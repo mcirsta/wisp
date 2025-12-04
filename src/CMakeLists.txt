@@ -24,6 +24,10 @@ include_directories(${LIBCRYPTO_INCLUDE_DIRS})
 
 pkg_check_modules(LIBPSL REQUIRED libpsl)
 include_directories(${LIBPSL_INCLUDE_DIRS})
+add_definitions(-DWITH_LIBPSL)
+
+pkg_check_modules(LIBUTF8PROC REQUIRED libutf8proc)
+include_directories(${LIBUTF8PROC_INCLUDE_DIRS})
 
 if(NEOSURF_USE_WEBP)
 	pkg_check_modules(LIBWEBP REQUIRED libwebp)
@@ -201,7 +205,7 @@ if(NEOSURF_BUILD_XXD)
 	)
 endif()
 
-set(NEOSURF_COMMON_LIBS css dom nsutils parserutils nsgif nsbmp svgtiny ${LIBCRYPTO_LIBRARIES} ${LIBPNG_LIBRARIES} ${LIBCURL_LIBRARIES} ${LIBJPEG_LIBRARIES} ${LIBWEBP_LIBRARIES} ${LIBPSL_LIBRARIES} ${ZLIB_LIBRARIES} ${LIBSSL_LIBRARIES})
+set(NEOSURF_COMMON_LIBS css dom nsutils parserutils nsgif nsbmp svgtiny ${LIBCRYPTO_LIBRARIES} ${LIBPNG_LIBRARIES} ${LIBCURL_LIBRARIES} ${LIBJPEG_LIBRARIES} ${LIBWEBP_LIBRARIES} ${LIBPSL_LIBRARIES} ${ZLIB_LIBRARIES} ${LIBSSL_LIBRARIES} ${LIBUTF8PROC_LIBRARIES})
 target_link_libraries(neosurf ${NEOSURF_COMMON_LIBS})
 
 install(TARGETS neosurf DESTINATION ${CMAKE_INSTALL_LIBDIR})
