@@ -39,6 +39,9 @@ css_error css__stylesheet_string_add(css_stylesheet *sheet, lwc_string *string, 
 {
 	uint32_t new_string_number; /* The string number count */
 
+	if (string == NULL)
+		return CSS_BADPARM;
+
 	/* search for the string in the existing vector */
 	for (new_string_number = 0;
 	     new_string_number < sheet->string_vector_c;
@@ -851,8 +854,7 @@ css_error css__stylesheet_selector_destroy(css_stylesheet *sheet,
 		d = c->combinator;
 
 		for (detail = &c->data; detail;) {
-			if (detail->qname.ns != NULL)
-				lwc_string_unref(detail->qname.ns);
+			lwc_string_unref(detail->qname.ns);
 			lwc_string_unref(detail->qname.name);
 
 			if (detail->value_type ==
@@ -871,8 +873,7 @@ css_error css__stylesheet_selector_destroy(css_stylesheet *sheet,
 	}
 
 	for (detail = &selector->data; detail;) {
-		if (detail->qname.ns != NULL)
-			lwc_string_unref(detail->qname.ns);
+		lwc_string_unref(detail->qname.ns);
 		lwc_string_unref(detail->qname.name);
 
 		if (detail->value_type == CSS_SELECTOR_DETAIL_VALUE_STRING &&
@@ -1152,6 +1153,7 @@ css_error css__stylesheet_rule_destroy(css_stylesheet *sheet, css_rule *rule)
 		css_rule_import *import = (css_rule_import *) rule;
 
 		lwc_string_unref(import->url);
+
 		if (import->media != NULL) {
 			css__mq_query_destroy(import->media);
 		}

@@ -75,8 +75,7 @@ void _dom_document_event_internal_finalise(dom_document_event_internal *dei)
 	int i;
 
 	for (i = 0; i < DOM_EVENT_COUNT; i++) {
-		if (dei->event_types[i] != NULL)
-			lwc_string_unref(dei->event_types[i]);
+		lwc_string_unref(dei->event_types[i]);
 	}
 
 	return;

@@ -1,0 +1,7 @@
+<svg vlns="l">
+  <defs> <linearGradient id="foo">
+  <stop stop-color="#6f" offset="0"/>
+ )<stop stop-color="#46" offset="1"/> </linearGradient>
+  </defs>
+  <path fill="url(#foo)e" stroke-width="" stroke='pointsar)' d='T10 110 V 9m 3 0 Z' />
+</svg>

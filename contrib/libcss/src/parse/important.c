@@ -25,10 +25,10 @@
  *                 If the input is invalid, then \a *ctx remains unchanged.
  */
 css_error css__parse_important(css_language *c,
-		const parserutils_vector *vector, int *ctx,
+		const parserutils_vector *vector, int32_t *ctx,
 		uint8_t *result)
 {
-	int orig_ctx = *ctx;
+	int32_t orig_ctx = *ctx;
 	bool match = false;
 	const css_token *token;
 
@@ -87,7 +87,10 @@ void css__make_style_important(css_style *style)
 		offset++;
 
 		/* Advance past any property-specific data */
-		if (hasFlagValue(opv) == false) {
+		if (hasFlagValue(opv) == false && value == VALUE_IS_CALC) {
+			/* All VALUE_IS_CALC have the form OPV UNIT STRIDX */
+			offset += 2;
+		} else if (hasFlagValue(opv) == false) {
 			switch (op) {
 			case CSS_PROP_AZIMUTH:
 				if ((value & ~AZIMUTH_BEHIND) == AZIMUTH_ANGLE)
@@ -343,6 +346,16 @@ void css__make_style_important(css_style *style)
 
 			case CSS_PROP_OPACITY:
 				if (value == OPACITY_SET)
+					offset++; /* value */
+				break;
+
+			case CSS_PROP_FILL_OPACITY:
+				if (value == FILL_OPACITY_SET)
+					offset++; /* value */
+				break;
+
+			case CSS_PROP_STROKE_OPACITY:
+				if (value == STROKE_OPACITY_SET)
 					offset++; /* value */
 				break;
 

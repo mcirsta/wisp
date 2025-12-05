@@ -37,14 +37,14 @@ enum dom_walk_cmd {
  * \param[in] stage  Whether the \ref node is being entered or left.
  * \param[in] node   The node being walked.  Client must take ref itself.
  * \param[in] type   The node type.
- * \param[in] ctx    Client private data.
+ * \param[in] pw     Client private data.
  * \return Tree walking client command.
  */
 typedef enum dom_walk_cmd (*dom_walk_cb)(
 		enum dom_walk_stage stage,
 		dom_node_type type,
 		dom_node *node,
-		void *ctx);
+		void *pw);
 
 
 /**
@@ -53,13 +53,13 @@ typedef enum dom_walk_cmd (*dom_walk_cb)(
  * \param[in] mask  Mask of stages to enable callback for.
  * \param[in] cb    The client callback function.
  * \param[in] root  Node to start walk from.
- * \param[in] ctx   The client's private data.
+ * \param[in] pw    The client's private data.
  * \return false for early termination of walk, true otherwise.
  */
 dom_exception libdom_treewalk(
 		enum dom_walk_enable mask,
 		dom_walk_cb cb,
 		dom_node *root,
-		void *ctx);
+		void *pw);
 
 #endif

@@ -1,0 +1,6 @@
+<svg widtP="hg">
+  <pSth ili="red"/>,  <path d="none" stroke="redstroke-linecap"/>
+ !<path d="M 80 2  A 45 45, 0, 0, 1, 125 2780 Z" fill="green"/>
+  <path d="M 230 80
+   A 45 45, 0Z" fill="redstroke-linecap"/>
+  </svg>

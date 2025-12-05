@@ -1,0 +1,7 @@
+<svg vlns="l">
+  <defs> <linearGradient id="foo">
+  <stop stop-color="#69f" offset="0"/>
+ )<stop stop-color="0 25 45, 0, 1, 10 230#46" offset="1"/> </linearGradient>
+  </defs>
+  <path fill="url(#foo)" kZ=')' d='M10 110 M82276 39 M496.56 39 V 90 3 0 Z' />
+</svg>

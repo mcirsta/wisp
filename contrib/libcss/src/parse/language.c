@@ -63,37 +63,37 @@ static css_error lookupNamespace(css_language *c,
 
 /* Selector list parsing */
 static css_error parseClass(css_language *c,
-		const parserutils_vector *vector, int *ctx,
+		const parserutils_vector *vector, int32_t *ctx,
 		css_selector_detail *specific);
 static css_error parseAttrib(css_language *c,
-		const parserutils_vector *vector, int *ctx,
+		const parserutils_vector *vector, int32_t *ctx,
 		css_selector_detail *specific);
 static css_error parseNth(css_language *c,
-		const parserutils_vector *vector, int *ctx,
+		const parserutils_vector *vector, int32_t *ctx,
 		css_selector_detail_value *value);
 static css_error parsePseudo(css_language *c,
-		const parserutils_vector *vector, int *ctx,
+		const parserutils_vector *vector, int32_t *ctx,
 		bool in_not, css_selector_detail *specific);
 static css_error parseSpecific(css_language *c,
-		const parserutils_vector *vector, int *ctx,
+		const parserutils_vector *vector, int32_t *ctx,
 		bool in_not, css_selector_detail *specific);
 static css_error parseAppendSpecific(css_language *c,
-		const parserutils_vector *vector, int *ctx,
+		const parserutils_vector *vector, int32_t *ctx,
 		css_selector **parent);
 static css_error parseSelectorSpecifics(css_language *c,
-		const parserutils_vector *vector, int *ctx,
+		const parserutils_vector *vector, int32_t *ctx,
 		css_selector **parent);
 static css_error parseTypeSelector(css_language *c,
-		const parserutils_vector *vector, int *ctx,
+		const parserutils_vector *vector, int32_t *ctx,
 		css_qname *qname);
 static css_error parseSimpleSelector(css_language *c,
-		const parserutils_vector *vector, int *ctx,
+		const parserutils_vector *vector, int32_t *ctx,
 		css_selector **result);
 static css_error parseCombinator(css_language *c,
-		const parserutils_vector *vector, int *ctx,
+		const parserutils_vector *vector, int32_t *ctx,
 		css_combinator *result);
 static css_error parseSelector(css_language *c,
-		const parserutils_vector *vector, int *ctx,
+		const parserutils_vector *vector, int32_t *ctx,
 		css_selector **result);
 static css_error parseSelectorList(css_language *c,
 		const parserutils_vector *vector, css_rule *rule);
@@ -101,7 +101,7 @@ static css_error parseSelectorList(css_language *c,
 /* Declaration parsing */
 static css_error parseProperty(css_language *c,
 		const css_token *property, const parserutils_vector *vector,
-		int *ctx, css_rule *rule);
+		int32_t *ctx, css_rule *rule);
 
 /**
  * Create a CSS language parser
@@ -169,8 +169,7 @@ css_error css__language_destroy(css_language *language)
 	if (language == NULL)
 		return CSS_BADPARM;
 
-	if (language->default_namespace != NULL)
-		lwc_string_unref(language->default_namespace);
+	lwc_string_unref(language->default_namespace);
 
 	if (language->namespaces != NULL) {
 		for (i = 0; i < language->num_namespaces; i++) {
@@ -762,9 +761,6 @@ css_error handleEndBlockContent(css_language *c, const parserutils_vector *vecto
 	 * tokens we have left
 	 */
 	ret = handleBlockContent(c, vector);
-	if (ret != CSS_OK) {
-		return ret;
-	}
 
 	/* Our goal here is to ensure that the language parse stack is in the
 	 * right state.  We've encountered the end of a BlockContent such as
@@ -783,14 +779,14 @@ css_error handleEndBlockContent(css_language *c, const parserutils_vector *vecto
 		entry = parserutils_stack_get_current(c->context);
 	}
 
-	return CSS_OK;
+	return ret;
 }
 
 css_error handleDeclaration(css_language *c, const parserutils_vector *vector)
 {
 	css_error error;
 	const css_token *token, *ident;
-	int ctx = 0;
+	int32_t ctx = 0;
 	context_entry *entry;
 	css_rule *rule;
 
@@ -858,8 +854,7 @@ css_error addNamespace(css_language *c, lwc_string *prefix, lwc_string *uri)
 {
 	if (prefix == NULL) {
 		/* Replace default namespace */
-		if (c->default_namespace != NULL)
-			lwc_string_unref(c->default_namespace);
+		lwc_string_unref(c->default_namespace);
 
 		/* Special case: if new namespace uri is "", use NULL */
 		if (lwc_string_length(uri) == 0)
@@ -895,8 +890,7 @@ css_error addNamespace(css_language *c, lwc_string *prefix, lwc_string *uri)
 		}
 
 		/* Replace namespace URI */
-		if (c->namespaces[idx].uri != NULL)
-			lwc_string_unref(c->namespaces[idx].uri);
+		lwc_string_unref(c->namespaces[idx].uri);
 
 		/* Special case: if new namespace uri is "", use NULL */
 		if (lwc_string_length(uri) == 0)
@@ -945,7 +939,7 @@ css_error lookupNamespace(css_language *c, lwc_string *prefix, lwc_string **uri)
  ******************************************************************************/
 
 css_error parseClass(css_language *c, const parserutils_vector *vector,
-		int *ctx, css_selector_detail *specific)
+		int32_t *ctx, css_selector_detail *specific)
 {
 	css_qname qname;
 	css_selector_detail_value detail_value;
@@ -976,7 +970,7 @@ css_error parseClass(css_language *c, const parserutils_vector *vector,
 }
 
 css_error parseAttrib(css_language *c, const parserutils_vector *vector,
-		int *ctx, css_selector_detail *specific)
+		int32_t *ctx, css_selector_detail *specific)
 {
 	css_qname qname;
 	css_selector_detail_value detail_value;
@@ -1078,7 +1072,7 @@ css_error parseAttrib(css_language *c, const parserutils_vector *vector,
 }
 
 css_error parseNth(css_language *c,
-		const parserutils_vector *vector, int *ctx,
+		const parserutils_vector *vector, int32_t *ctx,
 		css_selector_detail_value *value)
 {
 	const css_token *token;
@@ -1194,7 +1188,7 @@ css_error parseNth(css_language *c,
 					data[consumed] != 'N'))
 				return CSS_INVALID;
 
-			if (len - (++consumed) > 0) {
+			if (++consumed < len) {
 				if (data[consumed] != '-')
 					return CSS_INVALID;
 
@@ -1202,7 +1196,7 @@ css_error parseNth(css_language *c,
 				sign = -1;
 				had_sign = true;
 
-				if (len - (++consumed) > 0) {
+				if (++consumed < len) {
 					size_t bstart;
 
 					/* Reject additional sign */
@@ -1279,7 +1273,7 @@ css_error parseNth(css_language *c,
 }
 
 css_error parsePseudo(css_language *c, const parserutils_vector *vector,
-		int *ctx, bool in_not, css_selector_detail *specific)
+		int32_t *ctx, bool in_not, css_selector_detail *specific)
 {
 	static const struct
 	{
@@ -1459,7 +1453,7 @@ css_error parsePseudo(css_language *c, const parserutils_vector *vector,
 }
 
 css_error parseSpecific(css_language *c,
-		const parserutils_vector *vector, int *ctx,
+		const parserutils_vector *vector, int32_t *ctx,
 		bool in_not, css_selector_detail *specific)
 {
 	css_error error;
@@ -1514,7 +1508,7 @@ css_error parseSpecific(css_language *c,
 }
 
 css_error parseAppendSpecific(css_language *c,
-		const parserutils_vector *vector, int *ctx,
+		const parserutils_vector *vector, int32_t *ctx,
 		css_selector **parent)
 {
 	css_error error;
@@ -1529,7 +1523,7 @@ css_error parseAppendSpecific(css_language *c,
 }
 
 css_error parseSelectorSpecifics(css_language *c,
-		const parserutils_vector *vector, int *ctx,
+		const parserutils_vector *vector, int32_t *ctx,
 		css_selector **parent)
 {
 	css_error error;
@@ -1551,7 +1545,7 @@ css_error parseSelectorSpecifics(css_language *c,
 }
 
 css_error parseTypeSelector(css_language *c, const parserutils_vector *vector,
-		int *ctx, css_qname *qname)
+		int32_t *ctx, css_qname *qname)
 {
 	const css_token *token;
 	css_error error;
@@ -1612,10 +1606,10 @@ css_error parseTypeSelector(css_language *c, const parserutils_vector *vector,
 }
 
 css_error parseSimpleSelector(css_language *c,
-		const parserutils_vector *vector, int *ctx,
+		const parserutils_vector *vector, int32_t *ctx,
 		css_selector **result)
 {
-	int orig_ctx = *ctx;
+	int32_t orig_ctx = *ctx;
 	css_error error;
 	const css_token *token;
 	css_selector *selector;
@@ -1678,7 +1672,7 @@ css_error parseSimpleSelector(css_language *c,
 }
 
 css_error parseCombinator(css_language *c, const parserutils_vector *vector,
-		int *ctx, css_combinator *result)
+		int32_t *ctx, css_combinator *result)
 {
 	const css_token *token;
 	css_combinator comb = CSS_COMBINATOR_NONE;
@@ -1719,7 +1713,7 @@ css_error parseCombinator(css_language *c, const parserutils_vector *vector,
 }
 
 css_error parseSelector(css_language *c, const parserutils_vector *vector,
-		int *ctx, css_selector **result)
+		int32_t *ctx, css_selector **result)
 {
 	css_error error;
 	const css_token *token = NULL;
@@ -1737,7 +1731,6 @@ css_error parseSelector(css_language *c, const parserutils_vector *vector,
 	error = parseSimpleSelector(c, vector, ctx, &selector);
 	if (error != CSS_OK)
 		return error;
-	*result = selector;
 
 	while ((token = parserutils_vector_peek(vector, *ctx)) != NULL &&
 			tokenIsChar(token, ',') == false) {
@@ -1745,8 +1738,10 @@ css_error parseSelector(css_language *c, const parserutils_vector *vector,
 		css_selector *other = NULL;
 
 		error = parseCombinator(c, vector, ctx, &comb);
-		if (error != CSS_OK)
+		if (error != CSS_OK) {
+			css__stylesheet_selector_destroy(c->sheet, selector);
 			return error;
+		}
 
 		/* In the case of "html , body { ... }", the whitespace after
 		 * "html" and "body" will be considered an ancestor combinator.
@@ -1761,20 +1756,23 @@ css_error parseSelector(css_language *c, const parserutils_vector *vector,
 			continue;
 
 		error = parseSimpleSelector(c, vector, ctx, &other);
-		if (error != CSS_OK)
-			return error;
-
-		*result = other;
-
-		error = css__stylesheet_selector_combine(c->sheet,
-				comb, selector, other);
 		if (error != CSS_OK) {
 			css__stylesheet_selector_destroy(c->sheet, selector);
 			return error;
 		}
 
+		error = css__stylesheet_selector_combine(c->sheet,
+				comb, selector, other);
+		if (error != CSS_OK) {
+			css__stylesheet_selector_destroy(c->sheet, selector);
+			css__stylesheet_selector_destroy(c->sheet, other);
+			return error;
+		}
+
 		selector = other;
 	}
+
+	*result = selector;
 
 	return CSS_OK;
 }
@@ -1785,7 +1783,7 @@ css_error parseSelectorList(css_language *c, const parserutils_vector *vector,
 	css_error error;
 	const css_token *token = NULL;
 	css_selector *selector = NULL;
-	int ctx = 0;
+	int32_t ctx = 0;
 
 	/* Strip any leading whitespace (can happen if in nested block) */
 	consumeWhitespace(vector, &ctx);
@@ -1843,7 +1841,7 @@ css_error parseSelectorList(css_language *c, const parserutils_vector *vector,
  ******************************************************************************/
 
 css_error parseProperty(css_language *c, const css_token *property,
-		const parserutils_vector *vector, int *ctx, css_rule *rule)
+		const parserutils_vector *vector, int32_t *ctx, css_rule *rule)
 {
 	css_error error;
 	css_prop_handler handler = NULL;

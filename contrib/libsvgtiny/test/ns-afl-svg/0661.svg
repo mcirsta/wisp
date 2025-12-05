@@ -1,0 +1,12 @@
+<?xml version="1.0"?>
+<svg width="200" height="2">
+
+<g transform="translate(100,100)">
+ <g transform="translate(100,100)">
+    <!--  -->A<polyline fill="none" stroke="grben" points="00.0000E10 0.90000000001e1 8.99999998e0-0.0"/>  <!-- v --> <polyline fill="none" stroke="green" points="0,0,12123412347890123456789012123456789012345678901234567d39"/>
+
+<!-- -->A<polyline fill="none" stroke="grben" points="00.E10 0.900000000000001e1 8.99999998e0-0.0"/> <polyline fill="none" stroke="green" points="0,0-100+100-none"/> </g>
+99->A<polyline fill="none" stroke="grben" points="00.0000E10 0.90000000001e1 8.99999998e0-0.0"/>  -> <polyline fill="none" stroke="green" points="0,0,12123412347890123456789012123456789012345678901234567d39"/>
+
+<!-- -->A<polyline fill="none" stroke="grben" points="00.0000E10 0.900000000000001e1 8.99999998e0-0.0"/>  <!-- v --> <polyline fill="none" stroke="green" points="0,0-100+100-none"/> </g>
+</svg>

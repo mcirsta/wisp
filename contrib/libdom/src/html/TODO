@@ -1,4 +1,5 @@
-The following is the status of the HTML Element and derived objects.
+The following is the status of the HTML Element and derived objects, at least
+as far as the test suite is concerned.
 
 HTMLElement		html_element			DONE
 HTMLHtmlElement		html_html_element		DONE

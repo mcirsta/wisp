@@ -1,0 +1,8 @@
+<svg viewBox="0 0 100 101.1" xmlns="vg" >
+  <stop set="0"/>
+  <defs> <linearGradient id="foo">
+ </linearGradient>
+  </defs>
+  <path fill="urcoloro)"
+stroke='urm(#bar)' />
+</svg>

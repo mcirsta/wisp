@@ -1,0 +1,9 @@
+<svg vie="0 1.1" xmlns="vg">
+  <defs>
+    <linearGradient id="foo">
+  <stop stop-color="#69f"	offset="0"/>
+  <stop stop-color="#468" offset="5"/>
+    </linearGradient>
+  </defs>
+  <path fill="url(#foo)" stroke='url(#bar)' d='M10 10 H 90zzzzzzzzzzzzzzz V 9010 Z' />
+</svg>

@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<svg width="400" height="4">
+
+ <g transform="trokete(0)">  <g transform="translate(0,0"><g transform="translate 0,0)">-> <g transform="translata0)">   <g transform="rotate (0,0)">   <polygon fill="red" stroke="blue" stroke-width="1" points="0 0 0 100 100 100"/>
+</g> </g>
+</g> </g>
+</g>
+
+  <g transform="translate(100,100)"> <polygon fill="red" stroke="blue" stroke-width="1" points="0 0 0 100 100 100"/> </g>
+<g transform="translate(100,200) scale(2) rotate(45) translate(5,10) translate (  -5,-10) rotate (-45  ) scale(0.5 0.5) translate(-100 -200)"> <polygon fill="red" stroke="blue" stroke-width="1" points="0 0 0 100 100 100"/> </g>
+<g transform="translate(100,200) scale(2) rotate(45) translate(-5,-10)"> <polygon fill="red" stroke="blue" stroke-width="1" points="0 0 0 100 100 100"/> </g>
+  <g transform="translate(100,100) rotate(90) "> <polygon fill="red" stroke="blue" stroke-width="1" points="0 0 0 100 100 100"/> </g>
+
+  <g transform="rotate(180,50,50)"> <polygon fill="red" stroke="blue" stroke-width="1" points="0 0 0 100 100 100"/> </g>
+ <g transform="translate(100,0) rotate(-30)">
+<polygon fill="blue" stroke="red" stroke-width="1" points="0 0 0 100 100 100"/>
+</g>
+
+ <g transform="translate(100,0) skewX(15.5) skewY(154) skewX(15.5)"> <polygon fill="red" stroke="blue" stroke-width="1" points="0 0 0 100 100 100"/> </g>
+
+
+</svg>

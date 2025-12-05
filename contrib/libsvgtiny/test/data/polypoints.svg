@@ -1,0 +1,33 @@
+<?xml version="1.0"?>
+<svg width="200" height="200" viewBox="0 0 200 200" version="1.1" xmlns="http://www.w3.org/2000/svg">
+
+    <g transform="translate(100,100)">
+        <!-- smallest minimal point set is line from top left to bottom right -->
+        <polyline fill="none" stroke="red" points="0 0 9 9"/>
+
+        <!-- underflow -->
+        <polyline fill="none" stroke="red" points="1e-100-1e-100 0 200"/>
+
+        <!-- overflow -->
+        <polyline fill="none" stroke="red" points="-1e+39-1e+39+1e+39+1e+39"/>
+
+        <!-- really long and strange representations -->
+        <polyline fill="none" stroke="green" points="000000.0000E10 0.900000000000001e1 8.99999999e0-0.0"/>
+
+        <!-- very long numbers -->
+        <polyline fill="none" stroke="green" points="0,0,123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890e-298,0.000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001234567890e301"/>
+
+        <!-- missing point -->
+        <polyline fill="none" stroke="blue" points="0 4.5 9 4.5 0"/>
+
+        <!-- junk on the end -->
+        <polyline fill="none" stroke="blue" points="  -100-100-100+100-none"/>
+
+        <!-- missing digits -->
+        <polyline stroke="#123" points="0 0 ------9"/>
+        <polyline stroke="rgb(9,9,9)" points="0 0 .....9"/>
+        <polyline stroke="#112233" points="0 0 +e9 9"/>
+        <polyline stroke="#112233" points="0 0 .e9 9"/>
+	
+    </g>
+</svg>

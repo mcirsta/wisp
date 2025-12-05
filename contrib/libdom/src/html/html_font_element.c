@@ -188,3 +188,4 @@ dom_exception dom_html_font_element_set_##attr(			\
 SIMPLE_GET_SET(color);
 SIMPLE_GET_SET(face);
 SIMPLE_GET_SET(size);
+

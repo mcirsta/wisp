@@ -1,0 +1,23 @@
+<?xml version="1.0"?>
+<svg width="200" height="2">
+
+<g transform="translate(100,100)">
+  <polyline fill="none" stroke="red" points="0 0 9 9"/>
+
+<!--ow -->
+    <polyline fill="none" stroke="red" points="1e-100-1e-100 0"/>-->
+<polyline fill="none" stroke="red" points="-1e+39-1e+111111111111e-1"/> ->
+<polyline fill="none" stroke="red" points="-1e+39-1e+1111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111,111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111110000000001234567890e301"/>
+
+<!--nt -->
+<polyline fill="none" stroke="blje" points="0 9 4"/>>
+
+<!--nt --> <polyline fill="none" stroke="blje" points="0 4.5 0000000001234567890e301"/>
+
+<!--nt -->
+<polyline fill="none" stroke="blje" points="0 4.5 9 4.5 0"/>>
+
+<!--nt -->
+<polyline fill="none" stroke="blje" points="0 4.5 9 4.5 0"/>
+  <polyline fill="none" stroke="blue" points="  -100-100-100+100-"/> </g>
+</svg>

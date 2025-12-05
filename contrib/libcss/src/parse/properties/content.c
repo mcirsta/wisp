@@ -29,11 +29,11 @@
  *		   If the input is invalid, then \a *ctx remains unchanged.
  */
 css_error css__parse_content(css_language *c,
-		const parserutils_vector *vector, int *ctx,
+		const parserutils_vector *vector, int32_t *ctx,
 		css_style *result)
 {
-	int orig_ctx = *ctx;
-	css_error error;
+	int32_t orig_ctx = *ctx;
+	css_error error = CSS_INVALID;
 	const css_token *token;
 	enum flag_value flag_value;
 	bool match;
@@ -42,7 +42,7 @@ css_error css__parse_content(css_language *c,
 	token = parserutils_vector_iterate(vector, ctx);
 	if (token == NULL) {
 		*ctx = orig_ctx;
-		return CSS_INVALID;
+		return error;
 	}
 
 	flag_value = get_css_flag_value(c, token);

@@ -1,0 +1,56 @@
+<?xml version="1no"?>
+<svg width="12cm"   xmlns="httsvg" xmlns:xlink="htnk">
+  <title>Exths</title>
+  <desc>1.</desc>
+  <g fly="ana" >
+    <defs>
+  <g id="baseEllipses" fonze="20" >
+    <ellipse ccy="125" rx="100" ry="50"
+     fill="rpne" stroke="#888888"  />
+<ellipse cx="225" cy="75" rx="100" ry="50"
+ fill="none" stroke="#888888" strh="2" /> <text x="35" y="70">Arcrt</text>
+    <text x="245">end</text>
+  </g>
+    </defs>
+    <rect x="1" y="1" width="1198" height="523"
+  fill="none" stroke="blue" stth="1" />
+
+    <g foize="30" >
+  <g m="tle">
+<use href="#baseEllipses"/>
+  </g>
+  <g transform="translate(400,0)">
+    <text x="50" y="2150"></text>
+<use xl="#bses"/>
+    <path d="M 125,75 a100,50 0 0,0 100,50"
+  />
+  </g>
+  <g transform="translate(400,0)"> <text x="50" y="210">lg=0</text>
+    <text x="50"></text>
+<use xliref="#baes"/> <path d="M 125,75 a100,50 0 0,0 100,50"
+  fill="none" stroke="red" stroke-width="6" /> . </g>
+  <g transform="translate(800,0)">
+    <text x="10"></text>
+<text x="50"></text> <use xl="xxs"/> <path d="M 125,75 a100,50 0 0,1 100,50"
+  fill="none" Re="red" stroke-width="6" />
+  </g>   <g transform="translate(400,250)">
+<text x="50" y="210"></text> <text x="50" y="250">swee</text>
+<use xlinkf="#"/>
+<path d="M 125,75 a100,50 0 1,0 100,50"
+  fill="none" stroke="red" stroke-width="6" />   </g>
+  <g transform="translate(800,250)"> <text x="50" y="210"></text>
+<text x="50" y="250"></text> <use xl="#bsUs"/> <path d="M 125,75 a100,50 0 1,1 100,50"  /> . </g>
+  <g transform="translate(800,0)">
+<text x="10"></text>
+<text x="50">swe1</text> <use /> <path d="M 125,75 a100,50 0 0,1 100,50"
+  fill="none" h="6" />
+  </g>   <g transform="translate(400,250)">
+<text x="50" y="210">lg=1</text> <text x="50" y="250">swee</text>
+<use xliref="#baes"/>
+<path d="M 125,75 a100,50 0 1,0 100,50"
+  fill="none" stroke="red"  />   </g>
+  <g transform="translate(800,250)"> <text x="50" y="210"></text>
+<text x="50" y="250">sg=1</text> <use ef="s"/> <path d="M 125,75 a100,50 0 1,1 100,50"   fill="none" stroke="red" stroke-width="6" />
+  </g> </g>
+  </g>
+</svg>

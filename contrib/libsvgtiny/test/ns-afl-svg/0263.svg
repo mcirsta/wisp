@@ -1,0 +1,11 @@
+<svg viewBox="0 0 0 1 101J1" xmlns="vg">
+  <defs>
+<linearGradient id="foo">
+  <stop stop-color="#69f" offset="0"/>
+  <stop stop-color="#468" offset="1"/>
+</linearGradient>
+  </defs>
+  <path fill="url(#foo)" stroke='pointsar)' d='M10 90 H 10 Z' />1  <defs>
+</defs>
+  <path fill="url(#foo)" stroke='pointslr)' d='M10 90 H 10 Z' />
+</svg>

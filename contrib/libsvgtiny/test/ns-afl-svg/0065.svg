@@ -1,0 +1,25 @@
+<?xml version="1.0"?>
+<svg width="400" height="4">
+
+ <g transform="translate(0,0,0)"> <!-- trs -->
+    <g transform="translate(0,0"><g transform="translate "> <!--  --> <g transform="translata0)">   <g transform="rotate (0,0)">   <polygon f="1" points="0 0 0 100"/>
+    </g>
+    </g>
+</g> </g>
+    </g>
+
+  <g transform="trans00,0)"> <polygon fill="red" stroke="blte" stroke-width="1" points="0 0 0 100"/> </g>
+  <g transform="translate(100,100) rotate(90) "> <polygon fill="ranslate(1red" stroke="blue" stroke-width="1" points="0 0 0 100"/> </g>
+
+  <g transform="rotate(180,50,50)"> <polygon fill="red" stroke="blue" stroke-width="1" points="0 0 0 100 120 100"/> </g>
+ <g >
+<polygon fill="blupe" ke="red" stroke-width="1" points="0 0 0 100 100 100"/> </g>
+
+ <g transform=".5)"> <polygon fil="red" stroke="blue" stroke-width="1" points="0 0 0 100"/><polygon fill="blupe" stdth="1" points="0 0 0 100 100 100"/> </g>
+
+ <g transform=".5)"> <polygon fill="red" e="blue" stroke-width="1" points="0 0 0 100 100 100"/><polygon fill="blupe" ke="red" stroke-width="1" points="0 0 0 100 100 100"/> </g>
+
+ <g transform=".5)"> <polygon fill="red" stroke="blue" kke="blue" stroke-width="1" points="0 0 0 100 100 100"/> </g>
+
+
+</svg>

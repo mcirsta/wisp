@@ -1,0 +1,5 @@
+viewbox 0 0 1200 1200
+fill #012345 stroke #89abcd stroke-width 10 path 'M 100 100 L 1100 100 L 1100 200 L 100 200 Z ' 
+fill #eeffaa stroke #ccddee stroke-width 10 path 'M 100 200 L 1100 200 L 1100 300 L 100 300 Z ' 
+fill #ff6677 stroke #bb6677 stroke-width 10 path 'M 100 300 L 1100 300 L 1100 400 L 100 400 Z ' 
+fill #0080ff stroke #ff7f00 stroke-width 10 path 'M 100 400 L 1100 400 L 1100 500 L 100 500 Z ' 

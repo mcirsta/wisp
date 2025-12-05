@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-
 # This file is part of LibCSS.
 # Licensed under the MIT License,
 # http://www.opensource.org/licenses/mit-license.php
@@ -51,7 +49,7 @@ style = {
     ('font_weight', 4),
     ('justify_content', 3),
     ('list_style_position', 2),
-    ('list_style_type', 4),
+    ('list_style_type', 6),
     ('overflow_x', 3),
     ('overflow_y', 3),
     ('outline_style', 4),
@@ -97,6 +95,8 @@ style = {
     ('min_height', 2, 'length', 'CSS_MIN_HEIGHT_SET'),
     ('min_width', 2, 'length', 'CSS_MIN_WIDTH_SET'),
     ('opacity', 1, 'fixed', 'CSS_OPACITY_SET'),
+    ('fill_opacity', 1, 'fixed', 'CSS_FILL_OPACITY_SET'),
+    ('stroke_opacity', 1, 'fixed', 'CSS_STROKE_OPACITY_SET'),
     ('order', 1, 'integer', 'CSS_ORDER_SET'),
     ('padding_top', 1, 'length', 'CSS_PADDING_SET'),
     ('padding_right', 1, 'length', 'CSS_PADDING_SET'),
@@ -104,7 +104,7 @@ style = {
     ('padding_bottom', 1, 'length', 'CSS_PADDING_SET'),
     ('text_indent', 1, 'length', 'CSS_TEXT_INDENT_SET'),
     ('vertical_align', 4, 'length', 'CSS_VERTICAL_ALIGN_SET'),
-    ('width', 2, 'length', 'CSS_WIDTH_SET'),
+    ('width', 2, (('length', None, 'calc'),), 'CSS_WIDTH_SET'),
     ('z_index', 2, 'integer'),
     # Style group, arrays
     ('font_family', 3, 'string_arr', None, None,

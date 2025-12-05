@@ -7,6 +7,7 @@
 
 #include <assert.h>
 #include <stdlib.h>
+#include <string.h>
 #include <time.h>
 
 #include "events/event.h"
@@ -45,18 +46,15 @@ void _dom_event_destroy(dom_event *evt)
 /* Initialise function */
 dom_exception _dom_event_initialise(dom_event *evt)
 {
-	evt->stop = false;
-	evt->stop_now = false;
-	evt->prevent_default = false;
-	evt->custom = false;
+	/* Extract what should be retained. */
+	const struct dom_event_private_vtable *vtable = evt->vtable;
 
-	evt->type = NULL;
+	/* Clear everything */
+	memset(evt, 0, sizeof(*evt));
 
-	evt->namespace = NULL;
-
+	/* Set initial values */
 	evt->refcnt = 1;
-	evt->in_dispatch = false;
-	evt->is_initialised = false;
+	evt->vtable = vtable;
 	evt->is_trusted = true;
 
 	return DOM_NO_ERR;

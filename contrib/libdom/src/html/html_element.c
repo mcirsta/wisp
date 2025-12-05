@@ -518,7 +518,7 @@ dom_exception dom_html_element_set_int32_t_property(dom_html_element *ele,
 	if (err != DOM_NO_ERR)
 		goto fail;
 	
-	if (snprintf(numbuffer, 32, "%u", value) == 32)
+	if (snprintf(numbuffer, 32, "%"PRIu32, value) == 32)
 		numbuffer[31] = '\0';
 	
 	err = dom_string_create((const uint8_t *) numbuffer,
@@ -607,7 +607,7 @@ dom_exception dom_html_element_set_dom_ulong_property(dom_html_element *ele,
 	if (err != DOM_NO_ERR)
 		goto fail;
 
-	if (snprintf(numbuffer, 32, "%u", value) == 32)
+	if (snprintf(numbuffer, 32, "%"PRIu32, value) == 32)
 		numbuffer[31] = '\0';
 
 	err = dom_string_create((const uint8_t *) numbuffer,

@@ -24,15 +24,24 @@ struct svgtiny_gradient_stop {
 #define svgtiny_MAX_STOPS 10
 #define svgtiny_LINEAR_GRADIENT 0x2000000
 
+/**
+ * svg transform matrix
+ * | a c e |
+ * | b d f |
+ * | 0 0 1 |
+ */
+struct svgtiny_transformation_matrix {
+	float a, b, c, d, e, f;
+};
+
 struct svgtiny_parse_state_gradient {
 	unsigned int linear_gradient_stop_count;
 	dom_string *gradient_x1, *gradient_y1, *gradient_x2, *gradient_y2;
 	struct svgtiny_gradient_stop gradient_stop[svgtiny_MAX_STOPS];
 	bool gradient_user_space_on_use;
-	struct {
-		float a, b, c, d, e, f;
-	} gradient_transform;
+	struct svgtiny_transformation_matrix gradient_transform;
 };
+
 
 struct svgtiny_parse_state {
 	struct svgtiny_diagram *diagram;
@@ -42,9 +51,7 @@ struct svgtiny_parse_state {
 	float viewport_height;
 
 	/* current transformation matrix */
-	struct {
-		float a, b, c, d, e, f;
-	} ctm;
+	struct svgtiny_transformation_matrix ctm;
 
 	/*struct css_style style;*/
 
@@ -66,30 +73,64 @@ struct svgtiny_parse_state {
 
 struct svgtiny_list;
 
+/**
+ * control structure for inline style parse
+ */
+struct svgtiny_parse_internal_operation {
+	dom_string *key;
+	enum {
+		SVGTIOP_NONE,
+		SVGTIOP_PAINT,
+		SVGTIOP_COLOR,
+		SVGTIOP_LENGTH,
+		SVGTIOP_INTLENGTH,
+		SVGTIOP_OFFSET,
+	} operation;
+	void *param;
+	void *value;
+};
+
 /* svgtiny.c */
-float svgtiny_parse_length(dom_string *s, int viewport_size,
-		const struct svgtiny_parse_state state);
-void svgtiny_parse_color(dom_string *s, svgtiny_colour *c,
-		struct svgtiny_parse_state_gradient *grad,
-		struct svgtiny_parse_state *state);
-void svgtiny_parse_transform(char *s, float *ma, float *mb,
-		float *mc, float *md, float *me, float *mf);
 struct svgtiny_shape *svgtiny_add_shape(struct svgtiny_parse_state *state);
 void svgtiny_transform_path(float *p, unsigned int n,
 		struct svgtiny_parse_state *state);
-#if (defined(_GNU_SOURCE) && !defined(__APPLE__) || defined(__amigaos4__) || defined(__HAIKU__) || (defined(_POSIX_C_SOURCE) && ((_POSIX_C_SOURCE - 0) >= 200809L)))
-#define HAVE_STRNDUP
-#else
-#undef HAVE_STRNDUP
-char *svgtiny_strndup(const char *s, size_t n);
-#define strndup svgtiny_strndup
-#endif
+
+/* svgtiny_parse.c */
+svgtiny_code svgtiny_parse_inline_style(dom_element *node,
+		struct svgtiny_parse_state *state,
+		struct svgtiny_parse_internal_operation *ops);
+svgtiny_code svgtiny_parse_attributes(dom_element *node,
+		struct svgtiny_parse_state *state,
+		struct svgtiny_parse_internal_operation *ops);
+
+svgtiny_code svgtiny_parse_element_from_href(dom_element *node,
+		struct svgtiny_parse_state *state, dom_element **element);
+svgtiny_code svgtiny_parse_poly_points(const char *data, size_t datalen,
+		float *pointv, unsigned int *pointc);
+svgtiny_code svgtiny_parse_length(const char *text, size_t textlen,
+		int viewport_size, float *length);
+svgtiny_code svgtiny_parse_transform(const char *text, size_t textlen,
+		struct svgtiny_transformation_matrix *tm);
+svgtiny_code svgtiny_parse_color(const char *text, size_t textlen,
+		svgtiny_colour *c);
+svgtiny_code svgtiny_parse_viewbox(const char *text, size_t textlen,
+		float viewport_width, float viewport_height,
+		struct svgtiny_transformation_matrix *tm);
+svgtiny_code svgtiny_parse_none(const char *cursor, const char *textend);
+svgtiny_code svgtiny_parse_number(const char *text, const char **textend,
+		float *value);
+
+/* svgtiny_path.c */
+svgtiny_code svgtiny_parse_path_data(const char *text, size_t textlen,
+		float **pointv, unsigned int *pointc);
 
 /* svgtiny_gradient.c */
-void svgtiny_find_gradient(const char *id,
-		struct svgtiny_parse_state_gradient *grad,
+svgtiny_code svgtiny_update_gradient(dom_element *grad_element,
+		struct svgtiny_parse_state *state,
+		struct svgtiny_parse_state_gradient *grad);
+svgtiny_code svgtiny_gradient_add_fill_path(float *p, unsigned int n,
 		struct svgtiny_parse_state *state);
-svgtiny_code svgtiny_add_path_linear_gradient(float *p, unsigned int n,
+svgtiny_code svgtiny_gradient_add_stroke_path(float *p, unsigned int n,
 		struct svgtiny_parse_state *state);
 
 /* svgtiny_list.c */

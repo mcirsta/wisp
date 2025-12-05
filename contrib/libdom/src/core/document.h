@@ -28,6 +28,7 @@
 #include "core/node.h"
 #include "core/nodelist.h"
 
+#include "utils/hashtable.h"
 #include "utils/list.h"
 
 #include "events/document_event.h"
@@ -69,6 +70,8 @@ struct dom_document {
 	dom_string *_memo_domattrmodified; /**< DOMAttrModified */
 	dom_string *_memo_domcharacterdatamodified; /**< DOMCharacterDataModified */
 	dom_string *_memo_domsubtreemodified; /**< DOMSubtreeModified */
+
+	uint32_t dispatching_mutation; /**< Mutation event semaphore */
 };
 
 /* Create a DOM document */

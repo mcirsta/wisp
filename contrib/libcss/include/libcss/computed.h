@@ -279,8 +279,29 @@ uint8_t css_computed_max_width(
 		const css_computed_style *style,
 		css_fixed *length, css_unit *unit);
 
-uint8_t css_computed_width(
+/**
+ * Get the width property value in device pixels.
+ *
+ * \note  If available_px is set to a negative number (invalid) then,
+ *        if the computation would have required a valid available
+ *        width, it will return CSS_WIDTH_AUTO.
+ *
+ * This will resolve `calc()` expressions to used values.
+ *
+ * \param[in]  style         A computed style.
+ * \param[in]  unit_ctx      Unit conversion context.
+ * \param[in]  available_px  The available width in pixels.
+ * \param[out] px_out        Returns width in pixels if and only if the
+ *                           call returns CSS_WIDTH_SET.
+ * \return CSS_WIDTH_SET or CSS_WIDTH_AUTO.
+ */
+uint8_t css_computed_width_px(
 		const css_computed_style *style,
+		const css_unit_ctx *unit_ctx,
+		int available_px,
+		int *px_out);
+
+uint8_t css_computed_width(const css_computed_style *style,
 		css_fixed *length, css_unit *unit);
 
 uint8_t css_computed_empty_cells(
@@ -337,6 +358,14 @@ uint8_t css_computed_position(
 uint8_t css_computed_opacity(
 		const css_computed_style *style,
 		css_fixed *opacity);
+
+uint8_t css_computed_fill_opacity(
+		const css_computed_style *style,
+		css_fixed *fill_opacity);
+
+uint8_t css_computed_stroke_opacity(
+		const css_computed_style *style,
+		css_fixed *stroke_opacity);
 
 uint8_t css_computed_text_transform(
 		const css_computed_style *style);

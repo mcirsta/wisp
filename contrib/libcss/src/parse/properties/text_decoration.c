@@ -28,14 +28,14 @@
  *                 If the input is invalid, then \a *ctx remains unchanged.
  */
 css_error css__parse_text_decoration(css_language *c,
-		const parserutils_vector *vector, int *ctx,
+		const parserutils_vector *vector, int32_t *ctx,
 		css_style *result)
 {
-	int orig_ctx = *ctx;
+	int32_t orig_ctx = *ctx;
 	css_error error = CSS_INVALID;
 	const css_token *token;
 	enum flag_value flag_value;
-	bool match;
+	bool match = false;
 
 	/* IDENT([ underline || overline || line-through || blink ])
 	 * | IDENT (none, inherit) */

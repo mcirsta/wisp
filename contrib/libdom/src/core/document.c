@@ -286,6 +286,8 @@ dom_exception _dom_document_initialise(dom_document *doc,
 		return err;
 	}
 
+	doc->dispatching_mutation = 0;
+
 	/* We should not pass a NULL when all things hook up */
 	return _dom_document_event_internal_initialise(&doc->dei, daf, daf_ctx);
 }
@@ -665,7 +667,8 @@ dom_exception _dom_document_get_elements_by_tag_name(dom_document *doc,
  * \param result  Pointer to location to receive imported node in this document.
  * \return DOM_NO_ERR                on success,
  *         DOM_INVALID_CHARACTER_ERR if any of the names are invalid,
- *         DOM_NOT_SUPPORTED_ERR     if the type of \p node is unsupported
+ *         DOM_NOT_SUPPORTED_ERR     if the type of \p node is unsupported,
+ *         DOM_NO_MODIFICATION_ALLOWED_ERR if \p node or \p doc is readonly
  *
  * The returned node will have its reference count increased. It is
  * the responsibility of the caller to unref the node once it has
@@ -1065,7 +1068,7 @@ dom_exception _dom_document_set_uri(dom_document *doc,
  * \param node    The node to adopt
  * \param result  Pointer to location to receive adopted node
  * \return DOM_NO_ERR                      on success,
- *         DOM_NO_MODIFICATION_ALLOWED_ERR if \p node is readonly,
+ *         DOM_NO_MODIFICATION_ALLOWED_ERR if \p node or \p doc is readonly,
  *         DOM_NOT_SUPPORTED_ERR           if \p node is of type Document or
  *                                         DocumentType
  *
@@ -1435,7 +1438,7 @@ dom_exception dom_document_dup_node(dom_document *doc, dom_node *node,
 	dom_node_internal *child, *r;
 	dom_user_data *ud;
 
-	if (opt == DOM_NODE_ADOPTED && _dom_node_readonly(n))
+	if (_dom_node_readonly_owner(&doc->base) || _dom_node_readonly(n))
 		return DOM_NO_MODIFICATION_ALLOWED_ERR;
 	
 	if (n->type == DOM_DOCUMENT_NODE ||

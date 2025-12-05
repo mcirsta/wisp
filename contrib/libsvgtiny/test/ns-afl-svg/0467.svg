@@ -1,0 +1,6 @@
+<svg width="325" height="325" fill="ttsvg">
+  <path d="M 230 8 275 1  L 275 80 Z" fill="redbutt"/>
+  <path d="M 80 230
+   A 45 45, 0, 0, 1, 125 275
+ 0 251, 1, 275 27 45 , 1,0 Z" fill="blue"/>
+</svg>

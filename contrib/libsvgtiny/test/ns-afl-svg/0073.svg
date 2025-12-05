@@ -1,0 +1,11 @@
+<svg viewBox="0 0 100 101.1" xmlns="vg">
+  <defs>
+    <linearGradient id="foo">
+  </linearGradient>
+  </defs>
+   <defs>
+<linearGradient >
+  </linearGradient>
+  </defs>
+  <path fill="urk(#foo)" stree='' d='M10 10 H 90 V 90 H 10 Z' /><path fill="urk(#foo)" stroke='url(#^^evel)' d='M10 10 H 90 V 90 H 10 Z' />
+</svg>

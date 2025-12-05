@@ -15,11 +15,11 @@
  */
 struct parserutils_vector
 {
-	size_t item_size;		/**< Size of an item in the vector */
-	size_t chunk_size;		/**< Size of a vector chunk */
-	size_t items_allocated;		/**< Number of slots allocated */
-	int32_t current_item;		/**< Index of current item */
-	void *items;			/**< Items in vector */
+	size_t item_size;       /**< Size of an item in the vector */
+	size_t chunk_size;      /**< Size of a vector chunk */
+	size_t items_allocated; /**< Number of slots allocated */
+	int32_t current_item;   /**< Index of current item */
+	void *items;            /**< Items in vector */
 };
 
 /**
@@ -99,14 +99,25 @@ parserutils_error parserutils_vector_append(parserutils_vector *vector,
 	slot = vector->current_item + 1;
 
 	if ((size_t) slot >= vector->items_allocated) {
-		void *temp = realloc(vector->items,
-				(vector->items_allocated + vector->chunk_size) *
-				vector->item_size);
+		/* Exponential growth: double current allocation,
+		   but at least add chunk_size */
+		size_t new_allocated = vector->items_allocated * 2;
+		void *temp;
+
+		if (new_allocated < vector->items_allocated + vector->chunk_size)
+			new_allocated = vector->items_allocated + vector->chunk_size;
+
+		/* Overflow check */
+		if (new_allocated < vector->items_allocated ||
+		    new_allocated > SIZE_MAX / vector->item_size)
+			return PARSERUTILS_NOMEM;
+
+		temp = realloc(vector->items, new_allocated * vector->item_size);
 		if (temp == NULL)
 			return PARSERUTILS_NOMEM;
 
 		vector->items = temp;
-		vector->items_allocated += vector->chunk_size;
+		vector->items_allocated = new_allocated;
 	}
 
 	memcpy((uint8_t *) vector->items + (slot * vector->item_size), 
@@ -164,15 +175,15 @@ parserutils_error parserutils_vector_remove_last(parserutils_vector *vector)
 parserutils_error parserutils_vector_get_length(parserutils_vector *vector,
                                                 size_t *length)
 {
-        if (vector == NULL)
-                return PARSERUTILS_BADPARM;
-        
-        if (length == NULL)
-                return PARSERUTILS_BADPARM;
-        
-        *length = vector->current_item + 1;
-        
-        return PARSERUTILS_OK;
+	if (vector == NULL)
+		return PARSERUTILS_BADPARM;
+
+	if (length == NULL)
+		return PARSERUTILS_BADPARM;
+
+	*length = vector->current_item + 1;
+
+	return PARSERUTILS_OK;
 }
 
 /**

@@ -212,6 +212,12 @@ dom_exception dom_html_table_row_element_get_row_index(
 
 	uint32_t count = 0;
 
+	if (n == NULL) {
+		/* Firefox returns -1 for an orphaned table row */
+		*row_index = -1;
+		return DOM_NO_ERR;
+	}
+
 	for (n = n->first_child; n != (dom_node_internal *)table_row;
 			n = n->next) {
 		if(n->type == DOM_ELEMENT_NODE &&
@@ -297,6 +303,13 @@ dom_exception dom_html_table_row_element_get_section_row_index(
 	dom_node_internal *n = ((dom_node_internal *)table_row)->parent;
 	dom_html_document *doc = (dom_html_document *) ((dom_node_internal *) table_row)->owner;
 	int32_t count = 0;
+
+	if (n == NULL) {
+		/* Firefox returns -1 for orphaned rows */
+		*section_row_index = -1;
+		return DOM_NO_ERR;
+	}
+
 	for (n = n->first_child; n != (dom_node_internal *)table_row;
 			n = n->next) {
 		if (n->type == DOM_ELEMENT_NODE &&

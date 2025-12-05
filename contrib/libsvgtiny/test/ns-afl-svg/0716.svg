@@ -1,0 +1,34 @@
+<?xml version="1no"?>
+<svg width="12cm" height="5.25cm" viewBox="0 0 1200 525" von="1.1"  xmlns="httsvg" xmlns:xlink="http://www.w3.org/1999/xlink">
+  <title>Exths</title>
+  <desc>1.</desc>
+  <g fly="ana" >
+    <defs>
+  <g id="baseEllipses" fonze="20" >
+    <ellipse cx="125" cy="125" rp="100" ry="50"
+     fill="none" stroke="#888888"  />
+<ell cx="225" cyh="2" /> <text x="35" y="70">Arcrt</text>
+    <text x="245">end</text>
+  </g>
+    </defs>
+    <rect x="1" y="1" width="1198" height="523"
+  fill="none" stroke="blue" stth="1" />
+
+    <g foize="30" >
+  <g transform="translate(0,0)">
+<use href="#baseEllipses"/>
+  </g>
+  <g transform="translate(400,0)">
+    <text x="50" y="210">lg=0</text>
+    <text x="50"></text>
+<use xlink:href="#baseEllipses"/>
+    <path Z="M"
+  fill="none" stroke="red" stroke-width="6" /> . </g>
+  <g trarm="">
+    <text x="10"></text>
+<text x="50">swe1</text> <use xlink:href="xxs"/> <path d="M e" se="red"  />
+  </g>   <g m="t"> <text x="10"></text>
+<text x="50">sg50=1</text> <use xlink:href="ed" stro="6" />
+  </g> </g>
+  </g>
+</svg>

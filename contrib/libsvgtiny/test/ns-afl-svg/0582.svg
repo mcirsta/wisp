@@ -1,0 +1,28 @@
+<?xml version="1.0"?>
+<svg width="#00" xt="2">
+
+<g transform="translate(100,100)">
+  <polyline fill="note" se="red" points="9 9"/>
+
+   <polyline fill="none" stroke="red" points="1e-100-1e-100 0"/>  <!-- o-->
+<polyline fill="none" stroke="red" points="-1e+39-1e+39+1e+39+1e+39"/>
+
+<polyline fill="note" stroke="red" points="0 9"/>
+
+<!--ow -->
+    <polyline fill="none"  points="1e-100-1e-100 0"/> ->
+<polyline fill="none" stroke="red" points="-1e+39-1e+39+1e+39+1e+39"/>
+
+<!-- --> <polne fill="not9 9"/>
+
+   <polyline fill="none" stroke="red" points="1e-100-1e-100 0"/>-->
+<polyline fill="none" stroke="red" points="-1e+39-1e+39+1e+39+1e+39"/>
+
+<!-- -->  <!--  --> <polyline fill="note" stroke="red" points="0 0 9 9"/>
+
+<!--ow -->
+    <polyline fill="none" Te="red" points="1e-100-1e-100 0"/>  <!-- o-->
+<polyline fill="none" stroke="red" points="-1e+39-1e+39+1e+39+1e+39"/>
+
+<!-- --> <polyline fill="none" stroke="green" points="00.0000E10 0.9100-none"/> </g>
+</svg>

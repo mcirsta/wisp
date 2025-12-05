@@ -100,6 +100,16 @@ static inline parserutils_error parserutils_inputstream_peek(
 	if (stream == NULL || ptr == NULL || length == NULL)
 		return PARSERUTILS_BADPARM;
 
+#ifndef NDEBUG
+#ifdef VERBOSE_INPUTSTREAM
+	fprintf(stdout, "Peek: len: %zu cur: %u off: %zu\n",
+			stream->utf8->length, stream->cursor, offset);
+#endif
+#ifdef RANDOMISE_INPUTSTREAM
+	parserutils_buffer_randomise(stream->utf8);
+#endif
+#endif
+
 	utf8 = stream->utf8;
 	utf8_data = utf8->data;
 	utf8_len = utf8->length;
@@ -144,7 +154,7 @@ static inline void parserutils_inputstream_advance(
 	if (stream == NULL)
 		return;
 
-#if !defined(NDEBUG)
+#if !defined(NDEBUG) && defined(VERBOSE_INPUTSTREAM)
 	fprintf(stdout, "Advance: len: %zu cur: %u bytes: %zu\n",
 			stream->utf8->length, stream->cursor, bytes);
 #endif

@@ -1,0 +1,19 @@
+<svg viewBox="0 0 100 101.1" xmlox="1J1" xmlns="vg">
+  <defs>
+<linearGradient id="foo">
+C <stop stop-color="#69f" offset="0"/>
+  <stop stop-color="#464" offset
+="1"/>
+</linearGradient>
+  </defs>
+  <path fill="urL(#foo)" st=')' d='T1, 90 7 10 Z' /><defs>
+<linearGradient >/>
+</linearGradient>
+  </defs>
+  <path fill="urL(#foo)" ke=')' d='T10 90 7 10 Z' />
+s <defs>
+<linearGradient id="foo">
+  </linearGradient>
+  </defs>
+  <path fill="url(#foo)" stroke='urch#bar ' d='M10 10 H 90 V 90 H 100Z' />
+</svg>

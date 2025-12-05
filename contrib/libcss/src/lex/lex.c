@@ -370,10 +370,10 @@ css_error emitToken(css_lexer *lexer, css_token_type type,
 		error = parserutils_inputstream_peek(lexer->input, 0,
 				&data, &clen);
 
-#ifdef NDEBUG
-		(void) error;
-#else
+#ifndef NDEBUG
 		assert(type == CSS_TOKEN_EOF || error == PARSERUTILS_OK);
+#else
+		(void) error;
 #endif
 
 		t->data.data = (type == CSS_TOKEN_EOF) ? NULL : (uint8_t *) data;
@@ -881,7 +881,7 @@ css_error Hash(css_lexer *lexer, css_token **token)
 		return error;
 
 	/* Require at least one NMChar otherwise, we're just a raw '#' */
-	if (lexer->bytesReadForToken - lexer->context.origBytes > 0)
+	if (lexer->bytesReadForToken > lexer->context.origBytes)
 		return emitToken(lexer, CSS_TOKEN_HASH, token);
 
 	return emitToken(lexer, CSS_TOKEN_CHAR, token);
@@ -1313,8 +1313,8 @@ css_error String(css_lexer *lexer, css_token **token)
 
 	/* EOF will be reprocessed in Start() */
 	return emitToken(lexer,
-			error == CSS_INVALID ? CSS_TOKEN_INVALID_STRING
-					     : CSS_TOKEN_STRING,
+			error == CSS_OK ? CSS_TOKEN_STRING
+					: CSS_TOKEN_INVALID_STRING,
 			token);
 }
 
@@ -1775,28 +1775,17 @@ css_error consumeEscape(css_lexer *lexer, bool nl)
 		if (perror != PARSERUTILS_OK && perror != PARSERUTILS_EOF)
 			return css_error_from_parserutils_error(perror);
 
-		if (perror == PARSERUTILS_EOF) {
-			c = '\n';
-			APPEND(lexer, &c, 1);
+		c = '\n';
+		APPEND(lexer, &c, 1);
+		lexer->currentCol = 1;
+		lexer->currentLine++;
 
-			lexer->currentCol = 1;
-			lexer->currentLine++;
-
-			return CSS_OK;
-		}
-
-		c = *cptr;
-
-		if (c == '\n') {
-			APPEND(lexer, &c, 1);
-			/* And skip the '\r' in the input */
+		if (perror == PARSERUTILS_OK && *cptr == '\n') {
+			/* Skip the '\n' in the input */
 			lexer->bytesReadForToken += clen;
-
-			lexer->currentCol = 1;
-			lexer->currentLine++;
-
-			return CSS_OK;
 		}
+
+		return CSS_OK;
 	} else if (nl && (c == '\n' || c == '\f')) {
 		/* APPEND will increment this appropriately */
 		lexer->currentCol = 0;
@@ -1936,16 +1925,11 @@ css_error consumeStringChars(css_lexer *lexer)
 
 			error = consumeEscape(lexer, true);
 			if (error != CSS_OK) {
-				/* Rewind '\\', so we do the
-				 * right thing next time. */
-				lexer->bytesReadForToken -= clen;
-
-				/* Convert EOF to OK. This causes the caller
-				 * to believe that all StringChars have been
-				 * processed. Eventually, the '\\' will be
-				 * output as a CHAR. */
-				if (error == CSS_EOF)
-					return CSS_OK;
+				if (error != CSS_EOF) {
+					/* Rewind '\\', so we do the
+					 * right thing next time. */
+					lexer->bytesReadForToken -= clen;
+				}
 
 				return error;
 			}

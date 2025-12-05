@@ -1,0 +1,6 @@
+<svg vlns="l">
+  <defs> <linearGradient id="foo">
+  <stop stop-color="#69f" offset="8"/>  <stop  offset="6"/> <stop or="#46" offset="6"/> </linearGradient>
+  </defs>
+  <path fill="url(#foo)" ky=')' d='M12 110 4 90 ' />
+</svg>

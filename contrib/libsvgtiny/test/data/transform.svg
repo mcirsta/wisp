@@ -1,0 +1,56 @@
+<?xml version="1.0"?>
+<svg width="400" height="400" viewBox="0 0 400 400" version="1.1"
+     xmlns="http://www.w3.org/2000/svg">
+
+    <!-- transforms with a simple triangle -->
+
+    
+    <g transform="translate(0,0,0)"> <!-- too many parameters -->
+    <g transform="translate(0,0"> <!-- missing close bracket -->
+    <g transform="translate 0,0)"> <!-- missing open bracket -->
+    <g transform="translata (0,0)"> <!-- invalid function -->
+    <g transform="rotate (0,0)"> <!-- invalid number of parameters -->
+        <polygon fill="red" stroke="blue" stroke-width="1" points="0 0 0 100 100 100"/>
+    </g>
+    </g>
+    </g>
+    </g>
+    </g>
+
+    <!-- simple translate -->
+    <g transform="translate(100,100)">
+        <polygon fill="red" stroke="blue" stroke-width="1" points="0 0 0 100 100 100"/>
+    </g>
+
+    <!-- series of transformations which should all cancel out -->
+    <g transform="translate(100,200) scale(2) rotate(45) translate(5,10)
+    translate (  -5,-10) rotate (-45  ) scale(0.5 0.5) translate(-100 -200)">
+        <polygon fill="red" stroke="blue" stroke-width="1" points="0 0 0 100 100 100"/>
+    </g>
+
+    <!-- series of transformations -->
+    <g transform="translate(100,200) scale(2) rotate(45) translate(-5,-10)">
+        <polygon fill="red" stroke="blue" stroke-width="1" points="0 0 0 100 100 100"/>
+    </g>
+
+    <!-- 90 rotation -->
+    <g transform="translate(100,100) rotate(90) ">
+        <polygon fill="red" stroke="blue" stroke-width="1" points="0 0 0 100 100 100"/>
+    </g>
+
+    <!-- 180 rotation about square center -->
+    <g transform="rotate(180,50,50)">
+        <polygon fill="red" stroke="blue" stroke-width="1" points="0 0 0 100 100 100"/>
+    </g>
+
+    <g transform="translate(100,0) rotate(-30)">
+        <polygon fill="blue" stroke="red" stroke-width="1" points="0 0 0 100 100 100"/>
+    </g>
+
+    <!-- rotation with skews -->
+    <g transform="translate(100,0) skewX(15.5) skewY(154) skewX(15.5)">
+        <polygon fill="red" stroke="blue" stroke-width="1" points="0 0 0 100 100 100"/>
+    </g>
+
+
+</svg>

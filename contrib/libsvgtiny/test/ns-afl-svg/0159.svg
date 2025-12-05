@@ -1,0 +1,7 @@
+<svg viewBox="0 0 100 101.1" xmlns="vg">
+  <defs>
+    <linearGradient id="foo">
+  </linearGradient>
+  </defs>
+  <path fill="url(# 1fno)" stroke='url(#bar ' d='M10 10 H 9# V Z' />
+</svg>

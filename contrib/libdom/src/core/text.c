@@ -279,6 +279,7 @@ dom_exception _dom_text_replace_whole_text(dom_text *text,
 	err = walk_logic_adjacent_text(text, DELETE, &ret);
 	if (err != DOM_NO_ERR)
 		return err;
+	assert(ret == NULL);
 	
 	err = dom_characterdata_set_data(text, content);
 	if (err != DOM_NO_ERR)

@@ -1,0 +1,15 @@
+<svg viF="0 1" xmlns="vnone" stroke="green" ts="88g">
+  <defs>
+<linearGradient id="foo">
+  <stop stop-color="#69f" offset="0"/>
+  <stop stop-color="#464" offset="1"/>
+</linearGradient>
+  </defs>
+  <path fill="urL(#foo)" ke=')' d='T1  90 H 10 Z' />
+  <defs>
+<linearGradient id="foo">
+ 
+</linearGradient>
+  </defs>
+  <path fill="urL(#foo)" st='poir)' d='T1  90 H 10 Z' />
+</svg>

@@ -1109,13 +1109,7 @@ dom_exception _dom_element_set_id_attribute_ns(struct dom_element *element,
 		dom_string *namespace, dom_string *localname,
 		bool is_id)
 {
-	dom_exception err;
-
-	err = _dom_element_set_id_attr(element, namespace, localname, is_id);
-	
-	element->id_ns = dom_string_ref(namespace);
-
-	return err;
+	return _dom_element_set_id_attr(element, namespace, localname, is_id);
 }
 
 /**
@@ -1140,14 +1134,20 @@ dom_exception _dom_element_set_id_attribute_node(struct dom_element *element,
 	if (err != DOM_NO_ERR)
 		return err;
 	err = dom_node_get_local_name(id_attr, &localname);
-	if (err != DOM_NO_ERR)
+	if (err != DOM_NO_ERR) {
+		dom_string_unref(namespace);
 		return err;
+	}
 
 	err = _dom_element_set_id_attr(element, namespace, localname, is_id);
-	if (err != DOM_NO_ERR)
+	if (err != DOM_NO_ERR) {
+		dom_string_unref(localname);
+		dom_string_unref(namespace);
 		return err;
-	
-	element->id_ns = namespace;
+	}
+
+	dom_string_unref(localname);
+	dom_string_unref(namespace);
 
 	return DOM_NO_ERR;
 
@@ -2175,6 +2175,10 @@ dom_exception _dom_element_set_id_attr(struct dom_element *element,
 	
 	dom_attr_list *match;
 
+	/* Ensure element can be written to */
+	if (_dom_node_readonly(&element->base))
+		return DOM_NO_MODIFICATION_ALLOWED_ERR;
+
 	match = _dom_element_attr_list_find_by_name(element->attributes,
 			name, namespace);
 	if (match == NULL)
@@ -2191,8 +2195,15 @@ dom_exception _dom_element_set_id_attr(struct dom_element *element,
 		}
 
 		/* Set up the new id attr stuff */
+		dom_string_unref(element->id_name);
 		element->id_name = dom_string_ref(name);
+		dom_string_unref(element->id_ns);
 		element->id_ns = dom_string_ref(namespace);
+	} else {
+		dom_string_unref(element->id_name);
+		element->id_name = NULL;
+		dom_string_unref(element->id_ns);
+		element->id_ns = NULL;
 	}
 
 	_dom_attr_set_isid(match->attr, is_id);

@@ -221,7 +221,8 @@ dom_exception dom_attr_get_integer(dom_attr *a, uint32_t *value)
  * \param value  The new value
  * \return DOM_NO_ERR on success,
  *         DOM_ATTR_WRONG_TYPE_ERR if the attribute node is not a integer
- *                                 attribute
+ *                                 attribute,
+ *         DOM_NO_MODIFICATION_ALLOWED_ERR if ::a is readonly
  */
 dom_exception dom_attr_set_integer(dom_attr *a, uint32_t value)
 {
@@ -229,6 +230,10 @@ dom_exception dom_attr_set_integer(dom_attr *a, uint32_t value)
 	struct dom_node_internal *ele;
 	bool success = true;
 	dom_exception err;
+
+	if (_dom_node_readonly(&a->base)) {
+		return DOM_NO_MODIFICATION_ALLOWED_ERR;
+	}
 
 	/* If this is the first set method, we should fix this attribute
 	 * type */
@@ -283,7 +288,8 @@ dom_exception dom_attr_get_short(dom_attr *a, unsigned short *value)
  * \param value  The new value
  * \return DOM_NO_ERR on success,
  *         DOM_ATTR_WRONG_TYPE_ERR if the attribute node is not a short
- *                                 attribute
+ *                                 attribute,
+ *         DOM_NO_MODIFICATION_ALLOWED_ERR if ::a is readonly
  */
 dom_exception dom_attr_set_short(dom_attr *a, unsigned short value)
 {
@@ -291,6 +297,10 @@ dom_exception dom_attr_set_short(dom_attr *a, unsigned short value)
 	struct dom_node_internal *ele;
 	bool success = true;
 	dom_exception err;
+
+	if (_dom_node_readonly(&a->base)) {
+		return DOM_NO_MODIFICATION_ALLOWED_ERR;
+	}
 
 	/* If this is the first set method, we should fix this attribute
 	 * type */
@@ -345,7 +355,8 @@ dom_exception dom_attr_get_bool(dom_attr *a, bool *value)
  * \param value  The new value
  * \return DOM_NO_ERR on success,
  *         DOM_ATTR_WRONG_TYPE_ERR if the attribute node is not a bool
- *                                 attribute
+ *                                 attribute,
+ *         DOM_NO_MODIFICATION_ALLOWED_ERR if ::a is readonly
  */
 dom_exception dom_attr_set_bool(dom_attr *a, bool value)
 {
@@ -353,6 +364,10 @@ dom_exception dom_attr_set_bool(dom_attr *a, bool value)
 	struct dom_node_internal *ele;
 	bool success = true;
 	dom_exception err;
+
+	if (_dom_node_readonly(&a->base)) {
+		return DOM_NO_MODIFICATION_ALLOWED_ERR;
+	}
 
 	/* If this is the first set method, we should fix this attribute
 	 * type */

@@ -179,7 +179,7 @@ unsigned                return TOK_UNSIGNED;
                         return TOK_IDENTIFIER;
                     }
 
-"{quotedstring}*"     {
+\"{quotedstring}*\"     {
                         size_t n = yyleng - 2;
                         char *t = malloc(n + 1);
                         if (t == NULL) { YY_FATAL_ERROR("out of memory"); }

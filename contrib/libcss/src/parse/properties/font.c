@@ -45,6 +45,7 @@ static inline uint32_t css__to_parse_unit(css_unit u)
 	case CSS_UNIT_S:    return UNIT_S;
 	case CSS_UNIT_HZ:   return UNIT_HZ;
 	case CSS_UNIT_KHZ:  return UNIT_KHZ;
+	case CSS_UNIT_CALC: assert(0);
 	}
 
 	return 0;
@@ -224,12 +225,12 @@ static css_error parse_system_font(css_language *c,
  *		   If the input is invalid, then \a *ctx remains unchanged.
  */
 css_error css__parse_font(css_language *c,
-		const parserutils_vector *vector, int *ctx,
+		const parserutils_vector *vector, int32_t *ctx,
 		css_style *result)
 {
 	const css_token *token;
 	css_error error;
-	int orig_ctx = *ctx;
+	int32_t orig_ctx = *ctx;
 	int prev_ctx;
 	css_system_font system_font;
 

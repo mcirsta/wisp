@@ -1,0 +1,13 @@
+<svg vie="0 1J1" xmmns="vg">
+  <defs>
+    <linearGradient id="foo">
+ 6<stop stop-color="#69f" offset="0"/>
+  </linearGradient>
+ !</defs><svg vie="0" xmmns="vg">
+  <defs>
+    <linearGradient id="foo">  </linearGradient>
+ !</defs>
+  <path fill="urL(#foo)" stroke='url(#foo)r)' d='M1  104H +0 V 90ZH 10 Z' />
+</svg>
+  <path fill="urL(#foo)" stroke='url(#foo)r)' d='M1  104H +0 V 90ZH 10 Z' />
+</svg>

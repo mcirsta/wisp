@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-
 # This file is part of LibCSS.
 # Licensed under the MIT License,
 # http://www.opensource.org/licenses/mit-license.php
@@ -8,7 +6,6 @@
 import math
 import string
 import os
-import sys
 from select_config import values, groups
 from assets import assets
 from overrides import overrides
@@ -170,6 +167,7 @@ class CSSValue:
         self.size = size #  `None` means sizeof(ptr)
         self.defaults = defaults
         self.suffix = ''
+        self.calc = False
         self.bits = None if bits_size is None else {
             'name': bits_name,
             'type': bits_type,
@@ -226,6 +224,13 @@ class CSSProperty:
 
     def make_values(self, vals):
         """Make list of values for this property."""
+        self.has_calc = False
+
+        if vals is not None and any(len(val) > 2 and val[2] == 'calc' for val in vals):
+            self.has_calc = True
+
+        print(f"name: {self.name}, {vals}, has calc: {self.has_calc}")
+
         if vals is None:
             return []
         elif type(vals) is str:
@@ -236,8 +241,10 @@ class CSSProperty:
                 for x in values:
                     if x[0] == v[0]:
                         value = CSSValue(*x)
-                        if len(v) == 2:
+                        if len(v) > 1 and v[1] != None:
                             value.defaults = v[1]
+                        if len(v) > 2 and v[2] == 'calc':
+                            value.calc = True
                         if len(vals) > 1:
                             value.suffix = '_' + string.ascii_lowercase[i]
                         val_list.append(value)
@@ -325,18 +332,17 @@ class CSSProperty:
         """
         vals = []
         for v in self.values:
+            or_calc = '_or_calc' if v.calc else ''
+            star = '*' if pointer else ''
             vt, vn = shift_star(v.type, v.name)
-            vn += v.suffix
+            vn = star + vn + v.suffix
             if pointer:
-                vn = '*' + vn
                 if v.name == 'counter_arr' or v.name == 'content_item':
                     vt = 'const ' + vt
-            vals.append((vt, vn))
+            vals.append((vt + or_calc, vn))
             if v.bits is not None:
-                bt, bn = shift_star(v.bits['type'], v.bits['name'])
-                bn += v.suffix
-                if pointer:
-                    bn = '*' + bn
+                bt = v.bits['type']
+                bn = star + v.bits['name'] + v.suffix
                 vals.append((bt, bn))
         return vals
 
@@ -409,7 +415,7 @@ class CSSGroup:
 
         bin_size = 32 # We're using uint32_t as concrete bins.
         bits_array = []
-        props = sorted(self.props, key=(lambda x: x.bits_size), reverse=True)
+        props = sorted(self.props, key=(lambda x: (x.bits_size, x.name)), reverse=True)
 
         for p in props:
             for b in bits_array:
@@ -432,21 +438,12 @@ class CSSGroup:
 
         return bits_array
 
-    def get_idot_grp(self):
-        """Make parameters for accessing bits and values in this group."""
-        i_dot = '' if self.name == 'page' else 'i.'
-        grp = '' if self.name == 'style' else '->{}{}'.format(
-            '' if self.name == 'page' else i_dot, self.name)
-        return (i_dot, grp)
-
     def make_computed_h(self):
         """Output this group's text for the computed.h file."""
         t = Text()
         t.append()
 
-        typedef = 'typedef ' if self.name == 'page' else ''
-        t.append('{}struct css_computed_{}{} {{'.format(
-            typedef, self.name, '' if self.name == 'page' else '_i'))
+        t.append('struct css_computed_style_i {')
 
         t.comment()
         commented = []
@@ -493,103 +490,29 @@ class CSSGroup:
         t.append()
         t.append(self.make_value_declaration(for_commented=False))
 
-        if self.name == 'style':
-            t.append()
-            for g in css_groups:
-                if g.name != 'style' and g.name != 'page':
-                    t.append('css_computed_{0} *{0};'.format(g.name))
-
         t.indent(-1)
-        t.append('}}{};'.format(
-            ' css_computed_' + self.name if typedef else ''))
+        t.append('};')
 
-        if self.name != 'page':
-            typedef = 'typedef ' if self.name != 'style' else ''
-            t.append()
-            t.append('{}struct css_computed_{} {{'.format(
-                     typedef, self.name))
-            t.indent(1)
-            t.append('struct css_computed_' + self.name + '_i i;')
-            t.append()
-            t.append(self.make_value_declaration(for_commented=True))
-            t.append()
+        t.append()
+        t.append('struct css_computed_style {')
+        t.indent(1)
+        t.append('struct css_computed_style_i i;')
+        t.append()
+        t.append(self.make_value_declaration(for_commented=True))
+        t.append()
 
-            t.append('struct css_computed_' + self.name + ' *next;')
-            t.append('uint32_t count;')
-            t.append('uint32_t bin;')
-            t.indent(-1)
-            t.append('}}{};'.format(
-                ' css_computed_' + self.name if typedef else ''))
+        t.append('struct css_computed_style *next;')
+        t.append('uint32_t count;')
+        t.append('uint32_t bin;')
+        t.append('css_calculator *calc;')
+        t.indent(-1)
+        t.append('};')
 
         return t.to_string()
 
     def make_propset_h(self):
-        """Output this group's property functions for the propset.h file.
-
-        If group is not `style`, will also output the defaults
-        and the ENSURE_{group} texts.
-        """
+        """Output this group's property functions for the propset.h file."""
         t = Text()
-        i_dot, grp = self.get_idot_grp()
-
-        if self.name != 'style':
-            t.append('static const css_computed_{0} default_{0} = {{'.format(
-                self.name))
-            t.indent(1)
-
-            if self.name != 'page':
-                t.append('.i = {')
-                t.indent(1)
-
-            t.append('.bits = {') 
-            t.indent(1)
-
-            bits_ops = []
-            for b in self.bits_array:
-                or_ops = []
-                for p in b.contents:
-                    or_ops.append('({} << {})'.format(p.defaults, str(p.shift))
-                                  if p.shift else p.defaults)
-                bits_ops.append(' | '.join(or_ops))
-
-            t.append(',\n'.join(bits_ops).split('\n'))
-            t.indent(-1)
-            t.append('},')
-            t.append(',\n'.join(
-                self.make_value_declaration(False, True)).split('\n'))
-
-            if self.name != 'page':
-                t.indent(-1)
-                t.append('},')
-                t.append(',\n'.join(
-                    self.make_value_declaration(True, True) +
-                    [ '.next = NULL', '.count = 0', '.bin = UINT32_MAX' ]
-                    ).split('\n'))
-
-            t.indent(-1)
-            t.append('};')
-
-            t.append()
-            t.escape_newline()
-            t.append('#define ENSURE_{} do {{'.format(self.name.upper()))
-            t.indent(1)
-            t.append('if (style->{}{} == NULL) {{'.format(i_dot, self.name))
-            t.indent(1)
-            t.append('style->{}{n} = malloc(sizeof(css_computed_{n}));'.format(
-                i_dot, n=self.name))
-            t.append('if (style->{}{} == NULL)'.format(i_dot, self.name))
-            t.indent(1)
-            t.append('return CSS_NOMEM;')
-            t.indent(-1)
-            t.append()
-            t.append('memcpy(style->{}{n}, &default_{n}, '
-                     'sizeof(css_computed_{n}));'.format(i_dot, n=self.name))
-            t.indent(-1)
-            t.append('}')
-            t.indent(-1)
-            t.append('} while(0)')
-            t.escape_newline()
-            t.append()
 
         for p in sorted(self.props, key=(lambda x: x.name)):
             defines, undefs = p.def_undefs
@@ -611,15 +534,26 @@ class CSSGroup:
             t.append('{')
             t.indent(1)
 
-            t.append('uint32_t *bits;')
-            t.append()
-
-            if self.name != 'style':
-                t.append('ENSURE_{};'.format(self.name.upper()))
+            # Ensure any existing calc() values are freed
+            if p.has_calc:
+                t.append('uint32_t orig_bits = (style->i.bits[{name}_INDEX] & {name}_MASK) >> {name}_SHIFT;'.format(name=p.name.upper()))
                 t.append()
 
-            t.append('bits = &style{}->{}bits[{}_INDEX];'.format(
-                grp, i_dot, p.name.upper()))
+                type_mask, shift_list, bits_comment = p.get_bits()
+                t.append(bits_comment)
+                t.append('if ((orig_bits & {}) == {}) {{'.format(type_mask, p.condition))
+                t.indent(1)
+                for i, v in enumerate(list(reversed(shift_list))):
+                    t.append('if ((orig_bits & 0x{:x}) >> {} == CSS_UNIT_CALC) {{'.format(v[2], v[1]))
+                    t.indent(1)
+                    t.append('lwc_string_unref(style->i.{}.calc);'.format(p.name))
+                    t.indent(-1)
+                    t.append('}')
+                t.indent(-1)
+                t.append('}')
+                t.append()
+
+            t.append('uint32_t *bits = &style->i.bits[{}_INDEX];'.format(p.name.upper()))
             t.append()
 
             type_mask, shift_list, bits_comment = p.get_bits()
@@ -640,33 +574,28 @@ class CSSGroup:
                 old_t, old_n_shift = shift_star(v.type, old_n)
 
                 if v.name == 'string':
-                    t.append('{} {} = style{}->{}{};'.format(
-                        old_t, old_n_shift,
-                        grp, i_dot, p.name + v.suffix))
+                    t.append('{} {} = style->i.{};'.format(
+                        old_t, old_n_shift, p.name + v.suffix))
                     t.append()
                     t.append('if ({} != NULL) {{'.format(v.name + v.suffix))
                     t.indent(1)
-                    t.append('style{}->{}{} = lwc_string_ref({});'.format(
-                        grp, i_dot, p.name + v.suffix, v.name + v.suffix))
+                    t.append('style->i.{} = lwc_string_ref({});'.format(
+                        p.name + v.suffix, v.name + v.suffix))
                     t.indent(-1)
                     t.append('} else {')
                     t.indent(1)
-                    t.append('style{}->{}{} = NULL;'.format(
-                        grp, i_dot, p.name + v.suffix))
+                    t.append('style->i.{} = NULL;'.format(p.name + v.suffix))
                     t.indent(-1)
                     t.append('}')
                     t.append()
-                    t.append('if ({} != NULL)'.format(old_n))
-                    t.indent(1)
                     t.append('lwc_string_unref({});'.format(old_n))
-                    t.indent(-1)
 
                 elif v.name == 'string_arr' or v.name == 'counter_arr':
                     iter_var = 's' if v.name == 'string_arr' else 'c'
                     iter_deref = '*s' if v.name == 'string_arr' else 'c->name'
-                    t.append('{} {} = style{}->{};'.format(
+                    t.append('{} {} = style->{};'.format(
                         old_t, old_n_shift,
-                        grp, p.name + v.suffix))
+                        p.name + v.suffix))
                     t.append('{} {};'.format(old_t,
                                              shift_star(v.type, iter_var)[1]))
                     t.append()
@@ -677,8 +606,8 @@ class CSSGroup:
                     t.append('{0} = lwc_string_ref({0});'.format(iter_deref))
                     t.indent(-1)
                     t.append()
-                    t.append('style{}->{} = {};'.format(
-                        grp, p.name + v.suffix, v.name + v.suffix))
+                    t.append('style->{} = {};'.format(
+                        p.name + v.suffix, v.name + v.suffix))
                     t.append()
                     t.append('/* Free existing array */')
                     t.append('if ({} != NULL) {{'.format(old_n))
@@ -696,8 +625,17 @@ class CSSGroup:
                     t.append('}')
 
                 elif not v.is_ptr:
-                    t.append('style{}->{}{} = {};'.format(
-                        grp, i_dot, p.name + v.suffix, v.name + v.suffix))
+                    if p.has_calc:
+                        t.append('if (unit == CSS_UNIT_CALC) {')
+                        t.append('\tstyle->i.{}.calc = lwc_string_ref({}.calc);'.format(
+                                 p.name + v.suffix, v.name + v.suffix))
+                        t.append('} else {')
+                        t.append('\tstyle->i.{}.value = {}.value;'.format(
+                                 p.name + v.suffix, v.name + v.suffix))
+                        t.append('}')
+                    else:
+                        t.append('style->i.{} = {};'.format(
+                            p.name + v.suffix, v.name + v.suffix))
 
                 else:
                     raise ValueError('Cannot handle value ' + v.name +'!')
@@ -710,52 +648,37 @@ class CSSGroup:
 
         return t.to_string()
 
-    def make_propget_h(self):
-        """Output this group's property functions for the propget.h file."""
-        t = Text()
-        i_dot, grp = self.get_idot_grp()
+    def print_propget(self, t, p, only_bits=False):
+        vals = [] if only_bits else p.get_param_values(pointer=True)
+        params = ', '.join([ 'css_computed_style *style' ]
+                           + [ ' '.join(x) for x in vals ])
 
-        for p in sorted(self.props, key=(lambda x: x.name)):
-            defines, undefs = p.def_undefs
+        underscore_bits = '_bits' if only_bits else ''
+        t.append('static inline uint8_t get_{}{}(const {})'.format(
+            p.name, underscore_bits, params))
+        t.append('{')
+        t.indent(1)
 
-            t.append()
-            t.append(defines)
+        t.append('uint32_t bits = style->i.bits[{}_INDEX];'.format(
+            p.name.upper()))
+        t.append('bits &= {}_MASK;'.format(p.name.upper()))
+        t.append('bits >>= {}_SHIFT;'.format(p.name.upper()))
+        t.append()
 
-            if p.name in overrides['get']:
-                t.append(overrides['get'][p.name], pre_formatted=True)
-                t.append(undefs)
-                continue
+        type_mask, shift_list, bits_comment = p.get_bits()
+        t.append(bits_comment)
 
-            vals = p.get_param_values(pointer=True)
-            params = ', '.join([ 'css_computed_style *style' ]
-                               + [ ' '.join(x) for x in vals ])
-            t.append('static inline uint8_t get_{}(const {})'.format(
-                p.name, params))
-            t.append('{')
-            t.indent(1)
-
-            if self.name != 'style':
-                t.append('if (style{} != NULL) {{'.format(grp))
-                t.indent(1)
-
-            t.append('uint32_t bits = style{}->{}bits[{}_INDEX];'.format(
-                grp, i_dot, p.name.upper()))
-            t.append('bits &= {}_MASK;'.format(p.name.upper()))
-            t.append('bits >>= {}_SHIFT;'.format(p.name.upper()))
-            t.append()
-
-            type_mask, shift_list, bits_comment = p.get_bits()
-            t.append(bits_comment)
-
+        if only_bits == False:
             if p.condition:
                 t.append('if ((bits & {}) == {}) {{'.format(
                     type_mask, p.condition))
                 t.indent(1)
 
             for v in p.values:
-                this_idot = '' if v.is_ptr and v.name != 'string' else i_dot
-                t.append('*{} = style{}->{}{};'.format(
-                    v.name + v.suffix, grp, this_idot, p.name + v.suffix))
+                print(f"name: {p.name}, has_calc: {p.has_calc}, v.name: {v.name}")
+                i_dot = '' if v.is_ptr and v.name != 'string' else 'i.'
+                t.append('*{} = style->{}{};'.format(
+                    v.name + v.suffix, i_dot, p.name + v.suffix))
             for i, v in enumerate(list(reversed(shift_list))):
                 if i == 0:
                     t.append('*{} = bits >> {};'.format(v[0], v[1]))
@@ -766,29 +689,50 @@ class CSSGroup:
             if p.condition:
                 t.indent(-1)
                 t.append('}')
+            t.append()
+
+        t.append('return (bits & {});'.format(type_mask))
+
+        t.indent(-1)
+        t.append('}')
+
+    def make_propget_h(self):
+        """Output this group's property functions for the propget.h file."""
+        t = Text()
+
+        for p in sorted(self.props, key=(lambda x: x.name)):
+            defines, undefs = p.def_undefs
 
             t.append()
-            t.append('return (bits & {});'.format(type_mask))
+            t.append(defines)
 
-            if self.name != 'style':
-                t.indent(-1)
-                t.append('}')
-                t.append()
-                t.append('/* Initial value */')
-                for v in p.values:
-                    t.append('*{} = {};'.format(v.name + v.suffix, v.defaults))
-                    if v.bits is not None:
-                        t.append('*{} = {};'.format(
-                            v.bits['name'] + v.suffix, v.bits['defaults']))
-                t.append('return {};'.format(p.defaults))
+            self.print_propget(t, p, True)
 
-            t.indent(-1)
-            t.append('}')
+            if p.name in overrides['get']:
+                t.append(overrides['get'][p.name], pre_formatted=True)
+            else:
+                self.print_propget(t, p)
+
             t.append(undefs)
 
         return t.to_string()
 
-    def make_value_declaration(self, for_commented, defaults=False):
+    def print_destroy(self, t, p):
+        if p.has_calc:
+            t.append("set_{}(style, 0, (css_fixed_or_calc)0, CSS_UNIT_PX);".format(p.name))
+        else:
+            t.append("/* set_{}(style, 0, 0, CSS_UNIT_PX); */".format(p.name))
+
+    def make_destroy_inc(self):
+        """Output this group's destructors for the destroy.h file."""
+        t = Text()
+
+        for p in sorted(self.props, key=(lambda x: x.name)):
+            self.print_destroy(t, p)
+
+        return t.to_string()
+
+    def make_value_declaration(self, for_commented):
         """Output declarations of values for this group's properties.
 
         Args:
@@ -799,13 +743,12 @@ class CSSGroup:
         r = []
         for p in sorted(self.props, key=(lambda x: x.name)):
             if bool(p.comments) == for_commented:
+                if (p.values == None or len(p.values) == 0):
+                    continue
                 for v in p.values:
-                    if defaults:
-                        r.append('.{}{} = {}'.format(p.name, v.suffix,
-                                                     v.defaults))
-                    else:
-                        v_type, v_name = shift_star(v.type, p.name)
-                        r.append('{} {}{};'.format(v_type, v_name, v.suffix))
+                    or_calc = '_or_calc' if v.calc else ''
+                    v_type, v_name = shift_star(v.type, p.name)
+                    r.append('{} {}{};'.format(v_type + or_calc, v_name, v.suffix))
         return r
 
     def make_text(self, filename):
@@ -816,11 +759,13 @@ class CSSGroup:
             return self.make_propset_h()
         elif filename == 'propget.h':
             return self.make_propget_h()
+        elif filename == 'destroy.inc':
+            return self.make_destroy_inc()
         else:
             raise ValueError()
 
 css_groups = [ CSSGroup(g) for g in groups ]
-dir_path = sys.argv[1] + "/contrib/libcss"
+dir_path = os.path.dirname(os.path.realpath(__file__))
 
 for k, v in assets.items():
     # Key is filename string (e.g. "computed.h") without autogenerated_ prefix

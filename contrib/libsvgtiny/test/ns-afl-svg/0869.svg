@@ -1,0 +1,13 @@
+<svg viewBox="0 0 100 101.1" xmlns="vg" id="foo">
+  <stop set="0"/>
+  <defs> <linearGradient id="foo">
+ </linearGradient>
+  </defs>
+ <svg vlns="l">
+  <defs> <linearGradient id="foo">-  <stop stop-color="#69f" offset="0.8%"
+  />
+ )<stop stop-color="#46" offset="1"/> </linearGradient>
+  </defs>
+  <path fill="url(#foo)" stroke='pointsar)' d='M10 110 V 90 3 0 Z' />
+</svg> <path fill="url(#foo)" stroke='\rm(#bar)' />
+</svg>

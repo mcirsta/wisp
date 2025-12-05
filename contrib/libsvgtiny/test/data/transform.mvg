@@ -1,0 +1,9 @@
+viewbox 0 0 400 400
+fill #ff0000 stroke #0000ff stroke-width 1 path 'M 0 0 L 0 100 L 100 100 Z ' 
+fill #ff0000 stroke #0000ff stroke-width 1 path 'M 100 100 L 100 200 L 200 200 Z ' 
+fill #ff0000 stroke #0000ff stroke-width 1 path 'M 7.62939e-06 1.52588e-05 L 7.62939e-06 100 L 100 100 Z ' 
+fill #ff0000 stroke #0000ff stroke-width 1 path 'M 107.071 178.787 L -34.3503 320.208 L 107.071 461.63 Z ' 
+fill #ff0000 stroke #0000ff stroke-width 1 path 'M 100 100 L 0 100 L -7.62939e-06 200 Z ' 
+fill #ff0000 stroke #0000ff stroke-width -1 path 'M 100 100 L 100 7.62939e-06 L 0 0 Z ' 
+fill #0000ff stroke #ff0000 stroke-width 1 path 'M 100 0 L 150 86.6025 L 236.603 36.6025 Z ' 
+fill #ff0000 stroke #0000ff stroke-width 1 path 'M 100 0 L 151.714 86.474 L 238.188 37.7007 Z ' 

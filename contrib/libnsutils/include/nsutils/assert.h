@@ -17,7 +17,7 @@
 #define ns_static_assert(e) \
 { \
 	enum { \
-		cyaml_static_assert_check = 1 / (!!(e)) \
+		ns_static_assert_check = 1 / (!!(e)) \
 	}; \
 }
 

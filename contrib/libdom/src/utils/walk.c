@@ -19,7 +19,7 @@
  * \param[in]  stage    Whether the \ref node is being entered or left.
  * \param[in]  node     The node being walked.
  * \param[in]  cb       The client callback function.
- * \param[in]  ctx      The client's private data.
+ * \param[in]  pw       The client's private data.
  * \param[out] cmd_out  Walk instruction from client.
  * \return false for early termination of walk, true otherwise.
  */
@@ -28,7 +28,7 @@ static inline dom_exception dom_walk__cb(
 		enum dom_walk_stage stage,
 		dom_node *node,
 		dom_walk_cb cb,
-		void *ctx,
+		void *pw,
 		enum dom_walk_cmd *cmd_out)
 {
 	if ((1 << stage) & mask) {
@@ -40,7 +40,7 @@ static inline dom_exception dom_walk__cb(
 			return exc;
 		}
 
-		*cmd_out = cb(stage, type, node, ctx);
+		*cmd_out = cb(stage, type, node, pw);
 	}
 
 	return DOM_NO_ERR;
@@ -51,7 +51,7 @@ dom_exception libdom_treewalk(
 		enum dom_walk_enable mask,
 		dom_walk_cb cb,
 		dom_node *root,
-		void *ctx)
+		void *pw)
 {
 	dom_node *node;
 	dom_exception exc;
@@ -77,7 +77,7 @@ dom_exception libdom_treewalk(
 			/* No children; siblings & ancestor's siblings */
 			while (node != root) {
 				exc = dom_walk__cb(mask, DOM_WALK_STAGE_LEAVE,
-						node, cb, ctx, &cmd);
+						node, cb, pw, &cmd);
 				if (exc != DOM_NO_ERR ||
 				    cmd == DOM_WALK_CMD_ABORT) {
 					dom_node_unref(node);
@@ -118,7 +118,7 @@ dom_exception libdom_treewalk(
 		assert(node != root);
 
 		exc = dom_walk__cb(mask, DOM_WALK_STAGE_ENTER, node,
-				cb, ctx, &cmd);
+				cb, pw, &cmd);
 		if (exc != DOM_NO_ERR) {
 			return exc;
 		}

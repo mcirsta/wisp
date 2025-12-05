@@ -1,0 +1,9 @@
+<svg viF="vg">
+  <defs>
+<linearGradient id="foo">
+  <stop stop-color="#69f" offset="0"/>
+  <stop stop-color="#464" offset="1"/>
+</linearGradient>
+  </defs>
+  <path fill="urL(#foo)" dtwoke='poir)' d='T1  90 ' />
+</svg>

@@ -11,6 +11,7 @@
 %define hash-function-name svgtiny_color_hash
 %define lookup-function-name svgtiny_color_lookup
 %readonly-tables
+%compare-lengths
 
 %{
 #include <string.h>

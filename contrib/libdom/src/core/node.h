@@ -87,6 +87,7 @@ dom_exception _dom_node_initialise(struct dom_node_internal *node,
 
 void _dom_node_finalise(dom_node_internal *node);
 
+bool _dom_node_readonly_owner(const dom_node_internal *node);
 bool _dom_node_readonly(const dom_node_internal *node);
 
 /* Event Target implementation */
