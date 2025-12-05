@@ -95,7 +95,7 @@ add_library(dom SHARED
 	src/utils/character_valid.c
 	src/utils/validate.c
 	src/utils/walk.c
-	bindings/xml/xmlparser.c
+	bindings/xml/libxml_xmlparser.c
 	bindings/hubbub/parser.c
 )
 set_target_properties(dom PROPERTIES SOVERSION ${NEOSURF_ABI})

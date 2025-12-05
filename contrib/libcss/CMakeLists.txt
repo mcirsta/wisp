@@ -54,6 +54,7 @@ add_library(css SHARED
 	src/parse/properties/cue.c
 	src/parse/properties/cursor.c
 	src/parse/properties/elevation.c
+	src/parse/properties/fill_opacity.c
 	src/parse/properties/flex.c
 	src/parse/properties/flex_flow.c
 	src/parse/properties/font.c
@@ -70,6 +71,7 @@ add_library(css SHARED
 	src/parse/properties/play_during.c
 	src/parse/properties/properties.c
 	src/parse/properties/quotes.c
+	src/parse/properties/stroke_opacity.c
 	src/parse/properties/text_decoration.c
 	src/parse/properties/utils.c
 	src/parse/properties/voice_family.c
@@ -125,6 +127,7 @@ add_library(css SHARED
 	src/select/properties/display.c
 	src/select/properties/elevation.c
 	src/select/properties/empty_cells.c
+	src/select/properties/fill_opacity.c
 	src/select/properties/flex_basis.c
 	src/select/properties/flex_direction.c
 	src/select/properties/flex_grow.c
@@ -182,6 +185,7 @@ add_library(css SHARED
 	src/select/properties/speak_numeral.c
 	src/select/properties/speak_punctuation.c
 	src/select/properties/stress.c
+	src/select/properties/stroke_opacity.c
 	src/select/properties/table_layout.c
 	src/select/properties/text_align.c
 	src/select/properties/text_decoration.c
@@ -200,6 +204,7 @@ add_library(css SHARED
 	src/select/properties/writing_mode.c
 	src/select/properties/z_index.c
 	src/select/arena.c
+	src/select/calc.c
 	src/select/computed.c
 	src/select/dispatch.c
 	src/select/hash.c
@@ -209,6 +214,7 @@ add_library(css SHARED
 	src/select/format_list_style.c
 	src/select/unit.c
 	src/utils/utils.c
+	src/utils/errors.c
 )
 set_target_properties(css PROPERTIES SOVERSION ${NEOSURF_ABI})
 

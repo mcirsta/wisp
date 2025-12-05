@@ -31,6 +31,8 @@ add_library(svgtiny SHARED
 	src/svgtiny.c
 	src/svgtiny_gradient.c
 	src/svgtiny_list.c
+	src/svgtiny_parse.c
+	src/svgtiny_path.c
 )
 set_target_properties(svgtiny PROPERTIES SOVERSION ${NEOSURF_ABI})
 
