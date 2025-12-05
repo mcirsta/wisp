@@ -9,7 +9,7 @@ if(EXISTS "${CMAKE_SOURCE_DIR}/contrib/libparserutils/build/make-aliases.pl")
 		message(FATAL_ERROR "libparserutils make-aliases.pl failed (error ${RET})")
 	endif()
 else()
-	message(STATUS "libparserutils make-aliases.pl not found, skipping aliases.inc generation")
+	message(FATAL_ERROR "libparserutils make-aliases.pl not found, cannot generate aliases.inc")
 endif()
 
 add_library(parserutils SHARED

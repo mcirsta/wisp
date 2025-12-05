@@ -16,7 +16,7 @@
 #include <string.h>
 
 #include <dom/dom.h>
-#include <dom/bindings/xml/xmlparser.h>
+#include <xml/xmlparser.h>
 
 #include "svgtiny.h"
 #include "svgtiny_internal.h"

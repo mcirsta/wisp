@@ -27,6 +27,12 @@ set_target_properties(svgtiny PROPERTIES SOVERSION ${NEOSURF_ABI})
 
 target_link_libraries(svgtiny nsutils dom m)
 
+target_include_directories(svgtiny PRIVATE
+	${CMAKE_SOURCE_DIR}/contrib/libsvgtiny/src
+	${CMAKE_BINARY_DIR}/contrib/libsvgtiny/src
+	${CMAKE_SOURCE_DIR}/contrib/libdom/bindings
+)
+
 install(TARGETS svgtiny DESTINATION ${CMAKE_INSTALL_LIBDIR})
 
 install(FILES include/svgtiny.h DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
