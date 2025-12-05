@@ -28,7 +28,7 @@
 
 #include <neosurf/inttypes.h>
 #include <neosurf/utils/config.h>
-#include <neosurf/utils/errors.h>
+#include <utils/errors.h>
 #include "utils/nscolour.h"
 #include <neosurf/utils/nsoption.h>
 #include <neosurf/utils/corestrings.h>
@@ -134,6 +134,11 @@ nserror neosurf_init(const char *store_path)
 
 	/* corestrings init */
 	ret = corestrings_init();
+	if (ret != NSERROR_OK)
+		return ret;
+
+	/* Initialize urldb */
+	ret = urldb_init();
 	if (ret != NSERROR_OK)
 		return ret;
 

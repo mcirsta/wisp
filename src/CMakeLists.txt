@@ -24,7 +24,6 @@ include_directories(${LIBCRYPTO_INCLUDE_DIRS})
 
 pkg_check_modules(LIBPSL REQUIRED libpsl)
 include_directories(${LIBPSL_INCLUDE_DIRS})
-add_definitions(-DWITH_LIBPSL)
 
 pkg_check_modules(LIBUTF8PROC REQUIRED libutf8proc)
 include_directories(${LIBUTF8PROC_INCLUDE_DIRS})

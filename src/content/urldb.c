@@ -94,9 +94,7 @@
 #include <string.h>
 #include <strings.h>
 #include <time.h>
-#ifdef WITH_NSPSL
-#include <nspsl.h>
-#endif
+#include <libpsl.h>
 
 #include <neosurf/utils/inet.h>
 #include <neosurf/utils/nsoption.h>
@@ -273,6 +271,8 @@ struct search_node {
 
 /** Root database handle */
 static struct host_part db_root;
+
+static psl_ctx_t *psl_ctx = NULL;
 
 /** Search trees - one per letter + 1 for IPs + 1 for Everything Else */
 #define NUM_SEARCH_TREES 28
@@ -2844,8 +2844,27 @@ static void urldb_destroy_search_tree(struct search_node *root)
 
 
 /* exported interface documented in content/urldb.h */
+nserror urldb_init(void)
+{
+	psl_ctx = psl_latest(NULL);
+
+	if (psl_ctx == NULL) {
+		NSLOG(neosurf, INFO, "Failed to initialise PSL library.");
+		return NSERROR_INIT_FAILED;
+	}
+
+	return NSERROR_OK;
+}
+
+
+/* exported interface documented in content/urldb.h */
 void urldb_destroy(void)
 {
+	if (psl_ctx) {
+		psl_free(psl_ctx);
+		psl_ctx = NULL;
+	}
+
 	struct host_part *a, *b;
 	int i;
 
@@ -3850,9 +3869,6 @@ bool urldb_set_cookie(const char *header, nsurl *url, nsurl *referer)
 		struct cookie_internal_data *c;
 		char *dot;
 		size_t len;
-#ifdef WITH_NSPSL
-		const char *suffix;
-#endif
 
 		c = urldb_parse_cookie(url, &cur);
 		if (!c) {
@@ -3877,28 +3893,17 @@ bool urldb_set_cookie(const char *header, nsurl *url, nsurl *referer)
 			goto error;
 		}
 
-#ifdef WITH_NSPSL
 		/* check domain is not a public suffix */
 		dot = c->domain;
 		if (*dot == '.') {
 			dot++;
 		}
-		suffix = nspsl_getpublicsuffix(dot);
-		if (suffix == NULL) {
+		if (psl_ctx && psl_is_public_suffix(psl_ctx, dot)) {
 			NSLOG(netsurf, INFO,
 			      "domain %s was a public suffix domain", dot);
 			urldb_free_cookie(c);
 			goto error;
 		}
-#else
-		/* 4.3.2:ii Cookie domain must contain embedded dots */
-		dot = strchr(c->domain + 1, '.');
-		if (!dot || *(dot + 1) == '\0') {
-			/* no embedded dots */
-			urldb_free_cookie(c);
-			goto error;
-		}
-#endif
 
 		/* Domain match fetch host with cookie domain */
 		if (strcasecmp(lwc_string_data(host), c->domain) != 0) {

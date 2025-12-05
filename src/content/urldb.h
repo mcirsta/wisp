@@ -30,6 +30,12 @@
 #include "neosurf/cookie_db.h"
 
 /**
+ * Initialize urldb
+ */
+nserror urldb_init(void);
+
+
+/**
  * Destroy urldb
  */
 void urldb_destroy(void);
