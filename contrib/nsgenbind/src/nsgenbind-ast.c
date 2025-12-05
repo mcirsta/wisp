@@ -26,7 +26,7 @@
 static FILE *genbind_parsetracef;
 
 /* parser and lexer interface */
-int nsgenbind_debug;
+extern int nsgenbind_debug;
 extern int nsgenbind__flex_debug;
 extern void nsgenbind_restart(FILE*);
 extern int nsgenbind_parse(char *filename, struct genbind_node **genbind_ast);
@@ -565,7 +565,13 @@ FILE *genbindopen(const char *filename)
                 snprintf(fullname, fulllen, "%s/%s", options->idlpath, filename);
                 genfile = fopen(fullname, "r");
                 if ((genfile != NULL) && options->verbose) {
-                        printf("Opened Genbind file %s\n", fullname);
+                        printf("Opend Genbind file %s\n", fullname);
+#if 0
+                        if (options->depfilehandle != NULL) {
+                                fprintf(options->depfilehandle, " \\\n\t%s",
+                                        fullname);
+                        }
+#endif
                 }
 
                 free(fullname);

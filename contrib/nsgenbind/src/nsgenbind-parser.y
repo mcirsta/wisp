@@ -6,29 +6,23 @@
  * Copyright 2012 Vincent Sanders <vince@netsurf-browser.org>
  */
 
-//%define api.pure
-%pure-parser
-
 %locations
-
-//%define parse.error verbose
- /* would use api.prefix but it needs to be different between bison
-  *  2.5 and 2.6
-  */
+%define api.pure
+%define parse.error verbose
 
 %code requires {
 
 #ifndef YYLTYPE
 /* Bison <3.0 */
-#define YYLTYPE yyltype
+#define YYLTYPE YYLTYPE
 #else
 /* Bison 3.0 or later */
 /* Keep in sync with the defined API prefix */
 #define NSGENBIND_LTYPE_IS_DECLARED 1
 #endif
 
-typedef struct yyltype {
-        struct yyltype *next;
+typedef struct YYLTYPE {
+        struct YYLTYPE *next;
         int start_line;
         char *filename;
 
@@ -36,7 +30,7 @@ typedef struct yyltype {
         int first_column;
         int last_line;
         int last_column;
-} yyltype;
+} YYLTYPE;
 
 
 #define YYLLOC_DEFAULT(Current, Rhs, N)                                \
@@ -91,7 +85,7 @@ typedef struct yyltype {
 
 static char *errtxt;
 
-static void nsgenbind_error(yyltype *locp,
+static void nsgenbind_error(YYLTYPE *locp,
                             char *filename,
                             struct genbind_node **genbind_ast,
                             const char *str)

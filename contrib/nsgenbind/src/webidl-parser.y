@@ -45,9 +45,8 @@ webidl_error(YYLTYPE *locp, struct webidl_node **winbind_ast, const char *str)
 %}
 
 %locations
-//%define api.pure
-%pure-parser
-//%define parse.error verbose
+%define api.pure
+%define parse.error verbose
 %parse-param { struct webidl_node **webidl_ast }
 
 %union
@@ -516,6 +515,18 @@ DictionaryMember:
             $$ = webidl_node_new(WEBIDL_NODE_TYPE_ARGUMENT, NULL, member);
         }
         ;
+
+/* SE[14] */
+//Required:
+//        {
+//                $$ = false; /* empty */
+//        }
+//        |
+//        TOK_REQUIRED
+//        {
+//                $$ = true;
+//        }
+//        ;
 
  /* [14] */
 PartialDictionary:
