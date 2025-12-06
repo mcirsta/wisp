@@ -19,6 +19,10 @@
 #ifndef NETSURF_WINDOWS_WINDOW_H_
 #define NETSURF_WINDOWS_WINDOW_H_
 
+#ifndef NEOSURF_HOMEPAGE
+#define NEOSURF_HOMEPAGE "about:welcome"
+#endif
+
 /** The window operation function table for win32 */
 extern struct gui_window_table *win32_window_table;
 

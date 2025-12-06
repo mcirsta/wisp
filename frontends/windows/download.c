@@ -28,10 +28,9 @@
 #include <shlobj.h>
 #include <windows.h>
 
-#include "neosurf/utils/sys_time.h"
+#include <sys/time.h>
 #include "neosurf/utils/log.h"
 #include "neosurf/utils/messages.h"
-#include "neosurf/utils/url.h"
 #include "neosurf/utils/nsurl.h"
 #include "neosurf/utils/utils.h"
 #include "neosurf/utils/string.h"
@@ -155,7 +154,7 @@ static void nsws_download_clear_data(struct gui_download_window *w)
 }
 
 
-static BOOL CALLBACK
+static INT_PTR CALLBACK
 nsws_download_event_callback(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 {
 	switch(msg) {

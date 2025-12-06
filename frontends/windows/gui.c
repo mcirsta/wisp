@@ -32,7 +32,6 @@
 #include "neosurf/utils/nsurl.h"
 #include "neosurf/utils/log.h"
 #include "neosurf/utils/corestrings.h"
-#include "neosurf/utils/url.h"
 #include "neosurf/utils/file.h"
 #include "neosurf/utils/messages.h"
 #include "neosurf/browser_window.h"

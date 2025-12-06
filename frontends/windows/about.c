@@ -94,7 +94,7 @@ static BOOL destroy_about_dialog(HWND hwnd)
 
 }
 
-static BOOL CALLBACK 
+static INT_PTR CALLBACK 
 nsws_about_event_callback(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 {
 

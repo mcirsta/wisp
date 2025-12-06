@@ -145,7 +145,7 @@ static void change_spinner(HWND sub, double change, double minval, double maxval
  * \param lParam The message l parameter
  * \return result appropriate for message
  */
-static BOOL CALLBACK options_appearance_dialog_handler(HWND hwnd,
+static INT_PTR CALLBACK options_appearance_dialog_handler(HWND hwnd,
 						       UINT msg,
 						       WPARAM wparam,
 						       LPARAM lParam)
@@ -428,7 +428,7 @@ static BOOL CALLBACK options_appearance_dialog_handler(HWND hwnd,
  * \param lParam The message l parameter
  * \return result appropriate for message
  */
-static BOOL CALLBACK options_connections_dialog_handler(HWND hwnd,
+static INT_PTR CALLBACK options_connections_dialog_handler(HWND hwnd,
 							UINT msg,
 							WPARAM wparam,
 							LPARAM lParam)
@@ -599,7 +599,7 @@ static BOOL CALLBACK options_connections_dialog_handler(HWND hwnd,
  * \param lParam The message l parameter
  * \return result appropriate for message
  */
-static BOOL CALLBACK options_general_dialog_handler(HWND hwnd,
+static INT_PTR CALLBACK options_general_dialog_handler(HWND hwnd,
 						    UINT msg,
 						    WPARAM wparam,
 						    LPARAM lParam)
@@ -676,7 +676,7 @@ nserror nsws_prefs_save(void)
 	char *choices = NULL;
 	nserror res;
 
-	res = netsurf_mkpath(&choices, NULL, 2, G_config_path, "Choices");
+	res = neosurf_mkpath(&choices, NULL, 2, G_config_path, "Choices");
 	if (res == NSERROR_OK) {
 		nsoption_write(choices, NULL, NULL);
 		free(choices);

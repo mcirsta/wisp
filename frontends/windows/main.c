@@ -38,7 +38,7 @@
 #include "neosurf/browser_window.h"
 #include "neosurf/fetch.h"
 #include "neosurf/misc.h"
-#include "neosurf/netsurf.h"
+#include "neosurf/neosurf.h"
 #include "neosurf/desktop/hotlist.h"
 
 #include "windows/findfile.h"
@@ -222,32 +222,32 @@ static nserror set_defaults(struct nsoption_s *defaults)
 	free(buf);
 
 	/* ensure homepage option has a default */
-	nsoption_setnull_charp(homepage_url, strdup(NETSURF_HOMEPAGE));
+	nsoption_setnull_charp(homepage_url, strdup(NEOSURF_HOMEPAGE));
 
 	/* cookie file default */
 	fname = NULL;
-	netsurf_mkpath(&fname, NULL, 2, G_config_path, "Cookies");
+	neosurf_mkpath(&fname, NULL, 2, G_config_path, "Cookies");
 	if (fname != NULL) {
 		nsoption_setnull_charp(cookie_file, fname);
 	}
 
 	/* cookie jar default */
 	fname = NULL;
-	netsurf_mkpath(&fname, NULL, 2, G_config_path, "Cookies");
+	neosurf_mkpath(&fname, NULL, 2, G_config_path, "Cookies");
 	if (fname != NULL) {
 		nsoption_setnull_charp(cookie_jar, fname);
 	}
 
 	/* url database default */
 	fname = NULL;
-	netsurf_mkpath(&fname, NULL, 2, G_config_path, "URLs");
+	neosurf_mkpath(&fname, NULL, 2, G_config_path, "URLs");
 	if (fname != NULL) {
 		nsoption_setnull_charp(url_file, fname);
 	}
 
 	/* bookmark database default */
 	fname = NULL;
-	netsurf_mkpath(&fname, NULL, 2, G_config_path, "Hotlist");
+	neosurf_mkpath(&fname, NULL, 2, G_config_path, "Hotlist");
 	if (fname != NULL) {
 		nsoption_setnull_charp(hotlist_path, fname);
 	}
@@ -276,7 +276,7 @@ nsw32_option_init(int *pargc, char** argv, char **respaths, char *config_path)
 	}
 
 	/* Attempt to load the user choices */
-	ret = netsurf_mkpath(&choices, NULL, 2, config_path, "Choices");
+	ret = neosurf_mkpath(&choices, NULL, 2, config_path, "Choices");
 	if (ret == NSERROR_OK) {
 		nsoption_read(choices, nsoptions);
 		free(choices);
@@ -387,7 +387,7 @@ WinMain(HINSTANCE hInstance, HINSTANCE hLastInstance, LPSTR lpcli, int ncmd)
 	nserror ret;
 	const char *addr;
 	nsurl *url;
-	struct netsurf_table win32_table = {
+	struct neosurf_table win32_table = {
 		.misc = &win32_misc_table,
 		.window = win32_window_table,
 		.corewindow = win32_core_window_table,
@@ -400,7 +400,7 @@ WinMain(HINSTANCE hInstance, HINSTANCE hLastInstance, LPSTR lpcli, int ncmd)
 		.layout = win32_layout_table,
 	};
 
-	ret = netsurf_register(&win32_table);
+	ret = neosurf_register(&win32_table);
 	if (ret != NSERROR_OK) {
 		die("NetSurf operation table registration failed");
 	}
@@ -449,7 +449,7 @@ WinMain(HINSTANCE hInstance, HINSTANCE hLastInstance, LPSTR lpcli, int ncmd)
 	}
 
 	/* common initialisation */
-	ret = netsurf_init(NULL);
+	ret = neosurf_init(NULL);
 	if (ret != NSERROR_OK) {
 		NSLOG(netsurf, INFO, "NetSurf failed to initialise");
 		return 1;
@@ -476,7 +476,7 @@ WinMain(HINSTANCE hInstance, HINSTANCE hLastInstance, LPSTR lpcli, int ncmd)
 	} else if (nsoption_charp(homepage_url) != NULL) {
 		addr = nsoption_charp(homepage_url);
 	} else {
-		addr = NETSURF_HOMEPAGE;
+		addr = NEOSURF_HOMEPAGE;
 	}
 
 	NSLOG(netsurf, INFO, "calling browser_window_create");
@@ -500,7 +500,7 @@ WinMain(HINSTANCE hInstance, HINSTANCE hLastInstance, LPSTR lpcli, int ncmd)
 	urldb_save_cookies(nsoption_charp(cookie_jar));
 	urldb_save(nsoption_charp(url_file));
 
-	netsurf_exit();
+	neosurf_exit();
 
 	/* finalise options */
 	nsoption_finalise(nsoptions, nsoptions_default);

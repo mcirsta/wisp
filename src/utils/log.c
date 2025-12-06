@@ -21,7 +21,7 @@
 
 #include <neosurf/utils/config.h>
 #include <neosurf/utils/nsoption.h>
-#include "utils/sys_time.h"
+#include "neosurf/utils/sys_time.h"
 #include "utils/utsname.h"
 #include <neosurf/desktop/version.h>
 

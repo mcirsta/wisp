@@ -971,7 +971,7 @@ static nserror win32_open_new_window(struct gui_window *gw)
 	if (nsoption_charp(homepage_url) != NULL) {
 		addr = nsoption_charp(homepage_url);
 	} else {
-		addr = NETSURF_HOMEPAGE;
+		addr = NEOSURF_HOMEPAGE;
 	}
 
 	ret = nsurl_create(addr, &url);

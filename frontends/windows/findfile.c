@@ -28,7 +28,7 @@
 #include <string.h>
 
 #include "neosurf/utils/log.h"
-#include "neosurf/utils/url.h"
+#include "neosurf/utils/nsurl.h"
 #include "neosurf/utils/utils.h"
 #include "neosurf/utils/filepath.h"
 
