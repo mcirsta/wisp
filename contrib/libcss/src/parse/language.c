@@ -169,7 +169,8 @@ css_error css__language_destroy(css_language *language)
 	if (language == NULL)
 		return CSS_BADPARM;
 
-	lwc_string_unref(language->default_namespace);
+	if (language->default_namespace != NULL)
+		lwc_string_unref(language->default_namespace);
 
 	if (language->namespaces != NULL) {
 		for (i = 0; i < language->num_namespaces; i++) {
