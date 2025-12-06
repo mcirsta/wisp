@@ -28,6 +28,32 @@ set(NEOSURF_WINDOWS_SRCS
 	window.c
 )
 
+
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
+
+set(MESSAGES_LANGUAGES en fr de it nl)
+set(MESSAGES_PLATFORMS win all)
+set(FAT_MESSAGES "${CMAKE_SOURCE_DIR}/src/resources/FatMessages")
+set(SPLIT_MESSAGES_SCRIPT "${CMAKE_SOURCE_DIR}/src/utils/split_messages.py")
+set(GENERATED_MESSAGES_DIR "${CMAKE_CURRENT_BINARY_DIR}/res")
+
+set(GENERATED_MESSAGES_FILES)
+
+foreach(LANG ${MESSAGES_LANGUAGES})
+    set(MSG_FILE "${GENERATED_MESSAGES_DIR}/${LANG}/Messages")
+    list(APPEND GENERATED_MESSAGES_FILES ${MSG_FILE})
+    
+    add_custom_command(
+        OUTPUT ${MSG_FILE}
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${GENERATED_MESSAGES_DIR}/${LANG}"
+        COMMAND Python3::Interpreter ${SPLIT_MESSAGES_SCRIPT} ${FAT_MESSAGES} ${MSG_FILE} ${LANG} ${MESSAGES_PLATFORMS}
+        DEPENDS ${FAT_MESSAGES} ${SPLIT_MESSAGES_SCRIPT}
+        COMMENT "Generating Messages for ${LANG}"
+    )
+endforeach()
+
+add_custom_target(windows_messages DEPENDS ${GENERATED_MESSAGES_FILES})
+
 # Resource compilation
 set(NEOSURF_WINDOWS_RC res/resource.rc)
 
@@ -35,6 +61,9 @@ add_executable(neosurf-windows WIN32
 	${NEOSURF_WINDOWS_SRCS}
 	${NEOSURF_WINDOWS_RC}
 )
+
+add_dependencies(neosurf-windows windows_messages)
+target_include_directories(neosurf-windows PRIVATE ${GENERATED_MESSAGES_DIR})
 
 target_link_libraries(neosurf-windows neosurf m ${NEOSURF_COMMON_LIBS} ws2_32 comctl32 gdi32 user32 kernel32 msimg32 wininet shlwapi crypt32)
 
