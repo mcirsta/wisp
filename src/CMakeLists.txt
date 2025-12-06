@@ -45,22 +45,23 @@ if(LIBSSL_VERSION_MAJOR EQUAL 1)
 endif()
 
 # Build nsgenbind at configure time
-execute_process(COMMAND cmake -B ${CMAKE_BINARY_DIR}/contrib/nsgenbind ${CMAKE_SOURCE_DIR}/contrib/nsgenbind -G ${CMAKE_GENERATOR} -DYACC=${YACC} RESULT_VARIABLE RET)
+execute_process(COMMAND ${CMAKE_COMMAND} -B ${CMAKE_BINARY_DIR}/contrib/nsgenbind ${CMAKE_SOURCE_DIR}/contrib/nsgenbind -G ${CMAKE_GENERATOR} -DYACC=${YACC} RESULT_VARIABLE RET)
 if(NOT RET EQUAL 0)
 	message(FATAL_ERROR "nsgenbind configure failed (error ${RET})")
 endif()
-execute_process(COMMAND ${CMAKE_MAKE_PROGRAM} -C ${CMAKE_BINARY_DIR}/contrib/nsgenbind RESULT_VARIABLE RET)
+execute_process(COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR}/contrib/nsgenbind RESULT_VARIABLE RET)
 if(NOT RET EQUAL 0)
 	message(FATAL_ERROR "nsgenbind build failed (error ${RET})")
 endif()
 
-execute_process(COMMAND mkdir -p ${CMAKE_BINARY_DIR}/duktape RESULT_VARIABLE RET)
-if(NOT RET EQUAL 0)
-	message(FATAL_ERROR "Unable to create directory: ${CMAKE_BINARY_DIR}/duktape (error ${RET})")
-endif()
-execute_process(COMMAND ${CMAKE_BINARY_DIR}/contrib/nsgenbind/nsgenbind -I ${CMAKE_SOURCE_DIR}/src/content/handlers/javascript/WebIDL ${CMAKE_SOURCE_DIR}/src/content/handlers/javascript/duktape/neosurf.bnd ${CMAKE_BINARY_DIR}/duktape RESULT_VARIABLE RET)
+file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/duktape)
+execute_process(COMMAND ${CMAKE_BINARY_DIR}/contrib/nsgenbind/nsgenbind${CMAKE_EXECUTABLE_SUFFIX} -I ${CMAKE_SOURCE_DIR}/src/content/handlers/javascript/WebIDL neosurf.bnd ${CMAKE_BINARY_DIR}/duktape WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src/content/handlers/javascript/duktape RESULT_VARIABLE RET)
 if(NOT RET EQUAL 0)
 	message(FATAL_ERROR "Unable to generate bindings (error ${RET})")
+endif()
+
+if(NOT EXISTS ${CMAKE_BINARY_DIR}/duktape/binding.h)
+	message(FATAL_ERROR "Generated file duktape/binding.h is missing")
 endif()
 
 aux_source_directory(${CMAKE_BINARY_DIR}/duktape DSRC)
@@ -206,6 +207,8 @@ endif()
 
 set(NEOSURF_COMMON_LIBS css dom nsutils parserutils nsgif nsbmp svgtiny ${LIBCRYPTO_LIBRARIES} ${LIBPNG_LIBRARIES} ${LIBCURL_LIBRARIES} ${LIBJPEG_LIBRARIES} ${LIBWEBP_LIBRARIES} ${LIBPSL_LIBRARIES} ${ZLIB_LIBRARIES} ${LIBSSL_LIBRARIES} ${LIBUTF8PROC_LIBRARIES})
 target_link_libraries(neosurf ${NEOSURF_COMMON_LIBS})
+
+target_include_directories(neosurf PRIVATE ${CMAKE_SOURCE_DIR}/contrib ${CMAKE_BINARY_DIR})
 
 install(TARGETS neosurf DESTINATION ${CMAKE_INSTALL_LIBDIR})
 install(DIRECTORY resources/ DESTINATION ${CMAKE_INSTALL_DATADIR}/neosurf)

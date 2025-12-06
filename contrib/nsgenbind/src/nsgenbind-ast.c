@@ -528,7 +528,16 @@ FILE *genbindopen(const char *filename)
                         printf("Opened Genbind file %s\n", filename);
                 }
                 if (prevfilepath == NULL) {
-                        fullname = strrchr(filename, '/');
+                        char *slash = strrchr(filename, '/');
+                        char *backslash = strrchr(filename, '\\');
+                        if (slash && backslash) {
+                                fullname = (slash > backslash) ? slash : backslash;
+                        } else if (slash) {
+                                fullname = slash;
+                        } else {
+                                fullname = backslash;
+                        }
+
                         if (fullname == NULL) {
                                 fulllen = strlen(filename);
                         } else {

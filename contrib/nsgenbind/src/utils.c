@@ -35,7 +35,7 @@ static char *genb_fpath_tmp(const char *fname)
         char *fpath;
         int fpathl;
 
-        fpathl = strlen(options->outdirname) + strlen(fname) + 3;
+        fpathl = strlen(options->outdirname) + strlen(fname) + 32;
         fpath = malloc(fpathl);
         snprintf(fpath, fpathl, "%s/%s.%d", options->outdirname, fname, getpid());
 
@@ -90,6 +90,38 @@ FILE *genb_fopen_tmp(const char *fname)
         return filef;
 }
 
+
+
+
+
+static int genb_copy_file(const char *src, const char *dst)
+{
+        FILE *fsrc, *fdst;
+        char buf[4096];
+        size_t n;
+
+        fsrc = fopen(src, "rb");
+        if (!fsrc) return -1;
+
+        fdst = fopen(dst, "wb");
+        if (!fdst) {
+                fclose(fsrc);
+                return -1;
+        }
+
+        while ((n = fread(buf, 1, sizeof(buf), fsrc)) > 0) {
+                if (fwrite(buf, 1, n, fdst) != n) {
+                        fclose(fsrc);
+                        fclose(fdst);
+                        return -1;
+                }
+        }
+
+        fclose(fsrc);
+        fclose(fdst);
+        return 0;
+}
+
 int genb_fclose_tmp(FILE *filef_tmp, const char *fname)
 {
         char *fpath;
@@ -99,6 +131,7 @@ int genb_fclose_tmp(FILE *filef_tmp, const char *fname)
         char fbuf[1024];
         size_t trd;
         size_t frd;
+        int rename_res;
 
         if (options->dryrun) {
                 fclose(filef_tmp);
@@ -108,15 +141,26 @@ int genb_fclose_tmp(FILE *filef_tmp, const char *fname)
         fpath = genb_fpath(fname);
         tpath = genb_fpath_tmp(fname);
 
-        filef = fopen(fpath, "r");
+        filef = fopen(fpath, "rb");
         if (filef == NULL) {
-                /* unable to open target file for comparison */
+                /* target does not exist */
+                fclose(filef_tmp); /* close tmpfile */
 
-                fclose(filef_tmp); /*  close tmpfile */
-
-                remove(fpath);
-                rename(tpath, fpath);
+                /* Try rename first */
+                remove(fpath); /* Ensure target is gone */
+                rename_res = rename(tpath, fpath);
+                if (rename_res != 0) {
+                        if (genb_copy_file(tpath, fpath) != 0) {
+                                remove(tpath);
+                                free(fpath);
+                                free(tpath);
+                                return -1;
+                        } else {
+                                remove(tpath);
+                        }
+                }
         } else {
+                /* target exists, compare */
                 rewind(filef_tmp);
 
                 frd = fread(fbuf, 1, 1024, filef);
@@ -129,7 +173,17 @@ int genb_fclose_tmp(FILE *filef_tmp, const char *fname)
                                 fclose(filef);
 
                                 remove(fpath);
-                                rename(tpath, fpath);
+                                rename_res = rename(tpath, fpath);
+                                if (rename_res != 0) {
+                                        if (genb_copy_file(tpath, fpath) != 0) {
+                                                remove(tpath);
+                                                free(fpath);
+                                                free(tpath);
+                                                return -1;
+                                        } else {
+                                                remove(tpath);
+                                        }
+                                }
 
                                 goto close_done;
                         }

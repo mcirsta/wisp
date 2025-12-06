@@ -100,6 +100,8 @@ static struct opctx *open_header(struct ir *ir, const char *name)
 
 static int close_header(struct ir *ir, struct opctx *hdrc)
 {
+        int res;
+
         /* close header guard */
         outputf(hdrc,
                 "\n#endif\n");
@@ -109,9 +111,9 @@ static int close_header(struct ir *ir, struct opctx *hdrc)
                             ir->binding_node,
                             GENBIND_METHOD_TYPE_POSTFACE);
 
-        output_close(hdrc);
+        res = output_close(hdrc);
 
-        return 0;
+        return res;
 }
 
 
@@ -190,9 +192,7 @@ output_private_header(struct ir *ir)
                         interfacee->class_name);
         }
 
-        close_header(ir, privc);
-
-        return 0;
+        return close_header(ir, privc);
 }
 
 /**
@@ -223,9 +223,7 @@ output_prototype_header(struct ir *ir)
                 }
         }
 
-        close_header(ir, protoc);
-
-        return 0;
+        return close_header(ir, protoc);
 }
 
 /**
@@ -317,9 +315,7 @@ output_binding_header(struct ir *ir)
         outputf(bindc,
                 "duk_ret_t %s_create_prototypes(duk_context *ctx);\n", DLPFX);
 
-        close_header(ir, bindc);
-
-        return 0;
+         return close_header(ir, bindc);
 }
 
 

@@ -31,6 +31,7 @@
 #include <neosurf/utils/errors.h>
 #include <neosurf/utils/nsoption.h>
 #include <neosurf/utils/corestrings.h>
+#include "utils/utils.h"
 #include "utils/talloc.h"
 #include <neosurf/utils/string.h>
 #include <neosurf/utils/ascii.h>

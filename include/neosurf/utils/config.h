@@ -28,6 +28,12 @@
 #endif
 #endif
 
+#if defined(__GLIBC__)
+#if __GLIBC_PREREQ(2, 38)
+#define NS_NEW_GLIBC
+#endif
+#endif
+
 /* Try to detect which features the target OS supports */
 
 #if (defined(_GNU_SOURCE) && \
@@ -43,6 +49,7 @@ char *strndup(const char *s, size_t n);
 #endif
 
 #if ((defined(_GNU_SOURCE) ||			\
+      defined(NS_NEW_GLIBC) || \
       defined(__APPLE__) ||			\
       defined(__HAIKU__) ||			\
       defined(__NetBSD__) ||			\
@@ -75,7 +82,9 @@ char *strcasestr(const char *haystack, const char *needle);
  *  UnixLib if building for RISC OS.
  */
 #if ((defined(_GNU_SOURCE) && !defined(__APPLE__)) ||	\
-     defined(__riscos__) || \
+     defined(NS_NEW_GLIBC) ||				\
+     defined(__riscos__) ||				\
+     defined(__HAIKU__) ||				\
      defined(NetBSD_v8))
 #define HAVE_STRCHRNUL
 #else
@@ -194,6 +203,7 @@ char *realpath(const char *path, char *resolved_path);
 /* IPv6 */
 #if (defined(__amigaos4__) ||			\
      defined(__AMIGA__) ||			\
+     defined(nsatari) ||			\
      defined(__serenity__))
 	#define NO_IPV6
 #endif

@@ -299,10 +299,10 @@ struct gui_window_table {
 	 * Place the caret in a browser window.
 	 *
 	 * \param  g	   window with caret
-	 * \param  x	   coordinates of caret
-	 * \param  y	   coordinates of caret
+	 * \param  x	   document relative x coordinate of caret
+	 * \param  y	   document relative y coordinate of caret
 	 * \param  height  height of caret
-	 * \param  clip	   clip rectangle, or NULL if none
+	 * \param  clip	   document relative clip rectangle, or NULL if none
 	 */
 	void (*place_caret)(struct gui_window *g, int x, int y, int height, const struct rect *clip);
 
@@ -376,18 +376,6 @@ struct gui_window_table {
 			    const char *msg,
 			    size_t msglen,
 			    browser_window_console_flags flags);
-
-	/**
-	 * Filter URLs for navigation. Return the same nsurl if no filtering is
-	 * desired, or leave this table field NULL. The browser will reference
-	 * the returned URL.
-	 *
-	 * \param gw The gui window which is navigating to a URL
-	 * \param url The URL being navigated to
-	 * \return The same URL, or another URL to load instead.
-	 */
-	struct nsurl *(*url_filter)(struct gui_window *gw,
-			            struct nsurl *url);
 };
 
 #endif

@@ -1486,7 +1486,7 @@ html_get_contextual_content(struct content *c, int x, int y,
 		if (box->object)
 			data->object = box->object;
 
-		if (box->href)
+		if (box->href) {
 			data->link = box->href;
 			data->link_title = box->text;
 			data->link_title_length = box->length;

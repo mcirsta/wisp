@@ -167,6 +167,7 @@ CORESTRING_LWC_VALUE(application_octet_stream, "application/octet-stream");
 CORESTRING_LWC_VALUE(image_gif, "image/gif");
 CORESTRING_LWC_VALUE(image_png, "image/png");
 CORESTRING_LWC_VALUE(image_jpeg, "image/jpeg");
+CORESTRING_LWC_VALUE(image_jxl, "image/jxl");
 CORESTRING_LWC_VALUE(image_bmp, "image/bmp");
 CORESTRING_LWC_VALUE(image_vnd_microsoft_icon, "image/vnd.microsoft.icon");
 CORESTRING_LWC_VALUE(image_webp, "image/webp");
@@ -182,7 +183,6 @@ CORESTRING_LWC_VALUE(application_postscript, "application/postscript");
 CORESTRING_LWC_VALUE(application_pdf, "application/pdf");
 CORESTRING_LWC_VALUE(video_mp4, "video/mp4");
 CORESTRING_LWC_VALUE(image_svg, "image/svg+xml");
-CORESTRING_LWC_VALUE(image_jxl, "image/jxl");
 
 
 /* DOM strings */

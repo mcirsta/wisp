@@ -1,7 +1,4 @@
-execute_process(COMMAND mkdir -p ${CMAKE_BINARY_DIR}/contrib/libhubbub/src/treebuilder RESULT_VARIABLE RET)
-if(NOT RET EQUAL 0)
-	message(FATAL_ERROR "Unable to create directory: ${CMAKE_BINARY_DIR}/contrib/libhubbub/src/treebuilder (error ${RET})")
-endif()
+file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/contrib/libhubbub/src/treebuilder)
 
 # Create a temporary copy of the .gperf file with LF line endings (required by gperf on Windows)
 # Use the helper script to ensure binary write with LF and strip BOM.

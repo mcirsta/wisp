@@ -29,8 +29,8 @@
 
 #include <dom/dom.h>
 
-#include <dom/bindings/hubbub/parser.h>
-#include <dom/bindings/hubbub/errors.h>
+#include <libdom/bindings/hubbub/parser.h>
+#include <libdom/bindings/hubbub/errors.h>
 
 /**
  * Search children of a node for first named element 
