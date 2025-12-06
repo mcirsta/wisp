@@ -37,12 +37,12 @@
 #include <windows.h>
 #include <windowsx.h>
 
-#include "utils/log.h"
-#include "utils/messages.h"
-#include "utils/utf8.h"
-#include "netsurf/types.h"
-#include "netsurf/keypress.h"
-#include "netsurf/mouse.h"
+#include "neosurf/utils/log.h"
+#include "neosurf/utils/messages.h"
+#include "neosurf/utils/utf8.h"
+#include "neosurf/types.h"
+#include "neosurf/keypress.h"
+#include "neosurf/mouse.h"
 
 #include "windows/windbg.h"
 #include "windows/corewindow.h"

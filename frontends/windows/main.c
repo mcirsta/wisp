@@ -16,7 +16,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "utils/config.h"
+#include "neosurf/utils/config.h"
 
 #include <limits.h>
 #include <stdbool.h>
@@ -25,21 +25,21 @@
 #include <shlwapi.h>
 #include <io.h>
 
-#include "utils/utils.h"
-#include "utils/log.h"
-#include "utils/messages.h"
-#include "utils/filepath.h"
-#include "utils/file.h"
-#include "utils/nsurl.h"
-#include "utils/nsoption.h"
-#include "netsurf/url_db.h"
-#include "netsurf/cookie_db.h"
-#include "netsurf/browser.h"
-#include "netsurf/browser_window.h"
-#include "netsurf/fetch.h"
-#include "netsurf/misc.h"
-#include "netsurf/netsurf.h"
-#include "desktop/hotlist.h"
+#include "neosurf/utils/utils.h"
+#include "neosurf/utils/log.h"
+#include "neosurf/utils/messages.h"
+#include "neosurf/utils/filepath.h"
+#include "neosurf/utils/file.h"
+#include "neosurf/utils/nsurl.h"
+#include "neosurf/utils/nsoption.h"
+#include "neosurf/url_db.h"
+#include "neosurf/cookie_db.h"
+#include "neosurf/browser.h"
+#include "neosurf/browser_window.h"
+#include "neosurf/fetch.h"
+#include "neosurf/misc.h"
+#include "neosurf/netsurf.h"
+#include "neosurf/desktop/hotlist.h"
 
 #include "windows/findfile.h"
 #include "windows/file.h"

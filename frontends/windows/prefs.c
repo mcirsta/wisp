@@ -21,15 +21,15 @@
  * win32 preferences dialog implementation.
  */
 
-#include "utils/config.h"
+#include "neosurf/utils/config.h"
 
 #include <windows.h>
 #include <commctrl.h>
 
-#include "utils/nsoption.h"
-#include "utils/log.h"
-#include "utils/messages.h"
-#include "utils/file.h"
+#include "neosurf/utils/nsoption.h"
+#include "neosurf/utils/log.h"
+#include "neosurf/utils/messages.h"
+#include "neosurf/utils/file.h"
 
 #include "windows/gui.h"
 #include "windows/prefs.h"

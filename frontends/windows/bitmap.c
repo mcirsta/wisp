@@ -22,17 +22,17 @@
  * win32 implementation of the bitmap operations.
  */
 
-#include "utils/config.h"
+#include "neosurf/utils/config.h"
 
 #include <inttypes.h>
 #include <sys/types.h>
 #include <string.h>
 #include <windows.h>
 
-#include "utils/log.h"
-#include "netsurf/bitmap.h"
-#include "netsurf/plotters.h"
-#include "netsurf/content.h"
+#include "neosurf/utils/log.h"
+#include "neosurf/bitmap.h"
+#include "neosurf/plotters.h"
+#include "neosurf/content.h"
 
 #include "windows/plot.h"
 #include "windows/bitmap.h"

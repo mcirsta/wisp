@@ -22,7 +22,7 @@
 /** The window operation function table for win32 */
 extern struct gui_window_table *win32_window_table;
 
-#include "netsurf/mouse.h"
+#include "neosurf/mouse.h"
 
 struct browser_mouse {
        struct gui_window *gui;

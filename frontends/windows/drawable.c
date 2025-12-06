@@ -24,16 +24,16 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#include "utils/config.h"
+#include "neosurf/utils/config.h"
 
 #include <windows.h>
 #include <windowsx.h>
 
-#include "utils/errors.h"
-#include "utils/log.h"
-#include "netsurf/browser_window.h"
-#include "netsurf/plotters.h"
-#include "netsurf/keypress.h"
+#include "neosurf/utils/errors.h"
+#include "neosurf/utils/log.h"
+#include "neosurf/browser_window.h"
+#include "neosurf/plotters.h"
+#include "neosurf/keypress.h"
 
 #include "windows/windbg.h"
 #include "windows/plot.h"

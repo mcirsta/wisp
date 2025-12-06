@@ -22,7 +22,7 @@
  * win32 plotter implementation.
  */
 
-#include "utils/config.h"
+#include "neosurf/utils/config.h"
 #include <sys/types.h>
 #include <stdint.h>
 #include <string.h>
@@ -30,11 +30,11 @@
 #include <math.h>
 #include <windows.h>
 
-#include "utils/log.h"
-#include "utils/utf8.h"
-#include "netsurf/mouse.h"
-#include "netsurf/window.h"
-#include "netsurf/plotters.h"
+#include "neosurf/utils/log.h"
+#include "neosurf/utils/utf8.h"
+#include "neosurf/mouse.h"
+#include "neosurf/window.h"
+#include "neosurf/plotters.h"
 
 #include "windows/bitmap.h"
 #include "windows/font.h"

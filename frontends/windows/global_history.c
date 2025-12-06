@@ -25,11 +25,11 @@
 #include <stdlib.h>
 #include <windows.h>
 
-#include "utils/log.h"
-#include "utils/nsoption.h"
-#include "netsurf/keypress.h"
-#include "netsurf/plotters.h"
-#include "desktop/global_history.h"
+#include "neosurf/utils/log.h"
+#include "neosurf/utils/nsoption.h"
+#include "neosurf/keypress.h"
+#include "neosurf/plotters.h"
+#include "neosurf/desktop/global_history.h"
 
 #include "windows/plot.h"
 #include "windows/corewindow.h"

@@ -19,7 +19,7 @@
 #ifndef NETSURF_WINDOWS_COREWINDOW_H
 #define NETSURF_WINDOWS_COREWINDOW_H
 
-#include "netsurf/core_window.h"
+#include "neosurf/core_window.h"
 
 extern struct core_window_table *win32_core_window_table;
 

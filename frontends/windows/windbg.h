@@ -19,7 +19,7 @@
 #ifndef NETSURF_WINDOWS_WINDBG_H
 #define NETSURF_WINDOWS_WINDBG_H
 
-#include "utils/log.h"
+#include "neosurf/utils/log.h"
 
 const char *msg_num_to_name(int msg);
 void win_perror(const char *lpszFunction);

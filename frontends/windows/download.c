@@ -24,20 +24,20 @@
  */
 
 #include <limits.h>
-#include "utils/inet.h" /* get correct winsock ordering */
+#include "neosurf/utils/inet.h" /* get correct winsock ordering */
 #include <shlobj.h>
 #include <windows.h>
 
-#include "utils/sys_time.h"
-#include "utils/log.h"
-#include "utils/messages.h"
-#include "utils/url.h"
-#include "utils/nsurl.h"
-#include "utils/utils.h"
-#include "utils/string.h"
-#include "content/fetch.h"
-#include "netsurf/download.h"
-#include "desktop/download.h"
+#include "neosurf/utils/sys_time.h"
+#include "neosurf/utils/log.h"
+#include "neosurf/utils/messages.h"
+#include "neosurf/utils/url.h"
+#include "neosurf/utils/nsurl.h"
+#include "neosurf/utils/utils.h"
+#include "neosurf/utils/string.h"
+#include "neosurf/content/fetch.h"
+#include "neosurf/download.h"
+#include "neosurf/desktop/download.h"
 
 #include "windows/download.h"
 #include "windows/window.h"

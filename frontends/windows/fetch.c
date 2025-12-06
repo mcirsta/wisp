@@ -24,11 +24,11 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "utils/log.h"
-#include "utils/file.h"
-#include "utils/filepath.h"
-#include "content/fetch.h"
-#include "netsurf/fetch.h"
+#include "neosurf/utils/log.h"
+#include "neosurf/utils/file.h"
+#include "neosurf/utils/filepath.h"
+#include "neosurf/content/fetch.h"
+#include "neosurf/fetch.h"
 
 #include "windows/fetch.h"
 #include "windows/gui.h"

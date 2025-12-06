@@ -27,10 +27,10 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "utils/log.h"
-#include "utils/url.h"
-#include "utils/utils.h"
-#include "utils/filepath.h"
+#include "neosurf/utils/log.h"
+#include "neosurf/utils/url.h"
+#include "neosurf/utils/utils.h"
+#include "neosurf/utils/filepath.h"
 
 #include "windows/findfile.h"
 

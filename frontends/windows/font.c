@@ -22,17 +22,17 @@
  * Windows font handling and character encoding implementation.
  */
 
-#include "utils/config.h"
+#include "neosurf/utils/config.h"
 #include <assert.h>
 #include <windows.h>
 
-#include "netsurf/inttypes.h"
-#include "utils/log.h"
-#include "utils/nsoption.h"
-#include "utils/utf8.h"
-#include "netsurf/layout.h"
-#include "netsurf/utf8.h"
-#include "netsurf/plot_style.h"
+#include "neosurf/inttypes.h"
+#include "neosurf/utils/log.h"
+#include "neosurf/utils/nsoption.h"
+#include "neosurf/utils/utf8.h"
+#include "neosurf/layout.h"
+#include "neosurf/utf8.h"
+#include "neosurf/plot_style.h"
 
 #include "windows/font.h"
 

@@ -19,9 +19,9 @@
 #include <stdlib.h>
 #include <time.h>
 
-#include "utils/sys_time.h"
-#include "utils/log.h"
-#include "utils/errors.h"
+#include "neosurf/utils/sys_time.h"
+#include "neosurf/utils/log.h"
+#include "neosurf/utils/errors.h"
 
 #include "windows/schedule.h"
 

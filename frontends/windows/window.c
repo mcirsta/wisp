@@ -21,24 +21,24 @@
  * Main browser window handling for windows win32 frontend.
  */
 
-#include "utils/config.h"
+#include "neosurf/utils/config.h"
 
 #include <stdbool.h>
 #include <windows.h>
 #include <windowsx.h>
 #include <commctrl.h>
 
-#include "utils/errors.h"
-#include "utils/log.h"
-#include "utils/utils.h"
-#include "utils/nsoption.h"
-#include "utils/nsurl.h"
-#include "utils/messages.h"
-#include "content/content.h"
-#include "netsurf/browser_window.h"
-#include "netsurf/window.h"
-#include "netsurf/keypress.h"
-#include "desktop/browser_history.h"
+#include "neosurf/utils/errors.h"
+#include "neosurf/utils/log.h"
+#include "neosurf/utils/utils.h"
+#include "neosurf/utils/nsoption.h"
+#include "neosurf/utils/nsurl.h"
+#include "neosurf/utils/messages.h"
+#include "neosurf/content/content.h"
+#include "neosurf/browser_window.h"
+#include "neosurf/window.h"
+#include "neosurf/keypress.h"
+#include "neosurf/desktop/browser_history.h"
 
 #include "windows/gui.h"
 #include "windows/pointers.h"
