@@ -38,5 +38,9 @@ add_executable(neosurf-windows WIN32
 
 target_link_libraries(neosurf-windows neosurf m ${NEOSURF_COMMON_LIBS} ws2_32 comctl32 gdi32 user32 kernel32 msimg32 wininet shlwapi crypt32)
 
+if(CMAKE_BUILD_TYPE MATCHES Debug)
+	set(CMAKE_INSTALL_DO_STRIP OFF)
+endif()
+
 install(TARGETS neosurf-windows DESTINATION ${CMAKE_INSTALL_BINDIR})
 install(DIRECTORY res/ DESTINATION ${CMAKE_INSTALL_DATADIR}/neosurf-windows)
