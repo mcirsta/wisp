@@ -11,3 +11,7 @@ endif()
 if(NEOSURF_BUILD_WINDOWS_FRONTEND)
 	add_subdirectory(windows)
 endif()
+
+if(NEOSURF_BUILD_QT_FRONTEND)
+	add_subdirectory(qt)
+endif()

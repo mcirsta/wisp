@@ -69,15 +69,34 @@ if(${NEOSURF_USE_WEBP})
 	set(WEBP_SRC content/handlers/image/webp.c)
 endif()
 
-option(NEOSURF_BUILD_GTK_FRONTEND "Build and install the bundled Gtk frontend" ON)
+set(DEFAULT_GTK_FRONTEND OFF)
+set(DEFAULT_VI_FRONTEND OFF)
+set(DEFAULT_WINDOWS_FRONTEND OFF)
+set(DEFAULT_QT_FRONTEND OFF)
+
+if(WIN32)
+	set(DEFAULT_WINDOWS_FRONTEND ON)
+elseif(CMAKE_SYSTEM_NAME MATCHES "Linux")
+	set(DEFAULT_QT_FRONTEND ON)
+endif()
+
+option(NEOSURF_BUILD_GTK_FRONTEND "Build and install the bundled Gtk frontend" ${DEFAULT_GTK_FRONTEND})
+option(NEOSURF_BUILD_VI_FRONTEND "Build and install the bundled Visurf frontend" ${DEFAULT_VI_FRONTEND})
+option(NEOSURF_BUILD_WINDOWS_FRONTEND "Build and install the bundled Windows frontend" ${DEFAULT_WINDOWS_FRONTEND})
+option(NEOSURF_BUILD_QT_FRONTEND "Build and install the bundled Qt frontend" ${DEFAULT_QT_FRONTEND})
+
 if(NEOSURF_BUILD_GTK_FRONTEND)
 	add_definitions(-Dgtk -Dnsgtk)
 endif()
-option(NEOSURF_BUILD_VI_FRONTEND "Build and install the bundled Visurf frontend" ON)
+
 if(NEOSURF_BUILD_VI_FRONTEND)
 	add_definitions(-Dvi -Dnsvi)
 endif()
-option(NEOSURF_BUILD_WINDOWS_FRONTEND "Build and install the bundled Windows frontend" OFF)
+
+if(NEOSURF_BUILD_QT_FRONTEND)
+	add_definitions(-Dnsqt)
+endif()
+
 if(NEOSURF_BUILD_WINDOWS_FRONTEND)
 	add_definitions(-Dnswin32 -DWINVER=0x0600 -D_WIN32_WINNT=0x0600 -D_WIN32_WINDOWS=0x0600 -D_WIN32_IE=0x0600)
 endif()
@@ -91,6 +110,15 @@ if(NEOSURF_WERROR)
 		add_compile_options(/WX)
 	else()
 		add_compile_options(-Werror)
+	endif()
+endif()
+
+if(CMAKE_BUILD_TYPE MATCHES Debug)
+	add_definitions(-DNETSURF_LOG_LEVEL=DEEPDEBUG)
+
+	if((WIN32 AND CMAKE_C_COMPILER_ID MATCHES "Clang") OR UNIX)
+		add_compile_options(-fsanitize=address)
+		add_link_options(-fsanitize=address)
 	endif()
 endif()
 
