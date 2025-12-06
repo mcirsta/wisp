@@ -1,7 +1,8 @@
 find_package(Iconv REQUIRED)
 
 if(EXISTS "${CMAKE_SOURCE_DIR}/contrib/libparserutils/build/make-aliases.py")
-	execute_process(COMMAND ${PYTHON3} build/make-aliases.py 
+	file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/src/charset")
+	execute_process(COMMAND ${PYTHON3} build/make-aliases.py "${CMAKE_CURRENT_BINARY_DIR}/src/charset/aliases.inc"
 		WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/contrib/libparserutils 
 		RESULT_VARIABLE RET)
 	if(NOT RET EQUAL 0)
@@ -42,5 +43,6 @@ endif()
 install(TARGETS parserutils DESTINATION ${CMAKE_INSTALL_LIBDIR})
 
 include_directories(${CMAKE_SOURCE_DIR}/contrib/libparserutils/src)
+include_directories(${CMAKE_CURRENT_BINARY_DIR}/src/charset)
 
 install(DIRECTORY include/parserutils DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
