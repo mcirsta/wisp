@@ -11,7 +11,7 @@
 class Element {
 	prologue %{
 #include <neosurf/utils/corestrings.h>
-#include <dom/bindings/hubbub/parser.h>
+#include <libdom/bindings/hubbub/parser.h>
 %};
 };
 

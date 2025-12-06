@@ -31,7 +31,7 @@
 #ifndef NETSURF_DESKTOP_OPTIONS_H_
 #define NETSURF_DESKTOP_OPTIONS_H_
 
-#include "netsurf/types.h"
+#include "neosurf/types.h"
 
 /* defines for system colour table */
 #define NSOPTION_SYS_COLOUR_START NSOPTION_sys_colour_AccentColor

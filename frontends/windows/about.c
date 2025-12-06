@@ -23,13 +23,13 @@
 
 #include <stdio.h>
 
-#include "utils/config.h"
+#include "neosurf/utils/config.h"
 
 #include <windows.h>
 
-#include "utils/log.h"
-#include "utils/messages.h"
-#include "desktop/version.h"
+#include "neosurf/utils/log.h"
+#include "neosurf/utils/messages.h"
+#include "neosurf/desktop/version.h"
 
 #include "windows/gui.h"
 #include "windows/window.h"
@@ -57,7 +57,7 @@ static BOOL init_about_dialog(HWND hwnd)
 		}
 
 		snprintf(ver_str, sizeof(ver_str), "%s %s", 
-			 messages_get("NetSurf"), netsurf_version); 
+			 messages_get("NetSurf"), neosurf_version); 
 		
 		SendMessage(dlg_itm, WM_SETTEXT, 0, (LPARAM)ver_str);
 	}

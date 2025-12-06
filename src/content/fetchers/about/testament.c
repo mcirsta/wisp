@@ -25,8 +25,8 @@
 #include <stddef.h>
 
 #include "utils/errors.h"
-#include "netsurf/inttypes.h"
-#include "testament.h"
+#include "neosurf/inttypes.h"
+//#include "testament.h"
 
 #include "private.h"
 #include "atestament.h"

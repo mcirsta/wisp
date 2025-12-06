@@ -81,6 +81,9 @@ add_library(neosurf SHARED
 	content/fetchers/resource.c
 	content/fetchers/curl.c
 	content/fetchers/about/about.c
+	content/fetchers/about/choices.c
+	content/fetchers/about/testament.c
+	content/fetchers/about/websearch.c
 	content/fetchers/about/blank.c
 	content/fetchers/about/certificate.c
 	content/fetchers/about/chart.c
@@ -205,7 +208,11 @@ if(NEOSURF_BUILD_XXD)
 	)
 endif()
 
-set(NEOSURF_COMMON_LIBS css dom nsutils parserutils nsgif nsbmp svgtiny ${LIBCRYPTO_LIBRARIES} ${LIBPNG_LIBRARIES} ${LIBCURL_LIBRARIES} ${LIBJPEG_LIBRARIES} ${LIBWEBP_LIBRARIES} ${LIBPSL_LIBRARIES} ${ZLIB_LIBRARIES} ${LIBSSL_LIBRARIES} ${LIBUTF8PROC_LIBRARIES})
+set(NEOSURF_COMMON_LIBS css dom nsutils parserutils nsgif nsbmp svgtiny ${LIBCRYPTO_LIBRARIES} ${LIBPNG_LIBRARIES} ${LIBCURL_LIBRARIES} ${LIBJPEG_LIBRARIES} ${LIBWEBP_LIBRARIES} ${LIBPSL_LIBRARIES} ${ZLIB_LIBRARIES} ${LIBSSL_LIBRARIES} ${LIBUTF8PROC_LIBRARIES} regex)
+
+if(WIN32)
+	list(APPEND NEOSURF_COMMON_LIBS ws2_32)
+endif()
 target_link_libraries(neosurf ${NEOSURF_COMMON_LIBS})
 
 target_include_directories(neosurf PRIVATE ${CMAKE_SOURCE_DIR}/contrib ${CMAKE_BINARY_DIR})
