@@ -40,10 +40,14 @@
 #include <arpa/inet.h>
 #include <sys/select.h>
 
+#define ns_close_socket close
+
 #else
 
 #include <winsock2.h>
 #include <ws2tcpip.h>
+
+#define ns_close_socket closesocket
 
 #ifndef HAVE_INETPTON
 #define HAVE_INETPTON

@@ -3973,7 +3973,7 @@ bool browser_window_has_content(struct browser_window *bw)
 }
 
 
-./* Exported interface, documented in neosurf/browser_window.h */
+/* Exported interface, documented in neosurf/browser_window.h */
 struct hlcache_handle *browser_window_get_content(struct browser_window *bw)
 {
 	return bw->current_content;

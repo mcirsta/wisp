@@ -106,8 +106,7 @@ static void fetch_data_send_header(struct fetch_data_context *ctx,
 }
 
 static void *fetch_data_setup(struct fetch *parent_fetch, nsurl *url,
-		 bool only_2xx, bool downgrade_tls, const char *post_urlenc,
-		 const struct fetch_multipart_data *post_multipart,
+		 bool only_2xx, bool downgrade_tls, const struct fetch_postdata *postdata,
 		 const char **headers)
 {
 	struct fetch_data_context *ctx = calloc(1, sizeof(*ctx));

@@ -84,8 +84,7 @@ static bool html_css_fetcher_can_fetch(const nsurl *url)
 }
 
 static void *html_css_fetcher_setup(struct fetch *parent_fetch, nsurl *url,
-		 bool only_2xx, bool downgrade_tls, const char *post_urlenc,
-		 const struct fetch_multipart_data *post_multipart,
+		 bool only_2xx, bool downgrade_tls, const struct fetch_postdata *postdata,
 		 const char **headers)
 {
 	html_css_fetcher_context *ctx;

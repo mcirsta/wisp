@@ -30,7 +30,7 @@
 static const char *core_user_agent_string = NULL;
 
 #ifndef NEOSURF_UA_FORMAT_STRING
-#define NEOSURF_UA_FORMAT_STRING "Mozilla/5.0 (%s) NetSurf/%d"
+#define NEOSURF_UA_FORMAT_STRING "Mozilla/5.0 (%s) NeoSurf/%d"
 #endif
 
 /**
@@ -53,7 +53,7 @@ user_agent_build_string(void)
                 }
         }
 
-        len = snprintf(NULL, 0, NETSURF_UA_FORMAT_STRING,
+        len = snprintf(NULL, 0, NEOSURF_UA_FORMAT_STRING,
                        sysname,
                        neosurf_version);
         ua_string = malloc(len + 1);

@@ -37,6 +37,7 @@
 #include <neosurf/utils/errors.h>
 #include <neosurf/utils/log.h>
 #include <neosurf/utils/utils.h>
+#include <neosurf/utils/config.h>
 #include <neosurf/utils/nsoption.h>
 
 /** Length of buffer used to read lines from input file */

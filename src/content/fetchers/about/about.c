@@ -660,8 +660,7 @@ fetch_about_setup(struct fetch *fetchh,
 		  nsurl *url,
 		  bool only_2xx,
 		  bool downgrade_tls,
-		  const char *post_urlenc,
-		  const struct fetch_multipart_data *post_multipart,
+		  const struct fetch_postdata *postdata,
 		  const char **headers)
 {
 	struct fetch_about_context *ctx;
@@ -691,7 +690,8 @@ fetch_about_setup(struct fetch *fetchh,
 
 	ctx->fetchh = fetchh;
 	ctx->url = nsurl_ref(url);
-	ctx->multipart = post_multipart;
+	if (postdata && postdata->type == FETCH_POSTDATA_MULTIPART)
+		ctx->multipart = postdata->data.multipart;
 
 	RING_INSERT(ring, ctx);
 

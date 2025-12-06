@@ -451,8 +451,7 @@ fetch_start(nsurl *url,
 	    fetch_callback callback,
 	    void *p,
 	    bool only_2xx,
-	    const char *post_urlenc,
-	    const struct fetch_multipart_data *post_multipart,
+	    const struct fetch_postdata *postdata,
 	    bool verifiable,
 	    bool downgrade_tls,
 	    const char *headers[],
@@ -494,7 +493,7 @@ fetch_start(nsurl *url,
 	/* try and set up the fetch */
 	fetch->fetcher_handle = fetchers[fetch->fetcherd].ops.setup(fetch, url,
 						only_2xx, downgrade_tls,
-						post_urlenc, post_multipart,
+						postdata,
 						headers);
 	if (fetch->fetcher_handle == NULL) {
 

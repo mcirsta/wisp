@@ -902,17 +902,18 @@ static nserror get_referer_header(nsurl *url, nsurl *referer, char **header_out)
  */
 static nserror llcache_object_refetch(llcache_object *object)
 {
-	const char *urlenc = NULL;
-	struct fetch_multipart_data *multipart = NULL;
+	struct fetch_postdata postdata = { .type = FETCH_POSTDATA_NONE };
 	char **headers = NULL;
 	int header_idx = 0;
 	nserror res;
 
 	if (object->fetch.post != NULL) {
 		if (object->fetch.post->type == LLCACHE_POST_URL_ENCODED) {
-			urlenc = object->fetch.post->data.urlenc;
+			postdata.type = FETCH_POSTDATA_URLENC;
+			postdata.data.urlenc = object->fetch.post->data.urlenc;
 		} else {
-			multipart = object->fetch.post->data.multipart;
+			postdata.type = FETCH_POSTDATA_MULTIPART;
+			postdata.data.multipart = object->fetch.post->data.multipart;
 		}
 	}
 
@@ -984,8 +985,7 @@ static nserror llcache_object_refetch(llcache_object *object)
 			  llcache_fetch_callback,
 			  object,
 			  object->fetch.flags & LLCACHE_RETRIEVE_NO_ERROR_PAGES,
-			  urlenc,
-			  multipart,
+			  &postdata,
 			  object->fetch.flags & LLCACHE_RETRIEVE_VERIFIABLE,
 			  object->fetch.tried_with_tls_downgrade,
 			  (const char **)headers,

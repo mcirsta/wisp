@@ -339,8 +339,7 @@ fetch_resource_setup(struct fetch *fetchh,
 		     nsurl *url,
 		     bool only_2xx,
 		     bool downgrade_tls,
-		     const char *post_urlenc,
-		     const struct fetch_multipart_data *post_multipart,
+		     const struct fetch_postdata *postdata,
 		     const char **headers)
 {
 	struct fetch_resource_context *ctx;

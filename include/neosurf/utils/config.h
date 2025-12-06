@@ -208,4 +208,13 @@ char *realpath(const char *path, char *resolved_path);
 	#define NO_IPV6
 #endif
 
+/* Default log filters */
+#ifndef NEOSURF_BUILTIN_LOG_FILTER
+#define NEOSURF_BUILTIN_LOG_FILTER "level:WARNING"
+#endif
+
+#ifndef NEOSURF_BUILTIN_VERBOSE_FILTER
+#define NEOSURF_BUILTIN_VERBOSE_FILTER "level:VERBOSE"
+#endif
+
 #endif

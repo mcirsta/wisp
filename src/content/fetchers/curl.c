@@ -361,32 +361,40 @@ static bool fetch_curl_can_fetch(const nsurl *url)
 
 
 /**
- * allocate postdata
+ * clone postdata
  */
 static struct fetch_postdata *
-fetch_curl_alloc_postdata(const char *post_urlenc,
-			  const struct fetch_multipart_data *post_multipart)
+fetch_curl_clone_postdata(const struct fetch_postdata *src)
 {
 	struct fetch_postdata *postdata;
+
+	if (src == NULL)
+		return NULL;
+
 	postdata = calloc(1, sizeof(struct fetch_postdata));
 	if (postdata != NULL) {
-
-		if (post_urlenc) {
-			postdata->type = FETCH_POSTDATA_URLENC;
-			postdata->data.urlenc = strdup(post_urlenc);
-			if (postdata->data.urlenc == NULL) {
-				free(postdata);
-				postdata = NULL;
+		postdata->type = src->type;
+		switch (src->type) {
+		case FETCH_POSTDATA_URLENC:
+			if (src->data.urlenc) {
+				postdata->data.urlenc = strdup(src->data.urlenc);
+				if (postdata->data.urlenc == NULL) {
+					free(postdata);
+					postdata = NULL;
+				}
 			}
-		} else if (post_multipart) {
-			postdata->type = FETCH_POSTDATA_MULTIPART;
-			postdata->data.multipart = fetch_multipart_data_clone(post_multipart);
-			if (postdata->data.multipart == NULL) {
-				free(postdata);
-				postdata = NULL;
+			break;
+		case FETCH_POSTDATA_MULTIPART:
+			if (src->data.multipart) {
+				postdata->data.multipart = fetch_multipart_data_clone(src->data.multipart);
+				if (postdata->data.multipart == NULL) {
+					free(postdata);
+					postdata = NULL;
+				}
 			}
-		} else {
-			postdata->type = FETCH_POSTDATA_NONE;
+			break;
+		case FETCH_POSTDATA_NONE:
+			break;
 		}
 	}
 	return postdata;
@@ -475,8 +483,7 @@ fetch_curl_setup(struct fetch *parent_fetch,
 		 nsurl *url,
 		 bool only_2xx,
 		 bool downgrade_tls,
-		 const char *post_urlenc,
-		 const struct fetch_multipart_data *post_multipart,
+		 const struct fetch_postdata *postdata,
 		 const char **headers)
 {
 	struct curl_fetch_info *fetch;
@@ -497,8 +504,20 @@ fetch_curl_setup(struct fetch *parent_fetch,
 	if (fetch->host == NULL) {
 		goto failed;
 	}
-	fetch->postdata = fetch_curl_alloc_postdata(post_urlenc, post_multipart);
-	if (fetch->postdata == NULL) {
+	fetch->postdata = fetch_curl_clone_postdata(postdata);
+	if (fetch->postdata == NULL && postdata != NULL && postdata->type != FETCH_POSTDATA_NONE) {
+		/* Only fail if allocation failed for actual data.
+		   If postdata was NULL or NONE, fetch->postdata being NULL is fine/expected if clone returns NULL for that case.
+		   However, fetch_curl_clone_postdata returns a struct even for NONE, unless src is NULL.
+		   If src is NULL, we get NULL.
+		   If src is NONE, we get a struct with NONE.
+		   So checking result against NULL is enough if we expect a struct always unless src was NULL.
+		   If src is NULL, fetch->postdata is NULL.
+		*/
+		goto failed;
+	}
+	/* Use a simpler check matching original logic which allocated postdata even for NONE */
+	if (postdata != NULL && fetch->postdata == NULL) {
 		goto failed;
 	}
 
@@ -1791,7 +1810,23 @@ fetch_curl_debug(CURL *handle,
 }
 
 
+static curl_socket_t fetch_curl_socket_open(void *clientp,
+		curlsocktype purpose, struct curl_sockaddr *address)
+{
+	(void) clientp;
+	(void) purpose;
 
+	return (curl_socket_t) guit->fetch->socket_open(
+			address->family, address->socktype,
+			address->protocol);
+}
+
+static int fetch_curl_socket_close(void *clientp, curl_socket_t item)
+{
+	(void) clientp;
+
+	return guit->fetch->socket_close((int) item);
+}
 
 /**
  * Callback function for cURL.
@@ -2048,6 +2083,8 @@ nserror fetch_curl_register(void)
 	SETOPT(CURLOPT_LOW_SPEED_TIME, 180L);
 	SETOPT(CURLOPT_NOSIGNAL, 1L);
 	SETOPT(CURLOPT_CONNECTTIMEOUT, nsoption_uint(curl_fetch_timeout));
+	SETOPT(CURLOPT_OPENSOCKETFUNCTION, fetch_curl_socket_open);
+	SETOPT(CURLOPT_CLOSESOCKETFUNCTION, fetch_curl_socket_close);
 
 	if (nsoption_charp(ca_bundle) &&
 	    strcmp(nsoption_charp(ca_bundle), "")) {

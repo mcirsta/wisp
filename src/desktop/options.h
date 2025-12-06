@@ -291,6 +291,6 @@ NSOPTION_COLOUR(sys_colour_SelectedItemText, 0x00ffffff)
 NSOPTION_COLOUR(sys_colour_VisitedText, 0x008b1a55)
 
 /** Filter for non-verbose logging */
-NSOPTION_STRING(log_filter, NETSURF_BUILTIN_LOG_FILTER)
+NSOPTION_STRING(log_filter, NEOSURF_BUILTIN_LOG_FILTER)
 /** Filter for verbose logging */
-NSOPTION_STRING(verbose_filter, NETSURF_BUILTIN_VERBOSE_FILTER)
+NSOPTION_STRING(verbose_filter, NEOSURF_BUILTIN_VERBOSE_FILTER)
