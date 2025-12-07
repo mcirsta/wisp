@@ -23,6 +23,7 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include <math.h>
 
 #include "neosurf/utils/config.h"
 
@@ -533,8 +534,8 @@ nsws_drawable_mousemove(struct gui_window *gw, int x, int y)
 	/* if mouse button held down and pointer moved more than
 	 * minimum distance drag is happening */
 	if (((gw->mouse->state & (BROWSER_MOUSE_PRESS_1 | BROWSER_MOUSE_PRESS_2)) != 0) &&
-	    (abs(x - gw->mouse->pressed_x) >= 5) &&
-	    (abs(y - gw->mouse->pressed_y) >= 5)) {
+	    (fabs(x - gw->mouse->pressed_x) >= 5) &&
+	    (fabs(y - gw->mouse->pressed_y) >= 5)) {
 
 		NSLOG(neosurf, INFO, "Drag start state 0x%x",
 		      gw->mouse->state);

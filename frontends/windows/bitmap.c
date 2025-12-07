@@ -287,12 +287,12 @@ bitmap_render(struct bitmap *bitmap, struct hlcache_handle *content)
 
 	/* create two memory device contexts to put the bitmaps in */
 	bufferdc = CreateCompatibleDC(NULL);
-	if ((bufferdc == NULL)) {
+	if (bufferdc == NULL) {
 		return NSERROR_NOMEM;
 	}
 
 	minidc = CreateCompatibleDC(NULL);
-	if ((minidc == NULL)) {
+	if (minidc == NULL) {
 		DeleteDC(bufferdc);
 		return NSERROR_NOMEM;
 	}

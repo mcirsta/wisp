@@ -16,7 +16,9 @@
 #include <stdlib.h>
 #include <unistd.h>
 
-#if (defined(_POSIX_TIMERS) && (_POSIX_TIMERS > 0) && (defined _POSIX_MONOTONIC_CLOCK)) || defined(__OpenBSD__)
+#if defined(_WIN32)
+#include <windows.h>
+#elif (defined(_POSIX_TIMERS) && (_POSIX_TIMERS > 0) && (defined _POSIX_MONOTONIC_CLOCK)) || defined(__OpenBSD__)
 #include <time.h>
 #elif defined(__riscos)
 #include <oslib/os.h>
@@ -41,7 +43,26 @@ nsuerror nsu_getmonotonic_ms(uint64_t *current_out)
     uint64_t current;
     static uint64_t prev = 0; /* previous time so we never go backwards */
 
-#if (defined(_POSIX_TIMERS) && (_POSIX_TIMERS > 0) && (defined _POSIX_MONOTONIC_CLOCK)) || defined(__OpenBSD__)
+#if defined(_WIN32)
+#if _WIN32_WINNT >= 0x0600
+    current = GetTickCount64();
+#else
+    static LARGE_INTEGER freq;
+    LARGE_INTEGER count;
+    if (freq.QuadPart == 0) {
+        QueryPerformanceFrequency(&freq);
+    }
+    QueryPerformanceCounter(&count);
+
+#ifdef __SIZEOF_INT128__
+    current = (uint64_t)(( (unsigned __int128)count.QuadPart * 1000 ) / freq.QuadPart);
+#else
+    /* split calculation to avoid overflow of (count * 1000) */
+    current = (uint64_t)(count.QuadPart / freq.QuadPart * 1000 + 
+                        (count.QuadPart % freq.QuadPart) * 1000 / freq.QuadPart);
+#endif
+#endif
+#elif (defined(_POSIX_TIMERS) && (_POSIX_TIMERS > 0) && (defined _POSIX_MONOTONIC_CLOCK)) || defined(__OpenBSD__)
     struct timespec tp;
 
     clock_gettime(CLOCK_MONOTONIC, &tp);

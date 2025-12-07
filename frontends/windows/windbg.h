@@ -35,7 +35,7 @@ void win_perror(const char *lpszFunction);
 	    ((m) != WM_NCHITTEST) &&					\
 	    ((m) != WM_ENTERIDLE))					\
 		NSLOG(neosurf, DEBUG,					\
-		      "%s, hwnd %p, w 0x%x, l 0x%Ix",			\
+		      "%s, hwnd %p, w 0x%Ix, l 0x%Ix",			\
 		      msg_num_to_name(m), h, w, l)
 
 #endif

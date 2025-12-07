@@ -335,8 +335,8 @@ win32_font_split(const plot_font_style_t *style,
 	res = win32_font_width(style, string, *offset, actual_x);
 
 	NSLOG(neosurf, DEEPDEBUG,
-	      "ret %d Split %u chars at %ipx: Split at char %i (%ipx) - %.*s",
-	      res, length, x, *offset, *actual_x, *offset, string);
+	      "ret %d Split %"PRIsizet" chars at %ipx: Split at char %"PRIsizet" (%ipx) - %.*s",
+	      res, length, x, *offset, *actual_x, (int)*offset, string);
 
 	return res;
 }

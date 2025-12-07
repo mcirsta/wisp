@@ -2973,7 +2973,7 @@ static void llcache_persist(void *p)
 		total_bandwidth = (total_written * 1000) / total_elapsed;
 
 		NSLOG(llcache, DEBUG,
-		      "Wrote %"PRIsizet" bytes in %lums bw:%lu %s",
+		      "Wrote %"PRIsizet" bytes in %lums bw:%"PRIsizet" %s",
 		      written, elapsed, (written * 1000) / elapsed,
 		      nsurl_access(lst[idx]->url) );
 

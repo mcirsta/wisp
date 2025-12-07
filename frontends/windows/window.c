@@ -24,6 +24,7 @@
 #include "neosurf/utils/config.h"
 
 #include <stdbool.h>
+#include "neosurf/inttypes.h"
 #include <windows.h>
 #include <windowsx.h>
 #include <commctrl.h>
@@ -419,7 +420,7 @@ nsws_window_urlbar_callback(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 	/* override messages */
 	switch (msg) {
 	case WM_CHAR:
-		NSLOG(neosurf, INFO, "URLBar WM_CHAR: %d", wparam);
+		NSLOG(neosurf, INFO, "URLBar WM_CHAR: %"PRIsizet, wparam);
 		if (wparam == 1) {
 			/* handle ^A */
 			SendMessage(hwnd, EM_SETSEL, 0, -1);

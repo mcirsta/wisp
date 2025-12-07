@@ -293,7 +293,7 @@ static INT_PTR CALLBACK options_appearance_dialog_handler(HWND hwnd,
 					  (nsoption_int(http_proxy_auth) != -1));
 			nsoption_set_int(http_proxy_auth,
 					 nsoption_int(http_proxy_auth) +
-					 (nsoption_bool(http_proxy)) ? 0 : 1);
+					 ((nsoption_bool(http_proxy)) ? 0 : 1));
 			break;
 
 		case IDC_PREFS_SANS: {

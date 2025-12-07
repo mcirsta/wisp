@@ -24,6 +24,7 @@
  */
 
 #include <limits.h>
+#include "neosurf/inttypes.h"
 #include "neosurf/utils/inet.h" /* get correct winsock ordering */
 #include <shlobj.h>
 #include <windows.h>
@@ -314,7 +315,7 @@ gui_download_window_data(struct gui_download_window *w, const char *data,
 	struct timeval val;
 	res = fwrite((void *)data, 1, size, w->file);
 	if (res != size)
-		NSLOG(neosurf, INFO, "file write error %d of %d", size - res,
+		NSLOG(neosurf, INFO, "file write error %"PRIsizet" of %u", size - res,
 		      size);
 	w->downloaded += res;
 	w->progress = (unsigned int)(((long long)(w->downloaded) * 10000)
