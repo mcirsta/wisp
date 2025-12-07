@@ -111,6 +111,9 @@ static css_error nscss_register_imports(struct content_css_data *c);
 static css_error nscss_register_import(struct content_css_data *c,
 		const hlcache_handle *import);
 
+static css_error nscss_error_handler(void *pw, css_stylesheet *sheet,
+		css_error error, const char *msg);
+
 
 static css_stylesheet *blank_import;
 
