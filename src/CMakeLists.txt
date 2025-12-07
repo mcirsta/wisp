@@ -18,6 +18,7 @@ endif()
 
 pkg_check_modules(LIBCURL REQUIRED libcurl)
 include_directories(${LIBCURL_INCLUDE_DIRS})
+add_definitions(-DWITH_CURL)
 
 pkg_check_modules(LIBCRYPTO REQUIRED libcrypto)
 include_directories(${LIBCRYPTO_INCLUDE_DIRS})

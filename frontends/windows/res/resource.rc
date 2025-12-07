@@ -30,7 +30,7 @@ IDR_TOOLBAR_BITMAP_HOT BITMAP         "toolbarh.bmp"
 
 
 LANGUAGE LANG_NEUTRAL, SUBLANG_NEUTRAL
-IDR_THROBBER_AVI AVI "throbber.avi"
+// IDR_THROBBER_AVI AVI "throbber.avi"
 
 
 LANGUAGE LANG_NEUTRAL, SUBLANG_NEUTRAL
@@ -302,7 +302,7 @@ FONT 8, "MS Shell Dlg", 0, 0, 1
 // Icon resources
 //
 LANGUAGE LANG_NEUTRAL, SUBLANG_NEUTRAL
-IDR_NETSURF_ICON   ICON           "NetSurf.ico"
+IDR_NETSURF_ICON   ICON           "../../../src/resources/neosurf.ico"
 
 
 //
