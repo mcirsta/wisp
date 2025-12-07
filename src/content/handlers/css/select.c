@@ -135,6 +135,13 @@ static css_select_handler selection_handler = {
 	get_libcss_node_data,
 };
 
+static css_error nscss_error_handler(void *pw, css_stylesheet *sheet,
+		css_error error, const char *msg)
+{
+	NSLOG(neosurf, ERROR, "LibCSS Error: %s (Code: %d)", msg, error);
+	return CSS_OK;
+}
+
 /**
  * Create an inline style
  *
@@ -152,7 +159,7 @@ css_stylesheet *nscss_create_inline_style(const uint8_t *data, size_t len,
 	css_stylesheet *sheet;
 	css_error error;
 
-	params.params_version = CSS_STYLESHEET_PARAMS_VERSION_1;
+	params.params_version = CSS_STYLESHEET_PARAMS_VERSION_2;
 	params.level = CSS_LEVEL_DEFAULT;
 	params.charset = charset;
 	params.url = url;
@@ -167,6 +174,8 @@ css_stylesheet *nscss_create_inline_style(const uint8_t *data, size_t len,
 	params.color_pw = NULL;
 	params.font = NULL;
 	params.font_pw = NULL;
+	params.error = nscss_error_handler;
+	params.error_pw = NULL;
 
 	error = css_stylesheet_create(&params, &sheet);
 	if (error != CSS_OK) {
