@@ -133,8 +133,10 @@ css_error css_stylesheet_create(const css_stylesheet_params *params,
 	css_error error;
 	css_stylesheet *sheet;
 
-	if (params == NULL || params->params_version !=
-				CSS_STYLESHEET_PARAMS_VERSION_1 ||
+	if (params == NULL || (params->params_version !=
+				CSS_STYLESHEET_PARAMS_VERSION_1 &&
+			params->params_version !=
+				CSS_STYLESHEET_PARAMS_VERSION_2) ||
 			params->url == NULL || params->resolve == NULL ||
 			stylesheet == NULL)
 		return CSS_BADPARM;
@@ -806,6 +808,13 @@ css_error css__stylesheet_selector_create(css_stylesheet *sheet,
 			selector == NULL)
 		return CSS_BADPARM;
 
+	if (sheet->error) {
+		char buf[256];
+		snprintf(buf, sizeof(buf), "Creating selector: %.*s", 
+			(int)lwc_string_length(qname->name), lwc_string_data(qname->name));
+		sheet->error(sheet->error_pw, sheet, CSS_OK, buf);
+	}
+	
 	sel = malloc(sizeof(css_selector));
 	if (sel == NULL)
 		return CSS_NOMEM;

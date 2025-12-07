@@ -138,7 +138,8 @@ static css_select_handler selection_handler = {
 static css_error nscss_error_handler(void *pw, css_stylesheet *sheet,
 		css_error error, const char *msg)
 {
-	NSLOG(neosurf, ERROR, "LibCSS Error: %s (Code: %d)", msg, error);
+	fprintf(stderr, "DEBUG: select.c nscss_error_handler called! Msg: %s, Code: %d\n", msg ? msg : "null", error);
+	NSLOG(netsurf, ERROR, "LibCSS Error: %s (Code: %d)", msg, error);
 	return CSS_OK;
 }
 
@@ -179,20 +180,20 @@ css_stylesheet *nscss_create_inline_style(const uint8_t *data, size_t len,
 
 	error = css_stylesheet_create(&params, &sheet);
 	if (error != CSS_OK) {
-		NSLOG(neosurf, INFO, "Failed creating sheet: %d", error);
+		NSLOG(neosurf, ERROR, "Failed creating sheet: %d", error);
 		return NULL;
 	}
 
 	error = css_stylesheet_append_data(sheet, data, len);
 	if (error != CSS_OK && error != CSS_NEEDDATA) {
-		NSLOG(neosurf, INFO, "failed appending data: %d", error);
+		NSLOG(neosurf, ERROR, "failed appending data: %d", error);
 		css_stylesheet_destroy(sheet);
 		return NULL;
 	}
 
 	error = css_stylesheet_data_done(sheet);
 	if (error != CSS_OK) {
-		NSLOG(neosurf, INFO, "failed completing parse: %d", error);
+		NSLOG(neosurf, ERROR, "failed completing parse: %d", error);
 		css_stylesheet_destroy(sheet);
 		return NULL;
 	}

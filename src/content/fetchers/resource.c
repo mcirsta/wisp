@@ -179,8 +179,10 @@ static bool fetch_resource_data_handler(struct fetch_resource_context *ctx)
 	 */
 
 	/* content type */
-	if (fetch_resource_send_header(ctx, "Content-Type: %s",
-				       guit->fetch->filetype(lwc_string_data(ctx->entry->path)))) {
+	const char *mime_type = guit->fetch->filetype(lwc_string_data(ctx->entry->path));
+	NSLOG(neosurf, INFO, "fetch_resource_data_handler: Sending Content-Type: %s for %s", mime_type, lwc_string_data(ctx->entry->path));
+	if (fetch_resource_send_header(ctx, "Content-Type: %s", mime_type)) {
+		NSLOG(neosurf, ERROR, "fetch_resource_data_handler: Failed to send Content-Type for %s", lwc_string_data(ctx->entry->path));
 		goto fetch_resource_data_aborted;
 	}
 
@@ -205,6 +207,7 @@ static bool fetch_resource_data_handler(struct fetch_resource_context *ctx)
 	msg.type = FETCH_DATA;
 	msg.data.header_or_data.buf = (const uint8_t *) ctx->entry->data;
 	msg.data.header_or_data.len = ctx->entry->data_len;
+	NSLOG(neosurf, INFO, "fetch_resource_data_handler: Sending FETCH_DATA (%zu bytes) for %s", ctx->entry->data_len, lwc_string_data(ctx->entry->path));
 	fetch_resource_send_callback(&msg, ctx);
 
 	if (ctx->aborted == false) {

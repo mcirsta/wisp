@@ -240,8 +240,10 @@ static nserror nscss_create_css_data(struct content_css_data *c,
 
 	error = css_stylesheet_create(&params, &c->sheet);
 	if (error != CSS_OK) {
+		NSLOG(neosurf, ERROR, "css_stylesheet_create failed: %d", error);
 		return NSERROR_NOMEM;
 	}
+	NSLOG(neosurf, INFO, "css_stylesheet_create succeeded for %p", c);
 
 	return NSERROR_OK;
 }
@@ -260,8 +262,11 @@ nscss_process_data(struct content *c, const char *data, unsigned int size)
 	nscss_content *css = (nscss_content *) c;
 	css_error error;
 
+	NSLOG(neosurf, INFO, "Processing CSS data: %u bytes for %p", size, c);
+
 	error = nscss_process_css_data(&css->data, data, size);
 	if (error != CSS_OK && error != CSS_NEEDDATA) {
+		NSLOG(neosurf, ERROR, "nscss_process_css_data failed: %d", error);
 		content_broadcast_error(c, NSERROR_CSS, NULL);
 	}
 
@@ -293,6 +298,8 @@ bool nscss_convert(struct content *c)
 {
 	nscss_content *css = (nscss_content *) c;
 	css_error error;
+
+	NSLOG(neosurf, INFO, "nscss_convert called for %p", c);
 
 	error = nscss_convert_css_data(&css->data);
 	if (error != CSS_OK) {
@@ -331,10 +338,10 @@ static css_error nscss_convert_css_data(struct content_css_data *c)
 		const char *url;
 
 		if (css_stylesheet_get_url(c->sheet, &url) == CSS_OK) {
-			NSLOG(neosurf, INFO, "Failed converting %p %s (%d)",
+			NSLOG(neosurf, ERROR, "Failed converting %p %s (%d)",
 			      c, url, error);
 		} else {
-			NSLOG(neosurf, INFO, "Failed converting %p (%d)", c,
+			NSLOG(neosurf, ERROR, "Failed converting %p (%d)", c,
 			      error);
 		}
 	}
@@ -488,6 +495,8 @@ void nscss_content_done(struct content_css_data *css, void *pw)
 	size_t size;
 	css_error error;
 
+	NSLOG(neosurf, ERROR, "nscss_content_done called for %p", c);
+
 	/* Retrieve the size of this sheet */
 	error = css_stylesheet_size(css->sheet, &size);
 	if (error != CSS_OK) {
@@ -530,7 +539,11 @@ void nscss_content_done(struct content_css_data *css, void *pw)
 static css_error nscss_error_handler(void *pw, css_stylesheet *sheet,
 		css_error error, const char *msg)
 {
-	NSLOG(netsurf, ERROR, "LibCSS Error: %s (Code: %d)", msg, error);
+	if (error == CSS_OK) {
+		NSLOG(netsurf, INFO, "LibCSS Info: %s", msg);
+	} else {
+		NSLOG(netsurf, ERROR, "LibCSS Error: %s (Code: %d)", msg, error);
+	}
 	return CSS_OK;
 }
 

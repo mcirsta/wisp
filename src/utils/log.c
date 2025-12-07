@@ -18,6 +18,12 @@
 
 #include <stdarg.h>
 #include <stdio.h>
+#include <string.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#ifdef _WIN32
+#include <direct.h>
+#endif
 
 #include <neosurf/utils/config.h>
 #include <neosurf/utils/nsoption.h>
@@ -32,6 +38,10 @@ bool verbose_log = false;
 
 /** The stream to which logging is sent */
 static FILE *logfile;
+
+/** Split logging files */
+static FILE *split_log_files[6] = { NULL };
+static bool split_logging = false;
 
 /** Subtract the `struct timeval' values X and Y
  *
@@ -109,6 +119,33 @@ neosurf_render_log(void *_ctx,
 		   const char *fmt,
 		   va_list args)
 {
+	if (split_logging) {
+		int i;
+		for (i = 0; i < 6; i++) {
+			if (split_log_files[i] && (int)ctx->level >= i) {
+				va_list ap;
+				va_copy(ap, args);
+				fprintf(split_log_files[i],
+					"%s [%s %.*s] %.*s:%i %.*s: ",
+					nslog_gettime(),
+					nslog_short_level_name(ctx->level),
+					ctx->category->namelen,
+					ctx->category->name,
+					ctx->filenamelen,
+					ctx->filename,
+					ctx->lineno,
+					ctx->funcnamelen,
+					ctx->funcname);
+
+				vfprintf(split_log_files[i], fmt, ap);
+				va_end(ap);
+
+				fputc('\n', split_log_files[i]);
+				fflush(split_log_files[i]);
+			}
+		}
+	}
+
 	fprintf(logfile,
 		"%s [%s %.*s] %.*s:%i %.*s: ",
 		nslog_gettime(),
@@ -154,9 +191,10 @@ nslog_set_filter(const char *filter)
 #else
 
 void
-nslog_log(const char *file, const char *func, int ln, const char *format, ...)
+nslog_log(enum nslog_level level, const char *file, const char *func, int ln, const char *format, ...)
 {
 	va_list ap;
+	int i;
 
 	if (verbose_log) {
 		fprintf(logfile,
@@ -173,6 +211,29 @@ nslog_log(const char *file, const char *func, int ln, const char *format, ...)
 		va_end(ap);
 
 		fputc('\n', logfile);
+	}
+
+	if (split_logging) {
+		const char *time_str = nslog_gettime();
+		/* Iterate over split files. */
+		for (i = 0; i < 6; i++) {
+			/* Check if file is open and level is sufficient for this file */
+			if (split_log_files[i] && (int)level >= i) {
+				fprintf(split_log_files[i],
+					"%s %s:%i %s: ",
+					time_str,
+					file,
+					ln,
+					func);
+
+				va_start(ap, format);
+				vfprintf(split_log_files[i], format, ap);
+				va_end(ap);
+
+				fputc('\n', split_log_files[i]);
+				fflush(split_log_files[i]);
+			}
+		}
 	}
 }
 
@@ -191,6 +252,21 @@ nserror nslog_init(nslog_ensure_t *ensure, int *pargc, char **argv)
 {
 	struct utsname utsname;
 	nserror ret = NSERROR_OK;
+	int i;
+
+	/* Parse -split-logs */
+	for (i = 1; i < *pargc; i++) {
+		if (strcmp(argv[i], "-split-logs") == 0) {
+			split_logging = true;
+			/* Remove argument */
+			int j;
+			for (j = i + 1; j < *pargc; j++) {
+				argv[j - 1] = argv[j];
+			}
+			(*pargc)--;
+			i--;
+		}
+	}
 
 	if (((*pargc) > 1) &&
 	    (argv[1][0] == '-') &&
@@ -281,6 +357,21 @@ nserror nslog_init(nslog_ensure_t *ensure, int *pargc, char **argv)
 		}
 	}
 
+	if (split_logging && ret == NSERROR_OK) {
+		/* Create directory */
+#ifdef _WIN32
+		_mkdir("neosurf-logs");
+#else
+		mkdir("neosurf-logs", 0777);
+#endif
+		split_log_files[0] = fopen("neosurf-logs/ns-deepdebug.txt", "w");
+		split_log_files[1] = fopen("neosurf-logs/ns-debug.txt", "w");
+		split_log_files[2] = fopen("neosurf-logs/ns-verbose.txt", "w");
+		split_log_files[3] = fopen("neosurf-logs/ns-info.txt", "w");
+		split_log_files[4] = fopen("neosurf-logs/ns-warning.txt", "w");
+		split_log_files[5] = fopen("neosurf-logs/ns-error.txt", "w");
+	}
+
 	return ret;
 }
 
@@ -305,6 +396,17 @@ nslog_finalise(void)
 		fclose(logfile);
 		logfile = stderr;
 	}
+
+	if (split_logging) {
+		int i;
+		for (i = 0; i < 6; i++) {
+			if (split_log_files[i]) {
+				fclose(split_log_files[i]);
+				split_log_files[i] = NULL;
+			}
+		}
+	}
+
 #ifdef WITH_NSLOG
 	nslog_cleanup();
 #endif

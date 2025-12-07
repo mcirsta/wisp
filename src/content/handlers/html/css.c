@@ -117,9 +117,10 @@ html_convert_css_callback(hlcache_handle *css,
 		break;
 
 	case CONTENT_MSG_ERROR:
-		NSLOG(neosurf, INFO, "stylesheet %s failed: %s",
+		NSLOG(neosurf, ERROR, "stylesheet %s failed: %s (code %d)",
 		      nsurl_access(hlcache_handle_get_url(css)),
-		      event->data.errordata.errormsg);
+		      event->data.errordata.errormsg,
+		      event->data.errordata.errorcode);
 
 		hlcache_handle_release(css);
 		s->sheet = NULL;

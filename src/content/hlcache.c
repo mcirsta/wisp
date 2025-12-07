@@ -392,6 +392,10 @@ static nserror hlcache_migrate_ctx(hlcache_retrieval_ctx *ctx,
 		error = NSERROR_NEED_DATA;
 	} else {
 		/* Unacceptable type: report error */
+		NSLOG(neosurf, ERROR, "UnacceptableType for %s. Effective type: %s. Accepted types: %d", 
+              nsurl_access(hlcache_handle_get_url(ctx->handle)),
+              effective_type ? lwc_string_data(effective_type) : "NULL", ctx->accepted_types);
+
 		if (ctx->handle->cb != NULL) {
 			hlcache_event hlevent;
 
