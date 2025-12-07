@@ -701,7 +701,7 @@ nsws_window_create_toolbar(HINSTANCE hInstance,
 	hWndToolbar = CreateWindowEx(0,
 				     TOOLBARCLASSNAME,
 				     "Toolbar",
-				     WS_CHILD | TBSTYLE_FLAT,
+				     WS_CHILD | TBSTYLE_FLAT | TBSTYLE_TOOLTIPS,
 				     0, 0, 0, 0,
 				     hWndParent,
 				     NULL,
@@ -1466,6 +1466,44 @@ nsws_window_event_callback(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 		}
 		break;
 
+	case WM_NOTIFY:
+	{
+		LPNMHDR pnmh = (LPNMHDR)lparam;
+		if (pnmh->code == TTN_GETDISPINFO) {
+			LPNMTTDISPINFO ptdi = (LPNMTTDISPINFO)lparam;
+			const char *utf8_text = NULL;
+
+			switch (ptdi->hdr.idFrom) {
+			case IDM_NAV_BACK:
+				utf8_text = messages_get("Back");
+				break;
+			case IDM_NAV_FORWARD:
+				utf8_text = messages_get("Forward");
+				break;
+			case IDM_NAV_HOME:
+				utf8_text = messages_get("Home");
+				break;
+			case IDM_NAV_RELOAD:
+				utf8_text = messages_get("ObjReload");
+				break;
+			case IDM_NAV_STOP:
+				utf8_text = messages_get("Stop");
+				break;
+			}
+
+			if (utf8_text) {
+				MultiByteToWideChar(CP_UTF8, 0, utf8_text, -1,
+						    ptdi->szText,
+						    sizeof(ptdi->szText) / sizeof(WCHAR));
+				ptdi->lpszText = ptdi->szText;
+			}
+			return 0;
+		}
+	}
+	break;
+
+
+
 	case WM_COMMAND:
 		if (nsws_window_command(hwnd, gw, HIWORD(wparam),
 					LOWORD(wparam), (HWND)lparam) == 0) {
@@ -1905,6 +1943,7 @@ static void win32_window_page_info_change(struct gui_window *gw)
 	if (gw->tooltip) {
 		TOOLINFO toolInfo = { 0 };
 		const char *text = "";
+		WCHAR wtext[256] = {0};
 
 		switch (pistate) {
 		case PAGE_STATE_UNKNOWN:
@@ -1932,10 +1971,15 @@ static void win32_window_page_info_change(struct gui_window *gw)
 			break;
 		}
 
+		if (text) {
+			MultiByteToWideChar(CP_UTF8, 0, text, -1,
+					    wtext, sizeof(wtext) / sizeof(WCHAR));
+		}
+
 		toolInfo.cbSize = sizeof(toolInfo);
 		toolInfo.hwnd = gw->urlbar;
 		toolInfo.uId = (UINT_PTR)hbutton;
-		toolInfo.lpszText = (char *)text;
+		toolInfo.lpszText = wtext;
 		SendMessage(gw->tooltip, TTM_UPDATETIPTEXT, 0, (LPARAM)&toolInfo);
 	}
 }
