@@ -380,8 +380,10 @@ nsws_window_toolbar_callback(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 static void set_urlbar_edit_size(HWND hwnd)
 {
 	RECT rc;
+	int btn_x_offset = (NSWS_URLBAR_HEIGHT - NSW32_PGIBUTTON_HEIGHT) / 2;
+
 	GetClientRect(hwnd, &rc);
-	rc.left += NSW32_PGIBUTTON_HEIGHT;
+	rc.left += btn_x_offset + NSW32_PGIBUTTON_HEIGHT + 1;
 	SendMessage(hwnd, EM_SETRECT, 0, (LPARAM)&rc);
 	NSLOG(neosurf, DEBUG, "left:%ld right:%ld top:%ld bot:%ld",
 	      rc.left,rc.right,rc.top,rc.bottom);
@@ -485,7 +487,7 @@ nsws_window_urlbar_create(HINSTANCE hInstance,
 	hwnd = CreateWindowEx(0L,
 			      TEXT("Edit"),
 			      NULL,
-			      WS_CHILD | WS_BORDER | WS_VISIBLE |
+			      WS_CHILD | WS_BORDER | WS_VISIBLE | WS_CLIPCHILDREN |
 			      ES_LEFT | ES_AUTOHSCROLL | ES_MULTILINE,
 			      urlx,
 			      urly,
@@ -1483,36 +1485,46 @@ static void load_page_info_bitmaps(HINSTANCE hInstance, struct gui_window *gw)
 			     0,
 			     0,
 			     LR_DEFAULTCOLOR);
+	if (gw->hPageInfo[PAGE_STATE_UNKNOWN] == NULL) {
+		DWORD err = GetLastError();
+		NSLOG(neosurf, ERROR, "Failed to load IDB_PAGEINFO_INTERNAL (LoadImage): %lu", err);
+	}
+
 	gw->hPageInfo[PAGE_STATE_INTERNAL] = LoadImage(hInstance,
 			     MAKEINTRESOURCE(IDB_PAGEINFO_INTERNAL),
 			     IMAGE_BITMAP,
 			     0,
 			     0,
 			     LR_DEFAULTCOLOR);
+
 	gw->hPageInfo[PAGE_STATE_LOCAL] = LoadImage(hInstance,
 			     MAKEINTRESOURCE(IDB_PAGEINFO_LOCAL),
 			     IMAGE_BITMAP,
 			     0,
 			     0,
 			     LR_DEFAULTCOLOR);
+
 	gw->hPageInfo[PAGE_STATE_INSECURE] = LoadImage(hInstance,
 			     MAKEINTRESOURCE(IDB_PAGEINFO_INSECURE),
 			     IMAGE_BITMAP,
 			     0,
 			     0,
 			     LR_DEFAULTCOLOR);
+
 	gw->hPageInfo[PAGE_STATE_SECURE_OVERRIDE] = LoadImage(hInstance,
 			     MAKEINTRESOURCE(IDB_PAGEINFO_WARNING),
 			     IMAGE_BITMAP,
 			     0,
 			     0,
 			     LR_DEFAULTCOLOR);
+
 	gw->hPageInfo[PAGE_STATE_SECURE_ISSUES] = LoadImage(hInstance,
 			     MAKEINTRESOURCE(IDB_PAGEINFO_WARNING),
 			     IMAGE_BITMAP,
 			     0,
 			     0,
 			     LR_DEFAULTCOLOR);
+
 	gw->hPageInfo[PAGE_STATE_SECURE] = LoadImage(hInstance,
 			     MAKEINTRESOURCE(IDB_PAGEINFO_SECURE),
 			     IMAGE_BITMAP,

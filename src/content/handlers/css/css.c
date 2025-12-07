@@ -495,7 +495,7 @@ void nscss_content_done(struct content_css_data *css, void *pw)
 	size_t size;
 	css_error error;
 
-	NSLOG(neosurf, ERROR, "nscss_content_done called for %p", c);
+	NSLOG(neosurf, INFO, "nscss_content_done called for %p", c);
 
 	/* Retrieve the size of this sheet */
 	error = css_stylesheet_size(css->sheet, &size);
