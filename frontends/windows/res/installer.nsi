@@ -4,8 +4,8 @@
 # show up in a few places.
 # All the other settings can be tweaked by editing the !defines at the top of this script
 
-!define APPNAME "NetSurf"
-!define COMPANYNAME "NetSurf"
+!define APPNAME "NeoSurf"
+!define COMPANYNAME "NeoSurf"
 !define DESCRIPTION "Web Browser"
 
 # The version values must be simple integers
@@ -20,15 +20,15 @@
 !endif
 
 # These will be displayed by the "Click here for support information" link in "Add/Remove Programs"
-!define HELPURL "https://www.netsurf-browser.org/" # "Support Information" link
-!define UPDATEURL "https://www.netsurf-browser.org/" # "Product Updates" link
-!define ABOUTURL "https://www.netsurf-browser.org/" # "Publisher" link
+!define HELPURL "https://www.neosurf-browser.org/" # "Support Information" link
+!define UPDATEURL "https://www.neosurf-browser.org/" # "Product Updates" link
+!define ABOUTURL "https://www.neosurf-browser.org/" # "Publisher" link
 # This is the size (in kB) of all the files copied into "Program Files"
 !define INSTALLSIZE 9000
 
 # output filename
 !ifndef OUTFNAME
-  !define OUTFNAME "netsurf-installer.exe"
+  !define OUTFNAME "neosurf-installer.exe"
 !endif
 
 # path to resources
@@ -78,15 +78,15 @@ section "install"
 	setOutPath $INSTDIR
 
 	# Files added here should be removed by the uninstaller section
-	file "NetSurf.exe"
-	file /oname=NetSurf.ico "..\..\..\src\resources\neosurf.ico"
+	file "NeoSurf.exe"
+	file /oname=NeoSurf.ico "..\..\..\src\resources\neosurf.ico"
 	file /oname=default.css "..\..\..\src\resources\default.css"
 	file /oname=internal.css "..\..\..\src\resources\internal.css"
 	file /oname=adblock.css "..\..\..\src\resources\adblock.css"
 	file /oname=welcome.html "..\..\..\src\resources\en\welcome.html"
 	file /oname=credits.html "..\..\..\src\resources\en\credits.html"
 	file /oname=licence.html "..\..\..\src\resources\en\licence.html"
-	file /oname=netsurf.png "..\..\..\src\resources\neosurf.png"
+	file /oname=neosurf.png "..\..\..\src\resources\neosurf.png"
 	file /oname=messages "${OBJROOT}\messages-en"
 	file /oname=ca-bundle.crt "..\..\..\src\resources\ca-bundle"
 	file /oname=quirks.css "..\..\..\src\resources\quirks.css"
@@ -105,14 +105,14 @@ section "install"
  
 	# Start Menu
 	createDirectory "$SMPROGRAMS\${COMPANYNAME}"
-	createShortCut "$SMPROGRAMS\${COMPANYNAME}\${APPNAME}.lnk" "$INSTDIR\NetSurf.exe" "" "$INSTDIR\NetSurf.ico"
+	createShortCut "$SMPROGRAMS\${COMPANYNAME}\${APPNAME}.lnk" "$INSTDIR\NeoSurf.exe" "" "$INSTDIR\NeoSurf.ico"
  
 	# Registry information for add/remove programs
 	WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${COMPANYNAME} ${APPNAME}" "DisplayName" "${COMPANYNAME} - ${APPNAME} - ${DESCRIPTION}"
 	WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${COMPANYNAME} ${APPNAME}" "UninstallString" "$\"$INSTDIR\uninstall.exe$\""
 	WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${COMPANYNAME} ${APPNAME}" "QuietUninstallString" "$\"$INSTDIR\uninstall.exe$\" /S"
 	WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${COMPANYNAME} ${APPNAME}" "InstallLocation" "$\"$INSTDIR$\""
-	WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${COMPANYNAME} ${APPNAME}" "DisplayIcon" "$\"$INSTDIR\NetSurf.ico$\""
+	WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${COMPANYNAME} ${APPNAME}" "DisplayIcon" "$\"$INSTDIR\NeoSurf.ico$\""
 	WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${COMPANYNAME} ${APPNAME}" "Publisher" "$\"${COMPANYNAME}$\""
 	WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${COMPANYNAME} ${APPNAME}" "HelpLink" "$\"${HELPURL}$\""
 	WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${COMPANYNAME} ${APPNAME}" "URLUpdateInfo" "$\"${UPDATEURL}$\""
@@ -147,8 +147,8 @@ section "uninstall"
 	rmDir "$SMPROGRAMS\${COMPANYNAME}"
  
 	# Remove files
-	delete $INSTDIR\NetSurf.exe
-	delete $INSTDIR\NetSurf.ico
+	delete $INSTDIR\NeoSurf.exe
+	delete $INSTDIR\NeoSurf.ico
 	delete $INSTDIR\libcares-2.dll
 	delete $INSTDIR\libgnurx-0.dll
 	delete $INSTDIR\default.css
@@ -157,7 +157,7 @@ section "uninstall"
 	delete $INSTDIR\welcome.html
 	delete $INSTDIR\credits.html
 	delete $INSTDIR\licence.html
-	delete $INSTDIR\netsurf.png
+	delete $INSTDIR\neosurf.png
 	delete $INSTDIR\messages
 	delete $INSTDIR\ca-bundle.crt
 

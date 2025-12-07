@@ -22,8 +22,8 @@
  * The interface to the win32 font and utf8 handling.
  */
 
-#ifndef NETSURF_WINDOWS_FONT_H
-#define NETSURF_WINDOWS_FONT_H
+#ifndef NEOSURF_WINDOWS_FONT_H
+#define NEOSURF_WINDOWS_FONT_H
 
 struct plot_font_style;
 

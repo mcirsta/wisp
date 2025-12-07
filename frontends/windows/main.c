@@ -73,7 +73,7 @@ static int get_screen_dpi(void)
 		dpi = 96; /* 96DPI is the default */
 	}
 
-	NSLOG(netsurf, INFO, "FIX DPI %d", dpi);
+	NSLOG(neosurf, INFO, "FIX DPI %d", dpi);
 
 	return dpi;
 }
@@ -91,7 +91,7 @@ static int get_screen_dpi(void)
 static nserror get_config_home(char **config_home_out)
 {
 	TCHAR adPath[MAX_PATH]; /* appdata path */
-	char nsdir[] = "NetSurf";
+	char nsdir[] = "NeoSurf";
 	HRESULT hres;
 
 	hres = SHGetFolderPath(NULL,
@@ -118,7 +118,7 @@ static nserror get_config_home(char **config_home_out)
 
 	*config_home_out = strdup(adPath);
 
-	NSLOG(netsurf, INFO, "using config path \"%s\"", *config_home_out);
+	NSLOG(neosurf, INFO, "using config path \"%s\"", *config_home_out);
 
 	return NSERROR_OK;
 }
@@ -402,7 +402,7 @@ WinMain(HINSTANCE hInstance, HINSTANCE hLastInstance, LPSTR lpcli, int ncmd)
 
 	ret = neosurf_register(&win32_table);
 	if (ret != NSERROR_OK) {
-		die("NetSurf operation table registration failed");
+		die("NeoSurf operation table registration failed");
 	}
 
 	/* Save the application-instance handle. */
@@ -422,19 +422,19 @@ WinMain(HINSTANCE hInstance, HINSTANCE hLastInstance, LPSTR lpcli, int ncmd)
 	nslog_init(nslog_ensure, &argc, argv);
 
 	/* build resource path string vector */
-	respaths = nsws_init_resource("${APPDATA}\\NetSurf:${PROGRAMFILES}\\NetSurf\\NetSurf\\:"NETSURF_WINDOWS_RESPATH);
+	respaths = nsws_init_resource("${APPDATA}\\NeoSurf:${PROGRAMFILES}\\NeoSurf\\NeoSurf\\:"NEOSURF_WINDOWS_RESPATH);
 
 	/* Locate the correct user configuration directory path */
 	ret = get_config_home(&nsw32_config_home);
 	if (ret != NSERROR_OK) {
-		NSLOG(netsurf, INFO,
+		NSLOG(neosurf, INFO,
 		      "Unable to locate a configuration directory.");
 	}
 
 	/* Initialise user options */
 	ret = nsw32_option_init(&argc, argv, respaths, nsw32_config_home);
 	if (ret != NSERROR_OK) {
-		NSLOG(netsurf, ERROR, "Options failed to initialise (%s)\n",
+		NSLOG(neosurf, ERROR, "Options failed to initialise (%s)\n",
 		      messages_get_errorcode(ret));
 		return 1;
 	}
@@ -444,14 +444,14 @@ WinMain(HINSTANCE hInstance, HINSTANCE hLastInstance, LPSTR lpcli, int ncmd)
 	if (ret != NSERROR_OK) {
 		fprintf(stderr, "Unable to load translated messages (%s)\n",
 			messages_get_errorcode(ret));
-		NSLOG(netsurf, INFO, "Unable to load translated messages");
+		NSLOG(neosurf, INFO, "Unable to load translated messages");
 		/** \todo decide if message load faliure should be fatal */
 	}
 
 	/* common initialisation */
 	ret = neosurf_init(NULL);
 	if (ret != NSERROR_OK) {
-		NSLOG(netsurf, INFO, "NetSurf failed to initialise");
+		NSLOG(neosurf, INFO, "NeoSurf failed to initialise");
 		return 1;
 	}
 
@@ -479,7 +479,7 @@ WinMain(HINSTANCE hInstance, HINSTANCE hLastInstance, LPSTR lpcli, int ncmd)
 		addr = NEOSURF_HOMEPAGE;
 	}
 
-	NSLOG(netsurf, INFO, "calling browser_window_create");
+	NSLOG(neosurf, INFO, "calling browser_window_create");
 
 	ret = nsurl_create(addr, &url);
 	if (ret == NSERROR_OK) {

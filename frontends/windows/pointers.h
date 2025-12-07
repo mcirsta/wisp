@@ -22,8 +22,8 @@
  * Windows mouse cursor interface.
  */
 
-#ifndef _NETSURF_WINDOWS_POINTERS_H_
-#define _NETSURF_WINDOWS_POINTERS_H_
+#ifndef _NEOSURF_WINDOWS_POINTERS_H_
+#define _NEOSURF_WINDOWS_POINTERS_H_
 
 
 /**

@@ -148,7 +148,7 @@ nsw32_local_history_init(HINSTANCE hInstance,
 		return NSERROR_NOMEM;
 	}
 
-	ncwin->core.title = "NetSurf Local History";
+	ncwin->core.title = "NeoSurf Local History";
 	ncwin->core.draw = nsw32_local_history_draw;
 	ncwin->core.key = nsw32_local_history_key;
 	ncwin->core.mouse = nsw32_local_history_mouse;

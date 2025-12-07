@@ -42,17 +42,17 @@
 static const char *fetch_filetype(const char *unix_path)
 {
 	const char *ext;
-	NSLOG(netsurf, INFO, "unix path %s", unix_path);
+	NSLOG(neosurf, INFO, "unix path %s", unix_path);
 
 	ext = strrchr(unix_path, '.');
 	if (ext == NULL) {
-		NSLOG(netsurf, INFO, "no extension for %s returning html", unix_path);
+		NSLOG(neosurf, INFO, "no extension for %s returning html", unix_path);
 		return "text/html";
 	}
 
 	ext++; /* skip dot */
 
-	NSLOG(netsurf, INFO, "extension %s", ext);
+	NSLOG(neosurf, INFO, "extension %s", ext);
 
 	if (strcasecmp(ext, "css") == 0)
 		return "text/css";

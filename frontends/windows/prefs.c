@@ -281,7 +281,7 @@ static INT_PTR CALLBACK options_appearance_dialog_handler(HWND hwnd,
 
 
 	case WM_COMMAND:
-		NSLOG(netsurf, INFO, "WM_COMMAND Identifier 0x%x",
+		NSLOG(neosurf, INFO, "WM_COMMAND Identifier 0x%x",
 		      LOWORD(wparam));
 
 		switch(LOWORD(wparam)) {
@@ -721,8 +721,8 @@ void nsws_prefs_dialog_init(HINSTANCE hinst, HWND parent)
 	psh.dwFlags = PSH_NOAPPLYNOW | PSH_USEICONID | PSH_PROPSHEETPAGE;
 	psh.hwndParent = parent;
 	psh.hInstance = hinst;
-	psh.pszIcon = MAKEINTRESOURCE(IDR_NETSURF_ICON);
-	psh.pszCaption = (LPSTR) "NetSurf Options";
+	psh.pszIcon = MAKEINTRESOURCE(IDR_NEOSURF_ICON);
+	psh.pszCaption = (LPSTR) "NeoSurf Options";
 	psh.nPages = sizeof(psp) / sizeof(PROPSHEETPAGE);
 	psh.nStartPage = 0;
 	psh.ppsp = (LPCPROPSHEETPAGE) &psp;

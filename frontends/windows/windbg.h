@@ -16,8 +16,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef NETSURF_WINDOWS_WINDBG_H
-#define NETSURF_WINDOWS_WINDBG_H
+#ifndef NEOSURF_WINDOWS_WINDBG_H
+#define NEOSURF_WINDOWS_WINDBG_H
 
 #include "neosurf/utils/log.h"
 
@@ -34,7 +34,7 @@ void win_perror(const char *lpszFunction);
 	    ((m) != WM_MOUSEMOVE) &&					\
 	    ((m) != WM_NCHITTEST) &&					\
 	    ((m) != WM_ENTERIDLE))					\
-		NSLOG(netsurf, DEBUG,					\
+		NSLOG(neosurf, DEBUG,					\
 		      "%s, hwnd %p, w 0x%x, l 0x%Ix",			\
 		      msg_num_to_name(m), h, w, l)
 

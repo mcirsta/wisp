@@ -16,8 +16,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef NETSURF_WINDOWS_COREWINDOW_H
-#define NETSURF_WINDOWS_COREWINDOW_H
+#ifndef NEOSURF_WINDOWS_COREWINDOW_H
+#define NEOSURF_WINDOWS_COREWINDOW_H
 
 #include "neosurf/core_window.h"
 

@@ -52,12 +52,12 @@ static BOOL init_about_dialog(HWND hwnd)
 
 		hFont=CreateFont (26, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE, ANSI_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY, DEFAULT_PITCH | FF_SWISS, "Arial");
 		if (hFont != NULL) {
-			NSLOG(netsurf, INFO, "Setting font object");
+			NSLOG(neosurf, INFO, "Setting font object");
 			SendMessage(dlg_itm, WM_SETFONT, (WPARAM)hFont, 0);
 		}
 
 		snprintf(ver_str, sizeof(ver_str), "%s %d", 
-			 messages_get("NetSurf"), neosurf_version); 
+			 messages_get("NeoSurf"), neosurf_version); 
 		
 		SendMessage(dlg_itm, WM_SETTEXT, 0, (LPARAM)ver_str);
 	}
@@ -65,7 +65,7 @@ static BOOL init_about_dialog(HWND hwnd)
 	dlg_itm = GetDlgItem(hwnd, IDC_ABOUT_COPYRIGHT);
 	if (dlg_itm != NULL) {
 		snprintf(ver_str, sizeof(ver_str), "%s", 
-			 messages_get("NetSurfCopyright")); 
+			 messages_get("NeoSurfCopyright")); 
 		
 		SendMessage(dlg_itm, WM_SETTEXT, 0, (LPARAM)ver_str);
 	}
@@ -85,7 +85,7 @@ static BOOL destroy_about_dialog(HWND hwnd)
 	if (dlg_itm != NULL) {
 		hFont = (HFONT)SendMessage(dlg_itm, WM_GETFONT, 0, 0);
 		if (hFont != NULL) {
-			NSLOG(netsurf, INFO, "Destroyed font object");
+			NSLOG(neosurf, INFO, "Destroyed font object");
 			DeleteObject(hFont); 	
 		}
 	}
@@ -107,12 +107,12 @@ nsws_about_event_callback(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 	case WM_COMMAND:
 		switch(LOWORD(wparam)) {
 		case IDOK:
-			NSLOG(netsurf, INFO, "OK clicked");
+			NSLOG(neosurf, INFO, "OK clicked");
 			EndDialog(hwnd, IDOK);
 			break;
 
 		case IDCANCEL:
-			NSLOG(netsurf, INFO, "Cancel clicked");
+			NSLOG(neosurf, INFO, "Cancel clicked");
 			EndDialog(hwnd, IDOK);
 			break;
 

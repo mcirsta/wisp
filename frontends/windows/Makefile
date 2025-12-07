@@ -26,7 +26,7 @@ CFLAGS += '-D_WIN32_WINDOWS=0x0501'
 CFLAGS += '-D_WIN32_IE=0x0501'
 
 #installed resource path
-CFLAGS += '-DNETSURF_WINDOWS_RESPATH="$(NETSURF_WINDOWS_RESPATH)"'
+CFLAGS += '-DNEOSURF_WINDOWS_RESPATH="$(NEOSURF_WINDOWS_RESPATH)"'
 
 WSCFLAGS := -std=c99 -Dnswin32 -DCURL_STATICLIB -DCARES_STATICLIB -g
 
@@ -61,7 +61,7 @@ S_FRONTEND := main.c window.c gui.c clipboard.c drawable.c plot.c findfile.c \
 # Note this is deliberately *not* expanded here as common and image
 #   are not yet available
 SOURCES = $(S_COMMON) $(S_IMAGE) $(S_BROWSER) $(S_FRONTEND) $(S_RESOURCES)
-EXETARGET := NetSurf.exe
+EXETARGET := NeoSurf.exe
 
 # ----------------------------------------------------------------------------
 # Install target
@@ -73,9 +73,9 @@ install-windows:
 # Package target
 # ----------------------------------------------------------------------------
 
-package-windows: netsurf-installer.exe
+package-windows: neosurf-installer.exe
 
-WIN_RES_OBJ := installer.nsi NetSurf.ico netsurf.png welcome.html default.css
+WIN_RES_OBJ := installer.nsi NeoSurf.ico neosurf.png welcome.html default.css
 WIN_RES_INS_OBJ := $(addprefix $(FRONTEND_RESOURCES_DIR)/,$(WIN_RES_OBJ)) $(OBJROOT)/messages-en
 
 # deal with making installer generation verbose
@@ -90,11 +90,11 @@ $(OBJROOT)/messages-en: $(MESSAGES_TARGET)/en/Messages
 	$(VQ)echo "   MSGCP: $< $@"
 	$(Q)$(INSTALL) -m 644 -T $< $@
 
-netsurf-installer.exe: $(EXETARGET) $(POSTEXES) $(WIN_RES_INS_OBJ)
+neosurf-installer.exe: $(EXETARGET) $(POSTEXES) $(WIN_RES_INS_OBJ)
 	$(VQ)echo "MAKENSIS: $@"
 	$(Q)makensis -V$(NSIS_VERBOSE) -NOCD -DOBJROOT=$(OBJROOT) -DRESDIR=$(FRONTEND_RESOURCES_DIR) -DVERSIONMAJOR=$(VERSION_MAJ) -DVERSIONMINOR=$(VERSION_MIN) -DOUTFNAME=$@ $(FRONTEND_RESOURCES_DIR)/installer.nsi
 
 clean-installer:
-	$(VQ)echo "   CLEAN: netsurf-installer.exe"
-	$(Q)$(RM) netsurf-installer.exe
+	$(VQ)echo "   CLEAN: neosurf-installer.exe"
+	$(Q)$(RM) neosurf-installer.exe
 CLEANS += clean-installer

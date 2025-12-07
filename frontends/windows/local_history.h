@@ -21,8 +21,8 @@
  * Interface to win32 local history manager using nsw32 core window
  */
 
-#ifndef NETSURF_WINDOWS_LOCAL_HISTORY_H
-#define NETSURF_WINDOWS_LOCAL_HISTORY_H
+#ifndef NEOSURF_WINDOWS_LOCAL_HISTORY_H
+#define NEOSURF_WINDOWS_LOCAL_HISTORY_H
 
 /**
  * make the local history window visible.

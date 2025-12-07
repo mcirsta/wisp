@@ -21,8 +21,8 @@
  * Windows file operation table interface.
  */
 
-#ifndef _NETSURF_WINDOWS_FILE_H_
-#define _NETSURF_WINDOWS_FILE_H_
+#ifndef _NEOSURF_WINDOWS_FILE_H_
+#define _NEOSURF_WINDOWS_FILE_H_
 
 extern struct gui_file_table *win32_file_table;
 

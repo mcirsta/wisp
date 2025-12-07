@@ -16,8 +16,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef _NETSURF_WIN32_OPTIONS_H_
-#define _NETSURF_WIN32_OPTIONS_H_
+#ifndef _NEOSURF_WIN32_OPTIONS_H_
+#define _NEOSURF_WIN32_OPTIONS_H_
 
 /* currently nothing here */
 

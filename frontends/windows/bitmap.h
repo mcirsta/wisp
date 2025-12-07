@@ -17,8 +17,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef _NETSURF_WINDOWS_BITMAP_H_
-#define _NETSURF_WINDOWS_BITMAP_H_
+#ifndef _NEOSURF_WINDOWS_BITMAP_H_
+#define _NEOSURF_WINDOWS_BITMAP_H_
 
 extern struct gui_bitmap_table *win32_bitmap_table;
 

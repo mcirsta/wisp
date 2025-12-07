@@ -87,7 +87,7 @@ nserror nsw32_del_dialog(HWND hwndDlg)
 		if (cur->hwnd == hwndDlg) {
 			/* found match */
 			*prev = cur->next;
-			NSLOG(netsurf, DEBUG,
+			NSLOG(neosurf, DEBUG,
 			      "removed hwnd %p entry %p", cur->hwnd, cur);
 			free(cur);
 			return NSERROR_OK;
@@ -95,7 +95,7 @@ nserror nsw32_del_dialog(HWND hwndDlg)
 		prev = &cur->next;
 		cur = *prev;
 	}
-	NSLOG(netsurf, INFO, "did not find hwnd %p", hwndDlg);
+	NSLOG(neosurf, INFO, "did not find hwnd %p", hwndDlg);
 
 	return NSERROR_NOT_FOUND;
 }
@@ -109,7 +109,7 @@ static nserror handle_dialog_message(LPMSG lpMsg)
 	cur = dlglist;
 	while (cur != NULL) {
 		if (IsDialogMessage(cur->hwnd, lpMsg)) {
-			NSLOG(netsurf, DEBUG,
+			NSLOG(neosurf, DEBUG,
 			      "dispatched dialog hwnd %p", cur->hwnd);
 			return NSERROR_OK;
 		}
@@ -133,7 +133,7 @@ void win32_run(void)
 	int timeout; /* timeout in miliseconds */
 	UINT timer_id = 0;
 
-	NSLOG(netsurf, INFO, "Starting messgae dispatcher");
+	NSLOG(neosurf, INFO, "Starting messgae dispatcher");
 
 	while (!win32_quit) {
 		/* run the scheduler and discover how long to wait for

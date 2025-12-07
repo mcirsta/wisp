@@ -14,7 +14,7 @@ IDR_HOME_BITMAP    BITMAP         "home.bmp"
 
 
 LANGUAGE LANG_NEUTRAL, SUBLANG_NEUTRAL
-IDR_NETSURF_BANNER BITMAP         "banner.bmp"
+IDR_NEOSURF_BANNER BITMAP         "banner.bmp"
 
 
 LANGUAGE LANG_NEUTRAL, SUBLANG_NEUTRAL
@@ -156,7 +156,7 @@ IDR_MENU_MAIN MENU
         MENUITEM "G&uide", IDM_HELP_GUIDE
         MENUITEM "&Info", IDM_HELP_INFO
         MENUITEM SEPARATOR
-        MENUITEM "&About NetSurf", IDM_HELP_ABOUT
+        MENUITEM "&About NeoSurf", IDM_HELP_ABOUT
     }
 }
 
@@ -168,13 +168,13 @@ IDR_MENU_MAIN MENU
 LANGUAGE LANG_NEUTRAL, SUBLANG_NEUTRAL
 IDD_ABOUT DIALOGEX 10, 10, 206, 133
 STYLE DS_SHELLFONT | WS_CAPTION | WS_VISIBLE | WS_SYSMENU
-CAPTION "About NetSurf"
+CAPTION "About NeoSurf"
 FONT 8, "Ms Shell Dlg"
 {
-    CONTROL         IDR_NETSURF_BANNER, IDC_IMG1, WC_STATIC, SS_BITMAP | SS_REALSIZECONTROL, 0, 0, 205, 53, WS_EX_LEFT
-    LTEXT           "NetSurf", IDC_ABOUT_VERSION, 10, 60, 185, 16, NOT WS_GROUP | SS_LEFT, WS_EX_LEFT
-    LTEXT           "NetSurf is a small fast browser", IDC_ABOUT_TEXT, 10, 83, 185, 8, NOT WS_GROUP | SS_LEFT, WS_EX_LEFT
-    LTEXT           "Copyright 2003-2011 The NetSurf Developers", IDC_ABOUT_COPYRIGHT, 10, 96, 185, 8, NOT WS_GROUP | SS_LEFT, WS_EX_LEFT
+    CONTROL         IDR_NEOSURF_BANNER, IDC_IMG1, WC_STATIC, SS_BITMAP | SS_REALSIZECONTROL, 0, 0, 205, 53, WS_EX_LEFT
+    LTEXT           "NeoSurf", IDC_ABOUT_VERSION, 10, 60, 185, 16, NOT WS_GROUP | SS_LEFT, WS_EX_LEFT
+    LTEXT           "NeoSurf is a small fast browser", IDC_ABOUT_TEXT, 10, 83, 185, 8, NOT WS_GROUP | SS_LEFT, WS_EX_LEFT
+    LTEXT           "Copyright 2003-2011 The NeoSurf Developers", IDC_ABOUT_COPYRIGHT, 10, 96, 185, 8, NOT WS_GROUP | SS_LEFT, WS_EX_LEFT
     PUSHBUTTON      "&OK", IDOK, 143, 111, 54, 15, 0, WS_EX_LEFT
     PUSHBUTTON      "&Credits", IDC_BTN_CREDITS, 10, 111, 54, 15, 0, WS_EX_LEFT
     PUSHBUTTON      "&Licence", IDC_BTN_LICENCE, 70, 111, 54, 15, 0, WS_EX_LEFT
@@ -302,7 +302,7 @@ FONT 8, "MS Shell Dlg", 0, 0, 1
 // Icon resources
 //
 LANGUAGE LANG_NEUTRAL, SUBLANG_NEUTRAL
-IDR_NETSURF_ICON   ICON           "../../../src/resources/neosurf.ico"
+IDR_NEOSURF_ICON   ICON           "../../../src/resources/neosurf.ico"
 
 
 //
@@ -317,7 +317,7 @@ quirks.css USER "../../../src/resources/quirks.css"
 welcome.html USER "../../../src/resources/en/welcome.html"
 licence.html USER "../../../src/resources/en/licence.html"
 credits.html USER "../../../src/resources/en/credits.html"
-netsurf.png USER "../../../src/resources/neosurf.png"
+neosurf.png USER "../../../src/resources/neosurf.png"
 icons/arrow-l.png USER "../../../src/resources/icons/arrow-l.png"
 icons/content.png USER "../../../src/resources/icons/content.png"
 icons/directory.png USER "../../../src/resources/icons/directory.png"

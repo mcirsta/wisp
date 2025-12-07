@@ -218,12 +218,12 @@ void list_schedule(void)
 
 	gettimeofday(&tv, NULL);
 
-        NSLOG(netsurf, INFO, "schedule list at %ld:%ld", tv.tv_sec, tv.tv_usec);
+        NSLOG(neosurf, INFO, "schedule list at %ld:%ld", tv.tv_sec, tv.tv_usec);
 
         cur_nscb = schedule_list;
 
         while (cur_nscb != NULL) {
-                NSLOG(netsurf, INFO,
+                NSLOG(neosurf, INFO,
 		      "Schedule %p at %ld:%ld",
 		      cur_nscb,
                       cur_nscb->tv.tv_sec,

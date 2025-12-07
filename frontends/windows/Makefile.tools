@@ -5,8 +5,8 @@
 
 ifneq ($(HOST),windows)
   # Set Mingw defaults
-  GCCSDK_INSTALL_ENV ?= /opt/netsurf/i686-w64-mingw32/env
-  GCCSDK_INSTALL_CROSSBIN ?= /opt/netsurf/i686-w64-mingw32/cross/bin
+  GCCSDK_INSTALL_ENV ?= /opt/neosurf/i686-w64-mingw32/env
+  GCCSDK_INSTALL_CROSSBIN ?= /opt/neosurf/i686-w64-mingw32/cross/bin
 
   CC := $(wildcard $(GCCSDK_INSTALL_CROSSBIN)/*gcc)
   WINDRES := $(wildcard $(GCCSDK_INSTALL_CROSSBIN)/*windres)

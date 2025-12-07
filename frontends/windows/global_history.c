@@ -131,7 +131,7 @@ static nserror nsw32_global_history_init(HINSTANCE hInstance)
 		return NSERROR_NOMEM;
 	}
 
-	ncwin->core.title = "NetSurf Global History";
+	ncwin->core.title = "NeoSurf Global History";
 	ncwin->core.draw = nsw32_global_history_draw;
 	ncwin->core.key = nsw32_global_history_key;
 	ncwin->core.mouse = nsw32_global_history_mouse;

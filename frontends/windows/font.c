@@ -334,7 +334,7 @@ win32_font_split(const plot_font_style_t *style,
 	/* find the actual string width of the break */
 	res = win32_font_width(style, string, *offset, actual_x);
 
-	NSLOG(netsurf, DEEPDEBUG,
+	NSLOG(neosurf, DEEPDEBUG,
 	      "ret %d Split %u chars at %ipx: Split at char %i (%ipx) - %.*s",
 	      res, length, x, *offset, *actual_x, *offset, string);
 

@@ -16,8 +16,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef NETSURF_WINDOWS_WINDOW_H_
-#define NETSURF_WINDOWS_WINDOW_H_
+#ifndef NEOSURF_WINDOWS_WINDOW_H_
+#define NEOSURF_WINDOWS_WINDOW_H_
 
 #ifndef NEOSURF_HOMEPAGE
 #define NEOSURF_HOMEPAGE "about:welcome"

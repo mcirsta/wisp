@@ -16,8 +16,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef _NETSURF_WINDOWS_FILETYPE_H_
-#define _NETSURF_WINDOWS_FILETYPE_H_
+#ifndef _NEOSURF_WINDOWS_FILETYPE_H_
+#define _NEOSURF_WINDOWS_FILETYPE_H_
 
 /**
  * win32 API fetch operation table

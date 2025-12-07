@@ -135,7 +135,7 @@ static nserror nsw32_hotlist_init(HINSTANCE hInstance)
 		return NSERROR_NOMEM;
 	}
 
-	ncwin->core.title = "NetSurf Bookmarks";
+	ncwin->core.title = "NeoSurf Bookmarks";
 	ncwin->core.draw = nsw32_hotlist_draw;
 	ncwin->core.key = nsw32_hotlist_key;
 	ncwin->core.mouse = nsw32_hotlist_mouse;

@@ -21,8 +21,8 @@
  * Interface to win32 global history manager using nsw32 core window
  */
 
-#ifndef NETSURF_WINDOWS_GLOBAL_HISTORY_H
-#define NETSURF_WINDOWS_GLOBAL_HISTORY_H
+#ifndef NEOSURF_WINDOWS_GLOBAL_HISTORY_H
+#define NEOSURF_WINDOWS_GLOBAL_HISTORY_H
 
 /**
  * make the global history window visible.

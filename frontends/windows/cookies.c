@@ -142,7 +142,7 @@ static nserror nsw32_cookie_init(HINSTANCE hInstance)
 		return NSERROR_NOMEM;
 	}
 
-	ncwin->core.title = "NetSurf Cookies";
+	ncwin->core.title = "NeoSurf Cookies";
 	ncwin->core.draw = nsw32_cookie_draw;
 	ncwin->core.key = nsw32_cookie_key;
 	ncwin->core.mouse = nsw32_cookie_mouse;

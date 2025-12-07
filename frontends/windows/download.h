@@ -16,8 +16,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef _NETSURF_WINDOWS_DOWNLOAD_H_
-#define _NETSURF_WINDOWS_DOWNLOAD_H_
+#ifndef _NEOSURF_WINDOWS_DOWNLOAD_H_
+#define _NEOSURF_WINDOWS_DOWNLOAD_H_
 
 extern struct gui_download_table *win32_download_table;
 
