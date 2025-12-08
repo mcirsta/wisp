@@ -1140,8 +1140,8 @@ layout_next_margin_block(const css_unit_ctx *unit_len_ctx,
 			 struct box *box,
 			 struct box *block,
 			 int viewport_height,
-			 int *max_pos_margin,
-			 int *max_neg_margin)
+			 unsigned int *max_pos_margin,
+			 unsigned int *max_neg_margin)
 {
 	assert(block != NULL);
 
@@ -1165,10 +1165,12 @@ layout_next_margin_block(const css_unit_ctx *unit_len_ctx,
 						box->padding, box->border);
 
 				/* Apply top margin */
-				if (*max_pos_margin < box->margin[TOP])
-					*max_pos_margin = box->margin[TOP];
-				else if (*max_neg_margin < -box->margin[TOP])
-					*max_neg_margin = -box->margin[TOP];
+				if (box->margin[TOP] > 0 &&
+						(unsigned int)box->margin[TOP] > *max_pos_margin)
+					*max_pos_margin = (unsigned int)box->margin[TOP];
+				else if (box->margin[TOP] < 0 &&
+						-(unsigned int)box->margin[TOP] > *max_neg_margin)
+					*max_neg_margin = -(unsigned int)box->margin[TOP];
 			}
 
 			/* Check whether box is the box current margin collapses
@@ -1200,14 +1202,16 @@ layout_next_margin_block(const css_unit_ctx *unit_len_ctx,
 				 * Go up to first ancestor with a sibling. */
 				do {
 					/* Apply bottom margin */
-					if (*max_pos_margin <
-							box->margin[BOTTOM])
+					if (box->margin[BOTTOM] > 0 &&
+							(unsigned int)box->margin[BOTTOM] >
+							*max_pos_margin)
 						*max_pos_margin =
-							box->margin[BOTTOM];
-					else if (*max_neg_margin <
-							-box->margin[BOTTOM])
+							(unsigned int)box->margin[BOTTOM];
+					else if (box->margin[BOTTOM] < 0 &&
+							-(unsigned int)box->margin[BOTTOM] >
+							*max_neg_margin)
 						*max_neg_margin =
-							-box->margin[BOTTOM];
+							-(unsigned int)box->margin[BOTTOM];
 
 					box = box->parent;
 				} while (box != block && !box->next);
@@ -1221,10 +1225,12 @@ layout_next_margin_block(const css_unit_ctx *unit_len_ctx,
 			}
 
 			/* Apply bottom margin */
-			if (*max_pos_margin < box->margin[BOTTOM])
-				*max_pos_margin = box->margin[BOTTOM];
-			else if (*max_neg_margin < -box->margin[BOTTOM])
-				*max_neg_margin = -box->margin[BOTTOM];
+			if (box->margin[BOTTOM] > 0 &&
+					(unsigned int)box->margin[BOTTOM] > *max_pos_margin)
+				*max_pos_margin = (unsigned int)box->margin[BOTTOM];
+			else if (box->margin[BOTTOM] < 0 &&
+					-(unsigned int)box->margin[BOTTOM] > *max_neg_margin)
+				*max_neg_margin = -(unsigned int)box->margin[BOTTOM];
 
 			/* To next sibling. */
 			box = box->next;
@@ -3512,8 +3518,8 @@ bool layout_block_context(
 {
 	struct box *box;
 	int cx, cy;  /**< current coordinates */
-	int max_pos_margin = 0;
-	int max_neg_margin = 0;
+	unsigned int max_pos_margin = 0;
+	unsigned int max_neg_margin = 0;
 	int y = 0;
 	int lm, rm;
 	struct box *margin_collapse = NULL;
@@ -3659,7 +3665,7 @@ bool layout_block_context(
 				 * floats. */
 				int x0, x1, top;
 				struct box *left, *right;
-				top = cy + max_pos_margin - max_neg_margin;
+				top = cy + (int)max_pos_margin - (int)max_neg_margin;
 				top = (top > y) ? top : y;
 				x0 = cx;
 				x1 = cx + box->parent->width -
@@ -3696,8 +3702,8 @@ bool layout_block_context(
 					 * diminished due to floats. */
 					int x0, x1, top;
 					struct box *left, *right;
-					top = cy + max_pos_margin -
-							max_neg_margin;
+					top = cy + (int)max_pos_margin -
+							(int)max_neg_margin;
 					top = (top > y) ? top : y;
 					x0 = cx;
 					x1 = cx + box->parent->width -
@@ -3742,8 +3748,8 @@ bool layout_block_context(
 		     margin_collapse == box) &&
 		    in_margin == true) {
 			/* Margin goes above this box. */
-			cy += max_pos_margin - max_neg_margin;
-			box->y += max_pos_margin - max_neg_margin;
+			cy += (int)max_pos_margin - (int)max_neg_margin;
+			box->y += (int)max_pos_margin - (int)max_neg_margin;
 
 			/* Current margin has been applied. */
 			in_margin = false;

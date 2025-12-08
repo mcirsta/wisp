@@ -310,7 +310,13 @@ unsigned long long int strtoull(const char *nptr, char **endptr, int base)
 char *strcasestr(const char *haystack, const char *needle)
 {
 	size_t needle_len = strlen(needle);
-	const char * last_start = haystack + (strlen(haystack) - needle_len);
+	size_t haystack_len = strlen(haystack);
+	const char * last_start;
+
+	if (needle_len > haystack_len)
+		return NULL;
+
+	last_start = haystack + (haystack_len - needle_len);
 
 	while (haystack <= last_start) {
 		if (strncasecmp(haystack, needle, needle_len) == 0)

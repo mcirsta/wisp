@@ -44,8 +44,10 @@ typedef struct http_directive {
 } http_directive;
 
 
-static void http_destroy_directive(http_directive *self)
+static void http_destroy_directive(http__item *item)
 {
+	http_directive *self = (http_directive *) item;
+
 	lwc_string_unref(self->name);
 	if (self->value != NULL) {
 		lwc_string_unref(self->value);
@@ -54,7 +56,7 @@ static void http_destroy_directive(http_directive *self)
 }
 
 static nserror http__parse_directive(const char **input,
-		http_directive **result)
+		http__item **result)
 {
 	const char *pos = *input;
 	lwc_string *name;
@@ -99,7 +101,7 @@ static nserror http__parse_directive(const char **input,
 	directive->name = name;
 	directive->value = value;
 
-	*result = directive;
+	*result = (http__item *) directive;
 	*input = pos;
 
 	return NSERROR_OK;
@@ -246,7 +248,7 @@ nserror http_parse_strict_transport_security(const char *header_value,
 
 	http__skip_LWS(&pos);
 
-	error = http__parse_directive(&pos, &first);
+	error = http__parse_directive(&pos, (http__item **) &first);
 	if (error != NSERROR_OK) {
 		return error;
 	}
@@ -255,7 +257,8 @@ nserror http_parse_strict_transport_security(const char *header_value,
 
 	if (*pos == ';') {
 		error = http__item_list_parse(&pos,
-				http__parse_directive, first, &directives);
+				http__parse_directive, (http__item *) first,
+				(http__item **) &directives);
 		if (error != NSERROR_OK) {
 			if (directives != NULL) {
 				http_directive_list_destroy(directives);

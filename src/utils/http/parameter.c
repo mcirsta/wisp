@@ -40,8 +40,10 @@ struct http_parameter {
  *
  * \param self  Parameter to destroy
  */
-static void http_destroy_parameter(http_parameter *self)
+static void http_destroy_parameter(http__item *item)
 {
+	http_parameter *self = (http_parameter *) item;
+
 	lwc_string_unref(self->name);
 	lwc_string_unref(self->value);
 	free(self);
@@ -58,7 +60,7 @@ static void http_destroy_parameter(http_parameter *self)
  *
  * The returned parameter is owned by the caller.
  */
-nserror http__parse_parameter(const char **input, http_parameter **parameter)
+nserror http__parse_parameter(const char **input, http__item **parameter)
 {
 	const char *pos = *input;
 	lwc_string *name;
@@ -104,7 +106,7 @@ nserror http__parse_parameter(const char **input, http_parameter **parameter)
 	param->name = name;
 	param->value = value;
 
-	*parameter = param;
+	*parameter = (http__item *) param;
 	*input = pos;
 
 	return NSERROR_OK;

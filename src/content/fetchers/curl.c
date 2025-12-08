@@ -194,9 +194,19 @@ curl_fetch_ssl_value_destroy(void *value)
 	}
 }
 
+static void *curl_fetch_ssl_key_clone(void *key)
+{
+	return nsurl_ref(key);
+}
+
+static void curl_fetch_ssl_key_destroy(void *key)
+{
+	nsurl_unref(key);
+}
+
 static hashmap_parameters_t curl_fetch_ssl_hashmap_parameters = {
-	.key_clone = (hashmap_key_clone_t)nsurl_ref,
-	.key_destroy = (hashmap_key_destroy_t)nsurl_unref,
+	.key_clone = curl_fetch_ssl_key_clone,
+	.key_destroy = curl_fetch_ssl_key_destroy,
 	.key_eq = curl_fetch_ssl_key_eq,
 	.key_hash = curl_fetch_ssl_key_hash,
 	.value_alloc = curl_fetch_ssl_value_alloc,

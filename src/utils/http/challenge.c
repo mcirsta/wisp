@@ -40,8 +40,10 @@ struct http_challenge {
  *
  * \param self  Challenge to destroy
  */
-static void http_destroy_challenge(http_challenge *self)
+static void http_destroy_challenge(http__item *item)
 {
+	http_challenge *self = (http_challenge *) item;
+
 	lwc_string_unref(self->scheme);
 	http_parameter_list_destroy(self->params);
 	free(self);
@@ -83,7 +85,7 @@ nserror http__parse_challenge(const char **input, http_challenge **challenge)
 
 	http__skip_LWS(&pos);
 
-	error = http__parse_parameter(&pos, &first);
+	error = http__parse_parameter(&pos, (http__item **) &first);
 	if (error != NSERROR_OK) {
 		lwc_string_unref(scheme);
 		return error;

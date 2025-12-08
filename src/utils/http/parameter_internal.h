@@ -20,8 +20,9 @@
 #define NETSURF_UTILS_HTTP_PARAMETER_INTERNAL_H_
 
 #include <neosurf/utils/errors.h>
+#include "utils/http/generics.h"
 #include "utils/http/parameter.h"
 
-nserror http__parse_parameter(const char **input, http_parameter **parameter);
+nserror http__parse_parameter(const char **input, http__item **parameter);
 
 #endif

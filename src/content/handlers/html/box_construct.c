@@ -1231,8 +1231,9 @@ static bool box_construct_text(struct box_construct_ctx *ctx)
  * Convert an ELEMENT node to a box tree fragment,
  * then schedule conversion of the next ELEMENT node
  */
-static void convert_xml_to_box(struct box_construct_ctx *ctx)
+static void convert_xml_to_box(void *p)
 {
+	struct box_construct_ctx *ctx = p;
 	dom_node *next;
 	bool convert_children;
 	uint32_t num_processed = 0;
