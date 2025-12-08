@@ -124,7 +124,7 @@ NSOPTION_BOOL(background_images, true)
 NSOPTION_BOOL(animate_images, true)
 
 /** Whether to execute javascript */
-NSOPTION_BOOL(enable_javascript, false)
+NSOPTION_BOOL(enable_javascript, true)
 
 /** Whether to allow Author level CSS. */
 NSOPTION_BOOL(author_level_css, true)
