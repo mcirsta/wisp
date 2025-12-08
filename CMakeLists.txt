@@ -144,7 +144,45 @@ add_subdirectory(frontends)
 
 #TODO: quickjs/wasm3
 
-install(DIRECTORY include/neosurf DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
-
 #FIXME: gtk frontend seems to segfault if no proper GTK cursor theme is installed
 #FIXME: will fail in mysterious ways if user does not have write access to their ~/.config/
+
+set(CPACK_PACKAGE_NAME "NeoSurf")
+set(CPACK_PACKAGE_VENDOR "NeoSurf")
+set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Web Browser")
+set(CPACK_PACKAGE_VERSION "${NEOSURF_VERSION}")
+set(CPACK_PACKAGE_VERSION_MAJOR "${NEOSURF_VERSION}")
+set(CPACK_PACKAGE_VERSION_MINOR "0")
+set(CPACK_PACKAGE_VERSION_PATCH "0")
+set(CPACK_PACKAGE_INSTALL_DIRECTORY "NeoSurf")
+set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_SOURCE_DIR}/LICENSE")
+
+# NSIS Specific Configuration
+if(WIN32)
+	set(CPACK_GENERATOR "NSIS;ZIP")
+	set(CPACK_NSIS_DISPLAY_NAME "NeoSurf Web Browser")
+	set(CPACK_NSIS_PACKAGE_NAME "NeoSurf")
+	set(CPACK_NSIS_URL_INFO_ABOUT "https://www.neosurf-browser.org/")
+	set(CPACK_NSIS_HELP_LINK "https://www.neosurf-browser.org/")
+	set(CPACK_NSIS_CONTACT "https://www.neosurf-browser.org/")
+	set(CPACK_NSIS_MODIFY_PATH OFF)
+	
+	# Icon configuration (using the one from src/resources)
+	set(CPACK_NSIS_MUI_ICON "${CMAKE_SOURCE_DIR}/src/resources/neosurf.ico")
+	# Use default NSIS uninstall icon
+	# set(CPACK_NSIS_MUI_UNIICON "${CMAKE_SOURCE_DIR}/src/resources/neosurf.ico")
+	
+	# Run after install
+	set(CPACK_NSIS_MUI_FINISHPAGE_RUN "${CMAKE_INSTALL_BINDIR}/neosurf-windows.exe")
+	
+	# Uninstall previous versions
+	set(CPACK_NSIS_ENABLE_UNINSTALL_BEFORE_INSTALL ON)
+	
+	# Executables to create shortcuts for
+	# Note: This assumes the executable name is 'neosurf-windows' as defined in frontends/windows/CMakeLists.txt
+	# If building for Windows, the executable might be different depending on configuration
+	set(CPACK_NSIS_EXECUTABLES "${CMAKE_INSTALL_BINDIR}/neosurf-windows.exe")
+	set(CPACK_NSIS_MENU_LINKS "${CMAKE_INSTALL_BINDIR}/neosurf-windows.exe" "NeoSurf")
+endif()
+
+include(CPack)

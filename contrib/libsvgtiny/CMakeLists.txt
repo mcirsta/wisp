@@ -33,6 +33,7 @@ target_include_directories(svgtiny PRIVATE
 	${CMAKE_SOURCE_DIR}/contrib/libdom/bindings
 )
 
-install(TARGETS svgtiny DESTINATION ${CMAKE_INSTALL_LIBDIR})
-
-install(FILES include/svgtiny.h DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+install(TARGETS svgtiny
+	RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+	LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+)

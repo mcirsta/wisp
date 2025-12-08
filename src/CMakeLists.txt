@@ -39,6 +39,11 @@ include_directories(${ZLIB_INCLUDE_DIRS})
 
 pkg_check_modules(LIBSSL REQUIRED libssl)
 include_directories(${LIBSSL_INCLUDE_DIRS})
+
+pkg_check_modules(LIBXML2 libxml-2.0)
+if(LIBXML2_FOUND)
+	include_directories(${LIBXML2_INCLUDE_DIRS})
+endif()
 string(REPLACE "." ";" LIBSSL_VERSION_STRING ${LIBSSL_VERSION})
 list(GET LIBSSL_VERSION_STRING 0 LIBSSL_VERSION_MAJOR)
 if(LIBSSL_VERSION_MAJOR EQUAL 1)
@@ -243,7 +248,6 @@ target_include_directories(neosurf PRIVATE ${CMAKE_SOURCE_DIR}/contrib ${CMAKE_B
 install(TARGETS neosurf
 	RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
 	LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
-	ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
 )
 install(DIRECTORY resources/ DESTINATION ${CMAKE_INSTALL_DATADIR}/neosurf)
 
@@ -258,3 +262,97 @@ endif()
 if(NEOSURF_BUILD_XXD)
 	install(TARGETS xxd DESTINATION ${CMAKE_INSTALL_BINDIR})
 endif()
+
+if(WIN32)
+	function(install_dlls_for_package PREFIX LIBS)
+		if(NOT PREFIX OR NOT EXISTS "${PREFIX}/bin")
+			return()
+		endif()
+		
+		foreach(LIB ${LIBS})
+			string(REGEX REPLACE "^lib" "" BASE_NAME "${LIB}")
+			
+			file(GLOB DLLS 
+				"${PREFIX}/bin/lib${BASE_NAME}*.dll"
+				"${PREFIX}/bin/${BASE_NAME}*.dll"
+			)
+			
+			if(DLLS)
+				foreach(DLL ${DLLS})
+					message(STATUS "  Found DLL for ${LIB}: ${DLL}")
+				endforeach()
+				install(FILES ${DLLS} DESTINATION ${CMAKE_INSTALL_BINDIR})
+			endif()
+		endforeach()
+	endfunction()
+
+	if(LIBCURL_FOUND)
+		install_dlls_for_package("${LIBCURL_PREFIX}" "${LIBCURL_LIBRARIES}")
+		
+		file(GLOB RUNTIME_DLLS 
+			"${LIBCURL_PREFIX}/bin/libgcc_s_*.dll"
+			"${LIBCURL_PREFIX}/bin/libstdc++-*.dll"
+			"${LIBCURL_PREFIX}/bin/libwinpthread-*.dll"
+			"${LIBCURL_PREFIX}/bin/libbrotli*.dll" 
+			"${LIBCURL_PREFIX}/bin/libidn2*.dll"
+			"${LIBCURL_PREFIX}/bin/libunistring*.dll"
+			"${LIBCURL_PREFIX}/bin/libiconv*.dll"
+			"${LIBCURL_PREFIX}/bin/libintl*.dll"
+			"${LIBCURL_PREFIX}/bin/zlib1.dll"
+			"${LIBCURL_PREFIX}/bin/libssh2*.dll"
+			"${LIBCURL_PREFIX}/bin/libnghttp2*.dll"
+			"${LIBCURL_PREFIX}/bin/nghttp2*.dll"
+			"${LIBCURL_PREFIX}/bin/libnghttp3*.dll"
+			"${LIBCURL_PREFIX}/bin/libngtcp2*.dll"
+			"${LIBCURL_PREFIX}/bin/libzstd*.dll"
+			"${LIBCURL_PREFIX}/bin/libregex*.dll"
+			"${LIBCURL_PREFIX}/bin/libtre*.dll"
+			"${LIBCURL_PREFIX}/bin/libsystre*.dll"
+			"${LIBCURL_PREFIX}/bin/liblzma*.dll"
+		)
+		if(RUNTIME_DLLS)
+			install(FILES ${RUNTIME_DLLS} DESTINATION ${CMAKE_INSTALL_BINDIR})
+		endif()
+	endif()
+
+	if(LIBPSL_FOUND)
+		install_dlls_for_package("${LIBPSL_PREFIX}" "${LIBPSL_LIBRARIES}")
+	endif()
+
+	if(LIBJPEG_FOUND)
+		install_dlls_for_package("${LIBJPEG_PREFIX}" "${LIBJPEG_LIBRARIES}")
+	endif()
+
+	if(LIBPNG_FOUND)
+		install_dlls_for_package("${LIBPNG_PREFIX}" "${LIBPNG_LIBRARIES}")
+	endif()
+
+	if(LIBWEBP_FOUND)
+		install_dlls_for_package("${LIBWEBP_PREFIX}" "${LIBWEBP_LIBRARIES}")
+		file(GLOB WEBP_EXTRA_DLLS "${LIBWEBP_PREFIX}/bin/libsharpyuv*.dll")
+		if(WEBP_EXTRA_DLLS)
+			install(FILES ${WEBP_EXTRA_DLLS} DESTINATION ${CMAKE_INSTALL_BINDIR})
+		endif()
+	endif()
+
+	if(LIBCRYPTO_FOUND)
+		install_dlls_for_package("${LIBCRYPTO_PREFIX}" "${LIBCRYPTO_LIBRARIES}")
+	endif()
+
+	if(LIBSSL_FOUND)
+		install_dlls_for_package("${LIBSSL_PREFIX}" "${LIBSSL_LIBRARIES}")
+	endif()
+
+	if(LIBUTF8PROC_FOUND)
+		install_dlls_for_package("${LIBUTF8PROC_PREFIX}" "${LIBUTF8PROC_LIBRARIES}")
+	endif()
+
+	if(ZLIB_FOUND)
+		install_dlls_for_package("${ZLIB_PREFIX}" "${ZLIB_LIBRARIES}")
+	endif()
+
+	if(LIBXML2_FOUND)
+		install_dlls_for_package("${LIBXML2_PREFIX}" "${LIBXML2_LIBRARIES}")
+	endif()
+endif()
+

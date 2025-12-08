@@ -40,9 +40,10 @@ if(Iconv_FOUND)
 	endif()
 endif()
 
-install(TARGETS parserutils DESTINATION ${CMAKE_INSTALL_LIBDIR})
+install(TARGETS parserutils
+	RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+	LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+)
 
 include_directories(${CMAKE_SOURCE_DIR}/contrib/libparserutils/src)
 include_directories(${CMAKE_CURRENT_BINARY_DIR}/src/charset)
-
-install(DIRECTORY include/parserutils DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
