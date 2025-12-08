@@ -420,8 +420,26 @@ getter Window::document()
 
 getter Window::window()
 %{
-	duk_push_this(ctx);
-	return 1;
+    duk_push_this(ctx);
+    return 1;
+%}
+
+getter Window::self()
+%{
+    duk_push_this(ctx);
+    return 1;
+%}
+
+getter Window::top()
+%{
+    duk_push_this(ctx);
+    return 1;
+%}
+
+getter Window::parent()
+%{
+    duk_push_this(ctx);
+    return 1;
 %}
 
 getter Window::console()

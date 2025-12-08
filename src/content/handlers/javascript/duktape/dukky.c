@@ -953,10 +953,10 @@ js_exec(jsthread *thread, const uint8_t *txt, size_t txtlen, const char *name)
 		goto handle_error;
 	}
 
-	if (duk_pcall(CTX, 0/*nargs*/) == DUK_EXEC_ERROR) {
-		NSLOG(dukky, DEBUG, "Failed to execute JavaScript");
-		goto handle_error;
-	}
+    if (duk_pcall(CTX, 0/*nargs*/) == DUK_EXEC_ERROR) {
+        NSLOG(dukky, DEBUG, "Failed to execute JavaScript");
+        goto handle_error;
+    }
 
 	if (duk_get_top(CTX) == 0) duk_push_boolean(CTX, false);
 	NSLOG(dukky, DEEPDEBUG, "Returning %s",

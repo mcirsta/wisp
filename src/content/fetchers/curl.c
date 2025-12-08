@@ -1524,7 +1524,8 @@ static bool fetch_curl_process_headers(struct curl_fetch_info *f)
 	}
 
 	/* handle HTTP redirects (3xx response codes) */
-	if (300 <= http_code && http_code < 400 && f->location != 0) {
+	if (300 <= http_code && http_code < 400 && f->location != 0 &&
+			f->location[0] != '\0') {
 		NSLOG(neosurf, INFO, "FETCH_REDIRECT, '%s'", f->location);
 		msg.type = FETCH_REDIRECT;
 		msg.data.redirect = f->location;
@@ -1912,7 +1913,7 @@ fetch_curl_header(char *data, size_t size, size_t nmemb, void *_f)
 
 #define SKIP_ST(o) for (i = (o); i < (int) size && (data[i] == ' ' || data[i] == '\t'); i++)
 
-	if (12 < size && strncasecmp(data, "Location:", 9) == 0) {
+	if (9 < size && strncasecmp(data, "Location:", 9) == 0) {
 		/* extract Location header */
 		free(f->location);
 		f->location = malloc(size);

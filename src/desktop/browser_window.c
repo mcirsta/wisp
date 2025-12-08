@@ -624,6 +624,8 @@ static void browser_window_refresh(void *p)
 	hlcache_handle *parent = NULL;
 	enum browser_window_nav_flags flags = BW_NAVIGATE_UNVERIFIABLE;
 
+	NSLOG(neosurf, INFO, "browser_window_refresh executing");
+
 	assert(bw->current_content != NULL &&
 	       (content_get_status(bw->current_content) ==
 		CONTENT_STATUS_READY ||
@@ -964,6 +966,7 @@ browser_window_content_done(struct browser_window *bw)
 	}
 
 	if (bw->refresh_interval != -1) {
+		NSLOG(neosurf, INFO, "Content done. Scheduling refresh in %d ms", bw->refresh_interval * 10);
 		guit->misc->schedule(bw->refresh_interval * 10,
 				     browser_window_refresh, bw);
 	}
@@ -1505,6 +1508,7 @@ browser_window_callback(hlcache_handle *c, const hlcache_event *event, void *pw)
 	case CONTENT_MSG_DONE:
 		assert(bw->current_content == c);
 
+		NSLOG(neosurf, INFO, "CONTENT_MSG_DONE received");
 		res = browser_window_content_done(bw);
 		break;
 
@@ -1576,6 +1580,9 @@ browser_window_callback(hlcache_handle *c, const hlcache_event *event, void *pw)
 
 	case CONTENT_MSG_REFRESH:
 		bw->refresh_interval = event->data.delay * 100;
+		NSLOG(neosurf, INFO, "CONTENT_MSG_REFRESH received. Scheduling refresh in %d ms", bw->refresh_interval * 10);
+		guit->misc->schedule(bw->refresh_interval * 10,
+				     browser_window_refresh, bw);
 		break;
 
 	case CONTENT_MSG_LINK: /* content has an rfc5988 link element */
