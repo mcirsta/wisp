@@ -52,10 +52,10 @@ extern struct bitmap_colour_layout bitmap_layout;
  */
 static inline colour bitmap_pixel_to_colour(const uint8_t *pixel)
 {
-	return (pixel[bitmap_layout.r] <<  0) |
-	       (pixel[bitmap_layout.g] <<  8) |
-	       (pixel[bitmap_layout.b] << 16) |
-	       (pixel[bitmap_layout.a] << 24);
+	return ((uint32_t)pixel[bitmap_layout.r] <<  0) |
+	       ((uint32_t)pixel[bitmap_layout.g] <<  8) |
+	       ((uint32_t)pixel[bitmap_layout.b] << 16) |
+	       ((uint32_t)pixel[bitmap_layout.a] << 24);
 }
 
 /**

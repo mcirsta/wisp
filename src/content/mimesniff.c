@@ -91,7 +91,7 @@ static nserror mimesniff__match_mp4(const uint8_t *data, size_t len,
 		return NSERROR_NOT_FOUND;
 
 	/* Box size is big-endian */
-	box_size = (data[0] << 24) | (data[1] << 16) | (data[2] << 8) | data[3];
+	box_size = ((uint32_t)data[0] << 24) | ((uint32_t)data[1] << 16) | ((uint32_t)data[2] << 8) | (uint32_t)data[3];
 
 	/* Require that we can read the entire box, and reject bad box sizes */
 	if (len < box_size || box_size % 4 != 0)

@@ -1168,7 +1168,7 @@ layout_next_margin_block(const css_unit_ctx *unit_len_ctx,
 				if (box->margin[TOP] > 0 &&
 						(unsigned int)box->margin[TOP] > *max_pos_margin)
 					*max_pos_margin = (unsigned int)box->margin[TOP];
-				else if (box->margin[TOP] < 0 &&
+				else if (box->margin[TOP] != AUTO && box->margin[TOP] < 0 &&
 						-(unsigned int)box->margin[TOP] > *max_neg_margin)
 					*max_neg_margin = -(unsigned int)box->margin[TOP];
 			}
@@ -1207,7 +1207,7 @@ layout_next_margin_block(const css_unit_ctx *unit_len_ctx,
 							*max_pos_margin)
 						*max_pos_margin =
 							(unsigned int)box->margin[BOTTOM];
-					else if (box->margin[BOTTOM] < 0 &&
+					else if (box->margin[BOTTOM] != AUTO && box->margin[BOTTOM] < 0 &&
 							-(unsigned int)box->margin[BOTTOM] >
 							*max_neg_margin)
 						*max_neg_margin =
@@ -1228,7 +1228,7 @@ layout_next_margin_block(const css_unit_ctx *unit_len_ctx,
 			if (box->margin[BOTTOM] > 0 &&
 					(unsigned int)box->margin[BOTTOM] > *max_pos_margin)
 				*max_pos_margin = (unsigned int)box->margin[BOTTOM];
-			else if (box->margin[BOTTOM] < 0 &&
+			else if (box->margin[BOTTOM] != AUTO && box->margin[BOTTOM] < 0 &&
 					-(unsigned int)box->margin[BOTTOM] > *max_neg_margin)
 				*max_neg_margin = -(unsigned int)box->margin[BOTTOM];
 
@@ -4353,20 +4353,21 @@ layout__set_numerical_marker_text(
 	css_res = css_computed_format_list_style(box->style, marker->list_value,
 			marker->text, LIST_MARKER_SIZE, &counter_len);
 	if (css_res == CSS_OK) {
-		if (counter_len > LIST_MARKER_SIZE) {
+		if (counter_len >= LIST_MARKER_SIZE) {
 			/* Use computed size as marker did not fit in
 			 * default allocation. */
 			marker->text = talloc_realloc(content->bctx,
 					marker->text,
 					char,
-					counter_len);
+					counter_len + 1);
 			if (marker->text == NULL) {
 				return;
 			}
 			css_computed_format_list_style(box->style,
 					marker->list_value, marker->text,
-					counter_len, &counter_len);
+					counter_len + 1, &counter_len);
 		}
+		marker->text[counter_len] = '\0';
 		marker->length = counter_len;
 	}
 }

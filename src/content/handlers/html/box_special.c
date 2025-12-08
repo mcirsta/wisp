@@ -95,8 +95,10 @@ static inline bool box_is_root(dom_node *n)
  * \param o  The object params being destroyed.
  * \return 0 to allow talloc to continue destroying the tree.
  */
-static int box_object_talloc_destructor(struct object_params *o)
+static int box_object_talloc_destructor(void *vo)
 {
+	struct object_params *o = vo;
+
 	if (o->codebase != NULL)
 		nsurl_unref(o->codebase);
 	if (o->classid != NULL)
@@ -489,8 +491,10 @@ box_create_frameset(struct content_html_frames *f,
  * \param f The iframe params being destroyed.
  * \return 0 to allow talloc to continue destroying the tree.
  */
-static int box_iframes_talloc_destructor(struct content_html_iframe *f)
+static int box_iframes_talloc_destructor(void *ptr)
 {
+	struct content_html_iframe *f = (struct content_html_iframe *) ptr;
+
 	if (f->url != NULL) {
 		nsurl_unref(f->url);
 		f->url = NULL;
@@ -872,7 +876,7 @@ box_embed(dom_node *n,
 	if (params == NULL)
 		return false;
 
-	talloc_set_destructor(params, box_object_talloc_destructor);
+	_talloc_set_destructor(params, (int (*)(void *))box_object_talloc_destructor);
 
 	params->data = NULL;
 	params->type = NULL;
@@ -1072,7 +1076,7 @@ box_iframe(dom_node *n,
 		return false;
 	}
 
-	talloc_set_destructor(iframe, box_iframes_talloc_destructor);
+	talloc_set_destructor(iframe, (int (*)(struct content_html_iframe *))box_iframes_talloc_destructor);
 
 	iframe->box = box;
 	iframe->margin_width = 0;
@@ -1428,7 +1432,7 @@ box_object(dom_node *n,
 	if (params == NULL)
 		return false;
 
-	talloc_set_destructor(params, box_object_talloc_destructor);
+	_talloc_set_destructor(params, (int (*)(void *))box_object_talloc_destructor);
 
 	params->data = NULL;
 	params->type = NULL;

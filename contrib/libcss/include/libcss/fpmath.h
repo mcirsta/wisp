@@ -109,6 +109,19 @@ css_float_to_fixed(const float a) {
 	return (css_fixed) xx;
 }
 
+static inline int32_t
+css_fpct_of_int_to_int(const css_fixed p, const int i) {
+	int64_t xx = ((int64_t)p * (int64_t)i) / (100 << CSS_RADIX_POINT);
+
+	if (xx < INT_MIN)
+		xx = INT_MIN;
+
+	if (xx > INT_MAX)
+		xx = INT_MAX;
+
+	return (int32_t)xx;
+}
+
 /* Add two fixed point values */
 #define FADD(a, b) (css_add_fixed((a), (b)))
 /* Subtract two fixed point values */
@@ -156,7 +169,7 @@ css_float_to_fixed(const float a) {
 #define F_400	0x00064000	/* 400 */
 
 /* Fixed point percentage `p` of integer `i`, to an integer */
-#define FPCT_OF_INT_TOINT(p, i) (FIXTOINT(FDIV((p * i), F_100)))
+#define FPCT_OF_INT_TOINT(p, i) (css_fpct_of_int_to_int((p), (i)))
 
 #ifdef __cplusplus
 }

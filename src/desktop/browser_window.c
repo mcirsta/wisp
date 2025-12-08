@@ -27,6 +27,7 @@
 #include <neosurf/utils/config.h>
 
 #include <stdlib.h>
+#include <limits.h>
 #include <string.h>
 #include <math.h>
 #include <nsutils/time.h>
@@ -49,6 +50,7 @@
 #include "content/content_debug.h"
 
 #include <neosurf/content/handlers/html/html.h>
+#include <neosurf/content/handlers/html/box.h>
 #include <neosurf/content/handlers/html/form_internal.h>
 #include "content/handlers/javascript/js.h"
 
@@ -3996,8 +3998,12 @@ nserror browser_window_get_extents(struct browser_window *bw, bool scaled,
 	*height = content_get_height(bw->current_content);
 
 	if (scaled) {
-		*width *= bw->scale;
-		*height *= bw->scale;
+		if (*width != UNKNOWN_WIDTH) {
+			*width = *width * bw->scale;
+		}
+		if (*height != UNKNOWN_WIDTH) {
+			*height = *height * bw->scale;
+		}
 	}
 
 	return NSERROR_OK;
