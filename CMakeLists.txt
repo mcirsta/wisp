@@ -169,11 +169,11 @@ if(WIN32)
 	
 	# Icon configuration (using the one from src/resources)
 	set(CPACK_NSIS_MUI_ICON "${CMAKE_SOURCE_DIR}/src/resources/neosurf.ico")
-	# Use default NSIS uninstall icon
-	# set(CPACK_NSIS_MUI_UNIICON "${CMAKE_SOURCE_DIR}/src/resources/neosurf.ico")
-	
+	# Use a distinct icon for the uninstaller
+	set(CPACK_NSIS_MUI_UNIICON "${CMAKE_SOURCE_DIR}/src/resources/uninstall.ico")
+	set(CPACK_NSIS_INSTALLED_ICON_NAME "${CMAKE_INSTALL_BINDIR}/neosurf-windows.exe")
 	# Run after install
-	set(CPACK_NSIS_MUI_FINISHPAGE_RUN "${CMAKE_INSTALL_BINDIR}/neosurf-windows.exe")
+	set(CPACK_NSIS_MUI_FINISHPAGE_RUN "neosurf-windows.exe")
 	
 	# Uninstall previous versions
 	set(CPACK_NSIS_ENABLE_UNINSTALL_BEFORE_INSTALL ON)

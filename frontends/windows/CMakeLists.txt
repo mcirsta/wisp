@@ -88,6 +88,7 @@ install(FILES
 )
 install(FILES ${CMAKE_SOURCE_DIR}/src/resources/neosurf.png DESTINATION ${CMAKE_INSTALL_DATADIR}/neosurf-windows RENAME neosurf.png)
 install(FILES ${CMAKE_SOURCE_DIR}/src/resources/ca-bundle DESTINATION ${CMAKE_INSTALL_DATADIR}/neosurf-windows RENAME ca-bundle.crt)
+install(FILES ${CMAKE_SOURCE_DIR}/src/resources/uninstall.ico DESTINATION ${CMAKE_INSTALL_DATADIR}/neosurf-windows)
 
 install(FILES 
     ${CMAKE_SOURCE_DIR}/src/resources/icons/arrow-l.png
