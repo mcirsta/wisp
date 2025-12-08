@@ -826,8 +826,141 @@ path(const struct redraw_context *ctx,
      unsigned int n,
      const float transform[6])
 {
-	NSLOG(plot, DEEPDEBUG, "path unimplemented");
-	return NSERROR_OK;
+    HRGN clipregion;
+    HGDIOBJ penbak = NULL;
+    HGDIOBJ brushbak = NULL;
+    HPEN pen = NULL;
+    HBRUSH brush = NULL;
+    DWORD penstyle;
+    COLORREF pencol;
+    COLORREF brushcol;
+    LOGBRUSH lb;
+    int i = 0;
+    POINT pts[3];
+    int x, y;
+
+    if (plot_hdc == NULL) {
+        return NSERROR_INVALID;
+    }
+
+    clipregion = CreateRectRgnIndirect(&plot_clip);
+    if (clipregion == NULL) {
+        return NSERROR_INVALID;
+    }
+
+    pencol = (DWORD)(pstyle->stroke_colour & 0x00FFFFFF);
+    penstyle = PS_GEOMETRIC;
+    switch (pstyle->stroke_type) {
+    case PLOT_OP_TYPE_NONE:
+        penstyle |= PS_NULL;
+        break;
+    case PLOT_OP_TYPE_DOT:
+        penstyle |= PS_DOT;
+        break;
+    case PLOT_OP_TYPE_DASH:
+        penstyle |= PS_DASH;
+        break;
+    default:
+        penstyle |= PS_SOLID;
+        break;
+    }
+    lb.lbStyle = BS_SOLID;
+    lb.lbColor = pencol;
+    lb.lbHatch = 0;
+    pen = ExtCreatePen(penstyle,
+            plot_style_fixed_to_int(pstyle->stroke_width),
+            &lb, 0, NULL);
+    if (pen == NULL) {
+        DeleteObject(clipregion);
+        return NSERROR_INVALID;
+    }
+    penbak = SelectObject(plot_hdc, (HGDIOBJ) pen);
+    if (penbak == NULL) {
+        DeleteObject(pen);
+        DeleteObject(clipregion);
+        return NSERROR_INVALID;
+    }
+
+    if (pstyle->fill_type == PLOT_OP_TYPE_NONE) {
+        brush = GetStockObject(HOLLOW_BRUSH);
+        brushbak = SelectObject(plot_hdc, brush);
+    } else {
+        brushcol = (DWORD)(pstyle->fill_colour & 0x00FFFFFF);
+        brush = CreateSolidBrush(brushcol);
+        if (brush == NULL) {
+            SelectObject(plot_hdc, penbak);
+            DeleteObject(pen);
+            DeleteObject(clipregion);
+            return NSERROR_INVALID;
+        }
+        brushbak = SelectObject(plot_hdc, (HGDIOBJ) brush);
+        if (brushbak == NULL) {
+            DeleteObject(brush);
+            SelectObject(plot_hdc, penbak);
+            DeleteObject(pen);
+            DeleteObject(clipregion);
+            return NSERROR_INVALID;
+        }
+    }
+
+    SetPolyFillMode(plot_hdc, WINDING);
+    SelectClipRgn(plot_hdc, clipregion);
+
+    BeginPath(plot_hdc);
+
+    while (i < (int)n) {
+        int cmd = (int)p[i++];
+        switch (cmd) {
+        default:
+            break;
+        case PLOTTER_PATH_MOVE:
+            x = (int)(transform[0] * p[i] + transform[2] * p[i + 1] + transform[4]);
+            y = (int)(transform[1] * p[i] + transform[3] * p[i + 1] + transform[5]);
+            i += 2;
+            MoveToEx(plot_hdc, x, y, (LPPOINT)NULL);
+            break;
+        case PLOTTER_PATH_LINE:
+            x = (int)(transform[0] * p[i] + transform[2] * p[i + 1] + transform[4]);
+            y = (int)(transform[1] * p[i] + transform[3] * p[i + 1] + transform[5]);
+            i += 2;
+            LineTo(plot_hdc, x, y);
+            break;
+        case PLOTTER_PATH_BEZIER:
+            pts[0].x = (LONG)(transform[0] * p[i] + transform[2] * p[i + 1] + transform[4]);
+            pts[0].y = (LONG)(transform[1] * p[i] + transform[3] * p[i + 1] + transform[5]);
+            pts[1].x = (LONG)(transform[0] * p[i + 2] + transform[2] * p[i + 3] + transform[4]);
+            pts[1].y = (LONG)(transform[1] * p[i + 2] + transform[3] * p[i + 3] + transform[5]);
+            pts[2].x = (LONG)(transform[0] * p[i + 4] + transform[2] * p[i + 5] + transform[4]);
+            pts[2].y = (LONG)(transform[1] * p[i + 4] + transform[3] * p[i + 5] + transform[5]);
+            i += 6;
+            PolyBezierTo(plot_hdc, pts, 3);
+            break;
+        case PLOTTER_PATH_CLOSE:
+            CloseFigure(plot_hdc);
+            break;
+        }
+    }
+
+    EndPath(plot_hdc);
+
+    if (pstyle->fill_type != PLOT_OP_TYPE_NONE && pstyle->stroke_type != PLOT_OP_TYPE_NONE) {
+        StrokeAndFillPath(plot_hdc);
+    } else if (pstyle->fill_type != PLOT_OP_TYPE_NONE) {
+        FillPath(plot_hdc);
+    } else if (pstyle->stroke_type != PLOT_OP_TYPE_NONE) {
+        StrokePath(plot_hdc);
+    }
+
+    SelectClipRgn(plot_hdc, NULL);
+    SelectObject(plot_hdc, brushbak);
+    if (brush != NULL && pstyle->fill_type != PLOT_OP_TYPE_NONE) {
+        DeleteObject(brush);
+    }
+    SelectObject(plot_hdc, penbak);
+    DeleteObject(pen);
+    DeleteObject(clipregion);
+
+    return NSERROR_OK;
 }
 
 
