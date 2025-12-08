@@ -388,6 +388,13 @@ struct about_handlers about_handler_list[] = {
 		true
 	},
 	{
+		"licence",
+		SLEN("licence"),
+		NULL,
+		fetch_about_license_handler,
+		true
+	},
+	{
 		"welcome",
 		SLEN("welcome"),
 		NULL,

@@ -91,12 +91,22 @@ static const char *fetch_filetype(const char *unix_path)
  */
 static nsurl *nsw32_get_resource_url(const char *path)
 {
-	char buf[PATH_MAX];
-	nsurl *url = NULL;
+    char buf[PATH_MAX];
+    nsurl *url = NULL;
 
-	neosurf_path_to_nsurl(filepath_sfind(G_resource_pathv, buf, path), &url);
+    neosurf_path_to_nsurl(filepath_sfind(G_resource_pathv, buf, path), &url);
 
-	return url;
+    if (url == NULL && strcmp(path, "license.html") == 0) {
+        neosurf_path_to_nsurl(filepath_sfind(G_resource_pathv, buf, "licence.html"), &url);
+    }
+    if (url == NULL && strcmp(path, "credits.html") == 0) {
+        neosurf_path_to_nsurl(filepath_sfind(G_resource_pathv, buf, "en/credits.html"), &url);
+    }
+    if (url == NULL && strcmp(path, "welcome.html") == 0) {
+        neosurf_path_to_nsurl(filepath_sfind(G_resource_pathv, buf, "en/welcome.html"), &url);
+    }
+
+    return url;
 }
 
 

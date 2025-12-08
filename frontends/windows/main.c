@@ -294,26 +294,58 @@ nsw32_option_init(int *pargc, char** argv, char **respaths, char *config_path)
  */
 static nserror nsw32_messages_init(char **respaths)
 {
-	char *messages;
-	nserror res;
-	const uint8_t *data;
-	size_t data_size;
+    char *messages;
+    nserror res;
+    const uint8_t *data;
+    size_t data_size;
 
-	res = nsw32_get_resource_data("messages", &data, &data_size);
-	if (res == NSERROR_OK) {
-		res = messages_add_from_inline(data, data_size);
-	} else {
-		/* Obtain path to messages */
-		messages = filepath_find(respaths, "messages");
-		if (messages == NULL) {
-			res = NSERROR_NOT_FOUND;
-		} else {
-			res = messages_add_from_file(messages);
-			free(messages);
-		}
-	}
+    res = nsw32_get_resource_data("messages", &data, &data_size);
+    if (res == NSERROR_OK) {
+        res = messages_add_from_inline(data, data_size);
+        return res;
+    }
 
-	return res;
+    {
+        LANGID lid = GetUserDefaultUILanguage();
+        WORD pid = PRIMARYLANGID(lid);
+        const char *pref = "en";
+        if (pid == LANG_FRENCH) pref = "fr";
+        else if (pid == LANG_GERMAN) pref = "de";
+        else if (pid == LANG_ITALIAN) pref = "it";
+        else if (pid == LANG_DUTCH) pref = "nl";
+
+        {
+            char langpath[PATH_MAX];
+            snprintf(langpath, sizeof(langpath), "%s/Messages", pref);
+            messages = filepath_find(respaths, langpath);
+            if (messages != NULL) {
+                res = messages_add_from_file(messages);
+                free(messages);
+                return res;
+            }
+        }
+
+        {
+            char langpath[PATH_MAX];
+            snprintf(langpath, sizeof(langpath), "%s/Messages", "en");
+            messages = filepath_find(respaths, langpath);
+            if (messages != NULL) {
+                res = messages_add_from_file(messages);
+                free(messages);
+                return res;
+            }
+        }
+    }
+
+    /* Last resort: flat messages file */
+    messages = filepath_find(respaths, "messages");
+    if (messages != NULL) {
+        res = messages_add_from_file(messages);
+        free(messages);
+        return res;
+    }
+
+    return NSERROR_NOT_FOUND;
 }
 
 
