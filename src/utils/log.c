@@ -23,6 +23,8 @@
 #include <sys/types.h>
 #ifdef _WIN32
 #include <direct.h>
+#include <windows.h>
+#include <process.h>
 #endif
 
 #include <neosurf/utils/config.h>
@@ -42,6 +44,154 @@ static FILE *logfile;
 /** Split logging files */
 static FILE *split_log_files[6] = { NULL };
 static bool split_logging = false;
+
+#ifdef _WIN32
+static bool async_logging = false;
+struct log_entry { char *text; int level; struct log_entry *next; };
+static struct log_entry *log_head = NULL;
+static struct log_entry *log_tail = NULL;
+static size_t log_queue_len = 0;
+static const size_t log_queue_max = 4096;
+static HANDLE log_event = NULL;
+static uintptr_t log_thread_handle = 0;
+static CRITICAL_SECTION log_queue_cs;
+
+static void log_enqueue(char *text, int level)
+{
+    if (!async_logging) {
+        if (text == NULL) return;
+        #ifdef WITH_NSLOG
+        if (logfile) fprintf(logfile, "%s", text);
+        #else
+        if (verbose_log && logfile) fprintf(logfile, "%s", text);
+        #endif
+        if (split_logging) {
+            int i;
+            for (i = 0; i < 6; i++) {
+                if (split_log_files[i] && level >= i) {
+                    fprintf(split_log_files[i], "%s", text);
+                    fflush(split_log_files[i]);
+                }
+            }
+        }
+        free(text);
+        return;
+    }
+    EnterCriticalSection(&log_queue_cs);
+    if (log_queue_len >= log_queue_max) {
+        LeaveCriticalSection(&log_queue_cs);
+        free(text);
+        return;
+    }
+    struct log_entry *node = (struct log_entry *)malloc(sizeof(struct log_entry));
+    if (node == NULL) {
+        LeaveCriticalSection(&log_queue_cs);
+        free(text);
+        return;
+    }
+    node->text = text;
+    node->level = level;
+    node->next = NULL;
+    if (log_tail) {
+        log_tail->next = node;
+        log_tail = node;
+    } else {
+        log_head = log_tail = node;
+    }
+    log_queue_len++;
+    LeaveCriticalSection(&log_queue_cs);
+    if (log_event) SetEvent(log_event);
+}
+
+static void log_drain_all(void)
+{
+    for (;;) {
+        struct log_entry *node = NULL;
+        EnterCriticalSection(&log_queue_cs);
+        if (log_head) {
+            node = log_head;
+            log_head = log_head->next;
+            if (log_head == NULL) log_tail = NULL;
+            log_queue_len--;
+        }
+        LeaveCriticalSection(&log_queue_cs);
+        if (node == NULL) break;
+        #ifdef WITH_NSLOG
+        if (logfile) fprintf(logfile, "%s", node->text);
+        #else
+        if (verbose_log && logfile) fprintf(logfile, "%s", node->text);
+        #endif
+        if (split_logging) {
+            int i;
+            for (i = 0; i < 6; i++) {
+                if (split_log_files[i] && node->level >= i) {
+                    fprintf(split_log_files[i], "%s", node->text);
+                    fflush(split_log_files[i]);
+                }
+            }
+        }
+        free(node->text);
+        free(node);
+    }
+}
+
+static unsigned __stdcall log_thread_proc(void *arg)
+{
+    (void)arg;
+    while (async_logging) {
+        if (log_event) WaitForSingleObject(log_event, INFINITE);
+        log_drain_all();
+    }
+    log_drain_all();
+    return 0;
+}
+
+static void async_log_start(void)
+{
+    if (async_logging) return;
+    InitializeCriticalSection(&log_queue_cs);
+    log_event = CreateEvent(NULL, FALSE, FALSE, NULL);
+    async_logging = true;
+    log_thread_handle = _beginthreadex(NULL, 0, log_thread_proc, NULL, 0, NULL);
+}
+
+static void async_log_stop(void)
+{
+    if (!async_logging) return;
+    async_logging = false;
+    if (log_event) SetEvent(log_event);
+    if (log_thread_handle) {
+        WaitForSingleObject((HANDLE)log_thread_handle, INFINITE);
+        CloseHandle((HANDLE)log_thread_handle);
+        log_thread_handle = 0;
+    }
+    if (log_event) {
+        CloseHandle(log_event);
+        log_event = NULL;
+    }
+    log_drain_all();
+    DeleteCriticalSection(&log_queue_cs);
+}
+
+static void log_enqueue_formatted(int level, const char *prefix, const char *fmt, va_list args)
+{
+    va_list ap;
+    va_copy(ap, args);
+    int msglen = vsnprintf(NULL, 0, fmt, ap);
+    va_end(ap);
+    if (msglen < 0) return;
+    size_t plen = strlen(prefix);
+    char *buf = (char *)malloc(plen + (size_t)msglen + 2);
+    if (buf == NULL) return;
+    memcpy(buf, prefix, plen);
+    va_copy(ap, args);
+    vsnprintf(buf + plen, (size_t)msglen + 1, fmt, ap);
+    va_end(ap);
+    buf[plen + (size_t)msglen] = '\n';
+    buf[plen + (size_t)msglen + 1] = '\0';
+    log_enqueue(buf, level);
+}
+#endif
 
 /** Subtract the `struct timeval' values X and Y
  *
@@ -119,6 +269,25 @@ neosurf_render_log(void *_ctx,
 		   const char *fmt,
 		   va_list args)
 {
+#ifdef _WIN32
+    if (async_logging) {
+        char prefix_buf[256];
+        int pre_len = snprintf(prefix_buf, sizeof(prefix_buf),
+            "%s [%s %.*s] %.*s:%i %.*s: ",
+            nslog_gettime(),
+            nslog_short_level_name(ctx->level),
+            ctx->category->namelen,
+            ctx->category->name,
+            ctx->filenamelen,
+            ctx->filename,
+            ctx->lineno,
+            ctx->funcnamelen,
+            ctx->funcname);
+        if (pre_len < 0) return;
+        log_enqueue_formatted((int)ctx->level, prefix_buf, fmt, args);
+        return;
+    }
+#endif
 	if (split_logging) {
 		int i;
 		for (i = 0; i < 6; i++) {
@@ -195,6 +364,21 @@ nslog_log(enum nslog_level level, const char *file, const char *func, int ln, co
 {
 	va_list ap;
 	int i;
+#ifdef _WIN32
+    if (async_logging) {
+        char prefix_buf[256];
+        int pre_len = snprintf(prefix_buf, sizeof(prefix_buf),
+            "%s %s:%i %s: ",
+            nslog_gettime(),
+            file,
+            ln,
+            func);
+        va_start(ap, format);
+        log_enqueue_formatted((int)level, prefix_buf, format, ap);
+        va_end(ap);
+        return;
+    }
+#endif
 
 	if (verbose_log) {
 		fprintf(logfile,
@@ -342,6 +526,9 @@ nserror nslog_init(nslog_ensure_t *ensure, int *pargc, char **argv)
 
 	/* sucessfull logging initialisation so log system info */
 	if (ret == NSERROR_OK) {
+#ifdef _WIN32
+		if (verbose_log || split_logging) async_log_start();
+#endif
 		NSLOG(neosurf, INFO, "NeoSurf version '%d'", neosurf_version);
 		if (uname(&utsname) < 0) {
 			NSLOG(neosurf, INFO,
@@ -391,6 +578,9 @@ nslog_finalise(void)
 {
 	NSLOG(neosurf, INFO,
 	      "Finalising logging, please report any further messages");
+#ifdef _WIN32
+	async_log_stop();
+#endif
 	verbose_log = true;
 	if (logfile != stderr) {
 		fclose(logfile);
