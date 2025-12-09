@@ -1529,17 +1529,19 @@ bool html_redraw_box(const html_content *html, struct box *box,
 				cls = dom_string_data(class_attr);
 			}
 		}
-        uint8_t pos_enum = (box->style != NULL) ? css_computed_position(box->style) : CSS_POSITION_STATIC;
-        uint8_t bg_attach = (box->style != NULL) ? css_computed_background_attachment(box->style) : CSS_BACKGROUND_ATTACHMENT_SCROLL;
-        bool expand_viewport_bg = false;
-        if (data != NULL) {
-            int vp_x = data->viewport_x;
-            int root_w = data->root_width;
-            int b_left = x - border_left;
-            int b_right = x + padding_width + border_right;
-            int target_left = (int)(-vp_x * scale);
-            int target_right = (int)((-vp_x + root_w) * scale);
-            int tol = 8;
+	uint8_t pos_enum = (box->style != NULL) ? css_computed_position(box->style) : CSS_POSITION_STATIC;
+	uint8_t bg_attach = (box->style != NULL) ? css_computed_background_attachment(box->style) : CSS_BACKGROUND_ATTACHMENT_SCROLL;
+	//TODO remove in production
+	bool log_target = (cls != NULL && (strstr(cls, "submenu-wrapper") || strstr(cls, "hn-container") || strstr(cls, "sub-menu")));
+	bool expand_viewport_bg = false;
+		if (data != NULL) {
+			int vp_x = data->viewport_x;
+			int root_w = data->root_width;
+			int b_left = x - border_left;
+			int b_right = x + padding_width + border_right;
+			int target_left = (int)(-vp_x * scale);
+			int target_right = (int)((-vp_x + root_w) * scale);
+			int tol = 8;
             if (pos_enum == CSS_POSITION_FIXED || bg_attach == CSS_BACKGROUND_ATTACHMENT_FIXED) {
                 expand_viewport_bg = true;
             } else {
@@ -1547,16 +1549,27 @@ bool html_redraw_box(const html_content *html, struct box *box,
                 bool right_match = (b_right >= target_right - tol) && (b_right <= target_right + tol);
                 int root_w_scaled = (int)(root_w * scale);
                 int bg_extent = padding_width + border_left + border_right;
-                bool abs_full_width = (pos_enum == CSS_POSITION_ABSOLUTE) && (bg_extent >= root_w_scaled - tol);
+                bool abs_full_width = (bg_extent >= root_w_scaled - tol);
                 expand_viewport_bg = left_match && right_match;
                 if (!expand_viewport_bg && abs_full_width) {
                     expand_viewport_bg = true;
+                } else if (!expand_viewport_bg && right_match && abs_full_width) {
+                    expand_viewport_bg = true;
+                } else if (!expand_viewport_bg && left_match && abs_full_width) {
+                    expand_viewport_bg = true;
+                }
+                if (log_target) {
+                    NSLOG(layout, INFO, "bg decision: tag %s class %s box %p pos %u bgatt %u b_left %d b_right %d t_left %d t_right %d bg_extent %d root_scaled %d tol %d vp_x %d root_w %d expand %d",
+                        tag, cls, box, (unsigned)pos_enum, (unsigned)bg_attach,
+                        b_left, b_right, target_left, target_right,
+                        bg_extent, root_w_scaled, tol, vp_x, root_w,
+                        (int)expand_viewport_bg);
                 }
             }
         }
-        if (expand_viewport_bg) {
-            NSLOG(layout, INFO, "bg draw pre: tag %s class %s box %p pad_w %i pad_h %i", tag, cls, box, padding_width, padding_height);
-        }
+		if (expand_viewport_bg) {
+			NSLOG(layout, INFO, "bg draw pre: tag %s class %s box %p pad_w %i pad_h %i", tag, cls, box, padding_width, padding_height);
+		}
 		/* find intersection of clip box and border edge */
 		struct rect p;
 		p.x0 = x - border_left < r.x0 ? r.x0 : x - border_left;
@@ -1568,6 +1581,8 @@ bool html_redraw_box(const html_content *html, struct box *box,
         if (expand_viewport_bg && ctx->interactive) {
             int vp_x = (data != NULL) ? data->viewport_x : 0;
             int root_w = (data != NULL) ? data->root_width : 0;
+            if (vp_x < 0) vp_x = 0;
+            if (root_w < 0) root_w = 0;
             p.x0 = (int)(-vp_x * scale);
             p.x1 = (int)((-vp_x + root_w) * scale);
             if (ctx->plot->clip(ctx, &p) != NSERROR_OK)

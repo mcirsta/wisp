@@ -631,6 +631,11 @@ content_scaled_redraw(struct hlcache_handle *h,
 	data.repeat_x = false;
 	data.repeat_y = false;
 
+	data.root_width = width;
+	data.root_height = height;
+	data.viewport_x = 0;
+	data.viewport_y = 0;
+
 	/* Find the scale factor to use if the content has a width */
 	if (c->width) {
 		data.scale = (float)width / (float)c->width;

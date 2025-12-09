@@ -2720,12 +2720,17 @@ browser_window_redraw(struct browser_window *bw,
 		if (rbw != NULL) {
 			if (browser_window_get_dimensions(rbw, &root_w, &root_h) == NSERROR_OK) {
 				browser_window_get_position(bw, true, &pos_x, &pos_y);
+				assert(root_w >= 0);
+				assert(root_h >= 0);
 			}
 		}
 		data.root_width = root_w;
 		data.root_height = root_h;
 		data.viewport_x = pos_x;
 		data.viewport_y = pos_y;
+
+		NSLOG(layout, INFO, "bw redraw baseline: bw %p pos_x %d pos_y %d scale %f root_w %d root_h %d content_clip x0 %d x1 %d",
+			bw, pos_x, pos_y, bw->scale, root_w, root_h, clip->x0, clip->x1);
 	}
 
 	content_clip = *clip;
