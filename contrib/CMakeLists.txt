@@ -6,4 +6,4 @@ add_subdirectory(libnsgif)
 add_subdirectory(libnsutils)
 add_subdirectory(libparserutils)
 add_subdirectory(libsvgtiny)
-# nsgenbind is built separately
+add_subdirectory(nsgenbind)

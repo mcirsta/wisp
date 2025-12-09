@@ -14,29 +14,33 @@ if (NOT BISON_EXECUTABLE)
     message(FATAL_ERROR "bison not found")
 endif()
 
-execute_process(COMMAND ${FLEX_EXECUTABLE} -P=nsgenbind_ --outfile=${CMAKE_BINARY_DIR}/nsgenbind-lexer.c --header-file=${CMAKE_BINARY_DIR}/nsgenbind-lexer.h ${CMAKE_SOURCE_DIR}/src/nsgenbind-lexer.l RESULT_VARIABLE RET)
-if(NOT RET EQUAL 0)
-	message(FATAL_ERROR "flex nsgenbind failed (error ${RET})")
-endif()
+add_custom_command(
+    OUTPUT ${CMAKE_BINARY_DIR}/nsgenbind-lexer.c ${CMAKE_BINARY_DIR}/nsgenbind-lexer.h
+    COMMAND ${FLEX_EXECUTABLE} -P=nsgenbind_ --outfile=${CMAKE_BINARY_DIR}/nsgenbind-lexer.c --header-file=${CMAKE_BINARY_DIR}/nsgenbind-lexer.h ${CMAKE_CURRENT_SOURCE_DIR}/src/nsgenbind-lexer.l
+    DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/src/nsgenbind-lexer.l
+)
 if(NOT ${YACC} STREQUAL bison)
     message(FATAL_ERROR "nsgenbind requires bison >= 3.x; set -DYACC=bison")
 endif()
-execute_process(COMMAND ${BISON_EXECUTABLE} -o ${CMAKE_BINARY_DIR}/nsgenbind-parser.c -d ${CMAKE_SOURCE_DIR}/src/nsgenbind-parser.y -p nsgenbind_ RESULT_VARIABLE RET)
-if(NOT RET EQUAL 0)
-	message(FATAL_ERROR "yacc nsgenbind failed (error ${RET})")
-endif()
+add_custom_command(
+    OUTPUT ${CMAKE_BINARY_DIR}/nsgenbind-parser.c ${CMAKE_BINARY_DIR}/nsgenbind-parser.h
+    COMMAND ${BISON_EXECUTABLE} -o ${CMAKE_BINARY_DIR}/nsgenbind-parser.c -d ${CMAKE_CURRENT_SOURCE_DIR}/src/nsgenbind-parser.y -p nsgenbind_
+    DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/src/nsgenbind-parser.y
+)
 
-execute_process(COMMAND ${FLEX_EXECUTABLE} -P=webidl_ --outfile=${CMAKE_BINARY_DIR}/webidl-lexer.c --header-file=${CMAKE_BINARY_DIR}/webidl-lexer.h ${CMAKE_SOURCE_DIR}/src/webidl-lexer.l RESULT_VARIABLE RET)
-if(NOT RET EQUAL 0)
-	message(FATAL_ERROR "flex webidl failed (error ${RET})")
-endif()
+add_custom_command(
+    OUTPUT ${CMAKE_BINARY_DIR}/webidl-lexer.c ${CMAKE_BINARY_DIR}/webidl-lexer.h
+    COMMAND ${FLEX_EXECUTABLE} -P=webidl_ --outfile=${CMAKE_BINARY_DIR}/webidl-lexer.c --header-file=${CMAKE_BINARY_DIR}/webidl-lexer.h ${CMAKE_CURRENT_SOURCE_DIR}/src/webidl-lexer.l
+    DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/src/webidl-lexer.l
+)
 if(NOT ${YACC} STREQUAL bison)
     message(FATAL_ERROR "nsgenbind requires bison >= 3.x; set -DYACC=bison")
 endif()
-execute_process(COMMAND ${BISON_EXECUTABLE} -o ${CMAKE_BINARY_DIR}/webidl-parser.c -d ${CMAKE_SOURCE_DIR}/src/webidl-parser.y -p webidl_ RESULT_VARIABLE RET)
-if(NOT RET EQUAL 0)
-	message(FATAL_ERROR "yacc webidl failed (error ${RET})")
-endif()
+add_custom_command(
+    OUTPUT ${CMAKE_BINARY_DIR}/webidl-parser.c ${CMAKE_BINARY_DIR}/webidl-parser.h
+    COMMAND ${BISON_EXECUTABLE} -o ${CMAKE_BINARY_DIR}/webidl-parser.c -d ${CMAKE_CURRENT_SOURCE_DIR}/src/webidl-parser.y -p webidl_
+    DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/src/webidl-parser.y
+)
 
 add_executable(nsgenbind
 	src/nsgenbind.c
@@ -59,7 +63,7 @@ add_executable(nsgenbind
 )
 
 include_directories(
-	${CMAKE_SOURCE_DIR}/contrib/nsgenbind/include
-	${CMAKE_SOURCE_DIR}/contrib/nsgenbind/src
-	${CMAKE_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_SOURCE_DIR}/src
 )

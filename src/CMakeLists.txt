@@ -47,53 +47,14 @@ endif()
 string(REPLACE "." ";" LIBSSL_VERSION_STRING ${LIBSSL_VERSION})
 list(GET LIBSSL_VERSION_STRING 0 LIBSSL_VERSION_MAJOR)
 if(LIBSSL_VERSION_MAJOR EQUAL 1)
-	message(FATAL_ERROR "NeoSurf does not support OpenSSL 1.x.x")
+message(FATAL_ERROR "NeoSurf does not support OpenSSL 1.x.x")
 endif()
 
-# Build nsgenbind at configure time
-execute_process(COMMAND ${CMAKE_COMMAND} -B ${CMAKE_BINARY_DIR}/contrib/nsgenbind ${CMAKE_SOURCE_DIR}/contrib/nsgenbind -G ${CMAKE_GENERATOR} -DYACC=${YACC} RESULT_VARIABLE RET)
-if(NOT RET EQUAL 0)
-	message(FATAL_ERROR "nsgenbind configure failed (error ${RET})")
-endif()
-execute_process(COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR}/contrib/nsgenbind RESULT_VARIABLE RET)
-if(NOT RET EQUAL 0)
-	message(FATAL_ERROR "nsgenbind build failed (error ${RET})")
-endif()
+include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/duktape_bindings.cmake)
 
-file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/content/handlers/javascript/duktape)
-
-execute_process(COMMAND ${PYTHON3} ${CMAKE_SOURCE_DIR}/utils/cmake_helper.py file-to-hex
-	${CMAKE_SOURCE_DIR}/src/content/handlers/javascript/duktape/polyfill.js
-	${CMAKE_CURRENT_BINARY_DIR}/content/handlers/javascript/duktape/polyfill.js.inc
-	polyfill_js
-	RESULT_VARIABLE RET)
-if(NOT RET EQUAL 0)
-	message(FATAL_ERROR "Failed to generate polyfill.js.inc (error ${RET})")
-endif()
-
-execute_process(COMMAND ${PYTHON3} ${CMAKE_SOURCE_DIR}/utils/cmake_helper.py file-to-hex
-	${CMAKE_SOURCE_DIR}/src/content/handlers/javascript/duktape/generics.js
-	${CMAKE_CURRENT_BINARY_DIR}/content/handlers/javascript/duktape/generics.js.inc
-	generics_js
-	RESULT_VARIABLE RET)
-if(NOT RET EQUAL 0)
-	message(FATAL_ERROR "Failed to generate generics.js.inc (error ${RET})")
-endif()
-
-include_directories(${CMAKE_CURRENT_BINARY_DIR}/content/handlers/javascript/duktape)
-
-file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/duktape)
-execute_process(COMMAND ${CMAKE_BINARY_DIR}/contrib/nsgenbind/nsgenbind${CMAKE_EXECUTABLE_SUFFIX} -I ${CMAKE_SOURCE_DIR}/src/content/handlers/javascript/WebIDL neosurf.bnd ${CMAKE_BINARY_DIR}/duktape WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src/content/handlers/javascript/duktape RESULT_VARIABLE RET)
-if(NOT RET EQUAL 0)
-	message(FATAL_ERROR "Unable to generate bindings (error ${RET})")
-endif()
-
-if(NOT EXISTS ${CMAKE_BINARY_DIR}/duktape/binding.h)
-	message(FATAL_ERROR "Generated file duktape/binding.h is missing")
-endif()
-
-aux_source_directory(${CMAKE_BINARY_DIR}/duktape DSRC)
-
+ 
+ 
+ 
 set(NEOSURF_LIB_TYPE SHARED)
 if(NEOSURF_ENABLE_GPROF OR NEOSURF_ENABLE_FINSTRUMENT)
     set(NEOSURF_LIB_TYPE STATIC)
@@ -231,8 +192,10 @@ add_library(neosurf ${NEOSURF_LIB_TYPE}
 	utils/http/strict-transport-security.c
 	utils/nsurl/nsurl.c
 	utils/nsurl/parse.c
-	${DSRC}
+	${CMAKE_BINARY_DIR}/duktape/binding.c
+	${DUKTAPE_GEN_SOURCES}
 )
+add_dependencies(neosurf duktape_bindings duktape_js_inc)
 set_target_properties(neosurf PROPERTIES SOVERSION ${NEOSURF_ABI})
 
 if(NEOSURF_ENABLE_GPROF)

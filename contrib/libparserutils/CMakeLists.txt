@@ -1,16 +1,13 @@
 find_package(Iconv REQUIRED)
 
-if(EXISTS "${CMAKE_SOURCE_DIR}/contrib/libparserutils/build/make-aliases.py")
-	file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/src/charset")
-	execute_process(COMMAND ${PYTHON3} build/make-aliases.py "${CMAKE_CURRENT_BINARY_DIR}/src/charset/aliases.inc"
-		WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/contrib/libparserutils 
-		RESULT_VARIABLE RET)
-	if(NOT RET EQUAL 0)
-		message(FATAL_ERROR "libparserutils make-aliases.py failed (error ${RET})")
-	endif()
-else()
-	message(FATAL_ERROR "libparserutils make-aliases.py not found, cannot generate aliases.inc")
-endif()
+add_custom_command(
+    OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/src/charset/aliases.inc
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/src/charset
+    COMMAND ${PYTHON3} ${CMAKE_SOURCE_DIR}/contrib/libparserutils/build/make-aliases.py ${CMAKE_CURRENT_BINARY_DIR}/src/charset/aliases.inc
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/contrib/libparserutils
+    DEPENDS ${CMAKE_SOURCE_DIR}/contrib/libparserutils/build/make-aliases.py
+)
+add_custom_target(parserutils_aliases DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/src/charset/aliases.inc)
 
 add_library(parserutils SHARED
 	src/input/filter.c
@@ -30,6 +27,8 @@ add_library(parserutils SHARED
 	src/utils/errors.c
 )
 set_target_properties(parserutils PROPERTIES SOVERSION ${NEOSURF_ABI})
+
+add_dependencies(parserutils parserutils_aliases)
 
 if(Iconv_FOUND)
 	if(TARGET Iconv::Iconv)

@@ -2,8 +2,9 @@ cmake_minimum_required(VERSION 3.20)
 project(neosurf LANGUAGES C)
 enable_testing()
 
-set(NEOSURF_ABI 14)
-set(NEOSURF_VERSION 15)
+set(NEOSURF_ABI 1)
+set(NEOSURF_MAJOR_VERSION 0)
+set(NEOSURF_MINOR_VERSION 1)
 
 add_definitions(-DNDEBUG -DWITH_OPENSSL -DWITH_BMP -DWITH_GIF -DWITH_NS_SVG -D_XOPEN_SOURCE=700 -D_DEFAULT_SOURCE -DNEOSURF_VERSION=${NEOSURF_VERSION})
 add_compile_options(-std=c99 -Wno-unused-parameter -Wno-deprecated-declarations -Wno-strict-prototypes -Wno-unused-but-set-variable -Wno-int-conversion)
