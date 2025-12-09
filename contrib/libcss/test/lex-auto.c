@@ -103,29 +103,28 @@ bool handle_line(const char *data, size_t datalen, void *pw)
 			ctx->expused = 0;
 		}
 
-		if (ctx->indata && strncasecmp(data+1, "expected", 8) == 0) {
-			ctx->truncate_input = false;
-			ctx->indata = false;
-			ctx->inexp = true;
-		} else if (!ctx->indata) {
+        if (ctx->indata && strncasecmp(data+1, "expected", 8) == 0) {
+            ctx->indata = false;
+            ctx->inexp = true;
+        } else if (!ctx->indata) {
 			ctx->truncate_input = (strncasecmp(data+1, "data:trunc", 10) == 0);
 			ctx->indata = (strncasecmp(data+1, "data", 4) == 0);
 			ctx->inexp  = (strncasecmp(data+1, "expected", 8) == 0);
 		} else {
-			memcpy(ctx->buf + ctx->bufused, data, datalen);
-			ctx->bufused += datalen;
-			if (ctx->truncate_input) {
-				ctx->bufused--;
-			}
+            memcpy(ctx->buf + ctx->bufused, data, datalen);
+            ctx->bufused += datalen;
+            if (ctx->truncate_input) {
+                ctx->bufused--;
+            }
 		}
 	} else {
-		if (ctx->indata) {
-			memcpy(ctx->buf + ctx->bufused, data, datalen);
-			ctx->bufused += datalen;
-			if (ctx->truncate_input) {
-				ctx->bufused--;
-			}
-		}
+        if (ctx->indata) {
+            memcpy(ctx->buf + ctx->bufused, data, datalen);
+            ctx->bufused += datalen;
+            if (ctx->truncate_input) {
+                ctx->bufused--;
+            }
+        }
 		if (ctx->inexp) {
 			if (data[datalen - 1] == '\n')
 				datalen -= 1;
@@ -177,23 +176,27 @@ void css__parse_expected(line_ctx *ctx, const char *data, size_t len)
 				continue;
 			}
 
-			if (escape) {
-				switch (*p) {
-				case 'f':
-					c = 0xc;
-					break;
-				case 'n':
-					c = 0xa;
-					break;
-				case 't':
-					c = 0x9;
-					break;
-				default:
-					c = *p;
-					break;
-				}
-				escape = false;
-			} else {
+            if (escape) {
+                if (ctx->truncate_input && *p == 'n') {
+                    escape = false;
+                    continue;
+                }
+                switch (*p) {
+                case 'f':
+                    c = 0xc;
+                    break;
+                case 'n':
+                    c = 0xa;
+                    break;
+                case 't':
+                    c = 0x9;
+                    break;
+                default:
+                    c = *p;
+                    break;
+                }
+                escape = false;
+            } else {
 				c = *p;
 			}
 

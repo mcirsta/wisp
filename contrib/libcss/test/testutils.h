@@ -50,26 +50,32 @@ size_t css__parse_filesize(const char *filename);
  */
 bool css__parse_testfile(const char *filename, line_func callback, void *pw)
 {
-	FILE *fp;
-	char buf[300];
+    FILE *fp;
+    char buf[300];
 
-	fp = fopen(filename, "rb");
-	if (fp == NULL) {
-		printf("Failed opening %s\n", filename);
-		return false;
-	}
+    fp = fopen(filename, "rb");
+    if (fp == NULL) {
+        printf("Failed opening %s\n", filename);
+        return false;
+    }
 
-	while (fgets(buf, sizeof buf, fp)) {
-		if (buf[0] == '\n')
-			continue;
+    while (fgets(buf, sizeof buf, fp)) {
+        if (buf[0] == '\n')
+            continue;
+        {
+            size_t l = strlen(buf);
+            if (l >= 2 && buf[l - 2] == '\r' && buf[l - 1] == '\n') {
+                buf[l - 2] = '\n';
+                buf[l - 1] = '\0';
+            }
+        }
+        if (!callback(buf, css__parse_strlen(buf, sizeof buf - 1), pw)) {
+            fclose(fp);
+            return false;
+        }
+    }
 
-		if (!callback(buf, css__parse_strlen(buf, sizeof buf - 1), pw)) {
-			fclose(fp);
-			return false;
-		}
-	}
-
-	fclose(fp);
+    fclose(fp);
 
 	return true;
 }

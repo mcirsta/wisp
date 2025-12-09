@@ -91,11 +91,62 @@ bool handle_line(const char *data, size_t datalen, void *pw)
 			memcpy(ctx->buf + ctx->bufused, data, datalen);
 			ctx->bufused += datalen;
 		}
-		if (ctx->inenc) {
-			strcpy(ctx->enc, data);
-			if (ctx->enc[strlen(ctx->enc) - 1] == '\n')
-				ctx->enc[strlen(ctx->enc) - 1] = '\0';
-		}
+        if (ctx->inenc) {
+            /* Copy the raw encoding line into a local buffer and NUL-terminate */
+            char line[64];
+            size_t copy_len = datalen < sizeof(line) - 1 ? datalen : sizeof(line) - 1;
+            memcpy(line, data, copy_len);
+            line[copy_len] = '\0';
+
+            /* Strip a single trailing newline (test lines are LF or CRLF) */
+            size_t line_len = strlen(line);
+            if (line_len > 0 && line[line_len - 1] == '\n') {
+                line[--line_len] = '\0';
+            }
+
+            /* Remove UTF-8 BOM (EF BB BF) if present */
+            if (line_len >= 3 && memcmp(line, "\xEF\xBB\xBF", 3) == 0) {
+                size_t new_len = line_len - 3;
+                memmove(line, line + 3, new_len);
+                line[new_len] = '\0';
+                line_len = new_len;
+            }
+
+            /* Trim leading/trailing ASCII whitespace (space, tab, CR) */
+            size_t start = 0;
+            size_t end = line_len;
+            while (start < end && (line[start] == ' ' || line[start] == '\t' || line[start] == '\r')) {
+                start++;
+            }
+            while (end > start && (line[end - 1] == ' ' || line[end - 1] == '\t' || line[end - 1] == '\r')) {
+                end--;
+            }
+            if (start > 0 || end < line_len) {
+                memmove(line, line + start, end - start);
+                line[end - start] = '\0';
+            }
+
+            /* Normalize to a token containing only [A-Za-z0-9+-] */
+            char token[64];
+            size_t out = 0;
+            for (size_t i = 0; line[i] != '\0'; i++) {
+                unsigned char c = (unsigned char)line[i];
+                if ((c >= 'A' && c <= 'Z') ||
+                    (c >= 'a' && c <= 'z') ||
+                    (c >= '0' && c <= '9') ||
+                    c == '-' || c == '+') {
+                    if (out < sizeof(token) - 1) {
+                        token[out++] = (char)c;
+                    }
+                }
+            }
+            token[out] = '\0';
+
+            /* Update expected encoding only if we parsed a non-empty token */
+            if (token[0] != '\0') {
+                strcpy(ctx->enc, token);
+            }
+        }
 	}
 
 	return true;
@@ -112,11 +163,21 @@ void run_test(const uint8_t *data, size_t len, char *expected)
 
 	assert(mibenum != 0);
 
-	printf("%d: Detected charset %s (%d) Source %d Expected %s (%d)\n",
-			++testnum, parserutils_charset_mibenum_to_name(mibenum),
-			mibenum, source, expected,
-			parserutils_charset_mibenum_from_name(
-				expected, strlen(expected)));
+    printf("%d: Detected charset %s (%d) Source %d Expected %s (%d)\n",
+            ++testnum, parserutils_charset_mibenum_to_name(mibenum),
+            mibenum, source, expected,
+            parserutils_charset_mibenum_from_name(
+                expected, strlen(expected)));
+    fflush(stdout);
+    {
+        size_t elen = strlen(expected);
+        printf("Expected len=%zu bytes:", elen);
+        for (size_t i = 0; i < elen; i++) {
+            printf(" %02X", (unsigned char)expected[i]);
+        }
+        printf("\n");
+        fflush(stdout);
+    }
 
 	assert(mibenum == parserutils_charset_mibenum_from_name(
 			expected, strlen(expected)));
