@@ -2585,6 +2585,7 @@ static bool layout_float(struct box *b, int width, html_content *content)
 			if (!layout_table(b, width, content))
 				return false;
 		} else {
+			NSLOG(layout, INFO, "calling layout_flex for inline flex %p width %i", b, width);
 			if (!layout_flex(b, width, content))
 				return false;
 		}
@@ -3771,13 +3772,14 @@ bool layout_block_context(
 				 (overflow_x != CSS_OVERFLOW_VISIBLE ||
 				  overflow_y != CSS_OVERFLOW_VISIBLE))) {
 
-			if (box->type == BOX_FLEX) {
-				if (!layout_flex(box, box->width, content)) {
-					return false;
-				}
-			} else {
-				layout_block_context(box,
-						viewport_height, content);
+		if (box->type == BOX_FLEX) {
+			NSLOG(layout, INFO, "calling layout_flex for flex container %p width %i", box, box->width);
+			if (!layout_flex(box, box->width, content)) {
+				return false;
+			}
+		} else {
+			layout_block_context(box,
+					viewport_height, content);
 			}
 
 			cy += box->padding[TOP];
@@ -4818,6 +4820,7 @@ layout_absolute(struct box *box,
 		/* layout_table also expects the containing block to be
 		 * stored in the float_container field */
 		box->float_container = containing_block;
+		NSLOG(layout, INFO, "calling layout_flex for positioned flex %p width %i", box, width);
 		if (!layout_flex(box, width, content))
 			return false;
 		box->float_container = NULL;

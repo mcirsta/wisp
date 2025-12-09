@@ -1146,18 +1146,31 @@ bool layout_flex(struct box *flex, int available_width,
 
 	available_width = min(available_width, flex->width);
 
+	int resolved_height;
+	if (flex->height != AUTO) {
+		resolved_height = flex->height;
+	} else if (min_height > 0) {
+		resolved_height = min_height;
+	} else {
+		resolved_height = AUTO;
+	}
+
 	if (ctx->horizontal) {
 		ctx->available_main = available_width;
-		ctx->available_cross = ctx->flex->height;
+		ctx->available_cross = resolved_height;
 	} else {
-		ctx->available_main = ctx->flex->height;
+		ctx->available_main = resolved_height;
 		ctx->available_cross = available_width;
 	}
 
-	NSLOG(flex, DEEPDEBUG, "box %p: available_main: %i",
-			flex, ctx->available_main);
-	NSLOG(flex, DEEPDEBUG, "box %p: available_cross: %i",
-			flex, ctx->available_cross);
+    NSLOG(flex, DEEPDEBUG, "box %p: available_main: %i",
+            flex, ctx->available_main);
+    NSLOG(flex, DEEPDEBUG, "box %p: available_cross: %i",
+            flex, ctx->available_cross);
+    NSLOG(flex, INFO, "box %p: available_main: %i",
+            flex, ctx->available_main);
+    NSLOG(flex, INFO, "box %p: available_cross: %i",
+            flex, ctx->available_cross);
 
 	layout_flex_ctx__populate_item_data(ctx, flex, available_width);
 
