@@ -99,8 +99,12 @@
 
 static void neosurf_lwc_iterator(lwc_string *str, void *pw)
 {
-	NSLOG(neosurf, WARNING, "[%3u] %.*s", str->refcnt,
-	      (int)lwc_string_length(str), lwc_string_data(str));
+    unsigned *count = (unsigned *)pw;
+    if (count != NULL) {
+        (*count)++;
+    }
+    NSLOG(neosurf, WARNING, "[%3u] %.*s", str->refcnt,
+          (int)lwc_string_length(str), lwc_string_data(str));
 }
 
 /* exported interface documented in neosurf/neosurf.h */
@@ -327,8 +331,10 @@ void neosurf_exit(void)
 	if (dom_namespace_finalise() != DOM_NO_ERR) {
 		NSLOG(neosurf, WARNING, "Unable to finalise DOM namespace strings");
 	}
-	NSLOG(neosurf, INFO, "Remaining lwc strings:");
-	lwc_iterate_strings(neosurf_lwc_iterator, NULL);
+    NSLOG(neosurf, INFO, "Remaining lwc strings:");
+    unsigned lwc_count = 0;
+    lwc_iterate_strings(neosurf_lwc_iterator, &lwc_count);
+    NSLOG(neosurf, INFO, "Remaining lwc strings count: %u", lwc_count);
 
 	NSLOG(neosurf, INFO, "Exited successfully");
 }

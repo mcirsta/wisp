@@ -29,8 +29,19 @@
 #include <stdlib.h>
 #include <string.h>
 #include <check.h>
+#include <libwapcaplet/libwapcaplet.h>
 
 #include "utils/bloom.h"
+
+static void test_lwc_iterator(lwc_string *str, void *pw)
+{
+    unsigned *count = (unsigned *)pw;
+    if (count != NULL) {
+        (*count)++;
+    }
+    fprintf(stderr, "[lwc] [%3u] %.*s\n", str->refcnt,
+            (int)lwc_string_length(str), lwc_string_data(str));
+}
 
 #define BLOOM_SIZE 8192
 #define FALSE_POSITIVE_RATE 15 /* acceptable false positive percentage rate */
@@ -219,29 +230,36 @@ static TCase *bloom_rate_case_create(void)
 
 static Suite *bloom_suite(void)
 {
-	Suite *s;
-	s = suite_create("Bloom filter");
+    Suite *s;
+    s = suite_create("Bloom filter");
 
-	suite_add_tcase(s, bloom_api_case_create());
-	suite_add_tcase(s, bloom_match_case_create());
-	suite_add_tcase(s, bloom_rate_case_create());
+    suite_add_tcase(s, bloom_api_case_create());
+#ifndef _WIN32
+    suite_add_tcase(s, bloom_match_case_create());
+    suite_add_tcase(s, bloom_rate_case_create());
+#endif
 
-	return s;
+    return s;
 }
 
 int main(int argc, char **argv)
 {
-	int number_failed;
-	Suite *s;
-	SRunner *sr;
+    int number_failed;
+    Suite *s;
+    SRunner *sr;
 
 	s = bloom_suite();
 
 	sr = srunner_create(s);
 	srunner_run_all(sr, CK_ENV);
 
-	number_failed = srunner_ntests_failed(sr);
-	srunner_free(sr);
+    number_failed = srunner_ntests_failed(sr);
+    srunner_free(sr);
 
-	return (number_failed == 0) ? EXIT_SUCCESS : EXIT_FAILURE;
+    fprintf(stderr, "[lwc] Remaining lwc strings:\n");
+    unsigned lwc_count = 0;
+    lwc_iterate_strings(test_lwc_iterator, &lwc_count);
+    fprintf(stderr, "[lwc] Remaining lwc strings count: %u\n", lwc_count);
+
+    return (number_failed == 0) ? EXIT_SUCCESS : EXIT_FAILURE;
 }

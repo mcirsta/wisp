@@ -37,7 +37,7 @@ cookie_file:/home/vince/.netsurf/Cookies
 cookie_jar:/home/vince/.netsurf/Cookies
 homepage_url:about:welcome
 search_url_bar:0
-search_web_provider:
+search_web_provider:DuckDuckGo
 url_suggestion:1
 window_x:0
 window_y:0
@@ -98,6 +98,7 @@ show_single_tab:1
 button_type:1
 history_age:0
 hover_urls:0
+focus_new:0
 new_blank:0
 hotlist_path:/home/vince/.netsurf/Hotlist
 developer_view:0

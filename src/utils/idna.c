@@ -29,6 +29,7 @@
 #include <sys/types.h>
 
 #include "neosurf/inttypes.h"
+#include <inttypes.h>
 
 #include <neosurf/utils/errors.h>
 #include "utils/idna.h"
@@ -166,8 +167,11 @@ idna__ace_to_ucs4(const char *ace_label,
 
 
 #ifdef WITH_UTF8PROC
-
+#ifdef _WIN32
+#include <utf8proc.h>
+#else
 #include <libutf8proc/utf8proc.h>
+#endif
 
 int32_t idna_contexto[] = {
 	/* CONTEXTO codepoints which have a rule defined */
@@ -439,20 +443,20 @@ static bool idna__is_valid(int32_t *label, size_t len)
 
 		/* 4. Check characters not DISALLOWED by RFC5892 */
 		if (idna_prop == IDNA_P_DISALLOWED) {
-			NSLOG(netsurf, INFO,
-			      "Check failed: character %"PRIsizet" (%"PRIx32") is DISALLOWED",
-			      i,
-			      label[i]);
+            NSLOG(netsurf, INFO,
+                  "Check failed: character %"PRIsizet" (%08x) is DISALLOWED",
+                  i,
+                  (unsigned int)label[i]);
 			return false;
 		}
 
 		/* 5. Check CONTEXTJ characters conform to defined rules */
 		if (idna_prop == IDNA_P_CONTEXTJ) {
 			if (idna__contextj_rule(label, i, len) == false) {
-				NSLOG(netsurf, INFO,
-				      "Check failed: character %"PRIsizet" (%"PRIx32") does not conform to CONTEXTJ rule",
-				      i,
-				      label[i]);
+                NSLOG(netsurf, INFO,
+                      "Check failed: character %"PRIsizet" (%08x) does not conform to CONTEXTJ rule",
+                      i,
+                      (unsigned int)label[i]);
 				return false;
 			}
 		}
@@ -461,20 +465,20 @@ static bool idna__is_valid(int32_t *label, size_t len)
 		/** \todo optionally we can check conformance to this rule */
 		if (idna_prop == IDNA_P_CONTEXTO) {
 			if (idna__contexto_rule(label[i]) == false) {
-				NSLOG(netsurf, INFO,
-				      "Check failed: character %"PRIsizet" (%"PRIx32") has no CONTEXTO rule defined",
-				      i,
-				      label[i]);
+                NSLOG(netsurf, INFO,
+                      "Check failed: character %"PRIsizet" (%08x) has no CONTEXTO rule defined",
+                      i,
+                      (unsigned int)label[i]);
 				return false;
 			}
 		}
 
 		/* 7. Check characters are not UNASSIGNED */
 		if (idna_prop == IDNA_P_UNASSIGNED) {
-			NSLOG(netsurf, INFO,
-			      "Check failed: character %"PRIsizet" (%"PRIx32") is UNASSIGNED",
-			      i,
-			      label[i]);
+            NSLOG(netsurf, INFO,
+                  "Check failed: character %"PRIsizet" (%08x) is UNASSIGNED",
+                  i,
+                  (unsigned int)label[i]);
 			return false;
 		}
 

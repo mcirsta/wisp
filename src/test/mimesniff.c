@@ -27,11 +27,22 @@
 #include <stdlib.h>
 #include <string.h>
 #include <check.h>
+#include <libwapcaplet/libwapcaplet.h>
 
 #include "utils/utils.h"
 #include "utils/corestrings.h"
 #include "content/content_factory.h"
 #include "content/mimesniff.h"
+
+static void test_lwc_iterator(lwc_string *str, void *pw)
+{
+    unsigned *count = (unsigned *)pw;
+    if (count != NULL) {
+        (*count)++;
+    }
+    fprintf(stderr, "[lwc] [%3u] %.*s\n", str->refcnt,
+            (int)lwc_string_length(str), lwc_string_data(str));
+}
 
 #define NELEMS(x)  (sizeof(x) / sizeof((x)[0]))
 
@@ -882,15 +893,20 @@ static Suite *mimesniff_suite_create(void)
 
 int main(int argc, char **argv)
 {
-	int number_failed;
-	SRunner *sr;
+    int number_failed;
+    SRunner *sr;
 
 	sr = srunner_create(mimesniff_suite_create());
 
 	srunner_run_all(sr, CK_ENV);
 
-	number_failed = srunner_ntests_failed(sr);
-	srunner_free(sr);
+    number_failed = srunner_ntests_failed(sr);
+    srunner_free(sr);
 
-	return (number_failed == 0) ? EXIT_SUCCESS : EXIT_FAILURE;
+    fprintf(stderr, "[lwc] Remaining lwc strings:\n");
+    unsigned lwc_count = 0;
+    lwc_iterate_strings(test_lwc_iterator, &lwc_count);
+    fprintf(stderr, "[lwc] Remaining lwc strings count: %u\n", lwc_count);
+
+    return (number_failed == 0) ? EXIT_SUCCESS : EXIT_FAILURE;
 }

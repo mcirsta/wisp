@@ -38,7 +38,7 @@ nserror nslog_init(nslog_ensure_t *ensure, int *pargc, char **argv)
 }
 
 
-void nslog_log(const char *file, const char *func, int ln, const char *format, ...)
+void nslog_log(enum nslog_level level, const char *file, const char *func, int ln, const char *format, ...)
 {
 	va_list ap;
 

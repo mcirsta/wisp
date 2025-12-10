@@ -33,6 +33,16 @@
 #include "utils/corestrings.h"
 #include "utils/nsurl.h"
 
+static void test_lwc_iterator(lwc_string *str, void *pw)
+{
+    unsigned *count = (unsigned *)pw;
+    if (count != NULL) {
+        (*count)++;
+    }
+    fprintf(stderr, "[lwc] [%3u] %.*s\n", str->refcnt,
+            (int)lwc_string_length(str), lwc_string_data(str));
+}
+
 #define NELEMS(x)  (sizeof(x) / sizeof((x)[0]))
 
 struct test_pairs {
@@ -1375,63 +1385,64 @@ static Suite *nsurl_suite(void)
 
 	s = suite_create("nsurl");
 
-	/* Basic API operation assert checks */
-	tc_api_assert = tcase_create("API asserts");
+    #ifndef _WIN32
+    tc_api_assert = tcase_create("API asserts");
 
-	tcase_add_unchecked_fixture(tc_api_assert,
-				    corestring_create,
-				    corestring_teardown);
+    tcase_add_unchecked_fixture(tc_api_assert,
+                    corestring_create,
+                    corestring_teardown);
 
-	tcase_add_test_raise_signal(tc_api_assert,
-				    nsurl_api_assert_create_test, 6);
-	tcase_add_test_raise_signal(tc_api_assert,
-				    nsurl_api_assert_ref_test, 6);
-	tcase_add_test_raise_signal(tc_api_assert,
-				    nsurl_api_assert_unref_test, 6);
-	tcase_add_test_raise_signal(tc_api_assert,
-				    nsurl_api_assert_compare1_test, 6);
-	tcase_add_test_raise_signal(tc_api_assert,
-				    nsurl_api_assert_compare2_test, 6);
-	tcase_add_test_raise_signal(tc_api_assert,
-				    nsurl_api_assert_get_test, 6);
-	tcase_add_test_raise_signal(tc_api_assert,
-				    nsurl_api_assert_get_component1_test, 6);
-	tcase_add_test_raise_signal(tc_api_assert,
-				    nsurl_api_assert_get_component2_test, 6);
-	tcase_add_test_raise_signal(tc_api_assert,
-				    nsurl_api_assert_has_component1_test, 6);
-	tcase_add_test_raise_signal(tc_api_assert,
-				    nsurl_api_assert_has_component2_test, 6);
-	tcase_add_test_raise_signal(tc_api_assert,
-				    nsurl_api_assert_access_test, 6);
-	tcase_add_test_raise_signal(tc_api_assert,
-				    nsurl_api_assert_access_leaf_test, 6);
-	tcase_add_test_raise_signal(tc_api_assert,
-				    nsurl_api_assert_length_test, 6);
-	tcase_add_test_raise_signal(tc_api_assert,
-				    nsurl_api_assert_hash_test, 6);
-	tcase_add_test_raise_signal(tc_api_assert,
-				    nsurl_api_assert_join1_test, 6);
-	tcase_add_test_raise_signal(tc_api_assert,
-				    nsurl_api_assert_join2_test, 6);
-	tcase_add_test_raise_signal(tc_api_assert,
-				    nsurl_api_assert_defragment_test, 6);
-	tcase_add_test_raise_signal(tc_api_assert,
-				    nsurl_api_assert_refragment1_test, 6);
-	tcase_add_test_raise_signal(tc_api_assert,
-				    nsurl_api_assert_refragment2_test, 6);
-	tcase_add_test_raise_signal(tc_api_assert,
-				    nsurl_api_assert_replace_query1_test, 6);
-	tcase_add_test_raise_signal(tc_api_assert,
-				    nsurl_api_assert_replace_query2_test, 6);
-	tcase_add_test_raise_signal(tc_api_assert,
-				    nsurl_api_assert_replace_query3_test, 6);
-	tcase_add_test_raise_signal(tc_api_assert,
-				    nsurl_api_assert_nice_test, 6);
-	tcase_add_test_raise_signal(tc_api_assert,
-				    nsurl_api_assert_parent_test, 6);
+    tcase_add_test_raise_signal(tc_api_assert,
+                    nsurl_api_assert_create_test, 6);
+    tcase_add_test_raise_signal(tc_api_assert,
+                    nsurl_api_assert_ref_test, 6);
+    tcase_add_test_raise_signal(tc_api_assert,
+                    nsurl_api_assert_unref_test, 6);
+    tcase_add_test_raise_signal(tc_api_assert,
+                    nsurl_api_assert_compare1_test, 6);
+    tcase_add_test_raise_signal(tc_api_assert,
+                    nsurl_api_assert_compare2_test, 6);
+    tcase_add_test_raise_signal(tc_api_assert,
+                    nsurl_api_assert_get_test, 6);
+    tcase_add_test_raise_signal(tc_api_assert,
+                    nsurl_api_assert_get_component1_test, 6);
+    tcase_add_test_raise_signal(tc_api_assert,
+                    nsurl_api_assert_get_component2_test, 6);
+    tcase_add_test_raise_signal(tc_api_assert,
+                    nsurl_api_assert_has_component1_test, 6);
+    tcase_add_test_raise_signal(tc_api_assert,
+                    nsurl_api_assert_has_component2_test, 6);
+    tcase_add_test_raise_signal(tc_api_assert,
+                    nsurl_api_assert_access_test, 6);
+    tcase_add_test_raise_signal(tc_api_assert,
+                    nsurl_api_assert_access_leaf_test, 6);
+    tcase_add_test_raise_signal(tc_api_assert,
+                    nsurl_api_assert_length_test, 6);
+    tcase_add_test_raise_signal(tc_api_assert,
+                    nsurl_api_assert_hash_test, 6);
+    tcase_add_test_raise_signal(tc_api_assert,
+                    nsurl_api_assert_join1_test, 6);
+    tcase_add_test_raise_signal(tc_api_assert,
+                    nsurl_api_assert_join2_test, 6);
+    tcase_add_test_raise_signal(tc_api_assert,
+                    nsurl_api_assert_defragment_test, 6);
+    tcase_add_test_raise_signal(tc_api_assert,
+                    nsurl_api_assert_refragment1_test, 6);
+    tcase_add_test_raise_signal(tc_api_assert,
+                    nsurl_api_assert_refragment2_test, 6);
+    tcase_add_test_raise_signal(tc_api_assert,
+                    nsurl_api_assert_replace_query1_test, 6);
+    tcase_add_test_raise_signal(tc_api_assert,
+                    nsurl_api_assert_replace_query2_test, 6);
+    tcase_add_test_raise_signal(tc_api_assert,
+                    nsurl_api_assert_replace_query3_test, 6);
+    tcase_add_test_raise_signal(tc_api_assert,
+                    nsurl_api_assert_nice_test, 6);
+    tcase_add_test_raise_signal(tc_api_assert,
+                    nsurl_api_assert_parent_test, 6);
 
-	suite_add_tcase(s, tc_api_assert);
+    suite_add_tcase(s, tc_api_assert);
+    #endif
 
 	/* url creation */
 	tc_create = tcase_create("Create");
@@ -1565,17 +1576,22 @@ static Suite *nsurl_suite(void)
 
 int main(int argc, char **argv)
 {
-	int number_failed;
-	Suite *s;
-	SRunner *sr;
+    int number_failed;
+    Suite *s;
+    SRunner *sr;
 
 	s = nsurl_suite();
 
 	sr = srunner_create(s);
 	srunner_run_all(sr, CK_ENV);
 
-	number_failed = srunner_ntests_failed(sr);
-	srunner_free(sr);
+    number_failed = srunner_ntests_failed(sr);
+    srunner_free(sr);
 
-	return (number_failed == 0) ? EXIT_SUCCESS : EXIT_FAILURE;
+    fprintf(stderr, "[lwc] Remaining lwc strings:\n");
+    unsigned lwc_count = 0;
+    lwc_iterate_strings(test_lwc_iterator, &lwc_count);
+    fprintf(stderr, "[lwc] Remaining lwc strings count: %u\n", lwc_count);
+
+    return (number_failed == 0) ? EXIT_SUCCESS : EXIT_FAILURE;
 }

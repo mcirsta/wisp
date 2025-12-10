@@ -27,6 +27,7 @@
 
 #include <stdio.h>
 #include <stdint.h>
+#include <inttypes.h>
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
@@ -115,13 +116,16 @@ strtooption(const char *value, struct nsoption_s *option)
 		option->value.u = strtoul(value, NULL, 0);
 		break;
 
-	case OPTION_COLOUR:
-		if (sscanf(value, "%"SCNx32"", &rgbcolour) == 1) {
-			option->value.c = (((0x000000FF & rgbcolour) << 16) |
-					   ((0x0000FF00 & rgbcolour) << 0) |
-					   ((0x00FF0000 & rgbcolour) >> 16));
-		}
-		break;
+    case OPTION_COLOUR: {
+        unsigned int tmp;
+        if (sscanf(value, "%x", &tmp) == 1) {
+            rgbcolour = (colour)tmp;
+            option->value.c = (((0x000000FF & rgbcolour) << 16) |
+                       ((0x0000FF00 & rgbcolour) << 0) |
+                       ((0x00FF0000 & rgbcolour) >> 16));
+        }
+        }
+        break;
 
 	case OPTION_STRING:
 		if (option->value.s != NULL) {
@@ -311,7 +315,7 @@ static size_t nsoption_output_value_file(struct nsoption_s *option, void *ctx)
 		rgbcolour = (((0x000000FF & option->value.c) << 16) |
 			     ((0x0000FF00 & option->value.c) << 0) |
 			     ((0x00FF0000 & option->value.c) >> 16));
-		slen = fprintf(fp, "%s:%06"PRIx32"\n", option->key, rgbcolour);
+        slen = fprintf(fp, "%s:%06x\n", option->key, (unsigned int)rgbcolour);
 		break;
 
 	case OPTION_STRING:
@@ -370,16 +374,16 @@ nsoption_output_value_html(struct nsoption_s *option,
 		slen = snprintf(string + pos,
 				size - pos,
 				"<span style=\"font-family:Monospace;\">"
-				"#%06"PRIX32
+                "#%06X"
 				"</span> "
-				"<span style=\"background-color: #%06"PRIx32"; "
-				"border: 1px solid #%06"PRIx32"; "
+                "<span style=\"background-color: #%06x; "
+                "border: 1px solid #%06x; "
 				"display: inline-block; "
 				"width: 1em; height: 1em;\">"
 				"</span>",
-				rgbcolour,
-				rgbcolour,
-				colour_to_bw_furthest(rgbcolour));
+                (unsigned int)rgbcolour,
+                (unsigned int)rgbcolour,
+                colour_to_bw_furthest(rgbcolour));
 		break;
 
 	case OPTION_STRING:
@@ -442,7 +446,7 @@ nsoption_output_value_text(struct nsoption_s *option,
 		rgbcolour = (((0x000000FF & option->value.c) << 16) |
 			     ((0x0000FF00 & option->value.c) << 0) |
 			     ((0x00FF0000 & option->value.c) >> 16));
-		slen = snprintf(string + pos, size - pos, "%06"PRIx32, rgbcolour);
+        slen = snprintf(string + pos, size - pos, "%06x", (unsigned int)rgbcolour);
 		break;
 
 	case OPTION_STRING:
@@ -470,26 +474,38 @@ nsoption_output_value_text(struct nsoption_s *option,
 static nserror
 nsoption_dup(struct nsoption_s *src, struct nsoption_s **pdst)
 {
-	struct nsoption_s *dst;
-	dst = malloc(sizeof(defaults));
-	if (dst == NULL) {
-		return NSERROR_NOMEM;
-	}
-	*pdst = dst;
+    struct nsoption_s *dst;
+    size_t count = 0;
+    struct nsoption_s *scan = src;
 
-	/* copy the source table into the destination table */
-	memcpy(dst, src, sizeof(defaults));
+    /* determine number of entries (excluding sentinel) */
+    while (scan->key != NULL) {
+        count++;
+        scan++;
+    }
 
-	while (src->key != NULL) {
-		if ((src->type == OPTION_STRING) &&
-		    (src->value.s != NULL)) {
-			dst->value.s = strdup(src->value.s);
-		}
-		src++;
-		dst++;
-	}
+    /* allocate space for entries plus sentinel */
+    dst = malloc((count + 1) * sizeof(*dst));
+    if (dst == NULL) {
+        return NSERROR_NOMEM;
+    }
+    *pdst = dst;
 
-	return NSERROR_OK;
+    /* copy entries and sentinel */
+    memcpy(dst, src, (count + 1) * sizeof(*dst));
+
+    /* duplicate string contents for string-typed options */
+    scan = src;
+    while (scan->key != NULL) {
+        if ((scan->type == OPTION_STRING) &&
+            (scan->value.s != NULL)) {
+            dst->value.s = strdup(scan->value.s);
+        }
+        scan++;
+        dst++;
+    }
+
+    return NSERROR_OK;
 }
 
 /**
@@ -665,7 +681,7 @@ nsoption_init(nsoption_set_default_t *set_defaults,
 /* exported interface documented in utils/nsoption.h */
 nserror nsoption_finalise(struct nsoption_s *opts, struct nsoption_s *defs)
 {
-	nserror res;
+    nserror res;
 
 	/* check to see if global table selected */
 	if (opts == NULL) {
@@ -673,9 +689,12 @@ nserror nsoption_finalise(struct nsoption_s *opts, struct nsoption_s *defs)
 		if (res == NSERROR_OK) {
 			nsoptions = NULL;
 		}
-	} else {
-		res = nsoption_free(opts);
-	}
+    } else {
+        res = nsoption_free(opts);
+        if (res == NSERROR_OK && opts == nsoptions) {
+            nsoptions = NULL;
+        }
+    }
 	if (res != NSERROR_OK) {
 		return res;
 	}
@@ -686,11 +705,14 @@ nserror nsoption_finalise(struct nsoption_s *opts, struct nsoption_s *defs)
 		if (res == NSERROR_OK) {
 			nsoptions_default = NULL;
 		}
-	} else {
-		res = nsoption_free(defs);
-	}
+    } else {
+        res = nsoption_free(defs);
+        if (res == NSERROR_OK && defs == nsoptions_default) {
+            nsoptions_default = NULL;
+        }
+    }
 
-	return res;
+    return res;
 }
 
 
@@ -931,13 +953,13 @@ nsoption_commandline(int *pargc, char **argv, struct nsoption_s *opts)
 /* exported interface documented in options.h */
 int
 nsoption_snoptionf(char *string,
-		   size_t size,
-		   enum nsoption_e option_idx,
-		   const char *fmt)
+                   size_t size,
+                   enum nsoption_e option_idx,
+                   const char *fmt)
 {
-	size_t slen = 0; /* current output string length */
-	int fmtc = 0; /* current index into format string */
-	struct nsoption_s *option;
+    size_t slen = 0; /* current output string length */
+    int fmtc = 0; /* current index into format string */
+    struct nsoption_s *option;
 
 	if (fmt == NULL) {
 		return -1;
@@ -1038,10 +1060,11 @@ nsoption_snoptionf(char *string,
 		}
 	}
 
-	/* Ensure that we NUL-terminate the output */
-	string[min(slen, size - 1)] = '\0';
+    if (string != NULL && size > 0) {
+        string[min(slen, size - 1)] = '\0';
+    }
 
-	return slen;
+    return slen;
 }
 
 /* exported interface documented in options.h */

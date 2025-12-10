@@ -36,6 +36,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
+#include <stdint.h>
 #include <inttypes.h>
 
 #include <neosurf/utils/ascii.h>
@@ -987,9 +988,9 @@ nserror nsurl_parent(const nsurl *url, nsurl **new_url)
 /* exported interface, documented in nsurl.h */
 void nsurl_dump(const nsurl *url)
 {
-	fprintf(stderr, "nsurl components for %p "
-			"(refs: %i hash: %"PRIx32"):\n",
-			url, url->count, url->hash);
+    fprintf(stderr, "nsurl components for %p "
+            "(refs: %i hash: %08x):\n",
+            url, url->count, (unsigned int)url->hash);
 
 	if (url->components.scheme)
 		fprintf(stderr, "  Scheme: %s\n",

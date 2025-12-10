@@ -1306,17 +1306,18 @@ static nserror nsurl__check_host_valid(lwc_string *host)
 /* exported interface, documented in nsurl.h */
 nserror nsurl_create(const char * const url_s, nsurl **url)
 {
-	struct url_markers m;
-	struct nsurl_components c;
-	size_t length;
-	char *buff;
-	nserror e = NSERROR_OK;
-	bool match;
+    struct url_markers m;
+    struct nsurl_components c;
+    size_t length;
+    char *buff;
+    nserror e = NSERROR_OK;
+    bool match;
 
-	assert(url_s != NULL);
+    if (url == NULL || url_s == NULL)
+        return NSERROR_BAD_PARAMETER;
 
-	/* Peg out the URL sections */
-	nsurl__get_string_markers(url_s, &m, false);
+    /* Peg out the URL sections */
+    nsurl__get_string_markers(url_s, &m, false);
 
 	/* Get the length of the longest section */
 	length = nsurl__get_longest_section(&m);
@@ -1384,24 +1385,24 @@ nserror nsurl_create(const char * const url_s, nsurl **url)
 /* exported interface, documented in nsurl.h */
 nserror nsurl_join(const nsurl *base, const char *rel, nsurl **joined)
 {
-	struct url_markers m;
-	struct nsurl_components c;
-	size_t length;
-	char *buff;
-	char *buff_pos;
-	char *buff_start;
-	nserror error = 0;
-	enum {
-		NSURL_F_REL		=  0,
-		NSURL_F_BASE_SCHEME	= (1 << 0),
-		NSURL_F_BASE_AUTHORITY	= (1 << 1),
-		NSURL_F_BASE_PATH	= (1 << 2),
-		NSURL_F_MERGED_PATH	= (1 << 3),
-		NSURL_F_BASE_QUERY	= (1 << 4)
-	} joined_parts;
+    struct url_markers m;
+    struct nsurl_components c;
+    size_t length;
+    char *buff;
+    char *buff_pos;
+    char *buff_start;
+    nserror error = 0;
+    enum {
+        NSURL_F_REL		=  0,
+        NSURL_F_BASE_SCHEME	= (1 << 0),
+        NSURL_F_BASE_AUTHORITY	= (1 << 1),
+        NSURL_F_BASE_PATH	= (1 << 2),
+        NSURL_F_MERGED_PATH	= (1 << 3),
+        NSURL_F_BASE_QUERY	= (1 << 4)
+    } joined_parts;
 
-	assert(base != NULL);
-	assert(rel != NULL);
+    if (joined == NULL || base == NULL || rel == NULL)
+        return NSERROR_BAD_PARAMETER;
 
 	NSLOG(neosurf, DEEPDEBUG, "base: \"%s\", rel: \"%s\"",
 			nsurl_access(base), rel);

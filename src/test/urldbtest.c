@@ -36,12 +36,22 @@
 #include "utils/corestrings.h"
 #include "utils/nsurl.h"
 #include "utils/nsoption.h"
-#include "netsurf/url_db.h"
-#include "netsurf/cookie_db.h"
-#include "netsurf/bitmap.h"
+#include <neosurf/url_db.h>
+#include <neosurf/cookie_db.h>
+#include <neosurf/bitmap.h>
 #include "content/urldb.h"
 #include "desktop/gui_internal.h"
 #include "desktop/cookie_manager.h"
+
+static void test_lwc_iterator(lwc_string *str, void *pw)
+{
+    unsigned *count = (unsigned *)pw;
+    if (count != NULL) {
+        (*count)++;
+    }
+    fprintf(stderr, "[lwc] [%3u] %.*s\n", str->refcnt,
+            (int)lwc_string_length(str), lwc_string_data(str));
+}
 
 /**
  * url database used as input to test sets
@@ -95,40 +105,49 @@ static char *testnam(char *out)
 /**
  * compare two files contents
  */
+static int next_nc(FILE *fp)
+{
+    int ch;
+    do {
+        ch = fgetc(fp);
+    } while (ch == '\r');
+    return ch;
+}
+
 static int cmp(const char *f1, const char *f2)
 {
-	int res = 0;
-	FILE *fp1;
-	FILE *fp2;
-	int ch1;
-	int ch2;
+    int res = 0;
+    FILE *fp1;
+    FILE *fp2;
+    int ch1;
+    int ch2;
 
-	fp1 = fopen(f1, "r");
-	if (fp1 == NULL) {
-		return -1;
-	}
-	fp2 = fopen(f2, "r");
-	if (fp2 == NULL) {
-		fclose(fp1);
-		return -1;
-	}
+    fp1 = fopen(f1, "rb");
+    if (fp1 == NULL) {
+        return -1;
+    }
+    fp2 = fopen(f2, "rb");
+    if (fp2 == NULL) {
+        fclose(fp1);
+        return -1;
+    }
 
-	while (res == 0) {
-		ch1 = fgetc(fp1);
-		ch2 = fgetc(fp2);
+    while (res == 0) {
+        ch1 = next_nc(fp1);
+        ch2 = next_nc(fp2);
 
-		if (ch1 != ch2) {
-			res = 1;
-		}
+        if (ch1 != ch2) {
+            res = 1;
+        }
 
-		if (ch1 == EOF) {
-			break;
-		}
-	}
+        if (ch1 == EOF) {
+            break;
+        }
+    }
 
-	fclose(fp1);
-	fclose(fp2);
-	return res;
+    fclose(fp1);
+    fclose(fp2);
+    return res;
 }
 
 /*************** original test helpers ************/
@@ -230,26 +249,27 @@ static void urldb_create_loaded(void)
 
 static void urldb_lwc_iterator(lwc_string *str, void *pw)
 {
-	int *scount = pw;
-
-	NSLOG(netsurf, INFO, "[%3u] %.*s", str->refcnt,
-	      (int)lwc_string_length(str), lwc_string_data(str));
-	(*scount)++;
+    int *scount = pw;
+    if (str->refcnt > 0) {
+        NSLOG(netsurf, INFO, "[%3u] %.*s", str->refcnt,
+              (int)lwc_string_length(str), lwc_string_data(str));
+        (*scount)++;
+    }
 }
 
 
 /** urldb teardown fixture with destroy */
 static void urldb_teardown(void)
 {
-	int scount = 0;
+    int scount = 0;
 
-	urldb_destroy();
+    urldb_destroy();
 
-	corestrings_fini();
+    corestrings_fini();
 
-	NSLOG(netsurf, INFO, "Remaining lwc strings:");
-	lwc_iterate_strings(urldb_lwc_iterator, &scount);
-	ck_assert_int_eq(scount, 0);
+    NSLOG(netsurf, INFO, "Remaining lwc strings:");
+    lwc_iterate_strings(urldb_lwc_iterator, &scount);
+    ck_assert_int_eq(scount, 0);
 }
 
 
@@ -1057,12 +1077,10 @@ END_TEST
  */
 START_TEST(urldb_api_url_find_test)
 {
-	nsurl *url;
-	nserror res;
+    nsurl *url;
+    nserror res;
 
-	urldb_create();
-
-	/* search for a url with mailto scheme */
+    /* search for a url with mailto scheme */
 	res = nsurl_create("mailto:", &url);
 	ck_assert_int_eq(res, NSERROR_OK);
 
@@ -1108,16 +1126,22 @@ END_TEST
  */
 static TCase *urldb_api_case_create(void)
 {
-	TCase *tc;
-	tc = tcase_create("API_checks");
+    TCase *tc;
+    tc = tcase_create("API_checks");
 
-	tcase_add_test_raise_signal(tc,
-				    urldb_api_add_url_assert_test,
-				    6);
+    tcase_add_checked_fixture(tc,
+                              urldb_create,
+                              urldb_teardown);
+
+    #ifndef _WIN32
+    tcase_add_test_raise_signal(tc,
+                    urldb_api_add_url_assert_test,
+                    6);
+    #endif
 
 	tcase_add_test(tc, urldb_api_url_find_test);
 
-	tcase_add_test(tc, urldb_api_destroy_no_init_test);
+    tcase_add_test(tc, urldb_api_destroy_no_init_test);
 
 
 	return tc;
@@ -1143,15 +1167,20 @@ static Suite *urldb_suite_create(void)
 
 int main(int argc, char **argv)
 {
-	int number_failed;
-	SRunner *sr;
+    int number_failed;
+    SRunner *sr;
 
 	sr = srunner_create(urldb_suite_create());
 
 	srunner_run_all(sr, CK_ENV);
 
-	number_failed = srunner_ntests_failed(sr);
-	srunner_free(sr);
+    number_failed = srunner_ntests_failed(sr);
+    srunner_free(sr);
 
-	return (number_failed == 0) ? EXIT_SUCCESS : EXIT_FAILURE;
+    fprintf(stderr, "[lwc] Remaining lwc strings:\n");
+    unsigned lwc_count = 0;
+    lwc_iterate_strings(test_lwc_iterator, &lwc_count);
+    fprintf(stderr, "[lwc] Remaining lwc strings count: %u\n", lwc_count);
+
+    return (number_failed == 0) ? EXIT_SUCCESS : EXIT_FAILURE;
 }

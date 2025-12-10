@@ -67,6 +67,20 @@ target_include_directories(neosurf-windows PRIVATE ${GENERATED_MESSAGES_DIR} ${C
 
 target_link_libraries(neosurf-windows neosurf m ${NEOSURF_COMMON_LIBS} ws2_32 comctl32 gdi32 user32 kernel32 msimg32 wininet shlwapi crypt32)
 
+# Copy required runtime DLLs next to the executable for Debug builds on Windows
+if(WIN32 AND CMAKE_BUILD_TYPE MATCHES Debug)
+    add_custom_command(TARGET neosurf-windows POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_BINARY_DIR}/contrib/libdom/libdom.dll" "$<TARGET_FILE_DIR:neosurf-windows>/"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_BINARY_DIR}/contrib/libnsutils/libnsutils.dll" "$<TARGET_FILE_DIR:neosurf-windows>/"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_BINARY_DIR}/contrib/libparserutils/libparserutils.dll" "$<TARGET_FILE_DIR:neosurf-windows>/"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_BINARY_DIR}/contrib/libsvgtiny/libsvgtiny.dll" "$<TARGET_FILE_DIR:neosurf-windows>/"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_BINARY_DIR}/contrib/libnsbmp/libnsbmp.dll" "$<TARGET_FILE_DIR:neosurf-windows>/"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_BINARY_DIR}/contrib/libnsgif/libnsgif.dll" "$<TARGET_FILE_DIR:neosurf-windows>/"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_BINARY_DIR}/contrib/libcss/libcss.dll" "$<TARGET_FILE_DIR:neosurf-windows>/"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_BINARY_DIR}/contrib/libhubbub/libhubbub.dll" "$<TARGET_FILE_DIR:neosurf-windows>/"
+    )
+endif()
+
 if(NEOSURF_ENABLE_GPROF)
     if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
         target_compile_options(neosurf-windows PRIVATE -pg -g -fno-omit-frame-pointer)

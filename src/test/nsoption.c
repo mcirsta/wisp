@@ -26,16 +26,42 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#ifdef _WIN32
+#include <windows.h>
+#include <process.h>
+#else
 #include <unistd.h>
+#endif
 #include <check.h>
+#include <libwapcaplet/libwapcaplet.h>
 
 #include "utils/errors.h"
 #include "utils/log.h"
 #include "utils/nsoption.h"
 
-#ifndef TESTROOT
-#define TESTROOT "/tmp"
+static void test_lwc_iterator(lwc_string *str, void *pw)
+{
+    unsigned *count = (unsigned *)pw;
+    if (count != NULL) {
+        (*count)++;
+    }
+    fprintf(stderr, "[lwc] [%3u] %.*s\n", str->refcnt,
+            (int)lwc_string_length(str), lwc_string_data(str));
+}
+
+static const char *get_temp_dir(void)
+{
+#ifdef _WIN32
+    const char *p = getenv("TMP");
+    if (p == NULL) p = getenv("TEMP");
+    if (p == NULL) p = ".";
+    return p;
+#else
+    const char *p = getenv("TMPDIR");
+    if (p == NULL) p = "/tmp";
+    return p;
 #endif
+}
 
 const char *test_choices_path = "test/data/Choices";
 const char *test_choices_short_path = "test/data/Choices-short";
@@ -51,13 +77,21 @@ nserror nslog_set_filter_by_options() { return NSERROR_OK; }
  */
 static char *testnam(char *out)
 {
-	static int count = 0;
-	static char name[64];
-	int pid;
-	pid=getpid();
-	snprintf(name, 64, TESTROOT"/nsoptiontest%d%d", pid, count);
-	count++;
-	return name;
+    static int count = 0;
+    static char name[64];
+    int pid;
+#ifdef _WIN32
+    pid = _getpid();
+#else
+    pid = getpid();
+#endif
+#ifdef _WIN32
+    snprintf(name, 64, "%s/nsoptiontest%d%d", get_temp_dir(), pid, count);
+#else
+    snprintf(name, 64, "%s/nsoptiontest%d%d", get_temp_dir(), pid, count);
+#endif
+    count++;
+    return name;
 }
 
 static nserror gui_options_init_defaults(struct nsoption_s *defaults)
@@ -79,46 +113,56 @@ static nserror gui_options_init_defaults(struct nsoption_s *defaults)
 /**
  * compare two files contents
  */
+static int next_nc(FILE *fp)
+{
+    int ch;
+    do {
+        ch = fgetc(fp);
+    } while (ch == '\r');
+    return ch;
+}
+
 static int cmp(const char *f1, const char *f2)
 {
-	int res = 0;
-	FILE *fp1;
-	FILE *fp2;
-	int ch1;
-	int ch2;
+    int res = 0;
+    FILE *fp1;
+    FILE *fp2;
+    int ch1;
+    int ch2;
 
-	fp1 = fopen(f1, "r");
-	if (fp1 == NULL) {
-		return -1;
-	}
-	fp2 = fopen(f2, "r");
-	if (fp2 == NULL) {
-		fclose(fp1);
-		return -1;
-	}
+    fp1 = fopen(f1, "rb");
+    if (fp1 == NULL) {
+        return -1;
+    }
+    fp2 = fopen(f2, "rb");
+    if (fp2 == NULL) {
+        fclose(fp1);
+        return -1;
+    }
 
-	while (res == 0) {
-		ch1 = fgetc(fp1);
-		ch2 = fgetc(fp2);
+    while (res == 0) {
+        ch1 = next_nc(fp1);
+        ch2 = next_nc(fp2);
 
-		if (ch1 != ch2) {
-			res = 1;
-		}
+        if (ch1 != ch2) {
+            res = 1;
+        }
 
-		if (ch1 == EOF) {
-			break;
-		}
-	}
+        if (ch1 == EOF) {
+            break;
+        }
+    }
 
-	fclose(fp1);
-	fclose(fp2);
-	return res;
+    fclose(fp1);
+    fclose(fp2);
+    return res;
 }
 
 /** option create fixture */
 static void nsoption_create(void)
 {
-	nserror res;
+    fprintf(stderr, "[nsoption-test] fixture nsoption_create\n");
+    nserror res;
 
 	res = nsoption_init(NULL, NULL, NULL);
 	ck_assert_int_eq(res, NSERROR_OK);
@@ -127,7 +171,8 @@ static void nsoption_create(void)
 /** option create fixture for format case */
 static void nsoption_format_create(void)
 {
-	nserror res;
+    fprintf(stderr, "[nsoption-test] fixture nsoption_format_create\n");
+    nserror res;
 
 	res = nsoption_init(NULL, NULL, NULL);
 	ck_assert_int_eq(res, NSERROR_OK);
@@ -187,8 +232,8 @@ START_TEST(nsoption_session_test)
 	/* check for the correct answer */
 	ck_assert_int_eq(cmp(outnam, test_choices_full_path), 0);
 
-	/* remove test output */
-	unlink(outnam);
+    /* remove test output */
+    remove(outnam);
 
 	res = nsoption_finalise(NULL, NULL);
 	ck_assert_int_eq(res, NSERROR_OK);
@@ -222,7 +267,7 @@ struct format_test_vec_s format_test_vec[] = {
 	},
 	{
 		NSOPTION_enable_javascript,
-		"<tr><th>enable_javascript</th><td>boolean</td><td>user</td><td>true</td></tr>",
+		"<tr><th>enable_javascript</th><td>boolean</td><td>default</td><td>true</td></tr>",
 		"enable_javascript:1"
 	},
 	{
@@ -429,7 +474,8 @@ static TCase *nsoption_case_create(void)
  */
 START_TEST(nsoption_api_fini_no_init_test)
 {
-	nserror res;
+    fprintf(stderr, "[nsoption-test] nsoption_api_fini_no_init_test\n");
+    nserror res;
 
 	/* attempt to finalise without init */
 	res = nsoption_finalise(NULL, NULL);
@@ -442,7 +488,8 @@ END_TEST
  */
 START_TEST(nsoption_api_read_no_path_test)
 {
-	nserror res;
+    fprintf(stderr, "[nsoption-test] nsoption_api_read_no_path_test\n");
+    nserror res;
 
 	/* read with no path or init */
 	res = nsoption_read(NULL, NULL);
@@ -455,7 +502,8 @@ END_TEST
  */
 START_TEST(nsoption_api_read_no_init_test)
 {
-	nserror res;
+    fprintf(stderr, "[nsoption-test] nsoption_api_read_no_init_test\n");
+    nserror res;
 
 	/* read with path but no init */
 	res = nsoption_read(test_choices_path, NULL);
@@ -468,7 +516,8 @@ END_TEST
  */
 START_TEST(nsoption_api_write_no_path_test)
 {
-	nserror res;
+    fprintf(stderr, "[nsoption-test] nsoption_api_write_no_path_test\n");
+    nserror res;
 
 	/* write with no path or init */
 	res = nsoption_write(NULL, NULL, NULL);
@@ -481,7 +530,8 @@ END_TEST
  */
 START_TEST(nsoption_api_write_no_init_test)
 {
-	nserror res;
+    fprintf(stderr, "[nsoption-test] nsoption_api_write_no_init_test\n");
+    nserror res;
 
 	/* write with path but no init */
 	res = nsoption_write(test_choices_path, NULL, NULL);
@@ -495,7 +545,8 @@ END_TEST
  */
 START_TEST(nsoption_api_dump_no_path_test)
 {
-	nserror res;
+    fprintf(stderr, "[nsoption-test] nsoption_api_dump_no_path_test\n");
+    nserror res;
 
 	/* write with no path or init */
 	res = nsoption_dump(NULL, NULL);
@@ -508,7 +559,8 @@ END_TEST
  */
 START_TEST(nsoption_api_dump_no_init_test)
 {
-	nserror res;
+    fprintf(stderr, "[nsoption-test] nsoption_api_dump_no_init_test\n");
+    nserror res;
 	FILE *outf;
 
 	outf = tmpfile();
@@ -527,7 +579,8 @@ END_TEST
  */
 START_TEST(nsoption_api_commandline_no_args_test)
 {
-	nserror res;
+    fprintf(stderr, "[nsoption-test] nsoption_api_commandline_no_args_test\n");
+    nserror res;
 	int argc = 2;
 	char arg1[] = "nsoption";
 	char arg2[] = "--http_proxy_host=fooo";
@@ -548,7 +601,8 @@ END_TEST
  */
 START_TEST(nsoption_api_commandline_no_init_test)
 {
-	nserror res;
+    fprintf(stderr, "[nsoption-test] nsoption_api_commandline_no_init_test\n");
+    nserror res;
 	int argc = 2;
 	char arg1[] = "nsoption";
 	char arg2[] = "--http_proxy_host=fooo";
@@ -566,7 +620,8 @@ END_TEST
  */
 START_TEST(nsoption_api_fini_twice_test)
 {
-	nserror res;
+    fprintf(stderr, "[nsoption-test] nsoption_api_fini_twice_test\n");
+    nserror res;
 	res = nsoption_init(NULL, NULL, NULL);
 	ck_assert_int_eq(res, NSERROR_OK);
 
@@ -584,7 +639,8 @@ END_TEST
  */
 START_TEST(nsoption_api_init_def_test)
 {
-	nserror res;
+    fprintf(stderr, "[nsoption-test] nsoption_api_init_def_test\n");
+    nserror res;
 	res = nsoption_init(NULL, NULL, NULL);
 	ck_assert_int_eq(res, NSERROR_OK);
 
@@ -598,7 +654,8 @@ END_TEST
  */
 START_TEST(nsoption_api_init_param_test)
 {
-	nserror res;
+    fprintf(stderr, "[nsoption-test] nsoption_api_init_param_test\n");
+    nserror res;
 	res = nsoption_init(NULL, &nsoptions, &nsoptions_default);
 	ck_assert_int_eq(res, NSERROR_OK);
 
@@ -617,7 +674,8 @@ static nserror failing_init_cb(struct nsoption_s *defaults)
  */
 START_TEST(nsoption_api_init_failcb_test)
 {
-	nserror res;
+    fprintf(stderr, "[nsoption-test] nsoption_api_init_failcb_test\n");
+    nserror res;
 	res = nsoption_init(failing_init_cb, NULL, NULL);
 	ck_assert_int_eq(res, NSERROR_INIT_FAILED);
 }
@@ -628,7 +686,8 @@ END_TEST
  */
 START_TEST(nsoption_api_snoptionf_badfmt_test)
 {
-	int ret;
+    fprintf(stderr, "[nsoption-test] nsoption_api_snoptionf_badfmt_test\n");
+    int ret;
 	ret = nsoption_snoptionf(NULL, 0, -1, NULL);
 	ck_assert_int_eq(ret, -1);
 }
@@ -639,7 +698,8 @@ END_TEST
  */
 START_TEST(nsoption_api_snoptionf_param_test)
 {
-	int ret;
+    fprintf(stderr, "[nsoption-test] nsoption_api_snoptionf_param_test\n");
+    int ret;
 
 	ret = nsoption_snoptionf(NULL, 0, NSOPTION_LISTEND, "");
 	ck_assert_int_eq(ret, -1);
@@ -651,9 +711,11 @@ END_TEST
  */
 START_TEST(nsoption_api_snoptionf_no_init_test)
 {
-	int ret;
-	ret = nsoption_snoptionf(NULL, 0, 0, "");
-	ck_assert_int_eq(ret, -1);
+    fprintf(stderr, "[nsoption-test] nsoption_api_snoptionf_no_init_test\n");
+    int ret;
+    ret = nsoption_snoptionf(NULL, 0, 0, "");
+    fprintf(stderr, "[nsoption-test] ret=%d\n", ret);
+    ck_assert_int_eq(ret, -1);
 }
 END_TEST
 
@@ -699,15 +761,22 @@ static Suite *nsoption_suite_create(void)
 
 int main(int argc, char **argv)
 {
-	int number_failed;
-	SRunner *sr;
+    int number_failed;
+    SRunner *sr;
 
-	sr = srunner_create(nsoption_suite_create());
+    fprintf(stderr, "[nsoption-test] creating suite\n");
+    sr = srunner_create(nsoption_suite_create());
 
-	srunner_run_all(sr, CK_ENV);
+    fprintf(stderr, "[nsoption-test] running all tests\n");
+    srunner_run_all(sr, CK_ENV);
 
-	number_failed = srunner_ntests_failed(sr);
-	srunner_free(sr);
+    number_failed = srunner_ntests_failed(sr);
+    srunner_free(sr);
 
-	return (number_failed == 0) ? EXIT_SUCCESS : EXIT_FAILURE;
+    fprintf(stderr, "[lwc] Remaining lwc strings:\n");
+    unsigned lwc_count = 0;
+    lwc_iterate_strings(test_lwc_iterator, &lwc_count);
+    fprintf(stderr, "[lwc] Remaining lwc strings count: %u\n", lwc_count);
+
+    return (number_failed == 0) ? EXIT_SUCCESS : EXIT_FAILURE;
 }

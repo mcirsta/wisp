@@ -106,19 +106,77 @@ static const char * const months[NSC_TIME_MONTH__COUNT] = {
 };
 
 
+static void nsc_gmtime_fallback(time_t t,
+        int *year, int *month, int *day,
+        int *hour, int *min, int *sec, int *wday)
+{
+    int64_t seconds = (int64_t)t;
+    int64_t days = seconds / 86400;
+    int64_t rem = seconds % 86400;
+    if (rem < 0) {
+        rem += 86400;
+        days -= 1;
+    }
+    *hour = (int)(rem / 3600);
+    rem %= 3600;
+    *min = (int)(rem / 60);
+    *sec = (int)(rem % 60);
+
+    int y = 1970;
+    for (;;) {
+        int leap = ((y % 4) == 0 && (y % 100) != 0) || ((y % 400) == 0);
+        int diy = leap ? 366 : 365;
+        if (days >= diy) {
+            days -= diy;
+            y += 1;
+        } else if (days < 0) {
+            y -= 1;
+            leap = ((y % 4) == 0 && (y % 100) != 0) || ((y % 400) == 0);
+            diy = leap ? 366 : 365;
+            days += diy;
+        } else {
+            break;
+        }
+    }
+    *year = y;
+
+    int mdays[12] = {31,28,31,30,31,30,31,31,30,31,30,31};
+    if (((y % 4) == 0 && (y % 100) != 0) || ((y % 400) == 0)) {
+        mdays[1] = 29;
+    }
+    int m = 0;
+    while (days >= mdays[m]) {
+        days -= mdays[m];
+        m += 1;
+    }
+    *month = m;
+    *day = (int)days + 1;
+
+    int wd = (int)((4 + (seconds >= 0 ? (seconds/86400) : ((seconds-86399)/86400))) % 7);
+    if (wd < 0) wd += 7;
+    *wday = wd;
+}
+
 /* exported interface documented in utils/time.h */
 const char *rfc1123_date(time_t t)
 {
-	static char ret[31];
+    static char ret[31];
 
-	struct tm *tm = gmtime(&t);
+    struct tm *tm = gmtime(&t);
+    if (tm != NULL) {
+        snprintf(ret, sizeof ret, "%s, %02d %s %d %02d:%02d:%02d GMT",
+                weekdays_short[tm->tm_wday], tm->tm_mday,
+                months[tm->tm_mon], tm->tm_year + 1900,
+                tm->tm_hour, tm->tm_min, tm->tm_sec);
+        return ret;
+    }
 
-	snprintf(ret, sizeof ret, "%s, %02d %s %d %02d:%02d:%02d GMT",
-			weekdays_short[tm->tm_wday], tm->tm_mday,
-			months[tm->tm_mon], tm->tm_year + 1900,
-			tm->tm_hour, tm->tm_min, tm->tm_sec);
+    int year, month, day, hour, min, sec, wday;
+    nsc_gmtime_fallback(t, &year, &month, &day, &hour, &min, &sec, &wday);
+    snprintf(ret, sizeof ret, "%s, %02d %s %d %02d:%02d:%02d GMT",
+            weekdays_short[wday], day, months[month], year, hour, min, sec);
 
-	return ret;
+    return ret;
 }
 
 

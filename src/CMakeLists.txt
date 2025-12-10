@@ -12,8 +12,8 @@ if(NEOSURF_USE_JPEG)
 endif()
 
 if(NEOSURF_USE_PNG)
-	pkg_check_modules(LIBPNG REQUIRED libpng)
-	include_directories(${LIBPNG_INCLUDE_DIRS})
+    pkg_check_modules(LIBPNG REQUIRED libpng)
+    include_directories(${LIBPNG_INCLUDE_DIRS})
 endif()
 
 pkg_check_modules(LIBCURL REQUIRED libcurl)
@@ -237,6 +237,8 @@ endif()
 target_link_libraries(neosurf ${NEOSURF_COMMON_LIBS})
 
 target_include_directories(neosurf PRIVATE ${CMAKE_SOURCE_DIR}/contrib ${CMAKE_BINARY_DIR})
+
+include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/tests.cmake)
 
 install(TARGETS neosurf
 	RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
