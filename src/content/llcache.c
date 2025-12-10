@@ -3907,8 +3907,19 @@ llcache_initialise(const struct llcache_parameters *prm)
 	      "llcache initialising with a limit of %"PRIu32" bytes",
 	      llcache->limit);
 
-	/* backing store initialisation */
-	return guit->llcache->initialise(&prm->store);
+	NSLOG(llcache, INFO,
+	      "llcache backing store init: path=%s limit=%"PRIsizet" hyst=%"PRIsizet,
+	      prm->store.path ? prm->store.path : "(null)",
+	      prm->store.limit,
+	      prm->store.hysteresis);
+
+	{
+		nserror ret = guit->llcache->initialise(&prm->store);
+		if (ret != NSERROR_OK) {
+			NSLOG(llcache, ERROR, "llcache backing store initialise failed (%s)", messages_get_errorcode(ret));
+		}
+		return ret;
+	}
 }
 
 

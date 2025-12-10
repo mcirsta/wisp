@@ -35,6 +35,7 @@
 #include "neosurf/utils/file.h"
 #include "neosurf/utils/string.h"
 #include "neosurf/browser_window.h"
+#include "neosurf/utils/ascii.h"
 
 #include "windows/file.h"
 
@@ -252,9 +253,9 @@ static nserror windows_path_to_nsurl(const char *path, struct nsurl **url_out)
  */
 static nserror windows_mkdir_all(const char *fname)
 {
-	char *dname;
-	char *sep;
-	struct stat sb;
+    char *dname;
+    char *sep;
+    struct stat sb;
 
 	dname = strdup(fname);
 
@@ -277,34 +278,38 @@ static nserror windows_mkdir_all(const char *fname)
 	}
 	*sep = '\\'; /* restore separator */
 
-	sep = dname;
-	while (*sep == '\\') {
-		sep++;
-	}
-	while ((sep = strchr(sep, '\\')) != NULL) {
-		*sep = 0;
-		if (stat(dname, &sb) != 0) {
-			if (nsmkdir(dname, S_IRWXU) != 0) {
-				/* could not create path element */
-				free(dname);
-				return NSERROR_NOT_FOUND;
-			}
-		} else {
-			if (! S_ISDIR(sb.st_mode)) {
-				/* path element not a directory */
-				free(dname);
-				return NSERROR_NOT_DIRECTORY;
-			}
-		}
-		*sep = '\\'; /* restore separator */
-		/* skip directory separators */
-		while (*sep == '\\') {
-			sep++;
-		}
-	}
+    {
+        char *p = dname;
+        if (ascii_is_alpha(p[0]) &&
+            p[1] == ':' && (p[2] == '\\' || p[2] == '/')) {
+            p += 3;
+        }
+        while (*p == '\\') {
+            p++;
+        }
+        while ((sep = strchr(p, '\\')) != NULL) {
+            *sep = 0;
+            if (stat(dname, &sb) != 0) {
+                if (nsmkdir(dname, S_IRWXU) != 0) {
+                    free(dname);
+                    return NSERROR_NOT_FOUND;
+                }
+            } else {
+                if (! S_ISDIR(sb.st_mode)) {
+                    free(dname);
+                    return NSERROR_NOT_DIRECTORY;
+                }
+            }
+            *sep = '\\';
+            p = sep + 1;
+            while (*p == '\\') {
+                p++;
+            }
+        }
+    }
 
-	free(dname);
-	return NSERROR_OK;
+    free(dname);
+    return NSERROR_OK;
 }
 
 /* windows file handling */

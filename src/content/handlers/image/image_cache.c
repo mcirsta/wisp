@@ -506,10 +506,23 @@ nserror image_cache_fini(void)
 	return NSERROR_OK;
 }
 
+void image_cache_purge_bitmaps(void)
+{
+    struct image_cache_entry_s *centry;
+    if (image_cache == NULL) {
+        return;
+    }
+    centry = image_cache->entries;
+    while (centry != NULL) {
+        image_cache__free_bitmap(centry);
+        centry = centry->next;
+    }
+}
+
 /* exported interface documented in image_cache.h */
 nserror image_cache_add(struct content *content,
-			struct bitmap *bitmap,
-			image_cache_convert_fn *convert)
+            struct bitmap *bitmap,
+            image_cache_convert_fn *convert)
 {
 	struct image_cache_entry_s *centry;
 

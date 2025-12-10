@@ -57,6 +57,7 @@
 #include "windows/bitmap.h"
 #include "windows/clipboard.h"
 #include "windows/gui.h"
+#include <neosurf/content/backing_store.h>
 
 
 /**
@@ -253,6 +254,12 @@ static nserror set_defaults(struct nsoption_s *defaults)
 		nsoption_setnull_charp(hotlist_path, fname);
 	}
 
+	/* disk cache default path */
+	fname = NULL;
+	neosurf_mkpath(&fname, NULL, 2, G_config_path, "Cache");
+	if (fname != NULL) {
+		nsoption_setnull_charp(disc_cache_path, fname);
+	}
 	{
 		DWORD v = GetVersion();
 		DWORD maj = LOBYTE(LOWORD(v));
@@ -448,6 +455,7 @@ WinMain(HINSTANCE hInstance, HINSTANCE hLastInstance, LPSTR lpcli, int ncmd)
 		.fetch = win32_fetch_table,
 		.file = win32_file_table,
 		.utf8 = win32_utf8_table,
+		.llcache = filesystem_llcache_table,
 		.bitmap = win32_bitmap_table,
 		.layout = win32_layout_table,
 	};

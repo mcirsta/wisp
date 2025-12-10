@@ -57,6 +57,12 @@
 #include "neosurf/desktop/searchweb.h"
 #include "windows/window.h"
 
+#include "content/llcache.h"
+#include "content/handlers/image/image_cache.h"
+#include <neosurf/utils/file.h>
+#include <neosurf/desktop/gui_internal.h>
+#include <neosurf/content/backing_store.h>
+
 /**
  * List of all gui windows
  */
@@ -1286,6 +1292,32 @@ nsws_window_command(HWND hwnd,
 		break;
 
 	case IDM_VIEW_DEBUGGING_SAVE_DOMTREE:
+		break;
+
+	case IDM_VIEW_DEBUGGING_CLEAR_CACHE:
+		NSLOG(neosurf, INFO, "Clear Cache: start");
+		llcache_clean(true);
+		NSLOG(neosurf, INFO, "Clear Cache: llcache purged");
+		image_cache_purge_bitmaps();
+		NSLOG(neosurf, INFO, "Clear Cache: image cache bitmaps purged");
+		{
+			const char *path = nsoption_charp(disc_cache_path);
+			if (path != NULL && path[0] != '\0') {
+				struct llcache_store_parameters sp;
+				NSLOG(neosurf, INFO, "Clear Cache: clearing disc cache at %s", path);
+				guit->llcache->finalise();
+				neosurf_recursive_rm(path);
+				NSLOG(neosurf, INFO, "Clear Cache: disc cache directory removed");
+				sp.path = path;
+				sp.limit = nsoption_uint(disc_cache_size);
+				sp.hysteresis = sp.limit / 5;
+				guit->llcache->initialise(&sp);
+				NSLOG(neosurf, INFO, "Clear Cache: backing store init limit %"PRIsizet" hyst %"PRIsizet, sp.limit, sp.hysteresis);
+			} else {
+				NSLOG(neosurf, INFO, "Clear Cache: disc cache disabled");
+			}
+		}
+		NSLOG(neosurf, INFO, "Clear Cache: done");
 		break;
 
 	case IDM_HELP_CONTENTS:

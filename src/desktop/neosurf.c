@@ -106,7 +106,7 @@ static void neosurf_lwc_iterator(lwc_string *str, void *pw)
 /* exported interface documented in neosurf/neosurf.h */
 nserror neosurf_init(const char *store_path)
 {
-	nserror ret;
+    nserror ret;
 	struct hlcache_parameters hlcache_parameters = {
 		.bg_clean_time = HL_CACHE_CLEAN_TIME,
 		.llcache = {
@@ -132,22 +132,36 @@ nserror neosurf_init(const char *store_path)
 	signal(SIGPIPE, SIG_IGN);
 #endif
 
-	/* corestrings init */
-	ret = corestrings_init();
-	if (ret != NSERROR_OK)
-		return ret;
+    NSLOG(neosurf, INFO, "neosurf_init: start");
+    /* corestrings init */
+    NSLOG(neosurf, INFO, "init corestrings");
+    ret = corestrings_init();
+    if (ret != NSERROR_OK) {
+        NSLOG(neosurf, ERROR, "corestrings_init failed (%s)", messages_get_errorcode(ret));
+        return ret;
+    }
 
-	/* Initialize urldb */
-	ret = urldb_init();
-	if (ret != NSERROR_OK)
-		return ret;
+    /* Initialize urldb */
+    NSLOG(neosurf, INFO, "init urldb");
+    ret = urldb_init();
+    if (ret != NSERROR_OK) {
+        NSLOG(neosurf, ERROR, "urldb_init failed (%s)", messages_get_errorcode(ret));
+        return ret;
+    }
 
-	ret = nscolour_update();
-	if (ret != NSERROR_OK)
-		return ret;
+    NSLOG(neosurf, INFO, "update nscolour");
+    ret = nscolour_update();
+    if (ret != NSERROR_OK) {
+        NSLOG(neosurf, ERROR, "nscolour_update failed (%s)", messages_get_errorcode(ret));
+        return ret;
+    }
 
-	/* set up cache limits based on the memory cache size option */
-	hlcache_parameters.llcache.limit = nsoption_int(memory_cache_size);
+    /* set up cache limits based on the memory cache size option */
+    NSLOG(neosurf, INFO, "init cache params: mem=%d store_path=%s disc_cache_path=%s",
+          nsoption_int(memory_cache_size),
+          store_path ? store_path : "(null)",
+          nsoption_charp(disc_cache_path) ? nsoption_charp(disc_cache_path) : "(null)");
+    hlcache_parameters.llcache.limit = nsoption_int(memory_cache_size);
 
 	if (hlcache_parameters.llcache.limit < MINIMUM_MEMORY_CACHE_SIZE) {
 		hlcache_parameters.llcache.limit = MINIMUM_MEMORY_CACHE_SIZE;
@@ -180,51 +194,84 @@ nserror neosurf_init(const char *store_path)
 		nsoption_charp(disc_cache_path) :
 		store_path;
 
-	/* image handler bitmap cache */
-	ret = image_cache_init(&image_cache_parameters);
-	if (ret != NSERROR_OK)
-		return ret;
+    /* image handler bitmap cache */
+    NSLOG(neosurf, INFO, "init image_cache limit %"PRIsizet" hyst %"PRIsizet" speculate %d",
+          image_cache_parameters.limit, image_cache_parameters.hysteresis, image_cache_parameters.speculative_small);
+    ret = image_cache_init(&image_cache_parameters);
+    if (ret != NSERROR_OK) {
+        NSLOG(neosurf, ERROR, "image_cache_init failed (%s)", messages_get_errorcode(ret));
+        return ret;
+    }
 
-	/* content handler initialisation */
-	ret = nscss_init();
-	if (ret != NSERROR_OK)
-		return ret;
+    /* content handler initialisation */
+    NSLOG(neosurf, INFO, "init CSS");
+    ret = nscss_init();
+    if (ret != NSERROR_OK) {
+        NSLOG(neosurf, ERROR, "nscss_init failed (%s)", messages_get_errorcode(ret));
+        return ret;
+    }
 
-	ret = html_init();
-	if (ret != NSERROR_OK)
-		return ret;
+    NSLOG(neosurf, INFO, "init HTML");
+    ret = html_init();
+    if (ret != NSERROR_OK) {
+        NSLOG(neosurf, ERROR, "html_init failed (%s)", messages_get_errorcode(ret));
+        return ret;
+    }
 
-	ret = image_init();
-	if (ret != NSERROR_OK)
-		return ret;
+    NSLOG(neosurf, INFO, "init image handlers");
+    ret = image_init();
+    if (ret != NSERROR_OK) {
+        NSLOG(neosurf, ERROR, "image_init failed (%s)", messages_get_errorcode(ret));
+        return ret;
+    }
 
-	ret = textplain_init();
-	if (ret != NSERROR_OK)
-		return ret;
+    NSLOG(neosurf, INFO, "init textplain");
+    ret = textplain_init();
+    if (ret != NSERROR_OK) {
+        NSLOG(neosurf, ERROR, "textplain_init failed (%s)", messages_get_errorcode(ret));
+        return ret;
+    }
 
 	setlocale(LC_ALL, "");
 
-	/* initialise the fetchers */
-	ret = fetcher_init();
-	if (ret != NSERROR_OK)
-		return ret;
+    /* initialise the fetchers */
+    NSLOG(neosurf, INFO, "init fetchers");
+    ret = fetcher_init();
+    if (ret != NSERROR_OK) {
+        NSLOG(neosurf, ERROR, "fetcher_init failed (%s)", messages_get_errorcode(ret));
+        return ret;
+    }
 	
-	/* Initialise the hlcache and allow it to init the llcache for us */
-	ret = hlcache_initialise(&hlcache_parameters);
-	if (ret != NSERROR_OK)
-		return ret;
+    /* Initialise the hlcache and allow it to init the llcache for us */
+    NSLOG(neosurf, INFO, "init hlcache: limit %"PRIsizet" store.limit %"PRIsizet" hyst %"PRIsizet" path %s",
+          hlcache_parameters.llcache.limit,
+          hlcache_parameters.llcache.store.limit,
+          hlcache_parameters.llcache.store.hysteresis,
+          hlcache_parameters.llcache.store.path ? hlcache_parameters.llcache.store.path : "(null)");
+    ret = hlcache_initialise(&hlcache_parameters);
+    if (ret != NSERROR_OK) {
+        NSLOG(neosurf, ERROR, "hlcache_initialise failed (%s)", messages_get_errorcode(ret));
+        return ret;
+    }
 
-	/* Initialize system colours */
-	ret = ns_system_colour_init();
-	if (ret != NSERROR_OK)
-		return ret;
+    /* Initialize system colours */
+    NSLOG(neosurf, INFO, "init system colours");
+    ret = ns_system_colour_init();
+    if (ret != NSERROR_OK) {
+        NSLOG(neosurf, ERROR, "ns_system_colour_init failed (%s)", messages_get_errorcode(ret));
+        return ret;
+    }
 
 	js_initialise();
 
-	ret = page_info_init();
-	if (ret != NSERROR_OK) {
-		return ret;
-	}
+    NSLOG(neosurf, INFO, "init page-info");
+    ret = page_info_init();
+    if (ret != NSERROR_OK) {
+        NSLOG(neosurf, ERROR, "page_info_init failed (%s)", messages_get_errorcode(ret));
+        return ret;
+    }
+
+    NSLOG(neosurf, INFO, "neosurf_init: success");
 
 	return NSERROR_OK;
 }

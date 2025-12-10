@@ -1154,6 +1154,7 @@ read_entries(struct store_state *state)
 				return NSERROR_NOMEM;
 			}
 			if (read(fd, url, urllen) != (ssize_t)urllen) {
+				NSLOG(neosurf, ERROR, "read_entries: short read for URL length %u", urllen);
 				free(url);
 				close(fd);
 				free(fname);
@@ -1180,6 +1181,7 @@ read_entries(struct store_state *state)
 				/* The read failed, so reset the ptr */
 				ent->url = nsurl; /* It already had a ref */
 				nsurl_unref(nsurl);
+				NSLOG(neosurf, ERROR, "read_entries: short read for entry struct size %"PRIsizet, sizeof(*ent));
 				close(fd);
 				free(fname);
 				return NSERROR_INIT_FAILED;
@@ -1419,98 +1421,134 @@ control_error: /* problem with the control file */
 static nserror
 initialise(const struct llcache_store_parameters *parameters)
 {
-	struct store_state *newstate;
-	nserror ret;
+    struct store_state *newstate;
+    nserror ret;
 
-	/* check backing store is not already initialised */
-	if (storestate != NULL) {
-		return NSERROR_INIT_FAILED;
-	}
+    /* check backing store is not already initialised */
+    if (storestate != NULL) {
+        NSLOG(neosurf, ERROR, "FS backing store already initialised");
+        return NSERROR_INIT_FAILED;
+    }
 
 	/* if we are not allowed any space simply give up on init */
-	if (parameters->limit == 0) {
-		return NSERROR_OK;
-	}
+    if (parameters->limit == 0) {
+        NSLOG(neosurf, INFO, "FS backing store disabled: limit=0");
+        return NSERROR_OK;
+    }
 
 	/* if the path to the cache directory is not set do not init */
-	if (parameters->path == NULL) {
-		return NSERROR_OK;
-	}
+    if (parameters->path == NULL) {
+        NSLOG(neosurf, INFO, "FS backing store disabled: path is NULL");
+        return NSERROR_OK;
+    }
 
 	/* allocate new store state and set defaults */
-	newstate = calloc(1, sizeof(struct store_state));
-	if (newstate == NULL) {
-		return NSERROR_NOMEM;
-	}
+    newstate = calloc(1, sizeof(struct store_state));
+    if (newstate == NULL) {
+        return NSERROR_NOMEM;
+    }
 
 	newstate->path = strdup(parameters->path);
 	newstate->limit = parameters->limit;
 	newstate->hysteresis = parameters->hysteresis;
 
 	/* read store control and create new if required */
-	ret = read_control(newstate);
-	if (ret != NSERROR_OK) {
-		if (ret == NSERROR_NOT_FOUND) {
-			NSLOG(neosurf, INFO, "cache control file not found, making fresh");
-		} else {
-			NSLOG(neosurf, ERROR, "read control failed %s",
-			      messages_get_errorcode(ret));
-			ret = neosurf_recursive_rm(newstate->path);
-			if (ret != NSERROR_OK) {
-				NSLOG(neosurf, WARNING, "Error `%s` while removing `%s`",
-				      messages_get_errorcode(ret), newstate->path);
-				NSLOG(neosurf, WARNING, "Unable to clean up partial cache state.");
-				NSLOG(neosurf, WARNING, "Funky behaviour may ensue.");
-			} else {
-				NSLOG(neosurf, INFO, "Successfully removed old cache from `%s`",
-				      newstate->path);
-			}
-		}
-		ret = write_control(newstate);
-		if (ret == NSERROR_OK) {
-			unlink_entries(newstate);
-			write_cache_tag(newstate);
-		}
-	}
-	if (ret != NSERROR_OK) {
-		/* that went well obviously */
-		free(newstate->path);
-		free(newstate);
-		return ret;
-	}
+    ret = read_control(newstate);
+    if (ret != NSERROR_OK) {
+        if (ret == NSERROR_NOT_FOUND) {
+            NSLOG(neosurf, INFO, "cache control file not found, making fresh");
+        } else {
+            NSLOG(neosurf, ERROR, "read control failed %s",
+                  messages_get_errorcode(ret));
+            ret = neosurf_recursive_rm(newstate->path);
+            if (ret != NSERROR_OK) {
+                NSLOG(neosurf, WARNING, "Error `%s` while removing `%s`",
+                      messages_get_errorcode(ret), newstate->path);
+                NSLOG(neosurf, WARNING, "Unable to clean up partial cache state.");
+                NSLOG(neosurf, WARNING, "Funky behaviour may ensue.");
+            } else {
+                NSLOG(neosurf, INFO, "Successfully removed old cache from `%s`",
+                      newstate->path);
+            }
+        }
+        ret = write_control(newstate);
+        if (ret == NSERROR_OK) {
+            unlink_entries(newstate);
+            write_cache_tag(newstate);
+        } else {
+            NSLOG(neosurf, ERROR, "write control failed %s",
+                  messages_get_errorcode(ret));
+        }
+    }
+    if (ret != NSERROR_OK) {
+        /* that went well obviously */
+        free(newstate->path);
+        free(newstate);
+        return ret;
+    }
 
 	/* read filesystem entries */
-	ret = read_entries(newstate);
-	if (ret != NSERROR_OK) {
-		/* that went well obviously */
-		free(newstate->path);
-		free(newstate);
-		return ret;
-	}
+    ret = read_entries(newstate);
+    if (ret != NSERROR_OK) {
+        NSLOG(neosurf, ERROR, "read entries failed %s",
+              messages_get_errorcode(ret));
+        if (ret == NSERROR_INIT_FAILED) {
+            NSLOG(neosurf, INFO, "Clearing cache directory and recreating fresh state");
+            {
+                nserror rmr = neosurf_recursive_rm(newstate->path);
+                if (rmr != NSERROR_OK && rmr != NSERROR_NOT_FOUND) {
+                    NSLOG(neosurf, WARNING, "Failed to remove cache dir `%s`: %s",
+                          newstate->path, messages_get_errorcode(rmr));
+                }
+            }
+            {
+                nserror wr = write_control(newstate);
+                if (wr == NSERROR_OK) {
+                    unlink_entries(newstate);
+                    write_cache_tag(newstate);
+                } else {
+                    NSLOG(neosurf, ERROR, "write control failed %s",
+                          messages_get_errorcode(wr));
+                }
+            }
+            ret = read_entries(newstate);
+            if (ret != NSERROR_OK) {
+                free(newstate->path);
+                free(newstate);
+                return ret;
+            }
+        } else {
+            free(newstate->path);
+            free(newstate);
+            return ret;
+        }
+    }
 
 	/* read blocks */
-	ret = read_blocks(newstate);
-	if (ret != NSERROR_OK) {
-		/* oh dear */
-		hashmap_destroy(newstate->entries);
-		free(newstate->path);
-		free(newstate);
-		return ret;
-	}
+    ret = read_blocks(newstate);
+    if (ret != NSERROR_OK) {
+        NSLOG(neosurf, ERROR, "read blocks failed %s",
+              messages_get_errorcode(ret));
+        /* oh dear */
+        hashmap_destroy(newstate->entries);
+        free(newstate->path);
+        free(newstate);
+        return ret;
+    }
 
 	storestate = newstate;
 
-	NSLOG(neosurf, INFO, "FS backing store init successful");
+    NSLOG(neosurf, INFO, "FS backing store init successful");
 
-	NSLOG(neosurf, INFO,
-	      "path:%s limit:%"PRIsizet" hyst:%"PRIsizet,
-	      newstate->path,
-	      newstate->limit,
-	      newstate->hysteresis);
-	NSLOG(neosurf, INFO, "Using %"PRIu64"/%"PRIsizet,
-	      newstate->total_alloc, newstate->limit);
+    NSLOG(neosurf, INFO,
+          "path:%s limit:%"PRIsizet" hyst:%"PRIsizet,
+          newstate->path,
+          newstate->limit,
+          newstate->hysteresis);
+    NSLOG(neosurf, INFO, "Using %"PRIu64"/%"PRIsizet,
+          newstate->total_alloc, newstate->limit);
 
-	return NSERROR_OK;
+    return NSERROR_OK;
 }
 
 
