@@ -8,6 +8,8 @@
 #ifndef SVGTINY_H
 #define SVGTINY_H
 
+#include <stdbool.h>
+
 typedef int svgtiny_colour;
 #define svgtiny_TRANSPARENT 0x1000000
 #ifdef __riscos__
@@ -22,14 +24,48 @@ typedef int svgtiny_colour;
 #define svgtiny_BLUE(c) ((c) & 0xff)
 #endif
 
+typedef enum {
+    svgtiny_FILL_NONZERO,
+    svgtiny_FILL_EVENODD
+} svgtiny_fill_rule;
+
+typedef enum {
+    svgtiny_CAP_BUTT,
+    svgtiny_CAP_ROUND,
+    svgtiny_CAP_SQUARE
+} svgtiny_line_cap;
+
+typedef enum {
+    svgtiny_JOIN_MITER,
+    svgtiny_JOIN_ROUND,
+    svgtiny_JOIN_BEVEL
+} svgtiny_line_join;
+
 struct svgtiny_shape {
-	float *path;
-	unsigned int path_length;
-	char *text;
-	float text_x, text_y;
-	svgtiny_colour fill;
-	svgtiny_colour stroke;
-	int stroke_width;
+    float *path;
+    unsigned int path_length;
+    char *text;
+    float text_x, text_y;
+    svgtiny_colour fill;
+    svgtiny_colour stroke;
+    int stroke_width;
+    float fill_opacity;
+    bool fill_opacity_set;
+    float stroke_opacity;
+    bool stroke_opacity_set;
+    svgtiny_fill_rule fill_rule;
+    bool fill_rule_set;
+    svgtiny_line_cap stroke_linecap;
+    bool stroke_linecap_set;
+    svgtiny_line_join stroke_linejoin;
+    bool stroke_linejoin_set;
+    float stroke_miterlimit;
+    bool stroke_miterlimit_set;
+    float *stroke_dasharray;
+    unsigned int stroke_dasharray_count;
+    bool stroke_dasharray_set;
+    float stroke_dashoffset;
+    bool stroke_dashoffset_set;
 };
 
 struct svgtiny_diagram {

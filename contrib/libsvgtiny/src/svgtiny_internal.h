@@ -44,8 +44,8 @@ struct svgtiny_parse_state_gradient {
 
 
 struct svgtiny_parse_state {
-	struct svgtiny_diagram *diagram;
-	dom_document *document;
+    struct svgtiny_diagram *diagram;
+    dom_document *document;
 
 	float viewport_width;
 	float viewport_height;
@@ -55,10 +55,27 @@ struct svgtiny_parse_state {
 
 	/*struct css_style style;*/
 
-	/* paint attributes */
-	svgtiny_colour fill;
-	svgtiny_colour stroke;
-	int stroke_width;
+    /* paint attributes */
+    svgtiny_colour fill;
+    svgtiny_colour stroke;
+    int stroke_width;
+    float fill_opacity;
+    bool fill_opacity_set;
+    float stroke_opacity;
+    bool stroke_opacity_set;
+    svgtiny_fill_rule fill_rule;
+    bool fill_rule_set;
+    svgtiny_line_cap stroke_linecap;
+    bool stroke_linecap_set;
+    svgtiny_line_join stroke_linejoin;
+    bool stroke_linejoin_set;
+    float stroke_miterlimit;
+    bool stroke_miterlimit_set;
+    float *stroke_dasharray;
+    unsigned int stroke_dasharray_count;
+    bool stroke_dasharray_set;
+    float stroke_dashoffset;
+    bool stroke_dashoffset_set;
 
 	/* gradients */
 	struct svgtiny_parse_state_gradient fill_grad;
@@ -77,17 +94,31 @@ struct svgtiny_list;
  * control structure for inline style parse
  */
 struct svgtiny_parse_internal_operation {
-	dom_string *key;
-	enum {
-		SVGTIOP_NONE,
-		SVGTIOP_PAINT,
-		SVGTIOP_COLOR,
-		SVGTIOP_LENGTH,
-		SVGTIOP_INTLENGTH,
-		SVGTIOP_OFFSET,
-	} operation;
-	void *param;
-	void *value;
+    dom_string *key;
+    enum {
+        SVGTIOP_NONE,
+        SVGTIOP_PAINT,
+        SVGTIOP_COLOR,
+        SVGTIOP_LENGTH,
+        SVGTIOP_INTLENGTH,
+        SVGTIOP_OFFSET,
+        SVGTIOP_NUMBER,
+        SVGTIOP_KEYWORD,
+        SVGTIOP_DASHARRAY,
+    } operation;
+    void *param;
+    void *value;
+    bool *mark;
+};
+
+struct svgtiny_keyword_map {
+    const char *keyword;
+    int value;
+};
+
+struct svgtiny_dasharray_dest {
+    float **arrayp;
+    unsigned int *countp;
 };
 
 /* svgtiny.c */

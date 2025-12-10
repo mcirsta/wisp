@@ -8,23 +8,19 @@
 #ifndef SVGTINY_PARSE_H
 #define SVGTINY_PARSE_H
 
-/**
- * skip SVG spec defined whitespace
- *
- * \param cursor current cursor
- * \param textend end of buffer
- */
+static inline bool svg_is_whitespace(char c)
+{
+    return (c == 0x20 || c == 0x09 || c == 0x0A || c == 0x0D);
+}
+
 static inline void advance_whitespace(const char **cursor, const char *textend)
 {
-	while((*cursor) < textend) {
-		if ((**cursor != 0x20) &&
-		    (**cursor != 0x09) &&
-		    (**cursor != 0x0A) &&
-		    (**cursor != 0x0D)) {
-			break;
-		}
-		(*cursor)++;
-	}
+    while((*cursor) < textend) {
+        if (!svg_is_whitespace(**cursor)) {
+            break;
+        }
+        (*cursor)++;
+    }
 }
 
 

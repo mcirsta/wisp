@@ -9,6 +9,7 @@
 #include <math.h>
 #include <float.h>
 #include <string.h>
+#include <stdlib.h>
 
 
 #include "svgtiny.h"
@@ -1014,14 +1015,14 @@ svgtiny_parse_offset(const char *text, size_t textlen, float *offset)
  */
 static inline svgtiny_code
 dispatch_op(const char *value,
-	    size_t value_len,
-	    struct svgtiny_parse_state *state,
-	    struct svgtiny_parse_internal_operation *styleop)
+            size_t value_len,
+            struct svgtiny_parse_state *state,
+            struct svgtiny_parse_internal_operation *styleop)
 {
-	float parse_len;
-	svgtiny_code res = svgtiny_OK;
+    float parse_len;
+    svgtiny_code res = svgtiny_OK;
 
-	switch (styleop->operation) {
+    switch (styleop->operation) {
 	case SVGTIOP_NONE:
 		res = svgtiny_SVG_ERROR;
 		break;
@@ -1053,11 +1054,99 @@ dispatch_op(const char *value,
 		*((int *)styleop->value) = parse_len;
 		break;
 
-	case SVGTIOP_OFFSET:
-		res = svgtiny_parse_offset(value, value_len, styleop->value);
-		break;
-	}
-	return res;
+    case SVGTIOP_OFFSET:
+        res = svgtiny_parse_offset(value, value_len, styleop->value);
+        break;
+    case SVGTIOP_NUMBER: {
+        const char *cursor = value;
+        const char *numend = value + value_len;
+        float number = 0;
+        advance_whitespace(&cursor, numend);
+        res = svgtiny_parse_number(cursor, &numend, &number);
+        if (res == svgtiny_OK) {
+            *((float *)styleop->value) = number;
+        }
+        break;
+    }
+    case SVGTIOP_KEYWORD: {
+        const struct svgtiny_keyword_map *map = (const struct svgtiny_keyword_map *)styleop->param;
+        const char *cursor = value;
+        const char *end = value + value_len;
+        /* trim leading whitespace */
+        advance_whitespace(&cursor, end);
+        while (end > cursor && svg_is_whitespace(end[-1])) {
+            end--;
+        }
+        size_t vlen = end - cursor;
+        bool matched = false;
+        while (map && map->keyword) {
+            size_t klen = strlen(map->keyword);
+            if (klen == vlen && memcmp(cursor, map->keyword, vlen) == 0) {
+                *((int *)styleop->value) = map->value;
+                matched = true;
+                break;
+            }
+            map++;
+        }
+        res = matched ? svgtiny_OK : svgtiny_SVG_ERROR;
+        break;
+    }
+    case SVGTIOP_DASHARRAY: {
+        const char *cursor = value;
+        const char *textend = value + value_len;
+        advance_whitespace(&cursor, textend);
+        struct svgtiny_dasharray_dest *dest = (struct svgtiny_dasharray_dest *)styleop->value;
+        float *arr = NULL;
+        unsigned int count = 0;
+        unsigned int cap = 0;
+        svgtiny_code err = svgtiny_OK;
+        err = svgtiny_parse_none(cursor, textend);
+        if (err == svgtiny_OK) {
+            if (dest && dest->arrayp && dest->countp) {
+                *(dest->arrayp) = NULL;
+                *(dest->countp) = 0;
+            }
+            break;
+        }
+        while (cursor < textend) {
+            const char *numend = textend;
+            float number;
+            err = svgtiny_parse_number(cursor, &numend, &number);
+            if (err != svgtiny_OK) {
+                break;
+            }
+            if (count == cap) {
+                unsigned int newcap = cap == 0 ? 4 : cap * 2;
+                float *narr = realloc(arr, newcap * sizeof(float));
+                if (narr == NULL) {
+                    free(arr);
+                    arr = NULL;
+                    count = 0;
+                    cap = 0;
+                    break;
+                }
+                arr = narr;
+                cap = newcap;
+            }
+            arr[count++] = number;
+            cursor = numend;
+            while (cursor < textend && (*cursor == ' ' || *cursor == '\t' || *cursor == '\r' || *cursor == '\n' || *cursor == ',')) {
+                cursor++;
+            }
+        }
+        if (dest && dest->arrayp && dest->countp) {
+            *(dest->arrayp) = arr;
+            *(dest->countp) = count;
+        } else {
+            free(arr);
+        }
+        break;
+    }
+    }
+    if (res == svgtiny_OK && styleop->mark != NULL) {
+        *(styleop->mark) = true;
+    }
+    return res;
 }
 
 /**
@@ -1205,16 +1294,9 @@ svgtiny_parse_length(const char *text,
 		unitlen = (text + textlen) - unit;
 	}
 
-	/* discount whitespace on the end of the unit */
-	while(unitlen > 0) {
-		if ((unit[unitlen - 1] != 0x20) &&
-		    (unit[unitlen - 1] != 0x09) &&
-		    (unit[unitlen - 1] != 0x0A) &&
-		    (unit[unitlen - 1] != 0x0D)) {
-			break;
-		}
-		unitlen--;
-	}
+    while (unitlen > 0 && svg_is_whitespace(unit[unitlen - 1])) {
+        unitlen--;
+    }
 
 	/* decode the unit */
 	*length = 0;

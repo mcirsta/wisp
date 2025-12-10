@@ -26,14 +26,59 @@ static void write_mvg(FILE *fh, float scale, struct svgtiny_diagram *diagram)
                 } else {
                         fprintf(fh, "fill #%.6x ", diagram->shape[i].fill);
                 }
+                if (diagram->shape[i].fill_opacity_set) {
+                        fprintf(fh, "fill-opacity %g ", diagram->shape[i].fill_opacity);
+                }
+                if (diagram->shape[i].fill_rule_set && diagram->shape[i].path) {
+                        if (diagram->shape[i].fill_rule == svgtiny_FILL_EVENODD) {
+                                fprintf(fh, "fill-rule evenodd ");
+                        }
+                }
 
                 if (diagram->shape[i].stroke == svgtiny_TRANSPARENT) {
                         fprintf(fh, "stroke none ");
                 } else {
                         fprintf(fh, "stroke #%.6x ", diagram->shape[i].stroke);
                 }
+                if (diagram->shape[i].stroke_opacity_set) {
+                        fprintf(fh, "stroke-opacity %g ", diagram->shape[i].stroke_opacity);
+                }
                 fprintf(fh, "stroke-width %g ",
                        scale * diagram->shape[i].stroke_width);
+
+                if (diagram->shape[i].stroke_linecap_set) {
+                        const char *kw = "butt";
+                        switch (diagram->shape[i].stroke_linecap) {
+                        case svgtiny_CAP_ROUND: kw = "round"; break;
+                        case svgtiny_CAP_SQUARE: kw = "square"; break;
+                        case svgtiny_CAP_BUTT: default: kw = "butt"; break;
+                        }
+                        fprintf(fh, "stroke-linecap %s ", kw);
+                }
+                if (diagram->shape[i].stroke_linejoin_set) {
+                        const char *kwj = "miter";
+                        switch (diagram->shape[i].stroke_linejoin) {
+                        case svgtiny_JOIN_ROUND: kwj = "round"; break;
+                        case svgtiny_JOIN_BEVEL: kwj = "bevel"; break;
+                        case svgtiny_JOIN_MITER: default: kwj = "miter"; break;
+                        }
+                        fprintf(fh, "stroke-linejoin %s ", kwj);
+                }
+                if (diagram->shape[i].stroke_miterlimit_set) {
+                        fprintf(fh, "stroke-miterlimit %g ", diagram->shape[i].stroke_miterlimit);
+                }
+                if (diagram->shape[i].stroke_dasharray_set && diagram->shape[i].stroke_dasharray_count > 0 && diagram->shape[i].stroke_dasharray) {
+                        unsigned int di;
+                        fprintf(fh, "stroke-dasharray ");
+                        for (di = 0; di < diagram->shape[i].stroke_dasharray_count; di++) {
+                                if (di != 0) fprintf(fh, ",");
+                                fprintf(fh, "%g", diagram->shape[i].stroke_dasharray[di]);
+                        }
+                        fprintf(fh, " ");
+                }
+                if (diagram->shape[i].stroke_dashoffset_set) {
+                        fprintf(fh, "stroke-dashoffset %g ", diagram->shape[i].stroke_dashoffset);
+                }
 
                 if (diagram->shape[i].path) {
                         unsigned int j;
@@ -75,9 +120,9 @@ static void write_mvg(FILE *fh, float scale, struct svgtiny_diagram *diagram)
                                         j += 1;
                                 }
                         }
-                        fprintf(fh, "' ");
+                        fprintf(fh, "'");
                 } else if (diagram->shape[i].text) {
-                        fprintf(fh, "text %g %g '%s' ",
+                        fprintf(fh, "text %g %g '%s'",
                                scale * diagram->shape[i].text_x,
                                scale * diagram->shape[i].text_y,
                                diagram->shape[i].text);

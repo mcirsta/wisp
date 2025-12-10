@@ -4,22 +4,28 @@ import os
 def convert_eol(input_path, output_path):
     """
     Reads input_path in binary mode, strips UTF-8 BOM if present,
-    converts CRLF to LF, and writes to output_path.
+    converts CRLF to LF, trims trailing spaces/tabs per line,
+    and writes to output_path.
     """
     try:
         with open(input_path, 'rb') as f:
             content = f.read()
-        
+
         # Strip UTF-8 BOM if present
         if content.startswith(b'\xef\xbb\xbf'):
             content = content[3:]
-            
+
         # Convert CRLF to LF
         content = content.replace(b'\r\n', b'\n')
-        
+
+        # Trim trailing whitespace on each line
+        lines = content.split(b'\n')
+        lines = [ln.rstrip(b' \t') for ln in lines]
+        content = b'\n'.join(lines)
+
         with open(output_path, 'wb') as f:
             f.write(content)
-            
+
     except Exception as e:
         print("Error converting EOL: {}".format(e))
         sys.exit(1)

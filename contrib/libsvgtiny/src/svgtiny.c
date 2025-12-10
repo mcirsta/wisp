@@ -175,8 +175,14 @@ static void svgtiny_setup_state_local(struct svgtiny_parse_state *state)
  */
 static void svgtiny_cleanup_state_local(struct svgtiny_parse_state *state)
 {
-	svgtiny_grad_string_cleanup(&(state->fill_grad));
-	svgtiny_grad_string_cleanup(&(state->stroke_grad));
+    svgtiny_grad_string_cleanup(&(state->fill_grad));
+    svgtiny_grad_string_cleanup(&(state->stroke_grad));
+    if (state->stroke_dasharray != NULL) {
+        free(state->stroke_dasharray);
+        state->stroke_dasharray = NULL;
+        state->stroke_dasharray_count = 0;
+        state->stroke_dasharray_set = false;
+    }
 }
 
 
@@ -208,34 +214,111 @@ static void ignore_msg(uint32_t severity, void *ctx, const char *msg, ...)
  */
 static void
 svgtiny_parse_paint_attributes(dom_element *node,
-			       struct svgtiny_parse_state *state)
+                               struct svgtiny_parse_state *state)
 {
-	struct svgtiny_parse_internal_operation ops[] = {
-		{
-			/* fill color */
-			state->interned_fill,
-			SVGTIOP_PAINT,
-			&state->fill_grad,
-			&state->fill
-		}, {
-			/* stroke color */
-			state->interned_stroke,
-			SVGTIOP_PAINT,
-			&state->stroke_grad,
-			&state->stroke
-		}, {
-			/* stroke width */
-			state->interned_stroke_width,
-			SVGTIOP_INTLENGTH,
-			&state->viewport_width,
-			&state->stroke_width
-		},{
-			NULL, SVGTIOP_NONE, NULL, NULL
-		},
-	};
+    const struct svgtiny_keyword_map fill_rule_map[] = {
+        { "nonzero", svgtiny_FILL_NONZERO },
+        { "evenodd", svgtiny_FILL_EVENODD },
+        { NULL, 0 }
+    };
+    const struct svgtiny_keyword_map linecap_map[] = {
+        { "butt", svgtiny_CAP_BUTT },
+        { "round", svgtiny_CAP_ROUND },
+        { "square", svgtiny_CAP_SQUARE },
+        { NULL, 0 }
+    };
+    const struct svgtiny_keyword_map linejoin_map[] = {
+        { "miter", svgtiny_JOIN_MITER },
+        { "round", svgtiny_JOIN_ROUND },
+        { "bevel", svgtiny_JOIN_BEVEL },
+        { NULL, 0 }
+    };
+    struct svgtiny_dasharray_dest dashdest = {
+        &state->stroke_dasharray,
+        &state->stroke_dasharray_count
+    };
+    struct svgtiny_parse_internal_operation ops[] = {
+        {
+            /* fill color */
+            state->interned_fill,
+            SVGTIOP_PAINT,
+            &state->fill_grad,
+            &state->fill
+        }, {
+            /* stroke color */
+            state->interned_stroke,
+            SVGTIOP_PAINT,
+            &state->stroke_grad,
+            &state->stroke
+        }, {
+            /* stroke width */
+            state->interned_stroke_width,
+            SVGTIOP_INTLENGTH,
+            &state->viewport_width,
+            &state->stroke_width
+        }, {
+            /* fill-opacity */
+            state->interned_fill_opacity,
+            SVGTIOP_OFFSET,
+            NULL,
+            &state->fill_opacity,
+            &state->fill_opacity_set
+        }, {
+            /* stroke-opacity */
+            state->interned_stroke_opacity,
+            SVGTIOP_OFFSET,
+            NULL,
+            &state->stroke_opacity,
+            &state->stroke_opacity_set
+        }, {
+            /* fill-rule */
+            state->interned_fill_rule,
+            SVGTIOP_KEYWORD,
+            (void*)fill_rule_map,
+            &state->fill_rule,
+            &state->fill_rule_set
+        }, {
+            /* stroke-linecap */
+            state->interned_stroke_linecap,
+            SVGTIOP_KEYWORD,
+            (void*)linecap_map,
+            &state->stroke_linecap,
+            &state->stroke_linecap_set
+        }, {
+            /* stroke-linejoin */
+            state->interned_stroke_linejoin,
+            SVGTIOP_KEYWORD,
+            (void*)linejoin_map,
+            &state->stroke_linejoin,
+            &state->stroke_linejoin_set
+        }, {
+            /* stroke-miterlimit */
+            state->interned_stroke_miterlimit,
+            SVGTIOP_NUMBER,
+            NULL,
+            &state->stroke_miterlimit,
+            &state->stroke_miterlimit_set
+        }, {
+            /* stroke-dasharray */
+            state->interned_stroke_dasharray,
+            SVGTIOP_DASHARRAY,
+            NULL,
+            &dashdest,
+            &state->stroke_dasharray_set
+        }, {
+            /* stroke-dashoffset */
+            state->interned_stroke_dashoffset,
+            SVGTIOP_NUMBER,
+            NULL,
+            &state->stroke_dashoffset,
+            &state->stroke_dashoffset_set
+        },{
+            NULL, SVGTIOP_NONE, NULL, NULL
+        },
+    };
 
-	svgtiny_parse_attributes(node, state, ops);
-	svgtiny_parse_inline_style(node, state, ops);
+    svgtiny_parse_attributes(node, state, ops);
+    svgtiny_parse_inline_style(node, state, ops);
 }
 
 
@@ -1079,11 +1162,11 @@ parse_element(dom_element *element, struct svgtiny_parse_state *state)
 
 static svgtiny_code
 initialise_parse_state(struct svgtiny_parse_state *state,
-		       struct svgtiny_diagram *diagram,
-		       dom_document *document,
-		       dom_element *svg,
-		       int viewport_width,
-		       int viewport_height)
+                       struct svgtiny_diagram *diagram,
+                       dom_document *document,
+                       dom_element *svg,
+                       int viewport_width,
+                       int viewport_height)
 {
 	float x, y, width, height;
 
@@ -1120,10 +1203,27 @@ initialise_parse_state(struct svgtiny_parse_state *state,
 	state->ctm.f = 0; /*y;*/
 	/*state->style = css_base_style;
 	  state->style.font_size.value.length.value = option_font_size * 0.1;*/
-	state->fill = 0x000000;
-	state->stroke = svgtiny_TRANSPARENT;
-	state->stroke_width = 1;
-	return svgtiny_OK;
+    state->fill = 0x000000;
+    state->stroke = svgtiny_TRANSPARENT;
+    state->stroke_width = 1;
+    state->fill_opacity = 1.0f;
+    state->fill_opacity_set = false;
+    state->stroke_opacity = 1.0f;
+    state->stroke_opacity_set = false;
+    state->fill_rule = svgtiny_FILL_NONZERO;
+    state->fill_rule_set = false;
+    state->stroke_linecap = svgtiny_CAP_BUTT;
+    state->stroke_linecap_set = false;
+    state->stroke_linejoin = svgtiny_JOIN_MITER;
+    state->stroke_linejoin_set = false;
+    state->stroke_miterlimit = 4.0f;
+    state->stroke_miterlimit_set = false;
+    state->stroke_dasharray = NULL;
+    state->stroke_dasharray_count = 0;
+    state->stroke_dasharray_set = false;
+    state->stroke_dashoffset = 0.0f;
+    state->stroke_dashoffset_set = false;
+    return svgtiny_OK;
 }
 
 
@@ -1223,7 +1323,7 @@ svg_document_from_buffer(uint8_t *buffer, size_t size, dom_document **document)
  */
 struct svgtiny_shape *svgtiny_add_shape(struct svgtiny_parse_state *state)
 {
-	struct svgtiny_shape *shape;
+    struct svgtiny_shape *shape;
 
 	shape = realloc(state->diagram->shape,
 			(state->diagram->shape_count + 1) *
@@ -1231,18 +1331,50 @@ struct svgtiny_shape *svgtiny_add_shape(struct svgtiny_parse_state *state)
 	if (shape != NULL) {
 		state->diagram->shape = shape;
 
-		shape += state->diagram->shape_count;
-		shape->path = 0;
-		shape->path_length = 0;
-		shape->text = 0;
-		shape->fill = state->fill;
-		shape->stroke = state->stroke;
-		shape->stroke_width = lroundf((float) state->stroke_width *
-					      (state->ctm.a + state->ctm.d) / 2.0);
-		if (0 < state->stroke_width && shape->stroke_width == 0)
-			shape->stroke_width = 1;
-	}
-	return shape;
+        shape += state->diagram->shape_count;
+        shape->path = 0;
+        shape->path_length = 0;
+        shape->text = 0;
+        shape->fill = state->fill;
+        shape->stroke = state->stroke;
+        shape->stroke_width = lroundf((float) state->stroke_width *
+                                      (state->ctm.a + state->ctm.d) / 2.0);
+        if (0 < state->stroke_width && shape->stroke_width == 0)
+            shape->stroke_width = 1;
+        shape->fill_opacity = state->fill_opacity;
+        shape->fill_opacity_set = state->fill_opacity_set;
+        shape->stroke_opacity = state->stroke_opacity;
+        shape->stroke_opacity_set = state->stroke_opacity_set;
+        shape->fill_rule = state->fill_rule;
+        shape->fill_rule_set = state->fill_rule_set;
+        shape->stroke_linecap = state->stroke_linecap;
+        shape->stroke_linecap_set = state->stroke_linecap_set;
+        shape->stroke_linejoin = state->stroke_linejoin;
+        shape->stroke_linejoin_set = state->stroke_linejoin_set;
+        shape->stroke_miterlimit = state->stroke_miterlimit;
+        shape->stroke_miterlimit_set = state->stroke_miterlimit_set;
+        shape->stroke_dashoffset = state->stroke_dashoffset;
+        shape->stroke_dashoffset_set = state->stroke_dashoffset_set;
+        shape->stroke_dasharray = NULL;
+        shape->stroke_dasharray_count = 0;
+        shape->stroke_dasharray_set = state->stroke_dasharray_set;
+        if (state->stroke_dasharray_set && state->stroke_dasharray_count > 0 && state->stroke_dasharray != NULL) {
+            unsigned int c = state->stroke_dasharray_count;
+            float *arr = malloc(c * sizeof(float));
+            if (arr != NULL) {
+                memcpy(arr, state->stroke_dasharray, c * sizeof(float));
+                shape->stroke_dasharray = arr;
+                shape->stroke_dasharray_count = c;
+            } else {
+                shape->stroke_dasharray_set = false;
+                shape->stroke_dasharray_count = 0;
+            }
+            free(state->stroke_dasharray);
+            state->stroke_dasharray = NULL;
+            state->stroke_dasharray_count = 0;
+        }
+    }
+    return shape;
 }
 
 
@@ -1351,15 +1483,18 @@ svgtiny_code svgtiny_parse(struct svgtiny_diagram *diagram,
  */
 void svgtiny_free(struct svgtiny_diagram *svg)
 {
-	unsigned int i;
-	assert(svg);
+    unsigned int i;
+    assert(svg);
 
-	for (i = 0; i != svg->shape_count; i++) {
-		free(svg->shape[i].path);
-		free(svg->shape[i].text);
-	}
+    for (i = 0; i != svg->shape_count; i++) {
+        free(svg->shape[i].path);
+        free(svg->shape[i].text);
+        if (svg->shape[i].stroke_dasharray != NULL) {
+            free(svg->shape[i].stroke_dasharray);
+        }
+    }
 
-	free(svg->shape);
+    free(svg->shape);
 
-	free(svg);
+    free(svg);
 }

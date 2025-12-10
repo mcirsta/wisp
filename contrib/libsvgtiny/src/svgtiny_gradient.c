@@ -125,12 +125,14 @@ parse_gradient_stops(dom_element *linear,
 				state->interned_stop_color,
 				SVGTIOP_COLOR,
 				NULL,
-				&color
+				&color,
+				NULL
 			}, {
 				state->interned_offset,
 				SVGTIOP_OFFSET,
 				NULL,
-				&offset
+				&offset,
+				NULL
 			}, {
 				NULL, SVGTIOP_NONE, NULL, NULL
 			},

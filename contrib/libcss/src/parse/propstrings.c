@@ -644,7 +644,8 @@ const stringmap_entry stringmap[LAST_KNOWN] = {
 	SMAP("white"),
 	SMAP("whitesmoke"),
 	SMAP("yellow"),
-	SMAP("yellowgreen"),
+    SMAP("yellowgreen"),
+    SMAP("rebeccapurple"),
 
 	/* CSS Color Module Level 4 system colors */
 	SMAP("accentcolor"),
