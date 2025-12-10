@@ -1,12 +1,12 @@
 The source code, documentation, translatable messages files and UI 
-definitions contained within NetSurf are licensed under the following terms:
+definitions contained within NeoSurf are licensed under the following terms:
 
-  NetSurf is free software; you can redistribute it and/or modify
+  NeoSurf is free software; you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
   the Free Software Foundation; version 2 of the License.
   
   In addition, as a special exception, permission is granted to link the
-  code of this release of NetSurf with the OpenSSL project's "OpenSSL"
+  code of this release of NeoSurf with the OpenSSL project's "OpenSSL"
   library (or with modified versions of it that use the same license as 
   the "OpenSSL" library), and distribute the linked executables. You must
   obey the GNU General Public License version 2 in all respects for all of 
@@ -15,7 +15,7 @@ definitions contained within NetSurf are licensed under the following terms:
   obligated to do so. If you do not wish to do so, delete this exception
   statement from your version.
 
-All visual artwork contained within NetSurf is licensed under the terms of 
+All visual artwork contained within NeoSurf is licensed under the terms of 
 the MIT License.
 
 The full text of the MIT and GPL licenses are provided in Annex A and 
