@@ -140,7 +140,7 @@ int main(int argc, char *argv[])
 
         /* output file */
         if (argc > 3) {
-                outf = fopen(argv[3], "w+");
+                outf = fopen(argv[3], "wb");
                 if (outf == NULL) {
                         fprintf(stderr, "Unable to open %s for writing\n", argv[3]);
                         return 2;

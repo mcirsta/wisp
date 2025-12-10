@@ -25,6 +25,7 @@
 #include <limits.h>
 #include <string.h>
 #include <stdlib.h>
+#include <math.h>
 
 #include <svgtiny.h>
 
@@ -39,12 +40,12 @@
 #include "content/handlers/image/svg.h"
 
 typedef struct svg_content {
-	struct content base;
+    struct content base;
 
-	struct svgtiny_diagram *diagram;
+    struct svgtiny_diagram *diagram;
 
-	int current_width;
-	int current_height;
+    int current_width;
+    int current_height;
 } svg_content;
 
 
@@ -114,11 +115,11 @@ static bool svg_convert(struct content *c)
 				width, height, c->source_size);*/
 	//c->size += ?;
 	content_set_ready(c);
-	content_set_done(c);
+    content_set_done(c);
 	/* Done: update status bar */
 	content_set_status(c, "");
 
-	return true;
+    return true;
 }
 
 /**
@@ -127,9 +128,9 @@ static bool svg_convert(struct content *c)
 
 static void svg_reformat(struct content *c, int width, int height)
 {
-	svg_content *svg = (svg_content *) c;
-	const uint8_t *source_data;
-	size_t source_size;
+    svg_content *svg = (svg_content *) c;
+    const uint8_t *source_data;
+    size_t source_size;
 
 	assert(svg->diagram);
 
@@ -137,19 +138,19 @@ static void svg_reformat(struct content *c, int width, int height)
 	if (width != svg->current_width || height != svg->current_height) {
 		source_data = content__get_source_data(c, &source_size);
 
-		svgtiny_parse(svg->diagram,
-			      (const char *)source_data,
-			      source_size,
-			      nsurl_access(content_get_url(c)),
-			      width,
-			      height);
+    svgtiny_parse(svg->diagram,
+                  (const char *)source_data,
+                  source_size,
+                  nsurl_access(content_get_url(c)),
+                  width,
+                  height);
 
-		svg->current_width = width;
-		svg->current_height = height;
-	}
+    svg->current_width = width;
+    svg->current_height = height;
+    }
 
-	c->width = svg->diagram->width;
-	c->height = svg->diagram->height;
+    c->width = svg->diagram->width;
+    c->height = svg->diagram->height;
 }
 
 
@@ -168,85 +169,184 @@ svg_redraw_internal(svg_content *svg,
 		    float scale,
 		    colour background_colour)
 {
-	float transform[6];
-	struct svgtiny_diagram *diagram = svg->diagram;
-	int px, py;
-	unsigned int i;
-	plot_font_style_t fstyle = *plot_style_font;
-	plot_style_t pstyle;
-	nserror res;
+    float transform[6];
+    struct svgtiny_diagram *diagram = svg->diagram;
+    int px, py;
+    unsigned int i;
+    plot_font_style_t fstyle = *plot_style_font;
+    plot_style_t pstyle;
+    nserror res;
 
 	assert(diagram);
 
-	transform[0] = (float) width / (float) svg->base.width;
-	transform[1] = 0;
-	transform[2] = 0;
-	transform[3] = (float) height / (float) svg->base.height;
-	transform[4] = x;
-	transform[5] = y;
+    float sx = (float) width / (float) svg->base.width;
+    float sy = (float) height / (float) svg->base.height;
+    transform[0] = 1.0f;
+    transform[1] = 0.0f;
+    transform[2] = 0.0f;
+    transform[3] = 1.0f;
+    transform[4] = x;
+    transform[5] = y;
 
 #define BGR(c) (((svgtiny_RED((c))) |					\
 		 (svgtiny_GREEN((c)) << 8) |				\
 		 (svgtiny_BLUE((c)) << 16)))
 
-	for (i = 0; i != diagram->shape_count; i++) {
-		if (diagram->shape[i].path) {
-			/* stroke style */
-			if (diagram->shape[i].stroke == svgtiny_TRANSPARENT) {
-				pstyle.stroke_type = PLOT_OP_TYPE_NONE;
-				pstyle.stroke_colour = NS_TRANSPARENT;
-			} else {
-				pstyle.stroke_type = PLOT_OP_TYPE_SOLID;
-				pstyle.stroke_colour = BGR(diagram->shape[i].stroke);
-			}
-			pstyle.stroke_width = plot_style_int_to_fixed(
-					diagram->shape[i].stroke_width);
+    unsigned int max_path_len = 0;
+    for (i = 0; i != diagram->shape_count; i++) {
+        if (diagram->shape[i].path && diagram->shape[i].path_length > max_path_len) {
+            max_path_len = diagram->shape[i].path_length;
+        }
+    }
+    float *scaled = NULL;
+    if (max_path_len > 0) {
+        scaled = malloc(sizeof(float) * max_path_len);
+        if (scaled == NULL) {
+            return false;
+        }
+    }
+    float *combo = NULL;
+    unsigned int combo_len = 0;
+    unsigned int combo_cap = 0;
+    plot_style_t combo_style;
+    int combo_active = 0;
 
-			/* fill style */
-			if (diagram->shape[i].fill == svgtiny_TRANSPARENT) {
-				pstyle.fill_type = PLOT_OP_TYPE_NONE;
-				pstyle.fill_colour = NS_TRANSPARENT;
-			} else {
-				pstyle.fill_type = PLOT_OP_TYPE_SOLID;
-				pstyle.fill_colour = BGR(diagram->shape[i].fill);
-			}
+    for (i = 0; i != diagram->shape_count; i++) {
+        if (diagram->shape[i].path) {
+            /* stroke style */
+            if (diagram->shape[i].stroke == svgtiny_TRANSPARENT) {
+                pstyle.stroke_type = PLOT_OP_TYPE_NONE;
+                pstyle.stroke_colour = NS_TRANSPARENT;
+            } else {
+                pstyle.stroke_type = PLOT_OP_TYPE_SOLID;
+                pstyle.stroke_colour = BGR(diagram->shape[i].stroke);
+            }
+            pstyle.stroke_width = plot_style_int_to_fixed(
+                    diagram->shape[i].stroke_width);
 
-			/* draw the path */
-			res = ctx->plot->path(ctx,
-					&pstyle,
-					diagram->shape[i].path,
-					diagram->shape[i].path_length,
-					transform);
-			if (res != NSERROR_OK) {
-				return false;
-			}
+            /* fill style */
+            if (diagram->shape[i].fill == svgtiny_TRANSPARENT) {
+                pstyle.fill_type = PLOT_OP_TYPE_NONE;
+                pstyle.fill_colour = NS_TRANSPARENT;
+            } else {
+                pstyle.fill_type = PLOT_OP_TYPE_SOLID;
+                pstyle.fill_colour = BGR(diagram->shape[i].fill);
+            }
+            if (scaled != NULL) {
+                unsigned int j = 0;
+                unsigned int k = 0;
+                float minx = 0.0f, miny = 0.0f, maxx = 0.0f, maxy = 0.0f;
+                int initbb = 0;
+                while (j < diagram->shape[i].path_length) {
+                    int cmd = (int)diagram->shape[i].path[j++];
+                    scaled[k++] = (float)cmd;
+                    switch (cmd) {
+                    case PLOTTER_PATH_MOVE:
+                    case PLOTTER_PATH_LINE: {
+                        float xx = diagram->shape[i].path[j++] * sx;
+                        float yy = diagram->shape[i].path[j++] * sy;
+                        scaled[k++] = xx;
+                        scaled[k++] = yy;
+                        if (!initbb) { minx = maxx = xx; miny = maxy = yy; initbb = 1; }
+                        if (xx < minx) minx = xx; if (xx > maxx) maxx = xx;
+                        if (yy < miny) miny = yy; if (yy > maxy) maxy = yy;
+                        break;
+                    }
+                    case PLOTTER_PATH_BEZIER: {
+                        float x1 = diagram->shape[i].path[j++] * sx;
+                        float y1 = diagram->shape[i].path[j++] * sy;
+                        float x2 = diagram->shape[i].path[j++] * sx;
+                        float y2 = diagram->shape[i].path[j++] * sy;
+                        float x3 = diagram->shape[i].path[j++] * sx;
+                        float y3 = diagram->shape[i].path[j++] * sy;
+                        scaled[k++] = x1; scaled[k++] = y1;
+                        scaled[k++] = x2; scaled[k++] = y2;
+                        scaled[k++] = x3; scaled[k++] = y3;
+                        if (!initbb) { minx = maxx = x1; miny = maxy = y1; initbb = 1; }
+                        if (x1 < minx) minx = x1; if (x1 > maxx) maxx = x1;
+                        if (y1 < miny) miny = y1; if (y1 > maxy) maxy = y1;
+                        if (x2 < minx) minx = x2; if (x2 > maxx) maxx = x2;
+                        if (y2 < miny) miny = y2; if (y2 > maxy) maxy = y2;
+                        if (x3 < minx) minx = x3; if (x3 > maxx) maxx = x3;
+                        if (y3 < miny) miny = y3; if (y3 > maxy) maxy = y3;
+                        break;
+                    }
+                    case PLOTTER_PATH_CLOSE:
+                    default:
+                        break;
+                    }
+                }
+                int lx = (int)floorf(minx) + x;
+                int rx = (int)ceilf(maxx) + x;
+                int ty = (int)floorf(miny) + y;
+                int by = (int)ceilf(maxy) + y;
+                if (!(rx < clip->x0 || lx >= clip->x1 || by < clip->y0 || ty >= clip->y1)) {
+                    int same = combo_active &&
+                        combo_style.stroke_type == pstyle.stroke_type &&
+                        combo_style.fill_type == pstyle.fill_type &&
+                        combo_style.stroke_colour == pstyle.stroke_colour &&
+                        combo_style.fill_colour == pstyle.fill_colour &&
+                        combo_style.stroke_width == pstyle.stroke_width;
+                    if (!same) {
+                        if (combo_active && combo_len > 0) {
+                            res = ctx->plot->path(ctx, &combo_style, combo, combo_len, transform);
+                            if (res != NSERROR_OK) { if (scaled) free(scaled); if (combo) free(combo); return false; }
+                            combo_len = 0;
+                        }
+                        combo_style = pstyle;
+                        combo_active = 1;
+                    }
+                    if (combo_len + k > combo_cap) {
+                        unsigned int ncap = combo_cap ? combo_cap * 2 : k;
+                        while (ncap < combo_len + k) ncap *= 2;
+                        float *nbuf = realloc(combo, sizeof(float) * ncap);
+                        if (nbuf == NULL) { if (scaled) free(scaled); if (combo) free(combo); return false; }
+                        combo = nbuf;
+                        combo_cap = ncap;
+                    }
+                    memcpy(combo + combo_len, scaled, sizeof(float) * k);
+                    combo_len += k;
+                }
+            } else {
+                res = ctx->plot->path(ctx,
+                        &pstyle,
+                        diagram->shape[i].path,
+                        diagram->shape[i].path_length,
+                        transform);
+                if (res != NSERROR_OK) { if (scaled) free(scaled); if (combo) free(combo); return false; }
+            }
 
-		} else if (diagram->shape[i].text) {
-			px = transform[0] * diagram->shape[i].text_x +
-				transform[2] * diagram->shape[i].text_y +
-				transform[4];
-			py = transform[1] * diagram->shape[i].text_x +
-				transform[3] * diagram->shape[i].text_y +
-				transform[5];
+        } else if (diagram->shape[i].text) {
+            if (combo_active && combo_len > 0) {
+                res = ctx->plot->path(ctx, &combo_style, combo, combo_len, transform);
+                if (res != NSERROR_OK) { if (scaled) free(scaled); if (combo) free(combo); return false; }
+                combo_len = 0;
+                combo_active = 0;
+            }
+            px = (int)(diagram->shape[i].text_x * sx) + transform[4];
+            py = (int)(diagram->shape[i].text_y * sy) + transform[5];
 
-			fstyle.background = 0xffffff;
-			fstyle.foreground = 0x000000;
-			fstyle.size = (8 * PLOT_STYLE_SCALE) * scale;
+            fstyle.background = 0xffffff;
+            fstyle.foreground = 0x000000;
+            fstyle.size = (8 * PLOT_STYLE_SCALE) * scale;
 
-			res = ctx->plot->text(ctx,
-					      &fstyle,
-					      px, py,
-					      diagram->shape[i].text,
-					      strlen(diagram->shape[i].text));
-			if (res != NSERROR_OK) {
-				return false;
-			}
-		}
-	}
+            res = ctx->plot->text(ctx,
+                      &fstyle,
+                      px, py,
+                      diagram->shape[i].text,
+                      strlen(diagram->shape[i].text));
+            if (res != NSERROR_OK) { if (scaled) free(scaled); if (combo) free(combo); return false; }
+        }
+    }
 
 #undef BGR
-
-	return true;
+    if (combo_active && combo_len > 0) {
+        res = ctx->plot->path(ctx, &combo_style, combo, combo_len, transform);
+        if (res != NSERROR_OK) { if (scaled) free(scaled); if (combo) free(combo); return false; }
+    }
+    if (scaled) free(scaled);
+    if (combo) free(combo);
+    return true;
 }
 
 
@@ -298,11 +398,11 @@ svg_redraw_tiled_internal(svg_content *svg,
  */
 static bool
 svg_redraw(struct content *c,
-	   struct content_redraw_data *data,
-	   const struct rect *clip,
-	   const struct redraw_context *ctx)
+           struct content_redraw_data *data,
+           const struct rect *clip,
+           const struct redraw_context *ctx)
 {
-	svg_content *svg = (svg_content *)c;
+    svg_content *svg = (svg_content *)c;
 
 	if ((data->width <= 0) && (data->height <= 0)) {
 		/* No point trying to plot SVG if it does not occupy a valid
@@ -310,13 +410,12 @@ svg_redraw(struct content *c,
 		return true;
 	}
 
-	if ((data->repeat_x == false) && (data->repeat_y == false)) {
-		/* Simple case: SVG is not tiled */
-		return svg_redraw_internal(svg, data->x, data->y,
-				data->width, data->height,
-				clip, ctx, data->scale,
-				data->background_colour);
-	}
+    if ((data->repeat_x == false) && (data->repeat_y == false)) {
+        return svg_redraw_internal(svg, data->x, data->y,
+                data->width, data->height,
+                clip, ctx, data->scale,
+                data->background_colour);
+    }
 
 	return svg_redraw_tiled_internal(svg, data, clip, ctx);
 }
@@ -328,10 +427,10 @@ svg_redraw(struct content *c,
 
 static void svg_destroy(struct content *c)
 {
-	svg_content *svg = (svg_content *) c;
+    svg_content *svg = (svg_content *) c;
 
-	if (svg->diagram != NULL)
-		svgtiny_free(svg->diagram);
+    if (svg->diagram != NULL)
+        svgtiny_free(svg->diagram);
 }
 
 
