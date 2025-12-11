@@ -1489,19 +1489,19 @@ nsws_window_event_callback(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 		break;
 
 	case WM_CREATE:
-		/*
-		 * To cause all the component child windows to be
-		 * re-sized correctly a WM_SIZE message of the actual
-		 * created size must be sent.
-		 *
-		 * The message must be posted here because the actual
-		 * size values of the component windows are not known
-		 * until after the WM_CREATE message is dispatched.
-		 */
-		GetClientRect(hwnd, &rmain);
-		PostMessage(hwnd, WM_SIZE, 0,
-			    MAKELPARAM(rmain.right, rmain.bottom));
 		break;
+
+	case WM_CLOSE: {
+		RECT r;
+		GetWindowRect(hwnd, &r);
+		nsoption_set_int(window_x, r.left);
+		nsoption_set_int(window_y, r.top);
+		nsoption_set_int(window_width, r.right - r.left);
+		nsoption_set_int(window_height, r.bottom - r.top);
+		nsws_prefs_save();
+		DestroyWindow(hwnd);
+		return 0;
+	}
 
 	case WM_CONTEXTMENU:
 		if (nsws_ctx_menu(gw, hwnd, GET_X_LPARAM(lparam),
@@ -1706,7 +1706,14 @@ win32_window_create(struct browser_window *bw,
 
 	font_hwnd = gw->drawingarea;
 	open_windows++;
-	ShowWindow(gw->main, SW_SHOWNORMAL);
+	if ((nsoption_int(window_width) < 100) ||
+	    (nsoption_int(window_height) < 100) ||
+	    (nsoption_int(window_x) < 0) ||
+	    (nsoption_int(window_y) < 0)) {
+		ShowWindow(gw->main, SW_MAXIMIZE);
+	} else {
+		ShowWindow(gw->main, SW_SHOWNORMAL);
+	}
 
 	return gw;
 }
