@@ -20,7 +20,7 @@ extern "C"
  *
  * \param[in]  pw     Client data.
  * \param[in]  style  Style to measure font for, or NULL.
- * \param[in]  unit   Either CSS_UNIT_EX, or CSS_UNIT_CH.
+ * \param[in]  unit   Either CSS_UNIT_EX, CSS_UNIT_CH, or CSS_UNIT_IC.
  * \return length in CSS pixels.
  */
 typedef css_fixed (*css_unit_len_measure)(

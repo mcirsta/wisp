@@ -98,20 +98,25 @@ typedef enum css_unit {
 	CSS_UNIT_VMIN               = 0x0f,
 	CSS_UNIT_VMAX               = 0x10,
 	CSS_UNIT_Q                  = 0x11,
+	CSS_UNIT_IC                 = 0x12,
+	CSS_UNIT_CQW                = 0x13,
+	CSS_UNIT_CQH                = 0x14,
+	CSS_UNIT_CQI                = 0x15,
+	CSS_UNIT_CQB                = 0x16,
 
-	CSS_UNIT_PCT                = 0x15,	/* Percentage */
+	CSS_UNIT_PCT                = 0x1b,	/* Percentage */
 
-	CSS_UNIT_DEG                = 0x16,
-	CSS_UNIT_GRAD               = 0x17,
-	CSS_UNIT_RAD                = 0x18,
+	CSS_UNIT_DEG                = 0x1c,
+	CSS_UNIT_GRAD               = 0x1d,
+	CSS_UNIT_RAD                = 0x1e,
 
-	CSS_UNIT_MS                 = 0x19,
-	CSS_UNIT_S                  = 0x1a,
+	CSS_UNIT_MS                 = 0x1f,
+	CSS_UNIT_S                  = 0x20,
 
-	CSS_UNIT_HZ                 = 0x1b,
-	CSS_UNIT_KHZ                = 0x1c,
+	CSS_UNIT_HZ                 = 0x21,
+	CSS_UNIT_KHZ                = 0x22,
 
-	CSS_UNIT_CALC               = 0x1d  /**< Un-resolved calc() */
+	CSS_UNIT_CALC               = 0x23  /**< Un-resolved calc() */
 } css_unit;
 
 /**

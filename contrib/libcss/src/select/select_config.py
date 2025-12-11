@@ -9,7 +9,7 @@
 # Args: see docstring for class CSSValue in select_generator.py.
 values = {
     ('length', 'css_fixed', 4, '0',
-        'unit', 'css_unit', 5, 'CSS_UNIT_PX'),
+        'unit', 'css_unit', 6, 'CSS_UNIT_PX'),
     ('integer', 'int32_t', 4, '0'),
     ('fixed', 'css_fixed', 4, '0'),
     ('color', 'css_color', 4, '0'),

@@ -41,6 +41,16 @@ static inline css_unit css_unit__map_viewport_units(
 				CSS_WRITING_MODE_HORIZONTAL_TB) ?
 				CSS_UNIT_VW : CSS_UNIT_VH;
 
+	case CSS_UNIT_CQI:
+		return (style != NULL && get_writing_mode(style) !=
+				CSS_WRITING_MODE_HORIZONTAL_TB) ?
+				CSS_UNIT_CQH : CSS_UNIT_CQW;
+
+	case CSS_UNIT_CQB:
+		return (style != NULL && get_writing_mode(style) !=
+				CSS_WRITING_MODE_HORIZONTAL_TB) ?
+				CSS_UNIT_CQW : CSS_UNIT_CQH;
+
 	case CSS_UNIT_VMIN:
 		return (viewport_height < viewport_width) ?
 				CSS_UNIT_VH : CSS_UNIT_VW;
@@ -75,6 +85,7 @@ static inline css_fixed css_unit__absolute_len2pt(
 	assert(unit != CSS_UNIT_EM &&
 	       unit != CSS_UNIT_EX &&
 	       unit != CSS_UNIT_CH &&
+	       unit != CSS_UNIT_IC &&
 	       unit != CSS_UNIT_REM);
 
 	switch (css_unit__map_viewport_units(style,
@@ -237,6 +248,17 @@ static inline css_fixed css_unit__px_per_unit(
 				viewport_height,
 				viewport_width), FLTTOFIX(0.4));
 
+	case CSS_UNIT_IC:
+		if (measure != NULL) {
+			return measure(pw, ref_style, CSS_UNIT_IC);
+		}
+		return css_unit__font_size_px(
+				ref_style,
+				font_size_default,
+				font_size_minimum,
+				viewport_height,
+				viewport_width);
+
 	case CSS_UNIT_PX:
 		return F_1;
 
@@ -271,6 +293,10 @@ static inline css_fixed css_unit__px_per_unit(
 
 	case CSS_UNIT_VW:
 		return FDIV(viewport_height, F_100);
+
+	case CSS_UNIT_CQW:
+	case CSS_UNIT_CQH:
+		return 0;
 
 	default:
 		return 0;
@@ -468,7 +494,8 @@ css_error css_unit_compute_absolute_font_size(
 
 		case CSS_UNIT_EM: /* Fall-through */
 		case CSS_UNIT_EX: /* Fall-through */
-		case CSS_UNIT_CH:
+		case CSS_UNIT_CH: /* Fall-through */
+		case CSS_UNIT_IC:
 			/* Parent relative units. */
 			size->data.length.value = FMUL(
 					size->data.length.value, ref_len.value);
@@ -484,6 +511,10 @@ css_error css_unit_compute_absolute_font_size(
 				size->data.length.value = FMUL(
 						size->data.length.value,
 						FLTTOFIX(0.4));
+				break;
+
+			case CSS_UNIT_IC:
+				/* 1ic is typically 1em */
 				break;
 
 			default:

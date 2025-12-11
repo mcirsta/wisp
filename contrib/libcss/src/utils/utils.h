@@ -8,10 +8,16 @@
 #ifndef css_utils_h_
 #define css_utils_h_
 
+#include <stdio.h>
+
 #include <libwapcaplet/libwapcaplet.h>
 
 #include <libcss/types.h>
 #include <libcss/errors.h>
+
+#define CSS_UNIMPLEMENTED(msg) \
+	fprintf(stderr, "[LibCSS Warning] Unimplemented feature encountered at %s:%d: %s\n", \
+			__FILE__, __LINE__, msg)
 
 #ifndef max
 #define max(a,b) ((a)>(b)?(a):(b))

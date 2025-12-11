@@ -66,6 +66,11 @@ typedef enum unit {
 	UNIT_VMIN = (1u << 8) + 15,
 	UNIT_VMAX = (1u << 8) + 16,
 	UNIT_Q    = (1u << 8) + 17,
+	UNIT_IC   = (1u << 8) + 18,
+	UNIT_CQW  = (1u << 8) + 19,
+	UNIT_CQH  = (1u << 8) + 20,
+	UNIT_CQI  = (1u << 8) + 21,
+	UNIT_CQB  = (1u << 8) + 22,
 
 	UNIT_PCT = (1 << 9),
 

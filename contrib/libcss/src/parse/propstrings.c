@@ -493,6 +493,10 @@ const stringmap_entry stringmap[LAST_KNOWN] = {
 	SMAP("inline-grid"),
 	SMAP("sticky"),
 	SMAP("calc"),
+	SMAP("lab"),
+	SMAP("lch"),
+	SMAP("oklab"),
+	SMAP("oklch"),
 
 	/* Named colours */
 	SMAP("aliceblue"),
