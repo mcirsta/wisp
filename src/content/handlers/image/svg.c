@@ -40,6 +40,141 @@
 
 #include "content/handlers/image/svg.h"
 
+/* Maximum number of floats sent per plotter path call to avoid oversized buffers */
+#define SVG_COMBO_FLUSH_LIMIT 960
+
+/* Split a path buffer into safe chunks at MOVE boundaries and plot each chunk */
+static nserror svg_plot_path_chunked(const struct redraw_context *ctx,
+                                     const plot_style_t *style,
+                                     const float *p,
+                                     unsigned int n,
+                                     const float transform[6])
+{
+    unsigned int pos = 0;
+    unsigned int grp_start = 0;
+    unsigned int grp_len = 0;
+    unsigned int grp_moves = 0;
+    float gb_minx = 0.0f, gb_miny = 0.0f, gb_maxx = 0.0f, gb_maxy = 0.0f;
+    int gb_init = 0;
+    nserror r = NSERROR_OK;
+
+    while (pos < n) {
+        while (pos < n && (int)p[pos] != PLOTTER_PATH_MOVE) pos++;
+        if (pos >= n) break;
+
+        unsigned int sp_start = pos;
+        float sb_minx = 0.0f, sb_miny = 0.0f, sb_maxx = 0.0f, sb_maxy = 0.0f;
+        int sb_init = 0;
+
+        while (pos < n) {
+            int cmd = (int)p[pos++];
+            if (cmd == PLOTTER_PATH_MOVE || cmd == PLOTTER_PATH_LINE) {
+                float xx = p[pos++];
+                float yy = p[pos++];
+                if (!sb_init) { sb_minx = sb_maxx = xx; sb_miny = sb_maxy = yy; sb_init = 1; }
+                if (xx < sb_minx) sb_minx = xx; if (xx > sb_maxx) sb_maxx = xx;
+                if (yy < sb_miny) sb_miny = yy; if (yy > sb_maxy) sb_maxy = yy;
+            } else if (cmd == PLOTTER_PATH_BEZIER) {
+                float x1 = p[pos++]; float y1 = p[pos++];
+                float x2 = p[pos++]; float y2 = p[pos++];
+                float x3 = p[pos++]; float y3 = p[pos++];
+                if (!sb_init) { sb_minx = sb_maxx = x1; sb_miny = sb_maxy = y1; sb_init = 1; }
+                if (x1 < sb_minx) sb_minx = x1; if (x1 > sb_maxx) sb_maxx = x1;
+                if (y1 < sb_miny) sb_miny = y1; if (y1 > sb_maxy) sb_maxy = y1;
+                if (x2 < sb_minx) sb_minx = x2; if (x2 > sb_maxx) sb_maxx = x2;
+                if (y2 < sb_miny) sb_miny = y2; if (y2 > sb_maxy) sb_maxy = y2;
+                if (x3 < sb_minx) sb_minx = x3; if (x3 > sb_maxx) sb_maxx = x3;
+                if (y3 < sb_miny) sb_miny = y3; if (y3 > sb_maxy) sb_maxy = y3;
+            } else if (cmd == PLOTTER_PATH_CLOSE) {
+                /* no coords */
+            }
+            if (pos < n && (int)p[pos] == PLOTTER_PATH_MOVE) break;
+        }
+        unsigned int sp_end = pos;
+        unsigned int sp_len = sp_end - sp_start;
+        NSLOG(neosurf, INFO, "SVG subpath parsed: sp_len=%u sbbox=%.2f,%.2f..%.2f,%.2f", sp_len, sb_minx, sb_miny, sb_maxx, sb_maxy);
+
+        if (grp_len == 0) {
+            grp_start = sp_start;
+            grp_len = sp_len;
+            grp_moves = 1;
+            gb_minx = sb_minx; gb_miny = sb_miny; gb_maxx = sb_maxx; gb_maxy = sb_maxy; gb_init = sb_init;
+            continue;
+        }
+
+        int overlap = (sb_maxx >= gb_minx && sb_minx <= gb_maxx && sb_maxy >= gb_miny && sb_miny <= gb_maxy);
+        NSLOG(neosurf, INFO, "SVG group decision: grp_len=%u grp_moves=%u sb_len=%u gbbox=%.2f,%.2f..%.2f,%.2f sbbox=%.2f,%.2f..%.2f,%.2f overlap=%d next_total=%u limit=%u",
+              grp_len, grp_moves, sp_len,
+              gb_minx, gb_miny, gb_maxx, gb_maxy,
+              sb_minx, sb_miny, sb_maxx, sb_maxy,
+              overlap, grp_len + sp_len, SVG_COMBO_FLUSH_LIMIT);
+        if (!overlap || grp_len + sp_len > SVG_COMBO_FLUSH_LIMIT) {
+            NSLOG(neosurf, INFO, "SVG chunk flush: len=%u moves=%u reason=%s", grp_len, grp_moves, (!overlap ? "disjoint" : "limit"));
+            nserror rr = ctx->plot->path(ctx, style, p + grp_start, grp_len, transform);
+            if (rr != NSERROR_OK) {
+                NSLOG(neosurf, ERROR, "SVG chunk flush failed: len=%u err=%d; splitting fallback", grp_len, rr);
+                unsigned int pos2 = grp_start;
+                while (pos2 < grp_start + grp_len) {
+                    while (pos2 < grp_start + grp_len && (int)p[pos2] != PLOTTER_PATH_MOVE) pos2++;
+                    if (pos2 >= grp_start + grp_len) break;
+                    unsigned int sp = pos2;
+                    unsigned int ep = sp + 1;
+                    while (ep < grp_start + grp_len) {
+                        int c = (int)p[ep++];
+                        if (c == PLOTTER_PATH_MOVE || c == PLOTTER_PATH_LINE) { ep += 2; }
+                        else if (c == PLOTTER_PATH_BEZIER) { ep += 6; }
+                        else if (c == PLOTTER_PATH_CLOSE) { }
+                        if (ep < grp_start + grp_len && (int)p[ep] == PLOTTER_PATH_MOVE) break;
+                    }
+                    unsigned int slen = ep - sp;
+                    NSLOG(neosurf, INFO, "SVG chunk fallback split: subpath_len=%u", slen);
+                    nserror rr2 = ctx->plot->path(ctx, style, p + sp, slen, transform);
+                    if (rr2 != NSERROR_OK) { NSLOG(neosurf, ERROR, "SVG fallback subpath failed: len=%u err=%d", slen, rr2); r = rr2; }
+                    pos2 = ep;
+                }
+            }
+            grp_start = sp_start;
+            grp_len = sp_len;
+            grp_moves = 1;
+            gb_minx = sb_minx; gb_miny = sb_miny; gb_maxx = sb_maxx; gb_maxy = sb_maxy; gb_init = sb_init;
+        } else {
+            grp_len += sp_len;
+            grp_moves += 1;
+            if (!gb_init) { gb_minx = sb_minx; gb_miny = sb_miny; gb_maxx = sb_maxx; gb_maxy = sb_maxy; gb_init = sb_init; }
+            if (sb_minx < gb_minx) gb_minx = sb_minx; if (sb_maxx > gb_maxx) gb_maxx = sb_maxx;
+            if (sb_miny < gb_miny) gb_miny = sb_miny; if (sb_maxy > gb_maxy) gb_maxy = sb_maxy;
+        }
+    }
+
+    if (grp_len > 0) {
+        NSLOG(neosurf, INFO, "SVG chunk final flush: len=%u moves=%u", grp_len, grp_moves);
+        nserror rr = ctx->plot->path(ctx, style, p + grp_start, grp_len, transform);
+        if (rr != NSERROR_OK) {
+            NSLOG(neosurf, ERROR, "SVG chunk final flush failed: len=%u err=%d; splitting fallback", grp_len, rr);
+            unsigned int pos2 = grp_start;
+            while (pos2 < grp_start + grp_len) {
+                while (pos2 < grp_start + grp_len && (int)p[pos2] != PLOTTER_PATH_MOVE) pos2++;
+                if (pos2 >= grp_start + grp_len) break;
+                unsigned int sp = pos2;
+                unsigned int ep = sp + 1;
+                while (ep < grp_start + grp_len) {
+                    int c = (int)p[ep++];
+                    if (c == PLOTTER_PATH_MOVE || c == PLOTTER_PATH_LINE) { ep += 2; }
+                    else if (c == PLOTTER_PATH_BEZIER) { ep += 6; }
+                    else if (c == PLOTTER_PATH_CLOSE) { }
+                    if (ep < grp_start + grp_len && (int)p[ep] == PLOTTER_PATH_MOVE) break;
+                }
+                unsigned int slen = ep - sp;
+                NSLOG(neosurf, INFO, "SVG chunk fallback split: subpath_len=%u", slen);
+                nserror rr2 = ctx->plot->path(ctx, style, p + sp, slen, transform);
+                if (rr2 != NSERROR_OK) { NSLOG(neosurf, ERROR, "SVG fallback subpath failed: len=%u err=%d", slen, rr2); r = rr2; }
+                pos2 = ep;
+            }
+        }
+    }
+    return r;
+}
+
 typedef struct svg_content {
     struct content base;
 
@@ -191,6 +326,9 @@ svg_redraw_internal(svg_content *svg,
     transform[4] = x;
     transform[5] = y;
 
+    NSLOG(neosurf, INFO, "SVG redraw start: url=%s scale=%.3f clip=%d,%d..%d,%d limit=%u",
+          url_str, scale, clip->x0, clip->y0, clip->x1, clip->y1, SVG_COMBO_FLUSH_LIMIT);
+
 #define BGR(c) (((svgtiny_RED((c))) |					\
 		 (svgtiny_GREEN((c)) << 8) |				\
 		 (svgtiny_BLUE((c)) << 16)))
@@ -284,6 +422,31 @@ svg_redraw_internal(svg_content *svg,
                 int ty = (int)floorf(miny) + y;
                 int by = (int)ceilf(maxy) + y;
                 if (!(rx < clip->x0 || lx >= clip->x1 || by < clip->y0 || ty >= clip->y1)) {
+                    NSLOG(neosurf, INFO,
+                          "SVG path begin: url=%s index=%u orig_len=%u scaled_len=%u bbox=%d,%d..%d,%d",
+                          url_str, i, diagram->shape[i].path_length, k, lx, ty, rx, by);
+#ifdef NEOSURF_SVG_COMBO_DISABLE
+                    res = ctx->plot->path(ctx, &pstyle, scaled, k, transform);
+                    if (res != NSERROR_OK) {
+                        ok = false;
+                        int stroke_rgb = (svgtiny_RED(diagram->shape[i].stroke) << 16) |
+                                         (svgtiny_GREEN(diagram->shape[i].stroke) << 8) |
+                                         (svgtiny_BLUE(diagram->shape[i].stroke));
+                        int fill_rgb = (svgtiny_RED(diagram->shape[i].fill) << 16) |
+                                       (svgtiny_GREEN(diagram->shape[i].fill) << 8) |
+                                       (svgtiny_BLUE(diagram->shape[i].fill));
+                        NSLOG(neosurf, ERROR,
+                              "SVG render failed: url=%s element=path index=%u path_len=%u err=%d stroke=#%06x fill=#%06x stroke_w=%d",
+                              url_str,
+                              i,
+                              diagram->shape[i].path_length,
+                              res,
+                              stroke_rgb,
+                              fill_rgb,
+                              diagram->shape[i].stroke_width);
+                    }
+                    continue;
+#endif
                     int same = combo_active &&
                         combo_style.stroke_type == pstyle.stroke_type &&
                         combo_style.fill_type == pstyle.fill_type &&
@@ -291,13 +454,46 @@ svg_redraw_internal(svg_content *svg,
                         combo_style.fill_colour == pstyle.fill_colour &&
                         combo_style.stroke_width == pstyle.stroke_width;
                     if (!same) {
+                        /* Flush previous combo group in chunks when style changes */
                         if (combo_active && combo_len > 0) {
-                            res = ctx->plot->path(ctx, &combo_style, combo, combo_len, transform);
+                            NSLOG(neosurf, INFO, "SVG combo style change flush: len=%u", combo_len);
+                            res = svg_plot_path_chunked(ctx, &combo_style, combo, combo_len, transform);
                             if (res != NSERROR_OK) { ok = false; NSLOG(neosurf, ERROR, "SVG render failed: url=%s element=path combo_flush len=%u", url_str, combo_len); }
                             combo_len = 0;
                         }
                         combo_style = pstyle;
                         combo_active = 1;
+                    }
+                    /* Flush combo if adding current path would exceed chunk limit */
+                    if (combo_active && combo_len > 0 && combo_len + k > SVG_COMBO_FLUSH_LIMIT) {
+                        NSLOG(neosurf, INFO, "SVG combo limit flush: combo_len=%u next_len=%u", combo_len, k);
+                        res = svg_plot_path_chunked(ctx, &combo_style, combo, combo_len, transform);
+                        if (res != NSERROR_OK) { ok = false; NSLOG(neosurf, ERROR, "SVG render failed: url=%s element=path combo_flush len=%u", url_str, combo_len); }
+                        combo_len = 0;
+                    }
+                    if (k > SVG_COMBO_FLUSH_LIMIT) {
+                        NSLOG(neosurf, INFO, "SVG direct chunk plot: scaled_len=%u limit=%u", k, SVG_COMBO_FLUSH_LIMIT);
+                        res = svg_plot_path_chunked(ctx, &pstyle, scaled, k, transform);
+                        if (res != NSERROR_OK) {
+                            ok = false;
+                            int stroke_rgb = (svgtiny_RED(diagram->shape[i].stroke) << 16) |
+                                             (svgtiny_GREEN(diagram->shape[i].stroke) << 8) |
+                                             (svgtiny_BLUE(diagram->shape[i].stroke));
+                            int fill_rgb = (svgtiny_RED(diagram->shape[i].fill) << 16) |
+                                           (svgtiny_GREEN(diagram->shape[i].fill) << 8) |
+                                           (svgtiny_BLUE(diagram->shape[i].fill));
+                            NSLOG(neosurf, ERROR,
+                                  "SVG render failed: url=%s element=path index=%u path_len=%u scaled_len=%u err=%d stroke=#%06x fill=#%06x stroke_w=%d",
+                                  url_str,
+                                  i,
+                                  diagram->shape[i].path_length,
+                                  k,
+                                  res,
+                                  stroke_rgb,
+                                  fill_rgb,
+                                  diagram->shape[i].stroke_width);
+                        }
+                        continue;
                     }
                     if (combo_len + k > combo_cap) {
                         unsigned int ncap = combo_cap ? combo_cap * 2 : k;
@@ -309,6 +505,13 @@ svg_redraw_internal(svg_content *svg,
                 }
                 memcpy(combo + combo_len, scaled, sizeof(float) * k);
                 combo_len += k;
+                /* Periodic chunked flush to keep combo buffer bounded */
+                if (combo_len >= SVG_COMBO_FLUSH_LIMIT) {
+                    NSLOG(neosurf, INFO, "SVG periodic combo flush: len=%u", combo_len);
+                    res = svg_plot_path_chunked(ctx, &combo_style, combo, combo_len, transform);
+                    if (res != NSERROR_OK) { ok = false; NSLOG(neosurf, ERROR, "SVG render failed: url=%s element=path combo_flush len=%u", url_str, combo_len); }
+                    combo_len = 0;
+                }
             }
         } else {
                 res = ctx->plot->path(ctx,
@@ -325,10 +528,11 @@ svg_redraw_internal(svg_content *svg,
                                    (svgtiny_GREEN(diagram->shape[i].fill) << 8) |
                                    (svgtiny_BLUE(diagram->shape[i].fill));
                     NSLOG(neosurf, ERROR,
-                          "SVG render failed: url=%s element=path index=%u path_len=%u stroke=#%06x fill=#%06x stroke_w=%d",
+                          "SVG render failed: url=%s element=path index=%u path_len=%u err=%d stroke=#%06x fill=#%06x stroke_w=%d",
                           url_str,
                           i,
                           diagram->shape[i].path_length,
+                          res,
                           stroke_rgb,
                           fill_rgb,
                           diagram->shape[i].stroke_width);
@@ -336,8 +540,9 @@ svg_redraw_internal(svg_content *svg,
         }
 
     } else if (diagram->shape[i].text) {
+        /* Ensure combo is flushed safely before plotting text */
         if (combo_active && combo_len > 0) {
-                res = ctx->plot->path(ctx, &combo_style, combo, combo_len, transform);
+                res = svg_plot_path_chunked(ctx, &combo_style, combo, combo_len, transform);
                 if (res != NSERROR_OK) { ok = false; NSLOG(neosurf, ERROR, "SVG render failed: url=%s element=text combo_flush", url_str); }
                 combo_len = 0;
                 combo_active = 0;
@@ -359,10 +564,12 @@ svg_redraw_internal(svg_content *svg,
     }
 
 #undef BGR
-    if (combo_active && combo_len > 0) {
-        res = ctx->plot->path(ctx, &combo_style, combo, combo_len, transform);
-        if (res != NSERROR_OK) { ok = false; NSLOG(neosurf, ERROR, "SVG render failed: url=%s element=path final_flush len=%u", url_str, combo_len); }
-    }
+    /* Final chunked flush of any remaining combined paths */
+        if (combo_active && combo_len > 0) {
+        NSLOG(neosurf, INFO, "SVG final combo flush: len=%u", combo_len);
+            res = svg_plot_path_chunked(ctx, &combo_style, combo, combo_len, transform);
+            if (res != NSERROR_OK) { ok = false; NSLOG(neosurf, ERROR, "SVG render failed: url=%s element=path final_flush len=%u", url_str, combo_len); }
+        }
     if (scaled) free(scaled);
     if (combo) free(combo);
     return ok;

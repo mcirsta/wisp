@@ -151,6 +151,22 @@ include(CTest)
     ${CMAKE_SOURCE_DIR}/src/test/svg_redraw_test.c
   )
 
+  add_neosurf_test(svg_redraw_extlink_test
+    ${CMAKE_SOURCE_DIR}/src/desktop/plot_style.c
+    ${CMAKE_SOURCE_DIR}/src/content/handlers/image/svg.c
+    ${CMAKE_SOURCE_DIR}/src/test/log.c
+    ${CMAKE_SOURCE_DIR}/src/test/content_stubs.c
+    ${CMAKE_SOURCE_DIR}/src/test/svg_redraw_extlink_test.c
+  )
+
+  add_neosurf_test(svg_redraw_comboflush_test
+    ${CMAKE_SOURCE_DIR}/src/desktop/plot_style.c
+    ${CMAKE_SOURCE_DIR}/src/content/handlers/image/svg.c
+    ${CMAKE_SOURCE_DIR}/src/test/log.c
+    ${CMAKE_SOURCE_DIR}/src/test/content_stubs.c
+    ${CMAKE_SOURCE_DIR}/src/test/svg_redraw_comboflush_test.c
+  )
+
   if(NOT WIN32)
     add_library(malloc_fig SHARED ${CMAKE_SOURCE_DIR}/src/test/malloc_fig.c)
     target_include_directories(malloc_fig PRIVATE ${CMAKE_SOURCE_DIR}/src)

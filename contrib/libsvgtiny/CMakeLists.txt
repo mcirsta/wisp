@@ -78,3 +78,11 @@ endforeach()
 
 add_custom_target(svgtiny_tests_canonical DEPENDS ${SVGTINY_TEST_CANON_OUTPUTS})
 add_dependencies(svgtiny_test_svg2mvg svgtiny_tests_canonical)
+
+# Additional large-path decode test without canonical compare
+set(WORDMARK_SVG "${CMAKE_SOURCE_DIR}/contrib/libsvgtiny/test/data/wikipedia-wordmark-en.svg")
+set(WORDMARK_SCRIPT "${CMAKE_BINARY_DIR}/contrib/libsvgtiny/test/wikipedia-wordmark-en.cmake")
+file(GENERATE OUTPUT "${WORDMARK_SCRIPT}" CONTENT
+"file(MAKE_DIRECTORY \"${SVGTINY_TEST_OUT_DIR}\")\nexecute_process(COMMAND \"$<TARGET_FILE:svgtiny_test_svg2mvg>\" \"${WORDMARK_SVG}\" \"1.0\" \"${SVGTINY_TEST_OUT_DIR}/wikipedia-wordmark-en.mvg\" RESULT_VARIABLE R)\nif(NOT R EQUAL 0)\n  message(FATAL_ERROR \"svgtiny_test_svg2mvg failed: wikipedia-wordmark-en\")\nendif()\n")
+add_test(NAME svgtiny_svg2mvg_wikipedia_wordmark_en
+         COMMAND ${CMAKE_COMMAND} -P "${WORDMARK_SCRIPT}")
