@@ -4205,16 +4205,20 @@ nserror llcache_handle_invalidate_cache_data(llcache_handle *handle)
 /* See llcache.h for documentation */
 nsurl *llcache_handle_get_url(const llcache_handle *handle)
 {
-	return handle->object != NULL ? handle->object->url : NULL;
+    return handle->object != NULL ? handle->object->url : NULL;
 }
 
 /* See llcache.h for documentation */
 const uint8_t *llcache_handle_get_source_data(const llcache_handle *handle,
-		size_t *size)
+        size_t *size)
 {
-	*size = handle->object != NULL ? handle->object->source_len : 0;
-
-	return handle->object != NULL ? handle->object->source_data : NULL;
+    if (handle->object != NULL) {
+        (void) llcache_retrieve_persisted_data(handle->object);
+        *size = handle->object->source_len;
+        return handle->object->source_data;
+    }
+    *size = 0;
+    return NULL;
 }
 
 /* See llcache.h for documentation */

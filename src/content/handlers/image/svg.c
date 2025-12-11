@@ -32,6 +32,7 @@
 #include <neosurf/utils/messages.h>
 #include <neosurf/utils/utils.h>
 #include <neosurf/utils/nsurl.h>
+#include <neosurf/utils/log.h>
 #include <neosurf/plotters.h>
 #include <neosurf/content.h>
 #include <neosurf/content/content_protected.h>
@@ -176,6 +177,8 @@ svg_redraw_internal(svg_content *svg,
     plot_font_style_t fstyle = *plot_style_font;
     plot_style_t pstyle;
     nserror res;
+    bool ok = true;
+    const char *url_str = nsurl_access(content_get_url(&svg->base));
 
 	assert(diagram);
 
@@ -290,7 +293,7 @@ svg_redraw_internal(svg_content *svg,
                     if (!same) {
                         if (combo_active && combo_len > 0) {
                             res = ctx->plot->path(ctx, &combo_style, combo, combo_len, transform);
-                            if (res != NSERROR_OK) { if (scaled) free(scaled); if (combo) free(combo); return false; }
+                            if (res != NSERROR_OK) { ok = false; NSLOG(neosurf, ERROR, "SVG render failed: url=%s element=path combo_flush len=%u", url_str, combo_len); }
                             combo_len = 0;
                         }
                         combo_style = pstyle;
@@ -300,26 +303,42 @@ svg_redraw_internal(svg_content *svg,
                         unsigned int ncap = combo_cap ? combo_cap * 2 : k;
                         while (ncap < combo_len + k) ncap *= 2;
                         float *nbuf = realloc(combo, sizeof(float) * ncap);
-                        if (nbuf == NULL) { if (scaled) free(scaled); if (combo) free(combo); return false; }
-                        combo = nbuf;
-                        combo_cap = ncap;
-                    }
-                    memcpy(combo + combo_len, scaled, sizeof(float) * k);
-                    combo_len += k;
+                    if (nbuf == NULL) { if (scaled) free(scaled); if (combo) free(combo); return false; }
+                    combo = nbuf;
+                    combo_cap = ncap;
                 }
-            } else {
+                memcpy(combo + combo_len, scaled, sizeof(float) * k);
+                combo_len += k;
+            }
+        } else {
                 res = ctx->plot->path(ctx,
                         &pstyle,
                         diagram->shape[i].path,
                         diagram->shape[i].path_length,
                         transform);
-                if (res != NSERROR_OK) { if (scaled) free(scaled); if (combo) free(combo); return false; }
-            }
+                if (res != NSERROR_OK) {
+                    ok = false;
+                    int stroke_rgb = (svgtiny_RED(diagram->shape[i].stroke) << 16) |
+                                     (svgtiny_GREEN(diagram->shape[i].stroke) << 8) |
+                                     (svgtiny_BLUE(diagram->shape[i].stroke));
+                    int fill_rgb = (svgtiny_RED(diagram->shape[i].fill) << 16) |
+                                   (svgtiny_GREEN(diagram->shape[i].fill) << 8) |
+                                   (svgtiny_BLUE(diagram->shape[i].fill));
+                    NSLOG(neosurf, ERROR,
+                          "SVG render failed: url=%s element=path index=%u path_len=%u stroke=#%06x fill=#%06x stroke_w=%d",
+                          url_str,
+                          i,
+                          diagram->shape[i].path_length,
+                          stroke_rgb,
+                          fill_rgb,
+                          diagram->shape[i].stroke_width);
+                }
+        }
 
-        } else if (diagram->shape[i].text) {
-            if (combo_active && combo_len > 0) {
+    } else if (diagram->shape[i].text) {
+        if (combo_active && combo_len > 0) {
                 res = ctx->plot->path(ctx, &combo_style, combo, combo_len, transform);
-                if (res != NSERROR_OK) { if (scaled) free(scaled); if (combo) free(combo); return false; }
+                if (res != NSERROR_OK) { ok = false; NSLOG(neosurf, ERROR, "SVG render failed: url=%s element=text combo_flush", url_str); }
                 combo_len = 0;
                 combo_active = 0;
             }
@@ -335,18 +354,18 @@ svg_redraw_internal(svg_content *svg,
                       px, py,
                       diagram->shape[i].text,
                       strlen(diagram->shape[i].text));
-            if (res != NSERROR_OK) { if (scaled) free(scaled); if (combo) free(combo); return false; }
+            if (res != NSERROR_OK) { ok = false; NSLOG(neosurf, ERROR, "SVG render failed: url=%s element=text index=%u pos=%d,%d text='%s'", url_str, i, px, py, diagram->shape[i].text); }
         }
     }
 
 #undef BGR
     if (combo_active && combo_len > 0) {
         res = ctx->plot->path(ctx, &combo_style, combo, combo_len, transform);
-        if (res != NSERROR_OK) { if (scaled) free(scaled); if (combo) free(combo); return false; }
+        if (res != NSERROR_OK) { ok = false; NSLOG(neosurf, ERROR, "SVG render failed: url=%s element=path final_flush len=%u", url_str, combo_len); }
     }
     if (scaled) free(scaled);
     if (combo) free(combo);
-    return true;
+    return ok;
 }
 
 

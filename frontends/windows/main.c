@@ -489,7 +489,7 @@ WinMain(HINSTANCE hInstance, HINSTANCE hLastInstance, LPSTR lpcli, int ncmd)
 	nslog_init(nslog_ensure, &argc, argv);
 
 	/* build resource path string vector */
-    respaths = nsws_init_resource("${APPDATA}\\NeoSurf:${PROGRAMFILES}\\NeoSurf\\share\\neosurf\\:"NEOSURF_WINDOWS_RESPATH":./src/resources");
+    respaths = nsws_init_resource("${APPDATA}\\NeoSurf:${PROGRAMFILES}\\NeoSurf\\share\\neosurf\\:"NEOSURF_WINDOWS_RESPATH);
 
 	/* Locate the correct user configuration directory path */
 	ret = get_config_home(&nsw32_config_home);

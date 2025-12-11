@@ -51,46 +51,86 @@ static const wchar_t *windowclassname_drawable = L"nswsdrawablewindow";
 static LRESULT
 nsws_drawable_wheel(struct gui_window *gw, HWND hwnd, WPARAM wparam)
 {
-	int i, z, delta;
-	int key = LOWORD(wparam);
-	DWORD command;
-	unsigned int newmessage = WM_VSCROLL;
-	UINT lines = 3;
+    int delta = GET_WHEEL_DELTA_WPARAM(wparam);
+    int key = LOWORD(wparam);
+    UINT lines = 3;
 
-	delta = GET_WHEEL_DELTA_WPARAM(wparam);
+    SystemParametersInfo(SPI_GETWHEELSCROLLLINES, 0, &lines, 0);
 
-	if (key == MK_SHIFT) {
-		z = delta / WHEEL_DELTA;
-		command = (z > 0) ? SB_LINERIGHT : SB_LINELEFT;
-		newmessage = WM_HSCROLL;
-		z = (z < 0) ? -1 * z : z;
+    if (key == MK_SHIFT) {
+        if (gw->requestscrollx != 0)
+            return 0;
 
-		for (i = 0; i < z; i++) {
-			SendMessage(hwnd, newmessage, MAKELONG(command, 0), 0);
-		}
-	} else {
-		/* add MK_CONTROL -> zoom */
+        SCROLLINFO si;
+        int mem;
+        int width, height;
 
-		SystemParametersInfo(SPI_GETWHEELSCROLLLINES, 0, &lines, 0);
+        si.cbSize = sizeof(si);
+        si.fMask = SIF_ALL;
+        GetScrollInfo(hwnd, SB_HORZ, &si);
+        mem = si.nPos;
 
-		if (lines == WHEEL_PAGESCROLL) {
-			command = (delta > 0) ? SB_PAGEUP : SB_PAGEDOWN;
-			z = delta / WHEEL_DELTA;
-			z = (z < 0) ? -1 * z : z;
-			for (i = 0; i < z; i++) {
-				SendMessage(hwnd, newmessage, MAKELONG(command, 0), 0);
-			}
-		} else {
-			command = (delta > 0) ? SB_LINEUP : SB_LINEDOWN;
-			z = (delta * (int)lines) / WHEEL_DELTA;
-			z = (z < 0) ? -1 * z : z;
-			for (i = 0; i < z; i++) {
-				SendMessage(hwnd, newmessage, MAKELONG(command, 0), 0);
-			}
-		}
-	}
+        int ticks = delta / WHEEL_DELTA;
+        int dir = (ticks > 0) ? 1 : -1;
+        int absTicks = (ticks < 0) ? -ticks : ticks;
+        int step = absTicks * 30;
+        si.nPos += dir * step;
 
-	return 0;
+        if ((gw->bw != NULL) &&
+            (browser_window_get_extents(gw->bw, true, &width, &height) == NSERROR_OK)) {
+            si.nPos = min(si.nPos, width - gw->width);
+        }
+        si.nPos = max(si.nPos, 0);
+        SetScrollInfo(hwnd, SB_HORZ, &si, TRUE);
+        GetScrollInfo(hwnd, SB_HORZ, &si);
+        if (si.nPos != mem) {
+            struct rect rect;
+            rect.x0 = rect.x1 = gw->scrollx + gw->requestscrollx + si.nPos - mem;
+            rect.y0 = rect.y1 = gw->scrolly;
+            win32_window_set_scroll(gw, &rect);
+        }
+    } else {
+        if (gw->requestscrolly != 0)
+            return 0;
+
+        SCROLLINFO si;
+        int mem;
+        int width, height;
+
+        si.cbSize = sizeof(si);
+        si.fMask = SIF_ALL;
+        GetScrollInfo(hwnd, SB_VERT, &si);
+        mem = si.nPos;
+
+        int step;
+        if (lines == WHEEL_PAGESCROLL) {
+            int z = delta / WHEEL_DELTA;
+            int absTicks = (z < 0) ? -z : z;
+            step = absTicks * gw->height;
+            si.nPos += (delta > 0) ? -step : step;
+        } else {
+            int z = (delta * (int)lines) / WHEEL_DELTA;
+            int absLines = (z < 0) ? -z : z;
+            step = absLines * 30;
+            si.nPos += (delta > 0) ? -step : step;
+        }
+
+        if ((gw->bw != NULL) &&
+            (browser_window_get_extents(gw->bw, true, &width, &height) == NSERROR_OK)) {
+            si.nPos = min(si.nPos, height - gw->height);
+        }
+        si.nPos = max(si.nPos, 0);
+        SetScrollInfo(hwnd, SB_VERT, &si, TRUE);
+        GetScrollInfo(hwnd, SB_VERT, &si);
+        if (si.nPos != mem) {
+            struct rect rect;
+            rect.x0 = rect.x1 = gw->scrollx;
+            rect.y0 = rect.y1 = gw->scrolly + gw->requestscrolly + si.nPos - mem;
+            win32_window_set_scroll(gw, &rect);
+        }
+    }
+
+    return 0;
 }
 
 
