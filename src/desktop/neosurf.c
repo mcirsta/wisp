@@ -199,7 +199,7 @@ nserror neosurf_init(const char *store_path)
 		store_path;
 
     /* image handler bitmap cache */
-    NSLOG(neosurf, INFO, "init image_cache limit %"PRIsizet" hyst %"PRIsizet" speculate %d",
+    NSLOG(neosurf, INFO, "init image_cache limit %"PRIsizet" hyst %"PRIsizet" speculate %"PRIsizet,
           image_cache_parameters.limit, image_cache_parameters.hysteresis, image_cache_parameters.speculative_small);
     ret = image_cache_init(&image_cache_parameters);
     if (ret != NSERROR_OK) {

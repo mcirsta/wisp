@@ -37,6 +37,11 @@ static inline uint32_t css__to_parse_unit(css_unit u)
 	case CSS_UNIT_VMIN: return UNIT_VMIN;
 	case CSS_UNIT_VMAX: return UNIT_VMAX;
 	case CSS_UNIT_Q:    return UNIT_Q;
+	case CSS_UNIT_IC:   return UNIT_IC;
+	case CSS_UNIT_CQW:  return UNIT_CQW;
+	case CSS_UNIT_CQH:  return UNIT_CQH;
+	case CSS_UNIT_CQI:  return UNIT_CQI;
+	case CSS_UNIT_CQB:  return UNIT_CQB;
 	case CSS_UNIT_PCT:  return UNIT_PCT;
 	case CSS_UNIT_DEG:  return UNIT_DEG;
 	case CSS_UNIT_GRAD: return UNIT_GRAD;

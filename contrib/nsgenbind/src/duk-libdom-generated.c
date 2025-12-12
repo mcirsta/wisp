@@ -57,7 +57,7 @@ output_generated_attribute_user_getter(struct opctx *outc,
                 outputf(outc,
                         "\tdom_string *name;\n"
                         "\tdom_exception exc;\n\n"
-                        "\texc = dom_string_create((const uint8_t *)\"%s\", %ld, &name);\n"
+                        "\texc = dom_string_create((const uint8_t *)\"%s\", %llu, &name);\n"
                         "\tif (exc != DOM_NO_ERR) return 0;\n\n"
                         "\tduk_push_this(ctx);\n"
                         "\t/* ... node */\n"
@@ -71,7 +71,7 @@ output_generated_attribute_user_getter(struct opctx *outc,
                         "\t/* ... handler */\n"
                         "\treturn 1;\n",
                         atributee->name + 2,
-                        strlen(atributee->name + 2));
+                        (unsigned long long)strlen(atributee->name + 2));
                 return 0;
         }
         return -1;
@@ -250,7 +250,7 @@ output_generated_attribute_user_setter(struct opctx *outc,
                         "\t/* handlerfn this */\n"
                         "\tduk_get_prop_string(ctx, -1, HANDLER_MAGIC);\n"
                         "\t/* handlerfn this handlers */\n"
-                        "\tduk_push_lstring(ctx, \"%s\", %ld);\n"
+                        "\tduk_push_lstring(ctx, \"%s\", %llu);\n"
                         "\t/* handlerfn this handlers %s */\n"
                         "\tduk_dup(ctx, -4);\n"
                         "\t/* handlerfn this handlers %s handlerfn */\n"
@@ -260,7 +260,7 @@ output_generated_attribute_user_setter(struct opctx *outc,
                         "\t\tcorestring_dom_%s, false);\n"
                         "\treturn 0;\n",
                         atributee->name + 2,
-                        strlen(atributee->name + 2),
+                        (unsigned long long)strlen(atributee->name + 2),
                         atributee->name + 2,
                         atributee->name + 2,
                         atributee->name + 2);

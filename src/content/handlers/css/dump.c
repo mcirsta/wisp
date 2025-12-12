@@ -145,6 +145,21 @@ static void dump_css_unit(FILE *stream, css_fixed val, css_unit unit)
 	case CSS_UNIT_Q:
 		fprintf(stream, "q");
 		break;
+	case CSS_UNIT_IC:
+		fprintf(stream, "ic");
+		break;
+	case CSS_UNIT_CQW:
+		fprintf(stream, "cqw");
+		break;
+	case CSS_UNIT_CQH:
+		fprintf(stream, "cqh");
+		break;
+	case CSS_UNIT_CQI:
+		fprintf(stream, "cqi");
+		break;
+	case CSS_UNIT_CQB:
+		fprintf(stream, "cqb");
+		break;
 	case CSS_UNIT_CALC:
 		fprintf(stream, "calc()");
 		break;

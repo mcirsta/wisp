@@ -135,6 +135,21 @@ static size_t dump_css_unit(css_fixed val, css_unit unit, char *ptr, size_t len)
 	case CSS_UNIT_Q:
 		ret += snprintf(ptr + ret, len - ret, "q");
 		break;
+	case CSS_UNIT_IC:
+		ret += snprintf(ptr + ret, len - ret, "ic");
+		break;
+	case CSS_UNIT_CQW:
+		ret += snprintf(ptr + ret, len - ret, "cqw");
+		break;
+	case CSS_UNIT_CQH:
+		ret += snprintf(ptr + ret, len - ret, "cqh");
+		break;
+	case CSS_UNIT_CQI:
+		ret += snprintf(ptr + ret, len - ret, "cqi");
+		break;
+	case CSS_UNIT_CQB:
+		ret += snprintf(ptr + ret, len - ret, "cqb");
+		break;
 	case CSS_UNIT_PCT:
 		ret += snprintf(ptr + ret, len - ret, "%%");
 		break;
