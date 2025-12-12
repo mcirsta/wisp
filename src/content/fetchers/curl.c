@@ -196,19 +196,24 @@ curl_fetch_ssl_value_destroy(void *value)
 
 static void *curl_fetch_ssl_key_clone(void *key)
 {
-	return nsurl_ref(key);
+	return nsurl_ref((nsurl *)key);
 }
 
 static void curl_fetch_ssl_key_destroy(void *key)
 {
-	nsurl_unref(key);
+	nsurl_unref((nsurl *)key);
+}
+
+static uint32_t curl_fetch_ssl_key_hash_void(void *key)
+{
+	return curl_fetch_ssl_key_hash(key);
 }
 
 static hashmap_parameters_t curl_fetch_ssl_hashmap_parameters = {
 	.key_clone = curl_fetch_ssl_key_clone,
 	.key_destroy = curl_fetch_ssl_key_destroy,
 	.key_eq = curl_fetch_ssl_key_eq,
-	.key_hash = curl_fetch_ssl_key_hash,
+	.key_hash = curl_fetch_ssl_key_hash_void,
 	.value_alloc = curl_fetch_ssl_value_alloc,
 	.value_destroy = curl_fetch_ssl_value_destroy,
 };
@@ -266,6 +271,8 @@ struct curl_fetch_info {
 	uint64_t last_progress_update;	/**< Time of last progress update */
 	int cert_depth; /**< deepest certificate in use */
 	struct cert_info cert_data[MAX_CERT_DEPTH]; /**< HTTPS certificate data */
+	bool profiled_response_started; /**< Profiler flag */
+	char error_buffer[CURL_ERROR_SIZE];	/**< Error buffer for cURL. */
 };
 
 /** curl handle cache entry */
@@ -291,9 +298,6 @@ static int curl_fetchers_registered = 0;
 
 /** Flag for runtime detection of openssl usage */
 static bool curl_with_openssl;
-
-/** Error buffer for cURL. */
-static char fetch_error_buffer[CURL_ERROR_SIZE];
 
 /** Proxy authentication details. */
 static char fetch_proxy_userpwd[100];
@@ -463,6 +467,7 @@ static struct curl_fetch_info *fetch_alloc(void)
 	/* Clear certificate chain data */
 	memset(fetch->cert_data, 0, sizeof(fetch->cert_data));
 	fetch->cert_depth = -1;
+	fetch->profiled_response_started = false;
 
 	return fetch;
 }
@@ -505,6 +510,7 @@ fetch_curl_setup(struct fetch *parent_fetch,
 		return NULL;
 
 	NSLOG(netsurf, INFO, "fetch %p, url '%s'", fetch, nsurl_access(url));
+	NSLOG(neosurf, INFO, "PROFILER: START Fetch queue %p", fetch);
 
 	fetch->only_2xx = only_2xx;
 	fetch->downgrade_tls = downgrade_tls;
@@ -1207,6 +1213,7 @@ static CURLcode fetch_curl_set_options(struct curl_fetch_info *f)
 	}
 
 	SETOPT(CURLOPT_URL, nsurl_access(f->url));
+	SETOPT(CURLOPT_ERRORBUFFER, f->error_buffer);
 	SETOPT(CURLOPT_PRIVATE, f);
 	SETOPT(CURLOPT_WRITEDATA, f);
 	SETOPT(CURLOPT_WRITEHEADER, f);
@@ -1356,6 +1363,8 @@ static bool fetch_curl_start(void *vfetch)
 		NSLOG(neosurf, DEBUG, "Deferring fetch because we're inside cURL");
 		return false;
 	}
+	NSLOG(neosurf, INFO, "PROFILER: STOP Fetch queue %p", fetch);
+	NSLOG(neosurf, INFO, "PROFILER: START Fetch latency %p", fetch);
 	return fetch_curl_initiate_fetch(fetch,
 			fetch_curl_get_handle(fetch->host));
 }
@@ -1580,6 +1589,12 @@ static void fetch_curl_done(CURL *curl_handle, CURLcode result)
 
 	abort_fetch = f->abort;
 	NSLOG(neosurf, INFO, "done %s", nsurl_access(f->url));
+
+	if (f->profiled_response_started) {
+		NSLOG(neosurf, INFO, "PROFILER: STOP Fetch download %p", f);
+	} else {
+		NSLOG(neosurf, INFO, "PROFILER: STOP Fetch latency %p", f);
+	}
 
 	if ((abort_fetch == false) &&
 	    (result == CURLE_OK ||
@@ -1902,6 +1917,12 @@ fetch_curl_header(char *data, size_t size, size_t nmemb, void *_f)
 		return 0;
 	}
 
+	if (f->profiled_response_started == false) {
+		NSLOG(neosurf, INFO, "PROFILER: STOP Fetch latency %p", f);
+		NSLOG(neosurf, INFO, "PROFILER: START Fetch download %p", f);
+		f->profiled_response_started = true;
+	}
+
 	if (f->sent_ssl_chain == false) {
 		fetch_curl_report_certs_upstream(f);
 	}
@@ -2073,7 +2094,6 @@ nserror fetch_curl_register(void)
 		goto curl_easy_setopt_failed;				\
 	}
 
-	SETOPT(CURLOPT_ERRORBUFFER, fetch_error_buffer);
 	SETOPT(CURLOPT_DEBUGFUNCTION, fetch_curl_debug);
 	if (nsoption_bool(suppress_curl_debug)) {
 		SETOPT(CURLOPT_VERBOSE, 0);
