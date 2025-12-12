@@ -286,11 +286,29 @@ entries_hashmap_key_eq(void *key1, void *key2)
 }
 
 static void *
+entries_hashmap_key_clone(void *key)
+{
+	return nsurl_ref((nsurl *)key);
+}
+
+static void
+entries_hashmap_key_destroy(void *key)
+{
+	nsurl_unref((nsurl *)key);
+}
+
+static uint32_t
+entries_hashmap_key_hash(void *key)
+{
+	return nsurl_hash((nsurl *)key);
+}
+
+static void *
 entries_hashmap_value_alloc(void *key)
 {
 	struct store_entry *ent = calloc(1, sizeof(struct store_entry));
 	if (ent != NULL) {
-		ent->url = nsurl_ref(key);
+		ent->url = nsurl_ref((nsurl *)key);
 	}
 	return ent;
 }
@@ -305,9 +323,9 @@ entries_hashmap_value_destroy(void *value)
 }
 
 static hashmap_parameters_t entries_hashmap_parameters = {
-	.key_clone = (hashmap_key_clone_t)nsurl_ref,
-	.key_destroy = (hashmap_key_destroy_t)nsurl_unref,
-	.key_hash = (hashmap_key_hash_t)nsurl_hash,
+	.key_clone = entries_hashmap_key_clone,
+	.key_destroy = entries_hashmap_key_destroy,
+	.key_hash = entries_hashmap_key_hash,
 	.key_eq = entries_hashmap_key_eq,
 	.value_alloc = entries_hashmap_value_alloc,
 	.value_destroy = entries_hashmap_value_destroy,

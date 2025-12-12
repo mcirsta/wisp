@@ -39,6 +39,8 @@
 #include "content/content_factory.h"
 #include <neosurf/content/fetch.h>
 #include <neosurf/content/hlcache.h>
+#include <neosurf/misc.h>
+#include <neosurf/desktop/gui_internal.h>
 
 #include <neosurf/content/handlers/html/html.h>
 #include <neosurf/content/handlers/html/private.h>
@@ -48,10 +50,18 @@ typedef bool (script_handler_t)(struct jsthread *jsthread, const uint8_t *data, 
 
 static script_handler_t *select_script_handler(content_type ctype)
 {
-	if (ctype == CONTENT_JS) {
+	switch (ctype) {
+	case CONTENT_JS:
 		return js_exec;
+	default:
+		return NULL;
 	}
-	return NULL;
+}
+
+void script_resume_conversion_cb(void *p)
+{
+	html_content *htmlc = p;
+	html_begin_conversion(htmlc);
 }
 
 
@@ -207,7 +217,7 @@ convert_script_async_cb(hlcache_handle *script,
 	 * conversion
 	 */
 	if (html_can_begin_conversion(parent)) {
-		html_begin_conversion(parent);
+		guit->misc->schedule(0, script_resume_conversion_cb, parent);
 	}
 
 	/* if we have already started converting though, then we can handle the
@@ -270,7 +280,7 @@ convert_script_defer_cb(hlcache_handle *script,
 	 * conversion
 	 */
 	if (html_can_begin_conversion(parent)) {
-		html_begin_conversion(parent);
+		guit->misc->schedule(0, script_resume_conversion_cb, parent);
 	}
 
 	return NSERROR_OK;
@@ -368,7 +378,7 @@ convert_script_sync_cb(hlcache_handle *script,
 	 * conversion
 	 */
 	if (html_can_begin_conversion(parent)) {
-		html_begin_conversion(parent);
+		guit->misc->schedule(0, script_resume_conversion_cb, parent);
 	}
 
 	return NSERROR_OK;
@@ -588,6 +598,7 @@ html_process_script(void *ctx, dom_node *node)
 
 	NSLOG(neosurf, INFO, "content %p parser %p node %p", c, c->parser,
 	      node);
+	NSLOG(neosurf, INFO, "PROFILER: START JS execute %p", node);
 
 	exc = dom_element_get_attribute(node, corestring_dom_type, &mimetype);
 	if (exc != DOM_NO_ERR || mimetype == NULL) {
@@ -603,6 +614,7 @@ html_process_script(void *ctx, dom_node *node)
 	}
 
 	dom_string_unref(mimetype);
+	NSLOG(neosurf, INFO, "PROFILER: STOP JS execute %p", node);
 
 	return err;
 }

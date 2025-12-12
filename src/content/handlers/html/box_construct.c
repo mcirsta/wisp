@@ -31,11 +31,13 @@
 #include <neosurf/utils/errors.h>
 #include <neosurf/utils/nsoption.h>
 #include <neosurf/utils/corestrings.h>
+#include <neosurf/utils/log.h>
 #include "utils/utils.h"
 #include "utils/talloc.h"
 #include <neosurf/utils/string.h>
 #include <neosurf/utils/ascii.h>
 #include <neosurf/utils/nsurl.h>
+#include <nsutils/time.h>
 #include <neosurf/misc.h>
 #include "content/handlers/css/select.h"
 #include <neosurf/desktop/gui_internal.h>
@@ -48,6 +50,7 @@
 #include "content/handlers/html/box_special.h"
 #include "content/handlers/html/box_normalise.h"
 #include <neosurf/content/handlers/html/form_internal.h>
+#include <neosurf/content/fetch.h>
 
 /**
  * Context for box tree construction
@@ -1237,7 +1240,10 @@ static void convert_xml_to_box(void *p)
 	dom_node *next;
 	bool convert_children;
 	uint32_t num_processed = 0;
-	const uint32_t max_processed_before_yield = 10;
+	uint64_t start_time, now_time;
+
+	nsu_getmonotonic_ms(&start_time);
+	NSLOG(netsurf, INFO, "PROFILER: START Box construction slice %p", ctx);
 
 	do {
 		convert_children = true;
@@ -1245,11 +1251,12 @@ static void convert_xml_to_box(void *p)
 		assert(ctx->n != NULL);
 
 		if (box_construct_element(ctx, &convert_children) == false) {
-			ctx->cb(ctx->content, false);
-			dom_node_unref(ctx->n);
-			free(ctx);
-			return;
-		}
+				ctx->cb(ctx->content, false);
+				dom_node_unref(ctx->n);
+				free(ctx);
+				NSLOG(netsurf, INFO, "PROFILER: STOP Box construction slice %p", ctx);
+				return;
+			}
 
 		/* Find next element to process, converting text nodes as we go */
 		next = next_node(ctx->n, ctx->content, convert_children);
@@ -1262,6 +1269,7 @@ static void convert_xml_to_box(void *p)
 				ctx->cb(ctx->content, false);
 				dom_node_unref(next);
 				free(ctx);
+				NSLOG(netsurf, INFO, "PROFILER: STOP Box construction slice %p", ctx);
 				return;
 			}
 
@@ -1274,6 +1282,7 @@ static void convert_xml_to_box(void *p)
 					ctx->cb(ctx->content, false);
 					dom_node_unref(ctx->n);
 					free(ctx);
+					NSLOG(netsurf, INFO, "PROFILER: STOP Box construction slice %p", ctx);
 					return;
 				}
 			}
@@ -1307,10 +1316,21 @@ static void convert_xml_to_box(void *p)
 			assert(ctx->n == NULL);
 
 			free(ctx);
+			NSLOG(netsurf, INFO, "PROFILER: STOP Box construction slice %p", ctx);
 			return;
 		}
-	} while (++num_processed < max_processed_before_yield);
 
+		/* Check for yield every 64 nodes */
+		if ((++num_processed & 0x3F) == 0) {
+			nsu_getmonotonic_ms(&now_time);
+			/* Yield if we've been running for more than 50ms */
+			if (now_time - start_time > 50) {
+				break;
+			}
+		}
+	} while (true);
+
+	NSLOG(netsurf, INFO, "PROFILER: STOP Box construction slice %p", ctx);
 	/* More work to do: schedule a continuation */
 	guit->misc->schedule(0, (void *)convert_xml_to_box, ctx);
 }

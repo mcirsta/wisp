@@ -133,7 +133,7 @@ nserror libdom_hubbub_error_to_nserror(dom_hubbub_error error)
 
 	case (DOM_HUBBUB_HUBBUB_ERR | HUBBUB_PAUSED):
 		/* hubbub input paused */
-		return NSERROR_OK;
+		return NSERROR_PAUSED;
 
 	case DOM_HUBBUB_NOMEM:
 		/* out of memory error from DOM */

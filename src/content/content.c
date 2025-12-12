@@ -143,7 +143,12 @@ content_llcache_callback(llcache_handle *llcache,
 	case LLCACHE_EVENT_ERROR:
 		/** \todo Error page? */
 		c->status = CONTENT_STATUS_ERROR;
+		NSLOG(neosurf, INFO, "LLCACHE_EVENT_ERROR in content. Code: %d, Msg: %s", event->data.error.code, event->data.error.msg);
 		msg_data.errordata.errorcode = event->data.error.code;
+		/* DEBUG: Log if we see NSERROR_OK here, because this is where "Fetch error: OK" likely originates. */
+		if (msg_data.errordata.errorcode == NSERROR_OK) {
+			NSLOG(neosurf, ERROR, "CONTENT_LLCACHE_CALLBACK: Received LLCACHE_EVENT_ERROR with NSERROR_OK from llcache %p", llcache);
+		}
 		msg_data.errordata.errormsg = event->data.error.msg;
 		content_broadcast(c, CONTENT_MSG_ERROR, &msg_data);
 		break;
@@ -758,13 +763,25 @@ void content_broadcast(struct content *c, content_msg msg,
 		       const union content_msg_data *data)
 {
 	struct content_user *user, *next;
+	union content_msg_data safe_data;
+	const union content_msg_data *pdata = data;
+
 	assert(c);
+
+	if (msg == CONTENT_MSG_ERROR && data != NULL) {
+		if (data->errordata.errorcode == NSERROR_OK) {
+			NSLOG(neosurf, ERROR, "content_broadcast: CONTENT_MSG_ERROR with NSERROR_OK! Forcing NSERROR_UNKNOWN. Content: %p", c);
+			safe_data = *data;
+			safe_data.errordata.errorcode = NSERROR_UNKNOWN;
+			pdata = &safe_data;
+		}
+	}
 
 	NSLOG(neosurf, DEEPDEBUG, "%p -> msg:%d", c, msg);
 	for (user = c->user_list->next; user != 0; user = next) {
 		next = user->next;  /* user may be destroyed during callback */
 		if (user->callback != 0)
-			user->callback(c, msg, data, user->pw);
+			user->callback(c, msg, pdata, user->pw);
 	}
 }
 
@@ -777,6 +794,11 @@ content_broadcast_error(struct content *c, nserror errorcode, const char *msg)
 	union content_msg_data data;
 
 	assert(c);
+
+	if (errorcode == NSERROR_OK) {
+		NSLOG(neosurf, ERROR, "content_broadcast_error: Called with NSERROR_OK! Forcing NSERROR_UNKNOWN. Content: %p", c);
+		errorcode = NSERROR_UNKNOWN;
+	}
 
 	data.errordata.errorcode = errorcode;
 	data.errordata.errormsg = msg;

@@ -272,6 +272,7 @@ static void svg_reformat(struct content *c, int width, int height)
 
 	/* Avoid reformats to same width/height as we already reformatted to */
 	if (width != svg->current_width || height != svg->current_height) {
+		NSLOG(neosurf, INFO, "PROFILER: START SVG parsing %p", c);
 		source_data = content__get_source_data(c, &source_size);
 
     svgtiny_parse(svg->diagram,
@@ -280,6 +281,7 @@ static void svg_reformat(struct content *c, int width, int height)
                   nsurl_access(content_get_url(c)),
                   width,
                   height);
+    NSLOG(neosurf, INFO, "PROFILER: STOP SVG parsing %p", c);
 
     svg->current_width = width;
     svg->current_height = height;
@@ -326,6 +328,7 @@ svg_redraw_internal(svg_content *svg,
     transform[4] = x;
     transform[5] = y;
 
+    NSLOG(neosurf, INFO, "PROFILER: START SVG rendering %p", svg);
     NSLOG(neosurf, INFO, "SVG redraw start: url=%s scale=%.3f clip=%d,%d..%d,%d limit=%u",
           url_str, scale, clip->x0, clip->y0, clip->x1, clip->y1, SVG_COMBO_FLUSH_LIMIT);
 
@@ -572,6 +575,7 @@ svg_redraw_internal(svg_content *svg,
         }
     if (scaled) free(scaled);
     if (combo) free(combo);
+    NSLOG(neosurf, INFO, "PROFILER: STOP SVG rendering %p", svg);
     return ok;
 }
 

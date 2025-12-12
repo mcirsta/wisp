@@ -195,16 +195,16 @@ NSOPTION_BOOL(display_decoded_idn, false)
 /******** Fetcher options ********/
 
 /** Maximum simultaneous active fetchers */
-NSOPTION_INTEGER(max_fetchers, 24)
+NSOPTION_INTEGER(max_fetchers, 256)
 
 /** Maximum simultaneous active fetchers per host.
- * (<=option_max_fetchers else it makes no sense) Note that rfc2616
- * section 8.1.4 says that there should be no more than two keepalive
- * connections per host. None of the main browsers follow this as it
- * slows page fetches down considerably.  See
+ *
+ * Note that rfc2616 section 8.1.4 says that there should be no more
+ * than two keepalive connections per host. None of the main browsers
+ * follow this as it slows page fetches down considerably.  See
  * https://bugzilla.mozilla.org/show_bug.cgi?id=423377#c4
  */
-NSOPTION_INTEGER(max_fetchers_per_host, 5)
+NSOPTION_INTEGER(max_fetchers_per_host, 64)
 
 /** Maximum number of inactive fetchers cached.  The total number of
  * handles netsurf will therefore have open is this plus

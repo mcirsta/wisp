@@ -751,7 +751,7 @@ html_process_data(struct content *c, const char *data, unsigned int size)
 	}
 
 	/* broadcast the error if necessary */
-	if (err != NSERROR_OK) {
+	if (err != NSERROR_OK && err != NSERROR_PAUSED) {
 		content_broadcast_error(c, err, NULL);
 		return false;
 	}
@@ -829,6 +829,18 @@ bool html_can_begin_conversion(html_content *htmlc)
 	return true;
 }
 
+static void html_resume_conversion_cb(void *p);
+void script_resume_conversion_cb(void *p);
+
+bool
+html_begin_conversion(html_content *htmlc);
+
+static void html_resume_conversion_cb(void *p)
+{
+	html_content *htmlc = p;
+	html_begin_conversion(htmlc);
+}
+
 bool
 html_begin_conversion(html_content *htmlc)
 {
@@ -854,11 +866,18 @@ html_begin_conversion(html_content *htmlc)
 		NSLOG(neosurf, INFO, "Completing parse (%p)", htmlc);
 		/* complete parsing */
 		error = dom_hubbub_parser_completed(htmlc->parser);
-		if (error == DOM_HUBBUB_HUBBUB_ERR_PAUSED && htmlc->base.active > 0) {
+		if (error == DOM_HUBBUB_HUBBUB_ERR_PAUSED) {
 			/* The act of completing the parse failed because we've
 			 * encountered a sync script which needs to run
 			 */
-			NSLOG(neosurf, INFO, "Completing parse brought synchronous JS to light, cannot complete yet");
+			NSLOG(neosurf, INFO, "Completing parse brought synchronous JS to light, cannot complete yet (active: %d)", htmlc->base.active);
+
+			if (htmlc->base.active == 0) {
+				dom_hubbub_parser_pause(htmlc->parser, false);
+				guit->misc->schedule(0, html_resume_conversion_cb, htmlc);
+				return true;
+			}
+
 			return true;
 		}
 		if (error != DOM_HUBBUB_OK) {
@@ -1060,6 +1079,8 @@ static void html_reformat(struct content *c, int width, int height)
 
 	nsu_getmonotonic_ms(&ms_before);
 
+    NSLOG(neosurf, INFO, "PROFILER: START HTML layout %p", c);
+
 	htmlc->reflowing = true;
 
 	htmlc->unit_len_ctx.viewport_width = css_unit_device2css_px(
@@ -1089,6 +1110,8 @@ static void html_reformat(struct content *c, int width, int height)
 
 	htmlc->reflowing = false;
 	htmlc->had_initial_layout = true;
+
+    NSLOG(neosurf, INFO, "PROFILER: STOP HTML layout %p", c);
 
 	/* calculate next reflow time at three times what it took to reflow */
 	nsu_getmonotonic_ms(&ms_after);
@@ -1206,6 +1229,10 @@ static void html_destroy(struct content *c)
 
 	NSLOG(neosurf, INFO, "content %p", c);
 
+	/* Cancel any pending conversion resumes immediately */
+	guit->misc->schedule(-1, html_resume_conversion_cb, html);
+	guit->misc->schedule(-1, script_resume_conversion_cb, html);
+
 	/* If we're still converting a layout, cancel it */
 	if (html->box_conversion_context != NULL) {
 		if (cancel_dom_to_box(html->box_conversion_context) != NSERROR_OK) {
@@ -1299,7 +1326,7 @@ static void html_destroy(struct content *c)
 
 	/* Free scripts */
 	html_script_free(html);
-
+	
 	/* Free objects */
 	html_object_free_objects(html);
 

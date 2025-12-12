@@ -387,6 +387,12 @@ static nserror llcache_send_event_to_users(llcache_object *object,
 	nserror error = NSERROR_OK;
 	llcache_object_user *user, *next_user;
 
+	if (event->type == LLCACHE_EVENT_ERROR && event->data.error.code == NSERROR_OK) {
+		NSLOG(llcache, ERROR, "llcache_send_event_to_users: LLCACHE_EVENT_ERROR with NSERROR_OK! Msg: %s. Object state: %d", 
+			event->data.error.msg ? event->data.error.msg : "NULL",
+			object->fetch.state);
+	}
+
 	user = object->users;
 	while (user != NULL) {
 		bool was_target = user->iterator_target;
@@ -1299,10 +1305,13 @@ static nserror llcache_retrieve_persisted_data(llcache_object *object)
 	}
 
 	/* Source data for the object may be in the persistent store */
-	return guit->llcache->fetch(object->url,
+    NSLOG(neosurf, DEBUG, "PROFILER: START Cache retrieve %p", object);
+	nserror ret = guit->llcache->fetch(object->url,
 				    BACKING_STORE_NONE,
 				    &object->source_data,
 				    &object->source_len);
+    NSLOG(neosurf, DEBUG, "PROFILER: STOP Cache retrieve %p", object);
+    return ret;
 }
 
 /**
@@ -3161,6 +3170,8 @@ static void llcache_fetch_callback(const fetch_msg *msg, void *p)
 		event.type = LLCACHE_EVENT_ERROR;
 		event.data.error.code = NSERROR_UNKNOWN;
 		event.data.error.msg = msg->data.error;
+
+		NSLOG(llcache, INFO, "FETCH_ERROR received. Code: %d, Msg: %s", event.data.error.code, event.data.error.msg);
 
 		error = llcache_send_event_to_users(object, &event);
 

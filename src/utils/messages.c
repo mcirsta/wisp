@@ -406,14 +406,13 @@ const char *messages_get_errorcode(nserror code)
 	case NSERROR_TIMEOUT:
 		/* Operation timed out */
 		return messages_get_ctx("Timeout", messages_hash);
+
+	case NSERROR_PAUSED:
+		/* Operation paused */
+		return messages_get_ctx("Paused", messages_hash);
 	}
 
-	/* The switch has no default, so the compiler should tell us when we
-	 * forget to add messages for new error codes.  As such, we should
-	 * never get here.
-	 */
-	assert(0);
-	return messages_get_ctx("Unknown", messages_hash);
+	return messages_get_ctx("MiscError", messages_hash);
 }
 
 /* exported function documented in utils/messages.h */

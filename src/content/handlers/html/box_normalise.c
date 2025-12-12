@@ -218,6 +218,7 @@ box_normalise_table_row(struct box *row,
 					child->type == BOX_TABLE ||
 					child->type == BOX_TABLE_ROW_GROUP ||
 					child->type == BOX_TABLE_ROW)) {
+
 				box_add_child(cell, child);
 
 				next_child = child->next;
@@ -358,6 +359,7 @@ box_normalise_table_row_group(struct box *row_group,
 					child->type == BOX_TABLE ||
 					child->type == BOX_TABLE_ROW_GROUP ||
 					child->type == BOX_TABLE_CELL)) {
+
 				box_add_child(row, child);
 
 				next_child = child->next;
@@ -699,6 +701,7 @@ box_normalise_table(struct box *table, const struct box *root, html_content * c)
 					child->type == BOX_TABLE ||
 					child->type == BOX_TABLE_ROW ||
 					child->type == BOX_TABLE_CELL)) {
+
 				box_add_child(row_group, child);
 
 				next_child = child->next;
@@ -891,6 +894,7 @@ static bool box_normalise_flex(
 
 			while (child != NULL &&
 					child->type == BOX_INLINE_CONTAINER) {
+
 				box_add_child(implied_flex_item, child);
 
 				next_child = child->next;
@@ -964,6 +968,7 @@ static bool box_normalise_flex(
 					child->type == BOX_TABLE_ROW_GROUP ||
 					child->type == BOX_TABLE_ROW ||
 					child->type == BOX_TABLE_CELL)) {
+
 				box_add_child(implied_flex_item, child);
 
 				next_child = child->next;
@@ -1179,6 +1184,7 @@ box_normalise_block(struct box *block, const struct box *root, html_content *c)
 					child->type == BOX_TABLE_ROW_GROUP ||
 					child->type == BOX_TABLE_ROW ||
 					child->type == BOX_TABLE_CELL)) {
+
 				box_add_child(table, child);
 
 				next_child = child->next;

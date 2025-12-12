@@ -1343,6 +1343,8 @@ browser_window__handle_fetcherror(struct browser_window *bw,
 
 	memset(&params, 0, sizeof(params));
 
+	NSLOG(neosurf, ERROR, "Fetch error for %s: %s", nsurl_access(url), reason);
+
 	params.url = nsurl_ref(corestring_nsurl_about_query_fetcherror);
 	params.referrer = nsurl_ref(url);
 	params.flags = BW_NAVIGATE_HISTORY | BW_NAVIGATE_NO_TERMINAL_HISTORY_UPDATE | BW_NAVIGATE_INTERNAL;
@@ -1388,13 +1390,21 @@ browser_window__handle_error(struct browser_window *bw,
 	nsurl *url = hlcache_handle_get_url(c);
 
 	/* Unexpected OK? */
-	assert(code != NSERROR_OK);
+	/* assert(code != NSERROR_OK); */
+	if (code == NSERROR_OK) {
+		NSLOG(neosurf, ERROR, "Received CONTENT_MSG_ERROR with NSERROR_OK! Message: %s", 
+		      event->data.errordata.errormsg ? event->data.errordata.errormsg : "NULL");
+		code = NSERROR_UNKNOWN;
+	}
 
 	if (message == NULL) {
 		message = messages_get_errorcode(code);
 	} else {
 		message = messages_get(message);
 	}
+
+	NSLOG(neosurf, INFO, "browser_window__handle_error: code=%d message='%s' url='%s'", 
+	      code, message, nsurl_access(url));
 
 	if (c == bw->loading_content) {
 		bw->loading_content = NULL;
@@ -2603,6 +2613,8 @@ browser_window_redraw(struct browser_window *bw,
 	struct rect content_clip;
 	nserror res;
 
+    NSLOG(neosurf, DEBUG, "PROFILER: START Browser window redraw %p", bw);
+
 	if (bw == NULL) {
 		NSLOG(neosurf, INFO, "NULL browser window");
 		return false;
@@ -2786,6 +2798,7 @@ browser_window_redraw(struct browser_window *bw,
 		knockout_plot_end(ctx);
 	}
 
+    NSLOG(neosurf, DEBUG, "PROFILER: STOP Browser window redraw %p", bw);
 	return plot_ok;
 }
 

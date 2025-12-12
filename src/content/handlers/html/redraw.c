@@ -2114,6 +2114,8 @@ bool html_redraw(struct content *c, struct content_redraw_data *data,
 		.fill_colour = data->background_colour,
 	};
 
+    NSLOG(neosurf, INFO, "PROFILER: START HTML redraw %p", c);
+
 	box = html->layout;
 	assert(box);
 
@@ -2157,6 +2159,7 @@ bool html_redraw(struct content *c, struct content_redraw_data *data,
 				data->scale, clip, ctx);
 	}
 
+    NSLOG(neosurf, INFO, "PROFILER: STOP HTML redraw %p", c);
 	return result;
 
 }
