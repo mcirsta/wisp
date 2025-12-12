@@ -45,3 +45,4 @@ build-release
 build-mingw
 build-mingw64
 install_mingw
+install_release

@@ -150,6 +150,13 @@ html_object_nobox_callback(hlcache_handle *object,
 	return NSERROR_OK;
 }
 
+static void html_deferred_reformat(void *p)
+{
+	html_content *c = p;
+	c->pending_reformat = false;
+	content__reformat(&c->base, false, c->base.available_width, c->base.available_height);
+}
+
 
 /**
  * Callback for hlcache_handle_retrieve() for objects with a box.
@@ -186,10 +193,20 @@ html_object_callback(hlcache_handle *object,
 			/* Adjust parent content for new object size */
 			html_object_done(box, object, o->background);
 			if (c->base.status == CONTENT_STATUS_READY ||
-					c->base.status == CONTENT_STATUS_DONE)
-				content__reformat(&c->base, false,
-						c->base.available_width,
-						c->base.available_height);
+					c->base.status == CONTENT_STATUS_DONE) {
+				uint64_t ms_now;
+				nsu_getmonotonic_ms(&ms_now);
+
+				if (ms_now > c->base.reformat_time) {
+					content__reformat(&c->base, false,
+							c->base.available_width,
+							c->base.available_height);
+				} else if (c->pending_reformat == false) {
+					uint64_t delay = c->base.reformat_time - ms_now;
+					guit->misc->schedule(delay, html_deferred_reformat, c);
+					c->pending_reformat = true;
+				}
+			}
 		}
 		break;
 

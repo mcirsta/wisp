@@ -122,6 +122,9 @@ typedef struct html_content {
 	/** Whether a layout (reflow) is in progress */
 	bool reflowing;
 
+	/** Whether a reformat is pending (scheduled) */
+	bool pending_reformat;
+
 	/** Whether an initial layout has been done */
 	bool had_initial_layout;
 
