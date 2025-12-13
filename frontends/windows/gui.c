@@ -128,41 +128,44 @@ void win32_set_quit(bool q)
 /* exported interface documented in gui.h */
 void win32_run(void)
 {
-	MSG Msg; /* message from system */
-	BOOL bRet; /* message fetch result */
-	int timeout; /* timeout in miliseconds */
-	UINT timer_id = 0;
+	MSG Msg;
+	int timeout;
 
 	NSLOG(neosurf, INFO, "Starting messgae dispatcher");
 
 	while (!win32_quit) {
-		/* run the scheduler and discover how long to wait for
-		 * the next event.
-		 */
 		timeout = schedule_run();
 
-		if (timeout == 0) {
-			bRet = PeekMessage(&Msg, NULL, 0, 0, PM_REMOVE);
+		DWORD wait_timeout;
+		if (timeout < 0) {
+			wait_timeout = INFINITE;
 		} else {
-			if (timeout > 0) {
-				/* set up a timer to ensure we get woken */
-				timer_id = SetTimer(NULL, 0, timeout, NULL);
-			}
-
-			/* wait for a message */
-			bRet = GetMessage(&Msg, NULL, 0, 0);
-
-			/* if a timer was sucessfully created remove it */
-			if (timer_id != 0) {
-				KillTimer(NULL, timer_id);
-				timer_id = 0;
-			}
+			wait_timeout = (DWORD)timeout;
 		}
 
-		if ((bRet > 0) &&
-		    (handle_dialog_message(&Msg) != NSERROR_OK)) {
-			TranslateMessage(&Msg);
-			DispatchMessage(&Msg);
+		DWORD wait_result = MsgWaitForMultipleObjectsEx(
+			0,
+			NULL,
+			wait_timeout,
+			QS_ALLINPUT,
+			MWMO_INPUTAVAILABLE);
+
+		if (wait_result == WAIT_OBJECT_0) {
+			while (PeekMessage(&Msg, NULL, 0, 0, PM_REMOVE)) {
+				if (Msg.message == WM_QUIT) {
+					win32_quit = true;
+					break;
+				}
+
+				if (handle_dialog_message(&Msg) != NSERROR_OK) {
+					TranslateMessage(&Msg);
+					DispatchMessage(&Msg);
+				}
+
+				if (win32_quit) {
+					break;
+				}
+			}
 		}
 	}
 }
