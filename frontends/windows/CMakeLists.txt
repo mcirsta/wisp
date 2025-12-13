@@ -79,6 +79,8 @@ if(WIN32 AND CMAKE_BUILD_TYPE MATCHES Debug)
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_BINARY_DIR}/contrib/libnsgif/libnsgif.dll" "$<TARGET_FILE_DIR:neosurf-windows>/"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_BINARY_DIR}/contrib/libcss/libcss.dll" "$<TARGET_FILE_DIR:neosurf-windows>/"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_BINARY_DIR}/contrib/libhubbub/libhubbub.dll" "$<TARGET_FILE_DIR:neosurf-windows>/"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_BINARY_DIR}/src/libneosurf.dll" "$<TARGET_FILE_DIR:neosurf-windows>/"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_SOURCE_DIR}/src/resources/ca-bundle" "$<TARGET_FILE_DIR:neosurf-windows>/ca-bundle.crt"
     )
 endif()
 

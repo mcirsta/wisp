@@ -314,4 +314,22 @@ IDR_NEOSURF_ICON   ICON           "../../../src/resources/neosurf.ico"
 //
 // User resources
 //
+default.css             USER    "../../../src/resources/default.css"
+adblock.css             USER    "../../../src/resources/adblock.css"
+internal.css            USER    "../../../src/resources/internal.css"
+quirks.css              USER    "../../../src/resources/quirks.css"
+credits.html            USER    "../../../src/resources/credits.html"
+license.html            USER    "../../../src/resources/license.html"
+welcome.html            USER    "../../../src/resources/en/welcome.html"
+favicon.ico             USER    "../../../src/resources/favicon.ico"
+neosurf.png             USER    "../../../src/resources/neosurf.png"
+icons/arrow-l.png       USER    "../../../src/resources/icons/arrow-l.png"
+icons/content.png       USER    "../../../src/resources/icons/content.png"
+icons/directory.png     USER    "../../../src/resources/icons/directory.png"
+icons/directory2.png    USER    "../../../src/resources/icons/directory2.png"
+icons/hotlist-add.png   USER    "../../../src/resources/icons/hotlist-add.png"
+icons/hotlist-rmv.png   USER    "../../../src/resources/icons/hotlist-rmv.png"
+icons/search.png        USER    "../../../src/resources/icons/search.png"
+messages                USER    "../../../build-ninja/frontends/windows/res/en/Messages"
+
 

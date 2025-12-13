@@ -43,34 +43,7 @@
 char **
 nsws_init_resource(const char *resource_path)
 {
-	char **pathv; /* resource path string vector */
-	char **respath; /* resource paths vector */
-	const char *lang = NULL;
-	char *winpath;
-	int pathi;
-	char *slsh;
-
-	pathv = filepath_path_to_strvec(resource_path);
-	if (pathv == NULL)
-		return NULL;
- 
-	winpath = malloc(MAX_PATH);
-	GetModuleFileName(NULL, winpath, MAX_PATH);
-	slsh = strrchr(winpath, '\\');
-	if (slsh != NULL)
-		*slsh=0;
-    strncat(winpath, "\\..\\share\\neosurf", MAX_PATH);
-
-	pathi = 0;
-	while (pathv[pathi] != NULL)
-		pathi++;
-	pathv[pathi] = winpath;
-
-	respath = filepath_generate(pathv, &lang);
-
-	filepath_free_strvec(pathv);
-
-	return respath;
+	return NULL;
 }
 
 static char *realpath(const char *path, char *resolved_path)

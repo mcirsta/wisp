@@ -47,6 +47,8 @@ br[clear=all] { clear: both; }
 
 pre { display: block; font-family: monospace; white-space: pre; margin-bottom: 1em; }
 
+nobr { white-space: nowrap; }
+
 ins { color: green; text-decoration: underline; }
 del { color: red; text-decoration: line-through; }
 
