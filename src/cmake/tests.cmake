@@ -145,6 +145,10 @@ include(CTest)
     ${CMAKE_SOURCE_DIR}/src/test/html_redraw_borders_test.c
   )
 
+  add_neosurf_test(layout_flex_test
+    ${CMAKE_SOURCE_DIR}/src/test/layout_flex_test.c
+  )
+
   add_neosurf_test(svg_redraw_test
     ${CMAKE_SOURCE_DIR}/src/desktop/plot_style.c
     ${CMAKE_SOURCE_DIR}/src/test/svg_redraw_driver.c

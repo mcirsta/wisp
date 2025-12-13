@@ -713,7 +713,7 @@ static bool layout_flex__resolve_line(
 	bool grow;
 
 	if (available_main == AUTO) {
-		available_main = INT_MAX;
+		available_main = line->main_size;
 	}
 
 	grow = (line->main_size < available_main);
@@ -1126,6 +1126,7 @@ bool layout_flex(struct box *flex, int available_width,
 		html_content *content)
 {
 	int max_height, min_height;
+	int max_width = -1, min_width = 0;
 	struct flex_ctx *ctx;
 	bool success = false;
 
@@ -1141,12 +1142,24 @@ bool layout_flex(struct box *flex, int available_width,
 	layout_find_dimensions(
 			ctx->unit_len_ctx, available_width, -1,
 			flex, flex->style, NULL, &flex->height,
-			NULL, NULL, &max_height, &min_height,
+			&max_width, &min_width, &max_height, &min_height,
 			flex->margin, flex->padding, flex->border);
 
 	available_width = min(available_width, flex->width);
 	
 	int resolved_height;
+	if (flex->width == AUTO || flex->width == UNKNOWN_WIDTH) {
+		flex->width = ctx->horizontal ?
+				ctx->main_size :
+				ctx->cross_size;
+		if (max_width >= 0 && flex->width > max_width) {
+			flex->width = max_width;
+		}
+		if (min_width > 0 && flex->width < min_width) {
+			flex->width = min_width;
+		}
+	}
+
 	if (flex->height != AUTO) {
 		resolved_height = flex->height;
 	} else if (min_height > 0) {
