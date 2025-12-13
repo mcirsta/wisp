@@ -27,7 +27,7 @@
 #include "windows/schedule.h"
 #include "windows/qpc_safe.h"
 
-/* linked list of scheduled callbacks */
+/* linked list of scheduled callbacks, sorted by execution time */
 static struct nscallback *schedule_list = NULL;
 
 /**
@@ -116,6 +116,8 @@ static nserror schedule_remove(void (*callback)(void *p), void *p)
 nserror win32_schedule(int ival, void (*callback)(void *p), void *p)
 {
 	struct nscallback *nscb;
+	struct nscallback *cur_nscb;
+	struct nscallback *prev_nscb;
 	nserror ret;
 
 	ret = schedule_remove(callback, p);
@@ -138,9 +140,23 @@ nserror win32_schedule(int ival, void (*callback)(void *p), void *p)
 	nscb->callback = callback;
 	nscb->p = p;
 
-        /* add to list front */
-        nscb->next = schedule_list;
-        schedule_list = nscb;
+        /* Insert into list maintaining sort order by time */
+	if (schedule_list == NULL || nscb->tv < schedule_list->tv) {
+		/* Insert at head */
+		nscb->next = schedule_list;
+		schedule_list = nscb;
+	} else {
+		/* Find insertion point */
+		cur_nscb = schedule_list;
+		prev_nscb = NULL;
+		while (cur_nscb != NULL && cur_nscb->tv <= nscb->tv) {
+			prev_nscb = cur_nscb;
+			cur_nscb = cur_nscb->next;
+		}
+		/* Insert after prev_nscb */
+		nscb->next = cur_nscb;
+		prev_nscb->next = nscb;
+	}
 
 	return NSERROR_OK;
 }
@@ -152,64 +168,42 @@ schedule_run(void)
 	uint64_t now;
 	uint64_t nexttime;
         struct nscallback *cur_nscb;
-        struct nscallback *prev_nscb;
         struct nscallback *unlnk_nscb;
 
         if (schedule_list == NULL)
                 return -1;
 
-	/* reset enumeration to the start of the list */
-        cur_nscb = schedule_list;
-        prev_nscb = NULL;
-	nexttime = cur_nscb->tv;
-
 	now = get_monotonic_time_us();
 
-        while (cur_nscb != NULL) {
-                if (now >= cur_nscb->tv) {
-                        /* scheduled time */
+	/* Process all callbacks that are due (head of the sorted list) */
+        while (schedule_list != NULL && schedule_list->tv <= now) {
+		/* Remove head */
+		unlnk_nscb = schedule_list;
+		schedule_list = unlnk_nscb->next;
 
-                        /* remove callback */
-                        unlnk_nscb = cur_nscb;
+		NSLOG(schedule, DEBUG,
+		      "callback entry %p running %p(%p)",
+		      unlnk_nscb,
+		      unlnk_nscb->callback,
+		      unlnk_nscb->p);
 
-                        if (prev_nscb == NULL) {
-                                schedule_list = unlnk_nscb->next;
-                        } else {
-                                prev_nscb->next = unlnk_nscb->next;
-                        }
+		/* Call callback */
+		unlnk_nscb->callback(unlnk_nscb->p);
 
-                        NSLOG(schedule, DEBUG,
-			      "callback entry %p running %p(%p)",
-			      unlnk_nscb,
-			      unlnk_nscb->callback,
-			      unlnk_nscb->p);
-                        /* call callback */
-                        unlnk_nscb->callback(unlnk_nscb->p);
+		free(unlnk_nscb);
 
-                        free(unlnk_nscb);
+		/* Reset 'now' in case callback took a long time? 
+		 * For now we stick to the initial capture time to ensure
+		 * we don't get stuck in a loop processing 0-delay reschedules.
+		 */
+	}
 
-			/* dispatched events can modify the list,
-			 * instead of locking we simply reset list
-			 * enumeration to the start.
-			 */ 
-			if (schedule_list == NULL)
-				return -1; /* no more callbacks scheduled */
-			
-                        cur_nscb = schedule_list;
-                        prev_nscb = NULL;
-			nexttime = cur_nscb->tv;
-                } else {
-			/* if the time to the event is sooner than the
-			 * currently recorded soonest event record it 
-			 */
-			if (cur_nscb->tv < nexttime) {
-				nexttime = cur_nscb->tv;
-			}
-                        /* move to next element */
-                        prev_nscb = cur_nscb;
-                        cur_nscb = prev_nscb->next;
-                }
-        }
+	if (schedule_list == NULL) {
+		return -1;
+	}
+
+	/* The next event is simply the head of the list */
+	nexttime = schedule_list->tv;
 
 	/* make returned time relative to now */
 	int64_t diff = nexttime - now;
