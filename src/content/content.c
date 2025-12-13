@@ -225,8 +225,8 @@ content__init(struct content *c,
 	c->status = CONTENT_STATUS_LOADING;
 	c->width = 0;
 	c->height = 0;
-	c->available_width = 0;
-	c->available_height = 0;
+	c->available_width = -1;
+	c->available_height = -1;
 	c->quirks = quirks;
 	c->refresh = 0;
 	nsu_getmonotonic_ms(&c->time);
@@ -340,6 +340,10 @@ content__reformat(struct content *c, bool background, int width, int height)
 	assert(c->status == CONTENT_STATUS_READY ||
 	       c->status == CONTENT_STATUS_DONE);
 	assert(c->locked == false);
+
+	if (c->available_width == width && c->available_height == height) {
+		return;
+	}
 
 	c->available_width = width;
 	c->available_height = height;

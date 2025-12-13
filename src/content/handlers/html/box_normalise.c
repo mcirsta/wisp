@@ -61,6 +61,8 @@ struct columns {
 	unsigned int current_column;
 	/** Number of columns in main part of table 1..max columns */
 	unsigned int num_columns;
+	/** Number of columns allocated */
+	unsigned int allocated_columns;
 	/** Information about columns in main table, array [0, num_columns) */
 	struct span_info *spans;
 	/** Number of rows in table */
@@ -112,14 +114,22 @@ calculate_table_row(struct columns *col_info,
 
 	if (col_info->num_columns < cell_end_col) {
 		/* It appears that this row has more columns than
-		 * the maximum recorded for the table so far.
-		 * Allocate more span records. */
-		spans = realloc(col_info->spans,
-				sizeof *spans * (cell_end_col + 1));
-		if (spans == NULL)
-			return false;
+		 * the maximum recorded for the table so far. */
+		if (col_info->allocated_columns <= cell_end_col) {
+			/* Allocate more span records. Grow exponentially. */
+			unsigned int new_size = cell_end_col + 1;
+			if (new_size < col_info->allocated_columns * 2)
+				new_size = col_info->allocated_columns * 2;
 
-		col_info->spans = spans;
+			spans = realloc(col_info->spans,
+					sizeof *spans * new_size);
+			if (spans == NULL)
+				return false;
+
+			col_info->spans = spans;
+			col_info->allocated_columns = new_size;
+		}
+
 		col_info->num_columns = cell_end_col;
 
 		/* Mark new final column as sentinel */
@@ -635,6 +645,7 @@ box_normalise_table(struct box *table, const struct box *root, html_content * c)
 #endif
 
 	col_info.num_columns = 1;
+	col_info.allocated_columns = 2;
 	col_info.current_column = 0;
 	col_info.spans = malloc(2 * sizeof *col_info.spans);
 	if (col_info.spans == NULL)
