@@ -263,10 +263,10 @@ nscss_process_data(struct content *c, const char *data, unsigned int size)
 	css_error error;
 
 	NSLOG(neosurf, INFO, "Processing CSS data: %u bytes for %p", size, c);
-    NSLOG(neosurf, INFO, "PROFILER: START CSS parsing %p", c);
+    NSLOG(neosurf, DEBUG, "PROFILER: START CSS parsing %p", c);
 
 	error = nscss_process_css_data(&css->data, data, size);
-    NSLOG(neosurf, INFO, "PROFILER: STOP CSS parsing %p", c);
+    NSLOG(neosurf, DEBUG, "PROFILER: STOP CSS parsing %p", c);
 	if (error != CSS_OK && error != CSS_NEEDDATA) {
 		NSLOG(neosurf, ERROR, "nscss_process_css_data failed: %d", error);
 		content_broadcast_error(c, NSERROR_CSS, NULL);

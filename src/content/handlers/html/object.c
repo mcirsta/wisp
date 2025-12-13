@@ -150,7 +150,7 @@ html_object_nobox_callback(hlcache_handle *object,
 	return NSERROR_OK;
 }
 
-static void html_deferred_reformat(void *p)
+void html_deferred_reformat(void *p)
 {
 	html_content *c = p;
 	c->pending_reformat = false;

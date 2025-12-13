@@ -1079,7 +1079,7 @@ static void html_reformat(struct content *c, int width, int height)
 
 	nsu_getmonotonic_ms(&ms_before);
 
-    NSLOG(neosurf, INFO, "PROFILER: START HTML layout %p", c);
+    NSLOG(neosurf, DEBUG, "PROFILER: START HTML layout %p", c);
 
 	htmlc->reflowing = true;
 
@@ -1111,7 +1111,7 @@ static void html_reformat(struct content *c, int width, int height)
 	htmlc->reflowing = false;
 	htmlc->had_initial_layout = true;
 
-    NSLOG(neosurf, INFO, "PROFILER: STOP HTML layout %p", c);
+    NSLOG(neosurf, DEBUG, "PROFILER: STOP HTML layout %p", c);
 
 	/* calculate next reflow time at three times what it took to reflow */
 	nsu_getmonotonic_ms(&ms_after);
@@ -1232,6 +1232,7 @@ static void html_destroy(struct content *c)
 	/* Cancel any pending conversion resumes immediately */
 	guit->misc->schedule(-1, html_resume_conversion_cb, html);
 	guit->misc->schedule(-1, script_resume_conversion_cb, html);
+	guit->misc->schedule(-1, html_deferred_reformat, html);
 
 	/* If we're still converting a layout, cancel it */
 	if (html->box_conversion_context != NULL) {

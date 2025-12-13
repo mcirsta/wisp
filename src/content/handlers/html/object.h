@@ -83,4 +83,11 @@ nserror html_object_open_objects(struct html_content *html, struct browser_windo
  */
 nserror html_object_abort_objects(struct html_content *html);
 
+/**
+ * callback for deferred reformat
+ *
+ * \param p The html content
+ */
+void html_deferred_reformat(void *p);
+
 #endif

@@ -608,13 +608,13 @@ imagemap_extract(html_content *c)
 	uint32_t maybe_maps;
 	nserror ret = NSERROR_OK;
 
-	NSLOG(netsurf, INFO, "PROFILER: START imagemap_extract %p", c);
+	NSLOG(netsurf, DEBUG, "PROFILER: START imagemap_extract %p", c);
 
 	exc = dom_document_get_elements_by_tag_name(c->document,
 						    corestring_dom_map,
 						    &nlist);
 	if (exc != DOM_NO_ERR) {
-		NSLOG(netsurf, INFO, "PROFILER: STOP imagemap_extract %p", c);
+		NSLOG(netsurf, DEBUG, "PROFILER: STOP imagemap_extract %p", c);
 		return NSERROR_DOM;
 	}
 
@@ -687,7 +687,7 @@ imagemap_extract(html_content *c)
 
 out_nlist:
 	dom_nodelist_unref(nlist);
-	NSLOG(netsurf, INFO, "PROFILER: STOP imagemap_extract %p", c);
+	NSLOG(netsurf, DEBUG, "PROFILER: STOP imagemap_extract %p", c);
 	return ret;
 }
 

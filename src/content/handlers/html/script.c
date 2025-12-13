@@ -598,7 +598,7 @@ html_process_script(void *ctx, dom_node *node)
 
 	NSLOG(neosurf, INFO, "content %p parser %p node %p", c, c->parser,
 	      node);
-	NSLOG(neosurf, INFO, "PROFILER: START JS execute %p", node);
+	NSLOG(neosurf, DEBUG, "PROFILER: START JS execute %p", node);
 
 	exc = dom_element_get_attribute(node, corestring_dom_type, &mimetype);
 	if (exc != DOM_NO_ERR || mimetype == NULL) {
@@ -614,7 +614,7 @@ html_process_script(void *ctx, dom_node *node)
 	}
 
 	dom_string_unref(mimetype);
-	NSLOG(neosurf, INFO, "PROFILER: STOP JS execute %p", node);
+	NSLOG(neosurf, DEBUG, "PROFILER: STOP JS execute %p", node);
 
 	return err;
 }

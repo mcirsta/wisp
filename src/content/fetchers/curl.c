@@ -510,7 +510,7 @@ fetch_curl_setup(struct fetch *parent_fetch,
 		return NULL;
 
 	NSLOG(netsurf, INFO, "fetch %p, url '%s'", fetch, nsurl_access(url));
-	NSLOG(neosurf, INFO, "PROFILER: START Fetch queue %p", fetch);
+	NSLOG(neosurf, DEBUG, "PROFILER: START Fetch queue %p", fetch);
 
 	fetch->only_2xx = only_2xx;
 	fetch->downgrade_tls = downgrade_tls;
@@ -1363,8 +1363,8 @@ static bool fetch_curl_start(void *vfetch)
 		NSLOG(neosurf, DEBUG, "Deferring fetch because we're inside cURL");
 		return false;
 	}
-	NSLOG(neosurf, INFO, "PROFILER: STOP Fetch queue %p", fetch);
-	NSLOG(neosurf, INFO, "PROFILER: START Fetch latency %p", fetch);
+	NSLOG(neosurf, DEBUG, "PROFILER: STOP Fetch queue %p", fetch);
+	NSLOG(neosurf, DEBUG, "PROFILER: START Fetch latency %p", fetch);
 	return fetch_curl_initiate_fetch(fetch,
 			fetch_curl_get_handle(fetch->host));
 }
@@ -1591,9 +1591,9 @@ static void fetch_curl_done(CURL *curl_handle, CURLcode result)
 	NSLOG(neosurf, INFO, "done %s", nsurl_access(f->url));
 
 	if (f->profiled_response_started) {
-		NSLOG(neosurf, INFO, "PROFILER: STOP Fetch download %p", f);
+		NSLOG(neosurf, DEBUG, "PROFILER: STOP Fetch download %p", f);
 	} else {
-		NSLOG(neosurf, INFO, "PROFILER: STOP Fetch latency %p", f);
+		NSLOG(neosurf, DEBUG, "PROFILER: STOP Fetch latency %p", f);
 	}
 
 	if ((abort_fetch == false) &&
@@ -1918,8 +1918,8 @@ fetch_curl_header(char *data, size_t size, size_t nmemb, void *_f)
 	}
 
 	if (f->profiled_response_started == false) {
-		NSLOG(neosurf, INFO, "PROFILER: STOP Fetch latency %p", f);
-		NSLOG(neosurf, INFO, "PROFILER: START Fetch download %p", f);
+		NSLOG(neosurf, DEBUG, "PROFILER: STOP Fetch latency %p", f);
+		NSLOG(neosurf, DEBUG, "PROFILER: START Fetch download %p", f);
 		f->profiled_response_started = true;
 	}
 

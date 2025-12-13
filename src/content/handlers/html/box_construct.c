@@ -1243,7 +1243,7 @@ static void convert_xml_to_box(void *p)
 	uint64_t start_time, now_time;
 
 	nsu_getmonotonic_ms(&start_time);
-	NSLOG(netsurf, INFO, "PROFILER: START Box construction slice %p", ctx);
+	NSLOG(netsurf, DEBUG, "PROFILER: START Box construction slice %p", ctx);
 
 	do {
 		convert_children = true;
@@ -1254,7 +1254,7 @@ static void convert_xml_to_box(void *p)
 				ctx->cb(ctx->content, false);
 				dom_node_unref(ctx->n);
 				free(ctx);
-				NSLOG(netsurf, INFO, "PROFILER: STOP Box construction slice %p", ctx);
+				NSLOG(netsurf, DEBUG, "PROFILER: STOP Box construction slice %p", ctx);
 				return;
 			}
 
@@ -1269,7 +1269,7 @@ static void convert_xml_to_box(void *p)
 				ctx->cb(ctx->content, false);
 				dom_node_unref(next);
 				free(ctx);
-				NSLOG(netsurf, INFO, "PROFILER: STOP Box construction slice %p", ctx);
+				NSLOG(netsurf, DEBUG, "PROFILER: STOP Box construction slice %p", ctx);
 				return;
 			}
 
@@ -1282,7 +1282,7 @@ static void convert_xml_to_box(void *p)
 					ctx->cb(ctx->content, false);
 					dom_node_unref(ctx->n);
 					free(ctx);
-					NSLOG(netsurf, INFO, "PROFILER: STOP Box construction slice %p", ctx);
+					NSLOG(netsurf, DEBUG, "PROFILER: STOP Box construction slice %p", ctx);
 					return;
 				}
 			}
@@ -1316,7 +1316,7 @@ static void convert_xml_to_box(void *p)
 			assert(ctx->n == NULL);
 
 			free(ctx);
-			NSLOG(netsurf, INFO, "PROFILER: STOP Box construction slice %p", ctx);
+			NSLOG(netsurf, DEBUG, "PROFILER: STOP Box construction slice %p", ctx);
 			return;
 		}
 
@@ -1330,7 +1330,7 @@ static void convert_xml_to_box(void *p)
 		}
 	} while (true);
 
-	NSLOG(netsurf, INFO, "PROFILER: STOP Box construction slice %p", ctx);
+	NSLOG(netsurf, DEBUG, "PROFILER: STOP Box construction slice %p", ctx);
 	/* More work to do: schedule a continuation */
 	guit->misc->schedule(0, (void *)convert_xml_to_box, ctx);
 }
