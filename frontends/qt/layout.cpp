@@ -30,9 +30,9 @@ extern "C" {
 #include "utils/errors.h"
 #include "utils/utf8.h"
 #include "utils/nsoption.h"
-#include "netsurf/inttypes.h"
-#include "netsurf/layout.h"
-#include "netsurf/plot_style.h"
+#include "neosurf/inttypes.h"
+#include "neosurf/layout.h"
+#include "neosurf/plot_style.h"
 
 }
 

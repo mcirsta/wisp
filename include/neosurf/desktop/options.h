@@ -294,3 +294,6 @@ NSOPTION_COLOUR(sys_colour_VisitedText, 0x008b1a55)
 NSOPTION_STRING(log_filter, NEOSURF_BUILTIN_LOG_FILTER)
 /** Filter for verbose logging */
 NSOPTION_STRING(verbose_filter, NEOSURF_BUILTIN_VERBOSE_FILTER)
+
+/* page colour selection */
+NSOPTION_UINT(colour_selection, 0)

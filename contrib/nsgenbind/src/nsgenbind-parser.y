@@ -160,7 +160,7 @@ add_method(struct genbind_node **genbind_ast,
                 res_node = genbind_new_node(GENBIND_NODE_TYPE_CLASS, NULL,
                                       genbind_new_node(GENBIND_NODE_TYPE_IDENT,
                                                        method_node,
-                                                       class_name));
+                                                       strdup(class_name)));
         } else {
                 /* update the existing class */
 

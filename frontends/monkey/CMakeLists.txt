@@ -1,4 +1,4 @@
-find_package(Python3 REQUIRED COMPONENTS Interpreter)
+
 
 include_directories(${CMAKE_SOURCE_DIR}/include)
 

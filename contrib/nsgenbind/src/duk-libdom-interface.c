@@ -630,8 +630,11 @@ output_interface_init_declaration(struct opctx *outc,
                 DLPFX, interfacee->class_name, interfacee->class_name);
 
         /* count the number of arguments on the initializer */
+        if (interfacee->class_init_argt) {
+                free(interfacee->class_init_argt);
+        }
         interfacee->class_init_argc = 0;
-	interfacee->class_init_argt = NULL;
+ interfacee->class_init_argt = NULL;
 
         /* output the paramters on the method (if any) */
         param_node = genbind_node_find_type(

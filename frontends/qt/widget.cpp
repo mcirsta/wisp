@@ -29,9 +29,9 @@ extern "C" {
 #include "utils/log.h"
 #include "utils/nsoption.h"
 
-#include "netsurf/plotters.h"
-#include "netsurf/keypress.h"
-#include "netsurf/content.h"
+#include "neosurf/plotters.h"
+#include "neosurf/keypress.h"
+#include "neosurf/content.h"
 }
 
 #include "qt/application.cls.h"

@@ -192,6 +192,11 @@ int ir_dump(struct ir *map);
 int ir_dumpdot(struct ir *map);
 
 /**
+ * Free an IR
+ */
+void ir_free(struct ir *map);
+
+/**
  * interface map parent entry
  *
  * \return inherit entry or NULL if there is not one

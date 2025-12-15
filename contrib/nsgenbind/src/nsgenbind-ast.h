@@ -101,6 +101,11 @@ struct genbind_node *genbind_node_add(struct genbind_node *node, struct genbind_
 int genbind_dump_ast(struct genbind_node *node);
 
 /**
+ * Free a binding AST
+ */
+void genbind_free_ast(struct genbind_node *node);
+
+/**
  *Depth first left hand search using user provided comparison
  *
  * @param node The node to start the search from

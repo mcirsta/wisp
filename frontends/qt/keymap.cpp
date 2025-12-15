@@ -24,7 +24,7 @@
 #include <QKeyEvent>
 
 extern "C" {
-#include "netsurf/keypress.h"
+#include "neosurf/keypress.h"
 }
 
 #include "qt/keymap.h"

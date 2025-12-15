@@ -1,3 +1,5 @@
+#pragma once
+
 /*
  * Copyright 2023 Vincent Sanders <vince@netsurf-browser.org>
  *
@@ -28,9 +30,9 @@
 
 extern "C" {
 
-#include "netsurf/types.h"
-#include "netsurf/content_type.h"
-#include "netsurf/browser_window.h"
+#include "neosurf/types.h"
+#include "neosurf/content_type.h"
+#include "neosurf/browser_window.h"
 
 }
 

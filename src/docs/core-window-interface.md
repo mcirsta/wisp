@@ -27,7 +27,7 @@ core window API
 The API is fairly simple and simply involves passing a callback table
 and context pointer to the interface element being constructed.
 
-The header that defines the callback interface is netsurf/core_window.h 
+The header that defines the callback interface is neosurf/core_window.h 
 
 The callback table contains five function pointer interfaces which the
 frontend must implement for the core.
@@ -139,7 +139,7 @@ frontends/example/corewindow.h
     #ifndef EXAMPLE_COREWINDOW_H
     #define EXAMPLE_COREWINDOW_H
     
-    #include "netsurf/core_window.h"
+    #include "neosurf/core_window.h"
     
     /**
      * example core window state
@@ -257,9 +257,9 @@ frontends/example/corewindow.c
     #include "utils/utils.h"
     #include "utils/messages.h"
     #include "utils/utf8.h"
-    #include "netsurf/keypress.h"
-    #include "netsurf/mouse.h"
-    #include "netsurf/plot_style.h"
+    #include "neosurf/keypress.h"
+    #include "neosurf/mouse.h"
+    #include "neosurf/plot_style.h"
     
     /* extremely likely there will be additional headers required in a real frontend */
     #include "example/corewindow.h"
@@ -487,8 +487,8 @@ frontends/example/ssl_cert.c
     #include <stdlib.h>
     
     #include "utils/log.h"
-    #include "netsurf/keypress.h"
-    #include "netsurf/plotters.h"
+    #include "neosurf/keypress.h"
+    #include "neosurf/plotters.h"
     #include "desktop/sslcert_viewer.h"
     
     #include "example/corewindow.h"

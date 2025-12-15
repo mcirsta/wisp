@@ -1,3 +1,5 @@
+#pragma once
+
 /**
  * \file
  * Implementation of local history widget for qt.

@@ -162,7 +162,7 @@ nserror netsurf_nsurl_to_path(struct nsurl *url, char **path_out);
  * @return NSERROR_OK and the url is placed in \a url or error
  *         code on faliure.
  */
-nserror netsurf_path_to_nsurl(const char *path, struct nsurl **url);
+nserror neosurf_path_to_nsurl(const char *path, struct nsurl **url);
 
 /**
  * Ensure that all directory elements needed to store a filename exist.

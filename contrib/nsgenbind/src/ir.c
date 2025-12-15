@@ -19,6 +19,8 @@
 #include "webidl-ast.h"
 #include "ir.h"
 
+static void ir_free_entry(struct ir_entry *entry);
+
 /** count the number of nodes of a given type on an interface */
 static int
 enumerate_interface_type(struct webidl_node *interface_node,
@@ -945,10 +947,19 @@ entry_map_new(struct genbind_node *genbind,
 
         /* sort entries to ensure correct ordering */
         sorted_entries = entry_topoligical_sort(entries, entryc);
-        free(entries);
         if (sorted_entries == NULL) {
+                int i;
+                /* sort failed, free entries map */
+                for (i = 0; i < entryc; i++) {
+                        /* free the entry if it hasn't been moved */
+                        if (entries[i].name != NULL) {
+                                ir_free_entry(&entries[i]);
+                        }
+                }
+                free(entries);
                 return -1;
         }
+        free(entries);
 
         /* compute inheritance and refcounts on sorted map */
         compute_inherit_refcount(sorted_entries, entryc);
@@ -1234,4 +1245,91 @@ ir_inherit_entry(struct ir *map,
                 res = &map->entries[entry->inherit_idx];
         }
         return res;
+}
+
+static void ir_free_entry(struct ir_entry *entry)
+{
+        int i;
+
+        if (entry->filename) {
+                free(entry->filename);
+        }
+
+        /* we don't free entry->class_name, it's not dynamically allocated in ir.c */
+        if (entry->class_name) {
+                free(entry->class_name);
+        }
+
+        if (entry->class_init_argt) {
+                free(entry->class_init_argt);
+        }
+
+        /* free type-specific data */
+        switch (entry->type) {
+        case IR_ENTRY_TYPE_INTERFACE:
+                /* free operations */
+                for (i = 0; i < entry->u.interface.operationc; i++) {
+                        struct ir_operation_entry *op = &entry->u.interface.operationv[i];
+                        int j;
+                        /* free overloads */
+                        for (j = 0; j < op->overloadc; j++) {
+                                struct ir_operation_overload_entry *ovl = &op->overloadv[j];
+                                /* free arguments */
+                                if (ovl->argumentv) {
+                                        free(ovl->argumentv);
+                                }
+                        }
+                        if (op->overloadv) {
+                                free(op->overloadv);
+                        }
+                }
+                if (entry->u.interface.operationv) {
+                        free(entry->u.interface.operationv);
+                }
+
+                /* free attributes */
+                for (i = 0; i < entry->u.interface.attributec; i++) {
+                        struct ir_attribute_entry *attr = &entry->u.interface.attributev[i];
+                        if (attr->typev) {
+                                free(attr->typev);
+                        }
+                        if (attr->property_name) {
+                                free(attr->property_name);
+                        }
+                }
+                if (entry->u.interface.attributev) {
+                        free(entry->u.interface.attributev);
+                }
+
+                /* free constants */
+                if (entry->u.interface.constantv) {
+                        free(entry->u.interface.constantv);
+                }
+                break;
+
+        case IR_ENTRY_TYPE_DICTIONARY:
+                if (entry->u.dictionary.memberv) {
+                        free(entry->u.dictionary.memberv);
+                }
+                break;
+        }
+}
+
+void ir_free(struct ir *map)
+{
+        int i;
+
+        if (map == NULL) {
+                return;
+        }
+
+        /* free entries */
+        if (map->entries) {
+                for (i = 0; i < map->entryc; i++) {
+                        ir_free_entry(&map->entries[i]);
+                }
+                free(map->entries);
+        }
+
+        free(map);
 }

@@ -140,6 +140,9 @@ webidl_error(YYLTYPE *locp, struct webidl_node **winbind_ast, const char *str)
 %type <node> DictionaryMember
 
 %type <node> Exception
+%type <node> ExceptionMembers
+%type <node> ExceptionMember
+%type <node> ExceptionField
 %type <node> Enum
 %type <node> Typedef
 %type <node> ImplementsStatement
@@ -217,6 +220,8 @@ webidl_error(YYLTYPE *locp, struct webidl_node **winbind_ast, const char *str)
 %type <text> Other
 %type <text> OtherOrComma
 
+%destructor { free($$); } <text>
+%destructor { webidl_free_ast($$); } <node>
 
 %%
 
@@ -231,8 +236,15 @@ Definitions:
         |
         Definitions ExtendedAttributeList Definition
         {
-            webidl_node_add($3, $2);
-            $$ = *webidl_ast = webidl_node_prepend(*webidl_ast, $3);
+            if ($3 != NULL) {
+                webidl_node_add($3, $2);
+                *webidl_ast = webidl_node_prepend(*webidl_ast, $3);
+            } else {
+                if ($2 != NULL) {
+                     webidl_free_ast($2);
+                }
+            }
+            $$ = NULL;
         }
         |
         error
@@ -475,16 +487,16 @@ Dictionary:
 
  /* SE[12] */
 DictionaryMembers:
-        {
-                $$ = NULL; /* empty */
-        }
-        |
-        ExtendedAttributeList DictionaryMember DictionaryMembers
-        {
-                /** \todo handle ExtendedAttributeList */
-                $$ = webidl_node_append($3, $2);
-        }
-        ;
+       {
+               $$ = NULL; /* empty */
+       }
+       |
+       ExtendedAttributeList DictionaryMember DictionaryMembers
+       {
+               webidl_node_add($2, $1);
+               $$ = webidl_node_append($3, $2);
+       }
+       ;
 
  /* SE[13]
   * Second edition introduces Required except required type may not
@@ -593,6 +605,13 @@ DefaultValue:
 Exception:
         TOK_EXCEPTION TOK_IDENTIFIER Inheritance '{' ExceptionMembers '}' ';'
         {
+            free($2);
+            if ($3 != NULL) {
+                free($3);
+            }
+            if ($5 != NULL) {
+                webidl_free_ast($5);
+            }
             $$ = NULL;
         }
         ;
@@ -600,8 +619,23 @@ Exception:
  /* [18] */
 ExceptionMembers:
         /* empty */
+        {
+                $$ = NULL;
+        }
         |
         ExtendedAttributeList ExceptionMember ExceptionMembers
+        {
+                if ($1 != NULL) {
+                        webidl_free_ast($1);
+                }
+                if ($2 != NULL) {
+                        webidl_free_ast($2);
+                }
+                if ($3 != NULL) {
+                        webidl_free_ast($3);
+                }
+                $$ = NULL;
+        }
         ;
 
  /* [19] returns a string */
@@ -621,6 +655,7 @@ Inheritance:
 Enum:
         TOK_ENUM TOK_IDENTIFIER '{' EnumValueList '}' ';'
         {
+                free($2);
                 $$ = NULL;
         }
         ;
@@ -630,6 +665,9 @@ Enum:
   /* SE[20] */
 EnumValueList:
         TOK_STRING_LITERAL EnumValueListComma
+        {
+                free($1);
+        }
         ;
 
  /* SE[21] */
@@ -642,6 +680,9 @@ EnumValueListComma:
  /* SE[22] */
 EnumValueListString:
         TOK_STRING_LITERAL EnumValueListComma
+        {
+                free($1);
+        }
         |
         /* empty */
         ;
@@ -651,6 +692,9 @@ EnumValueListString:
 CallbackRest:
         TOK_IDENTIFIER '=' ReturnType '(' ArgumentList ')' ';'
         {
+                free($1);
+                webidl_free_ast($3);
+                webidl_free_ast($5);
                 $$ = NULL;
         }
         ;
@@ -659,6 +703,11 @@ CallbackRest:
 Typedef:
         TOK_TYPEDEF ExtendedAttributeList Type TOK_IDENTIFIER ';'
         {
+                if ($2 != NULL) {
+                        webidl_free_ast($2);
+                }
+                webidl_free_ast($3);
+                free($4);
                 $$ = NULL;
         }
         ;
@@ -1099,11 +1148,12 @@ Arguments:
 
  /* [43] */
 Argument:
-        ExtendedAttributeList OptionalOrRequiredArgument
-        {
-                $$ = $2;
-        }
-        ;
+       ExtendedAttributeList OptionalOrRequiredArgument
+       {
+               webidl_node_add($2, $1);
+               $$ = $2;
+       }
+       ;
 
  /* [44] */
 OptionalOrRequiredArgument:
@@ -1150,11 +1200,16 @@ Ellipsis:
 Iterable:
         TOK_ITERABLE '<' Type OptionalType '>' ';'
         {
+                webidl_free_ast($3);
+                if ($4 != NULL) {
+                        webidl_free_ast($4);
+                }
                 $$ = NULL;
         }
         |
         TOK_LEGACYITERABLE '<' Type '>' ';'
         {
+                webidl_free_ast($3);
                 $$ = NULL;
         }
         ;
@@ -1168,7 +1223,7 @@ OptionalType:
         |
         ',' Type
         {
-                $$ = NULL;
+                $$ = $2;
         }
         ;
 
@@ -1182,6 +1237,10 @@ ExceptionMember:
  /* [48] */
 ExceptionField:
         Type TOK_IDENTIFIER ';'
+        {
+                free($2);
+                $$ = $1;
+        }
         ;
 
  /* [49] extended attribute list inside square brackets */
@@ -1699,6 +1758,9 @@ UnionMemberType:
         |
         TOK_ANY '[' ']' TypeSuffix
         {
+                if ($4 != NULL) {
+                        webidl_free_ast($4);
+                }
                 $$ = NULL;
         }
         ;
@@ -1898,6 +1960,7 @@ OptionalLong:
 PromiseType:
         TOK_PROMISE '<' ReturnType '>'
         {
+            webidl_free_ast($3);
             $$ = NULL;
         }
         ;

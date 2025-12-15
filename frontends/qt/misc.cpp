@@ -27,10 +27,10 @@
 
 extern "C" {
 
-#include "utils/errors.h"
-#include "utils/sys_time.h"
-#include "utils/log.h"
-#include "netsurf/misc.h"
+#include "neosurf/utils/errors.h"
+#include "neosurf/utils/sys_time.h"
+#include "neosurf/utils/log.h"
+#include "neosurf/misc.h"
 
 }
 

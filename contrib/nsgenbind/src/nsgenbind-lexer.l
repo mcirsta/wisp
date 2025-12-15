@@ -33,6 +33,24 @@
 
 static struct YYLTYPE *locations = NULL;
 
+struct string_list {
+        char *str;
+        struct string_list *next;
+};
+static struct string_list *allocated_filenames = NULL;
+
+void nsgenbind_lexer_clean_filenames(void)
+{
+        struct string_list *cur = allocated_filenames;
+        while (cur) {
+                struct string_list *next = cur->next;
+                free(cur->str);
+                free(cur);
+                cur = next;
+        }
+        allocated_filenames = NULL;
+}
+
 static struct YYLTYPE *push_location(struct YYLTYPE *head,
                                      struct YYLTYPE *loc,
                                      const char *filename)
@@ -48,6 +66,14 @@ static struct YYLTYPE *push_location(struct YYLTYPE *head,
         loc->first_line = loc->last_line = 1;
         loc->first_column = loc->last_column = 1;
         loc->filename = strdup(filename);
+        if (loc->filename) {
+                struct string_list *n = malloc(sizeof(struct string_list));
+                if (n) {
+                        n->str = loc->filename;
+                        n->next = allocated_filenames;
+                        allocated_filenames = n;
+                }
+        }
         yylineno = 1;
 
         return res;

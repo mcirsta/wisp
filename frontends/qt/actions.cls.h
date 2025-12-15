@@ -32,9 +32,9 @@
 
 extern "C" {
 
-#include "netsurf/types.h"
-#include "netsurf/content_type.h"
-#include "netsurf/browser_window.h"
+#include "neosurf/types.h"
+#include "neosurf/content_type.h"
+#include "neosurf/browser_window.h"
 
 }
 

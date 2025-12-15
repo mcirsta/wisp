@@ -161,6 +161,11 @@ int webidl_parsefile(char *filename, struct webidl_node **webidl_ast);
 int webidl_dump_ast(struct webidl_node *node);
 
 /**
+ * Free an AST
+ */
+void webidl_free_ast(struct webidl_node *node);
+
+/**
  * perform replacement of implements elements with copies of ast data
  */
 int webidl_intercalate_implements(struct webidl_node *node);

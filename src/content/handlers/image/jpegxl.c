@@ -33,7 +33,7 @@
 #include "utils/utils.h"
 #include "utils/log.h"
 #include "utils/messages.h"
-#include "netsurf/bitmap.h"
+#include "neosurf/bitmap.h"
 #include "content/llcache.h"
 #include "content/content.h"
 #include "content/content_protected.h"

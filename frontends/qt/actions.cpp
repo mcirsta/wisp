@@ -36,7 +36,7 @@ extern "C" {
 #include "utils/nsurl.h"
 #include "utils/log.h"
 
-#include "netsurf/content.h"
+#include "neosurf/content.h"
 
 #include "desktop/browser_history.h"
 #include "desktop/hotlist.h"

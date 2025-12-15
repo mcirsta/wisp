@@ -27,8 +27,8 @@
 
 extern "C" {
 #include "utils/errors.h"
-#include "netsurf/core_window.h"
-#include "netsurf/mouse.h"
+#include "neosurf/core_window.h"
+#include "neosurf/mouse.h"
 }
 
 class NS_Corewindow : public QWidget

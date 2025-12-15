@@ -24,7 +24,6 @@ NetSurf.dmg
 NetSurf
 core
 nsfb-*
-build
 netsurf
 netsurf-libs
 dist
@@ -49,3 +48,6 @@ install_release
 *.diff
 Testing/Temporary
 duktape-build
+build-cmake
+build-gcc
+

@@ -22,6 +22,8 @@
 #include "jsapi-libdom.h"
 #include "duk-libdom.h"
 
+void nsgenbind_lexer_clean_filenames(void);
+
 struct options *options;
 
 enum bindingtype_e {
@@ -208,7 +210,7 @@ int main(int argc, char **argv)
         res = genbind_parsefile(options->infilename, &genbind_root);
         if (res != 0) {
                 fprintf(stderr, "Error: parse failed with code %d\n", res);
-                return res;
+                goto cleanup;
         }
 
         /* dump the binding AST */
@@ -217,22 +219,25 @@ int main(int argc, char **argv)
         /* get type of binding */
         bindingtype = genbind_get_type(genbind_root);
         if (bindingtype == BINDINGTYPE_UNKNOWN) {
-                return 3;
+                res = 3;
+                goto cleanup;
         }
 
         /* load the IDL files specified in the binding */
         res = genbind_load_idl(genbind_root, &webidl_root);
         if (res != 0) {
-                return 4;
+                res = 4;
+                goto cleanup;
         }
 
-	/* debug dump of web idl AST */
+ /* debug dump of web idl AST */
         webidl_dump_ast(webidl_root);
 
         /* generate intermediate representation */
         res = ir_new(genbind_root, webidl_root, &ir);
         if (res != 0) {
-                return 5;
+                res = 5;
+                goto cleanup;
         }
 
         /* dump the intermediate representation */
@@ -249,6 +254,33 @@ int main(int argc, char **argv)
                 fprintf(stderr, "Unable to generate binding of this type\n");
                 res = 7;
         }
+
+cleanup:
+        /* clean up */
+        if (ir != NULL) {
+            ir_free(ir);
+        }
+
+        if (webidl_root != NULL) {
+            webidl_free_ast(webidl_root);
+        }
+
+        if (genbind_root != NULL) {
+            genbind_free_ast(genbind_root);
+        }
+
+        if (options->idlpath != NULL) {
+            free(options->idlpath);
+        }
+        if (options->infilename != NULL) {
+            free(options->infilename);
+        }
+        if (options->outdirname != NULL) {
+            free(options->outdirname);
+        }
+        free(options);
+
+        nsgenbind_lexer_clean_filenames();
 
         return res;
 }

@@ -30,7 +30,6 @@ set(NEOSURF_WINDOWS_SRCS
 )
 
 
-find_package(Python3 REQUIRED COMPONENTS Interpreter)
 
 set(MESSAGES_LANGUAGES en fr de it nl)
 set(MESSAGES_PLATFORMS win all)

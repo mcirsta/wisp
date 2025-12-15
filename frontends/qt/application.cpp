@@ -38,12 +38,12 @@ extern "C" {
 #include "utils/messages.h"
 #include "utils/filepath.h"
 
-#include "netsurf/bitmap.h"
-#include "netsurf/netsurf.h"
-#include "netsurf/content.h"
-#include "netsurf/browser_window.h"
-#include "netsurf/cookie_db.h"
-#include "netsurf/url_db.h"
+#include "neosurf/bitmap.h"
+#include "neosurf/neosurf.h"
+#include "neosurf/content.h"
+#include "neosurf/browser_window.h"
+#include "neosurf/cookie_db.h"
+#include "neosurf/url_db.h"
 
 #include "desktop/hotlist.h"
 #include "desktop/searchweb.h"
@@ -59,14 +59,19 @@ extern "C" {
 #include "qt/cookies.cls.h"
 #include "qt/page_info.cls.h"
 
+
 //QTimer
 //QSocketNotifier
 
-static NS_Application *nsqtapp;
+#ifndef NEOSURF_HOMEPAGE
+#define NEOSURF_HOMEPAGE "about:welcome"
+#endif
+
+NS_Application* NS_Application::s_nsqt_instance = nullptr;
 
 NS_Application* NS_Application::instance()
 {
-	return nsqtapp;
+	return NS_Application::s_nsqt_instance;
 }
 
 /**
@@ -403,7 +408,7 @@ void NS_Application::nsOptionUpdate()
 	}
 }
 
-NS_Application::NS_Application(int &argc, char **argv, struct netsurf_table *nsqt_table)
+NS_Application::NS_Application(int &argc, char **argv, struct neosurf_table *nsqt_table)
 	:QApplication(argc, argv),
 	 m_settings_window(nullptr),
 	 m_bookmarks_window(nullptr),
@@ -413,10 +418,10 @@ NS_Application::NS_Application(int &argc, char **argv, struct netsurf_table *nsq
 {
 	nserror res;
 
-	nsqtapp = this;
+	NS_Application::s_nsqt_instance = this;
 
 	/* register operation tables */
-	res = netsurf_register(nsqt_table);
+	res = neosurf_register(nsqt_table);
 	if (res != NSERROR_OK) {
 		throw NS_Exception("NetSurf operation table failed registration", res);
 	}
@@ -473,7 +478,7 @@ NS_Application::NS_Application(int &argc, char **argv, struct netsurf_table *nsq
 	nsurl *url = NULL;
 
 	/* netsurf initialisation */
-	res = netsurf_init(NULL);
+	res = neosurf_init(NULL);
 	if (res != NSERROR_OK) {
 		throw NS_Exception("Netsurf core initialisation failed", res);
 	}
@@ -558,7 +563,7 @@ NS_Application::~NS_Application()
 	}
 
 	/* common finalisation */
-	netsurf_exit();
+	neosurf_exit();
 
 	/* finalise options */
 	nsoption_finalise(nsoptions, nsoptions_default);
@@ -716,7 +721,7 @@ nserror NS_Application::create_browser_widget(nsurl *url,
 		if (nsoption_charp(homepage_url) != NULL) {
 			addr = nsoption_charp(homepage_url);
 		} else {
-			addr = NETSURF_HOMEPAGE;
+			addr = NEOSURF_HOMEPAGE;
 		}
 		res = nsurl_create(addr, &url);
 		if (res == NSERROR_OK) {

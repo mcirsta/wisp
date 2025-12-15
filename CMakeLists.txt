@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(neosurf LANGUAGES C)
+project(neosurf LANGUAGES C CXX)
 
 # Testing option: ON for Debug builds, OFF for others
 set(DEFAULT_ENABLE_TESTS OFF)
@@ -19,7 +19,11 @@ math(EXPR NEOSURF_VERSION_NUM "${NEOSURF_MAJOR_VERSION} * 100 + ${NEOSURF_MINOR_
 
 add_definitions(-DNDEBUG -DWITH_OPENSSL -DWITH_BMP -DWITH_GIF -DWITH_NS_SVG -D_XOPEN_SOURCE=700 -D_DEFAULT_SOURCE -DNEOSURF_VERSION=${NEOSURF_VERSION_NUM} 
 			-DNEOSURF_VERSION_MAJOR=${NEOSURF_MAJOR_VERSION} -DNEOSURF_VERSION_MINOR=${NEOSURF_MINOR_VERSION})
-add_compile_options(-std=c99 -Wno-unused-parameter -Wno-deprecated-declarations -Wno-strict-prototypes -Wno-unused-but-set-variable -Wno-int-conversion)
+set(CMAKE_C_STANDARD 99)
+set(CMAKE_C_STANDARD_REQUIRED ON)
+add_compile_options(-Wno-unused-parameter -Wno-deprecated-declarations -Wno-unused-but-set-variable)
+add_compile_options($<$<COMPILE_LANGUAGE:C>:-Wno-strict-prototypes>)
+add_compile_options($<$<COMPILE_LANGUAGE:C>:-Wno-int-conversion>)
 
 include(GNUInstallDirs)
 
@@ -36,10 +40,7 @@ find_program(GPERF gperf)
 if(${GPERF} STREQUAL GPERF-NOTFOUND)
 	message(FATAL_ERROR "Missing `gperf` utility. Please refer to your distribution package manager for obtaining this.")
 endif()
-find_program(PYTHON3 python3)
-if(${PYTHON3} STREQUAL PYTHON3-NOTFOUND)
-	message(FATAL_ERROR "Missing Python3 executable. Please refer to your distribution package manager for obtaining this.")
-endif()
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
 find_program(FLEX flex)
 if(${FLEX} STREQUAL FLEX-NOTFOUND)
 	message(FATAL_ERROR "Missing `flex` utility. Please refer to your distribution package manager for obtaining this.")

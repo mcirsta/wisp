@@ -1,3 +1,5 @@
+#pragma once
+
 /*
  * Copyright 2023 Vincent Sanders <vince@netsurf-browser.org>
  *

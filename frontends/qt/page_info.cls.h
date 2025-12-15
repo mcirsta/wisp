@@ -1,3 +1,5 @@
+#pragma once
+
 /**
  * \file
  * Implementation of page info widget for qt.

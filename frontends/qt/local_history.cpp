@@ -21,8 +21,8 @@
  * Local history corewindow.
  */
 extern "C" {
-#include "netsurf/content.h"
-#include "netsurf/browser_window.h"
+#include "neosurf/content.h"
+#include "neosurf/browser_window.h"
 
 #include "desktop/local_history.h"
 #include "desktop/browser_private.h"

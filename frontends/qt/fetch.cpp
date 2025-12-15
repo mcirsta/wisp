@@ -34,7 +34,7 @@ extern "C" {
 #include "utils/log.h"
 #include "utils/filepath.h"
 #include "utils/file.h"
-#include "netsurf/fetch.h"
+#include "neosurf/fetch.h"
 
 }
 
@@ -99,7 +99,7 @@ static nsurl *nsqt_get_resource_url(const char *path)
 	char buf[PATH_MAX];
 	nsurl *url = NULL;
 
-	netsurf_path_to_nsurl(filepath_sfind(respaths, buf, path), &url);
+	neosurf_path_to_nsurl(filepath_sfind(respaths, buf, path), &url);
 
 	return url;
 }

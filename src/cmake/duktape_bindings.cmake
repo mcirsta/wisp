@@ -251,7 +251,7 @@ set(DUKTAPE_GEN_SOURCES
 add_custom_command(
     OUTPUT ${CMAKE_BINARY_DIR}/duktape/binding.h ${CMAKE_BINARY_DIR}/duktape/binding.c ${CMAKE_BINARY_DIR}/duktape/private.h ${CMAKE_BINARY_DIR}/duktape/prototype.h ${DUKTAPE_GEN_SOURCES}
     COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/duktape
-    COMMAND $<TARGET_FILE:nsgenbind> -I ${CMAKE_SOURCE_DIR}/src/content/handlers/javascript/WebIDL neosurf.bnd ${CMAKE_BINARY_DIR}/duktape
+    COMMAND ${CMAKE_COMMAND} -E env ASAN_OPTIONS=detect_leaks=0 $<TARGET_FILE:nsgenbind> -I ${CMAKE_SOURCE_DIR}/src/content/handlers/javascript/WebIDL neosurf.bnd ${CMAKE_BINARY_DIR}/duktape
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src/content/handlers/javascript/duktape
     DEPENDS nsgenbind ${DUKTAPE_BND} ${WEBIDL_SOURCES}
 )

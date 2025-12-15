@@ -21,7 +21,7 @@ include(CTest)
     add_executable(${name} ${ARGN})
     target_include_directories(${name} PRIVATE ${TEST_COMMON_INCLUDES})
     target_compile_definitions(${name} PRIVATE nsgtk NEOSURF_BUILTIN_LOG_FILTER=\"level:WARNING\" NEOSURF_BUILTIN_VERBOSE_FILTER=\"level:DEBUG\" WITH_UTF8PROC)
-    target_link_libraries(${name} ${NEOSURF_COMMON_LIBS} ${CHECK_LIBRARIES})
+    target_link_libraries(${name} PUBLIC ${NEOSURF_COMMON_LIBS} ${CHECK_LIBRARIES})
     add_test(NAME ${name} COMMAND ${name})
     set_tests_properties(${name} PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/src")
     set(TEST_ENV_PATH "C:/msys64/mingw64/bin\;C:/msys64/usr/bin\;$ENV{PATH}")
@@ -174,11 +174,13 @@ include(CTest)
   if(NOT WIN32)
     add_library(malloc_fig SHARED ${CMAKE_SOURCE_DIR}/src/test/malloc_fig.c)
     target_include_directories(malloc_fig PRIVATE ${CMAKE_SOURCE_DIR}/src)
-    target_link_libraries(malloc_fig dl)
+    target_link_libraries(malloc_fig PUBLIC dl)
 
     add_neosurf_test(hashmap
       ${CMAKE_SOURCE_DIR}/src/utils/nsurl/nsurl.c
       ${CMAKE_SOURCE_DIR}/src/utils/nsurl/parse.c
+      ${CMAKE_SOURCE_DIR}/src/utils/idna.c
+      ${CMAKE_SOURCE_DIR}/src/utils/punycode.c
       ${CMAKE_SOURCE_DIR}/src/utils/hashmap.c
       ${CMAKE_SOURCE_DIR}/src/utils/corestrings.c
       ${CMAKE_SOURCE_DIR}/src/test/log.c
@@ -189,6 +191,8 @@ include(CTest)
     add_neosurf_test(corestrings
       ${CMAKE_SOURCE_DIR}/src/utils/nsurl/nsurl.c
       ${CMAKE_SOURCE_DIR}/src/utils/nsurl/parse.c
+      ${CMAKE_SOURCE_DIR}/src/utils/idna.c
+      ${CMAKE_SOURCE_DIR}/src/utils/punycode.c
       ${CMAKE_SOURCE_DIR}/src/utils/corestrings.c
       ${CMAKE_SOURCE_DIR}/src/test/log.c
       ${CMAKE_SOURCE_DIR}/src/test/corestrings.c

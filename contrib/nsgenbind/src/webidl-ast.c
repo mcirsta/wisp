@@ -707,6 +707,75 @@ webidl_unlink(struct webidl_node *parent, struct webidl_node *node)
 	return -1; /* failed to remove node */
 }
 
+static struct webidl_node *webidl_node_clone(struct webidl_node *node)
+{
+        struct webidl_node *new_node;
+        struct webidl_node *child = NULL;
+        void *value = NULL;
+
+        if (node == NULL) return NULL;
+
+        /* Handle deep copy of r.node or r.text or r.flt */
+        switch (node->type) {
+        case WEBIDL_NODE_TYPE_ROOT:
+        case WEBIDL_NODE_TYPE_INTERFACE:
+        case WEBIDL_NODE_TYPE_DICTIONARY:
+        case WEBIDL_NODE_TYPE_LIST:
+        case WEBIDL_NODE_TYPE_EXTENDED_ATTRIBUTE:
+        case WEBIDL_NODE_TYPE_ATTRIBUTE:
+        case WEBIDL_NODE_TYPE_OPERATION:
+        case WEBIDL_NODE_TYPE_OPTIONAL:
+        case WEBIDL_NODE_TYPE_ARGUMENT:
+        case WEBIDL_NODE_TYPE_TYPE:
+        case WEBIDL_NODE_TYPE_CONST:
+        case WEBIDL_NODE_TYPE_TYPE_ARRAY:
+        case WEBIDL_NODE_TYPE_TYPE_NULLABLE:
+                if (node->r.node) {
+                        child = webidl_node_clone(node->r.node);
+                        value = child;
+                }
+                break;
+
+        case WEBIDL_NODE_TYPE_IDENT:
+        case WEBIDL_NODE_TYPE_INHERITANCE:
+        case WEBIDL_NODE_TYPE_INTERFACE_IMPLEMENTS:
+        case WEBIDL_NODE_TYPE_LITERAL_STRING:
+                if (node->r.text) {
+                        value = strdup(node->r.text);
+                }
+                break;
+
+        case WEBIDL_NODE_TYPE_LITERAL_FLOAT:
+                if (node->r.flt) {
+                        float *f = malloc(sizeof(float));
+                        *f = *node->r.flt;
+                        value = f;
+                }
+                break;
+
+        default:
+                value = node->r.value;
+                break;
+        }
+
+        new_node = webidl_node_new(node->type, NULL, value);
+
+        if (node->type == WEBIDL_NODE_TYPE_MODIFIER ||
+            node->type == WEBIDL_NODE_TYPE_TYPE_BASE ||
+            node->type == WEBIDL_NODE_TYPE_LITERAL_INT ||
+            node->type == WEBIDL_NODE_TYPE_SPECIAL ||
+            node->type == WEBIDL_NODE_TYPE_LITERAL_BOOL) {
+                new_node->r.number = node->r.number;
+        }
+
+        /* Recursively clone siblings */
+        if (node->l) {
+                new_node->l = webidl_node_clone(node->l);
+        }
+
+        return new_node;
+}
+
 static int implements_copy_nodes(struct webidl_node *src_node,
 				 struct webidl_node *dst_node)
 {
@@ -719,7 +788,7 @@ static int implements_copy_nodes(struct webidl_node *src_node,
 	while (src != NULL) {
 		if (src->type == WEBIDL_NODE_TYPE_LIST) {
 			/** @todo technicaly this should copy WEBIDL_NODE_TYPE_INHERITANCE */
-			dst = webidl_node_new(src->type, dst, src->r.text);
+			dst = webidl_node_new(src->type, dst, webidl_node_clone(src->r.node));
 		}
 		src = src->l;
 	}
@@ -756,10 +825,11 @@ intercalate_implements(struct webidl_node *interface_node, void *ctx)
 
 		/* once we have copied the implemntation remove entry */
 		webidl_unlink(interface_node, implements_node);
+		      webidl_free_ast(implements_node);
 
 		implements_node = webidl_node_find_type(
 			webidl_node_getnode(interface_node),
-			implements_node,
+			NULL,
 			WEBIDL_NODE_TYPE_INTERFACE_IMPLEMENTS);
 	}
 	return 0;
@@ -842,4 +912,58 @@ const char *webidl_type_to_str(enum webidl_type_modifier m, enum webidl_type t)
                 return "void";
         }
         return "Unknown";
+}
+
+void webidl_free_ast(struct webidl_node *node)
+{
+        struct webidl_node *next;
+
+        while (node != NULL) {
+                next = node->l;
+
+                switch (node->type) {
+                case WEBIDL_NODE_TYPE_ROOT:
+                case WEBIDL_NODE_TYPE_INTERFACE:
+                case WEBIDL_NODE_TYPE_DICTIONARY:
+                case WEBIDL_NODE_TYPE_LIST:
+                case WEBIDL_NODE_TYPE_EXTENDED_ATTRIBUTE:
+                case WEBIDL_NODE_TYPE_ATTRIBUTE:
+                case WEBIDL_NODE_TYPE_OPERATION:
+                case WEBIDL_NODE_TYPE_OPTIONAL:
+                case WEBIDL_NODE_TYPE_ARGUMENT:
+                case WEBIDL_NODE_TYPE_TYPE:
+                case WEBIDL_NODE_TYPE_CONST:
+                case WEBIDL_NODE_TYPE_TYPE_ARRAY:
+                case WEBIDL_NODE_TYPE_TYPE_NULLABLE:
+                        /* these types contain a child node in r.node */
+                        if (node->r.node) {
+                                webidl_free_ast(node->r.node);
+                        }
+                        break;
+
+                case WEBIDL_NODE_TYPE_IDENT:
+                case WEBIDL_NODE_TYPE_INHERITANCE:
+                case WEBIDL_NODE_TYPE_INTERFACE_IMPLEMENTS:
+                case WEBIDL_NODE_TYPE_LITERAL_STRING:
+                        /* these types contain a string in r.text */
+                        if (node->r.text) {
+                                free(node->r.text);
+                        }
+                        break;
+
+                case WEBIDL_NODE_TYPE_LITERAL_FLOAT:
+                        /* these types contain a float pointer in r.flt */
+                        if (node->r.flt) {
+                                free(node->r.flt);
+                        }
+                        break;
+
+                default:
+                        /* other types contain int/bool/etc or nothing in r, no freeing needed */
+                        break;
+                }
+
+                free(node);
+                node = next;
+        }
 }

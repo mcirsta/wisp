@@ -21,7 +21,7 @@ extern "C" {
 #include "utils/log.h"
 #include "utils/messages.h"
 
-#include "netsurf/netsurf.h"
+#include "neosurf/neosurf.h"
 }
 
 #include "qt/application.cls.h"
@@ -41,7 +41,7 @@ extern "C" {
 int main(int argc, char** argv)
 {
 	int ret = 0;
-	struct netsurf_table nsqt_table = {
+	struct neosurf_table nsqt_table = {
 		.misc = nsqt_misc_table,
 		.window = nsqt_window_table,
 		.corewindow = nsqt_core_window_table,

@@ -31,13 +31,13 @@ extern "C" {
 #include "utils/nsurl.h"
 #include "utils/messages.h"
 
-#include "netsurf/types.h"
-#include "netsurf/mouse.h"
-#include "netsurf/window.h"
-#include "netsurf/plotters.h"
-#include "netsurf/content.h"
-#include "netsurf/browser_window.h"
-#include "netsurf/mouse.h"
+#include "neosurf/types.h"
+#include "neosurf/mouse.h"
+#include "neosurf/window.h"
+#include "neosurf/plotters.h"
+#include "neosurf/content.h"
+#include "neosurf/browser_window.h"
+#include "neosurf/mouse.h"
 
 #include "desktop/browser_history.h"
 

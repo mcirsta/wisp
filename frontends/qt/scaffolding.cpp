@@ -28,7 +28,7 @@ extern "C" {
 #include "utils/log.h"
 #include "utils/messages.h"
 
-#include "netsurf/content.h"
+#include "neosurf/content.h"
 }
 
 #include "qt/application.cls.h"

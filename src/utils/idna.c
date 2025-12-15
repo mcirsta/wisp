@@ -167,11 +167,7 @@ idna__ace_to_ucs4(const char *ace_label,
 
 
 #ifdef WITH_UTF8PROC
-#ifdef _WIN32
 #include <utf8proc.h>
-#else
-#include <libutf8proc/utf8proc.h>
-#endif
 
 int32_t idna_contexto[] = {
 	/* CONTEXTO codepoints which have a rule defined */

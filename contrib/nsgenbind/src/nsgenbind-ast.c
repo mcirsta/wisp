@@ -514,6 +514,51 @@ int genbind_dump_ast(struct genbind_node *node)
         return 0;
 }
 
+/* exported interface documented in nsgenbind-ast.h */
+void genbind_free_ast(struct genbind_node *node)
+{
+        struct genbind_node *next;
+
+        while (node != NULL) {
+                next = node->l;
+
+                switch (node->type) {
+                case GENBIND_NODE_TYPE_BINDING:
+                case GENBIND_NODE_TYPE_CLASS:
+                case GENBIND_NODE_TYPE_PRIVATE:
+                case GENBIND_NODE_TYPE_INTERNAL:
+                case GENBIND_NODE_TYPE_PROPERTY:
+                case GENBIND_NODE_TYPE_FLAGS:
+                case GENBIND_NODE_TYPE_METHOD:
+                case GENBIND_NODE_TYPE_PARAMETER:
+                        /* these types contain a child node in r.node */
+                        if (node->r.node) {
+                                genbind_free_ast(node->r.node);
+                        }
+                        break;
+
+                case GENBIND_NODE_TYPE_WEBIDL:
+                case GENBIND_NODE_TYPE_STRING:
+                case GENBIND_NODE_TYPE_IDENT:
+                case GENBIND_NODE_TYPE_NAME:
+                case GENBIND_NODE_TYPE_CDATA:
+                case GENBIND_NODE_TYPE_FILE:
+                        /* these types contain a string in r.text */
+                        if (node->r.text) {
+                                free(node->r.text);
+                        }
+                        break;
+
+                default:
+                        /* other types contain int or nothing in r, no freeing needed */
+                        break;
+                }
+
+                free(node);
+                node = next;
+        }
+}
+
 FILE *genbindopen(const char *filename)
 {
         FILE *genfile;

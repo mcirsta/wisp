@@ -29,10 +29,10 @@ extern "C" {
 
 #include "utils/log.h"
 #include "utils/errors.h"
-#include "netsurf/types.h"
-#include "netsurf/mouse.h"
-#include "netsurf/window.h"
-#include "netsurf/plotters.h"
+#include "neosurf/types.h"
+#include "neosurf/mouse.h"
+#include "neosurf/window.h"
+#include "neosurf/plotters.h"
 
 }
 

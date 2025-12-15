@@ -3,9 +3,9 @@ find_package(Iconv REQUIRED)
 add_custom_command(
     OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/src/charset/aliases.inc
     COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/src/charset
-    COMMAND ${PYTHON3} ${CMAKE_SOURCE_DIR}/contrib/libparserutils/build/make-aliases.py ${CMAKE_CURRENT_BINARY_DIR}/src/charset/aliases.inc
+    COMMAND ${PYTHON3} ${CMAKE_SOURCE_DIR}/contrib/libparserutils/building/make-aliases.py ${CMAKE_CURRENT_BINARY_DIR}/src/charset/aliases.inc
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/contrib/libparserutils
-    DEPENDS ${CMAKE_SOURCE_DIR}/contrib/libparserutils/build/make-aliases.py
+    DEPENDS ${CMAKE_SOURCE_DIR}/contrib/libparserutils/building/make-aliases.py
 )
 add_custom_target(parserutils_aliases DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/src/charset/aliases.inc)
 

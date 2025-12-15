@@ -1,3 +1,5 @@
+#pragma once
+
 /*
  * Copyright 2023 Vincent Sanders <vince@netsurf-browser.org>
  *
@@ -29,8 +31,8 @@
 extern "C" {
 #include "utils/errors.h"
 
-#include "netsurf/mouse.h"
-#include "netsurf/window.h"
+#include "neosurf/mouse.h"
+#include "neosurf/window.h"
 }
 
 #include "qt/widget.cls.h"
