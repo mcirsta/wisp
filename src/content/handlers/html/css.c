@@ -88,18 +88,16 @@ static nserror css_error_to_nserror(css_error error)
 /**
  * Callback for fetchcache() for stylesheets.
  */
-static nserror
-html_convert_css_callback(hlcache_handle *css,
-			  const hlcache_event *event,
-			  void *pw)
+static nserror html_convert_css_callback(hlcache_handle *css,
+					 const hlcache_event *event,
+					 void *pw)
 {
 	html_content *parent = pw;
 	unsigned int i;
 	struct html_stylesheet *s;
 
 	/* Find sheet */
-	for (i = 0, s = parent->stylesheets;
-	     i != parent->stylesheet_count;
+	for (i = 0, s = parent->stylesheets; i != parent->stylesheet_count;
 	     i++, s++) {
 		if (s->sheet == css)
 			break;
@@ -110,33 +108,37 @@ html_convert_css_callback(hlcache_handle *css,
 	switch (event->type) {
 
 	case CONTENT_MSG_DONE:
-		NSLOG(neosurf, INFO, "done stylesheet slot %d '%s'", i,
+		NSLOG(neosurf,
+		      INFO,
+		      "done stylesheet slot %d '%s'",
+		      i,
 		      nsurl_access(hlcache_handle_get_url(css)));
-		parent->base.active--;
-		NSLOG(neosurf, INFO, "%d fetches active", parent->base.active);
+		CONTENT_ACTIVE_DEC(parent, "CSS callback DONE");
 		break;
 
-    case CONTENT_MSG_ERROR:
-    {
-        const char *u = nsurl_access(hlcache_handle_get_url(css));
-        if (u != NULL && strcmp(u, "resource:user.css") == 0) {
-            NSLOG(neosurf, INFO, "stylesheet %s missing: %s (code %d)",
-                  u,
-                  event->data.errordata.errormsg,
-                  event->data.errordata.errorcode);
-        } else {
-            NSLOG(neosurf, ERROR, "stylesheet %s failed: %s (code %d)",
-                  u,
-                  event->data.errordata.errormsg,
-                  event->data.errordata.errorcode);
-        }
+	case CONTENT_MSG_ERROR: {
+		const char *u = nsurl_access(hlcache_handle_get_url(css));
+		if (u != NULL && strcmp(u, "resource:user.css") == 0) {
+			NSLOG(neosurf,
+			      INFO,
+			      "stylesheet %s missing: %s (code %d)",
+			      u,
+			      event->data.errordata.errormsg,
+			      event->data.errordata.errorcode);
+		} else {
+			NSLOG(neosurf,
+			      ERROR,
+			      "stylesheet %s failed: %s (code %d)",
+			      u,
+			      event->data.errordata.errormsg,
+			      event->data.errordata.errorcode);
+		}
 
-        hlcache_handle_release(css);
-        s->sheet = NULL;
-        parent->base.active--;
-        NSLOG(neosurf, INFO, "%d fetches active", parent->base.active);
-        break;
-    }
+		hlcache_handle_release(css);
+		s->sheet = NULL;
+		CONTENT_ACTIVE_DEC(parent, "CSS callback ERROR");
+		break;
+	}
 
 	case CONTENT_MSG_POINTER:
 		/* Really don't want this to continue after the switch */
@@ -154,10 +156,9 @@ html_convert_css_callback(hlcache_handle *css,
 }
 
 
-static nserror
-html_stylesheet_from_domnode(html_content *c,
-			     dom_node *node,
-			     hlcache_handle **sheet)
+static nserror html_stylesheet_from_domnode(html_content *c,
+					    dom_node *node,
+					    hlcache_handle **sheet)
 {
 	hlcache_child_context child;
 	dom_string *style;
@@ -184,26 +185,31 @@ html_stylesheet_from_domnode(html_content *c,
 
 	dom_string_unref(style);
 
-	snprintf(urlbuf, sizeof(urlbuf), "x-ns-css:%"PRIu32"", key);
+	snprintf(urlbuf, sizeof(urlbuf), "x-ns-css:%" PRIu32 "", key);
 
 	error = nsurl_create(urlbuf, &url);
 	if (error != NSERROR_OK) {
 		return error;
 	}
 
-	error = hlcache_handle_retrieve(url, 0,
-			content_get_url(&c->base), NULL,
-			html_convert_css_callback, c, &child, CONTENT_CSS,
-			sheet);
+	CONTENT_ACTIVE_INC(c, "inline CSS fetch start");
+
+	error = hlcache_handle_retrieve(url,
+					0,
+					content_get_url(&c->base),
+					NULL,
+					html_convert_css_callback,
+					c,
+					&child,
+					CONTENT_CSS,
+					sheet);
 	if (error != NSERROR_OK) {
+		CONTENT_ACTIVE_DEC(c, "inline CSS fetch error");
 		nsurl_unref(url);
 		return error;
 	}
 
 	nsurl_unref(url);
-
-	c->base.active++;
-	NSLOG(neosurf, INFO, "%d fetches active", c->base.active);
 
 	return NSERROR_OK;
 }
@@ -227,7 +233,7 @@ html_create_style_element(html_content *c, dom_node *style)
 	exc = dom_element_get_attribute(style, corestring_dom_type, &val);
 	if (exc == DOM_NO_ERR && val != NULL) {
 		if (!dom_string_caseless_lwc_isequal(val,
-				corestring_lwc_text_css)) {
+						     corestring_lwc_text_css)) {
 			dom_string_unref(val);
 			return NULL;
 		}
@@ -238,8 +244,7 @@ html_create_style_element(html_content *c, dom_node *style)
 	exc = dom_element_get_attribute(style, corestring_dom_media, &val);
 	if (exc == DOM_NO_ERR && val != NULL) {
 		if (strcasestr(dom_string_data(val), "screen") == NULL &&
-				strcasestr(dom_string_data(val),
-						"all") == NULL) {
+		    strcasestr(dom_string_data(val), "all") == NULL) {
 			dom_string_unref(val);
 			return NULL;
 		}
@@ -249,12 +254,11 @@ html_create_style_element(html_content *c, dom_node *style)
 	/* Extend array */
 	stylesheets = realloc(c->stylesheets,
 			      sizeof(struct html_stylesheet) *
-			      (c->stylesheet_count + 1));
+				      (c->stylesheet_count + 1));
 	if (stylesheets == NULL) {
 
 		content_broadcast_error(&c->base, NSERROR_NOMEM, NULL);
 		return false;
-
 	}
 	c->stylesheets = stylesheets;
 
@@ -282,7 +286,10 @@ html_css_process_modified_style(html_content *c, struct html_stylesheet *s)
 	}
 
 	if (sheet != NULL) {
-		NSLOG(neosurf, INFO, "Updating sheet %p with %p", s->sheet,
+		NSLOG(neosurf,
+		      INFO,
+		      "Updating sheet %p with %p",
+		      s->sheet,
 		      sheet);
 
 		if (s->sheet != NULL) {
@@ -291,9 +298,8 @@ html_css_process_modified_style(html_content *c, struct html_stylesheet *s)
 				break;
 			default:
 				hlcache_handle_abort(s->sheet);
-				c->base.active--;
-				NSLOG(neosurf, INFO, "%d fetches active",
-				      c->base.active);
+				CONTENT_ACTIVE_DEC(c,
+						   "aborting modified style");
 			}
 			hlcache_handle_release(s->sheet);
 		}
@@ -336,7 +342,7 @@ bool html_css_update_style(html_content *c, dom_node *style)
 	struct html_stylesheet *s;
 
 	/* Find sheet */
-	for (i = 0, s = c->stylesheets;	i != c->stylesheet_count; i++, s++) {
+	for (i = 0, s = c->stylesheets; i != c->stylesheet_count; i++, s++) {
 		if (s->node == style)
 			break;
 	}
@@ -344,7 +350,8 @@ bool html_css_update_style(html_content *c, dom_node *style)
 		s = html_create_style_element(c, style);
 	}
 	if (s == NULL) {
-		NSLOG(neosurf, INFO,
+		NSLOG(neosurf,
+		      INFO,
 		      "Could not find or create inline stylesheet for %p",
 		      style);
 		return false;
@@ -367,12 +374,12 @@ bool html_css_process_style(html_content *c, dom_node *node)
 	struct html_stylesheet *s;
 
 	/* Find sheet */
-	for (i = 0, s = c->stylesheets;	i != c->stylesheet_count; i++, s++) {
+	for (i = 0, s = c->stylesheets; i != c->stylesheet_count; i++, s++) {
 		if (s->node == node)
 			break;
 	}
 
-		/* Should already exist */
+	/* Should already exist */
 	if (i == c->stylesheet_count) {
 		return false;
 	}
@@ -380,8 +387,7 @@ bool html_css_process_style(html_content *c, dom_node *node)
 	exc = dom_element_get_attribute(node, corestring_dom_media, &val);
 	if (exc == DOM_NO_ERR && val != NULL) {
 		if (strcasestr(dom_string_data(val), "screen") == NULL &&
-				strcasestr(dom_string_data(val),
-						"all") == NULL) {
+		    strcasestr(dom_string_data(val), "all") == NULL) {
 			s->unused = true;
 		}
 		dom_string_unref(val);
@@ -424,7 +430,7 @@ bool html_css_process_link(html_content *htmlc, dom_node *node)
 	exc = dom_element_get_attribute(node, corestring_dom_type, &type_attr);
 	if (exc == DOM_NO_ERR && type_attr != NULL) {
 		if (!dom_string_caseless_lwc_isequal(type_attr,
-				corestring_lwc_text_css)) {
+						     corestring_lwc_text_css)) {
 			dom_string_unref(type_attr);
 			return true;
 		}
@@ -454,20 +460,30 @@ bool html_css_process_link(html_content *htmlc, dom_node *node)
 	ns_error = nsurl_join(htmlc->base_url, dom_string_data(href), &joined);
 	if (ns_error != NSERROR_OK) {
 		dom_string_unref(href);
+		NSLOG(neosurf,
+		      ERROR,
+		      "nsurl_join failed (err: %d) - jumping to no_memory",
+		      ns_error);
 		goto no_memory;
 	}
 	dom_string_unref(href);
 
-	NSLOG(neosurf, INFO, "linked stylesheet %i '%s'",
-	      htmlc->stylesheet_count, nsurl_access(joined));
+	NSLOG(neosurf,
+	      INFO,
+	      "linked stylesheet %i '%s'",
+	      htmlc->stylesheet_count,
+	      nsurl_access(joined));
 
 	/* extend stylesheets array to allow for new sheet */
 	stylesheets = realloc(htmlc->stylesheets,
 			      sizeof(struct html_stylesheet) *
-			      (htmlc->stylesheet_count + 1));
+				      (htmlc->stylesheet_count + 1));
 	if (stylesheets == NULL) {
 		nsurl_unref(joined);
 		ns_error = NSERROR_NOMEM;
+		NSLOG(neosurf,
+		      ERROR,
+		      "realloc stylesheets failed - jumping to no_memory");
 		goto no_memory;
 	}
 
@@ -480,21 +496,32 @@ bool html_css_process_link(html_content *htmlc, dom_node *node)
 	child.charset = htmlc->encoding;
 	child.quirks = htmlc->base.quirks;
 
-	ns_error = hlcache_handle_retrieve(joined, 0,
-			content_get_url(&htmlc->base),
-			NULL, html_convert_css_callback,
-			htmlc, &child, CONTENT_CSS,
-			&htmlc->stylesheets[htmlc->stylesheet_count].sheet);
+	CONTENT_ACTIVE_INC(htmlc, "linked CSS fetch start");
+	ns_error = hlcache_handle_retrieve(
+		joined,
+		0,
+		content_get_url(&htmlc->base),
+		NULL,
+		html_convert_css_callback,
+		htmlc,
+		&child,
+		CONTENT_CSS,
+		&htmlc->stylesheets[htmlc->stylesheet_count].sheet);
 
 	nsurl_unref(joined);
 
-	if (ns_error != NSERROR_OK)
+	if (ns_error != NSERROR_OK) {
+		CONTENT_ACTIVE_DEC(htmlc, "linked CSS fetch error");
+		NSLOG(neosurf,
+		      ERROR,
+		      "hlcache_handle_retrieve failed (err: %d) - jumping to no_memory",
+		      ns_error);
 		goto no_memory;
+	}
 
 	htmlc->stylesheet_count++;
 
-	htmlc->base.active++;
-	NSLOG(neosurf, INFO, "%d fetches active", htmlc->base.active);
+	/* active count already logged by CONTENT_ACTIVE_INC */
 
 	return true;
 
@@ -507,7 +534,7 @@ no_memory:
 /* exported interface documented in html/html.h */
 struct html_stylesheet *html_get_stylesheets(hlcache_handle *h, unsigned int *n)
 {
-	html_content *c = (html_content *) hlcache_handle_get_content(h);
+	html_content *c = (html_content *)hlcache_handle_get_content(h);
 
 	assert(c != NULL);
 	assert(n != NULL);
@@ -570,17 +597,23 @@ nserror html_css_quirks_stylesheets(html_content *c)
 		child.charset = c->encoding;
 		child.quirks = c->base.quirks;
 
-		ns_error = hlcache_handle_retrieve(html_quirks_stylesheet_url,
-				0, content_get_url(&c->base), NULL,
-				html_convert_css_callback, c, &child,
-				CONTENT_CSS,
-				&c->stylesheets[STYLESHEET_QUIRKS].sheet);
+		CONTENT_ACTIVE_INC(c, "quirks CSS fetch start");
+		ns_error = hlcache_handle_retrieve(
+			html_quirks_stylesheet_url,
+			0,
+			content_get_url(&c->base),
+			NULL,
+			html_convert_css_callback,
+			c,
+			&child,
+			CONTENT_CSS,
+			&c->stylesheets[STYLESHEET_QUIRKS].sheet);
 		if (ns_error != NSERROR_OK) {
 			return ns_error;
 		}
 
-		c->base.active++;
-		NSLOG(neosurf, INFO, "%d fetches active", c->base.active);
+
+		/* active count already logged by CONTENT_ACTIVE_INC */
 	}
 
 	return ns_error;
@@ -602,7 +635,7 @@ nserror html_css_new_stylesheets(html_content *c)
 	 * stylesheet 2 is the adblocking stylesheet,
 	 * stylesheet 3 is the user stylesheet */
 	c->stylesheets = calloc(STYLESHEET_START,
-			sizeof(struct html_stylesheet));
+				sizeof(struct html_stylesheet));
 	if (c->stylesheets == NULL) {
 		return NSERROR_NOMEM;
 	}
@@ -616,43 +649,65 @@ nserror html_css_new_stylesheets(html_content *c)
 	child.charset = c->encoding;
 	child.quirks = c->base.quirks;
 
-	ns_error = hlcache_handle_retrieve(html_default_stylesheet_url, 0,
-			content_get_url(&c->base), NULL,
-			html_convert_css_callback, c, &child, CONTENT_CSS,
-			&c->stylesheets[STYLESHEET_BASE].sheet);
+	CONTENT_ACTIVE_INC(c, "default.css fetch start");
+	ns_error = hlcache_handle_retrieve(
+		html_default_stylesheet_url,
+		0,
+		content_get_url(&c->base),
+		NULL,
+		html_convert_css_callback,
+		c,
+		&child,
+		CONTENT_CSS,
+		&c->stylesheets[STYLESHEET_BASE].sheet);
 	if (ns_error != NSERROR_OK) {
+		CONTENT_ACTIVE_DEC(c, "default.css fetch error");
 		return ns_error;
 	}
 
-	c->base.active++;
-	NSLOG(neosurf, INFO, "%d fetches active", c->base.active);
+
+	/* active count already logged by CONTENT_ACTIVE_INC */
 
 
 	if (nsoption_bool(block_advertisements)) {
-		ns_error = hlcache_handle_retrieve(html_adblock_stylesheet_url,
-				0, content_get_url(&c->base), NULL,
-				html_convert_css_callback,
-				c, &child, CONTENT_CSS,
-				&c->stylesheets[STYLESHEET_ADBLOCK].sheet);
+		CONTENT_ACTIVE_INC(c, "adblock.css fetch start");
+		ns_error = hlcache_handle_retrieve(
+			html_adblock_stylesheet_url,
+			0,
+			content_get_url(&c->base),
+			NULL,
+			html_convert_css_callback,
+			c,
+			&child,
+			CONTENT_CSS,
+			&c->stylesheets[STYLESHEET_ADBLOCK].sheet);
 		if (ns_error != NSERROR_OK) {
+			CONTENT_ACTIVE_DEC(c, "adblock.css fetch error");
 			return ns_error;
 		}
 
-		c->base.active++;
-		NSLOG(neosurf, INFO, "%d fetches active", c->base.active);
 
+		/* active count already logged by CONTENT_ACTIVE_INC */
 	}
 
-	ns_error = hlcache_handle_retrieve(html_user_stylesheet_url, 0,
-			content_get_url(&c->base), NULL,
-			html_convert_css_callback, c, &child, CONTENT_CSS,
-			&c->stylesheets[STYLESHEET_USER].sheet);
+	CONTENT_ACTIVE_INC(c, "user.css fetch start");
+	ns_error = hlcache_handle_retrieve(
+		html_user_stylesheet_url,
+		0,
+		content_get_url(&c->base),
+		NULL,
+		html_convert_css_callback,
+		c,
+		&child,
+		CONTENT_CSS,
+		&c->stylesheets[STYLESHEET_USER].sheet);
 	if (ns_error != NSERROR_OK) {
+		CONTENT_ACTIVE_DEC(c, "user.css fetch error");
 		return ns_error;
 	}
 
-	c->base.active++;
-	NSLOG(neosurf, INFO, "%d fetches active", c->base.active);
+
+	/* active count already logged by CONTENT_ACTIVE_INC */
 
 	return ns_error;
 }
@@ -705,10 +760,8 @@ html_css_new_selection_context(html_content *c, css_select_ctx **ret_select_ctx)
 			/* TODO: Pass the sheet's full media query, instead of
 			 *       "screen".
 			 */
-			css_ret = css_select_ctx_append_sheet(select_ctx,
-							      sheet,
-							      origin,
-							      "screen");
+			css_ret = css_select_ctx_append_sheet(
+				select_ctx, sheet, origin, "screen");
 			if (css_ret != CSS_OK) {
 				css_select_ctx_destroy(select_ctx);
 				return css_error_to_nserror(css_ret);
@@ -732,22 +785,21 @@ nserror html_css_init(void)
 		return error;
 
 	error = nsurl_create("resource:default.css",
-			&html_default_stylesheet_url);
+			     &html_default_stylesheet_url);
 	if (error != NSERROR_OK)
 		return error;
 
 	error = nsurl_create("resource:adblock.css",
-			&html_adblock_stylesheet_url);
+			     &html_adblock_stylesheet_url);
 	if (error != NSERROR_OK)
 		return error;
 
 	error = nsurl_create("resource:quirks.css",
-			&html_quirks_stylesheet_url);
+			     &html_quirks_stylesheet_url);
 	if (error != NSERROR_OK)
 		return error;
 
-	error = nsurl_create("resource:user.css",
-			&html_user_stylesheet_url);
+	error = nsurl_create("resource:user.css", &html_user_stylesheet_url);
 
 	return error;
 }

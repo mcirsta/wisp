@@ -37,6 +37,7 @@
 #include <neosurf/utils/utils.h>
 #include <neosurf/utils/config.h>
 #include <neosurf/utils/filepath.h>
+#include <neosurf/utils/log.h>
 
 /** maximum number of elements in the resource vector */
 #define MAX_RESPATH 128
@@ -110,17 +111,27 @@ char *filepath_sfind(char **respathv, char *filepath, const char *filename)
 {
 	int respathc = 0;
 
-	if ((respathv == NULL) || (respathv[0] == NULL) || (filepath == NULL))
+	NSLOG(neosurf, INFO, "Looking for resource: '%s'", filename);
+
+	if ((respathv == NULL) || (respathv[0] == NULL) || (filepath == NULL)) {
+		NSLOG(neosurf,
+		      INFO,
+		      "Resource '%s' not found (search path empty)",
+		      filename);
 		return NULL;
+	}
 
 	while (respathv[respathc] != NULL) {
-		if (filepath_sfindfile(filepath, "%s/%s", respathv[respathc], filename) != NULL) {
+		if (filepath_sfindfile(
+			    filepath, "%s/%s", respathv[respathc], filename) !=
+		    NULL) {
 			return filepath;
 		}
 
 		respathc++;
 	}
 
+	NSLOG(neosurf, ERROR, "FATAL: Resource '%s' not found", filename);
 	return NULL;
 }
 
@@ -148,11 +159,10 @@ char *filepath_find(char **respathv, const char *filename)
 
 
 /* exported interface documented in filepath.h */
-char *
-filepath_sfinddef(char **respathv,
-		  char *filepath,
-		  const char *filename,
-		  const char *def)
+char *filepath_sfinddef(char **respathv,
+			char *filepath,
+			const char *filename,
+			const char *def)
 {
 	char t[PATH_MAX];
 	char *ret;
@@ -166,22 +176,25 @@ filepath_sfinddef(char **respathv,
 		/* search failed, return the path specified */
 		ret = filepath;
 		if (def[0] == '~') {
-			snprintf(t, PATH_MAX, "%s/%s/%s", getenv("HOME"), def + 1, filename);
+			snprintf(t,
+				 PATH_MAX,
+				 "%s/%s/%s",
+				 getenv("HOME"),
+				 def + 1,
+				 filename);
 		} else {
 			snprintf(t, PATH_MAX, "%s/%s", def, filename);
 		}
 		if (realpath(t, ret) == NULL) {
 			strncpy(ret, t, PATH_MAX);
 		}
-
 	}
 	return ret;
 }
 
 
 /* exported interface documented in filepath.h */
-char **
-filepath_generate(char * const *pathv, const char * const *langv)
+char **filepath_generate(char *const *pathv, const char *const *langv)
 {
 	char **respath; /* resource paths vector */
 	int pathc = 0;
@@ -193,8 +206,7 @@ filepath_generate(char * const *pathv, const char * const *langv)
 
 	respath = calloc(MAX_RESPATH, sizeof(char *));
 
-	while ((respath != NULL) &&
-	       (pathv[pathc] != NULL)) {
+	while ((respath != NULL) && (pathv[pathc] != NULL)) {
 		if ((stat(pathv[pathc], &dstat) == 0) &&
 		    S_ISDIR(dstat.st_mode)) {
 			/* path element exists and is a directory */
@@ -217,7 +229,8 @@ filepath_generate(char * const *pathv, const char * const *langv)
 
 				if ((stat(tmppath, &dstat) == 0) &&
 				    S_ISDIR(dstat.st_mode)) {
-					/* path element exists and is a directory */
+					/* path element exists and is a
+					 * directory */
 					respath[respathc++] = tmppath;
 				} else {
 					free(tmppath);
@@ -240,8 +253,7 @@ filepath_generate(char * const *pathv, const char * const *langv)
  * @param pathlen The length of the path element.
  * @return A string with the expanded path or NULL on empty expansion or error.
  */
-static char *
-expand_path(const char *path, int pathlen)
+static char *expand_path(const char *path, int pathlen)
 {
 	char *exp;
 	int explen;
@@ -261,14 +273,12 @@ expand_path(const char *path, int pathlen)
 	explen = pathlen;
 
 	while (exp[cloop] != 0) {
-		if ((exp[cloop] == '$') &&
-		    (exp[cloop + 1] == '{')) {
+		if ((exp[cloop] == '$') && (exp[cloop + 1] == '{')) {
 			cstart = cloop;
 			cloop++;
 		}
 
-		if ((cstart != -1) &&
-		    (exp[cloop] == '}')) {
+		if ((cstart != -1) && (exp[cloop] == '}')) {
 			replen = cloop - cstart;
 			exp[cloop] = 0;
 			envv = getenv(exp + cstart + 2);
@@ -288,7 +298,7 @@ expand_path(const char *path, int pathlen)
 				exp = tmp;
 				memmove(exp + cstart + envlen,
 					exp + cloop + 1,
-					explen - cloop );
+					explen - cloop);
 				memmove(exp + cstart, envv, envlen);
 				explen += envlen - replen;
 			}
@@ -309,8 +319,7 @@ expand_path(const char *path, int pathlen)
 
 
 /* exported interface documented in filepath.h */
-char **
-filepath_path_to_strvec(const char *path)
+char **filepath_path_to_strvec(const char *path)
 {
 	char **strvec;
 	int strc = 0;
@@ -325,7 +334,7 @@ filepath_path_to_strvec(const char *path)
 	estart = eend = path;
 
 	while (strc < (MAX_RESPATH - 2)) {
-		while ( (*eend != 0) && (*eend != ':') )
+		while ((*eend != 0) && (*eend != ':'))
 			eend++;
 		elen = eend - estart;
 

@@ -38,7 +38,8 @@
 #include "content/mimesniff.h"
 #include <neosurf/content/llcache.h>
 #include <neosurf/content/hlcache.h>
-// Note, this is *ONLY* so that we can abort cleanly during shutdown of the cache
+// Note, this is *ONLY* so that we can abort cleanly during shutdown of the
+// cache
 #include <neosurf/content/content_protected.h>
 #include "content/content_factory.h"
 
@@ -47,36 +48,39 @@ typedef struct hlcache_retrieval_ctx hlcache_retrieval_ctx;
 
 /** High-level cache retrieval context */
 struct hlcache_retrieval_ctx {
-	struct hlcache_retrieval_ctx *r_prev; /**< Previous retrieval context in the ring */
-	struct hlcache_retrieval_ctx *r_next; /**< Next retrieval context in the ring */
+	struct hlcache_retrieval_ctx
+		*r_prev; /**< Previous retrieval context in the ring */
+	struct hlcache_retrieval_ctx
+		*r_next; /**< Next retrieval context in the ring */
 
-	llcache_handle *llcache;	/**< Low-level cache handle */
+	llcache_handle *llcache; /**< Low-level cache handle */
 
-	hlcache_handle *handle;		/**< High-level handle for object */
+	hlcache_handle *handle; /**< High-level handle for object */
 
-	uint32_t flags;			/**< Retrieval flags */
+	uint32_t flags; /**< Retrieval flags */
 
-	content_type accepted_types;	/**< Accepted types */
+	content_type accepted_types; /**< Accepted types */
 
-	hlcache_child_context child;	/**< Child context */
+	hlcache_child_context child; /**< Child context */
 
-	bool migrate_target;		/**< Whether this context is the migration target */
+	bool migrate_target; /**< Whether this context is the migration target
+			      */
 };
 
 /** High-level cache handle */
 struct hlcache_handle {
-	hlcache_entry *entry;		/**< Pointer to cache entry */
+	hlcache_entry *entry; /**< Pointer to cache entry */
 
-	hlcache_handle_callback cb;	/**< Client callback */
-	void *pw;			/**< Client data */
+	hlcache_handle_callback cb; /**< Client callback */
+	void *pw; /**< Client data */
 };
 
 /** Entry in high-level cache */
 struct hlcache_entry {
-	struct content *content;	/**< Pointer to associated content */
+	struct content *content; /**< Pointer to associated content */
 
-	hlcache_entry *next;		/**< Next sibling */
-	hlcache_entry *prev;		/**< Previous sibling */
+	hlcache_entry *next; /**< Next sibling */
+	hlcache_entry *prev; /**< Previous sibling */
 };
 
 /** Current state of the cache.
@@ -123,10 +127,13 @@ static void hlcache_clean(void *force_clean_flag)
 		if (content_count_users(entry->content) != 0)
 			continue;
 
-		if (content__get_status(entry->content) == CONTENT_STATUS_LOADING) {
+		if (content__get_status(entry->content) ==
+		    CONTENT_STATUS_LOADING) {
 			if (force_clean == false)
 				continue;
-			NSLOG(neosurf, DEBUG, "Forcing content cleanup during shutdown");
+			NSLOG(neosurf,
+			      DEBUG,
+			      "Forcing content cleanup during shutdown");
 			content_abort(entry->content);
 			content_set_error(entry->content);
 		}
@@ -158,7 +165,9 @@ static void hlcache_clean(void *force_clean_flag)
 	llcache_clean(false);
 
 	/* Re-schedule ourselves */
-	guit->misc->schedule(hlcache->params.bg_clean_time, hlcache_clean, NULL);
+	guit->misc->schedule(hlcache->params.bg_clean_time,
+			     hlcache_clean,
+			     NULL);
 }
 
 /**
@@ -170,7 +179,8 @@ static void hlcache_clean(void *force_clean_flag)
  * \return True if the type is acceptable, false otherwise
  */
 static bool hlcache_type_is_acceptable(lwc_string *mime_type,
-		content_type accepted_types, content_type *computed_type)
+				       content_type accepted_types,
+				       content_type *computed_type)
 {
 	content_type type;
 
@@ -189,8 +199,10 @@ static bool hlcache_type_is_acceptable(lwc_string *mime_type,
  * \param data	Data for message
  * \param pw	Pointer to private data (hlcache_handle)
  */
-static void hlcache_content_callback(struct content *c, content_msg msg,
-		const union content_msg_data *data, void *pw)
+static void hlcache_content_callback(struct content *c,
+				     content_msg msg,
+				     const union content_msg_data *data,
+				     void *pw)
 {
 	hlcache_handle *handle = pw;
 	nserror error = NSERROR_OK;
@@ -223,16 +235,17 @@ static void hlcache_content_callback(struct content *c, content_msg msg,
  * \post Low-level handle is either released, or associated with new content
  * \post High-level handle is registered with content
  */
-static nserror hlcache_find_content(hlcache_retrieval_ctx *ctx,
-		lwc_string *effective_type)
+static nserror
+hlcache_find_content(hlcache_retrieval_ctx *ctx, lwc_string *effective_type)
 {
 	hlcache_entry *entry;
 	hlcache_event event;
 	nserror error = NSERROR_OK;
 
 	/* Search list of cached contents for a suitable one */
-	for (entry = hlcache->content_list; entry != NULL; entry = entry->next) {
-		hlcache_handle entry_handle = { entry, NULL, NULL };
+	for (entry = hlcache->content_list; entry != NULL;
+	     entry = entry->next) {
+		hlcache_handle entry_handle = {entry, NULL, NULL};
 		const llcache_handle *entry_llcache;
 
 		if (entry->content == NULL)
@@ -247,8 +260,8 @@ static nserror hlcache_find_content(hlcache_retrieval_ctx *ctx,
 			continue;
 
 		/* Ensure that quirks mode is acceptable */
-		if (content_matches_quirks(entry->content,
-				ctx->child.quirks) == false)
+		if (content_matches_quirks(entry->content, ctx->child.quirks) ==
+		    false)
 			continue;
 
 		/* Ensure that content uses same low-level object as
@@ -256,8 +269,8 @@ static nserror hlcache_find_content(hlcache_retrieval_ctx *ctx,
 		entry_llcache = content_get_llcache_handle(entry->content);
 
 		if (entry_llcache != NULL && ctx->llcache != NULL &&
-				llcache_handle_references_same_object(entry_llcache,
-				ctx->llcache)) {
+		    llcache_handle_references_same_object(entry_llcache,
+							  ctx->llcache)) {
 			break;
 		}
 	}
@@ -269,9 +282,11 @@ static nserror hlcache_find_content(hlcache_retrieval_ctx *ctx,
 			return NSERROR_NOMEM;
 
 		/* Create content using llhandle */
-		entry->content = content_factory_create_content(ctx->llcache,
-				ctx->child.charset, ctx->child.quirks,
-				effective_type);
+		entry->content = content_factory_create_content(
+			ctx->llcache,
+			ctx->child.charset,
+			ctx->child.quirks,
+			effective_type);
 		if (entry->content == NULL) {
 			free(entry);
 			return NSERROR_NOMEM;
@@ -296,7 +311,8 @@ static nserror hlcache_find_content(hlcache_retrieval_ctx *ctx,
 
 	/* Associate handle with content */
 	if (content_add_user(entry->content,
-			hlcache_content_callback, ctx->handle) == false)
+			     hlcache_content_callback,
+			     ctx->handle) == false)
 		return NSERROR_NOMEM;
 
 	/* Associate cache entry with handle */
@@ -315,7 +331,8 @@ static nserror hlcache_find_content(hlcache_retrieval_ctx *ctx,
 
 			if (ctx->handle->cb != NULL) {
 				event.type = CONTENT_MSG_READY;
-				ctx->handle->cb(ctx->handle, &event,
+				ctx->handle->cb(ctx->handle,
+						&event,
 						ctx->handle->pw);
 			}
 		} else if (status == CONTENT_STATUS_DONE) {
@@ -324,13 +341,15 @@ static nserror hlcache_find_content(hlcache_retrieval_ctx *ctx,
 
 			if (ctx->handle->cb != NULL) {
 				event.type = CONTENT_MSG_READY;
-				ctx->handle->cb(ctx->handle, &event,
+				ctx->handle->cb(ctx->handle,
+						&event,
 						ctx->handle->pw);
 			}
 
 			if (ctx->handle->cb != NULL) {
 				event.type = CONTENT_MSG_DONE;
-				ctx->handle->cb(ctx->handle, &event,
+				ctx->handle->cb(ctx->handle,
+						&event,
 						ctx->handle->pw);
 			}
 		}
@@ -348,8 +367,8 @@ static nserror hlcache_find_content(hlcache_retrieval_ctx *ctx,
  *         NSERROR_NEED_DATA on success where data is needed,
  *         appropriate error otherwise
  */
-static nserror hlcache_migrate_ctx(hlcache_retrieval_ctx *ctx,
-		lwc_string *effective_type)
+static nserror
+hlcache_migrate_ctx(hlcache_retrieval_ctx *ctx, lwc_string *effective_type)
 {
 	content_type type = CONTENT_NONE;
 	nserror error = NSERROR_OK;
@@ -357,19 +376,21 @@ static nserror hlcache_migrate_ctx(hlcache_retrieval_ctx *ctx,
 	ctx->migrate_target = true;
 
 	if ((effective_type != NULL) &&
-	    hlcache_type_is_acceptable(effective_type,
-				       ctx->accepted_types,
-				       &type)) {
+	    hlcache_type_is_acceptable(
+		    effective_type, ctx->accepted_types, &type)) {
 		error = hlcache_find_content(ctx, effective_type);
 		if (error != NSERROR_OK && error != NSERROR_NEED_DATA) {
 			if (ctx->handle->cb != NULL) {
 				hlcache_event hlevent;
 
 				hlevent.type = CONTENT_MSG_ERROR;
-				hlevent.data.errordata.errorcode = NSERROR_UNKNOWN;
-				hlevent.data.errordata.errormsg = messages_get("MiscError");
+				hlevent.data.errordata.errorcode =
+					NSERROR_UNKNOWN;
+				hlevent.data.errordata.errormsg = messages_get(
+					"MiscError");
 
-				ctx->handle->cb(ctx->handle, &hlevent,
+				ctx->handle->cb(ctx->handle,
+						&hlevent,
 						ctx->handle->pw);
 			}
 
@@ -377,7 +398,7 @@ static nserror hlcache_migrate_ctx(hlcache_retrieval_ctx *ctx,
 			llcache_handle_release(ctx->llcache);
 		}
 	} else if (type == CONTENT_NONE &&
-			(ctx->flags & HLCACHE_RETRIEVE_MAY_DOWNLOAD)) {
+		   (ctx->flags & HLCACHE_RETRIEVE_MAY_DOWNLOAD)) {
 		/* Unknown type, and we can download, so convert */
 		llcache_handle_force_stream(ctx->llcache);
 
@@ -387,27 +408,29 @@ static nserror hlcache_migrate_ctx(hlcache_retrieval_ctx *ctx,
 			hlevent.type = CONTENT_MSG_DOWNLOAD;
 			hlevent.data.download = ctx->llcache;
 
-			ctx->handle->cb(ctx->handle, &hlevent,
-					ctx->handle->pw);
+			ctx->handle->cb(ctx->handle, &hlevent, ctx->handle->pw);
 		}
 
 		/* Ensure caller knows we need data */
 		error = NSERROR_NEED_DATA;
 	} else {
 		/* Unacceptable type: report error */
-		NSLOG(neosurf, ERROR, "UnacceptableType for %s. Effective type: %s. Accepted types: %d", 
-              nsurl_access(hlcache_handle_get_url(ctx->handle)),
-              effective_type ? lwc_string_data(effective_type) : "NULL", ctx->accepted_types);
+		NSLOG(neosurf,
+		      ERROR,
+		      "UnacceptableType for %s. Effective type: %s. Accepted types: %d",
+		      nsurl_access(hlcache_handle_get_url(ctx->handle)),
+		      effective_type ? lwc_string_data(effective_type) : "NULL",
+		      ctx->accepted_types);
 
 		if (ctx->handle->cb != NULL) {
 			hlcache_event hlevent;
 
 			hlevent.type = CONTENT_MSG_ERROR;
 			hlevent.data.errordata.errorcode = NSERROR_UNKNOWN;
-			hlevent.data.errordata.errormsg = messages_get("UnacceptableType");
+			hlevent.data.errordata.errormsg = messages_get(
+				"UnacceptableType");
 
-			ctx->handle->cb(ctx->handle, &hlevent,
-					ctx->handle->pw);
+			ctx->handle->cb(ctx->handle, &hlevent, ctx->handle->pw);
 		}
 
 		llcache_handle_abort(ctx->llcache);
@@ -418,7 +441,7 @@ static nserror hlcache_migrate_ctx(hlcache_retrieval_ctx *ctx,
 
 	/* No longer require retrieval context */
 	RING_REMOVE(hlcache->retrieval_ctx_ring, ctx);
-	free((char *) ctx->child.charset);
+	free((char *)ctx->child.charset);
 	free(ctx);
 
 	return error;
@@ -432,10 +455,9 @@ static nserror hlcache_migrate_ctx(hlcache_retrieval_ctx *ctx,
  * \param pw	  Pointer to client-specific data
  * \return NSERROR_OK on success, appropriate error otherwise
  */
-static nserror
-hlcache_llcache_callback(llcache_handle *handle,
-			 const llcache_event *event,
-			 void *pw)
+static nserror hlcache_llcache_callback(llcache_handle *handle,
+					const llcache_event *event,
+					void *pw)
 {
 	hlcache_retrieval_ctx *ctx = pw;
 	lwc_string *effective_type = NULL;
@@ -456,10 +478,13 @@ hlcache_llcache_callback(llcache_handle *handle,
 		}
 		break;
 	case LLCACHE_EVENT_HAD_HEADERS:
-		error = mimesniff_compute_effective_type(llcache_handle_get_header(handle, "Content-Type"), NULL, 0,
-				ctx->flags & HLCACHE_RETRIEVE_SNIFF_TYPE,
-				ctx->accepted_types == CONTENT_IMAGE,
-				&effective_type);
+		error = mimesniff_compute_effective_type(
+			llcache_handle_get_header(handle, "Content-Type"),
+			NULL,
+			0,
+			ctx->flags & HLCACHE_RETRIEVE_SNIFF_TYPE,
+			ctx->accepted_types == CONTENT_IMAGE,
+			&effective_type);
 		if (error == NSERROR_OK || error == NSERROR_NOT_FOUND) {
 			/* If the sniffer was successful or failed to find
 			 * a Content-Type header when sniffing was
@@ -479,11 +504,13 @@ hlcache_llcache_callback(llcache_handle *handle,
 
 		break;
 	case LLCACHE_EVENT_HAD_DATA:
-		error = mimesniff_compute_effective_type(llcache_handle_get_header(handle, "Content-Type"),
-				event->data.data.buf, event->data.data.len,
-				ctx->flags & HLCACHE_RETRIEVE_SNIFF_TYPE,
-				ctx->accepted_types == CONTENT_IMAGE,
-				&effective_type);
+		error = mimesniff_compute_effective_type(
+			llcache_handle_get_header(handle, "Content-Type"),
+			event->data.data.buf,
+			event->data.data.len,
+			ctx->flags & HLCACHE_RETRIEVE_SNIFF_TYPE,
+			ctx->accepted_types == CONTENT_IMAGE,
+			&effective_type);
 		if (error != NSERROR_OK) {
 			assert(0 && "MIME sniff failed with data");
 		}
@@ -498,8 +525,13 @@ hlcache_llcache_callback(llcache_handle *handle,
 	case LLCACHE_EVENT_DONE:
 		/* DONE event before we could determine the effective MIME type.
 		 */
-		error = mimesniff_compute_effective_type(llcache_handle_get_header(handle, "Content-Type"),
-				NULL, 0, false, false, &effective_type);
+		error = mimesniff_compute_effective_type(
+			llcache_handle_get_header(handle, "Content-Type"),
+			NULL,
+			0,
+			false,
+			false,
+			&effective_type);
 		if (error == NSERROR_OK || error == NSERROR_NOT_FOUND) {
 			error = hlcache_migrate_ctx(ctx, effective_type);
 
@@ -513,7 +545,10 @@ hlcache_llcache_callback(llcache_handle *handle,
 		if (ctx->handle->cb != NULL) {
 			hlcache_event hlevent;
 
-			NSLOG(neosurf, ERROR, "Sending CONTENT_MSG_ERROR from LLCACHE_EVENT_DONE. Code: %d", error);
+			NSLOG(neosurf,
+			      ERROR,
+			      "Sending CONTENT_MSG_ERROR from LLCACHE_EVENT_DONE. Code: %d",
+			      error);
 
 			hlevent.type = CONTENT_MSG_ERROR;
 			hlevent.data.errordata.errorcode = error;
@@ -527,10 +562,14 @@ hlcache_llcache_callback(llcache_handle *handle,
 			hlcache_event hlevent;
 
 			hlevent.type = CONTENT_MSG_ERROR;
-			hlevent.data.errordata.errorcode = event->data.error.code;
+			hlevent.data.errordata.errorcode =
+				event->data.error.code;
 			if (hlevent.data.errordata.errorcode == NSERROR_OK) {
-				NSLOG(neosurf, ERROR, "LLCACHE_EVENT_ERROR with NSERROR_OK! Forcing NSERROR_UNKNOWN");
-				hlevent.data.errordata.errorcode = NSERROR_UNKNOWN;
+				NSLOG(neosurf,
+				      ERROR,
+				      "LLCACHE_EVENT_ERROR with NSERROR_OK! Forcing NSERROR_UNKNOWN");
+				hlevent.data.errordata.errorcode =
+					NSERROR_UNKNOWN;
 			}
 			hlevent.data.errordata.errormsg = event->data.error.msg;
 
@@ -561,8 +600,7 @@ hlcache_llcache_callback(llcache_handle *handle,
  ******************************************************************************/
 
 
-nserror
-hlcache_initialise(const struct hlcache_parameters *hlcache_parameters)
+nserror hlcache_initialise(const struct hlcache_parameters *hlcache_parameters)
 {
 	nserror ret;
 
@@ -581,7 +619,9 @@ hlcache_initialise(const struct hlcache_parameters *hlcache_parameters)
 	hlcache->params = *hlcache_parameters;
 
 	/* Schedule the cache cleanup */
-	guit->misc->schedule(hlcache->params.bg_clean_time, hlcache_clean, NULL);
+	guit->misc->schedule(hlcache->params.bg_clean_time,
+			     hlcache_clean,
+			     NULL);
 
 	return NSERROR_OK;
 }
@@ -601,12 +641,14 @@ void hlcache_finalise(void)
 	hlcache_retrieval_ctx *ctx, *next;
 
 	/* Obtain initial count of contents remaining */
-	for (num_contents = 0, entry = hlcache->content_list;
-			entry != NULL; entry = entry->next) {
+	for (num_contents = 0, entry = hlcache->content_list; entry != NULL;
+	     entry = entry->next) {
 		num_contents++;
 	}
 
-	NSLOG(netsurf, INFO, "%"PRIu32" contents remain before cache drain",
+	NSLOG(netsurf,
+	      INFO,
+	      "%" PRIu32 " contents remain before cache drain",
 	      num_contents);
 
 	/* Drain cache */
@@ -616,13 +658,16 @@ void hlcache_finalise(void)
 		hlcache_clean(NULL);
 
 		for (num_contents = 0, entry = hlcache->content_list;
-				entry != NULL; entry = entry->next) {
+		     entry != NULL;
+		     entry = entry->next) {
 			num_contents++;
 		}
 	} while (num_contents > 0 && num_contents != prev_contents);
 
-	NSLOG(netsurf, INFO, "%"PRIu32" contents remaining after being polite",
-			num_contents);
+	NSLOG(netsurf,
+	      INFO,
+	      "%" PRIu32 " contents remaining after being polite",
+	      num_contents);
 
 	/* Drain cache again, forcing the matter */
 	do {
@@ -631,19 +676,24 @@ void hlcache_finalise(void)
 		hlcache_clean(&entry); // Any non-NULL pointer will do
 
 		for (num_contents = 0, entry = hlcache->content_list;
-				entry != NULL; entry = entry->next) {
+		     entry != NULL;
+		     entry = entry->next) {
 			num_contents++;
 		}
 	} while (num_contents > 0 && num_contents != prev_contents);
 
-	NSLOG(netsurf, INFO, "%"PRIu32" contents remaining:", num_contents);
-	for (entry = hlcache->content_list; entry != NULL; entry = entry->next) {
-		hlcache_handle entry_handle = { entry, NULL, NULL };
+	NSLOG(netsurf, INFO, "%" PRIu32 " contents remaining:", num_contents);
+	for (entry = hlcache->content_list; entry != NULL;
+	     entry = entry->next) {
+		hlcache_handle entry_handle = {entry, NULL, NULL};
 
 		if (entry->content != NULL) {
-			NSLOG(neosurf, INFO, "	%p : %s (%"PRIu32" users)",
+			NSLOG(neosurf,
+			      INFO,
+			      "	%p : %s (%" PRIu32 " users)",
 			      entry,
-			      nsurl_access(hlcache_handle_get_url(&entry_handle)),
+			      nsurl_access(
+				      hlcache_handle_get_url(&entry_handle)),
 			      content_count_users(entry->content));
 		} else {
 			NSLOG(neosurf, INFO, "	%p", entry);
@@ -664,7 +714,7 @@ void hlcache_finalise(void)
 				free(ctx->handle);
 
 			if (ctx->child.charset != NULL)
-				free((char *) ctx->child.charset);
+				free((char *)ctx->child.charset);
 
 			free(ctx);
 
@@ -674,7 +724,10 @@ void hlcache_finalise(void)
 		hlcache->retrieval_ctx_ring = NULL;
 	}
 
-	NSLOG(neosurf, INFO, "hit/miss %d/%d", hlcache->hit_count,
+	NSLOG(neosurf,
+	      INFO,
+	      "hit/miss %d/%d",
+	      hlcache->hit_count,
 	      hlcache->miss_count);
 
 	/* De-schedule ourselves */
@@ -688,15 +741,15 @@ void hlcache_finalise(void)
 }
 
 /* See hlcache.h for documentation */
-nserror
-hlcache_handle_retrieve(nsurl *url,
-			uint32_t flags,
-			nsurl *referer,
-			llcache_post_data *post,
-			hlcache_handle_callback cb, void *pw,
-			hlcache_child_context *child,
-			content_type accepted_types,
-			hlcache_handle **result)
+nserror hlcache_handle_retrieve(nsurl *url,
+				uint32_t flags,
+				nsurl *referer,
+				llcache_post_data *post,
+				hlcache_handle_callback cb,
+				void *pw,
+				hlcache_child_context *child,
+				content_type accepted_types,
+				hlcache_handle **result)
 {
 	hlcache_retrieval_ctx *ctx;
 	nserror error;
@@ -706,29 +759,46 @@ hlcache_handle_retrieve(nsurl *url,
 	/* Optimization: Check if content is already in hlcache */
 	if (post == NULL && (flags & LLCACHE_RETRIEVE_FORCE_FETCH) == 0) {
 		hlcache_entry *entry;
-		for (entry = hlcache->content_list; entry != NULL; entry = entry->next) {
-			hlcache_handle entry_handle = { entry, NULL, NULL };
-			
-			if (entry->content == NULL) continue;
+		for (entry = hlcache->content_list; entry != NULL;
+		     entry = entry->next) {
+			hlcache_handle entry_handle = {entry, NULL, NULL};
 
-			/* Ignore contents in the error state */
-			if (content_get_status(&entry_handle) == CONTENT_STATUS_ERROR)
+			if (entry->content == NULL)
 				continue;
 
-			if (nsurl_compare(hlcache_handle_get_url(&entry_handle), url, NSURL_COMPLETE)) {
-				if (content_is_shareable(entry->content) == false) continue;
+			/* Ignore contents in the error state */
+			if (content_get_status(&entry_handle) ==
+			    CONTENT_STATUS_ERROR)
+				continue;
 
-				if ((content_get_type(&entry_handle) & accepted_types) == 0) continue;
-				
+			if (nsurl_compare(hlcache_handle_get_url(&entry_handle),
+					  url,
+					  NSURL_COMPLETE)) {
+				if (content_is_shareable(entry->content) ==
+				    false)
+					continue;
+
+				if ((content_get_type(&entry_handle) &
+				     accepted_types) == 0)
+					continue;
+
 				/* Found shareable content */
-				hlcache_handle *handle = calloc(1, sizeof(hlcache_handle));
-				if (handle == NULL) return NSERROR_NOMEM;
+				NSLOG(neosurf,
+				      DEBUG,
+				      "FETCH: cache HIT (sync callback) '%s'",
+				      nsurl_access(url));
+				hlcache_handle *handle = calloc(
+					1, sizeof(hlcache_handle));
+				if (handle == NULL)
+					return NSERROR_NOMEM;
 
 				handle->entry = entry;
 				handle->cb = cb;
 				handle->pw = pw;
 
-				if (content_add_user(entry->content, hlcache_content_callback, handle) == false) {
+				if (content_add_user(entry->content,
+						     hlcache_content_callback,
+						     handle) == false) {
 					free(handle);
 					return NSERROR_NOMEM;
 				}
@@ -737,24 +807,42 @@ hlcache_handle_retrieve(nsurl *url,
 
 				/* Notify callback of current state */
 				if (handle->cb != NULL) {
-					content_status status = content_get_status(handle);
+					content_status status =
+						content_get_status(handle);
 					hlcache_event event;
-					
+
 					if (status == CONTENT_STATUS_LOADING) {
-						event.type = CONTENT_MSG_LOADING;
-						handle->cb(handle, &event, handle->pw);
-					} else if (status == CONTENT_STATUS_READY) {
-						event.type = CONTENT_MSG_LOADING;
-						handle->cb(handle, &event, handle->pw);
+						event.type =
+							CONTENT_MSG_LOADING;
+						handle->cb(handle,
+							   &event,
+							   handle->pw);
+					} else if (status ==
+						   CONTENT_STATUS_READY) {
+						event.type =
+							CONTENT_MSG_LOADING;
+						handle->cb(handle,
+							   &event,
+							   handle->pw);
 						event.type = CONTENT_MSG_READY;
-						handle->cb(handle, &event, handle->pw);
-					} else if (status == CONTENT_STATUS_DONE) {
-						event.type = CONTENT_MSG_LOADING;
-						handle->cb(handle, &event, handle->pw);
+						handle->cb(handle,
+							   &event,
+							   handle->pw);
+					} else if (status ==
+						   CONTENT_STATUS_DONE) {
+						event.type =
+							CONTENT_MSG_LOADING;
+						handle->cb(handle,
+							   &event,
+							   handle->pw);
 						event.type = CONTENT_MSG_READY;
-						handle->cb(handle, &event, handle->pw);
+						handle->cb(handle,
+							   &event,
+							   handle->pw);
 						event.type = CONTENT_MSG_DONE;
-						handle->cb(handle, &event, handle->pw);
+						handle->cb(handle,
+							   &event,
+							   handle->pw);
 					}
 				}
 
@@ -762,19 +850,33 @@ hlcache_handle_retrieve(nsurl *url,
 			}
 		}
 
-		/* Optimization: Check if content is currently being retrieved */
+		/* Optimization: Check if content is currently being retrieved
+		 */
 		if (hlcache->retrieval_ctx_ring != NULL) {
 			RING_ITERATE_START(struct hlcache_retrieval_ctx,
 					   hlcache->retrieval_ctx_ring,
-					   ictx) {
-				if (ictx->llcache == NULL) continue;
+					   ictx)
+			{
+				if (ictx->llcache == NULL)
+					continue;
 
-				if (nsurl_compare(llcache_handle_get_url(ictx->llcache), url, NSURL_COMPLETE)) {
+				if (nsurl_compare(llcache_handle_get_url(
+							  ictx->llcache),
+						  url,
+						  NSURL_COMPLETE)) {
 					/* Found matching retrieval */
-					hlcache_retrieval_ctx *new_ctx = calloc(1, sizeof(hlcache_retrieval_ctx));
-					if (new_ctx == NULL) return NSERROR_NOMEM;
+					NSLOG(neosurf,
+					      DEBUG,
+					      "FETCH: joining PENDING '%s'",
+					      nsurl_access(url));
+					hlcache_retrieval_ctx *new_ctx = calloc(
+						1,
+						sizeof(hlcache_retrieval_ctx));
+					if (new_ctx == NULL)
+						return NSERROR_NOMEM;
 
-					new_ctx->handle = calloc(1, sizeof(hlcache_handle));
+					new_ctx->handle = calloc(
+						1, sizeof(hlcache_handle));
 					if (new_ctx->handle == NULL) {
 						free(new_ctx);
 						return NSERROR_NOMEM;
@@ -782,43 +884,58 @@ hlcache_handle_retrieve(nsurl *url,
 
 					if (child != NULL) {
 						if (child->charset != NULL) {
-							new_ctx->child.charset = strdup(child->charset);
-							if (new_ctx->child.charset == NULL) {
+							new_ctx->child
+								.charset = strdup(
+								child->charset);
+							if (new_ctx->child
+								    .charset ==
+							    NULL) {
 								free(new_ctx->handle);
 								free(new_ctx);
 								return NSERROR_NOMEM;
 							}
 						}
-						new_ctx->child.quirks = child->quirks;
+						new_ctx->child.quirks =
+							child->quirks;
 					}
 
 					new_ctx->flags = flags;
-					new_ctx->accepted_types = accepted_types;
+					new_ctx->accepted_types =
+						accepted_types;
 					new_ctx->handle->cb = cb;
 					new_ctx->handle->pw = pw;
-					
+
 					/* Share the low-level cache handle */
-					if (llcache_handle_clone(ictx->llcache, &new_ctx->llcache) != NSERROR_OK) {
+					if (llcache_handle_clone(
+						    ictx->llcache,
+						    &new_ctx->llcache) !=
+					    NSERROR_OK) {
 						free(new_ctx->handle);
 						free(new_ctx);
 						return NSERROR_NOMEM;
 					}
 
-					/* Update callback to point to the new context */
-					if (llcache_handle_change_callback(new_ctx->llcache, 
-							hlcache_llcache_callback, new_ctx) != NSERROR_OK) {
-						llcache_handle_release(new_ctx->llcache);
+					/* Update callback to point to the new
+					 * context */
+					if (llcache_handle_change_callback(
+						    new_ctx->llcache,
+						    hlcache_llcache_callback,
+						    new_ctx) != NSERROR_OK) {
+						llcache_handle_release(
+							new_ctx->llcache);
 						free(new_ctx->handle);
 						free(new_ctx);
 						return NSERROR_NOMEM;
 					}
 
-					RING_INSERT(hlcache->retrieval_ctx_ring, new_ctx);
-					
+					RING_INSERT(hlcache->retrieval_ctx_ring,
+						    new_ctx);
+
 					*result = new_ctx->handle;
 					return NSERROR_OK;
 				}
-			} RING_ITERATE_END(hlcache->retrieval_ctx_ring, ictx);
+			}
+			RING_ITERATE_END(hlcache->retrieval_ctx_ring, ictx);
 		}
 	}
 
@@ -851,12 +968,20 @@ hlcache_handle_retrieve(nsurl *url,
 	ctx->handle->cb = cb;
 	ctx->handle->pw = pw;
 
-	error = llcache_handle_retrieve(url, flags, referer, post,
-			hlcache_llcache_callback, ctx,
-			&ctx->llcache);
+	NSLOG(neosurf,
+	      DEBUG,
+	      "FETCH: cache MISS (new fetch) '%s'",
+	      nsurl_access(url));
+	error = llcache_handle_retrieve(url,
+					flags,
+					referer,
+					post,
+					hlcache_llcache_callback,
+					ctx,
+					&ctx->llcache);
 	if (error != NSERROR_OK) {
 		/* error retrieving handle so free context and return error */
-		free((char *) ctx->child.charset);
+		free((char *)ctx->child.charset);
 		free(ctx->handle);
 		free(ctx);
 	} else {
@@ -873,13 +998,15 @@ nserror hlcache_handle_release(hlcache_handle *handle)
 {
 	if (handle->entry != NULL) {
 		content_remove_user(handle->entry->content,
-				hlcache_content_callback, handle);
+				    hlcache_content_callback,
+				    handle);
 	} else {
 		RING_ITERATE_START(struct hlcache_retrieval_ctx,
 				   hlcache->retrieval_ctx_ring,
-				   ictx) {
+				   ictx)
+		{
 			if (ictx->handle == handle &&
-					ictx->migrate_target == false) {
+			    ictx->migrate_target == false) {
 				/* This is the nascent context for us,
 				 * so abort the fetch */
 				llcache_handle_abort(ictx->llcache);
@@ -887,13 +1014,14 @@ nserror hlcache_handle_release(hlcache_handle *handle)
 				/* Remove us from the ring */
 				RING_REMOVE(hlcache->retrieval_ctx_ring, ictx);
 				/* Throw us away */
-				free((char *) ictx->child.charset);
+				free((char *)ictx->child.charset);
 				free(ictx);
 				/* And stop */
 				RING_ITERATE_STOP(hlcache->retrieval_ctx_ring,
-						ictx);
+						  ictx);
 			}
-		} RING_ITERATE_END(hlcache->retrieval_ctx_ring, ictx);
+		}
+		RING_ITERATE_END(hlcache->retrieval_ctx_ring, ictx);
 	}
 
 	handle->cb = NULL;
@@ -928,9 +1056,10 @@ nserror hlcache_handle_abort(hlcache_handle *handle)
 
 		RING_ITERATE_START(struct hlcache_retrieval_ctx,
 				   hlcache->retrieval_ctx_ring,
-				   ictx) {
+				   ictx)
+		{
 			if (ictx->handle == handle &&
-					ictx->migrate_target == false) {
+			    ictx->migrate_target == false) {
 				/* This is the nascent context for us,
 				 * so abort the fetch */
 				llcache_handle_abort(ictx->llcache);
@@ -938,13 +1067,14 @@ nserror hlcache_handle_abort(hlcache_handle *handle)
 				/* Remove us from the ring */
 				RING_REMOVE(hlcache->retrieval_ctx_ring, ictx);
 				/* Throw us away */
-				free((char *) ictx->child.charset);
+				free((char *)ictx->child.charset);
 				free(ictx);
 				/* And stop */
 				RING_ITERATE_STOP(hlcache->retrieval_ctx_ring,
-						ictx);
+						  ictx);
 			}
-		} RING_ITERATE_END(hlcache->retrieval_ctx_ring, ictx);
+		}
+		RING_ITERATE_END(hlcache->retrieval_ctx_ring, ictx);
 
 		return NSERROR_OK;
 	}
@@ -965,8 +1095,8 @@ nserror hlcache_handle_abort(hlcache_handle *handle)
 			return NSERROR_NOMEM;
 		}
 
-		if (content_add_user(clone,
-				hlcache_content_callback, handle) == false) {
+		if (content_add_user(clone, hlcache_content_callback, handle) ==
+		    false) {
 			content_destroy(clone);
 			free(entry);
 			return NSERROR_NOMEM;
@@ -990,7 +1120,8 @@ nserror hlcache_handle_abort(hlcache_handle *handle)
 
 /* See hlcache.h for documentation */
 nserror hlcache_handle_replace_callback(hlcache_handle *handle,
-		hlcache_handle_callback cb, void *pw)
+					hlcache_handle_callback cb,
+					void *pw)
 {
 	handle->cb = cb;
 	handle->pw = pw;
@@ -1016,16 +1147,18 @@ nsurl *hlcache_handle_get_url(const hlcache_handle *handle)
 	} else {
 		RING_ITERATE_START(struct hlcache_retrieval_ctx,
 				   hlcache->retrieval_ctx_ring,
-				   ictx) {
+				   ictx)
+		{
 			if (ictx->handle == handle) {
 				/* This is the nascent context for us */
 				result = llcache_handle_get_url(ictx->llcache);
 
 				/* And stop */
 				RING_ITERATE_STOP(hlcache->retrieval_ctx_ring,
-						ictx);
+						  ictx);
 			}
-		} RING_ITERATE_END(hlcache->retrieval_ctx_ring, ictx);
+		}
+		RING_ITERATE_END(hlcache->retrieval_ctx_ring, ictx);
 	}
 
 	return result;

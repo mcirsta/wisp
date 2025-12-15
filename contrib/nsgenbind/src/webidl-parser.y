@@ -244,6 +244,7 @@ Definitions:
                      webidl_free_ast($2);
                 }
             }
+            (void)$1;
             $$ = NULL;
         }
         |
@@ -251,6 +252,7 @@ Definitions:
         {
             fprintf(stderr, "%d: %s\n", yylloc.first_line, errtxt);
             free(errtxt);
+            $$ = NULL;
             YYABORT ;
         }
         ;
@@ -1718,6 +1720,7 @@ Type:
         UnionType TypeSuffix
         {
             /* todo handle suffix */
+            if ($2) webidl_free_ast($2);
             $$ = $1;
         }
         ;
@@ -1729,6 +1732,7 @@ SingleType:
         TOK_ANY TypeSuffixStartingWithArray
         {
                 /* todo deal with TypeSuffixStartingWithArray */
+                if ($2) webidl_free_ast($2);
                 $$ = webidl_new_number_node(WEBIDL_NODE_TYPE_TYPE_BASE,
                                             NULL,
                                             WEBIDL_TYPE_ANY);
@@ -1753,6 +1757,7 @@ UnionMemberType:
         UnionType TypeSuffix
         {
             /* todo handle suffix */
+            if ($2) webidl_free_ast($2);
             $$ = $1;
         }
         |

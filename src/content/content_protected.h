@@ -52,6 +52,39 @@ struct selection_string;
 typedef struct content_handler content_handler;
 
 /**
+ * Debug macros for tracking active count changes.
+ * These log at DEBUG level, which is compiled out in release builds
+ * (release uses INFO minimum level).
+ *
+ * Usage:
+ *   CONTENT_ACTIVE_INC(c, "starting CSS fetch");
+ *   CONTENT_ACTIVE_DEC(c, "CSS fetch complete");
+ */
+#include <neosurf/utils/log.h>
+
+#define CONTENT_ACTIVE_INC(c, reason)                                          \
+	do {                                                                   \
+		(c)->base.active++;                                            \
+		NSLOG(neosurf,                                                 \
+		      DEBUG,                                                   \
+		      "ACTIVE++ → %u (%s) [content=%p]",                       \
+		      (c)->base.active,                                        \
+		      (reason),                                                \
+		      (void *)(c));                                            \
+	} while (0)
+
+#define CONTENT_ACTIVE_DEC(c, reason)                                          \
+	do {                                                                   \
+		(c)->base.active--;                                            \
+		NSLOG(neosurf,                                                 \
+		      DEBUG,                                                   \
+		      "ACTIVE-- → %u (%s) [content=%p]",                       \
+		      (c)->base.active,                                        \
+		      (reason),                                                \
+		      (void *)(c));                                            \
+	} while (0)
+
+/**
  * Content operation function table
  *
  * function table implementing a content type.
@@ -60,42 +93,60 @@ struct content_handler {
 	void (*fini)(void);
 
 	nserror (*create)(const struct content_handler *handler,
-                          lwc_string *imime_type,
-                          const struct http_parameter *params,
-                          struct llcache_handle *llcache,
-                          const char *fallback_charset, bool quirks,
-                          struct content **c);
+			  lwc_string *imime_type,
+			  const struct http_parameter *params,
+			  struct llcache_handle *llcache,
+			  const char *fallback_charset,
+			  bool quirks,
+			  struct content **c);
 
 	bool (*process_data)(struct content *c,
-			const char *data, unsigned int size);
+			     const char *data,
+			     unsigned int size);
 	bool (*data_complete)(struct content *c);
 	void (*reformat)(struct content *c, int width, int height);
 	void (*destroy)(struct content *c);
 	void (*stop)(struct content *c);
-	nserror (*mouse_track)(struct content *c, struct browser_window *bw,
-			browser_mouse_state mouse, int x, int y);
-	nserror (*mouse_action)(struct content *c, struct browser_window *bw,
-			browser_mouse_state mouse, int x, int y);
+	nserror (*mouse_track)(struct content *c,
+			       struct browser_window *bw,
+			       browser_mouse_state mouse,
+			       int x,
+			       int y);
+	nserror (*mouse_action)(struct content *c,
+				struct browser_window *bw,
+				browser_mouse_state mouse,
+				int x,
+				int y);
 	bool (*keypress)(struct content *c, uint32_t key);
-	bool (*redraw)(struct content *c, struct content_redraw_data *data,
-			const struct rect *clip,
-			const struct redraw_context *ctx);
-	nserror (*open)(struct content *c, struct browser_window *bw,
-			struct content *page, struct object_params *params);
+	bool (*redraw)(struct content *c,
+		       struct content_redraw_data *data,
+		       const struct rect *clip,
+		       const struct redraw_context *ctx);
+	nserror (*open)(struct content *c,
+			struct browser_window *bw,
+			struct content *page,
+			struct object_params *params);
 	nserror (*close)(struct content *c);
 	void (*clear_selection)(struct content *c);
-	char * (*get_selection)(struct content *c);
-	nserror (*get_contextual_content)(struct content *c, int x, int y,
-			struct browser_window_features *data);
-	bool (*scroll_at_point)(struct content *c, int x, int y,
-			int scrx, int scry);
-	bool (*drop_file_at_point)(struct content *c, int x, int y,
-			char *file);
-	nserror (*debug_dump)(struct content *c, FILE *f, enum content_debug op);
+	char *(*get_selection)(struct content *c);
+	nserror (*get_contextual_content)(struct content *c,
+					  int x,
+					  int y,
+					  struct browser_window_features *data);
+	bool (*scroll_at_point)(struct content *c,
+				int x,
+				int y,
+				int scrx,
+				int scry);
+	bool (*drop_file_at_point)(struct content *c, int x, int y, char *file);
+	nserror (*debug_dump)(struct content *c,
+			      FILE *f,
+			      enum content_debug op);
 	nserror (*debug)(struct content *c, enum content_debug op);
 	nserror (*clone)(const struct content *old, struct content **newc);
 	bool (*matches_quirks)(const struct content *c, bool quirks);
-	const char *(*get_encoding)(const struct content *c, enum content_encoding_type op);
+	const char *(*get_encoding)(const struct content *c,
+				    enum content_encoding_type op);
 	content_type (*type)(void);
 	void (*add_user)(struct content *c);
 	void (*remove_user)(struct content *c);
@@ -105,12 +156,21 @@ struct content_handler {
 	/**
 	 * content specific free text search find
 	 */
-	nserror (*textsearch_find)(struct content *c, struct textsearch_context *context, const char *pattern, int p_len, bool case_sens);
+	nserror (*textsearch_find)(struct content *c,
+				   struct textsearch_context *context,
+				   const char *pattern,
+				   int p_len,
+				   bool case_sens);
 
 	/**
 	 * get bounds of free text search match
 	 */
-	nserror (*textsearch_bounds)(struct content *c, unsigned start_idx, unsigned end_idx, struct box *start_ptr, struct box *end_ptr, struct rect *bounds_out);
+	nserror (*textsearch_bounds)(struct content *c,
+				     unsigned start_idx,
+				     unsigned end_idx,
+				     struct box *start_ptr,
+				     struct box *end_ptr,
+				     struct rect *bounds_out);
 
 	/**
 	 * redraw an area of selected text
@@ -123,12 +183,17 @@ struct content_handler {
 	 * \param end_idx The end index of teh text region to be redrawn
 	 * \return NSERROR_OK on success else error code
 	 */
-	nserror (*textselection_redraw)(struct content *c, unsigned start_idx, unsigned end_idx);
+	nserror (*textselection_redraw)(struct content *c,
+					unsigned start_idx,
+					unsigned end_idx);
 
 	/**
 	 * copy selected text into selection string possibly with formatting
 	 */
-	nserror (*textselection_copy)(struct content *c, unsigned start_idx, unsigned end_idx, struct selection_string *selstr);
+	nserror (*textselection_copy)(struct content *c,
+				      unsigned start_idx,
+				      unsigned end_idx,
+				      struct selection_string *selstr);
 
 	/**
 	 * get maximum index of text section.
@@ -139,7 +204,7 @@ struct content_handler {
 	 */
 	nserror (*textselection_get_end)(struct content *c, unsigned *end_idx);
 
-        /**
+	/**
 	 * handler dependant content sensitive internal data interface.
 	 */
 	void *(*get_internal)(const struct content *c, void *context);
@@ -162,13 +227,11 @@ struct content_handler {
 /**
  * Linked list of users of a content.
  */
-struct content_user
-{
-	void (*callback)(
-			struct content *c,
-			content_msg msg,
-			const union content_msg_data *data,
-			void *pw);
+struct content_user {
+	void (*callback)(struct content *c,
+			 content_msg msg,
+			 const union content_msg_data *data,
+			 void *pw);
 	void *pw;
 
 	struct content_user *next;
@@ -294,8 +357,8 @@ struct content {
 	} textsearch;
 };
 
-extern const char * const content_type_name[];
-extern const char * const content_status_name[];
+extern const char *const content_type_name[];
+extern const char *const content_status_name[];
 
 
 /**
@@ -310,10 +373,13 @@ extern const char * const content_status_name[];
  * \param quirks            Quirkiness of content
  * \return NSERROR_OK on success, appropriate error otherwise
  */
-nserror content__init(struct content *c, const struct content_handler *handler,
-		lwc_string *imime_type, const struct http_parameter *params,
-		struct llcache_handle *llcache, const char *fallback_charset,
-		bool quirks);
+nserror content__init(struct content *c,
+		      const struct content_handler *handler,
+		      lwc_string *imime_type,
+		      const struct http_parameter *params,
+		      struct llcache_handle *llcache,
+		      const char *fallback_charset,
+		      bool quirks);
 
 /**
  * Clone a content's data members
@@ -354,7 +420,9 @@ void content_set_status(struct content *c, const char *status_message);
 /**
  * Send a message to all users.
  */
-void content_broadcast(struct content *c, content_msg msg, const union content_msg_data *data);
+void content_broadcast(struct content *c,
+		       content_msg msg,
+		       const union content_msg_data *data);
 
 /**
  * Send an error message to all users.
@@ -363,7 +431,9 @@ void content_broadcast(struct content *c, content_msg msg, const union content_m
  * \param errorcode The nserror code to send
  * \param msg The error message to send alongside
  */
-void content_broadcast_error(struct content *c, nserror errorcode, const char *msg);
+void content_broadcast_error(struct content *c,
+			     nserror errorcode,
+			     const char *msg);
 
 /**
  * associate a metadata link with a content.
@@ -371,7 +441,8 @@ void content_broadcast_error(struct content *c, nserror errorcode, const char *m
  * \param c content to add link to
  * \param link The rfc5988 link to add
  */
-bool content__add_rfc5988_link(struct content *c, const struct content_rfc5988_link *link);
+bool content__add_rfc5988_link(struct content *c,
+			       const struct content_rfc5988_link *link);
 
 /**
  * free a rfc5988 link
@@ -379,7 +450,8 @@ bool content__add_rfc5988_link(struct content *c, const struct content_rfc5988_l
  * \param link The link to free
  * \return The next link in the chain
  */
-struct content_rfc5988_link *content__free_rfc5988_link(struct content_rfc5988_link *link);
+struct content_rfc5988_link *
+content__free_rfc5988_link(struct content_rfc5988_link *link);
 
 /**
  * cause a content to be reformatted.
@@ -389,7 +461,10 @@ struct content_rfc5988_link *content__free_rfc5988_link(struct content_rfc5988_l
  * \param width The available width to reformat content in
  * \param height The available height to reformat content in
  */
-void content__reformat(struct content *c, bool background, int width, int height);
+void content__reformat(struct content *c,
+		       bool background,
+		       int width,
+		       int height);
 
 /**
  * Request a redraw of an area of a content
@@ -400,7 +475,11 @@ void content__reformat(struct content *c, bool background, int width, int height
  * \param width	  Width of rectangle
  * \param height  Height of rectangle
  */
-void content__request_redraw(struct content *c, int x, int y, int width, int height);
+void content__request_redraw(struct content *c,
+			     int x,
+			     int y,
+			     int width,
+			     int height);
 
 /**
  * Retrieve mime-type of content
@@ -511,7 +590,8 @@ bool content__get_opaque(struct content *c);
  * \param op encoding operation.
  * \return Pointer to content info or NULL if none.
  */
-const char *content__get_encoding(struct content *c, enum content_encoding_type op);
+const char *
+content__get_encoding(struct content *c, enum content_encoding_type op);
 
 /**
  * Return whether a content is currently locked
@@ -540,8 +620,7 @@ void content_destroy(struct content *c);
  * called with the content.
  */
 bool content_add_user(struct content *h,
-		      void (*callback)(
-				       struct content *c,
+		      void (*callback)(struct content *c,
 				       content_msg msg,
 				       const union content_msg_data *data,
 				       void *pw),
@@ -558,8 +637,7 @@ bool content_add_user(struct content *h,
  * \param ctx Context passed when added
  */
 void content_remove_user(struct content *c,
-			 void (*callback)(
-					  struct content *c,
+			 void (*callback)(struct content *c,
 					  content_msg msg,
 					  const union content_msg_data *data,
 					  void *pw),

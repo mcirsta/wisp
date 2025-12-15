@@ -452,7 +452,10 @@ css_stylesheet *nscss_get_stylesheet(struct hlcache_handle *h)
 {
 	nscss_content *c = (nscss_content *) hlcache_handle_get_content(h);
 
-	assert(c != NULL);
+	if (c == NULL) {
+		NSLOG(neosurf, ERROR, "Content is NULL for handle %p", h);
+		return NULL;
+	}
 
 	return c->data.sheet;
 }
