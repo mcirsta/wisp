@@ -118,18 +118,27 @@ static nserror html_convert_css_callback(hlcache_handle *css,
 
 	case CONTENT_MSG_ERROR: {
 		const char *u = nsurl_access(hlcache_handle_get_url(css));
-		if (u != NULL && strcmp(u, "resource:user.css") == 0) {
+		/* user.css and adblock.css are optional - log at INFO */
+		if (u != NULL && (strcmp(u, "resource:user.css") == 0 ||
+				  strcmp(u, "resource:adblock.css") == 0)) {
 			NSLOG(neosurf,
 			      INFO,
-			      "stylesheet %s missing: %s (code %d)",
-			      u,
+			      "Optional stylesheet %s not found (this is normal)",
+			      u);
+		} else if (u != NULL &&
+			   strcmp(u, "resource:default.css") == 0) {
+			/* default.css is critical - browser will look broken
+			 * without it */
+			NSLOG(neosurf,
+			      ERROR,
+			      "CRITICAL: default.css failed to load: %s (code %d) - pages will be unstyled!",
 			      event->data.errordata.errormsg,
 			      event->data.errordata.errorcode);
 		} else {
 			NSLOG(neosurf,
 			      ERROR,
-			      "stylesheet %s failed: %s (code %d)",
-			      u,
+			      "Stylesheet %s failed: %s (code %d)",
+			      u ? u : "(unknown)",
 			      event->data.errordata.errormsg,
 			      event->data.errordata.errorcode);
 		}
