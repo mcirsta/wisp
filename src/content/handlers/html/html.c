@@ -1395,7 +1395,7 @@ static void html_destroy(struct content *c)
 
 	if (html->parser != NULL) {
 		NSLOG(neosurf,
-		      ERROR,
+		      DEBUG,
 		      "html_destroy: destroying parser %p for content %p",
 		      html->parser,
 		      c);
@@ -1403,7 +1403,7 @@ static void html_destroy(struct content *c)
 		html->parser = NULL;
 	} else {
 		NSLOG(neosurf,
-		      ERROR,
+		      DEBUG,
 		      "html_destroy: parser was already NULL for content %p",
 		      c);
 	}
