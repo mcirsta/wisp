@@ -159,15 +159,19 @@ static HWND nsws_window_create(HINSTANCE hInstance, struct gui_window *gw)
 
 	if ((nsoption_int(window_width) >= 100) &&
 	    (nsoption_int(window_height) >= 100) &&
-	    (nsoption_int(window_x) >= 0) &&
-	    (nsoption_int(window_y) >= 0)) {
+	    (nsoption_int(window_x) >= 0) && (nsoption_int(window_y) >= 0)) {
 		xpos = nsoption_int(window_x);
 		ypos = nsoption_int(window_y);
 		width = nsoption_int(window_width);
 		height = nsoption_int(window_height);
 
-		NSLOG(neosurf, DEBUG, "Setting Window position %d,%d %d,%d",
-		      xpos, ypos, width, height);
+		NSLOG(neosurf,
+		      DEBUG,
+		      "Setting Window position %d,%d %d,%d",
+		      xpos,
+		      ypos,
+		      width,
+		      height);
 	}
 
 	icc.dwSize = sizeof(icc);
@@ -183,10 +187,8 @@ static HWND nsws_window_create(HINSTANCE hInstance, struct gui_window *gw)
 	hwnd = CreateWindowExW(0,
 			       windowclassname_main,
 			       L"NeoSurf Browser",
-			       WS_OVERLAPPEDWINDOW |
-			       WS_CLIPCHILDREN |
-			       WS_CLIPSIBLINGS |
-			       CS_DBLCLKS,
+			       WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN |
+				       WS_CLIPSIBLINGS | CS_DBLCLKS,
 			       xpos,
 			       ypos,
 			       width,
@@ -216,19 +218,19 @@ static HWND nsws_window_create(HINSTANCE hInstance, struct gui_window *gw)
  * \param identifier The identifier the command was delivered for
  * \param ctrl_window The controlling window.
  */
-static LRESULT
-nsws_window_toolbar_command(struct gui_window *gw,
-			    int notification_code,
-			    int identifier,
-			    HWND ctrl_window)
+static LRESULT nsws_window_toolbar_command(struct gui_window *gw,
+					   int notification_code,
+					   int identifier,
+					   HWND ctrl_window)
 {
-	NSLOG(neosurf, DEBUG,
+	NSLOG(neosurf,
+	      DEBUG,
 	      "notification_code %d identifier %d ctrl_window %p",
 	      notification_code,
 	      identifier,
 	      ctrl_window);
 
-	switch(identifier) {
+	switch (identifier) {
 
 	case IDC_MAIN_URLBAR:
 		switch (notification_code) {
@@ -272,7 +274,6 @@ nsws_window_toolbar_command(struct gui_window *gw,
 
 	default:
 		return 1; /* unhandled */
-
 	}
 	return 0; /* control message handled */
 }
@@ -289,22 +290,22 @@ nsws_window_toolbar_command(struct gui_window *gw,
  * \param[out] width The calculated width
  * \param[out] height The calculated height
  */
-static void
-urlbar_dimensions(HWND hWndParent,
-		  int toolbuttonsize,
-		  int buttonc,
-		  int *x,
-		  int *y,
-		  int *width,
-		  int *height)
+static void urlbar_dimensions(HWND hWndParent,
+			      int toolbuttonsize,
+			      int buttonc,
+			      int *x,
+			      int *y,
+			      int *width,
+			      int *height)
 {
 	RECT rc;
 	const int cy_edit = NSWS_URLBAR_HEIGHT;
 
 	GetClientRect(hWndParent, &rc);
-	*x = (toolbuttonsize + 1) * (buttonc + 1) + (NSWS_THROBBER_WIDTH>>1);
+	*x = (toolbuttonsize + 1) * (buttonc + 1) + (NSWS_THROBBER_WIDTH >> 1);
 	*y = ((((rc.bottom - 1) - cy_edit) >> 1) * 2) / 3;
-	*width = (rc.right - 1) - *x - (NSWS_THROBBER_WIDTH>>1) - NSWS_THROBBER_WIDTH;
+	*width = (rc.right - 1) - *x - (NSWS_THROBBER_WIDTH >> 1) -
+		 NSWS_THROBBER_WIDTH;
 	*height = cy_edit;
 }
 
@@ -319,8 +320,10 @@ urlbar_dimensions(HWND hWndParent,
  * \param wparam The w parameter of the message.
  * \param lparam The l parameter of the message.
  */
-static LRESULT CALLBACK
-nsws_window_toolbar_callback(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
+static LRESULT CALLBACK nsws_window_toolbar_callback(HWND hwnd,
+						     UINT msg,
+						     WPARAM wparam,
+						     LPARAM lparam)
 {
 	struct gui_window *gw;
 	int urlx, urly, urlwidth, urlheight;
@@ -339,13 +342,18 @@ nsws_window_toolbar_callback(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 		urlbar_dimensions(hwnd,
 				  gw->toolbuttonsize,
 				  gw->toolbuttonc,
-				  &urlx, &urly, &urlwidth, &urlheight);
+				  &urlx,
+				  &urly,
+				  &urlwidth,
+				  &urlheight);
 
 		/* resize url */
 		if (gw->urlbar != NULL) {
 			MoveWindow(gw->urlbar,
-				   urlx, urly,
-				   urlwidth, urlheight,
+				   urlx,
+				   urly,
+				   urlwidth,
+				   urlheight,
 				   true);
 		}
 
@@ -361,10 +369,9 @@ nsws_window_toolbar_callback(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 		break;
 
 	case WM_COMMAND:
-		if (nsws_window_toolbar_command(gw,
-						HIWORD(wparam),
-						LOWORD(wparam),
-						(HWND)lparam) == 0) {
+		if (nsws_window_toolbar_command(
+			    gw, HIWORD(wparam), LOWORD(wparam), (HWND)lparam) ==
+		    0) {
 			return 0;
 		}
 		break;
@@ -376,7 +383,6 @@ nsws_window_toolbar_callback(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 		/* put the original message handler back */
 		SetWindowLongPtr(hwnd, GWLP_WNDPROC, (LONG_PTR)toolproc);
 		break;
-
 	}
 
 	/* chain to the next handler */
@@ -392,8 +398,13 @@ static void set_urlbar_edit_size(HWND hwnd)
 	GetClientRect(hwnd, &rc);
 	rc.left += btn_x_offset + NSW32_PGIBUTTON_HEIGHT + 1;
 	SendMessage(hwnd, EM_SETRECT, 0, (LPARAM)&rc);
-	NSLOG(neosurf, DEBUG, "left:%ld right:%ld top:%ld bot:%ld",
-	      rc.left,rc.right,rc.top,rc.bottom);
+	NSLOG(neosurf,
+	      DEBUG,
+	      "left:%ld right:%ld top:%ld bot:%ld",
+	      rc.left,
+	      rc.right,
+	      rc.top,
+	      rc.bottom);
 }
 
 
@@ -407,8 +418,10 @@ static void set_urlbar_edit_size(HWND hwnd)
  * \param wparam The w parameter of the message.
  * \param lparam The l parameter of the message.
  */
-static LRESULT CALLBACK
-nsws_window_urlbar_callback(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
+static LRESULT CALLBACK nsws_window_urlbar_callback(HWND hwnd,
+						    UINT msg,
+						    WPARAM wparam,
+						    LPARAM lparam)
 {
 	struct gui_window *gw;
 	WNDPROC urlproc;
@@ -426,13 +439,14 @@ nsws_window_urlbar_callback(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 	/* override messages */
 	switch (msg) {
 	case WM_CHAR:
-		NSLOG(neosurf, INFO, "URLBar WM_CHAR: %"PRIsizet, wparam);
+		NSLOG(neosurf, INFO, "URLBar WM_CHAR: %" PRIsizet, wparam);
 		if (wparam == 1) {
 			/* handle ^A */
 			SendMessage(hwnd, EM_SETSEL, 0, -1);
 			return 1;
 		} else if (wparam == 13) {
-			SendMessage(gw->main, WM_COMMAND, IDC_MAIN_LAUNCH_URL, 0);
+			SendMessage(
+				gw->main, WM_COMMAND, IDC_MAIN_LAUNCH_URL, 0);
 			return 0;
 		}
 		break;
@@ -457,7 +471,6 @@ nsws_window_urlbar_callback(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 		result = CallWindowProc(urlproc, hwnd, msg, wparam, lparam);
 		set_urlbar_edit_size(hwnd);
 		return result;
-
 	}
 
 	/* chain to the next handler */
@@ -474,28 +487,31 @@ nsws_window_urlbar_callback(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
  * \param gw win32 frontends window context.
  * \return win32 window handle of created window or NULL on error.
  */
-static HWND
-nsws_window_urlbar_create(HINSTANCE hInstance,
-			  HWND hWndParent,
-			  struct gui_window *gw)
+static HWND nsws_window_urlbar_create(HINSTANCE hInstance,
+				      HWND hWndParent,
+				      struct gui_window *gw)
 {
 	int urlx, urly, urlwidth, urlheight;
 	HWND hwnd;
 	HWND hbutton;
-	WNDPROC	urlproc;
+	WNDPROC urlproc;
 	HFONT hFont;
 
 	urlbar_dimensions(hWndParent,
 			  gw->toolbuttonsize,
 			  gw->toolbuttonc,
-			  &urlx, &urly, &urlwidth, &urlheight);
+			  &urlx,
+			  &urly,
+			  &urlwidth,
+			  &urlheight);
 
 	/* Create the edit control */
 	hwnd = CreateWindowEx(0L,
 			      TEXT("Edit"),
 			      NULL,
-			      WS_CHILD | WS_BORDER | WS_VISIBLE | WS_CLIPCHILDREN |
-			      ES_LEFT | ES_AUTOHSCROLL | ES_MULTILINE,
+			      WS_CHILD | WS_BORDER | WS_VISIBLE |
+				      WS_CLIPCHILDREN | ES_LEFT |
+				      ES_AUTOHSCROLL | ES_MULTILINE,
 			      urlx,
 			      urly,
 			      urlwidth,
@@ -513,17 +529,26 @@ nsws_window_urlbar_create(HINSTANCE hInstance,
 	SetProp(hwnd, TEXT("GuiWnd"), (HANDLE)gw);
 
 	/* subclass the message handler */
-	urlproc = (WNDPROC)SetWindowLongPtr(hwnd,
-					    GWLP_WNDPROC,
-					    (LONG_PTR)nsws_window_urlbar_callback);
+	urlproc = (WNDPROC)SetWindowLongPtr(
+		hwnd, GWLP_WNDPROC, (LONG_PTR)nsws_window_urlbar_callback);
 
 	/* save the real handler  */
 	SetProp(hwnd, TEXT("OrigMsgProc"), (HANDLE)urlproc);
 
-	hFont = CreateFont(urlheight - 4, 0, 0, 0, FW_BOLD, FALSE, FALSE,
-			   FALSE, ANSI_CHARSET, OUT_DEFAULT_PRECIS,
-			   CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY,
-			   DEFAULT_PITCH | FF_SWISS, "Arial");
+	hFont = CreateFont(urlheight - 4,
+			   0,
+			   0,
+			   0,
+			   FW_BOLD,
+			   FALSE,
+			   FALSE,
+			   FALSE,
+			   ANSI_CHARSET,
+			   OUT_DEFAULT_PRECIS,
+			   CLIP_DEFAULT_PRECIS,
+			   DEFAULT_QUALITY,
+			   DEFAULT_PITCH | FF_SWISS,
+			   "Arial");
 	if (hFont != NULL) {
 		NSLOG(neosurf, INFO, "Setting font object");
 		SendMessage(hwnd, WM_SETFONT, (WPARAM)hFont, 0);
@@ -531,61 +556,80 @@ nsws_window_urlbar_create(HINSTANCE hInstance,
 
 
 	/* Create the page info button */
-	hbutton = CreateWindowEx(0L,
-				 TEXT("BUTTON"),
-				 NULL,
-				 WS_CHILD | WS_VISIBLE | BS_BITMAP | BS_FLAT,
-				 (NSWS_URLBAR_HEIGHT - NSW32_PGIBUTTON_HEIGHT) /2,
-				 (NSWS_URLBAR_HEIGHT - NSW32_PGIBUTTON_HEIGHT) /2,
-				 NSW32_PGIBUTTON_HEIGHT,
-				 NSW32_PGIBUTTON_HEIGHT,
-				 hwnd,
-				 (HMENU)IDC_PAGEINFO,
-				 hInstance,
-			     NULL);
+	hbutton = CreateWindowEx(
+		0L,
+		TEXT("BUTTON"),
+		NULL,
+		WS_CHILD | WS_VISIBLE | BS_BITMAP | BS_FLAT,
+		(NSWS_URLBAR_HEIGHT - NSW32_PGIBUTTON_HEIGHT) / 2,
+		(NSWS_URLBAR_HEIGHT - NSW32_PGIBUTTON_HEIGHT) / 2,
+		NSW32_PGIBUTTON_HEIGHT,
+		NSW32_PGIBUTTON_HEIGHT,
+		hwnd,
+		(HMENU)IDC_PAGEINFO,
+		hInstance,
+		NULL);
 
 	/* Create tooltip control */
 	gw->tooltip = CreateWindowEx(WS_EX_TOPMOST,
 				     TOOLTIPS_CLASS,
 				     NULL,
 				     WS_POPUP | TTS_NOPREFIX | TTS_ALWAYSTIP,
-				     CW_USEDEFAULT, CW_USEDEFAULT,
-				     CW_USEDEFAULT, CW_USEDEFAULT,
+				     CW_USEDEFAULT,
+				     CW_USEDEFAULT,
+				     CW_USEDEFAULT,
+				     CW_USEDEFAULT,
 				     hwnd,
 				     NULL,
 				     hInstance,
 				     NULL);
 
 	if (gw->tooltip) {
-		TOOLINFOW toolInfo = { 0 };
+		TOOLINFOW toolInfo = {0};
 		LRESULT res;
-		
+
 		toolInfo.cbSize = sizeof(toolInfo);
-		
+
 		toolInfo.uFlags = TTF_SUBCLASS | TTF_IDISHWND;
 		toolInfo.hwnd = hwnd;
 		toolInfo.uId = (UINT_PTR)hbutton;
 		toolInfo.lpszText = L"";
-		res = SendMessageW(gw->tooltip, TTM_ADDTOOLW, 0, (LPARAM)&toolInfo);
+		res = SendMessageW(
+			gw->tooltip, TTM_ADDTOOLW, 0, (LPARAM)&toolInfo);
 		if (res == 0) {
-			NSLOG(neosurf, INFO, "Page info tooltip create failed (TTM_ADDTOOLW): hwnd=%p tooltip=%p size=%lu",
-			      hwnd, gw->tooltip, (unsigned long)toolInfo.cbSize);
+			NSLOG(neosurf,
+			      INFO,
+			      "Page info tooltip create failed (TTM_ADDTOOLW): hwnd=%p tooltip=%p size=%lu",
+			      hwnd,
+			      gw->tooltip,
+			      (unsigned long)toolInfo.cbSize);
 		}
 		SendMessage(gw->tooltip, TTM_ACTIVATE, TRUE, 0);
 	} else {
-		NSLOG(neosurf, INFO, "Page info tooltip create failed: hwnd=%p", hwnd);
+		NSLOG(neosurf,
+		      INFO,
+		      "Page info tooltip create failed: hwnd=%p",
+		      hwnd);
 	}
 
 	/* put a property on the parent toolbar so it can set the page info */
 	SetProp(hWndParent, TEXT("hPGIbutton"), (HANDLE)hbutton);
 
-	SendMessageW(hbutton, BM_SETIMAGE, IMAGE_BITMAP, (LPARAM)gw->hPageInfo[PAGE_STATE_UNKNOWN]);
+	SendMessageW(hbutton,
+		     BM_SETIMAGE,
+		     IMAGE_BITMAP,
+		     (LPARAM)gw->hPageInfo[PAGE_STATE_UNKNOWN]);
 
 	set_urlbar_edit_size(hwnd);
 
-	NSLOG(neosurf, INFO,
-	      "Created url bar hwnd:%p, x:%d, y:%d, w:%d, h:%d", hwnd, urlx,
-	      urly, urlwidth, urlheight);
+	NSLOG(neosurf,
+	      INFO,
+	      "Created url bar hwnd:%p, x:%d, y:%d, w:%d, h:%d",
+	      hwnd,
+	      urlx,
+	      urly,
+	      urlwidth,
+	      urlheight);
 
 	return hwnd;
 }
@@ -599,10 +643,9 @@ nsws_window_urlbar_create(HINSTANCE hInstance,
  * \param gw win32 frontends window context.
  * \return win32 window handle of created window or NULL on error.
  */
-static HWND
-nsws_window_throbber_create(HINSTANCE hInstance,
-			    HWND hWndParent,
-			    struct gui_window *gw)
+static HWND nsws_window_throbber_create(HINSTANCE hInstance,
+					HWND hWndParent,
+					struct gui_window *gw)
 {
 	HWND hwnd;
 	int urlx, urly, urlwidth, urlheight;
@@ -610,7 +653,10 @@ nsws_window_throbber_create(HINSTANCE hInstance,
 	urlbar_dimensions(hWndParent,
 			  gw->toolbuttonsize,
 			  gw->toolbuttonc,
-			  &urlx, &urly, &urlwidth, &urlheight);
+			  &urlx,
+			  &urly,
+			  &urlwidth,
+			  &urlheight);
 
 	hwnd = CreateWindow(ANIMATE_CLASS,
 			    "",
@@ -620,7 +666,7 @@ nsws_window_throbber_create(HINSTANCE hInstance,
 			    NSWS_THROBBER_WIDTH,
 			    NSWS_THROBBER_WIDTH,
 			    hWndParent,
-			    (HMENU) IDC_MAIN_THROBBER,
+			    (HMENU)IDC_MAIN_THROBBER,
 			    hInstance,
 			    NULL);
 
@@ -652,12 +698,15 @@ get_imagelist(HINSTANCE hInstance, int resid, int bsize, int bcnt)
 	HIMAGELIST hImageList;
 	HBITMAP hScrBM;
 
-	NSLOG(neosurf, INFO, "resource id %d, bzize %d, bcnt %d", resid,
-	      bsize, bcnt);
+	NSLOG(neosurf,
+	      INFO,
+	      "resource id %d, bzize %d, bcnt %d",
+	      resid,
+	      bsize,
+	      bcnt);
 
-	hImageList = ImageList_Create(bsize, bsize,
-				      ILC_COLOR24 | ILC_MASK, 0,
-				      bcnt);
+	hImageList = ImageList_Create(
+		bsize, bsize, ILC_COLOR24 | ILC_MASK, 0, bcnt);
 	if (hImageList == NULL) {
 		return NULL;
 	}
@@ -695,10 +744,9 @@ get_imagelist(HINSTANCE hInstance, int resid, int bsize, int bcnt)
  * \param gw win32 frontends window context.
  * \return win32 window handle of created window or NULL on error.
  */
-static HWND
-nsws_window_create_toolbar(HINSTANCE hInstance,
-			   HWND hWndParent,
-			   struct gui_window *gw)
+static HWND nsws_window_create_toolbar(HINSTANCE hInstance,
+				       HWND hWndParent,
+				       struct gui_window *gw)
 {
 	HIMAGELIST hImageList;
 	HWND hWndToolbar;
@@ -710,14 +758,17 @@ nsws_window_create_toolbar(HINSTANCE hInstance,
 		{3, IDM_NAV_RELOAD, TBSTATE_ENABLED, BTNS_BUTTON, {0}, 0, 0},
 		{4, IDM_NAV_STOP, TBSTATE_ENABLED, BTNS_BUTTON, {0}, 0, 0},
 	};
-	WNDPROC	toolproc;
+	WNDPROC toolproc;
 
 	/* Create the toolbar window and subclass its message handler. */
 	hWndToolbar = CreateWindowEx(0,
 				     TOOLBARCLASSNAME,
 				     "Toolbar",
 				     WS_CHILD | TBSTYLE_FLAT | TBSTYLE_TOOLTIPS,
-				     0, 0, 0, 0,
+				     0,
+				     0,
+				     0,
+				     0,
 				     hWndParent,
 				     NULL,
 				     HINST_COMMCTRL,
@@ -730,9 +781,10 @@ nsws_window_create_toolbar(HINSTANCE hInstance,
 	SetProp(hWndToolbar, TEXT("GuiWnd"), (HANDLE)gw);
 
 	/* subclass the message handler */
-	toolproc = (WNDPROC)SetWindowLongPtr(hWndToolbar,
-					     GWLP_WNDPROC,
-					     (LONG_PTR)nsws_window_toolbar_callback);
+	toolproc = (WNDPROC)SetWindowLongPtr(
+		hWndToolbar,
+		GWLP_WNDPROC,
+		(LONG_PTR)nsws_window_toolbar_callback);
 
 	/* save the real handler  */
 	SetProp(hWndToolbar, TEXT("OrigMsgProc"), (HANDLE)toolproc);
@@ -746,10 +798,8 @@ nsws_window_create_toolbar(HINSTANCE hInstance,
 				   gw->toolbuttonsize,
 				   gw->toolbuttonc);
 	if (hImageList != NULL) {
-		SendMessage(hWndToolbar,
-			    TB_SETIMAGELIST,
-			    0,
-			    (LPARAM)hImageList);
+		SendMessage(
+			hWndToolbar, TB_SETIMAGELIST, 0, (LPARAM)hImageList);
 	}
 
 	/* Create the disabled image list and assign to toolbar. */
@@ -770,17 +820,13 @@ nsws_window_create_toolbar(HINSTANCE hInstance,
 				   gw->toolbuttonsize,
 				   gw->toolbuttonc);
 	if (hImageList != NULL) {
-		SendMessage(hWndToolbar,
-			    TB_SETHOTIMAGELIST,
-			    0,
-			    (LPARAM)hImageList);
+		SendMessage(
+			hWndToolbar, TB_SETHOTIMAGELIST, 0, (LPARAM)hImageList);
 	}
 
 	/* Add buttons. */
-	SendMessage(hWndToolbar,
-		    TB_BUTTONSTRUCTSIZE,
-		    (WPARAM)sizeof(TBBUTTON),
-		    0);
+	SendMessage(
+		hWndToolbar, TB_BUTTONSTRUCTSIZE, (WPARAM)sizeof(TBBUTTON), 0);
 
 	/* Enable Unicode notifications for tooltips (TB_SETUNICODEFORMAT) */
 	SendMessage(hWndToolbar, 0x2005, (WPARAM)TRUE, 0);
@@ -797,7 +843,7 @@ nsws_window_create_toolbar(HINSTANCE hInstance,
 	gw->throbber = nsws_window_throbber_create(hInstance, hWndToolbar, gw);
 
 	SendMessage(hWndToolbar, TB_AUTOSIZE, 0, 0);
-	ShowWindow(hWndToolbar,  TRUE);
+	ShowWindow(hWndToolbar, TRUE);
 
 	return hWndToolbar;
 }
@@ -810,23 +856,25 @@ nsws_window_create_toolbar(HINSTANCE hInstance,
  * \param hWndParent The containing window.
  * \param gw win32 frontends window context.
  */
-static HWND
-nsws_window_create_statusbar(HINSTANCE hInstance,
-			     HWND hWndParent,
-			     struct gui_window *gw)
+static HWND nsws_window_create_statusbar(HINSTANCE hInstance,
+					 HWND hWndParent,
+					 struct gui_window *gw)
 {
 	HWND hwnd;
 	hwnd = CreateWindowEx(0,
 			      STATUSCLASSNAME,
 			      NULL,
 			      WS_CHILD | WS_VISIBLE,
-			      0, 0, 0, 0,
+			      0,
+			      0,
+			      0,
+			      0,
 			      hWndParent,
 			      (HMENU)IDC_MAIN_STATUSBAR,
 			      hInstance,
 			      NULL);
 	if (hwnd != NULL) {
-		SendMessage(hwnd, SB_SETTEXT, 0, (LPARAM)"NeoSurf");
+		SendMessage(hwnd, SB_SETTEXT, 0, (LPARAM) "NeoSurf");
 	}
 	return hwnd;
 }
@@ -839,8 +887,9 @@ nsws_window_create_statusbar(HINSTANCE hInstance,
  */
 static void nsws_update_edit(struct gui_window *w)
 {
-	browser_editor_flags editor_flags = (w->bw == NULL) ?
-		BW_EDITOR_NONE : browser_window_get_editor_flags(w->bw);
+	browser_editor_flags editor_flags =
+		(w->bw == NULL) ? BW_EDITOR_NONE
+				: browser_window_get_editor_flags(w->bw);
 	bool paste, copy, del;
 	bool sel = (editor_flags & BW_EDITOR_CAN_COPY);
 
@@ -899,11 +948,10 @@ static void nsws_update_edit(struct gui_window *w)
  * \param y the y coordinate of the event.
  * \return true if menu displayed else false
  */
-static bool
-nsws_ctx_menu(struct gui_window *gw, HWND hwnd, int x, int y)
+static bool nsws_ctx_menu(struct gui_window *gw, HWND hwnd, int x, int y)
 {
 	RECT rc; /* client area of window */
-	POINT pt = { x, y }; /* location of mouse click */
+	POINT pt = {x, y}; /* location of mouse click */
 
 	/* Get the bounding rectangle of the client area. */
 	GetClientRect(hwnd, &rc);
@@ -945,25 +993,33 @@ static void nsws_window_update_forward_back(struct gui_window *w)
 	bool back = browser_window_history_back_available(w->bw);
 
 	if (w->mainmenu != NULL) {
-		EnableMenuItem(w->mainmenu, IDM_NAV_FORWARD,
+		EnableMenuItem(w->mainmenu,
+			       IDM_NAV_FORWARD,
 			       (forward ? MF_ENABLED : MF_GRAYED));
-		EnableMenuItem(w->mainmenu, IDM_NAV_BACK,
+		EnableMenuItem(w->mainmenu,
+			       IDM_NAV_BACK,
 			       (back ? MF_ENABLED : MF_GRAYED));
-		EnableMenuItem(w->rclick, IDM_NAV_FORWARD,
+		EnableMenuItem(w->rclick,
+			       IDM_NAV_FORWARD,
 			       (forward ? MF_ENABLED : MF_GRAYED));
-		EnableMenuItem(w->rclick, IDM_NAV_BACK,
+		EnableMenuItem(w->rclick,
+			       IDM_NAV_BACK,
 			       (back ? MF_ENABLED : MF_GRAYED));
 	}
 
 	if (w->toolbar != NULL) {
-		SendMessage(w->toolbar, TB_SETSTATE,
-			    (WPARAM) IDM_NAV_FORWARD,
-			    MAKELONG((forward ? TBSTATE_ENABLED :
-				      TBSTATE_INDETERMINATE), 0));
-		SendMessage(w->toolbar, TB_SETSTATE,
-			    (WPARAM) IDM_NAV_BACK,
-			    MAKELONG((back ? TBSTATE_ENABLED :
-				      TBSTATE_INDETERMINATE), 0));
+		SendMessage(w->toolbar,
+			    TB_SETSTATE,
+			    (WPARAM)IDM_NAV_FORWARD,
+			    MAKELONG((forward ? TBSTATE_ENABLED
+					      : TBSTATE_INDETERMINATE),
+				     0));
+		SendMessage(w->toolbar,
+			    TB_SETSTATE,
+			    (WPARAM)IDM_NAV_BACK,
+			    MAKELONG((back ? TBSTATE_ENABLED
+					   : TBSTATE_INDETERMINATE),
+				     0));
 	}
 	nsw32_local_history_hide();
 }
@@ -989,9 +1045,8 @@ win32_window_invalidate_area(struct gui_window *gw, const struct rect *rect)
 
 		redrawrect.left = (long)rect->x0 - gw->scrollx;
 		redrawrect.top = (long)rect->y0 - gw->scrolly;
-		redrawrect.right =(long)rect->x1;
+		redrawrect.right = (long)rect->x1;
 		redrawrect.bottom = (long)rect->y1;
-
 	}
 	RedrawWindow(gw->drawingarea,
 		     redrawrectp,
@@ -1022,11 +1077,8 @@ static nserror win32_open_new_window(struct gui_window *gw)
 
 	ret = nsurl_create(addr, &url);
 	if (ret == NSERROR_OK) {
-		ret = browser_window_create(BW_CREATE_HISTORY,
-					    url,
-					    NULL,
-					    gw->bw,
-					    NULL);
+		ret = browser_window_create(
+			BW_CREATE_HISTORY, url, NULL, gw->bw, NULL);
 		nsurl_unref(url);
 	}
 
@@ -1044,25 +1096,24 @@ static nserror win32_open_new_window(struct gui_window *gw)
  * \param ctrl_window The win32 control window handle
  * \return appropriate response for command
  */
-static LRESULT
-nsws_window_command(HWND hwnd,
-		    struct gui_window *gw,
-		    int notification_code,
-		    int identifier,
-		    HWND ctrl_window)
+static LRESULT nsws_window_command(HWND hwnd,
+				   struct gui_window *gw,
+				   int notification_code,
+				   int identifier,
+				   HWND ctrl_window)
 {
 	nserror ret;
 
-	NSLOG(neosurf, INFO,
+	NSLOG(neosurf,
+	      INFO,
 	      "notification_code %x identifier %x ctrl_window %p",
 	      notification_code,
 	      identifier,
 	      ctrl_window);
 
-	switch(identifier) {
+	switch (identifier) {
 
-	case IDM_FILE_QUIT:
-	{
+	case IDM_FILE_QUIT: {
 		struct gui_window *w;
 		w = window_list;
 		while (w != NULL) {
@@ -1167,8 +1218,7 @@ nsws_window_command(HWND hwnd,
 		nsws_window_update_forward_back(gw);
 		break;
 
-	case IDM_NAV_HOME:
-	{
+	case IDM_NAV_HOME: {
 		nsurl *url;
 		ret = nsurl_create(nsoption_charp(homepage_url), &url);
 
@@ -1243,8 +1293,7 @@ nsws_window_command(HWND hwnd,
 		if (gw->fullscreen == NULL) {
 			HWND desktop = GetDesktopWindow();
 			gw->fullscreen = malloc(sizeof(RECT));
-			if ((desktop == NULL) ||
-			    (gw->fullscreen == NULL)) {
+			if ((desktop == NULL) || (gw->fullscreen == NULL)) {
 				win32_warning("NoMemory", 0);
 				break;
 			}
@@ -1252,24 +1301,27 @@ nsws_window_command(HWND hwnd,
 			GetWindowRect(gw->main, gw->fullscreen);
 			DeleteObject(desktop);
 			SetWindowLong(gw->main, GWL_STYLE, 0);
-			SetWindowPos(gw->main, HWND_TOPMOST, 0, 0,
+			SetWindowPos(gw->main,
+				     HWND_TOPMOST,
+				     0,
+				     0,
 				     rdesk.right - rdesk.left,
 				     rdesk.bottom - rdesk.top,
 				     SWP_SHOWWINDOW);
 		} else {
-			SetWindowLong(gw->main, GWL_STYLE,
-				      WS_OVERLAPPEDWINDOW |
-				      WS_HSCROLL | WS_VSCROLL |
-				      WS_CLIPCHILDREN |
-				      WS_CLIPSIBLINGS | CS_DBLCLKS);
-			SetWindowPos(gw->main, HWND_TOPMOST,
-				     gw->fullscreen->left,
-				     gw->fullscreen->top,
-				     gw->fullscreen->right -
-				     gw->fullscreen->left,
-				     gw->fullscreen->bottom -
-				     gw->fullscreen->top,
-				     SWP_SHOWWINDOW | SWP_FRAMECHANGED);
+			SetWindowLong(gw->main,
+				      GWL_STYLE,
+				      WS_OVERLAPPEDWINDOW | WS_HSCROLL |
+					      WS_VSCROLL | WS_CLIPCHILDREN |
+					      WS_CLIPSIBLINGS | CS_DBLCLKS);
+			SetWindowPos(
+				gw->main,
+				HWND_TOPMOST,
+				gw->fullscreen->left,
+				gw->fullscreen->top,
+				gw->fullscreen->right - gw->fullscreen->left,
+				gw->fullscreen->bottom - gw->fullscreen->top,
+				SWP_SHOWWINDOW | SWP_FRAMECHANGED);
 			free(gw->fullscreen);
 			gw->fullscreen = NULL;
 		}
@@ -1283,7 +1335,8 @@ nsws_window_command(HWND hwnd,
 		if (gw->bw != NULL) {
 			browser_window_debug(gw->bw, CONTENT_DEBUG_REDRAW);
 			/* TODO: This should only redraw, not reformat.
-			 * (Layout doesn't change, so reformat is a waste of time) */
+			 * (Layout doesn't change, so reformat is a waste of
+			 * time) */
 			browser_window_schedule_reformat(gw->bw);
 		}
 		break;
@@ -1304,47 +1357,64 @@ nsws_window_command(HWND hwnd,
 			const char *path = nsoption_charp(disc_cache_path);
 			if (path != NULL && path[0] != '\0') {
 				struct llcache_store_parameters sp;
-				NSLOG(neosurf, INFO, "Clear Cache: clearing disc cache at %s", path);
+				NSLOG(neosurf,
+				      INFO,
+				      "Clear Cache: clearing disc cache at %s",
+				      path);
 				guit->llcache->finalise();
 				neosurf_recursive_rm(path);
-				NSLOG(neosurf, INFO, "Clear Cache: disc cache directory removed");
+				NSLOG(neosurf,
+				      INFO,
+				      "Clear Cache: disc cache directory removed");
 				sp.path = path;
 				sp.limit = nsoption_uint(disc_cache_size);
 				sp.hysteresis = sp.limit / 5;
 				guit->llcache->initialise(&sp);
-				NSLOG(neosurf, INFO, "Clear Cache: backing store init limit %"PRIsizet" hyst %"PRIsizet, sp.limit, sp.hysteresis);
+				NSLOG(neosurf,
+				      INFO,
+				      "Clear Cache: backing store init limit %" PRIsizet
+				      " hyst %" PRIsizet,
+				      sp.limit,
+				      sp.hysteresis);
 			} else {
-				NSLOG(neosurf, INFO, "Clear Cache: disc cache disabled");
+				NSLOG(neosurf,
+				      INFO,
+				      "Clear Cache: disc cache disabled");
 			}
 		}
 		NSLOG(neosurf, INFO, "Clear Cache: done");
 		break;
 
 	case IDM_HELP_CONTENTS:
-		nsws_window_go(hwnd,
-			       "https://www.neosurf-browser.org/documentation/");
+		nsws_window_go(
+			hwnd, "https://www.neosurf-browser.org/documentation/");
 		break;
 
 	case IDM_HELP_GUIDE:
-		nsws_window_go(hwnd,
-			       "https://www.neosurf-browser.org/documentation/guide");
+		nsws_window_go(
+			hwnd,
+			"https://www.neosurf-browser.org/documentation/guide");
 		break;
 
 	case IDM_HELP_INFO:
-		nsws_window_go(hwnd,
-			       "https://www.neosurf-browser.org/documentation/info");
+		nsws_window_go(
+			hwnd,
+			"https://www.neosurf-browser.org/documentation/info");
 		break;
 
 	case IDM_HELP_ABOUT:
 		nsw32_about_dialog_init(hinst, gw->main);
 		break;
 
-	case IDC_MAIN_LAUNCH_URL:
-	{
+	case IDC_MAIN_LAUNCH_URL: {
 		nsurl *url;
 		nserror err;
 
-		NSLOG(neosurf, INFO, "IDC_MAIN_LAUNCH_URL: focus=%p, urlbar=%p", GetFocus(), gw->urlbar);
+		NSLOG(neosurf,
+		      INFO,
+		      "IDC_MAIN_LAUNCH_URL: focus=%p, urlbar=%p",
+		      GetFocus(),
+		      gw->urlbar);
 
 		if (GetFocus() != gw->urlbar) {
 			NSLOG(neosurf, INFO, "Focus not on urlbar, ignoring");
@@ -1353,7 +1423,10 @@ nsws_window_command(HWND hwnd,
 
 		int len = SendMessage(gw->urlbar, WM_GETTEXTLENGTH, 0, 0);
 		char addr[len + 1];
-		SendMessage(gw->urlbar, WM_GETTEXT, (WPARAM)(len + 1), (LPARAM)addr);
+		SendMessage(gw->urlbar,
+			    WM_GETTEXT,
+			    (WPARAM)(len + 1),
+			    (LPARAM)addr);
 		NSLOG(neosurf, INFO, "launching %s\n", addr);
 
 		err = search_web_omni(addr, SEARCH_WEB_OMNI_NONE, &url);
@@ -1377,7 +1450,6 @@ nsws_window_command(HWND hwnd,
 
 	default:
 		return 1; /* unhandled */
-
 	}
 	return 0; /* control message handled */
 }
@@ -1413,16 +1485,14 @@ static bool win32_window_get_scroll(struct gui_window *gw, int *sx, int *sy)
  * \param lparam The l win32 parameter
  * \return appropriate response for resize
  */
-static LRESULT
-nsws_window_resize(struct gui_window *gw,
-		   HWND hwnd,
-		   WPARAM wparam,
-		   LPARAM lparam)
+static LRESULT nsws_window_resize(struct gui_window *gw,
+				  HWND hwnd,
+				  WPARAM wparam,
+				  LPARAM lparam)
 {
 	RECT rstatus, rtool;
 
-	if ((gw->toolbar == NULL) ||
-	    (gw->urlbar == NULL) ||
+	if ((gw->toolbar == NULL) || (gw->urlbar == NULL) ||
 	    (gw->statusbar == NULL))
 		return 0;
 
@@ -1432,7 +1502,8 @@ nsws_window_resize(struct gui_window *gw,
 	GetClientRect(gw->toolbar, &rtool);
 	GetWindowRect(gw->statusbar, &rstatus);
 	gw->width = LOWORD(lparam);
-	gw->height = HIWORD(lparam) - (rtool.bottom - rtool.top) - (rstatus.bottom - rstatus.top);
+	gw->height = HIWORD(lparam) - (rtool.bottom - rtool.top) -
+		     (rstatus.bottom - rstatus.top);
 
 	if (gw->drawingarea != NULL) {
 		MoveWindow(gw->drawingarea,
@@ -1445,8 +1516,9 @@ nsws_window_resize(struct gui_window *gw,
 	nsws_window_update_forward_back(gw);
 
 	if (gw->toolbar != NULL) {
-		SendMessage(gw->toolbar, TB_SETSTATE,
-			    (WPARAM) IDM_NAV_STOP,
+		SendMessage(gw->toolbar,
+			    TB_SETSTATE,
+			    (WPARAM)IDM_NAV_STOP,
 			    MAKELONG(TBSTATE_INDETERMINATE, 0));
 	}
 
@@ -1462,8 +1534,10 @@ nsws_window_resize(struct gui_window *gw,
  * \param wparam The w win32 parameter
  * \param lparam The l win32 parameter
  */
-static LRESULT CALLBACK
-nsws_window_event_callback(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
+static LRESULT CALLBACK nsws_window_event_callback(HWND hwnd,
+						   UINT msg,
+						   WPARAM wparam,
+						   LPARAM lparam)
 {
 	struct gui_window *gw;
 	RECT rmain;
@@ -1482,9 +1556,12 @@ nsws_window_event_callback(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 		/* set the gui window associated with this window handle */
 		SetProp(hwnd, TEXT("GuiWnd"), (HANDLE)gw);
 
-		NSLOG(neosurf, INFO,
+		NSLOG(neosurf,
+		      INFO,
 		      "created hWnd:%p hInstance %p GUI window %p",
-		      hwnd, createstruct->hInstance, gw);
+		      hwnd,
+		      createstruct->hInstance,
+		      gw);
 
 		break;
 
@@ -1504,14 +1581,15 @@ nsws_window_event_callback(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 	}
 
 	case WM_CONTEXTMENU:
-		if (nsws_ctx_menu(gw, hwnd, GET_X_LPARAM(lparam),
+		if (nsws_ctx_menu(gw,
+				  hwnd,
+				  GET_X_LPARAM(lparam),
 				  GET_Y_LPARAM(lparam))) {
 			return 0;
 		}
 		break;
 
-	case WM_NOTIFY:
-	{
+	case WM_NOTIFY: {
 		LPNMHDR pnmh = (LPNMHDR)lparam;
 		if (pnmh->code == TTN_GETDISPINFOW) {
 			LPNMTTDISPINFOW ptdi = (LPNMTTDISPINFOW)lparam;
@@ -1536,21 +1614,28 @@ nsws_window_event_callback(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 			}
 
 			if (utf8_text) {
-				/* Convert UTF-8 to WideChar and store directly in the Unicode structure */
-				MultiByteToWideChar(CP_UTF8, 0, utf8_text, -1,
-						    ptdi->szText, sizeof(ptdi->szText) / sizeof(WCHAR));
+				/* Convert UTF-8 to WideChar and store directly
+				 * in the Unicode structure */
+				MultiByteToWideChar(CP_UTF8,
+						    0,
+						    utf8_text,
+						    -1,
+						    ptdi->szText,
+						    sizeof(ptdi->szText) /
+							    sizeof(WCHAR));
 				ptdi->lpszText = ptdi->szText;
 			}
 			return 0;
 		}
-	}
-	break;
-
+	} break;
 
 
 	case WM_COMMAND:
-		if (nsws_window_command(hwnd, gw, HIWORD(wparam),
-					LOWORD(wparam), (HWND)lparam) == 0) {
+		if (nsws_window_command(hwnd,
+					gw,
+					HIWORD(wparam),
+					LOWORD(wparam),
+					(HWND)lparam) == 0) {
 			return 0;
 		}
 		break;
@@ -1566,7 +1651,6 @@ nsws_window_event_callback(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 			win32_set_quit(true);
 		}
 		break;
-
 	}
 
 	return DefWindowProcW(hwnd, msg, wparam, lparam);
@@ -1585,58 +1669,68 @@ static void destroy_page_info_bitmaps(struct gui_window *gw)
 
 static void load_page_info_bitmaps(HINSTANCE hInstance, struct gui_window *gw)
 {
-	gw->hPageInfo[PAGE_STATE_UNKNOWN] = LoadImage(hInstance,
-			     MAKEINTRESOURCE(IDB_PAGEINFO_INTERNAL),
-			     IMAGE_BITMAP,
-			     0,
-			     0,
-			     LR_DEFAULTCOLOR);
+	gw->hPageInfo[PAGE_STATE_UNKNOWN] = LoadImage(
+		hInstance,
+		MAKEINTRESOURCE(IDB_PAGEINFO_INTERNAL),
+		IMAGE_BITMAP,
+		0,
+		0,
+		LR_DEFAULTCOLOR);
 	if (gw->hPageInfo[PAGE_STATE_UNKNOWN] == NULL) {
 		DWORD err = GetLastError();
-		NSLOG(neosurf, ERROR, "Failed to load IDB_PAGEINFO_INTERNAL (LoadImage): %lu", err);
+		NSLOG(neosurf,
+		      ERROR,
+		      "Failed to load IDB_PAGEINFO_INTERNAL (LoadImage): %lu",
+		      err);
 	}
 
-	gw->hPageInfo[PAGE_STATE_INTERNAL] = LoadImage(hInstance,
-			     MAKEINTRESOURCE(IDB_PAGEINFO_INTERNAL),
-			     IMAGE_BITMAP,
-			     0,
-			     0,
-			     LR_DEFAULTCOLOR);
+	gw->hPageInfo[PAGE_STATE_INTERNAL] = LoadImage(
+		hInstance,
+		MAKEINTRESOURCE(IDB_PAGEINFO_INTERNAL),
+		IMAGE_BITMAP,
+		0,
+		0,
+		LR_DEFAULTCOLOR);
 
 	gw->hPageInfo[PAGE_STATE_LOCAL] = LoadImage(hInstance,
-			     MAKEINTRESOURCE(IDB_PAGEINFO_LOCAL),
-			     IMAGE_BITMAP,
-			     0,
-			     0,
-			     LR_DEFAULTCOLOR);
+						    MAKEINTRESOURCE(
+							    IDB_PAGEINFO_LOCAL),
+						    IMAGE_BITMAP,
+						    0,
+						    0,
+						    LR_DEFAULTCOLOR);
 
-	gw->hPageInfo[PAGE_STATE_INSECURE] = LoadImage(hInstance,
-			     MAKEINTRESOURCE(IDB_PAGEINFO_INSECURE),
-			     IMAGE_BITMAP,
-			     0,
-			     0,
-			     LR_DEFAULTCOLOR);
+	gw->hPageInfo[PAGE_STATE_INSECURE] = LoadImage(
+		hInstance,
+		MAKEINTRESOURCE(IDB_PAGEINFO_INSECURE),
+		IMAGE_BITMAP,
+		0,
+		0,
+		LR_DEFAULTCOLOR);
 
-	gw->hPageInfo[PAGE_STATE_SECURE_OVERRIDE] = LoadImage(hInstance,
-			     MAKEINTRESOURCE(IDB_PAGEINFO_WARNING),
-			     IMAGE_BITMAP,
-			     0,
-			     0,
-			     LR_DEFAULTCOLOR);
+	gw->hPageInfo[PAGE_STATE_SECURE_OVERRIDE] = LoadImage(
+		hInstance,
+		MAKEINTRESOURCE(IDB_PAGEINFO_WARNING),
+		IMAGE_BITMAP,
+		0,
+		0,
+		LR_DEFAULTCOLOR);
 
-	gw->hPageInfo[PAGE_STATE_SECURE_ISSUES] = LoadImage(hInstance,
-			     MAKEINTRESOURCE(IDB_PAGEINFO_WARNING),
-			     IMAGE_BITMAP,
-			     0,
-			     0,
-			     LR_DEFAULTCOLOR);
+	gw->hPageInfo[PAGE_STATE_SECURE_ISSUES] = LoadImage(
+		hInstance,
+		MAKEINTRESOURCE(IDB_PAGEINFO_WARNING),
+		IMAGE_BITMAP,
+		0,
+		0,
+		LR_DEFAULTCOLOR);
 
-	gw->hPageInfo[PAGE_STATE_SECURE] = LoadImage(hInstance,
-			     MAKEINTRESOURCE(IDB_PAGEINFO_SECURE),
-			     IMAGE_BITMAP,
-			     0,
-			     0,
-			     LR_DEFAULTCOLOR);
+	gw->hPageInfo[PAGE_STATE_SECURE] = LoadImage(
+		hInstance,
+		MAKEINTRESOURCE(IDB_PAGEINFO_SECURE),
+		IMAGE_BITMAP,
+		0,
+		0,
+		LR_DEFAULTCOLOR);
 }
 
 
@@ -1648,10 +1742,9 @@ static void load_page_info_bitmaps(HINSTANCE hInstance, struct gui_window *gw)
  * \param flags The flags controlling the construction.
  * \return The new win32 gui window or NULL on error.
  */
-static struct gui_window *
-win32_window_create(struct browser_window *bw,
-		    struct gui_window *existing,
-		    gui_window_create_flags flags)
+static struct gui_window *win32_window_create(struct browser_window *bw,
+					      struct gui_window *existing,
+					      gui_window_create_flags flags)
 {
 	struct gui_window *gw;
 
@@ -1697,7 +1790,8 @@ win32_window_create(struct browser_window *bw,
 	gw->statusbar = nsws_window_create_statusbar(hinst, gw->main, gw);
 	gw->drawingarea = nsws_window_create_drawable(hinst, gw->main, gw);
 
-	NSLOG(neosurf, INFO,
+	NSLOG(neosurf,
+	      INFO,
 	      "new window: main:%p toolbar:%p statusbar %p drawingarea %p",
 	      gw->main,
 	      gw->toolbar,
@@ -1708,8 +1802,7 @@ win32_window_create(struct browser_window *bw,
 	open_windows++;
 	if ((nsoption_int(window_width) < 100) ||
 	    (nsoption_int(window_height) < 100) ||
-	    (nsoption_int(window_x) < 0) ||
-	    (nsoption_int(window_y) < 0)) {
+	    (nsoption_int(window_x) < 0) || (nsoption_int(window_y) < 0)) {
 		ShowWindow(gw->main, SW_MAXIMIZE);
 	} else {
 		ShowWindow(gw->main, SW_SHOWNORMAL);
@@ -1800,7 +1893,9 @@ static void win32_window_set_title(struct gui_window *w, const char *title)
 	NSLOG(neosurf, INFO, "%p, title %s", w, title);
 	fulltitle = malloc(strlen(title) + SLEN("  -  NeoSurf") + 1);
 	if (fulltitle == NULL) {
-		NSLOG(neosurf, ERROR, "%s",
+		NSLOG(neosurf,
+		      ERROR,
+		      "%s",
 		      messages_get_errorcode(NSERROR_NOMEM));
 		return;
 	}
@@ -1817,8 +1912,12 @@ static void win32_window_set_title(struct gui_window *w, const char *title)
 
 	enctitle = malloc(2 * (wlen + 1));
 	if (enctitle == NULL) {
-		NSLOG(neosurf, ERROR, "%s encoding \"%s\" len %d",
-		      messages_get_errorcode(NSERROR_NOMEM), fulltitle, wlen);
+		NSLOG(neosurf,
+		      ERROR,
+		      "%s encoding \"%s\" len %d",
+		      messages_get_errorcode(NSERROR_NOMEM),
+		      fulltitle,
+		      wlen);
 		free(fulltitle);
 		return;
 	}
@@ -1838,7 +1937,7 @@ static void win32_window_set_title(struct gui_window *w, const char *title)
  */
 static nserror win32_window_set_url(struct gui_window *gw, nsurl *url)
 {
-	SendMessage(gw->urlbar, WM_SETTEXT, 0, (LPARAM) nsurl_access(url));
+	SendMessage(gw->urlbar, WM_SETTEXT, 0, (LPARAM)nsurl_access(url));
 
 	return NSERROR_OK;
 }
@@ -1881,16 +1980,18 @@ win32_window_set_pointer(struct gui_window *w, gui_pointer_shape shape)
  * \param height height of caret
  * \param clip rectangle to clip caret or NULL if none
  */
-static void
-win32_window_place_caret(struct gui_window *w, int x, int y,
-			 int height, const struct rect *clip)
+static void win32_window_place_caret(struct gui_window *w,
+				     int x,
+				     int y,
+				     int height,
+				     const struct rect *clip)
 {
 	if (w == NULL) {
 		return;
 	}
 
-	CreateCaret(w->drawingarea, (HBITMAP)NULL, 1, height );
-	SetCaretPos(x - w->scrollx, y  - w->scrolly);
+	CreateCaret(w->drawingarea, (HBITMAP)NULL, 1, height);
+	SetCaretPos(x - w->scrollx, y - w->scrolly);
 	ShowCaret(w->drawingarea);
 }
 
@@ -1928,10 +2029,13 @@ static void win32_window_start_throbber(struct gui_window *w)
 		EnableMenuItem(w->rclick, IDM_NAV_RELOAD, MF_GRAYED);
 	}
 	if (w->toolbar != NULL) {
-		SendMessage(w->toolbar, TB_SETSTATE, (WPARAM) IDM_NAV_STOP,
+		SendMessage(w->toolbar,
+			    TB_SETSTATE,
+			    (WPARAM)IDM_NAV_STOP,
 			    MAKELONG(TBSTATE_ENABLED, 0));
-		SendMessage(w->toolbar, TB_SETSTATE,
-			    (WPARAM) IDM_NAV_RELOAD,
+		SendMessage(w->toolbar,
+			    TB_SETSTATE,
+			    (WPARAM)IDM_NAV_RELOAD,
 			    MAKELONG(TBSTATE_INDETERMINATE, 0));
 	}
 	w->throbbing = true;
@@ -1961,16 +2065,22 @@ static void win32_window_stop_throbber(struct gui_window *w)
 	}
 
 	if (w->toolbar != NULL) {
-		SendMessage(w->toolbar, TB_SETSTATE, (WPARAM) IDM_NAV_STOP,
+		SendMessage(w->toolbar,
+			    TB_SETSTATE,
+			    (WPARAM)IDM_NAV_STOP,
 			    MAKELONG(TBSTATE_INDETERMINATE, 0));
-		SendMessage(w->toolbar, TB_SETSTATE,
-			    (WPARAM) IDM_NAV_RELOAD,
+		SendMessage(w->toolbar,
+			    TB_SETSTATE,
+			    (WPARAM)IDM_NAV_RELOAD,
 			    MAKELONG(TBSTATE_ENABLED, 0));
 	}
 
 	w->throbbing = false;
 	Animate_Stop(w->throbber);
 	Animate_Seek(w->throbber, 0);
+
+	/* Reset cursor to arrow now that loading is complete */
+	SetCursor(LoadCursor(NULL, IDC_ARROW));
 }
 
 
@@ -1988,11 +2098,13 @@ static void win32_window_page_info_change(struct gui_window *gw)
 
 	pistate = browser_window_get_page_info_state(gw->bw);
 
-	SendMessageW(hbutton, BM_SETIMAGE, IMAGE_BITMAP,
+	SendMessageW(hbutton,
+		     BM_SETIMAGE,
+		     IMAGE_BITMAP,
 		     (LPARAM)gw->hPageInfo[pistate]);
 
 	if (gw->tooltip) {
-		TOOLINFOW toolInfo = { 0 };
+		TOOLINFOW toolInfo = {0};
 		const char *text = "";
 
 		switch (pistate) {
@@ -2024,18 +2136,27 @@ static void win32_window_page_info_change(struct gui_window *gw)
 		if (text) {
 			WCHAR wtext[256] = {0};
 			/* Convert UTF-8 to WideChar */
-			MultiByteToWideChar(CP_UTF8, 0, text, -1,
-					    wtext, sizeof(wtext) / sizeof(WCHAR));
+			MultiByteToWideChar(CP_UTF8,
+					    0,
+					    text,
+					    -1,
+					    wtext,
+					    sizeof(wtext) / sizeof(WCHAR));
 
 			toolInfo.cbSize = sizeof(toolInfo);
 			toolInfo.hwnd = gw->urlbar;
 			toolInfo.uId = (UINT_PTR)hbutton;
 			toolInfo.lpszText = wtext;
 			/* Use TTM_UPDATETIPTEXTW for Unicode */
-			SendMessageW(gw->tooltip, TTM_UPDATETIPTEXTW, 0, (LPARAM)&toolInfo);
+			SendMessageW(gw->tooltip,
+				     TTM_UPDATETIPTEXTW,
+				     0,
+				     (LPARAM)&toolInfo);
 		}
 	} else {
-		NSLOG(neosurf, INFO, "Page info tooltip update failed: no tooltip window");
+		NSLOG(neosurf,
+		      INFO,
+		      "Page info tooltip update failed: no tooltip window");
 	}
 }
 
@@ -2059,10 +2180,10 @@ win32_window_event(struct gui_window *gw, enum gui_window_event event)
 		win32_window_remove_caret(gw);
 		break;
 
-    case GW_EVENT_START_THROBBER:
-        win32_font_caches_flush();
-        win32_window_start_throbber(gw);
-        break;
+	case GW_EVENT_START_THROBBER:
+		win32_font_caches_flush();
+		win32_window_start_throbber(gw);
+		break;
 
 	case GW_EVENT_STOP_THROBBER:
 		win32_window_stop_throbber(gw);
@@ -2141,19 +2262,19 @@ bool nsws_window_go(HWND hwnd, const char *urltxt)
 		return false;
 	ret = nsurl_create(urltxt, &url);
 
-    if (ret != NSERROR_OK) {
-        win32_report_nserror(ret, 0);
-    } else {
-        win32_font_caches_flush();
-        browser_window_navigate(gw->bw,
-                                url,
-                                NULL,
-                                BW_NAVIGATE_HISTORY,
-                                NULL,
-                                NULL,
-                                NULL);
-        nsurl_unref(url);
-    }
+	if (ret != NSERROR_OK) {
+		win32_report_nserror(ret, 0);
+	} else {
+		win32_font_caches_flush();
+		browser_window_navigate(gw->bw,
+					url,
+					NULL,
+					BW_NAVIGATE_HISTORY,
+					NULL,
+					NULL,
+					NULL);
+		nsurl_unref(url);
+	}
 
 	return true;
 }
@@ -2195,9 +2316,11 @@ nserror win32_window_set_scroll(struct gui_window *gw, const struct rect *rect)
 		gw->requestscrolly = rect->y0 - gw->scrolly;
 	}
 
-	NSLOG(neosurf, DEEPDEBUG,
+	NSLOG(neosurf,
+	      DEEPDEBUG,
 	      "requestscroll x,y:%d,%d",
-	      gw->requestscrollx, gw->requestscrolly);
+	      gw->requestscrollx,
+	      gw->requestscrolly);
 
 	/* set the vertical scroll offset */
 	si.cbSize = sizeof(si);
@@ -2208,22 +2331,30 @@ nserror win32_window_set_scroll(struct gui_window *gw, const struct rect *rect)
 	si.nPos = max(gw->scrolly + gw->requestscrolly, 0);
 	si.nPos = min(si.nPos, height - gw->height);
 	SetScrollInfo(gw->drawingarea, SB_VERT, &si, TRUE);
-	NSLOG(neosurf, DEEPDEBUG,
+	NSLOG(neosurf,
+	      DEEPDEBUG,
 	      "SetScrollInfo VERT min:%d max:%d page:%d pos:%d",
-	      si.nMin, si.nMax, si.nPage, si.nPos);
+	      si.nMin,
+	      si.nMax,
+	      si.nPage,
+	      si.nPos);
 
 	/* set the horizontal scroll offset */
 	si.cbSize = sizeof(si);
 	si.fMask = SIF_ALL;
 	si.nMin = 0;
-	si.nMax = width -1;
+	si.nMax = width - 1;
 	si.nPage = gw->width;
 	si.nPos = max(gw->scrollx + gw->requestscrollx, 0);
 	si.nPos = min(si.nPos, width - gw->width);
 	SetScrollInfo(gw->drawingarea, SB_HORZ, &si, TRUE);
-	NSLOG(neosurf, DEEPDEBUG,
+	NSLOG(neosurf,
+	      DEEPDEBUG,
 	      "SetScrollInfo HORZ min:%d max:%d page:%d pos:%d",
-	      si.nMin, si.nMax, si.nPage, si.nPos);
+	      si.nMin,
+	      si.nMax,
+	      si.nPage,
+	      si.nPos);
 
 	/* Set caret position */
 	GetCaretPos(&p);
@@ -2237,17 +2368,18 @@ nserror win32_window_set_scroll(struct gui_window *gw, const struct rect *rect)
 	r.left = 0;
 	r.right = gw->width + 1;
 	ScrollWindowEx(gw->drawingarea,
-		       - gw->requestscrollx,
-		       - gw->requestscrolly,
+		       -gw->requestscrollx,
+		       -gw->requestscrolly,
 		       &r,
 		       NULL,
 		       NULL,
 		       &redraw,
 		       SW_INVALIDATE);
-	NSLOG(neosurf, DEEPDEBUG,
+	NSLOG(neosurf,
+	      DEEPDEBUG,
 	      "ScrollWindowEx %d, %d",
-	      - gw->requestscrollx,
-	      - gw->requestscrolly);
+	      -gw->requestscrollx,
+	      -gw->requestscrolly);
 
 	gw->scrolly += gw->requestscrolly;
 	gw->scrollx += gw->requestscrollx;
@@ -2259,8 +2391,7 @@ nserror win32_window_set_scroll(struct gui_window *gw, const struct rect *rect)
 
 
 /* exported interface documented in windows/window.h */
-nserror
-nsws_create_main_class(HINSTANCE hinstance)
+nserror nsws_create_main_class(HINSTANCE hinstance)
 {
 	nserror ret = NSERROR_OK;
 	WNDCLASSEXW wc;
