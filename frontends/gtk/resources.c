@@ -43,15 +43,15 @@
 #endif
 
 #ifdef WITH_BUILTIN_PIXBUF
-//#ifdef __GNUC__
-//const guint8 menu_cursor_pixdata[] __attribute__ ((__aligned__ (4)));
-//const guint8 favicon_pixdata[] __attribute__ ((__aligned__ (4)));
-//const guint8 netsurf_pixdata[] __attribute__ ((__aligned__ (4)));
-//#else
-//extern const guint8 menu_cursor_pixdata[];
-//extern const guint8 favicon_pixdata[];
-//extern const guint8 netsurf_pixdata[];
-//#endif
+// #ifdef __GNUC__
+// const guint8 menu_cursor_pixdata[] __attribute__ ((__aligned__ (4)));
+// const guint8 favicon_pixdata[] __attribute__ ((__aligned__ (4)));
+// const guint8 netsurf_pixdata[] __attribute__ ((__aligned__ (4)));
+// #else
+// extern const guint8 menu_cursor_pixdata[];
+// extern const guint8 favicon_pixdata[];
+// extern const guint8 netsurf_pixdata[];
+// #endif
 const guint8 *menu_cursor_pixdata;
 const guint8 *favicon_pixdata;
 const guint8 *neosurf_pixdata;
@@ -73,7 +73,7 @@ struct nsgtk_resource_s {
 	char *path;
 };
 
-#define RES_ENTRY(name) { name, sizeof((name)) - 1, NSGTK_RESOURCE_FILE, NULL }
+#define RES_ENTRY(name) {name, sizeof((name)) - 1, NSGTK_RESOURCE_FILE, NULL}
 
 /** resources that are used for gtk builder */
 static struct nsgtk_resource_s ui_resource[] = {
@@ -90,7 +90,7 @@ static struct nsgtk_resource_s ui_resource[] = {
 	RES_ENTRY("viewdata"),
 	RES_ENTRY("warning"),
 	RES_ENTRY("pageinfo"),
-	{ NULL, 0, NSGTK_RESOURCE_FILE, NULL },
+	{NULL, 0, NSGTK_RESOURCE_FILE, NULL},
 };
 
 /** resources that are used as pixbufs */
@@ -119,7 +119,7 @@ static struct nsgtk_resource_s pixbuf_resource[] = {
 	RES_ENTRY("throbber/throbber6.png"),
 	RES_ENTRY("throbber/throbber7.png"),
 	RES_ENTRY("throbber/throbber8.png"),
-	{ NULL, 0, NSGTK_RESOURCE_FILE, NULL },
+	{NULL, 0, NSGTK_RESOURCE_FILE, NULL},
 };
 
 /** resources that are used for direct data access */
@@ -132,7 +132,6 @@ static struct nsgtk_resource_s direct_resource[] = {
 	RES_ENTRY("internal.css"),
 	RES_ENTRY("quirks.css"),
 	RES_ENTRY("neosurf.png"),
-	RES_ENTRY("default.ico"),
 	RES_ENTRY("icons/arrow-l.png"),
 	RES_ENTRY("icons/content.png"),
 	RES_ENTRY("icons/directory2.png"),
@@ -143,7 +142,7 @@ static struct nsgtk_resource_s direct_resource[] = {
 	RES_ENTRY("languages"),
 	RES_ENTRY("accelerators"),
 	RES_ENTRY("Messages"),
-	{ NULL, 0, NSGTK_RESOURCE_FILE, NULL },
+	{NULL, 0, NSGTK_RESOURCE_FILE, NULL},
 };
 
 
@@ -156,8 +155,8 @@ GdkCursor *nsgtk_create_menu_cursor(void)
 
 	res = nsgdk_pixbuf_new_from_resname("menu_cursor.png", &pixbuf);
 	if (res == NSERROR_OK) {
-		cursor = gdk_cursor_new_from_pixbuf(gdk_display_get_default(),
-						    pixbuf, 0, 3);
+		cursor = gdk_cursor_new_from_pixbuf(
+			gdk_display_get_default(), pixbuf, 0, 3);
 		g_object_unref(pixbuf);
 	}
 
@@ -179,14 +178,13 @@ GdkCursor *nsgtk_create_menu_cursor(void)
  * \param respath A string vector containing the valid resource search paths
  * \param resource A resource entry to initialise
  */
-static nserror
-init_resource(char **respath, struct nsgtk_resource_s *resource)
+static nserror init_resource(char **respath, struct nsgtk_resource_s *resource)
 {
 	char *resname;
 #ifdef WITH_GRESOURCE
 	int resnamelen;
 	gboolean present;
-	const gchar * const *langv;
+	const gchar *const *langv;
 	int langc = 0;
 
 	langv = g_get_language_names();
@@ -194,31 +192,41 @@ init_resource(char **respath, struct nsgtk_resource_s *resource)
 	/* look for resource under per language paths */
 	while (langv[langc] != NULL) {
 		/* allocate and fill a full resource name path buffer */
-		resnamelen = snprintf(NULL, 0,
+		resnamelen = snprintf(NULL,
+				      0,
 				      "/org/neosurf/%s/%s",
-				      langv[langc], resource->name);
+				      langv[langc],
+				      resource->name);
 		resname = malloc(resnamelen + 1);
 		if (resname == NULL) {
 			return NSERROR_NOMEM;
 		}
-		snprintf(resname, resnamelen + 1,
+		snprintf(resname,
+			 resnamelen + 1,
 			 "/org/neosurf/%s/%s",
-			 langv[langc], resource->name);
+			 langv[langc],
+			 resource->name);
 
 		/* check if resource is present */
 		present = g_resources_get_info(resname,
 					       G_RESOURCE_LOOKUP_FLAGS_NONE,
-					       NULL, NULL, NULL);
+					       NULL,
+					       NULL,
+					       NULL);
 		if (present == TRUE) {
 			/* found an entry in the resources */
 			resource->path = resname;
 			resource->type = NSGTK_RESOURCE_GLIB;
-			NSLOG(neosurf, INFO, "Found gresource path %s",
+			NSLOG(neosurf,
+			      INFO,
+			      "Found gresource path %s",
 			      resource->path);
 			return NSERROR_OK;
 		}
-		NSLOG(neosurf, DEEPDEBUG,
-		      "gresource \"%s\" not found", resname);
+		NSLOG(neosurf,
+		      DEEPDEBUG,
+		      "gresource \"%s\" not found",
+		      resname);
 		free(resname);
 
 		langc++;
@@ -232,15 +240,13 @@ init_resource(char **respath, struct nsgtk_resource_s *resource)
 	}
 	snprintf(resname, resnamelen + 1, "/org/neosurf/%s", resource->name);
 
-	present = g_resources_get_info(resname,
-				       G_RESOURCE_LOOKUP_FLAGS_NONE,
-				       NULL, NULL, NULL);
+	present = g_resources_get_info(
+		resname, G_RESOURCE_LOOKUP_FLAGS_NONE, NULL, NULL, NULL);
 	if (present == TRUE) {
 		/* found an entry in the resources */
 		resource->path = resname;
 		resource->type = NSGTK_RESOURCE_GLIB;
-		NSLOG(neosurf, INFO, "Found gresource path %s",
-		      resource->path);
+		NSLOG(neosurf, INFO, "Found gresource path %s", resource->path);
 		return NSERROR_OK;
 	}
 	NSLOG(neosurf, DEEPDEBUG, "gresource \"%s\" not found", resname);
@@ -255,12 +261,16 @@ init_resource(char **respath, struct nsgtk_resource_s *resource)
 		resource->path = resname;
 		resource->type = NSGTK_RESOURCE_FILE;
 
-		NSLOG(neosurf, INFO,
-		      "Found file resource path %s", resource->path);
+		NSLOG(neosurf,
+		      INFO,
+		      "Found file resource path %s",
+		      resource->path);
 		return NSERROR_OK;
 	}
 
-	NSLOG(neosurf, INFO, "Unable to find resource %s on resource path",
+	NSLOG(neosurf,
+	      INFO,
+	      "Unable to find resource %s on resource path",
 	      resource->name);
 
 	return NSERROR_NOT_FOUND;
@@ -284,8 +294,7 @@ init_direct_resource(char **respath, struct nsgtk_resource_s *resource)
 	res = init_resource(respath, resource);
 
 #ifdef WITH_GRESOURCE
-	if ((res == NSERROR_OK) &&
-	    (resource->type == NSGTK_RESOURCE_GLIB)) {
+	if ((res == NSERROR_OK) && (resource->type == NSGTK_RESOURCE_GLIB)) {
 		/* found gresource we can convert */
 		GBytes *data;
 
@@ -401,7 +410,7 @@ static void list_gresource(void)
 	const char *nspath = "/org/neosurf";
 	char **reslist;
 	char **cur;
-	GError* gerror = NULL;
+	GError *gerror = NULL;
 	reslist = g_resources_enumerate_children(nspath,
 						 G_RESOURCE_LOOKUP_FLAGS_NONE,
 						 &gerror);
@@ -474,7 +483,7 @@ nsgdk_pixbuf_new_from_resname(const char *resname, GdkPixbuf **pixbuf_out)
 {
 	struct nsgtk_resource_s *resource;
 	GdkPixbuf *new_pixbuf = NULL;
-	GError* error = NULL;
+	GError *error = NULL;
 
 	resource = find_resource_from_name(resname, &pixbuf_resource[0]);
 	if (resource->name == NULL) {
@@ -488,13 +497,15 @@ nsgdk_pixbuf_new_from_resname(const char *resname, GdkPixbuf **pixbuf_out)
 
 	case NSGTK_RESOURCE_GLIB:
 #ifdef WITH_GRESOURCE
-		new_pixbuf = gdk_pixbuf_new_from_resource(resource->path, &error);
+		new_pixbuf = gdk_pixbuf_new_from_resource(resource->path,
+							  &error);
 #endif
 		break;
 
 	case NSGTK_RESOURCE_INLINE:
 #ifdef WITH_BUILTIN_PIXBUF
-		new_pixbuf = gdk_pixbuf_new_from_inline(-1, (const guint8 *)resource->path, FALSE, &error);
+		new_pixbuf = gdk_pixbuf_new_from_inline(
+			-1, (const guint8 *)resource->path, FALSE, &error);
 #endif
 		break;
 
@@ -505,14 +516,16 @@ nsgdk_pixbuf_new_from_resname(const char *resname, GdkPixbuf **pixbuf_out)
 
 	if (new_pixbuf == NULL) {
 		if (error != NULL) {
-			NSLOG(neosurf, INFO,
+			NSLOG(neosurf,
+			      INFO,
 			      "Unable to create pixbuf from file for %s with path %s \"%s\"",
 			      resource->name,
 			      resource->path,
 			      error->message);
 			g_error_free(error);
 		} else {
-			NSLOG(neosurf, INFO,
+			NSLOG(neosurf,
+			      INFO,
 			      "Unable to create pixbuf from file for %s with path %s",
 			      resource->name,
 			      resource->path);
@@ -530,7 +543,7 @@ nsgtk_builder_new_from_resname(const char *resname, GtkBuilder **builder_out)
 {
 	GtkBuilder *new_builder;
 	struct nsgtk_resource_s *ui_res;
-	GError* error = NULL;
+	GError *error = NULL;
 
 	ui_res = find_resource_from_name(resname, &ui_resource[0]);
 	if (ui_res->name == NULL) {
@@ -540,10 +553,10 @@ nsgtk_builder_new_from_resname(const char *resname, GtkBuilder **builder_out)
 	new_builder = gtk_builder_new();
 
 	if (ui_res->type == NSGTK_RESOURCE_FILE) {
-		if (!gtk_builder_add_from_file(new_builder,
-					       ui_res->path,
-					       &error)) {
-			NSLOG(neosurf, INFO,
+		if (!gtk_builder_add_from_file(
+			    new_builder, ui_res->path, &error)) {
+			NSLOG(neosurf,
+			      INFO,
 			      "Unable to add UI builder from file for %s with path %s \"%s\"",
 			      ui_res->name,
 			      ui_res->path,
@@ -553,10 +566,10 @@ nsgtk_builder_new_from_resname(const char *resname, GtkBuilder **builder_out)
 			return NSERROR_INIT_FAILED;
 		}
 	} else {
-		if (!nsgtk_builder_add_from_resource(new_builder,
-						     ui_res->path,
-						     &error)) {
-			NSLOG(neosurf, INFO,
+		if (!nsgtk_builder_add_from_resource(
+			    new_builder, ui_res->path, &error)) {
+			NSLOG(neosurf,
+			      INFO,
 			      "Unable to add UI builder from resource for %s with path %s \"%s\"",
 			      ui_res->name,
 			      ui_res->path,
@@ -573,10 +586,9 @@ nsgtk_builder_new_from_resname(const char *resname, GtkBuilder **builder_out)
 }
 
 /* exported interface documented in gtk/resources.h */
-nserror
-nsgtk_data_from_resname(const char *resname,
-			const uint8_t ** data_out,
-			size_t *data_size_out)
+nserror nsgtk_data_from_resname(const char *resname,
+				const uint8_t **data_out,
+				size_t *data_size_out)
 {
 #ifdef WITH_GRESOURCE
 	struct nsgtk_resource_s *resource;
@@ -612,8 +624,7 @@ nsgtk_data_from_resname(const char *resname,
 }
 
 /* exported interface documented in gtk/resources.h */
-nserror
-nsgtk_path_from_resname(const char *resname, const char **path_out)
+nserror nsgtk_path_from_resname(const char *resname, const char **path_out)
 {
 	struct nsgtk_resource_s *resource;
 
