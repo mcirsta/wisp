@@ -32,29 +32,24 @@
 	<file alias="credits.html">en/credits.html</file>
 	<file alias="licence.html">en/licence.html</file>
 	<file alias="welcome.html">en/welcome.html</file>
-	<file alias="Messages">en/Messages</file>
     </qresource>
     <qresource prefix="/" lang="nl">
 	<file alias="credits.html">nl/credits.html</file>
 	<file alias="licence.html">nl/licence.html</file>
 	<file alias="welcome.html">nl/welcome.html</file>
-        <file alias="Messages">nl/Messages</file>
     </qresource>
     <qresource prefix="/" lang="de">
 	<file alias="welcome.html">de/welcome.html</file>
-        <file alias="Messages">de/Messages</file>
     </qresource>
     <qresource prefix="/" lang="fr">
 	<file alias="credits.html">fr/credits.html</file>
 	<file alias="licence.html">fr/licence.html</file>
 	<file alias="welcome.html">fr/welcome.html</file>
-        <file alias="Messages">fr/Messages</file>
     </qresource>
     <qresource prefix="/" lang="it">
 	<file alias="credits.html">it/credits.html</file>
 	<file alias="licence.html">it/licence.html</file>
 	<file alias="welcome.html">it/welcome.html</file>
-        <file alias="Messages">it/Messages</file>
     </qresource>
     <qresource prefix="/" lang="ja">
 	<file alias="welcome.html">ja/welcome.html</file>
@@ -63,6 +58,5 @@
 	<file alias="credits.html">zh_CN/credits.html</file>
 	<file alias="licence.html">zh_CN/licence.html</file>
 	<file alias="welcome.html">zh_CN/welcome.html</file>
-        <file alias="Messages">zh_CN/Messages</file>
     </qresource>
 </RCC>

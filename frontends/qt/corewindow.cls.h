@@ -35,17 +35,24 @@ class NS_Corewindow : public QWidget
 {
 	Q_OBJECT
 
-public:
+      public:
 	NS_Corewindow(QWidget *parent, Qt::WindowFlags f = Qt::Window);
+	virtual ~NS_Corewindow();
 
-	static nserror static_invalidate(struct core_window *cw, const struct rect *rect);
-	static nserror static_set_extent(struct core_window *cw, int width, int height);
+	static nserror
+	static_invalidate(struct core_window *cw, const struct rect *rect);
+	static nserror
+	static_set_extent(struct core_window *cw, int width, int height);
 	static nserror static_set_scroll(struct core_window *cw, int x, int y);
-	static nserror static_get_scroll(const struct core_window *cw, int *x, int *y);
-	static nserror static_get_dimensions(const struct core_window *cw, int *width, int *height);
-	static nserror static_drag_status(struct core_window *cw, core_window_drag_status ds);
+	static nserror
+	static_get_scroll(const struct core_window *cw, int *x, int *y);
+	static nserror static_get_dimensions(const struct core_window *cw,
+					     int *width,
+					     int *height);
+	static nserror
+	static_drag_status(struct core_window *cw, core_window_drag_status ds);
 
-protected:
+      protected:
 	void paintEvent(QPaintEvent *event);
 	void keyPressEvent(QKeyEvent *event);
 	void mouseMoveEvent(QMouseEvent *event);
@@ -53,10 +60,12 @@ protected:
 	void mouseReleaseEvent(QMouseEvent *event);
 
 	struct nsqt_core_window *m_core_window;
-private:
+
+      private:
 	virtual void draw(struct rect *clip, struct redraw_context *ctx) = 0;
 	virtual bool key_press(uint32_t nskey) = 0;
-	virtual void mouse_action(browser_mouse_state mouse_state, int x, int y)=0;
+	virtual void
+	mouse_action(browser_mouse_state mouse_state, int x, int y) = 0;
 	int m_xoffset;
 	int m_yoffset;
 };

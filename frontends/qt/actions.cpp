@@ -47,184 +47,247 @@ extern "C" {
 #include "qt/urlbar.cls.h"
 #include "qt/actions.cls.h"
 
-NS_Actions::NS_Actions(QWidget* parent, struct browser_window *bw) :
-	QObject(parent),
-	m_back(new QAction(parent->style()->standardIcon(QStyle::SP_ArrowLeft),
-			   messages_get("Back"),
-			   parent)),
-	m_forward(new QAction(parent->style()->standardIcon(QStyle::SP_ArrowRight),
-			      messages_get("Forward"),
-			      parent)),
-	m_stop_reload(new QAction(parent)),
-	m_settings(new QAction(messages_get("Settings"), parent)),
-	m_bookmarks(new QAction(messages_get("ManageBookmarks"), parent)),
-	m_add_edit_bookmark(new QAction(QIcon(":/icons/hotlist-add.png"),
-					messages_get("AddBookmark"),
-					parent)),
-	m_local_history(new QAction(QIcon(":/local-history.png"),
-				    messages_get("HistLocalNS"),
-				    parent)),
-	m_global_history(new QAction(messages_get("HistGlobalNS"), parent)),
-	m_cookies(new QAction(messages_get("ShowCookiesNS"), parent)),
-	m_page_info(new QAction(QIcon(":/icons/page-info-internal.svg"),
-				messages_get("PageInfo"),
+NS_Actions::NS_Actions(QWidget *parent, struct browser_window *bw)
+	: QObject(parent), m_back(new QAction(parent->style()->standardIcon(
+						      QStyle::SP_ArrowLeft),
+					      messages_get("Back"),
+					      parent)),
+	  m_forward(new QAction(parent->style()->standardIcon(
+					QStyle::SP_ArrowRight),
+				messages_get("Forward"),
 				parent)),
-	m_page_scale(new QAction(messages_get("PageScale"), parent)),
-	m_reset_page_scale(new QAction(messages_get("PageScaleReset"), parent)),
-	m_reduce_page_scale(new QAction(messages_get("PageScaleReduce"), parent)),
-	m_increase_page_scale(new QAction(messages_get("PageScaleIncrease"), parent)),
-	m_newtab(new QAction(messages_get("NewTab"), parent)),
-	m_newwindow(new QAction(messages_get("NewWindowNS"), parent)),
-	m_quit(new QAction(messages_get("Quit"), parent)),
-	m_page_save(new QAction(messages_get("PageSave"), parent)),
-	m_page_source(new QAction(messages_get("PageSource"), parent)),
-	m_debug_render(new QAction(messages_get("DebugRender"), parent)),
-	m_debug_box_tree(new QAction(messages_get("DebugBoxTree"), parent)),
-	m_debug_dom_tree(new QAction(messages_get("DebugDomTree"), parent)),
-	m_about_netsurf(new QAction(messages_get("About"), parent)),
-	m_link_new_tab(new QAction(messages_get("LinkNewTab"), parent)),
-	m_link_new_window(new QAction(messages_get("LinkNewWin"), parent)),
-	m_link_bookmark(new QAction(messages_get("LinkBookmark"), parent)),
-	m_link_save(new QAction(messages_get("LinkSave"), parent)),
-	m_link_copy(new QAction(messages_get("LinkCopy"), parent)),
-	m_img_new_tab(new QAction(messages_get("ImageNewTab"), parent)),
-	m_img_save(new QAction(messages_get("ImageSave"), parent)),
-	m_img_copy(new QAction(messages_get("ImageCopy"), parent)),
-	m_obj_save(new QAction(messages_get("ObjectSave"), parent)),
-	m_obj_copy(new QAction(messages_get("ObjectCopy"), parent)),
-	m_sel_copy(new QAction(messages_get("CopyNS"), parent)),
-	m_sel_search(new QAction(messages_get("SearchWeb"), parent)),
-	m_bw(bw),
-	m_marked(false),
-	m_pistate(PAGE_STATE_INTERNAL),
-	m_link(nullptr),
-	m_object(nullptr),
-	m_selection(nullptr)
+	  m_stop_reload(new QAction(parent)),
+	  m_settings(new QAction(messages_get("Settings"), parent)),
+	  m_bookmarks(new QAction(messages_get("ManageBookmarks"), parent)),
+	  m_add_edit_bookmark(new QAction(QIcon(":/icons/hotlist-add.png"),
+					  messages_get("AddBookmark"),
+					  parent)),
+	  m_local_history(new QAction(QIcon(":/local-history.png"),
+				      messages_get("HistLocalNS"),
+				      parent)),
+	  m_global_history(new QAction(messages_get("HistGlobalNS"), parent)),
+	  m_cookies(new QAction(messages_get("ShowCookiesNS"), parent)),
+	  m_page_info(new QAction(QIcon(":/icons/page-info-internal.png"),
+				  tr("Page Info"),
+				  parent)),
+	  m_page_scale(new QAction(messages_get("PageScale"), parent)),
+	  m_reset_page_scale(
+		  new QAction(messages_get("PageScaleReset"), parent)),
+	  m_reduce_page_scale(
+		  new QAction(messages_get("PageScaleReduce"), parent)),
+	  m_increase_page_scale(
+		  new QAction(messages_get("PageScaleIncrease"), parent)),
+	  m_newtab(new QAction(messages_get("NewTab"), parent)),
+	  m_newwindow(new QAction(messages_get("NewWindowNS"), parent)),
+	  m_quit(new QAction(messages_get("Quit"), parent)),
+	  m_page_save(new QAction(messages_get("PageSave"), parent)),
+	  m_page_source(new QAction(messages_get("PageSource"), parent)),
+	  m_debug_render(new QAction(messages_get("DebugRender"), parent)),
+	  m_debug_box_tree(new QAction(messages_get("DebugBoxTree"), parent)),
+	  m_debug_dom_tree(new QAction(messages_get("DebugDomTree"), parent)),
+	  m_about_netsurf(new QAction(messages_get("About"), parent)),
+	  m_link_new_tab(new QAction(messages_get("LinkNewTab"), parent)),
+	  m_link_new_window(new QAction(messages_get("LinkNewWin"), parent)),
+	  m_link_bookmark(new QAction(messages_get("LinkBookmark"), parent)),
+	  m_link_save(new QAction(messages_get("LinkSave"), parent)),
+	  m_link_copy(new QAction(messages_get("LinkCopy"), parent)),
+	  m_img_new_tab(new QAction(messages_get("ImageNewTab"), parent)),
+	  m_img_save(new QAction(messages_get("ImageSave"), parent)),
+	  m_img_copy(new QAction(messages_get("ImageCopy"), parent)),
+	  m_obj_save(new QAction(messages_get("ObjectSave"), parent)),
+	  m_obj_copy(new QAction(messages_get("ObjectCopy"), parent)),
+	  m_sel_copy(new QAction(messages_get("CopyNS"), parent)),
+	  m_sel_search(new QAction(messages_get("SearchWeb"), parent)),
+	  m_bw(bw), m_marked(false), m_pistate(PAGE_STATE_INTERNAL),
+	  m_link(nullptr), m_object(nullptr), m_selection(nullptr)
 {
 	/* shortcuts */
 	m_back->setShortcut(QKeySequence::Back);
 	m_forward->setShortcut(QKeySequence::Forward);
-	m_bookmarks->setShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_O));
+	m_bookmarks->setShortcut(
+		QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_O));
 	m_global_history->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_H));
 	m_newtab->setShortcut(QKeySequence::AddTab);
 	m_newwindow->setShortcut(QKeySequence::New);
 	m_quit->setShortcut(QKeySequence::Quit);
 	m_page_source->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_U));
 
-	//m_quit->setShortcutContext(Qt::WidgetWithChildrenShortcut);
-	//m_newtab->setShortcutContext(Qt::WidgetWithChildrenShortcut);
-	//m_newwindow->setShortcutContext(Qt::WidgetWithChildrenShortcut);
+	// m_quit->setShortcutContext(Qt::WidgetWithChildrenShortcut);
+	// m_newtab->setShortcutContext(Qt::WidgetWithChildrenShortcut);
+	// m_newwindow->setShortcutContext(Qt::WidgetWithChildrenShortcut);
 
 	/* icon texts */
 	m_reduce_page_scale->setIconText(messages_get("PageScaleReduceShort"));
-	m_increase_page_scale->setIconText(messages_get("PageScaleIncreaseShort"));
+	m_increase_page_scale->setIconText(
+		messages_get("PageScaleIncreaseShort"));
 
 	/* hook up the signals */
-	connect(m_back, &QAction::triggered,
-		this, &NS_Actions::back_slot);
+	connect(m_back, &QAction::triggered, this, &NS_Actions::back_slot);
 
-	connect(m_forward, &QAction::triggered,
-		this, &NS_Actions::forward_slot);
+	connect(m_forward,
+		&QAction::triggered,
+		this,
+		&NS_Actions::forward_slot);
 
-	connect(m_stop_reload, &QAction::triggered,
-		this, &NS_Actions::stop_reload_slot);
+	connect(m_stop_reload,
+		&QAction::triggered,
+		this,
+		&NS_Actions::stop_reload_slot);
 
-	connect(m_settings, &QAction::triggered,
-		this, &NS_Actions::settings_slot);
+	connect(m_settings,
+		&QAction::triggered,
+		this,
+		&NS_Actions::settings_slot);
 
-	connect(m_bookmarks, &QAction::triggered,
-		this, &NS_Actions::bookmarks_slot);
+	connect(m_bookmarks,
+		&QAction::triggered,
+		this,
+		&NS_Actions::bookmarks_slot);
 
-	connect(m_add_edit_bookmark, &QAction::triggered,
-		this, &NS_Actions::add_edit_bookmark_slot);
+	connect(m_add_edit_bookmark,
+		&QAction::triggered,
+		this,
+		&NS_Actions::add_edit_bookmark_slot);
 
-	connect(m_local_history, &QAction::triggered,
-		this, &NS_Actions::local_history_slot);
+	connect(m_local_history,
+		&QAction::triggered,
+		this,
+		&NS_Actions::local_history_slot);
 
-	connect(m_global_history, &QAction::triggered,
-		this, &NS_Actions::global_history_slot);
+	connect(m_global_history,
+		&QAction::triggered,
+		this,
+		&NS_Actions::global_history_slot);
 
-	connect(m_cookies, &QAction::triggered,
-		this, &NS_Actions::cookies_slot);
+	connect(m_cookies,
+		&QAction::triggered,
+		this,
+		&NS_Actions::cookies_slot);
 
-	connect(m_page_info, &QAction::triggered,
-		this, &NS_Actions::page_info_slot);
+	connect(m_page_info,
+		&QAction::triggered,
+		this,
+		&NS_Actions::page_info_slot);
 
-	connect(m_page_scale, &QAction::triggered,
-		this, &NS_Actions::reset_page_scale_slot);
+	connect(m_page_scale,
+		&QAction::triggered,
+		this,
+		&NS_Actions::reset_page_scale_slot);
 
-	connect(m_reset_page_scale, &QAction::triggered,
-		this, &NS_Actions::reset_page_scale_slot);
+	connect(m_reset_page_scale,
+		&QAction::triggered,
+		this,
+		&NS_Actions::reset_page_scale_slot);
 
-	connect(m_reduce_page_scale, &QAction::triggered,
-		this, &NS_Actions::reduce_page_scale_slot);
+	connect(m_reduce_page_scale,
+		&QAction::triggered,
+		this,
+		&NS_Actions::reduce_page_scale_slot);
 
-	connect(m_increase_page_scale, &QAction::triggered,
-		this, &NS_Actions::increase_page_scale_slot);
+	connect(m_increase_page_scale,
+		&QAction::triggered,
+		this,
+		&NS_Actions::increase_page_scale_slot);
 
-	connect(m_newtab, &QAction::triggered,
-		this, &NS_Actions::newtab_slot);
+	connect(m_newtab, &QAction::triggered, this, &NS_Actions::newtab_slot);
 
-	connect(m_newwindow, &QAction::triggered,
-		this, &NS_Actions::newwindow_slot);
+	connect(m_newwindow,
+		&QAction::triggered,
+		this,
+		&NS_Actions::newwindow_slot);
 
-	connect(m_quit, &QAction::triggered,
-		this, &NS_Actions::quit_slot);
+	connect(m_quit, &QAction::triggered, this, &NS_Actions::quit_slot);
 
-	connect(m_page_save, &QAction::triggered,
-		this, &NS_Actions::page_save_slot);
+	connect(m_page_save,
+		&QAction::triggered,
+		this,
+		&NS_Actions::page_save_slot);
 
-	connect(m_page_source, &QAction::triggered,
-		this, &NS_Actions::page_source_slot);
+	connect(m_page_source,
+		&QAction::triggered,
+		this,
+		&NS_Actions::page_source_slot);
 
-	connect(m_debug_render, &QAction::triggered,
-		this, &NS_Actions::debug_render_slot);
+	connect(m_debug_render,
+		&QAction::triggered,
+		this,
+		&NS_Actions::debug_render_slot);
 
-	connect(m_debug_box_tree, &QAction::triggered,
-		this, &NS_Actions::debug_box_tree_slot);
+	connect(m_debug_box_tree,
+		&QAction::triggered,
+		this,
+		&NS_Actions::debug_box_tree_slot);
 
-	connect(m_debug_dom_tree, &QAction::triggered,
-		this, &NS_Actions::debug_dom_tree_slot);
+	connect(m_debug_dom_tree,
+		&QAction::triggered,
+		this,
+		&NS_Actions::debug_dom_tree_slot);
 
-	connect(m_about_netsurf, &QAction::triggered,
-		this, &NS_Actions::about_netsurf_slot);
+	connect(m_about_netsurf,
+		&QAction::triggered,
+		this,
+		&NS_Actions::about_netsurf_slot);
 
-	connect(m_link_new_tab, &QAction::triggered,
-		this, &NS_Actions::link_new_tab_slot);
+	connect(m_link_new_tab,
+		&QAction::triggered,
+		this,
+		&NS_Actions::link_new_tab_slot);
 
-	connect(m_link_new_window, &QAction::triggered,
-		this, &NS_Actions::link_new_window_slot);
+	connect(m_link_new_window,
+		&QAction::triggered,
+		this,
+		&NS_Actions::link_new_window_slot);
 
-	connect(m_link_bookmark, &QAction::triggered,
-		this, &NS_Actions::link_bookmark_slot);
+	connect(m_link_bookmark,
+		&QAction::triggered,
+		this,
+		&NS_Actions::link_bookmark_slot);
 
-	connect(m_link_save, &QAction::triggered,
-		this, &NS_Actions::link_save_slot);
+	connect(m_link_save,
+		&QAction::triggered,
+		this,
+		&NS_Actions::link_save_slot);
 
-	connect(m_link_copy, &QAction::triggered,
-		this, &NS_Actions::link_copy_slot);
+	connect(m_link_copy,
+		&QAction::triggered,
+		this,
+		&NS_Actions::link_copy_slot);
 
-	connect(m_img_new_tab, &QAction::triggered,
-		this, &NS_Actions::img_new_tab_slot);
+	connect(m_img_new_tab,
+		&QAction::triggered,
+		this,
+		&NS_Actions::img_new_tab_slot);
 
-	connect(m_img_save, &QAction::triggered,
-		this, &NS_Actions::img_save_slot);
+	connect(m_img_save,
+		&QAction::triggered,
+		this,
+		&NS_Actions::img_save_slot);
 
 	/* image link copy uses object copy slot */
-	connect(m_img_copy, &QAction::triggered,
-		this, &NS_Actions::obj_copy_slot);
+	connect(m_img_copy,
+		&QAction::triggered,
+		this,
+		&NS_Actions::obj_copy_slot);
 
-	connect(m_obj_save, &QAction::triggered,
-		this, &NS_Actions::obj_save_slot);
+	connect(m_obj_save,
+		&QAction::triggered,
+		this,
+		&NS_Actions::obj_save_slot);
 
-	connect(m_obj_copy, &QAction::triggered,
-		this, &NS_Actions::obj_copy_slot);
+	connect(m_obj_copy,
+		&QAction::triggered,
+		this,
+		&NS_Actions::obj_copy_slot);
 
-	connect(m_sel_copy, &QAction::triggered,
-		this, &NS_Actions::sel_copy_slot);
+	connect(m_sel_copy,
+		&QAction::triggered,
+		this,
+		&NS_Actions::sel_copy_slot);
 
-	connect(m_sel_search, &QAction::triggered,
-		this, &NS_Actions::sel_search_slot);
+	connect(m_sel_search,
+		&QAction::triggered,
+		this,
+		&NS_Actions::sel_search_slot);
 
 	update_navigation(NS_Actions::UpdateInactive);
 	update_page_info();
@@ -246,16 +309,18 @@ NS_Actions::~NS_Actions()
  */
 QToolButton *NS_Actions::QToolButtonFromQAction(QAction *action)
 {
-	QList <QObject *> widget_list = action->associatedObjects();
+	QList<QObject *> widget_list = action->associatedObjects();
 
 	/* iterate objects associated with action */
 	for (int idx = 0; idx < widget_list.count(); idx++) {
 #ifdef BUTTON_QOBJECT_CAST
 		// @todo find out why qobject_cast fails (always null) here
-		QToolButton *button = qobject_cast<QToolButton *>(widget_list.at(idx));
+		QToolButton *button = qobject_cast<QToolButton *>(
+			widget_list.at(idx));
 #else
-		const char *clsname = widget_list.at(idx)->metaObject()->className();
-		//NSLOG(netsurf, WARN, "%s",clsname);
+		const char *clsname =
+			widget_list.at(idx)->metaObject()->className();
+		// NSLOG(netsurf, WARN, "%s",clsname);
 		if ((strcmp(clsname, "QToolButton") == 0) ||
 		    (strcmp(clsname, "QLineEditIconButton") == 0)) {
 			return (QToolButton *)(widget_list.at(idx));
@@ -305,7 +370,9 @@ void NS_Actions::update(NS_Actions::Update update)
 	}
 }
 
-void NS_Actions::update(struct nsurl *link, struct hlcache_handle *object,char *selection)
+void NS_Actions::update(struct nsurl *link,
+			struct hlcache_handle *object,
+			char *selection)
 {
 	m_link = link;
 	m_object = object;
@@ -314,13 +381,16 @@ void NS_Actions::update(struct nsurl *link, struct hlcache_handle *object,char *
 	}
 	m_selection = selection;
 
-	m_sel_search->setText(QString::asprintf(messages_get("SearchProviderFor"), nsoption_charp(search_web_provider), m_selection));
+	m_sel_search->setText(
+		QString::asprintf(messages_get("SearchProviderFor"),
+				  nsoption_charp(search_web_provider),
+				  m_selection));
 }
 
 /*
  * page scale action widget for menu
  */
-QWidgetAction *NS_Actions::page_scale_widget_action(QWidget* parent)
+QWidgetAction *NS_Actions::page_scale_widget_action(QWidget *parent)
 {
 
 	QLabel *scalelabel = new QLabel("Page Scale");
@@ -358,7 +428,7 @@ QIcon NS_Actions::QIconFromText(QString text)
 {
 	QPixmap pixmap(64, 64);
 	QPainter painter(&pixmap);
-	painter.fillRect(QRect(0, 0, 64, 64), QColor(230,230,230));
+	painter.fillRect(QRect(0, 0, 64, 64), QColor(230, 230, 230));
 	QFont font = painter.font();
 	font.setFamily("Helvetica");
 	font.setStretch(75);
@@ -385,14 +455,13 @@ QString NS_Actions::QStringFromNsurl(struct nsurl *url)
 	QString res = QString::fromUtf8(idn_url_s, idn_url_l);
 	free(idn_url_s);
 	return res;
-
 }
 
 
 void NS_Actions::update_page_scale()
 {
 	double scale = browser_window_get_scale(m_bw) * 100.0;
-	QString scaletext = QString::number(scale)+"%";
+	QString scaletext = QString::number(scale) + "%";
 	m_reset_page_scale->setVisible(scale != nsoption_int(scale));
 #ifdef USE_ICON_FOR_SCALE
 	m_reset_page_scale->setIcon(QIconFromText(scaletext));
@@ -412,23 +481,23 @@ void NS_Actions::update_page_info()
 		QString fname(":/icons/page-info-internal.png");
 		switch (pistate) {
 		case PAGE_STATE_LOCAL:
-			fname=":/icons/page-info-local.png";
+			fname = ":/icons/page-info-local.png";
 			break;
 
 		case PAGE_STATE_INSECURE:
-			fname=":/icons/page-info-insecure.png";
+			fname = ":/icons/page-info-insecure.png";
 			break;
 
 		case PAGE_STATE_SECURE_OVERRIDE:
-			fname=":/icons/page-info-warning.png";
+			fname = ":/icons/page-info-warning.png";
 			break;
 
 		case PAGE_STATE_SECURE_ISSUES:
-			fname=":/icons/page-info-warning.png";
+			fname = ":/icons/page-info-warning.png";
 			break;
 
 		case PAGE_STATE_SECURE:
-			fname=":/icons/page-info-secure.png";
+			fname = ":/icons/page-info-secure.png";
 			break;
 
 		default:
@@ -451,11 +520,15 @@ void NS_Actions::update_bookmarks()
 	if (marked != m_marked) {
 		m_marked = marked;
 		if (m_marked) {
-			m_add_edit_bookmark->setIcon(QIcon(":/icons/hotlist-rmv.png"));
-			m_add_edit_bookmark->setText(messages_get("EditBookmark"));
+			m_add_edit_bookmark->setIcon(
+				QIcon(":/icons/hotlist-rmv.png"));
+			m_add_edit_bookmark->setText(
+				messages_get("EditBookmark"));
 		} else {
-			m_add_edit_bookmark->setIcon(QIcon(":/icons/hotlist-add.png"));
-			m_add_edit_bookmark->setText(messages_get("AddBookmark"));
+			m_add_edit_bookmark->setIcon(
+				QIcon(":/icons/hotlist-add.png"));
+			m_add_edit_bookmark->setText(
+				messages_get("AddBookmark"));
 		}
 	}
 }
@@ -464,18 +537,20 @@ void NS_Actions::update_bookmarks()
 void NS_Actions::update_navigation(NS_Actions::Update update)
 {
 	/* manage stop/reload state */
-	QWidget* parentw = qobject_cast<QWidget*>(parent());
+	QWidget *parentw = qobject_cast<QWidget *>(parent());
 	switch (update) {
 	case UpdateInactive:
 		m_active = false;
-		m_stop_reload->setIcon(parentw->style()->standardIcon(QStyle::SP_BrowserReload));
+		m_stop_reload->setIcon(parentw->style()->standardIcon(
+			QStyle::SP_BrowserReload));
 		m_stop_reload->setText(messages_get("Reload"));
 		m_stop_reload->setShortcut(QKeySequence::Refresh);
 		break;
 
 	case UpdateActive:
 		m_active = true;
-		m_stop_reload->setIcon(parentw->style()->standardIcon(QStyle::SP_BrowserStop));
+		m_stop_reload->setIcon(
+			parentw->style()->standardIcon(QStyle::SP_BrowserStop));
 		m_stop_reload->setText(messages_get("Stop"));
 		m_stop_reload->setShortcut(QKeySequence::Cancel);
 		break;
@@ -491,7 +566,23 @@ void NS_Actions::update_navigation(NS_Actions::Update update)
 
 #define PAGE_SCALE_COUNT 17
 
-static const float page_scales[PAGE_SCALE_COUNT]={ 0.33, 0.50, 0.67, 0.75, 0.80, 0.90, 1.00, 1.10, 1.20, 1.33, 1.50, 1.70, 2.00, 2.40, 3.00, 4.00, 5.00 };
+static const float page_scales[PAGE_SCALE_COUNT] = {0.33,
+						    0.50,
+						    0.67,
+						    0.75,
+						    0.80,
+						    0.90,
+						    1.00,
+						    1.10,
+						    1.20,
+						    1.33,
+						    1.50,
+						    1.70,
+						    2.00,
+						    2.40,
+						    3.00,
+						    4.00,
+						    5.00};
 
 void NS_Actions::change_page_scale(int step)
 {
@@ -569,7 +660,8 @@ void NS_Actions::add_edit_bookmark_slot(bool checked)
 
 void NS_Actions::local_history_slot(bool checked)
 {
-	NS_Application::instance()->local_history_show(m_bw, actionGlobal(m_local_history));
+	NS_Application::instance()->local_history_show(
+		m_bw, actionGlobal(m_local_history));
 }
 
 
@@ -587,13 +679,16 @@ void NS_Actions::cookies_slot(bool checked)
 
 void NS_Actions::page_info_slot(bool checked)
 {
-	NS_Application::instance()->page_info_show(m_bw, actionGlobal(m_page_info));
+	NS_Application::instance()->page_info_show(m_bw,
+						   actionGlobal(m_page_info));
 }
 
 
 void NS_Actions::reset_page_scale_slot(bool checked)
 {
-	browser_window_set_scale(m_bw, (float)nsoption_int(scale)/100.0, true);
+	browser_window_set_scale(m_bw,
+				 (float)nsoption_int(scale) / 100.0,
+				 true);
 	update_page_scale();
 }
 
@@ -707,7 +802,8 @@ void NS_Actions::obj_save_slot(bool checked)
 
 void NS_Actions::obj_copy_slot(bool checked)
 {
-	QGuiApplication::clipboard()->setText(QStringFromNsurl(hlcache_handle_get_url(m_object)));
+	QGuiApplication::clipboard()->setText(
+		QStringFromNsurl(hlcache_handle_get_url(m_object)));
 }
 
 void NS_Actions::sel_copy_slot(bool checked)
@@ -728,15 +824,21 @@ void NS_Actions::sel_search_slot(bool checked)
 
 	res = search_web_omni(m_selection, SEARCH_WEB_OMNI_SEARCHONLY, &url);
 	if (res == NSERROR_OK) {
-		res = browser_window_create(
-			(enum browser_window_create_flags)(BW_CREATE_HISTORY | BW_CREATE_TAB | BW_CREATE_FOREGROUND),
-			url,
-			NULL,
-			m_bw,
-			NULL);
+		res = browser_window_create((enum browser_window_create_flags)(
+						    BW_CREATE_HISTORY |
+						    BW_CREATE_TAB |
+						    BW_CREATE_FOREGROUND),
+					    url,
+					    NULL,
+					    m_bw,
+					    NULL);
 		nsurl_unref(url);
 	}
 	if (res != NSERROR_OK) {
-		NSLOG(netsurf,WARNING,"web search for %s failed with %s",m_selection, messages_get_errorcode(res));
+		NSLOG(netsurf,
+		      WARNING,
+		      "web search for %s failed with %s",
+		      m_selection,
+		      messages_get_errorcode(res));
 	}
 }

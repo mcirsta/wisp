@@ -104,11 +104,10 @@ static plot_font_style_t plot_fstyle_entry = {
  *                 used iff converting to charset fails
  * \return Pointer to converted string (on heap, caller frees), or NULL
  */
-static char *
-form_encode_item(const char *item,
-		 uint32_t len,
-		 const char *charset,
-		 const char *fallback)
+static char *form_encode_item(const char *item,
+			      uint32_t len,
+			      const char *charset,
+			      const char *fallback)
 {
 	nserror err;
 	char *ret = NULL;
@@ -128,26 +127,30 @@ form_encode_item(const char *item,
 		if (err == NSERROR_BAD_ENCODING) {
 			/* nope, try fallback charset (if any) */
 			if (fallback) {
-				snprintf(cset, sizeof cset,
-						"%s//TRANSLIT", fallback);
+				snprintf(cset,
+					 sizeof cset,
+					 "%s//TRANSLIT",
+					 fallback);
 				err = utf8_to_enc(item, cset, 0, &ret);
 
 				if (err == NSERROR_BAD_ENCODING) {
 					/* and without transliteration */
-					snprintf(cset, sizeof cset,
-							"%s", fallback);
+					snprintf(cset,
+						 sizeof cset,
+						 "%s",
+						 fallback);
 					err = utf8_to_enc(item, cset, 0, &ret);
 				}
 			}
 
 			if (err == NSERROR_BAD_ENCODING) {
 				/* that also failed, use 8859-1 */
-				err = utf8_to_enc(item, "ISO-8859-1//TRANSLIT",
-						0, &ret);
+				err = utf8_to_enc(
+					item, "ISO-8859-1//TRANSLIT", 0, &ret);
 				if (err == NSERROR_BAD_ENCODING) {
 					/* and without transliteration */
-					err = utf8_to_enc(item, "ISO-8859-1",
-							0, &ret);
+					err = utf8_to_enc(
+						item, "ISO-8859-1", 0, &ret);
 				}
 			}
 		}
@@ -194,8 +197,11 @@ fetch_data_list_add_sname(const char *name,
 	fetch_data->name = malloc(keysize + 1); /* allow for null */
 	if (fetch_data->name == NULL) {
 		free(fetch_data);
-		NSLOG(neosurf, INFO,
-		      "keyname allocation failure for %s%s", name, ksfx);
+		NSLOG(neosurf,
+		      INFO,
+		      "keyname allocation failure for %s%s",
+		      name,
+		      ksfx);
 		return NSERROR_NOMEM;
 	}
 	snprintf(fetch_data->name, keysize + 1, "%s%s", name, ksfx);
@@ -261,7 +267,8 @@ fetch_data_list_add(dom_string *name,
 		fetch_data->value = strdup("");
 	} else {
 		fetch_data->value = form_encode_item(dom_string_data(value),
-						     dom_string_byte_length(value),
+						     dom_string_byte_length(
+							     value),
 						     form_charset,
 						     docu_charset);
 	}
@@ -277,7 +284,8 @@ fetch_data_list_add(dom_string *name,
 		fetch_data->file = true;
 		fetch_data->rawfile = strdup(rawfile);
 		if (fetch_data->rawfile == NULL) {
-			NSLOG(neosurf, INFO,
+			NSLOG(neosurf,
+			      INFO,
 			      "Could not encode rawfile value for fetch data");
 			free(fetch_data->value);
 			free(fetch_data->name);
@@ -319,8 +327,10 @@ form_dom_to_data_textarea(dom_html_text_area_element *text_area_element,
 	exp = dom_html_text_area_element_get_disabled(text_area_element,
 						      &element_disabled);
 	if (exp != DOM_NO_ERR) {
-		NSLOG(neosurf, INFO,
-		      "Could not get text area disabled property. exp %d", exp);
+		NSLOG(neosurf,
+		      INFO,
+		      "Could not get text area disabled property. exp %d",
+		      exp);
 		return NSERROR_DOM;
 	}
 
@@ -333,8 +343,10 @@ form_dom_to_data_textarea(dom_html_text_area_element *text_area_element,
 	exp = dom_html_text_area_element_get_name(text_area_element,
 						  &inputname);
 	if (exp != DOM_NO_ERR) {
-		NSLOG(neosurf, INFO,
-		      "Could not get text area name property. exp %d", exp);
+		NSLOG(neosurf,
+		      INFO,
+		      "Could not get text area name property. exp %d",
+		      exp);
 		return NSERROR_DOM;
 	}
 
@@ -347,8 +359,10 @@ form_dom_to_data_textarea(dom_html_text_area_element *text_area_element,
 	exp = dom_html_text_area_element_get_value(text_area_element,
 						   &inputvalue);
 	if (exp != DOM_NO_ERR) {
-		NSLOG(neosurf, INFO,
-		      "Could not get text area content. exp %d", exp);
+		NSLOG(neosurf,
+		      INFO,
+		      "Could not get text area content. exp %d",
+		      exp);
 		dom_string_unref(inputname);
 		return NSERROR_DOM;
 	}
@@ -368,12 +382,12 @@ form_dom_to_data_textarea(dom_html_text_area_element *text_area_element,
 }
 
 
-static nserror
-form_dom_to_data_select_option(dom_html_option_element *option_element,
-			      dom_string *keyname,
-			      const char *form_charset,
-			      const char *docu_charset,
-			      struct fetch_multipart_data ***fetch_data_next_ptr)
+static nserror form_dom_to_data_select_option(
+	dom_html_option_element *option_element,
+	dom_string *keyname,
+	const char *form_charset,
+	const char *docu_charset,
+	struct fetch_multipart_data ***fetch_data_next_ptr)
 {
 	nserror res;
 	dom_exception exp; /* the result from DOM operations */
@@ -439,8 +453,10 @@ form_dom_to_data_select(dom_html_select_element *select_element,
 	exp = dom_html_select_element_get_disabled(select_element,
 						   &element_disabled);
 	if (exp != DOM_NO_ERR) {
-		NSLOG(neosurf, INFO,
-		      "Could not get select disabled property. exp %d", exp);
+		NSLOG(neosurf,
+		      INFO,
+		      "Could not get select disabled property. exp %d",
+		      exp);
 		return NSERROR_DOM;
 	}
 
@@ -452,8 +468,10 @@ form_dom_to_data_select(dom_html_select_element *select_element,
 	/* obtain name property */
 	exp = dom_html_select_element_get_name(select_element, &inputname);
 	if (exp != DOM_NO_ERR) {
-		NSLOG(neosurf, INFO,
-		      "Could not get select name property. exp %d", exp);
+		NSLOG(neosurf,
+		      INFO,
+		      "Could not get select name property. exp %d",
+		      exp);
 		return NSERROR_DOM;
 	}
 
@@ -465,8 +483,7 @@ form_dom_to_data_select(dom_html_select_element *select_element,
 	/* get options collection */
 	exp = dom_html_select_element_get_options(select_element, &options);
 	if (exp != DOM_NO_ERR) {
-		NSLOG(neosurf, INFO,
-		      "Could not get select options collection");
+		NSLOG(neosurf, INFO, "Could not get select options collection");
 		dom_string_unref(inputname);
 		return NSERROR_DOM;
 	}
@@ -474,7 +491,8 @@ form_dom_to_data_select(dom_html_select_element *select_element,
 	/* get options collection length */
 	exp = dom_html_options_collection_get_length(options, &options_count);
 	if (exp != DOM_NO_ERR) {
-		NSLOG(neosurf, INFO,
+		NSLOG(neosurf,
+		      INFO,
 		      "Could not get select options collection length");
 		dom_html_options_collection_unref(options);
 		dom_string_unref(inputname);
@@ -487,8 +505,10 @@ form_dom_to_data_select(dom_html_select_element *select_element,
 						       option_index,
 						       &option_element);
 		if (exp != DOM_NO_ERR) {
-			NSLOG(neosurf, INFO,
-			      "Could not get options item %d", option_index);
+			NSLOG(neosurf,
+			      INFO,
+			      "Could not get options item %d",
+			      option_index);
 			res = NSERROR_DOM;
 		} else {
 			res = form_dom_to_data_select_option(
@@ -513,13 +533,13 @@ form_dom_to_data_select(dom_html_select_element *select_element,
 }
 
 
-static nserror
-form_dom_to_data_input_submit(dom_html_input_element *input_element,
-			      dom_string *inputname,
-			      const char *charset,
-			      const char *document_charset,
-			      dom_html_element **submit_button,
-			      struct fetch_multipart_data ***fetch_data_next_ptr)
+static nserror form_dom_to_data_input_submit(
+	dom_html_input_element *input_element,
+	dom_string *inputname,
+	const char *charset,
+	const char *document_charset,
+	dom_html_element **submit_button,
+	struct fetch_multipart_data ***fetch_data_next_ptr)
 {
 	dom_exception exp; /* the result from DOM operations */
 	dom_string *inputvalue;
@@ -571,9 +591,10 @@ form_dom_to_data_input_image(dom_html_input_element *input_element,
 		return NSERROR_OK;
 	}
 
-	exp = dom_node_get_user_data((dom_node *)input_element,
-				     corestring_dom___ns_key_image_coords_node_data,
-				     &coords);
+	exp = dom_node_get_user_data(
+		(dom_node *)input_element,
+		corestring_dom___ns_key_image_coords_node_data,
+		&coords);
 	if (exp != DOM_NO_ERR) {
 		NSLOG(neosurf, INFO, "Could not get image XY data");
 		return NSERROR_DOM;
@@ -594,14 +615,12 @@ form_dom_to_data_input_image(dom_html_input_element *input_element,
 		return NSERROR_NOMEM;
 	}
 
-	res = fetch_data_list_add_sname(basename, ".x",
-					coords->x,
-					fetch_data_next_ptr);
+	res = fetch_data_list_add_sname(
+		basename, ".x", coords->x, fetch_data_next_ptr);
 
 	if (res == NSERROR_OK) {
-		res = fetch_data_list_add_sname(basename, ".y",
-						coords->y,
-						fetch_data_next_ptr);
+		res = fetch_data_list_add_sname(
+			basename, ".y", coords->y, fetch_data_next_ptr);
 	}
 
 	free(basename);
@@ -610,12 +629,12 @@ form_dom_to_data_input_image(dom_html_input_element *input_element,
 }
 
 
-static nserror
-form_dom_to_data_input_checkbox(dom_html_input_element *input_element,
-				dom_string *inputname,
-				const char *charset,
-				const char *document_charset,
-				struct fetch_multipart_data ***fetch_data_next_ptr)
+static nserror form_dom_to_data_input_checkbox(
+	dom_html_input_element *input_element,
+	dom_string *inputname,
+	const char *charset,
+	const char *document_charset,
+	struct fetch_multipart_data ***fetch_data_next_ptr)
 {
 	nserror res;
 	dom_exception exp; /* the result from DOM operations */
@@ -624,8 +643,7 @@ form_dom_to_data_input_checkbox(dom_html_input_element *input_element,
 
 	exp = dom_html_input_element_get_checked(input_element, &checked);
 	if (exp != DOM_NO_ERR) {
-		NSLOG(neosurf, INFO,
-		      "Could not get input element checked");
+		NSLOG(neosurf, INFO, "Could not get input element checked");
 		return NSERROR_DOM;
 	}
 
@@ -636,8 +654,7 @@ form_dom_to_data_input_checkbox(dom_html_input_element *input_element,
 
 	exp = dom_html_input_element_get_value(input_element, &inputvalue);
 	if (exp != DOM_NO_ERR) {
-		NSLOG(neosurf, INFO,
-		      "Could not get input element value");
+		NSLOG(neosurf, INFO, "Could not get input element value");
 		return NSERROR_DOM;
 	}
 
@@ -678,9 +695,10 @@ form_dom_to_data_input_file(dom_html_input_element *input_element,
 		return NSERROR_DOM;
 	}
 
-	exp = dom_node_get_user_data((dom_node *)input_element,
-				     corestring_dom___ns_key_file_name_node_data,
-				     &rawfile);
+	exp = dom_node_get_user_data(
+		(dom_node *)input_element,
+		corestring_dom___ns_key_file_name_node_data,
+		&rawfile);
 	if (exp != DOM_NO_ERR) {
 		NSLOG(neosurf, INFO, "Could not get file rawname");
 		return NSERROR_DOM;
@@ -764,8 +782,10 @@ form_dom_to_data_input(dom_html_input_element *input_element,
 	exp = dom_html_input_element_get_disabled(input_element,
 						  &element_disabled);
 	if (exp != DOM_NO_ERR) {
-		NSLOG(neosurf, INFO,
-		      "Could not get input disabled property. exp %d", exp);
+		NSLOG(neosurf,
+		      INFO,
+		      "Could not get input disabled property. exp %d",
+		      exp);
 		return NSERROR_DOM;
 	}
 
@@ -777,8 +797,10 @@ form_dom_to_data_input(dom_html_input_element *input_element,
 	/* obtain name property */
 	exp = dom_html_input_element_get_name(input_element, &inputname);
 	if (exp != DOM_NO_ERR) {
-		NSLOG(neosurf, INFO,
-		      "Could not get input name property. exp %d", exp);
+		NSLOG(neosurf,
+		      INFO,
+		      "Could not get input name property. exp %d",
+		      exp);
 		return NSERROR_DOM;
 	}
 
@@ -850,7 +872,6 @@ form_dom_to_data_input(dom_html_input_element *input_element,
 						  charset,
 						  document_charset,
 						  fetch_data_next_ptr);
-
 	}
 
 	dom_string_unref(inputtype);
@@ -890,8 +911,10 @@ form_dom_to_data_button(dom_html_button_element *button_element,
 	exp = dom_html_button_element_get_disabled(button_element,
 						   &element_disabled);
 	if (exp != DOM_NO_ERR) {
-		NSLOG(neosurf, INFO,
-		      "Unable to get disabled property. exp %d", exp);
+		NSLOG(neosurf,
+		      INFO,
+		      "Unable to get disabled property. exp %d",
+		      exp);
 		return NSERROR_DOM;
 	}
 
@@ -936,8 +959,10 @@ form_dom_to_data_button(dom_html_button_element *button_element,
 	/* obtain name property */
 	exp = dom_html_button_element_get_name(button_element, &inputname);
 	if (exp != DOM_NO_ERR) {
-		NSLOG(neosurf, INFO,
-		      "Could not get button name property. exp %d", exp);
+		NSLOG(neosurf,
+		      INFO,
+		      "Could not get button name property. exp %d",
+		      exp);
 		return NSERROR_DOM;
 	}
 
@@ -1051,10 +1076,9 @@ static char *form_acceptable_charset(struct form *form)
  *                             fetch_multipart_data, NULL if no controls
  * \return NSERROR_OK on success or appropriate error code
  */
-static nserror
-form_dom_to_data(struct form *form,
-		 struct form_control *submit_control,
-		 struct fetch_multipart_data **fetch_data_out)
+static nserror form_dom_to_data(struct form *form,
+				struct form_control *submit_control,
+				struct fetch_multipart_data **fetch_data_out)
 {
 	nserror res = NSERROR_OK;
 	char *charset; /* form characterset */
@@ -1101,9 +1125,11 @@ form_dom_to_data(struct form *form,
 		/* obtain a form element */
 		exp = dom_html_collection_item(elements, element_idx, &element);
 		if (exp != DOM_NO_ERR) {
-			NSLOG(neosurf, INFO,
+			NSLOG(neosurf,
+			      INFO,
 			      "retrieving form element %d failed with %d",
-			      element_idx, exp);
+			      element_idx,
+			      exp);
 			res = NSERROR_DOM;
 			goto form_dom_to_data_error;
 		}
@@ -1111,9 +1137,11 @@ form_dom_to_data(struct form *form,
 		/* node name from element */
 		exp = dom_node_get_node_name(element, &nodename);
 		if (exp != DOM_NO_ERR) {
-			NSLOG(neosurf, INFO,
+			NSLOG(neosurf,
+			      INFO,
 			      "getting element node name %d failed with %d",
-			      element_idx, exp);
+			      element_idx,
+			      exp);
 			dom_node_unref(element);
 			res = NSERROR_DOM;
 			goto form_dom_to_data_error;
@@ -1127,7 +1155,8 @@ form_dom_to_data(struct form *form,
 				form->document_charset,
 				&fetch_data_next);
 
-		} else if (dom_string_isequal(nodename, corestring_dom_SELECT)) {
+		} else if (dom_string_isequal(nodename,
+					      corestring_dom_SELECT)) {
 			/* Form element is HTMLSelectElement */
 			res = form_dom_to_data_select(
 				(dom_html_select_element *)element,
@@ -1144,7 +1173,8 @@ form_dom_to_data(struct form *form,
 				&submit_button,
 				&fetch_data_next);
 
-		} else if (dom_string_isequal(nodename, corestring_dom_BUTTON)) {
+		} else if (dom_string_isequal(nodename,
+					      corestring_dom_BUTTON)) {
 			/* Form element is HTMLButtonElement */
 			res = form_dom_to_data_button(
 				(dom_html_button_element *)element,
@@ -1155,12 +1185,12 @@ form_dom_to_data(struct form *form,
 
 		} else {
 			/* Form element is not handled */
-			NSLOG(neosurf, INFO,
+			NSLOG(neosurf,
+			      INFO,
 			      "Unhandled element type: %*s",
 			      (int)dom_string_byte_length(nodename),
 			      dom_string_data(nodename));
 			res = NSERROR_DOM;
-
 		}
 
 		dom_string_unref(nodename);
@@ -1192,12 +1222,12 @@ form_dom_to_data_error:
  * \param[in] form form to which successful controls relate
  * \param[in] control linked list of fetch_multipart_data
  * \param[out] encoded_out URL-encoded form data
- * \return NSERROR_OK on success and \a encoded_out updated else appropriate error code
+ * \return NSERROR_OK on success and \a encoded_out updated else appropriate
+ * error code
  */
-static nserror
-form_url_encode(struct form *form,
-		struct fetch_multipart_data *control,
-		char **encoded_out)
+static nserror form_url_encode(struct form *form,
+			       struct fetch_multipart_data *control,
+			       char **encoded_out)
 {
 	char *name, *value;
 	char *s, *s2;
@@ -1269,35 +1299,29 @@ form_select_menu_scroll_callback(void *client_data,
 	html_content *html = (html_content *)menu->c;
 
 	switch (scrollbar_data->msg) {
-		case SCROLLBAR_MSG_MOVED:
-			menu->callback(menu->client_data,
-					0, 0,
-					menu->width,
-					menu->height);
-			break;
-		case SCROLLBAR_MSG_SCROLL_START:
-		{
-			struct rect rect = {
-				.x0 = scrollbar_data->x0,
-				.y0 = scrollbar_data->y0,
-				.x1 = scrollbar_data->x1,
-				.y1 = scrollbar_data->y1
-			};
+	case SCROLLBAR_MSG_MOVED:
+		menu->callback(
+			menu->client_data, 0, 0, menu->width, menu->height);
+		break;
+	case SCROLLBAR_MSG_SCROLL_START: {
+		struct rect rect = {.x0 = scrollbar_data->x0,
+				    .y0 = scrollbar_data->y0,
+				    .x1 = scrollbar_data->x1,
+				    .y1 = scrollbar_data->y1};
 
-			browser_window_set_drag_type(html->bw,
-					DRAGGING_CONTENT_SCROLLBAR, &rect);
+		browser_window_set_drag_type(html->bw,
+					     DRAGGING_CONTENT_SCROLLBAR,
+					     &rect);
 
-			menu->scroll_capture = true;
-		}
-			break;
-		case SCROLLBAR_MSG_SCROLL_FINISHED:
-			menu->scroll_capture = false;
+		menu->scroll_capture = true;
+	} break;
+	case SCROLLBAR_MSG_SCROLL_FINISHED:
+		menu->scroll_capture = false;
 
-			browser_window_set_drag_type(html->bw,
-					DRAGGING_NONE, NULL);
-			break;
-		default:
-			break;
+		browser_window_set_drag_type(html->bw, DRAGGING_NONE, NULL);
+		break;
+	default:
+		break;
 	}
 }
 
@@ -1310,10 +1334,9 @@ form_select_menu_scroll_callback(void *client_data,
  * \param  item	    index of item selected from the menu
  * \return NSERROR_OK or appropriate error code.
  */
-static nserror
-form__select_process_selection(html_content *html,
-			       struct form_control *control,
-			       int item)
+static nserror form__select_process_selection(html_content *html,
+					      struct form_control *control,
+					      int item)
 {
 	struct box *inline_box;
 	struct form_option *o;
@@ -1330,9 +1353,8 @@ form__select_process_selection(html_content *html,
 
 	inline_box = control->box->children->children;
 
-	for (count = 0, o = control->data.select.items;
-			o != NULL;
-			count++, o = o->next) {
+	for (count = 0, o = control->data.select.items; o != NULL;
+	     count++, o = o->next) {
 		if (!control->data.select.multiple && o->selected) {
 			o->selected = false;
 			dom_html_option_element_set_selected(o->node, false);
@@ -1343,17 +1365,17 @@ form__select_process_selection(html_content *html,
 				if (o->selected) {
 					o->selected = false;
 					dom_html_option_element_set_selected(
-							o->node, false);
+						o->node, false);
 					control->data.select.num_selected--;
 				} else {
 					o->selected = true;
 					dom_html_option_element_set_selected(
-							o->node, true);
+						o->node, true);
 					control->data.select.num_selected++;
 				}
 			} else {
-				dom_html_option_element_set_selected(
-						o->node, true);
+				dom_html_option_element_set_selected(o->node,
+								     true);
 				o->selected = true;
 			}
 		}
@@ -1368,13 +1390,13 @@ form__select_process_selection(html_content *html,
 
 	if (control->data.select.num_selected == 0) {
 		inline_box->text = talloc_strdup(html->bctx,
-				messages_get("Form_None"));
+						 messages_get("Form_None"));
 	} else if (control->data.select.num_selected == 1) {
-		inline_box->text = talloc_strdup(html->bctx,
-				control->data.select.current->text);
+		inline_box->text = talloc_strdup(
+			html->bctx, control->data.select.current->text);
 	} else {
 		inline_box->text = talloc_strdup(html->bctx,
-				messages_get("Form_Many"));
+						 messages_get("Form_Many"));
 	}
 
 	if (!inline_box->text) {
@@ -1411,7 +1433,7 @@ static void form_select_menu_clicked(struct form_control *control, int x, int y)
 
 	line_height = menu->line_height;
 	line_height_with_spacing = line_height +
-			line_height * SELECT_LINE_SPACING;
+				   line_height * SELECT_LINE_SPACING;
 
 	option = control->data.select.items;
 	item_bottom_y = line_height_with_spacing;
@@ -1433,18 +1455,19 @@ static void form_select_menu_clicked(struct form_control *control, int x, int y)
 /* exported interface documented in html/form_internal.h */
 void form_add_control(struct form *form, struct form_control *control)
 {
-    if (form == NULL) {
-        return;
-    }
+	if (form == NULL) {
+		return;
+	}
 
-    control->form = form;
+	control->form = form;
 
-    if (form->control_index != NULL) {
-        void **slot = hashmap_insert(form->control_index, control->node);
-        if (slot != NULL) {
-            *(struct form_control **)slot = control;
-        }
-    }
+	if (form->control_index != NULL) {
+		void **slot = hashmap_insert(form->control_index,
+					     control->node);
+		if (slot != NULL) {
+			*(struct form_control **)slot = control;
+		}
+	}
 
 	if (form->controls != NULL) {
 		assert(form->last_control);
@@ -1465,8 +1488,13 @@ void form_free_control(struct form_control *control)
 	struct form_control *c;
 	assert(control != NULL);
 
-	NSLOG(neosurf, INFO, "Control:%p name:%p value:%p initial:%p",
-	      control, control->name, control->value, control->initial_value);
+	NSLOG(neosurf,
+	      INFO,
+	      "Control:%p name:%p value:%p initial:%p",
+	      control,
+	      control->name,
+	      control->value,
+	      control->initial_value);
 	free(control->name);
 	free(control->value);
 	free(control->initial_value);
@@ -1478,11 +1506,14 @@ void form_free_control(struct form_control *control)
 		struct form_option *option, *next;
 
 		for (option = control->data.select.items; option;
-				option = next) {
+		     option = next) {
 			next = option->next;
-			NSLOG(neosurf, INFO,
-			      "select option:%p text:%p value:%p", option,
-			      option->text, option->value);
+			NSLOG(neosurf,
+			      INFO,
+			      "select option:%p text:%p value:%p",
+			      option,
+			      option->text,
+			      option->value);
 			free(option->text);
 			free(option->value);
 			free(option);
@@ -1493,8 +1524,8 @@ void form_free_control(struct form_control *control)
 	}
 
 	if (control->type == GADGET_TEXTAREA ||
-			control->type == GADGET_TEXTBOX ||
-			control->type == GADGET_PASSWORD) {
+	    control->type == GADGET_TEXTBOX ||
+	    control->type == GADGET_PASSWORD) {
 
 		if (control->data.text.initial != NULL) {
 			dom_string_unref(control->data.text.initial);
@@ -1515,18 +1546,21 @@ void form_free_control(struct form_control *control)
 				break;
 			}
 			if (c == control) {
-				/* can only happen if control was first control */
+				/* can only happen if control was first control
+				 */
 				control->form->controls = control->next;
 				if (control->form->last_control == control)
 					control->form->controls =
-						control->form->last_control = NULL;
+						control->form->last_control =
+							NULL;
 				break;
 			}
 		}
 
 		/* mark index entry as removed */
 		if (control->form->control_index != NULL) {
-			void **slot = hashmap_insert(control->form->control_index, control->node);
+			void **slot = hashmap_insert(
+				control->form->control_index, control->node);
 			if (slot != NULL) {
 				*(struct form_control **)slot = NULL;
 			}
@@ -1537,13 +1571,20 @@ void form_free_control(struct form_control *control)
 		dom_string_unref(control->node_value);
 	}
 
+	if (control->box != NULL) {
+		control->box->gadget = NULL;
+	}
+
 	free(control);
 }
 
 
 /* exported interface documented in html/form_internal.h */
-bool form_add_option(struct form_control *control, char *value, char *text,
-		     bool selected, void *node)
+bool form_add_option(struct form_control *control,
+		     char *value,
+		     char *text,
+		     bool selected,
+		     void *node)
 {
 	struct form_option *option;
 
@@ -1566,7 +1607,7 @@ bool form_add_option(struct form_control *control, char *value, char *text,
 
 	/* set selected */
 	if (selected && (control->data.select.num_selected == 0 ||
-			control->data.select.multiple)) {
+			 control->data.select.multiple)) {
 		option->selected = option->initial_selected = true;
 		control->data.select.num_selected++;
 		control->data.select.current = option;
@@ -1581,11 +1622,10 @@ bool form_add_option(struct form_control *control, char *value, char *text,
 
 
 /* exported interface documented in html/form_internal.h */
-nserror
-form_open_select_menu(void *client_data,
-		      struct form_control *control,
-		      select_menu_redraw_callback callback,
-		      struct content *c)
+nserror form_open_select_menu(void *client_data,
+			      struct form_control *control,
+			      select_menu_redraw_callback callback,
+			      struct content *c)
 {
 	int line_height_with_spacing;
 	struct box *box;
@@ -1598,7 +1638,7 @@ form_open_select_menu(void *client_data,
 	/* if the menu is opened for the first time */
 	if (control->data.select.menu == NULL) {
 
-		menu = calloc(1, sizeof (struct form_select_menu));
+		menu = calloc(1, sizeof(struct form_select_menu));
 		if (menu == NULL) {
 			return NSERROR_NOMEM;
 		}
@@ -1607,25 +1647,27 @@ form_open_select_menu(void *client_data,
 
 		box = control->box;
 
-		menu->width = box->width +
-			box->border[RIGHT].width + box->padding[RIGHT] +
-			box->border[LEFT].width + box->padding[LEFT];
+		menu->width = box->width + box->border[RIGHT].width +
+			      box->padding[RIGHT] + box->border[LEFT].width +
+			      box->padding[LEFT];
 
 		font_plot_style_from_css(&html->unit_len_ctx,
-				control->box->style, &fstyle);
+					 control->box->style,
+					 &fstyle);
 		menu->f_size = fstyle.size;
 
-		menu->line_height = FIXTOINT(FDIV((FMUL(FLTTOFIX(1.2),
-				FMUL(html->unit_len_ctx.device_dpi,
-				INTTOFIX(fstyle.size / PLOT_STYLE_SCALE)))),
-				F_72));
+		menu->line_height = FIXTOINT(FDIV(
+			(FMUL(FLTTOFIX(1.2),
+			      FMUL(html->unit_len_ctx.device_dpi,
+				   INTTOFIX(fstyle.size / PLOT_STYLE_SCALE)))),
+			F_72));
 
 		line_height_with_spacing = menu->line_height +
-				menu->line_height *
-				SELECT_LINE_SPACING;
+					   menu->line_height *
+						   SELECT_LINE_SPACING;
 
 		total_height = control->data.select.num_items *
-				line_height_with_spacing;
+			       line_height_with_spacing;
 		menu->height = total_height;
 
 		if (menu->height > MAX_SELECT_HEIGHT) {
@@ -1668,12 +1710,12 @@ void form_free_select_menu(struct form_control *control)
 
 
 /* exported interface documented in html/form_internal.h */
-bool
-form_redraw_select_menu(struct form_control *control,
-			int x, int y,
-			float scale,
-			const struct rect *clip,
-			const struct redraw_context *ctx)
+bool form_redraw_select_menu(struct form_control *control,
+			     int x,
+			     int y,
+			     float scale,
+			     const struct rect *clip,
+			     const struct redraw_context *ctx)
 {
 	struct box *box;
 	struct form_select_menu *menu = control->data.select.menu;
@@ -1700,7 +1742,7 @@ form_redraw_select_menu(struct form_control *control,
 	line_height = menu->line_height;
 
 	line_height_with_spacing = line_height +
-			line_height * SELECT_LINE_SPACING;
+				   line_height * SELECT_LINE_SPACING;
 	scroll = scrollbar_get_offset(menu->scrollbar);
 
 	if (scale != 1.0) {
@@ -1772,7 +1814,7 @@ form_redraw_select_menu(struct form_control *control,
 	}
 	item_y -= line_height_with_spacing;
 	text_pos_offset = y - scroll +
-			(int) (line_height * (0.75 + SELECT_LINE_SPACING));
+			  (int)(line_height * (0.75 + SELECT_LINE_SPACING));
 	text_x = x + (box->border[LEFT].width + box->padding[LEFT]) * scale;
 
 	plot_fstyle_entry.size = menu->f_size;
@@ -1787,7 +1829,9 @@ form_redraw_select_menu(struct form_control *control,
 			rect.y0 = y0 > y2 ? y0 : y2;
 			rect.x1 = scrollbar_x + 1;
 			rect.y1 = y3 < y1 + 1 ? y3 : y1 + 1;
-			res = ctx->plot->rectangle(ctx, &plot_style_fill_selected, &rect);
+			res = ctx->plot->rectangle(ctx,
+						   &plot_style_fill_selected,
+						   &rect);
 			if (res != NSERROR_OK) {
 				return false;
 			}
@@ -1796,8 +1840,10 @@ form_redraw_select_menu(struct form_control *control,
 		y2 = text_pos_offset + item_y;
 		res = ctx->plot->text(ctx,
 				      &plot_fstyle_entry,
-				      text_x, y2,
-				      option->text, strlen(option->text));
+				      text_x,
+				      y2,
+				      option->text,
+				      strlen(option->text));
 		if (res != NSERROR_OK) {
 			return false;
 		}
@@ -1809,7 +1855,9 @@ form_redraw_select_menu(struct form_control *control,
 	res = scrollbar_redraw(menu->scrollbar,
 			       x_cp + menu->width - SCROLLBAR_WIDTH,
 			       y_cp,
-			       clip, scale, ctx);
+			       clip,
+			       scale,
+			       ctx);
 	if (res != NSERROR_OK) {
 		return false;
 	}
@@ -1819,10 +1867,9 @@ form_redraw_select_menu(struct form_control *control,
 
 
 /* private interface described in html/form_internal.h */
-bool
-form_clip_inside_select_menu(struct form_control *control,
-			     float scale,
-			     const struct rect *clip)
+bool form_clip_inside_select_menu(struct form_control *control,
+				  float scale,
+				  const struct rect *clip)
 {
 	struct form_select_menu *menu = control->data.select.menu;
 	int width, height;
@@ -1836,9 +1883,7 @@ form_clip_inside_select_menu(struct form_control *control,
 		height *= scale;
 	}
 
-	if (clip->x0 >= 0 &&
-	    clip->x1 <= width &&
-	    clip->y0 >= 0 &&
+	if (clip->x0 >= 0 && clip->x1 <= width && clip->y0 >= 0 &&
 	    clip->y1 <= height)
 		return true;
 
@@ -1880,16 +1925,16 @@ char *form_control_get_name(struct form_control *control)
 /* exported interface documented in netsurf/form.h */
 nserror form_control_bounding_rect(struct form_control *control, struct rect *r)
 {
-	box_bounds( control->box, r );
+	box_bounds(control->box, r);
 	return NSERROR_OK;
 }
 
 
 /* private interface described in html/form_internal.h */
-const char *
-form_select_mouse_action(struct form_control *control,
-			 browser_mouse_state mouse,
-			 int x, int y)
+const char *form_select_mouse_action(struct form_control *control,
+				     browser_mouse_state mouse,
+				     int x,
+				     int y)
 {
 	struct form_select_menu *menu = control->data.select.menu;
 	int x0, y0, x1, y1, scrollbar_x;
@@ -1903,14 +1948,13 @@ form_select_mouse_action(struct form_control *control,
 	scrollbar_x = x1 - SCROLLBAR_WIDTH;
 
 	if (menu->scroll_capture ||
-			(x > scrollbar_x && x < x1 && y > y0 && y < y1)) {
+	    (x > scrollbar_x && x < x1 && y > y0 && y < y1)) {
 		/* The scroll is currently capturing all events or the mouse
 		 * event is taking place on the scrollbar widget area
 		 */
 		x -= scrollbar_x;
 		return scrollbar_mouse_status_to_message(
-				scrollbar_mouse_action(menu->scrollbar,
-						mouse, x, y));
+			scrollbar_mouse_action(menu->scrollbar, mouse, x, y));
 	}
 
 
@@ -1924,8 +1968,9 @@ form_select_mouse_action(struct form_control *control,
 		if (!(mouse & BROWSER_MOUSE_CLICK_1 && !multiple))
 			/* anything but a button 1 click over a single select
 			   menu */
-			status = messages_get(control->data.select.multiple ?
-					"SelectMClick" : "SelectClick");
+			status = messages_get(control->data.select.multiple
+						      ? "SelectMClick"
+						      : "SelectClick");
 
 	} else if (!(mouse & (BROWSER_MOUSE_CLICK_1 | BROWSER_MOUSE_CLICK_2)))
 		/* if not a button 1 or 2 click*/
@@ -1936,10 +1981,10 @@ form_select_mouse_action(struct form_control *control,
 
 
 /* private interface described in html/form_internal.h */
-void
-form_select_mouse_drag_end(struct form_control *control,
-			   browser_mouse_state mouse,
-			   int x, int y)
+void form_select_mouse_drag_end(struct form_control *control,
+				browser_mouse_state mouse,
+				int x,
+				int y)
 {
 	int x0, y0, x1, y1;
 	int box_x, box_y;
@@ -1952,7 +1997,7 @@ form_select_mouse_drag_end(struct form_control *control,
 	box_coords(box, &box_x, &box_y);
 	box_x -= box->border[LEFT].width;
 	box_y += box->height + box->border[BOTTOM].width +
-			box->padding[BOTTOM] + box->padding[TOP];
+		 box->padding[BOTTOM] + box->padding[TOP];
 
 	/* Get drag end coords relative to scrollbar */
 	x = x - box_x;
@@ -1970,7 +2015,7 @@ form_select_mouse_drag_end(struct form_control *control,
 	y1 = menu->height;
 
 
-	if (x > x0 && x < x1 - SCROLLBAR_WIDTH && y >  y0 && y < y1) {
+	if (x > x0 && x < x1 - SCROLLBAR_WIDTH && y > y0 && y < y1) {
 		/* handle drag end above the option area like a regular click */
 		form_select_menu_clicked(control, x, y);
 	}
@@ -1979,7 +2024,8 @@ form_select_mouse_drag_end(struct form_control *control,
 
 /* private interface described in html/form_internal.h */
 void form_select_get_dimensions(struct form_control *control,
-		int *width, int *height)
+				int *width,
+				int *height)
 {
 	*width = control->data.select.menu->width;
 	*height = control->data.select.menu->height;
@@ -1988,7 +2034,10 @@ void form_select_get_dimensions(struct form_control *control,
 
 /* private interface described in html/form_internal.h */
 void form_select_menu_callback(void *client_data,
-		int x, int y, int width, int height)
+			       int x,
+			       int y,
+			       int width,
+			       int height)
 {
 	html_content *html = client_data;
 	int menu_x, menu_y;
@@ -1999,10 +2048,9 @@ void form_select_menu_callback(void *client_data,
 
 	menu_x -= box->border[LEFT].width;
 	menu_y += box->height + box->border[BOTTOM].width +
-			box->padding[BOTTOM] +
-			box->padding[TOP];
-	content__request_redraw((struct content *)html, menu_x + x, menu_y + y,
-			width, height);
+		  box->padding[BOTTOM] + box->padding[TOP];
+	content__request_redraw(
+		(struct content *)html, menu_x + x, menu_y + y, width, height);
 }
 
 
@@ -2020,8 +2068,7 @@ void form_radio_set(struct form_control *radio)
 
 	/* Clear selected state for other controls in
 	 * the same radio button group */
-	for (control = radio->form->controls;
-	     control != NULL;
+	for (control = radio->form->controls; control != NULL;
 	     control = control->next) {
 		/* Only interested in radio inputs */
 		if (control->type != GADGET_RADIO)
@@ -2036,10 +2083,8 @@ void form_radio_set(struct form_control *radio)
 		 *   b) this or the other control have an empty name attribute
 		 *   c) the control names do not match
 		 */
-		if ((control->name == NULL) ||
-		    (radio->name == NULL) ||
-		    (control->name[0] == '\0') ||
-		    (radio->name[0] == '\0') ||
+		if ((control->name == NULL) || (radio->name == NULL) ||
+		    (control->name[0] == '\0') || (radio->name[0] == '\0') ||
 		    strcmp(control->name, radio->name) != 0)
 			continue;
 
@@ -2047,7 +2092,8 @@ void form_radio_set(struct form_control *radio)
 		 * selected state */
 		if (control->selected) {
 			control->selected = false;
-			dom_html_input_element_set_checked(control->node, false);
+			dom_html_input_element_set_checked(control->node,
+							   false);
 			html__redraw_a_box(radio->html, control->box);
 		}
 	}
@@ -2059,15 +2105,16 @@ void form_radio_set(struct form_control *radio)
 
 
 /* private interface described in html/form_internal.h */
-nserror
-form_submit(nsurl *page_url,
-	    struct browser_window *target,
-	    struct form *form,
-	    struct form_control *submit_button)
+nserror form_submit(nsurl *page_url,
+		    struct browser_window *target,
+		    struct form *form,
+		    struct form_control *submit_button)
 {
 	nserror res;
 	char *data = NULL; /* encoded form data */
-	struct fetch_multipart_data *success = NULL; /* gcc is incapable of correctly reasoning about use and generates "maybe used uninitialised" warnings */
+	struct fetch_multipart_data *success =
+		NULL; /* gcc is incapable of correctly reasoning about use and
+			 generates "maybe used uninitialised" warnings */
 	nsurl *action_url;
 	nsurl *query_url;
 
@@ -2093,13 +2140,14 @@ form_submit(nsurl *page_url,
 			/* Replace query segment */
 			res = nsurl_replace_query(action_url, data, &query_url);
 			if (res == NSERROR_OK) {
-				res = browser_window_navigate(target,
-							      query_url,
-							      page_url,
-							      BW_NAVIGATE_HISTORY,
-							      NULL,
-							      NULL,
-							      NULL);
+				res = browser_window_navigate(
+					target,
+					query_url,
+					page_url,
+					BW_NAVIGATE_HISTORY,
+					NULL,
+					NULL,
+					NULL);
 
 				nsurl_unref(query_url);
 			}
@@ -2157,15 +2205,18 @@ void form_gadget_update_value(struct form_control *control, char *value)
 			dom_exception err;
 			dom_string *str;
 			err = dom_string_create((uint8_t *)value,
-						strlen(value), &str);
+						strlen(value),
+						&str);
 			if (err == DOM_NO_ERR) {
 				if (control->type == GADGET_TEXTAREA)
 					err = dom_html_text_area_element_set_value(
-						(dom_html_text_area_element *)(control->node),
+						(dom_html_text_area_element
+							 *)(control->node),
 						str);
 				else
 					err = dom_html_input_element_set_value(
-						(dom_html_input_element *)(control->node),
+						(dom_html_input_element
+							 *)(control->node),
 						str);
 				dom_string_unref(str);
 			}
@@ -2182,18 +2233,16 @@ void form_gadget_update_value(struct form_control *control, char *value)
 
 
 /* Exported API, see html/form_internal.h */
-void
-form_gadget_sync_with_dom(struct form_control *control)
+void form_gadget_sync_with_dom(struct form_control *control)
 {
 	dom_exception exc;
 	dom_string *value = NULL;
 	bool changed_dom = false;
 
-	if (control->syncing ||
-	    (control->type != GADGET_TEXTBOX &&
-	     control->type != GADGET_PASSWORD &&
-	     control->type != GADGET_HIDDEN &&
-	     control->type != GADGET_TEXTAREA)) {
+	if (control->syncing || (control->type != GADGET_TEXTBOX &&
+				 control->type != GADGET_PASSWORD &&
+				 control->type != GADGET_HIDDEN &&
+				 control->type != GADGET_TEXTAREA)) {
 		/* Not a control we support, or the control is already
 		 * mid-sync so we don't want to disrupt that
 		 */
@@ -2203,11 +2252,9 @@ form_gadget_sync_with_dom(struct form_control *control)
 	control->syncing = true;
 
 	/* If we've changed value, sync that toward the DOM */
-	if ((control->last_synced_value == NULL &&
-	     control->value != NULL &&
+	if ((control->last_synced_value == NULL && control->value != NULL &&
 	     control->value[0] != '\0') ||
-	    (control->last_synced_value != NULL &&
-	     control->value != NULL &&
+	    (control->last_synced_value != NULL && control->value != NULL &&
 	     strcmp(control->value, control->last_synced_value) != 0)) {
 		char *dup = strdup(control->value);
 		if (dup == NULL) {
@@ -2218,7 +2265,8 @@ form_gadget_sync_with_dom(struct form_control *control)
 		}
 		control->last_synced_value = dup;
 		exc = dom_string_create((uint8_t *)(control->value),
-					strlen(control->value), &value);
+					strlen(control->value),
+					&value);
 		if (exc != DOM_NO_ERR) {
 			goto out;
 		}
@@ -2228,9 +2276,11 @@ form_gadget_sync_with_dom(struct form_control *control)
 		control->node_value = value;
 		value = NULL;
 		if (control->type == GADGET_TEXTAREA) {
-			exc = dom_html_text_area_element_set_value(control->node, control->node_value);
+			exc = dom_html_text_area_element_set_value(
+				control->node, control->node_value);
 		} else {
-			exc = dom_html_input_element_set_value(control->node, control->node_value);
+			exc = dom_html_input_element_set_value(
+				control->node, control->node_value);
 		}
 		if (exc != DOM_NO_ERR) {
 			goto out;
@@ -2240,7 +2290,8 @@ form_gadget_sync_with_dom(struct form_control *control)
 
 	/* Now check if the DOM has changed since our last go */
 	if (control->type == GADGET_TEXTAREA) {
-		exc = dom_html_text_area_element_get_value(control->node, &value);
+		exc = dom_html_text_area_element_get_value(control->node,
+							   &value);
 	} else {
 		exc = dom_html_input_element_get_value(control->node, &value);
 	}
@@ -2254,9 +2305,8 @@ form_gadget_sync_with_dom(struct form_control *control)
 		/* The DOM has changed */
 		if (!changed_dom) {
 			/* And it wasn't us */
-			char *value_s = strndup(
-				dom_string_data(value),
-				dom_string_byte_length(value));
+			char *value_s = strndup(dom_string_data(value),
+						dom_string_byte_length(value));
 			char *dup = NULL;
 			if (value_s == NULL) {
 				goto out;
@@ -2287,22 +2337,48 @@ out:
 }
 
 
-static void *map_key_clone(void *key) { void **p = malloc(sizeof(void*)); if (p != NULL) *p = key; return p; }
-static void map_key_destroy(void *key) { free(key); }
-static uint32_t map_key_hash(void *key) { uintptr_t v = (uintptr_t)key; return (uint32_t)((v >> 4) ^ (v >> 32) ^ v); }
-static bool map_key_eq(void *a, void *b) { return *(void**)a == *(void**)b; }
-static void *map_value_alloc(void *key) { return malloc(sizeof(void*)); }
-static void map_value_destroy(void *value) { free(value); }
-static hashmap_parameters_t form_node_map_params = { map_key_clone, map_key_hash, map_key_eq, map_key_destroy, map_value_alloc, map_value_destroy };
+static void *map_key_clone(void *key)
+{
+	void **p = malloc(sizeof(void *));
+	if (p != NULL)
+		*p = key;
+	return p;
+}
+static void map_key_destroy(void *key)
+{
+	free(key);
+}
+static uint32_t map_key_hash(void *key)
+{
+	uintptr_t v = (uintptr_t)key;
+	return (uint32_t)((v >> 4) ^ (v >> 32) ^ v);
+}
+static bool map_key_eq(void *a, void *b)
+{
+	return *(void **)a == *(void **)b;
+}
+static void *map_value_alloc(void *key)
+{
+	return malloc(sizeof(void *));
+}
+static void map_value_destroy(void *value)
+{
+	free(value);
+}
+static hashmap_parameters_t form_node_map_params = {map_key_clone,
+						    map_key_hash,
+						    map_key_eq,
+						    map_key_destroy,
+						    map_value_alloc,
+						    map_value_destroy};
 
 /* exported interface documented in html/form_internal.h */
-struct form *
-form_new(void *node,
-	 const char *action,
-	 const char *target,
-	 form_method method,
-	 const char *charset,
-	 const char *doc_charset)
+struct form *form_new(void *node,
+		      const char *action,
+		      const char *target,
+		      form_method method,
+		      const char *charset,
+		      const char *doc_charset)
 {
 	struct form *form;
 
@@ -2354,7 +2430,7 @@ form_new(void *node,
 /* exported interface documented in html/form_internal.h */
 void form_free(struct form *form)
 {
-    struct form_control *c, *d;
+	struct form_control *c, *d;
 
 	for (c = form->controls; c != NULL; c = d) {
 		d = c->next;
@@ -2365,12 +2441,12 @@ void form_free(struct form *form)
 	free(form->action);
 	free(form->target);
 	free(form->accept_charsets);
-    free(form->document_charset);
+	free(form->document_charset);
 
-    if (form->control_index != NULL) {
-        hashmap_destroy(form->control_index);
-        form->control_index = NULL;
-    }
+	if (form->control_index != NULL) {
+		hashmap_destroy(form->control_index);
+		form->control_index = NULL;
+	}
 
 	free(form);
 }

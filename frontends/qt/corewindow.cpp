@@ -37,17 +37,20 @@ extern "C" {
 struct nsqt_core_window {
 	class NS_Corewindow *cw;
 };
-//QAbstractScrollArea
+// QAbstractScrollArea
 NS_Corewindow::NS_Corewindow(QWidget *parent, Qt::WindowFlags f)
-	: QWidget(parent, f),
-	  m_xoffset(0),
-	  m_yoffset(0)
+	: QWidget(parent, f), m_xoffset(0), m_yoffset(0)
 {
 	m_core_window = new struct nsqt_core_window;
 	m_core_window->cw = this;
 
 	setFocusPolicy(Qt::StrongFocus);
 	setMouseTracking(true);
+}
+
+NS_Corewindow::~NS_Corewindow()
+{
+	delete m_core_window;
 }
 
 void NS_Corewindow::paintEvent(QPaintEvent *event)
@@ -104,10 +107,10 @@ void NS_Corewindow::mousePressEvent(QMouseEvent *event)
 	Qt::MouseButton button = event->button();
 	int bms = BROWSER_MOUSE_HOVER; /* empty state */
 	if ((button & Qt::LeftButton) == Qt::LeftButton) {
-		bms |=BROWSER_MOUSE_PRESS_1;
+		bms |= BROWSER_MOUSE_PRESS_1;
 	}
 	if ((button & Qt::MiddleButton) == Qt::MiddleButton) {
-		bms |=BROWSER_MOUSE_PRESS_2;
+		bms |= BROWSER_MOUSE_PRESS_2;
 	}
 	mouse_action((browser_mouse_state)bms,
 		     pos.x() + m_xoffset,
@@ -122,23 +125,22 @@ void NS_Corewindow::mouseReleaseEvent(QMouseEvent *event)
 	Qt::KeyboardModifiers mods = event->modifiers();
 
 	if ((button & Qt::LeftButton) == Qt::LeftButton) {
-		bms |=BROWSER_MOUSE_CLICK_1;
+		bms |= BROWSER_MOUSE_CLICK_1;
 	}
 	if ((button & Qt::MiddleButton) == Qt::MiddleButton) {
-		bms |=BROWSER_MOUSE_CLICK_2;
+		bms |= BROWSER_MOUSE_CLICK_2;
 	}
 	/* keyboard modifiers */
-	if ((mods & Qt::ShiftModifier)!=0)
+	if ((mods & Qt::ShiftModifier) != 0)
 		bms |= BROWSER_MOUSE_MOD_1;
-	if ((mods & Qt::ControlModifier)!=0)
+	if ((mods & Qt::ControlModifier) != 0)
 		bms |= BROWSER_MOUSE_MOD_2;
-	if ((mods & Qt::AltModifier)!=0)
+	if ((mods & Qt::AltModifier) != 0)
 		bms |= BROWSER_MOUSE_MOD_3;
 
 	mouse_action((browser_mouse_state)bms,
 		     pos.x() + m_xoffset,
 		     pos.y() + m_yoffset);
-
 }
 
 
@@ -150,15 +152,15 @@ nserror NS_Corewindow::static_invalidate(struct core_window *cw,
 		nsqtcw->cw->update();
 	} else {
 		nsqtcw->cw->update(rect->x0,
-		       rect->y0,
-		       rect->x1 - rect->x0,
-		       rect->y1 - rect->y0);
-		       }
+				   rect->y0,
+				   rect->x1 - rect->x0,
+				   rect->y1 - rect->y0);
+	}
 	return NSERROR_OK;
 }
 
-nserror NS_Corewindow::static_set_extent(struct core_window *cw,
-					 int width, int height)
+nserror
+NS_Corewindow::static_set_extent(struct core_window *cw, int width, int height)
 {
 	struct nsqt_core_window *nsqtcw = (struct nsqt_core_window *)cw;
 	if ((width > 0) && (height > 0)) {
@@ -172,13 +174,15 @@ nserror NS_Corewindow::static_set_scroll(struct core_window *cw, int x, int y)
 	return NSERROR_OK;
 }
 
-nserror NS_Corewindow::static_get_scroll(const struct core_window *cw, int *x, int *y)
+nserror
+NS_Corewindow::static_get_scroll(const struct core_window *cw, int *x, int *y)
 {
 	return NSERROR_OK;
 }
 
 nserror NS_Corewindow::static_get_dimensions(const struct core_window *cw,
-					     int *width, int *height)
+					     int *width,
+					     int *height)
 {
 	struct nsqt_core_window *nsqtcw = (struct nsqt_core_window *)cw;
 	QSize size = nsqtcw->cw->size();
@@ -188,7 +192,8 @@ nserror NS_Corewindow::static_get_dimensions(const struct core_window *cw,
 	return NSERROR_OK;
 }
 
-nserror NS_Corewindow::static_drag_status(struct core_window *cw, core_window_drag_status ds)
+nserror NS_Corewindow::static_drag_status(struct core_window *cw,
+					  core_window_drag_status ds)
 {
 	return NSERROR_OK;
 }

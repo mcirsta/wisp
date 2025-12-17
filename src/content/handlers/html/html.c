@@ -944,6 +944,7 @@ bool html_can_begin_conversion(html_content *htmlc)
 
 static void html_resume_conversion_cb(void *p);
 void script_resume_conversion_cb(void *p);
+static void html_free_layout(html_content *htmlc);
 
 bool html_begin_conversion(html_content *htmlc);
 
@@ -1078,7 +1079,19 @@ bool html_begin_conversion(html_content *htmlc)
 	}
 	dom_string_unref(node_name);
 
+	/* Clear any existing layout */
+	html_free_layout(htmlc);
+
 	/* Retrieve forms from parser */
+	if (htmlc->forms != NULL) {
+		struct form *g;
+		for (f = htmlc->forms; f != NULL; f = g) {
+			g = f->prev;
+			form_free(f);
+		}
+		htmlc->forms = NULL;
+	}
+
 	htmlc->forms = html_forms_get_forms(
 		htmlc->encoding, (dom_html_document *)htmlc->document);
 	for (f = htmlc->forms; f != NULL; f = f->prev) {
@@ -1339,7 +1352,9 @@ static void html_free_layout(html_content *htmlc)
 		 * set be destroyed
 		 */
 		talloc_free(htmlc->bctx);
+		htmlc->bctx = NULL;
 	}
+	htmlc->layout = NULL;
 }
 
 /**
@@ -1408,14 +1423,19 @@ static void html_destroy(struct content *c)
 		      c);
 	}
 
-	if (html->document != NULL) {
-		dom_node_unref(html->document);
-		html->document = NULL;
-	}
+	/* Free layout before destroying document to avoid UAF */
+	html_free_layout(html);
 
+	/* Unref title before document - title is part of document tree
+	 * and will be destroyed when document is destroyed */
 	if (html->title != NULL) {
 		dom_node_unref(html->title);
 		html->title = NULL;
+	}
+
+	if (html->document != NULL) {
+		dom_node_unref(html->document);
+		html->document = NULL;
 	}
 
 	/* Free encoding */
@@ -1467,9 +1487,6 @@ static void html_destroy(struct content *c)
 
 	/* Free objects */
 	html_object_free_objects(html);
-
-	/* free layout */
-	html_free_layout(html);
 }
 
 

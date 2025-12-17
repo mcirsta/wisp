@@ -9,6 +9,11 @@
 #include <assert.h>
 #include <stdlib.h>
 
+#ifdef DOM_DEBUG_PENDING_NODES
+#include <stdio.h>
+#include <stddef.h>
+#endif
+
 #include <dom/functypes.h>
 #include <dom/core/attr.h>
 #include <dom/core/element.h>
@@ -35,34 +40,29 @@
  * Item in list of active nodelists
  */
 struct dom_doc_nl {
-	dom_nodelist *list;	/**< Nodelist */
+	dom_nodelist *list; /**< Nodelist */
 
-	struct dom_doc_nl *next;	/**< Next item */
-	struct dom_doc_nl *prev;	/**< Previous item */
+	struct dom_doc_nl *next; /**< Next item */
+	struct dom_doc_nl *prev; /**< Previous item */
 };
 
 /* The virtual functions of this dom_document */
 static const struct dom_document_vtable document_vtable = {
-	{
-		{
-			DOM_NODE_EVENT_TARGET_VTABLE
-		},
-		DOM_NODE_VTABLE_DOCUMENT
-	},
-	DOM_DOCUMENT_VTABLE
-};
+	{{DOM_NODE_EVENT_TARGET_VTABLE}, DOM_NODE_VTABLE_DOCUMENT},
+	DOM_DOCUMENT_VTABLE};
 
 static const struct dom_node_protect_vtable document_protect_vtable = {
-	DOM_DOCUMENT_PROTECT_VTABLE
-};
+	DOM_DOCUMENT_PROTECT_VTABLE};
 
 
 /*----------------------------------------------------------------------*/
 
 /* Internally used helper functions */
-static dom_exception dom_document_dup_node(dom_document *doc, 
-		dom_node *node, bool deep, dom_node **result, 
-		dom_node_operation opt);
+static dom_exception dom_document_dup_node(dom_document *doc,
+					   dom_node *node,
+					   bool deep,
+					   dom_node **result,
+					   dom_node_operation opt);
 
 
 /*----------------------------------------------------------------------*/
@@ -96,7 +96,7 @@ dom_exception _dom_document_create(dom_events_default_action_fetcher daf,
 
 	/* Initialise base class -- the Document has no parent, so
 	 * destruction will be attempted as soon as its reference count
-	 * reaches zero. Documents own themselves (this simplifies the 
+	 * reaches zero. Documents own themselves (this simplifies the
 	 * rest of the code, as it doesn't need to special case Documents)
 	 */
 	err = _dom_document_initialise(d, daf, daf_ctx);
@@ -113,19 +113,21 @@ dom_exception _dom_document_create(dom_events_default_action_fetcher daf,
 
 /* Initialise the document */
 dom_exception _dom_document_initialise(dom_document *doc,
-				       dom_events_default_action_fetcher daf, 
+				       dom_events_default_action_fetcher daf,
 				       void *daf_ctx)
 {
 	dom_exception err;
 	dom_string *name;
 
-	err = dom_string_create((const uint8_t *) "#document", 
-			SLEN("#document"), &name);
+	err = dom_string_create((const uint8_t *)"#document",
+				SLEN("#document"),
+				&name);
 	if (err != DOM_NO_ERR)
 		return err;
 
-	err = dom_string_create_interned((const uint8_t *) "about:blank",
-			SLEN("about:blank"), &doc->uri);
+	err = dom_string_create_interned((const uint8_t *)"about:blank",
+					 SLEN("about:blank"),
+					 &doc->uri);
 	if (err != DOM_NO_ERR) {
 		dom_string_unref(name);
 		return err;
@@ -133,8 +135,8 @@ dom_exception _dom_document_initialise(dom_document *doc,
 
 	doc->nodelists = NULL;
 
-	err = _dom_node_initialise(&doc->base, doc, DOM_DOCUMENT_NODE,
-			name, NULL, NULL, NULL);
+	err = _dom_node_initialise(
+		&doc->base, doc, DOM_DOCUMENT_NODE, name, NULL, NULL, NULL);
 	dom_string_unref(name);
 	if (err != DOM_NO_ERR) {
 		dom_string_unref(doc->uri);
@@ -143,24 +145,27 @@ dom_exception _dom_document_initialise(dom_document *doc,
 
 	list_init(&doc->pending_nodes);
 
-	err = dom_string_create_interned((const uint8_t *) "id",
-					 SLEN("id"), &doc->id_name);
+	err = dom_string_create_interned((const uint8_t *)"id",
+					 SLEN("id"),
+					 &doc->id_name);
 	if (err != DOM_NO_ERR) {
 		dom_string_unref(doc->uri);
 		return err;
 	}
 	doc->quirks = DOM_DOCUMENT_QUIRKS_MODE_NONE;
 
-	err = dom_string_create_interned((const uint8_t *) "class",
-			SLEN("class"), &doc->class_string);
+	err = dom_string_create_interned((const uint8_t *)"class",
+					 SLEN("class"),
+					 &doc->class_string);
 	if (err != DOM_NO_ERR) {
 		dom_string_unref(doc->uri);
 		dom_string_unref(doc->id_name);
 		return err;
 	}
 
-	err = dom_string_create_interned((const uint8_t *) "script",
-			SLEN("script"), &doc->script_string);
+	err = dom_string_create_interned((const uint8_t *)"script",
+					 SLEN("script"),
+					 &doc->script_string);
 	if (err != DOM_NO_ERR) {
 		dom_string_unref(doc->uri);
 		dom_string_unref(doc->id_name);
@@ -171,7 +176,8 @@ dom_exception _dom_document_initialise(dom_document *doc,
 	/* Intern the empty string. The use of a space in the constant
 	 * is to prevent the compiler warning about an empty string.
 	 */
-	err = dom_string_create_interned((const uint8_t *) " ", 0,
+	err = dom_string_create_interned((const uint8_t *)" ",
+					 0,
 					 &doc->_memo_empty);
 	if (err != DOM_NO_ERR) {
 		dom_string_unref(doc->uri);
@@ -181,7 +187,7 @@ dom_exception _dom_document_initialise(dom_document *doc,
 		return err;
 	}
 
-	err = dom_string_create_interned((const uint8_t *) "DOMNodeInserted",
+	err = dom_string_create_interned((const uint8_t *)"DOMNodeInserted",
 					 SLEN("DOMNodeInserted"),
 					 &doc->_memo_domnodeinserted);
 	if (err != DOM_NO_ERR) {
@@ -193,7 +199,7 @@ dom_exception _dom_document_initialise(dom_document *doc,
 		return err;
 	}
 
-	err = dom_string_create_interned((const uint8_t *) "DOMNodeRemoved",
+	err = dom_string_create_interned((const uint8_t *)"DOMNodeRemoved",
 					 SLEN("DOMNodeRemoved"),
 					 &doc->_memo_domnoderemoved);
 	if (err != DOM_NO_ERR) {
@@ -206,9 +212,10 @@ dom_exception _dom_document_initialise(dom_document *doc,
 		return err;
 	}
 
-	err = dom_string_create_interned((const uint8_t *) "DOMNodeInsertedIntoDocument",
-					 SLEN("DOMNodeInsertedIntoDocument"),
-					 &doc->_memo_domnodeinsertedintodocument);
+	err = dom_string_create_interned(
+		(const uint8_t *)"DOMNodeInsertedIntoDocument",
+		SLEN("DOMNodeInsertedIntoDocument"),
+		&doc->_memo_domnodeinsertedintodocument);
 	if (err != DOM_NO_ERR) {
 		dom_string_unref(doc->_memo_domnoderemoved);
 		dom_string_unref(doc->_memo_domnodeinserted);
@@ -220,9 +227,10 @@ dom_exception _dom_document_initialise(dom_document *doc,
 		return err;
 	}
 
-	err = dom_string_create_interned((const uint8_t *) "DOMNodeRemovedFromDocument",
-					 SLEN("DOMNodeRemovedFromDocument"),
-					 &doc->_memo_domnoderemovedfromdocument);
+	err = dom_string_create_interned(
+		(const uint8_t *)"DOMNodeRemovedFromDocument",
+		SLEN("DOMNodeRemovedFromDocument"),
+		&doc->_memo_domnoderemovedfromdocument);
 	if (err != DOM_NO_ERR) {
 		dom_string_unref(doc->_memo_domnodeinsertedintodocument);
 		dom_string_unref(doc->_memo_domnoderemoved);
@@ -235,7 +243,7 @@ dom_exception _dom_document_initialise(dom_document *doc,
 		return err;
 	}
 
-	err = dom_string_create_interned((const uint8_t *) "DOMAttrModified",
+	err = dom_string_create_interned((const uint8_t *)"DOMAttrModified",
 					 SLEN("DOMAttrModified"),
 					 &doc->_memo_domattrmodified);
 	if (err != DOM_NO_ERR) {
@@ -251,9 +259,10 @@ dom_exception _dom_document_initialise(dom_document *doc,
 		return err;
 	}
 
-	err = dom_string_create_interned((const uint8_t *) "DOMCharacterDataModified",
-					 SLEN("DOMCharacterDataModified"),
-					 &doc->_memo_domcharacterdatamodified);
+	err = dom_string_create_interned(
+		(const uint8_t *)"DOMCharacterDataModified",
+		SLEN("DOMCharacterDataModified"),
+		&doc->_memo_domcharacterdatamodified);
 	if (err != DOM_NO_ERR) {
 		dom_string_unref(doc->_memo_domattrmodified);
 		dom_string_unref(doc->_memo_domnoderemovedfromdocument);
@@ -268,7 +277,7 @@ dom_exception _dom_document_initialise(dom_document *doc,
 		return err;
 	}
 
-	err = dom_string_create_interned((const uint8_t *) "DOMSubtreeModified",
+	err = dom_string_create_interned((const uint8_t *)"DOMSubtreeModified",
 					 SLEN("DOMSubtreeModified"),
 					 &doc->_memo_domsubtreemodified);
 	if (err != DOM_NO_ERR) {
@@ -306,8 +315,41 @@ bool _dom_document_finalise(dom_document *doc)
 	/* Ensure list of nodes pending deletion is empty. If not,
 	 * then we can't yet destroy the document (its destruction will
 	 * have to wait until the pending nodes are destroyed) */
-	if (doc->pending_nodes.next != &doc->pending_nodes)
+	if (doc->pending_nodes.next != &doc->pending_nodes) {
+#ifdef DOM_DEBUG_PENDING_NODES
+		/* Debug: Log information about pending nodes */
+		struct list_entry *entry = doc->pending_nodes.next;
+		int count = 0;
+		fprintf(stderr,
+			"DOM_DEBUG: Document %p has pending nodes:\n",
+			(void *)doc);
+		while (entry != &doc->pending_nodes) {
+			dom_node_internal *node =
+				(dom_node_internal *)((char *)entry -
+						      offsetof(
+							      dom_node_internal,
+							      pending_list));
+			fprintf(stderr,
+				"  [%d] type=%d refcnt=%u parent=%p\n",
+				count,
+				node->type,
+				node->base.refcnt,
+				(void *)node->parent);
+			entry = entry->next;
+			count++;
+			if (count > 20) {
+				fprintf(stderr,
+					"  ... and more pending nodes\n");
+				break;
+			}
+		}
+		fprintf(stderr,
+			"DOM_DEBUG: Document %p cannot be freed due to %d pending nodes\n",
+			(void *)doc,
+			count);
+#endif
 		return false;
+	}
 
 	/* Ok, the document tree is empty, as is the list of nodes pending
 	 * deletion. Therefore, it is safe to destroy the document. */
@@ -332,12 +374,11 @@ bool _dom_document_finalise(dom_document *doc)
 	dom_string_unref(doc->_memo_domattrmodified);
 	dom_string_unref(doc->_memo_domcharacterdatamodified);
 	dom_string_unref(doc->_memo_domsubtreemodified);
-	
+
 	_dom_document_event_internal_finalise(&doc->dei);
 
 	return true;
 }
-
 
 
 /*----------------------------------------------------------------------*/
@@ -355,8 +396,8 @@ bool _dom_document_finalise(dom_document *doc)
  * the responsibility of the caller to unref the node once it has
  * finished with it.
  */
-dom_exception _dom_document_get_doctype(dom_document *doc,
-		dom_document_type **result)
+dom_exception
+_dom_document_get_doctype(dom_document *doc, dom_document_type **result)
 {
 	dom_node_internal *c;
 
@@ -368,7 +409,7 @@ dom_exception _dom_document_get_doctype(dom_document *doc,
 	if (c != NULL)
 		dom_node_ref(c);
 
-	*result = (dom_document_type *) c;
+	*result = (dom_document_type *)c;
 
 	return DOM_NO_ERR;
 }
@@ -384,12 +425,12 @@ dom_exception _dom_document_get_doctype(dom_document *doc,
  * It is the responsibility of the caller to unref the implementation once
  * it has finished with it.
  */
-dom_exception _dom_document_get_implementation(dom_document *doc,
-		dom_implementation **result)
+dom_exception
+_dom_document_get_implementation(dom_document *doc, dom_implementation **result)
 {
 	UNUSED(doc);
 
-	*result = (dom_implementation *) "libdom";
+	*result = (dom_implementation *)"libdom";
 
 	return DOM_NO_ERR;
 }
@@ -405,8 +446,8 @@ dom_exception _dom_document_get_implementation(dom_document *doc,
  * the responsibility of the caller to unref the node once it has
  * finished with it.
  */
-dom_exception _dom_document_get_document_element(dom_document *doc,
-		dom_element **result)
+dom_exception
+_dom_document_get_document_element(dom_document *doc, dom_element **result)
 {
 	dom_node_internal *root;
 
@@ -419,7 +460,7 @@ dom_exception _dom_document_get_document_element(dom_document *doc,
 	if (root != NULL)
 		dom_node_ref(root);
 
-	*result = (dom_element *) root;
+	*result = (dom_element *)root;
 
 	return DOM_NO_ERR;
 }
@@ -440,7 +481,8 @@ dom_exception _dom_document_get_document_element(dom_document *doc,
  * finished with it.
  */
 dom_exception _dom_document_create_element(dom_document *doc,
-		dom_string *tag_name, dom_element **result)
+					   dom_string *tag_name,
+					   dom_element **result)
 {
 	if (_dom_validate_name(tag_name) == false)
 		return DOM_INVALID_CHARACTER_ERR;
@@ -459,17 +501,19 @@ dom_exception _dom_document_create_element(dom_document *doc,
  * the responsibility of the caller to unref the node once it has
  * finished with it.
  */
-dom_exception _dom_document_create_document_fragment(dom_document *doc,
-		dom_document_fragment **result)
+dom_exception
+_dom_document_create_document_fragment(dom_document *doc,
+				       dom_document_fragment **result)
 {
 	dom_string *name;
 	dom_exception err;
 
-	err = dom_string_create((const uint8_t *) "#document-fragment", 
-			SLEN("#document-fragment"), &name);
+	err = dom_string_create((const uint8_t *)"#document-fragment",
+				SLEN("#document-fragment"),
+				&name);
 	if (err != DOM_NO_ERR)
 		return err;
-	
+
 	err = _dom_document_fragment_create(doc, name, NULL, result);
 	dom_string_unref(name);
 
@@ -489,16 +533,16 @@ dom_exception _dom_document_create_document_fragment(dom_document *doc,
  * finished with it.
  */
 dom_exception _dom_document_create_text_node(dom_document *doc,
-		dom_string *data, dom_text **result)
+					     dom_string *data,
+					     dom_text **result)
 {
 	dom_string *name;
 	dom_exception err;
 
-	err = dom_string_create((const uint8_t *) "#text", 
-			SLEN("#text"), &name);
+	err = dom_string_create((const uint8_t *)"#text", SLEN("#text"), &name);
 	if (err != DOM_NO_ERR)
 		return err;
-	
+
 	err = _dom_text_create(doc, name, data, result);
 	dom_string_unref(name);
 
@@ -518,16 +562,18 @@ dom_exception _dom_document_create_text_node(dom_document *doc,
  * finished with it.
  */
 dom_exception _dom_document_create_comment(dom_document *doc,
-		dom_string *data, dom_comment **result)
+					   dom_string *data,
+					   dom_comment **result)
 {
 	dom_string *name;
 	dom_exception err;
 
-	err = dom_string_create((const uint8_t *) "#comment", SLEN("#comment"),
-			&name);
+	err = dom_string_create((const uint8_t *)"#comment",
+				SLEN("#comment"),
+				&name);
 	if (err != DOM_NO_ERR)
 		return err;
-	
+
 	err = _dom_comment_create(doc, name, data, result);
 	dom_string_unref(name);
 
@@ -548,13 +594,15 @@ dom_exception _dom_document_create_comment(dom_document *doc,
  * finished with it.
  */
 dom_exception _dom_document_create_cdata_section(dom_document *doc,
-		dom_string *data, dom_cdata_section **result)
+						 dom_string *data,
+						 dom_cdata_section **result)
 {
 	dom_string *name;
 	dom_exception err;
 
-	err = dom_string_create((const uint8_t *) "#cdata-section", 
-			SLEN("#cdata-section"), &name);
+	err = dom_string_create((const uint8_t *)"#cdata-section",
+				SLEN("#cdata-section"),
+				&name);
 	if (err != DOM_NO_ERR)
 		return err;
 
@@ -579,10 +627,11 @@ dom_exception _dom_document_create_cdata_section(dom_document *doc,
  * the responsibility of the caller to unref the node once it has
  * finished with it.
  */
-dom_exception _dom_document_create_processing_instruction(
-		dom_document *doc, dom_string *target,
-		dom_string *data,
-		dom_processing_instruction **result)
+dom_exception
+_dom_document_create_processing_instruction(dom_document *doc,
+					    dom_string *target,
+					    dom_string *data,
+					    dom_processing_instruction **result)
 {
 	if (_dom_validate_name(target) == false)
 		return DOM_INVALID_CHARACTER_ERR;
@@ -606,7 +655,8 @@ dom_exception _dom_document_create_processing_instruction(
  * finished with it.
  */
 dom_exception _dom_document_create_attribute(dom_document *doc,
-		dom_string *name, dom_attr **result)
+					     dom_string *name,
+					     dom_attr **result)
 {
 	if (_dom_validate_name(name) == false)
 		return DOM_INVALID_CHARACTER_ERR;
@@ -628,9 +678,10 @@ dom_exception _dom_document_create_attribute(dom_document *doc,
  * the responsibility of the caller to unref the node once it has
  * finished with it.
  */
-dom_exception _dom_document_create_entity_reference(dom_document *doc,
-		dom_string *name,
-		dom_entity_reference **result)
+dom_exception
+_dom_document_create_entity_reference(dom_document *doc,
+				      dom_string *name,
+				      dom_entity_reference **result)
 {
 	if (_dom_validate_name(name) == false)
 		return DOM_INVALID_CHARACTER_ERR;
@@ -651,11 +702,16 @@ dom_exception _dom_document_create_entity_reference(dom_document *doc,
  * finished with it.
  */
 dom_exception _dom_document_get_elements_by_tag_name(dom_document *doc,
-		dom_string *tagname, dom_nodelist **result)
+						     dom_string *tagname,
+						     dom_nodelist **result)
 {
-	return _dom_document_get_nodelist(doc, DOM_NODELIST_BY_NAME, 
-			(dom_node_internal *) doc,  tagname, NULL, NULL, 
-			result);
+	return _dom_document_get_nodelist(doc,
+					  DOM_NODELIST_BY_NAME,
+					  (dom_node_internal *)doc,
+					  tagname,
+					  NULL,
+					  NULL,
+					  result);
 }
 
 /**
@@ -675,12 +731,14 @@ dom_exception _dom_document_get_elements_by_tag_name(dom_document *doc,
  * finished with it.
  */
 dom_exception _dom_document_import_node(dom_document *doc,
-		dom_node *node, bool deep, dom_node **result)
+					dom_node *node,
+					bool deep,
+					dom_node **result)
 {
 	/* TODO: The DOM_INVALID_CHARACTER_ERR exception */
 
-	return dom_document_dup_node(doc, node, deep, result,
-			DOM_NODE_IMPORTED);
+	return dom_document_dup_node(
+		doc, node, deep, result, DOM_NODE_IMPORTED);
 }
 
 /**
@@ -712,8 +770,9 @@ dom_exception _dom_document_import_node(dom_document *doc,
  * finished with it.
  */
 dom_exception _dom_document_create_element_ns(dom_document *doc,
-		dom_string *namespace, dom_string *qname,
-		dom_element **result)
+					      dom_string *namespace,
+					      dom_string *qname,
+					      dom_element **result)
 {
 	dom_string *prefix, *localname;
 	dom_exception err;
@@ -777,8 +836,9 @@ dom_exception _dom_document_create_element_ns(dom_document *doc,
  * finished with it.
  */
 dom_exception _dom_document_create_attribute_ns(dom_document *doc,
-		dom_string *namespace, dom_string *qname,
-		dom_attr **result)
+						dom_string *namespace,
+						dom_string *qname,
+						dom_attr **result)
 {
 	dom_string *prefix, *localname;
 	dom_exception err;
@@ -826,13 +886,18 @@ dom_exception _dom_document_create_attribute_ns(dom_document *doc,
  * the responsibility of the caller to unref the list once it has
  * finished with it.
  */
-dom_exception _dom_document_get_elements_by_tag_name_ns(
-		dom_document *doc, dom_string *namespace,
-		dom_string *localname, dom_nodelist **result)
+dom_exception _dom_document_get_elements_by_tag_name_ns(dom_document *doc,
+							dom_string *namespace,
+							dom_string *localname,
+							dom_nodelist **result)
 {
-	return _dom_document_get_nodelist(doc, DOM_NODELIST_BY_NAMESPACE, 
-			(dom_node_internal *) doc, NULL, namespace, localname, 
-			result);
+	return _dom_document_get_nodelist(doc,
+					  DOM_NODELIST_BY_NAMESPACE,
+					  (dom_node_internal *)doc,
+					  NULL,
+					  namespace,
+					  localname,
+					  result);
 }
 
 /**
@@ -848,14 +913,15 @@ dom_exception _dom_document_get_elements_by_tag_name_ns(
  * finished with it.
  */
 dom_exception _dom_document_get_element_by_id(dom_document *doc,
-		dom_string *id, dom_element **result)
+					      dom_string *id,
+					      dom_element **result)
 {
 	dom_node_internal *root;
 	dom_exception err;
 
 	*result = NULL;
 
-	err = dom_document_get_document_element(doc, (void *) &root);
+	err = dom_document_get_document_element(doc, (void *)&root);
 	if (err != DOM_NO_ERR)
 		return err;
 
@@ -879,8 +945,8 @@ dom_exception _dom_document_get_element_by_id(dom_document *doc,
  * the responsibility of the caller to unref the string once it has
  * finished with it.
  */
-dom_exception _dom_document_get_input_encoding(dom_document *doc,
-		dom_string **result)
+dom_exception
+_dom_document_get_input_encoding(dom_document *doc, dom_string **result)
 {
 	UNUSED(doc);
 	UNUSED(result);
@@ -899,8 +965,8 @@ dom_exception _dom_document_get_input_encoding(dom_document *doc,
  * the responsibility of the caller to unref the string once it has
  * finished with it.
  */
-dom_exception _dom_document_get_xml_encoding(dom_document *doc,
-		dom_string **result)
+dom_exception
+_dom_document_get_xml_encoding(dom_document *doc, dom_string **result)
 {
 	UNUSED(doc);
 	UNUSED(result);
@@ -915,8 +981,7 @@ dom_exception _dom_document_get_xml_encoding(dom_document *doc,
  * \param result  Pointer to location to receive result
  * \return DOM_NOT_SUPPORTED_ERR, we don't support this API now.
  */
-dom_exception _dom_document_get_xml_standalone(dom_document *doc,
-		bool *result)
+dom_exception _dom_document_get_xml_standalone(dom_document *doc, bool *result)
 {
 	UNUSED(doc);
 	UNUSED(result);
@@ -933,11 +998,11 @@ dom_exception _dom_document_get_xml_standalone(dom_document *doc,
  *         DOM_NOT_SUPPORTED_ERR if the document does not support the "XML"
  *                               feature.
  *
- * We don't support this API now, so the return value is always 
+ * We don't support this API now, so the return value is always
  * DOM_NOT_SUPPORTED_ERR.
  */
-dom_exception _dom_document_set_xml_standalone(dom_document *doc,
-		bool standalone)
+dom_exception
+_dom_document_set_xml_standalone(dom_document *doc, bool standalone)
 {
 	UNUSED(doc);
 	UNUSED(standalone);
@@ -956,11 +1021,11 @@ dom_exception _dom_document_set_xml_standalone(dom_document *doc,
  * the responsibility of the caller to unref the string once it has
  * finished with it.
  *
- * We don't support this API now, so the return value is always 
+ * We don't support this API now, so the return value is always
  * DOM_NOT_SUPPORTED_ERR.
  */
-dom_exception _dom_document_get_xml_version(dom_document *doc,
-		dom_string **result)
+dom_exception
+_dom_document_get_xml_version(dom_document *doc, dom_string **result)
 {
 	UNUSED(doc);
 	UNUSED(result);
@@ -977,11 +1042,11 @@ dom_exception _dom_document_get_xml_version(dom_document *doc,
  *         DOM_NOT_SUPPORTED_ERR if the document does not support the "XML"
  *                               feature.
  *
- * We don't support this API now, so the return value is always 
+ * We don't support this API now, so the return value is always
  * DOM_NOT_SUPPORTED_ERR.
  */
-dom_exception _dom_document_set_xml_version(dom_document *doc,
-		dom_string *version)
+dom_exception
+_dom_document_set_xml_version(dom_document *doc, dom_string *version)
 {
 	UNUSED(doc);
 	UNUSED(version);
@@ -996,8 +1061,8 @@ dom_exception _dom_document_set_xml_version(dom_document *doc,
  * \param result  Pointer to location to receive result
  * \return DOM_NOT_SUPPORTED_ERR, we don't support this API now.
  */
-dom_exception _dom_document_get_strict_error_checking(
-		dom_document *doc, bool *result)
+dom_exception
+_dom_document_get_strict_error_checking(dom_document *doc, bool *result)
 {
 	UNUSED(doc);
 	UNUSED(result);
@@ -1012,8 +1077,8 @@ dom_exception _dom_document_get_strict_error_checking(
  * \param strict  Whether to use strict error checking
  * \return DOM_NOT_SUPPORTED_ERR, we don't support this API now.
  */
-dom_exception _dom_document_set_strict_error_checking(
-		dom_document *doc, bool strict)
+dom_exception
+_dom_document_set_strict_error_checking(dom_document *doc, bool strict)
 {
 	UNUSED(doc);
 	UNUSED(strict);
@@ -1032,8 +1097,7 @@ dom_exception _dom_document_set_strict_error_checking(
  * the responsibility of the caller to unref the string once it has
  * finished with it.
  */
-dom_exception _dom_document_get_uri(dom_document *doc,
-		dom_string **result)
+dom_exception _dom_document_get_uri(dom_document *doc, dom_string **result)
 {
 	*result = dom_string_ref(doc->uri);
 
@@ -1051,8 +1115,7 @@ dom_exception _dom_document_get_uri(dom_document *doc,
  * the responsibility of the caller to unref the string once it has
  * finished with it.
  */
-dom_exception _dom_document_set_uri(dom_document *doc,
-		dom_string *uri)
+dom_exception _dom_document_set_uri(dom_document *doc, dom_string *uri)
 {
 	dom_string_unref(doc->uri);
 
@@ -1083,27 +1146,24 @@ dom_exception _dom_document_set_uri(dom_document *doc,
  *	  generally, the adoptNode and importNode call the same function
  *	  dom_document_dup_node.
  */
-dom_exception _dom_document_adopt_node(dom_document *doc,
-		dom_node *node, dom_node **result)
+dom_exception
+_dom_document_adopt_node(dom_document *doc, dom_node *node, dom_node **result)
 {
-	dom_node_internal *n = (dom_node_internal *) node;
+	dom_node_internal *n = (dom_node_internal *)node;
 	dom_exception err;
 	dom_node_internal *parent;
 	dom_node_internal *tmp;
-	
+
 	*result = NULL;
 
-	if (n->type == DOM_DOCUMENT_NODE ||
-			n->type == DOM_DOCUMENT_TYPE_NODE) {
-		return DOM_NOT_SUPPORTED_ERR;		
+	if (n->type == DOM_DOCUMENT_NODE || n->type == DOM_DOCUMENT_TYPE_NODE) {
+		return DOM_NOT_SUPPORTED_ERR;
 	}
 
-	if (n->type == DOM_ENTITY_NODE ||
-			n->type == DOM_NOTATION_NODE ||
-			n->type == DOM_PROCESSING_INSTRUCTION_NODE ||
-			n->type == DOM_TEXT_NODE ||
-			n->type == DOM_CDATA_SECTION_NODE ||
-			n->type == DOM_COMMENT_NODE) {
+	if (n->type == DOM_ENTITY_NODE || n->type == DOM_NOTATION_NODE ||
+	    n->type == DOM_PROCESSING_INSTRUCTION_NODE ||
+	    n->type == DOM_TEXT_NODE || n->type == DOM_CDATA_SECTION_NODE ||
+	    n->type == DOM_COMMENT_NODE) {
 		*result = NULL;
 		return DOM_NO_ERR;
 	}
@@ -1121,13 +1181,13 @@ dom_exception _dom_document_adopt_node(dom_document *doc,
 
 	parent = n->parent;
 	if (parent != NULL) {
-		err = dom_node_remove_child(parent, node, (void *) &tmp);
+		err = dom_node_remove_child(parent, node, (void *)&tmp);
 		if (err != DOM_NO_ERR) {
 			dom_node_unref(*result);
 			*result = NULL;
 			return err;
 		}
-                dom_node_unref(tmp);
+		dom_node_unref(tmp);
 	}
 
 	return DOM_NO_ERR;
@@ -1145,7 +1205,7 @@ dom_exception _dom_document_adopt_node(dom_document *doc,
  * finished with it.
  */
 dom_exception _dom_document_get_dom_config(dom_document *doc,
-		struct dom_configuration **result)
+					   struct dom_configuration **result)
 {
 	UNUSED(doc);
 	UNUSED(result);
@@ -1197,13 +1257,14 @@ dom_exception _dom_document_normalize(dom_document *doc)
  * the responsibility of the caller to unref the node once it has
  * finished with it.
  *
- * We don't support this API now, so the return value is always 
+ * We don't support this API now, so the return value is always
  * DOM_NOT_SUPPORTED_ERR.
  */
 dom_exception _dom_document_rename_node(dom_document *doc,
-		dom_node *node,
-		dom_string *namespace, dom_string *qname,
-		dom_node **result)
+					dom_node *node,
+					dom_string *namespace,
+					dom_string *qname,
+					dom_node **result)
 {
 	UNUSED(doc);
 	UNUSED(node);
@@ -1214,22 +1275,22 @@ dom_exception _dom_document_rename_node(dom_document *doc,
 	return DOM_NOT_SUPPORTED_ERR;
 }
 
-dom_exception _dom_document_get_text_content(dom_node_internal *node,
-					     dom_string **result)
+dom_exception
+_dom_document_get_text_content(dom_node_internal *node, dom_string **result)
 {
 	UNUSED(node);
-	
+
 	*result = NULL;
-	
+
 	return DOM_NO_ERR;
 }
 
-dom_exception _dom_document_set_text_content(dom_node_internal *node,
-					     dom_string *content)
+dom_exception
+_dom_document_set_text_content(dom_node_internal *node, dom_string *content)
 {
 	UNUSED(node);
 	UNUSED(content);
-	
+
 	return DOM_NO_ERR;
 }
 
@@ -1240,7 +1301,7 @@ dom_exception _dom_document_set_text_content(dom_node_internal *node,
 /* The virtual destroy function of this class */
 void _dom_document_destroy(dom_node_internal *node)
 {
-	dom_document *doc = (dom_document *) node;
+	dom_document *doc = (dom_document *)node;
 
 	if (_dom_document_finalise(doc) == true) {
 		free(doc);
@@ -1248,8 +1309,8 @@ void _dom_document_destroy(dom_node_internal *node)
 }
 
 /* The copy constructor function of this class */
-dom_exception _dom_document_copy(dom_node_internal *old, 
-		dom_node_internal **copy)
+dom_exception
+_dom_document_copy(dom_node_internal *old, dom_node_internal **copy)
 {
 	UNUSED(old);
 	UNUSED(copy);
@@ -1279,16 +1340,19 @@ dom_exception _dom_document_copy(dom_node_internal *old,
  * finished with it.
  */
 dom_exception _dom_document_get_nodelist(dom_document *doc,
-		nodelist_type type, dom_node_internal *root,
-		dom_string *tagname, dom_string *namespace,
-		dom_string *localname, dom_nodelist **list)
+					 nodelist_type type,
+					 dom_node_internal *root,
+					 dom_string *tagname,
+					 dom_string *namespace,
+					 dom_string *localname,
+					 dom_nodelist **list)
 {
 	struct dom_doc_nl *l;
 	dom_exception err;
 
 	for (l = doc->nodelists; l; l = l->next) {
-		if (_dom_nodelist_match(l->list, type, root, tagname,
-				namespace, localname))
+		if (_dom_nodelist_match(
+			    l->list, type, root, tagname, namespace, localname))
 			break;
 	}
 
@@ -1304,8 +1368,13 @@ dom_exception _dom_document_get_nodelist(dom_document *doc,
 			return DOM_NO_MEM_ERR;
 
 		/* Create nodelist */
-		err = _dom_nodelist_create(doc, type, root, tagname, namespace,
-				localname, &l->list);
+		err = _dom_nodelist_create(doc,
+					   type,
+					   root,
+					   tagname,
+					   namespace,
+					   localname,
+					   &l->list);
 		if (err != DOM_NO_ERR) {
 			free(l);
 			return err;
@@ -1336,8 +1405,7 @@ dom_exception _dom_document_get_nodelist(dom_document *doc,
  * \param doc   The document to remove the list from
  * \param list  The list to remove
  */
-void _dom_document_remove_nodelist(dom_document *doc,
-		dom_nodelist *list)
+void _dom_document_remove_nodelist(dom_document *doc, dom_nodelist *list)
 {
 	struct dom_doc_nl *l;
 
@@ -1365,15 +1433,16 @@ void _dom_document_remove_nodelist(dom_document *doc,
 }
 
 /**
- * Find element with certain ID in the subtree rooted at root 
+ * Find element with certain ID in the subtree rooted at root
  *
  * \param root    The root element from where we start
  * \param id      The ID of the target element
  * \param result  The result element
  * \return DOM_NO_ERR on success, appropriate dom_exception on failure.
  */
-dom_exception _dom_find_element_by_id(dom_node_internal *root, 
-		dom_string *id, dom_element **result)
+dom_exception _dom_find_element_by_id(dom_node_internal *root,
+				      dom_string *id,
+				      dom_element **result)
 {
 	dom_node_internal *node = root;
 
@@ -1383,11 +1452,11 @@ dom_exception _dom_find_element_by_id(dom_node_internal *root,
 		if (node->type == DOM_ELEMENT_NODE) {
 			dom_string *real_id;
 
-			_dom_element_get_id((dom_element *) node, &real_id);
+			_dom_element_get_id((dom_element *)node, &real_id);
 			if (real_id != NULL) {
 				if (dom_string_isequal(real_id, id)) {
 					dom_string_unref(real_id);
-					*result = (dom_element *) node;
+					*result = (dom_element *)node;
 					return DOM_NO_ERR;
 				}
 
@@ -1429,10 +1498,13 @@ dom_exception _dom_find_element_by_id(dom_node_internal *root,
  * \param opt     Whether this is adopt or import operation
  * \return DOM_NO_ERR on success, appropriate dom_exception on failure.
  */
-dom_exception dom_document_dup_node(dom_document *doc, dom_node *node,
-		bool deep, dom_node **result, dom_node_operation opt)
+dom_exception dom_document_dup_node(dom_document *doc,
+				    dom_node *node,
+				    bool deep,
+				    dom_node **result,
+				    dom_node_operation opt)
 {
-	dom_node_internal *n = (dom_node_internal *) node;
+	dom_node_internal *n = (dom_node_internal *)node;
 	dom_node_internal *ret;
 	dom_exception err;
 	dom_node_internal *child, *r;
@@ -1440,9 +1512,8 @@ dom_exception dom_document_dup_node(dom_document *doc, dom_node *node,
 
 	if (_dom_node_readonly_owner(&doc->base) || _dom_node_readonly(n))
 		return DOM_NO_MODIFICATION_ALLOWED_ERR;
-	
-	if (n->type == DOM_DOCUMENT_NODE ||
-			n->type == DOM_DOCUMENT_TYPE_NODE)
+
+	if (n->type == DOM_DOCUMENT_NODE || n->type == DOM_DOCUMENT_TYPE_NODE)
 		return DOM_NOT_SUPPORTED_ERR;
 
 	err = dom_node_copy(node, &ret);
@@ -1450,7 +1521,7 @@ dom_exception dom_document_dup_node(dom_document *doc, dom_node *node,
 		return err;
 
 	if (n->type == DOM_ATTRIBUTE_NODE) {
-		_dom_attr_set_specified((dom_attr *) node, true);
+		_dom_attr_set_specified((dom_attr *)node, true);
 		deep = true;
 	}
 
@@ -1460,27 +1531,27 @@ dom_exception dom_document_dup_node(dom_document *doc, dom_node *node,
 
 	if (n->type == DOM_ELEMENT_NODE) {
 		/* Specified attributes are copyied but not default attributes,
-		 * if the document object hold all the default attributes, we 
+		 * if the document object hold all the default attributes, we
 		 * have nothing to do here */
 	}
 
-	if (opt == DOM_NODE_ADOPTED && (n->type == DOM_ENTITY_NODE ||
-			n->type == DOM_NOTATION_NODE)) {
+	if (opt == DOM_NODE_ADOPTED &&
+	    (n->type == DOM_ENTITY_NODE || n->type == DOM_NOTATION_NODE)) {
 		/* We did not support XML now */
 		return DOM_NOT_SUPPORTED_ERR;
 	}
 
 	if (deep == true) {
-		child = ((dom_node_internal *) node)->first_child;
+		child = ((dom_node_internal *)node)->first_child;
 		while (child != NULL) {
-			err = dom_document_import_node(doc, child, deep,
-					(void *) &r);
+			err = dom_document_import_node(
+				doc, child, deep, (void *)&r);
 			if (err != DOM_NO_ERR) {
 				dom_node_unref(ret);
 				return err;
 			}
 
-			err = dom_node_append_child(ret, r, (void *) &r);
+			err = dom_node_append_child(ret, r, (void *)&r);
 			if (err != DOM_NO_ERR) {
 				dom_node_unref(ret);
 				dom_node_unref(r);
@@ -1496,19 +1567,19 @@ dom_exception dom_document_dup_node(dom_document *doc, dom_node *node,
 	ud = n->user_data;
 	while (ud != NULL) {
 		if (ud->handler != NULL) {
-			ud->handler(opt, ud->key, ud->data, node, 
-					(dom_node *) ret);
+			ud->handler(
+				opt, ud->key, ud->data, node, (dom_node *)ret);
 		}
 		ud = ud->next;
 	}
 
-	*result = (dom_node *) ret;
+	*result = (dom_node *)ret;
 
 	return DOM_NO_ERR;
 }
 
 /**
- * Try to destroy the document. 
+ * Try to destroy the document.
  *
  * \param doc  The instance of Document
  *
@@ -1523,7 +1594,7 @@ void _dom_document_try_destroy(dom_document *doc)
 	if (doc->base.base.refcnt != 0 || doc->base.parent != NULL)
 		return;
 
-	_dom_document_destroy((dom_node_internal *) doc);
+	_dom_document_destroy((dom_node_internal *)doc);
 }
 
 /**
@@ -1543,14 +1614,14 @@ void _dom_document_set_id_name(dom_document *doc, dom_string *name)
 /* Semi-internal API extensions for NetSurf */
 
 dom_exception _dom_document_get_quirks_mode(dom_document *doc,
-		dom_document_quirks_mode *result)
+					    dom_document_quirks_mode *result)
 {
 	*result = doc->quirks;
 	return DOM_NO_ERR;
 }
 
 dom_exception _dom_document_set_quirks_mode(dom_document *doc,
-		dom_document_quirks_mode quirks)
+					    dom_document_quirks_mode quirks)
 {
 	doc->quirks = quirks;
 	return DOM_NO_ERR;

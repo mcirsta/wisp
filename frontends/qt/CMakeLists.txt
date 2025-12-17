@@ -10,13 +10,23 @@ set(MESSAGES_LANGUAGES en fr de it nl zh_CN)
 set(MESSAGES_PLATFORMS qt all)
 set(FAT_MESSAGES "${CMAKE_SOURCE_DIR}/src/resources/FatMessages")
 set(SPLIT_MESSAGES_SCRIPT "${CMAKE_SOURCE_DIR}/src/utils/split_messages.py")
-set(GENERATED_MESSAGES_DIR "${CMAKE_CURRENT_SOURCE_DIR}/res")
+set(GENERATED_MESSAGES_DIR "${CMAKE_CURRENT_BINARY_DIR}/res")
 
 set(GENERATED_MESSAGES_FILES)
+set(QRC_CONTENT "<RCC>\n")
 
 foreach(LANG ${MESSAGES_LANGUAGES})
     set(MSG_FILE "${GENERATED_MESSAGES_DIR}/${LANG}/Messages")
     list(APPEND GENERATED_MESSAGES_FILES ${MSG_FILE})
+    
+    if(LANG STREQUAL "en")
+        set(QRC_CONTENT "${QRC_CONTENT}    <qresource prefix=\"/\">\n")
+    else()
+        set(QRC_CONTENT "${QRC_CONTENT}    <qresource prefix=\"/\" lang=\"${LANG}\">\n")
+    endif()
+
+    set(QRC_CONTENT "${QRC_CONTENT}        <file alias=\"Messages\">${LANG}/Messages</file>\n")
+    set(QRC_CONTENT "${QRC_CONTENT}    </qresource>\n")
 
     add_custom_command(
         OUTPUT ${MSG_FILE}
@@ -26,6 +36,9 @@ foreach(LANG ${MESSAGES_LANGUAGES})
         COMMENT "Generating Messages for ${LANG}"
     )
 endforeach()
+
+set(QRC_CONTENT "${QRC_CONTENT}</RCC>")
+file(WRITE "${GENERATED_MESSAGES_DIR}/messages.qrc" "${QRC_CONTENT}")
 
 add_custom_target(qt_messages DEPENDS ${GENERATED_MESSAGES_FILES})
 
@@ -76,6 +89,7 @@ set(QT_SOURCES
 
 set(QT_RESOURCES
     res/netsurf.qrc
+    ${GENERATED_MESSAGES_DIR}/messages.qrc
 )
 
 add_executable(nsqt ${QT_SOURCES} ${QT_RESOURCES})
