@@ -31,4 +31,5 @@ Testing/Temporary
 duktape-build
 build-cmake
 build-gcc
+__pycache__
 

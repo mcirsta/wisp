@@ -66,6 +66,7 @@ message(FATAL_ERROR "NeoSurf does not support OpenSSL 1.x.x")
 endif()
 
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/duktape_bindings.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/quickjs_bindings.cmake)
 
  
  

@@ -171,6 +171,23 @@ include(CTest)
     ${CMAKE_SOURCE_DIR}/src/test/svg_redraw_comboflush_test.c
   )
 
+  # QuickJS-ng JavaScript engine test
+  add_neosurf_test(test_quickjs
+    ${CMAKE_SOURCE_DIR}/src/content/handlers/javascript/quickjs/qjs.c
+    ${CMAKE_BINARY_DIR}/quickjs/console.c
+    ${CMAKE_SOURCE_DIR}/src/test/log.c
+    ${CMAKE_SOURCE_DIR}/src/test/test_quickjs.c
+  )
+  add_dependencies(test_quickjs quickjs_bindings)
+  target_include_directories(test_quickjs PRIVATE 
+    ${CMAKE_SOURCE_DIR}/contrib/quickjs-ng
+    ${CMAKE_SOURCE_DIR}/contrib/libnsutils/include
+    ${CMAKE_BINARY_DIR}/quickjs
+  )
+  target_link_libraries(test_quickjs PRIVATE qjs nsutils)
+
+
+
   if(NOT WIN32)
     add_library(malloc_fig SHARED ${CMAKE_SOURCE_DIR}/src/test/malloc_fig.c)
     target_include_directories(malloc_fig PRIVATE ${CMAKE_SOURCE_DIR}/src)
