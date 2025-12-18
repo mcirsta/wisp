@@ -83,6 +83,7 @@ NS_Window::NS_Window(QWidget *parent, struct browser_window *bw)
 	m_hscrollbar->setMinimum(0);
 	m_hscrollbar->setMaximum(1);
 	m_hscrollbar->setPageStep(1);
+	m_hscrollbar->setVisible(false);
 	connect(m_hscrollbar,
 		&QScrollBar::valueChanged,
 		m_nswidget,
@@ -93,6 +94,7 @@ NS_Window::NS_Window(QWidget *parent, struct browser_window *bw)
 	m_vscrollbar->setMinimum(0);
 	m_vscrollbar->setMaximum(1);
 	m_vscrollbar->setPageStep(1);
+	m_vscrollbar->setVisible(false);
 	connect(m_vscrollbar,
 		&QScrollBar::valueChanged,
 		m_nswidget,
@@ -238,14 +240,18 @@ nserror NS_Window::update_extent()
 	}
 
 	int width = m_nswidget->size().width();
-	m_hscrollbar->setMaximum(std::max(ew - width, m_hscrollbar->minimum()));
+	int max_h = std::max(ew - width, m_hscrollbar->minimum());
+	m_hscrollbar->setMaximum(max_h);
 	m_hscrollbar->setPageStep(width);
 	m_hscrollbar->setSingleStep(width / 16);
+	m_hscrollbar->setVisible(max_h > 0);
+
 	int height = m_nswidget->size().height();
-	m_vscrollbar->setMaximum(
-		std::max(eh - height, m_vscrollbar->minimum()));
+	int max_v = std::max(eh - height, m_vscrollbar->minimum());
+	m_vscrollbar->setMaximum(max_v);
 	m_vscrollbar->setPageStep(height);
 	m_vscrollbar->setSingleStep(height / 16);
+	m_vscrollbar->setVisible(max_v > 0);
 
 	return NSERROR_OK;
 }
