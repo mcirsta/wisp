@@ -518,6 +518,211 @@ START_TEST(test_quickjs_window_methods)
 }
 END_TEST
 
+/**
+ * Test Timers (stubs).
+ */
+START_TEST(test_quickjs_timers)
+{
+	jsheap *heap = NULL;
+	jsthread *thread = NULL;
+	nserror err;
+	bool result;
+
+	js_initialise();
+
+	err = js_newheap(5, &heap);
+	ck_assert_int_eq(err, NSERROR_OK);
+
+	err = js_newthread(heap, NULL, NULL, &thread);
+	ck_assert_int_eq(err, NSERROR_OK);
+
+	/* Test setTimeout exists and returns a number */
+	const char *code1 = "typeof setTimeout === 'function'";
+	result = js_exec(thread,
+			 (const uint8_t *)code1,
+			 strlen(code1),
+			 "test_setTimeout");
+	ck_assert(result == true);
+
+	/* Test clearTimeout exists */
+	const char *code2 = "typeof clearTimeout === 'function'";
+	result = js_exec(thread,
+			 (const uint8_t *)code2,
+			 strlen(code2),
+			 "test_clearTimeout");
+	ck_assert(result == true);
+
+	js_closethread(thread);
+	js_destroythread(thread);
+	js_destroyheap(heap);
+	js_finalise();
+}
+END_TEST
+
+/**
+ * Test Navigator.
+ */
+START_TEST(test_quickjs_navigator)
+{
+	jsheap *heap = NULL;
+	jsthread *thread = NULL;
+	nserror err;
+	bool result;
+
+	js_initialise();
+
+	err = js_newheap(5, &heap);
+	ck_assert_int_eq(err, NSERROR_OK);
+
+	err = js_newthread(heap, NULL, NULL, &thread);
+	ck_assert_int_eq(err, NSERROR_OK);
+
+	/* Test UserAgent */
+	const char *code1 =
+		"typeof navigator === 'object' && navigator.userAgent.length > 0";
+	result = js_exec(thread,
+			 (const uint8_t *)code1,
+			 strlen(code1),
+			 "test_userAgent");
+	ck_assert(result == true);
+
+	/* Test cookieEnabled */
+	const char *code2 = "navigator.cookieEnabled === true";
+	result = js_exec(thread,
+			 (const uint8_t *)code2,
+			 strlen(code2),
+			 "test_cookieEnabled");
+	ck_assert(result == true);
+
+	js_closethread(thread);
+	js_destroythread(thread);
+	js_destroyheap(heap);
+	js_finalise();
+}
+END_TEST
+
+/**
+ * Test Location.
+ */
+START_TEST(test_quickjs_location)
+{
+	jsheap *heap = NULL;
+	jsthread *thread = NULL;
+	nserror err;
+	bool result;
+
+	js_initialise();
+
+	err = js_newheap(5, &heap);
+	ck_assert_int_eq(err, NSERROR_OK);
+
+	err = js_newthread(heap, NULL, NULL, &thread);
+	ck_assert_int_eq(err, NSERROR_OK);
+
+	/* Test location exists */
+	const char *code1 =
+		"typeof location === 'object' && typeof window.location === 'object'";
+	result = js_exec(thread,
+			 (const uint8_t *)code1,
+			 strlen(code1),
+			 "test_location1");
+	ck_assert(result == true);
+
+	/* Test href */
+	const char *code2 = "typeof location.href === 'string'";
+	result = js_exec(thread,
+			 (const uint8_t *)code2,
+			 strlen(code2),
+			 "test_location2");
+	ck_assert(result == true);
+
+	/* Test replace/reload stubs */
+	const char *code3 =
+		"typeof location.replace === 'function' && typeof location.reload === 'function'";
+	result = js_exec(thread,
+			 (const uint8_t *)code3,
+			 strlen(code3),
+			 "test_location3");
+	ck_assert(result == true);
+
+	js_closethread(thread);
+	js_destroythread(thread);
+	js_destroyheap(heap);
+	js_finalise();
+}
+END_TEST
+
+/**
+ * Test Document.
+ */
+START_TEST(test_quickjs_document)
+{
+	jsheap *heap = NULL;
+	jsthread *thread = NULL;
+	nserror err;
+	bool result;
+
+	js_initialise();
+
+	err = js_newheap(5, &heap);
+	ck_assert_int_eq(err, NSERROR_OK);
+
+	err = js_newthread(heap, NULL, NULL, &thread);
+	ck_assert_int_eq(err, NSERROR_OK);
+
+	/* Test document exists */
+	const char *code1 =
+		"typeof document === 'object' && typeof window.document === 'object'";
+	result = js_exec(thread,
+			 (const uint8_t *)code1,
+			 strlen(code1),
+			 "test_document1");
+	ck_assert(result == true);
+
+	/* Test getElementById stub */
+	const char *code2 = "document.getElementById('foo') === null";
+	result = js_exec(thread,
+			 (const uint8_t *)code2,
+			 strlen(code2),
+			 "test_getElementById");
+	ck_assert(result == true);
+
+	/* Test createElement stub */
+	const char *code3 = "typeof document.createElement('div') === 'object'";
+	result = js_exec(thread,
+			 (const uint8_t *)code3,
+			 strlen(code3),
+			 "test_createElement");
+	ck_assert(result == true);
+
+	/* Test write stub */
+	const char *code4 = "typeof document.write === 'function'";
+	result = js_exec(
+		thread, (const uint8_t *)code4, strlen(code4), "test_write");
+	ck_assert(result == true);
+
+	/* Test body and documentElement properties */
+	const char *code5 =
+		"typeof document.body === 'object' && typeof document.documentElement === 'object'";
+	result = js_exec(thread,
+			 (const uint8_t *)code5,
+			 strlen(code5),
+			 "test_doc_props");
+	ck_assert(result == true);
+
+	/* Test cookie */
+	const char *code6 = "document.cookie === ''";
+	result = js_exec(
+		thread, (const uint8_t *)code6, strlen(code6), "test_cookie");
+	ck_assert(result == true);
+
+	js_closethread(thread);
+	js_destroythread(thread);
+	js_destroyheap(heap);
+	js_finalise();
+}
+END_TEST
+
 Suite *quickjs_suite(void)
 {
 
@@ -560,6 +765,10 @@ Suite *quickjs_suite(void)
 	tc_window = tcase_create("Window");
 	tcase_add_test(tc_window, test_quickjs_window_global);
 	tcase_add_test(tc_window, test_quickjs_window_methods);
+	tcase_add_test(tc_window, test_quickjs_timers);
+	tcase_add_test(tc_window, test_quickjs_navigator);
+	tcase_add_test(tc_window, test_quickjs_location);
+	tcase_add_test(tc_window, test_quickjs_document);
 	suite_add_tcase(s, tc_window);
 
 	return s;
