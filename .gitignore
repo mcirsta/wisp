@@ -33,4 +33,5 @@ build-cmake
 build-gcc
 __pycache__
 dumped_script.js
+out
 

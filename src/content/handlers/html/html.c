@@ -1408,6 +1408,19 @@ static void html_destroy(struct content *c)
 		html->jsthread = NULL;
 	}
 
+	/* Free iframes and framesets BEFORE freeing layout - they are allocated
+	 * within the box context (bctx) which gets freed by html_free_layout */
+	if (html->iframe != NULL) {
+		html_destroy_iframe(html->iframe);
+		html->iframe = NULL;
+	}
+
+	if (html->frameset != NULL) {
+		html_destroy_frameset(html->frameset);
+		talloc_free(html->frameset);
+		html->frameset = NULL;
+	}
+
 	/* Free layout FIRST - while DOM is still valid - so box destructor
 	 * can properly unref DOM nodes */
 	html_free_layout(html);
@@ -1449,19 +1462,6 @@ static void html_destroy(struct content *c)
 	if (html->base_target != NULL) {
 		free(html->base_target);
 		html->base_target = NULL;
-	}
-
-	/* Free frameset */
-	if (html->frameset != NULL) {
-		html_destroy_frameset(html->frameset);
-		talloc_free(html->frameset);
-		html->frameset = NULL;
-	}
-
-	/* Free iframes */
-	if (html->iframe != NULL) {
-		html_destroy_iframe(html->iframe);
-		html->iframe = NULL;
 	}
 
 	/* Destroy selection context */
