@@ -259,6 +259,8 @@ bool js_exec(jsthread *thread,
 {
 	JSValue result;
 	bool success = true;
+	char stack_buf[1024];
+	char *term_txt = NULL;
 
 	if (thread == NULL || thread->ctx == NULL || thread->closed) {
 		NSLOG(neosurf,
@@ -277,8 +279,25 @@ bool js_exec(jsthread *thread,
 	      name ? name : "<anonymous>",
 	      txtlen);
 
+	/* QuickJS-ng requires the input to be null-terminated at txt[txtlen] */
+	if (txtlen < sizeof(stack_buf)) {
+		memcpy(stack_buf, txt, txtlen);
+		stack_buf[txtlen] = '\0';
+		term_txt = stack_buf;
+	} else {
+		term_txt = malloc(txtlen + 1);
+		if (term_txt == NULL) {
+			NSLOG(neosurf,
+			      ERROR,
+			      "Failed to allocate memory for JS execution");
+			return false;
+		}
+		memcpy(term_txt, txt, txtlen);
+		term_txt[txtlen] = '\0';
+	}
+
 	result = JS_Eval(thread->ctx,
-			 (const char *)txt,
+			 term_txt,
 			 txtlen,
 			 name ? name : "<script>",
 			 JS_EVAL_TYPE_GLOBAL);
@@ -300,6 +319,10 @@ bool js_exec(jsthread *thread,
 	}
 
 	JS_FreeValue(thread->ctx, result);
+
+	if (term_txt != stack_buf) {
+		free(term_txt);
+	}
 
 	return success;
 }
