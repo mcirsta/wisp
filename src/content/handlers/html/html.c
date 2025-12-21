@@ -1079,6 +1079,18 @@ bool html_begin_conversion(html_content *htmlc)
 	}
 	dom_string_unref(node_name);
 
+	/* Cancel any ongoing box conversion before freeing the layout */
+	if (htmlc->box_conversion_context != NULL) {
+		if (cancel_dom_to_box(htmlc->box_conversion_context) !=
+		    NSERROR_OK) {
+			NSLOG(neosurf,
+			      WARNING,
+			      "Failed to cancel box conversion - aborting reformat to prevent crash");
+			return false;
+		}
+		htmlc->box_conversion_context = NULL;
+	}
+
 	/* Clear any existing layout */
 	html_free_layout(htmlc);
 

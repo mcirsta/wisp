@@ -204,6 +204,12 @@ add_neosurf_test(stacking_test
   ${CMAKE_SOURCE_DIR}/src/test/stacking_test.c
 )
 
+add_neosurf_test(box_construct_race_test
+  ${CMAKE_SOURCE_DIR}/src/utils/talloc.c
+  ${CMAKE_SOURCE_DIR}/src/test/log.c
+  ${CMAKE_SOURCE_DIR}/src/test/box_construct_race_test.c
+)
+
 # ============================================================================
 # JavaScript Tests
 # ============================================================================
