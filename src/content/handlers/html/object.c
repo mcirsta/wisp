@@ -219,11 +219,11 @@ static nserror html_object_callback(hlcache_handle *object,
 				} else if (c->pending_reformat == false) {
 					uint64_t delay = c->base.reformat_time -
 							 ms_now;
+					c->pending_reformat = true;
 					guit->misc->schedule(
 						delay,
 						html_deferred_reformat,
 						c);
-					c->pending_reformat = true;
 				}
 			}
 		}
@@ -235,17 +235,43 @@ static nserror html_object_callback(hlcache_handle *object,
 
 		html_object_done(box, object, o->background);
 
+		/*
+		 * Broadcast a redraw for the box area.
+		 *
+		 * For REPLACE_DIM boxes (fixed dimensions from HTML/CSS),
+		 * we can redraw immediately if the parent is ready.
+		 *
+		 * For dynamic-size boxes (no REPLACE_DIM), the box dimensions
+		 * may not be correct yet if we haven't had initial layout.
+		 * In that case, the reformat triggered below will handle it.
+		 * If we HAVE had initial layout, we need to trigger a reformat
+		 * so layout picks up the new intrinsic dimensions, and then
+		 * the CONTENT_MSG_REFORMAT broadcast will cause a full redraw.
+		 */
 		if (c->base.status != CONTENT_STATUS_LOADING &&
-		    box->flags & REPLACE_DIM) {
+		    c->had_initial_layout) {
 			union content_msg_data data;
-
-			if (c->had_initial_layout == false) {
-				break;
-			}
 
 			if (!box_visible(box))
 				break;
 
+			if (!(box->flags & REPLACE_DIM)) {
+				/*
+				 * Dynamic-size image completed after initial
+				 * layout. We need to trigger a reformat so the
+				 * layout engine picks up the new intrinsic
+				 * dimensions. The CONTENT_MSG_REFORMAT
+				 * broadcast will cause a full redraw.
+				 */
+				if (c->pending_reformat == false) {
+					c->pending_reformat = true;
+					guit->misc->schedule(
+						0, html_deferred_reformat, c);
+				}
+				break;
+			}
+
+			/* Fixed-size image - just redraw the box area */
 			box_coords(box, &x, &y);
 
 			data.redraw.x = x + box->padding[LEFT];
@@ -552,8 +578,8 @@ static nserror html_object_callback(hlcache_handle *object,
 			if (ms_now < c->base.reformat_time) {
 				delay = c->base.reformat_time - ms_now;
 			}
-			guit->misc->schedule(delay, html_deferred_reformat, c);
 			c->pending_reformat = true;
+			guit->misc->schedule(0, html_deferred_reformat, c);
 		}
 	}
 
