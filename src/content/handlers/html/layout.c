@@ -129,7 +129,8 @@ static void layout_minmax_block(struct box *block,
  *
  * See CSS 2.1 sections 10.3 and 10.6.
  */
-static void layout_get_object_dimensions(struct box *box,
+static void layout_get_object_dimensions(const css_unit_ctx *unit_len_ctx,
+					 struct box *box,
 					 int *width,
 					 int *height,
 					 int min_width,
@@ -140,8 +141,13 @@ static void layout_get_object_dimensions(struct box *box,
 	assert(box->object != NULL);
 	assert(width != NULL && height != NULL);
 
-	int intrinsic_width = content_get_width(box->object);
-	int intrinsic_height = content_get_height(box->object);
+	/* Intrinsic dimensions are in device pixels, convert to CSS pixels */
+	int intrinsic_width = FIXTOINT(
+		css_unit_device2css_px(INTTOFIX(content_get_width(box->object)),
+				       unit_len_ctx->device_dpi));
+	int intrinsic_height = FIXTOINT(css_unit_device2css_px(
+		INTTOFIX(content_get_height(box->object)),
+		unit_len_ctx->device_dpi));
 
 	/* DIAGNOSTIC LOG START */
 	/* DIAGNOSTIC LOG END */
@@ -769,13 +775,15 @@ static struct box *layout_minmax_line(struct box *first,
 		if (b->object || (b->flags & REPLACE_DIM)) {
 			if (b->object) {
 				int temp_height = height;
-				layout_get_object_dimensions(b,
-							     &width,
-							     &temp_height,
-							     INT_MIN,
-							     INT_MAX,
-							     INT_MIN,
-							     INT_MAX);
+				layout_get_object_dimensions(
+					&content->unit_len_ctx,
+					b,
+					&width,
+					&temp_height,
+					INT_MIN,
+					INT_MAX,
+					INT_MIN,
+					INT_MAX);
 			}
 
 			fixed = frac = 0;
@@ -1054,7 +1062,9 @@ static void layout_minmax_block(struct box *block,
 			min = html_get_box_tree(block->object)->min_width;
 			max = html_get_box_tree(block->object)->max_width;
 		} else {
-			min = max = content_get_width(block->object);
+			min = max = FIXTOINT(css_unit_device2css_px(
+				INTTOFIX(content_get_width(block->object)),
+				content->unit_len_ctx.device_dpi));
 		}
 
 		block->flags |= HAS_HEIGHT;
@@ -1145,9 +1155,15 @@ static void layout_minmax_block(struct box *block,
 		css_fixed value = 0;
 		int width;
 
-		if (css_computed_width_px(
-			    block->style, &content->unit_len_ctx, -1, &width) ==
-		    CSS_WIDTH_SET) {
+		enum css_width_e wtype;
+		wtype = css_computed_width(block->style, &value, &unit);
+
+		if (wtype == CSS_WIDTH_SET && unit == CSS_UNIT_PCT) {
+			min = 0;
+		} else if (css_computed_width_px(block->style,
+						 &content->unit_len_ctx,
+						 -1,
+						 &width) == CSS_WIDTH_SET) {
 			min = max = width;
 			using_max_border_box = border_box;
 			using_min_border_box = border_box;
@@ -1168,16 +1184,20 @@ static void layout_minmax_block(struct box *block,
 		}
 
 		max_type = css_computed_max_width(block->style, &value, &unit);
-		if (max_type == CSS_MAX_WIDTH_SET && unit != CSS_UNIT_PCT) {
-			int val = FIXTOINT(
-				css_unit_len2device_px(block->style,
-						       &content->unit_len_ctx,
-						       value,
-						       unit));
+		if (max_type == CSS_MAX_WIDTH_SET) {
+			if (unit == CSS_UNIT_PCT) {
+				min = 0;
+			} else {
+				int val = FIXTOINT(css_unit_len2device_px(
+					block->style,
+					&content->unit_len_ctx,
+					value,
+					unit));
 
-			if (val >= 0 && max > val) {
-				max = val;
-				using_max_border_box = border_box;
+				if (val >= 0 && max > val) {
+					max = val;
+					using_max_border_box = border_box;
+				}
 			}
 		}
 	}
@@ -1687,7 +1707,8 @@ static void layout_block_find_dimensions(const css_unit_ctx *unit_len_ctx,
 	if (box->object && !(box->flags & REPLACE_DIM) &&
 	    content_get_type(box->object) != CONTENT_HTML) {
 		/* block-level replaced element, see 10.3.4 and 10.6.2 */
-		layout_get_object_dimensions(box,
+		layout_get_object_dimensions(unit_len_ctx,
+					     box,
 					     &width,
 					     &height,
 					     min_width,
@@ -2696,7 +2717,8 @@ static void layout_float_find_dimensions(const css_unit_ctx *unit_len_ctx,
 	    content_get_type(box->object) != CONTENT_HTML) {
 		/* Floating replaced element, with intrinsic width or height.
 		 * See 10.3.6 and 10.6.2 */
-		layout_get_object_dimensions(box,
+		layout_get_object_dimensions(unit_len_ctx,
+					     box,
 					     &width,
 					     &height,
 					     min_width,
@@ -3208,7 +3230,8 @@ static bool layout_line(struct box *first,
 				       NULL);
 
 		if (b->object && !(b->flags & REPLACE_DIM)) {
-			layout_get_object_dimensions(b,
+			layout_get_object_dimensions(&content->unit_len_ctx,
+						     b,
 						     &b->width,
 						     &b->height,
 						     min_width,
@@ -3252,7 +3275,9 @@ static bool layout_line(struct box *first,
 			content_reformat(b->object, false, b->width, b->height);
 
 			if (htype == CSS_HEIGHT_AUTO)
-				b->height = content_get_height(b->object);
+				b->height = FIXTOINT(css_unit_device2css_px(
+					INTTOFIX(content_get_height(b->object)),
+					content->unit_len_ctx.device_dpi));
 		}
 
 		if (height < b->height)
@@ -3832,7 +3857,8 @@ bool layout_block_context(struct box *block,
 		int temp_width = block->width;
 		if (!layout_block_object(block))
 			return false;
-		layout_get_object_dimensions(block,
+		layout_get_object_dimensions(&content->unit_len_ctx,
+					     block,
 					     &temp_width,
 					     &block->height,
 					     INT_MIN,
@@ -4865,11 +4891,17 @@ static void layout_lists(const html_content *content, struct box *box)
 				}
 			}
 			if (marker->object) {
-				marker->width = content_get_width(
-					marker->object);
+				marker->width = FIXTOINT(css_unit_device2css_px(
+					INTTOFIX(content_get_width(
+						marker->object)),
+					content->unit_len_ctx.device_dpi));
 				marker->x = -marker->width;
-				marker->height = content_get_height(
-					marker->object);
+				marker->height = FIXTOINT(
+					css_unit_device2css_px(
+						INTTOFIX(content_get_height(
+							marker->object)),
+						content->unit_len_ctx
+							.device_dpi));
 				marker->y = (line_height(&content->unit_len_ctx,
 							 marker->style) -
 					     marker->height) /
@@ -5940,10 +5972,16 @@ static void layout_calculate_descendant_bboxes(const css_unit_ctx *unit_len_ctx,
 
 	/* Extend it to contain HTML contents if box is replaced */
 	if (box->object && content_get_type(box->object) == CONTENT_HTML) {
-		if (box->descendant_x1 < content_get_width(box->object))
-			box->descendant_x1 = content_get_width(box->object);
-		if (box->descendant_y1 < content_get_height(box->object))
-			box->descendant_y1 = content_get_height(box->object);
+		int obj_width = FIXTOINT(css_unit_device2css_px(
+			INTTOFIX(content_get_width(box->object)),
+			unit_len_ctx->device_dpi));
+		int obj_height = FIXTOINT(css_unit_device2css_px(
+			INTTOFIX(content_get_height(box->object)),
+			unit_len_ctx->device_dpi));
+		if (box->descendant_x1 < obj_width)
+			box->descendant_x1 = obj_width;
+		if (box->descendant_y1 < obj_height)
+			box->descendant_y1 = obj_height;
 	}
 
 	if (box->iframe != NULL) {

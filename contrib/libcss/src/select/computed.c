@@ -768,7 +768,8 @@ uint8_t css_computed_width_px(const css_computed_style *style,
 						     &unit,
 						     &value.value) == CSS_OK) {
 				type = CSS_WIDTH_SET;
-				*px_out = FIXTOINT(value.value);
+				*px_out = FIXTOINT(css_unit_css2device_px(
+					value.value, unit_ctx->device_dpi));
 			} else {
 				type = CSS_WIDTH_AUTO;
 			}

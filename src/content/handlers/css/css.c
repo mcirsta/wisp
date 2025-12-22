@@ -41,8 +41,8 @@
 /* Define to trace import fetches */
 #undef NSCSS_IMPORT_TRACE
 
-/** Screen DPI in fixed point units: defaults to 90, which RISC OS uses */
-css_fixed nscss_screen_dpi = F_90;
+/** Screen DPI in fixed point units: defaults to 96 (standard) */
+css_fixed nscss_screen_dpi = F_96;
 
 struct content_css_data;
 

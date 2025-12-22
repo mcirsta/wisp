@@ -358,6 +358,12 @@ static void html_get_dimensions(html_content *htmlc)
 	htmlc->unit_len_ctx.viewport_height = h;
 	htmlc->unit_len_ctx.device_dpi = device_dpi;
 
+	NSLOG(neosurf,
+	      WARNING,
+	      "DIAG: html_get_dimensions: media.width=%u media.height=%u (CSS px)",
+	      FIXTOINT(w),
+	      FIXTOINT(h));
+
 	/** \todo Change nsoption font sizes to px. */
 	f_size = FDIV(FMUL(F_96, FDIV(INTTOFIX(nsoption_int(font_size)), F_10)),
 		      F_72);

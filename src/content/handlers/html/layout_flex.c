@@ -35,6 +35,7 @@
 
 #include <neosurf/utils/log.h>
 #include <neosurf/utils/utils.h>
+#include <neosurf/utils/corestrings.h>
 
 #include <neosurf/content/handlers/html/box.h>
 #include <neosurf/content/handlers/html/html.h>
@@ -349,6 +350,29 @@ static void layout_flex_ctx__populate_item_data(const struct flex_ctx *ctx,
 	size_t i = 0;
 	bool horizontal = ctx->horizontal;
 
+	/* DIAG: Log flex container info */
+	{
+		const char *flex_cls = "";
+		dom_string *flex_class_attr = NULL;
+		if (flex->node != NULL) {
+			if (dom_element_get_attribute(flex->node,
+						      corestring_dom_class,
+						      &flex_class_attr) ==
+				    DOM_NO_ERR &&
+			    flex_class_attr != NULL) {
+				flex_cls = dom_string_data(flex_class_attr);
+			}
+		}
+		NSLOG(flex,
+		      WARNING,
+		      "DIAG: flex container class='%s' box=%p available_width=%i",
+		      flex_cls,
+		      flex,
+		      available_width);
+		if (flex_class_attr != NULL)
+			dom_string_unref(flex_class_attr);
+	}
+
 	for (struct box *b = flex->children; b != NULL; b = b->next) {
 		struct flex_item_data *item = &ctx->item.data[i++];
 
@@ -369,6 +393,31 @@ static void layout_flex_ctx__populate_item_data(const struct flex_ctx *ctx,
 			b->padding,
 			b->border);
 		b->float_container = NULL;
+
+		/* DIAG: Log flex item info with class name */
+		{
+			const char *item_cls = "";
+			dom_string *item_class_attr = NULL;
+			if (b->node != NULL) {
+				if (dom_element_get_attribute(
+					    b->node,
+					    corestring_dom_class,
+					    &item_class_attr) == DOM_NO_ERR &&
+				    item_class_attr != NULL) {
+					item_cls = dom_string_data(
+						item_class_attr);
+				}
+			}
+			NSLOG(flex,
+			      WARNING,
+			      "DIAG: flex-item class='%s' box=%p width=%i (AUTO=%i)",
+			      item_cls,
+			      b,
+			      b->width,
+			      (b->width == AUTO));
+			if (item_class_attr != NULL)
+				dom_string_unref(item_class_attr);
+		}
 
 		NSLOG(flex,
 		      DEEPDEBUG,
@@ -623,6 +672,18 @@ layout_flex__get_min_max_violations(struct flex_ctx *ctx,
 			target_main_size = 0;
 			item->min_violation = true;
 			NSLOG(flex, DEEPDEBUG, "Violation: less than 0");
+		}
+
+		/* DIAG: Log violations */
+		if (target_main_size != item->target_main_size) {
+			NSLOG(flex,
+			      WARNING,
+			      "DIAG: violation box=%p orig=%d new=%d min_main=%d box_min_width=%d",
+			      item->box,
+			      item->target_main_size,
+			      target_main_size,
+			      item->min_main,
+			      item->box->min_width);
 		}
 
 		total_violation += target_main_size - item->target_main_size;
@@ -936,6 +997,14 @@ static bool layout_flex__place_line_items_main(struct flex_ctx *ctx,
 			b->width = item->target_main_size -
 				   lh__delta_outer_width(b);
 
+			/* DIAG: Log before layout */
+			NSLOG(flex,
+			      WARNING,
+			      "DIAG: before layout_flex_item box=%p target_main=%d b->width=%d",
+			      b,
+			      item->target_main_size,
+			      b->width);
+
 			if (!layout_flex_item(ctx, item, b->width)) {
 				return false;
 			}
@@ -960,6 +1029,14 @@ static bool layout_flex__place_line_items_main(struct flex_ctx *ctx,
 
 		*box_pos_main = main_pos + lh__non_auto_margin(b, main_start) +
 				extra_pre + b->border[main_start].width;
+
+		/* DIAG: Log item final position */
+		NSLOG(flex,
+		      WARNING,
+		      "DIAG: flex item box=%p pos_main=%d size_main=%d",
+		      b,
+		      *box_pos_main,
+		      box_size_main);
 
 		if (!lh__box_is_absolute(b)) {
 			int cross_size;
