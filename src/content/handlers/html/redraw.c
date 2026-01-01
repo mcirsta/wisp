@@ -2612,7 +2612,8 @@ bool html_redraw_box(const html_content *html,
 	/* scrollbars */
 	if (((box->style && box->type != BOX_BR && box->type != BOX_TABLE &&
 	      box->type != BOX_INLINE && box->type != BOX_FLEX &&
-	      box->type != BOX_INLINE_FLEX &&
+	      box->type != BOX_INLINE_FLEX && box->type != BOX_GRID &&
+	      box->type != BOX_INLINE_GRID &&
 	      (box->gadget == NULL || box->gadget->type != GADGET_TEXTAREA) &&
 	      (overflow_x == CSS_OVERFLOW_SCROLL ||
 	       overflow_x == CSS_OVERFLOW_AUTO ||

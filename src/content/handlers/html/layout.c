@@ -1079,9 +1079,13 @@ static void layout_minmax_block(struct box *block,
 		for (child = block->children; child; child = child->next) {
 			switch (child->type) {
 			case BOX_FLEX:
-			case BOX_GRID:
 			case BOX_BLOCK:
 				layout_minmax_block(child, font_func, content);
+				if (child->flags & HAS_HEIGHT)
+					child_has_height = true;
+				break;
+			case BOX_GRID:
+				layout_minmax_grid(child, font_func, content);
 				if (child->flags & HAS_HEIGHT)
 					child_has_height = true;
 				break;
@@ -1282,6 +1286,53 @@ static void layout_minmax_block(struct box *block,
 
 	assert(0 <= block->min_width);
 	assert(block->min_width <= block->max_width);
+}
+
+/**
+ * Calculate minimum and maximum width of any box type
+ *
+ * This is a dispatcher function that routes to the appropriate
+ * minmax function based on the box type.
+ *
+ * \param box       box to calculate min/max width for
+ * \param font_func font functions
+ * \param content   The HTML content being laid out
+ */
+void layout_minmax_box(struct box *box,
+		       const struct gui_layout_table *font_func,
+		       const html_content *content)
+{
+	/* Check if already calculated */
+	if (box->max_width != UNKNOWN_MAX_WIDTH)
+		return;
+
+	switch (box->type) {
+	case BOX_BLOCK:
+	case BOX_INLINE_BLOCK:
+	case BOX_TABLE_CELL:
+	case BOX_FLEX:
+	case BOX_INLINE_FLEX:
+		layout_minmax_block(box, font_func, content);
+		break;
+	case BOX_GRID:
+	case BOX_INLINE_GRID:
+		layout_minmax_grid(box, font_func, content);
+		break;
+	case BOX_TABLE:
+		layout_minmax_table(box, font_func, content);
+		break;
+	case BOX_INLINE_CONTAINER:
+		layout_minmax_inline_container(box, NULL, font_func, content);
+		break;
+	default:
+		NSLOG(layout,
+		      WARNING,
+		      "layout_minmax_box: unhandled box type %d",
+		      box->type);
+		box->min_width = 0;
+		box->max_width = 0;
+		break;
+	}
 }
 
 

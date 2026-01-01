@@ -233,6 +233,11 @@ static bool layout_flex_item(const struct flex_ctx *ctx,
 		success = layout_flex(b, available_width, ctx->content);
 		b->float_container = NULL;
 		break;
+	case BOX_GRID:
+		b->float_container = b->parent;
+		success = layout_grid(b, available_width, ctx->content);
+		b->float_container = NULL;
+		break;
 	default:
 		assert(0 && "Bad flex item back type");
 		success = false;
@@ -375,6 +380,18 @@ static void layout_flex_ctx__populate_item_data(const struct flex_ctx *ctx,
 
 	for (struct box *b = flex->children; b != NULL; b = b->next) {
 		struct flex_item_data *item = &ctx->item.data[i++];
+
+		/* Skip boxes without styles - they shouldn't exist after
+		 * normalization, but add defensive check to prevent crash */
+		if (b->style == NULL) {
+			NSLOG(flex,
+			      ERROR,
+			      "DIAG: flex-item box=%p has NULL style! type=%d, skipping",
+			      b,
+			      b->type);
+			i--; /* Don't increment item index for skipped boxes */
+			continue;
+		}
 
 		b->float_container = b->parent;
 		layout_find_dimensions(

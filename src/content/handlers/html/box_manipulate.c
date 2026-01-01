@@ -29,9 +29,13 @@
 #include <neosurf/utils/errors.h>
 #include "utils/talloc.h"
 #include <neosurf/utils/nsurl.h>
+#include <neosurf/utils/log.h>
+#include <neosurf/utils/corestrings.h>
 #include <neosurf/types.h>
 #include <neosurf/mouse.h>
 #include <desktop/scrollbar.h>
+#include <string.h>
+#include <dom/dom.h>
 
 #include <neosurf/content/handlers/html/private.h>
 #include <neosurf/content/handlers/html/form_internal.h>
@@ -171,6 +175,55 @@ void box_add_child(struct box *parent, struct box *child)
 	assert(parent);
 	assert(child);
 
+#ifdef DEBUG_ADD_CHILD
+	/* Log when flex containers or their children are added */
+	if (parent->type == BOX_FLEX || parent->type == BOX_INLINE_FLEX ||
+	    child->type == BOX_FLEX || child->type == BOX_INLINE_FLEX) {
+		dom_string *class_str = NULL;
+		const char *class_name = "";
+		if (child->node != NULL) {
+			dom_element_get_attribute(child->node,
+						  corestring_dom_class,
+						  &class_str);
+			if (class_str != NULL) {
+				class_name = dom_string_data(class_str);
+			}
+		}
+		NSLOG(netsurf,
+		      INFO,
+		      "box_add_child: FLEX parent=%p type=%d child=%p type=%d class='%s'",
+		      parent,
+		      parent->type,
+		      child,
+		      child->type,
+		      class_name);
+		if (class_str != NULL) {
+			dom_string_unref(class_str);
+		}
+	}
+
+	/* Log any box with "vector" or "menu" in class name */
+	if (child->node != NULL) {
+		dom_string *class_str = NULL;
+		dom_element_get_attribute(child->node,
+					  corestring_dom_class,
+					  &class_str);
+		if (class_str != NULL) {
+			const char *class_name = dom_string_data(class_str);
+			if (strstr(class_name, "vector") != NULL ||
+			    strstr(class_name, "menu") != NULL ||
+			    strstr(class_name, "mw-portlet") != NULL) {
+				NSLOG(netsurf,
+				      INFO,
+				      "box_add_child: TRACE parent=%p child=%p class='%s'",
+				      parent,
+				      child,
+				      class_name);
+			}
+			dom_string_unref(class_str);
+		}
+	}
+#endif
 	if (parent->children != 0) { /* has children already */
 		parent->last->next = child;
 		child->prev = parent->last;

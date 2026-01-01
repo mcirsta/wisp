@@ -63,6 +63,27 @@ bool layout_table(struct box *table,
  */
 bool layout_flex(struct box *flex, int available_width, html_content *content);
 
+/**
+ * Calculate minimum and maximum width of any box type.
+ *
+ * \param box       box to calculate min/max width for
+ * \param font_func font functions
+ * \param content   The HTML content being laid out
+ */
+void layout_minmax_box(struct box *box,
+		       const struct gui_layout_table *font_func,
+		       const html_content *content);
+
+/**
+ * Perform grid layout on a grid container.
+ *
+ * \param grid            grid container box
+ * \param available_width available width in pixels
+ * \param content         html content
+ * \return true on success, false on failure
+ */
+bool layout_grid(struct box *grid, int available_width, html_content *content);
+
 typedef uint8_t (*css_len_func)(const css_computed_style *style,
 				css_fixed *length,
 				css_unit *unit);

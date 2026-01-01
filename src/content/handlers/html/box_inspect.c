@@ -773,6 +773,14 @@ void box_dump(FILE *stream, struct box *box, unsigned int depth, bool style)
 		fprintf(stream, "INLINE_FLEX ");
 		break;
 
+	case BOX_GRID:
+		fprintf(stream, "GRID ");
+		break;
+
+	case BOX_INLINE_GRID:
+		fprintf(stream, "INLINE_GRID ");
+		break;
+
 	default:
 		fprintf(stream, "Unknown box type ");
 	}

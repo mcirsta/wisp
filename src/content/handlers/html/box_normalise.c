@@ -186,6 +186,7 @@ static bool box_normalise_table_row(struct box *row,
 			cell = child;
 			break;
 		case BOX_FLEX:
+		case BOX_GRID:
 		case BOX_BLOCK:
 		case BOX_INLINE_CONTAINER:
 		case BOX_TABLE:
@@ -229,6 +230,7 @@ static bool box_normalise_table_row(struct box *row,
 
 			while (child != NULL &&
 			       (child->type == BOX_FLEX ||
+				child->type == BOX_GRID ||
 				child->type == BOX_BLOCK ||
 				child->type == BOX_INLINE_CONTAINER ||
 				child->type == BOX_TABLE ||
@@ -337,6 +339,7 @@ static bool box_normalise_table_row_group(struct box *row_group,
 				return false;
 			break;
 		case BOX_FLEX:
+		case BOX_GRID:
 		case BOX_BLOCK:
 		case BOX_INLINE_CONTAINER:
 		case BOX_TABLE:
@@ -380,6 +383,7 @@ static bool box_normalise_table_row_group(struct box *row_group,
 
 			while (child != NULL &&
 			       (child->type == BOX_FLEX ||
+				child->type == BOX_GRID ||
 				child->type == BOX_BLOCK ||
 				child->type == BOX_INLINE_CONTAINER ||
 				child->type == BOX_TABLE ||
@@ -695,6 +699,7 @@ box_normalise_table(struct box *table, const struct box *root, html_content *c)
 			}
 			break;
 		case BOX_FLEX:
+		case BOX_GRID:
 		case BOX_BLOCK:
 		case BOX_INLINE_CONTAINER:
 		case BOX_TABLE:
@@ -742,6 +747,7 @@ box_normalise_table(struct box *table, const struct box *root, html_content *c)
 
 			while (child != NULL &&
 			       (child->type == BOX_FLEX ||
+				child->type == BOX_GRID ||
 				child->type == BOX_BLOCK ||
 				child->type == BOX_INLINE_CONTAINER ||
 				child->type == BOX_TABLE ||
@@ -880,6 +886,10 @@ box_normalise_table(struct box *table, const struct box *root, html_content *c)
 	return true;
 }
 
+static bool box_normalise_grid(struct box *grid_container,
+			       const struct box *root,
+			       html_content *c);
+
 static bool box_normalise_flex(struct box *flex_container,
 			       const struct box *root,
 			       html_content *c)
@@ -906,6 +916,13 @@ static bool box_normalise_flex(struct box *flex_container,
 	assert(flex_container->type == BOX_FLEX ||
 	       flex_container->type == BOX_INLINE_FLEX);
 
+	NSLOG(netsurf,
+	      DEBUG,
+	      "box_normalise_flex: ENTER flex_container=%p type=%d children=%p",
+	      flex_container,
+	      flex_container->type,
+	      flex_container->children);
+
 	for (child = flex_container->children; child != NULL;
 	     child = next_child) {
 #ifdef BOX_NORMALISE_DEBUG
@@ -924,6 +941,13 @@ static bool box_normalise_flex(struct box *flex_container,
 			if (box_normalise_flex(child, root, c) == false)
 				return false;
 			break;
+		case BOX_GRID:
+		case BOX_INLINE_GRID:
+			/* Recurse into grid children to normalize nested
+			 * flex/grid */
+			if (box_normalise_grid(child, root, c) == false)
+				return false;
+			break;
 		case BOX_BLOCK:
 			/* ok */
 			if (box_normalise_block(child, root, c) == false)
@@ -931,6 +955,10 @@ static bool box_normalise_flex(struct box *flex_container,
 			break;
 		case BOX_INLINE_CONTAINER:
 			/* insert implied flex item */
+			NSLOG(netsurf,
+			      DEBUG,
+			      "box_normalise_flex: wrapping INLINE_CONTAINER child=%p in implied flex item",
+			      child);
 			assert(flex_container->style != NULL);
 
 			ctx.ctx = c->select_ctx;
@@ -1405,6 +1433,13 @@ bool box_normalise_block(struct box *block,
 
 	ctx.root_style = root->style;
 
+	NSLOG(netsurf,
+	      DEBUG,
+	      "box_normalise_block: ENTER block=%p type=%d children=%p",
+	      block,
+	      block->type,
+	      block->children);
+
 #ifdef BOX_NORMALISE_DEBUG
 	NSLOG(netsurf, INFO, "block %p, block->type %u", block, block->type);
 #endif
@@ -1425,12 +1460,19 @@ bool box_normalise_block(struct box *block,
 
 		switch (child->type) {
 		case BOX_GRID:
+		case BOX_INLINE_GRID:
 			/* ok - treat grid containers similarly to flex */
 			if (box_normalise_grid(child, root, c) == false)
 				return false;
 			break;
 		case BOX_FLEX:
+		case BOX_INLINE_FLEX:
 			/* ok */
+			NSLOG(netsurf,
+			      DEBUG,
+			      "box_normalise_block: calling box_normalise_flex for child=%p type=%d",
+			      child,
+			      child->type);
 			if (box_normalise_flex(child, root, c) == false)
 				return false;
 			break;
@@ -1450,7 +1492,7 @@ bool box_normalise_block(struct box *block,
 			break;
 		case BOX_INLINE:
 		case BOX_INLINE_END:
-		case BOX_INLINE_FLEX:
+
 		case BOX_INLINE_BLOCK:
 		case BOX_FLOAT_LEFT:
 		case BOX_FLOAT_RIGHT:

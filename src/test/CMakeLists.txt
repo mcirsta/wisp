@@ -215,6 +215,8 @@ add_neosurf_test(grid_layout_test
   ${CMAKE_SOURCE_DIR}/src/test/log.c
   ${CMAKE_SOURCE_DIR}/src/test/grid_layout_test.c
 )
+# Define TESTING so layout_grid.c uses test stubs instead of calling layout_minmax_box
+target_compile_definitions(grid_layout_test PRIVATE TESTING)
 
 add_neosurf_test(grid_construct_test
   ${CMAKE_SOURCE_DIR}/src/content/handlers/html/box_normalise.c
