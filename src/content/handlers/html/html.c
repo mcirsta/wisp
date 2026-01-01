@@ -371,7 +371,7 @@ static void html_get_dimensions(html_content *htmlc)
 	htmlc->unit_len_ctx.device_dpi = device_dpi;
 
 	NSLOG(neosurf,
-	      WARNING,
+	      DEEPDEBUG,
 	      "DIAG: html_get_dimensions: media.width=%u media.height=%u (CSS px)",
 	      FIXTOINT(w),
 	      FIXTOINT(h));

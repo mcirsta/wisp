@@ -416,9 +416,11 @@ qjs_init_console(JSContext *ctx)
         JS_NewClassID(rt, &js_console_class_id);
     }}
     
-    /* Register the class */
-    if (JS_NewClass(rt, js_console_class_id, &js_console_class) < 0) {{
-        return -1;
+    /* Register the class (only if not already registered in this runtime) */
+    if (!JS_IsRegisteredClass(rt, js_console_class_id)) {{
+        if (JS_NewClass(rt, js_console_class_id, &js_console_class) < 0) {{
+            return -1;
+        }}
     }}
     
     /* Create prototype */
@@ -550,8 +552,10 @@ qjs_init_{lower_name}(JSContext *ctx)
         JS_NewClassID(rt, &js_{lower_name}_class_id);
     }}
     
-    if (JS_NewClass(rt, js_{lower_name}_class_id, &js_{lower_name}_class) < 0) {{
-        return -1;
+    if (!JS_IsRegisteredClass(rt, js_{lower_name}_class_id)) {{
+        if (JS_NewClass(rt, js_{lower_name}_class_id, &js_{lower_name}_class) < 0) {{
+            return -1;
+        }}
     }}
     
     JSValue proto = JS_NewObject(ctx);
@@ -568,6 +572,9 @@ qjs_init_{lower_name}(JSContext *ctx)
                                    sizeof(js_{lower_name}_proto_funcs) / sizeof(js_{lower_name}_proto_funcs[0]));
         JS_SetPropertyStr(ctx, global_obj, "window", JS_DupValue(ctx, global_obj));
         JS_SetPropertyStr(ctx, global_obj, "self", JS_DupValue(ctx, global_obj));
+        JS_SetPropertyStr(ctx, global_obj, "parent", JS_DupValue(ctx, global_obj));
+        JS_SetPropertyStr(ctx, global_obj, "top", JS_DupValue(ctx, global_obj));
+        JS_SetPropertyStr(ctx, global_obj, "frames", JS_DupValue(ctx, global_obj));
         JS_FreeValue(ctx, global_obj);
     }}
     

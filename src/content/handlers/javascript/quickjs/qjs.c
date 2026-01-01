@@ -67,6 +67,26 @@ struct jsthread {
 };
 
 
+/**
+ * Get the window private data from a JS context.
+ *
+ * This allows other QuickJS binding modules to access the browser_window
+ * pointer stored in the jsthread.
+ *
+ * \param ctx The QuickJS context
+ * \return The win_priv pointer (struct browser_window *), or NULL if
+ * unavailable
+ */
+void *qjs_get_window_priv(JSContext *ctx)
+{
+	struct jsthread *t = JS_GetContextOpaque(ctx);
+	if (t == NULL) {
+		return NULL;
+	}
+	return t->win_priv;
+}
+
+
 /* exported interface documented in js.h */
 void js_initialise(void)
 {
@@ -210,6 +230,73 @@ js_newthread(jsheap *heap, void *win_priv, void *doc_priv, jsthread **thread)
 		NSLOG(neosurf,
 		      ERROR,
 		      "Failed to initialize QuickJS XMLHttpRequest");
+	}
+
+	/* Add DOM constructor stubs that third-party JS commonly checks */
+	{
+		JSValue global_obj = JS_GetGlobalObject(t->ctx);
+		JSValue proto;
+
+		/* HTMLElement constructor with prototype */
+		JSValue html_element = JS_NewObject(t->ctx);
+		proto = JS_NewObject(t->ctx);
+		JS_SetPropertyStr(t->ctx, html_element, "prototype", proto);
+		JS_SetPropertyStr(
+			t->ctx, global_obj, "HTMLElement", html_element);
+
+		/* Element constructor */
+		JSValue element = JS_NewObject(t->ctx);
+		proto = JS_NewObject(t->ctx);
+		JS_SetPropertyStr(t->ctx, element, "prototype", proto);
+		JS_SetPropertyStr(t->ctx, global_obj, "Element", element);
+
+		/* Node constructor */
+		JSValue node = JS_NewObject(t->ctx);
+		proto = JS_NewObject(t->ctx);
+		JS_SetPropertyStr(t->ctx, node, "prototype", proto);
+		/* Node type constants */
+		JS_SetPropertyStr(
+			t->ctx, node, "ELEMENT_NODE", JS_NewInt32(t->ctx, 1));
+		JS_SetPropertyStr(
+			t->ctx, node, "TEXT_NODE", JS_NewInt32(t->ctx, 3));
+		JS_SetPropertyStr(
+			t->ctx, node, "DOCUMENT_NODE", JS_NewInt32(t->ctx, 9));
+		JS_SetPropertyStr(t->ctx, global_obj, "Node", node);
+
+		/* Text constructor */
+		JSValue text = JS_NewObject(t->ctx);
+		proto = JS_NewObject(t->ctx);
+		JS_SetPropertyStr(t->ctx, text, "prototype", proto);
+		JS_SetPropertyStr(t->ctx, global_obj, "Text", text);
+
+		/* DocumentFragment constructor */
+		JSValue doc_frag = JS_NewObject(t->ctx);
+		proto = JS_NewObject(t->ctx);
+		JS_SetPropertyStr(t->ctx, doc_frag, "prototype", proto);
+		JS_SetPropertyStr(
+			t->ctx, global_obj, "DocumentFragment", doc_frag);
+
+		/* HTMLDocument constructor */
+		JSValue html_doc = JS_NewObject(t->ctx);
+		proto = JS_NewObject(t->ctx);
+		JS_SetPropertyStr(t->ctx, html_doc, "prototype", proto);
+		JS_SetPropertyStr(t->ctx, global_obj, "HTMLDocument", html_doc);
+
+		/* Event constructor */
+		JSValue event_ctor = JS_NewObject(t->ctx);
+		proto = JS_NewObject(t->ctx);
+		JS_SetPropertyStr(t->ctx, event_ctor, "prototype", proto);
+		JS_SetPropertyStr(t->ctx, global_obj, "Event", event_ctor);
+
+		/* CustomEvent constructor */
+		JSValue custom_event = JS_NewObject(t->ctx);
+		proto = JS_NewObject(t->ctx);
+		JS_SetPropertyStr(t->ctx, custom_event, "prototype", proto);
+		JS_SetPropertyStr(
+			t->ctx, global_obj, "CustomEvent", custom_event);
+
+		JS_FreeValue(t->ctx, global_obj);
+		NSLOG(neosurf, DEBUG, "DOM constructor stubs initialized");
 	}
 
 	NSLOG(neosurf, DEBUG, "Created QuickJS thread %p in heap %p", t, heap);

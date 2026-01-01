@@ -242,7 +242,6 @@ add_neosurf_test(test_quickjs
   ${CMAKE_SOURCE_DIR}/src/content/handlers/javascript/quickjs/xhr.c
   ${CMAKE_BINARY_DIR}/quickjs/console.c
   ${CMAKE_BINARY_DIR}/quickjs/window.c
-  ${CMAKE_SOURCE_DIR}/src/test/log.c
   ${CMAKE_SOURCE_DIR}/src/test/test_quickjs.c
 )
 add_dependencies(test_quickjs quickjs_bindings)
@@ -251,7 +250,7 @@ target_include_directories(test_quickjs PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libnsutils/include
   ${CMAKE_BINARY_DIR}/quickjs
 )
-target_link_libraries(test_quickjs PRIVATE qjs nsutils)
+target_link_libraries(test_quickjs PRIVATE qjs nsutils neosurf)
 
 # ============================================================================
 # Font-face Tests (simple test linked to neosurf lib)

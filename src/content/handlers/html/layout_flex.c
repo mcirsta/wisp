@@ -369,7 +369,7 @@ static void layout_flex_ctx__populate_item_data(const struct flex_ctx *ctx,
 			}
 		}
 		NSLOG(flex,
-		      WARNING,
+		      DEEPDEBUG,
 		      "DIAG: flex container class='%s' box=%p available_width=%i",
 		      flex_cls,
 		      flex,
@@ -426,7 +426,7 @@ static void layout_flex_ctx__populate_item_data(const struct flex_ctx *ctx,
 				}
 			}
 			NSLOG(flex,
-			      WARNING,
+			      DEEPDEBUG,
 			      "DIAG: flex-item class='%s' box=%p width=%i (AUTO=%i)",
 			      item_cls,
 			      b,
@@ -694,7 +694,7 @@ layout_flex__get_min_max_violations(struct flex_ctx *ctx,
 		/* DIAG: Log violations */
 		if (target_main_size != item->target_main_size) {
 			NSLOG(flex,
-			      WARNING,
+			      DEEPDEBUG,
 			      "DIAG: violation box=%p orig=%d new=%d min_main=%d box_min_width=%d",
 			      item->box,
 			      item->target_main_size,
@@ -1016,7 +1016,7 @@ static bool layout_flex__place_line_items_main(struct flex_ctx *ctx,
 
 			/* DIAG: Log before layout */
 			NSLOG(flex,
-			      WARNING,
+			      DEEPDEBUG,
 			      "DIAG: before layout_flex_item box=%p target_main=%d b->width=%d",
 			      b,
 			      item->target_main_size,
@@ -1049,7 +1049,7 @@ static bool layout_flex__place_line_items_main(struct flex_ctx *ctx,
 
 		/* DIAG: Log item final position */
 		NSLOG(flex,
-		      WARNING,
+		      DEEPDEBUG,
 		      "DIAG: flex item box=%p pos_main=%d size_main=%d",
 		      b,
 		      *box_pos_main,

@@ -636,14 +636,31 @@ START_TEST(test_quickjs_location)
 			 "test_location2");
 	ck_assert(result == true);
 
-	/* Test replace/reload stubs */
-	const char *code3 =
-		"typeof location.replace === 'function' && typeof location.reload === 'function'";
+	/* Test replace/reload/assign methods */
+	const char *code3 = "typeof location.replace === 'function' && "
+			    "typeof location.reload === 'function' && "
+			    "typeof location.assign === 'function'";
 	result = js_exec(thread,
 			 (const uint8_t *)code3,
 			 strlen(code3),
 			 "test_location3");
 	ck_assert(result == true);
+
+	/* Test URL properties - should all be strings */
+	const char *code4 = "typeof location.protocol === 'string' && "
+			    "typeof location.host === 'string' && "
+			    "typeof location.hostname === 'string' && "
+			    "typeof location.port === 'string' && "
+			    "typeof location.pathname === 'string' && "
+			    "typeof location.search === 'string' && "
+			    "typeof location.hash === 'string' && "
+			    "typeof location.origin === 'string'";
+	result = js_exec(thread,
+			 (const uint8_t *)code4,
+			 strlen(code4),
+			 "test_location_url_props");
+	ck_assert(result == true);
+
 
 	js_closethread(thread);
 	js_destroythread(thread);
@@ -714,6 +731,15 @@ START_TEST(test_quickjs_document)
 	const char *code6 = "document.cookie === ''";
 	result = js_exec(
 		thread, (const uint8_t *)code6, strlen(code6), "test_cookie");
+	ck_assert(result == true);
+
+	/* Test element.style property exists */
+	const char *code7 = "var el = document.createElement('div'); "
+			    "typeof el.style === 'object'";
+	result = js_exec(thread,
+			 (const uint8_t *)code7,
+			 strlen(code7),
+			 "test_element_style");
 	ck_assert(result == true);
 
 	js_closethread(thread);
