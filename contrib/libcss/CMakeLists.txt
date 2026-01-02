@@ -219,6 +219,10 @@ add_library(css SHARED
 	src/select/properties/grid_template_rows.c
 	src/select/properties/grid_auto_flow.c
 	src/select/properties/row_gap.c
+	src/select/properties/grid_column_start.c
+	src/select/properties/grid_column_end.c
+	src/select/properties/grid_row_start.c
+	src/select/properties/grid_row_end.c
 	src/select/arena.c
 	src/select/calc.c
 	src/select/computed.c

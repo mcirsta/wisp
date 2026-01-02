@@ -335,6 +335,12 @@ css_error css_stylesheet_append_data(css_stylesheet *sheet,
 				     const uint8_t *data,
 				     size_t len)
 {
+	css_error error;
+
+	fprintf(stderr,
+		"DEBUG: css_stylesheet_append_data called with %zu bytes\n",
+		len);
+
 	if (sheet == NULL || data == NULL)
 		return CSS_BADPARM;
 

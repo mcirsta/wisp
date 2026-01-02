@@ -225,4 +225,35 @@ css__copy_computed_content_item_array(bool ref,
 	return CSS_OK;
 }
 
+/** Copy zero-value terminated array of css_computed_grid_track items. */
+static inline css_error
+css__copy_grid_track_array(const css_computed_grid_track *orig,
+			   css_computed_grid_track **copy_out)
+{
+	size_t count = 0;
+	css_computed_grid_track *copy = NULL;
+
+	if (orig != NULL) {
+		/* Count tracks - terminated by a track with value=0 and unit=0
+		 */
+		for (const css_computed_grid_track *t = orig;
+		     t->value != 0 || t->unit != 0;
+		     t++) {
+			count++;
+		}
+
+		/* Allocate space for tracks + terminator */
+		copy = malloc((count + 1) * sizeof(*copy));
+		if (copy == NULL) {
+			return CSS_NOMEM;
+		}
+
+		/* Copy all tracks including terminator */
+		memcpy(copy, orig, (count + 1) * sizeof(*copy));
+	}
+
+	*copy_out = copy;
+	return CSS_OK;
+}
+
 #endif

@@ -627,6 +627,18 @@ css_error css__parse_grid_template_rows(css_language *c,
 					const parserutils_vector *vector,
 					int32_t *ctx,
 					css_style *result);
+css_error
+css__parse_grid_template_columns_internal(css_language *c,
+					  const parserutils_vector *vector,
+					  int32_t *ctx,
+					  css_style *result,
+					  enum css_properties_e id);
+css_error
+css__parse_grid_template_rows_internal(css_language *c,
+				       const parserutils_vector *vector,
+				       int32_t *ctx,
+				       css_style *result,
+				       enum css_properties_e id);
 css_error css__parse_grid_auto_flow(css_language *c,
 				    const parserutils_vector *vector,
 				    int32_t *ctx,
@@ -635,6 +647,22 @@ css_error css__parse_row_gap(css_language *c,
 			     const parserutils_vector *vector,
 			     int32_t *ctx,
 			     css_style *result);
+css_error css__parse_grid_column_start(css_language *c,
+				       const parserutils_vector *vector,
+				       int32_t *ctx,
+				       css_style *result);
+css_error css__parse_grid_column_end(css_language *c,
+				     const parserutils_vector *vector,
+				     int32_t *ctx,
+				     css_style *result);
+css_error css__parse_grid_row_start(css_language *c,
+				    const parserutils_vector *vector,
+				    int32_t *ctx,
+				    css_style *result);
+css_error css__parse_grid_row_end(css_language *c,
+				  const parserutils_vector *vector,
+				  int32_t *ctx,
+				  css_style *result);
 
 /** Mapping from property bytecode index to bytecode unit class mask. */
 extern const uint32_t property_unit_mask[CSS_N_PROPERTIES];

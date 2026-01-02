@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Grid minmax() test</title>
+<style>
+.test-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 72em) min-content;
+    gap: 10px;
+}
+.col1 { background: lightblue; }
+.col2 { background: lightgreen; }
+</style>
+</head>
+<body>
+<h1>Grid minmax() Test</h1>
+<div class="test-grid">
+    <div class="col1">Column 1: minmax(0, 72em)</div>
+    <div class="col2">Column 2: min-content</div>
+</div>
+</body>
+</html>

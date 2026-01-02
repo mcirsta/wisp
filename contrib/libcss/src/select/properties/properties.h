@@ -160,6 +160,10 @@ PROPERTY_FUNCS(grid_template_columns);
 PROPERTY_FUNCS(grid_template_rows);
 PROPERTY_FUNCS(grid_auto_flow);
 PROPERTY_FUNCS(row_gap);
+PROPERTY_FUNCS(grid_column_start);
+PROPERTY_FUNCS(grid_column_end);
+PROPERTY_FUNCS(grid_row_start);
+PROPERTY_FUNCS(grid_row_end);
 
 #undef PROPERTY_FUNCS
 

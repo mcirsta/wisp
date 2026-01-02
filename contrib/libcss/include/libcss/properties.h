@@ -146,6 +146,12 @@ enum css_properties_e {
 	CSS_PROP_GRID_AUTO_FLOW = 0x080,
 	CSS_PROP_ROW_GAP = 0x081,
 
+	/* CSS Grid item placement properties */
+	CSS_PROP_GRID_COLUMN_START = 0x082,
+	CSS_PROP_GRID_COLUMN_END = 0x083,
+	CSS_PROP_GRID_ROW_START = 0x084,
+	CSS_PROP_GRID_ROW_END = 0x085,
+
 	CSS_N_PROPERTIES
 };
 
@@ -898,6 +904,12 @@ enum css_grid_template_e {
 	CSS_GRID_TEMPLATE_INHERIT = 0x0,
 	CSS_GRID_TEMPLATE_NONE = 0x1,
 	CSS_GRID_TEMPLATE_SET = 0x2
+};
+
+enum css_grid_line_e {
+	CSS_GRID_LINE_INHERIT = 0x0,
+	CSS_GRID_LINE_AUTO = 0x1,
+	CSS_GRID_LINE_SET = 0x2
 };
 
 enum css_z_index_e {

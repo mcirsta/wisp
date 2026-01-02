@@ -105,6 +105,11 @@ typedef enum css_unit {
 
 	CSS_UNIT_FR = 0x17, /* CSS Grid fraction unit */
 
+	/* CSS Grid track sizing keywords */
+	CSS_UNIT_MIN_CONTENT = 0x18, /* min-content intrinsic size */
+	CSS_UNIT_MAX_CONTENT = 0x19, /* max-content intrinsic size */
+	CSS_UNIT_FIT_CONTENT = 0x1a, /* fit-content() function */
+
 	CSS_UNIT_PCT = 0x1b, /* Percentage */
 
 	CSS_UNIT_DEG = 0x1c,
@@ -117,7 +122,14 @@ typedef enum css_unit {
 	CSS_UNIT_HZ = 0x21,
 	CSS_UNIT_KHZ = 0x22,
 
-	CSS_UNIT_CALC = 0x23 /**< Un-resolved calc() */
+	CSS_UNIT_CALC = 0x23, /**< Un-resolved calc() */
+
+	/* CSS Grid minmax() marker - indicates this track uses minmax()
+	 * When this unit is used, the value contains both min and max:
+	 * - High 16 bits: min unit
+	 * - Low 16 bits: max unit
+	 * Followed by two values: min value, then max value */
+	CSS_UNIT_MINMAX = 0x24
 } css_unit;
 
 /**

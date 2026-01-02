@@ -168,7 +168,12 @@ const css_prop_handler property_handlers[LAST_PROP + 1 - FIRST_PROP] = {
 	css__parse_row_gap, /* grid-row-gap -> row-gap */
 	css__parse_column_gap, /* grid-column-gap -> column-gap */
 	/* Place shorthands */
-	css__parse_place_content};
+	css__parse_place_content,
+	/* Grid item placement properties */
+	css__parse_grid_column_start,
+	css__parse_grid_column_end,
+	css__parse_grid_row_start,
+	css__parse_grid_row_end};
 
 /** Mapping from property bytecode index to bytecode unit class mask. */
 const uint32_t property_unit_mask[CSS_N_PROPERTIES] = {

@@ -236,8 +236,13 @@ enum {
 	GRID_COLUMN_GAP,
 	/* Place shorthands */
 	PLACE_CONTENT,
+	/* Grid item placement properties */
+	GRID_COLUMN_START,
+	GRID_COLUMN_END,
+	GRID_ROW_START,
+	GRID_ROW_END,
 
-	LAST_PROP = PLACE_CONTENT,
+	LAST_PROP = GRID_ROW_END,
 
 	/* Other keywords */
 	INHERIT,
@@ -507,6 +512,11 @@ enum {
 	DENSE,
 	ROW_DENSE,
 	COLUMN_DENSE,
+	/* CSS Grid track sizing functions and keywords */
+	MINMAX,
+	MIN_CONTENT,
+	MAX_CONTENT,
+	FIT_CONTENT,
 	/* Named colours */
 	FIRST_COLOUR,
 

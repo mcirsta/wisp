@@ -172,7 +172,12 @@ style = {
         'Encode grid tracks as an array of track items, terminated with '
         'a zero-value entry.'),
     ('grid_auto_flow', 3),
-    ('row_gap', 2, 'length', 'CSS_ROW_GAP_SET', 'CSS_ROW_GAP_NORMAL')
+    ('row_gap', 2, 'length', 'CSS_ROW_GAP_SET', 'CSS_ROW_GAP_NORMAL'),
+    # CSS Grid item placement properties
+    ('grid_column_start', 2, 'integer', 'CSS_GRID_LINE_SET', 'CSS_GRID_LINE_AUTO'),
+    ('grid_column_end', 2, 'integer', 'CSS_GRID_LINE_SET', 'CSS_GRID_LINE_AUTO'),
+    ('grid_row_start', 2, 'integer', 'CSS_GRID_LINE_SET', 'CSS_GRID_LINE_AUTO'),
+    ('grid_row_end', 2, 'integer', 'CSS_GRID_LINE_SET', 'CSS_GRID_LINE_AUTO')
 }
 
 groups = [

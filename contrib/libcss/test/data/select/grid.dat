@@ -1,9 +1,8 @@
 #tree
 | div*
 #ua
-div { width: calc(10% + 16px); }
+div { grid-template-columns: minmax(10px, 1fr); }
 #user
-div { width: 10px; }
 #errors
 #expected
 align-content: stretch
@@ -64,6 +63,7 @@ font-size: 16px
 font-style: normal
 font-variant: normal
 font-weight: normal
+grid-template-columns: minmax(10px, 1fr)
 grid-column-end: auto
 grid-column-start: auto
 grid-row-end: auto
@@ -109,7 +109,7 @@ unicode-bidi: normal
 vertical-align: baseline
 visibility: visible
 white-space: normal
-width: 10px
+width: auto
 word-spacing: normal
 writing-mode: horizontal-tb
 z-index: auto

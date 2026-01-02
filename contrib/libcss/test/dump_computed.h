@@ -78,7 +78,29 @@ static size_t dump_css_number(css_fixed val, char *ptr, size_t len)
 
 static size_t dump_css_unit(css_fixed val, css_unit unit, char *ptr, size_t len)
 {
-	size_t ret = dump_css_number(val, ptr, len);
+	size_t ret = 0;
+
+	/* Keyword units don't have a numeric value - handle them first */
+	if (unit == CSS_UNIT_MIN_CONTENT || unit == CSS_UNIT_MAX_CONTENT ||
+	    unit == CSS_UNIT_FIT_CONTENT) {
+		switch (unit) {
+		case CSS_UNIT_MIN_CONTENT:
+			ret = snprintf(ptr, len, "min-content");
+			break;
+		case CSS_UNIT_MAX_CONTENT:
+			ret = snprintf(ptr, len, "max-content");
+			break;
+		case CSS_UNIT_FIT_CONTENT:
+			ret = snprintf(ptr, len, "fit-content");
+			break;
+		default:
+			break;
+		}
+		return ret;
+	}
+
+	/* Numeric units: print value first */
+	ret = dump_css_number(val, ptr, len);
 
 	switch (unit) {
 	case CSS_UNIT_PX:
@@ -159,6 +181,9 @@ static size_t dump_css_unit(css_fixed val, css_unit unit, char *ptr, size_t len)
 	case CSS_UNIT_GRAD:
 		ret += snprintf(ptr + ret, len - ret, "grad");
 		break;
+	case CSS_UNIT_FR:
+		ret += snprintf(ptr + ret, len - ret, "fr");
+		break;
 	case CSS_UNIT_RAD:
 		ret += snprintf(ptr + ret, len - ret, "rad");
 		break;
@@ -176,6 +201,15 @@ static size_t dump_css_unit(css_fixed val, css_unit unit, char *ptr, size_t len)
 		break;
 	case CSS_UNIT_CALC:
 		ret += snprintf(ptr + ret, len - ret, "calc()");
+		break;
+	case CSS_UNIT_MIN_CONTENT:
+		ret += snprintf(ptr + ret, len - ret, "min-content");
+		break;
+	case CSS_UNIT_MAX_CONTENT:
+		ret += snprintf(ptr + ret, len - ret, "max-content");
+		break;
+	case CSS_UNIT_FIT_CONTENT:
+		ret += snprintf(ptr + ret, len - ret, "fit-content");
 		break;
 	}
 
@@ -214,6 +248,9 @@ static void dump_computed_style(const css_computed_style *style,
 #ifdef USE_DEVICE
 	int pixels = 0;
 #endif
+	css_computed_grid_track *tracks = NULL;
+	int32_t n_tracks = 0;
+
 
 	(void)unit_ctx; /* Avoid unused argument warnings in select.c case */
 
@@ -2046,6 +2083,124 @@ static void dump_computed_style(const css_computed_style *style,
 	ptr += wrote;
 	*len -= wrote;
 
+	/* grid-template-columns */
+	val = css_computed_grid_template_columns(style, &n_tracks, &tracks);
+	if (val == CSS_GRID_TEMPLATE_SET && n_tracks > 0) {
+		wrote = snprintf(ptr, *len, "grid-template-columns:");
+		ptr += wrote;
+		*len -= wrote;
+
+		for (int i = 0; i < n_tracks; i++) {
+			wrote = snprintf(ptr, *len, " ");
+			ptr += wrote;
+			*len -= wrote;
+
+			if (tracks[i].unit == CSS_UNIT_MINMAX) {
+				wrote = snprintf(ptr, *len, "minmax(");
+				ptr += wrote;
+				*len -= wrote;
+
+				wrote = dump_css_unit(tracks[i].value,
+						      tracks[i].min_unit,
+						      ptr,
+						      *len);
+				ptr += wrote;
+				*len -= wrote;
+
+				wrote = snprintf(ptr, *len, ", ");
+				ptr += wrote;
+				*len -= wrote;
+
+				wrote = dump_css_unit(tracks[i].max_value,
+						      tracks[i].max_unit,
+						      ptr,
+						      *len);
+				ptr += wrote;
+				*len -= wrote;
+
+				wrote = snprintf(ptr, *len, ")");
+				ptr += wrote;
+				*len -= wrote;
+			} else {
+				wrote = dump_css_unit(tracks[i].value,
+						      tracks[i].unit,
+						      ptr,
+						      *len);
+				ptr += wrote;
+				*len -= wrote;
+			}
+		}
+		wrote = snprintf(ptr, *len, "\n");
+	} else {
+		wrote = 0;
+	}
+	ptr += wrote;
+	*len -= wrote;
+
+	/* grid-column-end */
+	val = css_computed_grid_column_end(style, &integer);
+	switch (val) {
+	case CSS_GRID_LINE_AUTO:
+		wrote = snprintf(ptr, *len, "grid-column-end: auto\n");
+		break;
+	case CSS_GRID_LINE_SET:
+		wrote = snprintf(ptr, *len, "grid-column-end: %d\n", integer);
+		break;
+	default:
+		wrote = 0;
+		break;
+	}
+	ptr += wrote;
+	*len -= wrote;
+
+	/* grid-column-start */
+	val = css_computed_grid_column_start(style, &integer);
+	switch (val) {
+	case CSS_GRID_LINE_AUTO:
+		wrote = snprintf(ptr, *len, "grid-column-start: auto\n");
+		break;
+	case CSS_GRID_LINE_SET:
+		wrote = snprintf(ptr, *len, "grid-column-start: %d\n", integer);
+		break;
+	default:
+		wrote = 0;
+		break;
+	}
+	ptr += wrote;
+	*len -= wrote;
+
+	/* grid-row-end */
+	val = css_computed_grid_row_end(style, &integer);
+	switch (val) {
+	case CSS_GRID_LINE_AUTO:
+		wrote = snprintf(ptr, *len, "grid-row-end: auto\n");
+		break;
+	case CSS_GRID_LINE_SET:
+		wrote = snprintf(ptr, *len, "grid-row-end: %d\n", integer);
+		break;
+	default:
+		wrote = 0;
+		break;
+	}
+	ptr += wrote;
+	*len -= wrote;
+
+	/* grid-row-start */
+	val = css_computed_grid_row_start(style, &integer);
+	switch (val) {
+	case CSS_GRID_LINE_AUTO:
+		wrote = snprintf(ptr, *len, "grid-row-start: auto\n");
+		break;
+	case CSS_GRID_LINE_SET:
+		wrote = snprintf(ptr, *len, "grid-row-start: %d\n", integer);
+		break;
+	default:
+		wrote = 0;
+		break;
+	}
+	ptr += wrote;
+	*len -= wrote;
+
 	/* height */
 	val = css_computed_height(style, &len1, &unit1);
 	switch (val) {
@@ -3284,6 +3439,7 @@ static void dump_computed_style(const css_computed_style *style,
 	}
 	ptr += wrote;
 	*len -= wrote;
+
 
 	/* z-index */
 	val = css_computed_z_index(style, &integer);

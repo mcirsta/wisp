@@ -244,6 +244,11 @@ const stringmap_entry stringmap[LAST_KNOWN] = {
 	SMAP("grid-column-gap"),
 	/* Place shorthands */
 	SMAP("place-content"),
+	/* Grid item placement properties */
+	SMAP("grid-column-start"),
+	SMAP("grid-column-end"),
+	SMAP("grid-row-start"),
+	SMAP("grid-row-end"),
 
 	SMAP("inherit"),
 	SMAP("unset"),
@@ -512,6 +517,11 @@ const stringmap_entry stringmap[LAST_KNOWN] = {
 	SMAP("dense"),
 	SMAP("row dense"),
 	SMAP("column dense"),
+	/* CSS Grid track sizing functions and keywords */
+	SMAP("minmax"),
+	SMAP("min-content"),
+	SMAP("max-content"),
+	SMAP("fit-content"),
 
 	/* Named colours */
 	SMAP("aliceblue"),

@@ -1,0 +1,9 @@
+#data
+div {
+	color: red;
+}
+
+#errors
+
+#expected
+color: #ff000000

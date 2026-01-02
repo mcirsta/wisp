@@ -21,8 +21,8 @@
 #include "utils/parserutilserror.h"
 #include "utils/utils.h"
 
-#undef DEBUG_STACK
-#undef DEBUG_EVENTS
+#define DEBUG_STACK
+#define DEBUG_EVENTS
 
 #ifndef NDEBUG
 #include <stdio.h>
@@ -320,8 +320,11 @@ css__parser_parse_chunk(css_parser *parser, const uint8_t *data, size_t len)
 		if (state == NULL)
 			break;
 
+		fprintf(stderr, "DEBUG: parser state %d\n", state->state);
+
 		error = parseFuncs[state->state](parser);
 	} while (error == CSS_OK);
+	;
 
 	return error;
 }
@@ -1560,6 +1563,11 @@ css_error parseDeclaration(css_parser *parser)
 
 			return transitionNoRet(parser, to);
 		}
+
+		fprintf(stderr,
+			"DEBUG: parseDeclaration '%.*s'\n",
+			(int)lwc_string_length(token->idata),
+			lwc_string_data(token->idata));
 
 		state->substate = WS;
 		/* Fall through */

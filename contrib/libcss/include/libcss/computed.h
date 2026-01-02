@@ -30,10 +30,24 @@ typedef struct css_computed_counter {
 
 /**
  * Grid track size for grid-template-columns/rows
+ *
+ * For simple tracks (px, fr, %, min-content, max-content):
+ *   - unit != CSS_UNIT_MINMAX
+ *   - value and unit contain the track size
+ *
+ * For minmax() tracks:
+ *   - unit == CSS_UNIT_MINMAX
+ *   - value and min_unit contain the minimum constraint
+ *   - max_value and max_unit contain the maximum constraint
  */
 typedef struct css_computed_grid_track {
-	css_fixed value; /**< Track size value */
-	css_unit unit; /**< CSS_UNIT_FR, CSS_UNIT_PX, CSS_UNIT_PCT, etc. */
+	css_fixed value; /**< Track size value (or min value for minmax) */
+	css_unit unit; /**< CSS_UNIT_FR, CSS_UNIT_PX, CSS_UNIT_MINMAX, etc. */
+
+	/* For minmax() tracks only (when unit == CSS_UNIT_MINMAX) */
+	css_unit min_unit; /**< Unit for minimum constraint */
+	css_fixed max_value; /**< Maximum constraint value */
+	css_unit max_unit; /**< Unit for maximum constraint */
 } css_computed_grid_track;
 
 typedef struct css_computed_clip_rect {
@@ -459,6 +473,18 @@ uint8_t css_computed_grid_template_columns(const css_computed_style *style,
 uint8_t css_computed_grid_template_rows(const css_computed_style *style,
 					int32_t *n_tracks,
 					css_computed_grid_track **tracks);
+
+uint8_t css_computed_grid_column_start(const css_computed_style *style,
+				       int32_t *integer);
+
+uint8_t
+css_computed_grid_column_end(const css_computed_style *style, int32_t *integer);
+
+uint8_t
+css_computed_grid_row_start(const css_computed_style *style, int32_t *integer);
+
+uint8_t
+css_computed_grid_row_end(const css_computed_style *style, int32_t *integer);
 
 #ifdef __cplusplus
 }

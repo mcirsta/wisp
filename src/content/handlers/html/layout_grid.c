@@ -57,12 +57,61 @@ static int layout_grid_get_column_count(struct box *grid)
 		grid_template_type = css_computed_grid_template_columns(
 			grid->style, &n_tracks, &tracks);
 
+		NSLOG(layout,
+		      INFO,
+		      "grid_get_column_count: type=%d, n_tracks=%d, tracks=%p",
+		      grid_template_type,
+		      n_tracks,
+		      tracks);
+
 		if (grid_template_type == CSS_GRID_TEMPLATE_SET &&
 		    n_tracks > 0) {
 			NSLOG(layout,
-			      DEBUG,
+			      INFO,
 			      "CSS grid-template-columns: %d tracks",
 			      n_tracks);
+			/* Log each track for debugging */
+			for (int32_t i = 0; i < n_tracks; i++) {
+				const char *unit_str = "unknown";
+				switch (tracks[i].unit) {
+				case CSS_UNIT_PX:
+					unit_str = "px";
+					break;
+				case CSS_UNIT_EM:
+					unit_str = "em";
+					break;
+				case CSS_UNIT_PCT:
+					unit_str = "%";
+					break;
+				case CSS_UNIT_FR:
+					unit_str = "fr";
+					break;
+				case CSS_UNIT_MIN_CONTENT:
+					unit_str = "min-content";
+					break;
+				case CSS_UNIT_MAX_CONTENT:
+					unit_str = "max-content";
+					break;
+				case CSS_UNIT_MINMAX:
+					NSLOG(layout,
+					      INFO,
+					      "  Track %d: minmax(min=%f %d, max=%f %d)",
+					      i,
+					      FIXTOFLT(tracks[i].value),
+					      tracks[i].min_unit,
+					      FIXTOFLT(tracks[i].max_value),
+					      tracks[i].max_unit);
+					continue;
+				default:
+					break;
+				}
+				NSLOG(layout,
+				      INFO,
+				      "  Track %d: %f %s",
+				      i,
+				      FIXTOFLT(tracks[i].value),
+				      unit_str);
+			}
 			return n_tracks;
 		} else if (grid_template_type == CSS_GRID_TEMPLATE_NONE) {
 			/* Explicit 'none' value means no explicit grid */
@@ -301,18 +350,66 @@ static void layout_grid_compute_tracks(struct box *grid,
 				fr_total += FIXTOINT(t->value);
 				NSLOG(netsurf,
 				      INFO,
-				      "Track %d is FR: val %d (fixed %d)",
+				      "Track %d is FR: val %d",
 				      i,
-				      FIXTOINT(t->value),
-				      t->value);
+				      FIXTOINT(t->value));
 				col_widths[i] = 0; /* Will be assigned later */
+			} else if (t->unit == CSS_UNIT_MIN_CONTENT ||
+				   t->unit == CSS_UNIT_MAX_CONTENT) {
+				/* Treat min/max-content as auto/1fr for now to
+				 * ensure visibility */
+				fr_tracks++;
+				fr_total += 1;
+				NSLOG(netsurf,
+				      INFO,
+				      "Track %d is Content (fallback to 1fr)",
+				      i);
+				col_widths[i] = 0;
+			} else if (t->unit == CSS_UNIT_MINMAX) {
+				/* For minmax(min, max), try to use max if it's
+				 * a Length */
+				/* If max is also dynamic, fallback to 1fr */
+				if (t->max_unit == CSS_UNIT_PX ||
+				    t->max_unit == CSS_UNIT_EM ||
+				    t->max_unit == CSS_UNIT_PCT) {
+					int w = FIXTOINT(css_unit_len2device_px(
+						style,
+						unit_len_ctx,
+						t->max_value,
+						t->max_unit));
+					if (t->max_unit == CSS_UNIT_PCT) {
+						/* Resolve percentage against
+						 * available width */
+						w = (w * available_width) /
+						    100; // approximation if
+							 // conversion not fully
+							 // context-aware
+					}
+					col_widths[i] = w;
+					used_width += w;
+					NSLOG(netsurf,
+					      INFO,
+					      "Track %d is MINMAX(..., %d %s) -> width %d",
+					      i,
+					      FIXTOINT(t->max_value),
+					      "fixed",
+					      w);
+				} else {
+					/* Max is FR or Content -> Treat as 1fr
+					 */
+					fr_tracks++;
+					fr_total += 1;
+					NSLOG(netsurf,
+					      INFO,
+					      "Track %d is MINMAX(..., dynamic) -> fallback to 1fr",
+					      i);
+					col_widths[i] = 0;
+				}
+
 			} else {
 				/* Handle fixed units (px, etc) */
-				/* For now assuming PX for simplicity or
-				 * converting */
-				/* TODO: Handle other units properly using
-				 * css_unit_len2device_px */
-				if (t->unit == CSS_UNIT_PX) {
+				if (t->unit == CSS_UNIT_PX ||
+				    t->unit == CSS_UNIT_EM) {
 					int w = FIXTOINT(css_unit_len2device_px(
 						style,
 						unit_len_ctx,
@@ -322,7 +419,7 @@ static void layout_grid_compute_tracks(struct box *grid,
 					used_width += w;
 					NSLOG(netsurf,
 					      INFO,
-					      "Track %d is PX: %d",
+					      "Track %d is Fixed: %d",
 					      i,
 					      w);
 				} else {
@@ -366,6 +463,12 @@ static void layout_grid_compute_tracks(struct box *grid,
 				if (t->unit == CSS_UNIT_FR) {
 					is_fr = true;
 					fr_val = FIXTOINT(t->value);
+				} else if (t->unit == CSS_UNIT_MIN_CONTENT ||
+					   t->unit == CSS_UNIT_MAX_CONTENT) {
+					/* min-content/max-content were marked
+					 * for FR distribution */
+					is_fr = true;
+					fr_val = 1;
 				}
 			} else {
 				is_fr = true; /* Fallback all fr */
@@ -388,6 +491,15 @@ bool layout_grid(struct box *grid, int available_width, html_content *content)
 	int col_idx = 0;
 	int row_idx = 0;
 	int num_cols = layout_grid_get_column_count(grid);
+
+	NSLOG(layout,
+	      WARNING,
+	      "GRID LAYOUT: grid=%p avail_w=%d num_cols=%d children=%p",
+	      grid,
+	      available_width,
+	      num_cols,
+	      grid->children);
+
 	int *col_widths; /* Array allocated locally */
 
 	/* Just use stack for small col counts or VLA/malloc */
@@ -415,6 +527,15 @@ bool layout_grid(struct box *grid, int available_width, html_content *content)
 				   num_cols,
 				   grid->style,
 				   &content->unit_len_ctx);
+
+	/* Log computed column widths */
+	for (int i = 0; i < num_cols; i++) {
+		NSLOG(layout,
+		      WARNING,
+		      "GRID LAYOUT: col[%d] width=%d",
+		      i,
+		      col_widths[i]);
+	}
 
 	int row_height = 0;
 

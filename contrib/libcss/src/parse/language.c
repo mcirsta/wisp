@@ -1957,14 +1957,28 @@ css_error parseProperty(css_language *c,
 		if (lwc_string_caseless_isequal(property->idata,
 						c->strings[i],
 						&match) == lwc_error_ok &&
-		    match)
+		    match) {
+			fprintf(stderr,
+				"DEBUG: parseProperty matched '%.*s' to index %d\n",
+				(int)lwc_string_length(property->idata),
+				lwc_string_data(property->idata),
+				i);
 			break;
+		}
 	}
-	if (i == LAST_PROP + 1)
+	if (i == LAST_PROP + 1) {
+		fprintf(stderr,
+			"DEBUG: parseProperty FAILED to match '%.*s'\n",
+			(int)lwc_string_length(property->idata),
+			lwc_string_data(property->idata));
 		return CSS_INVALID;
+	}
 
 	/* Get handler */
 	handler = property_handlers[i - FIRST_PROP];
+	fprintf(stderr,
+		"DEBUG: parseProperty dispatching to handler index %d\n",
+		i - FIRST_PROP);
 	assert(handler != NULL);
 
 	/* allocate style */
