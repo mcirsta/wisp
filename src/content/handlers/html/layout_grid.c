@@ -19,6 +19,22 @@
 /**
  * \file
  * \brief HTML grid layout implementation
+ *
+ * CSS Grid Layout Module Level 1 implementation.
+ *
+ * Box Model Notes (per CSS Grid spec):
+ * ------------------------------------
+ * - Grid tracks define the size of grid cells (content box of the grid area)
+ * - Gaps are spaces BETWEEN tracks (like extra fixed-size tracks)
+ * - Grid items are placed within grid areas; their margin box fills the area
+ * - For STRETCH alignment: item content = cell_size - padding - border
+ * - Row heights track the full box height (content + padding + border)
+ *   so that subsequent rows are positioned correctly
+ *
+ * Key relationships:
+ *   cell_width = track_width (sum for spanning items)
+ *   child->width = cell_width - padding[L+R] - border[L+R]  (content box)
+ *   rendered_width = child->width + padding[L+R] + border[L+R] = cell_width
  */
 
 #include <assert.h>
@@ -440,14 +456,15 @@ static void layout_grid_compute_tracks(struct box *grid, int available_width, in
     if (css_computed_column_gap(style, &gap_len, &gap_unit) == CSS_COLUMN_GAP_SET) {
         gap_px = FIXTOINT(css_unit_len2device_px(style, unit_len_ctx, gap_len, gap_unit));
     }
-    NSLOG(netsurf, INFO, "Column Gap: %d px (from val %d unit %d)", gap_px, gap_len, gap_unit);
+    NSLOG(layout, DEEPDEBUG, "Column Gap: %d px (from val %d unit %d)", gap_px, gap_len, gap_unit);
 
     /* Calculate total gap width consumed */
     if (num_cols > 1) {
         /* Parameters:
          * box->width is the available width for the grid container
          */
-        NSLOG(netsurf, INFO, "Grid Layout Compute Tracks: Available Width %d, Num Cols %d", available_width, num_cols);
+        NSLOG(layout, DEEPDEBUG, "Grid Layout Compute Tracks: Available Width %d, Num Cols %d", available_width,
+            num_cols);
         total_gap_width = (num_cols - 1) * gap_px;
     }
 
@@ -459,19 +476,19 @@ static void layout_grid_compute_tracks(struct box *grid, int available_width, in
              * grid) */
             css_computed_grid_track *t = &tracks[i % n_tracks];
 
-            NSLOG(netsurf, INFO, "Track %d: unit=%d value=%d (FR=%d PX=%d)", i, t->unit, FIXTOINT(t->value),
+            NSLOG(layout, DEEPDEBUG, "Track %d: unit=%d value=%d (FR=%d PX=%d)", i, t->unit, FIXTOINT(t->value),
                 CSS_UNIT_FR, CSS_UNIT_PX);
             if (t->unit == CSS_UNIT_FR) {
                 fr_tracks++;
                 fr_total += FIXTOINT(t->value);
-                NSLOG(netsurf, INFO, "Track %d is FR: val %d", i, FIXTOINT(t->value));
+                NSLOG(layout, DEEPDEBUG, "Track %d is FR: val %d", i, FIXTOINT(t->value));
                 col_widths[i] = 0; /* Will be assigned later */
             } else if (t->unit == CSS_UNIT_MIN_CONTENT || t->unit == CSS_UNIT_MAX_CONTENT) {
                 /* Treat min/max-content as auto/1fr for now to
                  * ensure visibility */
                 fr_tracks++;
                 fr_total += 1;
-                NSLOG(netsurf, INFO, "Track %d is Content (fallback to 1fr)", i);
+                NSLOG(layout, DEEPDEBUG, "Track %d is Content (fallback to 1fr)", i);
                 col_widths[i] = 0;
             } else if (t->unit == CSS_UNIT_MINMAX) {
                 /* For minmax(min, max), try to use max if it's
@@ -488,14 +505,14 @@ static void layout_grid_compute_tracks(struct box *grid, int available_width, in
                     }
                     col_widths[i] = w;
                     used_width += w;
-                    NSLOG(netsurf, INFO, "Track %d is MINMAX(..., %d %s) -> width %d", i, FIXTOINT(t->max_value),
+                    NSLOG(layout, DEEPDEBUG, "Track %d is MINMAX(..., %d %s) -> width %d", i, FIXTOINT(t->max_value),
                         "fixed", w);
                 } else {
                     /* Max is FR or Content -> Treat as 1fr
                      */
                     fr_tracks++;
                     fr_total += 1;
-                    NSLOG(netsurf, INFO, "Track %d is MINMAX(..., dynamic) -> fallback to 1fr", i);
+                    NSLOG(layout, DEEPDEBUG, "Track %d is MINMAX(..., dynamic) -> fallback to 1fr", i);
                     col_widths[i] = 0;
                 }
 
@@ -505,7 +522,7 @@ static void layout_grid_compute_tracks(struct box *grid, int available_width, in
                     int w = FIXTOINT(css_unit_len2device_px(style, unit_len_ctx, t->value, t->unit));
                     col_widths[i] = w;
                     used_width += w;
-                    NSLOG(netsurf, INFO, "Track %d is Fixed: %d", i, w);
+                    NSLOG(layout, DEEPDEBUG, "Track %d is Fixed: %d", i, w);
                 } else {
                     col_widths[i] = 0; /* Auto/Other fallback */
                 }
@@ -525,9 +542,9 @@ static void layout_grid_compute_tracks(struct box *grid, int available_width, in
         remaining_width = 0;
 
     if (fr_tracks > 0 && fr_total > 0) {
-        NSLOG(netsurf, INFO, "Distributing FR: Remaining %d, FR Total %d", remaining_width, fr_total);
+        NSLOG(layout, DEEPDEBUG, "Distributing FR: Remaining %d, FR Total %d", remaining_width, fr_total);
         int px_per_fr = remaining_width / fr_total;
-        NSLOG(netsurf, INFO, "PX per FR: %d", px_per_fr);
+        NSLOG(layout, DEEPDEBUG, "PX per FR: %d", px_per_fr);
         for (i = 0; i < num_cols; i++) {
             /* Check if this column was an FR track.
                We need to re-check the track definition or use a
@@ -763,13 +780,18 @@ bool layout_grid(struct box *grid, int available_width, html_content *content)
             child_x += col_widths[c] + gap_px;
         }
 
-        /* Resolve CSS dimensions */
+        /* Resolve CSS dimensions - this populates child->padding and child->border */
         layout_find_dimensions(&content->unit_len_ctx, child_width, -1, child, child->style, &child->width,
             &child->height, &child->max_width, &child->min_width, NULL, NULL, child->margin, child->padding,
             child->border);
 
-        /* Force child width to calculated width */
-        child->width = child_width;
+        /* Subtract horizontal padding and border so total box width fits in cell */
+        int content_width = child_width - child->padding[LEFT] - child->padding[RIGHT] - child->border[LEFT].width -
+            child->border[RIGHT].width;
+        if (content_width < 0) {
+            content_width = 0;
+        }
+        child->width = content_width;
 
         /* Recursively layout the child */
         if (child->type == BOX_BLOCK || child->type == BOX_INLINE_BLOCK || child->type == BOX_FLEX ||
@@ -781,8 +803,10 @@ bool layout_grid(struct box *grid, int available_width, html_content *content)
             }
         }
 
-        /* Track row heights for all spanned rows */
-        int height_per_row = child->height / row_span;
+        /* Track row heights for all spanned rows - include padding and border */
+        int total_height = child->height + child->padding[TOP] + child->padding[BOTTOM] + child->border[TOP].width +
+            child->border[BOTTOM].width;
+        int height_per_row = total_height / row_span;
         for (int r = item_row; r < item_row + row_span; r++) {
             if (!ensure_row_capacity(&row_heights, &row_heights_capacity, r)) {
                 free(col_widths);
@@ -833,11 +857,17 @@ bool layout_grid(struct box *grid, int available_width, html_content *content)
         int align_offset = 0;
 
         switch (align) {
-        case CSS_ALIGN_ITEMS_STRETCH:
-            /* Stretch to fill entire spanned height */
-            child->height = spanned_height;
+        case CSS_ALIGN_ITEMS_STRETCH: {
+            /* Stretch to fill entire spanned height - subtract padding/border */
+            int stretch_height = spanned_height - child->padding[TOP] - child->padding[BOTTOM] -
+                child->border[TOP].width - child->border[BOTTOM].width;
+            if (stretch_height < 0) {
+                stretch_height = 0;
+            }
+            child->height = stretch_height;
             align_offset = 0;
             break;
+        }
         case CSS_ALIGN_ITEMS_FLEX_START:
         case CSS_ALIGN_ITEMS_BASELINE:
             /* Align to start (top) - keep content height */

@@ -89,6 +89,34 @@ static inline bool arena__compare_string_list(lwc_string **a, lwc_string **b)
 }
 
 
+static inline bool
+arena__compare_grid_tracks(const struct css_computed_grid_track *a, const struct css_computed_grid_track *b)
+{
+    if (a == NULL && b == NULL) {
+        return true;
+    } else if (a == NULL || b == NULL) {
+        return false;
+    }
+
+    /* Compare track arrays element by element until terminator */
+    while ((a->value != 0 || a->unit != 0) && (b->value != 0 || b->unit != 0)) {
+        if (a->value != b->value || a->unit != b->unit || a->min_unit != b->min_unit || a->max_value != b->max_value ||
+            a->max_unit != b->max_unit) {
+            return false;
+        }
+        a++;
+        b++;
+    }
+
+    /* Check both reached terminator */
+    if ((a->value != 0 || a->unit != 0) || (b->value != 0 || b->unit != 0)) {
+        return false;
+    }
+
+    return true;
+}
+
+
 static inline bool css__arena_style_is_equal(struct css_computed_style *a, struct css_computed_style *b)
 {
     if (memcmp(&a->i, &b->i, sizeof(struct css_computed_style_i)) != 0) {
@@ -116,6 +144,15 @@ static inline bool css__arena_style_is_equal(struct css_computed_style *a, struc
     }
 
     if (!arena__compare_string_list(a->quotes, b->quotes)) {
+        return false;
+    }
+
+    /* Compare grid track arrays */
+    if (!arena__compare_grid_tracks(a->grid_template_columns, b->grid_template_columns)) {
+        return false;
+    }
+
+    if (!arena__compare_grid_tracks(a->grid_template_rows, b->grid_template_rows)) {
         return false;
     }
 
