@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Flex-basis calc() Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background: #f0f0f0;
+        }
+
+        h2 {
+            margin-top: 30px;
+            color: #333;
+        }
+
+        .container {
+            background: #ddd;
+            padding: 10px;
+            margin-bottom: 20px;
+        }
+
+        .flex-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            background: #888;
+            padding: 5px;
+        }
+
+        .item {
+            background: #4a90d9;
+            color: white;
+            padding: 20px;
+            text-align: center;
+            box-sizing: border-box;
+        }
+
+        /* Test 1: Simple calc() - 3 columns */
+        .test1 .item {
+            flex-basis: calc(33.33% - 10px);
+        }
+
+        /* Test 2: calc() like hotnews.ro */
+        .test2 .item {
+            flex-basis: calc(33.33% - 6.667px);
+        }
+
+        /* Test 3: calc() with px only */
+        .test3 .item {
+            flex-basis: calc(200px - 50px);
+        }
+
+        /* Test 4: 2 columns with calc() */
+        .test4 .item {
+            flex-basis: calc(50% - 5px);
+        }
+
+        /* Test 5: 4 columns with calc() */
+        .test5 .item {
+            flex-basis: calc(25% - 7.5px);
+        }
+
+        .expected {
+            color: #666;
+            font-size: 12px;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Flex-basis calc() Test Page</h1>
+    <p>This page tests that <code>flex-basis: calc()</code> expressions are correctly evaluated.</p>
+
+    <h2>Test 1: Three columns (33.33% - gap)</h2>
+    <div class="container">
+        <div class="flex-container test1">
+            <div class="item">A</div>
+            <div class="item">B</div>
+            <div class="item">C</div>
+            <div class="item">D</div>
+            <div class="item">E</div>
+            <div class="item">F</div>
+        </div>
+        <p class="expected">Expected: 3 items per row, 2 rows total</p>
+    </div>
+
+    <h2>Test 2: hotnews.ro style (33.33% - 6.667px)</h2>
+    <div class="container">
+        <div class="flex-container test2">
+            <div class="item">Article 1</div>
+            <div class="item">Article 2</div>
+            <div class="item">Article 3</div>
+        </div>
+        <p class="expected">Expected: 3 items side by side in one row</p>
+    </div>
+
+    <h2>Test 3: calc() with px only (200px - 50px = 150px)</h2>
+    <div class="container">
+        <div class="flex-container test3">
+            <div class="item">150px wide</div>
+            <div class="item">150px wide</div>
+            <div class="item">150px wide</div>
+        </div>
+        <p class="expected">Expected: Each item exactly 150px wide</p>
+    </div>
+
+    <h2>Test 4: Two columns (50% - gap)</h2>
+    <div class="container">
+        <div class="flex-container test4">
+            <div class="item">Left</div>
+            <div class="item">Right</div>
+            <div class="item">Left</div>
+            <div class="item">Right</div>
+        </div>
+        <p class="expected">Expected: 2 items per row, 2 rows total</p>
+    </div>
+
+    <h2>Test 5: Four columns (25% - gap)</h2>
+    <div class="container">
+        <div class="flex-container test5">
+            <div class="item">1</div>
+            <div class="item">2</div>
+            <div class="item">3</div>
+            <div class="item">4</div>
+        </div>
+        <p class="expected">Expected: 4 items in one row</p>
+    </div>
+
+</body>
+
+</html>

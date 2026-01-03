@@ -1052,9 +1052,69 @@ uint8_t css_computed_align_self(const css_computed_style *style)
     return get_align_self(style);
 }
 
-uint8_t css_computed_flex_basis(const css_computed_style *style, css_fixed *length, css_unit *unit)
+uint8_t css_computed_flex_basis(const css_computed_style *style, css_fixed_or_calc *length, css_unit *unit)
 {
     return get_flex_basis(style, length, unit);
+}
+
+/**
+ * Get the flex-basis property value in device pixels.
+ *
+ * \note  If available_px is set to a negative number (invalid) then,
+ *        if the computation would have required a valid available
+ *        width, it will return CSS_FLEX_BASIS_AUTO.
+ *
+ * This will resolve `calc()` expressions to used values.
+ *
+ * \param[in]  style         A computed style.
+ * \param[in]  unit_ctx      Unit conversion context.
+ * \param[in]  available_px  The available width in pixels.
+ * \param[out] px_out        Returns flex-basis in pixels if and only if the
+ *                           call returns CSS_FLEX_BASIS_SET.
+ * \return CSS_FLEX_BASIS_SET, CSS_FLEX_BASIS_AUTO, or CSS_FLEX_BASIS_CONTENT.
+ */
+uint8_t
+css_computed_flex_basis_px(const css_computed_style *style, const css_unit_ctx *unit_ctx, int available_px, int *px_out)
+{
+    enum css_flex_basis_e type;
+    css_unit unit = CSS_UNIT_PX;
+    css_fixed_or_calc value = {.value = 0};
+
+    type = get_flex_basis(style, &value, &unit);
+    switch (type) {
+    case CSS_FLEX_BASIS_INHERIT:
+        break;
+    case CSS_FLEX_BASIS_AUTO:
+    case CSS_FLEX_BASIS_CONTENT:
+        break;
+    case CSS_FLEX_BASIS_SET:
+        switch (unit) {
+        case CSS_UNIT_CALC: {
+            css_error err = css_calculator_calculate(
+                style->calc, unit_ctx, available_px, value.calc, style, &unit, &value.value);
+            if (err == CSS_OK) {
+                type = CSS_FLEX_BASIS_SET;
+                *px_out = FIXTOINT(css_unit_css2device_px(value.value, unit_ctx->device_dpi));
+            } else {
+                type = CSS_FLEX_BASIS_AUTO;
+            }
+        } break;
+        case CSS_UNIT_PCT:
+            if (available_px < 0) {
+                type = CSS_FLEX_BASIS_AUTO;
+                break;
+            }
+
+            *px_out = FPCT_OF_INT_TOINT(value.value, available_px);
+            break;
+        default:
+            *px_out = FIXTOINT(css_unit_len2device_px(style, unit_ctx, value.value, unit));
+            break;
+        }
+        break;
+    }
+
+    return type;
 }
 
 uint8_t css_computed_flex_direction(const css_computed_style *style)
@@ -1223,7 +1283,7 @@ css__compute_absolute_values(const css_computed_style *parent, css_computed_styl
         return error;
 
     /* Fix up flex-basis */
-    error = compute_absolute_length(style, &ex_size.data.length, get_flex_basis, set_flex_basis);
+    error = compute_absolute_length_calc(style, &ex_size.data.length, get_flex_basis, set_flex_basis);
     if (error != CSS_OK)
         return error;
 

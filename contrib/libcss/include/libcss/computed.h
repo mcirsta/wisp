@@ -23,6 +23,17 @@ extern "C" {
 struct css_hint;
 struct css_select_handler;
 
+/**
+ * Type for CSS values that can be either a fixed value or a calc() expression
+ */
+#ifndef css_fixed_or_calc_typedef
+#define css_fixed_or_calc_typedef
+typedef union {
+    css_fixed value;
+    lwc_string *calc;
+} css_fixed_or_calc;
+#endif
+
 typedef struct css_computed_counter {
     lwc_string *name;
     css_fixed value;
@@ -351,7 +362,26 @@ uint8_t css_computed_align_items(const css_computed_style *style);
 
 uint8_t css_computed_align_self(const css_computed_style *style);
 
-uint8_t css_computed_flex_basis(const css_computed_style *style, css_fixed *length, css_unit *unit);
+uint8_t css_computed_flex_basis(const css_computed_style *style, css_fixed_or_calc *length, css_unit *unit);
+
+/**
+ * Get the flex-basis property value in device pixels.
+ *
+ * \note  If available_px is set to a negative number (invalid) then,
+ *        if the computation would have required a valid available
+ *        width, it will return CSS_FLEX_BASIS_AUTO.
+ *
+ * This will resolve `calc()` expressions to used values.
+ *
+ * \param[in]  style         A computed style.
+ * \param[in]  unit_ctx      Unit conversion context.
+ * \param[in]  available_px  The available width in pixels.
+ * \param[out] px_out        Returns flex-basis in pixels if and only if the
+ *                           call returns CSS_FLEX_BASIS_SET.
+ * \return CSS_FLEX_BASIS_SET, CSS_FLEX_BASIS_AUTO, or CSS_FLEX_BASIS_CONTENT.
+ */
+uint8_t css_computed_flex_basis_px(
+    const css_computed_style *style, const css_unit_ctx *unit_ctx, int available_px, int *px_out);
 
 uint8_t css_computed_flex_direction(const css_computed_style *style);
 

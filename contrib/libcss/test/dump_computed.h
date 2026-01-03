@@ -1669,34 +1669,41 @@ static void dump_computed_style(const css_computed_style *style, char *buf, size
     *len -= wrote;
 
     /* flex-basis */
-    val = css_computed_flex_basis(style, &len1, &unit1);
-    switch (val) {
-    case CSS_FLEX_BASIS_INHERIT:
-        wrote = snprintf(ptr, *len, "flex-basis: inherit\n");
-        break;
-    case CSS_FLEX_BASIS_AUTO:
-        wrote = snprintf(ptr, *len, "flex-basis: auto\n");
-        break;
-    case CSS_FLEX_BASIS_CONTENT:
-        wrote = snprintf(ptr, *len, "flex-basis: content\n");
-        break;
-    case CSS_FLEX_BASIS_SET:
-        wrote = snprintf(ptr, *len, "flex-basis: ");
+    {
+        css_fixed_or_calc flex_basis_len;
+        val = css_computed_flex_basis(style, &flex_basis_len, &unit1);
+        switch (val) {
+        case CSS_FLEX_BASIS_INHERIT:
+            wrote = snprintf(ptr, *len, "flex-basis: inherit\n");
+            break;
+        case CSS_FLEX_BASIS_AUTO:
+            wrote = snprintf(ptr, *len, "flex-basis: auto\n");
+            break;
+        case CSS_FLEX_BASIS_CONTENT:
+            wrote = snprintf(ptr, *len, "flex-basis: content\n");
+            break;
+        case CSS_FLEX_BASIS_SET:
+            wrote = snprintf(ptr, *len, "flex-basis: ");
+            ptr += wrote;
+            *len -= wrote;
+
+            if (unit1 == CSS_UNIT_CALC) {
+                wrote = snprintf(ptr, *len, "calc(...)");
+            } else {
+                wrote = dump_css_unit(flex_basis_len.value, unit1, ptr, *len);
+            }
+            ptr += wrote;
+            *len -= wrote;
+
+            wrote = snprintf(ptr, *len, "\n");
+            break;
+        default:
+            wrote = 0;
+            break;
+        }
         ptr += wrote;
         *len -= wrote;
-
-        wrote = dump_css_unit(len1, unit1, ptr, *len);
-        ptr += wrote;
-        *len -= wrote;
-
-        wrote = snprintf(ptr, *len, "\n");
-        break;
-    default:
-        wrote = 0;
-        break;
     }
-    ptr += wrote;
-    *len -= wrote;
 
     /* flex-direction */
     val = css_computed_flex_direction(style);

@@ -43,12 +43,21 @@
 #include <neosurf/content/handlers/html/private.h>
 #include "content/handlers/html/layout_internal.h"
 
+/* Type for values that can be either a fixed value or a calc expression */
+#ifndef css_fixed_or_calc_typedef
+#define css_fixed_or_calc_typedef
+typedef union {
+    css_fixed value;
+    lwc_string *calc;
+} css_fixed_or_calc;
+#endif
+
 /**
  * Flex item data
  */
 struct flex_item_data {
     enum css_flex_basis_e basis;
-    css_fixed basis_length;
+    css_fixed_or_calc basis_length;
     css_unit basis_unit;
     struct box *box;
 
@@ -100,6 +109,9 @@ struct flex_ctx {
 
     int available_main;
     int available_cross;
+
+    int main_gap; /**< Gap between items in main axis direction (px) */
+    int cross_gap; /**< Gap between lines in cross axis direction (px) */
 
     bool horizontal;
     bool main_reversed;
@@ -169,6 +181,37 @@ static struct flex_ctx *layout_flex_ctx__create(html_content *content, const str
     ctx->wrap = css_computed_flex_wrap(flex->style);
     ctx->horizontal = lh__flex_main_is_horizontal(flex);
     ctx->main_reversed = lh__flex_direction_reversed(flex);
+
+    /* Read CSS gap properties - column-gap is main for row, row-gap is main for column */
+    ctx->main_gap = 0;
+    ctx->cross_gap = 0;
+    if (flex->style != NULL) {
+        css_fixed gap_len = 0;
+        css_unit gap_unit = CSS_UNIT_PX;
+
+        /* Main gap: column-gap for row direction, row-gap for column direction */
+        if (ctx->horizontal) {
+            if (css_computed_column_gap(flex->style, &gap_len, &gap_unit) == CSS_COLUMN_GAP_SET) {
+                ctx->main_gap = FIXTOINT(css_unit_len2device_px(flex->style, ctx->unit_len_ctx, gap_len, gap_unit));
+            }
+        } else {
+            if (css_computed_row_gap(flex->style, &gap_len, &gap_unit) == CSS_ROW_GAP_SET) {
+                ctx->main_gap = FIXTOINT(css_unit_len2device_px(flex->style, ctx->unit_len_ctx, gap_len, gap_unit));
+            }
+        }
+
+        /* Cross gap: row-gap for row direction, column-gap for column direction */
+        if (ctx->horizontal) {
+            if (css_computed_row_gap(flex->style, &gap_len, &gap_unit) == CSS_ROW_GAP_SET) {
+                ctx->cross_gap = FIXTOINT(css_unit_len2device_px(flex->style, ctx->unit_len_ctx, gap_len, gap_unit));
+            }
+        } else {
+            if (css_computed_column_gap(flex->style, &gap_len, &gap_unit) == CSS_COLUMN_GAP_SET) {
+                ctx->cross_gap = FIXTOINT(css_unit_len2device_px(flex->style, ctx->unit_len_ctx, gap_len, gap_unit));
+            }
+        }
+        NSLOG(flex, DEEPDEBUG, "Flex gap: main=%d cross=%d", ctx->main_gap, ctx->cross_gap);
+    }
 
     return ctx;
 }
@@ -267,18 +310,26 @@ layout_flex__base_and_main_sizes(const struct flex_ctx *ctx, struct flex_item_da
     NSLOG(flex, DEEPDEBUG, "box %p: delta_outer_main: %i", b, delta_outer_main);
 
     if (item->basis == CSS_FLEX_BASIS_SET) {
-        if (item->basis_unit == CSS_UNIT_PCT) {
-            item->base_size = FPCT_OF_INT_TOINT(item->basis_length, available_width);
+        /* Use css_computed_flex_basis_px to properly evaluate calc() expressions */
+        int basis_px = 0;
+        uint8_t basis_type = css_computed_flex_basis_px(b->style, ctx->unit_len_ctx, available_width, &basis_px);
+        if (basis_type == CSS_FLEX_BASIS_SET) {
+            /* Handle box-sizing: border-box by converting to content-box.
+             * The delta_outer_main will be added later at line 314, so we
+             * need to subtract padding+border now if box-sizing is border-box. */
+            layout_handle_box_sizing(ctx->unit_len_ctx, b, available_width, ctx->horizontal, &basis_px);
+            item->base_size = basis_px;
         } else {
-            item->base_size = FIXTOINT(
-                css_unit_len2device_px(b->style, ctx->unit_len_ctx, item->basis_length, item->basis_unit));
+            /* Fallback to content-based sizing if calc() couldn't be evaluated */
+            NSLOG(flex, DEEPDEBUG, "flex-basis: calc() evaluated to auto, using content-based sizing");
+            item->base_size = AUTO;
         }
-
     } else if (item->basis == CSS_FLEX_BASIS_AUTO) {
         item->base_size = ctx->horizontal ? b->width : b->height;
     } else {
         item->base_size = AUTO;
     }
+
 
     if (ctx->horizontal == false) {
         if (b->width == AUTO) {
@@ -302,8 +353,13 @@ layout_flex__base_and_main_sizes(const struct flex_ctx *ctx, struct flex_item_da
     item->base_size += delta_outer_main;
 
     if (ctx->horizontal) {
+        int before_clamp = item->base_size;
         item->base_size = min(item->base_size, available_width);
         item->base_size = max(item->base_size, content_min_width);
+        if (item->base_size != before_clamp) {
+            NSLOG(flex, WARNING, "CLAMP: base_size changed from %d to %d (content_min_width=%d, available_width=%d)",
+                before_clamp, item->base_size, content_min_width, available_width);
+        }
     }
 
     item->target_main_size = item->base_size;

@@ -80,7 +80,7 @@ style = {
     ('bottom', 2, 'length', 'CSS_BOTTOM_SET', None, None, 'get'),
     ('left', 2, 'length', 'CSS_LEFT_SET', None, None, 'get'),
     ('color', 1, 'color'),
-    ('flex_basis', 2, 'length', 'CSS_FLEX_BASIS_SET'),
+    ('flex_basis', 2, (('length', None, 'calc'),), 'CSS_FLEX_BASIS_SET'),
     ('flex_grow', 1, 'fixed', 'CSS_FLEX_GROW_SET'),
     ('flex_shrink', 1, 'fixed', 'CSS_FLEX_SHRINK_SET'),
     ('font_size', 4, 'length', 'CSS_FONT_SIZE_DIMENSION'),

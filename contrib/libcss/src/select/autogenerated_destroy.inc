@@ -59,7 +59,7 @@
 /* set_display(style, 0, 0, CSS_UNIT_PX); */
 /* set_empty_cells(style, 0, 0, CSS_UNIT_PX); */
 /* set_fill_opacity(style, 0, 0, CSS_UNIT_PX); */
-/* set_flex_basis(style, 0, 0, CSS_UNIT_PX); */
+set_flex_basis(style, 0, (css_fixed_or_calc)0, CSS_UNIT_PX);
 /* set_flex_direction(style, 0, 0, CSS_UNIT_PX); */
 /* set_flex_grow(style, 0, 0, CSS_UNIT_PX); */
 /* set_flex_shrink(style, 0, 0, CSS_UNIT_PX); */
