@@ -122,6 +122,7 @@ add_library(css SHARED
 	src/parse/properties/grid_column.c
 	src/parse/properties/grid_row.c
 	src/parse/properties/grid_area.c
+	src/parse/properties/grid_auto_flow.c
 	${PROPSRC}
 	src/select/properties/helpers.c
 	src/select/properties/align_content.c
@@ -317,6 +318,7 @@ src/parse/properties/grid_template_rows.c
 src/parse/properties/grid_column.c
 src/parse/properties/grid_row.c
 src/parse/properties/grid_area.c
+src/parse/properties/grid_auto_flow.c
 ${PROPSRC}
 src/select/properties/helpers.c
 src/select/properties/align_content.c

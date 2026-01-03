@@ -670,7 +670,12 @@ enum css_row_gap_e {
 
 enum css_grid_template_e { CSS_GRID_TEMPLATE_INHERIT = 0x0, CSS_GRID_TEMPLATE_NONE = 0x1, CSS_GRID_TEMPLATE_SET = 0x2 };
 
-enum css_grid_line_e { CSS_GRID_LINE_INHERIT = 0x0, CSS_GRID_LINE_AUTO = 0x1, CSS_GRID_LINE_SET = 0x2 };
+enum css_grid_line_e {
+    CSS_GRID_LINE_INHERIT = 0x0,
+    CSS_GRID_LINE_AUTO = 0x1,
+    CSS_GRID_LINE_SET = 0x2,
+    CSS_GRID_LINE_SPAN = 0x3
+};
 
 enum css_z_index_e { CSS_Z_INDEX_INHERIT = 0x0, CSS_Z_INDEX_SET = 0x1, CSS_Z_INDEX_AUTO = 0x2 };
 

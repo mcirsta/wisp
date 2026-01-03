@@ -134,6 +134,33 @@ static css_computed_grid_track mock_grid_tracks[4] = {
 /* Mock grid track data ... */
 static uint8_t dummy_style[4096]; /* Zeroed buffer for mock children style */
 
+/* Mock grid track data for 4 columns: 60px each (for span test) */
+static css_computed_grid_track mock_grid_tracks_4col[5] = {
+    {(60 << 10), CSS_UNIT_PX}, /* 60px */
+    {(60 << 10), CSS_UNIT_PX}, /* 60px */
+    {(60 << 10), CSS_UNIT_PX}, /* 60px */
+    {(60 << 10), CSS_UNIT_PX}, /* 60px */
+    {0, 0} /* Terminator */
+};
+
+/* For span test, use a different style marker */
+static uint8_t span_test_grid_style[4096];
+static uint8_t span_test_child_style[4096]; /* Regular child */
+static uint8_t span_test_wide_style[4096]; /* Wide child (span 2) */
+
+/* Mock grid track data for 2 columns: 60px each (for column dense test) */
+static css_computed_grid_track mock_grid_tracks_2col[3] = {
+    {(60 << 10), CSS_UNIT_PX}, /* 60px */
+    {(60 << 10), CSS_UNIT_PX}, /* 60px */
+    {0, 0} /* Terminator */
+};
+
+/* Style markers for column dense test */
+static uint8_t column_dense_grid_style[4096];
+static uint8_t column_dense_child_style[4096]; /* Regular child */
+static uint8_t column_dense_tall_style[4096]; /* Tall child (span 2 rows) */
+
+
 /* Mock css_computed_grid_template_columns */
 uint8_t
 css_computed_grid_template_columns(const css_computed_style *style, int32_t *n_tracks, css_computed_grid_track **tracks)
@@ -143,6 +170,50 @@ css_computed_grid_template_columns(const css_computed_style *style, int32_t *n_t
             *n_tracks = 3;
         if (tracks)
             *tracks = mock_grid_tracks;
+        return CSS_GRID_TEMPLATE_SET;
+    }
+    /* For span test, return 4 columns */
+    if (style == (const css_computed_style *)span_test_grid_style) {
+        if (n_tracks)
+            *n_tracks = 4;
+        if (tracks)
+            *tracks = mock_grid_tracks_4col;
+        return CSS_GRID_TEMPLATE_SET;
+    }
+    /* For column dense test, return 2 columns */
+    if (style == (const css_computed_style *)column_dense_grid_style) {
+        if (n_tracks)
+            *n_tracks = 2;
+        if (tracks)
+            *tracks = mock_grid_tracks_2col;
+        return CSS_GRID_TEMPLATE_SET;
+    }
+    if (n_tracks)
+        *n_tracks = 0;
+    if (tracks)
+        *tracks = NULL;
+    return CSS_GRID_TEMPLATE_NONE;
+}
+
+/* Mock grid track data for 4 rows: 50px each (for column dense test) */
+static css_computed_grid_track mock_grid_tracks_4row[5] = {
+    {(50 << 10), CSS_UNIT_PX}, /* 50px */
+    {(50 << 10), CSS_UNIT_PX}, /* 50px */
+    {(50 << 10), CSS_UNIT_PX}, /* 50px */
+    {(50 << 10), CSS_UNIT_PX}, /* 50px */
+    {0, 0} /* Terminator */
+};
+
+/* Mock css_computed_grid_template_rows */
+uint8_t
+css_computed_grid_template_rows(const css_computed_style *style, int32_t *n_tracks, css_computed_grid_track **tracks)
+{
+    /* For column dense test, return 4 rows */
+    if (style == (const css_computed_style *)column_dense_grid_style) {
+        if (n_tracks)
+            *n_tracks = 4;
+        if (tracks)
+            *tracks = mock_grid_tracks_4row;
         return CSS_GRID_TEMPLATE_SET;
     }
     if (n_tracks)
@@ -383,11 +454,307 @@ START_TEST(test_grid_layout_3_columns)
 }
 END_TEST
 
+/* Mock css_computed_grid_column_start - returns auto for all */
+uint8_t css_computed_grid_column_start(const css_computed_style *style, int32_t *val)
+{
+    /* For wide item (span 2), return SPAN with value 2 */
+    if (style == (const css_computed_style *)span_test_wide_style) {
+        if (val)
+            *val = (2 << 10); /* css_fixed for 2 */
+        return CSS_GRID_LINE_SPAN;
+    }
+    /* Default: auto */
+    if (val)
+        *val = 0;
+    return CSS_GRID_LINE_AUTO;
+}
+
+/* Mock css_computed_grid_column_end - returns auto for all */
+uint8_t css_computed_grid_column_end(const css_computed_style *style, int32_t *val)
+{
+    if (val)
+        *val = 0;
+    return CSS_GRID_LINE_AUTO;
+}
+
+/* Mock css_computed_grid_row_start - returns auto, or SPAN 2 for tall item */
+uint8_t css_computed_grid_row_start(const css_computed_style *style, int32_t *val)
+{
+    /* For tall item in column dense test, return SPAN with value 2 */
+    if (style == (const css_computed_style *)column_dense_tall_style) {
+        if (val)
+            *val = (2 << 10); /* css_fixed for 2 */
+        return CSS_GRID_LINE_SPAN;
+    }
+    if (val)
+        *val = 0;
+    return CSS_GRID_LINE_AUTO;
+}
+
+/* Mock css_computed_grid_row_end - returns auto for all */
+uint8_t css_computed_grid_row_end(const css_computed_style *style, int32_t *val)
+{
+    if (val)
+        *val = 0;
+    return CSS_GRID_LINE_AUTO;
+}
+
+/* Mock css_computed_grid_auto_flow - returns row or column based on grid style */
+uint8_t css_computed_grid_auto_flow(const css_computed_style *style)
+{
+    /* For column dense test, return column flow */
+    if (style == (const css_computed_style *)column_dense_grid_style) {
+        return CSS_GRID_AUTO_FLOW_COLUMN;
+    }
+    return CSS_GRID_AUTO_FLOW_ROW;
+}
+
+/* Mock css_computed_row_gap */
+uint8_t css_computed_row_gap(const css_computed_style *style, css_fixed *length, css_unit *unit)
+{
+    if (length)
+        *length = 0;
+    if (unit)
+        *unit = CSS_UNIT_PX;
+    return CSS_ROW_GAP_NORMAL;
+}
+
+/*
+ * Test grid span placement
+ *
+ * Grid: 4 columns of 60px each (240px total)
+ * Items:
+ *   1: regular (col 0)
+ *   2: span 2 columns (cols 1-2)
+ *   3: regular (col 3)
+ *   4: regular (next row, col 0)
+ *   5: regular (next row, col 1)
+ *
+ * Expected layout (row-major auto-flow):
+ *   Row 0: [1] [2------] [3]
+ *   Row 1: [4] [5]
+ *
+ * Note: Item 2 spans cols 1-2, so item 3 goes to col 3
+ */
+START_TEST(test_grid_span_placement)
+{
+    printf("\n=== test_grid_span_placement ===\n");
+
+    /* Root Grid Box - 4 columns of 60px = 240px */
+    struct box *grid = calloc(1, sizeof(struct box));
+    grid->type = BOX_GRID;
+    grid->x = 0;
+    grid->y = 0;
+    grid->width = 240;
+    grid->height = AUTO;
+    grid->style = (css_computed_style *)span_test_grid_style;
+
+    /* Override mock for this test's grid */
+    /* We need to modify css_computed_grid_template_columns */
+    /* Since we can't easily have multiple mocks, we'll just use the
+       span_test_grid_style pointer as a flag */
+
+    /* Children: 5 items, item 2 has span 2 */
+    struct box *items[5];
+    for (int i = 0; i < 5; i++) {
+        items[i] = calloc(1, sizeof(struct box));
+        items[i]->type = BOX_BLOCK;
+        items[i]->width = AUTO;
+        items[i]->height = 50;
+        items[i]->parent = grid;
+
+        /* Item 2 (index 1) has span 2 */
+        if (i == 1) {
+            items[i]->style = (css_computed_style *)span_test_wide_style;
+        } else {
+            items[i]->style = (css_computed_style *)span_test_child_style;
+        }
+    }
+
+    /* Link children */
+    grid->children = items[0];
+    for (int i = 0; i < 5; i++) {
+        if (i > 0) {
+            items[i]->prev = items[i - 1];
+            items[i - 1]->next = items[i];
+        }
+    }
+    grid->last = items[4];
+
+    /* Mock Content Context */
+    memset(&mock_content, 0, sizeof(mock_content));
+    mock_content.unit_len_ctx.device_dpi = (96 << 10);
+    mock_content.unit_len_ctx.font_size_default = (16 << 10);
+    mock_content.unit_len_ctx.viewport_width = (1000 << 10);
+    mock_content.unit_len_ctx.viewport_height = (1000 << 10);
+
+    /* Run Layout */
+    printf("Running layout_grid for span test...\n");
+    bool ok = layout_grid(grid, 240, &mock_content);
+    ck_assert_msg(ok, "layout_grid returned false");
+
+    /* Print results */
+    for (int i = 0; i < 5; i++) {
+        printf("Item %d: x=%d y=%d w=%d h=%d\n", i + 1, items[i]->x, items[i]->y, items[i]->width, items[i]->height);
+    }
+
+    /* Verify placement */
+    /* Item 1: col 0, row 0 -> x=0 */
+    ck_assert_int_eq(items[0]->x, 0);
+    ck_assert_int_eq(items[0]->y, 0);
+    ck_assert_int_eq(items[0]->width, 60);
+
+    /* Item 2: cols 1-2 (span 2), row 0 -> x=60, width=120 */
+    ck_assert_int_eq(items[1]->x, 60);
+    ck_assert_int_eq(items[1]->y, 0);
+    ck_assert_int_eq(items[1]->width, 120); /* 2 columns */
+
+    /* Item 3: col 3, row 0 -> x=180 */
+    ck_assert_int_eq(items[2]->x, 180);
+    ck_assert_int_eq(items[2]->y, 0);
+    ck_assert_int_eq(items[2]->width, 60);
+
+    /* Item 4: col 0, row 1 -> x=0, y=50 */
+    ck_assert_int_eq(items[3]->x, 0);
+    ck_assert_int_eq(items[3]->y, 50);
+    ck_assert_int_eq(items[3]->width, 60);
+
+    /* Item 5: col 1, row 1 -> x=60, y=50 */
+    ck_assert_int_eq(items[4]->x, 60);
+    ck_assert_int_eq(items[4]->y, 50);
+    ck_assert_int_eq(items[4]->width, 60);
+
+    /* Cleanup */
+    for (int i = 0; i < 5; i++) {
+        free(items[i]);
+    }
+    free(grid);
+
+    printf("=== test_grid_span_placement PASSED ===\n");
+}
+END_TEST
+
+/*
+ * Test grid-auto-flow: column dense
+ *
+ * Grid: 2 columns of 60px each, auto rows
+ * Items:
+ *   1: regular
+ *   2: span 2 rows (tall)
+ *   3: regular
+ *   4: regular
+ *   5: regular
+ *   6: regular
+ *
+ * With column flow, items fill columns first:
+ *   Col 0: [1] [2 (tall, rows 1-2)] [3]
+ *   Col 1: [4] [5] [6]
+ *
+ * Expected layout:
+ *   Row 0: [1] [4]     x=0,0  x=60,0
+ *   Row 1: [2---] [5]  x=0,50 x=60,50
+ *   Row 2: [2---] [6]  x=0,100 x=60,100
+ *   Row 3: [3]         x=0,150
+ */
+START_TEST(test_grid_column_dense)
+{
+    printf("\n=== test_grid_column_dense ===\n");
+
+    /* Root Grid Box - 2 columns of 60px = 120px */
+    struct box *grid = calloc(1, sizeof(struct box));
+    grid->type = BOX_GRID;
+    grid->x = 0;
+    grid->y = 0;
+    grid->width = 120;
+    grid->height = AUTO;
+    grid->style = (css_computed_style *)column_dense_grid_style;
+
+    /* Children: 6 items, item 2 has row span 2 */
+    struct box *items[6];
+    for (int i = 0; i < 6; i++) {
+        items[i] = calloc(1, sizeof(struct box));
+        items[i]->type = BOX_BLOCK;
+        items[i]->width = AUTO;
+        items[i]->height = 50;
+        items[i]->parent = grid;
+
+        /* Item 2 (index 1) has row span 2 */
+        if (i == 1) {
+            items[i]->style = (css_computed_style *)column_dense_tall_style;
+        } else {
+            items[i]->style = (css_computed_style *)column_dense_child_style;
+        }
+    }
+
+    /* Link children */
+    grid->children = items[0];
+    for (int i = 0; i < 6; i++) {
+        if (i > 0) {
+            items[i]->prev = items[i - 1];
+            items[i - 1]->next = items[i];
+        }
+    }
+    grid->last = items[5];
+
+    /* Mock Content Context */
+    memset(&mock_content, 0, sizeof(mock_content));
+    mock_content.unit_len_ctx.device_dpi = (96 << 10);
+    mock_content.unit_len_ctx.font_size_default = (16 << 10);
+    mock_content.unit_len_ctx.viewport_width = (1000 << 10);
+    mock_content.unit_len_ctx.viewport_height = (1000 << 10);
+
+    /* Run Layout */
+    printf("Running layout_grid for column dense test...\n");
+    bool ok = layout_grid(grid, 120, &mock_content);
+    ck_assert_msg(ok, "layout_grid returned false");
+
+    /* Print results */
+    for (int i = 0; i < 6; i++) {
+        printf("Item %d: x=%d y=%d w=%d h=%d\n", i + 1, items[i]->x, items[i]->y, items[i]->width, items[i]->height);
+    }
+
+    /* Verify placement - column flow places items in columns first */
+    /* Item 1: col 0, row 0 -> x=0, y=0 */
+    ck_assert_int_eq(items[0]->x, 0);
+    ck_assert_int_eq(items[0]->y, 0);
+
+    /* Item 2: col 0, rows 1-2 (span 2) -> x=0, y=50 */
+    ck_assert_int_eq(items[1]->x, 0);
+    ck_assert_int_eq(items[1]->y, 50);
+
+    /* Item 3: col 0, row 3 -> x=0, y=150 (after item 2's 2 rows) */
+    ck_assert_int_eq(items[2]->x, 0);
+    ck_assert_int_eq(items[2]->y, 150);
+
+    /* Item 4: col 1, row 0 -> x=60, y=0 */
+    ck_assert_int_eq(items[3]->x, 60);
+    ck_assert_int_eq(items[3]->y, 0);
+
+    /* Item 5: col 1, row 1 -> x=60, y=50 */
+    ck_assert_int_eq(items[4]->x, 60);
+    ck_assert_int_eq(items[4]->y, 50);
+
+    /* Item 6: col 1, row 2 -> x=60, y=100 */
+    ck_assert_int_eq(items[5]->x, 60);
+    ck_assert_int_eq(items[5]->y, 100);
+
+    /* Cleanup */
+    for (int i = 0; i < 6; i++) {
+        free(items[i]);
+    }
+    free(grid);
+
+    printf("=== test_grid_column_dense PASSED ===\n");
+}
+END_TEST
+
 Suite *grid_test_suite(void)
 {
     Suite *s = suite_create("grid_layout");
     TCase *tc = tcase_create("grid_flow");
     tcase_add_test(tc, test_grid_layout_3_columns);
+    tcase_add_test(tc, test_grid_span_placement);
+    tcase_add_test(tc, test_grid_column_dense);
     suite_add_tcase(s, tc);
     return s;
 }

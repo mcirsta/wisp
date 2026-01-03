@@ -718,6 +718,8 @@ enum op_grid_auto_flow {
 
 enum op_row_gap { ROW_GAP_NORMAL = COLUMN_GAP_NORMAL, ROW_GAP_CALC = COLUMN_GAP_CALC, ROW_GAP_SET = COLUMN_GAP_SET };
 
+enum op_grid_line { GRID_LINE_AUTO = 0x0000, GRID_LINE_SET = 0x0001, GRID_LINE_SPAN = 0x0002 };
+
 enum op_grid_template { GRID_TEMPLATE_NONE = 0x0000, GRID_TEMPLATE_SET = 0x0080 };
 
 #endif

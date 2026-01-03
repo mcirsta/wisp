@@ -43,6 +43,32 @@ static css_error parse_grid_line_value(
         return CSS_OK;
     }
 
+    /* Check for 'span' keyword (followed by optional integer) */
+    if (token->type == CSS_TOKEN_IDENT &&
+        lwc_string_caseless_isequal(token->idata, c->strings[SPAN], &match) == lwc_error_ok && match) {
+        css_fixed span_count = INTTOFIX(1); /* default span 1 */
+
+        parserutils_vector_iterate(vector, ctx);
+        consumeWhitespace(vector, ctx);
+
+        /* Check for optional integer after 'span' */
+        token = parserutils_vector_peek(vector, *ctx);
+        if (token != NULL && token->type == CSS_TOKEN_NUMBER) {
+            size_t consumed = 0;
+            span_count = css__number_from_lwc_string(token->idata, true, &consumed);
+
+            /* Must be a positive integer */
+            if (consumed != lwc_string_length(token->idata) || span_count <= 0) {
+                return CSS_INVALID;
+            }
+            parserutils_vector_iterate(vector, ctx);
+        }
+
+        *value = CSS_GRID_LINE_SPAN;
+        *integer = span_count;
+        return CSS_OK;
+    }
+
     /* Check for integer */
     if (token->type == CSS_TOKEN_NUMBER) {
         size_t consumed = 0;
@@ -137,7 +163,7 @@ css_error css__parse_grid_column(css_language *c, const parserutils_vector *vect
         *ctx = orig_ctx;
         return error;
     }
-    if (start_value == CSS_GRID_LINE_SET) {
+    if (start_value == CSS_GRID_LINE_SET || start_value == CSS_GRID_LINE_SPAN) {
         error = css__stylesheet_style_append(result, start_integer);
         if (error != CSS_OK) {
             *ctx = orig_ctx;
@@ -151,7 +177,7 @@ css_error css__parse_grid_column(css_language *c, const parserutils_vector *vect
         *ctx = orig_ctx;
         return error;
     }
-    if (end_value == CSS_GRID_LINE_SET) {
+    if (end_value == CSS_GRID_LINE_SET || end_value == CSS_GRID_LINE_SPAN) {
         error = css__stylesheet_style_append(result, end_integer);
         if (error != CSS_OK)
             *ctx = orig_ctx;

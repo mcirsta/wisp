@@ -365,6 +365,7 @@ enum {
     MIN_CONTENT,
     MAX_CONTENT,
     FIT_CONTENT,
+    SPAN,
     /* Named colours */
     FIRST_COLOUR,
 

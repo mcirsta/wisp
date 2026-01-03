@@ -58,6 +58,8 @@
 
 /** Indicates grid placement is auto (not explicitly set) */
 #define GRID_PLACEMENT_AUTO (-1)
+/** Indicates grid end is a span value (value is the span count) */
+#define GRID_PLACEMENT_SPAN (-2)
 
 /**
  * Ensure row_heights array has capacity for at least required_row + 1 elements.
@@ -183,7 +185,7 @@ static int layout_grid_get_explicit_row_count(struct box *grid)
         return n_tracks;
     }
 
-    return 1; /* Default to 1 row */
+    return 1; /* Default to 1 row if no explicit rows */
 }
 
 /**
@@ -191,39 +193,80 @@ static int layout_grid_get_explicit_row_count(struct box *grid)
  *
  * \param style     The computed style of the grid item
  * \param col_start Output: column start (0-indexed), or GRID_PLACEMENT_AUTO
- * \param col_end   Output: column end (0-indexed), or GRID_PLACEMENT_AUTO
+ * \param col_end   Output: column end (0-indexed), GRID_PLACEMENT_AUTO, or GRID_PLACEMENT_SPAN
  * \param row_start Output: row start (0-indexed), or GRID_PLACEMENT_AUTO
- * \param row_end   Output: row end (0-indexed), or GRID_PLACEMENT_AUTO
+ * \param row_end   Output: row end (0-indexed), GRID_PLACEMENT_AUTO, or GRID_PLACEMENT_SPAN
+ * \param col_span  Output: explicit column span (when col_end is GRID_PLACEMENT_SPAN)
+ * \param row_span  Output: explicit row span (when row_end is GRID_PLACEMENT_SPAN)
  */
-static void
-get_grid_item_placement(const css_computed_style *style, int *col_start, int *col_end, int *row_start, int *row_end)
+static void get_grid_item_placement(const css_computed_style *style, int *col_start, int *col_end, int *row_start,
+    int *row_end, int *col_span, int *row_span)
 {
     int32_t val;
+    uint8_t type;
+
+    /* Initialize defaults */
+    *col_span = 1;
+    *row_span = 1;
 
     /* grid-column-start */
-    if (style != NULL && css_computed_grid_column_start(style, &val) == CSS_GRID_LINE_SET) {
-        *col_start = FIXTOINT(val) - 1; /* CSS is 1-indexed */
+    if (style != NULL) {
+        type = css_computed_grid_column_start(style, &val);
+        if (type == CSS_GRID_LINE_SET) {
+            *col_start = FIXTOINT(val) - 1; /* CSS is 1-indexed */
+        } else if (type == CSS_GRID_LINE_SPAN) {
+            /* Start is span - means span from end position */
+            *col_start = GRID_PLACEMENT_SPAN;
+            *col_span = FIXTOINT(val);
+        } else {
+            *col_start = GRID_PLACEMENT_AUTO;
+        }
     } else {
         *col_start = GRID_PLACEMENT_AUTO;
     }
 
     /* grid-column-end */
-    if (style != NULL && css_computed_grid_column_end(style, &val) == CSS_GRID_LINE_SET) {
-        *col_end = FIXTOINT(val) - 1;
+    if (style != NULL) {
+        type = css_computed_grid_column_end(style, &val);
+        if (type == CSS_GRID_LINE_SET) {
+            *col_end = FIXTOINT(val) - 1;
+        } else if (type == CSS_GRID_LINE_SPAN) {
+            *col_end = GRID_PLACEMENT_SPAN;
+            *col_span = FIXTOINT(val);
+        } else {
+            *col_end = GRID_PLACEMENT_AUTO;
+        }
     } else {
         *col_end = GRID_PLACEMENT_AUTO;
     }
 
     /* grid-row-start */
-    if (style != NULL && css_computed_grid_row_start(style, &val) == CSS_GRID_LINE_SET) {
-        *row_start = FIXTOINT(val) - 1;
+    if (style != NULL) {
+        type = css_computed_grid_row_start(style, &val);
+        if (type == CSS_GRID_LINE_SET) {
+            *row_start = FIXTOINT(val) - 1;
+        } else if (type == CSS_GRID_LINE_SPAN) {
+            /* Start is span - means span from end position */
+            *row_start = GRID_PLACEMENT_SPAN;
+            *row_span = FIXTOINT(val);
+        } else {
+            *row_start = GRID_PLACEMENT_AUTO;
+        }
     } else {
         *row_start = GRID_PLACEMENT_AUTO;
     }
 
     /* grid-row-end */
-    if (style != NULL && css_computed_grid_row_end(style, &val) == CSS_GRID_LINE_SET) {
-        *row_end = FIXTOINT(val) - 1;
+    if (style != NULL) {
+        type = css_computed_grid_row_end(style, &val);
+        if (type == CSS_GRID_LINE_SET) {
+            *row_end = FIXTOINT(val) - 1;
+        } else if (type == CSS_GRID_LINE_SPAN) {
+            *row_end = GRID_PLACEMENT_SPAN;
+            *row_span = FIXTOINT(val);
+        } else {
+            *row_end = GRID_PLACEMENT_AUTO;
+        }
     } else {
         *row_end = GRID_PLACEMENT_AUTO;
     }
@@ -675,50 +718,82 @@ bool layout_grid(struct box *grid, int available_width, html_content *content)
         int item_col, item_row, col_span, row_span;
         int child_width, child_x, child_y;
 
-        /* Get explicit placement from CSS */
-        get_grid_item_placement(child->style, &col_start, &col_end, &row_start, &row_end);
+        /* Get explicit placement from CSS (also extracts explicit spans) */
+        get_grid_item_placement(child->style, &col_start, &col_end, &row_start, &row_end, &col_span, &row_span);
 
-        NSLOG(layout, WARNING, "GRID PLACEMENT CSS: col_start=%d col_end=%d row_start=%d row_end=%d", col_start,
-            col_end, row_start, row_end);
+        NSLOG(layout, WARNING,
+            "GRID PLACEMENT CSS: col_start=%d col_end=%d row_start=%d row_end=%d col_span=%d row_span=%d", col_start,
+            col_end, row_start, row_end, col_span, row_span);
 
-        /* Determine span first (needed for dense placement) */
-        if (col_end != GRID_PLACEMENT_AUTO && col_end > col_start && col_start != GRID_PLACEMENT_AUTO) {
+        /* Determine span from explicit line numbers if not using span syntax */
+        if (col_end == GRID_PLACEMENT_SPAN || col_start == GRID_PLACEMENT_SPAN) {
+            /* col_span already set by get_grid_item_placement */
+        } else if (col_end != GRID_PLACEMENT_AUTO && col_end > col_start && col_start != GRID_PLACEMENT_AUTO) {
             col_span = col_end - col_start;
-        } else {
-            col_span = 1;
         }
-        if (row_end != GRID_PLACEMENT_AUTO && row_end > row_start && row_start != GRID_PLACEMENT_AUTO) {
+        /* else col_span defaults to 1 from get_grid_item_placement */
+
+        if (row_end == GRID_PLACEMENT_SPAN || row_start == GRID_PLACEMENT_SPAN) {
+            /* row_span already set by get_grid_item_placement */
+        } else if (row_end != GRID_PLACEMENT_AUTO && row_end > row_start && row_start != GRID_PLACEMENT_AUTO) {
             row_span = row_end - row_start;
-        } else {
-            row_span = 1;
         }
+        /* else row_span defaults to 1 from get_grid_item_placement */
 
         /* Determine item position based on explicit placement or
          * auto-flow */
-        if (col_start != GRID_PLACEMENT_AUTO) {
+        /* Note: GRID_PLACEMENT_SPAN means auto-place but with a span,
+         * not an explicit column/row position. Only SET provides position. */
+        if (col_start != GRID_PLACEMENT_AUTO && col_start != GRID_PLACEMENT_SPAN) {
             item_col = col_start;
         } else if (is_dense) {
             /* CSS Grid spec §8.5: Dense mode - scan from start
-             * for first available cell that fits item's span
+             * for first available cell that fits item's span.
+             * For row flow: scan row-by-row (row 0: cols 0,1,2..., row 1: cols 0,1,2...)
+             * For column flow: scan column-by-column (col 0: rows 0,1,2..., col 1: rows 0,1,2...)
              */
             item_col = -1;
-            for (int scan_row = 0; scan_row < occupied_max_rows && item_col < 0; scan_row++) {
-                for (int scan_col = 0; scan_col <= num_cols - col_span; scan_col++) {
-                    /* Check if all cells in span are free
-                     */
-                    bool fits = true;
-                    for (int dr = 0; dr < row_span && fits; dr++) {
-                        for (int dc = 0; dc < col_span && fits; dc++) {
-                            int idx = (scan_row + dr) * num_cols + scan_col + dc;
-                            if (idx >= occupied_max_rows * num_cols || occupied[idx]) {
-                                fits = false;
+            if (flow_is_column) {
+                /* Column flow: scan column-first, respecting explicit row count */
+                int max_scan_row = num_rows - row_span;
+                for (int scan_col = 0; scan_col <= num_cols - col_span && item_col < 0; scan_col++) {
+                    for (int scan_row = 0; scan_row <= max_scan_row; scan_row++) {
+                        /* Check if all cells in span are free */
+                        bool fits = true;
+                        for (int dr = 0; dr < row_span && fits; dr++) {
+                            for (int dc = 0; dc < col_span && fits; dc++) {
+                                int idx = (scan_row + dr) * num_cols + scan_col + dc;
+                                if (idx >= occupied_max_rows * num_cols || occupied[idx]) {
+                                    fits = false;
+                                }
                             }
                         }
+                        if (fits) {
+                            item_col = scan_col;
+                            item_row = scan_row;
+                            goto dense_found;
+                        }
                     }
-                    if (fits) {
-                        item_col = scan_col;
-                        item_row = scan_row;
-                        goto dense_found;
+                }
+            } else {
+                /* Row flow: scan row-first */
+                for (int scan_row = 0; scan_row < occupied_max_rows && item_col < 0; scan_row++) {
+                    for (int scan_col = 0; scan_col <= num_cols - col_span; scan_col++) {
+                        /* Check if all cells in span are free */
+                        bool fits = true;
+                        for (int dr = 0; dr < row_span && fits; dr++) {
+                            for (int dc = 0; dc < col_span && fits; dc++) {
+                                int idx = (scan_row + dr) * num_cols + scan_col + dc;
+                                if (idx >= occupied_max_rows * num_cols || occupied[idx]) {
+                                    fits = false;
+                                }
+                            }
+                        }
+                        if (fits) {
+                            item_col = scan_col;
+                            item_row = scan_row;
+                            goto dense_found;
+                        }
                     }
                 }
             }
@@ -733,7 +808,7 @@ bool layout_grid(struct box *grid, int available_width, html_content *content)
             item_col = auto_col;
         }
 
-        if (row_start != GRID_PLACEMENT_AUTO) {
+        if (row_start != GRID_PLACEMENT_AUTO && row_start != GRID_PLACEMENT_SPAN) {
             item_row = row_start;
         } else if (!is_dense) {
             /* Only set from cursor if not dense (dense sets both)
@@ -924,18 +999,21 @@ bool layout_grid(struct box *grid, int available_width, html_content *content)
         /* CSS Grid spec §8: Advance auto-placement cursor
          * - row mode: Advance column, wrap to next row at end
          * - column mode: Advance row, wrap to next column at end
+         * Note: SPAN also uses auto-placement, so advance cursor for SPAN too
          */
-        if (col_start == GRID_PLACEMENT_AUTO && row_start == GRID_PLACEMENT_AUTO) {
+        bool col_auto = (col_start == GRID_PLACEMENT_AUTO || col_start == GRID_PLACEMENT_SPAN);
+        bool row_auto = (row_start == GRID_PLACEMENT_AUTO || row_start == GRID_PLACEMENT_SPAN);
+        if (col_auto && row_auto) {
             if (flow_is_column) {
-                /* Column mode: advance row first */
-                auto_row++;
+                /* Column mode: advance row past the placed item's span */
+                auto_row = item_row + row_span;
                 if (auto_row >= num_rows) {
                     auto_row = 0;
                     auto_col++;
                 }
             } else {
-                /* Row mode (default): advance column first */
-                auto_col++;
+                /* Row mode (default): advance column past the placed item's span */
+                auto_col = item_col + col_span;
                 if (auto_col >= num_cols) {
                     auto_col = 0;
                     auto_row++;

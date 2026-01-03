@@ -29,6 +29,11 @@ css_error css__cascade_grid_row_start(uint32_t opv, css_style *style, css_select
             integer = *((css_fixed *)style->bytecode);
             advance_bytecode(style, sizeof(integer));
             break;
+        case CSS_GRID_LINE_SPAN:
+            value = CSS_GRID_LINE_SPAN;
+            integer = *((css_fixed *)style->bytecode);
+            advance_bytecode(style, sizeof(integer));
+            break;
         }
     }
 

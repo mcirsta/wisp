@@ -75,7 +75,15 @@ css_error css__cascade_grid_template_rows(uint32_t opv, css_style *style, css_se
                         /* Simple track: we already read
                          * value and unit */
                         tracks[i].value = track_value;
-                        tracks[i].unit = css__to_css_unit(raw_unit);
+                        /* Handle grid-specific units that parser emits as
+                         * public CSS_UNIT_* values directly, without going
+                         * through bytecode unit conversion */
+                        if (raw_unit == CSS_UNIT_MIN_CONTENT || raw_unit == CSS_UNIT_MAX_CONTENT ||
+                            raw_unit == CSS_UNIT_FIT_CONTENT) {
+                            tracks[i].unit = raw_unit;
+                        } else {
+                            tracks[i].unit = css__to_css_unit(raw_unit);
+                        }
                         /* min_unit, max_value, max_unit
                          * are unused */
                         tracks[i].min_unit = 0;

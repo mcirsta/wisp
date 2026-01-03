@@ -183,3 +183,65 @@ static inline css_error set_content(
 
 	return CSS_OK;
 }'''
+
+# Grid line getters need to return integer for both CSS_GRID_LINE_SET and CSS_GRID_LINE_SPAN
+overrides['get']['grid_column_start'] = '''\
+static inline uint8_t get_grid_column_start(const css_computed_style *style, int32_t *integer)
+{
+	uint32_t bits = style->i.bits[GRID_COLUMN_START_INDEX];
+	bits &= GRID_COLUMN_START_MASK;
+	bits >>= GRID_COLUMN_START_SHIFT;
+
+	/* 2bits: tt : type */
+	if ((bits & 0x3) == CSS_GRID_LINE_SET || (bits & 0x3) == CSS_GRID_LINE_SPAN) {
+		*integer = style->i.grid_column_start;
+	}
+
+	return (bits & 0x3);
+}'''
+
+overrides['get']['grid_column_end'] = '''\
+static inline uint8_t get_grid_column_end(const css_computed_style *style, int32_t *integer)
+{
+	uint32_t bits = style->i.bits[GRID_COLUMN_END_INDEX];
+	bits &= GRID_COLUMN_END_MASK;
+	bits >>= GRID_COLUMN_END_SHIFT;
+
+	/* 2bits: tt : type */
+	if ((bits & 0x3) == CSS_GRID_LINE_SET || (bits & 0x3) == CSS_GRID_LINE_SPAN) {
+		*integer = style->i.grid_column_end;
+	}
+
+	return (bits & 0x3);
+}'''
+
+overrides['get']['grid_row_start'] = '''\
+static inline uint8_t get_grid_row_start(const css_computed_style *style, int32_t *integer)
+{
+	uint32_t bits = style->i.bits[GRID_ROW_START_INDEX];
+	bits &= GRID_ROW_START_MASK;
+	bits >>= GRID_ROW_START_SHIFT;
+
+	/* 2bits: tt : type */
+	if ((bits & 0x3) == CSS_GRID_LINE_SET || (bits & 0x3) == CSS_GRID_LINE_SPAN) {
+		*integer = style->i.grid_row_start;
+	}
+
+	return (bits & 0x3);
+}'''
+
+overrides['get']['grid_row_end'] = '''\
+static inline uint8_t get_grid_row_end(const css_computed_style *style, int32_t *integer)
+{
+	uint32_t bits = style->i.bits[GRID_ROW_END_INDEX];
+	bits &= GRID_ROW_END_MASK;
+	bits >>= GRID_ROW_END_SHIFT;
+
+	/* 2bits: tt : type */
+	if ((bits & 0x3) == CSS_GRID_LINE_SET || (bits & 0x3) == CSS_GRID_LINE_SPAN) {
+		*integer = style->i.grid_row_end;
+	}
+
+	return (bits & 0x3);
+}'''
+

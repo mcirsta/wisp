@@ -1681,7 +1681,7 @@ static inline uint8_t get_grid_column_end(const css_computed_style *style, int32
     bits >>= GRID_COLUMN_END_SHIFT;
 
     /* 2bits: tt : type */
-    if ((bits & 0x3) == CSS_GRID_LINE_SET) {
+    if ((bits & 0x3) == CSS_GRID_LINE_SET || (bits & 0x3) == CSS_GRID_LINE_SPAN) {
         *integer = style->i.grid_column_end;
     }
 
@@ -1710,7 +1710,7 @@ static inline uint8_t get_grid_column_start(const css_computed_style *style, int
     bits >>= GRID_COLUMN_START_SHIFT;
 
     /* 2bits: tt : type */
-    if ((bits & 0x3) == CSS_GRID_LINE_SET) {
+    if ((bits & 0x3) == CSS_GRID_LINE_SET || (bits & 0x3) == CSS_GRID_LINE_SPAN) {
         *integer = style->i.grid_column_start;
     }
 
@@ -1739,7 +1739,7 @@ static inline uint8_t get_grid_row_end(const css_computed_style *style, int32_t 
     bits >>= GRID_ROW_END_SHIFT;
 
     /* 2bits: tt : type */
-    if ((bits & 0x3) == CSS_GRID_LINE_SET) {
+    if ((bits & 0x3) == CSS_GRID_LINE_SET || (bits & 0x3) == CSS_GRID_LINE_SPAN) {
         *integer = style->i.grid_row_end;
     }
 
@@ -1768,7 +1768,7 @@ static inline uint8_t get_grid_row_start(const css_computed_style *style, int32_
     bits >>= GRID_ROW_START_SHIFT;
 
     /* 2bits: tt : type */
-    if ((bits & 0x3) == CSS_GRID_LINE_SET) {
+    if ((bits & 0x3) == CSS_GRID_LINE_SET || (bits & 0x3) == CSS_GRID_LINE_SPAN) {
         *integer = style->i.grid_row_start;
     }
 

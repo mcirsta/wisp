@@ -257,14 +257,62 @@ css_error css__parse_grid_template_columns_internal(
             break; /* End of input means end of track list */
         }
 
-        /* Also check for special chars that terminate property ( like ;
-         * or } ) */
-        /* But unit parser will fail if it sees them, breaking the loop,
-         * which is fine. */
-        /* However, if it returns CSS_INVALID, we need to decide if
-         * property is valid so far */
-        /* For grid-template-columns, stray tokens invalidate the whole
-         * property */
+        /* Check for repeat() function */
+        if (token->type == CSS_TOKEN_FUNCTION) {
+            bool match;
+            if (lwc_string_caseless_isequal(token->idata, c->strings[REPEAT], &match) == lwc_error_ok && match) {
+                /* repeat(N, track-size) */
+                parserutils_vector_iterate(vector, ctx); /* consume 'repeat(' */
+                consumeWhitespace(vector, ctx);
+
+                /* Parse repeat count - must be a positive integer */
+                token = parserutils_vector_peek(vector, *ctx);
+                if (token == NULL || token->type != CSS_TOKEN_NUMBER) {
+                    break; /* Invalid repeat syntax */
+                }
+
+                int32_t repeat_count = 0;
+                size_t consumed = 0;
+                css_fixed fixed_count = css__number_from_lwc_string(token->idata, true, &consumed);
+                if (consumed != lwc_string_length(token->idata)) {
+                    break;
+                }
+                repeat_count = FIXTOINT(fixed_count);
+                if (repeat_count <= 0 || repeat_count > MAX_GRID_TRACKS) {
+                    break; /* Invalid repeat count */
+                }
+                parserutils_vector_iterate(vector, ctx); /* consume number */
+
+                /* Consume comma */
+                consumeWhitespace(vector, ctx);
+                token = parserutils_vector_iterate(vector, ctx);
+                if (token == NULL || !tokenIsChar(token, ',')) {
+                    break; /* Expected comma */
+                }
+                consumeWhitespace(vector, ctx);
+
+                /* Parse the track size to repeat */
+                grid_track_t repeat_track = {0};
+                error = parse_track_size(c, vector, ctx, &repeat_track);
+                if (error != CSS_OK) {
+                    break; /* Failed to parse track in repeat() */
+                }
+
+                /* Consume closing paren */
+                consumeWhitespace(vector, ctx);
+                token = parserutils_vector_iterate(vector, ctx);
+                if (token == NULL || !tokenIsChar(token, ')')) {
+                    break; /* Expected closing paren */
+                }
+
+                /* Add repeat_count copies of the track */
+                fprintf(stderr, "DEBUG: repeat(%d, track) expanding\n", repeat_count);
+                for (int r = 0; r < repeat_count && num_tracks < MAX_GRID_TRACKS; r++) {
+                    tracks[num_tracks++] = repeat_track;
+                }
+                continue; /* Continue to next track in the list */
+            }
+        }
 
         error = parse_track_size(c, vector, ctx, &track);
         if (error == CSS_OK) {

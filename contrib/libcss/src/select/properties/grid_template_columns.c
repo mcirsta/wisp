@@ -68,7 +68,15 @@ css_error css__cascade_grid_template_columns(uint32_t opv, css_style *style, css
                         tracks[i].max_unit = css__to_css_unit(*style->bytecode);
                         advance_bytecode(style, sizeof(css_code_t));
                     } else {
-                        tracks[i].unit = css__to_css_unit(raw_unit);
+                        /* Handle grid-specific units that parser emits as
+                         * public CSS_UNIT_* values directly, without going
+                         * through bytecode unit conversion */
+                        if (raw_unit == CSS_UNIT_MIN_CONTENT || raw_unit == CSS_UNIT_MAX_CONTENT ||
+                            raw_unit == CSS_UNIT_FIT_CONTENT) {
+                            tracks[i].unit = raw_unit;
+                        } else {
+                            tracks[i].unit = css__to_css_unit(raw_unit);
+                        }
                         /* min_unit, max_value, max_unit
                          * are unused */
                         tracks[i].min_unit = 0;

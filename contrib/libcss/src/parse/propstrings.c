@@ -103,7 +103,7 @@ const stringmap_entry stringmap[LAST_KNOWN] = {SMAP("*"),
     /* CSS Grid keywords */
     SMAP("dense"), SMAP("row dense"), SMAP("column dense"),
     /* CSS Grid track sizing functions and keywords */
-    SMAP("minmax"), SMAP("min-content"), SMAP("max-content"), SMAP("fit-content"),
+    SMAP("minmax"), SMAP("min-content"), SMAP("max-content"), SMAP("fit-content"), SMAP("span"),
 
     /* Named colours */
     SMAP("aliceblue"), SMAP("antiquewhite"), SMAP("aqua"), SMAP("aquamarine"), SMAP("azure"), SMAP("beige"),
