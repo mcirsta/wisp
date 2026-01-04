@@ -212,11 +212,12 @@ static struct flex_ctx *layout_flex_ctx__create(html_content *content, const str
                 ctx->cross_gap = FIXTOINT(css_unit_len2device_px(flex->style, ctx->unit_len_ctx, gap_len, gap_unit));
             }
         }
-        NSLOG(
-            flex, WARNING, "Flex gap: main=%d cross=%d horizontal=%d", ctx->main_gap, ctx->cross_gap, ctx->horizontal);
-        // fprintf(
-        //     stderr, "FLEX GAP DEBUG: main=%d cross=%d horizontal=%d\n", ctx->main_gap, ctx->cross_gap,
+        // NSLOG(
+        //     flex, WARNING, "Flex gap: main=%d cross=%d horizontal=%d", ctx->main_gap, ctx->cross_gap,
         //     ctx->horizontal);
+        //  fprintf(
+        //      stderr, "FLEX GAP DEBUG: main=%d cross=%d horizontal=%d\n", ctx->main_gap, ctx->cross_gap,
+        //      ctx->horizontal);
     }
 
     return ctx;
@@ -994,7 +995,7 @@ static bool layout_flex__place_line_items_main(struct flex_ctx *ctx, struct flex
         }
 
         *box_pos_main = main_pos + lh__non_auto_margin(b, main_start) + extra_pre + b->border[main_start].width;
-        NSLOG(flex, WARNING, "ITEM[%zu]: POSITIONED at %d (main_pos=%d)", i, *box_pos_main, main_pos);
+        // NSLOG(flex, WARNING, "ITEM[%zu]: POSITIONED at %d (main_pos=%d)", i, *box_pos_main, main_pos);
 
         if (!lh__box_is_absolute(b)) {
             int cross_size;

@@ -47,7 +47,7 @@ static css_error parse_track_size(css_language *c, const parserutils_vector *vec
     if (token == NULL) {
         return CSS_INVALID;
     }
-    fprintf(stderr, "DEBUG: parse_track_size peeked token type %d\n", token->type);
+    // fprintf(stderr, "DEBUG: parse_track_size peeked token type %d\n", token->type);
 
     /* Check for keywords: auto, min-content, max-content */
     if (token->type == CSS_TOKEN_IDENT) {
@@ -84,7 +84,7 @@ static css_error parse_track_size(css_language *c, const parserutils_vector *vec
 
             /* Consume 'minmax(' */
             parserutils_vector_iterate(vector, ctx);
-            fprintf(stderr, "DEBUG: Found minmax\n");
+            // fprintf(stderr, "DEBUG: Found minmax\n");
 
             /* Skip whitespace */
             consumeWhitespace(vector, ctx);
@@ -217,8 +217,8 @@ css_error css__parse_grid_template_columns_internal(
     int num_tracks = 0;
 
 
-    printf("DEBUG: Entering css__parse_grid_template_columns_internal with ID %d\n", id);
-    fflush(stdout);
+    // printf("DEBUG: Entering css__parse_grid_template_columns_internal with ID %d\n", id);
+    // fflush(stdout);
 
     token = parserutils_vector_iterate(vector, ctx);
     if (token == NULL) {
@@ -246,7 +246,7 @@ css_error css__parse_grid_template_columns_internal(
 
     while (num_tracks < MAX_GRID_TRACKS) {
         grid_track_t track = {0};
-        fprintf(stderr, "DEBUG: Parsing track %d\n", num_tracks);
+        // fprintf(stderr, "DEBUG: Parsing track %d\n", num_tracks);
 
         /* Critical: consume whitespace between tracks */
         consumeWhitespace(vector, ctx);
@@ -306,7 +306,7 @@ css_error css__parse_grid_template_columns_internal(
                 }
 
                 /* Add repeat_count copies of the track */
-                fprintf(stderr, "DEBUG: repeat(%d, track) expanding\n", repeat_count);
+                // fprintf(stderr, "DEBUG: repeat(%d, track) expanding\n", repeat_count);
                 for (int r = 0; r < repeat_count && num_tracks < MAX_GRID_TRACKS; r++) {
                     tracks[num_tracks++] = repeat_track;
                 }
@@ -316,10 +316,10 @@ css_error css__parse_grid_template_columns_internal(
 
         error = parse_track_size(c, vector, ctx, &track);
         if (error == CSS_OK) {
-            fprintf(stderr, "DEBUG: Track %d parsed OK. Type=%d\n", num_tracks, track.type);
+            // fprintf(stderr, "DEBUG: Track %d parsed OK. Type=%d\n", num_tracks, track.type);
             tracks[num_tracks++] = track;
         } else {
-            fprintf(stderr, "DEBUG: Track parsing failed for index %d\n", num_tracks);
+            // fprintf(stderr, "DEBUG: Track parsing failed for index %d\n", num_tracks);
             /* If we encounter something that isn't a track, stop.
              * But if it's not the end of input, and not a valid
              * track, the property should likely be invalid? CSS

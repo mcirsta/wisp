@@ -32,7 +32,7 @@ css_error css__cascade_grid_template_columns(uint32_t opv, css_style *style, css
             advance_bytecode(style, sizeof(css_code_t));
 
             if (n_tracks > 0) {
-                fprintf(stderr, "DEBUG: cascade grid tracks %d\n", n_tracks);
+                // fprintf(stderr, "DEBUG: cascade grid tracks %d\n", n_tracks);
                 /* Allocate track array */
                 tracks = malloc(sizeof(css_computed_grid_track) * (n_tracks + 1));
                 if (tracks == NULL) {
