@@ -3238,6 +3238,14 @@ bool layout_block_context(struct box *block, int viewport_height, html_content *
 
                 layout_block_find_dimensions(&content->unit_len_ctx, box->parent->width, viewport_height, lm, rm, box);
 
+                /* Debug: trace margin values for wpnbha blocks */
+                if (cls != NULL && strstr(cls, "wpnbha")) {
+                    NSLOG(layout, WARNING,
+                        "wpnbha margins: tag %s box %p margin[TOP]=%d margin[BOTTOM]=%d HAS_HEIGHT=%d in_margin=%d max_pos=%u",
+                        tag, box, box->margin[TOP], box->margin[BOTTOM], (box->flags & HAS_HEIGHT) ? 1 : 0, in_margin,
+                        max_pos_margin);
+                }
+
                 if (is_target) {
                     NSLOG(layout, INFO, "block post: tag %s class %s box %p width %i height %i", tag, cls, box,
                         box->width, box->height);
@@ -3512,6 +3520,12 @@ bool layout_block_context(struct box *block, int viewport_height, html_content *
             max_pos_margin = box->margin[BOTTOM];
         else if (max_neg_margin < -box->margin[BOTTOM])
             max_neg_margin = -box->margin[BOTTOM];
+
+        /* Mark that we have a pending margin to apply to the next sibling.
+         * CSS 2.1 §8.3.1: "The bottom margin of an in-flow block-level
+         * element always collapses with the top margin of its next
+         * in-flow block-level sibling." */
+        in_margin = true;
 
         box = box->next;
         box->y = y;
