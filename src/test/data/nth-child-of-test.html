@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <title>CSS :nth-child(An+B of selector) Test</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            padding: 20px;
+            background: #f0f0f0;
+        }
+
+        h2 {
+            margin-top: 30px;
+            border-bottom: 1px solid #333;
+        }
+
+        .container {
+            background: white;
+            padding: 10px;
+            margin: 10px 0;
+            border: 1px solid #ccc;
+        }
+
+        .item {
+            padding: 10px;
+            margin: 5px 0;
+            border: 1px solid #ddd;
+        }
+
+        /* Test 1: Basic :nth-child(odd of .highlight) */
+        /* Should highlight 1st and 3rd items with .highlight class (pink) */
+        .test1 .item.highlight:nth-child(odd of .highlight) {
+            background-color: rgb(247, 233, 233);
+        }
+
+        /* Test 2: :nth-child(2n+1 of .special) - same as odd */
+        .test2 .item.special:nth-child(2n+1 of .special) {
+            background-color: rgb(200, 255, 200);
+        }
+
+        /* Test 3: :nth-child(even of .marked) */
+        .test3 .item.marked:nth-child(even of .marked) {
+            background-color: rgb(200, 200, 255);
+        }
+
+        /* Test 4: :nth-child(3 of .target) - exactly 3rd */
+        .test4 .item.target:nth-child(3 of .target) {
+            background-color: rgb(255, 220, 150);
+        }
+
+        /* Test 5: Hotnews-style selector */
+        .test5 .wpnbha.image-alignleft:nth-child(2n+1 of .image-alignleft) {
+            background-color: rgb(247, 233, 233);
+            margin-left: -10px;
+            margin-right: -10px;
+            padding: 10px;
+        }
+
+        .pass {
+            color: green;
+            font-weight: bold;
+        }
+
+        .expected {
+            color: #666;
+            font-style: italic;
+            font-size: 0.9em;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>CSS :nth-child(An+B of selector) Test Cases</h1>
+    <p>Testing CSS Selectors Level 4 feature: <code>:nth-child(An+B of &lt;selector&gt;)</code></p>
+
+    <h2>Test 1: :nth-child(odd of .highlight)</h2>
+    <p class="expected">Expected: Items 2 and 5 should have pink background (1st and 3rd .highlight)</p>
+    <div class="container test1">
+        <div class="item">1. Regular item</div>
+        <div class="item highlight">2. Highlight item (1st of .highlight) ← PINK</div>
+        <div class="item">3. Regular item</div>
+        <div class="item highlight">4. Highlight item (2nd of .highlight)</div>
+        <div class="item highlight">5. Highlight item (3rd of .highlight) ← PINK</div>
+        <div class="item">6. Regular item</div>
+    </div>
+
+    <h2>Test 2: :nth-child(2n+1 of .special)</h2>
+    <p class="expected">Expected: Items 1, 4, 6 should have green background (1st, 3rd, 5th of .special)</p>
+    <div class="container test2">
+        <div class="item special">1. Special (1st) ← GREEN</div>
+        <div class="item special">2. Special (2nd)</div>
+        <div class="item">3. Regular</div>
+        <div class="item special">4. Special (3rd) ← GREEN</div>
+        <div class="item special">5. Special (4th)</div>
+        <div class="item special">6. Special (5th) ← GREEN</div>
+    </div>
+
+    <h2>Test 3: :nth-child(even of .marked)</h2>
+    <p class="expected">Expected: Items 3 and 6 should have blue background (2nd and 4th of .marked)</p>
+    <div class="container test3">
+        <div class="item marked">1. Marked (1st)</div>
+        <div class="item">2. Regular</div>
+        <div class="item marked">3. Marked (2nd) ← BLUE</div>
+        <div class="item marked">4. Marked (3rd)</div>
+        <div class="item">5. Regular</div>
+        <div class="item marked">6. Marked (4th) ← BLUE</div>
+    </div>
+
+    <h2>Test 4: :nth-child(3 of .target)</h2>
+    <p class="expected">Expected: Only item 5 should have orange background (exactly 3rd of .target)</p>
+    <div class="container test4">
+        <div class="item target">1. Target (1st)</div>
+        <div class="item">2. Regular</div>
+        <div class="item target">3. Target (2nd)</div>
+        <div class="item">4. Regular</div>
+        <div class="item target">5. Target (3rd) ← ORANGE</div>
+        <div class="item target">6. Target (4th)</div>
+    </div>
+
+    <h2>Test 5: Hotnews-style (:nth-child(2n+1 of .image-alignleft))</h2>
+    <p class="expected">Expected: Alternating .image-alignleft blocks have pink background with extended margins</p>
+    <div class="container test5">
+        <div class="item wpnbha image-alignleft">Article 1 (1st of .image-alignleft) ← PINK</div>
+        <div class="item wpnbha">Article 2 (no .image-alignleft)</div>
+        <div class="item wpnbha image-alignleft">Article 3 (2nd of .image-alignleft)</div>
+        <div class="item wpnbha image-alignleft">Article 4 (3rd of .image-alignleft) ← PINK</div>
+        <div class="item wpnbha">Article 5 (no .image-alignleft)</div>
+        <div class="item wpnbha image-alignleft">Article 6 (4th of .image-alignleft)</div>
+    </div>
+
+    <h2>Reference</h2>
+    <p>Compare with Chrome/Firefox to verify correct behavior.</p>
+    <p><a href="https://developer.mozilla.org/en-US/docs/Web/CSS/:nth-child#the_of_selector_syntax">MDN: :nth-child of
+            selector syntax</a></p>
+</body>
+
+</html>

@@ -62,7 +62,8 @@ typedef enum css_combinator {
 
 typedef enum css_selector_detail_value_type {
     CSS_SELECTOR_DETAIL_VALUE_STRING,
-    CSS_SELECTOR_DETAIL_VALUE_NTH
+    CSS_SELECTOR_DETAIL_VALUE_NTH,
+    CSS_SELECTOR_DETAIL_VALUE_NTH_OF /**< nth with filter selector */
 } css_selector_detail_value_type;
 
 typedef union css_selector_detail_value {
@@ -71,6 +72,11 @@ typedef union css_selector_detail_value {
         int32_t a;
         int32_t b;
     } nth; /**< Data for x = an + b */
+    struct {
+        int32_t a;
+        int32_t b;
+        lwc_string *filter_class; /**< Filter class name (without .) */
+    } nth_of; /**< Data for :nth-child(An+B of .class) */
 } css_selector_detail_value;
 
 typedef struct css_selector_detail {
@@ -81,7 +87,7 @@ typedef struct css_selector_detail {
         comb : 3, /**< Type of combinator */
         next : 1, /**< Another selector detail
                    * follows */
-        value_type : 1, /**< Type of value field */
+        value_type : 2, /**< Type of value field (0-3) */
         negate : 1; /**< Detail match is inverted */
 } css_selector_detail;
 

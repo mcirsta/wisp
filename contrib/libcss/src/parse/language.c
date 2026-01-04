@@ -1276,12 +1276,46 @@ parsePseudo(css_language *c, const parserutils_vector *vector, int32_t *ctx, boo
             consumeWhitespace(vector, ctx);
         } else if (fun_type == NTH_CHILD || fun_type == NTH_LAST_CHILD || fun_type == NTH_OF_TYPE ||
             fun_type == NTH_LAST_OF_TYPE) {
-            /* an + b */
+            /* an + b [of <selector>]? */
             error = parseNth(c, vector, ctx, &detail_value);
             if (error != CSS_OK)
                 return error;
 
             value_type = CSS_SELECTOR_DETAIL_VALUE_NTH;
+
+            /* Check for "of" clause (CSS Selectors Level 4) - only for nth-child and nth-last-child */
+            if (fun_type == NTH_CHILD || fun_type == NTH_LAST_CHILD) {
+                token = parserutils_vector_peek(vector, *ctx);
+                if (token != NULL && token->type == CSS_TOKEN_IDENT) {
+                    bool is_of = false;
+                    lwc_string_caseless_isequal(token->idata, c->strings[OF], &is_of);
+                    if (is_of) {
+                        /* Consume 'of' */
+                        parserutils_vector_iterate(vector, ctx);
+                        consumeWhitespace(vector, ctx);
+
+                        /* Expect '.' followed by class name */
+                        token = parserutils_vector_peek(vector, *ctx);
+                        if (token != NULL && tokenIsChar(token, '.')) {
+                            parserutils_vector_iterate(vector, ctx);
+                            token = parserutils_vector_iterate(vector, ctx);
+                            if (token != NULL && token->type == CSS_TOKEN_IDENT) {
+                                /* Store as nth_of with filter class */
+                                detail_value.nth_of.a = detail_value.nth.a;
+                                detail_value.nth_of.b = detail_value.nth.b;
+                                detail_value.nth_of.filter_class = token->idata;
+                                value_type = CSS_SELECTOR_DETAIL_VALUE_NTH_OF;
+                                consumeWhitespace(vector, ctx);
+                            } else {
+                                return CSS_INVALID;
+                            }
+                        } else {
+                            /* 'of' without class selector - invalid for now */
+                            return CSS_INVALID;
+                        }
+                    }
+                }
+            }
         } else if (fun_type == NOT) {
             /* type_selector | specific */
             token = parserutils_vector_peek(vector, *ctx);

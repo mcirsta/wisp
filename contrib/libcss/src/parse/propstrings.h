@@ -313,6 +313,7 @@ enum {
     CURRENTCOLOR,
     ODD,
     EVEN,
+    OF, /* CSS Selectors Level 4: :nth-child(An+B of <selector>) */
     SRC,
     LOCAL,
     INITIAL,

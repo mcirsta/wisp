@@ -2301,12 +2301,57 @@ css_error match_detail(css_select_ctx *ctx, void *node, const css_selector_detai
         } else if (is_root == false && detail->qname.name == ctx->str.nth_child) {
             int32_t num_before = 0;
 
-            error = state->handler->node_count_siblings(state->pw, node, false, false, &num_before);
-            if (error == CSS_OK) {
-                int32_t a = detail->value.nth.a;
-                int32_t b = detail->value.nth.b;
+            if (detail->value_type == CSS_SELECTOR_DETAIL_VALUE_NTH_OF) {
+                /* :nth-child(An+B of .class) - count only matching siblings */
+                lwc_string *filter_class = detail->value.nth_of.filter_class;
 
-                *match = match_nth(a, b, num_before + 1);
+                /* First check if current node has the filter class */
+                bool node_has_class = false;
+                error = state->handler->node_has_class(state->pw, node, filter_class, &node_has_class);
+                if (error != CSS_OK)
+                    return error;
+
+                if (!node_has_class) {
+                    /* Node doesn't have filter class, can't match */
+                    *match = false;
+                } else {
+                    /* Count matching siblings before this node by iterating */
+                    void *sibling = NULL;
+                    void *current = node;
+
+                    /* Get previous sibling and count those with the filter class */
+                    while (true) {
+                        error = state->handler->sibling_node(state->pw, current, &sibling);
+                        if (error != CSS_OK)
+                            return error;
+                        if (sibling == NULL)
+                            break;
+
+                        /* Check if this sibling has the filter class */
+                        bool sibling_has_class = false;
+                        error = state->handler->node_has_class(state->pw, sibling, filter_class, &sibling_has_class);
+                        if (error != CSS_OK)
+                            return error;
+
+                        if (sibling_has_class)
+                            num_before++;
+
+                        current = sibling;
+                    }
+
+                    int32_t a = detail->value.nth_of.a;
+                    int32_t b = detail->value.nth_of.b;
+                    *match = match_nth(a, b, num_before + 1);
+                }
+            } else {
+                /* Regular :nth-child(An+B) */
+                error = state->handler->node_count_siblings(state->pw, node, false, false, &num_before);
+                if (error == CSS_OK) {
+                    int32_t a = detail->value.nth.a;
+                    int32_t b = detail->value.nth.b;
+
+                    *match = match_nth(a, b, num_before + 1);
+                }
             }
         } else if (is_root == false && detail->qname.name == ctx->str.nth_last_child) {
             int32_t num_after = 0;
