@@ -312,6 +312,46 @@ struct neosurf_table *guit = &mock_gui;
 #undef NSLOG
 #define NSLOG(cat, level, fmt, ...) fprintf(stderr, "NSLOG: " fmt "\n", ##__VA_ARGS__)
 
+/* Mock UTF-8 functions for box_text_transform Unicode support */
+uint32_t utf8_to_ucs4(const char *s, size_t l)
+{
+    /* Simple mock: just return the first byte for ASCII, or a placeholder for multi-byte */
+    if ((unsigned char)s[0] < 0x80) {
+        return (uint32_t)(unsigned char)s[0];
+    }
+    /* For multi-byte, return a placeholder (not used in test) */
+    return 0xFFFD;
+}
+
+size_t utf8_from_ucs4(uint32_t c, char *s)
+{
+    /* Simple mock: only handle ASCII */
+    if (c < 0x80) {
+        s[0] = (char)c;
+        return 1;
+    }
+    /* For non-ASCII, return replacement char */
+    s[0] = '?';
+    return 1;
+}
+
+size_t utf8_next(const char *s, size_t l, size_t o)
+{
+    /* Simple mock: advance by 1 for ASCII, or by multi-byte sequence length */
+    if (o >= l)
+        return l;
+    unsigned char c = (unsigned char)s[o];
+    if (c < 0x80)
+        return o + 1;
+    if ((c & 0xE0) == 0xC0)
+        return o + 2;
+    if ((c & 0xF0) == 0xE0)
+        return o + 3;
+    if ((c & 0xF8) == 0xF0)
+        return o + 4;
+    return o + 1;
+}
+
 /* Now Include */
 #include "content/handlers/html/box_construct.c"
 

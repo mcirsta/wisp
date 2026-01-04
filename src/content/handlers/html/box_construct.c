@@ -37,10 +37,12 @@
 #include <neosurf/utils/nsoption.h>
 #include <neosurf/utils/nsurl.h>
 #include <neosurf/utils/string.h>
+#include <neosurf/utils/utf8.h>
 #include <nsutils/time.h>
 #include "utils/talloc.h"
 #include "utils/utils.h"
 #include "content/handlers/css/select.h"
+#include <wctype.h>
 
 #include <neosurf/content/fetch.h>
 #include <neosurf/content/handlers/html/box.h>
@@ -985,37 +987,64 @@ static dom_node *next_node(dom_node *n, html_content *content, bool convert_chil
 
 
 /**
- * Apply the CSS text-transform property to given text for its ASCII chars.
+ * Apply the CSS text-transform property to given text (Unicode-aware).
  *
- * \param  s	string to transform
- * \param  len  length of s
+ * \param  s	string to transform (UTF-8, will be modified in-place)
+ * \param  len  length of s in bytes
  * \param  tt	transform type
+ *
+ * Note: This function handles multi-byte UTF-8 characters correctly.
+ * For case transformations where the result has the same byte length
+ * (which covers most Latin characters including Romanian diacritics),
+ * the transformation is done in-place.
  */
 static void box_text_transform(char *s, unsigned int len, enum css_text_transform_e tt)
 {
-    unsigned int i;
+    size_t off = 0;
+    bool prev_was_space = true; /* For capitalize: treat start as after space */
+
     if (len == 0)
         return;
-    switch (tt) {
-    case CSS_TEXT_TRANSFORM_UPPERCASE:
-        for (i = 0; i < len; ++i)
-            if ((unsigned char)s[i] < 0x80)
-                s[i] = ascii_to_upper(s[i]);
-        break;
-    case CSS_TEXT_TRANSFORM_LOWERCASE:
-        for (i = 0; i < len; ++i)
-            if ((unsigned char)s[i] < 0x80)
-                s[i] = ascii_to_lower(s[i]);
-        break;
-    case CSS_TEXT_TRANSFORM_CAPITALIZE:
-        if ((unsigned char)s[0] < 0x80)
-            s[0] = ascii_to_upper(s[0]);
-        for (i = 1; i < len; ++i)
-            if ((unsigned char)s[i] < 0x80 && ascii_is_space(s[i - 1]))
-                s[i] = ascii_to_upper(s[i]);
-        break;
-    default:
-        break;
+
+    while (off < len) {
+        size_t next_off = utf8_next(s, len, off);
+        size_t char_len = next_off - off;
+        uint32_t c = utf8_to_ucs4(s + off, char_len);
+        uint32_t transformed = c;
+
+        switch (tt) {
+        case CSS_TEXT_TRANSFORM_UPPERCASE:
+            transformed = towupper(c);
+            break;
+        case CSS_TEXT_TRANSFORM_LOWERCASE:
+            transformed = towlower(c);
+            break;
+        case CSS_TEXT_TRANSFORM_CAPITALIZE:
+            if (prev_was_space) {
+                transformed = towupper(c);
+            }
+            /* Track if current char is whitespace for next iteration */
+            prev_was_space = (c == ' ' || c == '\t' || c == '\n' || c == '\r');
+            break;
+        default:
+            break;
+        }
+
+        /* Only modify if transformation changed the character */
+        if (transformed != c) {
+            char new_char[6];
+            size_t new_len = utf8_from_ucs4(transformed, new_char);
+
+            /* In-place replacement only works if byte length matches.
+             * For most European languages (including Romanian), upper/lower
+             * case variants have the same UTF-8 byte length. */
+            if (new_len == char_len) {
+                memcpy(s + off, new_char, new_len);
+            }
+            /* If lengths differ, skip this character (rare case) */
+        }
+
+        off = next_off;
     }
 }
 
