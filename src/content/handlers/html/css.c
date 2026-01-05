@@ -43,6 +43,23 @@
 #include <neosurf/content/handlers/html/private.h>
 #include "content/handlers/html/css.h"
 
+#include <nsutils/time.h>
+
+/* Lightweight performance timing macro */
+#define PERF_ENABLED 1
+#if PERF_ENABLED
+#define PERF(fmt, ...)                                                                                                 \
+    do {                                                                                                               \
+        uint64_t _ms;                                                                                                  \
+        nsu_getmonotonic_ms(&_ms);                                                                                     \
+        fprintf(stderr, "PERF[%6lu.%03lu] " fmt "\n", (unsigned long)(_ms / 1000), (unsigned long)(_ms % 1000),        \
+            ##__VA_ARGS__);                                                                                            \
+        fflush(stderr);                                                                                                \
+    } while (0)
+#else
+#define PERF(fmt, ...) ((void)0)
+#endif
+
 static nsurl *html_default_stylesheet_url;
 static nsurl *html_adblock_stylesheet_url;
 static nsurl *html_quirks_stylesheet_url;
@@ -105,6 +122,8 @@ static nserror html_convert_css_callback(hlcache_handle *css, const hlcache_even
     switch (event->type) {
 
     case CONTENT_MSG_DONE:
+        PERF(
+            "CSS DONE slot %d '%s' (active=%d)", i, nsurl_access(hlcache_handle_get_url(css)), parent->base.active - 1);
         NSLOG(neosurf, INFO, "done stylesheet slot %d '%s'", i, nsurl_access(hlcache_handle_get_url(css)));
         CONTENT_ACTIVE_DEC(parent, "CSS callback DONE");
         break;
@@ -450,6 +469,7 @@ bool html_css_process_link(html_content *htmlc, dom_node *node)
     child.quirks = htmlc->base.quirks;
 
     CONTENT_ACTIVE_INC(htmlc, "linked CSS fetch start");
+    PERF("CSS FETCH START '%s' (active=%d)", nsurl_access(joined), htmlc->base.active);
     ns_error = hlcache_handle_retrieve(joined, 0, content_get_url(&htmlc->base), NULL, html_convert_css_callback, htmlc,
         &child, CONTENT_CSS, &htmlc->stylesheets[htmlc->stylesheet_count].sheet);
 

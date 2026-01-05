@@ -657,15 +657,15 @@ css_computed_width_px(const css_computed_style *style, const css_unit_ctx *unit_
     case CSS_WIDTH_SET:
         switch (unit) {
         case CSS_UNIT_CALC:
-            fprintf(stderr, "CALC WIDTH: available_px=%d calc_ptr=%p\n", available_px, (void *)value.calc);
+            // fprintf(stderr, "CALC WIDTH: available_px=%d calc_ptr=%p\n", available_px, (void *)value.calc);
             if (css_calculator_calculate(style->calc, unit_ctx, available_px, value.calc, style, &unit, &value.value) ==
                 CSS_OK) {
                 type = CSS_WIDTH_SET;
                 *px_out = FIXTOINT(css_unit_css2device_px(value.value, unit_ctx->device_dpi));
-                fprintf(stderr, "CALC WIDTH: SUCCESS result=%d unit=%d\n", *px_out, unit);
+                // fprintf(stderr, "CALC WIDTH: SUCCESS result=%d unit=%d\n", *px_out, unit);
             } else {
                 type = CSS_WIDTH_AUTO;
-                fprintf(stderr, "CALC WIDTH: FAILED, falling back to AUTO\n");
+                // fprintf(stderr, "CALC WIDTH: FAILED, falling back to AUTO\n");
             }
             break;
         case CSS_UNIT_PCT:

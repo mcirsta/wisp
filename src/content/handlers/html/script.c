@@ -45,6 +45,23 @@
 #include <neosurf/content/handlers/html/html.h>
 #include <neosurf/content/handlers/html/private.h>
 
+#include <nsutils/time.h>
+
+/* Lightweight performance timing macro */
+#define PERF_ENABLED 1
+#if PERF_ENABLED
+#define PERF(fmt, ...)                                                                                                 \
+    do {                                                                                                               \
+        uint64_t _ms;                                                                                                  \
+        nsu_getmonotonic_ms(&_ms);                                                                                     \
+        fprintf(stderr, "PERF[%6lu.%03lu] " fmt "\n", (unsigned long)(_ms / 1000), (unsigned long)(_ms % 1000),        \
+            ##__VA_ARGS__);                                                                                            \
+        fflush(stderr);                                                                                                \
+    } while (0)
+#else
+#define PERF(fmt, ...) ((void)0)
+#endif
+
 typedef bool(script_handler_t)(struct jsthread *jsthread, const uint8_t *data, size_t size, const char *name);
 
 
@@ -176,6 +193,8 @@ static nserror convert_script_async_cb(hlcache_handle *script, const hlcache_eve
         break;
 
     case CONTENT_MSG_DONE:
+        PERF("SCRIPT ASYNC DONE %d '%s' (active=%d)", i, nsurl_access(hlcache_handle_get_url(script)),
+            parent->base.active - 1);
         NSLOG(neosurf, INFO, "script %d done '%s'", i, nsurl_access(hlcache_handle_get_url(script)));
         if (parent->base.active == 0) {
             NSLOG(neosurf, CRITICAL,
@@ -184,6 +203,7 @@ static nserror convert_script_async_cb(hlcache_handle *script, const hlcache_eve
                 parent, nsurl_access(hlcache_handle_get_url(script)));
         }
         parent->base.active--;
+        parent->scripts_active--;
         NSLOG(neosurf, INFO, "%d fetches active", parent->base.active);
 
         break;
@@ -201,6 +221,7 @@ static nserror convert_script_async_cb(hlcache_handle *script, const hlcache_eve
                 parent, nsurl_access(hlcache_handle_get_url(script)));
         }
         parent->base.active--;
+        parent->scripts_active--;
         NSLOG(neosurf, INFO, "%d fetches active", parent->base.active);
 
         break;
@@ -246,6 +267,8 @@ static nserror convert_script_defer_cb(hlcache_handle *script, const hlcache_eve
     switch (event->type) {
 
     case CONTENT_MSG_DONE:
+        PERF("SCRIPT DEFER DONE %d '%s' (active=%d)", i, nsurl_access(hlcache_handle_get_url(script)),
+            parent->base.active - 1);
         NSLOG(neosurf, INFO, "script %d done '%s'", i, nsurl_access(hlcache_handle_get_url(script)));
         if (parent->base.active == 0) {
             NSLOG(neosurf, CRITICAL,
@@ -254,6 +277,7 @@ static nserror convert_script_defer_cb(hlcache_handle *script, const hlcache_eve
                 parent, nsurl_access(hlcache_handle_get_url(script)));
         }
         parent->base.active--;
+        parent->scripts_active--;
         NSLOG(neosurf, INFO, "%d fetches active", parent->base.active);
 
         break;
@@ -271,6 +295,7 @@ static nserror convert_script_defer_cb(hlcache_handle *script, const hlcache_eve
                 parent, nsurl_access(hlcache_handle_get_url(script)));
         }
         parent->base.active--;
+        parent->scripts_active--;
         NSLOG(neosurf, INFO, "%d fetches active", parent->base.active);
 
         break;
@@ -318,6 +343,8 @@ static nserror convert_script_sync_cb(hlcache_handle *script, const hlcache_even
 
     switch (event->type) {
     case CONTENT_MSG_DONE:
+        PERF("SCRIPT SYNC DONE %d '%s' (active=%d)", i, nsurl_access(hlcache_handle_get_url(script)),
+            parent->base.active - 1);
         NSLOG(neosurf, INFO, "script %d done '%s'", i, nsurl_access(hlcache_handle_get_url(script)));
         NSLOG(neosurf, INFO, "DIAG: sync_cb DONE: parent=%p active=%d->%d", parent, parent->base.active,
             parent->base.active - 1);
@@ -328,6 +355,7 @@ static nserror convert_script_sync_cb(hlcache_handle *script, const hlcache_even
                 parent, nsurl_access(hlcache_handle_get_url(script)));
         }
         parent->base.active--;
+        parent->scripts_active--;
         NSLOG(neosurf, INFO, "%d fetches active", parent->base.active);
 
         s->already_started = true;
@@ -365,6 +393,7 @@ static nserror convert_script_sync_cb(hlcache_handle *script, const hlcache_even
                 parent, nsurl_access(hlcache_handle_get_url(script)));
         }
         parent->base.active--;
+        parent->scripts_active--;
 
         NSLOG(neosurf, INFO, "%d fetches active", parent->base.active);
 
@@ -389,6 +418,13 @@ static nserror convert_script_sync_cb(hlcache_handle *script, const hlcache_even
      */
     if (html_can_begin_conversion(parent)) {
         guit->misc->schedule(0, script_resume_conversion_cb, parent);
+    }
+
+    /* if we have already started converting, execute pending scripts
+     * and proceed to done state if all scripts have finished
+     */
+    else if (parent->conversion_begun) {
+        return html_script_exec(parent, false);
     }
 
     return NSERROR_OK;
@@ -487,7 +523,13 @@ static dom_hubbub_error exec_src_script(html_content *c, dom_node *node, dom_str
      * a chance to increment it, causing an underflow.
      */
     c->base.active++;
-    NSLOG(neosurf, INFO, "DIAG: exec_src_script: content=%p active=%d (pre-retrieve)", c, c->base.active);
+    c->scripts_active++; /* Track script fetches separately */
+    NSLOG(neosurf, INFO, "DIAG: exec_src_script: content=%p active=%d scripts_active=%d (pre-retrieve)", c,
+        c->base.active, c->scripts_active);
+
+    PERF("SCRIPT FETCH START '%s' type=%s (active=%d)", nsurl_access(joined),
+        script_type == HTML_SCRIPT_SYNC ? "SYNC" : (script_type == HTML_SCRIPT_ASYNC ? "ASYNC" : "DEFER"),
+        c->base.active);
 
     ns_error = hlcache_handle_retrieve(
         joined, 0, content_get_url(&c->base), NULL, script_cb, c, &child, CONTENT_SCRIPT, &nscript->data.handle);
@@ -506,7 +548,11 @@ static dom_hubbub_error exec_src_script(html_content *c, dom_node *node, dom_str
 
         switch (script_type) {
         case HTML_SCRIPT_SYNC:
-            ret = DOM_HUBBUB_HUBBUB_ERR | HUBBUB_PAUSED;
+            /* Don't pause parser during script download.
+             * This allows parallel resource discovery and download.
+             * Script will execute when ready via conversion_begun path.
+             * This matches modern browser behavior (speculative parsing).
+             */
             break;
 
         case HTML_SCRIPT_ASYNC:

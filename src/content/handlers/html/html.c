@@ -89,6 +89,7 @@
         nsu_getmonotonic_ms(&_ms);                                                                                     \
         fprintf(stderr, "PERF[%6lu.%03lu] " fmt "\n", (unsigned long)(_ms / 1000), (unsigned long)(_ms % 1000),        \
             ##__VA_ARGS__);                                                                                            \
+        fflush(stderr);                                                                                                \
     } while (0)
 #else
 #define PERF(fmt, ...) ((void)0)
@@ -283,8 +284,10 @@ static void html_box_convert_done(html_content *c, bool success)
         c->parser = NULL;
     }
 
+    PERF("DOM to box conversion DONE");
     content_set_ready(&c->base);
 
+    PERF("content_set_ready DONE");
     html_proceed_to_done(c);
 
     dom_node_unref(html);
@@ -304,7 +307,7 @@ nserror html_proceed_to_done(html_content *html)
 {
     switch (content__get_status(&html->base)) {
     case CONTENT_STATUS_READY:
-        if (html->base.active == 0) {
+        if (html->base.active == html->scripts_active) {
             content_set_done(&html->base);
             return NSERROR_OK;
         }
@@ -362,6 +365,7 @@ static void html_get_dimensions(html_content *htmlc)
 /* exported function documented in html/html_internal.h */
 void html_finish_conversion(html_content *htmlc)
 {
+    PERF("html_finish_conversion START");
     union content_msg_data msg_data;
     dom_exception exc; /* returned by libdom functions */
     dom_node *html;
@@ -390,6 +394,7 @@ void html_finish_conversion(html_content *htmlc)
     }
 
     /* create new css selection context */
+    PERF("CSS selection context CREATE");
     error = html_css_new_selection_context(htmlc, &htmlc->select_ctx);
     if (error != NSERROR_OK) {
         content_broadcast_error(&htmlc->base, error, NULL);
@@ -422,6 +427,7 @@ void html_finish_conversion(html_content *htmlc)
 
     html_get_dimensions(htmlc);
 
+    PERF("DOM to box START");
     error = dom_to_box(html, htmlc, html_box_convert_done, &htmlc->box_conversion_context);
     if (error != NSERROR_OK) {
         NSLOG(neosurf, INFO, "box conversion failed");
@@ -433,6 +439,7 @@ void html_finish_conversion(html_content *htmlc)
     }
 
     dom_node_unref(html);
+    PERF("DOM to box QUEUED");
 }
 
 
@@ -619,6 +626,7 @@ static nserror html_create_html_data(html_content *c, const http_parameter *para
 static nserror html_create(const content_handler *handler, lwc_string *imime_type, const http_parameter *params,
     llcache_handle *llcache, const char *fallback_charset, bool quirks, struct content **c)
 {
+    PERF("html_create START");
     html_content *html;
     nserror error;
 
@@ -797,7 +805,9 @@ static bool html_process_data(struct content *c, const char *data, unsigned int 
 
 static bool html_convert(struct content *c)
 {
+    PERF("html_convert (data complete) START");
     html_content *htmlc = (html_content *)c;
+    htmlc->data_complete = true; /* Mark that HTML data has been received */
     dom_exception exc; /* returned by libdom functions */
 
     /* The quirk check and associated stylesheet fetch is "safe"
@@ -836,9 +846,21 @@ bool html_can_begin_conversion(html_content *htmlc)
 {
     unsigned int i;
 
-    /* Cannot begin conversion if we're still fetching stuff */
-    if (htmlc->base.active != 0)
+    /* If conversion has already begun, don't start again */
+    if (htmlc->conversion_begun)
         return false;
+
+    /* We can begin conversion when:
+     * 1. HTML data download is complete
+     * 2. All non-script fetches are done (active == scripts_active means only scripts remain)
+     * 3. Stylesheets are not being modified
+     * This allows immediate first render without waiting for scripts.
+     */
+    if (!htmlc->data_complete)
+        return false; /* HTML data not yet received */
+
+    if (htmlc->base.active != htmlc->scripts_active)
+        return false; /* Still waiting for CSS or HTML fetch */
 
     for (i = 0; i != htmlc->stylesheet_count; i++) {
         /* Cannot begin conversion if the stylesheets are modified */
@@ -863,6 +885,7 @@ void html_resume_conversion_cb(void *p)
 
 bool html_begin_conversion(html_content *htmlc)
 {
+    PERF("html_begin_conversion START (active=%d)", htmlc->base.active);
     dom_node *html;
     nserror ns_error;
     struct form *f;
@@ -883,8 +906,12 @@ bool html_begin_conversion(html_content *htmlc)
      */
     if (htmlc->parse_completed == false) {
         NSLOG(neosurf, INFO, "Completing parse (%p)", htmlc);
+        PERF("html_begin_conversion: completing parse (active=%d, scripts_active=%d)", htmlc->base.active,
+            htmlc->scripts_active);
         /* complete parsing */
         error = dom_hubbub_parser_completed(htmlc->parser);
+        PERF("html_begin_conversion: parse completed, error=%d (active=%d, scripts_active=%d)", error,
+            htmlc->base.active, htmlc->scripts_active);
         if (error == DOM_HUBBUB_HUBBUB_ERR_PAUSED) {
             /* The act of completing the parse failed because we've
              * encountered a sync script which needs to run
@@ -910,8 +937,12 @@ bool html_begin_conversion(html_content *htmlc)
         htmlc->parse_completed = true;
     }
 
+    PERF(
+        "html_begin_conversion: checking can_begin (active=%d, scripts_active=%d, data_complete=%d, conversion_begun=%d)",
+        htmlc->base.active, htmlc->scripts_active, htmlc->data_complete, htmlc->conversion_begun);
     if (html_can_begin_conversion(htmlc) == false) {
         NSLOG(neosurf, INFO, "Can't begin conversion (%p)", htmlc);
+        PERF("html_begin_conversion: CAN'T BEGIN - aborting");
         /* We can't proceed (see commentary above) */
         return true;
     }
@@ -925,10 +956,13 @@ bool html_begin_conversion(html_content *htmlc)
     }
 
     /* Conversion begins proper at this point */
+    PERF("html_begin_conversion: setting conversion_begun = true");
     htmlc->conversion_begun = true;
 
     /* complete script execution, including deferred scripts */
+    PERF("html_begin_conversion: calling html_script_exec");
     html_script_exec(htmlc, true);
+    PERF("html_begin_conversion: html_script_exec returned");
 
     /* fire a simple event that bubbles named DOMContentLoaded at
      * the Document.
@@ -1046,7 +1080,12 @@ bool html_begin_conversion(html_content *htmlc)
 
     dom_node_unref(html);
 
-    if (htmlc->base.active == 0) {
+    /* Proceed with conversion if only scripts remain active or no fetches remain.
+     * This allows immediate first render without waiting for script downloads.
+     */
+    if (htmlc->base.active == htmlc->scripts_active) {
+        PERF("html_begin_conversion: calling html_finish_conversion (active=%d, scripts_active=%d)", htmlc->base.active,
+            htmlc->scripts_active);
         html_finish_conversion(htmlc);
     }
 
@@ -1079,9 +1118,9 @@ static void html_stop(struct content *c)
     case CONTENT_STATUS_READY:
         html_object_abort_objects(htmlc);
 
-        /* If there are no further active fetches and we're still
+        /* If only scripts remain active and we're still
          * in the READY state, transition to the DONE state. */
-        if (c->status == CONTENT_STATUS_READY && c->active == 0) {
+        if (c->status == CONTENT_STATUS_READY && c->active == htmlc->scripts_active) {
             content_set_done(c);
         }
 
@@ -1123,6 +1162,9 @@ static void html_reformat(struct content *c, int width, int height)
     NSLOG(neosurf, DEBUG, "PROFILER: START HTML layout %p", c);
 
     htmlc->reflowing = true;
+    static int reformat_count = 0;
+    reformat_count++;
+    PERF("html_reformat #%d START (active=%d)", reformat_count, c->active);
 
     htmlc->unit_len_ctx.viewport_width = css_unit_device2css_px(INTTOFIX(width), htmlc->unit_len_ctx.device_dpi);
     htmlc->unit_len_ctx.viewport_height = css_unit_device2css_px(INTTOFIX(height), htmlc->unit_len_ctx.device_dpi);
@@ -1130,6 +1172,7 @@ static void html_reformat(struct content *c, int width, int height)
 
     layout_document(htmlc, width, height);
     layout = htmlc->layout;
+    PERF("html_reformat #%d DONE layout", reformat_count);
 
     /* width and height are at least margin box of document */
     c->width = layout->x + layout->padding[LEFT] + layout->width + layout->padding[RIGHT] +

@@ -100,6 +100,8 @@ typedef struct html_content {
     bool parse_completed; /**< Whether the parse has been completed */
     bool conversion_begun; /**< Whether or not the conversion has begun */
     bool conversion_restart_pending; /**< Whether a restart is pending */
+    unsigned int scripts_active; /**< Number of script fetches currently active */
+    bool data_complete; /**< Whether HTML data download is complete */
 
     /** Document tree */
     dom_document *document;

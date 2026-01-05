@@ -47,6 +47,21 @@
 #include <neosurf/content/handlers/html/private.h>
 #include "content/handlers/html/object.h"
 
+/* Lightweight performance timing macro */
+#define PERF_ENABLED 1
+#if PERF_ENABLED
+#define PERF(fmt, ...)                                                                                                 \
+    do {                                                                                                               \
+        uint64_t _ms;                                                                                                  \
+        nsu_getmonotonic_ms(&_ms);                                                                                     \
+        fprintf(stderr, "PERF[%6lu.%03lu] " fmt "\n", (unsigned long)(_ms / 1000), (unsigned long)(_ms % 1000),        \
+            ##__VA_ARGS__);                                                                                            \
+        fflush(stderr);                                                                                                \
+    } while (0)
+#else
+#define PERF(fmt, ...) ((void)0)
+#endif
+
 /* break reference loop */
 static void html_object_refresh(void *p);
 
@@ -206,6 +221,7 @@ static nserror html_object_callback(hlcache_handle *object, const hlcache_event 
         break;
 
     case CONTENT_MSG_DONE:
+        PERF("Object DONE (remaining=%d)", c->base.active - 1);
         if (c->base.active == 0) {
             NSLOG(neosurf, CRITICAL,
                 "ACTIVE UNDERFLOW! object_cb DONE decrement when 0 "
@@ -485,9 +501,20 @@ static nserror html_object_callback(hlcache_handle *object, const hlcache_event 
         break;
     }
 
-    if (c->base.status == CONTENT_STATUS_READY && c->base.active == 0 &&
+    if (c->base.status == CONTENT_STATUS_READY && c->base.active == c->scripts_active &&
         (event->type == CONTENT_MSG_LOADING || event->type == CONTENT_MSG_DONE || event->type == CONTENT_MSG_ERROR)) {
-        /* all objects have arrived */
+        /* all objects have arrived (only scripts may still be active) */
+        PERF("ALL OBJECTS COMPLETE - content_set_done (active=%d, scripts_active=%d)", c->base.active,
+            c->scripts_active);
+
+        /* Cancel any pending deferred reformat - we're doing final reformat now.
+         * This eliminates the 3× layout time throttle delay that would otherwise
+         * cause an unnecessary wait after loading completes. */
+        if (c->pending_reformat) {
+            guit->misc->schedule(-1, html_deferred_reformat, c);
+            c->pending_reformat = false;
+        }
+
         content__reformat(&c->base, false, c->base.available_width, c->base.available_height);
         content_set_done(&c->base);
     } else if (nsoption_bool(incremental_reflow) && event->type == CONTENT_MSG_DONE && box != NULL &&
@@ -720,6 +747,8 @@ bool html_fetch_object(html_content *c, nsurl *url, struct box *box, content_typ
     hlcache_handle_callback object_callback;
     hlcache_child_context child;
     nserror error;
+
+    PERF("OBJECT DISCOVER '%s' (bg=%d)", nsurl_access(url), background);
 
     /* If we've already been aborted, don't bother attempting the
      * fetch */

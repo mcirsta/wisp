@@ -66,6 +66,14 @@
  */
 #define UPDATES_PER_SECOND 2
 
+/* Performance tracing macro */
+#define PERF(fmt, ...)                                                                                                 \
+    do {                                                                                                               \
+        uint64_t _ms;                                                                                                  \
+        nsu_getmonotonic_ms(&_ms);                                                                                     \
+        fprintf(stderr, "PERF[%10.3f] " fmt "\n", _ms / 1000.0, ##__VA_ARGS__);                                        \
+    } while (0)
+
 /**
  * The ciphersuites the browser is prepared to use for TLS1.3
  */
@@ -1297,6 +1305,7 @@ static bool fetch_curl_start(void *vfetch)
         NSLOG(neosurf, DEBUG, "Deferring fetch because we're inside cURL");
         return false;
     }
+    PERF("CURL START '%s'", nsurl_access(fetch->url));
     NSLOG(neosurf, DEBUG, "PROFILER: STOP Fetch queue %p", fetch);
     NSLOG(neosurf, DEBUG, "PROFILER: START Fetch latency %p", fetch);
     return fetch_curl_initiate_fetch(fetch, fetch_curl_get_handle(fetch->host));
@@ -1519,6 +1528,7 @@ static void fetch_curl_done(CURL *curl_handle, CURLcode result)
     assert(code == CURLE_OK);
 
     abort_fetch = f->abort;
+    PERF("CURL DONE '%s' result=%d", nsurl_access(f->url), result);
     NSLOG(neosurf, INFO, "done %s", nsurl_access(f->url));
 
     if (f->profiled_response_started) {

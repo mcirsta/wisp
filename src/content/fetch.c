@@ -168,29 +168,15 @@ static bool fetch_dispatch_job(struct fetch *fetch)
  */
 static bool fetch_choose_and_dispatch(void)
 {
-    bool same_host;
     struct fetch *queueitem;
     queueitem = queue_ring;
-    do {
-        /* We can dispatch the selected item if there is room in the
-         * fetch ring
-         */
-        int countbyhost;
-        RING_COUNTBYLWCHOST(struct fetch, fetch_ring, countbyhost, queueitem->host);
-        if (countbyhost < nsoption_int(max_fetchers_per_host)) {
-            /* We can dispatch this item in theory */
-            return fetch_dispatch_job(queueitem);
-        }
-        /* skip over other items with the same host */
-        same_host = true;
-        while (same_host == true && queueitem->r_next != queue_ring) {
-            if (lwc_string_isequal(queueitem->host, queueitem->r_next->host, &same_host) == lwc_error_ok &&
-                same_host == true) {
-                queueitem = queueitem->r_next;
-            }
-        }
-        queueitem = queueitem->r_next;
-    } while (queueitem != queue_ring);
+
+    /* With HTTP/2 multiplexing, curl handles connection management.
+     * We no longer limit by host here - just dispatch immediately.
+     */
+    if (queueitem != NULL) {
+        return fetch_dispatch_job(queueitem);
+    }
     return false;
 }
 
