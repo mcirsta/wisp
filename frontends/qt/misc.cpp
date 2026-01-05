@@ -23,14 +23,13 @@
 
 #include <stddef.h>
 #include <stdlib.h>
-#include <time.h>
 
 extern "C" {
 
+#include <nsutils/time.h>
 #include "neosurf/misc.h"
 #include "neosurf/utils/errors.h"
 #include "neosurf/utils/log.h"
-#include "neosurf/utils/sys_time.h"
 }
 
 #include "qt/misc.h"
@@ -42,10 +41,11 @@ static struct nscallback *schedule_list = NULL;
 
 /**
  * scheduled callback.
+ * Uses monotonic millisecond timestamps for precision and reliability.
  */
 struct nscallback {
     struct nscallback *next;
-    struct timeval tv;
+    uint64_t due_ms; /**< Monotonic time when callback is due */
     void (*callback)(void *p);
     void *p;
 };
@@ -53,9 +53,8 @@ struct nscallback {
 /* exported function documented in qt/misc.h */
 int nsqt_schedule_run(void)
 {
-    struct timeval tv;
-    struct timeval nexttime;
-    struct timeval rettime;
+    uint64_t now_ms;
+    uint64_t next_due_ms;
     struct nscallback *cur_nscb;
     struct nscallback *prev_nscb;
     struct nscallback *unlnk_nscb;
@@ -63,18 +62,21 @@ int nsqt_schedule_run(void)
     if (schedule_list == NULL)
         return -1;
 
+    nsu_getmonotonic_ms(&now_ms);
+
     /* reset enumeration to the start of the list */
     cur_nscb = schedule_list;
     prev_nscb = NULL;
-    nexttime = cur_nscb->tv;
-
-    gettimeofday(&tv, NULL);
+    next_due_ms = cur_nscb->due_ms;
 
     while (cur_nscb != NULL) {
-        if (timercmp(&tv, &cur_nscb->tv, >)) {
-            /* scheduled time */
+        /* Use >= to ensure callbacks are invoked even when time matches exactly */
+        if (now_ms >= cur_nscb->due_ms) {
+            /* scheduled time has arrived or passed */
+            NSLOG(schedule, DEBUG, "Invoking callback %p(%p) now=%llu due=%llu", cur_nscb->callback, cur_nscb->p,
+                (unsigned long long)now_ms, (unsigned long long)cur_nscb->due_ms);
 
-            /* remove callback */
+            /* remove callback from list */
             unlnk_nscb = cur_nscb;
 
             if (prev_nscb == NULL) {
@@ -83,6 +85,7 @@ int nsqt_schedule_run(void)
                 prev_nscb->next = unlnk_nscb->next;
             }
 
+            /* invoke the callback */
             unlnk_nscb->callback(unlnk_nscb->p);
 
             free(unlnk_nscb);
@@ -94,13 +97,16 @@ int nsqt_schedule_run(void)
             /* reset enumeration to the start of the list */
             cur_nscb = schedule_list;
             prev_nscb = NULL;
-            nexttime = cur_nscb->tv;
+            next_due_ms = cur_nscb->due_ms;
+
+            /* Re-fetch time after callback execution in case it took time */
+            nsu_getmonotonic_ms(&now_ms);
         } else {
             /* if the time to the event is sooner than the
-             * currently recorded soonest event record it
+             * currently recorded soonest event, record it
              */
-            if (timercmp(&nexttime, &cur_nscb->tv, >)) {
-                nexttime = cur_nscb->tv;
+            if (cur_nscb->due_ms < next_due_ms) {
+                next_due_ms = cur_nscb->due_ms;
             }
             /* move to next element */
             prev_nscb = cur_nscb;
@@ -108,14 +114,25 @@ int nsqt_schedule_run(void)
         }
     }
 
-    /* make rettime relative to now */
-    timersub(&nexttime, &tv, &rettime);
+    /* Calculate time until next event in milliseconds */
+    int64_t delay_ms;
+    if (next_due_ms <= now_ms) {
+        /* Event is already due - should have been processed above, but handle edge case */
+        delay_ms = 0;
+        NSLOG(schedule, DEBUG, "WARNING: Event due but not processed now=%llu next_due=%llu",
+            (unsigned long long)now_ms, (unsigned long long)next_due_ms);
+    } else {
+        delay_ms = (int64_t)(next_due_ms - now_ms);
+    }
 
-    NSLOG(schedule, DEBUG, "returning time to next event as %ldms",
-        (long)((rettime.tv_sec * 1000) + (rettime.tv_usec / 1000)));
+    /* Clamp to valid range: 0 to 24 days max */
+    if (delay_ms > 2073600000) { /* ~24 days in ms */
+        delay_ms = 2073600000;
+    }
 
-    /* return next event time in milliseconds (24days max wait) */
-    return (rettime.tv_sec * 1000) + (rettime.tv_usec / 1000);
+    NSLOG(schedule, DEBUG, "returning time to next event as %ldms", (long)delay_ms);
+
+    return (int)delay_ms;
 }
 
 /**
@@ -194,7 +211,7 @@ static nserror schedule_remove(void (*callback)(void *p), void *p)
 nserror nsqt_schedule(int tival, void (*callback)(void *p), void *p)
 {
     struct nscallback *nscb;
-    struct timeval tv;
+    uint64_t now_ms;
     nserror ret;
 
     /* ensure uniqueness of the callback and context */
@@ -205,14 +222,14 @@ nserror nsqt_schedule(int tival, void (*callback)(void *p), void *p)
 
     NSLOG(schedule, DEBUG, "Adding %p(%p) in %d", callback, p, tival);
 
-    tv.tv_sec = tival / 1000; /* miliseconds to seconds */
-    tv.tv_usec = (tival % 1000) * 1000; /* remainder to microseconds */
+    nsu_getmonotonic_ms(&now_ms);
 
     nscb = (struct nscallback *)calloc(1, sizeof(struct nscallback));
+    if (nscb == NULL) {
+        return NSERROR_NOMEM;
+    }
 
-    gettimeofday(&nscb->tv, NULL);
-    timeradd(&nscb->tv, &tv, &nscb->tv);
-
+    nscb->due_ms = now_ms + (uint64_t)tival;
     nscb->callback = callback;
     nscb->p = p;
 

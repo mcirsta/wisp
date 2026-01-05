@@ -165,6 +165,14 @@ void html_deferred_reformat(void *p)
         union content_msg_data data = {.background = false};
         content_broadcast(&c->base, CONTENT_MSG_REFORMAT, &data);
     }
+
+    /* After reformat completes, try to transition to DONE state.
+     * This replaces the content_set_done() from the original synchronous code.
+     * html_proceed_to_done() will only call content_set_done() if:
+     * - status is READY (not LOADING or already DONE)
+     * - active == scripts_active (all non-script objects have finished)
+     */
+    html_proceed_to_done(c);
 }
 
 
@@ -224,7 +232,7 @@ static nserror html_object_callback(hlcache_handle *object, const hlcache_event 
                 c, object);
         }
         c->base.active--;
-        NSLOG(neosurf, INFO, "%d fetches active", c->base.active);
+        NSLOG(neosurf, INFO, "%d fetches active (scripts_active=%d)", c->base.active, c->scripts_active);
 
         html_object_done(box, object, o->background);
 
