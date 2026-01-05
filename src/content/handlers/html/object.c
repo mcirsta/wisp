@@ -205,6 +205,11 @@ static nserror html_object_callback(hlcache_handle *object, const hlcache_event 
 
             /* Adjust parent content for new object size */
             html_object_done(box, object, o->background);
+
+            /* DISABLED: Incremental reformat on READY
+             * Wait for all downloads to complete before reformatting.
+             */
+#if 0
             if (c->base.status == CONTENT_STATUS_READY || c->base.status == CONTENT_STATUS_DONE) {
                 uint64_t ms_now;
                 nsu_getmonotonic_ms(&ms_now);
@@ -217,6 +222,7 @@ static nserror html_object_callback(hlcache_handle *object, const hlcache_event 
                     guit->misc->schedule(delay, html_deferred_reformat, c);
                 }
             }
+#endif
         }
         break;
 
@@ -517,7 +523,17 @@ static nserror html_object_callback(hlcache_handle *object, const hlcache_event 
 
         content__reformat(&c->base, false, c->base.available_width, c->base.available_height);
         content_set_done(&c->base);
-    } else if (nsoption_bool(incremental_reflow) && event->type == CONTENT_MSG_DONE && box != NULL &&
+    }
+
+    /* DISABLED: Incremental reflow during downloads.
+     * Problem: Layout blocks the main thread, preventing curl polling.
+     * This causes downloads to appear "slow" when they've actually finished.
+     *
+     * Strategy: Wait for ALL downloads to complete, then do ONE final reformat.
+     * Result: Faster total load time and no blocking of download completion detection.
+     */
+#if 0
+    else if (nsoption_bool(incremental_reflow) && event->type == CONTENT_MSG_DONE && box != NULL &&
         !(box->flags & REPLACE_DIM)) {
 
         /* 1) the configuration option to reflow pages while
@@ -543,6 +559,7 @@ static nserror html_object_callback(hlcache_handle *object, const hlcache_event 
             guit->misc->schedule(0, html_deferred_reformat, c);
         }
     }
+#endif
 
     return NSERROR_OK;
 }
