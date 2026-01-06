@@ -1791,9 +1791,9 @@ bool convert_special_elements(dom_node *node, html_content *content, struct box 
                      */
                     {
                         struct svgtiny_diagram *diagram = NULL;
-                        nserror err;
                         const char *base_url = "";
                         char color_str[8] = "#000000"; /* Default black */
+                        struct html_inline_svg *cached = NULL;
 
                         if (content->base_url != NULL) {
                             base_url = nsurl_access(content->base_url);
@@ -1809,8 +1809,37 @@ bool convert_special_elements(dom_node *node, html_content *content, struct box 
                                 (col >> 16) & 0xff); /* B */
                         }
 
-                        err = html_parse_inline_svg((dom_element *)node, 300, 150, base_url, color_str, &diagram);
-                        if (err == NSERROR_OK && diagram != NULL) {
+                        /* Look for pre-serialized SVG XML from parser callback */
+                        for (cached = content->inline_svgs; cached != NULL; cached = cached->next) {
+                            if (cached->node == node) {
+                                break;
+                            }
+                        }
+
+                        if (cached != NULL && cached->svg_xml != NULL) {
+                            /* Use pre-serialized XML - just need to parse with libsvgtiny */
+                            svgtiny_code code;
+
+                            NSLOG(neosurf, DEBUG, "SVG: Using pre-serialized XML (%zu bytes)", cached->svg_xml_len);
+
+                            diagram = svgtiny_create();
+                            if (diagram != NULL) {
+                                code = svgtiny_parse(diagram, cached->svg_xml, cached->svg_xml_len, base_url, 300, 150);
+                                if (code != svgtiny_OK) {
+                                    NSLOG(neosurf, WARNING, "SVG: libsvgtiny parse failed: %d", code);
+                                    svgtiny_free(diagram);
+                                    diagram = NULL;
+                                }
+                            }
+                        } else {
+                            /* Pre-serialized XML not found - this should never happen
+                             * since the parser callback should have serialized it.
+                             * If JS DOM modification is implemented, it must call the
+                             * SVG serialization when inserting SVG elements. */
+                            NSLOG(neosurf, CRITICAL, "SVG: No pre-serialized XML found for inline SVG!");
+                        }
+
+                        if (diagram != NULL) {
                             box->svg_diagram = diagram;
                             NSLOG(neosurf, DEBUG, "SVG: Parsed inline SVG (%dx%d, %u shapes)", diagram->width,
                                 diagram->height, diagram->shape_count);

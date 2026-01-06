@@ -45,7 +45,6 @@ window_width:0
 window_height:0
 toolbar_status_size:6667
 scale:100
-incremental_reflow:1
 min_reflow_period:25
 core_select_menu:1
 display_decoded_idn:0

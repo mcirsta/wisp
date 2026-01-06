@@ -86,6 +86,13 @@ nserror html_resolve_svg_use_refs(struct html_content *c, dom_document *doc);
 void html_free_svg_symbols(struct html_content *c);
 
 /**
+ * Free the pre-serialized inline SVG list.
+ *
+ * \param c  HTML content
+ */
+void html_free_inline_svgs(struct html_content *c);
+
+/**
  * Serialize an inline SVG element to a string for libsvgtiny parsing.
  *
  * \param svg_element  The <svg> DOM element to serialize
@@ -95,19 +102,5 @@ void html_free_svg_symbols(struct html_content *c);
  */
 nserror
 html_serialize_inline_svg(dom_element *svg_element, const char *current_color, char **svg_data, size_t *svg_len);
-
-/**
- * Parse an inline SVG element using libsvgtiny.
- *
- * \param svg_element  The <svg> DOM element
- * \param width        Viewport width for rendering
- * \param height       Viewport height for rendering
- * \param base_url     Base URL for resolving relative references
- * \param current_color Hex color string (e.g. "#808080") for currentColor, or NULL
- * \param diagram_out  Returns the parsed svgtiny_diagram (caller must free)
- * \return NSERROR_OK on success, appropriate error otherwise
- */
-nserror html_parse_inline_svg(dom_element *svg_element, int width, int height, const char *base_url,
-    const char *current_color, struct svgtiny_diagram **diagram_out);
 
 #endif /* NETSURF_HTML_SVG_H */

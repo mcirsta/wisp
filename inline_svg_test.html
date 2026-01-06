@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Inline SVG Test</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        h1 { color: #333; }
+        .test-case {
+            background: white;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .test-case h3 {
+            margin-top: 0;
+            color: #666;
+        }
+        .svg-container {
+            display: inline-block;
+            border: 1px dashed #ccc;
+            padding: 10px;
+            margin: 5px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Inline SVG Test Cases</h1>
+
+    <!-- Test 1: Simple shapes -->
+    <div class="test-case">
+        <h3>1. Basic Shapes (circle, rect, line)</h3>
+        <div class="svg-container">
+            <svg width="100" height="100" viewBox="0 0 100 100">
+                <circle cx="50" cy="50" r="40" fill="red" stroke="black" stroke-width="2"/>
+            </svg>
+        </div>
+        <div class="svg-container">
+            <svg width="100" height="100" viewBox="0 0 100 100">
+                <rect x="10" y="10" width="80" height="80" fill="blue" rx="10"/>
+            </svg>
+        </div>
+        <div class="svg-container">
+            <svg width="100" height="100" viewBox="0 0 100 100">
+                <line x1="10" y1="10" x2="90" y2="90" stroke="green" stroke-width="5"/>
+                <line x1="90" y1="10" x2="10" y2="90" stroke="green" stroke-width="5"/>
+            </svg>
+        </div>
+    </div>
+
+    <!-- Test 2: Path element -->
+    <div class="test-case">
+        <h3>2. Path Element (star shape)</h3>
+        <div class="svg-container">
+            <svg width="120" height="120" viewBox="0 0 120 120">
+                <path d="M60 10 L75 45 L110 45 L80 70 L90 105 L60 85 L30 105 L40 70 L10 45 L45 45 Z" 
+                      fill="gold" stroke="orange" stroke-width="2"/>
+            </svg>
+        </div>
+    </div>
+
+    <!-- Test 3: Text -->
+    <div class="test-case">
+        <h3>3. SVG Text</h3>
+        <div class="svg-container">
+            <svg width="200" height="60" viewBox="0 0 200 60">
+                <text x="100" y="40" text-anchor="middle" font-size="24" fill="purple">Hello SVG!</text>
+            </svg>
+        </div>
+    </div>
+
+    <!-- Test 4: Gradient -->
+    <div class="test-case">
+        <h3>4. Linear Gradient</h3>
+        <div class="svg-container">
+            <svg width="150" height="100" viewBox="0 0 150 100">
+                <defs>
+                    <linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="0%">
+                        <stop offset="0%" style="stop-color:rgb(255,255,0);stop-opacity:1" />
+                        <stop offset="100%" style="stop-color:rgb(255,0,0);stop-opacity:1" />
+                    </linearGradient>
+                </defs>
+                <rect x="10" y="10" width="130" height="80" fill="url(#grad1)" rx="5"/>
+            </svg>
+        </div>
+    </div>
+
+    <!-- Test 5: Transform -->
+    <div class="test-case">
+        <h3>5. Transforms (rotate, scale)</h3>
+        <div class="svg-container">
+            <svg width="120" height="120" viewBox="0 0 120 120">
+                <rect x="35" y="35" width="50" height="50" fill="teal" transform="rotate(45 60 60)"/>
+            </svg>
+        </div>
+    </div>
+
+    <!-- Test 6: currentColor -->
+    <div class="test-case" style="color: #e74c3c;">
+        <h3>6. currentColor Inheritance (should be red)</h3>
+        <div class="svg-container">
+            <svg width="100" height="100" viewBox="0 0 100 100">
+                <circle cx="50" cy="50" r="40" fill="currentColor"/>
+            </svg>
+        </div>
+    </div>
+
+    <!-- Test 7: Nested SVG -->
+    <div class="test-case">
+        <h3>7. Multiple SVGs in sequence</h3>
+        <div class="svg-container">
+            <svg width="50" height="50"><rect width="50" height="50" fill="#3498db"/></svg>
+            <svg width="50" height="50"><rect width="50" height="50" fill="#2ecc71"/></svg>
+            <svg width="50" height="50"><rect width="50" height="50" fill="#e74c3c"/></svg>
+            <svg width="50" height="50"><rect width="50" height="50" fill="#9b59b6"/></svg>
+        </div>
+    </div>
+
+    <!-- Test 8: Polygon -->
+    <div class="test-case">
+        <h3>8. Polygon (hexagon)</h3>
+        <div class="svg-container">
+            <svg width="120" height="110" viewBox="0 0 120 110">
+                <polygon points="60,5 110,30 110,80 60,105 10,80 10,30" 
+                         fill="#1abc9c" stroke="#16a085" stroke-width="3"/>
+            </svg>
+        </div>
+    </div>
+
+    <!-- Test 9: Ellipse -->
+    <div class="test-case">
+        <h3>9. Ellipse</h3>
+        <div class="svg-container">
+            <svg width="150" height="80" viewBox="0 0 150 80">
+                <ellipse cx="75" cy="40" rx="60" ry="30" fill="#f39c12" stroke="#d35400" stroke-width="2"/>
+            </svg>
+        </div>
+    </div>
+
+    <!-- Test 10: Polyline -->
+    <div class="test-case">
+        <h3>10. Polyline (zigzag)</h3>
+        <div class="svg-container">
+            <svg width="200" height="60" viewBox="0 0 200 60">
+                <polyline points="10,50 40,10 70,50 100,10 130,50 160,10 190,50" 
+                          fill="none" stroke="#8e44ad" stroke-width="4"/>
+            </svg>
+        </div>
+    </div>
+
+</body>
+</html>

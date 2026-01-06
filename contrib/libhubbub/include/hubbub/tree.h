@@ -233,6 +233,15 @@ typedef hubbub_error (*hubbub_tree_encoding_change)(void *ctx, const char *encna
 typedef hubbub_error (*hubbub_tree_complete_script)(void *ctx, void *script);
 
 /**
+ * Complete SVG element processing
+ *
+ * \param ctx   Client's context
+ * \param svg   The SVG element (fully parsed with all children)
+ * \return HUBBUB_OK on success, appropriate error otherwise.
+ */
+typedef hubbub_error (*hubbub_tree_complete_svg)(void *ctx, void *svg);
+
+/**
  * Hubbub tree handler
  */
 typedef struct hubbub_tree_handler {
@@ -254,6 +263,7 @@ typedef struct hubbub_tree_handler {
     hubbub_tree_set_quirks_mode set_quirks_mode; /**< Set quirks mode */
     hubbub_tree_encoding_change encoding_change; /**< Change encoding */
     hubbub_tree_complete_script complete_script; /**< Script Complete */
+    hubbub_tree_complete_svg complete_svg; /**< SVG Complete */
     void *ctx; /**< Context pointer */
 } hubbub_tree_handler;
 

@@ -363,6 +363,29 @@ void html_free_svg_symbols(struct html_content *c)
 }
 
 /**
+ * Free the pre-serialized inline SVG list.
+ */
+void html_free_inline_svgs(struct html_content *c)
+{
+    struct html_inline_svg *entry;
+    struct html_inline_svg *next;
+
+    entry = c->inline_svgs;
+    while (entry != NULL) {
+        next = entry->next;
+
+        if (entry->node != NULL) {
+            dom_node_unref(entry->node);
+        }
+        free(entry->svg_xml);
+        free(entry);
+
+        entry = next;
+    }
+    c->inline_svgs = NULL;
+}
+
+/**
  * Helper to append text to a growing buffer.
  */
 static nserror svg_buffer_append(char **buf, size_t *len, size_t *cap, const char *str, size_t str_len)
@@ -715,49 +738,51 @@ nserror html_serialize_inline_svg(dom_element *svg_element, const char *current_
 }
 
 /**
- * Parse an inline SVG element using libsvgtiny.
+ * Parser callback when an SVG element completes parsing.
  *
- * @param current_color  Hex color string to substitute for currentColor, or NULL
+ * This is called by hubbub via libdom when an <svg> element closes.
+ * We serialize the SVG DOM to XML here to avoid redundant DOM traversal
+ * during box construction.
  */
-nserror html_parse_inline_svg(dom_element *svg_element, int width, int height, const char *base_url,
-    const char *current_color, struct svgtiny_diagram **diagram_out)
+dom_hubbub_error html_process_svg(void *ctx, dom_node *node)
 {
-    struct svgtiny_diagram *diagram;
-    svgtiny_code code;
-    char *svg_data = NULL;
-    size_t svg_len = 0;
+    html_content *c = (html_content *)ctx;
+    struct html_inline_svg *entry;
+    char *svg_xml = NULL;
+    size_t svg_xml_len = 0;
     nserror err;
 
-    *diagram_out = NULL;
-
-    /* Serialize the SVG element */
-    err = html_serialize_inline_svg(svg_element, current_color, &svg_data, &svg_len);
-    if (err != NSERROR_OK || svg_data == NULL) {
-        NSLOG(neosurf, WARNING, "SVG: Failed to serialize inline SVG");
-        return err != NSERROR_OK ? err : NSERROR_DOM;
+    if (c == NULL || node == NULL) {
+        return DOM_HUBBUB_OK;
     }
 
-    /* Create diagram */
-    diagram = svgtiny_create();
-    if (diagram == NULL) {
-        free(svg_data);
-        return NSERROR_NOMEM;
+    NSLOG(neosurf, DEBUG, "SVG: Parser callback - serializing inline SVG");
+
+    /* Serialize the SVG element to XML (without currentColor substitution -
+     * that will happen during box construction when we have CSS info) */
+    err = html_serialize_inline_svg((dom_element *)node, NULL, &svg_xml, &svg_xml_len);
+    if (err != NSERROR_OK || svg_xml == NULL) {
+        NSLOG(neosurf, WARNING, "SVG: Failed to serialize SVG in parser callback");
+        return DOM_HUBBUB_OK; /* Non-fatal, box_special.c will try again */
     }
 
-    /* Parse the SVG */
-    code = svgtiny_parse(diagram, svg_data, svg_len, base_url, width, height);
-    free(svg_data);
-
-    if (code != svgtiny_OK) {
-        NSLOG(neosurf, WARNING, "SVG: libsvgtiny parse failed: %d", code);
-        svgtiny_free(diagram);
-        return NSERROR_SVG_ERROR;
+    /* Create entry for the inline_svgs list */
+    entry = malloc(sizeof(struct html_inline_svg));
+    if (entry == NULL) {
+        free(svg_xml);
+        return DOM_HUBBUB_OK;
     }
 
-    *diagram_out = diagram;
+    /* Reference the node so it stays valid */
+    dom_node_ref(node);
 
-    NSLOG(neosurf, DEBUG, "SVG: Parsed inline SVG (%dx%d, %u shapes)", diagram->width, diagram->height,
-        diagram->shape_count);
+    entry->node = node;
+    entry->svg_xml = svg_xml;
+    entry->svg_xml_len = svg_xml_len;
+    entry->next = c->inline_svgs;
+    c->inline_svgs = entry;
 
-    return NSERROR_OK;
+    NSLOG(neosurf, DEBUG, "SVG: Pre-serialized %zu bytes of SVG XML", svg_xml_len);
+
+    return DOM_HUBBUB_OK;
 }

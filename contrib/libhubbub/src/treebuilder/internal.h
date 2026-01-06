@@ -116,6 +116,7 @@ void close_implied_end_tags(hubbub_treebuilder *treebuilder, element_type except
 void reset_insertion_mode(hubbub_treebuilder *treebuilder);
 hubbub_error append_text(hubbub_treebuilder *treebuilder, const hubbub_string *string);
 hubbub_error complete_script(hubbub_treebuilder *treebuilder);
+hubbub_error complete_svg(hubbub_treebuilder *treebuilder, void *svg_node);
 
 bool is_special_element(element_type type);
 bool is_scoping_element(element_type type);

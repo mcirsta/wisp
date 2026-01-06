@@ -22,6 +22,11 @@
  */
 typedef dom_hubbub_error (*dom_script)(void *ctx, struct dom_node *node);
 
+/**
+ * Type of SVG element callback function
+ */
+typedef dom_hubbub_error (*dom_svg)(void *ctx, struct dom_node *node);
+
 typedef struct dom_hubbub_parser dom_hubbub_parser;
 
 /* The encoding source of the document */
@@ -57,6 +62,8 @@ typedef struct dom_hubbub_parser_params {
 
     bool enable_script; /**< Whether scripting should be enabled. */
     dom_script script; /**< Script callback function */
+
+    dom_svg svg; /**< SVG element callback function */
 
     dom_msg msg; /**< Informational message function */
     void *ctx; /**< Pointer to client-specific private data */

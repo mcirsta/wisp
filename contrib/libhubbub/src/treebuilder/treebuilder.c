@@ -749,6 +749,22 @@ hubbub_error complete_script(hubbub_treebuilder *treebuilder)
 }
 
 /**
+ * SVG element processing complete
+ *
+ * \param treebuilder  The treebuilder instance
+ * \param svg_node     The completed SVG element node
+ * \return HUBBUB_OK on success, appropriate error otherwise
+ */
+hubbub_error complete_svg(hubbub_treebuilder *treebuilder, void *svg_node)
+{
+    hubbub_error error = HUBBUB_OK;
+    if (treebuilder->tree_handler->complete_svg != NULL) {
+        error = treebuilder->tree_handler->complete_svg(treebuilder->tree_handler->ctx, svg_node);
+    }
+    return error;
+}
+
+/**
  * Append text to the current node, inserting into the last child of the
  * current node, iff it's a Text node.
  *
@@ -912,6 +928,11 @@ hubbub_error element_stack_pop(hubbub_treebuilder *treebuilder, hubbub_ns *ns, e
     *ns = stack[slot].ns;
     *type = stack[slot].type;
     *node = stack[slot].node;
+
+    /* Call complete_svg callback when an SVG element closes */
+    if (stack[slot].type == SVG && stack[slot].ns == HUBBUB_NS_SVG) {
+        complete_svg(treebuilder, stack[slot].node);
+    }
 
     /** \todo reduce allocated stack size once there's enough free */
 

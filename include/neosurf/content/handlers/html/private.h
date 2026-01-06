@@ -37,6 +37,19 @@ struct gui_layout_table;
 struct scrollbar_msg_data;
 struct content_redraw_data;
 struct selection;
+struct svgtiny_diagram;
+
+/**
+ * Pre-serialized inline SVG, stored in linked list during parsing.
+ * The XML string is serialized during the parser callback to avoid
+ * redundant DOM traversal during box construction.
+ */
+struct html_inline_svg {
+    struct dom_node *node; /**< SVG DOM element (key for lookup) */
+    char *svg_xml; /**< Pre-serialized XML string */
+    size_t svg_xml_len; /**< Length of XML string */
+    struct html_inline_svg *next; /**< Next in list */
+};
 
 typedef enum {
     HTML_DRAG_NONE, /** No drag */
@@ -222,6 +235,9 @@ typedef struct html_content {
     /** SVG symbol registry for inline SVG <use> resolution, or NULL */
     struct svg_symbol_registry *svg_symbols;
 
+    /** Linked list of pre-parsed inline SVG diagrams, or NULL */
+    struct html_inline_svg *inline_svgs;
+
 } html_content;
 
 /**
@@ -366,6 +382,9 @@ bool html_redraw_inline_borders(struct box *box, struct rect b, const struct rec
 
 /* in html/script.c */
 dom_hubbub_error html_process_script(void *ctx, dom_node *node);
+
+/* in html/html_svg.c */
+dom_hubbub_error html_process_svg(void *ctx, dom_node *node);
 
 
 /* in html/forms.c */

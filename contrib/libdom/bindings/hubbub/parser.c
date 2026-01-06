@@ -51,6 +51,8 @@ struct dom_hubbub_parser {
 
     dom_script script; /**< Script callback function */
 
+    dom_svg svg; /**< SVG element callback function */
+
     void *mctx; /**< Pointer to client data */
 };
 
@@ -607,9 +609,31 @@ static hubbub_error complete_script(void *parser, void *script)
     return HUBBUB_UNKNOWN;
 }
 
+static hubbub_error complete_svg(void *parser, void *svg)
+{
+    dom_hubbub_parser *dom_parser = (dom_hubbub_parser *)parser;
+    dom_hubbub_error err;
+
+    if (dom_parser->svg == NULL) {
+        return HUBBUB_OK;
+    }
+
+    err = dom_parser->svg(dom_parser->mctx, (struct dom_node *)svg);
+
+    if (err == DOM_HUBBUB_OK) {
+        return HUBBUB_OK;
+    }
+
+    if ((err & DOM_HUBBUB_HUBBUB_ERR) != 0) {
+        return err & (~DOM_HUBBUB_HUBBUB_ERR);
+    }
+
+    return HUBBUB_UNKNOWN;
+}
+
 static hubbub_tree_handler tree_handler = {create_comment, create_doctype, create_element, create_text, ref_node,
     unref_node, append_child, insert_before, remove_child, clone_node, reparent_children, get_parent, has_children,
-    form_associate, add_attributes, set_quirks_mode, change_encoding, complete_script, NULL};
+    form_associate, add_attributes, set_quirks_mode, change_encoding, complete_script, complete_svg, NULL};
 
 /**
  * Default message callback
@@ -625,6 +649,16 @@ static void dom_hubbub_parser_default_msg(uint32_t severity, void *ctx, const ch
  * Default script callback.
  */
 static dom_hubbub_error dom_hubbub_parser_default_script(void *ctx, struct dom_node *node)
+{
+    UNUSED(ctx);
+    UNUSED(node);
+    return DOM_HUBBUB_OK;
+}
+
+/**
+ * Default SVG callback.
+ */
+static dom_hubbub_error dom_hubbub_parser_default_svg(void *ctx, struct dom_node *node)
 {
     UNUSED(ctx);
     UNUSED(node);
@@ -687,6 +721,13 @@ dom_hubbub_parser_create(dom_hubbub_parser_params *params, dom_hubbub_parser **p
         binding->script = dom_hubbub_parser_default_script;
     } else {
         binding->script = params->script;
+    }
+
+    /* ensure SVG function is valid or use the default */
+    if (params->svg == NULL) {
+        binding->svg = dom_hubbub_parser_default_svg;
+    } else {
+        binding->svg = params->svg;
     }
 
     /* create hubbub parser */
