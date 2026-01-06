@@ -969,7 +969,7 @@ static bool layout_flex__place_line_items_main(struct flex_ctx *ctx, struct flex
 
         if (ctx->horizontal) {
             b->width = item->target_main_size - lh__delta_outer_width(b);
-            NSLOG(flex, WARNING, "ITEM[%zu]: width=%d target_main=%d delta_outer=%d", i, b->width,
+            NSLOG(flex, DEEPDEBUG, "ITEM[%zu]: width=%d target_main=%d delta_outer=%d", i, b->width,
                 item->target_main_size, lh__delta_outer_width(b));
 
             if (!layout_flex_item(ctx, item, b->width)) {
@@ -991,18 +991,19 @@ static bool layout_flex__place_line_items_main(struct flex_ctx *ctx, struct flex
             extra_total = extra_pre + extra_post;
 
             main_pos += pre_multiplier * (extra_total + box_size_main + lh__delta_outer_main(ctx->flex, b));
-            NSLOG(flex, WARNING, "ITEM[%zu]: after pre_mult main_pos=%d (pre_mult=%d)", i, main_pos, pre_multiplier);
+            NSLOG(flex, DEEPDEBUG, "ITEM[%zu]: after pre_mult main_pos=%d (pre_mult=%d)", i, main_pos, pre_multiplier);
         }
 
         *box_pos_main = main_pos + lh__non_auto_margin(b, main_start) + extra_pre + b->border[main_start].width;
-        // NSLOG(flex, WARNING, "ITEM[%zu]: POSITIONED at %d (main_pos=%d)", i, *box_pos_main, main_pos);
+        NSLOG(flex, DEEPDEBUG, "ITEM[%zu]: POSITIONED at %d (main_pos=%d)", i, *box_pos_main, main_pos);
 
         if (!lh__box_is_absolute(b)) {
             int cross_size;
             int box_size_cross = lh__box_size_cross(ctx->horizontal, b);
 
             main_pos += post_multiplier * (extra_total + box_size_main + lh__delta_outer_main(ctx->flex, b));
-            NSLOG(flex, WARNING, "ITEM[%zu]: after post_mult main_pos=%d (post_mult=%d)", i, main_pos, post_multiplier);
+            NSLOG(
+                flex, DEEPDEBUG, "ITEM[%zu]: after post_mult main_pos=%d (post_mult=%d)", i, main_pos, post_multiplier);
 
             if (jc_gap_between > 0 || jc_gap_between_rem > 0) {
                 int extra_between_for_item = 0;
@@ -1024,14 +1025,15 @@ static bool layout_flex__place_line_items_main(struct flex_ctx *ctx, struct flex
                 }
 
                 main_pos += (!ctx->main_reversed ? 1 : -1) * (jc_gap_between + extra_between_for_item);
-                NSLOG(flex, WARNING, "ITEM[%zu]: after jc_gap main_pos=%d (jc_gap=%d)", i, main_pos, jc_gap_between);
+                NSLOG(flex, DEEPDEBUG, "ITEM[%zu]: after jc_gap main_pos=%d (jc_gap=%d)", i, main_pos, jc_gap_between);
             }
 
             /* Add CSS gap property spacing between items (not after the last item) */
             if (i < item_count - 1 && ctx->main_gap > 0) {
-                NSLOG(flex, WARNING, "ITEM[%zu]: ADDING CSS GAP main_pos_before=%d gap=%d", i, main_pos, ctx->main_gap);
+                NSLOG(
+                    flex, DEEPDEBUG, "ITEM[%zu]: ADDING CSS GAP main_pos_before=%d gap=%d", i, main_pos, ctx->main_gap);
                 main_pos += (!ctx->main_reversed ? 1 : -1) * ctx->main_gap;
-                NSLOG(flex, WARNING, "ITEM[%zu]: ADDING CSS GAP main_pos_after=%d", i, main_pos);
+                NSLOG(flex, DEEPDEBUG, "ITEM[%zu]: ADDING CSS GAP main_pos_after=%d", i, main_pos);
             }
 
             cross_size = box_size_cross + lh__delta_outer_cross(ctx->flex, b);
@@ -1213,8 +1215,24 @@ bool layout_flex(struct box *flex, int available_width, html_content *content)
     NSLOG(flex, DEEPDEBUG, "box %p: %s, available_width %i, width: %i", flex,
         ctx->horizontal ? "horizontal" : "vertical", available_width, flex->width);
 
-    layout_find_dimensions(ctx->unit_len_ctx, available_width, -1, flex, flex->style, NULL, &flex->height, &max_width,
-        &min_width, &max_height, &min_height, flex->margin, flex->padding, flex->border);
+    /* Per CSS Flexbox §9.8: "Once the cross size of a flex line has been determined,
+     * the cross sizes of items in auto-sized flex containers are also considered
+     * definite for the purpose of layout."
+     *
+     * If this flex container is a stretched flex item of a parent flex container,
+     * its height may already be set to a definite value. Pass NULL for height
+     * to prevent layout_find_dimensions from overwriting it with AUTO from CSS.
+     */
+    bool height_already_definite = (flex->height != AUTO && flex->height != UNKNOWN_WIDTH && flex->height >= 0);
+    int *height_ptr = height_already_definite ? NULL : &flex->height;
+
+    layout_find_dimensions(ctx->unit_len_ctx, available_width, -1, flex, flex->style, NULL, /* width - already set */
+        height_ptr, /* height - NULL if already definite from stretch */
+        &max_width, &min_width, &max_height, &min_height, flex->margin, flex->padding, flex->border);
+
+    if (height_already_definite) {
+        NSLOG(flex, DEBUG, "box %p: preserved stretched height %d (skipped CSS height:auto)", flex, flex->height);
+    }
 
     available_width = min(available_width, flex->width);
 
