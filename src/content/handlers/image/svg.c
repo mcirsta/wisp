@@ -376,7 +376,9 @@ static bool svg_redraw_internal(svg_content *svg, int x, int y, int width, int h
     plot_style_t pstyle;
     nserror res;
     bool ok = true;
-    const char *url_str = nsurl_access(content_get_url(&svg->base));
+    /* For inline SVGs, content_get_url may return NULL - handle gracefully */
+    nsurl *content_url = content_get_url(&svg->base);
+    const char *url_str = content_url ? nsurl_access(content_url) : "(inline)";
 
     assert(diagram);
 

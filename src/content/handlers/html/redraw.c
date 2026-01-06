@@ -67,6 +67,7 @@
 #include "content/handlers/html/font.h"
 #include "content/handlers/html/layout.h"
 #include "content/handlers/html/stacking.h"
+#include "content/handlers/image/svg.h"
 
 
 bool html_redraw_debug = false;
@@ -1929,6 +1930,20 @@ bool html_redraw_box(const html_content *html, struct box *box, int x_parent, in
                     sizeof(obj) - 1) != NSERROR_OK)
                 return false;
         }
+    } else if (box->svg_diagram != NULL && width != 0 && height != 0) {
+        /* Inline SVG rendering */
+        x_scrolled = x - scrollbar_get_offset(box->scroll_x) * scale;
+        y_scrolled = y - scrollbar_get_offset(box->scroll_y) * scale;
+
+        NSLOG(neosurf, DEBUG, "SVG: Rendering inline SVG at (%d,%d) size %dx%d", (int)(x_scrolled + padding_left),
+            (int)(y_scrolled + padding_top), (int)width, (int)height);
+
+        if (!svg_redraw_diagram(box->svg_diagram, (int)(x_scrolled + padding_left), (int)(y_scrolled + padding_top),
+                (int)width, (int)height, &r, ctx, scale, current_background_color)) {
+            NSLOG(neosurf, WARNING, "SVG: Inline SVG redraw failed");
+        }
+    } else if (box->svg_diagram != NULL && (width == 0 || height == 0)) {
+        NSLOG(neosurf, DEBUG, "SVG: Skipping inline SVG render - zero size (w=%d h=%d)", (int)width, (int)height);
     } else if (tag_type == DOM_HTML_ELEMENT_TYPE_CANVAS && box->node != NULL && box->flags & REPLACE_DIM) {
         /* Canvas to draw */
         struct bitmap *bitmap = NULL;

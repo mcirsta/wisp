@@ -51,7 +51,9 @@
 #include "content/handlers/html/box_manipulate.h"
 #include "content/handlers/html/box_special.h"
 #include "content/handlers/html/box_textarea.h"
+#include "content/handlers/html/html_svg.h"
 #include "content/handlers/html/object.h"
+#include <svgtiny.h>
 
 
 static const content_type image_types = CONTENT_IMAGE;
@@ -1765,6 +1767,61 @@ bool convert_special_elements(dom_node *node, html_content *content, struct box 
         break;
 
     default:
+        /* Check for SVG elements by tag name (not HTML element type) */
+        {
+            dom_string *tag_name = NULL;
+            dom_exception exc;
+
+            exc = dom_element_get_tag_name(node, &tag_name);
+            if (exc == DOM_NO_ERR && tag_name != NULL) {
+                if (dom_string_caseless_isequal(tag_name, corestring_dom_svg)) {
+                    /* This is an inline SVG element - treat as replaced element */
+                    box->flags |= IS_REPLACED | REPLACE_DIM;
+
+                    /* Don't convert children - we'll parse the entire SVG */
+                    if (convert_children) {
+                        *convert_children = false;
+                    }
+
+                    NSLOG(neosurf, DEBUG, "SVG: Found inline <svg> element");
+
+                    /* Parse inline SVG and store diagram in box.
+                     * Use default 300x150 like browsers do for replaced elements.
+                     * Actual rendering will scale to box dimensions.
+                     */
+                    {
+                        struct svgtiny_diagram *diagram = NULL;
+                        nserror err;
+                        const char *base_url = "";
+                        char color_str[8] = "#000000"; /* Default black */
+
+                        if (content->base_url != NULL) {
+                            base_url = nsurl_access(content->base_url);
+                        }
+
+                        /* Get computed CSS color for currentColor substitution */
+                        if (box->style != NULL) {
+                            css_color col;
+                            css_computed_color(box->style, &col);
+                            /* Convert CSS color to hex string (col is AABBGGRR format) */
+                            snprintf(color_str, sizeof(color_str), "#%02x%02x%02x", (col >> 0) & 0xff, /* R */
+                                (col >> 8) & 0xff, /* G */
+                                (col >> 16) & 0xff); /* B */
+                        }
+
+                        err = html_parse_inline_svg((dom_element *)node, 300, 150, base_url, color_str, &diagram);
+                        if (err == NSERROR_OK && diagram != NULL) {
+                            box->svg_diagram = diagram;
+                            NSLOG(neosurf, DEBUG, "SVG: Parsed inline SVG (%dx%d, %u shapes)", diagram->width,
+                                diagram->height, diagram->shape_count);
+                        } else {
+                            NSLOG(neosurf, WARNING, "SVG: Failed to parse inline SVG");
+                        }
+                    }
+                }
+                dom_string_unref(tag_name);
+            }
+        }
         res = true;
     }
 

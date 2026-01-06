@@ -70,6 +70,7 @@
 #include "content/handlers/html/layout_grid.h"
 #include "content/handlers/html/layout_internal.h"
 #include "content/handlers/html/table.h"
+#include <svgtiny.h>
 
 /** Array of per-side access functions for computed style margins. */
 const css_len_func margin_funcs[4] = {
@@ -645,6 +646,14 @@ static struct box *layout_minmax_line(struct box *first, int *line_min, int *lin
                 int temp_height = height;
                 layout_get_object_dimensions(
                     &content->unit_len_ctx, b, &width, &temp_height, INT_MIN, INT_MAX, INT_MIN, INT_MAX);
+            } else if (b->svg_diagram != NULL) {
+                /* Inline SVG - use diagram's intrinsic dimensions */
+                if (width == AUTO) {
+                    width = b->svg_diagram->width;
+                }
+                if (height == AUTO) {
+                    height = b->svg_diagram->height;
+                }
             }
 
             fixed = frac = 0;
@@ -2586,6 +2595,14 @@ static bool layout_line(struct box *first, int *width, int *y, int cx, int cy, s
         if (b->object && !(b->flags & REPLACE_DIM)) {
             layout_get_object_dimensions(
                 &content->unit_len_ctx, b, &b->width, &b->height, min_width, max_width, min_height, max_height);
+        } else if (b->svg_diagram != NULL) {
+            /* Inline SVG - use diagram's intrinsic dimensions */
+            if (b->width == AUTO) {
+                b->width = b->svg_diagram->width;
+            }
+            if (b->height == AUTO) {
+                b->height = b->svg_diagram->height;
+            }
         } else if (b->flags & IFRAME) {
             /* TODO: should we look at the content dimensions? */
             if (b->width == AUTO)

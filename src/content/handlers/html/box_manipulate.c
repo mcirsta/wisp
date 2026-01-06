@@ -36,6 +36,7 @@
 #include <neosurf/utils/nsurl.h>
 #include "utils/talloc.h"
 #include <string.h>
+#include <svgtiny.h>
 
 #include <neosurf/content/handlers/html/box.h>
 #include <neosurf/content/handlers/html/form_internal.h>
@@ -155,6 +156,7 @@ struct box *box_create(css_select_results *styles, css_computed_style *style, bo
     box->background = NULL;
     box->object = NULL;
     box->object_params = NULL;
+    box->svg_diagram = NULL;
     box->iframe = NULL;
     box->node = NULL;
 
@@ -279,6 +281,8 @@ void box_free_box(struct box *box)
             scrollbar_destroy(box->scroll_y);
         if (box->styles != NULL)
             css_select_results_destroy(box->styles);
+        if (box->svg_diagram != NULL)
+            svgtiny_free(box->svg_diagram);
     }
 
     talloc_free(box);

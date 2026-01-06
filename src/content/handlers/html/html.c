@@ -67,6 +67,7 @@
 #include "content/handlers/html/box_construct.h"
 #include "content/handlers/html/css.h"
 #include "content/handlers/html/dom_event.h"
+#include "content/handlers/html/html_svg.h"
 #include "content/handlers/html/imagemap.h"
 #include "content/handlers/html/layout.h"
 #include "content/handlers/html/object.h"
@@ -415,6 +416,19 @@ void html_finish_conversion(html_content *htmlc)
 
     html_get_dimensions(htmlc);
 
+    /* Collect SVG symbols and resolve <use> references before box conversion.
+     * This allows inline SVG elements with <use href="#id"> to render correctly
+     * by pre-resolving references that libsvgtiny can't handle across documents.
+     */
+    error = html_collect_svg_symbols(htmlc, htmlc->document);
+    if (error == NSERROR_OK) {
+        error = html_resolve_svg_use_refs(htmlc, htmlc->document);
+    }
+    if (error != NSERROR_OK && error != NSERROR_NOT_FOUND) {
+        NSLOG(neosurf, WARNING, "SVG symbol resolution had issues: %d", error);
+        /* Non-fatal - continue with box conversion */
+    }
+
     PERF("DOM to box START");
     error = dom_to_box(html, htmlc, html_box_convert_done, &htmlc->box_conversion_context);
     if (error != NSERROR_OK) {
@@ -497,6 +511,7 @@ static nserror html_create_html_data(html_content *c, const http_parameter *para
     c->object_list = NULL;
     c->forms = NULL;
     c->imagemaps = NULL;
+    c->svg_symbols = NULL;
     c->bw = NULL;
     c->frameset = NULL;
     c->iframe = NULL;
@@ -1433,6 +1448,9 @@ static void html_destroy(struct content *c)
 
     /* Free scripts */
     html_script_free(html);
+
+    /* Free SVG symbol registry */
+    html_free_svg_symbols(html);
 
     /* Free objects */
     html_object_free_objects(html);

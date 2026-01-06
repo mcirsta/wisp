@@ -219,6 +219,9 @@ typedef struct html_content {
      */
     struct form_control *visible_select_menu;
 
+    /** SVG symbol registry for inline SVG <use> resolution, or NULL */
+    struct svg_symbol_registry *svg_symbols;
+
 } html_content;
 
 /**

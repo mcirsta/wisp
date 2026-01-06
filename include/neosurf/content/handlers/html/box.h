@@ -447,6 +447,11 @@ struct box {
      */
     struct object_params *object_params;
 
+    /**
+     * Parsed inline SVG diagram, or NULL if not an inline SVG.
+     */
+    struct svgtiny_diagram *svg_diagram;
+
 
     /**
      * Iframe's browser_window, or NULL if none

@@ -1170,8 +1170,9 @@ static svgtiny_code initialise_parse_state(struct svgtiny_parse_state *state, st
         height = 150;
     }
 
-    diagram->width = width;
-    diagram->height = height;
+    /* Use ceilf to ensure we don't clip content when viewBox has fractional dimensions */
+    diagram->width = (int)ceilf(width);
+    diagram->height = (int)ceilf(height);
 
     /* set up parsing state */
     state->viewport_width = width;

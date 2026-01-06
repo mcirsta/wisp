@@ -128,6 +128,7 @@ add_library(neosurf ${NEOSURF_LIB_TYPE}
 	content/handlers/html/form.c
 	content/handlers/html/forms.c
 	content/handlers/html/html.c
+	content/handlers/html/html_svg.c
 	content/handlers/html/imagemap.c
 	content/handlers/html/interaction.c
 	content/handlers/html/layout.c

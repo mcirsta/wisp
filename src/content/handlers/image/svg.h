@@ -23,6 +23,36 @@
 #ifndef _NETSURF_IMAGE_SVG_H_
 #define _NETSURF_IMAGE_SVG_H_
 
+#include <stdbool.h>
+#include <stdint.h>
+
+#include <neosurf/utils/errors.h>
+
 nserror svg_init(void);
+
+/* Forward declarations */
+struct svgtiny_diagram;
+struct rect;
+struct redraw_context;
+typedef uint32_t colour;
+
+/**
+ * Render a standalone SVG diagram.
+ *
+ * Used for inline SVG elements in HTML content.
+ *
+ * \param diagram  SVG diagram to render
+ * \param x        Left coordinate
+ * \param y        Top coordinate
+ * \param width    Width to render at
+ * \param height   Height to render at
+ * \param clip     Clipping rectangle
+ * \param ctx      Redraw context
+ * \param scale    Scale factor
+ * \param background_colour  Background colour
+ * \return true on success, false on error
+ */
+bool svg_redraw_diagram(struct svgtiny_diagram *diagram, int x, int y, int width, int height, const struct rect *clip,
+    const struct redraw_context *ctx, float scale, colour background_colour);
 
 #endif

@@ -991,6 +991,10 @@ nsurl *content_get_url(struct content *c)
     if (c == NULL)
         return NULL;
 
+    /* For inline content (like inline SVGs), there is no llcache handle */
+    if (c->llcache == NULL)
+        return NULL;
+
     return llcache_handle_get_url(c->llcache);
 }
 
