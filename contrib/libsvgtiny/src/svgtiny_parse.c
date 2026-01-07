@@ -1465,6 +1465,12 @@ svgtiny_code svgtiny_parse_color(const char *text, size_t textlen, svgtiny_colou
         return res;
     }
 
+    /* check for currentColor keyword (case-insensitive) */
+    if ((textend - cursor >= 12) && (strncasecmp(cursor, "currentColor", 12) == 0)) {
+        *c = svgtiny_CURRENT_COLOR;
+        return svgtiny_OK;
+    }
+
     named_color = svgtiny_color_lookup(cursor, textend - cursor);
     if (named_color) {
         *c = named_color->color;

@@ -590,7 +590,8 @@ static nserror svg_serialize_node(dom_node *node, char **buf, size_t *len, size_
             /* Convert symbol to g (group) */
             err = svg_buffer_append(buf, len, cap, "g", 1);
         } else {
-            err = svg_buffer_append_lower(buf, len, cap, dom_string_data(name), dom_string_length(name));
+            /* Preserve original case for SVG element names (e.g. linearGradient) */
+            err = svg_buffer_append(buf, len, cap, dom_string_data(name), dom_string_length(name));
         }
         if (err != NSERROR_OK) {
             dom_string_unref(name);
@@ -680,7 +681,8 @@ static nserror svg_serialize_node(dom_node *node, char **buf, size_t *len, size_
             if (is_symbol) {
                 err = svg_buffer_append(buf, len, cap, "g", 1);
             } else {
-                err = svg_buffer_append_lower(buf, len, cap, dom_string_data(name), dom_string_length(name));
+                /* Preserve original case for closing tag to match opening tag */
+                err = svg_buffer_append(buf, len, cap, dom_string_data(name), dom_string_length(name));
             }
         }
         if (err == NSERROR_OK) {

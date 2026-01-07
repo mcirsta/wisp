@@ -50,9 +50,10 @@ typedef uint32_t colour;
  * \param ctx      Redraw context
  * \param scale    Scale factor
  * \param background_colour  Background colour
+ * \param current_color  CSS 'color' property for currentColor substitution
  * \return true on success, false on error
  */
 bool svg_redraw_diagram(struct svgtiny_diagram *diagram, int x, int y, int width, int height, const struct rect *clip,
-    const struct redraw_context *ctx, float scale, colour background_colour);
+    const struct redraw_context *ctx, float scale, colour background_colour, colour current_color);
 
 #endif

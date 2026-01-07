@@ -366,7 +366,7 @@ static void svg_reformat(struct content *c, int width, int height)
  */
 
 static bool svg_redraw_internal(svg_content *svg, int x, int y, int width, int height, const struct rect *clip,
-    const struct redraw_context *ctx, float scale, colour background_colour)
+    const struct redraw_context *ctx, float scale, colour background_colour, colour current_color)
 {
     float transform[6];
     struct svgtiny_diagram *diagram = svg->diagram;
@@ -419,22 +419,32 @@ static bool svg_redraw_internal(svg_content *svg, int x, int y, int width, int h
     for (i = 0; i != diagram->shape_count; i++) {
         if (diagram->shape[i].path) {
             /* stroke style */
-            if (diagram->shape[i].stroke == svgtiny_TRANSPARENT) {
+            svgtiny_colour stroke_c = diagram->shape[i].stroke;
+            if (stroke_c == svgtiny_CURRENT_COLOR) {
+                /* currentColor from CSS is already in neosurf format */
+                pstyle.stroke_type = PLOT_OP_TYPE_SOLID;
+                pstyle.stroke_colour = current_color;
+            } else if (stroke_c == svgtiny_TRANSPARENT) {
                 pstyle.stroke_type = PLOT_OP_TYPE_NONE;
                 pstyle.stroke_colour = NS_TRANSPARENT;
             } else {
                 pstyle.stroke_type = PLOT_OP_TYPE_SOLID;
-                pstyle.stroke_colour = BGR(diagram->shape[i].stroke);
+                pstyle.stroke_colour = BGR(stroke_c);
             }
             pstyle.stroke_width = plot_style_int_to_fixed(diagram->shape[i].stroke_width);
 
             /* fill style */
-            if (diagram->shape[i].fill == svgtiny_TRANSPARENT) {
+            svgtiny_colour fill_c = diagram->shape[i].fill;
+            if (fill_c == svgtiny_CURRENT_COLOR) {
+                /* currentColor from CSS is already in neosurf format */
+                pstyle.fill_type = PLOT_OP_TYPE_SOLID;
+                pstyle.fill_colour = current_color;
+            } else if (fill_c == svgtiny_TRANSPARENT) {
                 pstyle.fill_type = PLOT_OP_TYPE_NONE;
                 pstyle.fill_colour = NS_TRANSPARENT;
             } else {
                 pstyle.fill_type = PLOT_OP_TYPE_SOLID;
-                pstyle.fill_colour = BGR(diagram->shape[i].fill);
+                pstyle.fill_colour = BGR(fill_c);
             }
             if (scaled != NULL) {
                 unsigned int j = 0;
@@ -720,14 +730,14 @@ static bool svg_redraw_internal(svg_content *svg, int x, int y, int width, int h
 
 
 bool svg_redraw_diagram(struct svgtiny_diagram *diagram, int x, int y, int width, int height, const struct rect *clip,
-    const struct redraw_context *ctx, float scale, colour background_colour)
+    const struct redraw_context *ctx, float scale, colour background_colour, colour current_color)
 {
     svg_content tmp;
     memset(&tmp, 0, sizeof(tmp));
     tmp.diagram = diagram;
     tmp.base.width = width;
     tmp.base.height = height;
-    return svg_redraw_internal(&tmp, x, y, width, height, clip, ctx, scale, background_colour);
+    return svg_redraw_internal(&tmp, x, y, width, height, clip, ctx, scale, background_colour, current_color);
 }
 
 
@@ -761,7 +771,7 @@ static bool svg_redraw_tiled_internal(
     for (y = y0; y < y1; y += data->height) {
         for (x = x0; x < x1; x += data->width) {
             if (!svg_redraw_internal(
-                    svg, x, y, data->width, data->height, clip, ctx, data->scale, data->background_colour)) {
+                    svg, x, y, data->width, data->height, clip, ctx, data->scale, data->background_colour, 0)) {
                 return false;
             }
         }
@@ -787,7 +797,7 @@ static bool svg_redraw(
 
     if ((data->repeat_x == false) && (data->repeat_y == false)) {
         return svg_redraw_internal(
-            svg, data->x, data->y, data->width, data->height, clip, ctx, data->scale, data->background_colour);
+            svg, data->x, data->y, data->width, data->height, clip, ctx, data->scale, data->background_colour, 0);
     }
 
     return svg_redraw_tiled_internal(svg, data, clip, ctx);
