@@ -67,6 +67,7 @@ static nserror nsqt_set_style(QPainter *painter, const plot_style_t *style)
         penstyle = Qt::SolidLine;
     }
     pen.setStyle(penstyle);
+    pen.setWidthF(plot_style_fixed_to_float(style->stroke_width));
 
     painter->setPen(pen);
 
