@@ -1809,34 +1809,53 @@ bool convert_special_elements(dom_node *node, html_content *content, struct box 
                                 (col >> 16) & 0xff); /* B */
                         }
 
-                        /* Look for pre-serialized SVG XML from parser callback */
+                        /* Look for the inline SVG entry */
                         for (cached = content->inline_svgs; cached != NULL; cached = cached->next) {
                             if (cached->node == node) {
                                 break;
                             }
                         }
 
-                        if (cached != NULL && cached->svg_xml != NULL) {
-                            /* Use pre-serialized XML - just need to parse with libsvgtiny */
-                            svgtiny_code code;
+                        if (cached != NULL) {
+                            char *svg_xml = cached->svg_xml;
+                            size_t svg_len = cached->svg_xml_len;
+                            bool free_xml = false;
 
-                            NSLOG(neosurf, DEBUG, "SVG: Using pre-serialized XML (%zu bytes)", cached->svg_xml_len);
+                            /* Lazy Serialization: If XML is missing (not pre-serialized or invalidated),
+                             * serialize it now from the current DOM state. */
+                            if (svg_xml == NULL) {
+                                nserror err;
+                                NSLOG(neosurf, DEBUG, "SVG: Lazy serialization triggered");
+                                err = html_serialize_inline_svg((dom_element *)node, NULL, &svg_xml, &svg_len);
+                                if (err != NSERROR_OK || svg_xml == NULL) {
+                                    NSLOG(neosurf, WARNING, "SVG: Failed to lazy serialize inline SVG");
+                                } else {
+                                    /* We own this string and must free it after parsing */
+                                    free_xml = true;
+                                }
+                            } else {
+                                NSLOG(neosurf, DEBUG, "SVG: Using cached XML (%zu bytes)", svg_len);
+                            }
 
-                            diagram = svgtiny_create();
-                            if (diagram != NULL) {
-                                code = svgtiny_parse(diagram, cached->svg_xml, cached->svg_xml_len, base_url, 300, 150);
-                                if (code != svgtiny_OK) {
-                                    NSLOG(neosurf, WARNING, "SVG: libsvgtiny parse failed: %d", code);
-                                    svgtiny_free(diagram);
-                                    diagram = NULL;
+                            if (svg_xml != NULL) {
+                                svgtiny_code code;
+
+                                diagram = svgtiny_create();
+                                if (diagram != NULL) {
+                                    code = svgtiny_parse(diagram, svg_xml, svg_len, base_url, 300, 150);
+                                    if (code != svgtiny_OK) {
+                                        NSLOG(neosurf, WARNING, "SVG: libsvgtiny parse failed: %d", code);
+                                        svgtiny_free(diagram);
+                                        diagram = NULL;
+                                    }
+                                }
+
+                                if (free_xml) {
+                                    free(svg_xml);
                                 }
                             }
                         } else {
-                            /* Pre-serialized XML not found - this should never happen
-                             * since the parser callback should have serialized it.
-                             * If JS DOM modification is implemented, it must call the
-                             * SVG serialization when inserting SVG elements. */
-                            NSLOG(neosurf, CRITICAL, "SVG: No pre-serialized XML found for inline SVG!");
+                            NSLOG(neosurf, WARNING, "SVG: Inline SVG node not found in cache list");
                         }
 
                         if (diagram != NULL) {

@@ -53,17 +53,6 @@ struct svg_symbol_registry {
     unsigned int capacity;
 };
 
-/**
- * Collect all SVG symbols from the HTML document.
- *
- * Scans the document for <symbol> and relevant elements inside <defs>
- * that have id attributes, building a registry for later <use> resolution.
- *
- * \param c    HTML content
- * \param doc  DOM document
- * \return NSERROR_OK on success, appropriate error otherwise
- */
-nserror html_collect_svg_symbols(struct html_content *c, dom_document *doc);
 
 /**
  * Resolve all <use href="#id"> references in the document.
@@ -102,15 +91,5 @@ void html_free_inline_svgs(struct html_content *c);
  */
 nserror
 html_serialize_inline_svg(dom_element *svg_element, const char *current_color, char **svg_data, size_t *svg_len);
-
-/**
- * Update the pre-serialized inline SVG XML strings.
- *
- * This should be called after <use> resolution to ensure the XML matches
- * the modified DOM (with resolved symbols) before box conversion.
- *
- * \param c  HTML content
- */
-nserror html_update_inline_svgs(struct html_content *c);
 
 #endif /* NETSURF_HTML_SVG_H */

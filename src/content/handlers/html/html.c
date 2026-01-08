@@ -416,18 +416,9 @@ void html_finish_conversion(html_content *htmlc)
 
     html_get_dimensions(htmlc);
 
-    /* Collect SVG symbols and resolve <use> references before box conversion.
-     * This allows inline SVG elements with <use href="#id"> to render correctly
-     * by pre-resolving references that libsvgtiny can't handle across documents.
-     */
-    error = html_collect_svg_symbols(htmlc, htmlc->document);
-    if (error == NSERROR_OK) {
-        error = html_resolve_svg_use_refs(htmlc, htmlc->document);
-        if (error == NSERROR_OK) {
-            /* Update the pre-serialized XML to include the resolved content */
-            html_update_inline_svgs(htmlc);
-        }
-    }
+    /* SVG inline processing */
+    /* Symbols are collected incrementally during parsing in html_process_svg */
+    error = html_resolve_svg_use_refs(htmlc, htmlc->document);
     if (error != NSERROR_OK && error != NSERROR_NOT_FOUND) {
         NSLOG(neosurf, WARNING, "SVG symbol resolution had issues: %d", error);
         /* Non-fatal - continue with box conversion */

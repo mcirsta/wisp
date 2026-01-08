@@ -150,73 +150,6 @@ static nserror collect_symbols_from_element(dom_element *element, struct svg_sym
     return err;
 }
 
-/**
- * Collect all SVG symbols from the HTML document.
- */
-nserror html_collect_svg_symbols(struct html_content *c, dom_document *doc)
-{
-    dom_exception exc;
-    dom_nodelist *svg_elements = NULL;
-    uint32_t svg_count, i;
-    nserror err = NSERROR_OK;
-    struct svg_symbol_registry *reg;
-
-    /* Allocate registry */
-    reg = calloc(1, sizeof(struct svg_symbol_registry));
-    if (reg == NULL) {
-        return NSERROR_NOMEM;
-    }
-
-    reg->entries = calloc(SVG_SYMBOL_INITIAL_CAPACITY, sizeof(struct svg_symbol_entry));
-    if (reg->entries == NULL) {
-        free(reg);
-        return NSERROR_NOMEM;
-    }
-    reg->capacity = SVG_SYMBOL_INITIAL_CAPACITY;
-    reg->count = 0;
-
-    /* Find all SVG elements in the document */
-    exc = dom_document_get_elements_by_tag_name(doc, corestring_dom_svg, &svg_elements);
-    if (exc != DOM_NO_ERR || svg_elements == NULL) {
-        /* No SVG elements - that's fine */
-        c->svg_symbols = reg;
-        return NSERROR_OK;
-    }
-
-    exc = dom_nodelist_get_length(svg_elements, &svg_count);
-    if (exc != DOM_NO_ERR) {
-        dom_nodelist_unref(svg_elements);
-        c->svg_symbols = reg;
-        return NSERROR_OK;
-    }
-
-    NSLOG(neosurf, DEBUG, "SVG: Found %u SVG elements in document", svg_count);
-
-    /* Collect symbols from each SVG element */
-    for (i = 0; i < svg_count; i++) {
-        dom_node *svg_node = NULL;
-
-        exc = dom_nodelist_item(svg_elements, i, &svg_node);
-        if (exc != DOM_NO_ERR || svg_node == NULL) {
-            continue;
-        }
-
-        err = collect_symbols_from_element((dom_element *)svg_node, reg);
-        dom_node_unref(svg_node);
-
-        if (err != NSERROR_OK) {
-            break;
-        }
-    }
-
-    dom_nodelist_unref(svg_elements);
-
-    c->svg_symbols = reg;
-
-    NSLOG(neosurf, INFO, "SVG: Collected %u symbols from document", reg->count);
-
-    return err;
-}
 
 /**
  * Resolve all <use href="#id"> references in the document.
@@ -777,32 +710,26 @@ nserror html_serialize_inline_svg(dom_element *svg_element, const char *current_
  * We serialize the SVG DOM to XML here to avoid redundant DOM traversal
  * during box construction.
  */
+/**
+ * Parser callback when an SVG element completes parsing.
+ *
+ * This is called by hubbub via libdom when an <svg> element closes.
+ * We store the node reference to allow lazy serialization during box construction.
+ */
 dom_hubbub_error html_process_svg(void *ctx, dom_node *node)
 {
     html_content *c = (html_content *)ctx;
     struct html_inline_svg *entry;
-    char *svg_xml = NULL;
-    size_t svg_xml_len = 0;
-    nserror err;
 
     if (c == NULL || node == NULL) {
         return DOM_HUBBUB_OK;
     }
 
-    NSLOG(neosurf, DEBUG, "SVG: Parser callback - serializing inline SVG");
-
-    /* Serialize the SVG element to XML (without currentColor substitution -
-     * that will happen during box construction when we have CSS info) */
-    err = html_serialize_inline_svg((dom_element *)node, NULL, &svg_xml, &svg_xml_len);
-    if (err != NSERROR_OK || svg_xml == NULL) {
-        NSLOG(neosurf, WARNING, "SVG: Failed to serialize SVG in parser callback");
-        return DOM_HUBBUB_OK; /* Non-fatal, box_special.c will try again */
-    }
+    NSLOG(neosurf, DEBUG, "SVG: Parser callback - storing inline SVG node for lazy serialization");
 
     /* Create entry for the inline_svgs list */
     entry = malloc(sizeof(struct html_inline_svg));
     if (entry == NULL) {
-        free(svg_xml);
         return DOM_HUBBUB_OK;
     }
 
@@ -810,79 +737,35 @@ dom_hubbub_error html_process_svg(void *ctx, dom_node *node)
     dom_node_ref(node);
 
     entry->node = node;
-    entry->svg_xml = svg_xml;
-    entry->svg_xml_len = svg_xml_len;
+    entry->svg_xml = NULL; /* Lazy serialization */
+    entry->svg_xml_len = 0;
     entry->next = c->inline_svgs;
     c->inline_svgs = entry;
 
-    NSLOG(neosurf, DEBUG, "SVG: Pre-serialized %zu bytes of SVG XML", svg_xml_len);
+    /* Optimization: Collect symbols immediately from this SVG element
+     * instead of scanning the entire document later. */
+    if (c->svg_symbols == NULL) {
+        c->svg_symbols = calloc(1, sizeof(struct svg_symbol_registry));
+        if (c->svg_symbols != NULL) {
+            c->svg_symbols->entries = calloc(SVG_SYMBOL_INITIAL_CAPACITY, sizeof(struct svg_symbol_entry));
+            if (c->svg_symbols->entries != NULL) {
+                c->svg_symbols->capacity = SVG_SYMBOL_INITIAL_CAPACITY;
+                c->svg_symbols->count = 0;
+            } else {
+                free(c->svg_symbols);
+                c->svg_symbols = NULL;
+            }
+        }
+    }
+
+    if (c->svg_symbols != NULL) {
+        collect_symbols_from_element((dom_element *)node, c->svg_symbols);
+        NSLOG(neosurf, DEBUG, "SVG: Collected symbols from inline SVG (total: %u)", c->svg_symbols->count);
+    }
 
     return DOM_HUBBUB_OK;
 }
 
 /**
- * Update the pre-serialized inline SVG XML strings.
+ * Resolve all <use href="#id"> references in the document.
  */
-/**
- * Update the pre-serialized inline SVG XML strings.
- */
-nserror html_update_inline_svgs(struct html_content *c)
-{
-    struct html_inline_svg *entry;
-    nserror err;
-    dom_string *use_tag = NULL;
-    dom_exception exc;
-
-    if (c == NULL || c->inline_svgs == NULL) {
-        return NSERROR_OK;
-    }
-
-    NSLOG(neosurf, DEBUG, "SVG: Updating inline SVG XML after resolution");
-
-    exc = dom_string_create((const uint8_t *)"use", 3, &use_tag);
-    if (exc != DOM_NO_ERR) {
-        return NSERROR_DOM;
-    }
-
-    for (entry = c->inline_svgs; entry != NULL; entry = entry->next) {
-        char *svg_xml = NULL;
-        size_t svg_xml_len = 0;
-        dom_nodelist *use_elements = NULL;
-        uint32_t use_count = 0;
-
-        /* Optimization: Check if this SVG actually contains any <use> elements
-         * before re-serializing. This avoids expensive re-serialization of
-         * large definition/sprite-sheet SVGs that don't need updating. */
-        exc = dom_element_get_elements_by_tag_name((dom_element *)entry->node, use_tag, &use_elements);
-        if (exc == DOM_NO_ERR && use_elements != NULL) {
-            dom_nodelist_get_length(use_elements, &use_count);
-            dom_nodelist_unref(use_elements);
-        }
-
-        if (use_count == 0) {
-            /* No <use> elements, skip re-serialization */
-            continue;
-        }
-
-        /* Re-serialize the SVG element (which now includes resolved symbols) */
-        err = html_serialize_inline_svg((dom_element *)entry->node, NULL, &svg_xml, &svg_xml_len);
-        if (err != NSERROR_OK || svg_xml == NULL) {
-            NSLOG(neosurf, WARNING, "SVG: Failed to re-serialize inline SVG");
-            continue;
-        }
-
-        /* Free old XML and replace with new */
-        if (entry->svg_xml != NULL) {
-            free(entry->svg_xml);
-        }
-
-        entry->svg_xml = svg_xml;
-        entry->svg_xml_len = svg_xml_len;
-
-        NSLOG(neosurf, DEBUG, "SVG: Updated serialized XML (%zu bytes)", svg_xml_len);
-    }
-
-    dom_string_unref(use_tag);
-
-    return NSERROR_OK;
-}
