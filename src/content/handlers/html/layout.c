@@ -3164,7 +3164,7 @@ bool layout_block_context(struct box *block, int viewport_height, html_content *
                 }
             }
             if (class_attr != NULL) {
-                NSLOG(layout, INFO, "processing: tag %s class %s box %p width %i type %d", tag, cls, box, box->width,
+                NSLOG(layout, DEBUG, "processing: tag %s class %s box %p width %i type %d", tag, cls, box, box->width,
                     box->type);
             }
             if (class_attr != NULL)
@@ -3172,6 +3172,11 @@ bool layout_block_context(struct box *block, int viewport_height, html_content *
             if (name != NULL)
                 dom_string_unref(name);
         }
+
+        NSLOG(layout, DEBUG, "Box metrics for %p: w=%d m=%d,%d,%d,%d p=%d,%d,%d,%d b=%d,%d,%d,%d", box, box->width,
+            box->margin[TOP], box->margin[RIGHT], box->margin[BOTTOM], box->margin[LEFT], box->padding[TOP],
+            box->padding[RIGHT], box->padding[BOTTOM], box->padding[LEFT], box->border[TOP].width,
+            box->border[RIGHT].width, box->border[BOTTOM].width, box->border[LEFT].width);
 
         /* Tables are laid out before being positioned, because the
          * position depends on the width which is calculated in
@@ -3339,21 +3344,21 @@ bool layout_block_context(struct box *block, int viewport_height, html_content *
                         cls = dom_string_data(class_attr);
                     }
                 }
-                NSLOG(layout, INFO,
+                NSLOG(layout, DEBUG,
                     "flex pre: tag %s class %s box %p, overflow_x %d, overflow_y %d, wrap %d, parent_w %i, box_w %i",
                     tag, cls, box, overflow_x, overflow_y, css_computed_flex_wrap(box->style),
                     box->parent ? box->parent->width : 0, box->width);
-                NSLOG(layout, INFO, "calling layout_flex for flex container %p width %i", box, box->width);
+                NSLOG(layout, DEBUG, "calling layout_flex for flex container %p width %i", box, box->width);
                 if (!layout_flex(box, box->width, content)) {
                     return false;
                 }
-                NSLOG(layout, INFO, "flex post: box %p, w %i, h %i", box, box->width, box->height);
+                NSLOG(layout, DEBUG, "flex post: box %p, w %i, h %i", box, box->width, box->height);
                 if (class_attr != NULL)
                     dom_string_unref(class_attr);
                 if (name != NULL)
                     dom_string_unref(name);
             } else if (box->type == BOX_GRID) {
-                NSLOG(layout, INFO, "calling layout_grid for grid container %p width %i", box, box->width);
+                NSLOG(layout, DEBUG, "calling layout_grid for grid container %p width %i", box, box->width);
                 if (!layout_grid(box, box->width, content)) {
                     return false;
                 }

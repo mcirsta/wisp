@@ -23,6 +23,7 @@
 
 #include <QDir>
 #include <QResource>
+#include <QScreen>
 #include <QSettings>
 #include <QStandardPaths>
 
@@ -39,6 +40,7 @@ extern "C" {
 #include "utils/utils.h"
 
 #include "neosurf/bitmap.h"
+#include "neosurf/browser.h"
 #include "neosurf/browser_window.h"
 #include "neosurf/content.h"
 #include "neosurf/cookie_db.h"
@@ -338,6 +340,11 @@ NS_Application::NS_Application(int &argc, char **argv, struct neosurf_table *nsq
     nserror res;
 
     NS_Application::s_nsqt_instance = this;
+
+    QScreen *screen = primaryScreen();
+    if (screen) {
+        browser_set_dpi((int)screen->logicalDotsPerInch());
+    }
 
     /* register operation tables */
     res = neosurf_register(nsqt_table);

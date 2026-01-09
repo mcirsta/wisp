@@ -465,7 +465,23 @@ nserror NS_Window::static_get_dimensions(struct gui_window *gw, int *width, int 
             *width = max_w;
         }
     }
+    NSLOG(netsurf, DEBUG, "static_get_dimensions: nswidget w %d h %d -> returning w %d",
+        gw->window->m_nswidget->width(), gw->window->m_nswidget->height(), *width);
+    return NSERROR_OK;
+}
 
+/**
+ * Get the width of the vertical scrollbar.
+ *
+ * \param gw The gui window to obtain the scrollbar width from.
+ * \param width receives width of the scrollbar
+ * \return NSERROR_OK on success and width updated
+ *          else error code.
+ */
+nserror NS_Window::static_get_scrollbar_width(struct gui_window *gw, int *width)
+{
+    *width = gw->window->m_vscrollbar->sizeHint().width();
+    NSLOG(netsurf, DEBUG, "static_get_scrollbar_width: returning %d", *width);
     return NSERROR_OK;
 }
 
@@ -581,6 +597,7 @@ static struct gui_window_table window_table = {
     .get_scroll = NS_Window::static_get_scroll,
     .set_scroll = NS_Window::static_set_scroll,
     .get_dimensions = NS_Window::static_get_dimensions,
+    .get_scrollbar_width = NS_Window::static_get_scrollbar_width,
     .event = NS_Window::static_event,
     .set_title = NS_Window::static_set_title,
     .set_url = NS_Window::static_set_url,

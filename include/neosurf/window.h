@@ -233,6 +233,16 @@ struct gui_window_table {
      */
     nserror (*get_dimensions)(struct gui_window *gw, int *width, int *height);
 
+    /**
+     * Get the width of the vertical scrollbar.
+     *
+     * \param gw The gui window to obtain the scrollbar width from.
+     * \param width receives width of the scrollbar
+     * \return NSERROR_OK on success and width updated
+     *          else error code.
+     */
+    nserror (*get_scrollbar_width)(struct gui_window *gw, int *width);
+
 
     /**
      * Miscellaneous event occurred for a window

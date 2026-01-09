@@ -64,6 +64,7 @@ public:
     static nserror static_event(struct gui_window *gw, enum gui_window_event event);
     static nserror static_invalidate(struct gui_window *gw, const struct rect *rect);
     static nserror static_get_dimensions(struct gui_window *gw, int *width, int *height);
+    static nserror static_get_scrollbar_width(struct gui_window *gw, int *width);
     static void static_set_pointer(struct gui_window *gw, enum gui_pointer_shape shape);
     static void static_place_caret(struct gui_window *gw, int x, int y, int height, const struct rect *clip);
     static struct gui_window *

@@ -3693,6 +3693,27 @@ nserror browser_window_get_dimensions(struct browser_window *bw, int *width, int
 
 
 /* Exported interface, documented in neosurf/browser_window.h */
+nserror browser_window_get_scrollbar_width(struct browser_window *bw, int *width)
+{
+    assert(bw);
+
+    if (bw->window == NULL) {
+        /* Core managed browser window */
+        *width = SCROLLBAR_WIDTH;
+        return NSERROR_OK;
+    } else {
+        /* Front end window */
+        if (guit->window->get_scrollbar_width != NULL) {
+            return guit->window->get_scrollbar_width(bw->window, width);
+        }
+        /* Fallback if callback not implemented */
+        *width = SCROLLBAR_WIDTH;
+        return NSERROR_OK;
+    }
+}
+
+
+/* Exported interface, documented in neosurf/browser_window.h */
 void browser_window_set_dimensions(struct browser_window *bw, int width, int height)
 {
     assert(bw);

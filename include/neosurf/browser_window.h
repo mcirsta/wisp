@@ -280,6 +280,26 @@ struct hlcache_handle *browser_window_get_content(struct browser_window *bw);
 
 
 /**
+ * Get the dimensions of the browser window.
+ *
+ * \param bw  The browser window to get dimensions of
+ * \param width  receives the width of the window
+ * \param height receives the height of the window
+ * \return NSERROR_OK on success, appropriate error otherwise
+ */
+nserror browser_window_get_dimensions(struct browser_window *bw, int *width, int *height);
+
+/**
+ * Get the width of the vertical scrollbar.
+ *
+ * \param bw  The browser window to get scrollbar width of
+ * \param width  receives the width of the scrollbar
+ * \return NSERROR_OK on success, appropriate error otherwise
+ */
+nserror browser_window_get_scrollbar_width(struct browser_window *bw, int *width);
+
+
+/**
  * Set the dimensions of the area a browser window occupies
  *
  * \param  bw      The browser window to set dimensions of
