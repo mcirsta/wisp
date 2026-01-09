@@ -337,6 +337,39 @@ void output_calc(FILE *outputf, struct keyval *parseid, struct keyval_list *kvli
         parseid->val, ckv->val, kind);
 }
 
+/* Output handling for sizing keywords: fit-content, min-content, max-content */
+void output_sizing(FILE *outputf, struct keyval *parseid, struct keyval_list *kvlist)
+{
+    for (int i = 0; i < kvlist->count; i++) {
+        struct keyval *ckv = kvlist->item[i];
+        const char *keyword = ckv->key;
+        const char *unit;
+
+        /* Map keyword to UNIT_* constant */
+        if (strcmp(keyword, "FIT_CONTENT") == 0)
+            unit = "UNIT_FIT_CONTENT";
+        else if (strcmp(keyword, "MIN_CONTENT") == 0)
+            unit = "UNIT_MIN_CONTENT";
+        else if (strcmp(keyword, "MAX_CONTENT") == 0)
+            unit = "UNIT_MAX_CONTENT";
+        else
+            unit = keyword; /* fallback: use as-is */
+
+        fprintf(outputf,
+            "if ((token->type == CSS_TOKEN_IDENT) &&\n"
+            "\t\t\t(lwc_string_caseless_isequal(\n"
+            "\t\t\ttoken->idata, c->strings[%s],\n"
+            "\t\t\t&match) == lwc_error_ok && match)) {\n"
+            "\t\terror = css__stylesheet_style_appendOPV(result,\n"
+            "\t\t\t\t%s, 0, %s);\n"
+            "\t\tif (error == CSS_OK)\n"
+            "\t\t\terror = css__stylesheet_style_vappend(result, 2,\n"
+            "\t\t\t\t(css_fixed)0, (uint32_t)%s);\n\n"
+            "\t} else ",
+            keyword, parseid->val, ckv->val, unit);
+    }
+}
+
 void output_length_unit(FILE *outputf, struct keyval *parseid, struct keyval_list *kvlist)
 {
     struct keyval *ckv = kvlist->item[0];
@@ -537,6 +570,7 @@ int main(int argc, char **argv)
     struct keyval_list NUMBER = {0};
     struct keyval_list COLOR = {0};
     struct keyval_list CALC = {0};
+    struct keyval_list SIZING = {0};
 
     int ret = 0;
 
@@ -628,6 +662,14 @@ int main(int argc, char **argv)
             }
             only_ident = false;
             do_token_check = false;
+        } else if (strcmp(rkv->key, "SIZING") == 0) {
+            if (rkv->val[0] == '(') {
+                curlist = &SIZING;
+            } else if (rkv->val[0] == ')') {
+                curlist = &base;
+            }
+            only_ident = false;
+            do_token_check = false;
         } else if (strcmp(rkv->key, "COLOR") == 0) {
             COLOR.item[COLOR.count++] = rkv;
             rkv_needs_free = false;
@@ -673,6 +715,10 @@ int main(int argc, char **argv)
             output_calc(outputf, base.item[0], &CALC);
         }
 
+        if (SIZING.count > 0) {
+            output_sizing(outputf, base.item[0], &SIZING);
+        }
+
         if (NUMBER.count > 0)
             output_number(outputf, base.item[0], &NUMBER);
 
@@ -715,6 +761,8 @@ cleanup:
         free(IDENT_LIST.item[i]);
     for (int i = 0; i < CALC.count; i++)
         free(CALC.item[i]);
+    for (int i = 0; i < SIZING.count; i++)
+        free(SIZING.item[i]);
     free(descriptor);
     if (outputf != stdout)
         fclose(outputf);

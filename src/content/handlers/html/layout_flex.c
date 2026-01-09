@@ -373,9 +373,30 @@ layout_flex__base_and_main_sizes(const struct flex_ctx *ctx, struct flex_item_da
 
     if (ctx->horizontal == false) {
         if (b->width == AUTO) {
-            /* For column flex cross-size (width): use available_width, constrained by max_width.
-             * Don't use content_min_width as floor - text should wrap within available space */
-            b->width = min(available_width, content_max_width);
+            /* Check if CSS width is a content-sizing keyword (fit-content, min-content, max-content).
+             * These use intrinsic content width, not stretch behavior. */
+            css_fixed css_width_val;
+            css_unit css_width_unit;
+            uint8_t wtype = css_computed_width(b->style, &css_width_val, &css_width_unit);
+
+            bool is_content_sizing = (wtype == CSS_WIDTH_SET &&
+                (css_width_unit == CSS_UNIT_FIT_CONTENT || css_width_unit == CSS_UNIT_MIN_CONTENT ||
+                    css_width_unit == CSS_UNIT_MAX_CONTENT));
+
+            if (is_content_sizing) {
+                /* Content-sizing: use intrinsic content width, clamped by available */
+                b->width = content_max_width;
+                if (b->width > available_width) {
+                    b->width = available_width;
+                }
+            } else {
+                /* Auto: stretch to fill available width (standard flex cross-axis behavior) */
+                b->width = available_width;
+                /* But don't exceed content max if it's smaller (shrink-wrap) */
+                if (b->width > content_max_width) {
+                    b->width = content_max_width;
+                }
+            }
             b->width -= lh__delta_outer_width(b);
         }
 

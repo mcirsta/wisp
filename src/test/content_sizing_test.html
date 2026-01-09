@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <title>Content-Sizing Keywords Test</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            padding: 20px;
+            background: #f0f0f0;
+        }
+
+        .container {
+            background: white;
+            padding: 20px;
+            margin-bottom: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        h2 {
+            margin-top: 0;
+            color: #333;
+            border-bottom: 2px solid #4a90d9;
+            padding-bottom: 8px;
+        }
+
+        .demo-box {
+            background: #4a90d9;
+            color: white;
+            padding: 10px;
+            margin: 10px 0;
+        }
+
+        .label {
+            font-size: 12px;
+            color: #666;
+            margin-bottom: 4px;
+        }
+
+        /* width tests */
+        .width-fit-content {
+            width: fit-content;
+        }
+
+        .width-min-content {
+            width: min-content;
+        }
+
+        .width-max-content {
+            width: max-content;
+        }
+
+        /* height tests */
+        .height-fit-content {
+            height: fit-content;
+        }
+
+        .height-min-content {
+            height: min-content;
+        }
+
+        .height-max-content {
+            height: max-content;
+        }
+
+        /* min-width tests */
+        .min-width-fit-content {
+            min-width: fit-content;
+            width: 50px;
+        }
+
+        .min-width-min-content {
+            min-width: min-content;
+            width: 50px;
+        }
+
+        .min-width-max-content {
+            min-width: max-content;
+            width: 50px;
+        }
+
+        /* max-width tests */
+        .max-width-fit-content {
+            max-width: fit-content;
+            width: 500px;
+        }
+
+        .max-width-min-content {
+            max-width: min-content;
+            width: 500px;
+        }
+
+        .max-width-max-content {
+            max-width: max-content;
+            width: 500px;
+        }
+
+        /* min-height tests */
+        .min-height-container {
+            display: flex;
+            gap: 10px;
+        }
+
+        .min-height-fit-content {
+            min-height: fit-content;
+            height: 10px;
+        }
+
+        .min-height-min-content {
+            min-height: min-content;
+            height: 10px;
+        }
+
+        .min-height-max-content {
+            min-height: max-content;
+            height: 10px;
+        }
+
+        /* max-height tests */
+        .max-height-fit-content {
+            max-height: fit-content;
+            height: 200px;
+            overflow: hidden;
+        }
+
+        .max-height-min-content {
+            max-height: min-content;
+            height: 200px;
+            overflow: hidden;
+        }
+
+        .max-height-max-content {
+            max-height: max-content;
+            height: 200px;
+            overflow: hidden;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Content-Sizing Keywords Test</h1>
+    <p>Tests for <code>fit-content</code>, <code>min-content</code>, and <code>max-content</code> keywords.</p>
+
+    <div class="container">
+        <h2>width</h2>
+        <div class="label">width: fit-content</div>
+        <div class="demo-box width-fit-content">
+            This box shrinks to fit its content.
+        </div>
+
+        <div class="label">width: min-content</div>
+        <div class="demo-box width-min-content">
+            This box is as narrow as the longest word allows.
+        </div>
+
+        <div class="label">width: max-content</div>
+        <div class="demo-box width-max-content">
+            This box expands to fit all content on one line without wrapping.
+        </div>
+    </div>
+
+    <div class="container">
+        <h2>height</h2>
+        <div class="label">height: fit-content</div>
+        <div class="demo-box height-fit-content">
+            Box height fits content.
+        </div>
+
+        <div class="label">height: min-content</div>
+        <div class="demo-box height-min-content">
+            Box height is minimum needed for content.
+        </div>
+
+        <div class="label">height: max-content</div>
+        <div class="demo-box height-max-content">
+            Box height is maximum needed for content.
+        </div>
+    </div>
+
+    <div class="container">
+        <h2>min-width</h2>
+        <p>Each box has <code>width: 50px</code> but min-width overrides:</p>
+
+        <div class="label">min-width: fit-content (width: 50px ignored)</div>
+        <div class="demo-box min-width-fit-content">
+            Min-width forces this to be at least as wide as content.
+        </div>
+
+        <div class="label">min-width: min-content (width: 50px ignored)</div>
+        <div class="demo-box min-width-min-content">
+            Min-width forces this to be at least as wide as longest word.
+        </div>
+
+        <div class="label">min-width: max-content (width: 50px ignored)</div>
+        <div class="demo-box min-width-max-content">
+            Min-width forces this to be at least as wide as unwrapped content.
+        </div>
+    </div>
+
+    <div class="container">
+        <h2>max-width</h2>
+        <p>Each box has <code>width: 500px</code> but max-width limits:</p>
+
+        <div class="label">max-width: fit-content</div>
+        <div class="demo-box max-width-fit-content">
+            Content here.
+        </div>
+
+        <div class="label">max-width: min-content</div>
+        <div class="demo-box max-width-min-content">
+            Content here limited by longest word.
+        </div>
+
+        <div class="label">max-width: max-content</div>
+        <div class="demo-box max-width-max-content">
+            Content here.
+        </div>
+    </div>
+
+    <div class="container">
+        <h2>min-height</h2>
+        <p>Each box has <code>height: 10px</code> but min-height overrides:</p>
+
+        <div class="label">min-height: fit-content</div>
+        <div class="demo-box min-height-fit-content">
+            Min-height forces this to be tall enough for content.
+        </div>
+
+        <div class="label">min-height: min-content</div>
+        <div class="demo-box min-height-min-content">
+            Min-height forces this to be at least as tall as content needs.
+        </div>
+
+        <div class="label">min-height: max-content</div>
+        <div class="demo-box min-height-max-content">
+            Min-height forces this to be at least as tall as content needs.
+        </div>
+    </div>
+
+    <div class="container">
+        <h2>max-height</h2>
+        <p>Each box has <code>height: 200px</code> but max-height limits:</p>
+
+        <div class="label">max-height: fit-content</div>
+        <div class="demo-box max-height-fit-content">
+            Short content.
+        </div>
+
+        <div class="label">max-height: min-content</div>
+        <div class="demo-box max-height-min-content">
+            Short content.
+        </div>
+
+        <div class="label">max-height: max-content</div>
+        <div class="demo-box max-height-max-content">
+            Short content.
+        </div>
+    </div>
+</body>
+
+</html>

@@ -94,6 +94,13 @@ typedef enum unit {
     UNIT_DPCM = (1 << 13) + 1,
     UNIT_DPPX = (1 << 13) + 2,
 
+    /* Intrinsic sizing keywords (fit-content, min-content, max-content) */
+    UNIT_SIZING = (1 << 14),
+    UNIT_FIT_CONTENT = (1 << 14) + 0,
+    UNIT_MIN_CONTENT = (1 << 14) + 1,
+    UNIT_MAX_CONTENT = (1 << 14) + 2,
+    UNIT_MINMAX = (1 << 14) + 3, /* Grid minmax() marker */
+
     /* These are special only to the CALC bytecodes */
     UNIT_CALC_ANY = (1 << 20),
     UNIT_CALC_NUMBER = (1 << 20) + 1,

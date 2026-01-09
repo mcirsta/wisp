@@ -49,7 +49,7 @@ css_error css__cascade_grid_template_columns(uint32_t opv, css_style *style, css
                     uint32_t raw_unit = *style->bytecode;
                     advance_bytecode(style, sizeof(css_code_t));
 
-                    if (raw_unit == CSS_UNIT_MINMAX) {
+                    if (css__to_css_unit(raw_unit) == CSS_UNIT_MINMAX) {
                         tracks[i].unit = CSS_UNIT_MINMAX;
 
                         /* Read min value */
@@ -68,17 +68,9 @@ css_error css__cascade_grid_template_columns(uint32_t opv, css_style *style, css
                         tracks[i].max_unit = css__to_css_unit(*style->bytecode);
                         advance_bytecode(style, sizeof(css_code_t));
                     } else {
-                        /* Handle grid-specific units that parser emits as
-                         * public CSS_UNIT_* values directly, without going
-                         * through bytecode unit conversion */
-                        if (raw_unit == CSS_UNIT_MIN_CONTENT || raw_unit == CSS_UNIT_MAX_CONTENT ||
-                            raw_unit == CSS_UNIT_FIT_CONTENT) {
-                            tracks[i].unit = raw_unit;
-                        } else {
-                            tracks[i].unit = css__to_css_unit(raw_unit);
-                        }
-                        /* min_unit, max_value, max_unit
-                         * are unused */
+                        /* All units now go through css__to_css_unit conversion */
+                        tracks[i].unit = css__to_css_unit(raw_unit);
+                        /* min_unit, max_value, max_unit are unused */
                         tracks[i].min_unit = 0;
                         tracks[i].max_value = 0;
                         tracks[i].max_unit = 0;

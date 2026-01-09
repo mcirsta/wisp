@@ -49,7 +49,7 @@ css_error css__cascade_grid_template_rows(uint32_t opv, css_style *style, css_se
                     uint32_t raw_unit = *style->bytecode;
                     advance_bytecode(style, sizeof(css_code_t));
 
-                    if (raw_unit == CSS_UNIT_MINMAX) {
+                    if (css__to_css_unit(raw_unit) == CSS_UNIT_MINMAX) {
                         tracks[i].unit = CSS_UNIT_MINMAX;
                         /* For minmax, the value we read
                          * was marker (0), now read:
@@ -72,20 +72,11 @@ css_error css__cascade_grid_template_rows(uint32_t opv, css_style *style, css_se
                         tracks[i].max_unit = css__to_css_unit(*style->bytecode);
                         advance_bytecode(style, sizeof(css_code_t));
                     } else {
-                        /* Simple track: we already read
-                         * value and unit */
+                        /* Simple track: we already read value and unit.
+                         * All units now go through css__to_css_unit conversion */
                         tracks[i].value = track_value;
-                        /* Handle grid-specific units that parser emits as
-                         * public CSS_UNIT_* values directly, without going
-                         * through bytecode unit conversion */
-                        if (raw_unit == CSS_UNIT_MIN_CONTENT || raw_unit == CSS_UNIT_MAX_CONTENT ||
-                            raw_unit == CSS_UNIT_FIT_CONTENT) {
-                            tracks[i].unit = raw_unit;
-                        } else {
-                            tracks[i].unit = css__to_css_unit(raw_unit);
-                        }
-                        /* min_unit, max_value, max_unit
-                         * are unused */
+                        tracks[i].unit = css__to_css_unit(raw_unit);
+                        /* min_unit, max_value, max_unit are unused */
                         tracks[i].min_unit = 0;
                         tracks[i].max_value = 0;
                         tracks[i].max_unit = 0;

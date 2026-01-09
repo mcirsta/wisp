@@ -676,6 +676,13 @@ css_computed_width_px(const css_computed_style *style, const css_unit_ctx *unit_
 
             *px_out = FPCT_OF_INT_TOINT(value.value, available_px);
             break;
+        case CSS_UNIT_FIT_CONTENT:
+        case CSS_UNIT_MIN_CONTENT:
+        case CSS_UNIT_MAX_CONTENT:
+            /* These sizing keywords cannot be resolved to a fixed pixel value.
+             * Treat as AUTO so the layout engine can shrink-to-fit content. */
+            type = CSS_WIDTH_AUTO;
+            break;
         default:
             *px_out = FIXTOINT(css_unit_len2device_px(style, unit_ctx, value.value, unit));
             break;

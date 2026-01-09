@@ -63,14 +63,14 @@ static css_error parse_track_size(css_language *c, const parserutils_vector *vec
             parserutils_vector_iterate(vector, ctx);
             track->type = TRACK_SIMPLE;
             track->value = 0;
-            track->unit = CSS_UNIT_MIN_CONTENT;
+            track->unit = UNIT_MIN_CONTENT;
             return CSS_OK;
         } else if ((lwc_string_caseless_isequal(token->idata, c->strings[MAX_CONTENT], &match) == lwc_error_ok &&
                        match)) {
             parserutils_vector_iterate(vector, ctx);
             track->type = TRACK_SIMPLE;
             track->value = 0;
-            track->unit = CSS_UNIT_MAX_CONTENT;
+            track->unit = UNIT_MAX_CONTENT;
             return CSS_OK;
         }
     }
@@ -80,7 +80,7 @@ static css_error parse_track_size(css_language *c, const parserutils_vector *vec
         if ((lwc_string_caseless_isequal(token->idata, c->strings[MINMAX], &match) == lwc_error_ok && match)) {
             /* Parse minmax(min, max) */
             css_fixed min_value = 0, max_value = 0;
-            uint32_t min_unit = CSS_UNIT_PX, max_unit = CSS_UNIT_PX;
+            uint32_t min_unit = UNIT_PX, max_unit = UNIT_PX;
 
             /* Consume 'minmax(' */
             parserutils_vector_iterate(vector, ctx);
@@ -101,12 +101,12 @@ static css_error parse_track_size(css_language *c, const parserutils_vector *vec
                 if ((lwc_string_caseless_isequal(token->idata, c->strings[MIN_CONTENT], &match) == lwc_error_ok &&
                         match)) {
                     parserutils_vector_iterate(vector, ctx);
-                    min_unit = CSS_UNIT_MIN_CONTENT;
+                    min_unit = UNIT_MIN_CONTENT;
                 } else if ((lwc_string_caseless_isequal(token->idata, c->strings[MAX_CONTENT], &match) ==
                                    lwc_error_ok &&
                                match)) {
                     parserutils_vector_iterate(vector, ctx);
-                    min_unit = CSS_UNIT_MAX_CONTENT;
+                    min_unit = UNIT_MAX_CONTENT;
                 } else if ((lwc_string_caseless_isequal(token->idata, c->strings[AUTO], &match) == lwc_error_ok &&
                                match)) {
                     parserutils_vector_iterate(vector, ctx);
@@ -147,12 +147,12 @@ static css_error parse_track_size(css_language *c, const parserutils_vector *vec
                 if ((lwc_string_caseless_isequal(token->idata, c->strings[MIN_CONTENT], &match) == lwc_error_ok &&
                         match)) {
                     parserutils_vector_iterate(vector, ctx);
-                    max_unit = CSS_UNIT_MIN_CONTENT;
+                    max_unit = UNIT_MIN_CONTENT;
                 } else if ((lwc_string_caseless_isequal(token->idata, c->strings[MAX_CONTENT], &match) ==
                                    lwc_error_ok &&
                                match)) {
                     parserutils_vector_iterate(vector, ctx);
-                    max_unit = CSS_UNIT_MAX_CONTENT;
+                    max_unit = UNIT_MAX_CONTENT;
                 } else if ((lwc_string_caseless_isequal(token->idata, c->strings[AUTO], &match) == lwc_error_ok &&
                                match)) {
                     parserutils_vector_iterate(vector, ctx);
@@ -184,7 +184,7 @@ static css_error parse_track_size(css_language *c, const parserutils_vector *vec
             /* Store minmax track */
             track->type = TRACK_MINMAX;
             track->value = min_value;
-            track->unit = CSS_UNIT_MINMAX; /* Mark as minmax track */
+            track->unit = UNIT_MINMAX; /* Mark as minmax track */
             track->min_unit = min_unit; /* Store actual min unit */
             track->max_value = max_value;
             track->max_unit = max_unit;
@@ -376,7 +376,7 @@ css_error css__parse_grid_template_columns_internal(
                 *ctx = orig_ctx;
                 return error;
             }
-            error = css__stylesheet_style_append(result, CSS_UNIT_MINMAX);
+            error = css__stylesheet_style_append(result, UNIT_MINMAX);
             if (error != CSS_OK) {
                 *ctx = orig_ctx;
                 return error;

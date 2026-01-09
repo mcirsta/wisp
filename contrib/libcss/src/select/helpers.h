@@ -71,6 +71,14 @@ static inline css_unit css__to_css_unit(uint32_t u)
         return CSS_UNIT_KHZ;
     case UNIT_FR:
         return CSS_UNIT_FR;
+    case UNIT_FIT_CONTENT:
+        return CSS_UNIT_FIT_CONTENT;
+    case UNIT_MIN_CONTENT:
+        return CSS_UNIT_MIN_CONTENT;
+    case UNIT_MAX_CONTENT:
+        return CSS_UNIT_MAX_CONTENT;
+    case UNIT_MINMAX:
+        return CSS_UNIT_MINMAX;
     }
 
     /* Unhandled unit type - fail in debug to catch missing conversions */
