@@ -271,16 +271,22 @@ bool layout_flex_redistribute_auto_margins_vertical(struct box *flex)
     int auto_margin_count = 0;
     css_fixed grow_factor_sum = 0;
     int grow_item_count = 0;
+    int child_count = 0;
+    int gap_total = 0;
 
     NSLOG(flex, INFO, "Flex redistribute: container_h=%d", container_height);
 
-    /* First pass: calculate base content height, count auto margins, and sum flex-grow factors */
+    /* First pass: calculate base content height, count children, auto margins, and sum flex-grow factors.
+     * Also compute gap total by measuring space between adjacent children. */
+    struct box *prev_child = NULL;
     for (struct box *child = flex->children; child; child = child->next) {
         if (child->type == BOX_FLOAT_LEFT || child->type == BOX_FLOAT_RIGHT) {
             continue;
         }
 
-        /* Calculate this child's outer height */
+        child_count++;
+
+        /* Calculate this child's outer height (excluding auto margins which we'll compute) */
         int child_outer_height = child->height + child->padding[TOP] + child->padding[BOTTOM] +
             child->border[TOP].width + child->border[BOTTOM].width;
 
@@ -297,6 +303,24 @@ bool layout_flex_redistribute_auto_margins_vertical(struct box *flex)
 
         content_height += child_outer_height;
 
+        /* Compute gap from positions: gap = (this child's y) - (prev child's y + prev child's outer height) */
+        if (prev_child != NULL) {
+            int prev_outer_bottom = prev_child->y + prev_child->height + prev_child->padding[BOTTOM] +
+                prev_child->border[BOTTOM].width;
+            if (prev_child->margin[BOTTOM] != AUTO) {
+                prev_outer_bottom += prev_child->margin[BOTTOM];
+            }
+            int gap_before_this = child->y - child->border[TOP].width - child->padding[TOP];
+            if (child->margin[TOP] != AUTO) {
+                gap_before_this -= child->margin[TOP];
+            }
+            int measured_gap = gap_before_this - prev_outer_bottom;
+            if (measured_gap > 0) {
+                gap_total += measured_gap;
+            }
+        }
+        prev_child = child;
+
         /* Get flex-grow factor if this child has a style */
         if (child->style) {
             css_fixed grow;
@@ -309,11 +333,11 @@ bool layout_flex_redistribute_auto_margins_vertical(struct box *flex)
         }
     }
 
-    NSLOG(flex, INFO, "  Initial: content_h=%d, auto_margins=%d, grow_sum=%d", content_height, auto_margin_count,
-        FIXTOINT(grow_factor_sum));
+    NSLOG(flex, INFO, "  Initial: content_h=%d, auto_margins=%d, grow_sum=%d, gap_total=%d", content_height,
+        auto_margin_count, FIXTOINT(grow_factor_sum), gap_total);
 
-    /* Calculate extra space */
-    int extra_space = container_height - content_height;
+    /* Calculate extra space, accounting for gaps between items */
+    int extra_space = container_height - content_height - gap_total;
 
     if (extra_space <= 0) {
         /* No extra space to distribute */
@@ -1232,6 +1256,37 @@ static bool layout_flex__place_line_items_main(struct flex_ctx *ctx, struct flex
 
             if (!layout_flex_item(ctx, item, b->width)) {
                 return false;
+            }
+
+            /* Per CSS Flexbox spec §9.4.7: "Determine the hypothetical cross size
+             * of each item by performing layout with the used main size and the
+             * available space, treating auto as fit-content."
+             * If height is still AUTO after layout, compute fit-content height. */
+            if (b->height == AUTO) {
+                if (b->children == NULL) {
+                    /* Empty box: content height is 0 */
+                    b->height = 0;
+                    NSLOG(flex, DEEPDEBUG, "ITEM[%zu]: empty box, height resolved to 0 per CSS spec §9.4.7", i);
+                } else {
+                    /* Non-empty box: compute height from children (fit-content).
+                     * This is the bottom edge of the last child plus padding/border. */
+                    int content_bottom = 0;
+                    for (struct box *child = b->children; child != NULL; child = child->next) {
+                        if (child->type == BOX_FLOAT_LEFT || child->type == BOX_FLOAT_RIGHT) {
+                            continue;
+                        }
+                        int child_bottom = child->y + child->height;
+                        if (child->margin[BOTTOM] != AUTO) {
+                            child_bottom += child->margin[BOTTOM];
+                        }
+                        if (child_bottom > content_bottom) {
+                            content_bottom = child_bottom;
+                        }
+                    }
+                    b->height = content_bottom;
+                    NSLOG(
+                        flex, WARNING, "ITEM[%zu]: computed height %d from children per CSS spec §9.4.7", i, b->height);
+                }
             }
         }
 

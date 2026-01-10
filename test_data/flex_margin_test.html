@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <style>
+        .entry-wrapper {
+            display: flex;
+            flex-direction: column;
+            width: 300px;
+            border: 1px solid black;
+        }
+
+        .meta-before {
+            background: lightblue;
+            margin-bottom: 5px;
+        }
+
+        .entry-title {
+            background: lightgreen;
+            margin: 0;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Margin Test in Flex Column</h1>
+    <p>The blue meta box should have 5px margin below it, creating a gap before the green title.</p>
+
+    <div class="entry-wrapper">
+        <div class="meta-before">Meta content (should have 5px bottom margin)</div>
+        <h2 class="entry-title">Title (should be 5px below meta)</h2>
+    </div>
+
+</body>
+
+</html>

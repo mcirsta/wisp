@@ -3177,20 +3177,21 @@ bool layout_block_context(struct box *block, int viewport_height, html_content *
                     cls = dom_string_data(class_attr);
                 }
             }
-            if (class_attr != NULL) {
-                NSLOG(layout, DEBUG, "processing: tag %s class %s box %p width %i type %d", tag, cls, box, box->width,
-                    box->type);
-            }
+            /* Always log processing, not just when class exists */
+            NSLOG(layout, DEBUG, "processing: tag %s class %s box %p width %i type %d", tag, cls, box, box->width,
+                box->type);
+
+            /* Include tag/class in Box metrics for easier debugging */
+            NSLOG(layout, DEBUG, "Box metrics for %p (tag %s class %s): w=%d m=%d,%d,%d,%d p=%d,%d,%d,%d b=%d,%d,%d,%d",
+                box, tag, cls, box->width, box->margin[TOP], box->margin[RIGHT], box->margin[BOTTOM], box->margin[LEFT],
+                box->padding[TOP], box->padding[RIGHT], box->padding[BOTTOM], box->padding[LEFT],
+                box->border[TOP].width, box->border[RIGHT].width, box->border[BOTTOM].width, box->border[LEFT].width);
+
             if (class_attr != NULL)
                 dom_string_unref(class_attr);
             if (name != NULL)
                 dom_string_unref(name);
         }
-
-        NSLOG(layout, DEBUG, "Box metrics for %p: w=%d m=%d,%d,%d,%d p=%d,%d,%d,%d b=%d,%d,%d,%d", box, box->width,
-            box->margin[TOP], box->margin[RIGHT], box->margin[BOTTOM], box->margin[LEFT], box->padding[TOP],
-            box->padding[RIGHT], box->padding[BOTTOM], box->padding[LEFT], box->border[TOP].width,
-            box->border[RIGHT].width, box->border[BOTTOM].width, box->border[LEFT].width);
 
         /* Tables are laid out before being positioned, because the
          * position depends on the width which is calculated in

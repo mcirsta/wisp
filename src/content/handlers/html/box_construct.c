@@ -657,7 +657,11 @@ static bool box_construct_element(struct box_construct_ctx *ctx, bool *convert_c
 
         if (props.containing_block->type == BOX_FLEX || props.containing_block->type == BOX_INLINE_FLEX ||
             props.containing_block->type == BOX_GRID || props.containing_block->type == BOX_INLINE_GRID) {
-            /* Blockification */
+            /* Blockification per CSS Flexbox spec §4, CSS Grid spec, and CSS Display 3 §2.7:
+             * In-flow children of flex/grid containers are blockified.
+             * This means display:inline becomes display:block, etc.
+             * Layout-internal boxes (table-cell, table-row, etc.) also become block.
+             * This must happen BEFORE anonymous box creation. */
             switch (box->type) {
             case BOX_INLINE_FLEX:
                 box->type = BOX_FLEX;
@@ -666,6 +670,11 @@ static bool box_construct_element(struct box_construct_ctx *ctx, bool *convert_c
                 box->type = BOX_GRID;
                 break;
             case BOX_INLINE_BLOCK:
+            case BOX_INLINE:
+            case BOX_TABLE_CELL:
+            case BOX_TABLE_ROW:
+            case BOX_TABLE_ROW_GROUP:
+                /* Layout-internal boxes blockified to block per CSS Display 3 §2.7 */
                 box->type = BOX_BLOCK;
                 break;
             default:
