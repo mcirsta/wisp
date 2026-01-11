@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Grid Pass 3 Test - Row Height Re-stretch</title>
+    <style>
+        body {
+            margin: 20px;
+            font-family: sans-serif;
+            background: #f0f0f0;
+        }
+
+        h1 {
+            margin-bottom: 10px;
+        }
+
+        .debug-info {
+            background: #ffffcc;
+            padding: 10px;
+            margin-bottom: 20px;
+            border: 1px solid #ccc;
+        }
+
+        /*
+         * GRID PASS 3 TEST SCENARIO:
+         * 
+         * Pass 3 is triggered when a row's height increases AFTER earlier items
+         * in that row were already placed. This happens when:
+         * 1. Item A is placed in row 1 (height: 100px)
+         * 2. Item B is placed in row 1 AFTER A (height: 200px)
+         * 3. Row 1's height increases from 100px to 200px
+         * 4. Item A needs to be re-stretched to 200px (pass 3)
+         *
+         * To trigger this, we need items in the same row where later items
+         * (in DOM order) are taller than earlier items.
+         */
+
+        .test-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 200px);
+            gap: 10px;
+            background: #e0e0ff;
+            padding: 10px;
+            border: 2px solid blue;
+            margin-bottom: 30px;
+        }
+
+        .test-grid h3 {
+            grid-column: 1 / -1;
+            margin: 0 0 10px 0;
+            padding: 5px;
+            background: #333;
+            color: white;
+        }
+
+        .grid-item {
+            background: white;
+            border: 2px solid green;
+            padding: 10px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .grid-item.short {
+            /* Short content - will be stretched by pass 3 */
+            min-height: 50px;
+        }
+
+        .grid-item.medium {
+            min-height: 100px;
+        }
+
+        .grid-item.tall {
+            /* Tall content - triggers row height increase */
+            min-height: 200px;
+        }
+
+        .grid-item .label {
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .grid-item .content {
+            /* Don't use flex:1 here - it absorbs all extra space */
+            /* Let margin-top:auto on .stretch-indicator push it to bottom */
+            background: #f0f0f0;
+            padding: 5px;
+        }
+
+        /* Visual indicator when stretch is applied correctly */
+        .stretch-indicator {
+            margin-top: auto;
+            background: #fcc;
+            padding: 5px;
+            text-align: center;
+            font-size: 12px;
+            border: 1px dashed red;
+        }
+
+        /* Test 2: Explicit grid placement with varying heights */
+        .test-grid-explicit .item-a {
+            grid-column: 1;
+            grid-row: 1;
+        }
+
+        .test-grid-explicit .item-b {
+            grid-column: 2;
+            grid-row: 1;
+        }
+
+        .test-grid-explicit .item-c {
+            grid-column: 3;
+            grid-row: 1;
+        }
+
+        .test-grid-explicit .item-d {
+            grid-column: 1;
+            grid-row: 2;
+        }
+
+        .test-grid-explicit .item-e {
+            grid-column: 2;
+            grid-row: 2;
+        }
+
+        .test-grid-explicit .item-f {
+            grid-column: 3;
+            grid-row: 2;
+        }
+    </style>
+</head>
+
+<body>
+
+    <h1>Grid Pass 3 Test - Row Height Re-stretch</h1>
+
+    <div class="debug-info">
+        <strong>What this tests:</strong>
+        <ul>
+            <li>Pass 3 triggers when a later item in a row is taller than earlier items</li>
+            <li>Earlier items should be stretched to match the row's final height</li>
+            <li>The red "stretch indicator" boxes should be at the BOTTOM of each cell</li>
+        </ul>
+        <strong>Expected behavior:</strong>
+        <ul>
+            <li>All items in each row should have the same height</li>
+            <li>Stretch indicators should be at the bottom (pushed by flex + auto margin)</li>
+            <li>If pass 3 works incorrectly, short items won't stretch properly</li>
+        </ul>
+    </div>
+
+    <!-- Test 1: Auto-placement with varying heights -->
+    <h2>Test 1: Auto-placement (DOM order determines processing)</h2>
+    <div class="test-grid">
+        <!-- Row 1: Short, Short, TALL (tall comes last, triggers pass 3 for first two) -->
+        <div class="grid-item short">
+            <div class="label">A (short)</div>
+            <div class="content">50px content</div>
+            <div class="stretch-indicator">Should be at bottom</div>
+        </div>
+        <div class="grid-item short">
+            <div class="label">B (short)</div>
+            <div class="content">50px content</div>
+            <div class="stretch-indicator">Should be at bottom</div>
+        </div>
+        <div class="grid-item tall">
+            <div class="label">C (TALL - triggers pass 3)</div>
+            <div class="content">200px content - this makes row height 200px</div>
+            <div class="stretch-indicator">Should be at bottom</div>
+        </div>
+
+        <!-- Row 2: TALL, Short, Short (tall comes first, no pass 3 needed) -->
+        <div class="grid-item tall">
+            <div class="label">D (TALL - no pass 3)</div>
+            <div class="content">200px content - first in row</div>
+            <div class="stretch-indicator">Should be at bottom</div>
+        </div>
+        <div class="grid-item short">
+            <div class="label">E (short)</div>
+            <div class="content">50px content</div>
+            <div class="stretch-indicator">Should be at bottom</div>
+        </div>
+        <div class="grid-item short">
+            <div class="label">F (short)</div>
+            <div class="content">50px content</div>
+            <div class="stretch-indicator">Should be at bottom</div>
+        </div>
+
+        <!-- Row 3: Short, TALL, Short (middle is tall, first needs pass 3) -->
+        <div class="grid-item short">
+            <div class="label">G (short)</div>
+            <div class="content">50px content</div>
+            <div class="stretch-indicator">Should be at bottom</div>
+        </div>
+        <div class="grid-item tall">
+            <div class="label">H (TALL - triggers pass 3 for G)</div>
+            <div class="content">200px content</div>
+            <div class="stretch-indicator">Should be at bottom</div>
+        </div>
+        <div class="grid-item medium">
+            <div class="label">I (medium)</div>
+            <div class="content">100px content</div>
+            <div class="stretch-indicator">Should be at bottom</div>
+        </div>
+    </div>
+
+    <!-- Test 2: Explicit grid placement with varying heights -->
+    <h2>Test 2: Explicit Placement (same scenario, explicit positions)</h2>
+    <div class="test-grid test-grid-explicit">
+        <!-- Row 1 -->
+        <div class="grid-item short item-a">
+            <div class="label">A [1,1] short</div>
+            <div class="content">First in row</div>
+            <div class="stretch-indicator">Should be at bottom</div>
+        </div>
+        <div class="grid-item short item-b">
+            <div class="label">B [2,1] short</div>
+            <div class="content">Second in row</div>
+            <div class="stretch-indicator">Should be at bottom</div>
+        </div>
+        <div class="grid-item tall item-c">
+            <div class="label">C [3,1] TALL</div>
+            <div class="content">Tallest - triggers pass 3</div>
+            <div class="stretch-indicator">Should be at bottom</div>
+        </div>
+
+        <!-- Row 2 -->
+        <div class="grid-item tall item-d">
+            <div class="label">D [1,2] TALL</div>
+            <div class="content">First - no pass 3</div>
+            <div class="stretch-indicator">Should be at bottom</div>
+        </div>
+        <div class="grid-item short item-e">
+            <div class="label">E [2,2] short</div>
+            <div class="content">Normal stretch</div>
+            <div class="stretch-indicator">Should be at bottom</div>
+        </div>
+        <div class="grid-item medium item-f">
+            <div class="label">F [3,2] medium</div>
+            <div class="content">Normal stretch</div>
+            <div class="stretch-indicator">Should be at bottom</div>
+        </div>
+    </div>
+
+    <!-- Test 3: Multiple rows affected -->
+    <h2>Test 3: Row Spanning (cross-row effects)</h2>
+    <div class="test-grid">
+        <div class="grid-item short">
+            <div class="label">J (short)</div>
+            <div class="content">Row 1</div>
+            <div class="stretch-indicator">Should be at bottom</div>
+        </div>
+        <div class="grid-item short">
+            <div class="label">K (short)</div>
+            <div class="content">Row 1</div>
+            <div class="stretch-indicator">Should be at bottom</div>
+        </div>
+        <div class="grid-item tall" style="grid-row: span 2;">
+            <div class="label">L (TALL, spans 2 rows)</div>
+            <div class="content">Spans row 1 and 2 - 200px height split across rows</div>
+            <div class="stretch-indicator">Should be at bottom</div>
+        </div>
+        <div class="grid-item short">
+            <div class="label">M (short)</div>
+            <div class="content">Row 2</div>
+            <div class="stretch-indicator">Should be at bottom</div>
+        </div>
+        <div class="grid-item short">
+            <div class="label">N (short)</div>
+            <div class="content">Row 2</div>
+            <div class="stretch-indicator">Should be at bottom</div>
+        </div>
+    </div>
+
+</body>
+
+</html>

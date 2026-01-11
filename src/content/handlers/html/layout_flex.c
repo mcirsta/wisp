@@ -316,12 +316,24 @@ bool layout_flex_redistribute_auto_margins_vertical(struct box *flex)
         int child_outer_height = child->height + child->padding[TOP] + child->padding[BOTTOM] +
             child->border[TOP].width + child->border[BOTTOM].width;
 
-        if (child->margin[TOP] != AUTO) {
+        /* Check CSS computed style for auto margins - box margin is already resolved to 0 */
+        bool margin_top_auto = false;
+        bool margin_bottom_auto = false;
+        if (child->style) {
+            css_fixed len;
+            css_unit unit;
+            uint8_t margin_type = css_computed_margin_top(child->style, &len, &unit);
+            margin_top_auto = (margin_type == CSS_MARGIN_AUTO);
+            margin_type = css_computed_margin_bottom(child->style, &len, &unit);
+            margin_bottom_auto = (margin_type == CSS_MARGIN_AUTO);
+        }
+
+        if (!margin_top_auto) {
             child_outer_height += child->margin[TOP];
         } else {
             auto_margin_count++;
         }
-        if (child->margin[BOTTOM] != AUTO) {
+        if (!margin_bottom_auto) {
             child_outer_height += child->margin[BOTTOM];
         } else {
             auto_margin_count++;
@@ -394,52 +406,72 @@ bool layout_flex_redistribute_auto_margins_vertical(struct box *flex)
         NSLOG(flex, INFO, "  After grow: distributed=%d, new extra_space=%d", distributed, extra_space);
     }
 
-    /* Step 2: Redistribute remaining space to auto margins
-     * After flex-grow distribution, any remaining space goes to auto margins */
+    /* Step 2: Redistribute remaining space to auto margins AND reposition children.
+     * IMPORTANT: Even if there are no auto margins, we must reposition children
+     * after flex-grow distribution changed heights */
+    int margin_each = (auto_margin_count > 0 && extra_space > 0) ? (extra_space / auto_margin_count) : 0;
+    int margin_remainder = (auto_margin_count > 0 && extra_space > 0) ? (extra_space % auto_margin_count) : 0;
+
     if (auto_margin_count > 0 && extra_space > 0) {
-        int margin_each = extra_space / auto_margin_count;
-        int margin_remainder = extra_space % auto_margin_count;
-
         NSLOG(flex, INFO, "  Auto margin redistribute: extra=%d, margin_each=%d", extra_space, margin_each);
+    }
 
-        /* Reposition children with adjusted margins */
-        int current_y = flex->padding[TOP];
-        for (struct box *child = flex->children; child; child = child->next) {
-            if (child->type == BOX_FLOAT_LEFT || child->type == BOX_FLOAT_RIGHT) {
-                continue;
+    /* Reposition all children - this is needed after both GROW and auto margin distribution */
+    int current_y = flex->padding[TOP];
+    bool first_child = true;
+    for (struct box *child = flex->children; child; child = child->next) {
+        if (child->type == BOX_FLOAT_LEFT || child->type == BOX_FLOAT_RIGHT) {
+            continue;
+        }
+
+        /* Add CSS row-gap between items (not before first item) */
+        if (!first_child) {
+            current_y += css_row_gap;
+        }
+        first_child = false;
+
+        /* Check CSS computed style for auto margins - box margin is already resolved to 0 */
+        bool margin_top_auto = false;
+        bool margin_bottom_auto = false;
+        if (child->style) {
+            css_fixed len;
+            css_unit unit;
+            uint8_t margin_type = css_computed_margin_top(child->style, &len, &unit);
+            margin_top_auto = (margin_type == CSS_MARGIN_AUTO);
+            margin_type = css_computed_margin_bottom(child->style, &len, &unit);
+            margin_bottom_auto = (margin_type == CSS_MARGIN_AUTO);
+        }
+
+        /* Add margin-top (resolved or auto) */
+        if (margin_top_auto) {
+            int this_margin = margin_each;
+            if (margin_remainder > 0) {
+                this_margin++;
+                margin_remainder--;
             }
+            current_y += this_margin;
+        } else {
+            current_y += child->margin[TOP];
+        }
 
-            /* Add margin-top (resolved or auto) */
-            if (child->margin[TOP] == AUTO) {
-                int this_margin = margin_each;
-                if (margin_remainder > 0) {
-                    this_margin++;
-                    margin_remainder--;
-                }
-                current_y += this_margin;
-            } else {
-                current_y += child->margin[TOP];
+        /* Position the child */
+        current_y += child->border[TOP].width;
+        child->y = current_y;
+        current_y += child->padding[TOP] + child->height + child->padding[BOTTOM];
+        current_y += child->border[BOTTOM].width;
+
+        NSLOG(flex, DEEPDEBUG, "  Position: child %p at y=%d", child, child->y);
+
+        /* Add margin-bottom (resolved or auto) */
+        if (margin_bottom_auto) {
+            int this_margin = margin_each;
+            if (margin_remainder > 0) {
+                this_margin++;
+                margin_remainder--;
             }
-
-            /* Position the child */
-            current_y += child->border[TOP].width;
-            child->y = current_y;
-            current_y += child->padding[TOP] + child->height + child->padding[BOTTOM];
-            current_y += child->border[BOTTOM].width;
-
-            NSLOG(flex, INFO, "  Position: child %p at y=%d", child, child->y);
-
-            /* Add margin-bottom (resolved or auto) */
-            if (child->margin[BOTTOM] == AUTO) {
-                int this_margin = margin_each;
-                if (margin_remainder > 0) {
-                    this_margin++;
-                    margin_remainder--;
-                }
-                current_y += this_margin;
-            } else {
-                current_y += child->margin[BOTTOM];
-            }
+            current_y += this_margin;
+        } else {
+            current_y += child->margin[BOTTOM];
         }
     }
 

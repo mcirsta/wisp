@@ -69,6 +69,20 @@ typedef enum {
 } grid_placement_phase_t;
 
 /**
+ * Cached placement info for a grid item.
+ * Used to avoid re-parsing CSS in pass 3.
+ */
+struct grid_item_cache {
+    struct box *box; /**< The grid item box */
+    int item_col; /**< Column position (0-indexed) */
+    int item_row; /**< Row position (0-indexed) */
+    int col_span; /**< Column span */
+    int row_span; /**< Row span */
+    uint8_t align; /**< Vertical alignment (CSS_ALIGN_ITEMS_*) */
+    bool needs_restretch; /**< Whether this item needs re-stretch in pass 3 */
+};
+
+/**
  * Determine which placement phase an item belongs to.
  *
  * \param col_start Column start placement value
@@ -751,6 +765,26 @@ bool layout_grid(struct box *grid, int available_width, html_content *content)
     NSLOG(
         layout, INFO, "GRID LAYOUT: allocated %dx%d occupation grid (dense=%d)", num_cols, occupied_max_rows, is_dense);
 
+    /* Count children for item cache allocation */
+    int item_count = 0;
+    for (child = grid->children; child; child = child->next) {
+        item_count++;
+    }
+
+    /* Allocate item cache to avoid re-parsing CSS in pass 3 */
+    struct grid_item_cache *item_cache = NULL;
+    if (item_count > 0) {
+        item_cache = calloc(item_count, sizeof(struct grid_item_cache));
+        if (!item_cache) {
+            free(occupied);
+            free(row_first_item_done);
+            free(row_heights);
+            free(col_widths);
+            return false;
+        }
+    }
+    int cache_idx = 0;
+
     /* CSS Grid spec §8: Grid item placement algorithm
      *
      * Pass 1: Place items with definite position on BOTH row AND column axes
@@ -996,10 +1030,16 @@ bool layout_grid(struct box *grid, int available_width, html_content *content)
                 if (height_per_row > row_heights[r]) {
                     NSLOG(layout, WARNING, "GRID ROW_HEIGHT UPDATE: row[%d] %d -> %d (from child %p)", r,
                         row_heights[r], height_per_row, child);
-                    /* If this row already had an item, we need pass 3 to fix it */
+                    /* If this row already had an item, mark those items for re-stretch */
                     if (row_first_item_done[r]) {
                         needs_pass3 = true;
                         NSLOG(layout, WARNING, "GRID: needs_pass3 set TRUE because row[%d] already had item", r);
+                        /* Mark all cached items in this row for re-stretch */
+                        for (int ci = 0; ci < cache_idx; ci++) {
+                            if (item_cache[ci].item_row <= r && r < item_cache[ci].item_row + item_cache[ci].row_span) {
+                                item_cache[ci].needs_restretch = true;
+                            }
+                        }
                     }
                     row_heights[r] = height_per_row;
                 }
@@ -1092,8 +1132,32 @@ bool layout_grid(struct box *grid, int available_width, html_content *content)
             child->x = child_x;
             child->y = child_y;
 
+            /* Cache placement info for pass 3 optimization */
+            if (item_cache != NULL && cache_idx < item_count) {
+                item_cache[cache_idx].box = child;
+                item_cache[cache_idx].item_col = item_col;
+                item_cache[cache_idx].item_row = item_row;
+                item_cache[cache_idx].col_span = col_span;
+                item_cache[cache_idx].row_span = row_span;
+                item_cache[cache_idx].align = align;
+                item_cache[cache_idx].needs_restretch = false;
+                cache_idx++;
+            }
+
             NSLOG(layout, INFO, "Grid item placed: col=%d-%d row=%d-%d x=%d y=%d w=%d h=%d", item_col,
                 item_col + col_span, item_row, item_row + row_span, child_x, child_y, child->width, child->height);
+
+            /* Redistribute auto margins for column flex grid items.
+             * This is needed because flex layout happens before the grid item's
+             * final height is known. Now that height is set, redistribute space. */
+            if (child->type == BOX_FLEX && child->style) {
+                uint8_t flex_dir = css_computed_flex_direction(child->style);
+                bool is_column = (flex_dir == CSS_FLEX_DIRECTION_COLUMN ||
+                    flex_dir == CSS_FLEX_DIRECTION_COLUMN_REVERSE);
+                if (is_column) {
+                    layout_flex_redistribute_auto_margins_vertical(child);
+                }
+            }
 
             /* Mark cells as occupied for 3-phase placement tracking */
             if (occupied != NULL) {
@@ -1155,61 +1219,23 @@ bool layout_grid(struct box *grid, int available_width, html_content *content)
         } /* end child loop */
     } /* end phase loop */
 
-    /* Pass 3: Apply final stretch and positioning now that all row_heights are known.
-     * This is only necessary if some row had its height increased by a later item,
-     * which means earlier items in that row need re-stretching. */
-    if (needs_pass3) {
-        NSLOG(layout, INFO, "GRID LAYOUT: Pass 3 - applying final stretch with row_heights");
-        for (child = grid->children; child; child = child->next) {
-            int col_start, col_end, row_start, row_end;
-            int item_col, item_row, col_span, row_span;
+    /* Pass 3: Apply final stretch and positioning using cached data.
+     * OPTIMIZATION: Instead of re-parsing CSS for all items, use cached placement info.
+     * Only process items that were marked for re-stretch. */
+    if (needs_pass3 && item_cache != NULL) {
+        NSLOG(layout, INFO, "GRID LAYOUT: Pass 3 (optimized) - processing %d cached items", cache_idx);
+        for (int ci = 0; ci < cache_idx; ci++) {
+            struct grid_item_cache *cached = &item_cache[ci];
 
-            /* Re-get placement info for this child */
-            get_grid_item_placement(child->style, &col_start, &col_end, &row_start, &row_end, &col_span, &row_span);
-
-            /* Determine span from explicit line numbers */
-            if (col_end != GRID_PLACEMENT_SPAN && col_end != GRID_PLACEMENT_AUTO && col_end > col_start &&
-                col_start != GRID_PLACEMENT_AUTO) {
-                col_span = col_end - col_start;
-            }
-            if (row_end != GRID_PLACEMENT_SPAN && row_end != GRID_PLACEMENT_AUTO && row_end > row_start &&
-                row_start != GRID_PLACEMENT_AUTO) {
-                row_span = row_end - row_start;
+            /* Skip items that don't need re-stretch */
+            if (!cached->needs_restretch) {
+                continue;
             }
 
-            /* Get actual position from child's current x/y (already set in passes 1-2) */
-            /* We need to recalculate item_row from child->y */
-            int child_y_from_top = child->y - grid->padding[TOP];
-            item_row = 0;
-            int accumulated_y = 0;
-            for (int r = 0; r < max_row; r++) {
-                if (accumulated_y >= child_y_from_top) {
-                    item_row = r;
-                    break;
-                }
-                accumulated_y += row_heights[r] + gap_px;
-                item_row = r + 1;
-            }
-            /* Clamp to valid range */
-            if (item_row >= max_row)
-                item_row = max_row - 1;
-            if (item_row < 0)
-                item_row = 0;
-
-            /* Determine vertical alignment */
-            uint8_t align = CSS_ALIGN_ITEMS_STRETCH;
-            if (child->style) {
-                uint8_t align_self = css_computed_align_self(child->style);
-                if (align_self == CSS_ALIGN_SELF_AUTO) {
-                    if (grid->style) {
-                        align = css_computed_align_items(grid->style);
-                    }
-                } else {
-                    align = align_self;
-                }
-            } else if (grid->style) {
-                align = css_computed_align_items(grid->style);
-            }
+            struct box *child = cached->box;
+            int item_row = cached->item_row;
+            int row_span = cached->row_span;
+            uint8_t align = cached->align;
 
             /* Calculate spanned height with final row_heights */
             int spanned_height = 0;
@@ -1239,20 +1265,16 @@ bool layout_grid(struct box *grid, int available_width, html_content *content)
             }
             child->y = final_y;
 
-            NSLOG(layout, INFO, "Grid pass 3: item at row=%d height=%d->%d y=%d", item_row, original_height,
+            NSLOG(layout, INFO, "Grid pass 3: item at row=%d height=%d->%d y=%d (cached)", item_row, original_height,
                 child->height, child->y);
 
-            /* If height changed, redistribute auto margins in nested flex containers.
-             * For the grid item itself (e.g., .article which is flex column), we need to
-             * find its flex children that have margin-top/bottom: auto and adjust their positions.
-             * We also need to handle nested flex containers (e.g., .entry-wrapper with flex: 1). */
+            /* If height changed, redistribute auto margins in nested flex containers */
             if (child->height != original_height && child->type == BOX_FLEX) {
                 uint8_t flex_dir = css_computed_flex_direction(child->style);
                 bool is_column = (flex_dir == CSS_FLEX_DIRECTION_COLUMN ||
                     flex_dir == CSS_FLEX_DIRECTION_COLUMN_REVERSE);
 
                 if (is_column) {
-                    /* Redistribute auto margins in this column flex container */
                     layout_flex_redistribute_auto_margins_vertical(child);
 
                     /* Also check if any children are column flex containers */
@@ -1270,7 +1292,7 @@ bool layout_grid(struct box *grid, int available_width, html_content *content)
             }
         }
     } else {
-        NSLOG(layout, INFO, "GRID LAYOUT: Pass 3 skipped - no rows needed re-stretch");
+        NSLOG(layout, INFO, "GRID LAYOUT: Pass 3 skipped - no items needed re-stretch");
     }
 
     /* Calculate total grid height */
@@ -1284,6 +1306,7 @@ bool layout_grid(struct box *grid, int available_width, html_content *content)
 
     grid->height = grid_height;
 
+    free(item_cache);
     free(row_first_item_done);
     free(occupied);
     free(row_heights);

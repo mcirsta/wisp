@@ -215,6 +215,20 @@ static void layout_get_object_dimensions(const css_unit_ctx *unit_len_ctx, struc
             *height = (*width * intrinsic_height) / intrinsic_width;
         else
             *height = intrinsic_height;
+
+        /* CSS 2.1 Section 10.7: Apply min/max-height constraints.
+         * If tentative height exceeds max-height, use max-height and
+         * recalculate width to maintain aspect ratio. */
+        if (max_height >= 0 && *height > max_height) {
+            *height = max_height;
+            if (intrinsic_height != 0)
+                *width = (*height * intrinsic_width) / intrinsic_height;
+        }
+        if (min_height.type == CSS_SIZE_SET && min_height.value > 0 && *height < min_height.value) {
+            *height = min_height.value;
+            if (intrinsic_height != 0)
+                *width = (*height * intrinsic_width) / intrinsic_height;
+        }
     }
 }
 
