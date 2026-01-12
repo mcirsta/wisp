@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Font Width Test</title>
+    <link href="https://fonts.googleapis.com/css2?family=Literata:wght@400&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Literata', serif;
+            font-size: 16px;
+            font-weight: 400;
+            line-height: 24px;
+            padding: 20px;
+        }
+        .test-container {
+            width: 299px;
+            border: 1px solid #ccc;
+            margin-bottom: 20px;
+            padding: 5px;
+            background: #f0f0f0;
+        }
+        .measurements {
+            font-family: monospace;
+            font-size: 12px;
+            background: #fff;
+            padding: 10px;
+            margin-top: 20px;
+        }
+        #invisible {
+            position: absolute;
+            visibility: hidden;
+            white-space: nowrap;
+        }
+    </style>
+</head>
+<body>
+    <h2>Font Width Measurement Test</h2>
+    <p>Container width: 299px (same as entry-excerpt)</p>
+    
+    <div class="test-container">
+        <span id="test-line">neîncrederea tinerilor în capitalism și</span>
+    </div>
+    
+    <div class="test-container">
+        <span id="test-full">În general, presupunem că neîncrederea tinerilor în capitalism și atracția pentru stânga radicală vine din deficitul de cunoștințe despre ce e în realitate „comunismul". Dacă ar putea să facă o comparație, lucrurile s-ar lămuri, credem.…</span>
+    </div>
+    
+    <div class="measurements" id="results">
+        Measuring...
+    </div>
+    
+    <!-- Hidden element for measuring text width -->
+    <span id="invisible"></span>
+    
+    <script>
+        function measureText(text) {
+            const span = document.getElementById('invisible');
+            span.style.fontFamily = "'Literata', serif";
+            span.style.fontSize = '16px';
+            span.style.fontWeight = '400';
+            span.textContent = text;
+            return span.offsetWidth;
+        }
+        
+        window.onload = function() {
+            // Wait for font to load
+            document.fonts.ready.then(function() {
+                const results = [];
+                
+                // Measure specific phrases
+                const phrases = [
+                    "neîncrederea tinerilor în capitalism și",
+                    "neîncrederea tinerilor în capitalism",
+                    "și",
+                    "neîncrederea",
+                    "tinerilor",
+                    "în",
+                    "capitalism"
+                ];
+                
+                results.push("Container width: 299px");
+                results.push("---");
+                
+                phrases.forEach(phrase => {
+                    const width = measureText(phrase);
+                    results.push(`"${phrase}": ${width}px`);
+                });
+                
+                results.push("---");
+                
+                // Check if line fits
+                const lineWidth = measureText("neîncrederea tinerilor în capitalism și");
+                const fits = lineWidth <= 299 ? "YES ✓" : "NO ✗";
+                results.push(`Does line fit in 299px? ${fits} (width: ${lineWidth}px)`);
+                
+                // Show test element dimensions
+                const testLine = document.getElementById('test-line');
+                const rect = testLine.getBoundingClientRect();
+                results.push(`---`);
+                results.push(`Test element actual width: ${rect.width}px`);
+                results.push(`Test element height: ${rect.height}px`);
+                
+                document.getElementById('results').innerHTML = results.join('<br>');
+            });
+        };
+    </script>
+</body>
+</html>

@@ -257,7 +257,8 @@ layout_position(QFontMetrics &metrics, const char *string, size_t length, int x,
     /* deal with negative or zero available width  */
     if (x <= 0) {
         *string_idx = 0;
-        *actual_x = metrics.horizontalAdvance(string, length);
+        /* Use QString for correct UTF-8 byte interpretation */
+        *actual_x = metrics.horizontalAdvance(QString::fromUtf8(string, length));
         return NSERROR_OK;
     }
 
@@ -273,7 +274,7 @@ layout_position(QFontMetrics &metrics, const char *string, size_t length, int x,
     /* Convert character count back to byte position */
     str_len = qstr.left(chars_to_measure).toUtf8().length();
 
-    full_x = metrics.horizontalAdvance(string, str_len);
+    full_x = metrics.horizontalAdvance(qstr.left(chars_to_measure));
     if (full_x < x) {
         /* whole string fits */
         *string_idx = length;
@@ -289,7 +290,7 @@ layout_position(QFontMetrics &metrics, const char *string, size_t length, int x,
         current_chars = char_count;
 
     str_len = qstr.left(current_chars).toUtf8().length();
-    measured_x = metrics.horizontalAdvance(string, str_len);
+    measured_x = metrics.horizontalAdvance(qstr.left(current_chars));
 
     if (measured_x == 0) {
         *string_idx = 0;
@@ -307,14 +308,14 @@ layout_position(QFontMetrics &metrics, const char *string, size_t length, int x,
                 break;
             }
             str_len = qstr.left(current_chars).toUtf8().length();
-            measured_x = metrics.horizontalAdvance(string, str_len);
+            measured_x = metrics.horizontalAdvance(qstr.left(current_chars));
         }
     } else {
         /* too short try more chars until overflowing */
         int n_measured_x = measured_x;
         while (n_measured_x < x && current_chars < char_count) {
             size_t n_str_len = qstr.left(current_chars + 1).toUtf8().length();
-            n_measured_x = metrics.horizontalAdvance(string, n_str_len);
+            n_measured_x = metrics.horizontalAdvance(qstr.left(current_chars + 1));
             if (n_measured_x < x) {
                 measured_x = n_measured_x;
                 current_chars++;
@@ -346,7 +347,11 @@ static nserror nsqt_layout_width(const struct plot_font_style *fstyle, const cha
     /* Use top-level widget as device for accurate metrics matching rendering */
     QPaintDevice *device = get_metrics_device();
     QFontMetrics metrics = device ? QFontMetrics(*font, device) : QFontMetrics(*font);
-    *width = metrics.horizontalAdvance(string, length);
+    /* IMPORTANT: Use QString::fromUtf8 to correctly interpret byte length as UTF-8.
+     * Qt's horizontalAdvance(char*, len) treats len as CHARACTER count, not byte count! */
+    QString qstr = QString::fromUtf8(string, length);
+    *width = metrics.horizontalAdvance(qstr);
+
     delete font;
     NSLOG(netsurf, DEEPDEBUG, "fstyle: %p string:\"%.*s\", length: %" PRIsizet ", width: %dpx", fstyle, (int)length,
         string, length, *width);
@@ -420,6 +425,7 @@ static nserror nsqt_layout_split(const struct plot_font_style *fstyle, const cha
     size_t split_len;
     int split_x;
     size_t str_len;
+    int full_width = metrics.horizontalAdvance(QString::fromUtf8(string, length));
 
     res = layout_position(metrics, string, length, split, &split_len, &split_x);
     if (res != NSERROR_OK) {
@@ -434,9 +440,24 @@ static nserror nsqt_layout_split(const struct plot_font_style *fstyle, const cha
     }
 
     if (string[split_len] == ' ') {
-        /* string broke on boundary do not attempt to adjust */
-        *string_idx = split_len;
-        *actual_x = split_x;
+        /* string broke on boundary - but check if next word also fits */
+        size_t next_space = split_len + 1;
+        while ((next_space < length) && (string[next_space] != ' ')) {
+            next_space++;
+        }
+        /* include the space after next word if it exists */
+        if (next_space < length && string[next_space] == ' ') {
+            next_space++;
+        }
+        int next_width = metrics.horizontalAdvance(QString::fromUtf8(string, next_space));
+        if (next_width <= split) {
+            /* next word also fits! use it */
+            *string_idx = next_space;
+            *actual_x = next_width;
+        } else {
+            *string_idx = split_len;
+            *actual_x = split_x;
+        }
         goto nsqt_layout_split_done;
     }
 
@@ -459,8 +480,37 @@ static nserror nsqt_layout_split(const struct plot_font_style *fstyle, const cha
     if ((str_len < length) && (string[str_len] == ' ')) {
         str_len++;
     }
+
+    /* After finding space, GREEDILY try to include more words that fit */
+    while (str_len < length) {
+        size_t word_end = str_len;
+        /* Find the end of the next word (before any trailing space) */
+        while ((word_end < length) && (string[word_end] != ' ')) {
+            word_end++;
+        }
+
+        /* Measure width WITHOUT the trailing space (space can be trimmed at line end)
+         * IMPORTANT: Use QString::fromUtf8 to correctly interpret byte length as UTF-8 */
+        QString qstr = QString::fromUtf8(string, word_end);
+        int word_width = metrics.horizontalAdvance(qstr);
+
+        /* Calculate position including space for when we accept the word */
+        size_t next_pos = word_end;
+        if (next_pos < length && string[next_pos] == ' ') {
+            next_pos++;
+        }
+
+        if (word_width <= split) {
+            /* This word fits! Include it (with trailing space) and try the next one */
+            str_len = next_pos;
+        } else {
+            /* This word doesn't fit, stop here */
+            break;
+        }
+    }
+
     *string_idx = str_len;
-    *actual_x = metrics.horizontalAdvance(string, str_len);
+    *actual_x = metrics.horizontalAdvance(QString::fromUtf8(string, str_len));
 
 nsqt_layout_split_done:
     delete font;
