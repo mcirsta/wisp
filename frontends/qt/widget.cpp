@@ -159,6 +159,12 @@ void NS_Widget::paintEvent(QPaintEvent *event)
         return;
     }
     QPainter *painter = new QPainter(this);
+
+    /* Enable antialiasing for smoother edges on diagonal lines and curves */
+    painter->setRenderHint(QPainter::Antialiasing, true);
+    painter->setRenderHint(QPainter::TextAntialiasing, true);
+    painter->setRenderHint(QPainter::SmoothPixmapTransform, true);
+
     struct redraw_context ctx = {
         .interactive = true,
         .background_images = true,
