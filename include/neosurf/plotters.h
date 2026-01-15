@@ -47,6 +47,14 @@ enum path_command {
 };
 
 /**
+ * Gradient color stop for native gradient rendering.
+ */
+struct gradient_stop {
+    colour color; /**< Color at this stop (NetSurf format) */
+    float offset; /**< Position along gradient (0.0 to 1.0) */
+};
+
+/**
  * Redraw context
  */
 struct redraw_context {
@@ -316,6 +324,38 @@ struct plotter_table {
      * \return NSERROR_OK on success else error code.
      */
     nserror (*pop_transform)(const struct redraw_context *ctx);
+
+    /**
+     * Plot a linear gradient.
+     *
+     * Fills the current clip region with a linear gradient from (x0,y0) to (x1,y1).
+     * Optional, may be NULL if frontend doesn't support native gradients.
+     *
+     * \param ctx The current redraw context.
+     * \param x0, y0 Start point of gradient line.
+     * \param x1, y1 End point of gradient line.
+     * \param stops Array of color stops.
+     * \param stop_count Number of color stops.
+     * \return NSERROR_OK on success else error code.
+     */
+    nserror (*linear_gradient)(const struct redraw_context *ctx, float x0, float y0, float x1, float y1,
+        const struct gradient_stop *stops, unsigned int stop_count);
+
+    /**
+     * Plot a radial gradient.
+     *
+     * Fills the current clip region with a radial gradient centered at (cx,cy).
+     * Optional, may be NULL if frontend doesn't support native gradients.
+     *
+     * \param ctx The current redraw context.
+     * \param cx, cy Center point of gradient.
+     * \param rx, ry X and Y radii (set both equal for circle).
+     * \param stops Array of color stops.
+     * \param stop_count Number of color stops.
+     * \return NSERROR_OK on success else error code.
+     */
+    nserror (*radial_gradient)(const struct redraw_context *ctx, float cx, float cy, float rx, float ry,
+        const struct gradient_stop *stops, unsigned int stop_count);
 
     /* flags */
     /**

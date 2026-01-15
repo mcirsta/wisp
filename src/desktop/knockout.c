@@ -971,6 +971,50 @@ static nserror knockout_plot_pop_transform(const struct redraw_context *ctx)
 
 
 /**
+ * Linear gradient - pass through to real plotter.
+ */
+static nserror knockout_plot_linear_gradient(const struct redraw_context *ctx, float x0, float y0, float x1, float y1,
+    const struct gradient_stop *stops, unsigned int stop_count)
+{
+    nserror ffres;
+
+    /* Flush pending operations before gradient */
+    ffres = knockout_plot_flush(ctx);
+
+    if (real_plot.linear_gradient != NULL) {
+        nserror res = real_plot.linear_gradient(ctx, x0, y0, x1, y1, stops, stop_count);
+        if ((res != NSERROR_OK) && (ffres == NSERROR_OK)) {
+            ffres = res;
+        }
+    }
+
+    return ffres;
+}
+
+
+/**
+ * Radial gradient - pass through to real plotter.
+ */
+static nserror knockout_plot_radial_gradient(const struct redraw_context *ctx, float cx, float cy, float rx, float ry,
+    const struct gradient_stop *stops, unsigned int stop_count)
+{
+    nserror ffres;
+
+    /* Flush pending operations before gradient */
+    ffres = knockout_plot_flush(ctx);
+
+    if (real_plot.radial_gradient != NULL) {
+        nserror res = real_plot.radial_gradient(ctx, cx, cy, rx, ry, stops, stop_count);
+        if ((res != NSERROR_OK) && (ffres == NSERROR_OK)) {
+            ffres = res;
+        }
+    }
+
+    return ffres;
+}
+
+
+/**
  * knockout plotter operation table
  */
 const struct plotter_table knockout_plotters = {
@@ -988,5 +1032,7 @@ const struct plotter_table knockout_plotters = {
     .path = knockout_plot_path,
     .push_transform = knockout_plot_push_transform,
     .pop_transform = knockout_plot_pop_transform,
+    .linear_gradient = knockout_plot_linear_gradient,
+    .radial_gradient = knockout_plot_radial_gradient,
     .option_knockout = true,
 };

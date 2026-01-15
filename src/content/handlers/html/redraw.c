@@ -699,13 +699,90 @@ static bool html_redraw_linear_gradient(
     if (gradient == NULL || gradient->stop_count < 2)
         return true; /* Nothing to draw */
 
-    bool is_vertical = (gradient->direction == CSS_GRADIENT_TO_BOTTOM || gradient->direction == CSS_GRADIENT_TO_TOP);
-
-    int total_length = is_vertical ? (r->y1 - r->y0) : (r->x1 - r->x0);
-    if (total_length <= 0)
+    int width = r->x1 - r->x0;
+    int height = r->y1 - r->y0;
+    if (width <= 0 || height <= 0)
         return true;
 
-    /* Determine if gradient is reversed */
+#ifdef NEOSURF_USE_NATIVE_GRADIENTS
+    /* Native gradient rendering - compile-time selected */
+    NSLOG(plot, DEBUG, "Linear gradient: Using NATIVE rendering path");
+
+    /* Build gradient stops array */
+    struct gradient_stop *stops = alloca(gradient->stop_count * sizeof(struct gradient_stop));
+    for (unsigned int i = 0; i < gradient->stop_count; i++) {
+        stops[i].color = nscss_color_to_ns(gradient->stops[i].color);
+        stops[i].offset = FIXTOFLT(gradient->stops[i].offset) / 100.0f;
+    }
+
+    /* Calculate gradient line based on direction */
+    float x0, y0, x1, y1;
+    switch (gradient->direction) {
+    case CSS_GRADIENT_TO_BOTTOM:
+        x0 = (r->x0 + r->x1) / 2.0f;
+        y0 = r->y0;
+        x1 = x0;
+        y1 = r->y1;
+        break;
+    case CSS_GRADIENT_TO_TOP:
+        x0 = (r->x0 + r->x1) / 2.0f;
+        y0 = r->y1;
+        x1 = x0;
+        y1 = r->y0;
+        break;
+    case CSS_GRADIENT_TO_RIGHT:
+        x0 = r->x0;
+        y0 = (r->y0 + r->y1) / 2.0f;
+        x1 = r->x1;
+        y1 = y0;
+        break;
+    case CSS_GRADIENT_TO_LEFT:
+        x0 = r->x1;
+        y0 = (r->y0 + r->y1) / 2.0f;
+        x1 = r->x0;
+        y1 = y0;
+        break;
+    default:
+        /* Unsupported direction - just fill with first color */
+        {
+            plot_style_t pstyle = {
+                .fill_type = PLOT_OP_TYPE_SOLID,
+                .fill_colour = nscss_color_to_ns(gradient->stops[0].color),
+            };
+            ctx->plot->rectangle(ctx, &pstyle, r);
+            return true;
+        }
+    }
+
+    /* Set clip and render with native gradient */
+    ctx->plot->clip(ctx, r);
+    if (ctx->plot->linear_gradient != NULL) {
+        NSLOG(plot, DEBUG, "Linear gradient: Calling native plotter (%.1f,%.1f) to (%.1f,%.1f) with %u stops", x0, y0,
+            x1, y1, gradient->stop_count);
+        nserror err = ctx->plot->linear_gradient(ctx, x0, y0, x1, y1, stops, gradient->stop_count);
+        if (err == NSERROR_OK) {
+            NSLOG(plot, DEBUG, "Linear gradient: Native plotter succeeded");
+            return true;
+        }
+        NSLOG(plot, WARNING, "Linear gradient: Native plotter FAILED with error %d", err);
+    } else {
+        NSLOG(plot, WARNING, "Linear gradient: Native plotter is NULL!");
+    }
+    /* Native gradient not available or failed - fill with solid color as fallback */
+    {
+        plot_style_t pstyle = {
+            .fill_type = PLOT_OP_TYPE_SOLID,
+            .fill_colour = nscss_color_to_ns(gradient->stops[0].color),
+        };
+        ctx->plot->rectangle(ctx, &pstyle, r);
+    }
+    return true;
+
+#else /* !NEOSURF_USE_NATIVE_GRADIENTS */
+    /* Fallback: strip-based rendering */
+    NSLOG(plot, DEBUG, "Linear gradient: Using FALLBACK strip-based rendering");
+    bool is_vertical = (gradient->direction == CSS_GRADIENT_TO_BOTTOM || gradient->direction == CSS_GRADIENT_TO_TOP);
+    int total_length = is_vertical ? height : width;
     bool reversed = (gradient->direction == CSS_GRADIENT_TO_TOP || gradient->direction == CSS_GRADIENT_TO_LEFT);
 
     /* Draw gradient using strips */
@@ -744,7 +821,6 @@ static bool html_redraw_linear_gradient(
 
         /* Calculate strip rectangle */
         struct rect strip_rect;
-        int strip_size = (total_length + num_strips - 1) / num_strips;
         int strip_start = (strip * total_length) / num_strips;
         int strip_end = ((strip + 1) * total_length) / num_strips;
 
@@ -772,6 +848,7 @@ static bool html_redraw_linear_gradient(
     }
 
     return true;
+#endif /* NEOSURF_USE_NATIVE_GRADIENTS */
 }
 
 /**
@@ -790,8 +867,8 @@ static bool html_redraw_radial_gradient(
         return true; /* Nothing to draw */
 
     /* Calculate center and dimensions */
-    int cx = (r->x0 + r->x1) / 2;
-    int cy = (r->y0 + r->y1) / 2;
+    float cx = (r->x0 + r->x1) / 2.0f;
+    float cy = (r->y0 + r->y1) / 2.0f;
     int width = r->x1 - r->x0;
     int height = r->y1 - r->y0;
 
@@ -803,17 +880,14 @@ static bool html_redraw_radial_gradient(
 
     /* Farthest-corner sizing: gradient extends to cover entire box
      * Circle: radius = distance to corner (will be clipped)
-     * Ellipse: rx/ry = half dimensions (fills exactly) */
+     * Ellipse: rx/ry = half dimensions scaled by sqrt(2) */
     float rx, ry;
     if (gradient->shape == CSS_RADIAL_SHAPE_CIRCLE) {
-        /* Farthest-corner: radius = distance from center to corner */
         float half_w = width / 2.0f;
         float half_h = height / 2.0f;
         float corner_dist = sqrtf(half_w * half_w + half_h * half_h);
         rx = ry = corner_dist;
     } else {
-        /* Ellipse: farthest-corner sizing
-         * To reach corners, scale half dimensions by sqrt(2) */
         rx = width / 2.0f * 1.41421356f; /* sqrt(2) */
         ry = height / 2.0f * 1.41421356f;
     }
@@ -821,7 +895,29 @@ static bool html_redraw_radial_gradient(
     if (rx < 1.0f || ry < 1.0f)
         return true;
 
-    /* Draw gradient using concentric ellipses from outside to inside */
+#ifdef NEOSURF_USE_NATIVE_RADIAL_GRADIENTS
+    /* Native radial gradient rendering - compile-time selected */
+    NSLOG(plot, DEBUG, "Radial gradient: Using NATIVE rendering path");
+    if (ctx->plot->radial_gradient != NULL) {
+        /* Build gradient stops array */
+        struct gradient_stop *stops = alloca(gradient->stop_count * sizeof(struct gradient_stop));
+        for (unsigned int i = 0; i < gradient->stop_count; i++) {
+            stops[i].color = nscss_color_to_ns(gradient->stops[i].color);
+            stops[i].offset = FIXTOFLT(gradient->stops[i].offset) / 100.0f;
+        }
+
+        NSLOG(plot, DEBUG, "Radial gradient: Calling native plotter (%.1f,%.1f) rx=%.1f ry=%.1f with %u stops", cx, cy,
+            rx, ry, gradient->stop_count);
+        nserror err = ctx->plot->radial_gradient(ctx, cx, cy, rx, ry, stops, gradient->stop_count);
+        if (err == NSERROR_OK) {
+            NSLOG(plot, DEBUG, "Radial gradient: Native plotter succeeded");
+            return true;
+        }
+        /* Native failed, fall through to disc rendering */
+    }
+#endif /* NEOSURF_USE_NATIVE_RADIAL_GRADIENTS */
+
+    /* Fallback: Draw gradient using concentric ellipses from outside to inside */
     int max_dim = (width > height) ? width : height;
     int num_rings = (max_dim > 200) ? 100 : (max_dim > 50) ? 50 : max_dim;
     if (num_rings < 2)
@@ -874,25 +970,18 @@ static bool html_redraw_radial_gradient(
 
         /* Use disc for circles. For ellipses, use transform to stretch circle */
         if (ring_rx == ring_ry) {
-            nserror res = ctx->plot->disc(ctx, &pstyle, cx, cy, ring_rx);
+            nserror res = ctx->plot->disc(ctx, &pstyle, (int)cx, (int)cy, ring_rx);
             if (res != NSERROR_OK)
                 return false;
         } else {
             /* For ellipses, draw a unit circle with scaling transform */
-            /* Scale factors to convert circle to ellipse */
             float scale_x = (float)ring_rx;
             float scale_y = (float)ring_ry;
 
-            /* Transform: translate to center, then scale */
-            float transform[6] = {
-                scale_x, 0.0f, /* m11, m12: scale x, shear y */
-                0.0f, scale_y, /* m21, m22: shear x, scale y */
-                (float)cx, (float)cy /* dx, dy: translate */
-            };
+            float transform[6] = {scale_x, 0.0f, 0.0f, scale_y, cx, cy};
 
             if (ctx->plot->push_transform) {
                 ctx->plot->push_transform(ctx, transform);
-                /* Draw unit circle at origin - will be transformed to ellipse */
                 nserror res = ctx->plot->disc(ctx, &pstyle, 0, 0, 1);
                 ctx->plot->pop_transform(ctx);
                 if (res != NSERROR_OK)
@@ -900,7 +989,7 @@ static bool html_redraw_radial_gradient(
             } else {
                 /* Fallback: just draw a circle with max radius */
                 int max_r = (ring_rx > ring_ry) ? ring_rx : ring_ry;
-                nserror res = ctx->plot->disc(ctx, &pstyle, cx, cy, max_r);
+                nserror res = ctx->plot->disc(ctx, &pstyle, (int)cx, (int)cy, max_r);
                 if (res != NSERROR_OK)
                     return false;
             }

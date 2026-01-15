@@ -21,8 +21,10 @@
  * Implementation of plotters for qt.
  */
 
+#include <QLinearGradient>
 #include <QPainter>
 #include <QPainterPath>
+#include <QRadialGradient>
 #include <stddef.h>
 
 extern "C" {
@@ -424,6 +426,129 @@ static nserror nsqt_pop_transform(const struct redraw_context *ctx)
 
 
 /**
+ * Convert NetSurf color to QColor.
+ * NS format is 0xAABBGGRR with inverted alpha (0=opaque, 255=transparent).
+ */
+static inline QColor nsqt_qcolor_from_ns(colour c)
+{
+    int r = c & 0xFF;
+    int g = (c >> 8) & 0xFF;
+    int b = (c >> 16) & 0xFF;
+    int a = 255 - ((c >> 24) & 0xFF); /* Invert alpha */
+    return QColor(r, g, b, a);
+}
+
+
+/**
+ * Plot a linear gradient.
+ *
+ * Uses Qt's native QLinearGradient for hardware-accelerated rendering.
+ *
+ * \param ctx The current redraw context.
+ * \param x0, y0 Start point of gradient line.
+ * \param x1, y1 End point of gradient line.
+ * \param stops Array of color stops.
+ * \param stop_count Number of color stops.
+ * \return NSERROR_OK on success else error code.
+ */
+static nserror nsqt_plot_linear_gradient(const struct redraw_context *ctx, float x0, float y0, float x1, float y1,
+    const struct gradient_stop *stops, unsigned int stop_count)
+{
+    QPainter *painter = (QPainter *)ctx->priv;
+    if (painter == nullptr || stop_count < 2) {
+        return NSERROR_INVALID;
+    }
+
+    NSLOG(plot, DEBUG, "Native linear gradient: (%.1f,%.1f) to (%.1f,%.1f) with %u stops", x0, y0, x1, y1, stop_count);
+
+    QLinearGradient gradient(x0, y0, x1, y1);
+
+    /* Add color stops */
+    for (unsigned int i = 0; i < stop_count; i++) {
+        QColor color = nsqt_qcolor_from_ns(stops[i].color);
+        gradient.setColorAt(stops[i].offset, color);
+    }
+
+    /* Get clip region and fill it with gradient */
+    QRectF clip_rect = painter->clipBoundingRect();
+    if (clip_rect.isEmpty()) {
+        /* If no clip set, use the gradient bounds */
+        float minX = (x0 < x1) ? x0 : x1;
+        float minY = (y0 < y1) ? y0 : y1;
+        float maxX = (x0 > x1) ? x0 : x1;
+        float maxY = (y0 > y1) ? y0 : y1;
+        /* For vertical/horizontal gradients, use reasonable bounds */
+        if (minX == maxX) {
+            minX -= 1000;
+            maxX += 1000;
+        }
+        if (minY == maxY) {
+            minY -= 1000;
+            maxY += 1000;
+        }
+        clip_rect = QRectF(minX, minY, maxX - minX, maxY - minY);
+    }
+
+    painter->fillRect(clip_rect, gradient);
+
+    return NSERROR_OK;
+}
+
+
+/**
+ * Plot a radial gradient.
+ *
+ * Uses Qt's native QRadialGradient for hardware-accelerated rendering.
+ * For elliptical gradients, uses a transform to stretch the circle.
+ *
+ * \param ctx The current redraw context.
+ * \param cx, cy Center point of gradient.
+ * \param rx, ry X and Y radii (set both equal for circle).
+ * \param stops Array of color stops.
+ * \param stop_count Number of color stops.
+ * \return NSERROR_OK on success else error code.
+ */
+static nserror nsqt_plot_radial_gradient(const struct redraw_context *ctx, float cx, float cy, float rx, float ry,
+    const struct gradient_stop *stops, unsigned int stop_count)
+{
+    QPainter *painter = (QPainter *)ctx->priv;
+    if (painter == nullptr || stop_count < 2) {
+        return NSERROR_INVALID;
+    }
+
+    /* QRadialGradient uses a single radius, so we'll use the larger one
+     * and apply a transform for ellipses */
+    float radius = (rx > ry) ? rx : ry;
+    bool is_ellipse = (rx != ry);
+
+    if (is_ellipse) {
+        painter->save();
+        painter->translate(cx, cy);
+        painter->scale(rx / radius, ry / radius);
+        painter->translate(-cx, -cy);
+    }
+
+    QRadialGradient gradient(cx, cy, radius);
+
+    /* Add color stops */
+    for (unsigned int i = 0; i < stop_count; i++) {
+        QColor color = nsqt_qcolor_from_ns(stops[i].color);
+        gradient.setColorAt(stops[i].offset, color);
+    }
+
+    /* Fill the current clip region */
+    QRectF clip_rect = painter->clipBoundingRect();
+    painter->fillRect(clip_rect, gradient);
+
+    if (is_ellipse) {
+        painter->restore();
+    }
+
+    return NSERROR_OK;
+}
+
+
+/**
  * QT plotter table
  */
 const struct plotter_table nsqt_plotters = {.clip = nsqt_plot_clip,
@@ -440,4 +565,6 @@ const struct plotter_table nsqt_plotters = {.clip = nsqt_plot_clip,
     .flush = NULL,
     .push_transform = nsqt_push_transform,
     .pop_transform = nsqt_pop_transform,
+    .linear_gradient = nsqt_plot_linear_gradient,
+    .radial_gradient = nsqt_plot_radial_gradient,
     .option_knockout = true};
