@@ -15,6 +15,7 @@ COPYRIGHT = '''\
 
 # Include statements for generated headers
 INCLUDE_LIBCSS_COMPUTED = '#include <libcss/computed.h>\n'
+INCLUDE_LIBCSS_GRADIENT = '#include <libcss/gradient.h>\n'
 INCLUDE_PROPGET = '#include "select/propget.h"\n'
 INCLUDE_CALC = '#include "select/calc.h"\n'
 INCLUDE_COMPUTED = '#include "select/computed.h"\n'
@@ -44,6 +45,7 @@ assets = {}
 assets['computed.h'] = {
     'header': (COPYRIGHT + ifndef("computed") +
                INCLUDE_LIBCSS_COMPUTED +
+               INCLUDE_LIBCSS_GRADIENT +
                INCLUDE_CALC +
                CSS_FIXED_OR_CALC_UNION),
     'footer': '\n#endif\n'

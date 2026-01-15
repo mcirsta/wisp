@@ -72,7 +72,9 @@ enum css_background_image_e {
     CSS_BACKGROUND_IMAGE_INHERIT = 0x0,
     /* Consult pointer in struct to determine which */
     CSS_BACKGROUND_IMAGE_NONE = 0x1,
-    CSS_BACKGROUND_IMAGE_IMAGE = 0x1
+    CSS_BACKGROUND_IMAGE_IMAGE = 0x2,
+    CSS_BACKGROUND_IMAGE_LINEAR_GRADIENT = 0x3,
+    CSS_BACKGROUND_IMAGE_RADIAL_GRADIENT = 0x4
 };
 
 enum css_background_position_e { CSS_BACKGROUND_POSITION_INHERIT = 0x0, CSS_BACKGROUND_POSITION_SET = 0x1 };

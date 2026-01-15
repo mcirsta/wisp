@@ -3059,8 +3059,9 @@ static bool layout_line(struct box *first, int *width, int *y, int cx, int cy, s
                 /* text */
                 used_height = d->height;
             }
-        } else if ((d->type == BOX_INLINE) || d->type == BOX_INLINE_BLOCK) {
-            /* replaced inlines and inline-blocks */
+        } else if ((d->type == BOX_INLINE) || d->type == BOX_INLINE_BLOCK || d->type == BOX_INLINE_FLEX ||
+            d->type == BOX_INLINE_GRID) {
+            /* replaced inlines, inline-blocks, inline-flex, inline-grid */
             d->x += x0;
             d->y = *y + d->border[TOP].width + d->margin[TOP];
             h = d->margin[TOP] + d->border[TOP].width + d->padding[TOP] + d->height + d->padding[BOTTOM] +

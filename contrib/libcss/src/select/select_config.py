@@ -18,7 +18,8 @@ values = {
     ('counter_arr', 'css_computed_counter*'),
     ('content_item', 'css_computed_content_item*'),
     ('grid_track_arr', 'css_computed_grid_track*'),
-    ('transform_func_arr', 'css_transform_function*')
+    ('transform_func_arr', 'css_transform_function*'),
+    ('gradient', 'css_linear_gradient*')
 }
 
 # Configuration of property groups.
@@ -65,7 +66,7 @@ style = {
     ('white_space', 3),
     # Style group, with additional value
     ('background_color', 2, 'color'),
-    ('background_image', 1, 'string'),
+    ('background_image', 4, 'string'),
     ('background_position', 1, (('length',), ('length',)),
         'CSS_BACKGROUND_POSITION_SET'),
     ('border_top_color', 2, 'color'),

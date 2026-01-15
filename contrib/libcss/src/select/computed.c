@@ -7,6 +7,8 @@
 
 #include <string.h>
 
+#include <libcss/gradient.h>
+
 #include "utils/utils.h"
 #include "select/arena.h"
 #include "select/calc.h"
@@ -407,6 +409,20 @@ uint8_t css_computed_border_left_width(const css_computed_style *style, css_fixe
 uint8_t css_computed_background_image(const css_computed_style *style, lwc_string **url)
 {
     return get_background_image(style, url);
+}
+
+const css_linear_gradient *css_computed_background_gradient(const css_computed_style *style)
+{
+    if (style == NULL)
+        return NULL;
+    return style->background_gradient;
+}
+
+const css_radial_gradient *css_computed_background_radial_gradient(const css_computed_style *style)
+{
+    if (style == NULL)
+        return NULL;
+    return style->background_radial_gradient;
 }
 
 uint8_t css_computed_color(const css_computed_style *style, css_color *color)

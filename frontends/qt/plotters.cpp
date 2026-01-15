@@ -45,13 +45,22 @@ extern "C" {
  */
 static nserror nsqt_set_style(QPainter *painter, const plot_style_t *style)
 {
-    QColor fillcolour(
-        style->fill_colour & 0xFF, (style->fill_colour & 0xFF00) >> 8, (style->fill_colour & 0xFF0000) >> 16);
-    /*NSLOG(netsurf, WARNING,"fill_colour %x -> %d,%d,%d",
-          style->fill_colour,
-          style->fill_colour & 0xFF,
-          (style->fill_colour & 0xFF00) >>8,
-          (style->fill_colour & 0xFF0000) >>16);*/
+    /* Extract RGBA components - NS color format is 0xAABBGGRR
+     * Note: NS uses inverted alpha (0=opaque, 255=transparent)
+     * Qt uses standard alpha (0=transparent, 255=opaque) */
+    int fill_r = style->fill_colour & 0xFF;
+    int fill_g = (style->fill_colour & 0xFF00) >> 8;
+    int fill_b = (style->fill_colour & 0xFF0000) >> 16;
+    int fill_a = 255 - ((style->fill_colour >> 24) & 0xFF);
+
+    /* Debug: show color values when drawing fills */
+    if (style->fill_type != PLOT_OP_TYPE_NONE && fill_a < 255) {
+        fprintf(
+            stderr, "QT FILL: raw=0x%08x -> r=%d g=%d b=%d a=%d\n", style->fill_colour, fill_r, fill_g, fill_b, fill_a);
+    }
+
+    QColor fillcolour(fill_r, fill_g, fill_b, fill_a);
+
     Qt::BrushStyle brushstyle = Qt::NoBrush;
     if (style->fill_type != PLOT_OP_TYPE_NONE) {
         brushstyle = Qt::SolidPattern;
@@ -59,8 +68,13 @@ static nserror nsqt_set_style(QPainter *painter, const plot_style_t *style)
     QBrush brush(fillcolour, brushstyle);
     painter->setBrush(brush);
 
-    QColor strokecolour(
-        style->stroke_colour & 0xFF, (style->stroke_colour & 0xFF00) >> 8, (style->stroke_colour & 0xFF0000) >> 16);
+    /* Extract RGBA components for stroke - same alpha inversion */
+    int stroke_r = style->stroke_colour & 0xFF;
+    int stroke_g = (style->stroke_colour & 0xFF00) >> 8;
+    int stroke_b = (style->stroke_colour & 0xFF0000) >> 16;
+    int stroke_a = 255 - ((style->stroke_colour >> 24) & 0xFF);
+    QColor strokecolour(stroke_r, stroke_g, stroke_b, stroke_a);
+
     QPen pen(strokecolour);
     Qt::PenStyle penstyle = Qt::NoPen;
     if (style->stroke_type != PLOT_OP_TYPE_NONE) {
@@ -138,6 +152,9 @@ static nserror nsqt_plot_arc(
  */
 static nserror nsqt_plot_disc(const struct redraw_context *ctx, const plot_style_t *style, int x, int y, int radius)
 {
+    QPainter *painter = (QPainter *)ctx->priv;
+    nsqt_set_style(painter, style);
+    painter->drawEllipse(QPoint(x, y), radius, radius);
     return NSERROR_OK;
 }
 

@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Linear Gradient Test</title>
+    <style>
+        body {
+            background-color: #1a1a2e;
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            color: white;
+        }
+
+        .gradient-box {
+            width: 200px;
+            height: 100px;
+            margin: 10px;
+            display: inline-block;
+            border-radius: 8px;
+        }
+
+        .vertical {
+            background-image: linear-gradient(#00ff00, #0000ff);
+        }
+
+        .horizontal {
+            background-image: linear-gradient(to right, #ff0000, #00ffff);
+        }
+
+        .diagonal-45 {
+            background-image: linear-gradient(45deg, #ff7f50, #008080);
+        }
+
+        .diagonal-135 {
+            background-image: linear-gradient(135deg, #90ee90, #006400);
+        }
+
+        .to-left {
+            background-image: linear-gradient(to left, #ff69b4, #ffb6c1);
+        }
+
+        .to-top {
+            background-image: linear-gradient(to top, #0000ff, #800080);
+        }
+
+        .info {
+            margin-top: 30px;
+            padding: 15px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Linear Gradient Test</h1>
+
+    <div class="gradient-box vertical"></div>
+    <div class="gradient-box horizontal"></div>
+    <div class="gradient-box diagonal-45"></div>
+    <div class="gradient-box diagonal-135"></div>
+    <div class="gradient-box to-left"></div>
+    <div class="gradient-box to-top"></div>
+
+    <div class="info">
+        <strong>Test Cases:</strong><br>
+        • Vertical: Green → Blue<br>
+        • Horizontal: Red → Cyan<br>
+        • 45deg: Coral → Teal<br>
+        • 135deg: Light Green → Dark Green<br>
+        • to left: Pink → Light Pink<br>
+        • to top: Blue → Purple
+    </div>
+</body>
+
+</html>

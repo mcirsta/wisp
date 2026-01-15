@@ -9,6 +9,7 @@
 #define css_select_computed_h_
 
 #include <libcss/computed.h>
+#include <libcss/gradient.h>
 #include <libcss/hint.h>
 #include <libcss/unit.h>
 

@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>ID Gradient Test</title>
+    <style>
+        body {
+            background-color: #1a1a2e;
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            color: white;
+        }
+
+        .gradient-box {
+            width: 200px;
+            height: 100px;
+            margin: 10px;
+            display: inline-block;
+            border-radius: 8px;
+        }
+
+        #box1 {
+            background-image: linear-gradient(#00ff00, #0000ff);
+        }
+
+        #box2 {
+            background-image: linear-gradient(to right, #ff0000, #00ffff);
+        }
+
+        #box3 {
+            background-image: linear-gradient(to left, #ff69b4, #ffb6c1);
+        }
+
+        #box4 {
+            background-image: linear-gradient(to top, #0000ff, #800080);
+        }
+    </style>
+</head>
+
+<body>
+    <h1>ID Gradient Test</h1>
+    <div id="box1" class="gradient-box"></div>
+    <div id="box2" class="gradient-box"></div>
+    <div id="box3" class="gradient-box"></div>
+    <div id="box4" class="gradient-box"></div>
+</body>
+
+</html>

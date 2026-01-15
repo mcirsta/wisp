@@ -16,6 +16,7 @@ extern "C" {
 
 #include <libcss/errors.h>
 #include <libcss/functypes.h>
+#include <libcss/gradient.h>
 #include <libcss/properties.h>
 #include <libcss/types.h>
 #include <libcss/unit.h>
@@ -195,6 +196,15 @@ uint8_t css_computed_border_bottom_width(const css_computed_style *style, css_fi
 uint8_t css_computed_border_left_width(const css_computed_style *style, css_fixed *length, css_unit *unit);
 
 uint8_t css_computed_background_image(const css_computed_style *style, lwc_string **url);
+
+/**
+ * Get the background gradient from a computed style.
+ *
+ * \param style  Computed style to query
+ * \return Pointer to linear gradient structure, or NULL if none
+ */
+const css_linear_gradient *css_computed_background_gradient(const css_computed_style *style);
+const css_radial_gradient *css_computed_background_radial_gradient(const css_computed_style *style);
 
 uint8_t css_computed_color(const css_computed_style *style, css_color *color);
 

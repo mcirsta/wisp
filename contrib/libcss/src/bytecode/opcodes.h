@@ -65,7 +65,12 @@ enum op_background_color {
     BACKGROUND_COLOR_SET = 0x0080
 };
 
-enum op_background_image { BACKGROUND_IMAGE_URI = 0x0080, BACKGROUND_IMAGE_NONE = 0x0000 };
+enum op_background_image {
+    BACKGROUND_IMAGE_NONE = 0x0000,
+    BACKGROUND_IMAGE_URI = 0x0080,
+    BACKGROUND_IMAGE_LINEAR_GRADIENT = 0x0081,
+    BACKGROUND_IMAGE_RADIAL_GRADIENT = 0x0082
+};
 
 enum op_background_position {
     BACKGROUND_POSITION_HORZ_SET = 0x0080,

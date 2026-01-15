@@ -173,6 +173,46 @@ static inline bool css__arena_style_is_equal(struct css_computed_style *a, struc
         }
     }
 
+    /* Compare linear gradients */
+    if (a->background_gradient == NULL && b->background_gradient == NULL) {
+        /* Both NULL - equal */
+    } else if (a->background_gradient == NULL || b->background_gradient == NULL) {
+        /* One NULL, one not - not equal */
+        return false;
+    } else {
+        /* Both non-NULL - compare contents */
+        if (a->background_gradient->direction != b->background_gradient->direction ||
+            a->background_gradient->stop_count != b->background_gradient->stop_count) {
+            return false;
+        }
+        for (uint32_t i = 0; i < a->background_gradient->stop_count; i++) {
+            if (a->background_gradient->stops[i].color != b->background_gradient->stops[i].color ||
+                a->background_gradient->stops[i].offset != b->background_gradient->stops[i].offset) {
+                return false;
+            }
+        }
+    }
+
+    /* Compare radial gradients */
+    if (a->background_radial_gradient == NULL && b->background_radial_gradient == NULL) {
+        /* Both NULL - equal */
+    } else if (a->background_radial_gradient == NULL || b->background_radial_gradient == NULL) {
+        /* One NULL, one not - not equal */
+        return false;
+    } else {
+        /* Both non-NULL - compare contents */
+        if (a->background_radial_gradient->shape != b->background_radial_gradient->shape ||
+            a->background_radial_gradient->stop_count != b->background_radial_gradient->stop_count) {
+            return false;
+        }
+        for (uint32_t i = 0; i < a->background_radial_gradient->stop_count; i++) {
+            if (a->background_radial_gradient->stops[i].color != b->background_radial_gradient->stops[i].color ||
+                a->background_radial_gradient->stops[i].offset != b->background_radial_gradient->stops[i].offset) {
+                return false;
+            }
+        }
+    }
+
     return true;
 }
 

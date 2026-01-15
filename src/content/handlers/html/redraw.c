@@ -59,6 +59,7 @@
 #include "desktop/scrollbar.h"
 #include "desktop/selection.h"
 
+#include <libcss/gradient.h>
 #include <neosurf/content/handlers/html/box.h>
 #include <neosurf/content/handlers/html/box_inspect.h>
 #include <neosurf/content/handlers/html/form_internal.h>
@@ -86,10 +87,16 @@ static bool html_redraw_box_has_background(struct box *box)
 
     if (box->style != NULL) {
         css_color colour;
+        lwc_string *url;
 
+        /* Check for background color */
         css_computed_background_color(box->style, &colour);
-
         if (nscss_color_is_transparent(colour) == false)
+            return true;
+
+        /* Check for gradient background */
+        uint8_t bg_type = css_computed_background_image(box->style, &url);
+        if (bg_type == CSS_BACKGROUND_IMAGE_LINEAR_GRADIENT)
             return true;
     }
 
@@ -630,6 +637,281 @@ static bool html_redraw_file(int x, int y, int width, int height, struct box *bo
 
 
 /**
+ * Interpolate between two colors.
+ *
+ * \param c1  First color (CSS AARRGGBB format)
+ * \param c2  Second color (CSS AARRGGBB format)
+ * \param t   Interpolation factor (0.0 to 1.0)
+ * \return Interpolated color in NetSurf format
+ */
+static colour gradient_interpolate_color(css_color c1, css_color c2, float t)
+{
+    if (t <= 0.0f)
+        return nscss_color_to_ns(c1);
+    if (t >= 1.0f)
+        return nscss_color_to_ns(c2);
+
+    /* Extract ARGB components from CSS AARRGGBB format */
+    unsigned int a1 = (c1 >> 24) & 0xff;
+    unsigned int r1 = (c1 >> 16) & 0xff;
+    unsigned int g1 = (c1 >> 8) & 0xff;
+    unsigned int b1 = (c1 >> 0) & 0xff;
+
+    unsigned int a2 = (c2 >> 24) & 0xff;
+    unsigned int r2 = (c2 >> 16) & 0xff;
+    unsigned int g2 = (c2 >> 8) & 0xff;
+    unsigned int b2 = (c2 >> 0) & 0xff;
+
+    /* Linear interpolation */
+    unsigned int a = (unsigned int)(a1 + t * ((float)a2 - (float)a1) + 0.5f);
+    unsigned int r = (unsigned int)(r1 + t * ((float)r2 - (float)r1) + 0.5f);
+    unsigned int g = (unsigned int)(g1 + t * ((float)g2 - (float)g1) + 0.5f);
+    unsigned int b = (unsigned int)(b1 + t * ((float)b2 - (float)b1) + 0.5f);
+
+    /* Clamp values */
+    if (a > 255)
+        a = 255;
+    if (r > 255)
+        r = 255;
+    if (g > 255)
+        g = 255;
+    if (b > 255)
+        b = 255;
+
+    /* Construct CSS color and convert to NetSurf format */
+    css_color result = (a << 24) | (r << 16) | (g << 8) | b;
+    return nscss_color_to_ns(result);
+}
+
+
+/**
+ * Render a linear gradient.
+ *
+ * \param gradient  Gradient data from computed style
+ * \param r         Rectangle to fill with gradient
+ * \param scale     Current scale factor
+ * \param ctx       Redraw context
+ * \return true on success, false on failure
+ */
+static bool html_redraw_linear_gradient(
+    const css_linear_gradient *gradient, const struct rect *r, float scale, const struct redraw_context *ctx)
+{
+    if (gradient == NULL || gradient->stop_count < 2)
+        return true; /* Nothing to draw */
+
+    bool is_vertical = (gradient->direction == CSS_GRADIENT_TO_BOTTOM || gradient->direction == CSS_GRADIENT_TO_TOP);
+
+    int total_length = is_vertical ? (r->y1 - r->y0) : (r->x1 - r->x0);
+    if (total_length <= 0)
+        return true;
+
+    /* Determine if gradient is reversed */
+    bool reversed = (gradient->direction == CSS_GRADIENT_TO_TOP || gradient->direction == CSS_GRADIENT_TO_LEFT);
+
+    /* Draw gradient using strips */
+    int num_strips = (total_length > 200) ? 100 : (total_length > 50) ? 50 : total_length;
+    if (num_strips < 2)
+        num_strips = 2;
+
+    for (int strip = 0; strip < num_strips; strip++) {
+        /* Calculate position along gradient (0.0 to 1.0) */
+        float pos = (float)strip / (float)(num_strips - 1);
+        if (reversed)
+            pos = 1.0f - pos;
+
+        /* Convert to percentage (fixed point uses 0-INTTOFIX(100)) */
+        float pos_pct = pos * 100.0f;
+
+        /* Find which two stops we're between */
+        int stop_idx = 0;
+        for (int i = 0; i < (int)gradient->stop_count - 1; i++) {
+            float stop_pos = FIXTOFLT(gradient->stops[i + 1].offset);
+            if (pos_pct <= stop_pos) {
+                stop_idx = i;
+                break;
+            }
+            stop_idx = i;
+        }
+
+        /* Interpolate color between stops */
+        float stop1_pos = FIXTOFLT(gradient->stops[stop_idx].offset);
+        float stop2_pos = FIXTOFLT(gradient->stops[stop_idx + 1].offset);
+        float range = stop2_pos - stop1_pos;
+        float t = (range > 0.001f) ? (pos_pct - stop1_pos) / range : 0.0f;
+
+        colour strip_color = gradient_interpolate_color(
+            gradient->stops[stop_idx].color, gradient->stops[stop_idx + 1].color, t);
+
+        /* Calculate strip rectangle */
+        struct rect strip_rect;
+        int strip_size = (total_length + num_strips - 1) / num_strips;
+        int strip_start = (strip * total_length) / num_strips;
+        int strip_end = ((strip + 1) * total_length) / num_strips;
+
+        if (is_vertical) {
+            strip_rect.x0 = r->x0;
+            strip_rect.x1 = r->x1;
+            strip_rect.y0 = r->y0 + strip_start;
+            strip_rect.y1 = r->y0 + strip_end;
+        } else {
+            strip_rect.x0 = r->x0 + strip_start;
+            strip_rect.x1 = r->x0 + strip_end;
+            strip_rect.y0 = r->y0;
+            strip_rect.y1 = r->y1;
+        }
+
+        /* Fill the strip */
+        plot_style_t pstyle = {
+            .fill_type = PLOT_OP_TYPE_SOLID,
+            .fill_colour = strip_color,
+        };
+
+        nserror res = ctx->plot->rectangle(ctx, &pstyle, &strip_rect);
+        if (res != NSERROR_OK)
+            return false;
+    }
+
+    return true;
+}
+
+/**
+ * Draw a radial gradient background
+ *
+ * \param gradient  The radial gradient to draw
+ * \param r         Rectangle to fill with gradient
+ * \param scale     Current scale
+ * \param ctx       Redraw context
+ * \return true on success, false on error
+ */
+static bool html_redraw_radial_gradient(
+    const css_radial_gradient *gradient, const struct rect *r, float scale, const struct redraw_context *ctx)
+{
+    if (gradient == NULL || gradient->stop_count < 2)
+        return true; /* Nothing to draw */
+
+    /* Calculate center and dimensions */
+    int cx = (r->x0 + r->x1) / 2;
+    int cy = (r->y0 + r->y1) / 2;
+    int width = r->x1 - r->x0;
+    int height = r->y1 - r->y0;
+
+    if (width <= 0 || height <= 0)
+        return true;
+
+    /* Set clip rect to contain the gradient within the box */
+    ctx->plot->clip(ctx, r);
+
+    /* Farthest-corner sizing: gradient extends to cover entire box
+     * Circle: radius = distance to corner (will be clipped)
+     * Ellipse: rx/ry = half dimensions (fills exactly) */
+    float rx, ry;
+    if (gradient->shape == CSS_RADIAL_SHAPE_CIRCLE) {
+        /* Farthest-corner: radius = distance from center to corner */
+        float half_w = width / 2.0f;
+        float half_h = height / 2.0f;
+        float corner_dist = sqrtf(half_w * half_w + half_h * half_h);
+        rx = ry = corner_dist;
+    } else {
+        /* Ellipse: farthest-corner sizing
+         * To reach corners, scale half dimensions by sqrt(2) */
+        rx = width / 2.0f * 1.41421356f; /* sqrt(2) */
+        ry = height / 2.0f * 1.41421356f;
+    }
+
+    if (rx < 1.0f || ry < 1.0f)
+        return true;
+
+    /* Draw gradient using concentric ellipses from outside to inside */
+    int max_dim = (width > height) ? width : height;
+    int num_rings = (max_dim > 200) ? 100 : (max_dim > 50) ? 50 : max_dim;
+    if (num_rings < 2)
+        num_rings = 2;
+
+    /* Draw from outside (ring=0) to inside (ring=num_rings-1) */
+    for (int ring = 0; ring < num_rings; ring++) {
+        /* ring=0 is outermost (edge), ring=num_rings-1 is innermost (center) */
+        float t_ring = (float)ring / (float)(num_rings - 1);
+
+        /* Scale factor: 1.0 at ring=0 (outer), 0.0 at ring=num_rings-1 (center) */
+        float ring_scale = 1.0f - t_ring;
+
+        int ring_rx = (int)(rx * ring_scale);
+        int ring_ry = (int)(ry * ring_scale);
+        if (ring_rx < 1)
+            ring_rx = 1;
+        if (ring_ry < 1)
+            ring_ry = 1;
+
+        /* Calculate position along gradient: 0.0 = center, 1.0 = edge */
+        float pos = ring_scale;
+        float pos_pct = pos * 100.0f;
+
+        /* Find which two stops we're between */
+        int stop_idx = 0;
+        for (int i = 0; i < (int)gradient->stop_count - 1; i++) {
+            float stop_pos = FIXTOFLT(gradient->stops[i + 1].offset);
+            if (pos_pct <= stop_pos) {
+                stop_idx = i;
+                break;
+            }
+            stop_idx = i;
+        }
+
+        /* Interpolate color between stops */
+        float stop1_pos = FIXTOFLT(gradient->stops[stop_idx].offset);
+        float stop2_pos = FIXTOFLT(gradient->stops[stop_idx + 1].offset);
+        float range = stop2_pos - stop1_pos;
+        float t = (range > 0.001f) ? (pos_pct - stop1_pos) / range : 0.0f;
+
+        colour ring_color = gradient_interpolate_color(
+            gradient->stops[stop_idx].color, gradient->stops[stop_idx + 1].color, t);
+
+        /* Draw filled ellipse for this ring */
+        plot_style_t pstyle = {
+            .fill_type = PLOT_OP_TYPE_SOLID,
+            .fill_colour = ring_color,
+        };
+
+        /* Use disc for circles. For ellipses, use transform to stretch circle */
+        if (ring_rx == ring_ry) {
+            nserror res = ctx->plot->disc(ctx, &pstyle, cx, cy, ring_rx);
+            if (res != NSERROR_OK)
+                return false;
+        } else {
+            /* For ellipses, draw a unit circle with scaling transform */
+            /* Scale factors to convert circle to ellipse */
+            float scale_x = (float)ring_rx;
+            float scale_y = (float)ring_ry;
+
+            /* Transform: translate to center, then scale */
+            float transform[6] = {
+                scale_x, 0.0f, /* m11, m12: scale x, shear y */
+                0.0f, scale_y, /* m21, m22: shear x, scale y */
+                (float)cx, (float)cy /* dx, dy: translate */
+            };
+
+            if (ctx->plot->push_transform) {
+                ctx->plot->push_transform(ctx, transform);
+                /* Draw unit circle at origin - will be transformed to ellipse */
+                nserror res = ctx->plot->disc(ctx, &pstyle, 0, 0, 1);
+                ctx->plot->pop_transform(ctx);
+                if (res != NSERROR_OK)
+                    return false;
+            } else {
+                /* Fallback: just draw a circle with max radius */
+                int max_r = (ring_rx > ring_ry) ? ring_rx : ring_ry;
+                nserror res = ctx->plot->disc(ctx, &pstyle, cx, cy, max_r);
+                if (res != NSERROR_OK)
+                    return false;
+            }
+        }
+    }
+
+    return true;
+}
+
+
+/**
  * Plot background images.
  *
  * The reason for the presence of \a background is the backwards compatibility
@@ -790,6 +1072,28 @@ static bool html_redraw_background(int x, int y, struct box *box, float scale, c
                 }
             }
         }
+
+        /* Check for and render gradient background */
+        {
+            lwc_string *url;
+            uint8_t bg_type = css_computed_background_image(background->style, &url);
+            if (bg_type == CSS_BACKGROUND_IMAGE_LINEAR_GRADIENT) {
+                const css_linear_gradient *gradient = css_computed_background_gradient(background->style);
+                if (gradient != NULL) {
+                    if (!html_redraw_linear_gradient(gradient, &r, scale, ctx)) {
+                        return false;
+                    }
+                }
+            } else if (bg_type == CSS_BACKGROUND_IMAGE_RADIAL_GRADIENT) {
+                const css_radial_gradient *radial = css_computed_background_radial_gradient(background->style);
+                if (radial != NULL) {
+                    if (!html_redraw_radial_gradient(radial, &r, scale, ctx)) {
+                        return false;
+                    }
+                }
+            }
+        }
+
         /* and plot the image */
         if (plot_content) {
             width = content_get_width(background->background);
