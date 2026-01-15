@@ -309,22 +309,13 @@ static svgtiny_code svgtiny_add_path(float *p, unsigned int n, struct svgtiny_pa
     struct svgtiny_shape *shape;
     svgtiny_code res = svgtiny_OK;
 
-    if (state->fill == svgtiny_LINEAR_GRADIENT) {
-        /* adds a shape to fill the path with a linear gradient */
-        res = svgtiny_gradient_add_fill_path(p, n, state);
-    }
-    if (res != svgtiny_OK) {
-        free(p);
-        return res;
-    }
-
-    if (state->stroke == svgtiny_LINEAR_GRADIENT) {
-        /* adds a shape to stroke the path with a linear gradient */
-        res = svgtiny_gradient_add_stroke_path(p, n, state);
-    }
-    if (res != svgtiny_OK) {
-        free(p);
-        return res;
+    /* Handle gradient fills and/or strokes with unified function */
+    if (state->fill == svgtiny_LINEAR_GRADIENT || state->stroke == svgtiny_LINEAR_GRADIENT) {
+        res = svgtiny_gradient_add_path(p, n, state);
+        if (res != svgtiny_OK) {
+            free(p);
+            return res;
+        }
     }
 
     /* if stroke and fill are transparent do not add a shape */
@@ -1372,6 +1363,36 @@ struct svgtiny_shape *svgtiny_add_shape(struct svgtiny_parse_state *state)
             state->stroke_dasharray = NULL;
             state->stroke_dasharray_count = 0;
         }
+
+        /* Initialize fill gradient fields */
+        shape->fill_gradient_type = svgtiny_GRADIENT_NONE;
+        shape->fill_grad_x1 = 0;
+        shape->fill_grad_y1 = 0;
+        shape->fill_grad_x2 = 0;
+        shape->fill_grad_y2 = 0;
+        shape->fill_grad_stops = NULL;
+        shape->fill_grad_stop_count = 0;
+        shape->fill_grad_transform[0] = 1; /* identity matrix */
+        shape->fill_grad_transform[1] = 0;
+        shape->fill_grad_transform[2] = 0;
+        shape->fill_grad_transform[3] = 1;
+        shape->fill_grad_transform[4] = 0;
+        shape->fill_grad_transform[5] = 0;
+
+        /* Initialize stroke gradient fields */
+        shape->stroke_gradient_type = svgtiny_GRADIENT_NONE;
+        shape->stroke_grad_x1 = 0;
+        shape->stroke_grad_y1 = 0;
+        shape->stroke_grad_x2 = 0;
+        shape->stroke_grad_y2 = 0;
+        shape->stroke_grad_stops = NULL;
+        shape->stroke_grad_stop_count = 0;
+        shape->stroke_grad_transform[0] = 1;
+        shape->stroke_grad_transform[1] = 0;
+        shape->stroke_grad_transform[2] = 0;
+        shape->stroke_grad_transform[3] = 1;
+        shape->stroke_grad_transform[4] = 0;
+        shape->stroke_grad_transform[5] = 0;
     }
     return shape;
 }
@@ -1612,6 +1633,12 @@ void svgtiny_free(struct svgtiny_diagram *svg)
         free(svg->shape[i].text);
         if (svg->shape[i].stroke_dasharray != NULL) {
             free(svg->shape[i].stroke_dasharray);
+        }
+        if (svg->shape[i].fill_grad_stops != NULL) {
+            free(svg->shape[i].fill_grad_stops);
+        }
+        if (svg->shape[i].stroke_grad_stops != NULL) {
+            free(svg->shape[i].stroke_grad_stops);
         }
     }
 

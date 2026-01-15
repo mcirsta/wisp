@@ -55,12 +55,6 @@ static nserror nsqt_set_style(QPainter *painter, const plot_style_t *style)
     int fill_b = (style->fill_colour & 0xFF0000) >> 16;
     int fill_a = 255 - ((style->fill_colour >> 24) & 0xFF);
 
-    /* Debug: show color values when drawing fills */
-    if (style->fill_type != PLOT_OP_TYPE_NONE && fill_a < 255) {
-        fprintf(
-            stderr, "QT FILL: raw=0x%08x -> r=%d g=%d b=%d a=%d\n", style->fill_colour, fill_r, fill_g, fill_b, fill_a);
-    }
-
     QColor fillcolour(fill_r, fill_g, fill_b, fill_a);
 
     Qt::BrushStyle brushstyle = Qt::NoBrush;
@@ -440,76 +434,140 @@ static inline QColor nsqt_qcolor_from_ns(colour c)
 
 
 /**
- * Plot a linear gradient.
+ * Plot a linear gradient filling a path.
  *
- * Uses Qt's native QLinearGradient for hardware-accelerated rendering.
+ * Uses Qt's native QLinearGradient with QPainterPath for path-clipped fills.
  *
  * \param ctx The current redraw context.
+ * \param path Path data (float array with path commands).
+ * \param path_len Number of elements in path array.
+ * \param transform 6-element affine transform to apply to path.
  * \param x0, y0 Start point of gradient line.
  * \param x1, y1 End point of gradient line.
  * \param stops Array of color stops.
  * \param stop_count Number of color stops.
  * \return NSERROR_OK on success else error code.
  */
-static nserror nsqt_plot_linear_gradient(const struct redraw_context *ctx, float x0, float y0, float x1, float y1,
-    const struct gradient_stop *stops, unsigned int stop_count)
+static nserror nsqt_plot_linear_gradient(const struct redraw_context *ctx, const float *path, unsigned int path_len,
+    const float transform[6], float x0, float y0, float x1, float y1, const struct gradient_stop *stops,
+    unsigned int stop_count)
 {
     QPainter *painter = (QPainter *)ctx->priv;
     if (painter == nullptr || stop_count < 2) {
         return NSERROR_INVALID;
     }
 
-    NSLOG(plot, DEBUG, "Native linear gradient: (%.1f,%.1f) to (%.1f,%.1f) with %u stops", x0, y0, x1, y1, stop_count);
-
+    /* Create gradient */
     QLinearGradient gradient(x0, y0, x1, y1);
-
-    /* Add color stops */
     for (unsigned int i = 0; i < stop_count; i++) {
         QColor color = nsqt_qcolor_from_ns(stops[i].color);
         gradient.setColorAt(stops[i].offset, color);
     }
 
-    /* Get clip region and fill it with gradient */
-    QRectF clip_rect = painter->clipBoundingRect();
-    if (clip_rect.isEmpty()) {
-        /* If no clip set, use the gradient bounds */
-        float minX = (x0 < x1) ? x0 : x1;
-        float minY = (y0 < y1) ? y0 : y1;
-        float maxX = (x0 > x1) ? x0 : x1;
-        float maxY = (y0 > y1) ? y0 : y1;
-        /* For vertical/horizontal gradients, use reasonable bounds */
-        if (minX == maxX) {
-            minX -= 1000;
-            maxX += 1000;
-        }
-        if (minY == maxY) {
-            minY -= 1000;
-            maxY += 1000;
-        }
-        clip_rect = QRectF(minX, minY, maxX - minX, maxY - minY);
-    }
+    /* Path-based fill (SVG) vs clip-based fill (CSS) */
+    if (path != nullptr && path_len >= 3) {
+        NSLOG(plot, DEBUG, "Native linear gradient: x0=%.1f y0=%.1f x1=%.1f y1=%.1f stops=%u path_len=%u", x0, y0, x1,
+            y1, stop_count, path_len);
+        NSLOG(plot, DEBUG, "  Gradient QLinearGradient start=(%.1f,%.1f) end=(%.1f,%.1f)", x0, y0, x1, y1);
+        NSLOG(plot, DEBUG, "  Path first point: (%.1f, %.1f)", path[1], path[2]);
 
-    painter->fillRect(clip_rect, gradient);
+        QPainterPath qtpath(QPointF(path[1], path[2]));
+        for (unsigned int idx = 3; idx < path_len;) {
+            switch ((int)path[idx]) {
+            case PLOTTER_PATH_MOVE:
+                qtpath.moveTo(path[idx + 1], path[idx + 2]);
+                idx += 3;
+                break;
+            case PLOTTER_PATH_CLOSE:
+                qtpath.closeSubpath();
+                idx += 1;
+                break;
+            case PLOTTER_PATH_LINE:
+                qtpath.lineTo(path[idx + 1], path[idx + 2]);
+                idx += 3;
+                break;
+            case PLOTTER_PATH_BEZIER:
+                qtpath.cubicTo(
+                    path[idx + 1], path[idx + 2], path[idx + 3], path[idx + 4], path[idx + 5], path[idx + 6]);
+                idx += 7;
+                break;
+            default:
+                NSLOG(netsurf, WARNING, "bad path command %f in gradient", path[idx]);
+                return NSERROR_INVALID;
+            }
+        }
+        qtpath.setFillRule(Qt::WindingFill);
+
+        /* Log path bounds and clip state for debugging */
+        QRectF path_bounds = qtpath.boundingRect();
+        QRectF clip_bounds = painter->clipBoundingRect();
+        QRegion clip_region = painter->clipRegion();
+        NSLOG(plot, DEBUG, "  QPainterPath bounds: (%.1f,%.1f) to (%.1f,%.1f) size=%.1fx%.1f", path_bounds.left(),
+            path_bounds.top(), path_bounds.right(), path_bounds.bottom(), path_bounds.width(), path_bounds.height());
+        NSLOG(plot, DEBUG, "  QPainter clipBoundingRect: (%.1f,%.1f) to (%.1f,%.1f)", clip_bounds.left(),
+            clip_bounds.top(), clip_bounds.right(), clip_bounds.bottom());
+        NSLOG(plot, DEBUG, "  QPainter hasClipping=%d clipRegion.isEmpty=%d", painter->hasClipping(),
+            clip_region.isEmpty());
+
+        /* Path and gradient are in scaled-only space, apply transform for rendering */
+        const QTransform orig_transform = painter->transform();
+        NSLOG(plot, DEBUG, "  QPainter orig_transform: [%.2f,%.2f,%.2f,%.2f,%.2f,%.2f]", orig_transform.m11(),
+            orig_transform.m12(), orig_transform.m21(), orig_transform.m22(), orig_transform.dx(), orig_transform.dy());
+
+        if (transform != nullptr) {
+            NSLOG(plot, DEBUG, "  Applying transform: [%.2f,%.2f,%.2f,%.2f,%.2f,%.2f]", transform[0], transform[1],
+                transform[2], transform[3], transform[4], transform[5]);
+            painter->setTransform(QTransform(transform[0], transform[1], 0.0, transform[2], transform[3], 0.0,
+                                      transform[4], transform[5], 1.0),
+                true);
+        }
+        painter->fillPath(qtpath, gradient);
+        painter->setTransform(orig_transform);
+    } else {
+        /* CSS gradients: fill the clip rect */
+        NSLOG(plot, DEBUG, "Native linear gradient (CSS): (%.1f,%.1f) to (%.1f,%.1f) with %u stops", x0, y0, x1, y1,
+            stop_count);
+        QRectF clip_rect = painter->clipBoundingRect();
+        if (clip_rect.isEmpty()) {
+            /* If no clip set, use the gradient bounds */
+            float minX = (x0 < x1) ? x0 : x1;
+            float minY = (y0 < y1) ? y0 : y1;
+            float maxX = (x0 > x1) ? x0 : x1;
+            float maxY = (y0 > y1) ? y0 : y1;
+            if (minX == maxX) {
+                minX -= 1000;
+                maxX += 1000;
+            }
+            if (minY == maxY) {
+                minY -= 1000;
+                maxY += 1000;
+            }
+            clip_rect = QRectF(minX, minY, maxX - minX, maxY - minY);
+        }
+        painter->fillRect(clip_rect, gradient);
+    }
 
     return NSERROR_OK;
 }
-
-
 /**
- * Plot a radial gradient.
+ * Plot a radial gradient filling a path.
  *
- * Uses Qt's native QRadialGradient for hardware-accelerated rendering.
+ * Uses Qt's native QRadialGradient with QPainterPath for path-clipped fills.
  * For elliptical gradients, uses a transform to stretch the circle.
  *
  * \param ctx The current redraw context.
+ * \param path Path data (float array with path commands).
+ * \param path_len Number of elements in path array.
+ * \param transform 6-element affine transform to apply to path.
  * \param cx, cy Center point of gradient.
  * \param rx, ry X and Y radii (set both equal for circle).
  * \param stops Array of color stops.
  * \param stop_count Number of color stops.
  * \return NSERROR_OK on success else error code.
  */
-static nserror nsqt_plot_radial_gradient(const struct redraw_context *ctx, float cx, float cy, float rx, float ry,
-    const struct gradient_stop *stops, unsigned int stop_count)
+static nserror nsqt_plot_radial_gradient(const struct redraw_context *ctx, const float *path, unsigned int path_len,
+    const float transform[6], float cx, float cy, float rx, float ry, const struct gradient_stop *stops,
+    unsigned int stop_count)
 {
     QPainter *painter = (QPainter *)ctx->priv;
     if (painter == nullptr || stop_count < 2) {
@@ -521,27 +579,77 @@ static nserror nsqt_plot_radial_gradient(const struct redraw_context *ctx, float
     float radius = (rx > ry) ? rx : ry;
     bool is_ellipse = (rx != ry);
 
-    if (is_ellipse) {
-        painter->save();
-        painter->translate(cx, cy);
-        painter->scale(rx / radius, ry / radius);
-        painter->translate(-cx, -cy);
-    }
-
     QRadialGradient gradient(cx, cy, radius);
-
-    /* Add color stops */
     for (unsigned int i = 0; i < stop_count; i++) {
         QColor color = nsqt_qcolor_from_ns(stops[i].color);
         gradient.setColorAt(stops[i].offset, color);
     }
 
-    /* Fill the current clip region */
-    QRectF clip_rect = painter->clipBoundingRect();
-    painter->fillRect(clip_rect, gradient);
+    /* Path-based fill (SVG) vs clip-based fill (CSS) */
+    if (path != nullptr && path_len >= 3) {
+        /* Convert path to QPainterPath */
+        QPainterPath qtpath(QPointF(path[1], path[2]));
+        for (unsigned int idx = 3; idx < path_len;) {
+            switch ((int)path[idx]) {
+            case PLOTTER_PATH_MOVE:
+                qtpath.moveTo(path[idx + 1], path[idx + 2]);
+                idx += 3;
+                break;
+            case PLOTTER_PATH_CLOSE:
+                qtpath.closeSubpath();
+                idx += 1;
+                break;
+            case PLOTTER_PATH_LINE:
+                qtpath.lineTo(path[idx + 1], path[idx + 2]);
+                idx += 3;
+                break;
+            case PLOTTER_PATH_BEZIER:
+                qtpath.cubicTo(
+                    path[idx + 1], path[idx + 2], path[idx + 3], path[idx + 4], path[idx + 5], path[idx + 6]);
+                idx += 7;
+                break;
+            default:
+                NSLOG(netsurf, WARNING, "bad path command %f in gradient", path[idx]);
+                return NSERROR_INVALID;
+            }
+        }
+        qtpath.setFillRule(Qt::WindingFill);
 
-    if (is_ellipse) {
-        painter->restore();
+        /* Path and gradient are in scaled-only space, apply transform for rendering */
+        const QTransform orig_transform = painter->transform();
+        if (transform != nullptr) {
+            QTransform path_transform(
+                transform[0], transform[1], 0.0, transform[2], transform[3], 0.0, transform[4], transform[5], 1.0);
+            if (is_ellipse) {
+                path_transform.translate(cx, cy);
+                path_transform.scale(rx / radius, ry / radius);
+                path_transform.translate(-cx, -cy);
+            }
+            painter->setTransform(path_transform, true);
+        } else if (is_ellipse) {
+            painter->translate(cx, cy);
+            painter->scale(rx / radius, ry / radius);
+            painter->translate(-cx, -cy);
+        }
+        painter->fillPath(qtpath, gradient);
+        painter->setTransform(orig_transform);
+    } else {
+        /* CSS gradients: fill the clip rect */
+        QRectF clip_rect = painter->clipBoundingRect();
+
+        if (is_ellipse) {
+            /* Apply ellipse transform to the gradient brush, not the painter */
+            QTransform ellipse_transform;
+            ellipse_transform.translate(cx, cy);
+            ellipse_transform.scale(rx / radius, ry / radius);
+            ellipse_transform.translate(-cx, -cy);
+
+            QBrush brush(gradient);
+            brush.setTransform(ellipse_transform);
+            painter->fillRect(clip_rect, brush);
+        } else {
+            painter->fillRect(clip_rect, gradient);
+        }
     }
 
     return NSERROR_OK;

@@ -759,7 +759,8 @@ static bool html_redraw_linear_gradient(
     if (ctx->plot->linear_gradient != NULL) {
         NSLOG(plot, DEBUG, "Linear gradient: Calling native plotter (%.1f,%.1f) to (%.1f,%.1f) with %u stops", x0, y0,
             x1, y1, gradient->stop_count);
-        nserror err = ctx->plot->linear_gradient(ctx, x0, y0, x1, y1, stops, gradient->stop_count);
+        /* CSS gradients use clip rect, not path - pass NULL for path */
+        nserror err = ctx->plot->linear_gradient(ctx, NULL, 0, NULL, x0, y0, x1, y1, stops, gradient->stop_count);
         if (err == NSERROR_OK) {
             NSLOG(plot, DEBUG, "Linear gradient: Native plotter succeeded");
             return true;
@@ -908,7 +909,8 @@ static bool html_redraw_radial_gradient(
 
         NSLOG(plot, DEBUG, "Radial gradient: Calling native plotter (%.1f,%.1f) rx=%.1f ry=%.1f with %u stops", cx, cy,
             rx, ry, gradient->stop_count);
-        nserror err = ctx->plot->radial_gradient(ctx, cx, cy, rx, ry, stops, gradient->stop_count);
+        /* CSS gradients use clip rect, not path - pass NULL for path */
+        nserror err = ctx->plot->radial_gradient(ctx, NULL, 0, NULL, cx, cy, rx, ry, stops, gradient->stop_count);
         if (err == NSERROR_OK) {
             NSLOG(plot, DEBUG, "Radial gradient: Native plotter succeeded");
             return true;

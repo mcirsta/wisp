@@ -18,6 +18,11 @@
 /* set to add vector shape in output */
 #undef GRADIENT_DEBUG_VECTOR
 
+/* Forward declaration for triangle fallback (used when native gradients disabled) */
+#ifndef NEOSURF_USE_NATIVE_GRADIENTS
+static svgtiny_code svgtiny_gradient_add_path_triangles(
+    float *p, unsigned int n, struct svgtiny_parse_state *state, bool has_fill_gradient, bool has_stroke_gradient);
+#endif
 
 /**
  * Get the bounding box of path.
@@ -880,94 +885,260 @@ svgtiny_code svgtiny_gradient_add_stroke_path(float *p, unsigned int n, struct s
     return res;
 }
 
-
 /**
- * Add a path with a linear gradient fill to the diagram.
+ * Add a path with gradient fill and/or stroke to the diagram.
+ *
+ * This unified function creates ONE shape with both fill and stroke gradient
+ * info. The caller continues to own the original path. The renderer (svg.c)
+ * decides at render time whether to use native gradient APIs or fallback.
+ *
+ * \param p      Path data (not consumed - caller keeps ownership)
+ * \param n      Path length
+ * \param state  Parse state with fill/stroke gradient info
+ * \return svgtiny_OK on success
  */
-svgtiny_code svgtiny_gradient_add_fill_path(float *p, unsigned int n, struct svgtiny_parse_state *state)
+svgtiny_code svgtiny_gradient_add_path(float *p, unsigned int n, struct svgtiny_parse_state *state)
 {
-    struct grad_vector vector; /* gradient vector */
-    struct svgtiny_transformation_matrix trans;
-    struct svgtiny_list *pts;
-    unsigned int min_pt = 0;
-    struct svgtiny_parse_state_gradient *grad;
-    svgtiny_code res;
+    bool has_fill_gradient = (state->fill == svgtiny_LINEAR_GRADIENT);
+    bool has_stroke_gradient = (state->stroke == svgtiny_LINEAR_GRADIENT);
 
-    assert(state->fill == svgtiny_LINEAR_GRADIENT);
-    /* original path should not be filled as a shape is added here */
-    state->fill = svgtiny_TRANSPARENT;
+    /* At least one gradient must be present */
+    if (!has_fill_gradient && !has_stroke_gradient) {
+        return svgtiny_OK; /* Nothing to do */
+    }
 
-    grad = &state->fill_grad;
-
-    /* at least two stops are required to form a valid gradient */
-    if (grad->linear_gradient_stop_count < 2) {
-        if (grad->linear_gradient_stop_count == 1) {
-            /* fill the shape with stop colour */
-            state->fill = grad->gradient_stop[0].color;
+    /* Handle degenerate fill gradient (< 2 stops) */
+    if (has_fill_gradient && state->fill_grad.linear_gradient_stop_count < 2) {
+        if (state->fill_grad.linear_gradient_stop_count == 1) {
+            state->fill = state->fill_grad.gradient_stop[0].color;
+        } else {
+            state->fill = svgtiny_TRANSPARENT;
         }
+        has_fill_gradient = false;
+    }
+
+    /* Handle degenerate stroke gradient (< 2 stops) */
+    if (has_stroke_gradient && state->stroke_grad.linear_gradient_stop_count < 2) {
+        if (state->stroke_grad.linear_gradient_stop_count == 1) {
+            state->stroke = state->stroke_grad.gradient_stop[0].color;
+        } else {
+            state->stroke = svgtiny_TRANSPARENT;
+        }
+        has_stroke_gradient = false;
+    }
+
+    /* If both gradients were degenerate, nothing more to do */
+    if (!has_fill_gradient && !has_stroke_gradient) {
         return svgtiny_OK;
     }
 
-    compute_gradient_vector(p, n, state, grad, &vector);
+#ifdef NEOSURF_USE_NATIVE_GRADIENTS
+    /*
+     * NATIVE GRADIENT PATH: Store gradient info in shape struct.
+     * The renderer (svg.c) will call native plotter APIs to render.
+     */
+    struct svgtiny_shape *shape;
+    struct grad_vector fill_vector, stroke_vector;
 
-#ifdef GRADIENT_DEBUG
-    /* debug strips */
-    res = add_debug_gradient_strips(state, &vector);
-    if (res != svgtiny_OK) {
-        return res;
+    /* Compute gradient vectors */
+    if (has_fill_gradient) {
+        compute_gradient_vector(p, n, state, &state->fill_grad, &fill_vector);
     }
-#endif
+    if (has_stroke_gradient) {
+        compute_gradient_vector(p, n, state, &state->stroke_grad, &stroke_vector);
+    }
 
-    /* invert gradient transform for applying to vertices */
-    svgtiny_invert_matrix(&grad->gradient_transform, &trans);
-#ifdef GRADIENT_DEBUG
-    fprintf(
-        stderr, "inverse transform %g %g %g %g %g %g\n", trans[0], trans[1], trans[2], trans[3], trans[4], trans[5]);
-#endif
-
-    /* compute points on the path for triangle vertices */
-    pts = svgtiny_list_create(sizeof(struct grad_point));
-    if (!pts) {
+    /* Create shape with gradient info */
+    shape = svgtiny_add_shape(state);
+    if (!shape) {
         return svgtiny_OUT_OF_MEMORY;
     }
-    res = compute_grad_points(p, n, &trans, &vector, pts, &min_pt);
-    if (res != svgtiny_OK) {
-        svgtiny_list_free(pts);
-        return res;
+
+    /* Store a COPY of the path (caller continues to own original p) */
+    float *path_copy = malloc(n * sizeof(float));
+    if (!path_copy) {
+        return svgtiny_OUT_OF_MEMORY;
+    }
+    memcpy(path_copy, p, n * sizeof(float));
+    svgtiny_transform_path(path_copy, n, state);
+
+    shape->path = path_copy;
+    shape->path_length = n;
+    shape->fill = has_fill_gradient ? svgtiny_TRANSPARENT : state->fill;
+    shape->stroke = has_stroke_gradient ? svgtiny_TRANSPARENT : state->stroke;
+    shape->stroke_width = state->stroke_width;
+
+    /* Store fill gradient info */
+    if (has_fill_gradient) {
+        struct svgtiny_parse_state_gradient *grad = &state->fill_grad;
+
+        shape->fill_gradient_type = svgtiny_GRADIENT_LINEAR;
+        shape->fill_grad_x1 = fill_vector.x0;
+        shape->fill_grad_y1 = fill_vector.y0;
+        shape->fill_grad_x2 = fill_vector.x1;
+        shape->fill_grad_y2 = fill_vector.y1;
+
+        shape->fill_grad_stop_count = grad->linear_gradient_stop_count;
+        shape->fill_grad_stops = malloc(shape->fill_grad_stop_count * sizeof(struct svgtiny_gradient_stop_public));
+        if (!shape->fill_grad_stops) {
+            shape->fill_gradient_type = svgtiny_GRADIENT_NONE;
+            shape->fill_grad_stop_count = 0;
+            return svgtiny_OUT_OF_MEMORY;
+        }
+        for (unsigned int i = 0; i < shape->fill_grad_stop_count; i++) {
+            shape->fill_grad_stops[i].offset = grad->gradient_stop[i].offset;
+            shape->fill_grad_stops[i].color = grad->gradient_stop[i].color;
+        }
+
+        shape->fill_grad_transform[0] = grad->gradient_transform.a;
+        shape->fill_grad_transform[1] = grad->gradient_transform.b;
+        shape->fill_grad_transform[2] = grad->gradient_transform.c;
+        shape->fill_grad_transform[3] = grad->gradient_transform.d;
+        shape->fill_grad_transform[4] = grad->gradient_transform.e;
+        shape->fill_grad_transform[5] = grad->gradient_transform.f;
     }
 
-    /* There must be at least a single point for the gradient */
-    if (svgtiny_list_size(pts) == 0) {
-        svgtiny_list_free(pts);
-        return svgtiny_OK;
+    /* Store stroke gradient info */
+    if (has_stroke_gradient) {
+        struct svgtiny_parse_state_gradient *grad = &state->stroke_grad;
+
+        shape->stroke_gradient_type = svgtiny_GRADIENT_LINEAR;
+        shape->stroke_grad_x1 = stroke_vector.x0;
+        shape->stroke_grad_y1 = stroke_vector.y0;
+        shape->stroke_grad_x2 = stroke_vector.x1;
+        shape->stroke_grad_y2 = stroke_vector.y1;
+
+        shape->stroke_grad_stop_count = grad->linear_gradient_stop_count;
+        shape->stroke_grad_stops = malloc(shape->stroke_grad_stop_count * sizeof(struct svgtiny_gradient_stop_public));
+        if (!shape->stroke_grad_stops) {
+            shape->stroke_gradient_type = svgtiny_GRADIENT_NONE;
+            shape->stroke_grad_stop_count = 0;
+            return svgtiny_OUT_OF_MEMORY;
+        }
+        for (unsigned int i = 0; i < shape->stroke_grad_stop_count; i++) {
+            shape->stroke_grad_stops[i].offset = grad->gradient_stop[i].offset;
+            shape->stroke_grad_stops[i].color = grad->gradient_stop[i].color;
+        }
+
+        shape->stroke_grad_transform[0] = grad->gradient_transform.a;
+        shape->stroke_grad_transform[1] = grad->gradient_transform.b;
+        shape->stroke_grad_transform[2] = grad->gradient_transform.c;
+        shape->stroke_grad_transform[3] = grad->gradient_transform.d;
+        shape->stroke_grad_transform[4] = grad->gradient_transform.e;
+        shape->stroke_grad_transform[5] = grad->gradient_transform.f;
     }
 
-    /* render triangles */
-    res = add_gradient_triangles(state, grad, pts, min_pt);
-    if (res != svgtiny_OK) {
-        svgtiny_list_free(pts);
-        return res;
-    }
+    state->diagram->shape_count++;
 
-#ifdef GRADIENT_DEBUG_VECTOR
-    /* render gradient vector for debugging */
-    res = add_debug_gradient_vector(state, &vector);
-    if (res != svgtiny_OK) {
-        svgtiny_list_free(pts);
-        return res;
+    /* Set fill/stroke to TRANSPARENT so caller (svgtiny_add_path) doesn't
+     * create another shape on top. The gradients are handled by our shape. */
+    if (has_fill_gradient) {
+        state->fill = svgtiny_TRANSPARENT;
     }
-#endif
-
-#ifdef GRADIENT_DEBUG
-    /* render triangle vertices with r values for debugging */
-    res = add_debug_gradient_vertices(state, pts);
-    if (res != svgtiny_OK) {
-        svgtiny_list_free(pts);
-        return res;
+    if (has_stroke_gradient) {
+        state->stroke = svgtiny_TRANSPARENT;
     }
-#endif
-
-    svgtiny_list_free(pts);
 
     return svgtiny_OK;
+
+#else /* !NEOSURF_USE_NATIVE_GRADIENTS */
+    /*
+     * TRIANGLE FALLBACK PATH: Generate triangle/line shapes.
+     * No native plotter needed - shapes are rendered directly.
+     */
+    return svgtiny_gradient_add_path_triangles(p, n, state, has_fill_gradient, has_stroke_gradient);
+#endif /* NEOSURF_USE_NATIVE_GRADIENTS */
 }
+
+
+#ifndef NEOSURF_USE_NATIVE_GRADIENTS
+/**
+ * Triangle-based gradient fallback implementation.
+ *
+ * This function generates triangle/line shapes to approximate gradients
+ * when native gradient rendering is not available. Used for platforms
+ * without hardware gradient support (e.g., GDI on Windows).
+ *
+ * \param p                  Path data
+ * \param n                  Path length
+ * \param state              Parse state
+ * \param has_fill_gradient  True if fill needs gradient
+ * \param has_stroke_gradient True if stroke needs gradient
+ * \return svgtiny_OK on success
+ */
+static svgtiny_code svgtiny_gradient_add_path_triangles(
+    float *p, unsigned int n, struct svgtiny_parse_state *state, bool has_fill_gradient, bool has_stroke_gradient)
+{
+    svgtiny_code res = svgtiny_OK;
+
+    /* Handle fill gradient with triangles */
+    if (has_fill_gradient) {
+        struct grad_vector vector;
+        struct svgtiny_transformation_matrix trans;
+        struct svgtiny_list *pts;
+        unsigned int min_pt = 0;
+        struct svgtiny_parse_state_gradient *grad = &state->fill_grad;
+
+        /* Mark fill as transparent so normal path doesn't overpaint */
+        state->fill = svgtiny_TRANSPARENT;
+
+        compute_gradient_vector(p, n, state, grad, &vector);
+        svgtiny_invert_matrix(&grad->gradient_transform, &trans);
+
+        pts = svgtiny_list_create(sizeof(struct grad_point));
+        if (!pts) {
+            return svgtiny_OUT_OF_MEMORY;
+        }
+        res = compute_grad_points(p, n, &trans, &vector, pts, &min_pt);
+        if (res != svgtiny_OK) {
+            svgtiny_list_free(pts);
+            return res;
+        }
+
+        if (svgtiny_list_size(pts) > 0) {
+            res = add_gradient_triangles(state, grad, pts, min_pt);
+        }
+        svgtiny_list_free(pts);
+
+        if (res != svgtiny_OK) {
+            return res;
+        }
+    }
+
+    /* Handle stroke gradient with lines */
+    if (has_stroke_gradient) {
+        struct grad_vector vector;
+        struct svgtiny_transformation_matrix trans;
+        struct svgtiny_list *pts;
+        unsigned int min_pt = 0;
+        struct svgtiny_parse_state_gradient *grad = &state->stroke_grad;
+
+        /* Mark stroke as transparent so normal path doesn't overpaint */
+        state->stroke = svgtiny_TRANSPARENT;
+
+        compute_gradient_vector(p, n, state, grad, &vector);
+        svgtiny_invert_matrix(&grad->gradient_transform, &trans);
+
+        pts = svgtiny_list_create(sizeof(struct grad_point));
+        if (!pts) {
+            return svgtiny_OUT_OF_MEMORY;
+        }
+        res = compute_grad_points(p, n, &trans, &vector, pts, &min_pt);
+        if (res != svgtiny_OK) {
+            svgtiny_list_free(pts);
+            return res;
+        }
+
+        if (svgtiny_list_size(pts) > 0) {
+            res = add_gradient_lines(state, grad, pts, min_pt);
+        }
+        svgtiny_list_free(pts);
+
+        if (res != svgtiny_OK) {
+            return res;
+        }
+    }
+
+    return res;
+}
+#endif /* !NEOSURF_USE_NATIVE_GRADIENTS */

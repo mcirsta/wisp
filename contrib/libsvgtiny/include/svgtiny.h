@@ -34,6 +34,14 @@ typedef enum { svgtiny_JOIN_MITER, svgtiny_JOIN_ROUND, svgtiny_JOIN_BEVEL } svgt
 
 typedef enum { svgtiny_TEXT_ANCHOR_START, svgtiny_TEXT_ANCHOR_MIDDLE, svgtiny_TEXT_ANCHOR_END } svgtiny_text_anchor;
 
+typedef enum { svgtiny_GRADIENT_NONE, svgtiny_GRADIENT_LINEAR, svgtiny_GRADIENT_RADIAL } svgtiny_gradient_type;
+
+/** Gradient color stop */
+struct svgtiny_gradient_stop_public {
+    float offset; /**< Position 0.0-1.0 */
+    svgtiny_colour color;
+};
+
 struct svgtiny_shape {
     float *path;
     unsigned int path_length;
@@ -62,6 +70,20 @@ struct svgtiny_shape {
     bool stroke_dasharray_set;
     float stroke_dashoffset;
     bool stroke_dashoffset_set;
+
+    /* Fill gradient info (native gradient rendering) */
+    svgtiny_gradient_type fill_gradient_type;
+    float fill_grad_x1, fill_grad_y1, fill_grad_x2, fill_grad_y2;
+    struct svgtiny_gradient_stop_public *fill_grad_stops;
+    unsigned int fill_grad_stop_count;
+    float fill_grad_transform[6];
+
+    /* Stroke gradient info (native gradient rendering) */
+    svgtiny_gradient_type stroke_gradient_type;
+    float stroke_grad_x1, stroke_grad_y1, stroke_grad_x2, stroke_grad_y2;
+    struct svgtiny_gradient_stop_public *stroke_grad_stops;
+    unsigned int stroke_grad_stop_count;
+    float stroke_grad_transform[6];
 };
 
 struct svgtiny_diagram {

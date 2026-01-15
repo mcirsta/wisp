@@ -158,8 +158,7 @@ svgtiny_code svgtiny_parse_path_data(const char *text, size_t textlen, float **p
 /* svgtiny_gradient.c */
 svgtiny_code svgtiny_update_gradient(
     dom_element *grad_element, struct svgtiny_parse_state *state, struct svgtiny_parse_state_gradient *grad);
-svgtiny_code svgtiny_gradient_add_fill_path(float *p, unsigned int n, struct svgtiny_parse_state *state);
-svgtiny_code svgtiny_gradient_add_stroke_path(float *p, unsigned int n, struct svgtiny_parse_state *state);
+svgtiny_code svgtiny_gradient_add_path(float *p, unsigned int n, struct svgtiny_parse_state *state);
 
 /* svgtiny_list.c */
 struct svgtiny_list *svgtiny_list_create(size_t item_size);

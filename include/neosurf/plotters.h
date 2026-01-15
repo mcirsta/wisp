@@ -326,36 +326,44 @@ struct plotter_table {
     nserror (*pop_transform)(const struct redraw_context *ctx);
 
     /**
-     * Plot a linear gradient.
+     * Plot a linear gradient filling a path.
      *
-     * Fills the current clip region with a linear gradient from (x0,y0) to (x1,y1).
+     * Fills the specified path with a linear gradient from (x0,y0) to (x1,y1).
      * Optional, may be NULL if frontend doesn't support native gradients.
      *
      * \param ctx The current redraw context.
+     * \param path Path data (float array with path commands).
+     * \param path_len Number of elements in path array.
+     * \param transform 6-element affine transform to apply to path.
      * \param x0, y0 Start point of gradient line.
      * \param x1, y1 End point of gradient line.
      * \param stops Array of color stops.
      * \param stop_count Number of color stops.
      * \return NSERROR_OK on success else error code.
      */
-    nserror (*linear_gradient)(const struct redraw_context *ctx, float x0, float y0, float x1, float y1,
-        const struct gradient_stop *stops, unsigned int stop_count);
+    nserror (*linear_gradient)(const struct redraw_context *ctx, const float *path, unsigned int path_len,
+        const float transform[6], float x0, float y0, float x1, float y1, const struct gradient_stop *stops,
+        unsigned int stop_count);
 
     /**
-     * Plot a radial gradient.
+     * Plot a radial gradient filling a path.
      *
-     * Fills the current clip region with a radial gradient centered at (cx,cy).
+     * Fills the specified path with a radial gradient centered at (cx,cy).
      * Optional, may be NULL if frontend doesn't support native gradients.
      *
      * \param ctx The current redraw context.
+     * \param path Path data (float array with path commands).
+     * \param path_len Number of elements in path array.
+     * \param transform 6-element affine transform to apply to path.
      * \param cx, cy Center point of gradient.
      * \param rx, ry X and Y radii (set both equal for circle).
      * \param stops Array of color stops.
      * \param stop_count Number of color stops.
      * \return NSERROR_OK on success else error code.
      */
-    nserror (*radial_gradient)(const struct redraw_context *ctx, float cx, float cy, float rx, float ry,
-        const struct gradient_stop *stops, unsigned int stop_count);
+    nserror (*radial_gradient)(const struct redraw_context *ctx, const float *path, unsigned int path_len,
+        const float transform[6], float cx, float cy, float rx, float ry, const struct gradient_stop *stops,
+        unsigned int stop_count);
 
     /* flags */
     /**

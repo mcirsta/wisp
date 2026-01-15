@@ -163,6 +163,113 @@ static nserror svg_plot_dashed_line_as_rects(const struct redraw_context *ctx, c
     return NSERROR_OK;
 }
 
+/**
+ * Render a gradient fill for an SVG shape using native gradient APIs.
+ *
+ * This is called for shapes that have fill_gradient_type != svgtiny_GRADIENT_NONE.
+ * Uses native gradient plotting when available, otherwise skips (shape would have
+ * been pre-rendered as triangles in older libsvgtiny versions).
+ *
+ * \param ctx          Redraw context
+ * \param shape        SVG shape with gradient fill
+ * \param path         Path data (float array with path commands)
+ * \param path_len     Number of elements in path array
+ * \param bbox         Bounding box in display coordinates (for clipping)
+ * \param sx, sy       Scale factors (display/intrinsic)
+ * \param transform    Affine transform to apply
+ * \return NSERROR_OK on success, error code otherwise
+ */
+static nserror svg_plot_gradient_fill(const struct redraw_context *ctx, const struct svgtiny_shape *shape,
+    const float *path, unsigned int path_len, const struct rect *bbox, float sx, float sy, const float transform[6])
+{
+#ifdef NEOSURF_USE_NATIVE_GRADIENTS
+    if (shape->fill_gradient_type == svgtiny_GRADIENT_NONE) {
+        return NSERROR_OK;
+    }
+
+    NSLOG(neosurf, DEEPDEBUG, "SVG gradient: Using NATIVE rendering path for %s gradient",
+        shape->fill_gradient_type == svgtiny_GRADIENT_LINEAR ? "linear" : "radial");
+
+    if (ctx->plot->linear_gradient == NULL && shape->fill_gradient_type == svgtiny_GRADIENT_LINEAR) {
+        NSLOG(neosurf, WARNING, "SVG gradient: Native linear_gradient plotter is NULL!");
+        return NSERROR_NOT_IMPLEMENTED;
+    }
+
+    if (ctx->plot->radial_gradient == NULL && shape->fill_gradient_type == svgtiny_GRADIENT_RADIAL) {
+        NSLOG(neosurf, WARNING, "SVG gradient: Native radial_gradient plotter is NULL!");
+        return NSERROR_NOT_IMPLEMENTED;
+    }
+
+    /* Convert gradient stops from SVG format to plotter format */
+    struct gradient_stop *stops = alloca(shape->fill_grad_stop_count * sizeof(struct gradient_stop));
+    for (unsigned int i = 0; i < shape->fill_grad_stop_count; i++) {
+        /* Convert svgtiny RGB color to neosurf color format (BGR) */
+        svgtiny_colour c = shape->fill_grad_stops[i].color;
+        stops[i].color = (svgtiny_RED(c)) | (svgtiny_GREEN(c) << 8) | (svgtiny_BLUE(c) << 16);
+        stops[i].offset = shape->fill_grad_stops[i].offset;
+    }
+
+#ifdef SVG_GRADIENT_BBOX_CLIP
+    /* Optional: Set clip to the shape's bounding box.
+     * This can cause slight edge cutting for bezier curves due to bbox
+     * calculation using control points rather than actual curve bounds.
+     * Disabled by default since fillPath() clips to path shape naturally. */
+    ctx->plot->clip(ctx, bbox);
+#else
+    (void)bbox; /* Unused when not clipping to bbox */
+#endif
+
+    /* Scale gradient coordinates to match path space (scaled but not translated).
+     * The transform is applied during rendering by the plotter. */
+    float gx1 = shape->fill_grad_x1 * sx;
+    float gy1 = shape->fill_grad_y1 * sy;
+    float gx2 = shape->fill_grad_x2 * sx;
+    float gy2 = shape->fill_grad_y2 * sy;
+
+    nserror err;
+    if (shape->fill_gradient_type == svgtiny_GRADIENT_LINEAR) {
+        NSLOG(neosurf, DEEPDEBUG,
+            "SVG gradient: Calling native linear plotter (%.1f,%.1f) to (%.1f,%.1f) with %u stops, path_len=%u", gx1,
+            gy1, gx2, gy2, shape->fill_grad_stop_count, path_len);
+        err = ctx->plot->linear_gradient(
+            ctx, path, path_len, transform, gx1, gy1, gx2, gy2, stops, shape->fill_grad_stop_count);
+    } else {
+        /* Radial gradient: fill_grad_x1,y1 = center, fill_grad_x2,y2 = radii
+         * Scale to match path space (scaled but not translated). */
+        float cx = shape->fill_grad_x1 * sx;
+        float cy = shape->fill_grad_y1 * sy;
+        float rx = shape->fill_grad_x2 * sx;
+        float ry = shape->fill_grad_y2 * sy;
+        NSLOG(neosurf, DEEPDEBUG,
+            "SVG gradient: Calling native radial plotter (%.1f,%.1f) rx=%.1f ry=%.1f with %u stops, path_len=%u", cx,
+            cy, rx, ry, shape->fill_grad_stop_count, path_len);
+        err = ctx->plot->radial_gradient(
+            ctx, path, path_len, transform, cx, cy, rx, ry, stops, shape->fill_grad_stop_count);
+    }
+
+    if (err == NSERROR_OK) {
+        NSLOG(neosurf, DEEPDEBUG, "SVG gradient: Native plotter succeeded");
+    } else {
+        NSLOG(neosurf, WARNING, "SVG gradient: Native plotter FAILED with error %d", err);
+    }
+
+    return err;
+#else
+    NSLOG(neosurf, DEEPDEBUG, "SVG gradient: Native gradients DISABLED at compile time, using fallback");
+    /* Native gradients disabled - nothing to do (triangle fallback not implemented here) */
+    (void)ctx;
+    (void)shape;
+    (void)path;
+    (void)path_len;
+    (void)bbox;
+    (void)sx;
+    (void)sy;
+    (void)transform;
+    return NSERROR_NOT_IMPLEMENTED;
+#endif
+}
+
+
 /* Maximum number of floats sent per plotter path call to avoid oversized
  * buffers */
 #define SVG_COMBO_FLUSH_LIMIT 960
@@ -707,6 +814,32 @@ static bool svg_redraw_internal(svg_content *svg, int x, int y, int width, int h
                 if (!(rx < clip->x0 || lx >= clip->x1 || by < clip->y0 || ty >= clip->y1)) {
                     NSLOG(neosurf, INFO, "SVG path begin: url=%s index=%u orig_len=%u scaled_len=%u bbox=%d,%d..%d,%d",
                         url_str, i, diagram->shape[i].path_length, k, lx, ty, rx, by);
+                    NSLOG(neosurf, DEBUG, "  SVG bbox raw: minx=%.2f miny=%.2f maxx=%.2f maxy=%.2f", minx, miny, maxx,
+                        maxy);
+                    NSLOG(neosurf, DEBUG, "  SVG bbox floored: lx=%d ty=%d rx=%d by=%d (x=%d y=%d)", lx, ty, rx, by, x,
+                        y);
+                    NSLOG(neosurf, DEBUG, "  SVG transform: [%.2f,%.2f,%.2f,%.2f,%.2f,%.2f]", transform[0],
+                        transform[1], transform[2], transform[3], transform[4], transform[5]);
+
+                    /* Check for gradient fill and render it */
+                    if (diagram->shape[i].fill_gradient_type != svgtiny_GRADIENT_NONE) {
+                        struct rect grad_clip = {.x0 = lx, .y0 = ty, .x1 = rx, .y1 = by};
+                        nserror grad_err = svg_plot_gradient_fill(
+                            ctx, &diagram->shape[i], scaled, k, &grad_clip, sx, sy, transform);
+                        if (grad_err == NSERROR_OK) {
+                            NSLOG(neosurf, DEBUG, "SVG gradient fill rendered successfully for shape %u", i);
+                            /* Continue to render stroke if present */
+                            if (pstyle.stroke_type != PLOT_OP_TYPE_NONE) {
+                                plot_style_t stroke_only = pstyle;
+                                stroke_only.fill_type = PLOT_OP_TYPE_NONE;
+                                res = ctx->plot->path(ctx, &stroke_only, scaled, k, transform);
+                            }
+                            continue; /* Skip normal path rendering since gradient is done */
+                        }
+                        /* If gradient rendering failed, fall through to normal rendering */
+                        NSLOG(neosurf, WARNING, "SVG gradient fill failed for shape %u, falling back to solid", i);
+                    }
+
 #ifdef NEOSURF_SVG_COMBO_DISABLE
                     res = ctx->plot->path(ctx, &pstyle, scaled, k, transform);
                     if (res != NSERROR_OK) {

@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>SVG Gradient Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background: #f0f0f0;
+        }
+        h1 { color: #333; }
+        .container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+        .test-box {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        }
+        h3 { margin-top: 0; }
+    </style>
+</head>
+<body>
+    <h1>SVG Gradient Test</h1>
+    <div class="container">
+        <div class="test-box">
+            <h3>Linear Gradient (horizontal)</h3>
+            <svg width="200" height="100" xmlns="http://www.w3.org/2000/svg">
+                <defs>
+                    <linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="0%">
+                        <stop offset="0%" style="stop-color:rgb(255,0,0);stop-opacity:1" />
+                        <stop offset="100%" style="stop-color:rgb(0,0,255);stop-opacity:1" />
+                    </linearGradient>
+                </defs>
+                <rect x="10" y="10" width="180" height="80" fill="url(#grad1)" stroke="black" stroke-width="2"/>
+            </svg>
+        </div>
+        
+        <div class="test-box">
+            <h3>Linear Gradient (vertical)</h3>
+            <svg width="100" height="200" xmlns="http://www.w3.org/2000/svg">
+                <defs>
+                    <linearGradient id="grad2" x1="0%" y1="0%" x2="0%" y2="100%">
+                        <stop offset="0%" style="stop-color:#ff6600" />
+                        <stop offset="100%" style="stop-color:#00cc66" />
+                    </linearGradient>
+                </defs>
+                <rect x="10" y="10" width="80" height="180" fill="url(#grad2)" />
+            </svg>
+        </div>
+        
+        <div class="test-box">
+            <h3>Linear Gradient (diagonal)</h3>
+            <svg width="200" height="200" xmlns="http://www.w3.org/2000/svg">
+                <defs>
+                    <linearGradient id="grad3" x1="0%" y1="0%" x2="100%" y2="100%">
+                        <stop offset="0%" style="stop-color:#9900ff" />
+                        <stop offset="50%" style="stop-color:#ff0099" />
+                        <stop offset="100%" style="stop-color:#ffcc00" />
+                    </linearGradient>
+                </defs>
+                <rect x="10" y="10" width="180" height="180" fill="url(#grad3)" rx="20"/>
+            </svg>
+        </div>
+        
+        <div class="test-box">
+            <h3>Linear Gradient (circle path)</h3>
+            <svg width="200" height="200" xmlns="http://www.w3.org/2000/svg">
+                <defs>
+                    <linearGradient id="grad4" x1="0%" y1="0%" x2="100%" y2="0%">
+                        <stop offset="0%" style="stop-color:#00ffff" />
+                        <stop offset="100%" style="stop-color:#ff00ff" />
+                    </linearGradient>
+                </defs>
+                <circle cx="100" cy="100" r="80" fill="url(#grad4)" stroke="black" stroke-width="2"/>
+            </svg>
+        </div>
+    </div>
+</body>
+</html>
