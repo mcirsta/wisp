@@ -114,10 +114,18 @@ css_error css__parse_flex(css_language *c, const parserutils_vector *vector, int
 
             if ((grow) && (error = css__parse_flex_grow(c, vector, ctx, grow_style)) == CSS_OK) {
                 grow = false;
+            } else if ((shrink) && (error = css__parse_flex_shrink(c, vector, ctx, shrink_style)) == CSS_OK) {
+                /* Parse flex-shrink BEFORE flex-basis.
+                 * Rationale: A bare number like '0' can parse as either:
+                 *   - flex-basis: 0 (interpreted as 0px)
+                 *   - flex-shrink: 0 (unitless number)
+                 * Per CSS spec, the flex shorthand is: flex-grow flex-shrink flex-basis
+                 * So the second number in "flex: 0 0 75%" should be shrink, not basis.
+                 * By trying shrink first, we correctly parse "flex: 0 0 75%" as:
+                 *   grow=0, shrink=0, basis=75% */
+                shrink = false;
             } else if ((basis) && (error = css__parse_flex_basis(c, vector, ctx, basis_style)) == CSS_OK) {
                 basis = false;
-            } else if ((shrink) && (error = css__parse_flex_shrink(c, vector, ctx, shrink_style)) == CSS_OK) {
-                shrink = false;
             }
 
             if (error == CSS_OK) {

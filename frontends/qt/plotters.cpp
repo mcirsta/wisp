@@ -194,7 +194,21 @@ static nserror nsqt_plot_rectangle(const struct redraw_context *ctx, const plot_
 {
     QPainter *painter = (QPainter *)ctx->priv;
     nsqt_set_style(painter, style);
-    painter->drawRect(rect->x0, rect->y0, rect->x1 - rect->x0, rect->y1 - rect->y0);
+
+    /* Use fillRect when only fill is needed (no stroke) to avoid ghost outline */
+    if (style->stroke_type == PLOT_OP_TYPE_NONE) {
+        if (style->fill_type != PLOT_OP_TYPE_NONE) {
+            /* Disable anti-aliasing for filled rectangles to ensure pixel-perfect edges */
+            bool had_aa = painter->testRenderHint(QPainter::Antialiasing);
+            if (had_aa)
+                painter->setRenderHint(QPainter::Antialiasing, false);
+            painter->fillRect(rect->x0, rect->y0, rect->x1 - rect->x0, rect->y1 - rect->y0, painter->brush());
+            if (had_aa)
+                painter->setRenderHint(QPainter::Antialiasing, true);
+        }
+    } else {
+        painter->drawRect(rect->x0, rect->y0, rect->x1 - rect->x0, rect->y1 - rect->y0);
+    }
     return NSERROR_OK;
 }
 

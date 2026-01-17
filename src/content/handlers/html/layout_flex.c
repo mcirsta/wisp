@@ -78,6 +78,9 @@ struct flex_item_data {
     bool min_violation;
     bool max_violation;
     bool has_pct_basis; /* True if flex-basis was a percentage (for two-pass layout) */
+
+    int32_t order;
+    size_t original_index;
 };
 
 /**
@@ -997,6 +1000,10 @@ static void layout_flex_ctx__populate_item_data(struct flex_ctx *ctx, const stru
         item->box = b;
         item->basis = css_computed_flex_basis(b->style, &item->basis_length, &item->basis_unit);
 
+        /* Fetch 'order' property for storing */
+        css_computed_order(b->style, &item->order);
+        item->original_index = i; /* Store original DOM index (1-based as i was incremented) */
+
         css_computed_flex_shrink(b->style, &item->shrink);
         css_computed_flex_grow(b->style, &item->grow);
 
@@ -1722,9 +1729,6 @@ static void layout_flex__place_line_items_cross(struct flex_ctx *ctx, struct fle
                 int old_cross_size = *box_size_cross;
                 int target_cross_size = old_cross_size + cross_free_space;
 
-                NSLOG(flex, WARNING, "STRETCH: box %p old_height=%d target_height=%d (free=%d)", b, old_cross_size,
-                    target_cross_size, cross_free_space);
-
                 /* Set stretched size and mark with flag so layout_flex preserves it */
                 *box_size_cross = target_cross_size;
                 if (ctx->horizontal && cross_free_space > 0) {
@@ -1734,46 +1738,6 @@ static void layout_flex__place_line_items_cross(struct flex_ctx *ctx, struct fle
                 /* Relayout children for stretch */
                 if (!layout_flex_item(ctx, item, b->width)) {
                     return;
-                }
-
-                /* DIAGNOSTIC: Check if content height exceeds container height after stretch */
-                if (ctx->horizontal && b->type == BOX_FLEX) {
-                    int content_height = 0;
-                    int child_idx = 0;
-                    struct box *tallest_child = NULL;
-                    int tallest_bottom = 0;
-
-                    for (struct box *child = b->children; child; child = child->next) {
-                        int child_bottom = child->y + child->height + child->padding[BOTTOM] +
-                            child->border[BOTTOM].width + (child->margin[BOTTOM] != AUTO ? child->margin[BOTTOM] : 0);
-                        if (child_bottom > content_height) {
-                            content_height = child_bottom;
-                            tallest_child = child;
-                            tallest_bottom = child_bottom;
-                        }
-                        child_idx++;
-                    }
-
-                    bool overflow = content_height > b->height;
-                    NSLOG(flex, WARNING, "STRETCH DIAG box %p: container_height=%d content_height=%d delta=%d %s", b,
-                        b->height, content_height, content_height - b->height, overflow ? "OVERFLOW!" : "OK");
-
-                    /* If overflow, log each child to find the culprit */
-                    if (overflow && tallest_child) {
-                        NSLOG(flex, WARNING, "  OVERFLOW DETAIL: tallest child %p type=%d y=%d h=%d bottom=%d",
-                            tallest_child, tallest_child->type, tallest_child->y, tallest_child->height,
-                            tallest_bottom);
-                        /* Log all children positions */
-                        child_idx = 0;
-                        for (struct box *child = b->children; child; child = child->next) {
-                            int cb = child->y + child->height + child->padding[BOTTOM] + child->border[BOTTOM].width +
-                                (child->margin[BOTTOM] != AUTO ? child->margin[BOTTOM] : 0);
-                            NSLOG(flex, WARNING, "    CHILD[%d]: type=%d y=%d h=%d margin_b=%d bottom=%d", child_idx,
-                                child->type, child->y, child->height,
-                                child->margin[BOTTOM] != AUTO ? child->margin[BOTTOM] : -1, cb);
-                            child_idx++;
-                        }
-                    }
                 }
 
                 /* If this stretched item is a column flex container and its height increased,
@@ -1858,6 +1822,21 @@ static void layout_flex__place_lines(struct flex_ctx *ctx)
  * \param[in] content          memory pool for any new boxes
  * \return  true on success, false on memory exhaustion
  */
+/**
+ * Sort flex items by 'order' property, then by original index (stable sort)
+ */
+static int flex_item_cmp(const void *a, const void *b)
+{
+    const struct flex_item_data *fa = (const struct flex_item_data *)a;
+    const struct flex_item_data *fb = (const struct flex_item_data *)b;
+
+    if (fa->order != fb->order) {
+        return fa->order - fb->order;
+    }
+
+    return (int)(fa->original_index - fb->original_index);
+}
+
 bool layout_flex(struct box *flex, int available_width, html_content *content)
 {
     int max_height;
@@ -1930,6 +1909,16 @@ bool layout_flex(struct box *flex, int available_width, html_content *content)
     NSLOG(flex, INFO, "box %p: available_cross: %i", flex, ctx->available_cross);
 
     layout_flex_ctx__populate_item_data(ctx, flex, available_width);
+
+    /* Sort flex items by 'order' property then by original index */
+    if (ctx->item.count > 1) {
+        qsort(ctx->item.data, ctx->item.count, sizeof(struct flex_item_data), flex_item_cmp);
+    }
+
+    if (ctx->item.count == 0) {
+        layout_flex_ctx__destroy(ctx);
+        return true;
+    }
 
     /* Place items onto lines. */
     success = layout_flex__collect_items_into_lines(ctx);
