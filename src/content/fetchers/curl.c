@@ -1569,7 +1569,7 @@ static void fetch_curl_done(CURL *curl_handle, CURLcode result)
          */
         cert = true;
     } else {
-        NSLOG(neosurf, INFO, "Unknown cURL response code %d", result);
+        NSLOG(neosurf, INFO, "cURL error %d: %s", result, curl_easy_strerror(result));
         error = true;
     }
 

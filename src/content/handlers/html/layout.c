@@ -2718,13 +2718,32 @@ static bool layout_line(struct box *first, int *width, int *y, int cx, int cy, s
             layout_get_object_dimensions(
                 &content->unit_len_ctx, b, &b->width, &b->height, min_width, max_width, min_height, max_height);
         } else if (b->svg_diagram != NULL) {
-            /* Inline SVG - use diagram's intrinsic dimensions */
-            if (b->width == AUTO) {
-                b->width = b->svg_diagram->width;
+            /* Inline SVG - calculate dimensions preserving aspect ratio,
+             * similar to layout_get_object_dimensions for images.
+             * See CSS 2.1 Section 10.3.2 and 10.6.2. */
+            int intrinsic_width = b->svg_diagram->width;
+            int intrinsic_height = b->svg_diagram->height;
+
+            if (b->width == AUTO && b->height == AUTO) {
+                /* Both dimensions auto: use intrinsic size */
+                b->width = intrinsic_width;
+                b->height = intrinsic_height;
+            } else if (b->width == AUTO) {
+                /* Height set, width auto: calculate width from aspect ratio */
+                if (intrinsic_height != 0) {
+                    b->width = (b->height * intrinsic_width) / intrinsic_height;
+                } else {
+                    b->width = intrinsic_width;
+                }
+            } else if (b->height == AUTO) {
+                /* Width set, height auto: calculate height from aspect ratio */
+                if (intrinsic_width != 0) {
+                    b->height = (b->width * intrinsic_height) / intrinsic_width;
+                } else {
+                    b->height = intrinsic_height;
+                }
             }
-            if (b->height == AUTO) {
-                b->height = b->svg_diagram->height;
-            }
+            /* Both dimensions explicitly set: use them as-is (CSS takes precedence) */
         } else if (b->flags & IFRAME) {
             /* TODO: should we look at the content dimensions? */
             if (b->width == AUTO)

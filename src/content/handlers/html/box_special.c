@@ -27,6 +27,7 @@
  */
 
 #include <dom/dom.h>
+#include <limits.h>
 #include <stdbool.h>
 #include <string.h>
 
@@ -1080,6 +1081,137 @@ static bool box_iframe(dom_node *n, html_content *content, struct box *box, bool
 
 
 /**
+ * Parse srcset attribute and select best URL for target width.
+ *
+ * Implements a simplified version of the srcset selection algorithm,
+ * supporting only width descriptors (e.g., "image.jpg 800w").
+ *
+ * @param srcset     The srcset attribute value (comma-separated list)
+ * @param target_w   Target display width in CSS pixels
+ * @param base_url   Base URL for resolving relative URLs
+ * @param result_url Output: selected URL (caller must nsurl_unref)
+ * @return true if a URL was selected, false otherwise
+ */
+static bool srcset_select_url(const char *srcset, int target_w, nsurl *base_url, nsurl **result_url)
+{
+    const char *p = srcset;
+    const char *best_url_start = NULL;
+    size_t best_url_len = 0;
+    int best_width = 0;
+    int smallest_width = INT_MAX;
+    const char *smallest_url_start = NULL;
+    size_t smallest_url_len = 0;
+
+    if (srcset == NULL || target_w <= 0) {
+        return false;
+    }
+
+    /* Parse comma-separated entries */
+    while (*p) {
+        const char *url_start;
+        const char *url_end;
+        int width = 0;
+
+        /* Skip leading whitespace */
+        while (*p && (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r')) {
+            p++;
+        }
+        if (!*p)
+            break;
+
+        /* URL starts here */
+        url_start = p;
+
+        /* Find end of URL (stops at whitespace or comma) */
+        while (*p && *p != ' ' && *p != '\t' && *p != ',' && *p != '\n') {
+            p++;
+        }
+        url_end = p;
+
+        if (url_start == url_end) {
+            /* Empty URL, skip */
+            if (*p == ',')
+                p++;
+            continue;
+        }
+
+        /* Skip whitespace between URL and descriptor */
+        while (*p && (*p == ' ' || *p == '\t')) {
+            p++;
+        }
+
+        /* Parse width descriptor (e.g., "800w") */
+        if (*p && *p != ',') {
+            char *endptr;
+            long w = strtol(p, &endptr, 10);
+            if (endptr > p && *endptr == 'w') {
+                width = (int)w;
+                p = endptr + 1;
+            } else if (endptr > p && *endptr == 'x') {
+                /* Pixel density descriptor - treat 1x as ~800w, 2x as ~1600w */
+                double density = strtod(p, &endptr);
+                if (endptr > p && *endptr == 'x') {
+                    width = (int)(800 * density);
+                    p = endptr + 1;
+                }
+            }
+            /* Skip to comma or end */
+            while (*p && *p != ',') {
+                p++;
+            }
+        }
+
+        /* Skip comma */
+        if (*p == ',') {
+            p++;
+        }
+
+        /* If no width descriptor, assume large (treat as fallback) */
+        if (width == 0) {
+            width = 10000; /* Treat as very large */
+        }
+
+        /* Track smallest image (fallback if all are too small) */
+        if (width < smallest_width) {
+            smallest_width = width;
+            smallest_url_start = url_start;
+            smallest_url_len = url_end - url_start;
+        }
+
+        /* Select best: smallest image that is >= target width */
+        if (width >= target_w) {
+            if (best_url_start == NULL || width < best_width) {
+                best_url_start = url_start;
+                best_url_len = url_end - url_start;
+                best_width = width;
+            }
+        }
+    }
+
+    /* If no image >= target_w, use the smallest available */
+    if (best_url_start == NULL && smallest_url_start != NULL) {
+        best_url_start = smallest_url_start;
+        best_url_len = smallest_url_len;
+    }
+
+    if (best_url_start == NULL) {
+        return false;
+    }
+
+    /* Create URL string and resolve against base */
+    char *url_str = strndup(best_url_start, best_url_len);
+    if (url_str == NULL) {
+        return false;
+    }
+
+    nserror err = nsurl_join(base_url, url_str, result_url);
+    free(url_str);
+
+    return (err == NSERROR_OK);
+}
+
+
+/**
  * Embedded image [13.2].
  */
 static bool box_image(dom_node *n, html_content *content, struct box *box, bool *convert_children)
@@ -1121,20 +1253,32 @@ static bool box_image(dom_node *n, html_content *content, struct box *box, bool 
     if (box->usemap && box->usemap[0] == '#')
         box->usemap++;
 
-    /* get image URL */
-    err = dom_element_get_attribute(n, corestring_dom_src, &s);
-    if (err != DOM_NO_ERR || s == NULL)
-        return true;
+    /* Try srcset first for responsive image selection */
+    url = NULL;
+    err = dom_element_get_attribute(n, corestring_dom_srcset, &s);
+    if (err == DOM_NO_ERR && s != NULL) {
+        /* Use reasonable default target width for image selection.
+         * This reduces bandwidth significantly on image-heavy sites. */
+        int target_width = 800;
 
-    if (box_extract_link(content, s, content->base_url, &url) == false) {
+        if (srcset_select_url(dom_string_data(s), target_width, content->base_url, &url)) {
+            NSLOG(layout, DEBUG, "srcset: selected URL for target %dpx", target_width);
+        }
         dom_string_unref(s);
-        return false;
     }
 
-    dom_string_unref(s);
+    /* Fall back to src attribute if srcset didn't work */
+    if (url == NULL) {
+        err = dom_element_get_attribute(n, corestring_dom_src, &s);
+        if (err != DOM_NO_ERR || s == NULL)
+            return true;
 
-    if (url == NULL)
-        return true;
+        if (box_extract_link(content, s, content->base_url, &url) == false) {
+            dom_string_unref(s);
+            return false;
+        }
+        dom_string_unref(s);
+    }
 
     /* start fetch */
     box->flags |= IS_REPLACED;
