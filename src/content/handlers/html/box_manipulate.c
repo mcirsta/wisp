@@ -145,6 +145,7 @@ struct box *box_create(css_select_results *styles, css_computed_style *style, bo
     box->inline_end = NULL;
     box->float_children = NULL;
     box->float_container = NULL;
+    box->abs_containing_block = NULL;
     box->next_float = NULL;
     box->cached_place_below_level = 0;
     box->list_value = 1;

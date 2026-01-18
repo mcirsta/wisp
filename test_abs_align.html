@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <title>Absolute Position Alignment Test</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 50px;
+            background: #c00;
+            font-family: Arial, sans-serif;
+        }
+
+        .banner {
+            position: relative;
+            height: 200px;
+        }
+
+        .search {
+            position: relative;
+            width: 600px;
+            height: 120px;
+            background: rgba(0, 0, 0, 0.2);
+        }
+
+        .search span {
+            position: relative;
+        }
+
+        /* INPUT - explicitly set margin: 0 to override default */
+        .search input#search_string {
+            position: absolute;
+            top: 20px;
+            left: 10px;
+            width: 450px;
+            height: 60px;
+            font-size: 24px;
+            border: 3px solid #ccc;
+            padding: 5px;
+            box-sizing: border-box;
+            margin: 0;
+            /* ADDED: override default 1px margin */
+        }
+
+        /* SPAN button */
+        .search span#button-search {
+            position: absolute;
+            top: 20px;
+            left: 460px;
+            width: 80px;
+            height: 60px;
+            background: #fff;
+            border-color: #ccc;
+            border-style: solid;
+            border-width: 3px 3px 3px 0;
+            cursor: pointer;
+            display: block;
+            box-sizing: border-box;
+            margin: 0;
+        }
+
+        .info {
+            margin-top: 80px;
+            color: white;
+            font-size: 18px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="banner">
+        <div class="search">
+            <span>
+                <input type="text" id="search_string" placeholder="Search...">
+            </span>
+            <span id="button-search"></span>
+        </div>
+    </div>
+
+    <div class="info">
+        <h2>Test: Absolute Position Alignment</h2>
+        <p>Both elements now have <code>margin: 0</code> to override default.css</p>
+        <p><strong>Expected:</strong> Borders should now align perfectly.</p>
+    </div>
+</body>
+
+</html>

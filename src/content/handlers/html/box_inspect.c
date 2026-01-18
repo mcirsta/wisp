@@ -483,8 +483,33 @@ static bool box_nearest_text_box(struct box *box, int bx, int by, int fx, int fy
 /* Exported function documented in html/box.h */
 void box_coords(struct box *box, int *x, int *y)
 {
+    struct box *orig = box;
     *x = box->x;
     *y = box->y;
+
+    /* Check if this is an absolute/fixed positioned box */
+    if (box->style != NULL) {
+        enum css_position_e pos = css_computed_position(box->style);
+        if (pos == CSS_POSITION_ABSOLUTE || pos == CSS_POSITION_FIXED) {
+            /* Absolute/fixed positioned boxes MUST have abs_containing_block set.
+             * box->x/y are relative to the containing block, not the parent.
+             * Per CSS 2.1 §10.1. */
+            assert(box->abs_containing_block != NULL &&
+                "Absolute/fixed positioned box must have abs_containing_block set");
+
+            NSLOG(netsurf, INFO, "box_coords ABS entry: box=%p box.y=%d cb=%p cb.y=%d", (void *)orig, orig->y,
+                (void *)box->abs_containing_block, box->abs_containing_block->y);
+
+            /* Jump directly to the containing block and walk from there */
+            box = box->abs_containing_block;
+            *x += box->x - scrollbar_get_offset(box->scroll_x);
+            *y += box->y - scrollbar_get_offset(box->scroll_y);
+
+            NSLOG(netsurf, INFO, "box_coords after CB: y=%d", *y);
+        }
+    }
+
+    /* Walk remaining parent chain (from CB for absolute, from parent for normal) */
     while (box->parent) {
         if (box_is_float(box)) {
             assert(box->float_container);
@@ -495,6 +520,8 @@ void box_coords(struct box *box, int *x, int *y)
         *x += box->x - scrollbar_get_offset(box->scroll_x);
         *y += box->y - scrollbar_get_offset(box->scroll_y);
     }
+
+    NSLOG(netsurf, DEBUG, "box_coords FINAL: orig=%p final_y=%d", (void *)orig, *y);
 }
 
 

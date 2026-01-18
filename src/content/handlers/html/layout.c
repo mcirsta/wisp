@@ -4440,7 +4440,10 @@ static bool layout_absolute(struct box *box, struct box *containing_block, int c
     NSLOG(layout, DEBUG, "%i + %i + %i + %i + %i + %i + %i + %i + %i = %i", left, margin[LEFT], border[LEFT].width,
         padding[LEFT], width, padding[RIGHT], border[RIGHT].width, margin[RIGHT], right, containing_block->width);
 
-    box->x = left + margin[LEFT] + border[LEFT].width - cx;
+    /* Store the containing block for use by box_coords() and other functions.
+     * Per CSS 2.1 §10.1, box->x/y are relative to the containing block. */
+    box->abs_containing_block = containing_block;
+    box->x = left + margin[LEFT] + border[LEFT].width;
     if (containing_block->type == BOX_BLOCK || containing_block->type == BOX_INLINE_BLOCK ||
         containing_block->type == BOX_TABLE_CELL) {
         /* Block-level ancestor => reset container's width */
@@ -4542,7 +4545,7 @@ static bool layout_absolute(struct box *box, struct box *containing_block, int c
     NSLOG(layout, DEBUG, "%i + %i + %i + %i + %i + %i + %i + %i + %i = %i", top, margin[TOP], border[TOP].width,
         padding[TOP], height, padding[BOTTOM], border[BOTTOM].width, margin[BOTTOM], bottom, containing_block->height);
 
-    box->y = top + margin[TOP] + border[TOP].width - cy;
+    box->y = top + margin[TOP] + border[TOP].width;
     if (containing_block->type == BOX_BLOCK || containing_block->type == BOX_INLINE_BLOCK ||
         containing_block->type == BOX_TABLE_CELL) {
         /* Block-level ancestor => reset container's height */
@@ -4553,8 +4556,9 @@ static bool layout_absolute(struct box *box, struct box *containing_block, int c
     box->height = height;
     layout_apply_minmax_height(&content->unit_len_ctx, box, containing_block);
 
-    NSLOG(layout, INFO, "abs final: box->x %i box->y %i box->width %i box->height %i (top=%i left=%i cy=%i cx=%i)",
-        box->x, box->y, box->width, box->height, top, left, cy, cx);
+    NSLOG(layout, DEBUG,
+        "abs final: box=%p box->x %i box->y %i box->width %i box->height %i (top=%i left=%i cy=%i cx=%i) abs_cb=%p",
+        box, box->x, box->y, box->width, box->height, top, left, cy, cx, box->abs_containing_block);
 
     return true;
 }

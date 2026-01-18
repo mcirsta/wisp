@@ -1951,8 +1951,14 @@ bool html_redraw_box(const html_content *html, struct box *box, int x_parent, in
 
     /* avoid trivial FP maths */
     if (scale == 1.0) {
-        x = x_parent + box->x;
-        y = y_parent + box->y;
+        /* For absolute/fixed positioned elements, use box_coords() to get
+         * correct screen position from the containing block. */
+        if (box->abs_containing_block != NULL) {
+            box_coords(box, &x, &y);
+        } else {
+            x = x_parent + box->x;
+            y = y_parent + box->y;
+        }
         width = box->width;
         height = box->height;
         padding_left = box->padding[LEFT];
@@ -1968,8 +1974,18 @@ bool html_redraw_box(const html_content *html, struct box *box, int x_parent, in
             // Log removed - was too verbose
         }
     } else {
-        x = (x_parent + box->x) * scale;
-        y = (y_parent + box->y) * scale;
+        /* For absolute/fixed positioned elements, use box_coords() to get
+         * correct screen position from the containing block, not from the
+         * (incorrect) parent chain accumulation. Per CSS 2.1 §10.1. */
+        if (box->abs_containing_block != NULL) {
+            int abs_x, abs_y;
+            box_coords(box, &abs_x, &abs_y);
+            x = abs_x * scale;
+            y = abs_y * scale;
+        } else {
+            x = (x_parent + box->x) * scale;
+            y = (y_parent + box->y) * scale;
+        }
         width = box->width * scale;
         height = box->height * scale;
         /* left and top padding values are normally zero,
@@ -2331,7 +2347,25 @@ bool html_redraw_box(const html_content *html, struct box *box, int x_parent, in
                 (box->gadget->type == GADGET_TEXTAREA || box->gadget->type == GADGET_TEXTBOX ||
                     box->gadget->type == GADGET_PASSWORD))) &&
         (border_top || border_right || border_bottom || border_left)) {
-        if (!html_redraw_borders(box, x_parent, y_parent, padding_width, padding_height, &r, scale, ctx)) {
+        /* Compute unscaled box position for border drawing.
+         * For normal boxes: x_parent + box->x
+         * For absolute boxes: use pre-computed coordinates from box_coords */
+        int border_x, border_y;
+        if (box->abs_containing_block != NULL) {
+            /* x,y are already scaled, but html_redraw_borders needs unscaled.
+             * Divide by scale to get unscaled value. */
+            if (scale != 1.0f) {
+                border_x = (int)(x / scale);
+                border_y = (int)(y / scale);
+            } else {
+                border_x = x;
+                border_y = y;
+            }
+        } else {
+            border_x = x_parent + box->x;
+            border_y = y_parent + box->y;
+        }
+        if (!html_redraw_borders(box, border_x, border_y, padding_width, padding_height, &r, scale, ctx)) {
             {
                 result = false;
                 goto cleanup;

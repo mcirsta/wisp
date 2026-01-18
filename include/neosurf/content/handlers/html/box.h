@@ -283,6 +283,13 @@ struct box {
     struct box *float_container;
 
     /**
+     * For absolutely/fixed positioned boxes, points to the containing block
+     * (nearest positioned ancestor per CSS 2.1 §10.1). NULL for non-positioned
+     * boxes or when not yet computed.
+     */
+    struct box *abs_containing_block;
+
+    /**
      * Level below which subsequent floats must be cleared.  This
      * is used only for boxes with float_children
      */

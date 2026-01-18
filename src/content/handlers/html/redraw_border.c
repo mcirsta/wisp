@@ -394,15 +394,14 @@ static nserror html_redraw_border_plot(const int side, const int *p, colour c, e
  * \param ctx current redraw context
  * \return true if successful, false otherwise
  */
-bool html_redraw_borders(struct box *box, int x_parent, int y_parent, int p_width, int p_height,
-    const struct rect *clip, float scale, const struct redraw_context *ctx)
+bool html_redraw_borders(struct box *box, int x, int y, int p_width, int p_height, const struct rect *clip, float scale,
+    const struct redraw_context *ctx)
 {
     unsigned int sides[] = {LEFT, RIGHT, TOP, BOTTOM};
     int top = box->border[TOP].width;
     int right = box->border[RIGHT].width;
     int bottom = box->border[BOTTOM].width;
     int left = box->border[LEFT].width;
-    int x, y;
     unsigned int i, side;
     int p[8]; /* Box border vertices */
     int z[8]; /* Border vertices */
@@ -410,8 +409,9 @@ bool html_redraw_borders(struct box *box, int x_parent, int y_parent, int p_widt
     bool square_end_2 = false;
     nserror res;
 
-    x = x_parent + box->x;
-    y = y_parent + box->y;
+    /* x,y are now passed in directly as the pre-computed box position
+     * (unscaled). This avoids duplicate calculation and ensures correct
+     * positioning for absolute/fixed positioned elements. */
 
     if (scale != 1.0) {
         top *= scale;

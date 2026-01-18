@@ -9,8 +9,8 @@
 #include "neosurf/utils/errors.h"
 
 /* Under test */
-bool html_redraw_borders(struct box *box, int x_parent, int y_parent, int p_width, int p_height,
-    const struct rect *clip, float scale, const struct redraw_context *ctx);
+bool html_redraw_borders(struct box *box, int x, int y, int p_width, int p_height, const struct rect *clip, float scale,
+    const struct redraw_context *ctx);
 
 typedef struct {
     int polygon_count;
@@ -98,7 +98,10 @@ START_TEST(test_borders_left_only_geometry)
         .priv = &cap,
     };
 
-    bool ok = html_redraw_borders(&b, 0, 0,
+    /* Pass the actual box position (x, y) since html_redraw_borders no longer
+     * adds box->x/y internally. Previously we passed x_parent=0, y_parent=0
+     * and the function added box->x/y. Now we pass the final position. */
+    bool ok = html_redraw_borders(&b, b.x, b.y,
         /* p_width */ 100,
         /* p_height */ 50, &clip, 1.0f, &ctx);
     ck_assert_msg(ok, "html_redraw_borders returned false");
