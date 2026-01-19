@@ -1952,9 +1952,16 @@ bool html_redraw_box(const html_content *html, struct box *box, int x_parent, in
     /* avoid trivial FP maths */
     if (scale == 1.0) {
         /* For absolute/fixed positioned elements, use box_coords() to get
-         * correct screen position from the containing block. */
+         * correct screen position from the containing block.
+         * box_coords() returns document-relative coordinates, so we must add
+         * the viewport scroll offset (data->x/y) to get screen coordinates. */
         if (box->abs_containing_block != NULL) {
             box_coords(box, &x, &y);
+            /* Add viewport scroll offset */
+            if (data != NULL) {
+                x += data->x;
+                y += data->y;
+            }
         } else {
             x = x_parent + box->x;
             y = y_parent + box->y;
@@ -1976,10 +1983,17 @@ bool html_redraw_box(const html_content *html, struct box *box, int x_parent, in
     } else {
         /* For absolute/fixed positioned elements, use box_coords() to get
          * correct screen position from the containing block, not from the
-         * (incorrect) parent chain accumulation. Per CSS 2.1 §10.1. */
+         * (incorrect) parent chain accumulation. Per CSS 2.1 §10.1.
+         * Add viewport scroll offset (data->x/y) since box_coords returns
+         * document-relative coordinates. */
         if (box->abs_containing_block != NULL) {
             int abs_x, abs_y;
             box_coords(box, &abs_x, &abs_y);
+            /* Add viewport scroll offset before scaling */
+            if (data != NULL) {
+                abs_x += data->x;
+                abs_y += data->y;
+            }
             x = abs_x * scale;
             y = abs_y * scale;
         } else {
@@ -2238,25 +2252,27 @@ bool html_redraw_box(const html_content *html, struct box *box, int x_parent, in
             int root_w_scaled = (int)(root_w * scale);
             int bg_extent = padding_width + border_left + border_right;
             bool abs_full_width = (bg_extent >= root_w_scaled - tol);
+            bool is_root_or_body = (box->parent == NULL) || (box->parent != NULL && box->parent->parent == NULL);
 
+            /* Viewport background expansion rules:
+             * 1. position: fixed - always expand (CSS spec)
+             * 2. background-attachment: fixed - always expand (CSS spec)
+             * 3. Root/body elements - expand if full-width
+             *
+             * For all other elements, do NOT expand - log if they would have
+             * matched the old heuristics so we can detect if needed. */
             if (pos_enum == CSS_POSITION_FIXED || bg_attach == CSS_BACKGROUND_ATTACHMENT_FIXED) {
-                /* For fixed position, only expand if element spans full viewport width */
-                expand_viewport_bg = (left_match && right_match) || abs_full_width;
-            } else {
-                expand_viewport_bg = left_match && right_match;
-                if (!expand_viewport_bg && abs_full_width) {
-                    expand_viewport_bg = true;
-                } else if (!expand_viewport_bg && right_match && abs_full_width) {
-                    expand_viewport_bg = true;
-                } else if (!expand_viewport_bg && left_match && abs_full_width) {
-                    expand_viewport_bg = true;
-                }
-                if (log_target) {
-                    NSLOG(layout, INFO,
-                        "bg decision: tag %s class %s box %p pos %u bgatt %u b_left %d b_right %d t_left %d t_right %d bg_extent %d root_scaled %d tol %d vp_x %d root_w %d expand %d",
-                        tag, cls, box, (unsigned)pos_enum, (unsigned)bg_attach, b_left, b_right, target_left,
-                        target_right, bg_extent, root_w_scaled, tol, vp_x, root_w, (int)expand_viewport_bg);
-                }
+                /* CSS spec: fixed backgrounds cover the viewport */
+                expand_viewport_bg = true;
+            } else if (is_root_or_body && ((left_match && right_match) || abs_full_width)) {
+                /* Root/body elements: expand if they span the viewport width */
+                expand_viewport_bg = true;
+            } else if ((left_match && right_match) || abs_full_width) {
+                /* Would have expanded under old heuristics - log for detection */
+                NSLOG(netsurf, ERROR,
+                    "VIEWPORT_EXPANSION_SKIP: tag=%s class=%s box=%p - full-width element NOT expanded "
+                    "(left_match=%d right_match=%d abs_full_width=%d)",
+                    tag, cls, (void *)box, left_match, right_match, abs_full_width);
             }
         }
         if (expand_viewport_bg) {

@@ -198,11 +198,6 @@ static nserror nsqt_plot_rectangle(const struct redraw_context *ctx, const plot_
     int w = rect->x1 - rect->x0;
     int h = rect->y1 - rect->y0;
 
-    /* Log small rectangles that might be borders */
-    if ((w == 1 || h == 1) && style->stroke_type == PLOT_OP_TYPE_NONE) {
-        NSLOG(netsurf, WARNING, "nsqt_plot_rectangle: BORDER rect (%d,%d)->(%d,%d) size=%dx%d", rect->x0, rect->y0,
-            rect->x1, rect->y1, w, h);
-    }
 
     /* Use fillRect when only fill is needed (no stroke) to avoid ghost outline */
     if (style->stroke_type == PLOT_OP_TYPE_NONE) {
