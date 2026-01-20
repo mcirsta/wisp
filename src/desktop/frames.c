@@ -272,11 +272,17 @@ void browser_window_recalculate_iframes(struct browser_window *bw)
 {
     struct browser_window *window;
     int index;
+    struct rect rect;
 
     for (index = 0; index < bw->iframe_count; index++) {
         window = &(bw->iframes[index]);
 
-        if (window != NULL) {
+        if (window != NULL && window->box != NULL) {
+            box_bounds(window->box, &rect);
+
+            browser_window_set_position(window, rect.x0, rect.y0);
+            browser_window_set_dimensions(window, rect.x1 - rect.x0, rect.y1 - rect.y0);
+
             browser_window_handle_scrollbars(window);
         }
     }

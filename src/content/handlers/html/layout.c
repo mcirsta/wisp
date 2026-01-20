@@ -1159,9 +1159,9 @@ static struct box *layout_next_margin_block(const css_unit_ctx *unit_len_ctx, st
                     NULL, NULL, NULL, NULL, box->margin, box->padding, box->border);
 
                 /* Apply top margin */
-                if (box->margin[TOP] > 0 && (unsigned int)box->margin[TOP] > *max_pos_margin)
+                if (box->margin[TOP] > 0 && (unsigned int)box->margin[TOP] > *max_pos_margin) {
                     *max_pos_margin = (unsigned int)box->margin[TOP];
-                else if (box->margin[TOP] != AUTO && box->margin[TOP] < 0 &&
+                } else if (box->margin[TOP] != AUTO && box->margin[TOP] < 0 &&
                     -(unsigned int)box->margin[TOP] > *max_neg_margin)
                     *max_neg_margin = -(unsigned int)box->margin[TOP];
             }
@@ -1210,9 +1210,9 @@ static struct box *layout_next_margin_block(const css_unit_ctx *unit_len_ctx, st
                      * separate it from children (CSS 2.1 §8.3.1: "no padding
                      * ...separate them" for margins to be adjoining) */
                     if (!box->padding[BOTTOM]) {
-                        if (box->margin[BOTTOM] > 0 && (unsigned int)box->margin[BOTTOM] > *max_pos_margin)
+                        if (box->margin[BOTTOM] > 0 && (unsigned int)box->margin[BOTTOM] > *max_pos_margin) {
                             *max_pos_margin = (unsigned int)box->margin[BOTTOM];
-                        else if (box->margin[BOTTOM] != AUTO && box->margin[BOTTOM] < 0 &&
+                        } else if (box->margin[BOTTOM] != AUTO && box->margin[BOTTOM] < 0 &&
                             -(unsigned int)box->margin[BOTTOM] > *max_neg_margin)
                             *max_neg_margin = -(unsigned int)box->margin[BOTTOM];
                     }
@@ -1223,9 +1223,9 @@ static struct box *layout_next_margin_block(const css_unit_ctx *unit_len_ctx, st
             /* Apply bottom margin only if padding[BOTTOM] doesn't separate it
              * (CSS 2.1 §8.3.1: padding prevents margin collapsing) */
             if (!box->padding[BOTTOM]) {
-                if (box->margin[BOTTOM] > 0 && (unsigned int)box->margin[BOTTOM] > *max_pos_margin)
+                if (box->margin[BOTTOM] > 0 && (unsigned int)box->margin[BOTTOM] > *max_pos_margin) {
                     *max_pos_margin = (unsigned int)box->margin[BOTTOM];
-                else if (box->margin[BOTTOM] != AUTO && box->margin[BOTTOM] < 0 &&
+                } else if (box->margin[BOTTOM] != AUTO && box->margin[BOTTOM] < 0 &&
                     -(unsigned int)box->margin[BOTTOM] > *max_neg_margin)
                     *max_neg_margin = -(unsigned int)box->margin[BOTTOM];
             }
@@ -1469,6 +1469,46 @@ static void layout_block_find_dimensions(
     layout_find_dimensions(unit_len_ctx, available_width, viewport_height, box, style, &width, &height, &max_width,
         &min_width, &max_height, &min_height, margin, padding, border);
 
+    /* Debug: Log what layout_find_dimensions computed */
+    NSLOG(layout, DEBUG,
+        "layout_block_find_dimensions: AFTER layout_find_dimensions box=%p margins=[%d,%d,%d,%d] (AUTO=%d)", box,
+        margin[TOP], margin[RIGHT], margin[BOTTOM], margin[LEFT], AUTO);
+
+    /* Debug: Log computed margins for specific elements */
+    {
+        const char *tag = "";
+        const char *cls = "";
+        const char *id = "";
+        dom_string *name = NULL;
+        dom_string *class_attr = NULL;
+        dom_string *id_attr = NULL;
+        if (box->node != NULL) {
+            if (dom_node_get_node_name(box->node, &name) == DOM_NO_ERR && name != NULL) {
+                tag = dom_string_data(name);
+            }
+            if (dom_element_get_attribute(box->node, corestring_dom_class, &class_attr) == DOM_NO_ERR &&
+                class_attr != NULL) {
+                cls = dom_string_data(class_attr);
+            }
+            if (dom_element_get_attribute(box->node, corestring_dom_id, &id_attr) == DOM_NO_ERR && id_attr != NULL) {
+                id = dom_string_data(id_attr);
+            }
+        }
+        /* Log for article elements or DIVs with class/id */
+        if ((strcasecmp(tag, "ARTICLE") == 0) || (strcasecmp(tag, "DIV") == 0 && (cls[0] != '\0' || id[0] != '\0'))) {
+            NSLOG(layout, DEBUG,
+                "layout_block_find_dimensions: tag=%s id=%s class=%s box=%p margins=[%d,%d,%d,%d] padding=[%d,%d,%d,%d]",
+                tag, id, cls, box, margin[TOP], margin[RIGHT], margin[BOTTOM], margin[LEFT], padding[TOP],
+                padding[RIGHT], padding[BOTTOM], padding[LEFT]);
+        }
+        if (id_attr != NULL)
+            dom_string_unref(id_attr);
+        if (class_attr != NULL)
+            dom_string_unref(class_attr);
+        if (name != NULL)
+            dom_string_unref(name);
+    }
+
     if (box->object && !(box->flags & REPLACE_DIM) && content_get_type(box->object) != CONTENT_HTML) {
         /* block-level replaced element, see 10.3.4 and 10.6.2 */
         layout_get_object_dimensions(unit_len_ctx, box, &width, &height, min_width, max_width, min_height, max_height);
@@ -1479,10 +1519,21 @@ static void layout_block_find_dimensions(
     }
     box->height = height;
 
+    /* Debug: Log before AUTO margin handling */
+    if (margin[TOP] == AUTO || margin[BOTTOM] == AUTO) {
+        NSLOG(layout, DEBUG,
+            "layout_block_find_dimensions: BEFORE AUTO handling box=%p margin[TOP]=%d margin[BOTTOM]=%d", box,
+            margin[TOP], margin[BOTTOM]);
+    }
+
     if (margin[TOP] == AUTO)
         margin[TOP] = 0;
     if (margin[BOTTOM] == AUTO)
         margin[BOTTOM] = 0;
+
+    /* Debug: Log final margins */
+    NSLOG(layout, DEBUG, "layout_block_find_dimensions: FINAL box=%p margins=[%d,%d,%d,%d]", box, margin[TOP],
+        margin[RIGHT], margin[BOTTOM], margin[LEFT]);
 }
 
 
@@ -3479,8 +3530,7 @@ bool layout_block_context(struct box *block, int viewport_height, html_content *
 
         /* Vertical margin */
         if (((box->type == BOX_BLOCK && (box->flags & HAS_HEIGHT)) || box->type == BOX_FLEX || box->type == BOX_GRID ||
-                box->type == BOX_TABLE || (box->type == BOX_INLINE_CONTAINER && !box_is_first_child(box)) ||
-                margin_collapse == box) &&
+                box->type == BOX_TABLE || box->type == BOX_INLINE_CONTAINER || margin_collapse == box) &&
             in_margin == true) {
             /* Margin goes above this box. */
             cy += (int)max_pos_margin - (int)max_neg_margin;
@@ -3657,18 +3707,26 @@ bool layout_block_context(struct box *block, int viewport_height, html_content *
                 }
 
                 /* Apply bottom margin (skip if AUTO to prevent overflow) */
-                if (box->margin[BOTTOM] != AUTO && max_pos_margin < box->margin[BOTTOM])
+                if (box->margin[BOTTOM] != AUTO && max_pos_margin < box->margin[BOTTOM]) {
+
                     max_pos_margin = box->margin[BOTTOM];
-                else if (box->margin[BOTTOM] != AUTO && max_neg_margin < -box->margin[BOTTOM])
+                } else if (box->margin[BOTTOM] != AUTO && max_neg_margin < -box->margin[BOTTOM])
                     max_neg_margin = -box->margin[BOTTOM];
 
                 box = box->parent;
+
                 if (box == block)
                     break;
 
                 /* Margin is invalidated if this is a box
-                 * margins can't collapse through. */
-                if (box->type == BOX_BLOCK && box->flags & MAKE_HEIGHT) {
+                 * margins can't collapse through.
+                 * CSS 2.1 §8.3.1: margins can't collapse through if:
+                 * - box has explicit height (MAKE_HEIGHT)
+                 * - box has non-zero padding-bottom
+                 * - box has non-zero border-bottom */
+                if (box->type == BOX_BLOCK &&
+                    ((box->flags & MAKE_HEIGHT) || box->padding[BOTTOM] != 0 || box->border[BOTTOM].width != 0)) {
+
                     margin_collapse = NULL;
                     in_margin = false;
                     max_pos_margin = max_neg_margin = 0;
@@ -3693,11 +3751,21 @@ bool layout_block_context(struct box *block, int viewport_height, html_content *
 
                 cy += box->padding[BOTTOM] + box->border[BOTTOM].width;
                 cx -= box->x;
+
                 y = box->y + box->padding[TOP] + box->height + box->padding[BOTTOM] + box->border[BOTTOM].width;
 
             } while (box->next == NULL);
             if (box == block)
                 break;
+
+            /* CSS 2.1 §8.3.1: After exiting loop, check if the box we're at
+             * (which has a sibling) itself has padding/border that prevents
+             * margins from its children collapsing with the next sibling */
+            if (box->type == BOX_BLOCK && (box->padding[BOTTOM] != 0 || box->border[BOTTOM].width != 0)) {
+
+                in_margin = false;
+                max_pos_margin = max_neg_margin = 0;
+            }
         }
 
         /* To next sibling. */
@@ -3709,9 +3777,10 @@ bool layout_block_context(struct box *block, int viewport_height, html_content *
         }
 
         /* Apply bottom margin (skip if AUTO to prevent overflow) */
-        if (box->margin[BOTTOM] != AUTO && max_pos_margin < box->margin[BOTTOM])
+        if (box->margin[BOTTOM] != AUTO && max_pos_margin < box->margin[BOTTOM]) {
+
             max_pos_margin = box->margin[BOTTOM];
-        else if (box->margin[BOTTOM] != AUTO && max_neg_margin < -box->margin[BOTTOM])
+        } else if (box->margin[BOTTOM] != AUTO && max_neg_margin < -box->margin[BOTTOM])
             max_neg_margin = -box->margin[BOTTOM];
 
         /* Mark that we have a pending margin to apply to the next sibling.
