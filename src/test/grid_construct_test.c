@@ -255,6 +255,24 @@ void *_talloc_zero(const void *ctx, size_t size, const char *name)
     return calloc(1, size);
 }
 
+/* Minimal strndup implementation for Windows */
+char *strndup(const char *s, size_t n)
+{
+    size_t len;
+    char *s2;
+
+    for (len = 0; len != n && s[len]; len++)
+        continue;
+
+    s2 = malloc(len + 1);
+    if (!s2)
+        return NULL;
+
+    memcpy(s2, s, len);
+    s2[len] = 0;
+    return s2;
+}
+
 char *talloc_strdup(const void *ctx, const char *p)
 {
     return strdup(p);

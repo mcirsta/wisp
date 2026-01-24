@@ -48,19 +48,29 @@ target_compile_definitions(nsmonkey PRIVATE MONKEY_SRCPATH="${CMAKE_SOURCE_DIR}/
 target_link_libraries(nsmonkey neosurf m ${NEOSURF_COMMON_LIBS})
 
 if(WIN32 AND CMAKE_BUILD_TYPE MATCHES Debug)
-    # Copy libneosurf.dll next to nsmonkey
     add_custom_command(TARGET nsmonkey POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
                 $<TARGET_FILE:neosurf>
                 $<TARGET_FILE_DIR:nsmonkey>
         COMMENT "Copying libneosurf next to nsmonkey")
 
-    # Copy contrib runtime DLLs similar to Windows frontend
+    set(SVGTINY_RUNTIME)
+    if(TARGET svgtiny)
+        get_target_property(SVGTINY_TYPE svgtiny TYPE)
+        if(SVGTINY_TYPE STREQUAL "SHARED_LIBRARY" OR SVGTINY_TYPE STREQUAL "MODULE_LIBRARY")
+            set(SVGTINY_RUNTIME "$<TARGET_FILE:svgtiny>")
+        endif()
+    endif()
+    if(SVGTINY_RUNTIME)
+        add_custom_command(TARGET nsmonkey POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different "${SVGTINY_RUNTIME}" "$<TARGET_FILE_DIR:nsmonkey>/"
+        )
+    endif()
+
     add_custom_command(TARGET nsmonkey POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_BINARY_DIR}/contrib/libdom/libdom.dll" "$<TARGET_FILE_DIR:nsmonkey>/"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_BINARY_DIR}/contrib/libnsutils/libnsutils.dll" "$<TARGET_FILE_DIR:nsmonkey>/"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_BINARY_DIR}/contrib/libparserutils/libparserutils.dll" "$<TARGET_FILE_DIR:nsmonkey>/"
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_BINARY_DIR}/contrib/libsvgtiny/libsvgtiny.dll" "$<TARGET_FILE_DIR:nsmonkey>/"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_BINARY_DIR}/contrib/libnsbmp/libnsbmp.dll" "$<TARGET_FILE_DIR:nsmonkey>/"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_BINARY_DIR}/contrib/libnsgif/libnsgif.dll" "$<TARGET_FILE_DIR:nsmonkey>/"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_BINARY_DIR}/contrib/libcss/libcss.dll" "$<TARGET_FILE_DIR:nsmonkey>/"

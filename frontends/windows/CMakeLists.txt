@@ -69,11 +69,22 @@ target_link_libraries(neosurf-windows neosurf m ${NEOSURF_COMMON_LIBS} ws2_32 co
 
 # Copy required runtime DLLs next to the executable for Debug builds on Windows
 if(WIN32 AND CMAKE_BUILD_TYPE MATCHES Debug)
+    set(SVGTINY_RUNTIME)
+    if(TARGET svgtiny)
+        get_target_property(SVGTINY_TYPE svgtiny TYPE)
+        if(SVGTINY_TYPE STREQUAL "SHARED_LIBRARY" OR SVGTINY_TYPE STREQUAL "MODULE_LIBRARY")
+            set(SVGTINY_RUNTIME "$<TARGET_FILE:svgtiny>")
+        endif()
+    endif()
+    if(SVGTINY_RUNTIME)
+        add_custom_command(TARGET neosurf-windows POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different "${SVGTINY_RUNTIME}" "$<TARGET_FILE_DIR:neosurf-windows>/"
+        )
+    endif()
     add_custom_command(TARGET neosurf-windows POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_BINARY_DIR}/contrib/libdom/libdom.dll" "$<TARGET_FILE_DIR:neosurf-windows>/"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_BINARY_DIR}/contrib/libnsutils/libnsutils.dll" "$<TARGET_FILE_DIR:neosurf-windows>/"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_BINARY_DIR}/contrib/libparserutils/libparserutils.dll" "$<TARGET_FILE_DIR:neosurf-windows>/"
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_BINARY_DIR}/contrib/libsvgtiny/libsvgtiny.dll" "$<TARGET_FILE_DIR:neosurf-windows>/"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_BINARY_DIR}/contrib/libnsbmp/libnsbmp.dll" "$<TARGET_FILE_DIR:neosurf-windows>/"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_BINARY_DIR}/contrib/libnsgif/libnsgif.dll" "$<TARGET_FILE_DIR:neosurf-windows>/"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_BINARY_DIR}/contrib/libcss/libcss.dll" "$<TARGET_FILE_DIR:neosurf-windows>/"
