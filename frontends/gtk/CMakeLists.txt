@@ -8,6 +8,13 @@ include_directories(${GTK_INCLUDE_DIRS})
 
 include_directories(${CMAKE_SOURCE_DIR}/include)
 
+# Copy default.css to resources to avoid symlinks
+configure_file(
+	${CMAKE_SOURCE_DIR}/src/resources/default.css
+	${CMAKE_CURRENT_BINARY_DIR}/res/default.css
+	COPYONLY
+)
+
 add_executable(neosurf-gtk
 	gui.c
 	misc.c
@@ -47,3 +54,4 @@ target_link_libraries(neosurf-gtk neosurf m ${NEOSURF_COMMON_LIBS} ${GTK_LIBRARI
 
 install(TARGETS neosurf-gtk DESTINATION ${CMAKE_INSTALL_BINDIR})
 install(DIRECTORY res/ DESTINATION ${CMAKE_INSTALL_DATADIR}/neosurf-gtk)
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/res/default.css DESTINATION ${CMAKE_INSTALL_DATADIR}/neosurf-gtk)

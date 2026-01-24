@@ -1787,6 +1787,7 @@ bool html_redraw_box(const html_content *html, struct box *box, int x_parent, in
     struct rect r;
     struct rect rect;
     int x_scrolled, y_scrolled;
+    struct rect viewport_clip;
     struct box *bg_box = NULL;
     css_computed_clip_rect css_rect;
     enum css_overflow_e overflow_x = CSS_OVERFLOW_VISIBLE;
@@ -1961,6 +1962,13 @@ bool html_redraw_box(const html_content *html, struct box *box, int x_parent, in
             if (data != NULL) {
                 x += data->x;
                 y += data->y;
+
+                /* For absolute elements, use viewport clip instead of inherited DOM clip */
+                viewport_clip.x0 = data->viewport_x;
+                viewport_clip.y0 = data->viewport_y;
+                viewport_clip.x1 = data->viewport_x + data->root_width;
+                viewport_clip.y1 = data->viewport_y + data->root_height;
+                clip = &viewport_clip;
             }
         } else {
             x = x_parent + box->x;
@@ -1993,6 +2001,13 @@ bool html_redraw_box(const html_content *html, struct box *box, int x_parent, in
             if (data != NULL) {
                 abs_x += data->x;
                 abs_y += data->y;
+
+                /* For absolute elements, use viewport clip instead of inherited DOM clip */
+                viewport_clip.x0 = data->viewport_x;
+                viewport_clip.y0 = data->viewport_y;
+                viewport_clip.x1 = data->viewport_x + data->root_width;
+                viewport_clip.y1 = data->viewport_y + data->root_height;
+                clip = &viewport_clip;
             }
             x = abs_x * scale;
             y = abs_y * scale;

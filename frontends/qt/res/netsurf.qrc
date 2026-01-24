@@ -1,7 +1,7 @@
 <RCC>
     <qresource prefix="/">
 	<file>adblock.css</file>
-	<file>default.css</file>
+	<file alias="default.css">../../../src/resources/default.css</file>
 	<file>internal.css</file>
 	<file>quirks.css</file>
 	<file>user.css</file>

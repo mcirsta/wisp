@@ -521,7 +521,7 @@ void box_coords(struct box *box, int *x, int *y)
         *y += box->y - scrollbar_get_offset(box->scroll_y);
     }
 
-    NSLOG(netsurf, DEBUG, "box_coords FINAL: orig=%p final_y=%d", (void *)orig, *y);
+    NSLOG(netsurf, DEBUG, "box_coords FINAL: orig=%p final_x=%d final_y=%d", (void *)orig, *x, *y);
 }
 
 
