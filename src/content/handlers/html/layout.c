@@ -4606,6 +4606,21 @@ static bool layout_absolute(struct box *box, struct box *containing_block, int c
             margin[TOP] = 0;
         if (margin[BOTTOM] == AUTO)
             margin[BOTTOM] = 0;
+        /* Log which case we hit for submenu-wrapper */
+        if (box->node != NULL) {
+            dom_string *dbg_class = NULL;
+            if (dom_element_get_attribute(box->node, corestring_dom_class, &dbg_class) == DOM_NO_ERR && dbg_class != NULL) {
+                if (strstr(dom_string_data(dbg_class), "submenu-wrapper") != NULL) {
+                    NSLOG(layout, INFO,
+                        "VERT CASE submenu-wrapper: top=%d(%s) height=%d(%s) bottom=%d(%s) static_top=%d box->height=%d cb.height=%d",
+                        top, (top == AUTO ? "AUTO" : "SET"),
+                        height, (height == AUTO ? "AUTO" : "SET"),
+                        bottom, (bottom == AUTO ? "AUTO" : "SET"),
+                        static_top, box->height, containing_block->height);
+                }
+                dom_string_unref(dbg_class);
+            }
+        }
         if (top == AUTO && height == AUTO && bottom != AUTO) {
             height = box->height;
             top = containing_block->height - margin[TOP] - border[TOP].width - padding[TOP] - height - padding[BOTTOM] -
@@ -4633,7 +4648,32 @@ static bool layout_absolute(struct box *box, struct box *containing_block, int c
     NSLOG(layout, DEBUG, "%i + %i + %i + %i + %i + %i + %i + %i + %i = %i", top, margin[TOP], border[TOP].width,
         padding[TOP], height, padding[BOTTOM], border[BOTTOM].width, margin[BOTTOM], bottom, containing_block->height);
 
+    /* Log final values for submenu-wrapper */
+    if (box->node != NULL) {
+        dom_string *dbg_class = NULL;
+        if (dom_element_get_attribute(box->node, corestring_dom_class, &dbg_class) == DOM_NO_ERR && dbg_class != NULL) {
+            if (strstr(dom_string_data(dbg_class), "submenu-wrapper") != NULL) {
+                NSLOG(layout, INFO,
+                    "VERT FINAL submenu-wrapper: top=%d height=%d bottom=%d => box->y will be %d",
+                    top, height, bottom, top + margin[TOP] + border[TOP].width);
+            }
+            dom_string_unref(dbg_class);
+        }
+    }
+
     box->y = top + margin[TOP] + border[TOP].width;
+    
+    /* Debug: Log box->y assignment for submenu-wrapper */
+    if (box->node != NULL) {
+        dom_string *ydbg_class = NULL;
+        if (dom_element_get_attribute(box->node, corestring_dom_class, &ydbg_class) == DOM_NO_ERR && ydbg_class != NULL) {
+            if (strstr(dom_string_data(ydbg_class), "submenu-wrapper") != NULL) {
+                NSLOG(layout, INFO, "BOX_Y SET submenu-wrapper: box->y=%d (top=%d)", box->y, top);
+            }
+            dom_string_unref(ydbg_class);
+        }
+    }
+    
     if (containing_block->type == BOX_BLOCK || containing_block->type == BOX_INLINE_BLOCK ||
         containing_block->type == BOX_TABLE_CELL) {
         /* Block-level ancestor => reset container's height */
