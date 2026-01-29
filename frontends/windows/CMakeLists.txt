@@ -54,6 +54,10 @@ endforeach()
 
 add_custom_target(windows_messages DEPENDS ${GENERATED_MESSAGES_FILES})
 
+# Native GDI linear gradient support (uses GradientFill API)
+# Radial gradients use fallback triangle decomposition since GDI lacks native radial support
+option(NEOSURF_WINDOWS_NATIVE_LINEAR_GRADIENT "Use native GDI linear gradient rendering" ON)
+
 # Resource compilation
 set(NEOSURF_WINDOWS_RC res/resource.rc)
 
@@ -66,6 +70,12 @@ add_dependencies(neosurf-windows windows_messages)
 target_include_directories(neosurf-windows PRIVATE ${GENERATED_MESSAGES_DIR} ${CMAKE_SOURCE_DIR}/src)
 
 target_link_libraries(neosurf-windows neosurf m ${NEOSURF_COMMON_LIBS} ws2_32 comctl32 gdi32 user32 kernel32 msimg32 wininet shlwapi crypt32)
+
+# Enable native GDI linear gradient support if option is ON
+if(NEOSURF_WINDOWS_NATIVE_LINEAR_GRADIENT)
+    target_compile_definitions(neosurf-windows PRIVATE NEOSURF_WINDOWS_NATIVE_LINEAR_GRADIENT=1)
+    message(STATUS "Windows native GDI linear gradient rendering enabled")
+endif()
 
 # Copy required runtime DLLs next to the executable for Debug builds on Windows
 if(WIN32 AND CMAKE_BUILD_TYPE MATCHES Debug)

@@ -971,6 +971,328 @@ static nserror text(const struct redraw_context *ctx, const struct plot_font_sty
 }
 
 
+#ifdef NEOSURF_WINDOWS_NATIVE_LINEAR_GRADIENT
+/**
+ * Plot a linear gradient filling a path.
+ *
+ * Uses GDI GradientFill API with triangle mesh for gradient rendering.
+ * This supports arbitrary gradient angles, not just axis-aligned.
+ *
+ * \param ctx The current redraw context.
+ * \param path Path data (float array with path commands).
+ * \param path_len Number of elements in path array.
+ * \param transform 6-element affine transform to apply to path.
+ * \param x0, y0 Start point of gradient line.
+ * \param x1, y1 End point of gradient line.
+ * \param stops Array of color stops.
+ * \param stop_count Number of color stops.
+ * \return NSERROR_OK on success else error code.
+ */
+static nserror win_plot_linear_gradient(const struct redraw_context *ctx, const float *path, unsigned int path_len,
+    const float transform[6], float x0, float y0, float x1, float y1, const struct gradient_stop *stops,
+    unsigned int stop_count)
+{
+    HRGN clipregion;
+    float minx, miny, maxx, maxy;
+    int bbox_init = 0;
+    unsigned int i;
+
+    if (plot_hdc == NULL) {
+        NSLOG(neosurf, INFO, "HDC not set on call to plotters");
+        return NSERROR_INVALID;
+    }
+
+    if (stop_count < 2) {
+        NSLOG(plot, WARNING, "Linear gradient needs at least 2 stops, got %u", stop_count);
+        return NSERROR_INVALID;
+    }
+
+    /* Use identity transform if none provided (CSS gradients don't provide transform) */
+    static const float identity[6] = {1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f};
+    if (transform == NULL) {
+        transform = identity;
+    }
+
+    /* Extract bounding box from path */
+    if (path != NULL && path_len >= 3) {
+        i = 0;
+        while (i < path_len) {
+            int cmd = (int)path[i++];
+            switch (cmd) {
+            case PLOTTER_PATH_MOVE:
+            case PLOTTER_PATH_LINE: {
+                float px = path[i++];
+                float py = path[i++];
+                /* Apply transform */
+                float tx = transform[0] * px + transform[2] * py + transform[4];
+                float ty = transform[1] * px + transform[3] * py + transform[5];
+                if (!bbox_init) {
+                    minx = maxx = tx;
+                    miny = maxy = ty;
+                    bbox_init = 1;
+                } else {
+                    if (tx < minx)
+                        minx = tx;
+                    if (tx > maxx)
+                        maxx = tx;
+                    if (ty < miny)
+                        miny = ty;
+                    if (ty > maxy)
+                        maxy = ty;
+                }
+                break;
+            }
+            case PLOTTER_PATH_BEZIER: {
+                /* Include all bezier control points in bounding box */
+                for (int j = 0; j < 3; j++) {
+                    float px = path[i++];
+                    float py = path[i++];
+                    float tx = transform[0] * px + transform[2] * py + transform[4];
+                    float ty = transform[1] * px + transform[3] * py + transform[5];
+                    if (!bbox_init) {
+                        minx = maxx = tx;
+                        miny = maxy = ty;
+                        bbox_init = 1;
+                    } else {
+                        if (tx < minx)
+                            minx = tx;
+                        if (tx > maxx)
+                            maxx = tx;
+                        if (ty < miny)
+                            miny = ty;
+                        if (ty > maxy)
+                            maxy = ty;
+                    }
+                }
+                break;
+            }
+            case PLOTTER_PATH_CLOSE:
+                break;
+            default:
+                NSLOG(plot, WARNING, "Unknown path command %d in gradient", cmd);
+                break;
+            }
+        }
+    }
+
+    if (!bbox_init) {
+        /* No valid path - use the current clip rect as the fill area.
+         * This is the correct behavior for CSS gradients where the clip
+         * region defines the shape to fill. */
+        minx = (float)plot_clip.left;
+        miny = (float)plot_clip.top;
+        maxx = (float)plot_clip.right;
+        maxy = (float)plot_clip.bottom;
+    }
+
+    NSLOG(plot, DEBUG, "GDI linear gradient: (%.1f,%.1f) to (%.1f,%.1f), %u stops, bbox=(%.1f,%.1f)-(%.1f,%.1f)", x0,
+        y0, x1, y1, stop_count, minx, miny, maxx, maxy);
+
+    /* Set up clipping region - for SVG gradients, clip to the path shape */
+    HRGN pathregion = NULL;
+    if (path != NULL && path_len >= 3) {
+        /* Create a GDI path from the path data */
+        BeginPath(plot_hdc);
+
+        i = 0;
+        while (i < path_len) {
+            int cmd = (int)path[i++];
+            switch (cmd) {
+            case PLOTTER_PATH_MOVE: {
+                float px = path[i++];
+                float py = path[i++];
+                float tx = transform[0] * px + transform[2] * py + transform[4];
+                float ty = transform[1] * px + transform[3] * py + transform[5];
+                MoveToEx(plot_hdc, (int)tx, (int)ty, NULL);
+                break;
+            }
+            case PLOTTER_PATH_LINE: {
+                float px = path[i++];
+                float py = path[i++];
+                float tx = transform[0] * px + transform[2] * py + transform[4];
+                float ty = transform[1] * px + transform[3] * py + transform[5];
+                LineTo(plot_hdc, (int)tx, (int)ty);
+                break;
+            }
+            case PLOTTER_PATH_BEZIER: {
+                POINT pts[3];
+                for (int j = 0; j < 3; j++) {
+                    float px = path[i++];
+                    float py = path[i++];
+                    pts[j].x = (LONG)(transform[0] * px + transform[2] * py + transform[4]);
+                    pts[j].y = (LONG)(transform[1] * px + transform[3] * py + transform[5]);
+                }
+                PolyBezierTo(plot_hdc, pts, 3);
+                break;
+            }
+            case PLOTTER_PATH_CLOSE:
+                CloseFigure(plot_hdc);
+                break;
+            default:
+                break;
+            }
+        }
+
+        EndPath(plot_hdc);
+
+        /* Convert path to region for clipping */
+        pathregion = PathToRegion(plot_hdc);
+        if (pathregion != NULL) {
+            /* Also intersect with the plot_clip to respect viewport bounds */
+            HRGN cliprect = CreateRectRgnIndirect(&plot_clip);
+            if (cliprect != NULL) {
+                CombineRgn(pathregion, pathregion, cliprect, RGN_AND);
+                DeleteObject(cliprect);
+            }
+            SelectClipRgn(plot_hdc, pathregion);
+        }
+    }
+
+    /* If no path region was created, use rectangle clip */
+    if (pathregion == NULL) {
+        clipregion = CreateRectRgnIndirect(&plot_clip);
+        if (clipregion == NULL) {
+            return NSERROR_INVALID;
+        }
+        SelectClipRgn(plot_hdc, clipregion);
+    } else {
+        clipregion = pathregion;
+    }
+
+    /* Transform gradient endpoints */
+    float gx0 = transform[0] * x0 + transform[2] * y0 + transform[4];
+    float gy0 = transform[1] * x0 + transform[3] * y0 + transform[5];
+    float gx1 = transform[0] * x1 + transform[2] * y1 + transform[4];
+    float gy1 = transform[1] * x1 + transform[3] * y1 + transform[5];
+
+    /* Calculate gradient direction */
+    float gdx = gx1 - gx0;
+    float gdy = gy1 - gy0;
+    float glen = sqrtf(gdx * gdx + gdy * gdy);
+
+    if (glen < 0.01f) {
+        /* Degenerate gradient - just fill with first color */
+        COLORREF col = RGB(stops[0].color & 0xFF, (stops[0].color >> 8) & 0xFF, (stops[0].color >> 16) & 0xFF);
+        HBRUSH brush = CreateSolidBrush(col);
+        RECT fillrect = {(LONG)minx, (LONG)miny, (LONG)(maxx + 1), (LONG)(maxy + 1)};
+        FillRect(plot_hdc, &fillrect, brush);
+        DeleteObject(brush);
+        SelectClipRgn(plot_hdc, NULL);
+        DeleteObject(clipregion);
+        return NSERROR_OK;
+    }
+
+    /* Normalize gradient direction */
+    float ndx = gdx / glen;
+    float ndy = gdy / glen;
+
+    /* Perpendicular direction */
+    float pdx = -ndy;
+    float pdy = ndx;
+
+    /* Calculate how far the bounding box extends along the gradient direction */
+    float corners[4][2] = {{minx, miny}, {maxx, miny}, {maxx, maxy}, {minx, maxy}};
+    float min_proj = 1e30f, max_proj = -1e30f;
+    float max_perp = 0;
+
+    for (int c = 0; c < 4; c++) {
+        float dx = corners[c][0] - gx0;
+        float dy = corners[c][1] - gy0;
+        float proj = dx * ndx + dy * ndy;
+        float perp = fabsf(dx * pdx + dy * pdy);
+        if (proj < min_proj)
+            min_proj = proj;
+        if (proj > max_proj)
+            max_proj = proj;
+        if (perp > max_perp)
+            max_perp = perp;
+    }
+
+    /* Use GradientFill with triangle mesh for smooth gradient */
+    /* We'll create strips perpendicular to gradient direction */
+
+    /* Number of vertices = 2 * number of stops (left and right edge of each strip) */
+    TRIVERTEX *vertices = malloc(sizeof(TRIVERTEX) * stop_count * 2);
+    GRADIENT_TRIANGLE *triangles = malloc(sizeof(GRADIENT_TRIANGLE) * (stop_count - 1) * 2);
+
+    if (vertices == NULL || triangles == NULL) {
+        free(vertices);
+        free(triangles);
+        SelectClipRgn(plot_hdc, NULL);
+        DeleteObject(clipregion);
+        return NSERROR_NOMEM;
+    }
+
+    /* Extend perpendicular distance to cover the bounding box */
+    float perp_extend = max_perp + 10;
+
+    for (i = 0; i < stop_count; i++) {
+        float t = stops[i].offset;
+        /* Project position along gradient line */
+        float pos = t * glen;
+
+        /* Calculate left and right vertices perpendicular to gradient */
+        float cx = gx0 + ndx * pos;
+        float cy = gy0 + ndy * pos;
+
+        /* Left vertex (negative perpendicular direction) */
+        vertices[i * 2].x = (LONG)(cx - pdx * perp_extend);
+        vertices[i * 2].y = (LONG)(cy - pdy * perp_extend);
+
+        /* Right vertex (positive perpendicular direction) */
+        vertices[i * 2 + 1].x = (LONG)(cx + pdx * perp_extend);
+        vertices[i * 2 + 1].y = (LONG)(cy + pdy * perp_extend);
+
+        /* Set color - GDI uses 16-bit color components */
+        colour c = stops[i].color;
+        USHORT red = ((c & 0xFF) << 8);
+        USHORT green = (((c >> 8) & 0xFF) << 8);
+        USHORT blue = (((c >> 16) & 0xFF) << 8);
+        USHORT alpha = 0xFF00; /* Full opacity */
+
+        vertices[i * 2].Red = red;
+        vertices[i * 2].Green = green;
+        vertices[i * 2].Blue = blue;
+        vertices[i * 2].Alpha = alpha;
+
+        vertices[i * 2 + 1].Red = red;
+        vertices[i * 2 + 1].Green = green;
+        vertices[i * 2 + 1].Blue = blue;
+        vertices[i * 2 + 1].Alpha = alpha;
+    }
+
+    /* Create triangles between adjacent stop lines */
+    for (i = 0; i < stop_count - 1; i++) {
+        /* First triangle: current-left, current-right, next-left */
+        triangles[i * 2].Vertex1 = i * 2;
+        triangles[i * 2].Vertex2 = i * 2 + 1;
+        triangles[i * 2].Vertex3 = (i + 1) * 2;
+
+        /* Second triangle: current-right, next-right, next-left */
+        triangles[i * 2 + 1].Vertex1 = i * 2 + 1;
+        triangles[i * 2 + 1].Vertex2 = (i + 1) * 2 + 1;
+        triangles[i * 2 + 1].Vertex3 = (i + 1) * 2;
+    }
+
+    /* Call GradientFill */
+    BOOL result = GradientFill(
+        plot_hdc, vertices, stop_count * 2, triangles, (stop_count - 1) * 2, GRADIENT_FILL_TRIANGLE);
+
+    if (!result) {
+        NSLOG(plot, WARNING, "GradientFill failed with error %lu", GetLastError());
+    }
+
+    free(vertices);
+    free(triangles);
+
+    SelectClipRgn(plot_hdc, NULL);
+    DeleteObject(clipregion);
+
+    return result ? NSERROR_OK : NSERROR_INVALID;
+}
+#endif /* NEOSURF_WINDOWS_NATIVE_LINEAR_GRADIENT */
+
+
 /**
  * win32 API plot operation table
  */
@@ -984,5 +1306,8 @@ const struct plotter_table win_plotters = {
     .arc = arc,
     .bitmap = bitmap,
     .path = path,
+#ifdef NEOSURF_WINDOWS_NATIVE_LINEAR_GRADIENT
+    .linear_gradient = win_plot_linear_gradient,
+#endif
     .option_knockout = true,
 };
