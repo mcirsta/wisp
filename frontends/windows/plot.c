@@ -1211,9 +1211,13 @@ static nserror win_plot_linear_gradient(const struct redraw_context *ctx, const 
     /* Use GradientFill with triangle mesh for smooth gradient */
     /* We'll create strips perpendicular to gradient direction */
 
-    /* Number of vertices = 2 * number of stops (left and right edge of each strip) */
-    TRIVERTEX *vertices = malloc(sizeof(TRIVERTEX) * stop_count * 2);
-    GRADIENT_TRIANGLE *triangles = malloc(sizeof(GRADIENT_TRIANGLE) * (stop_count - 1) * 2);
+    /* We need extra vertices to extend the gradient beyond stops[0] and stops[stop_count-1]
+     * to cover the full bounding box. Add 2 extra vertex pairs (one before, one after). */
+    unsigned int total_vertices = (stop_count + 2) * 2;
+    unsigned int total_triangles = (stop_count + 1) * 2;
+
+    TRIVERTEX *vertices = malloc(sizeof(TRIVERTEX) * total_vertices);
+    GRADIENT_TRIANGLE *triangles = malloc(sizeof(GRADIENT_TRIANGLE) * total_triangles);
 
     if (vertices == NULL || triangles == NULL) {
         free(vertices);
@@ -1226,43 +1230,54 @@ static nserror win_plot_linear_gradient(const struct redraw_context *ctx, const 
     /* Extend perpendicular distance to cover the bounding box */
     float perp_extend = max_perp + 10;
 
+/* Helper to add a vertex pair at a given position along the gradient with a given color */
+#define ADD_VERTEX_PAIR(idx, pos_along_gradient, col)                                                                  \
+    do {                                                                                                               \
+        float cx = gx0 + ndx * (pos_along_gradient);                                                                   \
+        float cy = gy0 + ndy * (pos_along_gradient);                                                                   \
+        vertices[(idx) * 2].x = (LONG)(cx - pdx * perp_extend);                                                        \
+        vertices[(idx) * 2].y = (LONG)(cy - pdy * perp_extend);                                                        \
+        vertices[(idx) * 2 + 1].x = (LONG)(cx + pdx * perp_extend);                                                    \
+        vertices[(idx) * 2 + 1].y = (LONG)(cy + pdy * perp_extend);                                                    \
+        USHORT r = (((col) & 0xFF) << 8);                                                                              \
+        USHORT g = ((((col) >> 8) & 0xFF) << 8);                                                                       \
+        USHORT b = ((((col) >> 16) & 0xFF) << 8);                                                                      \
+        vertices[(idx) * 2].Red = r;                                                                                   \
+        vertices[(idx) * 2].Green = g;                                                                                 \
+        vertices[(idx) * 2].Blue = b;                                                                                  \
+        vertices[(idx) * 2].Alpha = 0xFF00;                                                                            \
+        vertices[(idx) * 2 + 1].Red = r;                                                                               \
+        vertices[(idx) * 2 + 1].Green = g;                                                                             \
+        vertices[(idx) * 2 + 1].Blue = b;                                                                              \
+        vertices[(idx) * 2 + 1].Alpha = 0xFF00;                                                                        \
+    } while (0)
+
+    /* First vertex pair: extend before the first stop with first stop's color */
+    float first_offset = stops[0].offset;
+    float first_pos = first_offset * glen;
+    float start_pos = min_proj - 10; /* Extend before bounding box */
+    if (start_pos >= first_pos)
+        start_pos = first_pos - 10;
+    ADD_VERTEX_PAIR(0, start_pos, stops[0].color);
+
+    /* Add vertices for each gradient stop */
     for (i = 0; i < stop_count; i++) {
-        float t = stops[i].offset;
-        /* Project position along gradient line */
-        float pos = t * glen;
-
-        /* Calculate left and right vertices perpendicular to gradient */
-        float cx = gx0 + ndx * pos;
-        float cy = gy0 + ndy * pos;
-
-        /* Left vertex (negative perpendicular direction) */
-        vertices[i * 2].x = (LONG)(cx - pdx * perp_extend);
-        vertices[i * 2].y = (LONG)(cy - pdy * perp_extend);
-
-        /* Right vertex (positive perpendicular direction) */
-        vertices[i * 2 + 1].x = (LONG)(cx + pdx * perp_extend);
-        vertices[i * 2 + 1].y = (LONG)(cy + pdy * perp_extend);
-
-        /* Set color - GDI uses 16-bit color components */
-        colour c = stops[i].color;
-        USHORT red = ((c & 0xFF) << 8);
-        USHORT green = (((c >> 8) & 0xFF) << 8);
-        USHORT blue = (((c >> 16) & 0xFF) << 8);
-        USHORT alpha = 0xFF00; /* Full opacity */
-
-        vertices[i * 2].Red = red;
-        vertices[i * 2].Green = green;
-        vertices[i * 2].Blue = blue;
-        vertices[i * 2].Alpha = alpha;
-
-        vertices[i * 2 + 1].Red = red;
-        vertices[i * 2 + 1].Green = green;
-        vertices[i * 2 + 1].Blue = blue;
-        vertices[i * 2 + 1].Alpha = alpha;
+        float pos = stops[i].offset * glen;
+        ADD_VERTEX_PAIR(i + 1, pos, stops[i].color);
     }
 
-    /* Create triangles between adjacent stop lines */
-    for (i = 0; i < stop_count - 1; i++) {
+    /* Last vertex pair: extend after the last stop with last stop's color */
+    float last_offset = stops[stop_count - 1].offset;
+    float last_pos = last_offset * glen;
+    float end_pos = max_proj + 10; /* Extend after bounding box */
+    if (end_pos <= last_pos)
+        end_pos = last_pos + 10;
+    ADD_VERTEX_PAIR(stop_count + 1, end_pos, stops[stop_count - 1].color);
+
+#undef ADD_VERTEX_PAIR
+
+    /* Create triangles between adjacent vertex pairs */
+    for (i = 0; i < stop_count + 1; i++) {
         /* First triangle: current-left, current-right, next-left */
         triangles[i * 2].Vertex1 = i * 2;
         triangles[i * 2].Vertex2 = i * 2 + 1;
@@ -1275,8 +1290,7 @@ static nserror win_plot_linear_gradient(const struct redraw_context *ctx, const 
     }
 
     /* Call GradientFill */
-    BOOL result = GradientFill(
-        plot_hdc, vertices, stop_count * 2, triangles, (stop_count - 1) * 2, GRADIENT_FILL_TRIANGLE);
+    BOOL result = GradientFill(plot_hdc, vertices, total_vertices, triangles, total_triangles, GRADIENT_FILL_TRIANGLE);
 
     if (!result) {
         NSLOG(plot, WARNING, "GradientFill failed with error %lu", GetLastError());
