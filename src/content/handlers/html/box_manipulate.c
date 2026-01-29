@@ -94,6 +94,11 @@ static int box_talloc_destructor(void *ptr)
         b->gadget = NULL;
     }
 
+    if (!(b->flags & CLONE) && b->svg_diagram != NULL) {
+        svgtiny_free(b->svg_diagram);
+        b->svg_diagram = NULL;
+    }
+
     return 0;
 }
 
