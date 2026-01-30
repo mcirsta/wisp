@@ -68,9 +68,9 @@ nserror html_font_face_process(const css_font_face *font_face, const char *base_
 
 /**
  * Load font data into the system font database.
- * This is called from the frontend when font data is received.
+ * This function must be implemented by each frontend.
  *
- * \param family_name Font family name
+ * \param family_name Font family name (CSS font-family)
  * \param data        Raw font file data
  * \param size        Size of font data in bytes
  * \return NSERROR_OK on success, or error code

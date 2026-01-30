@@ -33,6 +33,7 @@
 #define _NETSURF_LAYOUT_H_
 
 #include <stddef.h>
+#include <stdint.h>
 
 #include <neosurf/utils/errors.h>
 
@@ -96,6 +97,19 @@ struct gui_layout_table {
      */
     nserror (*split)(const struct plot_font_style *fstyle, const char *string, size_t length, int x,
         size_t *char_offset, int *actual_x);
+
+    /**
+     * Load font data into the system font database.
+     *
+     * This is called when a web font (@font-face) has been downloaded.
+     * The frontend should load the font into its platform's font system.
+     *
+     * \\param[in] family_name CSS font-family name
+     * \\param[in] data        Raw font file data (TrueType/OpenType/WOFF)
+     * \\param[in] size        Size of font data in bytes
+     * \\return NSERROR_OK on success, or appropriate error code
+     */
+    nserror (*load_font_data)(const char *family_name, const uint8_t *data, size_t size);
 };
 
 #endif

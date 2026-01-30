@@ -77,6 +77,14 @@ if(NEOSURF_WINDOWS_NATIVE_LINEAR_GRADIENT)
     message(STATUS "Windows native GDI linear gradient rendering enabled")
 endif()
 
+# WOFF font format decompression (converts WOFF to raw TrueType/OpenType for AddFontMemResourceEx)
+option(NEOSURF_WOFF_DECODE "Enable WOFF font format decompression for web fonts" ON)
+if(NEOSURF_WOFF_DECODE)
+    target_compile_definitions(neosurf-windows PRIVATE NEOSURF_WOFF_DECODE=1)
+    target_link_libraries(neosurf-windows ${ZLIB_LIBRARIES})
+    message(STATUS "WOFF font decompression enabled")
+endif()
+
 # Copy required runtime DLLs next to the executable for Debug builds on Windows
 if(WIN32 AND CMAKE_BUILD_TYPE MATCHES Debug)
     set(SVGTINY_RUNTIME)

@@ -30,6 +30,9 @@
 
 #include <neosurf/content/handlers/html/private.h>
 #include <neosurf/content/llcache.h>
+#include <neosurf/desktop/gui_internal.h>
+#include <neosurf/layout.h>
+#include <neosurf/neosurf.h>
 #include <neosurf/utils/errors.h>
 #include <neosurf/utils/log.h>
 #include <neosurf/utils/nsurl.h>
@@ -141,8 +144,11 @@ static nserror font_fetch_callback(llcache_handle *handle, const llcache_event *
         if (data != NULL && size > 0) {
             NSLOG(netsurf, INFO, "Font '%s' downloaded (%zu bytes)", dl->family_name, size);
 
-            /* Load the font into the system */
-            nserror err = html_font_face_load_data(dl->family_name, data, size);
+            /* Load the font into the system via frontend table */
+            nserror err = NSERROR_NOT_IMPLEMENTED;
+            if (guit != NULL && guit->layout != NULL && guit->layout->load_font_data != NULL) {
+                err = guit->layout->load_font_data(dl->family_name, data, size);
+            }
             if (err == NSERROR_OK) {
                 mark_font_loaded(dl->family_name);
             }
@@ -349,16 +355,6 @@ bool html_font_face_is_available(const char *family_name)
     return false;
 }
 
-/* This is a stub - the actual implementation is in the Qt frontend */
-__attribute__((weak)) nserror html_font_face_load_data(const char *family_name, const uint8_t *data, size_t size)
-{
-    (void)family_name;
-    (void)data;
-    (void)size;
-
-    NSLOG(netsurf, WARNING, "html_font_face_load_data not implemented by frontend");
-    return NSERROR_NOT_IMPLEMENTED;
-}
 
 /* Exported function documented in font_face.h */
 void html_font_face_set_done_callback(html_font_face_done_cb cb)
