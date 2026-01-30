@@ -310,7 +310,10 @@ nserror win32_bitmap_ensure_scaled(struct bitmap *bm, int width, int height)
         return NSERROR_INVALID;
     }
     SelectObject(sdc, swindib);
-    SetStretchBltMode(sdc, COLORONCOLOR);
+    /* Use HALFTONE for better quality interpolation when scaling.
+     * SetBrushOrgEx is required when using HALFTONE mode. */
+    SetStretchBltMode(sdc, HALFTONE);
+    SetBrushOrgEx(sdc, 0, 0, NULL);
     bltres = StretchDIBits(sdc, 0, 0, width, height, 0, 0, bm->width, bm->height, bm->pixdata, (BITMAPINFO *)bm->pbmi,
         DIB_RGB_COLORS, SRCCOPY);
 

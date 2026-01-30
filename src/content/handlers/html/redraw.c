@@ -38,6 +38,7 @@
 
 #include <libwapcaplet/libwapcaplet.h>
 #include <neosurf/bitmap.h>
+#include <neosurf/browser.h>
 #include <neosurf/browser_window.h>
 #include <neosurf/content.h>
 #include <neosurf/content/content.h>
@@ -1088,16 +1089,29 @@ static bool html_redraw_background(int x, int y, struct box *box, float scale, c
 
         /* handle background-position */
         css_computed_background_position(background->style, &hpos, &hunit, &vpos, &vunit);
-        if (hunit == CSS_UNIT_PCT) {
-            x += (width - content_get_width(background->background)) * scale * FIXTOFLT(hpos) / 100.;
-        } else {
-            x += (int)(FIXTOFLT(css_unit_len2device_px(background->style, unit_len_ctx, hpos, hunit)) * scale);
-        }
+        {
+            int bg_width = content_get_width(background->background);
+            int bg_height = content_get_height(background->background);
+#ifdef NEOSURF_DEVICE_PIXEL_LAYOUT
+            {
+                int dpi = browser_get_dpi();
+                if (dpi > 0 && dpi != 96) {
+                    bg_width = (bg_width * dpi) / 96;
+                    bg_height = (bg_height * dpi) / 96;
+                }
+            }
+#endif
+            if (hunit == CSS_UNIT_PCT) {
+                x += (width - bg_width) * scale * FIXTOFLT(hpos) / 100.;
+            } else {
+                x += (int)(FIXTOFLT(css_unit_len2device_px(background->style, unit_len_ctx, hpos, hunit)) * scale);
+            }
 
-        if (vunit == CSS_UNIT_PCT) {
-            y += (height - content_get_height(background->background)) * scale * FIXTOFLT(vpos) / 100.;
-        } else {
-            y += (int)(FIXTOFLT(css_unit_len2device_px(background->style, unit_len_ctx, vpos, vunit)) * scale);
+            if (vunit == CSS_UNIT_PCT) {
+                y += (height - bg_height) * scale * FIXTOFLT(vpos) / 100.;
+            } else {
+                y += (int)(FIXTOFLT(css_unit_len2device_px(background->style, unit_len_ctx, vpos, vunit)) * scale);
+            }
         }
     }
 
@@ -1189,6 +1203,15 @@ static bool html_redraw_background(int x, int y, struct box *box, float scale, c
         if (plot_content) {
             width = content_get_width(background->background);
             height = content_get_height(background->background);
+#ifdef NEOSURF_DEVICE_PIXEL_LAYOUT
+            {
+                int dpi = browser_get_dpi();
+                if (dpi > 0 && dpi != 96) {
+                    width = (width * dpi) / 96;
+                    height = (height * dpi) / 96;
+                }
+            }
+#endif
 
             /* ensure clip area only as large as required */
             if (!repeat_x) {
@@ -1302,20 +1325,33 @@ static bool html_redraw_inline_background(int x, int y, struct box *box, float s
 
         /* handle background-position */
         css_computed_background_position(box->style, &hpos, &hunit, &vpos, &vunit);
-        if (hunit == CSS_UNIT_PCT) {
-            x += (b.x1 - b.x0 - content_get_width(box->background) * scale) * FIXTOFLT(hpos) / 100.;
-
-            if (!repeat_x && ((hpos < 2 && !first) || (hpos > 98 && !last))) {
-                plot_content = false;
+        {
+            int bg_width = content_get_width(box->background);
+            int bg_height = content_get_height(box->background);
+#ifdef NEOSURF_DEVICE_PIXEL_LAYOUT
+            {
+                int dpi = browser_get_dpi();
+                if (dpi > 0 && dpi != 96) {
+                    bg_width = (bg_width * dpi) / 96;
+                    bg_height = (bg_height * dpi) / 96;
+                }
             }
-        } else {
-            x += (int)(FIXTOFLT(css_unit_len2device_px(box->style, unit_len_ctx, hpos, hunit)) * scale);
-        }
+#endif
+            if (hunit == CSS_UNIT_PCT) {
+                x += (b.x1 - b.x0 - bg_width * scale) * FIXTOFLT(hpos) / 100.;
 
-        if (vunit == CSS_UNIT_PCT) {
-            y += (b.y1 - b.y0 - content_get_height(box->background) * scale) * FIXTOFLT(vpos) / 100.;
-        } else {
-            y += (int)(FIXTOFLT(css_unit_len2device_px(box->style, unit_len_ctx, vpos, vunit)) * scale);
+                if (!repeat_x && ((hpos < 2 && !first) || (hpos > 98 && !last))) {
+                    plot_content = false;
+                }
+            } else {
+                x += (int)(FIXTOFLT(css_unit_len2device_px(box->style, unit_len_ctx, hpos, hunit)) * scale);
+            }
+
+            if (vunit == CSS_UNIT_PCT) {
+                y += (b.y1 - b.y0 - bg_height * scale) * FIXTOFLT(vpos) / 100.;
+            } else {
+                y += (int)(FIXTOFLT(css_unit_len2device_px(box->style, unit_len_ctx, vpos, vunit)) * scale);
+            }
         }
     }
 
@@ -1337,6 +1373,15 @@ static bool html_redraw_inline_background(int x, int y, struct box *box, float s
     if (plot_content) {
         int width = content_get_width(box->background);
         int height = content_get_height(box->background);
+#ifdef NEOSURF_DEVICE_PIXEL_LAYOUT
+        {
+            int dpi = browser_get_dpi();
+            if (dpi > 0 && dpi != 96) {
+                width = (width * dpi) / 96;
+                height = (height * dpi) / 96;
+            }
+        }
+#endif
 
         if (!repeat_x) {
             if (r.x0 < x)
@@ -2681,7 +2726,19 @@ bool html_redraw_box(const html_content *html, struct box *box, int x_parent, in
         /* Dimensions: pass unscaled, content_redraw applies obj_data.scale */
         obj_data.width = render_width;
         obj_data.height = render_height;
-        obj_data.background_colour = current_background_color;
+        /* If this box has a transparent background, don't fill behind the image.
+         * Otherwise use the inherited background color for alpha blending. */
+        if (box->style != NULL) {
+            css_color bgcol;
+            css_computed_background_color(box->style, &bgcol);
+            if (nscss_color_is_transparent(bgcol)) {
+                obj_data.background_colour = NS_TRANSPARENT;
+            } else {
+                obj_data.background_colour = current_background_color;
+            }
+        } else {
+            obj_data.background_colour = current_background_color;
+        }
         obj_data.scale = scale;
         obj_data.repeat_x = false;
         obj_data.repeat_y = false;
@@ -2698,11 +2755,20 @@ bool html_redraw_box(const html_content *html, struct box *box, int x_parent, in
             html_clip_intersect_object_fit(&object_clip, box_left, box_top, box_right, box_bottom, has_transform);
         }
 
+
         if (content_get_type(box->object) == CONTENT_HTML) {
             obj_data.x /= scale;
             obj_data.y /= scale;
         }
 
+        NSLOG(plot, INFO,
+            "REDRAW_IMG box=%p box_w=%d box_h=%d scaled_w=%d scaled_h=%d render=%dx%d scale=%.2f intrinsic=%dx%d", box,
+            box->width, box->height, width, height, render_width, render_height, scale, intrinsic_width,
+            intrinsic_height);
+        NSLOG(plot, INFO,
+            "REDRAW_IMG obj_data: x=%d y=%d w=%d h=%d obj_clip: x0=%d y0=%d x1=%d y1=%d (clip_size=%dx%d)", obj_data.x,
+            obj_data.y, obj_data.width, obj_data.height, object_clip.x0, object_clip.y0, object_clip.x1, object_clip.y1,
+            object_clip.x1 - object_clip.x0, object_clip.y1 - object_clip.y0);
 
         if (!content_redraw(box->object, &obj_data, &object_clip, ctx)) {
             const char *tag = "";

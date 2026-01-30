@@ -517,6 +517,11 @@ static nserror rectangle(const struct redraw_context *ctx, const plot_style_t *s
         return NSERROR_INVALID;
     }
 
+    /* Skip drawing if no fill and no stroke - nothing to draw */
+    if (style->fill_type == PLOT_OP_TYPE_NONE && style->stroke_type == PLOT_OP_TYPE_NONE) {
+        return NSERROR_OK;
+    }
+
     HRGN clipregion = CreateRectRgnIndirect(&plot_clip);
     if (clipregion == NULL) {
         return NSERROR_INVALID;
@@ -842,7 +847,11 @@ static nserror bitmap(const struct redraw_context *ctx, struct bitmap *bitmap, i
 
     /* Bail early if we can */
 
-    NSLOG(plot, DEEPDEBUG, "Plotting %p at %d,%d by %d,%d", bitmap, x, y, width, height);
+    NSLOG(plot, INFO,
+        "WIN_BITMAP Plotting %p at x=%d y=%d size=%dx%d intrinsic=%dx%d clip: %ld,%ld to %ld,%ld (clip_size=%ldx%ld)",
+        bitmap, x, y, width, height, bitmap ? bitmap->width : 0, bitmap ? bitmap->height : 0, plot_clip.left,
+        plot_clip.top, plot_clip.right, plot_clip.bottom, plot_clip.right - plot_clip.left,
+        plot_clip.bottom - plot_clip.top);
 
     if (bitmap == NULL) {
         NSLOG(neosurf, INFO, "Passed null bitmap!");

@@ -29,6 +29,7 @@
 #include <string.h>
 #include <strings.h>
 
+#include <neosurf/browser.h>
 #include <neosurf/content.h>
 #include <neosurf/content/handlers/css/utils.h>
 #include <neosurf/content/hlcache.h>
@@ -328,13 +329,22 @@ static nserror html_object_callback(hlcache_handle *object, const hlcache_event 
                 css_computed_background_position(box->style, &hpos, &hunit, &vpos, &vunit);
 
                 w = content_get_width(box->background);
+                h = content_get_height(box->background);
+#ifdef NEOSURF_DEVICE_PIXEL_LAYOUT
+                {
+                    int dpi = browser_get_dpi();
+                    if (dpi > 0 && dpi != 96) {
+                        w = (w * dpi) / 96;
+                        h = (h * dpi) / 96;
+                    }
+                }
+#endif
                 if (hunit == CSS_UNIT_PCT) {
                     l = (width - w) * hpos / INTTOFIX(100);
                 } else {
                     l = FIXTOINT(css_unit_len2device_px(box->style, &c->unit_len_ctx, hpos, hunit));
                 }
 
-                h = content_get_height(box->background);
                 if (vunit == CSS_UNIT_PCT) {
                     t = (height - h) * vpos / INTTOFIX(100);
                 } else {
@@ -379,6 +389,15 @@ static nserror html_object_callback(hlcache_handle *object, const hlcache_event 
                 /* Non-background case */
                 int w = content_get_width(object);
                 int h = content_get_height(object);
+#ifdef NEOSURF_DEVICE_PIXEL_LAYOUT
+                {
+                    int dpi = browser_get_dpi();
+                    if (dpi > 0 && dpi != 96) {
+                        w = (w * dpi) / 96;
+                        h = (h * dpi) / 96;
+                    }
+                }
+#endif
 
                 if (w != 0 && box->width != w) {
                     /* Not showing image at intrinsic

@@ -43,6 +43,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <neosurf/browser.h>
 #include <neosurf/browser_window.h>
 #include <neosurf/content.h>
 #include <neosurf/content/content.h>
@@ -136,18 +137,32 @@ static void layout_get_object_dimensions(const css_unit_ctx *unit_len_ctx, struc
     assert(box->object != NULL);
     assert(width != NULL && height != NULL);
 
-    /* Intrinsic dimensions are in device pixels, convert to CSS pixels */
-    int intrinsic_width = FIXTOINT(
-        css_unit_device2css_px(INTTOFIX(content_get_width(box->object)), unit_len_ctx->device_dpi));
-    int intrinsic_height = FIXTOINT(
-        css_unit_device2css_px(INTTOFIX(content_get_height(box->object)), unit_len_ctx->device_dpi));
+    /* Intrinsic dimensions from image content are in CSS pixels (the native
+     * pixel dimensions of the image file). Only CONTENT_HTML reports device
+     * pixels which would need conversion. */
+    int intrinsic_width = content_get_width(box->object);
+    int intrinsic_height = content_get_height(box->object);
 
     /* DIAG: Log image dimensions before calculation */
     NSLOG(layout, DEBUG, "OBJ_DIM box %p: input w=%d h=%d intrinsic=%dx%d limits w[%d,%d] h[%d,%d]", box, *width,
-        *height, intrinsic_width, intrinsic_height, min_width, max_width, min_height, max_height);
+        *height, intrinsic_width, intrinsic_height, min_width.value, max_width, min_height.value, max_height);
 
     if (*width == AUTO && *height == AUTO) {
-        /* No given dimensions */
+        /* No given dimensions - use intrinsic dimensions */
+
+#ifdef NEOSURF_DEVICE_PIXEL_LAYOUT
+        /* Windows frontend uses device pixels for layout (GDI doesn't auto-scale).
+         * Only scale here when intrinsic dimensions are used to determine box size.
+         * If CSS specifies explicit width/height, those values are already in the
+         * correct coordinate space and should not be scaled. */
+        {
+            int dpi = browser_get_dpi();
+            if (dpi > 0 && dpi != 96) {
+                intrinsic_width = (intrinsic_width * dpi) / 96;
+                intrinsic_height = (intrinsic_height * dpi) / 96;
+            }
+        }
+#endif
 
         bool scaled = false;
 
@@ -239,6 +254,10 @@ static void layout_get_object_dimensions(const css_unit_ctx *unit_len_ctx, struc
                 *width = (*height * intrinsic_width) / intrinsic_height;
         }
     }
+
+    /* DIAG: Log final computed dimensions */
+    NSLOG(layout, INFO, "OBJ_DIM_OUT box %p: computed w=%d h=%d (intrinsic was %dx%d)", box, *width, *height,
+        intrinsic_width, intrinsic_height);
 }
 
 
@@ -893,8 +912,16 @@ layout_minmax_block(struct box *block, const struct gui_layout_table *font_func,
             min = html_get_box_tree(block->object)->min_width.value;
             max = html_get_box_tree(block->object)->max_width;
         } else {
-            min = max = FIXTOINT(
-                css_unit_device2css_px(INTTOFIX(content_get_width(block->object)), content->unit_len_ctx.device_dpi));
+            /* Image content dimensions are in CSS pixels, not device pixels */
+            min = max = content_get_width(block->object);
+#ifdef NEOSURF_DEVICE_PIXEL_LAYOUT
+            {
+                int dpi = browser_get_dpi();
+                if (dpi > 0 && dpi != 96) {
+                    min = max = (min * dpi) / 96;
+                }
+            }
+#endif
         }
 
         block->flags |= HAS_HEIGHT;
@@ -4174,11 +4201,19 @@ static void layout_lists(const html_content *content, struct box *box)
                 }
             }
             if (marker->object) {
-                marker->width = FIXTOINT(css_unit_device2css_px(
-                    INTTOFIX(content_get_width(marker->object)), content->unit_len_ctx.device_dpi));
+                /* Image content dimensions are in CSS pixels */
+                marker->width = content_get_width(marker->object);
+                marker->height = content_get_height(marker->object);
+#ifdef NEOSURF_DEVICE_PIXEL_LAYOUT
+                {
+                    int dpi = browser_get_dpi();
+                    if (dpi > 0 && dpi != 96) {
+                        marker->width = (marker->width * dpi) / 96;
+                        marker->height = (marker->height * dpi) / 96;
+                    }
+                }
+#endif
                 marker->x = -marker->width;
-                marker->height = FIXTOINT(css_unit_device2css_px(
-                    INTTOFIX(content_get_height(marker->object)), content->unit_len_ctx.device_dpi));
                 marker->y = (line_height(&content->unit_len_ctx, marker->style) - marker->height) / 2;
             } else if (marker->text) {
                 if (marker->width == UNKNOWN_WIDTH) {

@@ -125,6 +125,11 @@ endif()
 
 if(NEOSURF_BUILD_WINDOWS_FRONTEND)
     add_definitions(-Dnswin32 -DWINVER=0x0600 -D_WIN32_WINNT=0x0600 -D_WIN32_WINDOWS=0x0600 -D_WIN32_IE=0x0600)
+    # Windows uses device pixels for layout (GDI doesn't auto-scale like Qt's QPainter)
+    # This causes image intrinsic dimensions to be scaled by DPI factor during layout
+    set(DEFAULT_DEVICE_PIXEL_LAYOUT ON)
+else()
+    set(DEFAULT_DEVICE_PIXEL_LAYOUT OFF)
 endif()
 if(NEOSURF_BUILD_MONKEY_FRONTEND)
     add_definitions(-Dmonkey -Dnsmonkey)
@@ -138,6 +143,12 @@ option(NEOSURF_ENABLE_FINSTRUMENT "Enable function tracing (-finstrument-functio
 option(NEOSURF_ENABLE_PERF_TRACE "Enable PERF() macro timing traces to stderr" OFF)
 option(NEOSURF_ENABLE_INCREMENTAL_REFLOW "Enable incremental page reflow as images load (slower but progressive)" OFF)
 option(NEOSURF_USE_NATIVE_GRADIENTS "Use native frontend gradient rendering when available (faster, better quality)" ON)
+option(NEOSURF_DEVICE_PIXEL_LAYOUT "Layout engine works in device pixels (requires DPI scaling for images)" ${DEFAULT_DEVICE_PIXEL_LAYOUT})
+
+if(NEOSURF_DEVICE_PIXEL_LAYOUT)
+    add_compile_definitions(NEOSURF_DEVICE_PIXEL_LAYOUT=1)
+    message(STATUS "Device pixel layout enabled (image dimensions scaled by DPI)")
+endif()
 
 if(NEOSURF_ENABLE_PERF_TRACE)
     add_compile_definitions(NEOSURF_PERF_TRACE_ENABLED=1)
