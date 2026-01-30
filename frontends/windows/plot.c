@@ -41,8 +41,12 @@
 #include "windows/font.h"
 #include "windows/gui.h"
 #include "windows/plot.h"
+#include "windows/window.h"
 
 HDC plot_hdc;
+
+/** Current gui_window being painted (for setting gradient flag) */
+struct gui_window *plot_gw;
 
 /** currently set clipping rectangle */
 static RECT plot_clip;
@@ -1036,6 +1040,11 @@ static nserror win_plot_linear_gradient(const struct redraw_context *ctx, const 
     if (stop_count < 2) {
         NSLOG(plot, WARNING, "Linear gradient needs at least 2 stops, got %u", stop_count);
         return NSERROR_INVALID;
+    }
+
+    /* Mark this page as having gradients - scrolling needs full repaint */
+    if (plot_gw != NULL) {
+        plot_gw->has_gradients = true;
     }
 
     /* Use identity transform if none provided (CSS gradients don't provide transform) */

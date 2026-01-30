@@ -18,6 +18,9 @@
 
 #include <windows.h>
 
+struct gui_window;
+
 extern const struct plotter_table win_plotters;
 
 extern HDC plot_hdc;
+extern struct gui_window *plot_gw;

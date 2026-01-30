@@ -1649,6 +1649,7 @@ static void win32_window_start_throbber(struct gui_window *w)
         SendMessage(w->toolbar, TB_SETSTATE, (WPARAM)IDM_NAV_RELOAD, MAKELONG(TBSTATE_INDETERMINATE, 0));
     }
     w->throbbing = true;
+    w->has_gradients = false; /* Reset - will be set if page contains gradients */
     Animate_Play(w->throbber, 0, -1, -1);
 }
 
@@ -1945,13 +1946,25 @@ nserror win32_window_set_scroll(struct gui_window *gw, const struct rect *rect)
     SetCaretPos(p.x - gw->requestscrollx, p.y - gw->requestscrolly);
     ShowCaret(gw->drawingarea);
 
-    RECT r, redraw;
+    RECT r;
     r.top = 0;
     r.bottom = view_height + 1;
     r.left = 0;
     r.right = view_width + 1;
-    ScrollWindowEx(gw->drawingarea, -gw->requestscrollx, -gw->requestscrolly, &r, NULL, NULL, &redraw, SW_INVALIDATE);
-    NSLOG(neosurf, DEEPDEBUG, "ScrollWindowEx %d, %d", -gw->requestscrollx, -gw->requestscrolly);
+
+    if (gw->has_gradients) {
+        /* Pages with gradients need full repaint since ScrollWindowEx
+         * copies pixels which causes gradient artifacts. */
+        InvalidateRect(gw->drawingarea, &r, FALSE);
+        NSLOG(neosurf, DEEPDEBUG, "Scroll full invalidate (has gradients) %d, %d", -gw->requestscrollx,
+            -gw->requestscrolly);
+    } else {
+        /* No gradients - use efficient scroll-blit optimization */
+        RECT redraw;
+        ScrollWindowEx(
+            gw->drawingarea, -gw->requestscrollx, -gw->requestscrolly, &r, NULL, NULL, &redraw, SW_INVALIDATE);
+        NSLOG(neosurf, DEEPDEBUG, "ScrollWindowEx %d, %d", -gw->requestscrollx, -gw->requestscrolly);
+    }
 
     gw->scrolly += gw->requestscrolly;
     gw->scrollx += gw->requestscrollx;

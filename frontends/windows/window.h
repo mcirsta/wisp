@@ -71,6 +71,8 @@ struct gui_window {
     int scrollx; /**< current scroll location */
     int scrolly; /**< current scroll location */
 
+    bool has_gradients; /**< true if page contains gradients (need full repaint on scroll) */
+
     RECT *fullscreen; /**< memorize non-fullscreen area */
     RECT redraw; /**< Area needing redraw. */
     int requestscrollx, requestscrolly; /**< scolling requested. */

@@ -406,6 +406,7 @@ static LRESULT nsws_drawable_paint(struct gui_window *gw, HWND hwnd)
 
     if (gw != NULL) {
         plot_hdc = ps.hdc;
+        plot_gw = gw;
 
         clip.x0 = ps.rcPaint.left;
         clip.y0 = ps.rcPaint.top;
@@ -417,6 +418,8 @@ static LRESULT nsws_drawable_paint(struct gui_window *gw, HWND hwnd)
          */
 
         browser_window_redraw(gw->bw, -gw->scrollx, -gw->scrolly, &clip, &ctx);
+
+        plot_gw = NULL;
     }
 
     EndPaint(hwnd, &ps);
