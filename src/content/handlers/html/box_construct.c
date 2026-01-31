@@ -1023,9 +1023,11 @@ static bool box_construct_element(struct box_construct_ctx *ctx, bool *convert_c
         box->styles = NULL;
         box->style = NULL;
 
-        /* Invalidate associated gadget, if any */
+        /* Free associated gadget, if any. This handles both formless controls
+         * and controls in a form's list. form_free_control sets box->gadget
+         * to NULL via control->box->gadget = NULL. */
         if (box->gadget != NULL) {
-            box->gadget->box = NULL;
+            form_free_control(box->gadget);
             box->gadget = NULL;
         }
 

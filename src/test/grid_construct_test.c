@@ -301,6 +301,13 @@ nscss_create_inline_style(const uint8_t *data, size_t len, const char *encoding,
     return NULL;
 }
 
+/* Mock form_free_control - needed by box_construct.c for BOX_NONE path */
+void form_free_control(struct form_control *control)
+{
+    /* In test, gadgets are not actually allocated, nothing to free */
+    (void)control;
+}
+
 /* -------------------------------------------------------------------------- */
 /* Helper Mocks */
 
