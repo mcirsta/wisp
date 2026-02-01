@@ -121,12 +121,20 @@ extern void nslog_log(enum nslog_level level, const char *file, const char *func
 #define LOG_LN __LINE__
 #endif
 
+#define LINK_WARNING(msg) __attribute__((deprecated(msg)))
+
+#ifdef NEOSURF_DISABLE_LOGGING
+#define NSLOG(catname, level, logmsg, args...)                                                                         \
+    do {                                                                                                               \
+    } while (0)
+#else
 #define NSLOG(catname, level, logmsg, args...)                                                                         \
     do {                                                                                                               \
         if (NSLOG_LEVEL_##level >= NSLOG_COMPILED_MIN_LEVEL) {                                                         \
             nslog_log(NSLOG_LEVEL_##level, __FILE__, LOG_FN, LOG_LN, logmsg, ##args);                                  \
         }                                                                                                              \
     } while (0)
+#endif
 
 #endif /* WITH_NSLOG */
 

@@ -20,7 +20,7 @@ else
 endif
 LDFLAGS += -L$(PREFIX)/lib
 
-COMMON_WARNFLAGS += -Wno-multichar
+# COMMON_WARNFLAGS += -Wno-multichar
 
 # compiler flags
 CFLAGS += -std=c99 -Dnsbeos -D_BSD_SOURCE -D_POSIX_C_SOURCE -Drestrict="" -g

@@ -21,9 +21,10 @@ add_definitions(-DNDEBUG -DWITH_OPENSSL -DWITH_BMP -DWITH_GIF -DWITH_NS_SVG -D_X
 			-DNEOSURF_VERSION_MAJOR=${NEOSURF_MAJOR_VERSION} -DNEOSURF_VERSION_MINOR=${NEOSURF_MINOR_VERSION})
 set(CMAKE_C_STANDARD 99)
 set(CMAKE_C_STANDARD_REQUIRED ON)
-add_compile_options(-Wno-unused-parameter -Wno-deprecated-declarations -Wno-unused-but-set-variable)
-add_compile_options($<$<COMPILE_LANGUAGE:C>:-Wno-strict-prototypes>)
-add_compile_options($<$<COMPILE_LANGUAGE:C>:-Wno-int-conversion>)
+# Strict warnings: Removed suppressions to fail on all warnings
+# add_compile_options(-Wno-unused-parameter -Wno-deprecated-declarations -Wno-unused-but-set-variable)
+# add_compile_options($<$<COMPILE_LANGUAGE:C>:-Wno-strict-prototypes>)
+# add_compile_options($<$<COMPILE_LANGUAGE:C>:-Wno-int-conversion>)
 
 include(GNUInstallDirs)
 
@@ -219,6 +220,20 @@ elseif(CMAKE_BUILD_TYPE MATCHES Debug)
     add_compile_definitions(NETSURF_LOG_LEVEL=DEEPDEBUG)
 else()
     add_compile_definitions(NETSURF_LOG_LEVEL=INFO)
+endif()
+
+# Disable logging and tracing for Release (and other non-Debug) builds
+if(NOT CMAKE_BUILD_TYPE MATCHES Debug)
+    add_compile_definitions(NEOSURF_DISABLE_LOGGING=1)
+    message(STATUS "Disabling logging and tracing for non-Debug build")
+    
+    # Enable Link Time Optimization (LTO) with parallel execution (auto)
+    set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -flto=auto")
+    set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -flto=auto")
+    set(CMAKE_EXE_LINKER_FLAGS_RELEASE "${CMAKE_EXE_LINKER_FLAGS_RELEASE} -flto=auto")
+    set(CMAKE_SHARED_LINKER_FLAGS_RELEASE "${CMAKE_SHARED_LINKER_FLAGS_RELEASE} -flto=auto")
+    set(CMAKE_MODULE_LINKER_FLAGS_RELEASE "${CMAKE_MODULE_LINKER_FLAGS_RELEASE} -flto=auto")
+    message(STATUS "Enabled Link Time Optimization (LTO) for Release build (auto-parallel)")
 endif()
 
 if(CMAKE_BUILD_TYPE MATCHES Debug AND NOT NEOSURF_ENABLE_GPROF)
