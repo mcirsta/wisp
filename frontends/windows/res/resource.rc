@@ -335,6 +335,6 @@ icons/directory2.png    USER    "../../../src/resources/icons/directory2.png"
 icons/hotlist-add.png   USER    "../../../src/resources/icons/hotlist-add.png"
 icons/hotlist-rmv.png   USER    "../../../src/resources/icons/hotlist-rmv.png"
 icons/search.png        USER    "../../../src/resources/icons/search.png"
-messages                USER    "../../../build-ninja/frontends/windows/res/en/Messages"
+messages                USER    NEOSURF_MESSAGES_PATH
 
 

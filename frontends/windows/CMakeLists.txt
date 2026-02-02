@@ -66,6 +66,11 @@ add_executable(neosurf-windows WIN32
 	${NEOSURF_WINDOWS_RC}
 )
 
+# Ensure resource.rc is recompiled when messages change and waits for them to be generated
+set_source_files_properties(${NEOSURF_WINDOWS_RC} PROPERTIES OBJECT_DEPENDS "${GENERATED_MESSAGES_DIR}/en/Messages")
+# Add quotes to the path so windres treats it as a string
+target_compile_definitions(neosurf-windows PRIVATE -DNEOSURF_MESSAGES_PATH="\\"${GENERATED_MESSAGES_DIR}/en/Messages\\"")
+
 add_dependencies(neosurf-windows windows_messages)
 target_include_directories(neosurf-windows PRIVATE ${GENERATED_MESSAGES_DIR} ${CMAKE_SOURCE_DIR}/src)
 
