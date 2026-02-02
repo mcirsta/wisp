@@ -24,8 +24,8 @@
 #include <assert.h>
 #include <string.h>
 
-#include <neosurf/utils/config.h>
-#include <neosurf/utils/log.h>
+#include <wisp/utils/config.h>
+#include <wisp/utils/log.h>
 #include "utils/libdom.h"
 
 

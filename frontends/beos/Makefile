@@ -40,8 +40,8 @@ ifneq ($(HARCH),$(HPARCH))
 PKGSARCH := _$(HARCH)
 endif
 
-PKGNAME := netsurf$(PKGSARCH)-$(VERSION_MAJ).$(VERSION_MIN)-1-$(HPARCH).hpkg
-HAIKU_TARGET_DIR := netsurf_pkg
+PKGNAME := wisp$(PKGSARCH)-$(VERSION_MAJ).$(VERSION_MIN)-1-$(HPARCH).hpkg
+HAIKU_TARGET_DIR := wisp_pkg
 
 # Identity of the packager
 PACKAGER := $(shell git config --get user.name) <$(shell git config --get user.email)>
@@ -49,20 +49,20 @@ PACKAGER := $(shell git config --get user.name) <$(shell git config --get user.e
 # package manifest file
 # TODO: remove requires hardcoding
 PKGINFO := \
-name	netsurf$(PKGSARCH)\n\
+name	wisp$(PKGSARCH)\n\
 version	$(VERSION_MAJ).$(VERSION_MIN)-1\n\
 architecture	$(HPARCH)\n\
 summary	"A multi-platform web browser"\n\
-description	"Small as a mouse, fast as a cheetah and available for free. NetSurf is a multi-platform web browser for RISC OS, UNIX-like platforms (including Linux), Mac OS X, and more.Whether you want to check your webmail, read the news or post to discussion forums, NetSurf is your lightweight gateway to the world wide web. Actively developed, NetSurf is continually evolving and improving."\n\
-vendor	"NetSurf"\n\
+description	"Small as a mouse, fast as a cheetah and available for free. Wisp is a multi-platform web browser for RISC OS, UNIX-like platforms (including Linux), Mac OS X, and more.Whether you want to check your webmail, read the news or post to discussion forums, Wisp is your lightweight gateway to the world wide web. Actively developed, Wisp is continually evolving and improving."\n\
+vendor	"Wisp"\n\
 packager	"$(PACKAGER)"\n\
 copyrights	{\n\t"2003-2025 The NetSurf Browser project"\n}\n\
 licenses	{\n\t"GNU GPL v2"\n}\n\
-urls	{\n\t"http://www.netsurf-browser.org/"\n}\n\
-source-urls	{\n\t"http://download.netsurf-browser.org/netsurf/releases/source/netsurf-$(VERSION_MAJ).$(VERSION_MIN)-src.tar.gz"\n}\n\
+urls	{\n\t"http://www.wisp-browser.org/"\n}\n\
+source-urls	{\n\t"http://download.wisp-browser.org/wisp/releases/source/wisp-$(VERSION_MAJ).$(VERSION_MIN)-src.tar.gz"\n}\n\
 provides	{\n\
-\tnetsurf$(PKGSARCH) = $(VERSION_MAJ).$(VERSION_MIN)\n\
-\tapp:netsurf = $(VERSION_MAJ).$(VERSION_MIN)\n\
+\twisp$(PKGSARCH) = $(VERSION_MAJ).$(VERSION_MIN)\n\
+\tapp:wisp = $(VERSION_MAJ).$(VERSION_MIN)\n\
 }\n\
 requires	{\n\
 \thaiku_x86>=r1~alpha4_pm_hrev51655-1\n\
@@ -91,7 +91,7 @@ S_FRONTEND := about.cpp bitmap.cpp cookies.cpp download.cpp		\
 # Note this is deliberately *not* expanded here as common and image
 #   are not yet available
 SOURCES = $(S_COMMON) $(S_IMAGE) $(S_BROWSER) $(S_FRONTEND)
-EXETARGET := NetSurf
+EXETARGET := Wisp
 
 # The filter and target for split messages
 MESSAGES_FILTER=beos
@@ -109,7 +109,7 @@ RDEF_IMP_BEOS := $(addprefix $(OBJROOT)/,$(subst /,_,$(RDEF_IMP_BEOS)))
 
 RDEP_BEOS := \
 	adblock.css beosdefault.css default.css internal.css quirks.css	\
-    neosurf.png favicon.png ca-bundle.txt \
+    wisp.png favicon.png ca-bundle.txt \
 	credits.html licence.html welcome.html SearchEngines
 
 RDEP_BEOS := $(addprefix $(FRONTEND_RESOURCES_DIR)/,$(RDEP_BEOS))	\
@@ -134,15 +134,15 @@ $(RSRC_BEOS): $(RDEF_BEOS) $(RDEF_IMP_BEOS)
 # ----------------------------------------------------------------------------
 
 install-beos:
-	$(Q)$(MKDIR) -p $(DESTDIR)$(NETSURF_BEOS_BIN)
-	$(Q)$(MKDIR) -p $(DESTDIR)$(NETSURF_BEOS_RESOURCES)
-	$(Q)copyattr -d $(EXETARGET) $(DESTDIR)$(NETSURF_BEOS_BIN)NetSurf
-	$(Q)cp -vRL $(FRONTEND_RESOURCES_DIR)/adblock.css $(DESTDIR)$(NETSURF_BEOS_RESOURCES)
-	$(Q)cp -vRL $(FRONTEND_RESOURCES_DIR)/ca-bundle.txt $(DESTDIR)$(NETSURF_BEOS_RESOURCES)
-	$(Q)cp -vRL $(FRONTEND_RESOURCES_DIR)/default.css $(DESTDIR)$(NETSURF_BEOS_RESOURCES)
-	$(Q)cp -vRL $(FRONTEND_RESOURCES_DIR)/beosdefault.css $(DESTDIR)$(NETSURF_BEOS_RESOURCES)
-	$(Q)cp -vRL $(FRONTEND_RESOURCES_DIR)/license $(DESTDIR)$(NETSURF_BEOS_RESOURCES)
-	$(Q)cp -vRL $(FRONTEND_RESOURCES_DIR)/SearchEngines $(DESTDIR)$(NETSURF_BEOS_RESOURCES)
+	$(Q)$(MKDIR) -p $(DESTDIR)$(WISP_BEOS_BIN)
+	$(Q)$(MKDIR) -p $(DESTDIR)$(WISP_BEOS_RESOURCES)
+	$(Q)copyattr -d $(EXETARGET) $(DESTDIR)$(WISP_BEOS_BIN)Wisp
+	$(Q)cp -vRL $(FRONTEND_RESOURCES_DIR)/adblock.css $(DESTDIR)$(WISP_BEOS_RESOURCES)
+	$(Q)cp -vRL $(FRONTEND_RESOURCES_DIR)/ca-bundle.txt $(DESTDIR)$(WISP_BEOS_RESOURCES)
+	$(Q)cp -vRL $(FRONTEND_RESOURCES_DIR)/default.css $(DESTDIR)$(WISP_BEOS_RESOURCES)
+	$(Q)cp -vRL $(FRONTEND_RESOURCES_DIR)/beosdefault.css $(DESTDIR)$(WISP_BEOS_RESOURCES)
+	$(Q)cp -vRL $(FRONTEND_RESOURCES_DIR)/license $(DESTDIR)$(WISP_BEOS_RESOURCES)
+	$(Q)cp -vRL $(FRONTEND_RESOURCES_DIR)/SearchEngines $(DESTDIR)$(WISP_BEOS_RESOURCES)
 
 # ----------------------------------------------------------------------------
 # Package target
@@ -156,14 +156,14 @@ $(PKGNAME): $(EXETARGET) $(POSTEXES)
 	$(Q)rm -rf $(PKGNAME)
 	$(Q)$(MKDIR) $(HAIKU_TARGET_DIR)
 	$(Q)echo -e '$(PKGINFO)' > $(HAIKU_TARGET_DIR)/.PackageInfo
-	$(Q)$(MKDIR) -p $(HAIKU_TARGET_DIR)/apps/netsurf/res
+	$(Q)$(MKDIR) -p $(HAIKU_TARGET_DIR)/apps/wisp/res
 	$(Q)$(MKDIR) -p $(HAIKU_TARGET_DIR)/data/deskbar/menu/Applications
-	$(Q)copyattr -d $(EXETARGET) $(HAIKU_TARGET_DIR)/apps/NetSurf
-	$(Q)cp -vRL $(FRONTEND_RESOURCES_DIR)/adblock.css $(HAIKU_TARGET_DIR)/apps/netsurf/res
-	$(Q)cp -vRL $(FRONTEND_RESOURCES_DIR)/ca-bundle.txt $(HAIKU_TARGET_DIR)/apps/netsurf/res
-	$(Q)cp -vRL $(FRONTEND_RESOURCES_DIR)/default.css $(HAIKU_TARGET_DIR)/apps/netsurf/res
-	$(Q)cp -vRL $(FRONTEND_RESOURCES_DIR)/beosdefault.css $(HAIKU_TARGET_DIR)/apps/netsurf/res
-	$(Q)cp -vRL $(FRONTEND_RESOURCES_DIR)/license $(HAIKU_TARGET_DIR)/apps/netsurf/res
-	$(Q)cp -vRL $(FRONTEND_RESOURCES_DIR)/SearchEngines $(HAIKU_TARGET_DIR)/apps/netsurf/res
-	$(Q)ln -s ../../../../apps/NetSurf $(HAIKU_TARGET_DIR)/data/deskbar/menu/Applications/
+	$(Q)copyattr -d $(EXETARGET) $(HAIKU_TARGET_DIR)/apps/Wisp
+	$(Q)cp -vRL $(FRONTEND_RESOURCES_DIR)/adblock.css $(HAIKU_TARGET_DIR)/apps/wisp/res
+	$(Q)cp -vRL $(FRONTEND_RESOURCES_DIR)/ca-bundle.txt $(HAIKU_TARGET_DIR)/apps/wisp/res
+	$(Q)cp -vRL $(FRONTEND_RESOURCES_DIR)/default.css $(HAIKU_TARGET_DIR)/apps/wisp/res
+	$(Q)cp -vRL $(FRONTEND_RESOURCES_DIR)/beosdefault.css $(HAIKU_TARGET_DIR)/apps/wisp/res
+	$(Q)cp -vRL $(FRONTEND_RESOURCES_DIR)/license $(HAIKU_TARGET_DIR)/apps/wisp/res
+	$(Q)cp -vRL $(FRONTEND_RESOURCES_DIR)/SearchEngines $(HAIKU_TARGET_DIR)/apps/wisp/res
+	$(Q)ln -s ../../../../apps/Wisp $(HAIKU_TARGET_DIR)/data/deskbar/menu/Applications/
 	package create -v -C $(HAIKU_TARGET_DIR) $(PKGNAME)

@@ -25,11 +25,11 @@
 #include <stdint.h>
 #include <stdlib.h>
 
-#include <neosurf/browser_window.h>
-#include <neosurf/desktop/version.h>
-#include <neosurf/utils/messages.h>
-#include <neosurf/utils/nsoption.h>
-#include <neosurf/utils/nsurl.h>
+#include <wisp/browser_window.h>
+#include <wisp/desktop/version.h>
+#include <wisp/utils/messages.h>
+#include <wisp/utils/nsoption.h>
+#include <wisp/utils/nsurl.h>
 
 #include "gtk/about.h"
 #include "gtk/compat.h"
@@ -96,7 +96,7 @@ void nsgtk_about_dialog_init(GtkWindow *parent)
     GList *pixbufs;
 
     /* Create the dialog */
-    dialog = gtk_dialog_new_with_buttons("About NeoSurf", parent, GTK_DIALOG_DESTROY_WITH_PARENT, "License",
+    dialog = gtk_dialog_new_with_buttons("About Wisp", parent, GTK_DIALOG_DESTROY_WITH_PARENT, "License",
         ABOUT_RESPONSE_ID_LICENCE, "Credits", ABOUT_RESPONSE_ID_CREDITS, "Close", GTK_RESPONSE_CANCEL, NULL, NULL);
 
     vbox = nsgtk_vbox_new(FALSE, 8);
@@ -116,7 +116,7 @@ void nsgtk_about_dialog_init(GtkWindow *parent)
 
     /* version string */
     label = gtk_label_new(NULL);
-    name_string = g_markup_printf_escaped("<span size=\"xx-large\" weight=\"bold\">NeoSurf %d</span>", neosurf_version);
+    name_string = g_markup_printf_escaped("<span size=\"xx-large\" weight=\"bold\">Wisp %d</span>", wisp_version);
     gtk_label_set_markup(GTK_LABEL(label), name_string);
     g_free(name_string);
     gtk_label_set_selectable(GTK_LABEL(label), TRUE);

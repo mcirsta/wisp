@@ -22,8 +22,8 @@
  * interface to image/bmp content handler initialisation.
  */
 
-#ifndef NETSURF_IMAGE_BMP_H_
-#define NETSURF_IMAGE_BMP_H_
+#ifndef WISP_IMAGE_BMP_H_
+#define WISP_IMAGE_BMP_H_
 
 nserror nsbmp_init(void);
 

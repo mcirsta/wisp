@@ -16,8 +16,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef NETSURF_GTK_MISC_H
-#define NETSURF_GTK_MISC_H 1
+#ifndef WISP_GTK_MISC_H
+#define WISP_GTK_MISC_H 1
 
 extern struct gui_misc_table *nsgtk_misc_table;
 

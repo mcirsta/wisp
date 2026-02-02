@@ -16,15 +16,15 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef NETSURF_CONTENT_CONTENT_FACTORY_H_
-#define NETSURF_CONTENT_CONTENT_FACTORY_H_
+#ifndef WISP_CONTENT_CONTENT_FACTORY_H_
+#define WISP_CONTENT_CONTENT_FACTORY_H_
 
 #include <stdbool.h>
 
 #include <libwapcaplet/libwapcaplet.h>
 
-#include <neosurf/utils/errors.h>
-#include "neosurf/content_type.h"
+#include <wisp/utils/errors.h>
+#include "wisp/content_type.h"
 
 #define CONTENT_FACTORY_REGISTER_TYPES(HNAME, HTYPELIST, HHANDLER)                                                     \
                                                                                                                        \

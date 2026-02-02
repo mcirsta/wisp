@@ -17,7 +17,7 @@
  */
 
 /* Block utils.h inclusion to mock inline functions */
-#define NETSURF_CSS_UTILS_H_
+#define WISP_CSS_UTILS_H_
 
 #include <check.h>
 #include <stdio.h>
@@ -26,11 +26,11 @@
 #include <unistd.h>
 
 #include <libcss/libcss.h>
-#include "neosurf/css.h"
-#include "neosurf/types.h"
-#include "neosurf/utils/config.h"
-#include "neosurf/utils/errors.h"
-#include "neosurf/utils/log.h"
+#include "wisp/css.h"
+#include "wisp/types.h"
+#include "wisp/utils/config.h"
+#include "wisp/utils/errors.h"
+#include "wisp/utils/log.h"
 /* We must provide definitions that utils.h would have provided if used */
 css_fixed nscss_screen_dpi = 0;
 
@@ -40,15 +40,15 @@ css_fixed nscss_screen_dpi = 0;
 #include "utils/libdom.h"
 #include "content/handlers/css/select.h"
 #include "content/handlers/html/box_normalise.h"
-#include "neosurf/content/handlers/html/box.h"
-#include "neosurf/content/handlers/html/private.h"
-#include "neosurf/desktop/gui_internal.h"
-#include "neosurf/misc.h"
-#include "neosurf/utf8.h"
-#include "neosurf/utils/nsoption.h"
+#include "wisp/content/handlers/html/box.h"
+#include "wisp/content/handlers/html/private.h"
+#include "wisp/desktop/gui_internal.h"
+#include "wisp/misc.h"
+#include "wisp/utf8.h"
+#include "wisp/utils/nsoption.h"
 
 /* Mock corestrings (Must be visible before mocks uses them) */
-#include "neosurf/utils/corestrings.h"
+#include "wisp/utils/corestrings.h"
 struct dom_string *corestring_dom_id;
 struct dom_string *corestring_dom_title;
 struct dom_string *corestring_dom_style;
@@ -331,8 +331,8 @@ static struct gui_utf8_table mock_utf8_table = {
 /* Define mock_misc matching struct gui_misc_table defined in misc.h */
 static struct gui_misc_table mock_misc = {.schedule = mock_schedule};
 /* Define mock_gui matching struct neosurf_table (guit) */
-static struct neosurf_table mock_gui = {.misc = &mock_misc, .utf8 = &mock_utf8_table};
-struct neosurf_table *guit = &mock_gui;
+static struct wisp_table mock_gui = {.misc = &mock_misc, .utf8 = &mock_utf8_table};
+struct wisp_table *guit = &mock_gui;
 
 /* Helper stubs */
 #undef NSLOG

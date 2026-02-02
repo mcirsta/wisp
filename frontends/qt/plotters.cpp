@@ -31,10 +31,10 @@ extern "C" {
 
 #include "utils/errors.h"
 #include "utils/log.h"
-#include "neosurf/mouse.h"
-#include "neosurf/plotters.h"
-#include "neosurf/types.h"
-#include "neosurf/window.h"
+#include "wisp/mouse.h"
+#include "wisp/plotters.h"
+#include "wisp/types.h"
+#include "wisp/window.h"
 }
 
 #include "qt/layout.h"
@@ -274,7 +274,7 @@ static nserror nsqt_plot_path(const struct redraw_context *ctx, const plot_style
         return NSERROR_OK;
     }
     if (p[0] != PLOTTER_PATH_MOVE) {
-        NSLOG(netsurf, INFO, "Path does not start with move");
+        NSLOG(wisp, INFO, "Path does not start with move");
         return NSERROR_INVALID;
     }
 
@@ -299,7 +299,7 @@ static nserror nsqt_plot_path(const struct redraw_context *ctx, const plot_style
             break;
 
         default:
-            NSLOG(netsurf, INFO, "bad path command %f", p[idx]);
+            NSLOG(wisp, INFO, "bad path command %f", p[idx]);
             return NSERROR_INVALID;
         }
     }
@@ -564,7 +564,7 @@ static nserror nsqt_plot_linear_gradient(const struct redraw_context *ctx, const
                 idx += 7;
                 break;
             default:
-                NSLOG(netsurf, WARNING, "bad path command %f in gradient", path[idx]);
+                NSLOG(wisp, WARNING, "bad path command %f in gradient", path[idx]);
                 return NSERROR_INVALID;
             }
         }
@@ -681,7 +681,7 @@ static nserror nsqt_plot_radial_gradient(const struct redraw_context *ctx, const
                 idx += 7;
                 break;
             default:
-                NSLOG(netsurf, WARNING, "bad path command %f in gradient", path[idx]);
+                NSLOG(wisp, WARNING, "bad path command %f in gradient", path[idx]);
                 return NSERROR_INVALID;
             }
         }

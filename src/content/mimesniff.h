@@ -21,13 +21,13 @@
  * MIME type sniffer interface
  */
 
-#ifndef NETSURF_CONTENT_MIMESNIFF_H_
-#define NETSURF_CONTENT_MIMESNIFF_H_
+#ifndef WISP_CONTENT_MIMESNIFF_H_
+#define WISP_CONTENT_MIMESNIFF_H_
 
 #include <stdbool.h>
 
 #include <libwapcaplet/libwapcaplet.h>
-#include <neosurf/utils/errors.h>
+#include <wisp/utils/errors.h>
 
 struct llcache_handle;
 

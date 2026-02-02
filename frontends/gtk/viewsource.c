@@ -20,12 +20,12 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <neosurf/browser_window.h>
-#include <neosurf/content.h>
-#include <neosurf/utils/messages.h>
-#include <neosurf/utils/nsurl.h>
-#include <neosurf/utils/utf8.h>
-#include <neosurf/utils/utils.h>
+#include <wisp/browser_window.h>
+#include <wisp/content.h>
+#include <wisp/utils/messages.h>
+#include <wisp/utils/nsurl.h>
+#include <wisp/utils/utf8.h>
+#include <wisp/utils/utils.h>
 
 #include "gtk/viewdata.h"
 #include "gtk/viewsource.h"
@@ -60,12 +60,12 @@ nserror nsgtk_viewsource(GtkWindow *parent, struct browser_window *bw)
         }
     }
 
-    title = malloc(strlen(nsurl_access(browser_window_access_url(bw))) + SLEN("Source of  - NeoSurf") + 1);
+    title = malloc(strlen(nsurl_access(browser_window_access_url(bw))) + SLEN("Source of  - Wisp") + 1);
     if (title == NULL) {
         free(filename);
         return NSERROR_NOMEM;
     }
-    sprintf(title, "Source of %s - NeoSurf", nsurl_access(browser_window_access_url(bw)));
+    sprintf(title, "Source of %s - Wisp", nsurl_access(browser_window_access_url(bw)));
 
     ret = utf8_from_enc((const char *)source_data, content_get_encoding(hlcontent, CONTENT_ENCODING_NORMAL),
         source_size, &ndata, &ndata_len);

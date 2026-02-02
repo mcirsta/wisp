@@ -28,8 +28,8 @@
  * desktop/local_history.h
  */
 
-#ifndef NETSURF_DESKTOP_BROWSER_HISTORY_H
-#define NETSURF_DESKTOP_BROWSER_HISTORY_H
+#ifndef WISP_DESKTOP_BROWSER_HISTORY_H
+#define WISP_DESKTOP_BROWSER_HISTORY_H
 
 #include <stdbool.h>
 

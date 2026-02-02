@@ -23,7 +23,7 @@
 extern "C" {
 #include "utils/log.h"
 #include "utils/useragent.h"
-#include "netsurf/clipboard.h"
+#include "wisp/clipboard.h"
 #include "curl/curlver.h"
 #include "desktop/version.h"
 #include "testament.h"
@@ -44,13 +44,13 @@ extern "C" {
 void nsbeos_about(struct gui_window *gui)
 {
     BString text;
-    text << "Netsurf  : " << user_agent_string() << "\n";
-    text << "Version  : " << netsurf_version << "\n";
+    text << "Wisp  : " << user_agent_string() << "\n";
+    text << "Version  : " << wisp_version << "\n";
     text << "Build ID : " << WT_REVID << "\n";
     text << "Date     : " << WT_COMPILEDATE << "\n";
     text << "cURL     : " << LIBCURL_VERSION << "\n";
 
-    BAboutWindow *alert = new BAboutWindow("About NetSurf", "application/x-vnd.NetSurf");
+    BAboutWindow *alert = new BAboutWindow("About Wisp", "application/x-vnd.Wisp");
     alert->AddExtraInfo(text);
     alert->Show();
     // TODO: i18n-ize

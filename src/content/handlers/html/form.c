@@ -34,29 +34,29 @@
 #include <stdio.h>
 #include <string.h>
 
-#include <neosurf/browser_window.h>
-#include <neosurf/content/fetch.h>
-#include <neosurf/content/handlers/css/utils.h>
-#include <neosurf/content/hlcache.h>
-#include <neosurf/desktop/textarea.h>
-#include <neosurf/misc.h>
-#include <neosurf/mouse.h>
-#include <neosurf/plotters.h>
-#include <neosurf/utils/ascii.h>
-#include <neosurf/utils/corestrings.h>
-#include <neosurf/utils/log.h>
-#include <neosurf/utils/messages.h>
-#include <neosurf/utils/utf8.h>
+#include <wisp/browser_window.h>
+#include <wisp/content/fetch.h>
+#include <wisp/content/handlers/css/utils.h>
+#include <wisp/content/hlcache.h>
+#include <wisp/desktop/textarea.h>
+#include <wisp/misc.h>
+#include <wisp/mouse.h>
+#include <wisp/plotters.h>
+#include <wisp/utils/ascii.h>
+#include <wisp/utils/corestrings.h>
+#include <wisp/utils/log.h>
+#include <wisp/utils/messages.h>
+#include <wisp/utils/utf8.h>
 #include "utils/talloc.h"
 #include "utils/url.h"
 #include "desktop/knockout.h"
 #include "desktop/scrollbar.h"
 
-#include <neosurf/content/handlers/html/box.h>
-#include <neosurf/content/handlers/html/box_inspect.h>
-#include <neosurf/content/handlers/html/form_internal.h>
-#include <neosurf/content/handlers/html/html.h>
-#include <neosurf/content/handlers/html/private.h>
+#include <wisp/content/handlers/html/box.h>
+#include <wisp/content/handlers/html/box_inspect.h>
+#include <wisp/content/handlers/html/form_internal.h>
+#include <wisp/content/handlers/html/html.h>
+#include <wisp/content/handlers/html/private.h>
 #include "utils/hashmap.h"
 #include "content/handlers/html/font.h"
 #include "content/handlers/html/layout.h"
@@ -174,7 +174,7 @@ static nserror fetch_data_list_add_sname(
 
     fetch_data = calloc(1, sizeof(*fetch_data));
     if (fetch_data == NULL) {
-        NSLOG(neosurf, INFO, "failed allocation for fetch data");
+        NSLOG(wisp, INFO, "failed allocation for fetch data");
         return NSERROR_NOMEM;
     }
 
@@ -183,7 +183,7 @@ static nserror fetch_data_list_add_sname(
     fetch_data->name = malloc(keysize + 1); /* allow for null */
     if (fetch_data->name == NULL) {
         free(fetch_data);
-        NSLOG(neosurf, INFO, "keyname allocation failure for %s%s", name, ksfx);
+        NSLOG(wisp, INFO, "keyname allocation failure for %s%s", name, ksfx);
         return NSERROR_NOMEM;
     }
     snprintf(fetch_data->name, keysize + 1, "%s%s", name, ksfx);
@@ -193,7 +193,7 @@ static nserror fetch_data_list_add_sname(
     if (fetch_data->value == NULL) {
         free(fetch_data->name);
         free(fetch_data);
-        NSLOG(neosurf, INFO, "value allocation failure");
+        NSLOG(wisp, INFO, "value allocation failure");
         return NSERROR_NOMEM;
     }
     snprintf(fetch_data->value, FETCH_DATA_INT_VALUE_SIZE, "%d", value);
@@ -226,14 +226,14 @@ static nserror fetch_data_list_add(dom_string *name, dom_string *value, const ch
 
     fetch_data = calloc(1, sizeof(*fetch_data));
     if (fetch_data == NULL) {
-        NSLOG(neosurf, INFO, "failed allocation for fetch data");
+        NSLOG(wisp, INFO, "failed allocation for fetch data");
         return NSERROR_NOMEM;
     }
 
     fetch_data->name = form_encode_item(
         dom_string_data(name), dom_string_byte_length(name), form_charset, docu_charset);
     if (fetch_data->name == NULL) {
-        NSLOG(neosurf, INFO, "Could not encode name for fetch data");
+        NSLOG(wisp, INFO, "Could not encode name for fetch data");
         free(fetch_data);
         return NSERROR_NOMEM;
     }
@@ -245,7 +245,7 @@ static nserror fetch_data_list_add(dom_string *name, dom_string *value, const ch
             dom_string_data(value), dom_string_byte_length(value), form_charset, docu_charset);
     }
     if (fetch_data->value == NULL) {
-        NSLOG(neosurf, INFO, "Could not encode value for fetch data");
+        NSLOG(wisp, INFO, "Could not encode value for fetch data");
         free(fetch_data->name);
         free(fetch_data);
         return NSERROR_NOMEM;
@@ -256,7 +256,7 @@ static nserror fetch_data_list_add(dom_string *name, dom_string *value, const ch
         fetch_data->file = true;
         fetch_data->rawfile = strdup(rawfile);
         if (fetch_data->rawfile == NULL) {
-            NSLOG(neosurf, INFO, "Could not encode rawfile value for fetch data");
+            NSLOG(wisp, INFO, "Could not encode rawfile value for fetch data");
             free(fetch_data->value);
             free(fetch_data->name);
             free(fetch_data);
@@ -293,7 +293,7 @@ static nserror form_dom_to_data_textarea(dom_html_text_area_element *text_area_e
     /* check if element is disabled */
     exp = dom_html_text_area_element_get_disabled(text_area_element, &element_disabled);
     if (exp != DOM_NO_ERR) {
-        NSLOG(neosurf, INFO, "Could not get text area disabled property. exp %d", exp);
+        NSLOG(wisp, INFO, "Could not get text area disabled property. exp %d", exp);
         return NSERROR_DOM;
     }
 
@@ -305,7 +305,7 @@ static nserror form_dom_to_data_textarea(dom_html_text_area_element *text_area_e
     /* obtain name property */
     exp = dom_html_text_area_element_get_name(text_area_element, &inputname);
     if (exp != DOM_NO_ERR) {
-        NSLOG(neosurf, INFO, "Could not get text area name property. exp %d", exp);
+        NSLOG(wisp, INFO, "Could not get text area name property. exp %d", exp);
         return NSERROR_DOM;
     }
 
@@ -317,7 +317,7 @@ static nserror form_dom_to_data_textarea(dom_html_text_area_element *text_area_e
     /* obtain text area value */
     exp = dom_html_text_area_element_get_value(text_area_element, &inputvalue);
     if (exp != DOM_NO_ERR) {
-        NSLOG(neosurf, INFO, "Could not get text area content. exp %d", exp);
+        NSLOG(wisp, INFO, "Could not get text area content. exp %d", exp);
         dom_string_unref(inputname);
         return NSERROR_DOM;
     }
@@ -342,7 +342,7 @@ static nserror form_dom_to_data_select_option(dom_html_option_element *option_el
 
     exp = dom_html_option_element_get_selected(option_element, &selected);
     if (exp != DOM_NO_ERR) {
-        NSLOG(neosurf, INFO, "Could not get option selected property");
+        NSLOG(wisp, INFO, "Could not get option selected property");
         return NSERROR_DOM;
     }
 
@@ -353,7 +353,7 @@ static nserror form_dom_to_data_select_option(dom_html_option_element *option_el
 
     exp = dom_html_option_element_get_value(option_element, &value);
     if (exp != DOM_NO_ERR) {
-        NSLOG(neosurf, INFO, "Could not get option value");
+        NSLOG(wisp, INFO, "Could not get option value");
         return NSERROR_DOM;
     }
 
@@ -390,7 +390,7 @@ static nserror form_dom_to_data_select(dom_html_select_element *select_element, 
     /* check if element is disabled */
     exp = dom_html_select_element_get_disabled(select_element, &element_disabled);
     if (exp != DOM_NO_ERR) {
-        NSLOG(neosurf, INFO, "Could not get select disabled property. exp %d", exp);
+        NSLOG(wisp, INFO, "Could not get select disabled property. exp %d", exp);
         return NSERROR_DOM;
     }
 
@@ -402,7 +402,7 @@ static nserror form_dom_to_data_select(dom_html_select_element *select_element, 
     /* obtain name property */
     exp = dom_html_select_element_get_name(select_element, &inputname);
     if (exp != DOM_NO_ERR) {
-        NSLOG(neosurf, INFO, "Could not get select name property. exp %d", exp);
+        NSLOG(wisp, INFO, "Could not get select name property. exp %d", exp);
         return NSERROR_DOM;
     }
 
@@ -414,7 +414,7 @@ static nserror form_dom_to_data_select(dom_html_select_element *select_element, 
     /* get options collection */
     exp = dom_html_select_element_get_options(select_element, &options);
     if (exp != DOM_NO_ERR) {
-        NSLOG(neosurf, INFO, "Could not get select options collection");
+        NSLOG(wisp, INFO, "Could not get select options collection");
         dom_string_unref(inputname);
         return NSERROR_DOM;
     }
@@ -422,7 +422,7 @@ static nserror form_dom_to_data_select(dom_html_select_element *select_element, 
     /* get options collection length */
     exp = dom_html_options_collection_get_length(options, &options_count);
     if (exp != DOM_NO_ERR) {
-        NSLOG(neosurf, INFO, "Could not get select options collection length");
+        NSLOG(wisp, INFO, "Could not get select options collection length");
         dom_html_options_collection_unref(options);
         dom_string_unref(inputname);
         return NSERROR_DOM;
@@ -432,7 +432,7 @@ static nserror form_dom_to_data_select(dom_html_select_element *select_element, 
     for (option_index = 0; option_index < options_count; ++option_index) {
         exp = dom_html_options_collection_item(options, option_index, &option_element);
         if (exp != DOM_NO_ERR) {
-            NSLOG(neosurf, INFO, "Could not get options item %d", option_index);
+            NSLOG(wisp, INFO, "Could not get options item %d", option_index);
             res = NSERROR_DOM;
         } else {
             res = form_dom_to_data_select_option(
@@ -471,7 +471,7 @@ static nserror form_dom_to_data_input_submit(dom_html_input_element *input_eleme
     /* matched button used to submit form */
     exp = dom_html_input_element_get_value(input_element, &inputvalue);
     if (exp != DOM_NO_ERR) {
-        NSLOG(neosurf, INFO, "Could not get submit button value");
+        NSLOG(wisp, INFO, "Could not get submit button value");
         return NSERROR_DOM;
     }
 
@@ -500,12 +500,12 @@ static nserror form_dom_to_data_input_image(dom_html_input_element *input_elemen
 
     exp = dom_node_get_user_data((dom_node *)input_element, corestring_dom___ns_key_image_coords_node_data, &coords);
     if (exp != DOM_NO_ERR) {
-        NSLOG(neosurf, INFO, "Could not get image XY data");
+        NSLOG(wisp, INFO, "Could not get image XY data");
         return NSERROR_DOM;
     }
 
     if (coords == NULL) {
-        NSLOG(neosurf, INFO, "No XY data on the image input");
+        NSLOG(wisp, INFO, "No XY data on the image input");
         return NSERROR_DOM;
     }
 
@@ -513,7 +513,7 @@ static nserror form_dom_to_data_input_image(dom_html_input_element *input_elemen
     basename = form_encode_item(
         dom_string_data(inputname), dom_string_byte_length(inputname), charset, document_charset);
     if (basename == NULL) {
-        NSLOG(neosurf, INFO, "Could not encode basename");
+        NSLOG(wisp, INFO, "Could not encode basename");
         return NSERROR_NOMEM;
     }
 
@@ -539,7 +539,7 @@ static nserror form_dom_to_data_input_checkbox(dom_html_input_element *input_ele
 
     exp = dom_html_input_element_get_checked(input_element, &checked);
     if (exp != DOM_NO_ERR) {
-        NSLOG(neosurf, INFO, "Could not get input element checked");
+        NSLOG(wisp, INFO, "Could not get input element checked");
         return NSERROR_DOM;
     }
 
@@ -550,7 +550,7 @@ static nserror form_dom_to_data_input_checkbox(dom_html_input_element *input_ele
 
     exp = dom_html_input_element_get_value(input_element, &inputvalue);
     if (exp != DOM_NO_ERR) {
-        NSLOG(neosurf, INFO, "Could not get input element value");
+        NSLOG(wisp, INFO, "Could not get input element value");
         return NSERROR_DOM;
     }
 
@@ -578,13 +578,13 @@ static nserror form_dom_to_data_input_file(dom_html_input_element *input_element
 
     exp = dom_html_input_element_get_value(input_element, &inputvalue);
     if (exp != DOM_NO_ERR) {
-        NSLOG(neosurf, INFO, "Could not get file value");
+        NSLOG(wisp, INFO, "Could not get file value");
         return NSERROR_DOM;
     }
 
     exp = dom_node_get_user_data((dom_node *)input_element, corestring_dom___ns_key_file_name_node_data, &rawfile);
     if (exp != DOM_NO_ERR) {
-        NSLOG(neosurf, INFO, "Could not get file rawname");
+        NSLOG(wisp, INFO, "Could not get file rawname");
         return NSERROR_DOM;
     }
 
@@ -610,7 +610,7 @@ static nserror form_dom_to_data_input_text(dom_html_input_element *input_element
 
     exp = dom_html_input_element_get_value(input_element, &inputvalue);
     if (exp != DOM_NO_ERR) {
-        NSLOG(neosurf, INFO, "Could not get input value");
+        NSLOG(wisp, INFO, "Could not get input value");
         return NSERROR_DOM;
     }
 
@@ -647,7 +647,7 @@ static nserror form_dom_to_data_input(dom_html_input_element *input_element, con
     /* check if element is disabled */
     exp = dom_html_input_element_get_disabled(input_element, &element_disabled);
     if (exp != DOM_NO_ERR) {
-        NSLOG(neosurf, INFO, "Could not get input disabled property. exp %d", exp);
+        NSLOG(wisp, INFO, "Could not get input disabled property. exp %d", exp);
         return NSERROR_DOM;
     }
 
@@ -659,7 +659,7 @@ static nserror form_dom_to_data_input(dom_html_input_element *input_element, con
     /* obtain name property */
     exp = dom_html_input_element_get_name(input_element, &inputname);
     if (exp != DOM_NO_ERR) {
-        NSLOG(neosurf, INFO, "Could not get input name property. exp %d", exp);
+        NSLOG(wisp, INFO, "Could not get input name property. exp %d", exp);
         return NSERROR_DOM;
     }
 
@@ -671,7 +671,7 @@ static nserror form_dom_to_data_input(dom_html_input_element *input_element, con
     /* get input type */
     exp = dom_html_input_element_get_type(input_element, &inputtype);
     if (exp != DOM_NO_ERR) {
-        NSLOG(neosurf, INFO, "Could not get input element type");
+        NSLOG(wisp, INFO, "Could not get input element type");
         dom_string_unref(inputname);
         return NSERROR_DOM;
     }
@@ -699,7 +699,7 @@ static nserror form_dom_to_data_input(dom_html_input_element *input_element, con
     } else if (dom_string_caseless_isequal(inputtype, corestring_dom_reset) ||
         dom_string_caseless_isequal(inputtype, corestring_dom_button)) {
         /* Skip these */
-        NSLOG(neosurf, INFO, "Skipping RESET and BUTTON");
+        NSLOG(wisp, INFO, "Skipping RESET and BUTTON");
         res = NSERROR_OK;
 
     } else {
@@ -739,7 +739,7 @@ static nserror form_dom_to_data_button(dom_html_button_element *button_element, 
     /* check if element is disabled */
     exp = dom_html_button_element_get_disabled(button_element, &element_disabled);
     if (exp != DOM_NO_ERR) {
-        NSLOG(neosurf, INFO, "Unable to get disabled property. exp %d", exp);
+        NSLOG(wisp, INFO, "Unable to get disabled property. exp %d", exp);
         return NSERROR_DOM;
     }
 
@@ -751,7 +751,7 @@ static nserror form_dom_to_data_button(dom_html_button_element *button_element, 
     /* get the type attribute */
     exp = dom_html_button_element_get_type(button_element, &inputtype);
     if (exp != DOM_NO_ERR) {
-        NSLOG(neosurf, INFO, "Could not get button element type");
+        NSLOG(wisp, INFO, "Could not get button element type");
         return NSERROR_DOM;
     }
 
@@ -784,7 +784,7 @@ static nserror form_dom_to_data_button(dom_html_button_element *button_element, 
     /* obtain name property */
     exp = dom_html_button_element_get_name(button_element, &inputname);
     if (exp != DOM_NO_ERR) {
-        NSLOG(neosurf, INFO, "Could not get button name property. exp %d", exp);
+        NSLOG(wisp, INFO, "Could not get button name property. exp %d", exp);
         return NSERROR_DOM;
     }
 
@@ -796,7 +796,7 @@ static nserror form_dom_to_data_button(dom_html_button_element *button_element, 
     /* get button value and add to fetch data list */
     exp = dom_html_button_element_get_value(button_element, &inputvalue);
     if (exp != DOM_NO_ERR) {
-        NSLOG(neosurf, INFO, "Could not get submit button value");
+        NSLOG(wisp, INFO, "Could not get submit button value");
         res = NSERROR_DOM;
     } else {
         res = fetch_data_list_add(inputname, inputvalue, NULL, form_charset, doc_charset, fetch_data_next_ptr);
@@ -918,21 +918,21 @@ form_dom_to_data(struct form *form, struct form_control *submit_control, struct 
     /** \todo Replace this call with something DOMish */
     charset = form_acceptable_charset(form);
     if (charset == NULL) {
-        NSLOG(neosurf, INFO, "failed to find charset");
+        NSLOG(wisp, INFO, "failed to find charset");
         return NSERROR_NOMEM;
     }
 
     /* obtain the form elements and count */
     exp = dom_html_form_element_get_elements(form->node, &elements);
     if (exp != DOM_NO_ERR) {
-        NSLOG(neosurf, INFO, "Could not get form elements");
+        NSLOG(wisp, INFO, "Could not get form elements");
         free(charset);
         return NSERROR_DOM;
     }
 
     exp = dom_html_collection_get_length(elements, &element_count);
     if (exp != DOM_NO_ERR) {
-        NSLOG(neosurf, INFO, "Could not get form element count");
+        NSLOG(wisp, INFO, "Could not get form element count");
         res = NSERROR_DOM;
         goto form_dom_to_data_error;
     }
@@ -941,7 +941,7 @@ form_dom_to_data(struct form *form, struct form_control *submit_control, struct 
         /* obtain a form element */
         exp = dom_html_collection_item(elements, element_idx, &element);
         if (exp != DOM_NO_ERR) {
-            NSLOG(neosurf, INFO, "retrieving form element %d failed with %d", element_idx, exp);
+            NSLOG(wisp, INFO, "retrieving form element %d failed with %d", element_idx, exp);
             res = NSERROR_DOM;
             goto form_dom_to_data_error;
         }
@@ -949,7 +949,7 @@ form_dom_to_data(struct form *form, struct form_control *submit_control, struct 
         /* node name from element */
         exp = dom_node_get_node_name(element, &nodename);
         if (exp != DOM_NO_ERR) {
-            NSLOG(neosurf, INFO, "getting element node name %d failed with %d", element_idx, exp);
+            NSLOG(wisp, INFO, "getting element node name %d failed with %d", element_idx, exp);
             dom_node_unref(element);
             res = NSERROR_DOM;
             goto form_dom_to_data_error;
@@ -977,7 +977,7 @@ form_dom_to_data(struct form *form, struct form_control *submit_control, struct 
 
         } else {
             /* Form element is not handled */
-            NSLOG(neosurf, INFO, "Unhandled element type: %*s", (int)dom_string_byte_length(nodename),
+            NSLOG(wisp, INFO, "Unhandled element type: %*s", (int)dom_string_byte_length(nodename),
                 dom_string_data(nodename));
             res = NSERROR_DOM;
         }
@@ -1257,7 +1257,7 @@ void form_free_control(struct form_control *control)
     struct form_control *c;
     assert(control != NULL);
 
-    NSLOG(neosurf, INFO, "Control:%p name:%p value:%p initial:%p", control, control->name, control->value,
+    NSLOG(wisp, INFO, "Control:%p name:%p value:%p initial:%p", control, control->name, control->value,
         control->initial_value);
     free(control->name);
     free(control->value);
@@ -1271,7 +1271,7 @@ void form_free_control(struct form_control *control)
 
         for (option = control->data.select.items; option; option = next) {
             next = option->next;
-            NSLOG(neosurf, INFO, "select option:%p text:%p value:%p", option, option->text, option->value);
+            NSLOG(wisp, INFO, "select option:%p text:%p value:%p", option, option->text, option->value);
             free(option->text);
             free(option->value);
             free(option);

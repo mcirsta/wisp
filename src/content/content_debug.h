@@ -21,8 +21,8 @@
  * Interface to content handling debug.
  */
 
-#ifndef _NETSURF_CONTENT_CONTENT_DEBUG_H_
-#define _NETSURF_CONTENT_CONTENT_DEBUG_H_
+#ifndef _WISP_CONTENT_CONTENT_DEBUG_H_
+#define _WISP_CONTENT_CONTENT_DEBUG_H_
 
 #include <stdio.h>
 

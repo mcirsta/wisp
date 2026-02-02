@@ -21,10 +21,10 @@
  * Interface to HTML searching.
  */
 
-#ifndef NETSURF_CONTENT_SEARCH_H
-#define NETSURF_CONTENT_SEARCH_H
+#ifndef WISP_CONTENT_SEARCH_H
+#define WISP_CONTENT_SEARCH_H
 
-#include <neosurf/desktop/search.h>
+#include <wisp/desktop/search.h>
 
 struct textsearch_context;
 struct content;

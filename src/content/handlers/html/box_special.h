@@ -21,8 +21,8 @@
  * HTML Box tree construction special element conversion interface.
  */
 
-#ifndef NETSURF_HTML_BOX_SPECIAL_H
-#define NETSURF_HTML_BOX_SPECIAL_H
+#ifndef WISP_HTML_BOX_SPECIAL_H
+#define WISP_HTML_BOX_SPECIAL_H
 
 
 /**

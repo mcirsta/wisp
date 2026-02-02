@@ -26,14 +26,14 @@
 #include <stdbool.h>
 #include <stdlib.h>
 
-#include <neosurf/bitmap.h>
-#include <neosurf/content.h>
-#include <neosurf/content/content_protected.h>
-#include <neosurf/content/llcache.h>
-#include <neosurf/desktop/gui_internal.h>
-#include <neosurf/plotters.h>
-#include <neosurf/utils/messages.h>
-#include <neosurf/utils/utils.h>
+#include <wisp/bitmap.h>
+#include <wisp/content.h>
+#include <wisp/content/content_protected.h>
+#include <wisp/content/llcache.h>
+#include <wisp/desktop/gui_internal.h>
+#include <wisp/plotters.h>
+#include <wisp/utils/messages.h>
+#include <wisp/utils/utils.h>
 #include "content/content_factory.h"
 #include "desktop/bitmap.h"
 

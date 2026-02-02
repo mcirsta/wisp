@@ -16,8 +16,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include <neosurf/desktop/version.h>
+#include <wisp/desktop/version.h>
 
-const int neosurf_version = NEOSURF_VERSION;
-const int neosurf_version_major = NEOSURF_VERSION_MAJOR;
-const int neosurf_version_minor = NEOSURF_VERSION_MINOR;
+const int wisp_version = WISP_VERSION;
+const int wisp_version_major = WISP_VERSION_MAJOR;
+const int wisp_version_minor = WISP_VERSION_MINOR;

@@ -16,13 +16,13 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef NETSURF_DESKTOP_LOCAL_HISTORY_H
-#define NETSURF_DESKTOP_LOCAL_HISTORY_H
+#ifndef WISP_DESKTOP_LOCAL_HISTORY_H
+#define WISP_DESKTOP_LOCAL_HISTORY_H
 
 #include <stdbool.h>
 #include <stdint.h>
 
-#include <neosurf/mouse.h>
+#include <wisp/mouse.h>
 #include "utils/errors.h"
 
 struct redraw_context;

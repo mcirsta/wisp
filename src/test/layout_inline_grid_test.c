@@ -11,11 +11,11 @@
 #include <string.h>
 
 #include "content/handlers/html/layout.h"
-#include "neosurf/content/handlers/html/box.h"
-#include "neosurf/css.h"
-#include "neosurf/types.h"
-#include "neosurf/utils/errors.h"
-#include "neosurf/utils/log.h"
+#include "wisp/content/handlers/html/box.h"
+#include "wisp/css.h"
+#include "wisp/types.h"
+#include "wisp/utils/errors.h"
+#include "wisp/utils/log.h"
 
 /* Forward declare html_content to satisfy layout_internal.h */
 typedef struct html_content html_content;

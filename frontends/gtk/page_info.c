@@ -25,14 +25,14 @@
 #include <stdint.h>
 #include <stdlib.h>
 
-#include <neosurf/browser_window.h>
-#include <neosurf/desktop/gui_internal.h>
-#include <neosurf/desktop/page-info.h>
-#include <neosurf/keypress.h>
-#include <neosurf/misc.h>
-#include <neosurf/plotters.h>
-#include <neosurf/utils/log.h>
-#include <neosurf/utils/messages.h>
+#include <wisp/browser_window.h>
+#include <wisp/desktop/gui_internal.h>
+#include <wisp/desktop/page-info.h>
+#include <wisp/keypress.h>
+#include <wisp/misc.h>
+#include <wisp/plotters.h>
+#include <wisp/utils/log.h>
+#include <wisp/utils/messages.h>
 
 #include "gtk/corewindow.h"
 #include "gtk/page_info.h"
@@ -162,7 +162,7 @@ nserror nsgtk_page_info(struct browser_window *bw)
 
     res = nsgtk_builder_new_from_resname("pageinfo", &ncwin->builder);
     if (res != NSERROR_OK) {
-        NSLOG(neosurf, CRITICAL, "Page Info UI builder init failed %s", messages_get_errorcode(res));
+        NSLOG(wisp, CRITICAL, "Page Info UI builder init failed %s", messages_get_errorcode(res));
         free(ncwin);
         return res;
     }
@@ -223,7 +223,7 @@ nserror nsgtk_page_info(struct browser_window *bw)
 /* exported interface documented in gtk/page_info.h */
 void nsgtk_page_info_set_position(struct nsgtk_pi_window *win, int x, int y)
 {
-    NSLOG(neosurf, INFO, "win=%p x=%d y=%d", win, x, y);
+    NSLOG(wisp, INFO, "win=%p x=%d y=%d", win, x, y);
 
     gtk_window_move(GTK_WINDOW(win->dlg), x, y);
 }

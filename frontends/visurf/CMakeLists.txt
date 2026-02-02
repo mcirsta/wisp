@@ -1,6 +1,6 @@
 find_package(PkgConfig)
 
-add_definitions(-DVISURF_RESPATH="${CMAKE_INSTALL_PREFIX}/share/neosurf-gtk")
+add_definitions(-DVISURF_RESPATH="${CMAKE_INSTALL_PREFIX}/share/wisp-gtk")
 
 pkg_check_modules(XKBCOMMON REQUIRED xkbcommon)
 include_directories(${XKBCOMMON_INCLUDE_DIRS})
@@ -22,7 +22,7 @@ include_directories(${PANGOCAIRO_INCLUDE_DIRS})
 
 include_directories(${CMAKE_SOURCE_DIR}/include)
 
-add_executable(neosurf-vi
+add_executable(wisp-vi
 	xdg-shell.c
 	xdg-decoration.c
 	main.c
@@ -39,7 +39,7 @@ add_executable(neosurf-vi
 	undo.c
 )
 
-target_link_libraries(neosurf-vi neosurf ${NEOSURF_COMMON_LIBS} ${XKBCOMMON_LIBRARIES} ${CAIRO_LIBRARIES} ${WAYLAND_CURSOR_LIBRARIES} ${WAYLAND_CLIENT_LIBRARIES} ${PANGO_LIBRARIES} ${PANGOCAIRO_LIBRARIES})
+target_link_libraries(wisp-vi wisp ${WISP_COMMON_LIBS} ${XKBCOMMON_LIBRARIES} ${CAIRO_LIBRARIES} ${WAYLAND_CURSOR_LIBRARIES} ${WAYLAND_CLIENT_LIBRARIES} ${PANGO_LIBRARIES} ${PANGOCAIRO_LIBRARIES})
 
-install(TARGETS neosurf-vi DESTINATION ${CMAKE_INSTALL_BINDIR})
-install(DIRECTORY ../gtk/res/ DESTINATION ${CMAKE_INSTALL_DATADIR}/neosurf-gtk) # Visurf uses the same resources as the Gtk frontend
+install(TARGETS wisp-vi DESTINATION ${CMAKE_INSTALL_BINDIR})
+install(DIRECTORY ../gtk/res/ DESTINATION ${CMAKE_INSTALL_DATADIR}/wisp-gtk) # Visurf uses the same resources as the Gtk frontend

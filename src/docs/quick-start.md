@@ -1,16 +1,16 @@
-Quick Build Steps for NetSurf
+Quick Build Steps for Wisp
 =============================
 
 Last Updated: 28th May 2024
 
-This document provides steps for building NetSurf.
+This document provides steps for building Wisp.
 
 These instructions use a shell script to perform several operations.
   This script has only been tested with the bash and zsh bourne style
   shell interpreters. The latest version of this script should be
-  retrieved from the official NetSurf source repository.
+  retrieved from the official Wisp source repository.
 
-This shell script is used by the NetSurf Developers but you should
+This shell script is used by the Wisp Developers but you should
   satisfy yourself that the script is not malicious. It should be noted
   that building the browser will also be executing shell code and
   requires a similar level of trust.
@@ -30,13 +30,13 @@ Grab a temporary env.sh
 Install any packages you need
 -----------------------------
 
-The package install helper installs all packages required to build NetSurf
-  and the NetSurf project libraries. By *default* no libraries for a graphical
+The package install helper installs all packages required to build Wisp
+  and the Wisp project libraries. By *default* no libraries for a graphical
   toolkit are installed.
 
      $ ns-package-install
 
-If NetSurf is to be built to target a graphical toolkit the development
+If Wisp is to be built to target a graphical toolkit the development
   packages for that toolkit can be installed by setting the TARGET_TOOLKIT
   variable to one of framebuffer, gtk2, gtk3 or qt6
 
@@ -53,7 +53,7 @@ Update the environment settings after package installation
      $ source env.sh
 
 
-Get the NetSurf project source code from Git
+Get the Wisp project source code from Git
 --------------------------------------------
 
 All the sources for the browser and support libraries is available
@@ -64,28 +64,28 @@ Local copies may be easily obtained with the ns-clone command.
      $ ns-clone
 
 
-Build and install NetSurf project libraries
+Build and install Wisp project libraries
 -------------------------------------------
 
-Updates NetSurf project library sources to latest, builds and installs them.
+Updates Wisp project library sources to latest, builds and installs them.
 
       $ ns-pull-install
 
 
-Switch to new NetSurf workspace
+Switch to new Wisp workspace
 -------------------------------
 
 Remove the bootstrap script and use the newly installed one
 
       $ rm env.sh
-      $ cd ~/dev-netsurf/workspace
+      $ cd ~/dev-wisp/workspace
       $ source env.sh
 
 
-Build and run NetSurf
+Build and run Wisp
 ---------------------
 
-      $ cd netsurf
+      $ cd wisp
 
 To build the native front end (the GTK front end on Linux, BSDs, etc)
   you could do:
@@ -115,7 +115,7 @@ After that, the commands such as `ns-package-install` and
   `ns-pull-install` will do what is appropriate for the platform you are
   building for.
 
-To do the final build of NetSurf, pass the appropriate TARGET to
+To do the final build of Wisp, pass the appropriate TARGET to
   make. For example, to cross compile for RISC OS:
 
       $ make TARGET=riscos
@@ -143,5 +143,5 @@ Not working?
 
 If the above steps are inapplicable, or don't work, you can build
   manually. Follow the instructions in the BUILDING-* documents in the
-  docs/ directory the NetSurf browser source tree.
+  docs/ directory the Wisp browser source tree.
 

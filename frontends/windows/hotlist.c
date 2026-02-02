@@ -25,11 +25,11 @@
 #include <stdlib.h>
 #include <windows.h>
 
-#include "neosurf/desktop/hotlist.h"
-#include "neosurf/keypress.h"
-#include "neosurf/plotters.h"
-#include "neosurf/utils/log.h"
-#include "neosurf/utils/nsoption.h"
+#include "wisp/desktop/hotlist.h"
+#include "wisp/keypress.h"
+#include "wisp/plotters.h"
+#include "wisp/utils/log.h"
+#include "wisp/utils/nsoption.h"
 
 #include "windows/corewindow.h"
 #include "windows/hotlist.h"
@@ -122,7 +122,7 @@ static nserror nsw32_hotlist_init(HINSTANCE hInstance)
         return NSERROR_NOMEM;
     }
 
-    ncwin->core.title = "NeoSurf Bookmarks";
+    ncwin->core.title = "Wisp Bookmarks";
     ncwin->core.draw = nsw32_hotlist_draw;
     ncwin->core.key = nsw32_hotlist_key;
     ncwin->core.mouse = nsw32_hotlist_mouse;

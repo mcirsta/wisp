@@ -24,9 +24,9 @@
 
 #include "utils/errors.h"
 #include "utils/filepath.h"
-#include "neosurf/fetch.h"
-#include "neosurf/utils/file.h"
-#include "neosurf/utils/nsurl.h"
+#include "wisp/fetch.h"
+#include "wisp/utils/file.h"
+#include "wisp/utils/nsurl.h"
 
 #include "monkey/fetch.h"
 #include "monkey/filetype.h"
@@ -39,7 +39,7 @@ static nsurl *gui_get_resource_url(const char *path)
     char buf[PATH_MAX];
     nsurl *url = NULL;
 
-    neosurf_path_to_nsurl(filepath_sfind(respaths, buf, path), &url);
+    wisp_path_to_nsurl(filepath_sfind(respaths, buf, path), &url);
 
     return url;
 }

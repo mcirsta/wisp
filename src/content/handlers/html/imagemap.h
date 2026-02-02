@@ -21,8 +21,8 @@
  * Interface to HTML imagemap
  */
 
-#ifndef NETSURF_HTML_IMAGEMAP_H
-#define NETSURF_HTML_IMAGEMAP_H
+#ifndef WISP_HTML_IMAGEMAP_H
+#define WISP_HTML_IMAGEMAP_H
 
 #include <dom/dom.h>
 

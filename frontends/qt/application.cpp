@@ -39,13 +39,13 @@ extern "C" {
 #include "utils/nsurl.h"
 #include "utils/utils.h"
 
-#include "neosurf/bitmap.h"
-#include "neosurf/browser.h"
-#include "neosurf/browser_window.h"
-#include "neosurf/content.h"
-#include "neosurf/cookie_db.h"
-#include "neosurf/neosurf.h"
-#include "neosurf/url_db.h"
+#include "wisp/bitmap.h"
+#include "wisp/browser.h"
+#include "wisp/browser_window.h"
+#include "wisp/content.h"
+#include "wisp/cookie_db.h"
+#include "wisp/wisp.h"
+#include "wisp/url_db.h"
 
 #include "desktop/hotlist.h"
 #include "desktop/searchweb.h"
@@ -65,8 +65,8 @@ extern "C" {
 // QTimer
 // QSocketNotifier
 
-#ifndef NEOSURF_HOMEPAGE
-#define NEOSURF_HOMEPAGE "about:welcome"
+#ifndef WISP_HOMEPAGE
+#define WISP_HOMEPAGE "about:welcome"
 #endif
 
 NS_Application *NS_Application::s_nsqt_instance = nullptr;
@@ -209,7 +209,7 @@ nserror NS_Application::set_option_defaults(struct nsoption_s *defaults)
     nsoption_setnull_charp(hotlist_path, strdup(config_dir.absoluteFilePath("Hotlist").toUtf8()));
 
     if (nsoption_charp(hotlist_path) == NULL) {
-        NSLOG(netsurf, ERROR, "Failed initialising bookmarks resource path");
+        NSLOG(wisp, ERROR, "Failed initialising bookmarks resource path");
         return NSERROR_BAD_PARAMETER;
     }
 
@@ -225,7 +225,7 @@ nserror NS_Application::set_option_defaults(struct nsoption_s *defaults)
     char *alang;
     alang = accept_language_from_qlocale(loc);
     if (alang != NULL) {
-        NSLOG(netsurf, DEBUG, "accept_language \"%s\"", alang);
+        NSLOG(wisp, DEBUG, "accept_language \"%s\"", alang);
         nsoption_set_charp(accept_language, alang);
     }
 
@@ -333,7 +333,7 @@ void NS_Application::nsOptionUpdate()
     }
 }
 
-NS_Application::NS_Application(int &argc, char **argv, struct neosurf_table *nsqt_table)
+NS_Application::NS_Application(int &argc, char **argv, struct wisp_table *nsqt_table)
     : QApplication(argc, argv), m_settings_window(nullptr), m_bookmarks_window(nullptr),
       m_local_history_window(nullptr), m_global_history_window(nullptr), m_cookies_window(nullptr)
 {
@@ -347,15 +347,15 @@ NS_Application::NS_Application(int &argc, char **argv, struct neosurf_table *nsq
     }
 
     /* register operation tables */
-    res = neosurf_register(nsqt_table);
+    res = wisp_register(nsqt_table);
     if (res != NSERROR_OK) {
-        throw NS_Exception("NetSurf operation table failed registration", res);
+        throw NS_Exception("Wisp operation table failed registration", res);
     }
 
     /* organization setup for settings */
-    setOrganizationName("NetSurf");
-    setOrganizationDomain("netsurf-browser.org");
-    setApplicationName("NetSurf");
+    setOrganizationName("Wisp");
+    setOrganizationDomain("wisp-browser.org");
+    setApplicationName("Wisp");
 
     // set up scheduler timer
     m_schedule_timer = new QTimer(this);
@@ -363,7 +363,7 @@ NS_Application::NS_Application(int &argc, char **argv, struct neosurf_table *nsq
     connect(m_schedule_timer, &QTimer::timeout, this, &NS_Application::schedule_run);
 
     /* Prep the resource search paths */
-    res = nsqt_init_resource_path("${HOME}/.netsurf/:${NETSURFRES}:" QT_RESPATH);
+    res = nsqt_init_resource_path("${HOME}/.wisp/:${WISPRES}:" QT_RESPATH);
     if (res != NSERROR_OK) {
         throw NS_Exception("Resources failed to initialise", res);
     }
@@ -402,16 +402,16 @@ NS_Application::NS_Application(int &argc, char **argv, struct neosurf_table *nsq
     nsurl *url = NULL;
 
     /* netsurf initialisation */
-    res = neosurf_init(NULL);
+    res = wisp_init(NULL);
     if (res != NSERROR_OK) {
-        throw NS_Exception("Netsurf core initialisation failed", res);
+        throw NS_Exception("Wisp core initialisation failed", res);
     }
 
     /* Web search engine sources */
     char *resource_filename = filepath_find(respaths, "SearchEngines");
     search_web_init(resource_filename);
     if (resource_filename != NULL) {
-        NSLOG(netsurf, INFO, "Using '%s' as Search Engines file", resource_filename);
+        NSLOG(wisp, INFO, "Using '%s' as Search Engines file", resource_filename);
         free(resource_filename);
     }
     search_web_select_provider(nsoption_charp(search_web_provider));
@@ -480,11 +480,11 @@ NS_Application::~NS_Application()
 
     res = hotlist_fini();
     if (res != NSERROR_OK) {
-        NSLOG(netsurf, INFO, "Error finalising hotlist: %s", messages_get_errorcode(res));
+        NSLOG(wisp, INFO, "Error finalising hotlist: %s", messages_get_errorcode(res));
     }
 
     /* common finalisation */
-    neosurf_exit();
+    wisp_exit();
 
     /* finalise options */
     nsoption_finalise(nsoptions, nsoptions_default);
@@ -637,7 +637,7 @@ nserror NS_Application::create_browser_widget(nsurl *url, struct browser_window 
         if (nsoption_charp(homepage_url) != NULL) {
             addr = nsoption_charp(homepage_url);
         } else {
-            addr = NEOSURF_HOMEPAGE;
+            addr = WISP_HOMEPAGE;
         }
         res = nsurl_create(addr, &url);
         if (res == NSERROR_OK) {

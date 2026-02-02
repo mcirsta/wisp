@@ -25,13 +25,13 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <neosurf/content/content_protected.h>
-#include <neosurf/utils/utils.h>
-#include "neosurf/browser_window.h"
-#include "neosurf/clipboard.h"
-#include "neosurf/window.h"
+#include <wisp/content/content_protected.h>
+#include <wisp/utils/utils.h>
+#include "wisp/browser_window.h"
+#include "wisp/clipboard.h"
+#include "wisp/window.h"
 
-#include <neosurf/desktop/gui_internal.h>
+#include <wisp/desktop/gui_internal.h>
 #include "desktop/browser_private.h"
 #include "desktop/selection.h"
 

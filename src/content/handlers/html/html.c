@@ -29,25 +29,25 @@
 #include <string.h>
 #include <strings.h>
 
-#include <neosurf/bitmap.h>
-#include <neosurf/browser_window.h>
-#include <neosurf/content.h>
-#include <neosurf/content/hlcache.h>
-#include <neosurf/desktop/gui_internal.h>
-#include <neosurf/desktop/textarea.h>
-#include <neosurf/keypress.h>
-#include <neosurf/layout.h>
-#include <neosurf/misc.h>
-#include <neosurf/utf8.h>
-#include <neosurf/utils/ascii.h>
-#include <neosurf/utils/config.h>
-#include <neosurf/utils/corestrings.h>
-#include <neosurf/utils/log.h>
-#include <neosurf/utils/messages.h>
-#include <neosurf/utils/nsoption.h>
-#include <neosurf/utils/string.h>
-#include <neosurf/utils/utf8.h>
-#include <neosurf/utils/utils.h>
+#include <wisp/bitmap.h>
+#include <wisp/browser_window.h>
+#include <wisp/content.h>
+#include <wisp/content/hlcache.h>
+#include <wisp/desktop/gui_internal.h>
+#include <wisp/desktop/textarea.h>
+#include <wisp/keypress.h>
+#include <wisp/layout.h>
+#include <wisp/misc.h>
+#include <wisp/utf8.h>
+#include <wisp/utils/ascii.h>
+#include <wisp/utils/config.h>
+#include <wisp/utils/corestrings.h>
+#include <wisp/utils/log.h>
+#include <wisp/utils/messages.h>
+#include <wisp/utils/nsoption.h>
+#include <wisp/utils/string.h>
+#include <wisp/utils/utf8.h>
+#include <wisp/utils/utils.h>
 #include "utils/http.h"
 #include "utils/libdom.h"
 #include "utils/talloc.h"
@@ -57,13 +57,13 @@
 #include "desktop/scrollbar.h"
 #include "desktop/selection.h"
 
-#include <neosurf/content/handlers/html/box.h>
-#include <neosurf/content/handlers/html/box_inspect.h>
-#include <neosurf/content/handlers/html/form_internal.h>
-#include <neosurf/content/handlers/html/html.h>
-#include <neosurf/content/handlers/html/html_save.h>
-#include <neosurf/content/handlers/html/interaction.h>
-#include <neosurf/content/handlers/html/private.h>
+#include <wisp/content/handlers/html/box.h>
+#include <wisp/content/handlers/html/box_inspect.h>
+#include <wisp/content/handlers/html/form_internal.h>
+#include <wisp/content/handlers/html/html.h>
+#include <wisp/content/handlers/html/html_save.h>
+#include <wisp/content/handlers/html/interaction.h>
+#include <wisp/content/handlers/html/private.h>
 #include "content/handlers/html/box_construct.h"
 #include "content/handlers/html/css.h"
 #include "content/handlers/html/dom_event.h"
@@ -83,7 +83,7 @@
 #define ALWAYS_DUMP_BOX 0
 
 /* Performance tracing - enable via CMake: -DNEOSURF_ENABLE_PERF_TRACE=ON */
-#include <neosurf/utils/perf.h>
+#include <wisp/utils/perf.h>
 
 static const char *html_types[] = {"application/xhtml+xml", "text/html"};
 
@@ -124,7 +124,7 @@ bool fire_generic_dom_event(dom_string *type, dom_node *target, bool bubbles, bo
         dom_event_unref(evt);
         return false;
     }
-    NSLOG(neosurf, INFO, "Dispatching '%*s' against %p", dom_string_length(type), dom_string_data(type), target);
+    NSLOG(wisp, INFO, "Dispatching '%*s' against %p", dom_string_length(type), dom_string_data(type), target);
     result = fire_dom_event(evt, target);
     dom_event_unref(evt);
     return result;
@@ -197,7 +197,7 @@ bool fire_dom_keyboard_event(dom_string *type, dom_node *target, bool bubbles, b
         return false;
     }
 
-    NSLOG(neosurf, INFO, "Dispatching '%*s' against %p", dom_string_length(type), dom_string_data(type), target);
+    NSLOG(wisp, INFO, "Dispatching '%*s' against %p", dom_string_length(type), dom_string_data(type), target);
 
     result = fire_dom_event((dom_event *)evt, target);
     dom_event_unref(evt);
@@ -216,7 +216,7 @@ static void html_box_convert_done(html_content *c, bool success)
     dom_exception exc; /* returned by libdom functions */
     dom_node *html;
 
-    NSLOG(neosurf, INFO, "DOM to box conversion complete (content %p)", c);
+    NSLOG(wisp, INFO, "DOM to box conversion complete (content %p)", c);
 
     c->box_conversion_context = NULL;
 
@@ -248,7 +248,7 @@ static void html_box_convert_done(html_content *c, bool success)
         /** @todo should this call html_object_free_objects(c);
          * like the other error paths
          */
-        NSLOG(neosurf, INFO, "error retrieving html element from dom");
+        NSLOG(wisp, INFO, "error retrieving html element from dom");
         content_broadcast_error(&c->base, NSERROR_DOM, NULL);
         content_set_error(&c->base);
         return;
@@ -257,7 +257,7 @@ static void html_box_convert_done(html_content *c, bool success)
     /* extract image maps - can't do this sensibly in dom_to_box */
     err = imagemap_extract(c);
     if (err != NSERROR_OK) {
-        NSLOG(neosurf, INFO, "imagemap extraction failed");
+        NSLOG(wisp, INFO, "imagemap extraction failed");
         html_object_free_objects(c);
         content_broadcast_error(&c->base, err, NULL);
         content_set_error(&c->base);
@@ -286,7 +286,7 @@ static void html_box_convert_done(html_content *c, bool success)
      * CSS callback), trigger it now.
      */
     if (c->conversion_restart_pending) {
-        NSLOG(neosurf, INFO, "Processing pending box conversion restart (content %p)", c);
+        NSLOG(wisp, INFO, "Processing pending box conversion restart (content %p)", c);
         c->conversion_restart_pending = false;
         guit->misc->schedule(0, html_resume_conversion_cb, c);
     }
@@ -298,11 +298,11 @@ nserror html_proceed_to_done(html_content *html)
     switch (content__get_status(&html->base)) {
     case CONTENT_STATUS_READY:
         if (html->base.active != html->scripts_active) {
-            NSLOG(neosurf, DEBUG, "proceed_to_done: waiting for scripts (active=%d scripts=%d)", html->base.active,
+            NSLOG(wisp, DEBUG, "proceed_to_done: waiting for scripts (active=%d scripts=%d)", html->base.active,
                 html->scripts_active);
             break;
         }
-        NSLOG(neosurf, INFO, "proceed_to_done: all resources ready, setting content DONE");
+        NSLOG(wisp, INFO, "proceed_to_done: all resources ready, setting content DONE");
         content_set_done(&html->base);
         return NSERROR_OK;
     case CONTENT_STATUS_DONE:
@@ -310,7 +310,7 @@ nserror html_proceed_to_done(html_content *html)
     case CONTENT_STATUS_LOADING:
         return NSERROR_OK;
     default:
-        NSLOG(neosurf, ERROR, "Content status unexpectedly not LOADING/READY/DONE");
+        NSLOG(wisp, ERROR, "Content status unexpectedly not LOADING/READY/DONE");
         break;
     }
     return NSERROR_UNKNOWN;
@@ -344,7 +344,7 @@ static void html_get_dimensions(html_content *htmlc)
     htmlc->unit_len_ctx.viewport_height = h;
     htmlc->unit_len_ctx.device_dpi = device_dpi;
 
-    NSLOG(neosurf, DEEPDEBUG, "DIAG: html_get_dimensions: media.width=%u media.height=%u (CSS px)", FIXTOINT(w),
+    NSLOG(wisp, DEEPDEBUG, "DIAG: html_get_dimensions: media.width=%u media.height=%u (CSS px)", FIXTOINT(w),
         FIXTOINT(h));
 
     /** \todo Change nsoption font sizes to px. */
@@ -385,7 +385,7 @@ void html_finish_conversion(html_content *htmlc)
      * after waiting for fonts, so we should proceed.
      */
     if (htmlc->select_ctx != NULL && htmlc->font_wait_start_ms == 0) {
-        NSLOG(neosurf, INFO, "Ignoring style change: NS layout is static.");
+        NSLOG(wisp, INFO, "Ignoring style change: NS layout is static.");
         return;
     }
 
@@ -411,14 +411,14 @@ void html_finish_conversion(html_content *htmlc)
     }
 
     /* convert dom tree to box tree */
-    NSLOG(neosurf, INFO, "DOM to box (%p)", htmlc);
+    NSLOG(wisp, INFO, "DOM to box (%p)", htmlc);
     content_set_status(&htmlc->base, messages_get("Processing"));
     msg_data.explicit_status_text = NULL;
     content_broadcast(&htmlc->base, CONTENT_MSG_STATUS, &msg_data);
 
     exc = dom_document_get_document_element(htmlc->document, (void *)&html);
     if ((exc != DOM_NO_ERR) || (html == NULL)) {
-        NSLOG(neosurf, INFO, "error retrieving html element from dom");
+        NSLOG(wisp, INFO, "error retrieving html element from dom");
         content_broadcast_error(&htmlc->base, NSERROR_DOM, NULL);
         content_set_error(&htmlc->base);
         return;
@@ -430,7 +430,7 @@ void html_finish_conversion(html_content *htmlc)
     /* Symbols are collected incrementally during parsing in html_process_svg */
     error = html_resolve_svg_use_refs(htmlc, htmlc->document);
     if (error != NSERROR_OK && error != NSERROR_NOT_FOUND) {
-        NSLOG(neosurf, WARNING, "SVG symbol resolution had issues: %d", error);
+        NSLOG(wisp, WARNING, "SVG symbol resolution had issues: %d", error);
         /* Non-fatal - continue with box conversion */
     }
 
@@ -444,7 +444,7 @@ void html_finish_conversion(html_content *htmlc)
         /* Store timestamp on first delay */
         if (htmlc->font_wait_start_ms == 0) {
             nsu_getmonotonic_ms(&htmlc->font_wait_start_ms);
-            NSLOG(neosurf, INFO, "Delaying box conversion - waiting for %d pending fonts (started at %llu ms)",
+            NSLOG(wisp, INFO, "Delaying box conversion - waiting for %d pending fonts (started at %llu ms)",
                 html_font_face_pending_count(), htmlc->font_wait_start_ms);
         }
         dom_node_unref(html);
@@ -457,14 +457,14 @@ void html_finish_conversion(html_content *htmlc)
         uint64_t now_ms;
         nsu_getmonotonic_ms(&now_ms);
         uint64_t delay_ms = now_ms - htmlc->font_wait_start_ms;
-        NSLOG(neosurf, INFO, "Fonts ready! Box conversion delayed by %llu ms", delay_ms);
+        NSLOG(wisp, INFO, "Fonts ready! Box conversion delayed by %llu ms", delay_ms);
         htmlc->font_wait_start_ms = 0; /* Reset for next time */
     }
 
     PERF("DOM to box START");
     error = dom_to_box(html, htmlc, html_box_convert_done, &htmlc->box_conversion_context);
     if (error != NSERROR_OK) {
-        NSLOG(neosurf, INFO, "box conversion failed");
+        NSLOG(wisp, INFO, "box conversion failed");
         dom_node_unref(html);
         html_object_free_objects(htmlc);
         content_broadcast_error(&htmlc->base, error, NULL);
@@ -486,22 +486,22 @@ static void html_document_user_data_handler(
 
     switch (operation) {
     case DOM_NODE_CLONED:
-        NSLOG(neosurf, INFO, "Cloned");
+        NSLOG(wisp, INFO, "Cloned");
         break;
     case DOM_NODE_RENAMED:
-        NSLOG(neosurf, INFO, "Renamed");
+        NSLOG(wisp, INFO, "Renamed");
         break;
     case DOM_NODE_IMPORTED:
-        NSLOG(neosurf, INFO, "imported");
+        NSLOG(wisp, INFO, "imported");
         break;
     case DOM_NODE_ADOPTED:
-        NSLOG(neosurf, INFO, "Adopted");
+        NSLOG(wisp, INFO, "Adopted");
         break;
     case DOM_NODE_DELETED:
         /* This is the only path I expect */
         break;
     default:
-        NSLOG(neosurf, INFO, "User data operation not handled.");
+        NSLOG(wisp, INFO, "User data operation not handled.");
         assert(0);
     }
 }
@@ -517,7 +517,7 @@ static nserror html_create_html_data(html_content *c, const http_parameter *para
     void *old_node_data;
     const char *prefer_color_mode = (nsoption_bool(prefer_dark_mode)) ? "dark" : "light";
 
-    NSLOG(neosurf, DEBUG, ">>> html_create_html_data called for content %p", c);
+    NSLOG(wisp, DEBUG, ">>> html_create_html_data called for content %p", c);
 
     c->parser = NULL;
     c->parse_completed = false;
@@ -603,7 +603,7 @@ static nserror html_create_html_data(html_content *c, const http_parameter *para
 
     error = dom_hubbub_parser_create(&parse_params, &c->parser, &c->document);
     if ((error != DOM_HUBBUB_OK) && (c->encoding != NULL)) {
-        NSLOG(neosurf, ERROR, "Initial parser creation failed (err: %d) for encoding %s", error, c->encoding);
+        NSLOG(wisp, ERROR, "Initial parser creation failed (err: %d) for encoding %s", error, c->encoding);
         /* Ok, we don't support the declared encoding. Bailing out
          * isn't exactly user-friendly, so fall back to autodetect */
         free(c->encoding);
@@ -614,7 +614,7 @@ static nserror html_create_html_data(html_content *c, const http_parameter *para
         error = dom_hubbub_parser_create(&parse_params, &c->parser, &c->document);
     }
     if (error != DOM_HUBBUB_OK) {
-        NSLOG(neosurf, ERROR, "Final parser creation failed (err: %d)", error);
+        NSLOG(wisp, ERROR, "Final parser creation failed (err: %d)", error);
         nsurl_unref(c->base_url);
         c->base_url = NULL;
 
@@ -626,12 +626,12 @@ static nserror html_create_html_data(html_content *c, const http_parameter *para
         return libdom_hubbub_error_to_nserror(error);
     }
 
-    NSLOG(neosurf, DEBUG, "<<< html_create_html_data SUCCESS, parser=%p for content %p", c->parser, c);
+    NSLOG(wisp, DEBUG, "<<< html_create_html_data SUCCESS, parser=%p for content %p", c->parser, c);
 
     err = dom_node_set_user_data(c->document, corestring_dom___ns_key_html_content_data, c,
         html_document_user_data_handler, (void *)&old_node_data);
     if (err != DOM_NO_ERR) {
-        NSLOG(neosurf, ERROR, "dom_node_set_user_data failed (err: %d), destroying parser %p for content %p", err,
+        NSLOG(wisp, ERROR, "dom_node_set_user_data failed (err: %d), destroying parser %p for content %p", err,
             c->parser, c);
         dom_hubbub_parser_destroy(c->parser);
         c->parser = NULL;
@@ -643,7 +643,7 @@ static nserror html_create_html_data(html_content *c, const http_parameter *para
         lwc_string_unref(c->media.prefers_color_scheme);
         c->media.prefers_color_scheme = NULL;
 
-        NSLOG(neosurf, ERROR, "Unable to set user data.");
+        NSLOG(wisp, ERROR, "Unable to set user data.");
         return NSERROR_DOM;
     }
 
@@ -707,7 +707,7 @@ static nserror html_process_encoding_change(struct content *c, const char *data,
     const uint8_t *source_data;
     size_t source_size;
 
-    NSLOG(neosurf, ERROR, ">>> html_process_encoding_change called for content %p, parser=%p", c, html->parser);
+    NSLOG(wisp, ERROR, ">>> html_process_encoding_change called for content %p, parser=%p", c, html->parser);
 
     /* Retrieve new encoding */
     encoding = dom_hubbub_parser_get_encoding(html->parser, &html->encoding_source);
@@ -726,7 +726,7 @@ static nserror html_process_encoding_change(struct content *c, const char *data,
     }
 
     /* Destroy binding */
-    NSLOG(neosurf, ERROR, "html_process_encoding_change: destroying parser %p, will recreate with encoding '%s'",
+    NSLOG(wisp, ERROR, "html_process_encoding_change: destroying parser %p, will recreate with encoding '%s'",
         html->parser, html->encoding);
     dom_hubbub_parser_destroy(html->parser);
     html->parser = NULL;
@@ -747,13 +747,13 @@ static nserror html_process_encoding_change(struct content *c, const char *data,
     /* Create new binding, using the new encoding */
     error = dom_hubbub_parser_create(&parse_params, &html->parser, &html->document);
     if (error != DOM_HUBBUB_OK) {
-        NSLOG(neosurf, ERROR, "Primary parser creation failed during encoding change (err: %d)", error);
+        NSLOG(wisp, ERROR, "Primary parser creation failed during encoding change (err: %d)", error);
         /* Ok, we don't support the declared encoding. Bailing out
          * isn't exactly user-friendly, so fall back to Windows-1252 */
         free(html->encoding);
         html->encoding = strdup("Windows-1252");
         if (html->encoding == NULL) {
-            NSLOG(neosurf, ERROR, "OOM falling back to Windows-1252");
+            NSLOG(wisp, ERROR, "OOM falling back to Windows-1252");
             return NSERROR_NOMEM;
         }
         parse_params.enc = html->encoding;
@@ -761,7 +761,7 @@ static nserror html_process_encoding_change(struct content *c, const char *data,
         error = dom_hubbub_parser_create(&parse_params, &html->parser, &html->document);
 
         if (error != DOM_HUBBUB_OK) {
-            NSLOG(neosurf, ERROR, "Fallback parser creation failed (err: %d)", error);
+            NSLOG(wisp, ERROR, "Fallback parser creation failed (err: %d)", error);
             return libdom_hubbub_error_to_nserror(error);
         }
     }
@@ -799,10 +799,10 @@ static bool html_process_data(struct content *c, const char *data, unsigned int 
          * error.
          */
         if (html->parse_completed) {
-            NSLOG(neosurf, INFO, "Ignoring data for content %p - parsing already complete", c);
+            NSLOG(wisp, INFO, "Ignoring data for content %p - parsing already complete", c);
             return true;
         }
-        NSLOG(neosurf, ERROR,
+        NSLOG(wisp, ERROR,
             "HTML parser is NULL for content %p but parsing not complete - suspected resource load failure.", c);
         return false;
     }
@@ -859,11 +859,11 @@ static bool html_convert(struct content *c)
     exc = dom_document_get_quirks_mode(htmlc->document, &htmlc->quirks);
     if (exc == DOM_NO_ERR) {
         html_css_quirks_stylesheets(htmlc);
-        NSLOG(neosurf, INFO, "quirks set to %d", htmlc->quirks);
+        NSLOG(wisp, INFO, "quirks set to %d", htmlc->quirks);
     }
 
     htmlc->base.active--; /* the html fetch is no longer active */
-    NSLOG(neosurf, INFO, "%d fetches active (%p)", htmlc->base.active, c);
+    NSLOG(wisp, INFO, "%d fetches active (%p)", htmlc->base.active, c);
 
     /* The parse cannot be completed here because it may be paused
      * untill all the resources being fetched have completed.
@@ -942,7 +942,7 @@ bool html_begin_conversion(html_content *htmlc)
      * complete to avoid repeating the completion pointlessly.
      */
     if (htmlc->parse_completed == false) {
-        NSLOG(neosurf, INFO, "Completing parse (%p)", htmlc);
+        NSLOG(wisp, INFO, "Completing parse (%p)", htmlc);
         PERF("html_begin_conversion: completing parse (active=%d, scripts_active=%d)", htmlc->base.active,
             htmlc->scripts_active);
         /* complete parsing */
@@ -953,7 +953,7 @@ bool html_begin_conversion(html_content *htmlc)
             /* The act of completing the parse failed because we've
              * encountered a sync script which needs to run
              */
-            NSLOG(neosurf, INFO, "Completing parse brought synchronous JS to light, cannot complete yet (active: %d)",
+            NSLOG(wisp, INFO, "Completing parse brought synchronous JS to light, cannot complete yet (active: %d)",
                 htmlc->base.active);
 
             if (htmlc->base.active == 0) {
@@ -965,7 +965,7 @@ bool html_begin_conversion(html_content *htmlc)
             return true;
         }
         if (error != DOM_HUBBUB_OK) {
-            NSLOG(neosurf, INFO, "Parsing failed");
+            NSLOG(wisp, INFO, "Parsing failed");
 
             content_broadcast_error(&htmlc->base, libdom_hubbub_error_to_nserror(error), NULL);
 
@@ -978,7 +978,7 @@ bool html_begin_conversion(html_content *htmlc)
         "html_begin_conversion: checking can_begin (active=%d, scripts_active=%d, data_complete=%d, conversion_begun=%d)",
         htmlc->base.active, htmlc->scripts_active, htmlc->data_complete, htmlc->conversion_begun);
     if (html_can_begin_conversion(htmlc) == false) {
-        NSLOG(neosurf, INFO, "Can't begin conversion (%p)", htmlc);
+        NSLOG(wisp, INFO, "Can't begin conversion (%p)", htmlc);
         PERF("html_begin_conversion: CAN'T BEGIN - aborting");
         /* We can't proceed (see commentary above) */
         return true;
@@ -986,7 +986,7 @@ bool html_begin_conversion(html_content *htmlc)
 
     /* Give up processing if we've been aborted */
     if (htmlc->aborted) {
-        NSLOG(neosurf, INFO, "Conversion aborted (%p) (active: %u)", htmlc, htmlc->base.active);
+        NSLOG(wisp, INFO, "Conversion aborted (%p) (active: %u)", htmlc, htmlc->base.active);
         content_set_error(&htmlc->base);
         content_broadcast_error(&htmlc->base, NSERROR_STOPPED, NULL);
         return false;
@@ -1025,7 +1025,7 @@ bool html_begin_conversion(html_content *htmlc)
     /* locate root element and ensure it is html */
     exc = dom_document_get_document_element(htmlc->document, (void *)&html);
     if ((exc != DOM_NO_ERR) || (html == NULL)) {
-        NSLOG(neosurf, INFO, "error retrieving html element from dom");
+        NSLOG(wisp, INFO, "error retrieving html element from dom");
         content_broadcast_error(&htmlc->base, NSERROR_DOM, NULL);
         return false;
     }
@@ -1033,7 +1033,7 @@ bool html_begin_conversion(html_content *htmlc)
     exc = dom_node_get_node_name(html, &node_name);
     if ((exc != DOM_NO_ERR) || (node_name == NULL) ||
         (!dom_string_caseless_lwc_isequal(node_name, corestring_lwc_html))) {
-        NSLOG(neosurf, INFO, "root element not html");
+        NSLOG(wisp, INFO, "root element not html");
         content_broadcast_error(&htmlc->base, NSERROR_DOM, NULL);
         dom_node_unref(html);
         return false;
@@ -1052,11 +1052,11 @@ bool html_begin_conversion(html_content *htmlc)
      */
     if (htmlc->box_conversion_context != NULL) {
         if (htmlc->conversion_restart_pending) {
-            NSLOG(neosurf, INFO, "Late callback ignored: restart already pending (content %p)", htmlc);
+            NSLOG(wisp, INFO, "Late callback ignored: restart already pending (content %p)", htmlc);
             return true;
         }
         NSLOG(
-            neosurf, INFO, "Late callback for content %p - box conversion already in progress, queuing restart", htmlc);
+            wisp, INFO, "Late callback for content %p - box conversion already in progress, queuing restart", htmlc);
         htmlc->conversion_restart_pending = true;
         return true;
     }
@@ -1168,7 +1168,7 @@ static void html_stop(struct content *c)
         break;
 
     default:
-        NSLOG(neosurf, INFO, "Unexpected status %d (%p)", c->status, c);
+        NSLOG(wisp, INFO, "Unexpected status %d (%p)", c->status, c);
         assert(0);
     }
 }
@@ -1190,11 +1190,11 @@ static void html_reformat(struct content *c, int width, int height)
      * reflow. Just return OK and wait for the conversion to complete.
      */
     if (htmlc->layout == NULL) {
-        NSLOG(neosurf, INFO, "Reflow skipped: layout is NULL");
+        NSLOG(wisp, INFO, "Reflow skipped: layout is NULL");
         return;
     }
 
-#ifndef NEOSURF_ENABLE_INCREMENTAL_REFLOW
+#ifndef WISP_ENABLE_INCREMENTAL_REFLOW
     /* Skip viewport-triggered reformats while objects are still downloading.
      * Only allow:
      * 1. Initial layout (when had_initial_layout is false)
@@ -1211,7 +1211,7 @@ static void html_reformat(struct content *c, int width, int height)
 
     nsu_getmonotonic_ms(&ms_before);
 
-    NSLOG(neosurf, DEBUG, "PROFILER: START HTML layout %p", c);
+    NSLOG(wisp, DEBUG, "PROFILER: START HTML layout %p", c);
 
     htmlc->reflowing = true;
     static int reformat_count = 0;
@@ -1243,7 +1243,7 @@ static void html_reformat(struct content *c, int width, int height)
     htmlc->reflowing = false;
     htmlc->had_initial_layout = true;
 
-    NSLOG(neosurf, DEBUG, "PROFILER: STOP HTML layout %p", c);
+    NSLOG(wisp, DEBUG, "PROFILER: STOP HTML layout %p", c);
 
     /* calculate next reflow time at three times what it took to reflow */
     nsu_getmonotonic_ms(&ms_after);
@@ -1373,7 +1373,7 @@ static void html_destroy(struct content *c)
     html_content *html = (html_content *)c;
     struct form *f, *g;
 
-    NSLOG(neosurf, INFO, "content %p", c);
+    NSLOG(wisp, INFO, "content %p", c);
 
     /* Cancel any pending conversion resumes immediately */
     guit->misc->schedule(-1, html_resume_conversion_cb, html);
@@ -1383,7 +1383,7 @@ static void html_destroy(struct content *c)
     /* If we're still converting a layout, cancel it */
     if (html->box_conversion_context != NULL) {
         if (cancel_dom_to_box(html->box_conversion_context) != NSERROR_OK) {
-            NSLOG(neosurf, CRITICAL, "WARNING, Unable to cancel conversion context, browser may crash");
+            NSLOG(wisp, CRITICAL, "WARNING, Unable to cancel conversion context, browser may crash");
         }
     }
 
@@ -1433,11 +1433,11 @@ static void html_destroy(struct content *c)
     html_free_layout(html);
 
     if (html->parser != NULL) {
-        NSLOG(neosurf, DEBUG, "html_destroy: destroying parser %p for content %p", html->parser, c);
+        NSLOG(wisp, DEBUG, "html_destroy: destroying parser %p for content %p", html->parser, c);
         dom_hubbub_parser_destroy(html->parser);
         html->parser = NULL;
     } else {
-        NSLOG(neosurf, DEBUG, "html_destroy: parser was already NULL for content %p", c);
+        NSLOG(wisp, DEBUG, "html_destroy: parser was already NULL for content %p", c);
     }
 
     /* Unref title before document - title is part of document tree
@@ -1796,7 +1796,7 @@ static void html__dom_user_data_handler(
         free(data);
         break;
     default:
-        NSLOG(neosurf, INFO, "User data operation not handled.");
+        NSLOG(wisp, INFO, "User data operation not handled.");
         assert(0);
     }
 }
@@ -1811,7 +1811,7 @@ static void html__set_file_gadget_filename(struct content *c, struct form_contro
     ret = guit->utf8->local_to_utf8(fn, 0, &utf8_fn);
     if (ret != NSERROR_OK) {
         assert(ret != NSERROR_BAD_ENCODING);
-        NSLOG(neosurf, INFO, "utf8 to local encoding conversion failed");
+        NSLOG(wisp, INFO, "utf8 to local encoding conversion failed");
         /* Load was for us - just no memory */
         return;
     }
@@ -1957,7 +1957,7 @@ static bool html_drop_file_at_point(struct content *c, int x, int y, char *file)
         ret = guit->utf8->local_to_utf8(buffer, file_len, &utf8_buff);
         if (ret != NSERROR_OK) {
             /* bad encoding shouldn't happen */
-            NSLOG(neosurf, ERROR, "local to utf8 encoding failed (%s)", messages_get_errorcode(ret));
+            NSLOG(wisp, ERROR, "local to utf8 encoding failed (%s)", messages_get_errorcode(ret));
             assert(ret != NSERROR_BAD_ENCODING);
             free(buffer);
             return true;
@@ -2019,19 +2019,19 @@ static nserror html_debug_dump(struct content *c, FILE *f, enum content_debug op
         ret = NSERROR_OK;
     } else {
         if (htmlc->document == NULL) {
-            NSLOG(neosurf, INFO, "No document to dump");
+            NSLOG(wisp, INFO, "No document to dump");
             return NSERROR_DOM;
         }
 
         exc = dom_document_get_document_element(htmlc->document, (void *)&html);
         if ((exc != DOM_NO_ERR) || (html == NULL)) {
-            NSLOG(neosurf, INFO, "Unable to obtain root node");
+            NSLOG(wisp, INFO, "Unable to obtain root node");
             return NSERROR_DOM;
         }
 
         ret = libdom_dump_structure(html, f, 0);
 
-        NSLOG(neosurf, INFO, "DOM structure dump returning %d", ret);
+        NSLOG(wisp, INFO, "DOM structure dump returning %d", ret);
 
         dom_node_unref(html);
     }
@@ -2245,44 +2245,44 @@ bool html_exec(struct content *c, const char *src, size_t srclen)
     dom_html_script_element *script_node;
 
     if (htmlc->document == NULL) {
-        NSLOG(neosurf, DEEPDEBUG, "Unable to exec, no document");
+        NSLOG(wisp, DEEPDEBUG, "Unable to exec, no document");
         goto out_no_string;
     }
 
     err = dom_string_create((const uint8_t *)src, srclen, &dom_src);
     if (err != DOM_NO_ERR) {
-        NSLOG(neosurf, DEEPDEBUG, "Unable to exec, could not create string");
+        NSLOG(wisp, DEEPDEBUG, "Unable to exec, could not create string");
         goto out_no_string;
     }
 
     err = dom_html_document_get_body(htmlc->document, &body_node);
     if (err != DOM_NO_ERR) {
-        NSLOG(neosurf, DEEPDEBUG, "Unable to retrieve body element");
+        NSLOG(wisp, DEEPDEBUG, "Unable to retrieve body element");
         goto out_no_body;
     }
 
     err = dom_document_create_text_node(htmlc->document, dom_src, &text_node);
     if (err != DOM_NO_ERR) {
-        NSLOG(neosurf, DEEPDEBUG, "Unable to exec, could not create text node");
+        NSLOG(wisp, DEEPDEBUG, "Unable to exec, could not create text node");
         goto out_no_text_node;
     }
 
     err = dom_document_create_element(htmlc->document, corestring_dom_SCRIPT, &script_node);
     if (err != DOM_NO_ERR) {
-        NSLOG(neosurf, DEEPDEBUG, "Unable to exec, could not create script node");
+        NSLOG(wisp, DEEPDEBUG, "Unable to exec, could not create script node");
         goto out_no_script_node;
     }
 
     err = dom_node_append_child(script_node, text_node, &spare_node);
     if (err != DOM_NO_ERR) {
-        NSLOG(neosurf, DEEPDEBUG, "Unable to exec, could not insert code node into script node");
+        NSLOG(wisp, DEEPDEBUG, "Unable to exec, could not insert code node into script node");
         goto out_unparented;
     }
     dom_node_unref(spare_node); /* We do not need the spare ref at all */
 
     err = dom_node_append_child(body_node, script_node, &spare_node);
     if (err != DOM_NO_ERR) {
-        NSLOG(neosurf, DEEPDEBUG, "Unable to exec, could not insert script node into document body");
+        NSLOG(wisp, DEEPDEBUG, "Unable to exec, could not insert script node into document body");
         goto out_unparented;
     }
     dom_node_unref(spare_node); /* Again no need for the spare ref */

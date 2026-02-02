@@ -30,13 +30,13 @@
 
 #include <webp/decode.h>
 
-#include <neosurf/bitmap.h>
-#include <neosurf/content/content_protected.h>
-#include <neosurf/content/llcache.h>
-#include <neosurf/desktop/gui_internal.h>
-#include <neosurf/utils/log.h>
-#include <neosurf/utils/messages.h>
-#include <neosurf/utils/utils.h>
+#include <wisp/bitmap.h>
+#include <wisp/content/content_protected.h>
+#include <wisp/content/llcache.h>
+#include <wisp/desktop/gui_internal.h>
+#include <wisp/utils/log.h>
+#include <wisp/utils/messages.h>
+#include <wisp/utils/utils.h>
 #include "content/content_factory.h"
 #include "desktop/bitmap.h"
 
@@ -202,7 +202,7 @@ static bool webp_convert(struct content *c)
 
     res = WebPGetInfo(data, data_size, &width, &height);
     if (res == 0) {
-        NSLOG(neosurf, INFO, "WebPGetInfo failed:%p", c);
+        NSLOG(wisp, INFO, "WebPGetInfo failed:%p", c);
         return false;
     }
 

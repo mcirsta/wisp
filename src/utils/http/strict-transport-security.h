@@ -16,8 +16,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef NETSURF_UTILS_HTTP_STRICT_TRANSPORT_SECURITY_H_
-#define NETSURF_UTILS_HTTP_STRICT_TRANSPORT_SECURITY_H_
+#ifndef WISP_UTILS_HTTP_STRICT_TRANSPORT_SECURITY_H_
+#define WISP_UTILS_HTTP_STRICT_TRANSPORT_SECURITY_H_
 
 #include <libwapcaplet/libwapcaplet.h>
 

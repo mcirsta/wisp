@@ -16,8 +16,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef NETSURF_BEOS_WINDOW_H
-#define NETSURF_BEOS_WINDOW_H 1
+#ifndef WISP_BEOS_WINDOW_H
+#define WISP_BEOS_WINDOW_H 1
 
 #include <NetPositive.h>
 #include <View.h>

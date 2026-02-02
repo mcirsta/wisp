@@ -24,14 +24,14 @@
  * The content functions manipulate struct contents, which correspond to URLs.
  */
 
-#ifndef NETSURF_CONTENT_CONTENT_PROTECTED_H_
-#define NETSURF_CONTENT_CONTENT_PROTECTED_H_
+#ifndef WISP_CONTENT_CONTENT_PROTECTED_H_
+#define WISP_CONTENT_CONTENT_PROTECTED_H_
 
 #include <libwapcaplet/libwapcaplet.h>
 #include <stdio.h>
 
-#include "neosurf/content_type.h"
-#include "neosurf/mouse.h" /* mouse state enums */
+#include "wisp/content_type.h"
+#include "wisp/mouse.h" /* mouse state enums */
 
 struct nsurl;
 struct content_redraw_data;
@@ -60,25 +60,25 @@ typedef struct content_handler content_handler;
  *   CONTENT_ACTIVE_INC(c, "starting CSS fetch");
  *   CONTENT_ACTIVE_DEC(c, "CSS fetch complete");
  */
-#include <neosurf/utils/log.h>
+#include <wisp/utils/log.h>
 
 #define CONTENT_ACTIVE_INC(c, reason)                                                                                  \
     do {                                                                                                               \
         (c)->base.active++;                                                                                            \
-        NSLOG(neosurf, DEBUG, "ACTIVE++ → %u (%s) [content=%p]", (c)->base.active, (reason), (void *)(c));             \
+        NSLOG(wisp, DEBUG, "ACTIVE++ → %u (%s) [content=%p]", (c)->base.active, (reason), (void *)(c));             \
     } while (0)
 
 #define CONTENT_ACTIVE_DEC(c, reason)                                                                                  \
     do {                                                                                                               \
         if ((c)->base.active == 0) {                                                                                   \
-            NSLOG(neosurf, CRITICAL,                                                                                   \
+            NSLOG(wisp, CRITICAL,                                                                                   \
                 "ACTIVE UNDERFLOW! Decrement when already 0 "                                                          \
                 "(%s) [content=%p url=%s]",                                                                            \
                 (reason), (void *)(c),                                                                                 \
                 (c)->base.llcache ? nsurl_access(llcache_handle_get_url((c)->base.llcache)) : "(no url)");             \
         }                                                                                                              \
         (c)->base.active--;                                                                                            \
-        NSLOG(neosurf, DEBUG, "ACTIVE-- → %u (%s) [content=%p]", (c)->base.active, (reason), (void *)(c));             \
+        NSLOG(wisp, DEBUG, "ACTIVE-- → %u (%s) [content=%p]", (c)->base.active, (reason), (void *)(c));             \
     } while (0)
 
 /**

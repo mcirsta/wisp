@@ -1,19 +1,19 @@
 --------------------------------------------------------------------------------
-  Build Instructions for Windows NetSurf                      13 February 2010
+  Build Instructions for Windows Wisp                      13 February 2010
 --------------------------------------------------------------------------------
 
   This document provides instructions for building the Windows version
-  of NetSurf and provides guidance on obtaining NetSurf's build
+  of Wisp and provides guidance on obtaining Wisp's build
   dependencies.
 
-  Windows NetSurf has been tested on Wine and Vista.
+  Windows Wisp has been tested on Wine and Vista.
 
 
-  Building and executing NetSurf
+  Building and executing Wisp
 ================================
 
-  The windows netsurf port uses the MinGW (Minimal GNU on Windows)
-  system as its build infrastructure. This allows the normal netsurf
+  The windows wisp port uses the MinGW (Minimal GNU on Windows)
+  system as its build infrastructure. This allows the normal wisp
   build process to be used.
 
   The method outlined here to create executables cross compiles
@@ -26,18 +26,18 @@
   Others cannot be automatically detected from the Makefile, so you
   will either need to install the dependencies, or set them to NO.
   
-  You should then obtain NetSurf's dependencies, keeping in mind which
+  You should then obtain Wisp's dependencies, keeping in mind which
   options you have enabled in the configuration file.  See the next
   section for specifics.
   
-  Once done, to build windows NetSurf on a UNIX-like platform, simply run:
+  Once done, to build windows Wisp on a UNIX-like platform, simply run:
 
       $ export MINGW_PREFIX=i586-mingw32msvc-
       $ export MINGW_INSTALL_ENV=/usr/i586-mingw32msvc/
       $ make TARGET=windows
 
-  If that produces errors, you probably don't have some of NetSurf's
-  build dependencies installed. See "Obtaining NetSurf's dependencies"
+  If that produces errors, you probably don't have some of Wisp's
+  build dependencies installed. See "Obtaining Wisp's dependencies"
   below. Or turn off the complaining features in a Makefile.config
   file. You may need to "make clean" before attempting to build after
   installing the dependencies.
@@ -46,17 +46,17 @@
   copied next to the exe and the windows/res directory available, also
   next to the executable.
 
-  Run NetSurf by executing it:
+  Run Wisp by executing it:
 
-      $ wine NetSurf.exe
+      $ wine Wisp.exe
 
   The staticaly linked binary which is generated may be several
   megabytes in size, this can be reduced by stripping the binary.
 
-      $ i586-mingw32msvc-strip NetSurf.exe 
+      $ i586-mingw32msvc-strip Wisp.exe 
 
 
-  Obtaining NetSurf's build dependencies
+  Obtaining Wisp's build dependencies
 ========================================
 
   Package installation
@@ -164,10 +164,10 @@ EOF
       $ make
       $ sudo make install
 
-  The NetSurf project's libraries
+  The Wisp project's libraries
 ---------------------------------
 
-  The NetSurf project has developed several libraries which are required by
+  The Wisp project has developed several libraries which are required by
   the browser. These are:
 
   LibParserUtils  --  Parser building utility functions
@@ -196,7 +196,7 @@ EOF
 -----------
 
   The windows resources may be rebuilt. Currently there is 1 object
-  file included in the Git distribution of NetSurf that could be
+  file included in the Git distribution of Wisp that could be
   manually compiled
 
       $ cd windows/res

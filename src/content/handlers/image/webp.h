@@ -21,8 +21,8 @@
  * Interface to image/webp content handlers
  */
 
-#ifndef _NETSURF_IMAGE_WEBP_H_
-#define _NETSURF_IMAGE_WEBP_H_
+#ifndef _WISP_IMAGE_WEBP_H_
+#define _WISP_IMAGE_WEBP_H_
 
 nserror nswebp_init(void);
 

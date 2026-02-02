@@ -35,9 +35,9 @@
 #include "content/llcache.h"
 #include "desktop/bitmap.h"
 #include "desktop/gui_internal.h"
-#include "neosurf/bitmap.h"
-#include "neosurf/content.h"
-#include "neosurf/plotters.h"
+#include "wisp/bitmap.h"
+#include "wisp/content.h"
+#include "wisp/plotters.h"
 
 #include "image/nssprite.h"
 
@@ -53,10 +53,10 @@ typedef struct nssprite_content {
     do {                                                                                                               \
         rosprite_error err = x;                                                                                        \
         if (err == ROSPRITE_EOF) {                                                                                     \
-            NSLOG(netsurf, INFO, "Got ROSPRITE_EOF when loading sprite file");                                         \
+            NSLOG(wisp, INFO, "Got ROSPRITE_EOF when loading sprite file");                                         \
             goto ro_sprite_error;                                                                                      \
         } else if (err == ROSPRITE_BADMODE) {                                                                          \
-            NSLOG(netsurf, INFO, "Got ROSPRITE_BADMODE when loading sprite file");                                     \
+            NSLOG(wisp, INFO, "Got ROSPRITE_BADMODE when loading sprite file");                                     \
             goto ro_sprite_error;                                                                                      \
         } else if (err == ROSPRITE_OK) {                                                                               \
         } else {                                                                                                       \

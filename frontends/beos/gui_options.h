@@ -17,8 +17,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef NETSURF_BEOS_OPTIONS_H
-#define NETSURF_BEOS_OPTIONS_H
+#ifndef WISP_BEOS_OPTIONS_H
+#define WISP_BEOS_OPTIONS_H
 
 #include <Window.h>
 

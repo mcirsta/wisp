@@ -16,10 +16,10 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef NETSURF_IMAGE_VIDEO_H_
-#define NETSURF_IMAGE_VIDEO_H_
+#ifndef WISP_IMAGE_VIDEO_H_
+#define WISP_IMAGE_VIDEO_H_
 
-#include <neosurf/utils/errors.h>
+#include <wisp/utils/errors.h>
 
 nserror nsvideo_init(void);
 

@@ -16,12 +16,12 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef NETSURF_UTILS_HTTP_GENERICS_H_
-#define NETSURF_UTILS_HTTP_GENERICS_H_
+#ifndef WISP_UTILS_HTTP_GENERICS_H_
+#define WISP_UTILS_HTTP_GENERICS_H_
 
 #include <stdbool.h>
 
-#include <neosurf/utils/errors.h>
+#include <wisp/utils/errors.h>
 
 /**
  * Representation of an item

@@ -25,11 +25,11 @@
 #include <dom/dom.h>
 #include <assert.h>
 
-#include <neosurf/content/handlers/css/utils.h>
-#include <neosurf/utils/log.h>
+#include <wisp/content/handlers/css/utils.h>
+#include <wisp/utils/log.h>
 #include "utils/talloc.h"
 
-#include <neosurf/content/handlers/html/box.h>
+#include <wisp/content/handlers/html/box.h>
 #include "content/handlers/html/table.h"
 
 /* Define to enable verbose table debug */
@@ -880,7 +880,7 @@ bool table_calculate_column_types(const css_unit_ctx *unit_len_ctx, struct box *
 
 #ifdef TABLE_DEBUG
     for (i = 0; i != table->columns; i++)
-        NSLOG(netsurf, INFO, "table %p, column %u: type %s, width %i", table, i,
+        NSLOG(wisp, INFO, "table %p, column %u: type %s, width %i", table, i,
             ((const char *[]){
                 "UNKNOWN",
                 "FIXED",

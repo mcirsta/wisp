@@ -109,7 +109,7 @@ const char *fetch_filetype(const char *unix_path)
         return "text/plain";
 
     if (node.IsDirectory())
-        return "application/x-netsurf-directory";
+        return "application/x-wisp-directory";
 
     BNodeInfo info(&node);
     err = info.InitCheck();

@@ -21,8 +21,8 @@
  * Target independent plotting QT interface.
  */
 
-#ifndef NETSURF_QT_PLOTTERS_H
-#define NETSURF_QT_PLOTTERS_H 1
+#ifndef WISP_QT_PLOTTERS_H
+#define WISP_QT_PLOTTERS_H 1
 
 struct plotter_table;
 

@@ -1,6 +1,6 @@
-#ifndef NETSURF_VI_H_
-#define NETSURF_VI_H_
-#include <neosurf/utils/nsurl.h>
+#ifndef WISP_VI_H_
+#define WISP_VI_H_
+#include <wisp/utils/nsurl.h>
 #include <xkbcommon/xkbcommon.h>
 #include "visurf/keybindings.h"
 #include "xdg-decoration.h"

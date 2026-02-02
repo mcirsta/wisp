@@ -23,14 +23,14 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <neosurf/bitmap.h>
-#include <neosurf/content/content_protected.h>
-#include <neosurf/content/llcache.h>
-#include <neosurf/desktop/gui_internal.h>
-#include <neosurf/ns_inttypes.h>
-#include <neosurf/utils/log.h>
-#include <neosurf/utils/messages.h>
-#include <neosurf/utils/utils.h>
+#include <wisp/bitmap.h>
+#include <wisp/content/content_protected.h>
+#include <wisp/content/llcache.h>
+#include <wisp/desktop/gui_internal.h>
+#include <wisp/ns_inttypes.h>
+#include <wisp/utils/log.h>
+#include <wisp/utils/messages.h>
+#include <wisp/utils/utils.h>
 #include "content/content_factory.h"
 #include "desktop/bitmap.h"
 
@@ -78,7 +78,7 @@ enum nspng_cberr {
  */
 static void nspng_warning(png_structp png_ptr, png_const_charp warning_message)
 {
-    NSLOG(neosurf, INFO, "%s", warning_message);
+    NSLOG(wisp, INFO, "%s", warning_message);
 }
 
 /**
@@ -86,7 +86,7 @@ static void nspng_warning(png_structp png_ptr, png_const_charp warning_message)
  */
 static void nspng_error(png_structp png_ptr, png_const_charp error_message)
 {
-    NSLOG(neosurf, INFO, "%s", error_message);
+    NSLOG(wisp, INFO, "%s", error_message);
     longjmp(png_jmpbuf(png_ptr), CBERR_LIBPNG);
 }
 
@@ -210,7 +210,7 @@ static void info_callback(png_structp png_s, png_infop info)
     png_c->rowbytes = png_get_rowbytes(png_s, info);
     png_c->interlace = (interlace == PNG_INTERLACE_ADAM7);
 
-    NSLOG(neosurf, INFO, "size %li * %li, rowbytes %" PRIsizet, (unsigned long)width, (unsigned long)height,
+    NSLOG(wisp, INFO, "size %li * %li, rowbytes %" PRIsizet, (unsigned long)width, (unsigned long)height,
         png_c->rowbytes);
 }
 
@@ -291,7 +291,7 @@ static nserror nspng_create_png_data(nspng_content *png_c)
 
     if (setjmp(png_jmpbuf(png_c->png))) {
         png_destroy_read_struct(&png_c->png, &png_c->info, 0);
-        NSLOG(neosurf, INFO, "Failed to set callbacks");
+        NSLOG(wisp, INFO, "Failed to set callbacks");
         png_c->png = NULL;
         png_c->info = NULL;
 
@@ -367,7 +367,7 @@ static bool nspng_process_data(struct content *c, const char *data, unsigned int
              * up png conversion and signal the content
              * error
              */
-            NSLOG(neosurf, INFO, "Fatal PNG error during header, error content");
+            NSLOG(wisp, INFO, "Fatal PNG error during header, error content");
 
             png_destroy_read_struct(&png_c->png, &png_c->info, 0);
             png_c->png = NULL;

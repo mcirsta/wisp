@@ -20,10 +20,10 @@
  * Knockout rendering (interface).
  */
 
-#ifndef _NETSURF_DESKTOP_KNOCKOUT_H_
-#define _NETSURF_DESKTOP_KNOCKOUT_H_
+#ifndef _WISP_DESKTOP_KNOCKOUT_H_
+#define _WISP_DESKTOP_KNOCKOUT_H_
 
-#include "neosurf/plotters.h"
+#include "wisp/plotters.h"
 
 
 /**

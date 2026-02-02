@@ -1,4 +1,4 @@
-# NetSurf ISO 639 language and region code list
+# Wisp ISO 639 language and region code list
 #
 # language code (used in accept header): ISO Language name: Endonym
 #
@@ -7,7 +7,7 @@
 # languages with at least that number of users.
 #
 # The inclusion or exclusion of a language (and region) selection is purely to
-# keep the list managable for the NetSurf UI language selection. The list
+# keep the list managable for the Wisp UI language selection. The list
 # contents are not influenced by any other criteria.
 #
 # Mostly ordered by total number of speakers to 0.4% (~30 million) then

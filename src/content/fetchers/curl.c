@@ -28,7 +28,7 @@
  */
 
 /* must come first to ensure winsock2.h vs windows.h ordering issues */
-#include <neosurf/utils/inet.h>
+#include <wisp/utils/inet.h>
 
 #include <sys/stat.h>
 #include <assert.h>
@@ -42,16 +42,16 @@
 #include <libwapcaplet/libwapcaplet.h>
 #include <nsutils/time.h>
 
-#include <neosurf/desktop/gui_internal.h>
-#include <neosurf/fetch.h>
-#include <neosurf/misc.h>
-#include <neosurf/utils/corestrings.h>
-#include <neosurf/utils/file.h>
-#include <neosurf/utils/log.h>
-#include <neosurf/utils/messages.h>
-#include <neosurf/utils/nsoption.h>
-#include <neosurf/utils/string.h>
-#include <neosurf/utils/utils.h>
+#include <wisp/desktop/gui_internal.h>
+#include <wisp/fetch.h>
+#include <wisp/misc.h>
+#include <wisp/utils/corestrings.h>
+#include <wisp/utils/file.h>
+#include <wisp/utils/log.h>
+#include <wisp/utils/messages.h>
+#include <wisp/utils/nsoption.h>
+#include <wisp/utils/string.h>
+#include <wisp/utils/utils.h>
 #include "utils/hashmap.h"
 #include "utils/ring.h"
 #include "utils/useragent.h"
@@ -67,7 +67,7 @@
 #define UPDATES_PER_SECOND 2
 
 /* Performance tracing - enable via CMake: -DNEOSURF_ENABLE_PERF_TRACE=ON */
-#include <neosurf/utils/perf.h>
+#include <wisp/utils/perf.h>
 
 /**
  * The ciphersuites the browser is prepared to use for TLS1.3
@@ -183,7 +183,7 @@ static void curl_fetch_ssl_value_destroy(void *value)
 {
     struct cert_chain *chain = value;
     if (cert_chain_free(chain) != NSERROR_OK) {
-        NSLOG(neosurf, WARNING, "Problem freeing SSL certificate chain");
+        NSLOG(wisp, WARNING, "Problem freeing SSL certificate chain");
     }
 }
 
@@ -305,7 +305,7 @@ static bool inside_curl = false;
  */
 static bool fetch_curl_initialise(lwc_string *scheme)
 {
-    NSLOG(neosurf, INFO, "Initialise cURL fetcher for %s", lwc_string_data(scheme));
+    NSLOG(wisp, INFO, "Initialise cURL fetcher for %s", lwc_string_data(scheme));
     curl_fetchers_registered++;
     return true; /* Always succeeds */
 }
@@ -321,21 +321,21 @@ static void fetch_curl_finalise(lwc_string *scheme)
     struct cache_handle *h;
 
     curl_fetchers_registered--;
-    NSLOG(neosurf, INFO, "Finalise cURL fetcher %s", lwc_string_data(scheme));
+    NSLOG(wisp, INFO, "Finalise cURL fetcher %s", lwc_string_data(scheme));
     if (curl_fetchers_registered == 0) {
         CURLMcode codem;
         /* All the fetchers have been finalised. */
-        NSLOG(neosurf, INFO, "All cURL fetchers finalised, closing down cURL");
+        NSLOG(wisp, INFO, "All cURL fetchers finalised, closing down cURL");
 
         curl_easy_cleanup(fetch_blank_curl);
 
         codem = curl_multi_cleanup(fetch_curl_multi);
         if (codem != CURLM_OK)
-            NSLOG(neosurf, INFO, "curl_multi_cleanup failed: ignoring");
+            NSLOG(wisp, INFO, "curl_multi_cleanup failed: ignoring");
 
         curl_global_cleanup();
 
-        NSLOG(neosurf, DEBUG, "Cleaning up SSL cert chain hashmap");
+        NSLOG(wisp, DEBUG, "Cleaning up SSL cert chain hashmap");
         hashmap_destroy(curl_fetch_ssl_hashmap);
         curl_fetch_ssl_hashmap = NULL;
     }
@@ -492,8 +492,8 @@ static void *fetch_curl_setup(struct fetch *parent_fetch, nsurl *url, bool only_
     if (fetch == NULL)
         return NULL;
 
-    NSLOG(netsurf, INFO, "fetch %p, url '%s'", fetch, nsurl_access(url));
-    NSLOG(neosurf, DEBUG, "PROFILER: START Fetch queue %p", fetch);
+    NSLOG(wisp, INFO, "fetch %p, url '%s'", fetch, nsurl_access(url));
+    NSLOG(wisp, DEBUG, "PROFILER: START Fetch queue %p", fetch);
 
     fetch->only_2xx = only_2xx;
     fetch->downgrade_tls = downgrade_tls;
@@ -940,7 +940,7 @@ static curl_mime *fetch_curl_postdata_convert(CURL *chandle, const struct fetch_
 
     cmime = curl_mime_init(chandle);
     if (cmime == NULL) {
-        NSLOG(netsurf, WARNING, "postdata conversion failed to curl mime context");
+        NSLOG(wisp, WARNING, "postdata conversion failed to curl mime context");
         return NULL;
     }
 
@@ -1034,7 +1034,7 @@ static curl_mime *fetch_curl_postdata_convert(CURL *chandle, const struct fetch_
     return cmime;
 
 convert_failed:
-    NSLOG(netsurf, WARNING, "postdata conversion failed with curl code: %d", code);
+    NSLOG(wisp, WARNING, "postdata conversion failed with curl code: %d", code);
     curl_mime_free(cmime);
     return NULL;
 }
@@ -1076,14 +1076,14 @@ static struct curl_httppost *fetch_curl_postdata_convert(CURL *chandle, const st
                     CURLFORM_FILENAME, "", CURLFORM_BUFFERPTR, &buf, CURLFORM_BUFFERLENGTH, 0, CURLFORM_CONTENTTYPE,
                     "application/octet-stream", CURLFORM_END);
                 if (code != CURL_FORMADD_OK)
-                    NSLOG(netsurf, INFO, "curl_formadd: %d (%s)", code, control->name);
+                    NSLOG(wisp, INFO, "curl_formadd: %d (%s)", code, control->name);
             } else {
                 char *mimetype = guit->fetch->mimetype(control->value);
                 code = curl_formadd(&post, &last, CURLFORM_COPYNAME, control->name, CURLFORM_FILE, control->rawfile,
                     CURLFORM_FILENAME, leafname, CURLFORM_CONTENTTYPE, (mimetype != 0 ? mimetype : "text/plain"),
                     CURLFORM_END);
                 if (code != CURL_FORMADD_OK)
-                    NSLOG(netsurf, INFO, "curl_formadd: %d (%s=%s)", code, control->name, control->value);
+                    NSLOG(wisp, INFO, "curl_formadd: %d (%s=%s)", code, control->name, control->value);
                 free(mimetype);
             }
             free(leafname);
@@ -1091,7 +1091,7 @@ static struct curl_httppost *fetch_curl_postdata_convert(CURL *chandle, const st
             code = curl_formadd(
                 &post, &last, CURLFORM_COPYNAME, control->name, CURLFORM_COPYCONTENTS, control->value, CURLFORM_END);
             if (code != CURL_FORMADD_OK)
-                NSLOG(netsurf, INFO, "curl_formadd: %d (%s=%s)", code, control->name, control->value);
+                NSLOG(wisp, INFO, "curl_formadd: %d (%s=%s)", code, control->name, control->value);
         }
     }
 
@@ -1259,7 +1259,7 @@ static bool fetch_curl_initiate_fetch(struct curl_fetch_info *fetch, CURL *handl
     if (code != CURLE_OK) {
         fetch->curl_handle = 0;
         /* The handle maybe went bad, eat it */
-        NSLOG(neosurf, WARNING, "cURL handle maybe went bad, retry later");
+        NSLOG(wisp, WARNING, "cURL handle maybe went bad, retry later");
         curl_easy_cleanup(handle);
         return false;
     }
@@ -1299,12 +1299,12 @@ static bool fetch_curl_start(void *vfetch)
 {
     struct curl_fetch_info *fetch = (struct curl_fetch_info *)vfetch;
     if (inside_curl) {
-        NSLOG(neosurf, DEBUG, "Deferring fetch because we're inside cURL");
+        NSLOG(wisp, DEBUG, "Deferring fetch because we're inside cURL");
         return false;
     }
     PERF("CURL START '%s'", nsurl_access(fetch->url));
-    NSLOG(neosurf, DEBUG, "PROFILER: STOP Fetch queue %p", fetch);
-    NSLOG(neosurf, DEBUG, "PROFILER: START Fetch latency %p", fetch);
+    NSLOG(wisp, DEBUG, "PROFILER: STOP Fetch queue %p", fetch);
+    NSLOG(wisp, DEBUG, "PROFILER: START Fetch latency %p", fetch);
     return fetch_curl_initiate_fetch(fetch, fetch_curl_get_handle(fetch->host));
 }
 
@@ -1371,7 +1371,7 @@ static void fetch_curl_stop(struct curl_fetch_info *f)
     CURLMcode codem;
 
     assert(f);
-    NSLOG(neosurf, INFO, "fetch %p, url '%s'", f, nsurl_access(f->url));
+    NSLOG(wisp, INFO, "fetch %p, url '%s'", f, nsurl_access(f->url));
 
     if (f->curl_handle) {
         /* remove from curl multi handle */
@@ -1393,13 +1393,13 @@ static void fetch_curl_abort(void *vf)
 {
     struct curl_fetch_info *f = (struct curl_fetch_info *)vf;
     assert(f);
-    NSLOG(neosurf, INFO, "fetch %p, url '%s'", f, nsurl_access(f->url));
+    NSLOG(wisp, INFO, "fetch %p, url '%s'", f, nsurl_access(f->url));
     if (f->curl_handle) {
         if (inside_curl) {
-            NSLOG(neosurf, DEBUG, "Deferring cleanup");
+            NSLOG(wisp, DEBUG, "Deferring cleanup");
             f->abort = true;
         } else {
-            NSLOG(neosurf, DEBUG, "Immediate abort");
+            NSLOG(wisp, DEBUG, "Immediate abort");
             fetch_curl_stop(f);
             fetch_free(f->fetch_handle);
         }
@@ -1462,7 +1462,7 @@ static bool fetch_curl_process_headers(struct curl_fetch_info *f)
         assert(code == CURLE_OK);
     }
     http_code = f->http_code;
-    NSLOG(neosurf, INFO, "HTTP status code %li", http_code);
+    NSLOG(wisp, INFO, "HTTP status code %li", http_code);
 
     if ((http_code == 304) && (f->postdata->type == FETCH_POSTDATA_NONE)) {
         /* Not Modified && GET request */
@@ -1473,7 +1473,7 @@ static bool fetch_curl_process_headers(struct curl_fetch_info *f)
 
     /* handle HTTP redirects (3xx response codes) */
     if (300 <= http_code && http_code < 400 && f->location != 0 && f->location[0] != '\0') {
-        NSLOG(neosurf, INFO, "FETCH_REDIRECT, '%s'", f->location);
+        NSLOG(wisp, INFO, "FETCH_REDIRECT, '%s'", f->location);
         msg.type = FETCH_REDIRECT;
         msg.data.redirect = f->location;
         fetch_send_callback(&msg, f->fetch_handle);
@@ -1526,12 +1526,12 @@ static void fetch_curl_done(CURL *curl_handle, CURLcode result)
 
     abort_fetch = f->abort;
     PERF("CURL DONE '%s' result=%d", nsurl_access(f->url), result);
-    NSLOG(neosurf, INFO, "done %s", nsurl_access(f->url));
+    NSLOG(wisp, INFO, "done %s", nsurl_access(f->url));
 
     if (f->profiled_response_started) {
-        NSLOG(neosurf, DEBUG, "PROFILER: STOP Fetch download %p", f);
+        NSLOG(wisp, DEBUG, "PROFILER: STOP Fetch download %p", f);
     } else {
-        NSLOG(neosurf, DEBUG, "PROFILER: STOP Fetch latency %p", f);
+        NSLOG(wisp, DEBUG, "PROFILER: STOP Fetch latency %p", f);
     }
 
     if ((abort_fetch == false) && (result == CURLE_OK || ((result == CURLE_WRITE_ERROR) && (f->stopped == false)))) {
@@ -1571,7 +1571,7 @@ static void fetch_curl_done(CURL *curl_handle, CURLcode result)
          */
         cert = true;
     } else {
-        NSLOG(neosurf, INFO, "cURL error %d: %s", result, curl_easy_strerror(result));
+        NSLOG(wisp, INFO, "cURL error %d: %s", result, curl_easy_strerror(result));
         error = true;
     }
 
@@ -1639,7 +1639,7 @@ static void fetch_curl_poll(lwc_string *scheme_ignored)
         codem = curl_multi_fdset(fetch_curl_multi, &read_fd_set, &write_fd_set, &exc_fd_set, &max_fd);
         assert(codem == CURLM_OK);
 
-        NSLOG(neosurf, DEEPDEBUG, "Curl file descriptor states (maxfd=%i):", max_fd);
+        NSLOG(wisp, DEEPDEBUG, "Curl file descriptor states (maxfd=%i):", max_fd);
         for (i = 0; i <= max_fd; i++) {
             bool read = false;
             bool write = false;
@@ -1655,7 +1655,7 @@ static void fetch_curl_poll(lwc_string *scheme_ignored)
                 error = true;
             }
             if (read || write || error) {
-                NSLOG(neosurf, DEEPDEBUG, "  fd %i: %s %s %s", i, read ? "read" : "    ", write ? "write" : "     ",
+                NSLOG(wisp, DEEPDEBUG, "  fd %i: %s %s %s", i, read ? "read" : "    ", write ? "write" : "     ",
                     error ? "error" : "     ");
             }
         }
@@ -1666,7 +1666,7 @@ static void fetch_curl_poll(lwc_string *scheme_ignored)
     do {
         codem = curl_multi_perform(fetch_curl_multi, &running);
         if (codem != CURLM_OK && codem != CURLM_CALL_MULTI_PERFORM) {
-            NSLOG(neosurf, WARNING, "curl_multi_perform: %i %s", codem, curl_multi_strerror(codem));
+            NSLOG(wisp, WARNING, "curl_multi_perform: %i %s", codem, curl_multi_strerror(codem));
             return;
         }
     } while (codem == CURLM_CALL_MULTI_PERFORM);
@@ -1824,8 +1824,8 @@ static size_t fetch_curl_header(char *data, size_t size, size_t nmemb, void *_f)
     }
 
     if (f->profiled_response_started == false) {
-        NSLOG(neosurf, DEBUG, "PROFILER: STOP Fetch latency %p", f);
-        NSLOG(neosurf, DEBUG, "PROFILER: START Fetch download %p", f);
+        NSLOG(wisp, DEBUG, "PROFILER: STOP Fetch latency %p", f);
+        NSLOG(wisp, DEBUG, "PROFILER: START Fetch download %p", f);
         f->profiled_response_started = true;
     }
 
@@ -1845,7 +1845,7 @@ static size_t fetch_curl_header(char *data, size_t size, size_t nmemb, void *_f)
         free(f->location);
         f->location = malloc(size);
         if (!f->location) {
-            NSLOG(neosurf, INFO, "malloc failed");
+            NSLOG(wisp, INFO, "malloc failed");
             return size;
         }
         SKIP_ST(9);
@@ -1937,17 +1937,17 @@ nserror fetch_curl_register(void)
     }
 #endif
 
-    NSLOG(neosurf, INFO, "curl_version %s", curl_version());
+    NSLOG(wisp, INFO, "curl_version %s", curl_version());
 
     code = curl_global_init(CURL_GLOBAL_ALL);
     if (code != CURLE_OK) {
-        NSLOG(neosurf, INFO, "curl_global_init failed.");
+        NSLOG(wisp, INFO, "curl_global_init failed.");
         return NSERROR_INIT_FAILED;
     }
 
     fetch_curl_multi = curl_multi_init();
     if (!fetch_curl_multi) {
-        NSLOG(neosurf, INFO, "curl_multi_init failed.");
+        NSLOG(wisp, INFO, "curl_multi_init failed.");
         return NSERROR_INIT_FAILED;
     }
 
@@ -1961,7 +1961,7 @@ nserror fetch_curl_register(void)
 #define SETOPT(option, value)                                                                                          \
     mcode = curl_multi_setopt(fetch_curl_multi, option, value);                                                        \
     if (mcode != CURLM_OK) {                                                                                           \
-        NSLOG(netsurf, ERROR, "attempting curl_multi_setopt(%s, ...)", #option);                                       \
+        NSLOG(wisp, ERROR, "attempting curl_multi_setopt(%s, ...)", #option);                                       \
         goto curl_multi_setopt_failed;                                                                                 \
     }
 
@@ -1979,7 +1979,7 @@ nserror fetch_curl_register(void)
      */
     fetch_blank_curl = curl_easy_init();
     if (!fetch_blank_curl) {
-        NSLOG(neosurf, INFO, "curl_easy_init failed");
+        NSLOG(wisp, INFO, "curl_easy_init failed");
         return NSERROR_INIT_FAILED;
     }
 
@@ -1987,7 +1987,7 @@ nserror fetch_curl_register(void)
 #define SETOPT(option, value)                                                                                          \
     code = curl_easy_setopt(fetch_blank_curl, option, value);                                                          \
     if (code != CURLE_OK) {                                                                                            \
-        NSLOG(netsurf, ERROR, "attempting curl_easy_setopt(%s, ...)", #option);                                        \
+        NSLOG(wisp, ERROR, "attempting curl_easy_setopt(%s, ...)", #option);                                        \
         goto curl_easy_setopt_failed;                                                                                  \
     }
 
@@ -2015,11 +2015,11 @@ nserror fetch_curl_register(void)
     SETOPT(CURLOPT_CLOSESOCKETFUNCTION, fetch_curl_socket_close);
 
     if (nsoption_charp(ca_bundle) && strcmp(nsoption_charp(ca_bundle), "")) {
-        NSLOG(neosurf, INFO, "ca_bundle: '%s'", nsoption_charp(ca_bundle));
+        NSLOG(wisp, INFO, "ca_bundle: '%s'", nsoption_charp(ca_bundle));
         SETOPT(CURLOPT_CAINFO, nsoption_charp(ca_bundle));
     }
     if (nsoption_charp(ca_path) && strcmp(nsoption_charp(ca_path), "")) {
-        NSLOG(neosurf, INFO, "ca_path: '%s'", nsoption_charp(ca_path));
+        NSLOG(wisp, INFO, "ca_path: '%s'", nsoption_charp(ca_path));
         SETOPT(CURLOPT_CAPATH, nsoption_charp(ca_path));
     }
 
@@ -2050,7 +2050,7 @@ nserror fetch_curl_register(void)
         SETOPT(CURLOPT_SSL_CIPHER_LIST, CIPHER_LIST);
     }
 
-    NSLOG(neosurf, INFO, "cURL %slinked against openssl", curl_with_openssl ? "" : "not ");
+    NSLOG(wisp, INFO, "cURL %slinked against openssl", curl_with_openssl ? "" : "not ");
 
     /* cURL initialised okay, register the fetchers */
 
@@ -2058,7 +2058,7 @@ nserror fetch_curl_register(void)
 
     curl_fetch_ssl_hashmap = hashmap_create(&curl_fetch_ssl_hashmap_parameters);
     if (curl_fetch_ssl_hashmap == NULL) {
-        NSLOG(neosurf, CRITICAL, "Unable to initialise SSL certificate hashmap");
+        NSLOG(wisp, CRITICAL, "Unable to initialise SSL certificate hashmap");
         return NSERROR_NOMEM;
     }
 
@@ -2075,19 +2075,19 @@ nserror fetch_curl_register(void)
         }
 
         if (fetcher_add(scheme, &fetcher_ops) != NSERROR_OK) {
-            NSLOG(neosurf, INFO, "Unable to register cURL fetcher for %s", data->protocols[i]);
+            NSLOG(wisp, INFO, "Unable to register cURL fetcher for %s", data->protocols[i]);
         }
     }
 
     return NSERROR_OK;
 
 curl_easy_setopt_failed:
-    NSLOG(neosurf, INFO, "curl_easy_setopt failed.");
+    NSLOG(wisp, INFO, "curl_easy_setopt failed.");
     return NSERROR_INIT_FAILED;
 
 #if LIBCURL_VERSION_NUM >= 0x071e00
 curl_multi_setopt_failed:
-    NSLOG(neosurf, INFO, "curl_multi_setopt failed.");
+    NSLOG(wisp, INFO, "curl_multi_setopt failed.");
     return NSERROR_INIT_FAILED;
 #endif
 }

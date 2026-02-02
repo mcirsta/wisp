@@ -69,8 +69,8 @@
  * Here implied boxes have been added and a float is present.
  */
 
-#ifndef NETSURF_HTML_BOX_CONSTRUCT_H
-#define NETSURF_HTML_BOX_CONSTRUCT_H
+#ifndef WISP_HTML_BOX_CONSTRUCT_H
+#define WISP_HTML_BOX_CONSTRUCT_H
 
 /**
  * Construct a box tree from a dom and html content

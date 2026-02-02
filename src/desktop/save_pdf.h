@@ -20,8 +20,8 @@
     PDF Plotting
 */
 
-#ifndef NETSURF_PDF_PLOTTERS_H
-#define NETSURF_PDF_PLOTTERS_H
+#ifndef WISP_PDF_PLOTTERS_H
+#define WISP_PDF_PLOTTERS_H
 
 #include "desktop/print.h"
 

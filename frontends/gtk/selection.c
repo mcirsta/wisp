@@ -20,9 +20,9 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <neosurf/browser_window.h>
-#include <neosurf/clipboard.h>
-#include <neosurf/utils/log.h>
+#include <wisp/browser_window.h>
+#include <wisp/clipboard.h>
+#include <wisp/utils/log.h>
 
 #include "gtk/toolbar_items.h"
 #include "gtk/window.h"

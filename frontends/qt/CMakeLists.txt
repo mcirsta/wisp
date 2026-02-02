@@ -88,7 +88,7 @@ set(QT_SOURCES
 )
 
 set(QT_RESOURCES
-    res/netsurf.qrc
+    res/wisp.qrc
     ${GENERATED_MESSAGES_DIR}/messages.qrc
 )
 
@@ -98,10 +98,10 @@ add_dependencies(nsqt qt_messages)
 
 target_compile_definitions(nsqt PRIVATE
     nsqt
-    QT_RESPATH="${CMAKE_INSTALL_PREFIX}/share/neosurf/res"
+    QT_RESPATH="${CMAKE_INSTALL_PREFIX}/share/wisp/res"
 )
 
-target_link_libraries(nsqt PRIVATE Qt6::Widgets Qt6::Core Qt6::Gui neosurf)
+target_link_libraries(nsqt PRIVATE Qt6::Widgets Qt6::Core Qt6::Gui wisp)
 target_include_directories(nsqt PRIVATE
     ${CMAKE_SOURCE_DIR}/include
     ${CMAKE_SOURCE_DIR}/frontends/qt

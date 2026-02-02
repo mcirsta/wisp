@@ -16,8 +16,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef NETSURF_GTK_PAGE_INFO_H
-#define NETSURF_GTK_PAGE_INFO_H 1
+#ifndef WISP_GTK_PAGE_INFO_H
+#define WISP_GTK_PAGE_INFO_H 1
 
 /**
  * Page information window

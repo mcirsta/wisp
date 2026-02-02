@@ -141,4 +141,4 @@ The `layout_grid.c` implementation provides basic grid layout functionality but 
 
 ## Test File
 
-Created `/mnt/netac/proj/neosurf/grid_placement_test.html` for visual testing.
+Created `/mnt/netac/proj/wisp/grid_placement_test.html` for visual testing.

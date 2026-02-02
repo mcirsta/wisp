@@ -1,5 +1,5 @@
-#ifndef NETSURF_VI_BITMAP_H
-#define NETSURF_VI_BITMAP_H
+#ifndef WISP_VI_BITMAP_H
+#define WISP_VI_BITMAP_H
 
 #include <cairo.h>
 

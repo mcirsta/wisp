@@ -21,8 +21,8 @@
  * Private interfaces for the about scheme fetcher.
  */
 
-#ifndef NETSURF_CONTENT_FETCHERS_ABOUT_PRIVATE_H
-#define NETSURF_CONTENT_FETCHERS_ABOUT_PRIVATE_H
+#ifndef WISP_CONTENT_FETCHERS_ABOUT_PRIVATE_H
+#define WISP_CONTENT_FETCHERS_ABOUT_PRIVATE_H
 
 struct fetch_about_context;
 struct fetch_multipart_data;

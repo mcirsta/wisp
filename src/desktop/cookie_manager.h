@@ -20,13 +20,13 @@
  * Cookie Manager (interface).
  */
 
-#ifndef _NETSURF_DESKTOP_COOKIE_MANAGER_H_
-#define _NETSURF_DESKTOP_COOKIE_MANAGER_H_
+#ifndef _WISP_DESKTOP_COOKIE_MANAGER_H_
+#define _WISP_DESKTOP_COOKIE_MANAGER_H_
 
 #include <stdbool.h>
 #include <stdint.h>
 
-#include <neosurf/mouse.h>
+#include <wisp/mouse.h>
 #include "utils/errors.h"
 
 struct redraw_context;

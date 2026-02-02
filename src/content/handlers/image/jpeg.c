@@ -28,14 +28,14 @@
 #include <stdbool.h>
 #include <stdlib.h>
 
-#include <neosurf/bitmap.h>
-#include <neosurf/content/content.h>
-#include <neosurf/content/content_protected.h>
-#include <neosurf/content/llcache.h>
-#include <neosurf/desktop/gui_internal.h>
-#include <neosurf/utils/log.h>
-#include <neosurf/utils/messages.h>
-#include <neosurf/utils/utils.h>
+#include <wisp/bitmap.h>
+#include <wisp/content/content.h>
+#include <wisp/content/content_protected.h>
+#include <wisp/content/llcache.h>
+#include <wisp/desktop/gui_internal.h>
+#include <wisp/utils/log.h>
+#include <wisp/utils/messages.h>
+#include <wisp/utils/utils.h>
 #include "content/content_factory.h"
 #include "desktop/bitmap.h"
 
@@ -139,7 +139,7 @@ static void nsjpeg_term_source(j_decompress_ptr cinfo)
 static void nsjpeg_error_log(j_common_ptr cinfo)
 {
     cinfo->err->format_message(cinfo, nsjpeg_error_buffer);
-    NSLOG(neosurf, INFO, "%s", nsjpeg_error_buffer);
+    NSLOG(wisp, INFO, "%s", nsjpeg_error_buffer);
 }
 
 
@@ -153,7 +153,7 @@ static void nsjpeg_error_exit(j_common_ptr cinfo)
     jmp_buf *setjmp_buffer = (jmp_buf *)cinfo->client_data;
 
     cinfo->err->format_message(cinfo, nsjpeg_error_buffer);
-    NSLOG(neosurf, INFO, "%s", nsjpeg_error_buffer);
+    NSLOG(wisp, INFO, "%s", nsjpeg_error_buffer);
 
     longjmp(*setjmp_buffer, 1);
 }
@@ -301,7 +301,7 @@ static struct bitmap *jpeg_cache_convert(struct content *c)
             cinfo.out_color_space = JCS_EXT_ABGR;
             break;
         default:
-            NSLOG(netsurf, ERROR, "Unexpected bitmap format: %u", bitmap_fmt.layout);
+            NSLOG(wisp, ERROR, "Unexpected bitmap format: %u", bitmap_fmt.layout);
             jpeg_destroy_decompress(&cinfo);
             return NULL;
         }

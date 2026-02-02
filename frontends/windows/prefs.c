@@ -21,15 +21,15 @@
  * win32 preferences dialog implementation.
  */
 
-#include "neosurf/utils/config.h"
+#include "wisp/utils/config.h"
 
 #include <windows.h>
 #include <commctrl.h>
 
-#include "neosurf/utils/file.h"
-#include "neosurf/utils/log.h"
-#include "neosurf/utils/messages.h"
-#include "neosurf/utils/nsoption.h"
+#include "wisp/utils/file.h"
+#include "wisp/utils/log.h"
+#include "wisp/utils/messages.h"
+#include "wisp/utils/nsoption.h"
 
 #include "windows/gui.h"
 #include "windows/prefs.h"
@@ -254,7 +254,7 @@ static INT_PTR CALLBACK options_appearance_dialog_handler(HWND hwnd, UINT msg, W
 
 
     case WM_COMMAND:
-        NSLOG(neosurf, INFO, "WM_COMMAND Identifier 0x%x", LOWORD(wparam));
+        NSLOG(wisp, INFO, "WM_COMMAND Identifier 0x%x", LOWORD(wparam));
 
         switch (LOWORD(wparam)) {
         case IDC_PREFS_PROXYTYPE:
@@ -594,7 +594,7 @@ nserror nsws_prefs_save(void)
     char *choices = NULL;
     nserror res;
 
-    res = neosurf_mkpath(&choices, NULL, 2, G_config_path, "Choices");
+    res = wisp_mkpath(&choices, NULL, 2, G_config_path, "Choices");
     if (res == NSERROR_OK) {
         nsoption_write(choices, NULL, NULL);
         free(choices);
@@ -639,8 +639,8 @@ void nsws_prefs_dialog_init(HINSTANCE hinst, HWND parent)
     psh.dwFlags = PSH_NOAPPLYNOW | PSH_USEICONID | PSH_PROPSHEETPAGE;
     psh.hwndParent = parent;
     psh.hInstance = hinst;
-    psh.pszIcon = MAKEINTRESOURCE(IDR_NEOSURF_ICON);
-    psh.pszCaption = (LPSTR) "NeoSurf Options";
+    psh.pszIcon = MAKEINTRESOURCE(IDR_WISP_ICON);
+    psh.pszCaption = (LPSTR) "Wisp Options";
     psh.nPages = sizeof(psp) / sizeof(PROPSHEETPAGE);
     psh.nStartPage = 0;
     psh.ppsp = (LPCPROPSHEETPAGE)&psp;

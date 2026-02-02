@@ -24,18 +24,18 @@
 #include <dom/dom.h>
 #include <string.h>
 
-#include <neosurf/desktop/textarea.h>
-#include <neosurf/keypress.h>
-#include <neosurf/misc.h>
-#include <neosurf/utils/config.h>
-#include <neosurf/utils/log.h>
-#include <neosurf/utils/messages.h>
+#include <wisp/desktop/textarea.h>
+#include <wisp/keypress.h>
+#include <wisp/misc.h>
+#include <wisp/utils/config.h>
+#include <wisp/utils/log.h>
+#include <wisp/utils/messages.h>
 
-#include <neosurf/content/handlers/html/box.h>
-#include <neosurf/content/handlers/html/box_inspect.h>
-#include <neosurf/content/handlers/html/form_internal.h>
-#include <neosurf/content/handlers/html/interaction.h>
-#include <neosurf/content/handlers/html/private.h>
+#include <wisp/content/handlers/html/box.h>
+#include <wisp/content/handlers/html/box_inspect.h>
+#include <wisp/content/handlers/html/form_internal.h>
+#include <wisp/content/handlers/html/interaction.h>
+#include <wisp/content/handlers/html/private.h>
 #include "content/handlers/html/box_textarea.h"
 #include "content/handlers/html/font.h"
 
@@ -148,7 +148,7 @@ static void box_textarea_callback(void *data, struct textarea_msg *msg)
                 break;
 
             default:
-                NSLOG(neosurf, INFO, "Drag type %d not handled.", msg->data.drag);
+                NSLOG(wisp, INFO, "Drag type %d not handled.", msg->data.drag);
                 /* This is a logic faliure in the
                  * front end code so abort.
                  */

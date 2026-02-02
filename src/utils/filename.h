@@ -16,15 +16,15 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef _NETSURF_UTILS_FILENAME_H_
-#define _NETSURF_UTILS_FILENAME_H_
+#ifndef _WISP_UTILS_FILENAME_H_
+#define _WISP_UTILS_FILENAME_H_
 
 #include <stdbool.h>
 
 #ifdef __riscos__
-#define TEMP_FILENAME_PREFIX "<Wimp$ScrapDir>/WWW/NetSurf/Misc"
+#define TEMP_FILENAME_PREFIX "<Wimp$ScrapDir>/WWW/Wisp/Misc"
 #else
-#define TEMP_FILENAME_PREFIX "/tmp/WWW/NetSurf/Misc"
+#define TEMP_FILENAME_PREFIX "/tmp/WWW/Wisp/Misc"
 #endif
 
 const char *filename_request(void);

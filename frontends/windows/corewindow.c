@@ -37,12 +37,12 @@
 #include <windows.h>
 #include <windowsx.h>
 
-#include "neosurf/keypress.h"
-#include "neosurf/mouse.h"
-#include "neosurf/types.h"
-#include "neosurf/utils/log.h"
-#include "neosurf/utils/messages.h"
-#include "neosurf/utils/utf8.h"
+#include "wisp/keypress.h"
+#include "wisp/mouse.h"
+#include "wisp/types.h"
+#include "wisp/utils/log.h"
+#include "wisp/utils/messages.h"
+#include "wisp/utils/utf8.h"
 
 #include "windows/corewindow.h"
 #include "windows/plot.h"
@@ -149,7 +149,7 @@ static LRESULT nsw32_corewindow_vscroll(struct nsw32_corewindow *nsw32_cw, HWND 
     SCROLLINFO si; /* current scroll information */
     SCROLLINFO usi; /* updated scroll infomation for scrollwindowex */
 
-    NSLOG(neosurf, INFO, "VSCROLL");
+    NSLOG(wisp, INFO, "VSCROLL");
 
     si.cbSize = sizeof(si);
     si.fMask = SIF_ALL;
@@ -214,7 +214,7 @@ static LRESULT nsw32_corewindow_hscroll(struct nsw32_corewindow *nsw32_cw, HWND 
     SCROLLINFO si; /* current scroll information */
     SCROLLINFO usi; /* updated scroll infomation for scrollwindowex */
 
-    NSLOG(neosurf, INFO, "VSCROLL");
+    NSLOG(wisp, INFO, "VSCROLL");
 
     si.cbSize = sizeof(si);
     si.fMask = SIF_ALL;
@@ -403,7 +403,7 @@ static nserror nsw32_cw_update_size(struct core_window *cw, int width, int heigh
 
     nsw32_cw->content_width = width;
     nsw32_cw->content_height = height;
-    NSLOG(neosurf, INFO, "new content size w:%d h:%d", width, height);
+    NSLOG(wisp, INFO, "new content size w:%d h:%d", width, height);
 
     update_scrollbars(nsw32_cw);
     return NSERROR_OK;
@@ -478,11 +478,11 @@ nserror nsw32_corewindow_init(HINSTANCE hInstance, HWND hWndParent, struct nsw32
         dwStyle = WS_OVERLAPPEDWINDOW | WS_HSCROLL | WS_VSCROLL | WS_CLIPSIBLINGS | WS_CLIPCHILDREN | CS_DBLCLKS;
     }
 
-    NSLOG(neosurf, INFO, "creating hInstance %p core window", hInstance);
+    NSLOG(wisp, INFO, "creating hInstance %p core window", hInstance);
     nsw32_cw->hWnd = CreateWindowEx(0, windowclassname_corewindow, nsw32_cw->title, dwStyle, CW_USEDEFAULT,
         CW_USEDEFAULT, 500, 400, hWndParent, NULL, hInstance, NULL);
     if (nsw32_cw->hWnd == NULL) {
-        NSLOG(neosurf, INFO, "Window create failed");
+        NSLOG(wisp, INFO, "Window create failed");
         return NSERROR_NOMEM;
     }
 

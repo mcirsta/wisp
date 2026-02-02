@@ -21,11 +21,11 @@
 #include <assert.h>
 #include <stdio.h>
 
-#include <neosurf/ns_inttypes.h>
-#include <neosurf/layout.h>
-#include <neosurf/plot_style.h>
-#include <neosurf/utils/log.h>
-#include <neosurf/utils/nsoption.h>
+#include <wisp/ns_inttypes.h>
+#include <wisp/layout.h>
+#include <wisp/plot_style.h>
+#include <wisp/utils/log.h>
+#include <wisp/utils/nsoption.h>
 #include "visurf/layout.h"
 #include "visurf/plotters.h"
 #include "visurf/pool-buffer.h"
@@ -59,7 +59,7 @@ static nserror nsfont_width(const plot_font_style_t *fstyle, const char *string,
 
     pango_layout_get_pixel_size(layout, width, NULL);
 
-    NSLOG(neosurf, DEEPDEBUG, "fstyle: %p string:\"%.*s\", length: %" PRIsizet ", width: %dpx", fstyle, (int)length,
+    NSLOG(wisp, DEEPDEBUG, "fstyle: %p string:\"%.*s\", length: %" PRIsizet ", width: %dpx", fstyle, (int)length,
         string, length, *width);
 
     return NSERROR_OK;

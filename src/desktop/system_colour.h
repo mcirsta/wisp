@@ -26,13 +26,13 @@
  * (e.g. cookies treeview or local file directory views.
  */
 
-#ifndef NETSURF_DESKTOP_SYSTEM_COLOUR_H
-#define NETSURF_DESKTOP_SYSTEM_COLOUR_H
+#ifndef WISP_DESKTOP_SYSTEM_COLOUR_H
+#define WISP_DESKTOP_SYSTEM_COLOUR_H
 
 #include <libcss/libcss.h>
 
-#include <neosurf/utils/errors.h>
-#include "neosurf/types.h"
+#include <wisp/utils/errors.h>
+#include "wisp/types.h"
 
 /**
  * css callback to obtain named system colour.

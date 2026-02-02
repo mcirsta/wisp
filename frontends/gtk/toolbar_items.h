@@ -16,8 +16,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef NETSURF_GTK_TOOLBAR_ITEMS_H
-#define NETSURF_GTK_TOOLBAR_ITEMS_H
+#ifndef WISP_GTK_TOOLBAR_ITEMS_H
+#define WISP_GTK_TOOLBAR_ITEMS_H
 
 typedef enum {
     BACK_BUTTON = 0,

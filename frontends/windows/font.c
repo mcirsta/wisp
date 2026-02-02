@@ -22,7 +22,7 @@
  * Windows font handling and character encoding implementation.
  */
 
-#include "neosurf/utils/config.h"
+#include "wisp/utils/config.h"
 #include <assert.h>
 #include <ctype.h>
 #include <string.h>
@@ -30,19 +30,19 @@
 
 #include <libwapcaplet/libwapcaplet.h>
 
-#include <neosurf/ns_inttypes.h>
-#include "neosurf/layout.h"
-#include "neosurf/plot_style.h"
-#include "neosurf/utf8.h"
-#include "neosurf/utils/errors.h"
-#include "neosurf/utils/log.h"
-#include "neosurf/utils/nsoption.h"
-#include "neosurf/utils/utf8.h"
+#include <wisp/ns_inttypes.h>
+#include "wisp/layout.h"
+#include "wisp/plot_style.h"
+#include "wisp/utf8.h"
+#include "wisp/utils/errors.h"
+#include "wisp/utils/log.h"
+#include "wisp/utils/nsoption.h"
+#include "wisp/utils/utf8.h"
 
 #include "utils/hashmap.h"
 #include "windows/font.h"
 
-#ifdef NEOSURF_WOFF_DECODE
+#ifdef WISP_WOFF_DECODE
 #include <zlib.h>
 #endif
 
@@ -184,7 +184,7 @@ static void font_map_insert(const char *css_name, const char *internal_name)
     }
 }
 
-#ifdef NEOSURF_WOFF_DECODE
+#ifdef WISP_WOFF_DECODE
 /**
  * WOFF (Web Open Font Format) header structure.
  */
@@ -272,7 +272,7 @@ static void write_be16(uint8_t *p, uint16_t val)
 static uint8_t *woff_decode(const uint8_t *woff_data, size_t woff_size, size_t *out_size)
 {
     if (woff_size < sizeof(woff_header_t)) {
-        NSLOG(netsurf, WARNING, "WOFF data too small for header");
+        NSLOG(wisp, WARNING, "WOFF data too small for header");
         return NULL;
     }
 
@@ -280,7 +280,7 @@ static uint8_t *woff_decode(const uint8_t *woff_data, size_t woff_size, size_t *
     const uint8_t *p = woff_data;
     uint32_t signature = read_be32(p);
     if (signature != WOFF_SIGNATURE) {
-        NSLOG(netsurf, WARNING, "Invalid WOFF signature: 0x%08x", signature);
+        NSLOG(wisp, WARNING, "Invalid WOFF signature: 0x%08x", signature);
         return NULL;
     }
 
@@ -289,14 +289,14 @@ static uint8_t *woff_decode(const uint8_t *woff_data, size_t woff_size, size_t *
     uint32_t totalSfntSize = read_be32(p + 16);
 
     if (totalSfntSize > 50 * 1024 * 1024) {
-        NSLOG(netsurf, WARNING, "WOFF output size too large: %u", totalSfntSize);
+        NSLOG(wisp, WARNING, "WOFF output size too large: %u", totalSfntSize);
         return NULL;
     }
 
     /* Allocate output buffer */
     uint8_t *sfnt = malloc(totalSfntSize);
     if (!sfnt) {
-        NSLOG(netsurf, WARNING, "Failed to allocate %u bytes for SFNT", totalSfntSize);
+        NSLOG(wisp, WARNING, "Failed to allocate %u bytes for SFNT", totalSfntSize);
         return NULL;
     }
     memset(sfnt, 0, totalSfntSize);
@@ -328,7 +328,7 @@ static uint8_t *woff_decode(const uint8_t *woff_data, size_t woff_size, size_t *
     p = woff_data + 44; /* Skip WOFF header (44 bytes) */
     for (uint16_t i = 0; i < numTables; i++) {
         if ((size_t)(p - woff_data + 20) > woff_size) {
-            NSLOG(netsurf, WARNING, "WOFF table entry %u exceeds data", i);
+            NSLOG(wisp, WARNING, "WOFF table entry %u exceeds data", i);
             free(sfnt);
             return NULL;
         }
@@ -341,13 +341,13 @@ static uint8_t *woff_decode(const uint8_t *woff_data, size_t woff_size, size_t *
         p += 20;
 
         if (offset + compLength > woff_size) {
-            NSLOG(netsurf, WARNING, "WOFF table %u data exceeds file", i);
+            NSLOG(wisp, WARNING, "WOFF table %u data exceeds file", i);
             free(sfnt);
             return NULL;
         }
 
         if (current_table_offset + origLength > totalSfntSize) {
-            NSLOG(netsurf, WARNING, "WOFF table %u exceeds output size", i);
+            NSLOG(wisp, WARNING, "WOFF table %u exceeds output size", i);
             free(sfnt);
             return NULL;
         }
@@ -368,12 +368,12 @@ static uint8_t *woff_decode(const uint8_t *woff_data, size_t woff_size, size_t *
             uLongf destLen = origLength;
             int ret = uncompress(table_dst, &destLen, table_src, compLength);
             if (ret != Z_OK) {
-                NSLOG(netsurf, WARNING, "WOFF table %u decompression failed: %d", i, ret);
+                NSLOG(wisp, WARNING, "WOFF table %u decompression failed: %d", i, ret);
                 free(sfnt);
                 return NULL;
             }
             if (destLen != origLength) {
-                NSLOG(netsurf, WARNING, "WOFF table %u size mismatch: expected %u, got %lu", i, origLength,
+                NSLOG(wisp, WARNING, "WOFF table %u size mismatch: expected %u, got %lu", i, origLength,
                     (unsigned long)destLen);
                 free(sfnt);
                 return NULL;
@@ -388,7 +388,7 @@ static uint8_t *woff_decode(const uint8_t *woff_data, size_t woff_size, size_t *
         current_table_offset = (current_table_offset + 3) & ~3;
     }
 
-    NSLOG(netsurf, INFO, "WOFF decoded: %zu bytes -> %u bytes", woff_size, totalSfntSize);
+    NSLOG(wisp, INFO, "WOFF decoded: %zu bytes -> %u bytes", woff_size, totalSfntSize);
     *out_size = totalSfntSize;
     return sfnt;
 }
@@ -1210,7 +1210,7 @@ HFONT get_font(const plot_font_style_t *style)
     nHeight = -MulDiv(style->size, GetDeviceCaps(hdc, LOGPIXELSY), 72 * PLOT_STYLE_SCALE);
     ReleaseDC(font_hwnd, hdc);
 
-    NSLOG(netsurf, DEEPDEBUG, "CreateFont: face='%s' height=%d weight=%d italic=%s", face ? face : "(null)", nHeight,
+    NSLOG(wisp, DEEPDEBUG, "CreateFont: face='%s' height=%d weight=%d italic=%s", face ? face : "(null)", nHeight,
         style->weight, (style->flags & FONTF_ITALIC) ? "yes" : "no");
 
     font = CreateFont(nHeight, 0, 0, 0, style->weight, (style->flags & FONTF_ITALIC) ? TRUE : FALSE, FALSE, FALSE,
@@ -1457,7 +1457,7 @@ nserror html_font_face_load_data(const char *family_name, const uint8_t *data, s
     char *internal_name = NULL;
     const uint8_t *font_data = data;
     size_t font_size = size;
-#ifdef NEOSURF_WOFF_DECODE
+#ifdef WISP_WOFF_DECODE
     uint8_t *decoded_font = NULL;
 #endif
 
@@ -1468,17 +1468,17 @@ nserror html_font_face_load_data(const char *family_name, const uint8_t *data, s
 
     /* Check for reasonable size limits to prevent memory issues */
     if (size > 50 * 1024 * 1024) { /* 50MB limit for font files */
-        NSLOG(netsurf, WARNING, "Font '%s' size %zu exceeds reasonable limit", family_name, size);
+        NSLOG(wisp, WARNING, "Font '%s' size %zu exceeds reasonable limit", family_name, size);
         return NSERROR_BAD_PARAMETER;
     }
 
-#ifdef NEOSURF_WOFF_DECODE
+#ifdef WISP_WOFF_DECODE
     /* Check if this is a WOFF font that needs decoding */
     if (is_woff_font(data, size)) {
-        NSLOG(netsurf, INFO, "Font '%s' is WOFF format, decoding...", family_name);
+        NSLOG(wisp, INFO, "Font '%s' is WOFF format, decoding...", family_name);
         decoded_font = woff_decode(data, size, &font_size);
         if (decoded_font == NULL) {
-            NSLOG(netsurf, WARNING, "Failed to decode WOFF font '%s'", family_name);
+            NSLOG(wisp, WARNING, "Failed to decode WOFF font '%s'", family_name);
             return NSERROR_INVALID;
         }
         font_data = decoded_font;
@@ -1490,17 +1490,17 @@ nserror html_font_face_load_data(const char *family_name, const uint8_t *data, s
 
     font_handle = AddFontMemResourceEx((PVOID)font_data, (DWORD)font_size, NULL, &num_fonts);
     if (font_handle == NULL || num_fonts == 0) {
-        NSLOG(netsurf, WARNING, "Failed to load font '%s' into Windows (error=%lu)", family_name, GetLastError());
+        NSLOG(wisp, WARNING, "Failed to load font '%s' into Windows (error=%lu)", family_name, GetLastError());
         if (internal_name)
             free(internal_name);
-#ifdef NEOSURF_WOFF_DECODE
+#ifdef WISP_WOFF_DECODE
         if (decoded_font)
             free(decoded_font);
 #endif
         return NSERROR_INVALID;
     }
 
-#ifdef NEOSURF_WOFF_DECODE
+#ifdef WISP_WOFF_DECODE
     /* Free the decoded font data (Windows has copied it internally) */
     if (decoded_font) {
         free(decoded_font);
@@ -1509,12 +1509,12 @@ nserror html_font_face_load_data(const char *family_name, const uint8_t *data, s
 
     /* Store mapping from CSS name to internal name */
     if (internal_name != NULL) {
-        NSLOG(netsurf, INFO, "Loaded web font: CSS '%s' -> internal '%s'", family_name, internal_name);
+        NSLOG(wisp, INFO, "Loaded web font: CSS '%s' -> internal '%s'", family_name, internal_name);
         font_map_insert(family_name, internal_name);
         free(internal_name);
     } else {
         /* No internal name found, use CSS name as-is */
-        NSLOG(netsurf, INFO, "Loaded web font: '%s' (no internal name found)", family_name);
+        NSLOG(wisp, INFO, "Loaded web font: '%s' (no internal name found)", family_name);
     }
 
     win32_font_caches_flush();

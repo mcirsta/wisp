@@ -31,13 +31,13 @@
  * file table.  Use the _ctx versions of the functions to do this.
  */
 
-#ifndef NETSURF_UTILS_MESSAGES_H_
-#define NETSURF_UTILS_MESSAGES_H_
+#ifndef WISP_UTILS_MESSAGES_H_
+#define WISP_UTILS_MESSAGES_H_
 
 #include <stdint.h>
 
 #include "utils/errors.h"
-#include "neosurf/ssl_certs.h"
+#include "wisp/ssl_certs.h"
 
 /**
  * Read keys and values from messages file into the standard Messages hash.

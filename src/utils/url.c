@@ -37,9 +37,9 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <neosurf/utils/ascii.h>
-#include <neosurf/utils/config.h>
-#include <neosurf/utils/log.h>
+#include <wisp/utils/ascii.h>
+#include <wisp/utils/config.h>
+#include <wisp/utils/log.h>
 #include "utils/url.h"
 
 

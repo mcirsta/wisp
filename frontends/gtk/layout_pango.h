@@ -21,8 +21,8 @@
  * Interface to GTK layout handling using pango.
  */
 
-#ifndef _NETSURF_GTK_LAYOUT_PANGO_H_
-#define _NETSURF_GTK_LAYOUT_PANGO_H_
+#ifndef _WISP_GTK_LAYOUT_PANGO_H_
+#define _WISP_GTK_LAYOUT_PANGO_H_
 
 #include <stdbool.h>
 

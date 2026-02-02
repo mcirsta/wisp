@@ -16,8 +16,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef NETSURF_MONKEY_SCHEDULE_H
-#define NETSURF_MONKEY_SCHEDULE_H
+#ifndef WISP_MONKEY_SCHEDULE_H
+#define WISP_MONKEY_SCHEDULE_H
 
 /**
  * Schedule a callback.

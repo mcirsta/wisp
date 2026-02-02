@@ -21,8 +21,8 @@
  * about scheme query auth handler interface
  */
 
-#ifndef NETSURF_CONTENT_FETCHERS_ABOUT_QUERY_AUTH_H
-#define NETSURF_CONTENT_FETCHERS_ABOUT_QUERY_AUTH_H
+#ifndef WISP_CONTENT_FETCHERS_ABOUT_QUERY_AUTH_H
+#define WISP_CONTENT_FETCHERS_ABOUT_QUERY_AUTH_H
 
 /**
  * Handler to generate about scheme query auth page.

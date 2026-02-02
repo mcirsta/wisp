@@ -22,11 +22,11 @@
  * Browser window private structure.
  */
 
-#ifndef NETSURF_DESKTOP_BROWSER_PRIVATE_H_
-#define NETSURF_DESKTOP_BROWSER_PRIVATE_H_
+#ifndef WISP_DESKTOP_BROWSER_PRIVATE_H_
+#define WISP_DESKTOP_BROWSER_PRIVATE_H_
 
-#include <neosurf/content/fetch.h>
-#include <neosurf/desktop/frame_types.h>
+#include <wisp/content/fetch.h>
+#include <wisp/desktop/frame_types.h>
 
 struct box;
 struct hlcache_handle;

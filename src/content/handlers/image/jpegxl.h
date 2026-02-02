@@ -20,8 +20,8 @@
  * Content for image/jpegxl (interface).
  */
 
-#ifndef _NETSURF_IMAGE_JPEGXL_H_
-#define _NETSURF_IMAGE_JPEGXL_H_
+#ifndef _WISP_IMAGE_JPEGXL_H_
+#define _WISP_IMAGE_JPEGXL_H_
 
 nserror nsjpegxl_init(void);
 

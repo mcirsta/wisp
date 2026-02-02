@@ -19,7 +19,7 @@
 #undef GRADIENT_DEBUG_VECTOR
 
 /* Forward declaration for triangle fallback (used when native gradients disabled) */
-#ifndef NEOSURF_USE_NATIVE_GRADIENTS
+#ifndef WISP_USE_NATIVE_GRADIENTS
 static svgtiny_code svgtiny_gradient_add_path_triangles(
     float *p, unsigned int n, struct svgtiny_parse_state *state, bool has_fill_gradient, bool has_stroke_gradient);
 #endif
@@ -932,7 +932,7 @@ svgtiny_code svgtiny_gradient_add_path(float *p, unsigned int n, struct svgtiny_
         return svgtiny_OK;
     }
 
-#ifdef NEOSURF_USE_NATIVE_GRADIENTS
+#ifdef WISP_USE_NATIVE_GRADIENTS
     /*
      * NATIVE GRADIENT PATH: Store gradient info in shape struct.
      * The renderer (svg.c) will call native plotter APIs to render.
@@ -1051,7 +1051,7 @@ svgtiny_code svgtiny_gradient_add_path(float *p, unsigned int n, struct svgtiny_
 }
 
 
-#ifndef NEOSURF_USE_NATIVE_GRADIENTS
+#ifndef WISP_USE_NATIVE_GRADIENTS
 /**
  * Triangle-based gradient fallback implementation.
  *

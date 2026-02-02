@@ -23,14 +23,14 @@
 #include <glib/gstdio.h>
 #include <gtk/gtk.h>
 
-#include <neosurf/desktop/download.h>
-#include <neosurf/download.h>
-#include <neosurf/utils/log.h>
-#include <neosurf/utils/messages.h>
-#include <neosurf/utils/nsoption.h>
-#include <neosurf/utils/nsurl.h>
-#include <neosurf/utils/string.h>
-#include <neosurf/utils/utils.h>
+#include <wisp/desktop/download.h>
+#include <wisp/download.h>
+#include <wisp/utils/log.h>
+#include <wisp/utils/messages.h>
+#include <wisp/utils/nsoption.h>
+#include <wisp/utils/nsurl.h>
+#include <wisp/utils/string.h>
+#include <wisp/utils/utils.h>
 
 #include "gtk/compat.h"
 #include "gtk/download.h"
@@ -770,7 +770,7 @@ nserror nsgtk_download_init(void)
 
     res = nsgtk_builder_new_from_resname("downloads", &builder);
     if (res != NSERROR_OK) {
-        NSLOG(netsurf, INFO, "Download UI builder init failed");
+        NSLOG(wisp, INFO, "Download UI builder init failed");
         return res;
     }
 

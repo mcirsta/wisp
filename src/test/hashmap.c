@@ -52,7 +52,7 @@ static void corestring_create(void)
 /**
  * iterator for any remaining strings in teardown fixture
  */
-static void netsurf_lwc_iterator(lwc_string *str, void *pw)
+static void wisp_lwc_iterator(lwc_string *str, void *pw)
 {
     fprintf(stderr, "[%3u] %.*s", str->refcnt, (int)lwc_string_length(str), lwc_string_data(str));
 }
@@ -61,7 +61,7 @@ static void corestring_teardown(void)
 {
     corestrings_fini();
 
-    lwc_iterate_strings(netsurf_lwc_iterator, NULL);
+    lwc_iterate_strings(wisp_lwc_iterator, NULL);
 }
 
 /* Infra */
@@ -296,8 +296,8 @@ typedef struct {
  * to validate prevptr and next in all cases.
  */
 static case_pair chain_pairs[] = {{"https://www.google.com/", NULL}, {"https://www.google.co.uk/", NULL},
-    {"https://www.netsurf-browser.org/", NULL}, {"http://www.google.com/", NULL}, {"http://www.google.co.uk/", NULL},
-    {"http://www.netsurf-browser.org/", NULL}, {"file:///tmp/test.html", NULL}, {"file:///tmp/inner.html", NULL},
+    {"https://www.wisp-browser.org/", NULL}, {"http://www.google.com/", NULL}, {"http://www.google.co.uk/", NULL},
+    {"http://www.wisp-browser.org/", NULL}, {"file:///tmp/test.html", NULL}, {"file:///tmp/inner.html", NULL},
     {"about:blank", NULL}, {"about:welcome", NULL}, {"about:testament", NULL}, {"resources:default.css", NULL},
     {NULL, NULL}};
 

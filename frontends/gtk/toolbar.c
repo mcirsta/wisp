@@ -27,22 +27,22 @@
 #include <string.h>
 #include <unistd.h>
 
-#include <neosurf/browser_window.h>
-#include <neosurf/content.h>
-#include <neosurf/desktop/browser_history.h>
-#include <neosurf/desktop/hotlist.h>
-#include <neosurf/desktop/print.h>
-#include <neosurf/desktop/save_complete.h>
-#include <neosurf/desktop/save_text.h>
-#include <neosurf/desktop/search.h>
-#include <neosurf/desktop/searchweb.h>
-#include <neosurf/keypress.h>
-#include <neosurf/utils/corestrings.h>
-#include <neosurf/utils/file.h>
-#include <neosurf/utils/log.h>
-#include <neosurf/utils/messages.h>
-#include <neosurf/utils/nsoption.h>
-#include <neosurf/utils/nsurl.h>
+#include <wisp/browser_window.h>
+#include <wisp/content.h>
+#include <wisp/desktop/browser_history.h>
+#include <wisp/desktop/hotlist.h>
+#include <wisp/desktop/print.h>
+#include <wisp/desktop/save_complete.h>
+#include <wisp/desktop/save_text.h>
+#include <wisp/desktop/search.h>
+#include <wisp/desktop/searchweb.h>
+#include <wisp/keypress.h>
+#include <wisp/utils/corestrings.h>
+#include <wisp/utils/file.h>
+#include <wisp/utils/log.h>
+#include <wisp/utils/messages.h>
+#include <wisp/utils/nsoption.h>
+#include <wisp/utils/nsurl.h>
 
 #include "gtk/about.h"
 #include "gtk/bitmap.h"
@@ -662,7 +662,7 @@ static nserror nsgtk_toolbar_customisation_save(struct nsgtk_toolbar *tb)
     nsoption_set_charp(toolbar_items, order);
 
     /* ensure choices are saved */
-    neosurf_mkpath(&choices, NULL, 2, nsgtk_config_home, "Choices");
+    wisp_mkpath(&choices, NULL, 2, nsgtk_config_home, "Choices");
     if (choices != NULL) {
         nsoption_write(choices, NULL, NULL);
         free(choices);
@@ -883,7 +883,7 @@ static nserror nsgtk_browser_window_create(struct browser_window *bw, bool intab
         if (nsoption_charp(homepage_url) != NULL) {
             addr = nsoption_charp(homepage_url);
         } else {
-            addr = NEOSURF_HOMEPAGE;
+            addr = WISP_HOMEPAGE;
         }
         res = nsurl_create(addr, &url);
     }
@@ -1435,7 +1435,7 @@ static gboolean cutomize_button_clicked_cb(GtkWidget *widget, gpointer data)
     /* create builder */
     res = nsgtk_builder_new_from_resname("toolbar", &builder);
     if (res != NSERROR_OK) {
-        NSLOG(neosurf, INFO, "Toolbar UI builder init failed");
+        NSLOG(wisp, INFO, "Toolbar UI builder init failed");
         return TRUE;
     }
     gtk_builder_connect_signals(builder, NULL);
@@ -1719,7 +1719,7 @@ static gboolean home_button_clicked_cb(GtkWidget *widget, gpointer data)
     if (nsoption_charp(homepage_url) != NULL) {
         addr = nsoption_charp(homepage_url);
     } else {
-        addr = NEOSURF_HOMEPAGE;
+        addr = WISP_HOMEPAGE;
     }
 
     res = toolbar_navigate_to_url(tb, addr);
@@ -1990,7 +1990,7 @@ static gboolean savepage_button_clicked_cb(GtkWidget *widget, gpointer data)
 
     d = opendir(path);
     if (d == NULL) {
-        NSLOG(neosurf, INFO, "Unable to open directory %s for complete save: %s", path, strerror(errno));
+        NSLOG(wisp, INFO, "Unable to open directory %s for complete save: %s", path, strerror(errno));
         if (errno == ENOTDIR) {
             nsgtk_warning("NoDirError", path);
         } else {
@@ -2114,7 +2114,7 @@ static gboolean print_button_clicked_cb(GtkWidget *widget, gpointer data)
     }
 
     /* use previously saved settings if any */
-    neosurf_mkpath(&settings_fname, NULL, 2, nsgtk_config_home, "Print");
+    wisp_mkpath(&settings_fname, NULL, 2, nsgtk_config_home, "Print");
     if (settings_fname != NULL) {
         print_settings = gtk_print_settings_new_from_file(settings_fname, NULL);
         if (print_settings != NULL) {
@@ -2507,7 +2507,7 @@ static gboolean savewindowsize_button_clicked_cb(GtkWidget *widget, gpointer dat
     nsoption_set_int(window_x, x);
     nsoption_set_int(window_y, y);
 
-    neosurf_mkpath(&choices, NULL, 2, nsgtk_config_home, "Choices");
+    wisp_mkpath(&choices, NULL, 2, nsgtk_config_home, "Choices");
     if (choices != NULL) {
         nsoption_write(choices, NULL, NULL);
         free(choices);
@@ -2643,7 +2643,7 @@ static gboolean localhistory_button_clicked_cb(GtkWidget *widget, gpointer data)
 
         res = nsgtk_local_history_present(GTK_WINDOW(toplevel), bw);
         if (res != NSERROR_OK) {
-            NSLOG(neosurf, INFO, "Unable to present local history window.");
+            NSLOG(wisp, INFO, "Unable to present local history window.");
         }
     }
     return TRUE;
@@ -2674,7 +2674,7 @@ static gboolean globalhistory_button_clicked_cb(GtkWidget *widget, gpointer data
     nserror res;
     res = nsgtk_global_history_present();
     if (res != NSERROR_OK) {
-        NSLOG(neosurf, INFO, "Unable to initialise global history window.");
+        NSLOG(wisp, INFO, "Unable to initialise global history window.");
     }
     return TRUE;
 }
@@ -2712,7 +2712,7 @@ static gboolean showbookmarks_button_clicked_cb(GtkWidget *widget, gpointer data
     nserror res;
     res = nsgtk_hotlist_present();
     if (res != NSERROR_OK) {
-        NSLOG(neosurf, INFO, "Unable to initialise bookmark window.");
+        NSLOG(wisp, INFO, "Unable to initialise bookmark window.");
     }
     return TRUE;
 }
@@ -2730,7 +2730,7 @@ static gboolean showcookies_button_clicked_cb(GtkWidget *widget, gpointer data)
     nserror res;
     res = nsgtk_cookies_present(NULL);
     if (res != NSERROR_OK) {
-        NSLOG(neosurf, INFO, "Unable to initialise cookies window.");
+        NSLOG(wisp, INFO, "Unable to initialise cookies window.");
     }
     return TRUE;
 }
@@ -2770,7 +2770,7 @@ static gboolean contents_button_clicked_cb(GtkWidget *widget, gpointer data)
     struct nsgtk_toolbar *tb = (struct nsgtk_toolbar *)data;
     nserror res;
 
-    res = toolbar_navigate_to_url(tb, "https://www.netsurf-browser.org/documentation/");
+    res = toolbar_navigate_to_url(tb, "https://www.wisp-browser.org/documentation/");
     if (res != NSERROR_OK) {
         nsgtk_warning(messages_get_errorcode(res), 0);
     }
@@ -2790,7 +2790,7 @@ static gboolean guide_button_clicked_cb(GtkWidget *widget, gpointer data)
     struct nsgtk_toolbar *tb = (struct nsgtk_toolbar *)data;
     nserror res;
 
-    res = toolbar_navigate_to_url(tb, "https://www.netsurf-browser.org/documentation/guide");
+    res = toolbar_navigate_to_url(tb, "https://www.wisp-browser.org/documentation/guide");
     if (res != NSERROR_OK) {
         nsgtk_warning(messages_get_errorcode(res), 0);
     }
@@ -2811,7 +2811,7 @@ static gboolean info_button_clicked_cb(GtkWidget *widget, gpointer data)
     struct nsgtk_toolbar *tb = (struct nsgtk_toolbar *)data;
     nserror res;
 
-    res = toolbar_navigate_to_url(tb, "https://www.netsurf-browser.org/documentation/info");
+    res = toolbar_navigate_to_url(tb, "https://www.wisp-browser.org/documentation/info");
     if (res != NSERROR_OK) {
         nsgtk_warning(messages_get_errorcode(res), 0);
     }

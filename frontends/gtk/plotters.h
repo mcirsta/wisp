@@ -21,8 +21,8 @@
  * Target independent plotting GTK+ interface.
  */
 
-#ifndef NETSURF_GTK_PLOTTERS_H
-#define NETSURF_GTK_PLOTTERS_H 1
+#ifndef WISP_GTK_PLOTTERS_H
+#define WISP_GTK_PLOTTERS_H 1
 
 #include <gtk/gtk.h>
 

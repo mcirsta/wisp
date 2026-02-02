@@ -1,0 +1,6 @@
+[Desktop Entry]
+Name=Wisp-GTK
+Exec=wisp-gtk
+Type=Application
+Categories=Utility;
+Icon=wisp

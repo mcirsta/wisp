@@ -22,14 +22,14 @@
  * Single/Multi-line UTF-8 text area interface
  */
 
-#ifndef NETSURF_DESKTOP_TEXTAREA_H
-#define NETSURF_DESKTOP_TEXTAREA_H
+#ifndef WISP_DESKTOP_TEXTAREA_H
+#define WISP_DESKTOP_TEXTAREA_H
 
 #include <stdbool.h>
 #include <stdint.h>
 
-#include "neosurf/mouse.h"
-#include "neosurf/plot_style.h"
+#include "wisp/mouse.h"
+#include "wisp/plot_style.h"
 
 struct textarea;
 struct redraw_context;

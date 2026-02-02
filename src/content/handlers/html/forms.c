@@ -23,12 +23,12 @@
 
 #include <string.h>
 
-#include <neosurf/utils/config.h>
-#include <neosurf/utils/corestrings.h>
-#include <neosurf/utils/log.h>
+#include <wisp/utils/config.h>
+#include <wisp/utils/corestrings.h>
+#include <wisp/utils/log.h>
 
-#include <neosurf/content/handlers/html/form_internal.h>
-#include <neosurf/content/handlers/html/private.h>
+#include <wisp/content/handlers/html/form_internal.h>
+#include <wisp/content/handlers/html/private.h>
 
 /**
  * process form element from dom

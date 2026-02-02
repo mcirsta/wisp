@@ -25,8 +25,8 @@
 #include <stdint.h>
 #include <stdlib.h>
 
-#include <neosurf/content/handlers/html/box.h>
-#include <neosurf/utils/utils.h>
+#include <wisp/content/handlers/html/box.h>
+#include <wisp/utils/utils.h>
 #include "content/handlers/html/stacking.h"
 
 /* See stacking.h for documentation */

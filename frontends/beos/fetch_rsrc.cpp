@@ -42,7 +42,7 @@ extern "C" {
 #include "utils/nsoption.h"
 #include "utils/ring.h"
 #include "utils/utils.h"
-#include "netsurf/inttypes.h"
+#include "wisp/inttypes.h"
 #include "content/fetch.h"
 #include "content/fetchers.h"
 }
@@ -72,13 +72,13 @@ BResources *gAppResources = NULL;
 
 static bool fetch_rsrc_initialise(lwc_string *scheme)
 {
-    NSLOG(netsurf, INFO, "fetch_rsrc_initialise called for %s", lwc_string_data(scheme));
+    NSLOG(wisp, INFO, "fetch_rsrc_initialise called for %s", lwc_string_data(scheme));
     return true;
 }
 
 static void fetch_rsrc_finalise(lwc_string *scheme)
 {
-    NSLOG(netsurf, INFO, "fetch_rsrc_finalise called for %s", lwc_string_data(scheme));
+    NSLOG(wisp, INFO, "fetch_rsrc_finalise called for %s", lwc_string_data(scheme));
 }
 
 static bool fetch_rsrc_can_fetch(const nsurl *url)
@@ -160,7 +160,7 @@ static bool fetch_rsrc_process(struct fetch_rsrc_context *c)
      *   rsrc://[TYPE][@NUM]/name[,mime]
      */
 
-    NSLOG(netsurf, INFO, "*** Processing %s", c->url);
+    NSLOG(wisp, INFO, "*** Processing %s", c->url);
 
     if (strlen(c->url) < 7) {
         /* 7 is the minimum possible length (rsrc://) */
@@ -196,11 +196,11 @@ static bool fetch_rsrc_process(struct fetch_rsrc_context *c)
         uint8 c1, c2, c3, c4;
         if (sscanf(params, "%c%c%c%c", &c1, &c2, &c3, &c4) > 3) {
             type = c1 << 24 | c2 << 16 | c3 << 8 | c4;
-            NSLOG(netsurf, INFO, "fetch_rsrc: type:%4.4s\n", (char *)&type);
+            NSLOG(wisp, INFO, "fetch_rsrc: type:%4.4s\n", (char *)&type);
         }
     }
 
-    NSLOG(netsurf, INFO, "fetch_rsrc: 0x%08" PRIx32 ", %" PRId32 ", '%s'\n", type, id, c->name);
+    NSLOG(wisp, INFO, "fetch_rsrc: 0x%08" PRIx32 ", %" PRId32 ", '%s'\n", type, id, c->name);
 
     bool found;
     if (id)
@@ -276,7 +276,7 @@ static void fetch_rsrc_poll(lwc_string *scheme)
             char header[64];
 
             fetch_set_http_code(c->parent_fetch, 200);
-            NSLOG(netsurf, INFO, "setting rsrc: MIME type to %s, length to %zd", c->mimetype, c->datalen);
+            NSLOG(wisp, INFO, "setting rsrc: MIME type to %s, length to %zd", c->mimetype, c->datalen);
             /* Any callback can result in the fetch being aborted.
              * Therefore, we _must_ check for this after _every_
              * call to fetch_rsrc_send_callback().
@@ -304,7 +304,7 @@ static void fetch_rsrc_poll(lwc_string *scheme)
                 fetch_rsrc_send_callback(&msg, c);
             }
         } else {
-            NSLOG(netsurf, INFO, "Processing of %s failed!", c->url);
+            NSLOG(wisp, INFO, "Processing of %s failed!", c->url);
 
             /* Ensure that we're unlocked here. If we aren't,
              * then fetch_rsrc_process() is broken.

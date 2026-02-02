@@ -21,16 +21,16 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <neosurf/desktop/version.h>
-#include <neosurf/utils/config.h>
-#include <neosurf/utils/log.h>
+#include <wisp/desktop/version.h>
+#include <wisp/utils/config.h>
+#include <wisp/utils/log.h>
 #include "utils/useragent.h"
 #include "utils/utsname.h"
 
 static const char *core_user_agent_string = NULL;
 
-#ifndef NEOSURF_UA_FORMAT_STRING
-#define NEOSURF_UA_FORMAT_STRING "Mozilla/5.0 (%s) NeoSurf/%d"
+#ifndef WISP_UA_FORMAT_STRING
+#define WISP_UA_FORMAT_STRING "Mozilla/5.0 (%s) Wisp/%d"
 #endif
 
 /**
@@ -52,17 +52,17 @@ static void user_agent_build_string(void)
         }
     }
 
-    len = snprintf(NULL, 0, NEOSURF_UA_FORMAT_STRING, sysname, neosurf_version);
+    len = snprintf(NULL, 0, WISP_UA_FORMAT_STRING, sysname, wisp_version);
     ua_string = malloc(len + 1);
     if (!ua_string) {
         /** \todo this needs handling better */
         return;
     }
-    snprintf(ua_string, len + 1, NEOSURF_UA_FORMAT_STRING, sysname, neosurf_version);
+    snprintf(ua_string, len + 1, WISP_UA_FORMAT_STRING, sysname, wisp_version);
 
     core_user_agent_string = ua_string;
 
-    NSLOG(neosurf, INFO, "Built user agent \"%s\"", core_user_agent_string);
+    NSLOG(wisp, INFO, "Built user agent \"%s\"", core_user_agent_string);
 }
 
 /* This is a function so that later we can override it trivially */

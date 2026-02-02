@@ -38,12 +38,12 @@
 #include <math.h>
 #include <string.h>
 
-#include <neosurf/keypress.h>
-#include <neosurf/mouse.h>
-#include <neosurf/types.h>
-#include <neosurf/utils/log.h>
-#include <neosurf/utils/messages.h>
-#include <neosurf/utils/utf8.h>
+#include <wisp/keypress.h>
+#include <wisp/mouse.h>
+#include <wisp/types.h>
+#include <wisp/utils/log.h>
+#include <wisp/utils/messages.h>
+#include <wisp/utils/utf8.h>
 
 #include "gtk/compat.h"
 #include "gtk/corewindow.h"
@@ -374,14 +374,14 @@ static gboolean nsgtk_cw_keypress_event(GtkWidget *widget, GdkEventKey *event, g
     if (res == NSERROR_OK) {
         return TRUE;
     } else if (res != NSERROR_NOT_IMPLEMENTED) {
-        NSLOG(neosurf, INFO, "%s", messages_get_errorcode(res));
+        NSLOG(wisp, INFO, "%s", messages_get_errorcode(res));
         return FALSE;
     }
 
     /* deal with unprocessed keypress */
     res = nsgtk_cw_key(nsgtk_cw, nskey);
     if (res != NSERROR_OK) {
-        NSLOG(neosurf, INFO, "%s", messages_get_errorcode(res));
+        NSLOG(wisp, INFO, "%s", messages_get_errorcode(res));
         return FALSE;
     }
     return TRUE;

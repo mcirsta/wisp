@@ -22,7 +22,7 @@
  */
 
 #include "utils/bloom.h"
-#include <neosurf/utils/utils.h>
+#include <wisp/utils/utils.h>
 #include <stdlib.h>
 
 /**

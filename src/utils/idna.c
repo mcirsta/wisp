@@ -28,13 +28,13 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <neosurf/ns_inttypes.h>
+#include <wisp/ns_inttypes.h>
 #include <inttypes.h>
 
-#include <neosurf/utils/errors.h>
-#include <neosurf/utils/log.h>
-#include <neosurf/utils/utf8.h>
-#include <neosurf/utils/utils.h>
+#include <wisp/utils/errors.h>
+#include <wisp/utils/log.h>
+#include <wisp/utils/utf8.h>
+#include <wisp/utils/utils.h>
 #include "utils/idna.h"
 #include "utils/idna_props.h"
 #include "utils/punycode.h"
@@ -56,17 +56,17 @@ static nserror punycode_status_to_nserror(enum punycode_status status)
         break;
 
     case punycode_bad_input:
-        NSLOG(neosurf, INFO, "Bad input");
+        NSLOG(wisp, INFO, "Bad input");
         ret = NSERROR_BAD_ENCODING;
         break;
 
     case punycode_big_output:
-        NSLOG(neosurf, INFO, "Output too big");
+        NSLOG(wisp, INFO, "Output too big");
         ret = NSERROR_BAD_SIZE;
         break;
 
     case punycode_overflow:
-        NSLOG(neosurf, INFO, "Overflow");
+        NSLOG(wisp, INFO, "Overflow");
         ret = NSERROR_NOSPACE;
         break;
 
@@ -393,7 +393,7 @@ static bool idna__is_valid(int32_t *label, size_t len)
 
     /* 2. Check characters 3 and 4 are not '--'. */
     if ((len >= 4) && (label[2] == 0x002d) && (label[3] == 0x002d)) {
-        NSLOG(netsurf, INFO, "Check failed: characters 2 and 3 are '--'");
+        NSLOG(wisp, INFO, "Check failed: characters 2 and 3 are '--'");
         return false;
     }
 
@@ -402,7 +402,7 @@ static bool idna__is_valid(int32_t *label, size_t len)
 
     if ((unicode_props->category == UTF8PROC_CATEGORY_MN) || (unicode_props->category == UTF8PROC_CATEGORY_MC) ||
         (unicode_props->category == UTF8PROC_CATEGORY_ME)) {
-        NSLOG(netsurf, INFO, "Check failed: character 0 is a combining mark");
+        NSLOG(wisp, INFO, "Check failed: character 0 is a combining mark");
         return false;
     }
 
@@ -412,14 +412,14 @@ static bool idna__is_valid(int32_t *label, size_t len)
         /* 4. Check characters not DISALLOWED by RFC5892 */
         if (idna_prop == IDNA_P_DISALLOWED) {
             NSLOG(
-                netsurf, INFO, "Check failed: character %" PRIsizet " (%08x) is DISALLOWED", i, (unsigned int)label[i]);
+                wisp, INFO, "Check failed: character %" PRIsizet " (%08x) is DISALLOWED", i, (unsigned int)label[i]);
             return false;
         }
 
         /* 5. Check CONTEXTJ characters conform to defined rules */
         if (idna_prop == IDNA_P_CONTEXTJ) {
             if (idna__contextj_rule(label, i, len) == false) {
-                NSLOG(netsurf, INFO, "Check failed: character %" PRIsizet " (%08x) does not conform to CONTEXTJ rule",
+                NSLOG(wisp, INFO, "Check failed: character %" PRIsizet " (%08x) does not conform to CONTEXTJ rule",
                     i, (unsigned int)label[i]);
                 return false;
             }
@@ -429,7 +429,7 @@ static bool idna__is_valid(int32_t *label, size_t len)
         /** \todo optionally we can check conformance to this rule */
         if (idna_prop == IDNA_P_CONTEXTO) {
             if (idna__contexto_rule(label[i]) == false) {
-                NSLOG(netsurf, INFO, "Check failed: character %" PRIsizet " (%08x) has no CONTEXTO rule defined", i,
+                NSLOG(wisp, INFO, "Check failed: character %" PRIsizet " (%08x) has no CONTEXTO rule defined", i,
                     (unsigned int)label[i]);
                 return false;
             }
@@ -438,7 +438,7 @@ static bool idna__is_valid(int32_t *label, size_t len)
         /* 7. Check characters are not UNASSIGNED */
         if (idna_prop == IDNA_P_UNASSIGNED) {
             NSLOG(
-                netsurf, INFO, "Check failed: character %" PRIsizet " (%08x) is UNASSIGNED", i, (unsigned int)label[i]);
+                wisp, INFO, "Check failed: character %" PRIsizet " (%08x) is UNASSIGNED", i, (unsigned int)label[i]);
             return false;
         }
 
@@ -490,7 +490,7 @@ static bool idna__verify(const char *label, size_t len)
         return true;
     }
 
-    NSLOG(netsurf, INFO, "Re-encoded ACE label %s does not match input", ace);
+    NSLOG(wisp, INFO, "Re-encoded ACE label %s does not match input", ace);
     free(ace);
 
     return false;
@@ -704,7 +704,7 @@ nserror idna_encode(const char *host, size_t len, char **ace_host, size_t *ace_l
         } else {
             /* This is already a DNS-valid ASCII string */
             if ((idna__is_ace(host, label_len) == true) && (idna__verify(host, label_len) == false)) {
-                NSLOG(netsurf, INFO, "Cannot verify ACE label %s", host);
+                NSLOG(wisp, INFO, "Cannot verify ACE label %s", host);
                 return NSERROR_BAD_URL;
             }
             FQDN_APPEND(host, label_len, NO_ACTION);

@@ -21,8 +21,8 @@
  * High-level resource cache interface
  */
 
-#ifndef NETSURF_CONTENT_HLCACHE_H_
-#define NETSURF_CONTENT_HLCACHE_H_
+#ifndef WISP_CONTENT_HLCACHE_H_
+#define WISP_CONTENT_HLCACHE_H_
 
 #include "utils/errors.h"
 #include "utils/nsurl.h"

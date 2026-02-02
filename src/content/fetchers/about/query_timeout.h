@@ -21,8 +21,8 @@
  * about scheme query timeout handler interface
  */
 
-#ifndef NETSURF_CONTENT_FETCHERS_ABOUT_QUERY_TIMEOUT_H
-#define NETSURF_CONTENT_FETCHERS_ABOUT_QUERY_TIMEOUT_H
+#ifndef WISP_CONTENT_FETCHERS_ABOUT_QUERY_TIMEOUT_H
+#define WISP_CONTENT_FETCHERS_ABOUT_QUERY_TIMEOUT_H
 
 /**
  * Handler to generate about scheme timeout query page

@@ -25,11 +25,11 @@
 #include <stdlib.h>
 #include <windows.h>
 
-#include "neosurf/desktop/global_history.h"
-#include "neosurf/keypress.h"
-#include "neosurf/plotters.h"
-#include "neosurf/utils/log.h"
-#include "neosurf/utils/nsoption.h"
+#include "wisp/desktop/global_history.h"
+#include "wisp/keypress.h"
+#include "wisp/plotters.h"
+#include "wisp/utils/log.h"
+#include "wisp/utils/nsoption.h"
 
 #include "windows/corewindow.h"
 #include "windows/global_history.h"
@@ -119,7 +119,7 @@ static nserror nsw32_global_history_init(HINSTANCE hInstance)
         return NSERROR_NOMEM;
     }
 
-    ncwin->core.title = "NeoSurf Global History";
+    ncwin->core.title = "Wisp Global History";
     ncwin->core.draw = nsw32_global_history_draw;
     ncwin->core.key = nsw32_global_history_key;
     ncwin->core.mouse = nsw32_global_history_mouse;

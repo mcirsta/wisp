@@ -5,7 +5,7 @@ dist
 install
 install
 ns.log
-neosurf-logs
+wisp-logs
 build-gprof
 install-gprof
 build-finstrument

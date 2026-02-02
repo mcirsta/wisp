@@ -33,14 +33,14 @@
 
 #include <string.h>
 
-#include <neosurf/utils/corestrings.h>
-#include <neosurf/utils/log.h>
-#include <neosurf/utils/utils.h>
+#include <wisp/utils/corestrings.h>
+#include <wisp/utils/log.h>
+#include <wisp/utils/utils.h>
 
-#include <neosurf/content/handlers/html/box.h>
-#include <neosurf/content/handlers/html/box_inspect.h>
-#include <neosurf/content/handlers/html/html.h>
-#include <neosurf/content/handlers/html/private.h>
+#include <wisp/content/handlers/html/box.h>
+#include <wisp/content/handlers/html/box_inspect.h>
+#include <wisp/content/handlers/html/html.h>
+#include <wisp/content/handlers/html/private.h>
 #include "content/handlers/html/layout_internal.h"
 
 /* Type for values that can be either a fixed value or a calc expression */

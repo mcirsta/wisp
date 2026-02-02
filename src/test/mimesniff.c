@@ -86,7 +86,7 @@ static void corestring_create(void)
 /**
  * iterator for any remaining strings in teardown fixture
  */
-static void netsurf_lwc_iterator(lwc_string *str, void *pw)
+static void wisp_lwc_iterator(lwc_string *str, void *pw)
 {
     fprintf(stderr, "[%3u] %.*s", str->refcnt, (int)lwc_string_length(str), lwc_string_data(str));
 }
@@ -95,7 +95,7 @@ static void corestring_teardown(void)
 {
     corestrings_fini();
 
-    lwc_iterate_strings(netsurf_lwc_iterator, NULL);
+    lwc_iterate_strings(wisp_lwc_iterator, NULL);
 }
 
 /* tests */

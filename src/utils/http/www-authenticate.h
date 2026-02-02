@@ -16,8 +16,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef NETSURF_UTILS_HTTP_WWW_AUTHENTICATE_H_
-#define NETSURF_UTILS_HTTP_WWW_AUTHENTICATE_H_
+#ifndef WISP_UTILS_HTTP_WWW_AUTHENTICATE_H_
+#define WISP_UTILS_HTTP_WWW_AUTHENTICATE_H_
 
 #include <libwapcaplet/libwapcaplet.h>
 

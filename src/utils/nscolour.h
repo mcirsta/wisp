@@ -22,10 +22,10 @@
  * Interface to acquire common colours used throughout NetSurf's interface.
  */
 
-#ifndef _NETSURF_UTILS_NSCOLOUR_H_
-#define _NETSURF_UTILS_NSCOLOUR_H_
+#ifndef _WISP_UTILS_NSCOLOUR_H_
+#define _WISP_UTILS_NSCOLOUR_H_
 
-#include "neosurf/types.h"
+#include "wisp/types.h"
 
 /**
  * NetSurf UI colour key.

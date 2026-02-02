@@ -21,10 +21,10 @@
  * Interface to browser history private operations
  */
 
-#ifndef NETSURF_DESKTOP_BROWSER_HISTORY_PRIVATE_H
-#define NETSURF_DESKTOP_BROWSER_HISTORY_PRIVATE_H
+#ifndef WISP_DESKTOP_BROWSER_HISTORY_PRIVATE_H
+#define WISP_DESKTOP_BROWSER_HISTORY_PRIVATE_H
 
-#include <neosurf/content/handlers/css/utils.h>
+#include <wisp/content/handlers/css/utils.h>
 
 #define LOCAL_HISTORY_WIDTH (FIXTOINT(css_unit_css2device_px(INTTOFIX(116), nscss_screen_dpi)))
 #define LOCAL_HISTORY_HEIGHT (FIXTOINT(css_unit_css2device_px(INTTOFIX(100), nscss_screen_dpi)))

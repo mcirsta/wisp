@@ -23,11 +23,11 @@
  * Scrollbar widgets used in frames code, not for frontend use
  */
 
-#ifndef NETSURF_DESKTOP_SCROLLBAR_H
-#define NETSURF_DESKTOP_SCROLLBAR_H
+#ifndef WISP_DESKTOP_SCROLLBAR_H
+#define WISP_DESKTOP_SCROLLBAR_H
 
-#include <neosurf/mouse.h>
-#include <neosurf/utils/errors.h>
+#include <wisp/mouse.h>
+#include <wisp/utils/errors.h>
 #include <limits.h>
 #include <stdbool.h>
 

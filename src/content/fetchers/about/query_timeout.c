@@ -28,9 +28,9 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <neosurf/content/fetch.h>
-#include <neosurf/utils/errors.h>
-#include <neosurf/utils/messages.h>
+#include <wisp/content/fetch.h>
+#include <wisp/utils/errors.h>
+#include <wisp/utils/messages.h>
 
 #include "private.h"
 #include "query.h"

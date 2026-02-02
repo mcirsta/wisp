@@ -20,12 +20,12 @@
  * HTTP header parsing functions
  */
 
-#ifndef NETSURF_UTILS_HTTP_H_
-#define NETSURF_UTILS_HTTP_H_
+#ifndef WISP_UTILS_HTTP_H_
+#define WISP_UTILS_HTTP_H_
 
 #include <libwapcaplet/libwapcaplet.h>
 
-#include <neosurf/utils/errors.h>
+#include <wisp/utils/errors.h>
 
 #include "utils/http/cache-control.h"
 #include "utils/http/content-disposition.h"

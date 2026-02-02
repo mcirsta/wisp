@@ -24,21 +24,21 @@
 
 #include <string.h>
 
-#include <neosurf/content/content.h>
-#include <neosurf/utils/ascii.h>
-#include <neosurf/utils/config.h>
-#include <neosurf/utils/corestrings.h>
-#include <neosurf/utils/log.h>
-#include <neosurf/utils/nsoption.h>
-#include <neosurf/utils/nsurl.h>
-#include <neosurf/utils/string.h>
+#include <wisp/content/content.h>
+#include <wisp/utils/ascii.h>
+#include <wisp/utils/config.h>
+#include <wisp/utils/corestrings.h>
+#include <wisp/utils/log.h>
+#include <wisp/utils/nsoption.h>
+#include <wisp/utils/nsurl.h>
+#include <wisp/utils/string.h>
 #include "content/handlers/javascript/js.h"
 
-#include <neosurf/bitmap.h>
+#include <wisp/bitmap.h>
 
-#include <neosurf/content/handlers/html/box.h>
-#include <neosurf/content/handlers/html/form_internal.h>
-#include <neosurf/content/handlers/html/private.h>
+#include <wisp/content/handlers/html/box.h>
+#include <wisp/content/handlers/html/form_internal.h>
+#include <wisp/content/handlers/html/private.h>
 #include "content/handlers/html/box_construct.h"
 #include "content/handlers/html/css.h"
 #include "content/handlers/html/dom_event.h"
@@ -248,42 +248,42 @@ static void dom_SCRIPT_showed_up(html_content *htmlc, dom_html_script_element *s
     bool within;
 
     if (!htmlc->enable_scripting) {
-        NSLOG(neosurf, INFO, "Encountered a script, but scripting is off, ignoring");
+        NSLOG(wisp, INFO, "Encountered a script, but scripting is off, ignoring");
         return;
     }
 
-    NSLOG(neosurf, DEEPDEBUG, "Encountered a script, node %p showed up", script);
+    NSLOG(wisp, DEEPDEBUG, "Encountered a script, node %p showed up", script);
 
     exc = dom_html_script_element_get_flags(script, &flags);
     if (exc != DOM_NO_ERR) {
-        NSLOG(neosurf, DEEPDEBUG, "Unable to retrieve flags, giving up");
+        NSLOG(wisp, DEEPDEBUG, "Unable to retrieve flags, giving up");
         return;
     }
 
     if (flags & DOM_HTML_SCRIPT_ELEMENT_FLAG_PARSER_INSERTED) {
-        NSLOG(neosurf, DEBUG, "Script was parser inserted, skipping");
+        NSLOG(wisp, DEBUG, "Script was parser inserted, skipping");
         return;
     }
 
     exc = dom_node_contains(htmlc->document, script, &within);
     if (exc != DOM_NO_ERR) {
-        NSLOG(neosurf, DEBUG, "Unable to determine if script was within document, ignoring");
+        NSLOG(wisp, DEBUG, "Unable to determine if script was within document, ignoring");
         return;
     }
 
     if (!within) {
-        NSLOG(neosurf, DEBUG, "Script was not within the document, ignoring for now");
+        NSLOG(wisp, DEBUG, "Script was not within the document, ignoring for now");
         return;
     }
 
     res = html_process_script(htmlc, (dom_node *)script);
     if (res == DOM_HUBBUB_OK) {
-        NSLOG(neosurf, DEEPDEBUG, "Inserted script has finished running");
+        NSLOG(wisp, DEEPDEBUG, "Inserted script has finished running");
     } else {
         if (res == (DOM_HUBBUB_HUBBUB_ERR | HUBBUB_PAUSED)) {
-            NSLOG(neosurf, DEEPDEBUG, "Inserted script has launced asynchronously");
+            NSLOG(wisp, DEEPDEBUG, "Inserted script has launced asynchronously");
         } else {
-            NSLOG(neosurf, DEEPDEBUG, "Failure starting script");
+            NSLOG(wisp, DEEPDEBUG, "Failure starting script");
         }
     }
 }
@@ -638,7 +638,7 @@ static void dom_default_action_DOMNodeInserted_cb(struct dom_event *evt, void *p
 
                 msg_data.jsthread = &htmlc->jsthread;
                 content_broadcast(&htmlc->base, CONTENT_MSG_GETTHREAD, &msg_data);
-                NSLOG(neosurf, INFO, "javascript context: %p (htmlc: %p)", htmlc->jsthread, htmlc);
+                NSLOG(wisp, INFO, "javascript context: %p (htmlc: %p)", htmlc->jsthread, htmlc);
             }
             if (htmlc->jsthread != NULL) {
                 js_handle_new_element(htmlc->jsthread, (dom_element *)node);
@@ -747,7 +747,7 @@ static void dom_default_action_finished_cb(struct dom_event *evt, void *pw)
 /* exported interface documented in html/dom_event.c */
 dom_default_action_callback html_dom_event_fetcher(dom_string *type, dom_default_action_phase phase, void **pw)
 {
-    NSLOG(neosurf, DEEPDEBUG, "phase:%d type:%s", phase, dom_string_data(type));
+    NSLOG(wisp, DEEPDEBUG, "phase:%d type:%s", phase, dom_string_data(type));
 
     if (phase == DOM_DEFAULT_ACTION_END) {
         if (dom_string_isequal(type, corestring_dom_DOMNodeInserted)) {

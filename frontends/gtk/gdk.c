@@ -18,7 +18,7 @@
 
 #include <string.h>
 
-#include <neosurf/utils/log.h>
+#include <wisp/utils/log.h>
 
 #include "gtk/gdk.h"
 
@@ -78,7 +78,7 @@ GdkPixbuf *nsgdk_pixbuf_get_from_surface(cairo_surface_t *surface, int scwidth, 
     if (cairo_surface_status(scsurface) != CAIRO_STATUS_SUCCESS) {
         cairo_surface_destroy(scsurface);
         g_object_unref(pixbuf);
-        NSLOG(neosurf, INFO, "Surface creation failed");
+        NSLOG(wisp, INFO, "Surface creation failed");
         return NULL;
     }
 

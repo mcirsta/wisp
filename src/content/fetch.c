@@ -40,17 +40,17 @@
 #include <strings.h>
 #include <time.h>
 
-#include <neosurf/desktop/gui_internal.h>
-#include <neosurf/misc.h>
-#include <neosurf/utils/config.h>
-#include <neosurf/utils/corestrings.h>
-#include <neosurf/utils/log.h>
-#include <neosurf/utils/messages.h>
-#include <neosurf/utils/nsoption.h>
-#include <neosurf/utils/nsurl.h>
+#include <wisp/desktop/gui_internal.h>
+#include <wisp/misc.h>
+#include <wisp/utils/config.h>
+#include <wisp/utils/corestrings.h>
+#include <wisp/utils/log.h>
+#include <wisp/utils/messages.h>
+#include <wisp/utils/nsoption.h>
+#include <wisp/utils/nsurl.h>
 #include "utils/ring.h"
 
-#include <neosurf/content/fetch.h>
+#include <wisp/content/fetch.h>
 #include "content/fetchers.h"
 #include "content/fetchers/about/about.h"
 #include "content/fetchers/curl.h"

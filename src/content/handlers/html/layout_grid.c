@@ -48,11 +48,11 @@
 #include <libcss/libcss.h>
 
 #include <dom/dom.h>
-#include <neosurf/content/handlers/html/box.h>
-#include <neosurf/content/handlers/html/private.h>
-#include <neosurf/utils/corestrings.h>
-#include <neosurf/utils/log.h>
-#include <neosurf/utils/utils.h>
+#include <wisp/content/handlers/html/box.h>
+#include <wisp/content/handlers/html/private.h>
+#include <wisp/utils/corestrings.h>
+#include <wisp/utils/log.h>
+#include <wisp/utils/utils.h>
 #include "content/handlers/html/layout_grid.h"
 #include "content/handlers/html/layout_internal.h"
 

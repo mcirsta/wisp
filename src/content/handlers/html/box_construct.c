@@ -28,26 +28,26 @@
 #include <dom/dom.h>
 #include <string.h>
 
-#include <neosurf/desktop/gui_internal.h>
-#include <neosurf/misc.h>
-#include <neosurf/utils/ascii.h>
-#include <neosurf/utils/corestrings.h>
-#include <neosurf/utils/errors.h>
-#include <neosurf/utils/log.h>
-#include <neosurf/utils/nsoption.h>
-#include <neosurf/utils/nsurl.h>
-#include <neosurf/utils/string.h>
-#include <neosurf/utils/utf8.h>
+#include <wisp/desktop/gui_internal.h>
+#include <wisp/misc.h>
+#include <wisp/utils/ascii.h>
+#include <wisp/utils/corestrings.h>
+#include <wisp/utils/errors.h>
+#include <wisp/utils/log.h>
+#include <wisp/utils/nsoption.h>
+#include <wisp/utils/nsurl.h>
+#include <wisp/utils/string.h>
+#include <wisp/utils/utf8.h>
 #include <nsutils/time.h>
 #include "utils/talloc.h"
 #include "utils/utils.h"
 #include "content/handlers/css/select.h"
 #include <wctype.h>
 
-#include <neosurf/content/fetch.h>
-#include <neosurf/content/handlers/html/box.h>
-#include <neosurf/content/handlers/html/form_internal.h>
-#include <neosurf/content/handlers/html/private.h>
+#include <wisp/content/fetch.h>
+#include <wisp/content/handlers/html/box.h>
+#include <wisp/content/handlers/html/form_internal.h>
+#include <wisp/content/handlers/html/private.h>
 #include "content/handlers/html/box_construct.h"
 #include "content/handlers/html/box_manipulate.h"
 #include "content/handlers/html/box_normalise.h"
@@ -331,7 +331,7 @@ static struct box *create_content_box(
         }
         box->length = text_len;
 
-        NSLOG(neosurf, DEEPDEBUG, "create_content_box: STRING '%.*s'", (int)(text_len > 50 ? 50 : text_len), text_data);
+        NSLOG(wisp, DEEPDEBUG, "create_content_box: STRING '%.*s'", (int)(text_len > 50 ? 50 : text_len), text_data);
         break;
     }
 
@@ -343,7 +343,7 @@ static struct box *create_content_box(
 
         error = nsurl_create(lwc_string_data(item->data.uri), &url);
         if (error != NSERROR_OK) {
-            NSLOG(neosurf, WARNING, "create_content_box: URI nsurl_create failed");
+            NSLOG(wisp, WARNING, "create_content_box: URI nsurl_create failed");
             break;
         }
 
@@ -360,7 +360,7 @@ static struct box *create_content_box(
 
         /* Start async fetch - box->object will be set when done */
         if (html_fetch_object(content, url, box, CONTENT_IMAGE, false) == false) {
-            NSLOG(neosurf, WARNING, "create_content_box: URI html_fetch_object failed");
+            NSLOG(wisp, WARNING, "create_content_box: URI html_fetch_object failed");
             nsurl_unref(url);
             /* Box allocation will be cleaned up by talloc */
             box = NULL;
@@ -368,14 +368,14 @@ static struct box *create_content_box(
         }
 
         nsurl_unref(url);
-        NSLOG(neosurf, DEEPDEBUG, "create_content_box: URI started fetch for %s", lwc_string_data(item->data.uri));
+        NSLOG(wisp, DEEPDEBUG, "create_content_box: URI started fetch for %s", lwc_string_data(item->data.uri));
         break;
     }
 
     case CSS_COMPUTED_CONTENT_COUNTER: {
         /* Counter - would need counter state tracking.
          * TODO: Implement counter support */
-        NSLOG(neosurf, DEEPDEBUG, "create_content_box: COUNTER (not implemented)");
+        NSLOG(wisp, DEEPDEBUG, "create_content_box: COUNTER (not implemented)");
         box = NULL;
         break;
     }
@@ -383,7 +383,7 @@ static struct box *create_content_box(
     case CSS_COMPUTED_CONTENT_COUNTERS: {
         /* Nested counters with separator
          * TODO: Implement counters support */
-        NSLOG(neosurf, DEEPDEBUG, "create_content_box: COUNTERS (not implemented)");
+        NSLOG(wisp, DEEPDEBUG, "create_content_box: COUNTERS (not implemented)");
         box = NULL;
         break;
     }
@@ -413,7 +413,7 @@ static struct box *create_content_box(
                             box->type = BOX_TEXT;
                             box->text = talloc_strndup(content->bctx, text_data, text_len);
                             box->length = text_len;
-                            NSLOG(neosurf, DEEPDEBUG, "create_content_box: ATTR '%.*s'",
+                            NSLOG(wisp, DEEPDEBUG, "create_content_box: ATTR '%.*s'",
                                 (int)(text_len > 50 ? 50 : text_len), text_data);
                         }
                     }
@@ -441,7 +441,7 @@ static struct box *create_content_box(
             box->type = BOX_TEXT;
             box->text = talloc_strdup(content->bctx, quote);
             box->length = strlen(quote);
-            NSLOG(neosurf, DEEPDEBUG, "create_content_box: %s_QUOTE",
+            NSLOG(wisp, DEEPDEBUG, "create_content_box: %s_QUOTE",
                 item->type == CSS_COMPUTED_CONTENT_OPEN_QUOTE ? "OPEN" : "CLOSE");
         }
         break;
@@ -454,7 +454,7 @@ static struct box *create_content_box(
         break;
 
     default:
-        NSLOG(neosurf, WARNING, "create_content_box: unknown type %d", item->type);
+        NSLOG(wisp, WARNING, "create_content_box: unknown type %d", item->type);
         box = NULL;
         break;
     }
@@ -561,7 +561,7 @@ static bool box_fetch_background(struct box *box, html_content *content)
         error = nsurl_create(lwc_string_data(bgimage_uri), &url);
         if (error == NSERROR_OK) {
             if (html_fetch_object(content, url, box, image_types, true) == false) {
-                NSLOG(neosurf, WARNING, "box_fetch_background: Failed to fetch background image");
+                NSLOG(wisp, WARNING, "box_fetch_background: Failed to fetch background image");
                 nsurl_unref(url);
                 return false;
             }
@@ -923,7 +923,7 @@ static bool box_construct_element(struct box_construct_ctx *ctx, bool *convert_c
     /* Deal with colspan/rowspan */
     err = dom_element_get_attribute(ctx->n, corestring_dom_colspan, &s);
     if (err != DOM_NO_ERR) {
-        NSLOG(neosurf, WARNING, "Failed to get colspan attribute");
+        NSLOG(wisp, WARNING, "Failed to get colspan attribute");
         goto error;
     }
 
@@ -940,7 +940,7 @@ static bool box_construct_element(struct box_construct_ctx *ctx, bool *convert_c
 
     err = dom_element_get_attribute(ctx->n, corestring_dom_rowspan, &s);
     if (err != DOM_NO_ERR) {
-        NSLOG(neosurf, WARNING, "Failed to get rowspan attribute");
+        NSLOG(wisp, WARNING, "Failed to get rowspan attribute");
         goto error;
     }
 
@@ -975,7 +975,7 @@ static bool box_construct_element(struct box_construct_ctx *ctx, bool *convert_c
         /* Normal mapping */
         box->type = box_map[ns_computed_display(box->style, props.node_is_root)];
 
-        NSLOG(neosurf, INFO, "box_construct: display %d map_type %d mapped from %d",
+        NSLOG(wisp, INFO, "box_construct: display %d map_type %d mapped from %d",
             ns_computed_display(box->style, props.node_is_root), box->type,
             ns_computed_display(box->style, props.node_is_root));
 
@@ -1008,7 +1008,7 @@ static bool box_construct_element(struct box_construct_ctx *ctx, bool *convert_c
     }
 
     if (convert_special_elements(ctx->n, ctx->content, box, convert_children) == false) {
-        NSLOG(neosurf, WARNING, "Failed to convert special elements");
+        NSLOG(wisp, WARNING, "Failed to convert special elements");
         goto error;
     }
 
@@ -1061,7 +1061,7 @@ static bool box_construct_element(struct box_construct_ctx *ctx, bool *convert_c
 
         /* Use helper to ensure inline container exists (may reuse from ::before) */
         if (!box_ensure_inline_container(props.containing_block, &props.inline_container, ctx->bctx)) {
-            NSLOG(neosurf, WARNING, "Failed to create inline container box");
+            NSLOG(wisp, WARNING, "Failed to create inline container box");
             goto error;
         }
     }
@@ -1085,7 +1085,7 @@ static bool box_construct_element(struct box_construct_ctx *ctx, bool *convert_c
         if (ns_computed_display(box->style, props.node_is_root) == CSS_DISPLAY_LIST_ITEM) {
             /* List item: compute marker */
             if (box_construct_marker(box, props.title, ctx, props.containing_block) == false) {
-                NSLOG(neosurf, WARNING, "Failed to construct list marker");
+                NSLOG(wisp, WARNING, "Failed to construct list marker");
                 goto error;
             }
         }
@@ -1095,7 +1095,7 @@ static bool box_construct_element(struct box_construct_ctx *ctx, bool *convert_c
             /* Float: insert a float between the parent and box. */
             struct box *flt = box_create(NULL, NULL, false, props.href, props.target, props.title, NULL, ctx->bctx);
             if (flt == NULL) {
-                NSLOG(neosurf, WARNING, "Failed to create float box");
+                NSLOG(wisp, WARNING, "Failed to create float box");
                 goto error;
             }
 
@@ -1201,7 +1201,7 @@ static void box_construct_element_after(dom_node *n, html_content *content)
                         box->last = pseudo_box;
                     }
 
-                    NSLOG(neosurf, DEEPDEBUG, "inline_before: created BOX_INLINE %p for ::before with %d children",
+                    NSLOG(wisp, DEEPDEBUG, "inline_before: created BOX_INLINE %p for ::before with %d children",
                         (void *)pseudo_box, pseudo_box->children ? 1 : 0);
                 }
             }
@@ -1659,7 +1659,7 @@ static void convert_xml_to_box(void *p)
     uint64_t start_time, now_time;
 
     nsu_getmonotonic_ms(&start_time);
-    NSLOG(netsurf, DEBUG, "PROFILER: START Box construction slice %p", ctx);
+    NSLOG(wisp, DEBUG, "PROFILER: START Box construction slice %p", ctx);
 
     do {
         convert_children = true;
@@ -1667,13 +1667,13 @@ static void convert_xml_to_box(void *p)
         assert(ctx->n != NULL);
 
         if (box_construct_element(ctx, &convert_children) == false) {
-            NSLOG(netsurf, WARNING, "box_construct_element failed");
+            NSLOG(wisp, WARNING, "box_construct_element failed");
             ctx->cb(ctx->content, false);
             dom_node_unref(ctx->n);
             if (ctx->root_box != NULL)
                 box_free(ctx->root_box);
             free(ctx);
-            NSLOG(netsurf, DEBUG, "PROFILER: STOP Box construction slice %p", ctx);
+            NSLOG(wisp, DEBUG, "PROFILER: STOP Box construction slice %p", ctx);
             return;
         }
 
@@ -1686,13 +1686,13 @@ static void convert_xml_to_box(void *p)
 
             err = dom_node_get_node_type(next, &type);
             if (err != DOM_NO_ERR) {
-                NSLOG(netsurf, WARNING, "dom_node_get_node_type failed");
+                NSLOG(wisp, WARNING, "dom_node_get_node_type failed");
                 ctx->cb(ctx->content, false);
                 dom_node_unref(next);
                 if (ctx->root_box != NULL)
                     box_free(ctx->root_box);
                 free(ctx);
-                NSLOG(netsurf, DEBUG, "PROFILER: STOP Box construction slice %p", ctx);
+                NSLOG(wisp, DEBUG, "PROFILER: STOP Box construction slice %p", ctx);
                 return;
             }
 
@@ -1702,13 +1702,13 @@ static void convert_xml_to_box(void *p)
             if (type == DOM_TEXT_NODE) {
                 ctx->n = next;
                 if (box_construct_text(ctx) == false) {
-                    NSLOG(netsurf, WARNING, "box_construct_text failed");
+                    NSLOG(wisp, WARNING, "box_construct_text failed");
                     ctx->cb(ctx->content, false);
                     dom_node_unref(ctx->n);
                     if (ctx->root_box != NULL)
                         box_free(ctx->root_box);
                     free(ctx);
-                    NSLOG(netsurf, DEBUG, "PROFILER: STOP Box construction slice %p", ctx);
+                    NSLOG(wisp, DEBUG, "PROFILER: STOP Box construction slice %p", ctx);
                     return;
                 }
             }
@@ -1731,7 +1731,7 @@ static void convert_xml_to_box(void *p)
 
             /** \todo Remove box_normalise_block */
             if (box_normalise_block(&root, ctx->root_box, (struct html_content *)ctx->content) == false) {
-                NSLOG(netsurf, WARNING, "box_normalise_block failed");
+                NSLOG(wisp, WARNING, "box_normalise_block failed");
                 ctx->cb(ctx->content, false);
                 if (ctx->root_box != NULL)
                     box_free(ctx->root_box);
@@ -1745,7 +1745,7 @@ static void convert_xml_to_box(void *p)
             assert(ctx->n == NULL);
 
             free(ctx);
-            NSLOG(netsurf, DEBUG, "PROFILER: STOP Box construction slice %p", ctx);
+            NSLOG(wisp, DEBUG, "PROFILER: STOP Box construction slice %p", ctx);
             return;
         }
 
@@ -1759,7 +1759,7 @@ static void convert_xml_to_box(void *p)
         }
     } while (true);
 
-    NSLOG(netsurf, DEBUG, "PROFILER: STOP Box construction slice %p", ctx);
+    NSLOG(wisp, DEBUG, "PROFILER: STOP Box construction slice %p", ctx);
     /* More work to do: schedule a continuation */
     guit->misc->schedule(0, (void *)convert_xml_to_box, ctx);
 }

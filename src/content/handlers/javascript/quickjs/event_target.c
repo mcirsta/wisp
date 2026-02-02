@@ -5,7 +5,7 @@
  */
 
 #include "event_target.h"
-#include <neosurf/utils/log.h>
+#include <wisp/utils/log.h>
 #include "quickjs.h"
 #include <stdlib.h>
 
@@ -14,7 +14,7 @@ static JSValue js_addEventListener(JSContext *ctx, JSValueConst this_val, int ar
     if (argc >= 2) {
         const char *type = JS_ToCString(ctx, argv[0]);
         bool is_func = JS_IsFunction(ctx, argv[1]);
-        NSLOG(neosurf, INFO, "addEventListener('%s', %s)", type, is_func ? "function" : "non-function");
+        NSLOG(wisp, INFO, "addEventListener('%s', %s)", type, is_func ? "function" : "non-function");
         JS_FreeCString(ctx, type);
         /* TODO: Store listener for later dispatch */
     }
@@ -25,7 +25,7 @@ static JSValue js_removeEventListener(JSContext *ctx, JSValueConst this_val, int
 {
     if (argc >= 2) {
         const char *type = JS_ToCString(ctx, argv[0]);
-        NSLOG(neosurf, INFO, "removeEventListener('%s')", type);
+        NSLOG(wisp, INFO, "removeEventListener('%s')", type);
         JS_FreeCString(ctx, type);
     }
     return JS_UNDEFINED;
@@ -33,7 +33,7 @@ static JSValue js_removeEventListener(JSContext *ctx, JSValueConst this_val, int
 
 static JSValue js_dispatchEvent(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
-    NSLOG(neosurf, INFO, "dispatchEvent called");
+    NSLOG(wisp, INFO, "dispatchEvent called");
     /* Always return true - event was handled */
     return JS_NewBool(ctx, 1);
 }

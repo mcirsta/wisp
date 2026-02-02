@@ -1,8 +1,8 @@
-#ifndef NETSURF_VI_WINDOW_H_
-#define NETSURF_VI_WINDOW_H_
-#include <neosurf/desktop/search.h>
-#include <neosurf/mouse.h>
-#include <neosurf/utils/nsurl.h>
+#ifndef WISP_VI_WINDOW_H_
+#define WISP_VI_WINDOW_H_
+#include <wisp/desktop/search.h>
+#include <wisp/mouse.h>
+#include <wisp/utils/nsurl.h>
 #include <xkbcommon/xkbcommon.h>
 #include "visurf/pool-buffer.h"
 #include "visurf/visurf.h"

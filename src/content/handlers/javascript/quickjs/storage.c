@@ -5,7 +5,7 @@
  */
 
 #include "storage.h"
-#include <neosurf/utils/log.h>
+#include <wisp/utils/log.h>
 #include "quickjs.h"
 #include <stdlib.h>
 
@@ -16,7 +16,7 @@ static JSValue js_storage_getItem(JSContext *ctx, JSValueConst this_val, int arg
 {
     if (argc > 0) {
         const char *key = JS_ToCString(ctx, argv[0]);
-        NSLOG(neosurf, INFO, "storage.getItem called with key: %s", key);
+        NSLOG(wisp, INFO, "storage.getItem called with key: %s", key);
         JS_FreeCString(ctx, key);
     }
     /* Return null for now - item not found */
@@ -28,7 +28,7 @@ static JSValue js_storage_setItem(JSContext *ctx, JSValueConst this_val, int arg
     if (argc >= 2) {
         const char *key = JS_ToCString(ctx, argv[0]);
         const char *value = JS_ToCString(ctx, argv[1]);
-        NSLOG(neosurf, INFO, "storage.setItem called with key: %s, value: %s", key, value);
+        NSLOG(wisp, INFO, "storage.setItem called with key: %s, value: %s", key, value);
         JS_FreeCString(ctx, key);
         JS_FreeCString(ctx, value);
     }
@@ -39,7 +39,7 @@ static JSValue js_storage_removeItem(JSContext *ctx, JSValueConst this_val, int 
 {
     if (argc > 0) {
         const char *key = JS_ToCString(ctx, argv[0]);
-        NSLOG(neosurf, INFO, "storage.removeItem called with key: %s", key);
+        NSLOG(wisp, INFO, "storage.removeItem called with key: %s", key);
         JS_FreeCString(ctx, key);
     }
     return JS_UNDEFINED;
@@ -47,7 +47,7 @@ static JSValue js_storage_removeItem(JSContext *ctx, JSValueConst this_val, int 
 
 static JSValue js_storage_clear(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
-    NSLOG(neosurf, INFO, "storage.clear called");
+    NSLOG(wisp, INFO, "storage.clear called");
     return JS_UNDEFINED;
 }
 

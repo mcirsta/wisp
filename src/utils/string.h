@@ -21,8 +21,8 @@
  * \brief Interface to utility string handling.
  */
 
-#ifndef _NETSURF_UTILS_STRING_H_
-#define _NETSURF_UTILS_STRING_H_
+#ifndef _WISP_UTILS_STRING_H_
+#define _WISP_UTILS_STRING_H_
 
 #include <stdarg.h>
 #include <stdlib.h>

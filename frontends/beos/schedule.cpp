@@ -24,9 +24,9 @@
 
 extern "C" {
 #include "utils/errors.h"
-#include "netsurf/browser_window.h"
-#include "netsurf/content_type.h"
-#include "netsurf/inttypes.h"
+#include "wisp/browser_window.h"
+#include "wisp/content_type.h"
+#include "wisp/inttypes.h"
 #include "beos/schedule.h"
 
 #include "utils/log.h"

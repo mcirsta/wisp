@@ -25,7 +25,7 @@
  */
 
 #include "content/handlers/html/redraw_helpers.h"
-#include <neosurf/types.h>
+#include <wisp/types.h>
 
 /* See redraw_helpers.h for documentation */
 clip_result_t html_clip_intersect_box(struct rect *r, const struct rect *clip, bool has_transform)

@@ -56,7 +56,7 @@ struct message_test_vec_s {
 
 struct message_test_vec_s message_errorcode_test_vec[] = {
     {NSERROR_OK, "OK"},
-    {NSERROR_NOMEM, "NetSurf is running out of memory. Please free some memory and try again."},
+    {NSERROR_NOMEM, "Wisp is running out of memory. Please free some memory and try again."},
     {NSERROR_NO_FETCH_HANDLER, "NoHandler"},
     {NSERROR_NOT_FOUND, "Not found"},
     {NSERROR_SAVE_FAILED, "SaveFailed"},
@@ -128,7 +128,7 @@ START_TEST(message_get_buff_test)
     ck_assert(buf == NULL);
 
     buf = messages_get_buff("NoMemory");
-    ck_assert_str_eq(buf, "NetSurf is running out of memory. Please free some memory and try again.");
+    ck_assert_str_eq(buf, "Wisp is running out of memory. Please free some memory and try again.");
     free(buf);
 
     /* cleanup */

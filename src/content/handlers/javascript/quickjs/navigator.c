@@ -5,7 +5,7 @@
  */
 
 #include "navigator.h"
-#include <neosurf/utils/log.h>
+#include <wisp/utils/log.h>
 #include "quickjs.h"
 #include <stdlib.h>
 
@@ -18,7 +18,7 @@ static JSValue js_navigator_userAgent_getter(JSContext *ctx, JSValueConst this_v
 {
     /* Mimic a modern browser to satisfy Google scripts */
     return JS_NewString(ctx,
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36 NeoSurf/1.0");
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36 Wisp/1.0");
 }
 
 static JSValue js_navigator_language_getter(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)

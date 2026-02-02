@@ -16,8 +16,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef NETSURF_QT_FETCH_H
-#define NETSURF_QT_FETCH_H 1
+#ifndef WISP_QT_FETCH_H
+#define WISP_QT_FETCH_H 1
 
 /**
  * qt fetch operations table

@@ -29,9 +29,9 @@
 #include <stdbool.h>
 #include <stdlib.h>
 
-#include <neosurf/desktop/search.h>
-#include <neosurf/search.h>
-#include <neosurf/utils/nsoption.h>
+#include <wisp/desktop/search.h>
+#include <wisp/search.h>
+#include <wisp/utils/nsoption.h>
 
 #include "gtk/compat.h"
 #include "gtk/search.h"

@@ -16,8 +16,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef NETSURF_CSS_INTERNAL_H_
-#define NETSURF_CSS_INTERNAL_H_
+#ifndef WISP_CSS_INTERNAL_H_
+#define WISP_CSS_INTERNAL_H_
 
 /**
  * URL resolution callback for libcss

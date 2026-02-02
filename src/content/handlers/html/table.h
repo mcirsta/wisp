@@ -22,8 +22,8 @@
  * Interface to HTML table processing and layout.
  */
 
-#ifndef NETSURF_HTML_TABLE_H
-#define NETSURF_HTML_TABLE_H
+#ifndef WISP_HTML_TABLE_H
+#define WISP_HTML_TABLE_H
 
 #include <stdbool.h>
 

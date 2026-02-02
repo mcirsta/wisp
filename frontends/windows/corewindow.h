@@ -16,10 +16,10 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef NEOSURF_WINDOWS_COREWINDOW_H
-#define NEOSURF_WINDOWS_COREWINDOW_H
+#ifndef WISP_WINDOWS_COREWINDOW_H
+#define WISP_WINDOWS_COREWINDOW_H
 
-#include "neosurf/core_window.h"
+#include "wisp/core_window.h"
 
 extern struct core_window_table *win32_core_window_table;
 

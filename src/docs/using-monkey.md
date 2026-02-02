@@ -1,31 +1,31 @@
-Usage Instructions for Monkey NetSurf
+Usage Instructions for Monkey Wisp
 =====================================
 
-This document provides usage instructions for the Monkey version of NetSurf.
+This document provides usage instructions for the Monkey version of Wisp.
 
-Monkey NetSurf has been tested on Ubuntu and Debian.
+Monkey Wisp has been tested on Ubuntu and Debian.
 
 Automated testing
 -----------------
 
 If you want to run the monkey_driver.py or monkey-see-monkey-do tools then
 you will need python3 and pyyaml installed.  The latter also needs internet
-access to test.netsurf-browser.org to acquire test data.
+access to test.wisp-browser.org to acquire test data.
 
 Overview
 --------
 
 ### What it is
 
-The NetSurf Monkey front end is a developer debug tool used to test how the
+The Wisp Monkey front end is a developer debug tool used to test how the
 core interacts with the user interface.  It allows the developers to profile
-NetSurf and to interact with the core directly as though the developer were a
+Wisp and to interact with the core directly as though the developer were a
 front end.
  
 ### What it is not
 
 Monkey is not a tool for building web-crawling robots or indeed anything other
-than a debug tool for the NetSurf developers.
+than a debug tool for the Wisp developers.
 
 ### How to interact with `nsmonkey`
 
@@ -74,7 +74,7 @@ In the below, _%something%_ indicates a substitution made by Monkey.
 
 ### Warnings, errors etc
 
-*  Warnings (tagged `WARN`) come from the NetSurf core.
+*  Warnings (tagged `WARN`) come from the Wisp core.
 *  Errors (tagged `ERROR`) tend to come from Monkey's parsers
 *  Death (tagged `DIE`) comes from the core and kills Monkey dead.
 

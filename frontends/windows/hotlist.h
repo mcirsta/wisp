@@ -21,8 +21,8 @@
  * Interface to win32 bookmark manager (hotlist).
  */
 
-#ifndef NEOSURF_WINDOWS_HOTLIST_H
-#define NEOSURF_WINDOWS_HOTLIST_H
+#ifndef WISP_WINDOWS_HOTLIST_H
+#define WISP_WINDOWS_HOTLIST_H
 
 /**
  * make the hotlist window visible.

@@ -27,8 +27,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <neosurf/utils/errors.h>
-#include <neosurf/utils/log.h>
+#include <wisp/utils/errors.h>
+#include <wisp/utils/log.h>
 
 #include "quickjs.h"
 
@@ -90,14 +90,14 @@ void *qjs_get_window_priv(JSContext *ctx)
 /* exported interface documented in js.h */
 void js_initialise(void)
 {
-    NSLOG(neosurf, INFO, "QuickJS-ng JavaScript engine initialised");
+    NSLOG(wisp, INFO, "QuickJS-ng JavaScript engine initialised");
 }
 
 
 /* exported interface documented in js.h */
 void js_finalise(void)
 {
-    NSLOG(neosurf, INFO, "QuickJS-ng JavaScript engine finalised");
+    NSLOG(wisp, INFO, "QuickJS-ng JavaScript engine finalised");
 }
 
 
@@ -125,7 +125,7 @@ nserror js_newheap(int timeout, jsheap **heap)
     /* Set max stack size (1MB) */
     JS_SetMaxStackSize(h->rt, 1024 * 1024);
 
-    NSLOG(neosurf, DEBUG, "Created QuickJS heap %p", h);
+    NSLOG(wisp, DEBUG, "Created QuickJS heap %p", h);
 
     *heap = h;
     return NSERROR_OK;
@@ -139,7 +139,7 @@ void js_destroyheap(jsheap *heap)
         return;
     }
 
-    NSLOG(neosurf, DEBUG, "Destroying QuickJS heap %p", heap);
+    NSLOG(wisp, DEBUG, "Destroying QuickJS heap %p", heap);
 
     if (heap->rt != NULL) {
         JS_FreeRuntime(heap->rt);
@@ -180,47 +180,47 @@ nserror js_newthread(jsheap *heap, void *win_priv, void *doc_priv, jsthread **th
 
     /* Initialize Console binding */
     if (qjs_init_console(t->ctx) < 0) {
-        NSLOG(neosurf, ERROR, "Failed to initialize QuickJS console binding");
+        NSLOG(wisp, ERROR, "Failed to initialize QuickJS console binding");
     }
 
     /* Initialize Window binding */
     if (qjs_init_window(t->ctx) < 0) {
-        NSLOG(neosurf, ERROR, "Failed to initialize QuickJS window binding");
+        NSLOG(wisp, ERROR, "Failed to initialize QuickJS window binding");
     }
 
     /* Initialize Timers */
     if (qjs_init_timers(t->ctx) < 0) {
-        NSLOG(neosurf, ERROR, "Failed to initialize QuickJS timers");
+        NSLOG(wisp, ERROR, "Failed to initialize QuickJS timers");
     }
 
     /* Initialize Navigator */
     if (qjs_init_navigator(t->ctx) < 0) {
-        NSLOG(neosurf, ERROR, "Failed to initialize QuickJS navigator");
+        NSLOG(wisp, ERROR, "Failed to initialize QuickJS navigator");
     }
 
     /* Initialize Location */
     if (qjs_init_location(t->ctx) < 0) {
-        NSLOG(neosurf, ERROR, "Failed to initialize QuickJS location");
+        NSLOG(wisp, ERROR, "Failed to initialize QuickJS location");
     }
 
     /* Initialize Document */
     if (qjs_init_document(t->ctx) < 0) {
-        NSLOG(neosurf, ERROR, "Failed to initialize QuickJS document");
+        NSLOG(wisp, ERROR, "Failed to initialize QuickJS document");
     }
 
     /* Initialize Storage (localStorage, sessionStorage) */
     if (qjs_init_storage(t->ctx) < 0) {
-        NSLOG(neosurf, ERROR, "Failed to initialize QuickJS storage");
+        NSLOG(wisp, ERROR, "Failed to initialize QuickJS storage");
     }
 
     /* Initialize EventTarget (addEventListener, etc.) */
     if (qjs_init_event_target(t->ctx) < 0) {
-        NSLOG(neosurf, ERROR, "Failed to initialize QuickJS event target");
+        NSLOG(wisp, ERROR, "Failed to initialize QuickJS event target");
     }
 
     /* Initialize XMLHttpRequest */
     if (qjs_init_xhr(t->ctx) < 0) {
-        NSLOG(neosurf, ERROR, "Failed to initialize QuickJS XMLHttpRequest");
+        NSLOG(wisp, ERROR, "Failed to initialize QuickJS XMLHttpRequest");
     }
 
     /* Add DOM constructor stubs that third-party JS commonly checks */
@@ -281,10 +281,10 @@ nserror js_newthread(jsheap *heap, void *win_priv, void *doc_priv, jsthread **th
         JS_SetPropertyStr(t->ctx, global_obj, "CustomEvent", custom_event);
 
         JS_FreeValue(t->ctx, global_obj);
-        NSLOG(neosurf, DEBUG, "DOM constructor stubs initialized");
+        NSLOG(wisp, DEBUG, "DOM constructor stubs initialized");
     }
 
-    NSLOG(neosurf, DEBUG, "Created QuickJS thread %p in heap %p", t, heap);
+    NSLOG(wisp, DEBUG, "Created QuickJS thread %p in heap %p", t, heap);
 
     *thread = t;
     return NSERROR_OK;
@@ -298,7 +298,7 @@ nserror js_closethread(jsthread *thread)
         return NSERROR_BAD_PARAMETER;
     }
 
-    NSLOG(neosurf, DEBUG, "Closing QuickJS thread %p", thread);
+    NSLOG(wisp, DEBUG, "Closing QuickJS thread %p", thread);
 
     thread->closed = true;
 
@@ -313,7 +313,7 @@ void js_destroythread(jsthread *thread)
         return;
     }
 
-    NSLOG(neosurf, DEBUG, "Destroying QuickJS thread %p", thread);
+    NSLOG(wisp, DEBUG, "Destroying QuickJS thread %p", thread);
 
     if (thread->ctx != NULL) {
         /* Execute any pending jobs before freeing context.
@@ -343,7 +343,7 @@ bool js_exec(jsthread *thread, const uint8_t *txt, size_t txtlen, const char *na
     char *term_txt = NULL;
 
     if (thread == NULL || thread->ctx == NULL || thread->closed) {
-        NSLOG(neosurf, WARNING, "Attempted to execute JS on invalid/closed thread");
+        NSLOG(wisp, WARNING, "Attempted to execute JS on invalid/closed thread");
         return false;
     }
 
@@ -351,7 +351,7 @@ bool js_exec(jsthread *thread, const uint8_t *txt, size_t txtlen, const char *na
         return true; /* Nothing to execute */
     }
 
-    NSLOG(neosurf, INFO, "Executing JS: %s (length %zu)", name ? name : "<anonymous>", txtlen);
+    NSLOG(wisp, INFO, "Executing JS: %s (length %zu)", name ? name : "<anonymous>", txtlen);
 
     /* QuickJS-ng requires the input to be null-terminated at txt[txtlen] */
     if (txtlen < sizeof(stack_buf)) {
@@ -361,7 +361,7 @@ bool js_exec(jsthread *thread, const uint8_t *txt, size_t txtlen, const char *na
     } else {
         term_txt = malloc(txtlen + 1);
         if (term_txt == NULL) {
-            NSLOG(neosurf, ERROR, "Failed to allocate memory for JS execution");
+            NSLOG(wisp, ERROR, "Failed to allocate memory for JS execution");
             return false;
         }
         memcpy(term_txt, txt, txtlen);
@@ -374,7 +374,7 @@ bool js_exec(jsthread *thread, const uint8_t *txt, size_t txtlen, const char *na
         JSValue exc = JS_GetException(thread->ctx);
         const char *exc_str = JS_ToCString(thread->ctx, exc);
 
-        NSLOG(neosurf, WARNING, "JavaScript error: %s", exc_str ? exc_str : "<unknown error>");
+        NSLOG(wisp, WARNING, "JavaScript error: %s", exc_str ? exc_str : "<unknown error>");
 
         if (exc_str) {
             JS_FreeCString(thread->ctx, exc_str);
@@ -397,7 +397,7 @@ bool js_exec(jsthread *thread, const uint8_t *txt, size_t txtlen, const char *na
 bool js_fire_event(jsthread *thread, const char *type, struct dom_document *doc, struct dom_node *target)
 {
     /* TODO: Implement event firing */
-    NSLOG(neosurf, DEBUG, "js_fire_event called (not yet implemented)");
+    NSLOG(wisp, DEBUG, "js_fire_event called (not yet implemented)");
     return true;
 }
 
@@ -406,7 +406,7 @@ bool js_dom_event_add_listener(jsthread *thread, struct dom_document *document, 
     struct dom_string *event_type_dom, void *js_funcval)
 {
     /* TODO: Implement event listener registration */
-    NSLOG(neosurf, DEBUG, "js_dom_event_add_listener called (not yet implemented)");
+    NSLOG(wisp, DEBUG, "js_dom_event_add_listener called (not yet implemented)");
     return true;
 }
 
@@ -415,7 +415,7 @@ bool js_dom_event_add_listener(jsthread *thread, struct dom_document *document, 
 void js_handle_new_element(jsthread *thread, struct dom_element *node)
 {
     /* TODO: Implement new element handling */
-    NSLOG(neosurf, DEBUG, "js_handle_new_element called (not yet implemented)");
+    NSLOG(wisp, DEBUG, "js_handle_new_element called (not yet implemented)");
 }
 
 
@@ -423,5 +423,5 @@ void js_handle_new_element(jsthread *thread, struct dom_element *node)
 void js_event_cleanup(jsthread *thread, struct dom_event *evt)
 {
     /* TODO: Implement event cleanup */
-    NSLOG(neosurf, DEBUG, "js_event_cleanup called (not yet implemented)");
+    NSLOG(wisp, DEBUG, "js_event_cleanup called (not yet implemented)");
 }

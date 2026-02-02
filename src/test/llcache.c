@@ -307,7 +307,7 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    if (nsurl_create("http://www.netsurf-browser.org", &url) != NSERROR_OK) {
+    if (nsurl_create("http://www.wisp-browser.org", &url) != NSERROR_OK) {
         fprintf(stderr, "Failed creating url\n");
         return 1;
     }

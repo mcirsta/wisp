@@ -19,8 +19,8 @@
 
 0.13 - Jun 10 2023
 - CMake prevents building on OpenSSL 1.x.x
-- Separated frontends from libneosurf source tree
-- Renamed "netsurf-gtk3" to "netsurf-gtk"
+- Separated frontends from libwisp source tree
+- Renamed "wisp-gtk3" to "wisp-gtk"
 - Headers are now installed for libcss, libdom, etc
 - Entering an address into the bar uses the current tab instead of opening a
 new one
@@ -33,7 +33,7 @@ new one
 - Added proper check for pkg-config or pkgconf
 - Consolidated the search and URL bars on GTK frontend
 - Temporarily removed Gtk3 preferences menu; it was broken in upstream
-NetSurf and should be rewritten
+Wisp and should be rewritten
 
 0.11 - May 26 2023
 - Added byacc support
@@ -42,7 +42,7 @@ NetSurf and should be rewritten
 - Removed excess warnings
 - Added pkg_config checks for m4, zlib and libssl
 - Various build system improvements
-- Fixed hard-coded pathnames in libneosurf, neosurf-gtk3 and neosurf-vi
+- Fixed hard-coded pathnames in libwisp, wisp-gtk3 and wisp-vi
 
 0.10 - May 14 2023
 - Disabled urlfilter in Visurf
@@ -54,7 +54,7 @@ NetSurf and should be rewritten
 0.9 - May 11 2023
 - Reworked README.md
 - Adding some styling guidelines to CONTRIBUTING.md
-- Added new pictures of NeoSurf
+- Added new pictures of Wisp
 - Improved how cmake handles CFLAGS
 - Fixed dependency searching
 - Visurf now defaults to about:welcome
@@ -66,22 +66,22 @@ NetSurf and should be rewritten
 - Visurf and Gtk3 frontends now optional
 - Resources required for the frontends are now installed properly in
 ${CMAKE_INSTALL_PREFIX}/share
-- libneosurf headers are now installed
+- libwisp headers are now installed
 - CMAKE_INSTALL_LIBDIR variable is now supported
 
 0.7 - May 9 2023
-- Added screen of NeoSurf to README.md
+- Added screen of Wisp to README.md
 - Added LICENSE file
 - Prevent building if source or build dirs have whitespace
 - Added concise error messages when build-essential utilities are missing
 - Added stub CONTRIBUTING.md file
 
 0.6 - May 8 2023
-- Incorporated upstream commits to NetSurf and its subprojects
+- Incorporated upstream commits to Wisp and its subprojects
 - Improved LibreSSL support
 - Fixed frequent or constant crashing on certain websites
 - Send DNT (Do Not Track) request by default
-- Updated Visurf for compatibility with latest NetSurf commits
+- Updated Visurf for compatibility with latest Wisp commits
 - Further reductions of unused or obsolete code
 - Fixed search engine being set to Dictionary.com instead of DuckDuckGo
 - Removed redundant resources
@@ -89,7 +89,7 @@ ${CMAKE_INSTALL_PREFIX}/share
 - Large number of other fixes and improvements
 
 0.5 - May 7 2023
-- Began bulk rebranding to NeoSurf
+- Began bulk rebranding to Wisp
 - Removed support for languages besides for English (these may be
 re-introduced later)
 - Reworked welcome.html, license.html, and credits.html
@@ -120,7 +120,7 @@ re-introduced later)
 - Removes all frontends except for gtk3 and visurf
 - Converted build system to CMake
 - Removed the about:testament page
-- Separated common code into libnetsurf
+- Separated common code into libwisp
 
 0.2 - Apr 13 2023
 - Added byacc compatibility to the build system
@@ -131,7 +131,7 @@ re-introduced later)
 0.1 - Mar 12, 2023
 - Added Visurf support
 - Updated libcss to master-02232023
-- Removed Perl from netsurf/tools/Makefile
+- Removed Perl from wisp/tools/Makefile
 - Disabled some sections of code which break LibreSSL
 - Added pre-built text assets to the source tree to bypass Perl dependency
 - Updated all library makefiles to build shared instead of static libraries

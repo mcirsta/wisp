@@ -22,19 +22,19 @@
  * win32 implementation of the bitmap operations.
  */
 
-#include "neosurf/utils/config.h"
+#include "wisp/utils/config.h"
 
 #include <sys/types.h>
 #include <inttypes.h>
 #include <string.h>
 #include <windows.h>
 
-#include "neosurf/bitmap.h"
-#include "neosurf/content.h"
-#include "neosurf/plotters.h"
-#include "neosurf/utils/log.h"
+#include "wisp/bitmap.h"
+#include "wisp/content.h"
+#include "wisp/plotters.h"
+#include "wisp/utils/log.h"
 
-#include "neosurf/utils/errors.h"
+#include "wisp/utils/errors.h"
 #include "windows/bitmap.h"
 #include "windows/plot.h"
 
@@ -53,7 +53,7 @@ static void *win32_bitmap_create(int width, int height, enum gui_bitmap_flags fl
     HBITMAP windib;
     uint8_t *pixdata;
 
-    NSLOG(neosurf, INFO, "width %d, height %d, flags %u", width, height, (unsigned)flags);
+    NSLOG(wisp, INFO, "width %d, height %d, flags %u", width, height, (unsigned)flags);
 
     pbmi = calloc(1, sizeof(BITMAPV5HEADER));
     if (pbmi == NULL) {
@@ -95,7 +95,7 @@ static void *win32_bitmap_create(int width, int height, enum gui_bitmap_flags fl
         bitmap->opaque = false;
     }
 
-    NSLOG(neosurf, INFO, "bitmap %p", bitmap);
+    NSLOG(wisp, INFO, "bitmap %p", bitmap);
 
     return bitmap;
 }
@@ -114,7 +114,7 @@ static unsigned char *bitmap_get_buffer(void *bitmap)
 {
     struct bitmap *bm = bitmap;
     if (bitmap == NULL) {
-        NSLOG(neosurf, INFO, "NULL bitmap!");
+        NSLOG(wisp, INFO, "NULL bitmap!");
         return NULL;
     }
 
@@ -133,7 +133,7 @@ static size_t bitmap_get_rowstride(void *bitmap)
     struct bitmap *bm = bitmap;
 
     if (bitmap == NULL) {
-        NSLOG(neosurf, INFO, "NULL bitmap!");
+        NSLOG(wisp, INFO, "NULL bitmap!");
         return 0;
     }
 
@@ -151,7 +151,7 @@ void win32_bitmap_destroy(void *bitmap)
     struct bitmap *bm = bitmap;
 
     if (bitmap == NULL) {
-        NSLOG(neosurf, INFO, "NULL bitmap!");
+        NSLOG(wisp, INFO, "NULL bitmap!");
         return;
     }
 
@@ -186,11 +186,11 @@ static void bitmap_set_opaque(void *bitmap, bool opaque)
     struct bitmap *bm = bitmap;
 
     if (bitmap == NULL) {
-        NSLOG(neosurf, INFO, "NULL bitmap!");
+        NSLOG(wisp, INFO, "NULL bitmap!");
         return;
     }
 
-    NSLOG(neosurf, INFO, "setting bitmap %p to %s", bm, opaque ? "opaque" : "transparent");
+    NSLOG(wisp, INFO, "setting bitmap %p to %s", bm, opaque ? "opaque" : "transparent");
     bm->opaque = opaque;
 }
 
@@ -205,7 +205,7 @@ static bool bitmap_get_opaque(void *bitmap)
     struct bitmap *bm = bitmap;
 
     if (bitmap == NULL) {
-        NSLOG(neosurf, INFO, "NULL bitmap!");
+        NSLOG(wisp, INFO, "NULL bitmap!");
         return false;
     }
 
@@ -217,7 +217,7 @@ static int bitmap_get_width(void *bitmap)
     struct bitmap *bm = bitmap;
 
     if (bitmap == NULL) {
-        NSLOG(neosurf, INFO, "NULL bitmap!");
+        NSLOG(wisp, INFO, "NULL bitmap!");
         return 0;
     }
 
@@ -229,7 +229,7 @@ static int bitmap_get_height(void *bitmap)
     struct bitmap *bm = bitmap;
 
     if (bitmap == NULL) {
-        NSLOG(neosurf, INFO, "NULL bitmap!");
+        NSLOG(wisp, INFO, "NULL bitmap!");
         return 0;
     }
 
@@ -364,7 +364,7 @@ static nserror bitmap_render(struct bitmap *bitmap, struct hlcache_handle *conte
     width = min(max(content_get_width(content), bitmap->width), 1024);
     height = ((width * bitmap->height) + (bitmap->width / 2)) / bitmap->width;
 
-    NSLOG(neosurf, INFO, "bitmap %p for content %p width %d, height %d", bitmap, content, width, height);
+    NSLOG(wisp, INFO, "bitmap %p for content %p width %d, height %d", bitmap, content, width, height);
 
     /* create two memory device contexts to put the bitmaps in */
     bufferdc = CreateCompatibleDC(NULL);

@@ -24,20 +24,20 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <neosurf/content/handlers/css/utils.h>
+#include <wisp/content/handlers/css/utils.h>
 
-#include <neosurf/utils/nsurl.h>
+#include <wisp/utils/nsurl.h>
 #include "utils/nscolour.h"
 
-#include "neosurf/browser_window.h"
-#include "neosurf/core_window.h"
-#include "neosurf/keypress.h"
-#include "neosurf/layout.h"
-#include "neosurf/mouse.h"
-#include "neosurf/plotters.h"
+#include "wisp/browser_window.h"
+#include "wisp/core_window.h"
+#include "wisp/keypress.h"
+#include "wisp/layout.h"
+#include "wisp/mouse.h"
+#include "wisp/plotters.h"
 
-#include <neosurf/desktop/gui_internal.h>
-#include <neosurf/desktop/page-info.h>
+#include <wisp/desktop/gui_internal.h>
+#include <wisp/desktop/page-info.h>
 #include "desktop/knockout.h"
 #include "desktop/system_colour.h"
 
@@ -398,7 +398,7 @@ static nserror page_info__set_text(struct page_info *pi)
     int printed;
     static const char *header[PAGE_STATE__COUNT] = {
         [PAGE_STATE_UNKNOWN] = "Provenance unknown",
-        [PAGE_STATE_INTERNAL] = "NeoSurf data",
+        [PAGE_STATE_INTERNAL] = "Wisp data",
         [PAGE_STATE_LOCAL] = "Local data",
         [PAGE_STATE_INSECURE] = "Connection not secure",
         [PAGE_STATE_SECURE_OVERRIDE] = "Connection not secure",

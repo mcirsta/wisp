@@ -26,8 +26,8 @@
 
 extern "C" {
 #include "utils/errors.h"
-#include "neosurf/plotters.h"
-#include "neosurf/types.h"
+#include "wisp/plotters.h"
+#include "wisp/types.h"
 }
 
 #include "qt/corewindow.cls.h"

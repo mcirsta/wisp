@@ -8,7 +8,7 @@
 # ----------------------------------------------------------------------------
 
 CFLAGS += -Dnsqt
-CXXFLAGS += -DQT_RESPATH=\"$(NETSURF_QT_RES_PATH)\" -Dnsqt -g
+CXXFLAGS += -DQT_RESPATH=\"$(WISP_QT_RES_PATH)\" -Dnsqt -g
 
 $(eval $(call pkg_config_find_and_add,Qt6Widgets,Qt6Widgets))
 $(eval $(call pkg_config_find_and_add,Qt6Core,Qt6Core))
@@ -31,7 +31,7 @@ MESSAGES_TARGET=$(FRONTEND_RESOURCES_DIR)
 # Builtin resource handling
 # ----------------------------------------------------------------------------
 
-QRC_FILE := netsurf
+QRC_FILE := wisp
 
 # use RCC to generate resource source
 $(OBJROOT)/%.qrc.cpp: $(FRONTEND_RESOURCES_DIR)/%.qrc $(addsuffix /Messages,$(addprefix $(MESSAGES_TARGET)/,$(MESSAGES_LANGUAGES)))

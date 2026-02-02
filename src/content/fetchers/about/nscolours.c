@@ -28,9 +28,9 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "neosurf/plot_style.h"
+#include "wisp/plot_style.h"
 
-#include <neosurf/utils/errors.h>
+#include <wisp/utils/errors.h>
 #include "utils/nscolour.h"
 
 #include "nscolours.h"

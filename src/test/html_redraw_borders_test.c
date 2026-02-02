@@ -2,11 +2,11 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "neosurf/content/handlers/html/box.h"
-#include "neosurf/css.h"
-#include "neosurf/plotters.h"
-#include "neosurf/types.h"
-#include "neosurf/utils/errors.h"
+#include "wisp/content/handlers/html/box.h"
+#include "wisp/css.h"
+#include "wisp/plotters.h"
+#include "wisp/types.h"
+#include "wisp/utils/errors.h"
 
 /* Under test */
 bool html_redraw_borders(struct box *box, int x, int y, int p_width, int p_height, const struct rect *clip, float scale,

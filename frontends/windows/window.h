@@ -16,17 +16,17 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef NEOSURF_WINDOWS_WINDOW_H_
-#define NEOSURF_WINDOWS_WINDOW_H_
+#ifndef WISP_WINDOWS_WINDOW_H_
+#define WISP_WINDOWS_WINDOW_H_
 
-#ifndef NEOSURF_HOMEPAGE
-#define NEOSURF_HOMEPAGE "about:welcome"
+#ifndef WISP_HOMEPAGE
+#define WISP_HOMEPAGE "about:welcome"
 #endif
 
 /** The window operation function table for win32 */
 extern struct gui_window_table *win32_window_table;
 
-#include "neosurf/mouse.h"
+#include "wisp/mouse.h"
 
 struct browser_mouse {
     struct gui_window *gui;

@@ -106,7 +106,7 @@ static void dict_hashtable_create(int dict_hash_size)
     char buf[BUFSIZ];
     uint32_t counter = 0;
 
-    snprintf(buf, sizeof(buf), "%s/words", NEOSURF_TEST_DATA_DIR);
+    snprintf(buf, sizeof(buf), "%s/words", WISP_TEST_DATA_DIR);
     dictf = fopen(buf, "r");
     ck_assert(dictf != NULL);
 
@@ -247,7 +247,7 @@ START_TEST(hashtable_dict_test)
     char buf[BUFSIZ];
     uint32_t counter = 0;
 
-    snprintf(buf, sizeof(buf), "%s/words", NEOSURF_TEST_DATA_DIR);
+    snprintf(buf, sizeof(buf), "%s/words", WISP_TEST_DATA_DIR);
     dictf = fopen(buf, "r");
     ck_assert(dictf != NULL);
 

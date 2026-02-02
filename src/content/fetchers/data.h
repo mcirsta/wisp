@@ -21,8 +21,8 @@
  * data scheme fetch handler interface.
  */
 
-#ifndef NETSURF_CONTENT_FETCHERS_FETCH_DATA_H
-#define NETSURF_CONTENT_FETCHERS_FETCH_DATA_H
+#ifndef WISP_CONTENT_FETCHERS_FETCH_DATA_H
+#define WISP_CONTENT_FETCHERS_FETCH_DATA_H
 
 /**
  * Register data scheme handler.

@@ -35,12 +35,12 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <neosurf/utils/log.h>
-#include <neosurf/utils/messages.h>
-#include <neosurf/utils/utils.h>
+#include <wisp/utils/log.h>
+#include <wisp/utils/messages.h>
+#include <wisp/utils/utils.h>
 #include "content/urldb.h"
 
-#include <neosurf/desktop/cookie_manager.h>
+#include <wisp/desktop/cookie_manager.h>
 #include "desktop/treeview.h"
 
 enum cookie_manager_field {
@@ -646,7 +646,7 @@ static void cookie_manager_delete_entry(struct cookie_manager_entry *e)
 
             urldb_delete_cookie(domain, path, name);
         } else {
-            NSLOG(neosurf, INFO,
+            NSLOG(wisp, INFO,
                 "Delete cookie fail: "
                 "need domain, path, and name.");
         }
@@ -713,7 +713,7 @@ nserror cookie_manager_init(void *core_window_handle)
         return err;
     }
 
-    NSLOG(neosurf, INFO, "Generating cookie manager data");
+    NSLOG(wisp, INFO, "Generating cookie manager data");
 
     /* Init. cookie manager treeview entry fields */
     err = cookie_manager_init_entry_fields();
@@ -748,7 +748,7 @@ nserror cookie_manager_init(void *core_window_handle)
     /* Inform client of window height */
     treeview_get_height(cm_ctx.tree);
 
-    NSLOG(neosurf, INFO, "Generated cookie manager data");
+    NSLOG(wisp, INFO, "Generated cookie manager data");
 
     return NSERROR_OK;
 }
@@ -760,7 +760,7 @@ nserror cookie_manager_fini(void)
     int i;
     nserror err;
 
-    NSLOG(neosurf, INFO, "Finalising cookie manager");
+    NSLOG(wisp, INFO, "Finalising cookie manager");
 
     cm_ctx.built = false;
 
@@ -783,7 +783,7 @@ nserror cookie_manager_fini(void)
         return err;
     }
 
-    NSLOG(neosurf, INFO, "Finalised cookie manager");
+    NSLOG(wisp, INFO, "Finalised cookie manager");
 
     return err;
 }

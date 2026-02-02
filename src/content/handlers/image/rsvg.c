@@ -49,9 +49,9 @@
 #include "content/llcache.h"
 #include "desktop/bitmap.h"
 #include "desktop/gui_internal.h"
-#include "neosurf/bitmap.h"
-#include "neosurf/content.h"
-#include "neosurf/plotters.h"
+#include "wisp/bitmap.h"
+#include "wisp/content.h"
+#include "wisp/plotters.h"
 
 #include "image/rsvg.h"
 
@@ -72,7 +72,7 @@ static nserror rsvg_create_svg_data(rsvg_content *c)
     c->bitmap = NULL;
 
     if ((c->rsvgh = rsvg_handle_new()) == NULL) {
-        NSLOG(netsurf, INFO, "rsvg_handle_new() returned NULL.");
+        NSLOG(wisp, INFO, "rsvg_handle_new() returned NULL.");
         content_broadcast_error(&c->base, NSERROR_NOMEM, NULL);
         return NSERROR_NOMEM;
     }
@@ -115,7 +115,7 @@ static bool rsvg_process_data(struct content *c, const char *data, unsigned int 
     GError *err = NULL;
 
     if (rsvg_handle_write(d->rsvgh, (const guchar *)data, (gsize)size, &err) == FALSE) {
-        NSLOG(netsurf, INFO, "rsvg_handle_write returned an error: %s", err->message);
+        NSLOG(wisp, INFO, "rsvg_handle_write returned an error: %s", err->message);
         content_broadcast_error(c, NSERROR_SVG_ERROR, NULL);
         return false;
     }
@@ -130,7 +130,7 @@ static bool rsvg_convert(struct content *c)
     GError *err = NULL;
 
     if (rsvg_handle_close(d->rsvgh, &err) == FALSE) {
-        NSLOG(netsurf, INFO, "rsvg_handle_close returned an error: %s", err->message);
+        NSLOG(wisp, INFO, "rsvg_handle_close returned an error: %s", err->message);
         content_broadcast_error(c, NSERROR_SVG_ERROR, NULL);
         return false;
     }
@@ -146,20 +146,20 @@ static bool rsvg_convert(struct content *c)
     c->height = rsvgsize.height;
 
     if ((d->bitmap = guit->bitmap->create(c->width, c->height, BITMAP_NONE)) == NULL) {
-        NSLOG(netsurf, INFO, "Failed to create bitmap for rsvg render.");
+        NSLOG(wisp, INFO, "Failed to create bitmap for rsvg render.");
         content_broadcast_error(c, NSERROR_NOMEM, NULL);
         return false;
     }
 
     if ((d->cs = cairo_image_surface_create_for_data((unsigned char *)guit->bitmap->get_buffer(d->bitmap),
              CAIRO_FORMAT_ARGB32, c->width, c->height, guit->bitmap->get_rowstride(d->bitmap))) == NULL) {
-        NSLOG(netsurf, INFO, "Failed to create Cairo image surface for rsvg render.");
+        NSLOG(wisp, INFO, "Failed to create Cairo image surface for rsvg render.");
         content_broadcast_error(c, NSERROR_NOMEM, NULL);
         return false;
     }
 
     if ((d->ct = cairo_create(d->cs)) == NULL) {
-        NSLOG(netsurf, INFO, "Failed to create Cairo drawing context for rsvg render.");
+        NSLOG(wisp, INFO, "Failed to create Cairo drawing context for rsvg render.");
         content_broadcast_error(c, NSERROR_NOMEM, NULL);
         return false;
     }

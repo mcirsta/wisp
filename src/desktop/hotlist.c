@@ -25,19 +25,19 @@
 #include <dom/dom.h>
 #include <libdom/bindings/hubbub/parser.h>
 
-#include <neosurf/utils/corestrings.h>
-#include <neosurf/utils/log.h>
-#include <neosurf/utils/messages.h>
-#include <neosurf/utils/nsurl.h>
-#include <neosurf/utils/utf8.h>
-#include <neosurf/utils/utils.h>
+#include <wisp/utils/corestrings.h>
+#include <wisp/utils/log.h>
+#include <wisp/utils/messages.h>
+#include <wisp/utils/nsurl.h>
+#include <wisp/utils/utf8.h>
+#include <wisp/utils/utils.h>
 #include "utils/libdom.h"
 #include "content/urldb.h"
 
-#include <neosurf/browser_window.h>
-#include <neosurf/desktop/gui_internal.h>
-#include <neosurf/desktop/hotlist.h>
-#include <neosurf/misc.h>
+#include <wisp/browser_window.h>
+#include <wisp/desktop/gui_internal.h>
+#include <wisp/desktop/hotlist.h>
+#include <wisp/misc.h>
 #include "desktop/treeview.h"
 
 #define N_DAYS 28
@@ -131,7 +131,7 @@ static nserror hotlist_save(const char *path)
     /* Replace any old hotlist file with the one we just saved */
     if (rename(temp_path, path) != 0) {
         res = NSERROR_SAVE_FAILED;
-        NSLOG(neosurf, INFO, "Error renaming hotlist: %s.", strerror(errno));
+        NSLOG(wisp, INFO, "Error renaming hotlist: %s.", strerror(errno));
         goto cleanup;
     }
 
@@ -609,20 +609,20 @@ static nserror hotlist_load_entry(dom_node *li, hotlist_load_ctx *ctx)
     /* The li must contain an "a" element */
     a = libdom_find_first_element(li, corestring_lwc_a);
     if (a == NULL) {
-        NSLOG(neosurf, INFO, "Missing <a> in <li>");
+        NSLOG(wisp, INFO, "Missing <a> in <li>");
         return NSERROR_INVALID;
     }
 
     derror = dom_node_get_text_content(a, &title1);
     if (derror != DOM_NO_ERR) {
-        NSLOG(neosurf, INFO, "No title");
+        NSLOG(wisp, INFO, "No title");
         dom_node_unref(a);
         return NSERROR_INVALID;
     }
 
     derror = dom_element_get_attribute(a, corestring_dom_href, &url1);
     if (derror != DOM_NO_ERR || url1 == NULL) {
-        NSLOG(neosurf, INFO, "No URL");
+        NSLOG(wisp, INFO, "No URL");
         dom_string_unref(title1);
         dom_node_unref(a);
         return NSERROR_INVALID;
@@ -640,7 +640,7 @@ static nserror hotlist_load_entry(dom_node *li, hotlist_load_ctx *ctx)
     dom_string_unref(url1);
 
     if (err != NSERROR_OK) {
-        NSLOG(neosurf, INFO, "Failed normalising '%s'", dom_string_data(url1));
+        NSLOG(wisp, INFO, "Failed normalising '%s'", dom_string_data(url1));
 
         if (title1 != NULL) {
             dom_string_unref(title1);
@@ -718,7 +718,7 @@ nserror hotlist_load_directory_cb(dom_node *node, void *ctx)
 
         error = dom_node_get_text_content(node, &title);
         if (error != DOM_NO_ERR || title == NULL) {
-            NSLOG(neosurf, INFO, "Empty <h4> or memory exhausted.");
+            NSLOG(wisp, INFO, "Empty <h4> or memory exhausted.");
             dom_string_unref(name);
             return NSERROR_DOM;
         }
@@ -813,7 +813,7 @@ static nserror hotlist_load(const char *path, bool *loaded)
 
     /* Handle no path */
     if (path == NULL) {
-        NSLOG(neosurf, INFO, "No hotlist file path provided.");
+        NSLOG(wisp, INFO, "No hotlist file path provided.");
         return NSERROR_OK;
     }
 
@@ -838,7 +838,7 @@ static nserror hotlist_load(const char *path, bool *loaded)
     html = libdom_find_first_element((dom_node *)document, corestring_lwc_html);
     if (html == NULL) {
         dom_node_unref(document);
-        NSLOG(neosurf, WARNING, "%s (<html> not found)", messages_get("TreeLoadError"));
+        NSLOG(wisp, WARNING, "%s (<html> not found)", messages_get("TreeLoadError"));
         return NSERROR_OK;
     }
 
@@ -847,7 +847,7 @@ static nserror hotlist_load(const char *path, bool *loaded)
     if (body == NULL) {
         dom_node_unref(html);
         dom_node_unref(document);
-        NSLOG(neosurf, WARNING, "%s (<html>...<body> not found)", messages_get("TreeLoadError"));
+        NSLOG(wisp, WARNING, "%s (<html>...<body> not found)", messages_get("TreeLoadError"));
         return NSERROR_OK;
     }
 
@@ -857,7 +857,7 @@ static nserror hotlist_load(const char *path, bool *loaded)
         dom_node_unref(body);
         dom_node_unref(html);
         dom_node_unref(document);
-        NSLOG(neosurf, WARNING, "%s (<html>...<body>...<ul> not found.)", messages_get("TreeLoadError"));
+        NSLOG(wisp, WARNING, "%s (<html>...<body>...<ul> not found.)", messages_get("TreeLoadError"));
         return NSERROR_OK;
     }
 
@@ -881,7 +881,7 @@ static nserror hotlist_load(const char *path, bool *loaded)
     dom_node_unref(document);
 
     if (err != NSERROR_OK) {
-        NSLOG(neosurf, WARNING, "%s (Failed building tree.)", messages_get("TreeLoadError"));
+        NSLOG(wisp, WARNING, "%s (Failed building tree.)", messages_get("TreeLoadError"));
         return NSERROR_OK;
     }
 
@@ -907,14 +907,14 @@ static nserror hotlist_generate(void)
     static const struct {
         const char *url;
         const char *msg_key;
-    } default_entries[] = {{"https://www.netsurf-browser.org/", "HotlistHomepage"},
-        {"https://www.netsurf-browser.org/downloads/", "HotlistDownloads"},
-        {"https://www.netsurf-browser.org/documentation", "HotlistDocumentation"},
-        {"https://www.netsurf-browser.org/contact", "HotlistContact"}};
+    } default_entries[] = {{"https://www.wisp-browser.org/", "HotlistHomepage"},
+        {"https://www.wisp-browser.org/downloads/", "HotlistDownloads"},
+        {"https://www.wisp-browser.org/documentation", "HotlistDocumentation"},
+        {"https://www.wisp-browser.org/contact", "HotlistContact"}};
     const int n_entries = sizeof(default_entries) / sizeof(default_entries[0]);
 
     /* First make "NeoSurf" folder for defualt entries */
-    title = "NeoSurf";
+    title = "Wisp";
     err = hotlist_add_folder_internal(title, NULL, TREE_REL_FIRST_CHILD, &f, false);
     if (err != NSERROR_OK) {
         return err;
@@ -1015,7 +1015,7 @@ nserror hotlist_export(const char *path, const char *title)
         return NSERROR_SAVE_FAILED;
 
     if (title == NULL)
-        title = "NeoSurf hotlist";
+        title = "Wisp hotlist";
 
     /* The Acorn Browse Hotlist format, which we mimic[*], is invalid HTML
      * claming to be valid.
@@ -1195,7 +1195,7 @@ nserror hotlist_init(const char *load_path, const char *save_path)
         return err;
     }
 
-    NSLOG(neosurf, INFO, "Loading hotlist");
+    NSLOG(wisp, INFO, "Loading hotlist");
 
     hl_ctx.tree = NULL;
     hl_ctx.built = false;
@@ -1239,7 +1239,7 @@ nserror hotlist_init(const char *load_path, const char *save_path)
      * the treeview is built. */
     hl_ctx.built = true;
 
-    NSLOG(neosurf, INFO, "Loaded hotlist");
+    NSLOG(wisp, INFO, "Loaded hotlist");
 
     return NSERROR_OK;
 }
@@ -1284,7 +1284,7 @@ nserror hotlist_fini(void)
     int i;
     nserror err;
 
-    NSLOG(neosurf, INFO, "Finalising hotlist");
+    NSLOG(wisp, INFO, "Finalising hotlist");
 
     /* Remove any existing scheduled save callback */
     guit->misc->schedule(-1, hotlist_schedule_save_cb, NULL);
@@ -1293,7 +1293,7 @@ nserror hotlist_fini(void)
     /* Save the hotlist */
     err = hotlist_save(hl_ctx.save_path);
     if (err != NSERROR_OK) {
-        NSLOG(neosurf, INFO, "Problem saving the hotlist.");
+        NSLOG(wisp, INFO, "Problem saving the hotlist.");
     }
 
     free(hl_ctx.save_path);
@@ -1301,7 +1301,7 @@ nserror hotlist_fini(void)
     /* Destroy the hotlist treeview */
     err = treeview_destroy(hl_ctx.tree);
     if (err != NSERROR_OK) {
-        NSLOG(neosurf, INFO, "Problem destroying the hotlist treeview.");
+        NSLOG(wisp, INFO, "Problem destroying the hotlist treeview.");
     }
     hl_ctx.built = false;
 
@@ -1315,7 +1315,7 @@ nserror hotlist_fini(void)
         return err;
     }
 
-    NSLOG(neosurf, INFO, "Finalised hotlist");
+    NSLOG(wisp, INFO, "Finalised hotlist");
 
     return err;
 }
@@ -1504,7 +1504,7 @@ nserror hotlist_add_entry(nsurl *url, const char *title, bool at_y, int y)
     enum treeview_relationship rel;
 
     if (url == NULL) {
-        err = nsurl_create("https://netsurf-browser.org/", &url);
+        err = nsurl_create("https://wisp-browser.org/", &url);
         if (err != NSERROR_OK) {
             return err;
         }

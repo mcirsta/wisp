@@ -62,7 +62,7 @@ static void dict_bloom_create(void)
     char buf[BUFSIZ];
     int i;
 
-    snprintf(buf, sizeof(buf), "%s/words", NEOSURF_TEST_DATA_DIR);
+    snprintf(buf, sizeof(buf), "%s/words", WISP_TEST_DATA_DIR);
     dictf = fopen(buf, "r");
     ck_assert(dictf != NULL);
 
@@ -97,8 +97,8 @@ START_TEST(bloom_create_test)
     b = bloom_create(BLOOM_SIZE);
     ck_assert(b != NULL);
 
-    bloom_insert_str(b, "NetSurf", 7);
-    ck_assert(bloom_search_str(b, "NetSurf", 7));
+    bloom_insert_str(b, "Wisp", 7);
+    ck_assert(bloom_search_str(b, "Wisp", 7));
     ck_assert(!bloom_search_str(b, "NotSurf", 7));
 
     ck_assert(bloom_items(b) == 1);
@@ -147,7 +147,7 @@ START_TEST(bloom_match_test)
     char buf[BUFSIZ];
     int i;
 
-    snprintf(buf, sizeof(buf), "%s/words", NEOSURF_TEST_DATA_DIR);
+    snprintf(buf, sizeof(buf), "%s/words", WISP_TEST_DATA_DIR);
     dictf = fopen(buf, "r");
     ck_assert(dictf != NULL);
 
@@ -184,7 +184,7 @@ START_TEST(bloom_falsepositive_test)
     int i;
     int false_positives = 0;
 
-    snprintf(buf, sizeof(buf), "%s/words", NEOSURF_TEST_DATA_DIR);
+    snprintf(buf, sizeof(buf), "%s/words", WISP_TEST_DATA_DIR);
     dictf = fopen(buf, "r");
     ck_assert(dictf != NULL);
 

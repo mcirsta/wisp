@@ -23,15 +23,15 @@
 
 #include <dom/dom.h>
 
-#include <neosurf/utils/corestrings.h>
-#include <neosurf/utils/nsurl.h>
-#include <neosurf/utils/utils.h>
+#include <wisp/utils/corestrings.h>
+#include <wisp/utils/nsurl.h>
+#include <wisp/utils/utils.h>
 
 /* define corestrings */
 #define CORESTRING_LWC_VALUE(NAME, VALUE) lwc_string *corestring_lwc_##NAME
 #define CORESTRING_DOM_VALUE(NAME, VALUE) dom_string *corestring_dom_##NAME
 #define CORESTRING_NSURL(NAME, VALUE) nsurl *corestring_nsurl_##NAME
-#include <neosurf/utils/corestringlist.h>
+#include <wisp/utils/corestringlist.h>
 #undef CORESTRING_LWC_VALUE
 #undef CORESTRING_DOM_VALUE
 #undef CORESTRING_NSURL
@@ -64,7 +64,7 @@ nserror corestrings_fini(void)
     } while (0)
 
 
-#include <neosurf/utils/corestringlist.h>
+#include <wisp/utils/corestringlist.h>
 
 #undef CORESTRING_LWC_VALUE
 #undef CORESTRING_DOM_VALUE
@@ -111,7 +111,7 @@ nserror corestrings_init(void)
         }                                                                                                              \
     } while (0)
 
-#include <neosurf/utils/corestringlist.h>
+#include <wisp/utils/corestringlist.h>
 
 #undef CORESTRING_LWC_VALUE
 #undef CORESTRING_DOM_VALUE

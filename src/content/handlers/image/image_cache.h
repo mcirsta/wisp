@@ -34,11 +34,11 @@
  * content handler complete control.
  */
 
-#ifndef NETSURF_IMAGE_IMAGE_CACHE_H_
-#define NETSURF_IMAGE_IMAGE_CACHE_H_
+#ifndef WISP_IMAGE_IMAGE_CACHE_H_
+#define WISP_IMAGE_IMAGE_CACHE_H_
 
-#include <neosurf/utils/errors.h>
-#include "neosurf/content_type.h"
+#include <wisp/utils/errors.h>
+#include "wisp/content_type.h"
 
 struct content;
 struct content_redraw_data;

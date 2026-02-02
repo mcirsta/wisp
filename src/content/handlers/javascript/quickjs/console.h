@@ -13,8 +13,8 @@
  * QuickJS-ng Console binding header.
  */
 
-#ifndef NEOSURF_QUICKJS_CONSOLE_H
-#define NEOSURF_QUICKJS_CONSOLE_H
+#ifndef WISP_QUICKJS_CONSOLE_H
+#define WISP_QUICKJS_CONSOLE_H
 
 #include "quickjs.h"
 

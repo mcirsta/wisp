@@ -27,13 +27,13 @@
 #include <windows.h>
 #endif
 
-#include <neosurf/desktop/version.h>
-#include <neosurf/utils/config.h>
-#include <neosurf/utils/nsoption.h>
+#include <wisp/desktop/version.h>
+#include <wisp/utils/config.h>
+#include <wisp/utils/nsoption.h>
 #include "utils/utsname.h"
-#include "neosurf/utils/sys_time.h"
+#include "wisp/utils/sys_time.h"
 
-#include <neosurf/utils/log.h>
+#include <wisp/utils/log.h>
 
 /** flag to enable verbose logging */
 bool verbose_log = false;
@@ -268,7 +268,7 @@ static const char *nslog_gettime(void)
 
 #ifdef WITH_NSLOG
 
-NSLOG_DEFINE_CATEGORY(noosurf, "NeoSurf default logging");
+NSLOG_DEFINE_CATEGORY(noosurf, "Wisp default logging");
 NSLOG_DEFINE_CATEGORY(llcache, "Low level cache");
 NSLOG_DEFINE_CATEGORY(fetch, "Object fetching");
 NSLOG_DEFINE_CATEGORY(plot, "Rendering system");
@@ -279,7 +279,7 @@ NSLOG_DEFINE_CATEGORY(flex, "Flex");
 NSLOG_DEFINE_CATEGORY(dukky, "Duktape JavaScript Binding");
 NSLOG_DEFINE_CATEGORY(jserrors, "JavaScript error messages");
 
-static void neosurf_render_log(void *_ctx, nslog_entry_context_t *ctx, const char *fmt, va_list args)
+static void wisp_render_log(void *_ctx, nslog_entry_context_t *ctx, const char *fmt, va_list args)
 {
 #ifdef _WIN32
     if (async_logging) {
@@ -473,10 +473,10 @@ nserror nslog_init(nslog_ensure_t *ensure, int *pargc, char **argv)
 
 #ifdef WITH_NSLOG
 
-    if (nslog_set_filter(verbose_log ? NEOSURF_BUILTIN_VERBOSE_FILTER : NEOSURF_BUILTIN_LOG_FILTER) != NSERROR_OK) {
+    if (nslog_set_filter(verbose_log ? WISP_BUILTIN_VERBOSE_FILTER : WISP_BUILTIN_LOG_FILTER) != NSERROR_OK) {
         ret = NSERROR_INIT_FAILED;
         verbose_log = false;
-    } else if (nslog_set_render_callback(neosurf_render_log, NULL) != NSLOG_NO_ERROR) {
+    } else if (nslog_set_render_callback(wisp_render_log, NULL) != NSLOG_NO_ERROR) {
         ret = NSERROR_INIT_FAILED;
         verbose_log = false;
     } else if (nslog_uncork() != NSLOG_NO_ERROR) {
@@ -492,11 +492,11 @@ nserror nslog_init(nslog_ensure_t *ensure, int *pargc, char **argv)
         if (verbose_log || split_logging)
             async_log_start();
 #endif
-        NSLOG(neosurf, INFO, "NeoSurf version '%d.%d'", neosurf_version_major, neosurf_version_minor);
+        NSLOG(wisp, INFO, "Wisp version '%d.%d'", wisp_version_major, wisp_version_minor);
         if (uname(&utsname) < 0) {
-            NSLOG(neosurf, INFO, "Failed to extract machine information");
+            NSLOG(wisp, INFO, "Failed to extract machine information");
         } else {
-            NSLOG(neosurf, INFO, "NeoSurf on <%s>, node <%s>, release <%s>, version <%s>, machine <%s>",
+            NSLOG(wisp, INFO, "Wisp on <%s>, node <%s>, release <%s>, version <%s>, machine <%s>",
                 utsname.sysname, utsname.nodename, utsname.release, utsname.version, utsname.machine);
         }
     }
@@ -504,17 +504,17 @@ nserror nslog_init(nslog_ensure_t *ensure, int *pargc, char **argv)
     if (split_logging && ret == NSERROR_OK) {
         /* Create directory */
 #ifdef _WIN32
-        _mkdir("neosurf-logs");
+        _mkdir("wisp-logs");
 #else
-        mkdir("neosurf-logs", 0777);
+        mkdir("wisp-logs", 0777);
 #endif
-        split_log_files[0] = fopen("neosurf-logs/ns-deepdebug.txt", "w");
-        split_log_files[1] = fopen("neosurf-logs/ns-debug.txt", "w");
-        split_log_files[2] = fopen("neosurf-logs/ns-verbose.txt", "w");
-        split_log_files[3] = fopen("neosurf-logs/ns-info.txt", "w");
-        split_log_files[4] = fopen("neosurf-logs/ns-warning.txt", "w");
-        split_log_files[5] = fopen("neosurf-logs/ns-error.txt", "w");
-        split_log_files[6] = fopen("neosurf-logs/ns-critical.txt", "w");
+        split_log_files[0] = fopen("wisp-logs/ns-deepdebug.txt", "w");
+        split_log_files[1] = fopen("wisp-logs/ns-debug.txt", "w");
+        split_log_files[2] = fopen("wisp-logs/ns-verbose.txt", "w");
+        split_log_files[3] = fopen("wisp-logs/ns-info.txt", "w");
+        split_log_files[4] = fopen("wisp-logs/ns-warning.txt", "w");
+        split_log_files[5] = fopen("wisp-logs/ns-error.txt", "w");
+        split_log_files[6] = fopen("wisp-logs/ns-critical.txt", "w");
     }
 
     return ret;
@@ -532,7 +532,7 @@ nserror nslog_set_filter_by_options(void)
 /* exported interface documented in utils/log.h */
 void nslog_finalise(void)
 {
-    NSLOG(neosurf, INFO, "Finalising logging, please report any further messages");
+    NSLOG(wisp, INFO, "Finalising logging, please report any further messages");
 #ifdef _WIN32
     async_log_stop();
 #endif

@@ -16,8 +16,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef NEOSURF_WINDOWS_CLIPBOARD_H
-#define NEOSURF_WINDOWS_CLIPBOARD_H
+#ifndef WISP_WINDOWS_CLIPBOARD_H
+#define WISP_WINDOWS_CLIPBOARD_H
 
 /**
  * The clipboard operation function table for win32

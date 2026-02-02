@@ -1,6 +1,6 @@
-#ifndef NETSURF_VI_KEYBINDINGS
-#define NETSURF_VI_KEYBINDINGS
-#include <neosurf/utils/errors.h>
+#ifndef WISP_VI_KEYBINDINGS
+#define WISP_VI_KEYBINDINGS
+#include <wisp/utils/errors.h>
 #include <xkbcommon/xkbcommon.h>
 #include <stdbool.h>
 #include <stdint.h>

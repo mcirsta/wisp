@@ -5,13 +5,13 @@
 TMPDIR_GTK=$(mktemp -dp "$PWD" tmp.gtk.XXXXXX)
 TMPDIR_VI=$(mktemp -dp "$PWD" tmp.vi.XXXXXX)
 
-cp -v neosurf-gtk.desktop "$TMPDIR_GTK"
-cp -v neosurf-vi.desktop "$TMPDIR_VI"
+cp -v wisp-gtk.desktop "$TMPDIR_GTK"
+cp -v wisp-vi.desktop "$TMPDIR_VI"
 
 cp -v AppRun-gtk "$TMPDIR_GTK/AppRun"
 cp -v AppRun-vi "$TMPDIR_VI/AppRun"
 
-cp -v neosurf.png "$TMPDIR_GTK"
-cp -v neosurf.png "$TMPDIR_VI"
+cp -v wisp.png "$TMPDIR_GTK"
+cp -v wisp.png "$TMPDIR_VI"
 
 #TODO bundle libpsl, openssl

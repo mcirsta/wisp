@@ -21,8 +21,8 @@
  * file scheme fetcher handler interface.
  */
 
-#ifndef NETSURF_CONTENT_FETCHERS_FETCH_FILE_H
-#define NETSURF_CONTENT_FETCHERS_FETCH_FILE_H
+#ifndef WISP_CONTENT_FETCHERS_FETCH_FILE_H
+#define WISP_CONTENT_FETCHERS_FETCH_FILE_H
 
 /**
  * Register file scheme handler.

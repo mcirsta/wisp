@@ -2,14 +2,14 @@
 
 # Guard: Only enable tests if NEOSURF_ENABLE_TESTS is ON
 # This is automatically ON for Debug builds or can be set via cmake option
-if(NOT NEOSURF_ENABLE_TESTS)
+if(NOT WISP_ENABLE_TESTS)
   return()
 endif()
 
 # Check for 'check' unit test framework
 pkg_check_modules(CHECK check)
 if(NOT CHECK_FOUND)
-  message(FATAL_ERROR "Missing 'check' unit test framework; install it or set NEOSURF_ENABLE_TESTS=OFF")
+  message(FATAL_ERROR "Missing 'check' unit test framework; install it or set WISP_ENABLE_TESTS=OFF")
 endif()
 
 include(CTest)
@@ -17,24 +17,24 @@ include(CTest)
 # Common includes for all tests
 set(TEST_COMMON_INCLUDES
   ${CMAKE_SOURCE_DIR}/src
-  ${CMAKE_SOURCE_DIR}/include/neosurf
+  ${CMAKE_SOURCE_DIR}/include/wisp
   ${CMAKE_SOURCE_DIR}/frontends
   ${CMAKE_SOURCE_DIR}/src/content/handlers
   ${CHECK_INCLUDE_DIRS}
 )
 
 # Function to add a NeoSurf test executable
-function(add_neosurf_test name)
+function(add_wisp_test name)
   add_executable(${name} ${ARGN})
   target_include_directories(${name} PRIVATE ${TEST_COMMON_INCLUDES})
   target_compile_definitions(${name} PRIVATE
     nsgtk
-    NEOSURF_BUILTIN_LOG_FILTER=\"level:WARNING\"
-    NEOSURF_BUILTIN_VERBOSE_FILTER=\"level:DEBUG\"
+    WISP_BUILTIN_LOG_FILTER=\"level:WARNING\"
+    WISP_BUILTIN_VERBOSE_FILTER=\"level:DEBUG\"
     WITH_UTF8PROC
-    NEOSURF_TEST_DATA_DIR=\"${CMAKE_SOURCE_DIR}/src/test/data\"
+    WISP_TEST_DATA_DIR=\"${CMAKE_SOURCE_DIR}/src/test/data\"
   )
-  target_link_libraries(${name} PUBLIC ${NEOSURF_COMMON_LIBS} ${CHECK_LIBRARIES})
+  target_link_libraries(${name} PUBLIC ${WISP_COMMON_LIBS} ${CHECK_LIBRARIES})
   add_test(NAME ${name} COMMAND ${name})
   set_tests_properties(${name} PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/src")
   set(TEST_ENV_PATH "C:/msys64/mingw64/bin\;C:/msys64/usr/bin\;$ENV{PATH}")
@@ -78,7 +78,7 @@ set(NSURL_SOURCES
   ${CMAKE_SOURCE_DIR}/src/test/log.c
   ${CMAKE_SOURCE_DIR}/src/test/nsurl.c
 )
-add_neosurf_test(nsurl ${NSURL_SOURCES})
+add_wisp_test(nsurl ${NSURL_SOURCES})
 
 set(URLDBTEST_SOURCES
   ${CMAKE_SOURCE_DIR}/src/utils/nsurl/nsurl.c
@@ -99,9 +99,9 @@ set(URLDBTEST_SOURCES
   ${CMAKE_SOURCE_DIR}/src/test/log.c
   ${CMAKE_SOURCE_DIR}/src/test/urldbtest.c
 )
-add_neosurf_test(urldbtest ${URLDBTEST_SOURCES})
+add_wisp_test(urldbtest ${URLDBTEST_SOURCES})
 
-add_neosurf_test(urlescape
+add_wisp_test(urlescape
   ${CMAKE_SOURCE_DIR}/src/utils/url.c
   ${CMAKE_SOURCE_DIR}/src/test/log.c
   ${CMAKE_SOURCE_DIR}/src/test/urlescape.c
@@ -111,31 +111,31 @@ add_neosurf_test(urlescape
 # Utility Tests
 # ============================================================================
 
-add_neosurf_test(messages
+add_wisp_test(messages
   ${CMAKE_SOURCE_DIR}/src/utils/messages.c
   ${CMAKE_SOURCE_DIR}/src/utils/hashtable.c
   ${CMAKE_SOURCE_DIR}/src/test/log.c
   ${CMAKE_SOURCE_DIR}/src/test/messages.c
 )
 
-add_neosurf_test(nsoption
+add_wisp_test(nsoption
   ${CMAKE_SOURCE_DIR}/src/utils/nsoption.c
   ${CMAKE_SOURCE_DIR}/src/test/log.c
   ${CMAKE_SOURCE_DIR}/src/test/nsoption.c
 )
 
-add_neosurf_test(bloom
+add_wisp_test(bloom
   ${CMAKE_SOURCE_DIR}/src/utils/bloom.c
   ${CMAKE_SOURCE_DIR}/src/test/bloom.c
 )
 
-add_neosurf_test(hashtable
+add_wisp_test(hashtable
   ${CMAKE_SOURCE_DIR}/src/utils/hashtable.c
   ${CMAKE_SOURCE_DIR}/src/test/log.c
   ${CMAKE_SOURCE_DIR}/src/test/hashtable.c
 )
 
-add_neosurf_test(utils
+add_wisp_test(utils
   ${CMAKE_SOURCE_DIR}/src/utils/nsurl/nsurl.c
   ${CMAKE_SOURCE_DIR}/src/utils/nsurl/parse.c
   ${CMAKE_SOURCE_DIR}/src/utils/idna.c
@@ -148,13 +148,13 @@ add_neosurf_test(utils
   ${CMAKE_SOURCE_DIR}/src/test/utils.c
 )
 
-add_neosurf_test(time
+add_wisp_test(time
   ${CMAKE_SOURCE_DIR}/src/utils/time.c
   ${CMAKE_SOURCE_DIR}/src/test/log.c
   ${CMAKE_SOURCE_DIR}/src/test/time.c
 )
 
-add_neosurf_test(mimesniff
+add_wisp_test(mimesniff
   ${CMAKE_SOURCE_DIR}/src/utils/nsurl/nsurl.c
   ${CMAKE_SOURCE_DIR}/src/utils/nsurl/parse.c
   ${CMAKE_SOURCE_DIR}/src/utils/idna.c
@@ -175,12 +175,12 @@ add_neosurf_test(mimesniff
 # Renderer Tests
 # ============================================================================
 
-add_neosurf_test(html_redraw_borders_test
+add_wisp_test(html_redraw_borders_test
   ${CMAKE_SOURCE_DIR}/src/content/handlers/html/redraw_border.c
   ${CMAKE_SOURCE_DIR}/src/test/html_redraw_borders_test.c
 )
 
-add_neosurf_test(layout_flex_test
+add_wisp_test(layout_flex_test
   ${CMAKE_SOURCE_DIR}/src/content/handlers/html/layout_flex.c
   ${CMAKE_SOURCE_DIR}/src/test/log.c
   ${CMAKE_SOURCE_DIR}/src/test/layout_flex_test.c
@@ -189,13 +189,13 @@ add_neosurf_test(layout_flex_test
 target_compile_definitions(layout_flex_test PRIVATE TESTING)
 
 
-add_neosurf_test(svg_redraw_test
+add_wisp_test(svg_redraw_test
   ${CMAKE_SOURCE_DIR}/src/desktop/plot_style.c
   ${CMAKE_SOURCE_DIR}/src/test/svg_redraw_driver.c
   ${CMAKE_SOURCE_DIR}/src/test/svg_redraw_test.c
 )
 
-add_neosurf_test(svg_redraw_extlink_test
+add_wisp_test(svg_redraw_extlink_test
   ${CMAKE_SOURCE_DIR}/src/desktop/plot_style.c
   ${CMAKE_SOURCE_DIR}/src/content/handlers/image/svg.c
   ${CMAKE_SOURCE_DIR}/src/test/log.c
@@ -203,7 +203,7 @@ add_neosurf_test(svg_redraw_extlink_test
   ${CMAKE_SOURCE_DIR}/src/test/svg_redraw_extlink_test.c
 )
 
-add_neosurf_test(svg_redraw_comboflush_test
+add_wisp_test(svg_redraw_comboflush_test
   ${CMAKE_SOURCE_DIR}/src/desktop/plot_style.c
   ${CMAKE_SOURCE_DIR}/src/content/handlers/image/svg.c
   ${CMAKE_SOURCE_DIR}/src/test/log.c
@@ -211,7 +211,7 @@ add_neosurf_test(svg_redraw_comboflush_test
   ${CMAKE_SOURCE_DIR}/src/test/svg_redraw_comboflush_test.c
 )
 
-add_neosurf_test(svg_dash_rects_test
+add_wisp_test(svg_dash_rects_test
   ${CMAKE_SOURCE_DIR}/src/desktop/plot_style.c
   ${CMAKE_SOURCE_DIR}/src/content/handlers/image/svg.c
   ${CMAKE_SOURCE_DIR}/src/test/log.c
@@ -219,7 +219,7 @@ add_neosurf_test(svg_dash_rects_test
   ${CMAKE_SOURCE_DIR}/src/test/svg_dash_rects_test.c
 )
 
-add_neosurf_test(stacking_test
+add_wisp_test(stacking_test
   ${CMAKE_SOURCE_DIR}/src/content/handlers/html/stacking.c
   ${CMAKE_SOURCE_DIR}/src/utils/utils.c
   ${CMAKE_SOURCE_DIR}/src/utils/messages.c
@@ -228,13 +228,13 @@ add_neosurf_test(stacking_test
   ${CMAKE_SOURCE_DIR}/src/test/stacking_test.c
 )
 
-add_neosurf_test(box_construct_race_test
+add_wisp_test(box_construct_race_test
   ${CMAKE_SOURCE_DIR}/src/utils/talloc.c
   ${CMAKE_SOURCE_DIR}/src/test/log.c
   ${CMAKE_SOURCE_DIR}/src/test/box_construct_race_test.c
 )
 
-add_neosurf_test(grid_layout_test
+add_wisp_test(grid_layout_test
   ${CMAKE_SOURCE_DIR}/src/content/handlers/html/layout_grid.c
   ${CMAKE_SOURCE_DIR}/src/test/log.c
   ${CMAKE_SOURCE_DIR}/src/test/grid_layout_test.c
@@ -242,14 +242,14 @@ add_neosurf_test(grid_layout_test
 # Define TESTING so layout_grid.c uses test stubs instead of calling layout_minmax_box
 target_compile_definitions(grid_layout_test PRIVATE TESTING)
 
-add_neosurf_test(layout_inline_grid_test
+add_wisp_test(layout_inline_grid_test
   ${CMAKE_SOURCE_DIR}/src/content/handlers/html/layout_grid.c
   ${CMAKE_SOURCE_DIR}/src/test/log.c
   ${CMAKE_SOURCE_DIR}/src/test/layout_inline_grid_test.c
 )
 target_compile_definitions(layout_inline_grid_test PRIVATE TESTING)
 
-add_neosurf_test(grid_construct_test
+add_wisp_test(grid_construct_test
   ${CMAKE_SOURCE_DIR}/src/content/handlers/html/box_normalise.c
   ${CMAKE_SOURCE_DIR}/src/utils/libdom.c
   ${CMAKE_SOURCE_DIR}/src/test/log.c
@@ -258,7 +258,7 @@ add_neosurf_test(grid_construct_test
 # Disable leak detection for grid_construct_test since libdom parsing has internal leaks
 set_property(TEST grid_construct_test PROPERTY ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0")
 
-add_neosurf_test(transform_clip_test
+add_wisp_test(transform_clip_test
   ${CMAKE_SOURCE_DIR}/src/content/handlers/html/redraw_helpers.c
   ${CMAKE_SOURCE_DIR}/src/test/transform_clip_test.c
 )
@@ -267,7 +267,7 @@ add_neosurf_test(transform_clip_test
 # JavaScript Tests
 # ============================================================================
 
-add_neosurf_test(test_quickjs
+add_wisp_test(test_quickjs
   ${CMAKE_SOURCE_DIR}/src/content/handlers/javascript/quickjs/qjs.c
   ${CMAKE_SOURCE_DIR}/src/content/handlers/javascript/quickjs/timers.c
   ${CMAKE_SOURCE_DIR}/src/content/handlers/javascript/quickjs/navigator.c
@@ -286,7 +286,7 @@ target_include_directories(test_quickjs PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libnsutils/include
   ${CMAKE_BINARY_DIR}/quickjs
 )
-target_link_libraries(test_quickjs PRIVATE qjs nsutils neosurf)
+target_link_libraries(test_quickjs PRIVATE qjs nsutils wisp)
 
 # ============================================================================
 # Font-face Tests (simple test linked to neosurf lib)
@@ -297,7 +297,7 @@ target_include_directories(font_face_test PRIVATE
   ${CMAKE_SOURCE_DIR}/src
   ${CMAKE_SOURCE_DIR}/include
 )
-target_link_libraries(font_face_test neosurf)
+target_link_libraries(font_face_test wisp)
 add_test(NAME font_face_test COMMAND font_face_test)
 
 # ============================================================================
@@ -309,7 +309,7 @@ if(NOT WIN32)
   target_include_directories(malloc_fig PRIVATE ${CMAKE_SOURCE_DIR}/src)
   target_link_libraries(malloc_fig PUBLIC dl)
 
-  add_neosurf_test(hashmap
+  add_wisp_test(hashmap
     ${CMAKE_SOURCE_DIR}/src/utils/nsurl/nsurl.c
     ${CMAKE_SOURCE_DIR}/src/utils/nsurl/parse.c
     ${CMAKE_SOURCE_DIR}/src/utils/idna.c
@@ -321,7 +321,7 @@ if(NOT WIN32)
   )
   target_link_libraries(hashmap PRIVATE malloc_fig)
 
-  add_neosurf_test(corestrings
+  add_wisp_test(corestrings
     ${CMAKE_SOURCE_DIR}/src/utils/nsurl/nsurl.c
     ${CMAKE_SOURCE_DIR}/src/utils/nsurl/parse.c
     ${CMAKE_SOURCE_DIR}/src/utils/idna.c

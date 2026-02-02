@@ -21,8 +21,8 @@
  * HTML content DOM event handling interface
  */
 
-#ifndef NETSURF_HTML_DOM_EVENT_H
-#define NETSURF_HTML_DOM_EVENT_H
+#ifndef WISP_HTML_DOM_EVENT_H
+#define WISP_HTML_DOM_EVENT_H
 
 /**
  * html content DOM action callback function selector

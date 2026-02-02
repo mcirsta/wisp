@@ -21,7 +21,7 @@ extern "C" {
 #include "utils/log.h"
 #include "utils/messages.h"
 
-#include "neosurf/neosurf.h"
+#include "wisp/wisp.h"
 }
 
 #include "qt/application.cls.h"
@@ -41,7 +41,7 @@ extern "C" {
 int main(int argc, char **argv)
 {
     int ret = 0;
-    struct neosurf_table nsqt_table = {
+    struct wisp_table nsqt_table = {
         .misc = nsqt_misc_table,
         .window = nsqt_window_table,
         .corewindow = nsqt_core_window_table,
@@ -62,7 +62,7 @@ int main(int argc, char **argv)
     try {
         nsapp = new NS_Application(argc, argv, &nsqt_table);
     } catch (NS_Exception &exp) {
-        fprintf(stderr, "NetSurf qt application initialisation failed. %s (%s)\n", exp.m_str.c_str(),
+        fprintf(stderr, "Wisp qt application initialisation failed. %s (%s)\n", exp.m_str.c_str(),
             messages_get_errorcode(exp.m_err));
         return 2;
     }

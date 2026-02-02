@@ -24,10 +24,10 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include <neosurf/utils/errors.h>
-#include <neosurf/utils/log.h>
+#include <wisp/utils/errors.h>
+#include <wisp/utils/log.h>
 
-#include <neosurf/desktop/gui_internal.h>
+#include <wisp/desktop/gui_internal.h>
 #include "desktop/bitmap.h"
 
 /** The client bitmap format. */
@@ -117,13 +117,13 @@ void bitmap_set_format(const bitmap_fmt_t *bitmap_format)
 {
     bitmap_fmt = *bitmap_format;
 
-    NSLOG(netsurf, INFO, "Setting core bitmap format to: %s%s", bitmap__layout_to_str(bitmap_format->layout),
+    NSLOG(wisp, INFO, "Setting core bitmap format to: %s%s", bitmap__layout_to_str(bitmap_format->layout),
         bitmap_format->pma ? " pre multiplied alpha" : "");
 
     bitmap_fmt.layout = bitmap_sanitise_bitmap_layout(bitmap_fmt.layout);
 
     if (bitmap_format->layout != bitmap_fmt.layout) {
-        NSLOG(netsurf, INFO, "Sanitised layout to: %s", bitmap__layout_to_str(bitmap_fmt.layout));
+        NSLOG(wisp, INFO, "Sanitised layout to: %s", bitmap__layout_to_str(bitmap_fmt.layout));
     }
 
     bitmap_layout = bitmap__get_colour_layout(&bitmap_fmt);
@@ -266,7 +266,7 @@ void bitmap_format_convert(void *bitmap, const bitmap_fmt_t *fmt_from, const bit
     struct bitmap_colour_layout to = bitmap__get_colour_layout(fmt_to);
     struct bitmap_colour_layout from = bitmap__get_colour_layout(fmt_from);
 
-    NSLOG(netsurf, DEEPDEBUG, "%p: format conversion (%u%s --> %u%s)", bitmap, fmt_from->layout,
+    NSLOG(wisp, DEEPDEBUG, "%p: format conversion (%u%s --> %u%s)", bitmap, fmt_from->layout,
         fmt_from->pma ? " pma" : "", fmt_to->layout, fmt_to->pma ? " pma" : "");
 
     if (fmt_from->pma == fmt_to->pma) {

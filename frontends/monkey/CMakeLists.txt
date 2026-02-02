@@ -45,14 +45,14 @@ target_include_directories(nsmonkey PRIVATE ${CMAKE_SOURCE_DIR}/src)
 target_compile_definitions(nsmonkey PRIVATE MONKEY_RESPATH="${GENERATED_MESSAGES_DIR}")
 target_compile_definitions(nsmonkey PRIVATE MONKEY_SRCPATH="${CMAKE_SOURCE_DIR}/src/resources")
 
-target_link_libraries(nsmonkey neosurf m ${NEOSURF_COMMON_LIBS})
+target_link_libraries(nsmonkey wisp m ${WISP_COMMON_LIBS})
 
 if(WIN32 AND CMAKE_BUILD_TYPE MATCHES Debug)
     add_custom_command(TARGET nsmonkey POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                $<TARGET_FILE:neosurf>
+                $<TARGET_FILE:wisp>
                 $<TARGET_FILE_DIR:nsmonkey>
-        COMMENT "Copying libneosurf next to nsmonkey")
+        COMMENT "Copying libwisp next to nsmonkey")
 
     set(SVGTINY_RUNTIME)
     if(TARGET svgtiny)
@@ -79,4 +79,4 @@ if(WIN32 AND CMAKE_BUILD_TYPE MATCHES Debug)
 endif()
 
 install(TARGETS nsmonkey DESTINATION ${CMAKE_INSTALL_BINDIR})
-install(DIRECTORY ${GENERATED_MESSAGES_DIR}/ DESTINATION ${CMAKE_INSTALL_DATADIR}/neosurf)
+install(DIRECTORY ${GENERATED_MESSAGES_DIR}/ DESTINATION ${CMAKE_INSTALL_DATADIR}/wisp)

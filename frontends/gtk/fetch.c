@@ -40,13 +40,13 @@
 #include <strings.h>
 #include <unistd.h>
 
-#include <neosurf/fetch.h>
-#include <neosurf/utils/ascii.h>
-#include <neosurf/utils/file.h>
-#include <neosurf/utils/filepath.h>
-#include <neosurf/utils/hashtable.h>
-#include <neosurf/utils/log.h>
-#include <neosurf/utils/nsurl.h>
+#include <wisp/fetch.h>
+#include <wisp/utils/ascii.h>
+#include <wisp/utils/file.h>
+#include <wisp/utils/filepath.h>
+#include <wisp/utils/hashtable.h>
+#include <wisp/utils/log.h>
+#include <wisp/utils/nsurl.h>
 
 #include "gtk/fetch.h"
 #include "gtk/gui.h"
@@ -91,7 +91,7 @@ void gtk_fetch_filetype_init(const char *mimefile)
 
     fh = fopen(mimefile, "r");
     if (fh == NULL) {
-        NSLOG(neosurf, INFO, "Unable to open a mime.types file, so using a minimal one for you.");
+        NSLOG(wisp, INFO, "Unable to open a mime.types file, so using a minimal one for you.");
         return;
     }
 
@@ -191,7 +191,7 @@ const char *fetch_filetype(const char *unix_path)
         /* stat suceeded so can check for directory */
 
         if (S_ISDIR(statbuf.st_mode)) {
-            return "application/x-neosurf-directory";
+            return "application/x-wisp-directory";
         }
     }
 
@@ -253,7 +253,7 @@ static nsurl *nsgtk_get_resource_url(const char *path)
     if (strcmp(path, "favicon.ico") == 0) {
         nsurl_create("resource:favicon.png", &url);
     } else {
-        neosurf_path_to_nsurl(filepath_sfind(respaths, buf, path), &url);
+        wisp_path_to_nsurl(filepath_sfind(respaths, buf, path), &url);
     }
 
     return url;

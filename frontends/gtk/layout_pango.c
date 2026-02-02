@@ -28,11 +28,11 @@
 #include <assert.h>
 #include <stdio.h>
 
-#include <neosurf/ns_inttypes.h>
-#include <neosurf/layout.h>
-#include <neosurf/plot_style.h>
-#include <neosurf/utils/log.h>
-#include <neosurf/utils/nsoption.h>
+#include <wisp/ns_inttypes.h>
+#include <wisp/layout.h>
+#include <wisp/plot_style.h>
+#include <wisp/utils/log.h>
+#include <wisp/utils/nsoption.h>
 
 #include "gtk/layout_pango.h"
 #include "gtk/plotters.h"
@@ -43,12 +43,12 @@ static PangoLayout *nsfont_pango_layout = NULL;
 static inline void nsfont_pango_check(void)
 {
     if (nsfont_pango_context == NULL) {
-        NSLOG(neosurf, INFO, "Creating nsfont_pango_context.");
+        NSLOG(wisp, INFO, "Creating nsfont_pango_context.");
         nsfont_pango_context = gdk_pango_context_get();
     }
 
     if (nsfont_pango_layout == NULL) {
-        NSLOG(neosurf, INFO, "Creating nsfont_pango_layout.");
+        NSLOG(wisp, INFO, "Creating nsfont_pango_layout.");
         nsfont_pango_layout = pango_layout_new(nsfont_pango_context);
     }
 }
@@ -83,7 +83,7 @@ static nserror nsfont_width(const plot_font_style_t *fstyle, const char *string,
     pango_layout_index_to_pos(nsfont_pango_layout, length, &pos);
     *width = PANGO_PIXELS(pos.x);
 
-    NSLOG(neosurf, DEEPDEBUG, "fstyle: %p string:\"%.*s\", length: %" PRIsizet ", width: %dpx", fstyle, (int)length,
+    NSLOG(wisp, DEEPDEBUG, "fstyle: %p string:\"%.*s\", length: %" PRIsizet ", width: %dpx", fstyle, (int)length,
         string, length, *width);
 
 
@@ -168,7 +168,7 @@ static nserror nsfont_position_in_string(
 
     res = layout_position(nsfont_pango_layout, string, length, x, char_offset, actual_x);
 
-    NSLOG(neosurf, DEEPDEBUG,
+    NSLOG(wisp, DEEPDEBUG,
         "fstyle: %p string:\"%.*s\", length: %" PRIsizet ", "
         "search_x: %dpx, offset: %" PRIsizet ", actual_x: %dpx",
         fstyle, (int)length, string, length, x, *char_offset, *actual_x);
@@ -265,7 +265,7 @@ split_done:
     g_object_unref(layout);
     g_object_unref(context);
 
-    NSLOG(neosurf, DEEPDEBUG,
+    NSLOG(wisp, DEEPDEBUG,
         "fstyle: %p string:\"%.*s\" / \"%.*s\", length: %" PRIsizet ", "
         "split_x: %dpx, offset: %" PRIsizet ", actual_x: %dpx",
         fstyle, (int)(*string_idx), string, (int)(length - *string_idx), string + *string_idx, length, x, *string_idx,

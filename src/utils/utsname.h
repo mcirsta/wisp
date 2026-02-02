@@ -21,8 +21,8 @@
  * \brief Interface to uts API to get name and information about current kernel.
  */
 
-#ifndef _NETSURF_UTILS_UTSNAME_H_
-#define _NETSURF_UTILS_UTSNAME_H_
+#ifndef _WISP_UTILS_UTSNAME_H_
+#define _WISP_UTILS_UTSNAME_H_
 
 #ifdef HAVE_UTSNAME
 #include <sys/utsname.h>

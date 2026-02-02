@@ -20,8 +20,8 @@
  * Low-level resource cache (interface)
  */
 
-#ifndef NETSURF_CONTENT_LLCACHE_H_
-#define NETSURF_CONTENT_LLCACHE_H_
+#ifndef WISP_CONTENT_LLCACHE_H_
+#define WISP_CONTENT_LLCACHE_H_
 
 #include <stdbool.h>
 #include <stddef.h>

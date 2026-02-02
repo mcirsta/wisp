@@ -35,8 +35,8 @@
 #include <string.h>
 #include <zlib.h>
 
-#include <neosurf/utils/hashtable.h>
-#include <neosurf/utils/log.h>
+#include <wisp/utils/hashtable.h>
+#include <wisp/utils/log.h>
 
 
 struct hash_entry {
@@ -125,7 +125,7 @@ static nserror process_line(struct hash_table *hash, uint8_t *ln, int lnlen)
 
     res = hash_add(hash, (char *)key, (char *)value);
     if (res != NSERROR_OK) {
-        NSLOG(netsurf, INFO, "Unable to add %s:%s to hash table", ln, value);
+        NSLOG(wisp, INFO, "Unable to add %s:%s to hash table", ln, value);
         return NSERROR_INVALID;
     }
     return NSERROR_OK;
@@ -154,7 +154,7 @@ static nserror hash_add_inline_plain(struct hash_table *ht, const uint8_t *data,
         } else {
             slen++;
             if (slen > sizeof s) {
-                NSLOG(neosurf, INFO, "Overlength line\n");
+                NSLOG(wisp, INFO, "Overlength line\n");
                 slen = 0;
             }
         }
@@ -191,7 +191,7 @@ static nserror hash_add_inline_gzip(struct hash_table *ht, const uint8_t *data, 
 
     ret = inflateInit2(&strm, 32 + MAX_WBITS);
     if (ret != Z_OK) {
-        NSLOG(neosurf, INFO, "inflateInit returned %d", ret);
+        NSLOG(wisp, INFO, "inflateInit returned %d", ret);
         return NSERROR_INVALID;
     }
 
@@ -230,7 +230,7 @@ static nserror hash_add_inline_gzip(struct hash_table *ht, const uint8_t *data, 
         }
         if (used == sizeof(s)) {
             /* entire buffer used and no newline */
-            NSLOG(neosurf, INFO, "Overlength line");
+            NSLOG(wisp, INFO, "Overlength line");
             used = 0;
         }
     } while (ret != Z_STREAM_END);
@@ -238,7 +238,7 @@ static nserror hash_add_inline_gzip(struct hash_table *ht, const uint8_t *data, 
     inflateEnd(&strm);
 
     if (ret != Z_STREAM_END) {
-        NSLOG(neosurf, INFO, "inflate returned %d", ret);
+        NSLOG(wisp, INFO, "inflate returned %d", ret);
         return NSERROR_INVALID;
     }
     return NSERROR_OK;
@@ -251,7 +251,7 @@ struct hash_table *hash_create(unsigned int chains)
     struct hash_table *r = malloc(sizeof(struct hash_table));
 
     if (r == NULL) {
-        NSLOG(neosurf, INFO, "Not enough memory for hash table.");
+        NSLOG(wisp, INFO, "Not enough memory for hash table.");
         return NULL;
     }
 
@@ -259,7 +259,7 @@ struct hash_table *hash_create(unsigned int chains)
     r->chain = calloc(chains, sizeof(struct hash_entry *));
 
     if (r->chain == NULL) {
-        NSLOG(neosurf, INFO, "Not enough memory for %d hash table chains.", chains);
+        NSLOG(wisp, INFO, "Not enough memory for %d hash table chains.", chains);
         free(r);
         return NULL;
     }
@@ -304,7 +304,7 @@ nserror hash_add(struct hash_table *ht, const char *key, const char *value)
 
     e = malloc(sizeof(struct hash_entry));
     if (e == NULL) {
-        NSLOG(neosurf, INFO, "Not enough memory for hash entry.");
+        NSLOG(wisp, INFO, "Not enough memory for hash entry.");
         return NSERROR_NOMEM;
     }
 
@@ -314,7 +314,7 @@ nserror hash_add(struct hash_table *ht, const char *key, const char *value)
     v = strlen(value);
     e->pairing = malloc(v + e->key_length + 2);
     if (e->pairing == NULL) {
-        NSLOG(neosurf, INFO, "Not enough memory for string duplication.");
+        NSLOG(wisp, INFO, "Not enough memory for string duplication.");
         free(e);
         return NSERROR_NOMEM;
     }
@@ -363,7 +363,7 @@ nserror hash_add_file(struct hash_table *ht, const char *path)
 
     fp = gzopen(path, "r");
     if (!fp) {
-        NSLOG(neosurf, INFO, "Unable to open file \"%.100s\": %s", path, strerror(errno));
+        NSLOG(wisp, INFO, "Unable to open file \"%.100s\": %s", path, strerror(errno));
 
         return NSERROR_NOT_FOUND;
     }

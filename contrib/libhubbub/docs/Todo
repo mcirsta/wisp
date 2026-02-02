@@ -5,7 +5,7 @@ TODO list
   + Documentation
   + Implement one or more tree builders
     - test/tree2.c would serve as a basic tree builder
-    - NetSurf's libxml2 binding could do with being brought back here somehow
+    - Wisp's libxml2 binding could do with being brought back here somehow
   + Parse error reporting (incl. acknowledging self-closing flags)
   + Implement extraneous chunk insertion/tokenisation
   + Statistical charset autodetection

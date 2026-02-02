@@ -36,7 +36,7 @@ extern "C" {
 #include "utils/nsoption.h"
 #include "utils/nsurl.h"
 #include "utils/utils.h"
-#include "netsurf/plotters.h"
+#include "wisp/plotters.h"
 }
 #include "beos/bitmap.h"
 #include "beos/font.h"
@@ -512,7 +512,7 @@ static nserror nsbeos_plot_path(const struct redraw_context *ctx, const plot_sty
     }
 
     if (p[0] != PLOTTER_PATH_MOVE) {
-        NSLOG(netsurf, INFO, "path doesn't start with a move");
+        NSLOG(wisp, INFO, "path doesn't start with a move");
         return NSERROR_INVALID;
     }
 
@@ -534,7 +534,7 @@ static nserror nsbeos_plot_path(const struct redraw_context *ctx, const plot_sty
             shape.BezierTo(pt);
             i += 7;
         } else {
-            NSLOG(netsurf, INFO, "bad path command %f", p[i]);
+            NSLOG(wisp, INFO, "bad path command %f", p[i]);
             return NSERROR_INVALID;
         }
     }
@@ -774,12 +774,12 @@ public:
 extern "C" void test_plotters_main(void);
 void test_plotters_main(void)
 {
-    BApplication app("application/x-vnd.NetSurf");
+    BApplication app("application/x-vnd.Wisp");
     memcpy(&plot, &nsbeos_plotters, sizeof(plot));
     BRect frame(0, 0, 300, 300);
     PTView *view = new PTView(frame);
     frame.OffsetBySelf(100, 100);
-    BWindow *win = new BWindow(frame, "NetSurfPlotterTest", B_TITLED_WINDOW, B_QUIT_ON_WINDOW_CLOSE);
+    BWindow *win = new BWindow(frame, "WispPlotterTest", B_TITLED_WINDOW, B_QUIT_ON_WINDOW_CLOSE);
     win->AddChild(view);
     nsbeos_current_gc_set(view);
     win->Show();

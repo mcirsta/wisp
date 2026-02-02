@@ -26,13 +26,13 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <neosurf/content/content_protected.h>
-#include <neosurf/content/hlcache.h>
-#include <neosurf/utils/config.h>
-#include <neosurf/utils/errors.h>
-#include <neosurf/utils/log.h>
-#include <neosurf/utils/messages.h>
-#include <neosurf/utils/utils.h>
+#include <wisp/content/content_protected.h>
+#include <wisp/content/hlcache.h>
+#include <wisp/utils/config.h>
+#include <wisp/utils/errors.h>
+#include <wisp/utils/log.h>
+#include <wisp/utils/messages.h>
+#include <wisp/utils/utils.h>
 #include "content/content_factory.h"
 #include "content/handlers/javascript/content.h"
 

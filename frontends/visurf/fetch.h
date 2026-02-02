@@ -1,5 +1,5 @@
-#ifndef NETSURF_VI_FETCH_H
-#define NETSURF_VI_FETCH_H
+#ifndef WISP_VI_FETCH_H
+#define WISP_VI_FETCH_H
 
 struct gui_fetch_table;
 extern struct gui_fetch_table vi_fetch_table;

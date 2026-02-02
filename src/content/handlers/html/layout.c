@@ -43,29 +43,29 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <neosurf/browser.h>
-#include <neosurf/browser_window.h>
-#include <neosurf/content.h>
-#include <neosurf/content/content.h>
-#include <neosurf/content/content_protected.h>
-#include <neosurf/content/handlers/css/utils.h>
-#include <neosurf/desktop/textarea.h>
-#include <neosurf/ns_inttypes.h>
-#include <neosurf/layout.h>
-#include <neosurf/utils/corestrings.h>
-#include <neosurf/utils/log.h>
-#include <neosurf/utils/nsoption.h>
-#include <neosurf/utils/nsurl.h>
-#include <neosurf/utils/utils.h>
+#include <wisp/browser.h>
+#include <wisp/browser_window.h>
+#include <wisp/content.h>
+#include <wisp/content/content.h>
+#include <wisp/content/content_protected.h>
+#include <wisp/content/handlers/css/utils.h>
+#include <wisp/desktop/textarea.h>
+#include <wisp/ns_inttypes.h>
+#include <wisp/layout.h>
+#include <wisp/utils/corestrings.h>
+#include <wisp/utils/log.h>
+#include <wisp/utils/nsoption.h>
+#include <wisp/utils/nsurl.h>
+#include <wisp/utils/utils.h>
 #include "utils/talloc.h"
 #include "desktop/scrollbar.h"
 
-#include <neosurf/content/handlers/html/box.h>
-#include <neosurf/content/handlers/html/box_inspect.h>
-#include <neosurf/content/handlers/html/form_internal.h>
-#include <neosurf/content/handlers/html/html.h>
-#include <neosurf/content/handlers/html/html_save.h>
-#include <neosurf/content/handlers/html/private.h>
+#include <wisp/content/handlers/html/box.h>
+#include <wisp/content/handlers/html/box_inspect.h>
+#include <wisp/content/handlers/html/form_internal.h>
+#include <wisp/content/handlers/html/html.h>
+#include <wisp/content/handlers/html/html_save.h>
+#include <wisp/content/handlers/html/private.h>
 #include "content/handlers/html/font.h"
 #include "content/handlers/html/layout.h"
 #include "content/handlers/html/layout_grid.h"
@@ -150,7 +150,7 @@ static void layout_get_object_dimensions(const css_unit_ctx *unit_len_ctx, struc
     if (*width == AUTO && *height == AUTO) {
         /* No given dimensions - use intrinsic dimensions */
 
-#ifdef NEOSURF_DEVICE_PIXEL_LAYOUT
+#ifdef WISP_DEVICE_PIXEL_LAYOUT
         /* Windows frontend uses device pixels for layout (GDI doesn't auto-scale).
          * Only scale here when intrinsic dimensions are used to determine box size.
          * If CSS specifies explicit width/height, those values are already in the
@@ -309,7 +309,7 @@ layout_minmax_table(struct box *table, const struct gui_layout_table *font_func,
         return;
 
     if (table_calculate_column_types(&content->unit_len_ctx, table) == false) {
-        NSLOG(neosurf, ERROR, "Could not establish table column types.");
+        NSLOG(wisp, ERROR, "Could not establish table column types.");
         return;
     }
     col = table->col;
@@ -914,7 +914,7 @@ layout_minmax_block(struct box *block, const struct gui_layout_table *font_func,
         } else {
             /* Image content dimensions are in CSS pixels, not device pixels */
             min = max = content_get_width(block->object);
-#ifdef NEOSURF_DEVICE_PIXEL_LAYOUT
+#ifdef WISP_DEVICE_PIXEL_LAYOUT
             {
                 int dpi = browser_get_dpi();
                 if (dpi > 0 && dpi != 96) {
@@ -4204,7 +4204,7 @@ static void layout_lists(const html_content *content, struct box *box)
                 /* Image content dimensions are in CSS pixels */
                 marker->width = content_get_width(marker->object);
                 marker->height = content_get_height(marker->object);
-#ifdef NEOSURF_DEVICE_PIXEL_LAYOUT
+#ifdef WISP_DEVICE_PIXEL_LAYOUT
                 {
                     int dpi = browser_get_dpi();
                     if (dpi > 0 && dpi != 96) {
@@ -5363,7 +5363,7 @@ bool layout_document(html_content *content, int width, int height)
     struct box *doc = content->layout;
     const struct gui_layout_table *font_func = content->font_func;
 
-    NSLOG(netsurf, DEBUG, "PROFILER: START layout_document %p", content);
+    NSLOG(wisp, DEBUG, "PROFILER: START layout_document %p", content);
 
     NSLOG(layout, DEBUG, "Doing layout to %ix%i of %s", width, height, nsurl_access(content_get_url(&content->base)));
 
@@ -5401,7 +5401,7 @@ bool layout_document(html_content *content, int width, int height)
     layout_calculate_descendant_bboxes(&content->unit_len_ctx, doc);
     layout_log_final_box_heights(&content->unit_len_ctx, doc);
 
-    NSLOG(netsurf, DEBUG, "PROFILER: STOP layout_document %p", content);
+    NSLOG(wisp, DEBUG, "PROFILER: STOP layout_document %p", content);
 
     return ret;
 }

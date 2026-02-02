@@ -21,14 +21,14 @@
  * HTML layout private interface.
  */
 
-#ifndef NETSURF_HTML_LAYOUT_INTERNAL_H
-#define NETSURF_HTML_LAYOUT_INTERNAL_H
+#ifndef WISP_HTML_LAYOUT_INTERNAL_H
+#define WISP_HTML_LAYOUT_INTERNAL_H
 
 #include <limits.h>
 #include <stdbool.h>
 #include <stdint.h>
 
-#include <neosurf/content/handlers/html/box.h>
+#include <wisp/content/handlers/html/box.h>
 
 struct html_content;
 struct gui_layout_table;

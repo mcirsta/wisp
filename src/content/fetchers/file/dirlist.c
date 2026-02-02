@@ -25,13 +25,13 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <neosurf/utils/messages.h>
-#include <neosurf/utils/nsurl.h>
+#include <wisp/utils/messages.h>
+#include <wisp/utils/nsurl.h>
 #include "utils/nscolour.h"
 
-#include <neosurf/ns_inttypes.h>
-#include "neosurf/plot_style.h"
-#include "neosurf/types.h"
+#include <wisp/ns_inttypes.h>
+#include "wisp/plot_style.h"
+#include "wisp/types.h"
 
 #include "desktop/system_colour.h"
 #include "dirlist.h"

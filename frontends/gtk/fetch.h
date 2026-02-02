@@ -16,8 +16,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef NETSURF_GTK_FETCH_H
-#define NETSURF_GTK_FETCH_H
+#ifndef WISP_GTK_FETCH_H
+#define WISP_GTK_FETCH_H
 
 extern struct gui_fetch_table *nsgtk_fetch_table;
 

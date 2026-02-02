@@ -21,7 +21,7 @@
  */
 
 #include "utils/log.h"
-#include "neosurf/browser_window.h"
+#include "wisp/browser_window.h"
 
 /**
  * Debug function logs a browser mouse state.
@@ -30,7 +30,7 @@
  */
 void browser_mouse_state_dump(browser_mouse_state mouse)
 {
-    NSLOG(netsurf, INFO, "mouse state: %s %s %s %s %s %s %s %s %s %s %s %s %s %s",
+    NSLOG(wisp, INFO, "mouse state: %s %s %s %s %s %s %s %s %s %s %s %s %s %s",
         mouse & BROWSER_MOUSE_PRESS_1 ? "P1" : "  ", mouse & BROWSER_MOUSE_PRESS_2 ? "P2" : "  ",
         mouse & BROWSER_MOUSE_CLICK_1 ? "C1" : "  ", mouse & BROWSER_MOUSE_CLICK_2 ? "C2" : "  ",
         mouse & BROWSER_MOUSE_DOUBLE_CLICK ? "DC" : "  ", mouse & BROWSER_MOUSE_TRIPLE_CLICK ? "TC" : "  ",

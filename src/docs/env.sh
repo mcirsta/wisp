@@ -251,7 +251,7 @@ if [ "x${HOST}" = "x" ]; then
     fi
 else
     # attempt to find host tools with the specificed ABI
-    HOST_CC_LIST="/opt/netsurf/${HOST}/cross/bin/${HOST}-cc /opt/netsurf/${HOST}/cross/bin/${HOST}-gcc ${HOST}-cc ${HOST}-gcc"
+    HOST_CC_LIST="/opt/wisp/${HOST}/cross/bin/${HOST}-cc /opt/wisp/${HOST}/cross/bin/${HOST}-gcc ${HOST}-cc ${HOST}-gcc"
     for HOST_CC_V in $(echo ${HOST_CC_LIST});do
         HOST_CC=$(command -v ${HOST_CC_V})
         if [ $? -eq 0 ];then
@@ -278,7 +278,7 @@ fi
 
 # set up a default target workspace
 if [ "x${TARGET_WORKSPACE}" = "x" ]; then
-    TARGET_WORKSPACE=${HOME}/dev-netsurf/workspace
+    TARGET_WORKSPACE=${HOME}/dev-wisp/workspace
 fi
 
 # set up default parallelism
@@ -292,14 +292,14 @@ fi
 # Setup GTK major version if required (either 2 or 3 currently)
 case "${TARGET_TOOLKIT}" in
     gtk2)
-	NETSURF_GTK_MAJOR=2
+	WISP_GTK_MAJOR=2
 	;;
     gtk3)
-	NETSURF_GTK_MAJOR=3
+	WISP_GTK_MAJOR=3
 	;;
     *)
-	if [ "x${NETSURF_GTK_MAJOR}" = "x" ]; then
-	    NETSURF_GTK_MAJOR=2
+	if [ "x${WISP_GTK_MAJOR}" = "x" ]; then
+	    WISP_GTK_MAJOR=2
 	fi
 	;;
 esac
@@ -315,13 +315,13 @@ export BUILD_PREFIX=${TARGET_WORKSPACE}/inst-${BUILD}
 export PKG_CONFIG_PATH=${PREFIX}/lib/pkgconfig:${PKG_CONFIG_PATH}::
 export LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${PREFIX}/lib
 export PATH=${PATH}:${BUILD_PREFIX}/bin
-export NETSURF_GTK_MAJOR
+export WISP_GTK_MAJOR
 
 # make tool
 MAKE=make
 
 # NetSurf GIT repositories
-NS_GIT="git://git.netsurf-browser.org"
+NS_GIT="git://git.wisp-browser.org"
 
 # Buildsystem: everything depends on this
 NS_BUILDSYSTEM="buildsystem"
@@ -329,7 +329,7 @@ NS_BUILDSYSTEM="buildsystem"
 NS_TOOLS=""
 NS_FRONTEND_LIBS=""
 
-BUILD_TARGET="${TARGET:-netsurf}"
+BUILD_TARGET="${TARGET:-wisp}"
 
 case "$BUILD_TARGET" in
     libhubbub)
@@ -344,7 +344,7 @@ case "$BUILD_TARGET" in
         NS_INTERNAL_LIBS="libwapcaplet libparserutils"
         ;;
 
-    netsurf)
+    wisp)
         # internal libraries all frontends require (order is important)
         NS_INTERNAL_LIBS="libwapcaplet libparserutils libhubbub libdom libcss libnsgif libnsbmp libutf8proc libnsutils libnspsl libnslog"
 

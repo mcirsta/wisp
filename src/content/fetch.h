@@ -20,15 +20,15 @@
  * Fetching of data from a URL (interface).
  */
 
-#ifndef _NETSURF_DESKTOP_FETCH_H_
-#define _NETSURF_DESKTOP_FETCH_H_
+#ifndef _WISP_DESKTOP_FETCH_H_
+#define _WISP_DESKTOP_FETCH_H_
 
 #include <stdbool.h>
 
 #include "utils/config.h"
 #include "utils/inet.h"
 #include "utils/nsurl.h"
-#include "neosurf/ssl_certs.h"
+#include "wisp/ssl_certs.h"
 
 struct content;
 struct fetch;

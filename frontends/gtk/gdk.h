@@ -20,8 +20,8 @@
  * GDK support functions for missing interfaces
  */
 
-#ifndef NETSURF_GTK_GDK_H_
-#define NETSURF_GTK_GDK_H_
+#ifndef WISP_GTK_GDK_H_
+#define WISP_GTK_GDK_H_
 
 #include <gtk/gtk.h>
 

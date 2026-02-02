@@ -21,9 +21,9 @@
  * Target independent plotting GTK+ interface.
  */
 
-#ifndef NETSURF_VI_PLOTTERS_H
-#define NETSURF_VI_PLOTTERS_H 1
-#include <neosurf/types.h>
+#ifndef WISP_VI_PLOTTERS_H
+#define WISP_VI_PLOTTERS_H 1
+#include <wisp/types.h>
 
 struct plotter_table;
 

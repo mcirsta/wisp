@@ -21,8 +21,8 @@
  * \brief Interface to time operations.
  */
 
-#ifndef _NETSURF_UTILS_TIME_H_
-#define _NETSURF_UTILS_TIME_H_
+#ifndef _WISP_UTILS_TIME_H_
+#define _WISP_UTILS_TIME_H_
 
 #include <time.h>
 

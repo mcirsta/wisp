@@ -1,0 +1,335 @@
+/*
+ * Copyright 2003 Phil Mellor <monkeyson@users.sourceforge.net>
+ * Copyright 2007 James Bursa <bursa@users.sourceforge.net>
+ * Copyright 2004 Andrew Timmins <atimmins@blueyonder.co.uk>
+ *
+ * This file is part of NetSurf, http://www.netsurf-browser.org/
+ *
+ * NetSurf is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; version 2 of the License.
+ *
+ * NetSurf is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
+#include <dom/dom.h>
+#include <libwapcaplet/libwapcaplet.h>
+#include <locale.h>
+#include <signal.h>
+#include <stdbool.h>
+#include <stdio.h>
+#include <stdlib.h>
+
+#include <wisp/content/handlers/css/css.h>
+#include <wisp/content/handlers/html/html.h>
+#include <wisp/content/hlcache.h>
+#include <wisp/ns_inttypes.h>
+#include <wisp/utils/config.h>
+#include <wisp/utils/corestrings.h>
+#include <wisp/utils/log.h>
+#include <wisp/utils/messages.h>
+#include <wisp/utils/nsoption.h>
+#include <wisp/utils/string.h>
+#include <wisp/utils/utf8.h>
+#include <utils/errors.h>
+#include "utils/nscolour.h"
+#include "utils/useragent.h"
+#include "content/content_factory.h"
+#include "content/fetchers.h"
+#include "content/handlers/image/image.h"
+#include "content/handlers/image/image_cache.h"
+#include "content/handlers/javascript/content.h"
+#include "content/handlers/javascript/js.h"
+#include "content/handlers/text/textplain.h"
+#include "content/mimesniff.h"
+#include "content/urldb.h"
+
+#include <wisp/browser_window.h>
+#include <wisp/desktop/gui_internal.h>
+#include <wisp/desktop/page-info.h>
+#include <wisp/desktop/searchweb.h>
+#include <wisp/misc.h>
+#include <wisp/wisp.h>
+#include "desktop/system_colour.h"
+
+
+/** \todo QUERY - Remove this import later */
+#include "desktop/browser_private.h"
+
+/** speculative pre-conversion small image size
+ *
+ * Experimenting by visiting every page from default page in order and
+ * then netsurf homepage
+ *
+ * 0    : Cache hit/miss/speculative miss/fail 604/147/  0/0 (80%/19%/ 0%/ 0%)
+ * 2048 : Cache hit/miss/speculative miss/fail 622/119/ 17/0 (82%/15%/ 2%/ 0%)
+ * 4096 : Cache hit/miss/speculative miss/fail 656/109/ 25/0 (83%/13%/ 3%/ 0%)
+ * 8192 : Cache hit/miss/speculative miss/fail 648/104/ 40/0 (81%/13%/ 5%/ 0%)
+ * ALL  : Cache hit/miss/speculative miss/fail 775/  0/161/0 (82%/ 0%/17%/ 0%)
+ */
+#define SPECULATE_SMALL 4096
+
+/** the time between image cache clean runs in ms. */
+#define IMAGE_CACHE_CLEAN_TIME (10 * 1000)
+
+/** default time between content cache cleans. */
+#define HL_CACHE_CLEAN_TIME (2 * IMAGE_CACHE_CLEAN_TIME)
+
+/** ensure there is a minimal amount of memory for source objetcs and
+ * decoded bitmaps.
+ */
+#define MINIMUM_MEMORY_CACHE_SIZE (2 * 1024 * 1024)
+
+/** default minimum object time before object is pushed to backing store. (s) */
+#define LLCACHE_STORE_MIN_LIFETIME (60 * 30)
+
+/** default minimum bandwidth for backing store writeout. (byte/s) */
+#define LLCACHE_STORE_MIN_BANDWIDTH (128 * 1024)
+
+/** default maximum bandwidth for backing store writeout. (byte/s) */
+#define LLCACHE_STORE_MAX_BANDWIDTH (1024 * 1024)
+
+/** default time quantum with which to calculate bandwidth (ms) */
+#define LLCACHE_STORE_TIME_QUANTUM (100)
+
+static void wisp_lwc_iterator(lwc_string *str, void *pw)
+{
+    unsigned *count = (unsigned *)pw;
+    if (count != NULL) {
+        (*count)++;
+    }
+    NSLOG(wisp, WARNING, "[%3u] %.*s", str->refcnt, (int)lwc_string_length(str), lwc_string_data(str));
+}
+
+/* exported interface documented in neosurf/neosurf.h */
+nserror wisp_init(const char *store_path)
+{
+    nserror ret;
+    struct hlcache_parameters hlcache_parameters = {.bg_clean_time = HL_CACHE_CLEAN_TIME,
+        .llcache = {
+            .minimum_lifetime = LLCACHE_STORE_MIN_LIFETIME,
+            .minimum_bandwidth = LLCACHE_STORE_MIN_BANDWIDTH,
+            .maximum_bandwidth = LLCACHE_STORE_MAX_BANDWIDTH,
+            .time_quantum = LLCACHE_STORE_TIME_QUANTUM,
+        }};
+    struct image_cache_parameters image_cache_parameters = {
+        .bg_clean_time = IMAGE_CACHE_CLEAN_TIME, .speculative_small = SPECULATE_SMALL};
+
+#ifdef HAVE_SIGPIPE
+    /* Ignore SIGPIPE - this is necessary as OpenSSL can generate these
+     * and the default action is to terminate the app. There's no easy
+     * way of determining the cause of the SIGPIPE (other than using
+     * sigaction() and some mechanism for getting the file descriptor
+     * out of libcurl). However, we expect nothing else to generate a
+     * SIGPIPE, anyway, so may as well just ignore them all.
+     */
+    signal(SIGPIPE, SIG_IGN);
+#endif
+
+    NSLOG(wisp, INFO, "wisp_init: start");
+    /* corestrings init */
+    NSLOG(wisp, INFO, "init corestrings");
+    ret = corestrings_init();
+    if (ret != NSERROR_OK) {
+        NSLOG(wisp, ERROR, "corestrings_init failed (%s)", messages_get_errorcode(ret));
+        return ret;
+    }
+
+    /* Initialize urldb */
+    NSLOG(wisp, INFO, "init urldb");
+    ret = urldb_init();
+    if (ret != NSERROR_OK) {
+        NSLOG(wisp, ERROR, "urldb_init failed (%s)", messages_get_errorcode(ret));
+        return ret;
+    }
+
+    NSLOG(wisp, INFO, "update nscolour");
+    ret = nscolour_update();
+    if (ret != NSERROR_OK) {
+        NSLOG(wisp, ERROR, "nscolour_update failed (%s)", messages_get_errorcode(ret));
+        return ret;
+    }
+
+    /* set up cache limits based on the memory cache size option */
+    NSLOG(wisp, INFO, "init cache params: mem=%d store_path=%s disc_cache_path=%s", nsoption_int(memory_cache_size),
+        store_path ? store_path : "(null)",
+        nsoption_charp(disc_cache_path) ? nsoption_charp(disc_cache_path) : "(null)");
+    hlcache_parameters.llcache.limit = nsoption_int(memory_cache_size);
+
+    if (hlcache_parameters.llcache.limit < MINIMUM_MEMORY_CACHE_SIZE) {
+        hlcache_parameters.llcache.limit = MINIMUM_MEMORY_CACHE_SIZE;
+        NSLOG(wisp, INFO, "Setting minimum memory cache size %" PRIsizet, hlcache_parameters.llcache.limit);
+    }
+
+    /* Set up the max attempts made to fetch a timing out resource */
+    hlcache_parameters.llcache.fetch_attempts = nsoption_uint(max_retried_fetches);
+
+    /* image cache is 25% of total memory cache size */
+    image_cache_parameters.limit = hlcache_parameters.llcache.limit / 4;
+
+    /* image cache hysteresis is 20% of the image cache size */
+    image_cache_parameters.hysteresis = image_cache_parameters.limit / 5;
+
+    /* account for image cache use from total */
+    hlcache_parameters.llcache.limit -= image_cache_parameters.limit;
+
+    /* set backing store target limit */
+    hlcache_parameters.llcache.store.limit = nsoption_uint(disc_cache_size);
+
+    /* set backing store hysterissi to 20% */
+    hlcache_parameters.llcache.store.hysteresis = hlcache_parameters.llcache.store.limit / 5;
+
+    /* set the path to the backing store */
+    hlcache_parameters.llcache.store.path = nsoption_charp(disc_cache_path) ? nsoption_charp(disc_cache_path)
+                                                                            : store_path;
+
+    /* image handler bitmap cache */
+    NSLOG(wisp, INFO, "init image_cache limit %" PRIsizet " hyst %" PRIsizet " speculate %" PRIsizet,
+        image_cache_parameters.limit, image_cache_parameters.hysteresis, image_cache_parameters.speculative_small);
+    ret = image_cache_init(&image_cache_parameters);
+    if (ret != NSERROR_OK) {
+        NSLOG(wisp, ERROR, "image_cache_init failed (%s)", messages_get_errorcode(ret));
+        return ret;
+    }
+
+    /* content handler initialisation */
+    NSLOG(wisp, INFO, "init CSS");
+    ret = nscss_init();
+    if (ret != NSERROR_OK) {
+        NSLOG(wisp, ERROR, "nscss_init failed (%s)", messages_get_errorcode(ret));
+        return ret;
+    }
+
+    NSLOG(wisp, INFO, "init HTML");
+    ret = html_init();
+    if (ret != NSERROR_OK) {
+        NSLOG(wisp, ERROR, "html_init failed (%s)", messages_get_errorcode(ret));
+        return ret;
+    }
+
+    NSLOG(wisp, INFO, "init image handlers");
+    ret = image_init();
+    if (ret != NSERROR_OK) {
+        NSLOG(wisp, ERROR, "image_init failed (%s)", messages_get_errorcode(ret));
+        return ret;
+    }
+
+    NSLOG(wisp, INFO, "init textplain");
+    ret = textplain_init();
+    if (ret != NSERROR_OK) {
+        NSLOG(wisp, ERROR, "textplain_init failed (%s)", messages_get_errorcode(ret));
+        return ret;
+    }
+
+    setlocale(LC_ALL, "");
+
+    /* initialise the fetchers */
+    NSLOG(wisp, INFO, "init fetchers");
+    ret = fetcher_init();
+    if (ret != NSERROR_OK) {
+        NSLOG(wisp, ERROR, "fetcher_init failed (%s)", messages_get_errorcode(ret));
+        return ret;
+    }
+
+    /* Initialise the hlcache and allow it to init the llcache for us */
+    NSLOG(wisp, INFO, "init hlcache: limit %" PRIsizet " store.limit %" PRIsizet " hyst %" PRIsizet " path %s",
+        hlcache_parameters.llcache.limit, hlcache_parameters.llcache.store.limit,
+        hlcache_parameters.llcache.store.hysteresis,
+        hlcache_parameters.llcache.store.path ? hlcache_parameters.llcache.store.path : "(null)");
+    ret = hlcache_initialise(&hlcache_parameters);
+    if (ret != NSERROR_OK) {
+        NSLOG(wisp, ERROR, "hlcache_initialise failed (%s)", messages_get_errorcode(ret));
+        return ret;
+    }
+
+    /* Initialize system colours */
+    NSLOG(wisp, INFO, "init system colours");
+    ret = ns_system_colour_init();
+    if (ret != NSERROR_OK) {
+        NSLOG(wisp, ERROR, "ns_system_colour_init failed (%s)", messages_get_errorcode(ret));
+        return ret;
+    }
+
+    js_initialise();
+    ret = javascript_init();
+    if (ret != NSERROR_OK) {
+        NSLOG(wisp, ERROR, "javascript_init failed (%s)", messages_get_errorcode(ret));
+        return ret;
+    }
+
+    NSLOG(wisp, INFO, "init page-info");
+    ret = page_info_init();
+    if (ret != NSERROR_OK) {
+        NSLOG(wisp, ERROR, "page_info_init failed (%s)", messages_get_errorcode(ret));
+        return ret;
+    }
+
+    NSLOG(wisp, INFO, "wisp_init: success");
+
+    return NSERROR_OK;
+}
+
+
+/**
+ * Clean up components used by gui NetSurf.
+ */
+
+void wisp_exit(void)
+{
+    hlcache_stop();
+
+    NSLOG(wisp, INFO, "Closing GUI");
+    guit->misc->quit();
+
+    NSLOG(wisp, INFO, "Finalising page-info module");
+    page_info_fini();
+
+    NSLOG(wisp, INFO, "Finalising JavaScript");
+    js_finalise();
+
+    NSLOG(wisp, INFO, "Finalising Web Search");
+    search_web_finalise();
+
+    NSLOG(wisp, INFO, "Finalising high-level cache");
+    hlcache_finalise();
+
+    NSLOG(wisp, INFO, "Closing fetches");
+    fetcher_quit();
+    /* Now the fetchers are done, our user-agent string can go */
+    free_user_agent_string();
+
+    /* dump any remaining cache entries */
+    image_cache_fini();
+
+    /* Clean up after content handlers */
+    content_factory_fini();
+
+    NSLOG(wisp, INFO, "Closing utf8");
+    utf8_finalise();
+
+    NSLOG(wisp, INFO, "Destroying URLdb");
+    urldb_destroy();
+
+    NSLOG(wisp, INFO, "Destroying System colours");
+    ns_system_colour_finalize();
+
+    NSLOG(wisp, INFO, "Destroying Messages");
+    messages_destroy();
+
+    corestrings_fini();
+    if (dom_namespace_finalise() != DOM_NO_ERR) {
+        NSLOG(wisp, WARNING, "Unable to finalise DOM namespace strings");
+    }
+    NSLOG(wisp, INFO, "Remaining lwc strings:");
+    unsigned lwc_count = 0;
+    lwc_iterate_strings(wisp_lwc_iterator, &lwc_count);
+    NSLOG(wisp, INFO, "Remaining lwc strings count: %u", lwc_count);
+
+    NSLOG(wisp, INFO, "Exited successfully");
+}

@@ -21,8 +21,8 @@
  * HTML content handler CSS interface.
  */
 
-#ifndef NETSURF_HTML_CSS_H
-#define NETSURF_HTML_CSS_H
+#ifndef WISP_HTML_CSS_H
+#define WISP_HTML_CSS_H
 
 /**
  * Initialise html content css handling.

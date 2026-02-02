@@ -40,8 +40,8 @@
  * dereference (which this current implementation keeps).
  */
 
-#ifndef _NETSURF_UTILS_NSOPTION_H_
-#define _NETSURF_UTILS_NSOPTION_H_
+#ifndef _WISP_UTILS_NSOPTION_H_
+#define _WISP_UTILS_NSOPTION_H_
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -56,7 +56,7 @@
 #define NSOPTION_UINT(NAME, DEFAULT)
 #define NSOPTION_COLOUR(NAME, DEFAULT)
 
-#include <neosurf/desktop/options.h>
+#include <wisp/desktop/options.h>
 #if defined(riscos)
 #include "riscos/options.h"
 #elif defined(nsgtk)
@@ -128,7 +128,7 @@ struct nsoption_s {
 #define NSOPTION_COLOUR(NAME, DEFAULT) NSOPTION_##NAME,
 
 enum nsoption_e {
-#include <neosurf/desktop/options.h>
+#include <wisp/desktop/options.h>
 #if defined(riscos)
 #include "riscos/options.h"
 #elif defined(nsgtk)

@@ -9,9 +9,9 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "neosurf/plotters.h"
-#include "neosurf/types.h"
-#include "neosurf/utils/errors.h"
+#include "wisp/plotters.h"
+#include "wisp/types.h"
+#include "wisp/utils/errors.h"
 
 #include <stdint.h>
 #include <svgtiny.h>

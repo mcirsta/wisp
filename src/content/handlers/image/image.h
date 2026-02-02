@@ -20,10 +20,10 @@
  * Initialisation/finalisation of image handlers.
  */
 
-#ifndef NETSURF_IMAGE_IMAGE_H_
-#define NETSURF_IMAGE_IMAGE_H_
+#ifndef WISP_IMAGE_IMAGE_H_
+#define WISP_IMAGE_IMAGE_H_
 
-#include <neosurf/utils/errors.h>
+#include <wisp/utils/errors.h>
 
 struct bitmap;
 struct content_redraw_data;

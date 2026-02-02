@@ -28,14 +28,14 @@
 #include <libcss/libcss.h>
 #include <libcss/select.h>
 
-#include <neosurf/content/handlers/html/private.h>
-#include <neosurf/content/llcache.h>
-#include <neosurf/desktop/gui_internal.h>
-#include <neosurf/layout.h>
-#include <neosurf/neosurf.h>
-#include <neosurf/utils/errors.h>
-#include <neosurf/utils/log.h>
-#include <neosurf/utils/nsurl.h>
+#include <wisp/content/handlers/html/private.h>
+#include <wisp/content/llcache.h>
+#include <wisp/desktop/gui_internal.h>
+#include <wisp/layout.h>
+#include <wisp/wisp.h>
+#include <wisp/utils/errors.h>
+#include <wisp/utils/log.h>
+#include <wisp/utils/nsurl.h>
 
 #include "content/handlers/html/font_face.h"
 
@@ -78,13 +78,13 @@ extern void html_finish_conversion(struct html_content *htmlc);
 static void check_fonts_done(void)
 {
     if (pending_font_count == 0 && font_done_callback != NULL) {
-        NSLOG(netsurf, INFO, "All font downloads complete, invoking callback");
+        NSLOG(wisp, INFO, "All font downloads complete, invoking callback");
         font_done_callback();
     }
     /* Notify content that fonts are done so it can continue box conversion */
     if (pending_font_count == 0 && font_waiting_content != NULL) {
         struct html_content *c = font_waiting_content;
-        NSLOG(netsurf, INFO, "All fonts loaded, resuming box conversion for %p", c);
+        NSLOG(wisp, INFO, "All fonts loaded, resuming box conversion for %p", c);
         html_finish_conversion(c);
     }
 }
@@ -110,7 +110,7 @@ static void mark_font_loaded(const char *family_name)
         entry->family_name = strdup(family_name);
         entry->next = loaded_fonts;
         loaded_fonts = entry;
-        NSLOG(netsurf, INFO, "Marked font '%s' as loaded", family_name);
+        NSLOG(wisp, INFO, "Marked font '%s' as loaded", family_name);
     }
 }
 
@@ -142,7 +142,7 @@ static nserror font_fetch_callback(llcache_handle *handle, const llcache_event *
 
         data = llcache_handle_get_source_data(handle, &size);
         if (data != NULL && size > 0) {
-            NSLOG(netsurf, INFO, "Font '%s' downloaded (%zu bytes)", dl->family_name, size);
+            NSLOG(wisp, INFO, "Font '%s' downloaded (%zu bytes)", dl->family_name, size);
 
             /* Load the font into the system via frontend table */
             nserror err = NSERROR_NOT_IMPLEMENTED;
@@ -168,7 +168,7 @@ static nserror font_fetch_callback(llcache_handle *handle, const llcache_event *
     }
 
     case LLCACHE_EVENT_ERROR:
-        NSLOG(netsurf, WARNING, "Failed to download font '%s': %s", dl->family_name, event->data.error.msg);
+        NSLOG(wisp, WARNING, "Failed to download font '%s': %s", dl->family_name, event->data.error.msg);
         llcache_handle_release(handle);
         free(dl->family_name);
         dl->family_name = NULL;
@@ -202,7 +202,7 @@ static nserror fetch_font_url(const char *family_name, nsurl *font_url, nsurl *b
     /* Find a free slot */
     dl = find_free_slot();
     if (dl == NULL) {
-        NSLOG(netsurf, WARNING, "No free font download slots");
+        NSLOG(wisp, WARNING, "No free font download slots");
         return NSERROR_NOMEM;
     }
 
@@ -213,7 +213,7 @@ static nserror fetch_font_url(const char *family_name, nsurl *font_url, nsurl *b
     }
     dl->in_use = true;
 
-    NSLOG(netsurf, INFO, "Fetching font '%s' from %s", family_name, nsurl_access(font_url));
+    NSLOG(wisp, INFO, "Fetching font '%s' from %s", family_name, nsurl_access(font_url));
 
     /* Start the fetch using llcache (raw bytes, no content handler needed)
      */
@@ -255,7 +255,7 @@ nserror html_font_face_process(const css_font_face *font_face, const char *base_
 
     /* Check if already loaded */
     if (html_font_face_is_available(family_name)) {
-        NSLOG(netsurf, DEBUG, "Font '%s' already available", family_name);
+        NSLOG(wisp, DEBUG, "Font '%s' already available", family_name);
         return NSERROR_OK;
     }
 
@@ -327,7 +327,7 @@ nserror html_font_face_init(struct html_content *c, css_select_ctx *select_ctx)
     font_waiting_content = c;
     (void)select_ctx;
 
-    NSLOG(netsurf, INFO, "Font-face system initialized for content %p", c);
+    NSLOG(wisp, INFO, "Font-face system initialized for content %p", c);
     return NSERROR_OK;
 }
 

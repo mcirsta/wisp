@@ -15,8 +15,8 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-#ifndef NETSURF_GTK_MENU_H_
-#define NETSURF_GTK_MENU_H_
+#ifndef WISP_GTK_MENU_H_
+#define WISP_GTK_MENU_H_
 
 #include <gtk/gtk.h>
 

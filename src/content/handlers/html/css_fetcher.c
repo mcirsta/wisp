@@ -29,17 +29,17 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <neosurf/content/fetch.h>
-#include <neosurf/utils/config.h>
-#include <neosurf/utils/corestrings.h>
-#include <neosurf/utils/log.h>
-#include <neosurf/utils/nsurl.h>
-#include <neosurf/utils/utils.h>
+#include <wisp/content/fetch.h>
+#include <wisp/utils/config.h>
+#include <wisp/utils/corestrings.h>
+#include <wisp/utils/log.h>
+#include <wisp/utils/nsurl.h>
+#include <wisp/utils/utils.h>
 #include "utils/ring.h"
 #include "content/fetchers.h"
-#include <neosurf/ns_inttypes.h>
+#include <wisp/ns_inttypes.h>
 
-#include <neosurf/content/handlers/html/private.h>
+#include <wisp/content/handlers/html/private.h>
 
 typedef struct html_css_fetcher_item {
     uint32_t key;
@@ -67,13 +67,13 @@ static html_css_fetcher_context *ring = NULL;
 
 static bool html_css_fetcher_initialise(lwc_string *scheme)
 {
-    NSLOG(neosurf, INFO, "html_css_fetcher_initialise called for %s", lwc_string_data(scheme));
+    NSLOG(wisp, INFO, "html_css_fetcher_initialise called for %s", lwc_string_data(scheme));
     return true;
 }
 
 static void html_css_fetcher_finalise(lwc_string *scheme)
 {
-    NSLOG(neosurf, INFO, "html_css_fetcher_finalise called for %s", lwc_string_data(scheme));
+    NSLOG(wisp, INFO, "html_css_fetcher_finalise called for %s", lwc_string_data(scheme));
 }
 
 static bool html_css_fetcher_can_fetch(const nsurl *url)
@@ -245,7 +245,7 @@ static void html_css_fetcher_poll(lwc_string *scheme)
                 html_css_fetcher_send_callback(&msg, c);
             }
         } else {
-            NSLOG(neosurf, INFO, "Processing of %s failed!", nsurl_access(c->url));
+            NSLOG(wisp, INFO, "Processing of %s failed!", nsurl_access(c->url));
 
             /* Ensure that we're unlocked here. If we aren't,
              * then html_css_fetcher_process() is broken.

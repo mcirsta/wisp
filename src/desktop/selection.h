@@ -20,10 +20,10 @@
  * Text selection within browser windows (interface).
  */
 
-#ifndef NETSURF_DESKTOP_SELECTION_H_
-#define NETSURF_DESKTOP_SELECTION_H_
+#ifndef WISP_DESKTOP_SELECTION_H_
+#define WISP_DESKTOP_SELECTION_H_
 
-#include "neosurf/mouse.h"
+#include "wisp/mouse.h"
 #include <stdbool.h>
 
 struct box;

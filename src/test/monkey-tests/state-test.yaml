@@ -27,7 +27,7 @@ steps:
   match: LOCAL
 - action: navigate
   window: win1
-  url: http://test.netsurf-browser.org/html/trivial-document.html
+  url: http://test.wisp-browser.org/html/trivial-document.html
 - action: block
   conditions:
   - window: win1
@@ -37,7 +37,7 @@ steps:
   match: INSECURE
 - action: navigate
   window: win1
-  url: https://test.netsurf-browser.org/html/trivial-document.html
+  url: https://test.wisp-browser.org/html/trivial-document.html
 - action: block
   conditions:
   - window: win1
@@ -47,7 +47,7 @@ steps:
   match: SECURE
 - action: navigate
   window: win1
-  url: https://test.netsurf-browser.org/html/trivial-document-with-png.html
+  url: https://test.wisp-browser.org/html/trivial-document-with-png.html
 - action: block
   conditions:
   - window: win1
@@ -57,7 +57,7 @@ steps:
   match: SECURE
 - action: navigate
   window: win1
-  url: https://test.netsurf-browser.org/html/trivial-document-with-http-png.html
+  url: https://test.wisp-browser.org/html/trivial-document-with-http-png.html
 - action: block
   conditions:
   - window: win1

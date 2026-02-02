@@ -29,27 +29,27 @@
 #include <string.h>
 #include <strings.h>
 
-#include <neosurf/browser.h>
-#include <neosurf/content.h>
-#include <neosurf/content/handlers/css/utils.h>
-#include <neosurf/content/hlcache.h>
-#include <neosurf/desktop/gui_internal.h>
-#include <neosurf/misc.h>
-#include <neosurf/utils/config.h>
-#include <neosurf/utils/corestrings.h>
-#include <neosurf/utils/log.h>
-#include <neosurf/utils/nsoption.h>
+#include <wisp/browser.h>
+#include <wisp/content.h>
+#include <wisp/content/handlers/css/utils.h>
+#include <wisp/content/hlcache.h>
+#include <wisp/desktop/gui_internal.h>
+#include <wisp/misc.h>
+#include <wisp/utils/config.h>
+#include <wisp/utils/corestrings.h>
+#include <wisp/utils/log.h>
+#include <wisp/utils/nsoption.h>
 #include "desktop/scrollbar.h"
 
-#include <neosurf/content/handlers/html/box.h>
-#include <neosurf/content/handlers/html/box_inspect.h>
-#include <neosurf/content/handlers/html/html.h>
-#include <neosurf/content/handlers/html/interaction.h>
-#include <neosurf/content/handlers/html/private.h>
+#include <wisp/content/handlers/html/box.h>
+#include <wisp/content/handlers/html/box_inspect.h>
+#include <wisp/content/handlers/html/html.h>
+#include <wisp/content/handlers/html/interaction.h>
+#include <wisp/content/handlers/html/private.h>
 #include "content/handlers/html/object.h"
 
 /* Performance tracing - enable via CMake: -DNEOSURF_ENABLE_PERF_TRACE=ON */
-#include <neosurf/utils/perf.h>
+#include <wisp/utils/perf.h>
 
 /* break reference loop */
 static void html_object_refresh(void *p);
@@ -207,7 +207,7 @@ static nserror html_object_callback(hlcache_handle *object, const hlcache_event 
             /* Incremental reflow on READY - disabled by default for performance.
              * Enable via CMake: -DNEOSURF_ENABLE_INCREMENTAL_REFLOW=ON
              */
-#ifdef NEOSURF_ENABLE_INCREMENTAL_REFLOW
+#ifdef WISP_ENABLE_INCREMENTAL_REFLOW
             if (c->base.status == CONTENT_STATUS_READY || c->base.status == CONTENT_STATUS_DONE) {
                 uint64_t ms_now;
                 nsu_getmonotonic_ms(&ms_now);
@@ -227,13 +227,13 @@ static nserror html_object_callback(hlcache_handle *object, const hlcache_event 
     case CONTENT_MSG_DONE:
         PERF("Object DONE (remaining=%d)", c->base.active - 1);
         if (c->base.active == 0) {
-            NSLOG(neosurf, CRITICAL,
+            NSLOG(wisp, CRITICAL,
                 "ACTIVE UNDERFLOW! object_cb DONE decrement when 0 "
                 "[content=%p object=%p]",
                 c, object);
         }
         c->base.active--;
-        NSLOG(neosurf, INFO, "%d fetches active (scripts_active=%d)", c->base.active, c->scripts_active);
+        NSLOG(wisp, INFO, "%d fetches active (scripts_active=%d)", c->base.active, c->scripts_active);
 
         html_object_done(box, object, o->background);
 
@@ -259,7 +259,7 @@ static nserror html_object_callback(hlcache_handle *object, const hlcache_event 
 
             /* Dynamic-size images need dimension updates via reformat, not just redraw */
             if (!(box->flags & REPLACE_DIM)) {
-#ifdef NEOSURF_ENABLE_INCREMENTAL_REFLOW
+#ifdef WISP_ENABLE_INCREMENTAL_REFLOW
                 /*
                  * Incremental reflow: trigger immediate reformat
                  * to pick up the new intrinsic dimensions.
@@ -291,13 +291,13 @@ static nserror html_object_callback(hlcache_handle *object, const hlcache_event 
         o->content = NULL;
 
         if (c->base.active == 0) {
-            NSLOG(neosurf, CRITICAL,
+            NSLOG(wisp, CRITICAL,
                 "ACTIVE UNDERFLOW! object_cb ERROR decrement when 0 "
                 "[content=%p object=%p]",
                 c, object);
         }
         c->base.active--;
-        NSLOG(neosurf, INFO, "%d fetches active", c->base.active);
+        NSLOG(wisp, INFO, "%d fetches active", c->base.active);
 
         html_object_failed(box, c, o->background);
 
@@ -330,7 +330,7 @@ static nserror html_object_callback(hlcache_handle *object, const hlcache_event 
 
                 w = content_get_width(box->background);
                 h = content_get_height(box->background);
-#ifdef NEOSURF_DEVICE_PIXEL_LAYOUT
+#ifdef WISP_DEVICE_PIXEL_LAYOUT
                 {
                     int dpi = browser_get_dpi();
                     if (dpi > 0 && dpi != 96) {
@@ -389,7 +389,7 @@ static nserror html_object_callback(hlcache_handle *object, const hlcache_event 
                 /* Non-background case */
                 int w = content_get_width(object);
                 int h = content_get_height(object);
-#ifdef NEOSURF_DEVICE_PIXEL_LAYOUT
+#ifdef WISP_DEVICE_PIXEL_LAYOUT
                 {
                     int dpi = browser_get_dpi();
                     if (dpi > 0 && dpi != 96) {
@@ -550,7 +550,7 @@ static nserror html_object_callback(hlcache_handle *object, const hlcache_event 
      * When disabled, only one final reformat occurs after all downloads complete.
      * Enable via CMake: -DNEOSURF_ENABLE_INCREMENTAL_REFLOW=ON
      */
-#ifdef NEOSURF_ENABLE_INCREMENTAL_REFLOW
+#ifdef WISP_ENABLE_INCREMENTAL_REFLOW
     else if (event->type == CONTENT_MSG_DONE && box != NULL && !(box->flags & REPLACE_DIM)) {
 
         /* 1) an object is newly fetched & converted,
@@ -606,7 +606,7 @@ static bool html_replace_object(struct content_html_object *object, nsurl *url)
         /* remove existing object */
         if (content_get_status(object->content) != CONTENT_STATUS_DONE) {
             c->base.active--;
-            NSLOG(neosurf, INFO, "%d fetches active", c->base.active);
+            NSLOG(wisp, INFO, "%d fetches active", c->base.active);
         }
 
         hlcache_handle_release(object->content);
@@ -622,7 +622,7 @@ static bool html_replace_object(struct content_html_object *object, nsurl *url)
      */
     for (page = c; page != NULL; page = page->page) {
         page->base.active++;
-        NSLOG(neosurf, INFO, "%d fetches active (pre-retrieve)", page->base.active);
+        NSLOG(wisp, INFO, "%d fetches active (pre-retrieve)", page->base.active);
         page->base.status = CONTENT_STATUS_READY;
     }
 
@@ -634,7 +634,7 @@ static bool html_replace_object(struct content_html_object *object, nsurl *url)
         /* Decrement the counters we just incremented */
         for (page = c; page != NULL; page = page->page) {
             page->base.active--;
-            NSLOG(neosurf, INFO, "%d fetches active (retrieve failed)", page->base.active);
+            NSLOG(wisp, INFO, "%d fetches active (retrieve failed)", page->base.active);
         }
         return false;
     }
@@ -715,7 +715,7 @@ nserror html_object_abort_objects(html_content *htmlc)
             object->content = NULL;
             if (object->box != NULL) {
                 htmlc->base.active--;
-                NSLOG(neosurf, INFO, "%d fetches active", htmlc->base.active);
+                NSLOG(wisp, INFO, "%d fetches active", htmlc->base.active);
             }
             break;
         }
@@ -756,7 +756,7 @@ nserror html_object_free_objects(html_content *html)
         struct content_html_object *victim = html->object_list;
 
         if (victim->content != NULL) {
-            NSLOG(neosurf, INFO, "object %p", victim->content);
+            NSLOG(wisp, INFO, "object %p", victim->content);
 
             if (content_get_type(victim->content) == CONTENT_HTML) {
                 guit->misc->schedule(-1, html_object_refresh, victim);
@@ -814,7 +814,7 @@ bool html_fetch_object(html_content *c, nsurl *url, struct box *box, content_typ
      */
     if (box != NULL) {
         c->base.active++;
-        NSLOG(neosurf, INFO, "%d fetches active (pre-retrieve)", c->base.active);
+        NSLOG(wisp, INFO, "%d fetches active (pre-retrieve)", c->base.active);
     }
 
     error = hlcache_handle_retrieve(url, HLCACHE_RETRIEVE_SNIFF_TYPE, content_get_url(&c->base), NULL, object_callback,
@@ -822,7 +822,7 @@ bool html_fetch_object(html_content *c, nsurl *url, struct box *box, content_typ
     if (error != NSERROR_OK) {
         if (box != NULL) {
             c->base.active--;
-            NSLOG(neosurf, INFO, "%d fetches active (retrieve failed)", c->base.active);
+            NSLOG(wisp, INFO, "%d fetches active (retrieve failed)", c->base.active);
         }
         free(object);
         return error != NSERROR_NOMEM;

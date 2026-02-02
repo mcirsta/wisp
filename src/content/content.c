@@ -26,17 +26,17 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <neosurf/utils/corestrings.h>
-#include <neosurf/utils/log.h>
-#include <neosurf/utils/messages.h>
+#include <wisp/utils/corestrings.h>
+#include <wisp/utils/log.h>
+#include <wisp/utils/messages.h>
 #include "desktop/knockout.h"
-#include "neosurf/bitmap.h"
-#include "neosurf/browser_window.h"
-#include "neosurf/content.h"
-#include <neosurf/ns_inttypes.h>
+#include "wisp/bitmap.h"
+#include "wisp/browser_window.h"
+#include "wisp/content.h"
+#include <wisp/ns_inttypes.h>
 
-#include <neosurf/content/content_protected.h>
-#include <neosurf/content/hlcache.h>
+#include <wisp/content/content_protected.h>
+#include <wisp/content/hlcache.h>
 #include "content/content_debug.h"
 #include "content/textsearch.h"
 #include "content/urldb.h"
@@ -70,7 +70,7 @@ static void content_convert(struct content *c)
     if (c->locked == true)
         return;
 
-    NSLOG(neosurf, INFO, "content " URL_FMT_SPC " (%p)", nsurl_access_log(llcache_handle_get_url(c->llcache)), c);
+    NSLOG(wisp, INFO, "content " URL_FMT_SPC " (%p)", nsurl_access_log(llcache_handle_get_url(c->llcache)), c);
 
     if (c->handler->data_complete != NULL) {
         c->locked = true;
@@ -130,13 +130,13 @@ static nserror content_llcache_callback(llcache_handle *llcache, const llcache_e
     case LLCACHE_EVENT_ERROR:
         /** \todo Error page? */
         c->status = CONTENT_STATUS_ERROR;
-        NSLOG(neosurf, INFO, "LLCACHE_EVENT_ERROR in content. Code: %d, Msg: %s", event->data.error.code,
+        NSLOG(wisp, INFO, "LLCACHE_EVENT_ERROR in content. Code: %d, Msg: %s", event->data.error.code,
             event->data.error.msg);
         msg_data.errordata.errorcode = event->data.error.code;
         /* DEBUG: Log if we see NSERROR_OK here, because this is where
          * "Fetch error: OK" likely originates. */
         if (msg_data.errordata.errorcode == NSERROR_OK) {
-            NSLOG(neosurf, ERROR,
+            NSLOG(wisp, ERROR,
                 "CONTENT_LLCACHE_CALLBACK: Received LLCACHE_EVENT_ERROR with NSERROR_OK from llcache %p", llcache);
         }
         msg_data.errordata.errormsg = event->data.error.msg;
@@ -183,7 +183,7 @@ nserror content__init(struct content *c, const content_handler *handler, lwc_str
     struct content_user *user_sentinel;
     nserror error;
 
-    NSLOG(neosurf, INFO, "url " URL_FMT_SPC " -> %p", nsurl_access_log(llcache_handle_get_url(llcache)), c);
+    NSLOG(wisp, INFO, "url " URL_FMT_SPC " -> %p", nsurl_access_log(llcache_handle_get_url(llcache)), c);
 
     user_sentinel = calloc(1, sizeof(struct content_user));
     if (user_sentinel == NULL) {
@@ -342,7 +342,7 @@ void content_destroy(struct content *c)
     struct content_rfc5988_link *link;
 
     assert(c);
-    NSLOG(neosurf, INFO, "content %p %s", c, nsurl_access_log(llcache_handle_get_url(c->llcache)));
+    NSLOG(wisp, INFO, "content %p %s", c, nsurl_access_log(llcache_handle_get_url(c->llcache)));
     assert(c->locked == false);
 
     if (c->handler->destroy != NULL)
@@ -456,13 +456,13 @@ bool content_exec(struct hlcache_handle *h, const char *src, size_t srclen)
 
     if (c->locked) {
         /* Not safe to do stuff */
-        NSLOG(neosurf, DEEPDEBUG, "Unable to exec, content locked");
+        NSLOG(wisp, DEEPDEBUG, "Unable to exec, content locked");
         return false;
     }
 
     if (c->handler->exec == NULL) {
         /* Can't exec something on this content */
-        NSLOG(neosurf, DEEPDEBUG, "Unable to exec, no exec function");
+        NSLOG(wisp, DEEPDEBUG, "Unable to exec, no exec function");
         return false;
     }
 
@@ -558,7 +558,7 @@ bool content_scaled_redraw(struct hlcache_handle *h, int width, int height, cons
         return true;
     }
 
-    NSLOG(neosurf, INFO, "Content %p %dx%d ctx:%p", c, width, height, ctx);
+    NSLOG(wisp, INFO, "Content %p %dx%d ctx:%p", c, width, height, ctx);
 
     if (ctx->plot->option_knockout) {
         knockout_plot_start(ctx, &new_ctx);
@@ -614,7 +614,7 @@ bool content_add_user(struct content *c,
 {
     struct content_user *user;
 
-    NSLOG(neosurf, INFO, "content " URL_FMT_SPC " (%p), user %p %p",
+    NSLOG(wisp, INFO, "content " URL_FMT_SPC " (%p), user %p %p",
         nsurl_access_log(llcache_handle_get_url(c->llcache)), c, callback, pw);
     user = malloc(sizeof(struct content_user));
     if (!user)
@@ -636,7 +636,7 @@ void content_remove_user(struct content *c,
     void (*callback)(struct content *c, content_msg msg, const union content_msg_data *data, void *pw), void *pw)
 {
     struct content_user *user, *next;
-    NSLOG(neosurf, INFO, "content " URL_FMT_SPC " (%p), user %p %p",
+    NSLOG(wisp, INFO, "content " URL_FMT_SPC " (%p), user %p %p",
         nsurl_access_log(llcache_handle_get_url(c->llcache)), c, callback, pw);
 
     /* user_list starts with a sentinel */
@@ -644,7 +644,7 @@ void content_remove_user(struct content *c,
         user = user->next)
         ;
     if (user->next == 0) {
-        NSLOG(neosurf, INFO, "user not found in list");
+        NSLOG(wisp, INFO, "user not found in list");
         assert(0);
         return;
     }
@@ -703,7 +703,7 @@ void content_broadcast(struct content *c, content_msg msg, const union content_m
 
     if (msg == CONTENT_MSG_ERROR && data != NULL) {
         if (data->errordata.errorcode == NSERROR_OK) {
-            NSLOG(neosurf, ERROR,
+            NSLOG(wisp, ERROR,
                 "content_broadcast: CONTENT_MSG_ERROR with NSERROR_OK! Forcing NSERROR_UNKNOWN. Content: %p", c);
             safe_data = *data;
             safe_data.errordata.errorcode = NSERROR_UNKNOWN;
@@ -711,7 +711,7 @@ void content_broadcast(struct content *c, content_msg msg, const union content_m
         }
     }
 
-    NSLOG(neosurf, DEEPDEBUG, "%p -> msg:%d", c, msg);
+    NSLOG(wisp, DEEPDEBUG, "%p -> msg:%d", c, msg);
     for (user = c->user_list->next; user != 0; user = next) {
         next = user->next; /* user may be destroyed during callback */
         if (user->callback != 0)
@@ -730,7 +730,7 @@ void content_broadcast_error(struct content *c, nserror errorcode, const char *m
 
     if (errorcode == NSERROR_OK) {
         NSLOG(
-            neosurf, ERROR, "content_broadcast_error: Called with NSERROR_OK! Forcing NSERROR_UNKNOWN. Content: %p", c);
+            wisp, ERROR, "content_broadcast_error: Called with NSERROR_OK! Forcing NSERROR_UNKNOWN. Content: %p", c);
         errorcode = NSERROR_UNKNOWN;
     }
 
@@ -754,7 +754,7 @@ nserror content_open(hlcache_handle *h, struct browser_window *bw, struct conten
 
     c = hlcache_handle_get_content(h);
     assert(c != 0);
-    NSLOG(neosurf, INFO, "content %p %s", c, nsurl_access_log(llcache_handle_get_url(c->llcache)));
+    NSLOG(wisp, INFO, "content %p %s", c, nsurl_access_log(llcache_handle_get_url(c->llcache)));
     if (c->handler->open != NULL) {
         res = c->handler->open(c, bw, page, params);
     } else {
@@ -780,7 +780,7 @@ nserror content_close(hlcache_handle *h)
         return NSERROR_INVALID;
     }
 
-    NSLOG(neosurf, INFO, "content %p %s", c, nsurl_access_log(llcache_handle_get_url(c->llcache)));
+    NSLOG(wisp, INFO, "content %p %s", c, nsurl_access_log(llcache_handle_get_url(c->llcache)));
 
     if (c->textsearch.context != NULL) {
         content_textsearch_destroy(c->textsearch.context);
@@ -1378,7 +1378,7 @@ nserror content__clone(const struct content *c, struct content *nc)
 /* exported interface documented in content/content.h */
 nserror content_abort(struct content *c)
 {
-    NSLOG(neosurf, INFO, "Aborting %p", c);
+    NSLOG(wisp, INFO, "Aborting %p", c);
 
     if (c->handler->stop != NULL)
         c->handler->stop(c);

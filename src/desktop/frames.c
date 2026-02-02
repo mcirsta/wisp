@@ -29,13 +29,13 @@
 #include <string.h>
 #include <time.h>
 
-#include <neosurf/content/handlers/html/box.h>
-#include <neosurf/content/handlers/html/box_inspect.h>
-#include <neosurf/content/handlers/html/html.h>
-#include <neosurf/content/hlcache.h>
-#include <neosurf/utils/log.h>
-#include <neosurf/utils/utils.h>
-#include "neosurf/content.h"
+#include <wisp/content/handlers/html/box.h>
+#include <wisp/content/handlers/html/box_inspect.h>
+#include <wisp/content/handlers/html/html.h>
+#include <wisp/content/hlcache.h>
+#include <wisp/utils/log.h>
+#include <wisp/utils/utils.h>
+#include "wisp/content.h"
 
 #include "desktop/browser_private.h"
 #include "desktop/frames.h"
@@ -586,9 +586,9 @@ static nserror browser_window_create_frameset_internal(struct browser_window *bw
             window->parent = bw;
 
             if (window->name)
-                NSLOG(neosurf, INFO, "Created frame '%s'", window->name);
+                NSLOG(wisp, INFO, "Created frame '%s'", window->name);
             else
-                NSLOG(neosurf, INFO, "Created frame (unnamed)");
+                NSLOG(wisp, INFO, "Created frame (unnamed)");
         }
     }
 

@@ -23,13 +23,13 @@
 
 #include <stdio.h>
 
-#include "neosurf/utils/config.h"
+#include "wisp/utils/config.h"
 
 #include <windows.h>
 
-#include "neosurf/desktop/version.h"
-#include "neosurf/utils/log.h"
-#include "neosurf/utils/messages.h"
+#include "wisp/desktop/version.h"
+#include "wisp/utils/log.h"
+#include "wisp/utils/messages.h"
 
 #include "windows/about.h"
 #include "windows/gui.h"
@@ -53,12 +53,12 @@ static BOOL init_about_dialog(HWND hwnd)
         hFont = CreateFont(26, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE, ANSI_CHARSET, OUT_DEFAULT_PRECIS,
             CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY, DEFAULT_PITCH | FF_SWISS, "Arial");
         if (hFont != NULL) {
-            NSLOG(neosurf, INFO, "Setting font object");
+            NSLOG(wisp, INFO, "Setting font object");
             SendMessage(dlg_itm, WM_SETFONT, (WPARAM)hFont, 0);
         }
 
-        snprintf(ver_str, sizeof(ver_str), "%s %d.%d", messages_get("NeoSurf"), neosurf_version_major,
-            neosurf_version_minor);
+        snprintf(ver_str, sizeof(ver_str), "%s %d.%d", messages_get("Wisp"), wisp_version_major,
+            wisp_version_minor);
 
         SendMessage(dlg_itm, WM_SETTEXT, 0, (LPARAM)ver_str);
     }
@@ -85,7 +85,7 @@ static BOOL destroy_about_dialog(HWND hwnd)
     if (dlg_itm != NULL) {
         hFont = (HFONT)SendMessage(dlg_itm, WM_GETFONT, 0, 0);
         if (hFont != NULL) {
-            NSLOG(neosurf, INFO, "Destroyed font object");
+            NSLOG(wisp, INFO, "Destroyed font object");
             DeleteObject(hFont);
         }
     }
@@ -105,12 +105,12 @@ static INT_PTR CALLBACK nsws_about_event_callback(HWND hwnd, UINT msg, WPARAM wp
     case WM_COMMAND:
         switch (LOWORD(wparam)) {
         case IDOK:
-            NSLOG(neosurf, INFO, "OK clicked");
+            NSLOG(wisp, INFO, "OK clicked");
             EndDialog(hwnd, IDOK);
             break;
 
         case IDCANCEL:
-            NSLOG(neosurf, INFO, "Cancel clicked");
+            NSLOG(wisp, INFO, "Cancel clicked");
             EndDialog(hwnd, IDOK);
             break;
 

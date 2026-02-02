@@ -16,8 +16,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef _NEOSURF_WINDOWS_PREFS_H_
-#define _NEOSURF_WINDOWS_PREFS_H_
+#ifndef _WISP_WINDOWS_PREFS_H_
+#define _WISP_WINDOWS_PREFS_H_
 
 /**
  * open the preferences dialog and respond to user.

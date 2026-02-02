@@ -33,8 +33,8 @@
 #include <curl/curl.h>
 #endif
 
-#include <neosurf/utils/ascii.h>
-#include <neosurf/utils/errors.h>
+#include <wisp/utils/ascii.h>
+#include <wisp/utils/errors.h>
 #include "utils/time.h"
 
 

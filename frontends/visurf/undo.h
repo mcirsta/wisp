@@ -1,5 +1,5 @@
-#ifndef NETSURF_VI_UNDO_H
-#define NETSURF_VI_UNDO_H
+#ifndef WISP_VI_UNDO_H
+#define WISP_VI_UNDO_H
 
 #include "visurf/visurf.h"
 

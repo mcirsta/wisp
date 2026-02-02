@@ -33,11 +33,11 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <neosurf/utils/config.h>
-#include <neosurf/utils/errors.h>
-#include <neosurf/utils/nsurl.h>
-#include <neosurf/utils/utils.h>
-#include <neosurf/ns_inttypes.h>
+#include <wisp/utils/config.h>
+#include <wisp/utils/errors.h>
+#include <wisp/utils/nsurl.h>
+#include <wisp/utils/utils.h>
+#include <wisp/ns_inttypes.h>
 
 #include "chart.h"
 #include "private.h"

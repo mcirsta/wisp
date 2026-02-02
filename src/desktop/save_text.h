@@ -21,8 +21,8 @@
  * Text export of HTML (interface).
  */
 
-#ifndef _NETSURF_DESKTOP_SAVE_TEXT_H_
-#define _NETSURF_DESKTOP_SAVE_TEXT_H_
+#ifndef _WISP_DESKTOP_SAVE_TEXT_H_
+#define _WISP_DESKTOP_SAVE_TEXT_H_
 
 struct box;
 struct hlcache_handle;

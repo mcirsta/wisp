@@ -64,7 +64,7 @@ const struct font_functions haru_nsfont = {haru_nsfont_width, haru_nsfont_positi
  */
 static void error_handler(HPDF_STATUS error_no, HPDF_STATUS detail_no, void *user_data)
 {
-    NSLOG(netsurf, INFO, "ERROR: in font_haru \n\terror_no=%x\n\tdetail_no=%d\n", (HPDF_UINT)error_no,
+    NSLOG(wisp, INFO, "ERROR: in font_haru \n\terror_no=%x\n\tdetail_no=%d\n", (HPDF_UINT)error_no,
         (HPDF_UINT)detail_no);
 #ifdef FONT_HARU_DEBUG
     exit(1);
@@ -131,7 +131,7 @@ bool haru_nsfont_width(const plot_font_style_t *fstyle, const char *string, size
     *width = width_real;
 
 #ifdef FONT_HARU_DEBUG
-    NSLOG(netsurf, INFO, "Measuring string: %s ; Calculated width: %f %i", string_nt, width_real, *width);
+    NSLOG(wisp, INFO, "Measuring string: %s ; Calculated width: %f %i", string_nt, width_real, *width);
 #endif
     free(string_nt);
     HPDF_Free(pdf);
@@ -186,7 +186,7 @@ bool haru_nsfont_position_in_string(
     *actual_x = real_width;
 
 #ifdef FONT_HARU_DEBUG
-    NSLOG(netsurf, INFO, "Position in string: %s at x: %i; Calculated position: %i", string_nt, x, *char_offset);
+    NSLOG(wisp, INFO, "Position in string: %s at x: %i; Calculated position: %i", string_nt, x, *char_offset);
 #endif
     free(string_nt);
     HPDF_Free(pdf);
@@ -228,7 +228,7 @@ bool haru_nsfont_split(
     offset = HPDF_Page_MeasureText(page, string_nt, x, HPDF_TRUE, &real_width);
 
 #ifdef FONT_HARU_DEBUG
-    NSLOG(netsurf, INFO, "Splitting string: %s for width: %i ; Calculated position: %i Calculated real_width: %f",
+    NSLOG(wisp, INFO, "Splitting string: %s for width: %i ; Calculated position: %i Calculated real_width: %f",
         string_nt, x, *char_offset, real_width);
 #endif
     *char_offset = offset - 1;
@@ -309,7 +309,7 @@ bool haru_nsfont_apply_style(
         strcat(font_name, "-Roman");
 
 #ifdef FONT_HARU_DEBUG
-    NSLOG(netsurf, INFO, "Setting font: %s", font_name);
+    NSLOG(wisp, INFO, "Setting font: %s", font_name);
 #endif
 
     size = fstyle->size;

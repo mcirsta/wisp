@@ -21,8 +21,8 @@
  * \brief core web search facilities interface.
  */
 
-#ifndef _NETSURF_DESKTOP_SEARCH_WEB_H_
-#define _NETSURF_DESKTOP_SEARCH_WEB_H_
+#ifndef _WISP_DESKTOP_SEARCH_WEB_H_
+#define _WISP_DESKTOP_SEARCH_WEB_H_
 
 struct bitmap;
 struct nsurl;

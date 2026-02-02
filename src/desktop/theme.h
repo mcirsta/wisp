@@ -20,8 +20,8 @@
  * GUI Themeing interface.
  */
 
-#ifndef _NETSURF_DESKTOP_THEME_H_
-#define _NETSURF_DESKTOP_THEME_H_
+#ifndef _WISP_DESKTOP_THEME_H_
+#define _WISP_DESKTOP_THEME_H_
 
 /* In platform specific theme_install.c. */
 

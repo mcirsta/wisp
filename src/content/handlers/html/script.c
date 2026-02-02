@@ -29,26 +29,26 @@
 #include <string.h>
 #include <strings.h>
 
-#include <neosurf/content.h>
-#include <neosurf/content/content_protected.h>
-#include <neosurf/content/fetch.h>
-#include <neosurf/content/hlcache.h>
-#include <neosurf/desktop/gui_internal.h>
-#include <neosurf/misc.h>
-#include <neosurf/utils/config.h>
-#include <neosurf/utils/corestrings.h>
-#include <neosurf/utils/log.h>
-#include <neosurf/utils/messages.h>
+#include <wisp/content.h>
+#include <wisp/content/content_protected.h>
+#include <wisp/content/fetch.h>
+#include <wisp/content/hlcache.h>
+#include <wisp/desktop/gui_internal.h>
+#include <wisp/misc.h>
+#include <wisp/utils/config.h>
+#include <wisp/utils/corestrings.h>
+#include <wisp/utils/log.h>
+#include <wisp/utils/messages.h>
 #include "content/content_factory.h"
 #include "content/handlers/javascript/js.h"
 
-#include <neosurf/content/handlers/html/html.h>
-#include <neosurf/content/handlers/html/private.h>
+#include <wisp/content/handlers/html/html.h>
+#include <wisp/content/handlers/html/private.h>
 
 #include <nsutils/time.h>
 
 /* Performance tracing - enable via CMake: -DNEOSURF_ENABLE_PERF_TRACE=ON */
-#include <neosurf/utils/perf.h>
+#include <wisp/utils/perf.h>
 
 typedef bool(script_handler_t)(struct jsthread *jsthread, const uint8_t *data, size_t size, const char *name);
 
@@ -183,34 +183,34 @@ static nserror convert_script_async_cb(hlcache_handle *script, const hlcache_eve
     case CONTENT_MSG_DONE:
         PERF("SCRIPT ASYNC DONE %d '%s' (active=%d)", i, nsurl_access(hlcache_handle_get_url(script)),
             parent->base.active - 1);
-        NSLOG(neosurf, INFO, "script %d done '%s'", i, nsurl_access(hlcache_handle_get_url(script)));
+        NSLOG(wisp, INFO, "script %d done '%s'", i, nsurl_access(hlcache_handle_get_url(script)));
         if (parent->base.active == 0) {
-            NSLOG(neosurf, CRITICAL,
+            NSLOG(wisp, CRITICAL,
                 "ACTIVE UNDERFLOW! async_cb DONE decrement when 0 "
                 "[content=%p script=%s]",
                 parent, nsurl_access(hlcache_handle_get_url(script)));
         }
         parent->base.active--;
         parent->scripts_active--;
-        NSLOG(neosurf, INFO, "%d fetches active", parent->base.active);
+        NSLOG(wisp, INFO, "%d fetches active", parent->base.active);
 
         break;
 
     case CONTENT_MSG_ERROR:
-        NSLOG(neosurf, INFO, "script %s failed: %s", nsurl_access(hlcache_handle_get_url(script)),
+        NSLOG(wisp, INFO, "script %s failed: %s", nsurl_access(hlcache_handle_get_url(script)),
             event->data.errordata.errormsg);
 
         hlcache_handle_release(script);
         s->data.handle = NULL;
         if (parent->base.active == 0) {
-            NSLOG(neosurf, CRITICAL,
+            NSLOG(wisp, CRITICAL,
                 "ACTIVE UNDERFLOW! async_cb ERROR decrement when 0 "
                 "[content=%p script=%s]",
                 parent, nsurl_access(hlcache_handle_get_url(script)));
         }
         parent->base.active--;
         parent->scripts_active--;
-        NSLOG(neosurf, INFO, "%d fetches active", parent->base.active);
+        NSLOG(wisp, INFO, "%d fetches active", parent->base.active);
 
         break;
 
@@ -257,34 +257,34 @@ static nserror convert_script_defer_cb(hlcache_handle *script, const hlcache_eve
     case CONTENT_MSG_DONE:
         PERF("SCRIPT DEFER DONE %d '%s' (active=%d)", i, nsurl_access(hlcache_handle_get_url(script)),
             parent->base.active - 1);
-        NSLOG(neosurf, INFO, "script %d done '%s'", i, nsurl_access(hlcache_handle_get_url(script)));
+        NSLOG(wisp, INFO, "script %d done '%s'", i, nsurl_access(hlcache_handle_get_url(script)));
         if (parent->base.active == 0) {
-            NSLOG(neosurf, CRITICAL,
+            NSLOG(wisp, CRITICAL,
                 "ACTIVE UNDERFLOW! defer_cb DONE decrement when 0 "
                 "[content=%p script=%s]",
                 parent, nsurl_access(hlcache_handle_get_url(script)));
         }
         parent->base.active--;
         parent->scripts_active--;
-        NSLOG(neosurf, INFO, "%d fetches active", parent->base.active);
+        NSLOG(wisp, INFO, "%d fetches active", parent->base.active);
 
         break;
 
     case CONTENT_MSG_ERROR:
-        NSLOG(neosurf, INFO, "script %s failed: %s", nsurl_access(hlcache_handle_get_url(script)),
+        NSLOG(wisp, INFO, "script %s failed: %s", nsurl_access(hlcache_handle_get_url(script)),
             event->data.errordata.errormsg);
 
         hlcache_handle_release(script);
         s->data.handle = NULL;
         if (parent->base.active == 0) {
-            NSLOG(neosurf, CRITICAL,
+            NSLOG(wisp, CRITICAL,
                 "ACTIVE UNDERFLOW! defer_cb ERROR decrement when 0 "
                 "[content=%p script=%s]",
                 parent, nsurl_access(hlcache_handle_get_url(script)));
         }
         parent->base.active--;
         parent->scripts_active--;
-        NSLOG(neosurf, INFO, "%d fetches active", parent->base.active);
+        NSLOG(wisp, INFO, "%d fetches active", parent->base.active);
 
         break;
 
@@ -333,18 +333,18 @@ static nserror convert_script_sync_cb(hlcache_handle *script, const hlcache_even
     case CONTENT_MSG_DONE:
         PERF("SCRIPT SYNC DONE %d '%s' (active=%d)", i, nsurl_access(hlcache_handle_get_url(script)),
             parent->base.active - 1);
-        NSLOG(neosurf, INFO, "script %d done '%s'", i, nsurl_access(hlcache_handle_get_url(script)));
-        NSLOG(neosurf, INFO, "DIAG: sync_cb DONE: parent=%p active=%d->%d", parent, parent->base.active,
+        NSLOG(wisp, INFO, "script %d done '%s'", i, nsurl_access(hlcache_handle_get_url(script)));
+        NSLOG(wisp, INFO, "DIAG: sync_cb DONE: parent=%p active=%d->%d", parent, parent->base.active,
             parent->base.active - 1);
         if (parent->base.active == 0) {
-            NSLOG(neosurf, CRITICAL,
+            NSLOG(wisp, CRITICAL,
                 "ACTIVE UNDERFLOW! sync_cb DONE decrement when 0 "
                 "[content=%p script=%s]",
                 parent, nsurl_access(hlcache_handle_get_url(script)));
         }
         parent->base.active--;
         parent->scripts_active--;
-        NSLOG(neosurf, INFO, "%d fetches active", parent->base.active);
+        NSLOG(wisp, INFO, "%d fetches active", parent->base.active);
 
         s->already_started = true;
 
@@ -362,20 +362,20 @@ static nserror convert_script_sync_cb(hlcache_handle *script, const hlcache_even
         if (parent->parser != NULL && active_sync_scripts == 0) {
             err = dom_hubbub_parser_pause(parent->parser, false);
             if (err != DOM_HUBBUB_OK) {
-                NSLOG(neosurf, INFO, "unpause returned 0x%x", err);
+                NSLOG(wisp, INFO, "unpause returned 0x%x", err);
             }
         }
 
         break;
 
     case CONTENT_MSG_ERROR:
-        NSLOG(neosurf, INFO, "script %s failed: %s", nsurl_access(hlcache_handle_get_url(script)),
+        NSLOG(wisp, INFO, "script %s failed: %s", nsurl_access(hlcache_handle_get_url(script)),
             event->data.errordata.errormsg);
 
         hlcache_handle_release(script);
         s->data.handle = NULL;
         if (parent->base.active == 0) {
-            NSLOG(neosurf, CRITICAL,
+            NSLOG(wisp, CRITICAL,
                 "ACTIVE UNDERFLOW! sync_cb ERROR decrement when 0 "
                 "[content=%p script=%s]",
                 parent, nsurl_access(hlcache_handle_get_url(script)));
@@ -383,7 +383,7 @@ static nserror convert_script_sync_cb(hlcache_handle *script, const hlcache_even
         parent->base.active--;
         parent->scripts_active--;
 
-        NSLOG(neosurf, INFO, "%d fetches active", parent->base.active);
+        NSLOG(wisp, INFO, "%d fetches active", parent->base.active);
 
         s->already_started = true;
 
@@ -391,7 +391,7 @@ static nserror convert_script_sync_cb(hlcache_handle *script, const hlcache_even
         if (parent->parser != NULL && active_sync_scripts == 0) {
             err = dom_hubbub_parser_pause(parent->parser, false);
             if (err != DOM_HUBBUB_OK) {
-                NSLOG(neosurf, INFO, "unpause returned 0x%x", err);
+                NSLOG(wisp, INFO, "unpause returned 0x%x", err);
             }
         }
 
@@ -441,7 +441,7 @@ static dom_hubbub_error exec_src_script(html_content *c, dom_node *node, dom_str
         return DOM_HUBBUB_NOMEM;
     }
 
-    NSLOG(neosurf, INFO, "script %i '%s'", c->scripts_count, nsurl_access(joined));
+    NSLOG(wisp, INFO, "script %i '%s'", c->scripts_count, nsurl_access(joined));
 
     /* there are three ways to process the script tag at this point:
      *
@@ -512,7 +512,7 @@ static dom_hubbub_error exec_src_script(html_content *c, dom_node *node, dom_str
      */
     c->base.active++;
     c->scripts_active++; /* Track script fetches separately */
-    NSLOG(neosurf, INFO, "DIAG: exec_src_script: content=%p active=%d scripts_active=%d (pre-retrieve)", c,
+    NSLOG(wisp, INFO, "DIAG: exec_src_script: content=%p active=%d scripts_active=%d (pre-retrieve)", c,
         c->base.active, c->scripts_active);
 
     PERF("SCRIPT FETCH START '%s' type=%s (active=%d)", nsurl_access(joined),
@@ -530,9 +530,9 @@ static dom_hubbub_error exec_src_script(html_content *c, dom_node *node, dom_str
         c->base.active--;
         /* mark duff script fetch as already started */
         nscript->already_started = true;
-        NSLOG(neosurf, INFO, "Fetch failed with error %d, active=%d", ns_error, c->base.active);
+        NSLOG(wisp, INFO, "Fetch failed with error %d, active=%d", ns_error, c->base.active);
     } else {
-        NSLOG(neosurf, INFO, "%d fetches active", c->base.active);
+        NSLOG(wisp, INFO, "%d fetches active", c->base.active);
 
         switch (script_type) {
         case HTML_SCRIPT_SYNC:
@@ -585,26 +585,26 @@ static dom_hubbub_error exec_inline_script(html_content *c, dom_node *node, dom_
     /* ensure script handler for content type */
     exc = dom_string_intern(mimetype, &lwcmimetype);
     if (exc != DOM_NO_ERR) {
-        NSLOG(neosurf, WARNING, "exec_inline_script: dom_string_intern failed");
+        NSLOG(wisp, WARNING, "exec_inline_script: dom_string_intern failed");
         return DOM_HUBBUB_DOM;
     }
 
     content_type ctype = content_factory_type_from_mime_type(lwcmimetype);
-    NSLOG(neosurf, INFO, "exec_inline_script: lwcmimetype='%s' -> content_type=%d (CONTENT_JS=%d)",
+    NSLOG(wisp, INFO, "exec_inline_script: lwcmimetype='%s' -> content_type=%d (CONTENT_JS=%d)",
         lwc_string_data(lwcmimetype), ctype, CONTENT_JS);
 
     script_handler = select_script_handler(ctype);
     lwc_string_unref(lwcmimetype);
 
-    NSLOG(neosurf, INFO, "exec_inline_script: script_handler=%p, jsthread=%p", script_handler, c->jsthread);
+    NSLOG(wisp, INFO, "exec_inline_script: script_handler=%p, jsthread=%p", script_handler, c->jsthread);
 
     if (script_handler != NULL) {
         NSLOG(
-            neosurf, INFO, "exec_inline_script: calling script_handler with %zu bytes", dom_string_byte_length(script));
+            wisp, INFO, "exec_inline_script: calling script_handler with %zu bytes", dom_string_byte_length(script));
         script_handler(
             c->jsthread, (const uint8_t *)dom_string_data(script), dom_string_byte_length(script), "?inline script?");
     } else {
-        NSLOG(neosurf, WARNING, "exec_inline_script: script_handler is NULL, skipping execution");
+        NSLOG(wisp, WARNING, "exec_inline_script: script_handler is NULL, skipping execution");
     }
     return DOM_HUBBUB_OK;
 }
@@ -631,34 +631,34 @@ dom_hubbub_error html_process_script(void *ctx, dom_node *node)
 
         msg_data.jsthread = &c->jsthread;
         content_broadcast(&c->base, CONTENT_MSG_GETTHREAD, &msg_data);
-        NSLOG(neosurf, INFO, "javascript context %p ", c->jsthread);
+        NSLOG(wisp, INFO, "javascript context %p ", c->jsthread);
         if (c->jsthread == NULL) {
             /* no context and it could not be created, abort */
             return DOM_HUBBUB_OK;
         }
     }
 
-    NSLOG(neosurf, INFO, "html_process_script: content %p parser %p node %p", c, c->parser, node);
-    NSLOG(neosurf, DEBUG, "PROFILER: START JS execute %p", node);
+    NSLOG(wisp, INFO, "html_process_script: content %p parser %p node %p", c, c->parser, node);
+    NSLOG(wisp, DEBUG, "PROFILER: START JS execute %p", node);
 
     exc = dom_element_get_attribute(node, corestring_dom_type, &mimetype);
     if (exc != DOM_NO_ERR || mimetype == NULL) {
         mimetype = dom_string_ref(corestring_dom_text_javascript);
     }
-    NSLOG(neosurf, INFO, "html_process_script: mimetype='%s'", dom_string_data(mimetype));
+    NSLOG(wisp, INFO, "html_process_script: mimetype='%s'", dom_string_data(mimetype));
 
     exc = dom_element_get_attribute(node, corestring_dom_src, &src);
     if (exc != DOM_NO_ERR || src == NULL) {
-        NSLOG(neosurf, INFO, "html_process_script: executing INLINE script");
+        NSLOG(wisp, INFO, "html_process_script: executing INLINE script");
         err = exec_inline_script(c, node, mimetype);
     } else {
-        NSLOG(neosurf, INFO, "html_process_script: fetching EXTERNAL script: %s", dom_string_data(src));
+        NSLOG(wisp, INFO, "html_process_script: fetching EXTERNAL script: %s", dom_string_data(src));
         err = exec_src_script(c, node, mimetype, src);
         dom_string_unref(src);
     }
 
     dom_string_unref(mimetype);
-    NSLOG(neosurf, DEBUG, "PROFILER: STOP JS execute %p", node);
+    NSLOG(wisp, DEBUG, "PROFILER: STOP JS execute %p", node);
 
     return err;
 }

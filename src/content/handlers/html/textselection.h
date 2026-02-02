@@ -21,8 +21,8 @@
  * HTML text selection handling
  */
 
-#ifndef NETSURF_HTML_TEXTSELECTION_H
-#define NETSURF_HTML_TEXTSELECTION_H
+#ifndef WISP_HTML_TEXTSELECTION_H
+#define WISP_HTML_TEXTSELECTION_H
 
 struct content;
 struct selection;

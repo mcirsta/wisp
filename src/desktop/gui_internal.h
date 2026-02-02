@@ -24,14 +24,14 @@
  * \note must not be used by frontends directly.
  */
 
-#ifndef _NETSURF_DESKTOP_GUI_INTERNAL_H_
-#define _NETSURF_DESKTOP_GUI_INTERNAL_H_
+#ifndef _WISP_DESKTOP_GUI_INTERNAL_H_
+#define _WISP_DESKTOP_GUI_INTERNAL_H_
 
 #include "desktop/gui_table.h"
 
 /**
  * The global operation table.
  */
-extern struct netsurf_table *guit;
+extern struct wisp_table *guit;
 
 #endif

@@ -1,16 +1,16 @@
 --------------------------------------------------------------------------------
-  Build Instructions for Framebuffer NetSurf                     16 March 2014
+  Build Instructions for Framebuffer Wisp                     16 March 2014
 --------------------------------------------------------------------------------
 
   This document provides instructions for building the Framebuffer version of 
-  NetSurf and provides guidance on obtaining NetSurf's build dependencies.
+  Wisp and provides guidance on obtaining Wisp's build dependencies.
 
-  Framebuffer NetSurf has been tested on Ubuntu and Debian.
+  Framebuffer Wisp has been tested on Ubuntu and Debian.
 
   Depending on the framebuffer frontend selected the build may need specific
   libraries installed, e.g. the SDL port requires SDL1.2 or later
 
-  There are two ways to get NetSurf building.  The QUICK-START (recommended),
+  There are two ways to get Wisp building.  The QUICK-START (recommended),
   and the manual build.  Whichever you choose, you should read both the
   "Fonts", and "Selecting a frontend and appropriate options" sections below.
 
@@ -19,24 +19,24 @@
 =============
 
   See the QUICK-START document, which provides a simple environment with
-  which you can fetch, build and install NetSurf and its dependencies.
+  which you can fetch, build and install Wisp and its dependencies.
 
-  The QUICK-START is the recommended way to build NetSurf.
+  The QUICK-START is the recommended way to build Wisp.
 
 
   Manual building
 =================
 
   If you can't follow the quick start instructions, you will have to build
-  NetSurf manually.  The instructions for doing this are given below.
+  Wisp manually.  The instructions for doing this are given below.
 
 
   Obtaining the build dependencies
 ----------------------------------
 
-  Many of NetSurf's dependencies are packaged on various operating systems.
+  Many of Wisp's dependencies are packaged on various operating systems.
   The remainder must be installed manually.  Currently, some of the libraries
-  developed as part of the NetSurf project have not had official releases.
+  developed as part of the Wisp project have not had official releases.
   Hopefully they will soon be released with downloadable tarballs and packaged
   in common distros.  For now, you'll have to make do with Git checkouts.
 
@@ -51,7 +51,7 @@
   note that when it has not been built with OpenSSL, the SSL_CTX is not
   available and results that certification details won't be presented in case
   they are invalid.  But as this is currently unimplemented in the Framebuffer
-  flavour of NetSurf, this won't make a difference at all.
+  flavour of Wisp, this won't make a difference at all.
 
   Fedora:
 
@@ -65,20 +65,20 @@
   Preparing your workspace
 --------------------------
 
-  NetSurf has a number of libraries which must be built in-order and
+  Wisp has a number of libraries which must be built in-order and
   installed into your workspace. Each library depends on a core build
-  system which NetSurf projects use. This build system relies on the
+  system which Wisp projects use. This build system relies on the
   presence of things like pkg-config to find libraries and also certain
   environment variables in order to work correctly.
 
-  Assuming you are preparing a workspace in /home/netsurf/workspace then
+  Assuming you are preparing a workspace in /home/wisp/workspace then
   the following steps will set you up:
 
   Make the workspace directory and change to it
   ---------------------------------------------
 
-  $ mkdir -p ${HOME}/netsurf/workspace
-  $ cd ${HOME}/netsurf/workspace
+  $ mkdir -p ${HOME}/wisp/workspace
+  $ cd ${HOME}/wisp/workspace
 
   Make the temporary install space
   --------------------------------
@@ -88,9 +88,9 @@
   Make an environment script
   --------------------------
   $ cat > env.sh <<'EOF'
-    export PKG_CONFIG_PATH=${HOME}/netsurf/workspace/inst/lib/pkgconfig::
-    export LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${HOME}/netsurf/workspace/inst/lib
-    export PREFIX=${HOME}/netsurf/workspace/inst
+    export PKG_CONFIG_PATH=${HOME}/wisp/workspace/inst/lib/pkgconfig::
+    export LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${HOME}/wisp/workspace/inst/lib
+    export PREFIX=${HOME}/wisp/workspace/inst
     EOF
 
   Change to workspace and source the environment
@@ -98,17 +98,17 @@
 
   Whenever you wish to start development in a new shell, run the following:
 
-  $ cd ${HOME}/netsurf/workspace
+  $ cd ${HOME}/wisp/workspace
   $ source env.sh
 
   From here on, any commands in this document assume you have sourced your
   shell environment.
 
 
-  The NetSurf project's libraries
+  The Wisp project's libraries
 ---------------------------------
 
-  The NetSurf project has developed several libraries which are required by
+  The Wisp project has developed several libraries which are required by
   the browser. These are:
 
   BuildSystem     --  Shared build system, needed to build the other libraries
@@ -139,20 +139,20 @@
   |       For more information, consult the libparserutils README file.
 
 
-  Getting the NetSurf source
+  Getting the Wisp source
 ----------------------------
 
-  From your workspace directory, run the following command to get the NetSurf
+  From your workspace directory, run the following command to get the Wisp
   source:
 
      $ git clone git://git.netsurf-browser.org/netsurf.git
 
-  And change to the 'netsurf' directory:
+  And change to the 'wisp' directory:
 
-     $ cd netsurf
+     $ cd wisp
 
 
-  Building and executing NetSurf
+  Building and executing Wisp
 --------------------------------
 
   First of all, you should examine the contents of Makefile.defaults
@@ -162,40 +162,40 @@
   Others cannot be automatically detected from the Makefile, so you
   will either need to install the dependencies, or set them to NO.
   
-  You should then obtain NetSurf's dependencies, keeping in mind which options
-  you have enabled in the configuration file.  See the "Obtaining NetSurf's
+  You should then obtain Wisp's dependencies, keeping in mind which options
+  you have enabled in the configuration file.  See the "Obtaining Wisp's
   dependencies" section for specifics.
   
-  Once done, to build Framebuffer NetSurf on a UNIX-like platform, simply run:
+  Once done, to build Framebuffer Wisp on a UNIX-like platform, simply run:
 
       $ make TARGET=framebuffer
 
-  If that produces errors, you probably don't have some of NetSurf's build
-  dependencies installed. See "Obtaining NetSurf's dependencies" below.
+  If that produces errors, you probably don't have some of Wisp's build
+  dependencies installed. See "Obtaining Wisp's dependencies" below.
   Or turn off the complaining features in your Makefile.config.  You may
   need to "make clean" before attempting to build after installing the 
   dependencies.
 
-  Run NetSurf by executing the "nsfb" program:
+  Run Wisp by executing the "nsfb" program:
 
       $ ./nsfb
 
-  | Note: NetSurf uses certain resources at run time.  In order to find these
+  | Note: Wisp uses certain resources at run time.  In order to find these
   |       resources, it searches three locations:
   |
-  |           1. ~/.netsurf/
-  |           2. $NETSURFRES/
-  |           3. /usr/share/netsurf/
+  |           1. ~/.wisp/
+  |           2. $WISPRES/
+  |           3. /usr/share/wisp/
   |
   |       In the build tree, the resources are located at
   |
   |           framebuffer/res
   |
-  |       Setting $NETSURFRES to point at the resources in the build tree
-  |       will enable you to run NetSurf from here without installation.
+  |       Setting $WISPRES to point at the resources in the build tree
+  |       will enable you to run Wisp from here without installation.
   |       To do this, run:
   |
-  |           export NETSURFRES=`pwd`/framebuffer/res
+  |           export WISPRES=`pwd`/framebuffer/res
 
 
   Fonts
@@ -203,7 +203,7 @@
 
   The framebuffer port currently has two choices for font
   handling. The font handler may be selected at compile time by using
-  the NETSURF_FB_FONTLIB configuration key. Currently supported values
+  the WISP_FB_FONTLIB configuration key. Currently supported values
   are internal and freetype
 
   Internal
@@ -232,16 +232,16 @@
   be set to the absolute path of the relevant font file including its
   .ttf extension. The variables are:
 
-  NETSURF_FB_FONT_SANS_SERIF
-  NETSURF_FB_FONT_SANS_SERIF_BOLD
-  NETSURF_FB_FONT_SANS_SERIF_ITALIC
-  NETSURF_FB_FONT_SANS_SERIF_ITALIC_BOLD
-  NETSURF_FB_FONT_SERIF
-  NETSURF_FB_FONT_SERIF_BOLD
-  NETSURF_FB_FONT_MONOSPACE
-  NETSURF_FB_FONT_MONOSPACE_BOLD
-  NETSURF_FB_FONT_CURSIVE
-  NETSURF_FB_FONT_FANTASY
+  WISP_FB_FONT_SANS_SERIF
+  WISP_FB_FONT_SANS_SERIF_BOLD
+  WISP_FB_FONT_SANS_SERIF_ITALIC
+  WISP_FB_FONT_SANS_SERIF_ITALIC_BOLD
+  WISP_FB_FONT_SERIF
+  WISP_FB_FONT_SERIF_BOLD
+  WISP_FB_FONT_MONOSPACE
+  WISP_FB_FONT_MONOSPACE_BOLD
+  WISP_FB_FONT_CURSIVE
+  WISP_FB_FONT_FANTASY
   
   The font selection may be changed by placing truetype font files
   in the resources path. The resource files will be the generic names
@@ -323,11 +323,11 @@ Index: framebuffer/font_freetype.c
 ==============================================  
 
   The framebuffer port interfaces to its input and output devices
-  using the NetSurf Framebuffer library (libnsfb). This library
+  using the Wisp Framebuffer library (libnsfb). This library
   provides an abstraction layer to input and output devices.
 
   The surface used by libnsfb is selected by using the -f switch to
-  NetSurf when executed. A surface in this context is simply the
+  Wisp when executed. A surface in this context is simply the
   combination of input and output devices.
 
   A surface output device may be any linearly mapped area of

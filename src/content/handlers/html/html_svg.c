@@ -27,10 +27,10 @@
 #include <dom/dom.h>
 #include <svgtiny.h>
 
-#include <neosurf/content/handlers/html/private.h>
-#include <neosurf/utils/corestrings.h>
-#include <neosurf/utils/errors.h>
-#include <neosurf/utils/log.h>
+#include <wisp/content/handlers/html/private.h>
+#include <wisp/utils/corestrings.h>
+#include <wisp/utils/errors.h>
+#include <wisp/utils/log.h>
 
 #include "content/handlers/html/html_svg.h"
 
@@ -62,7 +62,7 @@ static nserror svg_registry_add(struct svg_symbol_registry *reg, const char *id,
     dom_node_ref(element);
     reg->count++;
 
-    NSLOG(neosurf, DEBUG, "SVG: Added symbol '%s' to registry (count=%u)", id, reg->count);
+    NSLOG(wisp, DEBUG, "SVG: Added symbol '%s' to registry (count=%u)", id, reg->count);
 
     return NSERROR_OK;
 }
@@ -170,7 +170,7 @@ nserror html_resolve_svg_use_refs(struct html_content *c, dom_document *doc)
     reg = c->svg_symbols;
 
     if (reg->count == 0) {
-        NSLOG(neosurf, DEBUG, "SVG: No symbols to resolve");
+        NSLOG(wisp, DEBUG, "SVG: No symbols to resolve");
         return NSERROR_OK;
     }
 
@@ -194,7 +194,7 @@ nserror html_resolve_svg_use_refs(struct html_content *c, dom_document *doc)
         return NSERROR_OK;
     }
 
-    NSLOG(neosurf, DEBUG, "SVG: Found %u <use> elements to resolve", use_count);
+    NSLOG(wisp, DEBUG, "SVG: Found %u <use> elements to resolve", use_count);
 
     if (use_count > 0) {
         static_list = malloc(sizeof(dom_node *) * use_count);
@@ -267,7 +267,7 @@ nserror html_resolve_svg_use_refs(struct html_content *c, dom_document *doc)
             if (symbol != NULL) {
                 dom_node *cloned = NULL;
 
-                NSLOG(neosurf, DEBUG, "SVG: Resolving <use href=\"#%s\">", id);
+                NSLOG(wisp, DEBUG, "SVG: Resolving <use href=\"#%s\">", id);
 
                 /* Clone the symbol's children and append to use element */
                 exc = dom_node_clone_node(symbol, true, &cloned);
@@ -278,14 +278,14 @@ nserror html_resolve_svg_use_refs(struct html_content *c, dom_document *doc)
                     exc = dom_node_append_child(use_node, cloned, &result);
                     if (exc == DOM_NO_ERR && result != NULL) {
                         dom_node_unref(result);
-                        NSLOG(neosurf, DEBUG, "SVG: Successfully resolved <use> to symbol");
+                        NSLOG(wisp, DEBUG, "SVG: Successfully resolved <use> to symbol");
                     } else {
-                        NSLOG(neosurf, ERROR, "SVG: Failed to append resolved symbol content");
+                        NSLOG(wisp, ERROR, "SVG: Failed to append resolved symbol content");
                     }
                     dom_node_unref(cloned);
                 }
             } else {
-                NSLOG(neosurf, WARNING, "SVG: Symbol '%s' not found for <use>", id);
+                NSLOG(wisp, WARNING, "SVG: Symbol '%s' not found for <use>", id);
             }
         }
 
@@ -686,7 +686,7 @@ nserror html_serialize_inline_svg(dom_element *svg_element, const char *current_
     *svg_data = buf;
     *svg_len = len;
 
-    NSLOG(neosurf, DEBUG, "SVG: Serialized inline SVG (%zu bytes)", len);
+    NSLOG(wisp, DEBUG, "SVG: Serialized inline SVG (%zu bytes)", len);
 
     /* Debug: log first 500 chars of serialized SVG */
     if (len > 0) {
@@ -695,7 +695,7 @@ nserror html_serialize_inline_svg(dom_element *svg_element, const char *current_
         if (log_buf) {
             memcpy(log_buf, buf, log_len);
             log_buf[log_len] = '\0';
-            NSLOG(neosurf, DEBUG, "SVG content: %s%s", log_buf, len > 500 ? "..." : "");
+            NSLOG(wisp, DEBUG, "SVG content: %s%s", log_buf, len > 500 ? "..." : "");
             free(log_buf);
         }
     }
@@ -725,7 +725,7 @@ dom_hubbub_error html_process_svg(void *ctx, dom_node *node)
         return DOM_HUBBUB_OK;
     }
 
-    NSLOG(neosurf, DEBUG, "SVG: Parser callback - storing inline SVG node for lazy serialization");
+    NSLOG(wisp, DEBUG, "SVG: Parser callback - storing inline SVG node for lazy serialization");
 
     /* Create entry for the inline_svgs list */
     entry = malloc(sizeof(struct html_inline_svg));
@@ -760,7 +760,7 @@ dom_hubbub_error html_process_svg(void *ctx, dom_node *node)
 
     if (c->svg_symbols != NULL) {
         collect_symbols_from_element((dom_element *)node, c->svg_symbols);
-        NSLOG(neosurf, DEBUG, "SVG: Collected symbols from inline SVG (total: %u)", c->svg_symbols->count);
+        NSLOG(wisp, DEBUG, "SVG: Collected symbols from inline SVG (total: %u)", c->svg_symbols->count);
     }
 
     return DOM_HUBBUB_OK;

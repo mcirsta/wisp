@@ -16,8 +16,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef NETSURF_BEOS_CALLBACK_H
-#define NETSURF_BEOS_CALLBACK_H 1
+#ifndef WISP_BEOS_CALLBACK_H
+#define WISP_BEOS_CALLBACK_H 1
 
 extern bigtime_t earliest_callback_timeout;
 

@@ -6,7 +6,7 @@
 
 # Settings
 
-TITLE="Netsurf"
+TITLE="Wisp"
 
 # length and quality
 TYPE="std" # sml, std, lrg
@@ -60,10 +60,10 @@ TMP_PPM=${TMP_DIR}/${TITLE}-gource-${TYPE}-${OUTPUT_SIZE}-${CMODE}.ppm
 FILENAME=${TITLE}-gource-${TYPE}-${OUTPUT_SIZE}-${CMODE}.mp4
 
 # filter some directories which are not interesting
-FILEFILTER="\!NetSurf/|riscos/distribution/|gtk/res/|framebuffer/res/|amiga/resources/|beos/res/|cocoa/res/|windows/res/|atari/res|riscos/appdir/"
+FILEFILTER="\!Wisp/|riscos/distribution/|gtk/res/|framebuffer/res/|amiga/resources/|beos/res/|cocoa/res/|windows/res/|atari/res|riscos/appdir/"
 
 # generate
-gource --title "NetSurf Development" -${OUTPUT_SIZE} ${QPARAM} --max-files 10000 --bloom-multiplier 0.10 --bloom-intensity 0.5 --title ${TITLE} --highlight-all-users --output-framerate 25 --hide filenames --stop-at-end --date-format "%d %B %Y" --bloom-intensity 0.2 --file-filter "${FILEFILTER}" --key --camera-mode ${CMODE} --output-ppm-stream - > ${TMP_PPM}
+gource --title "Wisp Development" -${OUTPUT_SIZE} ${QPARAM} --max-files 10000 --bloom-multiplier 0.10 --bloom-intensity 0.5 --title ${TITLE} --highlight-all-users --output-framerate 25 --hide filenames --stop-at-end --date-format "%d %B %Y" --bloom-intensity 0.2 --file-filter "${FILEFILTER}" --key --camera-mode ${CMODE} --output-ppm-stream - > ${TMP_PPM}
 
 #convert the ppm to movie
 ffmpeg -y -r 25 -f image2pipe -vcodec ppm -i ${TMP_PPM} -vcodec libx264 -b:v 2000k ${FILENAME}

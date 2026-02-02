@@ -20,24 +20,24 @@
  * Implementation of paginated output.
  */
 
-#include <neosurf/utils/config.h>
+#include <wisp/utils/config.h>
 
 #include <dom/dom.h>
 #include <assert.h>
 #include <string.h>
 
-#include <neosurf/content/handlers/css/utils.h>
-#include <neosurf/content/handlers/html/box.h>
-#include <neosurf/content/hlcache.h>
-#include <neosurf/utils/log.h>
-#include <neosurf/utils/nsoption.h>
-#include <neosurf/utils/utils.h>
+#include <wisp/content/handlers/css/utils.h>
+#include <wisp/content/handlers/html/box.h>
+#include <wisp/content/hlcache.h>
+#include <wisp/utils/log.h>
+#include <wisp/utils/nsoption.h>
+#include <wisp/utils/utils.h>
 #include "utils/talloc.h"
-#include "neosurf/content.h"
-#include "neosurf/plotters.h"
+#include "wisp/content.h"
+#include "wisp/plotters.h"
 
-#include <neosurf/desktop/print.h>
-#include <neosurf/desktop/printer.h>
+#include <wisp/desktop/print.h>
+#include <wisp/desktop/printer.h>
 
 /* Default print settings */
 #define DEFAULT_PAGE_WIDTH 595
@@ -122,7 +122,7 @@ static bool print_apply_settings(hlcache_handle *content, struct print_settings 
 
     content_reformat(content, false, page_content_width, 0);
 
-    NSLOG(neosurf, INFO, "New layout applied.New height = %d ; New width = %d ", content_get_height(content),
+    NSLOG(wisp, INFO, "New layout applied.New height = %d ; New width = %d ", content_get_height(content),
         content_get_width(content));
 
     return true;

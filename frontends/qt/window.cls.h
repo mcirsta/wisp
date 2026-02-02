@@ -31,8 +31,8 @@
 extern "C" {
 #include "utils/errors.h"
 
-#include "neosurf/mouse.h"
-#include "neosurf/window.h"
+#include "wisp/mouse.h"
+#include "wisp/window.h"
 }
 
 #include "qt/urlbar.cls.h"

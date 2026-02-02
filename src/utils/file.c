@@ -29,13 +29,13 @@
 #include <string.h>
 #include <unistd.h>
 
-#include <neosurf/desktop/gui_internal.h>
+#include <wisp/desktop/gui_internal.h>
 
-#include <neosurf/utils/corestrings.h>
-#include <neosurf/utils/file.h>
-#include <neosurf/utils/nsurl.h>
-#include <neosurf/utils/string.h>
-#include <neosurf/utils/utils.h>
+#include <wisp/utils/corestrings.h>
+#include <wisp/utils/file.h>
+#include <wisp/utils/nsurl.h>
+#include <wisp/utils/string.h>
+#include <wisp/utils/utils.h>
 #include "utils/dirent.h"
 #include "utils/url.h"
 
@@ -276,7 +276,7 @@ static struct gui_file_table file_table = {
 struct gui_file_table *default_file_table = &file_table;
 
 /* exported interface documented in utils/file.h */
-nserror neosurf_mkpath(char **str, size_t *size, size_t nelm, ...)
+nserror wisp_mkpath(char **str, size_t *size, size_t nelm, ...)
 {
     va_list ap;
     nserror ret;
@@ -289,25 +289,25 @@ nserror neosurf_mkpath(char **str, size_t *size, size_t nelm, ...)
 }
 
 /* exported interface documented in utils/file.h */
-nserror neosurf_nsurl_to_path(struct nsurl *url, char **path_out)
+nserror wisp_nsurl_to_path(struct nsurl *url, char **path_out)
 {
     return guit->file->nsurl_to_path(url, path_out);
 }
 
 /* exported interface documented in utils/file.h */
-nserror neosurf_path_to_nsurl(const char *path, struct nsurl **url)
+nserror wisp_path_to_nsurl(const char *path, struct nsurl **url)
 {
     return guit->file->path_to_nsurl(path, url);
 }
 
 /* exported interface documented in utils/file.h */
-nserror neosurf_mkdir_all(const char *fname)
+nserror wisp_mkdir_all(const char *fname)
 {
     return guit->file->mkdir_all(fname);
 }
 
 /* exported interface documented in utils/file.h */
-nserror neosurf_recursive_rm(const char *path)
+nserror wisp_recursive_rm(const char *path)
 {
     DIR *parent;
     struct dirent *entry;
@@ -330,7 +330,7 @@ nserror neosurf_recursive_rm(const char *path)
         if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
             continue;
 
-        ret = neosurf_mkpath(&leafpath, NULL, 2, path, entry->d_name);
+        ret = wisp_mkpath(&leafpath, NULL, 2, path, entry->d_name);
         if (ret != NSERROR_OK)
             goto out;
 
@@ -343,7 +343,7 @@ nserror neosurf_recursive_rm(const char *path)
             goto out_via_errno;
         }
         if (S_ISDIR(ent_stat.st_mode)) {
-            ret = neosurf_recursive_rm(leafpath);
+            ret = wisp_recursive_rm(leafpath);
             if (ret != NSERROR_OK) {
                 free(leafpath);
                 goto out;

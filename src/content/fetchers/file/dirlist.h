@@ -23,8 +23,8 @@
  * These functions should in general be called via the content interface.
  */
 
-#ifndef NETSURF_CONTENT_DIRLIST_H_
-#define NETSURF_CONTENT_DIRLIST_H_
+#ifndef WISP_CONTENT_DIRLIST_H_
+#define WISP_CONTENT_DIRLIST_H_
 
 #include <stdbool.h>
 

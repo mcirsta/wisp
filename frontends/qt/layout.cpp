@@ -33,9 +33,9 @@ extern "C" {
 #include "utils/log.h"
 #include "utils/nsoption.h"
 #include "utils/utf8.h"
-#include <neosurf/ns_inttypes.h>
-#include "neosurf/layout.h"
-#include "neosurf/plot_style.h"
+#include <wisp/ns_inttypes.h>
+#include "wisp/layout.h"
+#include "wisp/plot_style.h"
 }
 
 #include "qt/layout.h"
@@ -85,7 +85,7 @@ static QFont *new_qfont_fstyle(const struct plot_font_style *fstyle)
             QStringList subs = QFont::substitutes(qfamily);
             if (!subs.isEmpty()) {
                 family = family_name;
-                NSLOG(netsurf, INFO, "Rendering text: web font '%s' -> '%s' (AVAILABLE)", family_name,
+                NSLOG(wisp, INFO, "Rendering text: web font '%s' -> '%s' (AVAILABLE)", family_name,
                     subs.first().toUtf8().constData());
                 break;
             }
@@ -97,7 +97,7 @@ static QFont *new_qfont_fstyle(const struct plot_font_style *fstyle)
              */
             if (QFontDatabase::hasFamily(qfamily) || QFontDatabase::families().contains(qfamily, Qt::CaseInsensitive)) {
                 family = family_name;
-                NSLOG(netsurf, DEBUG, "Using CSS font-family: %s", family_name);
+                NSLOG(wisp, DEBUG, "Using CSS font-family: %s", family_name);
                 break;
             }
 
@@ -105,7 +105,7 @@ static QFont *new_qfont_fstyle(const struct plot_font_style *fstyle)
             if (qfamily.compare("Helvetica Neue", Qt::CaseInsensitive) == 0) {
                 if (QFontDatabase::hasFamily("DejaVu Sans Condensed")) {
                     family = "DejaVu Sans Condensed";
-                    NSLOG(netsurf, DEBUG, "Using specific alias: 'Helvetica Neue' -> 'DejaVu Sans Condensed'");
+                    NSLOG(wisp, DEBUG, "Using specific alias: 'Helvetica Neue' -> 'DejaVu Sans Condensed'");
                     break;
                 }
             }
@@ -115,14 +115,14 @@ static QFont *new_qfont_fstyle(const struct plot_font_style *fstyle)
             QFontInfo aliasInfo(aliasFont);
             if (QFontDatabase::hasFamily(aliasInfo.family())) {
                 family = family_name;
-                NSLOG(netsurf, INFO, "Using CSS font-family alias: '%s' -> '%s'", family_name,
+                NSLOG(wisp, INFO, "Using CSS font-family alias: '%s' -> '%s'", family_name,
                     aliasInfo.family().toUtf8().constData());
                 break;
             }
 
             /* Font not found - log at INFO for web font debugging
              */
-            NSLOG(netsurf, INFO, "Rendering text: font '%s' NOT FOUND, trying next", family_name);
+            NSLOG(wisp, INFO, "Rendering text: font '%s' NOT FOUND, trying next", family_name);
             /* Mark that we had a font miss - repaint needed when
              * font loads */
             extern bool font_miss_occurred;
@@ -230,7 +230,7 @@ static QFont *nsfont_style_to_font(const struct plot_font_style *fstyle)
 
     /* no existing entry, replace oldest */
 
-    NSLOG(netsurf, DEEPDEBUG, "evicting slot %d age %d after %d hits", oldest_idx, pfcache.entries[oldest_idx].age,
+    NSLOG(wisp, DEEPDEBUG, "evicting slot %d age %d after %d hits", oldest_idx, pfcache.entries[oldest_idx].age,
         pfcache.entries[oldest_idx].hit);
 
     if (pfcache.entries[oldest_idx].qfont != NULL) {
@@ -376,7 +376,7 @@ static nserror nsqt_layout_width(const struct plot_font_style *fstyle, const cha
     *width = metrics.horizontalAdvance(qstr);
 
     delete font;
-    NSLOG(netsurf, DEEPDEBUG, "fstyle: %p string:\"%.*s\", length: %" PRIsizet ", width: %dpx", fstyle, (int)length,
+    NSLOG(wisp, DEEPDEBUG, "fstyle: %p string:\"%.*s\", length: %" PRIsizet ", width: %dpx", fstyle, (int)length,
         string, length, *width);
     return NSERROR_OK;
 }
@@ -407,7 +407,7 @@ static nserror nsqt_layout_position(
 
     delete font;
 
-    NSLOG(netsurf, DEEPDEBUG,
+    NSLOG(wisp, DEEPDEBUG,
         "fstyle: %p string:\"%.*s\", length: %" PRIsizet ", "
         "search_x: %dpx, offset: %" PRIsizet ", actual_x: %dpx",
         fstyle, (int)*string_idx, string, length, x, *string_idx, *actual_x);
@@ -537,7 +537,7 @@ static nserror nsqt_layout_split(const struct plot_font_style *fstyle, const cha
 
 nsqt_layout_split_done:
     delete font;
-    NSLOG(netsurf, DEEPDEBUG,
+    NSLOG(wisp, DEEPDEBUG,
         "fstyle: %p string:\"%.*s\", length: %" PRIsizet ", "
         "split: %dpx, offset: %" PRIsizet ", actual_x: %dpx",
         fstyle, (int)*string_idx, string, length, split, *string_idx, *actual_x);
@@ -555,7 +555,7 @@ nsqt_layout_plot(QPainter *painter, const struct plot_font_style *fstyle, int x,
     QPen pen(strokecolour);
     QFont *font = nsfont_style_to_font(fstyle);
 
-    NSLOG(netsurf, DEEPDEBUG, "fstyle: %p string:\"%.*s\", length: %" PRIsizet ", width: %dpx", fstyle, (int)length,
+    NSLOG(wisp, DEEPDEBUG, "fstyle: %p string:\"%.*s\", length: %" PRIsizet ", width: %dpx", fstyle, (int)length,
         text, length, QFontMetrics(*font, painter->device()).horizontalAdvance(text, length));
 
     painter->setPen(pen);
@@ -588,7 +588,7 @@ static void font_repaint_callback(void *p)
     (void)p;
     font_repaint_pending = false;
     font_miss_occurred = false;
-    NSLOG(netsurf, INFO, "Font loaded, triggering global repaint");
+    NSLOG(wisp, INFO, "Font loaded, triggering global repaint");
     for (QWidget *w : QApplication::topLevelWidgets()) {
         w->update();
     }
@@ -606,12 +606,12 @@ static nserror nsqt_load_font_data(const char *family_name, const uint8_t *data,
 
     int fontId = QFontDatabase::addApplicationFontFromData(fontData);
     if (fontId == -1) {
-        NSLOG(netsurf, WARNING, "Failed to load font '%s' into Qt", family_name);
+        NSLOG(wisp, WARNING, "Failed to load font '%s' into Qt", family_name);
         return NSERROR_INVALID;
     }
 
     QStringList families = QFontDatabase::applicationFontFamilies(fontId);
-    NSLOG(netsurf, INFO, "Loaded font '%s' into Qt as font ID %d (families: %s)", family_name, fontId,
+    NSLOG(wisp, INFO, "Loaded font '%s' into Qt as font ID %d (families: %s)", family_name, fontId,
         families.join(", ").toUtf8().constData());
 
     /* Register CSS→Qt font name substitution using Qt's built-in system */
@@ -621,7 +621,7 @@ static nserror nsqt_load_font_data(const char *family_name, const uint8_t *data,
 
         /* Tell Qt: when asked for CSS name, use Qt name instead */
         QFont::insertSubstitution(cssName, qtName);
-        NSLOG(netsurf, INFO, "Registered font substitution: '%s' -> '%s'", family_name, qtName.toUtf8().constData());
+        NSLOG(wisp, INFO, "Registered font substitution: '%s' -> '%s'", family_name, qtName.toUtf8().constData());
 
         /* FOUT: Schedule a global repaint so text re-renders with new
          * font. Only schedule if:
@@ -631,9 +631,9 @@ static nserror nsqt_load_font_data(const char *family_name, const uint8_t *data,
         if (font_miss_occurred && !font_repaint_pending) {
             font_repaint_pending = true;
             nsqt_schedule(100, font_repaint_callback, NULL);
-            NSLOG(netsurf, INFO, "Font miss detected, scheduling repaint");
+            NSLOG(wisp, INFO, "Font miss detected, scheduling repaint");
         } else if (!font_miss_occurred) {
-            NSLOG(netsurf, INFO, "No font miss - skipping repaint");
+            NSLOG(wisp, INFO, "No font miss - skipping repaint");
         }
     }
 

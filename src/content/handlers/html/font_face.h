@@ -21,11 +21,11 @@
  * Web font (font-face) loading interface.
  */
 
-#ifndef NETSURF_HTML_FONT_FACE_H
-#define NETSURF_HTML_FONT_FACE_H
+#ifndef WISP_HTML_FONT_FACE_H
+#define WISP_HTML_FONT_FACE_H
 
 #include <libcss/libcss.h>
-#include <neosurf/utils/errors.h>
+#include <wisp/utils/errors.h>
 
 struct html_content;
 struct nsurl;

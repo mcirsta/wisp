@@ -26,8 +26,8 @@
 #include <string.h>
 #include <strings.h>
 
-#include <neosurf/utils/corestrings.h>
-#include <neosurf/utils/utils.h>
+#include <wisp/utils/corestrings.h>
+#include <wisp/utils/utils.h>
 #include "utils/http.h"
 
 #include "content/content_factory.h"

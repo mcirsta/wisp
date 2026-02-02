@@ -86,7 +86,7 @@ void monkey_fetch_filetype_init(const char *mimefile)
     fh = fopen(mimefile, "r");
 
     if (fh == NULL) {
-        NSLOG(netsurf, INFO, "Unable to open a mime.types file, so using a minimal one for you.");
+        NSLOG(wisp, INFO, "Unable to open a mime.types file, so using a minimal one for you.");
         return;
     }
 
@@ -191,7 +191,7 @@ const char *monkey_fetch_filetype(const char *unix_path)
         return "text/plain";
     }
     if (S_ISDIR(statbuf.st_mode)) {
-        return "application/x-netsurf-directory";
+        return "application/x-wisp-directory";
     }
 
     l = strlen(unix_path);

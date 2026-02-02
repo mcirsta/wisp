@@ -1,4 +1,4 @@
-# NetSurf bitmap decoding library
+# Wisp bitmap decoding library
 
 The functions provided by this library allow for the decoding of
 Microsoft's BMP and ICO image file formats.

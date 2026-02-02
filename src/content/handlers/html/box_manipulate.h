@@ -22,8 +22,8 @@
  * Box tree manipulation interface.
  */
 
-#ifndef NETSURF_HTML_BOX_MANIPULATE_H
-#define NETSURF_HTML_BOX_MANIPULATE_H
+#ifndef WISP_HTML_BOX_MANIPULATE_H
+#define WISP_HTML_BOX_MANIPULATE_H
 
 
 /**

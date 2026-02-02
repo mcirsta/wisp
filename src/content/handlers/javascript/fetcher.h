@@ -20,8 +20,8 @@
  * javascript scheme handler
  */
 
-#ifndef NETSURF_JAVASCRIPT_FETCHER_H
-#define NETSURF_JAVASCRIPT_FETCHER_H
+#ifndef WISP_JAVASCRIPT_FETCHER_H
+#define WISP_JAVASCRIPT_FETCHER_H
 
 nserror fetch_javascript_register(void);
 

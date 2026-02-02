@@ -16,8 +16,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef _NEOSURF_WINDOWS_DRAWABLE_H_
-#define _NEOSURF_WINDOWS_DRAWABLE_H_
+#ifndef _WISP_WINDOWS_DRAWABLE_H_
+#define _WISP_WINDOWS_DRAWABLE_H_
 
 nserror nsws_create_drawable_class(HINSTANCE hinstance);
 HWND nsws_window_create_drawable(HINSTANCE hinstance, HWND hparent, struct gui_window *gw);

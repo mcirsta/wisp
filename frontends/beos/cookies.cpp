@@ -22,10 +22,10 @@
 #include <string.h>
 extern "C" {
 #include "utils/log.h"
-#include "netsurf/cookie_db.h"
-#include "netsurf/keypress.h"
-#include "netsurf/mouse.h"
-#include "netsurf/plotters.h"
+#include "wisp/cookie_db.h"
+#include "wisp/keypress.h"
+#include "wisp/mouse.h"
+#include "wisp/plotters.h"
 #include "desktop/cookie_manager.h"
 }
 #include "beos/cookies.h"

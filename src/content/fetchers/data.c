@@ -28,15 +28,15 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <neosurf/utils/corestrings.h>
-#include <neosurf/utils/log.h>
-#include <neosurf/utils/nsurl.h>
-#include <neosurf/utils/utils.h>
+#include <wisp/utils/corestrings.h>
+#include <wisp/utils/log.h>
+#include <wisp/utils/nsurl.h>
+#include <wisp/utils/utils.h>
 #include "utils/ring.h"
 #include "utils/url.h"
-#include <neosurf/ns_inttypes.h>
+#include <wisp/ns_inttypes.h>
 
-#include <neosurf/content/fetch.h>
+#include <wisp/content/fetch.h>
 #include "content/fetchers.h"
 #include "content/fetchers/data.h"
 
@@ -58,14 +58,14 @@ static struct fetch_data_context *ring = NULL;
 
 static bool fetch_data_initialise(lwc_string *scheme)
 {
-    NSLOG(neosurf, INFO, "fetch_data_initialise called for %s", lwc_string_data(scheme));
+    NSLOG(wisp, INFO, "fetch_data_initialise called for %s", lwc_string_data(scheme));
 
     return true;
 }
 
 static void fetch_data_finalise(lwc_string *scheme)
 {
-    NSLOG(neosurf, INFO, "fetch_data_finalise called for %s", lwc_string_data(scheme));
+    NSLOG(wisp, INFO, "fetch_data_finalise called for %s", lwc_string_data(scheme));
 }
 
 static bool fetch_data_can_fetch(const nsurl *url)
@@ -158,7 +158,7 @@ static bool fetch_data_process(struct fetch_data_context *c)
      * data must still be there.
      */
 
-    NSLOG(neosurf, DEEPDEBUG, "url: %.140s", nsurl_access(c->url));
+    NSLOG(wisp, DEEPDEBUG, "url: %.140s", nsurl_access(c->url));
 
     if (nsurl_length(c->url) < 6) {
         /* 6 is the minimum possible length (data:,) */
@@ -257,7 +257,7 @@ static void fetch_data_poll(lwc_string *scheme)
         /* Only process non-aborted fetches */
         if (c->aborted == false && fetch_data_process(c) == true) {
             fetch_set_http_code(c->parent_fetch, 200);
-            NSLOG(neosurf, INFO, "setting data: MIME type to %s, length to %" PRIsizet, c->mimetype, c->datalen);
+            NSLOG(wisp, INFO, "setting data: MIME type to %s, length to %" PRIsizet, c->mimetype, c->datalen);
             /* Any callback can result in the fetch being aborted.
              * Therefore, we _must_ check for this after _every_
              * call to fetch_data_send_callback().
@@ -287,7 +287,7 @@ static void fetch_data_poll(lwc_string *scheme)
                 fetch_data_send_callback(&msg, c);
             }
         } else {
-            NSLOG(neosurf, INFO, "Processing of %.140s failed!", nsurl_access(c->url));
+            NSLOG(wisp, INFO, "Processing of %.140s failed!", nsurl_access(c->url));
 
             /* Ensure that we're unlocked here. If we aren't,
              * then fetch_data_process() is broken.

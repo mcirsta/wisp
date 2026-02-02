@@ -16,8 +16,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef _NETSURF_GTK_VIEWSOURCE_H_
-#define _NETSURF_GTK_VIEWSOURCE_H_
+#ifndef _WISP_GTK_VIEWSOURCE_H_
+#define _WISP_GTK_VIEWSOURCE_H_
 
 nserror nsgtk_viewsource(GtkWindow *parent, struct browser_window *bw);
 

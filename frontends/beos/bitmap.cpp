@@ -38,11 +38,11 @@
 
 extern "C" {
 #include "utils/log.h"
-#include "netsurf/bitmap.h"
-#include "netsurf/browser_window.h"
-#include "netsurf/content.h"
-#include "netsurf/content_type.h"
-#include "netsurf/plotters.h"
+#include "wisp/bitmap.h"
+#include "wisp/browser_window.h"
+#include "wisp/content.h"
+#include "wisp/content_type.h"
+#include "wisp/plotters.h"
 }
 
 #include "beos/bitmap.h"
@@ -320,7 +320,7 @@ BBitmap *nsbeos_bitmap_get_pretile_x(struct bitmap *bitmap)
     if (!bitmap->pretile_x) {
         int width = bitmap->primary->Bounds().Width() + 1;
         int xmult = (MIN_PRETILE_WIDTH + width - 1) / width;
-        NSLOG(netsurf, INFO, "Pretiling %p for X*%d", bitmap, xmult);
+        NSLOG(wisp, INFO, "Pretiling %p for X*%d", bitmap, xmult);
         bitmap->pretile_x = nsbeos_bitmap_generate_pretile(bitmap->primary, xmult, 1);
     }
     return bitmap->pretile_x;
@@ -337,7 +337,7 @@ BBitmap *nsbeos_bitmap_get_pretile_y(struct bitmap *bitmap)
     if (!bitmap->pretile_y) {
         int height = bitmap->primary->Bounds().Height() + 1;
         int ymult = (MIN_PRETILE_HEIGHT + height - 1) / height;
-        NSLOG(netsurf, INFO, "Pretiling %p for Y*%d", bitmap, ymult);
+        NSLOG(wisp, INFO, "Pretiling %p for Y*%d", bitmap, ymult);
         bitmap->pretile_y = nsbeos_bitmap_generate_pretile(bitmap->primary, 1, ymult);
     }
     return bitmap->pretile_y;
@@ -356,7 +356,7 @@ BBitmap *nsbeos_bitmap_get_pretile_xy(struct bitmap *bitmap)
         int height = bitmap->primary->Bounds().Height() + 1;
         int xmult = (MIN_PRETILE_WIDTH + width - 1) / width;
         int ymult = (MIN_PRETILE_HEIGHT + height - 1) / height;
-        NSLOG(netsurf, INFO, "Pretiling %p for X*%d Y*%d", bitmap, xmult, ymult);
+        NSLOG(wisp, INFO, "Pretiling %p for X*%d Y*%d", bitmap, xmult, ymult);
         bitmap->pretile_xy = nsbeos_bitmap_generate_pretile(bitmap->primary, xmult, ymult);
     }
     return bitmap->pretile_xy;

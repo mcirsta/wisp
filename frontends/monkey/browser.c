@@ -27,10 +27,10 @@
 #include "utils/nsurl.h"
 #include "utils/ring.h"
 #include "utils/utils.h"
-#include "neosurf/browser_window.h"
-#include "neosurf/mouse.h"
-#include "neosurf/plotters.h"
-#include "neosurf/window.h"
+#include "wisp/browser_window.h"
+#include "wisp/mouse.h"
+#include "wisp/plotters.h"
+#include "wisp/window.h"
 
 #include "monkey/browser.h"
 #include "monkey/output.h"
@@ -527,7 +527,7 @@ static void monkey_window_handle_redraw(int argc, char **argv)
         clip.y1 = atoi(argv[6]);
     }
 
-    NSLOG(netsurf, INFO, "Issue redraw");
+    NSLOG(wisp, INFO, "Issue redraw");
     moutf(MOUT_WINDOW, "REDRAW WIN %d START", atoi(argv[2]));
     browser_window_redraw(gw->bw, gw->scrollx, gw->scrolly, &clip, &ctx);
     moutf(MOUT_WINDOW, "REDRAW WIN %d STOP", atoi(argv[2]));

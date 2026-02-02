@@ -21,7 +21,7 @@
 #include <stdlib.h>
 
 #include "utils/errors.h"
-#include "neosurf/bitmap.h"
+#include "wisp/bitmap.h"
 
 #include "monkey/bitmap.h"
 #include "monkey/output.h"

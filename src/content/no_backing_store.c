@@ -20,9 +20,9 @@
  * Low-level resource cache null persistant storage implementation.
  */
 
-#include <neosurf/utils/nsurl.h>
+#include <wisp/utils/nsurl.h>
 
-#include <neosurf/content/backing_store.h>
+#include <wisp/content/backing_store.h>
 
 
 /* default to disabled backing store */

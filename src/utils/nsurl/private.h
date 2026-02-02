@@ -16,13 +16,13 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef NETSURF_UTILS_NSURL_PRIVATE_H_
-#define NETSURF_UTILS_NSURL_PRIVATE_H_
+#ifndef WISP_UTILS_NSURL_PRIVATE_H_
+#define WISP_UTILS_NSURL_PRIVATE_H_
 
 #include <libwapcaplet/libwapcaplet.h>
 
-#include <neosurf/utils/nsurl.h>
-#include <neosurf/utils/utils.h>
+#include <wisp/utils/nsurl.h>
+#include <wisp/utils/utils.h>
 
 
 /**

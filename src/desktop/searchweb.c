@@ -24,15 +24,15 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <neosurf/content/hlcache.h>
-#include <neosurf/utils/log.h>
-#include <neosurf/utils/nsoption.h>
-#include <neosurf/utils/utils.h>
+#include <wisp/content/hlcache.h>
+#include <wisp/utils/log.h>
+#include <wisp/utils/nsoption.h>
+#include <wisp/utils/utils.h>
 #include "utils/url.h"
-#include "neosurf/content.h"
+#include "wisp/content.h"
 
-#include <neosurf/desktop/gui_internal.h>
-#include <neosurf/desktop/searchweb.h>
+#include <wisp/desktop/gui_internal.h>
+#include <wisp/desktop/searchweb.h>
 #include "content/urldb.h"
 
 struct search_provider {
@@ -280,12 +280,12 @@ static nserror search_web_ico_callback(hlcache_handle *ico, const hlcache_event 
     switch (event->type) {
 
     case CONTENT_MSG_DONE:
-        NSLOG(neosurf, INFO, "icon '%s' retrieved", nsurl_access(hlcache_handle_get_url(ico)));
+        NSLOG(wisp, INFO, "icon '%s' retrieved", nsurl_access(hlcache_handle_get_url(ico)));
         guit->search_web->provider_update(provider->name, content_get_bitmap(ico));
         break;
 
     case CONTENT_MSG_ERROR:
-        NSLOG(neosurf, INFO, "icon %s error: %s", nsurl_access(hlcache_handle_get_url(ico)),
+        NSLOG(wisp, INFO, "icon %s error: %s", nsurl_access(hlcache_handle_get_url(ico)),
             event->data.errordata.errormsg);
 
         hlcache_handle_release(ico);
@@ -484,7 +484,7 @@ static nserror default_ico_callback(hlcache_handle *ico, const hlcache_event *ev
     switch (event->type) {
 
     case CONTENT_MSG_DONE:
-        NSLOG(neosurf, INFO, "default icon '%s' retrieved", nsurl_access(hlcache_handle_get_url(ico)));
+        NSLOG(wisp, INFO, "default icon '%s' retrieved", nsurl_access(hlcache_handle_get_url(ico)));
 
         /* only set to default icon if providers icon has no handle */
         if (ctx->providers[search_web_ctx.current].ico_handle == NULL) {
@@ -493,7 +493,7 @@ static nserror default_ico_callback(hlcache_handle *ico, const hlcache_event *ev
         break;
 
     case CONTENT_MSG_ERROR:
-        NSLOG(neosurf, INFO, "icon %s error: %s", nsurl_access(hlcache_handle_get_url(ico)),
+        NSLOG(wisp, INFO, "icon %s error: %s", nsurl_access(hlcache_handle_get_url(ico)),
             event->data.errordata.errormsg);
 
         hlcache_handle_release(ico);

@@ -27,8 +27,8 @@
  * The destructor is called once during browser shutdown
  */
 
-#ifndef NEOSURF_WINDOWS_COOKIES_H
-#define NEOSURF_WINDOWS_COOKIES_H
+#ifndef WISP_WINDOWS_COOKIES_H
+#define WISP_WINDOWS_COOKIES_H
 
 /**
  * make the cookie window visible.

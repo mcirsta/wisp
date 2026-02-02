@@ -21,8 +21,8 @@
  * \brief Core download context (interface)
  */
 
-#ifndef NETSURF_DESKTOP_DOWNLOAD_H_
-#define NETSURF_DESKTOP_DOWNLOAD_H_
+#ifndef WISP_DESKTOP_DOWNLOAD_H_
+#define WISP_DESKTOP_DOWNLOAD_H_
 
 #include "utils/errors.h"
 

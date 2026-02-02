@@ -23,13 +23,13 @@
 
 #include <stdlib.h>
 
-#include <neosurf/browser_window.h>
-#include <neosurf/desktop/searchweb.h>
-#include <neosurf/url_db.h>
-#include <neosurf/utils/log.h>
-#include <neosurf/utils/messages.h>
-#include <neosurf/utils/nsoption.h>
-#include <neosurf/utils/nsurl.h>
+#include <wisp/browser_window.h>
+#include <wisp/desktop/searchweb.h>
+#include <wisp/url_db.h>
+#include <wisp/utils/log.h>
+#include <wisp/utils/messages.h>
+#include <wisp/utils/nsoption.h>
+#include <wisp/utils/nsurl.h>
 
 #include "gtk/compat.h"
 #include "gtk/completion.h"

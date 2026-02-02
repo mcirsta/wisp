@@ -30,20 +30,20 @@
 
 #include <dom/dom.h>
 
-#include <neosurf/browser_window.h>
-#include <neosurf/content.h>
-#include <neosurf/content/hlcache.h>
-#include <neosurf/desktop/gui_internal.h>
-#include <neosurf/desktop/textarea.h>
-#include <neosurf/keypress.h>
-#include <neosurf/layout.h>
-#include <neosurf/misc.h>
-#include <neosurf/mouse.h>
-#include <neosurf/utils/corestrings.h>
-#include <neosurf/utils/log.h>
-#include <neosurf/utils/messages.h>
-#include <neosurf/utils/nsoption.h>
-#include <neosurf/utils/utils.h>
+#include <wisp/browser_window.h>
+#include <wisp/content.h>
+#include <wisp/content/hlcache.h>
+#include <wisp/desktop/gui_internal.h>
+#include <wisp/desktop/textarea.h>
+#include <wisp/keypress.h>
+#include <wisp/layout.h>
+#include <wisp/misc.h>
+#include <wisp/mouse.h>
+#include <wisp/utils/corestrings.h>
+#include <wisp/utils/log.h>
+#include <wisp/utils/messages.h>
+#include <wisp/utils/nsoption.h>
+#include <wisp/utils/utils.h>
 #include "content/handlers/javascript/js.h"
 #include "content/textsearch.h"
 #include "desktop/browser_history.h"
@@ -51,11 +51,11 @@
 #include "desktop/scrollbar.h"
 #include "desktop/selection.h"
 
-#include <neosurf/content/handlers/html/box.h>
-#include <neosurf/content/handlers/html/box_inspect.h>
-#include <neosurf/content/handlers/html/form_internal.h>
-#include <neosurf/content/handlers/html/interaction.h>
-#include <neosurf/content/handlers/html/private.h>
+#include <wisp/content/handlers/html/box.h>
+#include <wisp/content/handlers/html/box_inspect.h>
+#include <wisp/content/handlers/html/form_internal.h>
+#include <wisp/content/handlers/html/interaction.h>
+#include <wisp/content/handlers/html/private.h>
 #include "content/handlers/html/box_textarea.h"
 #include "content/handlers/html/font.h"
 #include "content/handlers/html/imagemap.h"
@@ -258,7 +258,7 @@ static void html__image_coords_dom_user_data_handler(
         break;
 
     default:
-        NSLOG(neosurf, INFO, "User data operation not handled.");
+        NSLOG(wisp, INFO, "User data operation not handled.");
         assert(0);
     }
 }
@@ -746,7 +746,7 @@ gadget_mouse_action(html_content *html, browser_mouse_state mouse, int x, int y,
             html->visible_select_menu = mas->gadget.control;
             res = form_open_select_menu(c, mas->gadget.control, form_select_menu_callback, c);
             if (res != NSERROR_OK) {
-                NSLOG(neosurf, ERROR, "%s", messages_get_errorcode(res));
+                NSLOG(wisp, ERROR, "%s", messages_get_errorcode(res));
                 html->visible_select_menu = NULL;
             }
             mas->result.pointer = BROWSER_POINTER_DEFAULT;
@@ -1303,7 +1303,7 @@ nserror html_mouse_action(struct content *c, struct browser_window *bw, browser_
     }
 
     if (res != NSERROR_OK) {
-        NSLOG(neosurf, ERROR, "%s", messages_get_errorcode(res));
+        NSLOG(wisp, ERROR, "%s", messages_get_errorcode(res));
     }
 
     return res;

@@ -30,13 +30,13 @@
 
 #include <dom/dom.h>
 
-#include <neosurf/content/content_protected.h>
-#include <neosurf/content/hlcache.h>
-#include <neosurf/utils/corestrings.h>
-#include <neosurf/utils/log.h>
+#include <wisp/content/content_protected.h>
+#include <wisp/content/hlcache.h>
+#include <wisp/utils/corestrings.h>
+#include <wisp/utils/log.h>
 
-#include <neosurf/content/handlers/html/box.h>
-#include <neosurf/content/handlers/html/private.h>
+#include <wisp/content/handlers/html/box.h>
+#include <wisp/content/handlers/html/private.h>
 #include "content/handlers/html/box_construct.h"
 #include "content/handlers/html/imagemap.h"
 
@@ -240,23 +240,23 @@ void imagemap_dump(html_content *c)
 
         map = c->imagemaps[i];
         while (map != NULL) {
-            NSLOG(neosurf, INFO, "Imagemap: %s", map->key);
+            NSLOG(wisp, INFO, "Imagemap: %s", map->key);
 
             for (entry = map->list; entry; entry = entry->next) {
                 switch (entry->type) {
                 case IMAGEMAP_DEFAULT:
-                    NSLOG(neosurf, INFO, "\tDefault: %s", nsurl_access(entry->url));
+                    NSLOG(wisp, INFO, "\tDefault: %s", nsurl_access(entry->url));
                     break;
                 case IMAGEMAP_RECT:
-                    NSLOG(neosurf, INFO, "\tRectangle: %s: [(%d,%d),(%d,%d)]", nsurl_access(entry->url),
+                    NSLOG(wisp, INFO, "\tRectangle: %s: [(%d,%d),(%d,%d)]", nsurl_access(entry->url),
                         entry->bounds.rect.x0, entry->bounds.rect.y0, entry->bounds.rect.x1, entry->bounds.rect.y1);
                     break;
                 case IMAGEMAP_CIRCLE:
-                    NSLOG(neosurf, INFO, "\tCircle: %s: [(%d,%d),%d]", nsurl_access(entry->url), entry->bounds.circle.x,
+                    NSLOG(wisp, INFO, "\tCircle: %s: [(%d,%d),%d]", nsurl_access(entry->url), entry->bounds.circle.x,
                         entry->bounds.circle.y, entry->bounds.circle.r);
                     break;
                 case IMAGEMAP_POLY:
-                    NSLOG(neosurf, INFO, "\tPolygon: %s:", nsurl_access(entry->url));
+                    NSLOG(wisp, INFO, "\tPolygon: %s:", nsurl_access(entry->url));
                     for (j = 0; j != entry->bounds.poly.num; j++) {
                         fprintf(
                             stderr, "(%d,%d) ", (int)entry->bounds.poly.xcoords[j], (int)entry->bounds.poly.ycoords[j]);
@@ -570,11 +570,11 @@ nserror imagemap_extract(html_content *c)
     uint32_t maybe_maps;
     nserror ret = NSERROR_OK;
 
-    NSLOG(netsurf, DEBUG, "PROFILER: START imagemap_extract %p", c);
+    NSLOG(wisp, DEBUG, "PROFILER: START imagemap_extract %p", c);
 
     exc = dom_document_get_elements_by_tag_name(c->document, corestring_dom_map, &nlist);
     if (exc != DOM_NO_ERR) {
-        NSLOG(netsurf, DEBUG, "PROFILER: STOP imagemap_extract %p", c);
+        NSLOG(wisp, DEBUG, "PROFILER: STOP imagemap_extract %p", c);
         return NSERROR_DOM;
     }
 
@@ -643,7 +643,7 @@ nserror imagemap_extract(html_content *c)
 
 out_nlist:
     dom_nodelist_unref(nlist);
-    NSLOG(netsurf, DEBUG, "PROFILER: STOP imagemap_extract %p", c);
+    NSLOG(wisp, DEBUG, "PROFILER: STOP imagemap_extract %p", c);
     return ret;
 }
 

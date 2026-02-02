@@ -26,8 +26,8 @@
  *
  */
 
-#ifndef NETSURF_GTK_RESOURCES_H
-#define NETSURF_GTK_RESOURCES_H 1
+#ifndef WISP_GTK_RESOURCES_H
+#define WISP_GTK_RESOURCES_H 1
 
 /**
  * Initialise GTK resources handling.

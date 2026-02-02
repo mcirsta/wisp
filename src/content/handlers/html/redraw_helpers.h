@@ -23,8 +23,8 @@
  * These functions are extracted from html_redraw_box to allow unit testing.
  */
 
-#ifndef NETSURF_HTML_REDRAW_HELPERS_H
-#define NETSURF_HTML_REDRAW_HELPERS_H
+#ifndef WISP_HTML_REDRAW_HELPERS_H
+#define WISP_HTML_REDRAW_HELPERS_H
 
 #include <stdbool.h>
 

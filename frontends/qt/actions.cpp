@@ -36,7 +36,7 @@ extern "C" {
 #include "utils/nsoption.h"
 #include "utils/nsurl.h"
 
-#include "neosurf/content.h"
+#include "wisp/content.h"
 
 #include "desktop/browser_history.h"
 #include "desktop/hotlist.h"
@@ -69,7 +69,7 @@ NS_Actions::NS_Actions(QWidget *parent, struct browser_window *bw)
       m_debug_render(new QAction(messages_get("DebugRender"), parent)),
       m_debug_box_tree(new QAction(messages_get("DebugBoxTree"), parent)),
       m_debug_dom_tree(new QAction(messages_get("DebugDomTree"), parent)),
-      m_about_netsurf(new QAction(messages_get("About"), parent)),
+      m_about_wisp(new QAction(messages_get("About"), parent)),
       m_link_new_tab(new QAction(messages_get("LinkNewTab"), parent)),
       m_link_new_window(new QAction(messages_get("LinkNewWin"), parent)),
       m_link_bookmark(new QAction(messages_get("LinkBookmark"), parent)),
@@ -147,7 +147,7 @@ NS_Actions::NS_Actions(QWidget *parent, struct browser_window *bw)
 
     connect(m_debug_dom_tree, &QAction::triggered, this, &NS_Actions::debug_dom_tree_slot);
 
-    connect(m_about_netsurf, &QAction::triggered, this, &NS_Actions::about_netsurf_slot);
+    connect(m_about_wisp, &QAction::triggered, this, &NS_Actions::about_wisp_slot);
 
     connect(m_link_new_tab, &QAction::triggered, this, &NS_Actions::link_new_tab_slot);
 
@@ -600,7 +600,7 @@ void NS_Actions::debug_dom_tree_slot(bool checked)
 }
 
 
-void NS_Actions::about_netsurf_slot(bool checked)
+void NS_Actions::about_wisp_slot(bool checked)
 {
 }
 
@@ -682,6 +682,6 @@ void NS_Actions::sel_search_slot(bool checked)
         nsurl_unref(url);
     }
     if (res != NSERROR_OK) {
-        NSLOG(netsurf, WARNING, "web search for %s failed with %s", m_selection, messages_get_errorcode(res));
+        NSLOG(wisp, WARNING, "web search for %s failed with %s", m_selection, messages_get_errorcode(res));
     }
 }

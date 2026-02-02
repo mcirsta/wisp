@@ -1,9 +1,9 @@
 #include <libwapcaplet/libwapcaplet.h>
-#include <neosurf/content.h>
-#include <neosurf/content/content_protected.h>
-#include <neosurf/desktop/gui_internal.h>
-#include <neosurf/utils/errors.h>
-#include <neosurf/utils/nsurl.h>
+#include <wisp/content.h>
+#include <wisp/content/content_protected.h>
+#include <wisp/desktop/gui_internal.h>
+#include <wisp/utils/errors.h>
+#include <wisp/utils/nsurl.h>
 #include "utils/nsurl/private.h"
 #include <stdlib.h>
 #include <string.h>
@@ -11,8 +11,8 @@
 static struct nsurl *stub_url;
 
 /* Stub guit for tests - layout is NULL so svg.c will use approximation */
-static struct neosurf_table stub_gui_table = {0};
-struct neosurf_table *guit = &stub_gui_table;
+static struct wisp_table stub_gui_table = {0};
+struct wisp_table *guit = &stub_gui_table;
 
 nserror content__init(struct content *c, const struct content_handler *handler, lwc_string *imime_type,
     const struct http_parameter *params, struct llcache_handle *llcache, const char *fallback_charset, bool quirks)

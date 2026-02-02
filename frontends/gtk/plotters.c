@@ -30,9 +30,9 @@
 #include <assert.h>
 #include <math.h>
 
-#include <neosurf/plotters.h>
-#include <neosurf/utils/log.h>
-#include <neosurf/utils/nsoption.h>
+#include <wisp/plotters.h>
+#include <wisp/utils/log.h>
+#include <wisp/utils/nsoption.h>
 
 #include "gtk/bitmap.h"
 #include "gtk/layout_pango.h"
@@ -393,7 +393,7 @@ static nserror nsgtk_plot_path(const struct redraw_context *ctx, const plot_styl
         return NSERROR_OK;
 
     if (p[0] != PLOTTER_PATH_MOVE) {
-        NSLOG(neosurf, INFO, "Path does not start with move");
+        NSLOG(wisp, INFO, "Path does not start with move");
         return NSERROR_INVALID;
     }
 
@@ -429,7 +429,7 @@ static nserror nsgtk_plot_path(const struct redraw_context *ctx, const plot_styl
             cairo_curve_to(current_cr, p[i + 1], p[i + 2], p[i + 3], p[i + 4], p[i + 5], p[i + 6]);
             i += 7;
         } else {
-            NSLOG(neosurf, INFO, "bad path command %f", p[i]);
+            NSLOG(wisp, INFO, "bad path command %f", p[i]);
             /* Reset matrix for safety */
             cairo_set_matrix(current_cr, &old_ctm);
             return NSERROR_INVALID;

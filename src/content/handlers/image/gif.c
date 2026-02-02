@@ -39,17 +39,17 @@
 
 #include <nsgif.h>
 
-#include <neosurf/bitmap.h>
-#include <neosurf/content.h>
-#include <neosurf/content/content.h>
-#include <neosurf/content/content_protected.h>
-#include <neosurf/content/llcache.h>
-#include <neosurf/desktop/gui_internal.h>
-#include <neosurf/misc.h>
-#include <neosurf/utils/log.h>
-#include <neosurf/utils/messages.h>
-#include <neosurf/utils/nsoption.h>
-#include <neosurf/utils/utils.h>
+#include <wisp/bitmap.h>
+#include <wisp/content.h>
+#include <wisp/content/content.h>
+#include <wisp/content/content_protected.h>
+#include <wisp/content/llcache.h>
+#include <wisp/desktop/gui_internal.h>
+#include <wisp/misc.h>
+#include <wisp/utils/log.h>
+#include <wisp/utils/messages.h>
+#include <wisp/utils/nsoption.h>
+#include <wisp/utils/utils.h>
 #include "content/content_factory.h"
 #include "desktop/bitmap.h"
 
@@ -226,7 +226,7 @@ static bool gif_convert(struct content *c)
     /* Initialise the GIF */
     gif_err = nsgif_data_scan(gif->gif, size, data);
     if (gif_err != NSGIF_OK) {
-        NSLOG(netsurf, INFO, "nsgif scan: %s", nsgif_strerror(gif_err));
+        NSLOG(wisp, INFO, "nsgif scan: %s", nsgif_strerror(gif_err));
         /* Not fatal unless we have no frames. */
     }
 

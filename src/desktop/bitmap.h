@@ -20,13 +20,13 @@
  * Internal core bitmap interface.
  */
 
-#ifndef _NETSURF_DESKTOP_BITMAP_H_
-#define _NETSURF_DESKTOP_BITMAP_H_
+#ifndef _WISP_DESKTOP_BITMAP_H_
+#define _WISP_DESKTOP_BITMAP_H_
 
 #include <nsutils/endian.h>
 
-#include "neosurf/bitmap.h"
-#include "neosurf/types.h"
+#include "wisp/bitmap.h"
+#include "wisp/types.h"
 
 /** Pixel format: colour component order. */
 struct bitmap_colour_layout {

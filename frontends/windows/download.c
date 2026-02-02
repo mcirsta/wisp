@@ -23,21 +23,21 @@
  * \todo The windows download functionality is very buggy this needs redoing
  */
 
-#include <neosurf/ns_inttypes.h>
-#include "neosurf/utils/inet.h" /* get correct winsock ordering */
+#include <wisp/ns_inttypes.h>
+#include "wisp/utils/inet.h" /* get correct winsock ordering */
 #include <limits.h>
 #include <shlobj.h>
 #include <windows.h>
 
 #include <sys/time.h>
-#include "neosurf/content/fetch.h"
-#include "neosurf/desktop/download.h"
-#include "neosurf/download.h"
-#include "neosurf/utils/log.h"
-#include "neosurf/utils/messages.h"
-#include "neosurf/utils/nsurl.h"
-#include "neosurf/utils/string.h"
-#include "neosurf/utils/utils.h"
+#include "wisp/content/fetch.h"
+#include "wisp/desktop/download.h"
+#include "wisp/download.h"
+#include "wisp/utils/log.h"
+#include "wisp/utils/messages.h"
+#include "wisp/utils/nsurl.h"
+#include "wisp/utils/string.h"
+#include "wisp/utils/utils.h"
 
 #include "windows/download.h"
 #include "windows/gui.h"
@@ -243,7 +243,7 @@ static struct gui_download_window *gui_download_window_create(download_context *
         strcat(destination, "/");
     if (strlen(destination) + strlen(filename) < PATH_MAX - 1)
         strcat(destination, filename);
-    NSLOG(neosurf, INFO, "download %s [%s] from %s to %s", filename, size, domain, destination);
+    NSLOG(wisp, INFO, "download %s [%s] from %s to %s", filename, size, domain, destination);
     w->title = filename;
     w->domain = domain;
     w->size = total_size;
@@ -301,7 +301,7 @@ static nserror gui_download_window_data(struct gui_download_window *w, const cha
     struct timeval val;
     res = fwrite((void *)data, 1, size, w->file);
     if (res != size)
-        NSLOG(neosurf, INFO, "file write error %" PRIsizet " of %u", size - res, size);
+        NSLOG(wisp, INFO, "file write error %" PRIsizet " of %u", size - res, size);
     w->downloaded += res;
     w->progress = (unsigned int)(((long long)(w->downloaded) * 10000) / w->size);
     gettimeofday(&val, NULL);
@@ -313,7 +313,7 @@ static nserror gui_download_window_data(struct gui_download_window *w, const cha
 
 static void gui_download_window_error(struct gui_download_window *w, const char *error_msg)
 {
-    NSLOG(neosurf, INFO, "error %s", error_msg);
+    NSLOG(wisp, INFO, "error %s", error_msg);
 }
 
 static void gui_download_window_done(struct gui_download_window *w)

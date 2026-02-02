@@ -23,8 +23,8 @@
  * Interface to content handler for plain text.
  */
 
-#ifndef NETSURF_HTML_TEXTPLAIN_H
-#define NETSURF_HTML_TEXTPLAIN_H
+#ifndef WISP_HTML_TEXTPLAIN_H
+#define WISP_HTML_TEXTPLAIN_H
 
 /**
  * Initialise the text content handler

@@ -19,7 +19,7 @@
 #include <limits.h>
 #include <stdlib.h>
 
-#include <neosurf/utils/corestrings.h>
+#include <wisp/utils/corestrings.h>
 #include "utils/http.h"
 
 #include "utils/http/generics.h"

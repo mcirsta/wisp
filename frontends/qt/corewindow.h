@@ -16,8 +16,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef NETSURF_QT_COREWINDOW_H
-#define NETSURF_QT_COREWINDOW_H 1
+#ifndef WISP_QT_COREWINDOW_H
+#define WISP_QT_COREWINDOW_H 1
 
 /**
  * qt core window operation table

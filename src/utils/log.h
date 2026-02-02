@@ -17,8 +17,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef NETSURF_LOG_H
-#define NETSURF_LOG_H
+#ifndef WISP_LOG_H
+#define WISP_LOG_H
 
 #include <stdbool.h>
 #include <stdio.h>
@@ -65,8 +65,8 @@ extern nserror nslog_set_filter(const char *filter);
 extern nserror nslog_set_filter_by_options(void);
 
 /* ensure a logging level is defined */
-#ifndef NETSURF_LOG_LEVEL
-#define NETSURF_LOG_LEVEL INFO
+#ifndef WISP_LOG_LEVEL
+#define WISP_LOG_LEVEL INFO
 #endif
 #define NSLOG_LEVEL_NS_DEEPDEBUG NSLOG_LEVEL_DEEPDEBUG
 #define NSLOG_LEVEL_NS_DEBUG NSLOG_LEVEL_DEBUG
@@ -78,13 +78,13 @@ extern nserror nslog_set_filter_by_options(void);
 
 #define NSLOG_LVL(level) NSLOG_LEVEL_##level
 #define NSLOG_EVL(level) NSLOG_LVL(level)
-#define NSLOG_COMPILED_MIN_LEVEL NSLOG_EVL(NETSURF_LOG_LEVEL)
+#define NSLOG_COMPILED_MIN_LEVEL NSLOG_EVL(WISP_LOG_LEVEL)
 
 #ifdef WITH_NSLOG
 
 #include <nslog/nslog.h>
 
-NSLOG_DECLARE_CATEGORY(netsurf);
+NSLOG_DECLARE_CATEGORY(wisp);
 NSLOG_DECLARE_CATEGORY(llcache);
 NSLOG_DECLARE_CATEGORY(fetch);
 NSLOG_DECLARE_CATEGORY(plot);

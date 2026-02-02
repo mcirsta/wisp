@@ -29,20 +29,20 @@
 #include <ctype.h>
 #include <string.h>
 
-#include <neosurf/content/content.h>
-#include <neosurf/utils/log.h>
-#include <neosurf/utils/utf8.h>
-#include <neosurf/utils/utils.h>
+#include <wisp/content/content.h>
+#include <wisp/utils/log.h>
+#include <wisp/utils/utf8.h>
+#include <wisp/utils/utils.h>
 #include "utils/talloc.h"
-#include "neosurf/browser_window.h"
-#include "neosurf/form.h"
-#include "neosurf/keypress.h"
-#include "neosurf/mouse.h"
-#include "neosurf/types.h"
-#include "neosurf/window.h"
+#include "wisp/browser_window.h"
+#include "wisp/form.h"
+#include "wisp/keypress.h"
+#include "wisp/mouse.h"
+#include "wisp/types.h"
+#include "wisp/window.h"
 
-#include <neosurf/desktop/gui_internal.h>
-#include <neosurf/desktop/textinput.h>
+#include <wisp/desktop/gui_internal.h>
+#include <wisp/desktop/textinput.h>
 #include "desktop/browser_private.h"
 
 /* Define to enable textinput debug */

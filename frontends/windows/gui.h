@@ -17,8 +17,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef NEOSURF_WINDOWS_GUI_H
-#define NEOSURF_WINDOWS_GUI_H
+#ifndef WISP_WINDOWS_GUI_H
+#define WISP_WINDOWS_GUI_H
 
 struct gui_window;
 

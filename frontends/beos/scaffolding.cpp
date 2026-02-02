@@ -58,15 +58,15 @@ extern "C" {
 #include "utils/nsoption.h"
 #include "utils/nsurl.h"
 #include "utils/utils.h"
-#include "netsurf/browser_window.h"
-#include "netsurf/clipboard.h"
-#include "netsurf/content.h"
-#include "netsurf/content_type.h"
-#include "netsurf/form.h"
-#include "netsurf/inttypes.h"
-#include "netsurf/keypress.h"
-#include "netsurf/netsurf.h"
-#include "netsurf/plotters.h"
+#include "wisp/browser_window.h"
+#include "wisp/clipboard.h"
+#include "wisp/content.h"
+#include "wisp/content_type.h"
+#include "wisp/form.h"
+#include "wisp/inttypes.h"
+#include "wisp/keypress.h"
+#include "wisp/wisp.h"
+#include "wisp/plotters.h"
 #include "desktop/browser_history.h"
 #include "desktop/search.h"
 #include "desktop/searchweb.h"
@@ -404,7 +404,7 @@ void NSThrobber::SetBitmap(const BBitmap *bitmap)
 
 
 NSBaseView::NSBaseView(BRect frame)
-    : BView(frame, "NetSurf", B_FOLLOW_ALL_SIDES, 0 /*B_WILL_DRAW | B_NAVIGABLE | B_FRAME_EVENTS*/
+    : BView(frame, "Wisp", B_FOLLOW_ALL_SIDES, 0 /*B_WILL_DRAW | B_NAVIGABLE | B_FRAME_EVENTS*/
           /*| B_SUBPIXEL_PRECISE*/),
       fScaffolding(NULL)
 {
@@ -557,7 +557,7 @@ status_t NSBaseView::Archive(BMessage *archive, bool deep) const
         return err;
     // add our own fields
     // we try to reuse the same fields as NetPositive
-    archive->AddString("add_on", "application/x-vnd.NetSurf");
+    archive->AddString("add_on", "application/x-vnd.Wisp");
     // archive->AddInt32("version", 2);
     archive->AddString("url", fScaffolding->url_bar->Text());
     archive->AddBool("openAsText", false);
@@ -594,7 +594,7 @@ BArchivable *NSBaseView::Instantiate(BMessage *archive)
     gui_init_replicant(2, info->args);
 
     replicant_done_sem = create_sem(0, "NS Replicant created");
-    replicant_thread = spawn_thread(nsbeos_replicant_main_thread, "NetSurf Main Thread", B_NORMAL_PRIORITY, info);
+    replicant_thread = spawn_thread(nsbeos_replicant_main_thread, "Wisp Main Thread", B_NORMAL_PRIORITY, info);
     if (replicant_thread < B_OK) {
         delete_sem(replicant_done_sem);
         delete info;
@@ -666,7 +666,7 @@ void NSBaseView::AllAttached()
 
 
 NSBrowserWindow::NSBrowserWindow(BRect frame, struct beos_scaffolding *scaf)
-    : BWindow(frame, "NetSurf", B_DOCUMENT_WINDOW, 0), fScaffolding(scaf)
+    : BWindow(frame, "Wisp", B_DOCUMENT_WINDOW, 0), fScaffolding(scaf)
 {
 }
 
@@ -746,7 +746,7 @@ int32 nsbeos_replicant_main_thread(void *_arg)
         nsbeos_gui_poll();
     }
 
-    netsurf_exit();
+    wisp_exit();
     delete info;
     delete_sem(replicant_done_sem);
     return ret;
@@ -757,7 +757,7 @@ int32 nsbeos_replicant_main_thread(void *_arg)
 
 static void nsbeos_window_destroy_event(NSBrowserWindow *window, nsbeos_scaffolding *g, BMessage *event)
 {
-    NSLOG(netsurf, INFO, "Being Destroyed = %d", g->being_destroyed);
+    NSLOG(wisp, INFO, "Being Destroyed = %d", g->being_destroyed);
 
     if (--open_windows == 0)
         nsbeos_done = true;
@@ -814,7 +814,7 @@ void nsbeos_scaffolding_dispatch_event(nsbeos_scaffolding *scaffold, BMessage *m
     bw = nsbeos_get_browser_for_gui(scaffold->top_level);
     bool reloadAll = false;
 
-    NSLOG(netsurf, INFO, "nsbeos_scaffolding_dispatch_event() what = 0x%08" PRIx32, message->what);
+    NSLOG(wisp, INFO, "nsbeos_scaffolding_dispatch_event() what = 0x%08" PRIx32, message->what);
     switch (message->what) {
     case B_QUIT_REQUESTED:
         nsbeos_scaffolding_destroy(scaffold);
@@ -938,7 +938,7 @@ void nsbeos_scaffolding_dispatch_event(nsbeos_scaffolding *scaffold, BMessage *m
         browser_window_key_press(bw, NS_KEY_PASTE);
         break;
     case B_SELECT_ALL:
-        NSLOG(netsurf, INFO, "Selecting all text");
+        NSLOG(wisp, INFO, "Selecting all text");
         browser_window_key_press(bw, NS_KEY_SELECT_ALL);
         break;
     case B_NETPOSITIVE_BACK:
@@ -976,7 +976,7 @@ void nsbeos_scaffolding_dispatch_event(nsbeos_scaffolding *scaffold, BMessage *m
         nsurl *url;
         nserror error;
 
-        static const char *addr = NETSURF_HOMEPAGE;
+        static const char *addr = WISP_HOMEPAGE;
 
         if (nsoption_charp(homepage_url) != NULL) {
             addr = nsoption_charp(homepage_url);
@@ -1259,7 +1259,7 @@ void nsbeos_scaffolding_dispatch_event(nsbeos_scaffolding *scaffold, BMessage *m
 
 void nsbeos_scaffolding_destroy(nsbeos_scaffolding *scaffold)
 {
-    NSLOG(netsurf, INFO, "Being Destroyed = %d", scaffold->being_destroyed);
+    NSLOG(wisp, INFO, "Being Destroyed = %d", scaffold->being_destroyed);
     if (scaffold->being_destroyed)
         return;
     scaffold->being_destroyed = 1;
@@ -1343,7 +1343,7 @@ static void recursively_set_menu_items_target(BMenu *menu, BHandler *handler)
 
 void nsbeos_attach_toplevel_view(nsbeos_scaffolding *g, BView *view)
 {
-    NSLOG(netsurf, INFO, "Attaching view to scaffolding %p", g);
+    NSLOG(wisp, INFO, "Attaching view to scaffolding %p", g);
 
     // this is a replicant,... and it went bad
     if (!g->window) {
@@ -1360,7 +1360,7 @@ void nsbeos_attach_toplevel_view(nsbeos_scaffolding *g, BView *view)
     view->MoveTo(rect.LeftTop());
 
 
-    g->scroll_view = new BScrollView("NetSurfScrollView", view, B_FOLLOW_ALL, 0, true, true, B_NO_BORDER);
+    g->scroll_view = new BScrollView("WispScrollView", view, B_FOLLOW_ALL, 0, true, true, B_NO_BORDER);
 
     g->top_view->AddChild(g->scroll_view);
 
@@ -1617,7 +1617,7 @@ nsbeos_scaffolding *nsbeos_new_scaffolding(struct gui_window *toplevel)
 {
     struct beos_scaffolding *g = (struct beos_scaffolding *)malloc(sizeof(*g));
 
-    NSLOG(netsurf, INFO, "Constructing a scaffold of %p for gui_window %p", g, toplevel);
+    NSLOG(wisp, INFO, "Constructing a scaffold of %p for gui_window %p", g, toplevel);
 
     g->top_level = toplevel;
     g->being_destroyed = 0;
@@ -1680,7 +1680,7 @@ nsbeos_scaffolding *nsbeos_new_scaffolding(struct gui_window *toplevel)
         // App menu
         // XXX: use icon item ?
 
-        menu = new BMenu(messages_get("NetSurf"));
+        menu = new BMenu(messages_get("Wisp"));
         g->menu_bar->AddItem(menu);
 
         message = new BMessage(B_ABOUT_REQUESTED);
@@ -2117,8 +2117,8 @@ nsbeos_scaffolding *nsbeos_new_scaffolding(struct gui_window *toplevel)
 
 
     // the status bar at the bottom
-    BString status("NetSurf");
-    status << " " << netsurf_version;
+    BString status("Wisp");
+    status << " " << wisp_version;
     g->status_bar = new BStringView(
         BRect(0, 0, -1, -1), "StatusBar", status.String(), B_FOLLOW_LEFT /*_RIGHT*/ | B_FOLLOW_BOTTOM);
 
@@ -2146,7 +2146,7 @@ void gui_window_set_title(struct gui_window *_g, const char *title)
     BString nt(title);
     if (nt.Length())
         nt << " - ";
-    nt << "NetSurf";
+    nt << "Wisp";
 
     if (!g->top_view->LockLooper())
         return;
@@ -2166,8 +2166,8 @@ void gui_window_set_status(struct gui_window *_g, const char *text)
         return;
 
     if (text == NULL || text[0] == '\0') {
-        BString status("NetSurf");
-        status << " " << netsurf_version;
+        BString status("Wisp");
+        status << " " << wisp_version;
         g->status_bar->SetText(status.String());
     } else {
         g->status_bar->SetText(text);

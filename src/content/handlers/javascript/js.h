@@ -20,10 +20,10 @@
  * Interface to javascript engine functions.
  */
 
-#ifndef NETSURF_JAVASCRIPT_JS_H_
-#define NETSURF_JAVASCRIPT_JS_H_
+#ifndef WISP_JAVASCRIPT_JS_H_
+#define WISP_JAVASCRIPT_JS_H_
 
-#include <neosurf/utils/errors.h>
+#include <wisp/utils/errors.h>
 
 struct dom_event;
 struct dom_document;

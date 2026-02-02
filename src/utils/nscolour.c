@@ -28,10 +28,10 @@
 #include <stddef.h>
 #include <stdio.h>
 
-#include <neosurf/ns_inttypes.h>
-#include "neosurf/plot_style.h"
+#include <wisp/ns_inttypes.h>
+#include "wisp/plot_style.h"
 
-#include <neosurf/utils/errors.h>
+#include <wisp/utils/errors.h>
 #include "utils/nscolour.h"
 #include "desktop/system_colour.h"
 

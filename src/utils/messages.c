@@ -34,10 +34,10 @@
 #include <string.h>
 #include <zlib.h>
 
-#include <neosurf/utils/hashtable.h>
-#include <neosurf/utils/log.h>
-#include <neosurf/utils/messages.h>
-#include <neosurf/utils/utils.h>
+#include <wisp/utils/hashtable.h>
+#include <wisp/utils/log.h>
+#include <wisp/utils/messages.h>
+#include <wisp/utils/utils.h>
 
 /** Messages are stored in a fixed-size hash table. */
 #define HASH_SIZE 101
@@ -120,7 +120,7 @@ static nserror messages_load_ctx(const char *path, struct hash_table **ctx)
 
     nctx = messages_create_ctx(HASH_SIZE);
     if (nctx == NULL) {
-        NSLOG(neosurf, INFO, "Unable to create hash table for messages file %s", path);
+        NSLOG(wisp, INFO, "Unable to create hash table for messages file %s", path);
         return NSERROR_NOMEM;
     }
 
@@ -171,7 +171,7 @@ nserror messages_add_from_file(const char *path)
         return NSERROR_BAD_PARAMETER;
     }
 
-    NSLOG(neosurf, INFO, "Loading Messages from '%s'", path);
+    NSLOG(wisp, INFO, "Loading Messages from '%s'", path);
 
     return messages_load_ctx(path, &messages_hash);
 }
@@ -185,7 +185,7 @@ nserror messages_add_from_inline(const uint8_t *data, size_t size)
         messages_hash = messages_create_ctx(HASH_SIZE);
     }
     if (messages_hash == NULL) {
-        NSLOG(neosurf, INFO, "Unable to create hash table");
+        NSLOG(wisp, INFO, "Unable to create hash table");
         return NSERROR_NOMEM;
     }
     return hash_add_inline(messages_hash, data, size);
@@ -200,7 +200,7 @@ nserror messages_add_key_value(const char *key, const char *value)
         messages_hash = messages_create_ctx(HASH_SIZE);
     }
     if (messages_hash == NULL) {
-        NSLOG(netsurf, INFO, "Unable to create hash table");
+        NSLOG(wisp, INFO, "Unable to create hash table");
         return NSERROR_NOMEM;
     }
     return hash_add(messages_hash, key, value);

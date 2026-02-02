@@ -102,8 +102,8 @@ static char *testnam(char *out)
 static nserror gui_options_init_defaults(struct nsoption_s *defaults)
 {
     /* Set defaults for absent option strings */
-    nsoption_setnull_charp(ca_bundle, strdup("NetSurf:Resources.ca-bundle"));
-    nsoption_setnull_charp(cookie_file, strdup("NetSurf:Cookies"));
+    nsoption_setnull_charp(ca_bundle, strdup("Wisp:Resources.ca-bundle"));
+    nsoption_setnull_charp(cookie_file, strdup("Wisp:Cookies"));
     nsoption_setnull_charp(cookie_jar, strdup("Cookies"));
 
     if (nsoption_charp(ca_bundle) == NULL || nsoption_charp(cookie_file) == NULL ||
@@ -271,8 +271,8 @@ struct format_test_vec_s format_test_vec[] = {
         "<tr><th>http_proxy_host</th><td>string</td><td>default</td><td><span class=\"null-content\">NULL</span></td></tr>",
         "http_proxy_host:"},
     {NSOPTION_cookie_file,
-        "<tr><th>cookie_file</th><td>string</td><td>user</td><td>/home/vince/.netsurf/Cookies</td></tr>",
-        "cookie_file:/home/vince/.netsurf/Cookies"},
+        "<tr><th>cookie_file</th><td>string</td><td>user</td><td>/home/vince/.wisp/Cookies</td></tr>",
+        "cookie_file:/home/vince/.wisp/Cookies"},
     {NSOPTION_disc_cache_size,
         "<tr><th>disc_cache_size</th><td>unsigned integer</td><td>default</td><td>1073741824</td></tr>",
         "disc_cache_size:1073741824"},

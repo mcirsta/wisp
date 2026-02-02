@@ -25,9 +25,9 @@
 #include <stdio.h>
 #include <string.h>
 
-#include <neosurf/utils/errors.h>
-#include <neosurf/utils/nsoption.h>
-#include "neosurf/types.h"
+#include <wisp/utils/errors.h>
+#include <wisp/utils/nsoption.h>
+#include "wisp/types.h"
 
 #include "config.h"
 #include "private.h"
@@ -57,7 +57,7 @@ bool fetch_about_config_handler(struct fetch_about_context *ctx)
 
     res = fetch_about_ssenddataf(ctx,
         "<html>\n<head>\n"
-        "<title>NeoSurf Browser Config</title>\n"
+        "<title>Wisp Browser Config</title>\n"
         "<link rel=\"stylesheet\" type=\"text/css\" "
         "href=\"resource:internal.css\">\n"
         "</head>\n"
@@ -65,7 +65,7 @@ bool fetch_about_config_handler(struct fetch_about_context *ctx)
         "id =\"configlist\" "
         "class=\"ns-even-bg ns-even-fg ns-border\" "
         "style=\"overflow: hidden;\">\n"
-        "<h1 class=\"ns-border\">NeoSurf Browser Config</h1>\n"
+        "<h1 class=\"ns-border\">Wisp Browser Config</h1>\n"
         "<table class=\"config\">\n"
         "<tr><th>Option</th>"
         "<th>Type</th>"

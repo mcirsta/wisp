@@ -26,11 +26,11 @@
  * - Serialization of inline SVG for libsvgtiny parsing
  */
 
-#ifndef NETSURF_HTML_SVG_H
-#define NETSURF_HTML_SVG_H
+#ifndef WISP_HTML_SVG_H
+#define WISP_HTML_SVG_H
 
 #include <dom/dom.h>
-#include <neosurf/utils/errors.h>
+#include <wisp/utils/errors.h>
 #include <stddef.h>
 
 struct html_content;

@@ -21,8 +21,8 @@
  * @brief Utility routines to obtain paths to file resources.
  */
 
-#ifndef _NETSURF_UTILS_FILEPATH_H_
-#define _NETSURF_UTILS_FILEPATH_H_
+#ifndef _WISP_UTILS_FILEPATH_H_
+#define _WISP_UTILS_FILEPATH_H_
 
 #include <stdarg.h>
 

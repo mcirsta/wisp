@@ -23,7 +23,7 @@
  * These plot styles are globaly available and used in many places.
  */
 
-#include "neosurf/plot_style.h"
+#include "wisp/plot_style.h"
 
 static plot_style_t plot_style_fill_white_static = {
     .fill_type = PLOT_OP_TYPE_SOLID,

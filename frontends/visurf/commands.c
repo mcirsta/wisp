@@ -1,22 +1,22 @@
 #include "visurf/commands.h"
 #include <dom/dom.h>
-#include <neosurf/browser_window.h>
-#include <neosurf/content.h>
-#include <neosurf/content/content.h>
-#include <neosurf/content/content_protected.h>
-#include <neosurf/content/handlers/html/box.h>
-#include <neosurf/content/handlers/html/box_inspect.h>
-#include <neosurf/content/handlers/html/html.h>
-#include <neosurf/content/handlers/html/html_save.h>
-#include <neosurf/content/hlcache.h>
-#include <neosurf/content_type.h>
-#include <neosurf/desktop/browser_history.h>
-#include <neosurf/desktop/search.h>
-#include <neosurf/keypress.h>
-#include <neosurf/utils/errors.h>
-#include <neosurf/utils/log.h>
-#include <neosurf/utils/nsurl.h>
-#include <neosurf/utils/string.h>
+#include <wisp/browser_window.h>
+#include <wisp/content.h>
+#include <wisp/content/content.h>
+#include <wisp/content/content_protected.h>
+#include <wisp/content/handlers/html/box.h>
+#include <wisp/content/handlers/html/box_inspect.h>
+#include <wisp/content/handlers/html/html.h>
+#include <wisp/content/handlers/html/html_save.h>
+#include <wisp/content/hlcache.h>
+#include <wisp/content_type.h>
+#include <wisp/desktop/browser_history.h>
+#include <wisp/desktop/search.h>
+#include <wisp/keypress.h>
+#include <wisp/utils/errors.h>
+#include <wisp/utils/log.h>
+#include <wisp/utils/nsurl.h>
+#include <wisp/utils/string.h>
 #include "visurf/getopt.h"
 #include "visurf/settings.h"
 #include "visurf/undo.h"
@@ -60,13 +60,13 @@ static void handle_error(char *error_message)
 static int cmd_back(struct nsvi_state *state, int argc, char *argv[])
 {
     if (argc != 1) {
-        NSLOG(neosurf, ERROR, "back: unexpected argument");
+        NSLOG(wisp, ERROR, "back: unexpected argument");
         handle_error(strdup("back: unexpected argument"));
         return 1;
     }
     struct nsvi_window *win = global_state->keyboard_focus;
     if (!win) {
-        NSLOG(neosurf, ERROR, "back: no active window");
+        NSLOG(wisp, ERROR, "back: no active window");
         handle_error(strdup("back: no active window"));
         return 1;
     }
@@ -78,12 +78,12 @@ static int cmd_back(struct nsvi_state *state, int argc, char *argv[])
 static int cmd_bind(struct nsvi_state *state, int argc, char *argv[])
 {
     if (argc != 3) {
-        NSLOG(neosurf, ERROR, "bind: incorrect number of arguments");
+        NSLOG(wisp, ERROR, "bind: incorrect number of arguments");
         handle_error(strdup("bind: incorrect number of arguments"));
         return 1;
     }
     if (nsvi_bindings_new(&state->bindings, argv[1], argv[2]) != NSERROR_OK) {
-        NSLOG(neosurf, ERROR, "bind: invalid binding");
+        NSLOG(wisp, ERROR, "bind: invalid binding");
         handle_error(strdup("bind: invalid binding"));
         return 1;
     }
@@ -93,13 +93,13 @@ static int cmd_bind(struct nsvi_state *state, int argc, char *argv[])
 static int cmd_close(struct nsvi_state *state, int argc, char *argv[])
 {
     if (argc != 1) {
-        NSLOG(neosurf, ERROR, "close: unexpected argument");
+        NSLOG(wisp, ERROR, "close: unexpected argument");
         handle_error(strdup("close: unexpected argument"));
         return 1;
     }
     struct nsvi_window *win = global_state->keyboard_focus;
     if (!win) {
-        NSLOG(neosurf, ERROR, "close: no active window");
+        NSLOG(wisp, ERROR, "close: no active window");
         handle_error(strdup("close: no active window"));
         return 1;
     }
@@ -126,7 +126,7 @@ static int cmd_exec(struct nsvi_state *state, int argc, char *argv[])
     if (pid == 0) {
         execvp(subcmd[0], subcmd);
         // TODO: Bubble these errors up to the UI somehow
-        NSLOG(neosurf, ERROR, "exec: execvp failed: %s", strerror(errno));
+        NSLOG(wisp, ERROR, "exec: execvp failed: %s", strerror(errno));
         exit(1);
     }
     // TODO: Keep track of the subprocess, show in UI if it exits nonzero
@@ -138,7 +138,7 @@ static int cmd_exline(struct nsvi_state *state, int argc, char *argv[])
 {
     struct nsvi_window *win = global_state->keyboard_focus;
     if (!win) {
-        NSLOG(neosurf, ERROR, "exline: no active window");
+        NSLOG(wisp, ERROR, "exline: no active window");
         handle_error(strdup("exline: no active window"));
         return 1;
     }
@@ -315,7 +315,7 @@ static int cmd_follow(struct nsvi_state *state, int argc, char *argv[])
             mode = FOLLOW_YANK_PRIMARY;
             break;
         default:
-            NSLOG(neosurf, ERROR, "follow: invalid flag '%c'", c);
+            NSLOG(wisp, ERROR, "follow: invalid flag '%c'", c);
             char *error_message = malloc(25);
             sprintf(error_message, "follow: invalid flag '%c'", c);
             handle_error(error_message);
@@ -323,33 +323,33 @@ static int cmd_follow(struct nsvi_state *state, int argc, char *argv[])
         }
     }
     if (ns_optind != argc) {
-        NSLOG(neosurf, ERROR, "follow: unexpected argument");
+        NSLOG(wisp, ERROR, "follow: unexpected argument");
         handle_error(strdup("follow: unexpected argument"));
         return 1;
     }
 
     struct nsvi_window *win = global_state->keyboard_focus;
     if (!win) {
-        NSLOG(neosurf, ERROR, "follow: no active window");
+        NSLOG(wisp, ERROR, "follow: no active window");
         handle_error(strdup("follow: no active window"));
         return 1;
     }
     struct gui_window *gw = win->tabs[win->tab];
     struct hlcache_handle *handle = browser_window_get_content(gw->bw);
     if (!handle) {
-        NSLOG(neosurf, ERROR, "follow: no active content");
+        NSLOG(wisp, ERROR, "follow: no active content");
         handle_error(strdup("follow: no active content"));
         return 1;
     }
     if (content_get_type(handle) != CONTENT_HTML) {
-        NSLOG(neosurf, ERROR, "follow: cannot work with non-HTML content");
+        NSLOG(wisp, ERROR, "follow: cannot work with non-HTML content");
         handle_error(strdup("follow: cannot work with non-HTML content"));
         return 1;
     }
     struct box *tree = html_get_box_tree(handle);
     follow_collect_hints(gw, tree);
     if (gw->follow.nhint == 0) {
-        NSLOG(neosurf, ERROR, "follow: no hints");
+        NSLOG(wisp, ERROR, "follow: no hints");
         handle_error(strdup("follow: no hints"));
         return 1;
     }
@@ -366,13 +366,13 @@ static int cmd_follow(struct nsvi_state *state, int argc, char *argv[])
 static int cmd_forward(struct nsvi_state *state, int argc, char *argv[])
 {
     if (argc != 1) {
-        NSLOG(neosurf, ERROR, "forward: unexpected argument");
+        NSLOG(wisp, ERROR, "forward: unexpected argument");
         handle_error(strdup("forward: unexpected argument"));
         return 1;
     }
     struct nsvi_window *win = global_state->keyboard_focus;
     if (!win) {
-        NSLOG(neosurf, ERROR, "forward: no active window");
+        NSLOG(wisp, ERROR, "forward: no active window");
         handle_error(strdup("forward: no active window"));
         return 1;
     }
@@ -384,13 +384,13 @@ static int cmd_forward(struct nsvi_state *state, int argc, char *argv[])
 static int cmd_fullscreen(struct nsvi_state *state, int argc, char *argv[])
 {
     if (argc != 1) {
-        NSLOG(neosurf, ERROR, "fullscreen: unexpected argument");
+        NSLOG(wisp, ERROR, "fullscreen: unexpected argument");
         handle_error(strdup("fullscreen: unexpected argument"));
         return 1;
     }
     struct nsvi_window *win = global_state->keyboard_focus;
     if (!win) {
-        NSLOG(neosurf, ERROR, "fullscreen: no active window");
+        NSLOG(wisp, ERROR, "fullscreen: no active window");
         handle_error(strdup("fullscreen: no active window"));
         return 1;
     }
@@ -405,13 +405,13 @@ static int cmd_fullscreen(struct nsvi_state *state, int argc, char *argv[])
 static int cmd_insert(struct nsvi_state *state, int argc, char *argv[])
 {
     if (argc != 1) {
-        NSLOG(neosurf, ERROR, "insert: unexpected argument");
+        NSLOG(wisp, ERROR, "insert: unexpected argument");
         handle_error(strdup("insert: unexpected argument"));
         return 1;
     }
     struct nsvi_window *win = global_state->keyboard_focus;
     if (!win) {
-        NSLOG(neosurf, ERROR, "insert: no active window");
+        NSLOG(wisp, ERROR, "insert: no active window");
         handle_error(strdup("insert: no active window"));
         return 1;
     }
@@ -441,7 +441,7 @@ static int cmd_open(struct nsvi_state *state, int argc, char *argv[])
             filter_url = false;
             break;
         default:
-            NSLOG(neosurf, ERROR, "open: invalid flag '%c'", c);
+            NSLOG(wisp, ERROR, "open: invalid flag '%c'", c);
             char *error_message = malloc(23);
             sprintf(error_message, "open: invalid flag '%c'", c);
             handle_error(error_message);
@@ -449,7 +449,7 @@ static int cmd_open(struct nsvi_state *state, int argc, char *argv[])
         }
     }
     if (ns_optind >= argc) {
-        NSLOG(neosurf, ERROR, "open: expected an argument");
+        NSLOG(wisp, ERROR, "open: expected an argument");
         handle_error(strdup("open: expected an argument"));
         return 1;
     }
@@ -470,7 +470,7 @@ static int cmd_open(struct nsvi_state *state, int argc, char *argv[])
     }
 
     if (error != NSERROR_OK) {
-        NSLOG(neosurf, ERROR, "open: invalid url");
+        NSLOG(wisp, ERROR, "open: invalid url");
         handle_error(strdup("open: invalid url"));
         ret = 1;
         goto exit;
@@ -478,7 +478,7 @@ static int cmd_open(struct nsvi_state *state, int argc, char *argv[])
 
     struct nsvi_window *win = global_state->keyboard_focus;
     if (!win) {
-        NSLOG(neosurf, ERROR, "open: no active window");
+        NSLOG(wisp, ERROR, "open: no active window");
         handle_error(strdup("open: no active window"));
         ret = 1;
         goto exit;
@@ -497,7 +497,7 @@ static int cmd_open(struct nsvi_state *state, int argc, char *argv[])
     }
     nsurl_unref(url);
     if (error != NSERROR_OK) {
-        NSLOG(neosurf, ERROR, "open: browser_window_navigate failed");
+        NSLOG(wisp, ERROR, "open: browser_window_navigate failed");
         handle_error(strdup("open: browser_window_navigate failed"));
         ret = 1;
         goto exit;
@@ -512,7 +512,7 @@ exit:
 static int cmd_page(struct nsvi_state *state, int argc, char *argv[])
 {
     if (argc != 2) {
-        NSLOG(neosurf, ERROR, "page: expected argument");
+        NSLOG(wisp, ERROR, "page: expected argument");
         handle_error(strdup("page: expected argument"));
         return 1;
     }
@@ -520,13 +520,13 @@ static int cmd_page(struct nsvi_state *state, int argc, char *argv[])
     struct nsvi_window *win = global_state->keyboard_focus;
 
     if (!win) {
-        NSLOG(neosurf, ERROR, "page: no active window");
+        NSLOG(wisp, ERROR, "page: no active window");
         handle_error(strdup("page: no active window"));
         return 1;
     }
 
     if ((strcmp(argv[1], "next") != 0) && (strcmp(argv[1], "prev") != 0)) {
-        NSLOG(neosurf, ERROR, "page: expected <next|prev>");
+        NSLOG(wisp, ERROR, "page: expected <next|prev>");
         handle_error(strdup("page: expected <next|prev>"));
         return 1;
     }
@@ -535,13 +535,13 @@ static int cmd_page(struct nsvi_state *state, int argc, char *argv[])
     struct hlcache_handle *handle = browser_window_get_content(bw);
 
     if (!handle) {
-        NSLOG(neosurf, ERROR, "page: no active content");
+        NSLOG(wisp, ERROR, "page: no active content");
         handle_error(strdup("page: no active content"));
         return 1;
     }
 
     if (content_get_type(handle) != CONTENT_HTML) {
-        NSLOG(neosurf, ERROR, "page: cannot work with non-HTML content");
+        NSLOG(wisp, ERROR, "page: cannot work with non-HTML content");
         handle_error(strdup("page: cannot work with non-HTML content"));
         return 1;
     }
@@ -562,7 +562,7 @@ static int cmd_page(struct nsvi_state *state, int argc, char *argv[])
         link = link->next;
     }
 
-    NSLOG(neosurf, WARNING, "page: no <link rel=\"%s\"> found", argv[1]);
+    NSLOG(wisp, WARNING, "page: no <link rel=\"%s\"> found", argv[1]);
     ret = 1;
     goto exit;
 
@@ -594,20 +594,20 @@ static int cmd_paste(struct nsvi_state *state, int argc, char *argv[])
         }
     }
     if (ns_optind != argc) {
-        NSLOG(neosurf, ERROR, "paste: expected one argument");
+        NSLOG(wisp, ERROR, "paste: expected one argument");
         handle_error(strdup("paste: expected one argument"));
         return 1;
     }
     struct nsvi_window *win = state->keyboard_focus;
     if (!win) {
-        NSLOG(neosurf, ERROR, "paste: no active window");
+        NSLOG(wisp, ERROR, "paste: no active window");
         handle_error(strdup("paste: no active window"));
         return 1;
     }
 
     struct wl_data_offer *offer = state->selected_offer;
     if (!offer) {
-        NSLOG(neosurf, WARNING, "paste: nothing to paste");
+        NSLOG(wisp, WARNING, "paste: nothing to paste");
         return 1;
     }
 
@@ -641,7 +641,7 @@ static int cmd_paste(struct nsvi_state *state, int argc, char *argv[])
     nserror error = nsurl_create(data, &url);
     free(data);
     if (error != NSERROR_OK) {
-        NSLOG(neosurf, ERROR, "paste: invalid url");
+        NSLOG(wisp, ERROR, "paste: invalid url");
         handle_error(strdup("paste: invalid url"));
         return 1;
     }
@@ -661,7 +661,7 @@ static int cmd_paste(struct nsvi_state *state, int argc, char *argv[])
     nsurl_unref(url);
 
     if (error != NSERROR_OK) {
-        NSLOG(neosurf, ERROR, "open: browser_window_navigate failed");
+        NSLOG(wisp, ERROR, "open: browser_window_navigate failed");
         handle_error(strdup("open: browser_window_navigate failed"));
         return 1;
     }
@@ -686,7 +686,7 @@ static int cmd_reload(struct nsvi_state *state, int argc, char *argv[])
             force = true;
             break;
         default:
-            NSLOG(neosurf, ERROR, "reload: invalid flag '%c'", c);
+            NSLOG(wisp, ERROR, "reload: invalid flag '%c'", c);
             char *error_message = malloc(25);
             sprintf(error_message, "reload: invalid flag '%c'", c);
             handle_error(error_message);
@@ -694,14 +694,14 @@ static int cmd_reload(struct nsvi_state *state, int argc, char *argv[])
         }
     }
     if (ns_optind < argc) {
-        NSLOG(neosurf, ERROR, "reload: unexpected argument");
+        NSLOG(wisp, ERROR, "reload: unexpected argument");
         handle_error(strdup("reload: unexpected argument"));
         return 1;
     }
 
     struct nsvi_window *win = state->keyboard_focus;
     if (!win) {
-        NSLOG(neosurf, WARNING, "reload: no active window");
+        NSLOG(wisp, WARNING, "reload: no active window");
         return 1;
     }
     struct gui_window *gw = win->tabs[win->tab];
@@ -727,7 +727,7 @@ static int cmd_scroll(struct nsvi_state *state, int argc, char *argv[])
             ref = PAGE;
             break;
         default:
-            NSLOG(neosurf, ERROR, "scroll: invalid flag '%c'", c);
+            NSLOG(wisp, ERROR, "scroll: invalid flag '%c'", c);
             char *error_message = malloc(25);
             sprintf(error_message, "scroll: invalid flag '%c'", c);
             handle_error(error_message);
@@ -735,7 +735,7 @@ static int cmd_scroll(struct nsvi_state *state, int argc, char *argv[])
         }
     }
     if (ns_optind >= argc) {
-        NSLOG(neosurf, ERROR, "scroll: expected argument");
+        NSLOG(wisp, ERROR, "scroll: expected argument");
         handle_error(strdup("scroll: expected argument"));
         return 1;
     }
@@ -757,7 +757,7 @@ static int cmd_scroll(struct nsvi_state *state, int argc, char *argv[])
             amt = -amt;
             break;
         default:
-            NSLOG(neosurf, ERROR, "scroll: invalid argument");
+            NSLOG(wisp, ERROR, "scroll: invalid argument");
             handle_error(strdup("scroll: invalid argument"));
             return 1;
         }
@@ -765,7 +765,7 @@ static int cmd_scroll(struct nsvi_state *state, int argc, char *argv[])
     }
 
     if (!state->keyboard_focus) {
-        NSLOG(neosurf, WARNING, "scroll: no active window");
+        NSLOG(wisp, WARNING, "scroll: no active window");
         return 1;
     }
 
@@ -841,7 +841,7 @@ static int cmd_search(struct nsvi_state *state, int argc, char *argv[])
             gw->search_flags |= SEARCH_FLAG_CASE_SENSITIVE;
             break;
         default:
-            NSLOG(neosurf, ERROR, "search: invalid flag '%c'", c);
+            NSLOG(wisp, ERROR, "search: invalid flag '%c'", c);
             char *error_message = malloc(25);
             sprintf(error_message, "search: invalid flag '%c'", c);
             handle_error(error_message);
@@ -861,12 +861,12 @@ static int cmd_search(struct nsvi_state *state, int argc, char *argv[])
 static int cmd_set(struct nsvi_state *state, int argc, char *argv[])
 {
     if (argc != 3) {
-        NSLOG(neosurf, ERROR, "set: expected two arguments");
+        NSLOG(wisp, ERROR, "set: expected two arguments");
         handle_error(strdup("set: expected two arguments"));
         return 1;
     }
     if (!nsvi_config_set(argv[1], argv[2])) {
-        NSLOG(neosurf, ERROR, "set: invalid setting %s", argv[1]);
+        NSLOG(wisp, ERROR, "set: invalid setting %s", argv[1]);
         char *error_message = malloc(strlen(argv[1]) + 22);
         sprintf(error_message, "set: invalid setting %s", argv[1]);
         handle_error(error_message);
@@ -881,7 +881,7 @@ static int cmd_set(struct nsvi_state *state, int argc, char *argv[])
 static int cmd_source(struct nsvi_state *state, int argc, char *argv[])
 {
     if (argc < 2) {
-        NSLOG(neosurf, ERROR, "source: not enough arguments");
+        NSLOG(wisp, ERROR, "source: not enough arguments");
         handle_error(strdup("source: not enough arguments"));
         return 1;
     }
@@ -891,13 +891,13 @@ static int cmd_source(struct nsvi_state *state, int argc, char *argv[])
 static int cmd_stop(struct nsvi_state *state, int argc, char *argv[])
 {
     if (argc != 1) {
-        NSLOG(neosurf, ERROR, "stop: unexpected argument");
+        NSLOG(wisp, ERROR, "stop: unexpected argument");
         handle_error(strdup("stop: unexpected argument"));
         return 1;
     }
     struct nsvi_window *win = global_state->keyboard_focus;
     if (!win) {
-        NSLOG(neosurf, ERROR, "stop: no active window");
+        NSLOG(wisp, ERROR, "stop: no active window");
         handle_error(strdup("stop: no active window"));
         return 1;
     }
@@ -909,13 +909,13 @@ static int cmd_stop(struct nsvi_state *state, int argc, char *argv[])
 static int cmd_tab(struct nsvi_state *state, int argc, char *argv[])
 {
     if (argc != 2) {
-        NSLOG(neosurf, ERROR, "tab: expected argument");
+        NSLOG(wisp, ERROR, "tab: expected argument");
         handle_error(strdup("tab: expected argument"));
         return 1;
     }
     struct nsvi_window *win = global_state->keyboard_focus;
     if (!win) {
-        NSLOG(neosurf, ERROR, "tab: no active window");
+        NSLOG(wisp, ERROR, "tab: no active window");
         handle_error(strdup("tab: no active window"));
         return 1;
     }
@@ -928,7 +928,7 @@ static int cmd_tab(struct nsvi_state *state, int argc, char *argv[])
         char *endptr;
         i = strtoul(argv[1], &endptr, 10);
         if (*endptr) {
-            NSLOG(neosurf, ERROR, "tab: expected <next|prev|[index]>");
+            NSLOG(wisp, ERROR, "tab: expected <next|prev|[index]>");
             handle_error(strdup("tab: expected <next|prev|[index]>"));
             return 1;
         }
@@ -945,13 +945,13 @@ static int cmd_tab(struct nsvi_state *state, int argc, char *argv[])
 static int cmd_tabmove(struct nsvi_state *state, int argc, char *argv[])
 {
     if (argc != 2) {
-        NSLOG(neosurf, ERROR, "tabmove: expected argument");
+        NSLOG(wisp, ERROR, "tabmove: expected argument");
         handle_error(strdup("tabmove: expected argument"));
         return 1;
     }
     struct nsvi_window *win = global_state->keyboard_focus;
     if (!win) {
-        NSLOG(neosurf, ERROR, "tabmove: no active window");
+        NSLOG(wisp, ERROR, "tabmove: no active window");
         handle_error(strdup("tabmove: no active window"));
         return 1;
     }
@@ -960,7 +960,7 @@ static int cmd_tabmove(struct nsvi_state *state, int argc, char *argv[])
     int i = win->tab;
     int j = strtoul(argv[1], &endptr, 10);
     if (*endptr) {
-        NSLOG(neosurf, ERROR, "tabmove: expected [index]");
+        NSLOG(wisp, ERROR, "tabmove: expected [index]");
         handle_error(strdup("tabmove: expected [index]"));
         return 1;
     }
@@ -985,12 +985,12 @@ static int cmd_tabmove(struct nsvi_state *state, int argc, char *argv[])
 static int cmd_unbind(struct nsvi_state *state, int argc, char *argv[])
 {
     if (argc != 2) {
-        NSLOG(neosurf, ERROR, "unbind: unexpected argument");
+        NSLOG(wisp, ERROR, "unbind: unexpected argument");
         handle_error(strdup("unbind: unexpected argument"));
         return 1;
     }
     if (nsvi_bindings_remove(&state->bindings, argv[1]) != NSERROR_OK) {
-        NSLOG(neosurf, ERROR, "unbind: invalid binding");
+        NSLOG(wisp, ERROR, "unbind: invalid binding");
         handle_error(strdup("unbind: invalid binding"));
         return 1;
     }
@@ -1000,19 +1000,19 @@ static int cmd_unbind(struct nsvi_state *state, int argc, char *argv[])
 static int cmd_undo(struct nsvi_state *state, int argc, char *argv[])
 {
     if (argc != 1) {
-        NSLOG(neosurf, ERROR, "undo: unexpected argument");
+        NSLOG(wisp, ERROR, "undo: unexpected argument");
         handle_error(strdup("undo: unexpected argument"));
         return 1;
     }
     struct nsvi_window *win = global_state->keyboard_focus;
     if (!win) {
-        NSLOG(neosurf, ERROR, "undo: no active window");
+        NSLOG(wisp, ERROR, "undo: no active window");
         handle_error(strdup("undo: no active window"));
         return 1;
     }
     struct nsvi_undo *undo = state->undo;
     if (!undo) {
-        NSLOG(neosurf, ERROR, "undo: nothing to undo");
+        NSLOG(wisp, ERROR, "undo: nothing to undo");
         handle_error(strdup("undo: nothing to undo"));
         return 1;
     }
@@ -1025,7 +1025,7 @@ static int cmd_undo(struct nsvi_state *state, int argc, char *argv[])
         error = browser_window_create(
             BW_CREATE_TAB | BW_CREATE_FOREGROUND | BW_CREATE_HISTORY, undo->urls[0], NULL, gw->bw, NULL);
         if (error != NSERROR_OK) {
-            NSLOG(neosurf, ERROR, "undo: failed to create tab");
+            NSLOG(wisp, ERROR, "undo: failed to create tab");
             handle_error(strdup("undo: failed to create tab"));
             return 1;
         }
@@ -1064,7 +1064,7 @@ static int cmd_yank(struct nsvi_state *state, int argc, char *argv[])
             object = SELECTION;
             break;
         default:
-            NSLOG(neosurf, ERROR, "yank: invalid flag '%c'", c);
+            NSLOG(wisp, ERROR, "yank: invalid flag '%c'", c);
             char *error_message = malloc(23);
             sprintf(error_message, "yank: invalid flag '%c'", c);
             handle_error(error_message);
@@ -1072,14 +1072,14 @@ static int cmd_yank(struct nsvi_state *state, int argc, char *argv[])
         }
     }
     if (ns_optind < argc) {
-        NSLOG(neosurf, ERROR, "yank: unexpected argument");
+        NSLOG(wisp, ERROR, "yank: unexpected argument");
         handle_error(strdup("yank: unexpected argument"));
         return 1;
     }
 
     struct nsvi_window *win = state->keyboard_focus;
     if (!win) {
-        NSLOG(neosurf, WARNING, "yank: no active window");
+        NSLOG(wisp, WARNING, "yank: no active window");
         return 1;
     }
 
@@ -1101,7 +1101,7 @@ static int cmd_yank(struct nsvi_state *state, int argc, char *argv[])
         return 0;
     }
     if (err != NSERROR_OK) {
-        NSLOG(neosurf, ERROR, "yank: error setting clipboard");
+        NSLOG(wisp, ERROR, "yank: error setting clipboard");
         handle_error(strdup("yank: error setting clipboard"));
         return 1;
     }
@@ -1122,7 +1122,7 @@ static int cmd_zoom(struct nsvi_state *state, int argc, char *argv[])
     // TODO: Remember zoom preference for each domain
     bool relative = false;
     if (argc < 2) {
-        NSLOG(neosurf, ERROR, "zoom: expected argument");
+        NSLOG(wisp, ERROR, "zoom: expected argument");
         handle_error(strdup("zoom: expected argument"));
         return 1;
     }
@@ -1144,7 +1144,7 @@ static int cmd_zoom(struct nsvi_state *state, int argc, char *argv[])
             amt = -amt;
             break;
         default:
-            NSLOG(neosurf, ERROR, "zoom: invalid argument");
+            NSLOG(wisp, ERROR, "zoom: invalid argument");
             handle_error(strdup("zoom: invalid argument"));
             return 1;
         }
@@ -1153,14 +1153,14 @@ static int cmd_zoom(struct nsvi_state *state, int argc, char *argv[])
 
     struct nsvi_window *win = state->keyboard_focus;
     if (!win) {
-        NSLOG(neosurf, WARNING, "zoom: no active window");
+        NSLOG(wisp, WARNING, "zoom: no active window");
         return 1;
     }
 
     struct gui_window *gw = win->tabs[win->tab];
     nserror error = browser_window_set_scale(gw->bw, amt, !relative);
     if (error != NSERROR_OK) {
-        NSLOG(neosurf, WARNING, "zoom: browser_window_set_scale failed");
+        NSLOG(wisp, WARNING, "zoom: browser_window_set_scale failed");
         return 1;
     }
     return 0;
@@ -1269,7 +1269,7 @@ void nsvi_command(void *user, const char *cmd)
     wordexp_t p;
     int ret = wordexp(cmd, &p, 0);
     if (ret) {
-        NSLOG(neosurf, ERROR, "Unable to expand line: '%s'", cmd);
+        NSLOG(wisp, ERROR, "Unable to expand line: '%s'", cmd);
         char *error_message = malloc(strlen(cmd) + 26);
         sprintf(error_message, "Unable to expand line: '%s'", cmd);
         handle_error(error_message);
@@ -1288,11 +1288,11 @@ void nsvi_command(void *user, const char *cmd)
             error_message = malloc(strlen(argv[0]) + 19);
             sprintf(error_message, "Invalid command '%s'", argv[0]);
         }
-        NSLOG(neosurf, ERROR, "%s", error_message);
+        NSLOG(wisp, ERROR, "%s", error_message);
         handle_error(error_message);
         goto exit;
     }
-    NSLOG(neosurf, INFO, "Running command %s", cmd);
+    NSLOG(wisp, INFO, "Running command %s", cmd);
 
     command->exec(state, argc, argv);
 
@@ -1304,7 +1304,7 @@ int nsvi_command_source(void *user, const char *filepath)
 {
     FILE *f = fopen(filepath, "r");
     if (f == NULL) {
-        NSLOG(neosurf, ERROR, "source: unable to open file at '%s'", filepath);
+        NSLOG(wisp, ERROR, "source: unable to open file at '%s'", filepath);
         return 1;
     }
     char *line = NULL;

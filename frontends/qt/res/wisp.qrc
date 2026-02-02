@@ -1,0 +1,65 @@
+<RCC>
+    <qresource prefix="/">
+	<file>adblock.css</file>
+	<file alias="default.css">../../../src/resources/default.css</file>
+	<file>internal.css</file>
+	<file>quirks.css</file>
+	<file>user.css</file>
+        <file>languages</file>
+	<file>wisp.png</file>
+	<file>favicon.png</file>
+	<file alias="throbber1.png">throbber/throbber1.png</file>
+	<file alias="throbber2.png">throbber/throbber2.png</file>
+	<file alias="throbber3.png">throbber/throbber3.png</file>
+	<file alias="throbber4.png">throbber/throbber4.png</file>
+	<file alias="throbber5.png">throbber/throbber5.png</file>
+	<file alias="throbber6.png">throbber/throbber6.png</file>
+	<file alias="throbber7.png">throbber/throbber7.png</file>
+	<file alias="throbber8.png">throbber/throbber8.png</file>
+	<file alias="local-history.png">../../../src/resources/icons/local-history.png</file>
+	<file alias="icons/arrow-l.png">../../../src/resources/icons/arrow-l.png</file>
+	<file alias="icons/content.png">../../../src/resources/icons/content.png</file>
+	<file alias="icons/directory2.png">../../../src/resources/icons/directory2.png</file>
+	<file alias="icons/directory.png">../../../src/resources/icons/directory.png</file>
+	<file alias="icons/hotlist-add.png">../../../src/resources/icons/hotlist-add.png</file>
+	<file alias="icons/hotlist-rmv.png">../../../src/resources/icons/hotlist-rmv.png</file>
+	<file alias="icons/search.png">../../../src/resources/icons/search.png</file>
+	<file alias="icons/show-cookie.png">../../../src/resources/icons/show-cookie.png</file>
+	<file alias="icons/page-info-insecure.svg">../../../src/resources/icons/page-info-insecure.svg</file>
+	<file alias="icons/page-info-internal.svg">../../../src/resources/icons/page-info-internal.svg</file>
+	<file alias="icons/page-info-local.svg">../../../src/resources/icons/page-info-local.svg</file>
+	<file alias="icons/page-info-secure.svg">../../../src/resources/icons/page-info-secure.svg</file>
+	<file alias="icons/page-info-warning.svg">../../../src/resources/icons/page-info-warning.svg</file>
+	<file alias="credits.html">../../../src/resources/en/credits.html</file>
+	<file alias="licence.html">../../../src/resources/en/licence.html</file>
+	<file alias="welcome.html">../../../src/resources/en/welcome.html</file>
+	<file alias="license.html">../../../src/resources/license.html</file>
+	<file alias="favicon.ico">../../../src/resources/favicon.ico</file>
+    </qresource>
+    <qresource prefix="/" lang="nl">
+	<file alias="credits.html">../../../src/resources/nl/credits.html</file>
+	<file alias="licence.html">../../../src/resources/nl/licence.html</file>
+	<file alias="welcome.html">../../../src/resources/nl/welcome.html</file>
+    </qresource>
+    <qresource prefix="/" lang="de">
+	<file alias="welcome.html">../../../src/resources/de/welcome.html</file>
+    </qresource>
+    <qresource prefix="/" lang="fr">
+	<file alias="credits.html">../../../src/resources/fr/credits.html</file>
+	<file alias="licence.html">../../../src/resources/fr/licence.html</file>
+	<file alias="welcome.html">../../../src/resources/fr/welcome.html</file>
+    </qresource>
+    <qresource prefix="/" lang="it">
+	<file alias="credits.html">../../../src/resources/it/credits.html</file>
+	<file alias="licence.html">../../../src/resources/it/licence.html</file>
+	<file alias="welcome.html">../../../src/resources/it/welcome.html</file>
+    </qresource>
+    <qresource prefix="/" lang="ja">
+	<file alias="welcome.html">../../../src/resources/ja/welcome.html</file>
+    </qresource>
+    <qresource prefix="/" lang="zh_CN">
+	<file alias="credits.html">../../../src/resources/zh_CN/credits.html</file>
+	<file alias="licence.html">../../../src/resources/zh_CN/licence.html</file>
+	<file alias="welcome.html">../../../src/resources/zh_CN/welcome.html</file>
+    </qresource>
+</RCC>

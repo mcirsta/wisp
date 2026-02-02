@@ -1,19 +1,19 @@
 #include "visurf/window.h"
 #include <cairo/cairo.h>
 #include <linux/input-event-codes.h>
-#include <neosurf/browser_window.h>
-#include <neosurf/content/handlers/html/box.h>
-#include <neosurf/content/handlers/html/form_internal.h>
-#include <neosurf/content/handlers/html/interaction.h>
-#include <neosurf/content/handlers/html/private.h>
-#include <neosurf/desktop/textarea.h>
-#include <neosurf/keypress.h>
-#include <neosurf/mouse.h>
-#include <neosurf/plotters.h>
-#include <neosurf/utils/errors.h>
-#include <neosurf/utils/log.h>
-#include <neosurf/utils/nsurl.h>
-#include <neosurf/window.h>
+#include <wisp/browser_window.h>
+#include <wisp/content/handlers/html/box.h>
+#include <wisp/content/handlers/html/form_internal.h>
+#include <wisp/content/handlers/html/interaction.h>
+#include <wisp/content/handlers/html/private.h>
+#include <wisp/desktop/textarea.h>
+#include <wisp/keypress.h>
+#include <wisp/mouse.h>
+#include <wisp/plotters.h>
+#include <wisp/utils/errors.h>
+#include <wisp/utils/log.h>
+#include <wisp/utils/nsurl.h>
+#include <wisp/window.h>
 #include <sys/mman.h>
 #include "visurf/commands.h"
 #include "visurf/layout.h"
@@ -390,7 +390,7 @@ static bool draw_frame(struct nsvi_window *win)
 {
     struct pool_buffer *buffer = get_next_buffer(win->state->wl_shm, win->buffers, win->width, win->height, win->scale);
     if (!buffer) {
-        NSLOG(neosurf, WARNING, "Unable to obtain buffer");
+        NSLOG(wisp, WARNING, "Unable to obtain buffer");
         return false;
     }
     activebuffer = buffer;
@@ -548,7 +548,7 @@ static void nsvi_window_set_cursor(struct nsvi_window *win)
     const char *name = nsvi_window_xcursor(win->mouse.shape);
     struct wl_cursor *cursor = wl_cursor_theme_get_cursor(win->state->cursors, name);
     if (!cursor) {
-        NSLOG(neosurf, WARNING, "Unable to select cursor %s, falling back to default", name);
+        NSLOG(wisp, WARNING, "Unable to select cursor %s, falling back to default", name);
         cursor = wl_cursor_theme_get_cursor(win->state->cursors, "left_ptr");
         assert(cursor);
     }
@@ -743,7 +743,7 @@ nsvi_gui_window_create(struct browser_window *bw, struct gui_window *existing, g
     if (flags & GW_CREATE_FOCUS_LOCATION) {
         // XXX: What should we do here? Tee up `exline open $url`?
         // Under what circumstances does this happen?
-        NSLOG(neosurf, WARNING, "Location bar focus requested");
+        NSLOG(wisp, WARNING, "Location bar focus requested");
     }
     if (flags & GW_CREATE_TAB) {
         assert(existing);
@@ -1398,7 +1398,7 @@ static void nsvi_window_follow_hint(struct nsvi_window *win, struct link_hint *h
 
     if (error != NSERROR_OK) {
         // TODO: Display error
-        NSLOG(neosurf, ERROR, "Error following hint");
+        NSLOG(wisp, ERROR, "Error following hint");
     }
 
     nsvi_window_finish_hints(gw);
@@ -1799,7 +1799,7 @@ static void nsvi_window_touch_pending(struct nsvi_window *win, struct touch_even
         }
         break;
     case 2:
-        NSLOG(neosurf, WARNING, "Initiate zoom interaction");
+        NSLOG(wisp, WARNING, "Initiate zoom interaction");
         break;
     default:
         abort(); // Invariant

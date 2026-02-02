@@ -5,7 +5,7 @@
 #include <libcss/computed.h>
 #include <libcss/libcss.h>
 
-#include <neosurf/utils/log.h>
+#include <wisp/utils/log.h>
 
 /* Mock resolve functions */
 static css_error resolve_url(void *pw, const char *base, lwc_string *rel, lwc_string **abs)

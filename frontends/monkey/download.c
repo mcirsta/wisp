@@ -23,7 +23,7 @@
 #include "utils/errors.h"
 #include "utils/ring.h"
 #include "desktop/download.h"
-#include "neosurf/download.h"
+#include "wisp/download.h"
 
 #include "monkey/browser.h"
 #include "monkey/output.h"

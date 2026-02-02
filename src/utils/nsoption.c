@@ -33,13 +33,13 @@
 #include <string.h>
 #include <strings.h>
 
-#include <neosurf/plot_style.h>
-#include <neosurf/utils/config.h>
-#include <neosurf/utils/errors.h>
-#include <neosurf/utils/log.h>
-#include <neosurf/utils/nsoption.h>
-#include <neosurf/utils/utils.h>
-#include <neosurf/ns_inttypes.h>
+#include <wisp/plot_style.h>
+#include <wisp/utils/config.h>
+#include <wisp/utils/errors.h>
+#include <wisp/utils/log.h>
+#include <wisp/utils/nsoption.h>
+#include <wisp/utils/utils.h>
+#include <wisp/ns_inttypes.h>
 
 /** Length of buffer used to read lines from input file */
 #define NSOPTION_MAX_LINE_LEN 1024
@@ -59,7 +59,7 @@ struct nsoption_s *nsoptions_default = NULL;
 
 /** The table of compiled in default options */
 static struct nsoption_s defaults[] = {
-#include <neosurf/desktop/options.h>
+#include <wisp/desktop/options.h>
 
 #if defined(riscos)
 #include "riscos/options.h"
@@ -678,11 +678,11 @@ nserror nsoption_read(const char *path, struct nsoption_s *opts)
 
     fp = fopen(path, "r");
     if (!fp) {
-        NSLOG(netsurf, INFO, "Failed to open file '%s'", path);
+        NSLOG(wisp, INFO, "Failed to open file '%s'", path);
         return NSERROR_NOT_FOUND;
     }
 
-    NSLOG(netsurf, INFO, "Successfully opened '%s' for Options file", path);
+    NSLOG(wisp, INFO, "Successfully opened '%s' for Options file", path);
 
     while (fgets(s, NSOPTION_MAX_LINE_LEN, fp)) {
         optionline(opts, s, strlen(s));
@@ -761,7 +761,7 @@ nserror nsoption_write(const char *path, struct nsoption_s *opts, struct nsoptio
 
     fp = fopen(path, "w");
     if (!fp) {
-        NSLOG(neosurf, INFO, "failed to open file '%s' for writing", path);
+        NSLOG(wisp, INFO, "failed to open file '%s' for writing", path);
         return NSERROR_NOT_FOUND;
     }
 
@@ -840,7 +840,7 @@ nserror nsoption_commandline(int *pargc, char **argv, struct nsoption_s *opts)
 
         /* arg+arglen is the option to set, val is the value */
 
-        NSLOG(neosurf, INFO, "%.*s = %s", arglen, arg, val);
+        NSLOG(wisp, INFO, "%.*s = %s", arglen, arg, val);
 
         for (entry_loop = 0; entry_loop < NSOPTION_LISTEND; entry_loop++) {
             if (strncmp(arg, opts[entry_loop].key, arglen) == 0) {

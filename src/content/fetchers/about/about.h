@@ -21,8 +21,8 @@
  * about scheme URL method handler
  */
 
-#ifndef NETSURF_CONTENT_FETCHERS_ABOUT_ABOUT_H
-#define NETSURF_CONTENT_FETCHERS_ABOUT_ABOUT_H
+#ifndef WISP_CONTENT_FETCHERS_ABOUT_ABOUT_H
+#define WISP_CONTENT_FETCHERS_ABOUT_ABOUT_H
 
 /**
  * Register about scheme handler.

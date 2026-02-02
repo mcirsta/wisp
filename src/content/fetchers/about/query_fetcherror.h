@@ -21,8 +21,8 @@
  * about scheme query fetch error handler interface
  */
 
-#ifndef NETSURF_CONTENT_FETCHERS_ABOUT_QUERY_FETCHERROR_H
-#define NETSURF_CONTENT_FETCHERS_ABOUT_QUERY_FETCHERROR_H
+#ifndef WISP_CONTENT_FETCHERS_ABOUT_QUERY_FETCHERROR_H
+#define WISP_CONTENT_FETCHERS_ABOUT_QUERY_FETCHERROR_H
 
 /**
  * Handler to generate about scheme fetch error query page

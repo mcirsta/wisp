@@ -39,7 +39,7 @@ nserror monkey_register_handler(const char *cmd, handle_command_fn fn)
 {
     monkey_cmdhandler_t *ret = calloc(1, sizeof(*ret));
     if (ret == NULL) {
-        NSLOG(netsurf, INFO, "Unable to allocate handler");
+        NSLOG(wisp, INFO, "Unable to allocate handler");
         return NSERROR_NOMEM;
     }
     ret->cmd = strdup(cmd);

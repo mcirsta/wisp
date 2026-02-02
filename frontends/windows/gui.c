@@ -28,13 +28,13 @@
 #include <unistd.h>
 #include <windows.h>
 
-#include "neosurf/browser_window.h"
-#include "neosurf/utils/corestrings.h"
-#include "neosurf/utils/errors.h"
-#include "neosurf/utils/file.h"
-#include "neosurf/utils/log.h"
-#include "neosurf/utils/messages.h"
-#include "neosurf/utils/nsurl.h"
+#include "wisp/browser_window.h"
+#include "wisp/utils/corestrings.h"
+#include "wisp/utils/errors.h"
+#include "wisp/utils/file.h"
+#include "wisp/utils/log.h"
+#include "wisp/utils/messages.h"
+#include "wisp/utils/nsurl.h"
 
 #include "windows/gui.h"
 #include "windows/schedule.h"
@@ -84,14 +84,14 @@ nserror nsw32_del_dialog(HWND hwndDlg)
         if (cur->hwnd == hwndDlg) {
             /* found match */
             *prev = cur->next;
-            NSLOG(neosurf, DEBUG, "removed hwnd %p entry %p", cur->hwnd, cur);
+            NSLOG(wisp, DEBUG, "removed hwnd %p entry %p", cur->hwnd, cur);
             free(cur);
             return NSERROR_OK;
         }
         prev = &cur->next;
         cur = *prev;
     }
-    NSLOG(neosurf, INFO, "did not find hwnd %p", hwndDlg);
+    NSLOG(wisp, INFO, "did not find hwnd %p", hwndDlg);
 
     return NSERROR_NOT_FOUND;
 }
@@ -105,7 +105,7 @@ static nserror handle_dialog_message(LPMSG lpMsg)
     cur = dlglist;
     while (cur != NULL) {
         if (IsDialogMessage(cur->hwnd, lpMsg)) {
-            NSLOG(neosurf, DEBUG, "dispatched dialog hwnd %p", cur->hwnd);
+            NSLOG(wisp, DEBUG, "dispatched dialog hwnd %p", cur->hwnd);
             return NSERROR_OK;
         }
         cur = cur->next;
@@ -126,7 +126,7 @@ void win32_run(void)
     MSG Msg;
     int timeout;
 
-    NSLOG(neosurf, INFO, "Starting messgae dispatcher");
+    NSLOG(wisp, INFO, "Starting messgae dispatcher");
 
     while (!win32_quit) {
         timeout = schedule_run();

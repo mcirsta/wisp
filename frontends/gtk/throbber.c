@@ -23,7 +23,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include <neosurf/utils/log.h>
+#include <wisp/utils/log.h>
 
 #include "gtk/resources.h"
 #include "gtk/throbber.h"
@@ -66,12 +66,12 @@ nserror nsgtk_throbber_init(void)
         if (res != NSERROR_OK) {
             break;
         }
-        NSLOG(neosurf, INFO, "%s", resname);
+        NSLOG(wisp, INFO, "%s", resname);
     }
 
     if (frame < 1) {
         /* we need at least two frames - one for idle, one for active */
-        NSLOG(neosurf, INFO, "Insufficent number of frames (%d) in throbber animation.", frame);
+        NSLOG(wisp, INFO, "Insufficent number of frames (%d) in throbber animation.", frame);
         res = NSERROR_INIT_FAILED;
     }
 

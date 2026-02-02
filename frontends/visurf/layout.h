@@ -1,5 +1,5 @@
-#ifndef NETSURF_VI_LAYOUT_H
-#define NETSURF_VI_LAYOUT_H
+#ifndef WISP_VI_LAYOUT_H
+#define WISP_VI_LAYOUT_H
 #include <pango/pango.h>
 #include <stdbool.h>
 

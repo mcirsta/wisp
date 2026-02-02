@@ -16,7 +16,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "neosurf/utils/config.h"
+#include "wisp/utils/config.h"
 
 #include <io.h>
 #include <limits.h>
@@ -25,24 +25,24 @@
 #include <stdbool.h>
 #include <windows.h>
 
-#include "neosurf/browser.h"
-#include "neosurf/browser_window.h"
-#include "neosurf/cookie_db.h"
-#include "neosurf/desktop/hotlist.h"
-#include "neosurf/desktop/searchweb.h"
-#include "neosurf/fetch.h"
-#include "neosurf/misc.h"
-#include "neosurf/neosurf.h"
-#include "neosurf/url_db.h"
-#include "neosurf/utils/file.h"
-#include "neosurf/utils/log.h"
-#include "neosurf/utils/messages.h"
-#include "neosurf/utils/nsoption.h"
-#include "neosurf/utils/nsurl.h"
-#include "neosurf/utils/utils.h"
+#include "wisp/browser.h"
+#include "wisp/browser_window.h"
+#include "wisp/cookie_db.h"
+#include "wisp/desktop/hotlist.h"
+#include "wisp/desktop/searchweb.h"
+#include "wisp/fetch.h"
+#include "wisp/misc.h"
+#include "wisp/wisp.h"
+#include "wisp/url_db.h"
+#include "wisp/utils/file.h"
+#include "wisp/utils/log.h"
+#include "wisp/utils/messages.h"
+#include "wisp/utils/nsoption.h"
+#include "wisp/utils/nsurl.h"
+#include "wisp/utils/utils.h"
 
-#include <neosurf/bitmap.h>
-#include <neosurf/content/backing_store.h>
+#include <wisp/bitmap.h>
+#include <wisp/content/backing_store.h>
 #include "windows/bitmap.h"
 #include "windows/clipboard.h"
 #include "windows/cookies.h"
@@ -73,7 +73,7 @@ static int get_screen_dpi(void)
         dpi = 96; /* 96DPI is the default */
     }
 
-    NSLOG(neosurf, INFO, "Screen DPI: %d", dpi);
+    NSLOG(wisp, INFO, "Screen DPI: %d", dpi);
 
     return dpi;
 }
@@ -91,7 +91,7 @@ static int get_screen_dpi(void)
 static nserror get_config_home(char **config_home_out)
 {
     TCHAR adPath[MAX_PATH]; /* appdata path */
-    char nsdir[] = "NeoSurf";
+    char nsdir[] = "Wisp";
     HRESULT hres;
 
     hres = SHGetFolderPath(NULL, CSIDL_APPDATA | CSIDL_FLAG_CREATE, NULL, SHGFP_TYPE_CURRENT, adPath);
@@ -114,7 +114,7 @@ static nserror get_config_home(char **config_home_out)
 
     *config_home_out = strdup(adPath);
 
-    NSLOG(neosurf, INFO, "using config path \"%s\"", *config_home_out);
+    NSLOG(wisp, INFO, "using config path \"%s\"", *config_home_out);
 
     return NSERROR_OK;
 }
@@ -201,39 +201,39 @@ static nserror set_defaults(struct nsoption_s *defaults)
     free(buf);
 
     /* ensure homepage option has a default */
-    nsoption_setnull_charp(homepage_url, strdup(NEOSURF_HOMEPAGE));
+    nsoption_setnull_charp(homepage_url, strdup(WISP_HOMEPAGE));
 
     /* cookie file default */
     fname = NULL;
-    neosurf_mkpath(&fname, NULL, 2, G_config_path, "Cookies");
+    wisp_mkpath(&fname, NULL, 2, G_config_path, "Cookies");
     if (fname != NULL) {
         nsoption_setnull_charp(cookie_file, fname);
     }
 
     /* cookie jar default */
     fname = NULL;
-    neosurf_mkpath(&fname, NULL, 2, G_config_path, "Cookies");
+    wisp_mkpath(&fname, NULL, 2, G_config_path, "Cookies");
     if (fname != NULL) {
         nsoption_setnull_charp(cookie_jar, fname);
     }
 
     /* url database default */
     fname = NULL;
-    neosurf_mkpath(&fname, NULL, 2, G_config_path, "URLs");
+    wisp_mkpath(&fname, NULL, 2, G_config_path, "URLs");
     if (fname != NULL) {
         nsoption_setnull_charp(url_file, fname);
     }
 
     /* bookmark database default */
     fname = NULL;
-    neosurf_mkpath(&fname, NULL, 2, G_config_path, "Hotlist");
+    wisp_mkpath(&fname, NULL, 2, G_config_path, "Hotlist");
     if (fname != NULL) {
         nsoption_setnull_charp(hotlist_path, fname);
     }
 
     /* disk cache default path */
     fname = NULL;
-    neosurf_mkpath(&fname, NULL, 2, G_config_path, "Cache");
+    wisp_mkpath(&fname, NULL, 2, G_config_path, "Cache");
     if (fname != NULL) {
         nsoption_setnull_charp(disc_cache_path, fname);
     }
@@ -278,7 +278,7 @@ static nserror nsw32_option_init(int *pargc, char **argv, char *config_path)
     }
 
     /* Attempt to load the user choices */
-    ret = neosurf_mkpath(&choices, NULL, 2, config_path, "Choices");
+    ret = wisp_mkpath(&choices, NULL, 2, config_path, "Choices");
     if (ret == NSERROR_OK) {
         nsoption_read(choices, nsoptions);
         free(choices);
@@ -377,7 +377,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hLastInstance, LPSTR lpcli, in
     nserror ret;
     const char *addr;
     nsurl *url;
-    struct neosurf_table win32_table = {
+    struct wisp_table win32_table = {
         .misc = &win32_misc_table,
         .window = win32_window_table,
         .corewindow = win32_core_window_table,
@@ -391,9 +391,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hLastInstance, LPSTR lpcli, in
         .layout = win32_layout_table,
     };
 
-    ret = neosurf_register(&win32_table);
+    ret = wisp_register(&win32_table);
     if (ret != NSERROR_OK) {
-        die("NeoSurf operation table registration failed");
+        die("Wisp operation table registration failed");
     }
 
     /* Configure client bitmap format for Windows: BGRA with premultiplied
@@ -422,26 +422,26 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hLastInstance, LPSTR lpcli, in
     /* Locate the correct user configuration directory path */
     ret = get_config_home(&nsw32_config_home);
     if (ret != NSERROR_OK) {
-        NSLOG(neosurf, INFO, "Unable to locate a configuration directory.");
+        NSLOG(wisp, INFO, "Unable to locate a configuration directory.");
     }
 
     /* Initialise user options */
     ret = nsw32_option_init(&argc, argv, nsw32_config_home);
     if (ret != NSERROR_OK) {
-        NSLOG(neosurf, ERROR, "Options failed to initialise (%s)\n", messages_get_errorcode(ret));
+        NSLOG(wisp, ERROR, "Options failed to initialise (%s)\n", messages_get_errorcode(ret));
         return 1;
     }
 
     /* Initialise translated messages from embedded resources */
     ret = nsw32_messages_init();
     if (ret != NSERROR_OK) {
-        NSLOG(neosurf, WARNING, "Unable to load translated messages (%s)", messages_get_errorcode(ret));
+        NSLOG(wisp, WARNING, "Unable to load translated messages (%s)", messages_get_errorcode(ret));
     }
 
     /* common initialisation */
-    ret = neosurf_init(NULL);
+    ret = wisp_init(NULL);
     if (ret != NSERROR_OK) {
-        NSLOG(neosurf, INFO, "NeoSurf failed to initialise");
+        NSLOG(wisp, INFO, "Wisp failed to initialise");
         return 1;
     }
 
@@ -470,10 +470,10 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hLastInstance, LPSTR lpcli, in
     } else if (nsoption_charp(homepage_url) != NULL) {
         addr = nsoption_charp(homepage_url);
     } else {
-        addr = NEOSURF_HOMEPAGE;
+        addr = WISP_HOMEPAGE;
     }
 
-    NSLOG(neosurf, INFO, "calling browser_window_create");
+    NSLOG(wisp, INFO, "calling browser_window_create");
 
     ret = nsurl_create(addr, &url);
     if (ret == NSERROR_OK) {
@@ -489,7 +489,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hLastInstance, LPSTR lpcli, in
     urldb_save_cookies(nsoption_charp(cookie_jar));
     urldb_save(nsoption_charp(url_file));
 
-    neosurf_exit();
+    wisp_exit();
 
     /* finalise options */
     nsoption_finalise(nsoptions, nsoptions_default);

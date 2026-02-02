@@ -39,12 +39,12 @@
 #include <string.h>
 #include <strings.h>
 
-#include <neosurf/utils/ascii.h>
-#include <neosurf/utils/corestrings.h>
-#include <neosurf/utils/errors.h>
-#include <neosurf/utils/log.h>
-#include <neosurf/utils/nsurl.h>
-#include <neosurf/utils/utils.h>
+#include <wisp/utils/ascii.h>
+#include <wisp/utils/corestrings.h>
+#include <wisp/utils/errors.h>
+#include <wisp/utils/log.h>
+#include <wisp/utils/nsurl.h>
+#include <wisp/utils/utils.h>
 #include "utils/idna.h"
 #include "utils/nsurl/private.h"
 
@@ -208,7 +208,7 @@ lwc_string *nsurl_get_component(const nsurl *url, nsurl_component part)
         return (url->components.fragment != NULL) ? lwc_string_ref(url->components.fragment) : NULL;
 
     default:
-        NSLOG(neosurf, INFO, "Unsupported value passed to part param.");
+        NSLOG(wisp, INFO, "Unsupported value passed to part param.");
         assert(0);
     }
 
@@ -283,7 +283,7 @@ bool nsurl_has_component(const nsurl *url, nsurl_component part)
             return false;
 
     default:
-        NSLOG(neosurf, INFO, "Unsupported value passed to part param.");
+        NSLOG(wisp, INFO, "Unsupported value passed to part param.");
         assert(0);
     }
 

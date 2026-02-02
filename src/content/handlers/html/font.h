@@ -24,8 +24,8 @@
  * UTF-8 strings with lengths given.
  */
 
-#ifndef NETSURF_HTML_FONT_H
-#define NETSURF_HTML_FONT_H
+#ifndef WISP_HTML_FONT_H
+#define WISP_HTML_FONT_H
 
 struct plot_font_style;
 

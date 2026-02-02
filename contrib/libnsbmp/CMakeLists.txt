@@ -1,7 +1,7 @@
 add_library(nsbmp SHARED
 	src/libnsbmp.c
 )
-set_target_properties(nsbmp PROPERTIES SOVERSION ${NEOSURF_ABI})
+set_target_properties(nsbmp PROPERTIES SOVERSION ${WISP_ABI})
 
 install(TARGETS nsbmp
 	RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}

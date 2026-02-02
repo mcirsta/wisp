@@ -21,17 +21,17 @@
 #include <string.h>
 #include <time.h>
 
-#include <neosurf/utils/log.h>
-#include <neosurf/utils/messages.h>
-#include <neosurf/utils/nsurl.h>
-#include <neosurf/utils/utf8.h>
-#include <neosurf/utils/utils.h>
+#include <wisp/utils/log.h>
+#include <wisp/utils/messages.h>
+#include <wisp/utils/nsurl.h>
+#include <wisp/utils/utf8.h>
+#include <wisp/utils/utils.h>
 #include "utils/libdom.h"
 #include "content/urldb.h"
 
-#include <neosurf/desktop/global_history.h>
+#include <wisp/desktop/global_history.h>
 #include "desktop/treeview.h"
-#include "neosurf/browser_window.h"
+#include "wisp/browser_window.h"
 
 #define N_DAYS 28
 #define N_SEC_PER_DAY (60 * 60 * 24)
@@ -558,7 +558,7 @@ static nserror global_history_initialise_time(void)
     /* get the current time */
     t = time(NULL);
     if (t == -1) {
-        NSLOG(neosurf, INFO, "time info unaviable");
+        NSLOG(wisp, INFO, "time info unaviable");
         return NSERROR_UNKNOWN;
     }
 
@@ -569,7 +569,7 @@ static nserror global_history_initialise_time(void)
     full_time->tm_hour = 0;
     t = mktime(full_time);
     if (t == -1) {
-        NSLOG(neosurf, INFO, "mktime failed");
+        NSLOG(wisp, INFO, "mktime failed");
         return NSERROR_UNKNOWN;
     }
 
@@ -681,7 +681,7 @@ nserror global_history_init(void *core_window_handle)
         return err;
     }
 
-    NSLOG(neosurf, INFO, "Loading global history");
+    NSLOG(wisp, INFO, "Loading global history");
 
     /* Init. global history treeview time */
     err = global_history_initialise_time();
@@ -734,7 +734,7 @@ nserror global_history_init(void *core_window_handle)
     /* Inform client of window height */
     treeview_get_height(gh_ctx.tree);
 
-    NSLOG(neosurf, INFO, "Loaded global history");
+    NSLOG(wisp, INFO, "Loaded global history");
 
     return NSERROR_OK;
 }
@@ -746,7 +746,7 @@ nserror global_history_fini(void)
     int i;
     nserror err;
 
-    NSLOG(neosurf, INFO, "Finalising global history");
+    NSLOG(wisp, INFO, "Finalising global history");
 
     gh_ctx.built = false;
 
@@ -764,7 +764,7 @@ nserror global_history_fini(void)
         return err;
     }
 
-    NSLOG(neosurf, INFO, "Finalised global history");
+    NSLOG(wisp, INFO, "Finalised global history");
 
     return err;
 }
@@ -781,7 +781,7 @@ nserror global_history_add(nsurl *url)
 
     data = urldb_get_url_data(url);
     if (data == NULL) {
-        NSLOG(neosurf, INFO, "Can't add URL to history that's not present in urldb.");
+        NSLOG(wisp, INFO, "Can't add URL to history that's not present in urldb.");
         return NSERROR_BAD_PARAMETER;
     }
 
@@ -858,7 +858,7 @@ nserror global_history_export(const char *path, const char *title)
         return NSERROR_SAVE_FAILED;
 
     if (title == NULL)
-        title = "NeoSurf Browsing History";
+        title = "Wisp Browsing History";
 
     fputs("<!DOCTYPE html "
           "PUBLIC \"//W3C/DTD HTML 4.01//EN\" "

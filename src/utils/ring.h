@@ -30,8 +30,8 @@
  * of use to others and are thus included here.
  */
 
-#ifndef _NETSURF_UTILS_RING_H_
-#define _NETSURF_UTILS_RING_H_
+#ifndef _WISP_UTILS_RING_H_
+#define _WISP_UTILS_RING_H_
 
 
 /** Insert the given item into the specified ring.

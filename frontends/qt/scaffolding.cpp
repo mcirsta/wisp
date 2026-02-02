@@ -28,7 +28,7 @@ extern "C" {
 #include "utils/log.h"
 #include "utils/messages.h"
 
-#include "neosurf/content.h"
+#include "wisp/content.h"
 }
 
 #include "qt/application.cls.h"
@@ -188,7 +188,7 @@ NS_Scaffold *NS_Scaffold::get_scaffold(QWidget *page, bool use_current)
     } else {
         scaffold = new NS_Scaffold(nullptr);
     }
-    NSLOG(netsurf, DEBUG, "page:%p use_current:%d current:%p scaffold:%p", page, use_current, current, scaffold);
+    NSLOG(wisp, DEBUG, "page:%p use_current:%d current:%p scaffold:%p", page, use_current, current, scaffold);
     current = scaffold;
     return scaffold;
 }

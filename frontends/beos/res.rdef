@@ -24,7 +24,7 @@
 resource(1, "BEOS:APP_FLAGS") (#'APPF') $"01000000";
 
 /* application MIME signature */
-resource(1, "BEOS:APP_SIG") (#'MIMS') "application/x-vnd.NetSurf";
+resource(1, "BEOS:APP_SIG") (#'MIMS') "application/x-vnd.Wisp";
 
 /* list of supported MIME types */
 resource(1, "BEOS:FILE_TYPES") message {

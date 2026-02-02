@@ -5,7 +5,7 @@
  */
 
 #include "qpc_safe.h"
-#include "neosurf/utils/log.h"
+#include "wisp/utils/log.h"
 #include <intrin.h>
 #include <math.h>
 #include <stdio.h>
@@ -196,16 +196,16 @@ void qpc_safe_init(void)
     /* Initialize baseline values */
     if (g_qpc_status == QPC_RELIABILITY_GOOD) {
         QueryPerformanceCounter(&g_qpc_offset);
-        NSLOG(neosurf, INFO, "QPC initialized successfully (High Precision)");
+        NSLOG(wisp, INFO, "QPC initialized successfully (High Precision)");
     } else if (g_qpc_status == QPC_RELIABILITY_UNSTABLE) {
         /* Treat unstable as BAD for safety - fallback to GetTickCount64
          */
         g_tick_offset = GetTickCount64();
-        NSLOG(neosurf, INFO, "QPC initialized (Unstable - potential drift), falling back to GetTickCount64");
+        NSLOG(wisp, INFO, "QPC initialized (Unstable - potential drift), falling back to GetTickCount64");
     } else {
         /* Use GetTickCount64() as baseline for unreliable QPC */
         g_tick_offset = GetTickCount64();
-        NSLOG(neosurf, INFO, "QPC unreliable, falling back to GetTickCount64 (Low Precision)");
+        NSLOG(wisp, INFO, "QPC unreliable, falling back to GetTickCount64 (Low Precision)");
     }
 }
 

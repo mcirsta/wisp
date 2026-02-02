@@ -27,17 +27,17 @@
 
 #include <dom/dom.h>
 
-#include <neosurf/content/handlers/html/box.h>
-#include <neosurf/content/handlers/html/html_save.h>
-#include <neosurf/utils/config.h>
-#include <neosurf/utils/log.h>
-#include <neosurf/utils/utf8.h>
-#include <neosurf/utils/utils.h>
-#include "neosurf/content.h"
+#include <wisp/content/handlers/html/box.h>
+#include <wisp/content/handlers/html/html_save.h>
+#include <wisp/utils/config.h>
+#include <wisp/utils/log.h>
+#include <wisp/utils/utf8.h>
+#include <wisp/utils/utils.h>
+#include "wisp/content.h"
 
-#include <neosurf/desktop/gui_internal.h>
-#include <neosurf/desktop/save_text.h>
-#include "neosurf/utf8.h"
+#include <wisp/desktop/gui_internal.h>
+#include <wisp/desktop/save_text.h>
+#include "wisp/utf8.h"
 
 static void extract_text(struct box *box, bool *first, save_text_whitespace *before, struct save_text_state *save);
 static bool save_text_add_to_buffer(const char *text, size_t length, struct box *box, const char *whitespace_text,
@@ -73,7 +73,7 @@ void save_as_text(struct hlcache_handle *c, char *path)
     free(save.block);
 
     if (ret != NSERROR_OK) {
-        NSLOG(neosurf, INFO, "failed to convert to local encoding, return %d", ret);
+        NSLOG(wisp, INFO, "failed to convert to local encoding, return %d", ret);
         return;
     }
 
@@ -82,12 +82,12 @@ void save_as_text(struct hlcache_handle *c, char *path)
         int res = fputs(result, out);
 
         if (res < 0) {
-            NSLOG(neosurf, INFO, "Warning: write failed");
+            NSLOG(wisp, INFO, "Warning: write failed");
         }
 
         res = fputs("\n", out);
         if (res < 0) {
-            NSLOG(neosurf, INFO, "Warning: failed writing trailing newline");
+            NSLOG(wisp, INFO, "Warning: failed writing trailing newline");
         }
 
         fclose(out);

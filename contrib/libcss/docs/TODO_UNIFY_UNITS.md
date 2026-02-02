@@ -78,7 +78,7 @@ Eliminate bytecode unit encoding entirely and use CSS_UNIT directly throughout:
 
 ## Historical Context
 
-The bytecode encoding was designed when NetSurf targeted resource-constrained 
+The bytecode encoding was designed when Wisp targeted resource-constrained 
 systems (RISC OS, Amiga, old ARM devices). The category-based encoding allowed:
 - Type checking via bitmask (is this a length? angle? time?)
 - Compact storage (8-bit category + offset)

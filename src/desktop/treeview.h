@@ -21,14 +21,14 @@
  * Treeview handling interface.
  */
 
-#ifndef _NETSURF_DESKTOP_TREEVIEW_H_
-#define _NETSURF_DESKTOP_TREEVIEW_H_
+#ifndef _WISP_DESKTOP_TREEVIEW_H_
+#define _WISP_DESKTOP_TREEVIEW_H_
 
 #include <libwapcaplet/libwapcaplet.h>
 #include <stdbool.h>
 #include <stdint.h>
 
-#include "neosurf/mouse.h"
+#include "wisp/mouse.h"
 
 struct redraw_context;
 struct core_window;

@@ -1,9 +1,9 @@
 
-add_definitions(-DNEOSURF_WINDOWS_RESPATH=".")
+add_definitions(-DWISP_WINDOWS_RESPATH=".")
 
 include_directories(${CMAKE_SOURCE_DIR}/include)
 
-set(NEOSURF_WINDOWS_SRCS
+set(WISP_WINDOWS_SRCS
 	about.c
 	bitmap.c
 	clipboard.c
@@ -56,37 +56,37 @@ add_custom_target(windows_messages DEPENDS ${GENERATED_MESSAGES_FILES})
 
 # Native GDI linear gradient support (uses GradientFill API)
 # Radial gradients use fallback triangle decomposition since GDI lacks native radial support
-option(NEOSURF_WINDOWS_NATIVE_LINEAR_GRADIENT "Use native GDI linear gradient rendering" ON)
+option(WISP_WINDOWS_NATIVE_LINEAR_GRADIENT "Use native GDI linear gradient rendering" ON)
 
 # Resource compilation
-set(NEOSURF_WINDOWS_RC res/resource.rc)
+set(WISP_WINDOWS_RC res/resource.rc)
 
-add_executable(neosurf-windows WIN32
-	${NEOSURF_WINDOWS_SRCS}
-	${NEOSURF_WINDOWS_RC}
+add_executable(wisp-windows WIN32
+	${WISP_WINDOWS_SRCS}
+	${WISP_WINDOWS_RC}
 )
 
 # Ensure resource.rc is recompiled when messages change and waits for them to be generated
-set_source_files_properties(${NEOSURF_WINDOWS_RC} PROPERTIES OBJECT_DEPENDS "${GENERATED_MESSAGES_DIR}/en/Messages")
+set_source_files_properties(${WISP_WINDOWS_RC} PROPERTIES OBJECT_DEPENDS "${GENERATED_MESSAGES_DIR}/en/Messages")
 # Add quotes to the path so windres treats it as a string
-target_compile_definitions(neosurf-windows PRIVATE -DNEOSURF_MESSAGES_PATH="\\"${GENERATED_MESSAGES_DIR}/en/Messages\\"")
+target_compile_definitions(wisp-windows PRIVATE -DWISP_MESSAGES_PATH="\\"${GENERATED_MESSAGES_DIR}/en/Messages\\"")
 
-add_dependencies(neosurf-windows windows_messages)
-target_include_directories(neosurf-windows PRIVATE ${GENERATED_MESSAGES_DIR} ${CMAKE_SOURCE_DIR}/src)
+add_dependencies(wisp-windows windows_messages)
+target_include_directories(wisp-windows PRIVATE ${GENERATED_MESSAGES_DIR} ${CMAKE_SOURCE_DIR}/src)
 
-target_link_libraries(neosurf-windows neosurf m ${NEOSURF_COMMON_LIBS} ws2_32 comctl32 gdi32 user32 kernel32 msimg32 wininet shlwapi crypt32)
+target_link_libraries(wisp-windows wisp m ${WISP_COMMON_LIBS} ws2_32 comctl32 gdi32 user32 kernel32 msimg32 wininet shlwapi crypt32)
 
 # Enable native GDI linear gradient support if option is ON
-if(NEOSURF_WINDOWS_NATIVE_LINEAR_GRADIENT)
-    target_compile_definitions(neosurf-windows PRIVATE NEOSURF_WINDOWS_NATIVE_LINEAR_GRADIENT=1)
+if(WISP_WINDOWS_NATIVE_LINEAR_GRADIENT)
+    target_compile_definitions(wisp-windows PRIVATE WISP_WINDOWS_NATIVE_LINEAR_GRADIENT=1)
     message(STATUS "Windows native GDI linear gradient rendering enabled")
 endif()
 
 # WOFF font format decompression (converts WOFF to raw TrueType/OpenType for AddFontMemResourceEx)
-option(NEOSURF_WOFF_DECODE "Enable WOFF font format decompression for web fonts" ON)
-if(NEOSURF_WOFF_DECODE)
-    target_compile_definitions(neosurf-windows PRIVATE NEOSURF_WOFF_DECODE=1)
-    target_link_libraries(neosurf-windows ${ZLIB_LIBRARIES})
+option(WISP_WOFF_DECODE "Enable WOFF font format decompression for web fonts" ON)
+if(WISP_WOFF_DECODE)
+    target_compile_definitions(wisp-windows PRIVATE WISP_WOFF_DECODE=1)
+    target_link_libraries(wisp-windows ${ZLIB_LIBRARIES})
     message(STATUS "WOFF font decompression enabled")
 endif()
 
@@ -100,36 +100,36 @@ if(WIN32 AND CMAKE_BUILD_TYPE MATCHES Debug)
         endif()
     endif()
     if(SVGTINY_RUNTIME)
-        add_custom_command(TARGET neosurf-windows POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different "${SVGTINY_RUNTIME}" "$<TARGET_FILE_DIR:neosurf-windows>/"
+        add_custom_command(TARGET wisp-windows POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different "${SVGTINY_RUNTIME}" "$<TARGET_FILE_DIR:wisp-windows>/"
         )
     endif()
-    add_custom_command(TARGET neosurf-windows POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_BINARY_DIR}/contrib/libdom/libdom.dll" "$<TARGET_FILE_DIR:neosurf-windows>/"
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_BINARY_DIR}/contrib/libnsutils/libnsutils.dll" "$<TARGET_FILE_DIR:neosurf-windows>/"
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_BINARY_DIR}/contrib/libparserutils/libparserutils.dll" "$<TARGET_FILE_DIR:neosurf-windows>/"
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_BINARY_DIR}/contrib/libnsbmp/libnsbmp.dll" "$<TARGET_FILE_DIR:neosurf-windows>/"
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_BINARY_DIR}/contrib/libnsgif/libnsgif.dll" "$<TARGET_FILE_DIR:neosurf-windows>/"
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_BINARY_DIR}/contrib/libcss/libcss.dll" "$<TARGET_FILE_DIR:neosurf-windows>/"
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_BINARY_DIR}/contrib/libhubbub/libhubbub.dll" "$<TARGET_FILE_DIR:neosurf-windows>/"
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_BINARY_DIR}/src/libneosurf.dll" "$<TARGET_FILE_DIR:neosurf-windows>/"
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_SOURCE_DIR}/src/resources/ca-bundle" "$<TARGET_FILE_DIR:neosurf-windows>/ca-bundle.crt"
+    add_custom_command(TARGET wisp-windows POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_BINARY_DIR}/contrib/libdom/libdom.dll" "$<TARGET_FILE_DIR:wisp-windows>/"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_BINARY_DIR}/contrib/libnsutils/libnsutils.dll" "$<TARGET_FILE_DIR:wisp-windows>/"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_BINARY_DIR}/contrib/libparserutils/libparserutils.dll" "$<TARGET_FILE_DIR:wisp-windows>/"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_BINARY_DIR}/contrib/libnsbmp/libnsbmp.dll" "$<TARGET_FILE_DIR:wisp-windows>/"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_BINARY_DIR}/contrib/libnsgif/libnsgif.dll" "$<TARGET_FILE_DIR:wisp-windows>/"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_BINARY_DIR}/contrib/libcss/libcss.dll" "$<TARGET_FILE_DIR:wisp-windows>/"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_BINARY_DIR}/contrib/libhubbub/libhubbub.dll" "$<TARGET_FILE_DIR:wisp-windows>/"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_BINARY_DIR}/src/libwisp.dll" "$<TARGET_FILE_DIR:wisp-windows>/"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_SOURCE_DIR}/src/resources/ca-bundle" "$<TARGET_FILE_DIR:wisp-windows>/ca-bundle.crt"
     )
 endif()
 
-if(NEOSURF_ENABLE_GPROF)
+if(WISP_ENABLE_GPROF)
     if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
-        target_compile_options(neosurf-windows PRIVATE -pg -g -fno-omit-frame-pointer)
-        target_link_options(neosurf-windows PRIVATE -pg)
+        target_compile_options(wisp-windows PRIVATE -pg -g -fno-omit-frame-pointer)
+        target_link_options(wisp-windows PRIVATE -pg)
     endif()
 endif()
 
-if(NEOSURF_ENABLE_FINSTRUMENT)
+if(WISP_ENABLE_FINSTRUMENT)
     if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
-        target_sources(neosurf-windows PRIVATE profiler.c)
-        target_compile_options(neosurf-windows PRIVATE -finstrument-functions -g -fno-omit-frame-pointer)
+        target_sources(wisp-windows PRIVATE profiler.c)
+        target_compile_options(wisp-windows PRIVATE -finstrument-functions -g -fno-omit-frame-pointer)
     else()
-        message(FATAL_ERROR "NEOSURF_ENABLE_FINSTRUMENT requires GCC or Clang")
+        message(FATAL_ERROR "WISP_ENABLE_FINSTRUMENT requires GCC or Clang")
     endif()
 endif()
 
@@ -137,8 +137,8 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
 	set(CMAKE_INSTALL_DO_STRIP OFF)
 endif()
 
-install(TARGETS neosurf-windows DESTINATION ${CMAKE_INSTALL_BINDIR})
-install(DIRECTORY res/ DESTINATION ${CMAKE_INSTALL_DATADIR}/neosurf)
-install(DIRECTORY ${GENERATED_MESSAGES_DIR}/ DESTINATION ${CMAKE_INSTALL_DATADIR}/neosurf)
-install(FILES ${CMAKE_SOURCE_DIR}/src/resources/ca-bundle DESTINATION ${CMAKE_INSTALL_DATADIR}/neosurf RENAME ca-bundle.crt)
+install(TARGETS wisp-windows DESTINATION ${CMAKE_INSTALL_BINDIR})
+install(DIRECTORY res/ DESTINATION ${CMAKE_INSTALL_DATADIR}/wisp)
+install(DIRECTORY ${GENERATED_MESSAGES_DIR}/ DESTINATION ${CMAKE_INSTALL_DATADIR}/wisp)
+install(FILES ${CMAKE_SOURCE_DIR}/src/resources/ca-bundle DESTINATION ${CMAKE_INSTALL_DATADIR}/wisp RENAME ca-bundle.crt)
 install(FILES ${CMAKE_SOURCE_DIR}/src/resources/ca-bundle DESTINATION ${CMAKE_INSTALL_BINDIR} RENAME ca-bundle.crt)

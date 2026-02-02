@@ -32,9 +32,9 @@
 
 extern "C" {
 
-#include "neosurf/browser_window.h"
-#include "neosurf/content_type.h"
-#include "neosurf/types.h"
+#include "wisp/browser_window.h"
+#include "wisp/content_type.h"
+#include "wisp/types.h"
 }
 
 class NS_Actions : public QObject
@@ -94,7 +94,7 @@ public:
     QAction *m_debug_render; /**< toggle debug rendering */
     QAction *m_debug_box_tree; /**< debug the box tree */
     QAction *m_debug_dom_tree; /**< debug the DOM tree */
-    QAction *m_about_netsurf; /**< show info about the browser */
+    QAction *m_about_wisp; /**< show info about the browser */
     QAction *m_link_new_tab; /**< open link in new tab */
     QAction *m_link_new_window; /**< open link in new window */
     QAction *m_link_bookmark; /**<  bookmark link */
@@ -130,7 +130,7 @@ private slots:
     void debug_render_slot(bool checked);
     void debug_box_tree_slot(bool checked);
     void debug_dom_tree_slot(bool checked);
-    void about_netsurf_slot(bool checked);
+    void about_wisp_slot(bool checked);
     void link_new_tab_slot(bool checked);
     void link_new_window_slot(bool checked);
     void link_bookmark_slot(bool checked);

@@ -32,24 +32,24 @@
 #include <string.h>
 #include <unistd.h>
 
-#include <neosurf/bitmap.h>
-#include <neosurf/browser.h>
-#include <neosurf/browser_window.h>
-#include <neosurf/content/backing_store.h>
-#include <neosurf/content/fetch.h>
-#include <neosurf/cookie_db.h>
-#include <neosurf/desktop/hotlist.h>
-#include <neosurf/desktop/save_complete.h>
-#include <neosurf/desktop/searchweb.h>
-#include <neosurf/keypress.h>
-#include <neosurf/neosurf.h>
-#include <neosurf/url_db.h>
-#include <neosurf/utils/file.h>
-#include <neosurf/utils/filepath.h>
-#include <neosurf/utils/log.h>
-#include <neosurf/utils/messages.h>
-#include <neosurf/utils/nsoption.h>
-#include <neosurf/utils/utils.h>
+#include <wisp/bitmap.h>
+#include <wisp/browser.h>
+#include <wisp/browser_window.h>
+#include <wisp/content/backing_store.h>
+#include <wisp/content/fetch.h>
+#include <wisp/cookie_db.h>
+#include <wisp/desktop/hotlist.h>
+#include <wisp/desktop/save_complete.h>
+#include <wisp/desktop/searchweb.h>
+#include <wisp/keypress.h>
+#include <wisp/wisp.h>
+#include <wisp/url_db.h>
+#include <wisp/utils/file.h>
+#include <wisp/utils/filepath.h>
+#include <wisp/utils/log.h>
+#include <wisp/utils/messages.h>
+#include <wisp/utils/nsoption.h>
+#include <wisp/utils/utils.h>
 
 #include "gtk/accelerator.h"
 #include "gtk/bitmap.h"
@@ -99,7 +99,7 @@ nserror nsgtk_warning(const char *warning, const char *detail)
     static GtkWindow *nsgtk_warning_window;
     GtkLabel *WarningLabel;
 
-    NSLOG(neosurf, INFO, "%s %s", warning, detail ? detail : "");
+    NSLOG(wisp, INFO, "%s %s", warning, detail ? detail : "");
     fflush(stdout);
 
     nsgtk_warning_window = GTK_WINDOW(gtk_builder_get_object(warning_builder, "wndWarning"));
@@ -268,19 +268,19 @@ static char **nsgtk_init_resource_path(const char *config_home)
     char **respath; /* resource paths vector */
 
     if (config_home != NULL) {
-        resource_path_len = snprintf(NULL, 0, "%s:${NEOSURFRES}:%s", config_home, GTK_RESPATH);
+        resource_path_len = snprintf(NULL, 0, "%s:${WISPRES}:%s", config_home, GTK_RESPATH);
         resource_path = malloc(resource_path_len + 1);
         if (resource_path == NULL) {
             return NULL;
         }
-        snprintf(resource_path, resource_path_len + 1, "%s:${NEOSURFRES}:%s", config_home, GTK_RESPATH);
+        snprintf(resource_path, resource_path_len + 1, "%s:${WISPRES}:%s", config_home, GTK_RESPATH);
     } else {
-        resource_path_len = snprintf(NULL, 0, "${NEOSURFRES}:%s", GTK_RESPATH);
+        resource_path_len = snprintf(NULL, 0, "${WISPRES}:%s", GTK_RESPATH);
         resource_path = malloc(resource_path_len + 1);
         if (resource_path == NULL) {
             return NULL;
         }
-        snprintf(resource_path, resource_path_len + 1, "${NEOSURFRES}:%s", GTK_RESPATH);
+        snprintf(resource_path, resource_path_len + 1, "${WISPRES}:%s", GTK_RESPATH);
     }
 
     pathv = filepath_path_to_strvec(resource_path);
@@ -306,7 +306,7 @@ static nserror check_dirname(const char *path, const char *leaf, char **dirname_
     char *dirname = NULL;
     struct stat dirname_stat;
 
-    ret = neosurf_mkpath(&dirname, NULL, 2, path, leaf);
+    ret = wisp_mkpath(&dirname, NULL, 2, path, leaf);
     if (ret != NSERROR_OK) {
         return ret;
     }
@@ -354,9 +354,9 @@ static nserror get_config_home(char **config_home_out)
      * exists and is accessible.
      */
     if (home_dir != NULL) {
-        ret = check_dirname(home_dir, ".neosurf", &config_home);
+        ret = check_dirname(home_dir, ".wisp", &config_home);
         if (ret == NSERROR_OK) {
-            NSLOG(neosurf, INFO, "\"%s\"", config_home);
+            NSLOG(wisp, INFO, "\"%s\"", config_home);
             *config_home_out = config_home;
             return ret;
         }
@@ -385,18 +385,18 @@ static nserror get_config_home(char **config_home_out)
             return NSERROR_NOT_DIRECTORY;
         }
 
-        ret = check_dirname(home_dir, ".config/neosurf", &config_home);
+        ret = check_dirname(home_dir, ".config/wisp", &config_home);
         if (ret != NSERROR_OK) {
             return ret;
         }
     } else {
-        ret = check_dirname(xdg_config_dir, "neosurf", &config_home);
+        ret = check_dirname(xdg_config_dir, "wisp", &config_home);
         if (ret != NSERROR_OK) {
             return ret;
         }
     }
 
-    NSLOG(neosurf, INFO, "\"%s\"", config_home);
+    NSLOG(wisp, INFO, "\"%s\"", config_home);
 
     *config_home_out = config_home;
     return NSERROR_OK;
@@ -410,7 +410,7 @@ static nserror create_config_home(char **config_home_out)
     char *xdg_config_dir;
     nserror ret;
 
-    NSLOG(neosurf, INFO, "Attempting to create configuration directory");
+    NSLOG(wisp, INFO, "Attempting to create configuration directory");
 
     /* $XDG_CONFIG_HOME defines the base directory
      * relative to which user specific configuration files
@@ -425,19 +425,19 @@ static nserror create_config_home(char **config_home_out)
             return NSERROR_NOT_DIRECTORY;
         }
 
-        ret = neosurf_mkpath(&config_home, NULL, 4, home_dir, ".config", "neosurf", "/");
+        ret = wisp_mkpath(&config_home, NULL, 4, home_dir, ".config", "wisp", "/");
         if (ret != NSERROR_OK) {
             return ret;
         }
     } else {
-        ret = neosurf_mkpath(&config_home, NULL, 3, xdg_config_dir, "neosurf", "/");
+        ret = wisp_mkpath(&config_home, NULL, 3, xdg_config_dir, "wisp", "/");
         if (ret != NSERROR_OK) {
             return ret;
         }
     }
 
     /* ensure all elements of path exist (the trailing / is required) */
-    ret = neosurf_mkdir_all(config_home);
+    ret = wisp_mkdir_all(config_home);
     if (ret != NSERROR_OK) {
         free(config_home);
         return ret;
@@ -446,7 +446,7 @@ static nserror create_config_home(char **config_home_out)
     /* strip the trailing separator */
     config_home[strlen(config_home) - 1] = 0;
 
-    NSLOG(neosurf, INFO, "\"%s\"", config_home);
+    NSLOG(wisp, INFO, "\"%s\"", config_home);
 
     *config_home_out = config_home;
 
@@ -481,28 +481,28 @@ static nserror set_defaults(struct nsoption_s *defaults)
 
     /* cookie file default */
     fname = NULL;
-    neosurf_mkpath(&fname, NULL, 2, nsgtk_config_home, "Cookies");
+    wisp_mkpath(&fname, NULL, 2, nsgtk_config_home, "Cookies");
     if (fname != NULL) {
         nsoption_setnull_charp(cookie_file, fname);
     }
 
     /* cookie jar default */
     fname = NULL;
-    neosurf_mkpath(&fname, NULL, 2, nsgtk_config_home, "Cookies");
+    wisp_mkpath(&fname, NULL, 2, nsgtk_config_home, "Cookies");
     if (fname != NULL) {
         nsoption_setnull_charp(cookie_jar, fname);
     }
 
     /* url database default */
     fname = NULL;
-    neosurf_mkpath(&fname, NULL, 2, nsgtk_config_home, "URLs");
+    wisp_mkpath(&fname, NULL, 2, nsgtk_config_home, "URLs");
     if (fname != NULL) {
         nsoption_setnull_charp(url_file, fname);
     }
 
     /* bookmark database default */
     fname = NULL;
-    neosurf_mkpath(&fname, NULL, 2, nsgtk_config_home, "Hotlist");
+    wisp_mkpath(&fname, NULL, 2, nsgtk_config_home, "Hotlist");
     if (fname != NULL) {
         nsoption_setnull_charp(hotlist_path, fname);
     }
@@ -516,7 +516,7 @@ static nserror set_defaults(struct nsoption_s *defaults)
     if ((nsoption_charp(cookie_file) == NULL) || (nsoption_charp(cookie_jar) == NULL) ||
         (nsoption_charp(url_file) == NULL) || (nsoption_charp(hotlist_path) == NULL) ||
         (nsoption_charp(downloads_directory) == NULL)) {
-        NSLOG(neosurf, INFO, "Failed initialising default resource paths");
+        NSLOG(wisp, INFO, "Failed initialising default resource paths");
         return NSERROR_BAD_PARAMETER;
     }
 
@@ -584,7 +584,7 @@ static nserror nsgtk_option_init(int *pargc, char **argv)
     }
 
     /* Attempt to load the user choices */
-    ret = neosurf_mkpath(&choices, NULL, 2, nsgtk_config_home, "Choices");
+    ret = wisp_mkpath(&choices, NULL, 2, nsgtk_config_home, "Choices");
     if (ret == NSERROR_OK) {
         nsoption_read(choices, nsoptions);
         free(choices);
@@ -664,18 +664,18 @@ static nserror get_cache_home(char **cache_home_out)
             return NSERROR_NOT_DIRECTORY;
         }
 
-        ret = check_dirname(home_dir, ".cache/neosurf", &cache_home);
+        ret = check_dirname(home_dir, ".cache/wisp", &cache_home);
         if (ret != NSERROR_OK) {
             return ret;
         }
     } else {
-        ret = check_dirname(xdg_cache_dir, "neosurf", &cache_home);
+        ret = check_dirname(xdg_cache_dir, "wisp", &cache_home);
         if (ret != NSERROR_OK) {
             return ret;
         }
     }
 
-    NSLOG(neosurf, INFO, "\"%s\"", cache_home);
+    NSLOG(wisp, INFO, "\"%s\"", cache_home);
 
     *cache_home_out = cache_home;
     return NSERROR_OK;
@@ -692,7 +692,7 @@ static nserror create_cache_home(char **cache_home_out)
     char *xdg_cache_dir;
     nserror ret;
 
-    NSLOG(neosurf, INFO, "Attempting to create cache directory");
+    NSLOG(wisp, INFO, "Attempting to create cache directory");
 
     /* $XDG_CACHE_HOME defines the base directory
      * relative to which user specific cache files
@@ -707,19 +707,19 @@ static nserror create_cache_home(char **cache_home_out)
             return NSERROR_NOT_DIRECTORY;
         }
 
-        ret = neosurf_mkpath(&cache_home, NULL, 4, home_dir, ".cache", "neosurf", "/");
+        ret = wisp_mkpath(&cache_home, NULL, 4, home_dir, ".cache", "wisp", "/");
         if (ret != NSERROR_OK) {
             return ret;
         }
     } else {
-        ret = neosurf_mkpath(&cache_home, NULL, 3, xdg_cache_dir, "neosurf", "/");
+        ret = wisp_mkpath(&cache_home, NULL, 3, xdg_cache_dir, "wisp", "/");
         if (ret != NSERROR_OK) {
             return ret;
         }
     }
 
     /* ensure all elements of path exist (the trailing / is required) */
-    ret = neosurf_mkdir_all(cache_home);
+    ret = wisp_mkdir_all(cache_home);
     if (ret != NSERROR_OK) {
         free(cache_home);
         return ret;
@@ -728,7 +728,7 @@ static nserror create_cache_home(char **cache_home_out)
     /* strip the trailing separator */
     cache_home[strlen(cache_home) - 1] = 0;
 
-    NSLOG(neosurf, INFO, "\"%s\"", cache_home);
+    NSLOG(wisp, INFO, "\"%s\"", cache_home);
 
     *cache_home_out = cache_home;
 
@@ -750,7 +750,7 @@ static nserror nsgtk_init(int *pargc, char ***pargv, char **cache_home)
         ret = create_config_home(&nsgtk_config_home);
     }
     if (ret != NSERROR_OK) {
-        NSLOG(neosurf, INFO, "Unable to locate a configuration directory.");
+        NSLOG(wisp, INFO, "Unable to locate a configuration directory.");
         nsgtk_config_home = NULL;
     }
 
@@ -787,7 +787,7 @@ static nserror nsgtk_init(int *pargc, char ***pargv, char **cache_home)
     ret = nsgtk_messages_init(respaths);
     if (ret != NSERROR_OK) {
         fprintf(stderr, "Unable to load translated messages (%s)\n", messages_get_errorcode(ret));
-        NSLOG(neosurf, INFO, "Unable to load translated messages");
+        NSLOG(wisp, INFO, "Unable to load translated messages");
         /** \todo decide if message load faliure should be fatal */
     }
 
@@ -798,7 +798,7 @@ static nserror nsgtk_init(int *pargc, char ***pargv, char **cache_home)
         ret = create_cache_home(cache_home);
     }
     if (ret != NSERROR_OK) {
-        NSLOG(neosurf, INFO, "Unable to locate a cache directory.");
+        NSLOG(wisp, INFO, "Unable to locate a cache directory.");
     }
 
 
@@ -813,7 +813,7 @@ static nserror nsgtk_init(int *pargc, char ***pargv, char **cache_home)
  */
 static nserror nsgtk_add_named_icons_to_theme(void)
 {
-    gtk_icon_theme_add_resource_path(gtk_icon_theme_get_default(), "/org/neosurf/icons");
+    gtk_icon_theme_add_resource_path(gtk_icon_theme_get_default(), "/org/wisp/icons");
     return NSERROR_OK;
 }
 
@@ -835,7 +835,7 @@ static nserror add_builtin_icon(const char *prefix, const char *name, int x, int
     snprintf(resname, resnamelen, "icons%s/%s.png", prefix, name);
 
     res = nsgdk_pixbuf_new_from_resname(resname, &pixbuf);
-    NSLOG(netsurf, DEEPDEBUG, "%d %s", res, resname);
+    NSLOG(wisp, DEEPDEBUG, "%d %s", res, resname);
     free(resname);
     if (res != NSERROR_OK) {
         pixbuf = gdk_pixbuf_new(GDK_COLORSPACE_RGB, false, 8, x, y);
@@ -891,23 +891,23 @@ static nserror nsgtk_setup(int argc, char **argv, char **respath)
     /* Initialise gtk accelerator table */
     res = nsgtk_accelerator_init(respaths);
     if (res != NSERROR_OK) {
-        NSLOG(neosurf, INFO, "Unable to load gtk accelerator configuration");
+        NSLOG(wisp, INFO, "Unable to load gtk accelerator configuration");
         /* not fatal if this does not load */
     }
 
     /* initialise warning dialog */
     res = nsgtk_builder_new_from_resname("warning", &warning_builder);
     if (res != NSERROR_OK) {
-        NSLOG(neosurf, INFO, "Unable to initialise warning dialog");
+        NSLOG(wisp, INFO, "Unable to initialise warning dialog");
         return res;
     }
 
     gtk_builder_connect_signals(warning_builder, NULL);
 
     /* set default icon if its available */
-    res = nsgdk_pixbuf_new_from_resname("neosurf.xpm", &win_default_icon_pixbuf);
+    res = nsgdk_pixbuf_new_from_resname("wisp.xpm", &win_default_icon_pixbuf);
     if (res == NSERROR_OK) {
-        NSLOG(neosurf, INFO, "Seting default window icon");
+        NSLOG(wisp, INFO, "Seting default window icon");
         gtk_window_set_default_icon(win_default_icon_pixbuf);
     }
 
@@ -915,7 +915,7 @@ static nserror nsgtk_setup(int argc, char **argv, char **respath)
     resource_filename = filepath_find(respath, "SearchEngines");
     search_web_init(resource_filename);
     if (resource_filename != NULL) {
-        NSLOG(neosurf, INFO, "Using '%s' as Search Engines file", resource_filename);
+        NSLOG(wisp, INFO, "Using '%s' as Search Engines file", resource_filename);
         free(resource_filename);
     }
     search_web_select_provider(nsoption_charp(search_web_provider));
@@ -929,14 +929,14 @@ static nserror nsgtk_setup(int argc, char **argv, char **respath)
     /* add named icons to gtk theme */
     res = nsgtk_add_named_icons_to_theme();
     if (res != NSERROR_OK) {
-        NSLOG(neosurf, INFO, "Unable to add named icons to GTK theme.");
+        NSLOG(wisp, INFO, "Unable to add named icons to GTK theme.");
         return res;
     }
 
     /* initialise throbber */
     res = nsgtk_throbber_init();
     if (res != NSERROR_OK) {
-        NSLOG(neosurf, INFO, "Unable to initialise throbber.");
+        NSLOG(wisp, INFO, "Unable to initialise throbber.");
         return res;
     }
 
@@ -948,7 +948,7 @@ static nserror nsgtk_setup(int argc, char **argv, char **respath)
      * window.
      */
     browser_set_dpi(gdk_screen_get_resolution(gdk_screen_get_default()));
-    NSLOG(neosurf, INFO, "Set CSS DPI to %d", browser_get_dpi());
+    NSLOG(wisp, INFO, "Set CSS DPI to %d", browser_get_dpi());
 
     bitmap_set_format(&(bitmap_fmt_t){
         .layout = BITMAP_LAYOUT_ARGB8888,
@@ -967,7 +967,7 @@ static nserror nsgtk_setup(int argc, char **argv, char **respath)
     /* Initialise top level UI elements */
     res = nsgtk_download_init();
     if (res != NSERROR_OK) {
-        NSLOG(neosurf, INFO, "Unable to initialise download window.");
+        NSLOG(wisp, INFO, "Unable to initialise download window.");
         return res;
     }
 
@@ -994,7 +994,7 @@ static nserror nsgtk_setup(int argc, char **argv, char **respath)
     } else if (nsoption_charp(homepage_url) != NULL) {
         addr = strdup(nsoption_charp(homepage_url));
     } else {
-        addr = strdup(NEOSURF_HOMEPAGE);
+        addr = strdup(WISP_HOMEPAGE);
     }
 
     /* create an initial browser window */
@@ -1077,7 +1077,7 @@ static void nsgtk_finalise(void)
 {
     nserror res;
 
-    NSLOG(neosurf, INFO, "Quitting GUI");
+    NSLOG(wisp, INFO, "Quitting GUI");
 
     /* Ensure all scaffoldings are destroyed before we go into exit */
     nsgtk_download_destroy();
@@ -1086,32 +1086,32 @@ static void nsgtk_finalise(void)
 
     res = nsgtk_cookies_destroy();
     if (res != NSERROR_OK) {
-        NSLOG(neosurf, INFO, "Error finalising cookie viewer: %s", messages_get_errorcode(res));
+        NSLOG(wisp, INFO, "Error finalising cookie viewer: %s", messages_get_errorcode(res));
     }
 
     res = nsgtk_local_history_destroy();
     if (res != NSERROR_OK) {
-        NSLOG(neosurf, INFO, "Error finalising local history viewer: %s", messages_get_errorcode(res));
+        NSLOG(wisp, INFO, "Error finalising local history viewer: %s", messages_get_errorcode(res));
     }
 
     res = nsgtk_global_history_destroy();
     if (res != NSERROR_OK) {
-        NSLOG(neosurf, INFO, "Error finalising global history viewer: %s", messages_get_errorcode(res));
+        NSLOG(wisp, INFO, "Error finalising global history viewer: %s", messages_get_errorcode(res));
     }
 
     res = nsgtk_hotlist_destroy();
     if (res != NSERROR_OK) {
-        NSLOG(neosurf, INFO, "Error finalising hotlist viewer: %s", messages_get_errorcode(res));
+        NSLOG(wisp, INFO, "Error finalising hotlist viewer: %s", messages_get_errorcode(res));
     }
 
     res = hotlist_fini();
     if (res != NSERROR_OK) {
-        NSLOG(neosurf, INFO, "Error finalising hotlist: %s", messages_get_errorcode(res));
+        NSLOG(wisp, INFO, "Error finalising hotlist: %s", messages_get_errorcode(res));
     }
 
     res = save_complete_finalise();
     if (res != NSERROR_OK) {
-        NSLOG(neosurf, INFO, "Error finalising save complete: %s", messages_get_errorcode(res));
+        NSLOG(wisp, INFO, "Error finalising save complete: %s", messages_get_errorcode(res));
     }
 
     free(nsgtk_config_home);
@@ -1119,7 +1119,7 @@ static void nsgtk_finalise(void)
     gtk_fetch_filetype_fin();
 
     /* common finalisation */
-    neosurf_exit();
+    wisp_exit();
 
     /* finalise options */
     nsoption_finalise(nsoptions, nsoptions_default);
@@ -1136,7 +1136,7 @@ int main(int argc, char **argv)
 {
     nserror res;
     char *cache_home = NULL;
-    struct neosurf_table nsgtk_table = {
+    struct wisp_table nsgtk_table = {
         .misc = nsgtk_misc_table,
         .window = nsgtk_window_table,
         .corewindow = nsgtk_core_window_table,
@@ -1150,24 +1150,24 @@ int main(int argc, char **argv)
         .layout = nsgtk_layout_table,
     };
 
-    res = neosurf_register(&nsgtk_table);
+    res = wisp_register(&nsgtk_table);
     if (res != NSERROR_OK) {
-        fprintf(stderr, "NeoSurf operation table failed registration (%s)\n", messages_get_errorcode(res));
+        fprintf(stderr, "Wisp operation table failed registration (%s)\n", messages_get_errorcode(res));
         return 1;
     }
 
     /* gtk specific initialisation */
     res = nsgtk_init(&argc, &argv, &cache_home);
     if (res != NSERROR_OK) {
-        fprintf(stderr, "NeoSurf gtk failed to initialise (%s)\n", messages_get_errorcode(res));
+        fprintf(stderr, "Wisp gtk failed to initialise (%s)\n", messages_get_errorcode(res));
         return 2;
     }
 
     /* core initialisation */
-    res = neosurf_init(cache_home);
+    res = wisp_init(cache_home);
     free(cache_home);
     if (res != NSERROR_OK) {
-        fprintf(stderr, "NeoSurf core failed to initialise (%s)\n", messages_get_errorcode(res));
+        fprintf(stderr, "Wisp core failed to initialise (%s)\n", messages_get_errorcode(res));
         return 3;
     }
 
@@ -1175,7 +1175,7 @@ int main(int argc, char **argv)
     res = nsgtk_setup(argc, argv, respaths);
     if (res != NSERROR_OK) {
         nsgtk_finalise();
-        fprintf(stderr, "NeoSurf gtk setup failed (%s)\n", messages_get_errorcode(res));
+        fprintf(stderr, "Wisp gtk setup failed (%s)\n", messages_get_errorcode(res));
         return 4;
     }
 

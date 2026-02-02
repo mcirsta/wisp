@@ -21,8 +21,8 @@
  * Low-level source data cache backing store interface.
  */
 
-#ifndef NETSURF_CONTENT_LLCACHE_PRIVATE_H_
-#define NETSURF_CONTENT_LLCACHE_PRIVATE_H_
+#ifndef WISP_CONTENT_LLCACHE_PRIVATE_H_
+#define WISP_CONTENT_LLCACHE_PRIVATE_H_
 
 #include "content/llcache.h"
 

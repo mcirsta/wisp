@@ -86,7 +86,7 @@ NS_URLBar::NS_URLBar(QWidget *parent, NS_Actions *actions, struct browser_window
     moretoolsmenu->addAction(actions->m_debug_dom_tree);
 
     QMenu *helpmenu = m_burgermenu->addMenu(messages_get("Help"));
-    helpmenu->addAction(actions->m_about_netsurf);
+    helpmenu->addAction(actions->m_about_wisp);
 
     m_burgermenu->addSeparator();
 

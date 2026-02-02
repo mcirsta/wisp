@@ -1,5 +1,5 @@
-#ifndef NETSURF_VI_SETTINGS
-#define NETSURF_VI_SETTINGS
+#ifndef WISP_VI_SETTINGS
+#define WISP_VI_SETTINGS
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>

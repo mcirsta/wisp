@@ -16,8 +16,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef NETSURF_QT_RESOURCES_H
-#define NETSURF_QT_RESOURCES_H 1
+#ifndef WISP_QT_RESOURCES_H
+#define WISP_QT_RESOURCES_H 1
 
 /**
  * resource search path vector

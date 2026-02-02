@@ -21,8 +21,8 @@
  * CSS z-index stacking context utilities interface.
  */
 
-#ifndef NEOSURF_HTML_STACKING_H
-#define NEOSURF_HTML_STACKING_H
+#ifndef WISP_HTML_STACKING_H
+#define WISP_HTML_STACKING_H
 
 #include <stdbool.h>
 #include <stddef.h>

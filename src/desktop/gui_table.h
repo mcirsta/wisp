@@ -24,8 +24,8 @@
  * through netsurf.h or gui_internal.h
  */
 
-#ifndef _NETSURF_DESKTOP_GUI_TABLE_H_
-#define _NETSURF_DESKTOP_GUI_TABLE_H_
+#ifndef _WISP_DESKTOP_GUI_TABLE_H_
+#define _WISP_DESKTOP_GUI_TABLE_H_
 
 struct gui_misc_table;
 struct gui_window_table;
@@ -45,7 +45,7 @@ struct gui_layout_table;
  *
  * Function table implementing interface operations for the browser core.
  */
-struct netsurf_table {
+struct wisp_table {
 
     /**
      * Browser table.

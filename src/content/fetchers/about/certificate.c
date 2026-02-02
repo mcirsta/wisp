@@ -26,11 +26,11 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <neosurf/utils/errors.h>
-#include <neosurf/utils/log.h>
-#include <neosurf/utils/messages.h>
-#include <neosurf/ns_inttypes.h>
-#include "neosurf/ssl_certs.h"
+#include <wisp/utils/errors.h>
+#include <wisp/utils/log.h>
+#include <wisp/utils/messages.h>
+#include <wisp/ns_inttypes.h>
+#include "wisp/ssl_certs.h"
 
 #include "certificate.h"
 #include "private.h"
@@ -364,9 +364,9 @@ static nserror xname_to_info(X509_NAME *xname, struct ns_cert_name *iname)
         }
         if (field != NULL) {
             *field = strdup((const char *)value_str);
-            NSLOG(neosurf, DEEPDEBUG, "NID:%d value: %s", name_nid, *field);
+            NSLOG(wisp, DEEPDEBUG, "NID:%d value: %s", name_nid, *field);
         } else {
-            NSLOG(neosurf, DEEPDEBUG, "NID:%d", name_nid);
+            NSLOG(wisp, DEEPDEBUG, "NID:%d", name_nid);
         }
     }
 
@@ -1131,7 +1131,7 @@ bool fetch_about_certificate_handler(struct fetch_about_context *ctx)
     /* page head */
     res = fetch_about_ssenddataf(ctx,
         "<html>\n<head>\n"
-        "<title>NeoSurf Browser Certificate Viewer</title>\n"
+        "<title>Wisp Browser Certificate Viewer</title>\n"
         "<link rel=\"stylesheet\" type=\"text/css\" "
         "href=\"resource:internal.css\">\n"
         "</head>\n"

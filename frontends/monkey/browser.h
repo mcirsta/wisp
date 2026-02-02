@@ -16,8 +16,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef NETSURF_MONKEY_BROWSER_H
-#define NETSURF_MONKEY_BROWSER_H
+#ifndef WISP_MONKEY_BROWSER_H
+#define WISP_MONKEY_BROWSER_H
 
 struct hlcache_handle;
 

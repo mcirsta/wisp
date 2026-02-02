@@ -25,11 +25,11 @@
 #include <stdlib.h>
 #include <windows.h>
 
-#include "neosurf/desktop/cookie_manager.h"
-#include "neosurf/keypress.h"
-#include "neosurf/plotters.h"
-#include "neosurf/utils/log.h"
-#include "neosurf/utils/nsoption.h"
+#include "wisp/desktop/cookie_manager.h"
+#include "wisp/keypress.h"
+#include "wisp/plotters.h"
+#include "wisp/utils/log.h"
+#include "wisp/utils/nsoption.h"
 
 #include "windows/cookies.h"
 #include "windows/corewindow.h"
@@ -129,7 +129,7 @@ static nserror nsw32_cookie_init(HINSTANCE hInstance)
         return NSERROR_NOMEM;
     }
 
-    ncwin->core.title = "NeoSurf Cookies";
+    ncwin->core.title = "Wisp Cookies";
     ncwin->core.draw = nsw32_cookie_draw;
     ncwin->core.key = nsw32_cookie_key;
     ncwin->core.mouse = nsw32_cookie_mouse;

@@ -19,7 +19,7 @@
 #ifndef GTK_COREWINDOW_H
 #define GTK_COREWINDOW_H
 
-#include <neosurf/core_window.h>
+#include <wisp/core_window.h>
 
 extern struct core_window_table *nsgtk_core_window_table;
 

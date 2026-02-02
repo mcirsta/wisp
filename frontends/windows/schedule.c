@@ -20,9 +20,9 @@
 #include <stdlib.h>
 #include <time.h>
 
-#include "neosurf/utils/errors.h"
-#include "neosurf/utils/log.h"
-#include "neosurf/utils/sys_time.h"
+#include "wisp/utils/errors.h"
+#include "wisp/utils/log.h"
+#include "wisp/utils/sys_time.h"
 
 #include "windows/qpc_safe.h"
 #include "windows/schedule.h"
@@ -214,12 +214,12 @@ void list_schedule(void)
 
     now = get_monotonic_time_us();
 
-    NSLOG(neosurf, INFO, "schedule list at %lld", now);
+    NSLOG(wisp, INFO, "schedule list at %lld", now);
 
     cur_nscb = schedule_list;
 
     while (cur_nscb != NULL) {
-        NSLOG(neosurf, INFO, "Schedule %p at %lld", cur_nscb, cur_nscb->tv);
+        NSLOG(wisp, INFO, "Schedule %p at %lld", cur_nscb, cur_nscb->tv);
         cur_nscb = cur_nscb->next;
     }
 }

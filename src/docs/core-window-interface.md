@@ -1,7 +1,7 @@
 Core Window Interface
 =====================
 
-The NetSurf core provides an optional API to frontend implementations
+The Wisp core provides an optional API to frontend implementations
 which allows a number of "standard" window content interfaces to be
 provided.
 
@@ -27,7 +27,7 @@ core window API
 The API is fairly simple and simply involves passing a callback table
 and context pointer to the interface element being constructed.
 
-The header that defines the callback interface is neosurf/core_window.h 
+The header that defines the callback interface is wisp/core_window.h 
 
 The callback table contains five function pointer interfaces which the
 frontend must implement for the core.
@@ -139,7 +139,7 @@ frontends/example/corewindow.h
     #ifndef EXAMPLE_COREWINDOW_H
     #define EXAMPLE_COREWINDOW_H
     
-    #include "neosurf/core_window.h"
+    #include "wisp/core_window.h"
     
     /**
      * example core window state
@@ -257,9 +257,9 @@ frontends/example/corewindow.c
     #include "utils/utils.h"
     #include "utils/messages.h"
     #include "utils/utf8.h"
-    #include "neosurf/keypress.h"
-    #include "neosurf/mouse.h"
-    #include "neosurf/plot_style.h"
+    #include "wisp/keypress.h"
+    #include "wisp/mouse.h"
+    #include "wisp/plot_style.h"
     
     /* extremely likely there will be additional headers required in a real frontend */
     #include "example/corewindow.h"
@@ -437,8 +437,8 @@ frontends/example/ssl_cert.h
      * along with this program.  If not, see <http://www.gnu.org/licenses/>.
      */
     
-    #ifndef NETSURF_EXAMPLE_SSL_CERT_H
-    #define NETSURF_EXAMPLE_SSL_CERT_H 1
+    #ifndef WISP_EXAMPLE_SSL_CERT_H
+    #define WISP_EXAMPLE_SSL_CERT_H 1
     
     struct nsurl;
     struct ssl_cert_info;
@@ -487,8 +487,8 @@ frontends/example/ssl_cert.c
     #include <stdlib.h>
     
     #include "utils/log.h"
-    #include "neosurf/keypress.h"
-    #include "neosurf/plotters.h"
+    #include "wisp/keypress.h"
+    #include "wisp/plotters.h"
     #include "desktop/sslcert_viewer.h"
     
     #include "example/corewindow.h"

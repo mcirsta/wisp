@@ -18,8 +18,8 @@
  */
 
 
-#ifndef NETSURF_BEOS_OPTIONS_H_
-#define NETSURF_BEOS_OPTIONS_H_
+#ifndef WISP_BEOS_OPTIONS_H_
+#define WISP_BEOS_OPTIONS_H_
 
 /* currently nothing here */
 

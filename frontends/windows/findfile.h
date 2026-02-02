@@ -16,8 +16,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef _NEOSURF_WINDOWS_FINDFILE_H_
-#define _NEOSURF_WINDOWS_FINDFILE_H_
+#ifndef _WISP_WINDOWS_FINDFILE_H_
+#define _WISP_WINDOWS_FINDFILE_H_
 
 extern char *nsws_find_resource(char *buf, const char *filename, const char *def);
 

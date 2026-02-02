@@ -21,13 +21,13 @@
  * Pave info viewer window interface
  */
 
-#ifndef NETSURF_DESKTOP_PAGE_INFO_H
-#define NETSURF_DESKTOP_PAGE_INFO_H
+#ifndef WISP_DESKTOP_PAGE_INFO_H
+#define WISP_DESKTOP_PAGE_INFO_H
 
 #include <stdbool.h>
 #include <stdint.h>
 
-#include <neosurf/mouse.h>
+#include <wisp/mouse.h>
 #include "utils/errors.h"
 
 struct rect;

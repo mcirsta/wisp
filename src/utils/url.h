@@ -22,10 +22,10 @@
  * \brief Interface to URL parsing and joining operations.
  */
 
-#ifndef _NETSURF_UTILS_URL_H_
-#define _NETSURF_UTILS_URL_H_
+#ifndef _WISP_UTILS_URL_H_
+#define _WISP_UTILS_URL_H_
 
-#include <neosurf/utils/errors.h>
+#include <wisp/utils/errors.h>
 
 
 /**

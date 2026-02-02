@@ -27,7 +27,7 @@
 
 #include "utils/errors.h"
 #include "utils/nsoption.h"
-#include "neosurf/types.h"
+#include "wisp/types.h"
 
 #include "choices.h"
 #include "private.h"
@@ -54,7 +54,7 @@ bool fetch_about_choices_handler(struct fetch_about_context *ctx)
     if (fetch_about_send_header(ctx, "Content-Type: text/plain"))
         goto fetch_about_choices_handler_aborted;
 
-    slen = snprintf(buffer, sizeof buffer, "# Automatically generated current NetSurf browser Choices\n");
+    slen = snprintf(buffer, sizeof buffer, "# Automatically generated current Wisp browser Choices\n");
 
     do {
         res = nsoption_snoptionf(buffer + slen, sizeof buffer - slen, opt_loop, "%k:%v\n");

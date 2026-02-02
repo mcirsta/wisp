@@ -17,8 +17,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef _NETSURF_UTILS_USERAGENT_H_
-#define _NETSURF_UTILS_USERAGENT_H_
+#ifndef _WISP_UTILS_USERAGENT_H_
+#define _WISP_UTILS_USERAGENT_H_
 
 /** Retrieve the core user agent for this release.
  *

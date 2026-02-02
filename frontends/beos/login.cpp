@@ -33,9 +33,9 @@ extern "C" {
 #include "utils/nsurl.h"
 #include "utils/url.h"
 #include "utils/utils.h"
-#include "netsurf/browser_window.h"
-#include "netsurf/clipboard.h"
-#include "netsurf/content_type.h"
+#include "wisp/browser_window.h"
+#include "wisp/clipboard.h"
+#include "wisp/content_type.h"
 }
 
 #include "beos/gui.h"

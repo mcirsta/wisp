@@ -22,7 +22,7 @@
 #include <gdk/gdkkeysyms.h>
 #include <gtk/gtk.h>
 
-#include <neosurf/utils/messages.h>
+#include <wisp/utils/messages.h>
 
 #include "gtk/accelerator.h"
 #include "gtk/compat.h"

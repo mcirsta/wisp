@@ -21,8 +21,8 @@
  * Box tree treeview box replacement (interface).
  */
 
-#ifndef NETSURF_HTML_BOX_TEXTAREA_H
-#define NETSURF_HTML_BOX_TEXTAREA_H
+#ifndef WISP_HTML_BOX_TEXTAREA_H
+#define WISP_HTML_BOX_TEXTAREA_H
 
 struct dom_node;
 struct html_content;

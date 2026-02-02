@@ -31,24 +31,24 @@
 #include <stdbool.h>
 #include <string.h>
 
-#include <neosurf/desktop/frame_types.h>
-#include <neosurf/plot_style.h>
-#include <neosurf/utils/ascii.h>
-#include <neosurf/utils/config.h>
-#include <neosurf/utils/corestrings.h>
-#include <neosurf/utils/log.h>
-#include <neosurf/utils/messages.h>
-#include <neosurf/utils/nsoption.h>
-#include <neosurf/utils/nsurl.h>
-#include <neosurf/utils/string.h>
+#include <wisp/desktop/frame_types.h>
+#include <wisp/plot_style.h>
+#include <wisp/utils/ascii.h>
+#include <wisp/utils/config.h>
+#include <wisp/utils/corestrings.h>
+#include <wisp/utils/log.h>
+#include <wisp/utils/messages.h>
+#include <wisp/utils/nsoption.h>
+#include <wisp/utils/nsurl.h>
+#include <wisp/utils/string.h>
 #include "utils/talloc.h"
 #include "content/content_factory.h"
 #include "content/handlers/css/hints.h"
 
-#include <neosurf/content/handlers/html/box.h>
-#include <neosurf/content/handlers/html/form_internal.h>
-#include <neosurf/content/handlers/html/html.h>
-#include <neosurf/content/handlers/html/private.h>
+#include <wisp/content/handlers/html/box.h>
+#include <wisp/content/handlers/html/form_internal.h>
+#include <wisp/content/handlers/html/html.h>
+#include <wisp/content/handlers/html/private.h>
 #include "content/handlers/html/box_construct.h"
 #include "content/handlers/html/box_manipulate.h"
 #include "content/handlers/html/box_special.h"
@@ -938,7 +938,7 @@ static bool box_frameset(dom_node *n, html_content *content, struct box *box, bo
     bool ok;
 
     if (content->frameset) {
-        NSLOG(neosurf, INFO, "Error: multiple framesets in document.");
+        NSLOG(wisp, INFO, "Error: multiple framesets in document.");
         /* Don't convert children */
         if (convert_children)
             *convert_children = false;
@@ -1983,7 +1983,7 @@ bool convert_special_elements(dom_node *node, html_content *content, struct box 
                         *convert_children = false;
                     }
 
-                    NSLOG(neosurf, DEBUG, "SVG: Found inline <svg> element");
+                    NSLOG(wisp, DEBUG, "SVG: Found inline <svg> element");
 
                     /* Parse inline SVG and store diagram in box.
                      * Use default 300x150 like browsers do for replaced elements.
@@ -2025,16 +2025,16 @@ bool convert_special_elements(dom_node *node, html_content *content, struct box 
                              * serialize it now from the current DOM state. */
                             if (svg_xml == NULL) {
                                 nserror err;
-                                NSLOG(neosurf, DEBUG, "SVG: Lazy serialization triggered");
+                                NSLOG(wisp, DEBUG, "SVG: Lazy serialization triggered");
                                 err = html_serialize_inline_svg((dom_element *)node, NULL, &svg_xml, &svg_len);
                                 if (err != NSERROR_OK || svg_xml == NULL) {
-                                    NSLOG(neosurf, WARNING, "SVG: Failed to lazy serialize inline SVG");
+                                    NSLOG(wisp, WARNING, "SVG: Failed to lazy serialize inline SVG");
                                 } else {
                                     /* We own this string and must free it after parsing */
                                     free_xml = true;
                                 }
                             } else {
-                                NSLOG(neosurf, DEBUG, "SVG: Using cached XML (%zu bytes)", svg_len);
+                                NSLOG(wisp, DEBUG, "SVG: Using cached XML (%zu bytes)", svg_len);
                             }
 
                             if (svg_xml != NULL) {
@@ -2044,7 +2044,7 @@ bool convert_special_elements(dom_node *node, html_content *content, struct box 
                                 if (diagram != NULL) {
                                     code = svgtiny_parse(diagram, svg_xml, svg_len, base_url, 300, 150);
                                     if (code != svgtiny_OK) {
-                                        NSLOG(neosurf, WARNING, "SVG: libsvgtiny parse failed: %d", code);
+                                        NSLOG(wisp, WARNING, "SVG: libsvgtiny parse failed: %d", code);
                                         svgtiny_free(diagram);
                                         diagram = NULL;
                                     }
@@ -2055,15 +2055,15 @@ bool convert_special_elements(dom_node *node, html_content *content, struct box 
                                 }
                             }
                         } else {
-                            NSLOG(neosurf, WARNING, "SVG: Inline SVG node not found in cache list");
+                            NSLOG(wisp, WARNING, "SVG: Inline SVG node not found in cache list");
                         }
 
                         if (diagram != NULL) {
                             box->svg_diagram = diagram;
-                            NSLOG(neosurf, DEBUG, "SVG: Parsed inline SVG (%dx%d, %u shapes)", diagram->width,
+                            NSLOG(wisp, DEBUG, "SVG: Parsed inline SVG (%dx%d, %u shapes)", diagram->width,
                                 diagram->height, diagram->shape_count);
                         } else {
-                            NSLOG(neosurf, WARNING, "SVG: Failed to parse inline SVG");
+                            NSLOG(wisp, WARNING, "SVG: Failed to parse inline SVG");
                         }
                     }
                 }

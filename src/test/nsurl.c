@@ -72,7 +72,7 @@ static void corestring_create(void)
 /**
  * iterator for any remaining strings in teardown fixture
  */
-static void netsurf_lwc_iterator(lwc_string *str, void *pw)
+static void wisp_lwc_iterator(lwc_string *str, void *pw)
 {
     fprintf(stderr, "[%3u] %.*s", str->refcnt, (int)lwc_string_length(str), lwc_string_data(str));
 }
@@ -81,7 +81,7 @@ static void corestring_teardown(void)
 {
     corestrings_fini();
 
-    lwc_iterate_strings(netsurf_lwc_iterator, NULL);
+    lwc_iterate_strings(wisp_lwc_iterator, NULL);
 }
 
 /* tests */
@@ -164,10 +164,10 @@ START_TEST(nsurl_create_test)
 END_TEST
 
 static const struct test_triplets access_tests[] = {
-    {"http://www.netsurf-browser.org/a/big/tree", "http://www.netsurf-browser.org/a/big/tree", "tree"},
+    {"http://www.wisp-browser.org/a/big/tree", "http://www.wisp-browser.org/a/big/tree", "tree"},
 
-    {"HTTP://ci.netsurf-browser.org/jenkins/view/Unit Tests/job/coverage-netsurf/11/cobertura/utils/nsurl_c/",
-        "http://ci.netsurf-browser.org/jenkins/view/Unit%20Tests/job/coverage-netsurf/11/cobertura/utils/nsurl_c/", ""},
+    {"HTTP://ci.wisp-browser.org/jenkins/view/Unit Tests/job/coverage-wisp/11/cobertura/utils/nsurl_c/",
+        "http://ci.wisp-browser.org/jenkins/view/Unit%20Tests/job/coverage-wisp/11/cobertura/utils/nsurl_c/", ""},
 
     {"FILE:///", "file:///", "/"},
 };
@@ -487,18 +487,18 @@ END_TEST
  * query replacement tests
  */
 static const struct test_triplets replace_query_tests[] = {
-    {"http://netsurf-browser.org/?magical=true", "magical=true&result=win",
-        "http://netsurf-browser.org/?magical=true&result=win"},
+    {"http://wisp-browser.org/?magical=true", "magical=true&result=win",
+        "http://wisp-browser.org/?magical=true&result=win"},
 
-    {"http://netsurf-browser.org/?magical=true#fragment", "magical=true&result=win",
-        "http://netsurf-browser.org/?magical=true&result=win#fragment"},
+    {"http://wisp-browser.org/?magical=true#fragment", "magical=true&result=win",
+        "http://wisp-browser.org/?magical=true&result=win#fragment"},
 
-    {"http://netsurf-browser.org/#fragment", "magical=true&result=win",
-        "http://netsurf-browser.org/?magical=true&result=win#fragment"},
+    {"http://wisp-browser.org/#fragment", "magical=true&result=win",
+        "http://wisp-browser.org/?magical=true&result=win#fragment"},
 
-    {"http://netsurf-browser.org/path", "magical=true", "http://netsurf-browser.org/path?magical=true"},
+    {"http://wisp-browser.org/path", "magical=true", "http://wisp-browser.org/path?magical=true"},
 
-    {"http://netsurf-browser.org/path?magical=true", "", "http://netsurf-browser.org/path"},
+    {"http://wisp-browser.org/path?magical=true", "", "http://wisp-browser.org/path"},
 
 };
 

@@ -29,7 +29,7 @@
  */
 
 #include <dom/dom.h>
-#include <neosurf/utils/config.h>
+#include <wisp/utils/config.h>
 #include <assert.h>
 #include <math.h>
 #include <stdbool.h>
@@ -37,34 +37,34 @@
 #include <string.h>
 
 #include <libwapcaplet/libwapcaplet.h>
-#include <neosurf/bitmap.h>
-#include <neosurf/browser.h>
-#include <neosurf/browser_window.h>
-#include <neosurf/content.h>
-#include <neosurf/content/content.h>
-#include <neosurf/content/content_protected.h>
-#include <neosurf/content/handlers/css/utils.h>
-#include <neosurf/content/hlcache.h>
-#include <neosurf/desktop/gui_internal.h>
-#include <neosurf/desktop/print.h>
-#include <neosurf/desktop/textarea.h>
-#include <neosurf/layout.h>
-#include <neosurf/plotters.h>
-#include <neosurf/utils/corestrings.h>
-#include <neosurf/utils/log.h>
-#include <neosurf/utils/messages.h>
-#include <neosurf/utils/nsoption.h>
-#include <neosurf/utils/utils.h>
+#include <wisp/bitmap.h>
+#include <wisp/browser.h>
+#include <wisp/browser_window.h>
+#include <wisp/content.h>
+#include <wisp/content/content.h>
+#include <wisp/content/content_protected.h>
+#include <wisp/content/handlers/css/utils.h>
+#include <wisp/content/hlcache.h>
+#include <wisp/desktop/gui_internal.h>
+#include <wisp/desktop/print.h>
+#include <wisp/desktop/textarea.h>
+#include <wisp/layout.h>
+#include <wisp/plotters.h>
+#include <wisp/utils/corestrings.h>
+#include <wisp/utils/log.h>
+#include <wisp/utils/messages.h>
+#include <wisp/utils/nsoption.h>
+#include <wisp/utils/utils.h>
 #include "content/textsearch.h"
 #include "desktop/browser_private.h"
 #include "desktop/scrollbar.h"
 #include "desktop/selection.h"
 
 #include <libcss/gradient.h>
-#include <neosurf/content/handlers/html/box.h>
-#include <neosurf/content/handlers/html/box_inspect.h>
-#include <neosurf/content/handlers/html/form_internal.h>
-#include <neosurf/content/handlers/html/private.h>
+#include <wisp/content/handlers/html/box.h>
+#include <wisp/content/handlers/html/box_inspect.h>
+#include <wisp/content/handlers/html/form_internal.h>
+#include <wisp/content/handlers/html/private.h>
 #include "content/handlers/html/box_manipulate.h"
 #include "content/handlers/html/font.h"
 #include "content/handlers/html/layout.h"
@@ -705,7 +705,7 @@ static bool html_redraw_linear_gradient(
     if (width <= 0 || height <= 0)
         return true;
 
-#ifdef NEOSURF_USE_NATIVE_GRADIENTS
+#ifdef WISP_USE_NATIVE_GRADIENTS
     /* Native gradient rendering - compile-time selected */
     NSLOG(plot, DEBUG, "Linear gradient: Using NATIVE rendering path");
 
@@ -897,7 +897,7 @@ static bool html_redraw_radial_gradient(
     if (rx < 1.0f || ry < 1.0f)
         return true;
 
-#ifdef NEOSURF_USE_NATIVE_RADIAL_GRADIENTS
+#ifdef WISP_USE_NATIVE_RADIAL_GRADIENTS
     /* Native radial gradient rendering - compile-time selected */
     NSLOG(plot, DEBUG, "Radial gradient: Using NATIVE rendering path");
     if (ctx->plot->radial_gradient != NULL) {
@@ -1092,7 +1092,7 @@ static bool html_redraw_background(int x, int y, struct box *box, float scale, c
         {
             int bg_width = content_get_width(background->background);
             int bg_height = content_get_height(background->background);
-#ifdef NEOSURF_DEVICE_PIXEL_LAYOUT
+#ifdef WISP_DEVICE_PIXEL_LAYOUT
             {
                 int dpi = browser_get_dpi();
                 if (dpi > 0 && dpi != 96) {
@@ -1203,7 +1203,7 @@ static bool html_redraw_background(int x, int y, struct box *box, float scale, c
         if (plot_content) {
             width = content_get_width(background->background);
             height = content_get_height(background->background);
-#ifdef NEOSURF_DEVICE_PIXEL_LAYOUT
+#ifdef WISP_DEVICE_PIXEL_LAYOUT
             {
                 int dpi = browser_get_dpi();
                 if (dpi > 0 && dpi != 96) {
@@ -1328,7 +1328,7 @@ static bool html_redraw_inline_background(int x, int y, struct box *box, float s
         {
             int bg_width = content_get_width(box->background);
             int bg_height = content_get_height(box->background);
-#ifdef NEOSURF_DEVICE_PIXEL_LAYOUT
+#ifdef WISP_DEVICE_PIXEL_LAYOUT
             {
                 int dpi = browser_get_dpi();
                 if (dpi > 0 && dpi != 96) {
@@ -1373,7 +1373,7 @@ static bool html_redraw_inline_background(int x, int y, struct box *box, float s
     if (plot_content) {
         int width = content_get_width(box->background);
         int height = content_get_height(box->background);
-#ifdef NEOSURF_DEVICE_PIXEL_LAYOUT
+#ifdef WISP_DEVICE_PIXEL_LAYOUT
         {
             int dpi = browser_get_dpi();
             if (dpi > 0 && dpi != 96) {
@@ -2331,7 +2331,7 @@ bool html_redraw_box(const html_content *html, struct box *box, int x_parent, in
                 expand_viewport_bg = true;
             } else if ((left_match && right_match) || abs_full_width) {
                 /* Would have expanded under old heuristics - log for detection */
-                NSLOG(netsurf, DEBUG,
+                NSLOG(wisp, DEBUG,
                     "VIEWPORT_EXPANSION_SKIP: tag=%s class=%s box=%p - full-width element NOT expanded "
                     "(left_match=%d right_match=%d abs_full_width=%d)",
                     tag, cls, (void *)box, left_match, right_match, abs_full_width);
@@ -2794,7 +2794,7 @@ bool html_redraw_box(const html_content *html, struct box *box, int x_parent, in
                 if (mime)
                     lwc_string_unref(mime);
             }
-            NSLOG(neosurf, ERROR,
+            NSLOG(wisp, ERROR,
                 "Object redraw failed; red square shown for element tag=%s class=%s mime=%s url=%s size=%dx%d",
                 tag ? tag : "", cls ? cls : "", mime_c ? mime_c : "", url ? url : "", width, height);
             if (class_attr != NULL)
@@ -2842,7 +2842,7 @@ bool html_redraw_box(const html_content *html, struct box *box, int x_parent, in
         x_scrolled = x - scrollbar_get_offset(box->scroll_x) * scale;
         y_scrolled = y - scrollbar_get_offset(box->scroll_y) * scale;
 
-        NSLOG(neosurf, DEBUG, "SVG: Rendering inline SVG at (%d,%d) size %dx%d", (int)(x_scrolled + padding_left),
+        NSLOG(wisp, DEBUG, "SVG: Rendering inline SVG at (%d,%d) size %dx%d", (int)(x_scrolled + padding_left),
             (int)(y_scrolled + padding_top), (int)width, (int)height);
 
         /* Get CSS 'color' property for currentColor support */
@@ -2852,10 +2852,10 @@ bool html_redraw_box(const html_content *html, struct box *box, int x_parent, in
 
         if (!svg_redraw_diagram(box->svg_diagram, (int)(x_scrolled + padding_left), (int)(y_scrolled + padding_top),
                 (int)width, (int)height, &r, ctx, current_background_color, current_col)) {
-            NSLOG(neosurf, WARNING, "SVG: Inline SVG redraw failed");
+            NSLOG(wisp, WARNING, "SVG: Inline SVG redraw failed");
         }
     } else if (box->svg_diagram != NULL && (width == 0 || height == 0)) {
-        NSLOG(neosurf, DEBUG, "SVG: Skipping inline SVG render - zero size (w=%d h=%d)", (int)width, (int)height);
+        NSLOG(wisp, DEBUG, "SVG: Skipping inline SVG render - zero size (w=%d h=%d)", (int)width, (int)height);
     } else if (tag_type == DOM_HTML_ELEMENT_TYPE_CANVAS && box->node != NULL && box->flags & REPLACE_DIM) {
         /* Canvas to draw */
         struct bitmap *bitmap = NULL;
@@ -3003,7 +3003,7 @@ bool html_redraw_box(const html_content *html, struct box *box, int x_parent, in
 
         res = box_handle_scrollbars((struct content *)html, box, has_x_scroll, has_y_scroll);
         if (res != NSERROR_OK) {
-            NSLOG(neosurf, INFO, "%s", messages_get_errorcode(res));
+            NSLOG(wisp, INFO, "%s", messages_get_errorcode(res));
             {
                 {
                     result = false;
@@ -3066,7 +3066,7 @@ bool html_redraw(
         .fill_colour = data->background_colour,
     };
 
-    NSLOG(neosurf, DEBUG, "PROFILER: START HTML redraw %p", c);
+    NSLOG(wisp, DEBUG, "PROFILER: START HTML redraw %p", c);
 
     box = html->layout;
 
@@ -3107,6 +3107,6 @@ bool html_redraw(
             html->visible_select_menu, data->x + menu_x, data->y + menu_y, data->scale, clip, ctx);
     }
 
-    NSLOG(neosurf, DEBUG, "PROFILER: STOP HTML redraw %p", c);
+    NSLOG(wisp, DEBUG, "PROFILER: STOP HTML redraw %p", c);
     return result;
 }

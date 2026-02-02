@@ -30,9 +30,9 @@
 
 extern "C" {
 
-#include "neosurf/browser_window.h"
-#include "neosurf/content_type.h"
-#include "neosurf/types.h"
+#include "wisp/browser_window.h"
+#include "wisp/content_type.h"
+#include "wisp/types.h"
 }
 
 #include "qt/actions.cls.h"

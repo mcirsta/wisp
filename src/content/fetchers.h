@@ -22,11 +22,11 @@
  * Interface for fetchers factory.
  */
 
-#ifndef _NETSURF_DESKTOP_FETCHERS_H_
-#define _NETSURF_DESKTOP_FETCHERS_H_
+#ifndef _WISP_DESKTOP_FETCHERS_H_
+#define _WISP_DESKTOP_FETCHERS_H_
 
 #include <libwapcaplet/libwapcaplet.h>
-#include <neosurf/utils/inet.h> /* this is necessary for the fd_set definition */
+#include <wisp/utils/inet.h> /* this is necessary for the fd_set definition */
 
 struct nsurl;
 struct fetch_multipart_data;

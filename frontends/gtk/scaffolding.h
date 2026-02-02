@@ -16,10 +16,10 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef NETSURF_GTK_SCAFFOLDING_H
-#define NETSURF_GTK_SCAFFOLDING_H 1
+#ifndef WISP_GTK_SCAFFOLDING_H
+#define WISP_GTK_SCAFFOLDING_H 1
 
-#include <neosurf/utils/errors.h>
+#include <wisp/utils/errors.h>
 #include <stdbool.h>
 
 struct bitmap;

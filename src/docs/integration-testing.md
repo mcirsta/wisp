@@ -1,4 +1,4 @@
-NetSurf Integration Testing
+Wisp Integration Testing
 ===========================
 
 [TOC]
@@ -12,9 +12,9 @@ websites and rendering the contents etc.)
 A test is written as a set of operations in a yaml file. These files
 are parsed and executed by the monkey driver script.
 
-There are very few tests within the NetSurf repository. The large
+There are very few tests within the Wisp repository. The large
 majority of integration tests are instead held within the
-[netsurf-test](http://source.netsurf-browser.org/netsurf-test.git/)
+[wisp-test](http://source.netsurf-browser.org/netsurf-test.git/)
 repository.
 
 To allow more effective use of these tests additional infrastructure
@@ -30,7 +30,7 @@ extend test capabilities.
 # Running a test
 
 An individual test can be run using the monkey_driver.py python script
-from within the NetSurf repository
+from within the Wisp repository
 
     $ make TARGET=monkey
     $ ./test/monkey_driver.py -m ./nsmonkey -t test/monkey-tests/start-stop.yaml
@@ -50,7 +50,7 @@ run together. Groups are listed within division index files. A group
 of tests may occur within more than one division.
 
 To run the integration tests the monkey-see-monkey-do python script is
-used. It downloads the test plan for a division from the NetSurf test
+used. It downloads the test plan for a division from the Wisp test
 infrastructure and executes it.
 
     $ ./test/monkey-see-monkey-do
@@ -138,7 +138,7 @@ with the `accept_language` user option.
 
 The following launch action would start a browser:
  * Passing `--verbose` on the commandline
- * The `NETSURFRES` environment variable set to `/home/netsurf/resources`
+ * The `WISPRES` environment variable set to `/home/wisp/resources`
  * The user options `enable_javascript` and `send_referer` set to false.
  * The `LANGUAGE` environment variable set to `en`
 
@@ -147,7 +147,7 @@ The following launch action would start a browser:
   launch-options:
   - verbose
   environment:
-    NETSURFRES: /home/netsurf/resources
+    WISPRES: /home/wisp/resources
   options:
   - enable_javascript=0
   - send_referer=0
@@ -423,7 +423,7 @@ The checks available are:
       window: win1
 	  area: extent
       checks:
-      - text-contains: NetSurf
+      - text-contains: Wisp
       - text-contains: Browser
 	  - text-not-contains: Chrome
       - bitmap-count: 1

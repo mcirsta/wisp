@@ -20,8 +20,8 @@
  * UTF-8 manipulation functions (interface).
  */
 
-#ifndef _NETSURF_UTILS_UTF8_H_
-#define _NETSURF_UTILS_UTF8_H_
+#ifndef _WISP_UTILS_UTF8_H_
+#define _WISP_UTILS_UTF8_H_
 
 #include <stdbool.h>
 #include <stdint.h>

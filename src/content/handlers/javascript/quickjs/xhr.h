@@ -4,8 +4,8 @@
  * This file is part of NeoSurf, http://www.netsurf-browser.org/
  */
 
-#ifndef NEOSURF_QUICKJS_XHR_H
-#define NEOSURF_QUICKJS_XHR_H
+#ifndef WISP_QUICKJS_XHR_H
+#define WISP_QUICKJS_XHR_H
 
 #include "quickjs.h"
 

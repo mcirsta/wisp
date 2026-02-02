@@ -25,8 +25,8 @@
  * also adds boxes to the tree (eg. when formatting lines of text).
  */
 
-#ifndef NETSURF_HTML_LAYOUT_H
-#define NETSURF_HTML_LAYOUT_H
+#ifndef WISP_HTML_LAYOUT_H
+#define WISP_HTML_LAYOUT_H
 
 #include <stdbool.h>
 

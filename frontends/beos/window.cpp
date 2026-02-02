@@ -39,15 +39,15 @@ extern "C" {
 #include "utils/nsurl.h"
 #include "utils/utf8.h"
 #include "utils/utils.h"
-#include "netsurf/browser_window.h"
-#include "netsurf/clipboard.h"
-#include "netsurf/content_type.h"
-#include "netsurf/inttypes.h"
-#include "netsurf/keypress.h"
-#include "netsurf/mouse.h"
-#include "netsurf/plotters.h"
-#include "netsurf/url_db.h"
-#include "netsurf/window.h"
+#include "wisp/browser_window.h"
+#include "wisp/clipboard.h"
+#include "wisp/content_type.h"
+#include "wisp/inttypes.h"
+#include "wisp/keypress.h"
+#include "wisp/mouse.h"
+#include "wisp/plotters.h"
+#include "wisp/url_db.h"
+#include "wisp/window.h"
 }
 
 #include "beos/about.h"
@@ -336,7 +336,7 @@ gui_window_create(struct browser_window *bw, struct gui_window *existing, gui_wi
         return 0;
     }
 
-    NSLOG(netsurf, INFO, "Creating gui window %p for browser window %p", g, bw);
+    NSLOG(wisp, INFO, "Creating gui window %p for browser window %p", g, bw);
 
     g->bw = bw;
     g->mouse.state = 0;
@@ -417,25 +417,25 @@ void nsbeos_dispatch_event(BMessage *message)
         continue;
 
     if (gui && gui != z) {
-        NSLOG(netsurf, INFO, "discarding event for destroyed gui_window");
+        NSLOG(wisp, INFO, "discarding event for destroyed gui_window");
         delete message;
         return;
     }
     if (scaffold && (!y || scaffold != y->scaffold)) {
-        NSLOG(netsurf, INFO, "discarding event for destroyed scaffolding");
+        NSLOG(wisp, INFO, "discarding event for destroyed scaffolding");
         delete message;
         return;
     }
 
     // messages for top-level
     if (scaffold) {
-        NSLOG(netsurf, INFO, "dispatching to top-level");
+        NSLOG(wisp, INFO, "dispatching to top-level");
         nsbeos_scaffolding_dispatch_event(scaffold, message);
         delete message;
         return;
     }
 
-    NSLOG(netsurf, DEEPDEBUG, "processing message");
+    NSLOG(wisp, DEEPDEBUG, "processing message");
     switch (message->what) {
     case B_QUIT_REQUESTED:
         // from the BApplication
@@ -734,7 +734,7 @@ void nsbeos_window_keypress_event(BView *view, gui_window *g, BMessage *event)
         numbytes = strlen(bytes);
 
     NSLOG(
-        netsurf, INFO, "mods 0x%08" PRIx32 " key %" PRIu32 " raw %" PRIu32 " byte[0] %d", mods, key, raw_char, buff[0]);
+        wisp, INFO, "mods 0x%08" PRIx32 " key %" PRIu32 " raw %" PRIu32 " byte[0] %d", mods, key, raw_char, buff[0]);
 
     char byte;
     if (numbytes == 1) {
@@ -929,10 +929,10 @@ static void gui_window_destroy(struct gui_window *g)
         g->next->prev = g->prev;
 
 
-    NSLOG(netsurf, INFO, "Destroying gui_window %p", g);
+    NSLOG(wisp, INFO, "Destroying gui_window %p", g);
     assert(g != NULL);
     assert(g->bw != NULL);
-    NSLOG(netsurf, INFO, "     Scaffolding: %p", g->scaffold);
+    NSLOG(wisp, INFO, "     Scaffolding: %p", g->scaffold);
 
     if (g->view == NULL)
         return;
@@ -1084,7 +1084,7 @@ static void gui_window_update_extent(struct gui_window *g)
     x_max -= g->view->Bounds().Width() + 1;
     y_max -= g->view->Bounds().Height() + 1;
 
-    NSLOG(netsurf, INFO, "x_max = %d y_max = %d x_prop = %f y_prop = %f\n", x_max, y_max, x_prop, y_prop);
+    NSLOG(wisp, INFO, "x_max = %d y_max = %d x_prop = %f y_prop = %f\n", x_max, y_max, x_prop, y_prop);
 
     if (g->view->ScrollBar(B_HORIZONTAL)) {
         g->view->ScrollBar(B_HORIZONTAL)->SetRange(0, x_max);

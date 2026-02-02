@@ -22,13 +22,13 @@
 #include <unistd.h>
 #include <windows.h>
 
-#include "neosurf/browser_window.h"
-#include "neosurf/clipboard.h"
-#include "neosurf/utils/corestrings.h"
-#include "neosurf/utils/errors.h"
-#include "neosurf/utils/file.h"
-#include "neosurf/utils/log.h"
-#include "neosurf/utils/nsurl.h"
+#include "wisp/browser_window.h"
+#include "wisp/clipboard.h"
+#include "wisp/utils/corestrings.h"
+#include "wisp/utils/errors.h"
+#include "wisp/utils/file.h"
+#include "wisp/utils/log.h"
+#include "wisp/utils/nsurl.h"
 
 #include "windows/pointers.h"
 #include "windows/schedule.h"

@@ -27,10 +27,10 @@
 #include <string.h>
 #include <unistd.h>
 
-#include "neosurf/utils/filepath.h"
-#include "neosurf/utils/log.h"
-#include "neosurf/utils/nsurl.h"
-#include "neosurf/utils/utils.h"
+#include "wisp/utils/filepath.h"
+#include "wisp/utils/log.h"
+#include "wisp/utils/nsurl.h"
+#include "wisp/utils/utils.h"
 
 #include "windows/findfile.h"
 
@@ -60,15 +60,15 @@ char *nsws_find_resource(char *buf, const char *filename, const char *def)
     char t[PATH_MAX];
 
     if (cdir != NULL) {
-        NSLOG(neosurf, INFO, "Found Home %s", cdir);
+        NSLOG(wisp, INFO, "Found Home %s", cdir);
         strcpy(t, cdir);
-        strcat(t, "/.neosurf/");
+        strcat(t, "/.wisp/");
         strcat(t, filename);
         if ((realpath(t, buf) != NULL) && (access(buf, R_OK) == 0))
             return buf;
     }
 
-    cdir = getenv("NEOSURFRES");
+    cdir = getenv("WISPRES");
 
     if (cdir != NULL) {
         if (realpath(cdir, buf) != NULL) {
@@ -79,7 +79,7 @@ char *nsws_find_resource(char *buf, const char *filename, const char *def)
         }
     }
 
-    strcpy(t, NEOSURF_WINDOWS_RESPATH);
+    strcpy(t, WISP_WINDOWS_RESPATH);
     strcat(t, filename);
     if ((realpath(t, buf) != NULL) && (access(buf, R_OK) == 0))
         return buf;
@@ -87,7 +87,7 @@ char *nsws_find_resource(char *buf, const char *filename, const char *def)
     getcwd(t, PATH_MAX - SLEN("\\res\\") - strlen(filename));
     strcat(t, "\\res\\");
     strcat(t, filename);
-    NSLOG(neosurf, INFO, "looking in %s", t);
+    NSLOG(wisp, INFO, "looking in %s", t);
     if ((realpath(t, buf) != NULL) && (access(buf, R_OK) == 0))
         return buf;
 

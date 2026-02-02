@@ -21,7 +21,7 @@
 #include <string.h>
 
 #include "utils/http/primitives.h"
-#include <neosurf/ns_inttypes.h>
+#include <wisp/ns_inttypes.h>
 
 /**
  * Skip past linear whitespace in input

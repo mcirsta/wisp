@@ -19,10 +19,10 @@
 #include <stdint.h>
 #include <string.h>
 
-#include <neosurf/browser_window.h>
-#include <neosurf/desktop/search.h>
-#include <neosurf/utils/log.h>
-#include <neosurf/utils/nsoption.h>
+#include <wisp/browser_window.h>
+#include <wisp/desktop/search.h>
+#include <wisp/utils/log.h>
+#include <wisp/utils/nsoption.h>
 
 #include "gtk/compat.h"
 #include "gtk/scaffolding.h"
@@ -183,7 +183,7 @@ static void nsgtk_tab_switch_page_after(GtkNotebook *notebook, GtkWidget *selpag
 
     /* check if trying to select the "add page" tab */
     if (selpage != addpage) {
-        NSLOG(neosurf, INFO, "sel %d", selpagenum);
+        NSLOG(wisp, INFO, "sel %d", selpagenum);
         menubar = nsgtk_scaffolding_menu_bar(nsgtk_scaffolding_from_notebook(notebook));
         gw = g_object_get_data(G_OBJECT(selpage), "gui_window");
         if (gw != NULL) {
@@ -199,7 +199,7 @@ static void nsgtk_tab_switch_page_after(GtkNotebook *notebook, GtkWidget *selpag
         return;
     }
 
-    NSLOG(neosurf, INFO, "src %d sel %d", srcpagenum, selpagenum);
+    NSLOG(wisp, INFO, "src %d sel %d", srcpagenum, selpagenum);
 
     /* ensure the add tab is not already selected */
     if ((srcpagenum == -1) || (srcpagenum == (gint)selpagenum)) {
@@ -214,7 +214,7 @@ static void nsgtk_tab_switch_page_after(GtkNotebook *notebook, GtkWidget *selpag
         res = nsgtk_window_item_activate(gw, NEWTAB_BUTTON);
     }
     if (res != NSERROR_OK) {
-        NSLOG(neosurf, INFO, "Failed to open new tab.");
+        NSLOG(wisp, INFO, "Failed to open new tab.");
     }
 }
 

@@ -16,8 +16,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef NETSURF_MONKEY_DISPATCH_H
-#define NETSURF_MONKEY_DISPATCH_H 1
+#ifndef WISP_MONKEY_DISPATCH_H
+#define WISP_MONKEY_DISPATCH_H 1
 
 typedef void (*handle_command_fn)(int argc, char **argv);
 

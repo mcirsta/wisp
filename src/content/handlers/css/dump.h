@@ -16,8 +16,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef NETSURF_CSS_DUMP_H_
-#define NETSURF_CSS_DUMP_H_
+#ifndef WISP_CSS_DUMP_H_
+#define WISP_CSS_DUMP_H_
 
 /**
  * Dump a computed style \a style to the give file handle \a stream.

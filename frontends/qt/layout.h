@@ -16,8 +16,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef NETSURF_QT_LAYOUT_H
-#define NETSURF_QT_LAYOUT_H 1
+#ifndef WISP_QT_LAYOUT_H
+#define WISP_QT_LAYOUT_H 1
 
 /**
  * qt layout operations table

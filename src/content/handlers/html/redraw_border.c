@@ -25,13 +25,13 @@
 #include <stdbool.h>
 #include <stdlib.h>
 
-#include <neosurf/utils/log.h>
-#include <neosurf/utils/utils.h>
-#include "neosurf/css.h"
-#include "neosurf/plotters.h"
+#include <wisp/utils/log.h>
+#include <wisp/utils/utils.h>
+#include "wisp/css.h"
+#include "wisp/plotters.h"
 
-#include <neosurf/content/handlers/html/box.h>
-#include <neosurf/content/handlers/html/private.h>
+#include <wisp/content/handlers/html/box.h>
+#include <wisp/content/handlers/html/private.h>
 
 
 static plot_style_t plot_style_bdr = {

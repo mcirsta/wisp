@@ -1,6 +1,6 @@
 add_subdirectory(src/parse/properties/gen_parser)
 include(${CMAKE_SOURCE_DIR}/src/cmake/libcss_helpers.cmake)
-option(NEOSURF_VERBOSE_GEN "Enable verbose libcss code generation output" OFF)
+option(WISP_VERBOSE_GEN "Enable verbose libcss code generation output" OFF)
 
 set(LIBCSS_PROP_GEN ${CMAKE_SOURCE_DIR}/contrib/libcss/src/parse/properties/properties.gen)
 libcss_extract_property_names(${LIBCSS_PROP_GEN} LIBCSS_PROP_NAMES)
@@ -26,7 +26,7 @@ set(LIBCSS_SELECT_GEN_FILES
 add_custom_command(
     OUTPUT ${LIBCSS_SELECT_GEN_FILES}
     COMMAND ${CMAKE_COMMAND} -E make_directory ${LIBCSS_SELECT_OUT_DIR}
-    COMMAND ${PYTHON3} ${CMAKE_SOURCE_DIR}/contrib/libcss/src/select/select_generator.py ${LIBCSS_SELECT_OUT_DIR} $<$<OR:$<BOOL:${NEOSURF_VERBOSE_GEN}>,$<BOOL:${CMAKE_VERBOSE_MAKEFILE}>>:--verbose>
+    COMMAND ${PYTHON3} ${CMAKE_SOURCE_DIR}/contrib/libcss/src/select/select_generator.py ${LIBCSS_SELECT_OUT_DIR} $<$<OR:$<BOOL:${WISP_VERBOSE_GEN}>,$<BOOL:${CMAKE_VERBOSE_MAKEFILE}>>:--verbose>
     DEPENDS ${CMAKE_SOURCE_DIR}/contrib/libcss/src/select/select_generator.py ${CMAKE_SOURCE_DIR}/contrib/libcss/src/select/select_config.py ${CMAKE_SOURCE_DIR}/contrib/libcss/src/select/assets.py ${CMAKE_SOURCE_DIR}/contrib/libcss/src/select/overrides.py
 )
 add_custom_target(libcss_select_gen DEPENDS ${LIBCSS_SELECT_GEN_FILES})
@@ -278,7 +278,7 @@ add_library(css SHARED
 	src/utils/utils.c
 	src/utils/errors.c
 )
-set_target_properties(css PROPERTIES SOVERSION ${NEOSURF_ABI})
+set_target_properties(css PROPERTIES SOVERSION ${WISP_ABI})
 
 add_dependencies(css libcss_properties libcss_select_gen libcss_propreg_gen gen_parser)
 

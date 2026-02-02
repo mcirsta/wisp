@@ -24,12 +24,12 @@
  */
 
 #include "desktop/cw_helper.h"
-#include <neosurf/content/handlers/css/utils.h>
-#include <neosurf/utils/errors.h>
+#include <wisp/content/handlers/css/utils.h>
+#include <wisp/utils/errors.h>
 #include "desktop/gui_internal.h"
-#include "neosurf/browser.h"
-#include "neosurf/core_window.h"
-#include "neosurf/types.h"
+#include "wisp/browser.h"
+#include "wisp/core_window.h"
+#include "wisp/types.h"
 
 /* exported interface documented in cw_helper.h */
 nserror cw_helper_scroll_visible(struct core_window *cw_h, const struct rect *r)

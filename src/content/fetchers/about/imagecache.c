@@ -24,7 +24,7 @@
 #include <stdbool.h>
 #include <stdio.h>
 
-#include "neosurf/types.h"
+#include "wisp/types.h"
 
 #include "content/handlers/image/image_cache.h"
 

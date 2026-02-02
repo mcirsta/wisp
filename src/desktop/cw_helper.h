@@ -22,10 +22,10 @@
  * Helpers to simplify core use of corewindow.
  */
 
-#ifndef NETSURF_DESKTOP_CW_HELPER_H_
-#define NETSURF_DESKTOP_CW_HELPER_H_
+#ifndef WISP_DESKTOP_CW_HELPER_H_
+#define WISP_DESKTOP_CW_HELPER_H_
 
-#include <neosurf/utils/errors.h>
+#include <wisp/utils/errors.h>
 
 struct rect;
 struct core_window;

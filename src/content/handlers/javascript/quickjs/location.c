@@ -5,9 +5,9 @@
  */
 
 #include "location.h"
-#include <neosurf/browser_window.h>
-#include <neosurf/utils/log.h>
-#include <neosurf/utils/nsurl.h>
+#include <wisp/browser_window.h>
+#include <wisp/utils/log.h>
+#include <wisp/utils/nsurl.h>
 #include "quickjs.h"
 #include <stdlib.h>
 #include <string.h>
@@ -23,7 +23,7 @@ static nsurl *get_current_url(JSContext *ctx)
 {
     struct browser_window *bw = qjs_get_window_priv(ctx);
     if (bw == NULL) {
-        NSLOG(neosurf, DEBUG, "location: no browser window available");
+        NSLOG(wisp, DEBUG, "location: no browser window available");
         return NULL;
     }
     return browser_window_access_url(bw);
@@ -33,11 +33,11 @@ static JSValue js_location_href_getter(JSContext *ctx, JSValueConst this_val, in
 {
     nsurl *url = get_current_url(ctx);
     if (url == NULL) {
-        NSLOG(neosurf, DEBUG, "location.href getter: returning about:blank (no URL)");
+        NSLOG(wisp, DEBUG, "location.href getter: returning about:blank (no URL)");
         return JS_NewString(ctx, "about:blank");
     }
     const char *href = nsurl_access(url);
-    NSLOG(neosurf, DEBUG, "location.href getter: returning '%s'", href);
+    NSLOG(wisp, DEBUG, "location.href getter: returning '%s'", href);
     return JS_NewString(ctx, href);
 }
 
@@ -45,12 +45,12 @@ static JSValue js_location_protocol_getter(JSContext *ctx, JSValueConst this_val
 {
     nsurl *url = get_current_url(ctx);
     if (url == NULL) {
-        NSLOG(neosurf, DEBUG, "location.protocol getter: returning 'about:' (no URL)");
+        NSLOG(wisp, DEBUG, "location.protocol getter: returning 'about:' (no URL)");
         return JS_NewString(ctx, "about:");
     }
     lwc_string *scheme = nsurl_get_component(url, NSURL_SCHEME);
     if (scheme == NULL) {
-        NSLOG(neosurf, DEBUG, "location.protocol getter: no scheme, returning 'about:'");
+        NSLOG(wisp, DEBUG, "location.protocol getter: no scheme, returning 'about:'");
         return JS_NewString(ctx, "about:");
     }
     /* Protocol includes trailing colon */
@@ -64,7 +64,7 @@ static JSValue js_location_protocol_getter(JSContext *ctx, JSValueConst this_val
     result[len] = ':';
     result[len + 1] = '\0';
     lwc_string_unref(scheme);
-    NSLOG(neosurf, DEBUG, "location.protocol getter: returning '%s'", result);
+    NSLOG(wisp, DEBUG, "location.protocol getter: returning '%s'", result);
     JSValue ret = JS_NewString(ctx, result);
     free(result);
     return ret;
@@ -74,7 +74,7 @@ static JSValue js_location_host_getter(JSContext *ctx, JSValueConst this_val, in
 {
     nsurl *url = get_current_url(ctx);
     if (url == NULL) {
-        NSLOG(neosurf, DEBUG, "location.host getter: returning '' (no URL)");
+        NSLOG(wisp, DEBUG, "location.host getter: returning '' (no URL)");
         return JS_NewString(ctx, "");
     }
     lwc_string *host = nsurl_get_component(url, NSURL_HOST);
@@ -83,7 +83,7 @@ static JSValue js_location_host_getter(JSContext *ctx, JSValueConst this_val, in
     if (host == NULL) {
         if (port)
             lwc_string_unref(port);
-        NSLOG(neosurf, DEBUG, "location.host getter: no host, returning ''");
+        NSLOG(wisp, DEBUG, "location.host getter: no host, returning ''");
         return JS_NewString(ctx, "");
     }
 
@@ -98,7 +98,7 @@ static JSValue js_location_host_getter(JSContext *ctx, JSValueConst this_val, in
             buf[host_len] = ':';
             memcpy(buf + host_len + 1, lwc_string_data(port), port_len);
             buf[host_len + 1 + port_len] = '\0';
-            NSLOG(neosurf, DEBUG, "location.host getter: returning '%s'", buf);
+            NSLOG(wisp, DEBUG, "location.host getter: returning '%s'", buf);
             result = JS_NewString(ctx, buf);
             free(buf);
         } else {
@@ -106,7 +106,7 @@ static JSValue js_location_host_getter(JSContext *ctx, JSValueConst this_val, in
         }
         lwc_string_unref(port);
     } else {
-        NSLOG(neosurf, DEBUG, "location.host getter: returning '%s'", lwc_string_data(host));
+        NSLOG(wisp, DEBUG, "location.host getter: returning '%s'", lwc_string_data(host));
         result = JS_NewString(ctx, lwc_string_data(host));
     }
     lwc_string_unref(host);
@@ -117,15 +117,15 @@ static JSValue js_location_hostname_getter(JSContext *ctx, JSValueConst this_val
 {
     nsurl *url = get_current_url(ctx);
     if (url == NULL) {
-        NSLOG(neosurf, DEBUG, "location.hostname getter: returning '' (no URL)");
+        NSLOG(wisp, DEBUG, "location.hostname getter: returning '' (no URL)");
         return JS_NewString(ctx, "");
     }
     lwc_string *host = nsurl_get_component(url, NSURL_HOST);
     if (host == NULL) {
-        NSLOG(neosurf, DEBUG, "location.hostname getter: no host, returning ''");
+        NSLOG(wisp, DEBUG, "location.hostname getter: no host, returning ''");
         return JS_NewString(ctx, "");
     }
-    NSLOG(neosurf, DEBUG, "location.hostname getter: returning '%s'", lwc_string_data(host));
+    NSLOG(wisp, DEBUG, "location.hostname getter: returning '%s'", lwc_string_data(host));
     JSValue result = JS_NewString(ctx, lwc_string_data(host));
     lwc_string_unref(host);
     return result;
@@ -135,15 +135,15 @@ static JSValue js_location_port_getter(JSContext *ctx, JSValueConst this_val, in
 {
     nsurl *url = get_current_url(ctx);
     if (url == NULL) {
-        NSLOG(neosurf, DEBUG, "location.port getter: returning '' (no URL)");
+        NSLOG(wisp, DEBUG, "location.port getter: returning '' (no URL)");
         return JS_NewString(ctx, "");
     }
     lwc_string *port = nsurl_get_component(url, NSURL_PORT);
     if (port == NULL) {
-        NSLOG(neosurf, DEBUG, "location.port getter: no port, returning ''");
+        NSLOG(wisp, DEBUG, "location.port getter: no port, returning ''");
         return JS_NewString(ctx, "");
     }
-    NSLOG(neosurf, DEBUG, "location.port getter: returning '%s'", lwc_string_data(port));
+    NSLOG(wisp, DEBUG, "location.port getter: returning '%s'", lwc_string_data(port));
     JSValue result = JS_NewString(ctx, lwc_string_data(port));
     lwc_string_unref(port);
     return result;
@@ -153,15 +153,15 @@ static JSValue js_location_pathname_getter(JSContext *ctx, JSValueConst this_val
 {
     nsurl *url = get_current_url(ctx);
     if (url == NULL) {
-        NSLOG(neosurf, DEBUG, "location.pathname getter: returning '/' (no URL)");
+        NSLOG(wisp, DEBUG, "location.pathname getter: returning '/' (no URL)");
         return JS_NewString(ctx, "/");
     }
     lwc_string *path = nsurl_get_component(url, NSURL_PATH);
     if (path == NULL) {
-        NSLOG(neosurf, DEBUG, "location.pathname getter: no path, returning '/'");
+        NSLOG(wisp, DEBUG, "location.pathname getter: no path, returning '/'");
         return JS_NewString(ctx, "/");
     }
-    NSLOG(neosurf, DEBUG, "location.pathname getter: returning '%s'", lwc_string_data(path));
+    NSLOG(wisp, DEBUG, "location.pathname getter: returning '%s'", lwc_string_data(path));
     JSValue result = JS_NewString(ctx, lwc_string_data(path));
     lwc_string_unref(path);
     return result;
@@ -171,12 +171,12 @@ static JSValue js_location_search_getter(JSContext *ctx, JSValueConst this_val, 
 {
     nsurl *url = get_current_url(ctx);
     if (url == NULL) {
-        NSLOG(neosurf, DEBUG, "location.search getter: returning '' (no URL)");
+        NSLOG(wisp, DEBUG, "location.search getter: returning '' (no URL)");
         return JS_NewString(ctx, "");
     }
     lwc_string *query = nsurl_get_component(url, NSURL_QUERY);
     if (query == NULL) {
-        NSLOG(neosurf, DEBUG, "location.search getter: no query, returning ''");
+        NSLOG(wisp, DEBUG, "location.search getter: no query, returning ''");
         return JS_NewString(ctx, "");
     }
     /* search includes leading ? */
@@ -190,7 +190,7 @@ static JSValue js_location_search_getter(JSContext *ctx, JSValueConst this_val, 
     memcpy(result + 1, lwc_string_data(query), len);
     result[len + 1] = '\0';
     lwc_string_unref(query);
-    NSLOG(neosurf, DEBUG, "location.search getter: returning '%s'", result);
+    NSLOG(wisp, DEBUG, "location.search getter: returning '%s'", result);
     JSValue ret = JS_NewString(ctx, result);
     free(result);
     return ret;
@@ -200,12 +200,12 @@ static JSValue js_location_hash_getter(JSContext *ctx, JSValueConst this_val, in
 {
     nsurl *url = get_current_url(ctx);
     if (url == NULL) {
-        NSLOG(neosurf, DEBUG, "location.hash getter: returning '' (no URL)");
+        NSLOG(wisp, DEBUG, "location.hash getter: returning '' (no URL)");
         return JS_NewString(ctx, "");
     }
     lwc_string *fragment = nsurl_get_component(url, NSURL_FRAGMENT);
     if (fragment == NULL) {
-        NSLOG(neosurf, DEBUG, "location.hash getter: no fragment, returning ''");
+        NSLOG(wisp, DEBUG, "location.hash getter: no fragment, returning ''");
         return JS_NewString(ctx, "");
     }
     /* hash includes leading # */
@@ -219,7 +219,7 @@ static JSValue js_location_hash_getter(JSContext *ctx, JSValueConst this_val, in
     memcpy(result + 1, lwc_string_data(fragment), len);
     result[len + 1] = '\0';
     lwc_string_unref(fragment);
-    NSLOG(neosurf, DEBUG, "location.hash getter: returning '%s'", result);
+    NSLOG(wisp, DEBUG, "location.hash getter: returning '%s'", result);
     JSValue ret = JS_NewString(ctx, result);
     free(result);
     return ret;
@@ -229,7 +229,7 @@ static JSValue js_location_origin_getter(JSContext *ctx, JSValueConst this_val, 
 {
     nsurl *url = get_current_url(ctx);
     if (url == NULL) {
-        NSLOG(neosurf, DEBUG, "location.origin getter: returning 'null' (no URL)");
+        NSLOG(wisp, DEBUG, "location.origin getter: returning 'null' (no URL)");
         return JS_NewString(ctx, "null");
     }
     lwc_string *scheme = nsurl_get_component(url, NSURL_SCHEME);
@@ -243,7 +243,7 @@ static JSValue js_location_origin_getter(JSContext *ctx, JSValueConst this_val, 
             lwc_string_unref(host);
         if (port)
             lwc_string_unref(port);
-        NSLOG(neosurf, DEBUG, "location.origin getter: missing scheme/host, returning 'null'");
+        NSLOG(wisp, DEBUG, "location.origin getter: missing scheme/host, returning 'null'");
         return JS_NewString(ctx, "null");
     }
 
@@ -281,7 +281,7 @@ static JSValue js_location_origin_getter(JSContext *ctx, JSValueConst this_val, 
     if (port)
         lwc_string_unref(port);
 
-    NSLOG(neosurf, DEBUG, "location.origin getter: returning '%s'", result);
+    NSLOG(wisp, DEBUG, "location.origin getter: returning '%s'", result);
     JSValue ret = JS_NewString(ctx, result);
     free(result);
     return ret;
@@ -295,21 +295,21 @@ static JSValue js_location_assign(JSContext *ctx, JSValueConst this_val, int arg
     nserror err;
 
     if (argc < 1) {
-        NSLOG(neosurf, DEBUG, "location.assign: no argument provided");
+        NSLOG(wisp, DEBUG, "location.assign: no argument provided");
         return JS_UNDEFINED;
     }
 
     url_str = JS_ToCString(ctx, argv[0]);
     if (url_str == NULL) {
-        NSLOG(neosurf, DEBUG, "location.assign: failed to get URL string");
+        NSLOG(wisp, DEBUG, "location.assign: failed to get URL string");
         return JS_UNDEFINED;
     }
 
-    NSLOG(neosurf, DEBUG, "location.assign called with: '%s'", url_str);
+    NSLOG(wisp, DEBUG, "location.assign called with: '%s'", url_str);
 
     bw = qjs_get_window_priv(ctx);
     if (bw == NULL) {
-        NSLOG(neosurf, WARNING, "location.assign: no browser window available");
+        NSLOG(wisp, WARNING, "location.assign: no browser window available");
         JS_FreeCString(ctx, url_str);
         return JS_UNDEFINED;
     }
@@ -318,7 +318,7 @@ static JSValue js_location_assign(JSContext *ctx, JSValueConst this_val, int arg
     JS_FreeCString(ctx, url_str);
 
     if (err != NSERROR_OK) {
-        NSLOG(neosurf, WARNING, "location.assign: failed to create URL");
+        NSLOG(wisp, WARNING, "location.assign: failed to create URL");
         return JS_UNDEFINED;
     }
 
@@ -331,7 +331,7 @@ static JSValue js_location_assign(JSContext *ctx, JSValueConst this_val, int arg
     nsurl_unref(url);
 
     if (err != NSERROR_OK) {
-        NSLOG(neosurf, WARNING, "location.assign: navigation failed");
+        NSLOG(wisp, WARNING, "location.assign: navigation failed");
     }
 
     return JS_UNDEFINED;
@@ -345,21 +345,21 @@ static JSValue js_location_replace(JSContext *ctx, JSValueConst this_val, int ar
     nserror err;
 
     if (argc < 1) {
-        NSLOG(neosurf, DEBUG, "location.replace: no argument provided");
+        NSLOG(wisp, DEBUG, "location.replace: no argument provided");
         return JS_UNDEFINED;
     }
 
     url_str = JS_ToCString(ctx, argv[0]);
     if (url_str == NULL) {
-        NSLOG(neosurf, DEBUG, "location.replace: failed to get URL string");
+        NSLOG(wisp, DEBUG, "location.replace: failed to get URL string");
         return JS_UNDEFINED;
     }
 
-    NSLOG(neosurf, DEBUG, "location.replace called with: '%s'", url_str);
+    NSLOG(wisp, DEBUG, "location.replace called with: '%s'", url_str);
 
     bw = qjs_get_window_priv(ctx);
     if (bw == NULL) {
-        NSLOG(neosurf, WARNING, "location.replace: no browser window available");
+        NSLOG(wisp, WARNING, "location.replace: no browser window available");
         JS_FreeCString(ctx, url_str);
         return JS_UNDEFINED;
     }
@@ -368,7 +368,7 @@ static JSValue js_location_replace(JSContext *ctx, JSValueConst this_val, int ar
     JS_FreeCString(ctx, url_str);
 
     if (err != NSERROR_OK) {
-        NSLOG(neosurf, WARNING, "location.replace: failed to create URL");
+        NSLOG(wisp, WARNING, "location.replace: failed to create URL");
         return JS_UNDEFINED;
     }
 
@@ -381,7 +381,7 @@ static JSValue js_location_replace(JSContext *ctx, JSValueConst this_val, int ar
     nsurl_unref(url);
 
     if (err != NSERROR_OK) {
-        NSLOG(neosurf, WARNING, "location.replace: navigation failed");
+        NSLOG(wisp, WARNING, "location.replace: navigation failed");
     }
 
     return JS_UNDEFINED;
@@ -389,7 +389,7 @@ static JSValue js_location_replace(JSContext *ctx, JSValueConst this_val, int ar
 
 static JSValue js_location_reload(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
-    NSLOG(neosurf, DEBUG, "location.reload called");
+    NSLOG(wisp, DEBUG, "location.reload called");
     /* TODO: Implement actual reload */
     return JS_UNDEFINED;
 }
@@ -404,7 +404,7 @@ static void define_getter(JSContext *ctx, JSValue obj, const char *name, JSCFunc
 
 int qjs_init_location(JSContext *ctx)
 {
-    NSLOG(neosurf, DEBUG, "Initializing location binding");
+    NSLOG(wisp, DEBUG, "Initializing location binding");
 
     JSValue global_obj = JS_GetGlobalObject(ctx);
     JSValue location = JS_NewObject(ctx);
@@ -430,6 +430,6 @@ int qjs_init_location(JSContext *ctx)
 
     JS_FreeValue(ctx, global_obj);
 
-    NSLOG(neosurf, DEBUG, "Location binding initialized with all URL properties");
+    NSLOG(wisp, DEBUG, "Location binding initialized with all URL properties");
     return 0;
 }

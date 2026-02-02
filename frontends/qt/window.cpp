@@ -31,12 +31,12 @@ extern "C" {
 #include "utils/nsoption.h"
 #include "utils/nsurl.h"
 
-#include "neosurf/browser_window.h"
-#include "neosurf/content.h"
-#include "neosurf/mouse.h"
-#include "neosurf/plotters.h"
-#include "neosurf/types.h"
-#include "neosurf/window.h"
+#include "wisp/browser_window.h"
+#include "wisp/content.h"
+#include "wisp/mouse.h"
+#include "wisp/plotters.h"
+#include "wisp/types.h"
+#include "wisp/window.h"
 
 #include "desktop/browser_history.h"
 }
@@ -453,7 +453,7 @@ nserror NS_Window::static_get_dimensions(struct gui_window *gw, int *width, int 
 {
     nserror ret = gw->window->m_nswidget->get_dimensions(width, height);
     if (ret != NSERROR_OK) {
-        NSLOG(netsurf, ERROR, "m_nswidget->get_dimensions failed with %d", ret);
+        NSLOG(wisp, ERROR, "m_nswidget->get_dimensions failed with %d", ret);
         return ret;
     }
 
@@ -465,7 +465,7 @@ nserror NS_Window::static_get_dimensions(struct gui_window *gw, int *width, int 
             *width = max_w;
         }
     }
-    NSLOG(netsurf, DEBUG, "static_get_dimensions: nswidget w %d h %d -> returning w %d",
+    NSLOG(wisp, DEBUG, "static_get_dimensions: nswidget w %d h %d -> returning w %d",
         gw->window->m_nswidget->width(), gw->window->m_nswidget->height(), *width);
     return NSERROR_OK;
 }
@@ -481,7 +481,7 @@ nserror NS_Window::static_get_dimensions(struct gui_window *gw, int *width, int 
 nserror NS_Window::static_get_scrollbar_width(struct gui_window *gw, int *width)
 {
     *width = gw->window->m_vscrollbar->sizeHint().width();
-    NSLOG(netsurf, DEBUG, "static_get_scrollbar_width: returning %d", *width);
+    NSLOG(wisp, DEBUG, "static_get_scrollbar_width: returning %d", *width);
     return NSERROR_OK;
 }
 

@@ -25,9 +25,9 @@
 #include <gtk/gtk.h>
 #include <stdint.h>
 
-#include <neosurf/utils/errors.h>
-#include <neosurf/utils/hashtable.h>
-#include <neosurf/utils/log.h>
+#include <wisp/utils/errors.h>
+#include <wisp/utils/hashtable.h>
+#include <wisp/utils/log.h>
 
 #include "gtk/accelerator.h"
 #include "gtk/resources.h"
@@ -48,7 +48,7 @@ nserror nsgtk_accelerator_init(char **respaths)
         accelerators_hash = hash_create(HASH_SIZE);
     }
     if (accelerators_hash == NULL) {
-        NSLOG(neosurf, INFO, "Unable to create hash table");
+        NSLOG(wisp, INFO, "Unable to create hash table");
         return NSERROR_NOMEM;
     }
 

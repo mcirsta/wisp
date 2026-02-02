@@ -31,22 +31,22 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <neosurf/browser_window.h>
-#include <neosurf/content.h>
-#include <neosurf/desktop/searchweb.h>
-#include <neosurf/desktop/textinput.h>
-#include <neosurf/form.h>
-#include <neosurf/ns_inttypes.h>
-#include <neosurf/keypress.h>
-#include <neosurf/mouse.h>
-#include <neosurf/plotters.h>
-#include <neosurf/utils/log.h>
-#include <neosurf/utils/messages.h>
-#include <neosurf/utils/nsoption.h>
-#include <neosurf/utils/nsurl.h>
-#include <neosurf/utils/utf8.h>
-#include <neosurf/utils/utils.h>
-#include <neosurf/window.h>
+#include <wisp/browser_window.h>
+#include <wisp/content.h>
+#include <wisp/desktop/searchweb.h>
+#include <wisp/desktop/textinput.h>
+#include <wisp/form.h>
+#include <wisp/ns_inttypes.h>
+#include <wisp/keypress.h>
+#include <wisp/mouse.h>
+#include <wisp/plotters.h>
+#include <wisp/utils/log.h>
+#include <wisp/utils/messages.h>
+#include <wisp/utils/nsoption.h>
+#include <wisp/utils/nsurl.h>
+#include <wisp/utils/utf8.h>
+#include <wisp/utils/utils.h>
+#include <wisp/window.h>
 
 #include "gtk/bitmap.h"
 #include "gtk/compat.h"
@@ -431,7 +431,7 @@ static gboolean nsgtk_window_scroll_event(GtkWidget *widget, GdkEventScroll *eve
         break;
 #endif
     default:
-        NSLOG(netsurf, INFO, "Unhandled mouse scroll direction");
+        NSLOG(wisp, INFO, "Unhandled mouse scroll direction");
         return TRUE;
     }
 
@@ -761,7 +761,7 @@ gui_window_create(struct browser_window *bw, struct gui_window *existing, gui_wi
 
     res = nsgtk_builder_new_from_resname("tabcontents", &tab_builder);
     if (res != NSERROR_OK) {
-        NSLOG(neosurf, INFO, "Tab contents UI builder init failed");
+        NSLOG(wisp, INFO, "Tab contents UI builder init failed");
         return NULL;
     }
 
@@ -774,7 +774,7 @@ gui_window_create(struct browser_window *bw, struct gui_window *existing, gui_wi
         return NULL;
     }
 
-    NSLOG(neosurf, INFO, "Creating gui window %p for browser window %p", g, bw);
+    NSLOG(wisp, INFO, "Creating gui window %p for browser window %p", g, bw);
 
     g->bw = bw;
     g->mouse.state = 0;
@@ -895,7 +895,7 @@ gui_window_create(struct browser_window *bw, struct gui_window *existing, gui_wi
     /* Finally we need to focus the location bar if requested */
     if (flags & GW_CREATE_FOCUS_LOCATION) {
         if (nsgtk_window_item_activate(g, OPENLOCATION_BUTTON) != NSERROR_OK) {
-            NSLOG(neosurf, WARNING, "Unable to focus location input");
+            NSLOG(wisp, WARNING, "Unable to focus location input");
         }
     }
 
@@ -905,10 +905,10 @@ gui_window_create(struct browser_window *bw, struct gui_window *existing, gui_wi
 
 static void gui_window_destroy(struct gui_window *gw)
 {
-    NSLOG(neosurf, INFO, "gui_window: %p", gw);
+    NSLOG(wisp, INFO, "gui_window: %p", gw);
     assert(gw != NULL);
     assert(gw->bw != NULL);
-    NSLOG(neosurf, INFO, "scaffolding: %p", gw->scaffold);
+    NSLOG(wisp, INFO, "scaffolding: %p", gw->scaffold);
 
     /* kill off any throbber that might be running */
     nsgtk_schedule(-1, next_throbber_frame, gw);
@@ -924,7 +924,7 @@ static void gui_window_destroy(struct gui_window *gw)
         gw->next->prev = gw->prev;
     }
 
-    NSLOG(neosurf, INFO, "window list head: %p", window_list);
+    NSLOG(wisp, INFO, "window list head: %p", window_list);
 }
 
 
@@ -947,13 +947,13 @@ static void gui_window_set_icon(struct gui_window *gw, struct hlcache_handle *ic
     if (icon != NULL) {
         icon_bitmap = content_get_bitmap(icon);
         if (icon_bitmap != NULL) {
-            NSLOG(neosurf, INFO, "Using %p bitmap", icon_bitmap);
+            NSLOG(wisp, INFO, "Using %p bitmap", icon_bitmap);
             gw->icon = nsgdk_pixbuf_get_from_surface(icon_bitmap->surface, 16, 16);
         }
     }
 
     if (gw->icon == NULL) {
-        NSLOG(neosurf, INFO, "Using default favicon");
+        NSLOG(wisp, INFO, "Using default favicon");
         g_object_ref(favicon_pixbuf);
         gw->icon = favicon_pixbuf;
     }
@@ -1260,7 +1260,7 @@ static void gui_window_create_form_select_menu(struct gui_window *g, struct form
     item = 0;
     option = form_select_get_option(control, item);
     while (option != NULL) {
-        NSLOG(neosurf, INFO, "Item %" PRIdPTR " option %p text %s", item, option, option->text);
+        NSLOG(wisp, INFO, "Item %" PRIdPTR " option %p text %s", item, option, option->text);
         menu_item = gtk_check_menu_item_new_with_label(option->text);
         if (option->selected) {
             gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(menu_item), TRUE);
@@ -1299,10 +1299,10 @@ static void gui_window_file_gadget_open(struct gui_window *g, struct hlcache_han
         GTK_FILE_CHOOSER_ACTION_OPEN, NSGTK_STOCK_CANCEL, GTK_RESPONSE_CANCEL, NSGTK_STOCK_OPEN, GTK_RESPONSE_ACCEPT,
         NULL);
 
-    NSLOG(neosurf, INFO, "*** open dialog: %p", dialog);
+    NSLOG(wisp, INFO, "*** open dialog: %p", dialog);
 
     int ret = gtk_dialog_run(GTK_DIALOG(dialog));
-    NSLOG(neosurf, INFO, "*** return value: %d", ret);
+    NSLOG(wisp, INFO, "*** return value: %d", ret);
     if (ret == GTK_RESPONSE_ACCEPT) {
         char *filename;
 

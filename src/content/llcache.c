@@ -38,21 +38,21 @@
 #include <string.h>
 #include <strings.h>
 
-#include <neosurf/desktop/gui_internal.h>
-#include <neosurf/utils/config.h>
-#include <neosurf/utils/corestrings.h>
-#include <neosurf/utils/log.h>
-#include <neosurf/utils/messages.h>
-#include <neosurf/utils/nsoption.h>
-#include <neosurf/utils/nsurl.h>
-#include <neosurf/utils/utils.h>
+#include <wisp/desktop/gui_internal.h>
+#include <wisp/utils/config.h>
+#include <wisp/utils/corestrings.h>
+#include <wisp/utils/log.h>
+#include <wisp/utils/messages.h>
+#include <wisp/utils/nsoption.h>
+#include <wisp/utils/nsurl.h>
+#include <wisp/utils/utils.h>
 #include "utils/http.h"
 #include "utils/time.h"
-#include <neosurf/ns_inttypes.h>
-#include "neosurf/misc.h"
+#include <wisp/ns_inttypes.h>
+#include "wisp/misc.h"
 
-#include <neosurf/content/backing_store.h>
-#include <neosurf/content/fetch.h>
+#include <wisp/content/backing_store.h>
+#include <wisp/content/fetch.h>
 #include "content/urldb.h"
 
 /**
@@ -1242,9 +1242,9 @@ static nserror llcache_retrieve_persisted_data(llcache_object *object)
     }
 
     /* Source data for the object may be in the persistent store */
-    NSLOG(neosurf, DEBUG, "PROFILER: START Cache retrieve %p", object);
+    NSLOG(wisp, DEBUG, "PROFILER: START Cache retrieve %p", object);
     nserror ret = guit->llcache->fetch(object->url, BACKING_STORE_NONE, &object->source_data, &object->source_len);
-    NSLOG(neosurf, DEBUG, "PROFILER: STOP Cache retrieve %p", object);
+    NSLOG(wisp, DEBUG, "PROFILER: STOP Cache retrieve %p", object);
     return ret;
 }
 

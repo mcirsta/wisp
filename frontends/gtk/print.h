@@ -20,8 +20,8 @@
  * GTK printing (interface).
  */
 
-#ifndef NETSURF_GTK_PRINT_PLOTTERS_H
-#define NETSURF_GTK_PRINT_PLOTTERS_H
+#ifndef WISP_GTK_PRINT_PLOTTERS_H
+#define WISP_GTK_PRINT_PLOTTERS_H
 
 
 #include <gtk/gtk.h>

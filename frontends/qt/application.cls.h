@@ -57,7 +57,7 @@ class NS_Application : public QApplication
 {
     Q_OBJECT
 public:
-    NS_Application(int &argc, char **argv, struct neosurf_table *nsqt_table);
+    NS_Application(int &argc, char **argv, struct wisp_table *nsqt_table);
     ~NS_Application();
 
     static NS_Application *s_nsqt_instance;

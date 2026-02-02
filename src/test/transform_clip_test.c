@@ -14,7 +14,7 @@
 #include <string.h>
 
 #include "content/handlers/html/redraw_helpers.h"
-#include "neosurf/types.h"
+#include "wisp/types.h"
 
 /**
  * Test: Non-transformed box clip is intersected with parent clip

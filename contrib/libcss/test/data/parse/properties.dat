@@ -270,19 +270,19 @@
 ##
 
 #data
-* { background-image: url(netsurf.png); }
+* { background-image: url(wisp.png); }
 #errors
 #expected
 | 1 *
-|   0x02000003 PTR(netsurf.png)
+|   0x02000003 PTR(wisp.png)
 #reset
 
 #data
-* { background-image: url("netsurf.png"); }
+* { background-image: url("wisp.png"); }
 #errors
 #expected
 | 1 *
-|   0x02000003 PTR(netsurf.png)
+|   0x02000003 PTR(wisp.png)
 #reset
 
 #data
@@ -968,7 +968,7 @@ a:after { content: " a"; }
 #reset
 
 #data
-p:after { content: url("http://www.netsurf-browser.org/"); }
+p:after { content: url("http://www.wisp-browser.org/"); }
 #errors
 #expected
 | 1 p:after
@@ -1088,7 +1088,7 @@ a:after { content: " a" !important; }
 #reset
 
 #data
-p:after { content: url("http://www.netsurf-browser.org/") !important; }
+p:after { content: url("http://www.wisp-browser.org/") !important; }
 #errors
 #expected
 | 1 p:after
@@ -2280,7 +2280,7 @@ p:before { content: open-quote url('http://picodrive.acornarcade.com/') " : " at
 #reset
 
 #data
-* { list-style-image: url("http://www.netsurf-browser.org/bullet.png"); }
+* { list-style-image: url("http://www.wisp-browser.org/bullet.png"); }
 #errors
 #expected
 | 1 *

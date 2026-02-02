@@ -31,9 +31,9 @@
 
 #include <libwapcaplet/libwapcaplet.h>
 
-#include <neosurf/bitmap.h>
-#include <neosurf/cookie_db.h>
-#include <neosurf/url_db.h>
+#include <wisp/bitmap.h>
+#include <wisp/cookie_db.h>
+#include <wisp/url_db.h>
 #include "utils/corestrings.h"
 #include "utils/log.h"
 #include "utils/nsoption.h"
@@ -71,7 +71,7 @@ const char *test_cookies_out_path = "test/data/cookies-out";
 
 const char *wikipedia_url = "http://www.wikipedia.org/";
 
-struct neosurf_table *guit = NULL;
+struct wisp_table *guit = NULL;
 
 
 struct test_urls {
@@ -166,7 +166,7 @@ static nsurl *make_url(const char *url)
 {
     nsurl *nsurl;
     if (nsurl_create(url, &nsurl) != NSERROR_OK) {
-        NSLOG(netsurf, INFO, "failed creating nsurl");
+        NSLOG(wisp, INFO, "failed creating nsurl");
         exit(1);
     }
     return nsurl;
@@ -233,7 +233,7 @@ struct gui_bitmap_table tst_bitmap_table = {
     .destroy = destroy_bitmap,
 };
 
-struct neosurf_table tst_table = {
+struct wisp_table tst_table = {
     .bitmap = &tst_bitmap_table,
 };
 
@@ -270,7 +270,7 @@ static void urldb_lwc_iterator(lwc_string *str, void *pw)
 {
     int *scount = pw;
     if (str->refcnt > 0) {
-        NSLOG(netsurf, INFO, "[%3u] %.*s", str->refcnt, (int)lwc_string_length(str), lwc_string_data(str));
+        NSLOG(wisp, INFO, "[%3u] %.*s", str->refcnt, (int)lwc_string_length(str), lwc_string_data(str));
         (*scount)++;
     }
 }
@@ -285,7 +285,7 @@ static void urldb_teardown(void)
 
     corestrings_fini();
 
-    NSLOG(netsurf, INFO, "Remaining lwc strings:");
+    NSLOG(wisp, INFO, "Remaining lwc strings:");
     lwc_iterate_strings(urldb_lwc_iterator, &scount);
     ck_assert_int_eq(scount, 0);
 }
@@ -297,19 +297,19 @@ START_TEST(urldb_original_test)
     nsurl *urlr;
 
     /* fragments */
-    url = make_url("http://netsurf.strcprstskrzkrk.co.uk/path/to/resource.htm?a=b");
+    url = make_url("http://wisp.strcprstskrzkrk.co.uk/path/to/resource.htm?a=b");
     ck_assert(urldb_add_url(url) == true);
     nsurl_unref(url);
 
-    url = make_url("http://netsurf.strcprstskrzkrk.co.uk/path/to/resource.htm#zz?a=b");
+    url = make_url("http://wisp.strcprstskrzkrk.co.uk/path/to/resource.htm#zz?a=b");
     ck_assert(urldb_add_url(url) == true);
     nsurl_unref(url);
 
-    url = make_url("http://netsurf.strcprstskrzkrk.co.uk/path/to/resource.htm#aa?a=b");
+    url = make_url("http://wisp.strcprstskrzkrk.co.uk/path/to/resource.htm#aa?a=b");
     ck_assert(urldb_add_url(url) == true);
     nsurl_unref(url);
 
-    url = make_url("http://netsurf.strcprstskrzkrk.co.uk/path/to/resource.htm#yy?a=b");
+    url = make_url("http://wisp.strcprstskrzkrk.co.uk/path/to/resource.htm#yy?a=b");
     ck_assert(urldb_add_url(url) == true);
     nsurl_unref(url);
 
@@ -681,7 +681,7 @@ static int cb_count;
 
 static bool urldb_iterate_entries_cb(nsurl *url, const struct url_data *data)
 {
-    NSLOG(netsurf, INFO, "url: %s", nsurl_access(url));
+    NSLOG(wisp, INFO, "url: %s", nsurl_access(url));
     /* fprintf(stderr, "url:%s\ntitle:%s\n\n",nsurl_access(url),
      * data->title); */
     cb_count++;
@@ -932,7 +932,7 @@ static TCase *urldb_case_create(void)
 
 static bool urldb_iterate_cookies_cb(const struct cookie_data *data)
 {
-    NSLOG(netsurf, INFO, "%p", data);
+    NSLOG(wisp, INFO, "%p", data);
     /* fprintf(stderr, "domain:%s\npath:%s\nname:%s\n\n",data->domain,
      * data->path, data->name);*/
     return true;

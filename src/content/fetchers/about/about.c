@@ -33,16 +33,16 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <neosurf/ns_inttypes.h>
+#include <wisp/ns_inttypes.h>
 
-#include <neosurf/utils/corestrings.h>
-#include <neosurf/utils/errors.h>
-#include <neosurf/utils/nsurl.h>
-#include <neosurf/utils/utils.h>
+#include <wisp/utils/corestrings.h>
+#include <wisp/utils/errors.h>
+#include <wisp/utils/nsurl.h>
+#include <wisp/utils/utils.h>
 #include "utils/messages.h"
 #include "utils/ring.h"
 
-#include <neosurf/content/fetch.h>
+#include <wisp/content/fetch.h>
 #include "content/fetchers.h"
 
 #include "about.h"
@@ -320,7 +320,7 @@ static bool fetch_about_logo_handler(struct fetch_about_context *ctx)
     fetch_set_http_code(ctx->fetchh, 302);
 
     msg.type = FETCH_REDIRECT;
-    msg.data.redirect = "resource:neosurf.png";
+    msg.data.redirect = "resource:wisp.png";
 
     fetch_about_send_callback(&msg, ctx);
 
@@ -404,12 +404,12 @@ static bool fetch_about_about_handler(struct fetch_about_context *ctx)
 
     res = fetch_about_ssenddataf(ctx,
         "<html>\n<head>\n"
-        "<title>List of NeoSurf pages</title>\n"
+        "<title>List of Wisp pages</title>\n"
         "<link rel=\"stylesheet\" type=\"text/css\" "
         "href=\"resource:internal.css\">\n"
         "</head>\n"
         "<body class=\"ns-even-bg ns-even-fg ns-border\">\n"
-        "<h1 class =\"ns-border\">List of NeoSurf pages</h1>\n"
+        "<h1 class =\"ns-border\">List of Wisp pages</h1>\n"
         "<ul>\n");
     if (res != NSERROR_OK) {
         goto fetch_about_config_handler_aborted;

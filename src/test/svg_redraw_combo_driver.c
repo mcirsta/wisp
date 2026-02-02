@@ -6,9 +6,9 @@
 #include <svgtiny.h>
 typedef uint32_t colour;
 
-#include "neosurf/plot_style.h"
-#include "neosurf/plotters.h"
-#include "neosurf/utils/errors.h"
+#include "wisp/plot_style.h"
+#include "wisp/plotters.h"
+#include "wisp/utils/errors.h"
 
 static bool svg_plot_combo_diagram(const struct svgtiny_diagram *diagram, int x, int y, int width, int height,
     const struct rect *clip, const struct redraw_context *ctx, colour background_colour, colour current_color)

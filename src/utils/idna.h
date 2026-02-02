@@ -21,8 +21,8 @@
  * interface to international domain name handling.
  */
 
-#ifndef NETSURF_UTILS_IDNA_H_
-#define NETSURF_UTILS_IDNA_H_
+#ifndef WISP_UTILS_IDNA_H_
+#define WISP_UTILS_IDNA_H_
 
 /**
  * Unicode canonical combining class for virama

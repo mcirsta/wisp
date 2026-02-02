@@ -16,8 +16,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef NETSURF_UTILS_HTTP_CHALLENGE_INTERNAL_H_
-#define NETSURF_UTILS_HTTP_CHALLENGE_INTERNAL_H_
+#ifndef WISP_UTILS_HTTP_CHALLENGE_INTERNAL_H_
+#define WISP_UTILS_HTTP_CHALLENGE_INTERNAL_H_
 
 #include "utils/errors.h"
 #include "utils/http/challenge.h"

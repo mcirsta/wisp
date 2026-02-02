@@ -16,8 +16,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef NETSURF_GTK_THROBBER_H
-#define NETSURF_GTK_THROBBER_H
+#ifndef WISP_GTK_THROBBER_H
+#define WISP_GTK_THROBBER_H
 
 /**
  * Initialise global throbber context

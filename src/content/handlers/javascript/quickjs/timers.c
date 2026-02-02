@@ -5,14 +5,14 @@
  */
 
 #include "timers.h"
-#include <neosurf/utils/log.h>
+#include <wisp/utils/log.h>
 #include "quickjs.h"
 #include <stdlib.h>
 
 static JSValue js_setTimeout(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
     /* Stub implementation: just log and return a dummy ID */
-    NSLOG(neosurf, INFO, "setTimeout called");
+    NSLOG(wisp, INFO, "setTimeout called");
     if (argc > 0 && JS_IsFunction(ctx, argv[0])) {
         /* In a real implementation we would schedule this.
            For now, to unblock basic scripts that use 0 delay,
@@ -25,19 +25,19 @@ static JSValue js_setTimeout(JSContext *ctx, JSValueConst this_val, int argc, JS
 
 static JSValue js_clearTimeout(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
-    NSLOG(neosurf, INFO, "clearTimeout called");
+    NSLOG(wisp, INFO, "clearTimeout called");
     return JS_UNDEFINED;
 }
 
 static JSValue js_setInterval(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
-    NSLOG(neosurf, INFO, "setInterval called");
+    NSLOG(wisp, INFO, "setInterval called");
     return JS_NewInt32(ctx, 2);
 }
 
 static JSValue js_clearInterval(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
-    NSLOG(neosurf, INFO, "clearInterval called");
+    NSLOG(wisp, INFO, "clearInterval called");
     return JS_UNDEFINED;
 }
 

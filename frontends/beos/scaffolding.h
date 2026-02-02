@@ -17,8 +17,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef NETSURF_BEOS_SCAFFOLDING_H
-#define NETSURF_BEOS_SCAFFOLDING_H 1
+#ifndef WISP_BEOS_SCAFFOLDING_H
+#define WISP_BEOS_SCAFFOLDING_H 1
 
 #include <NetPositive.h>
 #include <View.h>

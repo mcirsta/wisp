@@ -16,8 +16,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef NETSURF_HASHMAP_H
-#define NETSURF_HASHMAP_H
+#ifndef WISP_HASHMAP_H
+#define WISP_HASHMAP_H
 
 #include <stdbool.h>
 #include <stdint.h>

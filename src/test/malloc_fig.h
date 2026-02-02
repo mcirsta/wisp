@@ -24,8 +24,8 @@
  * This library is used to inject allocation faults into NetSurf tests
  */
 
-#ifndef NETSURF_TEST_MALLOC_FIG_H
-#define NETSURF_TEST_MALLOC_FIG_H
+#ifndef WISP_TEST_MALLOC_FIG_H
+#define WISP_TEST_MALLOC_FIG_H
 
 void malloc_limit(unsigned int count);
 

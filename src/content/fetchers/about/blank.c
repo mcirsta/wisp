@@ -25,8 +25,8 @@
 #include <stdio.h>
 #include <string.h>
 
-#include <neosurf/utils/errors.h>
-#include "neosurf/types.h"
+#include <wisp/utils/errors.h>
+#include "wisp/types.h"
 
 #include "blank.h"
 #include "private.h"

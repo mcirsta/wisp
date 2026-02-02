@@ -29,18 +29,18 @@
 #include <string.h>
 #include <strings.h>
 
-#include <neosurf/desktop/gui_internal.h>
-#include <neosurf/utils/corestrings.h>
-#include <neosurf/utils/log.h>
-#include <neosurf/utils/messages.h>
-#include <neosurf/utils/nsurl.h>
-#include <neosurf/utils/utils.h>
+#include <wisp/desktop/gui_internal.h>
+#include <wisp/utils/corestrings.h>
+#include <wisp/utils/log.h>
+#include <wisp/utils/messages.h>
+#include <wisp/utils/nsurl.h>
+#include <wisp/utils/utils.h>
 #include "utils/ring.h"
 #include "utils/time.h"
-#include "neosurf/fetch.h"
-#include <neosurf/ns_inttypes.h>
+#include "wisp/fetch.h"
+#include <wisp/ns_inttypes.h>
 
-#include <neosurf/content/fetch.h>
+#include <wisp/content/fetch.h>
 #include "content/fetchers.h"
 #include "content/fetchers/resource.h"
 
@@ -48,7 +48,7 @@
 
 /** Valid resource paths */
 static const char *fetch_resource_paths[] = {"adblock.css", "default.css", "internal.css", "quirks.css", "user.css",
-    "credits.html", "license.html", "welcome.html", "favicon.ico", "neosurf.png", "icons/arrow-l.png",
+    "credits.html", "license.html", "welcome.html", "favicon.ico", "wisp.png", "icons/arrow-l.png",
     "icons/content.png", "icons/directory.png", "icons/directory2.png", "icons/hotlist-add.png",
     "icons/hotlist-rmv.png", "icons/search.png"};
 
@@ -161,10 +161,10 @@ static bool fetch_resource_data_handler(struct fetch_resource_context *ctx)
 
     /* content type */
     const char *mime_type = guit->fetch->filetype(lwc_string_data(ctx->entry->path));
-    NSLOG(neosurf, INFO, "fetch_resource_data_handler: Sending Content-Type: %s for %s", mime_type,
+    NSLOG(wisp, INFO, "fetch_resource_data_handler: Sending Content-Type: %s for %s", mime_type,
         lwc_string_data(ctx->entry->path));
     if (fetch_resource_send_header(ctx, "Content-Type: %s", mime_type)) {
-        NSLOG(neosurf, ERROR, "fetch_resource_data_handler: Failed to send Content-Type for %s",
+        NSLOG(wisp, ERROR, "fetch_resource_data_handler: Failed to send Content-Type for %s",
             lwc_string_data(ctx->entry->path));
         goto fetch_resource_data_aborted;
     }
@@ -187,7 +187,7 @@ static bool fetch_resource_data_handler(struct fetch_resource_context *ctx)
     msg.type = FETCH_DATA;
     msg.data.header_or_data.buf = (const uint8_t *)ctx->entry->data;
     msg.data.header_or_data.len = ctx->entry->data_len;
-    NSLOG(neosurf, INFO, "fetch_resource_data_handler: Sending FETCH_DATA (%zu bytes) for %s", ctx->entry->data_len,
+    NSLOG(wisp, INFO, "fetch_resource_data_handler: Sending FETCH_DATA (%zu bytes) for %s", ctx->entry->data_len,
         lwc_string_data(ctx->entry->path));
     fetch_resource_send_callback(&msg, ctx);
 
@@ -281,7 +281,7 @@ static bool fetch_resource_initialise(lwc_string *scheme)
         e->data = NULL;
         res = guit->fetch->get_resource_data(lwc_string_data(e->path), &e->data, &e->data_len);
         if (res == NSERROR_OK) {
-            NSLOG(neosurf, INFO, "direct data for %s", fetch_resource_paths[i]);
+            NSLOG(wisp, INFO, "direct data for %s", fetch_resource_paths[i]);
             fetch_resource_path_count++;
         } else {
             e->redirect_url = guit->fetch->get_resource_url(fetch_resource_paths[i]);
@@ -292,7 +292,7 @@ static bool fetch_resource_initialise(lwc_string *scheme)
                     lwc_string_unref(e->path);
                 }
             } else {
-                NSLOG(neosurf, INFO, "redirect url for %s", fetch_resource_paths[i]);
+                NSLOG(wisp, INFO, "redirect url for %s", fetch_resource_paths[i]);
                 fetch_resource_path_count++;
             }
         }

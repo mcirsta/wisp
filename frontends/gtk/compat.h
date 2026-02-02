@@ -21,8 +21,8 @@
  * Compatibility functions for older GTK versions (interface)
  */
 
-#ifndef NETSURF_GTK_COMPAT_H_
-#define NETSURF_GTK_COMPAT_H_
+#ifndef WISP_GTK_COMPAT_H_
+#define WISP_GTK_COMPAT_H_
 
 #include <stdint.h>
 

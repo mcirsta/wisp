@@ -1,4 +1,4 @@
-# NetSurf cookies file.
+# Wisp cookies file.
 #
 # Lines starting with a '#' are comments, blank lines are ignored.
 #
@@ -32,6 +32,6 @@ Version:	102
 0	.google.co.uk	1	/	1	0	0	2147483647	1468278489	0	APISID	IeJTJt20VmceF7bS/AACvc5cSFPpX8FJMj	0	unused	unused	
 0	.google.co.uk	1	/	1	1	0	2147483647	1468278489	0	SAPISID	baCIIjpj-o3XQCkH/A-WEZgPvnNnguijDQ	0	unused	unused	
 0	.google.co.uk	1	/	1	0	1	1484089690	0	0	NID	81=BGSfpwd63LrhVNUii2KYHfuyCUKzQv2Zg2ik1H_byGynWUgd9_q-kY48oCRapIewLtzMNYtf2KzYBk0_5OoAtNrD-0YSqXDzKalLWfQ8Vxwyywy79YDvAaX_3tprJzjp	0	unused	unused	
-0	.bbc.co.uk	1	/	1	0	0	2147483647	1470493359	0	BBC-UID	35e7d9a5837b2e9d026d30f521339ac6826814226444c1ee4a2134fef248fe180NetSurf/3.6%20(Linux)	0	unused	unused	
-0	news.bbc.co.uk	0	/	1	0	0	2147483647	1469574171	0	BBC-UID	25a73995333b5e9d8ea88a16a17c7b8beea45e555eb863e913853a4de2dcbdb80NetSurf%2f3%2e6%20%28Linux%29	0	http	http://news.bbc.co.uk/	
+0	.bbc.co.uk	1	/	1	0	0	2147483647	1470493359	0	BBC-UID	35e7d9a5837b2e9d026d30f521339ac6826814226444c1ee4a2134fef248fe180Wisp/3.6%20(Linux)	0	unused	unused	
+0	news.bbc.co.uk	0	/	1	0	0	2147483647	1469574171	0	BBC-UID	25a73995333b5e9d8ea88a16a17c7b8beea45e555eb863e913853a4de2dcbdb80Wisp%2f3%2e6%20%28Linux%29	0	http	http://news.bbc.co.uk/	
 0	en.wikipedia.org	0	/	1	1	1	1473249600	1470493303	0	WMF-Last-Access	06-Aug-2016	0	http	http://en.wikipedia.org/wiki/Main_Page	

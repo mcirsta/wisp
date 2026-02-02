@@ -25,18 +25,18 @@
 #include <dom/dom.h>
 #include <stdio.h>
 
-#include <neosurf/content.h>
-#include <neosurf/content/handlers/css/utils.h>
-#include <neosurf/mouse.h>
-#include <neosurf/types.h>
-#include <neosurf/utils/errors.h>
-#include <neosurf/utils/nsurl.h>
+#include <wisp/content.h>
+#include <wisp/content/handlers/css/utils.h>
+#include <wisp/mouse.h>
+#include <wisp/types.h>
+#include <wisp/utils/errors.h>
+#include <wisp/utils/nsurl.h>
 #include "content/handlers/css/dump.h"
 #include "desktop/scrollbar.h"
 
-#include <neosurf/content/handlers/html/box.h>
-#include <neosurf/content/handlers/html/box_inspect.h>
-#include <neosurf/content/handlers/html/private.h>
+#include <wisp/content/handlers/html/box.h>
+#include <wisp/content/handlers/html/box_inspect.h>
+#include <wisp/content/handlers/html/private.h>
 
 /**
  * Direction to move in a box-tree walk
@@ -521,7 +521,7 @@ void box_coords(struct box *box, int *x, int *y)
             assert(box->abs_containing_block != NULL &&
                 "Absolute/fixed positioned box must have abs_containing_block set");
 
-            NSLOG(netsurf, INFO, "box_coords ABS entry: box=%p box.y=%d cb=%p cb.y=%d", (void *)orig, orig->y,
+            NSLOG(wisp, INFO, "box_coords ABS entry: box=%p box.y=%d cb=%p cb.y=%d", (void *)orig, orig->y,
                 (void *)box->abs_containing_block, box->abs_containing_block->y);
 
             /* Jump directly to the containing block and walk from there */
@@ -529,7 +529,7 @@ void box_coords(struct box *box, int *x, int *y)
             *x += box->x - scrollbar_get_offset(box->scroll_x);
             *y += box->y - scrollbar_get_offset(box->scroll_y);
 
-            NSLOG(netsurf, INFO, "box_coords after CB: y=%d", *y);
+            NSLOG(wisp, INFO, "box_coords after CB: y=%d", *y);
         }
     }
 
@@ -545,7 +545,7 @@ void box_coords(struct box *box, int *x, int *y)
         *y += box->y - scrollbar_get_offset(box->scroll_y);
     }
 
-    NSLOG(netsurf, DEBUG, "box_coords FINAL: orig=%p final_x=%d final_y=%d", (void *)orig, *x, *y);
+    NSLOG(wisp, DEBUG, "box_coords FINAL: orig=%p final_x=%d final_y=%d", (void *)orig, *x, *y);
 }
 
 

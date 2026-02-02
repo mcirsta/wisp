@@ -5,7 +5,7 @@
  */
 
 #include "xhr.h"
-#include <neosurf/utils/log.h>
+#include <wisp/utils/log.h>
 #include "quickjs.h"
 #include <stdlib.h>
 #include <string.h>
@@ -57,7 +57,7 @@ static JSValue xhr_open(JSContext *ctx, JSValueConst this_val, int argc, JSValue
         const char *method = JS_ToCString(ctx, argv[0]);
         const char *url = JS_ToCString(ctx, argv[1]);
 
-        NSLOG(neosurf, INFO, "XHR.open('%s', '%s')", method, url);
+        NSLOG(wisp, INFO, "XHR.open('%s', '%s')", method, url);
 
         if (data->method)
             js_free(ctx, data->method);
@@ -80,7 +80,7 @@ static JSValue xhr_send(JSContext *ctx, JSValueConst this_val, int argc, JSValue
     if (!data)
         return JS_EXCEPTION;
 
-    NSLOG(neosurf, INFO, "XHR.send() called for %s %s", data->method ? data->method : "(null)",
+    NSLOG(wisp, INFO, "XHR.send() called for %s %s", data->method ? data->method : "(null)",
         data->url ? data->url : "(null)");
 
     /* Simulate immediate completion for stub */
@@ -97,7 +97,7 @@ static JSValue xhr_set_request_header(JSContext *ctx, JSValueConst this_val, int
     if (argc >= 2) {
         const char *name = JS_ToCString(ctx, argv[0]);
         const char *value = JS_ToCString(ctx, argv[1]);
-        NSLOG(neosurf, INFO, "XHR.setRequestHeader('%s', '%s')", name, value);
+        NSLOG(wisp, INFO, "XHR.setRequestHeader('%s', '%s')", name, value);
         JS_FreeCString(ctx, name);
         JS_FreeCString(ctx, value);
     }
@@ -117,7 +117,7 @@ static JSValue xhr_get_all_response_headers(JSContext *ctx, JSValueConst this_va
 
 static JSValue xhr_abort(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
-    NSLOG(neosurf, INFO, "XHR.abort() called");
+    NSLOG(wisp, INFO, "XHR.abort() called");
     return JS_UNDEFINED;
 }
 

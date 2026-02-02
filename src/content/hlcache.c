@@ -26,21 +26,21 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <neosurf/desktop/gui_internal.h>
-#include <neosurf/utils/log.h>
-#include <neosurf/utils/messages.h>
-#include <neosurf/utils/utils.h>
+#include <wisp/desktop/gui_internal.h>
+#include <wisp/utils/log.h>
+#include <wisp/utils/messages.h>
+#include <wisp/utils/utils.h>
 #include "utils/http.h"
 #include "utils/ring.h"
-#include "neosurf/content.h"
-#include "neosurf/misc.h"
+#include "wisp/content.h"
+#include "wisp/misc.h"
 
-#include <neosurf/content/hlcache.h>
-#include <neosurf/content/llcache.h>
+#include <wisp/content/hlcache.h>
+#include <wisp/content/llcache.h>
 #include "content/mimesniff.h"
 // Note, this is *ONLY* so that we can abort cleanly during shutdown of the
 // cache
-#include <neosurf/content/content_protected.h>
+#include <wisp/content/content_protected.h>
 #include "content/content_factory.h"
 
 typedef struct hlcache_entry hlcache_entry;
@@ -128,7 +128,7 @@ static void hlcache_clean(void *force_clean_flag)
         if (content__get_status(entry->content) == CONTENT_STATUS_LOADING) {
             if (force_clean == false)
                 continue;
-            NSLOG(neosurf, DEBUG, "Forcing content cleanup during shutdown");
+            NSLOG(wisp, DEBUG, "Forcing content cleanup during shutdown");
             content_abort(entry->content);
             content_set_error(entry->content);
         }
@@ -206,7 +206,7 @@ static void hlcache_content_callback(struct content *c, content_msg msg, const u
         error = handle->cb(handle, &event, handle->pw);
 
     if (error != NSERROR_OK)
-        NSLOG(neosurf, INFO, "Error in callback: %d", error);
+        NSLOG(wisp, INFO, "Error in callback: %d", error);
 }
 
 /**
@@ -380,7 +380,7 @@ static nserror hlcache_migrate_ctx(hlcache_retrieval_ctx *ctx, lwc_string *effec
         error = NSERROR_NEED_DATA;
     } else {
         /* Unacceptable type: report error */
-        NSLOG(neosurf, ERROR, "UnacceptableType for %s. Effective type: %s. Accepted types: %d",
+        NSLOG(wisp, ERROR, "UnacceptableType for %s. Effective type: %s. Accepted types: %d",
             nsurl_access(hlcache_handle_get_url(ctx->handle)),
             effective_type ? lwc_string_data(effective_type) : "NULL", ctx->accepted_types);
 
@@ -490,7 +490,7 @@ static nserror hlcache_llcache_callback(llcache_handle *handle, const llcache_ev
         if (ctx->handle->cb != NULL) {
             hlcache_event hlevent;
 
-            NSLOG(neosurf, ERROR, "Sending CONTENT_MSG_ERROR from LLCACHE_EVENT_DONE. Code: %d", error);
+            NSLOG(wisp, ERROR, "Sending CONTENT_MSG_ERROR from LLCACHE_EVENT_DONE. Code: %d", error);
 
             hlevent.type = CONTENT_MSG_ERROR;
             hlevent.data.errordata.errorcode = error;
@@ -506,7 +506,7 @@ static nserror hlcache_llcache_callback(llcache_handle *handle, const llcache_ev
             hlevent.type = CONTENT_MSG_ERROR;
             hlevent.data.errordata.errorcode = event->data.error.code;
             if (hlevent.data.errordata.errorcode == NSERROR_OK) {
-                NSLOG(neosurf, ERROR, "LLCACHE_EVENT_ERROR with NSERROR_OK! Forcing NSERROR_UNKNOWN");
+                NSLOG(wisp, ERROR, "LLCACHE_EVENT_ERROR with NSERROR_OK! Forcing NSERROR_UNKNOWN");
                 hlevent.data.errordata.errorcode = NSERROR_UNKNOWN;
             }
             hlevent.data.errordata.errormsg = event->data.error.msg;
@@ -581,7 +581,7 @@ void hlcache_finalise(void)
         num_contents++;
     }
 
-    NSLOG(netsurf, INFO, "%" PRIu32 " contents remain before cache drain", num_contents);
+    NSLOG(wisp, INFO, "%" PRIu32 " contents remain before cache drain", num_contents);
 
     /* Drain cache */
     do {
@@ -594,7 +594,7 @@ void hlcache_finalise(void)
         }
     } while (num_contents > 0 && num_contents != prev_contents);
 
-    NSLOG(netsurf, INFO, "%" PRIu32 " contents remaining after being polite", num_contents);
+    NSLOG(wisp, INFO, "%" PRIu32 " contents remaining after being polite", num_contents);
 
     /* Drain cache again, forcing the matter */
     do {
@@ -607,15 +607,15 @@ void hlcache_finalise(void)
         }
     } while (num_contents > 0 && num_contents != prev_contents);
 
-    NSLOG(netsurf, INFO, "%" PRIu32 " contents remaining:", num_contents);
+    NSLOG(wisp, INFO, "%" PRIu32 " contents remaining:", num_contents);
     for (entry = hlcache->content_list; entry != NULL; entry = entry->next) {
         hlcache_handle entry_handle = {entry, NULL, NULL};
 
         if (entry->content != NULL) {
-            NSLOG(neosurf, INFO, "	%p : %s (%" PRIu32 " users)", entry,
+            NSLOG(wisp, INFO, "	%p : %s (%" PRIu32 " users)", entry,
                 nsurl_access(hlcache_handle_get_url(&entry_handle)), content_count_users(entry->content));
         } else {
-            NSLOG(neosurf, INFO, "	%p", entry);
+            NSLOG(wisp, INFO, "	%p", entry);
         }
     }
 
@@ -643,7 +643,7 @@ void hlcache_finalise(void)
         hlcache->retrieval_ctx_ring = NULL;
     }
 
-    NSLOG(neosurf, INFO, "hit/miss %d/%d", hlcache->hit_count, hlcache->miss_count);
+    NSLOG(wisp, INFO, "hit/miss %d/%d", hlcache->hit_count, hlcache->miss_count);
 
     /* De-schedule ourselves */
     guit->misc->schedule(-1, hlcache_clean, NULL);
@@ -651,7 +651,7 @@ void hlcache_finalise(void)
     free(hlcache);
     hlcache = NULL;
 
-    NSLOG(neosurf, INFO, "Finalising low-level cache");
+    NSLOG(wisp, INFO, "Finalising low-level cache");
     llcache_finalise();
 }
 
@@ -686,7 +686,7 @@ nserror hlcache_handle_retrieve(nsurl *url, uint32_t flags, nsurl *referer, llca
                     continue;
 
                 /* Found shareable content */
-                NSLOG(neosurf, DEBUG, "FETCH: cache HIT (sync callback) '%s'", nsurl_access(url));
+                NSLOG(wisp, DEBUG, "FETCH: cache HIT (sync callback) '%s'", nsurl_access(url));
                 hlcache_handle *handle = calloc(1, sizeof(hlcache_handle));
                 if (handle == NULL)
                     return NSERROR_NOMEM;
@@ -739,7 +739,7 @@ nserror hlcache_handle_retrieve(nsurl *url, uint32_t flags, nsurl *referer, llca
 
                 if (nsurl_compare(llcache_handle_get_url(ictx->llcache), url, NSURL_COMPLETE)) {
                     /* Found matching retrieval */
-                    NSLOG(neosurf, DEBUG, "FETCH: joining PENDING '%s'", nsurl_access(url));
+                    NSLOG(wisp, DEBUG, "FETCH: joining PENDING '%s'", nsurl_access(url));
                     hlcache_retrieval_ctx *new_ctx = calloc(1, sizeof(hlcache_retrieval_ctx));
                     if (new_ctx == NULL)
                         return NSERROR_NOMEM;
@@ -823,7 +823,7 @@ nserror hlcache_handle_retrieve(nsurl *url, uint32_t flags, nsurl *referer, llca
     ctx->handle->cb = cb;
     ctx->handle->pw = pw;
 
-    NSLOG(neosurf, DEBUG, "FETCH: cache MISS (new fetch) '%s'", nsurl_access(url));
+    NSLOG(wisp, DEBUG, "FETCH: cache MISS (new fetch) '%s'", nsurl_access(url));
     error = llcache_handle_retrieve(url, flags, referer, post, hlcache_llcache_callback, ctx, &ctx->llcache);
     if (error != NSERROR_OK) {
         /* error retrieving handle so free context and return error */

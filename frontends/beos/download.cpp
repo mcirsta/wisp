@@ -24,7 +24,7 @@
 extern "C" {
 #include "utils/string.h"
 #include "utils/utils.h"
-#include "netsurf/download.h"
+#include "wisp/download.h"
 #include "desktop/download.h"
 }
 #include "beos/download.h"

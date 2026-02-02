@@ -3,7 +3,7 @@ User Interface
 
 [TOC]
 
-Netsurf is divided into a series of frontends which provide a user
+Wisp is divided into a series of frontends which provide a user
 interface around common core functionality. Each frontend is a
 distinct implementation for a specific GUI toolkit.
 
@@ -54,7 +54,7 @@ Frontend which uses the Microsodt win32 GDI toolkit.
 # User configuration
 
 The behaviour of the browser can be changed from the defaults with a
-configuration file. The [core user options](docs/netsurf-options.md)
+configuration file. The [core user options](docs/wisp-options.md)
 of the browser are common to all versions and are augmented by each
 frontend in a specific manner.
 

@@ -19,7 +19,7 @@ steps:
   - text-contains: Error 404
 - action: navigate
   window: win1
-  url: resource:neosurf.png
+  url: resource:wisp.png
 - action: block
   conditions:
   - window: win1

@@ -27,9 +27,9 @@
 extern "C" {
 
 #include <nsutils/time.h>
-#include "neosurf/misc.h"
-#include "neosurf/utils/errors.h"
-#include "neosurf/utils/log.h"
+#include "wisp/misc.h"
+#include "wisp/utils/errors.h"
+#include "wisp/utils/log.h"
 }
 
 #include "qt/misc.h"

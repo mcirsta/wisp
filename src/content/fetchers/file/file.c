@@ -24,7 +24,7 @@
  * output dates and directory ordering are affected by the current locale
  */
 
-#include <neosurf/utils/config.h>
+#include <wisp/utils/config.h>
 
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -44,20 +44,20 @@
 #endif
 #include <libwapcaplet/libwapcaplet.h>
 
-#include <neosurf/desktop/gui_internal.h>
-#include <neosurf/utils/corestrings.h>
-#include <neosurf/utils/file.h>
-#include <neosurf/utils/log.h>
-#include <neosurf/utils/messages.h>
-#include <neosurf/utils/nsurl.h>
-#include <neosurf/utils/utils.h>
+#include <wisp/desktop/gui_internal.h>
+#include <wisp/utils/corestrings.h>
+#include <wisp/utils/file.h>
+#include <wisp/utils/log.h>
+#include <wisp/utils/messages.h>
+#include <wisp/utils/nsurl.h>
+#include <wisp/utils/utils.h>
 #include "utils/dirent.h"
 #include "utils/ring.h"
 #include "utils/time.h"
-#include "neosurf/fetch.h"
-#include <neosurf/ns_inttypes.h>
+#include "wisp/fetch.h"
+#include <wisp/ns_inttypes.h>
 
-#include <neosurf/content/fetch.h>
+#include <wisp/content/fetch.h>
 #include "content/fetchers.h"
 #include "dirlist.h"
 #include "file.h"
@@ -144,11 +144,11 @@ static void *fetch_file_setup(struct fetch *fetchh, nsurl *url, bool only_2xx, b
 
     ret = guit->file->nsurl_to_path(url, &ctx->path);
     if (ret != NSERROR_OK) {
-        NSLOG(neosurf, ERROR, "Failed to convert URL to path: %s", nsurl_access(url));
+        NSLOG(wisp, ERROR, "Failed to convert URL to path: %s", nsurl_access(url));
         free(ctx);
         return NULL;
     }
-    NSLOG(neosurf, INFO, "fetch_file_setup: url '%s' -> path '%s'", nsurl_access(url), ctx->path);
+    NSLOG(wisp, INFO, "fetch_file_setup: url '%s' -> path '%s'", nsurl_access(url), ctx->path);
 
     ctx->url = nsurl_ref(url);
 
@@ -231,7 +231,7 @@ static void fetch_file_process_error(struct fetch_file_context *ctx, int code)
     /* content is going to return error code */
     fetch_set_http_code(ctx->fetchh, code);
 
-    NSLOG(neosurf, WARNING, "File fetch error: code %d for %s", code, ctx->path);
+    NSLOG(wisp, WARNING, "File fetch error: code %d for %s", code, ctx->path);
 
     msg.type = FETCH_ERROR;
     msg.data.error = messages_get("FetchFile");
@@ -262,7 +262,7 @@ static void fetch_file_process_plain(struct fetch_file_context *ctx, struct stat
     fd = open(ctx->path, O_RDONLY);
     if (fd < 0) {
         /* process errors as appropriate */
-        NSLOG(neosurf, ERROR, "Failed to open file: '%s' error: %d (%s)", ctx->path, errno, strerror(errno));
+        NSLOG(wisp, ERROR, "Failed to open file: '%s' error: %d (%s)", ctx->path, errno, strerror(errno));
         fetch_file_process_error(ctx, fetch_file_errno_to_http_code(errno));
         return;
     }
@@ -499,7 +499,7 @@ process_dir_ent(struct fetch_file_context *ctx, struct dirent *ent, bool even, c
         return NSERROR_BAD_PARAMETER;
     }
 
-    ret = neosurf_mkpath(&urlpath, NULL, 2, ctx->path, ent->d_name);
+    ret = wisp_mkpath(&urlpath, NULL, 2, ctx->path, ent->d_name);
     if (ret != NSERROR_OK) {
         return ret;
     }
@@ -699,7 +699,7 @@ static void fetch_file_process(struct fetch_file_context *ctx)
 
     if (stat(ctx->path, &fdstat) != 0) {
         /* process errors as appropriate */
-        NSLOG(neosurf, ERROR, "Failed to stat file: '%s' error: %d (%s)", ctx->path, errno, strerror(errno));
+        NSLOG(wisp, ERROR, "Failed to stat file: '%s' error: %d (%s)", ctx->path, errno, strerror(errno));
         fetch_file_process_error(ctx, fetch_file_errno_to_http_code(errno));
         return;
     }

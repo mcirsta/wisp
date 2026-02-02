@@ -28,19 +28,19 @@
 #include <string.h>
 #include <time.h>
 
-#include <neosurf/content/hlcache.h>
-#include <neosurf/utils/corestrings.h>
-#include <neosurf/utils/log.h>
-#include <neosurf/utils/utils.h>
+#include <wisp/content/hlcache.h>
+#include <wisp/utils/corestrings.h>
+#include <wisp/utils/log.h>
+#include <wisp/utils/utils.h>
 #include "content/urldb.h"
-#include "neosurf/bitmap.h"
-#include "neosurf/browser_window.h"
-#include "neosurf/content.h"
-#include "neosurf/layout.h"
-#include "neosurf/window.h"
+#include "wisp/bitmap.h"
+#include "wisp/browser_window.h"
+#include "wisp/content.h"
+#include "wisp/layout.h"
+#include "wisp/window.h"
 
-#include <neosurf/desktop/browser_history.h>
-#include <neosurf/desktop/gui_internal.h>
+#include <wisp/desktop/browser_history.h>
+#include <wisp/desktop/gui_internal.h>
 #include "desktop/browser_private.h"
 #include "desktop/local_history_private.h"
 
@@ -316,7 +316,7 @@ nserror browser_window_history_clone(const struct browser_window *existing, stru
 
     new_history->start = browser_window_history__clone_entry(new_history, new_history->start);
     if (!new_history->start) {
-        NSLOG(neosurf, INFO, "Insufficient memory to clone history");
+        NSLOG(wisp, INFO, "Insufficient memory to clone history");
         browser_window_history_destroy(clone);
         clone->history = NULL;
         return NSERROR_NOMEM;
@@ -359,14 +359,14 @@ nserror browser_window_history_add(struct browser_window *bw, struct hlcache_han
     entry->page.scroll_y = 0.0f;
 
     /* create thumbnail for localhistory view */
-    NSLOG(neosurf, DEBUG, "Creating thumbnail for %s", nsurl_access(entry->page.url));
+    NSLOG(wisp, DEBUG, "Creating thumbnail for %s", nsurl_access(entry->page.url));
 
     entry->page.bitmap = guit->bitmap->create(LOCAL_HISTORY_WIDTH, LOCAL_HISTORY_HEIGHT, BITMAP_CLEAR | BITMAP_OPAQUE);
     if (entry->page.bitmap != NULL) {
         ret = guit->bitmap->render(entry->page.bitmap, content);
         if (ret != NSERROR_OK) {
             /* Thumbnail render failed */
-            NSLOG(neosurf, WARNING, "Thumbnail render failed");
+            NSLOG(wisp, WARNING, "Thumbnail render failed");
         }
     }
 
@@ -418,7 +418,7 @@ nserror browser_window_history_update(struct browser_window *bw, struct hlcache_
     if (title == NULL) {
         return NSERROR_NOMEM;
     }
-    NSLOG(neosurf, INFO, "Updating history entry for %s", title);
+    NSLOG(wisp, INFO, "Updating history entry for %s", title);
     free(history->current->page.title);
     history->current->page.title = title;
 
@@ -439,7 +439,7 @@ nserror browser_window_history_update(struct browser_window *bw, struct hlcache_
         /* Successfully got scroll offsets, update the entry */
         history->current->page.scroll_x = (float)sx / (float)content_width;
         history->current->page.scroll_y = (float)sy / (float)content_height;
-        NSLOG(neosurf, INFO, "Updated scroll offsets to %g by %g", history->current->page.scroll_x,
+        NSLOG(wisp, INFO, "Updated scroll offsets to %g by %g", history->current->page.scroll_x,
             history->current->page.scroll_y);
     }
     return NSERROR_OK;

@@ -16,8 +16,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef NETSURF_GTK_OPTIONS_H_
-#define NETSURF_GTK_OPTIONS_H_
+#ifndef WISP_GTK_OPTIONS_H_
+#define WISP_GTK_OPTIONS_H_
 
 /* currently nothing here */
 

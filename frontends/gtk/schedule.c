@@ -20,8 +20,8 @@
 #include <stdbool.h>
 #include <stdlib.h>
 
-#include <neosurf/utils/errors.h>
-#include <neosurf/utils/log.h>
+#include <wisp/utils/errors.h>
+#include <wisp/utils/log.h>
 
 #include "gtk/schedule.h"
 

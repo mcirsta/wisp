@@ -21,8 +21,8 @@
  * Target independent plotting (BeOS interface).
  */
 
-#ifndef NETSURF_BEOS_PLOTTERS_H
-#define NETSURF_BEOS_PLOTTERS_H 1
+#ifndef WISP_BEOS_PLOTTERS_H
+#define WISP_BEOS_PLOTTERS_H 1
 
 extern "C" {
 

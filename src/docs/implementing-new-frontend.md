@@ -5,7 +5,7 @@ Implementing a new frontend
 
 # Introduction
 
-NetSurf is divided into a series of frontends which provide a user
+Wisp is divided into a series of frontends which provide a user
 interface around common core functionality.
 
 Each frontend is a distinct implementation for a specific GUI toolkit.
@@ -14,7 +14,7 @@ The existing frontends are covered in the [user
 interface](docs/user-interface.md) documentation.
 
 Note implementing a new frontend implies using a toolkit distinct from
-one of those already implemented and is distinct from porting NetSurf
+one of those already implemented and is distinct from porting Wisp
 to a new operating system platform.
 
 It is recommend, in the strongest terms, that if the prospective
@@ -27,7 +27,7 @@ Experience has shown that attempting to port to a platform and
 implement a toolkit at the same time generally results in failure to
 achieve either goal.
 
-NetSurf is built using GNU make and frontends are expected to
+Wisp is built using GNU make and frontends are expected to
 integrate with this buildsystem.
 
 Implementation languages have historically been limited to C, C++ and
@@ -49,7 +49,7 @@ simply be copied and the names changed as appropriate from an existing
 example. The actual amount of new code that needs to be provided is
 very small.
 
-NetSurf provides a great deal of generic functionality for things like
+Wisp provides a great deal of generic functionality for things like
 cookie, bookmark, history windows which require only minimal frontend
 support with the [core window API](docs/core-window-interface.md).
 
@@ -65,7 +65,7 @@ have been named win32 allowing for an implementation using a different
 toolkit (e.g mfc)
 
 All the files needed for the frontend are contained in a single
-sub-directory in the NetSurf source tree e.g. `frontends/fltk`
+sub-directory in the Wisp source tree e.g. `frontends/fltk`
 
 The only file outside this directory that much be changed is the
 `frontends/Makefile.hts` where a new entry must be added to the valid
@@ -90,27 +90,27 @@ Generally the entry point from the OS is the `main()` function and
 several frontends have a `main.cpp` where some have used `gui.c`.
  
 The usual shape for the `main()` function is a six step process:
- 1. The frontends operation tables are registered with NetSurf
- 2. The toolkit specific initialisation is performed (which may involve calling NetSurf provided utility functions for support operations like logging, message translations etc.)
- 3. Initialise the NetSurf core. After this point all browser functionality is available and registered operations can be called.
+ 1. The frontends operation tables are registered with Wisp
+ 2. The toolkit specific initialisation is performed (which may involve calling Wisp provided utility functions for support operations like logging, message translations etc.)
+ 3. Initialise the Wisp core. After this point all browser functionality is available and registered operations can be called.
  4. Perform toolkiit setup, usually opening the initial browsing window (perhaps according to user preferences)
- 5. Run the toolkits main loop while ensuring the NetSurf scheduled operations are also run at the appropriate time.
+ 5. Run the toolkits main loop while ensuring the Wisp scheduled operations are also run at the appropriate time.
  6. Finalisation on completion.
 
-## NetSurf operations tables
+## Wisp operations tables
 
-The frontend will generally call NetSurf interfaces to get a desired
+The frontend will generally call Wisp interfaces to get a desired
 behaviour e.g. `browser_window_create()` to create a new browsing
 context (the `browser_window_` prefix is historical and does not
 necessarily create a window e.g. on gtk it is more likely to open a
 tab in an existing window). To achieve the desired operation some
 operations need to be performed by the frontend under control of
-NetSurf, these operations are listed in tables.
+Wisp, these operations are listed in tables.
 
-The operation tables should be registered with the NetSurf core as one
+The operation tables should be registered with the Wisp core as one
 of the first operations of the frontend code. The functions in these
 tables (and the tables themselves) must remain valid until
-`netsurf_exit()` is called.
+`wisp_exit()` is called.
 
 There are (currently) twelve sets of operation tables held in separate
 structures. Only five of these are mandatory (misc, window, fetch,
@@ -150,7 +150,7 @@ The mandatory window operations are:
  - get_scroll - get the scroll offsets from the toolkit drawing widget
  - set_scroll - set the scroll offsets on the toolkit drawing widget
  - get_dimensions - get the dimensions of the toolkit drawing widget
- - event - deal with various window events from NetSurf which have no additional parameters
+ - event - deal with various window events from Wisp which have no additional parameters
 
 
 ### fetch operation table
@@ -184,7 +184,7 @@ operations:
 Rather than attempt to describe every aspect of an implementation we
 will rather work from an actual minimal example for the FLTK toolkit.
 
-This is available as a single commit (`git show 28ecbf82ed3024f51be4c87928fd91bacfc15cbc`) in the NetSurf source repository. Alternatively it can be [viewed in a web browser](https://git.netsurf-browser.org/netsurf.git/commit/?h=vince/fltk&id=28ecbf82ed3024f51be4c87928fd91bacfc15cbc).
+This is available as a single commit (`git show 28ecbf82ed3024f51be4c87928fd91bacfc15cbc`) in the Wisp source repository. Alternatively it can be [viewed in a web browser](https://git.netsurf-browser.org/netsurf.git/commit/?h=vince/fltk&id=28ecbf82ed3024f51be4c87928fd91bacfc15cbc).
 
 This represents the absolute minimum implementation to get a browser
 window on screen (and be able to click visible links). It is
@@ -195,7 +195,7 @@ equivalent implementation in other languages should be obvious.
 
 The [frontends/Makefile.hts](https://git.netsurf-browser.org/netsurf.git/diff/frontends/Makefile.hts?h=vince/fltk&id=28ecbf82ed3024f51be4c87928fd91bacfc15cbc)
 had the fltk target added to the VLDTARGET variable. This allows
-NetSurf to be built for this frontend with `make TARGET=fltk`
+Wisp to be built for this frontend with `make TARGET=fltk`
 
 As previously described the three GNU Make files are added:
 
@@ -220,8 +220,8 @@ This implements the six stage process outlined previously.
 
 ### Operations table registration
 
-The `netsurf_table` structure is initialised and passed to
-`netsurf_register()`. It should be noted that the approach taken here
+The `wisp_table` structure is initialised and passed to
+`wisp_register()`. It should be noted that the approach taken here
 and in most frontends is to have a source module for each operation
 table. The header for each module exposes just the pointer to the
 individual operation set, this allows for all the operation functions to
@@ -231,16 +231,16 @@ be static to their module and hence helps reduce global symbol usage.
 
 Her it is implemented in `nsfltk_init()` this function performs all
 the operations specific to the frontend which must be initialised
-before NetSurf itself. In some toolkits this would require calling the
+before Wisp itself. In some toolkits this would require calling the
 toolkit initialisation (e.g. `gtk_init()`).
 
-It is necessary to initialise NetSurf logging and user options at this
+It is necessary to initialise Wisp logging and user options at this
 point. A more fully featured implementation would also initialise the
 message translation system here.
 
-### NetSurf initialisation
+### Wisp initialisation
 
-This is simply the call to `netsurf_init()` from this point the
+This is simply the call to `wisp_init()` from this point the
 browser is fully operational and operations can and will be called.
 
 ### Frontend specific startup
@@ -272,7 +272,7 @@ activity based fetch progress instead of the fallback polling method.
 ### finalisation
 
 This simply finalises the browser stopping all activity and cleaning
-up any resource usage. After the call to `netsurf_exit()` no more
+up any resource usage. After the call to `wisp_exit()` no more
 operation calls will be made and all caches used by the core will be
 flushed.
 
@@ -306,7 +306,7 @@ method to render the browsing context and the handle method to handle
 mouse events to allow the user to click.
 
 The `NS_Widget::handle()` method simply translates the mouse press
-event from widget coordinates to NetSurf canvas coordinates and maps
+event from widget coordinates to Wisp canvas coordinates and maps
 the mouse button state. The core is informed of these events using
 `browser_window_mouse_click()`
 
@@ -348,7 +348,7 @@ the frontend.
 
 ## Improving the user interface
 
-The example discussion is based on a commit (`git show bc546388ce428be5cfa37cecb174d549c7b30320`) in the NetSurf source repository. Alternatively it can be [viewed in a web browser](https://git.netsurf-browser.org/netsurf.git/commit/?h=vince/fltk&id=bc546388ce428be5cfa37cecb174d549c7b30320).
+The example discussion is based on a commit (`git show bc546388ce428be5cfa37cecb174d549c7b30320`) in the Wisp source repository. Alternatively it can be [viewed in a web browser](https://git.netsurf-browser.org/netsurf.git/commit/?h=vince/fltk&id=bc546388ce428be5cfa37cecb174d549c7b30320).
 
 This changes a single module `window.cpp` where the `NS_Window`,
 `NS_Widget` and `NS_URLBar` classes are used to create a basic
@@ -405,9 +405,9 @@ hotlist(bookmarks) viewer.
 
 Hopefully this brief overview and worked example should give the
 prospective frontend developer enough information to understand how
-to get started implementing a new frontend toolkit for NetSurf.
+to get started implementing a new frontend toolkit for Wisp.
 
 As can be seen there is actually very little novel code necessary to
 get started though I should mention that the move from "minimal" to
 "full" implementation is a large undertaking and it would be wise to
-talk with the NetSurf developers if undertaking such work.
+talk with the Wisp developers if undertaking such work.

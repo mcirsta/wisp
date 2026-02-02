@@ -16,8 +16,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef NETSURF_GTK_WINDOW_H
-#define NETSURF_GTK_WINDOW_H 1
+#ifndef WISP_GTK_WINDOW_H
+#define WISP_GTK_WINDOW_H 1
 
 struct nsgtk_pi_window;
 

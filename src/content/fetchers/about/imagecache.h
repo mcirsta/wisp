@@ -21,10 +21,10 @@
  * about scheme imagecache handler interface
  */
 
-#ifndef NETSURF_CONTENT_FETCHERS_ABOUT_IMAGECACHE_H
+#ifndef WISP_CONTENT_FETCHERS_ABOUT_IMAGECACHE_H
 
 struct fetch_about_context;
-#define NETSURF_CONTENT_FETCHERS_ABOUT_IMAGECACHE_H
+#define WISP_CONTENT_FETCHERS_ABOUT_IMAGECACHE_H
 
 /**
  * Handler to generate about scheme imagecache page.

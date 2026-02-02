@@ -21,13 +21,13 @@
  * HTML layout grid private interface.
  */
 
-#ifndef NETSURF_HTML_LAYOUT_GRID_H
-#define NETSURF_HTML_LAYOUT_GRID_H
+#ifndef WISP_HTML_LAYOUT_GRID_H
+#define WISP_HTML_LAYOUT_GRID_H
 
 #include <dom/dom.h>
 #include <libwapcaplet/libwapcaplet.h>
-#include <neosurf/content/handlers/html/box.h>
-#include <neosurf/content/handlers/html/html.h>
+#include <wisp/content/handlers/html/box.h>
+#include <wisp/content/handlers/html/html.h>
 #include <stdbool.h>
 
 /**

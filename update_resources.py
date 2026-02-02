@@ -8,19 +8,19 @@ RESOURCES = [
         "filename": "ca-bundle"
     },
     {
-        "url": "https://raw.githubusercontent.com/netsurf-browser/netsurf/master/resources/SearchEngines",
+        "url": "https://raw.githubusercontent.com/wisp-browser/wisp/master/resources/SearchEngines",
         "filename": "SearchEngines"
     },
     {
-        "url": "https://raw.githubusercontent.com/netsurf-browser/netsurf/master/resources/default.css",
+        "url": "https://raw.githubusercontent.com/wisp-browser/wisp/master/resources/default.css",
         "filename": "default.css"
     },
     {
-        "url": "https://raw.githubusercontent.com/netsurf-browser/netsurf/master/resources/quirks.css",
+        "url": "https://raw.githubusercontent.com/wisp-browser/wisp/master/resources/quirks.css",
         "filename": "quirks.css"
     },
     {
-        "url": "https://raw.githubusercontent.com/netsurf-browser/netsurf/master/resources/internal.css",
+        "url": "https://raw.githubusercontent.com/wisp-browser/wisp/master/resources/internal.css",
         "filename": "internal.css"
     }
 ]

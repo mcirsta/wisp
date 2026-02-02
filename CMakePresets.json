@@ -12,7 +12,7 @@
             "generator": "Ninja",
             "binaryDir": "${sourceDir}/build-ninja",
             "cacheVariables": {
-                "NEOSURF_WERROR": "OFF",
+                "WISP_WERROR": "OFF",
                 "CMAKE_C_COMPILER": "gcc",
                 "PKG_CONFIG_EXECUTABLE": "C:/msys64/mingw64/bin/pkgconf.exe",
                 "GPERF": "C:/msys64/mingw64/bin/gperf.exe",

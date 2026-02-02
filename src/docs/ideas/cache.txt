@@ -1,7 +1,7 @@
 Content caching
 ===============
 
-NetSurf's existing fetch/cache architecture has a number of problems:
+Wisp's existing fetch/cache architecture has a number of problems:
 
 1) Content dependencies are not modelled.
 2) Content source data for non-shareable contents is duplicated.

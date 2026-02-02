@@ -24,21 +24,21 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <neosurf/utils/errors.h>
-#include <neosurf/utils/nsurl.h>
+#include <wisp/utils/errors.h>
+#include <wisp/utils/nsurl.h>
 
-#include "neosurf/browser_window.h"
-#include "neosurf/core_window.h"
-#include "neosurf/keypress.h"
-#include "neosurf/layout.h"
-#include "neosurf/plotters.h"
-#include "neosurf/types.h"
+#include "wisp/browser_window.h"
+#include "wisp/core_window.h"
+#include "wisp/keypress.h"
+#include "wisp/layout.h"
+#include "wisp/plotters.h"
+#include "wisp/types.h"
 
 #include "utils/nscolour.h"
 
-#include <neosurf/desktop/browser_history.h>
-#include <neosurf/desktop/gui_internal.h>
-#include <neosurf/desktop/local_history.h>
+#include <wisp/desktop/browser_history.h>
+#include <wisp/desktop/gui_internal.h>
+#include <wisp/desktop/local_history.h>
 #include "desktop/browser_private.h"
 #include "desktop/cw_helper.h"
 #include "desktop/local_history_private.h"

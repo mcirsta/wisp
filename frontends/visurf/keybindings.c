@@ -1,6 +1,6 @@
 #include "visurf/keybindings.h"
-#include <neosurf/utils/errors.h>
-#include <neosurf/utils/log.h>
+#include <wisp/utils/errors.h>
+#include <wisp/utils/log.h>
 #include <xkbcommon/xkbcommon.h>
 #include <assert.h>
 #include <stdbool.h>
@@ -188,7 +188,7 @@ void nsvi_bindings_handle(struct nsvi_bindings *state, xkb_keycode_t keycode, bo
 {
     xkb_keysym_t sym = xkb_state_key_get_one_sym(state->xkb_state, keycode);
     if (state->nbuf >= NSVI_KEYBUF_SIZE) {
-        NSLOG(neosurf, ERROR, "Keyboard buffer overflowed");
+        NSLOG(wisp, ERROR, "Keyboard buffer overflowed");
         state->nbuf = 0;
         return;
     }
@@ -214,7 +214,7 @@ void nsvi_bindings_handle(struct nsvi_bindings *state, xkb_keycode_t keycode, bo
         enum binding_state bstate = get_binding_state(state, cand);
         switch (bstate) {
         case STATE_COMPLETE:
-            NSLOG(neosurf, INFO, "Executing binding '%s'", cmd);
+            NSLOG(wisp, INFO, "Executing binding '%s'", cmd);
             state->nbuf = 0;
             state->exec(state->user, cmd);
             return;
@@ -227,10 +227,10 @@ void nsvi_bindings_handle(struct nsvi_bindings *state, xkb_keycode_t keycode, bo
     }
 
     if (pending == 0) {
-        NSLOG(neosurf, INFO, "No bindings for this key sequence, discarding");
+        NSLOG(wisp, INFO, "No bindings for this key sequence, discarding");
         state->nbuf = 0;
     } else {
-        NSLOG(neosurf, INFO, "No candidate bindings (yet)");
+        NSLOG(wisp, INFO, "No candidate bindings (yet)");
     }
 }
 

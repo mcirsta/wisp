@@ -31,9 +31,9 @@ extern "C" {
 #include "utils/errors.h"
 #include "utils/utils.h"
 
-#include "neosurf/bitmap.h"
-#include "neosurf/content.h"
-#include "neosurf/plotters.h"
+#include "wisp/bitmap.h"
+#include "wisp/content.h"
+#include "wisp/plotters.h"
 }
 
 #include "qt/bitmap.h"

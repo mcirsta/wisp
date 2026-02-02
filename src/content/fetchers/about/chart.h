@@ -21,10 +21,10 @@
  * about scheme chart handler interface
  */
 
-#ifndef NETSURF_CONTENT_FETCHERS_ABOUT_CHART_H
+#ifndef WISP_CONTENT_FETCHERS_ABOUT_CHART_H
 
 struct fetch_about_context;
-#define NETSURF_CONTENT_FETCHERS_ABOUT_CHART_H
+#define WISP_CONTENT_FETCHERS_ABOUT_CHART_H
 
 /**
  * Handler to generate about scheme chart page.

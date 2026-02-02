@@ -1,17 +1,17 @@
-# NeoSurf
+# Wisp
 
-This project is a fork of Netsurf with various privacy-focused improvements and additions, and a revamped build system.
+This project is a fork of Wisp with various privacy-focused improvements and additions, and a revamped build system.
 
 ## Why?
-NeoSurf has a different development vision from NetSurf.
+Wisp has a different development vision from Wisp.
 
-![NeoSurf](img/scr1.png?raw=true "NeoSurf Homepage")
+![Wisp](img/scr1.png?raw=true "Wisp Homepage")
 ![GNU.org](img/scr2.png?raw=true "GNU.org")
 
 ## Development
-Current focus is on general improvements to the codebase, as well as fixing a number of issues and bugs that were present in the most recent versions of NetSurf.
+Current focus is on general improvements to the codebase, as well as fixing a number of issues and bugs that were present in the most recent versions of Wisp.
 
-## Biggest differences from NetSurf
+## Biggest differences from Wisp
 * [Visurf support](https://sr.ht/~sircmpwn/visurf/), with various upstream improvements and fixes
 * Various upstream improvements and UI enhancements to Gtk frontend
 * Removed compatibility for super old and/or obscure libraries/software/operating systems
@@ -21,7 +21,7 @@ Current focus is on general improvements to the codebase, as well as fixing a nu
 * Simplified frontend development
 
 ## Known Issues
-At the moment preferences on Gtk frontend do not take effect, and as such this menu is currently disabled. This issue is inherited from NetSurf and will be amended soon.
+At the moment preferences on Gtk frontend do not take effect, and as such this menu is currently disabled. This issue is inherited from Wisp and will be amended soon.
 
 ## Building and installation
 To build with both Visurf and Gtk frontends:
@@ -30,15 +30,15 @@ $ cmake -B build -DCMAKE_INSTALL_PREFIX=/usr
 ```
 To build with Visurf only:
 ```sh
-$ cmake -B build -DCMAKE_INSTALL_PREFIX=/usr -DNEOSURF_BUILD_GTK_FRONTEND=OFF
+$ cmake -B build -DCMAKE_INSTALL_PREFIX=/usr -DWISP_BUILD_GTK_FRONTEND=OFF
 ```
 To build with Gtk only:
 ```sh
-$ cmake -B build -DCMAKE_INSTALL_PREFIX=/usr -DNEOSURF_BUILD_VI_FRONTEND=OFF
+$ cmake -B build -DCMAKE_INSTALL_PREFIX=/usr -DWISP_BUILD_VI_FRONTEND=OFF
 ```
-To build libneosurf only (no frontend):
+To build libwisp only (no frontend):
 ```sh
-$ cmake -B build -DCMAKE_INSTALL_PREFIX=/usr -DNEOSURF_BUILD_GTK_FRONTEND=OFF -DNEOSURF_BUILD_VI_FRONTEND=OFF
+$ cmake -B build -DCMAKE_INSTALL_PREFIX=/usr -DWISP_BUILD_GTK_FRONTEND=OFF -DWISP_BUILD_VI_FRONTEND=OFF
 ```
 
 Then:
@@ -51,9 +51,9 @@ And as root:
 # make -C build install
 ```
 
-NeoSurf is geared towards the Cobalt operating system, but is intended to remaining portable on any Linux or BSD-based platforms.
+Wisp is geared towards the Cobalt operating system, but is intended to remaining portable on any Linux or BSD-based platforms.
 
-At build-time, NeoSurf requires the following programs:
+At build-time, Wisp requires the following programs:
 * python3
 * cmake
 * any CMake-compatible build utility (typically GNU make)
@@ -79,7 +79,7 @@ At runtime and build-time, the following libraries and their development headers
 
 However you obtain these utilities and libraries depends on your distribution.
 
-## Using neosurf-vi
+## Using wisp-vi
 ### Keybindings
 Ctrl+q, Ctrl+w - Close tab
 

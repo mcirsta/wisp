@@ -5,7 +5,7 @@
  */
 
 #include "document.h"
-#include <neosurf/utils/log.h>
+#include <wisp/utils/log.h>
 #include "quickjs.h"
 #include <stdlib.h>
 
@@ -26,7 +26,7 @@ static JSValue js_element_removeEventListener(JSContext *ctx, JSValueConst this_
  */
 static JSValue create_style_object(JSContext *ctx)
 {
-    NSLOG(neosurf, DEBUG, "Creating dummy style object for element");
+    NSLOG(wisp, DEBUG, "Creating dummy style object for element");
     return JS_NewObject(ctx);
 }
 
@@ -117,7 +117,7 @@ static JSValue create_element_object(JSContext *ctx, const char *tag)
     JS_SetPropertyStr(ctx, element, "removeEventListener",
         JS_NewCFunction(ctx, js_element_removeEventListener, "removeEventListener", 2));
 
-    NSLOG(neosurf, DEBUG, "Created element stub with DOM properties, tagName='%s'", tag ? tag : "(null)");
+    NSLOG(wisp, DEBUG, "Created element stub with DOM properties, tagName='%s'", tag ? tag : "(null)");
 
     return element;
 }
@@ -125,7 +125,7 @@ static JSValue create_element_object(JSContext *ctx, const char *tag)
 /* Element method stubs */
 static JSValue js_element_appendChild(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
-    NSLOG(neosurf, DEBUG, "element.appendChild() called (stub)");
+    NSLOG(wisp, DEBUG, "element.appendChild() called (stub)");
     if (argc > 0) {
         return JS_DupValue(ctx, argv[0]); /* Return the appended child */
     }
@@ -134,7 +134,7 @@ static JSValue js_element_appendChild(JSContext *ctx, JSValueConst this_val, int
 
 static JSValue js_element_removeChild(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
-    NSLOG(neosurf, DEBUG, "element.removeChild() called (stub)");
+    NSLOG(wisp, DEBUG, "element.removeChild() called (stub)");
     if (argc > 0) {
         return JS_DupValue(ctx, argv[0]); /* Return the removed child */
     }
@@ -143,7 +143,7 @@ static JSValue js_element_removeChild(JSContext *ctx, JSValueConst this_val, int
 
 static JSValue js_element_insertBefore(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
-    NSLOG(neosurf, DEBUG, "element.insertBefore() called (stub)");
+    NSLOG(wisp, DEBUG, "element.insertBefore() called (stub)");
     if (argc > 0) {
         return JS_DupValue(ctx, argv[0]); /* Return the inserted node */
     }
@@ -152,7 +152,7 @@ static JSValue js_element_insertBefore(JSContext *ctx, JSValueConst this_val, in
 
 static JSValue js_element_cloneNode(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
-    NSLOG(neosurf, DEBUG, "element.cloneNode() called (stub)");
+    NSLOG(wisp, DEBUG, "element.cloneNode() called (stub)");
     /* Return a new empty element as a "clone" */
     return create_element_object(ctx, NULL);
 }
@@ -161,7 +161,7 @@ static JSValue js_element_getAttribute(JSContext *ctx, JSValueConst this_val, in
 {
     if (argc > 0) {
         const char *name = JS_ToCString(ctx, argv[0]);
-        NSLOG(neosurf, DEBUG, "element.getAttribute('%s') -> null (stub)", name ? name : "(null)");
+        NSLOG(wisp, DEBUG, "element.getAttribute('%s') -> null (stub)", name ? name : "(null)");
         if (name)
             JS_FreeCString(ctx, name);
     }
@@ -173,7 +173,7 @@ static JSValue js_element_setAttribute(JSContext *ctx, JSValueConst this_val, in
     if (argc >= 2) {
         const char *name = JS_ToCString(ctx, argv[0]);
         const char *value = JS_ToCString(ctx, argv[1]);
-        NSLOG(neosurf, DEBUG, "element.setAttribute('%s', '%s') (stub)", name ? name : "(null)",
+        NSLOG(wisp, DEBUG, "element.setAttribute('%s', '%s') (stub)", name ? name : "(null)",
             value ? value : "(null)");
         if (name)
             JS_FreeCString(ctx, name);
@@ -187,7 +187,7 @@ static JSValue js_element_hasAttribute(JSContext *ctx, JSValueConst this_val, in
 {
     if (argc > 0) {
         const char *name = JS_ToCString(ctx, argv[0]);
-        NSLOG(neosurf, DEBUG, "element.hasAttribute('%s') -> false (stub)", name ? name : "(null)");
+        NSLOG(wisp, DEBUG, "element.hasAttribute('%s') -> false (stub)", name ? name : "(null)");
         if (name)
             JS_FreeCString(ctx, name);
     }
@@ -198,7 +198,7 @@ static JSValue js_element_removeAttribute(JSContext *ctx, JSValueConst this_val,
 {
     if (argc > 0) {
         const char *name = JS_ToCString(ctx, argv[0]);
-        NSLOG(neosurf, DEBUG, "element.removeAttribute('%s') (stub)", name ? name : "(null)");
+        NSLOG(wisp, DEBUG, "element.removeAttribute('%s') (stub)", name ? name : "(null)");
         if (name)
             JS_FreeCString(ctx, name);
     }
@@ -209,7 +209,7 @@ static JSValue js_element_addEventListener(JSContext *ctx, JSValueConst this_val
 {
     if (argc >= 2) {
         const char *type = JS_ToCString(ctx, argv[0]);
-        NSLOG(neosurf, DEBUG, "element.addEventListener('%s', fn) (stub)", type ? type : "(null)");
+        NSLOG(wisp, DEBUG, "element.addEventListener('%s', fn) (stub)", type ? type : "(null)");
         if (type)
             JS_FreeCString(ctx, type);
     }
@@ -220,7 +220,7 @@ static JSValue js_element_removeEventListener(JSContext *ctx, JSValueConst this_
 {
     if (argc >= 2) {
         const char *type = JS_ToCString(ctx, argv[0]);
-        NSLOG(neosurf, DEBUG, "element.removeEventListener('%s', fn) (stub)", type ? type : "(null)");
+        NSLOG(wisp, DEBUG, "element.removeEventListener('%s', fn) (stub)", type ? type : "(null)");
         if (type)
             JS_FreeCString(ctx, type);
     }
@@ -232,11 +232,11 @@ static JSValue js_document_getElementById(JSContext *ctx, JSValueConst this_val,
 {
     if (argc > 0) {
         const char *id = JS_ToCString(ctx, argv[0]);
-        NSLOG(neosurf, DEBUG, "document.getElementById called with: '%s' -> returning null (stub)", id ? id : "(null)");
+        NSLOG(wisp, DEBUG, "document.getElementById called with: '%s' -> returning null (stub)", id ? id : "(null)");
         if (id)
             JS_FreeCString(ctx, id);
     } else {
-        NSLOG(neosurf, DEBUG, "document.getElementById called with no args -> null");
+        NSLOG(wisp, DEBUG, "document.getElementById called with no args -> null");
     }
     return JS_NULL;
 }
@@ -245,7 +245,7 @@ static JSValue js_document_getElementsByTagName(JSContext *ctx, JSValueConst thi
 {
     if (argc > 0) {
         const char *tag = JS_ToCString(ctx, argv[0]);
-        NSLOG(neosurf, DEBUG, "document.getElementsByTagName('%s') -> returning empty array (stub)",
+        NSLOG(wisp, DEBUG, "document.getElementsByTagName('%s') -> returning empty array (stub)",
             tag ? tag : "(null)");
         if (tag)
             JS_FreeCString(ctx, tag);
@@ -258,7 +258,7 @@ static JSValue js_document_getElementsByClassName(JSContext *ctx, JSValueConst t
 {
     if (argc > 0) {
         const char *cls = JS_ToCString(ctx, argv[0]);
-        NSLOG(neosurf, DEBUG, "document.getElementsByClassName('%s') -> returning empty array (stub)",
+        NSLOG(wisp, DEBUG, "document.getElementsByClassName('%s') -> returning empty array (stub)",
             cls ? cls : "(null)");
         if (cls)
             JS_FreeCString(ctx, cls);
@@ -271,7 +271,7 @@ static JSValue js_document_querySelector(JSContext *ctx, JSValueConst this_val, 
 {
     if (argc > 0) {
         const char *sel = JS_ToCString(ctx, argv[0]);
-        NSLOG(neosurf, DEBUG, "document.querySelector('%s') -> returning null (stub)", sel ? sel : "(null)");
+        NSLOG(wisp, DEBUG, "document.querySelector('%s') -> returning null (stub)", sel ? sel : "(null)");
         if (sel)
             JS_FreeCString(ctx, sel);
     }
@@ -282,7 +282,7 @@ static JSValue js_document_querySelectorAll(JSContext *ctx, JSValueConst this_va
 {
     if (argc > 0) {
         const char *sel = JS_ToCString(ctx, argv[0]);
-        NSLOG(neosurf, DEBUG, "document.querySelectorAll('%s') -> returning empty array (stub)", sel ? sel : "(null)");
+        NSLOG(wisp, DEBUG, "document.querySelectorAll('%s') -> returning empty array (stub)", sel ? sel : "(null)");
         if (sel)
             JS_FreeCString(ctx, sel);
     }
@@ -295,9 +295,9 @@ static JSValue js_document_createElement(JSContext *ctx, JSValueConst this_val, 
     const char *tag = NULL;
     if (argc > 0) {
         tag = JS_ToCString(ctx, argv[0]);
-        NSLOG(neosurf, DEBUG, "document.createElement('%s') -> creating element stub", tag ? tag : "(null)");
+        NSLOG(wisp, DEBUG, "document.createElement('%s') -> creating element stub", tag ? tag : "(null)");
     } else {
-        NSLOG(neosurf, DEBUG, "document.createElement() with no args");
+        NSLOG(wisp, DEBUG, "document.createElement() with no args");
     }
 
     /* Create element with style property and common attributes */
@@ -312,7 +312,7 @@ static JSValue js_document_createTextNode(JSContext *ctx, JSValueConst this_val,
 {
     if (argc > 0) {
         const char *text = JS_ToCString(ctx, argv[0]);
-        NSLOG(neosurf, DEBUG, "document.createTextNode('%s')", text ? text : "(null)");
+        NSLOG(wisp, DEBUG, "document.createTextNode('%s')", text ? text : "(null)");
         if (text)
             JS_FreeCString(ctx, text);
     }
@@ -326,7 +326,7 @@ static JSValue js_document_write(JSContext *ctx, JSValueConst this_val, int argc
 {
     if (argc > 0) {
         const char *str = JS_ToCString(ctx, argv[0]);
-        NSLOG(neosurf, DEBUG, "document.write('%s') (ignored)", str ? str : "(null)");
+        NSLOG(wisp, DEBUG, "document.write('%s') (ignored)", str ? str : "(null)");
         if (str)
             JS_FreeCString(ctx, str);
     }
@@ -335,32 +335,32 @@ static JSValue js_document_write(JSContext *ctx, JSValueConst this_val, int argc
 
 static JSValue js_document_body_getter(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
-    NSLOG(neosurf, DEBUG, "document.body getter -> returning stub element");
+    NSLOG(wisp, DEBUG, "document.body getter -> returning stub element");
     /* Return an element with style property */
     return create_element_object(ctx, "BODY");
 }
 
 static JSValue js_document_documentElement_getter(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
-    NSLOG(neosurf, DEBUG, "document.documentElement getter -> returning stub element");
+    NSLOG(wisp, DEBUG, "document.documentElement getter -> returning stub element");
     return create_element_object(ctx, "HTML");
 }
 
 static JSValue js_document_head_getter(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
-    NSLOG(neosurf, DEBUG, "document.head getter -> returning stub element");
+    NSLOG(wisp, DEBUG, "document.head getter -> returning stub element");
     return create_element_object(ctx, "HEAD");
 }
 
 static JSValue js_document_readyState_getter(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
-    NSLOG(neosurf, DEBUG, "document.readyState getter -> 'complete'");
+    NSLOG(wisp, DEBUG, "document.readyState getter -> 'complete'");
     return JS_NewString(ctx, "complete");
 }
 
 static JSValue js_document_cookie_getter(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
-    NSLOG(neosurf, DEBUG, "document.cookie getter -> ''");
+    NSLOG(wisp, DEBUG, "document.cookie getter -> ''");
     return JS_NewString(ctx, "");
 }
 
@@ -368,7 +368,7 @@ static JSValue js_document_cookie_setter(JSContext *ctx, JSValueConst this_val, 
 {
     if (argc > 0) {
         const char *cookie = JS_ToCString(ctx, argv[0]);
-        NSLOG(neosurf, DEBUG, "document.cookie setter: '%s' (ignored)", cookie ? cookie : "(null)");
+        NSLOG(wisp, DEBUG, "document.cookie setter: '%s' (ignored)", cookie ? cookie : "(null)");
         if (cookie)
             JS_FreeCString(ctx, cookie);
     }
@@ -394,7 +394,7 @@ define_getter_setter(JSContext *ctx, JSValue obj, const char *name, JSCFunction 
 
 int qjs_init_document(JSContext *ctx)
 {
-    NSLOG(neosurf, DEBUG, "Initializing document binding");
+    NSLOG(wisp, DEBUG, "Initializing document binding");
 
     JSValue global_obj = JS_GetGlobalObject(ctx);
     JSValue document = JS_NewObject(ctx);
@@ -428,6 +428,6 @@ int qjs_init_document(JSContext *ctx)
 
     JS_FreeValue(ctx, global_obj);
 
-    NSLOG(neosurf, DEBUG, "Document binding initialized with element stubs");
+    NSLOG(wisp, DEBUG, "Document binding initialized with element stubs");
     return 0;
 }

@@ -1,7 +1,7 @@
-NetSurf logging
+Wisp logging
 ===============
 
-NetSurf has a large number of internal diagnostic messages which can
+Wisp has a large number of internal diagnostic messages which can
 be viewed by the developer (or user if they wish)
 
 Each message has a category and a level which can be used to control
@@ -26,26 +26,26 @@ Compilation control
 At compilation time the logging behaviour can be controlled by using
 configuration overrides in a Makefile.config The parameters are:
 
-  - NETSURF_USE_NSLOG  
-  This controls if the NetSurf logging library (nslog) is used to
+  - WISP_USE_NSLOG  
+  This controls if the Wisp logging library (nslog) is used to
   allow comprehensive filtering of messages. The value defaults to
   AUTO which will use pkg-config to locate the library and enable if
   present. If set to NO or the library cannot be located the browsers
   logging will revert to simple boolean enabled/disabled logging
   controlled by the -v command line switch.
   
-  - NETSURF_LOG_LEVEL  
-  This controls what level of message is compiled into the NetSurf
+  - WISP_LOG_LEVEL  
+  This controls what level of message is compiled into the Wisp
   binary. The default value is VERBOSE and when not using nslog this
   value is also used to select what level of logging is shown with the
   -v command line switch.
   
-  - NETSURF_BUILTIN_LOG_FILTER  
+  - WISP_BUILTIN_LOG_FILTER  
   When using nslog this sets the default non-verbose filter. The
   default value ("level:WARNING") shows all messages of level WARNING
   and above
 
-  - NETSURF_BUILTIN_VERBOSE_FILTER  
+  - WISP_BUILTIN_VERBOSE_FILTER  
   When using nslog this sets the default verbose filter. The default
   value ("level:VERBOSE") shows all messages of level VERBOSE and
   above. The verbose level is selected from the commandline with the
@@ -86,7 +86,7 @@ Adding messages
 Messages can be easily added by including the utils/log.h header and
 he NSLOG() macro. for example
 
-    NSLOG(netsurf, INFO, "An example message %d", example_func());
+    NSLOG(wisp, INFO, "An example message %d", example_func());
 
 nslog
 -----

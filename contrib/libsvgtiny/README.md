@@ -9,7 +9,7 @@ All supported SVG objects, for example circles, lines, and gradient filled shape
 Libsvgtiny is Licensed under the MIT License,
 http://opensource.org/licenses/mit-license.php
 
-Written by James Bursa <james@netsurf-browser.org>.
+Written by James Bursa <james@wisp-browser.org>.
 
 ## SVG support
 

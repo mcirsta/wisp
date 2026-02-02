@@ -11,7 +11,7 @@ CWARNFLAGS += -Werror
 
 CFLAGS += -std=c99 \
 	  -Dmonkey -Dnsmonkey -g \
-	  -DMONKEY_RESPATH=\"$(NETSURF_MONKEY_RESOURCES)\"
+	  -DMONKEY_RESPATH=\"$(WISP_MONKEY_RESOURCES)\"
 
 LDFLAGS += -lm
 

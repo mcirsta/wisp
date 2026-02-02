@@ -43,10 +43,10 @@
  * 	horizontal or scale or, better, find a new layout.
  */
 
-#include <neosurf/utils/config.h>
-#include <neosurf/utils/errors.h>
+#include <wisp/utils/config.h>
+#include <wisp/utils/errors.h>
 
-#include <neosurf/desktop/save_pdf.h>
+#include <wisp/desktop/save_pdf.h>
 
 #ifdef WITH_PDF_EXPORT
 
@@ -55,16 +55,16 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <neosurf/content/hlcache.h>
-#include <neosurf/utils/log.h>
-#include <neosurf/utils/nsoption.h>
-#include <neosurf/utils/utils.h>
+#include <wisp/content/hlcache.h>
+#include <wisp/utils/log.h>
+#include <wisp/utils/nsoption.h>
+#include <wisp/utils/utils.h>
 #include "utils/useragent.h"
-#include "neosurf/bitmap.h"
+#include "wisp/bitmap.h"
 
-#include <neosurf/desktop/print.h>
-#include <neosurf/desktop/printer.h>
-#include "neosurf/plotters.h"
+#include <wisp/desktop/print.h>
+#include <wisp/desktop/printer.h>
+#include "wisp/plotters.h"
 
 #include "font_haru.h"
 
@@ -157,7 +157,7 @@ bool pdf_plot_rectangle(int x0, int y0, int x1, int y1, const plot_style_t *psty
 {
     DashPattern_e dash;
 #ifdef PDF_DEBUG
-    NSLOG(netsurf, INFO, "%d %d %d %d %f %X", x0, y0, x1, y1, page_height - y0, pstyle->fill_colour);
+    NSLOG(wisp, INFO, "%d %d %d %d %f %X", x0, y0, x1, y1, page_height - y0, pstyle->fill_colour);
 #endif
 
     if (pstyle->fill_type != PLOT_OP_TYPE_NONE) {
@@ -239,7 +239,7 @@ bool pdf_plot_polygon(const int *p, unsigned int n, const plot_style_t *style)
 #ifdef PDF_DEBUG
     int pmaxx = p[0], pmaxy = p[1];
     int pminx = p[0], pminy = p[1];
-    NSLOG(netsurf, INFO, ".");
+    NSLOG(wisp, INFO, ".");
 #endif
     if (n == 0)
         return true;
@@ -258,7 +258,7 @@ bool pdf_plot_polygon(const int *p, unsigned int n, const plot_style_t *style)
     }
 
 #ifdef PDF_DEBUG
-    NSLOG(netsurf, INFO, "%d %d %d %d %f", pminx, pminy, pmaxx, pmaxy, page_height - pminy);
+    NSLOG(wisp, INFO, "%d %d %d %d %f", pminx, pminy, pmaxx, pmaxy, page_height - pminy);
 #endif
 
     HPDF_Page_Fill(pdf_page);
@@ -271,7 +271,7 @@ bool pdf_plot_polygon(const int *p, unsigned int n, const plot_style_t *style)
 bool pdf_plot_clip(const struct rect *clip)
 {
 #ifdef PDF_DEBUG
-    NSLOG(netsurf, INFO, "%d %d %d %d", clip->x0, clip->y0, clip->x1, clip->y1);
+    NSLOG(wisp, INFO, "%d %d %d %d", clip->x0, clip->y0, clip->x1, clip->y1);
 #endif
 
     /*Normalize cllipping area - to prevent overflows.
@@ -290,7 +290,7 @@ bool pdf_plot_clip(const struct rect *clip)
 bool pdf_plot_text(int x, int y, const char *text, size_t length, const plot_font_style_t *fstyle)
 {
 #ifdef PDF_DEBUG
-    NSLOG(netsurf, INFO, ". %d %d %.*s", x, y, (int)length, text);
+    NSLOG(wisp, INFO, ". %d %d %.*s", x, y, (int)length, text);
 #endif
     char *word;
     HPDF_Font pdf_font;
@@ -322,7 +322,7 @@ bool pdf_plot_text(int x, int y, const char *text, size_t length, const plot_fon
 bool pdf_plot_disc(int x, int y, int radius, const plot_style_t *style)
 {
 #ifdef PDF_DEBUG
-    NSLOG(netsurf, INFO, ".");
+    NSLOG(wisp, INFO, ".");
 #endif
     if (style->fill_type != PLOT_OP_TYPE_NONE) {
         apply_clip_and_mode(false, style->fill_colour, NS_TRANSPARENT, 1., DashPattern_eNone);
@@ -347,7 +347,7 @@ bool pdf_plot_disc(int x, int y, int radius, const plot_style_t *style)
 bool pdf_plot_arc(int x, int y, int radius, int angle1, int angle2, const plot_style_t *style)
 {
 #ifdef PDF_DEBUG
-    NSLOG(netsurf, INFO, "%d %d %d %d %d %X", x, y, radius, angle1, angle2, style->stroke_colour);
+    NSLOG(wisp, INFO, "%d %d %d %d %d %X", x, y, radius, angle1, angle2, style->stroke_colour);
 #endif
 
     /* FIXME: line width 1 is ok ? */
@@ -373,7 +373,7 @@ bool pdf_plot_bitmap_tile(int x, int y, int width, int height, struct bitmap *bi
     HPDF_REAL max_width, max_height;
 
 #ifdef PDF_DEBUG
-    NSLOG(netsurf, INFO, "%d %d %d %d %p 0x%x", x, y, width, height, bitmap, bg);
+    NSLOG(wisp, INFO, "%d %d %d %d %p 0x%x", x, y, width, height, bitmap, bg);
 #endif
     if (width == 0 || height == 0)
         return true;
@@ -445,7 +445,7 @@ HPDF_Image pdf_extract_image(struct bitmap *bitmap)
         rgb_buffer = (unsigned char *)malloc(3 * img_width * img_height);
         alpha_buffer = (unsigned char *)malloc(img_width * img_height);
         if (rgb_buffer == NULL || alpha_buffer == NULL) {
-            NSLOG(neosurf, INFO, "Not enough memory to create RGB buffer");
+            NSLOG(wisp, INFO, "Not enough memory to create RGB buffer");
             free(rgb_buffer);
             free(alpha_buffer);
             return NULL;
@@ -557,7 +557,7 @@ bool pdf_plot_path(const float *p, unsigned int n, colour fill, float width, col
     bool empty_path;
 
 #ifdef PDF_DEBUG
-    NSLOG(netsurf, INFO, ".");
+    NSLOG(wisp, INFO, ".");
 #endif
 
     if (n == 0)
@@ -594,7 +594,7 @@ bool pdf_plot_path(const float *p, unsigned int n, colour fill, float width, col
             i += 7;
             empty_path = false;
         } else {
-            NSLOG(neosurf, INFO, "bad path command %f", p[i]);
+            NSLOG(wisp, INFO, "bad path command %f", p[i]);
             return false;
         }
     }
@@ -629,7 +629,7 @@ bool pdf_begin(struct print_settings *print_settings)
         HPDF_Free(pdf_doc);
     pdf_doc = HPDF_New(error_handler, NULL);
     if (!pdf_doc) {
-        NSLOG(neosurf, INFO, "Error creating pdf_doc");
+        NSLOG(wisp, INFO, "Error creating pdf_doc");
         return false;
     }
 
@@ -649,7 +649,7 @@ bool pdf_begin(struct print_settings *print_settings)
     pdf_page = NULL;
 
 #ifdef PDF_DEBUG
-    NSLOG(netsurf, INFO, "pdf_begin finishes");
+    NSLOG(wisp, INFO, "pdf_begin finishes");
 #endif
     return true;
 }
@@ -658,7 +658,7 @@ bool pdf_begin(struct print_settings *print_settings)
 bool pdf_next_page(void)
 {
 #ifdef PDF_DEBUG
-    NSLOG(netsurf, INFO, "pdf_next_page begins");
+    NSLOG(wisp, INFO, "pdf_next_page begins");
 #endif
     clip_update_needed = false;
     if (pdf_page != NULL) {
@@ -684,7 +684,7 @@ bool pdf_next_page(void)
     pdfw_gs_save(pdf_page);
 
 #ifdef PDF_DEBUG
-    NSLOG(netsurf, INFO, "%f %f", page_width, page_height);
+    NSLOG(wisp, INFO, "%f %f", page_width, page_height);
 #endif
 
     return true;
@@ -694,7 +694,7 @@ bool pdf_next_page(void)
 void pdf_end(void)
 {
 #ifdef PDF_DEBUG
-    NSLOG(netsurf, INFO, "pdf_end begins");
+    NSLOG(wisp, INFO, "pdf_end begins");
 #endif
     clip_update_needed = false;
     if (pdf_page != NULL) {
@@ -717,7 +717,7 @@ void pdf_end(void)
     else
         save_pdf(settings->output);
 #ifdef PDF_DEBUG
-    NSLOG(netsurf, INFO, "pdf_end finishes");
+    NSLOG(wisp, INFO, "pdf_end finishes");
 #endif
 }
 
@@ -755,7 +755,7 @@ nserror save_pdf(const char *path)
  */
 static void error_handler(HPDF_STATUS error_no, HPDF_STATUS detail_no, void *user_data)
 {
-    NSLOG(neosurf, INFO, "ERROR:\n\terror_no=%x\n\tdetail_no=%d\n", (HPDF_UINT)error_no, (HPDF_UINT)detail_no);
+    NSLOG(wisp, INFO, "ERROR:\n\terror_no=%x\n\tdetail_no=%d\n", (HPDF_UINT)error_no, (HPDF_UINT)detail_no);
 #ifdef PDF_DEBUG
     exit(1);
 #endif

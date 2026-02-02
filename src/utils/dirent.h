@@ -28,10 +28,10 @@
  *  utils config header include.
  */
 
-#ifndef NETSURF_UTILS_DIRENT_H
-#define NETSURF_UTILS_DIRENT_H
+#ifndef WISP_UTILS_DIRENT_H
+#define WISP_UTILS_DIRENT_H
 
-#include <neosurf/utils/config.h>
+#include <wisp/utils/config.h>
 
 #include <dirent.h>
 

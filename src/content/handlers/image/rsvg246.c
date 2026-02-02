@@ -46,9 +46,9 @@
 #include "content/llcache.h"
 #include "desktop/bitmap.h"
 #include "desktop/gui_internal.h"
-#include "neosurf/bitmap.h"
-#include "neosurf/content.h"
-#include "neosurf/plotters.h"
+#include "wisp/bitmap.h"
+#include "wisp/content.h"
+#include "wisp/plotters.h"
 
 #include "image/image_cache.h"
 
@@ -97,18 +97,18 @@ static struct bitmap *rsvg_cache_convert(struct content *c)
     gboolean renderres;
 
     if ((bitmap = guit->bitmap->create(c->width, c->height, BITMAP_NONE)) == NULL) {
-        NSLOG(netsurf, INFO, "Failed to create bitmap for rsvg render.");
+        NSLOG(wisp, INFO, "Failed to create bitmap for rsvg render.");
         return NULL;
     }
 
     if ((cs = cairo_image_surface_create_for_data((unsigned char *)guit->bitmap->get_buffer(bitmap),
              CAIRO_FORMAT_ARGB32, c->width, c->height, guit->bitmap->get_rowstride(bitmap))) == NULL) {
-        NSLOG(netsurf, INFO, "Failed to create Cairo image surface for rsvg render.");
+        NSLOG(wisp, INFO, "Failed to create Cairo image surface for rsvg render.");
         guit->bitmap->destroy(bitmap);
         return NULL;
     }
     if ((cr = cairo_create(cs)) == NULL) {
-        NSLOG(netsurf, INFO, "Failed to create Cairo drawing context for rsvg render.");
+        NSLOG(wisp, INFO, "Failed to create Cairo drawing context for rsvg render.");
         cairo_surface_destroy(cs);
         guit->bitmap->destroy(bitmap);
         return NULL;
@@ -119,7 +119,7 @@ static struct bitmap *rsvg_cache_convert(struct content *c)
     viewport.width = c->width;
     viewport.height = c->height;
     renderres = rsvg_handle_render_document(svgc->rsvgh, cr, &viewport, NULL);
-    NSLOG(netsurf, DEBUG, "rsvg render:%d, width:%d, height %d", renderres, c->width, c->height);
+    NSLOG(wisp, DEBUG, "rsvg render:%d, width:%d, height %d", renderres, c->width, c->height);
 
     bitmap_format_to_client(bitmap,
         &(bitmap_fmt_t){
@@ -159,7 +159,7 @@ static void rsvg__get_demensions(const rsvg_content *svgc, int *width, int *heig
     *width = rsvgsize.width;
     *height = rsvgsize.height;
 #endif
-    NSLOG(netsurf, DEBUG, "rsvg width:%d height:%d.", *width, *height);
+    NSLOG(wisp, DEBUG, "rsvg width:%d height:%d.", *width, *height);
 }
 
 static bool rsvg_convert(struct content *c)
@@ -178,7 +178,7 @@ static bool rsvg_convert(struct content *c)
     svgc->rsvgh = rsvg_handle_new_from_stream_sync(istream, NULL, RSVG_HANDLE_FLAGS_NONE, NULL, &gerror);
     g_object_unref(istream);
     if (svgc->rsvgh == NULL) {
-        NSLOG(netsurf, INFO, "Failed to create rsvg handle for content.");
+        NSLOG(wisp, INFO, "Failed to create rsvg handle for content.");
         return false;
     }
 

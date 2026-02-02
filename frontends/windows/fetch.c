@@ -24,10 +24,10 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "neosurf/content/fetch.h"
-#include "neosurf/fetch.h"
-#include "neosurf/utils/file.h"
-#include "neosurf/utils/log.h"
+#include "wisp/content/fetch.h"
+#include "wisp/fetch.h"
+#include "wisp/utils/file.h"
+#include "wisp/utils/log.h"
 
 #include "windows/fetch.h"
 
@@ -40,17 +40,17 @@
 static const char *fetch_filetype(const char *unix_path)
 {
     const char *ext;
-    NSLOG(neosurf, INFO, "unix path %s", unix_path);
+    NSLOG(wisp, INFO, "unix path %s", unix_path);
 
     ext = strrchr(unix_path, '.');
     if (ext == NULL) {
-        NSLOG(neosurf, INFO, "no extension for %s returning html", unix_path);
+        NSLOG(wisp, INFO, "no extension for %s returning html", unix_path);
         return "text/html";
     }
 
     ext++; /* skip dot */
 
-    NSLOG(neosurf, INFO, "extension %s", ext);
+    NSLOG(wisp, INFO, "extension %s", ext);
 
     if (strcasecmp(ext, "css") == 0)
         return "text/css";

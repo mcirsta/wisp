@@ -16,8 +16,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef NETSURF_VISURF_OPTIONS_H_
-#define NETSURF_VISURF_OPTIONS_H_
+#ifndef WISP_VISURF_OPTIONS_H_
+#define WISP_VISURF_OPTIONS_H_
 
 /* currently nothing here */
 

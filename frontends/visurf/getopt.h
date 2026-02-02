@@ -1,5 +1,5 @@
-#ifndef NETSURF_GETOPT_H
-#define NETSURF_GETOPT_H
+#ifndef WISP_GETOPT_H
+#define WISP_GETOPT_H
 
 extern char *ns_optarg;
 extern int ns_opterr, ns_optind, ns_optopt;

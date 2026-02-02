@@ -38,14 +38,14 @@
 #include <string.h>
 #include <strings.h>
 
-#include <neosurf/ns_inttypes.h>
+#include <wisp/ns_inttypes.h>
 
-#include <neosurf/utils/ascii.h>
-#include <neosurf/utils/corestrings.h>
-#include <neosurf/utils/errors.h>
-#include <neosurf/utils/log.h>
-#include <neosurf/utils/nsurl.h>
-#include <neosurf/utils/utils.h>
+#include <wisp/utils/ascii.h>
+#include <wisp/utils/corestrings.h>
+#include <wisp/utils/errors.h>
+#include <wisp/utils/log.h>
+#include <wisp/utils/nsurl.h>
+#include <wisp/utils/utils.h>
 #include "utils/idna.h"
 #include "utils/nsurl/private.h"
 
@@ -643,19 +643,19 @@ static void nsurl__get_string_markers(const char *const url_s, struct url_marker
             marker.fragment = marker.end;
     }
 
-    NSLOG(neosurf, DEEPDEBUG, "marker.start: %" PRIsizet, marker.start);
-    NSLOG(neosurf, DEEPDEBUG, "marker.scheme_end: %" PRIsizet, marker.scheme_end);
-    NSLOG(neosurf, DEEPDEBUG, "marker.authority: %" PRIsizet, marker.authority);
+    NSLOG(wisp, DEEPDEBUG, "marker.start: %" PRIsizet, marker.start);
+    NSLOG(wisp, DEEPDEBUG, "marker.scheme_end: %" PRIsizet, marker.scheme_end);
+    NSLOG(wisp, DEEPDEBUG, "marker.authority: %" PRIsizet, marker.authority);
 
-    NSLOG(neosurf, DEEPDEBUG, "marker.colon_first: %" PRIsizet, marker.colon_first);
-    NSLOG(neosurf, DEEPDEBUG, "marker.at: %" PRIsizet, marker.at);
-    NSLOG(neosurf, DEEPDEBUG, "marker.colon_last: %" PRIsizet, marker.colon_last);
+    NSLOG(wisp, DEEPDEBUG, "marker.colon_first: %" PRIsizet, marker.colon_first);
+    NSLOG(wisp, DEEPDEBUG, "marker.at: %" PRIsizet, marker.at);
+    NSLOG(wisp, DEEPDEBUG, "marker.colon_last: %" PRIsizet, marker.colon_last);
 
-    NSLOG(neosurf, DEEPDEBUG, "marker.path: %" PRIsizet, marker.path);
-    NSLOG(neosurf, DEEPDEBUG, "marker.query: %" PRIsizet, marker.query);
-    NSLOG(neosurf, DEEPDEBUG, "marker.fragment: %" PRIsizet, marker.fragment);
+    NSLOG(wisp, DEEPDEBUG, "marker.path: %" PRIsizet, marker.path);
+    NSLOG(wisp, DEEPDEBUG, "marker.query: %" PRIsizet, marker.query);
+    NSLOG(wisp, DEEPDEBUG, "marker.fragment: %" PRIsizet, marker.fragment);
 
-    NSLOG(neosurf, DEEPDEBUG, "marker.end: %" PRIsizet, marker.end);
+    NSLOG(wisp, DEEPDEBUG, "marker.end: %" PRIsizet, marker.end);
 
     /* Got all the URL components pegged out now */
     *markers = marker;
@@ -675,8 +675,8 @@ static size_t nsurl__remove_dot_segments(char *path, char *output)
     char *output_pos = output;
 
     while (*path_pos != '\0') {
-        NSLOG(neosurf, DEEPDEBUG, " in:%s", path_pos);
-        NSLOG(neosurf, DEEPDEBUG, "out:%.*s", (int)(output_pos - output), output);
+        NSLOG(wisp, DEEPDEBUG, " in:%s", path_pos);
+        NSLOG(wisp, DEEPDEBUG, "out:%.*s", (int)(output_pos - output), output);
 
         if (*path_pos == '.') {
             if (*(path_pos + 1) == '.' && *(path_pos + 2) == '/') {
@@ -1513,7 +1513,7 @@ nserror nsurl_join(const nsurl *base, const char *rel, nsurl **joined)
     if (joined == NULL || base == NULL || rel == NULL)
         return NSERROR_BAD_PARAMETER;
 
-    NSLOG(neosurf, DEEPDEBUG, "base: \"%s\", rel: \"%s\"", nsurl_access(base), rel);
+    NSLOG(wisp, DEEPDEBUG, "base: \"%s\", rel: \"%s\"", nsurl_access(base), rel);
 
     /* Peg out the URL sections */
     nsurl__get_string_markers(rel, &m, true);

@@ -20,12 +20,12 @@
 #include <string.h>
 #include <strings.h>
 
-#include <neosurf/plot_style.h>
-#include <neosurf/url_db.h>
-#include <neosurf/utils/corestrings.h>
-#include <neosurf/utils/log.h>
-#include <neosurf/utils/nsoption.h>
-#include <neosurf/utils/nsurl.h>
+#include <wisp/plot_style.h>
+#include <wisp/url_db.h>
+#include <wisp/utils/corestrings.h>
+#include <wisp/utils/log.h>
+#include <wisp/utils/nsoption.h>
+#include <wisp/utils/nsurl.h>
 #include "desktop/system_colour.h"
 
 #include "content/handlers/css/hints.h"
@@ -118,7 +118,7 @@ static css_select_handler selection_handler = {
 static css_error nscss_error_handler(void *pw, css_stylesheet *sheet, css_error error, const char *msg)
 {
     fprintf(stderr, "DEBUG: select.c nscss_error_handler called! Msg: %s, Code: %d\n", msg ? msg : "null", error);
-    NSLOG(netsurf, ERROR, "LibCSS Error: %s (Code: %d)", msg, error);
+    NSLOG(wisp, ERROR, "LibCSS Error: %s (Code: %d)", msg, error);
     return CSS_OK;
 }
 
@@ -159,20 +159,20 @@ nscss_create_inline_style(const uint8_t *data, size_t len, const char *charset, 
 
     error = css_stylesheet_create(&params, &sheet);
     if (error != CSS_OK) {
-        NSLOG(neosurf, ERROR, "Failed creating sheet: %d", error);
+        NSLOG(wisp, ERROR, "Failed creating sheet: %d", error);
         return NULL;
     }
 
     error = css_stylesheet_append_data(sheet, data, len);
     if (error != CSS_OK && error != CSS_NEEDDATA) {
-        NSLOG(neosurf, ERROR, "failed appending data: %d", error);
+        NSLOG(wisp, ERROR, "failed appending data: %d", error);
         css_stylesheet_destroy(sheet);
         return NULL;
     }
 
     error = css_stylesheet_data_done(sheet);
     if (error != CSS_OK) {
-        NSLOG(neosurf, ERROR, "failed completing parse: %d", error);
+        NSLOG(wisp, ERROR, "failed completing parse: %d", error);
         css_stylesheet_destroy(sheet);
         return NULL;
     }
@@ -194,13 +194,13 @@ static void nscss_dom_user_data_handler(
     case DOM_NODE_CLONED:
         error = css_libcss_node_data_handler(&selection_handler, CSS_NODE_CLONED, NULL, src, dst, data);
         if (error != CSS_OK)
-            NSLOG(neosurf, INFO, "Failed to clone libcss_node_data.");
+            NSLOG(wisp, INFO, "Failed to clone libcss_node_data.");
         break;
 
     case DOM_NODE_RENAMED:
         error = css_libcss_node_data_handler(&selection_handler, CSS_NODE_MODIFIED, NULL, src, NULL, data);
         if (error != CSS_OK)
-            NSLOG(neosurf, INFO, "Failed to update libcss_node_data.");
+            NSLOG(wisp, INFO, "Failed to update libcss_node_data.");
         break;
 
     case DOM_NODE_IMPORTED:
@@ -208,11 +208,11 @@ static void nscss_dom_user_data_handler(
     case DOM_NODE_DELETED:
         error = css_libcss_node_data_handler(&selection_handler, CSS_NODE_DELETED, NULL, src, NULL, data);
         if (error != CSS_OK)
-            NSLOG(neosurf, INFO, "Failed to delete libcss_node_data.");
+            NSLOG(wisp, INFO, "Failed to delete libcss_node_data.");
         break;
 
     default:
-        NSLOG(neosurf, INFO, "User data operation not handled.");
+        NSLOG(wisp, INFO, "User data operation not handled.");
         assert(0);
     }
 }

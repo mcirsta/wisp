@@ -21,8 +21,8 @@
  * about scheme query handlers support interface
  */
 
-#ifndef NETSURF_CONTENT_FETCHERS_ABOUT_QUERY_H
-#define NETSURF_CONTENT_FETCHERS_ABOUT_QUERY_H
+#ifndef WISP_CONTENT_FETCHERS_ABOUT_QUERY_H
+#define WISP_CONTENT_FETCHERS_ABOUT_QUERY_H
 
 /**
  * generate a generic query description

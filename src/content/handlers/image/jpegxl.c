@@ -39,7 +39,7 @@
 #include "content/llcache.h"
 #include "desktop/bitmap.h"
 #include "desktop/gui_internal.h"
-#include "neosurf/bitmap.h"
+#include "wisp/bitmap.h"
 
 #include "image/image_cache.h"
 
@@ -100,33 +100,33 @@ static struct bitmap *jpegxl_cache_convert(struct content *c)
 
     jxldec = JxlDecoderCreate(NULL);
     if (jxldec == NULL) {
-        NSLOG(netsurf, ERROR, "Unable to allocate decoder");
+        NSLOG(wisp, ERROR, "Unable to allocate decoder");
         return NULL;
     }
 
     decstatus = JxlDecoderSetUnpremultiplyAlpha(jxldec, !bitmap_fmt.pma);
     if (decstatus != JXL_DEC_SUCCESS) {
-        NSLOG(netsurf, ERROR, "unable to set premultiplied alpha status: %d", decstatus);
+        NSLOG(wisp, ERROR, "unable to set premultiplied alpha status: %d", decstatus);
         JxlDecoderDestroy(jxldec);
         return NULL;
     }
 
     decstatus = JxlDecoderSubscribeEvents(jxldec, JXL_DEC_FULL_IMAGE);
     if (decstatus != JXL_DEC_SUCCESS) {
-        NSLOG(netsurf, ERROR, "Unable to subscribe");
+        NSLOG(wisp, ERROR, "Unable to subscribe");
         return NULL;
     }
     src_data = content__get_source_data(c, &src_size);
 
     decstatus = JxlDecoderSetInput(jxldec, src_data, src_size);
     if (decstatus != JXL_DEC_SUCCESS) {
-        NSLOG(netsurf, ERROR, "unable to set input");
+        NSLOG(wisp, ERROR, "unable to set input");
         return NULL;
     }
 
     decstatus = JxlDecoderProcessInput(jxldec);
     if (decstatus != JXL_DEC_NEED_IMAGE_OUT_BUFFER) {
-        NSLOG(netsurf, ERROR, "expected status JXL_DEC_NEED_IMAGE_OUT_BUFFER(%d) got %d", JXL_DEC_NEED_IMAGE_OUT_BUFFER,
+        NSLOG(wisp, ERROR, "expected status JXL_DEC_NEED_IMAGE_OUT_BUFFER(%d) got %d", JXL_DEC_NEED_IMAGE_OUT_BUFFER,
             decstatus);
         JxlDecoderDestroy(jxldec);
         return NULL;
@@ -134,7 +134,7 @@ static struct bitmap *jpegxl_cache_convert(struct content *c)
 
     decstatus = JxlDecoderGetBasicInfo(jxldec, &binfo);
     if (decstatus != JXL_DEC_SUCCESS) {
-        NSLOG(netsurf, ERROR, "unable to get basic info status:%d", decstatus);
+        NSLOG(wisp, ERROR, "unable to get basic info status:%d", decstatus);
         JxlDecoderDestroy(jxldec);
         return NULL;
     }
@@ -161,7 +161,7 @@ static struct bitmap *jpegxl_cache_convert(struct content *c)
     }
     decstatus = JxlDecoderSetImageOutBuffer(jxldec, &jxl_output_format, output, c->size);
     if (decstatus != JXL_DEC_SUCCESS) {
-        NSLOG(netsurf, ERROR, "unable to set output buffer callback status:%d", decstatus);
+        NSLOG(wisp, ERROR, "unable to set output buffer callback status:%d", decstatus);
         guit->bitmap->destroy(bitmap);
         JxlDecoderDestroy(jxldec);
         return NULL;
@@ -169,7 +169,7 @@ static struct bitmap *jpegxl_cache_convert(struct content *c)
 
     decstatus = JxlDecoderProcessInput(jxldec);
     if (decstatus != JXL_DEC_FULL_IMAGE) {
-        NSLOG(netsurf, ERROR, "did not get decode event");
+        NSLOG(wisp, ERROR, "did not get decode event");
         guit->bitmap->destroy(bitmap);
         JxlDecoderDestroy(jxldec);
         return NULL;
@@ -189,7 +189,7 @@ static struct bitmap *jpegxl_cache_convert(struct content *c)
 static bool jxl_report_fail(struct content *c, JxlDecoderStatus decstatus, const char *msg)
 {
     union content_msg_data msg_data;
-    NSLOG(netsurf, ERROR, "%s decoder status:%d", msg, decstatus);
+    NSLOG(wisp, ERROR, "%s decoder status:%d", msg, decstatus);
     msg_data.errordata.errorcode = NSERROR_UNKNOWN;
     msg_data.errordata.errormsg = msg;
     content_broadcast(c, CONTENT_MSG_ERROR, &msg_data);
@@ -216,7 +216,7 @@ static bool nsjpegxl_convert(struct content *c)
 
     decsig = JxlSignatureCheck(data, size);
     if ((decsig != JXL_SIG_CODESTREAM) && (decsig != JXL_SIG_CONTAINER)) {
-        NSLOG(netsurf, ERROR, "signature failed");
+        NSLOG(wisp, ERROR, "signature failed");
         msg_data.errordata.errorcode = NSERROR_UNKNOWN;
         msg_data.errordata.errormsg = "Signature failed";
         content_broadcast(c, CONTENT_MSG_ERROR, &msg_data);
@@ -250,7 +250,7 @@ static bool nsjpegxl_convert(struct content *c)
 
     JxlDecoderDestroy(jxldec);
 
-    NSLOG(netsurf, INFO, "got basic info size:%ld x:%d y:%d", image_size, binfo.xsize, binfo.ysize);
+    NSLOG(wisp, INFO, "got basic info size:%ld x:%d y:%d", image_size, binfo.xsize, binfo.ysize);
 
     c->width = binfo.xsize;
     c->height = binfo.ysize;

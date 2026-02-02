@@ -19,7 +19,7 @@ add_library(svgtiny STATIC
     src/svgtiny_path.c
 )
 set_property(TARGET svgtiny PROPERTY POSITION_INDEPENDENT_CODE ON)
-set_target_properties(svgtiny PROPERTIES SOVERSION ${NEOSURF_ABI})
+set_target_properties(svgtiny PROPERTIES SOVERSION ${WISP_ABI})
 
 add_dependencies(svgtiny svgtiny_autogen)
 

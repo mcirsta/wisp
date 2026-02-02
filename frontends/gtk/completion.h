@@ -21,8 +21,8 @@
  * Interface to url entry completion.
  */
 
-#ifndef _NETSURF_GTK_COMPLETION_H_
-#define _NETSURF_GTK_COMPLETION_H_
+#ifndef _WISP_GTK_COMPLETION_H_
+#define _WISP_GTK_COMPLETION_H_
 
 struct nsgtk_scaffolding;
 

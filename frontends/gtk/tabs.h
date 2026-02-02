@@ -16,8 +16,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef NETSURF_GTK_TABS_H_
-#define NETSURF_GTK_TABS_H_
+#ifndef WISP_GTK_TABS_H_
+#define WISP_GTK_TABS_H_
 
 struct gui_window;
 

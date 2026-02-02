@@ -29,15 +29,15 @@
 
 #include <svgtiny.h>
 
-#include <neosurf/content.h>
-#include <neosurf/content/content_protected.h>
-#include <neosurf/desktop/gui_internal.h>
-#include <neosurf/layout.h>
-#include <neosurf/plotters.h>
-#include <neosurf/utils/log.h>
-#include <neosurf/utils/messages.h>
-#include <neosurf/utils/nsurl.h>
-#include <neosurf/utils/utils.h>
+#include <wisp/content.h>
+#include <wisp/content/content_protected.h>
+#include <wisp/desktop/gui_internal.h>
+#include <wisp/layout.h>
+#include <wisp/plotters.h>
+#include <wisp/utils/log.h>
+#include <wisp/utils/messages.h>
+#include <wisp/utils/nsurl.h>
+#include <wisp/utils/utils.h>
 #include "content/content_factory.h"
 
 #include "content/handlers/image/svg.h"
@@ -182,21 +182,21 @@ static nserror svg_plot_dashed_line_as_rects(const struct redraw_context *ctx, c
 static nserror svg_plot_gradient_fill(const struct redraw_context *ctx, const struct svgtiny_shape *shape,
     const float *path, unsigned int path_len, const struct rect *bbox, float sx, float sy, const float transform[6])
 {
-#ifdef NEOSURF_USE_NATIVE_GRADIENTS
+#ifdef WISP_USE_NATIVE_GRADIENTS
     if (shape->fill_gradient_type == svgtiny_GRADIENT_NONE) {
         return NSERROR_OK;
     }
 
-    NSLOG(neosurf, DEEPDEBUG, "SVG gradient: Using NATIVE rendering path for %s gradient",
+    NSLOG(wisp, DEEPDEBUG, "SVG gradient: Using NATIVE rendering path for %s gradient",
         shape->fill_gradient_type == svgtiny_GRADIENT_LINEAR ? "linear" : "radial");
 
     if (ctx->plot->linear_gradient == NULL && shape->fill_gradient_type == svgtiny_GRADIENT_LINEAR) {
-        NSLOG(neosurf, WARNING, "SVG gradient: Native linear_gradient plotter is NULL!");
+        NSLOG(wisp, WARNING, "SVG gradient: Native linear_gradient plotter is NULL!");
         return NSERROR_NOT_IMPLEMENTED;
     }
 
     if (ctx->plot->radial_gradient == NULL && shape->fill_gradient_type == svgtiny_GRADIENT_RADIAL) {
-        NSLOG(neosurf, WARNING, "SVG gradient: Native radial_gradient plotter is NULL!");
+        NSLOG(wisp, WARNING, "SVG gradient: Native radial_gradient plotter is NULL!");
         return NSERROR_NOT_IMPLEMENTED;
     }
 
@@ -228,7 +228,7 @@ static nserror svg_plot_gradient_fill(const struct redraw_context *ctx, const st
 
     nserror err;
     if (shape->fill_gradient_type == svgtiny_GRADIENT_LINEAR) {
-        NSLOG(neosurf, DEEPDEBUG,
+        NSLOG(wisp, DEEPDEBUG,
             "SVG gradient: Calling native linear plotter (%.1f,%.1f) to (%.1f,%.1f) with %u stops, path_len=%u", gx1,
             gy1, gx2, gy2, shape->fill_grad_stop_count, path_len);
         err = ctx->plot->linear_gradient(
@@ -240,7 +240,7 @@ static nserror svg_plot_gradient_fill(const struct redraw_context *ctx, const st
         float cy = shape->fill_grad_y1 * sy;
         float rx = shape->fill_grad_x2 * sx;
         float ry = shape->fill_grad_y2 * sy;
-        NSLOG(neosurf, DEEPDEBUG,
+        NSLOG(wisp, DEEPDEBUG,
             "SVG gradient: Calling native radial plotter (%.1f,%.1f) rx=%.1f ry=%.1f with %u stops, path_len=%u", cx,
             cy, rx, ry, shape->fill_grad_stop_count, path_len);
         err = ctx->plot->radial_gradient(
@@ -248,14 +248,14 @@ static nserror svg_plot_gradient_fill(const struct redraw_context *ctx, const st
     }
 
     if (err == NSERROR_OK) {
-        NSLOG(neosurf, DEEPDEBUG, "SVG gradient: Native plotter succeeded");
+        NSLOG(wisp, DEEPDEBUG, "SVG gradient: Native plotter succeeded");
     } else {
-        NSLOG(neosurf, WARNING, "SVG gradient: Native plotter FAILED with error %d", err);
+        NSLOG(wisp, WARNING, "SVG gradient: Native plotter FAILED with error %d", err);
     }
 
     return err;
 #else
-    NSLOG(neosurf, DEEPDEBUG, "SVG gradient: Native gradients DISABLED at compile time, using fallback");
+    NSLOG(wisp, DEEPDEBUG, "SVG gradient: Native gradients DISABLED at compile time, using fallback");
     /* Native gradients disabled - nothing to do (triangle fallback not implemented here) */
     (void)ctx;
     (void)shape;
@@ -359,7 +359,7 @@ static nserror svg_plot_path_chunked(const struct redraw_context *ctx, const plo
         }
         unsigned int sp_end = pos;
         unsigned int sp_len = sp_end - sp_start;
-        NSLOG(neosurf, INFO, "SVG subpath parsed: sp_len=%u sbbox=%.2f,%.2f..%.2f,%.2f", sp_len, sb_minx, sb_miny,
+        NSLOG(wisp, INFO, "SVG subpath parsed: sp_len=%u sbbox=%.2f,%.2f..%.2f,%.2f", sp_len, sb_minx, sb_miny,
             sb_maxx, sb_maxy);
 
         if (grp_len == 0) {
@@ -375,16 +375,16 @@ static nserror svg_plot_path_chunked(const struct redraw_context *ctx, const plo
         }
 
         int overlap = (sb_maxx >= gb_minx && sb_minx <= gb_maxx && sb_maxy >= gb_miny && sb_miny <= gb_maxy);
-        NSLOG(neosurf, INFO,
+        NSLOG(wisp, INFO,
             "SVG group decision: grp_len=%u grp_moves=%u sb_len=%u gbbox=%.2f,%.2f..%.2f,%.2f sbbox=%.2f,%.2f..%.2f,%.2f overlap=%d next_total=%u limit=%u",
             grp_len, grp_moves, sp_len, gb_minx, gb_miny, gb_maxx, gb_maxy, sb_minx, sb_miny, sb_maxx, sb_maxy, overlap,
             grp_len + sp_len, SVG_COMBO_FLUSH_LIMIT);
         if (!overlap || grp_len + sp_len > SVG_COMBO_FLUSH_LIMIT) {
-            NSLOG(neosurf, INFO, "SVG chunk flush: len=%u moves=%u reason=%s", grp_len, grp_moves,
+            NSLOG(wisp, INFO, "SVG chunk flush: len=%u moves=%u reason=%s", grp_len, grp_moves,
                 (!overlap ? "disjoint" : "limit"));
             nserror rr = ctx->plot->path(ctx, style, p + grp_start, grp_len, transform);
             if (rr != NSERROR_OK) {
-                NSLOG(neosurf, ERROR, "SVG chunk flush failed: len=%u err=%d; splitting fallback", grp_len, rr);
+                NSLOG(wisp, ERROR, "SVG chunk flush failed: len=%u err=%d; splitting fallback", grp_len, rr);
                 unsigned int pos2 = grp_start;
                 while (pos2 < grp_start + grp_len) {
                     while (pos2 < grp_start + grp_len && (int)p[pos2] != PLOTTER_PATH_MOVE)
@@ -405,10 +405,10 @@ static nserror svg_plot_path_chunked(const struct redraw_context *ctx, const plo
                             break;
                     }
                     unsigned int slen = ep - sp;
-                    NSLOG(neosurf, INFO, "SVG chunk fallback split: subpath_len=%u", slen);
+                    NSLOG(wisp, INFO, "SVG chunk fallback split: subpath_len=%u", slen);
                     nserror rr2 = ctx->plot->path(ctx, style, p + sp, slen, transform);
                     if (rr2 != NSERROR_OK) {
-                        NSLOG(neosurf, ERROR, "SVG fallback subpath failed: len=%u err=%d", slen, rr2);
+                        NSLOG(wisp, ERROR, "SVG fallback subpath failed: len=%u err=%d", slen, rr2);
                         r = rr2;
                     }
                     pos2 = ep;
@@ -444,10 +444,10 @@ static nserror svg_plot_path_chunked(const struct redraw_context *ctx, const plo
     }
 
     if (grp_len > 0) {
-        NSLOG(neosurf, INFO, "SVG chunk final flush: len=%u moves=%u", grp_len, grp_moves);
+        NSLOG(wisp, INFO, "SVG chunk final flush: len=%u moves=%u", grp_len, grp_moves);
         nserror rr = ctx->plot->path(ctx, style, p + grp_start, grp_len, transform);
         if (rr != NSERROR_OK) {
-            NSLOG(neosurf, ERROR, "SVG chunk final flush failed: len=%u err=%d; splitting fallback", grp_len, rr);
+            NSLOG(wisp, ERROR, "SVG chunk final flush failed: len=%u err=%d; splitting fallback", grp_len, rr);
             unsigned int pos2 = grp_start;
             while (pos2 < grp_start + grp_len) {
                 while (pos2 < grp_start + grp_len && (int)p[pos2] != PLOTTER_PATH_MOVE)
@@ -468,10 +468,10 @@ static nserror svg_plot_path_chunked(const struct redraw_context *ctx, const plo
                         break;
                 }
                 unsigned int slen = ep - sp;
-                NSLOG(neosurf, INFO, "SVG chunk fallback split: subpath_len=%u", slen);
+                NSLOG(wisp, INFO, "SVG chunk fallback split: subpath_len=%u", slen);
                 nserror rr2 = ctx->plot->path(ctx, style, p + sp, slen, transform);
                 if (rr2 != NSERROR_OK) {
-                    NSLOG(neosurf, ERROR, "SVG fallback subpath failed: len=%u err=%d", slen, rr2);
+                    NSLOG(wisp, ERROR, "SVG fallback subpath failed: len=%u err=%d", slen, rr2);
                     r = rr2;
                 }
                 pos2 = ep;
@@ -589,14 +589,14 @@ static void svg_reformat(struct content *c, int width, int height)
      * Intrinsic dimensions are already available from svg_convert via
      * svgtiny_parse_dimensions(), so we just wait for a call with real dimensions. */
     if (width <= 0 || height <= 0) {
-        NSLOG(neosurf, DEBUG, "SVG reformat skipped: dimensions unknown (0x0)");
+        NSLOG(wisp, DEBUG, "SVG reformat skipped: dimensions unknown (0x0)");
         return;
     }
 
     /* Parse the SVG at the viewport dimensions.
      * libsvgtiny bakes the CTM into shape coordinates and stroke widths,
      * so we need to parse at the actual display size for correct scaling. */
-    NSLOG(neosurf, DEBUG, "SVG parsing with viewport: %dx%d", width, height);
+    NSLOG(wisp, DEBUG, "SVG parsing with viewport: %dx%d", width, height);
     source_data = content__get_source_data(c, &source_size);
 
     svgtiny_parse(
@@ -630,7 +630,7 @@ static bool svg_redraw_internal(svg_content *svg, int x, int y, int width, int h
 
     float sx = (float)width / (float)svg->base.width;
     float sy = (float)height / (float)svg->base.height;
-    NSLOG(neosurf, WARNING, "SVG redraw: display=%dx%d intrinsic=%dx%d sx=%.3f sy=%.3f", width, height, svg->base.width,
+    NSLOG(wisp, WARNING, "SVG redraw: display=%dx%d intrinsic=%dx%d sx=%.3f sy=%.3f", width, height, svg->base.width,
         svg->base.height, sx, sy);
     transform[0] = 1.0f;
     transform[1] = 0.0f;
@@ -639,8 +639,8 @@ static bool svg_redraw_internal(svg_content *svg, int x, int y, int width, int h
     transform[4] = x;
     transform[5] = y;
 
-    NSLOG(neosurf, DEBUG, "PROFILER: START SVG rendering %p", svg);
-    NSLOG(neosurf, INFO, "SVG redraw start: url=%s clip=%d,%d..%d,%d limit=%u", url_str, clip->x0, clip->y0, clip->x1,
+    NSLOG(wisp, DEBUG, "PROFILER: START SVG rendering %p", svg);
+    NSLOG(wisp, INFO, "SVG redraw start: url=%s clip=%d,%d..%d,%d limit=%u", url_str, clip->x0, clip->y0, clip->x1,
         clip->y1, SVG_COMBO_FLUSH_LIMIT);
 
 #define BGR(c) (((svgtiny_RED((c))) | (svgtiny_GREEN((c)) << 8) | (svgtiny_BLUE((c)) << 16)))
@@ -666,7 +666,7 @@ static bool svg_redraw_internal(svg_content *svg, int x, int y, int width, int h
 
     for (i = 0; i != diagram->shape_count; i++) {
         if (diagram->shape[i].path) {
-            NSLOG(neosurf, WARNING, "SVG shape[%u/%u]: fill=0x%x stroke=0x%x stroke_width=%d dasharray=%s", i,
+            NSLOG(wisp, WARNING, "SVG shape[%u/%u]: fill=0x%x stroke=0x%x stroke_width=%d dasharray=%s", i,
                 diagram->shape_count, (unsigned)diagram->shape[i].fill, (unsigned)diagram->shape[i].stroke,
                 diagram->shape[i].stroke_width, diagram->shape[i].stroke_dasharray_set ? "yes" : "no");
             /* stroke style */
@@ -699,7 +699,7 @@ static bool svg_redraw_internal(svg_content *svg, int x, int y, int width, int h
                 for (unsigned int d = 0; d < diagram->shape[i].stroke_dasharray_count; d++) {
                     scaled_dasharray[d] = diagram->shape[i].stroke_dasharray[d] * stroke_scale;
                 }
-                NSLOG(neosurf, WARNING, "svg.c dasharray: raw=[%.1f,%.1f] stroke_scale=%.3f scaled=[%.1f,%.1f]",
+                NSLOG(wisp, WARNING, "svg.c dasharray: raw=[%.1f,%.1f] stroke_scale=%.3f scaled=[%.1f,%.1f]",
                     diagram->shape[i].stroke_dasharray[0],
                     diagram->shape[i].stroke_dasharray_count > 1 ? diagram->shape[i].stroke_dasharray[1] : 0,
                     stroke_scale, scaled_dasharray[0],
@@ -812,13 +812,13 @@ static bool svg_redraw_internal(svg_content *svg, int x, int y, int width, int h
                 int ty = (int)floorf(miny) + y;
                 int by = (int)ceilf(maxy) + y;
                 if (!(rx < clip->x0 || lx >= clip->x1 || by < clip->y0 || ty >= clip->y1)) {
-                    NSLOG(neosurf, INFO, "SVG path begin: url=%s index=%u orig_len=%u scaled_len=%u bbox=%d,%d..%d,%d",
+                    NSLOG(wisp, INFO, "SVG path begin: url=%s index=%u orig_len=%u scaled_len=%u bbox=%d,%d..%d,%d",
                         url_str, i, diagram->shape[i].path_length, k, lx, ty, rx, by);
-                    NSLOG(neosurf, DEBUG, "  SVG bbox raw: minx=%.2f miny=%.2f maxx=%.2f maxy=%.2f", minx, miny, maxx,
+                    NSLOG(wisp, DEBUG, "  SVG bbox raw: minx=%.2f miny=%.2f maxx=%.2f maxy=%.2f", minx, miny, maxx,
                         maxy);
-                    NSLOG(neosurf, DEBUG, "  SVG bbox floored: lx=%d ty=%d rx=%d by=%d (x=%d y=%d)", lx, ty, rx, by, x,
+                    NSLOG(wisp, DEBUG, "  SVG bbox floored: lx=%d ty=%d rx=%d by=%d (x=%d y=%d)", lx, ty, rx, by, x,
                         y);
-                    NSLOG(neosurf, DEBUG, "  SVG transform: [%.2f,%.2f,%.2f,%.2f,%.2f,%.2f]", transform[0],
+                    NSLOG(wisp, DEBUG, "  SVG transform: [%.2f,%.2f,%.2f,%.2f,%.2f,%.2f]", transform[0],
                         transform[1], transform[2], transform[3], transform[4], transform[5]);
 
                     /* Check for gradient fill and render it */
@@ -827,7 +827,7 @@ static bool svg_redraw_internal(svg_content *svg, int x, int y, int width, int h
                         nserror grad_err = svg_plot_gradient_fill(
                             ctx, &diagram->shape[i], scaled, k, &grad_clip, sx, sy, transform);
                         if (grad_err == NSERROR_OK) {
-                            NSLOG(neosurf, DEBUG, "SVG gradient fill rendered successfully for shape %u", i);
+                            NSLOG(wisp, DEBUG, "SVG gradient fill rendered successfully for shape %u", i);
                             /* Continue to render stroke if present */
                             if (pstyle.stroke_type != PLOT_OP_TYPE_NONE) {
                                 plot_style_t stroke_only = pstyle;
@@ -837,10 +837,10 @@ static bool svg_redraw_internal(svg_content *svg, int x, int y, int width, int h
                             continue; /* Skip normal path rendering since gradient is done */
                         }
                         /* If gradient rendering failed, fall through to normal rendering */
-                        NSLOG(neosurf, WARNING, "SVG gradient fill failed for shape %u, falling back to solid", i);
+                        NSLOG(wisp, WARNING, "SVG gradient fill failed for shape %u, falling back to solid", i);
                     }
 
-#ifdef NEOSURF_SVG_COMBO_DISABLE
+#ifdef WISP_SVG_COMBO_DISABLE
                     res = ctx->plot->path(ctx, &pstyle, scaled, k, transform);
                     if (res != NSERROR_OK) {
                         ok = false;
@@ -848,7 +848,7 @@ static bool svg_redraw_internal(svg_content *svg, int x, int y, int width, int h
                             (svgtiny_GREEN(diagram->shape[i].stroke) << 8) | (svgtiny_BLUE(diagram->shape[i].stroke));
                         int fill_rgb = (svgtiny_RED(diagram->shape[i].fill) << 16) |
                             (svgtiny_GREEN(diagram->shape[i].fill) << 8) | (svgtiny_BLUE(diagram->shape[i].fill));
-                        NSLOG(neosurf, ERROR,
+                        NSLOG(wisp, ERROR,
                             "SVG render failed: url=%s element=path index=%u path_len=%u err=%d stroke=#%06x fill=#%06x stroke_w=%d",
                             url_str, i, diagram->shape[i].path_length, res, stroke_rgb, fill_rgb,
                             diagram->shape[i].stroke_width);
@@ -884,7 +884,7 @@ static bool svg_redraw_internal(svg_content *svg, int x, int y, int width, int h
                                 (float)scaled_stroke_width, pstyle.stroke_dasharray, pstyle.stroke_dasharray_count,
                                 (float)diagram->shape[i].stroke_dashoffset, transform);
 
-                            NSLOG(neosurf, INFO, "Dashed line->rects: stroke_width=%d dasharray=[%.1f,%.1f]",
+                            NSLOG(wisp, INFO, "Dashed line->rects: stroke_width=%d dasharray=[%.1f,%.1f]",
                                 scaled_stroke_width, pstyle.stroke_dasharray[0],
                                 pstyle.stroke_dasharray_count > 1 ? pstyle.stroke_dasharray[1] : 0.0f);
                         } else {
@@ -906,11 +906,11 @@ static bool svg_redraw_internal(svg_content *svg, int x, int y, int width, int h
                         /* Flush previous combo group in
                          * chunks when style changes */
                         if (combo_active && combo_len > 0) {
-                            NSLOG(neosurf, INFO, "SVG combo style change flush: len=%u", combo_len);
+                            NSLOG(wisp, INFO, "SVG combo style change flush: len=%u", combo_len);
                             res = svg_plot_path_chunked(ctx, &combo_style, combo, combo_len, transform);
                             if (res != NSERROR_OK) {
                                 ok = false;
-                                NSLOG(neosurf, ERROR, "SVG render failed: url=%s element=path combo_flush len=%u",
+                                NSLOG(wisp, ERROR, "SVG render failed: url=%s element=path combo_flush len=%u",
                                     url_str, combo_len);
                             }
                             combo_len = 0;
@@ -921,17 +921,17 @@ static bool svg_redraw_internal(svg_content *svg, int x, int y, int width, int h
                     /* Flush combo if adding current path
                      * would exceed chunk limit */
                     if (combo_active && combo_len > 0 && combo_len + k > SVG_COMBO_FLUSH_LIMIT) {
-                        NSLOG(neosurf, INFO, "SVG combo limit flush: combo_len=%u next_len=%u", combo_len, k);
+                        NSLOG(wisp, INFO, "SVG combo limit flush: combo_len=%u next_len=%u", combo_len, k);
                         res = svg_plot_path_chunked(ctx, &combo_style, combo, combo_len, transform);
                         if (res != NSERROR_OK) {
                             ok = false;
-                            NSLOG(neosurf, ERROR, "SVG render failed: url=%s element=path combo_flush len=%u", url_str,
+                            NSLOG(wisp, ERROR, "SVG render failed: url=%s element=path combo_flush len=%u", url_str,
                                 combo_len);
                         }
                         combo_len = 0;
                     }
                     if (k > SVG_COMBO_FLUSH_LIMIT) {
-                        NSLOG(neosurf, INFO, "SVG direct chunk plot: scaled_len=%u limit=%u", k, SVG_COMBO_FLUSH_LIMIT);
+                        NSLOG(wisp, INFO, "SVG direct chunk plot: scaled_len=%u limit=%u", k, SVG_COMBO_FLUSH_LIMIT);
                         res = svg_plot_path_chunked(ctx, &pstyle, scaled, k, transform);
                         if (res != NSERROR_OK) {
                             ok = false;
@@ -940,7 +940,7 @@ static bool svg_redraw_internal(svg_content *svg, int x, int y, int width, int h
                                 (svgtiny_BLUE(diagram->shape[i].stroke));
                             int fill_rgb = (svgtiny_RED(diagram->shape[i].fill) << 16) |
                                 (svgtiny_GREEN(diagram->shape[i].fill) << 8) | (svgtiny_BLUE(diagram->shape[i].fill));
-                            NSLOG(neosurf, ERROR,
+                            NSLOG(wisp, ERROR,
                                 "SVG render failed: url=%s element=path index=%u path_len=%u scaled_len=%u err=%d stroke=#%06x fill=#%06x stroke_w=%d",
                                 url_str, i, diagram->shape[i].path_length, k, res, stroke_rgb, fill_rgb,
                                 diagram->shape[i].stroke_width);
@@ -967,11 +967,11 @@ static bool svg_redraw_internal(svg_content *svg, int x, int y, int width, int h
                     /* Periodic chunked flush to keep combo
                      * buffer bounded */
                     if (combo_len >= SVG_COMBO_FLUSH_LIMIT) {
-                        NSLOG(neosurf, INFO, "SVG periodic combo flush: len=%u", combo_len);
+                        NSLOG(wisp, INFO, "SVG periodic combo flush: len=%u", combo_len);
                         res = svg_plot_path_chunked(ctx, &combo_style, combo, combo_len, transform);
                         if (res != NSERROR_OK) {
                             ok = false;
-                            NSLOG(neosurf, ERROR, "SVG render failed: url=%s element=path combo_flush len=%u", url_str,
+                            NSLOG(wisp, ERROR, "SVG render failed: url=%s element=path combo_flush len=%u", url_str,
                                 combo_len);
                         }
                         combo_len = 0;
@@ -986,7 +986,7 @@ static bool svg_redraw_internal(svg_content *svg, int x, int y, int width, int h
                 res = svg_plot_path_chunked(ctx, &combo_style, combo, combo_len, transform);
                 if (res != NSERROR_OK) {
                     ok = false;
-                    NSLOG(neosurf, ERROR, "SVG render failed: url=%s element=text combo_flush", url_str);
+                    NSLOG(wisp, ERROR, "SVG render failed: url=%s element=text combo_flush", url_str);
                 }
                 combo_len = 0;
                 combo_active = 0;
@@ -1048,7 +1048,7 @@ static bool svg_redraw_internal(svg_content *svg, int x, int y, int width, int h
             res = ctx->plot->text(ctx, &fstyle, px, py, diagram->shape[i].text, strlen(diagram->shape[i].text));
             if (res != NSERROR_OK) {
                 ok = false;
-                NSLOG(neosurf, ERROR, "SVG render failed: url=%s element=text index=%u pos=%d,%d text='%s'", url_str, i,
+                NSLOG(wisp, ERROR, "SVG render failed: url=%s element=text index=%u pos=%d,%d text='%s'", url_str, i,
                     px, py, diagram->shape[i].text);
             }
         }
@@ -1057,18 +1057,18 @@ static bool svg_redraw_internal(svg_content *svg, int x, int y, int width, int h
 #undef BGR
     /* Final chunked flush of any remaining combined paths */
     if (combo_active && combo_len > 0) {
-        NSLOG(neosurf, INFO, "SVG final combo flush: len=%u", combo_len);
+        NSLOG(wisp, INFO, "SVG final combo flush: len=%u", combo_len);
         res = svg_plot_path_chunked(ctx, &combo_style, combo, combo_len, transform);
         if (res != NSERROR_OK) {
             ok = false;
-            NSLOG(neosurf, ERROR, "SVG render failed: url=%s element=path final_flush len=%u", url_str, combo_len);
+            NSLOG(wisp, ERROR, "SVG render failed: url=%s element=path final_flush len=%u", url_str, combo_len);
         }
     }
     if (scaled)
         free(scaled);
     if (combo)
         free(combo);
-    NSLOG(neosurf, DEBUG, "PROFILER: STOP SVG rendering %p", svg);
+    NSLOG(wisp, DEBUG, "PROFILER: STOP SVG rendering %p", svg);
     return ok;
 }
 

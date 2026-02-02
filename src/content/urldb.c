@@ -96,21 +96,21 @@
 #include <strings.h>
 #include <time.h>
 
-#include <neosurf/desktop/cookie_manager.h>
-#include <neosurf/utils/ascii.h>
-#include <neosurf/utils/corestrings.h>
-#include <neosurf/utils/inet.h>
-#include <neosurf/utils/log.h>
-#include <neosurf/utils/nsoption.h>
-#include <neosurf/utils/nsurl.h>
-#include <neosurf/utils/utils.h>
+#include <wisp/desktop/cookie_manager.h>
+#include <wisp/utils/ascii.h>
+#include <wisp/utils/corestrings.h>
+#include <wisp/utils/inet.h>
+#include <wisp/utils/log.h>
+#include <wisp/utils/nsoption.h>
+#include <wisp/utils/nsurl.h>
+#include <wisp/utils/utils.h>
 #include "utils/bloom.h"
 #include "utils/http.h"
 #include "utils/time.h"
 #include "utils/url.h"
-#include "neosurf/bitmap.h"
+#include "wisp/bitmap.h"
 
-#include <neosurf/content/content.h>
+#include <wisp/content/content.h>
 #include "content/urldb.h"
 
 /**
@@ -656,7 +656,7 @@ static bool urldb__host_is_ip_address(const char *host)
         c[slash - host] = '\0';
         sane_host = c;
         host_len = slash - host;
-        NSLOG(neosurf, INFO, "WARNING: called with non-host '%s'", host);
+        NSLOG(wisp, INFO, "WARNING: called with non-host '%s'", host);
     }
 
     if (strspn(sane_host, "0123456789abcdefABCDEF[].:") < host_len)
@@ -1246,7 +1246,7 @@ urldb_match_path(const struct path_data *parent, const char *path, lwc_string *s
     assert(parent->segment == NULL);
 
     if (path[0] != '/') {
-        NSLOG(neosurf, INFO, "path is %s", path);
+        NSLOG(wisp, INFO, "path is %s", path);
     }
 
     assert(path[0] == '/');
@@ -1372,12 +1372,12 @@ static void urldb_dump_paths(struct path_data *parent)
 
     do {
         if (p->segment != NULL) {
-            NSLOG(neosurf, INFO, "\t%s : %u", lwc_string_data(p->scheme), p->port);
+            NSLOG(wisp, INFO, "\t%s : %u", lwc_string_data(p->scheme), p->port);
 
-            NSLOG(neosurf, INFO, "\t\t'%s'", p->segment);
+            NSLOG(wisp, INFO, "\t\t'%s'", p->segment);
 
             for (i = 0; i != p->frag_cnt; i++) {
-                NSLOG(neosurf, INFO, "\t\t\t#%s", p->fragment[i]);
+                NSLOG(wisp, INFO, "\t\t\t#%s", p->fragment[i]);
             }
         }
 
@@ -1407,9 +1407,9 @@ static void urldb_dump_hosts(struct host_part *parent)
     struct host_part *h;
 
     if (parent->part) {
-        NSLOG(neosurf, INFO, "%s", parent->part);
+        NSLOG(wisp, INFO, "%s", parent->part);
 
-        NSLOG(neosurf, INFO, "\t%s invalid SSL certs", parent->permit_invalid_certs ? "Permits" : "Denies");
+        NSLOG(wisp, INFO, "\t%s invalid SSL certs", parent->permit_invalid_certs ? "Permits" : "Denies");
     }
 
     /* Dump path data */
@@ -1464,7 +1464,7 @@ static void urldb_dump_search(struct search_node *parent, int depth)
     }
     s[i] = 0;
 
-    NSLOG(neosurf, INFO, "%s", s);
+    NSLOG(wisp, INFO, "%s", s);
 
     urldb_dump_search(parent->right, depth + 1);
 }
@@ -2711,7 +2711,7 @@ nserror urldb_init(void)
     psl_ctx = psl_latest(NULL);
 
     if (psl_ctx == NULL) {
-        NSLOG(neosurf, INFO, "Failed to initialise PSL library.");
+        NSLOG(wisp, INFO, "Failed to initialise PSL library.");
         return NSERROR_INIT_FAILED;
     }
 
@@ -2768,14 +2768,14 @@ nserror urldb_load(const char *filename)
 
     assert(filename);
 
-    NSLOG(neosurf, INFO, "Loading URL file %s", filename);
+    NSLOG(wisp, INFO, "Loading URL file %s", filename);
 
     if (url_bloom == NULL)
         url_bloom = bloom_create(BLOOM_SIZE);
 
     fp = fopen(filename, "r");
     if (!fp) {
-        NSLOG(neosurf, INFO, "Failed to open file '%s' for reading", filename);
+        NSLOG(wisp, INFO, "Failed to open file '%s' for reading", filename);
         return NSERROR_NOT_FOUND;
     }
 
@@ -2786,12 +2786,12 @@ nserror urldb_load(const char *filename)
 
     version = atoi(s);
     if (version < MIN_URL_FILE_VERSION) {
-        NSLOG(neosurf, INFO, "Unsupported URL file version.");
+        NSLOG(wisp, INFO, "Unsupported URL file version.");
         fclose(fp);
         return NSERROR_INVALID;
     }
     if (version > URL_FILE_VERSION) {
-        NSLOG(neosurf, INFO, "Unknown URL file version.");
+        NSLOG(wisp, INFO, "Unknown URL file version.");
         fclose(fp);
         return NSERROR_INVALID;
     }
@@ -2835,7 +2835,7 @@ nserror urldb_load(const char *filename)
 
         h = urldb_add_host(host);
         if (!h) {
-            NSLOG(neosurf, INFO, "Failed adding host: '%s'", host);
+            NSLOG(wisp, INFO, "Failed adding host: '%s'", host);
             fclose(fp);
             return NSERROR_NOMEM;
         }
@@ -2849,7 +2849,7 @@ nserror urldb_load(const char *filename)
 
         /* no URLs => try next host */
         if (urls == 0) {
-            NSLOG(neosurf, INFO, "No URLs for '%s'", host);
+            NSLOG(wisp, INFO, "No URLs for '%s'", host);
             continue;
         }
 
@@ -2894,7 +2894,7 @@ nserror urldb_load(const char *filename)
              *       Need a nsurl_save too.
              */
             if (nsurl_create(url, &nsurl) != NSERROR_OK) {
-                NSLOG(neosurf, INFO, "Failed inserting '%s'", url);
+                NSLOG(wisp, INFO, "Failed inserting '%s'", url);
                 fclose(fp);
                 return NSERROR_NOMEM;
             }
@@ -2906,7 +2906,7 @@ nserror urldb_load(const char *filename)
 
             /* Copy and merge path/query strings */
             if (nsurl_get(nsurl, NSURL_PATH | NSURL_QUERY, &path_query, &len) != NSERROR_OK) {
-                NSLOG(neosurf, INFO, "Failed inserting '%s'", url);
+                NSLOG(wisp, INFO, "Failed inserting '%s'", url);
                 fclose(fp);
                 return NSERROR_NOMEM;
             }
@@ -2915,7 +2915,7 @@ nserror urldb_load(const char *filename)
             fragment_lwc = nsurl_get_component(nsurl, NSURL_FRAGMENT);
             p = urldb_add_path(scheme_lwc, port, h, path_query, fragment_lwc, nsurl);
             if (!p) {
-                NSLOG(neosurf, INFO, "Failed inserting '%s'", url);
+                NSLOG(wisp, INFO, "Failed inserting '%s'", url);
                 fclose(fp);
                 return NSERROR_NOMEM;
             }
@@ -2959,7 +2959,7 @@ nserror urldb_load(const char *filename)
     }
 
     fclose(fp);
-    NSLOG(neosurf, INFO, "Successfully loaded URL file");
+    NSLOG(wisp, INFO, "Successfully loaded URL file");
 #undef MAXIMUM_URL_LENGTH
 
     return NSERROR_OK;
@@ -2975,7 +2975,7 @@ nserror urldb_save(const char *filename)
 
     fp = fopen(filename, "w");
     if (!fp) {
-        NSLOG(neosurf, INFO, "Failed to open file '%s' for writing", filename);
+        NSLOG(wisp, INFO, "Failed to open file '%s' for writing", filename);
         return NSERROR_SAVE_FAILED;
     }
 
@@ -3755,7 +3755,7 @@ bool urldb_set_cookie(const char *header, nsurl *url, nsurl *referer)
             dot++;
         }
         if (psl_ctx && psl_is_public_suffix(psl_ctx, dot)) {
-            NSLOG(netsurf, INFO, "domain %s was a public suffix domain", dot);
+            NSLOG(wisp, INFO, "domain %s was a public suffix domain", dot);
             urldb_free_cookie(c);
             goto error;
         }
@@ -4132,7 +4132,7 @@ void urldb_load_cookies(const char *filename)
         for (; *p && *p != '\t'; p++)                                                                                  \
             ; /* do nothing */                                                                                         \
         if (p >= end) {                                                                                                \
-            NSLOG(neosurf, INFO, "Overran input");                                                                     \
+            NSLOG(wisp, INFO, "Overran input");                                                                     \
             continue;                                                                                                  \
         }                                                                                                              \
         *p++ = '\0';                                                                                                   \
@@ -4143,7 +4143,7 @@ void urldb_load_cookies(const char *filename)
         for (; *p && *p == '\t'; p++)                                                                                  \
             ; /* do nothing */                                                                                         \
         if (p >= end) {                                                                                                \
-            NSLOG(neosurf, INFO, "Overran input");                                                                     \
+            NSLOG(wisp, INFO, "Overran input");                                                                     \
             continue;                                                                                                  \
         }                                                                                                              \
     }
@@ -4170,7 +4170,7 @@ void urldb_load_cookies(const char *filename)
             loaded_cookie_file_version = atoi(p);
 
             if (loaded_cookie_file_version < MIN_COOKIE_FILE_VERSION) {
-                NSLOG(neosurf, INFO, "Unsupported Cookie file version");
+                NSLOG(wisp, INFO, "Unsupported Cookie file version");
                 break;
             }
 
@@ -4321,7 +4321,7 @@ void urldb_save_cookies(const char *filename)
         return;
 
     fprintf(fp,
-        "# NetSurf cookies file.\n"
+        "# Wisp cookies file.\n"
         "#\n"
         "# Lines starting with a '#' are comments, "
         "blank lines are ignored.\n"

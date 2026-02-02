@@ -22,22 +22,22 @@
  * Version information interface.
  */
 
-#ifndef _NETSURF_DESKTOP_VERSION_H_
-#define _NETSURF_DESKTOP_VERSION_H_
+#ifndef _WISP_DESKTOP_VERSION_H_
+#define _WISP_DESKTOP_VERSION_H_
 
 /**
  * User friendly version string.
  */
-extern const char *const netsurf_version;
+extern const char *const wisp_version;
 
 /**
  * NetSuf browser major version number.
  */
-extern const int netsurf_version_major;
+extern const int wisp_version_major;
 
 /**
  * NetSuf browser minor version number.
  */
-extern const int netsurf_version_minor;
+extern const int wisp_version_minor;
 
 #endif

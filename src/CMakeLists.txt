@@ -6,12 +6,12 @@ include_directories(
 	"${CMAKE_BINARY_DIR}"
 )
 
-if(NEOSURF_USE_JPEG)
+if(WISP_USE_JPEG)
 	pkg_check_modules(LIBJPEG REQUIRED libjpeg)
 	include_directories(${LIBJPEG_INCLUDE_DIRS})
 endif()
 
-if(NEOSURF_USE_PNG)
+if(WISP_USE_PNG)
     pkg_check_modules(LIBPNG REQUIRED libpng)
     include_directories(${LIBPNG_INCLUDE_DIRS})
 endif()
@@ -29,12 +29,12 @@ include_directories(${LIBPSL_INCLUDE_DIRS})
 pkg_check_modules(LIBUTF8PROC REQUIRED libutf8proc)
 include_directories(${LIBUTF8PROC_INCLUDE_DIRS})
 
-if(NEOSURF_USE_WEBP)
+if(WISP_USE_WEBP)
     pkg_check_modules(LIBWEBP REQUIRED libwebp)
     include_directories(${LIBWEBP_INCLUDE_DIRS})
 endif()
 
-if(NEOSURF_USE_RSVG)
+if(WISP_USE_RSVG)
     pkg_check_modules(LIBRSVG REQUIRED librsvg-2.0)
     include_directories(${LIBRSVG_INCLUDE_DIRS})
     pkg_check_modules(CAIRO REQUIRED cairo)
@@ -62,7 +62,7 @@ string(REPLACE "." ";" LIBSSL_VERSION_STRING ${LIBSSL_VERSION})
 
 list(GET LIBSSL_VERSION_STRING 0 LIBSSL_VERSION_MAJOR)
 if(LIBSSL_VERSION_MAJOR EQUAL 1)
-message(FATAL_ERROR "NeoSurf does not support OpenSSL 1.x.x")
+message(FATAL_ERROR "Wisp does not support OpenSSL 1.x.x")
 endif()
 
 # QuickJS-ng bindings
@@ -71,12 +71,12 @@ include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/quickjs_bindings.cmake)
  
  
  
-set(NEOSURF_LIB_TYPE SHARED)
-if(NEOSURF_ENABLE_GPROF OR NEOSURF_ENABLE_FINSTRUMENT)
-    set(NEOSURF_LIB_TYPE STATIC)
+set(WISP_LIB_TYPE SHARED)
+if(WISP_ENABLE_GPROF OR WISP_ENABLE_FINSTRUMENT)
+    set(WISP_LIB_TYPE STATIC)
 endif()
 
-add_library(neosurf ${NEOSURF_LIB_TYPE}
+add_library(wisp ${WISP_LIB_TYPE}
 	content/content.c
 	content/content_factory.c
 	content/fetch.c
@@ -183,7 +183,7 @@ add_library(neosurf ${NEOSURF_LIB_TYPE}
 	desktop/browser_history.c
 	desktop/download.c
 	desktop/frames.c
-	desktop/neosurf.c
+	desktop/wisp.c
 	desktop/cw_helper.c
 	desktop/save_complete.c
 	desktop/save_text.c
@@ -226,62 +226,62 @@ add_library(neosurf ${NEOSURF_LIB_TYPE}
 	${CMAKE_BINARY_DIR}/quickjs/window.c
 )
 # QuickJS-ng dependencies
-add_dependencies(neosurf quickjs_bindings)
-set_target_properties(neosurf PROPERTIES SOVERSION ${NEOSURF_ABI})
+add_dependencies(wisp quickjs_bindings)
+set_target_properties(wisp PROPERTIES SOVERSION ${WISP_ABI})
 
-if(NEOSURF_ENABLE_GPROF)
+if(WISP_ENABLE_GPROF)
     if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
-        target_compile_options(neosurf PRIVATE -pg -g -fno-omit-frame-pointer)
+        target_compile_options(wisp PRIVATE -pg -g -fno-omit-frame-pointer)
     endif()
 endif()
 
-if(NEOSURF_ENABLE_FINSTRUMENT)
+if(WISP_ENABLE_FINSTRUMENT)
     if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
-        target_compile_options(neosurf PRIVATE -finstrument-functions -g -fno-omit-frame-pointer)
+        target_compile_options(wisp PRIVATE -finstrument-functions -g -fno-omit-frame-pointer)
     endif()
 endif()
 
-if(NEOSURF_BUILD_XXD)
+if(WISP_BUILD_XXD)
 	add_executable(xxd
 		xxd.c
 	)
 endif()
 
-set(NEOSURF_COMMON_LIBS css dom nsutils parserutils nsgif nsbmp svgtiny ${LIBCRYPTO_LIBRARIES} ${LIBPNG_LIBRARIES} ${LIBCURL_LIBRARIES} ${LIBJPEG_LIBRARIES} ${LIBWEBP_LIBRARIES} ${LIBPSL_LIBRARIES} ${ZLIB_LIBRARIES} ${LIBSSL_LIBRARIES} ${LIBUTF8PROC_LIBRARIES} ${LIBREGEX_LIBRARIES})
+set(WISP_COMMON_LIBS css dom nsutils parserutils nsgif nsbmp svgtiny ${LIBCRYPTO_LIBRARIES} ${LIBPNG_LIBRARIES} ${LIBCURL_LIBRARIES} ${LIBJPEG_LIBRARIES} ${LIBWEBP_LIBRARIES} ${LIBPSL_LIBRARIES} ${ZLIB_LIBRARIES} ${LIBSSL_LIBRARIES} ${LIBUTF8PROC_LIBRARIES} ${LIBREGEX_LIBRARIES})
 
-if(NEOSURF_USE_RSVG)
-    list(APPEND NEOSURF_COMMON_LIBS ${LIBRSVG_LIBRARIES} ${CAIRO_LIBRARIES})
+if(WISP_USE_RSVG)
+    list(APPEND WISP_COMMON_LIBS ${LIBRSVG_LIBRARIES} ${CAIRO_LIBRARIES})
 endif()
 
 if(WIN32)
-	list(APPEND NEOSURF_COMMON_LIBS ws2_32)
+	list(APPEND WISP_COMMON_LIBS ws2_32)
 endif()
 
 # Add QuickJS-ng library
-list(APPEND NEOSURF_COMMON_LIBS qjs)
+list(APPEND WISP_COMMON_LIBS qjs)
 
-target_link_libraries(neosurf ${NEOSURF_COMMON_LIBS})
+target_link_libraries(wisp ${WISP_COMMON_LIBS})
 
-target_include_directories(neosurf PRIVATE ${CMAKE_SOURCE_DIR}/contrib ${CMAKE_BINARY_DIR})
+target_include_directories(wisp PRIVATE ${CMAKE_SOURCE_DIR}/contrib ${CMAKE_BINARY_DIR})
 
 # Include tests subdirectory (tests only enabled for Debug builds or when NEOSURF_ENABLE_TESTS=ON)
 add_subdirectory(test)
 
-install(TARGETS neosurf
+install(TARGETS wisp
 	RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
 	LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
 )
-install(DIRECTORY resources/ DESTINATION ${CMAKE_INSTALL_DATADIR}/neosurf)
+install(DIRECTORY resources/ DESTINATION ${CMAKE_INSTALL_DATADIR}/wisp)
 
-if(NEOSURF_INSTALL_NSGENBIND)
+if(WISP_INSTALL_NSGENBIND)
 	install(FILES ${CMAKE_BINARY_DIR}/contrib/nsgenbind/nsgenbind DESTINATION ${CMAKE_INSTALL_BINDIR} PERMISSIONS WORLD_EXECUTE)
 endif()
 
-if(NEOSURF_INSTALL_GEN_PARSER)
+if(WISP_INSTALL_GEN_PARSER)
 	install(FILES ${CMAKE_BINARY_DIR}/contrib/libcss/gen_parser/gen_parser DESTINATION ${CMAKE_INSTALL_BINDIR} PERMISSIONS WORLD_EXECUTE)
 endif()
 
-if(NEOSURF_BUILD_XXD)
+if(WISP_BUILD_XXD)
 	install(TARGETS xxd DESTINATION ${CMAKE_INSTALL_BINDIR})
 endif()
 
@@ -381,7 +381,7 @@ if(WIN32)
 		install_dlls_for_package("${LIBXML2_PREFIX}" "${LIBXML2_LIBRARIES}")
 	endif()
 
-	if(NEOSURF_USE_RSVG)
+	if(WISP_USE_RSVG)
 		install_dlls_for_package("${LIBRSVG_PREFIX}" "${LIBRSVG_LIBRARIES}")
 		install_dlls_for_package("${CAIRO_PREFIX}" "${CAIRO_LIBRARIES}")
 	endif()

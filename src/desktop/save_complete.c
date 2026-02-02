@@ -30,26 +30,26 @@
 #include <string.h>
 #include <strings.h>
 
-#include <neosurf/content/handlers/css/css.h>
-#include <neosurf/content/handlers/html/box.h>
-#include <neosurf/content/handlers/html/html.h>
-#include <neosurf/content/handlers/html/html_save.h>
-#include <neosurf/content/hlcache.h>
-#include <neosurf/utils/ascii.h>
-#include <neosurf/utils/config.h>
-#include <neosurf/utils/corestrings.h>
-#include <neosurf/utils/file.h>
-#include <neosurf/utils/log.h>
-#include <neosurf/utils/messages.h>
-#include <neosurf/utils/nsurl.h>
-#include <neosurf/utils/utf8.h>
-#include <neosurf/utils/utils.h>
+#include <wisp/content/handlers/css/css.h>
+#include <wisp/content/handlers/html/box.h>
+#include <wisp/content/handlers/html/html.h>
+#include <wisp/content/handlers/html/html_save.h>
+#include <wisp/content/hlcache.h>
+#include <wisp/utils/ascii.h>
+#include <wisp/utils/config.h>
+#include <wisp/utils/corestrings.h>
+#include <wisp/utils/file.h>
+#include <wisp/utils/log.h>
+#include <wisp/utils/messages.h>
+#include <wisp/utils/nsurl.h>
+#include <wisp/utils/utf8.h>
+#include <wisp/utils/utils.h>
 #include "utils/regex.h"
-#include "neosurf/content.h"
+#include "wisp/content.h"
 
-#include <neosurf/desktop/gui_internal.h>
-#include <neosurf/desktop/save_complete.h>
-#include "neosurf/misc.h"
+#include <wisp/desktop/gui_internal.h>
+#include <wisp/desktop/save_complete.h>
+#include "wisp/misc.h"
 
 static regex_t save_complete_import_re;
 
@@ -151,7 +151,7 @@ static nserror save_complete_save_buffer(
     FILE *fp;
     char *fname = NULL;
 
-    ret = neosurf_mkpath(&fname, NULL, 2, ctx->path, leafname);
+    ret = wisp_mkpath(&fname, NULL, 2, ctx->path, leafname);
     if (ret != NSERROR_OK) {
         return ret;
     }
@@ -159,7 +159,7 @@ static nserror save_complete_save_buffer(
     fp = fopen(fname, "wb");
     if (fp == NULL) {
         free(fname);
-        NSLOG(neosurf, INFO, "fopen(): %s", strerror(errno));
+        NSLOG(wisp, INFO, "fopen(): %s", strerror(errno));
         return NSERROR_SAVE_FAILED;
     }
 
@@ -993,7 +993,7 @@ static bool save_complete_node_handler(dom_node *node, save_complete_event_type 
     } else if (type == DOM_DOCUMENT_NODE) {
         /* Do nothing */
     } else {
-        NSLOG(neosurf, INFO, "Unhandled node type: %d", type);
+        NSLOG(wisp, INFO, "Unhandled node type: %d", type);
     }
 
     return true;
@@ -1014,7 +1014,7 @@ static nserror save_complete_save_html_document(save_complete_ctx *ctx, hlcache_
         snprintf(filename, sizeof filename, "%p", c);
     }
 
-    ret = neosurf_mkpath(&fname, NULL, 2, ctx->path, filename);
+    ret = wisp_mkpath(&fname, NULL, 2, ctx->path, filename);
     if (ret != NSERROR_OK) {
         return ret;
     }
@@ -1022,7 +1022,7 @@ static nserror save_complete_save_html_document(save_complete_ctx *ctx, hlcache_
     fp = fopen(fname, "wb");
     if (fp == NULL) {
         free(fname);
-        NSLOG(neosurf, INFO, "fopen(): %s", strerror(errno));
+        NSLOG(wisp, INFO, "fopen(): %s", strerror(errno));
         return NSERROR_SAVE_FAILED;
     }
 
@@ -1098,7 +1098,7 @@ static nserror save_complete_inventory(save_complete_ctx *ctx)
     char *fname = NULL;
     save_complete_entry *entry;
 
-    ret = neosurf_mkpath(&fname, NULL, 2, ctx->path, "Inventory");
+    ret = wisp_mkpath(&fname, NULL, 2, ctx->path, "Inventory");
     if (ret != NSERROR_OK) {
         return ret;
     }
@@ -1106,7 +1106,7 @@ static nserror save_complete_inventory(save_complete_ctx *ctx)
     fp = fopen(fname, "w");
     free(fname);
     if (fp == NULL) {
-        NSLOG(neosurf, INFO, "fopen(): %s", strerror(errno));
+        NSLOG(wisp, INFO, "fopen(): %s", strerror(errno));
         return NSERROR_SAVE_FAILED;
     }
 
@@ -1131,7 +1131,7 @@ static nserror regcomp_wrapper(regex_t *preg, const char *regex, int cflags)
     if (r) {
         char errbuf[200];
         regerror(r, preg, errbuf, sizeof errbuf);
-        NSLOG(neosurf, INFO, "Failed to compile regexp '%s': %s\n", regex, errbuf);
+        NSLOG(wisp, INFO, "Failed to compile regexp '%s': %s\n", regex, errbuf);
         return NSERROR_INIT_FAILED;
     }
     return NSERROR_OK;

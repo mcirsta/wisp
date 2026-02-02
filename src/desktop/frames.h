@@ -21,8 +21,8 @@
  * Frame and frameset creation and manipulation (interface).
  */
 
-#ifndef NETSURF_DESKTOP_FRAMES_H_
-#define NETSURF_DESKTOP_FRAMES_H_
+#ifndef WISP_DESKTOP_FRAMES_H_
+#define WISP_DESKTOP_FRAMES_H_
 
 struct scrollbar_msg_data;
 struct content_html_iframe;

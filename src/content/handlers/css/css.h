@@ -16,8 +16,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef netsurf_css_css_h_
-#define netsurf_css_css_h_
+#ifndef wisp_css_css_h_
+#define wisp_css_css_h_
 
 #include <stdint.h>
 

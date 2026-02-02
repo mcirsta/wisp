@@ -21,19 +21,19 @@
 #include <assert.h>
 #include <string.h>
 
-#include <neosurf/content/content_protected.h>
-#include <neosurf/content/fetch.h>
-#include <neosurf/content/hlcache.h>
-#include <neosurf/utils/corestrings.h>
-#include <neosurf/utils/errors.h>
-#include <neosurf/utils/log.h>
-#include <neosurf/utils/messages.h>
-#include <neosurf/utils/utils.h>
+#include <wisp/content/content_protected.h>
+#include <wisp/content/fetch.h>
+#include <wisp/content/hlcache.h>
+#include <wisp/utils/corestrings.h>
+#include <wisp/utils/errors.h>
+#include <wisp/utils/log.h>
+#include <wisp/utils/messages.h>
+#include <wisp/utils/utils.h>
 #include "utils/http.h"
 #include "content/content_factory.h"
 #include "desktop/system_colour.h"
 
-#include <neosurf/content/handlers/css/css.h>
+#include <wisp/content/handlers/css/css.h>
 #include "content/handlers/css/hints.h"
 #include "content/handlers/css/internal.h"
 #include "content/handlers/html/font_face.h"
@@ -226,10 +226,10 @@ static nserror nscss_create_css_data(
 
     error = css_stylesheet_create(&params, &c->sheet);
     if (error != CSS_OK) {
-        NSLOG(neosurf, ERROR, "css_stylesheet_create failed: %d", error);
+        NSLOG(wisp, ERROR, "css_stylesheet_create failed: %d", error);
         return NSERROR_NOMEM;
     }
-    NSLOG(neosurf, INFO, "css_stylesheet_create succeeded for %p", c);
+    NSLOG(wisp, INFO, "css_stylesheet_create succeeded for %p", c);
 
     return NSERROR_OK;
 }
@@ -247,13 +247,13 @@ static bool nscss_process_data(struct content *c, const char *data, unsigned int
     nscss_content *css = (nscss_content *)c;
     css_error error;
 
-    NSLOG(neosurf, INFO, "Processing CSS data: %u bytes for %p", size, c);
-    NSLOG(neosurf, DEBUG, "PROFILER: START CSS parsing %p", c);
+    NSLOG(wisp, INFO, "Processing CSS data: %u bytes for %p", size, c);
+    NSLOG(wisp, DEBUG, "PROFILER: START CSS parsing %p", c);
 
     error = nscss_process_css_data(&css->data, data, size);
-    NSLOG(neosurf, DEBUG, "PROFILER: STOP CSS parsing %p", c);
+    NSLOG(wisp, DEBUG, "PROFILER: STOP CSS parsing %p", c);
     if (error != CSS_OK && error != CSS_NEEDDATA) {
-        NSLOG(neosurf, ERROR, "nscss_process_css_data failed: %d", error);
+        NSLOG(wisp, ERROR, "nscss_process_css_data failed: %d", error);
         content_broadcast_error(c, NSERROR_CSS, NULL);
     }
 
@@ -284,7 +284,7 @@ bool nscss_convert(struct content *c)
     nscss_content *css = (nscss_content *)c;
     css_error error;
 
-    NSLOG(neosurf, INFO, "nscss_convert called for %p", c);
+    NSLOG(wisp, INFO, "nscss_convert called for %p", c);
 
     error = nscss_convert_css_data(&css->data);
     if (error != CSS_OK) {
@@ -323,9 +323,9 @@ static css_error nscss_convert_css_data(struct content_css_data *c)
         const char *url;
 
         if (css_stylesheet_get_url(c->sheet, &url) == CSS_OK) {
-            NSLOG(neosurf, ERROR, "Failed converting %p %s (%d)", c, url, error);
+            NSLOG(wisp, ERROR, "Failed converting %p %s (%d)", c, url, error);
         } else {
-            NSLOG(neosurf, ERROR, "Failed converting %p (%d)", c, error);
+            NSLOG(wisp, ERROR, "Failed converting %p (%d)", c, error);
         }
     }
 
@@ -428,7 +428,7 @@ css_stylesheet *nscss_get_stylesheet(struct hlcache_handle *h)
     nscss_content *c = (nscss_content *)hlcache_handle_get_content(h);
 
     if (c == NULL) {
-        NSLOG(neosurf, ERROR, "Content is NULL for handle %p", h);
+        NSLOG(wisp, ERROR, "Content is NULL for handle %p", h);
         return NULL;
     }
 
@@ -475,7 +475,7 @@ void nscss_content_done(struct content_css_data *css, void *pw)
     size_t size;
     css_error error;
 
-    NSLOG(neosurf, INFO, "nscss_content_done called for %p", c);
+    NSLOG(wisp, INFO, "nscss_content_done called for %p", c);
 
     /* Retrieve the size of this sheet */
     error = css_stylesheet_size(css->sheet, &size);
@@ -518,9 +518,9 @@ void nscss_content_done(struct content_css_data *css, void *pw)
 static css_error nscss_error_handler(void *pw, css_stylesheet *sheet, css_error error, const char *msg)
 {
     if (error == CSS_OK) {
-        NSLOG(netsurf, DEBUG, "LibCSS Info: %s", msg);
+        NSLOG(wisp, DEBUG, "LibCSS Info: %s", msg);
     } else {
-        NSLOG(netsurf, ERROR, "LibCSS Error: %s (Code: %d)", msg, error);
+        NSLOG(wisp, ERROR, "LibCSS Error: %s (Code: %d)", msg, error);
     }
     return CSS_OK;
 }
@@ -547,12 +547,12 @@ static css_error nscss_handle_font_face(void *pw, css_stylesheet *parent, const 
         return CSS_OK; /* Ignore font-face without family name */
     }
 
-    NSLOG(netsurf, INFO, "Parsed @font-face for family '%s'", lwc_string_data(font_family));
+    NSLOG(wisp, INFO, "Parsed @font-face for family '%s'", lwc_string_data(font_family));
 
     /* Get stylesheet URL to use as base for relative font URLs */
     error = css_stylesheet_get_url(parent, &sheet_url);
     if (error != CSS_OK || sheet_url == NULL) {
-        NSLOG(netsurf, WARNING, "Could not get stylesheet URL for font-face");
+        NSLOG(wisp, WARNING, "Could not get stylesheet URL for font-face");
         return CSS_OK;
     }
 
@@ -650,7 +650,7 @@ css_error nscss_handle_import(void *pw, css_stylesheet *parent, lwc_string *url)
     nsurl_unref(ns_ref);
 
 #ifdef NSCSS_IMPORT_TRACE
-    NSLOG(netsurf, INFO, "Import %d '%s' -> (handle: %p ctx: %p)", c->import_count, lwc_string_data(url),
+    NSLOG(wisp, INFO, "Import %d '%s' -> (handle: %p ctx: %p)", c->import_count, lwc_string_data(url),
         c->imports[c->import_count].c, ctx);
 #endif
 
@@ -673,7 +673,7 @@ nserror nscss_import(hlcache_handle *handle, const hlcache_event *event, void *p
     css_error error = CSS_OK;
 
 #ifdef NSCSS_IMPORT_TRACE
-    NSLOG(netsurf, INFO, "Event %d for %p (%p)", event->type, handle, ctx);
+    NSLOG(wisp, INFO, "Event %d for %p (%p)", event->type, handle, ctx);
 #endif
 
     assert(ctx->css->imports[ctx->index].c == handle);
@@ -713,7 +713,7 @@ css_error nscss_import_complete(nscss_import_ctx *ctx)
         error = nscss_register_imports(ctx->css);
 
 #ifdef NSCSS_IMPORT_TRACE
-    NSLOG(netsurf, INFO, "Destroying import context %p for %d", ctx, ctx->index);
+    NSLOG(wisp, INFO, "Destroying import context %p for %d", ctx, ctx->index);
 #endif
 
     /* No longer need import context */

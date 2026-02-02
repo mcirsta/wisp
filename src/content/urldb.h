@@ -21,13 +21,13 @@
  * Unified URL information database internal interface.
  */
 
-#ifndef NETSURF_CONTENT_URLDB_H
-#define NETSURF_CONTENT_URLDB_H
+#ifndef WISP_CONTENT_URLDB_H
+#define WISP_CONTENT_URLDB_H
 
 #include <libwapcaplet/libwapcaplet.h>
 
-#include "neosurf/cookie_db.h"
-#include "neosurf/url_db.h"
+#include "wisp/cookie_db.h"
+#include "wisp/url_db.h"
 
 /**
  * Initialize urldb

@@ -16,10 +16,10 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef NEOSURF_WINDOWS_WINDBG_H
-#define NEOSURF_WINDOWS_WINDBG_H
+#ifndef WISP_WINDOWS_WINDBG_H
+#define WISP_WINDOWS_WINDBG_H
 
-#include "neosurf/utils/log.h"
+#include "wisp/utils/log.h"
 
 const char *msg_num_to_name(int msg);
 void win_perror(const char *lpszFunction);
@@ -31,6 +31,6 @@ void win_perror(const char *lpszFunction);
  */
 #define LOG_WIN_MSG(h, m, w, l)                                                                                        \
     if (((m) != WM_SETCURSOR) && ((m) != WM_MOUSEMOVE) && ((m) != WM_NCHITTEST) && ((m) != WM_ENTERIDLE))              \
-    NSLOG(neosurf, DEBUG, "%s, hwnd %p, w 0x%Ix, l 0x%Ix", msg_num_to_name(m), h, w, l)
+    NSLOG(wisp, DEBUG, "%s, hwnd %p, w 0x%Ix, l 0x%Ix", msg_num_to_name(m), h, w, l)
 
 #endif

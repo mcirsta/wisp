@@ -25,13 +25,13 @@
 #include <stdbool.h>
 #include <string.h>
 
-#include <neosurf/desktop/save_pdf.h>
-#include <neosurf/misc.h>
-#include <neosurf/utils/config.h>
-#include <neosurf/utils/errors.h>
-#include <neosurf/utils/log.h>
-#include <neosurf/utils/messages.h>
-#include <neosurf/utils/nsurl.h>
+#include <wisp/desktop/save_pdf.h>
+#include <wisp/misc.h>
+#include <wisp/utils/config.h>
+#include <wisp/utils/errors.h>
+#include <wisp/utils/log.h>
+#include <wisp/utils/messages.h>
+#include <wisp/utils/nsurl.h>
 
 #include "gtk/compat.h"
 #include "gtk/cookies.h"
@@ -137,7 +137,7 @@ static void nsgtk_pdf_password(char **owner_pass, char **user_pass, char *path)
 
     res = nsgtk_builder_new_from_resname("password", &password_builder);
     if (res != NSERROR_OK) {
-        NSLOG(neosurf, INFO, "Password UI builder init failed");
+        NSLOG(wisp, INFO, "Password UI builder init failed");
         return;
     }
 

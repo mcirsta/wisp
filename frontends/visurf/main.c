@@ -1,22 +1,22 @@
-#include <neosurf/bitmap.h>
-#include <neosurf/browser_window.h>
-#include <neosurf/clipboard.h>
-#include <neosurf/content/fetch.h>
-#include <neosurf/cookie_db.h>
-#include <neosurf/fetch.h>
-#include <neosurf/layout.h>
-#include <neosurf/misc.h>
-#include <neosurf/neosurf.h>
-#include <neosurf/url_db.h>
-#include <neosurf/utils/config.h>
-#include <neosurf/utils/errors.h>
-#include <neosurf/utils/file.h>
-#include <neosurf/utils/filepath.h>
-#include <neosurf/utils/log.h>
-#include <neosurf/utils/messages.h>
-#include <neosurf/utils/nsoption.h>
-#include <neosurf/utils/nsurl.h>
-#include <neosurf/window.h>
+#include <wisp/bitmap.h>
+#include <wisp/browser_window.h>
+#include <wisp/clipboard.h>
+#include <wisp/content/fetch.h>
+#include <wisp/cookie_db.h>
+#include <wisp/fetch.h>
+#include <wisp/layout.h>
+#include <wisp/misc.h>
+#include <wisp/wisp.h>
+#include <wisp/url_db.h>
+#include <wisp/utils/config.h>
+#include <wisp/utils/errors.h>
+#include <wisp/utils/file.h>
+#include <wisp/utils/filepath.h>
+#include <wisp/utils/log.h>
+#include <wisp/utils/messages.h>
+#include <wisp/utils/nsoption.h>
+#include <wisp/utils/nsurl.h>
+#include <wisp/window.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -149,7 +149,7 @@ void nsvi_set_clipboard(struct nsvi_state *state, const char *type, const char *
 {
     struct nsvi_window *win = state->keyboard_focus;
     if (!win) {
-        NSLOG(neosurf, WARNING, "Cannot set clipboard without window focus");
+        NSLOG(wisp, WARNING, "Cannot set clipboard without window focus");
         return;
     }
     if (state->wl_data_source) {
@@ -739,7 +739,7 @@ static nserror check_dirname(const char *path, const char *leaf, char **dirname_
     char *dirname = NULL;
     struct stat dirname_stat;
 
-    ret = neosurf_mkpath(&dirname, NULL, 2, path, leaf);
+    ret = wisp_mkpath(&dirname, NULL, 2, path, leaf);
     if (ret != NSERROR_OK) {
         return ret;
     }
@@ -779,18 +779,18 @@ static nserror get_config_home(char **config_home_out)
             return NSERROR_NOT_DIRECTORY;
         }
 
-        ret = check_dirname(home_dir, ".config/neosurf", &config_home);
+        ret = check_dirname(home_dir, ".config/wisp", &config_home);
         if (ret != NSERROR_OK) {
             return ret;
         }
     } else {
-        ret = check_dirname(xdg_config_dir, "neosurf", &config_home);
+        ret = check_dirname(xdg_config_dir, "wisp", &config_home);
         if (ret != NSERROR_OK) {
             return ret;
         }
     }
 
-    NSLOG(neosurf, INFO, "\"%s\"", config_home);
+    NSLOG(wisp, INFO, "\"%s\"", config_home);
 
     *config_home_out = config_home;
     return NSERROR_OK;
@@ -813,9 +813,9 @@ static nserror create_config_home(char **config_home_out)
             return NSERROR_NOT_DIRECTORY;
         }
 
-        ret = neosurf_mkpath(&config_home, NULL, 3, home_dir, ".config", "neosurf");
+        ret = wisp_mkpath(&config_home, NULL, 3, home_dir, ".config", "wisp");
     } else {
-        ret = neosurf_mkpath(&config_home, NULL, 2, xdg_config_dir, "neosurf");
+        ret = wisp_mkpath(&config_home, NULL, 2, xdg_config_dir, "wisp");
     }
 
     if (ret != NSERROR_OK) {
@@ -824,12 +824,12 @@ static nserror create_config_home(char **config_home_out)
 
     // For creating the directory a trailing / is required.
     config_home_trailing = NULL;
-    ret = neosurf_mkpath(&config_home_trailing, NULL, 2, config_home, "/");
+    ret = wisp_mkpath(&config_home_trailing, NULL, 2, config_home, "/");
     if (ret != NSERROR_OK) {
         return ret;
     }
 
-    ret = neosurf_mkdir_all(config_home_trailing);
+    ret = wisp_mkdir_all(config_home_trailing);
     free(config_home_trailing);
     if (ret != NSERROR_OK) {
         return ret;
@@ -858,27 +858,27 @@ static nserror set_defaults(struct nsoption_s *defaults)
     }
 
     fname = NULL;
-    neosurf_mkpath(&fname, NULL, 2, config_home, "Cookies");
+    wisp_mkpath(&fname, NULL, 2, config_home, "Cookies");
     if (fname != NULL) {
         nsoption_setnull_charp(cookie_file, fname);
     }
 
     fname = NULL;
-    neosurf_mkpath(&fname, NULL, 2, config_home, "Cookies");
+    wisp_mkpath(&fname, NULL, 2, config_home, "Cookies");
     if (fname != NULL) {
         nsoption_setnull_charp(cookie_jar, fname);
     }
 
     /* url database default */
     fname = NULL;
-    neosurf_mkpath(&fname, NULL, 2, config_home, "URLs");
+    wisp_mkpath(&fname, NULL, 2, config_home, "URLs");
     if (fname != NULL) {
         nsoption_setnull_charp(url_file, fname);
     }
 
     /* bookmark database default */
     fname = NULL;
-    neosurf_mkpath(&fname, NULL, 2, config_home, "Hotlist");
+    wisp_mkpath(&fname, NULL, 2, config_home, "Hotlist");
     if (fname != NULL) {
         nsoption_setnull_charp(hotlist_path, fname);
     }
@@ -1056,7 +1056,7 @@ static void nsvi_load_config(struct nsvi_state *state)
 {
     assert(config_home != NULL);
     char *config = NULL;
-    neosurf_mkpath(&config, NULL, 2, config_home, "nsvirc");
+    wisp_mkpath(&config, NULL, 2, config_home, "nsvirc");
     if (config != NULL) {
         nsvi_command_source(state, config);
         free(config);
@@ -1073,21 +1073,21 @@ nserror nsvi_filter_url(struct nsvi_filter *filter, const char *in, nsurl **out)
     size_t r = fprintf(filter->in, "%s\n", in);
     if (r == 0) {
         if (ferror(filter->in) != 0) {
-            NSLOG(neosurf, ERROR, "Error writing to URL filter: %s", strerror(ferror(filter->in)));
+            NSLOG(wisp, ERROR, "Error writing to URL filter: %s", strerror(ferror(filter->in)));
         }
         if (feof(filter->in)) {
-            NSLOG(neosurf, ERROR, "Unexpected EOF from URL filter");
+            NSLOG(wisp, ERROR, "Unexpected EOF from URL filter");
         }
         goto error;
     }
     ssize_t n = getline(&filter->buf, &filter->bufsz, filter->out);
     if (n == -1) {
-        NSLOG(neosurf, ERROR, "Error reading from URL filter: %s", strerror(errno));
+        NSLOG(wisp, ERROR, "Error reading from URL filter: %s", strerror(errno));
         goto error;
     }
     err = nsurl_create(filter->buf, &new);
     if (err != NSERROR_OK) {
-        NSLOG(neosurf, ERROR, "Error parsing '%s' from URL filter", filter->buf);
+        NSLOG(wisp, ERROR, "Error parsing '%s' from URL filter", filter->buf);
         goto error;
     }
     *out = new;
@@ -1133,7 +1133,7 @@ int main(int argc, char *argv[])
         xcursor_size = strtol(getenv("XCURSOR_SIZE"), &endptr, 10);
 
         if (*endptr || xcursor_size <= 0) {
-            NSLOG(neosurf, WARNING, "XCURSOR_SIZE environment variable is set incorrectly");
+            NSLOG(wisp, WARNING, "XCURSOR_SIZE environment variable is set incorrectly");
             xcursor_size = 24;
         }
     }
@@ -1147,7 +1147,7 @@ int main(int argc, char *argv[])
         .events = POLLIN,
     };
 
-    struct neosurf_table vi_table = {
+    struct wisp_table vi_table = {
         .misc = &vi_misc_table,
         .clipboard = &vi_clipboard_table,
         .window = &vi_window_table,
@@ -1155,12 +1155,12 @@ int main(int argc, char *argv[])
         .bitmap = &vi_bitmap_table,
         .layout = &vi_layout_table,
     };
-    nserror ret = neosurf_register(&vi_table);
+    nserror ret = wisp_register(&vi_table);
     if (ret != NSERROR_OK) {
-        fatal("NeoSurf operation table failed registration");
+        fatal("Wisp operation table failed registration");
     }
 
-    respaths = nsvi_init_resource("${HOME}/.neosurf/:${NEOSURFRES}:" VISURF_RESPATH);
+    respaths = nsvi_init_resource("${HOME}/.wisp/:${WISPRES}:" VISURF_RESPATH);
     nslog_init(nslog_stream_configure, &argc, argv);
     ret = nsoption_init(set_defaults, &nsoptions, &nsoptions_default);
     if (ret != NSERROR_OK) {
@@ -1174,7 +1174,7 @@ int main(int argc, char *argv[])
     char *messages = filepath_find(respaths, "Messages");
     ret = messages_add_from_file(messages);
     if (ret != NSERROR_OK) {
-        NSLOG(neosurf, INFO, "Messages failed to load");
+        NSLOG(wisp, INFO, "Messages failed to load");
     }
 
     char buf[PATH_MAX];
@@ -1183,10 +1183,10 @@ int main(int argc, char *argv[])
 
     nsvi_load_config(&state);
 
-    ret = neosurf_init(NULL);
+    ret = wisp_init(NULL);
     free(messages);
     if (ret != NSERROR_OK) {
-        fatal("NeoSurf failed to initialise");
+        fatal("Wisp failed to initialise");
     }
 
     urldb_load(nsoption_charp(url_file));
@@ -1342,7 +1342,7 @@ int main(int argc, char *argv[])
     nsvi_fetch_filetype_fini();
     urldb_save_cookies(nsoption_charp(cookie_jar));
     urldb_save(nsoption_charp(url_file));
-    neosurf_exit();
+    wisp_exit();
     nsoption_finalise(nsoptions, nsoptions_default);
     nslog_finalise();
 

@@ -17,7 +17,7 @@ steps:
     status: complete
 - action: js-exec
   window: win1
-  cmd: location.assign("file:///home/dsilvers/dev-netsurf/workspace/netsurf/test/js/inserted-script.html")
+  cmd: location.assign("file:///home/dsilvers/dev-wisp/workspace/wisp/test/js/inserted-script.html")
 - action: block
   conditions:
   - window: win1

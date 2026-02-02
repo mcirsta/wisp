@@ -25,14 +25,14 @@
 #include <stdbool.h>
 #include <stdlib.h>
 
-#include <neosurf/bitmap.h>
-#include <neosurf/content.h>
-#include <neosurf/content/content_protected.h>
-#include <neosurf/content/llcache.h>
-#include <neosurf/desktop/gui_internal.h>
-#include <neosurf/utils/log.h>
-#include <neosurf/utils/messages.h>
-#include <neosurf/utils/utils.h>
+#include <wisp/bitmap.h>
+#include <wisp/content.h>
+#include <wisp/content/content_protected.h>
+#include <wisp/content/llcache.h>
+#include <wisp/desktop/gui_internal.h>
+#include <wisp/utils/log.h>
+#include <wisp/utils/messages.h>
+#include <wisp/utils/utils.h>
 #include "content/content_factory.h"
 #include "desktop/bitmap.h"
 
@@ -154,7 +154,7 @@ static bool nsico_convert(struct content *c)
     bmp = ico_find(ico->ico, 255, 255);
     if (bmp == NULL) {
         /* return error */
-        NSLOG(neosurf, INFO, "Failed to select icon");
+        NSLOG(wisp, INFO, "Failed to select icon");
         return false;
     }
 
@@ -169,7 +169,7 @@ static bool nsico_convert(struct content *c)
 static bool nsico__decode(struct bmp_image *ico)
 {
     if (ico->decoded == false) {
-        NSLOG(netsurf, DEBUG, "Decoding ICO %p", ico);
+        NSLOG(wisp, DEBUG, "Decoding ICO %p", ico);
         if (bmp_decode(ico) != BMP_OK) {
             return false;
         }
@@ -195,7 +195,7 @@ static bool nsico_redraw(
     bmp = ico_find(ico->ico, data->width, data->height);
     if (bmp == NULL) {
         /* return error */
-        NSLOG(neosurf, INFO, "Failed to select icon");
+        NSLOG(wisp, INFO, "Failed to select icon");
         return false;
     }
 
@@ -260,7 +260,7 @@ static void *nsico_get_internal(const struct content *c, void *context)
     bmp = ico_find(ico->ico, 16, 16);
     if (bmp == NULL) {
         /* return error */
-        NSLOG(neosurf, INFO, "Failed to select icon");
+        NSLOG(wisp, INFO, "Failed to select icon");
         return NULL;
     }
 
@@ -288,7 +288,7 @@ static bool nsico_is_opaque(struct content *c)
     bmp = ico_find(ico->ico, 16, 16);
     if (bmp == NULL) {
         /* return error */
-        NSLOG(neosurf, INFO, "Failed to select icon");
+        NSLOG(wisp, INFO, "Failed to select icon");
         return false;
     }
 

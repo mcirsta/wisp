@@ -23,19 +23,19 @@
  */
 
 #include <sys/types.h>
-#include "neosurf/utils/config.h"
+#include "wisp/utils/config.h"
 #include <limits.h>
 #include <math.h>
 #include <stdint.h>
 #include <string.h>
 #include <windows.h>
 
-#include "neosurf/mouse.h"
-#include "neosurf/plotters.h"
-#include "neosurf/browser.h"
-#include "neosurf/utils/log.h"
-#include "neosurf/utils/utf8.h"
-#include "neosurf/window.h"
+#include "wisp/mouse.h"
+#include "wisp/plotters.h"
+#include "wisp/browser.h"
+#include "wisp/utils/log.h"
+#include "wisp/utils/utf8.h"
+#include "wisp/window.h"
 
 #include "windows/bitmap.h"
 #include "windows/font.h"
@@ -81,7 +81,7 @@ static nserror plot_block(COLORREF col, int x, int y, int width, int height)
 
     /* ensure the plot HDC is set */
     if (plot_hdc == NULL) {
-        NSLOG(neosurf, INFO, "HDC not set on call to plotters");
+        NSLOG(wisp, INFO, "HDC not set on call to plotters");
         return NSERROR_INVALID;
     }
 
@@ -193,7 +193,7 @@ static nserror plot_bitmap(struct bitmap *bitmap, int x, int y, int width, int h
 
     /* ensure the plot HDC is set */
     if (plot_hdc == NULL) {
-        NSLOG(neosurf, INFO, "HDC not set on call to plotters");
+        NSLOG(wisp, INFO, "HDC not set on call to plotters");
         return NSERROR_INVALID;
     }
 
@@ -279,7 +279,7 @@ arc(const struct redraw_context *ctx, const plot_style_t *style, int x, int y, i
 
     /* ensure the plot HDC is set */
     if (plot_hdc == NULL) {
-        NSLOG(neosurf, INFO, "HDC not set on call to plotters");
+        NSLOG(wisp, INFO, "HDC not set on call to plotters");
         return NSERROR_INVALID;
     }
 
@@ -386,7 +386,7 @@ static nserror disc(const struct redraw_context *ctx, const plot_style_t *style,
 
     /* ensure the plot HDC is set */
     if (plot_hdc == NULL) {
-        NSLOG(neosurf, INFO, "HDC not set on call to plotters");
+        NSLOG(wisp, INFO, "HDC not set on call to plotters");
         return NSERROR_INVALID;
     }
 
@@ -459,7 +459,7 @@ static nserror line(const struct redraw_context *ctx, const plot_style_t *style,
 
     /* ensure the plot HDC is set */
     if (plot_hdc == NULL) {
-        NSLOG(neosurf, INFO, "HDC not set on call to plotters");
+        NSLOG(wisp, INFO, "HDC not set on call to plotters");
         return NSERROR_INVALID;
     }
 
@@ -522,7 +522,7 @@ static nserror rectangle(const struct redraw_context *ctx, const plot_style_t *s
 
     /* ensure the plot HDC is set */
     if (plot_hdc == NULL) {
-        NSLOG(neosurf, INFO, "HDC not set on call to plotters");
+        NSLOG(wisp, INFO, "HDC not set on call to plotters");
         return NSERROR_INVALID;
     }
 
@@ -606,7 +606,7 @@ static nserror polygon(const struct redraw_context *ctx, const plot_style_t *sty
 
     /* ensure the plot HDC is set */
     if (plot_hdc == NULL) {
-        NSLOG(neosurf, INFO, "HDC not set on call to plotters");
+        NSLOG(wisp, INFO, "HDC not set on call to plotters");
         return NSERROR_INVALID;
     }
 
@@ -863,7 +863,7 @@ static nserror bitmap(const struct redraw_context *ctx, struct bitmap *bitmap, i
         plot_clip.bottom - plot_clip.top);
 
     if (bitmap == NULL) {
-        NSLOG(neosurf, INFO, "Passed null bitmap!");
+        NSLOG(wisp, INFO, "Passed null bitmap!");
         return NSERROR_OK;
     }
 
@@ -963,7 +963,7 @@ static nserror text(const struct redraw_context *ctx, const struct plot_font_sty
 
     /* ensure the plot HDC is set */
     if (plot_hdc == NULL) {
-        NSLOG(neosurf, INFO, "HDC not set on call to plotters");
+        NSLOG(wisp, INFO, "HDC not set on call to plotters");
         return NSERROR_INVALID;
     }
 
@@ -1011,7 +1011,7 @@ static nserror text(const struct redraw_context *ctx, const struct plot_font_sty
 }
 
 
-#ifdef NEOSURF_WINDOWS_NATIVE_LINEAR_GRADIENT
+#ifdef WISP_WINDOWS_NATIVE_LINEAR_GRADIENT
 /**
  * Plot a linear gradient filling a path.
  *
@@ -1038,7 +1038,7 @@ static nserror win_plot_linear_gradient(const struct redraw_context *ctx, const 
     unsigned int i;
 
     if (plot_hdc == NULL) {
-        NSLOG(neosurf, INFO, "HDC not set on call to plotters");
+        NSLOG(wisp, INFO, "HDC not set on call to plotters");
         return NSERROR_INVALID;
     }
 
@@ -1368,12 +1368,12 @@ static nserror win_push_transform(const struct redraw_context *ctx, const float 
     XFORM new_xform;
 
     if (plot_hdc == NULL) {
-        NSLOG(neosurf, INFO, "HDC not set on call to push_transform");
+        NSLOG(wisp, INFO, "HDC not set on call to push_transform");
         return NSERROR_INVALID;
     }
 
     if (transform_stack_depth >= TRANSFORM_STACK_SIZE) {
-        NSLOG(neosurf, WARNING, "Transform stack overflow");
+        NSLOG(wisp, WARNING, "Transform stack overflow");
         return NSERROR_INVALID;
     }
 
@@ -1382,7 +1382,7 @@ static nserror win_push_transform(const struct redraw_context *ctx, const float 
 
     /* Save current transform to stack */
     if (!GetWorldTransform(plot_hdc, &current_xform)) {
-        NSLOG(neosurf, WARNING, "GetWorldTransform failed: %lu", GetLastError());
+        NSLOG(wisp, WARNING, "GetWorldTransform failed: %lu", GetLastError());
         return NSERROR_INVALID;
     }
     transform_stack[transform_stack_depth++] = current_xform;
@@ -1400,7 +1400,7 @@ static nserror win_push_transform(const struct redraw_context *ctx, const float 
 
     /* Combine with current transform (multiply: new = current * new) */
     if (!ModifyWorldTransform(plot_hdc, &new_xform, MWT_RIGHTMULTIPLY)) {
-        NSLOG(neosurf, WARNING, "ModifyWorldTransform failed: %lu", GetLastError());
+        NSLOG(wisp, WARNING, "ModifyWorldTransform failed: %lu", GetLastError());
         transform_stack_depth--;
         return NSERROR_INVALID;
     }
@@ -1420,19 +1420,19 @@ static nserror win_push_transform(const struct redraw_context *ctx, const float 
 static nserror win_pop_transform(const struct redraw_context *ctx)
 {
     if (plot_hdc == NULL) {
-        NSLOG(neosurf, INFO, "HDC not set on call to pop_transform");
+        NSLOG(wisp, INFO, "HDC not set on call to pop_transform");
         return NSERROR_INVALID;
     }
 
     if (transform_stack_depth <= 0) {
-        NSLOG(neosurf, WARNING, "Transform stack underflow");
+        NSLOG(wisp, WARNING, "Transform stack underflow");
         return NSERROR_INVALID;
     }
 
     /* Restore previous transform from stack */
     XFORM saved_xform = transform_stack[--transform_stack_depth];
     if (!SetWorldTransform(plot_hdc, &saved_xform)) {
-        NSLOG(neosurf, WARNING, "SetWorldTransform failed: %lu", GetLastError());
+        NSLOG(wisp, WARNING, "SetWorldTransform failed: %lu", GetLastError());
         return NSERROR_INVALID;
     }
 
@@ -1460,7 +1460,7 @@ const struct plotter_table win_plotters = {
     .path = path,
     .push_transform = win_push_transform,
     .pop_transform = win_pop_transform,
-#ifdef NEOSURF_WINDOWS_NATIVE_LINEAR_GRADIENT
+#ifdef WISP_WINDOWS_NATIVE_LINEAR_GRADIENT
     .linear_gradient = win_plot_linear_gradient,
 #endif
     .option_knockout = true,

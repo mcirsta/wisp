@@ -21,7 +21,7 @@
  * Processing for html content css operations.
  */
 
-#include <neosurf/utils/config.h>
+#include <wisp/utils/config.h>
 
 #include <assert.h>
 #include <ctype.h>
@@ -30,23 +30,23 @@
 #include <string.h>
 #include <strings.h>
 
-#include <neosurf/content.h>
-#include <neosurf/content/handlers/css/css.h>
-#include <neosurf/content/hlcache.h>
-#include <neosurf/desktop/gui_internal.h>
-#include <neosurf/misc.h>
-#include <neosurf/utils/corestrings.h>
-#include <neosurf/utils/log.h>
-#include <neosurf/utils/nsoption.h>
+#include <wisp/content.h>
+#include <wisp/content/handlers/css/css.h>
+#include <wisp/content/hlcache.h>
+#include <wisp/desktop/gui_internal.h>
+#include <wisp/misc.h>
+#include <wisp/utils/corestrings.h>
+#include <wisp/utils/log.h>
+#include <wisp/utils/nsoption.h>
 
-#include <neosurf/content/handlers/html/html.h>
-#include <neosurf/content/handlers/html/private.h>
+#include <wisp/content/handlers/html/html.h>
+#include <wisp/content/handlers/html/private.h>
 #include "content/handlers/html/css.h"
 
 #include <nsutils/time.h>
 
 /* Performance tracing - enable via CMake: -DNEOSURF_ENABLE_PERF_TRACE=ON */
-#include <neosurf/utils/perf.h>
+#include <wisp/utils/perf.h>
 
 static nsurl *html_default_stylesheet_url;
 static nsurl *html_adblock_stylesheet_url;
@@ -112,7 +112,7 @@ static nserror html_convert_css_callback(hlcache_handle *css, const hlcache_even
     case CONTENT_MSG_DONE:
         PERF(
             "CSS DONE slot %d '%s' (active=%d)", i, nsurl_access(hlcache_handle_get_url(css)), parent->base.active - 1);
-        NSLOG(neosurf, INFO, "done stylesheet slot %d '%s'", i, nsurl_access(hlcache_handle_get_url(css)));
+        NSLOG(wisp, INFO, "done stylesheet slot %d '%s'", i, nsurl_access(hlcache_handle_get_url(css)));
         CONTENT_ACTIVE_DEC(parent, "CSS callback DONE");
         break;
 
@@ -120,14 +120,14 @@ static nserror html_convert_css_callback(hlcache_handle *css, const hlcache_even
         const char *u = nsurl_access(hlcache_handle_get_url(css));
         /* user.css and adblock.css are optional - log at INFO */
         if (u != NULL && (strcmp(u, "resource:user.css") == 0 || strcmp(u, "resource:adblock.css") == 0)) {
-            NSLOG(neosurf, INFO, "Optional stylesheet %s not found (this is normal)", u);
+            NSLOG(wisp, INFO, "Optional stylesheet %s not found (this is normal)", u);
         } else if (u != NULL && strcmp(u, "resource:default.css") == 0) {
             /* default.css is critical - browser will look broken
              * without it */
-            NSLOG(neosurf, ERROR, "CRITICAL: default.css failed to load: %s (code %d) - pages will be unstyled!",
+            NSLOG(wisp, ERROR, "CRITICAL: default.css failed to load: %s (code %d) - pages will be unstyled!",
                 event->data.errordata.errormsg, event->data.errordata.errorcode);
         } else {
-            NSLOG(neosurf, ERROR, "Stylesheet %s failed: %s (code %d)", u ? u : "(unknown)",
+            NSLOG(wisp, ERROR, "Stylesheet %s failed: %s (code %d)", u ? u : "(unknown)",
                 event->data.errordata.errormsg, event->data.errordata.errorcode);
         }
 
@@ -168,7 +168,7 @@ static nserror html_stylesheet_from_domnode(html_content *c, dom_node *node, hlc
 
     exc = dom_node_get_text_content(node, &style);
     if ((exc != DOM_NO_ERR) || (style == NULL)) {
-        NSLOG(neosurf, INFO, "No text content");
+        NSLOG(wisp, INFO, "No text content");
         return NSERROR_OK;
     }
 
@@ -262,13 +262,13 @@ static bool html_css_process_modified_style(html_content *c, struct html_stylesh
 
     error = html_stylesheet_from_domnode(c, s->node, &sheet);
     if (error != NSERROR_OK) {
-        NSLOG(neosurf, INFO, "Failed to update sheet");
+        NSLOG(wisp, INFO, "Failed to update sheet");
         content_broadcast_error(&c->base, error, NULL);
         return false;
     }
 
     if (sheet != NULL) {
-        NSLOG(neosurf, INFO, "Updating sheet %p with %p", s->sheet, sheet);
+        NSLOG(wisp, INFO, "Updating sheet %p with %p", s->sheet, sheet);
 
         if (s->sheet != NULL) {
             switch (content_get_status(s->sheet)) {
@@ -327,7 +327,7 @@ bool html_css_update_style(html_content *c, dom_node *style)
         s = html_create_style_element(c, style);
     }
     if (s == NULL) {
-        NSLOG(neosurf, INFO, "Could not find or create inline stylesheet for %p", style);
+        NSLOG(wisp, INFO, "Could not find or create inline stylesheet for %p", style);
         return false;
     }
 
@@ -431,19 +431,19 @@ bool html_css_process_link(html_content *htmlc, dom_node *node)
     ns_error = nsurl_join(htmlc->base_url, dom_string_data(href), &joined);
     if (ns_error != NSERROR_OK) {
         dom_string_unref(href);
-        NSLOG(neosurf, ERROR, "nsurl_join failed (err: %d) - jumping to no_memory", ns_error);
+        NSLOG(wisp, ERROR, "nsurl_join failed (err: %d) - jumping to no_memory", ns_error);
         goto no_memory;
     }
     dom_string_unref(href);
 
-    NSLOG(neosurf, INFO, "linked stylesheet %i '%s'", htmlc->stylesheet_count, nsurl_access(joined));
+    NSLOG(wisp, INFO, "linked stylesheet %i '%s'", htmlc->stylesheet_count, nsurl_access(joined));
 
     /* extend stylesheets array to allow for new sheet */
     stylesheets = realloc(htmlc->stylesheets, sizeof(struct html_stylesheet) * (htmlc->stylesheet_count + 1));
     if (stylesheets == NULL) {
         nsurl_unref(joined);
         ns_error = NSERROR_NOMEM;
-        NSLOG(neosurf, ERROR, "realloc stylesheets failed - jumping to no_memory");
+        NSLOG(wisp, ERROR, "realloc stylesheets failed - jumping to no_memory");
         goto no_memory;
     }
 
@@ -465,7 +465,7 @@ bool html_css_process_link(html_content *htmlc, dom_node *node)
 
     if (ns_error != NSERROR_OK) {
         CONTENT_ACTIVE_DEC(htmlc, "linked CSS fetch error");
-        NSLOG(neosurf, ERROR, "hlcache_handle_retrieve failed (err: %d) - jumping to no_memory", ns_error);
+        NSLOG(wisp, ERROR, "hlcache_handle_retrieve failed (err: %d) - jumping to no_memory", ns_error);
         goto no_memory;
     }
 

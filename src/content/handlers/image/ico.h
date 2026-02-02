@@ -20,8 +20,8 @@
  * Content for image/ico (interface).
  */
 
-#ifndef _NETSURF_IMAGE_ICO_H_
-#define _NETSURF_IMAGE_ICO_H_
+#ifndef _WISP_IMAGE_ICO_H_
+#define _WISP_IMAGE_ICO_H_
 
 nserror nsico_init(void);
 

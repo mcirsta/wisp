@@ -28,20 +28,20 @@
 
 #include <desktop/scrollbar.h>
 #include <dom/dom.h>
-#include <neosurf/mouse.h>
-#include <neosurf/types.h>
-#include <neosurf/utils/corestrings.h>
-#include <neosurf/utils/errors.h>
-#include <neosurf/utils/log.h>
-#include <neosurf/utils/nsurl.h>
+#include <wisp/mouse.h>
+#include <wisp/types.h>
+#include <wisp/utils/corestrings.h>
+#include <wisp/utils/errors.h>
+#include <wisp/utils/log.h>
+#include <wisp/utils/nsurl.h>
 #include "utils/talloc.h"
 #include <string.h>
 #include <svgtiny.h>
 
-#include <neosurf/content/handlers/html/box.h>
-#include <neosurf/content/handlers/html/form_internal.h>
-#include <neosurf/content/handlers/html/interaction.h>
-#include <neosurf/content/handlers/html/private.h>
+#include <wisp/content/handlers/html/box.h>
+#include <wisp/content/handlers/html/form_internal.h>
+#include <wisp/content/handlers/html/interaction.h>
+#include <wisp/content/handlers/html/private.h>
 #include "content/handlers/html/box_manipulate.h"
 
 
@@ -188,7 +188,7 @@ void box_add_child(struct box *parent, struct box *child)
                 class_name = dom_string_data(class_str);
             }
         }
-        NSLOG(netsurf, INFO, "box_add_child: FLEX parent=%p type=%d child=%p type=%d class='%s'", parent, parent->type,
+        NSLOG(wisp, INFO, "box_add_child: FLEX parent=%p type=%d child=%p type=%d class='%s'", parent, parent->type,
             child, child->type, class_name);
         if (class_str != NULL) {
             dom_string_unref(class_str);
@@ -203,7 +203,7 @@ void box_add_child(struct box *parent, struct box *child)
             const char *class_name = dom_string_data(class_str);
             if (strstr(class_name, "vector") != NULL || strstr(class_name, "menu") != NULL ||
                 strstr(class_name, "mw-portlet") != NULL) {
-                NSLOG(netsurf, INFO, "box_add_child: TRACE parent=%p child=%p class='%s'", parent, child, class_name);
+                NSLOG(wisp, INFO, "box_add_child: TRACE parent=%p child=%p class='%s'", parent, child, class_name);
             }
             dom_string_unref(class_str);
         }

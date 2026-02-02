@@ -21,8 +21,8 @@
  * free text page search for gtk interface
  */
 
-#ifndef NETSURF_GTK_SEARCH_H_
-#define NETSURF_GTK_SEARCH_H_
+#ifndef WISP_GTK_SEARCH_H_
+#define WISP_GTK_SEARCH_H_
 
 extern struct gui_search_table *nsgtk_search_table;
 

@@ -28,10 +28,10 @@
 #include <strings.h>
 #include <unistd.h>
 
-#include <neosurf/utils/inet.h>
-#include <neosurf/utils/messages.h>
-#include <neosurf/utils/string.h>
-#include <neosurf/utils/utils.h>
+#include <wisp/utils/inet.h>
+#include <wisp/utils/messages.h>
+#include <wisp/utils/string.h>
+#include <wisp/utils/utils.h>
 #include "utils/dirent.h"
 
 /* exported interface documented in utils/string.h */

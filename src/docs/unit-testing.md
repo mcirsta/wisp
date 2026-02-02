@@ -1,11 +1,11 @@
-NetSurf Unit Testing
+Wisp Unit Testing
 ====================
 
 [TOC]
 
 # Overview
 
-NetSurf has unit tests integrated in the test directory. These tests
+Wisp has unit tests integrated in the test directory. These tests
 use the check unit test framework for C [1].
 
 The tests are in a logical hierachy of "suite", "case" and individual

@@ -20,13 +20,13 @@
  * Content for image/svg (interface).
  */
 
-#ifndef _NETSURF_IMAGE_SVG_H_
-#define _NETSURF_IMAGE_SVG_H_
+#ifndef _WISP_IMAGE_SVG_H_
+#define _WISP_IMAGE_SVG_H_
 
 #include <stdbool.h>
 #include <stdint.h>
 
-#include <neosurf/utils/errors.h>
+#include <wisp/utils/errors.h>
 
 nserror svg_init(void);
 

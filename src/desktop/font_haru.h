@@ -21,8 +21,8 @@
  * Font handling in Haru pdf documents (interface).
  */
 
-#ifndef _NETSURF_DESKTOP_FONT_HARU_H_
-#define _NETSURF_DESKTOP_FONT_HARU_H_
+#ifndef _WISP_DESKTOP_FONT_HARU_H_
+#define _WISP_DESKTOP_FONT_HARU_H_
 
 #include <hpdf.h>
 

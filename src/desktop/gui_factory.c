@@ -22,32 +22,32 @@
 #include <string.h>
 #include <unistd.h>
 
-#include <neosurf/content/backing_store.h>
-#include <neosurf/content/hlcache.h>
-#include <neosurf/utils/config.h>
-#include <neosurf/utils/errors.h>
-#include <neosurf/utils/file.h>
-#include <neosurf/utils/inet.h>
-#include "neosurf/bitmap.h"
+#include <wisp/content/backing_store.h>
+#include <wisp/content/hlcache.h>
+#include <wisp/utils/config.h>
+#include <wisp/utils/errors.h>
+#include <wisp/utils/file.h>
+#include <wisp/utils/inet.h>
+#include "wisp/bitmap.h"
 
-#include <neosurf/desktop/download.h>
-#include <neosurf/desktop/save_pdf.h>
-#include <neosurf/desktop/searchweb.h>
-#include "neosurf/clipboard.h"
-#include "neosurf/core_window.h"
-#include "neosurf/download.h"
-#include "neosurf/fetch.h"
-#include "neosurf/layout.h"
-#include "neosurf/misc.h"
-#include "neosurf/neosurf.h"
-#include "neosurf/search.h"
-#include "neosurf/utf8.h"
-#include "neosurf/window.h"
+#include <wisp/desktop/download.h>
+#include <wisp/desktop/save_pdf.h>
+#include <wisp/desktop/searchweb.h>
+#include "wisp/clipboard.h"
+#include "wisp/core_window.h"
+#include "wisp/download.h"
+#include "wisp/fetch.h"
+#include "wisp/layout.h"
+#include "wisp/misc.h"
+#include "wisp/wisp.h"
+#include "wisp/search.h"
+#include "wisp/utf8.h"
+#include "wisp/window.h"
 
 /**
  * The global interface table.
  */
-struct neosurf_table *guit = NULL;
+struct wisp_table *guit = NULL;
 
 
 static void gui_default_window_set_title(struct gui_window *g, const char *title)
@@ -740,7 +740,7 @@ static nserror verify_misc_register(struct gui_misc_table *gmt)
 
 
 /* exported interface documented in neosurf/neosurf.h */
-nserror neosurf_register(struct neosurf_table *gt)
+nserror wisp_register(struct wisp_table *gt)
 {
     nserror err;
 

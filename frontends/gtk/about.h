@@ -16,8 +16,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef NETSURF_GTK_ABOUT_H
-#define NETSURF_GTK_ABOUT_H
+#ifndef WISP_GTK_ABOUT_H
+#define WISP_GTK_ABOUT_H
 
 void nsgtk_about_dialog_init(GtkWindow *parent);
 

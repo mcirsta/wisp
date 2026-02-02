@@ -30,11 +30,11 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <neosurf/bitmap.h>
-#include <neosurf/content.h>
-#include <neosurf/plotters.h>
-#include <neosurf/utils/errors.h>
-#include <neosurf/utils/utils.h>
+#include <wisp/bitmap.h>
+#include <wisp/content.h>
+#include <wisp/plotters.h>
+#include <wisp/utils/errors.h>
+#include <wisp/utils/utils.h>
 
 #include "gtk/bitmap.h"
 #include "gtk/plotters.h"

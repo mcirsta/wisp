@@ -25,14 +25,14 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <neosurf/content/llcache.h>
-#include <neosurf/desktop/download.h>
-#include <neosurf/desktop/gui_internal.h>
-#include <neosurf/utils/corestrings.h>
-#include <neosurf/utils/log.h>
-#include <neosurf/utils/utils.h>
+#include <wisp/content/llcache.h>
+#include <wisp/desktop/download.h>
+#include <wisp/desktop/gui_internal.h>
+#include <wisp/utils/corestrings.h>
+#include <wisp/utils/log.h>
+#include <wisp/utils/utils.h>
 #include "utils/http.h"
-#include "neosurf/download.h"
+#include "wisp/download.h"
 
 /**
  * A context for a download

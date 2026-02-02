@@ -25,16 +25,16 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#include "neosurf/utils/config.h"
+#include "wisp/utils/config.h"
 
 #include <windows.h>
 #include <windowsx.h>
 
-#include "neosurf/browser_window.h"
-#include "neosurf/keypress.h"
-#include "neosurf/plotters.h"
-#include "neosurf/utils/errors.h"
-#include "neosurf/utils/log.h"
+#include "wisp/browser_window.h"
+#include "wisp/keypress.h"
+#include "wisp/plotters.h"
+#include "wisp/utils/errors.h"
+#include "wisp/utils/log.h"
 
 #include "windows/drawable.h"
 #include "windows/local_history.h"
@@ -139,7 +139,7 @@ static LRESULT nsws_drawable_vscroll(struct gui_window *gw, HWND hwnd, WPARAM wp
     SCROLLINFO si;
     int mem;
 
-    NSLOG(neosurf, INFO, "VSCROLL %d", gw->requestscrolly);
+    NSLOG(wisp, INFO, "VSCROLL %d", gw->requestscrolly);
 
     if (gw->requestscrolly != 0)
         return 0;
@@ -210,7 +210,7 @@ static LRESULT nsws_drawable_hscroll(struct gui_window *gw, HWND hwnd, WPARAM wp
     SCROLLINFO si;
     int mem;
 
-    NSLOG(neosurf, INFO, "HSCROLL %d", gw->requestscrollx);
+    NSLOG(wisp, INFO, "HSCROLL %d", gw->requestscrollx);
 
     if (gw->requestscrollx != 0)
         return 0;
@@ -441,7 +441,7 @@ nsws_drawable_mouseup(struct gui_window *gw, int x, int y, browser_mouse_state p
     if ((gw == NULL) || (gw->mouse == NULL) || (gw->bw == NULL))
         return 0;
 
-    NSLOG(neosurf, INFO, "state 0x%x, press 0x%x", gw->mouse->state, press);
+    NSLOG(wisp, INFO, "state 0x%x, press 0x%x", gw->mouse->state, press);
     if ((gw->mouse->state & press) != 0) {
         gw->mouse->state &= ~press;
         gw->mouse->state |= click;
@@ -455,7 +455,7 @@ nsws_drawable_mouseup(struct gui_window *gw, int x, int y, browser_mouse_state p
         gw->mouse->state &= ~BROWSER_MOUSE_MOD_3;
 
     if ((gw->mouse->state & click) != 0) {
-        NSLOG(neosurf, INFO, "mouse click bw %p, state 0x%x, x %d, y %d", gw->bw, gw->mouse->state, x + gw->scrollx,
+        NSLOG(wisp, INFO, "mouse click bw %p, state 0x%x, x %d, y %d", gw->bw, gw->mouse->state, x + gw->scrollx,
             y + gw->scrolly);
 
         browser_window_mouse_click(gw->bw, gw->mouse->state, x + gw->scrollx, y + gw->scrolly);
@@ -489,7 +489,7 @@ static LRESULT nsws_drawable_mousedown(struct gui_window *gw, int x, int y, brow
     gw->mouse->pressed_x = x + gw->scrollx;
     gw->mouse->pressed_y = y + gw->scrolly;
 
-    NSLOG(neosurf, INFO, "mouse click bw %p, state %x, x %d, y %d", gw->bw, gw->mouse->state, x + gw->scrollx,
+    NSLOG(wisp, INFO, "mouse click bw %p, state %x, x %d, y %d", gw->bw, gw->mouse->state, x + gw->scrollx,
         y + gw->scrolly);
 
     browser_window_mouse_click(gw->bw, gw->mouse->state, x + gw->scrollx, y + gw->scrolly);
@@ -519,7 +519,7 @@ static LRESULT nsws_drawable_mousemove(struct gui_window *gw, int x, int y)
     if (((gw->mouse->state & (BROWSER_MOUSE_PRESS_1 | BROWSER_MOUSE_PRESS_2)) != 0) &&
         (fabs(x - gw->mouse->pressed_x) >= 5) && (fabs(y - gw->mouse->pressed_y) >= 5)) {
 
-        NSLOG(neosurf, INFO, "Drag start state 0x%x", gw->mouse->state);
+        NSLOG(wisp, INFO, "Drag start state 0x%x", gw->mouse->state);
 
         if ((gw->mouse->state & BROWSER_MOUSE_PRESS_1) != 0) {
             browser_window_mouse_click(gw->bw, BROWSER_MOUSE_DRAG_1, gw->mouse->pressed_x, gw->mouse->pressed_y);
@@ -557,7 +557,7 @@ static LRESULT CALLBACK nsws_window_drawable_event_callback(HWND hwnd, UINT msg,
 
     gw = nsws_get_gui_window(hwnd);
     if (gw == NULL) {
-        NSLOG(neosurf, INFO, "Unable to find gui window structure for hwnd %p", hwnd);
+        NSLOG(wisp, INFO, "Unable to find gui window structure for hwnd %p", hwnd);
         return DefWindowProc(hwnd, msg, wparam, lparam);
     }
 
@@ -651,7 +651,7 @@ HWND nsws_window_create_drawable(HINSTANCE hinstance, HWND hparent, struct gui_w
 
     if (hwnd == NULL) {
         win_perror("WindowCreateDrawable");
-        NSLOG(neosurf, INFO, "Window creation failed");
+        NSLOG(wisp, INFO, "Window creation failed");
         return NULL;
     }
 

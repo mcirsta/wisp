@@ -16,8 +16,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef NETSURF_GTK_CALLBACK_H
-#define NETSURF_GTK_CALLBACK_H 1
+#ifndef WISP_GTK_CALLBACK_H
+#define WISP_GTK_CALLBACK_H 1
 
 nserror nsgtk_schedule(int t, void (*callback)(void *p), void *p);
 

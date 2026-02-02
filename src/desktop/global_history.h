@@ -16,14 +16,14 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef _NETSURF_DESKTOP_GLOBAL_HISTORY_H_
-#define _NETSURF_DESKTOP_GLOBAL_HISTORY_H_
+#ifndef _WISP_DESKTOP_GLOBAL_HISTORY_H_
+#define _WISP_DESKTOP_GLOBAL_HISTORY_H_
 
 #include <stdbool.h>
 #include <stdint.h>
 
 #include "utils/errors.h"
-#include "neosurf/mouse.h"
+#include "wisp/mouse.h"
 
 struct redraw_context;
 struct nsurl;

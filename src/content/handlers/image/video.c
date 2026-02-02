@@ -18,7 +18,7 @@
 
 #include <gst/gst.h>
 
-#include <neosurf/content/content_protected.h>
+#include <wisp/content/content_protected.h>
 #include "content/content_factory.h"
 
 #include "content/handlers/image/video.h"

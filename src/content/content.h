@@ -24,14 +24,14 @@
  * The content functions manipulate struct contents, which correspond to URLs.
  */
 
-#ifndef NETSURF_CONTENT_CONTENT_H_
-#define NETSURF_CONTENT_CONTENT_H_
+#ifndef WISP_CONTENT_CONTENT_H_
+#define WISP_CONTENT_CONTENT_H_
 
 #include <libwapcaplet/libwapcaplet.h>
 
-#include "neosurf/console.h" /* console state and flags enums */
-#include "neosurf/content_type.h"
-#include "neosurf/mouse.h" /* mouse state enums */
+#include "wisp/console.h" /* console state and flags enums */
+#include "wisp/content_type.h"
+#include "wisp/mouse.h" /* mouse state enums */
 
 struct browser_window;
 struct browser_window_features;

@@ -20,8 +20,8 @@
  * Useful interned string pointers (interface).
  */
 
-#ifndef NETSURF_UTILS_CORESTRINGS_H_
-#define NETSURF_UTILS_CORESTRINGS_H_
+#ifndef WISP_UTILS_CORESTRINGS_H_
+#define WISP_UTILS_CORESTRINGS_H_
 
 #include <libwapcaplet/libwapcaplet.h>
 #include "utils/errors.h"

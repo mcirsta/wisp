@@ -4,7 +4,7 @@ add_library(nsutils SHARED
 	src/unistd.c
 	src/libwapcaplet.c
 )
-set_target_properties(nsutils PROPERTIES SOVERSION ${NEOSURF_ABI})
+set_target_properties(nsutils PROPERTIES SOVERSION ${WISP_ABI})
 
 install(TARGETS nsutils
 	RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}

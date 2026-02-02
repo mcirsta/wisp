@@ -22,9 +22,9 @@
  * HTML internal font handling implementation.
  */
 
-#include <neosurf/content/handlers/css/utils.h>
-#include <neosurf/plot_style.h>
-#include <neosurf/utils/nsoption.h>
+#include <wisp/content/handlers/css/utils.h>
+#include <wisp/plot_style.h>
+#include <wisp/utils/nsoption.h>
 
 #include "content/handlers/html/font.h"
 

@@ -1,9 +1,9 @@
 #!/usr/bin/python3
 
 '''
-NetSurf automated test runner
+Wisp automated test runner
 
-This script retrives a test plan from the NetSurf infrastructure and
+This script retrives a test plan from the Wisp infrastructure and
   executes it using the monkey frontend
 '''
 
@@ -19,7 +19,7 @@ import monkey_driver as driver
 
 # Otherwise let's begin...
 
-BASE_PATH = "https://test.netsurf-browser.org/cgi-bin/monkey-index.cgi"
+BASE_PATH = "https://test.wisp-browser.org/cgi-bin/monkey-index.cgi"
 MONKEY_PATH = "./nsmonkey"
 
 mp.set_start_method('fork')

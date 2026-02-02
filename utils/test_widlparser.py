@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Integration tests for widlparser with neosurf WebIDL files.
+Integration tests for widlparser with wisp WebIDL files.
 
 Verifies that widlparser correctly parses all project IDL files.
 
@@ -18,7 +18,7 @@ except ImportError:
 
 
 class TestWidlparserIntegration(unittest.TestCase):
-    """Test widlparser with neosurf IDL files."""
+    """Test widlparser with wisp IDL files."""
 
     @classmethod
     def setUpClass(cls):

@@ -19,11 +19,11 @@
 #include <string.h>
 #include <strings.h>
 
-#include <neosurf/utils/corestrings.h>
-#include <neosurf/utils/log.h>
-#include <neosurf/utils/nsoption.h>
-#include <neosurf/utils/nsurl.h>
-#include <neosurf/utils/utils.h>
+#include <wisp/utils/corestrings.h>
+#include <wisp/utils/log.h>
+#include <wisp/utils/nsoption.h>
+#include <wisp/utils/nsurl.h>
+#include <wisp/utils/utils.h>
 
 #include "content/handlers/css/hints.h"
 #include "content/handlers/css/select.h"
@@ -1427,7 +1427,7 @@ css_error node_presentational_hint(void *pw, void *node, uint32_t *nhints, css_h
     }
 
 #ifdef LOG_STATS
-    NSLOG(netsurf, INFO, "Properties with hints: %i", hint_ctx.len);
+    NSLOG(wisp, INFO, "Properties with hints: %i", hint_ctx.len);
 #endif
 
     css_hint_get_hints(hints, nhints);

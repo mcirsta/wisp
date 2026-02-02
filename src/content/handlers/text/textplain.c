@@ -26,22 +26,22 @@
 #include <parserutils/input/inputstream.h>
 #include <string.h>
 
-#include <neosurf/browser_window.h>
-#include <neosurf/content.h>
-#include <neosurf/content/content_protected.h>
-#include <neosurf/content/handlers/css/utils.h>
-#include <neosurf/content/hlcache.h>
-#include <neosurf/desktop/gui_internal.h>
-#include <neosurf/keypress.h>
-#include <neosurf/layout.h>
-#include <neosurf/plotters.h>
-#include <neosurf/utils/corestrings.h>
-#include <neosurf/utils/errors.h>
-#include <neosurf/utils/log.h>
-#include <neosurf/utils/messages.h>
-#include <neosurf/utils/nsoption.h>
-#include <neosurf/utils/utf8.h>
-#include <neosurf/utils/utils.h>
+#include <wisp/browser_window.h>
+#include <wisp/content.h>
+#include <wisp/content/content_protected.h>
+#include <wisp/content/handlers/css/utils.h>
+#include <wisp/content/hlcache.h>
+#include <wisp/desktop/gui_internal.h>
+#include <wisp/keypress.h>
+#include <wisp/layout.h>
+#include <wisp/plotters.h>
+#include <wisp/utils/corestrings.h>
+#include <wisp/utils/errors.h>
+#include <wisp/utils/log.h>
+#include <wisp/utils/messages.h>
+#include <wisp/utils/nsoption.h>
+#include <wisp/utils/utf8.h>
+#include <wisp/utils/utils.h>
 #include "utils/http.h"
 #include "content/content_factory.h"
 #include "content/textsearch.h"
@@ -389,7 +389,7 @@ static void textplain_reformat(struct content *c, int width, int height)
     size_t line_start;
     nserror res;
 
-    NSLOG(neosurf, INFO, "content %p w:%d h:%d", c, width, height);
+    NSLOG(wisp, INFO, "content %p w:%d h:%d", c, width, height);
 
     /* compute available columns (assuming monospaced font) - use 8
      * characters for better accuracy
@@ -481,7 +481,7 @@ static void textplain_reformat(struct content *c, int width, int height)
     return;
 
 no_memory:
-    NSLOG(neosurf, INFO, "out of memory (line_count %lu)", line_count);
+    NSLOG(wisp, INFO, "out of memory (line_count %lu)", line_count);
     return;
 }
 

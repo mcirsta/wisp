@@ -27,9 +27,9 @@
 #include <stdbool.h>
 #include <stdlib.h>
 
-#include <neosurf/content/fetch.h>
-#include <neosurf/utils/corestrings.h>
-#include <neosurf/utils/nsurl.h>
+#include <wisp/content/fetch.h>
+#include <wisp/utils/corestrings.h>
+#include <wisp/utils/nsurl.h>
 #include "utils/ring.h"
 #include "content/fetchers.h"
 

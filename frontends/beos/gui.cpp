@@ -57,15 +57,15 @@ extern "C" {
 #include "utils/url.h"
 #include "utils/utf8.h"
 #include "utils/utils.h"
-#include "netsurf/browser_window.h"
-#include "netsurf/clipboard.h"
-#include "netsurf/content.h"
-#include "netsurf/cookie_db.h"
-#include "netsurf/fetch.h"
-#include "netsurf/misc.h"
-#include "netsurf/netsurf.h"
-#include "netsurf/search.h"
-#include "netsurf/url_db.h"
+#include "wisp/browser_window.h"
+#include "wisp/clipboard.h"
+#include "wisp/content.h"
+#include "wisp/cookie_db.h"
+#include "wisp/fetch.h"
+#include "wisp/misc.h"
+#include "wisp/wisp.h"
+#include "wisp/search.h"
+#include "wisp/url_db.h"
 #include "content/fetch.h"
 }
 
@@ -114,13 +114,13 @@ static int sEventPipe[2];
 /* exported function defined in beos/gui.h */
 nserror beos_warn_user(const char *warning, const char *detail)
 {
-    NSLOG(netsurf, INFO, "warn_user: %s (%s)", warning, detail);
+    NSLOG(wisp, INFO, "warn_user: %s (%s)", warning, detail);
     BAlert *alert;
     BString text(warning);
     if (detail)
         text << ":\n" << detail;
 
-    alert = new BAlert("NetSurf Warning", text.String(), "Debug", "Ok", NULL, B_WIDTH_AS_USUAL, B_WARNING_ALERT);
+    alert = new BAlert("Wisp Warning", text.String(), "Debug", "Ok", NULL, B_WIDTH_AS_USUAL, B_WARNING_ALERT);
     if (alert->Go() < 1) {
         debugger("warn_user");
     }
@@ -128,7 +128,7 @@ nserror beos_warn_user(const char *warning, const char *detail)
     return NSERROR_OK;
 }
 
-NSBrowserApplication::NSBrowserApplication() : BApplication("application/x-vnd.NetSurf")
+NSBrowserApplication::NSBrowserApplication() : BApplication("application/x-vnd.Wisp")
 {
 }
 
@@ -275,7 +275,7 @@ char *find_resource(char *buf, const char *filename, const char *def)
     char t[PATH_MAX];
 
     err = find_directory(B_USER_SETTINGS_DIRECTORY, &path);
-    path.Append("NetSurf");
+    path.Append("Wisp");
     if (err >= B_OK)
         cdir = path.Path();
     if (cdir != NULL) {
@@ -290,14 +290,14 @@ char *find_resource(char *buf, const char *filename, const char *def)
     cdir = getenv("HOME");
     if (cdir != NULL) {
         strcpy(t, cdir);
-        strcat(t, "/.netsurf/");
+        strcat(t, "/.wisp/");
         strcat(t, filename);
         realpath(t, buf);
         if (access(buf, R_OK) == 0)
             return buf;
     }
 
-    cdir = getenv("NETSURFRES");
+    cdir = getenv("WISPRES");
 
     if (cdir != NULL) {
         realpath(cdir, buf);
@@ -311,7 +311,7 @@ char *find_resource(char *buf, const char *filename, const char *def)
     BPathFinder f((void *)find_resource);
 
     BPath p;
-    if (f.FindPath(B_FIND_PATH_APPS_DIRECTORY, "netsurf/res", p) == B_OK) {
+    if (f.FindPath(B_FIND_PATH_APPS_DIRECTORY, "wisp/res", p) == B_OK) {
         strcpy(t, p.Path());
         strcat(t, filename);
         realpath(t, buf);
@@ -350,15 +350,15 @@ static void check_homedir(void)
 
     if (err < B_OK) {
         /* we really can't continue without a home directory. */
-        NSLOG(netsurf, INFO, "Can't find user settings directory - nowhere to store state!");
-        die("NetSurf needs to find the user settings directory in order to run.\n");
+        NSLOG(wisp, INFO, "Can't find user settings directory - nowhere to store state!");
+        die("Wisp needs to find the user settings directory in order to run.\n");
     }
 
-    path.Append("NetSurf");
+    path.Append("Wisp");
     err = create_directory(path.Path(), 0644);
     if (err < B_OK) {
-        NSLOG(netsurf, INFO, "Unable to create %s", path.Path());
-        die("NetSurf could not create its settings directory.\n");
+        NSLOG(wisp, INFO, "Unable to create %s", path.Path());
+        die("Wisp could not create its settings directory.\n");
     }
 }
 
@@ -383,7 +383,7 @@ static nsurl *gui_get_resource_url(const char *path)
         path = "favicon.png";
 
     u << path;
-    NSLOG(netsurf, INFO, "(%s) -> '%s'\n", path, u.String());
+    NSLOG(wisp, INFO, "(%s) -> '%s'\n", path, u.String());
     nsurl_create(u.String(), &url);
     return url;
 }
@@ -510,7 +510,7 @@ static BPath get_messages_path()
     BPathFinder f((void *)get_messages_path);
 
     BPath p;
-    f.FindPath(B_FIND_PATH_APPS_DIRECTORY, "netsurf/res", p);
+    f.FindPath(B_FIND_PATH_APPS_DIRECTORY, "wisp/res", p);
     BString lang;
 #ifdef __HAIKU__
     BMessage preferredLangs;
@@ -543,7 +543,7 @@ static void gui_init(int argc, char **argv)
         return;
     if (!replicated) {
         sBAppThreadID = spawn_thread(
-            bapp_thread, "BApplication(NetSurf)", B_NORMAL_PRIORITY, (void *)find_thread(NULL));
+            bapp_thread, "BApplication(Wisp)", B_NORMAL_PRIORITY, (void *)find_thread(NULL));
         if (sBAppThreadID < B_OK)
             return; /* #### handle errors */
         if (resume_thread(sBAppThreadID) < B_OK)
@@ -588,7 +588,7 @@ static void gui_init(int argc, char **argv)
         die("Unable to load throbber image.\n");
 
     find_resource(buf, "Choices", "%/Choices");
-    NSLOG(netsurf, INFO, "Using '%s' as Preferences file", buf);
+    NSLOG(wisp, INFO, "Using '%s' as Preferences file", buf);
     options_file_location = strdup(buf);
     nsoption_read(buf, NULL);
 
@@ -635,12 +635,12 @@ static void gui_init(int argc, char **argv)
 
     if (nsoption_charp(cookie_file) == NULL) {
         find_resource(buf, "Cookies", "%/Cookies");
-        NSLOG(netsurf, INFO, "Using '%s' as Cookies file", buf);
+        NSLOG(wisp, INFO, "Using '%s' as Cookies file", buf);
         nsoption_set_charp(cookie_file, strdup(buf));
     }
     if (nsoption_charp(cookie_jar) == NULL) {
         find_resource(buf, "Cookies", "%/Cookies");
-        NSLOG(netsurf, INFO, "Using '%s' as Cookie Jar file", buf);
+        NSLOG(wisp, INFO, "Using '%s' as Cookie Jar file", buf);
         nsoption_set_charp(cookie_jar, strdup(buf));
     }
     if ((nsoption_charp(cookie_file) == NULL) || (nsoption_charp(cookie_jar) == NULL))
@@ -648,13 +648,13 @@ static void gui_init(int argc, char **argv)
 
     if (nsoption_charp(url_file) == NULL) {
         find_resource(buf, "URLs", "%/URLs");
-        NSLOG(netsurf, INFO, "Using '%s' as URL file", buf);
+        NSLOG(wisp, INFO, "Using '%s' as URL file", buf);
         nsoption_set_charp(url_file, strdup(buf));
     }
 
     if (nsoption_charp(ca_path) == NULL) {
         find_resource(buf, "certs", "/etc/ssl/certs");
-        NSLOG(netsurf, INFO, "Using '%s' as certificate path", buf);
+        NSLOG(wisp, INFO, "Using '%s' as certificate path", buf);
         nsoption_set_charp(ca_path, strdup(buf));
     }
 
@@ -674,7 +674,7 @@ static void gui_init(int argc, char **argv)
     } else if (nsoption_charp(homepage_url) != NULL) {
         addr = nsoption_charp(homepage_url);
     } else {
-        addr = NETSURF_HOMEPAGE;
+        addr = WISP_HOMEPAGE;
     }
 
     /* create an initial browser window */
@@ -758,16 +758,16 @@ void nsbeos_gui_poll(void)
     timeout.tv_sec = (long)(next_schedule / 1000000LL);
     timeout.tv_usec = (long)(next_schedule % 1000000LL);
 
-    NSLOG(netsurf, DEEPDEBUG, "gui_poll: select(%d, ..., %Ldus", max_fd, next_schedule);
+    NSLOG(wisp, DEEPDEBUG, "gui_poll: select(%d, ..., %Ldus", max_fd, next_schedule);
     fd_count = select(max_fd, &read_fd_set, &write_fd_set, &exc_fd_set, &timeout);
-    NSLOG(netsurf, DEEPDEBUG, "select: %d\n", fd_count);
+    NSLOG(wisp, DEEPDEBUG, "select: %d\n", fd_count);
 
     if (fd_count > 0 && FD_ISSET(sEventPipe[0], &read_fd_set)) {
         BMessage *message;
         int len = read(sEventPipe[0], &message, sizeof(void *));
-        NSLOG(netsurf, DEEPDEBUG, "gui_poll: BMessage ? %d read", len);
+        NSLOG(wisp, DEEPDEBUG, "gui_poll: BMessage ? %d read", len);
         if (len == sizeof(void *)) {
-            NSLOG(netsurf, DEEPDEBUG, "gui_poll: BMessage.what %-4.4s\n", (char *)&(message->what));
+            NSLOG(wisp, DEEPDEBUG, "gui_poll: BMessage.what %-4.4s\n", (char *)&(message->what));
             nsbeos_dispatch_event(message);
         }
     }
@@ -939,7 +939,7 @@ void die(const char *const error)
     BString text("Cannot continue:\n");
     text << error;
 
-    alert = new BAlert("NetSurf Error", text.String(), "Debug", "Ok", NULL, B_WIDTH_AS_USUAL, B_STOP_ALERT);
+    alert = new BAlert("Wisp Error", text.String(), "Debug", "Ok", NULL, B_WIDTH_AS_USUAL, B_STOP_ALERT);
     if (alert->Go() < 1)
         debugger("die");
 
@@ -972,7 +972,7 @@ int main(int argc, char **argv)
 {
     nserror ret;
     BPath options;
-    struct netsurf_table beos_table = {&beos_misc_table, beos_window_table, NULL, /* corewindow */
+    struct wisp_table beos_table = {&beos_misc_table, beos_window_table, NULL, /* corewindow */
         beos_download_table, beos_clipboard_table, &beos_fetch_table, NULL, /* use POSIX file */
         NULL, /* default utf8 */
         NULL, /* default search */
@@ -980,13 +980,13 @@ int main(int argc, char **argv)
         NULL, /* default low level cache persistant storage */
         beos_bitmap_table, beos_layout_table};
 
-    ret = netsurf_register(&beos_table);
+    ret = wisp_register(&beos_table);
     if (ret != NSERROR_OK) {
-        die("NetSurf operation table failed registration");
+        die("Wisp operation table failed registration");
     }
 
     if (find_directory(B_USER_SETTINGS_DIRECTORY, &options, true) == B_OK) {
-        options.Append("x-vnd.NetSurf");
+        options.Append("x-vnd.Wisp");
     }
 
     if (!replicated) {
@@ -1025,7 +1025,7 @@ int main(int argc, char **argv)
 
     char path[12];
     sprintf(path, "%.2s/Messages", lang.String());
-    NSLOG(netsurf, INFO, "Loading messages from resource %s\n", path);
+    NSLOG(wisp, INFO, "Loading messages from resource %s\n", path);
 
     const uint8_t *res = (const uint8_t *)resources.LoadResource('data', path, &size);
     if (size > 0 && res != NULL) {
@@ -1035,9 +1035,9 @@ int main(int argc, char **argv)
         ret = messages_add_from_file(messages.Path());
     }
 
-    ret = netsurf_init(NULL);
+    ret = wisp_init(NULL);
     if (ret != NSERROR_OK) {
-        die("NetSurf failed to initialise");
+        die("Wisp failed to initialise");
     }
 
     gui_init(argc, argv);
@@ -1046,7 +1046,7 @@ int main(int argc, char **argv)
         nsbeos_gui_poll();
     }
 
-    netsurf_exit();
+    wisp_exit();
 
     /* finalise options */
     nsoption_finalise(nsoptions, nsoptions_default);
@@ -1062,7 +1062,7 @@ int gui_init_replicant(int argc, char **argv)
 {
     nserror ret;
     BPath options;
-    struct netsurf_table beos_table = {&beos_misc_table, beos_window_table, NULL, /* corewindow */
+    struct wisp_table beos_table = {&beos_misc_table, beos_window_table, NULL, /* corewindow */
         beos_download_table, beos_clipboard_table, &beos_fetch_table, NULL, /* use POSIX file */
         NULL, /* default utf8 */
         NULL, /* default search */
@@ -1070,13 +1070,13 @@ int gui_init_replicant(int argc, char **argv)
         NULL, /* default low level cache persistant storage */
         beos_bitmap_table, beos_layout_table};
 
-    ret = netsurf_register(&beos_table);
+    ret = wisp_register(&beos_table);
     if (ret != NSERROR_OK) {
-        die("NetSurf operation table failed registration");
+        die("Wisp operation table failed registration");
     }
 
     if (find_directory(B_USER_SETTINGS_DIRECTORY, &options, true) == B_OK) {
-        options.Append("x-vnd.NetSurf");
+        options.Append("x-vnd.Wisp");
     }
 
     /* initialise logging. Not fatal if it fails but not much we
@@ -1098,10 +1098,10 @@ int gui_init_replicant(int argc, char **argv)
     BPath messages = get_messages_path();
     ret = messages_add_from_file(messages.Path());
 
-    ret = netsurf_init(NULL);
+    ret = wisp_init(NULL);
     if (ret != NSERROR_OK) {
         // FIXME: must not die when in replicant!
-        die("NetSurf failed to initialise");
+        die("Wisp failed to initialise");
     }
 
     gui_init(argc, argv);

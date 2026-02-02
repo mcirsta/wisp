@@ -1,12 +1,12 @@
 #include "visurf/fetch.h"
-#include <neosurf/fetch.h>
-#include <neosurf/utils/ascii.h>
-#include <neosurf/utils/errors.h>
-#include <neosurf/utils/file.h>
-#include <neosurf/utils/filepath.h>
-#include <neosurf/utils/hashtable.h>
-#include <neosurf/utils/log.h>
-#include <neosurf/utils/nsurl.h>
+#include <wisp/fetch.h>
+#include <wisp/utils/ascii.h>
+#include <wisp/utils/errors.h>
+#include <wisp/utils/file.h>
+#include <wisp/utils/filepath.h>
+#include <wisp/utils/hashtable.h>
+#include <wisp/utils/log.h>
+#include <wisp/utils/nsurl.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <stdbool.h>
@@ -57,7 +57,7 @@ void nsvi_fetch_filetype_init(const char *mimefile)
 
     fh = fopen(mimefile, "r");
     if (fh == NULL) {
-        NSLOG(neosurf, INFO, "Unable to open a mime.types file, so using a minimal one for you.");
+        NSLOG(wisp, INFO, "Unable to open a mime.types file, so using a minimal one for you.");
         return;
     }
 
@@ -157,7 +157,7 @@ static const char *nsvi_fetch_filetype(const char *unix_path)
         /* stat suceeded so can check for directory */
 
         if (S_ISDIR(statbuf.st_mode)) {
-            return "application/x-neosurf-directory";
+            return "application/x-wisp-directory";
         }
     }
 
@@ -213,7 +213,7 @@ static nsurl *nsvi_fetch_get_resource_url(const char *path)
 {
     char buf[PATH_MAX];
     nsurl *url = NULL;
-    neosurf_path_to_nsurl(filepath_sfind(respaths, buf, path), &url);
+    wisp_path_to_nsurl(filepath_sfind(respaths, buf, path), &url);
     return url;
 }
 

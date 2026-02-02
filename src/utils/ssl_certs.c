@@ -26,11 +26,11 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <neosurf/utils/errors.h>
-#include <neosurf/utils/log.h>
-#include <neosurf/utils/nsurl.h>
+#include <wisp/utils/errors.h>
+#include <wisp/utils/log.h>
+#include <wisp/utils/nsurl.h>
 
-#include "neosurf/ssl_certs.h"
+#include "wisp/ssl_certs.h"
 
 /*
  * create new certificate chain

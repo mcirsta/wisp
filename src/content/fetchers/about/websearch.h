@@ -21,8 +21,8 @@
  * about scheme web search handler interface
  */
 
-#ifndef NETSURF_CONTENT_FETCHERS_ABOUT_WEBSEARCH_H
-#define NETSURF_CONTENT_FETCHERS_ABOUT_WEBSEARCH_H
+#ifndef WISP_CONTENT_FETCHERS_ABOUT_WEBSEARCH_H
+#define WISP_CONTENT_FETCHERS_ABOUT_WEBSEARCH_H
 
 /**
  * Handler for about scheme websearch.

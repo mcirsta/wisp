@@ -24,7 +24,7 @@
  * Browser window creation and manipulation implementation.
  */
 
-#include <neosurf/utils/config.h>
+#include <wisp/utils/config.h>
 
 #include <nsutils/time.h>
 #include <limits.h>
@@ -32,34 +32,34 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <neosurf/browser_window.h>
-#include <neosurf/content.h>
-#include <neosurf/content/content.h>
-#include <neosurf/content/hlcache.h>
-#include <neosurf/misc.h>
-#include <neosurf/plotters.h>
-#include <neosurf/search.h>
-#include <neosurf/types.h>
-#include <neosurf/utils/corestrings.h>
-#include <neosurf/utils/errors.h>
-#include <neosurf/utils/log.h>
-#include <neosurf/utils/messages.h>
-#include <neosurf/utils/nsoption.h>
-#include <neosurf/window.h>
+#include <wisp/browser_window.h>
+#include <wisp/content.h>
+#include <wisp/content/content.h>
+#include <wisp/content/hlcache.h>
+#include <wisp/misc.h>
+#include <wisp/plotters.h>
+#include <wisp/search.h>
+#include <wisp/types.h>
+#include <wisp/utils/corestrings.h>
+#include <wisp/utils/errors.h>
+#include <wisp/utils/log.h>
+#include <wisp/utils/messages.h>
+#include <wisp/utils/nsoption.h>
+#include <wisp/window.h>
 #include "content/content_debug.h"
 #include "content/urldb.h"
 
-#include <neosurf/content/handlers/html/box.h>
-#include <neosurf/content/handlers/html/form_internal.h>
-#include <neosurf/content/handlers/html/html.h>
+#include <wisp/content/handlers/html/box.h>
+#include <wisp/content/handlers/html/form_internal.h>
+#include <wisp/content/handlers/html/html.h>
 #include "content/handlers/javascript/js.h"
 
-#include <neosurf/desktop/browser_history.h>
-#include <neosurf/desktop/download.h>
-#include <neosurf/desktop/global_history.h>
-#include <neosurf/desktop/gui_internal.h>
-#include <neosurf/desktop/hotlist.h>
-#include <neosurf/desktop/textinput.h>
+#include <wisp/desktop/browser_history.h>
+#include <wisp/desktop/download.h>
+#include <wisp/desktop/global_history.h>
+#include <wisp/desktop/gui_internal.h>
+#include <wisp/desktop/hotlist.h>
+#include <wisp/desktop/textinput.h>
 #include "desktop/browser_private.h"
 #include "desktop/frames.h"
 #include "desktop/knockout.h"
@@ -319,11 +319,11 @@ static nserror browser_window_download(struct browser_window *bw, nsurl *url, ns
         /* no internal handler for this type, call out to frontend */
         error = guit->misc->launch_url(url);
     } else if (error != NSERROR_OK) {
-        NSLOG(neosurf, INFO, "Failed to fetch download: %d", error);
+        NSLOG(wisp, INFO, "Failed to fetch download: %d", error);
     } else {
         error = download_context_create(l, root->window);
         if (error != NSERROR_OK) {
-            NSLOG(neosurf, INFO, "Failed creating download context: %d", error);
+            NSLOG(wisp, INFO, "Failed creating download context: %d", error);
             llcache_handle_abort(l);
             llcache_handle_release(l);
         }
@@ -450,7 +450,7 @@ static nserror browser_window_favicon_callback(hlcache_handle *c, const hlcache_
 
             error = nsurl_create("resource:favicon.ico", &nsurl);
             if (error != NSERROR_OK) {
-                NSLOG(neosurf, INFO, "Unable to create default location url");
+                NSLOG(wisp, INFO, "Unable to create default location url");
             } else {
                 hlcache_handle_retrieve(nsurl, HLCACHE_RETRIEVE_SNIFF_TYPE, nsref, NULL,
                     browser_window_favicon_callback, bw, NULL, CONTENT_IMAGE, &bw->favicon.loading);
@@ -532,7 +532,7 @@ browser_window_update_favicon(hlcache_handle *c, struct browser_window *bw, stru
             res = nsurl_create("resource:favicon.ico", &nsurl);
         }
         if (res != NSERROR_OK) {
-            NSLOG(neosurf, INFO, "Unable to create default location url");
+            NSLOG(wisp, INFO, "Unable to create default location url");
             return res;
         }
     } else {
@@ -540,9 +540,9 @@ browser_window_update_favicon(hlcache_handle *c, struct browser_window *bw, stru
     }
 
     if (link == NULL) {
-        NSLOG(neosurf, INFO, "fetching general favicon from '%s'", nsurl_access(nsurl));
+        NSLOG(wisp, INFO, "fetching general favicon from '%s'", nsurl_access(nsurl));
     } else {
-        NSLOG(neosurf, INFO, "fetching favicon rel:%s '%s'", lwc_string_data(link->rel), nsurl_access(nsurl));
+        NSLOG(wisp, INFO, "fetching favicon rel:%s '%s'", lwc_string_data(link->rel), nsurl_access(nsurl));
     }
 
     res = hlcache_handle_retrieve(nsurl, HLCACHE_RETRIEVE_SNIFF_TYPE, nsref, NULL, browser_window_favicon_callback, bw,
@@ -567,7 +567,7 @@ static void browser_window_refresh(void *p)
     hlcache_handle *parent = NULL;
     enum browser_window_nav_flags flags = BW_NAVIGATE_UNVERIFIABLE;
 
-    NSLOG(neosurf, INFO, "browser_window_refresh executing");
+    NSLOG(wisp, INFO, "browser_window_refresh executing");
 
     assert(bw->current_content != NULL &&
         (content_get_status(bw->current_content) == CONTENT_STATUS_READY ||
@@ -754,7 +754,7 @@ static nserror browser_window_content_ready(struct browser_window *bw)
      */
     if (bw->loading_content == NULL && bw->current_content != NULL) {
         /* This is a restart case. Content is already current, just reformat it. */
-        NSLOG(neosurf, INFO, "Content ready (restart): skipping transfer, reformatting current content");
+        NSLOG(wisp, INFO, "Content ready (restart): skipping transfer, reformatting current content");
 
         /* Format the  content to the correct dimensions */
         browser_window_get_dimensions(bw, &width, &height);
@@ -785,7 +785,7 @@ static nserror browser_window_content_ready(struct browser_window *bw)
      * edge cases.
      */
     if (bw->current_content == NULL) {
-        NSLOG(neosurf, WARNING, "browser_window_content_ready: current_content is NULL, aborting");
+        NSLOG(wisp, WARNING, "browser_window_content_ready: current_content is NULL, aborting");
         return NSERROR_INVALID;
     }
 
@@ -905,7 +905,7 @@ static nserror browser_window_content_done(struct browser_window *bw)
         rect.x0 = rect.x1 = scrollx;
         rect.y0 = rect.y1 = scrolly;
         if (browser_window_set_scroll(bw, &rect) != NSERROR_OK) {
-            NSLOG(neosurf, WARNING, "Unable to set browser scroll offsets to %d by %d", scrollx, scrolly);
+            NSLOG(wisp, WARNING, "Unable to set browser scroll offsets to %d by %d", scrollx, scrolly);
         }
     }
 
@@ -915,7 +915,7 @@ static nserror browser_window_content_done(struct browser_window *bw)
     }
 
     if (bw->refresh_interval != -1) {
-        NSLOG(neosurf, INFO, "Content done. Scheduling refresh in %d ms", bw->refresh_interval * 10);
+        NSLOG(wisp, INFO, "Content done. Scheduling refresh in %d ms", bw->refresh_interval * 10);
         guit->misc->schedule(bw->refresh_interval * 10, browser_window_refresh, bw);
     }
 
@@ -1253,7 +1253,7 @@ static nserror browser_window__handle_fetcherror(struct browser_window *bw, cons
 
     memset(&params, 0, sizeof(params));
 
-    NSLOG(neosurf, ERROR, "Fetch error for %s: %s", nsurl_access(url), reason);
+    NSLOG(wisp, ERROR, "Fetch error for %s: %s", nsurl_access(url), reason);
 
     params.url = nsurl_ref(corestring_nsurl_about_query_fetcherror);
     params.referrer = nsurl_ref(url);
@@ -1295,7 +1295,7 @@ static nserror browser_window__handle_error(struct browser_window *bw, hlcache_h
     /* Unexpected OK? */
     /* assert(code != NSERROR_OK); */
     if (code == NSERROR_OK) {
-        NSLOG(neosurf, ERROR, "Received CONTENT_MSG_ERROR with NSERROR_OK! Message: %s",
+        NSLOG(wisp, ERROR, "Received CONTENT_MSG_ERROR with NSERROR_OK! Message: %s",
             event->data.errordata.errormsg ? event->data.errordata.errormsg : "NULL");
         code = NSERROR_UNKNOWN;
     }
@@ -1307,7 +1307,7 @@ static nserror browser_window__handle_error(struct browser_window *bw, hlcache_h
     }
 
     NSLOG(
-        neosurf, INFO, "browser_window__handle_error: code=%d message='%s' url='%s'", code, message, nsurl_access(url));
+        wisp, INFO, "browser_window__handle_error: code=%d message='%s' url='%s'", code, message, nsurl_access(url));
 
     if (c == bw->loading_content) {
         bw->loading_content = NULL;
@@ -1415,7 +1415,7 @@ static nserror browser_window_callback(hlcache_handle *c, const hlcache_event *e
     case CONTENT_MSG_DONE:
         assert(bw->current_content == c);
 
-        NSLOG(neosurf, INFO, "CONTENT_MSG_DONE received");
+        NSLOG(wisp, INFO, "CONTENT_MSG_DONE received");
         res = browser_window_content_done(bw);
         break;
 
@@ -1481,7 +1481,7 @@ static nserror browser_window_callback(hlcache_handle *c, const hlcache_event *e
 
     case CONTENT_MSG_REFRESH:
         bw->refresh_interval = event->data.delay * 100;
-        NSLOG(neosurf, INFO, "CONTENT_MSG_REFRESH received. Scheduling refresh in %d ms", bw->refresh_interval * 10);
+        NSLOG(wisp, INFO, "CONTENT_MSG_REFRESH received. Scheduling refresh in %d ms", bw->refresh_interval * 10);
         guit->misc->schedule(bw->refresh_interval * 10, browser_window_refresh, bw);
         break;
 
@@ -1714,7 +1714,7 @@ nserror browser_window_destroy_internal(struct browser_window *bw)
 
     /* clear any pending callbacks */
     guit->misc->schedule(-1, browser_window_refresh, bw);
-    NSLOG(neosurf, INFO, "Clearing reformat schedule for browser window %p", bw);
+    NSLOG(wisp, INFO, "Clearing reformat schedule for browser window %p", bw);
     guit->misc->schedule(-1, scheduled_reformat, bw);
 
     /* If this brower window is not the root window, and has focus, unset
@@ -1787,7 +1787,7 @@ nserror browser_window_destroy_internal(struct browser_window *bw)
     bw->status.text = NULL;
     browser_window__free_fetch_parameters(&bw->current_parameters);
     browser_window__free_fetch_parameters(&bw->loading_parameters);
-    NSLOG(neosurf, INFO, "Status text cache match:miss %d:%d", bw->status.match, bw->status.miss);
+    NSLOG(wisp, INFO, "Status text cache match:miss %d:%d", bw->status.match, bw->status.miss);
 
     return NSERROR_OK;
 }
@@ -2362,10 +2362,10 @@ bool browser_window_redraw(
     struct rect content_clip;
     nserror res;
 
-    NSLOG(neosurf, DEBUG, "PROFILER: START Browser window redraw %p", bw);
+    NSLOG(wisp, DEBUG, "PROFILER: START Browser window redraw %p", bw);
 
     if (bw == NULL) {
-        NSLOG(neosurf, INFO, "NULL browser window");
+        NSLOG(wisp, INFO, "NULL browser window");
         return false;
     }
 
@@ -2530,7 +2530,7 @@ bool browser_window_redraw(
         knockout_plot_end(ctx);
     }
 
-    NSLOG(neosurf, DEBUG, "PROFILER: STOP Browser window redraw %p", bw);
+    NSLOG(wisp, DEBUG, "PROFILER: STOP Browser window redraw %p", bw);
     return plot_ok;
 }
 
@@ -2539,7 +2539,7 @@ bool browser_window_redraw(
 bool browser_window_redraw_ready(struct browser_window *bw)
 {
     if (bw == NULL) {
-        NSLOG(neosurf, INFO, "NULL browser window");
+        NSLOG(wisp, INFO, "NULL browser window");
         return false;
     } else if (bw->current_content != NULL) {
         /* Can't render locked contents */
@@ -2613,7 +2613,7 @@ void browser_window_set_position(struct browser_window *bw, int x, int y)
         bw->x = x;
         bw->y = y;
     } else {
-        NSLOG(neosurf, INFO, "Asked to set position of front end window.");
+        NSLOG(wisp, INFO, "Asked to set position of front end window.");
         assert(0);
     }
 }
@@ -3021,7 +3021,7 @@ nserror browser_window_navigate(struct browser_window *bw, nsurl *url, nsurl *re
     assert(bw);
     assert(url);
 
-    NSLOG(neosurf, INFO, "bw %p, url %s", bw, nsurl_access(url));
+    NSLOG(wisp, INFO, "bw %p, url %s", bw, nsurl_access(url));
 
     /*
      * determine if navigation is internal url, if so, we do not
@@ -3061,7 +3061,7 @@ nserror browser_window_navigate(struct browser_window *bw, nsurl *url, nsurl *re
         depth++;
     }
     if (depth > FRAME_DEPTH) {
-        NSLOG(neosurf, INFO, "frame depth too high.");
+        NSLOG(wisp, INFO, "frame depth too high.");
         return NSERROR_FRAME_DEPTH;
     }
 
@@ -3209,7 +3209,7 @@ static nserror navigate_internal_real(struct browser_window *bw, struct browser_
     nserror res;
     hlcache_handle *c;
 
-    NSLOG(neosurf, INFO, "Loading '%s'", nsurl_access(params->url));
+    NSLOG(wisp, INFO, "Loading '%s'", nsurl_access(params->url));
 
     fetch_is_post = (params->post_urlenc != NULL || params->post_multipart != NULL);
 
@@ -3376,7 +3376,7 @@ static nserror navigate_internal_query_ssl(struct browser_window *bw, struct bro
     }
 
     if (nsurl_create(siteurl, &siteurl_ns) != NSERROR_OK) {
-        NSLOG(neosurf, ERROR, "Unable to reset ssl loading parameters");
+        NSLOG(wisp, ERROR, "Unable to reset ssl loading parameters");
     } else {
         /* In order that we may proceed, replace the loading parameters
          */
@@ -3398,7 +3398,7 @@ static nserror navigate_internal_query_timeout(struct browser_window *bw, struct
 {
     bool is_retry = false, is_back = false;
 
-    NSLOG(neosurf, INFO, "bw:%p params:%p", bw, params);
+    NSLOG(wisp, INFO, "bw:%p params:%p", bw, params);
 
     assert(params->post_multipart != NULL);
 
@@ -3432,7 +3432,7 @@ static nserror navigate_internal_query_fetcherror(struct browser_window *bw, str
 {
     bool is_retry = false, is_back = false;
 
-    NSLOG(neosurf, INFO, "bw:%p params:%p", bw, params);
+    NSLOG(wisp, INFO, "bw:%p params:%p", bw, params);
 
     assert(params->post_multipart != NULL);
 
@@ -3723,7 +3723,7 @@ void browser_window_set_dimensions(struct browser_window *bw, int width, int hei
         bw->width = width;
         bw->height = height;
     } else {
-        NSLOG(neosurf, INFO, "Asked to set dimensions of front end window.");
+        NSLOG(wisp, INFO, "Asked to set dimensions of front end window.");
         assert(0);
     }
 }
@@ -4188,12 +4188,12 @@ bool browser_window_exec(struct browser_window *bw, const char *src, size_t srcl
     assert(bw != NULL);
 
     if (!bw->current_content) {
-        NSLOG(neosurf, DEEPDEBUG, "Unable to exec, no content");
+        NSLOG(wisp, DEEPDEBUG, "Unable to exec, no content");
         return false;
     }
 
     if (content_get_status(bw->current_content) != CONTENT_STATUS_DONE) {
-        NSLOG(neosurf, DEEPDEBUG, "Unable to exec, content not done");
+        NSLOG(wisp, DEEPDEBUG, "Unable to exec, content not done");
         return false;
     }
 
@@ -4219,8 +4219,8 @@ nserror browser_window_console_log(struct browser_window *bw, browser_window_con
 
     /* bw is the target of the log, but root is where we log it */
 
-    NSLOG(neosurf, DEEPDEBUG, "Logging message in %p targetted at %p", root, bw);
-    NSLOG(neosurf, DEEPDEBUG, "Log came from %s",
+    NSLOG(wisp, DEEPDEBUG, "Logging message in %p targetted at %p", root, bw);
+    NSLOG(wisp, DEEPDEBUG, "Log came from %s",
         ((src == BW_CS_INPUT)                   ? "user input"
                 : (src == BW_CS_SCRIPT_ERROR)   ? "script error"
                 : (src == BW_CS_SCRIPT_CONSOLE) ? "script console"
@@ -4228,19 +4228,19 @@ nserror browser_window_console_log(struct browser_window *bw, browser_window_con
 
     switch (log_level) {
     case BW_CS_FLAG_LEVEL_DEBUG:
-        NSLOG(neosurf, DEBUG, "%.*s", (int)msglen, msg);
+        NSLOG(wisp, DEBUG, "%.*s", (int)msglen, msg);
         break;
     case BW_CS_FLAG_LEVEL_LOG:
-        NSLOG(neosurf, VERBOSE, "%.*s", (int)msglen, msg);
+        NSLOG(wisp, VERBOSE, "%.*s", (int)msglen, msg);
         break;
     case BW_CS_FLAG_LEVEL_INFO:
-        NSLOG(neosurf, INFO, "%.*s", (int)msglen, msg);
+        NSLOG(wisp, INFO, "%.*s", (int)msglen, msg);
         break;
     case BW_CS_FLAG_LEVEL_WARN:
-        NSLOG(neosurf, WARNING, "%.*s", (int)msglen, msg);
+        NSLOG(wisp, WARNING, "%.*s", (int)msglen, msg);
         break;
     case BW_CS_FLAG_LEVEL_ERROR:
-        NSLOG(neosurf, ERROR, "%.*s", (int)msglen, msg);
+        NSLOG(wisp, ERROR, "%.*s", (int)msglen, msg);
         break;
     default:
         /* Unreachable */

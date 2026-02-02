@@ -28,10 +28,10 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <neosurf/content/fetch.h>
-#include <neosurf/utils/errors.h>
-#include <neosurf/utils/log.h>
-#include <neosurf/utils/messages.h>
+#include <wisp/content/fetch.h>
+#include <wisp/utils/errors.h>
+#include <wisp/utils/log.h>
+#include <wisp/utils/messages.h>
 
 #include "private.h"
 #include "query_auth.h"
@@ -62,7 +62,7 @@ static nserror get_authentication_description(
 
     str = messages_get_buff(key, url_s, realm);
     if (str != NULL) {
-        NSLOG(neosurf, INFO, "key:%s url:%s realm:%s str:%s", key, url_s, realm, str);
+        NSLOG(wisp, INFO, "key:%s url:%s realm:%s str:%s", key, url_s, realm, str);
         *out_str = str;
     } else {
         res = NSERROR_NOMEM;

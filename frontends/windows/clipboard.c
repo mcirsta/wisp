@@ -23,8 +23,8 @@
 
 #include <windows.h>
 
-#include "neosurf/clipboard.h"
-#include "neosurf/utils/log.h"
+#include "wisp/clipboard.h"
+#include "wisp/utils/log.h"
 
 #include "windows/clipboard.h"
 

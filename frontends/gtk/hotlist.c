@@ -26,11 +26,11 @@
 #include <stdint.h>
 #include <stdlib.h>
 
-#include <neosurf/desktop/hotlist.h>
-#include <neosurf/keypress.h>
-#include <neosurf/plotters.h>
-#include <neosurf/utils/log.h>
-#include <neosurf/utils/nsoption.h>
+#include <wisp/desktop/hotlist.h>
+#include <wisp/keypress.h>
+#include <wisp/plotters.h>
+#include <wisp/utils/log.h>
+#include <wisp/utils/nsoption.h>
 
 #include "gtk/compat.h"
 #include "gtk/corewindow.h"
@@ -218,7 +218,7 @@ static void nsgtk_hotlist_init_menu(struct nsgtk_hotlist_window *hlwin)
     while (event->widget != NULL) {
         w = GTK_WIDGET(gtk_builder_get_object(hlwin->builder, event->widget));
         if (w == NULL) {
-            NSLOG(neosurf, INFO,
+            NSLOG(wisp, INFO,
                 "Unable to connect menu widget "
                 "%s"
                 "",
@@ -299,7 +299,7 @@ static nserror nsgtk_hotlist_init(void)
 
     res = nsgtk_builder_new_from_resname("hotlist", &ncwin->builder);
     if (res != NSERROR_OK) {
-        NSLOG(neosurf, INFO, "Hotlist UI builder init failed");
+        NSLOG(wisp, INFO, "Hotlist UI builder init failed");
         free(ncwin);
         return res;
     }

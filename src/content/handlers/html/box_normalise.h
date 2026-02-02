@@ -36,8 +36,8 @@
  *
  */
 
-#ifndef NETSURF_HTML_BOX_NORMALISE_H
-#define NETSURF_HTML_BOX_NORMALISE_H
+#ifndef WISP_HTML_BOX_NORMALISE_H
+#define WISP_HTML_BOX_NORMALISE_H
 
 #include <stdbool.h>
 

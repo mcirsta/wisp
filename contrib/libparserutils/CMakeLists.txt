@@ -26,7 +26,7 @@ add_library(parserutils SHARED
 	src/utils/vector.c
 	src/utils/errors.c
 )
-set_target_properties(parserutils PROPERTIES SOVERSION ${NEOSURF_ABI})
+set_target_properties(parserutils PROPERTIES SOVERSION ${WISP_ABI})
 
 add_dependencies(parserutils parserutils_aliases)
 

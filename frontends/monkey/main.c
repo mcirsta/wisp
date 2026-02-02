@@ -37,13 +37,13 @@
 #include "utils/messages.h"
 #include "utils/nsoption.h"
 #include "utils/nsurl.h"
-#include "neosurf/content/backing_store.h"
-#include "neosurf/content/fetch.h"
-#include "neosurf/cookie_db.h"
-#include "neosurf/misc.h"
-#include "neosurf/neosurf.h"
-#include "neosurf/url_db.h"
-#include "neosurf/utils/sys_time.h"
+#include "wisp/content/backing_store.h"
+#include "wisp/content/fetch.h"
+#include "wisp/cookie_db.h"
+#include "wisp/misc.h"
+#include "wisp/wisp.h"
+#include "wisp/url_db.h"
+#include "wisp/utils/sys_time.h"
 
 #include "monkey/401login.h"
 #include "monkey/bitmap.h"
@@ -251,9 +251,9 @@ static void monkey_options_handle_command(int argc, char **argv)
 static nserror set_defaults(struct nsoption_s *defaults)
 {
     /* Set defaults for absent option strings */
-    nsoption_setnull_charp(cookie_file, strdup("~/.netsurf/Cookies"));
-    nsoption_setnull_charp(cookie_jar, strdup("~/.netsurf/Cookies"));
-    nsoption_setnull_charp(url_file, strdup("~/.netsurf/URLs"));
+    nsoption_setnull_charp(cookie_file, strdup("~/.wisp/Cookies"));
+    nsoption_setnull_charp(cookie_jar, strdup("~/.wisp/Cookies"));
+    nsoption_setnull_charp(url_file, strdup("~/.wisp/URLs"));
 
     return NSERROR_OK;
 }
@@ -308,20 +308,20 @@ static void monkey_run(void)
         /* setup timeout */
         switch (schedtm) {
         case -1:
-            NSLOG(netsurf, INFO, "Iterate blocking");
+            NSLOG(wisp, INFO, "Iterate blocking");
             moutf(MOUT_GENERIC, "POLL BLOCKING");
             timeout = NULL;
             break;
 
         case 0:
-            NSLOG(netsurf, INFO, "Iterate immediate");
+            NSLOG(wisp, INFO, "Iterate immediate");
             tv.tv_sec = 0;
             tv.tv_usec = 0;
             timeout = &tv;
             break;
 
         default:
-            NSLOG(netsurf, INFO, "Iterate non-blocking");
+            NSLOG(wisp, INFO, "Iterate non-blocking");
             moutf(MOUT_GENERIC, "POLL TIMED %d", schedtm);
             tv.tv_sec = schedtm / 1000; /* miliseconds to seconds */
             tv.tv_usec = (schedtm % 1000) * 1000; /* remainder to microseconds */
@@ -341,7 +341,7 @@ static void monkey_run(void)
         } else {
             rdy_fd = select(max_fd + 1, &read_fd_set, &write_fd_set, &exc_fd_set, timeout);
             if (rdy_fd < 0) {
-                NSLOG(netsurf, CRITICAL, "Unable to select: %s", strerror(errno));
+                NSLOG(wisp, CRITICAL, "Unable to select: %s", strerror(errno));
                 Sleep(1);
             }
         }
@@ -357,7 +357,7 @@ static void monkey_run(void)
 #else
         rdy_fd = select(max_fd + 1, &read_fd_set, &write_fd_set, &exc_fd_set, timeout);
         if (rdy_fd < 0) {
-            NSLOG(netsurf, CRITICAL, "Unable to select: %s", strerror(errno));
+            NSLOG(wisp, CRITICAL, "Unable to select: %s", strerror(errno));
             monkey_done = true;
         } else if (rdy_fd > 0) {
             if (FD_ISSET(0, &read_fd_set)) {
@@ -417,7 +417,7 @@ int main(int argc, char **argv)
     char *options;
     char buf[PATH_MAX];
     nserror ret;
-    struct neosurf_table monkey_table = {
+    struct wisp_table monkey_table = {
         .misc = &monkey_misc_table,
         .window = monkey_window_table,
         .download = monkey_download_table,
@@ -438,9 +438,9 @@ int main(int argc, char **argv)
     signal(SIGBUS, signal_handler);
 #endif
 
-    ret = neosurf_register(&monkey_table);
+    ret = wisp_register(&monkey_table);
     if (ret != NSERROR_OK) {
-        die("NetSurf operation table failed registration");
+        die("Wisp operation table failed registration");
     }
 
     moutf(MOUT_GENERIC, "BOOT REGISTERED");
@@ -453,7 +453,7 @@ int main(int argc, char **argv)
 
     /* Prep the search paths */
     respaths = nsmonkey_init_resource(
-        "${HOME}/.netsurf/:${NETSURFRES}:" MONKEY_RESPATH ":./frontends/monkey/res:" MONKEY_SRCPATH "");
+        "${HOME}/.wisp/:${WISPRES}:" MONKEY_RESPATH ":./frontends/monkey/res:" MONKEY_SRCPATH "");
     moutf(MOUT_GENERIC, "BOOT RESPATHS READY");
 
     /* initialise logging. Not fatal if it fails but not much we can do
@@ -476,15 +476,15 @@ int main(int argc, char **argv)
     messages = filepath_find(respaths, "Messages");
     ret = messages_add_from_file(messages);
     if (ret != NSERROR_OK) {
-        NSLOG(netsurf, INFO, "Messages failed to load");
+        NSLOG(wisp, INFO, "Messages failed to load");
     }
     moutf(MOUT_GENERIC, "BOOT MESSAGES LOADED");
 
     /* common initialisation */
-    ret = neosurf_init(NULL);
+    ret = wisp_init(NULL);
     free(messages);
     if (ret != NSERROR_OK) {
-        die("NetSurf failed to initialise");
+        die("Wisp failed to initialise");
     }
     moutf(MOUT_GENERIC, "BOOT CORE INIT");
 
@@ -532,7 +532,7 @@ int main(int argc, char **argv)
     moutf(MOUT_GENERIC, "CLOSING_DOWN");
     monkey_kill_browser_windows();
 
-    neosurf_exit();
+    wisp_exit();
     moutf(MOUT_GENERIC, "FINISHED");
 
     /* finalise options */

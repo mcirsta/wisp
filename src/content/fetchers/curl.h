@@ -20,8 +20,8 @@
  * Fetching of data from a URL (Registration).
  */
 
-#ifndef NETSURF_CONTENT_FETCHERS_FETCH_CURL_H
-#define NETSURF_CONTENT_FETCHERS_FETCH_CURL_H
+#ifndef WISP_CONTENT_FETCHERS_FETCH_CURL_H
+#define WISP_CONTENT_FETCHERS_FETCH_CURL_H
 
 #include <curl/curl.h>
 

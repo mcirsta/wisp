@@ -27,9 +27,9 @@
 
 #include "utils/http.h"
 
-#include <neosurf/content/content.h>
-#include <neosurf/content/content_protected.h>
-#include <neosurf/content/llcache.h>
+#include <wisp/content/content.h>
+#include <wisp/content/content_protected.h>
+#include <wisp/content/llcache.h>
 #include "content/content_factory.h"
 
 /**

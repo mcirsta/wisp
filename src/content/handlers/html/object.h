@@ -21,8 +21,8 @@
  * HTML content object interface
  */
 
-#ifndef NETSURF_HTML_OBJECT_H
-#define NETSURF_HTML_OBJECT_H
+#ifndef WISP_HTML_OBJECT_H
+#define WISP_HTML_OBJECT_H
 
 struct html_content;
 struct browser_window;

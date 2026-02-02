@@ -33,10 +33,10 @@
 #include <string.h>
 #include <unistd.h>
 
-#include <neosurf/utils/config.h>
-#include <neosurf/utils/filepath.h>
-#include <neosurf/utils/log.h>
-#include <neosurf/utils/utils.h>
+#include <wisp/utils/config.h>
+#include <wisp/utils/filepath.h>
+#include <wisp/utils/log.h>
+#include <wisp/utils/utils.h>
 #include "utils/dirent.h" /** \todo why is this necessary for atari to get PATH_MAX and is there a better way */
 
 /** maximum number of elements in the resource vector */
@@ -111,10 +111,10 @@ char *filepath_sfind(char **respathv, char *filepath, const char *filename)
 {
     int respathc = 0;
 
-    NSLOG(neosurf, INFO, "Looking for resource: '%s'", filename);
+    NSLOG(wisp, INFO, "Looking for resource: '%s'", filename);
 
     if ((respathv == NULL) || (respathv[0] == NULL) || (filepath == NULL)) {
-        NSLOG(neosurf, INFO, "Resource '%s' not found (search path empty)", filename);
+        NSLOG(wisp, INFO, "Resource '%s' not found (search path empty)", filename);
         return NULL;
     }
 
@@ -126,7 +126,7 @@ char *filepath_sfind(char **respathv, char *filepath, const char *filename)
         respathc++;
     }
 
-    NSLOG(neosurf, ERROR, "FATAL: Resource '%s' not found", filename);
+    NSLOG(wisp, ERROR, "FATAL: Resource '%s' not found", filename);
     return NULL;
 }
 

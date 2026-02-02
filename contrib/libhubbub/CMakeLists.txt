@@ -43,7 +43,7 @@ add_library(hubbub SHARED
 	src/utils/string.c
 	src/utils/errors.c
 )
-set_target_properties(hubbub PROPERTIES SOVERSION ${NEOSURF_ABI})
+set_target_properties(hubbub PROPERTIES SOVERSION ${WISP_ABI})
 
 add_dependencies(hubbub hubbub_autogen)
 
