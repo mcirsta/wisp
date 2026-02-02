@@ -597,10 +597,10 @@ static void font_repaint_callback(void *p)
 /**
  * Load font data into Qt's font database.
  *
- * This function is called from the core when a web font is downloaded.
- * It overrides the weak symbol in font_face.c.
+ * This function is called from the core when a web font is downloaded
+ * via gui_layout_table.load_font_data.
  */
-extern "C" nserror html_font_face_load_data(const char *family_name, const uint8_t *data, size_t size)
+static nserror nsqt_load_font_data(const char *family_name, const uint8_t *data, size_t size)
 {
     QByteArray fontData(reinterpret_cast<const char *>(data), size);
 
@@ -645,6 +645,7 @@ static struct gui_layout_table layout_table = {
     .width = nsqt_layout_width,
     .position = nsqt_layout_position,
     .split = nsqt_layout_split,
+    .load_font_data = nsqt_load_font_data,
 };
 
 struct gui_layout_table *nsqt_layout_table = &layout_table;

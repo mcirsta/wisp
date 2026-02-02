@@ -66,17 +66,11 @@ bool html_font_face_is_available(const char *family_name);
  */
 nserror html_font_face_process(const css_font_face *font_face, const char *base_url);
 
-/**
- * Load font data into the system font database.
- * This function must be implemented by each frontend.
- *
- * \param family_name Font family name (CSS font-family)
- * \param data        Raw font file data
- * \param size        Size of font data in bytes
- * \return NSERROR_OK on success, or error code
+/*
+ * NOTE: Font data loading is handled via gui_layout_table.load_font_data
+ * in include/neosurf/layout.h. Frontends MUST implement this table entry.
+ * Do NOT define a function named html_font_face_load_data - it will not be called.
  */
-nserror html_font_face_load_data(const char *family_name, const uint8_t *data, size_t size);
-
 /**
  * Callback invoked when all pending font downloads have completed.
  * This can be used to trigger a page redraw (FOUT strategy).
