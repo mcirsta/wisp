@@ -1,0 +1,141 @@
+/* =========================
+ *   Wisp Browser – Style Sheet
+ *   Lightweight, modern, fast
+ *   ========================= */
+
+/* Reset */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+/* Base */
+html,
+body {
+    font-family: Arial, Helvetica, sans-serif;
+    color: #222;
+    background-color: #fffbe6;
+    /* airy light yellow */
+    min-height: 100vh;
+    line-height: 1.5;
+}
+
+/* Links */
+a {
+    color: #007acc;
+    text-decoration: none;
+}
+
+a:hover {
+    text-decoration: underline;
+}
+
+/* Header */
+header {
+    background-color: #fffbe6;
+    padding: 20px;
+    text-align: center;
+    position: sticky;
+    top: 0;
+    z-index: 1000;
+    border-bottom: 2px solid #ddd;
+}
+
+/* Logo */
+.logo {
+    width: 280px;
+    max-width: 90%;
+    margin-bottom: 20px;
+}
+
+/* Headings */
+h1 {
+    font-size: 2.8rem;
+    font-weight: 700;
+    margin-bottom: 10px;
+}
+
+h2 {
+    font-size: 1.8rem;
+    margin-bottom: 12px;
+    padding-bottom: 6px;
+    border-bottom: 2px solid #ddd;
+}
+
+h3 {
+    font-size: 1.2rem;
+    margin-bottom: 8px;
+}
+
+/* Intro text */
+.lead {
+    font-size: 1.2rem;
+    color: #444;
+    margin-bottom: 25px;
+}
+
+/* Main layout */
+main {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 30px 20px;
+}
+
+/* Sections */
+.section {
+    margin-bottom: 50px;
+}
+
+.section p {
+    margin-bottom: 10px;
+}
+
+/* Lists */
+ul {
+    margin-left: 20px;
+}
+
+li {
+    margin-bottom: 6px;
+}
+
+/* Features grid */
+.features {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 20px;
+}
+
+.feature {
+    flex: 1 1 250px;
+    padding: 16px;
+    background-color: #ffffff;
+    border: 1px solid #eee;
+    border-radius: 6px;
+}
+
+/* Footer */
+footer {
+    margin-top: 60px;
+    padding: 20px 10px;
+    text-align: center;
+    font-size: 0.9rem;
+    color: #666;
+    border-top: 1px solid #e5e5e5;
+}
+
+/* Small screens */
+@media (max-width: 600px) {
+    h1 {
+        font-size: 2.2rem;
+    }
+
+    h2 {
+        font-size: 1.5rem;
+    }
+
+    .lead {
+        font-size: 1.05rem;
+    }
+}

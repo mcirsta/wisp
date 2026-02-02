@@ -1211,8 +1211,28 @@ static struct box *layout_next_margin_block(const css_unit_ctx *unit_len_ctx, st
             box = box->children;
         } else {
             bool walked_up = false;
-            if (!box->next) {
-                /* No more siblings:
+
+            /* CSS 2.1 §8.3.1: Margins of a box collapse THROUGH it (top collapses
+             * with bottom) only if:
+             * - no top/bottom border
+             * - no top/bottom padding
+             * - height is 0 or auto
+             * - no line boxes (content)
+             *
+             * If the box does NOT collapse through (has height/content), then its
+             * Top margin does NOT collapse with its Bottom margin (and thus
+             * does not collapse with Parent Bottom or Next Sibling Top).
+             * We should NOT walk up in this case.
+             */
+            bool collapses_through = true;
+            if ((box->flags & MAKE_HEIGHT) || box->padding[TOP] || box->padding[BOTTOM] || box->border[TOP].width ||
+                box->border[BOTTOM].width || box->type == BOX_INLINE_CONTAINER) {
+                /* BOX_INLINE_CONTAINER typically has text/line boxes, so it doesn't collapse through */
+                collapses_through = false;
+            }
+
+            if (!box->next && collapses_through) {
+                /* No more siblings AND box collapses through:
                  * Go up to first ancestor with a sibling. */
                 walked_up = true;
                 do {
@@ -1244,6 +1264,12 @@ static struct box *layout_next_margin_block(const css_unit_ctx *unit_len_ctx, st
                      * content inside it. */
 
                 } while (!box->next);
+            } else if (!box->next) {
+                /* No more siblings and NO collapse through:
+                 * This box has content/height, so its top margin/margin chain
+                 * ends here. It does not collapse with parent's bottom or
+                 * valid next siblings of parent. */
+                return NULL;
             }
 
             /* CSS 2.1 §8.3.1: "bottom margin of box and top margin of its
