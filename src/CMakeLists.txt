@@ -65,9 +65,7 @@ if(LIBSSL_VERSION_MAJOR EQUAL 1)
 message(FATAL_ERROR "NeoSurf does not support OpenSSL 1.x.x")
 endif()
 
-# Duktape bindings commented out - using QuickJS-ng instead
-# Files kept for reference on implementing new JS bindings
-# include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/duktape_bindings.cmake)
+# QuickJS-ng bindings
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/quickjs_bindings.cmake)
 
  
@@ -155,9 +153,7 @@ add_library(neosurf ${NEOSURF_LIB_TYPE}
 	${WEBP_SRC}
 	content/handlers/javascript/fetcher.c
 	content/handlers/javascript/content.c
-	# Duktape sources replaced with QuickJS-ng - files kept for reference
-	# content/handlers/javascript/duktape/dukky.c
-	# content/handlers/javascript/duktape/duktape.c
+	# QuickJS-ng sources
 	content/handlers/javascript/quickjs/qjs.c
 	content/handlers/javascript/quickjs/timers.c
 	content/handlers/javascript/quickjs/navigator.c
@@ -225,14 +221,11 @@ add_library(neosurf ${NEOSURF_LIB_TYPE}
 	utils/http/strict-transport-security.c
 	utils/nsurl/nsurl.c
 	utils/nsurl/parse.c
-	# Duktape generated bindings replaced with QuickJS-ng - files kept for reference
-	# ${CMAKE_BINARY_DIR}/duktape/binding.c
-	# ${DUKTAPE_GEN_SOURCES}
+	# QuickJS-ng generated bindings
 	${CMAKE_BINARY_DIR}/quickjs/console.c
 	${CMAKE_BINARY_DIR}/quickjs/window.c
 )
-# Duktape dependencies replaced with QuickJS-ng
-# add_dependencies(neosurf duktape_bindings duktape_js_inc)
+# QuickJS-ng dependencies
 add_dependencies(neosurf quickjs_bindings)
 set_target_properties(neosurf PROPERTIES SOVERSION ${NEOSURF_ABI})
 
