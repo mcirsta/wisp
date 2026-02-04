@@ -5,8 +5,8 @@
 # How did I get mixed up with this fucking monkey anyhow?
 WISP_MONKEY_RESOURCES := $(PREFIX)/share/wisp/
 WISP_MONKEY_BIN := $(PREFIX)/bin/
-WISP_USE_RSVG := NO
-WISP_USE_NSSVG := NO
+
+WISP_USE_NSSVG := YES
 WISP_USE_ROSPRITE := NO
 WISP_USE_HARU_PDF := NO
 WISP_FS_BACKING_STORE := YES

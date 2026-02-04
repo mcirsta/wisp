@@ -9,13 +9,11 @@ WISP_QT_RES_PATH := $(PREFIX)/share/wisp/:./frontends/qt/res/
 # Where to install the wisp binary
 WISP_QT_BIN := $(PREFIX)/bin/
 
-# Enable Wisp's use of librsvg in conjunction with Cairo to display SVGs
-# Valid options: YES, NO, AUTO
-WISP_USE_RSVG := NO
+
 
 # Enable Wisp's use of libsvgtiny for displaying SVGs
 # Valid options: YES, NO, AUTO
-WISP_USE_NSSVG := AUTO
+WISP_USE_NSSVG := YES
 
 # Enable Wisp's use of librosprite for displaying RISC OS Sprites
 # Valid options: YES, NO, AUTO

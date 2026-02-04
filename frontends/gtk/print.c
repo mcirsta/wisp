@@ -404,9 +404,7 @@ nsgtk_print_plot_polygon(const struct redraw_context *ctx, const plot_style_t *s
 static nserror nsgtk_print_plot_path(const struct redraw_context *ctx, const plot_style_t *pstyle, const float *p,
     unsigned int n, const float transform[6])
 {
-    /* Only the internal SVG renderer uses this plot call currently,
-     * and the GTK version uses librsvg.  Thus, we ignore this complexity,
-     * and just return true obliviously. */
+    /* Only the internal SVG renderer uses this plot call currently. */
 
     return NSERROR_OK;
 }

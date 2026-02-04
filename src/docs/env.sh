@@ -46,10 +46,10 @@ ns_apt_get_install()
 
     case "${TARGET_TOOLKIT}" in
 	gtk2)
-	    NS_TK_DEB="libgtk2.0-dev librsvg2-dev"
+	    NS_TK_DEB="libgtk2.0-dev"
 	    ;;
 	gtk3)
-	    NS_TK_DEB="libgtk-3-dev librsvg2-dev"
+	    NS_TK_DEB="libgtk-3-dev"
 	    ;;
 	qt6)
 	    NS_TK_DEB="qt6-base-dev-tools qt6-base-dev"
@@ -76,10 +76,10 @@ ns_yum_install()
 
     case "${TARGET_TOOLKIT}" in
 	gtk2)
-	    NS_TK_YUM_RPM="gtk2-devel librsvg2-devel"
+	    NS_TK_YUM_RPM="gtk2-devel"
 	    ;;
 	gtk3)
-	    NS_TK_YUM_RPM="gtk3-devel librsvg2-devel"
+	    NS_TK_YUM_RPM="gtk3-devel"
 	    ;;
 	*)
 	    NS_TK_YUM_RPM=""
@@ -179,10 +179,10 @@ ns_generic_install()
 
     case "${TARGET_TOOLKIT}" in
 	gtk2)
-	    NS_TK_GEN="gtk+ 2 toolkit library, librsvg2 library"
+	    NS_TK_GEN="gtk+ 2 toolkit library"
 	    ;;
 	gtk3)
-	    NS_TK_GEN="gtk+ 3 toolkit library, librsvg2 library"
+	    NS_TK_GEN="gtk+ 3 toolkit library"
 	    ;;
 	qt6)
 	    NS_TK_GEN="qt6 toolkit dev library"

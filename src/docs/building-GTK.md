@@ -37,7 +37,7 @@ in common distros.  For now, you'll have to make do with Git checkouts.
 
 Debian-like OS:
 
-    $ apt-get install libgtk2.0-dev libcurl3-dev libpng-dev 
+    $ sudo apt-get install cmake libgtk-3-dev libcurl4-openssl-dev 
     $ apt-get install librsvg2-dev libjpeg-dev
 
 If you want to build with gtk 3 replace libgtk2.0-dev with libgtk-3-dev 

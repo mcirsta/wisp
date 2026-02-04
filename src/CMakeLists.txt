@@ -38,13 +38,7 @@ if(WISP_USE_WEBP)
     include_directories(${LIBWEBP_INCLUDE_DIRS})
 endif()
 
-if(WISP_USE_RSVG)
-    pkg_check_modules(LIBRSVG REQUIRED librsvg-2.0)
-    include_directories(${LIBRSVG_INCLUDE_DIRS})
-    pkg_check_modules(CAIRO REQUIRED cairo)
-    include_directories(${CAIRO_INCLUDE_DIRS})
-    set(RSVG_SRC content/handlers/image/rsvg246.c)
-endif()
+
 
 pkg_check_modules(ZLIB REQUIRED zlib)
 include_directories(${ZLIB_INCLUDE_DIRS})
@@ -145,7 +139,7 @@ add_library(wisp ${WISP_LIB_TYPE}
 	${JPEG_SRC}
 	${PNG_SRC}
 	content/handlers/image/svg.c
-	${RSVG_SRC}
+
 	#content/handlers/image/video.c # requires gstreamer TODO: replace with ffmpeg/libmpv
 	${WEBP_SRC}
 	content/handlers/javascript/fetcher.c
@@ -246,9 +240,7 @@ endif()
 
 set(WISP_COMMON_LIBS css dom nsutils parserutils nsgif nsbmp svgtiny ${LIBCRYPTO_LIBRARIES} ${LIBPNG_LIBRARIES} ${LIBCURL_LIBRARIES} ${LIBJPEG_LIBRARIES} ${LIBWEBP_LIBRARIES} ${LIBPSL_LIBRARIES} ${ZLIB_LIBRARIES} ${LIBSSL_LIBRARIES} ${LIBUTF8PROC_LIBRARIES} ${LIBREGEX_LIBRARIES})
 
-if(WISP_USE_RSVG)
-    list(APPEND WISP_COMMON_LIBS ${LIBRSVG_LIBRARIES} ${CAIRO_LIBRARIES})
-endif()
+
 
 if(WIN32)
 	list(APPEND WISP_COMMON_LIBS ws2_32)
@@ -387,8 +379,5 @@ if(WIN32 AND BUILD_SHARED_LIBS)
 		install_dlls_for_package("${LIBXML2_PREFIX}" "${LIBXML2_LIBRARIES}")
 	endif()
 
-	if(WISP_USE_RSVG)
-		install_dlls_for_package("${LIBRSVG_PREFIX}" "${LIBRSVG_LIBRARIES}")
-		install_dlls_for_package("${CAIRO_PREFIX}" "${CAIRO_LIBRARIES}")
-	endif()
+
 endif()

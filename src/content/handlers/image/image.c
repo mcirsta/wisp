@@ -36,7 +36,7 @@
 #include "content/handlers/image/jpegxl.h"
 #include "content/handlers/image/nssprite.h"
 #include "content/handlers/image/png.h"
-#include "content/handlers/image/rsvg.h"
+
 #include "content/handlers/image/svg.h"
 #include "content/handlers/image/webp.h"
 
@@ -91,17 +91,10 @@ nserror image_init(void)
         return error;
 #endif
 
-    /* Prefer rsvg over libsvgtiny for svgs */
-#ifdef WITH_NS_SVG
     error = svg_init();
     if (error != NSERROR_OK)
         return error;
-#endif
-#ifdef WITH_RSVG
-    error = nsrsvg_init();
-    if (error != NSERROR_OK)
-        return error;
-#endif
+
 
 #ifdef WITH_WEBP
     error = nswebp_init();
