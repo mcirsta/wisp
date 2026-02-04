@@ -3092,9 +3092,9 @@ static bool layout_line(struct box *first, int *width, int *y, int cx, int cy, s
 
             NSLOG(layout, DEBUG, "forcing");
 
-        } else if ((split == 0 || x1 - x0 <= x + space_before + w) && inline_count == 1) {
-            /* first word of first box doesn't fit, but a float is
-             * taking some of the width so move below it */
+        } else if ((split == 0 || x1 - x0 < x + space_before + w) && inline_count == 1) {
+            /* first word of first box doesn't fit (strictly exceeds available width),
+             * and a float is taking some of the width so move below it */
             assert(left || right);
             used_height = 0;
             if (left) {
@@ -3115,9 +3115,9 @@ static bool layout_line(struct box *first, int *width, int *y, int cx, int cy, s
 
             NSLOG(layout, DEBUG, "moving below float");
 
-        } else if (split == 0 || x1 - x0 <= x + space_before + w) {
-            /* first word of box doesn't fit so leave box for next
-             * line */
+        } else if (split == 0 || x1 - x0 < x + space_before + w) {
+            /* first word of box doesn't fit (strictly exceeds width) so leave box
+             * for next line */
             b = split_box;
 
             NSLOG(layout, DEBUG, "leaving for next line");

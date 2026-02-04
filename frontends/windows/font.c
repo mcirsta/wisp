@@ -1334,6 +1334,48 @@ static nserror win32_font_position(
 
 
 /**
+ * Helper function to find split point and measure width.
+ * This handles walking to word boundaries after position finding.
+ */
+static nserror win32_font_split_at_word(
+    const plot_font_style_t *style, const char *string, size_t length, int x, size_t *offset, int *actual_x)
+{
+    nserror res;
+    size_t c_off;
+
+    res = win32_font_position(style, string, length, x, offset, actual_x);
+    if (res != NSERROR_OK) {
+        return res;
+    }
+    if (*offset == length) {
+        return NSERROR_OK;
+    }
+
+    /* Walk backward to find a space to break on */
+    c_off = *offset;
+    while ((string[*offset] != ' ') && (*offset > 0)) {
+        (*offset)--;
+    }
+
+    /* If no backward space found, walk forward */
+    if (*offset == 0) {
+        *offset = c_off;
+        while ((*offset < length) && (string[*offset] != ' ')) {
+            (*offset)++;
+        }
+    }
+
+    res = win32_font_width(style, string, *offset, actual_x);
+
+    /* If we walked backward to find a space, the width should not exceed x.
+     * If we walked forward (first word doesn't fit), exceeding x is expected. */
+    assert(*offset >= c_off || *actual_x <= x);
+
+    return res;
+}
+
+
+/**
  * Find where to split a string to make it fit a width.
  *
  * \param  style	css_style for this text, with style->font_size.size ==
@@ -1353,11 +1395,11 @@ static nserror win32_font_split(
     const plot_font_style_t *style, const char *string, size_t length, int x, size_t *offset, int *actual_x)
 {
     nserror res;
-    int c_off;
 
     if (split_cache == NULL) {
         split_cache = hashmap_create(&split_cache_params);
     }
+
     if (split_cache != NULL) {
         split_key_t key;
         key.family = style->family;
@@ -1367,6 +1409,8 @@ static nserror win32_font_split(
         key.x = x;
         key.len = length;
         key.str = (char *)string;
+
+        /* Check cache first */
         void *slot = hashmap_lookup(split_cache, &key);
         if (slot != NULL) {
             split_value_t *val = (split_value_t *)slot;
@@ -1375,11 +1419,12 @@ static nserror win32_font_split(
             *actual_x = val->actual_x;
             return NSERROR_OK;
         }
-        res = win32_font_position(style, string, length, x, offset, actual_x);
-        if (res != NSERROR_OK) {
-            return res;
-        }
-        if (*offset == length) {
+
+        /* Compute split point */
+        res = win32_font_split_at_word(style, string, length, x, offset, actual_x);
+
+        /* Cache the result */
+        if (res == NSERROR_OK) {
             void *islot = hashmap_insert(split_cache, &key);
             if (islot != NULL) {
                 split_value_t *ival = (split_value_t *)islot;
@@ -1388,51 +1433,12 @@ static nserror win32_font_split(
                 ival->gen = ++split_gen;
                 split_cache_evict_if_needed();
             }
-            return NSERROR_OK;
-        }
-        c_off = *offset;
-        while ((string[*offset] != ' ') && (*offset > 0)) {
-            (*offset)--;
-        }
-        if (*offset == 0) {
-            *offset = c_off;
-            while ((*offset < length) && (string[*offset] != ' ')) {
-                (*offset)++;
-            }
-        }
-        res = win32_font_width(style, string, *offset, actual_x);
-        if (res == NSERROR_OK) {
-            void *islot2 = hashmap_insert(split_cache, &key);
-            if (islot2 != NULL) {
-                split_value_t *ival2 = (split_value_t *)islot2;
-                ival2->offset = *offset;
-                ival2->actual_x = *actual_x;
-                ival2->gen = ++split_gen;
-                split_cache_evict_if_needed();
-            }
         }
         return res;
     }
 
-    res = win32_font_position(style, string, length, x, offset, actual_x);
-    if (res != NSERROR_OK) {
-        return res;
-    }
-    if (*offset == length) {
-        return NSERROR_OK;
-    }
-    c_off = *offset;
-    while ((string[*offset] != ' ') && (*offset > 0)) {
-        (*offset)--;
-    }
-    if (*offset == 0) {
-        *offset = c_off;
-        while ((*offset < length) && (string[*offset] != ' ')) {
-            (*offset)++;
-        }
-    }
-    res = win32_font_width(style, string, *offset, actual_x);
-    return res;
+    /* Fallback: no cache available */
+    return win32_font_split_at_word(style, string, length, x, offset, actual_x);
 }
 
 void win32_font_caches_flush(void)

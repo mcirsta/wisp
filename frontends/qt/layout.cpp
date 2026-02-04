@@ -448,6 +448,7 @@ static nserror nsqt_layout_split(const struct plot_font_style *fstyle, const cha
     size_t split_len;
     int split_x;
     size_t str_len;
+    size_t last_word_end = 0; /* Track position before trailing space (for actual_x) */
     int full_width = metrics.horizontalAdvance(QString::fromUtf8(string, length));
 
     res = layout_position(metrics, string, length, split, &split_len, &split_x);
@@ -504,7 +505,13 @@ static nserror nsqt_layout_split(const struct plot_font_style *fstyle, const cha
         str_len++;
     }
 
-    /* After finding space, GREEDILY try to include more words that fit */
+    /* After finding space, GREEDILY try to include more words that fit.
+     * We measure WITHOUT trailing space since spaces are trimmed at line end. */
+    /* Initialize last_word_end to position BEFORE trailing space */
+    last_word_end = str_len;
+    if (last_word_end > 0 && string[last_word_end - 1] == ' ') {
+        last_word_end--;
+    }
     while (str_len < length) {
         size_t word_end = str_len;
         /* Find the end of the next word (before any trailing space) */
@@ -512,20 +519,17 @@ static nserror nsqt_layout_split(const struct plot_font_style *fstyle, const cha
             word_end++;
         }
 
-        /* Measure width WITHOUT the trailing space (space can be trimmed at line end)
-         * IMPORTANT: Use QString::fromUtf8 to correctly interpret byte length as UTF-8 */
-        QString qstr = QString::fromUtf8(string, word_end);
-        int word_width = metrics.horizontalAdvance(qstr);
-
-        /* Calculate position including space for when we accept the word */
-        size_t next_pos = word_end;
-        if (next_pos < length && string[next_pos] == ' ') {
-            next_pos++;
-        }
+        /* Measure width WITHOUT trailing space - space is trimmed at line end */
+        int word_width = metrics.horizontalAdvance(QString::fromUtf8(string, word_end));
 
         if (word_width <= split) {
-            /* This word fits! Include it (with trailing space) and try the next one */
-            str_len = next_pos;
+            /* This word fits! Update last_word_end to this position */
+            last_word_end = word_end;
+            /* Include trailing space in str_len so it's consumed for next iteration */
+            str_len = word_end;
+            if (str_len < length && string[str_len] == ' ') {
+                str_len++;
+            }
         } else {
             /* This word doesn't fit, stop here */
             break;
@@ -533,7 +537,8 @@ static nserror nsqt_layout_split(const struct plot_font_style *fstyle, const cha
     }
 
     *string_idx = str_len;
-    *actual_x = metrics.horizontalAdvance(QString::fromUtf8(string, str_len));
+    /* Return width WITHOUT trailing space since it's trimmed at line end */
+    *actual_x = metrics.horizontalAdvance(QString::fromUtf8(string, last_word_end));
 
 nsqt_layout_split_done:
     delete font;
@@ -555,8 +560,8 @@ nsqt_layout_plot(QPainter *painter, const struct plot_font_style *fstyle, int x,
     QPen pen(strokecolour);
     QFont *font = nsfont_style_to_font(fstyle);
 
-    NSLOG(wisp, DEEPDEBUG, "fstyle: %p string:\"%.*s\", length: %" PRIsizet ", width: %dpx", fstyle, (int)length,
-        text, length, QFontMetrics(*font, painter->device()).horizontalAdvance(text, length));
+    NSLOG(wisp, DEEPDEBUG, "fstyle: %p string:\"%.*s\", length: %" PRIsizet ", width: %dpx", fstyle, (int)length, text,
+        length, QFontMetrics(*font, painter->device()).horizontalAdvance(text, length));
 
     painter->setPen(pen);
     painter->setFont(*font);
