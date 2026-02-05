@@ -1,0 +1,27 @@
+pkgbase = wisp-qt
+	pkgdesc = A lightweight, modern web browser (Qt frontend)
+	pkgver = 0.1
+	pkgrel = 1
+	url = https://github.com/mcirsta/neosurf
+	arch = x86_64
+	license = GPL2
+	makedepends = git
+	makedepends = cmake
+	makedepends = ninja
+	makedepends = python
+	makedepends = gperf
+	makedepends = pkgconf
+	depends = qt6-base
+	depends = openssl
+	depends = libjpeg-turbo
+	depends = libpng
+	depends = libwebp
+	depends = curl
+	depends = libxml2
+	conflicts = wisp-qt-git
+	conflicts = wisp-browser-git
+	conflicts = neosurf-git
+	source = git+https://github.com/mcirsta/neosurf.git
+	sha256sums = SKIP
+
+pkgname = wisp-qt

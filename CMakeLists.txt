@@ -176,7 +176,7 @@ if(WISP_WERROR)
 	if(MSVC)
 		add_compile_options(/WX)
 	else()
-		add_compile_options(-Werror)
+		add_compile_options(-Werror -Werror=attribute-warning)
 	endif()
 endif()
 

@@ -1,0 +1,34 @@
+# Maintainer: Marius Cirsta <marius dot cirsta at gmail dot com>
+pkgname=wisp-qt
+_pkgname=wisp-qt
+pkgver=0.1
+pkgrel=1
+pkgdesc="A lightweight, modern web browser (Qt frontend)"
+arch=('x86_64')
+url="https://github.com/mcirsta/wisp"
+license=('GPL2')
+depends=('qt6-base' 'openssl' 'libjpeg-turbo' 'libpng' 'libwebp' 'curl' 'libxml2')
+makedepends=('git' 'cmake' 'ninja' 'python' 'gperf' 'pkgconf')
+conflicts=('wisp-qt-git' 'wisp-browser-git' 'neosurf-git')
+source=("git+https://github.com/mcirsta/wisp.git")
+sha256sums=('SKIP')
+
+build() {
+  cd "${srcdir}/wisp"
+  cmake -B build \
+    -G Ninja \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_INSTALL_PREFIX=/usr \
+    -DWISP_BUILD_QT_FRONTEND=ON \
+    -DWISP_ENABLE_TESTS=OFF \
+    -DWISP_WERROR=ON
+  cmake --build build
+} 
+
+package() {
+  cd "${srcdir}/wisp"
+  DESTDIR="$pkgdir" cmake --install build
+  
+  install -Dm644 frontends/qt/res/wisp-qt.desktop "$pkgdir/usr/share/applications/wisp-qt.desktop"
+  install -Dm644 frontends/qt/res/wisp.png "$pkgdir/usr/share/pixmaps/wisp.png"
+}
