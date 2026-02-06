@@ -37,6 +37,7 @@
 #include "content/handlers/image/nssprite.h"
 #include "content/handlers/image/png.h"
 
+#include "content/handlers/image/avif.h"
 #include "content/handlers/image/svg.h"
 #include "content/handlers/image/webp.h"
 
@@ -98,6 +99,12 @@ nserror image_init(void)
 
 #ifdef WITH_WEBP
     error = nswebp_init();
+    if (error != NSERROR_OK)
+        return error;
+#endif
+
+#ifdef WITH_AVIF
+    error = nsavif_init();
     if (error != NSERROR_OK)
         return error;
 #endif

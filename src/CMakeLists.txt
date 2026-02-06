@@ -38,6 +38,11 @@ if(WISP_USE_WEBP)
     include_directories(${LIBWEBP_INCLUDE_DIRS})
 endif()
 
+if(WISP_USE_AVIF)
+    pkg_check_modules(LIBAVIF REQUIRED libavif)
+    include_directories(${LIBAVIF_INCLUDE_DIRS})
+endif()
+
 
 
 pkg_check_modules(ZLIB REQUIRED zlib)
@@ -142,6 +147,7 @@ add_library(wisp ${WISP_LIB_TYPE}
 
 	#content/handlers/image/video.c # requires gstreamer TODO: replace with ffmpeg/libmpv
 	${WEBP_SRC}
+	${AVIF_SRC}
 	content/handlers/javascript/fetcher.c
 	content/handlers/javascript/content.c
 	# QuickJS-ng sources
@@ -238,7 +244,7 @@ if(WISP_BUILD_XXD)
 	)
 endif()
 
-set(WISP_COMMON_LIBS css dom nsutils parserutils nsgif nsbmp svgtiny ${LIBCRYPTO_LIBRARIES} ${LIBPNG_LIBRARIES} ${LIBCURL_LIBRARIES} ${LIBJPEG_LIBRARIES} ${LIBWEBP_LIBRARIES} ${LIBPSL_LIBRARIES} ${ZLIB_LIBRARIES} ${LIBSSL_LIBRARIES} ${LIBUTF8PROC_LIBRARIES} ${LIBREGEX_LIBRARIES})
+set(WISP_COMMON_LIBS css dom nsutils parserutils nsgif nsbmp svgtiny ${LIBCRYPTO_LIBRARIES} ${LIBPNG_LIBRARIES} ${LIBCURL_LIBRARIES} ${LIBJPEG_LIBRARIES} ${LIBWEBP_LIBRARIES} ${LIBAVIF_LIBRARIES} ${LIBPSL_LIBRARIES} ${ZLIB_LIBRARIES} ${LIBSSL_LIBRARIES} ${LIBUTF8PROC_LIBRARIES} ${LIBREGEX_LIBRARIES})
 
 
 

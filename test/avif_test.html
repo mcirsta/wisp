@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>AVIF Test Page</title>
+<style>
+  body { font-family: sans-serif; padding: 20px; background: #f0f0f0; }
+  .card { 
+    background: white; 
+    padding: 20px; 
+    margin-bottom: 20px; 
+    border-radius: 8px; 
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  }
+  img { 
+    max-width: 100%; 
+    border: 1px solid #ddd;
+    background: repeating-conic-gradient(#eee 0% 25%, transparent 0% 50%) 50% / 20px 20px;
+  }
+  code { background: #eee; padding: 2px 4px; border-radius: 4px; }
+  .status { font-weight: bold; }
+</style>
+</head>
+<body>
+  <h1>AVIF Support Test</h1>
+  <p>Test page for static AVIF image support in Wisp.</p>
+
+  <div class="card">
+    <h2>1. Remote AVIF (from CTV News)</h2>
+    <p>This image was previously failing with <code>UnacceptableType</code>.</p>
+    <img src="https://www.ctvnews.ca/resizer/v2/KQY36JFQYVEEHA55PYFSGCKCPA.jpg?smart=true&auth=873914d7755c225c340d72d2d7838c58698ce5e14b9dad4fc75478a719529493&width=800&height=450" alt="CTV News AVIF">
+  </div>
+
+  <div class="card">
+    <h2>2. Fallback Test</h2>
+    <p>If AVIF is not supported, this `picture` tag should show the JPEG fallback (if implemented in layout).</p>
+    <!-- Note: simple img tag is the main test since wisp might not support <picture> fully yet, 
+         but it's good to check -->
+    <picture>
+      <source srcset="https://colinbendell.github.io/avif/test-images/fox.avif" type="image/avif">
+      <img src="https://colinbendell.github.io/avif/test-images/fox.jpg" alt="Fox">
+    </picture>
+  </div>
+
+</body>
+</html>

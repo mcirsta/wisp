@@ -65,6 +65,11 @@ if(${WISP_USE_WEBP})
     add_definitions(-DWITH_WEBP)
     set(WEBP_SRC content/handlers/image/webp.c)
 endif()
+option(WISP_USE_AVIF "Include AVIF support (static images only)" ON)
+if(${WISP_USE_AVIF})
+    add_definitions(-DWITH_AVIF)
+    set(AVIF_SRC content/handlers/image/avif.c)
+endif()
 
 
 
