@@ -227,14 +227,21 @@ endif()
 if(NOT CMAKE_BUILD_TYPE MATCHES Debug)
     add_compile_definitions(WISP_DISABLE_LOGGING=1)
     message(STATUS "Disabling logging and tracing for non-Debug build")
-    
-    # Enable Link Time Optimization (LTO) with parallel execution (auto)
-    set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -flto -ffunction-sections -fdata-sections")
-    set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -flto -ffunction-sections -fdata-sections")
-    set(CMAKE_EXE_LINKER_FLAGS_RELEASE "${CMAKE_EXE_LINKER_FLAGS_RELEASE} -flto -Wl,--gc-sections")
-    set(CMAKE_SHARED_LINKER_FLAGS_RELEASE "${CMAKE_SHARED_LINKER_FLAGS_RELEASE} -flto -Wl,--gc-sections")
-    set(CMAKE_MODULE_LINKER_FLAGS_RELEASE "${CMAKE_MODULE_LINKER_FLAGS_RELEASE} -flto -Wl,--gc-sections")
-    message(STATUS "Enabled Link Time Optimization (LTO) for Release build (auto-parallel)")
+endif()
+
+# Enable Link Time Optimization (LTO) option
+# Default to ON for Release (non-Debug) builds, OFF for Debug
+set(DEFAULT_WISP_ENABLE_LTO OFF)
+if(NOT CMAKE_BUILD_TYPE MATCHES Debug)
+    set(DEFAULT_WISP_ENABLE_LTO ON)
+endif()
+
+option(WISP_ENABLE_LTO "Enable Link Time Optimization" ${DEFAULT_WISP_ENABLE_LTO})
+
+if(WISP_ENABLE_LTO)
+    add_compile_options(-flto -ffunction-sections -fdata-sections)
+    add_link_options(-flto -Wl,--gc-sections)
+    message(STATUS "Enabled Link Time Optimization (LTO)")
 endif()
 
 if(CMAKE_BUILD_TYPE MATCHES Debug AND NOT WISP_ENABLE_GPROF)
