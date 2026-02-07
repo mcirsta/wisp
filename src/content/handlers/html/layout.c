@@ -837,6 +837,8 @@ layout_minmax_block(struct box *block, const struct gui_layout_table *font_func,
     bool using_min_border_box = false;
     bool using_max_border_box = false;
     bool child_has_height = false;
+    int flex_item_count = 0; /* Count of flex items for gap calculation */
+    int flex_gap = 0; /* Gap between flex items in pixels */
 
     assert(block->type == BOX_BLOCK || block->type == BOX_FLEX || block->type == BOX_GRID ||
         block->type == BOX_INLINE_FLEX || block->type == BOX_INLINE_GRID || block->type == BOX_INLINE_BLOCK ||
@@ -930,6 +932,16 @@ layout_minmax_block(struct box *block, const struct gui_layout_table *font_func,
          * content? */
         block->flags |= HAS_HEIGHT;
     } else {
+        /* For horizontal flex containers, get the column-gap for intrinsic sizing.
+         * Per CSS spec, gaps contribute to the intrinsic main size. */
+        if (lh__box_is_flex_container(block) && lh__flex_main_is_horizontal(block) && block->style != NULL) {
+            css_fixed gap_len = 0;
+            css_unit gap_unit = CSS_UNIT_PX;
+            if (css_computed_column_gap(block->style, &gap_len, &gap_unit) == CSS_COLUMN_GAP_SET) {
+                flex_gap = FIXTOINT(css_unit_len2device_px(block->style, &content->unit_len_ctx, gap_len, gap_unit));
+            }
+        }
+
         /* recurse through children */
         for (child = block->children; child; child = child->next) {
             switch (child->type) {
@@ -993,6 +1005,7 @@ layout_minmax_block(struct box *block, const struct gui_layout_table *font_func,
                         min = child->min_width.value;
                 }
                 max += child->max_width;
+                flex_item_count++;
 
             } else {
                 if (min < child->min_width.value)
@@ -1004,6 +1017,18 @@ layout_minmax_block(struct box *block, const struct gui_layout_table *font_func,
             if (child_has_height)
                 block->flags |= HAS_HEIGHT;
         }
+    }
+
+    /* Add gap contribution for horizontal flex containers.
+     * Per CSS spec, intrinsic main size includes gaps between items.
+     * For n items, there are (n-1) gaps. */
+    if (flex_item_count > 1 && flex_gap > 0) {
+        int total_gap = (flex_item_count - 1) * flex_gap;
+        /* For nowrap flex, min is sum of items so add gaps to min too */
+        if (block->style != NULL && css_computed_flex_wrap(block->style) == CSS_FLEX_WRAP_NOWRAP) {
+            min += total_gap;
+        }
+        max += total_gap;
     }
 
     if (max < min) {

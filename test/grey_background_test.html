@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Grey Background Test</title>
+    <style>
+        /* Test various ways to set grey background */
+        
+        /* Direct RGB value - same as Tailwind's stone-200 */
+        .bg-rgb {
+            background-color: rgb(231, 229, 228);
+        }
+        
+        /* Hex value */
+        .bg-hex {
+            background-color: #e7e5e4;
+        }
+        
+        /* Named grey */
+        .bg-grey {
+            background-color: grey;
+        }
+        
+        /* Light grey */
+        .bg-lightgrey {
+            background-color: lightgrey;
+        }
+        
+        /* Common styling */
+        .test-box {
+            width: 100%;
+            height: 50px;
+            margin: 10px 0;
+            display: flex;
+            align-items: center;
+            padding-left: 20px;
+        }
+        
+        body {
+            font-family: sans-serif;
+            margin: 20px;
+        }
+        
+        h1 {
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Grey Background Rendering Test</h1>
+    
+    <p>Each box below tests a different way of specifying grey background:</p>
+    
+    <div class="test-box bg-rgb">
+        RGB: background-color: rgb(231, 229, 228) - Tailwind stone-200
+    </div>
+    
+    <div class="test-box bg-hex">
+        HEX: background-color: #e7e5e4
+    </div>
+    
+    <div class="test-box bg-grey">
+        Named: background-color: grey
+    </div>
+    
+    <div class="test-box bg-lightgrey">
+        Named: background-color: lightgrey
+    </div>
+    
+    <div class="test-box" style="background-color: rgb(231, 229, 228);">
+        Inline style: rgb(231, 229, 228)
+    </div>
+    
+    <div class="test-box" style="background-color: #e7e5e4;">
+        Inline style: #e7e5e4
+    </div>
+    
+    <hr style="margin: 30px 0;">
+    
+    <h2>Control: Red and Blue backgrounds</h2>
+    
+    <div class="test-box" style="background-color: red; color: white;">
+        Inline style: background-color: red
+    </div>
+    
+    <div class="test-box" style="background-color: blue; color: white;">
+        Inline style: background-color: blue
+    </div>
+    
+    <div class="test-box" style="background-color: #ff0000; color: white;">
+        Inline style: #ff0000 (red)
+    </div>
+</body>
+</html>

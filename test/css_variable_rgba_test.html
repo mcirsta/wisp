@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <title>CSS Variable in RGBA Test</title>
+    <style>
+        .test-box {
+            width: 100%;
+            height: 60px;
+            margin: 10px 0;
+            display: flex;
+            align-items: center;
+            padding-left: 20px;
+            border: 2px solid black;
+            font-weight: bold;
+        }
+
+        body {
+            font-family: sans-serif;
+            margin: 20px;
+        }
+
+        /* Test 1: CSS variable in rgba() - Tailwind pattern - BLUE */
+        .bg-with-var {
+            --tw-bg-opacity: 1;
+            background-color: rgba(0, 100, 255, var(--tw-bg-opacity));
+            color: white;
+        }
+
+        /* Test 2: CSS variable for whole color - GREEN */
+        :root {
+            --my-green: rgb(0, 200, 100);
+            --my-opacity: 0.5;
+        }
+
+        .bg-var-color {
+            background-color: var(--my-green);
+            color: white;
+        }
+
+        /* Test 3: Direct rgba - ORANGE */
+        .bg-rgba-direct {
+            background-color: rgba(255, 165, 0, 1);
+            color: black;
+        }
+
+        /* Test 4: rgba with half opacity - PURPLE */
+        .bg-rgba-half {
+            background-color: rgba(128, 0, 128, 0.7);
+            color: white;
+        }
+
+        /* Test 5: rgb direct - CYAN */
+        .bg-rgb-direct {
+            background-color: rgb(0, 200, 200);
+            color: black;
+        }
+
+        /* Control - RED */
+        .bg-red {
+            background-color: red;
+            color: white;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>CSS Variable in RGBA Test</h1>
+
+    <p>Each box should show a distinct color. White = FAILED to parse.</p>
+
+    <div class="test-box bg-with-var">
+        Test 1: BLUE via rgba(..., var(--tw-bg-opacity)) - TAILWIND PATTERN
+    </div>
+
+    <div class="test-box bg-var-color">
+        Test 2: GREEN via var(--my-green)
+    </div>
+
+    <div class="test-box bg-rgba-direct">
+        Test 3: ORANGE via rgba(255, 165, 0, 1)
+    </div>
+
+    <div class="test-box bg-rgba-half">
+        Test 4: PURPLE via rgba(128, 0, 128, 0.7)
+    </div>
+
+    <div class="test-box bg-rgb-direct">
+        Test 5: CYAN via rgb(0, 200, 200)
+    </div>
+
+    <div class="test-box bg-red">
+        Control: RED (should always work)
+    </div>
+</body>
+
+</html>
