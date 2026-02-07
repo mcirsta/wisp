@@ -219,10 +219,10 @@ static inline css_fixed css_unit__px_per_unit(const css_unit_len_measure measure
             root_style, font_size_default, font_size_minimum, viewport_height, viewport_width);
 
     case CSS_UNIT_VH:
-        return FDIV(viewport_width, F_100);
+        return FDIV(viewport_height, F_100);
 
     case CSS_UNIT_VW:
-        return FDIV(viewport_height, F_100);
+        return FDIV(viewport_width, F_100);
 
     case CSS_UNIT_CQW:
     case CSS_UNIT_CQH:
