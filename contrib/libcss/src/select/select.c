@@ -7,6 +7,7 @@
 
 #include <assert.h>
 #include <string.h>
+#include <stdio.h>
 
 #include <libwapcaplet/libwapcaplet.h>
 
@@ -1305,8 +1306,10 @@ css_error css_select_style(css_select_ctx *ctx, void *node, const css_unit_ctx *
                 error = css__custom_property_map_merge(state.computed->custom_props, sel->custom_props);
                 if (error != CSS_OK)
                     goto cleanup;
+#ifdef DEBUG_CSS_VAR
                 fprintf(
                     stderr, "[CSS-VAR] Cascaded %u custom properties from inline style\n", sel->custom_props->count);
+#endif
             }
 
             error = cascade_style(sel->style, &state);
@@ -2073,7 +2076,7 @@ css_error match_selector_chain(css_select_ctx *ctx, const css_selector *selector
 
     /* Cascade custom properties from the rule to computed style */
     css_rule_selector *rs = (css_rule_selector *)selector->rule;
-#ifdef DEBUG_CSS_VAR_CASCADE
+#ifdef DEBUG_CSS_VAR
     fprintf(stderr, "[CSS-VAR-CASCADE] match_selector_chain: rule matched, rs->custom_props=%p\n",
         (void *)rs->custom_props);
 #endif
@@ -2086,7 +2089,7 @@ css_error match_selector_chain(css_select_ctx *ctx, const css_selector *selector
         error = css__custom_property_map_merge(state->computed->custom_props, rs->custom_props);
         if (error != CSS_OK)
             return error;
-#ifdef DEBUG_CSS_VAR_CASCADE
+#ifdef DEBUG_CSS_VAR
         fprintf(stderr, "[CSS-VAR] Cascaded %u custom properties to computed style\n", rs->custom_props->count);
 #endif
     }
@@ -2569,12 +2572,21 @@ css_error match_detail(css_select_ctx *ctx, void *node, const css_selector_detai
  * \param tokens   Vector to append tokens to
  * \return CSS_OK on success, appropriate error otherwise
  */
-static css_error tokenize_and_append_value(lwc_string *value, parserutils_vector *tokens)
+static css_error
+tokenize_and_append_value_internal(lwc_string *value, parserutils_vector *tokens, css_select_state *state, int depth)
 {
     css_error error = CSS_OK;
     parserutils_inputstream *stream = NULL;
     css_lexer *lexer = NULL;
     parserutils_error perror;
+
+    /* Prevent infinite recursion */
+    if (depth > 10) {
+#ifdef DEBUG_CSS_VAR
+        fprintf(stderr, "[CSS-VAR-RESOLVE]   Max recursion depth reached\n");
+#endif
+        return CSS_INVALID;
+    }
 
     const char *value_data = lwc_string_data(value);
     size_t value_len = lwc_string_length(value);
@@ -2623,6 +2635,54 @@ static css_error tokenize_and_append_value(lwc_string *value, parserutils_vector
             continue;
         }
 
+        /* Check for var() function - resolve recursively if state provided */
+        if (state != NULL && t->type == CSS_TOKEN_FUNCTION && t->data.len == 3 &&
+            strncasecmp((const char *)t->data.data, "var", 3) == 0) {
+
+            /* Get variable name (next token should be IDENT) */
+            css_token *name_tok = NULL;
+            error = css__lexer_get_token(lexer, &name_tok);
+            if (error == CSS_OK && name_tok && name_tok->type == CSS_TOKEN_IDENT) {
+                lwc_string *var_name = NULL;
+                if (lwc_intern_string((const char *)name_tok->data.data, name_tok->data.len, &var_name) ==
+                    lwc_error_ok) {
+                    /* Look up variable */
+                    lwc_string *var_value = css__custom_property_get(state->computed->custom_props, var_name);
+                    if (var_value == NULL && state->parent_custom_props != NULL) {
+                        var_value = css__custom_property_get(state->parent_custom_props, var_name);
+                    }
+
+#ifdef DEBUG_CSS_VAR
+                    fprintf(stderr, "[CSS-VAR-RESOLVE]   Nested var(%.*s) -> '%s' (depth=%d)\n",
+                        (int)lwc_string_length(var_name), lwc_string_data(var_name),
+                        var_value ? lwc_string_data(var_value) : "(not found)", depth);
+#endif
+
+                    if (var_value != NULL) {
+                        /* Recursively resolve */
+                        tokenize_and_append_value_internal(var_value, tokens, state, depth + 1);
+                    }
+                    /* TODO: Handle fallback for nested var() */
+
+                    lwc_string_unref(var_name);
+                }
+            }
+
+            /* Skip until closing paren */
+            int paren_depth = 1;
+            while (paren_depth > 0) {
+                css_token *skip_tok = NULL;
+                error = css__lexer_get_token(lexer, &skip_tok);
+                if (error != CSS_OK || skip_tok == NULL || skip_tok->type == CSS_TOKEN_EOF)
+                    break;
+                if (skip_tok->type == CSS_TOKEN_FUNCTION)
+                    paren_depth++;
+                else if (skip_tok->type == CSS_TOKEN_CHAR && skip_tok->data.len == 1 && skip_tok->data.data[0] == ')')
+                    paren_depth--;
+            }
+            continue;
+        }
+
         /* Create a copy of the token with interned string */
         css_token copy = *t;
         if (t->data.data != NULL && t->data.len > 0 && t->type < CSS_TOKEN_LAST_INTERN) {
@@ -2639,6 +2699,11 @@ static css_error tokenize_and_append_value(lwc_string *value, parserutils_vector
     parserutils_inputstream_destroy(stream);
 
     return CSS_OK;
+}
+
+static css_error tokenize_and_append_value(lwc_string *value, parserutils_vector *tokens)
+{
+    return tokenize_and_append_value_internal(value, tokens, NULL, 0);
 }
 
 /**
@@ -2663,7 +2728,7 @@ static css_error resolve_var_style(uint32_t propstring_idx, css_style *style, cs
     /* Read token count */
     token_count = *style->bytecode;
     advance_bytecode(style, sizeof(uint32_t));
-#ifdef DEBUG_CSS_VAR_RESOLVE
+#ifdef DEBUG_CSS_VAR
     fprintf(stderr, "[CSS-VAR-RESOLVE] propstring_idx=%u: reading %u tokens\n", propstring_idx, token_count);
 #endif
     /* Create token vector */
@@ -2696,7 +2761,7 @@ static css_error resolve_var_style(uint32_t propstring_idx, css_style *style, cs
             token.data.data = (uint8_t *)lwc_string_data(str);
             token.data.len = lwc_string_length(str);
         }
-#ifdef DEBUG_CSS_VAR_RESOLVE
+#ifdef DEBUG_CSS_VAR
         fprintf(stderr, "[CSS-VAR-RESOLVE]   Token %u: type=%d data='%.*s'\n", i, token.type,
             (int)(token.data.len > 50 ? 50 : token.data.len),
             token.data.data ? (const char *)token.data.data : "(null)");
@@ -2718,7 +2783,9 @@ static css_error resolve_var_style(uint32_t propstring_idx, css_style *style, cs
                 if (i < token_count) {
                     css_token name_token = {0};
                     lwc_string *name_str = NULL;
+                    lwc_string *value = NULL;
 
+                    /* Read variable name token */
                     name_token.type = (css_token_type)*style->bytecode;
                     advance_bytecode(style, sizeof(uint32_t));
                     snumber = *style->bytecode;
@@ -2728,27 +2795,102 @@ static css_error resolve_var_style(uint32_t propstring_idx, css_style *style, cs
                         error = css__stylesheet_string_get((css_stylesheet *)state->sheet, snumber, &name_str);
                         if (error == CSS_OK && name_str != NULL) {
                             /* Look up variable value - first in current element, then parent */
-                            lwc_string *value = css__custom_property_get(state->computed->custom_props, name_str);
+                            value = css__custom_property_get(state->computed->custom_props, name_str);
 
                             /* Fallback to parent's custom properties (for inheritance) */
                             if (value == NULL && state->parent_custom_props != NULL) {
                                 value = css__custom_property_get(state->parent_custom_props, name_str);
                             }
-#ifdef DEBUG_CSS_VAR_CASCADE
-                            fprintf(stderr, "[CSS-VAR-RESOLVE]   var(%.*s) -> '%s'\n", (int)lwc_string_length(name_str),
-                                lwc_string_data(name_str), value ? lwc_string_data(value) : "(not found)");
-#endif
-                            if (value != NULL) {
-                                /* Re-tokenize the substituted value to handle complex values like rgb(...) */
-                                tokenize_and_append_value(value, tokens);
-                            }
                         }
                     }
 
-                    /* Skip closing paren token */
-                    i++;
-                    if (i < token_count) {
-                        advance_bytecode(style, sizeof(uint32_t) * 2);
+#ifdef DEBUG_CSS_VAR
+                    fprintf(stderr, "[CSS-VAR-RESOLVE]   var(%.*s) -> '%s'\n",
+                        name_str ? (int)lwc_string_length(name_str) : 0,
+                        name_str ? lwc_string_data(name_str) : "(null)",
+                        value ? lwc_string_data(value) : "(not found)");
+#endif
+
+                    if (value != NULL) {
+                        /* Re-tokenize the substituted value to handle complex values */
+                        tokenize_and_append_value_internal(value, tokens, state, 0);
+
+                        /* Skip remaining tokens until closing paren */
+                        uint32_t paren_depth = 1;
+                        while (i + 1 < token_count && paren_depth > 0) {
+                            i++;
+                            css_token_type skip_type = (css_token_type)*style->bytecode;
+                            advance_bytecode(style, sizeof(uint32_t));
+                            uint32_t skip_snum = *style->bytecode;
+                            advance_bytecode(style, sizeof(uint32_t));
+
+                            if (skip_type == CSS_TOKEN_FUNCTION) {
+                                paren_depth++;
+                            } else if (skip_type == CSS_TOKEN_CHAR && skip_snum != 0) {
+                                lwc_string *skip_str = NULL;
+                                if (css__stylesheet_string_get((css_stylesheet *)state->sheet, skip_snum, &skip_str) ==
+                                    CSS_OK) {
+                                    if (skip_str && lwc_string_length(skip_str) == 1 &&
+                                        lwc_string_data(skip_str)[0] == ')') {
+                                        paren_depth--;
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        /* Variable not found - look for fallback value after comma */
+                        bool found_comma = false;
+                        bool found_close = false;
+                        uint32_t paren_depth = 1;
+
+                        while (i + 1 < token_count && !found_close) {
+                            i++;
+                            css_token_type fb_type = (css_token_type)*style->bytecode;
+                            advance_bytecode(style, sizeof(uint32_t));
+                            uint32_t fb_snum = *style->bytecode;
+                            advance_bytecode(style, sizeof(uint32_t));
+
+                            lwc_string *fb_str = NULL;
+                            if (fb_snum != 0) {
+                                css__stylesheet_string_get((css_stylesheet *)state->sheet, fb_snum, &fb_str);
+                            }
+
+                            /* Check for comma - start collecting fallback */
+                            if (paren_depth == 1 && !found_comma && fb_type == CSS_TOKEN_CHAR && fb_str &&
+                                lwc_string_length(fb_str) == 1 && lwc_string_data(fb_str)[0] == ',') {
+                                found_comma = true;
+#ifdef DEBUG_CSS_VAR
+                                fprintf(stderr, "[CSS-VAR-RESOLVE]   Using fallback value\n");
+#endif
+                                continue; /* Skip the comma itself */
+                            }
+
+                            /* Check for close paren */
+                            if (fb_type == CSS_TOKEN_CHAR && fb_str && lwc_string_length(fb_str) == 1 &&
+                                lwc_string_data(fb_str)[0] == ')') {
+                                paren_depth--;
+                                if (paren_depth == 0) {
+                                    found_close = true;
+                                    continue;
+                                }
+                            }
+
+                            if (fb_type == CSS_TOKEN_FUNCTION) {
+                                paren_depth++;
+                            }
+
+                            /* If we're past the comma, append as fallback token */
+                            if (found_comma) {
+                                css_token fb_token = {0};
+                                fb_token.type = fb_type;
+                                fb_token.idata = fb_str;
+                                if (fb_str) {
+                                    fb_token.data.data = (uint8_t *)lwc_string_data(fb_str);
+                                    fb_token.data.len = lwc_string_length(fb_str);
+                                }
+                                parserutils_vector_append(tokens, &fb_token);
+                            }
+                        }
                     }
                 }
                 continue; /* Don't add the var( token itself */
@@ -2761,7 +2903,7 @@ static css_error resolve_var_style(uint32_t propstring_idx, css_style *style, cs
     /* Log final substituted token stream */
     size_t vector_len = 0;
     parserutils_vector_get_length(tokens, &vector_len);
-#ifdef DEBUG_CSS_VAR_RESOLVE
+#ifdef DEBUG_CSS_VAR
     fprintf(stderr, "[CSS-VAR-RESOLVE] After substitution, vector has %zu tokens\n", vector_len);
 #endif
     error = css__stylesheet_style_create((css_stylesheet *)state->sheet, &result_style);
@@ -2783,7 +2925,7 @@ static css_error resolve_var_style(uint32_t propstring_idx, css_style *style, cs
             error = handler(&temp_lang, tokens, &ctx, result_style);
 
             if (error == CSS_OK && result_style->used > 0) {
-#ifdef DEBUG_CSS_VAR_RESOLVE
+#ifdef DEBUG_CSS_VAR
                 fprintf(stderr, "[CSS-VAR-RESOLVE] propstring_idx %u parsed successfully, cascading\n", propstring_idx);
 #endif
                 /* Cascade the result */
@@ -2798,13 +2940,13 @@ static css_error resolve_var_style(uint32_t propstring_idx, css_style *style, cs
                         break;
                 }
             } else {
-#ifdef DEBUG_CSS_VAR_CASCADE
+#ifdef DEBUG_CSS_VAR
                 fprintf(
                     stderr, "[CSS-VAR-RESOLVE] propstring_idx %u parse failed or empty: %d\n", propstring_idx, error);
 #endif
             }
         } else {
-#ifdef DEBUG_CSS_VAR_CASCADE
+#ifdef DEBUG_CSS_VAR
             fprintf(stderr, "[CSS-VAR-RESOLVE] propstring_idx %u has NULL handler\n", propstring_idx);
 #endif
         }

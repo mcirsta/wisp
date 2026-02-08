@@ -2,6 +2,11 @@ add_subdirectory(src/parse/properties/gen_parser)
 include(${CMAKE_SOURCE_DIR}/src/cmake/libcss_helpers.cmake)
 option(WISP_VERBOSE_GEN "Enable verbose libcss code generation output" OFF)
 
+option(DEBUG_CSS_VAR "Enable CSS variable debugging" OFF)
+if(DEBUG_CSS_VAR)
+    add_compile_definitions(DEBUG_CSS_VAR)
+endif()
+
 set(LIBCSS_PROP_GEN ${CMAKE_SOURCE_DIR}/contrib/libcss/src/parse/properties/properties.gen)
 libcss_extract_property_names(${LIBCSS_PROP_GEN} LIBCSS_PROP_NAMES)
 set(LIBCSS_GEN_PROPERTIES)

@@ -958,6 +958,9 @@ css_error handleDeclaration(css_language *c, const parserutils_vector *vector)
     if (rule->type == CSS_RULE_FONT_FACE) {
         css_rule_font_face *ff_rule = (css_rule_font_face *)rule;
         error = css__parse_font_descriptor(c, ident, vector, &ctx, ff_rule);
+    } else if (css__is_custom_property(ident->idata)) {
+        /* Custom properties always use parseProperty, even with var() in value */
+        error = parseProperty(c, ident, vector, &ctx, rule);
     } else if (has_var) {
         /* Deferred parsing for var() declarations */
 #ifdef DEBUG_CSS_VAR
