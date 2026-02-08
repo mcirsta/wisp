@@ -34,6 +34,7 @@ enum flag {
     FLAG_INITIAL = (FLAG_VALUE_INITIAL << 1),
     FLAG_REVERT = (FLAG_VALUE_REVERT << 1),
     FLAG_UNSET = (FLAG_VALUE_UNSET << 1),
+    FLAG_VAR = (1 << 4),
 };
 
 enum calc_opcodes {

@@ -65,8 +65,10 @@ static css_error _iterate_universal(
 
 
 /* No bytecode if rule body is empty or wholly invalid --
- * Only interested in rules with bytecode */
-#define RULE_HAS_BYTECODE(r) (((css_rule_selector *)(r->sel->rule))->style != NULL)
+ * Only interested in rules with bytecode OR custom properties */
+#define RULE_HAS_BYTECODE(r)                                                                                           \
+    (((css_rule_selector *)(r->sel->rule))->style != NULL ||                                                           \
+        ((css_rule_selector *)(r->sel->rule))->custom_props != NULL)
 
 
 /**

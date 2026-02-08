@@ -19,6 +19,9 @@ extern "C" {
 #include <libcss/types.h>
 #include <libcss/unit.h>
 
+/* Forward declaration for custom properties */
+struct css_custom_property_map;
+
 typedef enum css_pseudo_element {
     CSS_PSEUDO_ELEMENT_NONE = 0,
     CSS_PSEUDO_ELEMENT_FIRST_LINE = 1,
@@ -120,6 +123,22 @@ typedef struct css_select_handler {
      * \return CSS_OK on success, or appropriate error otherwise
      */
     css_error (*get_libcss_node_data)(void *pw, void *node, void **libcss_node_data);
+
+    /**
+     * Get parent node's custom properties for var() resolution.
+     *
+     * Called during style selection to get the parent's composed style's
+     * custom properties. This enables var() inheritance from ancestors.
+     *
+     * \param pw             Client data
+     * \param node           DOM node being styled
+     * \param custom_props   Updated to parent's custom properties, or NULL
+     * \return CSS_OK on success, or appropriate error otherwise
+     *
+     * \note This callback is optional. If NULL, var() cannot inherit
+     *       from ancestors and will only resolve from the element itself.
+     */
+    css_error (*get_parent_custom_props)(void *pw, void *node, const struct css_custom_property_map **custom_props);
 } css_select_handler;
 
 /**

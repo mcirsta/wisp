@@ -353,6 +353,7 @@ enum {
     INLINE_GRID,
     STICKY,
     CALC,
+    VAR,
     LAB,
     LCH,
     OKLAB,

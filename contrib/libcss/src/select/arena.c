@@ -11,6 +11,7 @@
 #include "select/arena.h"
 #include "select/arena_hash.h"
 #include "select/computed.h"
+#include "select/custom_properties.h"
 
 #define TU_SIZE 3037
 #define TS_SIZE 5101
@@ -211,6 +212,11 @@ static inline bool css__arena_style_is_equal(struct css_computed_style *a, struc
                 return false;
             }
         }
+    }
+
+    /* Compare custom properties (CSS variables) */
+    if (!css__custom_property_map_equal(a->custom_props, b->custom_props)) {
+        return false;
     }
 
     return true;

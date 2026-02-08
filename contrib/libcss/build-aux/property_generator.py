@@ -324,6 +324,50 @@ class MultiFileGenerator:
         
         return '\n'.join(lines)
     
+    def generate_propstring_to_opcode(self):
+        """Generate mapping from propstring index to CSS_PROP_* opcode.
+        
+        This allows code to look up the correct CSS_PROP_* value from a
+        propstring index (which is alphabetical order) at runtime.
+        Shorthands map to CSS_N_PROPERTIES (invalid opcode) since they
+        don't have dispatch entries.
+        """
+        lines = self._header("PROPSTRING_TO_OPCODE", 
+                            "Mapping from propstring index to CSS_PROP_* opcode")
+        
+        # Get longhand properties from dispatch.c
+        all_props = [prop_info['name'] for prop_info in self.dispatch_order]
+        
+        # Add shorthand properties from metadata
+        shorthands = [name for name, meta in self.metadata.items() 
+                      if meta.get('is_shorthand', False) and name not in all_props]
+        
+        # Sort alphabetically to match propstrings order
+        sorted_props = sorted(all_props + shorthands)
+        
+        # Build dispatch index lookup: prop_name -> dispatch index (CSS_PROP_* value)
+        dispatch_index = {}
+        for idx, prop_info in enumerate(self.dispatch_order):
+            dispatch_index[prop_info['name']] = idx
+        
+        # Generate array
+        lines.append("/* Maps propstring index (FIRST_PROP-based) to CSS_PROP_* opcode */")
+        lines.append("/* Shorthands map to CSS_N_PROPERTIES (no dispatch entry) */")
+        lines.append("static const opcode_t propstring_to_opcode[LAST_PROP + 1 - FIRST_PROP] = {")
+        
+        for prop_name in sorted_props:
+            if prop_name in dispatch_index:
+                opcode_idx = dispatch_index[prop_name]
+                enum_name = self.metadata.get(prop_name, {}).get('enum', f'/* {prop_name} */')
+                lines.append(f"\t{enum_name}, /* {prop_name} -> opcode {opcode_idx} */")
+            else:
+                # Shorthand - no dispatch entry
+                lines.append(f"\tCSS_N_PROPERTIES, /* {prop_name} (shorthand) */")
+        
+        lines.append("};")
+        
+        return '\n'.join(lines)
+    
     def validate_indexes(self):
         """Validate that propstrings and handlers have consistent property order."""
         # Get longhand properties from dispatch.c

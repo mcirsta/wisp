@@ -98,8 +98,8 @@ const stringmap_entry stringmap[LAST_KNOWN] = {SMAP("*"),
     SMAP("content-box"), SMAP("border-box"), SMAP("stretch"), SMAP("inline-flex"), SMAP("flex-start"), SMAP("flex-end"),
     SMAP("space-between"), SMAP("space-around"), SMAP("space-evenly"), SMAP("row"), SMAP("row-reverse"),
     SMAP("column-reverse"), SMAP("wrap"), SMAP("wrap-reverse"), SMAP("and"), SMAP("or"), SMAP("only"), SMAP("infinite"),
-    SMAP("grid"), SMAP("inline-grid"), SMAP("sticky"), SMAP("calc"), SMAP("lab"), SMAP("lch"), SMAP("oklab"),
-    SMAP("oklch"),
+    SMAP("grid"), SMAP("inline-grid"), SMAP("sticky"), SMAP("calc"), SMAP("var"), SMAP("lab"), SMAP("lch"),
+    SMAP("oklab"), SMAP("oklch"),
     /* CSS Grid keywords */
     SMAP("dense"), SMAP("row dense"), SMAP("column dense"),
     /* CSS Grid track sizing functions and keywords */

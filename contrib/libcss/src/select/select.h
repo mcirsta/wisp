@@ -92,6 +92,9 @@ typedef struct css_select_state {
 
     struct css_node_data *node_data; /* Data we'll store on node */
 
+    /** Parent's custom properties for var() inheritance lookup */
+    const struct css_custom_property_map *parent_custom_props;
+
     prop_state props[CSS_N_PROPERTIES][CSS_PSEUDO_ELEMENT_COUNT];
 } css_select_state;
 

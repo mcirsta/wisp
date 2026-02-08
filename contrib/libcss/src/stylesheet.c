@@ -17,6 +17,7 @@
 #include "parse/mq.h"
 #include "select/dispatch.h"
 #include "select/font_face.h"
+#include "select/custom_properties.h"
 #include "stylesheet.h"
 
 static css_error _add_selectors(css_stylesheet *sheet, css_rule *rule);
@@ -1137,6 +1138,9 @@ css_error css__stylesheet_rule_destroy(css_stylesheet *sheet, css_rule *rule)
 
         if (s->style != NULL)
             css__stylesheet_style_destroy(s->style);
+
+        if (s->custom_props != NULL)
+            css__custom_property_map_destroy(s->custom_props);
     } break;
     case CSS_RULE_CHARSET: {
         css_rule_charset *charset = (css_rule_charset *)rule;

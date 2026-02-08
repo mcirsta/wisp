@@ -266,6 +266,7 @@ add_library(css ${WISP_LIB_TYPE}
 	src/select/properties/object_position.c
 	src/select/properties/transform.c
 	src/select/arena.c
+	src/select/custom_properties.c
 	src/select/calc.c
 	src/select/computed.c
 	src/select/dispatch.c

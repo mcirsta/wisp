@@ -615,6 +615,21 @@ css_error CDCOrIdentOrFunctionOrNPD(css_lexer *lexer, css_token **token)
             APPEND(lexer, cptr, clen);
 
             t->type = CSS_TOKEN_CDC;
+        } else if (startNMStart(c) || c == '-' || c == '\\') {
+            /* CSS custom property: --identifier
+             * The pattern is: - - nmstart nmchar*
+             * We've already consumed "--", and c is a valid start for an identifier.
+             * Continue as IDENT.
+             */
+            if (c != '\\') {
+                APPEND(lexer, cptr, clen);
+            } else {
+                lexer->bytesReadForToken += clen;
+                goto escape;
+            }
+            lexer->state = sIDENT;
+            lexer->substate = 0;
+            return IdentOrFunction(lexer, token);
         } else {
             /* Remove the '-' we read above */
             lexer->bytesReadForToken -= 1;

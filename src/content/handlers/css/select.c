@@ -70,6 +70,7 @@ static css_error node_is_lang(void *pw, void *node, lwc_string *lang, bool *matc
 static css_error ua_default_for_property(void *pw, uint32_t property, css_hint *hint);
 static css_error set_libcss_node_data(void *pw, void *node, void *libcss_node_data);
 static css_error get_libcss_node_data(void *pw, void *node, void **libcss_node_data);
+static css_error get_parent_custom_props(void *pw, void *node, const struct css_custom_property_map **custom_props);
 
 /**
  * Selection callback table for libcss
@@ -113,6 +114,7 @@ static css_select_handler selection_handler = {
     ua_default_for_property,
     set_libcss_node_data,
     get_libcss_node_data,
+    get_parent_custom_props,
 };
 
 static css_error nscss_error_handler(void *pw, css_stylesheet *sheet, css_error error, const char *msg)
@@ -1673,6 +1675,24 @@ css_error get_libcss_node_data(void *pw, void *node, void **libcss_node_data)
     if (err != DOM_NO_ERR) {
         return CSS_NOMEM;
     }
+
+    return CSS_OK;
+}
+
+/**
+ * Get parent node's custom properties for var() resolution
+ *
+ * \param pw           Client data (nscss_select_ctx *)
+ * \param node         DOM node being styled (unused, we use ctx->parent_style)
+ * \param custom_props Updated to parent's custom properties
+ * \return CSS_OK on success
+ */
+css_error get_parent_custom_props(void *pw, void *node, const struct css_custom_property_map **custom_props)
+{
+    nscss_select_ctx *ctx = pw;
+    (void)node; /* Unused - we get parent from ctx, not by walking DOM */
+
+    *custom_props = css_computed_style_get_custom_props(ctx->parent_style);
 
     return CSS_OK;
 }

@@ -135,6 +135,7 @@ typedef struct css_rule_selector {
 
     css_selector **selectors;
     css_style *style;
+    struct css_custom_property_map *custom_props; /**< Custom properties (--*) */
 } css_rule_selector;
 
 typedef struct css_rule_media {

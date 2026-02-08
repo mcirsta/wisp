@@ -455,6 +455,14 @@ uint8_t css_computed_object_position(
 uint8_t css_computed_transform(
     const css_computed_style *style, uint32_t *n_functions, const css_transform_function **functions);
 
+/**
+ * Get the custom properties map from a computed style
+ *
+ * \param style  Computed style
+ * \return Pointer to custom properties map, or NULL if none
+ */
+const struct css_custom_property_map *css_computed_style_get_custom_props(const css_computed_style *style);
+
 #ifdef __cplusplus
 }
 #endif

@@ -23,6 +23,7 @@
 
 #include "utils/parserutilserror.h"
 #include "utils/css_utils.h"
+#include "select/custom_properties.h"
 
 typedef struct context_entry {
     css_parser_event type; /**< Type of entry */
@@ -72,6 +73,8 @@ static css_error parseSelectorList(css_language *c, const parserutils_vector *ve
 
 /* Declaration parsing */
 static css_error parseProperty(
+    css_language *c, const css_token *property, const parserutils_vector *vector, int32_t *ctx, css_rule *rule);
+static css_error parseCustomProperty(
     css_language *c, const css_token *property, const parserutils_vector *vector, int32_t *ctx, css_rule *rule);
 
 /**
@@ -733,6 +736,164 @@ css_error handleEndBlockContent(css_language *c, const parserutils_vector *vecto
     return ret;
 }
 
+/**
+ * Emit a declaration containing var() references for deferred parsing
+ *
+ * \param c       Parsing context
+ * \param ident   Property identifier token
+ * \param vector  Vector of tokens to process
+ * \param ctx     Current vector iteration context
+ * \param rule    Rule to attach style to
+ * \return CSS_OK on success, appropriate error otherwise
+ *
+ * Storage format in bytecode:
+ *   [OPV with opcode=propstring_index, flags=FLAG_VAR]
+ *   [token count]
+ *   For each token:
+ *     [token type]
+ *     [string index into stylesheet strings]
+ */
+static css_error emit_var_declaration(
+    css_language *c, const css_token *ident, const parserutils_vector *vector, int32_t ctx, css_rule *rule)
+{
+    css_error error;
+    css_style *style = NULL;
+    uint32_t count = 0;
+    int32_t temp_ctx = ctx;
+    const css_token *token;
+    int propstring_idx = -1;
+    int i;
+
+    /* Find propstring index from identifier (same logic as parseProperty) */
+    for (i = FIRST_PROP; i <= LAST_PROP; i++) {
+        bool match = false;
+        if (lwc_string_caseless_isequal(ident->idata, c->strings[i], &match) == lwc_error_ok && match) {
+            propstring_idx = i - FIRST_PROP;
+            break;
+        }
+    }
+
+    if (propstring_idx < 0) {
+#ifdef DEBUG_CSS_VAR
+        fprintf(stderr, "[CSS-VAR] ERROR: propstring_idx < 0 for property '%.*s'\n",
+            (int)lwc_string_length(ident->idata), lwc_string_data(ident->idata));
+#endif
+        return CSS_INVALID;
+    }
+
+#ifdef DEBUG_CSS_VAR
+    fprintf(stderr, "[CSS-VAR] emit_var_declaration: found propstring_idx=%d for '%.*s'\n", propstring_idx,
+        (int)lwc_string_length(ident->idata), lwc_string_data(ident->idata));
+#endif
+
+    /* Create a new style (like parseProperty does) */
+    error = css__stylesheet_style_create(c->sheet, &style);
+    if (error != CSS_OK)
+        return error;
+
+    /* Count tokens until end of declaration */
+    while ((token = parserutils_vector_iterate(vector, &temp_ctx)) != NULL) {
+        if (tokenIsChar(token, ';') || tokenIsChar(token, '}')) {
+            break;
+        }
+        count++;
+    }
+
+#ifdef DEBUG_CSS_VAR
+    fprintf(stderr, "[CSS-VAR] emit_var_declaration: counted %u tokens\n", count);
+#endif
+
+    /* Emit OPV: propstring_index as opcode, FLAG_VAR to mark deferred resolution */
+    error = css__stylesheet_style_appendOPV(style, (opcode_t)propstring_idx, FLAG_VAR, 0);
+    if (error != CSS_OK) {
+        css__stylesheet_style_destroy(style);
+        return error;
+    }
+
+    /* Emit token count */
+    error = css__stylesheet_style_append(style, count);
+    if (error != CSS_OK) {
+        css__stylesheet_style_destroy(style);
+        return error;
+    }
+
+    /* Serialize tokens */
+    temp_ctx = ctx; /* Reset context */
+    for (uint32_t j = 0; j < count; j++) {
+        token = parserutils_vector_iterate(vector, &temp_ctx);
+
+        /* Emit type */
+        error = css__stylesheet_style_append(style, (uint32_t)token->type);
+        if (error != CSS_OK) {
+            css__stylesheet_style_destroy(style);
+            return error;
+        }
+
+        /* Emit string data */
+        uint32_t snumber = 0;
+        if (token->idata != NULL) {
+            error = css__stylesheet_string_add(c->sheet, lwc_string_ref(token->idata), &snumber);
+        } else if (token->data.len > 0) {
+            lwc_string *interned;
+            if (lwc_intern_string((const char *)token->data.data, token->data.len, &interned) != lwc_error_ok) {
+                css__stylesheet_style_destroy(style);
+                return CSS_NOMEM;
+            }
+            /* css__stylesheet_string_add takes ownership of the reference */
+            error = css__stylesheet_string_add(c->sheet, interned, &snumber);
+        }
+
+        if (error != CSS_OK) {
+            css__stylesheet_style_destroy(style);
+            return error;
+        }
+
+        error = css__stylesheet_style_append(style, snumber);
+        if (error != CSS_OK) {
+            css__stylesheet_style_destroy(style);
+            return error;
+        }
+    }
+
+    /* Append style to rule (like parseProperty does) */
+    error = css__stylesheet_rule_append_style(c->sheet, rule, style);
+    if (error != CSS_OK) {
+        css__stylesheet_style_destroy(style);
+        return error;
+    }
+#ifdef DEBUG_CSS_VAR
+    fprintf(stderr, "[CSS-VAR] emit_var_declaration: propstring_idx=%d, %u tokens stored, style appended to rule\n",
+        propstring_idx, count);
+#endif
+    return CSS_OK;
+}
+
+/**
+ * Check if a token vector contains a var() function call
+ *
+ * \param c       Language parser context (for access to interned strings)
+ * \param vector  Token vector to scan
+ * \param start   Starting index in the vector
+ * \return true if var() function found, false otherwise
+ */
+static bool containsVarFunction(css_language *c, const parserutils_vector *vector, int32_t start)
+{
+    int32_t ctx = start;
+    const css_token *token;
+
+    while ((token = parserutils_vector_iterate(vector, &ctx)) != NULL) {
+        /* Check for var() function using interned string comparison */
+        if (token->type == CSS_TOKEN_FUNCTION && token->idata != NULL) {
+            bool match = false;
+            if (lwc_string_caseless_isequal(token->idata, c->strings[VAR], &match) == lwc_error_ok && match) {
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
 css_error handleDeclaration(css_language *c, const parserutils_vector *vector)
 {
     css_error error;
@@ -740,6 +901,7 @@ css_error handleDeclaration(css_language *c, const parserutils_vector *vector)
     int32_t ctx = 0;
     context_entry *entry;
     css_rule *rule;
+    bool has_var = false;
 
     /* Locations where declarations are permitted:
      *
@@ -764,6 +926,15 @@ css_error handleDeclaration(css_language *c, const parserutils_vector *vector)
      * In CSS 2.1, value is any1, so '{' or ATKEYWORD => parse error
      */
     ident = parserutils_vector_iterate(vector, &ctx);
+
+    /* Debug: show what token type we received */
+    if (ident != NULL) {
+#ifdef DEBUG_CSS_VAR
+        fprintf(stderr, "[CSS-DEBUG] handleDeclaration token: type=%d '%.*s'\n", ident->type,
+            (int)lwc_string_length(ident->idata), lwc_string_data(ident->idata));
+#endif
+    }
+
     if (ident == NULL || ident->type != CSS_TOKEN_IDENT)
         return CSS_INVALID;
 
@@ -775,9 +946,25 @@ css_error handleDeclaration(css_language *c, const parserutils_vector *vector)
 
     consumeWhitespace(vector, &ctx);
 
+    /* Check if the declaration value contains var() */
+    has_var = containsVarFunction(c, vector, ctx);
+    if (has_var) {
+#ifdef DEBUG_CSS_VAR
+        fprintf(stderr, "[CSS-VAR] has_var detected for property: '%.*s'\n", (int)lwc_string_length(ident->idata),
+            lwc_string_data(ident->idata));
+#endif
+    }
+
     if (rule->type == CSS_RULE_FONT_FACE) {
         css_rule_font_face *ff_rule = (css_rule_font_face *)rule;
         error = css__parse_font_descriptor(c, ident, vector, &ctx, ff_rule);
+    } else if (has_var) {
+        /* Deferred parsing for var() declarations */
+#ifdef DEBUG_CSS_VAR
+        fprintf(stderr, "[CSS-VAR] Calling emit_var_declaration for property: '%.*s'\n",
+            (int)lwc_string_length(ident->idata), lwc_string_data(ident->idata));
+#endif
+        error = emit_var_declaration(c, ident, vector, ctx, rule);
     } else {
         error = parseProperty(c, ident, vector, &ctx, rule);
     }
@@ -1731,6 +1918,20 @@ css_error parseProperty(
     css_style *style = NULL;
     const css_token *token;
 
+    /* Debug: print every property being parsed */
+#ifdef DEBUG_CSS_VAR
+    fprintf(stderr, "[CSS-DEBUG] parseProperty: '%.*s'\n", (int)lwc_string_length(property->idata),
+        lwc_string_data(property->idata));
+#endif
+    /* Check for custom property (--*) */
+    if (css__is_custom_property(property->idata)) {
+#ifdef DEBUG_CSS_VAR
+        fprintf(stderr, "[CSS-VAR] Detected custom property: '%.*s'\n", (int)lwc_string_length(property->idata),
+            lwc_string_data(property->idata));
+#endif
+        return parseCustomProperty(c, property, vector, ctx, rule);
+    }
+
     /* Find property index */
     /** \todo improve on this linear search */
     for (i = FIRST_PROP; i <= LAST_PROP; i++) {
@@ -1795,6 +1996,198 @@ css_error parseProperty(
     }
 
     /* Style owned or destroyed by stylesheet, so forget about it */
+
+    return CSS_OK;
+}
+
+/**
+ * Parse a custom property declaration (--*)
+ *
+ * Custom properties have special parsing rules:
+ * - The value is stored as-is (not parsed into bytecode)
+ * - Values can contain any valid CSS tokens including var() references
+ *
+ * \param c         Language parser context
+ * \param property  Property token (the --* name)
+ * \param vector    Token vector containing the value
+ * \param ctx       Current position in token vector
+ * \param rule      Rule to attach custom property to
+ * \return CSS_OK on success, appropriate error otherwise
+ */
+css_error parseCustomProperty(
+    css_language *c, const css_token *property, const parserutils_vector *vector, int32_t *ctx, css_rule *rule)
+{
+    css_rule_selector *rs;
+    css_error error;
+    const css_token *token;
+    lwc_string *value_str = NULL;
+    lwc_error lwc_err;
+
+    /* Custom properties are only valid in selector rules */
+    if (rule->type != CSS_RULE_SELECTOR)
+        return CSS_INVALID;
+
+    rs = (css_rule_selector *)rule;
+
+    /* Create custom property map if it doesn't exist */
+    if (rs->custom_props == NULL) {
+        error = css__custom_property_map_create(&rs->custom_props);
+        if (error != CSS_OK)
+            return error;
+    }
+
+    /* Collect all remaining tokens as the value string */
+    /* For now, we'll build the value from the token text */
+    /* This is a simplified approach - tokens are space-separated */
+    {
+        char value_buf[4096];
+        size_t value_len = 0;
+        int32_t start_ctx = *ctx;
+
+        /* First pass: calculate total length needed */
+        while ((token = parserutils_vector_iterate(vector, ctx)) != NULL) {
+            /* Stop at !important */
+            if (token->type == CSS_TOKEN_IDENT) {
+                bool match = false;
+                if (lwc_string_caseless_isequal(token->idata, c->strings[IMPORTANT], &match) == lwc_error_ok && match) {
+                    /* Rewind to before !important */
+                    (*ctx)--;
+                    break;
+                }
+            }
+            if (token->type == CSS_TOKEN_CHAR && lwc_string_length(token->idata) == 1 &&
+                lwc_string_data(token->idata)[0] == '!') {
+                /* Found !, check for important */
+                (*ctx)--;
+                break;
+            }
+
+            /* Add space separator if not first token */
+            if (value_len > 0 && value_len < sizeof(value_buf) - 1) {
+                value_buf[value_len++] = ' ';
+            }
+
+            /* Append token text - use raw data buffer to get original unstripped value */
+            if (token->data.data != NULL && token->data.len > 0) {
+                size_t len = token->data.len;
+
+                /* For certain token types, the lexer strips characters.
+                 * We reconstruct the original value explicitly. */
+                switch (token->type) {
+                case CSS_TOKEN_FUNCTION:
+                    /* Lexer strips trailing '(' - use idata and append '(' explicitly */
+                    if (token->idata != NULL) {
+                        const char *func_name = lwc_string_data(token->idata);
+                        size_t func_len = lwc_string_length(token->idata);
+                        if (value_len + func_len + 1 < sizeof(value_buf)) {
+                            memcpy(value_buf + value_len, func_name, func_len);
+                            value_len += func_len;
+                            value_buf[value_len++] = '(';
+                        }
+                    }
+                    continue; /* Already handled FUNCTION fully */
+                case CSS_TOKEN_HASH:
+                    /* Lexer strips leading '#' - add it back */
+                    if (value_len < sizeof(value_buf) - 1) {
+                        value_buf[value_len++] = '#';
+                    }
+                    break;
+                case CSS_TOKEN_URI:
+                    /* URI has complex stripping - url(), quotes, whitespace.
+                     * For now use the simplified wrapper approach */
+                    {
+                        const char *url_open = "url(";
+                        if (value_len + 4 < sizeof(value_buf)) {
+                            memcpy(value_buf + value_len, url_open, 4);
+                            value_len += 4;
+                        }
+                        /* Use idata for the inner content */
+                        if (token->idata != NULL) {
+                            const char *inner = lwc_string_data(token->idata);
+                            size_t inner_len = lwc_string_length(token->idata);
+                            if (value_len + inner_len < sizeof(value_buf)) {
+                                memcpy(value_buf + value_len, inner, inner_len);
+                                value_len += inner_len;
+                            }
+                        }
+                        if (value_len < sizeof(value_buf) - 1) {
+                            value_buf[value_len++] = ')';
+                        }
+                    }
+                    continue; /* Already handled URI fully */
+                default:
+                    break;
+                }
+
+                if (value_len + len < sizeof(value_buf)) {
+                    memcpy(value_buf + value_len, token->data.data, len);
+                    value_len += len;
+                }
+            } else if (token->idata != NULL) {
+                /* Fallback to idata if data buffer not available */
+                const char *data = lwc_string_data(token->idata);
+                size_t len = lwc_string_length(token->idata);
+
+                if (value_len + len < sizeof(value_buf)) {
+                    memcpy(value_buf + value_len, data, len);
+                    value_len += len;
+                }
+            }
+        }
+
+        /* Null terminate and intern the string */
+        value_buf[value_len] = '\0';
+
+        /* Trim trailing whitespace */
+        while (value_len > 0 && (value_buf[value_len - 1] == ' ' || value_buf[value_len - 1] == '\t')) {
+            value_len--;
+            value_buf[value_len] = '\0';
+        }
+
+        /* Trim leading whitespace */
+        const char *value_start = value_buf;
+        while (*value_start == ' ' || *value_start == '\t') {
+            value_start++;
+            value_len--;
+        }
+
+        lwc_err = lwc_intern_string(value_start, value_len, &value_str);
+        if (lwc_err != lwc_error_ok)
+            return CSS_NOMEM;
+    }
+
+    /* Store the custom property */
+    error = css__custom_property_set(rs->custom_props, property->idata, value_str);
+
+#ifdef DEBUG_CSS_VAR
+    fprintf(stderr, "[CSS-VAR] Parsed custom property: %.*s = %.*s\n", (int)lwc_string_length(property->idata),
+        lwc_string_data(property->idata), (int)lwc_string_length(value_str), lwc_string_data(value_str));
+#endif
+
+    /* Release our reference - the map now owns it */
+    lwc_string_unref(value_str);
+
+    if (error != CSS_OK)
+        return error;
+
+    /* Handle !important if present */
+    {
+        uint8_t flags = 0;
+        error = css__parse_important(c, vector, ctx, &flags);
+        if (error != CSS_OK)
+            return error;
+
+        /* TODO: Store importance flag with custom property */
+        /* For now, we don't track importance for custom properties */
+    }
+
+    /* Ensure we've consumed all input */
+    consumeWhitespace(vector, ctx);
+    token = parserutils_vector_iterate(vector, ctx);
+    if (token != NULL) {
+        /* Trailing junk - but for custom properties, this is usually OK */
+        /* Custom properties have very permissive syntax */
+    }
 
     return CSS_OK;
 }

@@ -27,7 +27,11 @@
 #include "select/select.h"
 #include "select/strings.h"
 #include "select/unit.h"
+#include "select/custom_properties.h"
+#include "parse/language.h"
+#include "parse/properties/properties.h"
 #include "stylesheet.h"
+#include "lex/lex.h"
 
 /* Define this to enable verbose messages when matching selector chains */
 #undef DEBUG_CHAIN_MATCHING
@@ -1015,6 +1019,14 @@ static css_error css_select__initialise_selection_state(css_select_state *state,
         goto failed;
     }
 
+    /* Get parent's custom properties for var() resolution */
+    if (parent != NULL && handler->get_parent_custom_props != NULL) {
+        error = handler->get_parent_custom_props(pw, node, &state->parent_custom_props);
+        if (error != CSS_OK) {
+            goto failed;
+        }
+    }
+
     /* Get node's name */
     error = handler->node_name(pw, node, &state->element);
     if (error != CSS_OK) {
@@ -1282,6 +1294,20 @@ css_error css_select_style(css_select_ctx *ctx, void *node, const css_unit_ctx *
             /* Inline style applies to base element only */
             state.current_pseudo = CSS_PSEUDO_ELEMENT_NONE;
             state.computed = state.results->styles[CSS_PSEUDO_ELEMENT_NONE];
+
+            /* Cascade custom properties from inline style */
+            if (sel->custom_props != NULL) {
+                if (state.computed->custom_props == NULL) {
+                    error = css__custom_property_map_create(&state.computed->custom_props);
+                    if (error != CSS_OK)
+                        goto cleanup;
+                }
+                error = css__custom_property_map_merge(state.computed->custom_props, sel->custom_props);
+                if (error != CSS_OK)
+                    goto cleanup;
+                fprintf(
+                    stderr, "[CSS-VAR] Cascaded %u custom properties from inline style\n", sel->custom_props->count);
+            }
 
             error = cascade_style(sel->style, &state);
             if (error != CSS_OK)
@@ -2045,7 +2071,33 @@ css_error match_selector_chain(css_select_ctx *ctx, const css_selector *selector
     state->current_pseudo = pseudo;
     state->computed = state->results->styles[pseudo];
 
-    return cascade_style(((css_rule_selector *)selector->rule)->style, state);
+    /* Cascade custom properties from the rule to computed style */
+    css_rule_selector *rs = (css_rule_selector *)selector->rule;
+#ifdef DEBUG_CSS_VAR_CASCADE
+    fprintf(stderr, "[CSS-VAR-CASCADE] match_selector_chain: rule matched, rs->custom_props=%p\n",
+        (void *)rs->custom_props);
+#endif
+    if (rs->custom_props != NULL) {
+        if (state->computed->custom_props == NULL) {
+            error = css__custom_property_map_create(&state->computed->custom_props);
+            if (error != CSS_OK)
+                return error;
+        }
+        error = css__custom_property_map_merge(state->computed->custom_props, rs->custom_props);
+        if (error != CSS_OK)
+            return error;
+#ifdef DEBUG_CSS_VAR_CASCADE
+        fprintf(stderr, "[CSS-VAR] Cascaded %u custom properties to computed style\n", rs->custom_props->count);
+#endif
+    }
+
+    /* Only cascade style if there is bytecode - rules with only custom
+     * properties have rs->style == NULL */
+    if (rs->style != NULL) {
+        return cascade_style(rs->style, state);
+    }
+
+    return CSS_OK;
 }
 
 css_error match_named_combinator(css_select_ctx *ctx, css_combinator type, const css_selector *selector,
@@ -2507,6 +2559,265 @@ css_error match_detail(css_select_ctx *ctx, void *node, const css_selector_detai
     return error;
 }
 
+/**
+ * Tokenize a value string and append resulting tokens to a vector
+ *
+ * This is used during var() resolution to re-tokenize substituted values
+ * that may contain complex CSS like 'rgb(0, 200, 100)'.
+ *
+ * \param value    The value string to tokenize
+ * \param tokens   Vector to append tokens to
+ * \return CSS_OK on success, appropriate error otherwise
+ */
+static css_error tokenize_and_append_value(lwc_string *value, parserutils_vector *tokens)
+{
+    css_error error = CSS_OK;
+    parserutils_inputstream *stream = NULL;
+    css_lexer *lexer = NULL;
+    parserutils_error perror;
+
+    const char *value_data = lwc_string_data(value);
+    size_t value_len = lwc_string_length(value);
+
+    /* Create input stream from value string */
+    perror = parserutils_inputstream_create("UTF-8", CSS_CHARSET_DEFAULT, NULL, &stream);
+    if (perror != PARSERUTILS_OK) {
+        return CSS_NOMEM;
+    }
+
+    /* Append value data to stream */
+    perror = parserutils_inputstream_append(stream, (const uint8_t *)value_data, value_len);
+    if (perror != PARSERUTILS_OK) {
+        parserutils_inputstream_destroy(stream);
+        return CSS_NOMEM;
+    }
+
+    /* Signal end of data */
+    perror = parserutils_inputstream_append(stream, NULL, 0);
+    if (perror != PARSERUTILS_OK) {
+        parserutils_inputstream_destroy(stream);
+        return CSS_NOMEM;
+    }
+
+    /* Create lexer */
+    error = css__lexer_create(stream, &lexer);
+    if (error != CSS_OK) {
+        parserutils_inputstream_destroy(stream);
+        return error;
+    }
+
+    /* Read tokens from lexer and append to vector */
+    while (1) {
+        css_token *t = NULL;
+        error = css__lexer_get_token(lexer, &t);
+        if (error != CSS_OK) {
+            break;
+        }
+
+        if (t->type == CSS_TOKEN_EOF) {
+            break;
+        }
+
+        /* Skip whitespace tokens */
+        if (t->type == CSS_TOKEN_S) {
+            continue;
+        }
+
+        /* Create a copy of the token with interned string */
+        css_token copy = *t;
+        if (t->data.data != NULL && t->data.len > 0 && t->type < CSS_TOKEN_LAST_INTERN) {
+            lwc_string *interned = NULL;
+            if (lwc_intern_string((const char *)t->data.data, t->data.len, &interned) == lwc_error_ok) {
+                copy.idata = interned;
+            }
+        }
+
+        parserutils_vector_append(tokens, &copy);
+    }
+
+    css__lexer_destroy(lexer);
+    parserutils_inputstream_destroy(stream);
+
+    return CSS_OK;
+}
+
+/**
+ * Resolve a var()-containing declaration at select time
+ *
+ * Reads serialized tokens from bytecode, substitutes var() references,
+ * parses the result, and cascades into computed style.
+ *
+ * \param propstring_idx  Property handler index (from OPV opcode)
+ * \param style    Style containing bytecode (will be advanced)
+ * \param state    Selection state
+ * \return CSS_OK on success, appropriate error otherwise
+ */
+static css_error resolve_var_style(uint32_t propstring_idx, css_style *style, css_select_state *state)
+{
+    css_error error = CSS_OK;
+    uint32_t token_count;
+    parserutils_vector *tokens = NULL;
+    css_style *result_style = NULL;
+    int32_t ctx = 0;
+
+    /* Read token count */
+    token_count = *style->bytecode;
+    advance_bytecode(style, sizeof(uint32_t));
+#ifdef DEBUG_CSS_VAR_RESOLVE
+    fprintf(stderr, "[CSS-VAR-RESOLVE] propstring_idx=%u: reading %u tokens\n", propstring_idx, token_count);
+#endif
+    /* Create token vector */
+    if (parserutils_vector_create(sizeof(css_token), token_count + 1, &tokens) != PARSERUTILS_OK) {
+        return CSS_NOMEM;
+    }
+
+    /* Read and reconstruct tokens */
+    for (uint32_t i = 0; i < token_count; i++) {
+        css_token token = {0};
+        uint32_t snumber;
+        lwc_string *str = NULL;
+
+        /* Read type */
+        token.type = (css_token_type)*style->bytecode;
+        advance_bytecode(style, sizeof(uint32_t));
+
+        /* Read string index */
+        snumber = *style->bytecode;
+        advance_bytecode(style, sizeof(uint32_t));
+
+        /* Get string from stylesheet */
+        if (snumber != 0) {
+            error = css__stylesheet_string_get((css_stylesheet *)state->sheet, snumber, &str);
+            if (error != CSS_OK) {
+                parserutils_vector_destroy(tokens);
+                return error;
+            }
+            token.idata = str;
+            token.data.data = (uint8_t *)lwc_string_data(str);
+            token.data.len = lwc_string_length(str);
+        }
+#ifdef DEBUG_CSS_VAR_RESOLVE
+        fprintf(stderr, "[CSS-VAR-RESOLVE]   Token %u: type=%d data='%.*s'\n", i, token.type,
+            (int)(token.data.len > 50 ? 50 : token.data.len),
+            token.data.data ? (const char *)token.data.data : "(null)");
+#endif
+        /* Check if this is a var() function - perform substitution */
+        if (token.type == CSS_TOKEN_FUNCTION && token.idata != NULL) {
+            bool match = false;
+            lwc_string *var_str;
+
+            /* Intern "var" for comparison */
+            if (lwc_intern_string("var", 3, &var_str) == lwc_error_ok) {
+                lwc_string_caseless_isequal(token.idata, var_str, &match);
+                lwc_string_unref(var_str);
+            }
+
+            if (match) {
+                /* This is var() - read the variable name from next token */
+                i++; /* Advance to variable name token */
+                if (i < token_count) {
+                    css_token name_token = {0};
+                    lwc_string *name_str = NULL;
+
+                    name_token.type = (css_token_type)*style->bytecode;
+                    advance_bytecode(style, sizeof(uint32_t));
+                    snumber = *style->bytecode;
+                    advance_bytecode(style, sizeof(uint32_t));
+
+                    if (snumber != 0) {
+                        error = css__stylesheet_string_get((css_stylesheet *)state->sheet, snumber, &name_str);
+                        if (error == CSS_OK && name_str != NULL) {
+                            /* Look up variable value - first in current element, then parent */
+                            lwc_string *value = css__custom_property_get(state->computed->custom_props, name_str);
+
+                            /* Fallback to parent's custom properties (for inheritance) */
+                            if (value == NULL && state->parent_custom_props != NULL) {
+                                value = css__custom_property_get(state->parent_custom_props, name_str);
+                            }
+#ifdef DEBUG_CSS_VAR_CASCADE
+                            fprintf(stderr, "[CSS-VAR-RESOLVE]   var(%.*s) -> '%s'\n", (int)lwc_string_length(name_str),
+                                lwc_string_data(name_str), value ? lwc_string_data(value) : "(not found)");
+#endif
+                            if (value != NULL) {
+                                /* Re-tokenize the substituted value to handle complex values like rgb(...) */
+                                tokenize_and_append_value(value, tokens);
+                            }
+                        }
+                    }
+
+                    /* Skip closing paren token */
+                    i++;
+                    if (i < token_count) {
+                        advance_bytecode(style, sizeof(uint32_t) * 2);
+                    }
+                }
+                continue; /* Don't add the var( token itself */
+            }
+        }
+
+        parserutils_vector_append(tokens, &token);
+    }
+
+    /* Log final substituted token stream */
+    size_t vector_len = 0;
+    parserutils_vector_get_length(tokens, &vector_len);
+#ifdef DEBUG_CSS_VAR_RESOLVE
+    fprintf(stderr, "[CSS-VAR-RESOLVE] After substitution, vector has %zu tokens\n", vector_len);
+#endif
+    error = css__stylesheet_style_create((css_stylesheet *)state->sheet, &result_style);
+    if (error != CSS_OK) {
+        parserutils_vector_destroy(tokens);
+        return error;
+    }
+
+    /* Call property parser */
+    if (propstring_idx < LAST_PROP + 1 - FIRST_PROP) {
+        css_prop_handler handler = property_handlers[propstring_idx];
+        if (handler != NULL) {
+            /* Create minimal language context for parser */
+            css_language temp_lang = {
+                .sheet = (css_stylesheet *)state->sheet,
+                .strings = state->sheet->propstrings,
+            };
+
+            error = handler(&temp_lang, tokens, &ctx, result_style);
+
+            if (error == CSS_OK && result_style->used > 0) {
+#ifdef DEBUG_CSS_VAR_RESOLVE
+                fprintf(stderr, "[CSS-VAR-RESOLVE] propstring_idx %u parsed successfully, cascading\n", propstring_idx);
+#endif
+                /* Cascade the result */
+                css_style temp_style = *result_style;
+                while (temp_style.used > 0) {
+                    css_code_t parsed_opv = *temp_style.bytecode;
+                    advance_bytecode(&temp_style, sizeof(parsed_opv));
+
+                    opcode_t parsed_op = getOpcode(parsed_opv);
+                    error = prop_dispatch[parsed_op].cascade(parsed_opv, &temp_style, state);
+                    if (error != CSS_OK)
+                        break;
+                }
+            } else {
+#ifdef DEBUG_CSS_VAR_CASCADE
+                fprintf(
+                    stderr, "[CSS-VAR-RESOLVE] propstring_idx %u parse failed or empty: %d\n", propstring_idx, error);
+#endif
+            }
+        } else {
+#ifdef DEBUG_CSS_VAR_CASCADE
+            fprintf(stderr, "[CSS-VAR-RESOLVE] propstring_idx %u has NULL handler\n", propstring_idx);
+#endif
+        }
+    }
+
+    css__stylesheet_style_destroy(result_style);
+    parserutils_vector_destroy(tokens);
+
+    /* Per CSS spec, if var() resolution fails, the property is simply not applied.
+     * We return CSS_OK to continue processing other properties. */
+    return CSS_OK;
+}
+
 css_error cascade_style(const css_style *style, css_select_state *state)
 {
     css_style s = *style;
@@ -2522,6 +2833,19 @@ css_error cascade_style(const css_style *style, css_select_state *state)
 
         /* DEBUG: Log opcode to trace out-of-bounds access */
         // fprintf(stderr, "DEBUG cascade: opcode=%d (0x%03x), CSS_N_PROPERTIES=%d\n", op, op, CSS_N_PROPERTIES);
+
+        /* Check for FLAG_VAR - resolve var() at selection time using parent_custom_props */
+        if (getFlags(opv) & FLAG_VAR) {
+            css_error var_error = resolve_var_style((uint32_t)op, &s, state);
+            if (var_error != CSS_OK) {
+#ifdef DEBUG_CSS_VAR
+                fprintf(stderr, "[CSS-VAR] resolve_var_style failed for prop %d: %d\n", op, var_error);
+#endif
+                /* Per CSS spec, if var() resolution fails, property is not applied - continue */
+            }
+            continue;
+        }
+
         if (op >= CSS_N_PROPERTIES) {
             fprintf(stderr, "ERROR: Invalid opcode %d >= CSS_N_PROPERTIES %d!\n", op, CSS_N_PROPERTIES);
         }
