@@ -97,8 +97,8 @@ START_TEST(bloom_create_test)
     b = bloom_create(BLOOM_SIZE);
     ck_assert(b != NULL);
 
-    bloom_insert_str(b, "Wisp", 7);
-    ck_assert(bloom_search_str(b, "Wisp", 7));
+    bloom_insert_str(b, "Wisp", 4);
+    ck_assert(bloom_search_str(b, "Wisp", 4));
     ck_assert(!bloom_search_str(b, "NotSurf", 7));
 
     ck_assert(bloom_items(b) == 1);

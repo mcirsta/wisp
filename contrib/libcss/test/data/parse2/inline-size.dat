@@ -1,10 +1,9 @@
-#expected
-| .test {
-|   width: 100px;
-| }
-
 #data
 .test { inline-size: 100px; }
 #errors
+
+#expected
+| .test
+|  width: 100px
 
 #reset

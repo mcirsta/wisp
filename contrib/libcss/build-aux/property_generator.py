@@ -147,6 +147,148 @@ class PropertyGenParser:
         
         return self.prop_map
 
+
+class PerfectHashGenerator:
+    """Generate a perfect hash function using the perfect-hash library.
+    
+    Uses the 'perfect-hash' package (pip install perfect-hash) to create
+    a minimal perfect hash for O(1) property lookup with no collisions.
+    """
+    
+    def __init__(self, keys):
+        """Initialize with list of (key_string, handler_name, css_name) tuples."""
+        self.keys = keys
+        self.hash_table = {}
+        self.table_size = 0
+        self.f1 = None
+        self.f2 = None
+        self.G = None
+        
+    def build(self):
+        """Build using perfect_hash library."""
+        try:
+            import perfect_hash
+        except ImportError:
+            print("ERROR: 'perfect-hash' package not found.", file=sys.stderr)
+            print("Install with: pip install perfect-hash", file=sys.stderr)
+            print("  or on Arch: yay -S python-perfect-hash", file=sys.stderr)
+            sys.exit(1)
+        
+        # Extract just the key strings (lowercased for case-insensitive matching)
+        key_strings = [k[0].lower() for k in self.keys]
+        
+        # Generate the perfect hash function components
+        # Returns (f1, f2, G) where hash(key) = (G[f1(key)] + G[f2(key)]) % len(G)
+        self.f1, self.f2, self.G = perfect_hash.generate_hash(key_strings)
+        
+        # Build lookup table: calculate slot for each key
+        for key_data in self.keys:
+            key = key_data[0].lower()
+            slot = (self.G[self.f1(key)] + self.G[self.f2(key)]) % len(self.G)
+            self.hash_table[slot] = key_data
+        
+        # Table size is len(G)
+        self.table_size = len(self.G)
+        
+        return True
+    
+    def generate_c_code(self):
+        """Generate C code for the hash function and lookup table."""
+        lines = []
+        
+        # Generate the G table
+        lines.append("/* Perfect hash intermediate table G */")
+        lines.append(f"static const uint16_t G[{len(self.G)}] = {{")
+        # Format G table in rows of 16
+        for i in range(0, len(self.G), 16):
+            row = ", ".join(f"{self.G[j]}" for j in range(i, min(i + 16, len(self.G))))
+            lines.append(f"    {row},")
+        lines.append("};")
+        lines.append("")
+        
+        # Generate the salt tables from f1 and f2
+        # The StrSaltHash objects have a 'salt' attribute
+        salt1 = self.f1.salt if hasattr(self.f1, 'salt') else b''
+        salt2 = self.f2.salt if hasattr(self.f2, 'salt') else b''
+        
+        lines.append(f"static const unsigned char S1[{len(salt1)}] = {{")
+        for i in range(0, len(salt1), 16):
+            row = ", ".join(f"{salt1[j]}" for j in range(i, min(i + 16, len(salt1))))
+            lines.append(f"    {row},")
+        lines.append("};")
+        lines.append("")
+        
+        lines.append(f"static const unsigned char S2[{len(salt2)}] = {{")
+        for i in range(0, len(salt2), 16):
+            row = ", ".join(f"{salt2[j]}" for j in range(i, min(i + 16, len(salt2))))
+            lines.append(f"    {row},")
+        lines.append("};")
+        lines.append("")
+        
+        # Generate the hash function
+        lines.append("/* Perfect hash function for CSS property lookup */")
+        lines.append("static inline unsigned int css_prop_hash(const char *key, size_t len) {")
+        lines.append("    unsigned int f1 = 0, f2 = 0;")
+        lines.append(f"    size_t salt_len = {len(salt1)};")
+        lines.append("    for (size_t i = 0; i < len && i < salt_len; i++) {")
+        lines.append("        f1 += S1[i] * (unsigned char)key[i];")
+        lines.append("        f2 += S2[i] * (unsigned char)key[i];")
+        lines.append("    }")
+        lines.append(f"    f1 %= {len(self.G)};")
+        lines.append(f"    f2 %= {len(self.G)};")
+        lines.append(f"    return (G[f1] + G[f2]) % {len(self.G)};")
+        lines.append("}")
+        lines.append("")
+        
+        # Lookup table structure
+        lines.append("/* Property lookup table entry */")
+        lines.append("struct css_prop_entry {")
+        lines.append("    const char *name;     /* Property name (hyphenated) */")
+        lines.append("    uint8_t name_len;     /* Length of name */")
+        lines.append("    css_prop_handler handler;  /* Parse handler function */")
+        lines.append("};")
+        lines.append("")
+        
+        # Table size
+        lines.append(f"#define CSS_PROP_HASH_TABLE_SIZE {self.table_size}")
+        lines.append("")
+        
+        # Lookup table with sparse initialization
+        lines.append("static const struct css_prop_entry css_prop_hash_table[CSS_PROP_HASH_TABLE_SIZE] = {")
+        for slot in sorted(self.hash_table.keys()):
+            key, handler, css_name = self.hash_table[slot]
+            lines.append(f'    [{slot}] = {{ "{css_name}", {len(css_name)}, {handler} }},')
+        lines.append("};")
+        lines.append("")
+        
+        # Lookup helper function
+        lines.append("/* Lookup property handler by name (case-insensitive) */")
+        lines.append("static inline css_prop_handler css_prop_lookup(const char *name, size_t len) {")
+        lines.append("    /* Convert to lowercase for hash lookup */")
+        lines.append("    char lower[64];")
+        lines.append("    if (len >= sizeof(lower)) return NULL;")
+        lines.append("    for (size_t i = 0; i < len; i++) {")
+        lines.append("        char c = name[i];")
+        lines.append("        lower[i] = (c >= 'A' && c <= 'Z') ? c + 32 : c;")
+        lines.append("    }")
+        lines.append("    lower[len] = '\\0';")
+        lines.append("")
+        lines.append("    unsigned int slot = css_prop_hash(lower, len);")
+        lines.append("    if (slot >= CSS_PROP_HASH_TABLE_SIZE) return NULL;")
+        lines.append("")
+        lines.append("    const struct css_prop_entry *e = &css_prop_hash_table[slot];")
+        lines.append("    if (e->name == NULL || e->name_len != len) return NULL;")
+        lines.append("")
+        lines.append("    /* Verify exact match */")
+        lines.append("    for (size_t i = 0; i < len; i++) {")
+        lines.append("        if (lower[i] != e->name[i]) return NULL;")
+        lines.append("    }")
+        lines.append("    return e->handler;")
+        lines.append("}")
+        
+        return "\n".join(lines)
+
+
 class KeywordsParser:
     """Parse keywords.gen to get CSS syntax keywords."""
     
@@ -346,6 +488,44 @@ class MultiFileGenerator:
         
         return '\n'.join(lines)
     
+    def generate_hash_table(self):
+        """Generate perfect hash table for O(1) property lookup."""
+        lines = self._header("HASH_TABLE", "Perfect hash table for CSS property lookup")
+        
+        # Collect all properties that need parse handlers
+        # Get longhand properties from dispatch.c
+        all_props = [prop_info['name'] for prop_info in self.dispatch_order]
+        
+        # Add SHORTHAND properties
+        shorthands = [name for name, meta in self.metadata.items() 
+                      if meta.get('is_shorthand', False) and not meta.get('is_manual', False)
+                      and name not in all_props]
+        
+        # Add alias properties
+        aliases = [name for name, meta in self.metadata.items()
+                   if meta.get('is_alias', False) and name not in all_props]
+        
+        sorted_props = sorted(all_props + shorthands + aliases)
+        
+        # Build key tuples: (lookup_key, handler_name, css_name)
+        keys = []
+        for prop_name in sorted_props:
+            css_name = prop_name.replace('_', '-')
+            handler_name = f"css__parse_{prop_name}"
+            keys.append((css_name, handler_name, css_name))
+        
+        # Generate perfect hash
+        hasher = PerfectHashGenerator(keys)
+        hasher.build()
+        
+        # Add includes and the generated code
+        lines.append("#include <stdint.h>")
+        lines.append("#include <stddef.h>")
+        lines.append("")
+        lines.append(hasher.generate_c_code())
+        
+        return '\n'.join(lines)
+    
     def validate_indexes(self):
         """Validate that propstrings and handlers have consistent property order."""
         # Get longhand properties from dispatch.c
@@ -383,7 +563,7 @@ class MultiFileGenerator:
 
 def main():
     if len(sys.argv) != 9:
-        print("Usage: property_generator.py dispatch.c properties.gen keywords.gen enum.inc dispatch.inc propstrings.inc propstrings_strings.inc handlers.inc", file=sys.stderr)
+        print("Usage: property_generator.py dispatch.c properties.gen keywords.gen enum.inc dispatch.inc propstrings.inc propstrings_strings.inc hash_table.inc", file=sys.stderr)
         sys.exit(1)
     
     dispatch_file = sys.argv[1]
@@ -393,7 +573,7 @@ def main():
     dispatch_out = sys.argv[5]
     propstrings_out = sys.argv[6]
     propstrings_strings_out = sys.argv[7]
-    handlers_out = sys.argv[8]
+    hash_table_out = sys.argv[8]
     
     # Parse input files
     print("Parsing dispatch.c for property order...")
@@ -434,9 +614,11 @@ def main():
         f.write(generator.generate_propstrings_strings())
     print(f"Generated: {propstrings_strings_out}")
     
-    with open(handlers_out, 'w') as f:
-        f.write(generator.generate_parse_handlers())
-    print(f"Generated: {handlers_out}")
+    # Generate perfect hash table (replaces parse_handlers.inc)
+    print("Generating perfect hash table...")
+    with open(hash_table_out, 'w') as f:
+        f.write(generator.generate_hash_table())
+    print(f"Generated: {hash_table_out}")
 
 
 if __name__ == '__main__':

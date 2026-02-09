@@ -7,20 +7,7 @@
 
 #include "parse/properties/properties.h"
 
-/**
- * Dispatch table of property handlers, indexed by property enum
- */
-/**
- * Property parse handler dispatch array
- *
- * === AUTO-GENERATED - DO NOT EDIT ===
- * This array is auto-generated from properties.gen
- *
- * To add a property handler: Update properties.gen and rebuild
- * To add CSS keywords (pseudo-classes, at-rules): Update keywords.gen and
- * rebuild
- */
-#include "parse_handlers.inc"
+/* Note: Property handlers are now accessed via prop_hash_table.inc in language.c */
 
 /** Mapping from property bytecode index to bytecode unit class mask. */
 const uint32_t property_unit_mask[CSS_N_PROPERTIES] = {

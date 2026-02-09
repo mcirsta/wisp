@@ -31,6 +31,24 @@ add_custom_command(
 )
 add_custom_target(libcss_select_gen DEPENDS ${LIBCSS_SELECT_GEN_FILES})
 
+# Check for perfect_hash Python module (required for O(1) property lookup hash table)
+execute_process(
+    COMMAND ${Python3_EXECUTABLE} -c "import perfect_hash; print('ok')"
+    OUTPUT_VARIABLE PERFECT_HASH_CHECK
+    ERROR_QUIET
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+)
+if(NOT PERFECT_HASH_CHECK STREQUAL "ok")
+    message(FATAL_ERROR 
+        "Python 'perfect-hash' module not found.\n"
+        "Install it via:\n"
+        "  - Arch Linux: yay -S python-perfect-hash\n"
+        "  - pip: pip install perfect-hash\n"
+        "This is required for generating the CSS property hash table."
+    )
+endif()
+message(STATUS "Found Python perfect_hash module")
+
 # Property registration generator output files
 set(LIBCSS_PROPREG_OUT_DIR ${CMAKE_CURRENT_BINARY_DIR}/src/generated)
 set(LIBCSS_PROPREG_GEN_FILES
@@ -38,7 +56,7 @@ set(LIBCSS_PROPREG_GEN_FILES
     ${LIBCSS_PROPREG_OUT_DIR}/dispatch_table.inc
     ${LIBCSS_PROPREG_OUT_DIR}/propstrings_enum.inc
     ${LIBCSS_PROPREG_OUT_DIR}/propstrings_strings.inc
-    ${LIBCSS_PROPREG_OUT_DIR}/parse_handlers.inc
+    ${LIBCSS_PROPREG_OUT_DIR}/prop_hash_table.inc
 )
 add_custom_command(
     OUTPUT ${LIBCSS_PROPREG_GEN_FILES}
@@ -51,7 +69,7 @@ add_custom_command(
         ${LIBCSS_PROPREG_OUT_DIR}/dispatch_table.inc
         ${LIBCSS_PROPREG_OUT_DIR}/propstrings_enum.inc
         ${LIBCSS_PROPREG_OUT_DIR}/propstrings_strings.inc
-        ${LIBCSS_PROPREG_OUT_DIR}/parse_handlers.inc
+        ${LIBCSS_PROPREG_OUT_DIR}/prop_hash_table.inc
     DEPENDS 
         ${CMAKE_SOURCE_DIR}/contrib/libcss/build-aux/property_generator.py
         ${CMAKE_SOURCE_DIR}/contrib/libcss/src/select/dispatch.c

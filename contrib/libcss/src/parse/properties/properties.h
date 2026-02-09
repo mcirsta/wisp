@@ -19,7 +19,7 @@
 typedef css_error (*css_prop_handler)(
     css_language *c, const parserutils_vector *vector, int32_t *ctx, css_style *result);
 
-extern const css_prop_handler property_handlers[LAST_PROP + 1 - FIRST_PROP];
+/* Note: Property handlers are now accessed via prop_hash_table.inc in language.c */
 
 css_error css__parse_align_content(css_language *c, const parserutils_vector *vector, int32_t *ctx, css_style *result);
 css_error css__parse_align_items(css_language *c, const parserutils_vector *vector, int32_t *ctx, css_style *result);

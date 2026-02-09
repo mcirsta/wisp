@@ -972,7 +972,7 @@ p:after { content: url("http://www.wispbrowser.com/"); }
 #errors
 #expected
 | 1 p:after
-|   0x02040019 PTR(http://www.netsurf-browser.org/) 0x00000000
+|   0x02040019 PTR(http://www.wispbrowser.com/) 0x00000000
 #reset
 
 #data
@@ -1092,7 +1092,7 @@ p:after { content: url("http://www.wispbrowser.com/") !important; }
 #errors
 #expected
 | 1 p:after
-|   0x02040419 PTR(http://www.netsurf-browser.org/) 0x00000000
+|   0x02040419 PTR(http://www.wispbrowser.com/) 0x00000000
 #reset
 
 #data
@@ -2284,7 +2284,7 @@ p:before { content: open-quote url('http://picodrive.acornarcade.com/') " : " at
 #errors
 #expected
 | 1 *
-|   0x0200002d PTR(http://www.netsurf-browser.org/bullet.png)
+|   0x0200002d PTR(http://www.wispbrowser.com/bullet.png)
 #reset
 
 ##

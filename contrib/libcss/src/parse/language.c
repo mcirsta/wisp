@@ -24,6 +24,9 @@
 #include "utils/parserutilserror.h"
 #include "utils/css_utils.h"
 
+/* AUTO-GENERATED: Perfect hash table for O(1) CSS property lookup */
+#include "prop_hash_table.inc"
+
 typedef struct context_entry {
     css_parser_event type; /**< Type of entry */
     void *data; /**< Data for context */
@@ -1726,32 +1729,16 @@ css_error parseProperty(
 {
     css_error error;
     css_prop_handler handler = NULL;
-    int i = 0;
     uint8_t flags = 0;
     css_style *style = NULL;
     const css_token *token;
 
-    /* Find property index */
-    /** \todo improve on this linear search */
-    for (i = FIRST_PROP; i <= LAST_PROP; i++) {
-        bool match = false;
+    /* O(1) property lookup using perfect hash table */
+    handler = css_prop_lookup(lwc_string_data(property->idata), lwc_string_length(property->idata));
 
-        if (lwc_string_caseless_isequal(property->idata, c->strings[i], &match) == lwc_error_ok && match) {
-            // fprintf(stderr, "DEBUG: parseProperty matched '%.*s' to index %d\n",
-            //    (int)lwc_string_length(property->idata), lwc_string_data(property->idata), i);
-            break;
-        }
-    }
-    if (i == LAST_PROP + 1) {
-        // fprintf(stderr, "DEBUG: parseProperty FAILED to match '%.*s'\n", (int)lwc_string_length(property->idata),
-        //    lwc_string_data(property->idata));
+    if (handler == NULL) {
         return CSS_INVALID;
     }
-
-    /* Get handler */
-    handler = property_handlers[i - FIRST_PROP];
-    // fprintf(stderr, "DEBUG: parseProperty dispatching to handler index %d\n", i - FIRST_PROP);
-    assert(handler != NULL);
 
     /* allocate style */
     error = css__stylesheet_style_create(c->sheet, &style);
