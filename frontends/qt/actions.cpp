@@ -22,12 +22,17 @@
  */
 
 #include <cfloat>
+#include <cstdio>
+#include <unistd.h>
 
 #include <QClipboard>
+#include <QDesktopServices>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QPainter>
 #include <QStyle>
+#include <QTemporaryFile>
+#include <QUrl>
 #include <QWidget>
 
 extern "C" {
@@ -37,6 +42,7 @@ extern "C" {
 #include "utils/nsurl.h"
 
 #include "wisp/content.h"
+#include "wisp/browser_window.h"
 
 #include "desktop/browser_history.h"
 #include "desktop/hotlist.h"
@@ -587,16 +593,62 @@ void NS_Actions::page_source_slot(bool checked)
 
 void NS_Actions::debug_render_slot(bool checked)
 {
+    /* Toggle debug rendering overlay on the page */
+    browser_window_debug(m_bw, CONTENT_DEBUG_REDRAW);
 }
 
 
 void NS_Actions::debug_box_tree_slot(bool checked)
 {
+    /* Dump box tree (computed styles) to temp file and open it */
+    QTemporaryFile tempFile("wisp_boxtree_XXXXXX.txt");
+    tempFile.setAutoRemove(false); /* Keep file after program exits */
+
+    if (!tempFile.open()) {
+        NSLOG(wisp, WARNING, "Failed to create temp file for box tree dump");
+        return;
+    }
+
+    QString fileName = tempFile.fileName();
+    FILE *f = fdopen(dup(tempFile.handle()), "w");
+    if (f == NULL) {
+        NSLOG(wisp, WARNING, "Failed to open temp file for writing");
+        return;
+    }
+
+    browser_window_debug_dump(m_bw, f, CONTENT_DEBUG_RENDER);
+    fclose(f);
+    tempFile.close();
+
+    /* Open in default text editor */
+    QDesktopServices::openUrl(QUrl::fromLocalFile(fileName));
 }
 
 
 void NS_Actions::debug_dom_tree_slot(bool checked)
 {
+    /* Dump DOM tree to temp file and open it */
+    QTemporaryFile tempFile("wisp_domtree_XXXXXX.txt");
+    tempFile.setAutoRemove(false); /* Keep file after program exits */
+
+    if (!tempFile.open()) {
+        NSLOG(wisp, WARNING, "Failed to create temp file for DOM tree dump");
+        return;
+    }
+
+    QString fileName = tempFile.fileName();
+    FILE *f = fdopen(dup(tempFile.handle()), "w");
+    if (f == NULL) {
+        NSLOG(wisp, WARNING, "Failed to open temp file for writing");
+        return;
+    }
+
+    browser_window_debug_dump(m_bw, f, CONTENT_DEBUG_DOM);
+    fclose(f);
+    tempFile.close();
+
+    /* Open in default text editor */
+    QDesktopServices::openUrl(QUrl::fromLocalFile(fileName));
 }
 
 

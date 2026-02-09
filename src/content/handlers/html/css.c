@@ -386,16 +386,21 @@ bool html_css_process_link(html_content *htmlc, dom_node *node)
         return true;
 
     if (strcasestr(dom_string_data(rel), "stylesheet") == NULL) {
+        NSLOG(wisp, INFO, "DEBUG html_css_process_link: Rejected - rel='%s' does not contain 'stylesheet'",
+            dom_string_data(rel));
         dom_string_unref(rel);
         return true;
     } else if (strcasestr(dom_string_data(rel), "alternate") != NULL) {
         /* Ignore alternate stylesheets */
+        NSLOG(
+            wisp, INFO, "DEBUG html_css_process_link: Rejected - rel='%s' contains 'alternate'", dom_string_data(rel));
         dom_string_unref(rel);
         return true;
     }
     dom_string_unref(rel);
 
     if (nsoption_bool(author_level_css) == false) {
+        NSLOG(wisp, INFO, "DEBUG html_css_process_link: Rejected - author_level_css is false");
         return true;
     }
 
@@ -403,16 +408,22 @@ bool html_css_process_link(html_content *htmlc, dom_node *node)
     exc = dom_element_get_attribute(node, corestring_dom_type, &type_attr);
     if (exc == DOM_NO_ERR && type_attr != NULL) {
         if (!dom_string_caseless_lwc_isequal(type_attr, corestring_lwc_text_css)) {
+            NSLOG(wisp, INFO, "DEBUG html_css_process_link: Rejected - type='%s' is not text/css",
+                dom_string_data(type_attr));
             dom_string_unref(type_attr);
             return true;
         }
         dom_string_unref(type_attr);
     }
 
-    /* media contains 'screen' or 'all' or not present */
+    /* media contains 'screen' or 'all' or not present or empty string
+     * Note: empty media attribute is valid and equivalent to "all" per HTML spec */
     exc = dom_element_get_attribute(node, corestring_dom_media, &media);
     if (exc == DOM_NO_ERR && media != NULL) {
-        if (strcasestr(dom_string_data(media), "screen") == NULL && strcasestr(dom_string_data(media), "all") == NULL) {
+        if (dom_string_length(media) > 0 && strcasestr(dom_string_data(media), "screen") == NULL &&
+            strcasestr(dom_string_data(media), "all") == NULL) {
+            NSLOG(wisp, INFO, "DEBUG html_css_process_link: Rejected - media='%s' doesn't contain screen/all",
+                dom_string_data(media));
             dom_string_unref(media);
             return true;
         }
