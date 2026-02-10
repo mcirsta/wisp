@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Font Variant Loading Test</title>
+    <style>
+        /*
+ * Test page for font variant loading.
+ * URLs from Google Fonts CSS API (Roboto v50).
+ */
+
+        /* Roboto - Regular (400, normal) */
+        @font-face {
+            font-family: 'Roboto';
+            font-style: normal;
+            font-weight: 400;
+            src: url(https://fonts.gstatic.com/s/roboto/v50/KFOMCnqEu92Fr1ME7kSn66aGLdTylUAMQXC89YmC2DPNWubEbWmT.ttf) format('truetype');
+        }
+
+        /* Roboto - Bold (700, normal) */
+        @font-face {
+            font-family: 'Roboto';
+            font-style: normal;
+            font-weight: 700;
+            src: url(https://fonts.gstatic.com/s/roboto/v50/KFOMCnqEu92Fr1ME7kSn66aGLdTylUAMQXC89YmC2DPNWuYjammT.ttf) format('truetype');
+        }
+
+        /* Roboto - Italic (400, italic) */
+        @font-face {
+            font-family: 'Roboto';
+            font-style: italic;
+            font-weight: 400;
+            src: url(https://fonts.gstatic.com/s/roboto/v50/KFOKCnqEu92Fr1Mu53ZEC9_Vu3r1gIhOszmOClHrs6ljXfMMLoHQiA8.ttf) format('truetype');
+        }
+
+        /* Roboto - Bold Italic (700, italic) */
+        @font-face {
+            font-family: 'Roboto';
+            font-style: italic;
+            font-weight: 700;
+            src: url(https://fonts.gstatic.com/s/roboto/v50/KFOKCnqEu92Fr1Mu53ZEC9_Vu3r1gIhOszmOClHrs6ljXfMMLmbXiA8.ttf) format('truetype');
+        }
+
+        body {
+            font-family: 'Roboto', sans-serif;
+            font-size: 24px;
+            padding: 40px;
+            line-height: 1.6;
+            background: #f5f5f5;
+        }
+
+        h1 {
+            font-size: 32px;
+            margin-bottom: 20px;
+        }
+
+        h2 {
+            font-size: 22px;
+            color: #555;
+            margin-top: 30px;
+        }
+
+        .sample {
+            background: white;
+            padding: 16px 20px;
+            margin: 8px 0;
+            border: 1px solid #ddd;
+        }
+
+        .regular {
+            font-weight: 400;
+            font-style: normal;
+        }
+
+        .bold {
+            font-weight: 700;
+            font-style: normal;
+        }
+
+        .italic {
+            font-weight: 400;
+            font-style: italic;
+        }
+
+        .bold-italic {
+            font-weight: 700;
+            font-style: italic;
+        }
+
+        .label {
+            font-size: 14px;
+            color: #999;
+            font-weight: 400;
+            font-style: normal;
+            font-family: monospace;
+        }
+    </style>
+</head>
+
+<body>
+
+    <h1>Font Variant Loading Test</h1>
+    <p>Each box below should use a <b>different</b> font variant (not synthesized).</p>
+    <p>If bold text looks fuzzy/thick compared to Chrome, it is being synthesized from Regular.</p>
+
+    <h2>Roboto Variants</h2>
+
+    <div class="sample regular">
+        <span class="label">font-weight: 400, font-style: normal</span><br>
+        The quick brown fox jumps over the lazy dog. 0123456789
+    </div>
+
+    <div class="sample bold">
+        <span class="label">font-weight: 700, font-style: normal</span><br>
+        The quick brown fox jumps over the lazy dog. 0123456789
+    </div>
+
+    <div class="sample italic">
+        <span class="label">font-weight: 400, font-style: italic</span><br>
+        The quick brown fox jumps over the lazy dog. 0123456789
+    </div>
+
+    <div class="sample bold-italic">
+        <span class="label">font-weight: 700, font-style: italic</span><br>
+        The quick brown fox jumps over the lazy dog. 0123456789
+    </div>
+
+    <h2>Comparison</h2>
+    <div class="sample">
+        <span class="regular">Regular</span> vs <span class="bold">Bold</span> vs
+        <span class="italic">Italic</span> vs <span class="bold-italic">Bold Italic</span>
+    </div>
+
+</body>
+
+</html>

@@ -1456,7 +1456,7 @@ void win32_font_caches_flush(void)
     split_gen = 0;
 }
 
-nserror html_font_face_load_data(const char *family_name, const uint8_t *data, size_t size)
+nserror html_font_face_load_data(const struct font_variant_id *id, const uint8_t *data, size_t size)
 {
     DWORD num_fonts = 0;
     HANDLE font_handle;
@@ -1468,23 +1468,23 @@ nserror html_font_face_load_data(const char *family_name, const uint8_t *data, s
 #endif
 
     /* Validate input parameters */
-    if (family_name == NULL || data == NULL || size == 0) {
+    if (id == NULL || id->family_name == NULL || data == NULL || size == 0) {
         return NSERROR_BAD_PARAMETER;
     }
 
     /* Check for reasonable size limits to prevent memory issues */
     if (size > 50 * 1024 * 1024) { /* 50MB limit for font files */
-        NSLOG(wisp, WARNING, "Font '%s' size %zu exceeds reasonable limit", family_name, size);
+        NSLOG(wisp, WARNING, "Font '%s' size %zu exceeds reasonable limit", id->family_name, size);
         return NSERROR_BAD_PARAMETER;
     }
 
 #ifdef WISP_WOFF_DECODE
     /* Check if this is a WOFF font that needs decoding */
     if (is_woff_font(data, size)) {
-        NSLOG(wisp, INFO, "Font '%s' is WOFF format, decoding...", family_name);
+        NSLOG(wisp, INFO, "Font '%s' is WOFF format, decoding...", id->family_name);
         decoded_font = woff_decode(data, size, &font_size);
         if (decoded_font == NULL) {
-            NSLOG(wisp, WARNING, "Failed to decode WOFF font '%s'", family_name);
+            NSLOG(wisp, WARNING, "Failed to decode WOFF font '%s'", id->family_name);
             return NSERROR_INVALID;
         }
         font_data = decoded_font;
@@ -1496,7 +1496,8 @@ nserror html_font_face_load_data(const char *family_name, const uint8_t *data, s
 
     font_handle = AddFontMemResourceEx((PVOID)font_data, (DWORD)font_size, NULL, &num_fonts);
     if (font_handle == NULL || num_fonts == 0) {
-        NSLOG(wisp, WARNING, "Failed to load font '%s' into Windows (error=%lu)", family_name, GetLastError());
+        NSLOG(wisp, WARNING, "Windows rejected font '%s' (weight=%d style=%d, %zu bytes, error=%lu)", id->family_name,
+            id->weight, id->style, size, GetLastError());
         if (internal_name)
             free(internal_name);
 #ifdef WISP_WOFF_DECODE
@@ -1515,12 +1516,14 @@ nserror html_font_face_load_data(const char *family_name, const uint8_t *data, s
 
     /* Store mapping from CSS name to internal name */
     if (internal_name != NULL) {
-        NSLOG(wisp, INFO, "Loaded web font: CSS '%s' -> internal '%s'", family_name, internal_name);
-        font_map_insert(family_name, internal_name);
+        NSLOG(wisp, INFO, "Loaded web font: CSS '%s' (weight=%d style=%d) -> internal '%s'", id->family_name,
+            id->weight, id->style, internal_name);
+        font_map_insert(id->family_name, internal_name);
         free(internal_name);
     } else {
         /* No internal name found, use CSS name as-is */
-        NSLOG(wisp, INFO, "Loaded web font: '%s' (no internal name found)", family_name);
+        NSLOG(wisp, INFO, "Loaded web font: '%s' (weight=%d style=%d, no internal name found)", id->family_name,
+            id->weight, id->style);
     }
 
     win32_font_caches_flush();

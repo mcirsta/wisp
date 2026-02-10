@@ -39,6 +39,13 @@
 
 struct plot_font_style;
 
+/** Font variant identity: family name + weight + style from @font-face */
+struct font_variant_id {
+    char *family_name; /**< CSS font-family name */
+    uint8_t weight; /**< css_font_weight_e */
+    uint8_t style; /**< css_font_style_e */
+};
+
 struct gui_layout_table {
     /**
      * Measure the width of a string.
@@ -104,12 +111,12 @@ struct gui_layout_table {
      * This is called when a web font (@font-face) has been downloaded.
      * The frontend should load the font into its platform's font system.
      *
-     * \\param[in] family_name CSS font-family name
-     * \\param[in] data        Raw font file data (TrueType/OpenType/WOFF)
-     * \\param[in] size        Size of font data in bytes
-     * \\return NSERROR_OK on success, or appropriate error code
+     * \param[in] id   Font variant identity (family name, weight, style)
+     * \param[in] data Raw font file data (TrueType/OpenType/WOFF)
+     * \param[in] size Size of font data in bytes
+     * \return NSERROR_OK on success, or appropriate error code
      */
-    nserror (*load_font_data)(const char *family_name, const uint8_t *data, size_t size);
+    nserror (*load_font_data)(const struct font_variant_id *id, const uint8_t *data, size_t size);
 };
 
 #endif

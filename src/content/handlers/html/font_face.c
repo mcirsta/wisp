@@ -44,7 +44,7 @@
 
 /** Structure to track a font download */
 struct font_download {
-    char *family_name; /**< Font family name */
+    struct font_variant_id variant;
     llcache_handle *handle; /**< Fetch handle */
     bool in_use; /**< Whether this slot is in use */
 };
@@ -52,9 +52,9 @@ struct font_download {
 /** Global array of font downloads */
 static struct font_download font_downloads[MAX_FONT_DOWNLOADS];
 
-/** Set of loaded font family names (simple linked list) */
+/** Set of loaded font variants (simple linked list) */
 struct loaded_font {
-    char *family_name;
+    struct font_variant_id variant;
     struct loaded_font *next;
 };
 
@@ -90,27 +90,63 @@ static void check_fonts_done(void)
 }
 
 /**
-
- * Mark a font family as loaded
+ * Check if two font variant identities match.
  */
-static void mark_font_loaded(const char *family_name)
+static inline bool font_variant_match(const struct font_variant_id *a, const struct font_variant_id *b)
+{
+    return a->weight == b->weight && a->style == b->style && strcasecmp(a->family_name, b->family_name) == 0;
+}
+
+/**
+ * Check if a specific font variant is already loaded.
+ */
+static bool is_variant_loaded(const struct font_variant_id *id)
+{
+    struct loaded_font *entry;
+
+    for (entry = loaded_fonts; entry != NULL; entry = entry->next) {
+        if (font_variant_match(&entry->variant, id)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/**
+ * Check if a specific font variant is already being downloaded.
+ */
+static bool is_variant_pending(const struct font_variant_id *id)
+{
+    for (int i = 0; i < MAX_FONT_DOWNLOADS; i++) {
+        if (font_downloads[i].in_use && font_downloads[i].variant.family_name != NULL &&
+            font_variant_match(&font_downloads[i].variant, id)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/**
+ * Mark a font variant as loaded.
+ */
+static void mark_font_loaded(const struct font_variant_id *id)
 {
     struct loaded_font *entry;
 
     /* Check if already in list */
-    for (entry = loaded_fonts; entry != NULL; entry = entry->next) {
-        if (strcasecmp(entry->family_name, family_name) == 0) {
-            return; /* Already loaded */
-        }
+    if (is_variant_loaded(id)) {
+        return;
     }
 
     /* Add to list */
     entry = malloc(sizeof(struct loaded_font));
     if (entry != NULL) {
-        entry->family_name = strdup(family_name);
+        entry->variant.family_name = strdup(id->family_name);
+        entry->variant.weight = id->weight;
+        entry->variant.style = id->style;
         entry->next = loaded_fonts;
         loaded_fonts = entry;
-        NSLOG(wisp, INFO, "Marked font '%s' as loaded", family_name);
+        NSLOG(wisp, INFO, "Marked font '%s' (weight=%d style=%d) as loaded", id->family_name, id->weight, id->style);
     }
 }
 
@@ -142,22 +178,22 @@ static nserror font_fetch_callback(llcache_handle *handle, const llcache_event *
 
         data = llcache_handle_get_source_data(handle, &size);
         if (data != NULL && size > 0) {
-            NSLOG(wisp, INFO, "Font '%s' downloaded (%zu bytes)", dl->family_name, size);
+            NSLOG(wisp, INFO, "Font '%s' downloaded (%zu bytes)", dl->variant.family_name, size);
 
             /* Load the font into the system via frontend table */
             nserror err = NSERROR_NOT_IMPLEMENTED;
             if (guit != NULL && guit->layout != NULL && guit->layout->load_font_data != NULL) {
-                err = guit->layout->load_font_data(dl->family_name, data, size);
+                err = guit->layout->load_font_data(&dl->variant, data, size);
             }
             if (err == NSERROR_OK) {
-                mark_font_loaded(dl->family_name);
+                mark_font_loaded(&dl->variant);
             }
         }
 
         /* Clean up */
         llcache_handle_release(handle);
-        free(dl->family_name);
-        dl->family_name = NULL;
+        free(dl->variant.family_name);
+        dl->variant.family_name = NULL;
         dl->handle = NULL;
         dl->in_use = false;
 
@@ -168,10 +204,10 @@ static nserror font_fetch_callback(llcache_handle *handle, const llcache_event *
     }
 
     case LLCACHE_EVENT_ERROR:
-        NSLOG(wisp, WARNING, "Failed to download font '%s': %s", dl->family_name, event->data.error.msg);
+        NSLOG(wisp, WARNING, "Failed to download font '%s': %s", dl->variant.family_name, event->data.error.msg);
         llcache_handle_release(handle);
-        free(dl->family_name);
-        dl->family_name = NULL;
+        free(dl->variant.family_name);
+        dl->variant.family_name = NULL;
         dl->handle = NULL;
         dl->in_use = false;
 
@@ -190,11 +226,11 @@ static nserror font_fetch_callback(llcache_handle *handle, const llcache_event *
 /**
  * Start downloading a font from a URL (using llcache for raw bytes)
  *
- * \param family_name  Font family name
- * \param font_url     Absolute URL of font file
- * \param base_url     Base URL for referer header (may be NULL)
+ * \param id        Font variant identity (family name, weight, style)
+ * \param font_url  Absolute URL of font file
+ * \param base_url  Base URL for referer header (may be NULL)
  */
-static nserror fetch_font_url(const char *family_name, nsurl *font_url, nsurl *base_url)
+static nserror fetch_font_url(const struct font_variant_id *id, nsurl *font_url, nsurl *base_url)
 {
     struct font_download *dl;
     nserror err;
@@ -207,20 +243,22 @@ static nserror fetch_font_url(const char *family_name, nsurl *font_url, nsurl *b
     }
 
     /* Set up the download */
-    dl->family_name = strdup(family_name);
-    if (dl->family_name == NULL) {
+    dl->variant.family_name = strdup(id->family_name);
+    if (dl->variant.family_name == NULL) {
         return NSERROR_NOMEM;
     }
     dl->in_use = true;
+    dl->variant.weight = id->weight;
+    dl->variant.style = id->style;
 
-    NSLOG(wisp, INFO, "Fetching font '%s' from %s", family_name, nsurl_access(font_url));
+    NSLOG(wisp, INFO, "Fetching font '%s' (weight=%d style=%d) from %s", id->family_name, id->weight, id->style,
+        nsurl_access(font_url));
 
-    /* Start the fetch using llcache (raw bytes, no content handler needed)
-     */
+    /* Start the fetch using llcache (raw bytes, no content handler needed) */
     err = llcache_handle_retrieve(font_url, 0, base_url, NULL, font_fetch_callback, dl, &dl->handle);
     if (err != NSERROR_OK) {
-        free(dl->family_name);
-        dl->family_name = NULL;
+        free(dl->variant.family_name);
+        dl->variant.family_name = NULL;
         dl->in_use = false;
         return err;
     }
@@ -253,11 +291,26 @@ nserror html_font_face_process(const css_font_face *font_face, const char *base_
 
     const char *family_name = lwc_string_data(family);
 
-    /* Check if already loaded */
-    if (html_font_face_is_available(family_name)) {
-        NSLOG(wisp, DEBUG, "Font '%s' already available", family_name);
+    /* Build variant identity from libcss descriptors */
+    struct font_variant_id vid = {
+        .family_name = (char *)family_name,
+        .weight = css_font_face_font_weight(font_face),
+        .style = css_font_face_font_style(font_face),
+    };
+
+    /* Check if this specific variant is already loaded or being downloaded */
+    if (is_variant_loaded(&vid)) {
+        NSLOG(wisp, DEBUG, "Font '%s' variant (weight=%d style=%d) already loaded", vid.family_name, vid.weight,
+            vid.style);
         return NSERROR_OK;
     }
+    if (is_variant_pending(&vid)) {
+        NSLOG(wisp, DEBUG, "Font '%s' variant (weight=%d style=%d) already downloading", vid.family_name, vid.weight,
+            vid.style);
+        return NSERROR_OK;
+    }
+
+    NSLOG(wisp, INFO, "Processing @font-face '%s' (weight=%d style=%d)", vid.family_name, vid.weight, vid.style);
 
     /* Get number of sources */
     css_err = css_font_face_count_srcs(font_face, &src_count);
@@ -308,11 +361,11 @@ nserror html_font_face_process(const css_font_face *font_face, const char *base_
         }
 
         /* Fetch the font */
-        err = fetch_font_url(family_name, font_url, base);
+        err = fetch_font_url(&vid, font_url, base);
         nsurl_unref(font_url);
 
         if (err == NSERROR_OK) {
-            break; /* Successfully started fetch */
+            break; /* Successfully started fetch for this source */
         }
     }
 
@@ -347,7 +400,7 @@ bool html_font_face_is_available(const char *family_name)
     struct loaded_font *entry;
 
     for (entry = loaded_fonts; entry != NULL; entry = entry->next) {
-        if (strcasecmp(entry->family_name, family_name) == 0) {
+        if (strcasecmp(entry->variant.family_name, family_name) == 0) {
             return true;
         }
     }

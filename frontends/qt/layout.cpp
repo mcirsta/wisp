@@ -605,28 +605,29 @@ static void font_repaint_callback(void *p)
  * This function is called from the core when a web font is downloaded
  * via gui_layout_table.load_font_data.
  */
-static nserror nsqt_load_font_data(const char *family_name, const uint8_t *data, size_t size)
+static nserror nsqt_load_font_data(const struct font_variant_id *id, const uint8_t *data, size_t size)
 {
     QByteArray fontData(reinterpret_cast<const char *>(data), size);
 
     int fontId = QFontDatabase::addApplicationFontFromData(fontData);
     if (fontId == -1) {
-        NSLOG(wisp, WARNING, "Failed to load font '%s' into Qt", family_name);
+        NSLOG(wisp, WARNING, "Qt rejected font '%s' (weight=%d style=%d, %zu bytes) - invalid font data?",
+            id->family_name, id->weight, id->style, size);
         return NSERROR_INVALID;
     }
 
     QStringList families = QFontDatabase::applicationFontFamilies(fontId);
-    NSLOG(wisp, INFO, "Loaded font '%s' into Qt as font ID %d (families: %s)", family_name, fontId,
-        families.join(", ").toUtf8().constData());
+    NSLOG(wisp, INFO, "Loaded font '%s' (weight=%d style=%d) into Qt as font ID %d (families: %s)", id->family_name,
+        id->weight, id->style, fontId, families.join(", ").toUtf8().constData());
 
     /* Register CSS→Qt font name substitution using Qt's built-in system */
     if (!families.isEmpty()) {
-        QString cssName = QString::fromUtf8(family_name);
+        QString cssName = QString::fromUtf8(id->family_name);
         QString qtName = families.first();
 
         /* Tell Qt: when asked for CSS name, use Qt name instead */
         QFont::insertSubstitution(cssName, qtName);
-        NSLOG(wisp, INFO, "Registered font substitution: '%s' -> '%s'", family_name, qtName.toUtf8().constData());
+        NSLOG(wisp, INFO, "Registered font substitution: '%s' -> '%s'", id->family_name, qtName.toUtf8().constData());
 
         /* FOUT: Schedule a global repaint so text re-renders with new
          * font. Only schedule if:
