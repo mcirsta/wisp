@@ -118,7 +118,7 @@ static css_error parse_track_size(css_language *c, const parserutils_vector *vec
                 }
             } else {
                 /* Try to parse as dimension */
-                error = css__parse_unit_specifier(c, vector, ctx, CSS_UNIT_PX, &min_value, &min_unit);
+                error = css__parse_unit_specifier(c, vector, ctx, UNIT_PX, &min_value, &min_unit);
                 if (error != CSS_OK) {
                     *ctx = orig_ctx;
                     return CSS_INVALID;
@@ -164,7 +164,7 @@ static css_error parse_track_size(css_language *c, const parserutils_vector *vec
                 }
             } else {
                 /* Try to parse as dimension */
-                error = css__parse_unit_specifier(c, vector, ctx, CSS_UNIT_PX, &max_value, &max_unit);
+                error = css__parse_unit_specifier(c, vector, ctx, UNIT_PX, &max_value, &max_unit);
                 if (error != CSS_OK) {
                     *ctx = orig_ctx;
                     return CSS_INVALID;
@@ -193,7 +193,7 @@ static css_error parse_track_size(css_language *c, const parserutils_vector *vec
     }
 
     /* Try to parse a simple dimension/percentage/number */
-    error = css__parse_unit_specifier(c, vector, ctx, CSS_UNIT_PX, /* default unit */
+    error = css__parse_unit_specifier(c, vector, ctx, UNIT_PX, /* default unit */
         &track->value, &track->unit);
     if (error == CSS_OK) {
         /* unit returned from css__parse_unit_specifier is
