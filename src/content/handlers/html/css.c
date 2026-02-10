@@ -463,24 +463,26 @@ bool html_css_process_link(html_content *htmlc, dom_node *node)
     htmlc->stylesheets[htmlc->stylesheet_count].modified = false;
     htmlc->stylesheets[htmlc->stylesheet_count].unused = false;
 
-    /* start fetch */
+    /* start fetch - increment count BEFORE retrieve to prevent race with sync callback */
+    htmlc->stylesheet_count++;
+
     child.charset = htmlc->encoding;
     child.quirks = htmlc->base.quirks;
 
     CONTENT_ACTIVE_INC(htmlc, "linked CSS fetch start");
     PERF("CSS FETCH START '%s' (active=%d)", nsurl_access(joined), htmlc->base.active);
     ns_error = hlcache_handle_retrieve(joined, 0, content_get_url(&htmlc->base), NULL, html_convert_css_callback, htmlc,
-        &child, CONTENT_CSS, &htmlc->stylesheets[htmlc->stylesheet_count].sheet);
+        &child, CONTENT_CSS, &htmlc->stylesheets[htmlc->stylesheet_count - 1].sheet);
 
     nsurl_unref(joined);
 
     if (ns_error != NSERROR_OK) {
+        /* Retrieval failed, decrement count to clean up */
+        htmlc->stylesheet_count--;
         CONTENT_ACTIVE_DEC(htmlc, "linked CSS fetch error");
-        NSLOG(wisp, ERROR, "hlcache_handle_retrieve failed (err: %d) - jumping to no_memory", ns_error);
+        NSLOG(wisp, ERROR, "hlcache_handle_retrieve failed (err: %d)", ns_error);
         goto no_memory;
     }
-
-    htmlc->stylesheet_count++;
 
     /* active count already logged by CONTENT_ACTIVE_INC */
 
