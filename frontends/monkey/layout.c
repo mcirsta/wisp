@@ -31,7 +31,11 @@
 
 static nserror nsfont_width(const plot_font_style_t *fstyle, const char *string, size_t length, int *width)
 {
-    *width = (fstyle->size * utf8_bounded_length(string, length)) / PLOT_STYLE_SCALE;
+    size_t count = utf8_bounded_length(string, length);
+    *width = (fstyle->size * count) / PLOT_STYLE_SCALE;
+    if (fstyle->letter_spacing != 0 && count > 1) {
+        *width += fstyle->letter_spacing * (count - 1);
+    }
     return NSERROR_OK;
 }
 
@@ -50,10 +54,36 @@ static nserror nsfont_width(const plot_font_style_t *fstyle, const char *string,
 static nserror nsfont_position_in_string(
     const plot_font_style_t *fstyle, const char *string, size_t length, int x, size_t *char_offset, int *actual_x)
 {
-    *char_offset = x / (fstyle->size / PLOT_STYLE_SCALE);
-    if (*char_offset > length)
+    int char_width = fstyle->size / PLOT_STYLE_SCALE;
+    int spacing = fstyle->letter_spacing;
+
+    if (spacing == 0) {
+        *char_offset = x / char_width;
+    } else {
+        /* width(N) = N * char_width + (N-1) * spacing
+           width(N) = N * (char_width + spacing) - spacing
+           x + spacing = N * (char_width + spacing)
+           N = (x + spacing) / (char_width + spacing) */
+        if (x < 0)
+            x = 0;
+        *char_offset = (x + spacing) / (char_width + spacing);
+    }
+
+    if (*char_offset > length) /* Note: This compares char count to byte length, which is safe-ish for monkey but
+                                  technically wrong if multibyte. Monkey seems to assume 1 byte = 1 char often or relies
+                                  on utf8_bounded_length elsewhere. But here it was just comparing to length. */
         *char_offset = length;
-    *actual_x = *char_offset * (fstyle->size / PLOT_STYLE_SCALE);
+
+    /* Recalculate actual_x */
+    if (*char_offset > 0) {
+        *actual_x = *char_offset * char_width;
+        if (spacing != 0) {
+            *actual_x += (*char_offset - 1) * spacing;
+        }
+    } else {
+        *actual_x = 0;
+    }
+
     return NSERROR_OK;
 }
 
@@ -84,7 +114,13 @@ static nserror nsfont_position_in_string(
 static nserror nsfont_split(
     const plot_font_style_t *fstyle, const char *string, size_t length, int x, size_t *char_offset, int *actual_x)
 {
-    int c_off = *char_offset = x / (fstyle->size / PLOT_STYLE_SCALE);
+    nsfont_position_in_string(fstyle, string, length, x, char_offset, actual_x);
+
+    int c_off = *char_offset;
+
+    /* The logic below assumes char_offset is an index into string, which implies Monkey assumes ASCII mostly or that
+       logic is brittle. Preserving existing logic structure but using the calculated offset. */
+
     if (*char_offset > length) {
         *char_offset = length;
     } else {
@@ -100,7 +136,20 @@ static nserror nsfont_split(
             }
         }
     }
-    *actual_x = *char_offset * (fstyle->size / PLOT_STYLE_SCALE);
+
+    /* Re-calculate actual_x based on the final offset */
+    int char_width = fstyle->size / PLOT_STYLE_SCALE;
+    int spacing = fstyle->letter_spacing;
+
+    if (*char_offset > 0) {
+        *actual_x = *char_offset * char_width;
+        if (spacing != 0) {
+            *actual_x += (*char_offset - 1) * spacing;
+        }
+    } else {
+        *actual_x = 0;
+    }
+
     return NSERROR_OK;
 }
 
