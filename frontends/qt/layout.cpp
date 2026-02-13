@@ -185,6 +185,11 @@ static QFont *new_qfont_fstyle(const struct plot_font_style *fstyle)
         nfont->setCapitalization(QFont::SmallCaps);
     }
 
+    /* Apply letter-spacing if set */
+    if (fstyle->letter_spacing != 0) {
+        nfont->setLetterSpacing(QFont::AbsoluteSpacing, (qreal)fstyle->letter_spacing);
+    }
+
     return nfont;
 }
 
@@ -217,7 +222,8 @@ static QFont *nsfont_style_to_font(const struct plot_font_style *fstyle)
         if ((pfcache.entries[idx].qfont != NULL) && (pfcache.entries[idx].style.family == fstyle->family) &&
             (pfcache.entries[idx].style.size == fstyle->size) &&
             (pfcache.entries[idx].style.weight == fstyle->weight) &&
-            (pfcache.entries[idx].style.flags == fstyle->flags)) {
+            (pfcache.entries[idx].style.flags == fstyle->flags) &&
+            (pfcache.entries[idx].style.letter_spacing == fstyle->letter_spacing)) {
             /* found matching existing font */
             pfcache.entries[idx].hit++;
             pfcache.entries[idx].age = ++pfcache.age;
@@ -243,6 +249,7 @@ static QFont *nsfont_style_to_font(const struct plot_font_style *fstyle)
     pfcache.entries[oldest_idx].style.size = fstyle->size;
     pfcache.entries[oldest_idx].style.weight = fstyle->weight;
     pfcache.entries[oldest_idx].style.flags = fstyle->flags;
+    pfcache.entries[oldest_idx].style.letter_spacing = fstyle->letter_spacing;
 
     pfcache.entries[oldest_idx].hit = 0;
     pfcache.entries[oldest_idx].age = ++pfcache.age;

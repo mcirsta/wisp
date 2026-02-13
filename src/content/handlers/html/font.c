@@ -155,4 +155,14 @@ void font_plot_style_from_css(
     css_computed_color(css, &col);
     fstyle->foreground = nscss_color_to_ns(col);
     fstyle->background = 0;
+
+    /* letter-spacing */
+    css_fixed ls_length = 0;
+    css_unit ls_unit = CSS_UNIT_PX;
+    uint8_t ls_type = css_computed_letter_spacing(css, &ls_length, &ls_unit);
+    if (ls_type == CSS_LETTER_SPACING_SET) {
+        fstyle->letter_spacing = FIXTOINT(css_unit_len2device_px(css, unit_len_ctx, ls_length, ls_unit));
+    } else {
+        fstyle->letter_spacing = 0;
+    }
 }

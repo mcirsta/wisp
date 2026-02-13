@@ -549,12 +549,13 @@ static char *ttf_get_family_name(const uint8_t *data, size_t size)
 }
 
 
-/* Font cache keyed by family/size/weight/flags */
+/* Font cache keyed by family/size/weight/flags/letter_spacing */
 typedef struct {
     int family;
     int size;
     int weight;
     int flags;
+    int letter_spacing;
     char *face;
 } font_key_t;
 
@@ -571,6 +572,7 @@ static void *fc_key_clone(void *key)
     k->size = src->size;
     k->weight = src->weight;
     k->flags = src->flags;
+    k->letter_spacing = src->letter_spacing;
     k->face = NULL;
 
     /* Then duplicate the face string if needed */
@@ -601,6 +603,7 @@ static uint32_t fc_key_hash(void *key)
     h = (h ^ (uint32_t)k->size) * 16777619u;
     h = (h ^ (uint32_t)k->weight) * 16777619u;
     h = (h ^ (uint32_t)k->flags) * 16777619u;
+    h = (h ^ (uint32_t)k->letter_spacing) * 16777619u;
     if (k->face != NULL) {
         /* Limit face name length to prevent excessive hashing */
         const char *p = k->face;
@@ -620,7 +623,8 @@ static bool fc_key_eq(void *a, void *b)
     font_key_t *ka = (font_key_t *)a;
     font_key_t *kb = (font_key_t *)b;
 
-    if (ka->family != kb->family || ka->size != kb->size || ka->weight != kb->weight || ka->flags != kb->flags) {
+    if (ka->family != kb->family || ka->size != kb->size || ka->weight != kb->weight || ka->flags != kb->flags ||
+        ka->letter_spacing != kb->letter_spacing) {
         return false;
     }
 
@@ -673,6 +677,7 @@ typedef struct {
     int size;
     int weight;
     int flags;
+    int letter_spacing;
     int x;
     size_t len;
     char *str;
@@ -724,6 +729,7 @@ static uint32_t sc_key_hash(void *key)
     h = (h ^ (uint32_t)k->size) * 16777619u;
     h = (h ^ (uint32_t)k->weight) * 16777619u;
     h = (h ^ (uint32_t)k->flags) * 16777619u;
+    h = (h ^ (uint32_t)k->letter_spacing) * 16777619u;
     h = (h ^ (uint32_t)k->x) * 16777619u;
     h = (h ^ (uint32_t)k->len) * 16777619u;
     if (k->str != NULL && k->len > 0) {
@@ -739,7 +745,7 @@ static bool sc_key_eq(void *a, void *b)
     split_key_t *ka = (split_key_t *)a;
     split_key_t *kb = (split_key_t *)b;
     if (ka->family != kb->family || ka->size != kb->size || ka->weight != kb->weight || ka->flags != kb->flags ||
-        ka->x != kb->x || ka->len != kb->len) {
+        ka->letter_spacing != kb->letter_spacing || ka->x != kb->x || ka->len != kb->len) {
         return false;
     }
     if (ka->len == 0) {
@@ -1113,6 +1119,7 @@ static HFONT get_cached_font(const plot_font_style_t *style)
     key.size = style->size;
     key.weight = style->weight;
     key.flags = style->flags;
+    key.letter_spacing = style->letter_spacing;
     key.face = (char *)face; /* Safe: face points to static config strings or NULL */
 
     if (font_cache == NULL) {
@@ -1271,6 +1278,10 @@ static nserror win32_font_width(const plot_font_style_t *style, const char *utf8
             ret = NSERROR_INVALID;
         } else {
             *width = sizl.cx;
+            /* Add letter-spacing: extra pixels between each character */
+            if (style->letter_spacing != 0 && wclen > 1) {
+                *width += style->letter_spacing * (wclen - 1);
+            }
         }
     }
 
@@ -1317,7 +1328,32 @@ static nserror win32_font_position(
     ret = get_cached_wide(utf8str, utf8len, &wstr, &wclen);
     if (ret == NSERROR_OK) {
         int fit = 0;
-        if ((GetTextExtentExPointW(hdc, wstr, wclen, x, &fit, NULL, &s) != 0) &&
+        if (style->letter_spacing != 0 && wclen > 1) {
+            /* Walk characters to find the position accounting for spacing */
+            int cumulative = 0;
+            for (int i = 1; i <= wclen; i++) {
+                SIZE cs;
+                if (GetTextExtentPoint32W(hdc, wstr, i, &cs) == 0)
+                    break;
+                cumulative = cs.cx + style->letter_spacing * (i - 1);
+                if (cumulative > x) {
+                    /* Previous char was the last that fits */
+                    fit = i - 1;
+                    break;
+                }
+                prev_width = cumulative;
+                fit = i;
+            }
+            SIZE fs;
+            if (fit > 0 && GetTextExtentPoint32W(hdc, wstr, fit, &fs) != 0) {
+                s.cx = fs.cx + style->letter_spacing * (fit - 1);
+            } else {
+                s.cx = 0;
+            }
+            size_t boff = utf8_bounded_byte_length(utf8str, utf8len, (size_t)fit);
+            *char_offset = boff;
+            *actual_x = s.cx;
+        } else if ((GetTextExtentExPointW(hdc, wstr, wclen, x, &fit, NULL, &s) != 0) &&
             (GetTextExtentPoint32W(hdc, wstr, fit, &s) != 0)) {
             size_t boff = utf8_bounded_byte_length(utf8str, utf8len, (size_t)fit);
             *char_offset = boff;
@@ -1406,6 +1442,7 @@ static nserror win32_font_split(
         key.size = style->size;
         key.weight = style->weight;
         key.flags = style->flags;
+        key.letter_spacing = style->letter_spacing;
         key.x = x;
         key.len = length;
         key.str = (char *)string;

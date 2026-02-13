@@ -473,6 +473,59 @@ static inline bool box_has_percentage_max_width(struct box *b)
 }
 
 /**
+ * Compute the constrained intrinsic width of a replaced element (image, etc.)
+ * for the min/max width pass.
+ *
+ * Reads CSS min/max width/height constraints from the element's style and
+ * calls layout_get_object_dimensions() so that e.g. max-height on an image
+ * correctly limits the intrinsic width contribution via aspect-ratio scaling.
+ * Percentage-based constraints are skipped because the containing block
+ * dimensions are not yet known during the minmax pass.
+ *
+ * \param box      The box with an object (box->object must be non-NULL).
+ * \param content  The HTML content being laid out.
+ * \param css_width   CSS-computed width for the element (AUTO or set).
+ * \param css_height  CSS-computed height for the element (AUTO or set).
+ * \return  The constrained intrinsic width in device pixels.
+ */
+static int layout_minmax_object_width(struct box *box, const html_content *content, int css_width, int css_height)
+{
+    int width = css_width;
+    int height = css_height;
+    struct css_size obj_min_w = {.type = CSS_SIZE_AUTO, .value = 0};
+    struct css_size obj_min_h = {.type = CSS_SIZE_AUTO, .value = 0};
+    int obj_max_w = INT_MAX;
+    int obj_max_h = INT_MAX;
+
+    assert(box->object != NULL);
+
+    if (box->style) {
+        css_fixed v = 0;
+        css_unit u = CSS_UNIT_PX;
+
+        if (css_computed_max_height(box->style, &v, &u) == CSS_MAX_HEIGHT_SET && u != CSS_UNIT_PCT) {
+            obj_max_h = FIXTOINT(css_unit_len2device_px(box->style, &content->unit_len_ctx, v, u));
+        }
+        if (css_computed_max_width(box->style, &v, &u) == CSS_MAX_WIDTH_SET && u != CSS_UNIT_PCT) {
+            obj_max_w = FIXTOINT(css_unit_len2device_px(box->style, &content->unit_len_ctx, v, u));
+        }
+        if (css_computed_min_height(box->style, &v, &u) == CSS_MIN_HEIGHT_SET && u != CSS_UNIT_PCT) {
+            obj_min_h.type = CSS_SIZE_SET;
+            obj_min_h.value = FIXTOINT(css_unit_len2device_px(box->style, &content->unit_len_ctx, v, u));
+        }
+        if (css_computed_min_width(box->style, &v, &u) == CSS_MIN_WIDTH_SET && u != CSS_UNIT_PCT) {
+            obj_min_w.type = CSS_SIZE_SET;
+            obj_min_w.value = FIXTOINT(css_unit_len2device_px(box->style, &content->unit_len_ctx, v, u));
+        }
+    }
+
+    layout_get_object_dimensions(
+        &content->unit_len_ctx, box, &width, &height, obj_min_w, obj_max_w, obj_min_h, obj_max_h);
+
+    return width;
+}
+
+/**
  * Calculate minimum and maximum width of a line.
  *
  * \param first       a box in an inline container
@@ -664,15 +717,15 @@ static struct box *layout_minmax_line(struct box *first, int *line_min, int *lin
         /* inline replaced, 10.3.2 and 10.6.2 */
         assert(b->style);
 
-        bs = css_computed_box_sizing(block->style);
+        bs = css_computed_box_sizing(b->style);
 
         /* calculate box width */
         wtype = css_computed_width_px(b->style, &content->unit_len_ctx, -1, &width);
         if (wtype == CSS_WIDTH_SET) {
             if (bs == CSS_BOX_SIZING_BORDER_BOX) {
                 fixed = frac = 0;
-                calculate_mbp_width(&content->unit_len_ctx, block->style, LEFT, false, true, true, &fixed, &frac);
-                calculate_mbp_width(&content->unit_len_ctx, block->style, RIGHT, false, true, true, &fixed, &frac);
+                calculate_mbp_width(&content->unit_len_ctx, b->style, LEFT, false, true, true, &fixed, &frac);
+                calculate_mbp_width(&content->unit_len_ctx, b->style, RIGHT, false, true, true, &fixed, &frac);
                 if (width < fixed) {
                     width = fixed;
                 }
@@ -693,11 +746,7 @@ static struct box *layout_minmax_line(struct box *first, int *line_min, int *lin
 
         if (b->object || (b->flags & REPLACE_DIM)) {
             if (b->object) {
-                int temp_height = height;
-                /* No min constraints for inline replaced content */
-                struct css_size no_min = {.type = CSS_SIZE_AUTO, .value = 0};
-                layout_get_object_dimensions(
-                    &content->unit_len_ctx, b, &width, &temp_height, no_min, INT_MAX, no_min, INT_MAX);
+                width = layout_minmax_object_width(b, content, width, height);
             } else if (b->svg_diagram != NULL) {
                 /* Inline SVG - use diagram's intrinsic dimensions */
                 if (width == AUTO) {
@@ -914,16 +963,19 @@ layout_minmax_block(struct box *block, const struct gui_layout_table *font_func,
             min = html_get_box_tree(block->object)->min_width.value;
             max = html_get_box_tree(block->object)->max_width;
         } else {
-            /* Image content dimensions are in CSS pixels, not device pixels */
-            min = max = content_get_width(block->object);
-#ifdef WISP_DEVICE_PIXEL_LAYOUT
-            {
-                int dpi = browser_get_dpi();
-                if (dpi > 0 && dpi != 96) {
-                    min = max = (min * dpi) / 96;
-                }
+            /* Use constrained intrinsic width, respecting
+             * max-height/max-width via aspect-ratio scaling */
+            int obj_w = AUTO, obj_h = AUTO;
+
+            if (wtype == CSS_WIDTH_SET && wunit != CSS_UNIT_PCT) {
+                obj_w = FIXTOINT(css_unit_len2device_px(block->style, &content->unit_len_ctx, width, wunit));
             }
-#endif
+            if (htype == CSS_HEIGHT_SET && hunit != CSS_UNIT_PCT) {
+                obj_h = FIXTOINT(css_unit_len2device_px(block->style, &content->unit_len_ctx, height, hunit));
+            }
+
+            min = max = layout_minmax_object_width(block, content, obj_w, obj_h);
+            NSLOG(layout, DEBUG, "MINMAX_BLOCK object %p: after helper min=%d max=%d", block, min, max);
         }
 
         block->flags |= HAS_HEIGHT;
@@ -1080,6 +1132,7 @@ layout_minmax_block(struct box *block, const struct gui_layout_table *font_func,
             }
         }
     }
+    NSLOG(layout, DEBUG, "MINMAX_BLOCK %p: after constraints min=%d max=%d", block, min, max);
 
     if (htype == CSS_HEIGHT_SET && hunit != CSS_UNIT_PCT && height > INTTOFIX(0)) {
         block->flags |= MAKE_HEIGHT;
@@ -1125,6 +1178,8 @@ layout_minmax_block(struct box *block, const struct gui_layout_table *font_func,
         block->min_width.value = (min + extra_fixed) / (1.0 - extra_frac);
         block->max_width = (max + extra_fixed) / (1.0 - extra_frac);
     }
+    NSLOG(layout, DEBUG, "MINMAX_BLOCK %p: FINAL stored min=%d max=%d (extra_fixed=%d)", block, block->min_width.value,
+        block->max_width, extra_fixed);
 
     /* Detect overflow: if resulting max_width is huge, log debug info */
     if (block->max_width > 1000000000) {

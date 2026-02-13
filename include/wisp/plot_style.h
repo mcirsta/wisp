@@ -126,6 +126,7 @@ typedef struct plot_font_style {
     plot_font_flags_t flags; /**< Font flags */
     colour background; /**< Background colour to blend to, if appropriate */
     colour foreground; /**< Colour of text */
+    int letter_spacing; /**< Extra spacing between characters, in pixels */
 } plot_font_style_t;
 
 

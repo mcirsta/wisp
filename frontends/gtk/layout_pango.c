@@ -40,6 +40,25 @@
 static PangoContext *nsfont_pango_context = NULL;
 static PangoLayout *nsfont_pango_layout = NULL;
 
+/**
+ * Apply letter-spacing attribute to a Pango layout.
+ *
+ * \param layout  PangoLayout to apply to
+ * \param fstyle  Font style containing letter_spacing (in pixels)
+ */
+static inline void nsfont_apply_letter_spacing(PangoLayout *layout, const plot_font_style_t *fstyle)
+{
+    if (fstyle->letter_spacing != 0) {
+        PangoAttrList *attrs = pango_attr_list_new();
+        PangoAttribute *attr = pango_attr_letter_spacing_new(fstyle->letter_spacing * PANGO_SCALE);
+        pango_attr_list_insert(attrs, attr);
+        pango_layout_set_attributes(layout, attrs);
+        pango_attr_list_unref(attrs);
+    } else {
+        pango_layout_set_attributes(layout, NULL);
+    }
+}
+
 static inline void nsfont_pango_check(void)
 {
     if (nsfont_pango_context == NULL) {
@@ -77,6 +96,7 @@ static nserror nsfont_width(const plot_font_style_t *fstyle, const char *string,
     desc = nsfont_style_to_description(fstyle);
     pango_layout_set_font_description(nsfont_pango_layout, desc);
     pango_font_description_free(desc);
+    nsfont_apply_letter_spacing(nsfont_pango_layout, fstyle);
 
     pango_layout_set_text(nsfont_pango_layout, string, length);
 
@@ -165,6 +185,7 @@ static nserror nsfont_position_in_string(
     desc = nsfont_style_to_description(fstyle);
     pango_layout_set_font_description(nsfont_pango_layout, desc);
     pango_font_description_free(desc);
+    nsfont_apply_letter_spacing(nsfont_pango_layout, fstyle);
 
     res = layout_position(nsfont_pango_layout, string, length, x, char_offset, actual_x);
 
@@ -216,6 +237,7 @@ static nserror nsfont_split(
     desc = nsfont_style_to_description(fstyle);
     pango_layout_set_font_description(layout, desc);
     pango_font_description_free(desc);
+    nsfont_apply_letter_spacing(layout, fstyle);
 
     res = layout_position(layout, string, length, x, &split_len, &split_x);
     if (res != NSERROR_OK) {
@@ -297,6 +319,7 @@ nserror nsfont_paint(int x, int y, const char *string, size_t length, const plot
     desc = nsfont_style_to_description(fstyle);
     pango_layout_set_font_description(nsfont_pango_layout, desc);
     pango_font_description_free(desc);
+    nsfont_apply_letter_spacing(nsfont_pango_layout, fstyle);
 
     pango_layout_set_text(nsfont_pango_layout, string, length);
 

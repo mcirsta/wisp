@@ -166,6 +166,15 @@ static nserror beos_font_width(const plot_font_style_t *fstyle, const char *stri
     nsbeos_style_to_font(font, fstyle);
     *width = (int)font.StringWidth(string, length);
 
+    /* Add letter-spacing: extra pixels between each character */
+    if (fstyle->letter_spacing != 0) {
+        BString str(string, length);
+        int32 nchars = str.CountChars();
+        if (nchars > 1) {
+            *width += fstyle->letter_spacing * (nchars - 1);
+        }
+    }
+
     return NSERROR_OK;
 }
 
@@ -225,7 +234,7 @@ static nserror beos_font_position(
     // slow but it should work
     for (i = 0; string[index] && i < len; i++) {
         esc += escapements[i];
-        current = font.Size() * esc;
+        current = font.Size() * esc + fstyle->letter_spacing * i;
         index += utf8_char_len(&string[index]);
         // is current char already too far away?
         if (x < current)
@@ -291,7 +300,7 @@ static nserror beos_font_split(
             ;
         }
         esc += escapements[i];
-        current = font.Size() * esc;
+        current = font.Size() * esc + fstyle->letter_spacing * i;
         index += utf8_char_len(&string[index]);
     }
     *actual_x = MIN(*actual_x, (int)current);

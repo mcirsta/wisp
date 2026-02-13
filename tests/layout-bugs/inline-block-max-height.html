@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Bug: max-height ignored in inline-block intrinsic width</title>
+<style>
+/*
+ * This test reproduces two bugs in layout_minmax_line():
+ *
+ * BUG 1 (PRIMARY): When computing intrinsic (min/max) widths for inline
+ *   replaced elements, layout_get_object_dimensions() is called with
+ *   INT_MAX for max_height. This means CSS max-height constraints are
+ *   ignored, and the image's full intrinsic width is used instead of
+ *   the height-constrained width.
+ *
+ *   Expected: The green box should be ~112px wide (80px image + 32px padding).
+ *   Bug:      The green box is ~134px wide (100px intrinsic + 34px padding).
+ *
+ * BUG 2 (SECONDARY): css_computed_box_sizing() on line 667 reads from
+ *   block->style (grandparent) instead of b->style (the element itself).
+ *   With box-sizing: border-box, padding should be included in the width.
+ */
+
+body {
+    margin: 20px;
+    font-family: sans-serif;
+    font-size: 16px;
+}
+
+.container {
+    text-align: center;
+    max-width: 800px;
+    margin: 0 auto;
+    border: 2px solid #ccc;
+    padding: 20px;
+}
+
+/* Mimics the .cnx-logo structure */
+.logo-box {
+    display: inline-block;
+    vertical-align: middle;
+    background: #d4edda;
+    outline: 2px solid green;
+}
+
+/* Mimics the custom-logo-link <A> */
+.logo-link {
+    display: inline-block;
+    padding-right: 2em;  /* ~32px at 16px font-size */
+    box-sizing: border-box;   /* BUG 2: Wisp reads this from wrong element */
+    vertical-align: middle;
+    text-decoration: none;
+}
+
+/* The image with max-height constraint — this triggers BUG 1 */
+.logo-link img {
+    max-height: 80px;
+    max-width: 350px;
+    display: inline-block;
+    vertical-align: baseline;
+}
+
+/* Mimics the .site-branding-text */
+.text-box {
+    display: inline-block;
+    vertical-align: middle;
+    max-width: 87%;
+    text-align: left;
+    background: #cce5ff;
+    outline: 2px solid blue;
+    padding: 8px;
+}
+
+h3 {
+    text-align: left;
+    margin-top: 2em;
+}
+
+.expected {
+    color: green;
+    font-weight: bold;
+}
+
+.bug {
+    color: red;
+    font-weight: bold;
+}
+
+.info {
+    text-align: left;
+    font-size: 14px;
+    margin-top: 10px;
+    padding: 10px;
+    background: #f8f9fa;
+    border: 1px solid #dee2e6;
+}
+</style>
+</head>
+<body>
+
+<h2>Test: max-height ignored in inline-block intrinsic width</h2>
+
+<h3>Test Case (reproduces both bugs)</h3>
+<p>The green box (logo) and blue box (text) are both <code>inline-block</code> inside a <code>text-align: center</code> container. The image is 100&times;100px with <code>max-height: 80px</code>.</p>
+
+<div class="container">
+    <div class="logo-box">
+        <a class="logo-link" href="#">
+            <!-- 100x100 red square PNG via data URI -->
+            <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAGQAAABkCAIAAAD/gAIDAAAARklEQVR4nO3PQQ0AIADAQPCvZx0WIiTcNUCm99z+OLO7A6/yLMiyIMuCLAuyLMiyIMuCLAuyLMiyIMuCLAuyLMiyIMuCrA83qgHRPXsiJgAAAABJRU5ErkJggg==" alt="100x100 test image" />
+        </a>
+    </div>
+    <div class="text-box">
+        <strong>SITE TITLE TEXT</strong><br>
+        Tagline goes here
+    </div>
+</div>
+
+<div class="info">
+    <strong class="expected">Chrome (correct):</strong> Logo &lt;a&gt; = 112px wide (80px constrained image + 32px padding, border-box)<br>
+    <strong class="bug">Wisp (bug):</strong> Logo &lt;a&gt; = ~134px wide (100px intrinsic width + 34px padding, ignoring max-height and box-sizing)<br><br>
+    <strong>BUG 1:</strong> <code>layout_minmax_line()</code> calls <code>layout_get_object_dimensions()</code> with <code>INT_MAX</code> for max_height, so <code>max-height: 80px</code> on the image is ignored. The intrinsic 100px width is used instead of the constrained 80px.<br>
+    <strong>BUG 2:</strong> <code>css_computed_box_sizing(block-&gt;style)</code> on line 667 reads from the grandparent block instead of the inline element itself, so <code>box-sizing: border-box</code> on the &lt;a&gt; is not applied.
+</div>
+
+</body>
+</html>
