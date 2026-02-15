@@ -271,18 +271,22 @@ nserror html_resolve_svg_use_refs(struct html_content *c, dom_document *doc)
 
                 /* Clone the symbol's children and append to use element */
                 exc = dom_node_clone_node(symbol, true, &cloned);
+                NSLOG(wisp, DEBUG, "SVG: Clone result: exc=%d, cloned=%p", (int)exc, (void *)cloned);
                 if (exc == DOM_NO_ERR && cloned != NULL) {
                     dom_node *result = NULL;
 
                     /* Append cloned content as child of use element */
                     exc = dom_node_append_child(use_node, cloned, &result);
+                    NSLOG(wisp, DEBUG, "SVG: Append result: exc=%d, result=%p", (int)exc, (void *)result);
                     if (exc == DOM_NO_ERR && result != NULL) {
                         dom_node_unref(result);
                         NSLOG(wisp, DEBUG, "SVG: Successfully resolved <use> to symbol");
                     } else {
-                        NSLOG(wisp, ERROR, "SVG: Failed to append resolved symbol content");
+                        NSLOG(wisp, ERROR, "SVG: Failed to append resolved symbol content (exc=%d)", (int)exc);
                     }
                     dom_node_unref(cloned);
+                } else {
+                    NSLOG(wisp, ERROR, "SVG: Failed to clone symbol (exc=%d)", (int)exc);
                 }
             } else {
                 NSLOG(wisp, WARNING, "SVG: Symbol '%s' not found for <use>", id);
@@ -463,7 +467,482 @@ static nserror svg_buffer_append_replace_color(
 }
 
 /**
+ * Serialize an element's attributes to XML.
+ * Handles currentColor replacement and attribute filtering.
+ */
+static nserror svg_serialize_attributes(
+    dom_element *element, char **buf, size_t *len, size_t *cap, const char *current_color, bool skip_id)
+{
+    dom_exception exc;
+    dom_namednodemap *attrs = NULL;
+    nserror err = NSERROR_OK;
+
+    exc = dom_node_get_attributes(element, &attrs);
+    if (exc != DOM_NO_ERR || attrs == NULL) {
+        return NSERROR_OK;
+    }
+
+    uint32_t attr_count = 0;
+    dom_namednodemap_get_length(attrs, &attr_count);
+
+    NSLOG(wisp, DEBUG, "SVG serialize: Element has %u attributes", attr_count);
+
+    for (uint32_t i = 0; i < attr_count; i++) {
+        dom_attr *attr = NULL;
+        exc = dom_namednodemap_item(attrs, i, (dom_node **)&attr);
+        if (exc != DOM_NO_ERR || attr == NULL) {
+            continue;
+        }
+
+        dom_string *attr_name = NULL;
+        dom_string *attr_value = NULL;
+        dom_attr_get_name(attr, &attr_name);
+        dom_attr_get_value(attr, &attr_value);
+
+        if (attr_name != NULL) {
+            /* Skip 'id' attribute if requested */
+            if (skip_id && dom_string_caseless_isequal(attr_name, corestring_dom_id)) {
+                dom_string_unref(attr_name);
+                if (attr_value)
+                    dom_string_unref(attr_value);
+                dom_node_unref((dom_node *)attr);
+                continue;
+            }
+
+            /* Skip 'href' attribute - it is resolved in nested SVG */
+            if (dom_string_caseless_isequal(attr_name, corestring_dom_href)) {
+                NSLOG(wisp, DEBUG, "SVG serialize: Skipping href attribute (resolved)");
+                dom_string_unref(attr_name);
+                if (attr_value)
+                    dom_string_unref(attr_value);
+                dom_node_unref((dom_node *)attr);
+                continue;
+            }
+            /* Skip xmlns - we add it explicitly for standalone SVG */
+            {
+                const char *aname = dom_string_data(attr_name);
+                if (strncasecmp(aname, "xmlns", 5) == 0) {
+                    NSLOG(wisp, DEBUG, "SVG serialize: Skipping xmlns attribute (added explicitly)");
+                    dom_string_unref(attr_name);
+                    if (attr_value)
+                        dom_string_unref(attr_value);
+                    dom_node_unref((dom_node *)attr);
+                    continue;
+                }
+            }
+            /* Check for xlink:href */
+            {
+                dom_string *xlink_href = NULL;
+                if (dom_string_create((const uint8_t *)"xlink:href", 10, &xlink_href) == DOM_NO_ERR && xlink_href) {
+                    if (dom_string_caseless_isequal(attr_name, xlink_href)) {
+                        NSLOG(wisp, DEBUG, "SVG serialize: Skipping xlink:href attribute (resolved)");
+                        dom_string_unref(xlink_href);
+                        dom_string_unref(attr_name);
+                        if (attr_value)
+                            dom_string_unref(attr_value);
+                        dom_node_unref((dom_node *)attr);
+                        continue;
+                    }
+                    dom_string_unref(xlink_href);
+                }
+            }
+
+            err = svg_buffer_append(buf, len, cap, " ", 1);
+            if (err == NSERROR_OK) {
+                /* Handle special case for viewBox attribute - must keep camelCase */
+                const char *name_data = dom_string_data(attr_name);
+                size_t name_len = dom_string_length(attr_name);
+                NSLOG(wisp, DEBUG, "SVG serialize: attribute name='%s' len=%zu", name_data, name_len);
+                if (name_len == 7 && strncasecmp(name_data, "viewbox", 7) == 0) {
+                    /* Must be 'viewBox' with capital B */
+                    err = svg_buffer_append(buf, len, cap, "viewBox", 7);
+                } else {
+                    /* Output attribute as-is from DOM */
+                    err = svg_buffer_append(buf, len, cap, name_data, name_len);
+                }
+            }
+            if (err == NSERROR_OK && attr_value != NULL) {
+                err = svg_buffer_append(buf, len, cap, "=\"", 2);
+            }
+            if (err == NSERROR_OK && attr_value != NULL) {
+                const char *val = dom_string_data(attr_value);
+                size_t val_len = dom_string_length(attr_value);
+                err = svg_buffer_append_replace_color(buf, len, cap, val, val_len, current_color);
+            }
+            if (err == NSERROR_OK && attr_value != NULL) {
+                err = svg_buffer_append(buf, len, cap, "\"", 1);
+            }
+
+            dom_string_unref(attr_name);
+            attr_name = NULL;
+        }
+
+        if (attr_value) {
+            dom_string_unref(attr_value);
+            attr_value = NULL;
+        }
+        dom_node_unref((dom_node *)attr);
+        attr = NULL;
+
+        if (err != NSERROR_OK) {
+            break;
+        }
+    }
+
+    dom_namednodemap_unref(attrs);
+    return err;
+}
+
+/**
+ * Serialize an element's opening tag: <tagname [attrs]>
+ * Special version for <svg> that adds dimensions based on viewBox if present.
+ */
+static bool svg_element_is_use_with_resolved(dom_element *element, bool *has_resolved);
+
+static nserror svg_serialize_element_open_with_dimensions(
+    const char *tag_name, dom_element *element, char **buf, size_t *len, size_t *cap, const char *current_color)
+{
+    nserror err;
+    int viewbox_x = 0, viewbox_y = 0;
+    int viewbox_w = 24, viewbox_h = 24;
+    bool has_viewbox = false;
+
+    NSLOG(wisp, DEBUG, "SVG serialize: Opening tag <%s> with viewBox-based dimensions", tag_name);
+
+    /* First, check if element has viewBox attribute to get dimensions */
+    {
+        dom_exception exc;
+        dom_namednodemap *attrs = NULL;
+        exc = dom_node_get_attributes((dom_node *)element, &attrs);
+        if (exc == DOM_NO_ERR && attrs != NULL) {
+            uint32_t attr_count = 0;
+            dom_namednodemap_get_length(attrs, &attr_count);
+
+            for (uint32_t i = 0; i < attr_count; i++) {
+                dom_attr *attr = NULL;
+                exc = dom_namednodemap_item(attrs, i, (dom_node **)&attr);
+                if (exc == DOM_NO_ERR && attr != NULL) {
+                    dom_string *attr_name = NULL;
+                    dom_attr_get_name(attr, &attr_name);
+                    if (attr_name != NULL) {
+                        const char *name = dom_string_data(attr_name);
+                        /* Check for viewBox (case-insensitive) */
+                        if (strcasecmp(name, "viewBox") == 0 || strcasecmp(name, "viewbox") == 0) {
+                            dom_string *attr_value = NULL;
+                            dom_attr_get_value(attr, &attr_value);
+                            if (attr_value != NULL) {
+                                const char *val = dom_string_data(attr_value);
+                                /* Parse viewBox="x y w h" */
+                                int x, y, w, h;
+                                if (sscanf(val, "%d %d %d %d", &x, &y, &w, &h) == 4) {
+                                    viewbox_x = x;
+                                    viewbox_y = y;
+                                    viewbox_w = w;
+                                    viewbox_h = h;
+                                    has_viewbox = true;
+                                    NSLOG(wisp, DEBUG, "SVG serialize: Element has viewBox %dx%d", w, h);
+                                }
+                                dom_string_unref(attr_value);
+                            }
+                        }
+                        dom_string_unref(attr_name);
+                    }
+                    dom_node_unref((dom_node *)attr);
+                }
+            }
+            dom_namednodemap_unref(attrs);
+        }
+    }
+
+    /* If the outer <svg> has no viewBox, probe <use> children for the
+     * resolved symbol's viewBox and lift it to the root element.
+     * This flattens the structure so the serialized SVG looks like
+     * a normal file SVG — one root <svg> with viewBox and paths. */
+    if (!has_viewbox) {
+        dom_exception exc2;
+        dom_node *child = NULL;
+        exc2 = dom_node_get_first_child((dom_node *)element, &child);
+        while (exc2 == DOM_NO_ERR && child != NULL && !has_viewbox) {
+            dom_node_type ctype;
+            exc2 = dom_node_get_node_type(child, &ctype);
+            if (exc2 == DOM_NO_ERR && ctype == DOM_ELEMENT_NODE) {
+                bool has_resolved = false;
+                bool is_use = svg_element_is_use_with_resolved((dom_element *)child, &has_resolved);
+                if (is_use && has_resolved) {
+                    /* Find the resolved symbol/g child of the <use> */
+                    dom_node *resolved = NULL;
+                    dom_node_get_first_child(child, &resolved);
+                    while (resolved != NULL) {
+                        dom_node_type rtype;
+                        dom_node_get_node_type(resolved, &rtype);
+                        if (rtype == DOM_ELEMENT_NODE) {
+                            /* Check for viewBox on this resolved element */
+                            dom_string *vb_val = NULL;
+                            dom_string *vb_name = NULL;
+                            if (dom_string_create((const uint8_t *)"viewBox", 7, &vb_name) == DOM_NO_ERR && vb_name) {
+                                dom_element_get_attribute((dom_element *)resolved, vb_name, &vb_val);
+                                dom_string_unref(vb_name);
+                            }
+                            if (vb_val != NULL) {
+                                int x, y, w, h;
+                                if (sscanf(dom_string_data(vb_val), "%d %d %d %d", &x, &y, &w, &h) == 4) {
+                                    viewbox_x = x;
+                                    viewbox_y = y;
+                                    viewbox_w = w;
+                                    viewbox_h = h;
+                                    has_viewbox = true;
+                                    NSLOG(wisp, DEBUG,
+                                        "SVG serialize: Lifted viewBox "
+                                        "%dx%d from resolved <use> target",
+                                        w, h);
+                                }
+                                dom_string_unref(vb_val);
+                            }
+                            dom_node_unref(resolved);
+                            break;
+                        }
+                        dom_node *next = NULL;
+                        dom_node_get_next_sibling(resolved, &next);
+                        dom_node_unref(resolved);
+                        resolved = next;
+                    }
+                }
+            }
+            dom_node *next = NULL;
+            dom_node_get_next_sibling(child, &next);
+            dom_node_unref(child);
+            child = next;
+        }
+        if (child != NULL)
+            dom_node_unref(child);
+    }
+
+    err = svg_buffer_append(buf, len, cap, "<", 1);
+    if (err == NSERROR_OK) {
+        err = svg_buffer_append(buf, len, cap, tag_name, strlen(tag_name));
+    }
+
+    /* Always add xmlns for standalone SVG compatibility */
+    if (err == NSERROR_OK) {
+        err = svg_buffer_append(
+            buf, len, cap, " xmlns=\"http://www.w3.org/2000/svg\"", strlen(" xmlns=\"http://www.w3.org/2000/svg\""));
+    }
+
+    if (err == NSERROR_OK) {
+        err = svg_serialize_attributes(element, buf, len, cap, current_color, false);
+    }
+
+    /* Add viewBox and dimensions if we have them (either from the element
+     * itself or lifted from a resolved <use> target) */
+    if (err == NSERROR_OK && has_viewbox) {
+        bool has_existing_viewbox = false;
+        /* Check for existing viewBox in what we just wrote */
+        if (*len > 6) {
+            char *search = *buf + strlen(tag_name) + 1;
+            if (strstr(search, "viewBox=") != NULL)
+                has_existing_viewbox = true;
+        }
+        /* Add viewBox if it was lifted from a resolved symbol
+         * (not already on the element).
+         * Do NOT inject width/height — those are coordinate-space
+         * dimensions, not display dimensions.  CSS controls the
+         * display size via REPLACE_DIM on the box. */
+        if (!has_existing_viewbox) {
+            char vb_buf[64];
+            snprintf(vb_buf, sizeof(vb_buf), " viewBox=\"%d %d %d %d\"", viewbox_x, viewbox_y, viewbox_w, viewbox_h);
+            err = svg_buffer_append(buf, len, cap, vb_buf, strlen(vb_buf));
+        }
+    }
+    if (err == NSERROR_OK) {
+        err = svg_buffer_append(buf, len, cap, ">", 1);
+    }
+
+    return err;
+}
+
+/**
+ * Serialize an element's opening tag: <tagname [attrs]>
+ */
+static nserror svg_serialize_element_open(const char *tag_name, dom_element *element, char **buf, size_t *len,
+    size_t *cap, const char *current_color, bool skip_id)
+{
+    nserror err;
+
+    NSLOG(wisp, DEBUG, "SVG serialize: Opening tag <%s>", tag_name);
+
+    err = svg_buffer_append(buf, len, cap, "<", 1);
+    if (err == NSERROR_OK) {
+        err = svg_buffer_append(buf, len, cap, tag_name, strlen(tag_name));
+    }
+    if (err == NSERROR_OK) {
+        err = svg_serialize_attributes(element, buf, len, cap, current_color, skip_id);
+    }
+    if (err == NSERROR_OK) {
+        err = svg_buffer_append(buf, len, cap, ">", 1);
+    }
+
+    return err;
+}
+
+/**
+ * Serialize an element's closing tag: </tagname>
+ */
+static nserror svg_serialize_element_close(const char *tag_name, char **buf, size_t *len, size_t *cap)
+{
+    NSLOG(wisp, DEBUG, "SVG serialize: Closing tag </%s>", tag_name);
+
+    nserror err = svg_buffer_append(buf, len, cap, "</", 2);
+    if (err == NSERROR_OK) {
+        err = svg_buffer_append(buf, len, cap, tag_name, strlen(tag_name));
+    }
+    if (err == NSERROR_OK) {
+        err = svg_buffer_append(buf, len, cap, ">", 1);
+    }
+    return err;
+}
+
+/**
+ * Serialize children of an element recursively.
+ */
+static nserror
+svg_serialize_children(dom_element *element, char **buf, size_t *len, size_t *cap, const char *current_color);
+
+/* Forward declaration for svg_serialize_node */
+static nserror svg_serialize_node(dom_node *node, char **buf, size_t *len, size_t *cap, const char *current_color);
+
+/**
+ * Serialize children of an element recursively.
+ */
+static nserror
+svg_serialize_children(dom_element *element, char **buf, size_t *len, size_t *cap, const char *current_color)
+{
+    dom_exception exc;
+    dom_node *child = NULL;
+    nserror err = NSERROR_OK;
+
+    exc = dom_node_get_first_child((dom_node *)element, &child);
+    while (exc == DOM_NO_ERR && child != NULL) {
+        err = svg_serialize_node(child, buf, len, cap, current_color);
+
+        dom_node *next = NULL;
+        exc = dom_node_get_next_sibling(child, &next);
+        dom_node_unref(child);
+        child = next;
+
+        if (err != NSERROR_OK) {
+            break;
+        }
+    }
+
+    return err;
+}
+
+/**
+ * Serialize a <use> element with resolved symbol content.
+ * Since libsvgtiny doesn't support <use>, we inline the content directly.
+ */
+static nserror svg_serialize_use_with_resolved(
+    dom_element *use_element, char **buf, size_t *len, size_t *cap, const char *current_color)
+{
+    dom_exception exc;
+    nserror err = NSERROR_OK;
+
+    NSLOG(wisp, DEBUG, "SVG serialize: Processing <use> element - inlining content (libsvgtiny doesn't support <use>)");
+
+    /* Flatten: skip the <use> tag and its <symbol>/<g> wrapper entirely.
+     * Just output the resolved symbol's children directly into the
+     * parent <svg>.  The parent's viewBox was already set from the
+     * resolved symbol by svg_serialize_element_open_with_dimensions. */
+
+    /* Find the resolved symbol (first child element, typically <symbol> or <g>) */
+    dom_node *child = NULL;
+    exc = dom_node_get_first_child((dom_node *)use_element, &child);
+
+    while (exc == DOM_NO_ERR && child != NULL) {
+        dom_node_type child_type;
+        exc = dom_node_get_node_type(child, &child_type);
+
+        if (exc == DOM_NO_ERR && child_type == DOM_ELEMENT_NODE) {
+            dom_string *child_name = NULL;
+            exc = dom_node_get_node_name(child, &child_name);
+
+            if (exc == DOM_NO_ERR && child_name != NULL) {
+                const char *child_name_str = dom_string_data(child_name);
+                bool is_symbol = (strcasecmp(child_name_str, "symbol") == 0);
+                bool is_group = (strcasecmp(child_name_str, "g") == 0);
+
+                NSLOG(wisp, DEBUG, "SVG serialize: Found child element: <%s> (symbol=%d, g=%d)", child_name_str,
+                    is_symbol, is_group);
+
+                if (is_symbol || is_group) {
+                    /* Flatten: emit only the symbol/group's children,
+                     * not the <symbol>/<g> itself or a <svg> wrapper.
+                     * The viewBox has been lifted to the root <svg>. */
+                    NSLOG(wisp, DEBUG, "SVG serialize: Flattening <%s> children into root <svg>", child_name_str);
+
+                    err = svg_serialize_children((dom_element *)child, buf, len, cap, current_color);
+
+                    dom_string_unref(child_name);
+                    dom_node_unref(child);
+                    if (err != NSERROR_OK) {
+                        return err;
+                    }
+                    break; /* Only process first symbol/group */
+                }
+
+                dom_string_unref(child_name);
+            }
+        }
+
+        dom_node *next = NULL;
+        exc = dom_node_get_next_sibling(child, &next);
+        dom_node_unref(child);
+        child = next;
+    }
+
+    return NSERROR_OK;
+}
+
+/**
+ * Check if an element is a <use> element with resolved symbol content.
+ */
+static bool svg_element_is_use_with_resolved(dom_element *element, bool *has_resolved)
+{
+    dom_exception exc;
+    dom_string *name = NULL;
+    bool is_use = false;
+    *has_resolved = false;
+
+    exc = dom_node_get_node_name((dom_node *)element, &name);
+    if (exc != DOM_NO_ERR || name == NULL) {
+        return false;
+    }
+
+    const char *tag_name = dom_string_data(name);
+    if (strcasecmp(tag_name, "use") == 0) {
+        is_use = true;
+
+        /* Check if use has children (resolved symbols) */
+        dom_node *first_child = NULL;
+        exc = dom_node_get_first_child((dom_node *)element, &first_child);
+        if (exc == DOM_NO_ERR && first_child != NULL) {
+            *has_resolved = true;
+            NSLOG(wisp, DEBUG, "SVG serialize: <use> has resolved children");
+            dom_node_unref(first_child);
+        } else {
+            NSLOG(wisp, DEBUG, "SVG serialize: <use> has NO resolved children");
+        }
+    }
+
+    dom_string_unref(name);
+    return is_use;
+}
+
+/**
  * Recursively serialize a DOM node to XML string.
+ *
+ * This is the main entry point - it dispatches to specialized functions
+ * based on node type and element type.
  *
  * @param current_color  Hex color string (e.g. "#808080") to substitute for currentColor
  */
@@ -475,6 +954,7 @@ static nserror svg_serialize_node(dom_node *node, char **buf, size_t *len, size_
 
     exc = dom_node_get_node_type(node, &type);
     if (exc != DOM_NO_ERR) {
+        NSLOG(wisp, DEBUG, "SVG serialize: Failed to get node type");
         return NSERROR_DOM;
     }
 
@@ -483,179 +963,61 @@ static nserror svg_serialize_node(dom_node *node, char **buf, size_t *len, size_
         dom_string *text = NULL;
         exc = dom_node_get_text_content(node, &text);
         if (exc == DOM_NO_ERR && text != NULL) {
+            NSLOG(wisp, DEBUG, "SVG serialize: Text node: '%s'", dom_string_data(text));
             err = svg_buffer_append(buf, len, cap, dom_string_data(text), dom_string_length(text));
             dom_string_unref(text);
             if (err != NSERROR_OK)
                 return err;
         }
     } else if (type == DOM_ELEMENT_NODE) {
-        /* Element node - output tag and attributes */
+        dom_element *element = (dom_element *)node;
         dom_string *name = NULL;
-        dom_namednodemap *attrs = NULL;
         const char *tag_name_str;
-        bool is_use = false;
-        bool is_symbol = false;
-        bool has_children = false;
 
         exc = dom_node_get_node_name(node, &name);
         if (exc != DOM_NO_ERR || name == NULL) {
+            NSLOG(wisp, DEBUG, "SVG serialize: Failed to get node name");
             return NSERROR_DOM;
         }
 
         tag_name_str = dom_string_data(name);
+        NSLOG(wisp, DEBUG, "SVG serialize: Element <%s>", tag_name_str);
 
-        /* Check for special elements */
-        if (strcasecmp(tag_name_str, "use") == 0) {
-            is_use = true;
-            /* Check if use has children (resolved symbols) */
-            dom_node *first_child = NULL;
-            exc = dom_node_get_first_child(node, &first_child);
-            if (exc == DOM_NO_ERR && first_child != NULL) {
-                has_children = true;
-                dom_node_unref(first_child);
-            }
-        } else if (strcasecmp(tag_name_str, "symbol") == 0) {
-            is_symbol = true;
-        }
+        /* Check if this is a <use> element with resolved content */
+        bool has_resolved = false;
+        bool is_use = svg_element_is_use_with_resolved(element, &has_resolved);
 
-        /* For <use> elements with children, skip the use wrapper
-         * and just serialize the children directly */
-        if (is_use && has_children) {
-            dom_node *child = NULL;
-            exc = dom_node_get_first_child(node, &child);
-            while (exc == DOM_NO_ERR && child != NULL) {
-                err = svg_serialize_node(child, buf, len, cap, current_color);
-
-                dom_node *next = NULL;
-                exc = dom_node_get_next_sibling(child, &next);
-                dom_node_unref(child);
-                child = next;
-
-                if (err != NSERROR_OK) {
-                    if (child)
-                        dom_node_unref(child);
-                    dom_string_unref(name);
-                    return err;
-                }
-            }
-            dom_string_unref(name);
-            return NSERROR_OK;
-        }
-
-        /* Opening tag - use 'g' instead of 'symbol' since libsvgtiny
-         * doesn't render symbol elements directly */
-        err = svg_buffer_append(buf, len, cap, "<", 1);
-        if (err != NSERROR_OK) {
-            dom_string_unref(name);
-            return err;
-        }
-
-        if (is_symbol) {
-            /* Convert symbol to g (group) */
-            err = svg_buffer_append(buf, len, cap, "g", 1);
+        if (is_use && has_resolved) {
+            /* Special handling: serialize <use> with resolved symbol content */
+            NSLOG(wisp, DEBUG, "SVG serialize: Using special <use> handling with resolved content");
+            err = svg_serialize_use_with_resolved(element, buf, len, cap, current_color);
         } else {
-            /* Preserve original case for SVG element names (e.g. linearGradient) */
-            err = svg_buffer_append(buf, len, cap, dom_string_data(name), dom_string_length(name));
-        }
-        if (err != NSERROR_OK) {
-            dom_string_unref(name);
-            return err;
-        }
+            /* Normal element serialization: <tag> children </tag> */
+            if (strcasecmp(tag_name_str, "symbol") == 0) {
+                /* Convert <symbol> to <g> since libsvgtiny doesn't render symbol directly */
+                err = svg_serialize_element_open("g", element, buf, len, cap, current_color, false);
+            } else if (strcasecmp(tag_name_str, "svg") == 0) {
+                /* For root <svg>, add default width/height if not present */
+                err = svg_serialize_element_open_with_dimensions("svg", element, buf, len, cap, current_color);
+            } else {
+                err = svg_serialize_element_open(tag_name_str, element, buf, len, cap, current_color, false);
+            }
 
-        /* Attributes */
-        exc = dom_node_get_attributes(node, &attrs);
-        if (exc == DOM_NO_ERR && attrs != NULL) {
-            uint32_t attr_count = 0;
-            dom_namednodemap_get_length(attrs, &attr_count);
+            if (err == NSERROR_OK) {
+                err = svg_serialize_children(element, buf, len, cap, current_color);
+            }
 
-            for (uint32_t i = 0; i < attr_count; i++) {
-                dom_attr *attr = NULL;
-                exc = dom_namednodemap_item(attrs, i, (dom_node **)&attr);
-                if (exc == DOM_NO_ERR && attr != NULL) {
-                    dom_string *attr_name = NULL;
-                    dom_string *attr_value = NULL;
-
-                    dom_attr_get_name(attr, &attr_name);
-                    dom_attr_get_value(attr, &attr_value);
-
-                    if (attr_name != NULL) {
-                        err = svg_buffer_append(buf, len, cap, " ", 1);
-                        if (err == NSERROR_OK) {
-                            err = svg_buffer_append(
-                                buf, len, cap, dom_string_data(attr_name), dom_string_length(attr_name));
-                        }
-                        if (err == NSERROR_OK && attr_value != NULL) {
-                            err = svg_buffer_append(buf, len, cap, "=\"", 2);
-                            if (err == NSERROR_OK) {
-                                /* Replace any occurrence of currentColor with the actual color
-                                 * since libsvgtiny doesn't support it */
-                                const char *val = dom_string_data(attr_value);
-                                size_t val_len = dom_string_length(attr_value);
-                                err = svg_buffer_append_replace_color(buf, len, cap, val, val_len, current_color);
-                            }
-                            if (err == NSERROR_OK) {
-                                err = svg_buffer_append(buf, len, cap, "\"", 1);
-                            }
-                        }
-                        dom_string_unref(attr_name);
-                    }
-                    if (attr_value != NULL) {
-                        dom_string_unref(attr_value);
-                    }
-                    dom_node_unref((dom_node *)attr);
-
-                    if (err != NSERROR_OK) {
-                        dom_namednodemap_unref(attrs);
-                        dom_string_unref(name);
-                        return err;
-                    }
+            if (err == NSERROR_OK) {
+                if (strcasecmp(tag_name_str, "symbol") == 0) {
+                    err = svg_serialize_element_close("g", buf, len, cap);
+                } else {
+                    err = svg_serialize_element_close(tag_name_str, buf, len, cap);
                 }
             }
-            dom_namednodemap_unref(attrs);
-        }
-
-        err = svg_buffer_append(buf, len, cap, ">", 1);
-        if (err != NSERROR_OK) {
-            dom_string_unref(name);
-            return err;
-        }
-
-        /* Children */
-        dom_node *child = NULL;
-        exc = dom_node_get_first_child(node, &child);
-        while (exc == DOM_NO_ERR && child != NULL) {
-            err = svg_serialize_node(child, buf, len, cap, current_color);
-
-            dom_node *next = NULL;
-            exc = dom_node_get_next_sibling(child, &next);
-            dom_node_unref(child);
-            child = next;
-
-            if (err != NSERROR_OK) {
-                if (child)
-                    dom_node_unref(child);
-                dom_string_unref(name);
-                return err;
-            }
-        }
-
-        /* Closing tag */
-        err = svg_buffer_append(buf, len, cap, "</", 2);
-        if (err == NSERROR_OK) {
-            if (is_symbol) {
-                err = svg_buffer_append(buf, len, cap, "g", 1);
-            } else {
-                /* Preserve original case for closing tag to match opening tag */
-                err = svg_buffer_append(buf, len, cap, dom_string_data(name), dom_string_length(name));
-            }
-        }
-        if (err == NSERROR_OK) {
-            err = svg_buffer_append(buf, len, cap, ">", 1);
         }
 
         dom_string_unref(name);
-        if (err != NSERROR_OK)
-            return err;
+        return err;
     }
     /* Ignore other node types (comments, etc.) */
 

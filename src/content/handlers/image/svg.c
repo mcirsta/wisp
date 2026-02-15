@@ -359,8 +359,8 @@ static nserror svg_plot_path_chunked(const struct redraw_context *ctx, const plo
         }
         unsigned int sp_end = pos;
         unsigned int sp_len = sp_end - sp_start;
-        NSLOG(wisp, INFO, "SVG subpath parsed: sp_len=%u sbbox=%.2f,%.2f..%.2f,%.2f", sp_len, sb_minx, sb_miny,
-            sb_maxx, sb_maxy);
+        NSLOG(wisp, INFO, "SVG subpath parsed: sp_len=%u sbbox=%.2f,%.2f..%.2f,%.2f", sp_len, sb_minx, sb_miny, sb_maxx,
+            sb_maxy);
 
         if (grp_len == 0) {
             grp_start = sp_start;
@@ -630,7 +630,7 @@ static bool svg_redraw_internal(svg_content *svg, int x, int y, int width, int h
 
     float sx = (float)width / (float)svg->base.width;
     float sy = (float)height / (float)svg->base.height;
-    NSLOG(wisp, WARNING, "SVG redraw: display=%dx%d intrinsic=%dx%d sx=%.3f sy=%.3f", width, height, svg->base.width,
+    NSLOG(wisp, DEBUG, "SVG redraw: display=%dx%d intrinsic=%dx%d sx=%.3f sy=%.3f", width, height, svg->base.width,
         svg->base.height, sx, sy);
     transform[0] = 1.0f;
     transform[1] = 0.0f;
@@ -814,12 +814,11 @@ static bool svg_redraw_internal(svg_content *svg, int x, int y, int width, int h
                 if (!(rx < clip->x0 || lx >= clip->x1 || by < clip->y0 || ty >= clip->y1)) {
                     NSLOG(wisp, INFO, "SVG path begin: url=%s index=%u orig_len=%u scaled_len=%u bbox=%d,%d..%d,%d",
                         url_str, i, diagram->shape[i].path_length, k, lx, ty, rx, by);
-                    NSLOG(wisp, DEBUG, "  SVG bbox raw: minx=%.2f miny=%.2f maxx=%.2f maxy=%.2f", minx, miny, maxx,
-                        maxy);
-                    NSLOG(wisp, DEBUG, "  SVG bbox floored: lx=%d ty=%d rx=%d by=%d (x=%d y=%d)", lx, ty, rx, by, x,
-                        y);
-                    NSLOG(wisp, DEBUG, "  SVG transform: [%.2f,%.2f,%.2f,%.2f,%.2f,%.2f]", transform[0],
-                        transform[1], transform[2], transform[3], transform[4], transform[5]);
+                    NSLOG(
+                        wisp, DEBUG, "  SVG bbox raw: minx=%.2f miny=%.2f maxx=%.2f maxy=%.2f", minx, miny, maxx, maxy);
+                    NSLOG(wisp, DEBUG, "  SVG bbox floored: lx=%d ty=%d rx=%d by=%d (x=%d y=%d)", lx, ty, rx, by, x, y);
+                    NSLOG(wisp, DEBUG, "  SVG transform: [%.2f,%.2f,%.2f,%.2f,%.2f,%.2f]", transform[0], transform[1],
+                        transform[2], transform[3], transform[4], transform[5]);
 
                     /* Check for gradient fill and render it */
                     if (diagram->shape[i].fill_gradient_type != svgtiny_GRADIENT_NONE) {
@@ -910,8 +909,8 @@ static bool svg_redraw_internal(svg_content *svg, int x, int y, int width, int h
                             res = svg_plot_path_chunked(ctx, &combo_style, combo, combo_len, transform);
                             if (res != NSERROR_OK) {
                                 ok = false;
-                                NSLOG(wisp, ERROR, "SVG render failed: url=%s element=path combo_flush len=%u",
-                                    url_str, combo_len);
+                                NSLOG(wisp, ERROR, "SVG render failed: url=%s element=path combo_flush len=%u", url_str,
+                                    combo_len);
                             }
                             combo_len = 0;
                         }

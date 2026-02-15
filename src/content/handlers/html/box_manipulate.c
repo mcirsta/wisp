@@ -36,7 +36,7 @@
 #include <wisp/utils/nsurl.h>
 #include "utils/talloc.h"
 #include <string.h>
-#include <svgtiny.h>
+
 
 #include <wisp/content/handlers/html/box.h>
 #include <wisp/content/handlers/html/form_internal.h>
@@ -94,10 +94,6 @@ static int box_talloc_destructor(void *ptr)
         b->gadget = NULL;
     }
 
-    if (!(b->flags & CLONE) && b->svg_diagram != NULL) {
-        svgtiny_free(b->svg_diagram);
-        b->svg_diagram = NULL;
-    }
 
     return 0;
 }
@@ -162,7 +158,6 @@ struct box *box_create(css_select_results *styles, css_computed_style *style, bo
     box->background = NULL;
     box->object = NULL;
     box->object_params = NULL;
-    box->svg_diagram = NULL;
     box->iframe = NULL;
     box->node = NULL;
 
@@ -287,8 +282,6 @@ void box_free_box(struct box *box)
             scrollbar_destroy(box->scroll_y);
         if (box->styles != NULL)
             css_select_results_destroy(box->styles);
-        if (box->svg_diagram != NULL)
-            svgtiny_free(box->svg_diagram);
     }
 
     talloc_free(box);

@@ -55,7 +55,7 @@
 #include "content/handlers/html/box_textarea.h"
 #include "content/handlers/html/html_svg.h"
 #include "content/handlers/html/object.h"
-#include <svgtiny.h>
+#include <nsutils/base64.h>
 
 
 static const content_type image_types = CONTENT_IMAGE;
@@ -1985,19 +1985,13 @@ bool convert_special_elements(dom_node *node, html_content *content, struct box 
 
                     NSLOG(wisp, DEBUG, "SVG: Found inline <svg> element");
 
-                    /* Parse inline SVG and store diagram in box.
-                     * Use default 300x150 like browsers do for replaced elements.
-                     * Actual rendering will scale to box dimensions.
-                     */
+                    /* Serialize inline SVG and load it as a data: URI through
+                     * the normal content pipeline.  svg_reformat will re-parse
+                     * at the correct CSS display dimensions. */
                     {
-                        struct svgtiny_diagram *diagram = NULL;
-                        const char *base_url = "";
                         char color_str[8] = "#000000"; /* Default black */
                         struct html_inline_svg *cached = NULL;
 
-                        if (content->base_url != NULL) {
-                            base_url = nsurl_access(content->base_url);
-                        }
 
                         /* Get computed CSS color for currentColor substitution */
                         if (box->style != NULL) {
@@ -2038,39 +2032,60 @@ bool convert_special_elements(dom_node *node, html_content *content, struct box 
                             }
 
                             if (svg_xml != NULL) {
-                                svgtiny_code code;
+                                /* Build a data:image/svg+xml;base64,... URI from the
+                                 * serialized SVG XML.  Loading through the normal content
+                                 * pipeline gives us svg_reformat at the correct CSS
+                                 * display dimensions — like a real browser. */
+                                uint8_t *b64 = NULL;
+                                size_t b64_len = 0;
+                                nsuerror nsu_err;
 
-                                diagram = svgtiny_create();
-                                if (diagram != NULL) {
-                                    code = svgtiny_parse(diagram, svg_xml, svg_len, base_url, 300, 150);
-                                    if (code != svgtiny_OK) {
-                                        NSLOG(wisp, WARNING, "SVG: libsvgtiny parse failed: %d", code);
-                                        svgtiny_free(diagram);
-                                        diagram = NULL;
-                                    }
-                                }
+                                nsu_err = nsu_base64_encode_alloc((const uint8_t *)svg_xml, svg_len, &b64, &b64_len);
 
                                 if (free_xml) {
                                     free(svg_xml);
                                 }
-                            }
-                        } else {
-                            NSLOG(wisp, WARNING, "SVG: Inline SVG node not found in cache list");
-                        }
 
-                        if (diagram != NULL) {
-                            box->svg_diagram = diagram;
-                            NSLOG(wisp, DEBUG, "SVG: Parsed inline SVG (%dx%d, %u shapes)", diagram->width,
-                                diagram->height, diagram->shape_count);
-                        } else {
-                            NSLOG(wisp, WARNING, "SVG: Failed to parse inline SVG");
+                                if (nsu_err == NSUERROR_OK && b64 != NULL) {
+                                    /* Construct data: URI */
+                                    const char *prefix = "data:image/svg+xml;base64,";
+                                    size_t prefix_len = strlen(prefix);
+                                    size_t uri_len = prefix_len + b64_len;
+                                    char *data_uri = malloc(uri_len + 1);
+
+                                    if (data_uri != NULL) {
+                                        nsurl *svg_url = NULL;
+                                        memcpy(data_uri, prefix, prefix_len);
+                                        memcpy(data_uri + prefix_len, b64, b64_len);
+                                        data_uri[uri_len] = '\0';
+
+                                        if (nsurl_create(data_uri, &svg_url) == NSERROR_OK) {
+                                            html_fetch_object(content, svg_url, box, CONTENT_IMAGE, false);
+                                            nsurl_unref(svg_url);
+                                            NSLOG(wisp, DEBUG,
+                                                "SVG: Loaded inline SVG as data: URI "
+                                                "(%zu bytes XML, %zu bytes b64)",
+                                                svg_len, b64_len);
+                                        } else {
+                                            NSLOG(wisp, WARNING, "SVG: Failed to create data: URI");
+                                        }
+                                        free(data_uri);
+                                    }
+                                    free(b64);
+                                } else {
+                                    NSLOG(wisp, WARNING, "SVG: Base64 encoding failed");
+                                }
+                            } else {
+                                NSLOG(wisp, WARNING, "SVG: Inline SVG node not found in cache list");
+                            }
                         }
                     }
+                    dom_string_unref(tag_name);
                 }
-                dom_string_unref(tag_name);
             }
+            res = true;
         }
-        res = true;
+        break;
     }
 
     return res;

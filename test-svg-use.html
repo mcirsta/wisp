@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <title>SVG <use> Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background: #f0f0f0;
+        }
+
+        .icon {
+            display: inline-block;
+            width: 24px;
+            height: 24px;
+            fill: currentColor;
+        }
+
+        .test-box {
+            background: white;
+            padding: 20px;
+            margin: 10px 0;
+            border: 1px solid #ccc;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>SVG <use> Element Test</h1>
+
+    <div class="test-box">
+        <h2>Test 1: Simple icon-angle-down</h2>
+        <svg class="icon icon-angle-down" aria-hidden="true" role="img">
+            <use href="#icon-angle-down" xlink:href="#icon-angle-down"></use>
+        </svg>
+    </div>
+
+    <div class="test-box">
+        <h2>Test 2: Multiple icons</h2>
+        <svg class="icon" aria-hidden="true" role="img">
+            <use href="#icon-search" xlink:href="#icon-search"></use>
+        </svg>
+        <svg class="icon" aria-hidden="true" role="img">
+            <use href="#icon-close" xlink:href="#icon-close"></use>
+        </svg>
+        <svg class="icon" aria-hidden="true" role="img">
+            <use href="#icon-bars" xlink:href="#icon-bars"></use>
+        </svg>
+    </div>
+
+    <!-- Hidden SVG with symbol definitions -->
+    <svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+        <defs>
+            <symbol id="icon-angle-down" viewBox="0 0 320 512">
+                <path d="M143 352L31 240l112-112 48 48-64 64 64 64 48-48z" />
+            </symbol>
+            <symbol id="icon-search" viewBox="0 0 512 512">
+                <path
+                    d="M505 442.7L405.3 343c-8.7-9-21.9-9.3-31.3-.9l-25.9 25.9c-10.3 10.3-26.9 9.5-35.7-1.7L287.4 295.7 226.3 356l30.7 30.7c9 9 8.7 22.7-.9 31.3L183.3 491.3c-9.4 9.4-24.6 9.4-34 0l-48-48c-9.4-9.4-9.4-24.6 0-34L134.7 345.7 73.3 407.3c-9.4 9.4-24.6 9.4-34 0l-48-48c-9.4-9.4-9.4-24.6 0-34L44.7 252.7c62.3-62.3 163.5-62.3 225.9 0l25.9 25.9c9 8.7 9 21.9-.9 31.3L231.3 363.3l48.1 48.1c9 9 22.7 8.7 31.3-.9l72.8-72.8c9-9 9-22.7-.2-31.3z" />
+            </symbol>
+            <symbol id="icon-close" viewBox="0 0 352 512">
+                <path
+                    d="M242.7 256l100.1-100.1c12.3-12.3 12.3-32.2 0-44.5l-22.2-22.2c-12.3-12.3-32.2-12.3-44.5 0L176 189.3 75.9 89.2c-12.3-12.3-32.2-12.3-44.5 0L9.2 111.5c-12.3 12.3-12.3 32.2 0 44.5L109.3 256 9.2 356.1c-12.3 12.3-12.3 32.2 0 44.5l22.2 22.2c12.3 12.3 32.2 12.3 44.5 0L176 322.7l100.1 100.1c12.3 12.3 32.2 12.3 44.5 0l22.2-22.2c12.3-12.3 12.3-32.2 0-44.5L242.7 256z" />
+            </symbol>
+            <symbol id="icon-bars" viewBox="0 0 448 512">
+                <path
+                    d="M16 132h416c4.4 0 8-3.6 8-8V76c0-4.4-3.6-8-8-8H16c-4.4 0-8 3.6-8 8v48c0 4.4 3.6 8 8 8zm-16 204c0 4.4 3.6 8 8 8h416c4.4 0 8-3.6 8-8v-48c0-4.4-3.6-8-8-8H8c-4.4 0-8 3.6-8 8v48zm416-288v48c0 4.4 3.6 8 8 8h416c4.4 0 8-3.6 8-8V76c0-4.4-3.6-8-8-8H8c-4.4 0-8 3.6-8 8zm352 168h416c4.4 0 8-3.6 8-8v-48c0-4.4-3.6-8-8-8H360c-4.4 0-8 3.6-8 8v48c0 4.4 3.6 8 8 8z" />
+            </symbol>
+        </defs>
+    </svg>
+</body>
+
+</html>

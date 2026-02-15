@@ -273,7 +273,15 @@ static nserror html_object_callback(hlcache_handle *object, const hlcache_event 
                 break;
             }
 
-            /* Fixed-size image - just redraw the box area */
+            /* Fixed-size image - just redraw the box area.
+             * Skip if box hasn't been laid out yet (width is still
+             * the UNKNOWN_WIDTH sentinel).  This can happen when
+             * content resolves synchronously (data: URIs, cache hits)
+             * before layout assigns real dimensions.  Layout will
+             * trigger the proper redraw later. */
+            if (box->width == UNKNOWN_WIDTH)
+                break;
+
             box_coords(box, &x, &y);
 
             data.redraw.x = x + box->padding[LEFT];

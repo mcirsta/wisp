@@ -747,14 +747,6 @@ static struct box *layout_minmax_line(struct box *first, int *line_min, int *lin
         if (b->object || (b->flags & REPLACE_DIM)) {
             if (b->object) {
                 width = layout_minmax_object_width(b, content, width, height);
-            } else if (b->svg_diagram != NULL) {
-                /* Inline SVG - use diagram's intrinsic dimensions */
-                if (width == AUTO) {
-                    width = b->svg_diagram->width;
-                }
-                if (height == AUTO) {
-                    height = b->svg_diagram->height;
-                }
             }
 
             fixed = frac = 0;
@@ -2311,7 +2303,11 @@ static bool layout_block_object(struct box *block)
     NSLOG(layout, DEBUG, "block %p, object %p, width %i", block, hlcache_handle_get_url(block->object), block->width);
 
     if (content_can_reformat(block->object)) {
-        content_reformat(block->object, false, block->width, 1);
+        /* HTML content computes its own height from content flow,
+         * so pass height=1 as a placeholder.  Non-HTML content
+         * (SVG, images) needs the actual box height as viewport. */
+        int reformat_h = (content_get_type(block->object) == CONTENT_HTML) ? 1 : block->height;
+        content_reformat(block->object, false, block->width, reformat_h);
     } else {
         /* Non-HTML objects */
         /* this case handled already in
@@ -2892,33 +2888,6 @@ static bool layout_line(struct box *first, int *width, int *y, int cx, int cy, s
         if (b->object && !(b->flags & REPLACE_DIM)) {
             layout_get_object_dimensions(
                 &content->unit_len_ctx, b, &b->width, &b->height, min_width, max_width, min_height, max_height);
-        } else if (b->svg_diagram != NULL) {
-            /* Inline SVG - calculate dimensions preserving aspect ratio,
-             * similar to layout_get_object_dimensions for images.
-             * See CSS 2.1 Section 10.3.2 and 10.6.2. */
-            int intrinsic_width = b->svg_diagram->width;
-            int intrinsic_height = b->svg_diagram->height;
-
-            if (b->width == AUTO && b->height == AUTO) {
-                /* Both dimensions auto: use intrinsic size */
-                b->width = intrinsic_width;
-                b->height = intrinsic_height;
-            } else if (b->width == AUTO) {
-                /* Height set, width auto: calculate width from aspect ratio */
-                if (intrinsic_height != 0) {
-                    b->width = (b->height * intrinsic_width) / intrinsic_height;
-                } else {
-                    b->width = intrinsic_width;
-                }
-            } else if (b->height == AUTO) {
-                /* Width set, height auto: calculate height from aspect ratio */
-                if (intrinsic_width != 0) {
-                    b->height = (b->width * intrinsic_height) / intrinsic_width;
-                } else {
-                    b->height = intrinsic_height;
-                }
-            }
-            /* Both dimensions explicitly set: use them as-is (CSS takes precedence) */
         } else if (b->flags & IFRAME) {
             /* TODO: should we look at the content dimensions? */
             if (b->width == AUTO)

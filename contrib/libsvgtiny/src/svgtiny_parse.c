@@ -1488,6 +1488,9 @@ svgtiny_code svgtiny_parse_color(const char *text, size_t textlen, svgtiny_colou
  * https://www.w3.org/TR/SVG11/coords.html#ViewBoxAttribute
  * https://www.w3.org/TR/SVG2/coords.html#ViewBoxAttribute
  *
+ * Implements the default preserveAspectRatio="xMidYMid meet" behavior
+ * per https://www.w3.org/TR/SVG11/coords.html#PreserveAspectRatioAttribute
+ *
  * <min-x>,? <min-y>,? <width>,? <height>
  */
 svgtiny_code svgtiny_parse_viewbox(const char *text, size_t textlen, float viewport_width, float viewport_height,
@@ -1527,10 +1530,55 @@ svgtiny_code svgtiny_parse_viewbox(const char *text, size_t textlen, float viewp
         return svgtiny_SVG_ERROR;
     }
 
-    tm->a = (float)viewport_width / paramv[2];
-    tm->d = (float)viewport_height / paramv[3];
-    tm->e += -paramv[0] * tm->a;
-    tm->f += -paramv[1] * tm->d;
+    /* paramv: [0]=min-x, [1]=min-y, [2]=width, [3]=height */
+    float vb_x = paramv[0];
+    float vb_y = paramv[1];
+    float vb_w = paramv[2];
+    float vb_h = paramv[3];
+
+    if (vb_w <= 0 || vb_h <= 0) {
+        return svgtiny_SVG_ERROR;
+    }
+
+    float sx = viewport_width / vb_w;
+    float sy = viewport_height / vb_h;
+
+    /* preserveAspectRatio="xMidYMid meet" (the SVG default):
+     * - Use uniform scaling: scale = min(sx, sy)
+     * - Center the viewBox in the viewport
+     *
+     * The transform is: translate(tx, ty) · scale(s, s) · translate(-vb_x, -vb_y)
+     * where tx = (viewport_width - vb_w * scale) / 2
+     *       ty = (viewport_height - vb_h * scale) / 2
+     */
+    float scale = (sx < sy) ? sx : sy;
+    float tx = (viewport_width - vb_w * scale) * 0.5f;
+    float ty = (viewport_height - vb_h * scale) * 0.5f;
+
+    /* Combined local transform: translate(tx - vb_x*scale, ty - vb_y*scale) · scale(s, s)
+     * Compose with existing CTM: CTM' = CTM · local */
+    float local_e = tx - vb_x * scale;
+    float local_f = ty - vb_y * scale;
+
+    /* New CTM = old CTM × | scale  0       local_e |
+     *                      | 0      scale   local_f |
+     *                      | 0      0       1       |
+     *
+     * Result:
+     *   a' = a * scale
+     *   b' = b * scale
+     *   c' = c * scale
+     *   d' = d * scale
+     *   e' = a * local_e + c * local_f + e
+     *   f' = b * local_e + d * local_f + f
+     */
+    float a = tm->a, b = tm->b, c = tm->c, d = tm->d;
+    tm->e = a * local_e + c * local_f + tm->e;
+    tm->f = b * local_e + d * local_f + tm->f;
+    tm->a = a * scale;
+    tm->b = b * scale;
+    tm->c = c * scale;
+    tm->d = d * scale;
 
     return svgtiny_OK;
 }

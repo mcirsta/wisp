@@ -2844,25 +2844,6 @@ bool html_redraw_box(const html_content *html, struct box *box, int x_parent, in
                 }
             }
         }
-    } else if (box->svg_diagram != NULL && width != 0 && height != 0) {
-        /* Inline SVG rendering */
-        x_scrolled = x - scrollbar_get_offset(box->scroll_x) * scale;
-        y_scrolled = y - scrollbar_get_offset(box->scroll_y) * scale;
-
-        NSLOG(wisp, DEBUG, "SVG: Rendering inline SVG at (%d,%d) size %dx%d", (int)(x_scrolled + padding_left),
-            (int)(y_scrolled + padding_top), (int)width, (int)height);
-
-        /* Get CSS 'color' property for currentColor support */
-        css_color css_col;
-        css_computed_color(box->style, &css_col);
-        colour current_col = nscss_color_to_ns(css_col);
-
-        if (!svg_redraw_diagram(box->svg_diagram, (int)(x_scrolled + padding_left), (int)(y_scrolled + padding_top),
-                (int)width, (int)height, &r, ctx, current_background_color, current_col)) {
-            NSLOG(wisp, WARNING, "SVG: Inline SVG redraw failed");
-        }
-    } else if (box->svg_diagram != NULL && (width == 0 || height == 0)) {
-        NSLOG(wisp, DEBUG, "SVG: Skipping inline SVG render - zero size (w=%d h=%d)", (int)width, (int)height);
     } else if (tag_type == DOM_HTML_ELEMENT_TYPE_CANVAS && box->node != NULL && box->flags & REPLACE_DIM) {
         /* Canvas to draw */
         struct bitmap *bitmap = NULL;
