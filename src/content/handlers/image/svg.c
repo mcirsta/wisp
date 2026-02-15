@@ -628,10 +628,28 @@ static bool svg_redraw_internal(svg_content *svg, int x, int y, int width, int h
 
     assert(diagram);
 
-    float sx = (float)width / (float)svg->base.width;
-    float sy = (float)height / (float)svg->base.height;
-    NSLOG(wisp, DEBUG, "SVG redraw: display=%dx%d intrinsic=%dx%d sx=%.3f sy=%.3f", width, height, svg->base.width,
-        svg->base.height, sx, sy);
+    /* Scale from the coordinate space paths were parsed at (base.width/height,
+     * updated by svg_reformat to diagram->width/height) to the display size.
+     * Do NOT use the intrinsic dimensions from svg_convert because
+     * svgtiny_parse already bakes the viewBox→viewport transform into path
+     * coordinates via the CTM — using intrinsic dims would double-scale. */
+    int intrinsic_w = svg->base.width;
+    int intrinsic_h = svg->base.height;
+    int parse_w = intrinsic_w;
+    int parse_h = intrinsic_h;
+    if (svg->diagram->width > 0 && svg->diagram->height > 0) {
+        parse_w = svg->diagram->width;
+        parse_h = svg->diagram->height;
+    } else {
+        NSLOG(wisp, WARNING,
+            "SVG redraw: diagram->width=%d diagram->height=%d invalid, falling back to intrinsic %dx%d. "
+            "SVG may be missing width, height, and viewBox attributes.",
+            svg->diagram->width, svg->diagram->height, intrinsic_w, intrinsic_h);
+    }
+    float sx = (float)width / (float)parse_w;
+    float sy = (float)height / (float)parse_h;
+    NSLOG(wisp, DEBUG, "SVG redraw: display=%dx%d parsed=%dx%d intrinsic=%dx%d sx=%.3f sy=%.3f", width, height, parse_w,
+        parse_h, intrinsic_w, intrinsic_h, sx, sy);
     transform[0] = 1.0f;
     transform[1] = 0.0f;
     transform[2] = 0.0f;
