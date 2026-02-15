@@ -1976,7 +1976,22 @@ bool convert_special_elements(dom_node *node, html_content *content, struct box 
             if (exc == DOM_NO_ERR && tag_name != NULL) {
                 if (dom_string_caseless_isequal(tag_name, corestring_dom_svg)) {
                     /* This is an inline SVG element - treat as replaced element */
-                    box->flags |= IS_REPLACED | REPLACE_DIM;
+                    box->flags |= IS_REPLACED;
+
+                    {
+                        css_fixed value = 0;
+                        css_unit wunit = CSS_UNIT_PX;
+                        css_unit hunit = CSS_UNIT_PX;
+                        enum css_width_e wtype = css_computed_width(box->style, &value, &wunit);
+                        enum css_height_e htype = css_computed_height(box->style, &value, &hunit);
+
+                        if (wtype == CSS_WIDTH_SET && wunit != CSS_UNIT_PCT && htype == CSS_HEIGHT_SET &&
+                            hunit != CSS_UNIT_PCT) {
+                            /* We know the dimensions the image will be shown at
+                             * before it's fetched. */
+                            box->flags |= REPLACE_DIM;
+                        }
+                    }
 
                     /* Don't convert children - we'll parse the entire SVG */
                     if (convert_children) {
