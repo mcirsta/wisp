@@ -196,6 +196,13 @@ static nserror html_object_callback(hlcache_handle *object, const hlcache_event 
         break;
 
     case CONTENT_MSG_READY:
+        NSLOG(wisp, WARNING,
+            "SVGDIAG obj_cb READY: content=%p type=%d box=%p "
+            "box.w=%d box.h=%d box.max_w=%d box.flags=0x%x "
+            "can_reformat=%d will_reformat_w=%d will_reformat_h=%d",
+            object, content_get_type(object), box, box->width, box->height, box->max_width, box->flags,
+            content_can_reformat(object), box->max_width != UNKNOWN_MAX_WIDTH ? box->width : 0,
+            box->max_width != UNKNOWN_MAX_WIDTH ? box->height : 0);
         if (content_can_reformat(object)) {
             /* TODO: avoid knowledge of box internals here */
             content_reformat(object, false, box->max_width != UNKNOWN_MAX_WIDTH ? box->width : 0,
@@ -226,6 +233,12 @@ static nserror html_object_callback(hlcache_handle *object, const hlcache_event 
 
     case CONTENT_MSG_DONE:
         PERF("Object DONE (remaining=%d)", c->base.active - 1);
+        NSLOG(wisp, WARNING,
+            "SVGDIAG obj_cb DONE: content=%p type=%d box=%p "
+            "box.w=%d box.h=%d box.object=%p box.flags=0x%x "
+            "content.w=%d content.h=%d",
+            object, content_get_type(object), box, box->width, box->height, box->object, box->flags,
+            content_get_width(object), content_get_height(object));
         if (c->base.active == 0) {
             NSLOG(wisp, CRITICAL,
                 "ACTIVE UNDERFLOW! object_cb DONE decrement when 0 "

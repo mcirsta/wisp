@@ -138,6 +138,25 @@ int content_get_height(struct hlcache_handle *h);
 
 
 /**
+ * Retrieve intrinsic aspect ratio of content (ratio-only signal).
+ *
+ * Returns true only when the content has no real intrinsic dimensions
+ * but does have an intrinsic aspect ratio (e.g., SVG with only a viewBox).
+ * This signals to layout that it should use the containing block width
+ * and compute height from the ratio, per CSS Images 3 §5.2.
+ *
+ * For content with real intrinsic dimensions (raster images, SVGs with
+ * explicit width/height), this returns false.
+ *
+ * \param h       handle to the content
+ * \param ratio_w pointer to store ratio width
+ * \param ratio_h pointer to store ratio height
+ * \return true if content has ratio-only (no intrinsic dims), false otherwise
+ */
+bool content_get_intrinsic_ratio(struct hlcache_handle *h, int *ratio_w, int *ratio_h);
+
+
+/**
  * Invalidate content reuse data.
  *
  * causes subsequent requests for content URL to query server to

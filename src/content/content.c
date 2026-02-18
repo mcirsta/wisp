@@ -136,8 +136,8 @@ static nserror content_llcache_callback(llcache_handle *llcache, const llcache_e
         /* DEBUG: Log if we see NSERROR_OK here, because this is where
          * "Fetch error: OK" likely originates. */
         if (msg_data.errordata.errorcode == NSERROR_OK) {
-            NSLOG(wisp, ERROR,
-                "CONTENT_LLCACHE_CALLBACK: Received LLCACHE_EVENT_ERROR with NSERROR_OK from llcache %p", llcache);
+            NSLOG(wisp, ERROR, "CONTENT_LLCACHE_CALLBACK: Received LLCACHE_EVENT_ERROR with NSERROR_OK from llcache %p",
+                llcache);
         }
         msg_data.errordata.errormsg = event->data.error.msg;
         content_broadcast(c, CONTENT_MSG_ERROR, &msg_data);
@@ -614,8 +614,8 @@ bool content_add_user(struct content *c,
 {
     struct content_user *user;
 
-    NSLOG(wisp, INFO, "content " URL_FMT_SPC " (%p), user %p %p",
-        nsurl_access_log(llcache_handle_get_url(c->llcache)), c, callback, pw);
+    NSLOG(wisp, INFO, "content " URL_FMT_SPC " (%p), user %p %p", nsurl_access_log(llcache_handle_get_url(c->llcache)),
+        c, callback, pw);
     user = malloc(sizeof(struct content_user));
     if (!user)
         return false;
@@ -636,8 +636,8 @@ void content_remove_user(struct content *c,
     void (*callback)(struct content *c, content_msg msg, const union content_msg_data *data, void *pw), void *pw)
 {
     struct content_user *user, *next;
-    NSLOG(wisp, INFO, "content " URL_FMT_SPC " (%p), user %p %p",
-        nsurl_access_log(llcache_handle_get_url(c->llcache)), c, callback, pw);
+    NSLOG(wisp, INFO, "content " URL_FMT_SPC " (%p), user %p %p", nsurl_access_log(llcache_handle_get_url(c->llcache)),
+        c, callback, pw);
 
     /* user_list starts with a sentinel */
     for (user = c->user_list; user->next != 0 && !(user->next->callback == callback && user->next->pw == pw);
@@ -729,8 +729,7 @@ void content_broadcast_error(struct content *c, nserror errorcode, const char *m
     assert(c);
 
     if (errorcode == NSERROR_OK) {
-        NSLOG(
-            wisp, ERROR, "content_broadcast_error: Called with NSERROR_OK! Forcing NSERROR_UNKNOWN. Content: %p", c);
+        NSLOG(wisp, ERROR, "content_broadcast_error: Called with NSERROR_OK! Forcing NSERROR_UNKNOWN. Content: %p", c);
         errorcode = NSERROR_UNKNOWN;
     }
 
@@ -1126,6 +1125,25 @@ int content__get_height(struct content *c)
         return 0;
 
     return c->height;
+}
+
+
+/* exported interface documented in content/content.h */
+bool content_get_intrinsic_ratio(hlcache_handle *h, int *ratio_w, int *ratio_h)
+{
+    struct content *c = hlcache_handle_get_content(h);
+    if (c == NULL)
+        return false;
+
+    /* Handler-specific ratio (e.g., SVG viewBox-only).
+     * Only returns true when the content has no real intrinsic dimensions
+     * but does have an aspect ratio — the signal to layout to use
+     * containing-block sizing instead of intrinsic dimensions. */
+    if (c->handler != NULL && c->handler->get_intrinsic_ratio != NULL) {
+        return c->handler->get_intrinsic_ratio(c, ratio_w, ratio_h);
+    }
+
+    return false;
 }
 
 

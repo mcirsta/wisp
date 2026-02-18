@@ -65,20 +65,20 @@ typedef struct content_handler content_handler;
 #define CONTENT_ACTIVE_INC(c, reason)                                                                                  \
     do {                                                                                                               \
         (c)->base.active++;                                                                                            \
-        NSLOG(wisp, DEBUG, "ACTIVE++ → %u (%s) [content=%p]", (c)->base.active, (reason), (void *)(c));             \
+        NSLOG(wisp, DEBUG, "ACTIVE++ → %u (%s) [content=%p]", (c)->base.active, (reason), (void *)(c));                \
     } while (0)
 
 #define CONTENT_ACTIVE_DEC(c, reason)                                                                                  \
     do {                                                                                                               \
         if ((c)->base.active == 0) {                                                                                   \
-            NSLOG(wisp, CRITICAL,                                                                                   \
+            NSLOG(wisp, CRITICAL,                                                                                      \
                 "ACTIVE UNDERFLOW! Decrement when already 0 "                                                          \
                 "(%s) [content=%p url=%s]",                                                                            \
                 (reason), (void *)(c),                                                                                 \
                 (c)->base.llcache ? nsurl_access(llcache_handle_get_url((c)->base.llcache)) : "(no url)");             \
         }                                                                                                              \
         (c)->base.active--;                                                                                            \
-        NSLOG(wisp, DEBUG, "ACTIVE-- → %u (%s) [content=%p]", (c)->base.active, (reason), (void *)(c));             \
+        NSLOG(wisp, DEBUG, "ACTIVE-- → %u (%s) [content=%p]", (c)->base.active, (reason), (void *)(c));                \
     } while (0)
 
 /**
@@ -174,6 +174,20 @@ struct content_handler {
      * \param c The content to check
      */
     bool (*is_opaque)(struct content *c);
+
+    /**
+     * Get intrinsic aspect ratio for this content.
+     *
+     * For content with an intrinsic ratio but no intrinsic dimensions
+     * (e.g., SVG with only a viewBox), this returns the ratio so that
+     * layout can compute proportional dimensions per CSS Images 3 §5.2.
+     *
+     * \param c       The content to query
+     * \param ratio_w Pointer to store ratio width
+     * \param ratio_h Pointer to store ratio height
+     * \return true if ratio is available, false otherwise
+     */
+    bool (*get_intrinsic_ratio)(struct content *c, int *ratio_w, int *ratio_h);
 
     /**
      * There must be one content per user for this type.

@@ -104,6 +104,15 @@ typedef enum {
     svgtiny_SVG_ERROR
 } svgtiny_code;
 
+/**
+ * Source of dimensions returned by svgtiny_parse_dimensions().
+ */
+typedef enum {
+    svgtiny_DIMS_EXPLICIT, /**< width/height attributes present */
+    svgtiny_DIMS_VIEWBOX, /**< only viewBox present (ratio only) */
+    svgtiny_DIMS_DEFAULT /**< no viewBox either — using 300x150 */
+} svgtiny_dimension_source;
+
 enum { svgtiny_PATH_MOVE, svgtiny_PATH_CLOSE, svgtiny_PATH_LINE, svgtiny_PATH_BEZIER };
 
 struct svgtiny_named_color {
@@ -115,7 +124,8 @@ struct svgtiny_named_color {
 struct svgtiny_diagram *svgtiny_create(void);
 svgtiny_code
 svgtiny_parse(struct svgtiny_diagram *diagram, const char *buffer, size_t size, const char *url, int width, int height);
-svgtiny_code svgtiny_parse_dimensions(const char *buffer, size_t size, int *width, int *height);
+svgtiny_code
+svgtiny_parse_dimensions(const char *buffer, size_t size, int *width, int *height, svgtiny_dimension_source *source);
 void svgtiny_free(struct svgtiny_diagram *svg);
 
 #endif

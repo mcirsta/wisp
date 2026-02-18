@@ -92,11 +92,30 @@ struct svgtiny_parse_state {
     struct svgtiny_parse_state_gradient fill_grad;
     struct svgtiny_parse_state_gradient stroke_grad;
 
+    /* aspect ratio */
+    unsigned int aspect_ratio_align;
+    unsigned int aspect_ratio_mos;
+
     /* Interned strings */
 #define SVGTINY_STRING_ACTION2(n, nn) dom_string *interned_##n;
 #include "svgtiny_strings.h"
 #undef SVGTINY_STRING_ACTION2
 };
+
+enum {
+    svgtiny_ASPECT_RATIO_NONE,
+    svgtiny_ASPECT_RATIO_XMIN_YMIN,
+    svgtiny_ASPECT_RATIO_XMID_YMIN,
+    svgtiny_ASPECT_RATIO_XMAX_YMIN,
+    svgtiny_ASPECT_RATIO_XMIN_YMID,
+    svgtiny_ASPECT_RATIO_XMID_YMID,
+    svgtiny_ASPECT_RATIO_XMAX_YMID,
+    svgtiny_ASPECT_RATIO_XMIN_YMAX,
+    svgtiny_ASPECT_RATIO_XMID_YMAX,
+    svgtiny_ASPECT_RATIO_XMAX_YMAX
+};
+
+enum { svgtiny_ASPECT_RATIO_MEET, svgtiny_ASPECT_RATIO_SLICE };
 
 struct svgtiny_list;
 
@@ -144,11 +163,11 @@ svgtiny_code svgtiny_parse_attributes(
 svgtiny_code
 svgtiny_parse_element_from_href(dom_element *node, struct svgtiny_parse_state *state, dom_element **element);
 svgtiny_code svgtiny_parse_poly_points(const char *data, size_t datalen, float *pointv, unsigned int *pointc);
-svgtiny_code svgtiny_parse_length(const char *text, size_t textlen, int viewport_size, float *length);
+svgtiny_code svgtiny_parse_length(const char *text, size_t textlen, int viewport_size, float font_size, float *length);
 svgtiny_code svgtiny_parse_transform(const char *text, size_t textlen, struct svgtiny_transformation_matrix *tm);
 svgtiny_code svgtiny_parse_color(const char *text, size_t textlen, svgtiny_colour *c);
-svgtiny_code svgtiny_parse_viewbox(const char *text, size_t textlen, float viewport_width, float viewport_height,
-    struct svgtiny_transformation_matrix *tm);
+svgtiny_code svgtiny_parse_viewbox(const char *text, size_t textlen, struct svgtiny_parse_state *state);
+svgtiny_code svgtiny_parse_preserveAspectRatio(const char *text, size_t textlen, struct svgtiny_parse_state *state);
 svgtiny_code svgtiny_parse_none(const char *cursor, const char *textend);
 svgtiny_code svgtiny_parse_number(const char *text, const char **textend, float *value);
 

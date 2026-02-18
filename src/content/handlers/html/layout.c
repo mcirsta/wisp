@@ -132,7 +132,7 @@ layout_minmax_block(struct box *block, const struct gui_layout_table *font_func,
  * See CSS 2.1 sections 10.3 and 10.6.
  */
 static void layout_get_object_dimensions(const css_unit_ctx *unit_len_ctx, struct box *box, int *width, int *height,
-    struct css_size min_width, int max_width, struct css_size min_height, int max_height)
+    struct css_size min_width, int max_width, struct css_size min_height, int max_height, int containing_block_width)
 {
     assert(box->object != NULL);
     assert(width != NULL && height != NULL);
@@ -143,34 +143,60 @@ static void layout_get_object_dimensions(const css_unit_ctx *unit_len_ctx, struc
     int intrinsic_width = content_get_width(box->object);
     int intrinsic_height = content_get_height(box->object);
 
+    /* Check for an explicit intrinsic ratio from the content handler.
+     * This is set only when the content has no real intrinsic dimensions
+     * but has an aspect ratio (e.g., SVG with viewBox but no width/height).
+     * The ratio acts as the signal to use containing-block sizing. */
+    int ratio_w = 0;
+    int ratio_h = 0;
+    bool has_ratio_only = content_get_intrinsic_ratio(box->object, &ratio_w, &ratio_h);
+
+    /* For all ratio-based calculations below, we use either the explicit
+     * ratio (viewBox-only) or the intrinsic dimensions as the ratio source. */
+    int eff_ratio_w = has_ratio_only ? ratio_w : intrinsic_width;
+    int eff_ratio_h = has_ratio_only ? ratio_h : intrinsic_height;
+
     /* DIAG: Log image dimensions before calculation */
-    NSLOG(layout, DEBUG, "OBJ_DIM box %p: input w=%d h=%d intrinsic=%dx%d limits w[%d,%d] h[%d,%d]", box, *width,
-        *height, intrinsic_width, intrinsic_height, min_width.value, max_width, min_height.value, max_height);
+    NSLOG(layout, DEBUG,
+        "OBJ_DIM box %p: input w=%d h=%d intrinsic=%dx%d ratio=%dx%d has_ratio_only=%d cb_w=%d limits w[%d,%d] h[%d,%d]",
+        box, *width, *height, intrinsic_width, intrinsic_height, ratio_w, ratio_h, has_ratio_only,
+        containing_block_width, min_width.value, max_width, min_height.value, max_height);
 
     if (*width == AUTO && *height == AUTO) {
-        /* No given dimensions - use intrinsic dimensions */
+        if (has_ratio_only && ratio_w > 0 && ratio_h > 0 && containing_block_width > 0) {
+            /* Content has intrinsic ratio but no real intrinsic dimensions
+             * (e.g., SVG with viewBox only).  Per CSS Images 3 §5.2:
+             * use containing block width, compute height from ratio. */
+            *width = containing_block_width;
+            *height = (*width * ratio_h) / ratio_w;
+        } else if (intrinsic_width > 0 && intrinsic_height > 0) {
+            /* Has intrinsic dimensions — use them (existing behavior) */
 
 #ifdef WISP_DEVICE_PIXEL_LAYOUT
-        /* Windows frontend uses device pixels for layout (GDI doesn't auto-scale).
-         * Only scale here when intrinsic dimensions are used to determine box size.
-         * If CSS specifies explicit width/height, those values are already in the
-         * correct coordinate space and should not be scaled. */
-        {
-            int dpi = browser_get_dpi();
-            if (dpi > 0 && dpi != 96) {
-                intrinsic_width = (intrinsic_width * dpi) / 96;
-                intrinsic_height = (intrinsic_height * dpi) / 96;
+            /* Windows frontend uses device pixels for layout (GDI doesn't auto-scale).
+             * Only scale here when intrinsic dimensions are used to determine box size.
+             * If CSS specifies explicit width/height, those values are already in the
+             * correct coordinate space and should not be scaled. */
+            {
+                int dpi = browser_get_dpi();
+                if (dpi > 0 && dpi != 96) {
+                    intrinsic_width = (intrinsic_width * dpi) / 96;
+                    intrinsic_height = (intrinsic_height * dpi) / 96;
+                }
             }
-        }
 #endif
 
+            *width = intrinsic_width;
+            *height = intrinsic_height;
+        } else {
+            /* No intrinsic dimensions or ratio —
+             * CSS default object size (300×150). */
+            *width = 300;
+            *height = 150;
+        }
+
+        /* Apply min/max-width constraints */
         bool scaled = false;
-
-        /* use intrinsic dimensions */
-        *width = intrinsic_width;
-        *height = intrinsic_height;
-
-        /* Deal with min/max-width first */
         if (min_width.type == CSS_SIZE_SET && min_width.value > 0 && min_width.value > *width) {
             *width = min_width.value;
             scaled = true;
@@ -179,14 +205,12 @@ static void layout_get_object_dimensions(const css_unit_ctx *unit_len_ctx, struc
             *width = max_width;
             scaled = true;
         }
-
-        if (scaled && (intrinsic_width != 0)) {
-            /* Update height */
-            *height = (*width * intrinsic_height) / intrinsic_width;
+        if (scaled && eff_ratio_w != 0) {
+            *height = (*width * eff_ratio_h) / eff_ratio_w;
         }
 
+        /* Apply min/max-height constraints */
         scaled = false;
-        /* Deal with min/max-height */
         if (min_height.type == CSS_SIZE_SET && min_height.value > 0 && min_height.value > *height) {
             *height = min_height.value;
             scaled = true;
@@ -195,19 +219,14 @@ static void layout_get_object_dimensions(const css_unit_ctx *unit_len_ctx, struc
             *height = max_height;
             scaled = true;
         }
-
-        if (scaled && (intrinsic_height != 0)) {
-            /* Update width */
-            *width = (*height * intrinsic_width) / intrinsic_height;
+        if (scaled && eff_ratio_h != 0) {
+            *width = (*height * eff_ratio_w) / eff_ratio_h;
         }
 
     } else if (*width == AUTO) {
-        /* Have given height; width is calculated from the given height
-         * and ratio of intrinsic dimensions */
-        /* Intrinsic fetch removed from here as it is now at top */
-
-        if (intrinsic_height != 0)
-            *width = (*height * intrinsic_width) / intrinsic_height;
+        /* Have given height; width is calculated from ratio */
+        if (eff_ratio_h != 0)
+            *width = (*height * eff_ratio_w) / eff_ratio_h;
         else
             *width = intrinsic_width;
 
@@ -217,17 +236,15 @@ static void layout_get_object_dimensions(const css_unit_ctx *unit_len_ctx, struc
             *width = max_width;
 
     } else if (*height == AUTO) {
-        /* Have given width; height is calculated from the given width
-         * and ratio of intrinsic dimensions */
-        /* Intrinsic fetch removed */
+        /* Have given width; height is calculated from ratio */
 
         if (min_width.type == CSS_SIZE_SET && min_width.value > 0 && min_width.value > *width)
             *width = min_width.value;
         if (max_width >= 0 && max_width < *width)
             *width = max_width;
 
-        if (intrinsic_width != 0)
-            *height = (*width * intrinsic_height) / intrinsic_width;
+        if (eff_ratio_w != 0)
+            *height = (*width * eff_ratio_h) / eff_ratio_w;
         else
             *height = intrinsic_height;
 
@@ -245,19 +262,19 @@ static void layout_get_object_dimensions(const css_unit_ctx *unit_len_ctx, struc
          * Only recalculate width if object-fit is fill (default behavior). */
         if (max_height >= 0 && *height > max_height) {
             *height = max_height;
-            if (!preserve_box_width && intrinsic_height != 0)
-                *width = (*height * intrinsic_width) / intrinsic_height;
+            if (!preserve_box_width && eff_ratio_h != 0)
+                *width = (*height * eff_ratio_w) / eff_ratio_h;
         }
         if (min_height.type == CSS_SIZE_SET && min_height.value > 0 && *height < min_height.value) {
             *height = min_height.value;
-            if (!preserve_box_width && intrinsic_height != 0)
-                *width = (*height * intrinsic_width) / intrinsic_height;
+            if (!preserve_box_width && eff_ratio_h != 0)
+                *width = (*height * eff_ratio_w) / eff_ratio_h;
         }
     }
 
     /* DIAG: Log final computed dimensions */
-    NSLOG(layout, INFO, "OBJ_DIM_OUT box %p: computed w=%d h=%d (intrinsic was %dx%d)", box, *width, *height,
-        intrinsic_width, intrinsic_height);
+    NSLOG(layout, INFO, "OBJ_DIM_OUT box %p: computed w=%d h=%d (intrinsic was %dx%d, ratio=%dx%d has_ratio_only=%d)",
+        box, *width, *height, intrinsic_width, intrinsic_height, eff_ratio_w, eff_ratio_h, has_ratio_only);
 }
 
 
@@ -519,8 +536,8 @@ static int layout_minmax_object_width(struct box *box, const html_content *conte
         }
     }
 
-    layout_get_object_dimensions(
-        &content->unit_len_ctx, box, &width, &height, obj_min_w, obj_max_w, obj_min_h, obj_max_h);
+    layout_get_object_dimensions(&content->unit_len_ctx, box, &width, &height, obj_min_w, obj_max_w, obj_min_h,
+        obj_max_h, -1 /* containing block width unknown during minmax pass */);
 
     return width;
 }
@@ -1638,7 +1655,8 @@ static void layout_block_find_dimensions(
 
     if (box->object && !(box->flags & REPLACE_DIM) && content_get_type(box->object) != CONTENT_HTML) {
         /* block-level replaced element, see 10.3.4 and 10.6.2 */
-        layout_get_object_dimensions(unit_len_ctx, box, &width, &height, min_width, max_width, min_height, max_height);
+        layout_get_object_dimensions(
+            unit_len_ctx, box, &width, &height, min_width, max_width, min_height, max_height, available_width);
     }
 
     box->width = layout_solve_width(box, available_width, width, lm, rm, max_width, min_width.value);
@@ -2470,7 +2488,8 @@ static void layout_float_find_dimensions(
     if (box->object && !(box->flags & REPLACE_DIM) && content_get_type(box->object) != CONTENT_HTML) {
         /* Floating replaced element, with intrinsic width or height.
          * See 10.3.6 and 10.6.2 */
-        layout_get_object_dimensions(unit_len_ctx, box, &width, &height, min_width, max_width, min_height, max_height);
+        layout_get_object_dimensions(
+            unit_len_ctx, box, &width, &height, min_width, max_width, min_height, max_height, available_width);
     } else if (box->gadget &&
         (box->gadget->type == GADGET_TEXTBOX || box->gadget->type == GADGET_PASSWORD ||
             box->gadget->type == GADGET_FILE || box->gadget->type == GADGET_TEXTAREA)) {
@@ -2886,8 +2905,8 @@ static bool layout_line(struct box *first, int *width, int *y, int cx, int cy, s
             &min_width, &max_height, &min_height, NULL, NULL, NULL);
 
         if (b->object && !(b->flags & REPLACE_DIM)) {
-            layout_get_object_dimensions(
-                &content->unit_len_ctx, b, &b->width, &b->height, min_width, max_width, min_height, max_height);
+            layout_get_object_dimensions(&content->unit_len_ctx, b, &b->width, &b->height, min_width, max_width,
+                min_height, max_height, *width /* containing block / available line width */);
         } else if (b->flags & IFRAME) {
             /* TODO: should we look at the content dimensions? */
             if (b->width == AUTO)
@@ -3405,7 +3424,7 @@ bool layout_block_context(struct box *block, int viewport_height, html_content *
         /* No min constraints for block objects */
         struct css_size no_min = {.type = CSS_SIZE_AUTO, .value = 0};
         layout_get_object_dimensions(
-            &content->unit_len_ctx, block, &temp_width, &block->height, no_min, INT_MAX, no_min, INT_MAX);
+            &content->unit_len_ctx, block, &temp_width, &block->height, no_min, INT_MAX, no_min, INT_MAX, block->width);
         if (block->width == UNKNOWN_WIDTH || block->width >= 100000000) {
             fprintf(stderr, "LAYOUT_ERROR: block %p has INVALID width %d after layout_block_object\n", (void *)block,
                 block->width);

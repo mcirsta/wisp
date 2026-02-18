@@ -788,13 +788,15 @@ static svgtiny_code svgtiny_parse_text(dom_element *text, struct svgtiny_parse_s
     /* Parse dx attribute (relative x offset) */
     exc = dom_element_get_attribute(text, state.interned_dx, &attr);
     if (exc == DOM_NO_ERR && attr != NULL) {
-        svgtiny_parse_length(dom_string_data(attr), dom_string_byte_length(attr), (int)state.viewport_width, &dx);
+        svgtiny_parse_length(
+            dom_string_data(attr), dom_string_byte_length(attr), (int)state.viewport_width, state.font_size, &dx);
         dom_string_unref(attr);
     }
     /* Parse dy attribute (relative y offset) */
     exc = dom_element_get_attribute(text, state.interned_dy, &attr);
     if (exc == DOM_NO_ERR && attr != NULL) {
-        svgtiny_parse_length(dom_string_data(attr), dom_string_byte_length(attr), (int)state.viewport_height, &dy);
+        svgtiny_parse_length(
+            dom_string_data(attr), dom_string_byte_length(attr), (int)state.viewport_height, state.font_size, &dy);
         dom_string_unref(attr);
     }
 
@@ -963,6 +965,15 @@ static svgtiny_code svgtiny_parse_svg(dom_element *svg, struct svgtiny_parse_sta
     svgtiny_parse_paint_attributes(svg, &state);
     svgtiny_parse_font_attributes(svg, &state);
 
+    state.aspect_ratio_align = svgtiny_ASPECT_RATIO_XMID_YMID;
+    state.aspect_ratio_mos = svgtiny_ASPECT_RATIO_MEET;
+
+    exc = dom_element_get_attribute(svg, state.interned_preserveAspectRatio, &view_box);
+    if (exc == DOM_NO_ERR && view_box != NULL) {
+        svgtiny_parse_preserveAspectRatio(dom_string_data(view_box), dom_string_byte_length(view_box), &state);
+        dom_string_unref(view_box);
+    }
+
     exc = dom_element_get_attribute(svg, state.interned_viewBox, &view_box);
     if (exc != DOM_NO_ERR) {
         svgtiny_cleanup_state_local(&state);
@@ -970,8 +981,7 @@ static svgtiny_code svgtiny_parse_svg(dom_element *svg, struct svgtiny_parse_sta
     }
 
     if (view_box) {
-        svgtiny_parse_viewbox(dom_string_data(view_box), dom_string_byte_length(view_box), state.viewport_width,
-            state.viewport_height, &state.ctm);
+        svgtiny_parse_viewbox(dom_string_data(view_box), dom_string_byte_length(view_box), &state);
         dom_string_unref(view_box);
     }
 
@@ -1318,7 +1328,8 @@ struct svgtiny_shape *svgtiny_add_shape(struct svgtiny_parse_state *state)
         shape->path = 0;
         shape->path_length = 0;
         shape->text = 0;
-        shape->font_size = state->font_size;
+        /* Scale font size by CTM so it grows/shrinks with the SVG viewport */
+        shape->font_size = state->font_size * (state->ctm.a + state->ctm.d) / 2.0f;
         shape->text_anchor = state->text_anchor;
         shape->font_weight_bold = state->font_weight_bold;
 
@@ -1467,6 +1478,21 @@ svgtiny_code svgtiny_parse(struct svgtiny_diagram *diagram, const char *buffer, 
 
     UNUSED(url);
 
+    /* Clear any shapes from a previous parse so we don't accumulate
+     * stale data when svg_reformat re-parses at a new viewport size. */
+    if (diagram->shape_count > 0) {
+        for (unsigned int i = 0; i < diagram->shape_count; i++) {
+            free(diagram->shape[i].path);
+            free(diagram->shape[i].text);
+            free(diagram->shape[i].stroke_dasharray);
+            free(diagram->shape[i].fill_grad_stops);
+            free(diagram->shape[i].stroke_grad_stops);
+        }
+        free(diagram->shape);
+        diagram->shape = NULL;
+        diagram->shape_count = 0;
+    }
+
     code = svg_document_from_buffer((uint8_t *)buffer, size, &document);
     if (code == svgtiny_OK) {
         code = get_svg_element(document, &svg);
@@ -1498,9 +1524,11 @@ svgtiny_code svgtiny_parse(struct svgtiny_diagram *diagram, const char *buffer, 
  * \param size      Size of source data
  * \param width     Pointer to store extracted width
  * \param height    Pointer to store extracted height
+ * \param source    Pointer to store where dimensions came from (may be NULL)
  * \return svgtiny_OK on success, error code on failure
  */
-svgtiny_code svgtiny_parse_dimensions(const char *buffer, size_t size, int *width, int *height)
+svgtiny_code
+svgtiny_parse_dimensions(const char *buffer, size_t size, int *width, int *height, svgtiny_dimension_source *source)
 {
     dom_document *document;
     dom_element *svg;
@@ -1509,6 +1537,9 @@ svgtiny_code svgtiny_parse_dimensions(const char *buffer, size_t size, int *widt
     dom_exception exc;
     svgtiny_code code;
     float w = 0, h = 0;
+    bool has_explicit_width = false;
+    bool has_explicit_height = false;
+    bool has_viewbox = false;
 
     assert(buffer);
     assert(width);
@@ -1516,6 +1547,8 @@ svgtiny_code svgtiny_parse_dimensions(const char *buffer, size_t size, int *widt
 
     *width = 0;
     *height = 0;
+    if (source)
+        *source = svgtiny_DIMS_DEFAULT;
 
     code = svg_document_from_buffer((uint8_t *)buffer, size, &document);
     if (code != svgtiny_OK) {
@@ -1544,6 +1577,8 @@ svgtiny_code svgtiny_parse_dimensions(const char *buffer, size_t size, int *widt
         /* Skip percentage values - they don't give intrinsic dimensions */
         if (strchr(data, '%') == NULL) {
             w = strtof(data, NULL);
+            if (w > 0)
+                has_explicit_width = true;
         }
         dom_string_unref(attr);
     }
@@ -1555,6 +1590,8 @@ svgtiny_code svgtiny_parse_dimensions(const char *buffer, size_t size, int *widt
         /* Skip percentage values */
         if (strchr(data, '%') == NULL) {
             h = strtof(data, NULL);
+            if (h > 0)
+                has_explicit_height = true;
         }
         dom_string_unref(attr);
     }
@@ -1585,6 +1622,7 @@ svgtiny_code svgtiny_parse_dimensions(const char *buffer, size_t size, int *widt
             }
 
             if (i == 4) {
+                has_viewbox = true;
                 if (w <= 0)
                     w = vb[2];
                 if (h <= 0)
@@ -1612,6 +1650,17 @@ svgtiny_code svgtiny_parse_dimensions(const char *buffer, size_t size, int *widt
 
     *width = (int)ceilf(w);
     *height = (int)ceilf(h);
+
+    /* Report dimension source */
+    if (source) {
+        if (has_explicit_width && has_explicit_height) {
+            *source = svgtiny_DIMS_EXPLICIT;
+        } else if (has_viewbox) {
+            *source = svgtiny_DIMS_VIEWBOX;
+        } else {
+            *source = svgtiny_DIMS_DEFAULT;
+        }
+    }
 
     dom_node_unref(svg);
     dom_node_unref(document);

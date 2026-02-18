@@ -13,7 +13,7 @@ description: build instructions
 
 1. Configure with CMake (from the build directory):
    ```bash
-   cmake -DCMAKE_BUILD_TYPE=Debug -GNinja -DNEOSURF_ENABLE_PERF_TRACE=OFF -DNEOSURF_ENABLE_TESTS=ON ..
+   cmake -DCMAKE_BUILD_TYPE=Debug -GNinja -DWISP_ENABLE_PERF_TRACE=OFF -DWISP_ENABLE_TESTS=ON ..
    ```
    > **Note**: Use `-DNEOSURF_ENABLE_PERF_TRACE=ON` when measuring performance.
 
@@ -37,7 +37,7 @@ These instructions are for building on **Windows** using MSYS2/MinGW.
 
 2. Configure with CMake:
    ```powershell
-   cmake -S . -B build-ninja -G Ninja -DNEOSURF_WERROR=OFF -DPKG_CONFIG_EXECUTABLE=C:/msys64/mingw64/bin/pkgconf.exe -DCMAKE_C_COMPILER=gcc
+   cmake -S . -B build-ninja -G Ninja -DWISP_WERROR=OFF -DPKG_CONFIG_EXECUTABLE=C:/msys64/mingw64/bin/pkgconf.exe -DCMAKE_C_COMPILER=gcc
    ```
 
 3. Build with Ninja:

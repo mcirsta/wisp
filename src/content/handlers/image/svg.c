@@ -487,6 +487,9 @@ typedef struct svg_content {
     struct svgtiny_diagram *diagram;
 
     bool parsed; /**< True if SVG has been parsed at least once */
+    bool has_intrinsic_dimensions; /**< True if SVG has explicit width/height attrs */
+    int ratio_width; /**< viewBox/intrinsic width for aspect ratio */
+    int ratio_height; /**< viewBox/intrinsic height for aspect ratio */
 } svg_content;
 
 
@@ -557,12 +560,43 @@ static bool svg_convert(struct content *c)
      * with width=100% height=auto before reformat is called. */
     source_data = content__get_source_data(c, &source_size);
     if (source_data != NULL && source_size > 0) {
-        svgtiny_parse_dimensions((const char *)source_data, source_size, &intrinsic_width, &intrinsic_height);
+        svgtiny_dimension_source dim_source = svgtiny_DIMS_DEFAULT;
+        svgtiny_parse_dimensions(
+            (const char *)source_data, source_size, &intrinsic_width, &intrinsic_height, &dim_source);
 
-        /* Set content dimensions from the extracted intrinsic size */
+        /* Always store dimensions for the rendering pipeline.
+         * c->width/c->height are needed by svg_reformat and
+         * svg_redraw_internal for correct CTM scaling. */
         c->width = intrinsic_width;
         c->height = intrinsic_height;
+
+        /* Store whether SVG has real intrinsic dimensions or only a
+         * viewBox-derived ratio.  Only svgtiny_DIMS_VIEWBOX triggers
+         * the ratio-only path; explicit and default (no viewBox
+         * either) both keep intrinsic dimensions as-is.
+         *
+         * AG: Forcing has_intrinsic_dimensions = true even for VIEWBOX
+         * because layout seems to ignore the SVG otherwise when width/height are auto.
+         * The viewBox dimensions (200x100) serve as a valid intrinsic size.
+         */
+        if (dim_source == svgtiny_DIMS_VIEWBOX) {
+            /* viewBox-only: treat as intrinsic for layout default size */
+            svg->has_intrinsic_dimensions = true;
+            svg->ratio_width = intrinsic_width;
+            svg->ratio_height = intrinsic_height;
+        } else {
+            /* Explicit width/height or default (300×150) */
+            svg->has_intrinsic_dimensions = true;
+            svg->ratio_width = 0;
+            svg->ratio_height = 0;
+        }
     }
+
+    NSLOG(wisp, WARNING,
+        "SVGDIAG svg_convert: url=%s c->width=%d c->height=%d "
+        "has_intrinsic=%d ratio=%dx%d",
+        nsurl_access(content_get_url(c)), c->width, c->height, svg->has_intrinsic_dimensions, svg->ratio_width,
+        svg->ratio_height);
 
     content_set_ready(c);
     content_set_done(c);
@@ -587,9 +621,11 @@ static void svg_reformat(struct content *c, int width, int height)
     /* Skip reformat if dimensions are unknown (0x0).
      * We can't do a meaningful parse without knowing the target viewport.
      * Intrinsic dimensions are already available from svg_convert via
-     * svgtiny_parse_dimensions(), so we just wait for a call with real dimensions. */
+     * svgtiny_parse_dimensions(), so we just wait for layout to call
+     * again with real dimensions.  Fix 1 (shape clearing in svgtiny_parse)
+     * ensures any re-parse starts clean. */
     if (width <= 0 || height <= 0) {
-        NSLOG(wisp, DEBUG, "SVG reformat skipped: dimensions unknown (0x0)");
+        NSLOG(wisp, DEBUG, "SVG reformat skipped: dimensions unknown (%dx%d)", width, height);
         return;
     }
 
@@ -599,8 +635,18 @@ static void svg_reformat(struct content *c, int width, int height)
     NSLOG(wisp, DEBUG, "SVG parsing with viewport: %dx%d", width, height);
     source_data = content__get_source_data(c, &source_size);
 
-    svgtiny_parse(
+    /* For viewBox-only SVGs (no explicit width/height), parse at the
+     * viewBox dimensions rather than the display viewport.  svgtiny_parse
+     * resolves percentage values relative to the viewport passed in,
+     * and the viewBox CTM also scales them.  Using viewBox dimensions
+     * gives a CTM of identity (viewBox/viewport = 1:1), avoiding
+     * double-scaling.  svg_redraw_internal handles display scaling. */
+    svgtiny_code code = svgtiny_parse(
         svg->diagram, (const char *)source_data, source_size, nsurl_access(content_get_url(c)), width, height);
+
+    NSLOG(wisp, DEBUG, "svg_reformat: url=%s w=%d h=%d code=%d diag_w=%u diag_h=%u shapes=%u",
+        nsurl_access(content_get_url(c)), width, height, code, svg->diagram ? svg->diagram->width : 0,
+        svg->diagram ? svg->diagram->height : 0, svg->diagram ? svg->diagram->shape_count : 0);
 
     c->width = svg->diagram->width;
     c->height = svg->diagram->height;
@@ -997,6 +1043,11 @@ static bool svg_redraw_internal(svg_content *svg, int x, int y, int width, int h
             }
 
         } else if (diagram->shape[i].text) {
+            NSLOG(wisp, WARNING,
+                "SVGDIAG text shape[%u]: raw text_x=%.2f text_y=%.2f "
+                "font_size=%.2f fill=0x%x text='%s' anchor=%d sx=%.3f sy=%.3f",
+                i, diagram->shape[i].text_x, diagram->shape[i].text_y, diagram->shape[i].font_size,
+                diagram->shape[i].fill, diagram->shape[i].text, diagram->shape[i].text_anchor, sx, sy);
             /* Ensure combo is flushed safely before plotting text
              */
             if (combo_active && combo_len > 0) {
@@ -1010,6 +1061,9 @@ static bool svg_redraw_internal(svg_content *svg, int x, int y, int width, int h
             }
             px = (int)(diagram->shape[i].text_x * sx) + transform[4];
             py = (int)(diagram->shape[i].text_y * sy) + transform[5];
+
+            NSLOG(wisp, WARNING, "SVGDIAG text computed: px=%d py=%d (transform[4]=%.1f [5]=%.1f)", px, py,
+                transform[4], transform[5]);
 
             fstyle.background = 0xffffff;
             /* Use SVG fill color for text, default to black if
@@ -1067,6 +1121,9 @@ static bool svg_redraw_internal(svg_content *svg, int x, int y, int width, int h
                 ok = false;
                 NSLOG(wisp, ERROR, "SVG render failed: url=%s element=text index=%u pos=%d,%d text='%s'", url_str, i,
                     px, py, diagram->shape[i].text);
+            } else {
+                NSLOG(wisp, DEBUG, "SVG render text: url=%s index=%u pos=%d,%d fsize=%d text='%s' anchor=%d", url_str,
+                    i, px, py, fstyle.size, diagram->shape[i].text, diagram->shape[i].text_anchor);
             }
         }
     }
@@ -1148,10 +1205,20 @@ static bool svg_redraw(
     struct content *c, struct content_redraw_data *data, const struct rect *clip, const struct redraw_context *ctx)
 {
     svg_content *svg = (svg_content *)c;
+    nsurl *u = content_get_url(c);
+    const char *us = u ? nsurl_access(u) : "(inline)";
+
+    NSLOG(wisp, WARNING,
+        "SVGDIAG svg_redraw ENTRY: url=%s data={x=%d y=%d w=%d h=%d} "
+        "c->width=%d c->height=%d diagram=%p shapes=%u parsed=%d",
+        us, data->x, data->y, data->width, data->height, c->width, c->height, svg->diagram,
+        svg->diagram ? svg->diagram->shape_count : 0, svg->parsed);
 
     if ((data->width <= 0) && (data->height <= 0)) {
         /* No point trying to plot SVG if it does not occupy a
          * valid area */
+        NSLOG(wisp, WARNING, "SVGDIAG svg_redraw SKIP: width=%d height=%d (both <= 0), url=%s", data->width,
+            data->height, us);
         return true;
     }
 
@@ -1216,6 +1283,24 @@ static content_type svg_content_type(void)
     return CONTENT_IMAGE;
 }
 
+/**
+ * Get the intrinsic aspect ratio for this SVG content.
+ *
+ * Returns the ratio from the viewBox (or explicit width/height) so that
+ * layout can compute proportional dimensions for SVGs that have no
+ * intrinsic dimensions (viewBox-only).
+ */
+static bool svg_get_intrinsic_ratio(struct content *c, int *ratio_w, int *ratio_h)
+{
+    svg_content *svg = (svg_content *)c;
+    if (svg->ratio_width > 0 && svg->ratio_height > 0) {
+        *ratio_w = svg->ratio_width;
+        *ratio_h = svg->ratio_height;
+        return true;
+    }
+    return false;
+}
+
 static const content_handler svg_content_handler = {.create = svg_create,
     .data_complete = svg_convert,
     .reformat = svg_reformat,
@@ -1223,6 +1308,7 @@ static const content_handler svg_content_handler = {.create = svg_create,
     .redraw = svg_redraw,
     .clone = svg_clone,
     .type = svg_content_type,
+    .get_intrinsic_ratio = svg_get_intrinsic_ratio,
     .no_share = true};
 
 static const char *svg_types[] = {"image/svg", "image/svg+xml"};

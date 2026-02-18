@@ -1022,11 +1022,11 @@ static inline svgtiny_code dispatch_op(const char *value, size_t value_len, stru
         break;
 
     case SVGTIOP_LENGTH:
-        res = svgtiny_parse_length(value, value_len, (int)*((float *)styleop->param), styleop->value);
+        res = svgtiny_parse_length(value, value_len, (int)*((float *)styleop->param), state->font_size, styleop->value);
         break;
 
     case SVGTIOP_INTLENGTH:
-        res = svgtiny_parse_length(value, value_len, (int)*((float *)styleop->param), &parse_len);
+        res = svgtiny_parse_length(value, value_len, (int)*((float *)styleop->param), state->font_size, &parse_len);
         *((int *)styleop->value) = parse_len;
         break;
 
@@ -1245,13 +1245,12 @@ svgtiny_code svgtiny_parse_poly_points(const char *text, size_t textlen, float *
 /**
  * Parse a length as a number of pixels.
  */
-svgtiny_code svgtiny_parse_length(const char *text, size_t textlen, int viewport_size, float *length)
+svgtiny_code svgtiny_parse_length(const char *text, size_t textlen, int viewport_size, float font_size, float *length)
 {
     svgtiny_code err;
     float number;
     const char *unit;
     int unitlen;
-    float font_size = 20; /*css_len2px(&state.style.font_size.value.length, 0);*/
 
     unit = text + textlen;
     err = svgtiny_parse_number(text, &unit, &number);
@@ -1493,8 +1492,81 @@ svgtiny_code svgtiny_parse_color(const char *text, size_t textlen, svgtiny_colou
  *
  * <min-x>,? <min-y>,? <width>,? <height>
  */
-svgtiny_code svgtiny_parse_viewbox(const char *text, size_t textlen, float viewport_width, float viewport_height,
-    struct svgtiny_transformation_matrix *tm)
+/**
+ * parse preserveAspectRatio attribute
+ */
+svgtiny_code svgtiny_parse_preserveAspectRatio(const char *text, size_t textlen, struct svgtiny_parse_state *state)
+{
+    const char *cursor = text;
+    const char *textend = text + textlen;
+
+    /* defaults per spec */
+    state->aspect_ratio_align = svgtiny_ASPECT_RATIO_XMID_YMID;
+    state->aspect_ratio_mos = svgtiny_ASPECT_RATIO_MEET;
+
+    advance_whitespace(&cursor, textend);
+
+    if (cursor >= textend)
+        return svgtiny_OK;
+
+    if (cursor + 4 <= textend && strncmp(cursor, "none", 4) == 0) {
+        state->aspect_ratio_align = svgtiny_ASPECT_RATIO_NONE;
+        cursor += 4;
+    } else if (cursor + 4 <= textend && strncmp(cursor, "xMin", 4) == 0) {
+        cursor += 4;
+        if (cursor + 4 <= textend) {
+            if (strncmp(cursor, "YMin", 4) == 0)
+                state->aspect_ratio_align = svgtiny_ASPECT_RATIO_XMIN_YMIN;
+            else if (strncmp(cursor, "YMid", 4) == 0)
+                state->aspect_ratio_align = svgtiny_ASPECT_RATIO_XMIN_YMID;
+            else if (strncmp(cursor, "YMax", 4) == 0)
+                state->aspect_ratio_align = svgtiny_ASPECT_RATIO_XMIN_YMAX;
+            cursor += 4;
+        }
+    } else if (cursor + 4 <= textend && strncmp(cursor, "xMid", 4) == 0) {
+        cursor += 4;
+        if (cursor + 4 <= textend) {
+            if (strncmp(cursor, "YMin", 4) == 0)
+                state->aspect_ratio_align = svgtiny_ASPECT_RATIO_XMID_YMIN;
+            else if (strncmp(cursor, "YMid", 4) == 0)
+                state->aspect_ratio_align = svgtiny_ASPECT_RATIO_XMID_YMID;
+            else if (strncmp(cursor, "YMax", 4) == 0)
+                state->aspect_ratio_align = svgtiny_ASPECT_RATIO_XMID_YMAX;
+            cursor += 4;
+        }
+    } else if (cursor + 4 <= textend && strncmp(cursor, "xMax", 4) == 0) {
+        cursor += 4;
+        if (cursor + 4 <= textend) {
+            if (strncmp(cursor, "YMin", 4) == 0)
+                state->aspect_ratio_align = svgtiny_ASPECT_RATIO_XMAX_YMIN;
+            else if (strncmp(cursor, "YMid", 4) == 0)
+                state->aspect_ratio_align = svgtiny_ASPECT_RATIO_XMAX_YMID;
+            else if (strncmp(cursor, "YMax", 4) == 0)
+                state->aspect_ratio_align = svgtiny_ASPECT_RATIO_XMAX_YMAX;
+            cursor += 4;
+        }
+    }
+
+    advance_whitespace(&cursor, textend);
+
+    if (cursor + 4 <= textend && strncmp(cursor, "meet", 4) == 0) {
+        state->aspect_ratio_mos = svgtiny_ASPECT_RATIO_MEET;
+    } else if (cursor + 5 <= textend && strncmp(cursor, "slice", 5) == 0) {
+        state->aspect_ratio_mos = svgtiny_ASPECT_RATIO_SLICE;
+    }
+
+    return svgtiny_OK;
+}
+
+/**
+ * parse a viewbox attribute
+ *
+ * https://www.w3.org/TR/SVG11/coords.html#ViewBoxAttribute
+ * https://www.w3.org/TR/SVG2/coords.html#ViewBoxAttribute
+ *
+ * <min-x>,? <min-y>,? <width>,? <height>
+ */
+svgtiny_code svgtiny_parse_viewbox(const char *text, size_t textlen, struct svgtiny_parse_state *state)
 {
     const char *cursor = text; /* text cursor */
     const char *textend = text + textlen;
@@ -1540,45 +1612,100 @@ svgtiny_code svgtiny_parse_viewbox(const char *text, size_t textlen, float viewp
         return svgtiny_SVG_ERROR;
     }
 
-    float sx = viewport_width / vb_w;
-    float sy = viewport_height / vb_h;
+    float sx = state->viewport_width / vb_w;
+    float sy = state->viewport_height / vb_h;
 
-    /* preserveAspectRatio="xMidYMid meet" (the SVG default):
-     * - Use uniform scaling: scale = min(sx, sy)
-     * - Center the viewBox in the viewport
+    float scale_x, scale_y;
+    float tx = 0, ty = 0;
+
+    if (state->aspect_ratio_align == svgtiny_ASPECT_RATIO_NONE) {
+        scale_x = sx;
+        scale_y = sy;
+        tx = -vb_x * sx;
+        ty = -vb_y * sy;
+    } else {
+        float scale;
+        if (state->aspect_ratio_mos == svgtiny_ASPECT_RATIO_SLICE)
+            scale = (sx > sy) ? sx : sy;
+        else
+            scale = (sx < sy) ? sx : sy; /* MEET (default) */
+
+        scale_x = scale;
+        scale_y = scale;
+
+        /* Calculate alignment offsets */
+        /* X alignment */
+        switch (state->aspect_ratio_align) {
+        case svgtiny_ASPECT_RATIO_XMIN_YMIN:
+        case svgtiny_ASPECT_RATIO_XMIN_YMID:
+        case svgtiny_ASPECT_RATIO_XMIN_YMAX:
+            tx = -vb_x * scale;
+            break;
+        case svgtiny_ASPECT_RATIO_XMID_YMIN:
+        case svgtiny_ASPECT_RATIO_XMID_YMID:
+        case svgtiny_ASPECT_RATIO_XMID_YMAX:
+            tx = (state->viewport_width - vb_w * scale) * 0.5f - vb_x * scale;
+            break;
+        case svgtiny_ASPECT_RATIO_XMAX_YMIN:
+        case svgtiny_ASPECT_RATIO_XMAX_YMID:
+        case svgtiny_ASPECT_RATIO_XMAX_YMAX:
+            tx = (state->viewport_width - vb_w * scale) - vb_x * scale;
+            break;
+        default:
+            tx = (state->viewport_width - vb_w * scale) * 0.5f - vb_x * scale;
+            break;
+        }
+
+        /* Y alignment */
+        switch (state->aspect_ratio_align) {
+        case svgtiny_ASPECT_RATIO_XMIN_YMIN:
+        case svgtiny_ASPECT_RATIO_XMID_YMIN:
+        case svgtiny_ASPECT_RATIO_XMAX_YMIN:
+            ty = -vb_y * scale;
+            break;
+        case svgtiny_ASPECT_RATIO_XMIN_YMID:
+        case svgtiny_ASPECT_RATIO_XMID_YMID:
+        case svgtiny_ASPECT_RATIO_XMAX_YMID:
+            ty = (state->viewport_height - vb_h * scale) * 0.5f - vb_y * scale;
+            break;
+        case svgtiny_ASPECT_RATIO_XMIN_YMAX:
+        case svgtiny_ASPECT_RATIO_XMID_YMAX:
+        case svgtiny_ASPECT_RATIO_XMAX_YMAX:
+            ty = (state->viewport_height - vb_h * scale) - vb_y * scale;
+            break;
+        default:
+            ty = (state->viewport_height - vb_h * scale) * 0.5f - vb_y * scale;
+            break;
+        }
+    }
+
+    /* Initialize CTM with calculated transform
      *
-     * The transform is: translate(tx, ty) · scale(s, s) · translate(-vb_x, -vb_y)
-     * where tx = (viewport_width - vb_w * scale) / 2
-     *       ty = (viewport_height - vb_h * scale) / 2
-     */
-    float scale = (sx < sy) ? sx : sy;
-    float tx = (viewport_width - vb_w * scale) * 0.5f;
-    float ty = (viewport_height - vb_h * scale) * 0.5f;
-
-    /* Combined local transform: translate(tx - vb_x*scale, ty - vb_y*scale) · scale(s, s)
-     * Compose with existing CTM: CTM' = CTM · local */
-    float local_e = tx - vb_x * scale;
-    float local_f = ty - vb_y * scale;
-
-    /* New CTM = old CTM × | scale  0       local_e |
-     *                      | 0      scale   local_f |
-     *                      | 0      0       1       |
+     * Transform is: translate(tx, ty) · scale(sx, sy)
      *
-     * Result:
-     *   a' = a * scale
-     *   b' = b * scale
-     *   c' = c * scale
-     *   d' = d * scale
-     *   e' = a * local_e + c * local_f + e
-     *   f' = b * local_e + d * local_f + f
+     * Matrix multiplication:
+     * | 1 0 tx |   | sx 0 0 |   | sx 0 tx |
+     * | 0 1 ty | x | 0 sy 0 | = | 0 sy ty |
+     * | 0 0 1  |   | 0  0 1 |   | 0  0 1  |
+     *
+     * Compose with existing CTM: CTM' = CTM · local
      */
-    float a = tm->a, b = tm->b, c = tm->c, d = tm->d;
-    tm->e = a * local_e + c * local_f + tm->e;
-    tm->f = b * local_e + d * local_f + tm->f;
-    tm->a = a * scale;
-    tm->b = b * scale;
-    tm->c = c * scale;
-    tm->d = d * scale;
+    float a = state->ctm.a, b = state->ctm.b, c = state->ctm.c, d = state->ctm.d;
+    float e = state->ctm.e, f = state->ctm.f;
+
+    state->ctm.a = a * scale_x;
+    state->ctm.b = b * scale_x;
+    state->ctm.c = c * scale_y;
+    state->ctm.d = d * scale_y;
+    state->ctm.e = a * tx + c * ty + e;
+    state->ctm.f = b * tx + d * ty + f;
+
+    /* Per SVG spec §7.7, the viewBox establishes a new viewport.
+     * Update viewport dimensions to viewBox dimensions so that
+     * percentage values (e.g. x="50%") resolve against the viewBox
+     * coordinate system, not the outer display viewport. */
+    state->viewport_width = vb_w;
+    state->viewport_height = vb_h;
 
     return svgtiny_OK;
 }

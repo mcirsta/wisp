@@ -549,17 +549,104 @@ static nserror svg_serialize_attributes(
 
             err = svg_buffer_append(buf, len, cap, " ", 1);
             if (err == NSERROR_OK) {
-                /* Handle special case for viewBox attribute - must keep camelCase */
+                /* SVG attributes require specific camelCase per the HTML spec
+                 * §13.2.5.1 (adjust SVG attributes).  The DOM stores all
+                 * attribute names as lowercase, so we must restore correct
+                 * casing for the 62 SVG-specific camelCase attributes.
+                 *
+                 * Table sourced from the same list used by libhubbub in
+                 * treebuilder/in_foreign_content.c:svg_attributes[].
+                 * Sorted by lowercase key for binary search. */
+                static const struct {
+                    const char *lower; /* all-lowercase key */
+                    const char *proper; /* correctly-cased version */
+                } svg_attr_case[] = {
+                    {"attributename", "attributeName"},
+                    {"attributetype", "attributeType"},
+                    {"basefrequency", "baseFrequency"},
+                    {"baseprofile", "baseProfile"},
+                    {"calcmode", "calcMode"},
+                    {"clippathunits", "clipPathUnits"},
+                    {"contentscripttype", "contentScriptType"},
+                    {"contentstyletype", "contentStyleType"},
+                    {"diffuseconstant", "diffuseConstant"},
+                    {"edgemode", "edgeMode"},
+                    {"externalresourcesrequired", "externalResourcesRequired"},
+                    {"filterres", "filterRes"},
+                    {"filterunits", "filterUnits"},
+                    {"glyphref", "glyphRef"},
+                    {"gradienttransform", "gradientTransform"},
+                    {"gradientunits", "gradientUnits"},
+                    {"kernelmatrix", "kernelMatrix"},
+                    {"kernelunitlength", "kernelUnitLength"},
+                    {"keypoints", "keyPoints"},
+                    {"keysplines", "keySplines"},
+                    {"keytimes", "keyTimes"},
+                    {"lengthadjust", "lengthAdjust"},
+                    {"limitingconeangle", "limitingConeAngle"},
+                    {"markerheight", "markerHeight"},
+                    {"markerunits", "markerUnits"},
+                    {"markerwidth", "markerWidth"},
+                    {"maskcontentunits", "maskContentUnits"},
+                    {"maskunits", "maskUnits"},
+                    {"numoctaves", "numOctaves"},
+                    {"pathlength", "pathLength"},
+                    {"patterncontentunits", "patternContentUnits"},
+                    {"patterntransform", "patternTransform"},
+                    {"patternunits", "patternUnits"},
+                    {"pointsatx", "pointsAtX"},
+                    {"pointsaty", "pointsAtY"},
+                    {"pointsatz", "pointsAtZ"},
+                    {"preservealpha", "preserveAlpha"},
+                    {"preserveaspectratio", "preserveAspectRatio"},
+                    {"primitiveunits", "primitiveUnits"},
+                    {"refx", "refX"},
+                    {"refy", "refY"},
+                    {"repeatcount", "repeatCount"},
+                    {"repeatdur", "repeatDur"},
+                    {"requiredextensions", "requiredExtensions"},
+                    {"requiredfeatures", "requiredFeatures"},
+                    {"specularconstant", "specularConstant"},
+                    {"specularexponent", "specularExponent"},
+                    {"spreadmethod", "spreadMethod"},
+                    {"startoffset", "startOffset"},
+                    {"stddeviation", "stdDeviation"},
+                    {"stitchtiles", "stitchTiles"},
+                    {"surfacescale", "surfaceScale"},
+                    {"systemlanguage", "systemLanguage"},
+                    {"tablevalues", "tableValues"},
+                    {"targetx", "targetX"},
+                    {"targety", "targetY"},
+                    {"textlength", "textLength"},
+                    {"viewbox", "viewBox"},
+                    {"viewtarget", "viewTarget"},
+                    {"xchannelselector", "xChannelSelector"},
+                    {"ychannelselector", "yChannelSelector"},
+                    {"zoomandpan", "zoomAndPan"},
+                };
+                static const size_t svg_attr_case_count = sizeof(svg_attr_case) / sizeof(svg_attr_case[0]);
+
                 const char *name_data = dom_string_data(attr_name);
                 size_t name_len = dom_string_length(attr_name);
-                NSLOG(wisp, DEBUG, "SVG serialize: attribute name='%s' len=%zu", name_data, name_len);
-                if (name_len == 7 && strncasecmp(name_data, "viewbox", 7) == 0) {
-                    /* Must be 'viewBox' with capital B */
-                    err = svg_buffer_append(buf, len, cap, "viewBox", 7);
-                } else {
-                    /* Output attribute as-is from DOM */
-                    err = svg_buffer_append(buf, len, cap, name_data, name_len);
+                const char *output_name = name_data;
+
+                /* Binary search for case-adjusted name */
+                size_t lo = 0, hi = svg_attr_case_count;
+                while (lo < hi) {
+                    size_t mid = (lo + hi) / 2;
+                    int cmp = strcmp(name_data, svg_attr_case[mid].lower);
+                    if (cmp < 0)
+                        hi = mid;
+                    else if (cmp > 0)
+                        lo = mid + 1;
+                    else {
+                        output_name = svg_attr_case[mid].proper;
+                        name_len = strlen(output_name);
+                        break;
+                    }
                 }
+
+                err = svg_buffer_append(buf, len, cap, output_name, name_len);
             }
             if (err == NSERROR_OK && attr_value != NULL) {
                 err = svg_buffer_append(buf, len, cap, "=\"", 2);

@@ -285,16 +285,16 @@ static void compute_gradient_vector(float *p, unsigned int n, struct svgtiny_par
 
     if (!grad->gradient_user_space_on_use) {
         svgtiny_parse_length(dom_string_data(grad->gradient_x1), dom_string_byte_length(grad->gradient_x1),
-            object_x1 - object_x0, &vector->x0);
+            object_x1 - object_x0, state->font_size, &vector->x0);
 
         svgtiny_parse_length(dom_string_data(grad->gradient_y1), dom_string_byte_length(grad->gradient_y1),
-            object_y1 - object_y0, &vector->y0);
+            object_y1 - object_y0, state->font_size, &vector->y0);
 
         svgtiny_parse_length(dom_string_data(grad->gradient_x2), dom_string_byte_length(grad->gradient_x2),
-            object_x1 - object_x0, &vector->x1);
+            object_x1 - object_x0, state->font_size, &vector->x1);
 
         svgtiny_parse_length(dom_string_data(grad->gradient_y2), dom_string_byte_length(grad->gradient_y2),
-            object_y1 - object_y0, &vector->y1);
+            object_y1 - object_y0, state->font_size, &vector->y1);
 
         vector->x0 += object_x0;
         vector->y0 += object_y0;
@@ -302,13 +302,13 @@ static void compute_gradient_vector(float *p, unsigned int n, struct svgtiny_par
         vector->y1 += object_y0;
     } else {
         svgtiny_parse_length(dom_string_data(grad->gradient_x1), dom_string_byte_length(grad->gradient_x1),
-            state->viewport_width, &vector->x0);
+            state->viewport_width, state->font_size, &vector->x0);
         svgtiny_parse_length(dom_string_data(grad->gradient_y1), dom_string_byte_length(grad->gradient_y1),
-            state->viewport_height, &vector->y0);
+            state->viewport_height, state->font_size, &vector->y0);
         svgtiny_parse_length(dom_string_data(grad->gradient_x2), dom_string_byte_length(grad->gradient_x2),
-            state->viewport_width, &vector->x1);
+            state->viewport_width, state->font_size, &vector->x1);
         svgtiny_parse_length(dom_string_data(grad->gradient_y2), dom_string_byte_length(grad->gradient_y2),
-            state->viewport_height, &vector->y1);
+            state->viewport_height, state->font_size, &vector->y1);
     }
 
 #ifdef GRADIENT_DEBUG_VECTOR

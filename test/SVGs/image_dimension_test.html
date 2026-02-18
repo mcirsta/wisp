@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Image Dimension Test</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            padding: 20px;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            color: #333;
+        }
+
+        h2 {
+            color: #666;
+            margin-top: 30px;
+        }
+
+        .test-section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ccc;
+        }
+
+        .label {
+            font-weight: bold;
+            margin-bottom: 10px;
+            display: block;
+        }
+
+        /* Test 1: CSS sets explicit pixel dimensions */
+        .css-dimensions {
+            width: 150px;
+            height: 100px;
+        }
+
+        /* Test 2: CSS sets percentage dimensions (should use intrinsic) */
+        .percent-dimensions {
+            width: 50%;
+            height: 50px;
+        }
+
+        /* Test 3: CSS sets calc dimensions */
+        .calc-dimensions {
+            width: calc(100px + 50px);
+            height: calc(50px + 25px);
+        }
+
+        /* Test 4: Inline SVG with explicit px dimensions */
+        .svg-explicit {
+            width: 120px;
+            height: 80px;
+        }
+
+        /* Test 5: Inline SVG with percentage dimensions */
+        .svg-percent {
+            width: 30%;
+            height: 60px;
+        }
+
+        /* Test 6: Inline SVG without dimensions (uses intrinsic) */
+        .svg-intrinsic {
+            /* no width/height specified */
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Image Dimension Test</h1>
+    <p>This page tests REPLACE_DIM flag behavior for images and inline SVGs.</p>
+
+    <h2>Test 1: Image with CSS explicit pixel dimensions</h2>
+    <div class="test-section">
+        <span class="label">Expected: Box uses CSS dimensions (150x100)</span>
+        <img src="wisp-logo.png" alt="Test Image" class="css-dimensions">
+    </div>
+
+    <h2>Test 2: Image with CSS percentage dimensions</h2>
+    <div class="test-section">
+        <span class="label">Expected: Box uses intrinsic dimensions (REPLACE_DIM not set)</span>
+        <img src="wisp-logo.png" alt="Test Image" class="percent-dimensions">
+    </div>
+
+    <h2>Test 3: Image with CSS calc dimensions</h2>
+    <div class="test-section">
+        <span class="label">Expected: Box uses calc dimensions (150x75)</span>
+        <img src="wisp-logo.png" alt="Test Image" class="calc-dimensions">
+    </div>
+
+    <h2>Test 4: Inline SVG with explicit pixel dimensions</h2>
+    <div class="test-section">
+        <span class="label">Expected: SVG renders at 120x80</span>
+        <svg class="svg-explicit" xmlns="http://www.w3.org/2000/svg">
+            <rect width="100%" height="100%" fill="#4a90d9" />
+            <text x="50%" y="50%" text-anchor="middle" dy=".3em" fill="white">SVG 120x80</text>
+        </svg>
+    </div>
+
+    <h2>Test 5: Inline SVG with percentage dimensions</h2>
+    <div class="test-section">
+        <span class="label">Expected: SVG uses intrinsic dimensions (REPLACE_DIM not set)</span>
+        <svg class="svg-percent" xmlns="http://www.w3.org/2000/svg">
+            <rect width="100%" height="100%" fill="#d94a4a" />
+            <text x="50%" y="50%" text-anchor="middle" dy=".3em" fill="white">SVG %</text>
+        </svg>
+    </div>
+
+    <h2>Test 6: Inline SVG without dimensions (intrinsic)</h2>
+    <div class="test-section">
+        <span class="label">Expected: SVG uses its viewBox/dimensions (REPLACE_DIM not set)</span>
+        <svg class="svg-intrinsic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100">
+            <rect width="100%" height="100%" fill="#4ad94a" />
+            <text x="50%" y="50%" text-anchor="middle" dy=".3em" fill="white">SVG Intrinsic</text>
+        </svg>
+    </div>
+
+    <h2>Test 7: Inline SVG with calc dimensions</h2>
+    <div class="test-section">
+        <span class="label">Expected: SVG uses calc dimensions if supported</span>
+        <svg style="width: calc(100px + 50px); height: calc(50px + 30px);" xmlns="http://www.w3.org/2000/svg">
+            <rect width="100%" height="100%" fill="#d94a90" />
+            <text x="50%" y="50%" text-anchor="middle" dy=".3em" fill="white">SVG calc</text>
+        </svg>
+    </div>
+
+    <h2>Debug Info</h2>
+    <div class="test-section">
+        <p>To verify REPLACE_DIM behavior, check:</p>
+        <ul>
+            <li>Tests 1, 3, 4, 7 should have REPLACE_DIM set (CSS dimensions known)</li>
+            <li>Tests 2, 5, 6 should NOT have REPLACE_DIM set (intrinsic/percentage)</li>
+        </ul>
+    </div>
+</body>
+
+</html>
