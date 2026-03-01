@@ -14,6 +14,10 @@ from assets import assets
 from overrides import overrides
 
 
+# Module-level set of property names with computed = "auto"
+# (populated by build_style_from_toml)
+computed_auto_names = set()
+
 def build_style_from_toml(toml_path):
     """Read properties.toml and build the style property set.
 
@@ -22,7 +26,10 @@ def build_style_from_toml(toml_path):
 
     Only properties with a 'bits' field are included (those that appear
     in the computed style struct).
+
+    Side-effect: populates the module-level computed_auto_names set.
     """
+    global computed_auto_names
     try:
         import tomllib
     except ModuleNotFoundError:
@@ -31,15 +38,63 @@ def build_style_from_toml(toml_path):
     with open(toml_path, 'rb') as f:
         data = tomllib.load(f)
 
-    style = set()
+    VALID_COMPUTED = {'auto', 'manual', 'none'}
+
+    # First pass: validate computed field on all properties with bits
+    errors = []
     for name, props in data.items():
         if not isinstance(props, dict):
             continue
         if 'bits' not in props:
             continue
-        # Skip shorthand properties (no computed representation)
         if props.get('shorthand'):
             continue
+        computed = props.get('computed')
+        if computed is None:
+            errors.append(f"  {name}: missing 'computed' field")
+        elif computed not in VALID_COMPUTED:
+            errors.append(f"  {name}: invalid computed='{computed}' "
+                          f"(must be one of: {', '.join(sorted(VALID_COMPUTED))})")
+    if errors:
+        print("ERROR: properties.toml has invalid 'computed' fields:",
+              file=sys.stderr)
+        for e in errors:
+            print(e, file=sys.stderr)
+        sys.exit(1)
+
+    # Validate inherited field: every property with 'enum' must declare it
+    inherited_errors = []
+    for name, props in data.items():
+        if not isinstance(props, dict):
+            continue
+        if 'enum' not in props:
+            continue
+        if 'inherited' not in props:
+            inherited_errors.append(
+                f"  {name}: missing required 'inherited' field "
+                f"(must be true or false)")
+    if inherited_errors:
+        print("ERROR: properties.toml has properties with 'enum' but "
+              "missing 'inherited':", file=sys.stderr)
+        for e in inherited_errors:
+            print(e, file=sys.stderr)
+        sys.exit(1)
+
+    # Second pass: build style set and track auto names
+    style = set()
+    computed_auto_names = set()
+    for name, props in data.items():
+        if not isinstance(props, dict):
+            continue
+        if 'bits' not in props:
+            continue
+        if props.get('shorthand'):
+            continue
+
+        # Track computed field for public API generation
+        computed = props.get('computed')
+        if computed == 'auto':
+            computed_auto_names.add(name)
 
         bits = props['bits']
 
@@ -885,6 +940,38 @@ class CSSGroup:
 
         return t.to_string()
 
+    def make_computed_inc(self):
+        """Output auto-generated public API wrapper functions.
+
+        For each property with computed = "auto" in the TOML, generates:
+            uint8_t css_computed_XXX(const css_computed_style *style, ...)
+            {
+                return get_xxx(style, ...);
+            }
+        """
+        t = Text()
+        auto_props = [p for p in sorted(self.props, key=lambda x: x.name)
+                      if p.name in computed_auto_names]
+
+        for p in auto_props:
+            vals = p.get_param_values(pointer=True)
+            params = ', '.join(
+                ['const css_computed_style *style'] +
+                [' '.join(x) for x in vals])
+            args = ', '.join(
+                ['style'] +
+                [x[1].lstrip('*') for x in vals])
+
+            t.append()
+            t.append('uint8_t css_computed_{}({})'.format(p.name, params))
+            t.append('{')
+            t.indent(1)
+            t.append('return get_{}({});'.format(p.name, args))
+            t.indent(-1)
+            t.append('}')
+
+        return t.to_string()
+
     def make_value_declaration(self, for_commented):
         """Output declarations of values for this group's properties.
 
@@ -914,6 +1001,8 @@ class CSSGroup:
             return self.make_propget_h()
         elif filename == 'destroy.inc':
             return self.make_destroy_inc()
+        elif filename == 'computed.inc':
+            return self.make_computed_inc()
         else:
             raise ValueError()
 

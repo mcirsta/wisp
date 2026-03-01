@@ -69,3 +69,8 @@ assets['destroy.inc'] = {
     'header': COPYRIGHT,
     'footer': ''
 }
+
+assets['computed.inc'] = {
+    'header': (COPYRIGHT + INCLUDE_PROPGET),
+    'footer': ''
+}
