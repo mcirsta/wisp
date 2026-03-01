@@ -1,21 +1,16 @@
 add_subdirectory(src/parse/properties/gen_parser)
 option(WISP_VERBOSE_GEN "Enable verbose libcss code generation output" OFF)
 
+set(LIBCSS_CMAKE_HELPERS ${CMAKE_SOURCE_DIR}/contrib/libcss/build-aux/cmake_helpers.py)
+set(LIBCSS_PROPERTIES_TOML ${CMAKE_SOURCE_DIR}/contrib/libcss/properties.toml)
+
 # Check for TOML parsing support (required for properties.toml)
-# Python 3.11+ has tomllib built-in; older versions need 'tomli' package.
 execute_process(
-    COMMAND ${PYTHON3} -c "
-try:
-    import tomllib
-except ModuleNotFoundError:
-    import tomli
-print('ok')
-"
+    COMMAND ${PYTHON3} ${LIBCSS_CMAKE_HELPERS} check-toml
     OUTPUT_VARIABLE TOML_CHECK
     ERROR_QUIET
     OUTPUT_STRIP_TRAILING_WHITESPACE
 )
-
 if(NOT TOML_CHECK STREQUAL "ok")
     message(FATAL_ERROR
         "Python TOML parsing module not found.\n"
@@ -33,29 +28,8 @@ set(LIBCSS_CASCADE_GEN_DIR ${CMAKE_CURRENT_BINARY_DIR}/src/select/cascade_gen)
 set(LIBCSS_PROP_GEN_BUILT ${LIBCSS_PROPREG_OUT_DIR}/properties.gen)
 
 # Configure-time: extract property names from properties.toml for gen_parser output targets.
-# Only properties with a 'parse' field that are not manual/shorthand get generated parsers.
 execute_process(
-    COMMAND ${PYTHON3} -c "
-import sys
-try:
-    import tomllib
-except ModuleNotFoundError:
-    import tomli as tomllib
-
-with open(sys.argv[1], 'rb') as f:
-    data = tomllib.load(f)
-
-names = []
-for name, props in sorted(data.items()):
-    if not isinstance(props, dict):
-        continue
-    if not props.get('parse'):
-        continue
-    if props.get('manual') or props.get('shorthand'):
-        continue
-    names.append(name)
-print(';'.join(names))
-" ${CMAKE_SOURCE_DIR}/contrib/libcss/properties.toml
+    COMMAND ${PYTHON3} ${LIBCSS_CMAKE_HELPERS} property-names ${LIBCSS_PROPERTIES_TOML}
     OUTPUT_VARIABLE LIBCSS_PROP_NAMES_RAW
     OUTPUT_STRIP_TRAILING_WHITESPACE
     RESULT_VARIABLE _prop_names_result
@@ -147,49 +121,9 @@ include_directories("${CMAKE_CURRENT_BINARY_DIR}/src/select")
 include_directories("${CMAKE_CURRENT_BINARY_DIR}/src")
 include_directories("${CMAKE_CURRENT_BINARY_DIR}/src/generated")  # For property registration includes
 
-# Configure-time: read properties.toml to split cascade sources into generated vs manual.
-# Generated files go to LIBCSS_CASCADE_GEN_DIR (build tree), manual stay in source tree.
+# Configure-time: split cascade sources into generated vs manual.
 execute_process(
-    COMMAND ${PYTHON3} -c "
-import sys
-try:
-    import tomllib
-except ModuleNotFoundError:
-    import tomli as tomllib
-
-with open(sys.argv[1], 'rb') as f:
-    data = tomllib.load(f)
-
-generated = []
-manual = []
-errors = []
-VALID_CASCADE = {'none', 'manual', 'ident', 'length', 'length_auto',
-    'length_auto_calc', 'length_normal', 'length_none',
-    'bg_border_color', 'border_style', 'border_width',
-    'counter', 'integer', 'page_break', 'uri_none', 'break'}
-
-for name, props in data.items():
-    if not isinstance(props, dict):
-        continue
-    if not props.get('enum', '').startswith('CSS_PROP_'):
-        continue
-    cascade = props.get('cascade')
-    if cascade is None:
-        errors.append(name)
-        continue
-    if cascade == 'none':
-        continue
-    elif cascade == 'manual':
-        manual.append(name)
-    else:
-        generated.append(name)
-
-if errors:
-    print('ERROR:' + ';'.join(errors))
-else:
-    print('GENERATED:' + ';'.join(sorted(generated)))
-    print('MANUAL:' + ';'.join(sorted(manual)))
-" ${CMAKE_SOURCE_DIR}/contrib/libcss/properties.toml
+    COMMAND ${PYTHON3} ${LIBCSS_CMAKE_HELPERS} cascade-split ${LIBCSS_PROPERTIES_TOML}
     OUTPUT_VARIABLE CASCADE_SPLIT_OUTPUT
     OUTPUT_STRIP_TRAILING_WHITESPACE
     RESULT_VARIABLE CASCADE_SPLIT_RESULT
