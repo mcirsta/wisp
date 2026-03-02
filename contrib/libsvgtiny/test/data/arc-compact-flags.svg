@@ -1,0 +1,10 @@
+<?xml version="1.0" standalone="no"?>
+<!-- Test for compact arc flag notation per SVG spec §9.3.9.
+     Bug: parse_path_parameters parsed "01" as single number 1 instead
+     of two separate arc flags (large-arc=0, sweep=1).
+     This path uses arcs with compact flag notation to draw a semicircle. -->
+<svg width="200" height="200" viewBox="0 0 200 200"
+     xmlns="http://www.w3.org/2000/svg">
+  <path fill="none" stroke="black" stroke-width="2"
+    d="M 50,100 a50 50 0 01100 0" />
+</svg>

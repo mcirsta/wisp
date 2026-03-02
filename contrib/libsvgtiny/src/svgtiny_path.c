@@ -872,32 +872,124 @@ static svgtiny_code generate_path_ellipticalarc(struct internal_path_state *stat
 
 
 /**
- * parse parameters to a path command
+ * parse one numeric parameter and add it to the command parameter list
+ */
+static inline svgtiny_code parse_one_param(const char **cursor, const char *textend, struct internal_points *cmdp)
+{
+    const char *numend = textend;
+    svgtiny_code res;
+
+    res = ensure_internal_points(cmdp, 1);
+    if (res != svgtiny_OK) {
+        return res;
+    }
+
+    res = svgtiny_parse_number(*cursor, &numend, cmdp->p + cmdp->used);
+    if (res != svgtiny_OK) {
+        return res;
+    }
+    cmdp->used++;
+    *cursor = numend;
+
+    advance_comma_whitespace(cursor, textend);
+
+    return svgtiny_OK;
+}
+
+
+/**
+ * parse one arc flag parameter (single digit '0' or '1')
+ *
+ * Per SVG spec §9.3.9, arc flags are single-digit values that can
+ * appear adjacent to each other and to other numbers without separators.
+ */
+static inline svgtiny_code parse_one_flag(const char **cursor, const char *textend, struct internal_points *cmdp)
+{
+    svgtiny_code res;
+
+    advance_comma_whitespace(cursor, textend);
+
+    if (*cursor >= textend) {
+        return svgtiny_SVG_ERROR;
+    }
+
+    res = ensure_internal_points(cmdp, 1);
+    if (res != svgtiny_OK) {
+        return res;
+    }
+
+    if (**cursor == '0') {
+        cmdp->p[cmdp->used++] = 0.0f;
+    } else if (**cursor == '1') {
+        cmdp->p[cmdp->used++] = 1.0f;
+    } else {
+        return svgtiny_SVG_ERROR;
+    }
+    (*cursor)++;
+
+    advance_comma_whitespace(cursor, textend);
+
+    return svgtiny_OK;
+}
+
+
+/**
+ * parse parameters to a path command (generic, for non-arc commands)
  */
 static inline svgtiny_code parse_path_parameters(const char **cursor, const char *textend, struct internal_points *cmdp)
 {
-    const char *numend;
+    cmdp->used = 0;
+
+    while (parse_one_param(cursor, textend, cmdp) == svgtiny_OK)
+        ;
+
+    return svgtiny_OK;
+}
+
+
+/**
+ * parse parameters to an arc path command (A|a)
+ *
+ * Arc parameters come in groups of 7:
+ *   rx, ry, rotation, large-arc-flag, sweep-flag, x, y
+ *
+ * The two flag parameters are single-digit (0 or 1) and per SVG spec
+ * can appear without separators (e.g. "01" means large_arc=0, sweep=1).
+ */
+static inline svgtiny_code parse_arc_parameters(const char **cursor, const char *textend, struct internal_points *cmdp)
+{
     svgtiny_code res;
+    int i;
 
     cmdp->used = 0;
 
     do {
-        res = ensure_internal_points(cmdp, 1);
-        if (res != svgtiny_OK) {
-            return res;
+        /* 3 numbers: rx, ry, x-rotation */
+        for (i = 0; i < 3; i++) {
+            res = parse_one_param(cursor, textend, cmdp);
+            if (res != svgtiny_OK)
+                goto done;
         }
 
-        numend = textend;
-        res = svgtiny_parse_number(*cursor, &numend, cmdp->p + cmdp->used);
-        if (res != svgtiny_OK) {
-            break;
+        /* 2 flags: large-arc-flag, sweep-flag */
+        for (i = 0; i < 2; i++) {
+            res = parse_one_flag(cursor, textend, cmdp);
+            if (res != svgtiny_OK)
+                goto done;
         }
-        cmdp->used++;
-        *cursor = numend;
 
-        advance_comma_whitespace(cursor, textend);
+        /* 2 numbers: x, y */
+        for (i = 0; i < 2; i++) {
+            res = parse_one_param(cursor, textend, cmdp);
+            if (res != svgtiny_OK)
+                goto done;
+        }
+    } while (1);
 
-    } while (res == svgtiny_OK);
+done:
+    if ((cmdp->used % 7) != 0) {
+        return svgtiny_SVG_ERROR;
+    }
 
     return svgtiny_OK;
 }
@@ -966,7 +1058,11 @@ svgtiny_code svgtiny_parse_path_data(const char *text, size_t textlen, float **p
             goto parse_path_data_error;
         }
 
-        res = parse_path_parameters(&cursor, textend, &pathstate.cmd);
+        if (pathcmd == 'A') {
+            res = parse_arc_parameters(&cursor, textend, &pathstate.cmd);
+        } else {
+            res = parse_path_parameters(&cursor, textend, &pathstate.cmd);
+        }
         if (res != svgtiny_OK) {
             goto parse_path_data_error;
         }
