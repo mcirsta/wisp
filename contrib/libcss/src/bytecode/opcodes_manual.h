@@ -318,6 +318,18 @@ enum op_stroke { STROKE_NONE = 0x0000, STROKE_CURRENT_COLOR = 0x0001, STROKE_SET
 
 enum op_stroke_width { STROKE_WIDTH_SET = 0x0080 };
 
+enum op_text_align {
+    TEXT_ALIGN_LEFT = 0x0000,
+    TEXT_ALIGN_RIGHT = 0x0001,
+    TEXT_ALIGN_CENTER = 0x0002,
+    TEXT_ALIGN_JUSTIFY = 0x0003,
+    /* Internal-only: used for HTML table alignment inheritance,
+     * never produced by the CSS parser. See text_align.c compose. */
+    TEXT_ALIGN_LIBCSS_LEFT = 0x0004,
+    TEXT_ALIGN_LIBCSS_CENTER = 0x0005,
+    TEXT_ALIGN_LIBCSS_RIGHT = 0x0006
+};
+
 enum op_text_decoration {
     TEXT_DECORATION_NONE = 0x0000,
 

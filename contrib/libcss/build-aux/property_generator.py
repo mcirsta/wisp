@@ -612,51 +612,6 @@ class GperfInputGenerator:
         return "\n".join(lines)
 
 
-class KeywordsParser:
-    """Parse keywords.gen to get CSS syntax keywords."""
-    
-    def __init__(self, keywords_file):
-        self.keywords_file = Path(keywords_file)
-        self.keywords = []  # List of keyword names
-        
-    def parse(self):
-        """Parse keywords.gen and extract keyword names."""
-        if not self.keywords_file.exists():
-            print(f"FATAL ERROR: keywords.gen not found at {self.keywords_file}", file=sys.stderr)
-            sys.exit(1)
-        
-        try:
-            with open(self.keywords_file, 'r') as f:
-                lines = list(f)
-        except IOError as e:
-            print(f"FATAL ERROR: Cannot read keywords.gen: {e}", file=sys.stderr)
-            sys.exit(1)
-        
-        for line_num, line in enumerate(lines, 1):
-            line = line.strip()
-            
-            # Skip comments and empty lines
-            if not line or line.startswith('#'):
-                continue
-            
-            # Each non-comment line is a keyword name
-            if re.match(r'^[A-Z_]+$', line):
-                self.keywords.append(line)
-            else:
-                print(f"WARNING: Invalid keyword '{line}' at line {line_num} in keywords.gen", file=sys.stderr)
-        
-        # Validate we found keywords
-        if not self.keywords:
-            print("FATAL ERROR: No keywords found in keywords.gen", file=sys.stderr)
-            print("Expected format: One KEYWORD_NAME per line", file=sys.stderr)
-            sys.exit(1)
-        
-        if len(self.keywords) < 10:
-            print(f"FATAL ERROR: Only {len(self.keywords)} keywords in keywords.gen", file=sys.stderr)
-            print("Expected at least 10 keywords. File may be incomplete.", file=sys.stderr)
-            sys.exit(1)
-        
-        return self.keywords
 
 
 class MultiFileGenerator:
@@ -678,10 +633,9 @@ class MultiFileGenerator:
         'LAST_DEPRECATEDCOLOUR',
         'LAST_KNOWN',
     })
-    def __init__(self, dispatch_order, metadata, keywords):
+    def __init__(self, dispatch_order, metadata):
         self.dispatch_order = dispatch_order  # From dispatch.c
         self.metadata = metadata  # From properties.gen
-        self.keywords = keywords  # From keywords.gen
     
     def _header(self, file_type, description):
         """Generate common header for all files."""
@@ -783,6 +737,12 @@ class MultiFileGenerator:
         the #include "propstrings_enum.inc" line. Derives CSS string names
         from enum identifiers using naming conventions + lookup table.
         
+        Also performs collision detection: if a keyword's derived CSS string
+        matches a property name, it means propstrings.c would have two SMAP
+        entries for the same string (one from propstrings_strings.inc, one
+        from keywords_strings.inc). The fix is to remove the keyword from
+        propstrings.h and reuse the property's enum value in parser code.
+        
         Args:
             propstrings_h_path: Path to propstrings.h for parsing
         """
@@ -817,6 +777,20 @@ class MultiFileGenerator:
             # DCBACKGROUND → "background"  
             ('DC', 'Deprecated system colour alias'),
         ]
+        
+        # ═══════════════════════════════════════════════════════════════
+        # Build the set of property CSS names for collision detection.
+        # A collision means propstrings.c would have duplicate SMAP
+        # entries for the same string.
+        # ═══════════════════════════════════════════════════════════════
+        all_props = [prop_info['name'] for prop_info in self.dispatch_order]
+        shorthands = [name for name, meta in self.metadata.items()
+                      if meta.get('is_shorthand', False) and name not in all_props]
+        aliases = [name for name, meta in self.metadata.items()
+                   if meta.get('is_alias', False) and name not in all_props]
+        prop_css_names = set(
+            p.replace('_', '-') for p in all_props + shorthands + aliases
+        )
         
         # Parse propstrings.h
         with open(propstrings_h_path, 'r') as f:
@@ -865,7 +839,7 @@ class MultiFileGenerator:
                   "propstrings_enum.inc in propstrings.h", file=sys.stderr)
             sys.exit(1)
         
-        # Generate SMAP entries
+        # Generate SMAP entries + collision check
         lines = []
         lines.append("/*")
         lines.append(" * AUTO-GENERATED FILE — DO NOT EDIT!")
@@ -880,6 +854,8 @@ class MultiFileGenerator:
         lines.append(" *   4. Default: lowercase, underscore → hyphen")
         lines.append(" */")
         lines.append("")
+        
+        collisions = []  # (enum_name, css_string) pairs
         
         for name in enum_entries:
             # Rule 1: Lookup table
@@ -897,12 +873,31 @@ class MultiFileGenerator:
                     lines.append(f'\tSMAP("{css_string}"),  /* {name} — {reason} */')
                     stripped = True
                     break
-            if stripped:
-                continue
+            if not stripped:
+                # Rule 4: Default convention
+                css_string = name.lower().replace('_', '-')
+                lines.append(f'\tSMAP("{css_string}"),')
             
-            # Rule 4: Default convention
-            css_string = name.lower().replace('_', '-')
-            lines.append(f'\tSMAP("{css_string}"),')
+            # Collision check: does this keyword's CSS string duplicate a property?
+            # Whitelist: Some keyword enum entries intentionally share a CSS string
+            # with a property. DCBACKGROUND is a deprecated system colour whose enum
+            # slot is needed for the FIRST_DEPRECATEDCOLOUR..LAST_DEPRECATEDCOLOUR
+            # positional iteration in utils.c, even though its string "background"
+            # duplicates the background property.
+            if css_string in prop_css_names and name not in ('DCBACKGROUND',):
+                collisions.append((name, css_string))
+        
+        if collisions:
+            print(f"\nFATAL ERROR: Property/keyword string collision detected!", file=sys.stderr)
+            print(f"The following keyword entries in propstrings.h produce the same", file=sys.stderr)
+            print(f"CSS string as an auto-generated property name:", file=sys.stderr)
+            for enum_name, css_str in collisions:
+                print(f"  - {enum_name} → \"{css_str}\"", file=sys.stderr)
+            print(f"\nThis means propstrings.c would have duplicate SMAP entries.", file=sys.stderr)
+            print(f"Fix: Remove the keyword from propstrings.h. The property's enum", file=sys.stderr)
+            print(f"value (in propstrings_enum.inc) already provides the same string.", file=sys.stderr)
+            print(f"Parser code should use the property enum name directly.", file=sys.stderr)
+            sys.exit(1)
         
         return '\n'.join(lines)
     
@@ -1340,37 +1335,12 @@ class MultiFileGenerator:
                 sys.exit(1)
             seen.add(prop)
         
-        # Check for propstrings collisions: property names vs keywords.gen
-        prop_names_upper = set(p.upper() for p in sorted_props)
-        keyword_collisions = prop_names_upper.intersection(set(self.keywords))
-        if keyword_collisions:
-            print(f"\nFATAL ERROR: Property/keyword name collision detected!", file=sys.stderr)
-            print(f"The following names exist in BOTH properties.gen and keywords.gen:", file=sys.stderr)
-            for name in sorted(keyword_collisions):
-                print(f"  - {name}", file=sys.stderr)
-            print(f"\nBoth map to the same string, so only one enum entry is needed.", file=sys.stderr)
-            print(f"Fix: Remove the entry from keywords.gen. The property's enum", file=sys.stderr)
-            print(f"value (in propstrings_enum.inc) provides the same string.", file=sys.stderr)
-            print(f"Parser code should use the property enum name directly.", file=sys.stderr)
-            sys.exit(1)
-        
-        # Also scan propstrings.h for manually-listed keywords that match property names.
-        # These are keywords listed after LAST_PROP in propstrings.h (INHERIT, NONE, AUTO, etc.).
-        # Property names are auto-generated between FIRST_PROP and LAST_PROP, so a manual
-        # keyword with the same name would create a duplicate enum entry → compiler error.
-        # But a keyword with a DIFFERENT name for the same string (e.g., FILL_KEYWORD for "fill")
-        # would silently create a wasted duplicate string entry — we want to catch that too.
-        manual_keyword_collisions = []
-        for kw in self.keywords:
-            # keyword names from keywords.gen that appear BEFORE FIRST_PROP in propstrings.h
-            # are fine — they're in a separate section. We already checked keywords.gen above.
-            pass
-        
-        # The main protection is: keywords.gen collision = fatal error (checked above).
-        # For the manual keywords in propstrings.h after LAST_PROP, a collision would
-        # cause a compiler error (duplicate enum name), so the compiler catches those.
-        # This validation covers the keywords.gen case which IS the build system's
-        # responsibility.
+        # Keyword/property string collision is checked in generate_keywords_strings()
+        # when --propstrings-h is provided. That check catches cases where a keyword
+        # enum in propstrings.h derives the same CSS string as a property name,
+        # which would create duplicate SMAP entries in propstrings.c.
+        # For enum name collisions (e.g., a manual keyword with the same C identifier
+        # as a property), the compiler will catch those as duplicate enum values.
         
         print(f"  Validation passed: {len(sorted_props)} properties, no duplicates")
         return True
@@ -1407,11 +1377,10 @@ def main():
     if not output_dir:
         print("Usage: property_generator.py --output-dir DIR --toml properties.toml "
               "[--propstrings-h propstrings.h] [--cascade-dir DIR] "
-              "[dispatch.c] [keywords.gen]", file=sys.stderr)
+              "[dispatch.c]", file=sys.stderr)
         sys.exit(1)
     
     dispatch_file = positional[0] if len(positional) > 0 else None
-    keywords_file = positional[1] if len(positional) > 1 else None
     
     # Fixed output filenames within output_dir
     gen_file = os.path.join(output_dir, 'properties.gen')
@@ -1460,18 +1429,8 @@ def main():
         prop_metadata = gen_parser.parse()
         print(f"  Found {len(prop_metadata)} properties in properties.gen")
     
-    # Keywords: optional when using TOML mode (keywords.gen is being deprecated)
-    keywords = []
-    if keywords_file:
-        print("Parsing keywords.gen for CSS keywords...")
-        keywords_parser = KeywordsParser(keywords_file)
-        keywords = keywords_parser.parse()
-        print(f"  Found {len(keywords)} keywords in keywords.gen")
-    else:
-        print("No keywords.gen provided — skipping keyword collision check")
-    
     # Generate output files
-    generator = MultiFileGenerator(dispatch_order, prop_metadata, keywords)
+    generator = MultiFileGenerator(dispatch_order, prop_metadata)
     generator.toml_reader = toml_reader  # Store for cascade generation access
     
     # Run validation first

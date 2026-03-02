@@ -85,7 +85,6 @@ enum {
     ACTIVE,
     FOCUS,
     LANG,
-    /* LEFT, RIGHT, -- already in properties */
     FIRST,
     ROOT,
     NTH_CHILD,
@@ -325,9 +324,6 @@ enum {
     HSL,
     HSLA,
     HWB,
-    LIBCSS_LEFT,
-    LIBCSS_CENTER,
-    LIBCSS_RIGHT,
     CURRENTCOLOR,
     ODD,
     EVEN,
