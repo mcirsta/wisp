@@ -79,6 +79,12 @@ typedef struct plot_style_s {
     plot_operation_type_t fill_type; /**< Fill plot type */
     colour fill_colour; /**< Colour of fill */
 
+    /* Opacity for fill and stroke (0.0 = transparent, 1.0 = opaque).
+     * A value of 0.0 is treated as "not set" (fully opaque) to avoid
+     * regressions from zero-initialized plot_style_t structs. */
+    float fill_opacity; /**< Fill opacity, default 1.0 */
+    float stroke_opacity; /**< Stroke opacity, default 1.0 */
+
     /* Custom dash pattern for strokes (optional, used by SVG) */
     const float *stroke_dasharray; /**< Array of dash/gap lengths, or NULL for solid */
     unsigned int stroke_dasharray_count; /**< Number of elements in dasharray */

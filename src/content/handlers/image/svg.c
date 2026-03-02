@@ -792,6 +792,10 @@ static bool svg_redraw_internal(svg_content *svg, int x, int y, int width, int h
                 pstyle.fill_type = PLOT_OP_TYPE_SOLID;
                 pstyle.fill_colour = BGR(fill_c);
             }
+
+            /* Apply SVG fill-opacity and stroke-opacity */
+            pstyle.fill_opacity = diagram->shape[i].fill_opacity_set ? diagram->shape[i].fill_opacity : 1.0f;
+            pstyle.stroke_opacity = diagram->shape[i].stroke_opacity_set ? diagram->shape[i].stroke_opacity : 1.0f;
             if (scaled != NULL) {
                 unsigned int j = 0;
                 unsigned int k = 0;

@@ -68,6 +68,10 @@ static nserror nsqt_set_style(QPainter *painter, const plot_style_t *style)
 
     QColor fillcolour(fill_r, fill_g, fill_b, fill_a);
 
+    /* Apply SVG fill-opacity if set (0.0 = "not set" → fully opaque) */
+    if (style->fill_opacity > 0.0f && style->fill_opacity < 1.0f)
+        fillcolour.setAlphaF(fillcolour.alphaF() * style->fill_opacity);
+
     Qt::BrushStyle brushstyle = Qt::NoBrush;
     if (style->fill_type != PLOT_OP_TYPE_NONE) {
         brushstyle = Qt::SolidPattern;
@@ -81,6 +85,10 @@ static nserror nsqt_set_style(QPainter *painter, const plot_style_t *style)
     int stroke_b = (style->stroke_colour & 0xFF0000) >> 16;
     int stroke_a = 255 - ((style->stroke_colour >> 24) & 0xFF);
     QColor strokecolour(stroke_r, stroke_g, stroke_b, stroke_a);
+
+    /* Apply SVG stroke-opacity if set (0.0 = "not set" → fully opaque) */
+    if (style->stroke_opacity > 0.0f && style->stroke_opacity < 1.0f)
+        strokecolour.setAlphaF(strokecolour.alphaF() * style->stroke_opacity);
 
     QPen pen(strokecolour);
     Qt::PenStyle penstyle = Qt::NoPen;

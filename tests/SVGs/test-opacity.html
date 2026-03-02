@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>SVG Opacity Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background: #f0f0f0;
+        }
+
+        .test-container {
+            display: inline-block;
+            border: 1px dashed #ccc;
+            padding: 10px;
+            margin: 10px;
+            background: white;
+            vertical-align: top;
+        }
+
+        h3 {
+            margin-top: 30px;
+        }
+    </style>
+</head>
+
+<body>
+    <h3>SVG fill-opacity and stroke-opacity test (embedded via &lt;img&gt;)</h3>
+
+    <div class="test-container">
+        <p>External SVG file (test-opacity.svg)</p>
+        <img src="test-opacity.svg" width="400" height="200">
+    </div>
+
+    <h3>Inline SVG with fill-opacity</h3>
+
+    <div class="test-container">
+        <p>fill-opacity: 1.0 (opaque)</p>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="128" height="128">
+            <rect x="10" y="10" width="80" height="80" fill="#333333" />
+            <circle cx="50" cy="50" r="35" fill="#FF0000" fill-opacity="1.0" />
+        </svg>
+    </div>
+
+    <div class="test-container">
+        <p>fill-opacity: 0.5 (semi-transparent)</p>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="128" height="128">
+            <rect x="10" y="10" width="80" height="80" fill="#333333" />
+            <circle cx="50" cy="50" r="35" fill="#FF0000" fill-opacity="0.5" />
+        </svg>
+    </div>
+
+    <div class="test-container">
+        <p>fill-opacity: 0.25 (very transparent)</p>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="128" height="128">
+            <rect x="10" y="10" width="80" height="80" fill="#333333" />
+            <circle cx="50" cy="50" r="35" fill="#FF0000" fill-opacity="0.25" />
+        </svg>
+    </div>
+
+    <h3>Stroke opacity</h3>
+
+    <div class="test-container">
+        <p>stroke-opacity: 1.0</p>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="128" height="128">
+            <circle cx="50" cy="50" r="35" fill="none" stroke="#0000FF" stroke-width="6" stroke-opacity="1.0" />
+        </svg>
+    </div>
+
+    <div class="test-container">
+        <p>stroke-opacity: 0.5</p>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="128" height="128">
+            <circle cx="50" cy="50" r="35" fill="none" stroke="#0000FF" stroke-width="6" stroke-opacity="0.5" />
+        </svg>
+    </div>
+
+    <div class="test-container">
+        <p>Both: fill-opacity 0.5 + stroke-opacity 0.5</p>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="128" height="128">
+            <rect x="10" y="10" width="80" height="80" fill="#333333" />
+            <circle cx="50" cy="50" r="35" fill="#FF0000" fill-opacity="0.5" stroke="#0000FF" stroke-width="6"
+                stroke-opacity="0.5" />
+        </svg>
+    </div>
+</body>
+
+</html>
