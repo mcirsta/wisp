@@ -314,6 +314,10 @@ enum op_right { RIGHT_SET = BOTTOM_SET, RIGHT_AUTO = BOTTOM_AUTO };
 
 enum op_stroke_opacity { STROKE_OPACITY_SET = 0x0080 };
 
+enum op_stroke { STROKE_NONE = 0x0000, STROKE_CURRENT_COLOR = 0x0001, STROKE_SET = 0x0080 };
+
+enum op_stroke_width { STROKE_WIDTH_SET = 0x0080 };
+
 enum op_text_decoration {
     TEXT_DECORATION_NONE = 0x0000,
 

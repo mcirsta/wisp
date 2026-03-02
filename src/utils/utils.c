@@ -126,6 +126,17 @@ bool is_dir(const char *path)
 
 
 /* exported interface documented in utils/utils.h */
+int nsfmt_float(char *buf, size_t size, const char *fmt, double val)
+{
+    int ret = snprintf(buf, size, fmt, val);
+    char *comma = strchr(buf, ',');
+    if (comma)
+        *comma = '.';
+    return ret;
+}
+
+
+/* exported interface documented in utils/utils.h */
 nserror vsnstrjoin(char **str, size_t *size, char sep, size_t nelm, va_list ap)
 {
     const char *elm[16];
@@ -450,8 +461,7 @@ error:
  *  Note: __attribute__((used)) prevents LTO from discarding this function,
  *  which is needed by libidn2.a when statically linking.
  */
-__attribute__((used))
-char *strchrnul(const char *s, int c_in)
+__attribute__((used)) char *strchrnul(const char *s, int c_in)
 {
     const unsigned char *us = (const unsigned char *)s;
 

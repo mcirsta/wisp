@@ -86,11 +86,15 @@ void html_free_inline_svgs(struct html_content *c);
  *
  * Carries CSS-derived values that need to be "baked in" to the serialized SVG
  * text, since libsvgtiny has no CSS awareness.  Extend this struct as needed
- * for additional SVG presentation properties (stroke, fill-opacity, etc.).
+ * for additional SVG presentation properties.
  */
 struct svg_css_context {
     const char *current_color; /**< Hex from css_computed_color(), for currentColor */
     const char *fill; /**< Hex from css_computed_fill(), NULL if not set */
+    const char *fill_opacity; /**< "0.0"-"1.0" from css_computed_fill_opacity(), NULL if 1.0 */
+    const char *stroke; /**< Hex from css_computed_stroke(), NULL if not set */
+    const char *stroke_width; /**< e.g. "2px" from css_computed_stroke_width(), NULL if default (1px) */
+    const char *stroke_opacity; /**< "0.0"-"1.0" from css_computed_stroke_opacity(), NULL if 1.0 */
 };
 
 /**

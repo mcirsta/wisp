@@ -836,6 +836,50 @@ static nserror svg_serialize_element_open_with_dimensions(const char *tag_name, 
         }
     }
 
+    /* Inject CSS fill-opacity attribute from computed style. */
+    if (err == NSERROR_OK && css_ctx != NULL && css_ctx->fill_opacity != NULL) {
+        err = SVG_APPEND_LIT(buf, len, cap, " fill-opacity=\"");
+        if (err == NSERROR_OK) {
+            err = svg_buffer_append(buf, len, cap, css_ctx->fill_opacity, strlen(css_ctx->fill_opacity));
+        }
+        if (err == NSERROR_OK) {
+            err = SVG_APPEND_LIT(buf, len, cap, "\"");
+        }
+    }
+
+    /* Inject CSS stroke attribute from computed style. */
+    if (err == NSERROR_OK && css_ctx != NULL && css_ctx->stroke != NULL) {
+        err = SVG_APPEND_LIT(buf, len, cap, " stroke=\"");
+        if (err == NSERROR_OK) {
+            err = svg_buffer_append(buf, len, cap, css_ctx->stroke, strlen(css_ctx->stroke));
+        }
+        if (err == NSERROR_OK) {
+            err = SVG_APPEND_LIT(buf, len, cap, "\"");
+        }
+    }
+
+    /* Inject CSS stroke-width attribute from computed style. */
+    if (err == NSERROR_OK && css_ctx != NULL && css_ctx->stroke_width != NULL) {
+        err = SVG_APPEND_LIT(buf, len, cap, " stroke-width=\"");
+        if (err == NSERROR_OK) {
+            err = svg_buffer_append(buf, len, cap, css_ctx->stroke_width, strlen(css_ctx->stroke_width));
+        }
+        if (err == NSERROR_OK) {
+            err = SVG_APPEND_LIT(buf, len, cap, "\"");
+        }
+    }
+
+    /* Inject CSS stroke-opacity attribute from computed style. */
+    if (err == NSERROR_OK && css_ctx != NULL && css_ctx->stroke_opacity != NULL) {
+        err = SVG_APPEND_LIT(buf, len, cap, " stroke-opacity=\"");
+        if (err == NSERROR_OK) {
+            err = svg_buffer_append(buf, len, cap, css_ctx->stroke_opacity, strlen(css_ctx->stroke_opacity));
+        }
+        if (err == NSERROR_OK) {
+            err = SVG_APPEND_LIT(buf, len, cap, "\"");
+        }
+    }
+
     /* Add viewBox and dimensions if we have them (either from the element
      * itself or lifted from a resolved <use> target) */
     if (err == NSERROR_OK && has_viewbox) {

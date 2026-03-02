@@ -123,6 +123,12 @@ TYPE_INFO = {
         'set_extra': '',
         'get_extra': '',
     },
+    'paint_color': {
+        'hint_data': 'hint->data.color',
+        'get_vars': [('css_color', 'color')],
+        'set_extra': ', color',
+        'get_extra': ', &color',
+    },
 }
 
 
@@ -202,6 +208,8 @@ def generate_cascade_file(name, prop_data):
     # 1. cascade function
     if cascade_type == 'ident':
         lines.extend(generate_cascade_ident(name, NAME, prop_data, enum_prefix, initial))
+    elif cascade_type == 'paint_color':
+        lines.extend(generate_cascade_paint_color(name, NAME, prop_data, enum_prefix))
     else:
         helper = HELPER_MAP[cascade_type]
         lines.append(f'css_error css__cascade_{name}(uint32_t opv, css_style *style, css_select_state *state)')
@@ -391,6 +399,44 @@ def generate_cascade_ident(name, NAME, prop_data, enum_prefix, initial):
     lines.append(f'    return CSS_OK;')
     lines.append('}')
     
+    return lines
+
+
+def generate_cascade_paint_color(name, NAME, prop_data, enum_prefix):
+    """Generate the cascade function for SVG paint-color properties.
+
+    Unlike bg_border_color, this properly distinguishes NONE from COLOR.
+    Opcodes: {NAME}_NONE, {NAME}_CURRENT_COLOR, {NAME}_SET
+    CSS enums: CSS_{NAME}_NONE, CSS_{NAME}_COLOR, CSS_{NAME}_CURRENT_COLOR
+    """
+    lines = []
+    lines.append(f'css_error css__cascade_{name}(uint32_t opv, css_style *style, css_select_state *state)')
+    lines.append('{')
+    lines.append(f'    uint16_t value = {enum_prefix}_INHERIT;')
+    lines.append(f'    css_color color = 0;')
+    lines.append(f'')
+    lines.append(f'    if (hasFlagValue(opv) == false) {{')
+    lines.append(f'        switch (getValue(opv)) {{')
+    lines.append(f'        case {NAME}_NONE:')
+    lines.append(f'            value = {enum_prefix}_NONE;')
+    lines.append(f'            break;')
+    lines.append(f'        case {NAME}_CURRENT_COLOR:')
+    lines.append(f'            value = {enum_prefix}_CURRENT_COLOR;')
+    lines.append(f'            break;')
+    lines.append(f'        case {NAME}_SET:')
+    lines.append(f'            value = {enum_prefix}_COLOR;')
+    lines.append(f'            color = *((css_color *)style->bytecode);')
+    lines.append(f'            advance_bytecode(style, sizeof(color));')
+    lines.append(f'            break;')
+    lines.append(f'        }}')
+    lines.append(f'    }}')
+    lines.append(f'')
+    lines.append(f'    if (css__outranks_existing(getOpcode(opv), isImportant(opv), state, getFlagValue(opv))) {{')
+    lines.append(f'        return set_{name}(state->computed, value, color);')
+    lines.append(f'    }}')
+    lines.append(f'')
+    lines.append(f'    return CSS_OK;')
+    lines.append('}')
     return lines
 
 

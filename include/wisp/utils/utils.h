@@ -28,6 +28,8 @@
 
 #include <stdbool.h>
 #include <stddef.h>
+#include <stdio.h>
+#include <string.h>
 #include <wisp/ns_inttypes.h>
 
 #ifndef NOF_ELEMENTS
@@ -88,6 +90,20 @@
 #if !defined(ceilf) && defined(__MINT__)
 #define ceilf(x) (float)ceil((double)x)
 #endif
+
+/**
+ * Format a float into a string with '.' decimal separator, regardless of locale.
+ *
+ * Some locales use ',' as the decimal separator in snprintf %f output, but
+ * data-interchange formats (SVG, XML, JSON, CSS) always require '.'.
+ *
+ * \param buf   Output buffer
+ * \param size  Buffer size
+ * \param fmt   printf format string (e.g. "%.2f")
+ * \param val   Value to format
+ * \return      Number of characters written (same as snprintf)
+ */
+int nsfmt_float(char *buf, size_t size, const char *fmt, double val);
 
 /**
  * Calculate length of constant C string.

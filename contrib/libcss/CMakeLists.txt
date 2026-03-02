@@ -210,6 +210,7 @@ add_library(css ${WISP_LIB_TYPE}
 	src/parse/properties/properties.c
 	src/parse/properties/quotes.c
 	src/parse/properties/stroke_opacity.c
+	src/parse/properties/stroke_width.c
 	src/parse/properties/text_decoration.c
 	src/parse/properties/utils.c
 	src/parse/properties/voice_family.c

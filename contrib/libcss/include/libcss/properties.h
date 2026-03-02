@@ -287,11 +287,7 @@ enum css_display_e {
 
 enum css_empty_cells_e { CSS_EMPTY_CELLS_INHERIT = 0x0, CSS_EMPTY_CELLS_SHOW = 0x1, CSS_EMPTY_CELLS_HIDE = 0x2 };
 
-enum css_fill_e {
-    CSS_FILL_INHERIT = CSS_BACKGROUND_COLOR_INHERIT,
-    CSS_FILL_COLOR = CSS_BACKGROUND_COLOR_COLOR,
-    CSS_FILL_CURRENT_COLOR = CSS_BACKGROUND_COLOR_CURRENT_COLOR
-};
+enum css_fill_e { CSS_FILL_INHERIT = 0x0, CSS_FILL_NONE = 0x1, CSS_FILL_COLOR = 0x2, CSS_FILL_CURRENT_COLOR = 0x3 };
 
 enum css_fill_opacity_e { CSS_FILL_OPACITY_INHERIT = 0x0, CSS_FILL_OPACITY_SET = 0x1 };
 
@@ -583,6 +579,15 @@ enum css_quotes_e {
 enum css_right_e { CSS_RIGHT_INHERIT = 0x0, CSS_RIGHT_SET = 0x1, CSS_RIGHT_AUTO = 0x2 };
 
 enum css_stroke_opacity_e { CSS_STROKE_OPACITY_INHERIT = 0x0, CSS_STROKE_OPACITY_SET = 0x1 };
+
+enum css_stroke_e {
+    CSS_STROKE_INHERIT = 0x0,
+    CSS_STROKE_NONE = 0x1,
+    CSS_STROKE_COLOR = 0x2,
+    CSS_STROKE_CURRENT_COLOR = 0x3
+};
+
+enum css_stroke_width_e { CSS_STROKE_WIDTH_INHERIT = 0x0, CSS_STROKE_WIDTH_SET = 0x1 };
 
 enum css_table_layout_e { CSS_TABLE_LAYOUT_INHERIT = 0x0, CSS_TABLE_LAYOUT_AUTO = 0x1, CSS_TABLE_LAYOUT_FIXED = 0x2 };
 

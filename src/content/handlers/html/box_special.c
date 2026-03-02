@@ -41,6 +41,7 @@
 #include <wisp/utils/nsoption.h>
 #include <wisp/utils/nsurl.h>
 #include <wisp/utils/string.h>
+#include <wisp/utils/utils.h>
 #include "utils/talloc.h"
 #include "content/content_factory.h"
 #include "content/handlers/css/hints.h"
@@ -2006,7 +2007,11 @@ bool convert_special_elements(dom_node *node, html_content *content, struct box 
                     {
                         char color_str[8] = "#000000"; /* Default black */
                         char fill_str[8];
-                        struct svg_css_context css_ctx = {NULL, NULL};
+                        char fill_opacity_str[8];
+                        char stroke_str[8];
+                        char stroke_width_str[16];
+                        char stroke_opacity_str[8];
+                        struct svg_css_context css_ctx = {NULL, NULL, NULL, NULL, NULL, NULL};
                         struct html_inline_svg *cached = NULL;
 
 
@@ -2026,6 +2031,47 @@ bool convert_special_elements(dom_node *node, html_content *content, struct box 
                             } else if (fill_type == CSS_FILL_CURRENT_COLOR) {
                                 /* fill: currentColor → use the same as color */
                                 css_ctx.fill = color_str;
+                            } else if (fill_type == CSS_FILL_NONE) {
+                                css_ctx.fill = "none";
+                            }
+
+                            /* Get computed CSS fill-opacity */
+                            css_fixed fo_fixed;
+                            css_computed_fill_opacity(box->style, &fo_fixed);
+                            /* css_fixed is 22:10 fixed point, INTTOFIX(1) = 1024 */
+                            if (fo_fixed < INTTOFIX(1)) {
+                                nsfmt_float(fill_opacity_str, sizeof(fill_opacity_str), "%.2f", FIXTOFLT(fo_fixed));
+                                css_ctx.fill_opacity = fill_opacity_str;
+                            }
+
+                            /* Get computed CSS stroke for SVG stroke injection */
+                            css_color stroke_col;
+                            uint8_t stroke_type = css_computed_stroke(box->style, &stroke_col);
+                            if (stroke_type == CSS_STROKE_COLOR) {
+                                css_color_to_hex(stroke_col, stroke_str);
+                                css_ctx.stroke = stroke_str;
+                            } else if (stroke_type == CSS_STROKE_CURRENT_COLOR) {
+                                css_ctx.stroke = color_str;
+                            } else if (stroke_type == CSS_STROKE_NONE) {
+                                css_ctx.stroke = "none";
+                            }
+
+                            /* Get computed CSS stroke-width */
+                            css_fixed sw_len;
+                            css_unit sw_unit;
+                            uint8_t sw_type = css_computed_stroke_width(box->style, &sw_len, &sw_unit);
+                            if (sw_type == CSS_STROKE_WIDTH_SET && sw_len != INTTOFIX(1)) {
+                                /* Only inject if not the default 1px */
+                                nsfmt_float(stroke_width_str, sizeof(stroke_width_str), "%.2f", FIXTOFLT(sw_len));
+                                css_ctx.stroke_width = stroke_width_str;
+                            }
+
+                            /* Get computed CSS stroke-opacity */
+                            css_fixed so_fixed;
+                            css_computed_stroke_opacity(box->style, &so_fixed);
+                            if (so_fixed < INTTOFIX(1)) {
+                                nsfmt_float(stroke_opacity_str, sizeof(stroke_opacity_str), "%.2f", FIXTOFLT(so_fixed));
+                                css_ctx.stroke_opacity = stroke_opacity_str;
                             }
                         }
 
