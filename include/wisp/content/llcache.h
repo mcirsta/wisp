@@ -289,4 +289,24 @@ const char *llcache_handle_get_header(const llcache_handle *handle, const char *
  */
 bool llcache_handle_references_same_object(const llcache_handle *a, const llcache_handle *b);
 
+/**
+ * Create a low-level cache handle from a raw data buffer.
+ *
+ * Creates a synthetic llcache object pre-filled with the given data
+ * and Content-Type header.  No fetch is performed.  The object is
+ * placed on the uncached list so it is not subject to normal cache
+ * eviction.
+ *
+ * \param url        Synthetic URL for bookkeeping (e.g. wisp-inline://...)
+ * \param data       Raw data buffer (copied)
+ * \param len        Byte length of data
+ * \param mime_type  MIME type string (e.g. "image/svg+xml")
+ * \param cb         Client callback for events
+ * \param pw         Pointer to client-specific data
+ * \param result     Pointer to location to receive cache handle
+ * \return NSERROR_OK on success, appropriate error otherwise
+ */
+nserror llcache_handle_retrieve_buffer(nsurl *url, const uint8_t *data, size_t len, const char *mime_type,
+    llcache_handle_callback cb, void *pw, llcache_handle **result);
+
 #endif

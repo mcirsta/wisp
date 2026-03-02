@@ -993,3 +993,142 @@ nsurl *hlcache_handle_get_url(const hlcache_handle *handle)
 
     return result;
 }
+
+/**
+ * FNV-1a hash for generating content-based synthetic URLs.
+ */
+static uint32_t hlcache_fnv1a(const uint8_t *data, size_t len)
+{
+    uint32_t hash = 0x811c9dc5u; /* FNV offset basis */
+    for (size_t i = 0; i < len; i++) {
+        hash ^= data[i];
+        hash *= 0x01000193u; /* FNV prime */
+    }
+    return hash;
+}
+
+/* See hlcache.h for documentation */
+nserror hlcache_handle_retrieve_buffer(const uint8_t *data, size_t len, const char *mime_type,
+    hlcache_handle_callback cb, void *pw, hlcache_child_context *child, content_type accepted_types,
+    hlcache_handle **result)
+{
+    hlcache_retrieval_ctx *ctx;
+    hlcache_entry *entry;
+    nserror error;
+    nsurl *url = NULL;
+    char url_buf[64];
+
+    assert(data != NULL);
+    assert(len > 0);
+    assert(cb != NULL);
+
+    /* Generate a content-hash URL for deduplication */
+    uint32_t hash = hlcache_fnv1a(data, len);
+    snprintf(url_buf, sizeof(url_buf), "wisp-inline://svg-%08x-%zu", hash, len);
+    error = nsurl_create(url_buf, &url);
+    if (error != NSERROR_OK)
+        return error;
+
+    /* Check for existing content with the same URL (dedup) */
+    for (entry = hlcache->content_list; entry != NULL; entry = entry->next) {
+        hlcache_handle entry_handle = {entry, NULL, NULL};
+
+        if (entry->content == NULL)
+            continue;
+
+        if (content_get_status(&entry_handle) == CONTENT_STATUS_ERROR)
+            continue;
+
+        if (nsurl_compare(hlcache_handle_get_url(&entry_handle), url, NSURL_COMPLETE)) {
+
+            if ((content_get_type(&entry_handle) & accepted_types) == 0)
+                continue;
+
+            /* Cache hit — reuse existing content */
+            NSLOG(wisp, DEBUG, "BUFFER: cache HIT (dedup) '%s'", url_buf);
+
+            hlcache_handle *handle = calloc(1, sizeof(hlcache_handle));
+            if (handle == NULL) {
+                nsurl_unref(url);
+                return NSERROR_NOMEM;
+            }
+
+            handle->entry = entry;
+            handle->cb = cb;
+            handle->pw = pw;
+
+            if (content_add_user(entry->content, hlcache_content_callback, handle) == false) {
+                free(handle);
+                nsurl_unref(url);
+                return NSERROR_NOMEM;
+            }
+
+            *result = handle;
+            nsurl_unref(url);
+
+            /* Fire state catch-up callbacks */
+            content_status status = content_get_status(handle);
+            hlcache_event event;
+            if (status == CONTENT_STATUS_DONE) {
+                event.type = CONTENT_MSG_LOADING;
+                handle->cb(handle, &event, handle->pw);
+                event.type = CONTENT_MSG_READY;
+                handle->cb(handle, &event, handle->pw);
+                event.type = CONTENT_MSG_DONE;
+                handle->cb(handle, &event, handle->pw);
+            }
+
+            return NSERROR_OK;
+        }
+    }
+
+    /* Cache miss — create new content via synthetic llcache entry */
+    NSLOG(wisp, DEBUG, "BUFFER: cache MISS '%s'", url_buf);
+
+    ctx = calloc(1, sizeof(hlcache_retrieval_ctx));
+    if (ctx == NULL) {
+        nsurl_unref(url);
+        return NSERROR_NOMEM;
+    }
+
+    ctx->handle = calloc(1, sizeof(hlcache_handle));
+    if (ctx->handle == NULL) {
+        free(ctx);
+        nsurl_unref(url);
+        return NSERROR_NOMEM;
+    }
+
+    if (child != NULL) {
+        if (child->charset != NULL) {
+            ctx->child.charset = strdup(child->charset);
+            if (ctx->child.charset == NULL) {
+                free(ctx->handle);
+                free(ctx);
+                nsurl_unref(url);
+                return NSERROR_NOMEM;
+            }
+        }
+        ctx->child.quirks = child->quirks;
+    }
+
+    ctx->flags = HLCACHE_RETRIEVE_SNIFF_TYPE;
+    ctx->accepted_types = accepted_types;
+    ctx->handle->cb = cb;
+    ctx->handle->pw = pw;
+
+
+    /* Create synthetic llcache entry with the raw data */
+    error = llcache_handle_retrieve_buffer(url, data, len, mime_type, hlcache_llcache_callback, ctx, &ctx->llcache);
+    nsurl_unref(url);
+
+    if (error != NSERROR_OK) {
+        free((char *)ctx->child.charset);
+        free(ctx->handle);
+        free(ctx);
+    } else {
+        RING_INSERT(hlcache->retrieval_ctx_ring, ctx);
+        *result = ctx->handle;
+    }
+
+    return error;
+}

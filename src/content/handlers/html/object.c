@@ -857,3 +857,52 @@ bool html_fetch_object(html_content *c, nsurl *url, struct box *box, content_typ
 
     return true;
 }
+
+/* exported interface documented in html/object.h */
+bool html_fetch_object_buffer(html_content *c, const uint8_t *data, size_t len, const char *mime_type, struct box *box,
+    content_type permitted_types)
+{
+    struct content_html_object *object;
+    hlcache_child_context child;
+    nserror error;
+
+    if (c->aborted)
+        return true;
+
+    child.charset = c->encoding;
+    child.quirks = c->base.quirks;
+
+    object = calloc(1, sizeof(struct content_html_object));
+    if (object == NULL)
+        return false;
+
+    object->parent = (struct content *)c;
+    object->next = NULL;
+    object->content = NULL;
+    object->box = box;
+    object->permitted_types = permitted_types;
+    object->background = false;
+
+    if (box != NULL) {
+        c->base.active++;
+        NSLOG(wisp, INFO, "%d fetches active (pre-buffer-retrieve)", c->base.active);
+    }
+
+    error = hlcache_handle_retrieve_buffer(
+        data, len, mime_type, html_object_callback, object, &child, permitted_types, &object->content);
+
+    if (error != NSERROR_OK) {
+        if (box != NULL) {
+            c->base.active--;
+            NSLOG(wisp, INFO, "%d fetches active (buffer retrieve failed)", c->base.active);
+        }
+        free(object);
+        return error != NSERROR_NOMEM;
+    }
+
+    object->next = c->object_list;
+    c->object_list = object;
+    c->num_objects++;
+
+    return true;
+}

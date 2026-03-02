@@ -172,5 +172,26 @@ struct content *hlcache_handle_get_content(const hlcache_handle *handle);
  */
 nserror hlcache_handle_clone(hlcache_handle *handle, hlcache_handle **result);
 
+/**
+ * Create a high-level cache handle from a raw data buffer.
+ *
+ * Generates a content-hash URL for automatic deduplication.
+ * The resulting cache entry is pinned (not subject to eviction)
+ * and must be explicitly released on page teardown.
+ *
+ * \param data            Raw data buffer (copied)
+ * \param len             Byte length of data
+ * \param mime_type       MIME type (e.g. "image/svg+xml")
+ * \param cb              Callback for content events
+ * \param pw              Private data for callback
+ * \param child           Child context, or NULL
+ * \param accepted_types  Bitmap of acceptable content types
+ * \param result          Pointer to receive cache handle
+ * \return NSERROR_OK on success, appropriate error otherwise
+ */
+nserror hlcache_handle_retrieve_buffer(const uint8_t *data, size_t len, const char *mime_type,
+    hlcache_handle_callback cb, void *pw, hlcache_child_context *child, content_type accepted_types,
+    hlcache_handle **result);
+
 
 #endif

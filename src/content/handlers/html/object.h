@@ -91,4 +91,22 @@ nserror html_object_abort_objects(struct html_content *html);
  */
 void html_deferred_reformat(void *p);
 
+/**
+ * Create a content object from a raw data buffer.
+ *
+ * Like html_fetch_object, but takes raw data instead of a URL.
+ * Uses hlcache_handle_retrieve_buffer internally for content-hash
+ * deduplication and pinned cache semantics.
+ *
+ * \param c               content of type CONTENT_HTML
+ * \param data            Raw data buffer
+ * \param len             Byte length of data
+ * \param mime_type       MIME type string
+ * \param box             box that will contain the object
+ * \param permitted_types bitmap of acceptable types
+ * \return true on success, false on memory exhaustion
+ */
+bool html_fetch_object_buffer(struct html_content *c, const uint8_t *data, size_t len, const char *mime_type,
+    struct box *box, content_type permitted_types);
+
 #endif

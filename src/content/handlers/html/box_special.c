@@ -2058,49 +2058,19 @@ bool convert_special_elements(dom_node *node, html_content *content, struct box 
                             }
 
                             if (svg_xml != NULL) {
-                                /* Build a data:image/svg+xml;base64,... URI from the
-                                 * serialized SVG XML.  Loading through the normal content
-                                 * pipeline gives us svg_reformat at the correct CSS
-                                 * display dimensions — like a real browser. */
-                                uint8_t *b64 = NULL;
-                                size_t b64_len = 0;
-                                nsuerror nsu_err;
+                                /* Load inline SVG through buffer-based
+                                 * content pipeline — no base64 encoding,
+                                 * with content-hash dedup and pinned cache. */
+                                html_fetch_object_buffer(
+                                    content, (const uint8_t *)svg_xml, svg_len, "image/svg+xml", box, CONTENT_IMAGE);
 
-                                nsu_err = nsu_base64_encode_alloc((const uint8_t *)svg_xml, svg_len, &b64, &b64_len);
+                                NSLOG(wisp, DEBUG,
+                                    "SVG: Loaded inline SVG via buffer "
+                                    "(%zu bytes)",
+                                    svg_len);
 
-                                if (free_xml) {
+                                if (free_xml)
                                     free(svg_xml);
-                                }
-
-                                if (nsu_err == NSUERROR_OK && b64 != NULL) {
-                                    /* Construct data: URI */
-                                    const char *prefix = "data:image/svg+xml;base64,";
-                                    size_t prefix_len = strlen(prefix);
-                                    size_t uri_len = prefix_len + b64_len;
-                                    char *data_uri = malloc(uri_len + 1);
-
-                                    if (data_uri != NULL) {
-                                        nsurl *svg_url = NULL;
-                                        memcpy(data_uri, prefix, prefix_len);
-                                        memcpy(data_uri + prefix_len, b64, b64_len);
-                                        data_uri[uri_len] = '\0';
-
-                                        if (nsurl_create(data_uri, &svg_url) == NSERROR_OK) {
-                                            html_fetch_object(content, svg_url, box, CONTENT_IMAGE, false);
-                                            nsurl_unref(svg_url);
-                                            NSLOG(wisp, DEBUG,
-                                                "SVG: Loaded inline SVG as data: URI "
-                                                "(%zu bytes XML, %zu bytes b64)",
-                                                svg_len, b64_len);
-                                        } else {
-                                            NSLOG(wisp, WARNING, "SVG: Failed to create data: URI");
-                                        }
-                                        free(data_uri);
-                                    }
-                                    free(b64);
-                                } else {
-                                    NSLOG(wisp, WARNING, "SVG: Base64 encoding failed");
-                                }
                             } else {
                                 NSLOG(wisp, WARNING, "SVG: Inline SVG node not found in cache list");
                             }
