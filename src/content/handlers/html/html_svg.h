@@ -82,14 +82,38 @@ void html_free_svg_symbols(struct html_content *c);
 void html_free_inline_svgs(struct html_content *c);
 
 /**
+ * CSS context for inline SVG serialization.
+ *
+ * Carries CSS-derived values that need to be "baked in" to the serialized SVG
+ * text, since libsvgtiny has no CSS awareness.  Extend this struct as needed
+ * for additional SVG presentation properties (stroke, fill-opacity, etc.).
+ */
+struct svg_css_context {
+    const char *current_color; /**< Hex from css_computed_color(), for currentColor */
+    const char *fill; /**< Hex from css_computed_fill(), NULL if not set */
+};
+
+/**
+ * Convert a css_color (AARRGGBB format) to a "#RRGGBB" hex string.
+ *
+ * \param col  CSS color value
+ * \param buf  Output buffer, must be at least 8 bytes
+ */
+static inline void css_color_to_hex(css_color col, char buf[8])
+{
+    snprintf(buf, 8, "#%06x", (unsigned)(col & 0x00FFFFFF));
+}
+
+/**
  * Serialize an inline SVG element to a string for libsvgtiny parsing.
  *
  * \param svg_element  The <svg> DOM element to serialize
+ * \param css_ctx      CSS context (currentColor, fill, etc.), or NULL
  * \param svg_data     Returns the serialized SVG string (caller must free)
  * \param svg_len      Returns the length of the serialized string
  * \return NSERROR_OK on success, appropriate error otherwise
  */
-nserror
-html_serialize_inline_svg(dom_element *svg_element, const char *current_color, char **svg_data, size_t *svg_len);
+nserror html_serialize_inline_svg(
+    dom_element *svg_element, const struct svg_css_context *css_ctx, char **svg_data, size_t *svg_len);
 
 #endif /* NETSURF_HTML_SVG_H */

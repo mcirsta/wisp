@@ -2005,6 +2005,8 @@ bool convert_special_elements(dom_node *node, html_content *content, struct box 
                      * at the correct CSS display dimensions. */
                     {
                         char color_str[8] = "#000000"; /* Default black */
+                        char fill_str[8];
+                        struct svg_css_context css_ctx = {NULL, NULL};
                         struct html_inline_svg *cached = NULL;
 
 
@@ -2012,10 +2014,19 @@ bool convert_special_elements(dom_node *node, html_content *content, struct box 
                         if (box->style != NULL) {
                             css_color col;
                             css_computed_color(box->style, &col);
-                            /* Convert CSS color to hex string (col is AABBGGRR format) */
-                            snprintf(color_str, sizeof(color_str), "#%02x%02x%02x", (col >> 0) & 0xff, /* R */
-                                (col >> 8) & 0xff, /* G */
-                                (col >> 16) & 0xff); /* B */
+                            css_color_to_hex(col, color_str);
+                            css_ctx.current_color = color_str;
+
+                            /* Get computed CSS fill for SVG fill injection */
+                            css_color fill_col;
+                            uint8_t fill_type = css_computed_fill(box->style, &fill_col);
+                            if (fill_type == CSS_FILL_COLOR) {
+                                css_color_to_hex(fill_col, fill_str);
+                                css_ctx.fill = fill_str;
+                            } else if (fill_type == CSS_FILL_CURRENT_COLOR) {
+                                /* fill: currentColor → use the same as color */
+                                css_ctx.fill = color_str;
+                            }
                         }
 
                         /* Look for the inline SVG entry */
@@ -2035,7 +2046,7 @@ bool convert_special_elements(dom_node *node, html_content *content, struct box 
                             if (svg_xml == NULL) {
                                 nserror err;
                                 NSLOG(wisp, DEBUG, "SVG: Lazy serialization triggered");
-                                err = html_serialize_inline_svg((dom_element *)node, NULL, &svg_xml, &svg_len);
+                                err = html_serialize_inline_svg((dom_element *)node, &css_ctx, &svg_xml, &svg_len);
                                 if (err != NSERROR_OK || svg_xml == NULL) {
                                     NSLOG(wisp, WARNING, "SVG: Failed to lazy serialize inline SVG");
                                 } else {

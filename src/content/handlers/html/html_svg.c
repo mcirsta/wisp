@@ -36,6 +36,10 @@
 
 #define SVG_SYMBOL_INITIAL_CAPACITY 16
 
+/** Append a string literal to the SVG buffer.
+ *  Uses sizeof()-1 so the compiler computes the length — no manual counting. */
+#define SVG_APPEND_LIT(buf, len, cap, literal) svg_buffer_append(buf, len, cap, literal, sizeof(literal) - 1)
+
 /**
  * Add a symbol to the registry.
  */
@@ -471,7 +475,7 @@ static nserror svg_buffer_append_replace_color(
  * Handles currentColor replacement and attribute filtering.
  */
 static nserror svg_serialize_attributes(
-    dom_element *element, char **buf, size_t *len, size_t *cap, const char *current_color, bool skip_id)
+    dom_element *element, char **buf, size_t *len, size_t *cap, const struct svg_css_context *css_ctx, bool skip_id)
 {
     dom_exception exc;
     dom_namednodemap *attrs = NULL;
@@ -547,7 +551,7 @@ static nserror svg_serialize_attributes(
                 }
             }
 
-            err = svg_buffer_append(buf, len, cap, " ", 1);
+            err = SVG_APPEND_LIT(buf, len, cap, " ");
             if (err == NSERROR_OK) {
                 /* SVG attributes require specific camelCase per the HTML spec
                  * §13.2.5.1 (adjust SVG attributes).  The DOM stores all
@@ -649,15 +653,16 @@ static nserror svg_serialize_attributes(
                 err = svg_buffer_append(buf, len, cap, output_name, name_len);
             }
             if (err == NSERROR_OK && attr_value != NULL) {
-                err = svg_buffer_append(buf, len, cap, "=\"", 2);
+                err = SVG_APPEND_LIT(buf, len, cap, "=\"");
             }
             if (err == NSERROR_OK && attr_value != NULL) {
                 const char *val = dom_string_data(attr_value);
                 size_t val_len = dom_string_length(attr_value);
-                err = svg_buffer_append_replace_color(buf, len, cap, val, val_len, current_color);
+                err = svg_buffer_append_replace_color(
+                    buf, len, cap, val, val_len, css_ctx ? css_ctx->current_color : NULL);
             }
             if (err == NSERROR_OK && attr_value != NULL) {
-                err = svg_buffer_append(buf, len, cap, "\"", 1);
+                err = SVG_APPEND_LIT(buf, len, cap, "\"");
             }
 
             dom_string_unref(attr_name);
@@ -686,8 +691,8 @@ static nserror svg_serialize_attributes(
  */
 static bool svg_element_is_use_with_resolved(dom_element *element, bool *has_resolved);
 
-static nserror svg_serialize_element_open_with_dimensions(
-    const char *tag_name, dom_element *element, char **buf, size_t *len, size_t *cap, const char *current_color)
+static nserror svg_serialize_element_open_with_dimensions(const char *tag_name, dom_element *element, char **buf,
+    size_t *len, size_t *cap, const struct svg_css_context *css_ctx)
 {
     nserror err;
     int viewbox_x = 0, viewbox_y = 0;
@@ -804,19 +809,31 @@ static nserror svg_serialize_element_open_with_dimensions(
             dom_node_unref(child);
     }
 
-    err = svg_buffer_append(buf, len, cap, "<", 1);
+    err = SVG_APPEND_LIT(buf, len, cap, "<");
     if (err == NSERROR_OK) {
         err = svg_buffer_append(buf, len, cap, tag_name, strlen(tag_name));
     }
 
     /* Always add xmlns for standalone SVG compatibility */
     if (err == NSERROR_OK) {
-        err = svg_buffer_append(
-            buf, len, cap, " xmlns=\"http://www.w3.org/2000/svg\"", strlen(" xmlns=\"http://www.w3.org/2000/svg\""));
+        err = SVG_APPEND_LIT(buf, len, cap, " xmlns=\"http://www.w3.org/2000/svg\"");
     }
 
     if (err == NSERROR_OK) {
-        err = svg_serialize_attributes(element, buf, len, cap, current_color, false);
+        err = svg_serialize_attributes(element, buf, len, cap, css_ctx, false);
+    }
+
+    /* Inject CSS fill attribute from computed style.
+     * This sets the default fill for all descendant elements via SVG
+     * inheritance; elements with explicit fill attributes still override. */
+    if (err == NSERROR_OK && css_ctx != NULL && css_ctx->fill != NULL) {
+        err = SVG_APPEND_LIT(buf, len, cap, " fill=\"");
+        if (err == NSERROR_OK) {
+            err = svg_buffer_append(buf, len, cap, css_ctx->fill, strlen(css_ctx->fill));
+        }
+        if (err == NSERROR_OK) {
+            err = SVG_APPEND_LIT(buf, len, cap, "\"");
+        }
     }
 
     /* Add viewBox and dimensions if we have them (either from the element
@@ -841,7 +858,7 @@ static nserror svg_serialize_element_open_with_dimensions(
         }
     }
     if (err == NSERROR_OK) {
-        err = svg_buffer_append(buf, len, cap, ">", 1);
+        err = SVG_APPEND_LIT(buf, len, cap, ">");
     }
 
     return err;
@@ -851,21 +868,21 @@ static nserror svg_serialize_element_open_with_dimensions(
  * Serialize an element's opening tag: <tagname [attrs]>
  */
 static nserror svg_serialize_element_open(const char *tag_name, dom_element *element, char **buf, size_t *len,
-    size_t *cap, const char *current_color, bool skip_id)
+    size_t *cap, const struct svg_css_context *css_ctx, bool skip_id)
 {
     nserror err;
 
     NSLOG(wisp, DEBUG, "SVG serialize: Opening tag <%s>", tag_name);
 
-    err = svg_buffer_append(buf, len, cap, "<", 1);
+    err = SVG_APPEND_LIT(buf, len, cap, "<");
     if (err == NSERROR_OK) {
         err = svg_buffer_append(buf, len, cap, tag_name, strlen(tag_name));
     }
     if (err == NSERROR_OK) {
-        err = svg_serialize_attributes(element, buf, len, cap, current_color, skip_id);
+        err = svg_serialize_attributes(element, buf, len, cap, css_ctx, skip_id);
     }
     if (err == NSERROR_OK) {
-        err = svg_buffer_append(buf, len, cap, ">", 1);
+        err = SVG_APPEND_LIT(buf, len, cap, ">");
     }
 
     return err;
@@ -878,12 +895,12 @@ static nserror svg_serialize_element_close(const char *tag_name, char **buf, siz
 {
     NSLOG(wisp, DEBUG, "SVG serialize: Closing tag </%s>", tag_name);
 
-    nserror err = svg_buffer_append(buf, len, cap, "</", 2);
+    nserror err = SVG_APPEND_LIT(buf, len, cap, "</");
     if (err == NSERROR_OK) {
         err = svg_buffer_append(buf, len, cap, tag_name, strlen(tag_name));
     }
     if (err == NSERROR_OK) {
-        err = svg_buffer_append(buf, len, cap, ">", 1);
+        err = SVG_APPEND_LIT(buf, len, cap, ">");
     }
     return err;
 }
@@ -891,17 +908,18 @@ static nserror svg_serialize_element_close(const char *tag_name, char **buf, siz
 /**
  * Serialize children of an element recursively.
  */
-static nserror
-svg_serialize_children(dom_element *element, char **buf, size_t *len, size_t *cap, const char *current_color);
+static nserror svg_serialize_children(
+    dom_element *element, char **buf, size_t *len, size_t *cap, const struct svg_css_context *css_ctx);
 
 /* Forward declaration for svg_serialize_node */
-static nserror svg_serialize_node(dom_node *node, char **buf, size_t *len, size_t *cap, const char *current_color);
+static nserror
+svg_serialize_node(dom_node *node, char **buf, size_t *len, size_t *cap, const struct svg_css_context *css_ctx);
 
 /**
  * Serialize children of an element recursively.
  */
-static nserror
-svg_serialize_children(dom_element *element, char **buf, size_t *len, size_t *cap, const char *current_color)
+static nserror svg_serialize_children(
+    dom_element *element, char **buf, size_t *len, size_t *cap, const struct svg_css_context *css_ctx)
 {
     dom_exception exc;
     dom_node *child = NULL;
@@ -909,7 +927,7 @@ svg_serialize_children(dom_element *element, char **buf, size_t *len, size_t *ca
 
     exc = dom_node_get_first_child((dom_node *)element, &child);
     while (exc == DOM_NO_ERR && child != NULL) {
-        err = svg_serialize_node(child, buf, len, cap, current_color);
+        err = svg_serialize_node(child, buf, len, cap, css_ctx);
 
         dom_node *next = NULL;
         exc = dom_node_get_next_sibling(child, &next);
@@ -929,7 +947,7 @@ svg_serialize_children(dom_element *element, char **buf, size_t *len, size_t *ca
  * Since libsvgtiny doesn't support <use>, we inline the content directly.
  */
 static nserror svg_serialize_use_with_resolved(
-    dom_element *use_element, char **buf, size_t *len, size_t *cap, const char *current_color)
+    dom_element *use_element, char **buf, size_t *len, size_t *cap, const struct svg_css_context *css_ctx)
 {
     dom_exception exc;
     nserror err = NSERROR_OK;
@@ -967,7 +985,7 @@ static nserror svg_serialize_use_with_resolved(
                      * The viewBox has been lifted to the root <svg>. */
                     NSLOG(wisp, DEBUG, "SVG serialize: Flattening <%s> children into root <svg>", child_name_str);
 
-                    err = svg_serialize_children((dom_element *)child, buf, len, cap, current_color);
+                    err = svg_serialize_children((dom_element *)child, buf, len, cap, css_ctx);
 
                     dom_string_unref(child_name);
                     dom_node_unref(child);
@@ -1031,9 +1049,10 @@ static bool svg_element_is_use_with_resolved(dom_element *element, bool *has_res
  * This is the main entry point - it dispatches to specialized functions
  * based on node type and element type.
  *
- * @param current_color  Hex color string (e.g. "#808080") to substitute for currentColor
+ * @param css_ctx  CSS context for currentColor resolution and fill injection
  */
-static nserror svg_serialize_node(dom_node *node, char **buf, size_t *len, size_t *cap, const char *current_color)
+static nserror
+svg_serialize_node(dom_node *node, char **buf, size_t *len, size_t *cap, const struct svg_css_context *css_ctx)
 {
     dom_exception exc;
     dom_node_type type;
@@ -1077,21 +1096,21 @@ static nserror svg_serialize_node(dom_node *node, char **buf, size_t *len, size_
         if (is_use && has_resolved) {
             /* Special handling: serialize <use> with resolved symbol content */
             NSLOG(wisp, DEBUG, "SVG serialize: Using special <use> handling with resolved content");
-            err = svg_serialize_use_with_resolved(element, buf, len, cap, current_color);
+            err = svg_serialize_use_with_resolved(element, buf, len, cap, css_ctx);
         } else {
             /* Normal element serialization: <tag> children </tag> */
             if (strcasecmp(tag_name_str, "symbol") == 0) {
                 /* Convert <symbol> to <g> since libsvgtiny doesn't render symbol directly */
-                err = svg_serialize_element_open("g", element, buf, len, cap, current_color, false);
+                err = svg_serialize_element_open("g", element, buf, len, cap, css_ctx, false);
             } else if (strcasecmp(tag_name_str, "svg") == 0) {
                 /* For root <svg>, add default width/height if not present */
-                err = svg_serialize_element_open_with_dimensions("svg", element, buf, len, cap, current_color);
+                err = svg_serialize_element_open_with_dimensions("svg", element, buf, len, cap, css_ctx);
             } else {
-                err = svg_serialize_element_open(tag_name_str, element, buf, len, cap, current_color, false);
+                err = svg_serialize_element_open(tag_name_str, element, buf, len, cap, css_ctx, false);
             }
 
             if (err == NSERROR_OK) {
-                err = svg_serialize_children(element, buf, len, cap, current_color);
+                err = svg_serialize_children(element, buf, len, cap, css_ctx);
             }
 
             if (err == NSERROR_OK) {
@@ -1114,9 +1133,10 @@ static nserror svg_serialize_node(dom_node *node, char **buf, size_t *len, size_
 /**
  * Serialize an inline SVG element to a string for libsvgtiny parsing.
  *
- * @param current_color  Hex color string (e.g. "#808080") to substitute for currentColor, or NULL
+ * @param css_ctx  CSS context for currentColor resolution and fill injection, or NULL
  */
-nserror html_serialize_inline_svg(dom_element *svg_element, const char *current_color, char **svg_data, size_t *svg_len)
+nserror html_serialize_inline_svg(
+    dom_element *svg_element, const struct svg_css_context *css_ctx, char **svg_data, size_t *svg_len)
 {
     char *buf = NULL;
     size_t len = 0;
@@ -1124,7 +1144,7 @@ nserror html_serialize_inline_svg(dom_element *svg_element, const char *current_
     nserror err;
 
     /* Serialize the SVG element and its children */
-    err = svg_serialize_node((dom_node *)svg_element, &buf, &len, &cap, current_color);
+    err = svg_serialize_node((dom_node *)svg_element, &buf, &len, &cap, css_ctx);
     if (err != NSERROR_OK) {
         free(buf);
         *svg_data = NULL;
