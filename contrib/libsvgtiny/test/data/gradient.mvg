@@ -1,2 +1,2 @@
 viewbox 0 0 1000 1000
-fill none stroke none stroke-width 5 fill-gradient linear(25,25,25,175) fill-stops(0.05:#aa88ff,0.95:#ffddcc) stroke-gradient linear(25,25,25,25) stroke-stops(0.05:#ff6600,0.95:#ffff66) path 'M 83.3333 125 L 916.667 125 L 916.667 875 L 83.3333 875 Z '
+fill none stroke none stroke-width 5 fill-gradient linear(25,25,25,175) fill-stops(0.05:#aa88ff,0.95:#ffddcc) stroke-gradient linear(25,25,25,25) stroke-stops(0.05:#ff6600,0.95:#ffff66) path 'M 83.3333 250 L 916.667 250 L 916.667 750 L 83.3333 750 Z '

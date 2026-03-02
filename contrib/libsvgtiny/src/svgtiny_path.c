@@ -202,7 +202,7 @@ static inline svgtiny_code generate_path_hline(struct internal_path_state *state
         }
         state->path.p[state->path.used++] = svgtiny_PATH_LINE;
         state->path.p[state->path.used++] = state->cubic_x = state->quad_x = state->prev_x = state->cmd.p[cmdpc];
-        state->path.p[state->path.used++] = state->cubic_y = state->quad_x = state->prev_y;
+        state->path.p[state->path.used++] = state->cubic_y = state->quad_y = state->prev_y;
     }
     return svgtiny_OK;
 }
@@ -316,7 +316,7 @@ static inline svgtiny_code generate_path_scurveto(struct internal_path_state *st
         state->path.p[state->path.used++] = x1;
         state->path.p[state->path.used++] = y1;
         state->path.p[state->path.used++] = state->cubic_x = state->cmd.p[cmdpc + 0];
-        state->path.p[state->path.used++] = state->cubic_x = state->cmd.p[cmdpc + 1];
+        state->path.p[state->path.used++] = state->cubic_y = state->cmd.p[cmdpc + 1];
         state->path.p[state->path.used++] = state->quad_x = state->prev_x = state->cmd.p[cmdpc + 2];
         state->path.p[state->path.used++] = state->quad_y = state->prev_y = state->cmd.p[cmdpc + 3];
     }
@@ -344,14 +344,14 @@ static inline svgtiny_code generate_path_bcurveto(struct internal_path_state *st
             return res;
         }
 
-        state->quad_x = state->cmd.p[cmdpc + 0] /* x1 */;
-        state->quad_y = state->cmd.p[cmdpc + 1] /* y1 */;
         if (relative != 0) {
             state->cmd.p[cmdpc + 0] += state->prev_x; /* x1 */
             state->cmd.p[cmdpc + 1] += state->prev_y; /* y1 */
             state->cmd.p[cmdpc + 2] += state->prev_x; /* x */
             state->cmd.p[cmdpc + 3] += state->prev_y; /* y */
         }
+        state->quad_x = state->cmd.p[cmdpc + 0] /* x1 - now absolute */;
+        state->quad_y = state->cmd.p[cmdpc + 1] /* y1 - now absolute */;
 
         state->path.p[state->path.used++] = svgtiny_PATH_BEZIER;
         state->path.p[state->path.used++] = 1. / 3 * state->prev_x + 2. / 3 * state->cmd.p[cmdpc + 0];
@@ -394,8 +394,6 @@ static inline svgtiny_code generate_path_sbcurveto(struct internal_path_state *s
         state->quad_y = y1;
 
         if (relative != 0) {
-            x1 += state->prev_x;
-            y1 += state->prev_y;
             state->cmd.p[cmdpc + 0] += state->prev_x; /* x */
             state->cmd.p[cmdpc + 1] += state->prev_y; /* y */
         }

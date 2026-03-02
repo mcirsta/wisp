@@ -1,0 +1,10 @@
+<?xml version="1.0" standalone="no"?>
+<!-- Test for consecutive S (smooth curveto) commands.
+     The second S depends on cubic_y being updated by the first S.
+     Bug: generate_path_scurveto assigned cubic_x instead of cubic_y,
+     causing wrong reflected control point in the second S. -->
+<svg width="400" height="200" viewBox="0 0 400 200"
+     xmlns="http://www.w3.org/2000/svg">
+  <path fill="none" stroke="black" stroke-width="2"
+    d="M 0,100 C 0,0 100,0 100,100 S 200,200 200,100 S 300,0 300,100" />
+</svg>
