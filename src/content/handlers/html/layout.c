@@ -1258,6 +1258,58 @@ void layout_minmax_box(struct box *box, const struct gui_layout_table *font_func
 
 
 /**
+ * Check if a box is out of normal flow (absolute or fixed positioned).
+ * CSS 2.1 §9.3: Out-of-flow elements don't participate in margin collapsing.
+ */
+static inline bool box_is_out_of_flow(const struct box *box)
+{
+    return box->style != NULL &&
+        (css_computed_position(box->style) == CSS_POSITION_ABSOLUTE ||
+            css_computed_position(box->style) == CSS_POSITION_FIXED);
+}
+
+/**
+ * Check if a box has vertical padding or borders that separate margins.
+ * CSS 2.1 §8.3.1: Padding and borders prevent adjoining margins.
+ */
+static inline bool box_has_vertical_separator(const struct box *box)
+{
+    return box->padding[TOP] || box->padding[BOTTOM] || box->border[TOP].width || box->border[BOTTOM].width;
+}
+
+/**
+ * Check if an inline container generates line boxes from in-flow content.
+ * CSS 2.1 §8.3.1: Only line boxes from in-flow content prevent collapsing.
+ * An inline container with only out-of-flow (abs/fixed) children does not
+ * generate line boxes.
+ */
+static inline bool box_inline_container_has_line_boxes(const struct box *box)
+{
+    for (struct box *c = box->children; c != NULL; c = c->next) {
+        if (!box_is_out_of_flow(c))
+            return true;
+    }
+    return false;
+}
+
+/**
+ * Check if a box prevents margins from collapsing through it.
+ * CSS 2.1 §8.3.1: A box's own margins collapse only if it has zero
+ * min-height, zero/auto height, no vertical padding/border, and does
+ * not contain a line box.
+ */
+static inline bool box_prevents_collapse_through(const struct box *box)
+{
+    if (box->flags & MAKE_HEIGHT)
+        return true;
+    if (box_has_vertical_separator(box))
+        return true;
+    if (box->type == BOX_INLINE_CONTAINER)
+        return box_inline_container_has_line_boxes(box);
+    return false;
+}
+
+/**
  * Find next block that current margin collapses to.
  *
  * \param  unit_len_ctx  Length conversion context
@@ -1313,24 +1365,12 @@ static struct box *layout_next_margin_block(const css_unit_ctx *unit_len_ctx, st
         } else {
             bool walked_up = false;
 
-            /* CSS 2.1 §8.3.1: Margins of a box collapse THROUGH it (top collapses
-             * with bottom) only if:
-             * - no top/bottom border
-             * - no top/bottom padding
-             * - height is 0 or auto
-             * - no line boxes (content)
-             *
-             * If the box does NOT collapse through (has height/content), then its
-             * Top margin does NOT collapse with its Bottom margin (and thus
-             * does not collapse with Parent Bottom or Next Sibling Top).
-             * We should NOT walk up in this case.
-             */
-            bool collapses_through = true;
-            if ((box->flags & MAKE_HEIGHT) || box->padding[TOP] || box->padding[BOTTOM] || box->border[TOP].width ||
-                box->border[BOTTOM].width || box->type == BOX_INLINE_CONTAINER) {
-                /* BOX_INLINE_CONTAINER typically has text/line boxes, so it doesn't collapse through */
-                collapses_through = false;
-            }
+            /* CSS 2.1 §8.3.1: If the box does NOT collapse through
+             * (has height/content), then its Top margin does NOT
+             * collapse with its Bottom margin (and thus does not
+             * collapse with Parent Bottom or Next Sibling Top).
+             * We should NOT walk up in this case. */
+            bool collapses_through = !box_prevents_collapse_through(box);
 
             if (!box->next && collapses_through) {
                 /* No more siblings AND box collapses through:

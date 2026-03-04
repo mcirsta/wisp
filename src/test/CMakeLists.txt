@@ -300,6 +300,34 @@ target_include_directories(font_face_test PRIVATE
 target_link_libraries(font_face_test wisp)
 add_test(NAME font_face_test COMMAND font_face_test)
 
+# Margin collapse test — two-unit build to avoid enum collisions
+# between Wisp headers (box.h) and libcss internal headers (opcodes.h)
+
+# Style factory: only sees libcss internal headers
+add_library(margin_collapse_style OBJECT layout_margin_collapse_style.c)
+target_include_directories(margin_collapse_style PRIVATE
+  ${CMAKE_SOURCE_DIR}/contrib/libcss/include
+  ${CMAKE_SOURCE_DIR}/contrib/libcss/src
+  ${CMAKE_BINARY_DIR}/contrib/libcss/src
+  ${CMAKE_BINARY_DIR}/contrib/libcss/src/select
+  ${CMAKE_BINARY_DIR}/contrib/libcss/src/generated
+)
+
+# Test executable: only sees Wisp headers
+add_executable(layout_margin_collapse_test
+  layout_margin_collapse_test.c
+  $<TARGET_OBJECTS:margin_collapse_style>
+)
+target_include_directories(layout_margin_collapse_test PRIVATE
+  ${TEST_COMMON_INCLUDES}
+  ${CMAKE_SOURCE_DIR}/include
+)
+target_link_libraries(layout_margin_collapse_test wisp ${CHECK_LIBRARIES})
+add_test(NAME layout_margin_collapse_test COMMAND layout_margin_collapse_test)
+set_tests_properties(layout_margin_collapse_test PROPERTIES
+  ENVIRONMENT "CK_VERBOSITY=verbose;CK_FORK=no"
+)
+
 # ============================================================================
 # Unix-only Tests (require malloc_fig)
 # ============================================================================
