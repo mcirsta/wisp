@@ -367,13 +367,16 @@ def generate_cascade_file(name, prop_data):
 
 def generate_cascade_ident(name, NAME, prop_data, enum_prefix, initial):
     """Generate the cascade function for IDENT-switch properties."""
-    # Use the property's initial value (from TOML) for the switch default,
-    # not INHERIT. This matches the hand-written originals.
-    init_value = f'{enum_prefix}_{initial}'
+    # When hasFlagValue is true (inherit/initial/unset/revert), the switch
+    # is skipped, so this default is stored into the computed style bits.
+    # The compose function later checks `get_xxx(child) == CSS_XXX_INHERIT`
+    # to decide whether to copy from parent — so we MUST default to INHERIT
+    # (0x0), not the initial value.  For FLAG_VALUE_INITIAL, the finalize
+    # step in select.c calls css__initial_xxx() which overwrites correctly.
     lines = []
     lines.append(f'css_error css__cascade_{name}(uint32_t opv, css_style *style, css_select_state *state)')
     lines.append('{')
-    lines.append(f'    uint16_t value = {init_value};')
+    lines.append(f'    uint16_t value = {enum_prefix}_INHERIT;')
     lines.append(f'')
     lines.append(f'    UNUSED(style);')
     lines.append(f'')
