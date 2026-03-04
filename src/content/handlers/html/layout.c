@@ -1318,12 +1318,15 @@ static inline bool box_prevents_collapse_through(const struct box *box)
  * \param  viewport_height  height of viewport in px
  * \param  max_pos_margin  updated to to maximum positive margin encountered
  * \param  max_neg_margin  updated to to maximum negative margin encountered
+ * \param  crossed_parent_child  set to true if the margin chain descended
+ *         into a child (parent-first-child collapse per CSS 2.1 §8.3.1)
  * \return  next box that current margin collapses to, or NULL if none.
  */
 static struct box *layout_next_margin_block(const css_unit_ctx *unit_len_ctx, struct box *box, struct box *block,
-    int viewport_height, unsigned int *max_pos_margin, unsigned int *max_neg_margin)
+    int viewport_height, unsigned int *max_pos_margin, unsigned int *max_neg_margin, bool *crossed_parent_child)
 {
     assert(block != NULL);
+    *crossed_parent_child = false;
 
     while (box != NULL) {
 
@@ -1342,9 +1345,11 @@ static struct box *layout_next_margin_block(const css_unit_ctx *unit_len_ctx, st
                 if (box->margin[TOP] > 0 && (unsigned int)box->margin[TOP] > *max_pos_margin) {
                     *max_pos_margin = (unsigned int)box->margin[TOP];
                 } else if (box->margin[TOP] != AUTO && box->margin[TOP] < 0 &&
-                    -(unsigned int)box->margin[TOP] > *max_neg_margin)
+                    -(unsigned int)box->margin[TOP] > *max_neg_margin) {
                     *max_neg_margin = -(unsigned int)box->margin[TOP];
+                }
             }
+
 
             /* Check whether box is the box current margin collapses
              * to */
@@ -1360,7 +1365,9 @@ static struct box *layout_next_margin_block(const css_unit_ctx *unit_len_ctx, st
         /* Find next box */
         if (box->type == BOX_BLOCK && !box->object && box->children && box->style &&
             css_computed_overflow_y(box->style) == CSS_OVERFLOW_VISIBLE) {
-            /* Down into children. */
+            /* Down into children — crossing a parent-child boundary.
+             * CSS 2.1 §8.3.1: margin may collapse with first child. */
+            *crossed_parent_child = true;
             box = box->children;
         } else {
             bool walked_up = false;
@@ -3443,7 +3450,7 @@ static bool layout_inline_container(
 }
 
 
-/* Documented in layout_intertnal.h */
+/* Documented in layout_internal.h */
 bool layout_block_context(struct box *block, int viewport_height, html_content *content)
 {
     struct box *box;
@@ -3591,10 +3598,22 @@ bool layout_block_context(struct box *block, int viewport_height, html_content *
         /* If we don't know which box the current margin collapses
          * through to, find out.  Update the pos/neg margin values. */
         if (margin_collapse == NULL) {
-            margin_collapse = layout_next_margin_block(
-                &content->unit_len_ctx, box, block, viewport_height, &max_pos_margin, &max_neg_margin);
+            bool margin_from_child = false;
+            margin_collapse = layout_next_margin_block(&content->unit_len_ctx, box, block, viewport_height,
+                &max_pos_margin, &max_neg_margin, &margin_from_child);
             /* We have a margin that has not yet been applied. */
             in_margin = true;
+
+            /* CSS 2.1 §8.3.1: If the margin chain descended into a
+             * first child (no border/padding separator), the collapsed
+             * margin pushes the PARENT down, not the child inside
+             * the parent. Apply the margin here to the current box. */
+            if (margin_from_child && in_margin) {
+                cy += (int)max_pos_margin - (int)max_neg_margin;
+                box->y += (int)max_pos_margin - (int)max_neg_margin;
+                in_margin = false;
+                max_pos_margin = max_neg_margin = 0;
+            }
         }
 
         /* Clearance. */
@@ -3884,12 +3903,12 @@ bool layout_block_context(struct box *block, int viewport_height, html_content *
                     margin_collapse = NULL;
                 }
 
-                /* Apply bottom margin (skip if AUTO to prevent overflow) */
-                if (box->margin[BOTTOM] != AUTO && max_pos_margin < box->margin[BOTTOM]) {
-
-                    max_pos_margin = box->margin[BOTTOM];
-                } else if (box->margin[BOTTOM] != AUTO && max_neg_margin < -box->margin[BOTTOM])
-                    max_neg_margin = -box->margin[BOTTOM];
+                /* Apply bottom margin */
+                if (box->margin[BOTTOM] > 0 && (unsigned int)box->margin[BOTTOM] > max_pos_margin) {
+                    max_pos_margin = (unsigned int)box->margin[BOTTOM];
+                } else if (box->margin[BOTTOM] != AUTO && box->margin[BOTTOM] < 0 &&
+                    (unsigned int)(-box->margin[BOTTOM]) > max_neg_margin)
+                    max_neg_margin = (unsigned int)(-box->margin[BOTTOM]);
 
                 box = box->parent;
 
@@ -3898,12 +3917,22 @@ bool layout_block_context(struct box *block, int viewport_height, html_content *
 
                 /* Margin is invalidated if this is a box
                  * margins can't collapse through.
-                 * CSS 2.1 §8.3.1: margins can't collapse through if:
-                 * - box has explicit height (MAKE_HEIGHT)
-                 * - box has non-zero padding-bottom
-                 * - box has non-zero border-bottom */
+                 * CSS 2.1 §8.3.1: last-child bottom margin collapses
+                 * with parent only if parent has:
+                 * - height: auto (no MAKE_HEIGHT)
+                 * - min-height: 0
+                 * - no bottom padding
+                 * - no bottom border */
+                bool has_min_height = false;
+                if (box->style) {
+                    css_fixed mh_val;
+                    css_unit mh_unit;
+                    if (css_computed_min_height(box->style, &mh_val, &mh_unit) == CSS_MIN_HEIGHT_SET && mh_val > 0)
+                        has_min_height = true;
+                }
                 if (box->type == BOX_BLOCK &&
-                    ((box->flags & MAKE_HEIGHT) || box->padding[BOTTOM] != 0 || box->border[BOTTOM].width != 0)) {
+                    ((box->flags & MAKE_HEIGHT) || has_min_height || box->padding[BOTTOM] != 0 ||
+                        box->border[BOTTOM].width != 0)) {
 
                     margin_collapse = NULL;
                     in_margin = false;
@@ -3954,12 +3983,12 @@ bool layout_block_context(struct box *block, int viewport_height, html_content *
             margin_collapse = NULL;
         }
 
-        /* Apply bottom margin (skip if AUTO to prevent overflow) */
-        if (box->margin[BOTTOM] != AUTO && max_pos_margin < box->margin[BOTTOM]) {
-
-            max_pos_margin = box->margin[BOTTOM];
-        } else if (box->margin[BOTTOM] != AUTO && max_neg_margin < -box->margin[BOTTOM])
-            max_neg_margin = -box->margin[BOTTOM];
+        /* Apply bottom margin */
+        if (box->margin[BOTTOM] > 0 && (unsigned int)box->margin[BOTTOM] > max_pos_margin) {
+            max_pos_margin = (unsigned int)box->margin[BOTTOM];
+        } else if (box->margin[BOTTOM] != AUTO && box->margin[BOTTOM] < 0 &&
+            (unsigned int)(-box->margin[BOTTOM]) > max_neg_margin)
+            max_neg_margin = (unsigned int)(-box->margin[BOTTOM]);
 
         /* Mark that we have a pending margin to apply to the next sibling.
          * CSS 2.1 §8.3.1: "The bottom margin of an in-flow block-level

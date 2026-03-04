@@ -107,6 +107,14 @@ void style_set_padding_bottom(css_computed_style *s, int px)
     set_padding_bottom(s, CSS_PADDING_SET, INTTOFIX(px), CSS_UNIT_PX);
 }
 
+void style_set_min_height(css_computed_style *s, int px)
+{
+    if (px > 0)
+        set_min_height(s, CSS_MIN_HEIGHT_SET, INTTOFIX(px), CSS_UNIT_PX);
+    else
+        set_min_height(s, CSS_MIN_HEIGHT_AUTO, 0, CSS_UNIT_PX);
+}
+
 void destroy_mock_style(css_computed_style *s)
 {
     free(s);
