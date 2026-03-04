@@ -734,6 +734,161 @@ START_TEST(test_nested_collapse_through)
 END_TEST
 
 
+/**
+ * Test: self-collapsing block whose children are all out-of-flow (abspos).
+ *
+ * Models the cnx-software.com bug: a LABEL (display:block, margin-bottom:0.5em)
+ * contains only a .screen-reader-text SPAN (position:absolute). The LABEL has
+ * height 0 and no in-flow children, so per CSS 2.1 §8.3.1 its top and bottom
+ * margins should collapse through. Without the fix, layout_next_margin_block
+ * descends into the children, walks back up, but the !walked_up guard on
+ * margin[BOTTOM] accumulation causes the bottom margin to be lost from the
+ * collapsing chain.
+ *
+ * Structure:
+ *   block  (root BFC)
+ *     a    (height:10, mb:10)
+ *     label (height:0, mt:0, mb:7)  ← should collapse through
+ *       ic  (BOX_INLINE_CONTAINER)
+ *         span (BOX_INLINE, position:absolute)
+ *     input (height:10, mt:0)
+ *
+ * Expected: a.mb=10 collapses with label.mt=0, label.mb=7, input.mt=0.
+ * Collapsed = max(10, 0, 7, 0) = 10.  input.y = 10 + 10 = 20.
+ */
+START_TEST(test_collapse_through_abspos_children)
+{
+    html_content *content = create_test_content();
+
+    struct box *block = create_box_with_style(200);
+
+    /* Box A: normal block with height, margin-bottom 10 */
+    struct box *a = create_box_with_style(200);
+    style_set_height_px(a->style, 10);
+    a->flags |= HAS_HEIGHT | MAKE_HEIGHT;
+    style_set_margins(a->style, 0, 0, 10, 0);
+
+    /* Label: empty block with margin-bottom 7, height 0 */
+    struct box *label = create_box_with_style(200);
+    style_set_height_px(label->style, 0);
+    style_set_margins(label->style, 0, 0, 7, 0);
+    /* Do NOT set MAKE_HEIGHT — label is empty */
+
+    /* Abspos block child inside label.
+     * In the real cnx-software.com case, this is a .screen-reader-text SPAN
+     * (position:absolute) inside the LABEL, wrapped in an INLINE_CONTAINER.
+     * We use a BOX_BLOCK child here because layout_line requires nsoptions
+     * initialization that the test harness doesn't support. The key behavior
+     * under test is the same: layout_next_margin_block descends into the
+     * label's children, finds only abspos children, and must walk back up —
+     * where the label's margin[BOTTOM] must be accumulated. */
+    struct box *abspos_child = create_box_with_style(200);
+    style_set_position_absolute(abspos_child->style);
+    style_set_height_px(abspos_child->style, 1);
+    abspos_child->flags |= HAS_HEIGHT | MAKE_HEIGHT;
+
+    add_child(label, abspos_child);
+
+    /* Input: normal block with height */
+    struct box *input = create_box_with_style(200);
+    style_set_height_px(input->style, 10);
+    input->flags |= HAS_HEIGHT | MAKE_HEIGHT;
+
+    add_child(block, a);
+    add_child(block, label);
+    add_child(block, input);
+
+    bool ok = layout_block_context(block, 768, content);
+    ck_assert(ok);
+
+    /* label should collapse through: all margins are adjoining.
+     * a.mb=10, label.mt=0, label.mb=7, input.mt=0
+     * collapsed = max(10, 0, 7, 0) = 10
+     * input.y = a.height(10) + collapsed(10) = 20 */
+    ck_assert_msg(input->y == 20,
+        "collapse_through_abspos_children: expected input->y=20, got %d "
+        "(label with only abspos children should collapse through)",
+        input->y);
+
+    free_box_tree(block);
+    destroy_test_content(content);
+}
+END_TEST
+
+/**
+ * CSS 2.1 §8.3.1: A block element whose only child is an
+ * INLINE_CONTAINER with no line boxes should self-collapse.
+ *
+ * Models the real cnx-software.com LABEL:
+ *   FORM (block)
+ *     LABEL (block, mb=7, no border/padding/height)
+ *       └─ IC (inline container, empty — no in-flow inline content)
+ *     INPUT (block, with height)
+ *
+ * The IC is an anonymous wrapper (no style, no margins). In the real
+ * page it wraps a position:absolute INLINE_BLOCK, but we use an empty
+ * IC for simplicity — both represent "no line boxes."
+ *
+ * Expected: LABEL self-collapses. a.mb=10, label.mt=0, label.mb=7,
+ * input.mt=0 → collapsed = max(10,7) = 10 → input.y = 10+10 = 20.
+ */
+START_TEST(test_collapse_through_empty_ic)
+{
+    html_content *content = create_test_content();
+
+    struct box *block = create_box_with_style(200);
+
+    /* Box A: normal block with height 10, margin-bottom 10 */
+    struct box *a = create_box_with_style(200);
+    style_set_height_px(a->style, 10);
+    a->flags |= HAS_HEIGHT | MAKE_HEIGHT;
+    style_set_margins(a->style, 0, 0, 10, 0);
+
+    /* Label: empty block with margin-bottom 7, no height */
+    struct box *label = create_box_with_style(200);
+    style_set_height_px(label->style, 0);
+    style_set_margins(label->style, 0, 0, 7, 0);
+    /* Do NOT set MAKE_HEIGHT — label has no content */
+
+    /* Empty inline container inside label.
+     * This is what the box normaliser creates as an anonymous wrapper.
+     * No style, no margins, no children → no line boxes. */
+    struct box *ic = calloc(1, sizeof(struct box));
+    assert(ic != NULL);
+    ic->type = BOX_INLINE_CONTAINER;
+    ic->style = NULL;
+    ic->width = 200;
+    ic->height = 0;
+
+    add_child(label, ic);
+
+    /* Input: normal block with height */
+    struct box *input = create_box_with_style(200);
+    style_set_height_px(input->style, 10);
+    input->flags |= HAS_HEIGHT | MAKE_HEIGHT;
+
+    add_child(block, a);
+    add_child(block, label);
+    add_child(block, input);
+
+    bool ok = layout_block_context(block, 768, content);
+    ck_assert(ok);
+
+    /* label should self-collapse: its IC has no line boxes.
+     * a.mb=10, label.mt=0, label.mb=7, input.mt=0
+     * collapsed = max(10, 0, 7, 0) = 10
+     * input.y = a.height(10) + collapsed(10) = 20 */
+    ck_assert_msg(input->y == 20,
+        "collapse_through_empty_ic: expected input->y=20, got %d "
+        "(label with only empty IC child should self-collapse)",
+        input->y);
+
+    free_box_tree(block);
+    destroy_test_content(content);
+}
+END_TEST
+
+
 /* ========================================================================
  * Test runner
  * ======================================================================== */
@@ -1050,6 +1205,8 @@ static Suite *margin_collapse_suite(void)
     tcase_add_test(tc_through, test_no_collapse_through_height);
     tcase_add_test(tc_through, test_nested_collapse_through);
     tcase_add_test(tc_through, test_no_collapse_through_border);
+    tcase_add_test(tc_through, test_collapse_through_abspos_children);
+    tcase_add_test(tc_through, test_collapse_through_empty_ic);
     suite_add_tcase(s, tc_through);
 
     TCase *tc_parent = tcase_create("Parent-First-Child Collapse");

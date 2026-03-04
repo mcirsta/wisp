@@ -1292,6 +1292,24 @@ static inline bool box_inline_container_has_line_boxes(const struct box *box)
     return false;
 }
 
+
+/**
+ * Check if a block box has at least one in-flow block-level child.
+ * CSS 2.1 §8.3.1: For margin collapse descent, only in-flow block-level
+ * children have margins that participate in the block margin chain.
+ * Inline containers (anonymous wrappers) do not have block margins and
+ * should not trigger descent — their content is evaluated separately
+ * via box_prevents_collapse_through.
+ */
+static inline bool box_has_in_flow_block_children(const struct box *box)
+{
+    for (struct box *c = box->children; c != NULL; c = c->next) {
+        if (c->type == BOX_BLOCK && !box_is_out_of_flow(c))
+            return true;
+    }
+    return false;
+}
+
 /**
  * Check if a box prevents margins from collapsing through it.
  * CSS 2.1 §8.3.1: A box's own margins collapse only if it has zero
@@ -1306,6 +1324,14 @@ static inline bool box_prevents_collapse_through(const struct box *box)
         return true;
     if (box->type == BOX_INLINE_CONTAINER)
         return box_inline_container_has_line_boxes(box);
+    /* A block whose IC children have line boxes has content
+     * even before layout sets MAKE_HEIGHT. */
+    if (box->type == BOX_BLOCK) {
+        for (struct box *c = box->children; c != NULL; c = c->next) {
+            if (c->type == BOX_INLINE_CONTAINER && box_inline_container_has_line_boxes(c))
+                return true;
+        }
+    }
     return false;
 }
 
@@ -1364,9 +1390,12 @@ static struct box *layout_next_margin_block(const css_unit_ctx *unit_len_ctx, st
 
         /* Find next box */
         if (box->type == BOX_BLOCK && !box->object && box->children && box->style &&
-            css_computed_overflow_y(box->style) == CSS_OVERFLOW_VISIBLE) {
+            css_computed_overflow_y(box->style) == CSS_OVERFLOW_VISIBLE && box_has_in_flow_block_children(box)) {
             /* Down into children — crossing a parent-child boundary.
-             * CSS 2.1 §8.3.1: margin may collapse with first child. */
+             * CSS 2.1 §8.3.1: margin may collapse with first child.
+             * Only descend for in-flow block-level children; inline
+             * containers are anonymous wrappers without block margins
+             * and are handled via box_prevents_collapse_through. */
             *crossed_parent_child = true;
             box = box->children;
         } else {
@@ -1421,11 +1450,17 @@ static struct box *layout_next_margin_block(const css_unit_ctx *unit_len_ctx, st
             }
 
             /* CSS 2.1 §8.3.1: "bottom margin of box and top margin of its
-             * next in-flow following sibling" - only applies for DIRECT
-             * siblings. If we walked up, this box is an ancestor, and its
-             * margin-bottom is not adjacent to the first child's top margin
-             * deep inside a nested element. */
-            if (!walked_up && !box->padding[BOTTOM]) {
+             * next in-flow following sibling" — accumulate margin[BOTTOM]
+             * when moving to the next sibling.
+             *
+             * If we walked up from inside a child, the ancestor's
+             * margin-bottom is normally NOT adjacent to the child's top
+             * margin chain (it's at the bottom of the ancestor).
+             * EXCEPTION: if the ancestor itself collapses through
+             * (self-collapsing — no height, no in-flow content), then
+             * its top and bottom margins ARE adjoining, and the bottom
+             * margin is part of the same collapsing chain. */
+            if ((!walked_up || !box_prevents_collapse_through(box)) && !box->padding[BOTTOM]) {
                 if (box->margin[BOTTOM] > 0 && (unsigned int)box->margin[BOTTOM] > *max_pos_margin) {
                     *max_pos_margin = (unsigned int)box->margin[BOTTOM];
                 } else if (box->margin[BOTTOM] != AUTO && box->margin[BOTTOM] < 0 &&
@@ -3724,7 +3759,9 @@ bool layout_block_context(struct box *block, int viewport_height, html_content *
 
         /* Vertical margin */
         if (((box->type == BOX_BLOCK && (box->flags & HAS_HEIGHT)) || box->type == BOX_FLEX || box->type == BOX_GRID ||
-                box->type == BOX_TABLE || box->type == BOX_INLINE_CONTAINER || margin_collapse == box) &&
+                box->type == BOX_TABLE ||
+                (box->type == BOX_INLINE_CONTAINER && box_inline_container_has_line_boxes(box)) ||
+                margin_collapse == box) &&
             in_margin == true) {
             /* Margin goes above this box. */
             NSLOG(wisp, INFO, "MARGIN_COLLAPSE: box=%p type=%d cy_before=%d max_pos_margin=%u max_neg_margin=%u", box,
@@ -3983,8 +4020,16 @@ bool layout_block_context(struct box *block, int viewport_height, html_content *
             margin_collapse = NULL;
         }
 
-        /* Apply bottom margin */
-        if (box->margin[BOTTOM] > 0 && (unsigned int)box->margin[BOTTOM] > max_pos_margin) {
+        /* Apply bottom margin.
+         * CSS 2.1 §8.3.1: a self-collapsing block's margins were already
+         * accumulated by layout_next_margin_block (which traverses through
+         * parent-child chains). Do NOT accumulate them again here, or we
+         * get double-application when the main loop's inline descent
+         * reprocesses the same box. */
+        if (!box_prevents_collapse_through(box) && !(box->flags & MAKE_HEIGHT) && box->height == 0) {
+            /* Self-collapsing: margins already handled by
+             * layout_next_margin_block. Skip. */
+        } else if (box->margin[BOTTOM] > 0 && (unsigned int)box->margin[BOTTOM] > max_pos_margin) {
             max_pos_margin = (unsigned int)box->margin[BOTTOM];
         } else if (box->margin[BOTTOM] != AUTO && box->margin[BOTTOM] < 0 &&
             (unsigned int)(-box->margin[BOTTOM]) > max_neg_margin)
