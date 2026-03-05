@@ -204,6 +204,11 @@ struct pfcache_entry {
     int hit;
 };
 
+static struct {
+    unsigned int age;
+    struct pfcache_entry entries[PFCACHE_ENTRIES];
+} pfcache;
+
 /**
  * get a qt font object for a given netsurf font style
  *
@@ -213,13 +218,10 @@ static QFont *nsfont_style_to_font(const struct plot_font_style *fstyle)
 {
     int idx;
     int oldest_idx = 0;
-    static struct {
-        unsigned int age;
-        struct pfcache_entry entries[PFCACHE_ENTRIES];
-    } pfcache;
 
     for (idx = 0; idx < PFCACHE_ENTRIES; idx++) {
-        if ((pfcache.entries[idx].qfont != NULL) && (pfcache.entries[idx].style.family == fstyle->family) &&
+        if ((pfcache.entries[idx].qfont != NULL) && (pfcache.entries[idx].style.families == fstyle->families) &&
+            (pfcache.entries[idx].style.family == fstyle->family) &&
             (pfcache.entries[idx].style.size == fstyle->size) &&
             (pfcache.entries[idx].style.weight == fstyle->weight) &&
             (pfcache.entries[idx].style.flags == fstyle->flags) &&
@@ -227,7 +229,11 @@ static QFont *nsfont_style_to_font(const struct plot_font_style *fstyle)
             /* found matching existing font */
             pfcache.entries[idx].hit++;
             pfcache.entries[idx].age = ++pfcache.age;
-            return new QFont(*pfcache.entries[idx].qfont);
+
+            QFont *cached_font = new QFont(*pfcache.entries[idx].qfont);
+            NSLOG(wisp, DEEPDEBUG, "CACHE HIT - generic_family=%d (Resolved by Qt to: '%s')", fstyle->family,
+                QFontInfo(*cached_font).family().toUtf8().constData());
+            return cached_font;
         }
         if (pfcache.entries[idx].age < pfcache.entries[oldest_idx].age) {
             oldest_idx = idx;
@@ -245,6 +251,7 @@ static QFont *nsfont_style_to_font(const struct plot_font_style *fstyle)
 
     pfcache.entries[oldest_idx].qfont = new_qfont_fstyle(fstyle);
 
+    pfcache.entries[oldest_idx].style.families = fstyle->families;
     pfcache.entries[oldest_idx].style.family = fstyle->family;
     pfcache.entries[oldest_idx].style.size = fstyle->size;
     pfcache.entries[oldest_idx].style.weight = fstyle->weight;
@@ -254,7 +261,28 @@ static QFont *nsfont_style_to_font(const struct plot_font_style *fstyle)
     pfcache.entries[oldest_idx].hit = 0;
     pfcache.entries[oldest_idx].age = ++pfcache.age;
 
-    return new QFont(*pfcache.entries[oldest_idx].qfont);
+    QFont *created_font = new QFont(*pfcache.entries[oldest_idx].qfont);
+    NSLOG(wisp, DEEPDEBUG, "CACHE MISS - Created fresh QFont, generic_family=%d (Resolved by Qt to: '%s')",
+        fstyle->family, QFontInfo(*created_font).family().toUtf8().constData());
+    return created_font;
+}
+
+/**
+ * Purge the Qt font cache
+ *
+ * Called when a new web font is downloaded and registered so that
+ * subsequent text measurements do not use stale fallback fonts.
+ */
+static void nsqt_font_cache_clear(void)
+{
+    NSLOG(wisp, INFO, "Purging Qt font pfcache to force re-evaluation of newly loaded web fonts");
+    for (int i = 0; i < PFCACHE_ENTRIES; i++) {
+        if (pfcache.entries[i].qfont != NULL) {
+            delete pfcache.entries[i].qfont;
+            pfcache.entries[i].qfont = NULL;
+        }
+    }
+    pfcache.age = 0;
 }
 
 /**
@@ -635,6 +663,10 @@ static nserror nsqt_load_font_data(const struct font_variant_id *id, const uint8
         /* Tell Qt: when asked for CSS name, use Qt name instead */
         QFont::insertSubstitution(cssName, qtName);
         NSLOG(wisp, INFO, "Registered font substitution: '%s' -> '%s'", id->family_name, qtName.toUtf8().constData());
+
+        /* Purge the qt font cache so that subsequent layout passes are forced
+         * to re-evaluate the fonts and pick up this new substitution. */
+        nsqt_font_cache_clear();
 
         /* FOUT: Schedule a global repaint so text re-renders with new
          * font. Only schedule if:
