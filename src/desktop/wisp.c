@@ -290,14 +290,14 @@ void wisp_exit(void)
     NSLOG(wisp, INFO, "Finalising page-info module");
     page_info_fini();
 
-    NSLOG(wisp, INFO, "Finalising JavaScript");
-    js_finalise();
-
     NSLOG(wisp, INFO, "Finalising Web Search");
     search_web_finalise();
 
     NSLOG(wisp, INFO, "Finalising high-level cache");
     hlcache_finalise();
+
+    NSLOG(wisp, INFO, "Finalising JavaScript");
+    js_finalise();
 
     NSLOG(wisp, INFO, "Closing fetches");
     fetcher_quit();

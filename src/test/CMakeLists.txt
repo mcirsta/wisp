@@ -268,7 +268,7 @@ add_wisp_test(transform_clip_test
 # ============================================================================
 
 add_wisp_test(test_quickjs
-  ${CMAKE_SOURCE_DIR}/src/content/handlers/javascript/quickjs/qjs.c
+  ${CMAKE_SOURCE_DIR}/src/content/handlers/javascript/quickjs/quickjs_bindings.c
   ${CMAKE_SOURCE_DIR}/src/content/handlers/javascript/quickjs/timers.c
   ${CMAKE_SOURCE_DIR}/src/content/handlers/javascript/quickjs/navigator.c
   ${CMAKE_SOURCE_DIR}/src/content/handlers/javascript/quickjs/location.c

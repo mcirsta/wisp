@@ -26,6 +26,7 @@
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
+#include <assert.h>
 
 #include <wisp/utils/errors.h>
 #include <wisp/utils/log.h>
@@ -47,10 +48,15 @@
  * JavaScript heap structure.
  *
  * Maps to QuickJS's JSRuntime - one per browser window.
+ * Reference counted: the browser_window holds one reference (the owner),
+ * and each jsthread (JSContext) holds one reference. JS_FreeRuntime is
+ * only called when the last reference is dropped, ensuring all contexts
+ * are freed before the runtime.
  */
 struct jsheap {
     JSRuntime *rt;
     int timeout;
+    int refcount;
 };
 
 /**
@@ -87,6 +93,37 @@ void *qjs_get_window_priv(JSContext *ctx)
 }
 
 
+/** Global count of live jsheaps, for leak detection at shutdown. */
+static int jsheap_live_count = 0;
+
+/**
+ * Drop one reference to a jsheap. When the refcount reaches zero,
+ * the QuickJS runtime is freed and the heap struct is deallocated.
+ */
+static void jsheap_unref(jsheap *heap)
+{
+    if (heap == NULL) {
+        return;
+    }
+
+    heap->refcount--;
+    NSLOG(wisp, DEBUG, "jsheap %p unref -> refcount=%d", heap, heap->refcount);
+
+    if (heap->refcount < 0) {
+        NSLOG(wisp, ERROR, "jsheap %p refcount went negative (%d) - this is a bug!", heap, heap->refcount);
+    }
+
+    if (heap->refcount <= 0) {
+        NSLOG(wisp, DEBUG, "jsheap %p refcount reached zero, freeing JSRuntime", heap);
+        if (heap->rt != NULL) {
+            JS_FreeRuntime(heap->rt);
+        }
+        jsheap_live_count--;
+        free(heap);
+    }
+}
+
+
 /* exported interface documented in js.h */
 void js_initialise(void)
 {
@@ -97,6 +134,10 @@ void js_initialise(void)
 /* exported interface documented in js.h */
 void js_finalise(void)
 {
+    if (jsheap_live_count != 0) {
+        NSLOG(wisp, ERROR, "JS ENGINE LEAK: %d jsheap(s) still alive at shutdown!", jsheap_live_count);
+    }
+    assert(jsheap_live_count == 0);
     NSLOG(wisp, INFO, "QuickJS-ng JavaScript engine finalised");
 }
 
@@ -118,6 +159,7 @@ nserror js_newheap(int timeout, jsheap **heap)
     }
 
     h->timeout = timeout;
+    h->refcount = 1; /* Owner (browser_window) holds the initial reference */
 
     /* Set a reasonable memory limit (64MB default) */
     JS_SetMemoryLimit(h->rt, 64 * 1024 * 1024);
@@ -125,7 +167,8 @@ nserror js_newheap(int timeout, jsheap **heap)
     /* Set max stack size (1MB) */
     JS_SetMaxStackSize(h->rt, 1024 * 1024);
 
-    NSLOG(wisp, DEBUG, "Created QuickJS heap %p", h);
+    jsheap_live_count++;
+    NSLOG(wisp, DEBUG, "Created QuickJS heap %p (refcount=%d, live_heaps=%d)", h, h->refcount, jsheap_live_count);
 
     *heap = h;
     return NSERROR_OK;
@@ -139,13 +182,15 @@ void js_destroyheap(jsheap *heap)
         return;
     }
 
-    NSLOG(wisp, DEBUG, "Destroying QuickJS heap %p", heap);
-
-    if (heap->rt != NULL) {
-        JS_FreeRuntime(heap->rt);
+    if (heap->refcount > 1) {
+        NSLOG(wisp, WARNING,
+            "js_destroyheap: heap %p still has %d JS context(s) alive. "
+            "Runtime destruction deferred until all contexts are freed.",
+            heap, heap->refcount - 1);
     }
 
-    free(heap);
+    NSLOG(wisp, DEBUG, "js_destroyheap: dropping owner reference for heap %p", heap);
+    jsheap_unref(heap);
 }
 
 
@@ -174,6 +219,10 @@ nserror js_newthread(jsheap *heap, void *win_priv, void *doc_priv, jsthread **th
     t->win_priv = win_priv;
     t->doc_priv = doc_priv;
     t->closed = false;
+
+    /* Take a reference on the heap so it outlives this context */
+    heap->refcount++;
+    NSLOG(wisp, DEBUG, "jsheap %p ref (new thread) -> refcount=%d", heap, heap->refcount);
 
     /* Store thread pointer in context for later retrieval */
     JS_SetContextOpaque(t->ctx, t);
@@ -309,11 +358,14 @@ nserror js_closethread(jsthread *thread)
 /* exported interface documented in js.h */
 void js_destroythread(jsthread *thread)
 {
+    jsheap *heap;
+
     if (thread == NULL) {
         return;
     }
 
-    NSLOG(wisp, DEBUG, "Destroying QuickJS thread %p", thread);
+    heap = thread->heap;
+    NSLOG(wisp, DEBUG, "Destroying QuickJS thread %p (heap %p)", thread, heap);
 
     if (thread->ctx != NULL) {
         /* Execute any pending jobs before freeing context.
@@ -328,9 +380,14 @@ void js_destroythread(jsthread *thread)
         }
 
         JS_FreeContext(thread->ctx);
+        thread->ctx = NULL;
     }
 
     free(thread);
+
+    /* Drop our reference on the heap. If the owner (browser_window)
+     * already released its reference, this will free the runtime. */
+    jsheap_unref(heap);
 }
 
 
