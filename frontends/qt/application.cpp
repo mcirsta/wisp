@@ -444,11 +444,11 @@ NS_Application::NS_Application(int &argc, char **argv, struct wisp_table *nsqt_t
         }
 
         /* convert initial target to url */
-        res = nsurl_create(addr, &url);
+        res = search_web_omni(addr, SEARCH_WEB_OMNI_NONE, &url);
+        free(addr);
         if (res != NSERROR_OK) {
             throw NS_Exception("failed converting initial url", res);
         }
-        free(addr);
     }
 
     res = create_browser_widget(url, NULL, false);
