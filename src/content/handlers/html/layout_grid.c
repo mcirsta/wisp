@@ -621,10 +621,23 @@ static void layout_grid_compute_tracks(struct box *grid, int available_width, in
             col_widths[i] = 0;
     }
 
-    /* Distributed remaining space to FR tracks */
+    /* Distribute remaining space to FR tracks */
     int remaining_width = available_width - used_width - total_gap_width;
     if (remaining_width < 0)
         remaining_width = 0;
+
+    /* Guard: if the grid has indefinite width (e.g. inline-grid with auto
+     * width), fr tracks cannot be meaningfully distributed from infinite
+     * space. Clamp to 0 so fr tracks get zero width rather than nonsense.
+     * TODO: CSS Grid spec §11.5 says fr tracks in an indefinite context
+     * should resolve to max-content size — implement proper intrinsic
+     * sizing when content-based track sizing is available. */
+    if (available_width == UNKNOWN_WIDTH && fr_tracks > 0) {
+        assert(0 &&
+            "Grid with indefinite width has fr tracks — "
+            "fr distribution is not yet spec-correct");
+        remaining_width = 0;
+    }
 
     if (fr_tracks > 0 && fr_total > 0) {
         NSLOG(layout, DEEPDEBUG, "Distributing FR: Remaining %d, FR Total %d", remaining_width, fr_total);
@@ -1318,11 +1331,14 @@ bool layout_grid(struct box *grid, int available_width, html_content *content)
 
     /* IMPORTANT: layout_grid must set the grid's width */
     if (grid->width == UNKNOWN_WIDTH || grid->width < 0) {
-        fprintf(stderr, "GRID_BUG: grid %p width still not set (=%d)\n", (void *)grid, grid->width);
-        fflush(stderr);
-        assert(0 && "Grid width must be resolved by layout_grid");
-        /* Fallback for safety in Release builds if assert disabled */
-        grid->width = grid_width;
+        int intrinsic_width = 0;
+        for (int i = 0; i < num_cols; i++) {
+            intrinsic_width += col_widths[i];
+        }
+        if (num_cols > 1) {
+            intrinsic_width += gap_px * (num_cols - 1);
+        }
+        grid->width = intrinsic_width;
     }
 
     free(item_cache);

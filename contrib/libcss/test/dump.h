@@ -472,8 +472,22 @@ static const char *opcode_names[] = {
     "flex-wrap",
     "justify-content",
     "order",
+    "fill",
     "fill-opacity",
     "stroke-opacity",
+    "stroke",
+    "stroke-width",
+    "grid-template-columns",
+    "grid-template-rows",
+    "grid-auto-flow",
+    "row-gap",
+    "grid-column-start",
+    "grid-column-end",
+    "grid-row-start",
+    "grid-row-end",
+    "object-fit",
+    "object-position",
+    "transform",
 };
 
 static void dump_css_fixed(css_fixed f, char **ptr)

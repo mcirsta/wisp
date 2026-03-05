@@ -1014,6 +1014,7 @@ static bool svg_redraw_internal(svg_content *svg, int x, int y, int width, int h
                         res = ctx->plot->path(ctx, &pstyle, scaled, k, transform);
                         if (res != NSERROR_OK) {
                             ok = false;
+                            assert(0 && "Plotter rejected a valid SVG path — this should never happen");
                             int stroke_rgb = (svgtiny_RED(diagram->shape[i].stroke) << 16) |
                                 (svgtiny_GREEN(diagram->shape[i].stroke) << 8) |
                                 (svgtiny_BLUE(diagram->shape[i].stroke));

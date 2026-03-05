@@ -137,6 +137,10 @@ uint8_t css_computed_list_style_type(const css_computed_style *style)
 {
     return CSS_LIST_STYLE_TYPE_NONE;
 }
+uint8_t css_computed_white_space(const css_computed_style *style)
+{
+    return CSS_WHITE_SPACE_NORMAL;
+}
 uint8_t css_computed_list_style_image(const css_computed_style *style, lwc_string **url)
 {
     *url = NULL;
@@ -188,6 +192,9 @@ void box_free(struct box *box)
     /* Free text if any */
     if (box->text) {
         free(box->text);
+    }
+    if (box->node) {
+        dom_node_unref(box->node);
     }
     free(box);
 }
@@ -437,6 +444,7 @@ START_TEST(test_grid_construction)
     /* Setup Helper Strings */
 #define INIT_STR(x, v) dom_string_create((const uint8_t *)(v), strlen(v), &x)
     INIT_STR(corestring_dom_id, "id");
+    INIT_STR(corestring_dom_class, "class");
     INIT_STR(corestring_dom_title, "title");
     INIT_STR(corestring_dom_style, "style");
     INIT_STR(corestring_dom_colspan, "colspan");
@@ -554,6 +562,14 @@ START_TEST(test_grid_construction)
     dom_node_unref(root_el);
     dom_node_unref(doc);
     unlink("/tmp/ns_test_grid.html");
+
+    dom_string_unref(corestring_dom_id);
+    dom_string_unref(corestring_dom_class);
+    dom_string_unref(corestring_dom_title);
+    dom_string_unref(corestring_dom_style);
+    dom_string_unref(corestring_dom_colspan);
+    dom_string_unref(corestring_dom_rowspan);
+    dom_string_unref(corestring_dom___ns_key_box_node_data);
 }
 END_TEST
 

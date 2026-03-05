@@ -564,7 +564,7 @@ class GperfInputGenerator:
         lines.append("%enum")
         lines.append("%7bit")
         lines.append("%null-strings")
-        lines.append("%define hash-function-name css_prop_hash")
+        lines.append("%define hash-function-name css_prop_hash_generated")
         lines.append("%define lookup-function-name css_prop_lookup_generated")
         lines.append("")
         
@@ -595,15 +595,15 @@ class GperfInputGenerator:
         
         lines.append("%%")
         lines.append("")
-        
-        # Wrapper function appended after gperf's generated code.
-        # gperf's css_prop_lookup_generated() returns const struct css_prop_entry *
-        # but language.c expects css_prop_handler (a function pointer).
-        # This wrapper bridges the gap - same pattern as libhubbub's element-type.c
-        lines.append("/* Wrapper: extract handler from gperf lookup result */")
+        lines.append("/* Wrapper: safely parse CSS property names (mask non-ASCII to prevent gperf OOB) */")
         lines.append("static inline css_prop_handler css_prop_lookup(const char *name, size_t len) {")
         lines.append("    const struct css_prop_entry *entry;")
-        lines.append("    entry = css_prop_lookup_generated(name, len);")
+        lines.append("    char masked_str[256];")
+        lines.append("    if (len >= sizeof(masked_str)) len = sizeof(masked_str) - 1;")
+        lines.append("    for (size_t i = 0; i < len; ++i) {")
+        lines.append("        masked_str[i] = name[i] & 0x7F;")
+        lines.append("    }")
+        lines.append("    entry = css_prop_lookup_generated(masked_str, len);")
         lines.append("    if (entry == NULL) return NULL;")
         lines.append("    return entry->handler;")
         lines.append("}")
