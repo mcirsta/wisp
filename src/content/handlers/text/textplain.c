@@ -49,6 +49,16 @@
 
 #include "content/handlers/text/textplain.h"
 
+/* Font size scale factor (converts from plot style units to pixels) */
+#define FONT_SIZE_SCALE (4.0 / 3.0)
+
+/* Vertical center offset ratio within line height */
+#define BASELINE_CENTER_RATIO 0.5
+
+/* Additional offset ratio relative to font size for baseline alignment */
+#define BASELINE_FONT_RATIO 0.25
+
+
 struct textplain_line {
     size_t start;
     size_t length;
@@ -804,6 +814,10 @@ static bool text_draw(const char *utf8_text, size_t utf8_len, size_t offset, int
 
     /* Need scaled text size to pass to plotters */
     plot_fstyle = textplain_style;
+
+    int font_size_px = (plot_fstyle.size * FONT_SIZE_SCALE) / PLOT_STYLE_SCALE;
+    int baseline_offset = (int)((height * BASELINE_CENTER_RATIO + font_size_px * BASELINE_FONT_RATIO) * scale);
+
     plot_fstyle.size *= scale;
 
     /* is this box part of a selection? */
@@ -859,7 +873,7 @@ static bool text_draw(const char *utf8_text, size_t utf8_len, size_t offset, int
 
             /* draw any text preceding highlighted portion */
             if (start_idx > 0) {
-                res = ctx->plot->text(ctx, &plot_fstyle, x, y + (int)(height * 0.75 * scale), utf8_text, start_idx);
+                res = ctx->plot->text(ctx, &plot_fstyle, x, y + baseline_offset, utf8_text, start_idx);
                 if (res != NSERROR_OK) {
                     return false;
                 }
@@ -901,8 +915,7 @@ static bool text_draw(const char *utf8_text, size_t utf8_len, size_t offset, int
             fstyle_hback.foreground = colour_to_bw_furthest(pstyle_fill_hback.fill_colour);
 
             if (text_visible &&
-                (ctx->plot->text(ctx, &fstyle_hback, x, y + (int)(height * 0.75 * scale), utf8_text, endtxt_idx) !=
-                    NSERROR_OK)) {
+                (ctx->plot->text(ctx, &fstyle_hback, x, y + baseline_offset, utf8_text, endtxt_idx) != NSERROR_OK)) {
                 return false;
             }
 
@@ -922,7 +935,7 @@ static bool text_draw(const char *utf8_text, size_t utf8_len, size_t offset, int
 
                     clip_changed = true;
 
-                    res = ctx->plot->text(ctx, &plot_fstyle, x, y + (int)(height * 0.75 * scale), utf8_text, utf8_len);
+                    res = ctx->plot->text(ctx, &plot_fstyle, x, y + baseline_offset, utf8_text, utf8_len);
                     if (res != NSERROR_OK) {
                         return false;
                     }
@@ -936,7 +949,7 @@ static bool text_draw(const char *utf8_text, size_t utf8_len, size_t offset, int
     }
 
     if (!highlighted) {
-        res = ctx->plot->text(ctx, &plot_fstyle, x, y + (int)(height * 0.75 * scale), utf8_text, utf8_len);
+        res = ctx->plot->text(ctx, &plot_fstyle, x, y + baseline_offset, utf8_text, utf8_len);
         if (res != NSERROR_OK) {
             return false;
         }

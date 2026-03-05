@@ -72,6 +72,15 @@
 #include "content/handlers/html/stacking.h"
 #include "content/handlers/image/svg.h"
 
+/* Font size scale factor (converts from plot style units to pixels) */
+#define FONT_SIZE_SCALE (4.0 / 3.0)
+
+/* Vertical center offset ratio within line height */
+#define BASELINE_CENTER_RATIO 0.5
+
+/* Additional offset ratio relative to font size for baseline alignment */
+#define BASELINE_FONT_RATIO 0.25
+
 
 bool html_redraw_debug = false;
 
@@ -296,6 +305,9 @@ static bool text_redraw(const char *utf8_text, size_t utf8_len, size_t offset, i
     plot_font_style_t plot_fstyle = *fstyle;
     nserror res;
 
+    int font_size_px = (fstyle->size * FONT_SIZE_SCALE) / PLOT_STYLE_SCALE;
+    int baseline_offset = (int)((height * BASELINE_CENTER_RATIO + font_size_px * BASELINE_FONT_RATIO) * scale);
+
     /* Need scaled text size to pass to plotters */
     plot_fstyle.size *= scale;
 
@@ -356,8 +368,7 @@ static bool text_redraw(const char *utf8_text, size_t utf8_len, size_t offset, i
 
             /* draw any text preceding highlighted portion */
             if ((start_idx > 0) &&
-                (ctx->plot->text(ctx, &plot_fstyle, x, y + (int)(height * 0.75 * scale), utf8_text, start_idx) !=
-                    NSERROR_OK))
+                (ctx->plot->text(ctx, &plot_fstyle, x, y + baseline_offset, utf8_text, start_idx) != NSERROR_OK))
                 return false;
 
             pstyle_fill_hback.fill_colour = fstyle->foreground;
@@ -396,8 +407,7 @@ static bool text_redraw(const char *utf8_text, size_t utf8_len, size_t offset, i
             fstyle_hback.foreground = colour_to_bw_furthest(pstyle_fill_hback.fill_colour);
 
             if (text_visible &&
-                (ctx->plot->text(ctx, &fstyle_hback, x, y + (int)(height * 0.75 * scale), utf8_text, endtxt_idx) !=
-                    NSERROR_OK)) {
+                (ctx->plot->text(ctx, &fstyle_hback, x, y + baseline_offset, utf8_text, endtxt_idx) != NSERROR_OK)) {
                 return false;
             }
 
@@ -417,7 +427,7 @@ static bool text_redraw(const char *utf8_text, size_t utf8_len, size_t offset, i
 
                     clip_changed = true;
 
-                    res = ctx->plot->text(ctx, &plot_fstyle, x, y + (int)(height * 0.75 * scale), utf8_text, utf8_len);
+                    res = ctx->plot->text(ctx, &plot_fstyle, x, y + baseline_offset, utf8_text, utf8_len);
                     if (res != NSERROR_OK) {
                         return false;
                     }
@@ -431,7 +441,7 @@ static bool text_redraw(const char *utf8_text, size_t utf8_len, size_t offset, i
     }
 
     if (!highlighted) {
-        res = ctx->plot->text(ctx, &plot_fstyle, x, y + (int)(height * 0.75 * scale), utf8_text, utf8_len);
+        res = ctx->plot->text(ctx, &plot_fstyle, x, y + baseline_offset, utf8_text, utf8_len);
         if (res != NSERROR_OK) {
             return false;
         }
