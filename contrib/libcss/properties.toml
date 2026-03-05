@@ -21,14 +21,44 @@
 #   enum           CSS_PROP_* enum name (e.g. "CSS_PROP_HEIGHT")
 #   inherited      true if the property inherits by default (from CSS spec)
 #                  REQUIRED for all properties with 'enum'. Missing = build error.
-#   parse          Parse spec string for gen_parser
-#                  (e.g. "IDENT:( INHERIT: INITIAL: ... IDENT:) LENGTH_UNIT:( ... )")
+#   parse          Parse spec string for gen_parser AND the cascade ident generator.
+#                  Required for any property with cascade = "ident" (the generator uses
+#                  the opcode names from this spec to populate the cascade switch).
+#                  Omitted for manual = true properties that use cascade = "manual".
+#
+#                  Format: space-separated tokens describing the property's grammar:
+#                    IDENT:(  ...  IDENT:)   — keyword block, e.g.:
+#                      INHERIT:                    → sets FLAG_INHERIT (always include)
+#                      INITIAL:                    → sets FLAG_INITIAL (always include)
+#                      REVERT:                     → sets FLAG_REVERT  (always include)
+#                      UNSET:                      → sets FLAG_UNSET   (always include)
+#                      KEYWORD:flags,OPCODE_NAME   → maps CSS keyword to bytecode opcode
+#                        e.g.  BOLD:0,FONT_WEIGHT_BOLD
+#                              NONE:0,DISPLAY_NONE
+#                    LENGTH_UNIT:(  ...  MASK:...  RANGE:...  LENGTH_UNIT:)  — length block
+#                    NUMBER:(  ...  NUMBER:)   — number block
+#                    COLOR:OPCODE_NAME         — color token
+#                    URI:OPCODE_NAME           — URI token
+#                    CALC:( ... CALC:)         — calc() block
+#
+#                  The cascade ident generator extracts only KEYWORD:flags,OPCODE_NAME
+#                  entries (skipping INHERIT/INITIAL/REVERT/UNSET) to generate:
+#                    case OPCODE_NAME: value = CSS_OPCODE_NAME; break;
+#
+#                  IMPORTANT — manual = true + cascade = "ident":
+#                    If your parser is manual (manual = true) but you still want an
+#                    auto-generated cascade, you MUST provide a parse field listing all
+#                    opcode names. The field is only used to extract opcode names for
+#                    the cascade switch; it does NOT affect the actual parser.
+#                    Without it, the build will fail with a FATAL error.
+#                    See font_weight and grid_auto_flow as examples.
 #   cascade        How the cascade .c file is handled. REQUIRED for all CSS_PROP_
 #                  properties. Missing = build error. Possible values:
 #                    "none"              No cascade file (shorthands, stubs, aliases)
 #                    "manual"            Hand-written .c file in src/select/properties/
 #                    <type string>       Auto-generated .c file using the named template:
 #                      "ident"             IDENT-only switch (from parse spec opcodes)
+#                                            REQUIRES a 'parse' field — build fails without it
 #                      "bg_border_color"   → css__cascade_bg_border_color
 #                      "border_style"      → css__cascade_border_style
 #                      "border_width"      → css__cascade_border_width
@@ -72,7 +102,9 @@
 #                  (e.g. ["0", "CSS_UNIT_PX"] or ["2"] or ["INTTOFIX(1)"])
 #
 # Flags (all default to false if omitted):
-#   manual         Full manual parse implementation (no gen_parser output)
+#   manual         Full manual parse implementation in src/parse/properties/<name>.c
+#                  (no gen_parser output). If cascade = "ident", you still need a
+#                  'parse' field so the cascade generator can extract opcode names.
 #   shorthand      Shorthand property (e.g. "border", "margin")
 #   opcodes_manual Manual opcode enum definitions
 #   wrap           WRAP function name, for properties that delegate parsing
@@ -595,12 +627,13 @@ parse = '''IDENT:( INHERIT: INITIAL: REVERT: UNSET: NORMAL:0,FONT_VARIANT_NORMAL
 
 [font_weight]
 enum = "CSS_PROP_FONT_WEIGHT"
-cascade = "ident"
+cascade = "manual"
 computed = "auto"
 inherited = true
 manual = true
 bits = 4
 initial = "NORMAL"
+
 
 [height]
 enum = "CSS_PROP_HEIGHT"
@@ -1583,8 +1616,11 @@ inherited = false
 cascade = "ident"
 computed = "auto"
 manual = true
+opcodes_manual = true
 bits = 3
 initial = "ROW"
+parse = '''IDENT:( INHERIT: INITIAL: REVERT: UNSET: ROW:0,GRID_AUTO_FLOW_ROW COLUMN:0,GRID_AUTO_FLOW_COLUMN ROW_DENSE:0,GRID_AUTO_FLOW_ROW_DENSE COLUMN_DENSE:0,GRID_AUTO_FLOW_COLUMN_DENSE IDENT:)'''
+
 
 [row_gap]
 enum = "CSS_PROP_ROW_GAP"

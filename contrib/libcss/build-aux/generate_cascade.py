@@ -386,11 +386,22 @@ def generate_cascade_ident(name, NAME, prop_data, enum_prefix, initial):
     # Extract opcodes from parse spec
     parse_spec = prop_data.get('parse', '')
     opcodes = parse_opcodes_from_spec(parse_spec, NAME)
-    
+
+    if not opcodes:
+        print(f"FATAL: cascade = 'ident' for '{name}' but no opcodes found in parse spec.",
+              file=sys.stderr)
+        if not parse_spec:
+            print(f"  Property has no 'parse' field. Either add a parse spec with keyword",
+                  f"opcodes, or use cascade = 'manual'.", file=sys.stderr)
+        else:
+            print(f"  Parse spec '{parse_spec}' yielded no keyword opcodes.", file=sys.stderr)
+        sys.exit(1)
+
     for opcode in opcodes:
         lines.append(f'        case {opcode}:')
         lines.append(f'            value = CSS_{opcode};')
         lines.append(f'            break;')
+
     
     lines.append(f'        }}')
     lines.append(f'    }}')

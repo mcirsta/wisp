@@ -1145,15 +1145,11 @@ static void box_construct_element_after(dom_node *n, html_content *content)
 
     box_extract_properties(n, &props);
 
-    /* TODO: Handle ::before pseudo-element for inline boxes.
-     * This is disabled for now because:
-     * 1. It only handles STRING content, not URI/COUNTER/ATTR/etc.
-     * 2. The layout code needs more work to properly handle styled BOX_TEXT.
-     *
-     * Proper implementation requires:
-     * - Handle all content types (STRING, URI, COUNTER, ATTR, quotes)
-     * - Use BOX_INLINE wrapper for margins to work correctly
-     * - Normalization flattens children to siblings in correct order
+    /* Handle ::before pseudo-element for inline boxes.
+     * The pseudo-element's box type is determined by its computed display value,
+     * e.g. display:inline-block creates BOX_INLINE_BLOCK.
+     * For BOX_INLINE: text goes directly on the box, children get flattened by normaliser.
+     * For BOX_INLINE_BLOCK: text must be in an INLINE_CONTAINER child (same as box_construct_generate).
      */
     if (box->type == BOX_INLINE && !(box->flags & IS_REPLACED) && box->styles != NULL &&
         box->styles->styles[CSS_PSEUDO_ELEMENT_BEFORE] != NULL) {
@@ -1162,20 +1158,68 @@ static void box_construct_element_after(dom_node *n, html_content *content)
         uint8_t content_type = css_computed_content(before_style, &c_item);
 
         if (content_type != CSS_CONTENT_NORMAL && content_type != CSS_CONTENT_NONE && c_item != NULL) {
-            /* Create BOX_INLINE wrapper - this gets margins/padding from the style */
+            /* Determine box type from computed display */
+            enum css_display_e pseudo_display = ns_computed_display(before_style, false);
+            box_type pseudo_type = box_map[pseudo_display];
+
+            /* Create pseudo-element box with correct type */
             struct box *pseudo_box = box_create(
                 NULL, (css_computed_style *)before_style, false, NULL, NULL, NULL, NULL, content->bctx);
 
             if (pseudo_box != NULL) {
-                pseudo_box->type = BOX_INLINE;
+                pseudo_box->type = pseudo_type;
                 bool has_content = false;
+
+                /* Fetch background image for pseudo-element */
+                box_fetch_background(pseudo_box, content);
 
                 /* Create content boxes as children of the pseudo-element */
                 while (c_item->type != CSS_COMPUTED_CONTENT_NONE) {
-                    struct box *content_box = create_content_box(c_item, before_style, content, n);
-                    if (content_box != NULL) {
-                        box_add_child(pseudo_box, content_box);
-                        has_content = true;
+                    if (pseudo_type == BOX_INLINE) {
+                        /* For BOX_INLINE: use create_content_box, children get
+                         * flattened into siblings during normalisation */
+                        struct box *content_box = create_content_box(c_item, before_style, content, n);
+                        if (content_box != NULL) {
+                            box_add_child(pseudo_box, content_box);
+                            has_content = true;
+                        }
+                    } else {
+                        /* For BOX_INLINE_BLOCK and other block-level types:
+                         * text content must go inside an INLINE_CONTAINER child,
+                         * matching the pattern in box_construct_generate. */
+                        if (c_item->type == CSS_COMPUTED_CONTENT_STRING) {
+                            const char *text_data = lwc_string_data(c_item->data.string);
+                            size_t text_len = lwc_string_length(c_item->data.string);
+
+                            if (text_len > 0) {
+                                /* Ensure inline container exists inside the pseudo box */
+                                struct box *text_container;
+                                if (pseudo_box->last != NULL && pseudo_box->last->type == BOX_INLINE_CONTAINER) {
+                                    text_container = pseudo_box->last;
+                                } else {
+                                    text_container = box_create(
+                                        NULL, NULL, false, NULL, NULL, NULL, NULL, content->bctx);
+                                    if (text_container == NULL)
+                                        break;
+                                    text_container->type = BOX_INLINE_CONTAINER;
+                                    box_add_child(pseudo_box, text_container);
+                                }
+
+                                /* Create text box inside the container */
+                                struct box *text_box = box_create(NULL, (css_computed_style *)before_style, false, NULL,
+                                    NULL, NULL, NULL, content->bctx);
+                                if (text_box == NULL)
+                                    break;
+                                text_box->type = BOX_TEXT;
+                                text_box->text = talloc_strndup(content->bctx, text_data, text_len);
+                                if (text_box->text == NULL)
+                                    break;
+                                text_box->length = text_len;
+                                box_add_child(text_container, text_box);
+                                has_content = true;
+                            }
+                        }
+                        /* TODO: Handle URI/COUNTER/ATTR for non-inline pseudo types */
                     }
                     c_item++;
                 }
@@ -1183,13 +1227,9 @@ static void box_construct_element_after(dom_node *n, html_content *content)
                 /* Only insert if we created content */
                 if (has_content) {
                     /* Insert as FIRST child of parent inline box.
-                     * After flattening in normalization:
-                     *   INLINE_CONTAINER
-                     *     ├─ INLINE(parent)
-                     *     ├─ INLINE(::before)  <- pseudo_box
-                     *     ├─ content children  <- flattened
-                     *     ├─ original content
-                     *     └─ INLINE_END(parent)
+                     * For BOX_INLINE: normalization flattens children to siblings.
+                     * For BOX_INLINE_BLOCK: normaliser recursively processes as block,
+                     *   children stay intact inside the pseudo box.
                      */
                     pseudo_box->parent = box;
                     pseudo_box->next = box->children;
@@ -1202,8 +1242,9 @@ static void box_construct_element_after(dom_node *n, html_content *content)
                         box->last = pseudo_box;
                     }
 
-                    NSLOG(wisp, DEEPDEBUG, "inline_before: created BOX_INLINE %p for ::before with %d children",
-                        (void *)pseudo_box, pseudo_box->children ? 1 : 0);
+                    NSLOG(wisp, DEEPDEBUG, "inline_before: created %s %p for ::before with %d children",
+                        pseudo_type == BOX_INLINE ? "BOX_INLINE" : "BOX_INLINE_BLOCK", (void *)pseudo_box,
+                        pseudo_box->children ? 1 : 0);
                 }
             }
         }
