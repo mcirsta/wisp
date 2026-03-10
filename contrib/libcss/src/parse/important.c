@@ -84,7 +84,10 @@ void css__make_style_important(css_style *style)
         offset++;
 
         /* Advance past any property-specific data */
-        if (hasFlagValue(opv) == false && value == VALUE_IS_CALC) {
+        if (hasFlagValue(opv) == false && value == VALUE_IS_VAR) {
+            /* OPV + name_idx [+ fallback_idx if FLAG_VAR_HAS_FALLBACK] */
+            offset += varHasFallback(opv) ? 2 : 1;
+        } else if (hasFlagValue(opv) == false && value == VALUE_IS_CALC) {
             /* All VALUE_IS_CALC have the form OPV UNIT STRIDX */
             offset += 2;
         } else if (hasFlagValue(opv) == false) {

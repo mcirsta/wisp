@@ -46,3 +46,35 @@
 |   0x0000008c PTR(--color) PTR(red) 0x00000818
 #reset
 
+#data
+* { color: var(--primary) }
+#errors
+#expected
+| 1 *
+|   0x01f80018 PTR(--primary)
+#reset
+
+#data
+* { color: var(--primary, red) }
+#errors
+#expected
+| 1 *
+|   0x01f84018 PTR(--primary) PTR(red)
+#reset
+
+#data
+* { color: var(--primary) !important }
+#errors
+#expected
+| 1 *
+|   0x01f80418 PTR(--primary)
+#reset
+
+#data
+* { --color: red; color: var(--color) }
+#errors
+#expected
+| 1 *
+|   0x0000008c PTR(--color) PTR(red) 0x01f80018 PTR(--color)
+#reset
+

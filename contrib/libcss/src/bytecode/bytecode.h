@@ -34,6 +34,7 @@ enum flag {
     FLAG_INITIAL = (FLAG_VALUE_INITIAL << 1),
     FLAG_REVERT = (FLAG_VALUE_REVERT << 1),
     FLAG_UNSET = (FLAG_VALUE_UNSET << 1),
+    FLAG_VAR_HAS_FALLBACK = (1 << 4),  /* var() has a fallback value */
 };
 
 enum calc_opcodes {
@@ -155,6 +156,16 @@ static inline bool isInherit(css_code_t OPV)
 static inline bool isCalc(css_code_t OPV)
 {
     return getValue(OPV) == VALUE_IS_CALC;
+}
+
+static inline bool isVar(css_code_t OPV)
+{
+    return getValue(OPV) == VALUE_IS_VAR;
+}
+
+static inline bool varHasFallback(css_code_t OPV)
+{
+    return getFlags(OPV) & FLAG_VAR_HAS_FALLBACK;
 }
 
 #endif

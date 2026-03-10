@@ -517,7 +517,7 @@ class GperfInputGenerator:
     """
     
     def __init__(self, keys):
-        """Initialize with list of (css_name, handler_name) tuples."""
+        """Initialize with list of (css_name, handler_name, opcode) tuples."""
         self.keys = keys
     
     def generate_gperf_input(self):
@@ -580,32 +580,31 @@ class GperfInputGenerator:
         # Full struct definition - gperf needs this to generate the wordlist array.
         # The 'name' field is the keyword (filled by gperf automatically).
         # The 'handler' field is the css_prop_handler function pointer.
+        # The 'opcode' field is the CSS_PROP_* enum value (-1 for shorthands).
         lines.append("struct css_prop_entry {")
         lines.append("    const char *name;")
         lines.append("    css_prop_handler handler;")
+        lines.append("    int opcode;")
         lines.append("};")
         lines.append("")
         
         # Keyword section
         lines.append("%%")
         
-        # Each line: keyword, field_value
-        for css_name, handler_name in self.keys:
-            lines.append(f"{css_name}, {handler_name}")
+        # Each line: keyword, field_value, opcode
+        for css_name, handler_name, opcode in self.keys:
+            lines.append(f"{css_name}, {handler_name}, {opcode}")
         
         lines.append("%%")
         lines.append("")
         lines.append("/* Wrapper: safely parse CSS property names (mask non-ASCII to prevent gperf OOB) */")
-        lines.append("static inline css_prop_handler css_prop_lookup(const char *name, size_t len) {")
-        lines.append("    const struct css_prop_entry *entry;")
+        lines.append("static inline const struct css_prop_entry *css_prop_lookup(const char *name, size_t len) {")
         lines.append("    char masked_str[256];")
         lines.append("    if (len >= sizeof(masked_str)) len = sizeof(masked_str) - 1;")
         lines.append("    for (size_t i = 0; i < len; ++i) {")
         lines.append("        masked_str[i] = name[i] & 0x7F;")
         lines.append("    }")
-        lines.append("    entry = css_prop_lookup_generated(masked_str, len);")
-        lines.append("    if (entry == NULL) return NULL;")
-        lines.append("    return entry->handler;")
+        lines.append("    return css_prop_lookup_generated(masked_str, len);")
         lines.append("}")
         lines.append("")
         
@@ -1012,12 +1011,18 @@ class MultiFileGenerator:
         
         sorted_props = sorted(all_props + shorthands + aliases)
         
-        # Build key tuples: (css_name, handler_name)
+        # Build opcode map from dispatch_order (index = opcode)
+        opcode_map = {}
+        for idx, prop_info in enumerate(self.dispatch_order):
+            opcode_map[prop_info['name']] = idx
+        
+        # Build key tuples: (css_name, handler_name, opcode)
         keys = []
         for prop_name in sorted_props:
             css_name = prop_name.replace('_', '-')
             handler_name = f"css__parse_{prop_name}"
-            keys.append((css_name, handler_name))
+            opcode = opcode_map.get(prop_name, -1)  # -1 for shorthands/aliases
+            keys.append((css_name, handler_name, opcode))
         
         # Generate gperf input
         gen = GperfInputGenerator(keys)

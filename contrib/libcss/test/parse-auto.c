@@ -267,14 +267,20 @@ void css__parse_expected(line_ctx *ctx, const char *data, size_t len)
             }
 
             if (*next == 'P') {
-                /* Pointer */
+                /* Pointer — supports nested parens for values like var() */
                 const char *str;
+                int paren_depth = 0;
 
                 while (next < data + len && *next != '(')
                     next++;
+                paren_depth = 1;
                 str = next + 1;
-                while (next < data + len && *next != ')')
-                    next++;
+                next++;
+                while (next < data + len && paren_depth > 0) {
+                    if (*next == '(') paren_depth++;
+                    else if (*next == ')') paren_depth--;
+                    if (paren_depth > 0) next++;
+                }
                 next++;
 
                 if (rule->stused >= rule->stlen) {

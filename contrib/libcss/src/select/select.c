@@ -2528,6 +2528,14 @@ css_error cascade_style(const css_style *style, css_select_state *state)
             continue;
         }
 
+        /* Deferred var() references: skip trailing words.
+         * name_idx always present; fallback_idx if FLAG_VAR_HAS_FALLBACK. */
+        if (getValue(opv) == VALUE_IS_VAR) {
+            uint32_t skip = varHasFallback(opv) ? 2 : 1;
+            advance_bytecode(&s, skip * sizeof(css_code_t));
+            continue;
+        }
+
         /* DEBUG: Log opcode to trace out-of-bounds access */
         // fprintf(stderr, "DEBUG cascade: opcode=%d (0x%03x), CSS_N_PROPERTIES=%d\n", op, op, CSS_N_PROPERTIES);
         if (op >= CSS_N_PROPERTIES) {

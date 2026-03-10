@@ -1738,17 +1738,198 @@ css_error parseProperty(
     css_language *c, const css_token *property, const parserutils_vector *vector, int32_t *ctx, css_rule *rule)
 {
     css_error error;
-    css_prop_handler handler = NULL;
     uint8_t flags = 0;
     css_style *style = NULL;
     const css_token *token;
 
     /* O(1) property lookup using perfect hash table */
-    handler = css_prop_lookup(lwc_string_data(property->idata), lwc_string_length(property->idata));
+    const struct css_prop_entry *entry = css_prop_lookup(
+        lwc_string_data(property->idata), lwc_string_length(property->idata));
 
-    if (handler == NULL) {
+    if (entry == NULL) {
         return CSS_INVALID;
     }
+
+    /* Pre-scan: check if value contains a var() function reference.
+     * If so, we can't parse at parse time — defer to resolution. */
+    {
+        int32_t scan = *ctx;
+        bool has_var = false;
+
+        while ((token = parserutils_vector_iterate(vector, &scan)) != NULL) {
+            if (token->type == CSS_TOKEN_FUNCTION &&
+                token->idata != NULL &&
+                lwc_string_length(token->idata) == 3 &&
+                strncasecmp(lwc_string_data(token->idata), "var", 3) == 0) {
+                has_var = true;
+                break;
+            }
+        }
+
+        if (has_var) {
+            /* var() found — emit deferred bytecode.
+             * Shorthands (opcode == -1) don't support var() deferral
+             * because they expand into multiple properties at parse time. */
+            if (entry->opcode < 0) {
+                return CSS_INVALID;
+            }
+
+            /* 1B approach: find last '!' for !important detection */
+            int32_t value_start = *ctx;
+            int32_t excl_pos = -1;
+
+            scan = value_start;
+            while ((token = parserutils_vector_iterate(vector, &scan)) != NULL) {
+                if (tokenIsChar(token, '!'))
+                    excl_pos = scan - 1;
+            }
+
+            if (excl_pos >= 0) {
+                int32_t imp_ctx = excl_pos;
+                error = css__parse_important(c, vector, &imp_ctx, &flags);
+                if (error != CSS_OK && error != CSS_INVALID)
+                    return error;
+            }
+
+            /* Parse the var() function: var( <custom-property-name> [, <fallback>]? )
+             * Token stream: FUNCTION("var") WS? CUSTOM_PROP WS? [',' WS? fallback-tokens...] ')' */
+            scan = value_start;
+            consumeWhitespace(vector, &scan);
+
+            /* Expect FUNCTION token "var" */
+            token = parserutils_vector_iterate(vector, &scan);
+            if (token == NULL || token->type != CSS_TOKEN_FUNCTION ||
+                token->idata == NULL ||
+                lwc_string_length(token->idata) != 3 ||
+                strncasecmp(lwc_string_data(token->idata), "var", 3) != 0) {
+                return CSS_INVALID;
+            }
+
+            /* Skip whitespace after opening '(' */
+            consumeWhitespace(vector, &scan);
+
+            /* Expect custom property name (--name) */
+            token = parserutils_vector_iterate(vector, &scan);
+            if (token == NULL || token->type != CSS_TOKEN_CUSTOM_PROPERTY) {
+                return CSS_INVALID;
+            }
+
+            /* Intern the variable name */
+            lwc_string *var_name = lwc_string_ref(token->idata);
+            uint32_t name_idx;
+            error = css__stylesheet_string_add(c->sheet, var_name, &name_idx);
+            if (error != CSS_OK)
+                return error;
+
+            /* Check for comma (fallback follows) or closing paren */
+            consumeWhitespace(vector, &scan);
+            token = parserutils_vector_iterate(vector, &scan);
+
+            uint32_t fallback_idx = 0;
+            bool has_fallback = false;
+
+            if (token != NULL && tokenIsChar(token, ',')) {
+                /* Fallback value: capture everything from here to ')'.
+                 * Use source buffer span: first_token->data.data to
+                 * last_token->data.data + last_token->data.len */
+                consumeWhitespace(vector, &scan);
+
+                const css_token *fb_first = parserutils_vector_peek(vector, scan);
+                if (fb_first == NULL) {
+                    return CSS_INVALID;
+                }
+
+                const css_token *fb_last = fb_first;
+                int paren_depth = 1;
+                int32_t fb_scan = scan;
+
+                while ((token = parserutils_vector_iterate(vector, &fb_scan)) != NULL) {
+                    if (flags != 0 && (fb_scan - 1) == excl_pos)
+                        break;
+                    if (token->type == CSS_TOKEN_FUNCTION)
+                        paren_depth++;
+                    if (tokenIsChar(token, ')')) {
+                        paren_depth--;
+                        if (paren_depth == 0)
+                            break;
+                    }
+                    fb_last = token;
+                }
+
+                /* Build fallback string from source buffer span */
+                const char *fb_start = (const char *)fb_first->data.data;
+                const char *fb_end = (const char *)fb_last->data.data + fb_last->data.len;
+                size_t fb_len = fb_end - fb_start;
+
+                /* Trim trailing whitespace */
+                while (fb_len > 0 && (fb_start[fb_len - 1] == ' ' ||
+                                       fb_start[fb_len - 1] == '\t' ||
+                                       fb_start[fb_len - 1] == '\n' ||
+                                       fb_start[fb_len - 1] == '\r' ||
+                                       fb_start[fb_len - 1] == '\f')) {
+                    fb_len--;
+                }
+
+                if (fb_len > 0) {
+                    lwc_string *fallback_str;
+                    lwc_error lerr = lwc_intern_string(fb_start, fb_len, &fallback_str);
+                    if (lerr != lwc_error_ok)
+                        return CSS_NOMEM;
+
+                    error = css__stylesheet_string_add(c->sheet, fallback_str, &fallback_idx);
+                    if (error != CSS_OK)
+                        return error;
+
+                    has_fallback = true;
+                }
+            } else if (token == NULL || !tokenIsChar(token, ')')) {
+                return CSS_INVALID;
+            }
+
+            /* Build the var() flags: important + fallback indicator */
+            uint8_t var_flags = has_fallback ? FLAG_VAR_HAS_FALLBACK : 0;
+
+            /* Create style and emit deferred bytecode:
+             * [OPV(prop_opcode, var_flags, VALUE_IS_VAR)] [name_idx] [fallback_idx?] */
+            error = css__stylesheet_style_create(c->sheet, &style);
+            if (error != CSS_OK)
+                return error;
+
+            error = css__stylesheet_style_appendOPV(style,
+                (opcode_t)entry->opcode, var_flags, VALUE_IS_VAR);
+            if (error != CSS_OK) {
+                css__stylesheet_style_destroy(style);
+                return error;
+            }
+
+            error = css__stylesheet_style_append(style, name_idx);
+            if (error != CSS_OK) {
+                css__stylesheet_style_destroy(style);
+                return error;
+            }
+
+            if (has_fallback) {
+                error = css__stylesheet_style_append(style, fallback_idx);
+                if (error != CSS_OK) {
+                    css__stylesheet_style_destroy(style);
+                    return error;
+                }
+            }
+
+            if (flags != 0)
+                css__make_style_important(style);
+
+            error = css__stylesheet_rule_append_style(c->sheet, rule, style);
+            if (error != CSS_OK) {
+                css__stylesheet_style_destroy(style);
+                return error;
+            }
+
+            return CSS_OK;
+        }
+    }
+
+    /* Normal path: no var() — call the property handler */
 
     /* allocate style */
     error = css__stylesheet_style_create(c->sheet, &style);
@@ -1758,7 +1939,7 @@ css_error parseProperty(
     assert(style != NULL);
 
     /* Call the handler */
-    error = handler(c, vector, ctx, style);
+    error = entry->handler(c, vector, ctx, style);
     if (error != CSS_OK) {
         css__stylesheet_style_destroy(style);
         return error;
