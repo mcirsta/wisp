@@ -24,6 +24,12 @@ extern "C" {
 #include "wisp/wisp.h"
 }
 
+#ifdef WISP_QT_DISK_CACHE_ENABLED
+extern "C" {
+#include <wisp/content/backing_store.h>
+}
+#endif
+
 #include "qt/application.cls.h"
 
 #include "qt/bitmap.h"
@@ -52,7 +58,11 @@ int main(int argc, char **argv)
         .utf8 = NULL, /* use default utf-8 processing */
         .search = NULL, /* use the default text search */
         .search_web = NULL, /* use default web search */
+#ifdef WISP_QT_DISK_CACHE_ENABLED
+        .llcache = filesystem_llcache_table,
+#else
         .llcache = NULL, /* use default low level cache storage */
+#endif
         .bitmap = nsqt_bitmap_table,
         .layout = nsqt_layout_table,
     };

@@ -190,28 +190,33 @@ void NS_Application::nsOptionFromPalette(struct nsoption_s *opts)
  */
 nserror NS_Application::set_option_defaults(struct nsoption_s *defaults)
 {
-    QDir config_dir(QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation));
+    QDir data_dir(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation));
+    if (!data_dir.exists()) {
+        data_dir.mkpath(data_dir.absoluteFilePath(""));
+    }
 
-    /* ensure all elements of path exist */
-    if (!config_dir.exists()) {
-        config_dir.mkpath(config_dir.absoluteFilePath(""));
+    QDir cache_dir(QStandardPaths::writableLocation(QStandardPaths::CacheLocation));
+    if (!cache_dir.exists()) {
+        cache_dir.mkpath(cache_dir.absoluteFilePath(""));
     }
 
     /* cookies database default read and write paths */
-    nsoption_setnull_charp(cookie_file, strdup(config_dir.absoluteFilePath("Cookies").toUtf8()));
-
-    nsoption_setnull_charp(cookie_jar, strdup(config_dir.absoluteFilePath("Cookies").toUtf8()));
+    nsoption_setnull_charp(cookie_file, strdup(data_dir.absoluteFilePath("Cookies").toUtf8()));
+    nsoption_setnull_charp(cookie_jar, strdup(data_dir.absoluteFilePath("Cookies").toUtf8()));
 
     /* url database default path */
-    nsoption_setnull_charp(url_file, strdup(config_dir.absoluteFilePath("URLs").toUtf8()));
+    nsoption_setnull_charp(url_file, strdup(data_dir.absoluteFilePath("URLs").toUtf8()));
 
     /* bookmark database default path */
-    nsoption_setnull_charp(hotlist_path, strdup(config_dir.absoluteFilePath("Hotlist").toUtf8()));
+    nsoption_setnull_charp(hotlist_path, strdup(data_dir.absoluteFilePath("Hotlist").toUtf8()));
 
     if (nsoption_charp(hotlist_path) == NULL) {
         NSLOG(wisp, ERROR, "Failed initialising bookmarks resource path");
         return NSERROR_BAD_PARAMETER;
     }
+
+    /* disk cache default path */
+    nsoption_setnull_charp(disc_cache_path, strdup(cache_dir.absoluteFilePath("Cache").toUtf8()));
 
     /* set default font names */
     nsoption_set_charp(font_sans, strdup("Sans"));

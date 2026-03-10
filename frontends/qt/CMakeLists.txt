@@ -96,6 +96,18 @@ add_executable(wisp-qt ${QT_SOURCES} ${QT_RESOURCES})
 
 add_dependencies(wisp-qt qt_messages)
 
+# Determine default cache state based on build type
+set(DEFAULT_QT_DISK_CACHE ON)
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+    set(DEFAULT_QT_DISK_CACHE OFF)
+endif()
+
+option(WISP_QT_DISK_CACHE "Enable disk caching in the Qt frontend" ${DEFAULT_QT_DISK_CACHE})
+
+if(WISP_QT_DISK_CACHE)
+    target_compile_definitions(wisp-qt PRIVATE WISP_QT_DISK_CACHE_ENABLED)
+endif()
+
 target_compile_definitions(wisp-qt PRIVATE
     nsqt
     QT_RESPATH="${CMAKE_INSTALL_PREFIX}/share/wisp/res"

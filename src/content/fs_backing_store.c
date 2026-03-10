@@ -96,6 +96,9 @@ static int durable_rename(const char *src, const char *dst);
  */
 #define CONTROL_MAINT_TIME 10000
 
+/** Maximum URL length to accept from a cache index */
+#define MAX_CACHED_URL_LEN 65536
+
 /** Filename of serialised entries */
 #define ENTRIES_FNAME "entries"
 
@@ -661,9 +664,8 @@ static nserror store_evict(struct store_state *state)
 
     free(estate.elist);
 
-    NSLOG(wisp, INFO,
-        "removed %" PRIsizet " in %" PRIsizet " entries, %" PRIu64 " remaining in %" PRIsizet " entries", removed, ent,
-        state->total_alloc, old_count - ent);
+    NSLOG(wisp, INFO, "removed %" PRIsizet " in %" PRIsizet " entries, %" PRIu64 " remaining in %" PRIsizet " entries",
+        removed, ent, state->total_alloc, old_count - ent);
 
     return ret;
 }
@@ -731,6 +733,11 @@ static void validate_entries_after_write(struct store_state *state)
             for (uint32_t i = 0; i < expected; i++) {
                 uint32_t urllen;
                 if (read(fd, &urllen, sizeof(urllen)) != sizeof(urllen)) {
+                    truncated = true;
+                    break;
+                }
+                if (urllen > MAX_CACHED_URL_LEN) {
+                    NSLOG(wisp, ERROR, "validate entries: URL length (%u) exceeds limit", urllen);
                     truncated = true;
                     break;
                 }
@@ -807,6 +814,11 @@ static void validate_entries_after_write(struct store_state *state)
                 uint32_t urllen;
                 ssize_t r = read(fd, &urllen, sizeof(urllen));
                 if (r != sizeof(urllen)) {
+                    break;
+                }
+                if (urllen > MAX_CACHED_URL_LEN) {
+                    NSLOG(wisp, ERROR, "validate entries: URL length (%u) exceeds limit", urllen);
+                    truncated = true;
                     break;
                 }
                 char *url = calloc(1, urllen + 1);
@@ -929,6 +941,8 @@ static bool write_entry_iterator(void *key, void *value, void *ctx)
 static nserror write_entries(struct store_state *state)
 {
     char *fname = NULL; /* target filename */
+    char *tname = NULL; /* temporary filename */
+    char tfile[32];
     write_entry_iteration_state weistate;
     nserror ret;
 
@@ -947,13 +961,23 @@ static nserror write_entries(struct store_state *state)
     if (ret != NSERROR_OK) {
         return ret;
     }
+
+    snprintf(tfile, sizeof(tfile), "t%s_%ld", ENTRIES_FNAME, (long)getpid());
+    ret = wisp_mkpath(&tname, NULL, 2, state->path, tfile);
+    if (ret != NSERROR_OK) {
+        free(fname);
+        return ret;
+    }
+
     if (wisp_mkdir_all(fname) != NSERROR_OK) {
+        free(tname);
         free(fname);
         return NSERROR_SAVE_FAILED;
     }
 
-    weistate.fd = open_file_binary(fname, O_RDWR | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
+    weistate.fd = open_file_binary(tname, O_RDWR | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
     if (weistate.fd == -1) {
+        free(tname);
         free(fname);
         return NSERROR_SAVE_FAILED;
     }
@@ -965,14 +989,16 @@ static nserror write_entries(struct store_state *state)
         if (write(weistate.fd, magic, 4) != 4) {
             flush_fd(weistate.fd);
             close(weistate.fd);
-            unlink(fname);
+            unlink(tname);
+            free(tname);
             free(fname);
             entries_writing = false;
             return NSERROR_SAVE_FAILED;
         }
         if (write(weistate.fd, &ver, sizeof(ver)) != sizeof(ver)) {
             close(weistate.fd);
-            unlink(fname);
+            unlink(tname);
+            free(tname);
             free(fname);
             entries_writing = false;
             return NSERROR_SAVE_FAILED;
@@ -983,7 +1009,8 @@ static nserror write_entries(struct store_state *state)
             uint32_t count = hashmap_count(state->entries);
             if (write(weistate.fd, &count, sizeof(count)) != sizeof(count)) {
                 close(weistate.fd);
-                unlink(fname);
+                unlink(tname);
+                free(tname);
                 free(fname);
                 entries_writing = false;
                 return NSERROR_SAVE_FAILED;
@@ -1000,7 +1027,8 @@ static nserror write_entries(struct store_state *state)
             close(weistate.fd);
             NSLOG(wisp, INFO, "write_entries: final size %lld bytes", (long long)bytes);
         }
-        unlink(fname);
+        unlink(tname);
+        free(tname);
         free(fname);
         entries_writing = false;
         return NSERROR_SAVE_FAILED;
@@ -1016,12 +1044,21 @@ static nserror write_entries(struct store_state *state)
 
     NSLOG(wisp, INFO, "Wrote out %" PRIsizet " entries (format v2)", weistate.written);
 
+    if (durable_rename(tname, fname) != 0) {
+        unlink(tname);
+        free(tname);
+        free(fname);
+        entries_writing = false;
+        return NSERROR_SAVE_FAILED;
+    }
+
     /* entries successfully persisted */
     state->entries_dirty = false;
 
     validate_entries_after_write(state);
     entries_writing = false;
 
+    free(tname);
     free(fname);
     return NSERROR_OK;
 }
@@ -1126,14 +1163,15 @@ wr_err:
         return ret;
     }
 
-    /* remove() call is to handle non-POSIX rename() implementations */
-    (void)remove(fname);
-    if (rename(tname, fname) != 0) {
+    if (durable_rename(tname, fname) != 0) {
         unlink(tname);
         free(tname);
         free(fname);
         return NSERROR_SAVE_FAILED;
     }
+
+    free(fname);
+    free(tname);
 
     return NSERROR_OK;
 }
@@ -1463,6 +1501,11 @@ static nserror read_entries(struct store_state *state)
                         truncated = true;
                         break;
                     }
+                    if (urllen > MAX_CACHED_URL_LEN) {
+                        NSLOG(wisp, ERROR, "read_entries: URL length (%u) exceeds limit", urllen);
+                        truncated = true;
+                        break;
+                    }
                     url = calloc(1, urllen + 1);
                     if (url == NULL) {
                         close(fd);
@@ -1598,6 +1641,11 @@ static nserror read_entries(struct store_state *state)
             return NSERROR_INIT_FAILED;
         }
         while (read(fd, &urllen, sizeof(urllen)) == sizeof(urllen)) {
+            if (urllen > MAX_CACHED_URL_LEN) {
+                NSLOG(wisp, ERROR, "read_entries: URL length (%u) exceeds limit", urllen);
+                truncated = true;
+                break;
+            }
             url = calloc(1, urllen + 1);
             if (url == NULL) {
                 close(fd);
@@ -1753,7 +1801,7 @@ static nserror read_blocks(struct store_state *state)
 
     NSLOG(wisp, INFO, "Initialising block use map from %s", fname);
 
-    fd = open(fname, O_RDWR);
+    fd = open_file_binary(fname, O_RDWR, 0);
     free(fname);
     if (fd != -1) {
         /* initialise block file use array */
@@ -2277,8 +2325,8 @@ static nserror store_read_block(struct store_state *state, struct store_entry *b
 
     rd = nsu_pread(state->blocks[elem_idx][bf].fd, bse->elem[elem_idx].data, bse->elem[elem_idx].size, offst);
     if (rd != (ssize_t)bse->elem[elem_idx].size) {
-        NSLOG(wisp, ERROR, "Failed reading %" PRIssizet " of %d bytes into %p from %" PRIsizet " block %d errno %d",
-            rd, bse->elem[elem_idx].size, bse->elem[elem_idx].data, (size_t)offst, bse->elem[elem_idx].block, errno);
+        NSLOG(wisp, ERROR, "Failed reading %" PRIssizet " of %d bytes into %p from %" PRIsizet " block %d errno %d", rd,
+            bse->elem[elem_idx].size, bse->elem[elem_idx].data, (size_t)offst, bse->elem[elem_idx].block, errno);
         return NSERROR_SAVE_FAILED;
     }
 
