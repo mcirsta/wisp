@@ -208,8 +208,8 @@ void css__parse_expected(line_ctx *ctx, const char *data, size_t len)
 const char *string_from_type(css_token_type type)
 {
     const char *names[] = {"IDENT", "ATKEYWORD", "HASH", "FUNCTION", "STRING", "INVALID", "URI", "UNICODE-RANGE",
-        "CHAR", "NUMBER", "PERCENTAGE", "DIMENSION", "last_intern", "CDO", "CDC", "S", "COMMENT", "INCLUDES",
-        "DASHMATCH", "PREFIXMATCH", "SUFFIXMATCH", "SUBSTRINGMATCH", "EOF"};
+        "CHAR", "NUMBER", "PERCENTAGE", "DIMENSION", "CUSTOM_PROPERTY", "last_intern", "CDO", "CDC", "S",
+        "COMMENT", "INCLUDES", "DASHMATCH", "PREFIXMATCH", "SUFFIXMATCH", "SUBSTRINGMATCH", "EOF"};
 
     return names[type];
 }
@@ -258,6 +258,8 @@ css_token_type string_to_type(const char *data, size_t len)
         return CSS_TOKEN_SUBSTRINGMATCH;
     else if (len == 4 && strncasecmp(data, "CHAR", len) == 0)
         return CSS_TOKEN_CHAR;
+    else if (len == 15 && strncasecmp(data, "CUSTOM_PROPERTY", len) == 0)
+        return CSS_TOKEN_CUSTOM_PROPERTY;
     else
         return CSS_TOKEN_EOF;
 }

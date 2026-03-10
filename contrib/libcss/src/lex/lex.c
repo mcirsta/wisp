@@ -533,7 +533,7 @@ css_error CDCOrIdentOrFunctionOrNPD(css_lexer *lexer, css_token **token)
     size_t clen;
     css_error error;
     parserutils_error perror;
-    enum { Initial = 0, Escape = 1, Gt = 2 };
+    enum { Initial = 0, Escape = 1, Gt = 2, CustomProp = 3 };
 
     /* CDC = "-->"
      * IDENT = [-]? nmstart nmchar*
@@ -541,11 +541,12 @@ css_error CDCOrIdentOrFunctionOrNPD(css_lexer *lexer, css_token **token)
      * NUMBER = num = [-+]? ([0-9]+ | [0-9]* '.' [0-9]+)
      * PERCENTAGE = num '%'
      * DIMENSION = num ident
+     * CUSTOM_PROPERTY = '--' nmstart nmchar*
      *
      * The first dash has been consumed. Thus, we must consume the next
      * character in the stream. If it's a dash, then we're dealing with
-     * CDC. If it's a digit or dot, then we're dealing with NPD.
-     * Otherwise, we're dealing with IDENT/FUNCTION.
+     * CDC or CUSTOM_PROPERTY. If it's a digit or dot, then we're
+     * dealing with NPD. Otherwise, we're dealing with IDENT/FUNCTION.
      */
 
     switch (lexer->substate) {
@@ -596,7 +597,9 @@ css_error CDCOrIdentOrFunctionOrNPD(css_lexer *lexer, css_token **token)
     case Gt:
         lexer->substate = Gt;
 
-        /* Ok, so we're dealing with CDC. Expect a '>' */
+        /* Ok, so we've consumed '--'. Check what follows:
+         * '>' means CDC, nmstart means CUSTOM_PROPERTY,
+         * anything else means CHAR (just the first '-'). */
         perror = parserutils_inputstream_peek(lexer->input, lexer->bytesReadForToken, &cptr, &clen);
         if (perror != PARSERUTILS_OK && perror != PARSERUTILS_EOF)
             return css_error_from_parserutils_error(perror);
@@ -615,6 +618,10 @@ css_error CDCOrIdentOrFunctionOrNPD(css_lexer *lexer, css_token **token)
             APPEND(lexer, cptr, clen);
 
             t->type = CSS_TOKEN_CDC;
+        } else if (startNMStart(c)) {
+            /* Custom property: --nmstart nmchar* */
+            APPEND(lexer, cptr, clen);
+            goto customprop;
         } else {
             /* Remove the '-' we read above */
             lexer->bytesReadForToken -= 1;
@@ -622,6 +629,15 @@ css_error CDCOrIdentOrFunctionOrNPD(css_lexer *lexer, css_token **token)
             t->type = CSS_TOKEN_CHAR;
         }
         break;
+
+    case CustomProp:
+    customprop:
+        lexer->substate = CustomProp;
+        error = consumeNMChars(lexer);
+        if (error != CSS_OK)
+            return error;
+
+        return emitToken(lexer, CSS_TOKEN_CUSTOM_PROPERTY, token);
 
     case Escape:
     escape:

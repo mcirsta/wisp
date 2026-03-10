@@ -46,6 +46,7 @@ typedef enum css_token_type {
     CSS_TOKEN_NUMBER,
     CSS_TOKEN_PERCENTAGE,
     CSS_TOKEN_DIMENSION,
+    CSS_TOKEN_CUSTOM_PROPERTY,
 
     /* Those tokens that want strings interned appear above */
     CSS_TOKEN_LAST_INTERN,
