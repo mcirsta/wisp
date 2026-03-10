@@ -1,0 +1,48 @@
+#data
+* { --color: red }
+#errors
+#expected
+| 1 *
+|   0x0000008c PTR(--color) PTR(red)
+#reset
+
+#data
+* { --primary-color: #ff0000 }
+#errors
+#expected
+| 1 *
+|   0x0000008c PTR(--primary-color) PTR(ff0000)
+#reset
+
+#data
+* { --color: red !important }
+#errors
+#expected
+| 1 *
+|   0x0000048c PTR(--color) PTR(red)
+#reset
+
+#data
+* { --spacing: 10px }
+#errors
+#expected
+| 1 *
+|   0x0000008c PTR(--spacing) PTR(10px)
+#reset
+
+#data
+* { --multi: one two three }
+#errors
+#expected
+| 1 *
+|   0x0000008c PTR(--multi) PTR(one two three)
+#reset
+
+#data
+* { --color: red; color: inherit }
+#errors
+#expected
+| 1 *
+|   0x0000008c PTR(--color) PTR(red) 0x00000818
+#reset
+

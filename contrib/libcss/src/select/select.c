@@ -2520,6 +2520,14 @@ css_error cascade_style(const css_style *style, css_select_state *state)
 
         op = getOpcode(opv);
 
+        /* Custom property declarations: skip the 2 trailing words
+         * (name_string_idx, value_string_idx). Full processing
+         * will be added when the variable context is implemented. */
+        if (op == CSS_PROP_CUSTOM_PROPERTY) {
+            advance_bytecode(&s, 2 * sizeof(css_code_t));
+            continue;
+        }
+
         /* DEBUG: Log opcode to trace out-of-bounds access */
         // fprintf(stderr, "DEBUG cascade: opcode=%d (0x%03x), CSS_N_PROPERTIES=%d\n", op, op, CSS_N_PROPERTIES);
         if (op >= CSS_N_PROPERTIES) {

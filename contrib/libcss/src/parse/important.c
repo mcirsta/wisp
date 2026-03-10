@@ -433,6 +433,10 @@ void css__make_style_important(css_style *style)
                     offset++; /* z index */
                 break;
 
+            case CSS_PROP_CUSTOM_PROPERTY:
+                offset += 2; /* name_string_idx + value_string_idx */
+                break;
+
             default:
                 break;
             }

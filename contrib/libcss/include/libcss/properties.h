@@ -25,6 +25,18 @@ enum css_properties_e {
     CSS_N_PROPERTIES
 };
 
+/**
+ * Special opcode for CSS custom property declarations (--name: value).
+ * Defined outside the auto-generated enum so it doesn't affect
+ * prop_dispatch[] indexing. Must be handled specially in cascade_style().
+ *
+ * Bytecode layout: [OPV] [name_string_idx] [value_string_idx]
+ *   OPV uses CSS_PROP_CUSTOM_PROPERTY as the opcode.
+ *   name_string_idx: index into stylesheet string_vector for the property name.
+ *   value_string_idx: index into stylesheet string_vector for the raw value text.
+ */
+#define CSS_PROP_CUSTOM_PROPERTY CSS_N_PROPERTIES
+
 enum css_align_content_e {
     CSS_ALIGN_CONTENT_INHERIT = 0x0,
     CSS_ALIGN_CONTENT_STRETCH = 0x1,

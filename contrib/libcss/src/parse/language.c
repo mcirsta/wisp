@@ -76,6 +76,8 @@ static css_error parseSelectorList(css_language *c, const parserutils_vector *ve
 /* Declaration parsing */
 static css_error parseProperty(
     css_language *c, const css_token *property, const parserutils_vector *vector, int32_t *ctx, css_rule *rule);
+static css_error parseCustomProperty(
+    css_language *c, const css_token *property, const parserutils_vector *vector, int32_t *ctx, css_rule *rule);
 
 /**
  * Create a CSS language parser
@@ -763,11 +765,14 @@ css_error handleDeclaration(css_language *c, const parserutils_vector *vector)
     consumeWhitespace(vector, &ctx);
 
     /* IDENT ws ':' ws value
+     * or
+     * CUSTOM_PROPERTY ws ':' ws value
      *
      * In CSS 2.1, value is any1, so '{' or ATKEYWORD => parse error
      */
     ident = parserutils_vector_iterate(vector, &ctx);
-    if (ident == NULL || ident->type != CSS_TOKEN_IDENT)
+    if (ident == NULL ||
+        (ident->type != CSS_TOKEN_IDENT && ident->type != CSS_TOKEN_CUSTOM_PROPERTY))
         return CSS_INVALID;
 
     consumeWhitespace(vector, &ctx);
@@ -778,7 +783,12 @@ css_error handleDeclaration(css_language *c, const parserutils_vector *vector)
 
     consumeWhitespace(vector, &ctx);
 
-    if (rule->type == CSS_RULE_FONT_FACE) {
+    if (ident->type == CSS_TOKEN_CUSTOM_PROPERTY) {
+        /* Custom properties are not valid in @font-face */
+        if (rule->type == CSS_RULE_FONT_FACE)
+            return CSS_INVALID;
+        error = parseCustomProperty(c, ident, vector, &ctx, rule);
+    } else if (rule->type == CSS_RULE_FONT_FACE) {
         css_rule_font_face *ff_rule = (css_rule_font_face *)rule;
         error = css__parse_font_descriptor(c, ident, vector, &ctx, ff_rule);
     } else {
@@ -1785,3 +1795,135 @@ css_error parseProperty(
 
     return CSS_OK;
 }
+
+/**
+ * Parse a custom property declaration (--name: value)
+ *
+ * Captures the raw value text from all remaining tokens and stores
+ * both name and value as lwc_strings in the stylesheet's string_vector.
+ * Emits bytecode: [OPV(CSS_PROP_CUSTOM_PROPERTY, flags, 0)]
+ *                 [name_string_idx] [value_string_idx]
+ */
+css_error parseCustomProperty(
+    css_language *c, const css_token *property, const parserutils_vector *vector, int32_t *ctx, css_rule *rule)
+{
+    css_error error;
+    uint8_t flags = 0;
+    css_style *style = NULL;
+    const css_token *token;
+    uint32_t name_idx, value_idx;
+    lwc_string *value_str;
+    int32_t value_start = *ctx;
+
+    /* 1B: Scan forward to find the last '!' CHAR token position,
+     * then delegate to css__parse_important() from there. */
+    int32_t scan = value_start;
+    int32_t excl_pos = -1;
+
+    while ((token = parserutils_vector_iterate(vector, &scan)) != NULL) {
+        if (tokenIsChar(token, '!'))
+            excl_pos = scan - 1;
+    }
+
+    /* If we found a '!', try css__parse_important from that position */
+    if (excl_pos >= 0) {
+        int32_t imp_ctx = excl_pos;
+        error = css__parse_important(c, vector, &imp_ctx, &flags);
+        if (error != CSS_OK && error != CSS_INVALID)
+            return error;
+        /* If CSS_INVALID, the '!' wasn't followed by 'important',
+         * so flags stays 0 and we treat '!' as part of the value. */
+    }
+
+    /* Second pass: measure value text length.
+     * If !important was found (flags != 0), stop before excl_pos. */
+    size_t total_len = 0;
+    int32_t value_end = value_start;
+    scan = value_start;
+
+    while ((token = parserutils_vector_iterate(vector, &scan)) != NULL) {
+        if (flags != 0 && (scan - 1) == excl_pos)
+            break;
+        total_len += token->data.len;
+        value_end = scan;
+    }
+
+    /* Third pass: build the concatenated value string */
+    char *buf = malloc(total_len + 1);
+    if (buf == NULL)
+        return CSS_NOMEM;
+
+    size_t offset = 0;
+    scan = value_start;
+    while (scan < value_end && (token = parserutils_vector_iterate(vector, &scan)) != NULL) {
+        memcpy(buf + offset, token->data.data, token->data.len);
+        offset += token->data.len;
+    }
+
+    /* Trim trailing whitespace from the value */
+    while (offset > 0 && (buf[offset - 1] == ' ' || buf[offset - 1] == '\t' ||
+                             buf[offset - 1] == '\n' || buf[offset - 1] == '\r' ||
+                             buf[offset - 1] == '\f')) {
+        offset--;
+    }
+
+    /* Intern the value string */
+    lwc_error lerr = lwc_intern_string(buf, offset, &value_str);
+    free(buf);
+    if (lerr != lwc_error_ok)
+        return CSS_NOMEM;
+
+    /* Add name string to stylesheet (string_add takes ownership of the ref) */
+    lwc_string *name_ref = lwc_string_ref(property->idata);
+    error = css__stylesheet_string_add(c->sheet, name_ref, &name_idx);
+    if (error != CSS_OK) {
+        lwc_string_unref(value_str);
+        return error;
+    }
+
+    /* Add value string to stylesheet */
+    error = css__stylesheet_string_add(c->sheet, value_str, &value_idx);
+    if (error != CSS_OK) {
+        return error;
+    }
+
+    /* Create style and emit bytecode:
+     * [OPV(CSS_PROP_CUSTOM_PROPERTY, 0, 0)] [name_idx] [value_idx] */
+    error = css__stylesheet_style_create(c->sheet, &style);
+    if (error != CSS_OK)
+        return error;
+
+    error = css__stylesheet_style_appendOPV(style, CSS_PROP_CUSTOM_PROPERTY, 0, 0);
+    if (error != CSS_OK) {
+        css__stylesheet_style_destroy(style);
+        return error;
+    }
+
+    error = css__stylesheet_style_append(style, name_idx);
+    if (error != CSS_OK) {
+        css__stylesheet_style_destroy(style);
+        return error;
+    }
+
+    error = css__stylesheet_style_append(style, value_idx);
+    if (error != CSS_OK) {
+        css__stylesheet_style_destroy(style);
+        return error;
+    }
+
+    /* Mark important via css__make_style_important (2B: it now handles
+     * CSS_PROP_CUSTOM_PROPERTY in its switch to skip 2 trailing words) */
+    if (flags != 0)
+        css__make_style_important(style);
+
+    /* Append style to rule */
+    error = css__stylesheet_rule_append_style(c->sheet, rule, style);
+    if (error != CSS_OK) {
+        css__stylesheet_style_destroy(style);
+        return error;
+    }
+
+    return CSS_OK;
+}
+
+
