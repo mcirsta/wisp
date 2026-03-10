@@ -14,6 +14,7 @@
 #include <libcss/select.h>
 
 #include "stylesheet.h"
+#include "select/variables.h"
 
 /**
  * Item in the reject cache (only class and id types are valid)
@@ -52,6 +53,7 @@ struct css_node_data {
     css_select_results partial;
     css_bloom *bloom;
     css_node_flags flags;
+    css_var_context *var_ctx;  /* Per-element CSS variable context */
 };
 
 struct revert_data {
@@ -91,6 +93,8 @@ typedef struct css_select_state {
     reject_item *next_reject; /* Next free slot in reject cache */
 
     struct css_node_data *node_data; /* Data we'll store on node */
+
+    css_var_context *var_ctx;  /* Working variable context during selection */
 
     prop_state props[CSS_N_PROPERTIES][CSS_PSEUDO_ELEMENT_COUNT];
 } css_select_state;

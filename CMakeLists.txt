@@ -407,4 +407,7 @@ if(WISP_ENABLE_TESTS)
     get_filename_component(n "${f}" NAME_WE)
     add_test(NAME libcss_css21_${n} COMMAND libcss_css21 "${f}")
   endforeach()
+
+  add_libcss_test_exe(libcss_var_context ${LIBCSSL_TEST_DIR}/var-context.c)
+  add_test(NAME libcss_var_context COMMAND libcss_var_context)
 endif()
