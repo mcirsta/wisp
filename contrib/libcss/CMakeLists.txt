@@ -201,10 +201,12 @@ add_library(css ${WISP_LIB_TYPE}
 	src/parse/properties/list_style.c
 	src/parse/properties/list_style_type.c
 	src/parse/properties/margin.c
+	src/parse/properties/margin_inline.c
 	src/parse/properties/opacity.c
 	src/parse/properties/outline.c
 	src/parse/properties/overflow.c
 	src/parse/properties/padding.c
+	src/parse/properties/padding_inline.c
 	src/parse/properties/pause.c
 	src/parse/properties/play_during.c
 	src/parse/properties/properties.c

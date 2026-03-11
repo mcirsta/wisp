@@ -1476,6 +1476,9 @@ static bool layout_flex__place_line_items_main(struct flex_ctx *ctx, struct flex
     int jc_gap_between_rem = 0;
     int jc_gap_pre_extra = 0;
 
+    NSLOG(flex, DEEPDEBUG, "PLACE_MAIN_START for box %p: available_main=%d used_main_size=%d item_count=%zu", 
+          ctx->flex, ctx->available_main, line->used_main_size, line->count);
+
     if (ctx->main_reversed) {
         main_pos = lh__box_size_main(ctx->horizontal, ctx->flex) - main_pos;
     }
@@ -1494,6 +1497,7 @@ static bool layout_flex__place_line_items_main(struct flex_ctx *ctx, struct flex
         } else {
             int free_main = ctx->available_main - line->used_main_size;
             uint8_t jc = css_computed_justify_content(ctx->flex->style);
+            NSLOG(flex, DEEPDEBUG, "JUSTIFY_CONTENT for box %p: %d", ctx->flex, jc);
             switch (jc) {
             default:
                 break;

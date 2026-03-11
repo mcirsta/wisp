@@ -19,8 +19,10 @@
 #
 # Required:
 #   enum           CSS_PROP_* enum name (e.g. "CSS_PROP_HEIGHT")
+#                  REQUIRED for all properties, including shorthands.
+#                  Without this, the property is silently ignored.
 #   inherited      true if the property inherits by default (from CSS spec)
-#                  REQUIRED for all properties with 'enum'. Missing = build error.
+#                  REQUIRED for all properties, including shorthands. Missing = build error.
 #   parse          Parse spec string for gen_parser AND the cascade ident generator.
 #                  Required for any property with cascade = "ident" (the generator uses
 #                  the opcode names from this spec to populate the cascade switch).
@@ -1417,6 +1419,16 @@ computed = "auto"
 bits = 2
 initial = "CONTENT_BOX"
 parse = '''IDENT:( INHERIT: INITIAL: REVERT: UNSET: CONTENT_BOX:0,BOX_SIZING_CONTENT_BOX BORDER_BOX:0,BOX_SIZING_BORDER_BOX IDENT:)'''
+
+[margin_inline]
+enum = "CSS_PROP_MARGIN_INLINE"
+inherited = false
+shorthand = true
+
+[padding_inline]
+enum = "CSS_PROP_PADDING_INLINE"
+inherited = false
+shorthand = true
 
 [align_content]
 enum = "CSS_PROP_ALIGN_CONTENT"
