@@ -1939,6 +1939,25 @@ css_error parseProperty(
  * Emits bytecode: [OPV(CSS_PROP_CUSTOM_PROPERTY, flags, 0)]
  *                 [name_string_idx] [value_string_idx]
  */
+static inline const char *css__custom_prop_get_str(const css_token *token, size_t *len)
+{
+    if (token->idata != NULL) {
+        *len = lwc_string_length(token->idata);
+        return lwc_string_data(token->idata);
+    }
+    switch (token->type) {
+    case CSS_TOKEN_S: *len = 1; return " ";
+    case CSS_TOKEN_CDO: *len = 4; return "<!--";
+    case CSS_TOKEN_CDC: *len = 3; return "-->";
+    case CSS_TOKEN_INCLUDES: *len = 2; return "~=";
+    case CSS_TOKEN_DASHMATCH: *len = 2; return "|=";
+    case CSS_TOKEN_PREFIXMATCH: *len = 2; return "^=";
+    case CSS_TOKEN_SUFFIXMATCH: *len = 2; return "$=";
+    case CSS_TOKEN_SUBSTRINGMATCH: *len = 2; return "*=";
+    default: *len = 0; return "";
+    }
+}
+
 css_error parseCustomProperty(
     css_language *c, const css_token *property, const parserutils_vector *vector, int32_t *ctx, css_rule *rule)
 {
@@ -1979,15 +1998,21 @@ css_error parseCustomProperty(
     while ((token = parserutils_vector_iterate(vector, &scan)) != NULL) {
         if (flags != 0 && (scan - 1) == excl_pos)
             break;
+            
+        size_t tok_len = 0;
+        css__custom_prop_get_str(token, &tok_len);
+        
         /* Account for prefixes stripped by the lexer */
         if (token->type == CSS_TOKEN_HASH)
             total_len += 1; /* '#' prefix */
         else if (token->type == CSS_TOKEN_FUNCTION)
             total_len += 1; /* '(' suffix */
-        total_len += token->data.len;
-        /* Add space between tokens (except first) */
-        if (value_end > value_start)
-            total_len += 0; /* handled by CSS_TOKEN_S */
+        else if (token->type == CSS_TOKEN_STRING)
+            total_len += 2; /* "" surrounding */
+        else if (token->type == CSS_TOKEN_URI)
+            total_len += 6; /* url("") surrounding */
+            
+        total_len += tok_len;
         value_end = scan;
     }
 
@@ -1999,14 +2024,33 @@ css_error parseCustomProperty(
     size_t offset = 0;
     scan = value_start;
     while (scan < value_end && (token = parserutils_vector_iterate(vector, &scan)) != NULL) {
-        /* Re-add prefixes that the lexer strips from data */
+        size_t tok_len = 0;
+        const char *tok_str = css__custom_prop_get_str(token, &tok_len);
+        
+        /* Re-add prefixes and wrappers that the lexer strips */
         if (token->type == CSS_TOKEN_HASH) {
             buf[offset++] = '#';
-        }
-        memcpy(buf + offset, token->data.data, token->data.len);
-        offset += token->data.len;
-        if (token->type == CSS_TOKEN_FUNCTION) {
+            memcpy(buf + offset, tok_str, tok_len);
+            offset += tok_len;
+        } else if (token->type == CSS_TOKEN_FUNCTION) {
+            memcpy(buf + offset, tok_str, tok_len);
+            offset += tok_len;
             buf[offset++] = '(';
+        } else if (token->type == CSS_TOKEN_STRING) {
+            buf[offset++] = '"';
+            memcpy(buf + offset, tok_str, tok_len);
+            offset += tok_len;
+            buf[offset++] = '"';
+        } else if (token->type == CSS_TOKEN_URI) {
+            memcpy(buf + offset, "url(\"", 5);
+            offset += 5;
+            memcpy(buf + offset, tok_str, tok_len);
+            offset += tok_len;
+            buf[offset++] = '"';
+            buf[offset++] = ')';
+        } else {
+            memcpy(buf + offset, tok_str, tok_len);
+            offset += tok_len;
         }
     }
 

@@ -153,6 +153,9 @@ static css_error css__handle_var_function(
             }
         }
     } else {
+        fprintf(stderr, "  var('%s') NOT FOUND and no fallback (ctx has %u entries)\n",
+            lwc_string_data(var_name),
+            var_ctx != NULL ? var_ctx->count : 0);
         error = CSS_INVALID;
         goto cleanup;
     }
