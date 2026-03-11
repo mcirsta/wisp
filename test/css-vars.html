@@ -79,6 +79,29 @@
             padding: 10px;
         }
 
+        /* Test for @layer and :host */
+        @layer theme {
+            :root, :host {
+                --layer-color: #00ffff; /* Cyan */
+                --layer-bg: #000080;    /* Navy Blue */
+                --layer-border: 10px dashed #00ffff;
+                --layer-padding: 40px;
+                --layer-font-size: 24px;
+            }
+        }
+        
+        .layer-test {
+            /* If variables resolve successfully, box is Navy with Cyan text/border and huge.
+               If not, it falls back to a tiny ugly Red/Yellow box. */
+            color: var(--layer-color, yellow);
+            background-color: var(--layer-bg, red);
+            padding: var(--layer-padding, 5px);
+            border: var(--layer-border, 2px solid yellow);
+            font-size: var(--layer-font-size, 12px);
+            margin-top: 20px;
+            text-align: center;
+        }
+
     </style>
 </head>
 <body>
@@ -105,6 +128,12 @@
 
         <div class="cycle">
             This text creates a <strong>circular reference</strong>. The parser should detect the cycle, abort, and inherit the color instead of using the fallback or infinitely looping.
+        </div>
+
+        <div class="layer-test">
+            <strong>@layer and :host TEST</strong><br><br>
+            If Phase 1 works, this box is <strong>HUGE, NAVY BLUE, with CYAN DASHED BORDERS</strong>.<br>
+            If it fails, it will be a tiny Red box with Yellow text.
         </div>
     </div>
 </body>

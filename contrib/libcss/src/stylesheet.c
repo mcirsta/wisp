@@ -1085,6 +1085,12 @@ css_error css__stylesheet_rule_create(css_stylesheet *sheet, css_rule_type type,
     case CSS_RULE_PAGE:
         required = sizeof(css_rule_page);
         break;
+    case CSS_RULE_LAYER:
+        required = sizeof(css_rule_layer);
+        break;
+    case CSS_RULE_SUPPORTS:
+        required = sizeof(css_rule_supports);
+        break;
     }
 
     r = malloc(required);
@@ -1188,6 +1194,39 @@ css_error css__stylesheet_rule_destroy(css_stylesheet *sheet, css_rule *rule)
 
         if (page->style != NULL)
             css__stylesheet_style_destroy(page->style);
+    } break;
+    case CSS_RULE_LAYER: {
+        css_rule_layer *layer = (css_rule_layer *)rule;
+        css_rule *c, *d;
+
+        if (layer->name != NULL)
+            lwc_string_unref(layer->name);
+
+        for (c = layer->first_child; c != NULL; c = d) {
+            d = c->next;
+
+            /* Detach from list */
+            c->parent = NULL;
+            c->prev = NULL;
+            c->next = NULL;
+
+            css__stylesheet_rule_destroy(sheet, c);
+        }
+    } break;
+    case CSS_RULE_SUPPORTS: {
+        css_rule_supports *supports = (css_rule_supports *)rule;
+        css_rule *c, *d;
+
+        for (c = supports->first_child; c != NULL; c = d) {
+            d = c->next;
+
+            /* Detach from list */
+            c->parent = NULL;
+            c->prev = NULL;
+            c->next = NULL;
+
+            css__stylesheet_rule_destroy(sheet, c);
+        }
     } break;
     }
 
@@ -1413,24 +1452,49 @@ css_error css__stylesheet_add_rule(css_stylesheet *sheet, css_rule *rule, css_ru
     sheet->size += _rule_size(rule);
 
     if (parent != NULL) {
-        css_rule_media *media = (css_rule_media *)parent;
-
-        /* Parent must be an @media rule, or NULL */
-        assert(parent->type == CSS_RULE_MEDIA);
+        /* Parent must be an @media, @layer, or @supports rule, or NULL */
+        assert(parent->type == CSS_RULE_MEDIA ||
+               parent->type == CSS_RULE_LAYER ||
+               parent->type == CSS_RULE_SUPPORTS);
 
         /* Add rule to parent */
         rule->ptype = CSS_RULE_PARENT_RULE;
         rule->parent = parent;
         sheet->rule_count++;
 
-        if (media->last_child == NULL) {
-            rule->prev = rule->next = NULL;
-            media->first_child = media->last_child = rule;
-        } else {
-            media->last_child->next = rule;
-            rule->prev = media->last_child;
-            rule->next = NULL;
-            media->last_child = rule;
+        if (parent->type == CSS_RULE_MEDIA) {
+            css_rule_media *media = (css_rule_media *)parent;
+            if (media->last_child == NULL) {
+                rule->prev = rule->next = NULL;
+                media->first_child = media->last_child = rule;
+            } else {
+                media->last_child->next = rule;
+                rule->prev = media->last_child;
+                rule->next = NULL;
+                media->last_child = rule;
+            }
+        } else if (parent->type == CSS_RULE_LAYER) {
+            css_rule_layer *layer = (css_rule_layer *)parent;
+            if (layer->last_child == NULL) {
+                rule->prev = rule->next = NULL;
+                layer->first_child = layer->last_child = rule;
+            } else {
+                layer->last_child->next = rule;
+                rule->prev = layer->last_child;
+                rule->next = NULL;
+                layer->last_child = rule;
+            }
+        } else if (parent->type == CSS_RULE_SUPPORTS) {
+            css_rule_supports *supports = (css_rule_supports *)parent;
+            if (supports->last_child == NULL) {
+                rule->prev = rule->next = NULL;
+                supports->first_child = supports->last_child = rule;
+            } else {
+                supports->last_child->next = rule;
+                rule->prev = supports->last_child;
+                rule->next = NULL;
+                supports->last_child = rule;
+            }
         }
     } else {
         /* Add rule to sheet */
@@ -1543,11 +1607,20 @@ css_error _add_selectors(css_stylesheet *sheet, css_rule *rule)
             }
         }
     } break;
-    case CSS_RULE_MEDIA: {
-        css_rule_media *m = (css_rule_media *)rule;
+    case CSS_RULE_MEDIA:
+    case CSS_RULE_LAYER:
+    case CSS_RULE_SUPPORTS: {
         css_rule *r;
 
-        for (r = m->first_child; r != NULL; r = r->next) {
+        if (rule->type == CSS_RULE_MEDIA) {
+            r = ((css_rule_media *)rule)->first_child;
+        } else if (rule->type == CSS_RULE_LAYER) {
+            r = ((css_rule_layer *)rule)->first_child;
+        } else {
+            r = ((css_rule_supports *)rule)->first_child;
+        }
+
+        for (; r != NULL; r = r->next) {
             error = _add_selectors(sheet, r);
             if (error != CSS_OK) {
                 /* Failed, revert our changes */
@@ -1591,11 +1664,20 @@ css_error _remove_selectors(css_stylesheet *sheet, css_rule *rule)
                 return error;
         }
     } break;
-    case CSS_RULE_MEDIA: {
-        css_rule_media *m = (css_rule_media *)rule;
+    case CSS_RULE_MEDIA:
+    case CSS_RULE_LAYER:
+    case CSS_RULE_SUPPORTS: {
         css_rule *r;
 
-        for (r = m->first_child; r != NULL; r = r->next) {
+        if (rule->type == CSS_RULE_MEDIA) {
+            r = ((css_rule_media *)rule)->first_child;
+        } else if (rule->type == CSS_RULE_LAYER) {
+            r = ((css_rule_layer *)rule)->first_child;
+        } else {
+            r = ((css_rule_supports *)rule)->first_child;
+        }
+
+        for (; r != NULL; r = r->next) {
             error = _remove_selectors(sheet, r);
             if (error != CSS_OK)
                 return error;
@@ -1649,14 +1731,22 @@ size_t _rule_size(const css_rule *r)
         bytes += sizeof(css_rule_charset);
     } else if (r->type == CSS_RULE_IMPORT) {
         bytes += sizeof(css_rule_import);
-    } else if (r->type == CSS_RULE_MEDIA) {
-        const css_rule_media *rm = (const css_rule_media *)r;
+    } else if (r->type == CSS_RULE_MEDIA || r->type == CSS_RULE_LAYER || r->type == CSS_RULE_SUPPORTS) {
         const css_rule *c;
 
-        bytes += sizeof(css_rule_media);
+        if (r->type == CSS_RULE_MEDIA) {
+            bytes += sizeof(css_rule_media);
+            c = ((const css_rule_media *)r)->first_child;
+        } else if (r->type == CSS_RULE_LAYER) {
+            bytes += sizeof(css_rule_layer);
+            c = ((const css_rule_layer *)r)->first_child;
+        } else {
+            bytes += sizeof(css_rule_supports);
+            c = ((const css_rule_supports *)r)->first_child;
+        }
 
         /* Process children */
-        for (c = rm->first_child; c != NULL; c = c->next)
+        for (; c != NULL; c = c->next)
             bytes += _rule_size(c);
     } else if (r->type == CSS_RULE_FONT_FACE) {
         const css_rule_font_face *rf = (const css_rule_font_face *)r;

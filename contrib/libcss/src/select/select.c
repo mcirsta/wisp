@@ -2566,8 +2566,6 @@ css_error cascade_style(const css_style *style, css_select_state *state)
             css__stylesheet_string_get(s.sheet, value_idx, &value_str);
 
             if (name_str != NULL && value_str != NULL && state->var_ctx != NULL) {
-                fprintf(stderr, "  CUSTOM_PROP: storing '%s' = '%s'\n",
-                    lwc_string_data(name_str), lwc_string_data(value_str));
                 css__variables_ctx_set(state->var_ctx, name_str, value_str);
             }
             continue;

@@ -136,28 +136,45 @@ static css_error css__handle_var_function(
     lwc_string *resolved_val = css__variables_ctx_get(var_ctx, var_name);
 
     if (resolved_val != NULL) {
+        size_t initial_len = 0;
+        parserutils_vector_get_length(out_tokens, &initial_len);
+
         error = css__resolve_tokens(resolved_val, var_ctx, out_tokens, depth + 1);
-        if (error != CSS_OK) goto cleanup;
-    } else if (has_fallback) {
-        int32_t ctx = 0;
-        const css_token *fb_tok;
-        while ((fb_tok = parserutils_vector_iterate(fallback_tokens, &ctx)) != NULL) {
-            css_token *copy = (css_token *)fb_tok;
-            if (copy->idata != NULL) {
-                lwc_string_ref(copy->idata);
-            }
-            perr = parserutils_vector_append(out_tokens, copy);
-            if (perr != PARSERUTILS_OK) {
-                if (copy->idata != NULL) lwc_string_unref(copy->idata);
-                error = css_error_from_parserutils_error(perr); goto cleanup;
+
+        if (error != CSS_OK) {
+            /* If resolving failed (e.g., due to a cycle), rollback the tokens we appended */
+            size_t current_len = 0;
+            parserutils_vector_get_length(out_tokens, &current_len);
+            while (current_len > initial_len) {
+                const css_token *tok = parserutils_vector_peek(out_tokens, current_len - 1);
+                if (tok != NULL && tok->idata != NULL) lwc_string_unref(tok->idata);
+                parserutils_vector_remove_last(out_tokens);
+                current_len--;
             }
         }
     } else {
-        fprintf(stderr, "  var('%s') NOT FOUND and no fallback (ctx has %u entries)\n",
-            lwc_string_data(var_name),
-            var_ctx != NULL ? var_ctx->count : 0);
         error = CSS_INVALID;
-        goto cleanup;
+    }
+
+    if (error != CSS_OK) {
+        if (has_fallback) {
+            error = CSS_OK;
+            int32_t ctx2 = 0;
+            const css_token *fb_tok;
+            while ((fb_tok = parserutils_vector_iterate(fallback_tokens, &ctx2)) != NULL) {
+                css_token copy = *fb_tok;
+                if (copy.idata != NULL) {
+                    lwc_string_ref(copy.idata);
+                }
+                perr = parserutils_vector_append(out_tokens, &copy);
+                if (perr != PARSERUTILS_OK) {
+                    if (copy.idata != NULL) lwc_string_unref(copy.idata);
+                    error = css_error_from_parserutils_error(perr); goto cleanup;
+                }
+            }
+        } else {
+            goto cleanup;
+        }
     }
 
     error = CSS_OK;
@@ -375,13 +392,8 @@ css_error css__resolve_var_property(
         return css_error_from_parserutils_error(perr);
     }
 
-    fprintf(stderr, "Resolving var property '%s' with value '%s'\n",
-        lwc_string_data(prop_name), lwc_string_data(raw_value));
-
     error = css__resolve_tokens(raw_value, var_ctx, tokens, 1);
     if (error != CSS_OK) {
-        fprintf(stderr, "  Error resolving tokens for '%s'\n",
-            lwc_string_data(prop_name));
         goto cleanup;
     }
 

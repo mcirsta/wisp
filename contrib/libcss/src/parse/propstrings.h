@@ -63,6 +63,8 @@ enum {
     NAMESPACE,
     FONT_FACE,
     PAGE,
+    LAYER,
+    SUPPORTS,
 
     /* Media types */
     AURAL,
@@ -87,6 +89,7 @@ enum {
     LANG,
     FIRST,
     ROOT,
+    HOST,
     NTH_CHILD,
     NTH_LAST_CHILD,
     NTH_OF_TYPE,

@@ -582,6 +582,51 @@ css_error handleStartAtRule(css_language *c, const parserutils_vector *vector)
          * so no need to destroy it */
 
         c->state = HAD_RULE;
+    } else if (lwc_string_caseless_isequal(atkeyword->idata, c->strings[LAYER], &match) == lwc_error_ok && match) {
+        css_rule_layer *layer;
+        const css_token *token;
+
+        error = css__stylesheet_rule_create(c->sheet, CSS_RULE_LAYER, &rule);
+        if (error != CSS_OK)
+            return error;
+        layer = (css_rule_layer *)rule;
+
+        consumeWhitespace(vector, &ctx);
+
+        /* @layer can optionally have a name */
+        token = parserutils_vector_peek(vector, ctx);
+        if (token != NULL && token->type == CSS_TOKEN_IDENT) {
+            token = parserutils_vector_iterate(vector, &ctx);
+            layer->name = lwc_string_ref(token->idata);
+            consumeWhitespace(vector, &ctx);
+        }
+
+        error = css__stylesheet_add_rule(c->sheet, rule, NULL);
+        if (error != CSS_OK) {
+            css__stylesheet_rule_destroy(c->sheet, rule);
+            return error;
+        }
+
+        c->state = HAD_RULE;
+    } else if (lwc_string_caseless_isequal(atkeyword->idata, c->strings[SUPPORTS], &match) == lwc_error_ok && match) {
+        /* Phase 1: Transparent block parsing.
+         * We consume all tokens on this line (the condition), but do not evaluate them. */
+        error = css__stylesheet_rule_create(c->sheet, CSS_RULE_SUPPORTS, &rule);
+        if (error != CSS_OK)
+            return error;
+
+        /* Consume everything up to the EOF or brace (vector only contains tokens up to the brace) */
+        while (parserutils_vector_iterate(vector, &ctx) != NULL) {
+            /* do nothing */
+        }
+
+        error = css__stylesheet_add_rule(c->sheet, rule, NULL);
+        if (error != CSS_OK) {
+            css__stylesheet_rule_destroy(c->sheet, rule);
+            return error;
+        }
+
+        c->state = HAD_RULE;
     } else {
         return CSS_INVALID;
     }
@@ -693,11 +738,14 @@ css_error handleBlockContent(css_language *c, const parserutils_vector *vector)
 
     rule = entry->data;
     if (rule == NULL ||
-        (rule->type != CSS_RULE_SELECTOR && rule->type != CSS_RULE_PAGE && rule->type != CSS_RULE_MEDIA &&
-            rule->type != CSS_RULE_FONT_FACE))
+        (rule->type != CSS_RULE_SELECTOR && rule->type != CSS_RULE_PAGE &&
+         rule->type != CSS_RULE_MEDIA && rule->type != CSS_RULE_FONT_FACE &&
+         rule->type != CSS_RULE_LAYER && rule->type != CSS_RULE_SUPPORTS))
         return CSS_INVALID;
 
-    if (rule->type == CSS_RULE_MEDIA) {
+    if (rule->type == CSS_RULE_MEDIA ||
+        rule->type == CSS_RULE_LAYER ||
+        rule->type == CSS_RULE_SUPPORTS) {
         /* Expect rulesets */
         return handleStartRuleset(c, vector);
     } else {
@@ -1208,6 +1256,7 @@ parsePseudo(css_language *c, const parserutils_vector *vector, int32_t *ctx, boo
         {VISITED, CSS_SELECTOR_PSEUDO_CLASS}, {HOVER, CSS_SELECTOR_PSEUDO_CLASS}, {ACTIVE, CSS_SELECTOR_PSEUDO_CLASS},
         {FOCUS, CSS_SELECTOR_PSEUDO_CLASS}, {LANG, CSS_SELECTOR_PSEUDO_CLASS}, {LEFT, CSS_SELECTOR_PSEUDO_CLASS},
         {RIGHT, CSS_SELECTOR_PSEUDO_CLASS}, {FIRST, CSS_SELECTOR_PSEUDO_CLASS}, {ROOT, CSS_SELECTOR_PSEUDO_CLASS},
+        {HOST, CSS_SELECTOR_PSEUDO_CLASS},
         {NTH_CHILD, CSS_SELECTOR_PSEUDO_CLASS}, {NTH_LAST_CHILD, CSS_SELECTOR_PSEUDO_CLASS},
         {NTH_OF_TYPE, CSS_SELECTOR_PSEUDO_CLASS}, {NTH_LAST_OF_TYPE, CSS_SELECTOR_PSEUDO_CLASS},
         {LAST_CHILD, CSS_SELECTOR_PSEUDO_CLASS}, {FIRST_OF_TYPE, CSS_SELECTOR_PSEUDO_CLASS},

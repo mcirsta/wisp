@@ -112,7 +112,9 @@ typedef enum css_rule_type {
     CSS_RULE_IMPORT,
     CSS_RULE_MEDIA,
     CSS_RULE_FONT_FACE,
-    CSS_RULE_PAGE
+    CSS_RULE_PAGE,
+    CSS_RULE_LAYER,
+    CSS_RULE_SUPPORTS
 } css_rule_type;
 
 typedef enum css_rule_parent_type { CSS_RULE_PARENT_STYLESHEET, CSS_RULE_PARENT_RULE } css_rule_parent_type;
@@ -145,6 +147,24 @@ typedef struct css_rule_media {
     css_rule *first_child;
     css_rule *last_child;
 } css_rule_media;
+
+typedef struct css_rule_layer {
+    css_rule base;
+
+    lwc_string *name;       /* Optional layer name */
+
+    css_rule *first_child;
+    css_rule *last_child;
+} css_rule_layer;
+
+typedef struct css_rule_supports {
+    css_rule base;
+
+    /* Currently empty. Future parse/eval condition structures go here */
+
+    css_rule *first_child;
+    css_rule *last_child;
+} css_rule_supports;
 
 typedef struct css_rule_font_face {
     css_rule base;
