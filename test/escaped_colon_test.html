@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+/* Non-responsive test: escaped colon in class name */
+.test\:red {
+    color: red;
+    background-color: yellow;
+}
+
+/* Test with media query */
+@media(min-width:100px) {
+    .lg\:blue {
+        color: blue;
+        background-color: lime;
+    }
+}
+
+/* Plain class for baseline */
+.plain-green {
+    color: green;
+    background-color: pink;
+}
+</style>
+</head>
+<body>
+<p class="plain-green">This text should be GREEN on PINK (plain class)</p>
+<p class="test:red">This text should be RED on YELLOW (escaped colon class)</p>
+<p class="lg:blue">This text should be BLUE on LIME (escaped colon in media query)</p>
+</body>
+</html>

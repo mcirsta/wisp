@@ -1308,7 +1308,16 @@ css_error parseBlockContent(css_parser *parser)
                 return error;
 
             if (token->type == CSS_TOKEN_ATKEYWORD) {
-                state->substate = WS;
+                /* Nested at-rule inside block
+                 * (e.g. @media inside @layer) */
+                parser_state to = {sAtRule, Initial};
+                parser_state subsequent = {sBlockContent, Initial};
+
+                error = pushBack(parser, token);
+                if (error != CSS_OK)
+                    return error;
+
+                return transition(parser, to, subsequent);
             } else if (token->type == CSS_TOKEN_CHAR) {
                 if (lwc_string_length(token->idata) == 1 && lwc_string_data(token->idata)[0] == '{') {
                     /* Grammar ambiguity. Assume block */

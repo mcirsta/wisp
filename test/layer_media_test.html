@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+/* Test 1: Simple class (baseline) */
+.test-plain {
+    color: green;
+    background-color: #cfc;
+}
+
+/* Test 2: @media alone (no layer) */
+@media(min-width:100px) {
+    .test-media-only {
+        color: blue;
+        background-color: #ccf;
+    }
+}
+
+/* Test 3: @layer with plain rules (no media inside) */
+@layer test-layer-plain {
+    .test-layer-only {
+        color: purple;
+        background-color: #fcf;
+    }
+}
+
+/* Test 4: @media nested inside @layer - THE KEY TEST */
+@layer test-layer-media {
+    .test-layer-media-base {
+        color: orange;
+        background-color: #fec;
+    }
+
+    @media(min-width:100px) {
+        .test-layer-media-responsive {
+            color: red;
+            background-color: #fcc;
+            font-weight: bold;
+        }
+    }
+}
+
+/* Test 5: Deeper nesting: @layer > @media > rule with escaped colon */
+@layer test-layer-escape {
+    @media(min-width:100px) {
+        .lg\:test-escape {
+            color: darkgreen;
+            background-color: #cfc;
+            font-style: italic;
+        }
+    }
+}
+</style>
+</head>
+<body>
+<p class="test-plain">1. PLAIN CLASS - Should be GREEN on light green</p>
+<p class="test-media-only">2. @MEDIA ONLY - Should be BLUE on light blue</p>
+<p class="test-layer-only">3. @LAYER ONLY - Should be PURPLE on light purple</p>
+<p class="test-layer-media-base">4a. @LAYER + plain rule - Should be ORANGE on light orange</p>
+<p class="test-layer-media-responsive">4b. @LAYER + @MEDIA - Should be RED BOLD on light red</p>
+<p class="lg:test-escape">5. @LAYER + @MEDIA + escaped colon - Should be DARKGREEN ITALIC on light green</p>
+</body>
+</html>

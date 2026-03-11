@@ -325,16 +325,23 @@ css_error handleStartAtRule(css_language *c, const parserutils_vector *vector)
 {
     parserutils_error perror;
     context_entry entry = {CSS_PARSER_START_ATRULE, NULL};
+    context_entry *cur;
     const css_token *token = NULL;
     const css_token *atkeyword = NULL;
     int32_t ctx = 0;
     bool match = false;
+    css_rule *parent_rule = NULL;
     css_rule *rule;
     css_error error;
 
     /* vector contains: ATKEYWORD ws any0 */
 
     assert(c != NULL);
+
+    /* Retrieve parent rule from stack, if any (for nested at-rules) */
+    cur = parserutils_stack_get_current(c->context);
+    if (cur != NULL && cur->type != CSS_PARSER_START_STYLESHEET)
+        parent_rule = cur->data;
 
     atkeyword = parserutils_vector_iterate(vector, &ctx);
 
@@ -516,7 +523,7 @@ css_error handleStartAtRule(css_language *c, const parserutils_vector *vector)
             return error;
         }
 
-        error = css__stylesheet_add_rule(c->sheet, rule, NULL);
+        error = css__stylesheet_add_rule(c->sheet, rule, parent_rule);
         if (error != CSS_OK) {
             css__stylesheet_rule_destroy(c->sheet, rule);
             return error;
@@ -533,7 +540,7 @@ css_error handleStartAtRule(css_language *c, const parserutils_vector *vector)
 
         consumeWhitespace(vector, &ctx);
 
-        error = css__stylesheet_add_rule(c->sheet, rule, NULL);
+        error = css__stylesheet_add_rule(c->sheet, rule, parent_rule);
         if (error != CSS_OK) {
             css__stylesheet_rule_destroy(c->sheet, rule);
             return error;
@@ -601,7 +608,7 @@ css_error handleStartAtRule(css_language *c, const parserutils_vector *vector)
             consumeWhitespace(vector, &ctx);
         }
 
-        error = css__stylesheet_add_rule(c->sheet, rule, NULL);
+        error = css__stylesheet_add_rule(c->sheet, rule, parent_rule);
         if (error != CSS_OK) {
             css__stylesheet_rule_destroy(c->sheet, rule);
             return error;
@@ -620,7 +627,7 @@ css_error handleStartAtRule(css_language *c, const parserutils_vector *vector)
             /* do nothing */
         }
 
-        error = css__stylesheet_add_rule(c->sheet, rule, NULL);
+        error = css__stylesheet_add_rule(c->sheet, rule, parent_rule);
         if (error != CSS_OK) {
             css__stylesheet_rule_destroy(c->sheet, rule);
             return error;
