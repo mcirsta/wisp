@@ -876,16 +876,10 @@ static inline bool layout_flex__base_and_main_sizes(
         }
     }
 
-    if (ctx->horizontal) {
-        int before_clamp = item->base_size;
-        item->base_size = min(item->base_size, available_main_size);
-        item->base_size = max(item->base_size, content_min_width);
-        if (item->base_size != before_clamp) {
-            NSLOG(flex, WARNING,
-                "CLAMP: base_size changed from %d to %d (content_min_width=%d, available_main_size=%d)", before_clamp,
-                item->base_size, content_min_width, available_main_size);
-        }
-    }
+    /* Note: Per CSS Flexbox §9.2, the flex base size is NOT clamped by
+     * available_main_size. Overflow is handled by the flex-shrink algorithm
+     * in §9.7 (resolve flexible lengths). Clamping here would prevent
+     * flex-shrink from working correctly on items that exceed available space. */
 
     item->target_main_size = item->base_size;
     item->main_size = item->base_size;
