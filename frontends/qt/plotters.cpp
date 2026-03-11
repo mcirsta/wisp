@@ -91,9 +91,20 @@ static nserror nsqt_set_style(QPainter *painter, const plot_style_t *style)
         strokecolour.setAlphaF(strokecolour.alphaF() * style->stroke_opacity);
 
     QPen pen(strokecolour);
-    Qt::PenStyle penstyle = Qt::NoPen;
-    if (style->stroke_type != PLOT_OP_TYPE_NONE) {
+    Qt::PenStyle penstyle;
+    switch (style->stroke_type) {
+    case PLOT_OP_TYPE_DASH:
+        penstyle = Qt::DashLine;
+        break;
+    case PLOT_OP_TYPE_DOT:
+        penstyle = Qt::DotLine;
+        break;
+    case PLOT_OP_TYPE_NONE:
+        penstyle = Qt::NoPen;
+        break;
+    default:
         penstyle = Qt::SolidLine;
+        break;
     }
     pen.setStyle(penstyle);
     pen.setWidthF(plot_style_fixed_to_float(style->stroke_width));
