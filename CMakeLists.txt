@@ -410,4 +410,7 @@ if(WISP_ENABLE_TESTS)
 
   add_libcss_test_exe(libcss_var_context ${LIBCSSL_TEST_DIR}/var-context.c)
   add_test(NAME libcss_var_context COMMAND libcss_var_context)
+
+  add_libcss_test_exe(libcss_var_resolve ${LIBCSSL_TEST_DIR}/var-resolve.c)
+  add_test(NAME libcss_var_resolve COMMAND libcss_var_resolve)
 endif()

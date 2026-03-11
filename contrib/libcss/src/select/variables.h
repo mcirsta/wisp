@@ -61,4 +61,34 @@ css_error css__variables_ctx_set(css_var_context *ctx,
 lwc_string *css__variables_ctx_get(const css_var_context *ctx,
     lwc_string *name);
 
+/* --- Phase 5: var() Resolution --- */
+
+/* Max recursion depth for nested var() references */
+#define CSS_VAR_MAX_DEPTH 20
+
+/* Forward declarations */
+struct css_stylesheet;
+struct css_style;
+
+/**
+ * Resolve a var() reference: look up the variable (with fallback),
+ * tokenize the resolved text, and re-parse it via the property handler.
+ *
+ * On success, *out_style contains the parsed bytecode for the property.
+ * The caller is responsible for cascading the result and destroying
+ * the style via css__stylesheet_style_destroy().
+ *
+ * Returns CSS_OK on success.
+ * Returns CSS_INVALID if the variable is not found and no fallback exists,
+ * or if the resolved text is not valid for this property.
+ * In the CSS_INVALID case, *out_style is set to NULL.
+ */
+css_error css__resolve_var_value(
+    uint32_t op,
+    lwc_string *var_name,
+    lwc_string *fallback,
+    const css_var_context *var_ctx,
+    struct css_stylesheet *sheet,
+    struct css_style **out_style);
+
 #endif

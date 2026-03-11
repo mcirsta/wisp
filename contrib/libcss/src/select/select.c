@@ -2571,11 +2571,50 @@ css_error cascade_style(const css_style *style, css_select_state *state)
             continue;
         }
 
-        /* Deferred var() references: skip trailing words.
-         * name_idx always present; fallback_idx if FLAG_VAR_HAS_FALLBACK. */
+        /* Deferred var() references: resolve using the variable context.
+         * Read name (and optional fallback), then resolve + re-parse + cascade. */
         if (getValue(opv) == VALUE_IS_VAR) {
-            uint32_t skip = varHasFallback(opv) ? 2 : 1;
-            advance_bytecode(&s, skip * sizeof(css_code_t));
+            uint32_t name_idx = *s.bytecode;
+            advance_bytecode(&s, sizeof(css_code_t));
+
+            lwc_string *fallback_str = NULL;
+            if (varHasFallback(opv)) {
+                uint32_t fallback_idx = *s.bytecode;
+                advance_bytecode(&s, sizeof(css_code_t));
+                css__stylesheet_string_get(s.sheet, fallback_idx, &fallback_str);
+            }
+
+            lwc_string *var_name_str = NULL;
+            css__stylesheet_string_get(s.sheet, name_idx, &var_name_str);
+
+            if (var_name_str != NULL && state->var_ctx != NULL) {
+                css_style *resolved = NULL;
+                error = css__resolve_var_value(
+                    op, var_name_str, fallback_str,
+                    state->var_ctx, s.sheet, &resolved);
+
+                if (error == CSS_OK && resolved != NULL &&
+                    resolved->used > 0) {
+                    /* Cascade the resolved bytecode */
+                    css_style rs = *resolved;
+                    css_code_t result_opv = *rs.bytecode;
+                    advance_bytecode(&rs, sizeof(result_opv));
+
+                    /* Preserve importance from the original var() decl */
+                    if (isImportant(opv))
+                        result_opv |= FLAG_IMPORTANT;
+
+                    error = prop_dispatch[op].cascade(
+                        result_opv, &rs, state);
+                    css__stylesheet_style_destroy(resolved);
+                    if (error != CSS_OK)
+                        return error;
+                } else if (resolved != NULL) {
+                    css__stylesheet_style_destroy(resolved);
+                }
+                /* CSS_INVALID = no variable + no fallback;
+                 * property left at initial/inherited — that's correct. */
+            }
             continue;
         }
 

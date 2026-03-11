@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Wisp CSS Variables Test</title>
+    <style>
+        :root {
+            --bg-color: #2b2b2b;
+            --text-color: #e0e0e0;
+            --primary-color: #4caf50;
+            --secondary-color: var(--primary-color);
+            --border-style: solid;
+            --padding-large: 20px;
+            --font-stack: sans-serif, Arial;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: var(--font-stack);
+            margin: 20px;
+        }
+
+        .container {
+            border: 2px solid var(--secondary-color);
+            padding: var(--padding-large);
+            margin-bottom: 20px;
+            background-color: var(--missing-bg, #333333); /* Uses fallback */
+        }
+
+        h1 {
+            color: var(--primary-color);
+        }
+
+        .nested {
+            --local-color: #ff9800; /* Orange */
+            /* Override properties with local var */
+            color: var(--local-color);
+            border: 2px dashed var(--local-color);
+            padding: 10px;
+            margin-top: 10px;
+        }
+
+        .chain {
+            --c1: var(--c2);
+            --c2: var(--c3);
+            --c3: #03a9f4; /* Light Blue */
+            color: var(--c1);
+            font-weight: bold;
+            margin-top: 10px;
+        }
+
+        .invalid-type {
+            --bad-color: 10px; /* Invalid value for color */
+            /* The fallback is ignored if var exists. 
+               The property becomes invalid at computed-value time,
+               meaning it should inherit from the parent (which is --text-color #e0e0e0). 
+               It should not be red! */
+            color: var(--bad-color, red);
+            border: 1px solid var(--text-color);
+            padding: 10px;
+            margin-top: 10px;
+        }
+
+        .missing {
+            /* Variable doesn't exist, has no fallback -> invalid at computed-value time
+               so it inherits parent color. */
+            color: var(--does-not-exist);
+            margin-top: 10px;
+        }
+
+        /* Test for cyclic dependencies */
+        .cycle {
+            --loop-a: var(--loop-b);
+            --loop-b: var(--loop-a);
+            /* Cycle -> invalid -> inherits parent color */
+            color: var(--loop-a, yellow);
+            margin-top: 10px;
+            border: 1px solid red;
+            padding: 10px;
+        }
+
+    </style>
+</head>
+<body>
+    <h1>Extensive CSS Variables Test</h1>
+    
+    <div class="container">
+        <p>This container has a background color defined by a <strong>fallback</strong> <code>(#333)</code> and a border color matching <code>--secondary-color</code> which maps to <code>--primary-color</code>.</p>
+        
+        <div class="nested">
+            This is a nested div using a <code>--local-color</code> (orange) for its text and border.
+        </div>
+        
+        <div class="chain">
+            This text uses a chained variable resolving through 3 levels to become light blue.
+        </div>
+
+        <div class="invalid-type">
+            This text uses an <strong>invalid type</strong> (<code>10px</code> assigned to color). Standard CSS says it should inherit its parent color (light grey), NOT the fallback (red).
+        </div>
+
+        <div class="missing">
+            This text references a missing variable with no fallback. It should inherit the parent text color.
+        </div>
+
+        <div class="cycle">
+            This text creates a <strong>circular reference</strong>. The parser should detect the cycle, abort, and inherit the color instead of using the fallback or infinitely looping.
+        </div>
+    </div>
+</body>
+</html>

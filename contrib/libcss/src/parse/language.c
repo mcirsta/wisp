@@ -1834,45 +1834,87 @@ css_error parseProperty(
                  * last_token->data.data + last_token->data.len */
                 consumeWhitespace(vector, &scan);
 
-                const css_token *fb_first = parserutils_vector_peek(vector, scan);
-                if (fb_first == NULL) {
+                const css_token *fb_peek = parserutils_vector_peek(vector, scan);
+                if (fb_peek == NULL) {
                     return CSS_INVALID;
                 }
 
-                const css_token *fb_last = fb_first;
-                int paren_depth = 1;
-                int32_t fb_scan = scan;
+                /* Skip past the tokens to find the closing ')'.
+                 * We'll re-iterate for measuring and copying below. */
+                {
+                    int skip_depth = 1;
+                    int32_t skip_scan = scan;
+                    while ((token = parserutils_vector_iterate(vector, &skip_scan)) != NULL) {
+                        if (flags != 0 && (skip_scan - 1) == excl_pos)
+                            break;
+                        if (token->type == CSS_TOKEN_FUNCTION)
+                            skip_depth++;
+                        if (tokenIsChar(token, ')')) {
+                            skip_depth--;
+                            if (skip_depth == 0)
+                                break;
+                        }
+                    }
+                }
 
-                while ((token = parserutils_vector_iterate(vector, &fb_scan)) != NULL) {
-                    if (flags != 0 && (fb_scan - 1) == excl_pos)
+                /* Build fallback string by iterating tokens,
+                 * reconstructing prefixes stripped by the lexer */
+                size_t fb_total = 0;
+                int32_t fb_measure = scan;
+                int measure_depth = 1;
+                while ((token = parserutils_vector_iterate(vector, &fb_measure)) != NULL) {
+                    if (flags != 0 && (fb_measure - 1) == excl_pos)
                         break;
                     if (token->type == CSS_TOKEN_FUNCTION)
-                        paren_depth++;
+                        measure_depth++;
                     if (tokenIsChar(token, ')')) {
-                        paren_depth--;
-                        if (paren_depth == 0)
+                        measure_depth--;
+                        if (measure_depth == 0)
                             break;
                     }
-                    fb_last = token;
+                    if (token->type == CSS_TOKEN_HASH)
+                        fb_total += 1; /* '#' prefix */
+                    fb_total += token->data.len;
+                    if (token->type == CSS_TOKEN_FUNCTION)
+                        fb_total += 1; /* '(' suffix */
                 }
 
-                /* Build fallback string from source buffer span */
-                const char *fb_start = (const char *)fb_first->data.data;
-                const char *fb_end = (const char *)fb_last->data.data + fb_last->data.len;
-                size_t fb_len = fb_end - fb_start;
+                char *fb_buf = malloc(fb_total + 1);
+                if (fb_buf == NULL)
+                    return CSS_NOMEM;
+                size_t fb_off = 0;
+                int copy_depth = 1;
+                while ((token = parserutils_vector_iterate(vector, &scan)) != NULL) {
+                    if (flags != 0 && (scan - 1) == excl_pos)
+                        break;
+                    if (token->type == CSS_TOKEN_FUNCTION)
+                        copy_depth++;
+                    if (tokenIsChar(token, ')')) {
+                        copy_depth--;
+                        if (copy_depth == 0)
+                            break;
+                    }
+                    if (token->type == CSS_TOKEN_HASH)
+                        fb_buf[fb_off++] = '#';
+                    memcpy(fb_buf + fb_off, token->data.data, token->data.len);
+                    fb_off += token->data.len;
+                    if (token->type == CSS_TOKEN_FUNCTION)
+                        fb_buf[fb_off++] = '(';
+                }
 
                 /* Trim trailing whitespace */
-                while (fb_len > 0 && (fb_start[fb_len - 1] == ' ' ||
-                                       fb_start[fb_len - 1] == '\t' ||
-                                       fb_start[fb_len - 1] == '\n' ||
-                                       fb_start[fb_len - 1] == '\r' ||
-                                       fb_start[fb_len - 1] == '\f')) {
-                    fb_len--;
+                while (fb_off > 0 && (fb_buf[fb_off - 1] == ' ' ||
+                                       fb_buf[fb_off - 1] == '\t' ||
+                                       fb_buf[fb_off - 1] == '\n' ||
+                                       fb_buf[fb_off - 1] == '\r' ||
+                                       fb_buf[fb_off - 1] == '\f')) {
+                    fb_off--;
                 }
 
-                if (fb_len > 0) {
+                if (fb_off > 0) {
                     lwc_string *fallback_str;
-                    lwc_error lerr = lwc_intern_string(fb_start, fb_len, &fallback_str);
+                    lwc_error lerr = lwc_intern_string(fb_buf, fb_off, &fallback_str);
+                    free(fb_buf);
                     if (lerr != lwc_error_ok)
                         return CSS_NOMEM;
 
@@ -1881,6 +1923,8 @@ css_error parseProperty(
                         return error;
 
                     has_fallback = true;
+                } else {
+                    free(fb_buf);
                 }
             } else if (token == NULL || !tokenIsChar(token, ')')) {
                 return CSS_INVALID;
@@ -2025,7 +2069,15 @@ css_error parseCustomProperty(
     while ((token = parserutils_vector_iterate(vector, &scan)) != NULL) {
         if (flags != 0 && (scan - 1) == excl_pos)
             break;
+        /* Account for prefixes stripped by the lexer */
+        if (token->type == CSS_TOKEN_HASH)
+            total_len += 1; /* '#' prefix */
+        else if (token->type == CSS_TOKEN_FUNCTION)
+            total_len += 1; /* '(' suffix */
         total_len += token->data.len;
+        /* Add space between tokens (except first) */
+        if (value_end > value_start)
+            total_len += 0; /* handled by CSS_TOKEN_S */
         value_end = scan;
     }
 
@@ -2037,8 +2089,15 @@ css_error parseCustomProperty(
     size_t offset = 0;
     scan = value_start;
     while (scan < value_end && (token = parserutils_vector_iterate(vector, &scan)) != NULL) {
+        /* Re-add prefixes that the lexer strips from data */
+        if (token->type == CSS_TOKEN_HASH) {
+            buf[offset++] = '#';
+        }
         memcpy(buf + offset, token->data.data, token->data.len);
         offset += token->data.len;
+        if (token->type == CSS_TOKEN_FUNCTION) {
+            buf[offset++] = '(';
+        }
     }
 
     /* Trim trailing whitespace from the value */
