@@ -37,6 +37,15 @@ enum css_properties_e {
  */
 #define CSS_PROP_CUSTOM_PROPERTY CSS_N_PROPERTIES
 
+/**
+ * Special opcode for deferred var() property resolution.
+ * Used when any property value (shorthand or longhand) contains var().
+ * The entire raw value text is stored for resolution at computed-value time.
+ *
+ * Bytecode layout: [OPV] [prop_name_string_idx] [raw_value_string_idx]
+ */
+#define CSS_PROP_VAR_DEFERRED (CSS_N_PROPERTIES + 1)
+
 enum css_align_content_e {
     CSS_ALIGN_CONTENT_INHERIT = 0x0,
     CSS_ALIGN_CONTENT_STRETCH = 0x1,

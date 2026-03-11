@@ -11,7 +11,7 @@
 #errors
 #expected
 | 1 *
-|   0x0000008c PTR(--primary-color) PTR(ff0000)
+|   0x0000008c PTR(--primary-color) PTR(#ff0000)
 #reset
 
 #data
@@ -51,7 +51,7 @@
 #errors
 #expected
 | 1 *
-|   0x01f80018 PTR(--primary)
+|   0x0000008d PTR(color) PTR(var(--primary))
 #reset
 
 #data
@@ -59,7 +59,7 @@
 #errors
 #expected
 | 1 *
-|   0x01f84018 PTR(--primary) PTR(red)
+|   0x0000008d PTR(color) PTR(var(--primary, red))
 #reset
 
 #data
@@ -67,7 +67,7 @@
 #errors
 #expected
 | 1 *
-|   0x01f80418 PTR(--primary)
+|   0x0000048d PTR(color) PTR(var(--primary))
 #reset
 
 #data
@@ -75,6 +75,6 @@
 #errors
 #expected
 | 1 *
-|   0x0000008c PTR(--color) PTR(red) 0x01f80018 PTR(--color)
+|   0x0000008c PTR(--color) PTR(red) 0x0000008d PTR(color) PTR(var(--color))
 #reset
 

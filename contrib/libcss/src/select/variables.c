@@ -12,13 +12,25 @@
 #include "lex/lex.h"
 #include "utils/parserutilserror.h"
 #include "utils/css_utils.h"
+#include "bytecode/bytecode.h"
+#include "select/dispatch.h"
+#include "select/select.h"
 
 #include <parserutils/utils/vector.h>
 #include <libcss/functypes.h>
 #include <libcss/stylesheet.h>
 #include <libcss/properties.h>
 #include "parse/properties/properties.h"
-#include "parse_handler_table.inc"
+
+/* css_prop_entry struct and lookup function from the gperf table
+ * (defined in language.c via prop_hash_table.inc). */
+struct css_prop_entry {
+    const char *name;
+    css_prop_handler handler;
+    int opcode;
+};
+const struct css_prop_entry *css_prop_lookup(
+    const char *str, size_t len);
 
 #define VAR_CTX_INITIAL_CAPACITY 4
 
@@ -341,41 +353,32 @@ lwc_string *css__variables_ctx_get(const css_var_context *ctx,
     return NULL;
 }
 
-css_error css__resolve_var_value(
-    uint32_t op,
-    lwc_string *var_name,
-    lwc_string *fallback,
+css_error css__resolve_var_property(
+    lwc_string *prop_name,
+    lwc_string *raw_value,
     const css_var_context *var_ctx,
     css_stylesheet *sheet,
-    css_style **out_style)
+    bool important,
+    css_select_state *state)
 {
-    *out_style = NULL;
     css_error error = CSS_OK;
     parserutils_error perr;
     parserutils_vector *tokens = NULL;
     css_style *result_style = NULL;
-    lwc_string *value = NULL;
 
+    /* Step 1: Resolve all var() references in the raw value text */
     perr = parserutils_vector_create(sizeof(css_token), 16, &tokens);
     if (perr != PARSERUTILS_OK) {
         return css_error_from_parserutils_error(perr);
     }
 
-    value = css__variables_ctx_get(var_ctx, var_name);
+    fprintf(stderr, "Resolving var property '%s' with value '%s'\n",
+        lwc_string_data(prop_name), lwc_string_data(raw_value));
 
-    if (value != NULL) {
-        fprintf(stderr, "Resolved var %s to %s\n", lwc_string_data(var_name), lwc_string_data(value));
-        error = css__resolve_tokens(value, var_ctx, tokens, 1);
-    } else if (fallback != NULL) {
-        fprintf(stderr, "Var %s not found, using fallback %s\n", lwc_string_data(var_name), lwc_string_data(fallback));
-        error = css__resolve_tokens(fallback, var_ctx, tokens, 1);
-    } else {
-        fprintf(stderr, "No variable %s and no fallback\n", lwc_string_data(var_name));
-        error = CSS_INVALID;
-    }
-
+    error = css__resolve_tokens(raw_value, var_ctx, tokens, 1);
     if (error != CSS_OK) {
-        fprintf(stderr, "Error resolving tokens\n");
+        fprintf(stderr, "  Error resolving tokens for '%s'\n",
+            lwc_string_data(prop_name));
         goto cleanup;
     }
 
@@ -383,13 +386,12 @@ css_error css__resolve_var_value(
         size_t vec_len = 0;
         parserutils_vector_get_length(tokens, &vec_len);
         if (vec_len == 0) {
-            fprintf(stderr, "Token vector len is 0\n");
             error = CSS_INVALID;
             goto cleanup;
         }
     }
 
-    /* Append EOF token to make the parser happy! */
+    /* Append EOF token for the parser */
     {
         css_token eof_token;
         eof_token.type = CSS_TOKEN_EOF;
@@ -405,14 +407,17 @@ css_error css__resolve_var_value(
         }
     }
 
-    if (op >= CSS_N_PROPERTIES || css_property_parse_handlers[op] == NULL) {
-        fprintf(stderr, "Invalid property op %d\n", op);
+    /* Step 2: Look up the property handler by name via gperf */
+    const struct css_prop_entry *entry = css_prop_lookup(
+        lwc_string_data(prop_name), lwc_string_length(prop_name));
+    if (entry == NULL) {
+        fprintf(stderr, "  Property '%s' not found in gperf table\n",
+            lwc_string_data(prop_name));
         error = CSS_INVALID;
         goto cleanup;
     }
 
-    css_prop_handler handler = css_property_parse_handlers[op];
-
+    /* Step 3: Call the handler to parse resolved tokens into bytecode */
     css_language resolve_lang;
     memset(&resolve_lang, 0, sizeof(resolve_lang));
     resolve_lang.sheet = sheet;
@@ -422,7 +427,7 @@ css_error css__resolve_var_value(
     if (error != CSS_OK) goto cleanup;
 
     int32_t token_ctx = 0;
-    error = handler(&resolve_lang, tokens, &token_ctx, result_style);
+    error = entry->handler(&resolve_lang, tokens, &token_ctx, result_style);
     if (error != CSS_OK) {
         css__stylesheet_style_destroy(result_style);
         result_style = NULL;
@@ -430,7 +435,32 @@ css_error css__resolve_var_value(
         goto cleanup;
     }
 
-    *out_style = result_style;
+    /* Step 4: Cascade all OPVs in the resulting style.
+     * Longhands produce 1 OPV; shorthands produce multiple. */
+    {
+        css_style rs = *result_style;
+        while (rs.used > 0) {
+            css_code_t result_opv = *rs.bytecode;
+            advance_bytecode(&rs, sizeof(result_opv));
+
+            opcode_t result_op = getOpcode(result_opv);
+
+            /* Preserve importance from the original var() declaration */
+            if (important)
+                result_opv |= FLAG_IMPORTANT;
+
+            if (result_op < CSS_N_PROPERTIES) {
+                error = prop_dispatch[result_op].cascade(
+                    result_opv, &rs, state);
+                if (error != CSS_OK) {
+                    css__stylesheet_style_destroy(result_style);
+                    goto cleanup;
+                }
+            }
+        }
+    }
+
+    css__stylesheet_style_destroy(result_style);
     result_style = NULL;
 
 cleanup:

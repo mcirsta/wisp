@@ -2571,55 +2571,33 @@ css_error cascade_style(const css_style *style, css_select_state *state)
             continue;
         }
 
-        /* Deferred var() references: resolve using the variable context.
-         * Read name (and optional fallback), then resolve + re-parse + cascade. */
-        if (getValue(opv) == VALUE_IS_VAR) {
-            uint32_t name_idx = *s.bytecode;
+        /* Deferred var() property: resolve variables in raw value text,
+         * then re-parse through the property handler and cascade. */
+        if (op == CSS_PROP_VAR_DEFERRED) {
+            uint32_t prop_name_idx = *s.bytecode;
+            advance_bytecode(&s, sizeof(css_code_t));
+            uint32_t raw_value_idx = *s.bytecode;
             advance_bytecode(&s, sizeof(css_code_t));
 
-            lwc_string *fallback_str = NULL;
-            if (varHasFallback(opv)) {
-                uint32_t fallback_idx = *s.bytecode;
-                advance_bytecode(&s, sizeof(css_code_t));
-                css__stylesheet_string_get(s.sheet, fallback_idx, &fallback_str);
-            }
+            lwc_string *prop_name_str = NULL;
+            lwc_string *raw_value_str = NULL;
+            css__stylesheet_string_get(s.sheet, prop_name_idx, &prop_name_str);
+            css__stylesheet_string_get(s.sheet, raw_value_idx, &raw_value_str);
 
-            lwc_string *var_name_str = NULL;
-            css__stylesheet_string_get(s.sheet, name_idx, &var_name_str);
-
-            if (var_name_str != NULL && state->var_ctx != NULL) {
-                css_style *resolved = NULL;
-                error = css__resolve_var_value(
-                    op, var_name_str, fallback_str,
-                    state->var_ctx, s.sheet, &resolved);
-
-                if (error == CSS_OK && resolved != NULL &&
-                    resolved->used > 0) {
-                    /* Cascade the resolved bytecode */
-                    css_style rs = *resolved;
-                    css_code_t result_opv = *rs.bytecode;
-                    advance_bytecode(&rs, sizeof(result_opv));
-
-                    /* Preserve importance from the original var() decl */
-                    if (isImportant(opv))
-                        result_opv |= FLAG_IMPORTANT;
-
-                    error = prop_dispatch[op].cascade(
-                        result_opv, &rs, state);
-                    css__stylesheet_style_destroy(resolved);
-                    if (error != CSS_OK)
-                        return error;
-                } else if (resolved != NULL) {
-                    css__stylesheet_style_destroy(resolved);
-                }
-                /* CSS_INVALID = no variable + no fallback;
-                 * property left at initial/inherited — that's correct. */
+            if (prop_name_str != NULL && raw_value_str != NULL &&
+                state->var_ctx != NULL) {
+                css_error res = css__resolve_var_property(
+                    prop_name_str, raw_value_str,
+                    state->var_ctx, s.sheet,
+                    isImportant(opv), state);
+                /* CSS_INVALID = unresolvable var(); property stays at
+                 * initial/inherited value — that's correct per spec. */
+                if (res != CSS_OK && res != CSS_INVALID)
+                    return res;
             }
             continue;
         }
 
-        /* DEBUG: Log opcode to trace out-of-bounds access */
-        // fprintf(stderr, "DEBUG cascade: opcode=%d (0x%03x), CSS_N_PROPERTIES=%d\n", op, op, CSS_N_PROPERTIES);
         if (op >= CSS_N_PROPERTIES) {
             fprintf(stderr, "ERROR: Invalid opcode %d >= CSS_N_PROPERTIES %d!\n", op, CSS_N_PROPERTIES);
         }

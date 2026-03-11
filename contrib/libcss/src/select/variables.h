@@ -69,26 +69,23 @@ lwc_string *css__variables_ctx_get(const css_var_context *ctx,
 /* Forward declarations */
 struct css_stylesheet;
 struct css_style;
+struct css_select_state;
 
 /**
- * Resolve a var() reference: look up the variable (with fallback),
- * tokenize the resolved text, and re-parse it via the property handler.
+ * Resolve a deferred var() property: substitute all var() references
+ * in the raw value text, re-parse through the property handler (found
+ * via gperf lookup on prop_name), and cascade the result.
  *
- * On success, *out_style contains the parsed bytecode for the property.
- * The caller is responsible for cascading the result and destroying
- * the style via css__stylesheet_style_destroy().
+ * Works for both longhands and shorthands.
  *
- * Returns CSS_OK on success.
- * Returns CSS_INVALID if the variable is not found and no fallback exists,
- * or if the resolved text is not valid for this property.
- * In the CSS_INVALID case, *out_style is set to NULL.
+ * Returns CSS_OK on success, CSS_INVALID if unresolvable.
  */
-css_error css__resolve_var_value(
-    uint32_t op,
-    lwc_string *var_name,
-    lwc_string *fallback,
+css_error css__resolve_var_property(
+    lwc_string *prop_name,
+    lwc_string *raw_value,
     const css_var_context *var_ctx,
     struct css_stylesheet *sheet,
-    struct css_style **out_style);
+    bool important,
+    struct css_select_state *state);
 
 #endif
