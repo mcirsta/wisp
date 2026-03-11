@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <link rel="stylesheet" href="app.css">
+    <style>
+        /* Setup basic font */
+        html { font-size: 16px; }
+    </style>
+</head>
+<body>
+    <div class="hn-container flex flex-col px-0 lg:px-4 items-center gap-0">
+        <div class="flex justify-between items-center w-full h-16 px-2 lg:px-5 lg:py-5 lg:h-auto">
+            <div class="flex items-center flex-1 min-w-0 justify-start gap-4 lg:gap-8">
+                <button class="cursor-pointer shrink-0" aria-label="Menu" @click="$store.overlayMenu.toggle()">
+                    <span class="lg:hidden">
+                        <svg class="icon w-7 h-7">
+                            <use href="#icon-hamburger-search"></use>
+                        </svg>
+                    </span>
+                    <span class="hidden lg:inline">
+                        <svg class="icon w-8 h-8">
+                            <use href="#icon-hamburger"></use>
+                        </svg>
+                    </span>
+                </button>
+
+                <form action="https://hotnews.ro/" method="get" class="hidden lg:flex items-center gap-2 w-53 px-2 py-1 border-b border-[rgba(36,42,59,0.25)]">
+                    <button type="submit" aria-label="Caută" class="cursor-pointer -mt-px">
+                        <svg class="icon icon-search">
+                            <use href="#icon-search"></use>
+                        </svg>
+                    </button>
+                    <input type="text" name="s" placeholder="Caută..." value="" class="flex-1 text-input-label bg-transparent border-none outline-none">
+                </form>
+            </div>
+
+            <div class="flex items-center justify-center flex-none shrink-0 mx-2 lg:mx-4">
+                <a href="https://hotnews.ro/" class="flex items-center">
+                    <svg class="w-[12rem] h-8 lg:w-[14.9132rem] lg:h-[3.35rem] block">
+                        <use href="#icon-hotnews-logo"></use>
+                    </svg>
+                </a>
+            </div>
+
+            <div class="flex items-center justify-end flex-1 min-w-0 gap-4 lg:gap-8">
+                <div class="cursor-pointer shrink-0" x-data="{ loginState: false, loading: false }" x-effect="loginState = $store.piano.isLoggedIn" @click="if ($store.piano.isLoggedIn) {
+                        window.location.href = '/contul-meu';
+                    } else {
+                        loading = true;
+                        $store.piano.showLogin();
+                        setTimeout(() => { loading = false; }, 3000);
+                    }" @piano-modal-shown.window="loading = false" x-init="$watch('$store.piano.showingModal', value => { if (value) loading = false; })">
+                    <span class="lg:hidden">
+                        <svg x-show="!$store.piano.isLoggedIn && !loading" class="icon icon-user" style="display: none;">
+                            <use href="#icon-user"></use>
+                        </svg>
+                        <svg x-show="!$store.piano.isLoggedIn && loading" class="icon icon-user icon-spinner animate-spin" style="display: none;">
+                            <use href="#icon-spinner"></use>
+                        </svg>
+                        <span x-show="$store.piano.isLoggedIn" class="w-8 h-8 rounded-full bg-white border-2 border-color-hotnews-black flex items-center justify-center text-hotnews-black text-xs font-bold" x-text="$store.piano.userInitials">MC</span>
+                    </span>
+                    <span class="hidden lg:inline">
+                        <svg x-show="!$store.piano.isLoggedIn && !loading" class="icon icon-user-desktop" style="display: none;">
+                            <use href="#icon-user-desktop"></use>
+                        </svg>
+                        <svg x-show="!$store.piano.isLoggedIn && loading" class="icon icon-user-desktop icon-spinner animate-spin" style="display: none;">
+                            <use href="#icon-spinner"></use>
+                        </svg>
+                        <span x-show="$store.piano.isLoggedIn" class="w-8 h-8 rounded-full bg-white border-2 border-color-hotnews-black flex items-center justify-center text-hotnews-black text-xs font-bold" x-text="$store.piano.userInitials">MC</span>
+                    </span>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+      <symbol id="icon-hotnews-logo" viewBox="0 0 191 32">
+        <path fill="currentColor" d="M10 10h100v100h-100z"/>
+      </symbol>
+      <symbol id="icon-hamburger" viewBox="0 0 24 24">
+        <path fill="currentColor" d="M3 6h18v2H3V6m0 5h18v2H3v-2m0 5h18v2H3v-2z"/>
+      </symbol>
+      <symbol id="icon-search" viewBox="0 0 24 24">
+        <path fill="currentColor" d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.516 6.516 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5z"/>
+      </symbol>
+      <symbol id="icon-user-desktop" viewBox="0 0 24 24">
+        <path fill="currentColor" d="M12 4a4 4 0 0 1 4 4 4 4 0 0 1-4 4 4 4 0 0 1-4-4 4 4 0 0 1 4-4m0 10c4.42 0 8 1.79 8 4v2H4v-2c0-2.21 3.58-4 8-4z"/>
+      </symbol>
+    </svg>
+</body>
+</html>

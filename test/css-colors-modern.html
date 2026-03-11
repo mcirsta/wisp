@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body { font-family: sans-serif; background: #fff; padding: 20px; }
+        .box { width: 400px; height: 60px; margin-bottom: 20px; line-height: 60px; padding-left: 20px; color: white; font-weight: bold; border-radius: 8px;}
+        
+        /* Standard sRGB baseline */
+        .baseline { background-color: #3b82f6; } /* Tailwind Blue 500 */
+        
+        /* Modern Color Spaces mapped to the same blue */
+        .color-oklch { background-color: oklch(0.623 0.214 259.815); } /* Standard Tailwind v4 format */
+        .color-lch { background-color: lch(54% 63 260); }
+        .color-lab { background-color: lab(54% 10 -60); }
+        .color-oklab { background-color: oklab(0.623 0.038 -0.211); }
+        
+        /* Transparency Support */
+        .color-oklch-alpha { background-color: oklch(0.623 0.214 259.815 / 0.5); color: black; border: 2px solid #3b82f6;}
+    </style>
+</head>
+<body>
+    <h1>Modern CSS Color Support Test</h1>
+    <p>All solid boxes should be approximately the same shade of blue.</p>
+    
+    <div class="box baseline">Baseline sRGB (#3b82f6)</div>
+    
+    <div class="box color-oklch">OKLCH() - Tailwind v4 Standard</div>
+    <div class="box color-lch">LCH()</div>
+    <div class="box color-lab">LAB()</div>
+    <div class="box color-oklab">OKLAB()</div>
+    
+    <div class="box color-oklch-alpha">OKLCH() with 50% Alpha</div>
+</body>
+</html>

@@ -8,6 +8,7 @@
 #include <assert.h>
 #include <string.h>
 #include <strings.h>
+#include <math.h>
 
 #include "utils/parserutilserror.h"
 #include "bytecode/bytecode.h"
@@ -15,6 +16,10 @@
 #include "parse/properties/properties.h"
 #include "parse/properties/utils.h"
 #include "stylesheet.h"
+
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 
 
 /**
@@ -853,6 +858,70 @@ static bool parse_hwb(const parserutils_vector *vector, int32_t *ctx, uint32_t *
     return true;
 }
 
+static inline uint8_t linear_srgb_to_srgb8(double linear) {
+    double srgb;
+    if (linear <= 0.0) srgb = 0.0;
+    else if (linear >= 1.0) srgb = 1.0;
+    else if (linear <= 0.0031308) srgb = 12.92 * linear;
+    else srgb = 1.055 * pow(linear, 1.0 / 2.4) - 0.055;
+    
+    int val = (int)(srgb * 255.0 + 0.5);
+    if (val < 0) return 0;
+    if (val > 255) return 255;
+    return val;
+}
+
+static void OKLAB_to_RGB(double L, double a, double b, uint8_t *r_out, uint8_t *g_out, uint8_t *b_out) {
+    double l_ = L + 0.3963377774 * a + 0.2158037573 * b;
+    double m_ = L - 0.1055613458 * a - 0.0638541728 * b;
+    double s_ = L - 0.0894841775 * a - 1.2914855480 * b;
+
+    l_ = l_ * l_ * l_;
+    m_ = m_ * m_ * m_;
+    s_ = s_ * s_ * s_;
+
+    double r_lin = +4.0767416621 * l_ - 3.3077115913 * m_ + 0.2309699292 * s_;
+    double g_lin = -1.2684380046 * l_ + 2.6097574011 * m_ - 0.3413193965 * s_;
+    double b_lin = -0.0041960863 * l_ - 0.7034186147 * m_ + 1.7076147010 * s_;
+
+    *r_out = linear_srgb_to_srgb8(r_lin);
+    *g_out = linear_srgb_to_srgb8(g_lin);
+    *b_out = linear_srgb_to_srgb8(b_lin);
+}
+
+static void LAB_to_RGB(double L, double a, double b, uint8_t *r_out, uint8_t *g_out, uint8_t *b_out) {
+    // 1. Convert LAB to D50 XYZ
+    double y = (L + 16.0) / 116.0;
+    double x = a / 500.0 + y;
+    double z = y - b / 200.0;
+    
+    double x3 = x * x * x;
+    double z3 = z * z * z;
+    
+    x = (x3 > 0.008856) ? x3 : (x - 16.0 / 116.0) / 7.787;
+    y = (L > 8.0) ? (y * y * y) : L / 903.3;
+    z = (z3 > 0.008856) ? z3 : (z - 16.0 / 116.0) / 7.787;
+    
+    // D50 reference white
+    x *= 0.96422;
+    y *= 1.00000;
+    z *= 0.82521;
+    
+    // 2. Convert D50 XYZ to D65 XYZ (Bradford adaptation)
+    double x65 =  0.956456 * x - 0.022641 * y + 0.045987 * z;
+    double y65 = -0.027050 * x + 1.000000 * y + 0.029864 * z;
+    double z65 =  0.003920 * x - 0.015690 * y + 1.096894 * z;
+    
+    // 3. Convert D65 XYZ to Linear sRGB
+    double r_lin =  3.2404542 * x65 - 1.5371385 * y65 - 0.4985314 * z65;
+    double g_lin = -0.9692660 * x65 + 1.8760108 * y65 + 0.0415560 * z65;
+    double b_lin =  0.0556434 * x65 - 0.2040259 * y65 + 1.0572252 * z65;
+    
+    *r_out = linear_srgb_to_srgb8(r_lin);
+    *g_out = linear_srgb_to_srgb8(g_lin);
+    *b_out = linear_srgb_to_srgb8(b_lin);
+}
+
 /**
  * Parse a lab/oklab colour specifier
  *
@@ -861,11 +930,13 @@ static bool parse_hwb(const parserutils_vector *vector, int32_t *ctx, uint32_t *
  * \param result  Pointer to location to receive result (AARRGGBB)
  * \return true on success, false on error.
  */
-static bool parse_lab(const parserutils_vector *vector, int32_t *ctx, uint32_t *result)
+static bool parse_lab(const parserutils_vector *vector, int32_t *ctx, uint32_t *result, bool is_ok)
 {
     const css_token *token;
     size_t consumed = 0;
     int i;
+    double L = 0.0, A = 0.0, B = 0.0;
+    int32_t alpha = 255;
 
     consumeWhitespace(vector, ctx);
 
@@ -875,9 +946,26 @@ static bool parse_lab(const parserutils_vector *vector, int32_t *ctx, uint32_t *
         if (token == NULL || (token->type != CSS_TOKEN_NUMBER && token->type != CSS_TOKEN_PERCENTAGE))
             return false;
 
-        css__number_from_lwc_string(token->idata, false, &consumed);
+        css_fixed num = css__number_from_lwc_string(token->idata, false, &consumed);
         if (consumed != lwc_string_length(token->idata))
             return false;
+            
+        double val = FIXTOINT(num) + ((double)(num & ((1<<10)-1)) / (1<<10));
+        
+        // CSS spec says LAB Lightness percentage is 0-100%, A/B are unbounded but often scaled around 125
+        // OKLAB Lightness percentage is 0-100% mapped to 0.0-1.0, A/B are percentage mapped to -0.4 to 0.4
+        if (token->type == CSS_TOKEN_PERCENTAGE) {
+            if (is_ok) {
+                if (i == 0) val = val / 100.0;
+                else val = (val / 100.0) * 0.4;
+            } else {
+                if (i > 0) val = (val / 100.0) * 125.0;
+            }
+        }
+        
+        if (i == 0) L = val;
+        else if (i == 1) A = val;
+        else if (i == 2) B = val;
 
         consumeWhitespace(vector, ctx);
     }
@@ -892,9 +980,15 @@ static bool parse_lab(const parserutils_vector *vector, int32_t *ctx, uint32_t *
         if (token == NULL || (token->type != CSS_TOKEN_NUMBER && token->type != CSS_TOKEN_PERCENTAGE))
             return false;
 
-        css__number_from_lwc_string(token->idata, false, &consumed);
+        css_fixed num = css__number_from_lwc_string(token->idata, false, &consumed);
         if (consumed != lwc_string_length(token->idata))
             return false;
+            
+        if (token->type == CSS_TOKEN_NUMBER) {
+            alpha = FIXTOINT(FMUL(num, F_255));
+        } else {
+            alpha = FIXTOINT(FDIV(FMUL(num, F_255), F_100));
+        }
 
         consumeWhitespace(vector, ctx);
     }
@@ -903,8 +997,23 @@ static bool parse_lab(const parserutils_vector *vector, int32_t *ctx, uint32_t *
     if (!tokenIsChar(token, ')'))
         return false;
 
-    CSS_UNIMPLEMENTED("lab() color conversion");
-    *result = 0; /* TODO: Conversion */
+    uint8_t r, g, b, a;
+    
+    if (alpha > 255) {
+        a = 255;
+    } else if (alpha < 0) {
+        a = 0;
+    } else {
+        a = alpha;
+    }
+
+    if (is_ok) {
+        OKLAB_to_RGB(L, A, B, &r, &g, &b);
+    } else {
+        LAB_to_RGB(L, A, B, &r, &g, &b);
+    }
+
+    *result = ((unsigned)a << 24) | (r << 16) | (g << 8) | b;
     return true;
 }
 
@@ -916,11 +1025,13 @@ static bool parse_lab(const parserutils_vector *vector, int32_t *ctx, uint32_t *
  * \param result  Pointer to location to receive result (AARRGGBB)
  * \return true on success, false on error.
  */
-static bool parse_lch(const parserutils_vector *vector, int32_t *ctx, uint32_t *result)
+static bool parse_lch(const parserutils_vector *vector, int32_t *ctx, uint32_t *result, bool is_ok)
 {
     const css_token *token;
     size_t consumed = 0;
     int i;
+    double L = 0.0, C = 0.0, H = 0.0;
+    int32_t alpha = 255;
 
     consumeWhitespace(vector, ctx);
 
@@ -933,19 +1044,40 @@ static bool parse_lch(const parserutils_vector *vector, int32_t *ctx, uint32_t *
                 (i == 2 && token->type != CSS_TOKEN_DIMENSION)))
             return false;
 
+        double val = 0.0;
+
         if (token->type == CSS_TOKEN_DIMENSION) {
             /* Parse angle unit */
             size_t len = lwc_string_length(token->idata);
             const char *data = lwc_string_data(token->idata);
             uint32_t unit = UNIT_DEG;
-            css__number_from_lwc_string(token->idata, false, &consumed);
+            css_fixed num = css__number_from_lwc_string(token->idata, false, &consumed);
             if (css__parse_unit_keyword(data + consumed, len - consumed, &unit) != CSS_OK)
                 return false;
+                
+            val = FIXTOINT(num) + ((double)(num & ((1<<10)-1)) / (1<<10));
+            if (unit == UNIT_RAD) val = val * 180.0 / M_PI;
+            else if (unit == UNIT_GRAD) val = val * 0.9;
+            else if (unit == UNIT_TURN) val = val * 360.0;
         } else {
-            css__number_from_lwc_string(token->idata, false, &consumed);
+            css_fixed num = css__number_from_lwc_string(token->idata, false, &consumed);
             if (consumed != lwc_string_length(token->idata))
                 return false;
+            val = FIXTOINT(num) + ((double)(num & ((1<<10)-1)) / (1<<10));
         }
+        
+        if (token->type == CSS_TOKEN_PERCENTAGE) {
+            if (is_ok) {
+                if (i == 0) val = val / 100.0;
+                else if (i == 1) val = (val / 100.0) * 0.4;
+            } else {
+                if (i == 1) val = (val / 100.0) * 150.0;
+            }
+        }
+        
+        if (i == 0) L = val;
+        else if (i == 1) C = val;
+        else if (i == 2) H = val;
 
         consumeWhitespace(vector, ctx);
     }
@@ -960,9 +1092,15 @@ static bool parse_lch(const parserutils_vector *vector, int32_t *ctx, uint32_t *
         if (token == NULL || (token->type != CSS_TOKEN_NUMBER && token->type != CSS_TOKEN_PERCENTAGE))
             return false;
 
-        css__number_from_lwc_string(token->idata, false, &consumed);
+        css_fixed num = css__number_from_lwc_string(token->idata, false, &consumed);
         if (consumed != lwc_string_length(token->idata))
             return false;
+            
+        if (token->type == CSS_TOKEN_NUMBER) {
+            alpha = FIXTOINT(FMUL(num, F_255));
+        } else {
+            alpha = FIXTOINT(FDIV(FMUL(num, F_255), F_100));
+        }
 
         consumeWhitespace(vector, ctx);
     }
@@ -971,8 +1109,27 @@ static bool parse_lch(const parserutils_vector *vector, int32_t *ctx, uint32_t *
     if (!tokenIsChar(token, ')'))
         return false;
 
-    CSS_UNIMPLEMENTED("lch() color conversion");
-    *result = 0; /* TODO: Conversion */
+    uint8_t r, g, b, a;
+    
+    if (alpha > 255) {
+        a = 255;
+    } else if (alpha < 0) {
+        a = 0;
+    } else {
+        a = alpha;
+    }
+
+    // Convert Polar to Cartesian
+    double A = C * cos(H * M_PI / 180.0);
+    double B = C * sin(H * M_PI / 180.0);
+
+    if (is_ok) {
+        OKLAB_to_RGB(L, A, B, &r, &g, &b);
+    } else {
+        LAB_to_RGB(L, A, B, &r, &g, &b);
+    }
+
+    *result = ((unsigned)a << 24) | (r << 16) | (g << 8) | b;
     return true;
 }
 
@@ -1148,19 +1305,19 @@ css_error css__parse_colour_specifier(
                 goto invalid;
             }
         } else if ((lwc_string_caseless_isequal(token->idata, c->strings[LAB], &match) == lwc_error_ok && match)) {
-            if (!parse_lab(vector, ctx, result)) {
+            if (!parse_lab(vector, ctx, result, false)) {
                 goto invalid;
             }
         } else if ((lwc_string_caseless_isequal(token->idata, c->strings[OKLAB], &match) == lwc_error_ok && match)) {
-            if (!parse_lab(vector, ctx, result)) {
+            if (!parse_lab(vector, ctx, result, true)) {
                 goto invalid;
             }
         } else if ((lwc_string_caseless_isequal(token->idata, c->strings[LCH], &match) == lwc_error_ok && match)) {
-            if (!parse_lch(vector, ctx, result)) {
+            if (!parse_lch(vector, ctx, result, false)) {
                 goto invalid;
             }
         } else if ((lwc_string_caseless_isequal(token->idata, c->strings[OKLCH], &match) == lwc_error_ok && match)) {
-            if (!parse_lch(vector, ctx, result)) {
+            if (!parse_lch(vector, ctx, result, true)) {
                 goto invalid;
             }
         } else if ((lwc_string_caseless_isequal(token->idata, c->strings[COLOR], &match) == lwc_error_ok && match)) {
