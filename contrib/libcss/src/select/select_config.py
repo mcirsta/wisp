@@ -177,10 +177,10 @@ style = {
     ('grid_auto_flow', 3),
     ('row_gap', 2, 'length', 'CSS_ROW_GAP_SET', 'CSS_ROW_GAP_NORMAL'),
     # CSS Grid item placement properties
-    ('grid_column_start', 2, 'integer', 'CSS_GRID_LINE_SET', 'CSS_GRID_LINE_AUTO'),
-    ('grid_column_end', 2, 'integer', 'CSS_GRID_LINE_SET', 'CSS_GRID_LINE_AUTO'),
-    ('grid_row_start', 2, 'integer', 'CSS_GRID_LINE_SET', 'CSS_GRID_LINE_AUTO'),
-    ('grid_row_end', 2, 'integer', 'CSS_GRID_LINE_SET', 'CSS_GRID_LINE_AUTO'),
+    ('grid_column_start', 2, 'integer', ('CSS_GRID_LINE_SET', 'CSS_GRID_LINE_SPAN'), 'CSS_GRID_LINE_AUTO'),
+    ('grid_column_end', 2, 'integer', ('CSS_GRID_LINE_SET', 'CSS_GRID_LINE_SPAN'), 'CSS_GRID_LINE_AUTO'),
+    ('grid_row_start', 2, 'integer', ('CSS_GRID_LINE_SET', 'CSS_GRID_LINE_SPAN'), 'CSS_GRID_LINE_AUTO'),
+    ('grid_row_end', 2, 'integer', ('CSS_GRID_LINE_SET', 'CSS_GRID_LINE_SPAN'), 'CSS_GRID_LINE_AUTO'),
     # Object-fit property
     ('object_fit', 3),
     ('object_position', 1, (('length',), ('length',)),

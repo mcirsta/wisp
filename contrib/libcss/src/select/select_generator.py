@@ -119,6 +119,8 @@ def build_style_from_toml(toml_path):
         # TOML lists → tuples for hashability (e.g. ["get", "set"] → ("get", "set"))
         if isinstance(override, list):
             override = tuple(override)
+        if isinstance(condition, list):
+            condition = tuple(condition)
 
         # Build the tuple with only as many fields as needed
         # (trailing Nones can be omitted)
@@ -341,7 +343,13 @@ class CSSProperty:
         self.type_size = type_size
         self.values = self.make_values(values)
         self.defaults = defaults
-        self.condition = condition
+        # Normalize condition to always be a list (or None)
+        if condition is None:
+            self.condition = None
+        elif isinstance(condition, (list, tuple)):
+            self.condition = list(condition)
+        else:
+            self.condition = [condition]
         self.override = get_tuple(override)
         self.comments = comments
         self.__mask = None
@@ -675,7 +683,10 @@ class CSSGroup:
 
                 type_mask, shift_list, bits_comment = p.get_bits()
                 t.append(bits_comment)
-                t.append('if ((orig_bits & {}) == {}) {{'.format(type_mask, p.condition))
+                calc_cond = ' || '.join(
+                    '(orig_bits & {}) == {}'.format(type_mask, c)
+                    for c in p.condition)
+                t.append('if ({}) {{'.format(calc_cond))
                 t.indent(1)
                 for i, v in enumerate(list(reversed(shift_list))):
                     t.append('if ((orig_bits & 0x{:x}) >> {} == CSS_UNIT_CALC) {{'.format(v[2], v[1]))
@@ -719,8 +730,11 @@ class CSSGroup:
                     type_mask_raw, _, _ = p.get_bits()
                     t.append('/* Normalize value fields for consistent '
                              'memcmp in arena */')
-                    t.append('if (((uint32_t)type & {}) != {}) {{'.format(
-                        type_mask_raw, p.condition))
+                    norm_cond = ' && '.join(
+                        '((uint32_t)type & {}) != {}'.format(
+                            type_mask_raw, c)
+                        for c in p.condition)
+                    t.append('if ({}) {{'.format(norm_cond))
                     t.indent(1)
                     for v in normalizable:
                         vt, vn = shift_star(v.type, v.name + v.suffix)
@@ -877,8 +891,10 @@ class CSSGroup:
 
         if only_bits == False:
             if p.condition:
-                t.append('if ((bits & {}) == {}) {{'.format(
-                    type_mask, p.condition))
+                get_cond = ' || '.join(
+                    '(bits & {}) == {}'.format(type_mask, c)
+                    for c in p.condition)
+                t.append('if ({}) {{'.format(get_cond))
                 t.indent(1)
 
             for v in p.values:

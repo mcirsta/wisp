@@ -1646,7 +1646,7 @@ bits = 2
 initial = "GRID_LINE_AUTO"
 initial_data = ['0']
 values = "integer"
-condition = "CSS_GRID_LINE_SET"
+condition = ["CSS_GRID_LINE_SET", "CSS_GRID_LINE_SPAN"]
 defaults = "CSS_GRID_LINE_AUTO"
 parse = '''IDENT:( INHERIT: INITIAL: REVERT: UNSET: AUTO:0,CSS_GRID_LINE_AUTO IDENT:) NUMBER:( true:CSS_GRID_LINE_SET NUMBER:)'''
 
@@ -1660,7 +1660,7 @@ bits = 2
 initial = "GRID_LINE_AUTO"
 initial_data = ['0']
 values = "integer"
-condition = "CSS_GRID_LINE_SET"
+condition = ["CSS_GRID_LINE_SET", "CSS_GRID_LINE_SPAN"]
 defaults = "CSS_GRID_LINE_AUTO"
 parse = '''IDENT:( INHERIT: INITIAL: REVERT: UNSET: AUTO:0,CSS_GRID_LINE_AUTO IDENT:) NUMBER:( true:CSS_GRID_LINE_SET NUMBER:)'''
 
@@ -1674,7 +1674,7 @@ bits = 2
 initial = "GRID_LINE_AUTO"
 initial_data = ['0']
 values = "integer"
-condition = "CSS_GRID_LINE_SET"
+condition = ["CSS_GRID_LINE_SET", "CSS_GRID_LINE_SPAN"]
 defaults = "CSS_GRID_LINE_AUTO"
 parse = '''IDENT:( INHERIT: INITIAL: REVERT: UNSET: AUTO:0,CSS_GRID_LINE_AUTO IDENT:) NUMBER:( true:CSS_GRID_LINE_SET NUMBER:)'''
 
@@ -1688,7 +1688,7 @@ bits = 2
 initial = "GRID_LINE_AUTO"
 initial_data = ['0']
 values = "integer"
-condition = "CSS_GRID_LINE_SET"
+condition = ["CSS_GRID_LINE_SET", "CSS_GRID_LINE_SPAN"]
 defaults = "CSS_GRID_LINE_AUTO"
 parse = '''IDENT:( INHERIT: INITIAL: REVERT: UNSET: AUTO:0,CSS_GRID_LINE_AUTO IDENT:) NUMBER:( true:CSS_GRID_LINE_SET NUMBER:)'''
 

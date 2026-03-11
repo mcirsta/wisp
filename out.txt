@@ -1,0 +1,328 @@
+❯ ninja
+[50/50] Linking CXX executable frontends/qt/wisp-qt
+
+/mnt/netac/proj/wisp/build-gcc main* ≡
+❯ ./frontends/qt/wisp-qt -split-logs startupcafe.ro
+Resolving var property 'background-color' with value 'rgba(231,229,228,var(--tw-bg-opacity))'
+Resolving var property 'color' with value 'rgba(39,39,42,var(--tw-text-opacity))'
+Resolving var property 'background-color' with value 'rgba(255,255,255,var(--tw-bg-opacity))'
+Resolving var property 'background-color' with value 'rgba(231,229,228,var(--tw-bg-opacity))'
+Resolving var property 'color' with value 'rgba(168,162,158,var(--tw-text-opacity))'
+Resolving var property 'color' with value 'rgba(68,64,60,var(--tw-text-opacity))'
+Resolving var property 'color' with value 'rgba(68,64,60,var(--tw-text-opacity))'
+Resolving var property 'color' with value 'rgba(68,64,60,var(--tw-text-opacity))'
+Resolving var property 'color' with value 'rgba(68,64,60,var(--tw-text-opacity))'
+Resolving var property 'background-color' with value 'rgba(231,229,228,var(--tw-bg-opacity))'
+Resolving var property 'color' with value 'rgba(168,162,158,var(--tw-text-opacity))'
+Resolving var property 'border-color' with value 'rgba(212,212,216,var(--tw-border-opacity))'
+Resolving var property 'color' with value 'rgba(39,39,42,var(--tw-text-opacity))'
+Resolving var property 'transform' with value 'translate(var(--tw-translate-x),var(--tw-translate-y)) rotate(var(--tw-rotate)) skewX(var(--tw-skew-x)) skewY(var(--tw-skew-y)) scaleX(var(--tw-scale-x)) scaleY(var(--tw-scale-y))'
+Resolving var property 'background-color' with value 'rgba(0,139,208,var(--tw-bg-opacity))'
+Resolving var property 'color' with value 'rgba(39,39,42,var(--tw-text-opacity))'
+Resolving var property 'transform' with value 'translate(var(--tw-translate-x),var(--tw-translate-y)) rotate(var(--tw-rotate)) skewX(var(--tw-skew-x)) skewY(var(--tw-skew-y)) scaleX(var(--tw-scale-x)) scaleY(var(--tw-scale-y))'
+Resolving var property 'background-color' with value 'rgba(0,139,208,var(--tw-bg-opacity))'
+Resolving var property 'color' with value 'rgba(39,39,42,var(--tw-text-opacity))'
+Resolving var property 'transform' with value 'translate(var(--tw-translate-x),var(--tw-translate-y)) rotate(var(--tw-rotate)) skewX(var(--tw-skew-x)) skewY(var(--tw-skew-y)) scaleX(var(--tw-scale-x)) scaleY(var(--tw-scale-y))'
+Resolving var property 'background-color' with value 'rgba(0,139,208,var(--tw-bg-opacity))'
+Resolving var property 'color' with value 'rgba(39,39,42,var(--tw-text-opacity))'
+Resolving var property 'transform' with value 'translate(var(--tw-translate-x),var(--tw-translate-y)) rotate(var(--tw-rotate)) skewX(var(--tw-skew-x)) skewY(var(--tw-skew-y)) scaleX(var(--tw-scale-x)) scaleY(var(--tw-scale-y))'
+Resolving var property 'background-color' with value 'rgba(0,139,208,var(--tw-bg-opacity))'
+Resolving var property 'transform' with value 'translate(var(--tw-translate-x),var(--tw-translate-y)) rotate(var(--tw-rotate)) skewX(var(--tw-skew-x)) skewY(var(--tw-skew-y)) scaleX(var(--tw-scale-x)) scaleY(var(--tw-scale-y))'
+Resolving var property 'transform' with value 'translate(var(--tw-translate-x),var(--tw-translate-y)) rotate(var(--tw-rotate)) skewX(var(--tw-skew-x)) skewY(var(--tw-skew-y)) scaleX(var(--tw-scale-x)) scaleY(var(--tw-scale-y))'
+Resolving var property 'border-color' with value 'rgba(212,212,216,var(--tw-border-opacity))'
+Resolving var property 'color' with value 'rgba(39,39,42,var(--tw-text-opacity))'
+Resolving var property 'transform' with value 'translate(var(--tw-translate-x),var(--tw-translate-y)) rotate(var(--tw-rotate)) skewX(var(--tw-skew-x)) skewY(var(--tw-skew-y)) scaleX(var(--tw-scale-x)) scaleY(var(--tw-scale-y))'
+Resolving var property 'background-color' with value 'rgba(0,139,208,var(--tw-bg-opacity))'
+Resolving var property 'color' with value 'rgba(39,39,42,var(--tw-text-opacity))'
+Resolving var property 'transform' with value 'translate(var(--tw-translate-x),var(--tw-translate-y)) rotate(var(--tw-rotate)) skewX(var(--tw-skew-x)) skewY(var(--tw-skew-y)) scaleX(var(--tw-scale-x)) scaleY(var(--tw-scale-y))'
+Resolving var property 'background-color' with value 'rgba(0,139,208,var(--tw-bg-opacity))'
+Resolving var property 'color' with value 'rgba(39,39,42,var(--tw-text-opacity))'
+Resolving var property 'transform' with value 'translate(var(--tw-translate-x),var(--tw-translate-y)) rotate(var(--tw-rotate)) skewX(var(--tw-skew-x)) skewY(var(--tw-skew-y)) scaleX(var(--tw-scale-x)) scaleY(var(--tw-scale-y))'
+Resolving var property 'background-color' with value 'rgba(0,139,208,var(--tw-bg-opacity))'
+Resolving var property 'transform' with value 'translate(var(--tw-translate-x),var(--tw-translate-y)) rotate(var(--tw-rotate)) skewX(var(--tw-skew-x)) skewY(var(--tw-skew-y)) scaleX(var(--tw-scale-x)) scaleY(var(--tw-scale-y))'
+Resolving var property 'background-color' with value 'rgba(255,255,255,var(--tw-bg-opacity))'
+Resolving var property 'background-color' with value 'rgba(0,0,0,var(--tw-bg-opacity))'
+Resolving var property 'border-color' with value 'rgba(113,113,122,var(--tw-border-opacity))'
+Resolving var property 'color' with value 'rgba(113,113,122,var(--tw-text-opacity))'
+Resolving var property 'background-color' with value 'rgba(255,255,255,var(--tw-bg-opacity))'
+Resolving var property 'color' with value 'rgba(0,0,0,var(--tw-text-opacity))'
+Resolving var property 'background-color' with value 'rgba(228,228,231,var(--tw-bg-opacity))'
+Resolving var property 'color' with value 'rgba(113,113,122,var(--tw-text-opacity))'
+Resolving var property 'color' with value 'rgba(255,255,255,var(--tw-text-opacity))'
+Resolving var property 'color' with value 'rgba(255,255,255,var(--tw-text-opacity))'
+Resolving var property 'color' with value 'rgba(161,161,170,var(--tw-text-opacity))'
+Resolving var property 'border-color' with value 'rgba(113,113,122,var(--tw-border-opacity))'
+Resolving var property 'color' with value 'rgba(113,113,122,var(--tw-text-opacity))'
+Resolving var property 'background-color' with value 'rgba(228,228,231,var(--tw-bg-opacity))'
+Resolving var property 'color' with value 'rgba(113,113,122,var(--tw-text-opacity))'
+Resolving var property 'color' with value 'rgba(82,82,91,var(--tw-text-opacity))'
+Resolving var property 'border-color' with value 'rgba(113,113,122,var(--tw-border-opacity))'
+Resolving var property 'color' with value 'rgba(113,113,122,var(--tw-text-opacity))'
+Resolving var property 'background-color' with value 'rgba(228,228,231,var(--tw-bg-opacity))'
+Resolving var property 'color' with value 'rgba(113,113,122,var(--tw-text-opacity))'
+Resolving var property 'color' with value 'rgba(82,82,91,var(--tw-text-opacity))'
+Resolving var property 'border-color' with value 'rgba(113,113,122,var(--tw-border-opacity))'
+Resolving var property 'color' with value 'rgba(113,113,122,var(--tw-text-opacity))'
+Resolving var property 'background-color' with value 'rgba(228,228,231,var(--tw-bg-opacity))'
+Resolving var property 'color' with value 'rgba(113,113,122,var(--tw-text-opacity))'
+Resolving var property 'color' with value 'rgba(82,82,91,var(--tw-text-opacity))'
+Resolving var property 'border-color' with value 'rgba(113,113,122,var(--tw-border-opacity))'
+Resolving var property 'color' with value 'rgba(113,113,122,var(--tw-text-opacity))'
+Resolving var property 'background-color' with value 'rgba(228,228,231,var(--tw-bg-opacity))'
+Resolving var property 'color' with value 'rgba(113,113,122,var(--tw-text-opacity))'
+Resolving var property 'border-color' with value 'rgba(113,113,122,var(--tw-border-opacity))'
+Resolving var property 'color' with value 'rgba(113,113,122,var(--tw-text-opacity))'
+Resolving var property 'background-color' with value 'rgba(228,228,231,var(--tw-bg-opacity))'
+Resolving var property 'color' with value 'rgba(113,113,122,var(--tw-text-opacity))'
+Resolving var property 'border-color' with value 'rgba(113,113,122,var(--tw-border-opacity))'
+Resolving var property 'color' with value 'rgba(113,113,122,var(--tw-text-opacity))'
+Resolving var property 'background-color' with value 'rgba(228,228,231,var(--tw-bg-opacity))'
+Resolving var property 'color' with value 'rgba(113,113,122,var(--tw-text-opacity))'
+Resolving var property 'border-color' with value 'rgba(228,228,231,var(--tw-border-opacity))'
+Resolving var property 'color' with value 'rgba(161,161,170,var(--tw-text-opacity))'
+Resolving var property 'border-color' with value 'rgba(212,212,216,var(--tw-border-opacity))'
+Resolving var property 'color' with value 'rgba(228,228,231,var(--tw-text-opacity))'
+Resolving var property 'border-color' with value 'rgba(212,212,216,var(--tw-border-opacity))'
+Resolving var property 'color' with value 'rgba(228,228,231,var(--tw-text-opacity))'
+Resolving var property 'border-color' with value 'rgba(212,212,216,var(--tw-border-opacity))'
+Resolving var property 'color' with value 'rgba(228,228,231,var(--tw-text-opacity))'
+Resolving var property 'border-color' with value 'rgba(212,212,216,var(--tw-border-opacity))'
+Resolving var property 'color' with value 'rgba(228,228,231,var(--tw-text-opacity))'
+Resolving var property 'border-color' with value 'rgba(212,212,216,var(--tw-border-opacity))'
+Resolving var property 'color' with value 'rgba(228,228,231,var(--tw-text-opacity))'
+Resolving var property 'border-color' with value 'rgba(212,212,216,var(--tw-border-opacity))'
+Resolving var property 'color' with value 'rgba(99,1,174,var(--tw-text-opacity))'
+Resolving var property 'color' with value 'rgba(161,161,170,var(--tw-text-opacity))'
+Resolving var property 'color' with value 'rgba(161,161,170,var(--tw-text-opacity))'
+Resolving var property 'background-color' with value 'rgba(0,0,0,var(--tw-bg-opacity))'
+Resolving var property 'background-color' with value 'rgba(0,0,0,var(--tw-bg-opacity))'
+Resolving var property 'color' with value 'rgba(250,250,250,var(--tw-text-opacity))'
+Resolving var property 'border-color' with value 'rgba(113,113,122,var(--tw-border-opacity))'
+Resolving var property 'color' with value 'rgba(113,113,122,var(--tw-text-opacity))'
+Resolving var property 'background-color' with value 'rgba(228,228,231,var(--tw-bg-opacity))'
+Resolving var property 'color' with value 'rgba(113,113,122,var(--tw-text-opacity))'
+Resolving var property 'background-color' with value 'rgba(0,0,0,var(--tw-bg-opacity))'
+Resolving var property 'background-color' with value 'rgba(0,0,0,var(--tw-bg-opacity))'
+Resolving var property 'color' with value 'rgba(250,250,250,var(--tw-text-opacity))'
+Resolving var property 'border-color' with value 'rgba(113,113,122,var(--tw-border-opacity))'
+Resolving var property 'color' with value 'rgba(113,113,122,var(--tw-text-opacity))'
+Resolving var property 'background-color' with value 'rgba(228,228,231,var(--tw-bg-opacity))'
+Resolving var property 'color' with value 'rgba(113,113,122,var(--tw-text-opacity))'
+Resolving var property 'background-color' with value 'rgba(0,0,0,var(--tw-bg-opacity))'
+Resolving var property 'background-color' with value 'rgba(0,0,0,var(--tw-bg-opacity))'
+Resolving var property 'color' with value 'rgba(250,250,250,var(--tw-text-opacity))'
+Resolving var property 'border-color' with value 'rgba(113,113,122,var(--tw-border-opacity))'
+Resolving var property 'color' with value 'rgba(113,113,122,var(--tw-text-opacity))'
+Resolving var property 'background-color' with value 'rgba(228,228,231,var(--tw-bg-opacity))'
+Resolving var property 'color' with value 'rgba(113,113,122,var(--tw-text-opacity))'
+Resolving var property 'background-color' with value 'rgba(0,0,0,var(--tw-bg-opacity))'
+Resolving var property 'background-color' with value 'rgba(0,0,0,var(--tw-bg-opacity))'
+Resolving var property 'color' with value 'rgba(250,250,250,var(--tw-text-opacity))'
+Resolving var property 'border-color' with value 'rgba(113,113,122,var(--tw-border-opacity))'
+Resolving var property 'color' with value 'rgba(113,113,122,var(--tw-text-opacity))'
+Resolving var property 'background-color' with value 'rgba(228,228,231,var(--tw-bg-opacity))'
+Resolving var property 'color' with value 'rgba(113,113,122,var(--tw-text-opacity))'
+Resolving var property 'background-color' with value 'rgba(0,0,0,var(--tw-bg-opacity))'
+Resolving var property 'background-color' with value 'rgba(0,0,0,var(--tw-bg-opacity))'
+Resolving var property 'color' with value 'rgba(250,250,250,var(--tw-text-opacity))'
+Resolving var property 'border-color' with value 'rgba(113,113,122,var(--tw-border-opacity))'
+Resolving var property 'color' with value 'rgba(113,113,122,var(--tw-text-opacity))'
+Resolving var property 'background-color' with value 'rgba(228,228,231,var(--tw-bg-opacity))'
+Resolving var property 'color' with value 'rgba(113,113,122,var(--tw-text-opacity))'
+Resolving var property 'background-color' with value 'rgba(0,0,0,var(--tw-bg-opacity))'
+Resolving var property 'background-color' with value 'rgba(0,0,0,var(--tw-bg-opacity))'
+Resolving var property 'color' with value 'rgba(250,250,250,var(--tw-text-opacity))'
+Resolving var property 'border-color' with value 'rgba(113,113,122,var(--tw-border-opacity))'
+Resolving var property 'color' with value 'rgba(113,113,122,var(--tw-text-opacity))'
+Resolving var property 'background-color' with value 'rgba(228,228,231,var(--tw-bg-opacity))'
+Resolving var property 'color' with value 'rgba(113,113,122,var(--tw-text-opacity))'
+Resolving var property 'background-color' with value 'rgba(0,0,0,var(--tw-bg-opacity))'
+Resolving var property 'background-color' with value 'rgba(0,0,0,var(--tw-bg-opacity))'
+Resolving var property 'color' with value 'rgba(250,250,250,var(--tw-text-opacity))'
+Resolving var property 'border-color' with value 'rgba(113,113,122,var(--tw-border-opacity))'
+Resolving var property 'color' with value 'rgba(113,113,122,var(--tw-text-opacity))'
+Resolving var property 'background-color' with value 'rgba(228,228,231,var(--tw-bg-opacity))'
+Resolving var property 'color' with value 'rgba(113,113,122,var(--tw-text-opacity))'
+Resolving var property 'background-color' with value 'rgba(0,0,0,var(--tw-bg-opacity))'
+Resolving var property 'background-color' with value 'rgba(0,0,0,var(--tw-bg-opacity))'
+Resolving var property 'color' with value 'rgba(250,250,250,var(--tw-text-opacity))'
+Resolving var property 'border-color' with value 'rgba(113,113,122,var(--tw-border-opacity))'
+Resolving var property 'color' with value 'rgba(113,113,122,var(--tw-text-opacity))'
+Resolving var property 'background-color' with value 'rgba(228,228,231,var(--tw-bg-opacity))'
+Resolving var property 'color' with value 'rgba(113,113,122,var(--tw-text-opacity))'
+Resolving var property 'background-color' with value 'rgba(0,0,0,var(--tw-bg-opacity))'
+Resolving var property 'background-color' with value 'rgba(0,0,0,var(--tw-bg-opacity))'
+Resolving var property 'color' with value 'rgba(250,250,250,var(--tw-text-opacity))'
+Resolving var property 'border-color' with value 'rgba(113,113,122,var(--tw-border-opacity))'
+Resolving var property 'color' with value 'rgba(113,113,122,var(--tw-text-opacity))'
+Resolving var property 'background-color' with value 'rgba(228,228,231,var(--tw-bg-opacity))'
+Resolving var property 'color' with value 'rgba(113,113,122,var(--tw-text-opacity))'
+Resolving var property 'background-color' with value 'rgba(0,0,0,var(--tw-bg-opacity))'
+Resolving var property 'background-color' with value 'rgba(0,0,0,var(--tw-bg-opacity))'
+Resolving var property 'color' with value 'rgba(250,250,250,var(--tw-text-opacity))'
+Resolving var property 'border-color' with value 'rgba(113,113,122,var(--tw-border-opacity))'
+Resolving var property 'color' with value 'rgba(113,113,122,var(--tw-text-opacity))'
+Resolving var property 'background-color' with value 'rgba(228,228,231,var(--tw-bg-opacity))'
+Resolving var property 'color' with value 'rgba(113,113,122,var(--tw-text-opacity))'
+Resolving var property 'background-color' with value 'rgba(212,212,216,var(--tw-bg-opacity))'
+Resolving var property 'background-color' with value 'rgba(99,1,174,var(--tw-bg-opacity))'
+Resolving var property 'background-color' with value 'rgba(255,255,255,var(--tw-bg-opacity))'
+Resolving var property 'color' with value 'rgba(161,161,170,var(--tw-text-opacity))'
+Resolving var property 'border-color' with value 'rgba(113,113,122,var(--tw-border-opacity))'
+Resolving var property 'color' with value 'rgba(113,113,122,var(--tw-text-opacity))'
+Resolving var property 'background-color' with value 'rgba(228,228,231,var(--tw-bg-opacity))'
+Resolving var property 'color' with value 'rgba(113,113,122,var(--tw-text-opacity))'
+Resolving var property 'color' with value 'rgba(82,82,91,var(--tw-text-opacity))'
+Resolving var property 'border-color' with value 'rgba(113,113,122,var(--tw-border-opacity))'
+Resolving var property 'color' with value 'rgba(113,113,122,var(--tw-text-opacity))'
+Resolving var property 'background-color' with value 'rgba(228,228,231,var(--tw-bg-opacity))'
+Resolving var property 'color' with value 'rgba(113,113,122,var(--tw-text-opacity))'
+Resolving var property 'border-color' with value 'rgba(113,113,122,var(--tw-border-opacity))'
+Resolving var property 'color' with value 'rgba(113,113,122,var(--tw-text-opacity))'
+Resolving var property 'background-color' with value 'rgba(228,228,231,var(--tw-bg-opacity))'
+Resolving var property 'color' with value 'rgba(113,113,122,var(--tw-text-opacity))'
+Resolving var property 'border-color' with value 'rgba(113,113,122,var(--tw-border-opacity))'
+Resolving var property 'color' with value 'rgba(113,113,122,var(--tw-text-opacity))'
+Resolving var property 'background-color' with value 'rgba(228,228,231,var(--tw-bg-opacity))'
+Resolving var property 'color' with value 'rgba(113,113,122,var(--tw-text-opacity))'
+Resolving var property 'border-color' with value 'rgba(113,113,122,var(--tw-border-opacity))'
+Resolving var property 'color' with value 'rgba(113,113,122,var(--tw-text-opacity))'
+Resolving var property 'background-color' with value 'rgba(228,228,231,var(--tw-bg-opacity))'
+Resolving var property 'color' with value 'rgba(113,113,122,var(--tw-text-opacity))'
+Resolving var property 'border-color' with value 'rgba(113,113,122,var(--tw-border-opacity))'
+Resolving var property 'color' with value 'rgba(113,113,122,var(--tw-text-opacity))'
+Resolving var property 'background-color' with value 'rgba(228,228,231,var(--tw-bg-opacity))'
+Resolving var property 'color' with value 'rgba(113,113,122,var(--tw-text-opacity))'
+Resolving var property 'color' with value 'rgba(161,161,170,var(--tw-text-opacity))'
+Resolving var property 'border-color' with value 'rgba(212,212,216,var(--tw-border-opacity))'
+Resolving var property 'color' with value 'rgba(82,82,91,var(--tw-text-opacity))'
+Resolving var property 'border-color' with value 'rgba(212,212,216,var(--tw-border-opacity))'
+Resolving var property 'color' with value 'rgba(82,82,91,var(--tw-text-opacity))'
+Resolving var property 'border-color' with value 'rgba(212,212,216,var(--tw-border-opacity))'
+Resolving var property 'color' with value 'rgba(82,82,91,var(--tw-text-opacity))'
+Resolving var property 'border-color' with value 'rgba(212,212,216,var(--tw-border-opacity))'
+Resolving var property 'color' with value 'rgba(82,82,91,var(--tw-text-opacity))'
+Resolving var property 'border-color' with value 'rgba(212,212,216,var(--tw-border-opacity))'
+Resolving var property 'color' with value 'rgba(82,82,91,var(--tw-text-opacity))'
+Resolving var property 'border-color' with value 'rgba(212,212,216,var(--tw-border-opacity))'
+Resolving var property 'color' with value 'rgba(82,82,91,var(--tw-text-opacity))'
+Resolving var property 'border-color' with value 'rgba(212,212,216,var(--tw-border-opacity))'
+Resolving var property 'color' with value 'rgba(82,82,91,var(--tw-text-opacity))'
+Resolving var property 'border-color' with value 'rgba(212,212,216,var(--tw-border-opacity))'
+Resolving var property 'color' with value 'rgba(82,82,91,var(--tw-text-opacity))'
+Resolving var property 'color' with value 'rgba(161,161,170,var(--tw-text-opacity))'
+Resolving var property 'border-color' with value 'rgba(212,212,216,var(--tw-border-opacity))'
+Resolving var property 'color' with value 'rgba(82,82,91,var(--tw-text-opacity))'
+Resolving var property 'border-color' with value 'rgba(212,212,216,var(--tw-border-opacity))'
+Resolving var property 'color' with value 'rgba(82,82,91,var(--tw-text-opacity))'
+Resolving var property 'border-color' with value 'rgba(212,212,216,var(--tw-border-opacity))'
+Resolving var property 'color' with value 'rgba(82,82,91,var(--tw-text-opacity))'
+Resolving var property 'border-color' with value 'rgba(212,212,216,var(--tw-border-opacity))'
+Resolving var property 'color' with value 'rgba(82,82,91,var(--tw-text-opacity))'
+Resolving var property 'border-color' with value 'rgba(212,212,216,var(--tw-border-opacity))'
+Resolving var property 'color' with value 'rgba(82,82,91,var(--tw-text-opacity))'
+Resolving var property 'border-color' with value 'rgba(212,212,216,var(--tw-border-opacity))'
+Resolving var property 'color' with value 'rgba(82,82,91,var(--tw-text-opacity))'
+Resolving var property 'border-color' with value 'rgba(212,212,216,var(--tw-border-opacity))'
+Resolving var property 'color' with value 'rgba(82,82,91,var(--tw-text-opacity))'
+Resolving var property 'border-color' with value 'rgba(212,212,216,var(--tw-border-opacity))'
+Resolving var property 'color' with value 'rgba(82,82,91,var(--tw-text-opacity))'
+Resolving var property 'border-color' with value 'rgba(212,212,216,var(--tw-border-opacity))'
+Resolving var property 'color' with value 'rgba(82,82,91,var(--tw-text-opacity))'
+Resolving var property 'border-color' with value 'rgba(212,212,216,var(--tw-border-opacity))'
+Resolving var property 'color' with value 'rgba(82,82,91,var(--tw-text-opacity))'
+Resolving var property 'border-color' with value 'rgba(212,212,216,var(--tw-border-opacity))'
+Resolving var property 'color' with value 'rgba(82,82,91,var(--tw-text-opacity))'
+Resolving var property 'border-color' with value 'rgba(212,212,216,var(--tw-border-opacity))'
+Resolving var property 'color' with value 'rgba(82,82,91,var(--tw-text-opacity))'
+Resolving var property 'border-color' with value 'rgba(212,212,216,var(--tw-border-opacity))'
+Resolving var property 'color' with value 'rgba(82,82,91,var(--tw-text-opacity))'
+Resolving var property 'border-color' with value 'rgba(212,212,216,var(--tw-border-opacity))'
+Resolving var property 'color' with value 'rgba(82,82,91,var(--tw-text-opacity))'
+Resolving var property 'border-color' with value 'rgba(212,212,216,var(--tw-border-opacity))'
+Resolving var property 'color' with value 'rgba(82,82,91,var(--tw-text-opacity))'
+Resolving var property 'border-color' with value 'rgba(212,212,216,var(--tw-border-opacity))'
+Resolving var property 'color' with value 'rgba(82,82,91,var(--tw-text-opacity))'
+Resolving var property 'background-color' with value 'rgba(231,229,228,var(--tw-bg-opacity))'
+Resolving var property 'color' with value 'rgba(87,83,78,var(--tw-text-opacity))'
+Resolving var property 'color' with value 'rgba(87,83,78,var(--tw-text-opacity))'
+Resolving var property 'color' with value 'rgba(87,83,78,var(--tw-text-opacity))'
+Resolving var property 'transform' with value 'translate(var(--tw-translate-x),var(--tw-translate-y)) rotate(var(--tw-rotate)) skewX(var(--tw-skew-x)) skewY(var(--tw-skew-y)) scaleX(var(--tw-scale-x)) scaleY(var(--tw-scale-y))'
+/mnt/netac/proj/wisp/src/content/handlers/html/layout_grid.c:1040:47: runtime error: division by zero
+AddressSanitizer:DEADLYSIGNAL
+=================================================================
+==95934==ERROR: AddressSanitizer: FPE on unknown address 0x7f6479f7ec86 (pc 0x7f6479f7ec86 bp 0x7ffcc3f0ab50 sp 0x7ffcc3f0a840 T0)
+    #0 0x7f6479f7ec86 in layout_grid /mnt/netac/proj/wisp/src/content/handlers/html/layout_grid.c:1040
+    #1 0x7f6479f57115 in layout_flex_item /mnt/netac/proj/wisp/src/content/handlers/html/layout_flex.c:697
+    #2 0x7f6479f663b0 in layout_flex__place_line_items_main /mnt/netac/proj/wisp/src/content/handlers/html/layout_flex.c:1570
+    #3 0x7f6479f6879c in layout_flex__collect_items_into_lines /mnt/netac/proj/wisp/src/content/handlers/html/layout_flex.c:1719
+    #4 0x7f6479f6dd82 in layout_flex /mnt/netac/proj/wisp/src/content/handlers/html/layout_flex.c:2001
+    #5 0x7f6479f1db54 in layout_block_context /mnt/netac/proj/wisp/src/content/handlers/html/layout.c:3811
+    #6 0x7f6479f56c0a in layout_flex_item /mnt/netac/proj/wisp/src/content/handlers/html/layout_flex.c:683
+    #7 0x7f6479f58fff in layout_flex__base_and_main_sizes /mnt/netac/proj/wisp/src/content/handlers/html/layout_flex.c:834
+    #8 0x7f6479f5d1d1 in layout_flex_ctx__populate_item_data /mnt/netac/proj/wisp/src/content/handlers/html/layout_flex.c:1031
+    #9 0x7f6479f6d9f6 in layout_flex /mnt/netac/proj/wisp/src/content/handlers/html/layout_flex.c:1982
+    #10 0x7f6479f56f3d in layout_flex_item /mnt/netac/proj/wisp/src/content/handlers/html/layout_flex.c:692
+    #11 0x7f6479f58fff in layout_flex__base_and_main_sizes /mnt/netac/proj/wisp/src/content/handlers/html/layout_flex.c:834
+    #12 0x7f6479f5d1d1 in layout_flex_ctx__populate_item_data /mnt/netac/proj/wisp/src/content/handlers/html/layout_flex.c:1031
+    #13 0x7f6479f6d9f6 in layout_flex /mnt/netac/proj/wisp/src/content/handlers/html/layout_flex.c:1982
+    #14 0x7f6479f56f3d in layout_flex_item /mnt/netac/proj/wisp/src/content/handlers/html/layout_flex.c:692
+    #15 0x7f6479f58fff in layout_flex__base_and_main_sizes /mnt/netac/proj/wisp/src/content/handlers/html/layout_flex.c:834
+    #16 0x7f6479f5d1d1 in layout_flex_ctx__populate_item_data /mnt/netac/proj/wisp/src/content/handlers/html/layout_flex.c:1031
+    #17 0x7f6479f6d9f6 in layout_flex /mnt/netac/proj/wisp/src/content/handlers/html/layout_flex.c:1982
+    #18 0x7f6479f56f3d in layout_flex_item /mnt/netac/proj/wisp/src/content/handlers/html/layout_flex.c:692
+    #19 0x7f6479f58fff in layout_flex__base_and_main_sizes /mnt/netac/proj/wisp/src/content/handlers/html/layout_flex.c:834
+    #20 0x7f6479f5d1d1 in layout_flex_ctx__populate_item_data /mnt/netac/proj/wisp/src/content/handlers/html/layout_flex.c:1031
+    #21 0x7f6479f6d9f6 in layout_flex /mnt/netac/proj/wisp/src/content/handlers/html/layout_flex.c:1982
+    #22 0x7f6479f56f3d in layout_flex_item /mnt/netac/proj/wisp/src/content/handlers/html/layout_flex.c:692
+    #23 0x7f6479f58fff in layout_flex__base_and_main_sizes /mnt/netac/proj/wisp/src/content/handlers/html/layout_flex.c:834
+    #24 0x7f6479f5d1d1 in layout_flex_ctx__populate_item_data /mnt/netac/proj/wisp/src/content/handlers/html/layout_flex.c:1031
+    #25 0x7f6479f6d9f6 in layout_flex /mnt/netac/proj/wisp/src/content/handlers/html/layout_flex.c:1982
+    #26 0x7f6479f1db54 in layout_block_context /mnt/netac/proj/wisp/src/content/handlers/html/layout.c:3811
+    #27 0x7f6479f49c66 in layout_document /mnt/netac/proj/wisp/src/content/handlers/html/layout.c:5626
+    #28 0x7f6479e95f90 in html_reformat /mnt/netac/proj/wisp/src/content/handlers/html/html.c:1279
+    #29 0x7f6479cf3c9f in content__reformat /mnt/netac/proj/wisp/src/content/content.c:330
+    #30 0x7f6479cf34a2 in content_reformat /mnt/netac/proj/wisp/src/content/content.c:308
+    #31 0x7f647a11b7cf in browser_window_content_ready /mnt/netac/proj/wisp/src/desktop/browser_window.c:807
+    #32 0x7f647a120311 in browser_window_callback /mnt/netac/proj/wisp/src/desktop/browser_window.c:1412
+    #33 0x7f6479d0c14d in hlcache_content_callback /mnt/netac/proj/wisp/src/content/hlcache.c:206
+    #34 0x7f6479cf90e5 in content_broadcast /mnt/netac/proj/wisp/src/content/content.c:718
+    #35 0x7f6479cf3065 in content_set_ready /mnt/netac/proj/wisp/src/content/content.c:277
+    #36 0x7f6479e89072 in html_box_convert_done /mnt/netac/proj/wisp/src/content/handlers/html/html.c:278
+    #37 0x7f6479e0fc4d in convert_xml_to_box /mnt/netac/proj/wisp/src/content/handlers/html/box_construct.c:1809
+    #38 0x55ee6112b1d8 in nsqt_schedule_run() /mnt/netac/proj/wisp/frontends/qt/misc.cpp:89
+    #39 0x55ee610dc7f5 in NS_Application::schedule_run() /mnt/netac/proj/wisp/frontends/qt/application.cpp:517
+    #40 0x55ee610e7483 in QtPrivate::FunctorCall<std::integer_sequence<unsigned long>, QtPrivate::List<>, void, void (NS_Application::*)()>::call(void (NS_Application::*)(), NS_Application*, void**)::{lambda()#1}::operator()() const /usr/include/qt6/QtCore/qobjectdefs_impl.h:127
+    #41 0x55ee610e79b9 in void QtPrivate::FunctorCallBase::call_internal<void, QtPrivate::FunctorCall<std::integer_sequence<unsigned long>, QtPrivate::List<>, void, void (NS_Application::*)()>::call(void (NS_Application::*)(), NS_Application*, void**)::{lambda()#1}>(void**, QtPrivate::FunctorCall<std::integer_sequence<unsigned long>, QtPrivate::List<>, void, void (NS_Application::*)()>::call(void (NS_Application::*)(), NS_Application*, void**)::{lambda()#1}&&) /usr/include/qt6/QtCore/qobjectdefs_impl.h:65
+    #42 0x55ee610e7687 in QtPrivate::FunctorCall<std::integer_sequence<unsigned long>, QtPrivate::List<>, void, void (NS_Application::*)()>::call(void (NS_Application::*)(), NS_Application*, void**) /usr/include/qt6/QtCore/qobjectdefs_impl.h:126
+    #43 0x55ee610e6fac in void QtPrivate::FunctionPointer<void (NS_Application::*)()>::call<QtPrivate::List<>, void>(void (NS_Application::*)(), NS_Application*, void**) /usr/include/qt6/QtCore/qobjectdefs_impl.h:174
+    #44 0x55ee610e6c27 in QtPrivate::QCallableObject<void (NS_Application::*)(), QtPrivate::List<>, void>::impl(int, QtPrivate::QSlotObjectBase*, QObject*, void**, bool*) /usr/include/qt6/QtCore/qobjectdefs_impl.h:545
+    #45 0x7f6478fed1d5  (/usr/lib/libQt6Core.so.6+0x1ed1d5) (BuildId: 7221bfc94b53230909b2e64e61db1378931be93a)
+    #46 0x7f6478ffbe83 in QTimer::timerEvent(QTimerEvent*) (/usr/lib/libQt6Core.so.6+0x1fbe83) (BuildId: 7221bfc94b53230909b2e64e61db1378931be93a)
+    #47 0x7f6478fde0d8 in QObject::event(QEvent*) (/usr/lib/libQt6Core.so.6+0x1de0d8) (BuildId: 7221bfc94b53230909b2e64e61db1378931be93a)
+    #48 0x7f647b7033e8 in QApplicationPrivate::notify_helper(QObject*, QEvent*) (/usr/lib/libQt6Widgets.so.6+0x1033e8) (BuildId: 07f7b73438ac6591862ad1459eb0b903dc2edbf1)
+    #49 0x7f6478f7c517 in QCoreApplication::notifyInternal2(QObject*, QEvent*) (/usr/lib/libQt6Core.so.6+0x17c517) (BuildId: 7221bfc94b53230909b2e64e61db1378931be93a)
+    #50 0x7f647915794f in QTimerInfoList::activateTimers() (/usr/lib/libQt6Core.so.6+0x35794f) (BuildId: 7221bfc94b53230909b2e64e61db1378931be93a)
+    #51 0x7f6479294123  (/usr/lib/libQt6Core.so.6+0x494123) (BuildId: 7221bfc94b53230909b2e64e61db1378931be93a)
+    #52 0x7f64754ee828  (/usr/lib/libglib-2.0.so.0+0x67828) (BuildId: 185a6157307873adafd7599ec96871857a93de0a)
+    #53 0x7f64754efb87  (/usr/lib/libglib-2.0.so.0+0x68b87) (BuildId: 185a6157307873adafd7599ec96871857a93de0a)
+    #54 0x7f64754efcc1 in g_main_context_iteration (/usr/lib/libglib-2.0.so.0+0x68cc1) (BuildId: 185a6157307873adafd7599ec96871857a93de0a)
+    #55 0x7f6479290dba in QEventDispatcherGlib::processEvents(QFlags<QEventLoop::ProcessEventsFlag>) (/usr/lib/libQt6Core.so.6+0x490dba) (BuildId: 7221bfc94b53230909b2e64e61db1378931be93a)
+    #56 0x7f6478f878e5 in QEventLoop::exec(QFlags<QEventLoop::ProcessEventsFlag>) (/usr/lib/libQt6Core.so.6+0x1878e5) (BuildId: 7221bfc94b53230909b2e64e61db1378931be93a)
+    #57 0x7f6478f8112b in QCoreApplication::exec() (/usr/lib/libQt6Core.so.6+0x18112b) (BuildId: 7221bfc94b53230909b2e64e61db1378931be93a)
+    #58 0x55ee6112a6b6 in main /mnt/netac/proj/wisp/frontends/qt/main.cpp:80
+    #59 0x7f64752276c0  (/usr/lib/libc.so.6+0x276c0) (BuildId: be6002fa4876d5551ebbfd354c20416871ac9e7e)
+    #60 0x7f64752277f8 in __libc_start_main (/usr/lib/libc.so.6+0x277f8) (BuildId: be6002fa4876d5551ebbfd354c20416871ac9e7e)
+    #61 0x55ee6108e504 in _start (/mnt/netac/proj/wisp/build-gcc/frontends/qt/wisp-qt+0x200504) (BuildId: 3dbe8115ee6d1c4bcb8d68f28ba9acc997cc22c4)
+
+==95934==Register values:
+rax = 0x000000000000007d  rbx = 0x00007b646e5d6c20  rcx = 0x00007f647562176b  rdx = 0x0000000000000000  
+rdi = 0x00007f6479f7ec82  rsi = 0x00007ffcc3f0a830  rbp = 0x00007ffcc3f0ab50  rsp = 0x00007ffcc3f0a840  
+ r8 = 0x0000000000001000   r9 = 0x00007f646f900000  r10 = 0x0000000000000000  r11 = 0x0000000000000206  
+r12 = 0x0000000000000000  r13 = 0x000000000000007d  r14 = 0x00007cb46fc642f0  r15 = 0x00000f6c8dcbad60  
+AddressSanitizer can not provide additional info.
+SUMMARY: AddressSanitizer: FPE /mnt/netac/proj/wisp/src/content/handlers/html/layout_grid.c:1040 in layout_grid
+==95934==ABORTING
+
+/mnt/netac/proj/wisp/build-gcc main* ≡
+❯ 

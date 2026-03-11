@@ -312,6 +312,18 @@ static void get_grid_item_placement(const css_computed_style *style, int *col_st
     } else {
         *row_end = GRID_PLACEMENT_AUTO;
     }
+
+    /* Validate: per CSS Grid spec, span values must be >= 1 */
+    if (*col_span < 1) {
+        NSLOG(layout, ERROR,
+              "Invalid grid col_span=%d (must be >= 1), "
+              "possible propset normalization bug", *col_span);
+    }
+    if (*row_span < 1) {
+        NSLOG(layout, ERROR,
+              "Invalid grid row_span=%d (must be >= 1), "
+              "possible propset normalization bug", *row_span);
+    }
 }
 
 /**
