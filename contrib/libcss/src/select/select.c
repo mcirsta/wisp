@@ -2493,6 +2493,46 @@ css_error match_detail(css_select_ctx *ctx, void *node, const css_selector_detai
             *pseudo_element = CSS_PSEUDO_ELEMENT_BEFORE;
         } else if (detail->qname.name == ctx->str.after) {
             *pseudo_element = CSS_PSEUDO_ELEMENT_AFTER;
+        } else if (detail->qname.name == ctx->str.backdrop) {
+            *pseudo_element = CSS_PSEUDO_ELEMENT_BACKDROP;
+        } else if (detail->qname.name == ctx->str.file_selector_button) {
+            *pseudo_element = CSS_PSEUDO_ELEMENT_FILE_SELECTOR_BUTTON;
+        } else if (detail->qname.name == ctx->str.placeholder) {
+            *pseudo_element = CSS_PSEUDO_ELEMENT_PLACEHOLDER;
+        } else if (detail->qname.name == ctx->str.marker) {
+            *pseudo_element = CSS_PSEUDO_ELEMENT_MARKER;
+        } else if (detail->qname.name == ctx->str.webkit_search_decoration) {
+            *pseudo_element = CSS_PSEUDO_ELEMENT_WEBKIT_SEARCH_DECORATION;
+        } else if (detail->qname.name == ctx->str.webkit_date_and_time_value) {
+            *pseudo_element = CSS_PSEUDO_ELEMENT_WEBKIT_DATE_AND_TIME_VALUE;
+        } else if (detail->qname.name == ctx->str.webkit_datetime_edit) {
+            *pseudo_element = CSS_PSEUDO_ELEMENT_WEBKIT_DATETIME_EDIT;
+        } else if (detail->qname.name == ctx->str.webkit_datetime_edit_fields_wrapper) {
+            *pseudo_element = CSS_PSEUDO_ELEMENT_WEBKIT_DATETIME_EDIT_FIELDS_WRAPPER;
+        } else if (detail->qname.name == ctx->str.webkit_datetime_edit_year_field) {
+            *pseudo_element = CSS_PSEUDO_ELEMENT_WEBKIT_DATETIME_EDIT_YEAR_FIELD;
+        } else if (detail->qname.name == ctx->str.webkit_datetime_edit_month_field) {
+            *pseudo_element = CSS_PSEUDO_ELEMENT_WEBKIT_DATETIME_EDIT_MONTH_FIELD;
+        } else if (detail->qname.name == ctx->str.webkit_datetime_edit_day_field) {
+            *pseudo_element = CSS_PSEUDO_ELEMENT_WEBKIT_DATETIME_EDIT_DAY_FIELD;
+        } else if (detail->qname.name == ctx->str.webkit_datetime_edit_hour_field) {
+            *pseudo_element = CSS_PSEUDO_ELEMENT_WEBKIT_DATETIME_EDIT_HOUR_FIELD;
+        } else if (detail->qname.name == ctx->str.webkit_datetime_edit_minute_field) {
+            *pseudo_element = CSS_PSEUDO_ELEMENT_WEBKIT_DATETIME_EDIT_MINUTE_FIELD;
+        } else if (detail->qname.name == ctx->str.webkit_datetime_edit_second_field) {
+            *pseudo_element = CSS_PSEUDO_ELEMENT_WEBKIT_DATETIME_EDIT_SECOND_FIELD;
+        } else if (detail->qname.name == ctx->str.webkit_datetime_edit_millisecond_field) {
+            *pseudo_element = CSS_PSEUDO_ELEMENT_WEBKIT_DATETIME_EDIT_MILLISECOND_FIELD;
+        } else if (detail->qname.name == ctx->str.webkit_datetime_edit_meridiem_field) {
+            *pseudo_element = CSS_PSEUDO_ELEMENT_WEBKIT_DATETIME_EDIT_MERIDIEM_FIELD;
+        } else if (detail->qname.name == ctx->str.webkit_calendar_picker_indicator) {
+            *pseudo_element = CSS_PSEUDO_ELEMENT_WEBKIT_CALENDAR_PICKER_INDICATOR;
+        } else if (detail->qname.name == ctx->str.webkit_inner_spin_button) {
+            *pseudo_element = CSS_PSEUDO_ELEMENT_WEBKIT_INNER_SPIN_BUTTON;
+        } else if (detail->qname.name == ctx->str.webkit_outer_spin_button) {
+            *pseudo_element = CSS_PSEUDO_ELEMENT_WEBKIT_OUTER_SPIN_BUTTON;
+        } else if (detail->qname.name == ctx->str.webkit_scrollbar) {
+            *pseudo_element = CSS_PSEUDO_ELEMENT_WEBKIT_SCROLLBAR;
         } else
             *match = false;
         break;

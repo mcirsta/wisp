@@ -125,6 +125,66 @@ css_error css_select_strings_intern(css_select_strings *str)
     if (error != lwc_error_ok)
         return css_error_from_lwc_error(error);
 
+    error = lwc_intern_string("backdrop", SLEN("backdrop"), &str->backdrop);
+    if (error != lwc_error_ok) return css_error_from_lwc_error(error);
+
+    error = lwc_intern_string("file-selector-button", SLEN("file-selector-button"), &str->file_selector_button);
+    if (error != lwc_error_ok) return css_error_from_lwc_error(error);
+
+    error = lwc_intern_string("placeholder", SLEN("placeholder"), &str->placeholder);
+    if (error != lwc_error_ok) return css_error_from_lwc_error(error);
+
+    error = lwc_intern_string("marker", SLEN("marker"), &str->marker);
+    if (error != lwc_error_ok) return css_error_from_lwc_error(error);
+
+    error = lwc_intern_string("-webkit-search-decoration", SLEN("-webkit-search-decoration"), &str->webkit_search_decoration);
+    if (error != lwc_error_ok) return css_error_from_lwc_error(error);
+
+    error = lwc_intern_string("-webkit-date-and-time-value", SLEN("-webkit-date-and-time-value"), &str->webkit_date_and_time_value);
+    if (error != lwc_error_ok) return css_error_from_lwc_error(error);
+
+    error = lwc_intern_string("-webkit-datetime-edit", SLEN("-webkit-datetime-edit"), &str->webkit_datetime_edit);
+    if (error != lwc_error_ok) return css_error_from_lwc_error(error);
+
+    error = lwc_intern_string("-webkit-datetime-edit-fields-wrapper", SLEN("-webkit-datetime-edit-fields-wrapper"), &str->webkit_datetime_edit_fields_wrapper);
+    if (error != lwc_error_ok) return css_error_from_lwc_error(error);
+
+    error = lwc_intern_string("-webkit-datetime-edit-year-field", SLEN("-webkit-datetime-edit-year-field"), &str->webkit_datetime_edit_year_field);
+    if (error != lwc_error_ok) return css_error_from_lwc_error(error);
+
+    error = lwc_intern_string("-webkit-datetime-edit-month-field", SLEN("-webkit-datetime-edit-month-field"), &str->webkit_datetime_edit_month_field);
+    if (error != lwc_error_ok) return css_error_from_lwc_error(error);
+
+    error = lwc_intern_string("-webkit-datetime-edit-day-field", SLEN("-webkit-datetime-edit-day-field"), &str->webkit_datetime_edit_day_field);
+    if (error != lwc_error_ok) return css_error_from_lwc_error(error);
+
+    error = lwc_intern_string("-webkit-datetime-edit-hour-field", SLEN("-webkit-datetime-edit-hour-field"), &str->webkit_datetime_edit_hour_field);
+    if (error != lwc_error_ok) return css_error_from_lwc_error(error);
+
+    error = lwc_intern_string("-webkit-datetime-edit-minute-field", SLEN("-webkit-datetime-edit-minute-field"), &str->webkit_datetime_edit_minute_field);
+    if (error != lwc_error_ok) return css_error_from_lwc_error(error);
+
+    error = lwc_intern_string("-webkit-datetime-edit-second-field", SLEN("-webkit-datetime-edit-second-field"), &str->webkit_datetime_edit_second_field);
+    if (error != lwc_error_ok) return css_error_from_lwc_error(error);
+
+    error = lwc_intern_string("-webkit-datetime-edit-millisecond-field", SLEN("-webkit-datetime-edit-millisecond-field"), &str->webkit_datetime_edit_millisecond_field);
+    if (error != lwc_error_ok) return css_error_from_lwc_error(error);
+
+    error = lwc_intern_string("-webkit-datetime-edit-meridiem-field", SLEN("-webkit-datetime-edit-meridiem-field"), &str->webkit_datetime_edit_meridiem_field);
+    if (error != lwc_error_ok) return css_error_from_lwc_error(error);
+
+    error = lwc_intern_string("-webkit-calendar-picker-indicator", SLEN("-webkit-calendar-picker-indicator"), &str->webkit_calendar_picker_indicator);
+    if (error != lwc_error_ok) return css_error_from_lwc_error(error);
+
+    error = lwc_intern_string("-webkit-inner-spin-button", SLEN("-webkit-inner-spin-button"), &str->webkit_inner_spin_button);
+    if (error != lwc_error_ok) return css_error_from_lwc_error(error);
+
+    error = lwc_intern_string("-webkit-outer-spin-button", SLEN("-webkit-outer-spin-button"), &str->webkit_outer_spin_button);
+    if (error != lwc_error_ok) return css_error_from_lwc_error(error);
+
+    error = lwc_intern_string("-webkit-scrollbar", SLEN("-webkit-scrollbar"), &str->webkit_scrollbar);
+    if (error != lwc_error_ok) return css_error_from_lwc_error(error);
+
     error = lwc_intern_string("width", SLEN("width"), &str->width);
     if (error != lwc_error_ok)
         return css_error_from_lwc_error(error);
@@ -169,6 +229,27 @@ void css_select_strings_unref(css_select_strings *str)
     lwc_string_unref(str->first_letter);
     lwc_string_unref(str->before);
     lwc_string_unref(str->after);
+
+    lwc_string_unref(str->backdrop);
+    lwc_string_unref(str->file_selector_button);
+    lwc_string_unref(str->placeholder);
+    lwc_string_unref(str->marker);
+    lwc_string_unref(str->webkit_search_decoration);
+    lwc_string_unref(str->webkit_date_and_time_value);
+    lwc_string_unref(str->webkit_datetime_edit);
+    lwc_string_unref(str->webkit_datetime_edit_fields_wrapper);
+    lwc_string_unref(str->webkit_datetime_edit_year_field);
+    lwc_string_unref(str->webkit_datetime_edit_month_field);
+    lwc_string_unref(str->webkit_datetime_edit_day_field);
+    lwc_string_unref(str->webkit_datetime_edit_hour_field);
+    lwc_string_unref(str->webkit_datetime_edit_minute_field);
+    lwc_string_unref(str->webkit_datetime_edit_second_field);
+    lwc_string_unref(str->webkit_datetime_edit_millisecond_field);
+    lwc_string_unref(str->webkit_datetime_edit_meridiem_field);
+    lwc_string_unref(str->webkit_calendar_picker_indicator);
+    lwc_string_unref(str->webkit_inner_spin_button);
+    lwc_string_unref(str->webkit_outer_spin_button);
+    lwc_string_unref(str->webkit_scrollbar);
 
     lwc_string_unref(str->width);
     lwc_string_unref(str->height);

@@ -40,6 +40,27 @@ typedef struct {
     lwc_string *before;
     lwc_string *after;
 
+    lwc_string *backdrop;
+    lwc_string *file_selector_button;
+    lwc_string *placeholder;
+    lwc_string *marker;
+    lwc_string *webkit_search_decoration;
+    lwc_string *webkit_date_and_time_value;
+    lwc_string *webkit_datetime_edit;
+    lwc_string *webkit_datetime_edit_fields_wrapper;
+    lwc_string *webkit_datetime_edit_year_field;
+    lwc_string *webkit_datetime_edit_month_field;
+    lwc_string *webkit_datetime_edit_day_field;
+    lwc_string *webkit_datetime_edit_hour_field;
+    lwc_string *webkit_datetime_edit_minute_field;
+    lwc_string *webkit_datetime_edit_second_field;
+    lwc_string *webkit_datetime_edit_millisecond_field;
+    lwc_string *webkit_datetime_edit_meridiem_field;
+    lwc_string *webkit_calendar_picker_indicator;
+    lwc_string *webkit_inner_spin_button;
+    lwc_string *webkit_outer_spin_button;
+    lwc_string *webkit_scrollbar;
+
     lwc_string *width;
     lwc_string *height;
     lwc_string *prefers_color_scheme;
