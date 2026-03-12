@@ -261,11 +261,39 @@ class TomlPropertyReader:
             })
         return order
     
+    @staticmethod
+    def _strip_flag_keywords(parse_spec):
+        """Strip INHERIT/INITIAL/REVERT/UNSET from a parse spec's IDENT block.
+        
+        This produces a 'value-only' parse spec suitable for generating
+        _value() helper functions that handle length, calc, and property-specific
+        keywords but not CSS-wide keywords (inherit, initial, revert, unset).
+        """
+        tokens = parse_spec.split()
+        result = []
+        in_ident_block = False
+        for token in tokens:
+            if token == 'IDENT:(':
+                in_ident_block = True
+                result.append(token)
+            elif token == 'IDENT:)':
+                in_ident_block = False
+                result.append(token)
+            elif in_ident_block and token.split(':')[0] in ('INHERIT', 'INITIAL', 'REVERT', 'UNSET'):
+                continue  # Strip CSS-wide keywords
+            else:
+                result.append(token)
+        return ' '.join(result)
+    
     def generate_properties_gen(self):
         """Generate properties.gen content for gen_parser.
         
         This produces the same format gen_parser expects, derived from TOML data.
         Only properties with a 'parse' field are included (gen_parser needs parse specs).
+        
+        Also generates _value() helper functions for longhands referenced by
+        shorthand 'helper_longhands' fields. These are value-only parsers that
+        strip INHERIT/INITIAL/REVERT/UNSET from the parse spec.
         """
         lines = []
         lines.append("# AUTO-GENERATED from properties.toml — DO NOT EDIT")
@@ -310,6 +338,37 @@ class TomlPropertyReader:
                 lines.append(f"{prop_name}:{enum} {flag_str} {parse}")
             else:
                 lines.append(f"{prop_name}:{enum} {parse}")
+        
+        # Collect helper_longhands references from shorthands and generate
+        # _value() helper functions (value-only parsers without CSS-wide keywords)
+        value_helpers = {}  # name -> (enum, parse_spec, is_generic)
+        for prop_name, prop_data in self.toml_data.items():
+            helper_longhands = prop_data.get('helper_longhands', [])
+            for helper_name in helper_longhands:
+                if helper_name in value_helpers:
+                    continue  # Already collected
+                # Look up in generics first, then in properties
+                if helper_name in self.generics:
+                    gdata = self.generics[helper_name]
+                    enum = gdata.get('enum', 'op')
+                    parse = gdata.get('parse', '')
+                    value_helpers[helper_name] = (enum, parse, True)
+                elif helper_name in self.toml_data:
+                    pdata = self.toml_data[helper_name]
+                    enum = pdata.get('enum', '')
+                    parse = pdata.get('parse', '')
+                    value_helpers[helper_name] = (enum, parse, False)
+                else:
+                    print(f"WARNING: helper_longhands reference '{helper_name}' "
+                          f"not found in properties or generics", file=sys.stderr)
+        
+        if value_helpers:
+            lines.append("")
+            lines.append("# Value-only helpers (generated from helper_longhands)")
+            for name, (enum, parse, is_generic) in sorted(value_helpers.items()):
+                stripped = self._strip_flag_keywords(parse)
+                generic_flag = "GENERIC: " if is_generic else ""
+                lines.append(f"{name}_value:{enum} {generic_flag}{stripped}")
         
         return '\n'.join(lines) + '\n'
 

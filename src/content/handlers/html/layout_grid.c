@@ -316,13 +316,15 @@ static void get_grid_item_placement(const css_computed_style *style, int *col_st
     /* Validate: per CSS Grid spec, span values must be >= 1 */
     if (*col_span < 1) {
         NSLOG(layout, ERROR,
-              "Invalid grid col_span=%d (must be >= 1), "
-              "possible propset normalization bug", *col_span);
+            "Invalid grid col_span=%d (must be >= 1), "
+            "possible propset normalization bug",
+            *col_span);
     }
     if (*row_span < 1) {
         NSLOG(layout, ERROR,
-              "Invalid grid row_span=%d (must be >= 1), "
-              "possible propset normalization bug", *row_span);
+            "Invalid grid row_span=%d (must be >= 1), "
+            "possible propset normalization bug",
+            *row_span);
     }
 }
 
@@ -1049,6 +1051,8 @@ bool layout_grid(struct box *grid, int available_width, html_content *content)
             /* Track row heights for all spanned rows - include padding and border */
             int total_height = child->height + child->padding[TOP] + child->padding[BOTTOM] + child->border[TOP].width +
                 child->border[BOTTOM].width;
+            /* Ensure row_span is at least 1 to avoid division by zero */
+            assert(row_span >= 1 && "row_span must be at least 1");
             int height_per_row = total_height / row_span;
 
             NSLOG(layout, WARNING,

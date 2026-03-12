@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Shorthand calc() Test</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            background-color: #f0f0f0;
+            padding: 20px;
+        }
+        
+        h2 {
+            border-bottom: 2px solid #ccc;
+            padding-bottom: 5px;
+        }
+
+        .container {
+            background-color: white;
+            padding: 20px;
+            margin-bottom: 30px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+
+        /* Test 1: gap */
+        .test-gap {
+            display: flex;
+            background-color: #eee;
+            /* Using calc() to create a 20px (100px - 80px) and 40px (20px * 2) gap */
+            gap: calc(100px - 80px) calc(20px * 2);
+        }
+        .test-gap > div {
+            background-color: lightgreen;
+            padding: 10px;
+            border: 1px solid darkgreen;
+        }
+
+        /* Test 2: padding */
+        .test-padding {
+            background-color: lightblue;
+            border: 1px solid blue;
+            /* Using calc() for 10px top/bottom, 40px left/right */
+            padding: calc(20px / 2) calc(10px * 4);
+        }
+
+        /* Test 3: padding-inline */
+        .test-padding-inline {
+            background-color: lightyellow;
+            border: 1px solid orange;
+            /* Using calc() for 50px left, 10px right */
+            padding-inline: calc(100px / 2) calc(20px - 10px);
+        }
+
+        /* Test 4: margin */
+        .test-margin-container {
+            background-color: #ddd;
+            border: 1px solid #aaa;
+            padding: 1px; /* Prevents margin collapse */
+        }
+        .test-margin {
+            background-color: lightcoral;
+            border: 1px solid darkred;
+            /* 30px margin all around computed via calc */
+            margin: calc(10px + 20px);
+        }
+
+        /* Test 5: margin-inline */
+        .test-margin-inline-container {
+            background-color: #ddd;
+            border: 1px solid #aaa;
+        }
+        .test-margin-inline {
+            background-color: lightpink;
+            border: 1px solid deeppink;
+            /* 40px left margin, 60px right margin via calc */
+            margin-inline: calc(20px * 2) calc(100px - 40px);
+        }
+
+        /* Test 6: border-width */
+        .test-border-width {
+            background-color: #fff;
+            border-style: solid;
+            border-color: black;
+            padding: 10px;
+            /* top: 5px, right: 10px, bottom: 15px, left: 20px */
+            border-width: calc(10px / 2) calc(5px + 5px) calc(30px / 2) calc(4 * 5px);
+        }
+    </style>
+</head>
+<body>
+    <h1>Shorthand Property calc() Tests</h1>
+    <p>This file tests the ability to parse and evaluate calc() expressions inside shorthand properties.</p>
+
+    <div class="container">
+        <h2>1. gap: calc(100px - 80px) calc(20px * 2)</h2>
+        <p>Should show a 20px vertical gap and a 40px horizontal gap between the flex items.</p>
+        <div class="test-gap">
+            <div>Item 1</div>
+            <div>Item 2</div>
+            <div>Item 3</div>
+        </div>
+    </div>
+
+    <div class="container">
+        <h2>2. padding: calc(20px / 2) calc(10px * 4)</h2>
+        <p>Should show 10px padding on top/bottom and 40px padding on left/right inside the blue box.</p>
+        <div class="test-padding">
+            This text should have padding around it applied via calc().
+        </div>
+    </div>
+
+    <div class="container">
+        <h2>3. padding-inline: calc(100px / 2) calc(20px - 10px)</h2>
+        <p>Should show 50px padding on the left and 10px padding on the right inside the yellow box.</p>
+        <div class="test-padding-inline">
+            This text has padding on left/right via margin-inline and calc().
+        </div>
+    </div>
+
+    <div class="container">
+        <h2>4. margin: calc(10px + 20px)</h2>
+        <p>The red box should have a 30px margin on all sides separated from the grey outline.</p>
+        <div class="test-margin-container">
+            <div class="test-margin">
+                This box has margin around it applied via calc().
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <h2>5. margin-inline: calc(20px * 2) calc(100px - 40px)</h2>
+        <p>The pink box should have a 40px margin on the left and 60px margin on the right.</p>
+        <div class="test-margin-inline-container">
+            <div class="test-margin-inline">
+                This box has horizontal margin applied via calc().
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <h2>6. border-width: calc(10px / 2) calc(5px + 5px) calc(30px / 2) calc(4 * 5px)</h2>
+        <p>The white box should have borders of different thicknesses: Top 5px, Right 10px, Bottom 15px, Left 20px.</p>
+        <div class="test-border-width">
+            This box has border-width applied via calc().
+        </div>
+    </div>
+
+</body>
+</html>

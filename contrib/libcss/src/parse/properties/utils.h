@@ -166,6 +166,22 @@ css_error css__parse_margin_side(
 css_error css__parse_padding_side(
     css_language *c, const parserutils_vector *vector, int32_t *ctx, css_style *result, enum css_properties_e op);
 
+/* Value-only helpers (auto-generated, no inherit/initial/revert/unset) */
+css_error css__parse_padding_side_value(
+    css_language *c, const parserutils_vector *vector, int32_t *ctx, css_style *result, enum css_properties_e op);
+
+css_error css__parse_margin_side_value(
+    css_language *c, const parserutils_vector *vector, int32_t *ctx, css_style *result, enum css_properties_e op);
+
+css_error css__parse_border_side_width_value(
+    css_language *c, const parserutils_vector *vector, int32_t *ctx, css_style *result, enum css_properties_e op);
+
+css_error css__parse_row_gap_value(
+    css_language *c, const parserutils_vector *vector, int32_t *ctx, css_style *result);
+
+css_error css__parse_column_gap_value(
+    css_language *c, const parserutils_vector *vector, int32_t *ctx, css_style *result);
+
 
 css_error css__parse_list_style_type_value(css_language *c, const css_token *token, uint16_t *value);
 

@@ -29,131 +29,97 @@
  */
 css_error css__parse_margin(css_language *c, const parserutils_vector *vector, int32_t *ctx, css_style *result)
 {
-    int32_t orig_ctx = *ctx;
-    int prev_ctx;
-    const css_token *token;
-    uint16_t side_val[4];
-    css_fixed side_length[4];
-    uint32_t side_unit[4];
-    uint32_t side_count = 0;
-    bool match;
-    css_error error;
-    enum flag_value flag_value;
+	int32_t orig_ctx = *ctx;
+	const css_token *token;
+	css_error error;
+	enum flag_value flag_value;
 
-    /* Firstly, handle inherit */
-    token = parserutils_vector_peek(vector, *ctx);
-    if (token == NULL)
-        return CSS_INVALID;
+	/* Firstly, handle inherit */
+	token = parserutils_vector_peek(vector, *ctx);
+	if (token == NULL)
+		return CSS_INVALID;
 
-    flag_value = get_css_flag_value(c, token);
+	flag_value = get_css_flag_value(c, token);
 
-    if (flag_value != FLAG_VALUE__NONE) {
-        error = css_stylesheet_style_flag_value(result, flag_value, CSS_PROP_MARGIN_TOP);
-        if (error != CSS_OK)
-            return error;
+	if (flag_value != FLAG_VALUE__NONE) {
+		error = css_stylesheet_style_flag_value(result, flag_value, CSS_PROP_MARGIN_TOP);
+		if (error != CSS_OK)
+			return error;
 
-        error = css_stylesheet_style_flag_value(result, flag_value, CSS_PROP_MARGIN_RIGHT);
-        if (error != CSS_OK)
-            return error;
+		error = css_stylesheet_style_flag_value(result, flag_value, CSS_PROP_MARGIN_RIGHT);
+		if (error != CSS_OK)
+			return error;
 
-        error = css_stylesheet_style_flag_value(result, flag_value, CSS_PROP_MARGIN_BOTTOM);
-        if (error != CSS_OK)
-            return error;
+		error = css_stylesheet_style_flag_value(result, flag_value, CSS_PROP_MARGIN_BOTTOM);
+		if (error != CSS_OK)
+			return error;
 
-        error = css_stylesheet_style_flag_value(result, flag_value, CSS_PROP_MARGIN_LEFT);
-        if (error == CSS_OK)
-            parserutils_vector_iterate(vector, ctx);
+		error = css_stylesheet_style_flag_value(result, flag_value, CSS_PROP_MARGIN_LEFT);
+		if (error == CSS_OK)
+			parserutils_vector_iterate(vector, ctx);
 
-        return error;
-    }
+		return error;
+	}
 
-    /* Attempt to parse up to 4 widths */
-    do {
-        prev_ctx = *ctx;
+	/* Parse up to 4 values using auto-generated value helpers.
+	 * css__parse_margin_side_value handles: auto keyword, calc(),
+	 * plain length/percentage. */
+	int32_t side_ctx[4];
+	uint32_t side_count = 0;
+	static const enum css_properties_e side_ops[4] = {
+		CSS_PROP_MARGIN_TOP, CSS_PROP_MARGIN_RIGHT,
+		CSS_PROP_MARGIN_BOTTOM, CSS_PROP_MARGIN_LEFT
+	};
 
-        flag_value = get_css_flag_value(c, token);
+	while (side_count < 4) {
+		consumeWhitespace(vector, ctx);
+		token = parserutils_vector_peek(vector, *ctx);
+		if (token == NULL || token->type == CSS_TOKEN_EOF)
+			break;
+		if (side_count > 0) {
+			flag_value = get_css_flag_value(c, token);
+			if (flag_value != FLAG_VALUE__NONE)
+				break;
+		}
 
-        if ((token != NULL) && flag_value != FLAG_VALUE__NONE) {
-            *ctx = orig_ctx;
-            return CSS_INVALID;
-        }
+		side_ctx[side_count] = *ctx;
+		int32_t temp_ctx = *ctx;
+		error = css__parse_margin_side_value(c, vector, &temp_ctx, result, side_ops[side_count]);
+		if (error != CSS_OK) {
+			if (side_count == 0) {
+				*ctx = orig_ctx;
+				return error;
+			}
+			break;
+		}
+		*ctx = temp_ctx;
+		side_count++;
+	}
 
-        if ((token->type == CSS_TOKEN_IDENT) &&
-            (lwc_string_caseless_isequal(token->idata, c->strings[AUTO], &match) == lwc_error_ok && match)) {
-            side_val[side_count] = MARGIN_AUTO;
-            parserutils_vector_iterate(vector, ctx);
-            error = CSS_OK;
-        } else {
-            side_val[side_count] = MARGIN_SET;
+	if (side_count == 0) {
+		*ctx = orig_ctx;
+		return CSS_INVALID;
+	}
 
-            error = css__parse_unit_specifier(
-                c, vector, ctx, UNIT_PX, &side_length[side_count], &side_unit[side_count]);
-            if (error == CSS_OK) {
-                if (side_unit[side_count] & UNIT_ANGLE || side_unit[side_count] & UNIT_TIME ||
-                    side_unit[side_count] & UNIT_FREQ) {
-                    *ctx = orig_ctx;
-                    return CSS_INVALID;
-                }
-            }
-        }
+	/* Replay missing sides per CSS box model rules */
+	static const int replay_map[4][4] = {
+		{-1, 0, 0, 0},   /* 1 value:  T=0, R=0, B=0, L=0 */
+		{-1, -1, 0, 1},  /* 2 values: T=0, R=1, B=0, L=1 */
+		{-1, -1, -1, 1}, /* 3 values: T=0, R=1, B=2, L=1 */
+		{-1, -1, -1, -1}, /* 4 values: all done */
+	};
 
-        if (error == CSS_OK) {
-            side_count++;
+	for (uint32_t i = side_count; i < 4; i++) {
+		int src = replay_map[side_count - 1][i];
+		if (src >= 0) {
+			int32_t replay = side_ctx[src];
+			error = css__parse_margin_side_value(c, vector, &replay, result, side_ops[i]);
+			if (error != CSS_OK) {
+				*ctx = orig_ctx;
+				return error;
+			}
+		}
+	}
 
-            consumeWhitespace(vector, ctx);
-
-            token = parserutils_vector_peek(vector, *ctx);
-        } else {
-            /* Forcibly cause loop to exit */
-            token = NULL;
-        }
-    } while ((*ctx != prev_ctx) && (token != NULL) && (side_count < 4));
-
-
-#define SIDE_APPEND(OP, NUM)                                                                                           \
-    error = css__stylesheet_style_appendOPV(result, (OP), 0, side_val[(NUM)]);                                         \
-    if (error != CSS_OK)                                                                                               \
-        break;                                                                                                         \
-    if (side_val[(NUM)] == MARGIN_SET) {                                                                               \
-        error = css__stylesheet_style_append(result, side_length[(NUM)]);                                              \
-        if (error != CSS_OK)                                                                                           \
-            break;                                                                                                     \
-        error = css__stylesheet_style_append(result, side_unit[(NUM)]);                                                \
-        if (error != CSS_OK)                                                                                           \
-            break;                                                                                                     \
-    }
-
-    switch (side_count) {
-    case 1:
-        SIDE_APPEND(CSS_PROP_MARGIN_TOP, 0);
-        SIDE_APPEND(CSS_PROP_MARGIN_RIGHT, 0);
-        SIDE_APPEND(CSS_PROP_MARGIN_BOTTOM, 0);
-        SIDE_APPEND(CSS_PROP_MARGIN_LEFT, 0);
-        break;
-    case 2:
-        SIDE_APPEND(CSS_PROP_MARGIN_TOP, 0);
-        SIDE_APPEND(CSS_PROP_MARGIN_RIGHT, 1);
-        SIDE_APPEND(CSS_PROP_MARGIN_BOTTOM, 0);
-        SIDE_APPEND(CSS_PROP_MARGIN_LEFT, 1);
-        break;
-    case 3:
-        SIDE_APPEND(CSS_PROP_MARGIN_TOP, 0);
-        SIDE_APPEND(CSS_PROP_MARGIN_RIGHT, 1);
-        SIDE_APPEND(CSS_PROP_MARGIN_BOTTOM, 2);
-        SIDE_APPEND(CSS_PROP_MARGIN_LEFT, 1);
-        break;
-    case 4:
-        SIDE_APPEND(CSS_PROP_MARGIN_TOP, 0);
-        SIDE_APPEND(CSS_PROP_MARGIN_RIGHT, 1);
-        SIDE_APPEND(CSS_PROP_MARGIN_BOTTOM, 2);
-        SIDE_APPEND(CSS_PROP_MARGIN_LEFT, 3);
-        break;
-    default:
-        error = CSS_INVALID;
-    }
-
-    if (error != CSS_OK)
-        *ctx = orig_ctx;
-
-    return error;
+	return CSS_OK;
 }

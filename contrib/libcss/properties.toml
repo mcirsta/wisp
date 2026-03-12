@@ -1426,6 +1426,7 @@ inherited = false
 shorthand = true
 cascade = "none"
 computed = "none"
+helper_longhands = ["margin_side"]
 
 [padding_inline]
 enum = "CSS_PROP_PADDING_INLINE"
@@ -1433,6 +1434,7 @@ inherited = false
 shorthand = true
 cascade = "none"
 computed = "none"
+helper_longhands = ["padding_side"]
 
 [align_content]
 enum = "CSS_PROP_ALIGN_CONTENT"
@@ -1814,6 +1816,7 @@ inherited = false
 shorthand = true
 cascade = "none"
 computed = "none"
+helper_longhands = ["border_side_width"]
 
 [column_rule]
 enum = "CSS_PROP_COLUMN_RULE"
@@ -1863,6 +1866,7 @@ inherited = false
 shorthand = true
 cascade = "none"
 computed = "none"
+helper_longhands = ["row_gap", "column_gap"]
 
 [grid_area]
 enum = "CSS_PROP_GRID_AREA"
@@ -1905,6 +1909,7 @@ inherited = false
 shorthand = true
 cascade = "none"
 computed = "none"
+helper_longhands = ["margin_side"]
 
 [max_block_size]
 enum = "CSS_PROP_MAX_HEIGHT"
@@ -1954,6 +1959,7 @@ inherited = false
 shorthand = true
 cascade = "none"
 computed = "none"
+helper_longhands = ["padding_side"]
 
 [pause]
 enum = "CSS_PROP_PAUSE"

@@ -425,6 +425,28 @@ css_error css__resolve_var_property(
     /* Step 2: Look up the property handler by name via gperf */
     const struct css_prop_entry *entry = css_prop_lookup(
         lwc_string_data(prop_name), lwc_string_length(prop_name));
+    
+    fprintf(stderr, "VAR_RESOLVE: prop='%s' raw='%.*s'\n",
+        lwc_string_data(prop_name),
+        (int)lwc_string_length(raw_value), lwc_string_data(raw_value));
+    
+    /* Dump resolved tokens */
+    {
+        size_t dbg_len = 0;
+        parserutils_vector_get_length(tokens, &dbg_len);
+        fprintf(stderr, "VAR_RESOLVE: resolved %zu tokens for '%s':\n",
+            dbg_len, lwc_string_data(prop_name));
+        int32_t dbg_ctx = 0;
+        const css_token *dbg_t;
+        while ((dbg_t = parserutils_vector_iterate(tokens, &dbg_ctx)) != NULL) {
+            if (dbg_t->type == CSS_TOKEN_EOF) break;
+            fprintf(stderr, "  token[%d] type=%d data='%.*s'\n",
+                dbg_ctx - 1, dbg_t->type,
+                (int)(dbg_t->idata ? lwc_string_length(dbg_t->idata) : dbg_t->data.len),
+                dbg_t->idata ? lwc_string_data(dbg_t->idata) : (const char*)dbg_t->data.data);
+        }
+    }
+    
     if (entry == NULL) {
         fprintf(stderr, "  Property '%s' not found in gperf table\n",
             lwc_string_data(prop_name));
@@ -443,6 +465,8 @@ css_error css__resolve_var_property(
 
     int32_t token_ctx = 0;
     error = entry->handler(&resolve_lang, tokens, &token_ctx, result_style);
+    fprintf(stderr, "VAR_RESOLVE: handler for '%s' returned %d\n",
+        lwc_string_data(prop_name), error);
     if (error != CSS_OK) {
         css__stylesheet_style_destroy(result_style);
         result_style = NULL;
