@@ -1424,11 +1424,15 @@ parse = '''IDENT:( INHERIT: INITIAL: REVERT: UNSET: CONTENT_BOX:0,BOX_SIZING_CON
 enum = "CSS_PROP_MARGIN_INLINE"
 inherited = false
 shorthand = true
+cascade = "none"
+computed = "none"
 
 [padding_inline]
 enum = "CSS_PROP_PADDING_INLINE"
 inherited = false
 shorthand = true
+cascade = "none"
+computed = "none"
 
 [align_content]
 enum = "CSS_PROP_ALIGN_CONTENT"
