@@ -10,6 +10,10 @@
 #include <strings.h>
 #include <math.h>
 
+/* Undefine macros that conflict with CSS enums (e.g. on MinGW) */
+#undef OVERFLOW
+#undef UNDERFLOW
+
 #include "utils/parserutilserror.h"
 #include "bytecode/bytecode.h"
 #include "bytecode/opcodes.h"

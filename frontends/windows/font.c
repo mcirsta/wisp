@@ -1341,7 +1341,6 @@ static nserror win32_font_position(
                     fit = i - 1;
                     break;
                 }
-                prev_width = cumulative;
                 fit = i;
             }
             SIZE fs;

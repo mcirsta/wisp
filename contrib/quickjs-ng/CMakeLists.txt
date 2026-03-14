@@ -155,6 +155,7 @@ xoption(QJS_BUILD_CLI "Build the qjs executable" OFF)
 xoption(QJS_BUILD_CLI_STATIC "Build a static qjs executable" OFF)
 xoption(QJS_BUILD_CLI_WITH_MIMALLOC "Build the qjs executable with mimalloc" OFF)
 xoption(QJS_BUILD_CLI_WITH_STATIC_MIMALLOC "Build the qjs executable with mimalloc (statically linked)" OFF)
+xoption(QJS_BUILD_QJSC "Build the qjsc executable" OFF)
 xoption(QJS_DISABLE_PARSER "Disable JS source code parser" OFF)
 xoption(QJS_ENABLE_ASAN "Enable AddressSanitizer (ASan)" OFF)
 xoption(QJS_ENABLE_MSAN "Enable MemorySanitizer (MSan)" OFF)
@@ -310,6 +311,7 @@ endif()
 # QuickJS bytecode compiler
 #
 
+if(QJS_BUILD_QJSC)
 add_executable(qjsc
     qjsc.c
 )
@@ -317,6 +319,7 @@ add_qjs_libc_if_needed(qjsc)
 add_static_if_needed(qjsc)
 target_compile_definitions(qjsc PRIVATE ${qjs_defines})
 target_link_libraries(qjsc qjs)
+endif()
 
 
 # QuickJS CLI
@@ -466,10 +469,12 @@ if(QJS_BUILD_LIBC)
     install(FILES quickjs-libc.h DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 endif()
 if(NOT IOS AND NOT TVOS AND NOT WATCHOS)
-    if(QJS_BUILD_CLI)
-    install(TARGETS qjs_exe RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
-    endif()
-    install(TARGETS qjsc RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+     if(QJS_BUILD_CLI)
+     install(TARGETS qjs_exe RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+     endif()
+     if(QJS_BUILD_QJSC)
+     install(TARGETS qjsc RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+     endif()
 endif()
 install(TARGETS qjs EXPORT qjsConfig
         RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
