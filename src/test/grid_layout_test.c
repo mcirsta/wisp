@@ -267,11 +267,11 @@ css_computed_grid_template_rows(const css_computed_style *style, int32_t *n_trac
 }
 
 /* Mock css_computed_column_gap to return normal (no gap) */
-uint8_t css_computed_column_gap(const css_computed_style *style, css_fixed *length, css_unit *unit)
+uint8_t css_computed_column_gap(const css_computed_style *style, css_fixed_or_calc *length, css_unit *unit)
 {
     /* Return normal gap (0) for test */
     if (length)
-        *length = 0;
+        *length = (css_fixed_or_calc)0;
     if (unit)
         *unit = CSS_UNIT_PX;
     return CSS_COLUMN_GAP_NORMAL;
@@ -571,10 +571,10 @@ uint8_t css_computed_grid_auto_flow(const css_computed_style *style)
 }
 
 /* Mock css_computed_row_gap */
-uint8_t css_computed_row_gap(const css_computed_style *style, css_fixed *length, css_unit *unit)
+uint8_t css_computed_row_gap(const css_computed_style *style, css_fixed_or_calc *length, css_unit *unit)
 {
     if (length)
-        *length = 0;
+        *length = (css_fixed_or_calc)0;
     if (unit)
         *unit = CSS_UNIT_PX;
     return CSS_ROW_GAP_NORMAL;

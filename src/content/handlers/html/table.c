@@ -46,6 +46,29 @@ struct border {
     css_unit unit; /**< border-width units */
 };
 
+static inline bool table__length_to_px_int(const css_computed_style *style, const css_unit_ctx *unit_len_ctx,
+    css_fixed_or_calc length, css_unit unit, int *px_out)
+{
+    if (unit == CSS_UNIT_CALC) {
+        return css_computed_length_to_px(style, unit_len_ctx, -1, length, unit, px_out) == CSS_OK;
+    }
+    *px_out = FIXTOINT(css_unit_len2device_px(style, unit_len_ctx, length.value, unit));
+    return true;
+}
+
+static inline css_fixed table__length_to_fixed_px(
+    const css_computed_style *style, const css_unit_ctx *unit_len_ctx, css_fixed_or_calc length, css_unit unit)
+{
+    if (unit == CSS_UNIT_CALC) {
+        int px = 0;
+        if (css_computed_length_to_px(style, unit_len_ctx, -1, length, unit, &px) == CSS_OK) {
+            return INTTOFIX(px);
+        }
+        return 0;
+    }
+    return css_unit_len2device_px(style, unit_len_ctx, length.value, unit);
+}
+
 
 /**
  * Determine if a border style is more eyecatching than another
@@ -195,8 +218,12 @@ table_cell_top_process_table(const css_unit_ctx *unit_len_ctx, struct box *table
     /* Top border of table */
     b.style = css_computed_border_top_style(table->style);
     b.color = css_computed_border_top_color(table->style, &b.c);
-    css_computed_border_top_width(table->style, &b.width, &b.unit);
-    b.width = css_unit_len2device_px(table->style, unit_len_ctx, b.width, b.unit);
+    {
+        css_fixed_or_calc bw = (css_fixed_or_calc)0;
+        css_unit bu = CSS_UNIT_PX;
+        css_computed_border_top_width(table->style, &bw, &bu);
+        b.width = table__length_to_fixed_px(table->style, unit_len_ctx, bw, bu);
+    }
     b.unit = CSS_UNIT_PX;
     b_src = BOX_TABLE;
 
@@ -229,8 +256,12 @@ static bool table_cell_top_process_row(
     /* Bottom border of row */
     b.style = css_computed_border_bottom_style(row->style);
     b.color = css_computed_border_bottom_color(row->style, &b.c);
-    css_computed_border_bottom_width(row->style, &b.width, &b.unit);
-    b.width = css_unit_len2device_px(row->style, unit_len_ctx, b.width, b.unit);
+    {
+        css_fixed_or_calc bw = (css_fixed_or_calc)0;
+        css_unit bu = CSS_UNIT_PX;
+        css_computed_border_bottom_width(row->style, &bw, &bu);
+        b.width = table__length_to_fixed_px(row->style, unit_len_ctx, bw, bu);
+    }
     b.unit = CSS_UNIT_PX;
     b_src = BOX_TABLE_ROW;
 
@@ -243,8 +274,12 @@ static bool table_cell_top_process_row(
         /* Row is empty, so consider its top border */
         b.style = css_computed_border_top_style(row->style);
         b.color = css_computed_border_top_color(row->style, &b.c);
-        css_computed_border_top_width(row->style, &b.width, &b.unit);
-        b.width = css_unit_len2device_px(row->style, unit_len_ctx, b.width, b.unit);
+        {
+            css_fixed_or_calc bw = (css_fixed_or_calc)0;
+            css_unit bu = CSS_UNIT_PX;
+            css_computed_border_top_width(row->style, &bw, &bu);
+            b.width = table__length_to_fixed_px(row->style, unit_len_ctx, bw, bu);
+        }
         b.unit = CSS_UNIT_PX;
         b_src = BOX_TABLE_ROW;
 
@@ -276,8 +311,12 @@ static bool table_cell_top_process_row(
                 /* Consider bottom border */
                 b.style = css_computed_border_bottom_style(c->style);
                 b.color = css_computed_border_bottom_color(c->style, &b.c);
-                css_computed_border_bottom_width(c->style, &b.width, &b.unit);
-                b.width = css_unit_len2device_px(c->style, unit_len_ctx, b.width, b.unit);
+                {
+                    css_fixed_or_calc bw = (css_fixed_or_calc)0;
+                    css_unit bu = CSS_UNIT_PX;
+                    css_computed_border_bottom_width(c->style, &bw, &bu);
+                    b.width = table__length_to_fixed_px(c->style, unit_len_ctx, bw, bu);
+                }
                 b.unit = CSS_UNIT_PX;
                 b_src = BOX_TABLE_CELL;
 
@@ -322,8 +361,12 @@ static bool table_cell_top_process_group(
     /* Bottom border of group */
     b.style = css_computed_border_bottom_style(group->style);
     b.color = css_computed_border_bottom_color(group->style, &b.c);
-    css_computed_border_bottom_width(group->style, &b.width, &b.unit);
-    b.width = css_unit_len2device_px(group->style, unit_len_ctx, b.width, b.unit);
+    {
+        css_fixed_or_calc bw = (css_fixed_or_calc)0;
+        css_unit bu = CSS_UNIT_PX;
+        css_computed_border_bottom_width(group->style, &bw, &bu);
+        b.width = table__length_to_fixed_px(group->style, unit_len_ctx, bw, bu);
+    }
     b.unit = CSS_UNIT_PX;
     b_src = BOX_TABLE_ROW_GROUP;
 
@@ -347,8 +390,12 @@ static bool table_cell_top_process_group(
         /* Group is empty, so consider its top border */
         b.style = css_computed_border_top_style(group->style);
         b.color = css_computed_border_top_color(group->style, &b.c);
-        css_computed_border_top_width(group->style, &b.width, &b.unit);
-        b.width = css_unit_len2device_px(group->style, unit_len_ctx, b.width, b.unit);
+        {
+            css_fixed_or_calc bw = (css_fixed_or_calc)0;
+            css_unit bu = CSS_UNIT_PX;
+            css_computed_border_top_width(group->style, &bw, &bu);
+            b.width = table__length_to_fixed_px(group->style, unit_len_ctx, bw, bu);
+        }
         b.unit = CSS_UNIT_PX;
         b_src = BOX_TABLE_ROW_GROUP;
 
@@ -380,8 +427,12 @@ static void table_used_left_border_for_cell(const css_unit_ctx *unit_len_ctx, st
     /* Initialise to computed left border for cell */
     a.style = css_computed_border_left_style(cell->style);
     a.color = css_computed_border_left_color(cell->style, &a.c);
-    css_computed_border_left_width(cell->style, &a.width, &a.unit);
-    a.width = css_unit_len2device_px(cell->style, unit_len_ctx, a.width, a.unit);
+    {
+        css_fixed_or_calc bw = (css_fixed_or_calc)0;
+        css_unit bu = CSS_UNIT_PX;
+        css_computed_border_left_width(cell->style, &bw, &bu);
+        a.width = table__length_to_fixed_px(cell->style, unit_len_ctx, bw, bu);
+    }
     a.unit = CSS_UNIT_PX;
     a_src = BOX_TABLE_CELL;
 
@@ -410,8 +461,12 @@ static void table_used_left_border_for_cell(const css_unit_ctx *unit_len_ctx, st
 
         b.style = css_computed_border_right_style(prev->style);
         b.color = css_computed_border_right_color(prev->style, &b.c);
-        css_computed_border_right_width(prev->style, &b.width, &b.unit);
-        b.width = css_unit_len2device_px(prev->style, unit_len_ctx, b.width, b.unit);
+        {
+            css_fixed_or_calc bw = (css_fixed_or_calc)0;
+            css_unit bu = CSS_UNIT_PX;
+            css_computed_border_right_width(prev->style, &bw, &bu);
+            b.width = table__length_to_fixed_px(prev->style, unit_len_ctx, bw, bu);
+        }
         b.unit = CSS_UNIT_PX;
         b_src = BOX_TABLE_CELL;
 
@@ -430,8 +485,12 @@ static void table_used_left_border_for_cell(const css_unit_ctx *unit_len_ctx, st
             /* Spanned rows -- consider their left border */
             b.style = css_computed_border_left_style(row->style);
             b.color = css_computed_border_left_color(row->style, &b.c);
-            css_computed_border_left_width(row->style, &b.width, &b.unit);
-            b.width = css_unit_len2device_px(row->style, unit_len_ctx, b.width, b.unit);
+            {
+                css_fixed_or_calc bw = (css_fixed_or_calc)0;
+                css_unit bu = CSS_UNIT_PX;
+                css_computed_border_left_width(row->style, &bw, &bu);
+                b.width = table__length_to_fixed_px(row->style, unit_len_ctx, bw, bu);
+            }
             b.unit = CSS_UNIT_PX;
             b_src = BOX_TABLE_ROW;
 
@@ -448,8 +507,12 @@ static void table_used_left_border_for_cell(const css_unit_ctx *unit_len_ctx, st
         /* Row group -- consider its left border */
         b.style = css_computed_border_left_style(group->style);
         b.color = css_computed_border_left_color(group->style, &b.c);
-        css_computed_border_left_width(group->style, &b.width, &b.unit);
-        b.width = css_unit_len2device_px(group->style, unit_len_ctx, b.width, b.unit);
+        {
+            css_fixed_or_calc bw = (css_fixed_or_calc)0;
+            css_unit bu = CSS_UNIT_PX;
+            css_computed_border_left_width(group->style, &bw, &bu);
+            b.width = table__length_to_fixed_px(group->style, unit_len_ctx, bw, bu);
+        }
         b.unit = CSS_UNIT_PX;
         b_src = BOX_TABLE_ROW_GROUP;
 
@@ -461,8 +524,12 @@ static void table_used_left_border_for_cell(const css_unit_ctx *unit_len_ctx, st
         /* The table itself -- consider its left border */
         b.style = css_computed_border_left_style(table->style);
         b.color = css_computed_border_left_color(table->style, &b.c);
-        css_computed_border_left_width(table->style, &b.width, &b.unit);
-        b.width = css_unit_len2device_px(table->style, unit_len_ctx, b.width, b.unit);
+        {
+            css_fixed_or_calc bw = (css_fixed_or_calc)0;
+            css_unit bu = CSS_UNIT_PX;
+            css_computed_border_left_width(table->style, &bw, &bu);
+            b.width = table__length_to_fixed_px(table->style, unit_len_ctx, bw, bu);
+        }
         b.unit = CSS_UNIT_PX;
         b_src = BOX_TABLE;
 
@@ -495,16 +562,24 @@ static void table_used_top_border_for_cell(const css_unit_ctx *unit_len_ctx, str
     /* Initialise to computed top border for cell */
     a.style = css_computed_border_top_style(cell->style);
     css_computed_border_top_color(cell->style, &a.c);
-    css_computed_border_top_width(cell->style, &a.width, &a.unit);
-    a.width = css_unit_len2device_px(cell->style, unit_len_ctx, a.width, a.unit);
+    {
+        css_fixed_or_calc bw = (css_fixed_or_calc)0;
+        css_unit bu = CSS_UNIT_PX;
+        css_computed_border_top_width(cell->style, &bw, &bu);
+        a.width = table__length_to_fixed_px(cell->style, unit_len_ctx, bw, bu);
+    }
     a.unit = CSS_UNIT_PX;
     a_src = BOX_TABLE_CELL;
 
     /* Top border of row */
     b.style = css_computed_border_top_style(row->style);
     css_computed_border_top_color(row->style, &b.c);
-    css_computed_border_top_width(row->style, &b.width, &b.unit);
-    b.width = css_unit_len2device_px(row->style, unit_len_ctx, b.width, b.unit);
+    {
+        css_fixed_or_calc bw = (css_fixed_or_calc)0;
+        css_unit bu = CSS_UNIT_PX;
+        css_computed_border_top_width(row->style, &bw, &bu);
+        b.width = table__length_to_fixed_px(row->style, unit_len_ctx, bw, bu);
+    }
     b.unit = CSS_UNIT_PX;
     b_src = BOX_TABLE_ROW;
 
@@ -534,8 +609,12 @@ static void table_used_top_border_for_cell(const css_unit_ctx *unit_len_ctx, str
         /* Top border of row group */
         b.style = css_computed_border_top_style(group->style);
         b.color = css_computed_border_top_color(group->style, &b.c);
-        css_computed_border_top_width(group->style, &b.width, &b.unit);
-        b.width = css_unit_len2device_px(group->style, unit_len_ctx, b.width, b.unit);
+        {
+            css_fixed_or_calc bw = (css_fixed_or_calc)0;
+            css_unit bu = CSS_UNIT_PX;
+            css_computed_border_top_width(group->style, &bw, &bu);
+            b.width = table__length_to_fixed_px(group->style, unit_len_ctx, bw, bu);
+        }
         b.unit = CSS_UNIT_PX;
         b_src = BOX_TABLE_ROW_GROUP;
 
@@ -583,8 +662,12 @@ static void table_used_right_border_for_cell(const css_unit_ctx *unit_len_ctx, s
     /* Initialise to computed right border for cell */
     a.style = css_computed_border_right_style(cell->style);
     css_computed_border_right_color(cell->style, &a.c);
-    css_computed_border_right_width(cell->style, &a.width, &a.unit);
-    a.width = css_unit_len2device_px(cell->style, unit_len_ctx, a.width, a.unit);
+    {
+        css_fixed_or_calc bw = (css_fixed_or_calc)0;
+        css_unit bu = CSS_UNIT_PX;
+        css_computed_border_right_width(cell->style, &bw, &bu);
+        a.width = table__length_to_fixed_px(cell->style, unit_len_ctx, bw, bu);
+    }
     a.unit = CSS_UNIT_PX;
     a_src = BOX_TABLE_CELL;
 
@@ -604,8 +687,12 @@ static void table_used_right_border_for_cell(const css_unit_ctx *unit_len_ctx, s
             /* Spanned rows -- consider their right border */
             b.style = css_computed_border_right_style(row->style);
             b.color = css_computed_border_right_color(row->style, &b.c);
-            css_computed_border_right_width(row->style, &b.width, &b.unit);
-            b.width = css_unit_len2device_px(row->style, unit_len_ctx, b.width, b.unit);
+            {
+                css_fixed_or_calc bw = (css_fixed_or_calc)0;
+                css_unit bu = CSS_UNIT_PX;
+                css_computed_border_right_width(row->style, &bw, &bu);
+                b.width = table__length_to_fixed_px(row->style, unit_len_ctx, bw, bu);
+            }
             b.unit = CSS_UNIT_PX;
             b_src = BOX_TABLE_ROW;
 
@@ -622,8 +709,12 @@ static void table_used_right_border_for_cell(const css_unit_ctx *unit_len_ctx, s
         /* Row group -- consider its right border */
         b.style = css_computed_border_right_style(group->style);
         b.color = css_computed_border_right_color(group->style, &b.c);
-        css_computed_border_right_width(group->style, &b.width, &b.unit);
-        b.width = css_unit_len2device_px(group->style, unit_len_ctx, b.width, b.unit);
+        {
+            css_fixed_or_calc bw = (css_fixed_or_calc)0;
+            css_unit bu = CSS_UNIT_PX;
+            css_computed_border_right_width(group->style, &bw, &bu);
+            b.width = table__length_to_fixed_px(group->style, unit_len_ctx, bw, bu);
+        }
         b.unit = CSS_UNIT_PX;
         b_src = BOX_TABLE_ROW_GROUP;
 
@@ -635,8 +726,12 @@ static void table_used_right_border_for_cell(const css_unit_ctx *unit_len_ctx, s
         /* The table itself -- consider its right border */
         b.style = css_computed_border_right_style(table->style);
         b.color = css_computed_border_right_color(table->style, &b.c);
-        css_computed_border_right_width(table->style, &b.width, &b.unit);
-        b.width = css_unit_len2device_px(table->style, unit_len_ctx, b.width, b.unit);
+        {
+            css_fixed_or_calc bw = (css_fixed_or_calc)0;
+            css_unit bu = CSS_UNIT_PX;
+            css_computed_border_right_width(table->style, &bw, &bu);
+            b.width = table__length_to_fixed_px(table->style, unit_len_ctx, bw, bu);
+        }
         b.unit = CSS_UNIT_PX;
         b_src = BOX_TABLE;
 
@@ -669,8 +764,12 @@ static void table_used_bottom_border_for_cell(const css_unit_ctx *unit_len_ctx, 
     /* Initialise to computed bottom border for cell */
     a.style = css_computed_border_bottom_style(cell->style);
     css_computed_border_bottom_color(cell->style, &a.c);
-    css_computed_border_bottom_width(cell->style, &a.width, &a.unit);
-    a.width = css_unit_len2device_px(cell->style, unit_len_ctx, a.width, a.unit);
+    {
+        css_fixed_or_calc bw = (css_fixed_or_calc)0;
+        css_unit bu = CSS_UNIT_PX;
+        css_computed_border_bottom_width(cell->style, &bw, &bu);
+        a.width = table__length_to_fixed_px(cell->style, unit_len_ctx, bw, bu);
+    }
     a.unit = CSS_UNIT_PX;
     a_src = BOX_TABLE_CELL;
 
@@ -693,8 +792,12 @@ static void table_used_bottom_border_for_cell(const css_unit_ctx *unit_len_ctx, 
         /* Bottom border of row */
         b.style = css_computed_border_bottom_style(row->style);
         b.color = css_computed_border_bottom_color(row->style, &b.c);
-        css_computed_border_bottom_width(row->style, &b.width, &b.unit);
-        b.width = css_unit_len2device_px(row->style, unit_len_ctx, b.width, b.unit);
+        {
+            css_fixed_or_calc bw = (css_fixed_or_calc)0;
+            css_unit bu = CSS_UNIT_PX;
+            css_computed_border_bottom_width(row->style, &bw, &bu);
+            b.width = table__length_to_fixed_px(row->style, unit_len_ctx, bw, bu);
+        }
         b.unit = CSS_UNIT_PX;
         b_src = BOX_TABLE_ROW;
 
@@ -706,8 +809,12 @@ static void table_used_bottom_border_for_cell(const css_unit_ctx *unit_len_ctx, 
         /* Row group -- consider its bottom border */
         b.style = css_computed_border_bottom_style(group->style);
         b.color = css_computed_border_bottom_color(group->style, &b.c);
-        css_computed_border_bottom_width(group->style, &b.width, &b.unit);
-        b.width = css_unit_len2device_px(group->style, unit_len_ctx, b.width, b.unit);
+        {
+            css_fixed_or_calc bw = (css_fixed_or_calc)0;
+            css_unit bu = CSS_UNIT_PX;
+            css_computed_border_bottom_width(group->style, &bw, &bu);
+            b.width = table__length_to_fixed_px(group->style, unit_len_ctx, bw, bu);
+        }
         b.unit = CSS_UNIT_PX;
         b_src = BOX_TABLE_ROW_GROUP;
 
@@ -719,8 +826,12 @@ static void table_used_bottom_border_for_cell(const css_unit_ctx *unit_len_ctx, 
         /* The table itself -- consider its bottom border */
         b.style = css_computed_border_bottom_style(table->style);
         b.color = css_computed_border_bottom_color(table->style, &b.c);
-        css_computed_border_bottom_width(table->style, &b.width, &b.unit);
-        b.width = css_unit_len2device_px(table->style, unit_len_ctx, b.width, b.unit);
+        {
+            css_fixed_or_calc bw = (css_fixed_or_calc)0;
+            css_unit bu = CSS_UNIT_PX;
+            css_computed_border_bottom_width(table->style, &bw, &bu);
+            b.width = table__length_to_fixed_px(table->style, unit_len_ctx, bw, bu);
+        }
         b.unit = CSS_UNIT_PX;
         b_src = BOX_TABLE;
 
@@ -762,7 +873,7 @@ bool table_calculate_column_types(const css_unit_ctx *unit_len_ctx, struct box *
         for (row = row_group->children; row; row = row->next)
             for (cell = row->children; cell; cell = cell->next) {
                 enum css_width_e type;
-                css_fixed value = 0;
+                css_fixed_or_calc value = (css_fixed_or_calc)0;
                 css_unit unit = CSS_UNIT_PX;
 
                 assert(cell->type == BOX_TABLE_CELL);
@@ -782,11 +893,20 @@ bool table_calculate_column_types(const css_unit_ctx *unit_len_ctx, struct box *
                 /* fixed width takes priority over any other
                  * width type */
                 if (col[i].type != COLUMN_WIDTH_FIXED && type == CSS_WIDTH_SET && unit != CSS_UNIT_PCT) {
-                    col[i].type = COLUMN_WIDTH_FIXED;
-                    col[i].width = FIXTOINT(css_unit_len2device_px(cell->style, unit_len_ctx, value, unit));
-                    if (col[i].width < 0)
-                        col[i].width = 0;
-                    continue;
+                    int px = 0;
+                    bool ok = true;
+                    if (unit == CSS_UNIT_CALC) {
+                        ok = table__length_to_px_int(cell->style, unit_len_ctx, value, unit, &px);
+                    } else {
+                        px = FIXTOINT(css_unit_len2device_px(cell->style, unit_len_ctx, value.value, unit));
+                    }
+                    if (ok) {
+                        col[i].type = COLUMN_WIDTH_FIXED;
+                        col[i].width = px;
+                        if (col[i].width < 0)
+                            col[i].width = 0;
+                        continue;
+                    }
                 }
 
                 if (col[i].type != COLUMN_WIDTH_UNKNOWN)
@@ -794,7 +914,7 @@ bool table_calculate_column_types(const css_unit_ctx *unit_len_ctx, struct box *
 
                 if (type == CSS_WIDTH_SET && unit == CSS_UNIT_PCT) {
                     col[i].type = COLUMN_WIDTH_PERCENT;
-                    col[i].width = FIXTOINT(value);
+                    col[i].width = FIXTOINT(value.value);
                     if (col[i].width < 0)
                         col[i].width = 0;
                 } else if (type == CSS_WIDTH_AUTO) {
@@ -809,7 +929,7 @@ bool table_calculate_column_types(const css_unit_ctx *unit_len_ctx, struct box *
                 unsigned int fixed_columns = 0, percent_columns = 0, auto_columns = 0, unknown_columns = 0;
                 int fixed_width = 0, percent_width = 0;
                 enum css_width_e type;
-                css_fixed value = 0;
+                css_fixed_or_calc value = (css_fixed_or_calc)0;
                 css_unit unit = CSS_UNIT_PX;
 
                 if (cell->columns == 1)
@@ -844,15 +964,22 @@ bool table_calculate_column_types(const css_unit_ctx *unit_len_ctx, struct box *
                  * columns are fixed or unknown width, split
                  * extra width among unknown columns */
                 if (type == CSS_WIDTH_SET && unit != CSS_UNIT_PCT && fixed_columns + unknown_columns == cell->columns) {
-                    int width = (FIXTOFLT(css_unit_len2device_px(cell->style, unit_len_ctx, value, unit)) -
-                                    fixed_width) /
-                        unknown_columns;
-                    if (width < 0)
-                        width = 0;
-                    for (j = 0; j != cell->columns; j++) {
-                        if (col[i + j].type == COLUMN_WIDTH_UNKNOWN) {
-                            col[i + j].type = COLUMN_WIDTH_FIXED;
-                            col[i + j].width = width;
+                    int total_width = 0;
+                    bool ok = true;
+                    if (unit == CSS_UNIT_CALC) {
+                        ok = table__length_to_px_int(cell->style, unit_len_ctx, value, unit, &total_width);
+                    } else {
+                        total_width = FIXTOINT(css_unit_len2device_px(cell->style, unit_len_ctx, value.value, unit));
+                    }
+                    if (ok) {
+                        int width = (total_width - fixed_width) / unknown_columns;
+                        if (width < 0)
+                            width = 0;
+                        for (j = 0; j != cell->columns; j++) {
+                            if (col[i + j].type == COLUMN_WIDTH_UNKNOWN) {
+                                col[i + j].type = COLUMN_WIDTH_FIXED;
+                                col[i + j].width = width;
+                            }
                         }
                     }
                 }
@@ -860,7 +987,7 @@ bool table_calculate_column_types(const css_unit_ctx *unit_len_ctx, struct box *
                 /* as above for percentage width */
                 if (type == CSS_WIDTH_SET && unit == CSS_UNIT_PCT &&
                     percent_columns + unknown_columns == cell->columns) {
-                    int width = (FIXTOFLT(value) - percent_width) / unknown_columns;
+                    int width = (FIXTOFLT(value.value) - percent_width) / unknown_columns;
                     if (width < 0)
                         width = 0;
                     for (j = 0; j != cell->columns; j++) {
@@ -903,32 +1030,40 @@ void table_used_border_for_cell(const css_unit_ctx *unit_len_ctx, struct box *ce
     assert(cell->type == BOX_TABLE_CELL);
 
     if (css_computed_border_collapse(cell->style) == CSS_BORDER_COLLAPSE_SEPARATE) {
-        css_fixed width = 0;
+        css_fixed_or_calc width = (css_fixed_or_calc)0;
         css_unit unit = CSS_UNIT_PX;
 
         /* Left border */
         cell->border[LEFT].style = css_computed_border_left_style(cell->style);
         css_computed_border_left_color(cell->style, &cell->border[LEFT].c);
         css_computed_border_left_width(cell->style, &width, &unit);
-        cell->border[LEFT].width = FIXTOINT(css_unit_len2device_px(cell->style, unit_len_ctx, width, unit));
+        if (!table__length_to_px_int(cell->style, unit_len_ctx, width, unit, &cell->border[LEFT].width)) {
+            cell->border[LEFT].width = 0;
+        }
 
         /* Top border */
         cell->border[TOP].style = css_computed_border_top_style(cell->style);
         css_computed_border_top_color(cell->style, &cell->border[TOP].c);
         css_computed_border_top_width(cell->style, &width, &unit);
-        cell->border[TOP].width = FIXTOINT(css_unit_len2device_px(cell->style, unit_len_ctx, width, unit));
+        if (!table__length_to_px_int(cell->style, unit_len_ctx, width, unit, &cell->border[TOP].width)) {
+            cell->border[TOP].width = 0;
+        }
 
         /* Right border */
         cell->border[RIGHT].style = css_computed_border_right_style(cell->style);
         css_computed_border_right_color(cell->style, &cell->border[RIGHT].c);
         css_computed_border_right_width(cell->style, &width, &unit);
-        cell->border[RIGHT].width = FIXTOINT(css_unit_len2device_px(cell->style, unit_len_ctx, width, unit));
+        if (!table__length_to_px_int(cell->style, unit_len_ctx, width, unit, &cell->border[RIGHT].width)) {
+            cell->border[RIGHT].width = 0;
+        }
 
         /* Bottom border */
         cell->border[BOTTOM].style = css_computed_border_bottom_style(cell->style);
         css_computed_border_bottom_color(cell->style, &cell->border[BOTTOM].c);
         css_computed_border_bottom_width(cell->style, &width, &unit);
-        cell->border[BOTTOM].width = FIXTOINT(css_unit_len2device_px(cell->style, unit_len_ctx, width, unit));
+        if (!table__length_to_px_int(cell->style, unit_len_ctx, width, unit, &cell->border[BOTTOM].width)) {
+            cell->border[BOTTOM].width = 0;
+        }
     } else {
         /* Left border */
         table_used_left_border_for_cell(unit_len_ctx, cell);

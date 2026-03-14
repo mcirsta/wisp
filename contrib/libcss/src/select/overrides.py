@@ -87,7 +87,7 @@ static inline css_error set_clip(
 overrides['get']['line_height'] = '''\
 static inline uint8_t get_line_height(
 		const css_computed_style *style,
-		css_fixed *length, css_unit *unit)
+		css_fixed_or_calc *length, css_unit *unit)
 {
 	uint32_t bits = style->i.bits[LINE_HEIGHT_INDEX];
 	bits &= LINE_HEIGHT_MASK;

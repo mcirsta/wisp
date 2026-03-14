@@ -134,7 +134,7 @@ void font_plot_style_from_css(
     const css_unit_ctx *unit_len_ctx, const css_computed_style *css, plot_font_style_t *fstyle)
 {
     lwc_string **families;
-    css_fixed length = 0;
+    css_fixed_or_calc length = (css_fixed_or_calc)0;
     css_unit unit = CSS_UNIT_PX;
     css_color col;
 
@@ -142,8 +142,19 @@ void font_plot_style_from_css(
     fstyle->families = families;
 
     css_computed_font_size(css, &length, &unit);
-    fstyle->size = FIXTOINT(
-        FMUL(css_unit_font_size_len2pt(css, unit_len_ctx, length, unit), INTTOFIX(PLOT_STYLE_SCALE)));
+    if (unit == CSS_UNIT_CALC) {
+        int px = 0;
+        if (css_computed_length_to_px(css, unit_len_ctx, -1, length, unit, &px) == CSS_OK) {
+            css_fixed css_px = css_unit_device2css_px(INTTOFIX(px), unit_len_ctx->device_dpi);
+            fstyle->size = FIXTOINT(
+                FMUL(css_unit_font_size_len2pt(css, unit_len_ctx, css_px, CSS_UNIT_PX), INTTOFIX(PLOT_STYLE_SCALE)));
+        } else {
+            fstyle->size = 0;
+        }
+    } else {
+        fstyle->size = FIXTOINT(
+            FMUL(css_unit_font_size_len2pt(css, unit_len_ctx, length.value, unit), INTTOFIX(PLOT_STYLE_SCALE)));
+    }
 
     /* Clamp font size to configured minimum */
     if (fstyle->size < (nsoption_int(font_min_size) * PLOT_STYLE_SCALE) / 10)
@@ -157,11 +168,20 @@ void font_plot_style_from_css(
     fstyle->background = 0;
 
     /* letter-spacing */
-    css_fixed ls_length = 0;
+    css_fixed_or_calc ls_length = (css_fixed_or_calc)0;
     css_unit ls_unit = CSS_UNIT_PX;
     uint8_t ls_type = css_computed_letter_spacing(css, &ls_length, &ls_unit);
     if (ls_type == CSS_LETTER_SPACING_SET) {
-        fstyle->letter_spacing = FIXTOINT(css_unit_len2device_px(css, unit_len_ctx, ls_length, ls_unit));
+        if (ls_unit == CSS_UNIT_CALC) {
+            int px = 0;
+            if (css_computed_length_to_px(css, unit_len_ctx, -1, ls_length, ls_unit, &px) == CSS_OK) {
+                fstyle->letter_spacing = px;
+            } else {
+                fstyle->letter_spacing = 0;
+            }
+        } else {
+            fstyle->letter_spacing = FIXTOINT(css_unit_len2device_px(css, unit_len_ctx, ls_length.value, ls_unit));
+        }
     } else {
         fstyle->letter_spacing = 0;
     }

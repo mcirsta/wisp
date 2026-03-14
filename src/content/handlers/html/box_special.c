@@ -1272,7 +1272,7 @@ static bool box_image(dom_node *n, html_content *content, struct box *box, bool 
     nsurl *url;
     enum css_width_e wtype;
     enum css_height_e htype;
-    css_fixed value = 0;
+    css_fixed_or_calc value = (css_fixed_or_calc)0;
     css_unit wunit = CSS_UNIT_PX;
     css_unit hunit = CSS_UNIT_PX;
 
@@ -1338,7 +1338,8 @@ static bool box_image(dom_node *n, html_content *content, struct box *box, bool 
     wtype = css_computed_width(box->style, &value, &wunit);
     htype = css_computed_height(box->style, &value, &hunit);
 
-    if (wtype == CSS_WIDTH_SET && wunit != CSS_UNIT_PCT && htype == CSS_HEIGHT_SET && hunit != CSS_UNIT_PCT) {
+    if (wtype == CSS_WIDTH_SET && wunit != CSS_UNIT_PCT && wunit != CSS_UNIT_CALC &&
+        htype == CSS_HEIGHT_SET && hunit != CSS_UNIT_PCT && hunit != CSS_UNIT_CALC) {
         /* We know the dimensions the image will be shown at
          * before it's fetched. */
         box->flags |= REPLACE_DIM;
@@ -1980,14 +1981,14 @@ bool convert_special_elements(dom_node *node, html_content *content, struct box 
                     box->flags |= IS_REPLACED;
 
                     {
-                        css_fixed value = 0;
+                        css_fixed_or_calc value = (css_fixed_or_calc)0;
                         css_unit wunit = CSS_UNIT_PX;
                         css_unit hunit = CSS_UNIT_PX;
                         enum css_width_e wtype = css_computed_width(box->style, &value, &wunit);
                         enum css_height_e htype = css_computed_height(box->style, &value, &hunit);
 
-                        if (wtype == CSS_WIDTH_SET && wunit != CSS_UNIT_PCT && htype == CSS_HEIGHT_SET &&
-                            hunit != CSS_UNIT_PCT) {
+                        if (wtype == CSS_WIDTH_SET && wunit != CSS_UNIT_PCT && wunit != CSS_UNIT_CALC &&
+                            htype == CSS_HEIGHT_SET && hunit != CSS_UNIT_PCT && hunit != CSS_UNIT_CALC) {
                             /* We know the dimensions the image will be shown at
                              * before it's fetched. */
                             box->flags |= REPLACE_DIM;
@@ -2057,13 +2058,30 @@ bool convert_special_elements(dom_node *node, html_content *content, struct box 
                             }
 
                             /* Get computed CSS stroke-width */
-                            css_fixed sw_len;
+                            css_fixed_or_calc sw_len = (css_fixed_or_calc)0;
                             css_unit sw_unit;
                             uint8_t sw_type = css_computed_stroke_width(box->style, &sw_len, &sw_unit);
-                            if (sw_type == CSS_STROKE_WIDTH_SET && sw_len != INTTOFIX(1)) {
-                                /* Only inject if not the default 1px */
-                                nsfmt_float(stroke_width_str, sizeof(stroke_width_str), "%.2f", FIXTOFLT(sw_len));
-                                css_ctx.stroke_width = stroke_width_str;
+                            if (sw_type == CSS_STROKE_WIDTH_SET) {
+                                bool have_len = true;
+                                css_fixed sw_fixed = 0;
+                                if (sw_unit == CSS_UNIT_CALC) {
+                                    int px = 0;
+                                    if (css_computed_length_to_px(box->style, &content->unit_len_ctx, -1, sw_len,
+                                            sw_unit, &px) == CSS_OK) {
+                                        sw_fixed = INTTOFIX(px);
+                                    } else {
+                                        have_len = false;
+                                    }
+                                } else {
+                                    sw_fixed = sw_len.value;
+                                }
+
+                                if (have_len && sw_fixed != INTTOFIX(1)) {
+                                    /* Only inject if not the default 1px */
+                                    nsfmt_float(
+                                        stroke_width_str, sizeof(stroke_width_str), "%.2f", FIXTOFLT(sw_fixed));
+                                    css_ctx.stroke_width = stroke_width_str;
+                                }
                             }
 
                             /* Get computed CSS stroke-opacity */

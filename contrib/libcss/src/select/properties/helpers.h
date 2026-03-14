@@ -26,16 +26,24 @@ css_error css__cascade_border_style(
     uint32_t opv, css_style *style, css_select_state *state, css_error (*fun)(css_computed_style *, uint8_t));
 css_error css__cascade_border_width(uint32_t opv, css_style *style, css_select_state *state,
     css_error (*fun)(css_computed_style *, uint8_t, css_fixed, css_unit));
+css_error css__cascade_border_width_calc(uint32_t opv, css_style *style, css_select_state *state,
+    css_error (*fun)(css_computed_style *, uint8_t, css_fixed_or_calc, css_unit));
 css_error css__cascade_length_auto(uint32_t opv, css_style *style, css_select_state *state,
     css_error (*fun)(css_computed_style *, uint8_t, css_fixed, css_unit));
 css_error css__cascade_length_auto_calc(uint32_t opv, css_style *style, css_select_state *state,
     css_error (*fun)(css_computed_style *, uint8_t, css_fixed_or_calc, css_unit));
 css_error css__cascade_length_normal(uint32_t opv, css_style *style, css_select_state *state,
     css_error (*fun)(css_computed_style *, uint8_t, css_fixed, css_unit));
+css_error css__cascade_length_normal_calc(uint32_t opv, css_style *style, css_select_state *state,
+    css_error (*fun)(css_computed_style *, uint8_t, css_fixed_or_calc, css_unit));
 css_error css__cascade_length_none(uint32_t opv, css_style *style, css_select_state *state,
     css_error (*fun)(css_computed_style *, uint8_t, css_fixed, css_unit));
+css_error css__cascade_length_none_calc(uint32_t opv, css_style *style, css_select_state *state,
+    css_error (*fun)(css_computed_style *, uint8_t, css_fixed_or_calc, css_unit));
 css_error css__cascade_length(uint32_t opv, css_style *style, css_select_state *state,
     css_error (*fun)(css_computed_style *, uint8_t, css_fixed, css_unit));
+css_error css__cascade_length_calc(uint32_t opv, css_style *style, css_select_state *state,
+    css_error (*fun)(css_computed_style *, uint8_t, css_fixed_or_calc, css_unit));
 css_error css__cascade_number(uint32_t opv, css_style *style, css_select_state *state,
     css_error (*fun)(css_computed_style *, uint8_t, css_fixed));
 css_error css__cascade_page_break_after_before_inside(

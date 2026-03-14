@@ -166,13 +166,23 @@ static void dump_css_unit(FILE *stream, css_fixed val, css_unit unit)
     }
 }
 
+static void dump_css_length_or_calc(FILE *stream, css_fixed_or_calc val, css_unit unit)
+{
+    if (unit == CSS_UNIT_CALC) {
+        fprintf(stream, "calc()");
+        return;
+    }
+    dump_css_unit(stream, val.value, unit);
+}
+
 /* exported interface documented in content/handlers/css/dump.h */
 void nscss_dump_computed_style(FILE *stream, const css_computed_style *style)
 {
     uint8_t val;
     css_color color = 0;
     lwc_string *url = NULL;
-    css_fixed len1 = 0, len2 = 0;
+    css_fixed_or_calc len1 = (css_fixed_or_calc)0, len2 = (css_fixed_or_calc)0;
+    css_fixed num = 0;
     css_unit unit1 = CSS_UNIT_PX, unit2 = CSS_UNIT_PX;
     css_computed_clip_rect rect = {
         0, 0, 0, 0, CSS_UNIT_PX, CSS_UNIT_PX, CSS_UNIT_PX, CSS_UNIT_PX, true, true, true, true};
@@ -218,9 +228,9 @@ void nscss_dump_computed_style(FILE *stream, const css_computed_style *style)
     val = css_computed_background_position(style, &len1, &unit1, &len2, &unit2);
     if (val == CSS_BACKGROUND_POSITION_SET) {
         fprintf(stream, "background-position: ");
-        dump_css_unit(stream, len1, unit1);
+        dump_css_length_or_calc(stream, len1, unit1);
         fprintf(stream, " ");
-        dump_css_unit(stream, len2, unit2);
+        dump_css_length_or_calc(stream, len2, unit2);
         fprintf(stream, " ");
     }
 
@@ -261,9 +271,9 @@ void nscss_dump_computed_style(FILE *stream, const css_computed_style *style)
     val = css_computed_border_spacing(style, &len1, &unit1, &len2, &unit2);
     if (val == CSS_BORDER_SPACING_SET) {
         fprintf(stream, "border-spacing: ");
-        dump_css_unit(stream, len1, unit1);
+        dump_css_length_or_calc(stream, len1, unit1);
         fprintf(stream, " ");
-        dump_css_unit(stream, len2, unit2);
+        dump_css_length_or_calc(stream, len2, unit2);
         fprintf(stream, " ");
     }
 
@@ -469,7 +479,7 @@ void nscss_dump_computed_style(FILE *stream, const css_computed_style *style)
         break;
     case CSS_BORDER_WIDTH_WIDTH:
         fprintf(stream, "border-top-width: ");
-        dump_css_unit(stream, len1, unit1);
+        dump_css_length_or_calc(stream, len1, unit1);
         fprintf(stream, " ");
         break;
     default:
@@ -490,7 +500,7 @@ void nscss_dump_computed_style(FILE *stream, const css_computed_style *style)
         break;
     case CSS_BORDER_WIDTH_WIDTH:
         fprintf(stream, "border-right-width: ");
-        dump_css_unit(stream, len1, unit1);
+        dump_css_length_or_calc(stream, len1, unit1);
         fprintf(stream, " ");
         break;
     default:
@@ -511,7 +521,7 @@ void nscss_dump_computed_style(FILE *stream, const css_computed_style *style)
         break;
     case CSS_BORDER_WIDTH_WIDTH:
         fprintf(stream, "border-bottom-width: ");
-        dump_css_unit(stream, len1, unit1);
+        dump_css_length_or_calc(stream, len1, unit1);
         fprintf(stream, " ");
         break;
     default:
@@ -532,7 +542,7 @@ void nscss_dump_computed_style(FILE *stream, const css_computed_style *style)
         break;
     case CSS_BORDER_WIDTH_WIDTH:
         fprintf(stream, "border-left-width: ");
-        dump_css_unit(stream, len1, unit1);
+        dump_css_length_or_calc(stream, len1, unit1);
         fprintf(stream, " ");
         break;
     default:
@@ -547,7 +557,7 @@ void nscss_dump_computed_style(FILE *stream, const css_computed_style *style)
         break;
     case CSS_BOTTOM_SET:
         fprintf(stream, "bottom: ");
-        dump_css_unit(stream, len1, unit1);
+        dump_css_length_or_calc(stream, len1, unit1);
         fprintf(stream, " ");
         break;
     default:
@@ -959,7 +969,7 @@ void nscss_dump_computed_style(FILE *stream, const css_computed_style *style)
     case CSS_FONT_SIZE_DIMENSION:
         fprintf(stream, "font-size: ");
 
-        dump_css_unit(stream, len1, unit1);
+        dump_css_length_or_calc(stream, len1, unit1);
 
         fprintf(stream, " ");
         break;
@@ -1051,7 +1061,7 @@ void nscss_dump_computed_style(FILE *stream, const css_computed_style *style)
     case CSS_HEIGHT_SET:
         fprintf(stream, "height: ");
 
-        dump_css_unit(stream, len1, unit1);
+        dump_css_length_or_calc(stream, len1, unit1);
 
         fprintf(stream, " ");
         break;
@@ -1068,7 +1078,7 @@ void nscss_dump_computed_style(FILE *stream, const css_computed_style *style)
     case CSS_LEFT_SET:
         fprintf(stream, "left: ");
 
-        dump_css_unit(stream, len1, unit1);
+        dump_css_length_or_calc(stream, len1, unit1);
 
         fprintf(stream, " ");
         break;
@@ -1085,7 +1095,7 @@ void nscss_dump_computed_style(FILE *stream, const css_computed_style *style)
     case CSS_LETTER_SPACING_SET:
         fprintf(stream, "letter-spacing: ");
 
-        dump_css_unit(stream, len1, unit1);
+        dump_css_length_or_calc(stream, len1, unit1);
 
         fprintf(stream, " ");
         break;
@@ -1102,14 +1112,14 @@ void nscss_dump_computed_style(FILE *stream, const css_computed_style *style)
     case CSS_LINE_HEIGHT_NUMBER:
         fprintf(stream, "line-height: ");
 
-        dump_css_fixed(stream, len1);
+        dump_css_fixed(stream, len1.value);
 
         fprintf(stream, " ");
         break;
     case CSS_LINE_HEIGHT_DIMENSION:
         fprintf(stream, "line-height: ");
 
-        dump_css_unit(stream, len1, unit1);
+        dump_css_length_or_calc(stream, len1, unit1);
 
         fprintf(stream, " ");
         break;
@@ -1199,7 +1209,7 @@ void nscss_dump_computed_style(FILE *stream, const css_computed_style *style)
     case CSS_MARGIN_SET:
         fprintf(stream, "margin-top: ");
 
-        dump_css_unit(stream, len1, unit1);
+        dump_css_length_or_calc(stream, len1, unit1);
 
         fprintf(stream, " ");
         break;
@@ -1216,7 +1226,7 @@ void nscss_dump_computed_style(FILE *stream, const css_computed_style *style)
     case CSS_MARGIN_SET:
         fprintf(stream, "margin-right: ");
 
-        dump_css_unit(stream, len1, unit1);
+        dump_css_length_or_calc(stream, len1, unit1);
 
         fprintf(stream, " ");
         break;
@@ -1233,7 +1243,7 @@ void nscss_dump_computed_style(FILE *stream, const css_computed_style *style)
     case CSS_MARGIN_SET:
         fprintf(stream, "margin-bottom: ");
 
-        dump_css_unit(stream, len1, unit1);
+        dump_css_length_or_calc(stream, len1, unit1);
 
         fprintf(stream, " ");
         break;
@@ -1250,7 +1260,7 @@ void nscss_dump_computed_style(FILE *stream, const css_computed_style *style)
     case CSS_MARGIN_SET:
         fprintf(stream, "margin-left: ");
 
-        dump_css_unit(stream, len1, unit1);
+        dump_css_length_or_calc(stream, len1, unit1);
 
         fprintf(stream, " ");
         break;
@@ -1267,7 +1277,7 @@ void nscss_dump_computed_style(FILE *stream, const css_computed_style *style)
     case CSS_MAX_HEIGHT_SET:
         fprintf(stream, "max-height: ");
 
-        dump_css_unit(stream, len1, unit1);
+        dump_css_length_or_calc(stream, len1, unit1);
 
         fprintf(stream, " ");
         break;
@@ -1284,7 +1294,7 @@ void nscss_dump_computed_style(FILE *stream, const css_computed_style *style)
     case CSS_MAX_WIDTH_SET:
         fprintf(stream, "max-width: ");
 
-        dump_css_unit(stream, len1, unit1);
+        dump_css_length_or_calc(stream, len1, unit1);
 
         fprintf(stream, " ");
         break;
@@ -1298,7 +1308,7 @@ void nscss_dump_computed_style(FILE *stream, const css_computed_style *style)
     case CSS_MIN_HEIGHT_SET:
         fprintf(stream, "min-height: ");
 
-        dump_css_unit(stream, len1, unit1);
+        dump_css_length_or_calc(stream, len1, unit1);
 
         fprintf(stream, " ");
         break;
@@ -1312,7 +1322,7 @@ void nscss_dump_computed_style(FILE *stream, const css_computed_style *style)
     case CSS_MIN_WIDTH_SET:
         fprintf(stream, "min-width: ");
 
-        dump_css_unit(stream, len1, unit1);
+        dump_css_length_or_calc(stream, len1, unit1);
 
         fprintf(stream, " ");
         break;
@@ -1321,12 +1331,12 @@ void nscss_dump_computed_style(FILE *stream, const css_computed_style *style)
     }
 
     /* opacity */
-    val = css_computed_opacity(style, &len1);
+    val = css_computed_opacity(style, &num);
     switch (val) {
     case CSS_OPACITY_SET:
         fprintf(stream, "opacity: ");
 
-        dump_css_fixed(stream, len1);
+        dump_css_fixed(stream, num);
 
         fprintf(stream, " ");
         break;
@@ -1396,7 +1406,7 @@ void nscss_dump_computed_style(FILE *stream, const css_computed_style *style)
     case CSS_OUTLINE_WIDTH_WIDTH:
         fprintf(stream, "outline-width: ");
 
-        dump_css_unit(stream, len1, unit1);
+        dump_css_length_or_calc(stream, len1, unit1);
 
         fprintf(stream, " ");
         break;
@@ -1448,7 +1458,7 @@ void nscss_dump_computed_style(FILE *stream, const css_computed_style *style)
     case CSS_PADDING_SET:
         fprintf(stream, "padding-top: ");
 
-        dump_css_unit(stream, len1, unit1);
+        dump_css_length_or_calc(stream, len1, unit1);
 
         fprintf(stream, " ");
         break;
@@ -1462,7 +1472,7 @@ void nscss_dump_computed_style(FILE *stream, const css_computed_style *style)
     case CSS_PADDING_SET:
         fprintf(stream, "padding-right: ");
 
-        dump_css_unit(stream, len1, unit1);
+        dump_css_length_or_calc(stream, len1, unit1);
 
         fprintf(stream, " ");
         break;
@@ -1476,7 +1486,7 @@ void nscss_dump_computed_style(FILE *stream, const css_computed_style *style)
     case CSS_PADDING_SET:
         fprintf(stream, "padding-bottom: ");
 
-        dump_css_unit(stream, len1, unit1);
+        dump_css_length_or_calc(stream, len1, unit1);
 
         fprintf(stream, " ");
         break;
@@ -1490,7 +1500,7 @@ void nscss_dump_computed_style(FILE *stream, const css_computed_style *style)
     case CSS_PADDING_SET:
         fprintf(stream, "padding-left: ");
 
-        dump_css_unit(stream, len1, unit1);
+        dump_css_length_or_calc(stream, len1, unit1);
 
         fprintf(stream, " ");
         break;
@@ -1548,7 +1558,7 @@ void nscss_dump_computed_style(FILE *stream, const css_computed_style *style)
     case CSS_RIGHT_SET:
         fprintf(stream, "right: ");
 
-        dump_css_unit(stream, len1, unit1);
+        dump_css_length_or_calc(stream, len1, unit1);
 
         fprintf(stream, " ");
         break;
@@ -1629,7 +1639,7 @@ void nscss_dump_computed_style(FILE *stream, const css_computed_style *style)
     case CSS_TEXT_INDENT_SET:
         fprintf(stream, "text-indent: ");
 
-        dump_css_unit(stream, len1, unit1);
+        dump_css_length_or_calc(stream, len1, unit1);
 
         fprintf(stream, " ");
         break;
@@ -1665,7 +1675,7 @@ void nscss_dump_computed_style(FILE *stream, const css_computed_style *style)
     case CSS_TOP_SET:
         fprintf(stream, "top: ");
 
-        dump_css_unit(stream, len1, unit1);
+        dump_css_length_or_calc(stream, len1, unit1);
 
         fprintf(stream, " ");
         break;
@@ -1719,7 +1729,7 @@ void nscss_dump_computed_style(FILE *stream, const css_computed_style *style)
     case CSS_VERTICAL_ALIGN_SET:
         fprintf(stream, "vertical-align: ");
 
-        dump_css_unit(stream, len1, unit1);
+        dump_css_length_or_calc(stream, len1, unit1);
 
         fprintf(stream, " ");
         break;
@@ -1774,7 +1784,7 @@ void nscss_dump_computed_style(FILE *stream, const css_computed_style *style)
     case CSS_WIDTH_SET:
         fprintf(stream, "width: ");
 
-        dump_css_unit(stream, len1, unit1);
+        dump_css_length_or_calc(stream, len1, unit1);
 
         fprintf(stream, " ");
         break;
@@ -1791,7 +1801,7 @@ void nscss_dump_computed_style(FILE *stream, const css_computed_style *style)
     case CSS_WORD_SPACING_SET:
         fprintf(stream, "word-spacing: ");
 
-        dump_css_unit(stream, len1, unit1);
+        dump_css_length_or_calc(stream, len1, unit1);
 
         fprintf(stream, " ");
         break;

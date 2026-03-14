@@ -413,4 +413,7 @@ if(WISP_ENABLE_TESTS)
 
   add_libcss_test_exe(libcss_var_resolve ${LIBCSSL_TEST_DIR}/var-resolve.c)
   add_test(NAME libcss_var_resolve COMMAND libcss_var_resolve)
+
+  add_libcss_test_exe(libcss_calc_props ${LIBCSSL_TEST_DIR}/calc_props.c)
+  add_test(NAME libcss_calc_props COMMAND libcss_calc_props)
 endif()

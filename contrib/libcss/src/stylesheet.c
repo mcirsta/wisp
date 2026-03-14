@@ -103,7 +103,7 @@ css_error css__stylesheet_string_get(css_stylesheet *sheet, uint32_t string_numb
     /* External string numbers = index into vector + 1 */
     string_number--;
 
-    if (string_number > sheet->string_vector_c) {
+    if (string_number >= sheet->string_vector_c) {
         return CSS_BADPARM;
     }
 

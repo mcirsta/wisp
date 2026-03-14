@@ -4,12 +4,26 @@
  */
 
 #include <assert.h>
+#include <stdio.h>
 #include <string.h>
 
 #include "bytecode/bytecode.h"
 #include "bytecode/opcodes.h"
 #include "parse/properties/properties.h"
 #include "parse/properties/utils.h"
+
+#ifndef NDEBUG
+#define TRACE_UNSUPPORTED_CALC(c, token, prop)                                                                          \
+    do {                                                                                                                \
+        bool match__ = false;                                                                                           \
+        if ((token) != NULL && (token)->type == CSS_TOKEN_FUNCTION && (token)->idata != NULL &&                       \
+            lwc_string_caseless_isequal((token)->idata, (c)->strings[CALC], &match__) == lwc_error_ok && match__) {   \
+            fprintf(stderr, "[LibCSS Error] unsupported calc() for %s\n", (prop));                                    \
+        }                                                                                                               \
+    } while (0)
+#else
+#define TRACE_UNSUPPORTED_CALC(c, token, prop) ((void)0)
+#endif
 
 /**
  * Parse stroke-width
@@ -51,6 +65,7 @@ css_error css__parse_stroke_width(css_language *c, const parserutils_vector *vec
 
         error = css__parse_unit_specifier(c, vector, ctx, UNIT_PX, &length, &unit);
         if (error != CSS_OK) {
+            TRACE_UNSUPPORTED_CALC(c, token, "stroke-width");
             *ctx = orig_ctx;
             return error;
         }

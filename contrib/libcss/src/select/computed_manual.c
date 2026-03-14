@@ -14,12 +14,12 @@
 #include "select/propget.h"
 #include "select/unit.h"
 
-uint8_t css_computed_outline_width(const css_computed_style *style, css_fixed *length, css_unit *unit)
+uint8_t css_computed_outline_width(const css_computed_style *style, css_fixed_or_calc *length, css_unit *unit)
 {
     /* This property is in the uncommon block, so we need to handle
      * absolute value calculation for initial value (medium) here. */
     if (get_outline_width(style, length, unit) == CSS_BORDER_WIDTH_MEDIUM) {
-        *length = INTTOFIX(2);
+        length->value = INTTOFIX(2);
         *unit = CSS_UNIT_PX;
     }
 
@@ -31,7 +31,7 @@ uint8_t css_computed_clip(const css_computed_style *style, css_computed_clip_rec
     return get_clip(style, rect);
 }
 
-uint8_t css_computed_top(const css_computed_style *style, css_fixed *length, css_unit *unit)
+uint8_t css_computed_top(const css_computed_style *style, css_fixed_or_calc *length, css_unit *unit)
 {
     uint8_t position = css_computed_position(style);
     uint8_t top = get_top(style, length, unit);
@@ -46,21 +46,28 @@ uint8_t css_computed_top(const css_computed_style *style, css_fixed *length, css
 
         if (top == CSS_TOP_AUTO && (bottom & 0x3) == CSS_BOTTOM_AUTO) {
             /* Both auto => 0px */
-            *length = 0;
+            length->value = 0;
             *unit = CSS_UNIT_PX;
+            top = CSS_TOP_SET;
         } else if (top == CSS_TOP_AUTO) {
             /* Top is auto => -bottom */
-            *length = -style->i.bottom;
-            *unit = (css_unit)(bottom >> 2);
+            css_unit bottom_unit = (css_unit)(bottom >> 2);
+            if (bottom_unit != CSS_UNIT_CALC) {
+                length->value = -style->i.bottom.value;
+                *unit = bottom_unit;
+                top = CSS_TOP_SET;
+            } else {
+                top = CSS_TOP_AUTO;
+            }
+        } else {
+            top = CSS_TOP_SET;
         }
-
-        top = CSS_TOP_SET;
     }
 
     return top;
 }
 
-uint8_t css_computed_right(const css_computed_style *style, css_fixed *length, css_unit *unit)
+uint8_t css_computed_right(const css_computed_style *style, css_fixed_or_calc *length, css_unit *unit)
 {
     uint8_t position = css_computed_position(style);
     uint8_t right = get_right(style, length, unit);
@@ -75,24 +82,30 @@ uint8_t css_computed_right(const css_computed_style *style, css_fixed *length, c
 
         if (right == CSS_RIGHT_AUTO && (left & 0x3) == CSS_LEFT_AUTO) {
             /* Both auto => 0px */
-            *length = 0;
+            length->value = 0;
             *unit = CSS_UNIT_PX;
+            right = CSS_RIGHT_SET;
         } else if (right == CSS_RIGHT_AUTO) {
             /* Right is auto => -left */
-            *length = -style->i.left;
-            *unit = (css_unit)(left >> 2);
+            css_unit left_unit = (css_unit)(left >> 2);
+            if (left_unit != CSS_UNIT_CALC) {
+                length->value = -style->i.left.value;
+                *unit = left_unit;
+                right = CSS_RIGHT_SET;
+            } else {
+                right = CSS_RIGHT_AUTO;
+            }
         } else {
             /** \todo Consider containing block's direction
              * if overconstrained */
+            right = CSS_RIGHT_SET;
         }
-
-        right = CSS_RIGHT_SET;
     }
 
     return right;
 }
 
-uint8_t css_computed_bottom(const css_computed_style *style, css_fixed *length, css_unit *unit)
+uint8_t css_computed_bottom(const css_computed_style *style, css_fixed_or_calc *length, css_unit *unit)
 {
     uint8_t position = css_computed_position(style);
     uint8_t bottom = get_bottom(style, length, unit);
@@ -107,21 +120,29 @@ uint8_t css_computed_bottom(const css_computed_style *style, css_fixed *length, 
 
         if (bottom == CSS_BOTTOM_AUTO && (top & 0x3) == CSS_TOP_AUTO) {
             /* Both auto => 0px */
-            *length = 0;
+            length->value = 0;
             *unit = CSS_UNIT_PX;
+            bottom = CSS_BOTTOM_SET;
         } else if (bottom == CSS_BOTTOM_AUTO || (top & 0x3) != CSS_TOP_AUTO) {
             /* Bottom is auto or top is not auto => -top */
-            *length = -style->i.top;
-            *unit = (css_unit)(top >> 2);
+            css_unit top_unit = (css_unit)(top >> 2);
+            if (top_unit != CSS_UNIT_CALC) {
+                length->value = -style->i.top.value;
+                *unit = top_unit;
+                bottom = CSS_BOTTOM_SET;
+            } else {
+                bottom = CSS_BOTTOM_AUTO;
+            }
         }
-
-        bottom = CSS_BOTTOM_SET;
+        if (bottom != CSS_BOTTOM_AUTO) {
+            bottom = CSS_BOTTOM_SET;
+        }
     }
 
     return bottom;
 }
 
-uint8_t css_computed_left(const css_computed_style *style, css_fixed *length, css_unit *unit)
+uint8_t css_computed_left(const css_computed_style *style, css_fixed_or_calc *length, css_unit *unit)
 {
     uint8_t position = css_computed_position(style);
     uint8_t left = get_left(style, length, unit);
@@ -136,18 +157,24 @@ uint8_t css_computed_left(const css_computed_style *style, css_fixed *length, cs
 
         if (left == CSS_LEFT_AUTO && (right & 0x3) == CSS_RIGHT_AUTO) {
             /* Both auto => 0px */
-            *length = 0;
+            length->value = 0;
             *unit = CSS_UNIT_PX;
+            left = CSS_LEFT_SET;
         } else if (left == CSS_LEFT_AUTO) {
             /* Left is auto => -right */
-            *length = -style->i.right;
-            *unit = (css_unit)(right >> 2);
+            css_unit right_unit = (css_unit)(right >> 2);
+            if (right_unit != CSS_UNIT_CALC) {
+                length->value = -style->i.right.value;
+                *unit = right_unit;
+                left = CSS_LEFT_SET;
+            } else {
+                left = CSS_LEFT_AUTO;
+            }
         } else {
             /** \todo Consider containing block's direction
              * if overconstrained */
+            left = CSS_LEFT_SET;
         }
-
-        left = CSS_LEFT_SET;
     }
 
     return left;
@@ -205,15 +232,39 @@ css_computed_width_px(const css_computed_style *style, const css_unit_ctx *unit_
     return type;
 }
 
-uint8_t css_computed_width(const css_computed_style *style, css_fixed *length, css_unit *unit)
+css_error css_computed_length_to_px(
+    const css_computed_style *style, const css_unit_ctx *unit_ctx, int available_px, css_fixed_or_calc length,
+    css_unit unit, int *px_out)
+{
+    switch (unit) {
+    case CSS_UNIT_CALC: {
+        css_fixed value = 0;
+        css_unit out_unit = CSS_UNIT_PX;
+        css_error err = css_calculator_calculate(style->calc, unit_ctx, available_px, length.calc, style, &out_unit, &value);
+        if (err != CSS_OK) {
+            return err;
+        }
+        *px_out = FIXTOINT(css_unit_css2device_px(value, unit_ctx->device_dpi));
+        return CSS_OK;
+    }
+    case CSS_UNIT_PCT:
+        if (available_px < 0) {
+            return CSS_INVALID;
+        }
+        *px_out = FPCT_OF_INT_TOINT(length.value, available_px);
+        return CSS_OK;
+    default:
+        *px_out = FIXTOINT(css_unit_len2device_px(style, unit_ctx, length.value, unit));
+        return CSS_OK;
+    }
+}
+
+uint8_t css_computed_width(const css_computed_style *style, css_fixed_or_calc *length, css_unit *unit)
 {
     css_fixed_or_calc length_ = {.value = 0};
     uint8_t ret = get_width(style, &length_, unit);
     if (ret == CSS_WIDTH_SET) {
-        if (*unit == CSS_UNIT_CALC) {
-            return CSS_WIDTH_AUTO;
-        }
-        *length = length_.value;
+        *length = length_;
     }
     return ret;
 }
@@ -230,7 +281,7 @@ uint8_t css_computed_float(const css_computed_style *style)
     return value;
 }
 
-uint8_t css_computed_min_height(const css_computed_style *style, css_fixed *length, css_unit *unit)
+uint8_t css_computed_min_height(const css_computed_style *style, css_fixed_or_calc *length, css_unit *unit)
 {
     uint8_t min_height = get_min_height(style, length, unit);
 
@@ -239,7 +290,7 @@ uint8_t css_computed_min_height(const css_computed_style *style, css_fixed *leng
 
         if (display != CSS_DISPLAY_FLEX && display != CSS_DISPLAY_INLINE_FLEX) {
             min_height = CSS_MIN_HEIGHT_SET;
-            *length = 0;
+            length->value = 0;
             *unit = CSS_UNIT_PX;
         }
     }
@@ -247,7 +298,7 @@ uint8_t css_computed_min_height(const css_computed_style *style, css_fixed *leng
     return min_height;
 }
 
-uint8_t css_computed_min_width(const css_computed_style *style, css_fixed *length, css_unit *unit)
+uint8_t css_computed_min_width(const css_computed_style *style, css_fixed_or_calc *length, css_unit *unit)
 {
     uint8_t min_width = get_min_width(style, length, unit);
 
@@ -256,7 +307,7 @@ uint8_t css_computed_min_width(const css_computed_style *style, css_fixed *lengt
 
         if (display != CSS_DISPLAY_FLEX && display != CSS_DISPLAY_INLINE_FLEX) {
             min_width = CSS_MIN_WIDTH_SET;
-            *length = 0;
+            length->value = 0;
             *unit = CSS_UNIT_PX;
         }
     }
@@ -274,12 +325,12 @@ uint8_t css_computed_column_rule_color(const css_computed_style *style, css_colo
     return CSS_COLUMN_RULE_COLOR_COLOR;
 }
 
-uint8_t css_computed_column_rule_width(const css_computed_style *style, css_fixed *length, css_unit *unit)
+uint8_t css_computed_column_rule_width(const css_computed_style *style, css_fixed_or_calc *length, css_unit *unit)
 {
     /* This property is in the uncommon block, so we need to handle
      * absolute value calculation for initial value (medium) here. */
     if (get_column_rule_width(style, length, unit) == CSS_BORDER_WIDTH_MEDIUM) {
-        *length = INTTOFIX(2);
+        length->value = INTTOFIX(2);
         *unit = CSS_UNIT_PX;
     }
 

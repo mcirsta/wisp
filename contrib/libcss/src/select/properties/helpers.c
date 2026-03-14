@@ -172,6 +172,55 @@ css_error css__cascade_border_width(uint32_t opv, css_style *style, css_select_s
     return CSS_OK;
 }
 
+css_error css__cascade_border_width_calc(uint32_t opv, css_style *style, css_select_state *state,
+    css_error (*fun)(css_computed_style *, uint8_t, css_fixed_or_calc, css_unit))
+{
+    uint16_t value = CSS_BORDER_WIDTH_INHERIT;
+    css_fixed_or_calc length = (css_fixed_or_calc)0;
+    uint32_t unit = UNIT_PX;
+    uint32_t snum = 0;
+
+    if (hasFlagValue(opv) == false) {
+        switch (getValue(opv)) {
+        case BORDER_WIDTH_SET:
+            value = CSS_BORDER_WIDTH_WIDTH;
+            length.value = *((css_fixed *)style->bytecode);
+            advance_bytecode(style, sizeof(length.value));
+            unit = *((uint32_t *)style->bytecode);
+            advance_bytecode(style, sizeof(unit));
+            break;
+        case BORDER_WIDTH_THIN:
+            value = CSS_BORDER_WIDTH_THIN;
+            break;
+        case BORDER_WIDTH_MEDIUM:
+            value = CSS_BORDER_WIDTH_MEDIUM;
+            break;
+        case BORDER_WIDTH_THICK:
+            value = CSS_BORDER_WIDTH_THICK;
+            break;
+        case BORDER_WIDTH_CALC:
+            value = CSS_BORDER_WIDTH_WIDTH;
+            advance_bytecode(style, sizeof(unit)); /* skip unit */
+            snum = *((uint32_t *)style->bytecode);
+            advance_bytecode(style, sizeof(snum));
+            unit = CSS_UNIT_CALC;
+            css__stylesheet_string_get(style->sheet, snum, &length.calc);
+            break;
+        default:
+            assert(0 && "Invalid value");
+            break;
+        }
+    }
+
+    unit = css__to_css_unit(unit);
+
+    if (css__outranks_existing(getOpcode(opv), isImportant(opv), state, getFlagValue(opv))) {
+        return fun(state->computed, value, length, unit);
+    }
+
+    return CSS_OK;
+}
+
 css_error css__cascade_length_auto(uint32_t opv, css_style *style, css_select_state *state,
     css_error (*fun)(css_computed_style *, uint8_t, css_fixed, css_unit))
 {
@@ -291,6 +340,49 @@ css_error css__cascade_length_normal(uint32_t opv, css_style *style, css_select_
     return CSS_OK;
 }
 
+css_error css__cascade_length_normal_calc(uint32_t opv, css_style *style, css_select_state *state,
+    css_error (*fun)(css_computed_style *, uint8_t, css_fixed_or_calc, css_unit))
+{
+    uint16_t value = CSS_LETTER_SPACING_INHERIT;
+    css_fixed_or_calc length = (css_fixed_or_calc)0;
+    uint32_t unit = UNIT_PX;
+    uint32_t snum = 0;
+
+    if (hasFlagValue(opv) == false) {
+        switch (getValue(opv)) {
+        case LETTER_SPACING_SET:
+            value = CSS_LETTER_SPACING_SET;
+            length.value = *((css_fixed *)style->bytecode);
+            advance_bytecode(style, sizeof(length.value));
+            unit = *((uint32_t *)style->bytecode);
+            advance_bytecode(style, sizeof(unit));
+            break;
+        case LETTER_SPACING_NORMAL:
+            value = CSS_LETTER_SPACING_NORMAL;
+            break;
+        case LETTER_SPACING_CALC:
+            value = CSS_LETTER_SPACING_SET;
+            advance_bytecode(style, sizeof(unit)); /* skip unit */
+            snum = *((uint32_t *)style->bytecode);
+            advance_bytecode(style, sizeof(snum));
+            unit = CSS_UNIT_CALC;
+            css__stylesheet_string_get(style->sheet, snum, &length.calc);
+            break;
+        default:
+            assert(0 && "Invalid value");
+            break;
+        }
+    }
+
+    unit = css__to_css_unit(unit);
+
+    if (css__outranks_existing(getOpcode(opv), isImportant(opv), state, getFlagValue(opv))) {
+        return fun(state->computed, value, length, unit);
+    }
+
+    return CSS_OK;
+}
+
 css_error css__cascade_length_none(uint32_t opv, css_style *style, css_select_state *state,
     css_error (*fun)(css_computed_style *, uint8_t, css_fixed, css_unit))
 {
@@ -314,6 +406,49 @@ css_error css__cascade_length_none(uint32_t opv, css_style *style, css_select_st
             advance_bytecode(style, sizeof(unit));
             advance_bytecode(style, sizeof(unit)); // TODO
             return CSS_OK;
+        default:
+            assert(0 && "Invalid value");
+            break;
+        }
+    }
+
+    unit = css__to_css_unit(unit);
+
+    if (css__outranks_existing(getOpcode(opv), isImportant(opv), state, getFlagValue(opv))) {
+        return fun(state->computed, value, length, unit);
+    }
+
+    return CSS_OK;
+}
+
+css_error css__cascade_length_none_calc(uint32_t opv, css_style *style, css_select_state *state,
+    css_error (*fun)(css_computed_style *, uint8_t, css_fixed_or_calc, css_unit))
+{
+    uint16_t value = CSS_MAX_HEIGHT_INHERIT;
+    css_fixed_or_calc length = (css_fixed_or_calc)0;
+    uint32_t unit = UNIT_PX;
+    uint32_t snum = 0;
+
+    if (hasFlagValue(opv) == false) {
+        switch (getValue(opv)) {
+        case MAX_HEIGHT_SET:
+            value = CSS_MAX_HEIGHT_SET;
+            length.value = *((css_fixed *)style->bytecode);
+            advance_bytecode(style, sizeof(length.value));
+            unit = *((uint32_t *)style->bytecode);
+            advance_bytecode(style, sizeof(unit));
+            break;
+        case MAX_HEIGHT_NONE:
+            value = CSS_MAX_HEIGHT_NONE;
+            break;
+        case MAX_HEIGHT_CALC:
+            value = CSS_MAX_HEIGHT_SET;
+            advance_bytecode(style, sizeof(unit)); /* skip unit */
+            snum = *((uint32_t *)style->bytecode);
+            advance_bytecode(style, sizeof(snum));
+            unit = CSS_UNIT_CALC;
+            css__stylesheet_string_get(style->sheet, snum, &length.calc);
+            break;
         default:
             assert(0 && "Invalid value");
             break;
@@ -359,6 +494,46 @@ css_error css__cascade_length(uint32_t opv, css_style *style, css_select_state *
 
     /** \todo lose fun != NULL once all properties have set routines */
     if (fun != NULL && css__outranks_existing(getOpcode(opv), isImportant(opv), state, getFlagValue(opv))) {
+        return fun(state->computed, value, length, unit);
+    }
+
+    return CSS_OK;
+}
+
+css_error css__cascade_length_calc(uint32_t opv, css_style *style, css_select_state *state,
+    css_error (*fun)(css_computed_style *, uint8_t, css_fixed_or_calc, css_unit))
+{
+    uint16_t value = CSS_MIN_HEIGHT_INHERIT;
+    css_fixed_or_calc length = (css_fixed_or_calc)0;
+    uint32_t unit = UNIT_PX;
+    uint32_t snum = 0;
+
+    if (hasFlagValue(opv) == false) {
+        switch (getValue(opv)) {
+        case MIN_HEIGHT_SET:
+            value = CSS_MIN_HEIGHT_SET;
+            length.value = *((css_fixed *)style->bytecode);
+            advance_bytecode(style, sizeof(length.value));
+            unit = *((uint32_t *)style->bytecode);
+            advance_bytecode(style, sizeof(unit));
+            break;
+        case MIN_HEIGHT_CALC:
+            value = CSS_MIN_HEIGHT_SET;
+            advance_bytecode(style, sizeof(unit)); /* skip unit */
+            snum = *((uint32_t *)style->bytecode);
+            advance_bytecode(style, sizeof(snum));
+            unit = CSS_UNIT_CALC;
+            css__stylesheet_string_get(style->sheet, snum, &length.calc);
+            break;
+        default:
+            assert(0 && "Invalid value");
+            break;
+        }
+    }
+
+    unit = css__to_css_unit(unit);
+
+    if (css__outranks_existing(getOpcode(opv), isImportant(opv), state, getFlagValue(opv))) {
         return fun(state->computed, value, length, unit);
     }
 

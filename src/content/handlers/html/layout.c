@@ -287,15 +287,21 @@ static void layout_get_object_dimensions(const css_unit_ctx *unit_len_ctx, struc
  */
 static int layout_text_indent(const css_unit_ctx *unit_len_ctx, const css_computed_style *style, int width)
 {
-    css_fixed value = 0;
+    css_fixed_or_calc value = (css_fixed_or_calc)0;
     css_unit unit = CSS_UNIT_PX;
 
     css_computed_text_indent(style, &value, &unit);
 
     if (unit == CSS_UNIT_PCT) {
-        return FPCT_OF_INT_TOINT(value, width);
+        return FPCT_OF_INT_TOINT(value.value, width);
+    } else if (unit == CSS_UNIT_CALC) {
+        int px = 0;
+        if (lh__length_to_px(style, unit_len_ctx, width, value, unit, &px)) {
+            return px;
+        }
+        return 0;
     } else {
-        return FIXTOINT(css_unit_len2device_px(style, unit_len_ctx, value, unit));
+        return FIXTOINT(css_unit_len2device_px(style, unit_len_ctx, value.value, unit));
     }
 }
 
@@ -341,12 +347,14 @@ layout_minmax_table(struct box *table, const struct gui_layout_table *font_func,
 
     /* border-spacing is used in the separated borders model */
     if (css_computed_border_collapse(table->style) == CSS_BORDER_COLLAPSE_SEPARATE) {
-        css_fixed h = 0, v = 0;
+        css_fixed_or_calc h = (css_fixed_or_calc)0, v = (css_fixed_or_calc)0;
         css_unit hu = CSS_UNIT_PX, vu = CSS_UNIT_PX;
 
         css_computed_border_spacing(table->style, &h, &hu, &v, &vu);
 
-        border_spacing_h = FIXTOINT(css_unit_len2device_px(table->style, &content->unit_len_ctx, h, hu));
+        if (!lh__length_to_px(table->style, &content->unit_len_ctx, -1, h, hu, &border_spacing_h)) {
+            border_spacing_h = 0;
+        }
     }
 
     /* 1st pass: consider cells with colspan 1 only */
@@ -481,7 +489,7 @@ static inline bool box_has_percentage_max_width(struct box *b)
 {
     css_unit unit = CSS_UNIT_PX;
     enum css_max_width_e type;
-    css_fixed value = 0;
+    css_fixed_or_calc value = (css_fixed_or_calc)0;
 
     assert(b != NULL);
 
@@ -517,22 +525,48 @@ static int layout_minmax_object_width(struct box *box, const html_content *conte
     assert(box->object != NULL);
 
     if (box->style) {
-        css_fixed v = 0;
+        css_fixed_or_calc v = (css_fixed_or_calc)0;
         css_unit u = CSS_UNIT_PX;
 
         if (css_computed_max_height(box->style, &v, &u) == CSS_MAX_HEIGHT_SET && u != CSS_UNIT_PCT) {
-            obj_max_h = FIXTOINT(css_unit_len2device_px(box->style, &content->unit_len_ctx, v, u));
+            if (u == CSS_UNIT_CALC) {
+                if (!lh__length_to_px(box->style, &content->unit_len_ctx, -1, v, u, &obj_max_h)) {
+                    obj_max_h = INT_MAX;
+                }
+            } else {
+                obj_max_h = FIXTOINT(css_unit_len2device_px(box->style, &content->unit_len_ctx, v.value, u));
+            }
         }
         if (css_computed_max_width(box->style, &v, &u) == CSS_MAX_WIDTH_SET && u != CSS_UNIT_PCT) {
-            obj_max_w = FIXTOINT(css_unit_len2device_px(box->style, &content->unit_len_ctx, v, u));
+            if (u == CSS_UNIT_CALC) {
+                if (!lh__length_to_px(box->style, &content->unit_len_ctx, -1, v, u, &obj_max_w)) {
+                    obj_max_w = INT_MAX;
+                }
+            } else {
+                obj_max_w = FIXTOINT(css_unit_len2device_px(box->style, &content->unit_len_ctx, v.value, u));
+            }
         }
         if (css_computed_min_height(box->style, &v, &u) == CSS_MIN_HEIGHT_SET && u != CSS_UNIT_PCT) {
             obj_min_h.type = CSS_SIZE_SET;
-            obj_min_h.value = FIXTOINT(css_unit_len2device_px(box->style, &content->unit_len_ctx, v, u));
+            if (u == CSS_UNIT_CALC) {
+                if (!lh__length_to_px(box->style, &content->unit_len_ctx, -1, v, u, &obj_min_h.value)) {
+                    obj_min_h.type = CSS_SIZE_AUTO;
+                    obj_min_h.value = 0;
+                }
+            } else {
+                obj_min_h.value = FIXTOINT(css_unit_len2device_px(box->style, &content->unit_len_ctx, v.value, u));
+            }
         }
         if (css_computed_min_width(box->style, &v, &u) == CSS_MIN_WIDTH_SET && u != CSS_UNIT_PCT) {
             obj_min_w.type = CSS_SIZE_SET;
-            obj_min_w.value = FIXTOINT(css_unit_len2device_px(box->style, &content->unit_len_ctx, v, u));
+            if (u == CSS_UNIT_CALC) {
+                if (!lh__length_to_px(box->style, &content->unit_len_ctx, -1, v, u, &obj_min_w.value)) {
+                    obj_min_w.type = CSS_SIZE_AUTO;
+                    obj_min_w.value = 0;
+                }
+            } else {
+                obj_min_w.value = FIXTOINT(css_unit_len2device_px(box->style, &content->unit_len_ctx, v.value, u));
+            }
         }
     }
 
@@ -580,7 +614,7 @@ static struct box *layout_minmax_line(struct box *first, int *line_min, int *lin
         enum css_width_e wtype;
         enum css_height_e htype;
         enum css_box_sizing_e bs;
-        css_fixed value = 0;
+        css_fixed_or_calc value = (css_fixed_or_calc)0;
         css_unit unit = CSS_UNIT_PX;
 
         assert(lh__box_is_inline_content(b));
@@ -768,7 +802,9 @@ static struct box *layout_minmax_line(struct box *first, int *line_min, int *lin
         /* height */
         htype = css_computed_height(b->style, &value, &unit);
         if (htype == CSS_HEIGHT_SET) {
-            height = FIXTOINT(css_unit_len2device_px(b->style, &content->unit_len_ctx, value, unit));
+            if (!lh__length_to_px(b->style, &content->unit_len_ctx, -1, value, unit, &height)) {
+                height = AUTO;
+            }
         } else {
             height = AUTO;
         }
@@ -898,10 +934,10 @@ layout_minmax_block(struct box *block, const struct gui_layout_table *font_func,
     int extra_fixed = 0;
     float extra_frac = 0;
     enum css_width_e wtype = CSS_WIDTH_AUTO;
-    css_fixed width = 0;
+    css_fixed_or_calc width = (css_fixed_or_calc)0;
     css_unit wunit = CSS_UNIT_PX;
     enum css_height_e htype = CSS_HEIGHT_AUTO;
-    css_fixed height = 0;
+    css_fixed_or_calc height = (css_fixed_or_calc)0;
     css_unit hunit = CSS_UNIT_PX;
     enum css_box_sizing_e bs = CSS_BOX_SIZING_CONTENT_BOX;
     bool using_min_border_box = false;
@@ -989,10 +1025,24 @@ layout_minmax_block(struct box *block, const struct gui_layout_table *font_func,
             int obj_w = AUTO, obj_h = AUTO;
 
             if (wtype == CSS_WIDTH_SET && wunit != CSS_UNIT_PCT) {
-                obj_w = FIXTOINT(css_unit_len2device_px(block->style, &content->unit_len_ctx, width, wunit));
+                if (wunit == CSS_UNIT_CALC) {
+                    int px = 0;
+                    if (lh__length_to_px(block->style, &content->unit_len_ctx, -1, width, wunit, &px)) {
+                        obj_w = px;
+                    }
+                } else {
+                    obj_w = FIXTOINT(css_unit_len2device_px(block->style, &content->unit_len_ctx, width.value, wunit));
+                }
             }
             if (htype == CSS_HEIGHT_SET && hunit != CSS_UNIT_PCT) {
-                obj_h = FIXTOINT(css_unit_len2device_px(block->style, &content->unit_len_ctx, height, hunit));
+                if (hunit == CSS_UNIT_CALC) {
+                    int px = 0;
+                    if (lh__length_to_px(block->style, &content->unit_len_ctx, -1, height, hunit, &px)) {
+                        obj_h = px;
+                    }
+                } else {
+                    obj_h = FIXTOINT(css_unit_len2device_px(block->style, &content->unit_len_ctx, height.value, hunit));
+                }
             }
 
             min = max = layout_minmax_object_width(block, content, obj_w, obj_h);
@@ -1008,10 +1058,12 @@ layout_minmax_block(struct box *block, const struct gui_layout_table *font_func,
         /* For horizontal flex containers, get the column-gap for intrinsic sizing.
          * Per CSS spec, gaps contribute to the intrinsic main size. */
         if (lh__box_is_flex_container(block) && lh__flex_main_is_horizontal(block) && block->style != NULL) {
-            css_fixed gap_len = 0;
+            css_fixed_or_calc gap_len = (css_fixed_or_calc)0;
             css_unit gap_unit = CSS_UNIT_PX;
             if (css_computed_column_gap(block->style, &gap_len, &gap_unit) == CSS_COLUMN_GAP_SET) {
-                flex_gap = FIXTOINT(css_unit_len2device_px(block->style, &content->unit_len_ctx, gap_len, gap_unit));
+                if (!lh__length_to_px(block->style, &content->unit_len_ctx, -1, gap_len, gap_unit, &flex_gap)) {
+                    flex_gap = 0;
+                }
             }
         }
 
@@ -1124,7 +1176,7 @@ layout_minmax_block(struct box *block, const struct gui_layout_table *font_func,
         enum css_max_width_e max_type;
         enum css_min_width_e min_type;
         css_unit unit = CSS_UNIT_PX;
-        css_fixed value = 0;
+        css_fixed_or_calc value = (css_fixed_or_calc)0;
         int width;
 
         enum css_width_e wtype;
@@ -1154,11 +1206,12 @@ layout_minmax_block(struct box *block, const struct gui_layout_table *font_func,
 
         min_type = css_computed_min_width(block->style, &value, &unit);
         if (min_type == CSS_MIN_WIDTH_SET && unit != CSS_UNIT_PCT) {
-            int val = FIXTOINT(css_unit_len2device_px(block->style, &content->unit_len_ctx, value, unit));
-
-            if (min < val) {
-                min = val;
-                using_min_border_box = border_box;
+            int val = 0;
+            if (lh__length_to_px(block->style, &content->unit_len_ctx, -1, value, unit, &val)) {
+                if (min < val) {
+                    min = val;
+                    using_min_border_box = border_box;
+                }
             }
         }
 
@@ -1169,20 +1222,32 @@ layout_minmax_block(struct box *block, const struct gui_layout_table *font_func,
                     min = 0;
                 }
             } else {
-                int val = FIXTOINT(css_unit_len2device_px(block->style, &content->unit_len_ctx, value, unit));
-
-                if (val >= 0 && max > val) {
-                    max = val;
-                    using_max_border_box = border_box;
+                int val = 0;
+                if (lh__length_to_px(block->style, &content->unit_len_ctx, -1, value, unit, &val)) {
+                    if (val >= 0 && max > val) {
+                        max = val;
+                        using_max_border_box = border_box;
+                    }
                 }
             }
         }
     }
     NSLOG(layout, DEBUG, "MINMAX_BLOCK %p: after constraints min=%d max=%d", block, min, max);
 
-    if (htype == CSS_HEIGHT_SET && hunit != CSS_UNIT_PCT && height > INTTOFIX(0)) {
-        block->flags |= MAKE_HEIGHT;
-        block->flags |= HAS_HEIGHT;
+    if (htype == CSS_HEIGHT_SET && hunit != CSS_UNIT_PCT) {
+        bool positive = false;
+        if (hunit == CSS_UNIT_CALC) {
+            int hpx = 0;
+            if (lh__length_to_px(block->style, &content->unit_len_ctx, -1, height, hunit, &hpx)) {
+                positive = hpx > 0;
+            }
+        } else {
+            positive = height.value > INTTOFIX(0);
+        }
+        if (positive) {
+            block->flags |= MAKE_HEIGHT;
+            block->flags |= HAS_HEIGHT;
+        }
     }
 
     /* add margins, border, padding to min, max widths */
@@ -1819,7 +1884,7 @@ static void layout_block_add_scrollbar(struct box *box, int which)
             (box->object && content_get_type(box->object) == CONTENT_HTML))) {
         /* make space for scrollbars, unless width is AUTO */
         enum css_height_e htype;
-        css_fixed height = 0;
+        css_fixed_or_calc height = (css_fixed_or_calc)0;
         css_unit hunit = CSS_UNIT_PX;
         htype = css_computed_height(box->style, &height, &hunit);
 
@@ -1877,7 +1942,7 @@ bool layout_table(struct box *table, int available_width, html_content *content)
     struct column *col;
     const css_computed_style *style = table->style;
     enum css_height_e htype;
-    css_fixed value = 0;
+    css_fixed_or_calc value = (css_fixed_or_calc)0;
     css_unit unit = CSS_UNIT_PX;
 
     assert(table->type == BOX_TABLE);
@@ -1931,13 +1996,17 @@ bool layout_table(struct box *table, int available_width, html_content *content)
 
     /* border-spacing is used in the separated borders model */
     if (css_computed_border_collapse(style) == CSS_BORDER_COLLAPSE_SEPARATE) {
-        css_fixed h = 0, v = 0;
+        css_fixed_or_calc h = (css_fixed_or_calc)0, v = (css_fixed_or_calc)0;
         css_unit hu = CSS_UNIT_PX, vu = CSS_UNIT_PX;
 
         css_computed_border_spacing(style, &h, &hu, &v, &vu);
 
-        border_spacing_h = FIXTOINT(css_unit_len2device_px(style, &content->unit_len_ctx, h, hu));
-        border_spacing_v = FIXTOINT(css_unit_len2device_px(style, &content->unit_len_ctx, v, vu));
+        if (!lh__length_to_px(style, &content->unit_len_ctx, -1, h, hu, &border_spacing_h)) {
+            border_spacing_h = 0;
+        }
+        if (!lh__length_to_px(style, &content->unit_len_ctx, -1, v, vu, &border_spacing_v)) {
+            border_spacing_v = 0;
+        }
     }
 
     /* find specified table width, or available width if auto-width */
@@ -1958,9 +2027,13 @@ bool layout_table(struct box *table, int available_width, html_content *content)
     /* Find any table height specified within CSS/HTML */
     htype = css_computed_height(style, &value, &unit);
     if (htype == CSS_HEIGHT_SET) {
-        if (unit == CSS_UNIT_PCT) {
-            /* This is the minimum height for the table
-             * (see 17.5.3) */
+        if (unit == CSS_UNIT_PCT || unit == CSS_UNIT_CALC) {
+            int available_height = -1;
+            enum css_height_e cb_htype = CSS_HEIGHT_AUTO;
+            css_fixed_or_calc ignored = (css_fixed_or_calc)0;
+            css_unit cb_unit = CSS_UNIT_PX;
+
+            /* This is the minimum height for the table (see 17.5.3). */
             if (css_computed_position(table->style) == CSS_POSITION_ABSOLUTE) {
                 /* Table is absolutely positioned */
                 assert(table->float_container);
@@ -1981,22 +2054,30 @@ bool layout_table(struct box *table, int available_width, html_content *content)
             }
 
             if (containing_block) {
-                css_fixed ignored = 0;
-
-                htype = css_computed_height(containing_block->style, &ignored, &unit);
+                cb_htype = css_computed_height(containing_block->style, &ignored, &cb_unit);
             }
 
             if (containing_block && containing_block->height != AUTO &&
-                (css_computed_position(table->style) == CSS_POSITION_ABSOLUTE || htype == CSS_HEIGHT_SET)) {
-                /* Table is absolutely positioned or its
-                 * containing block has a valid specified
-                 * height. (CSS 2.1 Section 10.5) */
-                min_height = FPCT_OF_INT_TOINT(value, containing_block->height);
+                (css_computed_position(table->style) == CSS_POSITION_ABSOLUTE || cb_htype == CSS_HEIGHT_SET)) {
+                /* Table is absolutely positioned or its containing block has a valid specified height
+                 * (CSS 2.1 Section 10.5). */
+                available_height = containing_block->height;
+            }
+
+            if (available_height >= 0) {
+                int px = 0;
+                if (lh__length_to_px(style, &content->unit_len_ctx, available_height, value, unit, &px)) {
+                    min_height = px;
+                }
+            } else if (unit == CSS_UNIT_CALC) {
+                int px = 0;
+                if (lh__length_to_px(style, &content->unit_len_ctx, -1, value, unit, &px)) {
+                    min_height = px;
+                }
             }
         } else {
-            /* This is the minimum height for the table
-             * (see 17.5.3) */
-            min_height = FIXTOINT(css_unit_len2device_px(style, &content->unit_len_ctx, value, unit));
+            /* This is the minimum height for the table (see 17.5.3). */
+            min_height = FIXTOINT(css_unit_len2device_px(style, &content->unit_len_ctx, value.value, unit));
         }
     }
 
@@ -2168,7 +2249,9 @@ bool layout_table(struct box *table, int available_width, html_content *content)
 
             htype = css_computed_height(row->style, &value, &unit);
             if (htype == CSS_HEIGHT_SET && unit != CSS_UNIT_PCT) {
-                row_height = FIXTOINT(css_unit_len2device_px(row->style, &content->unit_len_ctx, value, unit));
+                if (!lh__length_to_px(row->style, &content->unit_len_ctx, -1, value, unit, &row_height)) {
+                    row_height = 0;
+                }
             }
             for (c = row->children; c; c = c->next) {
                 assert(c->style);
@@ -2198,9 +2281,11 @@ bool layout_table(struct box *table, int available_width, html_content *content)
                     /* some sites use height="1" or similar
                      * to attempt to make cells as small as
                      * possible, so treat it as a minimum */
-                    int h = FIXTOINT(css_unit_len2device_px(c->style, &content->unit_len_ctx, value, unit));
-                    if (c->height < h)
-                        c->height = h;
+                    int h = 0;
+                    if (lh__length_to_px(c->style, &content->unit_len_ctx, -1, value, unit, &h)) {
+                        if (c->height < h)
+                            c->height = h;
+                    }
                 }
                 /* specified row height is treated as a minimum
                  */
@@ -2364,7 +2449,7 @@ static bool layout_apply_minmax_height(const css_unit_ctx *unit_len_ctx, struct 
 
     if (box->style) {
         enum css_height_e htype = CSS_HEIGHT_AUTO;
-        css_fixed value = 0;
+        css_fixed_or_calc value = (css_fixed_or_calc)0;
         css_unit unit = CSS_UNIT_PX;
 
         if (containing_block) {
@@ -2373,21 +2458,22 @@ static bool layout_apply_minmax_height(const css_unit_ctx *unit_len_ctx, struct 
 
         /* max-height */
         if (css_computed_max_height(box->style, &value, &unit) == CSS_MAX_HEIGHT_SET) {
-            if (unit == CSS_UNIT_PCT) {
+            int available_height = -1;
+
+            if (unit == CSS_UNIT_PCT || unit == CSS_UNIT_CALC) {
                 if (containing_block && containing_block->height != AUTO &&
                     (css_computed_position(box->style) == CSS_POSITION_ABSOLUTE || htype == CSS_HEIGHT_SET)) {
-                    /* Box is absolutely positioned or its
-                     * containing block has a valid
-                     * specified height. (CSS 2.1
-                     * Section 10.5) */
-                    h = FPCT_OF_INT_TOINT(value, containing_block->height);
-                    if (h < box->height) {
-                        box->height = h;
-                        updated = true;
-                    }
+                    /* Box is absolutely positioned or its containing block has a valid
+                     * specified height. (CSS 2.1 Section 10.5) */
+                    available_height = containing_block->height;
                 }
-            } else {
-                h = FIXTOINT(css_unit_len2device_px(box->style, unit_len_ctx, value, unit));
+            }
+
+            if (!(unit == CSS_UNIT_PCT && available_height < 0)) {
+                int avail = (unit == CSS_UNIT_PCT || unit == CSS_UNIT_CALC) ? available_height : -1;
+                if (!lh__length_to_px(box->style, unit_len_ctx, avail, value, unit, &h)) {
+                    h = box->height;
+                }
                 if (h < box->height) {
                     box->height = h;
                     updated = true;
@@ -2397,21 +2483,22 @@ static bool layout_apply_minmax_height(const css_unit_ctx *unit_len_ctx, struct 
 
         /* min-height */
         if (ns_computed_min_height(box->style, &value, &unit) == CSS_MIN_HEIGHT_SET) {
-            if (unit == CSS_UNIT_PCT) {
+            int available_height = -1;
+
+            if (unit == CSS_UNIT_PCT || unit == CSS_UNIT_CALC) {
                 if (containing_block && containing_block->height != AUTO &&
                     (css_computed_position(box->style) == CSS_POSITION_ABSOLUTE || htype == CSS_HEIGHT_SET)) {
-                    /* Box is absolutely positioned or its
-                     * containing block has a valid
-                     * specified height. (CSS 2.1
-                     * Section 10.5) */
-                    h = FPCT_OF_INT_TOINT(value, containing_block->height);
-                    if (h > box->height) {
-                        box->height = h;
-                        updated = true;
-                    }
+                    /* Box is absolutely positioned or its containing block has a valid
+                     * specified height. (CSS 2.1 Section 10.5) */
+                    available_height = containing_block->height;
                 }
-            } else {
-                h = FIXTOINT(css_unit_len2device_px(box->style, unit_len_ctx, value, unit));
+            }
+
+            if (!(unit == CSS_UNIT_PCT && available_height < 0)) {
+                int avail = (unit == CSS_UNIT_PCT || unit == CSS_UNIT_CALC) ? available_height : -1;
+                if (!lh__length_to_px(box->style, unit_len_ctx, avail, value, unit, &h)) {
+                    h = box->height;
+                }
                 if (h > box->height) {
                     box->height = h;
                     updated = true;
@@ -2786,31 +2873,32 @@ static void place_float_below(struct box *c, int width, int cx, int y, struct bo
 static int line_height(const css_unit_ctx *unit_len_ctx, const css_computed_style *style)
 {
     enum css_line_height_e lhtype;
-    css_fixed lhvalue = 0;
+    css_fixed_or_calc lhvalue = (css_fixed_or_calc)0;
     css_unit lhunit = CSS_UNIT_PX;
-    css_fixed line_height;
 
     assert(style);
 
     lhtype = css_computed_line_height(style, &lhvalue, &lhunit);
     if (lhtype == CSS_LINE_HEIGHT_NORMAL) {
         /* Normal => use a constant of 1.2 * font-size */
-        lhvalue = FLTTOFIX(1.2);
+        lhvalue.value = FLTTOFIX(1.2);
         lhtype = CSS_LINE_HEIGHT_NUMBER;
     }
 
-    if (lhtype == CSS_LINE_HEIGHT_NUMBER || lhunit == CSS_UNIT_PCT) {
-        line_height = css_unit_len2device_px(style, unit_len_ctx, lhvalue, CSS_UNIT_EM);
-
-        if (lhtype != CSS_LINE_HEIGHT_NUMBER)
-            line_height = FDIV(line_height, F_100);
-    } else {
-        assert(lhunit != CSS_UNIT_PCT);
-
-        line_height = css_unit_len2device_px(style, unit_len_ctx, lhvalue, lhunit);
+    if (lhtype == CSS_LINE_HEIGHT_NUMBER) {
+        css_fixed line_height = css_unit_len2device_px(style, unit_len_ctx, lhvalue.value, CSS_UNIT_EM);
+        return FIXTOINT(line_height);
     }
 
-    return FIXTOINT(line_height);
+    /* Length or percentage (including calc) */
+    {
+        int font_px = FIXTOINT(css_unit_len2device_px(style, unit_len_ctx, INTTOFIX(1), CSS_UNIT_EM));
+        int px = 0;
+        if (!lh__length_to_px(style, unit_len_ctx, font_px, lhvalue, lhunit, &px)) {
+            px = font_px;
+        }
+        return px;
+    }
 }
 
 
@@ -3046,7 +3134,7 @@ static bool layout_line(struct box *first, int *width, int *y, int cx, int cy, s
 
         /* Reformat object to new box size */
         if (b->object && content_can_reformat(b->object) && b->width != content_get_available_width(b->object)) {
-            css_fixed value = 0;
+            css_fixed_or_calc value = (css_fixed_or_calc)0;
             css_unit unit = CSS_UNIT_PX;
             enum css_height_e htype = css_computed_height(b->style, &value, &unit);
 
@@ -3400,7 +3488,7 @@ static bool layout_line(struct box *first, int *width, int *y, int cx, int cy, s
     for (d = first; d != b; d = d->next) {
         if ((d->type == BOX_INLINE && d->inline_end) || d->type == BOX_BR || d->type == BOX_TEXT ||
             d->type == BOX_INLINE_END) {
-            css_fixed value = 0;
+            css_fixed_or_calc value = (css_fixed_or_calc)0;
             css_unit unit = CSS_UNIT_PX;
             switch (css_computed_vertical_align(d->style, &value, &unit)) {
             case CSS_VERTICAL_ALIGN_SUPER:
@@ -3746,7 +3834,7 @@ bool layout_block_context(struct box *block, int viewport_height, html_content *
         } else if (box->type == BOX_TABLE) {
             if (box->style != NULL) {
                 enum css_width_e wtype;
-                css_fixed width = 0;
+                css_fixed_or_calc width = (css_fixed_or_calc)0;
                 css_unit unit = CSS_UNIT_PX;
 
                 wtype = css_computed_width(box->style, &width, &unit);
@@ -3897,7 +3985,7 @@ bool layout_block_context(struct box *block, int viewport_height, html_content *
             y = cy;
             while (1) {
                 enum css_width_e wtype;
-                css_fixed width = 0;
+                css_fixed_or_calc width = (css_fixed_or_calc)0;
                 css_unit unit = CSS_UNIT_PX;
 
                 wtype = css_computed_width(box->style, &width, &unit);
@@ -3987,10 +4075,24 @@ bool layout_block_context(struct box *block, int viewport_height, html_content *
                  * - no bottom border */
                 bool has_min_height = false;
                 if (box->style) {
-                    css_fixed mh_val;
-                    css_unit mh_unit;
-                    if (css_computed_min_height(box->style, &mh_val, &mh_unit) == CSS_MIN_HEIGHT_SET && mh_val > 0)
-                        has_min_height = true;
+                    css_fixed_or_calc mh_val = (css_fixed_or_calc)0;
+                    css_unit mh_unit = CSS_UNIT_PX;
+                    if (css_computed_min_height(box->style, &mh_val, &mh_unit) == CSS_MIN_HEIGHT_SET) {
+                        if (mh_unit == CSS_UNIT_PCT || mh_unit == CSS_UNIT_CALC) {
+                            int mh_px = 0;
+                            int available = -1;
+                            if (box->parent && box->parent->height != AUTO) {
+                                available = box->parent->height;
+                            }
+                            if (lh__length_to_px(box->style, &content->unit_len_ctx, available, mh_val, mh_unit,
+                                    &mh_px) &&
+                                mh_px > 0) {
+                                has_min_height = true;
+                            }
+                        } else if (mh_val.value > 0) {
+                            has_min_height = true;
+                        }
+                    }
                 }
                 if (box->type == BOX_BLOCK &&
                     ((box->flags & MAKE_HEIGHT) || has_min_height || box->padding[BOTTOM] != 0 ||
@@ -4526,7 +4628,7 @@ static void layout_compute_offsets(const css_unit_ctx *unit_len_ctx, struct box 
     int *top, int *right, int *bottom, int *left)
 {
     uint32_t type;
-    css_fixed value = 0;
+    css_fixed_or_calc value = (css_fixed_or_calc)0;
     css_unit unit = CSS_UNIT_PX;
 
     assert(containing_block->width != UNKNOWN_WIDTH);
@@ -4536,10 +4638,8 @@ static void layout_compute_offsets(const css_unit_ctx *unit_len_ctx, struct box 
     /* left */
     type = css_computed_left(box->style, &value, &unit);
     if (type == CSS_LEFT_SET) {
-        if (unit == CSS_UNIT_PCT) {
-            *left = FPCT_OF_INT_TOINT(value, containing_block->width);
-        } else {
-            *left = FIXTOINT(css_unit_len2device_px(box->style, unit_len_ctx, value, unit));
+        if (!lh__length_to_px(box->style, unit_len_ctx, containing_block->width, value, unit, left)) {
+            *left = AUTO;
         }
     } else {
         *left = AUTO;
@@ -4548,10 +4648,8 @@ static void layout_compute_offsets(const css_unit_ctx *unit_len_ctx, struct box 
     /* right */
     type = css_computed_right(box->style, &value, &unit);
     if (type == CSS_RIGHT_SET) {
-        if (unit == CSS_UNIT_PCT) {
-            *right = FPCT_OF_INT_TOINT(value, containing_block->width);
-        } else {
-            *right = FIXTOINT(css_unit_len2device_px(box->style, unit_len_ctx, value, unit));
+        if (!lh__length_to_px(box->style, unit_len_ctx, containing_block->width, value, unit, right)) {
+            *right = AUTO;
         }
     } else {
         *right = AUTO;
@@ -4560,10 +4658,8 @@ static void layout_compute_offsets(const css_unit_ctx *unit_len_ctx, struct box 
     /* top */
     type = css_computed_top(box->style, &value, &unit);
     if (type == CSS_TOP_SET) {
-        if (unit == CSS_UNIT_PCT) {
-            *top = FPCT_OF_INT_TOINT(value, containing_block->height);
-        } else {
-            *top = FIXTOINT(css_unit_len2device_px(box->style, unit_len_ctx, value, unit));
+        if (!lh__length_to_px(box->style, unit_len_ctx, containing_block->height, value, unit, top)) {
+            *top = AUTO;
         }
     } else {
         *top = AUTO;
@@ -4572,10 +4668,8 @@ static void layout_compute_offsets(const css_unit_ctx *unit_len_ctx, struct box 
     /* bottom */
     type = css_computed_bottom(box->style, &value, &unit);
     if (type == CSS_BOTTOM_SET) {
-        if (unit == CSS_UNIT_PCT) {
-            *bottom = FPCT_OF_INT_TOINT(value, containing_block->height);
-        } else {
-            *bottom = FIXTOINT(css_unit_len2device_px(box->style, unit_len_ctx, value, unit));
+        if (!lh__length_to_px(box->style, unit_len_ctx, containing_block->height, value, unit, bottom)) {
+            *bottom = AUTO;
         }
     } else {
         *bottom = AUTO;
@@ -4639,7 +4733,7 @@ static bool layout_absolute(struct box *box, struct box *containing_block, int c
     box->float_container = NULL;
 
     {
-        css_fixed wlen = 0;
+        css_fixed_or_calc wlen = (css_fixed_or_calc)0;
         css_unit wunit = CSS_UNIT_PX;
         const char *tag = "";
         const char *cls = "";
@@ -4655,10 +4749,12 @@ static bool layout_absolute(struct box *box, struct box *containing_block, int c
             }
         }
         uint8_t wtype = css_computed_width(box->style, &wlen, &wunit);
+        long wlen_val = (wunit == CSS_UNIT_CALC) ? 0 : (long)wlen.value;
+        void *wlen_calc = (wunit == CSS_UNIT_CALC) ? (void *)wlen.calc : NULL;
         NSLOG(layout, INFO,
-            "abs offsets pre: tag %s class %s top %i left %i right %i width %i wtype %u wlen %ld wunit %u cb.width %i cb.height %i",
-            tag, cls, top, left, right, width, (unsigned)wtype, (long)wlen, (unsigned)wunit, containing_block->width,
-            containing_block->height);
+            "abs offsets pre: tag %s class %s top %i left %i right %i width %i wtype %u wlen %ld wunit %u wcalc %p cb.width %i cb.height %i",
+            tag, cls, top, left, right, width, (unsigned)wtype, wlen_val, (unsigned)wunit, wlen_calc,
+            containing_block->width, containing_block->height);
         if (class_attr != NULL)
             dom_string_unref(class_attr);
         if (name != NULL)
@@ -5271,12 +5367,18 @@ static void layout_get_box_bbox(
      * reduced, we increase the top of the descendant bbox. */
     if (box->type == BOX_BLOCK && box->style != NULL && css_computed_overflow_y(box->style) == CSS_OVERFLOW_VISIBLE &&
         box->object == NULL) {
-        css_fixed font_size = 0;
+        css_fixed_or_calc font_size = (css_fixed_or_calc)0;
         css_unit font_unit = CSS_UNIT_PT;
         int text_height;
 
         css_computed_font_size(box->style, &font_size, &font_unit);
-        text_height = css_unit_len2device_px(box->style, unit_len_ctx, font_size, font_unit);
+        if (font_unit == CSS_UNIT_CALC) {
+            if (!lh__length_to_px(box->style, unit_len_ctx, -1, font_size, font_unit, &text_height)) {
+                text_height = 0;
+            }
+        } else {
+            text_height = css_unit_len2device_px(box->style, unit_len_ctx, font_size.value, font_unit);
+        }
         text_height = FIXTOINT(text_height * 3 / 4);
         *desc_y0 = (*desc_y0 < -text_height) ? *desc_y0 : -text_height;
     }
@@ -5508,13 +5610,13 @@ static void layout_log_final_box_heights(const css_unit_ctx *unit_len_ctx, struc
                 box->padding[TOP], box->padding[BOTTOM], box->border[TOP].width, box->border[BOTTOM].width);
         }
         if (is_site_nav && box->style != NULL) {
-            css_fixed hval = 0;
+            css_fixed_or_calc hval = (css_fixed_or_calc)0;
             css_unit hunit = CSS_UNIT_PX;
-            css_fixed min_hval = 0;
+            css_fixed_or_calc min_hval = (css_fixed_or_calc)0;
             css_unit min_hunit = CSS_UNIT_PX;
-            css_fixed max_hval = 0;
+            css_fixed_or_calc max_hval = (css_fixed_or_calc)0;
             css_unit max_hunit = CSS_UNIT_PX;
-            css_fixed lhval = 0;
+            css_fixed_or_calc lhval = (css_fixed_or_calc)0;
             css_unit lhunit = CSS_UNIT_PX;
             enum css_height_e htype = css_computed_height(box->style, &hval, &hunit);
             enum css_min_height_e min_htype = ns_computed_min_height(box->style, &min_hval, &min_hunit);
@@ -5526,13 +5628,19 @@ static void layout_log_final_box_heights(const css_unit_ctx *unit_len_ctx, struc
             int lhpx = line_height(unit_len_ctx, box->style);
 
             if (htype == CSS_HEIGHT_SET && hunit != CSS_UNIT_PCT) {
-                hpx = FIXTOINT(css_unit_len2device_px(box->style, unit_len_ctx, hval, hunit));
+                if (!lh__length_to_px(box->style, unit_len_ctx, -1, hval, hunit, &hpx)) {
+                    hpx = -1;
+                }
             }
             if (min_htype == CSS_MIN_HEIGHT_SET && min_hunit != CSS_UNIT_PCT) {
-                min_hpx = FIXTOINT(css_unit_len2device_px(box->style, unit_len_ctx, min_hval, min_hunit));
+                if (!lh__length_to_px(box->style, unit_len_ctx, -1, min_hval, min_hunit, &min_hpx)) {
+                    min_hpx = -1;
+                }
             }
             if (max_htype == CSS_MAX_HEIGHT_SET && max_hunit != CSS_UNIT_PCT) {
-                max_hpx = FIXTOINT(css_unit_len2device_px(box->style, unit_len_ctx, max_hval, max_hunit));
+                if (!lh__length_to_px(box->style, unit_len_ctx, -1, max_hval, max_hunit, &max_hpx)) {
+                    max_hpx = -1;
+                }
             }
 
             NSLOG(layout, INFO,

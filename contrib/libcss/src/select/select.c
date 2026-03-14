@@ -2602,8 +2602,17 @@ css_error cascade_style(const css_style *style, css_select_state *state)
             /* Resolve lwc_strings from the stylesheet's string_vector */
             lwc_string *name_str = NULL;
             lwc_string *value_str = NULL;
-            css__stylesheet_string_get(s.sheet, name_idx, &name_str);
-            css__stylesheet_string_get(s.sheet, value_idx, &value_str);
+            css_error nerr = css__stylesheet_string_get(s.sheet, name_idx, &name_str);
+            css_error verr = css__stylesheet_string_get(s.sheet, value_idx, &value_str);
+
+            if (nerr != CSS_OK || verr != CSS_OK) {
+#ifndef NDEBUG
+                fprintf(stderr,
+                    "VAR_RESOLVE: invalid custom property string index name=%u value=%u count=%u\n",
+                    name_idx, value_idx, s.sheet->string_vector_c);
+#endif
+                continue;
+            }
 
             if (name_str != NULL && value_str != NULL && state->var_ctx != NULL) {
                 css__variables_ctx_set(state->var_ctx, name_str, value_str);
@@ -2621,8 +2630,17 @@ css_error cascade_style(const css_style *style, css_select_state *state)
 
             lwc_string *prop_name_str = NULL;
             lwc_string *raw_value_str = NULL;
-            css__stylesheet_string_get(s.sheet, prop_name_idx, &prop_name_str);
-            css__stylesheet_string_get(s.sheet, raw_value_idx, &raw_value_str);
+            css_error perr = css__stylesheet_string_get(s.sheet, prop_name_idx, &prop_name_str);
+            css_error rerr = css__stylesheet_string_get(s.sheet, raw_value_idx, &raw_value_str);
+
+            if (perr != CSS_OK || rerr != CSS_OK) {
+#ifndef NDEBUG
+                fprintf(stderr,
+                    "VAR_RESOLVE: invalid deferred string index prop=%u raw=%u count=%u\n",
+                    prop_name_idx, raw_value_idx, s.sheet->string_vector_c);
+#endif
+                continue;
+            }
 
             if (prop_name_str != NULL && raw_value_str != NULL &&
                 state->var_ctx != NULL) {

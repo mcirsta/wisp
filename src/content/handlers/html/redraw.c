@@ -161,6 +161,7 @@ static struct box *html_redraw_find_bg_box(struct box *box)
  * content (images, videos) based on the object-fit and object-position properties.
  *
  * \param style           CSS computed style (for object-position)
+ * \param unit_len_ctx    Length conversion context
  * \param object_fit      CSS object-fit value
  * \param box_width       Box content area width
  * \param box_height      Box content area height
@@ -171,9 +172,9 @@ static struct box *html_redraw_find_bg_box(struct box *box)
  * \param offset_x        Updated with x offset within box
  * \param offset_y        Updated with y offset within box
  */
-static void calculate_object_fit_dimensions(const css_computed_style *style, uint8_t object_fit, int box_width,
-    int box_height, int intrinsic_width, int intrinsic_height, int *render_width, int *render_height, int *offset_x,
-    int *offset_y)
+static void calculate_object_fit_dimensions(const css_computed_style *style, const css_unit_ctx *unit_len_ctx,
+    uint8_t object_fit, int box_width, int box_height, int intrinsic_width, int intrinsic_height, int *render_width,
+    int *render_height, int *offset_x, int *offset_y)
 {
     /* Handle zero dimensions */
     if (intrinsic_width <= 0 || intrinsic_height <= 0 || box_width <= 0 || box_height <= 0) {
@@ -234,15 +235,15 @@ static void calculate_object_fit_dimensions(const css_computed_style *style, uin
             *render_height = intrinsic_height;
         } else {
             /* Recurse with contain */
-            calculate_object_fit_dimensions(style, CSS_OBJECT_FIT_CONTAIN, box_width, box_height, intrinsic_width,
-                intrinsic_height, render_width, render_height, offset_x, offset_y);
+            calculate_object_fit_dimensions(style, unit_len_ctx, CSS_OBJECT_FIT_CONTAIN, box_width, box_height,
+                intrinsic_width, intrinsic_height, render_width, render_height, offset_x, offset_y);
             return;
         }
         break;
     }
 
     /* Calculate object-position offsets */
-    css_fixed hlength = 0, vlength = 0;
+    css_fixed_or_calc hlength = (css_fixed_or_calc)0, vlength = (css_fixed_or_calc)0;
     css_unit hunit = CSS_UNIT_PCT, vunit = CSS_UNIT_PCT;
 
     if (style != NULL) {
@@ -250,28 +251,36 @@ static void calculate_object_fit_dimensions(const css_computed_style *style, uin
         (void)type; /* Silence unused variable warning */
     } else {
         /* Default: 50% 50% (center center) */
-        hlength = INTTOFIX(50);
-        vlength = INTTOFIX(50);
+        hlength.value = INTTOFIX(50);
+        vlength.value = INTTOFIX(50);
     }
 
     /* Calculate horizontal offset */
     int available_x = box_width - *render_width;
-    if (hunit == CSS_UNIT_PCT) {
-        /* Percentage: offset = (available space) * (percentage / 100) */
-        *offset_x = FIXTOINT(FDIV(FMUL(INTTOFIX(available_x), hlength), INTTOFIX(100)));
+    if (style != NULL && unit_len_ctx != NULL) {
+        int px = 0;
+        if (css_computed_length_to_px(style, unit_len_ctx, available_x, hlength, hunit, &px) == CSS_OK) {
+            *offset_x = px;
+        } else {
+            *offset_x = 0;
+        }
     } else {
-        /* Length unit - for now treat as pixels (proper unit conversion would need unit_ctx) */
-        *offset_x = FIXTOINT(hlength);
+        /* Default: 50% 50% (center center) */
+        *offset_x = FIXTOINT(FDIV(FMUL(INTTOFIX(available_x), hlength.value), INTTOFIX(100)));
     }
 
     /* Calculate vertical offset */
     int available_y = box_height - *render_height;
-    if (vunit == CSS_UNIT_PCT) {
-        /* Percentage: offset = (available space) * (percentage / 100) */
-        *offset_y = FIXTOINT(FDIV(FMUL(INTTOFIX(available_y), vlength), INTTOFIX(100)));
+    if (style != NULL && unit_len_ctx != NULL) {
+        int px = 0;
+        if (css_computed_length_to_px(style, unit_len_ctx, available_y, vlength, vunit, &px) == CSS_OK) {
+            *offset_y = px;
+        } else {
+            *offset_y = 0;
+        }
     } else {
-        /* Length unit - treat as pixels */
-        *offset_y = FIXTOINT(vlength);
+        /* Default: 50% 50% (center center) */
+        *offset_y = FIXTOINT(FDIV(FMUL(INTTOFIX(available_y), vlength.value), INTTOFIX(100)));
     }
 }
 
@@ -1045,7 +1054,7 @@ static bool html_redraw_background(int x, int y, struct box *box, float scale, c
     struct box *clip_box = box;
     int ox = x, oy = y;
     int width, height;
-    css_fixed hpos = 0, vpos = 0;
+    css_fixed_or_calc hpos = (css_fixed_or_calc)0, vpos = (css_fixed_or_calc)0;
     css_unit hunit = CSS_UNIT_PX, vunit = CSS_UNIT_PX;
     struct box *parent;
     struct rect r = *clip;
@@ -1112,15 +1121,29 @@ static bool html_redraw_background(int x, int y, struct box *box, float scale, c
             }
 #endif
             if (hunit == CSS_UNIT_PCT) {
-                x += (width - bg_width) * scale * FIXTOFLT(hpos) / 100.;
+                x += (width - bg_width) * scale * FIXTOFLT(hpos.value) / 100.;
+            } else if (hunit == CSS_UNIT_CALC) {
+                int px = 0;
+                if (css_computed_length_to_px(background->style, unit_len_ctx, width - bg_width, hpos, hunit, &px) ==
+                    CSS_OK) {
+                    x += (int)(px * scale);
+                }
             } else {
-                x += (int)(FIXTOFLT(css_unit_len2device_px(background->style, unit_len_ctx, hpos, hunit)) * scale);
+                x += (int)(FIXTOFLT(css_unit_len2device_px(background->style, unit_len_ctx, hpos.value, hunit)) *
+                    scale);
             }
 
             if (vunit == CSS_UNIT_PCT) {
-                y += (height - bg_height) * scale * FIXTOFLT(vpos) / 100.;
+                y += (height - bg_height) * scale * FIXTOFLT(vpos.value) / 100.;
+            } else if (vunit == CSS_UNIT_CALC) {
+                int px = 0;
+                if (css_computed_length_to_px(background->style, unit_len_ctx, height - bg_height, vpos, vunit, &px) ==
+                    CSS_OK) {
+                    y += (int)(px * scale);
+                }
             } else {
-                y += (int)(FIXTOFLT(css_unit_len2device_px(background->style, unit_len_ctx, vpos, vunit)) * scale);
+                y += (int)(FIXTOFLT(css_unit_len2device_px(background->style, unit_len_ctx, vpos.value, vunit)) *
+                    scale);
             }
         }
     }
@@ -1128,7 +1151,7 @@ static bool html_redraw_background(int x, int y, struct box *box, float scale, c
     /* special case for table rows as their background needs
      * to be clipped to all the cells */
     if (box->type == BOX_TABLE_ROW) {
-        css_fixed h = 0, v = 0;
+        css_fixed_or_calc h = (css_fixed_or_calc)0, v = (css_fixed_or_calc)0;
         css_unit hu = CSS_UNIT_PX, vu = CSS_UNIT_PX;
 
         for (parent = box->parent; ((parent) && (parent->type != BOX_TABLE)); parent = parent->parent)
@@ -1137,7 +1160,15 @@ static bool html_redraw_background(int x, int y, struct box *box, float scale, c
 
         css_computed_border_spacing(parent->style, &h, &hu, &v, &vu);
 
-        clip_to_children = (h > 0) || (v > 0);
+        if (hu == CSS_UNIT_CALC || vu == CSS_UNIT_CALC) {
+            int hpx = 0;
+            int vpx = 0;
+            bool ok_h = css_computed_length_to_px(parent->style, unit_len_ctx, -1, h, hu, &hpx) == CSS_OK;
+            bool ok_v = css_computed_length_to_px(parent->style, unit_len_ctx, -1, v, vu, &vpx) == CSS_OK;
+            clip_to_children = (ok_h && hpx > 0) || (ok_v && vpx > 0);
+        } else {
+            clip_to_children = (h.value > 0) || (v.value > 0);
+        }
 
         if (clip_to_children)
             clip_box = box->children;
@@ -1293,7 +1324,7 @@ static bool html_redraw_inline_background(int x, int y, struct box *box, float s
     bool repeat_y = false;
     bool plot_colour = true;
     bool plot_content;
-    css_fixed hpos = 0, vpos = 0;
+    css_fixed_or_calc hpos = (css_fixed_or_calc)0, vpos = (css_fixed_or_calc)0;
     css_unit hunit = CSS_UNIT_PX, vunit = CSS_UNIT_PX;
     css_color bgcol;
     plot_style_t pstyle_fill_bg = {
@@ -1348,19 +1379,40 @@ static bool html_redraw_inline_background(int x, int y, struct box *box, float s
             }
 #endif
             if (hunit == CSS_UNIT_PCT) {
-                x += (b.x1 - b.x0 - bg_width * scale) * FIXTOFLT(hpos) / 100.;
+                x += (b.x1 - b.x0 - bg_width * scale) * FIXTOFLT(hpos.value) / 100.;
 
-                if (!repeat_x && ((hpos < 2 && !first) || (hpos > 98 && !last))) {
-                    plot_content = false;
+                if (!repeat_x) {
+                    int hpos_pct = FIXTOINT(hpos.value);
+                    if ((hpos_pct < 2 && !first) || (hpos_pct > 98 && !last)) {
+                        plot_content = false;
+                    }
+                }
+            } else if (hunit == CSS_UNIT_CALC) {
+                int available_x = 0;
+                if (scale > 0.0f) {
+                    available_x = (int)((b.x1 - b.x0) / scale) - bg_width;
+                }
+                int px = 0;
+                if (css_computed_length_to_px(box->style, unit_len_ctx, available_x, hpos, hunit, &px) == CSS_OK) {
+                    x += (int)(px * scale);
                 }
             } else {
-                x += (int)(FIXTOFLT(css_unit_len2device_px(box->style, unit_len_ctx, hpos, hunit)) * scale);
+                x += (int)(FIXTOFLT(css_unit_len2device_px(box->style, unit_len_ctx, hpos.value, hunit)) * scale);
             }
 
             if (vunit == CSS_UNIT_PCT) {
-                y += (b.y1 - b.y0 - bg_height * scale) * FIXTOFLT(vpos) / 100.;
+                y += (b.y1 - b.y0 - bg_height * scale) * FIXTOFLT(vpos.value) / 100.;
+            } else if (vunit == CSS_UNIT_CALC) {
+                int available_y = 0;
+                if (scale > 0.0f) {
+                    available_y = (int)((b.y1 - b.y0) / scale) - bg_height;
+                }
+                int px = 0;
+                if (css_computed_length_to_px(box->style, unit_len_ctx, available_y, vpos, vunit, &px) == CSS_OK) {
+                    y += (int)(px * scale);
+                }
             } else {
-                y += (int)(FIXTOFLT(css_unit_len2device_px(box->style, unit_len_ctx, vpos, vunit)) * scale);
+                y += (int)(FIXTOFLT(css_unit_len2device_px(box->style, unit_len_ctx, vpos.value, vunit)) * scale);
             }
         }
     }
@@ -2734,8 +2786,8 @@ bool html_redraw_box(const html_content *html, struct box *box, int x_parent, in
 
         /* Calculate render dimensions based on object-fit and object-position */
         int render_width, render_height, offset_x, offset_y;
-        calculate_object_fit_dimensions(box->style, object_fit, width, height, intrinsic_width, intrinsic_height,
-            &render_width, &render_height, &offset_x, &offset_y);
+        calculate_object_fit_dimensions(box->style, &html->unit_len_ctx, object_fit, width, height, intrinsic_width,
+            intrinsic_height, &render_width, &render_height, &offset_x, &offset_y);
 
         /* Position: base position + padding + centering offset (all scaled) */
         obj_data.x = x_scrolled + padding_left + offset_x * scale;
