@@ -223,7 +223,7 @@ static void dump_computed_style(const css_computed_style *style, char *buf, size
     uint8_t val;
     css_color color = 0;
     lwc_string *url = NULL;
-    css_fixed len1 = 0, len2 = 0;
+    css_fixed_or_calc len1 = (css_fixed_or_calc)0, len2 = (css_fixed_or_calc)0;
     css_unit unit1 = CSS_UNIT_PX, unit2 = CSS_UNIT_PX;
     css_computed_clip_rect rect = {
         0, 0, 0, 0, CSS_UNIT_PX, CSS_UNIT_PX, CSS_UNIT_PX, CSS_UNIT_PX, true, true, true, true};
@@ -394,7 +394,7 @@ static void dump_computed_style(const css_computed_style *style, char *buf, size
         ptr += wrote;
         *len -= wrote;
 
-        wrote = dump_css_unit(len1, unit1, ptr, *len);
+        wrote = dump_css_unit(len1.value, unit1, ptr, *len);
         ptr += wrote;
         *len -= wrote;
 
@@ -402,7 +402,7 @@ static void dump_computed_style(const css_computed_style *style, char *buf, size
         ptr += wrote;
         *len -= wrote;
 
-        wrote = dump_css_unit(len2, unit2, ptr, *len);
+        wrote = dump_css_unit(len2.value, unit2, ptr, *len);
         ptr += wrote;
         *len -= wrote;
 
@@ -466,7 +466,7 @@ static void dump_computed_style(const css_computed_style *style, char *buf, size
         ptr += wrote;
         *len -= wrote;
 
-        wrote = dump_css_unit(len1, unit1, ptr, *len);
+        wrote = dump_css_unit(len1.value, unit1, ptr, *len);
         ptr += wrote;
         *len -= wrote;
 
@@ -474,7 +474,7 @@ static void dump_computed_style(const css_computed_style *style, char *buf, size
         ptr += wrote;
         *len -= wrote;
 
-        wrote = dump_css_unit(len2, unit2, ptr, *len);
+        wrote = dump_css_unit(len2.value, unit2, ptr, *len);
         ptr += wrote;
         *len -= wrote;
 
@@ -751,7 +751,7 @@ static void dump_computed_style(const css_computed_style *style, char *buf, size
         ptr += wrote;
         *len -= wrote;
 
-        wrote = dump_css_unit(len1, unit1, ptr, *len);
+        wrote = dump_css_unit(len1.value, unit1, ptr, *len);
         ptr += wrote;
         *len -= wrote;
 
@@ -784,7 +784,7 @@ static void dump_computed_style(const css_computed_style *style, char *buf, size
         ptr += wrote;
         *len -= wrote;
 
-        wrote = dump_css_unit(len1, unit1, ptr, *len);
+        wrote = dump_css_unit(len1.value, unit1, ptr, *len);
         ptr += wrote;
         *len -= wrote;
 
@@ -817,7 +817,7 @@ static void dump_computed_style(const css_computed_style *style, char *buf, size
         ptr += wrote;
         *len -= wrote;
 
-        wrote = dump_css_unit(len1, unit1, ptr, *len);
+        wrote = dump_css_unit(len1.value, unit1, ptr, *len);
         ptr += wrote;
         *len -= wrote;
 
@@ -850,7 +850,7 @@ static void dump_computed_style(const css_computed_style *style, char *buf, size
         ptr += wrote;
         *len -= wrote;
 
-        wrote = dump_css_unit(len1, unit1, ptr, *len);
+        wrote = dump_css_unit(len1.value, unit1, ptr, *len);
         ptr += wrote;
         *len -= wrote;
 
@@ -877,7 +877,7 @@ static void dump_computed_style(const css_computed_style *style, char *buf, size
         ptr += wrote;
         *len -= wrote;
 
-        wrote = dump_css_unit(len1, unit1, ptr, *len);
+        wrote = dump_css_unit(len1.value, unit1, ptr, *len);
         ptr += wrote;
         *len -= wrote;
 
@@ -1173,7 +1173,7 @@ static void dump_computed_style(const css_computed_style *style, char *buf, size
         ptr += wrote;
         *len -= wrote;
 
-        wrote = dump_css_unit(len1, unit1, ptr, *len);
+        wrote = dump_css_unit(len1.value, unit1, ptr, *len);
         ptr += wrote;
         *len -= wrote;
 
@@ -1265,7 +1265,7 @@ static void dump_computed_style(const css_computed_style *style, char *buf, size
         ptr += wrote;
         *len -= wrote;
 
-        wrote = dump_css_unit(len1, unit1, ptr, *len);
+        wrote = dump_css_unit(len1.value, unit1, ptr, *len);
         ptr += wrote;
         *len -= wrote;
 
@@ -1311,7 +1311,7 @@ static void dump_computed_style(const css_computed_style *style, char *buf, size
         ptr += wrote;
         *len -= wrote;
 
-        wrote = dump_css_unit(len1, unit1, ptr, *len);
+        wrote = dump_css_unit(len1.value, unit1, ptr, *len);
         ptr += wrote;
         *len -= wrote;
 
@@ -1645,7 +1645,7 @@ static void dump_computed_style(const css_computed_style *style, char *buf, size
     *len -= wrote;
 
     /* fill-opacity */
-    val = css_computed_fill_opacity(style, &len1);
+    val = css_computed_fill_opacity(style, &len1.value);
     switch (val) {
     case CSS_FILL_OPACITY_INHERIT:
         wrote = snprintf(ptr, *len, "fill-opacity: inherit\n");
@@ -1655,7 +1655,7 @@ static void dump_computed_style(const css_computed_style *style, char *buf, size
         ptr += wrote;
         *len -= wrote;
 
-        wrote = dump_css_fixed(len1, ptr, *len);
+        wrote = dump_css_fixed(len1.value, ptr, *len);
         ptr += wrote;
         *len -= wrote;
 
@@ -1731,7 +1731,7 @@ static void dump_computed_style(const css_computed_style *style, char *buf, size
     *len -= wrote;
 
     /* flex-grow */
-    val = css_computed_flex_grow(style, &len1);
+    val = css_computed_flex_grow(style, &len1.value);
     switch (val) {
     case CSS_FLEX_GROW_INHERIT:
         wrote = snprintf(ptr, *len, "flex-grow: inherit\n");
@@ -1741,7 +1741,7 @@ static void dump_computed_style(const css_computed_style *style, char *buf, size
         ptr += wrote;
         *len -= wrote;
 
-        wrote = dump_css_fixed(len1, ptr, *len);
+        wrote = dump_css_fixed(len1.value, ptr, *len);
         ptr += wrote;
         *len -= wrote;
 
@@ -1755,7 +1755,7 @@ static void dump_computed_style(const css_computed_style *style, char *buf, size
     *len -= wrote;
 
     /* flex-shrink */
-    val = css_computed_flex_shrink(style, &len1);
+    val = css_computed_flex_shrink(style, &len1.value);
     switch (val) {
     case CSS_FLEX_SHRINK_INHERIT:
         wrote = snprintf(ptr, *len, "flex-shrink: inherit\n");
@@ -1765,7 +1765,7 @@ static void dump_computed_style(const css_computed_style *style, char *buf, size
         ptr += wrote;
         *len -= wrote;
 
-        wrote = dump_css_fixed(len1, ptr, *len);
+        wrote = dump_css_fixed(len1.value, ptr, *len);
         ptr += wrote;
         *len -= wrote;
 
@@ -1902,7 +1902,7 @@ static void dump_computed_style(const css_computed_style *style, char *buf, size
         ptr += wrote;
         *len -= wrote;
 
-        wrote = dump_css_unit(len1, unit1, ptr, *len);
+        wrote = dump_css_unit(len1.value, unit1, ptr, *len);
         ptr += wrote;
         *len -= wrote;
 
@@ -2131,7 +2131,7 @@ static void dump_computed_style(const css_computed_style *style, char *buf, size
         ptr += wrote;
         *len -= wrote;
 
-        wrote = dump_css_unit(len1, unit1, ptr, *len);
+        wrote = dump_css_unit(len1.value, unit1, ptr, *len);
         ptr += wrote;
         *len -= wrote;
 
@@ -2189,7 +2189,7 @@ static void dump_computed_style(const css_computed_style *style, char *buf, size
         ptr += wrote;
         *len -= wrote;
 
-        wrote = dump_css_unit(len1, unit1, ptr, *len);
+        wrote = dump_css_unit(len1.value, unit1, ptr, *len);
         ptr += wrote;
         *len -= wrote;
 
@@ -2216,7 +2216,7 @@ static void dump_computed_style(const css_computed_style *style, char *buf, size
         ptr += wrote;
         *len -= wrote;
 
-        wrote = dump_css_unit(len1, unit1, ptr, *len);
+        wrote = dump_css_unit(len1.value, unit1, ptr, *len);
         ptr += wrote;
         *len -= wrote;
 
@@ -2243,7 +2243,7 @@ static void dump_computed_style(const css_computed_style *style, char *buf, size
         ptr += wrote;
         *len -= wrote;
 
-        wrote = dump_css_fixed(len1, ptr, *len);
+        wrote = dump_css_fixed(len1.value, ptr, *len);
         ptr += wrote;
         *len -= wrote;
 
@@ -2254,7 +2254,7 @@ static void dump_computed_style(const css_computed_style *style, char *buf, size
         ptr += wrote;
         *len -= wrote;
 
-        wrote = dump_css_unit(len1, unit1, ptr, *len);
+        wrote = dump_css_unit(len1.value, unit1, ptr, *len);
         ptr += wrote;
         *len -= wrote;
 
@@ -2373,7 +2373,7 @@ static void dump_computed_style(const css_computed_style *style, char *buf, size
         ptr += wrote;
         *len -= wrote;
 
-        wrote = dump_css_unit(len1, unit1, ptr, *len);
+        wrote = dump_css_unit(len1.value, unit1, ptr, *len);
         ptr += wrote;
         *len -= wrote;
 
@@ -2400,7 +2400,7 @@ static void dump_computed_style(const css_computed_style *style, char *buf, size
         ptr += wrote;
         *len -= wrote;
 
-        wrote = dump_css_unit(len1, unit1, ptr, *len);
+        wrote = dump_css_unit(len1.value, unit1, ptr, *len);
         ptr += wrote;
         *len -= wrote;
 
@@ -2427,7 +2427,7 @@ static void dump_computed_style(const css_computed_style *style, char *buf, size
         ptr += wrote;
         *len -= wrote;
 
-        wrote = dump_css_unit(len1, unit1, ptr, *len);
+        wrote = dump_css_unit(len1.value, unit1, ptr, *len);
         ptr += wrote;
         *len -= wrote;
 
@@ -2454,7 +2454,7 @@ static void dump_computed_style(const css_computed_style *style, char *buf, size
         ptr += wrote;
         *len -= wrote;
 
-        wrote = dump_css_unit(len1, unit1, ptr, *len);
+        wrote = dump_css_unit(len1.value, unit1, ptr, *len);
         ptr += wrote;
         *len -= wrote;
 
@@ -2481,7 +2481,7 @@ static void dump_computed_style(const css_computed_style *style, char *buf, size
         ptr += wrote;
         *len -= wrote;
 
-        wrote = dump_css_unit(len1, unit1, ptr, *len);
+        wrote = dump_css_unit(len1.value, unit1, ptr, *len);
         ptr += wrote;
         *len -= wrote;
 
@@ -2508,7 +2508,7 @@ static void dump_computed_style(const css_computed_style *style, char *buf, size
         ptr += wrote;
         *len -= wrote;
 
-        wrote = dump_css_unit(len1, unit1, ptr, *len);
+        wrote = dump_css_unit(len1.value, unit1, ptr, *len);
         ptr += wrote;
         *len -= wrote;
 
@@ -2535,7 +2535,7 @@ static void dump_computed_style(const css_computed_style *style, char *buf, size
         ptr += wrote;
         *len -= wrote;
 
-        wrote = dump_css_unit(len1, unit1, ptr, *len);
+        wrote = dump_css_unit(len1.value, unit1, ptr, *len);
         ptr += wrote;
         *len -= wrote;
 
@@ -2562,7 +2562,7 @@ static void dump_computed_style(const css_computed_style *style, char *buf, size
         ptr += wrote;
         *len -= wrote;
 
-        wrote = dump_css_unit(len1, unit1, ptr, *len);
+        wrote = dump_css_unit(len1.value, unit1, ptr, *len);
         ptr += wrote;
         *len -= wrote;
 
@@ -2576,7 +2576,7 @@ static void dump_computed_style(const css_computed_style *style, char *buf, size
     *len -= wrote;
 
     /* opacity */
-    val = css_computed_opacity(style, &len1);
+    val = css_computed_opacity(style, &len1.value);
     switch (val) {
     case CSS_OPACITY_INHERIT:
         wrote = snprintf(ptr, *len, "opacity: inherit\n");
@@ -2586,7 +2586,7 @@ static void dump_computed_style(const css_computed_style *style, char *buf, size
         ptr += wrote;
         *len -= wrote;
 
-        wrote = dump_css_fixed(len1, ptr, *len);
+        wrote = dump_css_fixed(len1.value, ptr, *len);
         ptr += wrote;
         *len -= wrote;
 
@@ -2694,7 +2694,7 @@ static void dump_computed_style(const css_computed_style *style, char *buf, size
         ptr += wrote;
         *len -= wrote;
 
-        wrote = dump_css_unit(len1, unit1, ptr, *len);
+        wrote = dump_css_unit(len1.value, unit1, ptr, *len);
         ptr += wrote;
         *len -= wrote;
 
@@ -2768,7 +2768,7 @@ static void dump_computed_style(const css_computed_style *style, char *buf, size
         ptr += wrote;
         *len -= wrote;
 
-        wrote = dump_css_unit(len1, unit1, ptr, *len);
+        wrote = dump_css_unit(len1.value, unit1, ptr, *len);
         ptr += wrote;
         *len -= wrote;
 
@@ -2792,7 +2792,7 @@ static void dump_computed_style(const css_computed_style *style, char *buf, size
         ptr += wrote;
         *len -= wrote;
 
-        wrote = dump_css_unit(len1, unit1, ptr, *len);
+        wrote = dump_css_unit(len1.value, unit1, ptr, *len);
         ptr += wrote;
         *len -= wrote;
 
@@ -2816,7 +2816,7 @@ static void dump_computed_style(const css_computed_style *style, char *buf, size
         ptr += wrote;
         *len -= wrote;
 
-        wrote = dump_css_unit(len1, unit1, ptr, *len);
+        wrote = dump_css_unit(len1.value, unit1, ptr, *len);
         ptr += wrote;
         *len -= wrote;
 
@@ -2840,7 +2840,7 @@ static void dump_computed_style(const css_computed_style *style, char *buf, size
         ptr += wrote;
         *len -= wrote;
 
-        wrote = dump_css_unit(len1, unit1, ptr, *len);
+        wrote = dump_css_unit(len1.value, unit1, ptr, *len);
         ptr += wrote;
         *len -= wrote;
 
@@ -2928,7 +2928,7 @@ static void dump_computed_style(const css_computed_style *style, char *buf, size
         ptr += wrote;
         *len -= wrote;
 
-        wrote = dump_css_unit(len1, unit1, ptr, *len);
+        wrote = dump_css_unit(len1.value, unit1, ptr, *len);
         ptr += wrote;
         *len -= wrote;
 
@@ -2942,7 +2942,7 @@ static void dump_computed_style(const css_computed_style *style, char *buf, size
     *len -= wrote;
 
     /* stroke-opacity */
-    val = css_computed_stroke_opacity(style, &len1);
+    val = css_computed_stroke_opacity(style, &len1.value);
     switch (val) {
     case CSS_STROKE_OPACITY_INHERIT:
         wrote = snprintf(ptr, *len, "stroke-opacity: inherit\n");
@@ -2952,7 +2952,7 @@ static void dump_computed_style(const css_computed_style *style, char *buf, size
         ptr += wrote;
         *len -= wrote;
 
-        wrote = dump_css_fixed(len1, ptr, *len);
+        wrote = dump_css_fixed(len1.value, ptr, *len);
         ptr += wrote;
         *len -= wrote;
 
@@ -3073,7 +3073,7 @@ static void dump_computed_style(const css_computed_style *style, char *buf, size
         ptr += wrote;
         *len -= wrote;
 
-        wrote = dump_css_unit(len1, unit1, ptr, *len);
+        wrote = dump_css_unit(len1.value, unit1, ptr, *len);
         ptr += wrote;
         *len -= wrote;
 
@@ -3125,7 +3125,7 @@ static void dump_computed_style(const css_computed_style *style, char *buf, size
         ptr += wrote;
         *len -= wrote;
 
-        wrote = dump_css_unit(len1, unit1, ptr, *len);
+        wrote = dump_css_unit(len1.value, unit1, ptr, *len);
         ptr += wrote;
         *len -= wrote;
 
@@ -3195,7 +3195,7 @@ static void dump_computed_style(const css_computed_style *style, char *buf, size
         ptr += wrote;
         *len -= wrote;
 
-        wrote = dump_css_unit(len1, unit1, ptr, *len);
+        wrote = dump_css_unit(len1.value, unit1, ptr, *len);
         ptr += wrote;
         *len -= wrote;
 
@@ -3285,7 +3285,7 @@ static void dump_computed_style(const css_computed_style *style, char *buf, size
         ptr += wrote;
         *len -= wrote;
 #else
-        wrote = dump_css_unit(len1, unit1, ptr, *len);
+        wrote = dump_css_unit(len1.value, unit1, ptr, *len);
         ptr += wrote;
         *len -= wrote;
 #endif
@@ -3313,7 +3313,7 @@ static void dump_computed_style(const css_computed_style *style, char *buf, size
         ptr += wrote;
         *len -= wrote;
 
-        wrote = dump_css_unit(len1, unit1, ptr, *len);
+        wrote = dump_css_unit(len1.value, unit1, ptr, *len);
         ptr += wrote;
         *len -= wrote;
 

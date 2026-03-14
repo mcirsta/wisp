@@ -188,47 +188,54 @@ static struct flex_ctx *layout_flex_ctx__create(html_content *content, const str
     ctx->horizontal = lh__flex_main_is_horizontal(flex);
     ctx->main_reversed = lh__flex_direction_reversed(flex);
 
-    /* Read CSS gap properties per flexbox spec:
-     * - For row direction (horizontal): column-gap is main, row-gap is cross
-     * - For column direction (vertical): row-gap is main, column-gap is cross */
+    /* Gaps are resolved after available sizes are known. */
     ctx->main_gap = 0;
     ctx->cross_gap = 0;
-    if (flex->style != NULL) {
-        css_fixed gap_len = 0;
-        css_unit gap_unit = CSS_UNIT_PX;
-
-        /* Main gap */
-        if (ctx->horizontal) {
-            if (css_computed_column_gap(flex->style, &gap_len, &gap_unit) == CSS_COLUMN_GAP_SET) {
-                ctx->main_gap = FIXTOINT(css_unit_len2device_px(flex->style, ctx->unit_len_ctx, gap_len, gap_unit));
-            }
-        } else {
-            if (css_computed_row_gap(flex->style, &gap_len, &gap_unit) == CSS_ROW_GAP_SET) {
-                ctx->main_gap = FIXTOINT(css_unit_len2device_px(flex->style, ctx->unit_len_ctx, gap_len, gap_unit));
-            }
-        }
-
-        NSLOG(flex, INFO, "Gap parsed: flex=%p horizontal=%d main_gap=%d", flex, ctx->horizontal, ctx->main_gap);
-
-        /* Cross gap */
-        if (ctx->horizontal) {
-            if (css_computed_row_gap(flex->style, &gap_len, &gap_unit) == CSS_ROW_GAP_SET) {
-                ctx->cross_gap = FIXTOINT(css_unit_len2device_px(flex->style, ctx->unit_len_ctx, gap_len, gap_unit));
-            }
-        } else {
-            if (css_computed_column_gap(flex->style, &gap_len, &gap_unit) == CSS_COLUMN_GAP_SET) {
-                ctx->cross_gap = FIXTOINT(css_unit_len2device_px(flex->style, ctx->unit_len_ctx, gap_len, gap_unit));
-            }
-        }
-        // NSLOG(
-        //     flex, WARNING, "Flex gap: main=%d cross=%d horizontal=%d", ctx->main_gap, ctx->cross_gap,
-        //     ctx->horizontal);
-        //  fprintf(
-        //      stderr, "FLEX GAP DEBUG: main=%d cross=%d horizontal=%d\n", ctx->main_gap, ctx->cross_gap,
-        //      ctx->horizontal);
-    }
 
     return ctx;
+}
+
+static void layout_flex_ctx__compute_gaps(struct flex_ctx *ctx, const struct box *flex, int available_inline,
+    int available_block)
+{
+    int column_gap = 0;
+    int row_gap = 0;
+
+    if (flex->style != NULL) {
+        css_fixed_or_calc gap_len = (css_fixed_or_calc)0;
+        css_unit gap_unit = CSS_UNIT_PX;
+
+        /* Column gap uses inline size; row gap uses block size. */
+        if (css_computed_column_gap(flex->style, &gap_len, &gap_unit) == CSS_COLUMN_GAP_SET) {
+            if (!lh__length_to_px(flex->style, ctx->unit_len_ctx, available_inline, gap_len, gap_unit, &column_gap)) {
+                column_gap = 0;
+            }
+        }
+        if (css_computed_row_gap(flex->style, &gap_len, &gap_unit) == CSS_ROW_GAP_SET) {
+            if (!lh__length_to_px(flex->style, ctx->unit_len_ctx, available_block, gap_len, gap_unit, &row_gap)) {
+                row_gap = 0;
+            }
+        }
+    }
+
+    if (column_gap < 0) {
+        NSLOG(flex, DEBUG, "Negative column-gap clamped to 0: %d", column_gap);
+        column_gap = 0;
+    }
+    if (row_gap < 0) {
+        NSLOG(flex, DEBUG, "Negative row-gap clamped to 0: %d", row_gap);
+        row_gap = 0;
+    }
+
+    /* For row direction (horizontal): column-gap is main, row-gap is cross
+     * For column direction (vertical): row-gap is main, column-gap is cross */
+    if (ctx->horizontal) {
+        ctx->main_gap = column_gap;
+        ctx->cross_gap = row_gap;
+    } else {
+        ctx->main_gap = row_gap;
+        ctx->cross_gap = column_gap;
+    }
 }
 
 /**
@@ -286,12 +293,16 @@ bool layout_flex_redistribute_auto_margins_vertical(struct box *flex)
     /* Get CSS row-gap for column flex (this is the main axis gap) */
     int css_row_gap = 0;
     if (flex->style) {
-        css_fixed gap_len = 0;
+        css_fixed_or_calc gap_len = (css_fixed_or_calc)0;
         css_unit gap_unit = CSS_UNIT_PX;
         uint8_t gap_type = css_computed_row_gap(flex->style, &gap_len, &gap_unit);
-        if (gap_type == CSS_ROW_GAP_SET && gap_unit != CSS_UNIT_PCT) {
-            /* Convert to pixels using a dummy unit context - we just need px conversion */
-            css_row_gap = FIXTOINT(gap_len); /* Already in px if unit is px */
+        if (gap_type == CSS_ROW_GAP_SET) {
+            if (gap_unit == CSS_UNIT_PX) {
+                css_row_gap = FIXTOINT(gap_len.value);
+            } else {
+                /* Without unit context here, fall back to 0 for non-px/calc. */
+                css_row_gap = 0;
+            }
         }
     }
 
@@ -323,7 +334,7 @@ bool layout_flex_redistribute_auto_margins_vertical(struct box *flex)
         bool margin_top_auto = false;
         bool margin_bottom_auto = false;
         if (child->style) {
-            css_fixed len;
+            css_fixed_or_calc len = (css_fixed_or_calc)0;
             css_unit unit;
             uint8_t margin_type = css_computed_margin_top(child->style, &len, &unit);
             margin_top_auto = (margin_type == CSS_MARGIN_AUTO);
@@ -444,7 +455,7 @@ bool layout_flex_redistribute_auto_margins_vertical(struct box *flex)
         bool margin_top_auto = false;
         bool margin_bottom_auto = false;
         if (child->style) {
-            css_fixed len;
+            css_fixed_or_calc len = (css_fixed_or_calc)0;
             css_unit unit;
             uint8_t margin_type = css_computed_margin_top(child->style, &len, &unit);
             margin_top_auto = (margin_type == CSS_MARGIN_AUTO);
@@ -802,7 +813,7 @@ static inline bool layout_flex__base_and_main_sizes(
         if (b->width == AUTO) {
             /* Check if CSS width is a content-sizing keyword (fit-content, min-content, max-content).
              * These use intrinsic content width, not stretch behavior. */
-            css_fixed css_width_val;
+            css_fixed_or_calc css_width_val = (css_fixed_or_calc)0;
             css_unit css_width_unit;
             uint8_t wtype = css_computed_width(b->style, &css_width_val, &css_width_unit);
 
@@ -962,7 +973,7 @@ static void layout_flex_ctx__populate_item_data(struct flex_ctx *ctx, const stru
          * minimum size. Only explicitly set non-zero values should prevent shrinking below content.
          * This matches browser behavior where flex items don't shrink below content by default. */
         {
-            css_fixed value;
+            css_fixed_or_calc value = (css_fixed_or_calc)0;
             css_unit unit;
             enum css_min_height_e min_h_type = ns_computed_min_height(b->style, &value, &unit);
             enum css_min_width_e min_w_type = ns_computed_min_width(b->style, &value, &unit);
@@ -1970,6 +1981,18 @@ bool layout_flex(struct box *flex, int available_width, html_content *content)
     } else {
         ctx->available_main = resolved_height;
         ctx->available_cross = available_width;
+    }
+
+    {
+        int available_inline = available_width;
+        int available_block = resolved_height;
+        if (available_inline == AUTO || available_inline == UNKNOWN_WIDTH) {
+            available_inline = -1;
+        }
+        if (available_block == AUTO) {
+            available_block = -1;
+        }
+        layout_flex_ctx__compute_gaps(ctx, flex, available_inline, available_block);
     }
 
     NSLOG(flex, DEEPDEBUG, "box %p: available_main: %i", flex, ctx->available_main);

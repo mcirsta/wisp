@@ -339,7 +339,7 @@ static nserror html_object_callback(hlcache_handle *object, const hlcache_event 
 
             if (object == box->background) {
                 /* Redraw request is for background */
-                css_fixed hpos = 0, vpos = 0;
+                css_fixed_or_calc hpos = (css_fixed_or_calc)0, vpos = (css_fixed_or_calc)0;
                 css_unit hunit = CSS_UNIT_PX;
                 css_unit vunit = CSS_UNIT_PX;
                 int width = box->padding[LEFT] + box->width + box->padding[RIGHT];
@@ -361,15 +361,31 @@ static nserror html_object_callback(hlcache_handle *object, const hlcache_event 
                 }
 #endif
                 if (hunit == CSS_UNIT_PCT) {
-                    l = (width - w) * hpos / INTTOFIX(100);
+                    l = (width - w) * hpos.value / INTTOFIX(100);
+                } else if (hunit == CSS_UNIT_CALC) {
+                    int px = 0;
+                    if (css_computed_length_to_px(box->style, &c->unit_len_ctx, width - w, hpos, hunit, &px) ==
+                        CSS_OK) {
+                        l = px;
+                    } else {
+                        l = 0;
+                    }
                 } else {
-                    l = FIXTOINT(css_unit_len2device_px(box->style, &c->unit_len_ctx, hpos, hunit));
+                    l = FIXTOINT(css_unit_len2device_px(box->style, &c->unit_len_ctx, hpos.value, hunit));
                 }
 
                 if (vunit == CSS_UNIT_PCT) {
-                    t = (height - h) * vpos / INTTOFIX(100);
+                    t = (height - h) * vpos.value / INTTOFIX(100);
+                } else if (vunit == CSS_UNIT_CALC) {
+                    int px = 0;
+                    if (css_computed_length_to_px(box->style, &c->unit_len_ctx, height - h, vpos, vunit, &px) ==
+                        CSS_OK) {
+                        t = px;
+                    } else {
+                        t = 0;
+                    }
                 } else {
-                    t = FIXTOINT(css_unit_len2device_px(box->style, &c->unit_len_ctx, vpos, vunit));
+                    t = FIXTOINT(css_unit_len2device_px(box->style, &c->unit_len_ctx, vpos.value, vunit));
                 }
 
                 /* Redraw area depends on background-repeat */

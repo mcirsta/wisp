@@ -161,37 +161,37 @@ uint8_t css_computed_align_search_items(const css_computed_style *style)
 }
 /* Removed unknown justify items */
 
-uint8_t css_computed_column_gap(const css_computed_style *style, css_fixed *length, css_unit *unit)
+uint8_t css_computed_column_gap(const css_computed_style *style, css_fixed_or_calc *length, css_unit *unit)
 {
     return CSS_COLUMN_GAP_NORMAL;
 }
-uint8_t css_computed_row_gap(const css_computed_style *style, css_fixed *length, css_unit *unit)
+uint8_t css_computed_row_gap(const css_computed_style *style, css_fixed_or_calc *length, css_unit *unit)
 {
     return CSS_ROW_GAP_NORMAL;
 }
 
 /* Mocks for width/height - return AUTO */
-uint8_t css_computed_width(const css_computed_style *style, css_fixed *length, css_unit *unit)
+uint8_t css_computed_width(const css_computed_style *style, css_fixed_or_calc *length, css_unit *unit)
 {
     return CSS_WIDTH_AUTO;
 }
-uint8_t css_computed_height(const css_computed_style *style, css_fixed *length, css_unit *unit)
+uint8_t css_computed_height(const css_computed_style *style, css_fixed_or_calc *length, css_unit *unit)
 {
     return CSS_HEIGHT_AUTO;
 }
-uint8_t css_computed_min_width(const css_computed_style *style, css_fixed *length, css_unit *unit)
+uint8_t css_computed_min_width(const css_computed_style *style, css_fixed_or_calc *length, css_unit *unit)
 {
     return CSS_MIN_WIDTH_AUTO;
 }
-uint8_t css_computed_max_width(const css_computed_style *style, css_fixed *length, css_unit *unit)
+uint8_t css_computed_max_width(const css_computed_style *style, css_fixed_or_calc *length, css_unit *unit)
 {
     return CSS_MAX_WIDTH_NONE;
 }
-uint8_t css_computed_min_height(const css_computed_style *style, css_fixed *length, css_unit *unit)
+uint8_t css_computed_min_height(const css_computed_style *style, css_fixed_or_calc *length, css_unit *unit)
 {
     return CSS_MIN_HEIGHT_AUTO;
 }
-uint8_t css_computed_max_height(const css_computed_style *style, css_fixed *length, css_unit *unit)
+uint8_t css_computed_max_height(const css_computed_style *style, css_fixed_or_calc *length, css_unit *unit)
 {
     return CSS_MAX_HEIGHT_NONE;
 }

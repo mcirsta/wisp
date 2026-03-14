@@ -28,8 +28,8 @@ static css_error compute_border_colors(css_computed_style *style);
 
 static css_error compute_absolute_border_width(css_computed_style *style, const css_hint_length *ex_size);
 static css_error compute_absolute_border_side_width(css_computed_style *style, const css_hint_length *ex_size,
-    uint8_t (*get)(const css_computed_style *style, css_fixed *len, css_unit *unit),
-    css_error (*set)(css_computed_style *style, uint8_t type, css_fixed len, css_unit unit));
+    uint8_t (*get)(const css_computed_style *style, css_fixed_or_calc *len, css_unit *unit),
+    css_error (*set)(css_computed_style *style, uint8_t type, css_fixed_or_calc len, css_unit unit));
 static css_error compute_absolute_sides(css_computed_style *style, const css_hint_length *ex_size);
 static css_error compute_absolute_clip(css_computed_style *style, const css_hint_length *ex_size);
 static css_error compute_absolute_line_height(css_computed_style *style, const css_hint_length *ex_size);
@@ -37,15 +37,17 @@ static css_error compute_absolute_margins(css_computed_style *style, const css_h
 static css_error compute_absolute_padding(css_computed_style *style, const css_hint_length *ex_size);
 static css_error compute_absolute_vertical_align(css_computed_style *style, const css_hint_length *ex_size);
 static css_error compute_absolute_length(css_computed_style *style, const css_hint_length *ex_size,
-    uint8_t (*get)(const css_computed_style *style, css_fixed *len, css_unit *unit),
-    css_error (*set)(css_computed_style *style, uint8_t type, css_fixed len, css_unit unit));
+    uint8_t (*get)(const css_computed_style *style, css_fixed_or_calc *len, css_unit *unit),
+    css_error (*set)(css_computed_style *style, uint8_t type, css_fixed_or_calc len, css_unit unit));
 static css_error compute_absolute_length_calc(css_computed_style *style, const css_hint_length *ex_size,
     uint8_t (*get)(const css_computed_style *style, css_fixed_or_calc *len, css_unit *unit),
     css_error (*set)(css_computed_style *style, uint8_t type, css_fixed_or_calc len, css_unit unit));
 static css_error compute_absolute_length_pair(css_computed_style *style, const css_hint_length *ex_size,
-    uint8_t (*get)(const css_computed_style *style, css_fixed *len1, css_unit *unit1, css_fixed *len2, css_unit *unit2),
+    uint8_t (*get)(const css_computed_style *style, css_fixed_or_calc *len1, css_unit *unit1, css_fixed_or_calc *len2,
+        css_unit *unit2),
     css_error (*set)(
-        css_computed_style *style, uint8_t type, css_fixed len1, css_unit unit1, css_fixed len2, css_unit unit2));
+        css_computed_style *style, uint8_t type, css_fixed_or_calc len1, css_unit unit1, css_fixed_or_calc len2,
+        css_unit unit2));
 
 
 /**
@@ -357,24 +359,28 @@ css__compute_absolute_values(const css_computed_style *parent, css_computed_styl
 {
     css_hint_length *ref_length = NULL;
     css_hint psize, size, ex_size;
+    css_fixed_or_calc length = (css_fixed_or_calc)0;
     css_error error;
 
     /* Get reference font-size for relative sizes. */
     if (parent != NULL) {
-        psize.status = get_font_size(parent, &psize.data.length.value, &psize.data.length.unit);
+        psize.status = get_font_size(parent, &length, &psize.data.length.unit);
+        psize.data.length.value = length.value;
         if (psize.status != CSS_FONT_SIZE_DIMENSION) {
             return CSS_BADPARM;
         }
         ref_length = &psize.data.length;
     }
 
-    size.status = get_font_size(style, &size.data.length.value, &size.data.length.unit);
+    size.status = get_font_size(style, &length, &size.data.length.unit);
+    size.data.length.value = length.value;
 
     error = css_unit_compute_absolute_font_size(ref_length, unit_ctx->root_style, unit_ctx->font_size_default, &size);
     if (error != CSS_OK)
         return error;
 
-    error = set_font_size(style, size.status, size.data.length.value, size.data.length.unit);
+    length.value = size.data.length.value;
+    error = set_font_size(style, size.status, length, size.data.length.unit);
     if (error != CSS_OK)
         return error;
 
@@ -641,28 +647,28 @@ css_error compute_absolute_border_width(css_computed_style *style, const css_hin
  * \return CSS_OK on success
  */
 css_error compute_absolute_border_side_width(css_computed_style *style, const css_hint_length *ex_size,
-    uint8_t (*get)(const css_computed_style *style, css_fixed *len, css_unit *unit),
-    css_error (*set)(css_computed_style *style, uint8_t type, css_fixed len, css_unit unit))
+    uint8_t (*get)(const css_computed_style *style, css_fixed_or_calc *len, css_unit *unit),
+    css_error (*set)(css_computed_style *style, uint8_t type, css_fixed_or_calc len, css_unit unit))
 {
-    css_fixed length;
+    css_fixed_or_calc length = (css_fixed_or_calc)0;
     css_unit unit;
 
     switch (get(style, &length, &unit)) {
     case CSS_BORDER_WIDTH_THIN:
-        length = INTTOFIX(1);
+        length.value = INTTOFIX(1);
         unit = CSS_UNIT_PX;
         break;
     case CSS_BORDER_WIDTH_MEDIUM:
-        length = INTTOFIX(2);
+        length.value = INTTOFIX(2);
         unit = CSS_UNIT_PX;
         break;
     case CSS_BORDER_WIDTH_THICK:
-        length = INTTOFIX(4);
+        length.value = INTTOFIX(4);
         unit = CSS_UNIT_PX;
         break;
     case CSS_BORDER_WIDTH_WIDTH:
         if (unit == CSS_UNIT_EX) {
-            length = FMUL(length, ex_size->value);
+            length.value = FMUL(length.value, ex_size->value);
             unit = ex_size->unit;
         }
         break;
@@ -732,7 +738,7 @@ css_error compute_absolute_clip(css_computed_style *style, const css_hint_length
  */
 css_error compute_absolute_line_height(css_computed_style *style, const css_hint_length *ex_size)
 {
-    css_fixed length = 0;
+    css_fixed_or_calc length = (css_fixed_or_calc)0;
     css_unit unit = CSS_UNIT_PX;
     uint8_t type;
     css_error error;
@@ -741,7 +747,7 @@ css_error compute_absolute_line_height(css_computed_style *style, const css_hint
 
     if (type == CSS_LINE_HEIGHT_DIMENSION) {
         if (unit == CSS_UNIT_EX) {
-            length = FMUL(length, ex_size->value);
+            length.value = FMUL(length.value, ex_size->value);
             unit = ex_size->unit;
         }
 
@@ -853,7 +859,7 @@ css_error compute_absolute_padding(css_computed_style *style, const css_hint_len
  */
 css_error compute_absolute_vertical_align(css_computed_style *style, const css_hint_length *ex_size)
 {
-    css_fixed length = 0;
+    css_fixed_or_calc length = (css_fixed_or_calc)0;
     css_unit unit = CSS_UNIT_PX;
     uint8_t type;
     css_error error;
@@ -862,7 +868,7 @@ css_error compute_absolute_vertical_align(css_computed_style *style, const css_h
 
     if (type == CSS_VERTICAL_ALIGN_SET) {
         if (unit == CSS_UNIT_EX) {
-            length = FMUL(length, ex_size->value);
+            length.value = FMUL(length.value, ex_size->value);
             unit = ex_size->unit;
         }
 
@@ -884,17 +890,17 @@ css_error compute_absolute_vertical_align(css_computed_style *style, const css_h
  * \return CSS_OK on success
  */
 css_error compute_absolute_length(css_computed_style *style, const css_hint_length *ex_size,
-    uint8_t (*get)(const css_computed_style *style, css_fixed *len, css_unit *unit),
-    css_error (*set)(css_computed_style *style, uint8_t type, css_fixed len, css_unit unit))
+    uint8_t (*get)(const css_computed_style *style, css_fixed_or_calc *len, css_unit *unit),
+    css_error (*set)(css_computed_style *style, uint8_t type, css_fixed_or_calc len, css_unit unit))
 {
     css_unit unit = CSS_UNIT_PX;
-    css_fixed length;
+    css_fixed_or_calc length = (css_fixed_or_calc)0;
     uint8_t type;
 
     type = get(style, &length, &unit);
 
     if (type == CSS_WIDTH_SET && unit == CSS_UNIT_EX) {
-        length = FMUL(length, ex_size->value);
+        length.value = FMUL(length.value, ex_size->value);
         unit = ex_size->unit;
 
         return set(style, type, length, unit);
@@ -916,20 +922,7 @@ css_error compute_absolute_length_calc(css_computed_style *style, const css_hint
     uint8_t (*get)(const css_computed_style *style, css_fixed_or_calc *len, css_unit *unit),
     css_error (*set)(css_computed_style *style, uint8_t type, css_fixed_or_calc len, css_unit unit))
 {
-    css_unit unit = CSS_UNIT_PX;
-    css_fixed_or_calc length;
-    uint8_t type;
-
-    type = get(style, &length, &unit);
-
-    if (type == CSS_WIDTH_SET && unit == CSS_UNIT_EX) {
-        length.value = FMUL(length.value, ex_size->value);
-        unit = ex_size->unit;
-
-        return set(style, type, length, unit);
-    }
-
-    return CSS_OK;
+    return compute_absolute_length(style, ex_size, get, set);
 }
 
 
@@ -943,11 +936,13 @@ css_error compute_absolute_length_calc(css_computed_style *style, const css_hint
  * \return CSS_OK on success
  */
 css_error compute_absolute_length_pair(css_computed_style *style, const css_hint_length *ex_size,
-    uint8_t (*get)(const css_computed_style *style, css_fixed *len1, css_unit *unit1, css_fixed *len2, css_unit *unit2),
+    uint8_t (*get)(const css_computed_style *style, css_fixed_or_calc *len1, css_unit *unit1, css_fixed_or_calc *len2,
+        css_unit *unit2),
     css_error (*set)(
-        css_computed_style *style, uint8_t type, css_fixed len1, css_unit unit1, css_fixed len2, css_unit unit2))
+        css_computed_style *style, uint8_t type, css_fixed_or_calc len1, css_unit unit1, css_fixed_or_calc len2,
+        css_unit unit2))
 {
-    css_fixed length1, length2;
+    css_fixed_or_calc length1 = (css_fixed_or_calc)0, length2 = (css_fixed_or_calc)0;
     css_unit unit1, unit2;
     uint8_t type;
 
@@ -958,15 +953,14 @@ css_error compute_absolute_length_pair(css_computed_style *style, const css_hint
     }
 
     if (unit1 == CSS_UNIT_EX) {
-        length1 = FMUL(length1, ex_size->value);
+        length1.value = FMUL(length1.value, ex_size->value);
         unit1 = ex_size->unit;
     }
 
     if (unit2 == CSS_UNIT_EX) {
-        length2 = FMUL(length2, ex_size->value);
+        length2.value = FMUL(length2.value, ex_size->value);
         unit2 = ex_size->unit;
     }
 
     return set(style, type, length1, unit1, length2, unit2);
 }
-

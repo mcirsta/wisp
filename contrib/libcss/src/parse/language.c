@@ -1871,13 +1871,22 @@ css_error parseProperty(
             scan = value_start;
 
             while ((token = parserutils_vector_iterate(vector, &scan)) != NULL) {
+                size_t tok_len = 0;
+
                 if (flags != 0 && (scan - 1) == excl_pos)
                     break;
+
+                if (token->idata != NULL) {
+                    tok_len = lwc_string_length(token->idata);
+                } else {
+                    tok_len = token->data.len;
+                }
+
                 if (token->type == CSS_TOKEN_HASH)
                     total_len += 1; /* '#' prefix */
                 else if (token->type == CSS_TOKEN_FUNCTION)
                     total_len += 1; /* '(' suffix */
-                total_len += token->data.len;
+                total_len += tok_len;
                 value_end = scan;
             }
 
@@ -1888,10 +1897,23 @@ css_error parseProperty(
             size_t offset = 0;
             scan = value_start;
             while (scan < value_end && (token = parserutils_vector_iterate(vector, &scan)) != NULL) {
+                const char *tok_data = NULL;
+                size_t tok_len = 0;
+
+                if (token->idata != NULL) {
+                    tok_data = lwc_string_data(token->idata);
+                    tok_len = lwc_string_length(token->idata);
+                } else {
+                    tok_data = (const char *)token->data.data;
+                    tok_len = token->data.len;
+                }
+
                 if (token->type == CSS_TOKEN_HASH)
                     buf[offset++] = '#';
-                memcpy(buf + offset, token->data.data, token->data.len);
-                offset += token->data.len;
+                if (tok_data != NULL && tok_len > 0) {
+                    memcpy(buf + offset, tok_data, tok_len);
+                    offset += tok_len;
+                }
                 if (token->type == CSS_TOKEN_FUNCTION)
                     buf[offset++] = '(';
             }
@@ -2195,5 +2217,3 @@ css_error parseCustomProperty(
 
     return CSS_OK;
 }
-
-

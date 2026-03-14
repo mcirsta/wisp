@@ -126,13 +126,15 @@ static inline css_fixed css_unit__font_size_px(const css_computed_style *style, 
     const css_fixed font_size_minimum, const css_fixed viewport_height, const css_fixed viewport_width)
 {
     css_fixed font_length = 0;
+    css_fixed_or_calc font_length_or_calc = (css_fixed_or_calc)0;
     css_unit font_unit = CSS_UNIT_PT;
 
     if (style == NULL) {
         return font_size_default;
     }
 
-    get_font_size(style, &font_length, &font_unit);
+    get_font_size(style, &font_length_or_calc, &font_unit);
+    font_length = font_length_or_calc.value;
 
     if (font_unit != CSS_UNIT_PX) {
         font_length = css_unit__absolute_len2pt(style, viewport_height, viewport_width, font_length, font_unit);
@@ -286,7 +288,9 @@ static inline css_hint_length css_unit__get_font_size(const css_computed_style *
     };
 
     if (style != NULL) {
-        enum css_font_size_e status = get_font_size(style, &size.value, &size.unit);
+        css_fixed_or_calc length = (css_fixed_or_calc)0;
+        enum css_font_size_e status = get_font_size(style, &length, &size.unit);
+        size.value = length.value;
 
         UNUSED(status);
 

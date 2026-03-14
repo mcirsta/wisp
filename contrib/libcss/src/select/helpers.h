@@ -81,6 +81,9 @@ static inline css_unit css__to_css_unit(uint32_t u)
         return CSS_UNIT_MAX_CONTENT;
     case UNIT_MINMAX:
         return CSS_UNIT_MINMAX;
+    /* Some cascade paths set this directly after parsing calc(). */
+    case CSS_UNIT_CALC:
+        return CSS_UNIT_CALC;
     }
 
     /* Unhandled unit type - fail in debug to catch missing conversions */

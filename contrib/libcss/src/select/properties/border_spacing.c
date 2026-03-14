@@ -17,20 +17,20 @@
 css_error css__cascade_border_spacing(uint32_t opv, css_style *style, css_select_state *state)
 {
     uint16_t value = CSS_BORDER_SPACING_INHERIT;
-    css_fixed hlength = 0;
-    css_fixed vlength = 0;
+    css_fixed_or_calc hlength = (css_fixed_or_calc)0;
+    css_fixed_or_calc vlength = (css_fixed_or_calc)0;
     uint32_t hunit = UNIT_PX;
     uint32_t vunit = UNIT_PX;
 
     if (hasFlagValue(opv) == false) {
         value = CSS_BORDER_SPACING_SET;
-        hlength = *((css_fixed *)style->bytecode);
-        advance_bytecode(style, sizeof(hlength));
+        hlength.value = *((css_fixed *)style->bytecode);
+        advance_bytecode(style, sizeof(hlength.value));
         hunit = *((uint32_t *)style->bytecode);
         advance_bytecode(style, sizeof(hunit));
 
-        vlength = *((css_fixed *)style->bytecode);
-        advance_bytecode(style, sizeof(vlength));
+        vlength.value = *((css_fixed *)style->bytecode);
+        advance_bytecode(style, sizeof(vlength.value));
         vunit = *((uint32_t *)style->bytecode);
         advance_bytecode(style, sizeof(vunit));
     }
@@ -47,18 +47,22 @@ css_error css__cascade_border_spacing(uint32_t opv, css_style *style, css_select
 
 css_error css__set_border_spacing_from_hint(const css_hint *hint, css_computed_style *style)
 {
-    return set_border_spacing(style, hint->status, hint->data.position.h.value, hint->data.position.h.unit,
-        hint->data.position.v.value, hint->data.position.v.unit);
+    css_fixed_or_calc hlength = {.value = hint->data.position.h.value};
+    css_fixed_or_calc vlength = {.value = hint->data.position.v.value};
+    return set_border_spacing(
+        style, hint->status, hlength, hint->data.position.h.unit, vlength, hint->data.position.v.unit);
 }
 
 css_error css__initial_border_spacing(css_select_state *state)
 {
-    return set_border_spacing(state->computed, CSS_BORDER_SPACING_SET, 0, CSS_UNIT_PX, 0, CSS_UNIT_PX);
+    return set_border_spacing(
+        state->computed, CSS_BORDER_SPACING_SET, (css_fixed_or_calc)0, CSS_UNIT_PX, (css_fixed_or_calc)0,
+        CSS_UNIT_PX);
 }
 
 css_error css__copy_border_spacing(const css_computed_style *from, css_computed_style *to)
 {
-    css_fixed hlength = 0, vlength = 0;
+    css_fixed_or_calc hlength = (css_fixed_or_calc)0, vlength = (css_fixed_or_calc)0;
     css_unit hunit = CSS_UNIT_PX, vunit = CSS_UNIT_PX;
     uint8_t type = get_border_spacing(from, &hlength, &hunit, &vlength, &vunit);
 
@@ -72,7 +76,7 @@ css_error css__copy_border_spacing(const css_computed_style *from, css_computed_
 css_error css__compose_border_spacing(
     const css_computed_style *parent, const css_computed_style *child, css_computed_style *result)
 {
-    css_fixed hlength = 0, vlength = 0;
+    css_fixed_or_calc hlength = (css_fixed_or_calc)0, vlength = (css_fixed_or_calc)0;
     css_unit hunit = CSS_UNIT_PX, vunit = CSS_UNIT_PX;
     uint8_t type = get_border_spacing(child, &hlength, &hunit, &vlength, &vunit);
 

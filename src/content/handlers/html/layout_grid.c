@@ -437,10 +437,13 @@ void layout_minmax_grid(struct box *grid, const struct gui_layout_table *font_fu
 
     /* Get column gap */
     if (grid->style != NULL) {
-        css_fixed gap_len = 0;
+        css_fixed_or_calc gap_len = (css_fixed_or_calc)0;
         css_unit gap_unit = CSS_UNIT_PX;
         if (css_computed_column_gap(grid->style, &gap_len, &gap_unit) == CSS_COLUMN_GAP_SET) {
-            gap_px = FIXTOINT(css_unit_len2device_px(grid->style, &content->unit_len_ctx, gap_len, gap_unit));
+            int available_inline = (grid->width != AUTO && grid->width != UNKNOWN_WIDTH) ? grid->width : -1;
+            if (!lh__length_to_px(grid->style, &content->unit_len_ctx, available_inline, gap_len, gap_unit, &gap_px)) {
+                gap_px = 0;
+            }
         }
     }
 
@@ -542,7 +545,7 @@ static void layout_grid_compute_tracks(struct box *grid, int available_width, in
 {
     int32_t n_tracks = 0;
     css_computed_grid_track *tracks = NULL;
-    css_fixed gap_len = 0;
+    css_fixed_or_calc gap_len = (css_fixed_or_calc)0;
     css_unit gap_unit = CSS_UNIT_PX;
     int gap_px = 0;
     int total_gap_width = 0;
@@ -553,7 +556,9 @@ static void layout_grid_compute_tracks(struct box *grid, int available_width, in
 
     /* Get column gap */
     if (css_computed_column_gap(style, &gap_len, &gap_unit) == CSS_COLUMN_GAP_SET) {
-        gap_px = FIXTOINT(css_unit_len2device_px(style, unit_len_ctx, gap_len, gap_unit));
+        if (!lh__length_to_px(style, unit_len_ctx, available_width, gap_len, gap_unit, &gap_px)) {
+            gap_px = 0;
+        }
     }
     NSLOG(layout, DEEPDEBUG, "Column Gap: %d px (from val %d unit %d)", gap_px, gap_len, gap_unit);
 
@@ -711,10 +716,12 @@ bool layout_grid(struct box *grid, int available_width, html_content *content)
 
     /* Get Gap for layout positioning */
     int gap_px = 0;
-    css_fixed gap_len = 0;
+    css_fixed_or_calc gap_len = (css_fixed_or_calc)0;
     css_unit gap_unit = CSS_UNIT_PX;
     if (grid->style != NULL && css_computed_column_gap(grid->style, &gap_len, &gap_unit) == CSS_COLUMN_GAP_SET) {
-        gap_px = FIXTOINT(css_unit_len2device_px(grid->style, &content->unit_len_ctx, gap_len, gap_unit));
+        if (!lh__length_to_px(grid->style, &content->unit_len_ctx, available_width, gap_len, gap_unit, &gap_px)) {
+            gap_px = 0;
+        }
     }
 
     layout_grid_compute_tracks(grid, available_width, col_widths, num_cols, grid->style, &content->unit_len_ctx);

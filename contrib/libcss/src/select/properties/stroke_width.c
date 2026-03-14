@@ -16,14 +16,14 @@
 css_error css__cascade_stroke_width(uint32_t opv, css_style *style, css_select_state *state)
 {
     uint16_t value = CSS_STROKE_WIDTH_INHERIT;
-    css_fixed length = 0;
+    css_fixed_or_calc length = (css_fixed_or_calc)0;
     uint32_t unit = UNIT_PX;
 
     if (hasFlagValue(opv) == false) {
         value = CSS_STROKE_WIDTH_SET;
 
-        length = *((css_fixed *)style->bytecode);
-        advance_bytecode(style, sizeof(length));
+        length.value = *((css_fixed *)style->bytecode);
+        advance_bytecode(style, sizeof(length.value));
         unit = *((uint32_t *)style->bytecode);
         advance_bytecode(style, sizeof(unit));
     }
@@ -39,18 +39,19 @@ css_error css__cascade_stroke_width(uint32_t opv, css_style *style, css_select_s
 
 css_error css__set_stroke_width_from_hint(const css_hint *hint, css_computed_style *style)
 {
-    return set_stroke_width(style, hint->status, hint->data.length.value, hint->data.length.unit);
+    css_fixed_or_calc length = {.value = hint->data.length.value};
+    return set_stroke_width(style, hint->status, length, hint->data.length.unit);
 }
 
 css_error css__initial_stroke_width(css_select_state *state)
 {
     /* SVG spec: initial value of stroke-width is 1 (px) */
-    return set_stroke_width(state->computed, CSS_STROKE_WIDTH_SET, INTTOFIX(1), CSS_UNIT_PX);
+    return set_stroke_width(state->computed, CSS_STROKE_WIDTH_SET, (css_fixed_or_calc)INTTOFIX(1), CSS_UNIT_PX);
 }
 
 css_error css__copy_stroke_width(const css_computed_style *from, css_computed_style *to)
 {
-    css_fixed length = 0;
+    css_fixed_or_calc length = (css_fixed_or_calc)0;
     css_unit unit = CSS_UNIT_PX;
     uint8_t type = get_stroke_width(from, &length, &unit);
 
@@ -64,7 +65,7 @@ css_error css__copy_stroke_width(const css_computed_style *from, css_computed_st
 css_error
 css__compose_stroke_width(const css_computed_style *parent, const css_computed_style *child, css_computed_style *result)
 {
-    css_fixed length = 0;
+    css_fixed_or_calc length = (css_fixed_or_calc)0;
     css_unit unit = CSS_UNIT_PX;
     uint8_t type = get_stroke_width(child, &length, &unit);
 

@@ -162,16 +162,16 @@ css_error css_computed_format_list_style(
  * Property accessors                                                         *
  ******************************************************************************/
 
-uint8_t css_computed_letter_spacing(const css_computed_style *style, css_fixed *length, css_unit *unit);
+uint8_t css_computed_letter_spacing(const css_computed_style *style, css_fixed_or_calc *length, css_unit *unit);
 
 uint8_t css_computed_outline_color(const css_computed_style *style, css_color *color);
 
-uint8_t css_computed_outline_width(const css_computed_style *style, css_fixed *length, css_unit *unit);
+uint8_t css_computed_outline_width(const css_computed_style *style, css_fixed_or_calc *length, css_unit *unit);
 
 uint8_t css_computed_border_spacing(
-    const css_computed_style *style, css_fixed *hlength, css_unit *hunit, css_fixed *vlength, css_unit *vunit);
+    const css_computed_style *style, css_fixed_or_calc *hlength, css_unit *hunit, css_fixed_or_calc *vlength, css_unit *vunit);
 
-uint8_t css_computed_word_spacing(const css_computed_style *style, css_fixed *length, css_unit *unit);
+uint8_t css_computed_word_spacing(const css_computed_style *style, css_fixed_or_calc *length, css_unit *unit);
 
 uint8_t css_computed_counter_increment(const css_computed_style *style, const css_computed_counter **counters);
 
@@ -183,17 +183,17 @@ uint8_t css_computed_clip(const css_computed_style *style, css_computed_clip_rec
 
 uint8_t css_computed_content(const css_computed_style *style, const css_computed_content_item **content);
 
-uint8_t css_computed_vertical_align(const css_computed_style *style, css_fixed *length, css_unit *unit);
+uint8_t css_computed_vertical_align(const css_computed_style *style, css_fixed_or_calc *length, css_unit *unit);
 
-uint8_t css_computed_font_size(const css_computed_style *style, css_fixed *length, css_unit *unit);
+uint8_t css_computed_font_size(const css_computed_style *style, css_fixed_or_calc *length, css_unit *unit);
 
-uint8_t css_computed_border_top_width(const css_computed_style *style, css_fixed *length, css_unit *unit);
+uint8_t css_computed_border_top_width(const css_computed_style *style, css_fixed_or_calc *length, css_unit *unit);
 
-uint8_t css_computed_border_right_width(const css_computed_style *style, css_fixed *length, css_unit *unit);
+uint8_t css_computed_border_right_width(const css_computed_style *style, css_fixed_or_calc *length, css_unit *unit);
 
-uint8_t css_computed_border_bottom_width(const css_computed_style *style, css_fixed *length, css_unit *unit);
+uint8_t css_computed_border_bottom_width(const css_computed_style *style, css_fixed_or_calc *length, css_unit *unit);
 
-uint8_t css_computed_border_left_width(const css_computed_style *style, css_fixed *length, css_unit *unit);
+uint8_t css_computed_border_left_width(const css_computed_style *style, css_fixed_or_calc *length, css_unit *unit);
 
 uint8_t css_computed_background_image(const css_computed_style *style, lwc_string **url);
 
@@ -212,13 +212,13 @@ uint8_t css_computed_list_style_image(const css_computed_style *style, lwc_strin
 
 uint8_t css_computed_quotes(const css_computed_style *style, lwc_string ***quotes);
 
-uint8_t css_computed_top(const css_computed_style *style, css_fixed *length, css_unit *unit);
+uint8_t css_computed_top(const css_computed_style *style, css_fixed_or_calc *length, css_unit *unit);
 
-uint8_t css_computed_right(const css_computed_style *style, css_fixed *length, css_unit *unit);
+uint8_t css_computed_right(const css_computed_style *style, css_fixed_or_calc *length, css_unit *unit);
 
-uint8_t css_computed_bottom(const css_computed_style *style, css_fixed *length, css_unit *unit);
+uint8_t css_computed_bottom(const css_computed_style *style, css_fixed_or_calc *length, css_unit *unit);
 
-uint8_t css_computed_left(const css_computed_style *style, css_fixed *length, css_unit *unit);
+uint8_t css_computed_left(const css_computed_style *style, css_fixed_or_calc *length, css_unit *unit);
 
 uint8_t css_computed_border_top_color(const css_computed_style *style, css_color *color);
 
@@ -230,21 +230,21 @@ uint8_t css_computed_border_left_color(const css_computed_style *style, css_colo
 
 uint8_t css_computed_box_sizing(const css_computed_style *style);
 
-uint8_t css_computed_height(const css_computed_style *style, css_fixed *length, css_unit *unit);
+uint8_t css_computed_height(const css_computed_style *style, css_fixed_or_calc *length, css_unit *unit);
 
-uint8_t css_computed_line_height(const css_computed_style *style, css_fixed *length, css_unit *unit);
+uint8_t css_computed_line_height(const css_computed_style *style, css_fixed_or_calc *length, css_unit *unit);
 
 uint8_t css_computed_background_color(const css_computed_style *style, css_color *color);
 
 uint8_t css_computed_z_index(const css_computed_style *style, int32_t *z_index);
 
-uint8_t css_computed_margin_top(const css_computed_style *style, css_fixed *length, css_unit *unit);
+uint8_t css_computed_margin_top(const css_computed_style *style, css_fixed_or_calc *length, css_unit *unit);
 
-uint8_t css_computed_margin_right(const css_computed_style *style, css_fixed *length, css_unit *unit);
+uint8_t css_computed_margin_right(const css_computed_style *style, css_fixed_or_calc *length, css_unit *unit);
 
-uint8_t css_computed_margin_bottom(const css_computed_style *style, css_fixed *length, css_unit *unit);
+uint8_t css_computed_margin_bottom(const css_computed_style *style, css_fixed_or_calc *length, css_unit *unit);
 
-uint8_t css_computed_margin_left(const css_computed_style *style, css_fixed *length, css_unit *unit);
+uint8_t css_computed_margin_left(const css_computed_style *style, css_fixed_or_calc *length, css_unit *unit);
 
 uint8_t css_computed_background_attachment(const css_computed_style *style);
 
@@ -254,9 +254,9 @@ uint8_t css_computed_caption_side(const css_computed_style *style);
 
 uint8_t css_computed_direction(const css_computed_style *style);
 
-uint8_t css_computed_max_height(const css_computed_style *style, css_fixed *length, css_unit *unit);
+uint8_t css_computed_max_height(const css_computed_style *style, css_fixed_or_calc *length, css_unit *unit);
 
-uint8_t css_computed_max_width(const css_computed_style *style, css_fixed *length, css_unit *unit);
+uint8_t css_computed_max_width(const css_computed_style *style, css_fixed_or_calc *length, css_unit *unit);
 
 /**
  * Get the width property value in device pixels.
@@ -277,7 +277,26 @@ uint8_t css_computed_max_width(const css_computed_style *style, css_fixed *lengt
 uint8_t
 css_computed_width_px(const css_computed_style *style, const css_unit_ctx *unit_ctx, int available_px, int *px_out);
 
-uint8_t css_computed_width(const css_computed_style *style, css_fixed *length, css_unit *unit);
+/**
+ * Resolve a length or calc() value to device pixels.
+ *
+ * \note If available_px is negative and the length requires a valid
+ *       available size (percent or calc with percent), this returns
+ *       CSS_INVALID.
+ *
+ * \param[in]  style         A computed style.
+ * \param[in]  unit_ctx      Unit conversion context.
+ * \param[in]  available_px  The available size in pixels.
+ * \param[in]  length        Length value or calc() expression.
+ * \param[in]  unit          Length unit (or CSS_UNIT_CALC).
+ * \param[out] px_out        Returns length in pixels on success.
+ * \return CSS_OK on success, CSS_INVALID on failure.
+ */
+css_error css_computed_length_to_px(
+    const css_computed_style *style, const css_unit_ctx *unit_ctx, int available_px, css_fixed_or_calc length,
+    css_unit unit, int *px_out);
+
+uint8_t css_computed_width(const css_computed_style *style, css_fixed_or_calc *length, css_unit *unit);
 
 uint8_t css_computed_empty_cells(const css_computed_style *style);
 
@@ -287,21 +306,21 @@ uint8_t css_computed_writing_mode(const css_computed_style *style);
 
 uint8_t css_computed_font_style(const css_computed_style *style);
 
-uint8_t css_computed_min_height(const css_computed_style *style, css_fixed *length, css_unit *unit);
+uint8_t css_computed_min_height(const css_computed_style *style, css_fixed_or_calc *length, css_unit *unit);
 
-uint8_t css_computed_min_width(const css_computed_style *style, css_fixed *length, css_unit *unit);
+uint8_t css_computed_min_width(const css_computed_style *style, css_fixed_or_calc *length, css_unit *unit);
 
 uint8_t css_computed_background_repeat(const css_computed_style *style);
 
 uint8_t css_computed_clear(const css_computed_style *style);
 
-uint8_t css_computed_padding_top(const css_computed_style *style, css_fixed *length, css_unit *unit);
+uint8_t css_computed_padding_top(const css_computed_style *style, css_fixed_or_calc *length, css_unit *unit);
 
-uint8_t css_computed_padding_right(const css_computed_style *style, css_fixed *length, css_unit *unit);
+uint8_t css_computed_padding_right(const css_computed_style *style, css_fixed_or_calc *length, css_unit *unit);
 
-uint8_t css_computed_padding_bottom(const css_computed_style *style, css_fixed *length, css_unit *unit);
+uint8_t css_computed_padding_bottom(const css_computed_style *style, css_fixed_or_calc *length, css_unit *unit);
 
-uint8_t css_computed_padding_left(const css_computed_style *style, css_fixed *length, css_unit *unit);
+uint8_t css_computed_padding_left(const css_computed_style *style, css_fixed_or_calc *length, css_unit *unit);
 
 uint8_t css_computed_overflow_x(const css_computed_style *style);
 
@@ -319,16 +338,16 @@ uint8_t css_computed_stroke_opacity(const css_computed_style *style, css_fixed *
 
 uint8_t css_computed_stroke(const css_computed_style *style, css_color *color);
 
-uint8_t css_computed_stroke_width(const css_computed_style *style, css_fixed *length, css_unit *unit);
+uint8_t css_computed_stroke_width(const css_computed_style *style, css_fixed_or_calc *length, css_unit *unit);
 
 uint8_t css_computed_text_transform(const css_computed_style *style);
 
-uint8_t css_computed_text_indent(const css_computed_style *style, css_fixed *length, css_unit *unit);
+uint8_t css_computed_text_indent(const css_computed_style *style, css_fixed_or_calc *length, css_unit *unit);
 
 uint8_t css_computed_white_space(const css_computed_style *style);
 
 uint8_t css_computed_background_position(
-    const css_computed_style *style, css_fixed *hlength, css_unit *hunit, css_fixed *vlength, css_unit *vunit);
+    const css_computed_style *style, css_fixed_or_calc *hlength, css_unit *hunit, css_fixed_or_calc *vlength, css_unit *vunit);
 
 uint8_t css_computed_break_after(const css_computed_style *style);
 
@@ -340,19 +359,19 @@ uint8_t css_computed_column_count(const css_computed_style *style, int32_t *colu
 
 uint8_t css_computed_column_fill(const css_computed_style *style);
 
-uint8_t css_computed_column_gap(const css_computed_style *style, css_fixed *length, css_unit *unit);
+uint8_t css_computed_column_gap(const css_computed_style *style, css_fixed_or_calc *length, css_unit *unit);
 
-uint8_t css_computed_row_gap(const css_computed_style *style, css_fixed *length, css_unit *unit);
+uint8_t css_computed_row_gap(const css_computed_style *style, css_fixed_or_calc *length, css_unit *unit);
 
 uint8_t css_computed_column_rule_color(const css_computed_style *style, css_color *color);
 
 uint8_t css_computed_column_rule_style(const css_computed_style *style);
 
-uint8_t css_computed_column_rule_width(const css_computed_style *style, css_fixed *length, css_unit *unit);
+uint8_t css_computed_column_rule_width(const css_computed_style *style, css_fixed_or_calc *length, css_unit *unit);
 
 uint8_t css_computed_column_span(const css_computed_style *style);
 
-uint8_t css_computed_column_width(const css_computed_style *style, css_fixed *length, css_unit *unit);
+uint8_t css_computed_column_width(const css_computed_style *style, css_fixed_or_calc *length, css_unit *unit);
 
 uint8_t css_computed_display(const css_computed_style *style, bool root);
 
@@ -456,7 +475,7 @@ uint8_t css_computed_grid_auto_flow(const css_computed_style *style);
 uint8_t css_computed_object_fit(const css_computed_style *style);
 
 uint8_t css_computed_object_position(
-    const css_computed_style *style, css_fixed *hlength, css_unit *hunit, css_fixed *vlength, css_unit *vunit);
+    const css_computed_style *style, css_fixed_or_calc *hlength, css_unit *hunit, css_fixed_or_calc *vlength, css_unit *vunit);
 
 uint8_t css_computed_transform(
     const css_computed_style *style, uint32_t *n_functions, const css_transform_function **functions);
