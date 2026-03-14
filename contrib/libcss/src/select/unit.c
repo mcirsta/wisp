@@ -10,6 +10,7 @@
 
 #include "utils/css_utils.h"
 
+#include "calc.h"
 #include "propget.h"
 #include "unit.h"
 
@@ -122,8 +123,9 @@ css_fixed css_unit_font_size_len2pt(
  * \param[in] viewport_width     Client viewport width.
  * \return font-size in CSS pixels.
  */
-static inline css_fixed css_unit__font_size_px(const css_computed_style *style, const css_fixed font_size_default,
-    const css_fixed font_size_minimum, const css_fixed viewport_height, const css_fixed viewport_width)
+static inline css_fixed css_unit__font_size_px(const css_computed_style *style, const css_computed_style *root_style,
+    const css_fixed font_size_default, const css_fixed font_size_minimum, const css_fixed viewport_height,
+    const css_fixed viewport_width)
 {
     css_fixed font_length = 0;
     css_fixed_or_calc font_length_or_calc = (css_fixed_or_calc)0;
@@ -134,7 +136,38 @@ static inline css_fixed css_unit__font_size_px(const css_computed_style *style, 
     }
 
     get_font_size(style, &font_length_or_calc, &font_unit);
-    font_length = font_length_or_calc.value;
+    if (font_unit == CSS_UNIT_CALC) {
+        /* Resolve calc() for numeric font-size use (e.g. em/ex conversions). */
+        css_unit calc_unit = CSS_UNIT_PX;
+        css_fixed calc_length = 0;
+        css_unit_ctx calc_ctx = {
+            .viewport_width = viewport_width,
+            .viewport_height = viewport_height,
+            .font_size_default = font_size_default,
+            .font_size_minimum = font_size_minimum,
+            .device_dpi = F_96,
+            .root_style = root_style,
+            .pw = NULL,
+            .measure = NULL,
+        };
+        css_error err = CSS_INVALID;
+
+        if (font_length_or_calc.calc != NULL && style->calc != NULL) {
+            /* available is the percentage base in px; for font-size use the default base here. */
+            err = css_calculator_calculate(style->calc, &calc_ctx, FIXTOINT(font_size_default), font_length_or_calc.calc,
+                NULL, &calc_unit, &calc_length);
+        }
+
+        if (err == CSS_OK) {
+            font_length = calc_length;
+            font_unit = calc_unit;
+        } else {
+            font_length = font_size_default;
+            font_unit = CSS_UNIT_PX;
+        }
+    } else {
+        font_length = font_length_or_calc.value;
+    }
 
     if (font_unit != CSS_UNIT_PX) {
         font_length = css_unit__absolute_len2pt(style, viewport_height, viewport_width, font_length, font_unit);
@@ -171,14 +204,16 @@ static inline css_fixed css_unit__px_per_unit(const css_unit_len_measure measure
 {
     switch (css_unit__map_viewport_units(ref_style, viewport_height, viewport_width, unit)) {
     case CSS_UNIT_EM:
-        return css_unit__font_size_px(ref_style, font_size_default, font_size_minimum, viewport_height, viewport_width);
+        return css_unit__font_size_px(
+            ref_style, root_style, font_size_default, font_size_minimum, viewport_height, viewport_width);
 
     case CSS_UNIT_EX:
         if (measure != NULL) {
             return measure(pw, ref_style, CSS_UNIT_EX);
         }
         return FMUL(
-            css_unit__font_size_px(ref_style, font_size_default, font_size_minimum, viewport_height, viewport_width),
+            css_unit__font_size_px(
+                ref_style, root_style, font_size_default, font_size_minimum, viewport_height, viewport_width),
             FLTTOFIX(0.6));
 
     case CSS_UNIT_CH:
@@ -186,14 +221,16 @@ static inline css_fixed css_unit__px_per_unit(const css_unit_len_measure measure
             return measure(pw, ref_style, CSS_UNIT_CH);
         }
         return FMUL(
-            css_unit__font_size_px(ref_style, font_size_default, font_size_minimum, viewport_height, viewport_width),
+            css_unit__font_size_px(
+                ref_style, root_style, font_size_default, font_size_minimum, viewport_height, viewport_width),
             FLTTOFIX(0.4));
 
     case CSS_UNIT_IC:
         if (measure != NULL) {
             return measure(pw, ref_style, CSS_UNIT_IC);
         }
-        return css_unit__font_size_px(ref_style, font_size_default, font_size_minimum, viewport_height, viewport_width);
+        return css_unit__font_size_px(
+            ref_style, root_style, font_size_default, font_size_minimum, viewport_height, viewport_width);
 
     case CSS_UNIT_PX:
         return F_1;
@@ -218,7 +255,7 @@ static inline css_fixed css_unit__px_per_unit(const css_unit_len_measure measure
 
     case CSS_UNIT_REM:
         return css_unit__font_size_px(
-            root_style, font_size_default, font_size_minimum, viewport_height, viewport_width);
+            root_style, root_style, font_size_default, font_size_minimum, viewport_height, viewport_width);
 
     case CSS_UNIT_VH:
         return FDIV(viewport_height, F_100);
@@ -290,7 +327,13 @@ static inline css_hint_length css_unit__get_font_size(const css_computed_style *
     if (style != NULL) {
         css_fixed_or_calc length = (css_fixed_or_calc)0;
         enum css_font_size_e status = get_font_size(style, &length, &size.unit);
-        size.value = length.value;
+        if (size.unit == CSS_UNIT_CALC) {
+            /* Keep this path numeric: calc() is handled elsewhere with full context. */
+            size.value = font_size_default;
+            size.unit = CSS_UNIT_PX;
+        } else {
+            size.value = length.value;
+        }
 
         UNUSED(status);
 
@@ -299,6 +342,7 @@ static inline css_hint_length css_unit__get_font_size(const css_computed_style *
         assert(size.unit != CSS_UNIT_EM);
         assert(size.unit != CSS_UNIT_EX);
         assert(size.unit != CSS_UNIT_PCT);
+        assert(size.unit != CSS_UNIT_CALC);
     }
 
     return size;

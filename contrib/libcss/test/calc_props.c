@@ -588,6 +588,30 @@ static void test_flex_basis_px_calc(void)
     destroy_style_case(&ctx);
 }
 
+static void test_font_size_calc_roundtrip(void)
+{
+    style_case ctx;
+    const css_computed_style *style = select_style_from_css("* { font-size: calc(10px + 6px); }", &ctx);
+
+    /* Regression: calc pointer must survive compute_absolute_values on 64-bit builds. */
+    expect_calc_px("font-size", style, &unit_ctx, 200, css_computed_font_size, CSS_FONT_SIZE_DIMENSION, 16);
+
+    destroy_style_case(&ctx);
+}
+
+static void test_em_uses_calc_font_size(void)
+{
+    style_case ctx;
+    const css_computed_style *style =
+        select_style_from_css("* { font-size: calc(10px + 10px); width: 2em; }", &ctx);
+    int px = 0;
+
+    assert(css_computed_width_px(style, &unit_ctx, 200, &px) == CSS_WIDTH_SET);
+    assert(px == 40);
+
+    destroy_style_case(&ctx);
+}
+
 int main(void)
 {
     test_calc_property_getters();
@@ -595,6 +619,8 @@ int main(void)
     test_relative_offsets_with_calc();
     test_width_px_calc();
     test_flex_basis_px_calc();
+    test_font_size_calc_roundtrip();
+    test_em_uses_calc_font_size();
 
     printf("PASS\n");
     return 0;

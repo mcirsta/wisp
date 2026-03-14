@@ -358,28 +358,39 @@ css_error
 css__compute_absolute_values(const css_computed_style *parent, css_computed_style *style, const css_unit_ctx *unit_ctx)
 {
     css_hint_length *ref_length = NULL;
-    css_hint psize, size, ex_size;
+    css_hint psize = {0}, size = {0}, ex_size = {0};
     css_fixed_or_calc length = (css_fixed_or_calc)0;
+    css_hint_length ex_ref = {
+        .value = 0,
+        .unit = CSS_UNIT_PX,
+    };
+    css_fixed size_ref_value = 0;
     css_error error;
 
     /* Get reference font-size for relative sizes. */
     if (parent != NULL) {
         psize.status = get_font_size(parent, &length, &psize.data.length.unit);
-        psize.data.length.value = length.value;
         if (psize.status != CSS_FONT_SIZE_DIMENSION) {
             return CSS_BADPARM;
         }
-        ref_length = &psize.data.length;
+        if (psize.data.length.unit != CSS_UNIT_CALC) {
+            psize.data.length.value = length.value;
+            ref_length = &psize.data.length;
+        }
     }
 
     size.status = get_font_size(style, &length, &size.data.length.unit);
-    size.data.length.value = length.value;
+    if (size.data.length.unit != CSS_UNIT_CALC) {
+        size.data.length.value = length.value;
+    }
 
     error = css_unit_compute_absolute_font_size(ref_length, unit_ctx->root_style, unit_ctx->font_size_default, &size);
     if (error != CSS_OK)
         return error;
 
-    length.value = size.data.length.value;
+    if (size.data.length.unit != CSS_UNIT_CALC) {
+        length.value = size.data.length.value;
+    }
     error = set_font_size(style, size.status, length, size.data.length.unit);
     if (error != CSS_OK)
         return error;
@@ -389,14 +400,21 @@ css__compute_absolute_values(const css_computed_style *parent, css_computed_styl
     ex_size.data.length.value = INTTOFIX(1);
     ex_size.data.length.unit = CSS_UNIT_EX;
 
-    error = css_unit_compute_absolute_font_size(
-        &size.data.length, unit_ctx->root_style, unit_ctx->font_size_default, &ex_size);
+    ex_ref = size.data.length;
+    if (ex_ref.unit == CSS_UNIT_CALC) {
+        /* Keep calc expression for font-size, but use a numeric reference for ex/em conversions. */
+        ex_ref.value = unit_ctx->font_size_default;
+        ex_ref.unit = CSS_UNIT_PX;
+    }
+
+    error = css_unit_compute_absolute_font_size(&ex_ref, unit_ctx->root_style, unit_ctx->font_size_default, &ex_size);
     if (error != CSS_OK)
         return error;
 
     /* Convert ex size into ems */
-    if (size.data.length.value != 0)
-        ex_size.data.length.value = FDIV(ex_size.data.length.value, size.data.length.value);
+    size_ref_value = ex_ref.value;
+    if (size_ref_value != 0)
+        ex_size.data.length.value = FDIV(ex_size.data.length.value, size_ref_value);
     else
         ex_size.data.length.value = 0;
     ex_size.data.length.unit = CSS_UNIT_EM;
