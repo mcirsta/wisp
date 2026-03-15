@@ -27,6 +27,46 @@ set(LIBCSS_PROPREG_OUT_DIR ${CMAKE_CURRENT_BINARY_DIR}/src/generated)
 set(LIBCSS_CASCADE_GEN_DIR ${CMAKE_CURRENT_BINARY_DIR}/src/select/cascade_gen)
 set(LIBCSS_PROP_GEN_BUILT ${LIBCSS_PROPREG_OUT_DIR}/properties.gen)
 
+# Configure-time: split cascade sources into generated vs manual before
+# declaring generator rules so add_custom_command() captures the full output list.
+execute_process(
+    COMMAND ${PYTHON3} ${LIBCSS_CMAKE_HELPERS} cascade-split ${LIBCSS_PROPERTIES_TOML}
+    OUTPUT_VARIABLE CASCADE_SPLIT_OUTPUT
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    RESULT_VARIABLE CASCADE_SPLIT_RESULT
+)
+if(NOT CASCADE_SPLIT_RESULT EQUAL 0)
+    message(FATAL_ERROR "Failed to read cascade split from properties.toml")
+endif()
+
+# Check for missing cascade fields
+string(REGEX MATCH "ERROR:([^\n]*)" _err "${CASCADE_SPLIT_OUTPUT}")
+if(_err)
+    message(FATAL_ERROR
+        "properties.toml: the following CSS_PROP_ properties are missing a required 'cascade' field: ${CMAKE_MATCH_1}\n"
+        "Valid values: 'none' (no cascade file), 'manual' (hand-written .c), or a type string for auto-generation.")
+endif()
+
+# Parse the output into two lists
+string(REGEX MATCH "GENERATED:([^\n]*)" _m "${CASCADE_SPLIT_OUTPUT}")
+set(_gen_names "${CMAKE_MATCH_1}")
+string(REGEX MATCH "MANUAL:([^\n]*)" _m "${CASCADE_SPLIT_OUTPUT}")
+set(_man_names "${CMAKE_MATCH_1}")
+
+set(LIBCSS_CASCADE_GENERATED)
+foreach(name ${_gen_names})
+    list(APPEND LIBCSS_CASCADE_GENERATED "${LIBCSS_CASCADE_GEN_DIR}/${name}.c")
+endforeach()
+
+set(LIBCSS_CASCADE_MANUAL)
+foreach(name ${_man_names})
+    list(APPEND LIBCSS_CASCADE_MANUAL "src/select/properties/${name}.c")
+endforeach()
+
+list(LENGTH LIBCSS_CASCADE_GENERATED _gen_count)
+list(LENGTH LIBCSS_CASCADE_MANUAL _man_count)
+message(STATUS "Cascade sources: ${_gen_count} generated, ${_man_count} manual")
+
 # Configure-time: extract property names from properties.toml for gen_parser output targets.
 execute_process(
     COMMAND ${PYTHON3} ${LIBCSS_CMAKE_HELPERS} property-names ${LIBCSS_PROPERTIES_TOML}
@@ -46,7 +86,7 @@ add_custom_command(
     OUTPUT ${LIBCSS_GEN_PROPERTIES}
     COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/contrib/libcss/properties
     COMMAND ${PYTHON3} ${CMAKE_SOURCE_DIR}/contrib/libcss/src/parse/properties/parser_wrapper.py ${CMAKE_BINARY_DIR}/contrib/libcss/properties $<TARGET_FILE:gen_parser> ${LIBCSS_PROP_GEN_BUILT}
-    DEPENDS gen_parser ${LIBCSS_PROPREG_PYTHON_FILES} ${CMAKE_SOURCE_DIR}/contrib/libcss/src/parse/properties/parser_wrapper.py
+    DEPENDS gen_parser ${LIBCSS_PROP_GEN_BUILT} ${CMAKE_SOURCE_DIR}/contrib/libcss/src/parse/properties/parser_wrapper.py
 )
 add_custom_target(libcss_properties DEPENDS ${LIBCSS_GEN_PROPERTIES})
 
@@ -86,6 +126,7 @@ set(LIBCSS_PROPREG_PYTHON_FILES
 add_custom_command(
     OUTPUT ${LIBCSS_PROPREG_PYTHON_FILES} ${LIBCSS_CASCADE_GENERATED}
     COMMAND ${CMAKE_COMMAND} -E make_directory ${LIBCSS_PROPREG_OUT_DIR}
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${LIBCSS_CASCADE_GEN_DIR}
     COMMAND ${PYTHON3} ${CMAKE_SOURCE_DIR}/contrib/libcss/build-aux/property_generator.py
         --toml ${CMAKE_SOURCE_DIR}/contrib/libcss/properties.toml
         --output-dir ${LIBCSS_PROPREG_OUT_DIR}
@@ -110,6 +151,7 @@ add_custom_command(
 
 set(LIBCSS_PROPREG_GEN_FILES
     ${LIBCSS_PROPREG_PYTHON_FILES}
+    ${LIBCSS_CASCADE_GENERATED}
     ${LIBCSS_PROPREG_OUT_DIR}/prop_hash_table.inc
 )
 add_custom_target(libcss_propreg_gen DEPENDS ${LIBCSS_PROPREG_GEN_FILES})
@@ -121,44 +163,6 @@ include_directories("${CMAKE_CURRENT_BINARY_DIR}/src/select")
 include_directories("${CMAKE_CURRENT_BINARY_DIR}/src")
 include_directories("${CMAKE_CURRENT_BINARY_DIR}/src/generated")  # For property registration includes
 
-# Configure-time: split cascade sources into generated vs manual.
-execute_process(
-    COMMAND ${PYTHON3} ${LIBCSS_CMAKE_HELPERS} cascade-split ${LIBCSS_PROPERTIES_TOML}
-    OUTPUT_VARIABLE CASCADE_SPLIT_OUTPUT
-    OUTPUT_STRIP_TRAILING_WHITESPACE
-    RESULT_VARIABLE CASCADE_SPLIT_RESULT
-)
-if(NOT CASCADE_SPLIT_RESULT EQUAL 0)
-    message(FATAL_ERROR "Failed to read cascade split from properties.toml")
-endif()
-
-# Check for missing cascade fields
-string(REGEX MATCH "ERROR:([^\n]*)" _err "${CASCADE_SPLIT_OUTPUT}")
-if(_err)
-    message(FATAL_ERROR
-        "properties.toml: the following CSS_PROP_ properties are missing a required 'cascade' field: ${CMAKE_MATCH_1}\n"
-        "Valid values: 'none' (no cascade file), 'manual' (hand-written .c), or a type string for auto-generation.")
-endif()
-
-# Parse the output into two lists
-string(REGEX MATCH "GENERATED:([^\n]*)" _m "${CASCADE_SPLIT_OUTPUT}")
-set(_gen_names "${CMAKE_MATCH_1}")
-string(REGEX MATCH "MANUAL:([^\n]*)" _m "${CASCADE_SPLIT_OUTPUT}")
-set(_man_names "${CMAKE_MATCH_1}")
-
-set(LIBCSS_CASCADE_GENERATED)
-foreach(name ${_gen_names})
-    list(APPEND LIBCSS_CASCADE_GENERATED "${LIBCSS_CASCADE_GEN_DIR}/${name}.c")
-endforeach()
-
-set(LIBCSS_CASCADE_MANUAL)
-foreach(name ${_man_names})
-    list(APPEND LIBCSS_CASCADE_MANUAL "src/select/properties/${name}.c")
-endforeach()
-
-list(LENGTH LIBCSS_CASCADE_GENERATED _gen_count)
-list(LENGTH LIBCSS_CASCADE_MANUAL _man_count)
-message(STATUS "Cascade sources: ${_gen_count} generated, ${_man_count} manual")
 # Mark generated cascade files so CMake knows they don't exist yet at configure time
 set_source_files_properties(${LIBCSS_CASCADE_GENERATED} PROPERTIES GENERATED TRUE)
 set_source_files_properties(${LIBCSS_PROPREG_OUT_DIR}/autogenerated_dispatch.c PROPERTIES GENERATED TRUE)
