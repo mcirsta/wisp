@@ -244,11 +244,13 @@ if(WISP_BUILD_XXD)
 	)
 endif()
 
-set(WISP_COMMON_LIBS css dom nsutils parserutils nsgif nsbmp svgtiny ${LIBCRYPTO_LIBRARIES} ${LIBPNG_LIBRARIES} ${LIBCURL_LIBRARIES} ${LIBJPEG_LIBRARIES} ${LIBWEBP_LIBRARIES} ${LIBAVIF_LIBRARIES} ${LIBPSL_LIBRARIES} ${ZLIB_LIBRARIES} ${LIBSSL_LIBRARIES} ${LIBUTF8PROC_LIBRARIES} ${LIBREGEX_LIBRARIES} aom SvtAv1Enc rav1e dav1d sharpyuv yuv ntdll)
+set(WISP_COMMON_LIBS css dom nsutils parserutils nsgif nsbmp svgtiny ${LIBCRYPTO_LIBRARIES} ${LIBPNG_LIBRARIES} ${LIBCURL_LIBRARIES} ${LIBJPEG_LIBRARIES} ${LIBWEBP_LIBRARIES} ${LIBAVIF_LIBRARIES} ${LIBPSL_LIBRARIES} ${ZLIB_LIBRARIES} ${LIBSSL_LIBRARIES} ${LIBUTF8PROC_LIBRARIES} ${LIBREGEX_LIBRARIES})
 
 
 
 if(WIN32)
+	# Static Windows builds may need codec/system libs that are not propagated cleanly by pkg-config.
+	list(APPEND WISP_COMMON_LIBS aom SvtAv1Enc rav1e dav1d sharpyuv yuv ntdll)
 	list(APPEND WISP_COMMON_LIBS ws2_32)
     target_link_options(wisp PUBLIC -static)
 endif()
