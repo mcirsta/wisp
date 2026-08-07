@@ -60,7 +60,9 @@
 #include "content/fetchers.h"
 #include "content/fetchers/curl.h"
 #include "content/urldb.h"
-
+#ifdef _WIN32
+#include "content/fetchers/certs.h"
+#endif
 /**
  * maximum number of progress notifications per second
  */
@@ -1166,6 +1168,16 @@ static CURLcode fetch_curl_set_options(struct curl_fetch_info *f)
     SETOPT(CURLOPT_WRITEHEADER, f);
     SETOPT(NSCURLOPT_PROGRESS_DATA, f);
     SETOPT(CURLOPT_HTTPHEADER, f->headers);
+
+    //For HTTPS in Windows
+    #ifdef _WIN32
+    struct curl_blob blob;
+    blob.data = __cacert_pem;
+    blob.len = __cacert_pem_len;
+    blob.flags = CURL_BLOB_COPY;
+    curl_easy_setopt(f->curl_handle, CURLOPT_CAINFO_BLOB, &blob);
+    #endif
+    
     code = fetch_curl_set_postdata(f);
     if (code != CURLE_OK) {
         return code;
