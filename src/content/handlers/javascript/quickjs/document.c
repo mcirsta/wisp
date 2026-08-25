@@ -161,7 +161,7 @@ static JSValue js_element_insertBefore(JSContext *ctx, JSValueConst this_val, in
 static JSValue js_element_cloneNode(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
     NSLOG(wisp, DEBUG, "element.cloneNode() called (stub)");
-    JSValue value;
+    JSValue value = JS_UNDEFINED;
     /* Return a new empty element as a "clone" */
     return create_element_object(ctx, NULL, value);
 }
@@ -408,7 +408,7 @@ static JSValue js_document_documentElement_getter(JSContext *ctx, JSValueConst t
 static JSValue js_document_head_getter(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
     NSLOG(wisp, DEBUG, "document.head getter -> returning stub element");
-    JSValue value;
+    JSValue value = JS_UNDEFINED;
     return create_element_object(ctx, "HEAD", value);
 }
 

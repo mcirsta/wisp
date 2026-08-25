@@ -9,11 +9,6 @@
 
 #include "quickjs.h"
 
-struct OptionJSValue{
-    JSValue element;
-    bool null;
-};
-
 /**
  * Initialize Document object on the global object.
  *
