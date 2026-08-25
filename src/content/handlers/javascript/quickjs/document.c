@@ -6,7 +6,14 @@
 
 #include "document.h"
 #include <wisp/utils/log.h>
+#include "content/handlers/javascript/quickjs/node_wrapper.h"
+#include "dom/core/element.h"
+#include "dom/core/exceptions.h"
+#include "dom/core/node.h"
+#include "dom/core/string.h"
+#include "dom/core/document.h"
 #include "quickjs.h"
+#include <stdint.h>
 #include <stdlib.h>
 
 /* Forward declarations for element methods */
@@ -52,10 +59,11 @@ static JSValue create_classlist_object(JSContext *ctx)
  * Elements need: style, classList, tagName, parentNode, childNodes, and
  * methods.
  */
-static JSValue create_element_object(JSContext *ctx, const char *tag)
+JSValue create_element_object(JSContext *ctx, const char *tag, JSValue element)
 {
-    JSValue element = JS_NewObject(ctx);
-
+    if(JS_IsUndefined(element) || JS_IsNull(element)){
+        element = JS_NewObject(ctx);
+    }
     /* Add style property */
     JS_SetPropertyStr(ctx, element, "style", create_style_object(ctx));
 
@@ -69,7 +77,7 @@ static JSValue create_element_object(JSContext *ctx, const char *tag)
     }
 
     /* Node properties */
-    JS_SetPropertyStr(ctx, element, "nodeType", JS_NewInt32(ctx, 1)); /* ELEMENT_NODE */
+    JS_SetPropertyStr(ctx, element, "nodeType", js_node_nodeType_getter(ctx, element)); /* ELEMENT_NODE */
     JS_SetPropertyStr(ctx, element, "parentNode", JS_NULL);
     JS_SetPropertyStr(ctx, element, "parentElement", JS_NULL);
     JS_SetPropertyStr(ctx, element, "firstChild", JS_NULL);
@@ -153,8 +161,9 @@ static JSValue js_element_insertBefore(JSContext *ctx, JSValueConst this_val, in
 static JSValue js_element_cloneNode(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
     NSLOG(wisp, DEBUG, "element.cloneNode() called (stub)");
+    JSValue value;
     /* Return a new empty element as a "clone" */
-    return create_element_object(ctx, NULL);
+    return create_element_object(ctx, NULL, value);
 }
 
 static JSValue js_element_getAttribute(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
@@ -230,15 +239,63 @@ static JSValue js_element_removeEventListener(JSContext *ctx, JSValueConst this_
 
 static JSValue js_document_getElementById(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
-    if (argc > 0) {
-        const char *id = JS_ToCString(ctx, argv[0]);
-        NSLOG(wisp, DEBUG, "document.getElementById called with: '%s' -> returning null (stub)", id ? id : "(null)");
-        if (id)
-            JS_FreeCString(ctx, id);
-    } else {
-        NSLOG(wisp, DEBUG, "document.getElementById called with no args -> null");
+    if (argc < 1) {
+        NSLOG(wisp, DEBUG, "document.getElementById() called with no args -> null");
+        return JS_NULL;
     }
-    return JS_NULL;
+
+    const char *id = JS_ToCString(ctx, argv[0]);
+    if(!id){
+        return JS_NULL;
+    }
+
+    NSLOG(wisp, DEBUG, "document.getElementById('%s')", id);
+
+    //Get the real dom_document
+    struct dom_document *doc = (struct dom_document *)qjs_get_document_priv(ctx);
+    if(!doc){
+        NSLOG(wisp, WARNING, "getElementById: no dom_document available");
+        JS_FreeCString(ctx, id);
+        return JS_NULL;
+    }
+
+    //Create a dom_string since ID
+    struct dom_string *id_dom = NULL;
+    dom_exception err = dom_string_create((const uint8_t *)id, strlen(id), &id_dom);
+    JS_FreeCString(ctx, id);
+
+    if(err != DOM_NO_ERR || !id_dom){
+        NSLOG(wisp, WARNING, "getElementById: failed to create dom_string");
+        return JS_NULL;
+    }
+
+    //Search the element.
+    struct dom_element *found = NULL;
+    err = dom_document_get_element_by_id(doc, id_dom, &found);
+
+    dom_string_unref(id_dom);
+    if (err != DOM_NO_ERR || !found) {
+        NSLOG(wisp, DEBUG, "getElementById: element not found -> null");
+        return JS_NULL;
+    }
+
+    NSLOG(wisp, DEBUG, "getElementById: found element %p", found);
+
+    //Get the tag name for the wrapper
+    struct dom_string *tag_str = NULL;
+    const char *tag_cstr = NULL;
+    if(dom_node_get_node_name(found, &tag_str) == DOM_NO_ERR && tag_str){
+        tag_cstr = dom_string_data(tag_str);
+    }
+
+    //Wrap the element in a JSObject
+    JSValue result = qjs_wrap_dom_element(ctx, found, tag_cstr);
+    //Free reference
+    if(tag_str){
+        dom_string_unref(tag_str);
+    }
+
+    return result;
 }
 
 static JSValue js_document_getElementsByTagName(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
@@ -299,9 +356,9 @@ static JSValue js_document_createElement(JSContext *ctx, JSValueConst this_val, 
     } else {
         NSLOG(wisp, DEBUG, "document.createElement() with no args");
     }
-
+    JSValue value = JS_UNDEFINED;
     /* Create element with style property and common attributes */
-    JSValue element = create_element_object(ctx, tag);
+    JSValue element = create_element_object(ctx, tag, value);
 
     if (tag)
         JS_FreeCString(ctx, tag);
@@ -336,20 +393,23 @@ static JSValue js_document_write(JSContext *ctx, JSValueConst this_val, int argc
 static JSValue js_document_body_getter(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
     NSLOG(wisp, DEBUG, "document.body getter -> returning stub element");
+    JSValue value = JS_UNDEFINED;
     /* Return an element with style property */
-    return create_element_object(ctx, "BODY");
+    return create_element_object(ctx, "BODY", value);
 }
 
 static JSValue js_document_documentElement_getter(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
     NSLOG(wisp, DEBUG, "document.documentElement getter -> returning stub element");
-    return create_element_object(ctx, "HTML");
+    JSValue value = JS_UNDEFINED;
+    return create_element_object(ctx, "HTML", value);
 }
 
 static JSValue js_document_head_getter(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
     NSLOG(wisp, DEBUG, "document.head getter -> returning stub element");
-    return create_element_object(ctx, "HEAD");
+    JSValue value;
+    return create_element_object(ctx, "HEAD", value);
 }
 
 static JSValue js_document_readyState_getter(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)

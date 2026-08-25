@@ -43,7 +43,7 @@
 #include "content/handlers/javascript/quickjs/timers.h"
 #include "content/handlers/javascript/quickjs/window.h"
 #include "content/handlers/javascript/quickjs/xhr.h"
-
+#include "content/handlers/javascript/quickjs/node_wrapper.h"
 /**
  * JavaScript heap structure.
  *
@@ -90,6 +90,14 @@ void *qjs_get_window_priv(JSContext *ctx)
         return NULL;
     }
     return t->win_priv;
+}
+
+void *qjs_get_document_priv(JSContext *ctx){
+    struct jsthread *t = JS_GetContextOpaque(ctx);
+    if(t == NULL){
+        return NULL;
+    }
+    return t->doc_priv;
 }
 
 
@@ -192,8 +200,6 @@ void js_destroyheap(jsheap *heap)
     NSLOG(wisp, DEBUG, "js_destroyheap: dropping owner reference for heap %p", heap);
     jsheap_unref(heap);
 }
-
-
 /* exported interface documented in js.h */
 nserror js_newthread(jsheap *heap, void *win_priv, void *doc_priv, jsthread **thread)
 {
@@ -250,6 +256,10 @@ nserror js_newthread(jsheap *heap, void *win_priv, void *doc_priv, jsthread **th
     /* Initialize Location */
     if (qjs_init_location(t->ctx) < 0) {
         NSLOG(wisp, ERROR, "Failed to initialize QuickJS location");
+    }
+    /* Initialize Node Wrapper */
+    if (qjs_init_node_wrapper(t->ctx) < 0) {
+        NSLOG(wisp, ERROR, "Failed to initialize QuickJS node wrapper");
     }
 
     /* Initialize Document */

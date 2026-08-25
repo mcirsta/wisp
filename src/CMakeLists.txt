@@ -168,6 +168,7 @@ add_library(wisp ${WISP_LIB_TYPE}
 	content/handlers/javascript/quickjs/document.c
 	content/handlers/javascript/quickjs/storage.c
 	content/handlers/javascript/quickjs/event_target.c
+	content/handlers/javascript/quickjs/node_wrapper.c
 	content/handlers/javascript/quickjs/xhr.c
 	content/handlers/text/textplain.c
 	desktop/cookie_manager.c
@@ -330,7 +331,7 @@ if(WIN32 AND BUILD_SHARED_LIBS)
         if(NOT PREFIX OR NOT EXISTS "${PREFIX}/bin")
             return()
         endif()
-        
+
         foreach(LIB ${LIBS})
             string(REGEX REPLACE "^lib" "" BASE_NAME "${LIB}")
 
@@ -344,7 +345,7 @@ if(WIN32 AND BUILD_SHARED_LIBS)
                 "${PREFIX}/bin/${BASE_NAME}-*.dll"
             )
             list(APPEND DLLS ${DLL_EXACT} ${DLL_VER})
-            
+
             if(DLLS)
                 foreach(DLL ${DLLS})
                     message(STATUS "  Found DLL for ${LIB}: ${DLL}")
@@ -356,11 +357,11 @@ if(WIN32 AND BUILD_SHARED_LIBS)
 
 	if(LIBCURL_FOUND)
 		install_dlls_for_package("${LIBCURL_PREFIX}" "${LIBCURL_LIBRARIES}")
-		
-        file(GLOB RUNTIME_DLLS 
+
+        file(GLOB RUNTIME_DLLS
             "${LIBCURL_PREFIX}/bin/libgcc_s_*.dll"
             "${LIBCURL_PREFIX}/bin/libwinpthread-*.dll"
-            "${LIBCURL_PREFIX}/bin/libbrotli*.dll" 
+            "${LIBCURL_PREFIX}/bin/libbrotli*.dll"
             "${LIBCURL_PREFIX}/bin/libidn2*.dll"
             "${LIBCURL_PREFIX}/bin/libunistring*.dll"
             "${LIBCURL_PREFIX}/bin/libiconv*.dll"
