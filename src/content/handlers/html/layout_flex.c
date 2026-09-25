@@ -737,22 +737,8 @@ static inline bool layout_flex__base_and_main_sizes(
     int container_width = ctx->horizontal ? available_main_size : available_cross_size;
     int container_height = ctx->horizontal ? available_cross_size : available_main_size;
     css_unit_ctx flex_unit_len_ctx = lh__with_container_dimensions(ctx->unit_len_ctx, container_width, container_height);
-    int content_min_width = b->min_width.value;
     int content_max_width = b->max_width;
     int delta_outer_main = lh__delta_outer_main(ctx->flex, b);
-
-    /* Per CSS Flexbox spec §4.5, for flex items:
-     * - min-width/height: auto computes to min-content IF overflow is visible
-     * - If overflow is NOT visible (hidden/auto/scroll), min-width:auto = 0
-     * This allows flex items to shrink below their content size when overflow
-     * is set to hide/clip the overflowing content. */
-    if (ctx->horizontal && b->style != NULL) {
-        enum css_overflow_e overflow_x = css_computed_overflow_x(b->style);
-        if (overflow_x != CSS_OVERFLOW_VISIBLE) {
-            content_min_width = 0;
-            NSLOG(flex, DEEPDEBUG, "box %p: overflow_x=%d != visible, setting content_min_width=0", b, overflow_x);
-        }
-    }
 
     NSLOG(flex, DEEPDEBUG, "box %p: delta_outer_main: %i", b, delta_outer_main);
     NSLOG(flex, DEBUG, "box %p: item->basis=%d (SET=1, AUTO=2, CONTENT=3)", b, item->basis);
@@ -857,7 +843,7 @@ static inline bool layout_flex__base_and_main_sizes(
          * For column flex: update min_main from actual content height.
          * This handles both CSS-specified heights and intrinsic image sizes. */
         if (!ctx->horizontal && item->min_main.type == CSS_SIZE_AUTO) {
-            int content_min_height = b->height + lh__delta_outer_height(b);
+            int content_min_height = b->height;
             if (content_min_height > 0) {
                 NSLOG(flex, DEEPDEBUG, "AUTO MIN-HEIGHT: box %p min_main 0 -> %d (content height)", b,
                     content_min_height);
@@ -878,16 +864,22 @@ static inline bool layout_flex__base_and_main_sizes(
 
     item->base_size += delta_outer_main;
 
-    /* Per CSS Flexbox spec §4.5: automatic minimum size is capped by
-     * the item's specified size (width/height) when it's definite.
-     * automatic_min = min(content_min, specified_size) */
-    if (ctx->horizontal && b->width != AUTO) {
-        int specified_main = b->width + delta_outer_main;
-        if (content_min_width > specified_main) {
-            NSLOG(flex, WARNING, "AUTO-MIN CAP: content_min_width %d -> %d (specified width=%d)", content_min_width,
-                specified_main, b->width);
-            content_min_width = specified_main;
+    if (ctx->horizontal && item->min_main.type == CSS_SIZE_AUTO) {
+        /* Intrinsic widths include the outer edges; min_main is a content
+         * size. An explicit minimum (including zero) never uses this floor.
+         * CSS Flexbox §4.5 caps auto by definite preferred and maximum sizes. */
+        int automatic_min = max(0, b->min_width.value - delta_outer_main);
+        if (css_computed_overflow_x(b->style) != CSS_OVERFLOW_VISIBLE) {
+            automatic_min = 0;
         }
+        if (b->width != AUTO) {
+            automatic_min = min(automatic_min, b->width);
+        }
+        if (item->max_main >= 0) {
+            automatic_min = min(automatic_min, item->max_main);
+        }
+        item->min_main.type = CSS_SIZE_SET;
+        item->min_main.value = automatic_min;
     }
 
     /* Note: Per CSS Flexbox §9.2, the flex base size is NOT clamped by
@@ -898,7 +890,7 @@ static inline bool layout_flex__base_and_main_sizes(
     item->target_main_size = item->base_size;
     item->main_size = item->base_size;
 
-    if (item->max_main > 0 && item->main_size > item->max_main + delta_outer_main) {
+    if (item->max_main >= 0 && item->main_size > item->max_main + delta_outer_main) {
         int old_main_size = item->main_size;
         item->main_size = item->max_main + delta_outer_main;
         NSLOG(flex, DEEPDEBUG,
@@ -967,37 +959,18 @@ static void layout_flex_ctx__populate_item_data(struct flex_ctx *ctx, const stru
             b->padding, b->border);
         b->float_container = NULL;
 
-        /* Determine min type from CSS computed values.
-         * Per CSS Flexbox spec §4.5, flex items have min-width/min-height initial value of 'auto',
-         * which triggers automatic minimum size based on content. However, libcss computes the
-         * general initial value of 0 (for non-flex items) because it doesn't know layout context.
-         *
-         * Solution: For flex items, treat min-size: 0 as if it were 'auto', enabling automatic
-         * minimum size. Only explicitly set non-zero values should prevent shrinking below content.
-         * This matches browser behavior where flex items don't shrink below content by default. */
+        /* layout_find_dimensions uses legacy wrappers which resolve auto to
+         * zero for ordinary block layout. Flex items need the computed auto
+         * distinction; their own display does not identify them as items. */
         {
             css_fixed_or_calc value = (css_fixed_or_calc)0;
-            css_unit unit;
-            enum css_min_height_e min_h_type = ns_computed_min_height(b->style, &value, &unit);
-            enum css_min_width_e min_w_type = ns_computed_min_width(b->style, &value, &unit);
-
-            if (horizontal) {
-                /* Horizontal flex: min-width affects main axis.
-                 * Treat 0 as AUTO to enable automatic minimum size per spec. */
-                item->min_main.type = (min_w_type == CSS_MIN_WIDTH_SET && item->min_main.value != 0) ? CSS_SIZE_SET
-                                                                                                     : CSS_SIZE_AUTO;
-                item->min_cross.type = (min_h_type == CSS_MIN_HEIGHT_SET && item->min_cross.value != 0) ? CSS_SIZE_SET
-                                                                                                        : CSS_SIZE_AUTO;
-            } else {
-                /* Column flex: min-height affects main axis.
-                 * Treat 0 as AUTO to enable automatic minimum size per spec. */
-                item->min_main.type = (min_h_type == CSS_MIN_HEIGHT_SET && item->min_main.value != 0) ? CSS_SIZE_SET
-                                                                                                      : CSS_SIZE_AUTO;
-                item->min_cross.type = (min_w_type == CSS_MIN_WIDTH_SET && item->min_cross.value != 0) ? CSS_SIZE_SET
-                                                                                                       : CSS_SIZE_AUTO;
+            css_unit unit = CSS_UNIT_PX;
+            if (css_computed_min_width(b->style, &value, &unit) == CSS_MIN_WIDTH_AUTO) {
+                (horizontal ? &item->min_main : &item->min_cross)->type = CSS_SIZE_AUTO;
             }
-            NSLOG(flex, DEEPDEBUG, "box %p: min_main.type=%d value=%d (AUTO=0, SET=1) min_h_type=%d horizontal=%d", b,
-                item->min_main.type, item->min_main.value, min_h_type, horizontal);
+            if (css_computed_min_height(b->style, &value, &unit) == CSS_MIN_HEIGHT_AUTO) {
+                (horizontal ? &item->min_cross : &item->min_main)->type = CSS_SIZE_AUTO;
+            }
         }
 
         /* DIAG: Log flex item info with class name */
@@ -1252,26 +1225,18 @@ static inline int layout_flex__get_min_max_violations(struct flex_ctx *ctx, stru
             continue;
         }
 
-        if (item->max_main > 0 && target_main_size > item->max_main) {
-            target_main_size = item->max_main;
+        int delta_outer_main = lh__delta_outer_main(ctx->flex, item->box);
+        if (item->max_main >= 0 && target_main_size > item->max_main + delta_outer_main) {
+            target_main_size = item->max_main + delta_outer_main;
             item->max_violation = true;
-            NSLOG(flex, DEEPDEBUG, "Violation: max_main: %i", item->max_main);
         }
 
-        /* Only apply min_main constraint when it's been explicitly set or computed from content */
-        if (item->min_main.type == CSS_SIZE_SET && target_main_size < item->min_main.value) {
-            target_main_size = item->min_main.value;
+        /* The used minimum already accounts for auto, overflow, and size
+         * caps. Reapplying the intrinsic box minimum here would undo them. */
+        if (item->min_main.type == CSS_SIZE_SET &&
+            target_main_size < item->min_main.value + delta_outer_main) {
+            target_main_size = item->min_main.value + delta_outer_main;
             item->min_violation = true;
-            NSLOG(flex, DEEPDEBUG, "Violation: min_main: %i", item->min_main.value);
-        }
-
-        /* Only apply box->min_width for horizontal flex (where width is main axis).
-         * For column flex, min_width is cross-axis, not main-axis.
-         * (struct box has no min_height field to use for column flex) */
-        if (ctx->horizontal && target_main_size < item->box->min_width.value) {
-            target_main_size = item->box->min_width.value;
-            item->min_violation = true;
-            NSLOG(flex, DEEPDEBUG, "Violation: box min_width: %i", item->box->min_width.value);
         }
 
         if (target_main_size < 0) {

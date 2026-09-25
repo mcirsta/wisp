@@ -11,15 +11,11 @@
 #include "wisp/utils/errors.h"
 #include "wisp/utils/log.h"
 
-/* Forward declare html_content to satisfy layout_internal.h */
-typedef struct html_content html_content;
+#include "wisp/content/handlers/html/private.h"
+#include "flex_layout_style.h"
 
 #include "content/handlers/html/layout_internal.h"
 
-/* Mock dependencies */
-struct html_content {
-    struct css_unit_ctx unit_len_ctx;
-};
 
 /* Define AUTO locally for test since it's an internal macro often */
 #ifndef AUTO
@@ -86,9 +82,11 @@ uint8_t css_computed_flex_grow(const css_computed_style *style, css_fixed *grow)
         *grow = (1 << 10); /* 1.0 in css_fixed format (10-bit fractional) */
         return CSS_FLEX_GROW_SET;
     }
-    /* Default: flex-grow: 0 */
-    *grow = 0;
-    return CSS_FLEX_GROW_SET;
+    if (style == (const css_computed_style *)mock_style_flex_grow_0) {
+        *grow = 0;
+        return CSS_FLEX_GROW_SET;
+    }
+    return flex_test_style_grow(style, grow);
 }
 
 /* Now linking against REAL layout_flex.c - provide stubs for its dependencies */
@@ -905,6 +903,153 @@ START_TEST(test_row_flex_min_height_unchanged)
 END_TEST
 
 
+/* Exercise the real flex algorithm and libcss getters, not copied sizing logic.
+ * Intrinsic widths model an unbreakable 600px descendant in a 400px row. */
+START_TEST(test_flex_minimum_width_layout)
+{
+    struct flex_test_style values = {
+        .width = -1,
+        .width_unit = CSS_UNIT_PX,
+        .min_width = -1,
+        .min_unit = CSS_UNIT_PX,
+        .max_width = -1,
+        .basis = -1,
+        .overflow = CSS_OVERFLOW_VISIBLE,
+    };
+    int expected = 400;
+    switch (_i) {
+    case 0:
+        expected = 600;
+        break; /* auto retains content minimum */
+    case 1:
+        values.min_width = 0;
+        break;
+    case 2:
+        values.min_width = 0;
+        values.basis = 0;
+        values.grow = 1;
+        break;
+    case 3:
+        values.min_width = 0;
+        values.min_unit = CSS_UNIT_PCT;
+        break;
+    case 4:
+        values.min_width = 50;
+        values.min_unit = CSS_UNIT_PCT;
+        break;
+    case 5:
+        values.min_width = 450;
+        expected = 450;
+        break;
+    case 6:
+        values.width = 300;
+        expected = 300;
+        break; /* specified-size cap */
+    case 7:
+        values.width = 100;
+        values.width_unit = CSS_UNIT_PCT;
+        break;
+    case 8:
+        values.max_width = 250;
+        expected = 250;
+        break; /* max-size cap */
+    case 9:
+        values.max_width = 0;
+        expected = 0;
+        break;
+    case 10:
+        values.overflow = CSS_OVERFLOW_HIDDEN;
+        break;
+    case 11:
+        values.overflow = CSS_OVERFLOW_AUTO;
+        break;
+    case 12:
+        values.overflow = CSS_OVERFLOW_SCROLL;
+        break;
+    case 13:
+        values.overflow = CSS_OVERFLOW_HIDDEN;
+        values.min_width = 450;
+        expected = 450;
+        break;
+    case 14:
+        values.min_width = 450;
+        values.max_width = 250;
+        expected = 450;
+        break;
+    case 15:
+        values.min_width = 0;
+        values.padding = 10;
+        values.margin = 5;
+        expected = 370;
+        break;
+    case 16:
+        values.width = 300;
+        values.padding = 10;
+        values.margin = 5;
+        expected = 300;
+        break;
+    case 17:
+        values.width = 300;
+        values.padding = 10;
+        values.border_box = true;
+        expected = 280;
+        break;
+    case 18:
+        values.min_width = 0;
+        values.reverse = true;
+        break;
+    }
+    css_computed_style *item_style = flex_test_style_create(&values);
+    ck_assert_ptr_nonnull(item_style);
+    css_fixed_or_calc minimum = (css_fixed_or_calc)0;
+    css_unit unit = CSS_UNIT_PX;
+    ck_assert_int_eq(css_computed_min_width(item_style, &minimum, &unit),
+        values.min_width < 0 ? CSS_MIN_WIDTH_AUTO : CSS_MIN_WIDTH_SET);
+    ck_assert_int_eq(css_computed_min_height(item_style, &minimum, &unit), CSS_MIN_HEIGHT_AUTO);
+
+    struct flex_test_style container_values = {
+        .container = true,
+        .reverse = values.reverse,
+        .width = 400,
+        .width_unit = CSS_UNIT_PX,
+        .min_width = -1,
+        .min_unit = CSS_UNIT_PX,
+        .max_width = -1,
+        .basis = -1,
+        .overflow = CSS_OVERFLOW_VISIBLE,
+    };
+    css_computed_style *container_style = flex_test_style_create(&container_values);
+    ck_assert_ptr_nonnull(container_style);
+    struct box flex = {.type = BOX_FLEX, .style = container_style, .width = 400, .height = AUTO};
+    int intrinsic_width = 600 + 2 * (values.padding + values.margin);
+    struct box item = {.type = BOX_BLOCK,
+        .style = item_style,
+        .parent = &flex,
+        .width = AUTO,
+        .height = AUTO,
+        .min_width = {CSS_SIZE_SET, intrinsic_width},
+        .max_width = intrinsic_width};
+    flex.children = flex.last = &item;
+    html_content content = {.unit_len_ctx = {
+                                .viewport_width = INTTOFIX(1280),
+                                .viewport_height = INTTOFIX(900),
+                                .font_size_default = INTTOFIX(16),
+                                .font_size_minimum = INTTOFIX(6),
+                                .device_dpi = INTTOFIX(96),
+                                .root_style = container_style,
+                            }};
+    ck_assert(layout_flex(&flex, 400, &content));
+    ck_assert_int_eq(item.width, expected);
+    /* Reformatting must not replace the intrinsic caches with used sizes. */
+    ck_assert_int_eq(item.min_width.value, intrinsic_width);
+    ck_assert_int_eq(item.max_width, intrinsic_width);
+    ck_assert(layout_flex(&flex, 400, &content));
+    ck_assert_int_eq(item.width, expected);
+    css_computed_style_destroy(item_style);
+    css_computed_style_destroy(container_style);
+}
+END_TEST
+
 /* Test suite setup */
 Suite *layout_flex_suite(void)
 {
@@ -938,6 +1083,8 @@ Suite *layout_flex_suite(void)
     tcase_add_test(tc_core, test_column_flex_explicit_min_height_preserved);
     tcase_add_test(tc_core, test_column_flex_explicit_min_height_zero);
     tcase_add_test(tc_core, test_row_flex_min_height_unchanged);
+
+    tcase_add_loop_test(tc_core, test_flex_minimum_width_layout, 0, 19);
 
     suite_add_tcase(s, tc_core);
 

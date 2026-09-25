@@ -1,0 +1,39 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Flex minimum widths: auto, zero, and size caps</title>
+<style>
+  :root { --spacing: 4px; }
+  body { margin: 16px; font: 14px sans-serif; }
+  p { margin: 10px 0 3px; }
+  .row { display: flex; width: 400px; background: #ddd; margin-bottom: 5px; }
+  .item { flex: 1; background: #aecbf0; }
+  .wide { width: 600px; height: 16px; }
+  .zero { min-width: 0; }
+  .calc { min-width: calc(4px * 0); }
+  .variable { min-width: calc(var(--spacing) * 0); }
+  .specified { width: 100%; flex: 0 1 auto; }
+  .capped { max-width: 250px; }
+  .hidden { overflow: hidden; }
+  .outer { display: flex; width: 600px; background: #ddd; }
+  main { width: 100%; min-width: calc(var(--spacing) * 0); }
+  .columns { display: flex; gap: 20px; }
+  .news { flex: 1; min-width: 0; background: #aecbf0; }
+  .sidebar { width: 150px; flex-shrink: 0; background: #d0e7b5; }
+</style>
+<p>Automatic minimum: blue item stays 600px wide and overflows the 400px row.</p>
+<div class="row"><div id="auto" class="item"><div class="wide"></div></div></div>
+<p>Each explicit zero minimum below: blue item is 400px wide.</p>
+<div class="row"><div id="zero" class="item zero"><div class="wide"></div></div></div>
+<div class="row"><div id="calc" class="item calc"><div class="wide"></div></div></div>
+<div class="row"><div id="variable" class="item variable"><div class="wide"></div></div></div>
+<p>Automatic minimum capped by width:100%: 400px.</p>
+<div class="row"><div id="specified" class="item specified"><div class="wide"></div></div></div>
+<p>Automatic minimum capped by max-width: 250px.</p>
+<div class="row"><div id="capped" class="item capped"><div class="wide"></div></div></div>
+<p>Automatic minimum with overflow:hidden: 400px.</p>
+<div class="row"><div id="hidden" class="item hidden"><div class="wide"></div></div></div>
+<p>Reduced HotNews structure: main 600px, news 430px, gap 20px, sidebar 150px.</p>
+<div class="outer"><main id="main"><div class="columns">
+  <div id="news" class="news"><div class="wide"></div></div>
+  <aside id="sidebar" class="sidebar">Sidebar</aside>
+</div></main></div>

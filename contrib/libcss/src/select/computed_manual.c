@@ -283,36 +283,16 @@ uint8_t css_computed_float(const css_computed_style *style)
 
 uint8_t css_computed_min_height(const css_computed_style *style, css_fixed_or_calc *length, css_unit *unit)
 {
-    uint8_t min_height = get_min_height(style, length, unit);
-
-    if (min_height == CSS_MIN_HEIGHT_AUTO) {
-        uint8_t display = get_display(style);
-
-        if (display != CSS_DISPLAY_FLEX && display != CSS_DISPLAY_INLINE_FLEX) {
-            min_height = CSS_MIN_HEIGHT_SET;
-            length->value = 0;
-            *unit = CSS_UNIT_PX;
-        }
-    }
-
-    return min_height;
+    /* Whether auto has a content-based minimum depends on the parent's
+     * layout mode, not this element's display. Preserve it for layout. */
+    return get_min_height(style, length, unit);
 }
 
 uint8_t css_computed_min_width(const css_computed_style *style, css_fixed_or_calc *length, css_unit *unit)
 {
-    uint8_t min_width = get_min_width(style, length, unit);
-
-    if (min_width == CSS_MIN_WIDTH_AUTO) {
-        uint8_t display = get_display(style);
-
-        if (display != CSS_DISPLAY_FLEX && display != CSS_DISPLAY_INLINE_FLEX) {
-            min_width = CSS_MIN_WIDTH_SET;
-            length->value = 0;
-            *unit = CSS_UNIT_PX;
-        }
-    }
-
-    return min_width;
+    /* Whether auto has a content-based minimum depends on the parent's
+     * layout mode, not this element's display. Preserve it for layout. */
+    return get_min_width(style, length, unit);
 }
 
 uint8_t css_computed_column_rule_color(const css_computed_style *style, css_color *color)

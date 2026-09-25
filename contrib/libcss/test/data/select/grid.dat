@@ -82,8 +82,8 @@ margin-bottom: 0px
 margin-left: 0px
 max-height: none
 max-width: none
-min-height: 0px
-min-width: 0px
+min-height: auto
+min-width: auto
 opacity: 1.000
 order: 0
 outline-color: invert

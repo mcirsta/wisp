@@ -198,7 +198,10 @@ add_wisp_test(layout_flex_test
   ${CMAKE_SOURCE_DIR}/src/content/handlers/html/layout_flex.c
   ${CMAKE_SOURCE_DIR}/src/test/log.c
   ${CMAKE_SOURCE_DIR}/src/test/layout_flex_test.c
+  ${CMAKE_SOURCE_DIR}/src/test/flex_layout_style.c
 )
+set_source_files_properties(flex_layout_style.c PROPERTIES INCLUDE_DIRECTORIES
+  "${CMAKE_SOURCE_DIR}/contrib/libcss/src;${CMAKE_BINARY_DIR}/contrib/libcss/src;${CMAKE_BINARY_DIR}/contrib/libcss/src/select;${CMAKE_BINARY_DIR}/contrib/libcss/src/generated")
 # Define TESTING so layout_flex.c can use test stubs
 target_compile_definitions(layout_flex_test PRIVATE TESTING)
 wisp_test_allow_libcss_stubs(layout_flex_test)
