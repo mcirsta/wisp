@@ -1,0 +1,45 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>CSS variable architecture: literal references</title>
+<style>
+  :root {
+    --ink: #234567;
+    --gap: 12px;
+    --width: 40px;
+    --alias: var(--width);
+    --tracks: 80px 120px;
+    --label: "Reading page";
+  }
+  body { font: 16px sans-serif; margin: 24px; color: #234567; }
+  .sample { margin: 8px 0 24px; padding: 12px; border: 1px solid #234567; width: 300px; }
+  .sample span { display: block; background: #e3edf5; padding: 4px; }
+  .flex-var { display: var(--display, flex); gap: var(--gap); color: var(--ink); }
+  .flex-ref { display: flex; gap: 12px; color: #234567; }
+  .grid-var { display: grid; grid-template-columns: var(--tracks); gap: var(--gap); }
+  .grid-ref { display: grid; grid-template-columns: 80px 120px; gap: 12px; }
+  .scope-var { --width: 90px; width: var(--alias); height: var(--width); }
+  .scope-ref { width: 40px; height: 90px; }
+  .pseudo-var::before { --label: "Before"; content: var(--label); }
+  .pseudo-var::after { content: var(--label); }
+  .pseudo-ref::before { content: "Before"; }
+  .pseudo-ref::after { content: "Reading page"; }
+  .invalid-var { --a: var(--b); --b: var(--a); width: var(--a, 200px); }
+  .invalid-ref { width: 200px; }
+</style>
+<h1>CSS variables and literal references</h1>
+<p>Each pair should look identical. The first uses variables; the second uses literal values. No JavaScript or network resources are needed.</p>
+<h2>Flex</h2>
+<div class="sample flex-var"><span>Read</span><span>the page</span></div>
+<div class="sample flex-ref"><span>Read</span><span>the page</span></div>
+<h2>Grid</h2>
+<div class="sample grid-var"><span>Read</span><span>the page</span></div>
+<div class="sample grid-ref"><span>Read</span><span>the page</span></div>
+<h2>Completed parent alias, with a child override</h2>
+<div class="sample scope-var"></div>
+<div class="sample scope-ref"></div>
+<h2>Separate pseudo-element scopes</h2>
+<div class="sample pseudo-var"> / </div>
+<div class="sample pseudo-ref"> / </div>
+<h2>Fallback from a cycle</h2>
+<div class="sample invalid-var">Fallback width</div>
+<div class="sample invalid-ref">Fallback width</div>

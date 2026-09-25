@@ -163,6 +163,7 @@ static void css__destroy_node_data(struct css_node_data *node_data)
     }
 
     css__variables_ctx_destroy(node_data->var_ctx);
+    css__variables_ctx_destroy(node_data->var_parent);
 
     free(node_data);
 }
@@ -675,8 +676,10 @@ static css_error css__set_node_data(void *node, css_select_state *state, css_sel
     }
 
     /* Transfer working var_ctx to node_data for child inheritance */
-    node_data->var_ctx = state->var_ctx;
-    state->var_ctx = NULL;
+    node_data->var_ctx = state->var_ctx[CSS_PSEUDO_ELEMENT_NONE];
+    state->var_ctx[CSS_PSEUDO_ELEMENT_NONE] = NULL;
+    node_data->var_parent = state->var_parent;
+    state->var_parent = NULL;
 
     error = handler->set_libcss_node_data(pw, node, node_data);
     if (error != CSS_OK) {
@@ -730,6 +733,9 @@ static css_error css_select_style__get_sharable_node_data_for_candidate(css_sele
 #endif
         return error;
     }
+
+    if (node_data->var_parent != state->var_parent)
+        return CSS_OK;
 
     /* If one node has hints and other doesn't then can't share */
     if ((node_data->flags & CSS_NODE_FLAGS_HAS_HINTS) != (state->node_data->flags & CSS_NODE_FLAGS_HAS_HINTS)) {
@@ -951,10 +957,9 @@ static void css_select__finalise_selection_state(css_select_state *state)
         css__destroy_node_data(state->node_data);
     }
 
-    if (state->var_ctx != NULL) {
-        css__variables_ctx_destroy(state->var_ctx);
-        state->var_ctx = NULL;
-    }
+    for (uint32_t i = 0; i < CSS_PSEUDO_ELEMENT_COUNT; i++)
+        css__variables_ctx_destroy(state->var_ctx[i]);
+    css__variables_ctx_destroy(state->var_parent);
 
     if (state->classes != NULL) {
         for (uint32_t i = 0; i < state->n_classes; i++) {
@@ -1035,11 +1040,11 @@ static css_error css_select__initialise_selection_state(css_select_state *state,
         if (error != CSS_OK) {
             goto failed;
         }
-        error = css__variables_ctx_clone_inherited(
-            parent_data != NULL ? parent_data->var_ctx : NULL,
-            &state->var_ctx);
+        state->var_parent = css__variables_ctx_ref(parent_data != NULL ? parent_data->var_ctx : NULL);
+        error = css__variables_ctx_clone_inherited(state->var_parent,
+            &state->var_ctx[CSS_PSEUDO_ELEMENT_NONE]);
     } else {
-        error = css__variables_ctx_create(&state->var_ctx);
+        error = css__variables_ctx_create(&state->var_ctx[CSS_PSEUDO_ELEMENT_NONE]);
     }
     if (error != CSS_OK) {
         goto failed;
@@ -1267,12 +1272,8 @@ css_error css_select_style(css_select_ctx *ctx, void *node, const css_unit_ctx *
         for (i = 0; i < CSS_PSEUDO_ELEMENT_COUNT; i++) {
             state.results->styles[i] = css__computed_style_ref(styles[i]);
         }
-        css__variables_ctx_destroy(state.var_ctx);
-        state.var_ctx = NULL;
-        error = css__variables_ctx_clone(share->var_ctx, &state.var_ctx);
-        if (error != CSS_OK) {
-            goto cleanup;
-        }
+        css__variables_ctx_destroy(state.var_ctx[CSS_PSEUDO_ELEMENT_NONE]);
+        state.var_ctx[CSS_PSEUDO_ELEMENT_NONE] = css__variables_ctx_ref(share->var_ctx);
 #ifdef DEBUG_STYLE_SHARING
         printf("style:\t%s\tSHARED!\n", lwc_string_data(state.element.name));
 #endif
@@ -1349,6 +1350,20 @@ css_error css_select_style(css_select_ctx *ctx, void *node, const css_unit_ctx *
         }
 
         state.collecting_vars = false;
+    }
+
+    /* Publish the element environment before resolving its pseudo-elements.
+     * Pseudo declarations were collected into independent local builders. */
+    error = css__variables_ctx_finalize(&state.var_ctx[CSS_PSEUDO_ELEMENT_NONE]);
+    if (error != CSS_OK)
+        goto cleanup;
+    for (j = CSS_PSEUDO_ELEMENT_NONE + 1; j < CSS_PSEUDO_ELEMENT_COUNT; j++) {
+        if (state.var_ctx[j] == NULL)
+            continue;
+        state.var_ctx[j]->parent = css__variables_ctx_ref(state.var_ctx[CSS_PSEUDO_ELEMENT_NONE]);
+        error = css__variables_ctx_finalize(&state.var_ctx[j]);
+        if (error != CSS_OK)
+            goto cleanup;
     }
 
     /* Iterate through the top-level stylesheets, selecting styles
@@ -2936,72 +2951,34 @@ css_error cascade_style(const css_style *style, css_select_state *state)
             continue;
         }
 
-        /* Custom property declarations carry 2 trailing words:
-         * (name_string_idx, value_string_idx). During the variable-collection
-         * pass, cascade them into the per-element variable context. */
-        if (op == CSS_PROP_CUSTOM_PROPERTY) {
-            /* Read name and value string indices from bytecode */
-            uint32_t name_idx = *s.bytecode;
+        /* Both variable opcodes carry a name string ID and a parsed-value ID. */
+        if (op == CSS_PROP_CUSTOM_PROPERTY || op == CSS_PROP_VAR_DEFERRED) {
+            uint32_t name_id = *s.bytecode;
+            lwc_string *name = NULL;
+            css_var_context **vars = &state->var_ctx[state->current_pseudo];
             advance_bytecode(&s, sizeof(css_code_t));
-            uint32_t value_idx = *s.bytecode;
+            uint32_t value_id = *s.bytecode;
             advance_bytecode(&s, sizeof(css_code_t));
-
-            /* Resolve lwc_strings from the stylesheet's string_vector */
-            lwc_string *name_str = NULL;
-            lwc_string *value_str = NULL;
-            css_error nerr = css__stylesheet_string_get(s.sheet, name_idx, &name_str);
-            css_error verr = css__stylesheet_string_get(s.sheet, value_idx, &value_str);
-
-            if (nerr != CSS_OK || verr != CSS_OK) {
-                CSS_LOG(DEBUG,
-                    "VAR_RESOLVE: invalid custom property string index name=%u value=%u count=%u",
-                    name_idx, value_idx, s.sheet->string_vector_c);
-                continue;
+            error = css__stylesheet_string_get(s.sheet, name_id, &name);
+            if (error != CSS_OK)
+                return error;
+            if (op == CSS_PROP_CUSTOM_PROPERTY) {
+                if (!state->collecting_vars)
+                    continue;
+                if (*vars == NULL) {
+                    error = css__variables_ctx_create(vars);
+                    if (error != CSS_OK)
+                        return error;
+                }
+                error = css__variables_ctx_cascade(*vars, name,
+                    css__stylesheet_var_value_get(s.sheet, value_id),
+                    state->current_origin, state->current_specificity, isImportant(opv));
+            } else {
+                css_var_context *env = *vars != NULL ? *vars : state->var_ctx[CSS_PSEUDO_ELEMENT_NONE];
+                error = css__resolve_var_property(name, value_id, env, s.sheet, isImportant(opv), state);
             }
-
-            if (state->collecting_vars &&
-                    name_str != NULL && value_str != NULL &&
-                    state->var_ctx != NULL) {
-                css__variables_ctx_cascade(state->var_ctx,
-                    name_str, value_str,
-                    state->current_origin,
-                    state->current_specificity,
-                    isImportant(opv));
-            }
-            continue;
-        }
-
-        /* Deferred var() property: resolve variables in cached value tokens,
-         * then re-parse through the property handler and cascade. */
-        if (op == CSS_PROP_VAR_DEFERRED) {
-            uint32_t prop_name_idx = *s.bytecode;
-            advance_bytecode(&s, sizeof(css_code_t));
-            uint32_t raw_value_idx = *s.bytecode;
-            advance_bytecode(&s, sizeof(css_code_t));
-
-            lwc_string *prop_name_str = NULL;
-            lwc_string *raw_value_str = NULL;
-            css_error perr = css__stylesheet_string_get(s.sheet, prop_name_idx, &prop_name_str);
-            css_error rerr = css__stylesheet_string_get(s.sheet, raw_value_idx, &raw_value_str);
-
-            if (perr != CSS_OK || rerr != CSS_OK) {
-                CSS_LOG(DEBUG,
-                    "VAR_RESOLVE: invalid deferred string index prop=%u raw=%u count=%u",
-                    prop_name_idx, raw_value_idx, s.sheet->string_vector_c);
-                continue;
-            }
-
-            if (prop_name_str != NULL && raw_value_str != NULL &&
-                state->var_ctx != NULL) {
-                css_error res = css__resolve_var_property(
-                    prop_name_str, raw_value_idx, raw_value_str,
-                    state->var_ctx, s.sheet,
-                    isImportant(opv), state);
-                /* CSS_INVALID = unresolvable var(); property stays at
-                 * initial/inherited value — that's correct per spec. */
-                if (res != CSS_OK && res != CSS_INVALID)
-                    return res;
-            }
+            if (error != CSS_OK)
+                return error;
             continue;
         }
 

@@ -251,10 +251,10 @@ struct css_stylesheet {
     uint32_t string_vector_c; /**< The number of string
                                * vector entries used */
 
-    parserutils_vector **var_token_vector; /**< Token cache for
-                                            * deferred var() values,
-                                            * indexed by string number - 1 */
-    uint32_t var_token_vector_l; /**< Token cache allocated length */
+    struct css_var_value **var_values; /**< Owned parsed variable declarations */
+    uint32_t var_values_count;
+    uint32_t var_values_capacity;
+
 };
 
 css_error css__stylesheet_style_create(css_stylesheet *sheet, css_style **style);

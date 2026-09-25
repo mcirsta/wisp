@@ -13,6 +13,7 @@
 #include "lex/lex.h"
 #include "parse/font_face.h"
 #include "parse/important.h"
+#include "select/variables.h"
 #include "parse/language.h"
 #include "parse/mq.h"
 #include "parse/parse.h"
@@ -1811,6 +1812,69 @@ css_error parseSelectorList(css_language *c, const parserutils_vector *vector, c
  * Property parsing functions						      *
  ******************************************************************************/
 
+/* Preserve the original token sequence and strip only a top-level trailing
+ * !important. Both custom properties and deferred ordinary declarations use
+ * the same stylesheet-owned representation and bytecode shape. */
+static css_error parseVariableDeclaration(css_language *c, const css_token *property,
+    const parserutils_vector *vector, int32_t *ctx, css_rule *rule, opcode_t opcode)
+{
+    int32_t start = *ctx, end = start, scan = start;
+    unsigned depth = 0;
+    const css_token *token;
+    uint8_t flags = 0;
+    uint32_t name_id, value_id;
+    css_style *style = NULL;
+    css_error error;
+
+    while ((token = parserutils_vector_iterate(vector, &scan)) != NULL) {
+        if (depth == 0 && tokenIsChar(token, '!')) {
+            int32_t important = scan - 1;
+            error = css__parse_important(c, vector, &important, &flags);
+            if (error != CSS_OK)
+                return error;
+            consumeWhitespace(vector, &important);
+            if (parserutils_vector_peek(vector, important) != NULL)
+                return CSS_INVALID;
+            scan = important;
+            break;
+        }
+        if (token->type == CSS_TOKEN_FUNCTION || tokenIsChar(token, '(') ||
+            tokenIsChar(token, '[') || tokenIsChar(token, '{')) {
+            depth++;
+        } else if (tokenIsChar(token, ')') || tokenIsChar(token, ']') || tokenIsChar(token, '}')) {
+            if (depth == 0)
+                return CSS_INVALID;
+            depth--;
+        }
+        end = scan;
+    }
+    if (depth != 0)
+        return CSS_INVALID;
+    error = css__stylesheet_var_value_add(c->sheet, vector, start, end, &value_id);
+    if (error != CSS_OK)
+        return error;
+    error = css__stylesheet_string_add(c->sheet, lwc_string_ref(property->idata), &name_id);
+    if (error != CSS_OK)
+        return error;
+    error = css__stylesheet_style_create(c->sheet, &style);
+    if (error != CSS_OK)
+        return error;
+    error = css__stylesheet_style_appendOPV(style, opcode, flags, 0);
+    if (error == CSS_OK)
+        error = css__stylesheet_style_append(style, name_id);
+    if (error == CSS_OK)
+        error = css__stylesheet_style_append(style, value_id);
+    if (error == CSS_OK)
+        error = css__stylesheet_rule_append_style(c->sheet, rule, style);
+    if (error != CSS_OK) {
+        css__stylesheet_style_destroy(style);
+        return error;
+    }
+    c->sheet->uses_variables = true;
+    *ctx = scan;
+    return CSS_OK;
+}
+
 css_error parseProperty(
     css_language *c, const css_token *property, const parserutils_vector *vector, int32_t *ctx, css_rule *rule)
 {
@@ -1844,142 +1908,8 @@ css_error parseProperty(
         }
 
         if (has_var) {
-            /* var() found anywhere in the value — defer entire property.
-             * Works for both shorthands and longhands. */
-
-            /* Detect !important by scanning for trailing '!' */
-            int32_t value_start = *ctx;
-            int32_t excl_pos = -1;
-
-            scan = value_start;
-            while ((token = parserutils_vector_iterate(vector, &scan)) != NULL) {
-                if (tokenIsChar(token, '!'))
-                    excl_pos = scan - 1;
-            }
-
-            if (excl_pos >= 0) {
-                int32_t imp_ctx = excl_pos;
-                error = css__parse_important(c, vector, &imp_ctx, &flags);
-                if (error != CSS_OK && error != CSS_INVALID)
-                    return error;
-            }
-
-            /* Build the raw value text used as the deferred token-cache key,
-             * reconstructing prefixes stripped by the lexer */
-            size_t total_len = 0;
-            int32_t value_end = value_start;
-            scan = value_start;
-
-            while ((token = parserutils_vector_iterate(vector, &scan)) != NULL) {
-                size_t tok_len = 0;
-
-                if (flags != 0 && (scan - 1) == excl_pos)
-                    break;
-
-                if (token->idata != NULL) {
-                    tok_len = lwc_string_length(token->idata);
-                } else {
-                    tok_len = token->data.len;
-                }
-
-                if (token->type == CSS_TOKEN_HASH)
-                    total_len += 1; /* '#' prefix */
-                else if (token->type == CSS_TOKEN_FUNCTION)
-                    total_len += 1; /* '(' suffix */
-                total_len += tok_len;
-                value_end = scan;
-            }
-
-            char *buf = malloc(total_len + 1);
-            if (buf == NULL)
-                return CSS_NOMEM;
-
-            size_t offset = 0;
-            scan = value_start;
-            while (scan < value_end && (token = parserutils_vector_iterate(vector, &scan)) != NULL) {
-                const char *tok_data = NULL;
-                size_t tok_len = 0;
-
-                if (token->idata != NULL) {
-                    tok_data = lwc_string_data(token->idata);
-                    tok_len = lwc_string_length(token->idata);
-                } else {
-                    tok_data = (const char *)token->data.data;
-                    tok_len = token->data.len;
-                }
-
-                if (token->type == CSS_TOKEN_HASH)
-                    buf[offset++] = '#';
-                if (tok_data != NULL && tok_len > 0) {
-                    memcpy(buf + offset, tok_data, tok_len);
-                    offset += tok_len;
-                }
-                if (token->type == CSS_TOKEN_FUNCTION)
-                    buf[offset++] = '(';
-            }
-
-            /* Trim trailing whitespace */
-            while (offset > 0 && (buf[offset - 1] == ' ' || buf[offset - 1] == '\t' ||
-                                   buf[offset - 1] == '\n' || buf[offset - 1] == '\r' ||
-                                   buf[offset - 1] == '\f')) {
-                offset--;
-            }
-
-            /* Intern the raw value string */
-            lwc_string *raw_value_str;
-            lwc_error lerr = lwc_intern_string(buf, offset, &raw_value_str);
-            free(buf);
-            if (lerr != lwc_error_ok)
-                return CSS_NOMEM;
-
-            uint32_t raw_value_idx;
-            error = css__stylesheet_string_add(c->sheet, raw_value_str, &raw_value_idx);
-            if (error != CSS_OK)
-                return error;
-
-            /* Store property name */
-            lwc_string *prop_name_ref = lwc_string_ref(property->idata);
-            uint32_t prop_name_idx;
-            error = css__stylesheet_string_add(c->sheet, prop_name_ref, &prop_name_idx);
-            if (error != CSS_OK)
-                return error;
-
-            /* Emit: [OPV(CSS_PROP_VAR_DEFERRED, flags, 0)] [prop_name_idx] [raw_value_idx] */
-            error = css__stylesheet_style_create(c->sheet, &style);
-            if (error != CSS_OK)
-                return error;
-
-            error = css__stylesheet_style_appendOPV(style,
-                (opcode_t)CSS_PROP_VAR_DEFERRED, 0, 0);
-            if (error != CSS_OK) {
-                css__stylesheet_style_destroy(style);
-                return error;
-            }
-
-            error = css__stylesheet_style_append(style, prop_name_idx);
-            if (error != CSS_OK) {
-                css__stylesheet_style_destroy(style);
-                return error;
-            }
-
-            error = css__stylesheet_style_append(style, raw_value_idx);
-            if (error != CSS_OK) {
-                css__stylesheet_style_destroy(style);
-                return error;
-            }
-
-            if (flags != 0)
-                css__make_style_important(style);
-
-            error = css__stylesheet_rule_append_style(c->sheet, rule, style);
-            if (error != CSS_OK) {
-                css__stylesheet_style_destroy(style);
-                return error;
-            }
-
-            c->sheet->uses_variables = true;
-
-            return CSS_OK;
+            return parseVariableDeclaration(c, property, vector, ctx, rule,
+                (opcode_t)CSS_PROP_VAR_DEFERRED);
         }
     }
 
@@ -2031,194 +1961,10 @@ css_error parseProperty(
     return CSS_OK;
 }
 
-/**
- * Parse a custom property declaration (--name: value)
- *
- * Captures the raw value text from all remaining tokens and stores both name
- * and value as lwc_strings in the stylesheet's string_vector. The cascade
- * stores the value in css_var_value, where tokens and var() refs are cached.
- * Emits bytecode: [OPV(CSS_PROP_CUSTOM_PROPERTY, flags, 0)]
- *                 [name_string_idx] [value_string_idx]
- */
-static inline const char *css__custom_prop_get_str(const css_token *token, size_t *len)
+/* Custom properties retain parser tokens; no serialization/re-lexing. */
+css_error parseCustomProperty(css_language *c, const css_token *property,
+    const parserutils_vector *vector, int32_t *ctx, css_rule *rule)
 {
-    if (token->idata != NULL) {
-        *len = lwc_string_length(token->idata);
-        return lwc_string_data(token->idata);
-    }
-    switch (token->type) {
-    case CSS_TOKEN_S: *len = 1; return " ";
-    case CSS_TOKEN_CDO: *len = 4; return "<!--";
-    case CSS_TOKEN_CDC: *len = 3; return "-->";
-    case CSS_TOKEN_INCLUDES: *len = 2; return "~=";
-    case CSS_TOKEN_DASHMATCH: *len = 2; return "|=";
-    case CSS_TOKEN_PREFIXMATCH: *len = 2; return "^=";
-    case CSS_TOKEN_SUFFIXMATCH: *len = 2; return "$=";
-    case CSS_TOKEN_SUBSTRINGMATCH: *len = 2; return "*=";
-    default: *len = 0; return "";
-    }
-}
-
-css_error parseCustomProperty(
-    css_language *c, const css_token *property, const parserutils_vector *vector, int32_t *ctx, css_rule *rule)
-{
-    css_error error;
-    uint8_t flags = 0;
-    css_style *style = NULL;
-    const css_token *token;
-    uint32_t name_idx, value_idx;
-    lwc_string *value_str;
-    int32_t value_start = *ctx;
-
-    /* 1B: Scan forward to find the last '!' CHAR token position,
-     * then delegate to css__parse_important() from there. */
-    int32_t scan = value_start;
-    int32_t excl_pos = -1;
-
-    while ((token = parserutils_vector_iterate(vector, &scan)) != NULL) {
-        if (tokenIsChar(token, '!'))
-            excl_pos = scan - 1;
-    }
-
-    /* If we found a '!', try css__parse_important from that position */
-    if (excl_pos >= 0) {
-        int32_t imp_ctx = excl_pos;
-        error = css__parse_important(c, vector, &imp_ctx, &flags);
-        if (error != CSS_OK && error != CSS_INVALID)
-            return error;
-        /* If CSS_INVALID, the '!' wasn't followed by 'important',
-         * so flags stays 0 and we treat '!' as part of the value. */
-    }
-
-    /* Second pass: measure value text length.
-     * If !important was found (flags != 0), stop before excl_pos. */
-    size_t total_len = 0;
-    int32_t value_end = value_start;
-    scan = value_start;
-
-    while ((token = parserutils_vector_iterate(vector, &scan)) != NULL) {
-        if (flags != 0 && (scan - 1) == excl_pos)
-            break;
-            
-        size_t tok_len = 0;
-        css__custom_prop_get_str(token, &tok_len);
-        
-        /* Account for prefixes stripped by the lexer */
-        if (token->type == CSS_TOKEN_HASH)
-            total_len += 1; /* '#' prefix */
-        else if (token->type == CSS_TOKEN_FUNCTION)
-            total_len += 1; /* '(' suffix */
-        else if (token->type == CSS_TOKEN_STRING)
-            total_len += 2; /* "" surrounding */
-        else if (token->type == CSS_TOKEN_URI)
-            total_len += 6; /* url("") surrounding */
-            
-        total_len += tok_len;
-        value_end = scan;
-    }
-
-    /* Third pass: build the concatenated value string */
-    char *buf = malloc(total_len + 1);
-    if (buf == NULL)
-        return CSS_NOMEM;
-
-    size_t offset = 0;
-    scan = value_start;
-    while (scan < value_end && (token = parserutils_vector_iterate(vector, &scan)) != NULL) {
-        size_t tok_len = 0;
-        const char *tok_str = css__custom_prop_get_str(token, &tok_len);
-        
-        /* Re-add prefixes and wrappers that the lexer strips */
-        if (token->type == CSS_TOKEN_HASH) {
-            buf[offset++] = '#';
-            memcpy(buf + offset, tok_str, tok_len);
-            offset += tok_len;
-        } else if (token->type == CSS_TOKEN_FUNCTION) {
-            memcpy(buf + offset, tok_str, tok_len);
-            offset += tok_len;
-            buf[offset++] = '(';
-        } else if (token->type == CSS_TOKEN_STRING) {
-            buf[offset++] = '"';
-            memcpy(buf + offset, tok_str, tok_len);
-            offset += tok_len;
-            buf[offset++] = '"';
-        } else if (token->type == CSS_TOKEN_URI) {
-            memcpy(buf + offset, "url(\"", 5);
-            offset += 5;
-            memcpy(buf + offset, tok_str, tok_len);
-            offset += tok_len;
-            buf[offset++] = '"';
-            buf[offset++] = ')';
-        } else {
-            memcpy(buf + offset, tok_str, tok_len);
-            offset += tok_len;
-        }
-    }
-
-    /* Trim trailing whitespace from the value */
-    while (offset > 0 && (buf[offset - 1] == ' ' || buf[offset - 1] == '\t' ||
-                             buf[offset - 1] == '\n' || buf[offset - 1] == '\r' ||
-                             buf[offset - 1] == '\f')) {
-        offset--;
-    }
-
-    /* Intern the value string */
-    lwc_error lerr = lwc_intern_string(buf, offset, &value_str);
-    free(buf);
-    if (lerr != lwc_error_ok)
-        return CSS_NOMEM;
-
-    /* Add name string to stylesheet (string_add takes ownership of the ref) */
-    lwc_string *name_ref = lwc_string_ref(property->idata);
-    error = css__stylesheet_string_add(c->sheet, name_ref, &name_idx);
-    if (error != CSS_OK) {
-        lwc_string_unref(value_str);
-        return error;
-    }
-
-    /* Add value string to stylesheet */
-    error = css__stylesheet_string_add(c->sheet, value_str, &value_idx);
-    if (error != CSS_OK) {
-        return error;
-    }
-
-    /* Create style and emit bytecode:
-     * [OPV(CSS_PROP_CUSTOM_PROPERTY, 0, 0)] [name_idx] [value_idx] */
-    error = css__stylesheet_style_create(c->sheet, &style);
-    if (error != CSS_OK)
-        return error;
-
-    error = css__stylesheet_style_appendOPV(style, CSS_PROP_CUSTOM_PROPERTY, 0, 0);
-    if (error != CSS_OK) {
-        css__stylesheet_style_destroy(style);
-        return error;
-    }
-
-    error = css__stylesheet_style_append(style, name_idx);
-    if (error != CSS_OK) {
-        css__stylesheet_style_destroy(style);
-        return error;
-    }
-
-    error = css__stylesheet_style_append(style, value_idx);
-    if (error != CSS_OK) {
-        css__stylesheet_style_destroy(style);
-        return error;
-    }
-
-    /* Mark important via css__make_style_important (2B: it now handles
-     * CSS_PROP_CUSTOM_PROPERTY in its switch to skip 2 trailing words) */
-    if (flags != 0)
-        css__make_style_important(style);
-
-    /* Append style to rule */
-    error = css__stylesheet_rule_append_style(c->sheet, rule, style);
-    if (error != CSS_OK) {
-        css__stylesheet_style_destroy(style);
-        return error;
-    }
-
-    c->sheet->uses_variables = true;
-
-    return CSS_OK;
+    return parseVariableDeclaration(c, property, vector, ctx, rule,
+        (opcode_t)CSS_PROP_CUSTOM_PROPERTY);
 }

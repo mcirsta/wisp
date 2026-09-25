@@ -1,5 +1,11 @@
 # Phase 2: Modern Pseudo-Elements Rendering Support
 
+Status: separate follow-up for rendering additional pseudo-elements. Variable
+inheritance and isolation between element and pseudo-element scopes are owned by
+the [CSS variable architecture plan](css-vars-architecture-plan.md). This document
+covers the additional box construction, painting, and control behavior; it does
+not propose a separate variable implementation.
+
 This document outlines the Phase 2 implementation plan for properly rendering modern pseudo-elements (like `::backdrop`, `::file-selector-button`, `::placeholder`) in the Wisp Engine after Phase 1 (Parsing Support in `libcss`) was completed.
 
 ## Background Context

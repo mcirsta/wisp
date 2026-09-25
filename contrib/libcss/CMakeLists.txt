@@ -257,6 +257,11 @@ set_target_properties(css PROPERTIES SOVERSION ${WISP_ABI})
 add_dependencies(css libcss_properties libcss_select_gen libcss_propreg_gen gen_parser)
 
 target_link_libraries(css nsutils parserutils)
+if(NOT WIN32)
+    # calc() evaluation calls the platform math library, including in tests
+    # that link libcss without the browser's own math dependency.
+    target_link_libraries(css m)
+endif()
 
 if(LIBCSS_ENABLE_LOGGING)
 	target_compile_definitions(css PRIVATE LIBCSS_ENABLE_LOGGING=1)

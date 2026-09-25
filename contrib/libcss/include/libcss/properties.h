@@ -30,21 +30,15 @@ enum css_properties_e {
  * Defined outside the auto-generated enum so it doesn't affect
  * prop_dispatch[] indexing. Must be handled specially in cascade_style().
  *
- * Bytecode layout: [OPV] [name_string_idx] [value_string_idx]
- *   OPV uses CSS_PROP_CUSTOM_PROPERTY as the opcode.
- *   name_string_idx: index into stylesheet string_vector for the property name.
- *   value_string_idx: index into stylesheet string_vector for the raw value
- *     text used by css_var_value's token/reference cache.
+ * Bytecode layout: [OPV] [name_string_idx] [value_id]
+ *   value_id identifies an immutable token record in stylesheet var_values.
  */
 #define CSS_PROP_CUSTOM_PROPERTY CSS_N_PROPERTIES
 
 /**
- * Special opcode for deferred var() property resolution.
- * Used when any property value (shorthand or longhand) contains var().
- * The raw value text is stored as a stylesheet string and used as the key for
- * a per-stylesheet token cache at computed-value time.
- *
- * Bytecode layout: [OPV] [prop_name_string_idx] [raw_value_string_idx]
+ * Deferred var() resolution, for longhands and shorthands.
+ * Bytecode layout: [OPV] [prop_name_string_idx] [value_id]
+ * Both opcodes own their declaration tokens through the stylesheet.
  */
 #define CSS_PROP_VAR_DEFERRED (CSS_N_PROPERTIES + 1)
 

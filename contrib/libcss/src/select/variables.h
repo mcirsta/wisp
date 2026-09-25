@@ -1,44 +1,31 @@
 /*
- * This file is part of LibCSS
+ * This file is part of LibCSS.
  * Licensed under the MIT License,
  *                http://www.opensource.org/licenses/mit-license.php
  */
-
 #ifndef css_select_variables_h_
 #define css_select_variables_h_
 
 #include <libwapcaplet/libwapcaplet.h>
 #include <libcss/errors.h>
 #include <libcss/types.h>
+#include <parserutils/utils/vector.h>
 
-/**
- * A single custom property binding: name -> value.
- * Entries point to ref-counted custom property values. Each value keeps the
- * original text plus cached tokens and cached var() references.
- */
+/* Owned, immutable tokens: declarations live on a stylesheet; computed values
+ * live in finalized environments. Neither contains pointers into lexer input. */
 typedef struct css_var_value css_var_value;
 typedef struct css_var_lookup css_var_lookup;
-typedef struct css_var_resolved css_var_resolved;
+typedef struct css_var_candidates css_var_candidates;
 
 typedef struct css_var_entry {
-    lwc_string *name;   /* e.g. "--primary" */
-    css_var_value *value;
-    uint32_t specificity;
-    css_origin origin;
-    bool important;
-    bool cascaded;      /* false when this is only an inherited value */
+    lwc_string *name;
+    css_var_value *value; /* NULL is a guaranteed-invalid local binding. */
+    css_var_candidates *candidates; /* Cascade metadata, freed on finalization. */
 } css_var_entry;
 
-/**
- * Per-element variable context.
- *
- * Local declarations are kept in append order with a best-effort lookup table
- * for fast name lookups. Inherited values are reached through parent contexts,
- * so child contexts do not copy every inherited custom property.
- *
- * Resolved custom property expansions are memoized per context, because an
- * inherited value can resolve differently when a child shadows one dependency.
- */
+/* A mutable cascade builder becomes an immutable computed environment when
+ * finalized. Only local bindings are stored; parents are already finalized.
+ * An invalid local value masks the parent. Refcounts are single-threaded. */
 typedef struct css_var_context {
     uint32_t refcnt;
     struct css_var_context *parent;
@@ -48,100 +35,40 @@ typedef struct css_var_context {
     css_var_lookup *lookup;
     uint32_t lookup_capacity;
     bool lookup_valid;
-    lwc_string **cyclic_names;
-    uint32_t cyclic_count;
-    uint32_t cyclic_capacity;
-    bool cycles_valid;
-    css_var_resolved *resolved;
-    uint32_t resolved_count;
-    uint32_t resolved_capacity;
-    css_var_lookup *resolved_lookup;
-    uint32_t resolved_lookup_capacity;
-    bool resolved_lookup_valid;
+    bool finalized;
 } css_var_context;
 
-/**
- * Create an empty variable context.
- */
-css_error css__variables_ctx_create(css_var_context **out);
-
-/**
- * Clone a variable context (full deep copy with lwc_string_ref).
- * If src is NULL, creates an empty context.
- */
-css_error css__variables_ctx_clone(const css_var_context *src, css_var_context **out);
-
-/**
- * Clone a parent context for child inheritance. Values are preserved for
- * lookup, but cascade metadata is reset so any child declaration wins.
- */
-css_error css__variables_ctx_clone_inherited(
-    css_var_context *src,
-    css_var_context **out);
-
-/**
- * Destroy a variable context and unref all strings.
- */
-void css__variables_ctx_destroy(css_var_context *ctx);
-
-/**
- * Set a variable in the context. If name already exists, its value
- * is replaced. Both name and value are ref'd by this function.
- */
-css_error css__variables_ctx_set(css_var_context *ctx,
-    lwc_string *name, lwc_string *value);
-
-/**
- * Cascade a variable declaration into the context.
- */
-css_error css__variables_ctx_cascade(
-    css_var_context *ctx,
-    lwc_string *name,
-    lwc_string *value,
-    css_origin origin,
-    uint32_t specificity,
-    bool important);
-
-/**
- * Look up a variable by name.
- * Returns the value lwc_string (not ref'd - caller must ref if keeping),
- * or NULL if not found.
- */
-lwc_string *css__variables_ctx_get(const css_var_context *ctx,
-    lwc_string *name);
-
-/* --- Phase 5: var() Resolution --- */
-
-/* Max recursion depth for nested var() references */
-#define CSS_VAR_MAX_DEPTH 64
-
-/* Forward declarations */
 struct css_stylesheet;
-struct css_style;
 struct css_select_state;
 
-/**
- * Resolve a deferred var() property: substitute all var() references
- * in the tokenized value text, re-parse through the property handler
- * (found via gperf lookup on prop_name), and cascade the result.
- * The raw value string index is used to cache tokenization per stylesheet.
- *
- * Works for both longhands and shorthands.
- *
- * Returns CSS_OK on success, CSS_INVALID if unresolvable.
- */
-css_error css__resolve_var_property(
-    lwc_string *prop_name,
-    uint32_t raw_value_idx,
-    lwc_string *raw_value,
-    css_var_context *var_ctx,
-    struct css_stylesheet *sheet,
-    bool important,
-    struct css_select_state *state);
+css_error css__variables_ctx_create(css_var_context **out);
+css_var_context *css__variables_ctx_ref(css_var_context *ctx);
+css_error css__variables_ctx_clone_inherited(css_var_context *parent,
+    css_var_context **out);
+/* Finalize local values in dependency order. Empty overlays reuse the parent.
+ * On error the builder must be destroyed, not retried or published. */
+css_error css__variables_ctx_finalize(css_var_context **ctx);
+void css__variables_ctx_destroy(css_var_context *ctx);
+css_error css__variables_ctx_cascade(css_var_context *ctx, lwc_string *name,
+    css_var_value *value, css_origin origin, uint32_t specificity, bool important);
 
-/**
- * Destroy any tokenized deferred var() values cached on a stylesheet.
- */
-void css__stylesheet_var_token_cache_destroy(struct css_stylesheet *sheet);
+/* Internal context-test helpers. The selection path uses parsed declarations. */
+css_error css__variables_ctx_set(css_var_context *ctx,
+    lwc_string *name, lwc_string *raw);
+lwc_string *css__variables_ctx_get(const css_var_context *ctx, lwc_string *name);
+
+/* Capture parser tokens once and return a stylesheet-local declaration ID. */
+css_error css__stylesheet_var_value_add(struct css_stylesheet *sheet,
+    const parserutils_vector *tokens, int32_t start, int32_t end, uint32_t *id);
+css_var_value *css__stylesheet_var_value_get(struct css_stylesheet *sheet, uint32_t id);
+void css__stylesheet_var_values_destroy(struct css_stylesheet *sheet);
+
+#define CSS_VAR_MAX_TOKENS 65536u
+/* Only fallback syntax nesting is recursive; dependency chains are iterative. */
+#define CSS_VAR_MAX_DEPTH 64
+
+css_error css__resolve_var_property(lwc_string *prop_name, uint32_t value_id,
+    css_var_context *ctx, struct css_stylesheet *sheet, bool important,
+    struct css_select_state *state);
 
 #endif

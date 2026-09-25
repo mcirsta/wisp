@@ -11,6 +11,8 @@ install-gprof
 build-finstrument
 install-finstrument
 build-ctest
+build-css-vars
+build-css-vars-release
 build-inc
 _staging
 build-ninja
@@ -29,4 +31,5 @@ dumped_script.js
 out
 build
 websites
+sites
 

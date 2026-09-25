@@ -85,7 +85,7 @@ void css__make_style_important(css_style *style)
 
         /* Advance past any property-specific data */
         if (op == CSS_PROP_VAR_DEFERRED) {
-            /* OPV + prop_name_idx + raw_value_idx */
+            /* OPV + prop_name_idx + value_id */
             offset += 2;
         } else if (hasFlagValue(opv) == false && value == VALUE_IS_CALC) {
             /* All VALUE_IS_CALC have the form OPV UNIT STRIDX */
@@ -437,7 +437,7 @@ void css__make_style_important(css_style *style)
                 break;
 
             case CSS_PROP_CUSTOM_PROPERTY:
-                offset += 2; /* name_string_idx + value_string_idx */
+                offset += 2; /* name_string_idx + value_id */
                 break;
 
             default:

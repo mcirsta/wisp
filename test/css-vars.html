@@ -72,7 +72,7 @@
         .cycle {
             --loop-a: var(--loop-b);
             --loop-b: var(--loop-a);
-            /* Cycle -> invalid -> inherits parent color */
+            /* Cycle -> invalid variable -> use the yellow fallback */
             color: var(--loop-a, yellow);
             margin-top: 10px;
             border: 1px solid red;
@@ -127,7 +127,7 @@
         </div>
 
         <div class="cycle">
-            This text creates a <strong>circular reference</strong>. The parser should detect the cycle, abort, and inherit the color instead of using the fallback or infinitely looping.
+            This text creates a <strong>circular reference</strong>. The variables become invalid, so this text should use the yellow fallback.
         </div>
 
         <div class="layer-test">

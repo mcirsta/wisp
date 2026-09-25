@@ -7,7 +7,8 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
   set(DEFAULT_ENABLE_TESTS ON)
 endif()
 option(WISP_ENABLE_TESTS "Enable unit/integration tests" ${DEFAULT_ENABLE_TESTS})
-if(WISP_ENABLE_TESTS)
+option(WISP_ENABLE_LIBCSS_TESTS "Enable standalone libcss tests (no Check dependency)" ${WISP_ENABLE_TESTS})
+if(WISP_ENABLE_TESTS OR WISP_ENABLE_LIBCSS_TESTS)
   include(CTest)
 endif()
 
@@ -325,9 +326,15 @@ endif()
 
 include(CPack)
 
-if(WISP_ENABLE_TESTS)
+if(WISP_ENABLE_LIBCSS_TESTS)
   function(add_libcss_test_exe name src)
     add_executable(${name} ${src})
+    # These harnesses perform setup in assertions, including in optimized runs.
+    if(MSVC)
+      target_compile_options(${name} PRIVATE /UNDEBUG)
+    else()
+      target_compile_options(${name} PRIVATE -UNDEBUG)
+    endif()
     target_include_directories(${name} PRIVATE
       ${CMAKE_SOURCE_DIR}/contrib/libcss/src
       ${CMAKE_SOURCE_DIR}/contrib/libcss/include

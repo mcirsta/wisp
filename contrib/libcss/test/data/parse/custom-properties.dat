@@ -3,7 +3,7 @@
 #errors
 #expected
 | 1 *
-|   0x0000008c PTR(--color) PTR(red)
+|   0x0000008c PTR(--color) 0x00000000
 #reset
 
 #data
@@ -11,7 +11,7 @@
 #errors
 #expected
 | 1 *
-|   0x0000008c PTR(--primary-color) PTR(#ff0000)
+|   0x0000008c PTR(--primary-color) 0x00000000
 #reset
 
 #data
@@ -19,7 +19,7 @@
 #errors
 #expected
 | 1 *
-|   0x0000048c PTR(--color) PTR(red)
+|   0x0000048c PTR(--color) 0x00000000
 #reset
 
 #data
@@ -27,7 +27,7 @@
 #errors
 #expected
 | 1 *
-|   0x0000008c PTR(--spacing) PTR(10px)
+|   0x0000008c PTR(--spacing) 0x00000000
 #reset
 
 #data
@@ -35,7 +35,7 @@
 #errors
 #expected
 | 1 *
-|   0x0000008c PTR(--multi) PTR(one two three)
+|   0x0000008c PTR(--multi) 0x00000000
 #reset
 
 #data
@@ -43,7 +43,7 @@
 #errors
 #expected
 | 1 *
-|   0x0000008c PTR(--color) PTR(red) 0x00000818
+|   0x0000008c PTR(--color) 0x00000000 0x00000818
 #reset
 
 #data
@@ -51,7 +51,7 @@
 #errors
 #expected
 | 1 *
-|   0x0000008d PTR(color) PTR(var(--primary))
+|   0x0000008d PTR(color) 0x00000000
 #reset
 
 #data
@@ -59,7 +59,7 @@
 #errors
 #expected
 | 1 *
-|   0x0000008d PTR(color) PTR(var(--primary, red))
+|   0x0000008d PTR(color) 0x00000000
 #reset
 
 #data
@@ -67,7 +67,7 @@
 #errors
 #expected
 | 1 *
-|   0x0000048d PTR(color) PTR(var(--primary))
+|   0x0000048d PTR(color) 0x00000000
 #reset
 
 #data
@@ -75,6 +75,27 @@
 #errors
 #expected
 | 1 *
-|   0x0000008c PTR(--color) PTR(red) 0x0000008d PTR(color) PTR(var(--color))
+|   0x0000008c PTR(--color) 0x00000000 0x0000008d PTR(color) 0x00000001
 #reset
 
+#data
+* { --empty:; width: var(--empty, 12px) }
+#errors
+#expected
+| 1 *
+|   0x0000008c PTR(--empty) 0x00000000 0x0000008d PTR(width) 0x00000001
+#reset
+
+#data
+* { --w: 10px !important junk }
+#errors
+#expected
+| 1 *
+#reset
+
+#data
+* { --w: var(not-custom) }
+#errors
+#expected
+| 1 *
+#reset

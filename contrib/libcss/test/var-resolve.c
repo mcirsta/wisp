@@ -14,10 +14,14 @@
 #include <libcss/select.h>
 
 #include "testutils.h"
+#include "select/select.h"
+#include "stylesheet.h"
+#include <nsutils/time.h>
 
 typedef struct test_node {
     lwc_string *name;
     struct test_node *parent;
+    struct test_node *previous;
     void *libcss_node_data;
 } test_node;
 
@@ -120,12 +124,15 @@ static css_error named_sibling_node(void *pw, void *node, const css_qname *qname
 
 static css_error named_generic_sibling_node(void *pw, void *node, const css_qname *qname, void **sibling)
 {
+    test_node *n = node;
     UNUSED(pw);
-    UNUSED(node);
-    UNUSED(qname);
-
     *sibling = NULL;
-
+    for (n = n->previous; n != NULL; n = n->previous) {
+        if (test_node_name_matches(n, qname)) {
+            *sibling = n;
+            break;
+        }
+    }
     return CSS_OK;
 }
 
@@ -805,11 +812,11 @@ static void test_custom_property_inherits_from_parent_node(void)
     destroy_style_case(&ctx);
 }
 
-static void test_inherited_custom_property_resolves_with_child_shadow(void)
+static void test_inherited_custom_property_keeps_parent_value(void)
 {
     style_case ctx;
-    test_node plain_node;
-    test_node shadow_node;
+    test_node plain_node = {0};
+    test_node shadow_node = {0};
     css_select_results *plain_results = NULL;
     css_select_results *shadow_results = NULL;
     lwc_string *plain_name = NULL;
@@ -840,7 +847,7 @@ static void test_inherited_custom_property_resolves_with_child_shadow(void)
 
     style = select_style_for_node(&ctx, &shadow_node, NULL, &shadow_results);
     expect_length_px("inherited variable with child shadow", style,
-        css_computed_width, CSS_WIDTH_SET, 41);
+        css_computed_width, CSS_WIDTH_SET, 40);
 
     assert(lwc_intern_string("div", 3, &plain_name) == lwc_error_ok);
     plain_node.name = plain_name;
@@ -1037,7 +1044,7 @@ static void test_self_reference_in_fallback_is_cycle(void)
     destroy_style_case(&ctx);
 }
 
-static void test_inherited_overlay_cycle_is_invalid(void)
+static void test_inherited_invalid_value_stays_invalid(void)
 {
     style_case ctx;
     const css_computed_style *style;
@@ -1056,14 +1063,364 @@ static void test_inherited_overlay_cycle_is_invalid(void)
     ctx.node.parent = &ctx.parent_node;
     style = select_style_for_node(&ctx, &ctx.node, NULL, &ctx.results);
 
-    expect_length_px("inherited overlay cycle fallback width", style,
+    expect_length_px("inherited invalid value fallback width", style,
         css_computed_width, CSS_WIDTH_SET, 35);
 
     destroy_style_case(&ctx);
 }
 
-int main(void)
+static void attach_parent(style_case *ctx)
 {
+    assert(lwc_intern_string("html", 4, &ctx->parent_name) == lwc_error_ok);
+    ctx->parent_node.name = ctx->parent_name;
+    select_style_for_node(ctx, &ctx->parent_node, NULL, &ctx->parent_results);
+    ctx->node.parent = &ctx->parent_node;
+}
+
+static void test_cross_generation_dependencies(void)
+{
+    style_case ctx;
+    setup_style_case(&ctx,
+        "html { --a: 17px; --b: var(--a); --bad: var(--missing); }"
+        "div { --a: var(--b); --missing: 20px; width: var(--a); height: var(--bad, 19px); }");
+    attach_parent(&ctx);
+    const css_computed_style *style = select_style_for_node(&ctx, &ctx.node, NULL, &ctx.results);
+    expect_length_px("cross generation is not a cycle", style, css_computed_width, CSS_WIDTH_SET, 17);
+    expect_length_px("child cannot repair parent", style, css_computed_height, CSS_HEIGHT_SET, 19);
+    destroy_style_case(&ctx);
+}
+
+static void test_pseudo_local_scopes(void)
+{
+    style_case ctx;
+    const css_computed_style *style = select_style_from_css(
+        "div { --w: 10px; --alias: var(--w); width: var(--w); }"
+        "div::before { --w: 20px; width: var(--w); height: var(--alias); }"
+        "div::after { --w: 30px; width: var(--w); }", &ctx);
+    expect_length_px("pseudo does not change base", style, css_computed_width, CSS_WIDTH_SET, 10);
+    expect_length_px("before local width", ctx.results->styles[CSS_PSEUDO_ELEMENT_BEFORE],
+        css_computed_width, CSS_WIDTH_SET, 20);
+    expect_length_px("before inherits completed alias", ctx.results->styles[CSS_PSEUDO_ELEMENT_BEFORE],
+        css_computed_height, CSS_HEIGHT_SET, 10);
+    expect_length_px("after independent width", ctx.results->styles[CSS_PSEUDO_ELEMENT_AFTER],
+        css_computed_width, CSS_WIDTH_SET, 30);
+    test_node child = {.name = ctx.node_name, .parent = &ctx.node};
+    css_select_results *child_results;
+    css_stylesheet *inline_style = create_stylesheet_from_css("--w: inherit; width: var(--w)", true, false);
+    style = select_style_for_node(&ctx, &child, inline_style, &child_results);
+    expect_length_px("child inherits base rather than pseudo", style, css_computed_width, CSS_WIDTH_SET, 10);
+    destroy_node_data(&child);
+    css_select_results_destroy(child_results);
+    css_stylesheet_destroy(inline_style);
+    destroy_style_case(&ctx);
+}
+
+static void test_empty_and_invalid_values(void)
+{
+    style_case ctx;
+    const css_computed_style *style = select_style_from_css(
+        "div { --empty: ; --invalid: initial; width: var(--empty, 12px);"
+        "height: var(--invalid, 13px); margin: 6px var(--missing,); }", &ctx);
+    expect_length_type("empty does not use fallback", style, css_computed_width, CSS_WIDTH_AUTO);
+    expect_length_px("initial is invalid", style, css_computed_height, CSS_HEIGHT_SET, 13);
+    expect_length_px("empty fallback in shorthand", style, css_computed_margin_left, CSS_MARGIN_SET, 6);
+    destroy_style_case(&ctx);
+
+    setup_style_case(&ctx, "html { --w: 9px; } div { --w: initial; width: var(--w, 14px); }");
+    attach_parent(&ctx);
+    style = select_style_for_node(&ctx, &ctx.node, NULL, &ctx.results);
+    expect_length_px("invalid local masks parent", style, css_computed_width, CSS_WIDTH_SET, 14);
+    destroy_style_case(&ctx);
+}
+
+static void test_css_wide_custom_values(void)
+{
+    const char *keywords[] = {"inherit", "unset", "revert"};
+    for (unsigned i = 0; i < sizeof(keywords) / sizeof(keywords[0]); i++) {
+        char css[256];
+        style_case ctx;
+        snprintf(css, sizeof(css), "html { --w: 15px !important; } div { --w: %s; width: var(--w); }", keywords[i]);
+        setup_style_case(&ctx, css);
+        attach_parent(&ctx);
+        const css_computed_style *style = select_style_for_node(&ctx, &ctx.node, NULL, &ctx.results);
+        expect_length_px(keywords[i], style, css_computed_width, CSS_WIDTH_SET, 15);
+        destroy_style_case(&ctx);
+    }
+}
+
+static void test_custom_property_origins(void)
+{
+    style_case ctx;
+    setup_style_case(&ctx, "div { --w: revert; width: var(--w); }");
+    css_stylesheet *user = create_stylesheet_from_css("div { --w: 16px; }", false, false);
+    assert(css_select_ctx_insert_sheet(ctx.select_ctx, user, 0, CSS_ORIGIN_USER, NULL) == CSS_OK);
+    const css_computed_style *style = select_style_for_node(&ctx, &ctx.node, NULL, &ctx.results);
+    expect_length_px("revert restores user origin", style, css_computed_width, CSS_WIDTH_SET, 16);
+    destroy_style_case(&ctx);
+    css_stylesheet_destroy(user);
+
+    setup_style_case(&ctx, "div { --w: 18px !important; width: var(--w); }");
+    user = create_stylesheet_from_css("div { --w: 19px !important; }", false, false);
+    assert(css_select_ctx_insert_sheet(ctx.select_ctx, user, 0, CSS_ORIGIN_USER, NULL) == CSS_OK);
+    style = select_style_for_node(&ctx, &ctx.node, NULL, &ctx.results);
+    expect_length_px("user important beats author", style, css_computed_width, CSS_WIDTH_SET, 19);
+    destroy_style_case(&ctx);
+    css_stylesheet_destroy(user);
+}
+
+static void test_token_preservation(void)
+{
+    style_case ctx;
+    const css_computed_content_item *content;
+    select_style_from_css(
+        "div { --label: \"a\\\"b\"; --n: 12; width: var(--n)px;"
+        "height: 7px; height: var(--n) junk; }"
+        "div::before { content: var(--label); }"
+        "div::after { content: var(--missing, \"fallback text\"); }", &ctx);
+    expect_length_type("tokens cannot merge into dimension", ctx.results->styles[0], css_computed_width, CSS_WIDTH_AUTO);
+    expect_length_type("trailing tokens invalidate entire value", ctx.results->styles[0], css_computed_height, CSS_HEIGHT_AUTO);
+    assert(css_computed_content(ctx.results->styles[CSS_PSEUDO_ELEMENT_BEFORE], &content) == CSS_CONTENT_SET);
+    assert(content[0].type == CSS_COMPUTED_CONTENT_STRING);
+    assert(lwc_string_length(content[0].data.string) == 3);
+    assert(memcmp(lwc_string_data(content[0].data.string), "a\"b", 3) == 0);
+    assert(css_computed_content(ctx.results->styles[CSS_PSEUDO_ELEMENT_AFTER], &content) == CSS_CONTENT_SET);
+    assert(content[0].type == CSS_COMPUTED_CONTENT_STRING);
+    assert(strcmp(lwc_string_data(content[0].data.string), "fallback text") == 0);
+    destroy_style_case(&ctx);
+}
+
+static void test_full_cyclic_component(void)
+{
+    style_case ctx;
+    const css_computed_style *style = select_style_from_css(
+        "div { --a: var(--b, var(--c)); --b: var(--a); --c: var(--b);"
+        "width: var(--c, 23px); --ok: var(--c, 24px); height: var(--ok); }", &ctx);
+    expect_length_px("entire cyclic component invalid", style, css_computed_width, CSS_WIDTH_SET, 23);
+    expect_length_px("dependent fallback remains valid", style, css_computed_height, CSS_HEIGHT_SET, 24);
+    destroy_style_case(&ctx);
+}
+
+static void test_long_dependency_chain(void)
+{
+    unsigned count = 4096;
+    size_t capacity = count * 48 + 128, offset = 0;
+    char *css = malloc(capacity);
+    style_case ctx;
+    assert(css != NULL);
+    offset += snprintf(css + offset, capacity - offset, "div {");
+    for (unsigned i = 0; i < count; i++)
+        offset += snprintf(css + offset, capacity - offset, "--v%u:var(--v%u);", i, i + 1);
+    snprintf(css + offset, capacity - offset, "--v%u:27px; width:var(--v0); }", count);
+    const css_computed_style *style = select_style_from_css(css, &ctx);
+    expect_length_px("long iterative dependency chain", style, css_computed_width, CSS_WIDTH_SET, 27);
+    destroy_style_case(&ctx);
+    free(css);
+}
+
+static void test_expansion_limit(void)
+{
+    char css[4096];
+    size_t offset = snprintf(css, sizeof(css), "div { --v0:0;");
+    style_case ctx;
+    for (unsigned i = 1; i <= 17; i++)
+        offset += snprintf(css + offset, sizeof(css) - offset,
+            "--v%u:var(--v%u) var(--v%u);", i, i - 1, i - 1);
+    snprintf(css + offset, sizeof(css) - offset,
+        "width:var(--v15, 28px); height:var(--v16, 29px); }");
+    const css_computed_style *style = select_style_from_css(css, &ctx);
+    /* v15 has 65,535 tokens: present but not a width. v16 is over the cap. */
+    expect_length_type("below limit does not use fallback", style, css_computed_width, CSS_WIDTH_AUTO);
+    expect_length_px("over limit becomes invalid", style, css_computed_height, CSS_HEIGHT_SET, 29);
+    destroy_style_case(&ctx);
+}
+
+static void test_sharing_and_parent_reselection(void)
+{
+    style_case ctx;
+    setup_style_case(&ctx, "html { --w: 30px; } div { width: var(--w); }");
+    attach_parent(&ctx);
+    select_style_for_node(&ctx, &ctx.node, NULL, &ctx.results);
+    test_node sibling = {.name = ctx.node_name, .parent = &ctx.parent_node, .previous = &ctx.node};
+    css_select_results *results;
+    const css_computed_style *style = select_style_for_node(&ctx, &sibling, NULL, &results);
+    expect_length_px("shared sibling", style, css_computed_width, CSS_WIDTH_SET, 30);
+    assert(((struct css_node_data *)sibling.libcss_node_data)->var_ctx ==
+        ((struct css_node_data *)ctx.node.libcss_node_data)->var_ctx);
+    destroy_node_data(&sibling);
+    css_select_results_destroy(results);
+
+    destroy_node_data(&ctx.parent_node);
+    css_select_results_destroy(ctx.parent_results);
+    ctx.inline_style = create_stylesheet_from_css("--w:31px", true, false);
+    select_style_for_node(&ctx, &ctx.parent_node, ctx.inline_style, &ctx.parent_results);
+    style = select_style_for_node(&ctx, &sibling, NULL, &results);
+    expect_length_px("stale sibling environment not shared", style, css_computed_width, CSS_WIDTH_SET, 31);
+    expect_length_px("old snapshot unchanged", ctx.results->styles[0], css_computed_width, CSS_WIDTH_SET, 30);
+    destroy_node_data(&sibling);
+    css_select_results_destroy(results);
+    destroy_style_case(&ctx);
+}
+
+static void test_nested_important_and_case_sensitive_names(void)
+{
+    style_case ctx;
+    const css_computed_style *style = select_style_from_css(
+        "div { --a:32px; --A:33px; --w:var(--a, !important);"
+        "width:var(--w); height:var(--A); }", &ctx);
+    expect_length_px("nested bang retained in fallback", style, css_computed_width, CSS_WIDTH_SET, 32);
+    expect_length_px("case sensitive name", style, css_computed_height, CSS_HEIGHT_SET, 33);
+    destroy_style_case(&ctx);
+}
+
+static void test_deferred_important(void)
+{
+    style_case ctx;
+    const css_computed_style *style = select_style_from_css(
+        "div { --w: 34px; --m: 4px 5px; width:var(--w) !important; width:35px;"
+        "margin:var(--m) !important; margin-left:36px;"
+        "height:var(--missing) !important; height:37px; }", &ctx);
+    expect_length_px("deferred important longhand", style, css_computed_width, CSS_WIDTH_SET, 34);
+    expect_length_px("deferred important shorthand", style, css_computed_margin_left, CSS_MARGIN_SET, 5);
+    expect_length_type("invalid important still wins", style, css_computed_height, CSS_HEIGHT_AUTO);
+    destroy_style_case(&ctx);
+}
+
+static void test_property_handler_integration(void)
+{
+    style_case ctx;
+    css_fixed number;
+    css_color color;
+    int32_t n_tracks;
+    css_computed_grid_track *tracks;
+    lwc_string *url;
+    setup_style_case(&ctx,
+        "html { --size:2em; --half:calc(50% + 10px); --flex:2 1 30px;"
+        "--tracks:40px 1fr; --ink:#123456; --image:url(\"icon.svg\"); font-size:30px; }"
+        "div { font-size:12px; width:var(--half); height:var(--size);"
+        "display:var(--missing, flex); flex:var(--flex); grid-template-columns:var(--tracks);"
+        "stroke:var(--ink); stroke-width:var(--size); background-image:var(--image); }");
+    attach_parent(&ctx);
+    const css_computed_style *style = select_style_for_node(&ctx, &ctx.node, NULL, &ctx.results);
+    expect_length_px("calc through generated width parser", style, css_computed_width, CSS_WIDTH_SET, 110);
+    expect_length_px("inherited tokens use consumer font", style, css_computed_height, CSS_HEIGHT_SET, 24);
+    assert(css_computed_display(style, false) == CSS_DISPLAY_FLEX);
+    assert(css_computed_flex_grow(style, &number) == CSS_FLEX_GROW_SET && number == INTTOFIX(2));
+    expect_length_px("flex shorthand basis", style, css_computed_flex_basis, CSS_FLEX_BASIS_SET, 30);
+    css_computed_grid_template_columns(style, &n_tracks, &tracks);
+    assert(n_tracks == 2 && tracks != NULL);
+    assert(tracks[0].unit == CSS_UNIT_PX && tracks[0].value == INTTOFIX(40));
+    assert(tracks[1].unit == CSS_UNIT_FR && tracks[1].value == INTTOFIX(1));
+    assert(css_computed_stroke(style, &color) == CSS_STROKE_COLOR && color == 0xff123456);
+    expect_length_px("SVG stroke width", style, css_computed_stroke_width, CSS_STROKE_WIDTH_SET, 24);
+    assert(css_computed_background_image(style, &url) == CSS_BACKGROUND_IMAGE_IMAGE);
+    assert(url != NULL && strcmp(lwc_string_data(url), "icon.svg") == 0);
+    destroy_style_case(&ctx);
+}
+
+static void test_environment_outlives_stylesheet(void)
+{
+    style_case ctx;
+    setup_style_case(&ctx, "html { --literal:38px; --alias:var(--literal); --label:\"owned tokens\"; }");
+    attach_parent(&ctx);
+    /* Inheritance must own its values independently of the original parser,
+     * stylesheet declaration table, and stylesheet string table. */
+    assert(css_select_ctx_remove_sheet(ctx.select_ctx, ctx.sheet) == CSS_OK);
+    assert(css_stylesheet_destroy(ctx.sheet) == CSS_OK);
+    ctx.sheet = create_stylesheet_from_css(
+        "div { width:var(--literal); height:var(--alias); }"
+        "div::before { content:var(--label); }", false, false);
+    assert(css_select_ctx_append_sheet(ctx.select_ctx, ctx.sheet, CSS_ORIGIN_AUTHOR, NULL) == CSS_OK);
+    const css_computed_style *style = select_style_for_node(&ctx, &ctx.node, NULL, &ctx.results);
+    expect_length_px("literal survives sheet", style, css_computed_width, CSS_WIDTH_SET, 38);
+    expect_length_px("computed alias survives sheet", style, css_computed_height, CSS_HEIGHT_SET, 38);
+    const css_computed_content_item *content;
+    assert(css_computed_content(ctx.results->styles[CSS_PSEUDO_ELEMENT_BEFORE], &content) == CSS_CONTENT_SET);
+    assert(content[0].type == CSS_COMPUTED_CONTENT_STRING);
+    assert(strcmp(lwc_string_data(content[0].data.string), "owned tokens") == 0);
+    destroy_style_case(&ctx);
+}
+
+/* Repeatable selection-only workload: retain all nodes/results until measured.
+ * This deliberately exercises the sibling-sharing path as well as inheritance.
+ * Run in an optimized build with assertions enabled and diagnostic logs off. */
+static int benchmark(unsigned elements, unsigned variables)
+{
+    style_case ctx;
+    size_t size = (size_t)variables * 40 + 160, used = 0;
+    char *css = malloc(size);
+    test_node *nodes = calloc(elements, sizeof(*nodes));
+    css_select_results **results = calloc(elements, sizeof(*results));
+    uint64_t begin, parsed, selected;
+    size_t set_size = 8, environments = 0, bindings = 0;
+    css_var_context **seen;
+    assert(css != NULL && nodes != NULL && results != NULL);
+    used += snprintf(css + used, size - used, "html {");
+    for (unsigned i = 0; i < variables; i++)
+        used += snprintf(css + used, size - used, "--v%u:20px;", i);
+    snprintf(css + used, size - used, variables != 0 ?
+        "} div { width:var(--v0); height:var(--v0); }" :
+        "} div { width:20px; height:20px; }");
+    nsu_getmonotonic_ms(&begin);
+    setup_style_case(&ctx, css);
+    nsu_getmonotonic_ms(&parsed);
+    attach_parent(&ctx);
+    for (unsigned i = 0; i < elements; i++) {
+        nodes[i].name = ctx.node_name;
+        nodes[i].parent = &ctx.parent_node;
+        nodes[i].previous = i != 0 ? &nodes[i - 1] : NULL;
+        select_style_for_node(&ctx, &nodes[i], NULL, &results[i]);
+    }
+    nsu_getmonotonic_ms(&selected);
+    expect_length_px("benchmark first", results[0]->styles[0], css_computed_width, CSS_WIDTH_SET, 20);
+    expect_length_px("benchmark last", results[elements - 1]->styles[0], css_computed_width, CSS_WIDTH_SET, 20);
+    while (set_size < (size_t)(elements + 1) * 2)
+        set_size *= 2;
+    seen = calloc(set_size, sizeof(*seen));
+    assert(seen != NULL);
+    for (unsigned i = 0; i <= elements; i++) {
+        struct css_node_data *data = i == elements ? ctx.parent_node.libcss_node_data : nodes[i].libcss_node_data;
+        css_var_context *env = data->var_ctx;
+        size_t slot = ((uintptr_t)env >> 4) & (set_size - 1);
+        while (seen[slot] != NULL && seen[slot] != env)
+            slot = (slot + 1) & (set_size - 1);
+        if (seen[slot] == NULL) {
+            seen[slot] = env;
+            environments++;
+            bindings += env->count;
+        }
+    }
+    printf("elements=%u variables=%u parse_ms=%llu select_ms=%llu environments=%zu bindings=%zu\n",
+        elements, variables, (unsigned long long)(parsed - begin),
+        (unsigned long long)(selected - parsed), environments, bindings);
+    for (unsigned i = 0; i < elements; i++) {
+        destroy_node_data(&nodes[i]);
+        css_select_results_destroy(results[i]);
+    }
+    destroy_style_case(&ctx);
+    free(seen);
+    free(results);
+    free(nodes);
+    free(css);
+    return 0;
+}
+
+static void assert_no_interned_strings(lwc_string *string, void *pw)
+{
+    UNUSED(pw);
+    fprintf(stderr, "Leaked interned string: %.*s\n", (int)lwc_string_length(string), lwc_string_data(string));
+    assert(false);
+}
+
+int main(int argc, char **argv)
+{
+    if (argc == 4 && strcmp(argv[1], "--benchmark") == 0) {
+        unsigned elements = (unsigned)strtoul(argv[2], NULL, 10);
+        unsigned variables = (unsigned)strtoul(argv[3], NULL, 10);
+        if (elements == 0 || elements > 50000 || variables > 1024)
+            return EXIT_FAILURE;
+        return benchmark(elements, variables);
+    }
+    assert(argc == 1);
     test_same_rule_custom_property_after_use();
     test_later_rule_custom_property_after_use();
     test_nested_fallback_uses_final_context();
@@ -1072,7 +1429,7 @@ int main(void)
     test_important_custom_property_wins();
     test_invalid_var_overrides_earlier_width();
     test_custom_property_inherits_from_parent_node();
-    test_inherited_custom_property_resolves_with_child_shadow();
+    test_inherited_custom_property_keeps_parent_value();
     test_inline_style_var_resolution();
     test_imported_sheet_custom_property();
     test_pseudo_element_uses_element_vars();
@@ -1084,8 +1441,24 @@ int main(void)
     test_custom_property_fallback_cycle_is_invalid();
     test_noncyclic_var_can_fallback_from_cycle();
     test_self_reference_in_fallback_is_cycle();
-    test_inherited_overlay_cycle_is_invalid();
+    test_inherited_invalid_value_stays_invalid();
 
+    test_cross_generation_dependencies();
+    test_pseudo_local_scopes();
+    test_empty_and_invalid_values();
+    test_css_wide_custom_values();
+    test_custom_property_origins();
+    test_token_preservation();
+    test_full_cyclic_component();
+    test_long_dependency_chain();
+    test_expansion_limit();
+    test_sharing_and_parent_reselection();
+    test_nested_important_and_case_sensitive_names();
+    test_deferred_important();
+    test_property_handler_integration();
+    test_environment_outlives_stylesheet();
+
+    lwc_iterate_strings(assert_no_interned_strings, NULL);
     printf("PASS\n");
     return 0;
 }

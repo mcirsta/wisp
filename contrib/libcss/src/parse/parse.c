@@ -1502,6 +1502,12 @@ css_error parseDeclaration(css_parser *parser)
     case WS: {
         parser_state to = {sValue1, Initial};
         parser_state subsequent = {sDeclaration, AfterValue1};
+        const css_token *property = parserutils_vector_peek(parser->tokens, 0);
+
+        /* A custom property's declaration-value may be empty. Ordinary
+         * declarations still require at least one value token. */
+        if (property != NULL && property->type == CSS_TOKEN_CUSTOM_PROPERTY)
+            to.state = sValue0;
 
         error = eatWS(parser);
         if (error != CSS_OK)

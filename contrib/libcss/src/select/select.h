@@ -53,7 +53,8 @@ struct css_node_data {
     css_select_results partial;
     css_bloom *bloom;
     css_node_flags flags;
-    css_var_context *var_ctx;  /* Per-element CSS variable context */
+    css_var_context *var_ctx;  /* Completed element variable environment */
+    css_var_context *var_parent; /* Inherited snapshot used for style sharing */
 };
 
 struct revert_data {
@@ -94,7 +95,8 @@ typedef struct css_select_state {
 
     struct css_node_data *node_data; /* Data we'll store on node */
 
-    css_var_context *var_ctx;  /* Working variable context during selection */
+    css_var_context *var_ctx[CSS_PSEUDO_ELEMENT_COUNT];
+    css_var_context *var_parent; /* Inherited snapshot before empty-overlay reuse */
     bool collecting_vars; /* First pass: collect final custom properties only */
 
     prop_state props[CSS_N_PROPERTIES][CSS_PSEUDO_ELEMENT_COUNT];
