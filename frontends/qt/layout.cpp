@@ -41,6 +41,10 @@ extern "C" {
 #include "qt/layout.h"
 #include "qt/misc.h"
 
+#ifdef WISP_QT_CAPTURE
+#include "qt/capture_inspect.h"
+#endif
+
 /* Standard DPI assumption: CSS uses 96 DPI, points are 1/72 inch.
  * To convert points to pixels: pixels = points × (96/72) = points × 4/3
  */
@@ -266,6 +270,15 @@ static QFont *nsfont_style_to_font(const struct plot_font_style *fstyle)
         fstyle->family, QFontInfo(*created_font).family().toUtf8().constData());
     return created_font;
 }
+
+#ifdef WISP_QT_CAPTURE
+QFont nsqt_capture_font(const struct plot_font_style *style)
+{
+    // Use the same selection, substitutions and pixel sizing as text painting.
+    std::unique_ptr<QFont> font(nsfont_style_to_font(style));
+    return *font;
+}
+#endif
 
 /**
  * Purge the Qt font cache

@@ -94,6 +94,17 @@ set(QT_RESOURCES
 
 add_executable(wisp-qt ${QT_SOURCES} ${QT_RESOURCES})
 
+option(WISP_QT_CAPTURE "Build the optional Qt rendering capture tool" OFF)
+if(WISP_QT_CAPTURE)
+    target_sources(wisp-qt PRIVATE capture.cpp capture_inspect.cpp)
+    target_compile_definitions(wisp-qt PRIVATE WISP_QT_CAPTURE)
+    if(BUILD_TESTING)
+        add_test(NAME qt_render_capture
+            COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_capture.py $<TARGET_FILE:wisp-qt>)
+        set_tests_properties(qt_render_capture PROPERTIES TIMEOUT 60)
+    endif()
+endif()
+
 add_dependencies(wisp-qt qt_messages)
 
 # Determine default cache state based on build type

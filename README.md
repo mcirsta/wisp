@@ -12,6 +12,9 @@ We appreciate the philosophy of Netsurf, and intend to keep the spirit of the pr
 ## Development
 Current development is focused on adding compatibility with modern websites, integrating the QuickJS-ng JS engine and porting to different platforms, most notably modern Windows using Direct2D, OS X, Haiku and Remarkable.
 
+For repeatable page images and DOM/layout diagnostics, see the optional
+[Qt rendering capture tool](frontends/qt/CAPTURE.md).
+
 ## Biggest differences from Netsurf
 * Removed compatibility for super old and/or obscure libraries/software/operating systems
 * Dedicated LibreSSL support

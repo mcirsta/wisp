@@ -47,6 +47,9 @@ extern "C" {
 #include "qt/window.cls.h"
 #include "qt/window.h"
 
+#ifdef WISP_QT_CAPTURE
+#include "qt/capture.h"
+#endif
 /**
  * time (in ms) between throbber animation frame updates
  */
@@ -381,6 +384,11 @@ nserror NS_Window::static_event(struct gui_window *gw, enum gui_window_event eve
 {
     nserror res;
 
+#ifdef WISP_QT_CAPTURE
+    if (NS_Capture::active()) {
+        NS_Capture::active()->windowEvent(gw->window->m_bw, event);
+    }
+#endif
     switch (event) {
     case GW_EVENT_UPDATE_EXTENT:
         res = gw->window->update_extent();
@@ -431,6 +439,11 @@ nserror NS_Window::static_event(struct gui_window *gw, enum gui_window_event eve
  */
 nserror NS_Window::static_invalidate(struct gui_window *gw, const struct rect *rect)
 {
+#ifdef WISP_QT_CAPTURE
+    if (NS_Capture::active()) {
+        NS_Capture::active()->activity(gw->window->m_bw);
+    }
+#endif
     return gw->window->m_nswidget->invalidate(rect);
 }
 
@@ -457,6 +470,13 @@ nserror NS_Window::static_get_dimensions(struct gui_window *gw, int *width, int 
         return ret;
     }
 
+#ifdef WISP_QT_CAPTURE
+    if (NS_Capture::active()) {
+        // Capture paints the entire fixed canvas, even when it is larger than
+        // the virtual screen or the surrounding window. Chrome cannot shrink it.
+        return ret;
+    }
+#endif
     if (gw->window->m_vscrollbar->isVisible()) {
         int sb_w = gw->window->m_vscrollbar->sizeHint().width();
         int max_w = gw->window->width() - sb_w;
@@ -569,6 +589,15 @@ NS_Window::static_create(struct browser_window *bw, struct gui_window *existing,
     if (flags & GW_CREATE_FOREGROUND) {
         scaffold->setCurrentIndex(tabidx);
     }
+#ifdef WISP_QT_CAPTURE
+    if (NS_Capture::active()) {
+        NS_Capture::active()->attach(bw, gw->window->m_nswidget);
+        scaffold->setWindowState(Qt::WindowNoState);
+        // Unlike adjustSize(), resize() does not cap the window to 2/3 of the
+        // screen. The offscreen platform often has a small virtual screen.
+        scaffold->resize(scaffold->sizeHint());
+    }
+#endif
     scaffold->show();
 
     return gw;
@@ -582,6 +611,11 @@ NS_Window::static_create(struct browser_window *bw, struct gui_window *existing,
  */
 void NS_Window::static_destroy(struct gui_window *gw)
 {
+#ifdef WISP_QT_CAPTURE
+    if (NS_Capture::active()) {
+        NS_Capture::active()->detach(gw->window->m_bw);
+    }
+#endif
     gw->window->deleteLater();
     free(gw);
 }

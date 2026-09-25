@@ -40,6 +40,9 @@ extern "C" {
 #include "qt/resources.h"
 #include "qt/window.h"
 
+#ifdef WISP_QT_CAPTURE
+#include "qt/capture.h"
+#endif
 
 /**
  * Main entry point from OS.
@@ -47,6 +50,13 @@ extern "C" {
 int main(int argc, char **argv)
 {
     int ret = 0;
+#ifdef WISP_QT_CAPTURE
+    NS_Capture capture;
+    ret = capture.prepare(argc, argv);
+    if (ret != 0) {
+        return ret < 0 ? 2 : 0;
+    }
+#endif
     struct wisp_table nsqt_table = {
         .misc = nsqt_misc_table,
         .window = nsqt_window_table,
@@ -79,6 +89,12 @@ int main(int argc, char **argv)
 
     ret = nsapp->exec();
 
+#ifdef WISP_QT_CAPTURE
+    if (NS_Capture::active() && !capture.finished()) {
+        fprintf(stderr, "Capture interrupted before completion\n");
+        ret = 1;
+    }
+#endif
     delete nsapp;
 
     return ret;

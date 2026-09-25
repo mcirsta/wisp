@@ -61,6 +61,9 @@ extern "C" {
 #include "qt/page_info.cls.h"
 #include "qt/settings.cls.h"
 
+#ifdef WISP_QT_CAPTURE
+#include "qt/capture.h"
+#endif
 
 // QTimer
 // QSocketNotifier
@@ -191,11 +194,23 @@ void NS_Application::nsOptionFromPalette(struct nsoption_s *opts)
 nserror NS_Application::set_option_defaults(struct nsoption_s *defaults)
 {
     QDir data_dir(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation));
+#ifdef WISP_QT_CAPTURE
+    if (NS_Capture::active()) {
+        data_dir.setPath(NS_Capture::active()->profilePath());
+        nsoption_set_bool(enable_javascript, false);
+        nsoption_set_bool(animate_images, false);
+    }
+#endif
     if (!data_dir.exists()) {
         data_dir.mkpath(data_dir.absoluteFilePath(""));
     }
 
     QDir cache_dir(QStandardPaths::writableLocation(QStandardPaths::CacheLocation));
+#ifdef WISP_QT_CAPTURE
+    if (NS_Capture::active()) {
+        cache_dir = data_dir;
+    }
+#endif
     if (!cache_dir.exists()) {
         cache_dir.mkpath(cache_dir.absoluteFilePath(""));
     }
@@ -350,6 +365,11 @@ NS_Application::NS_Application(int &argc, char **argv, struct wisp_table *nsqt_t
     if (screen) {
         browser_set_dpi((int)screen->logicalDotsPerInch());
     }
+#ifdef WISP_QT_CAPTURE
+    if (NS_Capture::active()) {
+        browser_set_dpi(96);
+    }
+#endif
 
     /* register operation tables */
     res = wisp_register(nsqt_table);
@@ -368,7 +388,13 @@ NS_Application::NS_Application(int &argc, char **argv, struct wisp_table *nsqt_t
     connect(m_schedule_timer, &QTimer::timeout, this, &NS_Application::schedule_run);
 
     /* Prep the resource search paths */
-    res = nsqt_init_resource_path("${HOME}/.wisp/:${WISPRES}:" QT_RESPATH);
+    const char *resource_path = "${HOME}/.wisp/:${WISPRES}:" QT_RESPATH;
+#ifdef WISP_QT_CAPTURE
+    if (NS_Capture::active()) {
+        resource_path = "${WISPRES}:" QT_RESPATH;
+    }
+#endif
+    res = nsqt_init_resource_path(resource_path);
     if (res != NSERROR_OK) {
         throw NS_Exception("Resources failed to initialise", res);
     }

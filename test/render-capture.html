@@ -1,0 +1,16 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Render capture fixture</title>
+<style>
+  :root { --accent: #2468ac; }
+  body { margin: 0; background: white; color: #222; font: 16px sans-serif; }
+  #capture-title { margin: 0; padding: 16px; background: var(--accent); color: white; }
+  #probe { width: 123px; height: 80px; background: #e0a020; }
+  #overflow { height: 1200px; border-left: 4px solid var(--accent); }
+</style>
+<h1 id="capture-title">Render capture</h1>
+<div id="probe">123px wide</div>
+<svg xmlns="http://www.w3.org/2000/svg" width="100" height="60" viewBox="0 0 100 60">
+  <circle cx="30" cy="30" r="24" fill="#25864b"/>
+</svg>
+<div id="overflow">This page deliberately needs a vertical scrollbar.</div>

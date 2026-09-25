@@ -1,0 +1,21 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Render capture fixture: inspection</title>
+<style>
+  body { margin: 0; font: 16px sans-serif; }
+  #container { position: relative; margin: 20px; padding: 10px; border: 2px solid; width: 240px; }
+  #probe { width: 80px; height: 40px; padding: 5px; border: 3px solid; margin: 7px; }
+  #absolute { position: absolute; left: 30px; top: 15px; width: 50px; height: 20px; background: red; }
+  #hidden { display: none; }
+  #wrapping { width: 70px; }
+  #flex { display: flex; flex-direction: column; gap: 5px; }
+</style>
+<div id="container">
+  <div id="probe">123px wide</div>
+  <div id="absolute">absolute</div>
+</div>
+<h1 id="capture-title">Inspection fixture</h1>
+<div id="hidden">Hidden element</div>
+<div id="wrapping"><span id="wrapped">Several words wrap onto multiple lines.</span></div>
+<div id="flex"><div id="unicode:ș">Unicode ID</div><div>Second item</div></div>
+<script>document.getElementById('probe').style.width = '999px';</script>

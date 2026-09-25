@@ -1,0 +1,65 @@
+/* SPDX-License-Identifier: GPL-2.0-only */
+#pragma once
+
+#include <QElapsedTimer>
+#include <QObject>
+#include <QPointer>
+#include <QPoint>
+#include <QSize>
+#include <QStringList>
+#include <QTemporaryDir>
+#include <QTimer>
+#include <memory>
+
+extern "C" {
+#include "utils/errors.h"
+#include "wisp/mouse.h"
+#include "wisp/window.h"
+}
+
+class QWidget;
+struct browser_window;
+
+/* Optional frontend-only diagnostics. No renderer state is accessed off-thread. */
+class NS_Capture : public QObject
+{
+public:
+    /* Strip capture arguments before Qt and the core parse their options.
+     * Return 0 to continue, 1 for help, -1 for invalid arguments. */
+    int prepare(int &argc, char **argv);
+    static NS_Capture *active();
+    QString profilePath() const;
+    bool finished() const
+    {
+        return m_finished;
+    }
+    void attach(struct browser_window *bw, QWidget *widget);
+    void detach(struct browser_window *bw);
+    void activity(struct browser_window *bw);
+    void windowEvent(struct browser_window *bw, enum gui_window_event event);
+
+protected:
+    bool eventFilter(QObject *object, QEvent *event) override;
+
+private:
+    void poll();
+    void finish(const QString &result);
+    bool dump(const char *name, bool boxes);
+
+    static NS_Capture *s_active;
+    QString m_directory;
+    QString m_requested_url;
+    QStringList m_inspect_ids;
+    QPoint m_inspect_point{-1, -1};
+    QSize m_size{1280, 900};
+    int m_timeout_ms = 30000;
+    int m_settle_ms = 500;
+    std::unique_ptr<QTemporaryDir> m_profile;
+    struct browser_window *m_bw = nullptr;
+    QPointer<QWidget> m_widget;
+    QElapsedTimer m_elapsed;
+    qint64 m_last_activity = 0;
+    QTimer m_timer;
+    bool m_loading = true;
+    bool m_finished = false;
+};
