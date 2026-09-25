@@ -253,7 +253,11 @@ add_wisp_test(grid_layout_test
   ${CMAKE_SOURCE_DIR}/src/content/handlers/html/layout_grid.c
   ${CMAKE_SOURCE_DIR}/src/test/log.c
   ${CMAKE_SOURCE_DIR}/src/test/grid_layout_test.c
+  ${CMAKE_SOURCE_DIR}/src/test/grid_layout_style.c
 )
+# Only the style factory includes libcss internals and generated setters.
+set_source_files_properties(grid_layout_style.c PROPERTIES INCLUDE_DIRECTORIES
+  "${CMAKE_SOURCE_DIR}/contrib/libcss/src;${CMAKE_BINARY_DIR}/contrib/libcss/src;${CMAKE_BINARY_DIR}/contrib/libcss/src/select;${CMAKE_BINARY_DIR}/contrib/libcss/src/generated")
 # Define TESTING so layout_grid.c uses test stubs instead of calling layout_minmax_box
 target_compile_definitions(grid_layout_test PRIVATE TESTING)
 wisp_test_allow_libcss_stubs(grid_layout_test)

@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Grid fixed width and auto margins: Haiku reduction</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 20px; font: 16px/24px sans-serif; }
+  p { margin: 12px 0 4px; }
+  .container { width: 280px; background: #ddd; }
+  .grid { display: grid; }
+  .inline-grid { display: inline-grid; }
+  .item { width: 20px; height: 40px; background: #39893c; }
+  .centered { margin: 0 auto; }
+  .stretch { width: auto; }
+  .haiku-outer {
+    position: relative;
+    left: 48px;
+    width: 20px;
+    height: 128px;
+    margin: auto;
+    border: 1px solid #666;
+  }
+  .haiku-inner {
+    position: relative;
+    left: -2px;
+    top: -2px;
+    width: 20px;
+    height: 128px;
+    border: 1px solid #666;
+    background: #fafafa;
+  }
+  .haiku-filler {
+    position: absolute;
+    bottom: 0;
+    width: 100%;
+    height: 0;
+    border-top: 1px solid #39893c;
+  }
+</style>
+<!--
+  Reduced from https://www.haiku-os.org/ on 2026-09-25, with JS disabled.
+  shijin4.css makes .fundraising-meter an inline-grid. Its direct child has
+  width:20px, margin:auto, position:relative and left:48px in inline CSS.
+  No scripts, external assets, fonts, flex containers or CSS variables needed.
+
+  Expected border-box x / width (all container left edges are x=20):
+    block-centered:       150 / 20
+    grid-fixed:            20 / 20
+    grid-centered:        150 / 20
+    grid-stretched:        20 / 280
+    haiku-outer:          198 / 20   (20 + (280 - 20)/2 + 48)
+    haiku-inner:          197 / 20   (198 + 1 - 2)
+    haiku-filler:         198 / 18   (197 + 1)
+    grid-auto-centered:   130 / 60   (20 + (280 - 60)/2)
+
+  Compare with the optional Qt capture tools documented in
+  frontends/qt/CAPTURE.md; inspect these IDs and haiku-container.
+  The first and fourth cases are controls.
+
+  Observed in cfe77182 at an 800x650 viewport: both controls match Chromium;
+  grid-fixed and grid-centered instead have x=20, width=280. The Haiku outer
+  has x=67, width=280, and the filler has x=67, width=18 (131px too far left).
+  The regression fix preserves declared widths, resolves auto margins and
+  includes the child's border when positioning its padding edge. This page
+  checks horizontal sizing/placement; vertical layout has separate differences.
+-->
+<p>Block: fixed width, auto margins (control)</p>
+<div class="container"><div id="block-centered" class="item centered"></div></div>
+
+<p>Grid: fixed width, zero margins</p>
+<div class="container grid"><div id="grid-fixed" class="item"></div></div>
+
+<p>Grid: fixed width, auto margins</p>
+<div class="container grid"><div id="grid-centered" class="item centered"></div></div>
+
+<p>Grid: auto width, zero margins (control)</p>
+<div class="container grid"><div id="grid-stretched" class="item stretch"></div></div>
+
+<p>Haiku: inline-grid, auto margins, relative offsets and borders</p>
+<div class="container">
+  <div id="haiku-container" class="container inline-grid">
+    <div id="haiku-outer" class="haiku-outer">
+      <div id="haiku-inner" class="haiku-inner">
+        <div id="haiku-filler" class="haiku-filler"></div>
+      </div>
+    </div>
+  </div>
+</div>
+<p>Grid: auto width and auto margins shrink to the content</p>
+<div class="container grid">
+  <div id="grid-auto-centered" class="item stretch centered">
+    <div style="width: 60px; height: 10px"></div>
+  </div>
+</div>
+</html>

@@ -32,6 +32,7 @@
 #include "wisp/types.h"
 #include "wisp/utils/errors.h"
 #include "wisp/utils/log.h"
+#include "grid_layout_style.h"
 
 /* Define AUTO locally for test since it's an internal macro often */
 #ifndef AUTO
@@ -1003,6 +1004,116 @@ START_TEST(test_grid_explicit_column_only)
 }
 END_TEST
 
+/* Real computed dimension/margin/border accessors; only nested content layout
+ * and track placement are stubbed by this test executable. */
+static const struct {
+    const char *name;
+    struct grid_item_test_style style;
+    int width, left, right, x;
+} sizing_cases[] = {
+    {"fixed width", {.width = 20, .max_width = -1}, 20, 0, 0, 0},
+    {"centered fixed width", {.width = 20, .margin_left = AUTO, .margin_right = AUTO, .max_width = -1}, 20, 130, 130,
+        130},
+    {"left auto", {.width = 20, .margin_left = AUTO, .margin_right = 10, .max_width = -1}, 20, 250, 10, 250},
+    {"right auto", {.width = 20, .margin_left = 10, .margin_right = AUTO, .max_width = -1}, 20, 10, 250, 10},
+    {"fixed margins", {.width = 20, .margin_left = 7, .margin_right = 11, .max_width = -1}, 20, 7, 11, 7},
+    {"stretch", {.width = AUTO, .margin_left = 7, .margin_right = 11, .padding = 3, .border = 1, .max_width = -1}, 254,
+        7, 11, 8},
+    {"Haiku border box",
+        {.width = 20, .border_box = true, .border = 1, .margin_left = AUTO, .margin_right = AUTO, .max_width = -1}, 18,
+        130, 130, 131},
+    {"content box",
+        {.width = 20, .padding = 3, .border = 1, .margin_left = AUTO, .margin_right = AUTO, .max_width = -1}, 20, 126,
+        126, 127},
+    {"percentage width",
+        {.width = 50,
+            .percent_width = true,
+            .border_box = true,
+            .padding = 3,
+            .border = 1,
+            .margin_left = AUTO,
+            .margin_right = AUTO,
+            .max_width = -1},
+        132, 70, 70, 71},
+    {"overflow", {.width = 300, .margin_left = AUTO, .margin_right = AUTO, .max_width = -1}, 300, 0, 0, 0},
+    {"max width", {.width = AUTO, .margin_left = AUTO, .margin_right = AUTO, .max_width = 40}, 40, 120, 120, 120},
+    {"min wins over max", {.width = 20, .margin_left = AUTO, .margin_right = AUTO, .min_width = 80, .max_width = 40},
+        80, 100, 100, 100},
+    {"auto margins shrink to fit", {.width = AUTO, .margin_left = AUTO, .margin_right = AUTO, .max_width = -1}, 100, 90,
+        90, 90},
+    {"odd free space", {.width = 21, .margin_left = AUTO, .margin_right = AUTO, .max_width = -1}, 21, 129, 130, 129},
+};
+
+START_TEST(test_grid_item_sizing)
+{
+    const struct grid_item_test_style *values = &sizing_cases[_i].style;
+    css_computed_style *style = grid_item_test_style_create(values);
+    ck_assert_ptr_nonnull(style);
+    struct box grid = {
+        .type = BOX_GRID, .width = 280, .height = AUTO, .style = (css_computed_style *)span_test_child_style};
+    struct box child = {.type = BOX_BLOCK,
+        .style = style,
+        .parent = &grid,
+        .width = AUTO,
+        .height = AUTO,
+        .min_width = {.value = 50},
+        .max_width = 100};
+    grid.children = grid.last = &child;
+    /* Grid padding must be added once, separately from item borders/margins. */
+    grid.padding[LEFT] = 9;
+    grid.padding[TOP] = 5;
+    html_content content = {0};
+    content.unit_len_ctx.device_dpi = INTTOFIX(96);
+    content.unit_len_ctx.font_size_default = INTTOFIX(16);
+
+    /* Re-layout must recalculate auto margins and retain intrinsic width caches. */
+    for (int run = 0; run < 2; run++) {
+        ck_assert(layout_grid(&grid, 280, &content));
+        ck_assert_msg(child.width == sizing_cases[_i].width, "%s: width=%d, expected %d", sizing_cases[_i].name,
+            child.width, sizing_cases[_i].width);
+        ck_assert_int_eq(child.margin[LEFT], sizing_cases[_i].left);
+        ck_assert_int_eq(child.margin[RIGHT], sizing_cases[_i].right);
+        ck_assert_int_eq(child.x, 9 + sizing_cases[_i].x);
+        ck_assert_int_eq(child.y, 5 + values->border);
+        ck_assert_int_eq(child.min_width.value, 50);
+        ck_assert_int_eq(child.max_width, 100);
+    }
+    css_computed_style_destroy(style);
+}
+END_TEST
+
+START_TEST(test_grid_border_after_row_growth)
+{
+    struct grid_item_test_style values = {
+        .width = 20, .border = 1, .margin_left = AUTO, .margin_right = AUTO, .max_width = -1};
+    css_computed_style *first_style = grid_item_test_style_create(&values);
+    values.padding = 5;
+    css_computed_style *second_style = grid_item_test_style_create(&values);
+    ck_assert_ptr_nonnull(first_style);
+    ck_assert_ptr_nonnull(second_style);
+    struct box grid = {
+        .type = BOX_GRID, .width = 840, .height = AUTO, .style = (css_computed_style *)explicit_grid_style};
+    struct box second = {.type = BOX_BLOCK, .style = second_style, .parent = &grid};
+    struct box first = {.type = BOX_BLOCK, .style = first_style, .parent = &grid, .next = &second};
+    grid.children = &first;
+    grid.last = &second;
+    second.prev = &first;
+    grid.padding[TOP] = 5;
+    html_content content = {0};
+    content.unit_len_ctx.device_dpi = INTTOFIX(96);
+    content.unit_len_ctx.font_size_default = INTTOFIX(16);
+    ck_assert(layout_grid(&grid, 840, &content));
+    /* The taller second item triggers pass 3 for the first item. Its padding
+     * edge must still include the top border after that second positioning. */
+    ck_assert_int_eq(first.y, 6);
+    ck_assert_int_eq(second.y, 6);
+    ck_assert_int_eq(first.x, 130);
+    ck_assert_int_eq(first.margin[LEFT], 129);
+    css_computed_style_destroy(first_style);
+    css_computed_style_destroy(second_style);
+}
+END_TEST
+
 Suite *grid_test_suite(void)
 {
     Suite *s = suite_create("grid_layout");
@@ -1012,6 +1123,8 @@ Suite *grid_test_suite(void)
     tcase_add_test(tc, test_grid_column_dense);
     tcase_add_test(tc, test_grid_explicit_placement);
     tcase_add_test(tc, test_grid_explicit_column_only);
+    tcase_add_loop_test(tc, test_grid_item_sizing, 0, sizeof(sizing_cases) / sizeof(sizing_cases[0]));
+    tcase_add_test(tc, test_grid_border_after_row_growth);
     suite_add_tcase(s, tc);
     return s;
 }
@@ -1020,6 +1133,14 @@ Suite *grid_test_suite(void)
 void setup_corestrings(void)
 {
     dom_string_create((const uint8_t *)"class", 5, &corestring_dom_class);
+    /* The old placement fixtures model the default margin:0. A zeroed
+     * computed-style bitfield actually reads as inherit/auto, not zero. */
+    void *styles[] = {dummy_style, span_test_grid_style, span_test_child_style, span_test_wide_style,
+        column_dense_grid_style, column_dense_child_style, column_dense_tall_style, explicit_grid_style,
+        explicit_auto_style, explicit_fixed_style, explicit_col_only_style, explicit_grid_4col_style};
+    for (size_t i = 0; i < sizeof(styles) / sizeof(styles[0]); i++) {
+        grid_test_set_horizontal_margins(styles[i], 0, 0);
+    }
 }
 
 void teardown_corestrings(void)

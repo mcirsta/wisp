@@ -26,15 +26,16 @@
  * ------------------------------------
  * - Grid tracks define the size of grid cells (content box of the grid area)
  * - Gaps are spaces BETWEEN tracks (like extra fixed-size tracks)
- * - Grid items are placed within grid areas; their margin box fills the area
- * - For STRETCH alignment: item content = cell_size - padding - border
+ * - Grid items are sized within their grid areas, respecting declared widths
+ * - Auto widths stretch unless auto margins request shrink-to-fit sizing
+ * - Remaining inline space is distributed to auto margins before placement
  * - Row heights track the full box height (content + padding + border)
  *   so that subsequent rows are positioned correctly
  *
  * Key relationships:
  *   cell_width = track_width (sum for spanning items)
- *   child->width = cell_width - padding[L+R] - border[L+R]  (content box)
- *   rendered_width = child->width + padding[L+R] + border[L+R] = cell_width
+ *   border_box_width = child->width + padding[L+R] + border[L+R]
+ *   child->x is the padding edge: area_x + margin[L] + border[L]
  */
 
 #include <assert.h>
@@ -693,585 +694,570 @@ static void layout_grid_compute_tracks(struct box *grid, int available_width, in
     }
 }
 
-bool layout_grid(struct box *grid, int available_width, html_content *content)
+/* Per-call scratch state. Helpers borrow these buffers; layout_grid owns
+ * their lifetime. No state is shared between nested grid layouts. */
+struct grid_layout_ctx {
+    struct box *grid;
+    html_content *content;
+    int num_cols, num_rows, gap_px;
+    int *col_widths, *row_heights;
+    int row_heights_capacity, max_row;
+    bool *row_first_item_done;
+    bool flow_is_column, is_dense;
+    int auto_col, auto_row;
+    bool *occupied;
+    int occupied_max_rows;
+    struct grid_item_cache *item_cache;
+    int item_count, cache_idx;
+    bool needs_pass3;
+};
+
+/* Requested CSS grid lines and the resolved grid area for one item. */
+struct grid_placement {
+    int col_start, col_end, row_start, row_end;
+    int col, row, col_span, row_span;
+};
+
+static void layout_grid_cleanup(struct grid_layout_ctx *ctx)
 {
-    struct box *child;
-    int grid_width = available_width;
-    int grid_height = 0;
-    int x, y;
-    int col_idx = 0;
-    int row_idx = 0;
-    int num_cols = layout_grid_get_column_count(grid);
+    free(ctx->item_cache);
+    free(ctx->row_first_item_done);
+    free(ctx->occupied);
+    free(ctx->row_heights);
+    free(ctx->col_widths);
+}
 
-    NSLOG(layout, WARNING, "GRID LAYOUT: grid=%p avail_w=%d num_cols=%d children=%p", grid, available_width, num_cols,
-        grid->children);
-
-    int *col_widths; /* Array allocated locally */
-
-    /* Just use stack for small col counts or VLA/malloc */
-    /* VLA is risky for stack size. Malloc is safer. */
-    col_widths = malloc(sizeof(int) * num_cols);
-    if (!col_widths)
+/* Allocate the existing scratch buffers and resolve tracks and flow direction.
+ * The caller also cleans up partially initialized state on failure. */
+static bool layout_grid_prepare(struct grid_layout_ctx *ctx, int available_width)
+{
+    struct box *grid = ctx->grid;
+    ctx->num_cols = layout_grid_get_column_count(grid);
+    NSLOG(layout, WARNING, "GRID LAYOUT: grid=%p avail_w=%d num_cols=%d children=%p", grid, available_width,
+        ctx->num_cols, grid->children);
+    ctx->col_widths = malloc(sizeof(int) * ctx->num_cols);
+    if (!ctx->col_widths)
         return false;
 
-    /* Get Gap for layout positioning */
-    int gap_px = 0;
     css_fixed_or_calc gap_len = (css_fixed_or_calc)0;
     css_unit gap_unit = CSS_UNIT_PX;
     if (grid->style != NULL && css_computed_column_gap(grid->style, &gap_len, &gap_unit) == CSS_COLUMN_GAP_SET) {
-        if (!lh__length_to_px(grid->style, &content->unit_len_ctx, available_width, gap_len, gap_unit, &gap_px)) {
-            gap_px = 0;
+        if (!lh__length_to_px(
+                grid->style, &ctx->content->unit_len_ctx, available_width, gap_len, gap_unit, &ctx->gap_px)) {
+            ctx->gap_px = 0;
         }
     }
-
-    layout_grid_compute_tracks(grid, available_width, col_widths, num_cols, grid->style, &content->unit_len_ctx);
-
-    /* Log computed column widths */
-    for (int i = 0; i < num_cols; i++) {
-        NSLOG(layout, WARNING, "GRID LAYOUT: col[%d] width=%d", i, col_widths[i]);
+    layout_grid_compute_tracks(
+        grid, available_width, ctx->col_widths, ctx->num_cols, grid->style, &ctx->content->unit_len_ctx);
+    for (int i = 0; i < ctx->num_cols; i++) {
+        NSLOG(layout, WARNING, "GRID LAYOUT: col[%d] width=%d", i, ctx->col_widths[i]);
     }
 
-    int row_height = 0;
-    int max_row = 0; /* Track highest row used */
-
-    /* Dynamic row heights array - starts at 100, grows as needed */
-    int row_heights_capacity = 100;
-    int *row_heights = calloc(row_heights_capacity, sizeof(int));
-    if (!row_heights) {
-        free(col_widths);
+    ctx->row_heights_capacity = 100;
+    ctx->row_heights = calloc(ctx->row_heights_capacity, sizeof(int));
+    if (!ctx->row_heights)
         return false;
-    }
-
-    /* Track if any row needs re-stretch (height increased after first item in row) */
-    bool *row_first_item_done = calloc(row_heights_capacity, sizeof(bool));
-    bool needs_pass3 = false;
-    if (!row_first_item_done) {
-        free(col_widths);
-        free(row_heights);
+    ctx->row_first_item_done = calloc(ctx->row_heights_capacity, sizeof(bool));
+    if (!ctx->row_first_item_done)
         return false;
-    }
-
-    /* Initialize row heights from CSS grid-template-rows */
-    if (!init_row_heights_from_css(grid->style, &row_heights, &row_heights_capacity)) {
-        free(col_widths);
-        free(row_heights);
+    if (!init_row_heights_from_css(grid->style, &ctx->row_heights, &ctx->row_heights_capacity))
         return false;
-    }
 
-    /* CSS Grid spec §8: Read grid-auto-flow to determine placement
-     * direction
-     * - row (default): Fill row by row, left to right, top to bottom
-     * - column: Fill column by column, top to bottom, left to right
-     * - dense variants: Backfill holes (Phase 3)
-     */
-    uint8_t auto_flow = CSS_GRID_AUTO_FLOW_ROW; /* default per spec */
-    if (grid->style != NULL) {
+    uint8_t auto_flow = CSS_GRID_AUTO_FLOW_ROW;
+    if (grid->style != NULL)
         auto_flow = css_computed_grid_auto_flow(grid->style);
-    }
-    bool flow_is_column = (auto_flow == CSS_GRID_AUTO_FLOW_COLUMN || auto_flow == CSS_GRID_AUTO_FLOW_COLUMN_DENSE);
+    ctx->flow_is_column = (auto_flow == CSS_GRID_AUTO_FLOW_COLUMN || auto_flow == CSS_GRID_AUTO_FLOW_COLUMN_DENSE);
+    ctx->is_dense = (auto_flow == CSS_GRID_AUTO_FLOW_ROW_DENSE || auto_flow == CSS_GRID_AUTO_FLOW_COLUMN_DENSE);
+    ctx->num_rows = ctx->flow_is_column ? layout_grid_get_explicit_row_count(grid) : 1;
+    NSLOG(layout, INFO, "GRID LAYOUT: grid-auto-flow=%d (column=%s)", auto_flow, ctx->flow_is_column ? "yes" : "no");
 
-    NSLOG(layout, INFO, "GRID LAYOUT: grid-auto-flow=%d (column=%s)", auto_flow, flow_is_column ? "yes" : "no");
-
-    /* For column mode, we need explicit row count to know when to wrap */
-    int num_rows = flow_is_column ? layout_grid_get_explicit_row_count(grid) : 1; /* row mode doesn't need this */
-
-    /* Auto-placement cursor for items without explicit placement */
-    int auto_col = 0;
-    int auto_row = 0;
-
-    /* CSS Grid spec §8.5: Dense packing requires tracking occupied cells
-     * to enable backfilling holes left by larger items.
-     * For 3-phase placement, we also need to track occupied cells to prevent
-     * auto-placed items from overlapping with explicitly placed items.
-     * We use a simple bitmap: occupied[row * num_cols + col]
-     */
-    bool is_dense = (auto_flow == CSS_GRID_AUTO_FLOW_ROW_DENSE || auto_flow == CSS_GRID_AUTO_FLOW_COLUMN_DENSE);
-    bool *occupied = NULL;
-    int occupied_max_rows = row_heights_capacity; /* Use same capacity */
-
-    /* Always allocate occupied grid for 3-phase placement */
-    occupied = calloc(occupied_max_rows * num_cols, sizeof(bool));
-    if (!occupied) {
-        free(col_widths);
-        free(row_heights);
+    ctx->occupied_max_rows = ctx->row_heights_capacity;
+    ctx->occupied = calloc(ctx->occupied_max_rows * ctx->num_cols, sizeof(bool));
+    if (!ctx->occupied)
         return false;
-    }
-    NSLOG(
-        layout, INFO, "GRID LAYOUT: allocated %dx%d occupation grid (dense=%d)", num_cols, occupied_max_rows, is_dense);
+    NSLOG(layout, INFO, "GRID LAYOUT: allocated %dx%d occupation grid (dense=%d)", ctx->num_cols,
+        ctx->occupied_max_rows, ctx->is_dense);
 
-    /* Count children for item cache allocation */
-    int item_count = 0;
-    for (child = grid->children; child; child = child->next) {
-        item_count++;
-    }
-
-    /* Allocate item cache to avoid re-parsing CSS in pass 3 */
-    struct grid_item_cache *item_cache = NULL;
-    if (item_count > 0) {
-        item_cache = calloc(item_count, sizeof(struct grid_item_cache));
-        if (!item_cache) {
-            free(occupied);
-            free(row_first_item_done);
-            free(row_heights);
-            free(col_widths);
+    for (struct box *child = grid->children; child; child = child->next)
+        ctx->item_count++;
+    if (ctx->item_count > 0) {
+        ctx->item_cache = calloc(ctx->item_count, sizeof(struct grid_item_cache));
+        if (!ctx->item_cache)
             return false;
-        }
     }
-    int cache_idx = 0;
+    return true;
+}
 
-    /* CSS Grid spec §8: Grid item placement algorithm
-     *
-     * Pass 1: Place items with definite position on BOTH row AND column axes
-     *         These reserve cells before any auto-placement occurs.
-     *
-     * Pass 2: Process remaining items in DOM order (Phase 2 and Phase 3 mixed)
-     *         - Phase 2 items (one axis definite) are placed, cursor advances
-     *         - Phase 3 items (fully auto) are placed at cursor, cursor advances
-     *         This ensures DOM order is respected for auto-placement.
-     */
-    for (int pass = 1; pass <= 2; pass++) {
-        NSLOG(layout, INFO, "GRID PLACEMENT: Starting pass %d", pass);
+/* Resolve the grid area without changing the placement cursor or occupancy. */
+static void layout_grid_resolve_placement(const struct grid_layout_ctx *ctx, struct grid_placement *placement)
+{
+    /* Determine span from explicit line numbers if not using span syntax */
+    if (placement->col_end == GRID_PLACEMENT_SPAN || placement->col_start == GRID_PLACEMENT_SPAN) {
+        /* col_span already set by get_grid_item_placement */
+    } else if (placement->col_end != GRID_PLACEMENT_AUTO && placement->col_end > placement->col_start &&
+        placement->col_start != GRID_PLACEMENT_AUTO) {
+        placement->col_span = placement->col_end - placement->col_start;
+    }
+    /* else col_span defaults to 1 from get_grid_item_placement */
 
-        for (child = grid->children; child; child = child->next) {
-            int col_start, col_end, row_start, row_end;
-            int item_col, item_row, col_span, row_span;
-            int child_width, child_x, child_y;
+    if (placement->row_end == GRID_PLACEMENT_SPAN || placement->row_start == GRID_PLACEMENT_SPAN) {
+        /* row_span already set by get_grid_item_placement */
+    } else if (placement->row_end != GRID_PLACEMENT_AUTO && placement->row_end > placement->row_start &&
+        placement->row_start != GRID_PLACEMENT_AUTO) {
+        placement->row_span = placement->row_end - placement->row_start;
+    }
+    /* else row_span defaults to 1 from get_grid_item_placement */
 
-            /* Get explicit placement from CSS (also extracts explicit spans) */
-            get_grid_item_placement(child->style, &col_start, &col_end, &row_start, &row_end, &col_span, &row_span);
-
-            int item_phase = get_placement_phase(col_start, row_start);
-
-            /* Pass 1: Only process items with both axes definite (Phase 1) */
-            if (pass == 1 && item_phase != GRID_PHASE_DEFINITE_BOTH) {
-                continue;
-            }
-            /* Pass 2: Process Phase 2 and Phase 3 items in DOM order */
-            if (pass == 2 && item_phase == GRID_PHASE_DEFINITE_BOTH) {
-                continue; /* Already processed in Pass 1 */
-            }
-
-            NSLOG(layout, WARNING,
-                "GRID PLACEMENT pass=%d item_phase=%d: col_start=%d col_end=%d row_start=%d row_end=%d col_span=%d row_span=%d",
-                pass, item_phase, col_start, col_end, row_start, row_end, col_span, row_span);
-
-            /* Determine span from explicit line numbers if not using span syntax */
-            if (col_end == GRID_PLACEMENT_SPAN || col_start == GRID_PLACEMENT_SPAN) {
-                /* col_span already set by get_grid_item_placement */
-            } else if (col_end != GRID_PLACEMENT_AUTO && col_end > col_start && col_start != GRID_PLACEMENT_AUTO) {
-                col_span = col_end - col_start;
-            }
-            /* else col_span defaults to 1 from get_grid_item_placement */
-
-            if (row_end == GRID_PLACEMENT_SPAN || row_start == GRID_PLACEMENT_SPAN) {
-                /* row_span already set by get_grid_item_placement */
-            } else if (row_end != GRID_PLACEMENT_AUTO && row_end > row_start && row_start != GRID_PLACEMENT_AUTO) {
-                row_span = row_end - row_start;
-            }
-            /* else row_span defaults to 1 from get_grid_item_placement */
-
-            /* Determine item position based on explicit placement or
-             * auto-flow */
-            /* Note: GRID_PLACEMENT_SPAN means auto-place but with a span,
-             * not an explicit column/row position. Only SET provides position. */
-            if (col_start != GRID_PLACEMENT_AUTO && col_start != GRID_PLACEMENT_SPAN) {
-                item_col = col_start;
-            } else if (is_dense) {
-                /* CSS Grid spec §8.5: Dense mode - scan from start
-                 * for first available cell that fits item's span.
-                 * For row flow: scan row-by-row (row 0: cols 0,1,2..., row 1: cols 0,1,2...)
-                 * For column flow: scan column-by-column (col 0: rows 0,1,2..., col 1: rows 0,1,2...)
-                 */
-                item_col = -1;
-                if (flow_is_column) {
-                    /* Column flow: scan column-first, respecting explicit row count */
-                    int max_scan_row = num_rows - row_span;
-                    for (int scan_col = 0; scan_col <= num_cols - col_span && item_col < 0; scan_col++) {
-                        for (int scan_row = 0; scan_row <= max_scan_row; scan_row++) {
-                            /* Check if all cells in span are free */
-                            bool fits = true;
-                            for (int dr = 0; dr < row_span && fits; dr++) {
-                                for (int dc = 0; dc < col_span && fits; dc++) {
-                                    int idx = (scan_row + dr) * num_cols + scan_col + dc;
-                                    if (idx >= occupied_max_rows * num_cols || occupied[idx]) {
-                                        fits = false;
-                                    }
-                                }
-                            }
-                            if (fits) {
-                                item_col = scan_col;
-                                item_row = scan_row;
-                                goto dense_found;
+    /* Determine item position based on explicit placement or
+     * auto-flow */
+    /* Note: GRID_PLACEMENT_SPAN means auto-place but with a span,
+     * not an explicit column/row position. Only SET provides position. */
+    if (placement->col_start != GRID_PLACEMENT_AUTO && placement->col_start != GRID_PLACEMENT_SPAN) {
+        placement->col = placement->col_start;
+    } else if (ctx->is_dense) {
+        /* CSS Grid spec §8.5: Dense mode - scan from start
+         * for first available cell that fits item's span.
+         * For row flow: scan row-by-row (row 0: cols 0,1,2..., row 1: cols 0,1,2...)
+         * For column flow: scan column-by-column (col 0: rows 0,1,2..., col 1: rows 0,1,2...)
+         */
+        placement->col = -1;
+        if (ctx->flow_is_column) {
+            /* Column flow: scan column-first, respecting explicit row count */
+            int max_scan_row = ctx->num_rows - placement->row_span;
+            for (int scan_col = 0; scan_col <= ctx->num_cols - placement->col_span && placement->col < 0; scan_col++) {
+                for (int scan_row = 0; scan_row <= max_scan_row; scan_row++) {
+                    /* Check if all cells in span are free */
+                    bool fits = true;
+                    for (int dr = 0; dr < placement->row_span && fits; dr++) {
+                        for (int dc = 0; dc < placement->col_span && fits; dc++) {
+                            int idx = (scan_row + dr) * ctx->num_cols + scan_col + dc;
+                            if (idx >= ctx->occupied_max_rows * ctx->num_cols || ctx->occupied[idx]) {
+                                fits = false;
                             }
                         }
                     }
-                } else {
-                    /* Row flow: scan row-first */
-                    for (int scan_row = 0; scan_row < occupied_max_rows && item_col < 0; scan_row++) {
-                        for (int scan_col = 0; scan_col <= num_cols - col_span; scan_col++) {
-                            /* Check if all cells in span are free */
-                            bool fits = true;
-                            for (int dr = 0; dr < row_span && fits; dr++) {
-                                for (int dc = 0; dc < col_span && fits; dc++) {
-                                    int idx = (scan_row + dr) * num_cols + scan_col + dc;
-                                    if (idx >= occupied_max_rows * num_cols || occupied[idx]) {
-                                        fits = false;
-                                    }
-                                }
-                            }
-                            if (fits) {
-                                item_col = scan_col;
-                                item_row = scan_row;
-                                goto dense_found;
-                            }
-                        }
+                    if (fits) {
+                        placement->col = scan_col;
+                        placement->row = scan_row;
+                        goto dense_found;
                     }
-                }
-            dense_found:
-                if (item_col < 0) {
-                    /* Fallback: use cursor if scan failed */
-                    item_col = auto_col;
-                    item_row = auto_row;
-                }
-            } else {
-                /* Normal mode: scan from cursor for first free cell */
-                item_col = -1;
-                item_row = auto_row;
-                for (int scan_col = auto_col; scan_col < num_cols && item_col < 0; scan_col++) {
-                    /* Check if cell is free */
-                    int idx = auto_row * num_cols + scan_col;
-                    if (idx < occupied_max_rows * num_cols && !occupied[idx]) {
-                        item_col = scan_col;
-                        break; /* Found first free cell */
-                    }
-                }
-                /* If no free cell in current row, advance to next rows */
-                if (item_col < 0) {
-                    for (int scan_row = auto_row + 1; scan_row < occupied_max_rows && item_col < 0; scan_row++) {
-                        for (int scan_col = 0; scan_col < num_cols; scan_col++) {
-                            int idx = scan_row * num_cols + scan_col;
-                            if (!occupied[idx]) {
-                                item_col = scan_col;
-                                item_row = scan_row;
-                                break;
-                            }
-                        }
-                    }
-                }
-                if (item_col < 0) {
-                    /* Fallback: use cursor if scan failed */
-                    item_col = auto_col;
-                    item_row = auto_row;
                 }
             }
-
-            if (row_start != GRID_PLACEMENT_AUTO && row_start != GRID_PLACEMENT_SPAN) {
-                item_row = row_start;
-            } else if (col_start != GRID_PLACEMENT_AUTO && col_start != GRID_PLACEMENT_SPAN) {
-                /* Phase 2: definite column, auto row - find first free row in this column */
-                item_row = 0;
-                for (int scan_row = 0; scan_row < occupied_max_rows; scan_row++) {
-                    int idx = scan_row * num_cols + item_col;
-                    if (idx < occupied_max_rows * num_cols && !occupied[idx]) {
-                        item_row = scan_row;
+        } else {
+            /* Row flow: scan row-first */
+            for (int scan_row = 0; scan_row < ctx->occupied_max_rows && placement->col < 0; scan_row++) {
+                for (int scan_col = 0; scan_col <= ctx->num_cols - placement->col_span; scan_col++) {
+                    /* Check if all cells in span are free */
+                    bool fits = true;
+                    for (int dr = 0; dr < placement->row_span && fits; dr++) {
+                        for (int dc = 0; dc < placement->col_span && fits; dc++) {
+                            int idx = (scan_row + dr) * ctx->num_cols + scan_col + dc;
+                            if (idx >= ctx->occupied_max_rows * ctx->num_cols || ctx->occupied[idx]) {
+                                fits = false;
+                            }
+                        }
+                    }
+                    if (fits) {
+                        placement->col = scan_col;
+                        placement->row = scan_row;
+                        goto dense_found;
+                    }
+                }
+            }
+        }
+    dense_found:
+        if (placement->col < 0) {
+            /* Fallback: use cursor if scan failed */
+            placement->col = ctx->auto_col;
+            placement->row = ctx->auto_row;
+        }
+    } else {
+        /* Normal mode: scan from cursor for first free cell */
+        placement->col = -1;
+        placement->row = ctx->auto_row;
+        for (int scan_col = ctx->auto_col; scan_col < ctx->num_cols && placement->col < 0; scan_col++) {
+            /* Check if cell is free */
+            int idx = ctx->auto_row * ctx->num_cols + scan_col;
+            if (idx < ctx->occupied_max_rows * ctx->num_cols && !ctx->occupied[idx]) {
+                placement->col = scan_col;
+                break; /* Found first free cell */
+            }
+        }
+        /* If no free cell in current row, advance to next rows */
+        if (placement->col < 0) {
+            for (int scan_row = ctx->auto_row + 1; scan_row < ctx->occupied_max_rows && placement->col < 0;
+                scan_row++) {
+                for (int scan_col = 0; scan_col < ctx->num_cols; scan_col++) {
+                    int idx = scan_row * ctx->num_cols + scan_col;
+                    if (!ctx->occupied[idx]) {
+                        placement->col = scan_col;
+                        placement->row = scan_row;
                         break;
                     }
                 }
             }
-            /* Note: for fully auto-placed items, item_row is already set by the scan above */
+        }
+        if (placement->col < 0) {
+            /* Fallback: use cursor if scan failed */
+            placement->col = ctx->auto_col;
+            placement->row = ctx->auto_row;
+        }
+    }
 
-            NSLOG(layout, WARNING,
-                "GRID PLACE DECISION: item_col=%d item_row=%d (cursor col=%d row=%d) flow_is_column=%d", item_col,
-                item_row, auto_col, auto_row, flow_is_column);
-
-            /* Clamp to valid range */
-            if (item_col < 0)
-                item_col = 0;
-            if (item_col >= num_cols)
-                item_col = num_cols - 1;
-            if (item_row < 0)
-                item_row = 0;
-
-            /* Recalculate span after positioning (for auto end values) */
-            if (col_end != GRID_PLACEMENT_AUTO && col_end > item_col) {
-                col_span = col_end - item_col;
-            }
-            if (row_end != GRID_PLACEMENT_AUTO && row_end > item_row) {
-                row_span = row_end - item_row;
-            }
-
-            /* Clamp span to grid bounds */
-            if (item_col + col_span > num_cols) {
-                col_span = num_cols - item_col;
-            }
-
-            /* Calculate child width (sum of spanned columns + gaps) */
-            child_width = 0;
-            for (int c = item_col; c < item_col + col_span; c++) {
-                child_width += col_widths[c];
-                if (c > item_col) {
-                    child_width += gap_px; /* Add gap between columns */
-                }
-            }
-
-            /* Calculate x position (sum of columns before item_col + container padding) */
-            child_x = grid->padding[LEFT];
-            for (int c = 0; c < item_col; c++) {
-                child_x += col_widths[c] + gap_px;
-            }
-
-            /* Resolve CSS dimensions - this populates child->padding and child->border */
-            struct css_size item_min_width; /* local struct to match layout_find_dimensions signature */
-            layout_find_dimensions(&content->unit_len_ctx, child_width, -1, child, child->style, &child->width,
-                &child->height, &child->max_width, &item_min_width, NULL, NULL, child->margin, child->padding,
-                child->border);
-            child->min_width.value = item_min_width.value; /* Store value back in box struct */
-
-            /* Subtract horizontal padding and border so total box width fits in cell */
-            int content_width = child_width - child->padding[LEFT] - child->padding[RIGHT] - child->border[LEFT].width -
-                child->border[RIGHT].width;
-            if (content_width < 0) {
-                content_width = 0;
-            }
-            child->width = content_width;
-
-            /* Recursively layout the child */
-            if (child->type == BOX_BLOCK || child->type == BOX_INLINE_BLOCK || child->type == BOX_FLEX ||
-                child->type == BOX_INLINE_FLEX || child->type == BOX_GRID || child->type == BOX_INLINE_GRID) {
-                child->float_container = grid;
-                if (!layout_block_context(child, -1, content)) {
-                    free(col_widths);
-                    free(row_heights);
-                    return false;
-                }
-                child->float_container = NULL;
-            } else if (child->type == BOX_TABLE) {
-                child->float_container = grid;
-                if (!layout_table(child, child_width, content)) {
-                    free(col_widths);
-                    free(row_heights);
-                    return false;
-                }
-                child->float_container = NULL;
-            }
-
-            /* Track row heights for all spanned rows - include padding and border */
-            int total_height = child->height + child->padding[TOP] + child->padding[BOTTOM] + child->border[TOP].width +
-                child->border[BOTTOM].width;
-            /* Ensure row_span is at least 1 to avoid division by zero */
-            assert(row_span >= 1 && "row_span must be at least 1");
-            int height_per_row = total_height / row_span;
-
-            NSLOG(layout, WARNING,
-                "GRID ROW_HEIGHT: child %p content_h=%d pad=%d,%d border=%d,%d total=%d row_span=%d height_per_row=%d",
-                child, child->height, child->padding[TOP], child->padding[BOTTOM], child->border[TOP].width,
-                child->border[BOTTOM].width, total_height, row_span, height_per_row);
-
-            for (int r = item_row; r < item_row + row_span; r++) {
-                if (!ensure_row_capacity(&row_heights, &row_heights_capacity, r)) {
-                    free(col_widths);
-                    free(row_heights);
-                    return false;
-                }
-                if (height_per_row > row_heights[r]) {
-                    NSLOG(layout, WARNING, "GRID ROW_HEIGHT UPDATE: row[%d] %d -> %d (from child %p)", r,
-                        row_heights[r], height_per_row, child);
-                    /* If this row already had an item, mark those items for re-stretch */
-                    if (row_first_item_done[r]) {
-                        needs_pass3 = true;
-                        NSLOG(layout, WARNING, "GRID: needs_pass3 set TRUE because row[%d] already had item", r);
-                        /* Mark all cached items in this row for re-stretch */
-                        for (int ci = 0; ci < cache_idx; ci++) {
-                            if (item_cache[ci].item_row <= r && r < item_cache[ci].item_row + item_cache[ci].row_span) {
-                                item_cache[ci].needs_restretch = true;
-                            }
-                        }
-                    }
-                    row_heights[r] = height_per_row;
-                }
-                row_first_item_done[r] = true;
-            }
-
-            /* Track max row for grid height calculation */
-            if (item_row + row_span > max_row) {
-                max_row = item_row + row_span;
-            }
-
-            /* Determine vertical alignment for this grid item */
-            uint8_t align = CSS_ALIGN_ITEMS_STRETCH; /* default */
-
-            /* Check align-self on the child first */
-            if (child->style) {
-                uint8_t align_self = css_computed_align_self(child->style);
-                if (align_self == CSS_ALIGN_SELF_AUTO) {
-                    /* Use align-items from grid container */
-                    if (grid->style) {
-                        align = css_computed_align_items(grid->style);
-                    }
-                } else {
-                    /* Use align-self value */
-                    align = align_self;
-                }
-            } else if (grid->style) {
-                /* No child style, use grid container's align-items */
-                align = css_computed_align_items(grid->style);
-            }
-
-            /* Calculate total available height for this item */
-            int spanned_height = 0;
-            for (int r = item_row; r < item_row + row_span; r++) {
-                spanned_height += row_heights[r];
-                if (r > item_row) {
-                    spanned_height += gap_px;
-                }
-            }
-
-            /* Apply alignment */
-            int content_height = child->height; /* Height from layout */
-            int align_offset = 0;
-
-            switch (align) {
-            case CSS_ALIGN_ITEMS_STRETCH: {
-                /* Stretch to fill entire spanned height - subtract padding/border */
-                int stretch_height = spanned_height - child->padding[TOP] - child->padding[BOTTOM] -
-                    child->border[TOP].width - child->border[BOTTOM].width;
-                if (stretch_height < 0) {
-                    stretch_height = 0;
-                }
-                child->height = stretch_height;
-                align_offset = 0;
+    if (placement->row_start != GRID_PLACEMENT_AUTO && placement->row_start != GRID_PLACEMENT_SPAN) {
+        placement->row = placement->row_start;
+    } else if (placement->col_start != GRID_PLACEMENT_AUTO && placement->col_start != GRID_PLACEMENT_SPAN) {
+        /* Phase 2: definite column, auto row - find first free row in this column */
+        placement->row = 0;
+        for (int scan_row = 0; scan_row < ctx->occupied_max_rows; scan_row++) {
+            int idx = scan_row * ctx->num_cols + placement->col;
+            if (idx < ctx->occupied_max_rows * ctx->num_cols && !ctx->occupied[idx]) {
+                placement->row = scan_row;
                 break;
             }
-            case CSS_ALIGN_ITEMS_FLEX_START:
-            case CSS_ALIGN_ITEMS_BASELINE:
-                /* Align to start (top) - keep content height */
-                align_offset = 0;
-                break;
-            case CSS_ALIGN_ITEMS_FLEX_END:
-                /* Align to end (bottom) */
-                align_offset = spanned_height - content_height;
-                if (align_offset < 0)
-                    align_offset = 0;
-                break;
-            case CSS_ALIGN_ITEMS_CENTER:
-                /* Center vertically */
-                align_offset = (spanned_height - content_height) / 2;
-                if (align_offset < 0)
-                    align_offset = 0;
-                break;
-            default:
-                /* Unknown - default to stretch */
-                child->height = spanned_height;
-                align_offset = 0;
-                break;
-            }
+        }
+    }
+    /* Note: for fully auto-placed items, item_row is already set by the scan above */
 
-            /* Calculate y position (sum of row heights before item_row + container padding) */
-            child_y = grid->padding[TOP];
-            for (int r = 0; r < item_row; r++) {
-                child_y += row_heights[r] + gap_px;
-            }
-            /* Apply alignment offset within the grid area */
-            child_y += align_offset;
+    NSLOG(layout, WARNING, "GRID PLACE DECISION: item_col=%d item_row=%d (cursor col=%d row=%d) flow_is_column=%d",
+        placement->col, placement->row, ctx->auto_col, ctx->auto_row, ctx->flow_is_column);
 
-            /* Position child */
-            child->x = child_x;
-            child->y = child_y;
+    /* Clamp to valid range */
+    if (placement->col < 0)
+        placement->col = 0;
+    if (placement->col >= ctx->num_cols)
+        placement->col = ctx->num_cols - 1;
+    if (placement->row < 0)
+        placement->row = 0;
 
-            /* Cache placement info for pass 3 optimization */
-            if (item_cache != NULL && cache_idx < item_count) {
-                item_cache[cache_idx].box = child;
-                item_cache[cache_idx].item_col = item_col;
-                item_cache[cache_idx].item_row = item_row;
-                item_cache[cache_idx].col_span = col_span;
-                item_cache[cache_idx].row_span = row_span;
-                item_cache[cache_idx].align = align;
-                item_cache[cache_idx].needs_restretch = false;
-                cache_idx++;
-            }
+    /* Recalculate span after positioning (for auto end values) */
+    if (placement->col_end != GRID_PLACEMENT_AUTO && placement->col_end > placement->col) {
+        placement->col_span = placement->col_end - placement->col;
+    }
+    if (placement->row_end != GRID_PLACEMENT_AUTO && placement->row_end > placement->row) {
+        placement->row_span = placement->row_end - placement->row;
+    }
 
-            NSLOG(layout, INFO, "Grid item placed: col=%d-%d row=%d-%d x=%d y=%d w=%d h=%d", item_col,
-                item_col + col_span, item_row, item_row + row_span, child_x, child_y, child->width, child->height);
+    /* Clamp span to grid bounds */
+    if (placement->col + placement->col_span > ctx->num_cols) {
+        placement->col_span = ctx->num_cols - placement->col;
+    }
+}
 
-            /* Redistribute auto margins for column flex grid items.
-             * This is needed because flex layout happens before the grid item's
-             * final height is known. Now that height is set, redistribute space. */
-            if (child->type == BOX_FLEX && child->style) {
-                uint8_t flex_dir = css_computed_flex_direction(child->style);
-                bool is_column = (flex_dir == CSS_FLEX_DIRECTION_COLUMN ||
-                    flex_dir == CSS_FLEX_DIRECTION_COLUMN_REVERSE);
-                if (is_column) {
-                    layout_flex_redistribute_auto_margins_vertical(child);
-                }
-            }
+/* Resolve inline sizing, lay out contents, then distribute inline auto margins. */
+static bool layout_grid_size_item(const struct grid_layout_ctx *ctx, struct box *child, int child_width)
+{
+    /* Resolve CSS dimensions - this populates child->padding and child->border */
+    /* CSS constraints are separate from the cached intrinsic widths. */
+    struct css_size item_min_width;
+    int item_max_width;
+    layout_find_dimensions(&ctx->content->unit_len_ctx, child_width, -1, child, child->style, &child->width,
+        &child->height, &item_max_width, &item_min_width, NULL, NULL, child->margin, child->padding, child->border);
 
-            /* Mark cells as occupied for 3-phase placement tracking */
-            if (occupied != NULL) {
-                for (int dr = 0; dr < row_span; dr++) {
-                    for (int dc = 0; dc < col_span; dc++) {
-                        int occ_row = item_row + dr;
-                        int occ_col = item_col + dc;
-                        if (occ_row < occupied_max_rows && occ_col < num_cols) {
-                            int idx = occ_row * num_cols + occ_col;
-                            occupied[idx] = true;
-                        }
+    bool auto_left = child->margin[LEFT] == AUTO;
+    bool auto_right = child->margin[RIGHT] == AUTO;
+    int margin_left = auto_left ? 0 : child->margin[LEFT];
+    int margin_right = auto_right ? 0 : child->margin[RIGHT];
+    int edges = child->padding[LEFT] + child->padding[RIGHT] + child->border[LEFT].width + child->border[RIGHT].width;
+
+    if (child->width == AUTO) {
+        int outer_width = child_width;
+        if (auto_left || auto_right) {
+            /* Intrinsic widths include margins, borders and padding,
+             * with auto margins treated as zero during min/max layout. */
+            outer_width = min(max(child->min_width.value, outer_width), child->max_width);
+        }
+        child->width = max(0, outer_width - margin_left - margin_right - edges);
+    }
+    if (item_max_width >= 0) {
+        child->width = min(child->width, item_max_width);
+    }
+    if (item_min_width.type == CSS_SIZE_SET) {
+        child->width = max(child->width, item_min_width.value);
+    }
+    child->margin[LEFT] = margin_left;
+    child->margin[RIGHT] = margin_right;
+
+    /* Recursively layout the child */
+    if (child->type == BOX_BLOCK || child->type == BOX_INLINE_BLOCK || child->type == BOX_FLEX ||
+        child->type == BOX_INLINE_FLEX || child->type == BOX_GRID || child->type == BOX_INLINE_GRID) {
+        child->float_container = ctx->grid;
+        if (!layout_block_context(child, -1, ctx->content)) {
+            return false;
+        }
+        child->float_container = NULL;
+    } else if (child->type == BOX_TABLE) {
+        child->float_container = ctx->grid;
+        if (!layout_table(child, child_width, ctx->content)) {
+            return false;
+        }
+        child->float_container = NULL;
+    }
+
+    /* Auto margins absorb only positive free space, including after
+     * a table or nested layout has adjusted the item's used width. */
+    int free_width = max(0, child_width - child->width - edges - margin_left - margin_right);
+    child->margin[LEFT] = auto_left ? free_width / (auto_right ? 2 : 1) : margin_left;
+    child->margin[RIGHT] = auto_right ? free_width - (auto_left ? child->margin[LEFT] : 0) : margin_right;
+    return true;
+}
+
+/* Grow row heights and flag earlier items affected by that growth. */
+static bool
+layout_grid_update_rows(struct grid_layout_ctx *ctx, const struct box *child, const struct grid_placement *placement)
+{
+    /* Track row heights for all spanned rows - include padding and border */
+    int total_height = child->height + child->padding[TOP] + child->padding[BOTTOM] + child->border[TOP].width +
+        child->border[BOTTOM].width;
+    /* Ensure row_span is at least 1 to avoid division by zero */
+    assert(placement->row_span >= 1 && "row_span must be at least 1");
+    int height_per_row = total_height / placement->row_span;
+
+    NSLOG(layout, WARNING,
+        "GRID ROW_HEIGHT: child %p content_h=%d pad=%d,%d border=%d,%d total=%d row_span=%d height_per_row=%d", child,
+        child->height, child->padding[TOP], child->padding[BOTTOM], child->border[TOP].width,
+        child->border[BOTTOM].width, total_height, placement->row_span, height_per_row);
+
+    for (int r = placement->row; r < placement->row + placement->row_span; r++) {
+        if (!ensure_row_capacity(&ctx->row_heights, &ctx->row_heights_capacity, r)) {
+            return false;
+        }
+        if (height_per_row > ctx->row_heights[r]) {
+            NSLOG(layout, WARNING, "GRID ROW_HEIGHT UPDATE: row[%d] %d -> %d (from child %p)", r, ctx->row_heights[r],
+                height_per_row, child);
+            /* If this row already had an item, mark those items for re-stretch */
+            if (ctx->row_first_item_done[r]) {
+                ctx->needs_pass3 = true;
+                NSLOG(layout, WARNING, "GRID: needs_pass3 set TRUE because row[%d] already had item", r);
+                /* Mark all cached items in this row for re-stretch */
+                for (int ci = 0; ci < ctx->cache_idx; ci++) {
+                    if (ctx->item_cache[ci].item_row <= r &&
+                        r < ctx->item_cache[ci].item_row + ctx->item_cache[ci].row_span) {
+                        ctx->item_cache[ci].needs_restretch = true;
                     }
                 }
             }
+            ctx->row_heights[r] = height_per_row;
+        }
+        ctx->row_first_item_done[r] = true;
+    }
 
-            /* CSS Grid spec §8: Advance auto-placement cursor
-             * - row mode: Advance column, wrap to next row at end
-             * - column mode: Advance row, wrap to next column at end
-             * Note: SPAN also uses auto-placement, so advance cursor for SPAN too
-             *
-             * CSS Grid spec §8.5: For items with definite column position,
-             * "increment the cursor's column position to be one past the item's column-end line"
-             */
-            bool col_auto = (col_start == GRID_PLACEMENT_AUTO || col_start == GRID_PLACEMENT_SPAN);
-            bool row_auto = (row_start == GRID_PLACEMENT_AUTO || row_start == GRID_PLACEMENT_SPAN);
+    /* Track max row for grid height calculation */
+    if (placement->row + placement->row_span > ctx->max_row) {
+        ctx->max_row = placement->row + placement->row_span;
+    }
+    return true;
+}
 
-            /* Phase 2: definite column, auto row - advance cursor past item */
-            if (!col_auto && row_auto) {
-                if (!flow_is_column) {
-                    /* Row mode: advance column past the placed item's column-end */
-                    auto_col = item_col + col_span;
-                    if (auto_col >= num_cols) {
-                        auto_col = 0;
-                        auto_row++;
-                    }
-                }
-                /* Column mode: definite column means advance row */
-                /* (But this is unusual - definite column in column flow) */
+/* Apply the current row sizes and return the alignment to cache for pass 3. */
+static uint8_t
+layout_grid_align_item(const struct grid_layout_ctx *ctx, struct box *child, const struct grid_placement *placement)
+{
+    /* Determine vertical alignment for this grid item */
+    uint8_t align = CSS_ALIGN_ITEMS_STRETCH; /* default */
+
+    /* Check align-self on the child first */
+    if (child->style) {
+        uint8_t align_self = css_computed_align_self(child->style);
+        if (align_self == CSS_ALIGN_SELF_AUTO) {
+            /* Use align-items from grid container */
+            if (ctx->grid->style) {
+                align = css_computed_align_items(ctx->grid->style);
             }
+        } else {
+            /* Use align-self value */
+            align = align_self;
+        }
+    } else if (ctx->grid->style) {
+        /* No child style, use grid container's align-items */
+        align = css_computed_align_items(ctx->grid->style);
+    }
 
-            /* Phase 3: fully auto items */
-            if (col_auto && row_auto) {
-                if (flow_is_column) {
-                    /* Column mode: advance row past the placed item's span */
-                    auto_row = item_row + row_span;
-                    if (auto_row >= num_rows) {
-                        auto_row = 0;
-                        auto_col++;
-                    }
-                } else {
-                    /* Row mode (default): advance column past the placed item's span */
-                    auto_col = item_col + col_span;
-                    if (auto_col >= num_cols) {
-                        auto_col = 0;
-                        auto_row++;
-                    }
+    /* Calculate total available height for this item */
+    int spanned_height = 0;
+    for (int r = placement->row; r < placement->row + placement->row_span; r++) {
+        spanned_height += ctx->row_heights[r];
+        if (r > placement->row) {
+            spanned_height += ctx->gap_px;
+        }
+    }
+
+    /* Apply alignment */
+    int content_height = child->height; /* Height from layout */
+    int align_offset = 0;
+
+    switch (align) {
+    case CSS_ALIGN_ITEMS_STRETCH: {
+        /* Stretch to fill entire spanned height - subtract padding/border */
+        int stretch_height = spanned_height - child->padding[TOP] - child->padding[BOTTOM] - child->border[TOP].width -
+            child->border[BOTTOM].width;
+        if (stretch_height < 0) {
+            stretch_height = 0;
+        }
+        child->height = stretch_height;
+        align_offset = 0;
+        break;
+    }
+    case CSS_ALIGN_ITEMS_FLEX_START:
+    case CSS_ALIGN_ITEMS_BASELINE:
+        /* Align to start (top) - keep content height */
+        align_offset = 0;
+        break;
+    case CSS_ALIGN_ITEMS_FLEX_END:
+        /* Align to end (bottom) */
+        align_offset = spanned_height - content_height;
+        if (align_offset < 0)
+            align_offset = 0;
+        break;
+    case CSS_ALIGN_ITEMS_CENTER:
+        /* Center vertically */
+        align_offset = (spanned_height - content_height) / 2;
+        if (align_offset < 0)
+            align_offset = 0;
+        break;
+    default:
+        /* Unknown - default to stretch */
+        child->height = spanned_height;
+        align_offset = 0;
+        break;
+    }
+
+    /* Calculate y position (sum of row heights before item_row + container padding) */
+    int child_y = ctx->grid->padding[TOP];
+    for (int r = 0; r < placement->row; r++) {
+        child_y += ctx->row_heights[r] + ctx->gap_px;
+    }
+    /* Apply alignment offset within the grid area */
+    child_y += align_offset;
+    child->y = child_y + child->border[TOP].width;
+    return align;
+}
+
+/* Lay out one resolved grid area and cache its placement for the final pass. */
+static bool
+layout_grid_layout_item(struct grid_layout_ctx *ctx, struct box *child, const struct grid_placement *placement)
+{
+    /* Calculate child width (sum of spanned columns + gaps) */
+    int child_width = 0;
+    for (int c = placement->col; c < placement->col + placement->col_span; c++) {
+        child_width += ctx->col_widths[c];
+        if (c > placement->col) {
+            child_width += ctx->gap_px; /* Add gap between columns */
+        }
+    }
+
+    /* Calculate x position (sum of columns before item_col + container padding) */
+    int child_x = ctx->grid->padding[LEFT];
+    for (int c = 0; c < placement->col; c++) {
+        child_x += ctx->col_widths[c] + ctx->gap_px;
+    }
+    if (!layout_grid_size_item(ctx, child, child_width) || !layout_grid_update_rows(ctx, child, placement))
+        return false;
+    uint8_t align = layout_grid_align_item(ctx, child, placement);
+    child->x = child_x + child->margin[LEFT] + child->border[LEFT].width;
+    int child_y = child->y - child->border[TOP].width;
+
+    /* Cache placement info for pass 3 optimization */
+    if (ctx->item_cache != NULL && ctx->cache_idx < ctx->item_count) {
+        ctx->item_cache[ctx->cache_idx].box = child;
+        ctx->item_cache[ctx->cache_idx].item_col = placement->col;
+        ctx->item_cache[ctx->cache_idx].item_row = placement->row;
+        ctx->item_cache[ctx->cache_idx].col_span = placement->col_span;
+        ctx->item_cache[ctx->cache_idx].row_span = placement->row_span;
+        ctx->item_cache[ctx->cache_idx].align = align;
+        ctx->item_cache[ctx->cache_idx].needs_restretch = false;
+        ctx->cache_idx++;
+    }
+
+    NSLOG(layout, INFO, "Grid item placed: col=%d-%d row=%d-%d x=%d y=%d w=%d h=%d", placement->col,
+        placement->col + placement->col_span, placement->row, placement->row + placement->row_span, child_x, child_y,
+        child->width, child->height);
+
+    /* Redistribute auto margins for column flex grid items.
+     * This is needed because flex layout happens before the grid item's
+     * final height is known. Now that height is set, redistribute space. */
+    if (child->type == BOX_FLEX && child->style) {
+        uint8_t flex_dir = css_computed_flex_direction(child->style);
+        bool is_column = (flex_dir == CSS_FLEX_DIRECTION_COLUMN || flex_dir == CSS_FLEX_DIRECTION_COLUMN_REVERSE);
+        if (is_column) {
+            layout_flex_redistribute_auto_margins_vertical(child);
+        }
+    }
+    return true;
+}
+
+/* Reserve the occupied cells and advance the auto-placement cursor. */
+static void layout_grid_advance_placement(struct grid_layout_ctx *ctx, const struct grid_placement *placement)
+{
+    /* Mark cells as occupied for 3-phase placement tracking */
+    if (ctx->occupied != NULL) {
+        for (int dr = 0; dr < placement->row_span; dr++) {
+            for (int dc = 0; dc < placement->col_span; dc++) {
+                int occ_row = placement->row + dr;
+                int occ_col = placement->col + dc;
+                if (occ_row < ctx->occupied_max_rows && occ_col < ctx->num_cols) {
+                    int idx = occ_row * ctx->num_cols + occ_col;
+                    ctx->occupied[idx] = true;
                 }
             }
-        } /* end child loop */
-    } /* end phase loop */
+        }
+    }
 
+    /* CSS Grid spec §8: Advance auto-placement cursor
+     * - row mode: Advance column, wrap to next row at end
+     * - column mode: Advance row, wrap to next column at end
+     * Note: SPAN also uses auto-placement, so advance cursor for SPAN too
+     *
+     * CSS Grid spec §8.5: For items with definite column position,
+     * "increment the cursor's column position to be one past the item's column-end line"
+     */
+    bool col_auto = (placement->col_start == GRID_PLACEMENT_AUTO || placement->col_start == GRID_PLACEMENT_SPAN);
+    bool row_auto = (placement->row_start == GRID_PLACEMENT_AUTO || placement->row_start == GRID_PLACEMENT_SPAN);
+
+    /* Phase 2: definite column, auto row - advance cursor past item */
+    if (!col_auto && row_auto) {
+        if (!ctx->flow_is_column) {
+            /* Row mode: advance column past the placed item's column-end */
+            ctx->auto_col = placement->col + placement->col_span;
+            if (ctx->auto_col >= ctx->num_cols) {
+                ctx->auto_col = 0;
+                ctx->auto_row++;
+            }
+        }
+        /* Column mode: definite column means advance row */
+        /* (But this is unusual - definite column in column flow) */
+    }
+
+    /* Phase 3: fully auto items */
+    if (col_auto && row_auto) {
+        if (ctx->flow_is_column) {
+            /* Column mode: advance row past the placed item's span */
+            ctx->auto_row = placement->row + placement->row_span;
+            if (ctx->auto_row >= ctx->num_rows) {
+                ctx->auto_row = 0;
+                ctx->auto_col++;
+            }
+        } else {
+            /* Row mode (default): advance column past the placed item's span */
+            ctx->auto_col = placement->col + placement->col_span;
+            if (ctx->auto_col >= ctx->num_cols) {
+                ctx->auto_col = 0;
+                ctx->auto_row++;
+            }
+        }
+    }
+}
+
+/* Revisit only cached items whose row grew after their initial layout. */
+static void layout_grid_restretch_items(const struct grid_layout_ctx *ctx)
+{
     /* Pass 3: Apply final stretch and positioning using cached data.
      * OPTIMIZATION: Instead of re-parsing CSS for all items, use cached placement info.
      * Only process items that were marked for re-stretch. */
-    if (needs_pass3 && item_cache != NULL) {
-        NSLOG(layout, INFO, "GRID LAYOUT: Pass 3 (optimized) - processing %d cached items", cache_idx);
-        for (int ci = 0; ci < cache_idx; ci++) {
-            struct grid_item_cache *cached = &item_cache[ci];
+    if (ctx->needs_pass3 && ctx->item_cache != NULL) {
+        NSLOG(layout, INFO, "GRID LAYOUT: Pass 3 (optimized) - processing %d cached items", ctx->cache_idx);
+        for (int ci = 0; ci < ctx->cache_idx; ci++) {
+            struct grid_item_cache *cached = &ctx->item_cache[ci];
 
             /* Skip items that don't need re-stretch */
             if (!cached->needs_restretch) {
@@ -1285,10 +1271,10 @@ bool layout_grid(struct box *grid, int available_width, html_content *content)
 
             /* Calculate spanned height with final row_heights */
             int spanned_height = 0;
-            for (int r = item_row; r < item_row + row_span && r < max_row; r++) {
-                spanned_height += row_heights[r];
+            for (int r = item_row; r < item_row + row_span && r < ctx->max_row; r++) {
+                spanned_height += ctx->row_heights[r];
                 if (r > item_row) {
-                    spanned_height += gap_px;
+                    spanned_height += ctx->gap_px;
                 }
             }
 
@@ -1305,11 +1291,11 @@ bool layout_grid(struct box *grid, int available_width, html_content *content)
             }
 
             /* Recalculate y position with final row_heights */
-            int final_y = grid->padding[TOP];
+            int final_y = ctx->grid->padding[TOP];
             for (int r = 0; r < item_row; r++) {
-                final_y += row_heights[r] + gap_px;
+                final_y += ctx->row_heights[r] + ctx->gap_px;
             }
-            child->y = final_y;
+            child->y = final_y + child->border[TOP].width;
 
             NSLOG(layout, INFO, "Grid pass 3: item at row=%d height=%d->%d y=%d (cached)", item_row, original_height,
                 child->height, child->y);
@@ -1340,34 +1326,67 @@ bool layout_grid(struct box *grid, int available_width, html_content *content)
     } else {
         NSLOG(layout, INFO, "GRID LAYOUT: Pass 3 skipped - no items needed re-stretch");
     }
+}
 
+/* Publish final dimensions once all rows have been laid out. */
+static void layout_grid_set_dimensions(const struct grid_layout_ctx *ctx)
+{
     /* Calculate total grid height */
-    grid_height = 0;
-    for (int r = 0; r < max_row; r++) {
-        grid_height += row_heights[r];
+    int grid_height = 0;
+    for (int r = 0; r < ctx->max_row; r++) {
+        grid_height += ctx->row_heights[r];
         if (r > 0) {
-            grid_height += gap_px;
+            grid_height += ctx->gap_px;
         }
     }
 
-    grid->height = grid_height;
+    ctx->grid->height = grid_height;
 
     /* IMPORTANT: layout_grid must set the grid's width */
-    if (grid->width == UNKNOWN_WIDTH || grid->width < 0) {
+    if (ctx->grid->width == UNKNOWN_WIDTH || ctx->grid->width < 0) {
         int intrinsic_width = 0;
-        for (int i = 0; i < num_cols; i++) {
-            intrinsic_width += col_widths[i];
+        for (int i = 0; i < ctx->num_cols; i++) {
+            intrinsic_width += ctx->col_widths[i];
         }
-        if (num_cols > 1) {
-            intrinsic_width += gap_px * (num_cols - 1);
+        if (ctx->num_cols > 1) {
+            intrinsic_width += ctx->gap_px * (ctx->num_cols - 1);
         }
-        grid->width = intrinsic_width;
+        ctx->grid->width = intrinsic_width;
     }
+}
 
-    free(item_cache);
-    free(row_first_item_done);
-    free(occupied);
-    free(row_heights);
-    free(col_widths);
-    return true;
+bool layout_grid(struct box *grid, int available_width, html_content *content)
+{
+    struct grid_layout_ctx ctx = {.grid = grid, .content = content};
+    bool success = false;
+    if (!layout_grid_prepare(&ctx, available_width))
+        goto cleanup;
+
+    /* Reserve fully definite items first. Then place the remaining items in
+     * DOM order, preserving the shared auto-placement cursor between passes. */
+    for (int pass = 1; pass <= 2; pass++) {
+        NSLOG(layout, INFO, "GRID PLACEMENT: Starting pass %d", pass);
+        for (struct box *child = grid->children; child; child = child->next) {
+            struct grid_placement placement = {0};
+            get_grid_item_placement(child->style, &placement.col_start, &placement.col_end, &placement.row_start,
+                &placement.row_end, &placement.col_span, &placement.row_span);
+            int phase = get_placement_phase(placement.col_start, placement.row_start);
+            if ((pass == 1 && phase != GRID_PHASE_DEFINITE_BOTH) || (pass == 2 && phase == GRID_PHASE_DEFINITE_BOTH))
+                continue;
+            NSLOG(layout, WARNING,
+                "GRID PLACEMENT pass=%d item_phase=%d: col_start=%d col_end=%d row_start=%d row_end=%d col_span=%d row_span=%d",
+                pass, phase, placement.col_start, placement.col_end, placement.row_start, placement.row_end,
+                placement.col_span, placement.row_span);
+            layout_grid_resolve_placement(&ctx, &placement);
+            if (!layout_grid_layout_item(&ctx, child, &placement))
+                goto cleanup;
+            layout_grid_advance_placement(&ctx, &placement);
+        }
+    }
+    layout_grid_restretch_items(&ctx);
+    layout_grid_set_dimensions(&ctx);
+    success = true;
+cleanup:
+    layout_grid_cleanup(&ctx);
+    return success;
 }
