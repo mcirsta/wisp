@@ -114,9 +114,10 @@ rendering speedup or universal constant-time lookup.
 - Release: 59/60 pass, including both variable suites and the property integration
   checks. `libcss_css21_fontface` segfaults; the same case segfaults in the baseline
   Release engine. It is a separate existing failure.
-- Qt: the complete Release browser builds after allowing the existing
-  `deprecated-enum-float-conversion` warning in `frontends/qt/plotters.cpp` through
-  a local CMake flag. An offscreen launch with JS disabled and the local reference
+- Qt: the complete Release browser builds with normal warnings-as-errors settings.
+  A follow-up makes the enum-to-float conversion explicit in the path renderer;
+  the temporary compiler-warning exception is no longer needed. An offscreen
+  launch with JS disabled and the local reference
   fixture stayed running until the eight-second smoke-test timeout. This is not
   visual or geometry validation. Windows was not tested.
 - Check is not discoverable through `pkg-config` in this execution environment,

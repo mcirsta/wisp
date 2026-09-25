@@ -303,7 +303,7 @@ static nserror nsqt_plot_path(const struct redraw_context *ctx, const plot_style
         /* path does not have enough points for initial move */
         return NSERROR_OK;
     }
-    if (p[0] != PLOTTER_PATH_MOVE) {
+    if (p[0] != static_cast<float>(PLOTTER_PATH_MOVE)) {
         NSLOG(wisp, INFO, "Path does not start with move");
         return NSERROR_INVALID;
     }
