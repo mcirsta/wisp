@@ -925,6 +925,108 @@ START_TEST(test_aspect_ratio_compose)
 }
 END_TEST
 
+/* Resolve through the actual stylesheet parser, cascade and layout helpers.
+ * The current logical-property mapping targets horizontal-tb text. */
+static const struct {
+    const char *declarations;
+    int padding[4], margin[4]; /* top, right, bottom, left */
+} logical_spacing_cases[] = {
+    {"padding-block:20px", {20, 0, 20, 0}, {0}},
+    {"padding-block:10px 30px", {10, 0, 30, 0}, {0}},
+    {"margin-block:12px", {0}, {12, 0, 12, 0}},
+    {"margin-block:-4px 8px", {0}, {-4, 0, 8, 0}},
+    {"margin-block:auto 10px", {0}, {AUTO, 0, 10, 0}},
+    {"padding-block:5% 10%", {20, 0, 40, 0}, {0}},
+    {"margin-block:5% 10%", {0}, {20, 0, 40, 0}},
+    {"padding-block:1em 2em", {16, 0, 32, 0}, {0}},
+    {"padding-block:calc(5% + 2px) calc(3px * 4)", {22, 0, 12, 0}, {0}},
+    {"--spacing:4px;padding-block:calc(var(--spacing)*5)", {20, 0, 20, 0}, {0}},
+    {"--space:6px 14px;margin-block:var(--space)", {0}, {6, 0, 14, 0}},
+    {"padding-block:10px;padding-top:7px", {7, 0, 10, 0}, {0}},
+    {"padding-top:7px;padding-block:10px", {10, 0, 10, 0}, {0}},
+    {"padding-block:10px !important;padding-top:7px", {10, 0, 10, 0}, {0}},
+    {"padding-top:7px !important;padding-block:10px", {7, 0, 10, 0}, {0}},
+    {"padding-block:10px;padding-block-end:3px", {10, 0, 3, 0}, {0}},
+    {"padding-block-start:5px;padding-block-end:calc(5px + 2px)", {5, 0, 7, 0}, {0}},
+    {"margin-block-start:-5px;margin-block-end:auto", {0}, {-5, 0, AUTO, 0}},
+    {"--s:2px;margin-block-start:calc(var(--s)*3);margin-bottom:9px", {0}, {6, 0, 9, 0}},
+    {"padding:5px;padding-block:initial", {0, 5, 0, 5}, {0}},
+    {"margin:5px;margin-block:unset", {0}, {0, 5, 0, 5}},
+    {"padding-block:12px;padding-block:20px -2px", {12, 0, 12, 0}, {0}},
+    {"padding-block:12px;padding-block:20px auto", {12, 0, 12, 0}, {0}},
+    {"padding-block:12px;padding-block:20px initial", {12, 0, 12, 0}, {0}},
+    {"padding-block:12px;padding-block:10px 20px 30px", {12, 0, 12, 0}, {0}},
+    {"padding-block:12px;padding-block:inherit 20px", {12, 0, 12, 0}, {0}},
+    {"padding-inline:12px;padding-inline:20px initial", {0, 12, 0, 12}, {0}},
+    {"margin-inline:12px;margin-inline:20px inherit", {0}, {0, 12, 0, 12}},
+    {"padding-inline:10px 30px !important;padding-left:5px", {0, 30, 0, 10}, {0}},
+    {"margin-inline:auto 5px", {0}, {0, 5, 0, AUTO}},
+    {"--x:20px; padding-block:var(--x) !important;padding-bottom:1px", {20, 0, 20, 0}, {0}},
+    {"padding-block:10px;padding-block:var(--missing)", {0}, {0}},
+    {"padding:5px;padding-block:revert", {0, 5, 0, 5}, {0}},
+    {"padding-block-start:7px !important;padding-top:9px", {7, 0, 0, 0}, {0}},
+    {"--pad:13px;padding-block-end:var(--pad)", {0, 0, 13, 0}, {0}},
+    {"direction:rtl;padding-block:10px 20px;margin-block:3px 7px", {10, 0, 20, 0}, {3, 0, 7, 0}},
+};
+
+START_TEST(test_logical_spacing)
+{
+    select_ctx ctx;
+    char css[350];
+    snprintf(
+        css, sizeof(css), "* { font-size:16px; padding:0; margin:0; %s; }", logical_spacing_cases[_i].declarations);
+    const css_computed_style *style = select_style_from_css(css, &ctx);
+    struct box box = {.type = BOX_BLOCK, .style = (css_computed_style *)style};
+    layout_find_dimensions(
+        &unit_ctx, 400, -1, &box, style, NULL, NULL, NULL, NULL, NULL, NULL, box.margin, box.padding, box.border);
+    for (int side = 0; side < 4; side++) {
+        ck_assert_int_eq(box.padding[side], logical_spacing_cases[_i].padding[side]);
+        ck_assert_int_eq(box.margin[side], logical_spacing_cases[_i].margin[side]);
+    }
+    destroy_select_ctx(&ctx);
+}
+END_TEST
+
+START_TEST(test_logical_spacing_inherit)
+{
+    select_ctx parent_ctx, child_ctx;
+    const css_computed_style *parent = select_style_from_css(
+        "* { padding:11px 12px 13px 14px; margin:1px 2px 3px 4px; }", &parent_ctx);
+    const css_computed_style *child = select_style_from_css_node(
+        "* { padding:5px; margin:6px; padding-block:inherit; margin-block:inherit; }", &child_ctx, false);
+    css_computed_style *composed = NULL;
+    ck_assert_int_eq(css_computed_style_compose(parent, child, &unit_ctx, &composed), CSS_OK);
+    struct box box = {.type = BOX_BLOCK, .style = composed};
+    layout_find_dimensions(
+        &unit_ctx, 400, -1, &box, composed, NULL, NULL, NULL, NULL, NULL, NULL, box.margin, box.padding, box.border);
+    ck_assert_int_eq(box.padding[TOP], 11);
+    ck_assert_int_eq(box.padding[BOTTOM], 13);
+    ck_assert_int_eq(box.padding[LEFT], 5);
+    ck_assert_int_eq(box.margin[TOP], 1);
+    ck_assert_int_eq(box.margin[BOTTOM], 3);
+    ck_assert_int_eq(box.margin[RIGHT], 6);
+    css_computed_style_destroy(composed);
+    destroy_select_ctx(&child_ctx);
+    destroy_select_ctx(&parent_ctx);
+}
+END_TEST
+
+START_TEST(test_logical_spacing_specificity)
+{
+    select_ctx ctx;
+    const css_computed_style *style = select_style_from_css(
+        "div { padding-top:7px; margin-bottom:9px; } * { padding-block:20px; margin-block:10px; }", &ctx);
+    struct box box = {.type = BOX_BLOCK, .style = (css_computed_style *)style};
+    layout_find_dimensions(
+        &unit_ctx, 400, -1, &box, style, NULL, NULL, NULL, NULL, NULL, NULL, box.margin, box.padding, box.border);
+    ck_assert_int_eq(box.padding[TOP], 7);
+    ck_assert_int_eq(box.padding[BOTTOM], 20);
+    ck_assert_int_eq(box.margin[TOP], 10);
+    ck_assert_int_eq(box.margin[BOTTOM], 9);
+    destroy_select_ctx(&ctx);
+}
+END_TEST
+
 Suite *layout_calc_suite(void)
 {
     Suite *s = suite_create("LayoutCalc");
@@ -947,6 +1049,10 @@ Suite *layout_calc_suite(void)
     tcase_add_test(tc_core, test_aspect_ratio_height_constraints);
     tcase_add_loop_test(tc_core, test_aspect_ratio_compose, 0, 2);
     tcase_add_loop_test(tc_core, test_aspect_ratio_content_minimum, 0, 3);
+    tcase_add_loop_test(
+        tc_core, test_logical_spacing, 0, sizeof(logical_spacing_cases) / sizeof(logical_spacing_cases[0]));
+    tcase_add_test(tc_core, test_logical_spacing_inherit);
+    tcase_add_test(tc_core, test_logical_spacing_specificity);
     suite_add_tcase(s, tc_core);
     return s;
 }

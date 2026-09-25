@@ -2010,3 +2010,47 @@ bits = 2
 initial = "AUTO"
 values = [["fixed"], ["fixed"]]
 condition = ["CSS_ASPECT_RATIO_RATIO", "CSS_ASPECT_RATIO_AUTO_RATIO"]
+
+# Logical spacing uses the existing horizontal-tb physical-side mapping.
+
+[margin_block]
+enum = "CSS_PROP_MARGIN_BLOCK"
+inherited = false
+shorthand = true
+cascade = "none"
+computed = "none"
+
+[margin_block_start]
+enum = "CSS_PROP_MARGIN_TOP"
+inherited = false
+cascade = "none"
+computed = "none"
+parse = "WRAP:css__parse_margin_side"
+
+[margin_block_end]
+enum = "CSS_PROP_MARGIN_BOTTOM"
+inherited = false
+cascade = "none"
+computed = "none"
+parse = "WRAP:css__parse_margin_side"
+
+[padding_block]
+enum = "CSS_PROP_PADDING_BLOCK"
+inherited = false
+shorthand = true
+cascade = "none"
+computed = "none"
+
+[padding_block_start]
+enum = "CSS_PROP_PADDING_TOP"
+inherited = false
+cascade = "none"
+computed = "none"
+parse = "WRAP:css__parse_padding_side"
+
+[padding_block_end]
+enum = "CSS_PROP_PADDING_BOTTOM"
+inherited = false
+cascade = "none"
+computed = "none"
+parse = "WRAP:css__parse_padding_side"

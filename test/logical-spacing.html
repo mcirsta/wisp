@@ -1,0 +1,25 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Logical block spacing regression</title>
+<style>
+body { margin:16px; font:16px/20px sans-serif; }
+section { margin:16px 0; border:1px solid #aaa; padding:8px; }
+.probe { width:160px; height:40px; background:#bcd; }
+</style>
+<h1>Logical block spacing</h1>
+<p>These cases target the engine's horizontal-tb writing mode. Compare padding and margin sides as well as box dimensions.</p>
+<section>One value: outer 160 × 80<div id="single" class="probe" style="padding-block:20px"></div></section>
+<section>Two values: outer 160 × 80<div id="pair" class="probe" style="padding-block:10px 30px"></div></section>
+<section>Variables and calc: outer 160 × 80<div id="variable" class="probe" style="--spacing:4px;padding-block:calc(var(--spacing)*5)"></div></section>
+<section>Physical override and logical end: outer 160 × 62<div id="overrides" class="probe" style="padding-block:20px;padding-top:7px;padding-block-end:15px"></div></section>
+<section>Important logical shorthand: outer 160 × 80<div id="important" class="probe" style="padding-block:20px !important;padding-top:1px"></div></section>
+<section>Percentage padding uses containing width: outer 160 × 100<div style="width:400px"><div id="percentage" class="probe" style="padding-block:5% 10%"></div></div></section>
+<section>Block margins: top 12, bottom 24<div id="margins" class="probe" style="margin-block:12px 24px"></div><div id="after-margins" style="height:10px"></div></section>
+<section>Block edges: top margin 8, bottom 16<div id="edges" class="probe" style="--s:4px;margin-block-start:calc(var(--s)*2);margin-block-end:16px;padding-block-start:5px;padding-block-end:7px"></div></section>
+<section>Inherited logical padding from physical sides<div style="padding:11px 12px 13px 14px"><div id="inherited" class="probe" style="padding-block:inherit"></div></div></section>
+<section>Inline shorthands still work<div id="inline" class="probe" style="padding-inline:10px 30px;margin-inline:12px 24px"></div></section>
+<section>Flex items with block padding<div style="display:flex;align-items:flex-start;width:400px"><div id="flex" class="probe" style="padding-block:10px 20px"></div><div style="width:100px;height:10px"></div></div></section>
+<section>Grid item with block padding<div style="display:grid;grid-template-columns:200px 200px;width:400px;align-items:start"><div id="grid" class="probe" style="padding-block:10px 20px"></div><div style="height:10px"></div></div></section>
+<section>Invalid second value preserves previous declaration<div id="invalid" class="probe" style="padding-block:10px;padding-block:20px -2px"></div></section>
+<section>Ratio includes border-box logical padding<div id="ratio" class="probe" style="box-sizing:border-box;width:200px;height:auto;aspect-ratio:2;padding-block:10px 20px;padding-inline:5px;border:2px solid"></div></section>
+<section>Tailwind-style border-box header<div id="header" style="--spacing:4px;box-sizing:border-box;width:400px;display:flex;align-items:center;padding-block:calc(var(--spacing)*5);padding-inline:calc(var(--spacing)*4)"><div style="width:200px;height:56px;background:#bcd"></div></div></section>
