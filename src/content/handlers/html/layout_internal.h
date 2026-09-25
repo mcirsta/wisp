@@ -428,7 +428,8 @@ static inline int lh__available_height_for_box(const struct box *box, int viewpo
     }
 
     if (containing_block != NULL && containing_block->height != AUTO &&
-        (css_computed_position(box->style) == CSS_POSITION_ABSOLUTE || cbhtype == CSS_HEIGHT_SET)) {
+        (css_computed_position(box->style) == CSS_POSITION_ABSOLUTE || cbhtype == CSS_HEIGHT_SET ||
+            (containing_block->flags & ASPECT_RATIO_HEIGHT))) {
         return containing_block->height;
     }
 
@@ -437,6 +438,58 @@ static inline int lh__available_height_for_box(const struct box *box, int viewpo
     }
 
     return -1;
+}
+
+/** Transfer a content-box dimension through the specified preferred ratio.
+ * Border-box ratios include padding/borders on both axes, never margins.
+ * The caller selects between this and a replaced element's natural ratio. */
+static inline int layout_ratio_dimension(const struct box *box, int size, bool to_height)
+{
+    css_fixed width = 0, height = 0;
+    if (box->style == NULL || size < 0) {
+        return AUTO;
+    }
+    uint8_t type = css_computed_aspect_ratio(box->style, &width, &height);
+    if ((type != CSS_ASPECT_RATIO_RATIO && type != CSS_ASPECT_RATIO_AUTO_RATIO) || width <= 0 || height <= 0) {
+        return AUTO;
+    }
+    double horizontal = 0, vertical = 0;
+    if (css_computed_box_sizing(box->style) == CSS_BOX_SIZING_BORDER_BOX) {
+        horizontal = (double)box->padding[LEFT] + box->padding[RIGHT] + box->border[LEFT].width +
+            box->border[RIGHT].width;
+        vertical = (double)box->padding[TOP] + box->padding[BOTTOM] + box->border[TOP].width +
+            box->border[BOTTOM].width;
+    }
+    double result = to_height ? (size + horizontal) * height / width - vertical
+                              : (size + vertical) * width / height - horizontal;
+    return result < 0 ? 0 : result > INT_MAX ? INT_MAX : (int)result;
+}
+
+/** Called after layout has chosen the used width and refreshed CSS height. */
+static inline void layout_prepare_aspect_ratio_height(struct box *box)
+{
+    box->flags &= ~ASPECT_RATIO_HEIGHT;
+    if (box->height != AUTO || box->object != NULL || box->type == BOX_TABLE || box->type == BOX_TABLE_CELL) {
+        return;
+    }
+    int height = layout_ratio_dimension(box, box->width, true);
+    if (height != AUTO) {
+        box->height = height;
+        box->flags |= ASPECT_RATIO_HEIGHT;
+    }
+}
+
+/** A preferred ratio can yield to the automatic content minimum. */
+static inline void layout_ratio_content_height(struct box *box, int content_height)
+{
+    if ((box->flags & ASPECT_RATIO_HEIGHT) && content_height > box->height &&
+        css_computed_overflow_y(box->style) == CSS_OVERFLOW_VISIBLE) {
+        css_fixed_or_calc value = (css_fixed_or_calc)0;
+        css_unit unit = CSS_UNIT_PX;
+        if (css_computed_min_height(box->style, &value, &unit) == CSS_MIN_HEIGHT_AUTO) {
+            box->height = content_height;
+        }
+    }
 }
 
 /**
@@ -602,53 +655,24 @@ static inline void layout_find_dimensions(const css_unit_ctx *unit_len_ctx, int 
     }
 
     if (max_height) {
-        enum css_max_height_e type;
         css_fixed_or_calc value = (css_fixed_or_calc)0;
         css_unit unit = CSS_UNIT_PX;
-
-        type = css_computed_max_height(style, &value, &unit);
-
-        if (type == CSS_MAX_HEIGHT_SET) {
-            if (unit == CSS_UNIT_PCT) {
-                /* TODO: handle percentage */
-                *max_height = -1;
-            } else if (unit == CSS_UNIT_CALC) {
-                if (!lh__length_to_px(style, box_unit_len_ctx, -1, value, unit, max_height)) {
-                    *max_height = -1;
-                }
-            } else {
-                *max_height = FIXTOINT(css_unit_len2device_px(style, box_unit_len_ctx, value.value, unit));
-            }
-        } else {
-            /* Inadmissible */
-            *max_height = -1;
+        *max_height = -1;
+        if (css_computed_max_height(style, &value, &unit) == CSS_MAX_HEIGHT_SET &&
+            lh__length_to_px(style, box_unit_len_ctx, available_height, value, unit, max_height)) {
+            layout_handle_box_sizing(box_unit_len_ctx, box, available_width, false, max_height);
         }
     }
 
     if (min_height) {
-        enum css_min_height_e type;
         css_fixed_or_calc value = (css_fixed_or_calc)0;
         css_unit unit = CSS_UNIT_PX;
-
-        type = ns_computed_min_height(style, &value, &unit);
-
-        if (type == CSS_MIN_HEIGHT_SET) {
+        min_height->type = CSS_SIZE_AUTO;
+        min_height->value = 0;
+        if (ns_computed_min_height(style, &value, &unit) == CSS_MIN_HEIGHT_SET &&
+            lh__length_to_px(style, box_unit_len_ctx, available_height, value, unit, &min_height->value)) {
             min_height->type = CSS_SIZE_SET;
-            if (unit == CSS_UNIT_PCT) {
-                /* TODO: handle percentage */
-                min_height->value = 0;
-            } else if (unit == CSS_UNIT_CALC) {
-                if (!lh__length_to_px(style, box_unit_len_ctx, -1, value, unit, &min_height->value)) {
-                    min_height->type = CSS_SIZE_AUTO;
-                    min_height->value = 0;
-                }
-            } else {
-                min_height->value = FIXTOINT(css_unit_len2device_px(style, box_unit_len_ctx, value.value, unit));
-            }
-        } else {
-            /* min-height: auto */
-            min_height->type = CSS_SIZE_AUTO;
-            min_height->value = 0;
+            layout_handle_box_sizing(box_unit_len_ctx, box, available_width, false, &min_height->value);
         }
     }
 
@@ -725,6 +749,16 @@ static inline void layout_find_dimensions(const css_unit_ctx *unit_len_ctx, int 
                 (box->type == BOX_TABLE || box->type == BOX_TABLE_ROW_GROUP || box->type == BOX_TABLE_ROW))
                 border[i].width = 0;
         }
+    }
+    if (width && height && *width == AUTO && *height != AUTO && box->object == NULL) {
+        int source_height = *height;
+        if (max_height && *max_height >= 0 && source_height > *max_height) {
+            source_height = *max_height;
+        }
+        if (min_height && min_height->type == CSS_SIZE_SET && source_height < min_height->value) {
+            source_height = min_height->value;
+        }
+        *width = layout_ratio_dimension(box, source_height, false);
     }
 }
 

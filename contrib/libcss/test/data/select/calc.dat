@@ -7,7 +7,7 @@ div { width: 10px; }
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000

@@ -58,3 +58,9 @@ css_computed_style *flex_test_style_create(const struct flex_test_style *v)
 #undef SET_EDGES
     return style;
 }
+
+void flex_test_style_ratio(css_computed_style *style, int height, int numerator, int denominator)
+{
+    set_aspect_ratio(style, CSS_ASPECT_RATIO_RATIO, INTTOFIX(numerator), INTTOFIX(denominator));
+    set_height(style, CSS_HEIGHT_SET, (css_fixed_or_calc)INTTOFIX(height), CSS_UNIT_PX);
+}

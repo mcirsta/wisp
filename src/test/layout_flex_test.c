@@ -1051,6 +1051,50 @@ START_TEST(test_flex_minimum_width_layout)
 END_TEST
 
 /* Test suite setup */
+/* A definite cross size transfers through the ratio into the automatic
+ * minimum. Explicit min-width:0 and a specified width still take precedence. */
+START_TEST(test_flex_ratio_minimum)
+{
+    struct flex_test_style values = {.width = -1,
+        .width_unit = CSS_UNIT_PX,
+        .min_width = _i == 1 ? 0 : -1,
+        .min_unit = CSS_UNIT_PX,
+        .max_width = -1,
+        .basis = -1,
+        .overflow = CSS_OVERFLOW_VISIBLE};
+    if (_i == 2)
+        values.width = 120;
+    if (_i == 3)
+        values.max_width = 180;
+    css_computed_style *item_style = flex_test_style_create(&values);
+    flex_test_style_ratio(item_style, 100, 2, 1);
+    values.container = true;
+    values.width = 150;
+    css_computed_style *parent_style = flex_test_style_create(&values);
+    struct box parent = {.type = BOX_FLEX, .style = parent_style, .width = 150, .height = AUTO};
+    struct box item = {.type = BOX_BLOCK,
+        .style = item_style,
+        .parent = &parent,
+        .width = AUTO,
+        .height = AUTO,
+        .min_width = {CSS_SIZE_SET, 0},
+        .max_width = 0};
+    parent.children = parent.last = &item;
+    html_content content = {.unit_len_ctx = {.viewport_width = INTTOFIX(1280),
+                                .viewport_height = INTTOFIX(900),
+                                .font_size_default = INTTOFIX(16),
+                                .font_size_minimum = INTTOFIX(6),
+                                .device_dpi = INTTOFIX(96),
+                                .root_style = parent_style}};
+    ck_assert(layout_flex(&parent, 150, &content));
+    ck_assert_int_eq(item.width, _i == 0 ? 200 : _i == 1 ? 150 : _i == 2 ? 120 : 180);
+    ck_assert(layout_flex(&parent, 150, &content));
+    ck_assert_int_eq(item.width, _i == 0 ? 200 : _i == 1 ? 150 : _i == 2 ? 120 : 180);
+    css_computed_style_destroy(item_style);
+    css_computed_style_destroy(parent_style);
+}
+END_TEST
+
 Suite *layout_flex_suite(void)
 {
     Suite *s;
@@ -1086,6 +1130,7 @@ Suite *layout_flex_suite(void)
 
     tcase_add_loop_test(tc_core, test_flex_minimum_width_layout, 0, 19);
 
+    tcase_add_loop_test(tc_core, test_flex_ratio_minimum, 0, 4);
     suite_add_tcase(s, tc_core);
 
     return s;

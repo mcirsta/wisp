@@ -5,6 +5,7 @@
 #include <check.h>
 #include <stdbool.h>
 #include <stdlib.h>
+#include <stdio.h>
 #include <string.h>
 
 #include <libcss/libcss.h>
@@ -20,6 +21,7 @@
 typedef struct test_node {
     lwc_string *name;
     void *libcss_node_data;
+    struct test_node *parent;
 } test_node;
 
 typedef struct select_ctx {
@@ -110,8 +112,7 @@ static css_error named_generic_sibling_node(void *pw, void *node, const css_qnam
 static css_error parent_node(void *pw, void *node, void **parent)
 {
     UNUSED(pw);
-    UNUSED(node);
-    *parent = NULL;
+    *parent = ((test_node *)node)->parent;
     return CSS_OK;
 }
 
@@ -226,8 +227,7 @@ static css_error node_has_attribute_substring(void *pw, void *node, const css_qn
 static css_error node_is_root(void *pw, void *node, bool *match)
 {
     UNUSED(pw);
-    UNUSED(node);
-    *match = true;
+    *match = ((test_node *)node)->parent == NULL;
     return CSS_OK;
 }
 
@@ -466,7 +466,7 @@ const css_border_color_func border_color_funcs[4] = {
     [LEFT] = css_computed_border_left_color,
 };
 
-static css_computed_style *select_style_from_css(const char *css, select_ctx *ctx)
+static css_computed_style *select_style_from_css_node(const char *css, select_ctx *ctx, bool root)
 {
     css_stylesheet_params params = {
         .params_version = CSS_STYLESHEET_PARAMS_VERSION_1,
@@ -500,9 +500,11 @@ static css_computed_style *select_style_from_css(const char *css, select_ctx *ct
 
     ck_assert_int_eq(lwc_intern_string("div", 3, &ctx->node_name), lwc_error_ok);
 
+    test_node parent = {.name = ctx->node_name};
     test_node node = {
         .name = ctx->node_name,
         .libcss_node_data = NULL,
+        .parent = root ? NULL : &parent,
     };
 
     ck_assert_int_eq(
@@ -518,6 +520,11 @@ static css_computed_style *select_style_from_css(const char *css, select_ctx *ct
     ck_assert_ptr_nonnull(ctx->results->styles[CSS_PSEUDO_ELEMENT_NONE]);
 
     return ctx->results->styles[CSS_PSEUDO_ELEMENT_NONE];
+}
+
+static const css_computed_style *select_style_from_css(const char *css, select_ctx *ctx)
+{
+    return select_style_from_css_node(css, ctx, true);
 }
 
 static void destroy_select_ctx(select_ctx *ctx)
@@ -797,6 +804,127 @@ START_TEST(test_inset_block_shorthand_sets_top_and_bottom)
 }
 END_TEST
 
+static const struct {
+    const char *declaration;
+    uint8_t type;
+    css_fixed numerator, denominator;
+} ratio_cases[] = {
+    {"", CSS_ASPECT_RATIO_AUTO, 0, 0},
+    {"aspect-ratio: 16 / 9", CSS_ASPECT_RATIO_RATIO, (16 * (1 << CSS_RADIX_POINT)), (9 * (1 << CSS_RADIX_POINT))},
+    {"aspect-ratio: 1.5", CSS_ASPECT_RATIO_RATIO, (3 * (1 << CSS_RADIX_POINT) / 2), (1 * (1 << CSS_RADIX_POINT))},
+    {"aspect-ratio: auto 3/2", CSS_ASPECT_RATIO_AUTO_RATIO, (3 * (1 << CSS_RADIX_POINT)), (2 * (1 << CSS_RADIX_POINT))},
+    {"aspect-ratio: 3/2 auto", CSS_ASPECT_RATIO_AUTO_RATIO, (3 * (1 << CSS_RADIX_POINT)), (2 * (1 << CSS_RADIX_POINT))},
+    {"aspect-ratio: 0/2", CSS_ASPECT_RATIO_RATIO, 0, (2 * (1 << CSS_RADIX_POINT))},
+    {"aspect-ratio: 2/0", CSS_ASPECT_RATIO_RATIO, (2 * (1 << CSS_RADIX_POINT)), 0},
+    {"aspect-ratio: -1/2", CSS_ASPECT_RATIO_AUTO, 0, 0},
+    {"aspect-ratio: 1/-2", CSS_ASPECT_RATIO_AUTO, 0, 0},
+    {"aspect-ratio: 1px/2", CSS_ASPECT_RATIO_AUTO, 0, 0},
+    {"aspect-ratio: 1/", CSS_ASPECT_RATIO_AUTO, 0, 0},
+    {"aspect-ratio: auto auto", CSS_ASPECT_RATIO_AUTO, 0, 0},
+    {"aspect-ratio: 1 2", CSS_ASPECT_RATIO_AUTO, 0, 0},
+    {"aspect-ratio: 2; aspect-ratio: initial", CSS_ASPECT_RATIO_AUTO, 0, 0},
+    {"aspect-ratio: 2; aspect-ratio: unset", CSS_ASPECT_RATIO_AUTO, 0, 0},
+    {"aspect-ratio: 2 !important; aspect-ratio: 3", CSS_ASPECT_RATIO_RATIO, (2 * (1 << CSS_RADIX_POINT)),
+        (1 * (1 << CSS_RADIX_POINT))},
+    {"--r: 3/2; aspect-ratio: var(--r)", CSS_ASPECT_RATIO_RATIO, (3 * (1 << CSS_RADIX_POINT)),
+        (2 * (1 << CSS_RADIX_POINT))},
+};
+
+START_TEST(test_aspect_ratio_parse)
+{
+    select_ctx ctx;
+    char css[200];
+    snprintf(css, sizeof(css), "* { %s; }", ratio_cases[_i].declaration);
+    const css_computed_style *style = select_style_from_css(css, &ctx);
+    css_fixed numerator = 0, denominator = 0;
+    ck_assert_int_eq(css_computed_aspect_ratio(style, &numerator, &denominator), ratio_cases[_i].type);
+    ck_assert_int_eq(numerator, ratio_cases[_i].numerator);
+    ck_assert_int_eq(denominator, ratio_cases[_i].denominator);
+    destroy_select_ctx(&ctx);
+}
+END_TEST
+
+START_TEST(test_aspect_ratio_dimensions)
+{
+    select_ctx ctx;
+    const css_computed_style *style = select_style_from_css(
+        "* { aspect-ratio: 2; height: 100px; box-sizing: border-box; padding: 10px; border: 2px solid; }", &ctx);
+    struct box box = {.type = BOX_BLOCK, .style = (css_computed_style *)style};
+    layout_find_dimensions(&unit_ctx, 500, -1, &box, style, &box.width, &box.height, NULL, NULL, NULL, NULL, box.margin,
+        box.padding, box.border);
+    ck_assert_int_eq(box.height, 76);
+    ck_assert_int_eq(box.width, 176);
+    ck_assert_int_eq(layout_ratio_dimension(&box, 176, true), 76);
+    ck_assert_int_eq(layout_ratio_dimension(&box, AUTO, true), AUTO);
+    ck_assert_int_eq(layout_ratio_dimension(&box, INT_MAX, false), INT_MAX);
+    destroy_select_ctx(&ctx);
+}
+END_TEST
+
+START_TEST(test_aspect_ratio_content_minimum)
+{
+    select_ctx ctx;
+    const css_computed_style *style = select_style_from_css(_i == 0 ? "* { aspect-ratio: 2; }"
+            : _i == 1                                               ? "* { aspect-ratio: 2; min-height: 0; }"
+                                                                    : "* { aspect-ratio: 2; overflow: hidden; }",
+        &ctx);
+    struct box box = {.type = BOX_BLOCK, .style = (css_computed_style *)style, .width = 200, .height = AUTO};
+    layout_prepare_aspect_ratio_height(&box);
+    ck_assert_int_eq(box.height, 100);
+    ck_assert(box.flags & ASPECT_RATIO_HEIGHT);
+    layout_ratio_content_height(&box, 150);
+    ck_assert_int_eq(box.height, _i == 0 ? 150 : 100);
+    destroy_select_ctx(&ctx);
+}
+END_TEST
+
+START_TEST(test_aspect_ratio_height_constraints)
+{
+    select_ctx ctx;
+    const css_computed_style *style = select_style_from_css(
+        "* { aspect-ratio: 2; height: 100px; min-height: 50%; max-height: calc(50% + 20px); "
+        "box-sizing: border-box; padding: 10px; border: 2px solid; }",
+        &ctx);
+    struct box parent = {.type = BOX_BLOCK,
+        .style = (css_computed_style *)style,
+        .width = 500,
+        .height = 300,
+        .flags = ASPECT_RATIO_HEIGHT};
+    struct box box = {.type = BOX_BLOCK, .style = (css_computed_style *)style, .parent = &parent};
+    int max_height;
+    struct css_size min_height;
+    layout_find_dimensions(&unit_ctx, 500, -1, &box, style, &box.width, &box.height, NULL, NULL, &max_height,
+        &min_height, box.margin, box.padding, box.border);
+    ck_assert_int_eq(min_height.type, CSS_SIZE_SET);
+    ck_assert_int_eq(min_height.value, 126);
+    ck_assert_int_eq(max_height, 146);
+    /* Min-height participates in the transfer from height to auto width. */
+    ck_assert_int_eq(box.width, 276);
+    destroy_select_ctx(&ctx);
+}
+END_TEST
+
+START_TEST(test_aspect_ratio_compose)
+{
+    select_ctx parent_ctx, child_ctx;
+    const css_computed_style *parent = select_style_from_css("* { aspect-ratio: 3/2; }", &parent_ctx);
+    const css_computed_style *child = select_style_from_css_node(
+        _i == 0 ? "* { aspect-ratio: inherit; }" : "* { }", &child_ctx, false);
+    css_computed_style *composed = NULL;
+    ck_assert_int_eq(css_computed_style_compose(parent, child, &unit_ctx, &composed), CSS_OK);
+    css_fixed width = 0, height = 0;
+    ck_assert_int_eq(
+        css_computed_aspect_ratio(composed, &width, &height), _i == 0 ? CSS_ASPECT_RATIO_RATIO : CSS_ASPECT_RATIO_AUTO);
+    if (_i == 0) {
+        ck_assert_int_eq(width, 3 * (1 << CSS_RADIX_POINT));
+        ck_assert_int_eq(height, 2 * (1 << CSS_RADIX_POINT));
+    }
+    css_computed_style_destroy(composed);
+    destroy_select_ctx(&child_ctx);
+    destroy_select_ctx(&parent_ctx);
+}
+END_TEST
+
 Suite *layout_calc_suite(void)
 {
     Suite *s = suite_create("LayoutCalc");
@@ -814,6 +942,11 @@ Suite *layout_calc_suite(void)
     tcase_add_test(tc_core, test_inset_inline_shorthand_sets_left_and_right);
     tcase_add_test(tc_core, test_inset_block_shorthand_sets_top_and_bottom);
 
+    tcase_add_loop_test(tc_core, test_aspect_ratio_parse, 0, sizeof(ratio_cases) / sizeof(ratio_cases[0]));
+    tcase_add_test(tc_core, test_aspect_ratio_dimensions);
+    tcase_add_test(tc_core, test_aspect_ratio_height_constraints);
+    tcase_add_loop_test(tc_core, test_aspect_ratio_compose, 0, 2);
+    tcase_add_loop_test(tc_core, test_aspect_ratio_content_minimum, 0, 3);
     suite_add_tcase(s, tc_core);
     return s;
 }

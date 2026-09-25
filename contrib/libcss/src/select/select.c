@@ -2857,6 +2857,10 @@ static void cascade_skip_property(css_style *style, css_code_t opv)
             if (value == MIN_HEIGHT_SET)
                 advance_bytecode(style, 2 * sizeof(css_code_t));
             break;
+        case CSS_PROP_ASPECT_RATIO:
+            if (value == ASPECT_RATIO_RATIO || value == ASPECT_RATIO_AUTO_RATIO)
+                advance_bytecode(style, 2 * sizeof(css_code_t));
+            break;
         case CSS_PROP_OPACITY:
             if (value == OPACITY_SET)
                 advance_bytecode(style, sizeof(css_code_t));

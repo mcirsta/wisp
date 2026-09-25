@@ -280,6 +280,9 @@ static void dump_computed_style(const css_computed_style *style, char *buf, size
     case CSS_ALIGN_ITEMS_INHERIT:
         wrote = snprintf(ptr, *len, "align-items: inherit\n");
         break;
+    case CSS_ALIGN_ITEMS_NORMAL:
+        wrote = snprintf(ptr, *len, "align-items: normal\n");
+        break;
     case CSS_ALIGN_ITEMS_STRETCH:
         wrote = snprintf(ptr, *len, "align-items: stretch\n");
         break;
@@ -307,6 +310,9 @@ static void dump_computed_style(const css_computed_style *style, char *buf, size
     switch (val) {
     case CSS_ALIGN_SELF_INHERIT:
         wrote = snprintf(ptr, *len, "align-self: inherit\n");
+        break;
+    case CSS_ALIGN_SELF_NORMAL:
+        wrote = snprintf(ptr, *len, "align-self: normal\n");
         break;
     case CSS_ALIGN_SELF_STRETCH:
         wrote = snprintf(ptr, *len, "align-self: stretch\n");

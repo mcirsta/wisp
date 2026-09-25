@@ -7,7 +7,7 @@ div { display: inline; }
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -124,7 +124,7 @@ div { display: inline-grid; }
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -244,7 +244,7 @@ p { display: block; }
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -368,7 +368,7 @@ div#foo { float: right; }
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -493,7 +493,7 @@ div p.green { float: left !important; }
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -618,7 +618,7 @@ div.moose > div + div { border-top-style: solid; }
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -743,7 +743,7 @@ div.moose > div + div { border-top-style: solid; }
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -858,7 +858,7 @@ div { color: currentColor; }
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -974,7 +974,7 @@ div:active { background-color: #bbc; }
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #ff000000
@@ -1090,7 +1090,7 @@ p:first-child { background-color: #bbc; }
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #ffbbbbcc
@@ -1205,7 +1205,7 @@ div { quotes: "a" "b" }
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -1325,7 +1325,7 @@ div p + p { background-attachment: fixed; }
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: fixed
 background-color: #00000000
@@ -1445,7 +1445,7 @@ div p + p { background-attachment: fixed; }
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -1566,7 +1566,7 @@ div p + p { background-attachment: fixed; }
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -1690,7 +1690,7 @@ div p + p { background-image: url("Sonic_the_Hedgehog.png"); background-position
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -1813,7 +1813,7 @@ div p + p { background-image: url("Sonic_the_Hedgehog.png"); background-repeat: 
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -1942,7 +1942,7 @@ td,th {display:table-cell;}
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -2071,7 +2071,7 @@ td,th {display:table-cell;}
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -2200,7 +2200,7 @@ td,th {display:table-cell;}
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -2333,7 +2333,7 @@ tr > td {border-top-width: thin;border-right-width: medium;border-bottom-width: 
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -2465,7 +2465,7 @@ tr > td {border-top-width: 0;border-right-width: 2em;border-bottom-width: thick;
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -2595,7 +2595,7 @@ td,th {display:table-cell;}
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -2724,7 +2724,7 @@ td,th {display:table-cell;}
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -2853,7 +2853,7 @@ td,th {display:table-cell;}
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -2982,7 +2982,7 @@ td,th {display:table-cell;}
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #ff1122ee
@@ -3111,7 +3111,7 @@ td,th {display:table-cell;}
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -3240,7 +3240,7 @@ td,th {display:table-cell;}
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -3369,7 +3369,7 @@ td,th {display:table-cell;}
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -3498,7 +3498,7 @@ td,th {display:table-cell;}
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -3627,7 +3627,7 @@ td,th {display:table-cell;}
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -3756,7 +3756,7 @@ td,th {display:table-cell;}
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -3885,7 +3885,7 @@ td,th {display:table-cell;}
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -4014,7 +4014,7 @@ td,th {display:table-cell;}
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -4143,7 +4143,7 @@ td,th {display:table-cell;}
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -4272,7 +4272,7 @@ td,th {display:table-cell;}
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -4401,7 +4401,7 @@ td,th {display:table-cell;}
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -4530,7 +4530,7 @@ td,th {display:table-cell;}
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -4659,7 +4659,7 @@ td,th {display:table-cell;}
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -4788,7 +4788,7 @@ td,th {display:table-cell;}
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -4917,7 +4917,7 @@ td,th {display:table-cell;}
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -5046,7 +5046,7 @@ td,th {display:table-cell;}
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -5175,7 +5175,7 @@ td,th {display:table-cell;}
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -5297,7 +5297,7 @@ div#foo p { letter-spacing: 300%; }
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -5419,7 +5419,7 @@ div#foo p { letter-spacing: 300px; }
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -5541,7 +5541,7 @@ div p { letter-spacing: horizontal-tb; }
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -5660,7 +5660,7 @@ p{column-count: 2; column-rule-color: #bbc; column-rule-style: solid; column-rul
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -5780,7 +5780,7 @@ p { display: block; break-after: avoid; break-before: column; }
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -5900,7 +5900,7 @@ p { display: block; break-after: avoid-page; break-before: always; }
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -6020,7 +6020,7 @@ p { display: block; break-after: avoid-page; break-before: always; break-inside:
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -6136,7 +6136,7 @@ div { box-sizing: inherit; }
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -6253,7 +6253,7 @@ div { box-sizing: border-box; }
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -7416,7 +7416,7 @@ div { flex: 2 3 10px; }
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -7532,7 +7532,7 @@ div { flex: auto; }
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -7648,7 +7648,7 @@ div { flex: none; }
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -7764,7 +7764,7 @@ div { flex: 0; }
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -7880,7 +7880,7 @@ div { flex: 0 0; }
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -7996,7 +7996,7 @@ div { flex: 0 0 0; }
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -8112,7 +8112,7 @@ div { flex: 3; }
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -8227,7 +8227,7 @@ div { flex: 3px; }
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -8342,7 +8342,7 @@ div { flex: 2 3em; }
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -8457,7 +8457,7 @@ div { flex: 20 30; }
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -8574,7 +8574,7 @@ div { flex: 3 3; }
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -8691,7 +8691,7 @@ div { flex-grow: 3; flex-shrink: 3; flex-basis: 3px; }
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -8806,7 +8806,7 @@ div { flex: 0 0 0; }
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -8923,7 +8923,7 @@ div { flex: none; }
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -9040,7 +9040,7 @@ p { flex: inherit; }
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -9157,7 +9157,7 @@ p { flex: inherit; }
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -9272,7 +9272,7 @@ div { flex-flow: nowrap; }
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -9387,7 +9387,7 @@ div { flex-flow: wrap; }
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -9502,7 +9502,7 @@ div { flex-flow: wrap-reverse; }
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -9617,7 +9617,7 @@ div { flex-flow: row; }
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -9732,7 +9732,7 @@ div { flex-flow: column; }
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -9847,7 +9847,7 @@ div { flex-flow: row-reverse; }
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -9962,7 +9962,7 @@ div { flex-flow: column-reverse; }
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -10077,7 +10077,7 @@ div { flex-flow: column-reverse wrap-reverse; }
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -10194,7 +10194,7 @@ p {flex-flow: inherit; }
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -10311,7 +10311,7 @@ p { flex-direction: inherit; flex-wrap: inherit; }
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -10426,7 +10426,7 @@ div { flex-basis: 4.5em; flex-grow: 2.37; flex-shrink: 0.899; }
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -10541,7 +10541,7 @@ div { justify-content: flex-start; }
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -10656,7 +10656,7 @@ div { justify-content: flex-end; }
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -10771,7 +10771,7 @@ div { justify-content: center; }
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -10886,7 +10886,7 @@ div { justify-content: space-between; }
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -11001,7 +11001,7 @@ div { justify-content: space-around; }
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -11116,7 +11116,7 @@ div { justify-content: space-evenly; }
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -11233,7 +11233,7 @@ div { justify-content: space-evenly; }
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -11350,7 +11350,7 @@ p { justify-content: inherit; }
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -11465,7 +11465,7 @@ div { order: 0; }
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -11580,7 +11580,7 @@ div { order: 5; }
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -11695,7 +11695,7 @@ div { order: -5; }
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -11812,7 +11812,7 @@ p { order: inherit; }
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -12159,7 +12159,7 @@ div { display: flex; }
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -12274,7 +12274,7 @@ div { display: inline-flex; }
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -12389,7 +12389,7 @@ div { width: 10px; }
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -12504,7 +12504,7 @@ div { width: 10ex; }
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -12619,7 +12619,7 @@ div { width: 10em; }
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -12734,7 +12734,7 @@ div { width: 10in; }
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -12849,7 +12849,7 @@ div { width: 10mm; }
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -12964,7 +12964,7 @@ div { width: 10pt; }
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -13079,7 +13079,7 @@ div { width: 10pc; }
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -13194,7 +13194,7 @@ div { width: 10em; }
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -13309,7 +13309,7 @@ div { width: 10ch; }
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -13424,7 +13424,7 @@ div { width: 10ch; }
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -13539,7 +13539,7 @@ div { width: 10rem; }
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -13654,7 +13654,7 @@ div { width: 10lh; }
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -13769,7 +13769,7 @@ div { width: 10rem; }
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -13884,7 +13884,7 @@ div { width: 10vh; }
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -13999,7 +13999,7 @@ div { width: 10vw; }
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -14114,7 +14114,7 @@ div { width: 10vi; }
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -14229,7 +14229,7 @@ div { width: 10vb; }
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -14344,7 +14344,7 @@ div { width: 10vmin; }
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -14459,7 +14459,7 @@ div { width: 10vmax; }
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -14574,7 +14574,7 @@ div { width: 10q; }
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -14689,7 +14689,7 @@ div { width: 10%; }
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -14823,7 +14823,7 @@ p { }
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -14938,7 +14938,7 @@ p { font: special-system-font }
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -15053,7 +15053,7 @@ div { position: sticky; }
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000

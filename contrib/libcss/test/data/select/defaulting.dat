@@ -5,7 +5,7 @@ div { display: block; }
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -122,7 +122,7 @@ div { display: initial; }
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -240,7 +240,7 @@ p { display: inherit; }
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -359,7 +359,7 @@ p { display: unset; }
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -474,7 +474,7 @@ div { font-style: italic; }
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -593,7 +593,7 @@ p { font-style: unset; }
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -711,7 +711,7 @@ div { display: table-cell; }
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -829,7 +829,7 @@ p { font-style: revert; }
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -947,7 +947,7 @@ p { display: revert; }
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -1062,7 +1062,7 @@ div { display: revert; }
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -1180,7 +1180,7 @@ div { display: revert; }
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -1300,7 +1300,7 @@ div { display: revert; }
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000
@@ -1420,7 +1420,7 @@ div { display: revert; }
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000

@@ -193,6 +193,13 @@ void nscss_dump_computed_style(FILE *stream, const css_computed_style *style)
 
     fprintf(stream, "{ ");
 
+    css_fixed ratio_width = 0, ratio_height = 0;
+    val = css_computed_aspect_ratio(style, &ratio_width, &ratio_height);
+    if (val == CSS_ASPECT_RATIO_RATIO || val == CSS_ASPECT_RATIO_AUTO_RATIO) {
+        fprintf(stream, "aspect-ratio: %s%g / %g ", val == CSS_ASPECT_RATIO_AUTO_RATIO ? "auto " : "",
+            FIXTOFLT(ratio_width), FIXTOFLT(ratio_height));
+    }
+
     /* background-attachment */
     val = css_computed_background_attachment(style);
     switch (val) {

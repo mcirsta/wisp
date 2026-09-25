@@ -179,6 +179,7 @@ add_library(css ${WISP_LIB_TYPE}
 	src/parse/propstrings.c
 	src/parse/font_face.c
 	src/parse/mq.c
+	src/parse/properties/aspect_ratio.c
 	src/parse/properties/azimuth.c
 	src/parse/properties/background.c
 	src/parse/properties/background_image.c

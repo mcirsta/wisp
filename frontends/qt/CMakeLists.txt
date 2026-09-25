@@ -102,6 +102,9 @@ if(WISP_QT_CAPTURE)
         add_test(NAME qt_render_capture
             COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_capture.py $<TARGET_FILE:wisp-qt>)
         set_tests_properties(qt_render_capture PROPERTIES TIMEOUT 60)
+        add_test(NAME qt_aspect_ratio
+            COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_aspect_ratio.py $<TARGET_FILE:wisp-qt>)
+        set_tests_properties(qt_aspect_ratio PROPERTIES TIMEOUT 30)
     endif()
 endif()
 

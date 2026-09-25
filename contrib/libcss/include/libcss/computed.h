@@ -246,6 +246,9 @@ uint8_t css_computed_margin_bottom(const css_computed_style *style, css_fixed_or
 
 uint8_t css_computed_margin_left(const css_computed_style *style, css_fixed_or_calc *length, css_unit *unit);
 
+/** Preferred width/height ratio; auto may defer to a replaced object's natural ratio. */
+uint8_t css_computed_aspect_ratio(const css_computed_style *style, css_fixed *width, css_fixed *height);
+
 uint8_t css_computed_background_attachment(const css_computed_style *style);
 
 uint8_t css_computed_border_collapse(const css_computed_style *style);

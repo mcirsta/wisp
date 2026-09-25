@@ -1,0 +1,41 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Preferred aspect ratio regression cases</title>
+<style>
+body { margin: 16px; font: 16px/20px sans-serif; }
+section { margin: 12px 0; border-top: 1px solid #999; }
+.sample { background: #bdd; }
+.row { display: flex; width: 300px; align-items: flex-start; }
+.grid { display: grid; width: 300px; grid-template-columns: 150px 150px; }
+</style>
+<h1>Preferred aspect ratios</h1>
+<p>Inspect the element IDs with compare_capture.py. Sizes are content-box CSS pixels unless stated otherwise.</p>
+<section>Width to height: 300 × 200<div id="block" class="sample" style="width:300px;aspect-ratio:3/2"></div></section>
+<section>Height to width: 240 × 120<div id="from-height" class="sample" style="height:120px;aspect-ratio:2"></div></section>
+<section>Both dimensions specified: 100 × 60<div id="both" class="sample" style="width:100px;height:60px;aspect-ratio:1"></div></section>
+<section>Border box: outer 200 × 100, content 176 × 76<div id="border-box" class="sample" style="box-sizing:border-box;width:200px;aspect-ratio:2;padding:10px;border:2px solid"></div></section>
+<section>Content box: content 200 × 100<div id="content-box" class="sample" style="width:200px;aspect-ratio:2;padding:10px;border:2px solid"></div></section>
+<section>Width constrained: 120 × 60<div id="max-width" class="sample" style="width:200px;max-width:120px;aspect-ratio:2"></div></section>
+<section>Height constrained: 200 × 70<div id="max-height" class="sample" style="width:200px;max-height:70px;aspect-ratio:2"></div></section>
+<section>Content minimum grows to 150px<div id="content-min" class="sample" style="width:100px;aspect-ratio:1"><div style="height:150px"></div></div></section>
+<section>Explicit minimum allows overflow: 100 × 100<div id="min-zero" class="sample" style="width:100px;aspect-ratio:1;min-height:0"><div style="height:150px"></div></div></section>
+<section>Scrollable ratio: 100 × 100<div id="scroll" class="sample" style="width:100px;aspect-ratio:1;overflow:hidden"><div style="height:150px"></div></div></section>
+<section>Percentage child: 200 × 50<div style="width:200px;aspect-ratio:2"><div id="percentage" class="sample" style="height:50%"></div></div></section>
+<section>Flex shrink: each 150 × 75<div class="row"><div id="flex-a" class="sample" style="width:200px;aspect-ratio:2;min-width:0"></div><div id="flex-b" class="sample" style="width:200px;aspect-ratio:2;min-width:0"></div></div></section>
+<section>Column flex ratio: 200 × 100<div id="column" class="sample" style="display:flex;flex-direction:column;width:200px;aspect-ratio:2;justify-content:flex-end"><div id="column-child" style="height:50%">50% child</div></div></section>
+<section>Column flex content minimum: 100 × 150<div id="column-content" class="sample" style="display:flex;flex-direction:column;width:100px;aspect-ratio:1"><div style="height:150px;flex-shrink:0"></div></div></section>
+<section>Grid ratio item: 150 × 75 beside taller item<div class="grid"><div id="grid-item" class="sample" style="aspect-ratio:2"></div><div style="height:100px"></div></div></section>
+<section>Explicit grid stretch transfers height to width: 200 × 100<div class="grid" style="align-items:stretch"><div id="grid-stretch" class="sample" style="aspect-ratio:2"></div><div style="height:100px"></div></div></section>
+<section>Absolute ratio: 200 × 100<div style="position:relative;height:100px;width:200px"><div id="absolute" class="sample" style="position:absolute;top:0;left:0;width:100%;aspect-ratio:2"></div></div></section>
+<section>Image override: 100 × 100<img id="image-ratio" style="width:100px;aspect-ratio:1" src="aspect-ratio-image.svg"></section>
+<section>Natural image with auto: 100 × 50<img id="image-auto" style="width:100px;aspect-ratio:auto 1" src="aspect-ratio-image.svg"></section>
+<section>Image without specified dimensions: 200 × 200<img id="image-intrinsic" style="aspect-ratio:1" src="aspect-ratio-image.svg"></section>
+<section>Custom property: 150 × 100<div id="variable" class="sample" style="--ratio:3/2;width:150px;aspect-ratio:var(--ratio)"></div></section>
+<section>Degenerate ratio stays auto: 100 × 20<div id="degenerate" class="sample" style="width:100px;aspect-ratio:0/1">Auto height</div></section>
+
+<section>Border-box height constraints: outer 200 × 80<div id="border-max-height" class="sample" style="width:200px;aspect-ratio:2;max-height:80px;box-sizing:border-box;padding:10px;border:2px solid"></div></section>
+<section>Flex transferred minimum: 200 × 100 overflows a 150px row<div class="row" style="width:150px"><div id="flex-transferred" class="sample" style="height:100px;aspect-ratio:2"></div></div></section>
+<section>Inline block from height: 200 × 100<div id="inline-ratio" class="sample" style="display:inline-block;height:100px;aspect-ratio:2"></div></section>
+<section>Grid container ratio: 200 × 100<div id="grid-container" class="sample" style="display:grid;width:200px;aspect-ratio:2"><div style="height:20px"></div></div></section>
+
+<section>Absolute ratio with both vertical offsets: 200 × 100<div style="position:relative;height:150px;width:200px"><div id="absolute-insets" class="sample" style="position:absolute;top:0;bottom:0;left:0;width:100%;aspect-ratio:2"></div></div></section>

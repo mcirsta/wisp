@@ -13,6 +13,8 @@
 #ifndef css_bytecode_opcodes_manual_h_
 #define css_bytecode_opcodes_manual_h_
 
+enum op_aspect_ratio { ASPECT_RATIO_AUTO = 0, ASPECT_RATIO_RATIO = 0x0080, ASPECT_RATIO_AUTO_RATIO = 0x0081 };
+
 enum op_azimuth {
     AZIMUTH_ANGLE = 0x0080,
 

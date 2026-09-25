@@ -335,6 +335,11 @@ void css__make_style_important(css_style *style)
                     offset += 2; /* length + units */
                 break;
 
+            case CSS_PROP_ASPECT_RATIO:
+                if (value == ASPECT_RATIO_RATIO || value == ASPECT_RATIO_AUTO_RATIO)
+                    offset += 2; /* numerator + denominator */
+                break;
+
             case CSS_PROP_OPACITY:
                 if (value == OPACITY_SET)
                     offset++; /* value */

@@ -831,6 +831,7 @@ static inline bool layout_flex__base_and_main_sizes(
             NSLOG(flex, DEEPDEBUG, "} END_FLEX_ITEM_AUTO_WIDTH_RESOLUTION");
         }
 
+        layout_prepare_aspect_ratio_height(b);
         if (!layout_flex_item(ctx, item, b->width)) {
             return false;
         }
@@ -853,6 +854,9 @@ static inline bool layout_flex__base_and_main_sizes(
         }
     }
 
+    if (item->base_size == AUTO && ctx->horizontal && b->height != AUTO && b->object == NULL) {
+        item->base_size = layout_ratio_dimension(b, b->height, false);
+    }
     if (item->base_size == AUTO) {
         if (ctx->horizontal == false) {
             NSLOG(flex, DEBUG, "box %p: setting base_size from b->height=%d", b, b->height);
@@ -869,10 +873,22 @@ static inline bool layout_flex__base_and_main_sizes(
          * size. An explicit minimum (including zero) never uses this floor.
          * CSS Flexbox §4.5 caps auto by definite preferred and maximum sizes. */
         int automatic_min = max(0, b->min_width.value - delta_outer_main);
+        if (b->height != AUTO && b->object == NULL) {
+            int cross_size = b->height;
+            if (item->max_cross >= 0)
+                cross_size = min(cross_size, item->max_cross);
+            if (item->min_cross.type == CSS_SIZE_SET)
+                cross_size = max(cross_size, item->min_cross.value);
+            int transferred = layout_ratio_dimension(b, cross_size, false);
+            if (transferred != AUTO)
+                automatic_min = max(automatic_min, transferred);
+        }
         if (css_computed_overflow_x(b->style) != CSS_OVERFLOW_VISIBLE) {
             automatic_min = 0;
         }
-        if (b->width != AUTO) {
+        css_fixed_or_calc preferred = (css_fixed_or_calc)0;
+        css_unit preferred_unit = CSS_UNIT_PX;
+        if (b->width != AUTO && css_computed_width(b->style, &preferred, &preferred_unit) == CSS_WIDTH_SET) {
             automatic_min = min(automatic_min, b->width);
         }
         if (item->max_main >= 0) {
@@ -1544,6 +1560,10 @@ static bool layout_flex__place_line_items_main(struct flex_ctx *ctx, struct flex
             NSLOG(flex, DEEPDEBUG, "ITEM[%zu]: width=%d target_main=%d delta_outer=%d", i, b->width,
                 item->target_main_size, lh__delta_outer_width(b));
 
+            if (b->flags & ASPECT_RATIO_HEIGHT) {
+                b->height = AUTO;
+            }
+            layout_prepare_aspect_ratio_height(b);
             if (!layout_flex_item(ctx, item, b->width)) {
                 return false;
             }
@@ -1935,6 +1955,16 @@ bool layout_flex(struct box *flex, int available_width, html_content *content)
         }
     }
 
+    if (!height_was_stretched) {
+        layout_prepare_aspect_ratio_height(flex);
+        if (flex->flags & ASPECT_RATIO_HEIGHT) {
+            if (max_height >= 0)
+                flex->height = min(flex->height, max_height);
+            if (min_height.type == CSS_SIZE_SET)
+                flex->height = max(flex->height, min_height.value);
+        }
+    }
+
     if (flex->height != AUTO) {
         resolved_height = flex->height;
     } else if (min_height.type == CSS_SIZE_SET && min_height.value > 0) {
@@ -1997,6 +2027,8 @@ bool layout_flex(struct box *flex, int available_width, html_content *content)
     if (flex->height == AUTO) {
         flex->height = ctx->horizontal ? ctx->cross_size : ctx->main_size;
     }
+
+    layout_ratio_content_height(flex, ctx->horizontal ? ctx->cross_size : ctx->main_size);
 
     /* TWO-PASS LAYOUT: Re-resolve percentage flex-basis against definite height
      * and apply flex-shrink algorithm. Only runs for column flex with % flex-basis. */

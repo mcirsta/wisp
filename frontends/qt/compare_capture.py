@@ -108,7 +108,7 @@ def inspect_chromium(cdp, ids, point):
     def describe(node):
         node_id = node["nodeId"]
         style = cdp.call("CSS.getComputedStyleForNode", nodeId=node_id)["computedStyle"]
-        wanted = ("display", "position", "box-sizing", "width", "height", "min-width", "max-width",
+        wanted = ("display", "position", "box-sizing", "aspect-ratio", "width", "height", "min-width", "max-width",
                   "min-height", "max-height", "overflow", "overflow-x", "overflow-y", "color",
                   "background-color", "font-family", "font-size", "font-weight", "line-height",
                   "flex-direction", "flex-wrap", "flex-grow", "flex-shrink", "flex-basis", "order",

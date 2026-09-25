@@ -110,7 +110,8 @@ typedef enum {
     IFRAME = 1 << 10, /* box contains an iframe */
     CONVERT_CHILDREN = 1 << 11, /* wanted children converting */
     IS_REPLACED = 1 << 12, /* box is a replaced element */
-    HEIGHT_STRETCHED = 1 << 13 /* height was set by parent's cross-axis stretch */
+    HEIGHT_STRETCHED = 1 << 13, /* height was set by parent's cross-axis stretch */
+    ASPECT_RATIO_HEIGHT = 1 << 14 /* auto height derived from the preferred ratio */
 } box_flags;
 
 

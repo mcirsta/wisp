@@ -6,7 +6,7 @@ div { grid-column-start: 2; grid-row-start: 3; }
 #errors
 #expected
 align-content: stretch
-align-items: stretch
+align-items: normal
 align-self: auto
 background-attachment: scroll
 background-color: #00000000

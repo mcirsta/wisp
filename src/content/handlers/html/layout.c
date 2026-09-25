@@ -156,6 +156,12 @@ static void layout_get_object_dimensions(const css_unit_ctx *unit_len_ctx, struc
     int eff_ratio_w = has_ratio_only ? ratio_w : intrinsic_width;
     int eff_ratio_h = has_ratio_only ? ratio_h : intrinsic_height;
 
+    css_fixed css_ratio_w = 0, css_ratio_h = 0;
+    uint8_t ratio_type = box->style ? css_computed_aspect_ratio(box->style, &css_ratio_w, &css_ratio_h)
+                                    : CSS_ASPECT_RATIO_AUTO;
+    bool css_ratio = layout_ratio_dimension(box, 0, true) != AUTO &&
+        !(ratio_type == CSS_ASPECT_RATIO_AUTO_RATIO && eff_ratio_w > 0 && eff_ratio_h > 0);
+
     /* DIAG: Log image dimensions before calculation */
     NSLOG(layout, DEBUG,
         "OBJ_DIM box %p: input w=%d h=%d intrinsic=%dx%d ratio=%dx%d has_ratio_only=%d cb_w=%d limits w[%d,%d] h[%d,%d]",
@@ -195,6 +201,10 @@ static void layout_get_object_dimensions(const css_unit_ctx *unit_len_ctx, struc
             *height = 150;
         }
 
+        if (css_ratio) {
+            *height = layout_ratio_dimension(box, *width, true);
+        }
+
         /* Apply min/max-width constraints */
         bool scaled = false;
         if (min_width.type == CSS_SIZE_SET && min_width.value > 0 && min_width.value > *width) {
@@ -205,8 +215,9 @@ static void layout_get_object_dimensions(const css_unit_ctx *unit_len_ctx, struc
             *width = max_width;
             scaled = true;
         }
-        if (scaled && eff_ratio_w != 0) {
-            *height = (*width * eff_ratio_h) / eff_ratio_w;
+        if (scaled && (css_ratio || eff_ratio_w != 0)) {
+            *height = css_ratio ? layout_ratio_dimension(box, *width, true)
+                                : (int)((int64_t)*width * eff_ratio_h / eff_ratio_w);
         }
 
         /* Apply min/max-height constraints */
@@ -219,13 +230,16 @@ static void layout_get_object_dimensions(const css_unit_ctx *unit_len_ctx, struc
             *height = max_height;
             scaled = true;
         }
-        if (scaled && eff_ratio_h != 0) {
-            *width = (*height * eff_ratio_w) / eff_ratio_h;
+        if (scaled && (css_ratio || eff_ratio_h != 0)) {
+            *width = css_ratio ? layout_ratio_dimension(box, *height, false)
+                               : (int)((int64_t)*height * eff_ratio_w / eff_ratio_h);
         }
 
     } else if (*width == AUTO) {
         /* Have given height; width is calculated from ratio */
-        if (eff_ratio_h != 0)
+        if (css_ratio)
+            *width = layout_ratio_dimension(box, *height, false);
+        else if (eff_ratio_h != 0)
             *width = (*height * eff_ratio_w) / eff_ratio_h;
         else
             *width = intrinsic_width;
@@ -243,7 +257,9 @@ static void layout_get_object_dimensions(const css_unit_ctx *unit_len_ctx, struc
         if (max_width >= 0 && max_width < *width)
             *width = max_width;
 
-        if (eff_ratio_w != 0)
+        if (css_ratio)
+            *height = layout_ratio_dimension(box, *width, true);
+        else if (eff_ratio_w != 0)
             *height = (*width * eff_ratio_h) / eff_ratio_w;
         else
             *height = intrinsic_height;
@@ -255,7 +271,7 @@ static void layout_get_object_dimensions(const css_unit_ctx *unit_len_ctx, struc
         if (box->style) {
             object_fit = css_computed_object_fit(box->style);
         }
-        bool preserve_box_width = (object_fit != CSS_OBJECT_FIT_FILL);
+        bool preserve_box_width = css_ratio || (object_fit != CSS_OBJECT_FIT_FILL);
 
         /* CSS 2.1 Section 10.7: Apply min/max-height constraints.
          * If tentative height exceeds max-height, use max-height.
@@ -1408,7 +1424,7 @@ static inline bool box_has_in_flow_block_children(const struct box *box)
  */
 static inline bool box_prevents_collapse_through(const struct box *box)
 {
-    if (box->flags & MAKE_HEIGHT)
+    if (box->flags & (MAKE_HEIGHT | ASPECT_RATIO_HEIGHT))
         return true;
     if (box_has_vertical_separator(box))
         return true;
@@ -1846,6 +1862,13 @@ static void layout_block_find_dimensions(
 
     box->width = layout_solve_width(box, available_width, width, lm, rm, max_width, min_width.value);
     box->height = height;
+    layout_prepare_aspect_ratio_height(box);
+    if (box->flags & ASPECT_RATIO_HEIGHT) {
+        if (max_height >= 0)
+            box->height = min(box->height, max_height);
+        if (min_height.type == CSS_SIZE_SET)
+            box->height = max(box->height, min_height.value);
+    }
 
     if (margin[TOP] == AUTO)
         margin[TOP] = 0;
@@ -2463,7 +2486,8 @@ static bool layout_apply_minmax_height(const css_unit_ctx *unit_len_ctx, struct 
 
             if (unit == CSS_UNIT_PCT || unit == CSS_UNIT_CALC) {
                 if (containing_block && containing_block->height != AUTO &&
-                    (css_computed_position(box->style) == CSS_POSITION_ABSOLUTE || htype == CSS_HEIGHT_SET)) {
+                    (css_computed_position(box->style) == CSS_POSITION_ABSOLUTE || htype == CSS_HEIGHT_SET ||
+                        (containing_block->flags & ASPECT_RATIO_HEIGHT))) {
                     /* Box is absolutely positioned or its containing block has a valid
                      * specified height. (CSS 2.1 Section 10.5) */
                     available_height = containing_block->height;
@@ -2474,6 +2498,9 @@ static bool layout_apply_minmax_height(const css_unit_ctx *unit_len_ctx, struct 
                 int avail = (unit == CSS_UNIT_PCT || unit == CSS_UNIT_CALC) ? available_height : -1;
                 if (!lh__length_to_px(box->style, unit_len_ctx, avail, value, unit, &h)) {
                     h = box->height;
+                } else {
+                    int containing_width = containing_block ? containing_block->width : box->width;
+                    layout_handle_box_sizing(unit_len_ctx, box, containing_width, false, &h);
                 }
                 if (h < box->height) {
                     box->height = h;
@@ -2488,7 +2515,8 @@ static bool layout_apply_minmax_height(const css_unit_ctx *unit_len_ctx, struct 
 
             if (unit == CSS_UNIT_PCT || unit == CSS_UNIT_CALC) {
                 if (containing_block && containing_block->height != AUTO &&
-                    (css_computed_position(box->style) == CSS_POSITION_ABSOLUTE || htype == CSS_HEIGHT_SET)) {
+                    (css_computed_position(box->style) == CSS_POSITION_ABSOLUTE || htype == CSS_HEIGHT_SET ||
+                        (containing_block->flags & ASPECT_RATIO_HEIGHT))) {
                     /* Box is absolutely positioned or its containing block has a valid
                      * specified height. (CSS 2.1 Section 10.5) */
                     available_height = containing_block->height;
@@ -2499,6 +2527,9 @@ static bool layout_apply_minmax_height(const css_unit_ctx *unit_len_ctx, struct 
                 int avail = (unit == CSS_UNIT_PCT || unit == CSS_UNIT_CALC) ? available_height : -1;
                 if (!lh__length_to_px(box->style, unit_len_ctx, avail, value, unit, &h)) {
                     h = box->height;
+                } else {
+                    int containing_width = containing_block ? containing_block->width : box->width;
+                    layout_handle_box_sizing(unit_len_ctx, box, containing_width, false, &h);
                 }
                 if (h > box->height) {
                     box->height = h;
@@ -2765,6 +2796,7 @@ static void layout_float_find_dimensions(
 
     box->width = width;
     box->height = height;
+    layout_prepare_aspect_ratio_height(box);
 
     if (margin[TOP] == AUTO)
         margin[TOP] = 0;
@@ -3642,6 +3674,10 @@ bool layout_block_context(struct box *block, int viewport_height, html_content *
         return true;
     }
 
+    if (block->height == AUTO) {
+        layout_prepare_aspect_ratio_height(block);
+    }
+
     /* special case if the block contains an radio button or checkbox */
     if (block->gadget && (block->gadget->type == GADGET_RADIO || block->gadget->type == GADGET_CHECKBOX)) {
         /* form checkbox or radio button
@@ -4096,8 +4132,8 @@ bool layout_block_context(struct box *block, int viewport_height, html_content *
                     }
                 }
                 if (box->type == BOX_BLOCK &&
-                    ((box->flags & MAKE_HEIGHT) || has_min_height || box->padding[BOTTOM] != 0 ||
-                        box->border[BOTTOM].width != 0)) {
+                    ((box->flags & (MAKE_HEIGHT | ASPECT_RATIO_HEIGHT)) || has_min_height ||
+                        box->padding[BOTTOM] != 0 || box->border[BOTTOM].width != 0)) {
 
                     margin_collapse = NULL;
                     in_margin = false;
@@ -4109,8 +4145,10 @@ bool layout_block_context(struct box *block, int viewport_height, html_content *
 
                     if (box->type == BOX_BLOCK)
                         layout_block_add_scrollbar(box, BOTTOM);
-                } else
+                } else {
+                    layout_ratio_content_height(box, y - box->padding[TOP]);
                     cy += box->height - (y - box->padding[TOP]);
+                }
 
                 /* Apply any min-height and max-height to
                  * boxes in normal flow */
@@ -4188,6 +4226,8 @@ bool layout_block_context(struct box *block, int viewport_height, html_content *
         if (block->type == BOX_BLOCK)
             layout_block_add_scrollbar(block, BOTTOM);
     }
+
+    layout_ratio_content_height(block, cy - block->padding[TOP]);
 
     if (block->style && css_computed_position(block->style) != CSS_POSITION_ABSOLUTE) {
         /* Block is in normal flow */
@@ -4966,6 +5006,10 @@ static bool layout_absolute(struct box *box, struct box *containing_block, int c
         if (!layout_grid(box, width, content))
             return false;
         box->float_container = NULL;
+    }
+
+    if (height == AUTO && (box->flags & ASPECT_RATIO_HEIGHT)) {
+        height = box->height;
     }
 
     /* 10.6.4 */

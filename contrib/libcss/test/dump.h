@@ -488,6 +488,7 @@ static const char *opcode_names[] = {
     "object-fit",
     "object-position",
     "transform",
+    [CSS_PROP_ASPECT_RATIO] = "aspect-ratio",
 };
 
 static void dump_css_fixed(css_fixed f, char **ptr)
@@ -878,6 +879,9 @@ void dump_bytecode(css_style *style, char **ptr, uint32_t depth)
                 break;
             case CSS_PROP_ALIGN_ITEMS:
                 switch (value) {
+                case ALIGN_ITEMS_NORMAL:
+                    *ptr += sprintf(*ptr, "normal");
+                    break;
                 case ALIGN_ITEMS_STRETCH:
                     *ptr += sprintf(*ptr, "stretch");
                     break;
@@ -897,6 +901,9 @@ void dump_bytecode(css_style *style, char **ptr, uint32_t depth)
                 break;
             case CSS_PROP_ALIGN_SELF:
                 switch (value) {
+                case ALIGN_SELF_NORMAL:
+                    *ptr += sprintf(*ptr, "normal");
+                    break;
                 case ALIGN_SELF_STRETCH:
                     *ptr += sprintf(*ptr, "stretch");
                     break;
@@ -2110,6 +2117,21 @@ void dump_bytecode(css_style *style, char **ptr, uint32_t depth)
                 case MIN_HEIGHT_AUTO:
                     *ptr += sprintf(*ptr, "auto");
                     break;
+                }
+                break;
+            case CSS_PROP_ASPECT_RATIO:
+                if (value == ASPECT_RATIO_AUTO || value == ASPECT_RATIO_AUTO_RATIO)
+                    *ptr += sprintf(*ptr, "auto");
+                if (value == ASPECT_RATIO_RATIO || value == ASPECT_RATIO_AUTO_RATIO) {
+                    css_fixed numerator = *((css_fixed *)bytecode);
+                    ADVANCE(sizeof(numerator));
+                    css_fixed denominator = *((css_fixed *)bytecode);
+                    ADVANCE(sizeof(denominator));
+                    if (value == ASPECT_RATIO_AUTO_RATIO)
+                        *ptr += sprintf(*ptr, " ");
+                    dump_number(numerator, ptr);
+                    *ptr += sprintf(*ptr, " / ");
+                    dump_number(denominator, ptr);
                 }
                 break;
             case CSS_PROP_OPACITY:
