@@ -349,8 +349,11 @@ static void monkey_run(void)
             DWORD avail = 0;
             HANDLE hIn = GetStdHandle(STD_INPUT_HANDLE);
             if (hIn != INVALID_HANDLE_VALUE) {
-                if (PeekNamedPipe(hIn, NULL, 0, NULL, &avail, NULL) && avail > 0) {
-                    monkey_process_command();
+                if (PeekNamedPipe(hIn, NULL, 0, NULL, &avail, NULL)) {
+                    if (avail > 0 && !monkey_process_command())
+                        monkey_done = true;
+                } else if (GetLastError() == ERROR_BROKEN_PIPE) {
+                    monkey_done = true;
                 }
             }
         }
@@ -361,7 +364,8 @@ static void monkey_run(void)
             monkey_done = true;
         } else if (rdy_fd > 0) {
             if (FD_ISSET(0, &read_fd_set)) {
-                monkey_process_command();
+                if (!monkey_process_command())
+                    monkey_done = true;
             }
         }
 #endif

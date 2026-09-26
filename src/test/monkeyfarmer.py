@@ -32,6 +32,8 @@ import socket
 import subprocess
 import time
 import errno
+import queue
+import shutil
 import sys
 
 class StderrEcho(threading.Thread):
@@ -64,24 +66,19 @@ class StdoutReader(threading.Thread):
             line = self.stream.readline()
             if not line:
                 break
-            try:
-                s = line.decode('utf-8')
-            except UnicodeDecodeError:
-                s = line.decode('utf-8', 'replace')
-            sys.stderr.write("{}".format(s))
             self.on_line(line)
 
 
 class MonkeyFarmer:
 
-    def __init__(self, monkey_cmd, monkey_env, online, quiet=False, *, wrapper=None):
+    def __init__(self, monkey_cmd, monkey_env, online, quiet=False, *, wrapper=None, timeout=30):
         if wrapper is not None:
             new_cmd = list(wrapper)
             new_cmd.extend(monkey_cmd)
             monkey_cmd = new_cmd
 
         exe_path = monkey_cmd[0] if isinstance(monkey_cmd, (list, tuple)) else monkey_cmd
-        if not os.path.isfile(exe_path):
+        if shutil.which(exe_path) is None:
             sys.stderr.write("ERROR: nsmonkey executable not found: {}\n".format(exe_path))
             sys.stderr.write("       Use a valid path, e.g. build-ninja\\frontends\\monkey\\nsmonkey.exe\n")
             raise FileNotFoundError(exe_path)
@@ -103,21 +100,32 @@ class MonkeyFarmer:
         self.stdout = self.monkey.stdout
         self.stderr = self.monkey.stderr
 
-        self.err_echo = StderrEcho(self.stderr)
-        self.stdout_reader = StdoutReader(self.stdout, self._on_stdout_line)
-
         self.buffer = b""
         self.incoming = b""
-        self.lines = []
+        self.lines = queue.Queue()
         self.scheduled = []
         self.deadmonkey = False
         self.online = online
         self.quiet = quiet
         self.discussion = []
         self.maybe_slower = wrapper is not None
+        self.deadline = time.monotonic() + timeout
+        # Initialise shared state before the reader threads can publish output.
+        self.err_echo = StderrEcho(self.stderr)
+        self.stdout_reader = StdoutReader(self.stdout, self.lines.put)
 
-    def _on_stdout_line(self, line):
-        self.lines.append(line)
+    def close(self):
+        """Reap the child on success, assertion failure or timeout."""
+        self.stdin.close()
+        try:
+            self.monkey.wait(timeout=2)
+        except subprocess.TimeoutExpired:
+            self.monkey.kill()
+            self.monkey.wait()
+        self.stdout_reader.join(timeout=2)
+        self.err_echo.join(timeout=2)
+        self.stdout.close()
+        self.stderr.close()
 
     def _pump_stdin(self):
         if len(self.buffer) > 0:
@@ -128,8 +136,8 @@ class MonkeyFarmer:
                     self.buffer = self.buffer[sent:]
                 else:
                     self.buffer = b""
-            except BrokenPipeError:
-                self.deadmonkey = True
+            except BrokenPipeError as exc:
+                raise RuntimeError("Monkey closed its command stream") from exc
 
     def tell_monkey(self, *args):
         cmd = (" ".join(args))
@@ -161,67 +169,69 @@ class MonkeyFarmer:
         self.scheduled = [x for x in self.scheduled if x[1] != event]
 
     def loop(self, once=False):
-        if len(self.lines) > 0:
-            self.monkey_says(self.lines.pop(0))
-            if once:
-                return
-        while not self.deadmonkey:
+        while True:
+            if time.monotonic() >= self.deadline:
+                raise TimeoutError("Monkey test timed out waiting for an event")
+            if self.deadmonkey:
+                raise RuntimeError("Monkey exited while waiting for an event")
             now = time.time()
-            while len(self.scheduled) > 0 and now >= self.scheduled[0][0]:
-                func = self.scheduled[0][1]
-                self.scheduled.pop(0)
+            while self.scheduled and now >= self.scheduled[0][0]:
+                _, func = self.scheduled.pop(0)
                 func(self)
                 now = time.time()
             self._pump_stdin()
-            if self.monkey.poll() is not None and not self.deadmonkey:
-                self.deadmonkey = True
-                self.lines.append("GENERIC EXIT {}".format(
-                    self.monkey.returncode).encode('utf-8'))
-            if len(self.lines) > 0:
-                self.monkey_says(self.lines.pop(0))
-                if once or self.deadmonkey:
+            status = self.monkey.poll()
+            if status is not None:
+                # Drain final output before reporting exit, including FINISHED.
+                self.stdout_reader.join(timeout=1)
+            try:
+                line = self.lines.get_nowait()
+            except queue.Empty:
+                if status is not None:
+                    self.deadmonkey = True
+                    self.monkey_says(f"GENERIC EXIT {status}".encode())
                     return
-            timeout = 0.01
-            if len(self.scheduled) > 0:
-                next_event = self.scheduled[0][0]
-                timeout = max(0.0, min(next_event - now, 0.05))
-            time.sleep(timeout)
+            else:
+                self.monkey_says(line)
+                if once:
+                    return
+                continue
+            time.sleep(0.01)
+            # Allow callers' startup/shutdown deadlines to run during silence.
+            if once:
+                return
 
 
 class Browser:
 
     # pylint: disable=locally-disabled, too-many-instance-attributes, dangerous-default-value, invalid-name
 
-    def __init__(self, monkey_cmd=["./nsmonkey"], monkey_env=None, quiet=False, *, wrapper=None):
+    def __init__(self, monkey_cmd=["./nsmonkey"], monkey_env=None, quiet=False, *, wrapper=None, timeout=30):
         self.farmer = MonkeyFarmer(
             monkey_cmd=monkey_cmd,
             monkey_env=monkey_env,
             online=self.on_monkey_line,
             quiet=quiet,
-            wrapper=wrapper)
+            wrapper=wrapper,
+            timeout=timeout)
         self.windows = {}
         self.logins = {}
         self.current_draw_target = None
         self.started = False
         self.stopped = False
         self.launchurl = None
-        now = time.time()
-        timeout = now + 1
+        startup_deadline = time.monotonic() + (10 if wrapper is not None else 5)
 
         try:
-            import sys
-            if sys.platform.startswith('win'):
-                timeout = now + 5
-        except Exception:
-            pass
-
-        if wrapper is not None:
-            timeout = now + 10
-
-        while not self.started:
-            self.farmer.loop(once=True)
-            if time.time() > timeout:
-                break
+            while not self.started and not self.stopped:
+                self.farmer.loop(once=True)
+                if time.monotonic() > startup_deadline:
+                    raise TimeoutError("Monkey did not report STARTED")
+            if not self.started:
+                raise RuntimeError("Monkey exited before startup completed")
+        except BaseException:
+            self.farmer.close()
+            raise
 
     def pass_options(self, *opts):
         if len(opts) > 0:
@@ -238,15 +248,15 @@ class Browser:
 
     def quit_and_wait(self):
         self.quit()
-        deadline = time.time() + 5
-        while (not self.stopped) and (time.time() < deadline):
+        deadline = time.monotonic() + 5
+        while not self.stopped and time.monotonic() < deadline:
             self.farmer.loop(once=True)
-            try:
-                if self.farmer.monkey.poll() is not None:
-                    return True
-            except Exception:
-                pass
-        return self.stopped
+        if not self.stopped:
+            raise TimeoutError("Monkey did not finish shutting down")
+        status = self.farmer.monkey.wait(timeout=5)
+        if status != 0:
+            raise RuntimeError(f"Monkey exited with code {status}")
+        return True
 
     def handle_GENERIC(self, what, *args):
         if what == 'STARTED':

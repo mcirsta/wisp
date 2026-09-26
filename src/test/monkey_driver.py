@@ -27,6 +27,8 @@ import sys
 import getopt
 import time
 import yaml
+import tempfile
+from pathlib import Path
 
 from monkeyfarmer import Browser
 
@@ -129,15 +131,8 @@ def parse_argv(argv):
 
 def load_test_plan(path):
 
-    # pylint: disable=locally-disabled, broad-except
-
-    plan = []
-    with open(path, 'r') as stream:
-        try:
-            plan = (yaml.load(stream, Loader=yaml.CSafeLoader))
-        except Exception as exc:
-            print(exc)
-    return plan
+    with open(path, 'r', encoding='utf-8') as stream:
+        return yaml.safe_load(stream)
 
 
 def get_indent(ctx):
@@ -201,6 +196,9 @@ def run_test_step_action_launch(ctx, step):
 
     # build command line switches list
     monkey_cmd = [ctx["monkey"]]
+    for option, filename in (("cookie_file", "cookies"), ("cookie_jar", "cookies"),
+                             ("url_file", "urls"), ("disc_cache_path", "cache")):
+        monkey_cmd.append(f"--{option}={ctx['profile'] / filename}")
     for option in step.get('launch-options', []):
         monkey_cmd.append("--{}".format(option))
     print(get_indent(ctx) + "        " + "Command line: " + repr(monkey_cmd))
@@ -218,12 +216,8 @@ def run_test_step_action_launch(ctx, step):
         monkey_cmd=monkey_cmd,
         monkey_env=monkey_env,
         quiet=True,
-        wrapper=ctx.get("wrapper"))
-    # Ensure STARTED is observed before asserting
-    import time as _time
-    _deadline = _time.time() + 2
-    while (not ctx['browser'].started) and (not ctx['browser'].stopped) and (_time.time() < _deadline):
-        ctx['browser'].farmer.loop(once=True)
+        wrapper=ctx.get("wrapper"),
+        timeout=max(0.001, ctx['deadline'] - time.monotonic()))
     assert_browser(ctx)
     ctx['windows'] = dict()
 
@@ -264,6 +258,8 @@ def run_test_step_action_navigate(ctx, step):
     assert_browser(ctx)
     if 'url' in step.keys():
         url = step['url']
+    elif 'path' in step:
+        url = (ctx['test_dir'] / step['path']).resolve().as_uri()
     elif 'repeaturl' in step.keys():
         repeat = ctx['repeats'].get(step['repeaturl'])
         assert repeat is not None
@@ -412,9 +408,9 @@ def run_test_step_action_click(ctx, step):
             if x is not None:
                 assert False, "Found more than one thing to click on, oh well"
             bmap = int(target['bitmap'])
-            assert bmap < 0 or bmap >= len(bitmaps)
-            x = bitmaps[bmap][0] + bitmaps[bmap][2] / 2
-            y = bitmaps[bmap][1] + bitmaps[bmap][3] / 2
+            assert 0 <= bmap < len(bitmaps)
+            x = bitmaps[bmap][0] + bitmaps[bmap][2] // 2
+            y = bitmaps[bmap][1] + bitmaps[bmap][3] // 2
         elif 'text' in target:
             if x is not None:
                 assert False, "Found more than one thing to click on, oh well"
@@ -448,7 +444,9 @@ def run_test_step_action_plot_check(ctx, step):
             # big area and have the browser clip it
             area=["0","0","1000","1000000"]
         else:
-            area = [step["area"]]
+            value = step['area']
+            area = value.split() if isinstance(value, str) else [str(n) for n in value]
+            assert len(area) == 4, "Plot area requires x0 y0 x1 y1"
     else:
         area = None
 
@@ -603,8 +601,10 @@ def run_test_step_action_page_info_state(ctx, step):
 def run_test_step_action_quit(ctx, step):
     print(get_indent(ctx) + "Action: " + step["action"])
     assert_browser(ctx)
-    browser = ctx.pop('browser')
+    browser = ctx['browser']
     assert browser.quit_and_wait()
+    browser.farmer.close()
+    ctx.pop('browser')
     # clean up context as all windows have gone away after browser quit
     ctx.pop('windows')
 
@@ -638,6 +638,8 @@ STEP_HANDLERS = {
 
 
 def run_test_step(ctx, step):
+    if time.monotonic() >= ctx['deadline']:
+        raise TimeoutError("Monkey test exceeded its time limit")
     STEP_HANDLERS[step["action"]](ctx, step)
 
 
@@ -651,7 +653,26 @@ def walk_test_plan(ctx, plan):
 
 def run_test_plan(ctx, plan):
     print_test_plan_info(ctx, plan)
-    walk_test_plan(ctx, plan)
+    timeout = float(plan.get('timeout', 30))
+    if not 0 < timeout < float('inf'):
+        raise ValueError("Test timeout must be a finite positive number")
+    ctx['deadline'] = time.monotonic() + timeout
+    ctx.setdefault('test_dir', Path.cwd())
+    with tempfile.TemporaryDirectory(prefix='wisp-monkey-') as profile:
+        ctx['profile'] = Path(profile)
+        try:
+            walk_test_plan(ctx, plan)
+        except BaseException:
+            browser = ctx.get('browser')
+            if browser is not None:
+                print("Recent Monkey commands/events:", file=sys.stderr)
+                for direction, line in browser.farmer.discussion[-20:]:
+                    print(direction, line.rstrip(), file=sys.stderr)
+            raise
+        finally:
+            browser = ctx.pop('browser', None)
+            if browser is not None:
+                browser.farmer.close()
 
 
 def run_preloaded_test(path_monkey, plan):
@@ -667,6 +688,7 @@ def main(argv):
     plan = load_test_plan(path_test)
     ctx["monkey"] = path_monkey
     ctx["wrapper"] = wrapper
+    ctx['test_dir'] = Path(path_test).resolve().parent
     run_test_plan(ctx, plan)
 
 

@@ -58,7 +58,7 @@ void monkey_free_handlers(void)
     }
 }
 
-void monkey_process_command(void)
+bool monkey_process_command(void)
 {
     char buffer[PATH_MAX];
     int argc = 0;
@@ -68,15 +68,15 @@ void monkey_process_command(void)
     char **nargv;
 
     if (fgets(buffer, PATH_MAX, stdin) == NULL) {
-        return;
+        return false;
     }
 
-    /* remove newline */
-    buffer[strlen(buffer) - 1] = '\0';
+    /* The last command may have no trailing newline. */
+    buffer[strcspn(buffer, "\r\n")] = '\0';
 
     argv = malloc(sizeof *argv);
     if (argv == NULL) {
-        return;
+        return true;
     }
     argc = 1;
     *argv = buffer;
@@ -111,4 +111,5 @@ void monkey_process_command(void)
     }
 
     free(argv);
+    return true;
 }

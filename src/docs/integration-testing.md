@@ -12,80 +12,57 @@ websites and rendering the contents etc.)
 A test is written as a set of operations in a yaml file. These files
 are parsed and executed by the monkey driver script.
 
-There are very few tests within the Wisp repository. The large
-majority of integration tests are instead held within the
-[wisp-test](http://source.netsurf-browser.org/netsurf-test.git/)
-repository.
+The maintained local suite uses only repository fixtures and built-in resources.
+It covers startup, shutdown, missing resources, images, text/image links, reload,
+and loading/redrawing the flex, aspect-ratio and background-layer pages. These
+are integration smoke tests: Monkey's approximate font metrics and text-only
+plotter cannot validate visual rendering. Use the [Qt capture tools](../../frontends/qt/CAPTURE.md)
+for screenshot and box-geometry comparisons.
 
-To allow more effective use of these tests additional infrastructure
-has been constructed to allow groupings of tests to be run. This is
-used extensively by the CI system to perform integration testing on
-every commit.
+# Building and running
 
-The infrastructure also provides for special CGI scripts which have
-known behaviours such as delays or returning specific content to
-extend test capabilities.
+Python 3 and PyYAML are required by the YAML runner. Enable tests and Monkey in
+an existing build, or make a separate build without Qt:
 
+```sh
+cmake -S . -B build-monkey -G Ninja -DCMAKE_BUILD_TYPE=Release \
+  -DWISP_BUILD_MONKEY_FRONTEND=ON -DWISP_BUILD_QT_FRONTEND=OFF \
+  -DWISP_ENABLE_TESTS=ON -DWISP_ENABLE_LIBCSS_TESTS=OFF
+cmake --build build-monkey --target nsmonkey
+ctest --test-dir build-monkey -L monkey --output-on-failure
+```
 
-# Running a test
+The general test build also requires Check, as described in the build
+instructions. Each Monkey test has a CTest timeout. Driver lifecycle checks
+exercise EOF, commands without a final newline, timeout cleanup and final events.
 
-An individual test can be run using the monkey_driver.py python script
-from within the Wisp repository
+Run one YAML test directly:
 
-    $ make TARGET=monkey
-    $ ./test/monkey_driver.py -m ./nsmonkey -t test/monkey-tests/start-stop.yaml
+```sh
+python3 src/test/monkey_driver.py -m build-monkey/frontends/monkey/nsmonkey \
+  -t src/test/monkey-tests/local-navigation.yaml
+```
 
-The command actually executed can be augmented using the wrapper
-switch, this allows the test to be run under a debugger or profiler.
+Tests use temporary cookie, URL database and disk-cache files, removed after the
+child exits. Launch options in a test can override these paths deliberately.
+The runner closes and reaps the browser on failures and prints recent protocol
+events. Tests have a 30-second deadline by default; set a top-level `timeout`
+(in seconds) for longer runs. `launch-options: [enable_javascript=0]` disables
+JavaScript from startup.
 
-For example to wrap execution under valgrind memory checker
+A debugger or profiler can wrap the browser with `-w`, for example:
 
-    $ ./test/monkey_driver.py -m ./nsmonkey -w 'valgrind -v --track-origins=yes' -t test/monkey-tests/start-stop.yaml
+```sh
+python3 src/test/monkey_driver.py -m build-monkey/frontends/monkey/nsmonkey \
+  -w 'valgrind --error-exitcode=1' -t src/test/monkey-tests/start-stop.yaml
+```
 
+# Legacy network tests
 
-# Running more than one test
-
-Each test is a member of a group and the tests within each group are
-run together. Groups are listed within division index files. A group
-of tests may occur within more than one division.
-
-To run the integration tests the monkey-see-monkey-do python script is
-used. It downloads the test plan for a division from the Wisp test
-infrastructure and executes it.
-
-    $ ./test/monkey-see-monkey-do
-    Fetching tests...
-    Parsing tests...
-    Running tests...
-    Start group: initial
-      [ Basic checks that the browser can start and stop ]
-      => Run test: start-stop-no-js.yaml
-      => Run test: basic-navigation.yaml
-      => Run test: start-stop.yaml
-    Start group: no-networking
-      [ Tests that require no networking ]
-      => Run test: resource-scheme.yaml
-    Start group: ecmascript
-      [ ECMAScript tests ]
-    PASS
-
-If no division is specified on the command line the "default" division
-is used. Other divisions are specified with the d switch for example
-to specify the "short-internet" division:
-
-    $ ./test/monkey-see-monkey-do -d short-internet
-
-Additionally the g switch allows the limiting of tests within a single
-group to be executed.
-
-    $ ./test/monkey-see-monkey-do -g no-networking
-    Fetching tests...
-    Parsing tests...
-    Running tests...
-    Start group: no-networking
-      [ Tests that require no networking ]
-      => Run test: resource-scheme.yaml
-    PASS
+The other YAML files and `src/test/monkey-see-monkey-do` are inherited network
+integration tools. The latter fetches plans from an external test service; they
+are not part of the maintained local CTest suite. Their availability and expected
+website responses are not verified by a passing local run.
 
 # Test files
 
@@ -184,6 +161,14 @@ identifier or an assert will occur.
 
 
 ## navigate
+
+Use `path` for a local HTML fixture, relative to the YAML file. The runner
+converts it to a file URL, including escaping spaces and non-ASCII characters:
+
+    - action: navigate
+      window: win1
+      path: local-navigation.html
+
 
 Cause a window to start navigating to a new URL.
 
@@ -457,6 +442,10 @@ not specified is `single`
 
 
 ## wait-loading
+
+After a click that navigates, use `wait-loading` before blocking for `complete`.
+Otherwise the old page may still report completion before the click is processed.
+
 
 Wait for the navigated page to start loading before moving to the next
 action.

@@ -47,6 +47,24 @@ target_compile_definitions(nsmonkey PRIVATE MONKEY_SRCPATH="${CMAKE_SOURCE_DIR}/
 
 target_link_libraries(nsmonkey wisp m ${WISP_COMMON_LIBS})
 
+if(WISP_ENABLE_TESTS)
+    execute_process(COMMAND ${Python3_EXECUTABLE} -c "import yaml"
+        RESULT_VARIABLE MONKEY_YAML_RESULT OUTPUT_QUIET ERROR_QUIET)
+    if(NOT MONKEY_YAML_RESULT EQUAL 0)
+        message(FATAL_ERROR "Monkey tests require PyYAML for ${Python3_EXECUTABLE}")
+    endif()
+    set(MONKEY_TEST_DIR "${CMAKE_SOURCE_DIR}/src/test")
+    foreach(TEST_NAME start-stop start-stop-no-js resource-scheme local-navigation local-layout)
+        add_test(NAME monkey_${TEST_NAME}
+            COMMAND Python3::Interpreter ${MONKEY_TEST_DIR}/monkey_driver.py
+                -m $<TARGET_FILE:nsmonkey> -t ${MONKEY_TEST_DIR}/monkey-tests/${TEST_NAME}.yaml)
+        set_tests_properties(monkey_${TEST_NAME} PROPERTIES TIMEOUT 40 LABELS monkey)
+    endforeach()
+    add_test(NAME monkey_driver COMMAND Python3::Interpreter
+        ${MONKEY_TEST_DIR}/monkey_driver_test.py $<TARGET_FILE:nsmonkey>)
+    set_tests_properties(monkey_driver PROPERTIES TIMEOUT 40 LABELS monkey)
+endif()
+
 if(WIN32 AND CMAKE_BUILD_TYPE MATCHES Debug)
     add_custom_command(TARGET nsmonkey POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different

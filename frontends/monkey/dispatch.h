@@ -19,11 +19,14 @@
 #ifndef WISP_MONKEY_DISPATCH_H
 #define WISP_MONKEY_DISPATCH_H 1
 
+#include <stdbool.h>
+
 typedef void (*handle_command_fn)(int argc, char **argv);
 
 nserror monkey_register_handler(const char *cmd, handle_command_fn fn);
 
-void monkey_process_command(void);
+/* Return false when the command stream has closed. */
+bool monkey_process_command(void);
 
 void monkey_free_handlers(void);
 

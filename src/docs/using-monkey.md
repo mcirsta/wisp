@@ -8,9 +8,15 @@ Monkey Wisp has been tested on Ubuntu and Debian.
 Automated testing
 -----------------
 
-If you want to run the monkey_driver.py or monkey-see-monkey-do tools then
-you will need python3 and pyyaml installed.  The latter also needs internet
-access to test.wispbrowser.com to acquire test data.
+Use the [local integration-testing guide](integration-testing.md) to build Monkey
+with CMake and run its CTest suite. The YAML runner requires Python 3 and PyYAML.
+The local suite needs no external test service. The older
+`monkey-see-monkey-do` script downloads plans and remains a legacy tool.
+
+Monkey uses approximate font measurements and emits drawing commands, not pixels.
+Use the [Qt capture tools](../../frontends/qt/CAPTURE.md) to assess real typography,
+layout geometry and screenshots. Plot output is synchronous, so full-redraw
+wall time is not a representative browser painting benchmark.
 
 Overview
 --------
@@ -85,7 +91,7 @@ Commands
 
 *   `QUIT`
 
-    Cause monkey to quit cleanly.
+    Cause monkey to quit cleanly. Closing the command pipe also shuts it down.
     This will cleanly destroy open windows etc.
 
 *   `OPTIONS` _%str_

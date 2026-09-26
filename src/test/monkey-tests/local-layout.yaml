@@ -1,0 +1,45 @@
+title: CSS fixture load and redraw smoke tests (not visual comparisons)
+group: local
+steps:
+- action: launch
+  launch-options:
+  - enable_javascript=0
+  language: en
+- action: window-new
+  tag: win1
+- action: navigate
+  window: win1
+  path: ../../../test/flex-minimum-sizing.html
+- action: block
+  conditions:
+  - window: win1
+    status: complete
+- action: plot-check
+  window: win1
+  checks:
+  - text-contains: Automatic minimum
+- action: navigate
+  window: win1
+  path: ../../../test/aspect-ratio.html
+- action: block
+  conditions:
+  - window: win1
+    status: complete
+- action: plot-check
+  window: win1
+  checks:
+  - text-contains: Preferred aspect ratios
+- action: navigate
+  window: win1
+  path: ../../../test/background-layers.html
+- action: block
+  conditions:
+  - window: win1
+    status: complete
+- action: plot-check
+  window: win1
+  checks:
+  - text-contains: Inline background
+- action: window-close
+  window: win1
+- action: quit
