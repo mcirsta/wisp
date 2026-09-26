@@ -1,0 +1,31 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Margins around empty overflow containers</title>
+<style>
+  body { margin: 0; font: 16px/23px sans-serif; }
+  section { margin: 10px; padding: 10px; border: 1px solid #999; width: 550px; }
+  .slot { margin-bottom: 30px; }
+  .following { height: 20px; background: #ddd; }
+</style>
+<!-- Each grey bar has a 30px gap above it, or 31px with the 1px child.
+     Empty overflow containers keep their outer bottom margin. -->
+<section>
+  <div class="slot" id="visible-empty"></div>
+  <div class="following" id="visible-empty-next">visible empty control</div>
+</section>
+<section>
+  <div class="slot" id="hidden-empty" style="overflow:hidden"></div>
+  <div class="following" id="hidden-empty-next">hidden empty</div>
+</section>
+<section>
+  <div class="slot" id="hidden-child" style="overflow:hidden"><div></div></div>
+  <div class="following" id="hidden-child-next">hidden with empty child</div>
+</section>
+<section>
+  <div class="slot" id="hidden-height" style="overflow:hidden"><div style="height:1px"></div></div>
+  <div class="following" id="hidden-height-next">hidden with 1px child control</div>
+</section>
+<section>
+  <div class="slot" id="hidden-x" style="overflow-x:hidden"></div>
+  <div class="following" id="hidden-x-next">horizontal overflow only</div>
+</section>

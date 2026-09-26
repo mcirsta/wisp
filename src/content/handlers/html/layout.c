@@ -1418,15 +1418,22 @@ static inline bool box_has_in_flow_block_children(const struct box *box)
 
 /**
  * Check if a box prevents margins from collapsing through it.
- * CSS 2.1 §8.3.1: A box's own margins collapse only if it has zero
- * min-height, zero/auto height, no vertical padding/border, and does
- * not contain a line box.
+ * CSS 2.1 §8.3.1: A box's own margins collapse only if it does not
+ * establish an independent formatting context, has zero min-height,
+ * zero/auto height, no vertical padding/border, and no line box.
  */
 static inline bool box_prevents_collapse_through(const struct box *box)
 {
     /* Flex/grid containers establish independent formatting contexts, even
      * when empty. Their top and bottom margins are never adjoining. */
     if (box->type == BOX_FLEX || box->type == BOX_GRID)
+        return true;
+    /* Overflow establishes a block formatting context. Even when empty,
+     * its top and bottom margins are separate (CSS 2.1 §8.3.1), so its
+     * bottom margin still needs collecting after layout. */
+    if (box->type == BOX_BLOCK && box->style &&
+        (css_computed_overflow_x(box->style) != CSS_OVERFLOW_VISIBLE ||
+            css_computed_overflow_y(box->style) != CSS_OVERFLOW_VISIBLE))
         return true;
     if (box->flags & (MAKE_HEIGHT | ASPECT_RATIO_HEIGHT))
         return true;
@@ -1493,7 +1500,9 @@ static struct box *layout_next_margin_block(const css_unit_ctx *unit_len_ctx, st
             /* Check whether box is the box current margin collapses
              * to */
             if (box->type == BOX_FLEX || box->type == BOX_GRID || box->flags & MAKE_HEIGHT || box->border[TOP].width ||
-                box->padding[TOP] || (box->style && css_computed_overflow_y(box->style) != CSS_OVERFLOW_VISIBLE) ||
+                box->padding[TOP] ||
+                (box->style && (css_computed_overflow_x(box->style) != CSS_OVERFLOW_VISIBLE ||
+                    css_computed_overflow_y(box->style) != CSS_OVERFLOW_VISIBLE)) ||
                 (box->type == BOX_INLINE_CONTAINER && !box_is_first_child(box))) {
                 /* Collapse to this box; return it */
                 return box;
@@ -1503,6 +1512,7 @@ static struct box *layout_next_margin_block(const css_unit_ctx *unit_len_ctx, st
 
         /* Find next box */
         if (box->type == BOX_BLOCK && !box->object && box->children && box->style &&
+            css_computed_overflow_x(box->style) == CSS_OVERFLOW_VISIBLE &&
             css_computed_overflow_y(box->style) == CSS_OVERFLOW_VISIBLE && box_has_in_flow_block_children(box)) {
             /* Down into children — crossing a parent-child boundary.
              * CSS 2.1 §8.3.1: margin may collapse with first child.

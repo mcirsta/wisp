@@ -572,6 +572,47 @@ START_TEST(test_no_collapse_overflow_hidden)
 }
 END_TEST
 
+START_TEST(test_empty_overflow_hidden_margins)
+{
+    const struct {
+        int top, bottom, next_top, expected_next;
+    } margins[] = {
+        { 0, 30, 0, 30 }, /* Empty advertising slot before the article. */
+        { 20, 30, 10, 50 }, /* Own margins stay separate; sibling margins collapse. */
+        { 20, -15, 10, 15 },
+    };
+    int variant = _i / 4;
+    bool empty_child = (_i & 1) != 0;
+    bool wrapped = (_i & 2) != 0;
+    html_content *content = create_test_content();
+    struct box *root = create_box_with_style(200);
+    struct box *slot = create_box_with_style(200);
+    style_set_overflow_hidden(slot->style);
+    style_set_margins(slot->style, margins[variant].top, 0, margins[variant].bottom, 0);
+    if (empty_child)
+        add_child(slot, create_box_with_style(200));
+    struct box *wrapper = wrapped ? create_box_with_style(200) : slot;
+    if (wrapped)
+        add_child(wrapper, slot);
+    add_child(root, wrapper);
+    struct box *next = create_box_with_style(200);
+    style_set_height_px(next->style, 10);
+    next->flags |= HAS_HEIGHT | MAKE_HEIGHT;
+    style_set_margins(next->style, margins[variant].next_top, 0, 0, 0);
+    add_child(root, next);
+
+    ck_assert(layout_block_context(root, 768, content));
+    ck_assert_int_eq(slot->height, 0);
+    ck_assert_int_eq(wrapper->y, margins[variant].top);
+    if (wrapped)
+        ck_assert_int_eq(slot->y, 0);
+    ck_assert_int_eq(next->y, margins[variant].expected_next);
+
+    free_box_tree(root);
+    destroy_test_content(content);
+}
+END_TEST
+
 
 /* ========================================================================
  * Parent-Last-Child Collapse (CSS 2.1 §8.3.1 Rule 3)
@@ -1340,6 +1381,7 @@ static Suite *margin_collapse_suite(void)
     TCase *tc_excl = tcase_create("Exclusion Rules");
     tcase_add_test(tc_excl, test_no_collapse_abspos_skipped);
     tcase_add_test(tc_excl, test_no_collapse_overflow_hidden);
+    tcase_add_loop_test(tc_excl, test_empty_overflow_hidden_margins, 0, 12);
     tcase_add_loop_test(tc_excl, test_wrapped_formatting_context_margins, 0, 16);
     suite_add_tcase(s, tc_excl);
 
