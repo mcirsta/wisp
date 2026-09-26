@@ -158,5 +158,12 @@ static inline bool isCalc(css_code_t OPV)
 }
 
 
+static inline bool css__is_background_list(uint32_t opv)
+{
+    unsigned op = getOpcode(opv);
+    return !hasFlagValue(opv) && getValue(opv) == BACKGROUND_LAYER_LIST &&
+        (op == CSS_PROP_BACKGROUND_IMAGE || op == CSS_PROP_BACKGROUND_POSITION || op == CSS_PROP_BACKGROUND_REPEAT ||
+            op == CSS_PROP_BACKGROUND_ATTACHMENT);
+}
 
 #endif

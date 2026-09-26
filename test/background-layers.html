@@ -1,0 +1,34 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Multiple background layers</title>
+<style>
+html { height: 700px; background: none, linear-gradient(#eeeeee,#eeeeee); }
+body { margin: 0; font: 14px sans-serif; }
+.case { position: absolute; width: 200px; height: 100px; background-color: yellow; }
+.case::after { content: attr(id); position: absolute; top: -20px; left: 0; }
+#order { left: 10px; top: 30px; background-image: linear-gradient(rgba(255,0,0,.5),rgba(255,0,0,.5)),linear-gradient(blue,blue); }
+#images { left: 250px; top: 30px; background-image: url(test_data/background_layers/red.png),url(test_data/background_layers/blue.png),none; background-position: 10px 10px,20px 20px; background-repeat: no-repeat; }
+#none { left: 490px; top: 30px; background-image: none,url(test_data/background_layers/red.png),url(test_data/background_layers/blue.png); background-position: center,right bottom,left bottom; background-repeat: no-repeat; }
+#cycle { left: 10px; top: 160px; background-image: url(test_data/background_layers/red-alpha.png),url(test_data/background_layers/blue.png),url(test_data/background_layers/blue.png),url(test_data/background_layers/red.png); background-position: left top,right bottom; background-repeat: no-repeat; }
+#repeat { left: 250px; top: 160px; background-image: url(test_data/background_layers/red.png),url(test_data/background_layers/blue.png); background-repeat: repeat-x,repeat-y; }
+#mixed { left: 490px; top: 160px; background-image: linear-gradient(to right,transparent 100px,rgba(0,0,0,.5) 100px),url(test_data/background_layers/red.png),radial-gradient(circle,blue,blue); background-repeat: no-repeat; }
+#invalid { left: 10px; top: 290px; background: none,linear-gradient(blue,blue); background: red,url(test_data/background_layers/red.png); }
+#shorthand { left: 250px; top: 290px; background: url(test_data/background_layers/red.png) right bottom no-repeat, url(test_data/background_layers/blue.png) no-repeat yellow; }
+#variable { left: 490px; top: 290px; --layers: none,linear-gradient(blue,blue); background: var(--layers) !important; background: red; }
+#pseudo { left: 250px; top: 420px; }
+#pseudo::before { content: ''; display: block; width: 200px; height: 100px; background: linear-gradient(rgba(255,0,0,.5),rgba(255,0,0,.5)),linear-gradient(blue,blue); }
+#shift { left: 490px; top: 420px; background: linear-gradient(blue,blue) 20px 0 no-repeat,linear-gradient(red,red) 0 20px no-repeat yellow; }
+#missing { left: 10px; top: 550px; background: url(test_data/background_layers/missing.png),linear-gradient(blue,blue); }
+#reset { left: 250px; top: 550px; background: url(test_data/background_layers/red.png),url(test_data/background_layers/blue.png); background: green; }
+#table { position: absolute; left: 490px; top: 550px; width: 200px; height: 100px; border-spacing: 10px; }
+#table tr { background: linear-gradient(rgba(255,0,0,.5),rgba(255,0,0,.5)),linear-gradient(blue,blue); }
+#table td { padding: 0; height: 80px; }
+#table td:first-child { background-color: rgba(0,255,0,.5); }
+</style>
+<div id="order" class="case"></div><div id="images" class="case"></div><div id="none" class="case"></div>
+<div id="cycle" class="case"></div><div id="repeat" class="case"></div><div id="mixed" class="case"></div>
+<div id="invalid" class="case"></div><div id="shorthand" class="case"></div><div id="variable" class="case"></div>
+<div style="position:absolute;left:10px;top:420px"><span id="inline" style="color:transparent;padding:15px 30px;background:linear-gradient(rgba(255,0,0,.5),rgba(255,0,0,.5)),linear-gradient(blue,blue)">Inline background</span></div>
+<div id="pseudo" class="case"></div><div id="shift" class="case"></div>
+<div id="missing" class="case"></div><div id="reset" class="case"></div>
+<table id="table"><tr><td></td><td></td></tr></table>

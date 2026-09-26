@@ -1205,10 +1205,227 @@ START_TEST(test_layout_unresolved_edges_assert)
 END_TEST
 #endif
 
+/* Background layers exercise parser/cascade/ownership through public APIs. */
+static const struct {
+    const char *css;
+    uint32_t count;
+    uint8_t first, second;
+} background_layer_cases[] = {
+    {"background-image:url(a),none,linear-gradient(red,blue)", 3, CSS_BACKGROUND_IMAGE_IMAGE,
+        CSS_BACKGROUND_IMAGE_NONE},
+    {"background:linear-gradient(red,blue) no-repeat left top, url(b) repeat-x right bottom red", 2,
+        CSS_BACKGROUND_IMAGE_LINEAR_GRADIENT, CSS_BACKGROUND_IMAGE_IMAGE},
+    {"background-image:none,radial-gradient(circle,red,blue)", 2, CSS_BACKGROUND_IMAGE_NONE,
+        CSS_BACKGROUND_IMAGE_RADIAL_GRADIENT},
+    {"--bg:url(a),linear-gradient(red,blue);background-image:var(--bg)", 2, CSS_BACKGROUND_IMAGE_IMAGE,
+        CSS_BACKGROUND_IMAGE_LINEAR_GRADIENT},
+    {"background-image:none,url(b)!important;background-image:url(c),none;--n:17px;width:var(--n)", 2,
+        CSS_BACKGROUND_IMAGE_NONE, CSS_BACKGROUND_IMAGE_IMAGE},
+    {"background-image:none,url(a);background-image:none", 1, CSS_BACKGROUND_IMAGE_NONE, CSS_BACKGROUND_IMAGE_NONE},
+    {"background-image:url(a),url(b);background-image:initial", 1, CSS_BACKGROUND_IMAGE_NONE,
+        CSS_BACKGROUND_IMAGE_NONE},
+    {"background-image:url(a),url(b);background-image:unset", 1, CSS_BACKGROUND_IMAGE_NONE, CSS_BACKGROUND_IMAGE_NONE},
+    {"background-image:url(a),url(b);background:blue", 1, CSS_BACKGROUND_IMAGE_NONE, CSS_BACKGROUND_IMAGE_NONE},
+    {"background:var(--bg)!important;--bg:none,url(b) blue;background-image:url(c)", 2, CSS_BACKGROUND_IMAGE_NONE,
+        CSS_BACKGROUND_IMAGE_IMAGE},
+};
+START_TEST(test_background_layers)
+{
+    select_ctx ctx;
+    char css[1024];
+    snprintf(css, sizeof(css), "* {%s}", background_layer_cases[_i].css);
+    const css_computed_style *s = select_style_from_css(css, &ctx);
+    lwc_string *url;
+    ck_assert_uint_eq(css_computed_background_layer_count(s), background_layer_cases[_i].count);
+    ck_assert_uint_eq(css_computed_background_image_layer(s, 0, &url), background_layer_cases[_i].first);
+    ck_assert_uint_eq(css_computed_background_image_layer(s, 1, &url), background_layer_cases[_i].second);
+    if (_i == 1) {
+        css_color color;
+        css_computed_background_color(s, &color);
+        ck_assert_uint_eq(color, 0xffff0000);
+        ck_assert_int_eq(css_computed_background_repeat_layer(s, 0), CSS_BACKGROUND_REPEAT_NO_REPEAT);
+        ck_assert_int_eq(css_computed_background_repeat_layer(s, 1), CSS_BACKGROUND_REPEAT_REPEAT_X);
+        css_fixed_or_calc x, y;
+        css_unit xu, yu;
+        css_computed_background_position_layer(s, 1, &x, &xu, &y, &yu);
+        ck_assert_int_eq(x.value, INTTOFIX(100));
+        ck_assert_int_eq(y.value, INTTOFIX(100));
+    }
+    if (_i == 4) {
+        css_fixed_or_calc w;
+        css_unit u;
+        css_computed_width(s, &w, &u);
+        ck_assert_int_eq(w.value, INTTOFIX(17));
+    }
+    destroy_select_ctx(&ctx);
+}
+END_TEST
+
+static const char *invalid_background_layers[] = {
+    "background-image:url(c),",
+    "background-image:,url(c)",
+    "background-image:url(c),,url(d)",
+    "background-image:inherit,url(c)",
+    "background-image:url(c),initial",
+    "background-image:url(c),broken()",
+    "background:red,url(c)",
+    "background:url(c),",
+    "background:,url(c)",
+    "background:url(c),none blue red",
+    "background:url(c),inherit",
+    "background:inherit,url(c)",
+    "background:url(c),url(d) / unsupported",
+};
+START_TEST(test_invalid_background_layers)
+{
+    char css[1024];
+    snprintf(css, sizeof(css), "* {background-image:url(a),url(b);%s}", invalid_background_layers[_i]);
+    select_ctx ctx;
+    const css_computed_style *s = select_style_from_css(css, &ctx);
+    lwc_string *url;
+    ck_assert_uint_eq(css_computed_background_layer_count(s), 2);
+    css_computed_background_image_layer(s, 0, &url);
+    ck_assert_ptr_nonnull(url);
+    ck_assert_str_eq(lwc_string_data(url), "a");
+    css_computed_background_image_layer(s, 1, &url);
+    ck_assert_str_eq(lwc_string_data(url), "b");
+    destroy_select_ctx(&ctx);
+}
+END_TEST
+
+START_TEST(test_background_list_matching)
+{
+    select_ctx ctx;
+    const css_computed_style *s = select_style_from_css(
+        "* {background-image:none,url(b),none,url(d),none;"
+        "background-position:10px 20px,30px 40px,50px 60px;"
+        "background-repeat:no-repeat,repeat-x; background-attachment:fixed,scroll}",
+        &ctx);
+    for (uint32_t i = 0; i < 5; i++) {
+        css_fixed_or_calc x, y;
+        css_unit xu, yu;
+        css_computed_background_position_layer(s, i, &x, &xu, &y, &yu);
+        ck_assert_int_eq(x.value, INTTOFIX(10 + 20 * (i % 3)));
+        ck_assert_int_eq(y.value, INTTOFIX(20 + 20 * (i % 3)));
+        ck_assert_int_eq(xu, CSS_UNIT_PX);
+        ck_assert_int_eq(css_computed_background_repeat_layer(s, i),
+            i % 2 == 0 ? CSS_BACKGROUND_REPEAT_NO_REPEAT : CSS_BACKGROUND_REPEAT_REPEAT_X);
+        ck_assert_int_eq(css_computed_background_attachment_layer(s, i),
+            i % 2 == 0 ? CSS_BACKGROUND_ATTACHMENT_FIXED : CSS_BACKGROUND_ATTACHMENT_SCROLL);
+    }
+    destroy_select_ctx(&ctx);
+}
+END_TEST
+
+START_TEST(test_background_list_inheritance)
+{
+    select_ctx parent_ctx, child_ctx;
+    const css_computed_style *parent = select_style_from_css(
+        "* {font-size:20px;background-image:url(parent),linear-gradient(red 1em,blue 4em),radial-gradient(red 2em,blue 3em),url(tail);"
+        "background-position:1em 2em,3em 4em,5em 6em; background-repeat:no-repeat,repeat-x; background-attachment:scroll,fixed}",
+        &parent_ctx);
+    const css_computed_style *child = select_style_from_css_node(
+        "* {font-size:40px;background:inherit;background-image:none}", &child_ctx, false);
+    css_computed_style *result = NULL;
+    ck_assert_int_eq(css_computed_style_compose(parent, child, &unit_ctx, &result), CSS_OK);
+    /* Extra position values survive even though the child's image list is shorter. */
+    ck_assert_uint_eq(css_computed_background_layer_count(result), 1);
+    css_fixed_or_calc x, y;
+    css_unit xu, yu;
+    for (unsigned i = 0; i < 3; i++) {
+        css_computed_background_position_layer(result, i, &x, &xu, &y, &yu);
+        ck_assert_int_eq(xu, CSS_UNIT_PX);
+        ck_assert_int_eq(x.value, INTTOFIX(20 + 40 * i));
+        ck_assert_int_eq(y.value, INTTOFIX(40 + 40 * i));
+    }
+    ck_assert_int_eq(css_computed_background_repeat_layer(result, 3), CSS_BACKGROUND_REPEAT_REPEAT_X);
+    css_computed_style_destroy(result);
+    destroy_select_ctx(&child_ctx);
+    child = select_style_from_css_node("* {font-size:40px;background-image:inherit}", &child_ctx, false);
+    ck_assert_int_eq(css_computed_style_compose(parent, child, &unit_ctx, &result), CSS_OK);
+    destroy_select_ctx(&parent_ctx); /* Result must own every inherited allocation. */
+    const css_linear_gradient *linear = css_computed_background_gradient_layer(result, 1);
+    const css_radial_gradient *radial = css_computed_background_radial_gradient_layer(result, 2);
+    ck_assert_ptr_nonnull(linear);
+    ck_assert_ptr_nonnull(radial);
+    ck_assert_int_eq(linear->stops[0].unit, CSS_UNIT_PX);
+    ck_assert_int_eq(linear->stops[0].offset, INTTOFIX(20));
+    ck_assert_int_eq(radial->stops[0].offset, INTTOFIX(40));
+    lwc_string *url;
+    ck_assert_uint_eq(css_computed_background_layer_count(result), 4);
+    css_computed_background_image_layer(result, 0, &url);
+    ck_assert_str_eq(lwc_string_data(url), "parent");
+    css_computed_background_image_layer(result, 3, &url);
+    ck_assert_str_eq(lwc_string_data(url), "tail");
+    css_computed_style_destroy(result);
+    destroy_select_ctx(&child_ctx);
+}
+END_TEST
+
+START_TEST(test_background_list_reset)
+{
+    const char *resets[] = {"background-position:initial;background-repeat:unset;background-attachment:initial",
+        "background-position:0% 0%;background-repeat:repeat;background-attachment:scroll", "background:none"};
+    select_ctx ctx;
+    char css[1024];
+    snprintf(css, sizeof(css), "* {background:none left top no-repeat fixed, url(a) right bottom repeat-x fixed;%s}",
+        resets[_i]);
+    const css_computed_style *s = select_style_from_css(css, &ctx);
+    css_fixed_or_calc x, y;
+    css_unit xu, yu;
+    css_computed_background_position_layer(s, 1, &x, &xu, &y, &yu);
+    ck_assert_int_eq(x.value, 0);
+    ck_assert_int_eq(y.value, 0);
+    ck_assert_int_eq(css_computed_background_repeat_layer(s, 1), CSS_BACKGROUND_REPEAT_REPEAT);
+    ck_assert_int_eq(css_computed_background_attachment_layer(s, 1), CSS_BACKGROUND_ATTACHMENT_SCROLL);
+    destroy_select_ctx(&ctx);
+}
+END_TEST
+
+START_TEST(test_background_style_sharing)
+{
+    select_ctx ctx[4];
+    const css_computed_style *a = select_style_from_css("* {background-image:none,linear-gradient(red,blue)}", &ctx[0]);
+    const css_computed_style *b = select_style_from_css(
+        "* {background-image:none,linear-gradient(red,green)}", &ctx[1]);
+    const css_computed_style *c = select_style_from_css("* {background-image:none,linear-gradient(red,blue)}", &ctx[2]);
+    const css_computed_style *d = select_style_from_css(
+        "* {background-image:none,linear-gradient(red,blue);background-position:0% 0%,5px 6px}", &ctx[3]);
+    ck_assert_ptr_ne(a, b);
+    ck_assert_ptr_eq(a, c);
+    ck_assert_ptr_ne(a, d);
+    ck_assert_uint_eq(css_computed_background_gradient_layer(b, 1)->stops[1].color, 0xff008000);
+    for (unsigned i = 0; i < 4; i++)
+        destroy_select_ctx(&ctx[i]);
+}
+END_TEST
+
+START_TEST(test_background_many_layers)
+{
+    char css[4096] = "* {background-image:";
+    for (unsigned i = 0; i < 300; i++)
+        strcat(css, i == 299 ? "none}" : "none,");
+    select_ctx ctx;
+    const css_computed_style *s = select_style_from_css(css, &ctx);
+    ck_assert_uint_eq(css_computed_background_layer_count(s), 300);
+    destroy_select_ctx(&ctx);
+}
+END_TEST
+
 Suite *layout_calc_suite(void)
 {
     Suite *s = suite_create("LayoutCalc");
     TCase *tc_core = tcase_create("Core");
+    tcase_add_loop_test(
+        tc_core, test_background_layers, 0, sizeof(background_layer_cases) / sizeof(background_layer_cases[0]));
+    tcase_add_loop_test(tc_core, test_invalid_background_layers, 0,
+        sizeof(invalid_background_layers) / sizeof(invalid_background_layers[0]));
+    tcase_add_test(tc_core, test_background_list_matching);
+    tcase_add_test(tc_core, test_background_list_inheritance);
+    tcase_add_loop_test(tc_core, test_background_list_reset, 0, 3);
+    tcase_add_test(tc_core, test_background_style_sharing);
+    tcase_add_test(tc_core, test_background_many_layers);
+
 
     tcase_add_test(tc_core, test_lh_length_to_px_calc);
     tcase_add_test(tc_core, test_lh_length_to_px_pct_invalid);

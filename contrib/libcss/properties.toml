@@ -194,11 +194,11 @@ manual = true
 [background_attachment]
 enum = "CSS_PROP_BACKGROUND_ATTACHMENT"
 inherited = false
-cascade = "ident"
+cascade = "manual"
+manual = true
 computed = "auto"
 bits = 2
 initial = "SCROLL"
-parse = '''IDENT:( INHERIT: INITIAL: REVERT: UNSET: FIXED:0,BACKGROUND_ATTACHMENT_FIXED SCROLL:0,BACKGROUND_ATTACHMENT_SCROLL IDENT:)'''
 
 [background_color]
 enum = "CSS_PROP_BACKGROUND_COLOR"
@@ -235,11 +235,11 @@ condition = "CSS_BACKGROUND_POSITION_SET"
 [background_repeat]
 enum = "CSS_PROP_BACKGROUND_REPEAT"
 inherited = false
-cascade = "ident"
+cascade = "manual"
+manual = true
 computed = "auto"
 bits = 3
 initial = "REPEAT"
-parse = '''IDENT:( INHERIT: INITIAL: REVERT: UNSET: NO_REPEAT:0,BACKGROUND_REPEAT_NO_REPEAT REPEAT_X:0,BACKGROUND_REPEAT_REPEAT_X REPEAT_Y:0,BACKGROUND_REPEAT_REPEAT_Y REPEAT:0,BACKGROUND_REPEAT_REPEAT IDENT:)'''
 
 [border_collapse]
 enum = "CSS_PROP_BORDER_COLLAPSE"

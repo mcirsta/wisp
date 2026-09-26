@@ -463,6 +463,10 @@ struct box {
      * Background image for this box, or NULL if none
      */
     struct hlcache_handle *background;
+    /** Additional image handles in CSS layer order. Talloc-owned by this box;
+     * handles are borrowed from the document's object list. NULL for one layer
+     * or for backgrounds containing only generated images. */
+    struct hlcache_handle **background_layers;
 
 
     /**
@@ -481,6 +485,11 @@ struct box {
      */
     struct browser_window *iframe;
 };
+
+static inline struct hlcache_handle *box_background_layer(const struct box *box, uint32_t layer)
+{
+    return layer == 0 ? box->background : box->background_layers == NULL ? NULL : box->background_layers[layer - 1];
+}
 
 
 #endif

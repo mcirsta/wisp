@@ -7,8 +7,8 @@ The shared parser still caps gradients at ten stops and requires at least two.
 
 The handwritten `background_image.c` parser emits color/offset/unit triples.
 The cascade, `!important` walker, deferred-cascade skip walker, diagnostic dump,
-and computed-style equality all understand that payload. No generated property
-layout or generator metadata changes are needed. Font-relative lengths become
+and computed-style equality all understand that payload. The stop payload itself requires no generated property
+layout or generator metadata changes. Font-relative lengths become
 pixels during style computation, so explicit inheritance preserves their size.
 
 At paint time, both existing painters use the same stop resolution: percentages
@@ -26,10 +26,11 @@ fills, which the strip painter needs for correct alpha compositing.
 This covers HotNews's `5px`/`160px` overlays, including variable colors and
 `background: ... !important`. It does not complete all CSS gradient syntax:
 arbitrary angles are still approximated to cardinal directions, and color-space
-clauses, multiple background layers, repeating gradients, transition hints,
+clauses, repeating gradients, transition hints,
 double-position stops, `currentColor` stops and `calc()` positions remain
 unsupported. Existing radial shape/size and background sizing/attachment limits
-are not redesigned here.
+are not redesigned here. Multiple backgrounds are covered in
+[background-layers.md](background-layers.md).
 
 `layout_calc_test` exercises real parsing and selection, mixed/negative/omitted
 positions, resizing, zoom, font-relative inheritance, style sharing, important

@@ -11,7 +11,7 @@
 
 #include "bytecode/bytecode.h"
 #include "bytecode/opcodes.h"
-#include "parse/properties/properties.h"
+#include "parse/properties/background.h"
 #include "parse/properties/utils.h"
 
 #ifndef NDEBUG
@@ -42,7 +42,7 @@
  *		   If the input is invalid, then \a *ctx remains unchanged.
  */
 css_error
-css__parse_background_position(css_language *c, const parserutils_vector *vector, int32_t *ctx, css_style *result)
+css__parse_background_position_item(css_language *c, const parserutils_vector *vector, int32_t *ctx, css_style *result)
 {
     int32_t orig_ctx = *ctx;
     css_error error;
@@ -218,4 +218,10 @@ css__parse_background_position(css_language *c, const parserutils_vector *vector
     }
 
     return CSS_OK;
+}
+
+css_error css__parse_background_position(css_language *c, const parserutils_vector *v, int32_t *ctx, css_style *result)
+{
+    return css__parse_background_list(
+        c, v, ctx, result, CSS_PROP_BACKGROUND_POSITION, css__parse_background_position_item);
 }

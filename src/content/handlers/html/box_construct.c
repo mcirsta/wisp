@@ -548,31 +548,28 @@ static bool box_add_with_float_wrap(struct box *box, struct box *parent, int *bc
  */
 static bool box_fetch_background(struct box *box, html_content *content)
 {
-    lwc_string *bgimage_uri;
-
-    if (box->style == NULL) {
+    if (box->style == NULL || !nsoption_bool(background_images))
         return true;
-    }
-
-    if (css_computed_background_image(box->style, &bgimage_uri) == CSS_BACKGROUND_IMAGE_IMAGE && bgimage_uri != NULL &&
-        nsoption_bool(background_images) == true) {
-        nsurl *url;
-        nserror error;
-
-        error = nsurl_create(lwc_string_data(bgimage_uri), &url);
-        if (error == NSERROR_OK) {
-            if (html_fetch_object(content, url, box, image_types, true) == false) {
-                NSLOG(wisp, WARNING, "box_fetch_background: Failed to fetch background image");
-                nsurl_unref(url);
+    uint32_t count = css_computed_background_layer_count(box->style);
+    for (uint32_t i = 0; i < count; i++) {
+        lwc_string *uri;
+        if (css_computed_background_image_layer(box->style, i, &uri) != CSS_BACKGROUND_IMAGE_IMAGE || uri == NULL)
+            continue;
+        if (i > 0 && box->background_layers == NULL) {
+            box->background_layers = talloc_zero_array(box, struct hlcache_handle *, count - 1);
+            if (box->background_layers == NULL)
                 return false;
-            }
+        }
+        nsurl *url;
+        if (nsurl_create(lwc_string_data(uri), &url) == NSERROR_OK) {
+            bool ok = html_fetch_background(content, url, box, image_types, i);
             nsurl_unref(url);
+            if (!ok)
+                return false;
         }
     }
-
     return true;
 }
-
 
 /**
  * Check if a box type needs an inline container.

@@ -105,9 +105,12 @@ static bool html_redraw_box_has_background(struct box *box)
             return true;
 
         /* Check for gradient background */
-        uint8_t bg_type = css_computed_background_image(box->style, &url);
-        if (bg_type == CSS_BACKGROUND_IMAGE_LINEAR_GRADIENT || bg_type == CSS_BACKGROUND_IMAGE_RADIAL_GRADIENT)
-            return true;
+        for (uint32_t i = 0; i < css_computed_background_layer_count(box->style); i++) {
+            uint8_t bg_type = css_computed_background_image_layer(box->style, i, &url);
+            if (bg_type == CSS_BACKGROUND_IMAGE_LINEAR_GRADIENT || bg_type == CSS_BACKGROUND_IMAGE_RADIAL_GRADIENT ||
+                (bg_type == CSS_BACKGROUND_IMAGE_IMAGE && url != NULL))
+                return true;
+        }
     }
 
     return false;
@@ -949,33 +952,66 @@ static bool html_redraw_radial_gradient(const css_radial_gradient *gradient, con
 }
 
 
-/**
- * Plot background images.
- *
- * The reason for the presence of \a background is the backwards compatibility
- * mess that is backgrounds on &lt;body&gt;. The background will be drawn
- * relative to \a box, using the background information contained within \a
- * background.
- *
- * \param  x	  coordinate of box
- * \param  y	  coordinate of box
- * \param  box	  box to draw background image of
- * \param  scale  scale for redraw
- * \param  clip   current clip rectangle
- * \param  background_colour  current background colour
- * \param  background  box containing background details (usually \a box)
- * \param  unit_len_ctx  Length conversion context
- * \param  ctx      current redraw context
- * \return true if successful, false otherwise
- */
-
-static bool html_redraw_background(int x, int y, struct box *box, float scale, const struct rect *clip,
-    colour *background_colour, struct box *background, const css_unit_ctx *unit_len_ctx,
-    const struct redraw_context *ctx)
+/* Gradients have no intrinsic dimensions: background-size:auto gives them the
+ * positioning area's size. Position/repeat still apply to each generated image. */
+static bool html_redraw_gradient_layer(const css_computed_style *style, uint32_t layer, const struct rect *area,
+    const struct rect *clip, float scale, const css_unit_ctx *units, const struct redraw_context *ctx)
 {
+    const css_linear_gradient *linear = css_computed_background_gradient_layer(style, layer);
+    const css_radial_gradient *radial = css_computed_background_radial_gradient_layer(style, layer);
+    if (linear == NULL && radial == NULL)
+        return true;
+    int width = area->x1 - area->x0, height = area->y1 - area->y0;
+    if (width <= 0 || height <= 0 || clip->x0 >= clip->x1 || clip->y0 >= clip->y1)
+        return true;
+    css_fixed_or_calc x = {0}, y = {0};
+    css_unit xu = CSS_UNIT_PX, yu = CSS_UNIT_PX;
+    css_computed_background_position_layer(style, layer, &x, &xu, &y, &yu);
+    int dx = 0, dy = 0;
+    if (xu == CSS_UNIT_CALC)
+        css_computed_length_to_px(style, units, 0, x, xu, &dx);
+    else if (xu != CSS_UNIT_PCT)
+        dx = FIXTOINT(css_unit_len2device_px(style, units, x.value, xu));
+    if (yu == CSS_UNIT_CALC)
+        css_computed_length_to_px(style, units, 0, y, yu, &dy);
+    else if (yu != CSS_UNIT_PCT)
+        dy = FIXTOINT(css_unit_len2device_px(style, units, y.value, yu));
+    uint8_t repeat = css_computed_background_repeat_layer(style, layer);
+    bool repeat_x = repeat == CSS_BACKGROUND_REPEAT_REPEAT || repeat == CSS_BACKGROUND_REPEAT_REPEAT_X;
+    bool repeat_y = repeat == CSS_BACKGROUND_REPEAT_REPEAT || repeat == CSS_BACKGROUND_REPEAT_REPEAT_Y;
+    int64_t start_x = area->x0 + (int64_t)(dx * scale), start_y = area->y0 + (int64_t)(dy * scale);
+    if (repeat_x)
+        start_x += (int64_t)floor((double)(clip->x0 - start_x) / width) * width;
+    if (repeat_y)
+        start_y += (int64_t)floor((double)(clip->y0 - start_y) / height) * height;
+    for (int64_t ty = start_y; ty < clip->y1; ty += height) {
+        for (int64_t tx = start_x; tx < clip->x1; tx += width) {
+            struct rect tile = {tx, ty, tx + width, ty + height};
+            struct rect r = {((tile.x0 > clip->x0) ? tile.x0 : clip->x0), ((tile.y0 > clip->y0) ? tile.y0 : clip->y0),
+                ((tile.x1 < clip->x1) ? tile.x1 : clip->x1), ((tile.y1 < clip->y1) ? tile.y1 : clip->y1)};
+            if (r.x0 < r.x1 && r.y0 < r.y1) {
+                bool ok = linear != NULL ? html_redraw_linear_gradient(linear, style, units, &tile, &r, scale, ctx)
+                                         : html_redraw_radial_gradient(radial, style, units, &tile, &r, scale, ctx);
+                if (!ok)
+                    return false;
+            }
+            if (!repeat_x)
+                break;
+        }
+        if (!repeat_y)
+            break;
+    }
+    return true;
+}
+
+static bool html_redraw_background_layer(int x, int y, struct box *box, float scale, const struct rect *clip,
+    colour *background_colour, struct box *background, const css_unit_ctx *unit_len_ctx,
+    const struct redraw_context *ctx, uint32_t layer, bool paint_colour)
+{
+    struct hlcache_handle *image = box_background_layer(background, layer);
     bool repeat_x = false;
     bool repeat_y = false;
-    bool plot_colour = true;
+    bool plot_colour = paint_colour;
     bool plot_content;
     bool clip_to_children = false;
     struct box *clip_box = box;
@@ -995,7 +1031,7 @@ static bool html_redraw_background(int x, int y, struct box *box, float scale, c
     if (ctx->background_images == false)
         return true;
 
-    plot_content = (background->background != NULL);
+    plot_content = (image != NULL);
 
     if (plot_content) {
         if (!box->parent) {
@@ -1010,12 +1046,12 @@ static bool html_redraw_background(int x, int y, struct box *box, float scale, c
             height = box->padding[TOP] + box->height + box->padding[BOTTOM];
         }
         /* handle background-repeat */
-        switch (css_computed_background_repeat(background->style)) {
+        switch (css_computed_background_repeat_layer(background->style, layer)) {
         case CSS_BACKGROUND_REPEAT_REPEAT:
             repeat_x = repeat_y = true;
             /* optimisation: only plot the colour if
              * bitmap is not opaque */
-            plot_colour = !content_get_opaque(background->background);
+            plot_colour = plot_colour && !content_get_opaque(image);
             break;
 
         case CSS_BACKGROUND_REPEAT_REPEAT_X:
@@ -1034,10 +1070,10 @@ static bool html_redraw_background(int x, int y, struct box *box, float scale, c
         }
 
         /* handle background-position */
-        css_computed_background_position(background->style, &hpos, &hunit, &vpos, &vunit);
+        css_computed_background_position_layer(background->style, layer, &hpos, &hunit, &vpos, &vunit);
         {
-            int bg_width = content_get_width(background->background);
-            int bg_height = content_get_height(background->background);
+            int bg_width = content_get_width(image);
+            int bg_height = content_get_height(image);
 #ifdef WISP_DEVICE_PIXEL_LAYOUT
             {
                 int dpi = browser_get_dpi();
@@ -1123,13 +1159,12 @@ static bool html_redraw_background(int x, int y, struct box *box, float scale, c
 
             css_computed_background_color(clip_box->style, &bgcol);
 
-            /* <td> attributes override <tr> */
-            /* if the background content is opaque there
-             * is no need to plot underneath it.
-             */
-            if ((r.x0 >= r.x1) || (r.y0 >= r.y1) || (nscss_color_is_transparent(bgcol) == false) ||
-                ((clip_box->background != NULL) && content_get_opaque(clip_box->background)))
+            /* Opaque cell colors cover the row. Translucent colors and
+             * partially covering images still need the row underneath. */
+            if ((r.x0 >= r.x1) || (r.y0 >= r.y1) || (bgcol >> 24) == 0xff)
                 continue;
+            if (ctx->plot->clip(ctx, &r) != NSERROR_OK)
+                return false;
         }
 
         /* plot the background colour */
@@ -1146,40 +1181,20 @@ static bool html_redraw_background(int x, int y, struct box *box, float scale, c
             }
         }
 
-        /* Check for and render gradient background */
-        {
-            lwc_string *url;
-            uint8_t bg_type = css_computed_background_image(background->style, &url);
-            /* Gradient sizing uses the whole padding box, not a clipped slice. */
-            struct rect gradient_rect = {
-                .x0 = ox,
-                .y0 = oy,
-                .x1 = ox + (box->padding[LEFT] + box->width + box->padding[RIGHT]) * scale,
-                .y1 = oy + (box->padding[TOP] + box->height + box->padding[BOTTOM]) * scale,
-            };
-            if (bg_type == CSS_BACKGROUND_IMAGE_LINEAR_GRADIENT) {
-                const css_linear_gradient *gradient = css_computed_background_gradient(background->style);
-                if (gradient != NULL) {
-                    if (!html_redraw_linear_gradient(
-                            gradient, background->style, unit_len_ctx, &gradient_rect, &r, scale, ctx)) {
-                        return false;
-                    }
-                }
-            } else if (bg_type == CSS_BACKGROUND_IMAGE_RADIAL_GRADIENT) {
-                const css_radial_gradient *radial = css_computed_background_radial_gradient(background->style);
-                if (radial != NULL) {
-                    if (!html_redraw_radial_gradient(
-                            radial, background->style, unit_len_ctx, &gradient_rect, &r, scale, ctx)) {
-                        return false;
-                    }
-                }
-            }
-        }
+        /* Generated images have the padding-box size with background-size:auto. */
+        struct rect area = {
+            .x0 = ox,
+            .y0 = oy,
+            .x1 = ox + (box->padding[LEFT] + box->width + box->padding[RIGHT]) * scale,
+            .y1 = oy + (box->padding[TOP] + box->height + box->padding[BOTTOM]) * scale,
+        };
+        if (!html_redraw_gradient_layer(background->style, layer, &area, &r, scale, unit_len_ctx, ctx))
+            return false;
 
         /* and plot the image */
         if (plot_content) {
-            width = content_get_width(background->background);
-            height = content_get_height(background->background);
+            width = content_get_width(image);
+            height = content_get_height(image);
 #ifdef WISP_DEVICE_PIXEL_LAYOUT
             {
                 int dpi = browser_get_dpi();
@@ -1222,7 +1237,7 @@ static bool html_redraw_background(int x, int y, struct box *box, float scale, c
                 bg_data.repeat_y = repeat_y;
 
                 /* We just continue if redraw fails */
-                content_redraw(background->background, &bg_data, &r, ctx);
+                content_redraw(image, &bg_data, &r, ctx);
             }
         }
 
@@ -1233,6 +1248,43 @@ static bool html_redraw_background(int x, int y, struct box *box, float scale, c
     return true;
 }
 
+
+/**
+ * Plot background images.
+ *
+ * The reason for the presence of \a background is the backwards compatibility
+ * mess that is backgrounds on &lt;body&gt;. The background will be drawn
+ * relative to \a box, using the background information contained within \a
+ * background.
+ *
+ * \param  x	  coordinate of box
+ * \param  y	  coordinate of box
+ * \param  box	  box to draw background image of
+ * \param  scale  scale for redraw
+ * \param  clip   current clip rectangle
+ * \param  background_colour  current background colour
+ * \param  background  box containing background details (usually \a box)
+ * \param  unit_len_ctx  Length conversion context
+ * \param  ctx      current redraw context
+ * \return true if successful, false otherwise
+ */
+
+static bool html_redraw_background(int x, int y, struct box *box, float scale, const struct rect *clip,
+    colour *background_colour, struct box *background, const css_unit_ctx *unit_len_ctx,
+    const struct redraw_context *ctx)
+{
+    uint32_t count = css_computed_background_layer_count(background->style);
+    if (count == 1)
+        return html_redraw_background_layer(
+            x, y, box, scale, clip, background_colour, background, unit_len_ctx, ctx, 0, true);
+    for (uint32_t i = count; i-- > 0;) {
+        if (ctx->plot->clip(ctx, clip) != NSERROR_OK ||
+            !html_redraw_background_layer(
+                x, y, box, scale, clip, background_colour, background, unit_len_ctx, ctx, i, i == count - 1))
+            return false;
+    }
+    return true;
+}
 
 /**
  * Plot an inline's background and/or background image.
@@ -1251,14 +1303,15 @@ static bool html_redraw_background(int x, int y, struct box *box, float scale, c
  * \return true if successful, false otherwise
  */
 
-static bool html_redraw_inline_background(int x, int y, struct box *box, float scale, const struct rect *clip,
+static bool html_redraw_inline_background_layer(int x, int y, struct box *box, float scale, const struct rect *clip,
     struct rect b, bool first, bool last, colour *background_colour, const css_unit_ctx *unit_len_ctx,
-    const struct redraw_context *ctx)
+    const struct redraw_context *ctx, uint32_t layer, bool paint_colour)
 {
+    struct hlcache_handle *image = box_background_layer(box, layer);
     struct rect r = *clip;
     bool repeat_x = false;
     bool repeat_y = false;
-    bool plot_colour = true;
+    bool plot_colour = paint_colour;
     bool plot_content;
     css_fixed_or_calc hpos = (css_fixed_or_calc)0, vpos = (css_fixed_or_calc)0;
     css_unit hunit = CSS_UNIT_PX, vunit = CSS_UNIT_PX;
@@ -1269,20 +1322,20 @@ static bool html_redraw_inline_background(int x, int y, struct box *box, float s
     };
     nserror res;
 
-    plot_content = (box->background != NULL);
+    plot_content = (image != NULL);
 
     if (html_redraw_printing && nsoption_bool(remove_backgrounds))
         return true;
 
     if (plot_content) {
         /* handle background-repeat */
-        switch (css_computed_background_repeat(box->style)) {
+        switch (css_computed_background_repeat_layer(box->style, layer)) {
         case CSS_BACKGROUND_REPEAT_REPEAT:
             repeat_x = repeat_y = true;
             /* optimisation: only plot the colour if
              * bitmap is not opaque
              */
-            plot_colour = !content_get_opaque(box->background);
+            plot_colour = plot_colour && !content_get_opaque(image);
             break;
 
         case CSS_BACKGROUND_REPEAT_REPEAT_X:
@@ -1301,10 +1354,10 @@ static bool html_redraw_inline_background(int x, int y, struct box *box, float s
         }
 
         /* handle background-position */
-        css_computed_background_position(box->style, &hpos, &hunit, &vpos, &vunit);
+        css_computed_background_position_layer(box->style, layer, &hpos, &hunit, &vpos, &vunit);
         {
-            int bg_width = content_get_width(box->background);
-            int bg_height = content_get_height(box->background);
+            int bg_width = content_get_width(image);
+            int bg_height = content_get_height(image);
 #ifdef WISP_DEVICE_PIXEL_LAYOUT
             {
                 int dpi = browser_get_dpi();
@@ -1367,10 +1420,12 @@ static bool html_redraw_inline_background(int x, int y, struct box *box, float s
             }
         }
     }
+    if (!html_redraw_gradient_layer(box->style, layer, &b, &r, scale, unit_len_ctx, ctx))
+        return false;
     /* and plot the image */
     if (plot_content) {
-        int width = content_get_width(box->background);
-        int height = content_get_height(box->background);
+        int width = content_get_width(image);
+        int height = content_get_height(image);
 #ifdef WISP_DEVICE_PIXEL_LAYOUT
         {
             int dpi = browser_get_dpi();
@@ -1412,13 +1467,30 @@ static bool html_redraw_inline_background(int x, int y, struct box *box, float s
             bg_data.repeat_y = repeat_y;
 
             /* We just continue if redraw fails */
-            content_redraw(box->background, &bg_data, &r, ctx);
+            content_redraw(image, &bg_data, &r, ctx);
         }
     }
 
     return true;
 }
 
+
+static bool html_redraw_inline_background(int x, int y, struct box *box, float scale, const struct rect *clip,
+    struct rect b, bool first, bool last, colour *background_colour, const css_unit_ctx *unit_len_ctx,
+    const struct redraw_context *ctx)
+{
+    uint32_t count = css_computed_background_layer_count(box->style);
+    if (count == 1)
+        return html_redraw_inline_background_layer(
+            x, y, box, scale, clip, b, first, last, background_colour, unit_len_ctx, ctx, 0, true);
+    for (uint32_t i = count; i-- > 0;) {
+        if (ctx->plot->clip(ctx, clip) != NSERROR_OK ||
+            !html_redraw_inline_background_layer(
+                x, y, box, scale, clip, b, first, last, background_colour, unit_len_ctx, ctx, i, i == count - 1))
+            return false;
+    }
+    return true;
+}
 
 /**
  * Plot text decoration for an inline box.

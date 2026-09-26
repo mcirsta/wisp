@@ -258,6 +258,16 @@ char *squash_whitespace(const char *s)
     return strdup(s);
 }
 
+bool html_fetch_background(struct html_content *c, struct nsurl *url, struct box *box, content_type type, uint32_t layer)
+{
+    return true;
+}
+
+void *_talloc_zero_array(const void *ctx, size_t element_size, unsigned count, const char *name)
+{
+    return calloc(count, element_size);
+}
+
 void *_talloc_zero(const void *ctx, size_t size, const char *name)
 {
     return calloc(1, size);

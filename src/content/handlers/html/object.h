@@ -43,6 +43,9 @@ struct nsurl;
  * \param background this is a background image
  * \return true on success, false on memory exhaustion
  */
+bool html_fetch_background(
+    struct html_content *c, nsurl *url, struct box *box, content_type permitted_types, uint32_t layer);
+
 bool html_fetch_object(
     struct html_content *c, struct nsurl *url, struct box *box, content_type permitted_types, bool background);
 

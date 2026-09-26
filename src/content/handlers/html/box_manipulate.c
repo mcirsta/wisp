@@ -156,6 +156,7 @@ struct box *box_create(css_select_results *styles, css_computed_style *style, bo
     box->usemap = NULL;
     box->id = id;
     box->background = NULL;
+    box->background_layers = NULL;
     box->object = NULL;
     box->object_params = NULL;
     box->iframe = NULL;

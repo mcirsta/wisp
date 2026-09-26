@@ -91,12 +91,15 @@ static void html_object_failed(struct box *box, html_content *content, bool back
  * Update a box whose content has completed rendering.
  */
 
-static void html_object_done(struct box *box, hlcache_handle *object, bool background)
+static void html_object_done(struct box *box, hlcache_handle *object, bool background, uint32_t layer)
 {
     struct box *b;
 
     if (background) {
-        box->background = object;
+        if (layer == 0)
+            box->background = object;
+        else
+            box->background_layers[layer - 1] = object;
         return;
     }
 
@@ -209,7 +212,7 @@ static nserror html_object_callback(hlcache_handle *object, const hlcache_event 
                 box->max_width != UNKNOWN_MAX_WIDTH ? box->height : 0);
 
             /* Adjust parent content for new object size */
-            html_object_done(box, object, o->background);
+            html_object_done(box, object, o->background, o->background_layer);
 
             /* Incremental reflow on READY - disabled by default for performance.
              * Enable via CMake: -DNEOSURF_ENABLE_INCREMENTAL_REFLOW=ON
@@ -248,7 +251,7 @@ static nserror html_object_callback(hlcache_handle *object, const hlcache_event 
         c->base.active--;
         NSLOG(wisp, INFO, "%d fetches active (scripts_active=%d)", c->base.active, c->scripts_active);
 
-        html_object_done(box, object, o->background);
+        html_object_done(box, object, o->background, o->background_layer);
 
         /*
          * Broadcast a redraw for the box area.
@@ -307,6 +310,12 @@ static nserror html_object_callback(hlcache_handle *object, const hlcache_event 
         break;
 
     case CONTENT_MSG_ERROR:
+        if (o->background) {
+            if (o->background_layer == 0)
+                box->background = NULL;
+            else
+                box->background_layers[o->background_layer - 1] = NULL;
+        }
         hlcache_handle_release(object);
 
         o->content = NULL;
@@ -337,7 +346,7 @@ static nserror html_object_callback(hlcache_handle *object, const hlcache_event 
 
             box_coords(box, &x, &y);
 
-            if (object == box->background) {
+            if (o->background) {
                 /* Redraw request is for background */
                 css_fixed_or_calc hpos = (css_fixed_or_calc)0, vpos = (css_fixed_or_calc)0;
                 css_unit hunit = CSS_UNIT_PX;
@@ -347,10 +356,10 @@ static nserror html_object_callback(hlcache_handle *object, const hlcache_event 
                 int t, h, l, w;
 
                 /* Need to know background-position */
-                css_computed_background_position(box->style, &hpos, &hunit, &vpos, &vunit);
+                css_computed_background_position_layer(box->style, o->background_layer, &hpos, &hunit, &vpos, &vunit);
 
-                w = content_get_width(box->background);
-                h = content_get_height(box->background);
+                w = content_get_width(object);
+                h = content_get_height(object);
 #ifdef WISP_DEVICE_PIXEL_LAYOUT
                 {
                     int dpi = browser_get_dpi();
@@ -389,7 +398,7 @@ static nserror html_object_callback(hlcache_handle *object, const hlcache_event 
                 }
 
                 /* Redraw area depends on background-repeat */
-                switch (css_computed_background_repeat(box->style)) {
+                switch (css_computed_background_repeat_layer(box->style, o->background_layer)) {
                 case CSS_BACKGROUND_REPEAT_REPEAT:
                     data.redraw.x = 0;
                     data.redraw.y = 0;
@@ -809,7 +818,8 @@ nserror html_object_free_objects(html_content *html)
 
 
 /* exported interface documented in html/object.h */
-bool html_fetch_object(html_content *c, nsurl *url, struct box *box, content_type permitted_types, bool background)
+static bool html_fetch_object_layer(
+    html_content *c, nsurl *url, struct box *box, content_type permitted_types, bool background, uint32_t layer)
 {
     struct content_html_object *object;
     hlcache_handle_callback object_callback;
@@ -843,6 +853,7 @@ bool html_fetch_object(html_content *c, nsurl *url, struct box *box, content_typ
     object->box = box;
     object->permitted_types = permitted_types;
     object->background = background;
+    object->background_layer = layer;
 
     /* Increment active BEFORE hlcache_handle_retrieve.
      * Callbacks can fire synchronously for cached content,
@@ -921,4 +932,14 @@ bool html_fetch_object_buffer(html_content *c, const uint8_t *data, size_t len, 
     c->num_objects++;
 
     return true;
+}
+
+bool html_fetch_object(html_content *c, nsurl *url, struct box *box, content_type permitted_types, bool background)
+{
+    return html_fetch_object_layer(c, url, box, permitted_types, background, 0);
+}
+
+bool html_fetch_background(html_content *c, nsurl *url, struct box *box, content_type permitted_types, uint32_t layer)
+{
+    return html_fetch_object_layer(c, url, box, permitted_types, true, layer);
 }

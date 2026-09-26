@@ -193,3 +193,13 @@
 | *
 |  width: /* -> 0px */ calc(1em 1px + =) !important
 #reset
+
+#data
+* { width: calc((100% - 2px) / 2) !important; height: 10px; display: flex; }
+#errors
+#expected
+| *
+|  width: /* -> 0px */ calc(100% 2px - 2 / =) !important
+|  height: 10px
+|  display: flex
+#reset

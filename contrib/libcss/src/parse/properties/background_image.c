@@ -10,7 +10,7 @@
 
 #include "bytecode/bytecode.h"
 #include "bytecode/opcodes.h"
-#include "parse/properties/properties.h"
+#include "parse/properties/background.h"
 #include "parse/properties/utils.h"
 
 #include <libcss/gradient.h>
@@ -326,7 +326,7 @@ parse_radial_gradient(css_language *c, const parserutils_vector *vector, int32_t
  * Supports: none, inherit, initial, revert, unset, url(), linear-gradient(), radial-gradient()
  */
 css_error
-css__parse_background_image(css_language *c, const parserutils_vector *vector, int32_t *ctx, css_style *result)
+css__parse_background_image_item(css_language *c, const parserutils_vector *vector, int32_t *ctx, css_style *result)
 {
     int32_t orig_ctx = *ctx;
     css_error error;
@@ -403,4 +403,9 @@ css__parse_background_image(css_language *c, const parserutils_vector *vector, i
 
     *ctx = orig_ctx;
     return CSS_INVALID;
+}
+
+css_error css__parse_background_image(css_language *c, const parserutils_vector *v, int32_t *ctx, css_style *result)
+{
+    return css__parse_background_list(c, v, ctx, result, CSS_PROP_BACKGROUND_IMAGE, css__parse_background_image_item);
 }

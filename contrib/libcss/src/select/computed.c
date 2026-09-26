@@ -13,6 +13,7 @@
 #include "select/arena.h"
 #include "select/calc.h"
 #include "select/computed.h"
+#include "select/background.h"
 #include "select/dispatch.h"
 #include "select/propget.h"
 #include "select/propset.h"
@@ -178,6 +179,8 @@ css_error css_computed_style_destroy(css_computed_style *style)
     // TODO can these be NULL ?
     if (style->i.list_style_image != NULL)
         lwc_string_unref(style->i.list_style_image);
+    css__background_destroy(style);
+
     if (style->i.background_image != NULL)
         lwc_string_unref(style->i.background_image);
 
@@ -312,13 +315,16 @@ css_error css_computed_style_compose(const css_computed_style *restrict parent,
     for (i = 0; i < CSS_N_PROPERTIES; i++) {
         /* Compose the property */
         error = prop_dispatch[i].compose(parent, child, composed);
-        if (error != CSS_OK)
-            break;
+        if (error != CSS_OK) {
+            css_computed_style_destroy(composed);
+            return error;
+        }
     }
 
     /* Finally, compute absolute values for everything */
     error = css__compute_absolute_values(parent, composed, unit_ctx);
     if (error != CSS_OK) {
+        css_computed_style_destroy(composed);
         return error;
     }
 
@@ -345,6 +351,16 @@ const css_radial_gradient *css_computed_background_radial_gradient(const css_com
 /******************************************************************************
  * Library internals                                                          *
  ******************************************************************************/
+
+static void compute_background_length(
+    css_fixed_or_calc *length, css_unit *unit, const css_computed_style *style, const css_unit_ctx *ctx)
+{
+    if (*unit == CSS_UNIT_EM || *unit == CSS_UNIT_EX || *unit == CSS_UNIT_CH || *unit == CSS_UNIT_REM ||
+        *unit == CSS_UNIT_LH || *unit == CSS_UNIT_IC) {
+        length->value = css_unit_len2css_px(style, ctx, length->value, *unit);
+        *unit = CSS_UNIT_PX;
+    }
+}
 
 static void compute_gradient_lengths(
     css_gradient_stop *stops, uint8_t count, const css_computed_style *style, const css_unit_ctx *unit_ctx)
@@ -435,10 +451,16 @@ css__compute_absolute_values(const css_computed_style *parent, css_computed_styl
         ex_size.data.length.value = 0;
     ex_size.data.length.unit = CSS_UNIT_EM;
 
-    /* Fix up background-position */
-    error = compute_absolute_length_pair(style, &ex_size.data.length, get_background_position, set_background_position);
-    if (error != CSS_OK)
-        return error;
+    /* Resolve font-relative background positions before inheritance. */
+    css_background_position pos = {0};
+    uint8_t position_type = get_background_position(style, &pos.x, &pos.xunit, &pos.y, &pos.yunit);
+    if (position_type == CSS_BACKGROUND_POSITION_SET) {
+        compute_background_length(&pos.x, &pos.xunit, style, unit_ctx);
+        compute_background_length(&pos.y, &pos.yunit, style, unit_ctx);
+        error = set_background_position(style, position_type, pos.x, pos.xunit, pos.y, pos.yunit);
+        if (error != CSS_OK)
+            return error;
+    }
 
     /* Fix up background-color */
     error = compute_absolute_color(style, get_background_color, set_background_color);
@@ -565,6 +587,31 @@ css__compute_absolute_values(const css_computed_style *parent, css_computed_styl
     error = compute_absolute_length(style, &ex_size.data.length, get_column_gap, set_column_gap);
     if (error != CSS_OK)
         return error;
+
+    /* Compute relative units in every layer before styles can be inherited
+     * or interned. Lists have independent lengths; even unused items matter. */
+    if (style->background_layers != NULL) {
+        struct css_background_list *positions = style->background_layers->list[CSS_BG_POSITION];
+        if (positions != NULL) {
+            for (uint32_t i = 0; i < positions->count; i++) {
+                css_background_position *p = &positions->values[i].position;
+                compute_background_length(&p->x, &p->xunit, style, unit_ctx);
+                compute_background_length(&p->y, &p->yunit, style, unit_ctx);
+            }
+        }
+        struct css_background_list *images = style->background_layers->list[CSS_BG_IMAGE];
+        if (images != NULL) {
+            for (uint32_t i = 0; i < images->count; i++) {
+                css_background_image *image = &images->values[i].image;
+                if (image->type == CSS_BACKGROUND_IMAGE_LINEAR_GRADIENT)
+                    compute_gradient_lengths(
+                        image->data.linear->stops, image->data.linear->stop_count, style, unit_ctx);
+                else if (image->type == CSS_BACKGROUND_IMAGE_RADIAL_GRADIENT)
+                    compute_gradient_lengths(
+                        image->data.radial->stops, image->data.radial->stop_count, style, unit_ctx);
+            }
+        }
+    }
 
     if (style->background_gradient != NULL)
         compute_gradient_lengths(

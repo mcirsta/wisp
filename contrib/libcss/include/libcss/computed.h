@@ -195,6 +195,18 @@ uint8_t css_computed_border_bottom_width(const css_computed_style *style, css_fi
 
 uint8_t css_computed_border_left_width(const css_computed_style *style, css_fixed_or_calc *length, css_unit *unit);
 
+/** Image list length (including none). Other lists cycle to match it.
+ * Existing unindexed getters continue to return the first value. */
+uint32_t css_computed_background_layer_count(const css_computed_style *style);
+uint8_t css_computed_background_image_layer(const css_computed_style *style, uint32_t layer, lwc_string **url);
+const css_linear_gradient *css_computed_background_gradient_layer(const css_computed_style *style, uint32_t layer);
+const css_radial_gradient *
+css_computed_background_radial_gradient_layer(const css_computed_style *style, uint32_t layer);
+uint8_t css_computed_background_position_layer(const css_computed_style *style, uint32_t layer, css_fixed_or_calc *x,
+    css_unit *xu, css_fixed_or_calc *y, css_unit *yu);
+uint8_t css_computed_background_repeat_layer(const css_computed_style *style, uint32_t layer);
+uint8_t css_computed_background_attachment_layer(const css_computed_style *style, uint32_t layer);
+
 uint8_t css_computed_background_image(const css_computed_style *style, lwc_string **url);
 
 /**

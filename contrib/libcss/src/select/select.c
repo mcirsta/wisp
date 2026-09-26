@@ -2684,7 +2684,9 @@ static void cascade_skip_property(css_style *style, css_code_t opv)
     opcode_t op = getOpcode(opv);
     uint32_t value = getValue(opv);
 
-    if (op == CSS_PROP_VAR_DEFERRED || op == CSS_PROP_CUSTOM_PROPERTY) {
+    if (css__is_background_list(opv)) {
+        advance_bytecode(style, (1 + *style->bytecode) * sizeof(css_code_t));
+    } else if (op == CSS_PROP_VAR_DEFERRED || op == CSS_PROP_CUSTOM_PROPERTY) {
         advance_bytecode(style, 2 * sizeof(css_code_t));
     } else if (hasFlagValue(opv) == false && value == VALUE_IS_CALC) {
         advance_bytecode(style, 2 * sizeof(css_code_t));

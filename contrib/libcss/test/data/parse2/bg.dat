@@ -273,3 +273,30 @@
 | *
 #reset
 
+#data
+* {
+ background-image: url(top.png), linear-gradient(90deg, red 10%, blue), radial-gradient(circle, white, black), none !important;
+ background-position: left top, 25% 10px !important;
+ background-repeat: no-repeat, repeat-x !important;
+ background-attachment: scroll, fixed !important;
+ color: #123456;
+}
+#errors
+#expected
+| *
+|  background-image: /* 4 layers !important */
+|  background-image: url('top.png')
+|  background-image: linear-gradient(3, #ffff0000 10%, #ff0000ff)
+|  background-image: radial-gradient(0, #ffffffff, #ff000000)
+|  background-image: none
+|  background-position: /* 2 layers !important */
+|  background-position: left top
+|  background-position: 25% 10px
+|  background-repeat: /* 2 layers !important */
+|  background-repeat: no-repeat
+|  background-repeat: repeat-x
+|  background-attachment: /* 2 layers !important */
+|  background-attachment: scroll
+|  background-attachment: fixed
+|  color: #ff123456
+#reset

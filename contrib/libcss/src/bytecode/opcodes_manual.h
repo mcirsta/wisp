@@ -13,6 +13,21 @@
 #ifndef css_bytecode_opcodes_manual_h_
 #define css_bytecode_opcodes_manual_h_
 
+
+/* A background list is OPV, payload word count, item count, then scalar
+ * OPV/payload pairs. Only the outer OPV participates in the cascade.
+ * Single values retain their existing encoding. No native pointers occur here. */
+#define BACKGROUND_LAYER_LIST 0x2000
+
+enum op_background_attachment { BACKGROUND_ATTACHMENT_FIXED = 0, BACKGROUND_ATTACHMENT_SCROLL = 1 };
+enum op_background_repeat {
+    BACKGROUND_REPEAT_NO_REPEAT = 0,
+    BACKGROUND_REPEAT_REPEAT_X = 1,
+    BACKGROUND_REPEAT_REPEAT_Y = 2,
+    BACKGROUND_REPEAT_REPEAT = 3
+};
+
+
 enum op_aspect_ratio { ASPECT_RATIO_AUTO = 0, ASPECT_RATIO_RATIO = 0x0080, ASPECT_RATIO_AUTO_RATIO = 0x0081 };
 
 enum op_azimuth {

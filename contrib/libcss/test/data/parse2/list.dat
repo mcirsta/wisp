@@ -546,6 +546,20 @@
 | *
 #reset
 
+#data
+* { content: open-quote counters(section, ".", lower-roman) " tail" close-quote; color: #123456; }
+#errors
+#expected
+| *
+|  content: open-quote counters(section, ., lower-roman) ' tail' close-quote
+|  color: #ff123456
+#reset
 
-
-
+#data
+* { content: counters(section, " / ") counter(item, upper-alpha) attr(title) url(icon.png) no-close-quote !important; display: block; }
+#errors
+#expected
+| *
+|  content: counters(section,  / ) counter(item, upper-alpha) attr('title') url('icon.png') no-close-quote !important
+|  display: block
+#reset

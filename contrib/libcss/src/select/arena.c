@@ -11,6 +11,7 @@
 #include "select/arena.h"
 #include "select/arena_hash.h"
 #include "select/computed.h"
+#include "select/background.h"
 
 #define TU_SIZE 3037
 #define TS_SIZE 5101
@@ -20,7 +21,7 @@ struct css_computed_style *table_s[TS_SIZE];
 
 static inline uint32_t css__arena_hash_style(struct css_computed_style *s)
 {
-    return css__arena_hash((const uint8_t *)&s->i, sizeof(s->i));
+    return css__arena_hash((const uint8_t *)&s->i, sizeof(s->i)) ^ css__background_hash(s);
 }
 
 
@@ -122,6 +123,9 @@ static inline bool css__arena_style_is_equal(struct css_computed_style *a, struc
     if (memcmp(&a->i, &b->i, sizeof(struct css_computed_style_i)) != 0) {
         return false;
     }
+
+    if (!css__background_equal(a, b))
+        return false;
 
     if (!arena__compare_string_list(a->font_family, b->font_family)) {
         return false;

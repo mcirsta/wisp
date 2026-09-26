@@ -642,6 +642,7 @@ class CSSGroup:
         t.append('/* CSS gradient data */')
         t.append('css_linear_gradient *background_gradient;')
         t.append('css_radial_gradient *background_radial_gradient;')
+        t.append('struct css_background_lists *background_layers;')
         t.append()
         t.append('struct css_computed_style *next;')
         t.append('uint32_t count;')
