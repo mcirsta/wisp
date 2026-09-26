@@ -1,0 +1,25 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Inline image baseline and line strut</title>
+<style>
+  body { margin: 0; font: 16px/23px sans-serif; }
+  section { margin: 8px; border: 1px solid #777; width: 400px; }
+  .line { background: #ffe8bd; }
+  img { width: 20px; height: 80px; }
+</style>
+<!-- The orange space below baseline images comes from the font and line-height.
+     Top/bottom alignment, block display and zero line-height provide controls. -->
+<section><div class="line" id="baseline"><img id="baseline-image" src="inline-image-baseline.svg"></div></section>
+<section><div class="line" id="top"><img style="vertical-align:top" src="inline-image-baseline.svg"></div></section>
+<section><div class="line" id="bottom"><img style="vertical-align:bottom" src="inline-image-baseline.svg"></div></section>
+<section><div class="line" id="mixed"><img id="mixed-image" src="inline-image-baseline.svg"><span id="mixed-text">H</span></div></section>
+<section><div class="line" id="two"><img id="tall-image" src="inline-image-baseline.svg"><img id="short-image" style="height:40px" src="inline-image-baseline.svg"></div></section>
+<section><div class="line" id="small"><img id="small-image" style="height:8px" src="inline-image-baseline.svg"></div></section>
+<section><div class="line" id="large-font" style="font-size:32px;line-height:46px"><img src="inline-image-baseline.svg"></div></section>
+<section><div class="line" id="zero-font" style="font-size:0;line-height:0"><img src="inline-image-baseline.svg"></div></section>
+<section><div class="line" id="zero-line" style="line-height:0"><img src="inline-image-baseline.svg"></div></section>
+<section><div class="line" id="edges"><img id="edges-image" style="margin:5px 0 7px;border:2px solid black;padding:3px" src="inline-image-baseline.svg"></div></section>
+<section><div class="line" id="linked"><a href="#"><img src="inline-image-baseline.svg"></a></div></section>
+<section><div class="line" id="wrapped" style="width:30px"><img id="wrap-first" src="inline-image-baseline.svg"><img id="wrap-second" src="inline-image-baseline.svg"></div></section>
+<section><div class="line" id="block"><img style="display:block" src="inline-image-baseline.svg"></div></section>
+<section><div class="line" id="float-only"><img style="float:left" src="inline-image-baseline.svg"></div><div style="clear:both"></div></section>

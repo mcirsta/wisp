@@ -24,9 +24,28 @@
 
 #include <wisp/content/handlers/css/utils.h>
 #include <wisp/plot_style.h>
+#include <wisp/layout.h>
 #include <wisp/utils/nsoption.h>
 
 #include "content/handlers/html/font.h"
+
+int font_baseline(const struct gui_layout_table *font_func, const struct plot_font_style *fstyle, int line_height)
+{
+    int ascent, descent;
+    if (fstyle->size == 0)
+        return line_height / 2;
+    if (font_func && font_func->font_metrics &&
+        font_func->font_metrics(fstyle, &ascent, &descent) == NSERROR_OK && ascent >= 0 && descent >= 0) {
+        /* CSS 2.1 §10.8.1: split leading equally above and below the font.
+         * Leading may be negative; keep ascent + descent equal to line-height. */
+        return (line_height + ascent - descent) / 2;
+    }
+
+    /* Preserve the historical text-painting baseline for other frontends. */
+    int pixels = (fstyle->flags & FONTF_SIZE_PIXELS) ? fstyle->size / PLOT_STYLE_SCALE :
+        (fstyle->size * 4) / (PLOT_STYLE_SCALE * 3);
+    return (2 * line_height + pixels) / 4;
+}
 
 /**
  * Map a generic CSS font family to a generic plot font family

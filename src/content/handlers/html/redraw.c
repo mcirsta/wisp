@@ -72,16 +72,6 @@
 #include "content/handlers/html/stacking.h"
 #include "content/handlers/image/svg.h"
 
-/* Font size scale factor (converts from plot style units to pixels) */
-#define FONT_SIZE_SCALE (4.0 / 3.0)
-
-/* Vertical center offset ratio within line height */
-#define BASELINE_CENTER_RATIO 0.5
-
-/* Additional offset ratio relative to font size for baseline alignment */
-#define BASELINE_FONT_RATIO 0.25
-
-
 bool html_redraw_debug = false;
 
 /**
@@ -317,8 +307,7 @@ static bool text_redraw(const char *utf8_text, size_t utf8_len, size_t offset, i
     plot_font_style_t plot_fstyle = *fstyle;
     nserror res;
 
-    int font_size_px = (fstyle->size * FONT_SIZE_SCALE) / PLOT_STYLE_SCALE;
-    int baseline_offset = (int)((height * BASELINE_CENTER_RATIO + font_size_px * BASELINE_FONT_RATIO) * scale);
+    int baseline_offset = font_baseline(((html_content *)c)->font_func, fstyle, height) * scale;
 
     /* Need scaled text size to pass to plotters */
     plot_fstyle.size *= scale;

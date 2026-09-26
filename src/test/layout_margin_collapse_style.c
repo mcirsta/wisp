@@ -145,3 +145,10 @@ void destroy_mock_style(css_computed_style *s)
 {
     free(s);
 }
+
+void style_set_inline_metrics(css_computed_style *s, int font_px, int line_px, uint8_t align)
+{
+    set_font_size(s, CSS_FONT_SIZE_DIMENSION, (css_fixed_or_calc)INTTOFIX(font_px), CSS_UNIT_PX);
+    set_line_height(s, CSS_LINE_HEIGHT_DIMENSION, (css_fixed_or_calc)INTTOFIX(line_px), CSS_UNIT_PX);
+    set_vertical_align(s, align, (css_fixed_or_calc)0, CSS_UNIT_PX);
+}

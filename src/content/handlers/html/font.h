@@ -28,6 +28,10 @@
 #define WISP_HTML_FONT_H
 
 struct plot_font_style;
+struct gui_layout_table;
+
+/** Baseline offset within a CSS line-height, including half-leading. */
+int font_baseline(const struct gui_layout_table *font_func, const struct plot_font_style *fstyle, int line_height);
 
 /**
  * Populate a font style using data from a computed CSS style

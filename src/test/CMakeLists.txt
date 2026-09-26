@@ -362,6 +362,14 @@ set_tests_properties(layout_margin_collapse_test PROPERTIES
   ENVIRONMENT "CK_VERBOSITY=verbose;CK_FORK=no"
 )
 
+add_executable(layout_inline_baseline_test
+  layout_inline_baseline_test.c
+  $<TARGET_OBJECTS:margin_collapse_style>
+)
+target_include_directories(layout_inline_baseline_test PRIVATE ${TEST_COMMON_INCLUDES} ${CMAKE_SOURCE_DIR}/include)
+target_link_libraries(layout_inline_baseline_test wisp ${CHECK_LIBRARIES})
+add_test(NAME layout_inline_baseline_test COMMAND layout_inline_baseline_test)
+
 # ============================================================================
 # Unix-only Tests (require malloc_fig)
 # ============================================================================

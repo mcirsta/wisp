@@ -2994,6 +2994,71 @@ static int line_height(const css_unit_ctx *unit_len_ctx, const css_computed_styl
 }
 
 
+static bool box_is_inline_object(const struct box *box)
+{
+    return (box->type == BOX_INLINE || box->type == BOX_INLINE_BLOCK) && lh__box_is_object(box);
+}
+
+static int layout_text_baseline(const html_content *content, const css_computed_style *style, int height)
+{
+    plot_font_style_t fstyle;
+    font_plot_style_from_css(&content->unit_len_ctx, style, &fstyle);
+    return font_baseline(content->font_func, &fstyle, height);
+}
+
+/**
+ * Measure the baseline and line height for a line containing replaced content.
+ * The parent's zero-width strut contributes ascent and descent even if there
+ * is no text. Top/bottom-aligned objects contribute height without extending
+ * the baseline; ordinary inline-block baseline discovery remains separate.
+ */
+static bool layout_line_object_metrics(struct box *first, struct box *end, const html_content *content,
+    int *height, int *baseline)
+{
+    bool has_object = false;
+    for (struct box *b = first; b != end; b = b->next) {
+        if (box_is_inline_object(b) && !box_is_out_of_flow(b)) {
+            has_object = true;
+            break;
+        }
+    }
+    if (!has_object)
+        return false;
+
+    const css_computed_style *parent_style = first->parent->parent->style;
+    int strut_height = line_height(&content->unit_len_ctx, parent_style);
+    int above = layout_text_baseline(content, parent_style, strut_height);
+    int below = strut_height - above;
+    int aligned_height = strut_height;
+
+    for (struct box *b = first; b != end; b = b->next) {
+        if (lh__box_is_float_box(b) || box_is_out_of_flow(b) || !b->style)
+            continue;
+        css_fixed_or_calc value = (css_fixed_or_calc)0;
+        css_unit unit = CSS_UNIT_PX;
+        uint8_t align = css_computed_vertical_align(b->style, &value, &unit);
+        bool object = box_is_inline_object(b);
+        int h = b->height;
+        if (object) {
+            h += b->margin[TOP] + b->border[TOP].width + b->padding[TOP] + b->padding[BOTTOM] +
+                b->border[BOTTOM].width + b->margin[BOTTOM];
+        } else if (b->type != BOX_TEXT && b->type != BOX_INLINE && b->type != BOX_INLINE_END) {
+            continue;
+        }
+        if (align == CSS_VERTICAL_ALIGN_BASELINE || align == CSS_VERTICAL_ALIGN_INHERIT) {
+            int a = object ? h : layout_text_baseline(content, b->style, h);
+            above = max(above, a);
+            below = max(below, h - a);
+        } else {
+            aligned_height = max(aligned_height, h);
+        }
+    }
+    *height = max(*height, max(above + below, aligned_height));
+    *baseline = above;
+    return true;
+}
+
+
 /**
  * Position a line of boxes in inline formatting context.
  *
@@ -3026,6 +3091,7 @@ static bool layout_line(struct box *first, int *width, int *y, int cx, int cy, s
     struct box *br_box = 0;
     bool move_y = false;
     bool place_below = false;
+    bool has_inline_object = false;
     int space_before = 0, space_after = 0;
     unsigned int inline_count = 0;
     unsigned int i;
@@ -3090,6 +3156,7 @@ static bool layout_line(struct box *first, int *width, int *y, int cx, int cy, s
             continue;
 
         assert(b->style != NULL);
+        has_inline_object |= box_is_inline_object(b);
         font_plot_style_from_css(&content->unit_len_ctx, b->style, &fstyle);
 
         x += space_after;
@@ -3247,6 +3314,11 @@ static bool layout_line(struct box *first, int *width, int *y, int cx, int cy, s
 
         x += b->width;
     }
+
+    /* Include the strut descent when determining which floats this line meets. */
+    int baseline;
+    if (has_inline_object)
+        layout_line_object_metrics(first, b, content, &height, &baseline);
 
     /* find new sides using this height */
     x0 = cx;
@@ -3575,9 +3647,30 @@ static bool layout_line(struct box *first, int *width, int *y, int cx, int cy, s
 
     assert(b != first || (move_y && 0 < used_height && (left || right)));
 
+    /* Recompute from boxes actually placed on this line after wrapping. */
+    bool object_line = has_inline_object && layout_line_object_metrics(first, b, content, &used_height, &baseline);
+
     /* handle vertical-align by adjusting box y values */
     /** \todo  proper vertical alignment handling */
     for (d = first; d != b; d = d->next) {
+        if (object_line && box_is_inline_object(d) && !box_is_out_of_flow(d)) {
+            css_fixed_or_calc value = (css_fixed_or_calc)0;
+            css_unit unit = CSS_UNIT_PX;
+            h = d->margin[TOP] + d->border[TOP].width + d->padding[TOP] + d->height + d->padding[BOTTOM] +
+                d->border[BOTTOM].width + d->margin[BOTTOM];
+            switch (css_computed_vertical_align(d->style, &value, &unit)) {
+            case CSS_VERTICAL_ALIGN_BASELINE:
+            case CSS_VERTICAL_ALIGN_INHERIT:
+                d->y += baseline - h;
+                break;
+            case CSS_VERTICAL_ALIGN_BOTTOM:
+                d->y += used_height - h;
+                break;
+            default:
+                break;
+            }
+            continue;
+        }
         if ((d->type == BOX_INLINE && d->inline_end) || d->type == BOX_BR || d->type == BOX_TEXT ||
             d->type == BOX_INLINE_END) {
             css_fixed_or_calc value = (css_fixed_or_calc)0;
@@ -3595,7 +3688,10 @@ static bool layout_line(struct box *first, int *width, int *y, int cx, int cy, s
                 break;
             default:
             case CSS_VERTICAL_ALIGN_BASELINE:
-                d->y += 0.75 * (used_height - d->height);
+                if (object_line)
+                    d->y += baseline - layout_text_baseline(content, d->style, d->height);
+                else
+                    d->y += 0.75 * (used_height - d->height);
                 break;
             }
         }

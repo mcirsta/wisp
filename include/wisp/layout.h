@@ -117,6 +117,13 @@ struct gui_layout_table {
      * \return NSERROR_OK on success, or appropriate error code
      */
     nserror (*load_font_data)(const struct font_variant_id *id, const uint8_t *data, size_t size);
+
+    /**
+     * Optional font ascent and descent, in unscaled layout pixels.
+     * Both values are nonnegative distances from the baseline. The core
+     * supplies a fallback when this callback is absent or fails.
+     */
+    nserror (*font_metrics)(const struct plot_font_style *fstyle, int *ascent, int *descent);
 };
 
 #endif

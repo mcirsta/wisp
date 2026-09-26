@@ -724,11 +724,23 @@ static nserror nsqt_load_font_data(const struct font_variant_id *id, const uint8
 }
 
 
+static nserror nsqt_font_metrics(const struct plot_font_style *fstyle, int *ascent, int *descent)
+{
+    QFont *font = nsfont_style_to_font(fstyle);
+    QFontMetricsF metrics(*font, get_metrics_device());
+    qreal scale = svg_font_scale(fstyle);
+    *ascent = qRound(metrics.ascent() * scale);
+    *descent = qRound(metrics.descent() * scale);
+    delete font;
+    return NSERROR_OK;
+}
+
 static struct gui_layout_table layout_table = {
     .width = nsqt_layout_width,
     .position = nsqt_layout_position,
     .split = nsqt_layout_split,
     .load_font_data = nsqt_load_font_data,
+    .font_metrics = nsqt_font_metrics,
 };
 
 struct gui_layout_table *nsqt_layout_table = &layout_table;
