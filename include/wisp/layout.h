@@ -92,6 +92,8 @@ struct gui_layout_table {
      * \return NSERROR_OK or appropriate error code on faliure
      *
      * On exit, char_offset indicates first character after split point.
+     * For a break at a space, leave char_offset on the space and exclude it
+     * from actual_x; the caller consumes and accounts for that space separately.
      *
      * \note char_offset of 0 must never be returned.
      *

@@ -512,7 +512,7 @@ static nserror nsqt_layout_split(const struct plot_font_style *fstyle, const cha
     size_t split_len;
     int split_x;
     size_t str_len;
-    size_t last_word_end = 0; /* Track position before trailing space (for actual_x) */
+    size_t last_word_end = 0; /* Both offset and width exclude the breaking space. */
     int full_width = metrics.horizontalAdvance(QString::fromUtf8(string, length));
 
     res = layout_position(metrics, string, length, split, &split_len, &split_x);
@@ -521,33 +521,17 @@ static nserror nsqt_layout_split(const struct plot_font_style *fstyle, const cha
         return res;
     }
 
-    if ((split_len < 1) || (split_len >= length)) {
+    if (length == 0 || full_width <= split) {
         *string_idx = length;
-        *actual_x = split_x;
+        *actual_x = full_width;
         goto nsqt_layout_split_done;
     }
 
-    if (string[split_len] == ' ') {
-        /* string broke on boundary - but check if next word also fits */
-        size_t next_space = split_len + 1;
-        while ((next_space < length) && (string[next_space] != ' ')) {
-            next_space++;
-        }
-        /* include the space after next word if it exists */
-        if (next_space < length && string[next_space] == ' ') {
-            next_space++;
-        }
-        int next_width = metrics.horizontalAdvance(QString::fromUtf8(string, next_space));
-        if (next_width <= split) {
-            /* next word also fits! use it */
-            *string_idx = next_space;
-            *actual_x = next_width;
-        } else {
-            *string_idx = split_len;
-            *actual_x = split_x;
-        }
-        goto nsqt_layout_split_done;
-    }
+    /* If the position estimate reaches the end despite overflowing (very
+     * narrow glyphs), restart at the first word. A zero estimate likewise
+     * searches forward for a complete word, even if that word cannot fit. */
+    if (split_len >= length)
+        split_len = 0;
 
     /* attempt to break string */
     str_len = split_len;
@@ -600,8 +584,10 @@ static nserror nsqt_layout_split(const struct plot_font_style *fstyle, const cha
         }
     }
 
-    *string_idx = str_len;
-    /* Return width WITHOUT trailing space since it's trimmed at line end */
+    /* The core consumes text[*string_idx] when it is a space and records its
+     * advance separately. Including that space in the offset but not the width
+     * loses the gap when retained text boxes are placed together on reflow. */
+    *string_idx = last_word_end;
     *actual_x = metrics.horizontalAdvance(QString::fromUtf8(string, last_word_end));
 
 nsqt_layout_split_done:

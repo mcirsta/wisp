@@ -94,6 +94,17 @@ set(QT_RESOURCES
 
 add_executable(wisp-qt ${QT_SOURCES} ${QT_RESOURCES})
 
+if(BUILD_TESTING AND WISP_ENABLE_TESTS)
+    add_executable(qt_text_split_test test_text_split.cpp test_text_reflow.c layout.cpp
+        $<TARGET_OBJECTS:margin_collapse_style>)
+    target_include_directories(qt_text_split_test PRIVATE
+        ${CMAKE_SOURCE_DIR}/include ${CMAKE_SOURCE_DIR}/src ${CMAKE_SOURCE_DIR}/frontends)
+    target_link_libraries(qt_text_split_test PRIVATE Qt6::Widgets wisp)
+    add_test(NAME qt_text_split COMMAND qt_text_split_test)
+    set_tests_properties(qt_text_split PROPERTIES TIMEOUT 30
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_SCALE_FACTOR=1;QT_SCREEN_SCALE_FACTORS=1;QT_FONT_DPI=96")
+endif()
+
 option(WISP_QT_CAPTURE "Build the optional Qt rendering capture tool" OFF)
 if(WISP_QT_CAPTURE)
     target_sources(wisp-qt PRIVATE capture.cpp capture_inspect.cpp)

@@ -1,0 +1,12 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Text split spacing after image loading and resizing</title>
+<style>
+  body { margin: 10px; font: 16px/23px "Noto Sans", sans-serif; }
+  p { width: 369px; max-width: 100%; margin: 0 0 20px; background: #eef; }
+</style>
+<!-- These paragraphs should wrap alike, including after loading and resizing. -->
+<p id="plain">With the proprietary Chaos Group V-RAY renderer, there was an upset in better performance on Windows with the RTX GPU back-end.</p>
+<p id="split">With the proprietary Chaos Group V-RAY <span>renderer, there was an upset in better performance on Windows with the RTX GPU back-end.</span></p>
+<!-- Loading a separate image exercises a further layout pass. -->
+<img id="reflow-trigger" src="inline-image-baseline.svg" width="20" height="80" alt="Reflow trigger">
