@@ -26,6 +26,64 @@
 
 #include "content/handlers/html/redraw_helpers.h"
 #include <wisp/types.h>
+#include <assert.h>
+#include <math.h>
+
+void html_gradient_positions(const css_gradient_stop *stops, unsigned int count, const css_computed_style *style,
+    const css_unit_ctx *unit_ctx, float length, float scale, float *positions)
+{
+    assert(count >= 2 && length > 0);
+    unsigned int previous = 0;
+    for (unsigned int i = 0; i < count; i++) {
+        if (stops[i].auto_offset) {
+            if (i == 0)
+                positions[i] = 0;
+            else if (i == count - 1)
+                positions[i] = 1;
+            else
+                continue;
+        } else if (stops[i].unit == CSS_UNIT_PCT) {
+            positions[i] = FIXTOFLT(stops[i].offset) / 100.0f;
+        } else {
+            positions[i] = FIXTOFLT(css_unit_len2device_px(style, unit_ctx, stops[i].offset, stops[i].unit)) * scale /
+                length;
+        }
+        if (i > 0) {
+            positions[i] = fmaxf(positions[i], positions[previous]);
+            /* Distribute an omitted run between its surrounding positioned stops. */
+            for (unsigned int j = previous + 1; j < i; j++)
+                positions[j] = positions[previous] +
+                    (positions[i] - positions[previous]) * (j - previous) / (i - previous);
+        }
+        previous = i;
+    }
+}
+
+css_color
+html_gradient_color_at(const css_gradient_stop *stops, const float *positions, unsigned int count, float position)
+{
+    if (position < positions[0])
+        return stops[0].color;
+    unsigned int upper = 1;
+    while (upper < count && position >= positions[upper])
+        upper++;
+    if (upper == count)
+        return stops[count - 1].color;
+    float t = (position - positions[upper - 1]) / (positions[upper] - positions[upper - 1]);
+    css_color a = stops[upper - 1].color, b = stops[upper].color;
+    float alpha_a = a >> 24, alpha_b = b >> 24;
+    float alpha = alpha_a + (alpha_b - alpha_a) * t;
+    if (alpha <= 0)
+        return 0;
+    css_color color = (css_color)(alpha + 0.5f) << 24;
+    for (unsigned int shift = 0; shift < 24; shift += 8) {
+        float channel_a = ((a >> shift) & 255) * alpha_a;
+        float channel_b = ((b >> shift) & 255) * alpha_b;
+        unsigned int channel = (unsigned int)((channel_a + (channel_b - channel_a) * t) / alpha + 0.5f);
+        color |= (channel > 255 ? 255 : channel) << shift;
+    }
+    return color;
+}
 
 /* See redraw_helpers.h for documentation */
 clip_result_t html_clip_intersect_box(struct rect *r, const struct rect *clip, bool has_transform)

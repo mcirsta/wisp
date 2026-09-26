@@ -27,9 +27,21 @@
 #define WISP_HTML_REDRAW_HELPERS_H
 
 #include <stdbool.h>
+#include <libcss/gradient.h>
+#include <libcss/unit.h>
 
 /* Forward declare rect since we don't want to pull in all of types.h */
 struct rect;
+
+/** Resolve length/percentage/omitted gradient stops against the full gradient
+ * line in device pixels. Output is monotonic, but may extend outside [0, 1].
+ * Both painters use the CSS Images color-stop fixup rules here. */
+void html_gradient_positions(const css_gradient_stop *stops, unsigned int count, const css_computed_style *style,
+    const css_unit_ctx *unit_ctx, float length, float scale, float *positions);
+
+/** Sample fixed-up stops in premultiplied sRGBA, extending endpoint colors. */
+css_color
+html_gradient_color_at(const css_gradient_stop *stops, const float *positions, unsigned int count, float position);
 
 /**
  * Result of clip intersection operation

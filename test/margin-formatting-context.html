@@ -1,0 +1,63 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Margins around wrapped flex and grid containers</title>
+<style>
+  html, body { margin: 0; font: 14px sans-serif; }
+  section { padding: 10px; border: 1px solid black; margin: 5px; width: 300px; }
+  .row { display: flex; }
+  .column { flex: 1; min-width: 0; }
+  .slot { position: relative; margin-bottom: 51px; }
+  .hero { width: 100%; background: #abc; }
+  .content { height: 100px; }
+  .following { height: 20px; background: #fab; }
+</style>
+<!-- Each blue box starts at the top of its column. The 51px margin belongs
+     below it, before the orange sibling. No network assets or scripts. -->
+<section>block
+  <div class="row"><div class="column" id="block-column">
+    <div class="slot" id="block-slot" style="">
+      <div class="hero" id="block-hero" style="display:block;height:100px"><div class="content"></div></div>
+    </div>
+    <div class="following" id="block-next"></div>
+  </div></div>
+</section>
+<section>flex
+  <div class="row"><div class="column" id="flex-column">
+    <div class="slot" id="flex-slot" style="">
+      <div class="hero" id="flex-hero" style="display:flex;height:100px"><div class="content"></div></div>
+    </div>
+    <div class="following" id="flex-next"></div>
+  </div></div>
+</section>
+<section>grid
+  <div class="row"><div class="column" id="grid-column">
+    <div class="slot" id="grid-slot" style="">
+      <div class="hero" id="grid-hero" style="display:grid;height:100px"><div class="content"></div></div>
+    </div>
+    <div class="following" id="grid-next"></div>
+  </div></div>
+</section>
+<section>flex-ratio
+  <div class="row"><div class="column" id="flex-ratio-column">
+    <div class="slot" id="flex-ratio-slot" style="">
+      <div class="hero" id="flex-ratio-hero" style="display:flex;aspect-ratio:3/2"><div class="content"></div></div>
+    </div>
+    <div class="following" id="flex-ratio-next"></div>
+  </div></div>
+</section>
+<section>flex-auto
+  <div class="row"><div class="column" id="flex-auto-column">
+    <div class="slot" id="flex-auto-slot" style="">
+      <div class="hero" id="flex-auto-hero" style="display:flex"><div class="content"></div></div>
+    </div>
+    <div class="following" id="flex-auto-next"></div>
+  </div></div>
+</section>
+<section>flex-no-margin
+  <div class="row"><div class="column" id="flex-no-margin-column">
+    <div class="slot" id="flex-no-margin-slot" style="margin-bottom:0">
+      <div class="hero" id="flex-no-margin-hero" style="display:flex;height:100px"><div class="content"></div></div>
+    </div>
+    <div class="following" id="flex-no-margin-next"></div>
+  </div></div>
+</section>

@@ -2709,6 +2709,9 @@ static void cascade_skip_property(css_style *style, css_code_t opv)
         case CSS_PROP_LIST_STYLE_IMAGE:
             if (value == BACKGROUND_IMAGE_URI)
                 advance_bytecode(style, sizeof(css_code_t));
+            else if (op == CSS_PROP_BACKGROUND_IMAGE &&
+                (value == BACKGROUND_IMAGE_LINEAR_GRADIENT || value == BACKGROUND_IMAGE_RADIAL_GRADIENT))
+                advance_bytecode(style, (2 + 3 * style->bytecode[1]) * sizeof(css_code_t));
             break;
         case CSS_PROP_BACKGROUND_POSITION:
             if ((value & 0xf0) == BACKGROUND_POSITION_HORZ_SET)

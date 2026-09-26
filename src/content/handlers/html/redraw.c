@@ -106,7 +106,7 @@ static bool html_redraw_box_has_background(struct box *box)
 
         /* Check for gradient background */
         uint8_t bg_type = css_computed_background_image(box->style, &url);
-        if (bg_type == CSS_BACKGROUND_IMAGE_LINEAR_GRADIENT)
+        if (bg_type == CSS_BACKGROUND_IMAGE_LINEAR_GRADIENT || bg_type == CSS_BACKGROUND_IMAGE_RADIAL_GRADIENT)
             return true;
     }
 
@@ -656,52 +656,30 @@ static bool html_redraw_file(int x, int y, int width, int height, struct box *bo
 }
 
 
-/**
- * Interpolate between two colors.
- *
- * \param c1  First color (CSS AARRGGBB format)
- * \param c2  Second color (CSS AARRGGBB format)
- * \param t   Interpolation factor (0.0 to 1.0)
- * \return Interpolated color in NetSurf format
- */
-static colour gradient_interpolate_color(css_color c1, css_color c2, float t)
+#if defined(WISP_USE_NATIVE_GRADIENTS) || defined(WISP_USE_NATIVE_RADIAL_GRADIENTS)
+/* Native plotters accept stops in [0,1]. Clip the color function, not the
+ * specified positions: clamping an off-image stop would change its slope. */
+static unsigned int gradient_native_stops(
+    const css_gradient_stop *source, const float *positions, unsigned int count, struct gradient_stop *stops)
 {
-    if (t <= 0.0f)
-        return nscss_color_to_ns(c1);
-    if (t >= 1.0f)
-        return nscss_color_to_ns(c2);
-
-    /* Extract ARGB components from CSS AARRGGBB format */
-    unsigned int a1 = (c1 >> 24) & 0xff;
-    unsigned int r1 = (c1 >> 16) & 0xff;
-    unsigned int g1 = (c1 >> 8) & 0xff;
-    unsigned int b1 = (c1 >> 0) & 0xff;
-
-    unsigned int a2 = (c2 >> 24) & 0xff;
-    unsigned int r2 = (c2 >> 16) & 0xff;
-    unsigned int g2 = (c2 >> 8) & 0xff;
-    unsigned int b2 = (c2 >> 0) & 0xff;
-
-    /* Linear interpolation */
-    unsigned int a = (unsigned int)(a1 + t * ((float)a2 - (float)a1) + 0.5f);
-    unsigned int r = (unsigned int)(r1 + t * ((float)r2 - (float)r1) + 0.5f);
-    unsigned int g = (unsigned int)(g1 + t * ((float)g2 - (float)g1) + 0.5f);
-    unsigned int b = (unsigned int)(b1 + t * ((float)b2 - (float)b1) + 0.5f);
-
-    /* Clamp values */
-    if (a > 255)
-        a = 255;
-    if (r > 255)
-        r = 255;
-    if (g > 255)
-        g = 255;
-    if (b > 255)
-        b = 255;
-
-    /* Construct CSS color and convert to NetSurf format */
-    css_color result = (a << 24) | (r << 16) | (g << 8) | b;
-    return nscss_color_to_ns(result);
+    unsigned int n = 0;
+    stops[n++] = (struct gradient_stop){
+        .color = nscss_color_to_ns(html_gradient_color_at(source, positions, count, 0)), .offset = 0};
+    for (unsigned int i = 0; i < count; i++) {
+        if (positions[i] > 0 && positions[i] < 1)
+            stops[n++] = (struct gradient_stop){.color = nscss_color_to_ns(source[i].color), .offset = positions[i]};
+    }
+    stops[n++] = (struct gradient_stop){
+        .color = nscss_color_to_ns(html_gradient_color_at(source, positions, count, 1)), .offset = 1};
+    /* Qt's setColorAt replaces coincident stops. Retain both sides of a hard
+     * edge by separating earlier stops by one floating-point step. */
+    for (unsigned int i = n - 1; i > 0; i--) {
+        if (stops[i - 1].offset >= stops[i].offset && stops[i].offset > 0)
+            stops[i - 1].offset = nextafterf(stops[i].offset, 0);
+    }
+    return n;
 }
+#endif
 
 
 /**
@@ -713,8 +691,9 @@ static colour gradient_interpolate_color(css_color c1, css_color c2, float t)
  * \param ctx       Redraw context
  * \return true on success, false on failure
  */
-static bool html_redraw_linear_gradient(
-    const css_linear_gradient *gradient, const struct rect *r, float scale, const struct redraw_context *ctx)
+static bool html_redraw_linear_gradient(const css_linear_gradient *gradient, const css_computed_style *style,
+    const css_unit_ctx *unit_ctx, const struct rect *r, const struct rect *clip, float scale,
+    const struct redraw_context *ctx)
 {
     if (gradient == NULL || gradient->stop_count < 2)
         return true; /* Nothing to draw */
@@ -724,16 +703,18 @@ static bool html_redraw_linear_gradient(
     if (width <= 0 || height <= 0)
         return true;
 
+    bool is_vertical = (gradient->direction == CSS_GRADIENT_TO_BOTTOM || gradient->direction == CSS_GRADIENT_TO_TOP);
+    int total_length = is_vertical ? height : width;
+    float positions[CSS_LINEAR_GRADIENT_MAX_STOPS];
+    html_gradient_positions(gradient->stops, gradient->stop_count, style, unit_ctx, total_length, scale, positions);
+    ctx->plot->clip(ctx, clip);
+
 #ifdef WISP_USE_NATIVE_GRADIENTS
     /* Native gradient rendering - compile-time selected */
     NSLOG(plot, DEBUG, "Linear gradient: Using NATIVE rendering path");
 
-    /* Build gradient stops array */
-    struct gradient_stop *stops = alloca(gradient->stop_count * sizeof(struct gradient_stop));
-    for (unsigned int i = 0; i < gradient->stop_count; i++) {
-        stops[i].color = nscss_color_to_ns(gradient->stops[i].color);
-        stops[i].offset = FIXTOFLT(gradient->stops[i].offset) / 100.0f;
-    }
+    struct gradient_stop stops[CSS_LINEAR_GRADIENT_MAX_STOPS + 2];
+    unsigned int count = gradient_native_stops(gradient->stops, positions, gradient->stop_count, stops);
 
     /* Calculate gradient line based on direction */
     float x0, y0, x1, y1;
@@ -775,12 +756,11 @@ static bool html_redraw_linear_gradient(
     }
 
     /* Set clip and render with native gradient */
-    ctx->plot->clip(ctx, r);
     if (ctx->plot->linear_gradient != NULL) {
         NSLOG(plot, DEBUG, "Linear gradient: Calling native plotter (%.1f,%.1f) to (%.1f,%.1f) with %u stops", x0, y0,
             x1, y1, gradient->stop_count);
         /* CSS gradients use clip rect, not path - pass NULL for path */
-        nserror err = ctx->plot->linear_gradient(ctx, NULL, 0, NULL, x0, y0, x1, y1, stops, gradient->stop_count);
+        nserror err = ctx->plot->linear_gradient(ctx, NULL, 0, NULL, x0, y0, x1, y1, stops, count);
         if (err == NSERROR_OK) {
             NSLOG(plot, DEBUG, "Linear gradient: Native plotter succeeded");
             return true;
@@ -789,56 +769,23 @@ static bool html_redraw_linear_gradient(
     } else {
         NSLOG(plot, WARNING, "Linear gradient: Native plotter is NULL!");
     }
-    /* Native gradient not available or failed - fill with solid color as fallback */
-    {
-        plot_style_t pstyle = {
-            .fill_type = PLOT_OP_TYPE_SOLID,
-            .fill_colour = nscss_color_to_ns(gradient->stops[0].color),
-        };
-        ctx->plot->rectangle(ctx, &pstyle, r);
-    }
-    return true;
-
-#else /* !NEOSURF_USE_NATIVE_GRADIENTS */
-    /* Fallback: strip-based rendering */
-    NSLOG(plot, DEBUG, "Linear gradient: Using FALLBACK strip-based rendering");
-    bool is_vertical = (gradient->direction == CSS_GRADIENT_TO_BOTTOM || gradient->direction == CSS_GRADIENT_TO_TOP);
-    int total_length = is_vertical ? height : width;
+#endif
+    /* Native support is optional; all frontends can use the same fixed-up stops. */
     bool reversed = (gradient->direction == CSS_GRADIENT_TO_TOP || gradient->direction == CSS_GRADIENT_TO_LEFT);
 
     /* Draw gradient using strips */
-    int num_strips = (total_length > 200) ? 100 : (total_length > 50) ? 50 : total_length;
+    int num_strips = (total_length > 100) ? 100 : total_length;
     if (num_strips < 2)
         num_strips = 2;
 
     for (int strip = 0; strip < num_strips; strip++) {
         /* Calculate position along gradient (0.0 to 1.0) */
-        float pos = (float)strip / (float)(num_strips - 1);
+        float pos = ((float)strip + 0.5f) / num_strips;
         if (reversed)
             pos = 1.0f - pos;
 
-        /* Convert to percentage (fixed point uses 0-INTTOFIX(100)) */
-        float pos_pct = pos * 100.0f;
-
-        /* Find which two stops we're between */
-        int stop_idx = 0;
-        for (int i = 0; i < (int)gradient->stop_count - 1; i++) {
-            float stop_pos = FIXTOFLT(gradient->stops[i + 1].offset);
-            if (pos_pct <= stop_pos) {
-                stop_idx = i;
-                break;
-            }
-            stop_idx = i;
-        }
-
-        /* Interpolate color between stops */
-        float stop1_pos = FIXTOFLT(gradient->stops[stop_idx].offset);
-        float stop2_pos = FIXTOFLT(gradient->stops[stop_idx + 1].offset);
-        float range = stop2_pos - stop1_pos;
-        float t = (range > 0.001f) ? (pos_pct - stop1_pos) / range : 0.0f;
-
-        colour strip_color = gradient_interpolate_color(
-            gradient->stops[stop_idx].color, gradient->stops[stop_idx + 1].color, t);
+        colour strip_color = nscss_color_to_ns(
+            html_gradient_color_at(gradient->stops, positions, gradient->stop_count, pos));
 
         /* Calculate strip rectangle */
         struct rect strip_rect;
@@ -869,7 +816,6 @@ static bool html_redraw_linear_gradient(
     }
 
     return true;
-#endif /* NEOSURF_USE_NATIVE_GRADIENTS */
 }
 
 /**
@@ -881,8 +827,9 @@ static bool html_redraw_linear_gradient(
  * \param ctx       Redraw context
  * \return true on success, false on error
  */
-static bool html_redraw_radial_gradient(
-    const css_radial_gradient *gradient, const struct rect *r, float scale, const struct redraw_context *ctx)
+static bool html_redraw_radial_gradient(const css_radial_gradient *gradient, const css_computed_style *style,
+    const css_unit_ctx *unit_ctx, const struct rect *r, const struct rect *clip, float scale,
+    const struct redraw_context *ctx)
 {
     if (gradient == NULL || gradient->stop_count < 2)
         return true; /* Nothing to draw */
@@ -897,7 +844,7 @@ static bool html_redraw_radial_gradient(
         return true;
 
     /* Set clip rect to contain the gradient within the box */
-    ctx->plot->clip(ctx, r);
+    ctx->plot->clip(ctx, clip);
 
     /* Farthest-corner sizing: gradient extends to cover entire box
      * Circle: radius = distance to corner (will be clipped)
@@ -916,21 +863,20 @@ static bool html_redraw_radial_gradient(
     if (rx < 1.0f || ry < 1.0f)
         return true;
 
+    float positions[CSS_RADIAL_GRADIENT_MAX_STOPS];
+    html_gradient_positions(gradient->stops, gradient->stop_count, style, unit_ctx, rx, scale, positions);
+
 #ifdef WISP_USE_NATIVE_RADIAL_GRADIENTS
     /* Native radial gradient rendering - compile-time selected */
     NSLOG(plot, DEBUG, "Radial gradient: Using NATIVE rendering path");
     if (ctx->plot->radial_gradient != NULL) {
-        /* Build gradient stops array */
-        struct gradient_stop *stops = alloca(gradient->stop_count * sizeof(struct gradient_stop));
-        for (unsigned int i = 0; i < gradient->stop_count; i++) {
-            stops[i].color = nscss_color_to_ns(gradient->stops[i].color);
-            stops[i].offset = FIXTOFLT(gradient->stops[i].offset) / 100.0f;
-        }
+        struct gradient_stop stops[CSS_RADIAL_GRADIENT_MAX_STOPS + 2];
+        unsigned int count = gradient_native_stops(gradient->stops, positions, gradient->stop_count, stops);
 
         NSLOG(plot, DEBUG, "Radial gradient: Calling native plotter (%.1f,%.1f) rx=%.1f ry=%.1f with %u stops", cx, cy,
             rx, ry, gradient->stop_count);
         /* CSS gradients use clip rect, not path - pass NULL for path */
-        nserror err = ctx->plot->radial_gradient(ctx, NULL, 0, NULL, cx, cy, rx, ry, stops, gradient->stop_count);
+        nserror err = ctx->plot->radial_gradient(ctx, NULL, 0, NULL, cx, cy, rx, ry, stops, count);
         if (err == NSERROR_OK) {
             NSLOG(plot, DEBUG, "Radial gradient: Native plotter succeeded");
             return true;
@@ -962,27 +908,8 @@ static bool html_redraw_radial_gradient(
 
         /* Calculate position along gradient: 0.0 = center, 1.0 = edge */
         float pos = ring_scale;
-        float pos_pct = pos * 100.0f;
-
-        /* Find which two stops we're between */
-        int stop_idx = 0;
-        for (int i = 0; i < (int)gradient->stop_count - 1; i++) {
-            float stop_pos = FIXTOFLT(gradient->stops[i + 1].offset);
-            if (pos_pct <= stop_pos) {
-                stop_idx = i;
-                break;
-            }
-            stop_idx = i;
-        }
-
-        /* Interpolate color between stops */
-        float stop1_pos = FIXTOFLT(gradient->stops[stop_idx].offset);
-        float stop2_pos = FIXTOFLT(gradient->stops[stop_idx + 1].offset);
-        float range = stop2_pos - stop1_pos;
-        float t = (range > 0.001f) ? (pos_pct - stop1_pos) / range : 0.0f;
-
-        colour ring_color = gradient_interpolate_color(
-            gradient->stops[stop_idx].color, gradient->stops[stop_idx + 1].color, t);
+        colour ring_color = nscss_color_to_ns(
+            html_gradient_color_at(gradient->stops, positions, gradient->stop_count, pos));
 
         /* Draw filled ellipse for this ring */
         plot_style_t pstyle = {
@@ -1223,17 +1150,26 @@ static bool html_redraw_background(int x, int y, struct box *box, float scale, c
         {
             lwc_string *url;
             uint8_t bg_type = css_computed_background_image(background->style, &url);
+            /* Gradient sizing uses the whole padding box, not a clipped slice. */
+            struct rect gradient_rect = {
+                .x0 = ox,
+                .y0 = oy,
+                .x1 = ox + (box->padding[LEFT] + box->width + box->padding[RIGHT]) * scale,
+                .y1 = oy + (box->padding[TOP] + box->height + box->padding[BOTTOM]) * scale,
+            };
             if (bg_type == CSS_BACKGROUND_IMAGE_LINEAR_GRADIENT) {
                 const css_linear_gradient *gradient = css_computed_background_gradient(background->style);
                 if (gradient != NULL) {
-                    if (!html_redraw_linear_gradient(gradient, &r, scale, ctx)) {
+                    if (!html_redraw_linear_gradient(
+                            gradient, background->style, unit_len_ctx, &gradient_rect, &r, scale, ctx)) {
                         return false;
                     }
                 }
             } else if (bg_type == CSS_BACKGROUND_IMAGE_RADIAL_GRADIENT) {
                 const css_radial_gradient *radial = css_computed_background_radial_gradient(background->style);
                 if (radial != NULL) {
-                    if (!html_redraw_radial_gradient(radial, &r, scale, ctx)) {
+                    if (!html_redraw_radial_gradient(
+                            radial, background->style, unit_len_ctx, &gradient_rect, &r, scale, ctx)) {
                         return false;
                     }
                 }

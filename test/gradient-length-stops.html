@@ -1,0 +1,29 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Gradient length stops</title>
+<style>
+html,body { margin:0; background:white; font:14px sans-serif; }
+.sample { position:absolute; width:200px; height:100px; }
+.label { position:absolute; top:-20px; }
+</style>
+<div class="sample" id="pixels" style="left:10px;top:30px;background:linear-gradient(to right,#000 0px,#fff 100px);"><span class="label">pixels</span></div>
+<div class="sample" id="percent" style="left:230px;top:30px;background:linear-gradient(to right,#000 0%,#fff 100%);"><span class="label">percent</span></div>
+<div class="sample" id="mixed" style="left:450px;top:30px;background:linear-gradient(to right,#f00 20px,#00f 50%);"><span class="label">mixed</span></div>
+<div class="sample" id="omitted" style="left:670px;top:30px;background:linear-gradient(to right,#000 20px,#fff,#000 80px);"><span class="label">omitted</span></div>
+<div class="sample" id="hard" style="left:10px;top:160px;background:linear-gradient(to right,#f00 70px,#00f 40px);"><span class="label">hard</span></div>
+<div class="sample" id="outside" style="left:230px;top:160px;background:linear-gradient(to right,#000 -100px,#fff 300px);"><span class="label">outside</span></div>
+<div class="sample" id="alpha" style="left:450px;top:160px;background:linear-gradient(to right,transparent 0px,#00f 100px);"><span class="label">alpha</span></div>
+<div class="sample" id="important" style="left:670px;top:160px;background:linear-gradient(to right,#000 0px,var(--end) 100px)!important;--end:#fff;background-image:none;"><span class="label">important</span></div>
+<div class="sample" id="relative" style="left:10px;top:290px;background:linear-gradient(to right,#000 0px,#fff 5em);font-size:20px;"><span class="label">relative</span></div>
+<div class="sample" id="reverse" style="left:230px;top:290px;background:linear-gradient(to left,#000 0px,#fff 100px);"><span class="label">reverse</span></div>
+<div class="sample" id="vertical" style="left:450px;top:290px;background:linear-gradient(180deg,#000 0px,#fff 70px);"><span class="label">vertical</span></div>
+<div class="sample" id="radial" style="left:670px;top:290px;background:radial-gradient(circle,#000 0px,#fff 50px);"><span class="label">radial</span></div>
+<!-- The visible portion must retain the full 400px gradient scale. -->
+<div style="position:absolute;left:10px;top:420px;width:200px;height:100px;overflow:hidden">
+  <div id="clipped" style="width:400px;height:100px;background:linear-gradient(to right,#000 0px,#fff 400px)"></div>
+</div>
+<div style="position:absolute;left:230px;top:420px;width:200px;height:100px;overflow:hidden">
+  <div id="shifted" style="position:relative;left:-100px;width:400px;height:100px;background:linear-gradient(to right,#000 0px,#fff 400px)"></div>
+</div>
+<!-- Translucent rectangles must retain the white background below them. -->
+<div class="sample" id="alpha-rectangle" style="left:450px;top:420px;background:rgba(0,0,255,.5)"></div>

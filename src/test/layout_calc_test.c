@@ -13,6 +13,7 @@
 #include <libwapcaplet/libwapcaplet.h>
 
 #include "content/handlers/html/layout_internal.h"
+#include "content/handlers/html/redraw_helpers.h"
 
 #ifndef UNUSED
 #define UNUSED(x) ((void)(x))
@@ -1027,6 +1028,148 @@ START_TEST(test_logical_spacing_specificity)
 }
 END_TEST
 
+/* Parse real CSS, then resolve against a used gradient line length. */
+static const struct {
+    const char *css;
+    unsigned int count;
+    float positions[CSS_LINEAR_GRADIENT_MAX_STOPS];
+} gradient_cases[] = {
+    {"background-image:linear-gradient(red 0px,blue 70px)", 2, {0, .35f}},
+    {"background:linear-gradient(180deg,transparent 5px,#2145ac 160px)!important;padding-left:7px", 2, {.025f, .8f}},
+    {"--brand:#2145ac;--end:70px;background-image:linear-gradient(transparent 0px,var(--brand) var(--end))", 2,
+        {0, .35f}},
+    {"background-image:linear-gradient(red,blue)", 2, {0, 1}},
+    {"background-image:linear-gradient(red 40px,green,white,blue 80%)", 4, {.2f, .4f, .6f, .8f}},
+    {"background-image:linear-gradient(red 100px,green 20%,blue)", 3, {.5f, .5f, 1}},
+    {"background-image:linear-gradient(red -1%,blue 150%)", 2, {-.01f, 1.5f}},
+    {"background-image:linear-gradient(red -50px,green,blue 250px)", 3, {-.25f, .5f, 1.25f}},
+    {"background-image:linear-gradient(red 250px,blue)", 2, {1.25f, 1.25f}},
+    {"background-image:linear-gradient(red,blue -10px)", 2, {0, 0}},
+    {"font-size:20px;background-image:linear-gradient(red 1em,blue 4em)", 2, {.1f, .4f}},
+    {"background-image:linear-gradient(red 0,blue 75%)", 2, {0, .75f}},
+    {"background-image:linear-gradient(red 0px,blue 70px)!important;background-image:linear-gradient(red,blue)", 2,
+        {0, .35f}},
+    {"background-image:linear-gradient(red 0px,blue 70px);--other:42px;width:var(--other)", 2, {0, .35f}},
+    {"background-image:radial-gradient(circle,red 0px,blue 70px)!important", 2, {0, .35f}},
+    {"background-image:linear-gradient(red,red,red,red,red,red,red,red,red,blue)", 10,
+        {0, 1.f / 9, 2.f / 9, 3.f / 9, 4.f / 9, 5.f / 9, 6.f / 9, 7.f / 9, 8.f / 9, 1}},
+};
+
+START_TEST(test_gradient_stops)
+{
+    char css[1024];
+    snprintf(css, sizeof(css), "* {%s}", gradient_cases[_i].css);
+    select_ctx ctx;
+    const css_computed_style *style = select_style_from_css(css, &ctx);
+    const css_linear_gradient *linear = css_computed_background_gradient(style);
+    const css_radial_gradient *radial = css_computed_background_radial_gradient(style);
+    const css_gradient_stop *stops = linear ? linear->stops : radial ? radial->stops : NULL;
+    ck_assert_ptr_nonnull(stops);
+    unsigned int count = linear ? linear->stop_count : radial->stop_count;
+    ck_assert_uint_eq(count, gradient_cases[_i].count);
+    float positions[CSS_LINEAR_GRADIENT_MAX_STOPS];
+    html_gradient_positions(stops, count, style, &unit_ctx, 200, 1, positions);
+    for (unsigned int i = 0; i < count; i++)
+        ck_assert_float_eq_tol(positions[i], gradient_cases[_i].positions[i], .001f);
+    /* Zoom changes both lengths and the drawing area, preserving proportions. */
+    html_gradient_positions(stops, count, style, &unit_ctx, 400, 2, positions);
+    for (unsigned int i = 0; i < count; i++)
+        ck_assert_float_eq_tol(positions[i], gradient_cases[_i].positions[i], .001f);
+    if (_i == 1 || _i == 2)
+        ck_assert_uint_eq(stops[0].color, 0);
+    destroy_select_ctx(&ctx);
+}
+END_TEST
+
+static const char *invalid_gradients[] = {
+    "linear-gradient(red)",
+    "linear-gradient(red 3s,blue)",
+    "linear-gradient(red 1fr,blue)",
+    "linear-gradient(red 2,blue)",
+    "linear-gradient(red 0px,blue,)",
+    "linear-gradient(red 0px,blue 70px) junk",
+    "linear-gradient(red 0px blue 70px)",
+    "linear-gradient(red,red,red,red,red,red,red,red,red,red,blue)",
+    "linear-gradient(red,red,red,red,red,red,red,red,red,blue",
+    "radial-gradient(red)",
+};
+START_TEST(test_invalid_gradient)
+{
+    char css[1024];
+    snprintf(
+        css, sizeof(css), "* {background-image:linear-gradient(red,blue);background-image:%s}", invalid_gradients[_i]);
+    select_ctx ctx;
+    const css_computed_style *style = select_style_from_css(css, &ctx);
+    const css_linear_gradient *g = css_computed_background_gradient(style);
+    ck_assert_ptr_nonnull(g);
+    ck_assert_uint_eq(g->stop_count, 2);
+    ck_assert(g->stops[0].auto_offset && g->stops[1].auto_offset);
+    destroy_select_ctx(&ctx);
+}
+END_TEST
+
+START_TEST(test_gradient_resize_and_color)
+{
+    select_ctx ctx;
+    const css_computed_style *style = select_style_from_css(
+        "* {background-image:linear-gradient(transparent 40px,#0000ff 50%)}", &ctx);
+    const css_linear_gradient *g = css_computed_background_gradient(style);
+    ck_assert_ptr_nonnull(g);
+    float positions[2];
+    html_gradient_positions(g->stops, 2, style, &unit_ctx, 200, 1, positions);
+    ck_assert_float_eq_tol(positions[0], .2f, .001f);
+    ck_assert_float_eq_tol(positions[1], .5f, .001f);
+    css_color midpoint = html_gradient_color_at(g->stops, positions, 2, .35f);
+    ck_assert_uint_eq(midpoint & 0xffffff, 0x0000ff);
+    ck_assert_int_le(abs((int)(midpoint >> 24) - 128), 1);
+    html_gradient_positions(g->stops, 2, style, &unit_ctx, 50, 1, positions);
+    ck_assert_float_eq_tol(positions[0], .8f, .001f);
+    ck_assert_float_eq_tol(positions[1], .8f, .001f);
+    ck_assert_uint_eq(html_gradient_color_at(g->stops, positions, 2, .7f), 0);
+    ck_assert_uint_eq(html_gradient_color_at(g->stops, positions, 2, .8f), 0xff0000ff);
+    destroy_select_ctx(&ctx);
+}
+END_TEST
+
+START_TEST(test_gradient_inheritance)
+{
+    select_ctx parent_ctx, child_ctx;
+    const css_computed_style *parent = select_style_from_css(
+        "* {font-size:20px;background-image:linear-gradient(red 1em,blue 4em)}", &parent_ctx);
+    const css_computed_style *child = select_style_from_css_node(
+        "* {font-size:40px;background-image:inherit}", &child_ctx, false);
+    css_computed_style *composed = NULL;
+    ck_assert_int_eq(css_computed_style_compose(parent, child, &unit_ctx, &composed), CSS_OK);
+    const css_linear_gradient *g = css_computed_background_gradient(composed);
+    ck_assert_ptr_nonnull(g);
+    ck_assert_int_eq(g->stops[0].unit, CSS_UNIT_PX);
+    ck_assert_int_eq(g->stops[0].offset, INTTOFIX(20));
+    ck_assert_int_eq(g->stops[1].offset, INTTOFIX(80));
+    css_computed_style_destroy(composed);
+    destroy_select_ctx(&child_ctx);
+    destroy_select_ctx(&parent_ctx);
+}
+END_TEST
+
+START_TEST(test_gradient_style_sharing)
+{
+    select_ctx contexts[3];
+    const css_computed_style *styles[3] = {
+        select_style_from_css("* {background-image:linear-gradient(red 0px,blue 50px)}", &contexts[0]),
+        select_style_from_css("* {background-image:linear-gradient(red 0px,blue 50%)}", &contexts[1]),
+        select_style_from_css("* {background-image:linear-gradient(red 0px,blue)}", &contexts[2]),
+    };
+    for (int i = 0; i < 3; i++) {
+        const css_linear_gradient *g = css_computed_background_gradient(styles[i]);
+        ck_assert_ptr_nonnull(g);
+        ck_assert_int_eq(g->stops[1].unit, i == 0 ? CSS_UNIT_PX : CSS_UNIT_PCT);
+        ck_assert_int_eq(g->stops[1].auto_offset, i == 2);
+    }
+    for (int i = 0; i < 3; i++)
+        destroy_select_ctx(&contexts[i]);
+}
+END_TEST
+
 Suite *layout_calc_suite(void)
 {
     Suite *s = suite_create("LayoutCalc");
@@ -1053,6 +1196,11 @@ Suite *layout_calc_suite(void)
         tc_core, test_logical_spacing, 0, sizeof(logical_spacing_cases) / sizeof(logical_spacing_cases[0]));
     tcase_add_test(tc_core, test_logical_spacing_inherit);
     tcase_add_test(tc_core, test_logical_spacing_specificity);
+    tcase_add_loop_test(tc_core, test_gradient_stops, 0, sizeof(gradient_cases) / sizeof(gradient_cases[0]));
+    tcase_add_loop_test(tc_core, test_invalid_gradient, 0, sizeof(invalid_gradients) / sizeof(invalid_gradients[0]));
+    tcase_add_test(tc_core, test_gradient_resize_and_color);
+    tcase_add_test(tc_core, test_gradient_inheritance);
+    tcase_add_test(tc_core, test_gradient_style_sharing);
     suite_add_tcase(s, tc_core);
     return s;
 }

@@ -108,6 +108,16 @@ if(WISP_QT_CAPTURE)
         add_test(NAME qt_logical_spacing
             COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_logical_spacing.py $<TARGET_FILE:wisp-qt>)
         set_tests_properties(qt_logical_spacing PROPERTIES TIMEOUT 30)
+        add_test(NAME qt_flex_alignment
+            COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_flex_alignment.py $<TARGET_FILE:wisp-qt>)
+        set_tests_properties(qt_flex_alignment PROPERTIES TIMEOUT 30)
+        find_program(WISP_TEST_MAGICK magick)
+        if(WISP_TEST_MAGICK)
+            add_test(NAME qt_gradient_stops
+                COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_gradient_stops.py
+                    $<TARGET_FILE:wisp-qt> ${WISP_TEST_MAGICK})
+            set_tests_properties(qt_gradient_stops PROPERTIES TIMEOUT 30)
+        endif()
     endif()
 endif()
 

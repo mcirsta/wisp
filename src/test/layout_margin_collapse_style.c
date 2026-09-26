@@ -48,6 +48,11 @@ css_computed_style *create_block_style(void)
     return s;
 }
 
+void style_set_flex_or_grid(css_computed_style *s, bool grid)
+{
+    set_display(s, grid ? CSS_DISPLAY_GRID : CSS_DISPLAY_FLEX);
+}
+
 void style_set_margins(css_computed_style *s, int top, int right, int bottom, int left)
 {
     if (top != INT_MIN)

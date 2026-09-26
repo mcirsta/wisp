@@ -30,7 +30,9 @@ typedef enum css_gradient_direction {
  */
 typedef struct css_gradient_stop {
     css_color color; /* AARRGGBB color value */
-    css_fixed offset; /* Position as percentage (0-100 as fixed point) */
+    css_fixed offset; /* Specified position; percentages use the 0-100 range */
+    css_unit unit; /* Length or percentage; relative lengths computed with style */
+    bool auto_offset; /* Omitted position, resolved after the gradient size is known */
 } css_gradient_stop;
 
 /**

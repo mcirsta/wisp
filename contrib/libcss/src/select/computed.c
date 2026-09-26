@@ -346,6 +346,22 @@ const css_radial_gradient *css_computed_background_radial_gradient(const css_com
  * Library internals                                                          *
  ******************************************************************************/
 
+static void compute_gradient_lengths(
+    css_gradient_stop *stops, uint8_t count, const css_computed_style *style, const css_unit_ctx *unit_ctx)
+{
+    for (uint8_t i = 0; i < count; i++) {
+        /* Freeze font-relative lengths in the defining element's style so
+         * background-image:inherit does not reinterpret them with a new font. */
+        css_unit unit = stops[i].unit;
+        if (!stops[i].auto_offset &&
+            (unit == CSS_UNIT_EM || unit == CSS_UNIT_EX || unit == CSS_UNIT_CH || unit == CSS_UNIT_REM ||
+                unit == CSS_UNIT_LH || unit == CSS_UNIT_IC)) {
+            stops[i].offset = css_unit_len2css_px(style, unit_ctx, stops[i].offset, unit);
+            stops[i].unit = CSS_UNIT_PX;
+        }
+    }
+}
+
 /**
  * Compute the absolute values of a style
  *
@@ -549,6 +565,13 @@ css__compute_absolute_values(const css_computed_style *parent, css_computed_styl
     error = compute_absolute_length(style, &ex_size.data.length, get_column_gap, set_column_gap);
     if (error != CSS_OK)
         return error;
+
+    if (style->background_gradient != NULL)
+        compute_gradient_lengths(
+            style->background_gradient->stops, style->background_gradient->stop_count, style, unit_ctx);
+    if (style->background_radial_gradient != NULL)
+        compute_gradient_lengths(
+            style->background_radial_gradient->stops, style->background_radial_gradient->stop_count, style, unit_ctx);
 
     return CSS_OK;
 }

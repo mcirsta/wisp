@@ -309,7 +309,8 @@ bool layout_flex_redistribute_auto_margins_vertical(struct box *flex)
     /* First pass: count children */
     int child_count_initial = 0;
     for (struct box *child = flex->children; child; child = child->next) {
-        if (child->type != BOX_FLOAT_LEFT && child->type != BOX_FLOAT_RIGHT) {
+        if (child->type != BOX_FLOAT_LEFT && child->type != BOX_FLOAT_RIGHT &&
+            !(child->style && lh__box_is_absolute(child))) {
             child_count_initial++;
         }
     }
@@ -320,7 +321,8 @@ bool layout_flex_redistribute_auto_margins_vertical(struct box *flex)
     /* Second pass: calculate content height, auto margins, and flex-grow */
     struct box *prev_child = NULL;
     for (struct box *child = flex->children; child; child = child->next) {
-        if (child->type == BOX_FLOAT_LEFT || child->type == BOX_FLOAT_RIGHT) {
+        if (child->type == BOX_FLOAT_LEFT || child->type == BOX_FLOAT_RIGHT ||
+            (child->style && lh__box_is_absolute(child))) {
             continue;
         }
 
@@ -379,6 +381,13 @@ bool layout_flex_redistribute_auto_margins_vertical(struct box *flex)
     NSLOG(flex, INFO, "  Initial: content_h=%d, auto_margins=%d, grow_sum=%d, gap_total=%d", content_height,
         auto_margin_count, FIXTOINT(grow_factor_sum), gap_total);
 
+    /* With no growth or auto margins, preserve the positions already computed
+     * by justify-content (including reverse directions). This is a late size
+     * adjustment, not a second alignment pass. */
+    if (auto_margin_count == 0 && grow_item_count == 0) {
+        return true;
+    }
+
     /* Calculate extra space, accounting for gaps between items */
     int extra_space = container_height - content_height - gap_total;
 
@@ -395,7 +404,8 @@ bool layout_flex_redistribute_auto_margins_vertical(struct box *flex)
         int distributed = 0;
 
         for (struct box *child = flex->children; child; child = child->next) {
-            if (child->type == BOX_FLOAT_LEFT || child->type == BOX_FLOAT_RIGHT) {
+            if (child->type == BOX_FLOAT_LEFT || child->type == BOX_FLOAT_RIGHT ||
+                (child->style && lh__box_is_absolute(child))) {
                 continue;
             }
 
@@ -441,7 +451,8 @@ bool layout_flex_redistribute_auto_margins_vertical(struct box *flex)
     int current_y = flex->padding[TOP];
     bool first_child = true;
     for (struct box *child = flex->children; child; child = child->next) {
-        if (child->type == BOX_FLOAT_LEFT || child->type == BOX_FLOAT_RIGHT) {
+        if (child->type == BOX_FLOAT_LEFT || child->type == BOX_FLOAT_RIGHT ||
+            (child->style && lh__box_is_absolute(child))) {
             continue;
         }
 
@@ -1151,21 +1162,19 @@ static struct flex_line_data *layout_flex__build_line(struct flex_ctx *ctx, size
 /**
  * Freeze an item on a line
  *
- * \param[in] ctx   Flex layout context
  * \param[in] line  Line to containing item
  * \param[in] item  Item to freeze
  */
 static inline void
-layout_flex__item_freeze(const struct flex_ctx *ctx, struct flex_line_data *line, struct flex_item_data *item)
+layout_flex__item_freeze(struct flex_line_data *line, struct flex_item_data *item)
 {
     item->freeze = true;
     line->frozen++;
 
     if (!lh__box_is_absolute(item->box)) {
-        /* Include outer dimensions (padding + border + non-auto margins)
-         * in used_main_size so free space calculation is correct for
-         * auto margin distribution (mx-auto centering). */
-        line->used_main_size += item->target_main_size + lh__delta_outer_main(ctx->flex, item->box);
+        /* Target sizes already include padding, borders and non-auto margins.
+         * Counting those edges again steals space from alignment/auto margins. */
+        line->used_main_size += item->target_main_size;
     }
 
     NSLOG(flex, DEEPDEBUG,
@@ -1339,7 +1348,7 @@ static inline void layout_flex__distribute_free_main(struct flex_ctx *ctx, struc
                 continue;
             } else if (scaled_shrink_factor_sum == 0) {
                 item->target_main_size = item->main_size;
-                layout_flex__item_freeze(ctx, line, item);
+                layout_flex__item_freeze(line, item);
                 continue;
             }
 
@@ -1396,12 +1405,12 @@ static bool layout_flex__resolve_line(struct flex_ctx *ctx, struct flex_line_dat
         if (grow) {
             if (item->grow == 0 || item->base_size > item->main_size) {
                 item->target_main_size = item->main_size;
-                layout_flex__item_freeze(ctx, line, item);
+                layout_flex__item_freeze(line, item);
             }
         } else {
             if (item->shrink == 0 || item->base_size < item->main_size) {
                 item->target_main_size = item->main_size;
-                layout_flex__item_freeze(ctx, line, item);
+                layout_flex__item_freeze(line, item);
             }
         }
 
@@ -1443,7 +1452,7 @@ static bool layout_flex__resolve_line(struct flex_ctx *ctx, struct flex_line_dat
 
             if (total_violation == 0 || (total_violation > 0 && item->min_violation) ||
                 (total_violation < 0 && item->max_violation)) {
-                layout_flex__item_freeze(ctx, line, item);
+                layout_flex__item_freeze(line, item);
             }
         }
     }

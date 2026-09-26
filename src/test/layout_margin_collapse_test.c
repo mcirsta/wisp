@@ -951,6 +951,54 @@ START_TEST(test_collapse_through_empty_ic)
 END_TEST
 
 
+/* A wrapper's bottom margin must not leak above its flex/grid child.
+ * Exercise both auto-height content and an empty formatting context, whose
+ * own top/bottom margins also cannot collapse through each other. */
+START_TEST(test_wrapped_formatting_context_margins)
+{
+    bool grid = (_i & 1) != 0;
+    bool empty = (_i & 2) != 0;
+    bool negative = (_i & 4) != 0;
+    html_content *content = create_test_content();
+    struct box *root = create_box_with_style(200);
+    struct box *wrapper = create_box_with_style(200);
+    style_set_margins(wrapper->style, 0, 0, negative ? -15 : 51, 0);
+    struct box *container = create_box_with_style(200);
+    container->type = grid ? BOX_GRID : BOX_FLEX;
+    style_set_flex_or_grid(container->style, grid);
+    style_set_margins(container->style, 10, 0, 20, 0);
+    if (!empty) {
+        struct box *item = create_box_with_style(200);
+        style_set_height_px(item->style, 100);
+        item->flags |= HAS_HEIGHT | MAKE_HEIGHT;
+        add_child(container, item);
+    }
+    struct box *next = create_box_with_style(200);
+    style_set_height_px(next->style, 20);
+    next->flags |= HAS_HEIGHT | MAKE_HEIGHT;
+    add_child(root, wrapper);
+    if (_i & 8) {
+        struct box *inner = create_box_with_style(200);
+        add_child(wrapper, inner);
+        add_child(inner, container);
+    } else {
+        add_child(wrapper, container);
+    }
+    add_child(root, next);
+
+    ck_assert(layout_block_context(root, 768, content));
+    /* The child's top margin may collapse with its block wrapper, but its
+     * bottom margin only collapses with the wrapper's bottom margin. */
+    ck_assert_int_eq(wrapper->y, 10);
+    ck_assert_int_eq(container->y, 0);
+    ck_assert_int_eq(container->height, empty ? 0 : 100);
+    ck_assert_int_eq(next->y, 10 + container->height + (negative ? 5 : 51));
+
+    free_box_tree(root);
+    destroy_test_content(content);
+}
+END_TEST
+
 /* ========================================================================
  * Test runner
  * ======================================================================== */
@@ -1292,6 +1340,7 @@ static Suite *margin_collapse_suite(void)
     TCase *tc_excl = tcase_create("Exclusion Rules");
     tcase_add_test(tc_excl, test_no_collapse_abspos_skipped);
     tcase_add_test(tc_excl, test_no_collapse_overflow_hidden);
+    tcase_add_loop_test(tc_excl, test_wrapped_formatting_context_margins, 0, 16);
     suite_add_tcase(s, tc_excl);
 
     return s;

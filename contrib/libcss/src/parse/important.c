@@ -120,6 +120,9 @@ void css__make_style_important(css_style *style)
 
                 if (value == BACKGROUND_IMAGE_URI)
                     offset++; /* string table entry */
+                else if (op == CSS_PROP_BACKGROUND_IMAGE &&
+                    (value == BACKGROUND_IMAGE_LINEAR_GRADIENT || value == BACKGROUND_IMAGE_RADIAL_GRADIENT))
+                    offset += 2 + 3 * bytecode[offset + 1]; /* header, count, color/offset/unit stops */
                 break;
 
             case CSS_PROP_BACKGROUND_POSITION:

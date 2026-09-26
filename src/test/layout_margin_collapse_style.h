@@ -20,6 +20,9 @@
  */
 css_computed_style *create_block_style(void);
 
+/** Use a block-level flex or grid formatting context. */
+void style_set_flex_or_grid(css_computed_style *s, bool grid);
+
 /**
  * Set CSS margins on a style (in px).
  * Pass INT_MIN for any edge to leave it unchanged.

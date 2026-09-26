@@ -499,8 +499,11 @@ knockout_plot_rectangle(const struct redraw_context *ctx, const plot_style_t *ps
             return NSERROR_OK;
         }
 
-        /* fills both knock out and get knocked out */
-        knockout_calculate(ctx, kx0, ky0, kx1, ky1, NULL);
+        /* Only opaque fills hide earlier drawing. Translucent gradient strips
+         * still need the background beneath them for alpha compositing.
+         * NetSurf colors use inverted alpha; zero fill_opacity means unset. */
+        if ((pstyle->fill_colour >> 24) == 0 && !(pstyle->fill_opacity > 0.0f && pstyle->fill_opacity < 1.0f))
+            knockout_calculate(ctx, kx0, ky0, kx1, ky1, NULL);
         knockout_boxes[knockout_box_cur].bbox = *rect;
         knockout_boxes[knockout_box_cur].deleted = false;
         knockout_boxes[knockout_box_cur].child = NULL;

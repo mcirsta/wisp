@@ -1095,6 +1095,85 @@ START_TEST(test_flex_ratio_minimum)
 }
 END_TEST
 
+/* The real layout algorithm must count padding, borders and margins once,
+ * and its later column adjustment must preserve justify-content alignment. */
+START_TEST(test_flex_outer_size_alignment)
+{
+    static const uint8_t directions[] = {CSS_FLEX_DIRECTION_ROW, CSS_FLEX_DIRECTION_ROW_REVERSE,
+        CSS_FLEX_DIRECTION_COLUMN, CSS_FLEX_DIRECTION_COLUMN_REVERSE};
+    uint8_t direction = directions[_i / 2];
+    bool center = _i % 2;
+    bool horizontal = _i < 4;
+    bool reverse = (_i / 2) % 2;
+    struct flex_test_style values = {.width = 100, .width_unit = CSS_UNIT_PX,
+        .min_width = -1, .min_unit = CSS_UNIT_PX, .max_width = -1, .basis = -1,
+        .overflow = CSS_OVERFLOW_VISIBLE, .padding = 10, .margin = 5, .border = 3};
+    css_computed_style *item_style = flex_test_style_create(&values);
+    ck_assert_ptr_nonnull(item_style);
+    flex_test_style_alignment(item_style, CSS_FLEX_DIRECTION_ROW, CSS_JUSTIFY_CONTENT_FLEX_START, 100);
+    values.container = true;
+    values.width = 400;
+    values.padding = values.margin = values.border = 0;
+    css_computed_style *parent_style = flex_test_style_create(&values);
+    ck_assert_ptr_nonnull(parent_style);
+    flex_test_style_alignment(parent_style, direction,
+        center ? CSS_JUSTIFY_CONTENT_CENTER : CSS_JUSTIFY_CONTENT_FLEX_END, 400);
+    struct box parent = {.type = BOX_FLEX, .style = parent_style, .width = 400, .height = AUTO};
+    struct box item = {.type = BOX_BLOCK, .style = item_style, .parent = &parent,
+        .width = AUTO, .height = AUTO, .min_width = {CSS_SIZE_SET, 136}, .max_width = 136};
+    parent.children = parent.last = &item;
+    html_content content = {.unit_len_ctx = {.viewport_width = INTTOFIX(1280),
+        .viewport_height = INTTOFIX(900), .font_size_default = INTTOFIX(16),
+        .font_size_minimum = INTTOFIX(6), .device_dpi = INTTOFIX(96), .root_style = parent_style}};
+    /* 400 - (100 content + 20 padding + 6 border + 10 margin) = 264 free. */
+    int expected = (center ? 132 : reverse ? 0 : 264) + 5 + 3;
+    for (int pass = 0; pass < 2; pass++) {
+        ck_assert(layout_flex(&parent, 400, &content));
+        ck_assert_int_eq(horizontal ? item.x : item.y, expected);
+        ck_assert_int_eq(item.width, 100);
+        ck_assert_int_eq(item.height, 100);
+    }
+    css_computed_style_destroy(item_style);
+    css_computed_style_destroy(parent_style);
+}
+END_TEST
+
+/* A background must neither consume space nor be moved by the late pass.
+ * Exercise both absolute/fixed positioning and growth/auto-margin adjustment. */
+START_TEST(test_flex_redistribute_out_of_flow)
+{
+    struct flex_test_style values = {.width = 100, .width_unit = CSS_UNIT_PX,
+        .min_width = -1, .min_unit = CSS_UNIT_PX, .max_width = -1, .basis = -1,
+        .overflow = CSS_OVERFLOW_VISIBLE, .grow = 1,
+        .position = _i % 2 ? CSS_POSITION_FIXED : CSS_POSITION_ABSOLUTE};
+    css_computed_style *background_style = flex_test_style_create(&values);
+    ck_assert_ptr_nonnull(background_style);
+    values.position = CSS_POSITION_STATIC;
+    bool grow = _i >= 2;
+    values.grow = grow ? 1 : 0;
+    css_computed_style *item_style = flex_test_style_create(&values);
+    ck_assert_ptr_nonnull(item_style);
+    struct box parent = {.type = BOX_FLEX, .width = 100, .height = 400};
+    struct box item = {.type = BOX_BLOCK, .style = item_style, .parent = &parent,
+        .width = 100, .height = 100, .margin = {grow ? 0 : AUTO, 0, 0, 0}};
+    struct box background = {.type = BOX_BLOCK, .style = background_style, .parent = &parent,
+        .width = 100, .height = 400, .x = 7, .y = 11, .next = &item};
+    item.prev = &background;
+    parent.children = &background;
+    parent.last = &item;
+    for (int pass = 0; pass < 2; pass++) {
+        ck_assert(layout_flex_redistribute_auto_margins_vertical(&parent));
+        ck_assert_int_eq(item.y, grow ? 0 : 300);
+        ck_assert_int_eq(item.height, grow ? 400 : 100);
+        ck_assert_int_eq(background.height, 400);
+        ck_assert_int_eq(background.x, 7);
+        ck_assert_int_eq(background.y, 11);
+    }
+    css_computed_style_destroy(item_style);
+    css_computed_style_destroy(background_style);
+}
+END_TEST
+
 Suite *layout_flex_suite(void)
 {
     Suite *s;
@@ -1131,6 +1210,8 @@ Suite *layout_flex_suite(void)
     tcase_add_loop_test(tc_core, test_flex_minimum_width_layout, 0, 19);
 
     tcase_add_loop_test(tc_core, test_flex_ratio_minimum, 0, 4);
+    tcase_add_loop_test(tc_core, test_flex_outer_size_alignment, 0, 8);
+    tcase_add_loop_test(tc_core, test_flex_redistribute_out_of_flow, 0, 4);
     suite_add_tcase(s, tc_core);
 
     return s;

@@ -35,9 +35,14 @@ catch changes where spacing contributes to a preferred ratio.
 
 The saved HotNews desktop header grows from 57px to 99px (Chromium: 99.44px),
 and the main container begins at y=174 (Chromium: 175.94). The mobile header
-matches at 68px. The pre-existing offset inside the first news column remains
-51px on desktop and 34px on mobile; it is separate from the new block spacing.
-The Haiku screenshot remains byte-identical to the aspect-ratio baseline.
+matches at 68px. The separate 51px desktop / 34px mobile offset inside the first
+news column was subsequently fixed in margin-collapse look-ahead: block-level
+flex/grid children now terminate the chain, including empty containers nested
+inside block wrappers. Their external margins can still collapse with the
+wrapper, but the wrapper's bottom margin cannot leak above their content.
+`layout_margin_collapse_test` covers positive/negative margins, empty/nonempty
+containers and nested wrappers; `test/margin-formatting-context.html` is the
+rendered reproduction. That layout fix leaves Haiku's screenshot unchanged.
 
 For a reference comparison:
 

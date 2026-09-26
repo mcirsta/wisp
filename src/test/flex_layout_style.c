@@ -21,7 +21,7 @@ css_computed_style *flex_test_style_create(const struct flex_test_style *v)
         return NULL;
     }
     set_display(style, v->container ? CSS_DISPLAY_FLEX : CSS_DISPLAY_BLOCK);
-    set_position(style, CSS_POSITION_STATIC);
+    set_position(style, v->position ? v->position : CSS_POSITION_STATIC);
     set_float(style, CSS_FLOAT_NONE);
     set_box_sizing(style, v->border_box ? CSS_BOX_SIZING_BORDER_BOX : CSS_BOX_SIZING_CONTENT_BOX);
     set_font_size(style, CSS_FONT_SIZE_DIMENSION, (css_fixed_or_calc)INTTOFIX(16), CSS_UNIT_PX);
@@ -49,8 +49,8 @@ css_computed_style *flex_test_style_create(const struct flex_test_style *v)
 #define SET_EDGES(side)                                                                                                \
     set_margin_##side(style, CSS_MARGIN_SET, (css_fixed_or_calc)INTTOFIX(v->margin), CSS_UNIT_PX);                     \
     set_padding_##side(style, CSS_PADDING_SET, (css_fixed_or_calc)INTTOFIX(v->padding), CSS_UNIT_PX);                  \
-    set_border_##side##_width(style, CSS_BORDER_WIDTH_WIDTH, (css_fixed_or_calc)0, CSS_UNIT_PX);                       \
-    set_border_##side##_style(style, CSS_BORDER_STYLE_NONE)
+    set_border_##side##_width(style, CSS_BORDER_WIDTH_WIDTH, (css_fixed_or_calc)INTTOFIX(v->border), CSS_UNIT_PX);     \
+    set_border_##side##_style(style, v->border ? CSS_BORDER_STYLE_SOLID : CSS_BORDER_STYLE_NONE)
     SET_EDGES(top);
     SET_EDGES(right);
     SET_EDGES(bottom);
@@ -62,5 +62,12 @@ css_computed_style *flex_test_style_create(const struct flex_test_style *v)
 void flex_test_style_ratio(css_computed_style *style, int height, int numerator, int denominator)
 {
     set_aspect_ratio(style, CSS_ASPECT_RATIO_RATIO, INTTOFIX(numerator), INTTOFIX(denominator));
+    set_height(style, CSS_HEIGHT_SET, (css_fixed_or_calc)INTTOFIX(height), CSS_UNIT_PX);
+}
+
+void flex_test_style_alignment(css_computed_style *style, uint8_t direction, uint8_t justify, int height)
+{
+    set_flex_direction(style, direction);
+    set_justify_content(style, justify);
     set_height(style, CSS_HEIGHT_SET, (css_fixed_or_calc)INTTOFIX(height), CSS_UNIT_PX);
 }

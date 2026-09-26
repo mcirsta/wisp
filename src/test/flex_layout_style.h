@@ -18,11 +18,14 @@ struct flex_test_style {
     uint8_t overflow;
     int padding;
     int margin;
+    int border;
+    uint8_t position; /* Zero uses static. */
 };
 
 css_computed_style *flex_test_style_create(const struct flex_test_style *values);
 uint8_t flex_test_style_grow(const css_computed_style *style, css_fixed *grow);
 
 void flex_test_style_ratio(css_computed_style *style, int height, int numerator, int denominator);
+void flex_test_style_alignment(css_computed_style *style, uint8_t direction, uint8_t justify, int height);
 
 #endif

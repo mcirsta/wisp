@@ -13,7 +13,9 @@
 #include "parse/properties/properties.h"
 #include "parse/properties/utils.h"
 
-#define MAX_GRADIENT_STOPS 10
+#include <libcss/gradient.h>
+
+#define MAX_GRADIENT_STOPS CSS_LINEAR_GRADIENT_MAX_STOPS
 
 /**
  * Parse linear gradient direction keywords
@@ -99,6 +101,77 @@ parse_gradient_direction(css_language *c, const parserutils_vector *vector, int3
     return CSS_INVALID;
 }
 
+/** Parse a bounded color-stop list, retaining units until used-value resolution.
+ * Bytecode: direction/shape, count, then (color, offset, unit) per stop.
+ * Unit zero denotes an omitted position; negative positions are valid lengths.
+ */
+static css_error parse_gradient_stops(
+    css_language *c, const parserutils_vector *vector, int32_t *ctx, css_style *result, uint16_t kind, uint32_t header)
+{
+    struct {
+        uint32_t color;
+        css_fixed offset;
+        uint32_t unit;
+    } stops[MAX_GRADIENT_STOPS] = {0};
+    uint32_t count = 0;
+    css_error error;
+
+    while (true) {
+        if (count == MAX_GRADIENT_STOPS)
+            return CSS_INVALID;
+        consumeWhitespace(vector, ctx);
+        uint16_t color_type;
+        error = css__parse_colour_specifier(c, vector, ctx, &color_type, &stops[count].color);
+        if (error != CSS_OK)
+            return error;
+        if (color_type == COLOR_TRANSPARENT)
+            stops[count].color = 0;
+        else if (color_type != COLOR_SET)
+            return CSS_INVALID; /* currentColor needs a computed-color reference. */
+
+        consumeWhitespace(vector, ctx);
+        const css_token *token = parserutils_vector_peek(vector, *ctx);
+        if (token != NULL &&
+            (token->type == CSS_TOKEN_DIMENSION || token->type == CSS_TOKEN_NUMBER ||
+                token->type == CSS_TOKEN_PERCENTAGE)) {
+            error = css__parse_unit_specifier(c, vector, ctx, UNIT_PX, &stops[count].offset, &stops[count].unit);
+            if (error != CSS_OK)
+                return error;
+            if (stops[count].unit != UNIT_PCT && (!(stops[count].unit & UNIT_LENGTH) || stops[count].unit == UNIT_FR))
+                return CSS_INVALID;
+            /* Gradient functions do not accept unitless nonzero lengths, even
+             * in a quirks-mode sheet. */
+            if (token->type == CSS_TOKEN_NUMBER && stops[count].offset != 0)
+                return CSS_INVALID;
+        }
+        count++;
+        consumeWhitespace(vector, ctx);
+        token = parserutils_vector_iterate(vector, ctx);
+        if (token == NULL)
+            return CSS_INVALID;
+        if (tokenIsChar(token, ')'))
+            break;
+        if (!tokenIsChar(token, ','))
+            return CSS_INVALID;
+    }
+    if (count < 2)
+        return CSS_INVALID;
+
+    error = css__stylesheet_style_appendOPV(result, CSS_PROP_BACKGROUND_IMAGE, 0, kind);
+    if (error == CSS_OK)
+        error = css__stylesheet_style_append(result, header);
+    if (error == CSS_OK)
+        error = css__stylesheet_style_append(result, count);
+    for (uint32_t i = 0; i < count && error == CSS_OK; i++) {
+        error = css__stylesheet_style_append(result, stops[i].color);
+        if (error == CSS_OK)
+            error = css__stylesheet_style_append(result, stops[i].offset);
+        if (error == CSS_OK)
+            error = css__stylesheet_style_append(result, stops[i].unit);
+    }
+    return error;
+}
+
 /**
  * Parse a linear gradient
  *
@@ -115,12 +188,6 @@ parse_linear_gradient(css_language *c, const parserutils_vector *vector, int32_t
     css_error error = CSS_OK;
     const css_token *token;
     uint32_t direction = 0; /* Default: to bottom */
-    uint32_t stop_count = 0;
-    struct {
-        uint32_t color;
-        css_fixed offset;
-    } stops[MAX_GRADIENT_STOPS];
-    uint16_t color_val;
     bool has_direction = false;
 
     /* Try to parse direction - first try angle, then try keyword */
@@ -186,114 +253,10 @@ parse_linear_gradient(css_language *c, const parserutils_vector *vector, int32_t
         *ctx = checkpoint;
     }
 
-    /* Parse color stops */
-    while (stop_count < MAX_GRADIENT_STOPS) {
-        consumeWhitespace(vector, ctx);
-
-        /* Parse color */
-        token = parserutils_vector_peek(vector, *ctx);
-        error = css__parse_colour_specifier(c, vector, ctx, &color_val, &stops[stop_count].color);
-        if (error != CSS_OK) {
-            *ctx = orig_ctx;
-            return error;
-        }
-
-        consumeWhitespace(vector, ctx);
-
-        /* Check for optional offset (percentage) */
-        token = parserutils_vector_peek(vector, *ctx);
-        if (token && token->type == CSS_TOKEN_PERCENTAGE) {
-            size_t consumed = 0;
-
-            /* PERCENTAGE token idata does NOT include the '%' character */
-            stops[stop_count].offset = css__number_from_lwc_string(token->idata, false, &consumed);
-
-            parserutils_vector_iterate(vector, ctx); /* Consume percentage */
-            consumeWhitespace(vector, ctx);
-        } else {
-            /* Auto-distribute stops evenly if no offset specified */
-            /* We'll calculate this after all stops are parsed */
-            stops[stop_count].offset = INTTOFIX(-1); /* Marker for auto */
-        }
-
-        stop_count++;
-
-        /* Check for end of gradient or comma */
-        token = parserutils_vector_peek(vector, *ctx);
-        if (token == NULL) {
-            *ctx = orig_ctx;
-            return CSS_INVALID;
-        }
-
-        if (token->type == CSS_TOKEN_CHAR && lwc_string_length(token->idata) == 1 &&
-            lwc_string_data(token->idata)[0] == ')') {
-            /* End of gradient */
-            parserutils_vector_iterate(vector, ctx); /* Consume ')' */
-            break;
-        }
-
-        if (token->type == CSS_TOKEN_CHAR && lwc_string_length(token->idata) == 1 &&
-            lwc_string_data(token->idata)[0] == ',') {
-            parserutils_vector_iterate(vector, ctx); /* Consume ',' */
-            continue;
-        }
-
-        /* Unexpected token */
+    error = parse_gradient_stops(c, vector, ctx, result, BACKGROUND_IMAGE_LINEAR_GRADIENT, direction);
+    if (error != CSS_OK)
         *ctx = orig_ctx;
-        return CSS_INVALID;
-    }
-
-    /* Auto-distribute stops without explicit offsets */
-    if (stop_count > 0) {
-        int auto_count = 0;
-        for (uint32_t i = 0; i < stop_count; i++) {
-            if (stops[i].offset == INTTOFIX(-1))
-                auto_count++;
-        }
-
-        if (auto_count > 0) {
-            /* Simple distribution: first=0%, last=100%, others evenly spaced */
-            for (uint32_t i = 0; i < stop_count; i++) {
-                if (stops[i].offset == INTTOFIX(-1)) {
-                    stops[i].offset = FDIV(INTTOFIX(i * 100), INTTOFIX(stop_count - 1));
-                }
-            }
-        }
-    }
-
-    error = css__stylesheet_style_appendOPV(result, CSS_PROP_BACKGROUND_IMAGE, 0, BACKGROUND_IMAGE_LINEAR_GRADIENT);
-    if (error != CSS_OK) {
-        *ctx = orig_ctx;
-        return error;
-    }
-
-    error = css__stylesheet_style_append(result, direction);
-    if (error != CSS_OK) {
-        *ctx = orig_ctx;
-        return error;
-    }
-
-    error = css__stylesheet_style_append(result, stop_count);
-    if (error != CSS_OK) {
-        *ctx = orig_ctx;
-        return error;
-    }
-
-    for (uint32_t i = 0; i < stop_count; i++) {
-        error = css__stylesheet_style_append(result, stops[i].color);
-        if (error != CSS_OK) {
-            *ctx = orig_ctx;
-            return error;
-        }
-
-        error = css__stylesheet_style_append(result, stops[i].offset);
-        if (error != CSS_OK) {
-            *ctx = orig_ctx;
-            return error;
-        }
-    }
-
-    return CSS_OK;
+    return error;
 }
 
 /**
@@ -312,12 +275,6 @@ parse_radial_gradient(css_language *c, const parserutils_vector *vector, int32_t
     css_error error = CSS_OK;
     const css_token *token;
     uint32_t shape = 0; /* Default: circle */
-    uint32_t stop_count = 0;
-    struct {
-        uint32_t color;
-        css_fixed offset;
-    } stops[MAX_GRADIENT_STOPS];
-    uint16_t color_val;
     bool has_shape = false;
     bool match;
     lwc_string *keyword = NULL;
@@ -357,102 +314,10 @@ parse_radial_gradient(css_language *c, const parserutils_vector *vector, int32_t
         }
     }
 
-    /* Parse color stops */
-    while (stop_count < MAX_GRADIENT_STOPS) {
-        consumeWhitespace(vector, ctx);
-
-        /* Parse color */
-        token = parserutils_vector_peek(vector, *ctx);
-        if (token == NULL) {
-            break;
-        }
-        error = css__parse_colour_specifier(c, vector, ctx, &color_val, &stops[stop_count].color);
-        if (error != CSS_OK) {
-            *ctx = orig_ctx;
-            return error;
-        }
-
-        consumeWhitespace(vector, ctx);
-
-        /* Check for optional offset (percentage) */
-        token = parserutils_vector_peek(vector, *ctx);
-        if (token && token->type == CSS_TOKEN_PERCENTAGE) {
-            size_t consumed = 0;
-            stops[stop_count].offset = css__number_from_lwc_string(token->idata, false, &consumed);
-            parserutils_vector_iterate(vector, ctx);
-            consumeWhitespace(vector, ctx);
-        } else {
-            stops[stop_count].offset = INTTOFIX(-1); /* Marker for auto */
-        }
-
-        stop_count++;
-
-        /* Check for end of gradient or comma */
-        token = parserutils_vector_peek(vector, *ctx);
-        if (token == NULL) {
-            *ctx = orig_ctx;
-            return CSS_INVALID;
-        }
-
-        if (token->type == CSS_TOKEN_CHAR && lwc_string_length(token->idata) == 1 &&
-            lwc_string_data(token->idata)[0] == ')') {
-            parserutils_vector_iterate(vector, ctx);
-            break;
-        }
-
-        if (token->type == CSS_TOKEN_CHAR && lwc_string_length(token->idata) == 1 &&
-            lwc_string_data(token->idata)[0] == ',') {
-            parserutils_vector_iterate(vector, ctx);
-            continue;
-        }
-
+    error = parse_gradient_stops(c, vector, ctx, result, BACKGROUND_IMAGE_RADIAL_GRADIENT, shape);
+    if (error != CSS_OK)
         *ctx = orig_ctx;
-        return CSS_INVALID;
-    }
-
-    /* Auto-distribute stops without explicit offsets */
-    if (stop_count > 0) {
-        for (uint32_t i = 0; i < stop_count; i++) {
-            if (stops[i].offset == INTTOFIX(-1)) {
-                stops[i].offset = FDIV(INTTOFIX(i * 100), INTTOFIX(stop_count - 1));
-            }
-        }
-    }
-
-    /* Write to bytecode */
-    error = css__stylesheet_style_appendOPV(result, CSS_PROP_BACKGROUND_IMAGE, 0, BACKGROUND_IMAGE_RADIAL_GRADIENT);
-    if (error != CSS_OK) {
-        *ctx = orig_ctx;
-        return error;
-    }
-
-    error = css__stylesheet_style_append(result, shape);
-    if (error != CSS_OK) {
-        *ctx = orig_ctx;
-        return error;
-    }
-
-    error = css__stylesheet_style_append(result, stop_count);
-    if (error != CSS_OK) {
-        *ctx = orig_ctx;
-        return error;
-    }
-
-    for (uint32_t i = 0; i < stop_count; i++) {
-        error = css__stylesheet_style_append(result, stops[i].color);
-        if (error != CSS_OK) {
-            *ctx = orig_ctx;
-            return error;
-        }
-
-        error = css__stylesheet_style_append(result, stops[i].offset);
-        if (error != CSS_OK) {
-            *ctx = orig_ctx;
-            return error;
-        }
-    }
-
-    return CSS_OK;
+    return error;
 }
 
 /**

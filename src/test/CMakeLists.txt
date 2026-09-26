@@ -192,6 +192,7 @@ add_wisp_test(html_redraw_borders_test
 
 add_wisp_test(layout_calc_test
   ${CMAKE_SOURCE_DIR}/src/test/layout_calc_test.c
+  ${CMAKE_SOURCE_DIR}/src/content/handlers/html/redraw_helpers.c
 )
 
 add_wisp_test(layout_flex_test

@@ -187,7 +187,9 @@ static inline bool css__arena_style_is_equal(struct css_computed_style *a, struc
         }
         for (uint32_t i = 0; i < a->background_gradient->stop_count; i++) {
             if (a->background_gradient->stops[i].color != b->background_gradient->stops[i].color ||
-                a->background_gradient->stops[i].offset != b->background_gradient->stops[i].offset) {
+                a->background_gradient->stops[i].offset != b->background_gradient->stops[i].offset ||
+                a->background_gradient->stops[i].unit != b->background_gradient->stops[i].unit ||
+                a->background_gradient->stops[i].auto_offset != b->background_gradient->stops[i].auto_offset) {
                 return false;
             }
         }
@@ -207,7 +209,10 @@ static inline bool css__arena_style_is_equal(struct css_computed_style *a, struc
         }
         for (uint32_t i = 0; i < a->background_radial_gradient->stop_count; i++) {
             if (a->background_radial_gradient->stops[i].color != b->background_radial_gradient->stops[i].color ||
-                a->background_radial_gradient->stops[i].offset != b->background_radial_gradient->stops[i].offset) {
+                a->background_radial_gradient->stops[i].offset != b->background_radial_gradient->stops[i].offset ||
+                a->background_radial_gradient->stops[i].unit != b->background_radial_gradient->stops[i].unit ||
+                a->background_radial_gradient->stops[i].auto_offset !=
+                    b->background_radial_gradient->stops[i].auto_offset) {
                 return false;
             }
         }

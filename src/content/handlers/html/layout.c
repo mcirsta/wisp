@@ -1410,7 +1410,7 @@ static inline bool box_inline_container_has_line_boxes(const struct box *box)
 static inline bool box_has_in_flow_block_children(const struct box *box)
 {
     for (struct box *c = box->children; c != NULL; c = c->next) {
-        if (c->type == BOX_BLOCK && !box_is_out_of_flow(c))
+        if ((c->type == BOX_BLOCK || c->type == BOX_FLEX || c->type == BOX_GRID) && !box_is_out_of_flow(c))
             return true;
     }
     return false;
@@ -1424,17 +1424,24 @@ static inline bool box_has_in_flow_block_children(const struct box *box)
  */
 static inline bool box_prevents_collapse_through(const struct box *box)
 {
+    /* Flex/grid containers establish independent formatting contexts, even
+     * when empty. Their top and bottom margins are never adjoining. */
+    if (box->type == BOX_FLEX || box->type == BOX_GRID)
+        return true;
     if (box->flags & (MAKE_HEIGHT | ASPECT_RATIO_HEIGHT))
         return true;
     if (box_has_vertical_separator(box))
         return true;
     if (box->type == BOX_INLINE_CONTAINER)
         return box_inline_container_has_line_boxes(box);
-    /* A block whose IC children have line boxes has content
-     * even before layout sets MAKE_HEIGHT. */
+    /* In-flow descendants can separate the margins even before layout sets
+     * MAKE_HEIGHT. This also covers a zero-height flex/grid inside wrappers. */
     if (box->type == BOX_BLOCK) {
         for (struct box *c = box->children; c != NULL; c = c->next) {
-            if (c->type == BOX_INLINE_CONTAINER && box_inline_container_has_line_boxes(c))
+            if (!box_is_out_of_flow(c) &&
+                (c->type == BOX_BLOCK || c->type == BOX_INLINE_CONTAINER || c->type == BOX_FLEX ||
+                    c->type == BOX_GRID) &&
+                box_prevents_collapse_through(c))
                 return true;
         }
     }
@@ -1485,8 +1492,8 @@ static struct box *layout_next_margin_block(const css_unit_ctx *unit_len_ctx, st
 
             /* Check whether box is the box current margin collapses
              * to */
-            if (box->flags & MAKE_HEIGHT || box->border[TOP].width || box->padding[TOP] ||
-                (box->style && css_computed_overflow_y(box->style) != CSS_OVERFLOW_VISIBLE) ||
+            if (box->type == BOX_FLEX || box->type == BOX_GRID || box->flags & MAKE_HEIGHT || box->border[TOP].width ||
+                box->padding[TOP] || (box->style && css_computed_overflow_y(box->style) != CSS_OVERFLOW_VISIBLE) ||
                 (box->type == BOX_INLINE_CONTAINER && !box_is_first_child(box))) {
                 /* Collapse to this box; return it */
                 return box;

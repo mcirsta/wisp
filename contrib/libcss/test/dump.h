@@ -1027,6 +1027,29 @@ void dump_bytecode(css_style *style, char **ptr, uint32_t depth)
                     ADVANCE(sizeof(snum));
                     *ptr += sprintf(*ptr, "url('%.*s')", (int)lwc_string_length(he), lwc_string_data(he));
                 } break;
+                case BACKGROUND_IMAGE_LINEAR_GRADIENT:
+                case BACKGROUND_IMAGE_RADIAL_GRADIENT: {
+                    uint32_t header = *((uint32_t *)bytecode);
+                    ADVANCE(sizeof(header));
+                    uint32_t count = *((uint32_t *)bytecode);
+                    ADVANCE(sizeof(count));
+                    *ptr += sprintf(*ptr, "%s-gradient(%u",
+                        value == BACKGROUND_IMAGE_LINEAR_GRADIENT ? "linear" : "radial", header);
+                    for (uint32_t i = 0; i < count; i++) {
+                        uint32_t color = *((uint32_t *)bytecode);
+                        ADVANCE(sizeof(color));
+                        css_fixed position = *((css_fixed *)bytecode);
+                        ADVANCE(sizeof(position));
+                        uint32_t unit = *((uint32_t *)bytecode);
+                        ADVANCE(sizeof(unit));
+                        *ptr += sprintf(*ptr, ", #%08x", color);
+                        if (unit != 0) {
+                            *ptr += sprintf(*ptr, " ");
+                            dump_unit(position, unit, ptr);
+                        }
+                    }
+                    *ptr += sprintf(*ptr, ")");
+                } break;
                 }
                 break;
             case CSS_PROP_BACKGROUND_POSITION:

@@ -56,12 +56,16 @@ css_error css__cascade_background_image(uint32_t opv, css_style *style, css_sele
 
                 /* Read color stops */
                 for (uint32_t i = 0; i < stop_count && i < CSS_LINEAR_GRADIENT_MAX_STOPS; i++) {
-                    /* Each stop: color (4 bytes) + offset (4 bytes fixed point) */
+                    /* Each stop: color + fixed-point offset + unit (zero = auto). */
                     gradient->stops[i].color = *((css_code_t *)style->bytecode);
                     advance_bytecode(style, sizeof(css_code_t));
 
                     gradient->stops[i].offset = *((css_fixed *)style->bytecode);
                     advance_bytecode(style, sizeof(css_fixed));
+                    uint32_t unit = *((css_code_t *)style->bytecode);
+                    advance_bytecode(style, sizeof(css_code_t));
+                    gradient->stops[i].auto_offset = (unit == 0);
+                    gradient->stops[i].unit = unit == 0 ? CSS_UNIT_PCT : css__to_css_unit(unit);
                 }
             }
             break;
@@ -94,6 +98,10 @@ css_error css__cascade_background_image(uint32_t opv, css_style *style, css_sele
 
                     radial->stops[i].offset = *((css_fixed *)style->bytecode);
                     advance_bytecode(style, sizeof(css_fixed));
+                    uint32_t unit = *((css_code_t *)style->bytecode);
+                    advance_bytecode(style, sizeof(css_code_t));
+                    radial->stops[i].auto_offset = (unit == 0);
+                    radial->stops[i].unit = unit == 0 ? CSS_UNIT_PCT : css__to_css_unit(unit);
                 }
 
                 /* Store in state for later use */
