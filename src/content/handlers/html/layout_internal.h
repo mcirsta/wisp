@@ -24,6 +24,7 @@
 #ifndef WISP_HTML_LAYOUT_INTERNAL_H
 #define WISP_HTML_LAYOUT_INTERNAL_H
 
+#include <assert.h>
 #include <limits.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -34,6 +35,14 @@ struct html_content;
 struct gui_layout_table;
 
 #define AUTO INT_MIN
+
+/* For assertions at the point a layout value is consumed as pixels.
+ * Negative margins/coordinates are valid. This does not resolve auto or
+ * validate an available-size parameter whose API uses -1 for indefinite. */
+static inline bool lh__is_resolved(int value)
+{
+    return value != AUTO && value != UNKNOWN_WIDTH;
+}
 
 /* Note: enum css_size_type and struct css_size are defined in box.h */
 
@@ -212,17 +221,26 @@ static inline bool lh__flex_direction_reversed(const struct box *flex)
 
 static inline int lh__non_auto_margin(const struct box *b, enum box_side side)
 {
+    assert(b->margin[side] != UNKNOWN_WIDTH);
     return (b->margin[side] == AUTO) ? 0 : b->margin[side];
 }
 
 static inline int lh__delta_outer_height(const struct box *b)
 {
+    assert(lh__is_resolved(b->padding[TOP]));
+    assert(lh__is_resolved(b->padding[BOTTOM]));
+    assert(lh__is_resolved(b->border[TOP].width));
+    assert(lh__is_resolved(b->border[BOTTOM].width));
     return b->padding[TOP] + b->padding[BOTTOM] + b->border[TOP].width + b->border[BOTTOM].width +
         lh__non_auto_margin(b, TOP) + lh__non_auto_margin(b, BOTTOM);
 }
 
 static inline int lh__delta_outer_width(const struct box *b)
 {
+    assert(lh__is_resolved(b->padding[LEFT]));
+    assert(lh__is_resolved(b->padding[RIGHT]));
+    assert(lh__is_resolved(b->border[LEFT].width));
+    assert(lh__is_resolved(b->border[RIGHT].width));
     return b->padding[LEFT] + b->padding[RIGHT] + b->border[LEFT].width + b->border[RIGHT].width +
         lh__non_auto_margin(b, LEFT) + lh__non_auto_margin(b, RIGHT);
 }

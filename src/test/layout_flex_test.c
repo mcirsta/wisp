@@ -1,5 +1,6 @@
 #include <check.h>
 #include <limits.h>
+#include <signal.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -1174,6 +1175,15 @@ START_TEST(test_flex_redistribute_out_of_flow)
 }
 END_TEST
 
+#ifndef NDEBUG
+START_TEST(test_flex_redistribute_requires_resolved_height)
+{
+    struct box flex = {.type = BOX_FLEX, .height = _i ? UNKNOWN_WIDTH : AUTO};
+    layout_flex_redistribute_auto_margins_vertical(&flex);
+}
+END_TEST
+#endif
+
 Suite *layout_flex_suite(void)
 {
     Suite *s;
@@ -1212,6 +1222,9 @@ Suite *layout_flex_suite(void)
     tcase_add_loop_test(tc_core, test_flex_ratio_minimum, 0, 4);
     tcase_add_loop_test(tc_core, test_flex_outer_size_alignment, 0, 8);
     tcase_add_loop_test(tc_core, test_flex_redistribute_out_of_flow, 0, 4);
+#ifndef NDEBUG
+    tcase_add_loop_test_raise_signal(tc_core, test_flex_redistribute_requires_resolved_height, SIGABRT, 0, 2);
+#endif
     suite_add_tcase(s, tc_core);
 
     return s;

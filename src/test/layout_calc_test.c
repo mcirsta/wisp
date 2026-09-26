@@ -4,6 +4,7 @@
 
 #include <check.h>
 #include <stdbool.h>
+#include <signal.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -1170,6 +1171,40 @@ START_TEST(test_gradient_style_sharing)
 }
 END_TEST
 
+/* Outer edges may be known while the content size is still unresolved.
+ * Auto margins contribute zero here, and negative margins remain valid. */
+START_TEST(test_layout_resolved_edges_with_auto_content)
+{
+    struct box box = {.width = AUTO, .height = AUTO, .max_width = UNKNOWN_MAX_WIDTH,
+        .padding = {3, 3, 3, 3}, .margin = {AUTO, -1, -7, AUTO}};
+    for (int side = TOP; side <= LEFT; side++)
+        box.border[side].width = 2;
+    ck_assert_int_eq(lh__delta_outer_width(&box), 9);
+    ck_assert_int_eq(lh__delta_outer_height(&box), 3);
+}
+END_TEST
+
+#ifndef NDEBUG
+/* Reject both sentinels in padding/borders, and unknown margins, before
+ * adding them. In particular AUTO + 3 would not itself overflow. */
+START_TEST(test_layout_unresolved_edges_assert)
+{
+    struct box box = {0};
+    int side = _i % 4;
+    if (_i < 8)
+        box.padding[side] = _i < 4 ? AUTO : UNKNOWN_WIDTH;
+    else if (_i < 16)
+        box.border[side].width = _i < 12 ? AUTO : UNKNOWN_WIDTH;
+    else
+        box.margin[side] = UNKNOWN_WIDTH;
+    if (side == LEFT || side == RIGHT)
+        (void)lh__delta_outer_width(&box);
+    else
+        (void)lh__delta_outer_height(&box);
+}
+END_TEST
+#endif
+
 Suite *layout_calc_suite(void)
 {
     Suite *s = suite_create("LayoutCalc");
@@ -1201,6 +1236,10 @@ Suite *layout_calc_suite(void)
     tcase_add_test(tc_core, test_gradient_resize_and_color);
     tcase_add_test(tc_core, test_gradient_inheritance);
     tcase_add_test(tc_core, test_gradient_style_sharing);
+    tcase_add_test(tc_core, test_layout_resolved_edges_with_auto_content);
+#ifndef NDEBUG
+    tcase_add_loop_test_raise_signal(tc_core, test_layout_unresolved_edges_assert, SIGABRT, 0, 20);
+#endif
     suite_add_tcase(s, tc_core);
     return s;
 }

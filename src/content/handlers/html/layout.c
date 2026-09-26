@@ -5366,6 +5366,15 @@ static void layout_position_relative(const css_unit_ctx *unit_len_ctx, struct bo
 static void layout_get_box_bbox(
     const css_unit_ctx *unit_len_ctx, struct box *box, int *desc_x0, int *desc_y0, int *desc_x1, int *desc_y1)
 {
+    /* Final geometry consumes pixels, never unresolved layout states. */
+    assert(lh__is_resolved(box->width));
+    assert(lh__is_resolved(box->height));
+#ifndef NDEBUG
+    for (int side = TOP; side <= LEFT; side++) {
+        assert(lh__is_resolved(box->padding[side]));
+        assert(lh__is_resolved(box->border[side].width));
+    }
+#endif
     /* Catch boxes with unresolved width - this would cause overflow */
     /* Catch boxes with unresolved width - this would cause overflow */
     if (box->width == UNKNOWN_WIDTH || box->width >= 100000000) {
@@ -5517,8 +5526,8 @@ static void layout_calculate_descendant_bboxes(const css_unit_ctx *unit_len_ctx,
 {
     struct box *child;
 
-    assert(box->width != UNKNOWN_WIDTH);
-    assert(box->height != AUTO);
+    assert(lh__is_resolved(box->width));
+    assert(lh__is_resolved(box->height));
     /* assert((box->width >= 0) && (box->height >= 0)); */
 
     /* Handle boxes with invalid negative width - set descendant to box size to prevent overflow */

@@ -281,6 +281,7 @@ static enum box_side layout_flex__main_end_side(const struct flex_ctx *ctx)
  */
 bool layout_flex_redistribute_auto_margins_vertical(struct box *flex)
 {
+    assert(lh__is_resolved(flex->height));
     int container_height = flex->height;
     int content_height = 0;
     int auto_margin_count = 0;
@@ -329,6 +330,7 @@ bool layout_flex_redistribute_auto_margins_vertical(struct box *flex)
         child_count++;
 
         /* Calculate this child's outer height (excluding auto margins which we'll compute) */
+        assert(lh__is_resolved(child->height));
         int child_outer_height = child->height + child->padding[TOP] + child->padding[BOTTOM] +
             child->border[TOP].width + child->border[BOTTOM].width;
 
@@ -873,10 +875,13 @@ static inline bool layout_flex__base_and_main_sizes(
             NSLOG(flex, DEBUG, "box %p: setting base_size from b->height=%d", b, b->height);
             item->base_size = b->height;
         } else {
+            assert(lh__is_resolved(content_max_width));
             item->base_size = content_max_width - delta_outer_main;
         }
     }
 
+    /* Auto bases have been resolved from layout or intrinsic measurement. */
+    assert(lh__is_resolved(item->base_size));
     item->base_size += delta_outer_main;
 
     if (ctx->horizontal && item->min_main.type == CSS_SIZE_AUTO) {
@@ -1096,6 +1101,7 @@ static struct flex_line_data *layout_flex__build_line(struct flex_ctx *ctx, size
         int pos_main;
         int gap_for_item;
 
+        assert(lh__is_resolved(ctx->horizontal ? item->main_size : b->height));
         pos_main = ctx->horizontal ? item->main_size : b->height + lh__delta_outer_main(ctx->flex, b);
 
         /* Account for gap: if this item is added, we need line->count gaps total
@@ -1172,6 +1178,7 @@ layout_flex__item_freeze(struct flex_line_data *line, struct flex_item_data *ite
     line->frozen++;
 
     if (!lh__box_is_absolute(item->box)) {
+        assert(lh__is_resolved(item->target_main_size));
         /* Target sizes already include padding, borders and non-auto margins.
          * Counting those edges again steals space from alignment/auto margins. */
         line->used_main_size += item->target_main_size;
@@ -1382,6 +1389,7 @@ static bool layout_flex__resolve_line(struct flex_ctx *ctx, struct flex_line_dat
         available_main = line->main_size;
     }
 
+    assert(lh__is_resolved(available_main));
     /* Subtract gap space from available main - gaps are fixed gutters per CSS spec */
     if (line->count > 1 && ctx->main_gap > 0) {
         int gap_total = (int)(line->count - 1) * ctx->main_gap;
@@ -1614,6 +1622,7 @@ static bool layout_flex__place_line_items_main(struct flex_ctx *ctx, struct flex
 
 
         if (!lh__box_is_absolute(b)) {
+            assert(lh__is_resolved(box_size_main));
             if (b->margin[main_start] == AUTO) {
                 extra_pre = extra + extra_remainder;
             }
@@ -1637,6 +1646,7 @@ static bool layout_flex__place_line_items_main(struct flex_ctx *ctx, struct flex
             int cross_size;
             int box_size_cross = lh__box_size_cross(ctx->horizontal, b);
 
+            assert(lh__is_resolved(box_size_cross));
             main_pos += post_multiplier * (extra_total + box_size_main + lh__delta_outer_main(ctx->flex, b));
             NSLOG(
                 flex, DEEPDEBUG, "ITEM[%zu]: after post_mult main_pos=%d (post_mult=%d)", i, main_pos, post_multiplier);

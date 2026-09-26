@@ -4,6 +4,27 @@
 
 This document outlines a systematic approach to debugging layout issues in the Wisp browser rendering engine.
 
+## Assertions for unresolved layout values
+
+Layout retains `AUTO` (`INT_MIN`) and `UNKNOWN_WIDTH` / `UNKNOWN_MAX_WIDTH`
+(`INT_MAX`). Debug assertions check selected points where these states must
+already have become pixel measurements: outer-edge arithmetic, flex sizing
+and placement, grid item measurements, and final box bounds.
+
+Build with `CMAKE_BUILD_TYPE=Debug` to enable these checks. Standard `assert()`
+checks disappear when `NDEBUG` is defined, as in the Release build. They do not
+change box storage, resolve values, clamp dimensions, or add Release work.
+The existing Debug sanitizer configuration complements them by detecting
+overflow; it cannot detect every accidental arithmetic use of a sentinel.
+
+When a check fails, inspect the value's producer and the current layout stage.
+Do not substitute zero just to pass the assertion. Unknown measurements are
+valid earlier in layout, auto margins are handled explicitly, and negative
+margins/coordinates are legitimate. `lh__is_resolved()` is only a sentinel
+check; APIs using `-1` for an indefinite available size need their own checks.
+`layout_calc_test` and `layout_flex_test` include Debug-only cases that expect
+`SIGABRT` for invalid inputs, alongside valid auto/negative-margin cases.
+
 ## Debugging Tools Available in Wisp
 
 ### 1. Logging System

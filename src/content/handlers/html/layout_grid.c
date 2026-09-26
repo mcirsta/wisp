@@ -947,6 +947,7 @@ static void layout_grid_resolve_placement(const struct grid_layout_ctx *ctx, str
 /* Resolve inline sizing, lay out contents, then distribute inline auto margins. */
 static bool layout_grid_size_item(const struct grid_layout_ctx *ctx, struct box *child, int child_width)
 {
+    assert(lh__is_resolved(child_width));
     /* Resolve CSS dimensions - this populates child->padding and child->border */
     /* CSS constraints are separate from the cached intrinsic widths. */
     struct css_size item_min_width;
@@ -996,6 +997,7 @@ static bool layout_grid_size_item(const struct grid_layout_ctx *ctx, struct box 
 
     /* Auto margins absorb only positive free space, including after
      * a table or nested layout has adjusted the item's used width. */
+    assert(lh__is_resolved(child->width));
     int free_width = max(0, child_width - child->width - edges - margin_left - margin_right);
     child->margin[LEFT] = auto_left ? free_width / (auto_right ? 2 : 1) : margin_left;
     child->margin[RIGHT] = auto_right ? free_width - (auto_left ? child->margin[LEFT] : 0) : margin_right;
@@ -1006,6 +1008,8 @@ static bool layout_grid_size_item(const struct grid_layout_ctx *ctx, struct box 
 static bool
 layout_grid_update_rows(struct grid_layout_ctx *ctx, const struct box *child, const struct grid_placement *placement)
 {
+    /* Content layout must finish before its height contributes to a row. */
+    assert(lh__is_resolved(child->height));
     /* Track row heights for all spanned rows - include padding and border */
     int total_height = child->height + child->padding[TOP] + child->padding[BOTTOM] + child->border[TOP].width +
         child->border[BOTTOM].width;
