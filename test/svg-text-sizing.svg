@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="600" height="100">
+  <!-- The sizes share the same whole-pixel part at both 100% and 60%. -->
+  <g font-size="9">
+    <text x="10" y="20">MMMMMMMMMMMMMMMMMMMM</text>
+    <text x="520" y="20" text-anchor="end">MMMMMMMMMMMMMMMMMMMM</text>
+  </g>
+  <g font-size="9.25">
+    <text x="10" y="50">MMMMMMMMMMMMMMMMMMMM</text>
+    <text x="520" y="50" text-anchor="end">MMMMMMMMMMMMMMMMMMMM</text>
+  </g>
+  <g font-size="9.75">
+    <text x="10" y="80">MMMMMMMMMMMMMMMMMMMM</text>
+    <text x="520" y="80" text-anchor="end">MMMMMMMMMMMMMMMMMMMM</text>
+  </g>
+</svg>

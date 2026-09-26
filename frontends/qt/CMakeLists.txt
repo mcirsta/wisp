@@ -113,6 +113,10 @@ if(WISP_QT_CAPTURE)
         set_tests_properties(qt_flex_alignment PROPERTIES TIMEOUT 30)
         find_program(WISP_TEST_MAGICK magick)
         if(WISP_TEST_MAGICK)
+            add_test(NAME qt_svg_text
+                COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_svg_text.py
+                    $<TARGET_FILE:wisp-qt> ${WISP_TEST_MAGICK})
+            set_tests_properties(qt_svg_text PROPERTIES TIMEOUT 30)
             add_test(NAME qt_gradient_stops
                 COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_gradient_stops.py
                     $<TARGET_FILE:wisp-qt> ${WISP_TEST_MAGICK})

@@ -1111,10 +1111,8 @@ static bool svg_redraw_internal(svg_content *svg, int x, int y, int width, int h
             fstyle.flags |= FONTF_SIZE_PIXELS;
 
 
-            /* Apply font-weight bold if specified */
-            if (diagram->shape[i].font_weight_bold) {
-                fstyle.weight = 700;
-            }
+            /* Each shape has its own resolved weight; don't retain a previous bold. */
+            fstyle.weight = diagram->shape[i].font_weight_bold ? 700 : 400;
 
             /* Adjust position for text-anchor */
             if (diagram->shape[i].text_anchor != svgtiny_TEXT_ANCHOR_START) {

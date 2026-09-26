@@ -63,6 +63,17 @@ static QPaintDevice *get_metrics_device(void)
     return nullptr;
 }
 
+/* QFont's pixel size is integral. Preserve the remaining SVG scale in both
+ * measurement and painting, without changing HTML/CSS font sizing or DPI. */
+static qreal svg_font_scale(const struct plot_font_style *style)
+{
+    if (!(style->flags & FONTF_SIZE_PIXELS) || style->size <= 0) {
+        return 1.0;
+    }
+    int pixels = qMax(1, style->size / PLOT_STYLE_SCALE);
+    return qreal(style->size) / (qreal(pixels) * PLOT_STYLE_SCALE);
+}
+
 /**
  * constructs a qfont from a nsfont
  *
@@ -421,7 +432,12 @@ static nserror nsqt_layout_width(const struct plot_font_style *fstyle, const cha
     /* IMPORTANT: Use QString::fromUtf8 to correctly interpret byte length as UTF-8.
      * Qt's horizontalAdvance(char*, len) treats len as CHARACTER count, not byte count! */
     QString qstr = QString::fromUtf8(string, length);
-    *width = metrics.horizontalAdvance(qstr);
+    qreal scale = svg_font_scale(fstyle);
+    if (scale != 1.0) {
+        *width = qRound(QFontMetricsF(*font, device).horizontalAdvance(qstr) * scale);
+    } else {
+        *width = metrics.horizontalAdvance(qstr);
+    }
 
     delete font;
     NSLOG(wisp, DEEPDEBUG, "fstyle: %p string:\"%.*s\", length: %" PRIsizet ", width: %dpx", fstyle, (int)length,
@@ -614,7 +630,16 @@ nsqt_layout_plot(QPainter *painter, const struct plot_font_style *fstyle, int x,
     painter->setPen(pen);
     painter->setFont(*font);
 
-    painter->drawText(x, y, QString::fromUtf8(text, length));
+    qreal scale = svg_font_scale(fstyle);
+    if (scale != 1.0) {
+        painter->save();
+        painter->translate(x, y);
+        painter->scale(scale, scale);
+        painter->drawText(0, 0, QString::fromUtf8(text, length));
+        painter->restore();
+    } else {
+        painter->drawText(x, y, QString::fromUtf8(text, length));
+    }
 
     delete font;
     return NSERROR_OK;
