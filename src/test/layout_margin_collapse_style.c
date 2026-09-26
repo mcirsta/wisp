@@ -93,6 +93,27 @@ void style_set_overflow_hidden(css_computed_style *s)
     set_overflow_y(s, CSS_OVERFLOW_HIDDEN);
 }
 
+void style_set_width(css_computed_style *s, int value, bool percent)
+{
+    set_width(s, value < 0 ? CSS_WIDTH_AUTO : CSS_WIDTH_SET,
+        (css_fixed_or_calc)INTTOFIX(value < 0 ? 0 : value), percent ? CSS_UNIT_PCT : CSS_UNIT_PX);
+}
+
+void style_set_min_width(css_computed_style *s, int px)
+{
+    set_min_width(s, CSS_MIN_WIDTH_SET, (css_fixed_or_calc)INTTOFIX(px), CSS_UNIT_PX);
+}
+
+void style_set_horizontal_edges(css_computed_style *s, int padding, int border)
+{
+    set_padding_left(s, CSS_PADDING_SET, (css_fixed_or_calc)INTTOFIX(padding), CSS_UNIT_PX);
+    set_padding_right(s, CSS_PADDING_SET, (css_fixed_or_calc)INTTOFIX(padding), CSS_UNIT_PX);
+    set_border_left_width(s, CSS_BORDER_WIDTH_WIDTH, (css_fixed_or_calc)INTTOFIX(border), CSS_UNIT_PX);
+    set_border_right_width(s, CSS_BORDER_WIDTH_WIDTH, (css_fixed_or_calc)INTTOFIX(border), CSS_UNIT_PX);
+    set_border_left_style(s, border ? CSS_BORDER_STYLE_SOLID : CSS_BORDER_STYLE_NONE);
+    set_border_right_style(s, border ? CSS_BORDER_STYLE_SOLID : CSS_BORDER_STYLE_NONE);
+}
+
 void style_set_position_absolute(css_computed_style *s)
 {
     set_position(s, CSS_POSITION_ABSOLUTE);

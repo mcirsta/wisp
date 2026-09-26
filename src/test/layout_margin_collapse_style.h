@@ -44,6 +44,15 @@ void style_set_padding_top(css_computed_style *s, int px);
  */
 void style_set_height_px(css_computed_style *s, int px);
 
+/** Set width in px or percent; a negative value means auto. */
+void style_set_width(css_computed_style *s, int value, bool percent);
+
+/** Set min-width in px. */
+void style_set_min_width(css_computed_style *s, int px);
+
+/** Set left/right padding and borders to the same widths, in px. */
+void style_set_horizontal_edges(css_computed_style *s, int padding, int border);
+
 /** Set overflow-x and overflow-y to hidden. */
 void style_set_overflow_hidden(css_computed_style *s);
 

@@ -3,7 +3,7 @@
  *
  * This file is part of Wisp.
  *
- * Tests for CSS 2.1 §8.3.1 margin collapsing in layout_block_context().
+ * Tests for margin collapsing and float avoidance in layout_block_context().
  *
  * Links against real libwisp. Style creation is in a separate
  * translation unit to avoid enum collisions.
@@ -1335,6 +1335,74 @@ START_TEST(test_last_child_min_height_blocks)
 END_TEST
 
 
+/* Fixed/percentage widths must move below floats when they do not fit;
+ * auto widths may shrink alongside them, subject to min-width and edges. */
+START_TEST(test_overflow_block_avoids_floats)
+{
+    static const struct {
+        int width;
+        bool percent;
+        int min_width, padding, border;
+        int x[4], y[4], used_width[4];
+    } cases[] = {
+        { 360, false, 0, 0, 0, {0, 0, 0, 0}, {100, 160, 160, 160}, {360, 360, 360, 360} },
+        { 100, true, 0, 0, 0, {0, 0, 0, 0}, {100, 160, 160, 160}, {360, 360, 360, 360} },
+        { 180, false, 0, 0, 0, {150, 0, 0, 0}, {0, 0, 100, 160}, {180, 180, 180, 180} },
+        { 50, true, 0, 0, 0, {150, 0, 0, 0}, {0, 0, 100, 160}, {180, 180, 180, 180} },
+        { -1, false, 0, 0, 0, {150, 0, 150, 300}, {0, 0, 0, 0}, {210, 210, 60, 60} },
+        { -1, false, 180, 0, 0, {150, 0, 0, 0}, {0, 0, 100, 160}, {210, 210, 210, 360} },
+        { 180, false, 0, 12, 2, {150, 0, 0, 0}, {20, 20, 100, 160}, {180, 180, 180, 180} },
+        { 400, false, 0, 0, 0, {0, 0, 0, 0}, {100, 160, 160, 160}, {400, 400, 400, 400} },
+    };
+    int profile = _i % 4; /* left, right, both sides, two left floats */
+    int variant = (_i / 4) % 8;
+    int parent_padding = _i >= 32 ? 10 : 0;
+    html_content *content = create_test_content();
+    struct box *root = create_box_with_style(360);
+    root->padding[LEFT] = root->padding[RIGHT] = parent_padding;
+    struct box *ic = create_box_with_style(360);
+    ic->type = BOX_INLINE_CONTAINER;
+    destroy_mock_style(ic->style);
+    ic->style = NULL;
+    add_child(root, ic);
+    for (int i = 0; i < (profile >= 2 ? 2 : 1); i++) {
+        struct box *fl = create_box_with_style(150);
+        fl->type = profile == 1 || (profile == 2 && i == 1) ? BOX_FLOAT_RIGHT : BOX_FLOAT_LEFT;
+        struct box *item = create_box_with_style(150);
+        style_set_margins(item->style, 0, 0, 0, 0);
+        style_set_width(item->style, 150, false);
+        style_set_height_px(item->style, profile == 1 || i == 1 ? 160 : 100);
+        item->flags |= HAS_HEIGHT | MAKE_HEIGHT;
+        add_child(fl, item);
+        add_child(ic, fl);
+    }
+    struct box *b = create_box_with_style(360);
+    style_set_margins(b->style, 0, 0, 0, 0);
+    style_set_overflow_hidden(b->style);
+    style_set_width(b->style, cases[variant].width, cases[variant].percent);
+    style_set_min_width(b->style, cases[variant].min_width);
+    style_set_horizontal_edges(b->style, cases[variant].padding, cases[variant].border);
+    style_set_border_top(b->style, cases[variant].border);
+    if (cases[variant].border)
+        style_set_margins(b->style, 20, 0, 0, 0);
+    style_set_height_px(b->style, 20);
+    b->flags |= HAS_HEIGHT | MAKE_HEIGHT;
+    add_child(root, b);
+    struct box *next = create_box_with_style(360);
+    style_set_height_px(next->style, 10);
+    next->flags |= HAS_HEIGHT | MAKE_HEIGHT;
+    add_child(root, next);
+
+    ck_assert(layout_block_context(root, 768, content));
+    ck_assert_int_eq(b->x, parent_padding + cases[variant].x[profile] + cases[variant].border);
+    ck_assert_int_eq(b->y, cases[variant].y[profile] + cases[variant].border);
+    ck_assert_int_eq(b->width, cases[variant].used_width[profile]);
+    ck_assert_int_eq(next->y, b->y + 20);
+    free_box_tree(root);
+    destroy_test_content(content);
+}
+END_TEST
+
 /* ========================================================================
  * Test runner
  * ======================================================================== */
@@ -1384,6 +1452,10 @@ static Suite *margin_collapse_suite(void)
     tcase_add_loop_test(tc_excl, test_empty_overflow_hidden_margins, 0, 12);
     tcase_add_loop_test(tc_excl, test_wrapped_formatting_context_margins, 0, 16);
     suite_add_tcase(s, tc_excl);
+
+    TCase *tc_floats = tcase_create("Float Avoidance");
+    tcase_add_loop_test(tc_floats, test_overflow_block_avoids_floats, 0, 64);
+    suite_add_tcase(s, tc_floats);
 
     return s;
 }

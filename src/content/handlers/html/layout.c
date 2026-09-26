@@ -1497,13 +1497,15 @@ static struct box *layout_next_margin_block(const css_unit_ctx *unit_len_ctx, st
             }
 
 
-            /* Check whether box is the box current margin collapses
-             * to */
+            /* Check whether box is the box current margin collapses to.
+             * Position inline content (including floats) before collecting
+             * a following sibling's top margin. */
             if (box->type == BOX_FLEX || box->type == BOX_GRID || box->flags & MAKE_HEIGHT || box->border[TOP].width ||
                 box->padding[TOP] ||
                 (box->style && (css_computed_overflow_x(box->style) != CSS_OVERFLOW_VISIBLE ||
                     css_computed_overflow_y(box->style) != CSS_OVERFLOW_VISIBLE)) ||
-                (box->type == BOX_INLINE_CONTAINER && !box_is_first_child(box))) {
+                (box->type == BOX_INLINE_CONTAINER &&
+                    (box_inline_container_has_line_boxes(box) || !box_is_first_child(box)))) {
                 /* Collapse to this box; return it */
                 return box;
             }
@@ -1891,6 +1893,46 @@ static void layout_block_find_dimensions(
         margin[TOP] = 0;
     if (margin[BOTTOM] == AUTO)
         margin[BOTTOM] = 0;
+}
+
+
+/**
+ * Size a new formatting context beside floats, moving down if it cannot fit.
+ * Coordinates are relative to the containing block formatting context.
+ * Return the chosen top border edge; dimensions and horizontal margins are
+ * recomputed at each float boundary, keeping percentages relative to the parent.
+ */
+static int layout_block_avoid_floats(const css_unit_ctx *unit_len_ctx, struct box *box,
+    int viewport_height, struct box *floats, int cx, int top)
+{
+    int containing_left = cx + box->parent->padding[LEFT];
+    int containing_right = containing_left + box->parent->width;
+
+    for (;;) {
+        int x0 = containing_left, x1 = containing_right;
+        struct box *left, *right;
+        find_sides(floats, top, top, &x0, &x1, &left, &right);
+        layout_block_find_dimensions(unit_len_ctx, box->parent->width, viewport_height,
+            x0 - containing_left, containing_right - x1, box);
+
+        /* The width solver can produce a negative right margin for a fixed
+         * width that will not fit. Test the border box, not the margin box. */
+        int border_left = containing_left + box->margin[LEFT];
+        int border_right = border_left + box->border[LEFT].width + box->padding[LEFT] + box->width +
+            box->padding[RIGHT] + box->border[RIGHT].width;
+        if ((!left && !right) || (border_left >= x0 && border_right <= x1))
+            return top;
+
+        /* Try the next boundary, rather than clearing every float. The box
+         * may fit beside a taller float once a shorter one has ended. Each
+         * step advances past an obstructing float, including oversized boxes. */
+        if (!left)
+            top = right->y + right->height;
+        else if (!right)
+            top = left->y + left->height;
+        else
+            top = min(left->y + left->height, right->y + right->height);
+    }
 }
 
 
@@ -3835,23 +3877,6 @@ bool layout_block_context(struct box *block, int viewport_height, html_content *
 
         if (box->type == BOX_FLEX || box->type == BOX_GRID || box->type == BOX_BLOCK || box->flags & IFRAME ||
             box->type == BOX_INLINE_FLEX || box->type == BOX_INLINE_GRID) {
-            if (lh__box_is_object(box) == false && box->style &&
-                (overflow_x != CSS_OVERFLOW_VISIBLE || overflow_y != CSS_OVERFLOW_VISIBLE)) {
-                /* box establishes new block formatting context
-                 * so available width may be diminished due to
-                 * floats. */
-                int x0, x1, top;
-                struct box *left, *right;
-                top = cy + (int)max_pos_margin - (int)max_neg_margin;
-                top = (top > y) ? top : y;
-                x0 = cx;
-                x1 = cx + box->parent->width - box->parent->padding[LEFT] - box->parent->padding[RIGHT];
-                find_sides(block->float_children, top, top, &x0, &x1, &left, &right);
-                /* calculate min required left & right margins
-                 * needed to avoid floats */
-                lm = x0 - cx;
-                rm = cx + box->parent->width - box->parent->padding[LEFT] - box->parent->padding[RIGHT] - x1;
-            }
             {
                 const char *tag = "";
                 const char *cls = "";
@@ -3867,7 +3892,17 @@ bool layout_block_context(struct box *block, int viewport_height, html_content *
                     }
                 }
 
-                layout_block_find_dimensions(&content->unit_len_ctx, box->parent->width, viewport_height, lm, rm, box);
+                if (!lh__box_is_object(box) && box->style && block->float_children &&
+                    (overflow_x != CSS_OVERFLOW_VISIBLE || overflow_y != CSS_OVERFLOW_VISIBLE)) {
+                    int top = cy + (int)max_pos_margin - (int)max_neg_margin;
+                    y = layout_block_avoid_floats(&content->unit_len_ctx, box, viewport_height,
+                        block->float_children, cx, max(top, y));
+                    /* Clearance below uses padding-edge coordinates. */
+                    y += box->border[TOP].width;
+                } else {
+                    layout_block_find_dimensions(
+                        &content->unit_len_ctx, box->parent->width, viewport_height, 0, 0, box);
+                }
 
                 /* Detect if width is still the sentinel after dimension calculation */
                 if (box->width == UNKNOWN_WIDTH || box->width > 100000000) {

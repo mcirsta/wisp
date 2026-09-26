@@ -1,0 +1,46 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Overflow containers beside floats</title>
+<style>
+  body { margin: 0; font: 14px sans-serif; }
+  section { width: 360px; padding: 10px; border: 1px solid #999; margin: 10px; overflow: hidden; }
+  .left, .right { width: 150px; }
+  .left { float: left; height: 100px; background: #acd; }
+  .right { float: right; height: 160px; background: #cda; }
+  .second-left { float: left; height: 160px; background: #cda; width: 150px; }
+  .block { overflow: hidden; height: 50px; background: #eab; }
+</style>
+<!-- Pink blocks move down only as far as needed to fit. Auto width can shrink
+     beside both floats; percentages still resolve against the full parent. -->
+<section>
+  <div><div class="left"></div><div class="second-left"></div></div>
+  <div class="block" id="full-percent" style="width:100%">100%, two left floats (Phoronix)</div>
+</section>
+<section>
+  <div class="right"></div>
+  <div class="block" id="full-fixed" style="width:360px">360px, right float</div>
+</section>
+<section>
+  <div class="left"></div><div class="right"></div>
+  <div class="block" id="half-percent" style="width:50%">50%, fits after the shorter float</div>
+</section>
+<section>
+  <div class="left"></div><div class="right"></div>
+  <div class="block" id="auto">auto</div>
+</section>
+<section>
+  <div class="left"></div><div class="right"></div>
+  <div class="block" id="min-auto" style="min-width:180px">auto with min-width</div>
+</section>
+<section>
+  <div class="left"></div><div class="right"></div>
+  <div class="block" id="edges" style="width:180px;padding:0 12px;border:2px solid black;margin-top:20px">Padding, border and top margin</div>
+</section>
+<section>
+  <div class="left"></div><div class="right"></div>
+  <div class="block" id="oversized" style="width:400px">Wider than the parent, below both floats</div>
+</section>
+<section>
+  <div class="left"></div>
+  <div class="block" id="beside" style="width:180px;padding:0 12px;border:2px solid black;margin-top:20px">Fits beside the float</div>
+</section>
