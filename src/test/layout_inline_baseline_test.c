@@ -123,6 +123,97 @@ START_TEST(test_inline_object_baseline)
 }
 END_TEST
 
+START_TEST(test_inline_block_alignment)
+{
+    static const struct {
+        const char *name;
+        uint8_t align;
+        int short_y, height;
+    } cases[] = {
+        {"baseline", CSS_VERTICAL_ALIGN_BASELINE, 40, 84},
+        {"top", CSS_VERTICAL_ALIGN_TOP, 0, 80},
+        {"bottom", CSS_VERTICAL_ALIGN_BOTTOM, 40, 80},
+        {"middle", CSS_VERTICAL_ALIGN_MIDDLE, 20, 80},
+    };
+    html_content content = {
+        .unit_len_ctx = {.viewport_width = INTTOFIX(200), .viewport_height = INTTOFIX(500),
+            .font_size_default = INTTOFIX(16), .device_dpi = INTTOFIX(96)},
+        .font_func = &fonts,
+    };
+    struct box *root = make_box(BOX_BLOCK, 20, CSS_VERTICAL_ALIGN_BASELINE);
+    struct box *ic = make_box(BOX_INLINE_CONTAINER, 0, 0);
+    append(root, ic);
+    struct box *blocks[2];
+    for (int i = 0; i < 2; i++) {
+        blocks[i] = make_box(BOX_INLINE_BLOCK, 20, cases[_i].align);
+        style_set_width(blocks[i]->style, 20, false);
+        style_set_height_px(blocks[i]->style, i == 0 ? 80 : 40);
+        blocks[i]->max_width = 20;
+        append(ic, blocks[i]);
+    }
+    ck_assert(layout_block_context(root, 500, &content));
+    ck_assert_msg(blocks[0]->y == 0 && blocks[1]->y == cases[_i].short_y &&
+            ic->height == cases[_i].height,
+        "%s: tall y=%d, short y=%d, line height=%d", cases[_i].name,
+        blocks[0]->y, blocks[1]->y, ic->height);
+    free_tree(root);
+}
+END_TEST
+
+START_TEST(test_inline_block_last_baseline)
+{
+    html_content content = {
+        .unit_len_ctx = {.viewport_width = INTTOFIX(200), .viewport_height = INTTOFIX(500),
+            .font_size_default = INTTOFIX(16), .device_dpi = INTTOFIX(96)},
+        .font_func = &fonts,
+    };
+    struct box *root = make_box(BOX_BLOCK, 20, CSS_VERTICAL_ALIGN_BASELINE);
+    struct box *ic = make_box(BOX_INLINE_CONTAINER, 0, 0);
+    append(root, ic);
+    struct box *image = make_box(BOX_INLINE, 20, CSS_VERTICAL_ALIGN_BASELINE);
+    image->flags |= REPLACE_DIM;
+    style_set_width(image->style, 20, false);
+    style_set_height_px(image->style, 100);
+    append(ic, image);
+    struct box *block = make_box(BOX_INLINE_BLOCK, 20, CSS_VERTICAL_ALIGN_BASELINE);
+    style_set_width(block->style, 80, false);
+    style_set_height_px(block->style, 80);
+    style_set_padding_top(block->style, 5);
+    style_set_border_top(block->style, 2);
+    style_set_margins(block->style, 3, 0, 7, 0);
+    block->max_width = 80;
+    append(ic, block);
+    struct box *last = NULL;
+    for (int i = 0; i < 2; i++) {
+        struct box *p = make_box(BOX_BLOCK, 20, CSS_VERTICAL_ALIGN_BASELINE);
+        struct box *line = make_box(BOX_INLINE_CONTAINER, 0, 0);
+        last = make_box(BOX_TEXT, 20, CSS_VERTICAL_ALIGN_BASELINE);
+        last->text = "Ag";
+        last->length = 2;
+        last->width = UNKNOWN_WIDTH;
+        append(block, p);
+        append(p, line);
+        append(line, last);
+    }
+    if (_i)
+        style_set_overflow_hidden(block->style);
+    /* Reflow must refresh the cached baseline when the last line changes. */
+    const int heights[] = {20, 40, 20};
+    for (size_t i = 0; i < sizeof(heights) / sizeof(heights[0]); i++) {
+        style_set_inline_metrics(last->style, 16, heights[i], CSS_VERTICAL_ALIGN_BASELINE);
+        root->height = AUTO;
+        ck_assert(layout_block_context(root, 500, &content));
+        int expected_baseline = image->y + image->height;
+        int actual_baseline = _i ? block->y + block->padding[TOP] + block->height + block->margin[BOTTOM] :
+            block->y + last->parent->parent->y + last->parent->y + last->y + (heights[i] + 12) / 2;
+        ck_assert_msg(actual_baseline == expected_baseline,
+            "overflow %s, line %d: baseline %d, expected %d", _i ? "hidden" : "visible", heights[i],
+            actual_baseline, expected_baseline);
+    }
+    free_tree(root);
+}
+END_TEST
+
 START_TEST(test_font_baseline_fallback)
 {
     plot_font_style_t style = {.size = 12 * PLOT_STYLE_SCALE};
@@ -141,9 +232,11 @@ int main(void)
 {
     if (nsoption_init(NULL, NULL, NULL) != NSERROR_OK)
         return EXIT_FAILURE;
-    Suite *suite = suite_create("Inline image baseline");
+    Suite *suite = suite_create("Inline image and block alignment");
     TCase *tc = tcase_create("Line metrics");
     tcase_add_loop_test(tc, test_inline_object_baseline, 0, 12);
+    tcase_add_loop_test(tc, test_inline_block_alignment, 0, 4);
+    tcase_add_loop_test(tc, test_inline_block_last_baseline, 0, 2);
     tcase_add_test(tc, test_font_baseline_fallback);
     suite_add_tcase(suite, tc);
     SRunner *runner = srunner_create(suite);

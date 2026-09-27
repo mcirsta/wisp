@@ -131,3 +131,47 @@ void test_fractional_text_reflow(const struct gui_layout_table *fonts)
     check_spaces(&estimated);
     finish(&estimated);
 }
+
+void test_inline_spacing_reflow(const struct gui_layout_table *fonts)
+{
+    /* AA<span> <span> BB </span></span>: opening markers own both
+     * spaces before BB. Only one survives, including after reflow. */
+    struct paragraph p;
+    init(&p, "AA", fonts);
+    struct box inlines[5] = {0};
+    p.text.next = &inlines[0];
+    p.lines.last = &inlines[4];
+    for (size_t i = 0; i < 5; i++) {
+        inlines[i].type = i < 2 ? BOX_INLINE : i == 2 ? BOX_TEXT : BOX_INLINE_END;
+        inlines[i].style = p.root.style;
+        inlines[i].parent = &p.lines;
+        inlines[i].prev = i == 0 ? &p.text : &inlines[i - 1];
+        inlines[i].next = i == 4 ? NULL : &inlines[i + 1];
+    }
+    inlines[0].inline_end = &inlines[4];
+    inlines[4].inline_end = &inlines[0];
+    inlines[1].inline_end = &inlines[3];
+    inlines[3].inline_end = &inlines[1];
+    inlines[0].space = inlines[1].space = inlines[2].space = UNKNOWN_WIDTH;
+    inlines[2].text = "BB";
+    inlines[2].length = 2;
+    inlines[2].width = UNKNOWN_WIDTH;
+    p.root.max_width = p.lines.max_width = UNKNOWN_MAX_WIDTH;
+    layout_minmax_box(&p.root, fonts, &p.content);
+
+    plot_font_style_t font;
+    int word, space;
+    font_plot_style_from_css(&p.content.unit_len_ctx, p.root.style, &font);
+    assert(fonts->width(&font, "AA", 2, &word) == NSERROR_OK);
+    assert(fonts->width(&font, " ", 1, &space) == NSERROR_OK);
+    int fit = word * 2 + space;
+    const int widths[] = {fit, fit - 1, 200, word, fit};
+    for (size_t i = 0; i < sizeof(widths) / sizeof(widths[0]); i++) {
+        bool wraps = widths[i] < fit;
+        layout(&p, widths[i]);
+        assert(inlines[2].x == (wraps ? 0 : word + space));
+        assert(inlines[2].y == (wraps ? 23 : 0));
+        assert(p.root.height == (wraps ? 46 : 23));
+    }
+    finish(&p);
+}

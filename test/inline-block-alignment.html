@@ -1,0 +1,35 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Inline-block vertical alignment</title>
+<style>
+@font-face { font-family: AlignmentTest; src: url(fonts/normal-400.ttf); }
+body { margin: 0; font: 20px/30px AlignmentTest; }
+.row { margin: 10px; width: 500px; background: #eee; }
+.box { display: inline-block; width: 60px; background: #9bc; }
+.tall { height: 80px; }
+.short { height: 40px; background: #dc9; }
+.middle { vertical-align: middle; }
+.top { vertical-align: top; }
+.bottom { vertical-align: bottom; }
+.logo, .brand { display: inline-block; }
+.brand { vertical-align: middle; background: #dc9; }
+p { margin: 0; }
+.edge { padding: 3px 0 5px; border-top: 2px solid; border-bottom: 4px solid; margin: 7px 0 9px; }
+.textblock { display: inline-block; width: 150px; height: 110px; padding: 5px 0 9px; border: 2px solid; margin: 3px 0 7px; }
+.image { width: 20px; height: 80px; }
+</style>
+<div class="row" id="middle"><span id="middle-tall" class="box tall middle"></span><span id="middle-short" class="box short middle"></span></div>
+<div class="row" id="top"><span id="top-tall" class="box tall top"></span><span id="top-short" class="box short top"></span></div>
+<div class="row" id="bottom"><span id="bottom-tall" class="box tall bottom"></span><span id="bottom-short" class="box short bottom"></span></div>
+<div class="row" id="baseline"><span id="baseline-tall" class="box tall"></span><span id="baseline-short" class="box short"></span></div>
+<!-- CNX: the logo wrapper is baseline-aligned; its child and the brand use middle. -->
+<div class="row" id="nested"><span id="nested-logo" class="logo"><span class="box tall middle"></span></span> <span id="nested-brand" class="brand"><p>Title</p><p>Description</p></span></div>
+<div class="row" id="edges"><span id="edges-tall" class="box tall middle edge"></span><span id="edges-short" class="box short middle"></span></div>
+<div class="row" id="image"><img id="image-tall" class="image middle" src="inline-image-baseline.svg"><span id="image-short" class="box short middle"></span></div>
+<div class="row" id="last"><span id="last-block" class="textblock"><div><p>First</p><p id="last-line">Last</p></div><div style="height:15px"></div><span style="position:absolute;height:200px">Out</span></span><span id="last-reference">Text</span></div>
+<div class="row" id="clipped"><img id="clipped-reference" class="image" src="inline-image-baseline.svg"><span id="clipped-block" class="textblock" style="overflow:hidden"><p>First</p><p>Last</p></span></div>
+<div class="row" id="wrap" style="width:90px"><span id="wrap-tall" class="box tall middle"></span> <span id="wrap-short" class="box short middle"></span></div>
+<div class="row" id="zero" style="font-size:0;line-height:0"><span id="zero-tall" class="box tall middle"></span><span id="zero-short" class="box short middle"></span></div>
+<div class="row" id="soft"><span id="soft-block" style="display:inline-block;width:30px">AA BB</span><span id="soft-reference">Text</span></div>
+<div class="row" id="button"><button id="button-block" style="font:inherit;border:1px solid;padding:2px;margin:3px;overflow:visible">BB</button><span id="button-reference">Text</span></div>
+<div class="row" id="button-clipped"><button id="button-clipped-block" style="font:inherit;border:1px solid;padding:2px;margin:3px;overflow:hidden">BB</button><span id="button-clipped-reference">Text</span></div>

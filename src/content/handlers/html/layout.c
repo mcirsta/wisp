@@ -592,6 +592,64 @@ static int layout_minmax_object_width(struct box *box, const html_content *conte
     return width;
 }
 
+/* Empty inline markers do not interrupt a run of collapsible spaces. */
+static bool layout_inline_has_content(const struct box *box)
+{
+    return (box->text && box->length != 0) || lh__box_is_replace(box) || box->type == BOX_INLINE_BLOCK ||
+        box->type == BOX_INLINE_FLEX || box->type == BOX_INLINE_GRID;
+}
+
+/**
+ * Resolve a collapsed space after any in-flow inline box. Construction can
+ * attach it to an opening inline or an atomic inline, not just text/end boxes.
+ * Suppress leading and duplicate spaces across empty markers (CSS 2.1 16.6.1).
+ */
+static int layout_inline_space(struct box *box, bool *has_content, bool *after_space,
+    const struct gui_layout_table *font_func, const html_content *content)
+{
+    if (layout_inline_has_content(box)) {
+        *has_content = true;
+        *after_space = false;
+    }
+
+    if (box->space == 0 || !*has_content || *after_space)
+        return 0;
+
+    *after_space = true;
+    if (box->space == UNKNOWN_WIDTH) {
+        plot_font_style_t style;
+        font_plot_style_from_css(&content->unit_len_ctx, box->style, &style);
+        font_func->width(&style, " ", 1, &box->space);
+    }
+    return box->space;
+}
+
+/* Find the first space in the trailing run of empty inline markers. A space
+ * after the final box is still pending, so it has no width to remove. Walking
+ * just this suffix keeps trimming linear across all lines of a container. */
+static struct box *layout_trailing_space(struct box *first, struct box *end)
+{
+    struct box *space = NULL;
+    bool following_inline = false;
+
+    if (end == first)
+        return NULL;
+
+    for (struct box *b = end ? end->prev : first->parent->last; b; b = b->prev) {
+        if (lh__box_is_inline_flow(b) && !(b->type == BOX_INLINE_BLOCK && lh__box_is_absolute(b))) {
+            /* Ignored duplicates may still have an unmeasured width. */
+            if (following_inline && b->space != 0 && b->space != UNKNOWN_WIDTH)
+                space = b;
+            if (layout_inline_has_content(b))
+                return space;
+            following_inline = true;
+        }
+        if (b == first)
+            break;
+    }
+    return NULL;
+}
+
 /**
  * Calculate minimum and maximum width of a line.
  *
@@ -614,6 +672,8 @@ static struct box *layout_minmax_line(struct box *first, int *line_min, int *lin
     struct box *block;
     plot_font_style_t fstyle;
     bool no_wrap;
+    bool has_content = false, after_space = false;
+    int space_after = 0;
 
     assert(first->parent);
     assert(first->parent->parent);
@@ -668,6 +728,9 @@ static struct box *layout_minmax_line(struct box *first, int *line_min, int *lin
             continue;
         }
 
+        max += space_after;
+        space_after = layout_inline_space(b, &has_content, &after_space, font_func, content);
+
         if (b->type == BOX_INLINE_BLOCK || b->type == BOX_INLINE_FLEX || b->type == BOX_INLINE_GRID) {
             if (b->type == BOX_INLINE_GRID) {
                 layout_minmax_grid(b, font_func, content);
@@ -706,13 +769,6 @@ static struct box *layout_minmax_line(struct box *first, int *line_min, int *lin
             calculate_mbp_width(&content->unit_len_ctx, b->inline_end->style, RIGHT, true, true, true, &fixed, &frac);
             if (0 < fixed)
                 max += fixed;
-
-            if (b->next) {
-                if (b->space == UNKNOWN_WIDTH) {
-                    font_func->width(&fstyle, " ", 1, &b->space);
-                }
-                max += b->space;
-            }
 
             *line_has_height = true;
             continue;
@@ -754,13 +810,6 @@ static struct box *layout_minmax_line(struct box *first, int *line_min, int *lin
                 }
             }
             max += b->width;
-            if (b->next) {
-                if (b->space == UNKNOWN_WIDTH) {
-                    font_func->width(&fstyle, " ", 1, &b->space);
-                }
-                max += b->space;
-            }
-
             if (no_wrap) {
                 /* Don't wrap due to block style,
                  * so min is the same as max */
@@ -870,6 +919,18 @@ static struct box *layout_minmax_line(struct box *first, int *line_min, int *lin
 
         *line_has_height = true;
     }
+
+    struct box *trailing_space = layout_trailing_space(first, b);
+    if (trailing_space) {
+        max -= trailing_space->space;
+        /* This is a paragraph/BR boundary, not a soft wrap. These spaces
+         * can never reappear on reflow; discard them so an exact-fit line
+         * cannot push its closing inline markers onto an empty next line. */
+        for (struct box *d = trailing_space; d != b; d = d->next)
+            d->space = 0;
+    }
+    if (no_wrap)
+        min = max;
 
     if (first_line) {
         /* todo: handle percentage values properly */
@@ -3021,9 +3082,9 @@ static int line_height(const css_unit_ctx *unit_len_ctx, const css_computed_styl
 }
 
 
-static bool box_is_inline_object(const struct box *box)
+static bool box_needs_inline_alignment(const struct box *box)
 {
-    return (box->type == BOX_INLINE || box->type == BOX_INLINE_BLOCK) && lh__box_is_object(box);
+    return box->type == BOX_INLINE_BLOCK || (box->type == BOX_INLINE && lh__box_is_object(box));
 }
 
 static int layout_text_baseline(const html_content *content, const css_computed_style *style, int height)
@@ -3033,18 +3094,64 @@ static int layout_text_baseline(const html_content *content, const css_computed_
     return font_baseline(content->font_func, &fstyle, height);
 }
 
+/* Find the last normal-flow line, looking through block descendants but not
+ * into floats, positioned boxes or independent flex/grid/table contexts. The
+ * inline container records its baseline during layout, so no text is remeasured. */
+static bool layout_last_line_baseline(const struct box *box, int *baseline)
+{
+    for (const struct box *child = box->last; child; child = child->prev) {
+        if (box_is_out_of_flow(child) || lh__box_is_float_box(child))
+            continue;
+        if (child->type == BOX_INLINE_CONTAINER && (child->flags & HAS_BASELINE)) {
+            *baseline = child->y + child->baseline;
+            return true;
+        }
+        if (child->type == BOX_BLOCK && layout_last_line_baseline(child, baseline)) {
+            *baseline += child->y;
+            return true;
+        }
+    }
+    return false;
+}
+
+/* Distance from the atomic inline's margin-box top to the parent baseline.
+ * CSS 2.1 10.8.1: middle uses the parent's x-height; an inline-block's normal
+ * baseline comes from its last line, or its bottom margin edge when clipped
+ * or when it has no in-flow lines. Use the existing ex-unit metric/fallback. */
+static int layout_atomic_baseline(const struct box *box, int height, uint8_t align,
+    const css_computed_style *parent_style, const html_content *content)
+{
+    if (align == CSS_VERTICAL_ALIGN_MIDDLE) {
+        int ex = FIXTOINT(css_unit_len2device_px(parent_style, &content->unit_len_ctx, INTTOFIX(1), CSS_UNIT_EX));
+        return (height + ex) / 2;
+    }
+
+    /* Text buttons keep their label baseline even with the UA's clipping
+     * style; applying the ordinary clipped-inline-block rule sinks nearby text. */
+    bool text_button = box->gadget && (box->gadget->type == GADGET_BUTTON ||
+        box->gadget->type == GADGET_SUBMIT || box->gadget->type == GADGET_RESET);
+    int baseline;
+    if (box->type == BOX_INLINE_BLOCK && !lh__box_is_object(box) &&
+        (text_button || (css_computed_overflow_x(box->style) == CSS_OVERFLOW_VISIBLE &&
+                            css_computed_overflow_y(box->style) == CSS_OVERFLOW_VISIBLE)) &&
+        layout_last_line_baseline(box, &baseline)) {
+        return box->margin[TOP] + box->border[TOP].width + baseline;
+    }
+    return height;
+}
+
 /**
- * Measure the baseline and line height for a line containing replaced content.
+ * Measure the baseline and line height for a line containing images/inline-blocks.
  * The parent's zero-width strut contributes ascent and descent even if there
  * is no text. Top/bottom-aligned objects contribute height without extending
- * the baseline; ordinary inline-block baseline discovery remains separate.
+ * the baseline; middle alignment contributes on both sides of the baseline.
  */
-static bool layout_line_object_metrics(struct box *first, struct box *end, const html_content *content,
+static bool layout_line_alignment_metrics(struct box *first, struct box *end, const html_content *content,
     int *height, int *baseline)
 {
     bool has_object = false;
     for (struct box *b = first; b != end; b = b->next) {
-        if (box_is_inline_object(b) && !box_is_out_of_flow(b)) {
+        if (box_needs_inline_alignment(b) && !box_is_out_of_flow(b)) {
             has_object = true;
             break;
         }
@@ -3064,16 +3171,20 @@ static bool layout_line_object_metrics(struct box *first, struct box *end, const
         css_fixed_or_calc value = (css_fixed_or_calc)0;
         css_unit unit = CSS_UNIT_PX;
         uint8_t align = css_computed_vertical_align(b->style, &value, &unit);
-        bool object = box_is_inline_object(b);
-        int h = b->height;
+        bool object = box_needs_inline_alignment(b);
+        /* Closing markers receive their opening box's height in pass 2.
+         * During pass 1 that field may still be AUTO (or from an old reflow). */
+        int h = b->type == BOX_INLINE_END ? line_height(&content->unit_len_ctx, b->style) : b->height;
         if (object) {
             h += b->margin[TOP] + b->border[TOP].width + b->padding[TOP] + b->padding[BOTTOM] +
                 b->border[BOTTOM].width + b->margin[BOTTOM];
         } else if (b->type != BOX_TEXT && b->type != BOX_INLINE && b->type != BOX_INLINE_END) {
             continue;
         }
-        if (align == CSS_VERTICAL_ALIGN_BASELINE || align == CSS_VERTICAL_ALIGN_INHERIT) {
-            int a = object ? h : layout_text_baseline(content, b->style, h);
+        if (align == CSS_VERTICAL_ALIGN_BASELINE || align == CSS_VERTICAL_ALIGN_INHERIT ||
+            (object && align == CSS_VERTICAL_ALIGN_MIDDLE)) {
+            int a = object ? layout_atomic_baseline(b, h, align, parent_style, content) :
+                             layout_text_baseline(content, b->style, h);
             above = max(above, a);
             below = max(below, h - a);
         } else {
@@ -3098,12 +3209,13 @@ static bool layout_line_object_metrics(struct box *first, struct box *end, const
  * \param  cont	   ancestor box which defines horizontal space, for floats
  * \param  indent  apply any first-line indent
  * \param  has_text_children  at least one TEXT in the inline_container
+ * \param  record_baseline  retain the last line baseline for an inline-block ancestor
  * \param  next_box  updated to first box for next line, or 0 at end
  * \param  content  memory pool for any new boxes
  * \return  true on success, false on memory exhaustion
  */
 static bool layout_line(struct box *first, int *width, int *y, int cx, int cy, struct box *cont, bool indent,
-    bool has_text_children, html_content *content, struct box **next_box)
+    bool has_text_children, bool record_baseline, html_content *content, struct box **next_box)
 {
     int height, used_height;
     int x0 = 0;
@@ -3118,7 +3230,8 @@ static bool layout_line(struct box *first, int *width, int *y, int cx, int cy, s
     struct box *br_box = 0;
     bool move_y = false;
     bool place_below = false;
-    bool has_inline_object = false;
+    bool has_aligned_inline = false;
+    bool has_content = false, after_space = false;
     int space_before = 0, space_after = 0;
     unsigned int inline_count = 0;
     unsigned int i;
@@ -3174,7 +3287,6 @@ static bool layout_line(struct box *first, int *width, int *y, int cx, int cy, s
                 return false;
 
             b->width = 0;
-            space_after = 0;
             continue;
         }
         if (b->type == BOX_INLINE_BLOCK &&
@@ -3183,10 +3295,11 @@ static bool layout_line(struct box *first, int *width, int *y, int cx, int cy, s
             continue;
 
         assert(b->style != NULL);
-        has_inline_object |= box_is_inline_object(b);
+        has_aligned_inline |= box_needs_inline_alignment(b);
         font_plot_style_from_css(&content->unit_len_ctx, b->style, &fstyle);
 
         x += space_after;
+        space_after = layout_inline_space(b, &has_content, &after_space, font_func, content);
 
         if (b->type == BOX_INLINE_BLOCK || b->type == BOX_INLINE_FLEX || b->type == BOX_INLINE_GRID) {
             /* minmax MUST have been calculated by parent's minmax pass */
@@ -3202,7 +3315,6 @@ static bool layout_line(struct box *first, int *width, int *y, int cx, int cy, s
                 height = h;
             x += b->margin[LEFT] + b->border[LEFT].width + b->padding[LEFT] + b->width + b->padding[RIGHT] +
                 b->border[RIGHT].width + b->margin[RIGHT];
-            space_after = 0;
             continue;
         }
 
@@ -3223,12 +3335,6 @@ static bool layout_line(struct box *first, int *width, int *y, int cx, int cy, s
             }
         } else if (b->type == BOX_INLINE_END) {
             b->width = 0;
-            if (b->space == UNKNOWN_WIDTH) {
-                font_func->width(&fstyle, " ", 1, &b->space);
-                /** \todo handle errors */
-            }
-            space_after = b->space;
-
             x += b->padding[RIGHT] + b->border[RIGHT].width + b->margin[RIGHT];
             continue;
         }
@@ -3241,7 +3347,6 @@ static bool layout_line(struct box *first, int *width, int *y, int cx, int cy, s
 
             if (!b->text) {
                 b->width = 0;
-                space_after = 0;
                 continue;
             }
 
@@ -3281,15 +3386,8 @@ static bool layout_line(struct box *first, int *width, int *y, int cx, int cy, s
             }
 
             x += b->width;
-            if (b->space == UNKNOWN_WIDTH) {
-                font_func->width(&fstyle, " ", 1, &b->space);
-                /** \todo handle errors */
-            }
-            space_after = b->space;
             continue;
         }
-
-        space_after = 0;
 
         /* inline replaced, 10.3.2 and 10.6.2 */
         assert(b->style);
@@ -3344,8 +3442,8 @@ static bool layout_line(struct box *first, int *width, int *y, int cx, int cy, s
 
     /* Include the strut descent when determining which floats this line meets. */
     int baseline;
-    if (has_inline_object)
-        layout_line_object_metrics(first, b, content, &height, &baseline);
+    if (has_aligned_inline)
+        layout_line_alignment_metrics(first, b, content, &height, &baseline);
 
     /* find new sides using this height */
     x0 = cx;
@@ -3361,6 +3459,7 @@ static bool layout_line(struct box *first, int *width, int *y, int cx, int cy, s
         x1 = x0;
 
     space_after = space_before = 0;
+    has_content = after_space = false;
 
     /* pass 2: place boxes in line: loop body executed at least once */
 
@@ -3403,18 +3502,7 @@ static bool layout_line(struct box *first, int *width, int *y, int cx, int cy, s
             }
 
             space_before = space_after;
-            if (b->object || b->flags & REPLACE_DIM || b->flags & IFRAME)
-                space_after = 0;
-            else if (b->text || b->type == BOX_INLINE_END) {
-                if (b->space == UNKNOWN_WIDTH) {
-                    font_plot_style_from_css(&content->unit_len_ctx, b->style, &fstyle);
-                    /** \todo handle errors */
-                    font_func->width(&fstyle, " ", 1, &b->space);
-                }
-                space_after = b->space;
-            } else {
-                space_after = 0;
-            }
+            space_after = layout_inline_space(b, &has_content, &after_space, font_func, content);
             split_box = b;
             move_y = true;
             inline_count++;
@@ -3608,6 +3696,18 @@ static bool layout_line(struct box *first, int *width, int *y, int cx, int cy, s
         move_y = true;
     }
 
+    /* Empty inline markers may have consumed a space before we discovered
+     * the line break. Remove it before text alignment, and move those markers
+     * back with it so their borders/backgrounds end at the trimmed position. */
+    struct box *trailing_space = layout_trailing_space(first, b);
+    if (trailing_space) {
+        x -= trailing_space->space;
+        for (d = trailing_space->next; d != b; d = d->next) {
+            if (lh__box_is_inline_flow(d) && !box_is_out_of_flow(d))
+                d->x -= trailing_space->space;
+        }
+    }
+
     /* set positions */
     switch (css_computed_text_align(first->parent->parent->style)) {
     case CSS_TEXT_ALIGN_RIGHT:
@@ -3675,20 +3775,23 @@ static bool layout_line(struct box *first, int *width, int *y, int cx, int cy, s
     assert(b != first || (move_y && 0 < used_height && (left || right)));
 
     /* Recompute from boxes actually placed on this line after wrapping. */
-    bool object_line = has_inline_object && layout_line_object_metrics(first, b, content, &used_height, &baseline);
+    bool aligned_line = has_aligned_inline &&
+        layout_line_alignment_metrics(first, b, content, &used_height, &baseline);
 
     /* handle vertical-align by adjusting box y values */
     /** \todo  proper vertical alignment handling */
     for (d = first; d != b; d = d->next) {
-        if (object_line && box_is_inline_object(d) && !box_is_out_of_flow(d)) {
+        if (aligned_line && box_needs_inline_alignment(d) && !box_is_out_of_flow(d)) {
             css_fixed_or_calc value = (css_fixed_or_calc)0;
             css_unit unit = CSS_UNIT_PX;
             h = d->margin[TOP] + d->border[TOP].width + d->padding[TOP] + d->height + d->padding[BOTTOM] +
                 d->border[BOTTOM].width + d->margin[BOTTOM];
-            switch (css_computed_vertical_align(d->style, &value, &unit)) {
+            uint8_t align = css_computed_vertical_align(d->style, &value, &unit);
+            switch (align) {
             case CSS_VERTICAL_ALIGN_BASELINE:
             case CSS_VERTICAL_ALIGN_INHERIT:
-                d->y += baseline - h;
+            case CSS_VERTICAL_ALIGN_MIDDLE:
+                d->y += baseline - layout_atomic_baseline(d, h, align, first->parent->parent->style, content);
                 break;
             case CSS_VERTICAL_ALIGN_BOTTOM:
                 d->y += used_height - h;
@@ -3715,13 +3818,32 @@ static bool layout_line(struct box *first, int *width, int *y, int cx, int cy, s
                 break;
             default:
             case CSS_VERTICAL_ALIGN_BASELINE:
-                if (object_line)
+                if (aligned_line)
                     d->y += baseline - layout_text_baseline(content, d->style, d->height);
                 else
                     d->y += 0.75 * (used_height - d->height);
                 break;
             }
         }
+    }
+
+    if (record_baseline && b != first && move_y && used_height > 0) {
+        if (!aligned_line) {
+            /* Preserve the actual baseline of the existing text-only path. */
+            for (d = first; d != b; d = d->next) {
+                css_fixed_or_calc value = (css_fixed_or_calc)0;
+                css_unit unit = CSS_UNIT_PX;
+                if (d->type == BOX_TEXT && d->length &&
+                    css_computed_vertical_align(d->style, &value, &unit) == CSS_VERTICAL_ALIGN_BASELINE) {
+                    baseline = d->y - *y + layout_text_baseline(content, d->style, d->height);
+                    break;
+                }
+            }
+            if (d == b)
+                baseline = layout_text_baseline(content, first->parent->parent->style, used_height);
+        }
+        first->parent->baseline = *y + baseline;
+        first->parent->flags |= HAS_BASELINE;
     }
 
     /* handle clearance for br */
@@ -3760,6 +3882,14 @@ static bool layout_inline_container(
     int curwidth, maxwidth = width;
 
     assert(inline_container->type == BOX_INLINE_CONTAINER);
+    inline_container->flags &= ~HAS_BASELINE;
+
+    /* Only inline-block ancestors need this cache. Avoid extra font metrics
+     * calls for ordinary document paragraphs and unrelated formatting contexts. */
+    struct box *ancestor = inline_container->parent;
+    while (ancestor && ancestor->type == BOX_BLOCK)
+        ancestor = ancestor->parent;
+    bool record_baseline = ancestor && ancestor->type == BOX_INLINE_BLOCK;
 
     NSLOG(layout, DEBUG, "inline_container %p, width %i, cont %p, cx %i, cy %i", inline_container, width, cont, cx, cy);
 
@@ -3794,7 +3924,8 @@ static bool layout_inline_container(
         /* Use the available width for layout, not inline_container->width which
          * may contain a stale min_width value from minmax calculation */
         curwidth = (inline_container->width > width) ? width : inline_container->width;
-        if (!layout_line(c, &curwidth, &y, cx, cy + y, cont, first_line, has_text_children, content, &next))
+        if (!layout_line(c, &curwidth, &y, cx, cy + y, cont, first_line, has_text_children, record_baseline,
+                content, &next))
             return false;
         maxwidth = max(maxwidth, curwidth);
         c = next;

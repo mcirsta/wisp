@@ -111,7 +111,8 @@ typedef enum {
     CONVERT_CHILDREN = 1 << 11, /* wanted children converting */
     IS_REPLACED = 1 << 12, /* box is a replaced element */
     HEIGHT_STRETCHED = 1 << 13, /* height was set by parent's cross-axis stretch */
-    ASPECT_RATIO_HEIGHT = 1 << 14 /* auto height derived from the preferred ratio */
+    ASPECT_RATIO_HEIGHT = 1 << 14, /* auto height derived from the preferred ratio */
+    HAS_BASELINE = 1 << 15 /* inline container has a laid-out in-flow line */
 } box_flags;
 
 
@@ -378,6 +379,9 @@ struct box {
      */
     int max_width;
 
+    /** Last line's baseline relative to this inline container; valid with HAS_BASELINE. */
+    int baseline;
+
 
     /**
      * Text, or NULL if none. Unterminated.
@@ -390,7 +394,8 @@ struct box {
     size_t length;
 
     /**
-     * Width of space after current text (depends on font and size).
+     * Width of collapsed space after this inline box (UNKNOWN_WIDTH until
+     * measured). May also be attached to inline markers or atomic inlines.
      */
     int space;
 

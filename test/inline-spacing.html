@@ -1,0 +1,36 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Spaces across inline boundaries</title>
+<style>
+@font-face { font-family: SpacingTest; src: url(fonts/normal-400.ttf); }
+body { margin: 0; font: 20px/30px SpacingTest; }
+.row { margin: 0; height: 40px; }
+.fit { display: inline-block; }
+.atomic { display: inline-block; width: 20px; height: 10px; background: #68a; }
+.flex { display: inline-flex; }
+.grid { display: inline-grid; }
+i { display: inline-block; width: 1px; height: 10px; background: red; }
+.hidden { display: none; }
+.wrap { width: 30px; height: auto; }
+</style>
+<!-- The generated font advances 12px per letter and 5px per space at 20px.
+     The red marker makes the end of the text measurable without font raster comparisons. -->
+<div class="row"><span class="fit" id="nested"><span><a><time>DATE</time></a></span><span> by <span>AUTHOR</span></span><i id="nested-end"></i></span></div>
+<div class="row"><span class="fit" id="hidden"><span><a><time>DATE</time><time class="hidden">HIDDEN</time></a></span><span> by <span>AUTHOR</span></span><i id="hidden-end"></i></span></div>
+<div class="row"><span class="fit" id="flat">DATE by AUTHOR<i id="flat-end"></i></span></div>
+<div class="row"><span class="fit" id="duplicate"><span>A </span> <span> B</span><i id="duplicate-end"></i></span></div>
+<div class="row"><span class="fit" id="empty">A<span> <span> </span> </span>B<i id="empty-end"></i></span></div>
+<div class="row"><span class="fit" id="leading"><span> <span> A</span></span><i id="leading-end"></i></span></div>
+<div class="row"><span class="fit" id="adjacent"><span>A</span><span>B</span><i id="adjacent-end"></i></span></div>
+<div class="row"><span class="fit" id="blocks"><span class="atomic"></span> <span class="atomic"></span><i id="blocks-end"></i></span></div>
+<div class="row"><span class="fit" id="flex"><span class="atomic flex"></span> <span class="atomic"></span><i id="flex-end"></i></span></div>
+<div class="row"><span class="fit" id="grid"><span class="atomic grid"><span class="atomic"></span></span> <span class="atomic"></span><i id="grid-end"></i></span></div>
+<div class="row"><span class="fit" id="image"><img class="atomic" style="display:inline" alt="" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='10'/%3E"> <span class="atomic"></span><i id="image-end"></i></span></div>
+<div class="row"><span class="fit" id="padding">A<span style="padding-left:7px"> B</span><i id="padding-end"></i></span></div>
+<div class="row"><span class="fit" id="nowrap" style="white-space:nowrap">A<span> B</span><i id="nowrap-end"></i></span></div>
+<div class="row"><span class="fit" id="pre" style="white-space:pre">A<span>  B</span><i id="pre-end"></i></span></div>
+<div class="row" id="break">A<br><span> B</span><i id="break-end"></i></div>
+<div class="row wrap" id="wrap">AA<span> BB</span><i id="wrap-end"></i></div>
+<div class="row wrap" id="wrap-blocks"><span class="atomic"></span> <span class="atomic"></span><i id="wrap-blocks-end"></i></div>
+<div class="row"><span class="fit" id="trailing"><span>A </span> <span> </span></span></div>
+<div class="row wrap" id="wrap-right" style="text-align:right"><span id="wrap-right-first">AA</span><span> <span>BB</span></span></div>
