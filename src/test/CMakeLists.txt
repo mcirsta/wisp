@@ -371,6 +371,11 @@ target_include_directories(layout_inline_baseline_test PRIVATE ${TEST_COMMON_INC
 target_link_libraries(layout_inline_baseline_test wisp ${CHECK_LIBRARIES})
 add_test(NAME layout_inline_baseline_test COMMAND layout_inline_baseline_test)
 
+add_executable(layout_fixed_test layout_fixed_test.c)
+target_include_directories(layout_fixed_test PRIVATE ${TEST_COMMON_INCLUDES} ${CMAKE_SOURCE_DIR}/include)
+target_link_libraries(layout_fixed_test wisp ${CHECK_LIBRARIES})
+add_test(NAME layout_fixed_test COMMAND layout_fixed_test)
+
 # ============================================================================
 # Unix-only Tests (require malloc_fig)
 # ============================================================================

@@ -36,6 +36,9 @@
  */
 void box_coords(struct box *box, int *x, int *y);
 
+/** As box_coords, with an explicit viewport scroll offset (layout pixels). */
+void box_coords_at_scroll(struct box *box, int *x, int *y, int scroll_x, int scroll_y);
+
 
 /**
  * Find the bounds of a box.

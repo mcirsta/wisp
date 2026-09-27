@@ -1,0 +1,42 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Fixed positioning</title>
+<style>
+html { margin: 7px; padding: 3px; }
+body { margin: 11px; font: 16px/20px sans-serif; }
+.panel { position: relative; width: 260px; height: 180px; padding: 10px; border: 2px solid; }
+.fixed { position: fixed; background: #168844; }
+#bottom { left: 0; right: 0; bottom: 0; height: 40px; }
+#percent { right: 10%; top: 10%; width: 20%; height: 20%; }
+#absolute { position: absolute; right: 0; bottom: 0; width: 20px; height: 20px; background: #bb5511; }
+#static { width: 20px; height: 20px; background: #663399; }
+#nested { left: 30px; bottom: 50px; width: 100px; height: 50px; }
+#nested-absolute { position: absolute; left: 10px; top: 10px; width: 20px; height: 20px; background: #2255cc; }
+#negative { position: absolute; z-index: -1; left: 40px; top: 10px; width: 20px; height: 20px; background: #ccaa11; }
+#nested-fixed { position: fixed; left: 150px; bottom: 50px; width: 20px; height: 20px; background: #cc2255; }
+#stretch { position: fixed; left: 10px; top: 80px; bottom: 80px; width: 5px; background: #117799; }
+#padded-flex { position: fixed; display: flex; left: 250px; top: 10px; width: 100px; height: 40px; padding: 5px; }
+#padded-flex > div { position: absolute; bottom: 0; width: 10px; height: 10px; }
+#transform { transform: translate(0px, 0px); width: 100px; height: 80px; padding: 5px; border: 2px solid; }
+#transform-fixed { position: fixed; right: 0; bottom: 0; width: 20px; height: 20px; background: #bbbb00; }
+#spacer { width: 1300px; height: 900px; }
+#scroll-target { height: 10px; }
+#clipping { overflow: hidden; position: relative; z-index: 2; width: 50px; height: 50px; }
+#escape { position: fixed; left: 200px; bottom: 50px; width: 20px; height: 20px; background: #00aaaa; }
+#tail { height: 1200px; }
+</style>
+<div id="panel" class="panel">
+  <div id="bottom" class="fixed"></div>
+  <div id="percent" class="fixed"></div>
+  <div id="absolute"></div>
+  <div id="static" class="fixed"></div>
+</div>
+<div id="nested" class="fixed"><div id="nested-absolute"></div><div id="negative"></div><div id="nested-fixed"></div></div>
+<div id="stretch"></div>
+<!-- Laying out absolute children must restore their flex containing block's padding. -->
+<div id="padded-flex"><div id="flex-left" style="left:0"></div><div id="flex-right" style="right:0"></div></div>
+<div id="transform"><div id="transform-fixed"></div></div>
+<div id="spacer"></div>
+<div id="scroll-target"></div>
+<div id="clipping"><div id="escape"></div></div>
+<div id="tail"></div>

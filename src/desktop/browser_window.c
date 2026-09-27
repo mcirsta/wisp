@@ -3673,7 +3673,24 @@ nserror browser_window_get_extents(struct browser_window *bw, bool scaled, int *
 }
 
 
-/* exported internal interface, documented in desktop/browser_private.h */
+/* Exported interface, documented in wisp/browser_window.h. */
+void browser_window_get_scroll(struct browser_window *bw, int *x, int *y)
+{
+    *x = *y = 0;
+    if (bw == NULL)
+        return;
+    if (bw->window != NULL) {
+        if (guit->window->get_scroll(bw->window, x, y)) {
+            *x /= bw->scale;
+            *y /= bw->scale;
+        }
+    } else {
+        *x = scrollbar_get_offset(bw->scroll_x);
+        *y = scrollbar_get_offset(bw->scroll_y);
+    }
+}
+
+/* Exported interface, documented in wisp/browser_window.h. */
 nserror browser_window_get_dimensions(struct browser_window *bw, int *width, int *height)
 {
     nserror res;

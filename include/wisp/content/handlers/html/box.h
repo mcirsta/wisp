@@ -112,7 +112,9 @@ typedef enum {
     IS_REPLACED = 1 << 12, /* box is a replaced element */
     HEIGHT_STRETCHED = 1 << 13, /* height was set by parent's cross-axis stretch */
     ASPECT_RATIO_HEIGHT = 1 << 14, /* auto height derived from the preferred ratio */
-    HAS_BASELINE = 1 << 15 /* inline container has a laid-out in-flow line */
+    HAS_BASELINE = 1 << 15, /* inline container has a laid-out in-flow line */
+    IS_VIEWPORT = 1 << 16, /* synthetic containing block owned by html_content */
+    HAS_FIXED_DESCENDANT = 1 << 17 /* viewport-fixed descendant can escape clipping */
 } box_flags;
 
 

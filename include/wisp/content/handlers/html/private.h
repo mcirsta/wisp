@@ -30,6 +30,7 @@
 
 #include <wisp/content/content_protected.h>
 #include <wisp/content/handlers/css/utils.h>
+#include <wisp/content/handlers/html/box.h>
 #include "wisp/types.h"
 
 
@@ -38,6 +39,13 @@ struct scrollbar_msg_data;
 struct content_redraw_data;
 struct selection;
 struct svgtiny_diagram;
+
+/* A persistent containing block for viewport-fixed boxes, outside the DOM tree.
+ * Its first member permits box-coordinate code to recover the owning document. */
+struct html_viewport {
+    struct box box;
+    struct html_content *owner;
+};
 
 /**
  * Pre-serialized inline SVG, stored in linked list during parsing.
@@ -160,6 +168,7 @@ typedef struct html_content {
     void *box_conversion_context;
     /** Box tree, or NULL. */
     struct box *layout;
+    struct html_viewport viewport;
     /** Document background colour. */
     colour background_colour;
 

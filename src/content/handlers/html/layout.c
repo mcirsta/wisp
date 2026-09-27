@@ -2595,10 +2595,10 @@ static bool layout_apply_minmax_height(const css_unit_ctx *unit_len_ctx, struct 
     bool updated = false;
 
     /* Find containing block for percentage heights */
-    if (box->style != NULL && css_computed_position(box->style) == CSS_POSITION_ABSOLUTE) {
+    if (box_is_out_of_flow(box)) {
         /* Box is absolutely positioned */
-        assert(container);
-        containing_block = container;
+        containing_block = container ? container : box->abs_containing_block;
+        assert(containing_block);
     } else if (box->parent && (box->parent->type == BOX_FLOAT_LEFT || box->parent->type == BOX_FLOAT_RIGHT)) {
         /* Box is child of a float wrapper - walk up to find containing block with style.
          * Skip BOX_INLINE_CONTAINER and BOX_FLOAT_* which have NULL styles by design. */
@@ -2623,7 +2623,7 @@ static bool layout_apply_minmax_height(const css_unit_ctx *unit_len_ctx, struct 
         css_fixed_or_calc value = (css_fixed_or_calc)0;
         css_unit unit = CSS_UNIT_PX;
 
-        if (containing_block) {
+        if (containing_block && containing_block->style) {
             htype = css_computed_height(containing_block->style, &value, &unit);
         }
 
@@ -2633,7 +2633,7 @@ static bool layout_apply_minmax_height(const css_unit_ctx *unit_len_ctx, struct 
 
             if (unit == CSS_UNIT_PCT || unit == CSS_UNIT_CALC) {
                 if (containing_block && containing_block->height != AUTO &&
-                    (css_computed_position(box->style) == CSS_POSITION_ABSOLUTE || htype == CSS_HEIGHT_SET ||
+                    (box_is_out_of_flow(box) || htype == CSS_HEIGHT_SET ||
                         (containing_block->flags & ASPECT_RATIO_HEIGHT))) {
                     /* Box is absolutely positioned or its containing block has a valid
                      * specified height. (CSS 2.1 Section 10.5) */
@@ -2662,7 +2662,7 @@ static bool layout_apply_minmax_height(const css_unit_ctx *unit_len_ctx, struct 
 
             if (unit == CSS_UNIT_PCT || unit == CSS_UNIT_CALC) {
                 if (containing_block && containing_block->height != AUTO &&
-                    (css_computed_position(box->style) == CSS_POSITION_ABSOLUTE || htype == CSS_HEIGHT_SET ||
+                    (box_is_out_of_flow(box) || htype == CSS_HEIGHT_SET ||
                         (containing_block->flags & ASPECT_RATIO_HEIGHT))) {
                     /* Box is absolutely positioned or its containing block has a valid
                      * specified height. (CSS 2.1 Section 10.5) */
@@ -5393,7 +5393,9 @@ static bool layout_absolute(struct box *box, struct box *containing_block, int c
     box->y = top + margin[TOP] + border[TOP].width;
 
     if (containing_block->type == BOX_BLOCK || containing_block->type == BOX_INLINE_BLOCK ||
-        containing_block->type == BOX_TABLE_CELL) {
+        containing_block->type == BOX_TABLE_CELL || containing_block->type == BOX_FLEX ||
+        containing_block->type == BOX_INLINE_FLEX || containing_block->type == BOX_GRID ||
+        containing_block->type == BOX_INLINE_GRID) {
         /* Block-level ancestor => reset container's height */
         containing_block->height -= containing_block->padding[TOP] + containing_block->padding[BOTTOM];
     } else {
@@ -5410,6 +5412,16 @@ static bool layout_absolute(struct box *box, struct box *containing_block, int c
 }
 
 
+/* A non-none transform establishes a containing block even when it is an
+ * identity transform. Position:relative alone does not contain fixed boxes. */
+static bool layout_has_transform(const struct box *box)
+{
+    uint32_t count = 0;
+    const css_transform_function *functions = NULL;
+    return box->style && css_computed_transform(box->style, &count, &functions) == CSS_TRANSFORM_FUNCTIONS &&
+        count > 0;
+}
+
 /**
  * Recursively layout and position absolutely positioned boxes.
  *
@@ -5425,13 +5437,26 @@ layout_position_absolute(struct box *box, struct box *containing_block, int cx, 
 {
     struct box *c;
 
+    box->flags &= ~HAS_FIXED_DESCENDANT;
     for (c = box->children; c; c = c->next) {
         if ((c->type == BOX_BLOCK || c->type == BOX_TABLE || c->type == BOX_INLINE_BLOCK || c->type == BOX_FLEX ||
                 c->type == BOX_GRID || c->type == BOX_INLINE_FLEX || c->type == BOX_INLINE_GRID) &&
             (css_computed_position(c->style) == CSS_POSITION_ABSOLUTE ||
                 css_computed_position(c->style) == CSS_POSITION_FIXED)) {
             struct box *abs_cb = containing_block;
-            if (c->parent != NULL && (c->parent->type == BOX_FLEX || c->parent->type == BOX_INLINE_FLEX) &&
+            int static_x = cx, static_y = cy;
+            if (css_computed_position(c->style) == CSS_POSITION_FIXED) {
+                abs_cb = c->parent;
+                while (abs_cb && !layout_has_transform(abs_cb))
+                    abs_cb = abs_cb->parent;
+                if (abs_cb == NULL)
+                    abs_cb = &content->viewport.box;
+                int cb_x, cb_y;
+                box_coords_at_scroll(box, &static_x, &static_y, 0, 0);
+                box_coords_at_scroll(abs_cb, &cb_x, &cb_y, 0, 0);
+                static_x -= cb_x;
+                static_y -= cb_y;
+            } else if (c->parent != NULL && (c->parent->type == BOX_FLEX || c->parent->type == BOX_INLINE_FLEX) &&
                 c->parent->style != NULL && css_computed_position(c->parent->style) != CSS_POSITION_STATIC) {
                 abs_cb = c->parent;
             }
@@ -5471,11 +5496,11 @@ layout_position_absolute(struct box *box, struct box *containing_block, int cx, 
                 dom_string_unref(cb_class_attr);
             if (cb_name != NULL)
                 dom_string_unref(cb_name);
-            if (!layout_absolute(c, abs_cb, cx, cy, content))
+            if (!layout_absolute(c, abs_cb, static_x, static_y, content))
                 return false;
             if (!layout_position_absolute(c, c, 0, 0, content))
                 return false;
-        } else if (c->style && css_computed_position(c->style) == CSS_POSITION_RELATIVE) {
+        } else if ((c->style && css_computed_position(c->style) == CSS_POSITION_RELATIVE) || layout_has_transform(c)) {
             if (!layout_position_absolute(c, c, 0, 0, content))
                 return false;
         } else {
@@ -5502,6 +5527,9 @@ layout_position_absolute(struct box *box, struct box *containing_block, int cx, 
             if (!layout_position_absolute(c, containing_block, cx + px, cy + py, content))
                 return false;
         }
+        if ((c->flags & HAS_FIXED_DESCENDANT) ||
+            (c->abs_containing_block && (c->abs_containing_block->flags & IS_VIEWPORT)))
+            box->flags |= HAS_FIXED_DESCENDANT;
     }
 
     return true;
@@ -5769,6 +5797,9 @@ static void layout_get_box_bbox(
 static void layout_update_descendant_bbox(
     const css_unit_ctx *unit_len_ctx, struct box *box, struct box *child, int off_x, int off_y)
 {
+    if (child->abs_containing_block && (child->abs_containing_block->flags & IS_VIEWPORT))
+        return;
+
     int child_desc_x0, child_desc_y0, child_desc_x1, child_desc_y1;
 
     /* get coordinates of child relative to box */
@@ -6115,6 +6146,11 @@ bool layout_document(html_content *content, int width, int height)
     NSLOG(wisp, DEBUG, "PROFILER: START layout_document %p", content);
 
     NSLOG(layout, DEBUG, "Doing layout to %ix%i of %s", width, height, nsurl_access(content_get_url(&content->base)));
+
+    content->viewport = (struct html_viewport){
+        .box = {.type = BOX_BLOCK, .flags = IS_VIEWPORT, .width = width, .height = height},
+        .owner = content,
+    };
 
     layout_minmax_block(doc, font_func, content);
 

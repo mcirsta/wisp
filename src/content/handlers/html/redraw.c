@@ -1794,9 +1794,18 @@ static bool html_redraw_box_children(const html_content *html, struct box *box, 
         }
     }
 
-    /* NOTE: Pass 2 (negative z-index) removed - negative z-index elements
-     * are now rendered by html_redraw_negative_zindex_children() before
-     * the parent's background is drawn, per CSS 2.1 stacking order. */
+    /* Negative children of a stacking context belong above its own background.
+     * Non-context ancestors use the earlier negative-child pass. */
+    if (box_creates_stacking_context(box) && negative_zindex.count > 0) {
+        stacking_context_sort(&negative_zindex);
+        for (i = 0; i < negative_zindex.count; i++) {
+            if (!html_redraw_box(html, negative_zindex.entries[i].box, negative_zindex.entries[i].x_parent,
+                    negative_zindex.entries[i].y_parent, clip, scale, current_background_color, data, ctx)) {
+                render_ok = false;
+                goto cleanup;
+            }
+        }
+    }
 
     /* Pass 2: Render in-flow children (z-index: auto) */
     for (c = box->children; c; c = c->next) {
@@ -2062,7 +2071,8 @@ bool html_redraw_box(const html_content *html, struct box *box, int x_parent, in
          * the viewport scroll offset (data->x/y) to get screen coordinates. */
         if (box->abs_containing_block != NULL) {
             int doc_x, doc_y;
-            box_coords(box, &doc_x, &doc_y);
+            box_coords_at_scroll(box, &doc_x, &doc_y,
+                data ? data->viewport_x - data->x : 0, data ? data->viewport_y - data->y : 0);
             x = doc_x;
             y = doc_y;
             /* Add viewport scroll offset */
@@ -2100,7 +2110,9 @@ bool html_redraw_box(const html_content *html, struct box *box, int x_parent, in
          * document-relative coordinates. */
         if (box->abs_containing_block != NULL) {
             int abs_x, abs_y;
-            box_coords(box, &abs_x, &abs_y);
+            box_coords_at_scroll(box, &abs_x, &abs_y,
+                data ? data->viewport_x / scale - data->x : 0,
+                data ? data->viewport_y / scale - data->y : 0);
             /* Add viewport scroll offset before scaling */
             if (data != NULL) {
                 abs_x += data->x;
@@ -2205,6 +2217,15 @@ bool html_redraw_box(const html_content *html, struct box *box, int x_parent, in
 
     /* return if the rectangle is completely outside the clip rectangle */
     if (clip->y1 < r.y0 || r.y1 < clip->y0 || clip->x1 < r.x0 || r.x1 < clip->x0) {
+        /* A viewport-fixed descendant may still be visible when its DOM
+         * ancestor is off screen. Its own redraw restores the viewport clip. */
+        if (box->flags & HAS_FIXED_DESCENDANT) {
+            int px = box->abs_containing_block ? x / scale - box->x : x_parent;
+            int py = box->abs_containing_block ? y / scale - box->y : y_parent;
+            return html_redraw_negative_zindex_children(html, box, px, py, clip, scale,
+                       current_background_color, data, ctx) &&
+                html_redraw_box_children(html, box, px, py, clip, scale, current_background_color, data, ctx);
+        }
         return true; /* Early return BEFORE push_transform, no cleanup needed */
     }
 
@@ -2995,8 +3016,8 @@ bool html_redraw_box(const html_content *html, struct box *box, int x_parent, in
             /* For absolute elements: we computed screen position x, y via box_coords().
              * Children's offset = child_x_parent + box->x = x (we want)
              * So child_x_parent = x - box->x */
-            child_x_parent = x - box->x;
-            child_y_parent = y - box->y;
+            child_x_parent = x / scale - box->x;
+            child_y_parent = y / scale - box->y;
         } else {
             /* Normal elements: use standard parent chain */
             child_x_parent = x_parent;

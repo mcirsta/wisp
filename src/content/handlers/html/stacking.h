@@ -47,7 +47,8 @@ bool box_creates_stacking_context(const struct box *box);
 /**
  * Get the effective z-index for a box.
  *
- * Returns Z_INDEX_AUTO for z-index: auto or non-positioned elements.
+ * Returns Z_INDEX_AUTO when no stacking context is established. Fixed boxes
+ * and transformed elements with auto z-index have effective stack level zero.
  *
  * \param box  Box to get z-index for
  * \return z-index value, or Z_INDEX_AUTO

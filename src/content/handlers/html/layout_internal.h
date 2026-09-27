@@ -419,7 +419,8 @@ static inline int lh__available_height_for_box(const struct box *box, int viewpo
         return -1;
     }
 
-    if (css_computed_position(box->style) == CSS_POSITION_ABSOLUTE && box->parent) {
+    if ((css_computed_position(box->style) == CSS_POSITION_ABSOLUTE ||
+            css_computed_position(box->style) == CSS_POSITION_FIXED) && box->parent) {
         assert(box->float_container);
         containing_block = box->float_container;
     } else if (box->parent && (box->parent->type == BOX_FLOAT_LEFT || box->parent->type == BOX_FLOAT_RIGHT)) {
@@ -438,7 +439,7 @@ static inline int lh__available_height_for_box(const struct box *box, int viewpo
         containing_block = box->parent->parent;
     }
 
-    if (containing_block != NULL) {
+    if (containing_block != NULL && containing_block->style != NULL) {
         css_fixed_or_calc f = (css_fixed_or_calc)0;
         css_unit u = CSS_UNIT_PX;
 
@@ -446,7 +447,8 @@ static inline int lh__available_height_for_box(const struct box *box, int viewpo
     }
 
     if (containing_block != NULL && containing_block->height != AUTO &&
-        (css_computed_position(box->style) == CSS_POSITION_ABSOLUTE || cbhtype == CSS_HEIGHT_SET ||
+        (css_computed_position(box->style) == CSS_POSITION_ABSOLUTE ||
+            css_computed_position(box->style) == CSS_POSITION_FIXED || cbhtype == CSS_HEIGHT_SET ||
             (containing_block->flags & ASPECT_RATIO_HEIGHT))) {
         return containing_block->height;
     }

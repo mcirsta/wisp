@@ -32,22 +32,7 @@
 /* See stacking.h for documentation */
 bool box_creates_stacking_context(const struct box *box)
 {
-    if (box == NULL || box->style == NULL) {
-        return false;
-    }
-
-    uint8_t pos = css_computed_position(box->style);
-    bool is_positioned = (pos == CSS_POSITION_RELATIVE || pos == CSS_POSITION_ABSOLUTE || pos == CSS_POSITION_FIXED);
-
-    if (!is_positioned) {
-        return false;
-    }
-
-    int32_t z_index;
-    uint8_t z_type = css_computed_z_index(box->style, &z_index);
-
-    /* Stacking context if positioned AND z-index is not auto */
-    return z_type == CSS_Z_INDEX_SET;
+    return box_get_z_index(box) != Z_INDEX_AUTO;
 }
 
 /* See stacking.h for documentation */
@@ -57,18 +42,24 @@ int32_t box_get_z_index(const struct box *box)
         return Z_INDEX_AUTO;
     }
 
-    /* Only positioned elements can have z-index */
+    /* Transforms and fixed boxes establish stacking contexts even with auto
+     * z-index. Keep their descendants inside that context during collection. */
+    uint32_t count = 0;
+    const css_transform_function *functions = NULL;
+    bool transformed = box->node &&
+        css_computed_transform(box->style, &count, &functions) == CSS_TRANSFORM_FUNCTIONS && count > 0;
     uint8_t pos = css_computed_position(box->style);
     bool is_positioned = (pos == CSS_POSITION_RELATIVE || pos == CSS_POSITION_ABSOLUTE || pos == CSS_POSITION_FIXED);
 
     if (!is_positioned) {
-        return Z_INDEX_AUTO;
+        return transformed ? 0 : Z_INDEX_AUTO;
     }
 
     int32_t z_index;
     uint8_t z_type = css_computed_z_index(box->style, &z_index);
 
-    return (z_type == CSS_Z_INDEX_SET) ? z_index : Z_INDEX_AUTO;
+    return (z_type == CSS_Z_INDEX_SET) ? z_index :
+        ((pos == CSS_POSITION_FIXED || transformed) ? 0 : Z_INDEX_AUTO);
 }
 
 /* See stacking.h for documentation */

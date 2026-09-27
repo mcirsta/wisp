@@ -289,6 +289,9 @@ struct hlcache_handle *browser_window_get_content(struct browser_window *bw);
  */
 nserror browser_window_get_dimensions(struct browser_window *bw, int *width, int *height);
 
+/** Get the viewport scroll offset in unscaled content coordinates. */
+void browser_window_get_scroll(struct browser_window *bw, int *x, int *y);
+
 /**
  * Get the width of the vertical scrollbar.
  *

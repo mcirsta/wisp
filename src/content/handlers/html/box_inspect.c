@@ -26,6 +26,7 @@
 #include <stdio.h>
 
 #include <wisp/content.h>
+#include <wisp/browser_window.h>
 #include <wisp/content/handlers/css/utils.h>
 #include <wisp/mouse.h>
 #include <wisp/types.h>
@@ -504,48 +505,54 @@ static bool box_nearest_text_box(struct box *box, int bx, int by, int fx, int fy
 }
 
 
-/* Exported function documented in html/box.h */
-void box_coords(struct box *box, int *x, int *y)
+/* Resolve coordinate ancestry before adding the viewport scroll offset. */
+static void box_coords_internal(struct box *box, int *x, int *y, const int *scroll)
 {
-    struct box *orig = box;
+    assert(box->style == NULL ||
+        (css_computed_position(box->style) != CSS_POSITION_ABSOLUTE &&
+            css_computed_position(box->style) != CSS_POSITION_FIXED) || box->abs_containing_block != NULL);
     *x = box->x;
     *y = box->y;
-
-    /* Check if this is an absolute/fixed positioned box */
-    if (box->style != NULL) {
-        enum css_position_e pos = css_computed_position(box->style);
-        if (pos == CSS_POSITION_ABSOLUTE || pos == CSS_POSITION_FIXED) {
-            /* Absolute/fixed positioned boxes MUST have abs_containing_block set.
-             * box->x/y are relative to the containing block, not the parent.
-             * Per CSS 2.1 §10.1. */
-            assert(box->abs_containing_block != NULL &&
-                "Absolute/fixed positioned box must have abs_containing_block set");
-
-            NSLOG(wisp, INFO, "box_coords ABS entry: box=%p box.y=%d cb=%p cb.y=%d", (void *)orig, orig->y,
-                (void *)box->abs_containing_block, box->abs_containing_block->y);
-
-            /* Jump directly to the containing block and walk from there */
-            box = box->abs_containing_block;
-            *x += box->x - scrollbar_get_offset(box->scroll_x);
-            *y += box->y - scrollbar_get_offset(box->scroll_y);
-
-            NSLOG(wisp, INFO, "box_coords after CB: y=%d", *y);
+    for (;;) {
+        if (box->flags & IS_VIEWPORT) {
+            int sx = 0, sy = 0;
+            if (scroll != NULL) {
+                sx = scroll[0];
+                sy = scroll[1];
+            } else {
+                const struct html_viewport *viewport = (const struct html_viewport *)box;
+                browser_window_get_scroll(viewport->owner ? viewport->owner->bw : NULL, &sx, &sy);
+            }
+            *x += sx;
+            *y += sy;
+            return;
         }
-    }
-
-    /* Walk remaining parent chain (from CB for absolute, from parent for normal) */
-    while (box->parent) {
-        if (box_is_float(box)) {
+        /* Follow the coordinate parent at every level, including positioned
+         * ancestors of ordinary children and nested absolute/fixed boxes. */
+        if (box->abs_containing_block != NULL) {
+            box = box->abs_containing_block;
+        } else if (box_is_float(box)) {
             assert(box->float_container);
             box = box->float_container;
         } else {
             box = box->parent;
         }
+        if (box == NULL)
+            return;
         *x += box->x - scrollbar_get_offset(box->scroll_x);
         *y += box->y - scrollbar_get_offset(box->scroll_y);
     }
+}
 
-    NSLOG(wisp, DEBUG, "box_coords FINAL: orig=%p final_x=%d final_y=%d", (void *)orig, *x, *y);
+void box_coords(struct box *box, int *x, int *y)
+{
+    box_coords_internal(box, x, y, NULL);
+}
+
+void box_coords_at_scroll(struct box *box, int *x, int *y, int scroll_x, int scroll_y)
+{
+    const int scroll[] = {scroll_x, scroll_y};
+    box_coords_internal(box, x, y, scroll);
 }
 
 
@@ -563,6 +570,26 @@ void box_bounds(struct box *box, struct rect *r)
     r->y1 = r->y0 + height;
 }
 
+
+/* Search only escaping fixed descendants when an ancestor rejects the point.
+ * Ordinary children must remain clipped by that ancestor. */
+static struct box *box_fixed_at_point(const css_unit_ctx *ctx, struct box *root, int x, int y, int *bx, int *by)
+{
+    for (struct box *child = root->children; child; child = child->next) {
+        if (child->abs_containing_block && (child->abs_containing_block->flags & IS_VIEWPORT)) {
+            bool physical;
+            box_coords(child, bx, by);
+            if (box_contains_point(ctx, child, x - *bx, y - *by, &physical) && physical)
+                return child;
+        }
+        if (child->flags & HAS_FIXED_DESCENDANT) {
+            struct box *hit = box_fixed_at_point(ctx, child, x, y, bx, by);
+            if (hit)
+                return hit;
+        }
+    }
+    return NULL;
+}
 
 /* Exported function documented in html/box.h */
 struct box *
@@ -594,6 +621,15 @@ box_at_point(const css_unit_ctx *unit_len_ctx, struct box *box, const int x, con
 
             skip_children = false;
         } else {
+            if (box->flags & HAS_FIXED_DESCENDANT) {
+                int fx, fy;
+                struct box *fixed = box_fixed_at_point(unit_len_ctx, box, x, y, &fx, &fy);
+                if (fixed) {
+                    *box_x = fx;
+                    *box_y = fy;
+                    return fixed;
+                }
+            }
             skip_children = true;
         }
     }
