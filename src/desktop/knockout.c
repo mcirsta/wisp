@@ -941,6 +941,11 @@ static nserror knockout_plot_push_transform(const struct redraw_context *ctx, co
     /* Flush pending operations before transform */
     ffres = knockout_plot_flush(ctx);
 
+    /* Do not claim success without applying the transform: callers may draw
+     * relative to its origin. Let them use their untransformed fallback. */
+    if (real_plot.push_transform == NULL || real_plot.pop_transform == NULL)
+        return ffres == NSERROR_OK ? NSERROR_NOT_IMPLEMENTED : ffres;
+
     if (real_plot.push_transform != NULL) {
         nserror res = real_plot.push_transform(ctx, transform);
         if ((res != NSERROR_OK) && (ffres == NSERROR_OK)) {

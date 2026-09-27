@@ -82,7 +82,7 @@ struct svgtiny_parse_state {
     svgtiny_text_anchor text_anchor;
     bool font_weight_bold;
 
-    /* current text position (for tspan inheritance) */
+    /* current text position in local user units (for tspan inheritance) */
     float text_x;
     float text_y;
     bool text_x_set;

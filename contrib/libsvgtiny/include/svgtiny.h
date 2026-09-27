@@ -46,8 +46,9 @@ struct svgtiny_shape {
     float *path;
     unsigned int path_length;
     char *text;
-    float text_x, text_y;
-    float font_size;
+    float text_x, text_y; /**< Text origin in diagram coordinates. */
+    float text_transform[4]; /**< Linear part [a,b,c,d] of the text-to-diagram transform. */
+    float font_size; /**< Font size in the text's untransformed user units. */
     svgtiny_text_anchor text_anchor;
     bool font_weight_bold;
     svgtiny_colour fill;

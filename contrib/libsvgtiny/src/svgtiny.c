@@ -806,37 +806,14 @@ static svgtiny_code svgtiny_parse_text(dom_element *text, struct svgtiny_parse_s
     svgtiny_parse_font_attributes(text, &state);
     svgtiny_parse_transform_attributes(text, &state);
 
-    /* If x or y were explicitly set, use them; otherwise inherit from
-     * parent's text position */
-    if (x_set) {
-        px = state.ctm.a * x + state.ctm.c * y + state.ctm.e;
-        state.text_x = px;
-        state.text_x_set = true;
-    } else if (state.text_x_set) {
-        /* Inherit from parent */
-        px = state.text_x;
-    } else {
-        /* First text element, use default (0,0 transformed) */
-        px = state.ctm.a * x + state.ctm.c * y + state.ctm.e;
-        state.text_x = px;
-    }
-
-    if (y_set) {
-        py = state.ctm.b * x + state.ctm.d * y + state.ctm.f;
-        state.text_y = py;
-        state.text_y_set = true;
-    } else if (state.text_y_set) {
-        /* Inherit from parent */
-        py = state.text_y;
-    } else {
-        /* First text element, use default (0,0 transformed) */
-        py = state.ctm.b * x + state.ctm.d * y + state.ctm.f;
-        state.text_y = py;
-    }
-
-    /* Apply dx/dy offsets (scale by CTM) */
-    px += state.ctm.a * dx;
-    py += state.ctm.d * dy;
+    /* Resolve inherited positions and relative offsets before transforming.
+     * A rotation mixes both coordinates; inheriting diagram coordinates or
+     * applying only a/d to dx/dy loses that part of the transform. */
+    px = (x_set || !state.text_x_set ? x : state.text_x) + dx;
+    py = (y_set || !state.text_y_set ? y : state.text_y) + dy;
+    state.text_x = px;
+    state.text_y = py;
+    state.text_x_set = state.text_y_set = true;
 
     exc = dom_node_get_first_child(text, &child);
     if (exc != DOM_NO_ERR) {
@@ -885,8 +862,8 @@ static svgtiny_code svgtiny_parse_text(dom_element *text, struct svgtiny_parse_s
             } else {
                 shape->text = strdup("");
             }
-            shape->text_x = px;
-            shape->text_y = py;
+            shape->text_x = state.ctm.a * px + state.ctm.c * py + state.ctm.e;
+            shape->text_y = state.ctm.b * px + state.ctm.d * py + state.ctm.f;
             state.diagram->shape_count++;
         }
 
@@ -1328,8 +1305,13 @@ struct svgtiny_shape *svgtiny_add_shape(struct svgtiny_parse_state *state)
         shape->path = 0;
         shape->path_length = 0;
         shape->text = 0;
-        /* Scale font size by CTM so it grows/shrinks with the SVG viewport */
-        shape->font_size = state->font_size * (state->ctm.a + state->ctm.d) / 2.0f;
+        /* Keep the glyph transform, not just its effect on the text origin.
+         * The matrix trace is not a font scale (it vanishes at 90 degrees). */
+        shape->font_size = state->font_size;
+        shape->text_transform[0] = state->ctm.a;
+        shape->text_transform[1] = state->ctm.b;
+        shape->text_transform[2] = state->ctm.c;
+        shape->text_transform[3] = state->ctm.d;
         shape->text_anchor = state->text_anchor;
         shape->font_weight_bold = state->font_weight_bold;
 

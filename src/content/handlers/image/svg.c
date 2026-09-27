@@ -1080,8 +1080,23 @@ static bool svg_redraw_internal(svg_content *svg, int x, int y, int width, int h
                 combo_len = 0;
                 combo_active = 0;
             }
-            px = (int)(diagram->shape[i].text_x * sx) + transform[4];
-            py = (int)(diagram->shape[i].text_y * sy) + transform[5];
+            const struct svgtiny_shape *shape = &diagram->shape[i];
+            float text_transform[6] = {
+                sx * shape->text_transform[0], sy * shape->text_transform[1],
+                sx * shape->text_transform[2], sy * shape->text_transform[3],
+                sx * shape->text_x + x, sy * shape->text_y + y};
+            float font_scale = hypotf(text_transform[0], text_transform[1]);
+            if (font_scale == 0 || !isfinite(font_scale) ||
+                text_transform[0] * text_transform[3] == text_transform[1] * text_transform[2])
+                continue; /* A singular transform has no visible glyph area. */
+
+            /* Keep the existing display-sized font metrics. Apply only the
+             * remaining rotation/skew/stretch around the transformed origin,
+             * so neither the SVG viewport nor the font size is scaled twice. */
+            for (unsigned int j = 0; j < 4; j++)
+                text_transform[j] /= font_scale;
+            px = (int)text_transform[4];
+            py = (int)text_transform[5];
 
             NSLOG(wisp, WARNING, "SVGDIAG text computed: px=%d py=%d (transform[4]=%.1f [5]=%.1f)", px, py,
                 transform[4], transform[5]);
@@ -1094,25 +1109,32 @@ static bool svg_redraw_internal(svg_content *svg, int x, int y, int width, int h
             } else {
                 fstyle.foreground = BGR(diagram->shape[i].fill);
             }
-            /* Use SVG font-size, fallback to 12.
-             * SVG font-size is in USER UNITS (pixels). Scale with viewport
-             * so fonts grow/shrink proportionally with the SVG.
-             * Use sx (display_width/intrinsic_width) as the scale factor.
-             * Use FONTF_SIZE_PIXELS flag to tell the frontend to use the
-             * size directly as pixels without point-to-pixel conversion.
-             */
+            /* The stored font size is in local SVG user units. */
             float fsize = diagram->shape[i].font_size;
             if (fsize <= 0.0f) {
                 fsize = 12.0f;
             }
-            /* Apply viewport scale (sx) so fonts scale with SVG display size */
-            float scaled_fsize = fsize * sx;
+            float scaled_fsize = fsize * font_scale;
             fstyle.size = (int)(scaled_fsize * PLOT_STYLE_SCALE);
             fstyle.flags |= FONTF_SIZE_PIXELS;
 
 
             /* Each shape has its own resolved weight; don't retain a previous bold. */
             fstyle.weight = diagram->shape[i].font_weight_bold ? 700 : 400;
+
+            bool pushed = false;
+            bool transformed = text_transform[0] != 1 || text_transform[1] != 0 ||
+                text_transform[2] != 0 || text_transform[3] != 1;
+            if (transformed && ctx->plot->push_transform && ctx->plot->pop_transform) {
+                res = ctx->plot->push_transform(ctx, text_transform);
+                if (res == NSERROR_OK) {
+                    pushed = true;
+                    px = py = 0;
+                } else if (res != NSERROR_NOT_IMPLEMENTED) {
+                    ok = false;
+                    continue;
+                }
+            }
 
             /* Adjust position for text-anchor */
             if (diagram->shape[i].text_anchor != svgtiny_TEXT_ANCHOR_START) {
@@ -1136,6 +1158,9 @@ static bool svg_redraw_internal(svg_content *svg, int x, int y, int width, int h
             }
 
             res = ctx->plot->text(ctx, &fstyle, px, py, diagram->shape[i].text, strlen(diagram->shape[i].text));
+            /* Restore the painter even if the text operation failed. */
+            if (pushed && ctx->plot->pop_transform(ctx) != NSERROR_OK)
+                ok = false;
             if (res != NSERROR_OK) {
                 ok = false;
                 NSLOG(wisp, ERROR, "SVG render failed: url=%s element=text index=%u pos=%d,%d text='%s'", url_str, i,

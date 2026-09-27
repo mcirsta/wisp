@@ -240,6 +240,7 @@ add_wisp_test(svg_dash_rects_test
 
 add_wisp_test(svg_text_test
   ${CMAKE_SOURCE_DIR}/src/desktop/plot_style.c
+  ${CMAKE_SOURCE_DIR}/src/desktop/knockout.c
   ${CMAKE_SOURCE_DIR}/src/content/handlers/image/svg.c
   ${CMAKE_SOURCE_DIR}/src/test/log.c
   ${CMAKE_SOURCE_DIR}/src/test/content_stubs.c

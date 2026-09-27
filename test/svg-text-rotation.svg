@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="600" height="220" font-size="20">
+  <text x="20" y="40" fill="#ff0000">MMMM</text>
+  <text x="150" y="70" text-anchor="middle" transform="rotate(90 150 70)" fill="#00aa00">MMMM</text>
+  <text x="250" y="100" text-anchor="end" transform="rotate(-90 250 100)" fill="#0000ff">MMMM</text>
+  <text x="450" y="40" text-anchor="end" transform="rotate(180 450 40)" fill="#ff00ff">MMMM</text>
+  <g transform="translate(20 105) scale(1.5)">
+    <text x="80" y="20" font-size="14" transform="rotate(90 80 20)" fill="#00aaaa"><tspan dx="4" dy="2">MMMM</tspan></text>
+  </g>
+  <!-- This must stay in place after all text transforms have been popped. -->
+  <rect x="570" y="10" width="10" height="10" fill="#000000"/>
+</svg>
