@@ -101,3 +101,33 @@ void test_text_reflow(const struct gui_layout_table *fonts)
         finish(&retained);
     }
 }
+
+void test_fractional_text_reflow(const struct gui_layout_table *fonts)
+{
+    /* The Qt driver selects the generated face: "a b" is just over 23px.
+     * Check the core's whole-box fast path as well as retained split boxes. */
+    const int widths[] = {23, 23, 24, 23, 24};
+    struct paragraph retained;
+    init(&retained, "a b", fonts);
+    for (size_t i = 0; i < sizeof(widths) / sizeof(widths[0]); i++) {
+        struct paragraph fresh;
+        init(&fresh, "a b", fonts);
+        layout(&retained, widths[i]);
+        layout(&fresh, widths[i]);
+        assert(fresh.root.height == (widths[i] == 23 ? 46 : 23));
+        assert(retained.root.height == fresh.root.height);
+        check_spaces(&retained);
+        finish(&fresh);
+    }
+    finish(&retained);
+
+    /* Splitting estimates the remainder by subtracting rounded advances.
+     * An apparent exact fit must still be measured before accepting it. */
+    struct paragraph estimated;
+    init(&estimated, "a b", fonts);
+    estimated.text.width = 23;
+    layout(&estimated, 23);
+    assert(estimated.root.height == 46);
+    check_spaces(&estimated);
+    finish(&estimated);
+}

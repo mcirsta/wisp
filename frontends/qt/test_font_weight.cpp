@@ -3,9 +3,11 @@
 #include <QFile>
 #include <QFontDatabase>
 #include <QFontMetrics>
+#include <QFontMetricsF>
 #include <QPainter>
 #include <QRawFont>
 #include <QtEndian>
+#include <QtMath>
 #include <cstdio>
 #include <cstdlib>
 
@@ -73,7 +75,7 @@ struct Family {
             REQUIRE(selected.italic() == italic);
             int width;
             REQUIRE(nsqt_layout_table->width(&style, "MMMM", 4, &width) == NSERROR_OK);
-            REQUIRE(width == QFontMetrics(selected).horizontalAdvance("MMMM"));
+            REQUIRE(width == qCeil(QFontMetricsF(selected).horizontalAdvance("MMMM")));
 
             QImage actual_image(100, 40, QImage::Format_ARGB32_Premultiplied);
             actual_image.fill(Qt::white);

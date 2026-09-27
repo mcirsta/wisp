@@ -109,7 +109,7 @@ if(BUILD_TESTING AND WISP_ENABLE_TESTS)
     target_include_directories(qt_text_split_test PRIVATE
         ${CMAKE_SOURCE_DIR}/include ${CMAKE_SOURCE_DIR}/src ${CMAKE_SOURCE_DIR}/frontends)
     target_link_libraries(qt_text_split_test PRIVATE Qt6::Widgets wisp)
-    add_test(NAME qt_text_split COMMAND qt_text_split_test)
+    add_test(NAME qt_text_split COMMAND qt_text_split_test ${CMAKE_SOURCE_DIR}/test/fonts/normal-400.ttf)
     set_tests_properties(qt_text_split PROPERTIES TIMEOUT 30
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_SCALE_FACTOR=1;QT_SCREEN_SCALE_FACTORS=1;QT_FONT_DPI=96")
 endif()

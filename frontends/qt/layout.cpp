@@ -27,6 +27,7 @@
 #include <QRawFont>
 #include <QWidget>
 #include <QtEndian>
+#include <QtMath>
 #include <stddef.h>
 #include <utility>
 
@@ -390,10 +391,11 @@ static void nsqt_font_cache_clear(void)
  * code on faliure
  */
 static nserror
-layout_position(QFontMetrics &metrics, const char *string, size_t length, int x, size_t *string_idx, int *actual_x)
+layout_position(const QFontMetricsF &metrics, const char *string, size_t length, int x, size_t *string_idx,
+    int *actual_x)
 {
-    int full_x;
-    int measured_x;
+    qreal full_x;
+    qreal measured_x;
     size_t str_len;
 
     /* deal with empty string */
@@ -407,7 +409,7 @@ layout_position(QFontMetrics &metrics, const char *string, size_t length, int x,
     if (x <= 0) {
         *string_idx = 0;
         /* Use QString for correct UTF-8 byte interpretation */
-        *actual_x = metrics.horizontalAdvance(QString::fromUtf8(string, length));
+        *actual_x = qRound(metrics.horizontalAdvance(QString::fromUtf8(string, length)));
         return NSERROR_OK;
     }
 
@@ -427,7 +429,7 @@ layout_position(QFontMetrics &metrics, const char *string, size_t length, int x,
     if (full_x < x) {
         /* whole string fits */
         *string_idx = length;
-        *actual_x = full_x;
+        *actual_x = qRound(full_x);
         return NSERROR_OK;
     }
 
@@ -443,7 +445,7 @@ layout_position(QFontMetrics &metrics, const char *string, size_t length, int x,
 
     if (measured_x == 0) {
         *string_idx = 0;
-        *actual_x = full_x;
+        *actual_x = qRound(full_x);
         return NSERROR_OK;
     }
 
@@ -461,7 +463,7 @@ layout_position(QFontMetrics &metrics, const char *string, size_t length, int x,
         }
     } else {
         /* too short try more chars until overflowing */
-        int n_measured_x = measured_x;
+        qreal n_measured_x = measured_x;
         while (n_measured_x < x && current_chars < char_count) {
             size_t n_str_len = qstr.left(current_chars + 1).toUtf8().length();
             n_measured_x = metrics.horizontalAdvance(qstr.left(current_chars + 1));
@@ -474,7 +476,7 @@ layout_position(QFontMetrics &metrics, const char *string, size_t length, int x,
     }
 
     *string_idx = str_len;
-    *actual_x = measured_x;
+    *actual_x = qRound(measured_x);
 
     return NSERROR_OK;
 }
@@ -495,16 +497,17 @@ static nserror nsqt_layout_width(const struct plot_font_style *fstyle, const cha
     QFont *font = nsfont_style_to_font(fstyle);
     /* Use top-level widget as device for accurate metrics matching rendering */
     QPaintDevice *device = get_metrics_device();
-    QFontMetrics metrics = device ? QFontMetrics(*font, device) : QFontMetrics(*font);
+    QFontMetricsF metrics(*font, device);
     /* IMPORTANT: Use QString::fromUtf8 to correctly interpret byte length as UTF-8.
      * Qt's horizontalAdvance(char*, len) treats len as CHARACTER count, not byte count! */
     QString qstr = QString::fromUtf8(string, length);
-    qreal scale = svg_font_scale(fstyle);
-    if (scale != 1.0) {
-        *width = qRound(QFontMetricsF(*font, device).horizontalAdvance(qstr) * scale);
-    } else {
-        *width = metrics.horizontalAdvance(qstr);
-    }
+    qreal advance = metrics.horizontalAdvance(qstr) * svg_font_scale(fstyle);
+    /* The core skips splitting a box when its integer width fits. Round HTML
+     * advances up so a fractional overflow cannot bypass that check. Collapsed
+     * spaces are positioning advances between boxes, not text to fit: retain
+     * their nearest-pixel gaps. SVG anchoring also uses the nearest pixel. */
+    bool positioning = (fstyle->flags & FONTF_SIZE_PIXELS) || (length == 1 && string[0] == ' ');
+    *width = positioning ? qRound(advance) : qCeil(advance);
 
     delete font;
     NSLOG(wisp, DEEPDEBUG, "fstyle: %p string:\"%.*s\", length: %" PRIsizet ", width: %dpx", fstyle, (int)length,
@@ -531,7 +534,7 @@ static nserror nsqt_layout_position(
     QFont *font = nsfont_style_to_font(fstyle);
     /* Use top-level widget as device for accurate metrics matching rendering */
     QPaintDevice *device = get_metrics_device();
-    QFontMetrics metrics = device ? QFontMetrics(*font, device) : QFontMetrics(*font);
+    QFontMetricsF metrics(*font, device);
     nserror res;
 
     res = layout_position(metrics, string, length, x, string_idx, actual_x);
@@ -575,12 +578,12 @@ static nserror nsqt_layout_split(const struct plot_font_style *fstyle, const cha
     QFont *font = nsfont_style_to_font(fstyle);
     /* Use top-level widget as device for accurate metrics matching rendering */
     QPaintDevice *device = get_metrics_device();
-    QFontMetrics metrics = device ? QFontMetrics(*font, device) : QFontMetrics(*font);
+    QFontMetricsF metrics(*font, device);
     size_t split_len;
     int split_x;
     size_t str_len;
     size_t last_word_end = 0; /* Both offset and width exclude the breaking space. */
-    int full_width = metrics.horizontalAdvance(QString::fromUtf8(string, length));
+    qreal full_width = metrics.horizontalAdvance(QString::fromUtf8(string, length));
 
     res = layout_position(metrics, string, length, split, &split_len, &split_x);
     if (res != NSERROR_OK) {
@@ -590,7 +593,7 @@ static nserror nsqt_layout_split(const struct plot_font_style *fstyle, const cha
 
     if (length == 0 || full_width <= split) {
         *string_idx = length;
-        *actual_x = full_width;
+        *actual_x = qCeil(full_width);
         goto nsqt_layout_split_done;
     }
 
@@ -635,7 +638,7 @@ static nserror nsqt_layout_split(const struct plot_font_style *fstyle, const cha
         }
 
         /* Measure width WITHOUT trailing space - space is trimmed at line end */
-        int word_width = metrics.horizontalAdvance(QString::fromUtf8(string, word_end));
+        qreal word_width = metrics.horizontalAdvance(QString::fromUtf8(string, word_end));
 
         if (word_width <= split) {
             /* This word fits! Update last_word_end to this position */
@@ -655,7 +658,7 @@ static nserror nsqt_layout_split(const struct plot_font_style *fstyle, const cha
      * advance separately. Including that space in the offset but not the width
      * loses the gap when retained text boxes are placed together on reflow. */
     *string_idx = last_word_end;
-    *actual_x = metrics.horizontalAdvance(QString::fromUtf8(string, last_word_end));
+    *actual_x = qCeil(metrics.horizontalAdvance(QString::fromUtf8(string, last_word_end)));
 
 nsqt_layout_split_done:
     delete font;
