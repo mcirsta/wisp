@@ -58,6 +58,13 @@ make_font("Wisp Weight Test", "Condensed Black", 900, width=3).save(DESTINATION 
 for weight, style in [(400, "Regular"), (700, "Bold")]:
     make_font("Wisp Normal Test", style, weight).save(DESTINATION / f"normal-{weight}.ttf")
 
+# Different vendor IDs make Qt expose two foundries for this one family.
+for italic, vendor in [(False, "UKWN"), (True, "URW ")]:
+    style = "Italic" if italic else "Regular"
+    foundry = make_font("Wisp Foundry Test", style, 400, italic=italic)
+    foundry.font["OS/2"].achVendID = vendor
+    foundry.save(DESTINATION / f"foundry-{style.lower()}.ttf")
+
 variable = make_font("Wisp Variable Test", "Regular", 400)
 variable.setupFvar([("wght", 100, 400, 900, "Weight")],
                    [{"location": {"wght": weight}, "stylename": name}

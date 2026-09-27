@@ -31,6 +31,10 @@
 #include <stddef.h>
 #include <utility>
 
+#if QT_CONFIG(fontconfig)
+#include <fontconfig/fontconfig.h>
+#endif
+
 extern "C" {
 
 #include "utils/errors.h"
@@ -142,64 +146,103 @@ static void match_font_weight(QFont &font)
         font.setWeight(QFont::Weight(chosen));
 }
 
-/**
- * constructs a qfont from a nsfont
- *
- * First checks if any of the CSS font-family names are available,
- * then falls back to generic families if none match.
- */
+/* Resolve one CSS family without accepting Qt's fallback for an unknown name.
+ * Registered web fonts take priority over installed families of the same name. */
+static QString available_font_family(const QString &family, bool italic)
+{
+#if QT_CONFIG(fontconfig)
+    /* hasFamily() also applies platform aliases, including weak fallbacks.
+     * Check the actual names; Qt adds " [foundry]" for duplicate families. */
+    const QStringList installed = QFontDatabase::families();
+    auto is_installed = [&installed](const QString &name) {
+        for (const QString &entry : installed) {
+            if (entry.compare(name, Qt::CaseInsensitive) == 0)
+                return true;
+            int foundry = entry.lastIndexOf(" [");
+            if (foundry >= 0 && entry.endsWith(']') &&
+                QStringView(entry).left(foundry).compare(name, Qt::CaseInsensitive) == 0)
+                return true;
+        }
+        return false;
+    };
+#else
+    auto is_installed = [](const QString &name) { return QFontDatabase::hasFamily(name); };
+#endif
+    for (const QString &substitute : QFont::substitutes(family)) {
+        if (is_installed(substitute))
+            return substitute;
+    }
+    if (is_installed(family))
+        return family;
+
+#if QT_CONFIG(fontconfig)
+    /* Fontconfig distinguishes strong aliases (e.g. Arial -> Liberation Sans)
+     * from weak fallback lists appended even for a completely unknown family.
+     * Only a strong, available alias may displace the next CSS family. */
+    FcPattern *pattern = FcPatternCreate();
+    if (pattern == nullptr)
+        return {};
+    QString resolved;
+    QByteArray name = family.toUtf8();
+    if (FcPatternAddString(pattern, FC_FAMILY, reinterpret_cast<const FcChar8 *>(name.constData())) &&
+        FcPatternAddInteger(pattern, FC_SLANT, italic ? FC_SLANT_ITALIC : FC_SLANT_ROMAN) &&
+        FcConfigSubstitute(nullptr, pattern, FcMatchPattern)) {
+        FcValue value;
+        FcValueBinding binding;
+        for (int i = 0; FcPatternGetWithBinding(pattern, FC_FAMILY, i, &value, &binding) == FcResultMatch; ++i) {
+            if (binding != FcValueBindingStrong || value.type != FcTypeString)
+                continue;
+            QString candidate = QString::fromUtf8(reinterpret_cast<const char *>(value.u.s));
+            if (is_installed(candidate)) {
+                resolved = candidate;
+                break;
+            }
+        }
+        /* Qt splits duplicate families by foundry and can pick an italic-only
+         * foundry for an upright request. Preserve Fontconfig's style match
+         * when qualifying such an alias; Qt still selects the font weight. */
+        if (!resolved.isEmpty() && !installed.contains(resolved, Qt::CaseInsensitive)) {
+            FcDefaultSubstitute(pattern);
+            FcResult result;
+            FcPattern *match = FcFontMatch(nullptr, pattern, &result);
+            if (match != nullptr) {
+                FcChar8 *matched_family, *foundry;
+                if (FcPatternGetString(match, FC_FAMILY, 0, &matched_family) == FcResultMatch &&
+                    resolved.compare(QString::fromUtf8(reinterpret_cast<const char *>(matched_family)),
+                        Qt::CaseInsensitive) == 0 &&
+                    FcPatternGetString(match, FC_FOUNDRY, 0, &foundry) == FcResultMatch) {
+                    QString qualified =
+                        resolved + " [" + QString::fromUtf8(reinterpret_cast<const char *>(foundry)) + "]";
+                    if (installed.contains(qualified, Qt::CaseInsensitive))
+                        resolved = qualified;
+                }
+                FcPatternDestroy(match);
+            }
+        }
+    }
+    FcPatternDestroy(pattern);
+    return resolved;
+#else
+    (void)italic;
+    return {};
+#endif
+}
+
+/* Try CSS families in order, then the configured generic family. */
 static QFont *new_qfont_fstyle(const struct plot_font_style *fstyle)
 {
     QFont *nfont;
-    const char *family = NULL;
-    bool italic = false;
-    QFontDatabase fontdb;
+    QString family;
+    bool italic = (fstyle->flags & FONTF_ITALIC) != 0;
 
     /* First, try to find a matching font from the CSS font-family list */
     if (fstyle->families != NULL) {
         lwc_string *const *families = fstyle->families;
         while (*families != NULL) {
             const char *family_name = lwc_string_data(*families);
-            QString qfamily = QString::fromUtf8(family_name);
-
-            /* Check if this font has a substitution registered
-             * (for web fonts loaded via @font-face)
-             */
-            QStringList subs = QFont::substitutes(qfamily);
-            if (!subs.isEmpty()) {
-                family = family_name;
-                NSLOG(wisp, INFO, "Rendering text: web font '%s' -> '%s' (AVAILABLE)", family_name,
-                    subs.first().toUtf8().constData());
-                break;
-            }
-
-            /* Check if this font family is available in the system
-             */
-            /* Check if this font family is available in the system
-             * We check strict existence first, then try to resolve aliases (e.g. Helvetica -> Noto Sans)
-             */
-            if (QFontDatabase::hasFamily(qfamily) || QFontDatabase::families().contains(qfamily, Qt::CaseInsensitive)) {
-                family = family_name;
-                NSLOG(wisp, DEBUG, "Using CSS font-family: %s", family_name);
-                break;
-            }
-
-            /* Special handling for Helvetica Neue which is often compact - prefer condensed variants */
-            if (qfamily.compare("Helvetica Neue", Qt::CaseInsensitive) == 0) {
-                if (QFontDatabase::hasFamily("DejaVu Sans Condensed")) {
-                    family = "DejaVu Sans Condensed";
-                    NSLOG(wisp, DEBUG, "Using specific alias: 'Helvetica Neue' -> 'DejaVu Sans Condensed'");
-                    break;
-                }
-            }
-
-            /* Check if Qt/FontConfig maps this to a valid installed font (alias) */
-            QFont aliasFont(qfamily);
-            QFontInfo aliasInfo(aliasFont);
-            if (QFontDatabase::hasFamily(aliasInfo.family())) {
-                family = family_name;
-                NSLOG(wisp, INFO, "Using CSS font-family alias: '%s' -> '%s'", family_name,
-                    aliasInfo.family().toUtf8().constData());
+            family = available_font_family(QString::fromUtf8(family_name), italic);
+            if (!family.isEmpty()) {
+                NSLOG(wisp, DEBUG, "Using CSS font-family: '%s' -> '%s'", family_name, qPrintable(family));
                 break;
             }
 
@@ -215,33 +258,29 @@ static QFont *new_qfont_fstyle(const struct plot_font_style *fstyle)
     }
 
     /* Fall back to generic families if no specific font was found */
-    if (family == NULL) {
+    if (family.isEmpty()) {
         switch (fstyle->family) {
         case PLOT_FONT_FAMILY_SERIF:
-            family = nsoption_charp(font_serif);
+            family = QString::fromUtf8(nsoption_charp(font_serif));
             break;
 
         case PLOT_FONT_FAMILY_MONOSPACE:
-            family = nsoption_charp(font_mono);
+            family = QString::fromUtf8(nsoption_charp(font_mono));
             break;
 
         case PLOT_FONT_FAMILY_CURSIVE:
-            family = nsoption_charp(font_cursive);
+            family = QString::fromUtf8(nsoption_charp(font_cursive));
             break;
 
         case PLOT_FONT_FAMILY_FANTASY:
-            family = nsoption_charp(font_fantasy);
+            family = QString::fromUtf8(nsoption_charp(font_fantasy));
             break;
 
         case PLOT_FONT_FAMILY_SANS_SERIF:
         default:
-            family = nsoption_charp(font_sans);
+            family = QString::fromUtf8(nsoption_charp(font_sans));
             break;
         }
-    }
-
-    if (fstyle->flags & FONTF_ITALIC) {
-        italic = true;
     }
 
     nfont = new QFont(family, -1, fstyle->weight, italic);
