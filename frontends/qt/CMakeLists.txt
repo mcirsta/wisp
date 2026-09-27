@@ -95,6 +95,15 @@ set(QT_RESOURCES
 add_executable(wisp-qt ${QT_SOURCES} ${QT_RESOURCES})
 
 if(BUILD_TESTING AND WISP_ENABLE_TESTS)
+    add_executable(qt_font_weight_test test_font_weight.cpp layout.cpp)
+    target_compile_definitions(qt_font_weight_test PRIVATE WISP_QT_CAPTURE)
+    target_include_directories(qt_font_weight_test PRIVATE
+        ${CMAKE_SOURCE_DIR}/include ${CMAKE_SOURCE_DIR}/src ${CMAKE_SOURCE_DIR}/frontends)
+    target_link_libraries(qt_font_weight_test PRIVATE Qt6::Widgets wisp)
+    add_test(NAME qt_font_weight COMMAND qt_font_weight_test ${CMAKE_SOURCE_DIR}/test/fonts)
+    set_tests_properties(qt_font_weight PROPERTIES TIMEOUT 30
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_SCALE_FACTOR=1;QT_SCREEN_SCALE_FACTORS=1;QT_FONT_DPI=96")
+
     add_executable(qt_text_split_test test_text_split.cpp test_text_reflow.c layout.cpp
         $<TARGET_OBJECTS:margin_collapse_style>)
     target_include_directories(qt_text_split_test PRIVATE

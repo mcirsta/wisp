@@ -52,6 +52,13 @@ with flex alignment/direction/growth and grid auto-flow values. This is not a
 complete modern CSS serializer. The font report identifies the primary font;
 individual glyph fallback can use additional fonts.
 
+Font diagnostics distinguish `weight` (the CSS request), `selected_weight`
+(the weight requested from Qt after CSS fallback matching), and `face_weight`
+(the static font's OpenType OS/2 weight). `resolved_style` names the loaded face.
+`face_weight` is null for variable fonts or fonts without that table; `variable`
+identifies variable fonts. Qt's reported numeric weight alone can echo the request
+even when it loaded a different face.
+
 ID lookup distinguishes `not_found` from `no_box` (for example `display:none`,
 a hidden ancestor, or an SVG subelement without its own HTML box). Wrapped
 inline elements can own several boxes. Reports include up to 64 matching boxes,

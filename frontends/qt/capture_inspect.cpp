@@ -4,7 +4,9 @@
 #include <QFile>
 #include <QFontInfo>
 #include <QJsonArray>
+#include <QRawFont>
 #include <QVector>
+#include <QtEndian>
 
 extern "C" {
 // These C-only headers use parameter names/qualifiers reserved in C++.
@@ -182,8 +184,15 @@ static QJsonObject describe(struct box *box, const css_unit_ctx *units)
         plot_font_style_t style;
         font_plot_style_from_css(units, box->style, &style);
         const QFont font = nsqt_capture_font(&style);
+        const QRawFont face = QRawFont::fromFont(font);
+        const bool variable = !face.fontTable("fvar").isEmpty();
+        const QByteArray os2 = face.fontTable("OS/2");
         result["font"] = QJsonObject{{"selected_family", font.family()}, {"resolved_family", QFontInfo(font).family()},
-            {"pixel_size", font.pixelSize()}, {"weight", font.weight()}, {"italic", font.italic()}};
+            {"pixel_size", font.pixelSize()}, {"weight", style.weight}, {"selected_weight", font.weight()},
+            {"resolved_style", face.styleName()}, {"variable", variable},
+            {"face_weight", !variable && os2.size() >= 6 ? QJsonValue(qFromBigEndian<quint16>(os2.constData() + 4)) :
+                                                         QJsonValue(QJsonValue::Null)},
+            {"italic", font.italic()}};
     }
     return result;
 }

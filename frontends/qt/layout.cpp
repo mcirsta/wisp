@@ -24,8 +24,11 @@
 #include <QApplication>
 #include <QFontDatabase>
 #include <QPainter>
+#include <QRawFont>
 #include <QWidget>
+#include <QtEndian>
 #include <stddef.h>
+#include <utility>
 
 extern "C" {
 
@@ -72,6 +75,70 @@ static qreal svg_font_scale(const struct plot_font_style *style)
     }
     int pixels = qMax(1, style->size / PLOT_STYLE_SCALE);
     return qreal(style->size) / (qreal(pixels) * PLOT_STYLE_SCALE);
+}
+
+/* CSS Fonts matching order, rather than Qt's nearest-weight distance.
+ * The first component orders search groups, the second weights within a group.
+ * https://www.w3.org/TR/css-fonts-4/#font-style-matching */
+static std::pair<int, int> font_weight_rank(int requested, int available)
+{
+    if (requested < 400)
+        return available <= requested ? std::make_pair(0, requested - available) :
+                                        std::make_pair(1, available - requested);
+    if (requested > 500)
+        return available >= requested ? std::make_pair(0, available - requested) :
+                                        std::make_pair(1, requested - available);
+    if (available >= requested && available <= 500)
+        return {0, available - requested};
+    if (available < requested)
+        return {1, requested - available};
+    return {2, available - 500};
+}
+
+/* Called only on a QFont cache miss, after pixel sizing. Keep Qt's family,
+ * style and width choice; correct missing weights within that set of faces. */
+static void match_font_weight(QFont &font)
+{
+    QRawFont current = QRawFont::fromFont(font);
+    QByteArray os2 = current.fontTable("OS/2");
+    if (os2.size() < 8)
+        return;
+
+    /* QFontInfo::weight() and QRawFont::weight() can both echo the request.
+     * OS/2 contains the static face's actual weight and width class. */
+    int requested = font.weight();
+    int current_weight = qFromBigEndian<quint16>(os2.constData() + 4);
+    int width_class = qFromBigEndian<quint16>(os2.constData() + 6);
+    if (current_weight < 1 || current_weight > 1000 || width_class < 1 || width_class > 9 ||
+        current_weight == requested || !current.fontTable("fvar").isEmpty())
+        return; // Exact matches need no search; leave variable ranges to Qt.
+
+    QString family = QFontInfo(font).family();
+    QFont::Style face_style = QFontDatabase::font(family, current.styleName(), 12).style();
+    int chosen = current_weight;
+    auto best_rank = font_weight_rank(requested, chosen);
+    for (const QString &name : QFontDatabase::styles(family)) {
+        QFont candidate = QFontDatabase::font(family, name, 12);
+        if (candidate.style() != face_style || font_weight_rank(requested, candidate.weight()) >= best_rank)
+            continue;
+
+        candidate.setPixelSize(font.pixelSize());
+        QRawFont raw = QRawFont::fromFont(candidate);
+        QByteArray candidate_os2 = raw.fontTable("OS/2");
+        if (candidate_os2.size() < 8 || qFromBigEndian<quint16>(candidate_os2.constData() + 6) != width_class)
+            continue;
+        if (!raw.fontTable("fvar").isEmpty())
+            return; // A named instance is not the complete set of variable weights.
+        int weight = qFromBigEndian<quint16>(candidate_os2.constData() + 4);
+        if (weight >= 1 && weight <= 1000 && font_weight_rank(requested, weight) < best_rank) {
+            chosen = weight;
+            best_rank = font_weight_rank(requested, weight);
+        }
+    }
+    /* If the same physical face wins, retain the original request so Qt can
+     * still synthesize bold/italic where the family has no such face. */
+    if (chosen != current_weight)
+        font.setWeight(QFont::Weight(chosen));
 }
 
 /**
@@ -194,7 +261,7 @@ static QFont *new_qfont_fstyle(const struct plot_font_style *fstyle)
         pixelSize = (fstyle->size * 4) / (PLOT_STYLE_SCALE * 3);
     }
     nfont->setPixelSize(pixelSize > 0 ? pixelSize : 1);
-
+    match_font_weight(*nfont);
 
     if (fstyle->flags & FONTF_SMALLCAPS) {
         nfont->setCapitalization(QFont::SmallCaps);
