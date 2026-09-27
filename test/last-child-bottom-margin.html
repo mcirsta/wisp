@@ -1,0 +1,40 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Last child bottom margins inside padding and borders</title>
+<style>
+body { margin: 0; font: 14px/20px sans-serif; }
+/* Isolate the cases so their external margins cannot join. */
+.case { overflow: hidden; margin: 10px; border: 1px solid #aaa; width: 250px; }
+.parent { padding-top: 3px; border-top: 2px solid; margin-bottom: 7px; background: #def; }
+.padding { padding-bottom: 5px; }
+.border { border-bottom: 1px solid; }
+.child { height: 20px; margin-bottom: 13px; background: #abd; }
+.after { height: 10px; margin-top: 11px; background: #aaa; clear: both; }
+.negative .child { margin-bottom: -7px; }
+.clamped .child { margin-bottom: -30px; }
+.nested .wrapper { margin-bottom: 20px; }
+.mixed .child { margin-bottom: -13px; }
+.nested-negative .wrapper { margin-bottom: -13px; }
+.fixed-short { height: 10px; }
+.fixed-tall { height: 60px; }
+.min-short { min-height: 10px; }
+.min-tall { min-height: 60px; }
+.ratio { width: 40px; aspect-ratio: 2 / 1; }
+.bfc { overflow: hidden; }
+.float { float: left; width: 200px; }
+</style>
+<div class="case"><div id="padding" class="parent padding"><div class="child">Padding</div></div><div id="padding-after" class="after"></div></div>
+<div class="case"><div id="border" class="parent border"><div class="child">Border</div></div><div id="border-after" class="after"></div></div>
+<div class="case"><div id="both" class="parent padding border"><div class="child">Both edges</div></div><div id="both-after" class="after"></div></div>
+<div class="case"><div id="negative" class="parent padding negative"><div class="child">Negative margin</div></div><div id="negative-after" class="after"></div></div>
+<div class="case"><div id="clamped" class="parent padding clamped"><div class="child">Height stays nonnegative</div></div><div id="clamped-after" class="after"></div></div>
+<div class="case"><div id="nested" class="parent padding nested"><div class="wrapper"><div class="child">Nested margins collapse once</div></div></div><div id="nested-after" class="after"></div></div>
+<div class="case"><div id="mixed" class="parent padding nested mixed"><div class="wrapper"><div class="child">Mixed signs</div></div></div><div id="mixed-after" class="after"></div></div>
+<div class="case"><div id="nested-negative" class="parent padding negative nested-negative"><div class="wrapper"><div class="child">Two negative margins</div></div></div><div id="nested-negative-after" class="after"></div></div>
+<div class="case"><div id="fixed-short" class="parent padding border fixed-short"><div class="child">Fixed height, overflowing child</div></div><div id="fixed-short-after" class="after"></div></div>
+<div class="case"><div id="fixed-tall" class="parent padding border fixed-tall"><div class="child">Fixed height, extra room</div></div><div id="fixed-tall-after" class="after"></div></div>
+<div class="case"><div id="min-short" class="parent padding border min-short"><div class="child">Minimum below content</div></div><div id="min-short-after" class="after"></div></div>
+<div class="case"><div id="min-tall" class="parent padding border min-tall"><div class="child">Minimum above content</div></div><div id="min-tall-after" class="after"></div></div>
+<div class="case"><div id="ratio" class="parent padding border ratio"><div class="child"></div></div><div id="ratio-after" class="after"></div></div>
+<div class="case"><div id="bfc" class="parent padding border bfc"><div class="child">Overflow hidden control</div></div><div id="bfc-after" class="after"></div></div>
+<div class="case"><div id="float" class="parent padding border float"><div class="child">Float control</div></div><div id="float-after" class="after"></div></div>

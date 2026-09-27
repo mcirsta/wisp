@@ -1383,17 +1383,45 @@ static inline bool box_has_vertical_separator(const struct box *box)
     return box->padding[TOP] || box->padding[BOTTOM] || box->border[TOP].width || box->border[BOTTOM].width;
 }
 
-/**
- * Check if an inline container generates line boxes from in-flow content.
- * CSS 2.1 §8.3.1: Only line boxes from in-flow content prevent collapsing.
- * An inline container with only out-of-flow (abs/fixed) children does not
- * generate line boxes.
- */
+/* Empty inline fragments around a block do not separate margins (CSS 2.1
+ * 9.4.2). Check computed edges: layout has not populated their box dimensions
+ * yet. Horizontal edges also make an otherwise empty inline participate in
+ * a line, so all four sides matter. Keep unresolved calc() edges as
+ * separators, as before. */
+static bool box_inline_has_edges(const struct box *box)
+{
+    if (box->style == NULL)
+        return false;
+    for (unsigned int side = 0; side < 4; side++) {
+        css_fixed_or_calc value = (css_fixed_or_calc)0;
+        css_unit unit = CSS_UNIT_PX;
+        if (margin_funcs[side](box->style, &value, &unit) == CSS_MARGIN_SET &&
+            (unit == CSS_UNIT_CALC || value.value != 0))
+            return true;
+        if (padding_funcs[side](box->style, &value, &unit) == CSS_PADDING_SET &&
+            (unit == CSS_UNIT_CALC || value.value != 0))
+            return true;
+        if (border_style_funcs[side](box->style) > CSS_BORDER_STYLE_HIDDEN) {
+            uint8_t type = border_width_funcs[side](box->style, &value, &unit);
+            if (type != CSS_BORDER_WIDTH_WIDTH || unit == CSS_UNIT_CALC || value.value != 0)
+                return true;
+        }
+    }
+    return false;
+}
+
+/* Whether an inline container interrupts margin lookahead. Floats also need
+ * positioning before looking past their container. Collapsed whitespace is
+ * stored in box->space, while preserved whitespace has its own text box. */
 static inline bool box_inline_container_has_line_boxes(const struct box *box)
 {
     for (struct box *c = box->children; c != NULL; c = c->next) {
-        if (!box_is_out_of_flow(c))
-            return true;
+        if (box_is_out_of_flow(c))
+            continue;
+        if ((c->type == BOX_INLINE || c->type == BOX_INLINE_END) && !lh__box_is_replace(c) &&
+            !(c->text && c->length) && !box_inline_has_edges(c))
+            continue;
+        return true;
     }
     return false;
 }
@@ -1504,8 +1532,7 @@ static struct box *layout_next_margin_block(const css_unit_ctx *unit_len_ctx, st
                 box->padding[TOP] ||
                 (box->style && (css_computed_overflow_x(box->style) != CSS_OVERFLOW_VISIBLE ||
                     css_computed_overflow_y(box->style) != CSS_OVERFLOW_VISIBLE)) ||
-                (box->type == BOX_INLINE_CONTAINER &&
-                    (box_inline_container_has_line_boxes(box) || !box_is_first_child(box)))) {
+                (box->type == BOX_INLINE_CONTAINER && box_inline_container_has_line_boxes(box))) {
                 /* Collapse to this box; return it */
                 return box;
             }
@@ -4283,6 +4310,18 @@ bool layout_block_context(struct box *block, int viewport_height, html_content *
                     ((box->flags & (MAKE_HEIGHT | ASPECT_RATIO_HEIGHT)) || has_min_height ||
                         box->padding[BOTTOM] != 0 || box->border[BOTTOM].width != 0)) {
 
+                    /* CSS 2.1 §10.6.3: bottom padding/border keeps the
+                     * child's collapsed margin inside the auto content
+                     * height. Account for it before clearing the chain.
+                     * A preferred aspect ratio can also grow for content. */
+                    if ((box->height == AUTO || (box->flags & ASPECT_RATIO_HEIGHT)) &&
+                        (box->padding[BOTTOM] != 0 || box->border[BOTTOM].width != 0)) {
+                        int margin = (int)max_pos_margin - (int)max_neg_margin;
+                        /* Negative margins cannot make content height negative. */
+                        margin = max(margin, box->padding[TOP] - y);
+                        y += margin;
+                        cy += margin;
+                    }
                     margin_collapse = NULL;
                     in_margin = false;
                     max_pos_margin = max_neg_margin = 0;

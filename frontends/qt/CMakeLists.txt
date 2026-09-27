@@ -131,6 +131,12 @@ if(WISP_QT_CAPTURE)
         add_test(NAME qt_flex_alignment
             COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_flex_alignment.py $<TARGET_FILE:wisp-qt>)
         set_tests_properties(qt_flex_alignment PROPERTIES TIMEOUT 30)
+        add_test(NAME qt_inline_wrapper_margins
+            COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_inline_wrapper_margins.py $<TARGET_FILE:wisp-qt>)
+        set_tests_properties(qt_inline_wrapper_margins PROPERTIES TIMEOUT 30)
+        add_test(NAME qt_last_child_margin
+            COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_last_child_margin.py $<TARGET_FILE:wisp-qt>)
+        set_tests_properties(qt_last_child_margin PROPERTIES TIMEOUT 30)
         find_program(WISP_TEST_MAGICK magick)
         if(WISP_TEST_MAGICK)
             add_test(NAME qt_inline_baseline

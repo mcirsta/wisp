@@ -1,0 +1,27 @@
+<!doctype html><meta charset="utf-8"><title>Margins around blocks wrapped in links</title>
+<style>body { margin:0; font:13px/20px sans-serif; }
+/* Keep each margin chain inside its case, including negative margins. */
+.case { width:300px; overflow:hidden; margin:12px; border:1px solid #888; }
+.before, .child, .after { height:30px; }
+.before { margin:0 0 5px; background:#ddd; }
+.child { margin:13px 0 17px; background:#cfc; }
+.after { margin:7px 0 0; background:#def; }
+a { color:inherit; text-decoration:none; }
+.ib {display:inline-block; width:4px; height:7px; background:#777;}
+.negative .before {margin-bottom:-5px} .negative .child {margin-top:-13px;margin-bottom:-17px} .negative .after {margin-top:-7px}
+</style>
+<div id="plain" class="case plain"><div id="plain-before" class="before">plain</div><div id="plain-child" class="child">Block</div><div id="plain-after" class="after">After</div></div>
+<div id="link" class="case link"><div id="link-before" class="before">link</div><a href="#"><div id="link-child" class="child">Block</div></a><div id="link-after" class="after">After</div></div>
+<div id="nested" class="case nested"><div id="nested-before" class="before">nested</div><a href="#"><span><div id="nested-child" class="child">Block</div></span></a><div id="nested-after" class="after">After</div></div>
+<div id="spaces" class="case spaces"><div id="spaces-before" class="before">spaces</div><a href="#">
+ <div id="spaces-child" class="child">Block</div>
+ </a><div id="spaces-after" class="after">After</div></div>
+<div id="relative" class="case relative"><div id="relative-before" class="before">relative</div><a href="#" style="position:relative"><div id="relative-child" class="child">Block</div></a><div id="relative-after" class="after">After</div></div>
+<div id="positioned" class="case positioned"><div id="positioned-before" class="before">positioned</div><a href="#"><span style="position:absolute">ignored</span><div id="positioned-child" class="child">Block</div><span style="position:fixed">ignored</span></a><div id="positioned-after" class="after">After</div></div>
+<div id="text" class="case text"><div id="text-before" class="before">text</div><a href="#">before<div id="text-child" class="child">Block</div>after</a><div id="text-after" class="after">After</div></div>
+<div id="break" class="case break"><div id="break-before" class="before">break</div><a href="#"><br><div id="break-child" class="child">Block</div><br></a><div id="break-after" class="after">After</div></div>
+<div id="preserved" class="case preserved"><div id="preserved-before" class="before">preserved</div><a href="#" style="white-space:pre">
+<div id="preserved-child" class="child">Block</div>
+</a><div id="preserved-after" class="after">After</div></div>
+<div id="inlineblock" class="case inlineblock"><div id="inlineblock-before" class="before">inlineblock</div><a href="#"><span class="ib"></span><div id="inlineblock-child" class="child">Block</div><span class="ib"></span></a><div id="inlineblock-after" class="after">After</div></div>
+<div id="negative" class="case negative"><div id="negative-before" class="before">negative</div><a href="#"><div id="negative-child" class="child">Block</div></a><div id="negative-after" class="after">After</div></div>

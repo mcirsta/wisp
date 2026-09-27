@@ -21,6 +21,7 @@
 #include <stdio.h>
 
 #include <wisp/utils/errors.h>
+#include <wisp/utils/nsoption.h>
 #include <wisp/layout.h>
 #include <wisp/content/handlers/html/private.h>
 #include <wisp/content/handlers/html/box.h>
@@ -716,11 +717,10 @@ START_TEST(test_last_child_with_border_bottom)
     bool ok = layout_block_context(root, 768, content);
     ck_assert(ok);
 
-    /* Border-bottom blocks last-child collapse. c.mb stays inside p.
-     * p.height = auto(10) + border_bottom(1) area.
-     * next.y = p.height_auto(10) + p.border_bottom(1) = 11
-     * (c.mb=20 does NOT propagate) */
-    ck_assert_msg(next->y == 11, "last_child_with_border_bottom: expected next->y=11, got %d", next->y);
+    /* The child's bottom margin contributes to the auto content height,
+     * before the parent's bottom border: 10 + 20 + 1. */
+    ck_assert_int_eq(p->height, 30);
+    ck_assert_msg(next->y == 31, "last_child_with_border_bottom: expected next->y=31, got %d", next->y);
 
     free_box_tree(root);
     destroy_test_content(content);
@@ -992,6 +992,103 @@ START_TEST(test_collapse_through_empty_ic)
 END_TEST
 
 
+/* Empty fragments on either side of a block inside an inline link do not
+ * separate adjoining margins. Real inline content and edges still do. */
+static const char *const split_inline_variants[] = {
+    "empty container", "split link", "nested inline", "collapsed whitespace",
+    "text", "horizontal border", "vertical padding", "horizontal margin",
+    "inline block", "line break", "absolute inline block",
+};
+enum { SPLIT_INLINE_VARIANT_COUNT = sizeof(split_inline_variants) / sizeof(split_inline_variants[0]) };
+
+START_TEST(test_split_inline_margins)
+{
+    int variant = _i % SPLIT_INLINE_VARIANT_COUNT;
+    int sign = _i < SPLIT_INLINE_VARIANT_COUNT ? 1 : -1;
+    bool separates = variant >= 4 && variant <= 9;
+    html_content *content = create_test_content();
+    struct box *root = create_box_with_style(200);
+    struct box *before = create_box_with_style(200);
+    struct box *child = create_box_with_style(200);
+    struct box *after = create_box_with_style(200);
+    struct box *fragments[2];
+    struct box *markers[2] = {NULL, NULL};
+    style_set_height_px(before->style, 30);
+    style_set_height_px(child->style, 30);
+    style_set_height_px(after->style, 30);
+    before->flags = child->flags = after->flags = HAS_HEIGHT | MAKE_HEIGHT;
+    style_set_margins(before->style, 0, 0, sign * 5, 0);
+    style_set_margins(child->style, sign * 13, 0, sign * 17, 0);
+    style_set_margins(after->style, sign * 7, 0, 0, 0);
+
+    for (int i = 0; i < 2; i++) {
+        fragments[i] = calloc(1, sizeof(struct box));
+        ck_assert_ptr_nonnull(fragments[i]);
+        fragments[i]->type = BOX_INLINE_CONTAINER;
+        if (variant == 0)
+            continue;
+        struct box *marker = markers[i] = create_box_with_style(0);
+        marker->type = i == 0 ? BOX_INLINE : BOX_INLINE_END;
+        style_set_inline_metrics(marker->style, 16, 20, CSS_VERTICAL_ALIGN_BASELINE);
+        if (variant == 3)
+            marker->space = UNKNOWN_WIDTH; // Collapsible whitespace around the block.
+        if (variant == 5)
+            style_set_horizontal_edges(marker->style, 0, 2);
+        if (variant == 6)
+            style_set_padding_top(marker->style, 2);
+        if (variant == 7)
+            style_set_margins(marker->style, 0, 2, 0, 2);
+        add_child(fragments[i], marker);
+        if (variant == 2) {
+            struct box *nested = create_box_with_style(0);
+            nested->type = BOX_INLINE;
+            add_child(fragments[i], nested);
+        }
+        if (variant == 4 || variant >= 8) {
+            struct box *inline_content = create_box_with_style(0);
+            style_set_inline_metrics(inline_content->style, 16, 20, CSS_VERTICAL_ALIGN_BASELINE);
+            inline_content->type = variant == 4 ? BOX_TEXT : variant == 9 ? BOX_BR : BOX_INLINE_BLOCK;
+            if (variant == 4) {
+                inline_content->text = "x";
+                inline_content->length = 1;
+                inline_content->width = 8;
+            } else if (variant == 9) {
+                inline_content->height = 0;
+            } else {
+                style_set_height_px(inline_content->style, 7);
+                style_set_width(inline_content->style, 0, false);
+                inline_content->flags = HAS_HEIGHT | MAKE_HEIGHT;
+                if (variant == 10)
+                    style_set_position_absolute(inline_content->style);
+            }
+            add_child(fragments[i], inline_content);
+        }
+    }
+    if (markers[0]) {
+        markers[0]->inline_end = markers[1];
+        markers[1]->inline_end = markers[0];
+    }
+    add_child(root, before);
+    add_child(root, fragments[0]);
+    add_child(root, child);
+    add_child(root, fragments[1]);
+    add_child(root, after);
+    ck_assert(layout_block_context(root, 768, content));
+    int before_gap = child->y - (before->y + before->height);
+    int after_gap = after->y - (child->y + child->height);
+    int expected_before = sign * (separates ? 18 : 13) + fragments[0]->height;
+    int expected_after = sign * (separates ? 24 : 17) + fragments[1]->height;
+    ck_assert_msg(before_gap == expected_before,
+        "%s, %s margins: gap before block is %d, expected %d", split_inline_variants[variant],
+        sign > 0 ? "positive" : "negative", before_gap, expected_before);
+    ck_assert_msg(after_gap == expected_after,
+        "%s, %s margins: gap after block is %d, expected %d", split_inline_variants[variant],
+        sign > 0 ? "positive" : "negative", after_gap, expected_after);
+    free_box_tree(root);
+    destroy_test_content(content);
+}
+END_TEST
+
 /* A wrapper's bottom margin must not leak above its flex/grid child.
  * Exercise both auto-height content and an empty formatting context, whose
  * own top/bottom margins also cannot collapse through each other. */
@@ -1206,12 +1303,97 @@ START_TEST(test_last_child_with_padding_bottom)
     bool ok = layout_block_context(root, 768, content);
     ck_assert(ok);
 
-    /* Padding-bottom blocks last-child collapse. c.mb stays inside p.
-     * p.height = auto(10) + padding_bottom(5) = content+padding area.
-     * next.y = p.height_auto(10) + p.padding_bottom(5) = 15
-     * (c.mb=20 does NOT propagate) */
-    ck_assert_msg(next->y == 15, "last_child_with_padding_bottom: expected next->y=15, got %d", next->y);
+    /* The child's bottom margin contributes to the auto content height,
+     * before the parent's bottom padding: 10 + 20 + 5. */
+    ck_assert_int_eq(p->height, 30);
+    ck_assert_msg(next->y == 35, "last_child_with_padding_bottom: expected next->y=35, got %d", next->y);
 
+    free_box_tree(root);
+    destroy_test_content(content);
+}
+END_TEST
+
+/* Bottom edges keep the child's collapsed margin inside the parent's
+ * content height, independently of the parent's external sibling margins. */
+static const struct {
+    const char *name;
+    int padding, border, child_margin;
+    bool nested;
+    int wrapper_margin, height, min_height, expected_height;
+} contained_margin_cases[] = {
+    {"padding", 5, 0, 13, false, 0, -1, 0, 33},
+    {"border", 0, 1, 13, false, 0, -1, 0, 33},
+    {"both", 5, 1, 13, false, 0, -1, 0, 33},
+    {"negative", 5, 0, -7, false, 0, -1, 0, 13},
+    {"negative-clamped", 5, 0, -30, false, 0, -1, 0, 0},
+    {"nested-positive", 5, 0, 13, true, 20, -1, 0, 40},
+    {"nested-mixed", 5, 0, -13, true, 20, -1, 0, 27},
+    {"nested-negative", 5, 0, -7, true, -13, -1, 0, 7},
+    {"fixed-short", 5, 1, 13, false, 0, 10, 0, 10},
+    {"fixed-tall", 5, 1, 13, false, 0, 60, 0, 60},
+    {"min-short", 5, 1, 13, false, 0, -1, 10, 33},
+    {"min-tall", 5, 1, 13, false, 0, -1, 60, 60},
+};
+enum { CONTAINED_MARGIN_CASE_COUNT = sizeof(contained_margin_cases) / sizeof(contained_margin_cases[0]) };
+
+START_TEST(test_last_child_contained_margin)
+{
+    int variant = _i % CONTAINED_MARGIN_CASE_COUNT;
+    bool with_sibling = _i < CONTAINED_MARGIN_CASE_COUNT;
+    const char *name = contained_margin_cases[variant].name;
+    html_content *content = create_test_content();
+    struct box *root = create_box_with_style(200);
+    struct box *parent = create_box_with_style(200);
+    style_set_padding_top(parent->style, 3);
+    style_set_border_top(parent->style, 2);
+    style_set_padding_bottom(parent->style, contained_margin_cases[variant].padding);
+    style_set_border_bottom(parent->style, contained_margin_cases[variant].border);
+    style_set_height_px(parent->style, contained_margin_cases[variant].height);
+    style_set_min_height(parent->style, contained_margin_cases[variant].min_height);
+    style_set_margins(parent->style, 0, 0, 7, 0);
+    if (contained_margin_cases[variant].height >= 0)
+        parent->flags |= HAS_HEIGHT | MAKE_HEIGHT;
+    add_child(root, parent);
+
+    struct box *container = parent;
+    if (contained_margin_cases[variant].nested) {
+        container = create_box_with_style(200);
+        style_set_margins(container->style, 0, 0, contained_margin_cases[variant].wrapper_margin, 0);
+        add_child(parent, container);
+    }
+    struct box *child = create_box_with_style(200);
+    style_set_height_px(child->style, 20);
+    child->flags |= HAS_HEIGHT | MAKE_HEIGHT;
+    style_set_margins(child->style, 0, 0, contained_margin_cases[variant].child_margin, 0);
+    add_child(container, child);
+
+    struct box *next = NULL;
+    if (with_sibling) {
+        next = create_box_with_style(200);
+        style_set_height_px(next->style, 10);
+        next->flags |= HAS_HEIGHT | MAKE_HEIGHT;
+        style_set_margins(next->style, 11, 0, 0, 0);
+        add_child(root, next);
+    }
+
+    int expected_height = contained_margin_cases[variant].expected_height;
+    int parent_bottom = 2 + 3 + expected_height + contained_margin_cases[variant].padding +
+        contained_margin_cases[variant].border;
+    for (int pass = 0; pass < 2; pass++) {
+        root->height = AUTO;
+        ck_assert(layout_block_context(root, 768, content));
+        ck_assert_msg(parent->height == expected_height,
+            "%s (sibling=%d, pass=%d): expected content height %d, got %d",
+            name, with_sibling, pass, expected_height, parent->height);
+        if (next) {
+            ck_assert_msg(next->y == parent_bottom + 11,
+                "%s (pass=%d): expected next y=%d, got %d", name, pass, parent_bottom + 11, next->y);
+        }
+        int expected_root = parent_bottom + (with_sibling ? 11 + 10 : 7);
+        ck_assert_msg(root->height == expected_root,
+            "%s (sibling=%d, pass=%d): expected root height %d, got %d",
+            name, with_sibling, pass, expected_root, root->height);
+    }
     free_box_tree(root);
     destroy_test_content(content);
 }
@@ -1427,6 +1609,7 @@ static Suite *margin_collapse_suite(void)
     tcase_add_test(tc_through, test_collapse_through_abspos_children);
     tcase_add_test(tc_through, test_collapse_through_skips_abspos_next_sibling);
     tcase_add_test(tc_through, test_collapse_through_empty_ic);
+    tcase_add_loop_test(tc_through, test_split_inline_margins, 0, 2 * SPLIT_INLINE_VARIANT_COUNT);
     suite_add_tcase(s, tc_through);
 
     TCase *tc_parent = tcase_create("Parent-First-Child Collapse");
@@ -1441,6 +1624,7 @@ static Suite *margin_collapse_suite(void)
     tcase_add_test(tc_last, test_last_child_fixed_height);
     tcase_add_test(tc_last, test_last_child_with_border_bottom);
     tcase_add_test(tc_last, test_last_child_with_padding_bottom);
+    tcase_add_loop_test(tc_last, test_last_child_contained_margin, 0, 2 * CONTAINED_MARGIN_CASE_COUNT);
     tcase_add_test(tc_last, test_last_child_parent_has_mb);
     tcase_add_test(tc_last, test_last_child_parent_mb_larger);
     tcase_add_test(tc_last, test_last_child_min_height_blocks);
@@ -1462,6 +1646,9 @@ static Suite *margin_collapse_suite(void)
 
 int main(void)
 {
+    /* Inline cases use font_plot_style_from_css(), which reads font options. */
+    if (nsoption_init(NULL, NULL, NULL) != NSERROR_OK)
+        return EXIT_FAILURE;
     int number_failed;
     Suite *s = margin_collapse_suite();
     SRunner *sr = srunner_create(s);
@@ -1470,6 +1657,7 @@ int main(void)
     srunner_run_all(sr, CK_VERBOSE);
     number_failed = srunner_ntests_failed(sr);
     srunner_free(sr);
+    nsoption_finalise(NULL, NULL);
 
     return (number_failed == 0) ? EXIT_SUCCESS : EXIT_FAILURE;
 }
