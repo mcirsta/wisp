@@ -154,6 +154,12 @@ if(WISP_QT_CAPTURE)
         set_tests_properties(qt_last_child_margin PROPERTIES TIMEOUT 30)
         find_program(WISP_TEST_MAGICK magick)
         if(WISP_TEST_MAGICK)
+            if(WISP_USE_WEBP)
+                add_test(NAME qt_webp_first_frame
+                    COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_webp_first_frame.py
+                        $<TARGET_FILE:wisp-qt> ${WISP_TEST_MAGICK})
+                set_tests_properties(qt_webp_first_frame PROPERTIES TIMEOUT 40)
+            endif()
             add_test(NAME qt_fixed_position
                 COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_fixed_position.py
                     $<TARGET_FILE:wisp-qt> ${WISP_TEST_MAGICK})

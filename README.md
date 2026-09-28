@@ -40,3 +40,7 @@ At build-time, Wisp requires the following programs:
 * any CMake-compatible build utility (typically make or ninja)
 * gperf
 * pkg-config or pkgconf
+
+WebP support (`WISP_USE_WEBP=ON`, the default) requires `libwebp` and
+`libwebpdemux`. Animated WebP images display their fully composited first frame;
+playback is not currently supported.

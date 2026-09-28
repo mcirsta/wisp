@@ -27,8 +27,10 @@
 #include <setjmp.h>
 #include <stdbool.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include <webp/decode.h>
+#include <webp/demux.h>
 
 #include <wisp/bitmap.h>
 #include <wisp/content/content_protected.h>
@@ -71,6 +73,56 @@ static nserror webp_create(const content_handler *handler, lwc_string *imime_typ
     return NSERROR_OK;
 }
 
+/** Decode one complete animation canvas, then release all decoder state. */
+static bool webp_decode_first_frame(const uint8_t *source, size_t size, struct bitmap *bitmap, bitmap_fmt_t *fmt)
+{
+    WebPData data = {.bytes = source, .size = size};
+    WebPAnimDecoderOptions options;
+    WebPAnimDecoder *decoder;
+    WebPAnimInfo info;
+    uint8_t *frame;
+    int timestamp;
+    bool success = false;
+    size_t rowbytes = (size_t)guit->bitmap->get_width(bitmap) * 4;
+    size_t rowstride = guit->bitmap->get_rowstride(bitmap);
+
+    if (rowstride < rowbytes || !WebPAnimDecoderOptionsInit(&options)) {
+        return false;
+    }
+
+    options.use_threads = 0;
+    if (fmt->layout == BITMAP_LAYOUT_B8G8R8A8) {
+        options.color_mode = fmt->pma ? MODE_bgrA : MODE_BGRA;
+    } else {
+        /* Animation decoding supports RGBA and BGRA only. Other frontend
+         * layouts are converted by bitmap_format_to_client below. */
+        fmt->layout = BITMAP_LAYOUT_R8G8B8A8;
+        options.color_mode = fmt->pma ? MODE_rgbA : MODE_RGBA;
+    }
+
+    decoder = WebPAnimDecoderNew(&data, &options);
+    if (decoder == NULL) {
+        return false;
+    }
+
+    if (WebPAnimDecoderGetInfo(decoder, &info) &&
+        info.canvas_width == (uint32_t)guit->bitmap->get_width(bitmap) &&
+        info.canvas_height == (uint32_t)guit->bitmap->get_height(bitmap) &&
+        WebPAnimDecoderGetNext(decoder, &frame, &timestamp)) {
+        uint8_t *pixels = guit->bitmap->get_buffer(bitmap);
+
+        /* GetNext returns the reconstructed canvas, including transparent
+         * pixels outside a partial first frame. Its storage is decoder-owned. */
+        for (uint32_t y = 0; y < info.canvas_height; y++) {
+            memcpy(pixels + y * rowstride, frame + y * rowbytes, rowbytes);
+        }
+        success = true;
+    }
+
+    WebPAnimDecoderDelete(decoder);
+    return success;
+}
+
 /**
  * create a bitmap from webp content.
  */
@@ -98,7 +150,9 @@ static struct bitmap *webp_cache_convert(struct content *c)
         return NULL;
     }
 
-    if (webpfeatures.has_alpha == 0) {
+    /* An animation can have a transparent canvas outside its first frame even
+     * when the encoded frame has no alpha. Determine its opacity after decode. */
+    if (webpfeatures.has_alpha == 0 && !webpfeatures.has_animation) {
         bmap_flags = BITMAP_OPAQUE;
     } else {
         bmap_flags = BITMAP_NONE;
@@ -120,7 +174,10 @@ static struct bitmap *webp_cache_convert(struct content *c)
 
     rowstride = guit->bitmap->get_rowstride(bitmap);
 
-    if (bitmap_fmt.pma) {
+    if (webpfeatures.has_animation) {
+        /* WebP playback is deliberately unsupported: cache only frame one. */
+        decoded = webp_decode_first_frame(source_data, source_size, bitmap, &webp_fmt) ? pixels : NULL;
+    } else if (bitmap_fmt.pma) {
         WebPDecoderConfig cfg;
         if (!WebPInitDecoderConfig(&cfg)) {
             guit->bitmap->destroy(bitmap);
@@ -175,6 +232,9 @@ static struct bitmap *webp_cache_convert(struct content *c)
     }
 
     bitmap_format_to_client(bitmap, &webp_fmt);
+    if (webpfeatures.has_animation) {
+        guit->bitmap->set_opaque(bitmap, bitmap_test_opaque(bitmap));
+    }
     guit->bitmap->modified(bitmap);
 
     return bitmap;

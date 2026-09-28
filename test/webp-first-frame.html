@@ -1,0 +1,20 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>WebP first-frame decoding</title>
+<style>
+html, body { margin: 0; background: white; }
+.sample { position: absolute; width: 32px; height: 24px; background-color: #204060; }
+img { display: block; }
+#static { left: 10px; top: 10px; }
+#opaque { left: 60px; top: 10px; }
+#alpha { left: 110px; top: 10px; }
+#offset { left: 160px; top: 10px; }
+#background { left: 210px; top: 10px; background-image: url(webp/offset-alpha.webp); }
+#static-alpha { left: 260px; top: 10px; }
+</style>
+<div class="sample" id="static"><img src="webp/static.webp" alt="static"></div>
+<div class="sample" id="opaque"><img src="webp/opaque.webp" alt="first frame"></div>
+<div class="sample" id="alpha"><img src="webp/offset-alpha.webp" alt="offset alpha"></div>
+<div class="sample" id="offset"><img src="webp/offset-opaque.webp" alt="offset opaque"></div>
+<div class="sample" id="background"></div>
+<div class="sample" id="static-alpha"><img src="webp/static-alpha.webp" alt="static alpha"></div>

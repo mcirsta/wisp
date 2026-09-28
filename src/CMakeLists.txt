@@ -35,7 +35,8 @@ include_directories(${LIBUTF8PROC_INCLUDE_DIRS})
 
 if(WISP_USE_WEBP)
     pkg_check_modules(LIBWEBP REQUIRED libwebp)
-    include_directories(${LIBWEBP_INCLUDE_DIRS})
+    pkg_check_modules(LIBWEBPDEMUX REQUIRED libwebpdemux)
+    include_directories(${LIBWEBP_INCLUDE_DIRS} ${LIBWEBPDEMUX_INCLUDE_DIRS})
 endif()
 
 if(WISP_USE_AVIF)
@@ -270,6 +271,7 @@ if(WISP_USE_JPEG)
 endif()
 
 if(WISP_USE_WEBP)
+    wisp_append_pkg_libraries(WISP_COMMON_LIBS LIBWEBPDEMUX)
     wisp_append_pkg_libraries(WISP_COMMON_LIBS LIBWEBP)
 endif()
 
@@ -399,6 +401,10 @@ if(WIN32 AND BUILD_SHARED_LIBS)
 		if(WEBP_EXTRA_DLLS)
 			install(FILES ${WEBP_EXTRA_DLLS} DESTINATION ${CMAKE_INSTALL_BINDIR})
 		endif()
+	endif()
+
+	if(LIBWEBPDEMUX_FOUND)
+		install_dlls_for_package("${LIBWEBPDEMUX_PREFIX}" "${LIBWEBPDEMUX_LIBRARIES}")
 	endif()
 
 	if(LIBCRYPTO_FOUND)
