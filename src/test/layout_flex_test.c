@@ -99,7 +99,7 @@ static int g_test_block_content_height = 50; /* Default test content height */
 bool layout_block_context(struct box *block, int viewport_height, html_content *content)
 {
     /* Simulate content layout by setting height from content */
-    if (block->height == AUTO || block->height == 0) {
+    if (block->height == AUTO || (block->height == 0 && !(block->flags & HEIGHT_STRETCHED))) {
         block->height = g_test_block_content_height;
     }
     return true;
@@ -1230,6 +1230,161 @@ START_TEST(test_flex_redistribute_out_of_flow)
 }
 END_TEST
 
+/* Absolute and fixed children must not consume space in the real flex
+ * algorithm, regardless of direction, flex factors or repeated layout. */
+START_TEST(test_flex_out_of_flow_sizing)
+{
+    static const uint8_t directions[] = {CSS_FLEX_DIRECTION_ROW, CSS_FLEX_DIRECTION_ROW_REVERSE,
+        CSS_FLEX_DIRECTION_COLUMN, CSS_FLEX_DIRECTION_COLUMN_REVERSE};
+    uint8_t direction = directions[_i % 4];
+    bool horizontal = _i % 4 < 2;
+    bool grow = _i >= 8;
+    uint8_t position = (_i / 4) % 2 ? CSS_POSITION_FIXED : CSS_POSITION_ABSOLUTE;
+    struct flex_test_style values = {.container = true,
+        .width = 400,
+        .width_unit = CSS_UNIT_PX,
+        .min_width = 0,
+        .min_unit = CSS_UNIT_PX,
+        .max_width = -1,
+        .basis = -1,
+        .overflow = CSS_OVERFLOW_VISIBLE};
+    css_computed_style *parent_style = flex_test_style_create(&values);
+    values.container = false;
+    values.width = grow ? 100 : 400;
+    values.grow = grow ? 1 : 0;
+    values.position = CSS_POSITION_RELATIVE;
+    css_computed_style *item_style = flex_test_style_create(&values);
+    flex_test_style_alignment(item_style, direction, CSS_JUSTIFY_CONTENT_FLEX_START, grow ? 100 : 400);
+    flex_test_style_stretch(item_style, 0, -1, false);
+    values.width = 100;
+    values.grow = 10;
+    values.position = position;
+    css_computed_style *overlay_style = flex_test_style_create(&values);
+    flex_test_style_alignment(overlay_style, direction, CSS_JUSTIFY_CONTENT_FLEX_START, 100);
+    struct box parent = {.type = BOX_FLEX, .style = parent_style};
+    struct box item = {
+        .type = BOX_BLOCK, .style = item_style, .parent = &parent, .min_width = {CSS_SIZE_SET, 0}, .max_width = 400};
+    struct box overlay = {.type = BOX_BLOCK,
+        .style = overlay_style,
+        .parent = &parent,
+        .min_width = {CSS_SIZE_SET, 0},
+        .max_width = 100,
+        .next = &item};
+    item.prev = &overlay;
+    parent.children = &overlay;
+    parent.last = &item;
+    html_content content = {.unit_len_ctx = {.viewport_width = INTTOFIX(1280),
+                                .viewport_height = INTTOFIX(900),
+                                .font_size_default = INTTOFIX(16),
+                                .font_size_minimum = INTTOFIX(6),
+                                .device_dpi = INTTOFIX(96),
+                                .root_style = parent_style}};
+    for (int pass = 0; pass < 2; pass++) {
+        int size = pass ? 320 : 400;
+        parent.width = size;
+        flex_test_style_alignment(parent_style, direction, CSS_JUSTIFY_CONTENT_FLEX_START, size);
+        ck_assert(layout_flex(&parent, size, &content));
+        int actual = horizontal ? item.width : item.height;
+        ck_assert_msg(actual == size, "direction %u, position %u, grow %d, pass %d: expected %d, got %d", direction,
+            position, grow, pass, size, actual);
+        ck_assert_msg(lh__box_is_flex_item(&item), "relative child must remain a flex item");
+        ck_assert_msg(!lh__box_is_flex_item(&overlay), "out-of-flow child is not a flex item");
+    }
+    css_computed_style_destroy(overlay_style);
+    css_computed_style_destroy(item_style);
+    css_computed_style_destroy(parent_style);
+}
+END_TEST
+
+enum { COLUMN_SHRINK_CASES = 6 };
+
+/* Run the real flex solver and placement together, including a second
+ * layout at a larger height so the earlier shrink must not become a base. */
+START_TEST(test_column_flex_shrink_layout)
+{
+    static const char *names[] = {"proportional", "minimum", "inflexible", "weighted", "outer edges", "overflow"};
+    static const int expected[COLUMN_SHRINK_CASES][2][2] = {{{150, 50}, {225, 75}}, {{180, 20}, {225, 75}},
+        {{100, 100}, {100, 200}}, {{200, 0}, {250, 50}}, {{160, 0}, {260, 0}}, {{240, 0}, {240, 60}}};
+    int variant = _i % COLUMN_SHRINK_CASES;
+    bool reverse = _i >= COLUMN_SHRINK_CASES;
+    uint8_t direction = reverse ? CSS_FLEX_DIRECTION_COLUMN_REVERSE : CSS_FLEX_DIRECTION_COLUMN;
+    struct flex_test_style values = {.container = true,
+        .width = 100,
+        .width_unit = CSS_UNIT_PX,
+        .min_width = 0,
+        .min_unit = CSS_UNIT_PX,
+        .max_width = -1,
+        .basis = -1,
+        .overflow = CSS_OVERFLOW_VISIBLE};
+    css_computed_style *parent_style = flex_test_style_create(&values);
+    ck_assert_ptr_nonnull(parent_style);
+    values.container = false;
+    if (variant == 4) {
+        values.padding = 10;
+        values.border = 5;
+        values.margin = 10; /* stretch helper resets the top margin to zero */
+    }
+    css_computed_style *first_style = flex_test_style_create(&values);
+    ck_assert_ptr_nonnull(first_style);
+    flex_test_style_alignment(first_style, direction, CSS_JUSTIFY_CONTENT_FLEX_START, variant == 2 ? 100 : 300);
+    flex_test_style_stretch(first_style, variant == 1 ? 180 : variant == 5 ? 240 : 0, -1, false);
+    if (variant == 2)
+        flex_test_style_shrink(first_style, 0);
+    values.padding = values.border = values.margin = 0;
+    css_computed_style *second_style = flex_test_style_create(&values);
+    ck_assert_ptr_nonnull(second_style);
+    flex_test_style_alignment(second_style, direction, CSS_JUSTIFY_CONTENT_FLEX_START, variant == 2 ? 300 : 100);
+    flex_test_style_stretch(second_style, 0, -1, false);
+    if (variant == 3)
+        flex_test_style_shrink(second_style, 3);
+    struct box parent = {.type = BOX_FLEX, .style = parent_style, .width = 100};
+    struct box first = {
+        .type = BOX_BLOCK, .style = first_style, .parent = &parent, .min_width = {CSS_SIZE_SET, 0}, .max_width = 100};
+    struct box second = {.type = BOX_BLOCK,
+        .style = second_style,
+        .parent = &parent,
+        .min_width = {CSS_SIZE_SET, 0},
+        .max_width = 100,
+        .prev = &first};
+    parent.children = &first;
+    if (variant == 4) {
+        parent.last = &first;
+    } else {
+        first.next = &second;
+        parent.last = &second;
+    }
+    html_content content = {.unit_len_ctx = {.viewport_width = INTTOFIX(1280),
+                                .viewport_height = INTTOFIX(900),
+                                .font_size_default = INTTOFIX(16),
+                                .font_size_minimum = INTTOFIX(6),
+                                .device_dpi = INTTOFIX(96),
+                                .root_style = parent_style}};
+    for (int pass = 0; pass < 2; pass++) {
+        int height = pass ? 300 : 200;
+        flex_test_style_alignment(parent_style, direction, CSS_JUSTIFY_CONTENT_FLEX_START, height);
+        ck_assert(layout_flex(&parent, 100, &content));
+        int first_height = expected[variant][pass][0];
+        int second_height = expected[variant][pass][1];
+        ck_assert_msg(first.height == first_height, "%s reverse=%d pass=%d: first height %d, expected %d",
+            names[variant], reverse, pass, first.height, first_height);
+        int outer_first = first_height + (variant == 4 ? 40 : 0);
+        int first_y = (reverse ? height - outer_first : 0) + (variant == 4 ? 5 : 0);
+        ck_assert_msg(first.y == first_y, "%s reverse=%d pass=%d: first y %d, expected %d", names[variant], reverse,
+            pass, first.y, first_y);
+        if (variant != 4) {
+            int second_y = reverse ? height - outer_first - second_height : outer_first;
+            ck_assert_msg(second.height == second_height && second.y == second_y,
+                "%s reverse=%d pass=%d: second y/height %d/%d, expected %d/%d", names[variant], reverse, pass, second.y,
+                second.height, second_y, second_height);
+        }
+        ck_assert_msg(!(first.flags & HEIGHT_STRETCHED), "%s: leaked resolved-height flag", names[variant]);
+    }
+    css_computed_style_destroy(second_style);
+    css_computed_style_destroy(first_style);
+    css_computed_style_destroy(parent_style);
+}
+END_TEST
+
 #ifndef NDEBUG
 START_TEST(test_flex_redistribute_requires_resolved_height)
 {
@@ -1278,6 +1433,8 @@ Suite *layout_flex_suite(void)
     tcase_add_loop_test(tc_core, test_flex_ratio_minimum, 0, 4);
     tcase_add_loop_test(tc_core, test_flex_outer_size_alignment, 0, 8);
     tcase_add_loop_test(tc_core, test_flex_redistribute_out_of_flow, 0, 4);
+    tcase_add_loop_test(tc_core, test_flex_out_of_flow_sizing, 0, 16);
+    tcase_add_loop_test(tc_core, test_column_flex_shrink_layout, 0, 2 * COLUMN_SHRINK_CASES);
 #ifndef NDEBUG
     tcase_add_loop_test_raise_signal(tc_core, test_flex_redistribute_requires_resolved_height, SIGABRT, 0, 2);
 #endif

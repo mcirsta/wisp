@@ -139,6 +139,9 @@ if(WISP_QT_CAPTURE)
         add_test(NAME qt_render_capture
             COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_capture.py $<TARGET_FILE:wisp-qt>)
         set_tests_properties(qt_render_capture PROPERTIES TIMEOUT 60)
+        add_test(NAME qt_absolute_sizing
+            COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_absolute_sizing.py $<TARGET_FILE:wisp-qt>)
+        set_tests_properties(qt_absolute_sizing PROPERTIES TIMEOUT 30)
         add_test(NAME qt_aspect_ratio
             COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_aspect_ratio.py $<TARGET_FILE:wisp-qt>)
         set_tests_properties(qt_aspect_ratio PROPERTIES TIMEOUT 30)
@@ -148,6 +151,12 @@ if(WISP_QT_CAPTURE)
         add_test(NAME qt_flex_alignment
             COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_flex_alignment.py $<TARGET_FILE:wisp-qt>)
         set_tests_properties(qt_flex_alignment PROPERTIES TIMEOUT 30)
+        add_test(NAME qt_flex_out_of_flow
+            COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_flex_out_of_flow.py $<TARGET_FILE:wisp-qt>)
+        set_tests_properties(qt_flex_out_of_flow PROPERTIES TIMEOUT 30)
+        add_test(NAME qt_flex_column_sizing
+            COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_flex_column_sizing.py $<TARGET_FILE:wisp-qt>)
+        set_tests_properties(qt_flex_column_sizing PROPERTIES TIMEOUT 30)
         add_test(NAME qt_flex_image_sizing
             COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_flex_image_sizing.py $<TARGET_FILE:wisp-qt>)
         set_tests_properties(qt_flex_image_sizing PROPERTIES TIMEOUT 30)

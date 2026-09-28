@@ -1388,10 +1388,12 @@ static void layout_grid_set_dimensions(const struct grid_layout_ctx *ctx)
         }
     }
 
-    if (ctx->grid->flags & ASPECT_RATIO_HEIGHT) {
-        layout_ratio_content_height(ctx->grid, grid_height);
-    } else {
-        ctx->grid->height = grid_height;
+    if (!(ctx->grid->flags & HEIGHT_STRETCHED)) {
+        if (ctx->grid->flags & ASPECT_RATIO_HEIGHT) {
+            layout_ratio_content_height(ctx->grid, grid_height);
+        } else {
+            ctx->grid->height = grid_height;
+        }
     }
 
     /* IMPORTANT: layout_grid must set the grid's width */

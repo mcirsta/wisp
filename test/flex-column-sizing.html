@@ -1,0 +1,33 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Column flex sizing uses the solved heights</title>
+<style>
+html, body { margin: 0; }
+.case { display: flex; position: relative; flex-direction: column; width: 300px; height: 200px; margin-bottom: 20px; background: #ddd; }
+.item { min-height: 0; height: 400px; background: #369; }
+.a { height: 300px; } .b { height: 100px; background: #c73; }
+.overlay { position: absolute; left: 0; top: 0; width: 50px; height: 50px; }
+.half { height: 50%; background: #d83; }
+</style>
+<!-- All sizes are independent of fonts, scripts and network resources. -->
+<div class="case" id="basic"><div class="item" id="basic-item"></div></div>
+<div class="case" id="overlay"><div class="overlay"></div><div class="item" id="overlay-item"></div></div>
+<div class="case" id="reverse" style="flex-direction:column-reverse"><div class="item a" id="reverse-a"></div><div class="item b" id="reverse-b"></div></div>
+<div class="case" id="proportional"><div class="item a" id="proportional-a"></div><div class="item b" id="proportional-b"></div></div>
+<div class="case" id="minimum"><div class="item a" id="minimum-a" style="min-height:180px"></div><div class="item b" id="minimum-b"></div></div>
+<div class="case" id="inflexible"><div class="item b" id="inflexible-a" style="flex-shrink:0"></div><div class="item a" id="inflexible-b"></div></div>
+<div class="case" id="weighted"><div class="item a" id="weighted-a"></div><div class="item b" id="weighted-b" style="flex-shrink:3"></div></div>
+<div class="case" id="edges"><div class="item" id="edges-item" style="padding:10px;border:5px solid black;margin:5px"></div></div>
+<div class="case" id="gap" style="height:220px;gap:20px"><div class="item a" id="gap-a"></div><div class="item b" id="gap-b"></div></div>
+<div class="case" id="nested"><div class="item" id="nested-item"><div class="half" id="nested-half"></div></div></div>
+<div class="case" id="nested-flex"><div class="item" id="nested-flex-item" style="display:flex;flex-direction:column"><div class="half" id="nested-flex-half"></div></div></div>
+<div class="case" id="nested-grid"><div class="item" id="nested-grid-item" style="display:grid;grid-template-rows:1fr"><div id="nested-grid-child" style="height:400px"></div></div></div>
+<div class="case" id="ratio"><div class="item" id="ratio-item" style="width:300px;height:auto;aspect-ratio:3/4"><div class="half" id="ratio-half"></div></div></div>
+<div class="case" id="content"><div class="item" id="content-item" style="height:auto"><div id="content-child" style="height:400px"></div></div></div>
+<div class="case" id="auto-minimum"><div class="item" id="auto-minimum-item" style="height:auto;min-height:auto"><div style="height:300px"></div></div></div>
+<div class="case" id="overflow"><div class="item a" id="overflow-a" style="min-height:240px"></div><div class="item b" id="overflow-b"></div></div>
+<div class="case" id="zero" style="height:0"><div class="item" id="zero-item"></div></div>
+<div class="case" id="indefinite" style="height:auto"><div class="item" id="indefinite-item" style="height:auto"><div class="half" id="indefinite-half"><div style="height:20px"></div></div></div></div>
+<div class="case" id="growth"><div class="item" id="growth-item" style="height:100px;flex-grow:1"><div class="half" id="growth-half"></div></div></div>
+<div class="case" id="indefinite-basis" style="height:auto"><div class="item" id="indefinite-basis-item" style="height:auto;flex-basis:50%"><div class="half" id="indefinite-basis-half"><div style="height:20px"></div></div></div></div>
+<div class="case" id="indefinite-calc" style="height:auto"><div class="item" id="indefinite-calc-item" style="height:auto;flex-basis:calc(50% + 0px)"><div class="half" id="indefinite-calc-half"><div style="height:20px"></div></div></div></div>

@@ -28,6 +28,7 @@ uint8_t flex_test_style_grow(const css_computed_style *style, css_fixed *grow);
 void flex_test_style_ratio(css_computed_style *style, int height, int numerator, int denominator);
 void flex_test_style_alignment(css_computed_style *style, uint8_t direction, uint8_t justify, int height);
 void flex_test_style_stretch(css_computed_style *style, int minimum, int maximum, bool auto_margin);
+void flex_test_style_shrink(css_computed_style *style, int shrink);
 void flex_test_style_wrap(css_computed_style *style, uint8_t wrap);
 
 #endif

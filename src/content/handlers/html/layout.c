@@ -5122,61 +5122,73 @@ static void layout_compute_offsets(const css_unit_ctx *unit_len_ctx, struct box 
 }
 
 
-/**
- * Layout and position an absolutely positioned box.
- *
- * \param  box               absolute box to layout and position
- * \param  containing_block  containing block
- * \param  cx                position of box relative to containing_block
- * \param  cy                position of box relative to containing_block
- * \param  content           memory pool for any new boxes
- * \return  true on success, false on memory exhaustion
- */
-static bool layout_absolute(struct box *box, struct box *containing_block, int cx, int cy, html_content *content)
+/* CSS Flexbox §4.1: when both insets on an axis are auto, position an
+ * absolute child as the sole, fixed-size item in its parent's content box.
+ * This runs after absolute sizing, so neither flex factors nor stretch can
+ * change the child's size or make it consume space in the flex container. */
+static void layout_absolute_flex_static_position(struct box *box, int cx, int cy, bool auto_x, bool auto_y)
 {
-    int static_left, static_top; /* static position */
+    const struct box *flex = box->parent;
+    bool horizontal = lh__flex_main_is_horizontal(flex);
+    int main_free = lh__box_size_main(horizontal, flex) - lh__box_size_main(horizontal, box) -
+        lh__delta_outer_main(flex, box);
+    int cross_free = (horizontal ? flex->height - box->height : flex->width - box->width) -
+        lh__delta_outer_cross(flex, box);
+    int main_offset = 0;
+    int cross_offset = 0;
+
+    switch (css_computed_justify_content(flex->style)) {
+    case CSS_JUSTIFY_CONTENT_FLEX_END:
+        main_offset = main_free;
+        break;
+    case CSS_JUSTIFY_CONTENT_CENTER:
+        main_offset = main_free / 2;
+        break;
+    case CSS_JUSTIFY_CONTENT_SPACE_AROUND:
+    case CSS_JUSTIFY_CONTENT_SPACE_EVENLY:
+        main_offset = max(0, main_free / 2);
+        break;
+    default:
+        break;
+    }
+    if (lh__flex_direction_reversed(flex))
+        main_offset = main_free - main_offset;
+
+    switch (lh__box_align_self(flex, box)) {
+    case CSS_ALIGN_SELF_FLEX_END:
+        cross_offset = cross_free;
+        break;
+    case CSS_ALIGN_SELF_CENTER:
+        cross_offset = cross_free / 2;
+        break;
+    default:
+        break;
+    }
+
+    if (auto_x) {
+        box->x = cx + flex->padding[LEFT] + (horizontal ? main_offset : cross_offset) + lh__non_auto_margin(box, LEFT) +
+            box->border[LEFT].width;
+    }
+    if (auto_y) {
+        box->y = cy + flex->padding[TOP] + (horizontal ? cross_offset : main_offset) + lh__non_auto_margin(box, TOP) +
+            box->border[TOP].width;
+    }
+}
+
+
+/* Temporary values for the CSS 2.1 absolute-positioning equations.
+ * Kept on the stack; resolving one axis does not change the other. */
+struct absolute_layout {
     int top, right, bottom, left;
     int width, height, max_width;
     struct css_size min_width;
-    int *margin = box->margin;
-    int *padding = box->padding;
-    struct box_border *border = box->border;
+    int static_left, static_top;
     int available_width;
-    int space;
+};
 
-    assert(box->type == BOX_BLOCK || box->type == BOX_TABLE || box->type == BOX_INLINE_BLOCK || box->type == BOX_FLEX ||
-        box->type == BOX_GRID || box->type == BOX_INLINE_FLEX || box->type == BOX_INLINE_GRID);
-
-    /* The static position is where the box would be if it was not
-     * absolutely positioned. The x and y are filled in by
-     * layout_block_context(). */
-    static_left = cx + box->x;
-    static_top = cy + box->y;
-
-    if (containing_block->type == BOX_BLOCK || containing_block->type == BOX_INLINE_BLOCK ||
-        containing_block->type == BOX_TABLE_CELL || containing_block->type == BOX_FLEX ||
-        containing_block->type == BOX_INLINE_FLEX || containing_block->type == BOX_GRID ||
-        containing_block->type == BOX_INLINE_GRID) {
-        /* Block level container => temporarily increase containing
-         * block dimensions to include padding (we restore this
-         * again at the end) */
-        containing_block->width += containing_block->padding[LEFT] + containing_block->padding[RIGHT];
-        containing_block->height += containing_block->padding[TOP] + containing_block->padding[BOTTOM];
-    }
-
-    /* Capture available_width AFTER padding adjustment */
-    available_width = containing_block->width;
-
-    layout_compute_offsets(&content->unit_len_ctx, box, containing_block, &top, &right, &bottom, &left);
-
-    /* Pass containing block into layout_find_dimensions via the float
-     * containing block box member. This is unused for absolutely positioned
-     * boxes because a box can't be floated and absolutely positioned. */
-    box->float_container = containing_block;
-    layout_find_dimensions(&content->unit_len_ctx, available_width, -1, box, box->style, &width, &height, &max_width,
-        &min_width, 0, 0, margin, padding, border);
-    box->float_container = NULL;
-
+static void layout_absolute_log_box(struct box *box, struct box *containing_block, const struct absolute_layout *layout)
+{
+    int top = layout->top, left = layout->left, right = layout->right, width = layout->width;
     {
         css_fixed_or_calc wlen = (css_fixed_or_calc)0;
         css_unit wunit = CSS_UNIT_PX;
@@ -5225,6 +5237,22 @@ static bool layout_absolute(struct box *box, struct box *containing_block, int c
         if (name != NULL)
             dom_string_unref(name);
     }
+}
+
+/* CSS 2.1 §10.3.7: solve left/width/right, including shrink-to-fit and
+ * horizontal auto margins. The containing block includes its padding here. */
+static void
+layout_absolute_resolve_horizontal(struct box *box, const struct box *containing_block, struct absolute_layout *layout)
+{
+    int left = layout->left, right = layout->right, width = layout->width;
+    int max_width = layout->max_width;
+    struct css_size min_width = layout->min_width;
+    int available_width = layout->available_width;
+    int static_left = layout->static_left;
+    int *margin = box->margin;
+    const int *padding = box->padding;
+    const struct box_border *border = box->border;
+    int space;
 
     /* 10.3.7 */
     NSLOG(layout, DEBUG, "%i + %i + %i + %i + %i + %i + %i + %i + %i = %i", left, margin[LEFT], border[LEFT].width,
@@ -5365,24 +5393,16 @@ static bool layout_absolute(struct box *box, struct box *containing_block, int c
     NSLOG(layout, DEBUG, "%i + %i + %i + %i + %i + %i + %i + %i + %i = %i", left, margin[LEFT], border[LEFT].width,
         padding[LEFT], width, padding[RIGHT], border[RIGHT].width, margin[RIGHT], right, containing_block->width);
 
-    /* Store the containing block for use by box_coords() and other functions.
-     * Per CSS 2.1 §10.1, box->x/y are relative to the containing block. */
-    box->abs_containing_block = containing_block;
-    box->x = left + margin[LEFT] + border[LEFT].width;
-    if (containing_block->type == BOX_BLOCK || containing_block->type == BOX_INLINE_BLOCK ||
-        containing_block->type == BOX_TABLE_CELL || containing_block->type == BOX_FLEX ||
-        containing_block->type == BOX_INLINE_FLEX || containing_block->type == BOX_GRID ||
-        containing_block->type == BOX_INLINE_GRID) {
-        /* Block-level ancestor => reset container's width */
-        containing_block->width -= containing_block->padding[LEFT] + containing_block->padding[RIGHT];
-    } else {
-        /** \todo inline ancestors */
-    }
-    box->width = width;
-    box->height = height;
+    layout->left = left;
+    layout->right = right;
+    layout->width = width;
+}
 
-    NSLOG(layout, INFO, "abs box %p: width %i parent %p parent.width %i", box, box->width, containing_block,
-        containing_block->width);
+/* Dispatch the inner formatter after horizontal sizing has chosen the width.
+ * Preserve each formatter's existing containing-block setup. */
+static bool layout_absolute_contents(struct box *box, struct box *containing_block, html_content *content)
+{
+    int width = box->width;
 
     if (box->type == BOX_BLOCK || box->type == BOX_INLINE_BLOCK || box->object || box->flags & IFRAME) {
         if (!layout_block_context(box, -1, content))
@@ -5411,6 +5431,21 @@ static bool layout_absolute(struct box *box, struct box *containing_block, int c
             return false;
         box->float_container = NULL;
     }
+
+    return true;
+}
+
+/* CSS 2.1 §10.6.4: solve top/height/bottom after content layout, when an
+ * auto height can use the measured content height. */
+static void
+layout_absolute_resolve_vertical(struct box *box, const struct box *containing_block, struct absolute_layout *layout)
+{
+    int top = layout->top, bottom = layout->bottom, height = layout->height;
+    int static_top = layout->static_top;
+    int *margin = box->margin;
+    const int *padding = box->padding;
+    const struct box_border *border = box->border;
+    int space;
 
     if (height == AUTO && (box->flags & ASPECT_RATIO_HEIGHT)) {
         height = box->height;
@@ -5476,23 +5511,106 @@ static bool layout_absolute(struct box *box, struct box *containing_block, int c
     NSLOG(layout, DEBUG, "%i + %i + %i + %i + %i + %i + %i + %i + %i = %i", top, margin[TOP], border[TOP].width,
         padding[TOP], height, padding[BOTTOM], border[BOTTOM].width, margin[BOTTOM], bottom, containing_block->height);
 
-    box->y = top + margin[TOP] + border[TOP].width;
+    layout->top = top;
+    layout->bottom = bottom;
+    layout->height = height;
+}
 
-    if (containing_block->type == BOX_BLOCK || containing_block->type == BOX_INLINE_BLOCK ||
+
+/**
+ * Layout and position an absolutely positioned box.
+ *
+ * \param  box               absolute box to layout and position
+ * \param  containing_block  containing block
+ * \param  cx                position of box relative to containing_block
+ * \param  cy                position of box relative to containing_block
+ * \param  content           memory pool for any new boxes
+ * \return  true on success, false on memory exhaustion
+ */
+static bool layout_absolute(struct box *box, struct box *containing_block, int cx, int cy, html_content *content)
+{
+    struct absolute_layout layout;
+    int *margin = box->margin;
+    int *padding = box->padding;
+    struct box_border *border = box->border;
+    bool block_containing_box = containing_block->type == BOX_BLOCK || containing_block->type == BOX_INLINE_BLOCK ||
         containing_block->type == BOX_TABLE_CELL || containing_block->type == BOX_FLEX ||
         containing_block->type == BOX_INLINE_FLEX || containing_block->type == BOX_GRID ||
-        containing_block->type == BOX_INLINE_GRID) {
+        containing_block->type == BOX_INLINE_GRID;
+
+    assert(box->type == BOX_BLOCK || box->type == BOX_TABLE || box->type == BOX_INLINE_BLOCK || box->type == BOX_FLEX ||
+        box->type == BOX_GRID || box->type == BOX_INLINE_FLEX || box->type == BOX_INLINE_GRID);
+
+    /* Normal layout supplies the fallback static position. Flex children
+     * with auto insets receive their final alignment after absolute sizing. */
+    layout.static_left = cx + box->x;
+    layout.static_top = cy + box->y;
+
+    if (block_containing_box) {
+        /* Block level container => temporarily increase containing
+         * block dimensions to include padding (we restore this
+         * again at the end) */
+        containing_block->width += containing_block->padding[LEFT] + containing_block->padding[RIGHT];
+        containing_block->height += containing_block->padding[TOP] + containing_block->padding[BOTTOM];
+    }
+
+    /* Capture available_width AFTER padding adjustment */
+    layout.available_width = containing_block->width;
+
+    layout_compute_offsets(
+        &content->unit_len_ctx, box, containing_block, &layout.top, &layout.right, &layout.bottom, &layout.left);
+    bool auto_x = layout.left == AUTO && layout.right == AUTO;
+    bool auto_y = layout.top == AUTO && layout.bottom == AUTO;
+
+    /* Pass containing block into layout_find_dimensions via the float
+     * containing block box member. This is unused for absolutely positioned
+     * boxes because a box can't be floated and absolutely positioned. */
+    box->float_container = containing_block;
+    layout_find_dimensions(&content->unit_len_ctx, layout.available_width, -1, box, box->style, &layout.width,
+        &layout.height, &layout.max_width, &layout.min_width, 0, 0, margin, padding, border);
+    box->float_container = NULL;
+
+    layout_absolute_log_box(box, containing_block, &layout);
+    layout_absolute_resolve_horizontal(box, containing_block, &layout);
+
+    /* Store the containing block for use by box_coords() and other functions.
+     * Per CSS 2.1 §10.1, box->x/y are relative to the containing block. */
+    box->abs_containing_block = containing_block;
+    box->x = layout.left + margin[LEFT] + border[LEFT].width;
+    if (block_containing_box) {
+        /* Block-level ancestor => reset container's width */
+        containing_block->width -= containing_block->padding[LEFT] + containing_block->padding[RIGHT];
+    } else {
+        /** \todo inline ancestors */
+    }
+    box->width = layout.width;
+    box->height = layout.height;
+
+    NSLOG(layout, INFO, "abs box %p: width %i parent %p parent.width %i", box, box->width, containing_block,
+        containing_block->width);
+
+    if (!layout_absolute_contents(box, containing_block, content))
+        return false;
+    layout_absolute_resolve_vertical(box, containing_block, &layout);
+
+    box->y = layout.top + margin[TOP] + border[TOP].width;
+
+    if (block_containing_box) {
         /* Block-level ancestor => reset container's height */
         containing_block->height -= containing_block->padding[TOP] + containing_block->padding[BOTTOM];
     } else {
         /** \todo Inline ancestors */
     }
-    box->height = height;
+    box->height = layout.height;
     layout_apply_minmax_height(&content->unit_len_ctx, box, containing_block);
+
+    if (box->parent && lh__box_is_flex_container(box->parent) && (auto_x || auto_y)) {
+        layout_absolute_flex_static_position(box, cx, cy, auto_x, auto_y);
+    }
 
     NSLOG(layout, DEBUG,
         "abs final: box=%p box->x %i box->y %i box->width %i box->height %i (top=%i left=%i cy=%i cx=%i) abs_cb=%p",
-        box, box->x, box->y, box->width, box->height, top, left, cy, cx, box->abs_containing_block);
+        box, box->x, box->y, box->width, box->height, layout.top, layout.left, cy, cx, box->abs_containing_block);
 
     return true;
 }
@@ -5570,6 +5688,7 @@ layout_position_absolute(struct box *box, struct box *containing_block, int cx, 
             } else if (c->parent != NULL && (c->parent->type == BOX_FLEX || c->parent->type == BOX_INLINE_FLEX) &&
                 c->parent->style != NULL && css_computed_position(c->parent->style) != CSS_POSITION_STATIC) {
                 abs_cb = c->parent;
+                static_x = static_y = 0;
             }
             const char *cb_tag = "";
             const char *cb_cls = "";

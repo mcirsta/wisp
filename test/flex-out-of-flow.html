@@ -1,0 +1,34 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Out-of-flow children do not participate in flex sizing</title>
+<style>
+html, body { margin: 0; }
+.case { position: relative; display: flex; width: 400px; margin-bottom: 10px; background: #ddd; }
+.item { min-width: 0; min-height: 0; height: 40px; background: #369; }
+.overlay { position: absolute; left: 0; top: 0; width: 44px; height: 20px; background: #e84; }
+.small { width: 100px; flex: none; }
+.static { left: auto; top: auto; width: 40px; }
+</style>
+<!-- Fixed geometry avoids font-dependent expectations. Overlays intentionally
+     have flex factors/bases which must have no effect on either kind of child. -->
+<div class="case" id="shrink"><div class="item" id="shrink-item" style="width:100%"></div><div class="overlay" id="shrink-overlay" style="flex:10 1 400px"></div></div>
+<div class="case" id="grow"><div class="overlay" id="grow-overlay" style="position:fixed;left:450px;flex:10 1 0"></div><div class="item" id="grow-item" style="width:100px;flex-grow:1"></div></div>
+<div class="case" id="relative"><div class="item" id="relative-item" style="width:100%"></div><div class="overlay" id="relative-overlay" style="position:relative;flex:none"></div></div>
+<div class="case" id="reverse" style="flex-direction:row-reverse"><div class="item" id="reverse-item" style="width:100%"></div><div class="overlay"></div></div>
+<div class="case" id="column" style="height:200px;flex-direction:column"><div class="overlay"></div><div class="item" id="column-item" style="flex:1"></div></div>
+<div class="case" id="gap" style="width:320px;gap:20px"><div class="item" id="gap-a" style="width:150px"></div><div class="overlay"></div><div class="item" id="gap-b" style="width:150px"></div></div>
+<div class="case" id="wrap" style="width:320px;gap:20px;flex-wrap:wrap"><div class="overlay"></div><div class="item" id="wrap-a" style="width:150px"></div><div class="overlay"></div><div class="item" id="wrap-b" style="width:150px"></div><div class="item" id="wrap-c" style="width:100px"></div><div class="overlay"></div></div>
+<div class="case" id="between" style="justify-content:space-between"><div class="item small" id="between-a"></div><div class="overlay"></div><div class="item small" id="between-b"></div></div>
+<div class="case" id="auto-margin"><div class="overlay" style="margin:auto"></div><div class="item small" id="auto-margin-item" style="margin-left:auto"></div></div>
+<div class="case" id="empty"><div class="overlay" id="empty-overlay" style="height:150px"></div></div>
+<div class="case" id="minimum" style="min-height:100px"><div class="overlay"></div></div>
+<div class="case" id="intrinsic" style="display:inline-flex;width:auto;gap:20px"><div class="item small" id="intrinsic-item"></div><div class="overlay" style="width:500px"></div></div>
+<div class="case" id="center" style="height:80px;justify-content:center;align-items:center"><div class="item small"></div><div class="overlay static" id="center-overlay"></div></div>
+<div class="case" id="end" style="height:80px;justify-content:flex-end;align-items:flex-end"><div class="overlay static" id="end-overlay"></div><div class="item small"></div></div>
+<div class="case" id="static-reverse" style="height:80px;flex-direction:row-reverse"><div class="item small"></div><div class="overlay static" id="static-reverse-overlay"></div></div>
+<div class="case" id="static-column" style="height:100px;flex-direction:column-reverse;align-items:center"><div class="item small"></div><div class="overlay static" id="static-column-overlay"></div></div>
+<div class="case" id="edges" style="height:80px;padding:10px;border:3px solid black;justify-content:center;align-items:center"><div class="item small"></div><div class="overlay static" id="edges-overlay" style="margin:5px;padding:3px;border:2px solid black"></div></div>
+<div class="case" id="auto-size" style="height:100px;justify-content:center"><div class="item small"></div><div class="overlay static" id="auto-size-overlay" style="width:auto;height:auto;display:flex;flex-direction:column"><div id="auto-size-child" style="width:80px;height:30px"></div></div></div>
+<div class="case" id="fixed-static" style="height:80px;justify-content:center;align-items:center"><div class="item small"></div><div class="overlay static" id="fixed-static-overlay" style="position:fixed"></div></div>
+<div style="position:relative;padding:15px"><div class="case" id="ancestor" style="position:static;height:80px;justify-content:center;align-items:center"><div class="item small"></div><div class="overlay static" id="ancestor-overlay"></div></div></div>
+<div class="case" id="one-inset" style="height:80px;justify-content:center;align-items:center"><div class="item small"></div><div class="overlay static" id="one-inset-overlay" style="left:7px"></div></div>

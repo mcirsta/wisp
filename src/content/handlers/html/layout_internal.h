@@ -148,12 +148,6 @@ static inline bool lh__box_is_flex_container(const struct box *b)
     return b->type == BOX_FLEX || b->type == BOX_INLINE_FLEX;
 }
 
-/** Layout helper: Check whether box takes part in inline flow. */
-static inline bool lh__box_is_flex_item(const struct box *b)
-{
-    return (b->parent != NULL) && lh__box_is_flex_container(b->parent);
-}
-
 /** Layout helper: Check whether box is inline level. (Includes BR.) */
 static inline bool lh__box_is_inline_level(const struct box *b)
 {
@@ -164,6 +158,12 @@ static inline bool lh__box_is_absolute(const struct box *b)
 {
     return css_computed_position(b->style) == CSS_POSITION_ABSOLUTE ||
         css_computed_position(b->style) == CSS_POSITION_FIXED;
+}
+
+/** Only in-flow children participate in flex sizing and stretch. */
+static inline bool lh__box_is_flex_item(const struct box *b)
+{
+    return b->parent != NULL && lh__box_is_flex_container(b->parent) && !(b->style && lh__box_is_absolute(b));
 }
 
 /* Out-of-flow boxes in an inline container retain their inner formatter.

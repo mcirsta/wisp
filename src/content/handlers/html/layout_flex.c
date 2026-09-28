@@ -78,6 +78,7 @@ struct flex_item_data {
     bool min_violation;
     bool max_violation;
     bool has_pct_basis; /* True if flex-basis was a percentage (for two-pass layout) */
+    bool definite_basis; /* Basis resolved without an indefinite percentage reference. */
 
     int32_t order;
     size_t original_index;
@@ -169,7 +170,7 @@ static struct flex_ctx *layout_flex_ctx__create(html_content *content, const str
 
     ctx->item.count = box_count_children(flex);
     ctx->item.data = calloc(ctx->item.count, sizeof(*ctx->item.data));
-    if (ctx->item.data == NULL) {
+    if (ctx->item.count != 0 && ctx->item.data == NULL) {
         layout_flex_ctx__destroy(ctx);
         return NULL;
     }
@@ -698,10 +699,23 @@ static void layout_flex__two_pass_resolve(struct flex_ctx *ctx, struct box *flex
  * \param[in] available_width  Available width for item in pixels
  * \return true on success false on failure
  */
-static bool layout_flex_item(const struct flex_ctx *ctx, const struct flex_item_data *item, int available_width)
+static bool
+layout_flex_item(const struct flex_ctx *ctx, const struct flex_item_data *item, int available_width, bool resolved_main)
 {
     bool success;
     struct box *b = item->box;
+
+    if (resolved_main && !ctx->horizontal) {
+        /* Flexbox §9.7: use the solved main size for columns too. Preserve
+         * that height through nested layout and a later cross-axis stretch;
+         * otherwise the item's CSS height can overwrite the flex result. */
+        b->height = max(0, item->target_main_size - lh__delta_outer_height(b));
+        /* Do not turn an intrinsic auto-height column into a definite
+         * percentage-height reference merely because it was measured. */
+        if (ctx->available_main != AUTO || item->definite_basis)
+            b->flags |= HEIGHT_STRETCHED;
+        b->flags &= ~ASPECT_RATIO_HEIGHT;
+    }
 
     switch (b->type) {
     case BOX_BLOCK:
@@ -777,6 +791,7 @@ static inline bool layout_flex__base_and_main_sizes(
         }
 
         if (basis_type == CSS_FLEX_BASIS_SET) {
+            item->definite_basis = true;
             /* Handle box-sizing: border-box by converting to content-box.
              * The delta_outer_main will be added later at line 314, so we
              * need to subtract padding+border now if box-sizing is border-box. */
@@ -849,7 +864,7 @@ static inline bool layout_flex__base_and_main_sizes(
         }
 
         layout_prepare_aspect_ratio_height(b);
-        if (!layout_flex_item(ctx, item, b->width)) {
+        if (!layout_flex_item(ctx, item, b->width, false)) {
             return false;
         }
 
@@ -978,15 +993,23 @@ static void layout_flex_ctx__populate_item_data(struct flex_ctx *ctx, const stru
     }
 
     for (struct box *b = flex->children; b != NULL; b = b->next) {
-        struct flex_item_data *item = &ctx->item.data[i++];
-
         /* Skip boxes without styles - they shouldn't exist after
          * normalization, but add defensive check to prevent crash */
         if (b->style == NULL) {
             NSLOG(flex, ERROR, "DIAG: flex-item box=%p has NULL style! type=%d, skipping", b, b->type);
-            i--; /* Don't increment item index for skipped boxes */
             continue;
         }
+
+        /* CSS Flexbox §4.1: absolute/fixed children are not flex items.
+         * Filter them before sizing, sorting, counting gaps or building lines.
+         * The absolute-positioning pass lays them out independently. Reset
+         * the fallback position here so a reflow cannot reuse old coordinates. */
+        if (lh__box_is_absolute(b)) {
+            b->x = flex->padding[LEFT];
+            b->y = flex->padding[TOP];
+            continue;
+        }
+        struct flex_item_data *item = &ctx->item.data[i++];
 
         b->float_container = b->parent;
         layout_find_dimensions(ctx->unit_len_ctx, available_width, -1, b, b->style, &b->width, &b->height,
@@ -1047,6 +1070,7 @@ static void layout_flex_ctx__populate_item_data(struct flex_ctx *ctx, const stru
         int ref_cross = horizontal ? ctx->available_cross : available_width;
         layout_flex__base_and_main_sizes(ctx, item, ref_main, ref_cross);
     }
+    ctx->item.count = i;
 }
 
 /**
@@ -1113,38 +1137,35 @@ static struct flex_line_data *layout_flex__build_line(struct flex_ctx *ctx, size
         gap_for_item = (line->count > 0) ? ctx->main_gap : 0;
 
         if (ctx->wrap == CSS_FLEX_WRAP_NOWRAP || pos_main + used_main + gap_for_item <= ctx->available_main ||
-            lh__box_is_absolute(item->box) || ctx->available_main == AUTO || line->count == 0 || pos_main == 0) {
-            if (lh__box_is_absolute(item->box) == false) {
-                /* Use pos_main which reflects actual b->height for column flex,
-                 * not pre-computed item->main_size which may be stale */
-                line->main_size += pos_main;
-                used_main += pos_main + gap_for_item;
+            ctx->available_main == AUTO || line->count == 0 || pos_main == 0) {
+            /* Use pos_main which reflects actual b->height for column flex,
+             * not pre-computed item->main_size which may be stale */
+            line->main_size += pos_main;
+            used_main += pos_main + gap_for_item;
 
-                /* Get element class for debugging */
-                const char *item_cls = "";
-                dom_string *item_class_attr = NULL;
-                if (b->node != NULL) {
-                    if (dom_element_get_attribute(b->node, corestring_dom_class, &item_class_attr) == DOM_NO_ERR &&
-                        item_class_attr != NULL) {
-                        item_cls = dom_string_data(item_class_attr);
-                    }
+            /* Get element class for debugging */
+            const char *item_cls = "";
+            dom_string *item_class_attr = NULL;
+            if (b->node != NULL) {
+                if (dom_element_get_attribute(b->node, corestring_dom_class, &item_class_attr) == DOM_NO_ERR &&
+                    item_class_attr != NULL) {
+                    item_cls = dom_string_data(item_class_attr);
                 }
-                NSLOG(flex, INFO,
-                    "MARGIN_CHECK: box %p class='%s' margin[LEFT]=%d margin[RIGHT]=%d (AUTO=%d) start_side=%d end_side=%d",
-                    b, item_cls, b->margin[LEFT], b->margin[RIGHT], AUTO, start_side, end_side);
-                if (b->margin[start_side] == AUTO) {
-                    line->main_auto_margin_count++;
-                    NSLOG(flex, INFO, "  -> auto margin on START side detected, count now %d",
-                        line->main_auto_margin_count);
-                }
-                if (b->margin[end_side] == AUTO) {
-                    line->main_auto_margin_count++;
-                    NSLOG(flex, INFO, "  -> auto margin on END side detected, count now %d",
-                        line->main_auto_margin_count);
-                }
-                if (item_class_attr != NULL)
-                    dom_string_unref(item_class_attr);
             }
+            NSLOG(flex, INFO,
+                "MARGIN_CHECK: box %p class='%s' margin[LEFT]=%d margin[RIGHT]=%d (AUTO=%d) start_side=%d end_side=%d",
+                b, item_cls, b->margin[LEFT], b->margin[RIGHT], AUTO, start_side, end_side);
+            if (b->margin[start_side] == AUTO) {
+                line->main_auto_margin_count++;
+                NSLOG(
+                    flex, INFO, "  -> auto margin on START side detected, count now %d", line->main_auto_margin_count);
+            }
+            if (b->margin[end_side] == AUTO) {
+                line->main_auto_margin_count++;
+                NSLOG(flex, INFO, "  -> auto margin on END side detected, count now %d", line->main_auto_margin_count);
+            }
+            if (item_class_attr != NULL)
+                dom_string_unref(item_class_attr);
             item->line = ctx->line.count;
             line->count++;
             item_index++;
@@ -1181,12 +1202,10 @@ layout_flex__item_freeze(struct flex_line_data *line, struct flex_item_data *ite
     item->freeze = true;
     line->frozen++;
 
-    if (!lh__box_is_absolute(item->box)) {
-        assert(lh__is_resolved(item->target_main_size));
-        /* Target sizes already include padding, borders and non-auto margins.
-         * Counting those edges again steals space from alignment/auto margins. */
-        line->used_main_size += item->target_main_size;
-    }
+    assert(lh__is_resolved(item->target_main_size));
+    /* Target sizes already include padding, borders and non-auto margins.
+     * Counting those edges again steals space from alignment/auto margins. */
+    line->used_main_size += item->target_main_size;
 
     NSLOG(flex, DEEPDEBUG,
         "flex-item box: %p: "
@@ -1585,7 +1604,7 @@ static bool layout_flex__place_line_items_main(struct flex_ctx *ctx, struct flex
                 b->height = AUTO;
             }
             layout_prepare_aspect_ratio_height(b);
-            if (!layout_flex_item(ctx, item, b->width)) {
+            if (!layout_flex_item(ctx, item, b->width, true)) {
                 return false;
             }
 
@@ -1619,88 +1638,87 @@ static bool layout_flex__place_line_items_main(struct flex_ctx *ctx, struct flex
                         flex, WARNING, "ITEM[%zu]: computed height %d from children per CSS spec §9.4.7", i, b->height);
                 }
             }
+        } else if (b->height != max(0, item->target_main_size - lh__delta_outer_height(b))) {
+            /* The base measurement already laid out unchanged column items. */
+            if (!layout_flex_item(ctx, item, b->width, true)) {
+                return false;
+            }
         }
 
         box_size_main = lh__box_size_main(ctx->horizontal, b);
         box_pos_main = ctx->horizontal ? &b->x : &b->y;
 
 
-        if (!lh__box_is_absolute(b)) {
-            assert(lh__is_resolved(box_size_main));
-            if (b->margin[main_start] == AUTO) {
-                extra_pre = extra + extra_remainder;
-            }
-            if (b->margin[main_end] == AUTO) {
-                extra_post = extra + extra_remainder;
-            }
-            extra_total = extra_pre + extra_post;
-            NSLOG(flex, DEEPDEBUG, "ITEM[%zu]: extra=%d extra_pre=%d extra_post=%d extra_total=%d", i, extra, extra_pre,
-                extra_post, extra_total);
-
-            main_pos += pre_multiplier * (extra_total + box_size_main + lh__delta_outer_main(ctx->flex, b));
-            NSLOG(flex, DEEPDEBUG, "ITEM[%zu]: after pre_mult main_pos=%d (pre_mult=%d)", i, main_pos, pre_multiplier);
+        assert(lh__is_resolved(box_size_main));
+        if (b->margin[main_start] == AUTO) {
+            extra_pre = extra + extra_remainder;
         }
+        if (b->margin[main_end] == AUTO) {
+            extra_post = extra + extra_remainder;
+        }
+        extra_total = extra_pre + extra_post;
+        NSLOG(flex, DEEPDEBUG, "ITEM[%zu]: extra=%d extra_pre=%d extra_post=%d extra_total=%d", i, extra, extra_pre,
+            extra_post, extra_total);
+
+        main_pos += pre_multiplier * (extra_total + box_size_main + lh__delta_outer_main(ctx->flex, b));
+        NSLOG(flex, DEEPDEBUG, "ITEM[%zu]: after pre_mult main_pos=%d (pre_mult=%d)", i, main_pos, pre_multiplier);
 
         *box_pos_main = main_pos + lh__non_auto_margin(b, main_start) + extra_pre + b->border[main_start].width;
         NSLOG(flex, DEEPDEBUG,
             "ITEM[%zu]: box_pos_main=%d (main_pos=%d + non_auto_margin=%d + extra_pre=%d + border=%d)", i,
             *box_pos_main, main_pos, lh__non_auto_margin(b, main_start), extra_pre, b->border[main_start].width);
 
-        if (!lh__box_is_absolute(b)) {
-            int cross_size;
-            int box_size_cross = lh__box_size_cross(ctx->horizontal, b);
+        int cross_size;
+        int box_size_cross = lh__box_size_cross(ctx->horizontal, b);
 
-            assert(lh__is_resolved(box_size_cross));
-            main_pos += post_multiplier * (extra_total + box_size_main + lh__delta_outer_main(ctx->flex, b));
-            NSLOG(
-                flex, DEEPDEBUG, "ITEM[%zu]: after post_mult main_pos=%d (post_mult=%d)", i, main_pos, post_multiplier);
+        assert(lh__is_resolved(box_size_cross));
+        main_pos += post_multiplier * (extra_total + box_size_main + lh__delta_outer_main(ctx->flex, b));
+        NSLOG(flex, DEEPDEBUG, "ITEM[%zu]: after post_mult main_pos=%d (post_mult=%d)", i, main_pos, post_multiplier);
 
-            /* DIAG: Log detailed child contribution for column flex debugging */
-            if (!ctx->horizontal) {
-                NSLOG(flex, WARNING,
-                    "COLUMN_CHILD[%zu]: box %p type=%d h=%d m_top=%d m_bot=%d delta_outer=%d total_contrib=%d running_main=%d",
-                    i, b, b->type, box_size_main, b->margin[TOP], b->margin[BOTTOM], lh__delta_outer_main(ctx->flex, b),
-                    box_size_main + lh__delta_outer_main(ctx->flex, b), main_pos);
-            }
+        /* DIAG: Log detailed child contribution for column flex debugging */
+        if (!ctx->horizontal) {
+            NSLOG(flex, WARNING,
+                "COLUMN_CHILD[%zu]: box %p type=%d h=%d m_top=%d m_bot=%d delta_outer=%d total_contrib=%d running_main=%d",
+                i, b, b->type, box_size_main, b->margin[TOP], b->margin[BOTTOM], lh__delta_outer_main(ctx->flex, b),
+                box_size_main + lh__delta_outer_main(ctx->flex, b), main_pos);
+        }
 
-            if (jc_gap_between > 0 || jc_gap_between_rem > 0) {
-                int extra_between_for_item = 0;
-                if (jc_gap_between_rem > 0) {
-                    int gap_idx = (int)(i - line->first);
-                    int gaps = (int)(line->count - 1);
-                    if (gaps > 0) {
-                        if (!ctx->main_reversed) {
-                            if (gap_idx < jc_gap_between_rem && gap_idx < gaps) {
-                                extra_between_for_item = 1;
-                            }
-                        } else {
-                            int rev_idx = gaps - 1 - gap_idx;
-                            if (rev_idx < jc_gap_between_rem && gap_idx < gaps) {
-                                extra_between_for_item = 1;
-                            }
+        if (jc_gap_between > 0 || jc_gap_between_rem > 0) {
+            int extra_between_for_item = 0;
+            if (jc_gap_between_rem > 0) {
+                int gap_idx = (int)(i - line->first);
+                int gaps = (int)(line->count - 1);
+                if (gaps > 0) {
+                    if (!ctx->main_reversed) {
+                        if (gap_idx < jc_gap_between_rem && gap_idx < gaps) {
+                            extra_between_for_item = 1;
+                        }
+                    } else {
+                        int rev_idx = gaps - 1 - gap_idx;
+                        if (rev_idx < jc_gap_between_rem && gap_idx < gaps) {
+                            extra_between_for_item = 1;
                         }
                     }
                 }
-
-                main_pos += (!ctx->main_reversed ? 1 : -1) * (jc_gap_between + extra_between_for_item);
-                NSLOG(flex, DEEPDEBUG, "ITEM[%zu]: after jc_gap main_pos=%d (jc_gap=%d)", i, main_pos, jc_gap_between);
             }
 
-            /* Add CSS gap property spacing between items (not after the last item) */
-            if (i < item_count - 1 && ctx->main_gap > 0) {
-                NSLOG(
-                    flex, DEEPDEBUG, "ITEM[%zu]: ADDING CSS GAP main_pos_before=%d gap=%d", i, main_pos, ctx->main_gap);
-                main_pos += (!ctx->main_reversed ? 1 : -1) * ctx->main_gap;
-                NSLOG(flex, DEEPDEBUG, "ITEM[%zu]: ADDING CSS GAP main_pos_after=%d", i, main_pos);
-            }
+            main_pos += (!ctx->main_reversed ? 1 : -1) * (jc_gap_between + extra_between_for_item);
+            NSLOG(flex, DEEPDEBUG, "ITEM[%zu]: after jc_gap main_pos=%d (jc_gap=%d)", i, main_pos, jc_gap_between);
+        }
 
-            /* CSS FLEXBOX §9.8 COMPLIANCE: Cross Size Determination */
-            cross_size = box_size_cross + lh__delta_outer_cross(ctx->flex, b);
-            if (line->cross_size < cross_size) {
-                NSLOG(flex, WARNING, "LINE CROSS_SIZE update: box %p type=%d height=%d -> line->cross_size=%d", b,
-                    b->type, box_size_cross, cross_size);
-                line->cross_size = cross_size;
-            }
+        /* Add CSS gap property spacing between items (not after the last item) */
+        if (i < item_count - 1 && ctx->main_gap > 0) {
+            NSLOG(flex, DEEPDEBUG, "ITEM[%zu]: ADDING CSS GAP main_pos_before=%d gap=%d", i, main_pos, ctx->main_gap);
+            main_pos += (!ctx->main_reversed ? 1 : -1) * ctx->main_gap;
+            NSLOG(flex, DEEPDEBUG, "ITEM[%zu]: ADDING CSS GAP main_pos_after=%d", i, main_pos);
+        }
+
+        /* CSS FLEXBOX §9.8 COMPLIANCE: Cross Size Determination */
+        cross_size = box_size_cross + lh__delta_outer_cross(ctx->flex, b);
+        if (line->cross_size < cross_size) {
+            NSLOG(flex, WARNING, "LINE CROSS_SIZE update: box %p type=%d height=%d -> line->cross_size=%d", b, b->type,
+                box_size_cross, cross_size);
+            line->cross_size = cross_size;
         }
     }
 
@@ -1836,7 +1854,7 @@ static void layout_flex__place_line_items_cross(struct flex_ctx *ctx, struct fle
                 }
 
                 /* Relayout children for stretch */
-                if (!layout_flex_item(ctx, item, b->width)) {
+                if (!layout_flex_item(ctx, item, b->width, true)) {
                     return;
                 }
 
@@ -2043,24 +2061,15 @@ bool layout_flex(struct box *flex, int available_width, html_content *content)
         qsort(ctx->item.data, ctx->item.count, sizeof(struct flex_item_data), flex_item_cmp);
     }
 
-    if (ctx->item.count == 0) {
-        /* Empty flex container: resolve height to 0 (no content = no height).
-         * This mirrors the resolution at line 2021-2022 for non-empty containers
-         * and prevents integer overflow when parent uses unresolved AUTO height. */
-        if (flex->height == AUTO) {
-            flex->height = 0;
+    if (ctx->item.count > 0) {
+        /* Place only in-flow items onto lines. Absolute-only containers still
+         * go through the common auto-height and min/max-height resolution. */
+        success = layout_flex__collect_items_into_lines(ctx);
+        if (!success) {
+            goto cleanup;
         }
-        layout_flex_ctx__destroy(ctx);
-        return true;
+        layout_flex__place_lines(ctx);
     }
-
-    /* Place items onto lines. */
-    success = layout_flex__collect_items_into_lines(ctx);
-    if (!success) {
-        goto cleanup;
-    }
-
-    layout_flex__place_lines(ctx);
 
     if (flex->height == AUTO) {
         flex->height = ctx->horizontal ? ctx->cross_size : ctx->main_size;
@@ -2091,7 +2100,7 @@ bool layout_flex(struct box *flex, int available_width, html_content *content)
 
         /* Also handle nested column flex containers recursively */
         for (struct box *child = flex->children; child; child = child->next) {
-            if (child->type == BOX_FLEX && child->style) {
+            if (child->type == BOX_FLEX && child->style && !lh__box_is_absolute(child)) {
                 uint8_t child_flex_dir = css_computed_flex_direction(child->style);
                 bool child_is_column = (child_flex_dir == CSS_FLEX_DIRECTION_COLUMN ||
                     child_flex_dir == CSS_FLEX_DIRECTION_COLUMN_REVERSE);

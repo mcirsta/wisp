@@ -86,3 +86,8 @@ void flex_test_style_wrap(css_computed_style *style, uint8_t wrap)
 {
     set_flex_wrap(style, wrap);
 }
+
+void flex_test_style_shrink(css_computed_style *style, int shrink)
+{
+    set_flex_shrink(style, CSS_FLEX_SHRINK_SET, INTTOFIX(shrink));
+}
