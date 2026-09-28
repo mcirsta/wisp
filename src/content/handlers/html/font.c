@@ -162,14 +162,11 @@ void font_plot_style_from_css(
 
     css_computed_font_size(css, &length, &unit);
     if (unit == CSS_UNIT_CALC) {
-        int px = 0;
-        if (css_computed_length_to_px(css, unit_len_ctx, -1, length, unit, &px) == CSS_OK) {
-            css_fixed css_px = css_unit_device2css_px(INTTOFIX(px), unit_len_ctx->device_dpi);
-            fstyle->size = FIXTOINT(
-                FMUL(css_unit_font_size_len2pt(css, unit_len_ctx, css_px, CSS_UNIT_PX), INTTOFIX(PLOT_STYLE_SCALE)));
-        } else {
-            fstyle->size = 0;
-        }
+        /* One em uses the computed font's fixed-point resolver, including
+         * calc(). The integer layout-length API would discard its fraction. */
+        css_fixed css_px = css_unit_len2css_px(css, unit_len_ctx, INTTOFIX(1), CSS_UNIT_EM);
+        fstyle->size = FIXTOINT(
+            FMUL(css_unit_font_size_len2pt(css, unit_len_ctx, css_px, CSS_UNIT_PX), INTTOFIX(PLOT_STYLE_SCALE)));
     } else {
         fstyle->size = FIXTOINT(
             FMUL(css_unit_font_size_len2pt(css, unit_len_ctx, length.value, unit), INTTOFIX(PLOT_STYLE_SCALE)));

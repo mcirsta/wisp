@@ -1,0 +1,24 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Fractional HTML font sizes</title>
+<style>
+@font-face { font-family: FractionalTest; src: url(fonts/normal-400.ttf); }
+html { font-size: 31px; }
+body { margin: 12px; font: 31px/24px FractionalTest, sans-serif; color: black; background: white; }
+.row { height: 30px; }
+.sample { display: inline-block; vertical-align: top; }
+.wrap { width: 22px; line-height: 20px; margin-bottom: 4px; }
+</style>
+<div class="row"><span id="integer15" class="sample" style="font-size:15px">café alpha beta gamma</span></div>
+<div class="row"><span id="fraction155" class="sample" style="font-size:15.5px">café alpha beta gamma</span></div>
+<div class="row"><span id="fraction159" class="sample" style="font-size:15.9px">café alpha beta gamma</span></div>
+<div class="row"><span id="integer16" class="sample" style="font-size:16px">café alpha beta gamma</span></div>
+<div class="row"><span id="em" class="sample" style="font-size:.5em">café alpha beta gamma</span></div>
+<div class="row"><span id="rem" class="sample" style="font-size:.5rem">café alpha beta gamma</span></div>
+<div class="row"><span id="percent" class="sample" style="font-size:50%">café alpha beta gamma</span></div>
+<div class="row"><span id="calc" class="sample" style="font-size:calc(15px + .5px)">café alpha beta gamma</span></div>
+<div class="row"><span id="positive" class="sample" style="font-size:15.5px;letter-spacing:2px">café alpha beta gamma</span></div>
+<div class="row"><span id="negative" class="sample" style="font-size:15.5px;letter-spacing:-1px">café alpha beta gamma</span></div>
+<div class="row"><span id="minimum" class="sample" style="font-size:1px">café alpha beta gamma</span></div>
+<div id="wrap15" class="wrap" style="font-size:15px">a b</div>
+<div id="wrap155" class="wrap" style="font-size:15.5px">a b</div>

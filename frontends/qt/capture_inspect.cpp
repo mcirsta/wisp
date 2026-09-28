@@ -188,7 +188,9 @@ static QJsonObject describe(struct box *box, const css_unit_ctx *units)
         const bool variable = !face.fontTable("fvar").isEmpty();
         const QByteArray os2 = face.fontTable("OS/2");
         result["font"] = QJsonObject{{"selected_family", font.family()}, {"resolved_family", QFontInfo(font).family()},
-            {"pixel_size", font.pixelSize()}, {"weight", style.weight}, {"selected_weight", font.weight()},
+            {"pixel_size", font.pixelSize()},
+            {"effective_pixel_size", font.pixelSize() * nsqt_capture_font_scale(&style)},
+            {"weight", style.weight}, {"selected_weight", font.weight()},
             {"resolved_style", face.styleName()}, {"variable", variable},
             {"face_weight", !variable && os2.size() >= 6 ? QJsonValue(qFromBigEndian<quint16>(os2.constData() + 4)) :
                                                          QJsonValue(QJsonValue::Null)},

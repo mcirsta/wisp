@@ -10,5 +10,6 @@
 struct hlcache_handle;
 struct plot_font_style;
 
+qreal nsqt_capture_font_scale(const struct plot_font_style *style);
 QFont nsqt_capture_font(const struct plot_font_style *style);
 QJsonObject nsqt_capture_inspect(struct hlcache_handle *content, const QStringList &ids, const QPoint &point);

@@ -59,6 +59,10 @@ Font diagnostics distinguish `weight` (the CSS request), `selected_weight`
 identifies variable fonts. Qt's reported numeric weight alone can echo the request
 even when it loaded a different face.
 
+`pixel_size` is the underlying integer Qt font size. `effective_pixel_size`
+includes the fractional scale used for measurement and painting (before page
+zoom), so a 15.9px CSS font can report a 15px base and approximately 15.9px effective.
+
 ID lookup distinguishes `not_found` from `no_box` (for example `display:none`,
 a hidden ancestor, or an SVG subelement without its own HTML box). Wrapped
 inline elements can own several boxes. Reports include up to 64 matching boxes,

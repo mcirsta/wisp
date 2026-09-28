@@ -113,6 +113,14 @@ if(BUILD_TESTING AND WISP_ENABLE_TESTS)
     set_tests_properties(qt_font_fallback PROPERTIES TIMEOUT 30
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_SCALE_FACTOR=1;QT_SCREEN_SCALE_FACTORS=1;QT_FONT_DPI=96")
 
+    add_executable(qt_fractional_fonts_test test_fractional_fonts.cpp layout.cpp)
+    target_include_directories(qt_fractional_fonts_test PRIVATE
+        ${CMAKE_SOURCE_DIR}/include ${CMAKE_SOURCE_DIR}/src ${CMAKE_SOURCE_DIR}/frontends)
+    target_link_libraries(qt_fractional_fonts_test PRIVATE Qt6::Widgets wisp)
+    add_test(NAME qt_fractional_fonts COMMAND qt_fractional_fonts_test ${CMAKE_SOURCE_DIR}/test/fonts/normal-400.ttf)
+    set_tests_properties(qt_fractional_fonts PROPERTIES TIMEOUT 30
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_SCALE_FACTOR=1;QT_SCREEN_SCALE_FACTORS=1;QT_FONT_DPI=96")
+
     add_executable(qt_text_split_test test_text_split.cpp test_text_reflow.c layout.cpp
         $<TARGET_OBJECTS:margin_collapse_style>)
     target_include_directories(qt_text_split_test PRIVATE
@@ -157,6 +165,10 @@ if(WISP_QT_CAPTURE)
         set_tests_properties(qt_scrolling_bounds PROPERTIES TIMEOUT 60)
         find_program(WISP_TEST_MAGICK magick)
         if(WISP_TEST_MAGICK)
+            add_test(NAME qt_fractional_font_capture
+                COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_fractional_fonts.py
+                    $<TARGET_FILE:wisp-qt> ${WISP_TEST_MAGICK})
+            set_tests_properties(qt_fractional_font_capture PROPERTIES TIMEOUT 30)
             add_test(NAME qt_input_placeholders
                 COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_input_placeholders.py
                     $<TARGET_FILE:wisp-qt> ${WISP_TEST_MAGICK})
@@ -216,7 +228,7 @@ target_link_libraries(wisp-qt PRIVATE Qt6::Widgets Qt6::Core Qt6::Gui wisp)
 # backends on other platforms keep using installed families and Qt substitutions.
 if(QT_FEATURE_fontconfig)
     find_package(Fontconfig REQUIRED)
-    foreach(font_target wisp-qt qt_font_weight_test qt_font_fallback_test qt_text_split_test)
+    foreach(font_target wisp-qt qt_font_weight_test qt_font_fallback_test qt_text_split_test qt_fractional_fonts_test)
         if(TARGET ${font_target})
             target_link_libraries(${font_target} PRIVATE Fontconfig::Fontconfig)
         endif()

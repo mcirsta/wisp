@@ -236,6 +236,12 @@ css_select_results *nscss_get_style(nscss_select_ctx *ctx, dom_node *n, const cs
     int pseudo_element;
     css_error error;
 
+    /* During box construction the document's layout/root style is not set
+     * yet. Use the already selected root for rem resolution in composition. */
+    css_unit_ctx units = *unit_len_ctx;
+    units.root_style = ctx->root_style;
+    unit_len_ctx = &units;
+
     /* Select style for node */
     error = css_select_style(ctx->ctx, n, unit_len_ctx, media, inline_style, &selection_handler, ctx, &styles);
 

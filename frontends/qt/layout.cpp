@@ -71,15 +71,20 @@ static QPaintDevice *get_metrics_device(void)
     return nullptr;
 }
 
-/* QFont's pixel size is integral. Preserve the remaining SVG scale in both
- * measurement and painting, without changing HTML/CSS font sizing or DPI. */
-static qreal svg_font_scale(const struct plot_font_style *style)
+/* QFont's pixel size is integral. Keep the residual scale in all text
+ * operations, with CSS points converted at 96dpi and SVG already in pixels. */
+static qreal font_pixel_size(const struct plot_font_style *style)
 {
-    if (!(style->flags & FONTF_SIZE_PIXELS) || style->size <= 0) {
+    if (style->size <= 0)
         return 1.0;
-    }
-    int pixels = qMax(1, style->size / PLOT_STYLE_SCALE);
-    return qreal(style->size) / (qreal(pixels) * PLOT_STYLE_SCALE);
+    qreal pixels = qreal(style->size) / PLOT_STYLE_SCALE;
+    return (style->flags & FONTF_SIZE_PIXELS) ? pixels : pixels * 4 / 3;
+}
+
+static qreal font_scale(const struct plot_font_style *style)
+{
+    qreal pixels = font_pixel_size(style);
+    return pixels / qMax(1, int(pixels));
 }
 
 /* CSS Fonts matching order, rather than Qt's nearest-weight distance.
@@ -285,31 +290,16 @@ static QFont *new_qfont_fstyle(const struct plot_font_style *fstyle)
 
     nfont = new QFont(family, -1, fstyle->weight, italic);
 
-    /* Calculate pixel size from fstyle->size.
-     * If FONTF_SIZE_PIXELS is set (SVG), size is already in pixels * PLOT_STYLE_SCALE.
-     * Otherwise (HTML/CSS), size is in points and needs conversion.
-     */
-    int pixelSize;
-    if (fstyle->flags & FONTF_SIZE_PIXELS) {
-        /* SVG: size is pixels * PLOT_STYLE_SCALE, use directly */
-        pixelSize = fstyle->size / PLOT_STYLE_SCALE;
-    } else {
-        /* HTML/CSS: size is points * PLOT_STYLE_SCALE, convert to pixels.
-         * Standard conversion: pixels = points × (96/72) = points × 4/3
-         * With PLOT_STYLE_SCALE: pixelSize = (fstyle->size × 4) / (PLOT_STYLE_SCALE × 3)
-         */
-        pixelSize = (fstyle->size * 4) / (PLOT_STYLE_SCALE * 3);
-    }
-    nfont->setPixelSize(pixelSize > 0 ? pixelSize : 1);
+    nfont->setPixelSize(qMax(1, int(font_pixel_size(fstyle))));
     match_font_weight(*nfont);
 
     if (fstyle->flags & FONTF_SMALLCAPS) {
         nfont->setCapitalization(QFont::SmallCaps);
     }
 
-    /* Apply letter-spacing if set */
+    /* The painter scales glyphs, but absolute CSS letter spacing stays in pixels. */
     if (fstyle->letter_spacing != 0) {
-        nfont->setLetterSpacing(QFont::AbsoluteSpacing, (qreal)fstyle->letter_spacing);
+        nfont->setLetterSpacing(QFont::AbsoluteSpacing, qreal(fstyle->letter_spacing) / font_scale(fstyle));
     }
 
     return nfont;
@@ -390,6 +380,11 @@ static QFont *nsfont_style_to_font(const struct plot_font_style *fstyle)
 }
 
 #ifdef WISP_QT_CAPTURE
+qreal nsqt_capture_font_scale(const struct plot_font_style *style)
+{
+    return font_scale(style);
+}
+
 QFont nsqt_capture_font(const struct plot_font_style *style)
 {
     // Use the same selection, substitutions and pixel sizing as text painting.
@@ -420,6 +415,7 @@ static void nsqt_font_cache_clear(void)
  * Find the position in a string where an x coordinate falls.
  *
  * \param[in] metrics qt font metrics to measure with.
+ * \param[in] scale residual font-size scale applied by the painter.
  * \param[in] string UTF-8 string to measure
  * \param[in] length length of string, in bytes
  * \param[in] x coordinate to search for
@@ -430,7 +426,7 @@ static void nsqt_font_cache_clear(void)
  * code on faliure
  */
 static nserror
-layout_position(const QFontMetricsF &metrics, const char *string, size_t length, int x, size_t *string_idx,
+layout_position(const QFontMetricsF &metrics, qreal scale, const char *string, size_t length, int x, size_t *string_idx,
     int *actual_x)
 {
     qreal full_x;
@@ -448,7 +444,7 @@ layout_position(const QFontMetricsF &metrics, const char *string, size_t length,
     if (x <= 0) {
         *string_idx = 0;
         /* Use QString for correct UTF-8 byte interpretation */
-        *actual_x = qRound(metrics.horizontalAdvance(QString::fromUtf8(string, length)));
+        *actual_x = qRound(metrics.horizontalAdvance(QString::fromUtf8(string, length)) * scale);
         return NSERROR_OK;
     }
 
@@ -464,7 +460,7 @@ layout_position(const QFontMetricsF &metrics, const char *string, size_t length,
     /* Convert character count back to byte position */
     str_len = qstr.left(chars_to_measure).toUtf8().length();
 
-    full_x = metrics.horizontalAdvance(qstr.left(chars_to_measure));
+    full_x = metrics.horizontalAdvance(qstr.left(chars_to_measure)) * scale;
     if (full_x < x) {
         /* whole string fits */
         *string_idx = length;
@@ -480,7 +476,7 @@ layout_position(const QFontMetricsF &metrics, const char *string, size_t length,
         current_chars = char_count;
 
     str_len = qstr.left(current_chars).toUtf8().length();
-    measured_x = metrics.horizontalAdvance(qstr.left(current_chars));
+    measured_x = metrics.horizontalAdvance(qstr.left(current_chars)) * scale;
 
     if (measured_x == 0) {
         *string_idx = 0;
@@ -498,14 +494,14 @@ layout_position(const QFontMetricsF &metrics, const char *string, size_t length,
                 break;
             }
             str_len = qstr.left(current_chars).toUtf8().length();
-            measured_x = metrics.horizontalAdvance(qstr.left(current_chars));
+            measured_x = metrics.horizontalAdvance(qstr.left(current_chars)) * scale;
         }
     } else {
         /* too short try more chars until overflowing */
         qreal n_measured_x = measured_x;
         while (n_measured_x < x && current_chars < char_count) {
             size_t n_str_len = qstr.left(current_chars + 1).toUtf8().length();
-            n_measured_x = metrics.horizontalAdvance(qstr.left(current_chars + 1));
+            n_measured_x = metrics.horizontalAdvance(qstr.left(current_chars + 1)) * scale;
             if (n_measured_x < x) {
                 measured_x = n_measured_x;
                 current_chars++;
@@ -540,7 +536,7 @@ static nserror nsqt_layout_width(const struct plot_font_style *fstyle, const cha
     /* IMPORTANT: Use QString::fromUtf8 to correctly interpret byte length as UTF-8.
      * Qt's horizontalAdvance(char*, len) treats len as CHARACTER count, not byte count! */
     QString qstr = QString::fromUtf8(string, length);
-    qreal advance = metrics.horizontalAdvance(qstr) * svg_font_scale(fstyle);
+    qreal advance = metrics.horizontalAdvance(qstr) * font_scale(fstyle);
     /* The core skips splitting a box when its integer width fits. Round HTML
      * advances up so a fractional overflow cannot bypass that check. Collapsed
      * spaces are positioning advances between boxes, not text to fit: retain
@@ -576,7 +572,7 @@ static nserror nsqt_layout_position(
     QFontMetricsF metrics(*font, device);
     nserror res;
 
-    res = layout_position(metrics, string, length, x, string_idx, actual_x);
+    res = layout_position(metrics, font_scale(fstyle), string, length, x, string_idx, actual_x);
 
     delete font;
 
@@ -622,9 +618,10 @@ static nserror nsqt_layout_split(const struct plot_font_style *fstyle, const cha
     int split_x;
     size_t str_len;
     size_t last_word_end = 0; /* Both offset and width exclude the breaking space. */
-    qreal full_width = metrics.horizontalAdvance(QString::fromUtf8(string, length));
+    qreal scale = font_scale(fstyle);
+    qreal full_width = metrics.horizontalAdvance(QString::fromUtf8(string, length)) * scale;
 
-    res = layout_position(metrics, string, length, split, &split_len, &split_x);
+    res = layout_position(metrics, scale, string, length, split, &split_len, &split_x);
     if (res != NSERROR_OK) {
         delete font;
         return res;
@@ -677,7 +674,7 @@ static nserror nsqt_layout_split(const struct plot_font_style *fstyle, const cha
         }
 
         /* Measure width WITHOUT trailing space - space is trimmed at line end */
-        qreal word_width = metrics.horizontalAdvance(QString::fromUtf8(string, word_end));
+        qreal word_width = metrics.horizontalAdvance(QString::fromUtf8(string, word_end)) * scale;
 
         if (word_width <= split) {
             /* This word fits! Update last_word_end to this position */
@@ -697,7 +694,7 @@ static nserror nsqt_layout_split(const struct plot_font_style *fstyle, const cha
      * advance separately. Including that space in the offset but not the width
      * loses the gap when retained text boxes are placed together on reflow. */
     *string_idx = last_word_end;
-    *actual_x = qCeil(metrics.horizontalAdvance(QString::fromUtf8(string, last_word_end)));
+    *actual_x = qCeil(metrics.horizontalAdvance(QString::fromUtf8(string, last_word_end)) * scale);
 
 nsqt_layout_split_done:
     delete font;
@@ -725,7 +722,7 @@ nsqt_layout_plot(QPainter *painter, const struct plot_font_style *fstyle, int x,
     painter->setPen(pen);
     painter->setFont(*font);
 
-    qreal scale = svg_font_scale(fstyle);
+    qreal scale = font_scale(fstyle);
     if (scale != 1.0) {
         painter->save();
         painter->translate(x, y);
@@ -823,7 +820,7 @@ static nserror nsqt_font_metrics(const struct plot_font_style *fstyle, int *asce
 {
     QFont *font = nsfont_style_to_font(fstyle);
     QFontMetricsF metrics(*font, get_metrics_device());
-    qreal scale = svg_font_scale(fstyle);
+    qreal scale = font_scale(fstyle);
     *ascent = qRound(metrics.ascent() * scale);
     *descent = qRound(metrics.descent() * scale);
     delete font;
