@@ -820,6 +820,8 @@ class MultiFileGenerator:
             'ZERO_VALUE':       '0',
             # C keyword collision — 'wrap' is used by WRAP: in specs
             'WRAP_STRING':      'wrap',
+            # Legacy pseudo-element spelling retains its leading hyphen.
+            'WEBKIT_INPUT_PLACEHOLDER': '-webkit-input-placeholder',
         }
         
         # ═══════════════════════════════════════════════════════════════

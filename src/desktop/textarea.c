@@ -115,6 +115,8 @@ struct textarea {
     int line_height; /**< Line height obtained from style */
 
     struct textarea_utf8 text; /**< Textarea text content */
+    char *placeholder; /**< Hint, never part of the editable/submitted text */
+    plot_font_style_t placeholder_fstyle;
 #define PASSWORD_REPLACEMENT "\xe2\x80\xa2"
 #define PASSWORD_REPLACEMENT_W (sizeof(PASSWORD_REPLACEMENT) - 1)
     struct textarea_utf8 password; /**< Text for obscured display */
@@ -151,6 +153,17 @@ struct textarea {
 
     struct textarea_undo undo; /**< Undo/redo information */
 };
+
+
+static void textarea_request_redraw(struct textarea *ta)
+{
+    struct textarea_msg msg = {
+        .ta = ta,
+        .type = TEXTAREA_MSG_REDRAW_REQUEST,
+        .data.redraw = {0, 0, ta->vis_width, ta->vis_height},
+    };
+    ta->callback(ta->data, &msg);
+}
 
 
 /**
@@ -1695,6 +1708,7 @@ static void
 textarea_set_text_style(struct textarea *ta, const plot_font_style_t *fstyle, colour selected_text, colour selected_bg)
 {
     ta->fstyle = *fstyle;
+    textarea_set_placeholder_style(ta, NULL);
 
     ta->sel_fstyle = *fstyle;
     ta->sel_fstyle.foreground = selected_text;
@@ -1737,6 +1751,7 @@ textarea_create(const textarea_flags flags, const textarea_setup *setup, textare
 
     ret->border_width = setup->border_width;
     ret->border_col = setup->border_col;
+    ret->placeholder = NULL;
 
     textarea_set_text_style(ret, &setup->text, setup->selected_text, setup->selected_bg);
 
@@ -1834,8 +1849,52 @@ void textarea_destroy(struct textarea *ta)
     free(ta->undo.details);
 
     free(ta->text.data);
+    free(ta->placeholder);
     free(ta->lines);
     free(ta);
+}
+
+
+/* exported interface, documented in textarea.h */
+bool textarea_set_placeholder(struct textarea *ta, const char *text)
+{
+    char *hint = NULL;
+
+    if (text != NULL && text[0] != '\0') {
+        hint = strdup(text);
+        if (hint == NULL)
+            return false;
+
+        /* HTML inputs strip newlines; textareas preserve line breaks. */
+        char *out = hint;
+        for (const char *in = text; *in != '\0'; in++) {
+            if (*in == '\r' || *in == '\n') {
+                if (ta->flags & TEXTAREA_MULTILINE) {
+                    *out++ = '\n';
+                    if (*in == '\r' && in[1] == '\n')
+                        in++;
+                }
+            } else {
+                *out++ = *in;
+            }
+        }
+        *out = '\0';
+    }
+
+    free(ta->placeholder);
+    ta->placeholder = hint;
+    if (ta->text.len == 1)
+        textarea_request_redraw(ta);
+    return true;
+}
+
+
+/* exported interface, documented in textarea.h */
+void textarea_set_placeholder_style(struct textarea *ta, const plot_font_style_t *style)
+{
+    ta->placeholder_fstyle = style != NULL ? *style : ta->fstyle;
+    if (style == NULL)
+        ta->placeholder_fstyle.foreground = 0x757575;
 }
 
 
@@ -1871,6 +1930,9 @@ bool textarea_set_text(struct textarea *ta, const char *text)
         if (!textarea_reflow_singleline(ta, 0, &r))
             return false;
     }
+
+    if (ta->placeholder != NULL)
+        textarea_request_redraw(ta);
 
     return true;
 }
@@ -1968,6 +2030,64 @@ bool textarea_set_caret(struct textarea *ta, int caret)
     }
 
     return true;
+}
+
+
+/** Paint hints without adding editable lines, scroll extents or selection state. */
+static void textarea_redraw_placeholder(struct textarea *ta, int x, int y, float scale,
+    const struct rect *clip, const struct redraw_context *ctx)
+{
+    plot_font_style_t style = ta->placeholder_fstyle;
+    struct rect r = *clip;
+    const char *text = ta->placeholder;
+    const char *paragraph_end = text;
+    int width = ta->vis_width - 2 * ta->border_width - ta->pad_left - ta->pad_right;
+    int line_height = max(1, FIXTOINT(FMUL(FLTTOFIX(1.3),
+        FDIV(FMUL(nscss_screen_dpi, FDIV(INTTOFIX(style.size), INTTOFIX(PLOT_STYLE_SCALE))), F_72))));
+    int baseline;
+    int line = 0;
+
+    if (width <= 0 || style.foreground == NS_TRANSPARENT)
+        return;
+
+    r.x0 = max(r.x0, x + (ta->border_width + ta->pad_left) * scale);
+    r.x1 = min(r.x1, x + (ta->vis_width - ta->border_width - ta->pad_right) * scale);
+    if (r.x0 >= r.x1 || r.y0 >= r.y1)
+        return;
+    ctx->plot->clip(ctx, &r);
+
+    if (ta->flags & TEXTAREA_MULTILINE)
+        baseline = ta->border_width + ta->pad_top + (line_height * 3 + 2) / 4;
+    else
+        baseline = ta->border_width + (2 * (ta->vis_height - 2 * ta->border_width) + line_height + 2) / 4;
+
+    style.size *= scale;
+    while (*text != '\0' && y + (baseline + (line - 1) * line_height) * scale < r.y1) {
+        size_t length;
+        int actual_width;
+
+        if (text >= paragraph_end)
+            paragraph_end = text + strcspn(text, "\n");
+        length = paragraph_end - text;
+        if ((ta->flags & TEXTAREA_MULTILINE) && length > 0) {
+            size_t split;
+            if (guit->layout->split(&ta->placeholder_fstyle, text, length, width, &split, &actual_width) ==
+                    NSERROR_OK && split > 0 && split < length)
+                length = split;
+        }
+        if (length > 0) {
+            ctx->plot->text(ctx, &style, x + (ta->border_width + ta->pad_left) * scale,
+                y + (baseline + line * line_height) * scale, text, length);
+        }
+        if (!(ta->flags & TEXTAREA_MULTILINE))
+            break;
+
+        text += length;
+        /* Consume the explicit newline or the space at a soft wrap. */
+        if (*text == '\n' || (text < paragraph_end && *text == ' '))
+            text++;
+        line++;
+    }
 }
 
 
@@ -2095,6 +2215,9 @@ void textarea_redraw(struct textarea *ta, int x, int y, colour bg, float scale, 
     }
 
     plot_style_fill_bg.fill_colour = ta->sel_fstyle.background;
+
+    if (ta->text.len == 1 && ta->placeholder != NULL)
+        textarea_redraw_placeholder(ta, x, y, scale, &r, ctx);
 
     for (line = line0; (line <= line1) && (y + line * ta->line_height <= r.y1 + ta->scroll_y); line++) {
         if (ta->lines[line].b_length == 0) {
@@ -2273,6 +2396,7 @@ bool textarea_keypress(struct textarea *ta, uint32_t key)
     int byte_delta = 0;
     int x, y;
     bool redraw = false;
+    bool was_empty = ta->text.len == 1;
     bool readonly;
     bool bar_x = ta->bar_x;
     bool bar_y = ta->bar_y;
@@ -2731,9 +2855,11 @@ bool textarea_keypress(struct textarea *ta, uint32_t key)
     msg.ta = ta;
     msg.type = TEXTAREA_MSG_REDRAW_REQUEST;
 
-    if (bar_x != (ta->bar_x != NULL) || bar_y != (ta->bar_y != NULL) || h_extent != ta->h_extent ||
+    if ((ta->placeholder != NULL && was_empty != (ta->text.len == 1)) ||
+        bar_x != (ta->bar_x != NULL) || bar_y != (ta->bar_y != NULL) || h_extent != ta->h_extent ||
         v_extent != ta->v_extent) {
-        /* Must redraw since scrollbars have changed */
+        /* Repaint the whole hint on empty/nonempty transitions, including
+         * wrapped lines, even when the edit itself affects only one glyph. */
         msg.data.redraw.x0 = ta->border_width;
         msg.data.redraw.y0 = ta->border_width;
         msg.data.redraw.x1 = ta->vis_width - ta->border_width;

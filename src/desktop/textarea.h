@@ -184,6 +184,23 @@ bool textarea_set_text(struct textarea *ta, const char *text);
 
 
 /**
+ * Set an owned copy of a UTF-8 hint, displayed only while the value is empty.
+ * NULL removes the hint. Does not change the value, selection or undo history.
+ * Requests a redraw if the value is empty.
+ * Returns false on allocation failure, leaving the previous hint intact.
+ */
+bool textarea_set_placeholder(struct textarea *ta, const char *text);
+
+
+/**
+ * Set the hint's font and colour during layout (does not request a redraw).
+ * NULL uses the current text style with a default grey foreground.
+ * textarea_set_layout resets this style; apply any override afterwards.
+ */
+void textarea_set_placeholder_style(struct textarea *ta, const plot_font_style_t *style);
+
+
+/**
  * Insert the text in a text area at the caret, replacing any selection.
  *
  * \param ta Text area

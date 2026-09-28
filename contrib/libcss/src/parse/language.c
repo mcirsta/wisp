@@ -1330,6 +1330,11 @@ parsePseudo(css_language *c, const parserutils_vector *vector, int32_t *ctx, boo
     qname.name = token->idata;
 
     /* Search lut for selector type */
+    /* Legacy WebKit spelling uses the standard placeholder style slot. */
+    if (require_element && token->type == CSS_TOKEN_IDENT &&
+        lwc_string_caseless_isequal(qname.name, c->strings[WEBKIT_INPUT_PLACEHOLDER], &match) == lwc_error_ok && match)
+        qname.name = c->strings[PLACEHOLDER];
+
     for (lut_idx = 0; lut_idx < N_ELEMENTS(pseudo_lut); lut_idx++) {
         if ((lwc_string_caseless_isequal(qname.name, c->strings[pseudo_lut[lut_idx].index], &match) == lwc_error_ok) &&
             match) {

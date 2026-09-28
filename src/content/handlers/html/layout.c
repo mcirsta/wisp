@@ -4552,18 +4552,6 @@ bool layout_block_context(struct box *block, int viewport_height, html_content *
         layout_apply_minmax_height(&content->unit_len_ctx, block, NULL);
     }
 
-    if (block->gadget &&
-        (block->gadget->type == GADGET_TEXTAREA || block->gadget->type == GADGET_PASSWORD ||
-            block->gadget->type == GADGET_TEXTBOX)) {
-        plot_font_style_t fstyle;
-        int ta_width = block->padding[LEFT] + block->width + block->padding[RIGHT];
-        int ta_height = block->padding[TOP] + block->height + block->padding[BOTTOM];
-        font_plot_style_from_css(&content->unit_len_ctx, block->style, &fstyle);
-        fstyle.background = NS_TRANSPARENT;
-        textarea_set_layout(block->gadget->data.text.ta, &fstyle, ta_width, ta_height, block->padding[TOP],
-            block->padding[RIGHT], block->padding[BOTTOM], block->padding[LEFT]);
-    }
-
     return true;
 }
 
@@ -5422,6 +5410,31 @@ static bool layout_has_transform(const struct box *box)
         count > 0;
 }
 
+/* Shared controls need final dimensions even when an ordinary block does not
+ * establish its own formatting context. This runs once per control in the
+ * existing final positioning walk, after flex/grid and absolute sizing. */
+static void layout_text_control(struct box *box, html_content *content)
+{
+    if (box->gadget &&
+        (box->gadget->type == GADGET_TEXTAREA || box->gadget->type == GADGET_PASSWORD ||
+            box->gadget->type == GADGET_TEXTBOX)) {
+        plot_font_style_t fstyle;
+        int ta_width = box->padding[LEFT] + box->width + box->padding[RIGHT];
+        int ta_height = box->padding[TOP] + box->height + box->padding[BOTTOM];
+        font_plot_style_from_css(&content->unit_len_ctx, box->style, &fstyle);
+        fstyle.background = NS_TRANSPARENT;
+        textarea_set_layout(box->gadget->data.text.ta, &fstyle, ta_width, ta_height, box->padding[TOP],
+            box->padding[RIGHT], box->padding[BOTTOM], box->padding[LEFT]);
+        if (box->styles != NULL && box->styles->styles[CSS_PSEUDO_ELEMENT_PLACEHOLDER] != NULL) {
+            font_plot_style_from_css(&content->unit_len_ctx,
+                box->styles->styles[CSS_PSEUDO_ELEMENT_PLACEHOLDER], &fstyle);
+            fstyle.background = NS_TRANSPARENT;
+            textarea_set_placeholder_style(box->gadget->data.text.ta, &fstyle);
+        }
+    }
+}
+
+
 /**
  * Recursively layout and position absolutely positioned boxes.
  *
@@ -5531,6 +5544,8 @@ layout_position_absolute(struct box *box, struct box *containing_block, int cx, 
             (c->abs_containing_block && (c->abs_containing_block->flags & IS_VIEWPORT)))
             box->flags |= HAS_FIXED_DESCENDANT;
     }
+
+    layout_text_control(box, content);
 
     return true;
 }

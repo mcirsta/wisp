@@ -1,0 +1,44 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Input and textarea placeholders</title>
+<style>
+body { margin: 12px; background: white; font: 16px sans-serif; }
+.row { height: 62px; position: relative; }
+input, textarea {
+    position: absolute; left: 0; top: 0; margin: 0;
+    box-sizing: border-box; width: 240px; height: 52px;
+    border: 1px solid #888; padding: 6px; background: white;
+    font: 16px/20px sans-serif; color: #757575;
+}
+.reference { left: 260px; }
+#styled::placeholder { color: #c00000; font: italic bold 18px monospace; }
+#styled-reference { color: #c00000; font: italic bold 18px monospace; }
+#legacy::-webkit-input-placeholder { color: #0000c0; }
+#legacy-reference { color: #0000c0; }
+.multi { height: 106px; }
+.multi textarea { height: 96px; width: 160px; }
+#block { position: static; display: block; overflow: visible; }
+#block::placeholder, #block-reference { color: #600080; }
+.flex { display: flex; width: 240px; height: 52px; }
+.grid { display: grid; width: 240px; grid-template-columns: 240px; grid-template-rows: 52px; }
+.flex input, .grid input { position: static; min-width: 0; height: auto; }
+#stretched { height: auto; bottom: 10px; }
+</style>
+<!-- Each hint should paint like the real value alongside it, without becoming a value. -->
+<div class="row"><input id="default" type="search" placeholder="Search …"><input class="reference" id="default-reference" value="Search …"></div>
+<div class="row"><input id="styled" placeholder="Styled hint"><input class="reference" id="styled-reference" value="Styled hint"></div>
+<div class="row"><input id="legacy" placeholder="CNX search"><input class="reference" id="legacy-reference" value="CNX search"></div>
+<div class="row"><input id="password" type="password" placeholder="Password"><input class="reference" id="password-reference" value="Password"></div>
+<div class="row"><input id="filled" placeholder="Must stay hidden" value="Actual value"><input class="reference" id="filled-reference" value="Actual value"></div>
+<div class="row"><input id="readonly" readonly placeholder="Read only"><input class="reference" id="readonly-reference" readonly value="Read only"></div>
+<div class="row"><input id="newlines" placeholder="a&#13;&#10;b&#13;c&#10;d"><input class="reference" id="newlines-reference" value="abcd"></div>
+<!-- CR/CRLF normalization is tested directly in the widget unit test. -->
+<div class="row multi"><textarea id="multiline" placeholder="café&#10;știri&#10;alpha beta gamma delta"></textarea><textarea class="reference" id="multiline-reference">café
+știri
+alpha beta gamma delta</textarea></div>
+<div class="row"><input id="empty" placeholder=""><input class="reference" id="empty-reference"></div>
+<!-- These controls must receive final widget geometry outside a block formatting context. -->
+<div class="row"><input id="block" placeholder="Block control"><input class="reference" id="block-reference" value="Block control"></div>
+<div class="row"><div class="flex"><input id="flex" placeholder="Flex control"></div><input class="reference" id="flex-reference" value="Flex control"></div>
+<div class="row"><div class="grid"><input id="grid" placeholder="Grid control"></div><input class="reference" id="grid-reference" value="Grid control"></div>
+<div class="row"><input id="stretched" placeholder="Absolute control"><input class="reference" id="stretched-reference" value="Absolute control"></div>

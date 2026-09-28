@@ -28,6 +28,7 @@
 #include <wisp/keypress.h>
 #include <wisp/misc.h>
 #include <wisp/utils/config.h>
+#include <wisp/utils/corestrings.h>
 #include <wisp/utils/log.h>
 #include <wisp/utils/messages.h>
 
@@ -162,9 +163,9 @@ static void box_textarea_callback(void *data, struct textarea_msg *msg)
         /* Request redraw of the required textarea rectangle */
         int x, y;
 
-        if (html->reflowing == true) {
-            /* Can't redraw during layout, and it will
-             * be redrawn after layout anyway. */
+        if (html->layout == NULL || html->reflowing) {
+            /* Creation can reflow the widget's scrollbars before the box
+             * tree has coordinates. The first HTML layout paints it. */
             break;
         }
 
@@ -317,6 +318,17 @@ bool box_textarea_create_textarea(html_content *html, struct box *box, struct do
 
     if (!textarea_set_text(gadget->data.text.ta, text))
         return false;
+
+    dom_string *placeholder = NULL;
+    err = dom_element_get_attribute(node, corestring_dom_placeholder, &placeholder);
+    if (err != DOM_NO_ERR)
+        return false;
+    if (placeholder != NULL) {
+        bool ok = textarea_set_placeholder(gadget->data.text.ta, dom_string_data(placeholder));
+        dom_string_unref(placeholder);
+        if (!ok)
+            return false;
+    }
 
     return true;
 }

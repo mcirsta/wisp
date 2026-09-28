@@ -374,6 +374,11 @@ button {
 	box-sizing: border-box;
 }
 
+input::placeholder,
+textarea::placeholder {
+	color: #757575;
+}
+
 input[disabled] {
 	background-color: #ddd;
 	color: #333;

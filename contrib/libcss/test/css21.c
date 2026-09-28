@@ -26,7 +26,8 @@ static css_error resolve_url(void *pw, const char *base, lwc_string *rel, lwc_st
 
 int main(int argc, char **argv)
 {
-    css_stylesheet_params params;
+    /* Optional callbacks, including font-face notification, default to NULL. */
+    css_stylesheet_params params = {0};
     css_stylesheet *sheet;
     FILE *fp;
     size_t len, origlen;
