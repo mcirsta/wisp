@@ -1,0 +1,24 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Zero font size and the minimum font preference</title>
+<style>
+@font-face { font-family: ZeroTest; src: url(fonts/normal-400.ttf); }
+body { margin: 12px; font: 16px/24px ZeroTest, sans-serif; color: black; background: white; }
+.row { height: 28px; }
+.sample { display: inline-block; vertical-align: top; }
+.zero { font-size: 0; }
+.tile { display: inline-block; width: 20px; height: 10px; background: green; }
+</style>
+<div class="row" id="plain-row"><span class="sample zero" id="plain">Invisible text</span></div>
+<div class="row" id="calc-row"><span class="sample" id="calc" style="font-size:calc(10px - 10px)">Invisible text</span></div>
+<div class="row" id="em-row"><span class="sample" id="em" style="font-size:0em">Invisible text</span></div>
+<div class="row zero" id="inherited-row"><span class="sample" id="inherited">Invisible text</span></div>
+<div class="row zero" id="child-row">Hidden parent <span class="sample" id="child" style="font-size:16px">Visible child</span> hidden tail</div>
+<div class="row" id="control-row"><span class="sample" id="control">Visible child</span></div>
+<div class="row zero" id="spaces"><span class="tile" id="first"></span> <span class="tile" id="second"></span></div>
+<div class="row"><span class="sample" id="minimum" style="font-size:1px">Minimum size</span></div>
+<div class="row" id="spacing-row"><span class="sample zero" id="spacing" style="letter-spacing:2px">ABC</span><span class="sample zero" id="negative" style="letter-spacing:-1px">ABC</span></div>
+<div class="zero" id="relative" style="width:2em;height:2em">Invisible text</div>
+<div class="zero" id="normal" style="line-height:normal">Invisible text</div>
+<div class="zero" id="numeric" style="line-height:1.5">Invisible text</div>
+<div class="zero" id="explicit" style="line-height:20px">Invisible text</div>

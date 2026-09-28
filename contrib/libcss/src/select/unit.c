@@ -197,8 +197,8 @@ static inline css_fixed css_unit__font_size_px(const css_computed_style *style, 
         font_length = FDIV(FMUL(font_length, F_96), F_72);
     }
 
-    /* Clamp to configured minimum */
-    if (font_length < font_size_minimum) {
+    /* Preserve zero for font-relative lengths, including line-height. */
+    if (font_length != 0 && font_length < font_size_minimum) {
         font_length = font_size_minimum;
     }
 

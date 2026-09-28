@@ -71,3 +71,18 @@ void flex_test_style_alignment(css_computed_style *style, uint8_t direction, uin
     set_justify_content(style, justify);
     set_height(style, CSS_HEIGHT_SET, (css_fixed_or_calc)INTTOFIX(height), CSS_UNIT_PX);
 }
+
+void flex_test_style_stretch(css_computed_style *style, int minimum, int maximum, bool auto_margin)
+{
+    set_align_self(style, CSS_ALIGN_SELF_STRETCH);
+    set_min_height(style, minimum < 0 ? CSS_MIN_HEIGHT_AUTO : CSS_MIN_HEIGHT_SET,
+        (css_fixed_or_calc)INTTOFIX(minimum < 0 ? 0 : minimum), CSS_UNIT_PX);
+    set_max_height(style, maximum < 0 ? CSS_MAX_HEIGHT_NONE : CSS_MAX_HEIGHT_SET,
+        (css_fixed_or_calc)INTTOFIX(maximum < 0 ? 0 : maximum), CSS_UNIT_PX);
+    set_margin_top(style, auto_margin ? CSS_MARGIN_AUTO : CSS_MARGIN_SET, (css_fixed_or_calc)0, CSS_UNIT_PX);
+}
+
+void flex_test_style_wrap(css_computed_style *style, uint8_t wrap)
+{
+    set_flex_wrap(style, wrap);
+}

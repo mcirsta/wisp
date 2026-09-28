@@ -119,6 +119,7 @@ struct flex_ctx {
 
     bool horizontal;
     bool main_reversed;
+    bool definite_cross_size;
     enum css_flex_wrap_e wrap;
 
     struct flex_items {
@@ -727,6 +728,9 @@ static bool layout_flex_item(const struct flex_ctx *ctx, const struct flex_item_
         break;
     }
 
+    /* Keep stretch definiteness visible throughout nested layout, then
+     * discard it so a later reflow cannot reuse this stretch decision. */
+    b->flags &= ~HEIGHT_STRETCHED;
     if (!success) {
         NSLOG(flex, ERROR, "box %p: layout failed", b);
     }
@@ -776,7 +780,7 @@ static inline bool layout_flex__base_and_main_sizes(
             /* Handle box-sizing: border-box by converting to content-box.
              * The delta_outer_main will be added later at line 314, so we
              * need to subtract padding+border now if box-sizing is border-box. */
-            layout_handle_box_sizing(&flex_unit_len_ctx, b, available_cross_size, ctx->horizontal, &basis_px);
+            layout_handle_box_sizing(&flex_unit_len_ctx, b, container_width, ctx->horizontal, &basis_px);
 
             /* For column flex with flex-basis: 0 (e.g., from 'flex: 1'), the item
              * should still grow to fit its content. The 0 means "start from content
@@ -1040,7 +1044,7 @@ static void layout_flex_ctx__populate_item_data(struct flex_ctx *ctx, const stru
          * - Row flex: main=width, cross=height
          * - Column flex: main=height, cross=width */
         int ref_main = horizontal ? available_width : ctx->available_main;
-        int ref_cross = horizontal ? ctx->available_main : available_width;
+        int ref_cross = horizontal ? ctx->available_cross : available_width;
         layout_flex__base_and_main_sizes(ctx, item, ref_main, ref_cross);
     }
 }
@@ -1736,6 +1740,11 @@ static bool layout_flex__collect_items_into_lines(struct flex_ctx *ctx)
             return false;
         }
 
+        /* CSS Flexbox 9.4: a single line uses the definite inner cross size,
+         * even when its contents would otherwise make the line larger. */
+        if (ctx->wrap == CSS_FLEX_WRAP_NOWRAP && ctx->definite_cross_size)
+            line->cross_size = ctx->available_cross;
+
         /* DIAG: Log line finalization */
         NSLOG(flex, WARNING, "LINE FINAL: container %p line_idx=%zu items=%zu cross_size=%d main_size=%d", ctx->flex,
             ctx->line.count - 1, line->count, line->cross_size, line->main_size);
@@ -1811,14 +1820,19 @@ static void layout_flex__place_line_items_cross(struct flex_ctx *ctx, struct fle
         default:
             /* Fall through. */
         case CSS_ALIGN_SELF_STRETCH:
-            if (lh__box_size_cross_is_auto(ctx->horizontal, b)) {
+            if (!has_auto_margin_cross_start && !has_auto_margin_cross_end &&
+                lh__box_size_cross_is_auto(ctx->horizontal, b)) {
                 int old_cross_size = *box_size_cross;
-                int target_cross_size = old_cross_size + cross_free_space;
+                int target_cross_size = max(0, old_cross_size + cross_free_space);
+                if (item->max_cross >= 0)
+                    target_cross_size = min(target_cross_size, item->max_cross);
+                if (item->min_cross.type == CSS_SIZE_SET)
+                    target_cross_size = max(target_cross_size, item->min_cross.value);
 
-                /* Set stretched size and mark with flag so layout_flex preserves it */
                 *box_size_cross = target_cross_size;
-                if (ctx->horizontal && cross_free_space > 0) {
+                if (ctx->horizontal) {
                     b->flags |= HEIGHT_STRETCHED;
+                    b->flags &= ~ASPECT_RATIO_HEIGHT;
                 }
 
                 /* Relayout children for stretch */
@@ -1947,10 +1961,9 @@ bool layout_flex(struct box *flex, int available_width, html_content *content)
      *
      * If this flex container was stretched by its parent (HEIGHT_STRETCHED flag),
      * preserve the stretched height by not letting layout_find_dimensions overwrite it.
-     * Clear the flag after checking since we've now handled the stretch.
+     * The calling flex item keeps the flag set while descendants are laid out.
      */
     bool height_was_stretched = (flex->flags & HEIGHT_STRETCHED) != 0;
-    flex->flags &= ~HEIGHT_STRETCHED; /* Clear flag after reading */
     int *height_ptr = height_was_stretched ? NULL : &flex->height;
 
     layout_find_dimensions(ctx->unit_len_ctx, available_width, -1, flex, flex->style, NULL, /* width - already set */
@@ -1985,6 +1998,10 @@ bool layout_flex(struct box *flex, int available_width, html_content *content)
     }
 
     if (flex->height != AUTO) {
+        if (max_height >= 0)
+            flex->height = min(flex->height, max_height);
+        if (min_height.type == CSS_SIZE_SET)
+            flex->height = max(flex->height, min_height.value);
         resolved_height = flex->height;
     } else if (min_height.type == CSS_SIZE_SET && min_height.value > 0) {
         resolved_height = min_height.value;
@@ -1995,9 +2012,11 @@ bool layout_flex(struct box *flex, int available_width, html_content *content)
     if (ctx->horizontal) {
         ctx->available_main = available_width;
         ctx->available_cross = resolved_height;
+        ctx->definite_cross_size = flex->height != AUTO;
     } else {
         ctx->available_main = resolved_height;
         ctx->available_cross = available_width;
+        ctx->definite_cross_size = available_width != AUTO;
     }
 
     {

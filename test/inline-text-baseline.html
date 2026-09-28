@@ -1,0 +1,23 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Mixed text baselines and parent struts</title>
+<style>
+  @font-face { font-family: "Wisp Normal Test"; src: url("fonts/normal-400.ttf"); }
+  body { margin: 0; background: white; color: black; font: 20px/36px "Wisp Normal Test"; }
+  .case { margin: 8px; width: 240px; }
+  .large { font-size: 40px; line-height: 40px; }
+  #zero-strut { line-height: 0; }
+  #same-font { font-size: 40px; line-height: 40px; }
+  #wrapped { width: 65px; }
+  #positioned { position: absolute; }
+</style>
+<!-- The bundled font has 800/200 ascent/descent per 1000 units. The parent
+     contributes 12px below the baseline, the large child 32px above: 44px.
+     Every rectangular glyph ends on the baseline, making painting testable. -->
+<div class="case" id="mixed"><span class="large" id="large-text">H</span><span id="small-text">H</span></div>
+<div class="case" id="strut"><a class="large">H</a></div>
+<div class="case" id="zero-strut"><a class="large">H</a></div>
+<div class="case" id="same-font"><a class="large">H</a></div>
+<div class="case" id="wrapped"><a class="large">HH HH HH</a></div>
+<div class="case" id="empty"><a class="large"></a></div>
+<div class="case" id="out-of-flow"><span class="large" id="positioned">H</span></div>

@@ -48,6 +48,11 @@ target_compile_definitions(nsmonkey PRIVATE MONKEY_SRCPATH="${CMAKE_SOURCE_DIR}/
 target_link_libraries(nsmonkey wisp m ${WISP_COMMON_LIBS})
 
 if(WISP_ENABLE_TESTS)
+    add_executable(monkey_layout_test test_layout.c layout.c)
+    target_include_directories(monkey_layout_test PRIVATE ${CMAKE_SOURCE_DIR}/src ${CMAKE_SOURCE_DIR}/frontends)
+    target_link_libraries(monkey_layout_test PRIVATE wisp)
+    add_test(NAME monkey_layout COMMAND monkey_layout_test)
+
     execute_process(COMMAND ${Python3_EXECUTABLE} -c "import yaml"
         RESULT_VARIABLE MONKEY_YAML_RESULT OUTPUT_QUIET ERROR_QUIET)
     if(NOT MONKEY_YAML_RESULT EQUAL 0)

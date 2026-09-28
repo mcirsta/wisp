@@ -109,6 +109,54 @@ static void check_font(const QString &family, qreal pixels, bool svg, int spacin
     }
 }
 
+static void check_zero_font(bool svg, int spacing)
+{
+    std::fprintf(stderr, "zero size SVG=%d spacing=%d\n", svg, spacing);
+    plot_font_style_t style = {};
+    style.family = PLOT_FONT_FAMILY_SANS_SERIF;
+    style.flags = svg ? FONTF_SIZE_PIXELS : FONTF_NONE;
+    style.weight = 400;
+    style.letter_spacing = spacing;
+    const QByteArray text = QString::fromUtf8("café ab").toUtf8();
+    const int advance = qMax(0, spacing);
+    int width, ascent, descent;
+    REQUIRE(nsqt_layout_table->width(&style, text.constData(), text.size(), &width) == NSERROR_OK);
+    REQUIRE(width == 7 * advance);
+    REQUIRE(nsqt_layout_table->font_metrics(&style, &ascent, &descent) == NSERROR_OK);
+    REQUIRE(ascent == 0 && descent == 0);
+    size_t offset;
+    int actual;
+    REQUIRE(nsqt_layout_table->split(&style, text.constData(), text.size(), width, &offset, &actual) == NSERROR_OK);
+    REQUIRE(offset == size_t(text.size()) && actual == width);
+    if (spacing > 0) {
+        REQUIRE(nsqt_layout_table->split(&style, text.constData(), text.size(), 4 * spacing,
+            &offset, &actual) == NSERROR_OK);
+        REQUIRE(offset == 5 && actual == 4 * spacing); // UTF-8 offset before the space.
+        REQUIRE(nsqt_layout_table->position(&style, text.constData(), text.size(), 4 * spacing + 1,
+            &offset, &actual) == NSERROR_OK);
+        REQUIRE(offset == 5 && actual == 4 * spacing);
+    } else {
+        REQUIRE(nsqt_layout_table->position(&style, text.constData(), text.size(), 1,
+            &offset, &actual) == NSERROR_OK);
+        REQUIRE(offset == size_t(text.size()) && actual == 0);
+    }
+    // Combining marks and surrogate pairs do not add extra letter spacing.
+    const QByteArray clusters = QString::fromUtf8("a\u0301\U0001F600").toUtf8();
+    REQUIRE(nsqt_layout_table->width(&style, clusters.constData(), clusters.size(), &width) == NSERROR_OK);
+    REQUIRE(width == 2 * advance);
+
+    QImage image(120, 40, QImage::Format_ARGB32_Premultiplied);
+    image.fill(Qt::white);
+    const QImage blank = image.copy();
+    QPainter painter(&image);
+    painter.scale(1.25, 1.25);
+    QTransform transform = painter.transform();
+    REQUIRE(nsqt_layout_plot(&painter, &style, 10, 20, text.constData(), text.size()) == NSERROR_OK);
+    REQUIRE(painter.transform() == transform);
+    painter.end();
+    REQUIRE(image == blank);
+}
+
 int main(int argc, char **argv)
 {
     QApplication app(argc, argv);
@@ -123,6 +171,10 @@ int main(int argc, char **argv)
             for (int spacing : {-1, 0, 2})
                 check_font(family, pixels, svg, spacing);
         }
+    }
+    for (bool svg : {false, true}) {
+        for (int spacing : {-1, 0, 2})
+            check_zero_font(svg, spacing);
     }
     nsoption_finalise(nullptr, nullptr);
     std::puts("Fractional fonts: widths, splits, UTF-8 positions, metrics, spacing, painting, zoom and DPI passed.");

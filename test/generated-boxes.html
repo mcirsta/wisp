@@ -1,0 +1,176 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Generated content and positioned inline formatting</title>
+<style>
+body { margin:0; background:white; font:16px/20px sans-serif; }
+.row { height:80px; }
+.case { float:left; position:relative; width:240px; height:80px; }
+.host::before { content:"L"; }
+.host::after { content:"R"; }
+.host::before, .host::after, .before, .after { color:#168844; }
+.order .host::before { content:attr(data-label); }
+.order .host::before, .order .host::after, .order .before, .order .after {
+    padding:0 3px; border:1px solid #168844;
+}
+.empty .host::before, .empty .host::after { content:""; }
+.empty .host::before, .empty .host::after, .empty .before, .empty .after {
+    display:inline-block; width:18px; height:12px; background:#168844;
+}
+.none .host::before, .none .host::after, .none .before, .none .after { display:none; }
+.block .host::before, .block .host::after, .block .before, .block .after {
+    display:block; height:10px; line-height:10px; width:80px; background:#ddeedd;
+}
+.float .host::before, .float .host::after, .float .before, .float .after {
+    width:30px; height:25px; background:#ddeedd;
+}
+.float .host::before, .float .before { float:left; }
+.float .host::after, .float .after { float:right; }
+.positioned .host::before, .positioned .host::after, .positioned .before, .positioned .after {
+    position:absolute; top:25px; width:50px; height:25px; background:#ddeedd;
+}
+.positioned .host::before, .positioned .before { left:20px; }
+.positioned .host::after, .positioned .after { left:120px; }
+.flex .host::before, .flex .host::after, .flex .before, .flex .after { display:inline-flex; }
+.grid .host::before, .grid .host::after, .grid .before, .grid .after { display:inline-grid; }
+.table .host::before, .table .host::after, .table .before, .table .after { display:inline-table; }
+/* A transformed ancestor makes the fixed cases local to each comparison panel. */
+.fixed .case { transform:translate(0px,0px); }
+.fixed .host::before, .fixed .host::after, .fixed .before, .fixed .after { position:fixed; }
+.auto .host::before, .auto .host::after, .auto .before, .auto .after { left:auto; top:auto; }
+.flex-owner .host, .flex-owner .reference-host { display:flex; }
+.grid-owner .host, .grid-owner .reference-host { display:grid; grid-template-columns:30px 50px 30px; }
+.flex-owner .host::before, .flex-owner .host::after, .flex-owner .before, .flex-owner .after,
+.grid-owner .host::before, .grid-owner .host::after, .grid-owner .before, .grid-owner .after {
+    float:left; width:30px; height:20px; background:#ddeedd;
+}
+.shrink { display:inline-block; background:#eeeeee; }
+.prefix, .suffix { display:inline-block; width:17px; height:10px; background:#168844; }
+.target { position:absolute; width:100px; height:40px; background:#eeeeee; }
+.cell { display:block; width:20px; height:10px; background:#168844; }
+.dom-flex .target { display:inline-flex; }
+.dom-grid .target { display:inline-grid; grid-template-columns:30px 30px; }
+.dom-table .target { display:inline-table; }
+.dom-table .cell { display:table-cell; }
+.block-display .host::before, .block-display .host::after,
+.block-display .before, .block-display .after { display:block; }
+.dom-block-flex .target { display:flex; }
+.dom-block-grid .target { display:grid; grid-template-columns:30px 30px; }
+.dom-block-table .target { display:table; }
+.dom-block-flow .target { display:block; }
+.dom-block-table .cell { display:table-cell; }
+</style>
+<!-- Each pseudo-element panel is compared with equivalent DOM children.
+     The final rows independently check child geometry, static positioning,
+     intrinsic width and trailing-space removal for positioned inline boxes. -->
+<div class="row order">
+    <div class="case" id="order">prefix <span class="host" data-label="B"><span>middle</span></span> tail</div>
+    <div class="case" id="order-reference">prefix <span class="reference-host"><span class="before">B</span><span>middle</span><span class="after">R</span></span> tail</div>
+</div>
+<div class="row empty">
+    <div class="case" id="empty">prefix <span class="host" data-label="B"></span> tail</div>
+    <div class="case" id="empty-reference">prefix <span class="reference-host"><span class="before"></span><span class="after"></span></span> tail</div>
+</div>
+<div class="row none">
+    <div class="case" id="none">prefix <span class="host" data-label="B"></span> tail</div>
+    <div class="case" id="none-reference">prefix <span class="reference-host"><span class="before">L</span><span class="after">R</span></span> tail</div>
+</div>
+<div class="row block">
+    <div class="case" id="block">prefix <span class="host" data-label="B"><span>middle</span></span> tail</div>
+    <div class="case" id="block-reference">prefix <span class="reference-host"><span class="before">L</span><span>middle</span><span class="after">R</span></span> tail</div>
+</div>
+<div class="row float">
+    <div class="case" id="float">prefix <span class="host" data-label="B"><span>middle</span></span> tail</div>
+    <div class="case" id="float-reference">prefix <span class="reference-host"><span class="before">L</span><span>middle</span><span class="after">R</span></span> tail</div>
+</div>
+<div class="row positioned flex absolute">
+    <div class="case" id="absolute-flex">prefix <span class="host" data-label="B"><span>middle</span></span> tail</div>
+    <div class="case" id="absolute-flex-reference">prefix <span class="reference-host"><span class="before">L</span><span>middle</span><span class="after">R</span></span> tail</div>
+</div>
+<div class="row positioned grid absolute">
+    <div class="case" id="absolute-grid">prefix <span class="host" data-label="B"><span>middle</span></span> tail</div>
+    <div class="case" id="absolute-grid-reference">prefix <span class="reference-host"><span class="before">L</span><span>middle</span><span class="after">R</span></span> tail</div>
+</div>
+<div class="row positioned table absolute">
+    <div class="case" id="absolute-table">prefix <span class="host" data-label="B"><span>middle</span></span> tail</div>
+    <div class="case" id="absolute-table-reference">prefix <span class="reference-host"><span class="before">L</span><span>middle</span><span class="after">R</span></span> tail</div>
+</div>
+<div class="row positioned flex fixed">
+    <div class="case" id="fixed-flex">prefix <span class="host" data-label="B"><span>middle</span></span> tail</div>
+    <div class="case" id="fixed-flex-reference">prefix <span class="reference-host"><span class="before">L</span><span>middle</span><span class="after">R</span></span> tail</div>
+</div>
+<div class="row positioned grid fixed">
+    <div class="case" id="fixed-grid">prefix <span class="host" data-label="B"><span>middle</span></span> tail</div>
+    <div class="case" id="fixed-grid-reference">prefix <span class="reference-host"><span class="before">L</span><span>middle</span><span class="after">R</span></span> tail</div>
+</div>
+<div class="row positioned table fixed">
+    <div class="case" id="fixed-table">prefix <span class="host" data-label="B"><span>middle</span></span> tail</div>
+    <div class="case" id="fixed-table-reference">prefix <span class="reference-host"><span class="before">L</span><span>middle</span><span class="after">R</span></span> tail</div>
+</div>
+<div class="row positioned flex auto">
+    <div class="case" id="auto-flex">prefix <span class="host" data-label="B"><span>middle</span></span> tail</div>
+    <div class="case" id="auto-flex-reference">prefix <span class="reference-host"><span class="before">L</span><span>middle</span><span class="after">R</span></span> tail</div>
+</div>
+<div class="row positioned grid auto">
+    <div class="case" id="auto-grid">prefix <span class="host" data-label="B"><span>middle</span></span> tail</div>
+    <div class="case" id="auto-grid-reference">prefix <span class="reference-host"><span class="before">L</span><span>middle</span><span class="after">R</span></span> tail</div>
+</div>
+<div class="row positioned table auto">
+    <div class="case" id="auto-table">prefix <span class="host" data-label="B"><span>middle</span></span> tail</div>
+    <div class="case" id="auto-table-reference">prefix <span class="reference-host"><span class="before">L</span><span>middle</span><span class="after">R</span></span> tail</div>
+</div>
+<div class="row flex-owner">
+    <div class="case" id="flex-owner">prefix <span class="host" data-label="B"><span>middle</span></span> tail</div>
+    <div class="case" id="flex-owner-reference">prefix <span class="reference-host"><span class="before">L</span><span>middle</span><span class="after">R</span></span> tail</div>
+</div>
+<div class="row grid-owner">
+    <div class="case" id="grid-owner">prefix <span class="host" data-label="B"><span>middle</span></span> tail</div>
+    <div class="case" id="grid-owner-reference">prefix <span class="reference-host"><span class="before">L</span><span>middle</span><span class="after">R</span></span> tail</div>
+</div>
+<div class="row dom-flex">
+    <div class="case" id="dom-flex"><span class="prefix"></span><span class="target" id="dom-flex-target"><span class="cell" id="dom-flex-first"></span><span class="cell" id="dom-flex-second"></span></span><span class="suffix" id="dom-flex-suffix"></span></div>
+    <div class="case" id="dom-flex-reference"><span class="prefix"></span><span class="suffix"></span></div>
+</div>
+<div class="row flex positioned">
+    <div class="case" id="shrink-flex"><span class="shrink" id="shrink-flex-width">A <span class="host"></span></span>tail</div>
+    <div class="case" id="shrink-flex-reference"><span class="shrink" id="shrink-flex-reference-width">A</span>tail</div>
+</div>
+<div class="row dom-grid">
+    <div class="case" id="dom-grid"><span class="prefix"></span><span class="target" id="dom-grid-target"><span class="cell" id="dom-grid-first"></span><span class="cell" id="dom-grid-second"></span></span><span class="suffix" id="dom-grid-suffix"></span></div>
+    <div class="case" id="dom-grid-reference"><span class="prefix"></span><span class="suffix"></span></div>
+</div>
+<div class="row grid positioned">
+    <div class="case" id="shrink-grid"><span class="shrink" id="shrink-grid-width">A <span class="host"></span></span>tail</div>
+    <div class="case" id="shrink-grid-reference"><span class="shrink" id="shrink-grid-reference-width">A</span>tail</div>
+</div>
+<div class="row dom-table">
+    <div class="case" id="dom-table"><span class="prefix"></span><span class="target" id="dom-table-target"><span class="cell" id="dom-table-first"></span><span class="cell" id="dom-table-second"></span></span><span class="suffix" id="dom-table-suffix"></span></div>
+    <div class="case" id="dom-table-reference"><span class="prefix"></span><span class="suffix"></span></div>
+</div>
+<div class="row table positioned">
+    <div class="case" id="shrink-table"><span class="shrink" id="shrink-table-width">A <span class="host"></span></span>tail</div>
+    <div class="case" id="shrink-table-reference"><span class="shrink" id="shrink-table-reference-width">A</span>tail</div>
+</div>
+<div class="row positioned block-display absolute">
+    <div class="case" id="absolute-block">prefix <span class="host">middle</span> tail</div>
+    <div class="case" id="absolute-block-reference">prefix <span><span class="before">L</span>middle<span class="after">R</span></span> tail</div>
+</div>
+<div class="row positioned block-display auto">
+    <div class="case" id="auto-block">prefix <span class="host">middle</span> tail</div>
+    <div class="case" id="auto-block-reference">prefix <span><span class="before">L</span>middle<span class="after">R</span></span> tail</div>
+</div>
+<div class="row dom-block-flow">
+    <div class="case" id="dom-block-flow"><span class="prefix"></span><span class="target" id="dom-block-flow-target"><span class="cell" id="dom-block-flow-first"></span><span class="cell" id="dom-block-flow-second"></span></span><span class="suffix" id="dom-block-flow-suffix"></span></div>
+    <div class="case" id="dom-block-flow-reference"><span class="prefix"></span><span class="suffix"></span></div>
+</div>
+<div class="row dom-block-flex">
+    <div class="case" id="dom-block-flex"><span class="prefix"></span><span class="target" id="dom-block-flex-target"><span class="cell" id="dom-block-flex-first"></span><span class="cell" id="dom-block-flex-second"></span></span><span class="suffix" id="dom-block-flex-suffix"></span></div>
+    <div class="case" id="dom-block-flex-reference"><span class="prefix"></span><span class="suffix"></span></div>
+</div>
+<div class="row dom-block-grid">
+    <div class="case" id="dom-block-grid"><span class="prefix"></span><span class="target" id="dom-block-grid-target"><span class="cell" id="dom-block-grid-first"></span><span class="cell" id="dom-block-grid-second"></span></span><span class="suffix" id="dom-block-grid-suffix"></span></div>
+    <div class="case" id="dom-block-grid-reference"><span class="prefix"></span><span class="suffix"></span></div>
+</div>
+<div class="row dom-block-table">
+    <div class="case" id="dom-block-table"><span class="prefix"></span><span class="target" id="dom-block-table-target"><span class="cell" id="dom-block-table-first"></span><span class="cell" id="dom-block-table-second"></span></span><span class="suffix" id="dom-block-table-suffix"></span></div>
+    <div class="case" id="dom-block-table-reference"><span class="prefix"></span><span class="suffix"></span></div>
+</div>

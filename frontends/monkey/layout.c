@@ -57,6 +57,12 @@ static nserror nsfont_position_in_string(
     int char_width = fstyle->size / PLOT_STYLE_SCALE;
     int spacing = fstyle->letter_spacing;
 
+    if (char_width == 0 && spacing == 0) {
+        *char_offset = x <= 0 ? 0 : length;
+        *actual_x = 0;
+        return NSERROR_OK;
+    }
+
     if (spacing == 0) {
         *char_offset = x / char_width;
     } else {
@@ -114,6 +120,12 @@ static nserror nsfont_position_in_string(
 static nserror nsfont_split(
     const plot_font_style_t *fstyle, const char *string, size_t length, int x, size_t *char_offset, int *actual_x)
 {
+    if (fstyle->size == 0 && fstyle->letter_spacing == 0) {
+        *char_offset = length;
+        *actual_x = 0;
+        return NSERROR_OK;
+    }
+
     nsfont_position_in_string(fstyle, string, length, x, char_offset, actual_x);
 
     int c_off = *char_offset;

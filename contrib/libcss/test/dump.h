@@ -156,7 +156,7 @@ void dump_rule_font_face(css_rule_font_face *s, char **buf, size_t *buflen)
 {
     char *ptr = *buf;
 
-    ptr += sprintf(ptr, "| @font-face ");
+    ptr += sprintf(ptr, "| @font-face");
 
     if (s->font_face != NULL) {
         dump_font_face(s->font_face, &ptr);

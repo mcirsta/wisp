@@ -148,6 +148,9 @@ if(WISP_QT_CAPTURE)
         add_test(NAME qt_flex_alignment
             COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_flex_alignment.py $<TARGET_FILE:wisp-qt>)
         set_tests_properties(qt_flex_alignment PROPERTIES TIMEOUT 30)
+        add_test(NAME qt_flex_image_sizing
+            COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_flex_image_sizing.py $<TARGET_FILE:wisp-qt>)
+        set_tests_properties(qt_flex_image_sizing PROPERTIES TIMEOUT 30)
         add_test(NAME qt_inline_wrapper_margins
             COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_inline_wrapper_margins.py $<TARGET_FILE:wisp-qt>)
         set_tests_properties(qt_inline_wrapper_margins PROPERTIES TIMEOUT 30)
@@ -160,6 +163,9 @@ if(WISP_QT_CAPTURE)
         add_test(NAME qt_last_child_margin
             COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_last_child_margin.py $<TARGET_FILE:wisp-qt>)
         set_tests_properties(qt_last_child_margin PROPERTIES TIMEOUT 30)
+        add_test(NAME qt_empty_block_margins
+            COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_empty_block_margins.py $<TARGET_FILE:wisp-qt>)
+        set_tests_properties(qt_empty_block_margins PROPERTIES TIMEOUT 30)
         add_test(NAME qt_scrolling_bounds
             COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_scrolling_bounds.py $<TARGET_FILE:wisp-qt>)
         set_tests_properties(qt_scrolling_bounds PROPERTIES TIMEOUT 60)
@@ -177,10 +183,18 @@ if(WISP_QT_CAPTURE)
                 COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_positioned_pseudo.py
                     $<TARGET_FILE:wisp-qt> ${WISP_TEST_MAGICK})
             set_tests_properties(qt_positioned_pseudo PROPERTIES TIMEOUT 30)
+            add_test(NAME qt_generated_boxes
+                COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_generated_boxes.py
+                    $<TARGET_FILE:wisp-qt> ${WISP_TEST_MAGICK})
+            set_tests_properties(qt_generated_boxes PROPERTIES TIMEOUT 30)
             add_test(NAME qt_fractional_font_capture
                 COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_fractional_fonts.py
                     $<TARGET_FILE:wisp-qt> ${WISP_TEST_MAGICK})
             set_tests_properties(qt_fractional_font_capture PROPERTIES TIMEOUT 30)
+            add_test(NAME qt_zero_font_size
+                COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_zero_font_size.py
+                    $<TARGET_FILE:wisp-qt> ${WISP_TEST_MAGICK})
+            set_tests_properties(qt_zero_font_size PROPERTIES TIMEOUT 30)
             add_test(NAME qt_input_placeholders
                 COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_input_placeholders.py
                     $<TARGET_FILE:wisp-qt> ${WISP_TEST_MAGICK})
@@ -199,6 +213,10 @@ if(WISP_QT_CAPTURE)
                 COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_inline_baseline.py
                     $<TARGET_FILE:wisp-qt> ${WISP_TEST_MAGICK})
             set_tests_properties(qt_inline_baseline PROPERTIES TIMEOUT 30)
+            add_test(NAME qt_inline_text_baseline
+                COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_inline_text_baseline.py
+                    $<TARGET_FILE:wisp-qt> ${WISP_TEST_MAGICK})
+            set_tests_properties(qt_inline_text_baseline PROPERTIES TIMEOUT 30)
             add_test(NAME qt_svg_text
                 COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_svg_text.py
                     $<TARGET_FILE:wisp-qt> ${WISP_TEST_MAGICK})

@@ -30,6 +30,7 @@
 #include <stdint.h>
 
 #include <wisp/content/handlers/html/box.h>
+#include <wisp/utils/utils.h>
 
 struct html_content;
 struct gui_layout_table;
@@ -159,10 +160,25 @@ static inline bool lh__box_is_inline_level(const struct box *b)
     return lh__box_is_inline_flow(b) || b->type == BOX_BR;
 }
 
+static inline bool lh__box_is_absolute(const struct box *b)
+{
+    return css_computed_position(b->style) == CSS_POSITION_ABSOLUTE ||
+        css_computed_position(b->style) == CSS_POSITION_FIXED;
+}
+
+/* Out-of-flow boxes in an inline container retain their inner formatter.
+ * A table can occur here only when positioned, never as an in-flow table. */
+static inline bool lh__box_is_inline_positioned(const struct box *b)
+{
+    return (b->type == BOX_INLINE_BLOCK || b->type == BOX_INLINE_FLEX || b->type == BOX_INLINE_GRID ||
+               b->type == BOX_TABLE) &&
+        lh__box_is_absolute(b);
+}
+
 /** Layout helper: Check whether box is inline level. (Includes BR, floats.) */
 static inline bool lh__box_is_inline_content(const struct box *b)
 {
-    return lh__box_is_float_box(b) || lh__box_is_inline_level(b);
+    return lh__box_is_float_box(b) || lh__box_is_inline_level(b) || lh__box_is_inline_positioned(b);
 }
 
 /** Layout helper: Check whether box is an object. */
@@ -181,12 +197,6 @@ static inline bool lh__box_is_replace(const struct box *b)
 static inline bool lh__have_border(enum box_side side, const css_computed_style *style)
 {
     return border_style_funcs[side](style) != CSS_BORDER_STYLE_NONE;
-}
-
-static inline bool lh__box_is_absolute(const struct box *b)
-{
-    return css_computed_position(b->style) == CSS_POSITION_ABSOLUTE ||
-        css_computed_position(b->style) == CSS_POSITION_FIXED;
 }
 
 static inline bool lh__flex_main_is_horizontal(const struct box *flex)
@@ -303,7 +313,7 @@ static inline enum css_align_self_e lh__box_align_self(const struct box *flex, c
         align_self = css_computed_align_items(flex->style);
     }
 
-    return align_self;
+    return align_self == CSS_ALIGN_SELF_NORMAL ? CSS_ALIGN_SELF_STRETCH : align_self;
 }
 
 /**
@@ -449,7 +459,7 @@ static inline int lh__available_height_for_box(const struct box *box, int viewpo
     if (containing_block != NULL && containing_block->height != AUTO &&
         (css_computed_position(box->style) == CSS_POSITION_ABSOLUTE ||
             css_computed_position(box->style) == CSS_POSITION_FIXED || cbhtype == CSS_HEIGHT_SET ||
-            (containing_block->flags & ASPECT_RATIO_HEIGHT))) {
+            (containing_block->flags & (ASPECT_RATIO_HEIGHT | HEIGHT_STRETCHED)))) {
         return containing_block->height;
     }
 
@@ -547,6 +557,32 @@ static inline void layout_handle_box_sizing(
     }
 }
 
+static inline bool lh__intrinsic_width_unit(css_unit unit)
+{
+    return unit == CSS_UNIT_MIN_CONTENT || unit == CSS_UNIT_MAX_CONTENT || unit == CSS_UNIT_FIT_CONTENT;
+}
+
+/* Cached intrinsic widths include the outer edges. Sizing keywords specify
+ * content sizes, regardless of box-sizing (CSS Sizing 3.3). */
+static inline int
+lh__intrinsic_width(const struct box *box, const css_unit_ctx *unit_ctx, int available_width, css_unit unit)
+{
+    assert(box->max_width != UNKNOWN_MAX_WIDTH);
+    int edges = 0;
+    float fraction = 0;
+    calculate_mbp_width(unit_ctx, box->style, LEFT, true, true, true, &edges, &fraction);
+    calculate_mbp_width(unit_ctx, box->style, RIGHT, true, true, true, &edges, &fraction);
+    if (available_width >= 0)
+        edges += fraction * available_width;
+    int minimum = max(0, box->min_width.value - edges);
+    int maximum = max(minimum, box->max_width - edges);
+    if (unit == CSS_UNIT_MIN_CONTENT)
+        return minimum;
+    if (unit == CSS_UNIT_MAX_CONTENT || available_width < 0)
+        return maximum;
+    return min(maximum, max(minimum, available_width - edges));
+}
+
 /**
  * Calculate width, height, and thickness of margins, paddings, and borders.
  *
@@ -577,7 +613,12 @@ static inline void layout_find_dimensions(const css_unit_ctx *unit_len_ctx, int 
     unsigned int i;
 
     if (width) {
-        if (css_computed_width_px(style, box_unit_len_ctx, available_width, width) == CSS_WIDTH_SET) {
+        css_fixed_or_calc value = (css_fixed_or_calc)0;
+        css_unit unit = CSS_UNIT_PX;
+        if (css_computed_width(style, &value, &unit) == CSS_WIDTH_SET && lh__intrinsic_width_unit(unit) &&
+            box->max_width != UNKNOWN_MAX_WIDTH) {
+            *width = lh__intrinsic_width(box, box_unit_len_ctx, available_width, unit);
+        } else if (css_computed_width_px(style, box_unit_len_ctx, available_width, width) == CSS_WIDTH_SET) {
             layout_handle_box_sizing(box_unit_len_ctx, box, available_width, true, width);
         } else {
             *width = AUTO;
@@ -625,7 +666,10 @@ static inline void layout_find_dimensions(const css_unit_ctx *unit_len_ctx, int 
         type = css_computed_max_width(style, &value, &unit);
 
         if (type == CSS_MAX_WIDTH_SET) {
-            if (unit == CSS_UNIT_PCT) {
+            if (lh__intrinsic_width_unit(unit)) {
+                *max_width = box->max_width == UNKNOWN_MAX_WIDTH ? -1 :
+                    lh__intrinsic_width(box, box_unit_len_ctx, available_width, unit);
+            } else if (unit == CSS_UNIT_PCT) {
                 *max_width = FPCT_OF_INT_TOINT(value.value, available_width);
             } else if (unit == CSS_UNIT_CALC) {
                 if (!lh__length_to_px(style, box_unit_len_ctx, available_width, value, unit, max_width)) {
@@ -639,7 +683,7 @@ static inline void layout_find_dimensions(const css_unit_ctx *unit_len_ctx, int 
             *max_width = -1;
         }
 
-        if (*max_width != -1) {
+        if (*max_width != -1 && !lh__intrinsic_width_unit(unit)) {
             layout_handle_box_sizing(box_unit_len_ctx, box, available_width, true, max_width);
         }
     }
@@ -653,7 +697,10 @@ static inline void layout_find_dimensions(const css_unit_ctx *unit_len_ctx, int 
 
         if (type == CSS_MIN_WIDTH_SET) {
             min_width->type = CSS_SIZE_SET;
-            if (unit == CSS_UNIT_PCT) {
+            if (lh__intrinsic_width_unit(unit)) {
+                min_width->value = box->max_width == UNKNOWN_MAX_WIDTH ? 0 :
+                    lh__intrinsic_width(box, box_unit_len_ctx, available_width, unit);
+            } else if (unit == CSS_UNIT_PCT) {
                 min_width->value = FPCT_OF_INT_TOINT(value.value, available_width);
             } else if (unit == CSS_UNIT_CALC) {
                 if (!lh__length_to_px(style, box_unit_len_ctx, available_width, value, unit, &min_width->value)) {
@@ -669,7 +716,7 @@ static inline void layout_find_dimensions(const css_unit_ctx *unit_len_ctx, int 
             min_width->value = 0;
         }
 
-        if (min_width->value != 0) {
+        if (min_width->value != 0 && !lh__intrinsic_width_unit(unit)) {
             layout_handle_box_sizing(box_unit_len_ctx, box, available_width, true, &min_width->value);
         }
     }

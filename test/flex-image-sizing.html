@@ -1,0 +1,66 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Flex percentage-height images and intrinsic widths</title>
+<style>
+body { margin: 12px; font: 16px/20px sans-serif; }
+.frame { width:400px; height:60px; margin-bottom:12px; background:#eee; }
+.flex { display:flex; }
+img { display:block; height:100%; width:auto; max-width:100%; }
+.peer { width:100px; flex-shrink:0; }
+</style>
+<!-- The local image is 200 x 100. Integer ratios avoid font/rounding dependencies. -->
+block
+<div id="block-frame" class="frame " style=""><img id="block-image" src="aspect-ratio-image.svg"></div>
+stretch
+<div id="stretch-frame" class="frame flex" style=""><div id="stretch-item" style=""><img id="stretch-image" src="aspect-ratio-image.svg"></div><div class="peer"></div></div>
+tall
+<div id="tall-frame" class="frame flex" style="height:150px"><div id="tall-item" style=""><img id="tall-image" src="aspect-ratio-image.svg"></div><div class="peer"></div></div>
+explicit
+<div id="explicit-frame" class="frame flex" style=""><div id="explicit-item" style="height:60px"><img id="explicit-image" src="aspect-ratio-image.svg"></div><div class="peer"></div></div>
+start
+<div id="start-frame" class="frame flex" style="align-items:flex-start"><div id="start-item" style=""><img id="start-image" src="aspect-ratio-image.svg"></div><div class="peer"></div></div>
+minimum
+<div id="minimum-frame" class="frame flex" style=""><div id="minimum-item" style="min-height:80px"><img id="minimum-image" src="aspect-ratio-image.svg"></div><div class="peer"></div></div>
+maximum
+<div id="maximum-frame" class="frame flex" style="height:150px"><div id="maximum-item" style="max-height:80px"><img id="maximum-image" src="aspect-ratio-image.svg"></div><div class="peer"></div></div>
+edges
+<div id="edges-frame" class="frame flex" style="height:100px"><div id="edges-item" style="padding:5px;border:2px solid;margin:3px"><img id="edges-image" src="aspect-ratio-image.svg"></div><div class="peer"></div></div>
+auto-margin
+<div id="auto-margin-frame" class="frame flex" style=""><div id="auto-margin-item" style="margin-top:auto"><img id="auto-margin-image" src="aspect-ratio-image.svg"></div><div class="peer"></div></div>
+nested
+<div id="nested-frame" class="frame flex" style=""><div id="nested-item" style="display:flex"><div id="nested-inner" style="height:100%"><img id="nested-image" src="aspect-ratio-image.svg"></div></div><div class="peer"></div></div>
+auto-height
+<div id="auto-height-frame" class="frame flex" style="height:auto"><div id="auto-height-item" style=""><img id="auto-height-image" src="aspect-ratio-image.svg"></div><div class="peer" style="height:150px"></div></div>
+container-minimum
+<div id="container-minimum-frame" class="frame flex" style="height:auto;min-height:150px"><div id="container-minimum-item" style=""><img id="container-minimum-image" src="aspect-ratio-image.svg"></div><div class="peer"></div></div>
+fit-minimum
+<div id="fit-minimum-frame" class="frame flex" style="width:250px"><div id="fit-minimum-item" style="height:60px;width:max-content;min-width:fit-content"><img id="fit-minimum-image" src="aspect-ratio-image.svg"></div><div class="peer" style="width:200px"></div></div>
+zero-minimum
+<div id="zero-minimum-frame" class="frame flex" style="width:250px"><div id="zero-minimum-item" style="height:60px;width:max-content;min-width:0"><img id="zero-minimum-image" src="aspect-ratio-image.svg"></div><div class="peer" style="width:200px"></div></div>
+
+<!-- Wrapping does not give items a definite cross size during intrinsic measurement. -->
+wrapped single line
+<div class="frame flex" style="height:60px;flex-wrap:wrap"><div id="wrapped-item"><img id="wrapped-image" src="aspect-ratio-image.svg"></div></div>
+wrapped two lines
+<div class="frame flex" style="width:250px;height:300px;flex-wrap:wrap"><div id="wrapped-two-item"><img id="wrapped-two-image" src="aspect-ratio-image.svg"></div><div style="width:200px;height:100px;flex-shrink:0"></div></div>
+<!-- Each unbreakable inline block supplies a known width, without font metrics. -->
+<style>
+.keyword-item { font-size:0; line-height:0; align-self:flex-start; }
+.keyword-item span { display:inline-block; height:10px; }
+</style>
+<div class="frame flex" style="width:150px;"><div id="min-content" class="keyword-item" style="min-width:min-content"><span style="width:80px"></span> <span style="width:120px"></span></div><div class="peer"></div></div>
+<div class="frame flex" style="width:150px;"><div id="max-content" class="keyword-item" style="min-width:max-content"><span style="width:80px"></span> <span style="width:120px"></span></div><div class="peer"></div></div>
+<div class="frame flex" style="width:150px;"><div id="fit-content" class="keyword-item" style="min-width:fit-content"><span style="width:80px"></span> <span style="width:120px"></span></div><div class="peer"></div></div>
+<div class="frame flex" style="width:150px;"><div id="border-keyword" class="keyword-item" style="min-width:max-content;padding:10px;border:2px solid;box-sizing:border-box"><span style="width:80px"></span> <span style="width:120px"></span></div><div class="peer"></div></div>
+<div class="frame flex" style="width:150px;flex-direction:column;align-items:flex-start"><div id="column-keyword" class="keyword-item" style="width:max-content;min-width:0"><span style="width:80px"></span> <span style="width:120px"></span></div><div class="peer"></div></div>
+
+<div class="frame flex"><div id="basis-percent-padding" style="flex:0 0 200px;box-sizing:border-box;padding:0 10%"></div></div>
+<div class="frame flex" style="min-height:80px"><div id="parent-minimum-item"><img id="parent-minimum-image" src="aspect-ratio-image.svg"></div></div>
+<div class="frame flex" style="height:150px;max-height:80px"><div id="parent-maximum-item"><img id="parent-maximum-image" src="aspect-ratio-image.svg"></div></div>
+
+<div class="frame flex"><div id="inline-item"><img id="inline-image" style="display:inline" src="aspect-ratio-image.svg"></div></div>
+<div class="frame flex" style="flex-direction:row-reverse"><div id="reverse-item"><img id="reverse-image" src="aspect-ratio-image.svg"></div></div>
+<div class="frame flex"><div id="percent-maximum-item"><img id="percent-maximum-image" style="max-height:50%" src="aspect-ratio-image.svg"></div></div>
+<div class="frame flex"><div id="maximum-keyword" class="keyword-item" style="max-width:min-content"><span style="width:80px"></span> <span style="width:120px"></span></div></div>
+
+<div class="frame flex"><div id="stretched-ratio" style="width:120px;aspect-ratio:1"><div style="height:120px"></div></div></div>

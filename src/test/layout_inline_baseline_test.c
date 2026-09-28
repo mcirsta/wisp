@@ -1,4 +1,4 @@
-/* Inline replaced-element baselines, using the real block/inline layout code. */
+/* Inline text and object baselines, using the real block/inline layout code. */
 #include <check.h>
 #include <stdlib.h>
 
@@ -36,6 +36,16 @@ static nserror width(const struct plot_font_style *style, const char *text, size
 }
 
 static const struct gui_layout_table fonts = {.width = width, .font_metrics = metrics};
+
+static nserror scaled_metrics(const struct plot_font_style *style, int *ascent, int *descent)
+{
+    int pixels = (style->size * 4) / (PLOT_STYLE_SCALE * 3);
+    *ascent = pixels * 7 / 8;
+    *descent = pixels / 8;
+    return NSERROR_OK;
+}
+
+static const struct gui_layout_table scaled_fonts = {.width = width, .font_metrics = scaled_metrics};
 
 static struct box *make_box(box_type type, int line_height, uint8_t align)
 {
@@ -214,6 +224,71 @@ START_TEST(test_inline_block_last_baseline)
 }
 END_TEST
 
+static const struct {
+    const char *name;
+    int parent_font, parent_line, child_font, child_line, height, child_y;
+} text_cases[] = {
+    {"parent descent, child ascent", 16, 28, 32, 32, 36, 0},
+    {"zero parent line-height", 16, 0, 32, 32, 32, 0},
+    {"same font and line-height", 32, 32, 32, 32, 32, 0},
+    {"parent ascent, child descent", 32, 32, 16, 28, 36, 8},
+    {"zero parent font", 0, 0, 32, 32, 32, 0},
+    {"negative child leading", 32, 32, 16, 0, 32, 22},
+};
+
+START_TEST(test_mixed_text_baseline)
+{
+    html_content content = {
+        .unit_len_ctx = {.viewport_width = INTTOFIX(200), .viewport_height = INTTOFIX(500),
+            .font_size_default = INTTOFIX(16), .device_dpi = INTTOFIX(96)},
+        .font_func = &scaled_fonts,
+    };
+    struct box *root = make_box(BOX_BLOCK, text_cases[_i].parent_line, CSS_VERTICAL_ALIGN_BASELINE);
+    style_set_inline_metrics(root->style, text_cases[_i].parent_font, text_cases[_i].parent_line,
+        CSS_VERTICAL_ALIGN_BASELINE);
+    struct box *ic = make_box(BOX_INLINE_CONTAINER, 0, 0);
+    append(root, ic);
+    struct box *child = make_box(BOX_TEXT, text_cases[_i].child_line, CSS_VERTICAL_ALIGN_BASELINE);
+    style_set_inline_metrics(child->style, text_cases[_i].child_font, text_cases[_i].child_line,
+        CSS_VERTICAL_ALIGN_BASELINE);
+    child->text = "Ag";
+    child->length = 2;
+    child->width = UNKNOWN_WIDTH;
+    append(ic, child);
+
+    /* The invisible parent strut must suffice; adding actual parent-sized text
+     * must not change the line height or the child's baseline. */
+    for (int with_parent_text = 0; with_parent_text < 2; with_parent_text++) {
+        struct box *parent_text = NULL;
+        if (with_parent_text) {
+            parent_text = make_box(BOX_TEXT, text_cases[_i].parent_line, CSS_VERTICAL_ALIGN_BASELINE);
+            style_set_inline_metrics(parent_text->style, text_cases[_i].parent_font, text_cases[_i].parent_line,
+                CSS_VERTICAL_ALIGN_BASELINE);
+            parent_text->text = "Ag";
+            parent_text->length = 2;
+            parent_text->width = UNKNOWN_WIDTH;
+            append(ic, parent_text);
+        }
+        root->height = AUTO;
+        ck_assert(layout_block_context(root, 500, &content));
+        ck_assert_msg(root->height == text_cases[_i].height && ic->height == text_cases[_i].height &&
+                child->y == text_cases[_i].child_y,
+            "%s, parent text %d: root height %d, line height %d, child y %d; expected %d, %d",
+            text_cases[_i].name, with_parent_text, root->height, ic->height, child->y,
+            text_cases[_i].height, text_cases[_i].child_y);
+        if (parent_text) {
+            int parent_baseline = parent_text->y +
+                (text_cases[_i].parent_line + text_cases[_i].parent_font * 3 / 4) / 2;
+            int child_baseline = child->y +
+                (text_cases[_i].child_line + text_cases[_i].child_font * 3 / 4) / 2;
+            ck_assert_msg(parent_baseline == child_baseline, "%s: parent baseline %d, child baseline %d",
+                text_cases[_i].name, parent_baseline, child_baseline);
+        }
+    }
+    free_tree(root);
+}
+END_TEST
+
 START_TEST(test_font_baseline_fallback)
 {
     plot_font_style_t style = {.size = 12 * PLOT_STYLE_SCALE};
@@ -232,11 +307,12 @@ int main(void)
 {
     if (nsoption_init(NULL, NULL, NULL) != NSERROR_OK)
         return EXIT_FAILURE;
-    Suite *suite = suite_create("Inline image and block alignment");
+    Suite *suite = suite_create("Inline text and object alignment");
     TCase *tc = tcase_create("Line metrics");
     tcase_add_loop_test(tc, test_inline_object_baseline, 0, 12);
     tcase_add_loop_test(tc, test_inline_block_alignment, 0, 4);
     tcase_add_loop_test(tc, test_inline_block_last_baseline, 0, 2);
+    tcase_add_loop_test(tc, test_mixed_text_baseline, 0, sizeof(text_cases) / sizeof(text_cases[0]));
     tcase_add_test(tc, test_font_baseline_fallback);
     suite_add_tcase(suite, tc);
     SRunner *runner = srunner_create(suite);

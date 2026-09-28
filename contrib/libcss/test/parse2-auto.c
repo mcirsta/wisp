@@ -170,7 +170,8 @@ void css__parse_expected(line_ctx *ctx, const char *data, size_t len)
 
 void run_test(const uint8_t *data, size_t len, const char *exp, size_t explen)
 {
-    css_stylesheet_params params;
+    /* Optional callbacks, including font-face notification, default to NULL. */
+    css_stylesheet_params params = {0};
     css_stylesheet *sheet;
     css_error error;
     char *buf;

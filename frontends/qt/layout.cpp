@@ -25,6 +25,7 @@
 #include <QFontDatabase>
 #include <QPainter>
 #include <QRawFont>
+#include <QTextBoundaryFinder>
 #include <QWidget>
 #include <QtEndian>
 #include <QtMath>
@@ -75,7 +76,7 @@ static QPaintDevice *get_metrics_device(void)
  * operations, with CSS points converted at 96dpi and SVG already in pixels. */
 static qreal font_pixel_size(const struct plot_font_style *style)
 {
-    if (style->size <= 0)
+    if (style->size < 0)
         return 1.0;
     qreal pixels = qreal(style->size) / PLOT_STYLE_SCALE;
     return (style->flags & FONTF_SIZE_PIXELS) ? pixels : pixels * 4 / 3;
@@ -85,6 +86,24 @@ static qreal font_scale(const struct plot_font_style *style)
 {
     qreal pixels = font_pixel_size(style);
     return pixels / qMax(1, int(pixels));
+}
+
+/* At zero size glyphs have no advance, but absolute letter spacing remains.
+ * Count graphemes rather than UTF-8 bytes or UTF-16 code units. Qt cannot
+ * represent a zero-pixel font or spacing divided by a zero residual scale. */
+static qreal text_advance(const QFontMetricsF &metrics, qreal scale, int spacing, const QString &text)
+{
+    if (scale != 0)
+        return metrics.horizontalAdvance(text) * scale;
+    /* Negative spacing cannot give a zero-size run a negative used width. */
+    if (spacing <= 0)
+        return 0;
+
+    QTextBoundaryFinder boundaries(QTextBoundaryFinder::Grapheme, text);
+    int count = 0;
+    while (boundaries.toNextBoundary() != -1)
+        count++;
+    return qreal(count) * spacing;
 }
 
 /* CSS Fonts matching order, rather than Qt's nearest-weight distance.
@@ -298,7 +317,7 @@ static QFont *new_qfont_fstyle(const struct plot_font_style *fstyle)
     }
 
     /* The painter scales glyphs, but absolute CSS letter spacing stays in pixels. */
-    if (fstyle->letter_spacing != 0) {
+    if (fstyle->letter_spacing != 0 && fstyle->size != 0) {
         nfont->setLetterSpacing(QFont::AbsoluteSpacing, qreal(fstyle->letter_spacing) / font_scale(fstyle));
     }
 
@@ -416,6 +435,7 @@ static void nsqt_font_cache_clear(void)
  *
  * \param[in] metrics qt font metrics to measure with.
  * \param[in] scale residual font-size scale applied by the painter.
+ * \param[in] spacing absolute letter spacing for zero-size glyphs.
  * \param[in] string UTF-8 string to measure
  * \param[in] length length of string, in bytes
  * \param[in] x coordinate to search for
@@ -426,8 +446,8 @@ static void nsqt_font_cache_clear(void)
  * code on faliure
  */
 static nserror
-layout_position(const QFontMetricsF &metrics, qreal scale, const char *string, size_t length, int x, size_t *string_idx,
-    int *actual_x)
+layout_position(const QFontMetricsF &metrics, qreal scale, int spacing, const char *string, size_t length, int x,
+    size_t *string_idx, int *actual_x)
 {
     qreal full_x;
     qreal measured_x;
@@ -444,7 +464,7 @@ layout_position(const QFontMetricsF &metrics, qreal scale, const char *string, s
     if (x <= 0) {
         *string_idx = 0;
         /* Use QString for correct UTF-8 byte interpretation */
-        *actual_x = qRound(metrics.horizontalAdvance(QString::fromUtf8(string, length)) * scale);
+        *actual_x = qRound(text_advance(metrics, scale, spacing, QString::fromUtf8(string, length)));
         return NSERROR_OK;
     }
 
@@ -460,7 +480,7 @@ layout_position(const QFontMetricsF &metrics, qreal scale, const char *string, s
     /* Convert character count back to byte position */
     str_len = qstr.left(chars_to_measure).toUtf8().length();
 
-    full_x = metrics.horizontalAdvance(qstr.left(chars_to_measure)) * scale;
+    full_x = text_advance(metrics, scale, spacing, qstr.left(chars_to_measure));
     if (full_x < x) {
         /* whole string fits */
         *string_idx = length;
@@ -476,7 +496,7 @@ layout_position(const QFontMetricsF &metrics, qreal scale, const char *string, s
         current_chars = char_count;
 
     str_len = qstr.left(current_chars).toUtf8().length();
-    measured_x = metrics.horizontalAdvance(qstr.left(current_chars)) * scale;
+    measured_x = text_advance(metrics, scale, spacing, qstr.left(current_chars));
 
     if (measured_x == 0) {
         *string_idx = 0;
@@ -494,14 +514,14 @@ layout_position(const QFontMetricsF &metrics, qreal scale, const char *string, s
                 break;
             }
             str_len = qstr.left(current_chars).toUtf8().length();
-            measured_x = metrics.horizontalAdvance(qstr.left(current_chars)) * scale;
+            measured_x = text_advance(metrics, scale, spacing, qstr.left(current_chars));
         }
     } else {
         /* too short try more chars until overflowing */
         qreal n_measured_x = measured_x;
         while (n_measured_x < x && current_chars < char_count) {
             size_t n_str_len = qstr.left(current_chars + 1).toUtf8().length();
-            n_measured_x = metrics.horizontalAdvance(qstr.left(current_chars + 1)) * scale;
+            n_measured_x = text_advance(metrics, scale, spacing, qstr.left(current_chars + 1));
             if (n_measured_x < x) {
                 measured_x = n_measured_x;
                 current_chars++;
@@ -536,7 +556,7 @@ static nserror nsqt_layout_width(const struct plot_font_style *fstyle, const cha
     /* IMPORTANT: Use QString::fromUtf8 to correctly interpret byte length as UTF-8.
      * Qt's horizontalAdvance(char*, len) treats len as CHARACTER count, not byte count! */
     QString qstr = QString::fromUtf8(string, length);
-    qreal advance = metrics.horizontalAdvance(qstr) * font_scale(fstyle);
+    qreal advance = text_advance(metrics, font_scale(fstyle), fstyle->letter_spacing, qstr);
     /* The core skips splitting a box when its integer width fits. Round HTML
      * advances up so a fractional overflow cannot bypass that check. Collapsed
      * spaces are positioning advances between boxes, not text to fit: retain
@@ -572,7 +592,7 @@ static nserror nsqt_layout_position(
     QFontMetricsF metrics(*font, device);
     nserror res;
 
-    res = layout_position(metrics, font_scale(fstyle), string, length, x, string_idx, actual_x);
+    res = layout_position(metrics, font_scale(fstyle), fstyle->letter_spacing, string, length, x, string_idx, actual_x);
 
     delete font;
 
@@ -619,9 +639,9 @@ static nserror nsqt_layout_split(const struct plot_font_style *fstyle, const cha
     size_t str_len;
     size_t last_word_end = 0; /* Both offset and width exclude the breaking space. */
     qreal scale = font_scale(fstyle);
-    qreal full_width = metrics.horizontalAdvance(QString::fromUtf8(string, length)) * scale;
+    qreal full_width = text_advance(metrics, scale, fstyle->letter_spacing, QString::fromUtf8(string, length));
 
-    res = layout_position(metrics, scale, string, length, split, &split_len, &split_x);
+    res = layout_position(metrics, scale, fstyle->letter_spacing, string, length, split, &split_len, &split_x);
     if (res != NSERROR_OK) {
         delete font;
         return res;
@@ -674,7 +694,7 @@ static nserror nsqt_layout_split(const struct plot_font_style *fstyle, const cha
         }
 
         /* Measure width WITHOUT trailing space - space is trimmed at line end */
-        qreal word_width = metrics.horizontalAdvance(QString::fromUtf8(string, word_end)) * scale;
+        qreal word_width = text_advance(metrics, scale, fstyle->letter_spacing, QString::fromUtf8(string, word_end));
 
         if (word_width <= split) {
             /* This word fits! Update last_word_end to this position */
@@ -694,7 +714,7 @@ static nserror nsqt_layout_split(const struct plot_font_style *fstyle, const cha
      * advance separately. Including that space in the offset but not the width
      * loses the gap when retained text boxes are placed together on reflow. */
     *string_idx = last_word_end;
-    *actual_x = qCeil(metrics.horizontalAdvance(QString::fromUtf8(string, last_word_end)) * scale);
+    *actual_x = qCeil(text_advance(metrics, scale, fstyle->letter_spacing, QString::fromUtf8(string, last_word_end)));
 
 nsqt_layout_split_done:
     delete font;
@@ -711,6 +731,9 @@ nsqt_layout_split_done:
 nserror
 nsqt_layout_plot(QPainter *painter, const struct plot_font_style *fstyle, int x, int y, const char *text, size_t length)
 {
+    if (fstyle->size == 0)
+        return NSERROR_OK;
+
     QColor strokecolour(
         fstyle->foreground & 0xFF, (fstyle->foreground & 0xFF00) >> 8, (fstyle->foreground & 0xFF0000) >> 16);
     QPen pen(strokecolour);

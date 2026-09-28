@@ -172,8 +172,8 @@ void font_plot_style_from_css(
             FMUL(css_unit_font_size_len2pt(css, unit_len_ctx, length.value, unit), INTTOFIX(PLOT_STYLE_SCALE)));
     }
 
-    /* Clamp font size to configured minimum */
-    if (fstyle->size < (nsoption_int(font_min_size) * PLOT_STYLE_SCALE) / 10)
+    /* Preserve zero: authors use it to hide text and remove inline spaces. */
+    if (fstyle->size != 0 && fstyle->size < (nsoption_int(font_min_size) * PLOT_STYLE_SCALE) / 10)
         fstyle->size = (nsoption_int(font_min_size) * PLOT_STYLE_SCALE) / 10;
 
     fstyle->weight = plot_font_weight(css_computed_font_weight(css));

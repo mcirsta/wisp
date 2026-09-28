@@ -775,6 +775,70 @@ START_TEST(test_nested_collapse_through)
 END_TEST
 
 
+/* An entirely empty chain must stay pending until the formatting-context
+ * boundary. Nesting empty children must not apply its margin a second time. */
+static const struct {
+    const char *name;
+    int first_bottom, second_bottom, prefix_height, collapsed;
+} empty_chain_cases[] = {
+    {"equal", 30, 30, 0, 30},
+    {"first-larger", 30, 10, 0, 30},
+    {"last-larger", 10, 30, 0, 30},
+    {"mixed", 30, -10, 40, 20},
+    {"negative", -10, -20, 40, -20},
+    {"zero", 0, 0, 0, 0},
+};
+enum { EMPTY_CHAIN_CASE_COUNT = sizeof(empty_chain_cases) / sizeof(empty_chain_cases[0]) };
+
+START_TEST(test_nested_empty_margin_chain)
+{
+    int variant = _i % EMPTY_CHAIN_CASE_COUNT;
+    bool with_following = _i >= EMPTY_CHAIN_CASE_COUNT;
+    html_content *content = create_test_content();
+    struct box *root = create_box_with_style(200);
+    if (empty_chain_cases[variant].prefix_height) {
+        struct box *prefix = create_box_with_style(200);
+        style_set_height_px(prefix->style, empty_chain_cases[variant].prefix_height);
+        prefix->flags |= HAS_HEIGHT | MAKE_HEIGHT;
+        add_child(root, prefix);
+    }
+    for (int i = 0; i < 2; i++) {
+        struct box *empty = create_box_with_style(200);
+        style_set_margins(empty->style, 0, 0,
+            i == 0 ? empty_chain_cases[variant].first_bottom : empty_chain_cases[variant].second_bottom, 0);
+        add_child(root, empty);
+        /* Match the nested empty wrappers in Tion's mobile advertising column. */
+        for (int depth = 0; depth < 2; depth++) {
+            struct box *child = create_box_with_style(200);
+            add_child(empty, child);
+            empty = child;
+        }
+    }
+    struct box *following = NULL;
+    if (with_following) {
+        following = create_box_with_style(200);
+        style_set_height_px(following->style, 10);
+        following->flags |= HAS_HEIGHT | MAKE_HEIGHT;
+        add_child(root, following);
+    }
+    int end = empty_chain_cases[variant].prefix_height + empty_chain_cases[variant].collapsed;
+    for (int pass = 0; pass < 2; pass++) {
+        root->height = AUTO;
+        ck_assert(layout_block_context(root, 768, content));
+        ck_assert_msg(root->height == end + (with_following ? 10 : 0),
+            "%s (following=%d, pass=%d): expected height %d, got %d",
+            empty_chain_cases[variant].name, with_following, pass,
+            end + (with_following ? 10 : 0), root->height);
+        if (following) {
+            ck_assert_msg(following->y == end, "%s (pass=%d): expected following y=%d, got %d",
+                empty_chain_cases[variant].name, pass, end, following->y);
+        }
+    }
+    free_box_tree(root);
+    destroy_test_content(content);
+}
+END_TEST
+
 /**
  * Test: self-collapsing block whose children are all out-of-flow (abspos).
  *
@@ -1605,6 +1669,7 @@ static Suite *margin_collapse_suite(void)
     tcase_add_test(tc_through, test_collapse_through_empty);
     tcase_add_test(tc_through, test_no_collapse_through_height);
     tcase_add_test(tc_through, test_nested_collapse_through);
+    tcase_add_loop_test(tc_through, test_nested_empty_margin_chain, 0, 2 * EMPTY_CHAIN_CASE_COUNT);
     tcase_add_test(tc_through, test_no_collapse_through_border);
     tcase_add_test(tc_through, test_collapse_through_abspos_children);
     tcase_add_test(tc_through, test_collapse_through_skips_abspos_next_sibling);

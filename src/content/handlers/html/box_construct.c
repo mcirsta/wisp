@@ -504,45 +504,6 @@ static bool box_ensure_inline_container(struct box *containing_block, struct box
 
 
 /**
- * Add box to parent with optional float wrapping.
- *
- * If the box has float:left or float:right (and is not a flex child),
- * wraps it in a BOX_FLOAT_LEFT/RIGHT box before adding to the inline container.
- * Otherwise, adds directly to the parent.
- *
- * \param box              Box to add
- * \param parent           Parent to add to (inline_container or containing_block)
- * \param bctx             Box context for memory allocation
- * \param is_flex_child    True if parent is flex/grid (floats don't apply)
- * \return true on success, false on memory allocation failure
- */
-static bool box_add_with_float_wrap(struct box *box, struct box *parent, int *bctx, bool is_flex_child)
-{
-    if (box->style == NULL) {
-        box_add_child(parent, box);
-        return true;
-    }
-
-    uint8_t float_val = css_computed_float(box->style);
-    bool is_floated = !is_flex_child && (float_val == CSS_FLOAT_LEFT || float_val == CSS_FLOAT_RIGHT);
-
-    if (is_floated) {
-        struct box *flt = box_create(NULL, NULL, false, NULL, NULL, NULL, NULL, bctx);
-        if (flt == NULL) {
-            return false;
-        }
-        flt->type = (float_val == CSS_FLOAT_LEFT) ? BOX_FLOAT_LEFT : BOX_FLOAT_RIGHT;
-        box_add_child(parent, flt);
-        box_add_child(flt, box);
-    } else {
-        box_add_child(parent, box);
-    }
-
-    return true;
-}
-
-
-/**
  * Fetch background image for a box if specified in its style.
  *
  * \param box      Box to fetch background for (must have style)
@@ -574,177 +535,168 @@ static bool box_fetch_background(struct box *box, html_content *content)
     return true;
 }
 
-/**
- * Check if a box type needs an inline container.
- *
- * \param box_type      The box type to check
- * \param is_floated    Whether the box has float:left or float:right
- * \return true if box needs inline container, false otherwise
- */
-static inline bool box_needs_inline_container(box_type type, bool is_floated)
+/* Flex/grid children are blockified and do not float. */
+static bool box_parent_is_flex_or_grid(const struct box *parent)
 {
-    return type == BOX_INLINE || type == BOX_BR || type == BOX_INLINE_BLOCK || type == BOX_INLINE_FLEX ||
-        type == BOX_INLINE_GRID || is_floated;
+    return parent != NULL &&
+        (parent->type == BOX_FLEX || parent->type == BOX_INLINE_FLEX || parent->type == BOX_GRID ||
+            parent->type == BOX_INLINE_GRID);
 }
 
-
-/**
- * Construct the box required for a generated element.
- *
- * \param n        XML node of type XML_ELEMENT_NODE
- * \param content  Content of type CONTENT_HTML that is being processed
- * \param box      Box which may have generated content
- * \param style    Complete computed style for pseudo element, or NULL
- *
- * This function handles ::before and ::after pseudo-elements by:
- * 1. Creating a box for the pseudo-element itself
- * 2. Processing the 'content' property to create child text boxes
- */
-static void box_construct_generate(dom_node *n, html_content *content, struct box *box, const css_computed_style *style)
+/* Choose a formatting type and a representation suitable for placement.
+ * The computed CSS display remains unchanged. */
+static box_type box_construct_type(const css_computed_style *style, const struct box *parent, bool root)
 {
-    struct box *gen = NULL;
-    struct box *inline_container = NULL;
-    enum css_display_e computed_display;
-    const css_computed_content_item *c_item;
-    uint8_t content_type;
+    if (root)
+        return BOX_BLOCK;
 
-    /* Generated content can be added to container box types that can have children.
-     * Block-level and inline-level containers that establish formatting contexts
-     * can have ::before/::after pseudo-elements per CSS spec.
-     *
-     * Note: BOX_INLINE is NOT supported here because inline boxes in this
-     * codebase have a different structure (text stored directly on box, not
-     * as children). Inline elements are handled separately in box_construct_element. */
-    switch (box->type) {
+    box_type type = box_map[ns_computed_display(style, false)];
+    bool item = box_parent_is_flex_or_grid(parent);
+    uint8_t position = css_computed_position(style);
+
+    if (!item && (position == CSS_POSITION_ABSOLUTE || position == CSS_POSITION_FIXED)) {
+        /* Keep out-of-flow boxes in the inline stream so they cannot split
+         * a text line. The inline variants preserve their inner formatter;
+         * layout uses the original display for the static-position anchor. */
+        switch (type) {
+        case BOX_BLOCK:
+            return BOX_INLINE_BLOCK;
+        case BOX_FLEX:
+            return BOX_INLINE_FLEX;
+        case BOX_GRID:
+            return BOX_INLINE_GRID;
+        default:
+            break;
+        }
+    }
+
+    if (item) {
+        switch (type) {
+        case BOX_INLINE_FLEX:
+            return BOX_FLEX;
+        case BOX_INLINE_GRID:
+            return BOX_GRID;
+        case BOX_INLINE:
+        case BOX_INLINE_BLOCK:
+        case BOX_TABLE_CELL:
+        case BOX_TABLE_ROW:
+        case BOX_TABLE_ROW_GROUP:
+            return BOX_BLOCK;
+        default:
+            break;
+        }
+    }
+    return type;
+}
+
+/* Insert ordinary and generated boxes by the same rules. In-flow blocks end
+ * the current inline run; subsequent inline content starts a new container. */
+static bool box_construct_insert(struct box *box, struct box *parent, struct box **inline_container, int *bctx)
+{
+    if (parent == NULL)
+        return true; /* Document root. */
+
+    uint8_t position = css_computed_position(box->style);
+    bool positioned = position == CSS_POSITION_ABSOLUTE || position == CSS_POSITION_FIXED;
+    bool item = box_parent_is_flex_or_grid(parent);
+    uint8_t float_value = css_computed_float(box->style);
+    bool floated = !item && !positioned && (float_value == CSS_FLOAT_LEFT || float_value == CSS_FLOAT_RIGHT);
+    /* There is no inline table box type. Positioned tables can still use an
+     * inline container for their anchor, while retaining table formatting. */
+    bool inline_table = !item && positioned && box->type == BOX_TABLE;
+    bool inline_level = box->type == BOX_INLINE || box->type == BOX_BR || box->type == BOX_INLINE_BLOCK ||
+        box->type == BOX_INLINE_FLEX || box->type == BOX_INLINE_GRID || inline_table;
+
+    if (inline_level || floated) {
+        if (!box_ensure_inline_container(parent, inline_container, bctx))
+            return false;
+        if (floated) {
+            struct box *flt = box_create(NULL, NULL, false, box->href, box->target, box->title, NULL, bctx);
+            if (flt == NULL)
+                return false;
+            flt->type = float_value == CSS_FLOAT_LEFT ? BOX_FLOAT_LEFT : BOX_FLOAT_RIGHT;
+            box_add_child(*inline_container, flt);
+            box_add_child(flt, box);
+        } else {
+            box_add_child(*inline_container, box);
+        }
+    } else {
+        box_add_child(parent, box);
+        *inline_container = NULL;
+    }
+    return true;
+}
+
+static void box_construct_inline_end(struct box *box, struct box *container, int *bctx)
+{
+    struct box *end = box_create(NULL, box->style, false, box->href, box->target, box->title,
+        box->id == NULL ? NULL : lwc_string_ref(box->id), bctx);
+    if (end == NULL)
+        return;
+    end->type = BOX_INLINE_END;
+    end->flags |= box->flags & IS_OPACITY_ZERO;
+    box_add_child(container, end);
+    box->inline_end = end;
+    end->inline_end = box;
+}
+
+/* Generate content at the same traversal point as an equivalent DOM child:
+ * before children for ::before, after children for ::after. Inline owners use
+ * their containing block, just as their real children do. */
+static void box_construct_generate(dom_node *n, html_content *content, struct box *owner,
+    struct box_construct_props *props, const css_computed_style *style)
+{
+    if (style == NULL || (owner->flags & IS_REPLACED))
+        return;
+    switch (owner->type) {
+    case BOX_INLINE:
     case BOX_BLOCK:
     case BOX_INLINE_BLOCK:
     case BOX_FLEX:
     case BOX_INLINE_FLEX:
     case BOX_GRID:
     case BOX_INLINE_GRID:
-        /* These can have generated content children */
         break;
     default:
-        /* Other box types (BOX_INLINE, TABLE_*, FLOAT_*, etc.) cannot directly
-         * have generated content in the current implementation */
         return;
     }
 
-    /* To determine if an element has a pseudo element, we select
-     * for it and test to see if the returned style's content
-     * property is set to normal. */
-    if (style == NULL)
-        return;
-
-    content_type = css_computed_content(style, &c_item);
+    const css_computed_content_item *item;
+    uint8_t content_type = css_computed_content(style, &item);
     if (content_type == CSS_CONTENT_NORMAL || content_type == CSS_CONTENT_NONE)
         return;
 
-    /* create box for this element */
-    computed_display = ns_computed_display(style, box_is_root(n));
-
-    /** \todo Not wise to drop const from the computed style */
-    gen = box_create(NULL, (css_computed_style *)style, false, NULL, NULL, NULL, NULL, content->bctx);
-    if (gen == NULL) {
+    struct box *parent = owner->type == BOX_INLINE ? props->containing_block : owner;
+    struct box *container = parent->last != NULL && parent->last->type == BOX_INLINE_CONTAINER ? parent->last : NULL;
+    box_type type = box_construct_type(style, parent, false);
+    if (type == BOX_NONE)
         return;
-    }
-    gen->flags |= box->flags & IS_OPACITY_ZERO;
 
-    /* set box type from computed display */
-    gen->type = box_map[computed_display];
-
-    /* Skip BOX_NONE - display:none pseudo-elements should not be added */
-    if (gen->type == BOX_NONE) {
+    struct box *gen = box_create(
+        NULL, (css_computed_style *)style, false, owner->href, owner->target, owner->title, NULL, content->bctx);
+    if (gen == NULL)
         return;
-    }
-
-    /* Fetch background image for pseudo-element */
-    if (!box_fetch_background(gen, content)) {
+    gen->type = type;
+    gen->flags |= owner->flags & IS_OPACITY_ZERO;
+    if (!box_fetch_background(gen, content) || !box_construct_insert(gen, parent, &container, content->bctx))
         return;
-    }
+    if (owner->type == BOX_INLINE)
+        props->inline_container = container;
 
-    /* Check if we need an inline container */
-    uint8_t float_val = css_computed_float(style);
-    bool is_floated = (float_val == CSS_FLOAT_LEFT || float_val == CSS_FLOAT_RIGHT);
-
-    if (box_needs_inline_container(gen->type, is_floated)) {
-        /* Ensure inline container exists */
-        if (!box_ensure_inline_container(box, &inline_container, content->bctx)) {
+    /* An empty string still generates the styled box (e.g. an empty icon).
+     * Text and image items use one content path for all owner/display types. */
+    struct box *text_container = type == BOX_INLINE ? container : NULL;
+    for (; item != NULL && item->type != CSS_COMPUTED_CONTENT_NONE; item++) {
+        struct box *child = create_content_box(item, style, content, n);
+        if (child == NULL)
+            continue;
+        if (!box_ensure_inline_container(gen, &text_container, content->bctx))
             return;
-        }
-        /* Add with float wrapping if needed */
-        if (!box_add_with_float_wrap(gen, inline_container, content->bctx, false)) {
-            return;
-        }
-    } else {
-        /* Block-level: add directly to parent */
-        box_add_child(box, gen);
+        child->flags |= gen->flags & IS_OPACITY_ZERO;
+        box_add_child(text_container, child);
     }
-
-    /* Now process the content property items */
-    if (c_item != NULL) {
-        while (c_item->type != CSS_COMPUTED_CONTENT_NONE) {
-            if (c_item->type == CSS_COMPUTED_CONTENT_STRING) {
-                /* Create a text box for the string content */
-                const char *text_data = lwc_string_data(c_item->data.string);
-                size_t text_len = lwc_string_length(c_item->data.string);
-
-                if (text_len > 0) {
-                    if (gen->type == BOX_INLINE) {
-                        /* For inline boxes, text goes
-                         * directly on the box */
-                        char *text_copy = talloc_strndup(content->bctx, text_data, text_len);
-                        if (text_copy == NULL) {
-                            break;
-                        }
-                        gen->text = text_copy;
-                        gen->length = text_len;
-                    } else {
-                        /* For block boxes, create
-                         * inline container + text box
-                         */
-                        struct box *text_container;
-                        struct box *text_box;
-                        char *text_copy;
-
-                        /* Create inline container if
-                         * needed */
-                        if (gen->last != NULL && gen->last->type == BOX_INLINE_CONTAINER) {
-                            text_container = gen->last;
-                        } else {
-                            text_container = box_create(NULL, NULL, false, NULL, NULL, NULL, NULL, content->bctx);
-                            if (text_container == NULL) {
-                                break;
-                            }
-                            text_container->type = BOX_INLINE_CONTAINER;
-                            box_add_child(gen, text_container);
-                        }
-
-                        /* Create text box */
-                        text_box = box_create(
-                            NULL, (css_computed_style *)style, false, NULL, NULL, NULL, NULL, content->bctx);
-                        if (text_box == NULL) {
-                            break;
-                        }
-
-                        text_box->type = BOX_TEXT;
-
-                        text_copy = talloc_strndup(content->bctx, text_data, text_len);
-                        if (text_copy == NULL) {
-                            break;
-                        }
-
-                        text_box->text = text_copy;
-                        text_box->length = text_len;
-
-                        box_add_child(text_container, text_box);
-                    }
-                }
-            }
-            /* TODO: Handle CSS_COMPUTED_CONTENT_URI for images */
-            c_item++;
-        }
-    }
+    if (type == BOX_INLINE)
+        box_construct_inline_end(gen, container, content->bctx);
 }
 
 
@@ -827,21 +779,6 @@ static bool box_construct_marker(struct box *box, const char *title, struct box_
     return true;
 }
 
-static inline bool box__style_is_float(const struct box *box)
-{
-    return css_computed_float(box->style) == CSS_FLOAT_LEFT || css_computed_float(box->style) == CSS_FLOAT_RIGHT;
-}
-
-static inline bool box__is_flex(const struct box *box)
-{
-    return box->type == BOX_FLEX || box->type == BOX_INLINE_FLEX;
-}
-
-static inline bool box__containing_block_is_flex(const struct box_construct_props *props)
-{
-    return props->containing_block != NULL && box__is_flex(props->containing_block);
-}
-
 /**
  * Construct the box tree for an XML element.
  *
@@ -853,7 +790,6 @@ static bool box_construct_element(struct box_construct_ctx *ctx, bool *convert_c
 {
     dom_string *title0, *s;
     lwc_string *id = NULL;
-    enum css_display_e css_display;
     struct box *box = NULL, *old_box;
     css_select_results *styles = NULL;
     lwc_string *bgimage_uri;
@@ -962,66 +898,11 @@ static bool box_construct_element(struct box_construct_ctx *ctx, bool *convert_c
         dom_string_unref(s);
     }
 
-    css_display = ns_computed_display_static(box->style);
-
-    /* Set box type from computed display */
-    if ((css_computed_position(box->style) == CSS_POSITION_ABSOLUTE ||
-            css_computed_position(box->style) == CSS_POSITION_FIXED) &&
-        (css_display == CSS_DISPLAY_INLINE || css_display == CSS_DISPLAY_INLINE_BLOCK ||
-            css_display == CSS_DISPLAY_INLINE_TABLE || css_display == CSS_DISPLAY_INLINE_FLEX)) {
-        /* Special case for absolute positioning: make absolute inlines
-         * into inline block so that the boxes are constructed in an
-         * inline container as if they were not absolutely positioned.
-         * Layout expects and handles this. */
-        box->type = box_map[CSS_DISPLAY_INLINE_BLOCK];
-    } else if (props.node_is_root) {
-        /* Special case for root element: force it to BLOCK, or the
-         * rest of the layout will break. */
-        box->type = BOX_BLOCK;
-    } else {
-        /* Normal mapping */
-        box->type = box_map[ns_computed_display(box->style, props.node_is_root)];
-
-        NSLOG(wisp, INFO, "box_construct: display %d map_type %d mapped from %d",
-            ns_computed_display(box->style, props.node_is_root), box->type,
-            ns_computed_display(box->style, props.node_is_root));
-
-        if (props.containing_block->type == BOX_FLEX || props.containing_block->type == BOX_INLINE_FLEX ||
-            props.containing_block->type == BOX_GRID || props.containing_block->type == BOX_INLINE_GRID) {
-            /* Blockification per CSS Flexbox spec §4, CSS Grid spec, and CSS Display 3 §2.7:
-             * In-flow children of flex/grid containers are blockified.
-             * This means display:inline becomes display:block, etc.
-             * Layout-internal boxes (table-cell, table-row, etc.) also become block.
-             * This must happen BEFORE anonymous box creation. */
-            switch (box->type) {
-            case BOX_INLINE_FLEX:
-                box->type = BOX_FLEX;
-                break;
-            case BOX_INLINE_GRID:
-                box->type = BOX_GRID;
-                break;
-            case BOX_INLINE_BLOCK:
-            case BOX_INLINE:
-            case BOX_TABLE_CELL:
-            case BOX_TABLE_ROW:
-            case BOX_TABLE_ROW_GROUP:
-                /* Layout-internal boxes blockified to block per CSS Display 3 §2.7 */
-                box->type = BOX_BLOCK;
-                break;
-            default:
-                break;
-            }
-        }
-    }
+    box->type = box_construct_type(box->style, props.containing_block, props.node_is_root);
 
     if (convert_special_elements(ctx->n, ctx->content, box, convert_children) == false) {
         NSLOG(wisp, WARNING, "Failed to convert special elements");
         goto error;
-    }
-
-    /* Handle the :before pseudo element */
-    if (!(box->flags & IS_REPLACED)) {
-        box_construct_generate(ctx->n, ctx->content, box, box->styles->styles[CSS_PSEUDO_ELEMENT_BEFORE]);
     }
 
     if (box->type == BOX_NONE ||
@@ -1056,23 +937,6 @@ static bool box_construct_element(struct box_construct_ctx *ctx, bool *convert_c
     /* Attach box to DOM node */
     box->node = dom_node_ref(ctx->n);
 
-    if (props.inline_container == NULL &&
-        (box->type == BOX_INLINE || box->type == BOX_BR || box->type == BOX_INLINE_BLOCK ||
-            box->type == BOX_INLINE_FLEX || box->type == BOX_INLINE_GRID ||
-            (box__style_is_float(box) && !box__containing_block_is_flex(&props))) &&
-        props.node_is_root == false) {
-        /* Found an inline child of a block without a current container
-         * (i.e. this box is the first child of its parent, or was
-         * preceded by block-level siblings) */
-        assert(props.containing_block != NULL && "Box must have containing block.");
-
-        /* Use helper to ensure inline container exists (may reuse from ::before) */
-        if (!box_ensure_inline_container(props.containing_block, &props.inline_container, ctx->bctx)) {
-            NSLOG(wisp, WARNING, "Failed to create inline container box");
-            goto error;
-        }
-    }
-
     /* Kick off fetch for any background image */
     if (!box_fetch_background(box, ctx->content)) {
         goto error;
@@ -1081,46 +945,14 @@ static bool box_construct_element(struct box_construct_ctx *ctx, bool *convert_c
     if (*convert_children)
         box->flags |= CONVERT_CHILDREN;
 
-    if (box->type == BOX_INLINE || box->type == BOX_BR || box->type == BOX_INLINE_FLEX ||
-        box->type == BOX_INLINE_BLOCK || box->type == BOX_INLINE_GRID) {
-        /* Inline container must exist, as we'll have
-         * created it above if it didn't */
-        assert(props.inline_container != NULL);
-
-        box_add_child(props.inline_container, box);
-    } else {
-        if (ns_computed_display(box->style, props.node_is_root) == CSS_DISPLAY_LIST_ITEM) {
-            /* List item: compute marker */
-            if (box_construct_marker(box, props.title, ctx, props.containing_block) == false) {
-                NSLOG(wisp, WARNING, "Failed to construct list marker");
-                goto error;
-            }
-        }
-
-        if (props.node_is_root == false && box__containing_block_is_flex(&props) == false &&
-            (css_computed_float(box->style) == CSS_FLOAT_LEFT || css_computed_float(box->style) == CSS_FLOAT_RIGHT)) {
-            /* Float: insert a float between the parent and box. */
-            struct box *flt = box_create(NULL, NULL, false, props.href, props.target, props.title, NULL, ctx->bctx);
-            if (flt == NULL) {
-                NSLOG(wisp, WARNING, "Failed to create float box");
-                goto error;
-            }
-
-            if (css_computed_float(box->style) == CSS_FLOAT_LEFT)
-                flt->type = BOX_FLOAT_LEFT;
-            else
-                flt->type = BOX_FLOAT_RIGHT;
-
-            box_add_child(props.inline_container, flt);
-            box_add_child(flt, box);
-        } else {
-            /* Non-floated block-level box: add to containing block
-             * if there is one. If we're the root box, then there
-             * won't be. */
-            if (props.containing_block != NULL)
-                box_add_child(props.containing_block, box);
-        }
+    if (ns_computed_display(box->style, props.node_is_root) == CSS_DISPLAY_LIST_ITEM) {
+        if (!box_construct_marker(box, props.title, ctx, props.containing_block))
+            goto error;
     }
+    if (!box_construct_insert(box, props.containing_block, &props.inline_container, ctx->bctx))
+        goto error;
+
+    box_construct_generate(ctx->n, ctx->content, box, &props, box->styles->styles[CSS_PSEUDO_ELEMENT_BEFORE]);
 
     return true;
 
@@ -1151,164 +983,21 @@ static void box_construct_element_after(dom_node *n, html_content *content)
 
     box_extract_properties(n, &props);
 
-    /* Handle ::before pseudo-element for inline boxes.
-     * The pseudo-element's box type is determined by its computed display value,
-     * e.g. display:inline-block creates BOX_INLINE_BLOCK.
-     * For BOX_INLINE: text goes directly on the box, children get flattened by normaliser.
-     * For BOX_INLINE_BLOCK: text must be in an INLINE_CONTAINER child (same as box_construct_generate).
-     */
-    if (box->type == BOX_INLINE && !(box->flags & IS_REPLACED) && box->styles != NULL &&
-        box->styles->styles[CSS_PSEUDO_ELEMENT_BEFORE] != NULL) {
-        const css_computed_style *before_style = box->styles->styles[CSS_PSEUDO_ELEMENT_BEFORE];
-        const css_computed_content_item *c_item;
-        uint8_t content_type = css_computed_content(before_style, &c_item);
-
-        if (content_type != CSS_CONTENT_NORMAL && content_type != CSS_CONTENT_NONE && c_item != NULL) {
-            /* Determine box type from computed display */
-            enum css_display_e pseudo_display = ns_computed_display(before_style, false);
-            box_type pseudo_type = box_map[pseudo_display];
-
-            if (pseudo_type == BOX_BLOCK &&
-                (css_computed_position(before_style) == CSS_POSITION_ABSOLUTE ||
-                    css_computed_position(before_style) == CSS_POSITION_FIXED)) {
-                /* Positioned content is blockified by CSS, but these children
-                 * are flattened into the parent's inline container. Use the
-                 * inline-block representation expected by inline layout for
-                 * out-of-flow boxes, as we do for positioned inline elements. */
-                pseudo_type = BOX_INLINE_BLOCK;
-            }
-
-            /* Create pseudo-element box with correct type */
-            struct box *pseudo_box = box_create(
-                NULL, (css_computed_style *)before_style, false, NULL, NULL, NULL, NULL, content->bctx);
-
-            if (pseudo_box != NULL) {
-                pseudo_box->type = pseudo_type;
-                pseudo_box->flags |= box->flags & IS_OPACITY_ZERO;
-                bool has_content = false;
-
-                /* Fetch background image for pseudo-element */
-                box_fetch_background(pseudo_box, content);
-
-                /* Create content boxes as children of the pseudo-element */
-                while (c_item->type != CSS_COMPUTED_CONTENT_NONE) {
-                    if (pseudo_type == BOX_INLINE) {
-                        /* For BOX_INLINE: use create_content_box, children get
-                         * flattened into siblings during normalisation */
-                        struct box *content_box = create_content_box(c_item, before_style, content, n);
-                        if (content_box != NULL) {
-                            box_add_child(pseudo_box, content_box);
-                            has_content = true;
-                        }
-                    } else {
-                        /* For BOX_INLINE_BLOCK and other block-level types:
-                         * text content must go inside an INLINE_CONTAINER child,
-                         * matching the pattern in box_construct_generate. */
-                        if (c_item->type == CSS_COMPUTED_CONTENT_STRING) {
-                            const char *text_data = lwc_string_data(c_item->data.string);
-                            size_t text_len = lwc_string_length(c_item->data.string);
-
-                            if (text_len > 0) {
-                                /* Ensure inline container exists inside the pseudo box */
-                                struct box *text_container;
-                                if (pseudo_box->last != NULL && pseudo_box->last->type == BOX_INLINE_CONTAINER) {
-                                    text_container = pseudo_box->last;
-                                } else {
-                                    text_container = box_create(
-                                        NULL, NULL, false, NULL, NULL, NULL, NULL, content->bctx);
-                                    if (text_container == NULL)
-                                        break;
-                                    text_container->type = BOX_INLINE_CONTAINER;
-                                    box_add_child(pseudo_box, text_container);
-                                }
-
-                                /* Create text box inside the container */
-                                struct box *text_box = box_create(NULL, (css_computed_style *)before_style, false, NULL,
-                                    NULL, NULL, NULL, content->bctx);
-                                if (text_box == NULL)
-                                    break;
-                                text_box->type = BOX_TEXT;
-                                text_box->text = talloc_strndup(content->bctx, text_data, text_len);
-                                if (text_box->text == NULL)
-                                    break;
-                                text_box->length = text_len;
-                                box_add_child(text_container, text_box);
-                                has_content = true;
-                            }
-                        }
-                        /* TODO: Handle URI/COUNTER/ATTR for non-inline pseudo types */
-                    }
-                    c_item++;
-                }
-
-                /* Only insert if we created content */
-                if (has_content) {
-                    /* Insert as FIRST child of parent inline box.
-                     * For BOX_INLINE: normalization flattens children to siblings.
-                     * For BOX_INLINE_BLOCK: normaliser recursively processes as block,
-                     *   children stay intact inside the pseudo box.
-                     */
-                    pseudo_box->parent = box;
-                    pseudo_box->next = box->children;
-                    pseudo_box->prev = NULL;
-                    if (box->children != NULL) {
-                        box->children->prev = pseudo_box;
-                    }
-                    box->children = pseudo_box;
-                    if (box->last == NULL) {
-                        box->last = pseudo_box;
-                    }
-
-                    NSLOG(wisp, DEEPDEBUG, "inline_before: created %s %p for ::before with %d children",
-                        pseudo_type == BOX_INLINE ? "BOX_INLINE" : "BOX_INLINE_BLOCK", (void *)pseudo_box,
-                        pseudo_box->children ? 1 : 0);
-                }
-            }
-        }
-    }
+    box_construct_generate(n, content, box, &props, box->styles->styles[CSS_PSEUDO_ELEMENT_AFTER]);
 
     if (box->type == BOX_INLINE || box->type == BOX_BR) {
-        /* Insert INLINE_END into containing block */
-        struct box *inline_end;
         bool has_children;
-        dom_exception err;
-
-        err = dom_node_has_child_nodes(n, &has_children);
-        if (err != DOM_NO_ERR)
+        if (dom_node_has_child_nodes(n, &has_children) != DOM_NO_ERR)
             return;
 
-        if (has_children == false || (box->flags & CONVERT_CHILDREN) == 0) {
-            /* No children, or didn't want children converted */
+        /* Generated siblings also need to be enclosed by the owner's inline
+         * end, even if the DOM element itself is empty. */
+        has_children |= box->next != NULL || props.containing_block->last != box->parent;
+        if (!has_children || (box->flags & CONVERT_CHILDREN) == 0)
             return;
-        }
-
-        if (props.inline_container == NULL) {
-            /* Create inline container if we don't have one */
-            props.inline_container = box_create(NULL, NULL, false, NULL, NULL, NULL, NULL, content->bctx);
-            if (props.inline_container == NULL)
-                return;
-
-            props.inline_container->type = BOX_INLINE_CONTAINER;
-
-            box_add_child(props.containing_block, props.inline_container);
-        }
-
-        inline_end = box_create(NULL, box->style, false, box->href, box->target, box->title,
-            box->id == NULL ? NULL : lwc_string_ref(box->id), content->bctx);
-        if (inline_end != NULL) {
-            inline_end->type = BOX_INLINE_END;
-            inline_end->flags |= box->flags & IS_OPACITY_ZERO;
-
-            assert(props.inline_container != NULL);
-
-            box_add_child(props.inline_container, inline_end);
-
-            box->inline_end = inline_end;
-            inline_end->inline_end = box;
-        }
-    } else if (!(box->flags & IS_REPLACED)) {
-        /* Handle the :after pseudo element */
-        box_construct_generate(n, content, box, box->styles->styles[CSS_PSEUDO_ELEMENT_AFTER]);
+        if (!box_ensure_inline_container(props.containing_block, &props.inline_container, content->bctx))
+            return;
+        box_construct_inline_end(box, props.inline_container, content->bctx);
     }
 }
 

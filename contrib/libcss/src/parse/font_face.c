@@ -32,12 +32,22 @@ static bool font_rule_font_family_reserved(css_language *c, const css_token *ide
 static css_error
 font_face_parse_font_family(css_language *c, const parserutils_vector *vector, int32_t *ctx, css_font_face *font_face)
 {
+    int32_t orig_ctx = *ctx;
     css_error error;
     lwc_string *string;
 
     error = css__ident_list_or_string_to_string(c, vector, ctx, font_rule_font_family_reserved, &string);
     if (error != CSS_OK)
         return error;
+
+    /* A descriptor names one family, not a fallback list. Validate all
+     * tokens before replacing an earlier valid descriptor. */
+    consumeWhitespace(vector, ctx);
+    if (parserutils_vector_peek(vector, *ctx) != NULL) {
+        lwc_string_unref(string);
+        *ctx = orig_ctx;
+        return CSS_INVALID;
+    }
 
     css__font_face_set_font_family(font_face, string);
 

@@ -1,0 +1,72 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Nested empty block margins</title>
+<style>
+body { margin: 10px; font: 16px/20px sans-serif; }
+.case { width: 300px; margin-bottom: 15px; border: 1px solid; overflow: hidden; }
+.column { float: left; width: 100%; background: #ffe8bd; }
+.empty { margin: 0 0 30px; }
+.marker { clear: both; height: 5px; background: #167747; }
+.prefix { height: 40px; }
+#overflow-column { float: none; overflow: hidden; }
+#padded-column { padding-top: 1px; }
+#nonempty-column .empty { height: 1px; }
+#mixed-second, #negative-first { margin-bottom: -10px; }
+#negative-second { margin-bottom: -20px; }
+</style>
+<!-- The outer border/overflow contain each case's margins. The marker must
+     start at the column's bottom, including its collapsed internal margins. -->
+Nested empty children (Tion's mobile advertising structure)
+<div class="case">
+  <div class="column" id="nested-column">
+    <div class="empty"><div><div></div></div></div>
+    <div class="empty"><div><div></div></div></div>
+  </div>
+  <div class="marker" id="nested-marker"></div>
+</div>
+Empty blocks without nesting
+<div class="case">
+  <div class="column" id="bare-column"><div class="empty"></div><div class="empty"></div></div>
+  <div class="marker" id="bare-marker"></div>
+</div>
+One nested empty block
+<div class="case">
+  <div class="column" id="single-column"><div class="empty"><div></div></div></div>
+  <div class="marker" id="single-marker"></div>
+</div>
+Overflow container with nested empty blocks
+<div class="case">
+  <div class="column" id="overflow-column">
+    <div class="empty"><div></div></div><div class="empty"><div></div></div>
+  </div>
+  <div class="marker" id="overflow-marker"></div>
+</div>
+Float with top padding and nested empty blocks
+<div class="case">
+  <div class="column" id="padded-column">
+    <div class="empty"><div></div></div><div class="empty"><div></div></div>
+  </div>
+  <div class="marker" id="padded-marker"></div>
+</div>
+Nonempty blocks separate their margins
+<div class="case">
+  <div class="column" id="nonempty-column"><div class="empty"></div><div class="empty"></div></div>
+  <div class="marker" id="nonempty-marker"></div>
+</div>
+Mixed margins after 40px of content
+<div class="case">
+  <div class="column" id="mixed-column">
+    <div class="prefix"></div>
+    <div class="empty"><div></div></div><div class="empty" id="mixed-second"><div></div></div>
+  </div>
+  <div class="marker" id="mixed-marker"></div>
+</div>
+Negative margins after 40px of content
+<div class="case">
+  <div class="column" id="negative-column">
+    <div class="prefix"></div>
+    <div class="empty" id="negative-first"><div></div></div>
+    <div class="empty" id="negative-second"><div></div></div>
+  </div>
+  <div class="marker" id="negative-marker"></div>
+</div>

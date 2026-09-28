@@ -236,7 +236,12 @@ static void layout_get_object_dimensions(const css_unit_ctx *unit_len_ctx, struc
         }
 
     } else if (*width == AUTO) {
-        /* Have given height; width is calculated from ratio */
+        /* Resolve the given height's limits before transferring through the
+         * ratio. This also covers percentages resolved by flex stretching. */
+        if (max_height >= 0)
+            *height = min(*height, max_height);
+        if (min_height.type == CSS_SIZE_SET)
+            *height = max(*height, min_height.value);
         if (css_ratio)
             *width = layout_ratio_dimension(box, *height, false);
         else if (eff_ratio_h != 0)
@@ -513,6 +518,71 @@ static inline bool box_has_percentage_max_width(struct box *b)
     return ((type == CSS_MAX_WIDTH_SET) && (unit == CSS_UNIT_PCT));
 }
 
+/* Intrinsic image widths can depend on a definite percentage height. The
+ * minmax pass precedes layout, so use CSS sizes, never a previous box->height.
+ * A nowrap row's stretched height is definite already (Flexbox 9.8). Stop at
+ * content-dependent heights; they must not feed back into intrinsic widths. */
+static int layout_minmax_definite_height(const struct box *box, const css_unit_ctx *unit_ctx)
+{
+    if (box == NULL || box->style == NULL)
+        return AUTO;
+
+    const struct box *parent = box->parent;
+    if (parent && parent->type == BOX_INLINE_CONTAINER)
+        parent = parent->parent;
+
+    css_fixed_or_calc value = (css_fixed_or_calc)0;
+    css_unit unit = CSS_UNIT_PX;
+    uint8_t type = css_computed_height(box->style, &value, &unit);
+    bool stretch = type == CSS_HEIGHT_AUTO && lh__box_is_flex_item(box) && lh__flex_main_is_horizontal(parent) &&
+        css_computed_flex_wrap(parent->style) == CSS_FLEX_WRAP_NOWRAP &&
+        lh__box_align_self(parent, box) == CSS_ALIGN_SELF_STRETCH;
+    if (type != CSS_HEIGHT_SET && !stretch)
+        return AUTO;
+
+    int available = layout_minmax_definite_height(parent, unit_ctx);
+    int height = AUTO;
+    int edges = 0;
+    float fraction = 0;
+    if (stretch || css_computed_box_sizing(box->style) == CSS_BOX_SIZING_BORDER_BOX) {
+        for (unsigned int side = TOP; side <= BOTTOM; side += 2) {
+            if (stretch && margin_funcs[side](box->style, &value, &unit) == CSS_MARGIN_AUTO)
+                return AUTO;
+            calculate_mbp_width(unit_ctx, box->style, side, stretch, true, true, &edges, &fraction);
+        }
+        /* Percentage edges need an inline size that this pass does not know. */
+        if (fraction != 0)
+            return AUTO;
+    }
+
+    if (stretch) {
+        if (available == AUTO)
+            return AUTO;
+        height = max(0, available - edges);
+    } else {
+        css_computed_height(box->style, &value, &unit);
+        if (!lh__length_to_px(box->style, unit_ctx, available, value, unit, &height))
+            return AUTO;
+        height = max(0, height - edges);
+    }
+
+    /* Stretch limits are content-box sizes; margins are not part of them. */
+    edges = 0;
+    fraction = 0;
+    if (css_computed_box_sizing(box->style) == CSS_BOX_SIZING_BORDER_BOX) {
+        calculate_mbp_width(unit_ctx, box->style, TOP, false, true, true, &edges, &fraction);
+        calculate_mbp_width(unit_ctx, box->style, BOTTOM, false, true, true, &edges, &fraction);
+    }
+    int limit;
+    if (css_computed_max_height(box->style, &value, &unit) == CSS_MAX_HEIGHT_SET &&
+        lh__length_to_px(box->style, unit_ctx, available, value, unit, &limit))
+        height = min(height, max(0, limit - edges));
+    if (css_computed_min_height(box->style, &value, &unit) == CSS_MIN_HEIGHT_SET &&
+        lh__length_to_px(box->style, unit_ctx, available, value, unit, &limit))
+        height = max(height, max(0, limit - edges));
+    return height;
+}
+
 /**
  * Compute the constrained intrinsic width of a replaced element (image, etc.)
  * for the min/max width pass.
@@ -520,8 +590,8 @@ static inline bool box_has_percentage_max_width(struct box *b)
  * Reads CSS min/max width/height constraints from the element's style and
  * calls layout_get_object_dimensions() so that e.g. max-height on an image
  * correctly limits the intrinsic width contribution via aspect-ratio scaling.
- * Percentage-based constraints are skipped because the containing block
- * dimensions are not yet known during the minmax pass.
+ * Percentage heights use a definite ancestor height where one is available;
+ * percentage width constraints still have no containing width in this pass.
  *
  * \param box      The box with an object (box->object must be non-NULL).
  * \param content  The HTML content being laid out.
@@ -540,6 +610,12 @@ static int layout_minmax_object_width(struct box *box, const html_content *conte
 
     assert(box->object != NULL);
 
+    if (width == AUTO) {
+        int definite_height = layout_minmax_definite_height(box, &content->unit_len_ctx);
+        if (definite_height != AUTO)
+            height = definite_height;
+    }
+
     if (box->style) {
         css_fixed_or_calc v = (css_fixed_or_calc)0;
         css_unit u = CSS_UNIT_PX;
@@ -553,7 +629,8 @@ static int layout_minmax_object_width(struct box *box, const html_content *conte
                 obj_max_h = FIXTOINT(css_unit_len2device_px(box->style, &content->unit_len_ctx, v.value, u));
             }
         }
-        if (css_computed_max_width(box->style, &v, &u) == CSS_MAX_WIDTH_SET && u != CSS_UNIT_PCT) {
+        if (css_computed_max_width(box->style, &v, &u) == CSS_MAX_WIDTH_SET && u != CSS_UNIT_PCT &&
+            !lh__intrinsic_width_unit(u)) {
             if (u == CSS_UNIT_CALC) {
                 if (!lh__length_to_px(box->style, &content->unit_len_ctx, -1, v, u, &obj_max_w)) {
                     obj_max_w = INT_MAX;
@@ -573,7 +650,8 @@ static int layout_minmax_object_width(struct box *box, const html_content *conte
                 obj_min_h.value = FIXTOINT(css_unit_len2device_px(box->style, &content->unit_len_ctx, v.value, u));
             }
         }
-        if (css_computed_min_width(box->style, &v, &u) == CSS_MIN_WIDTH_SET && u != CSS_UNIT_PCT) {
+        if (css_computed_min_width(box->style, &v, &u) == CSS_MIN_WIDTH_SET && u != CSS_UNIT_PCT &&
+            !lh__intrinsic_width_unit(u)) {
             obj_min_w.type = CSS_SIZE_SET;
             if (u == CSS_UNIT_CALC) {
                 if (!lh__length_to_px(box->style, &content->unit_len_ctx, -1, v, u, &obj_min_w.value)) {
@@ -636,7 +714,7 @@ static struct box *layout_trailing_space(struct box *first, struct box *end)
         return NULL;
 
     for (struct box *b = end ? end->prev : first->parent->last; b; b = b->prev) {
-        if (lh__box_is_inline_flow(b) && !(b->type == BOX_INLINE_BLOCK && lh__box_is_absolute(b))) {
+        if (lh__box_is_inline_flow(b) && !lh__box_is_inline_positioned(b)) {
             /* Ignored duplicates may still have an unmeasured width. */
             if (following_inline && b->space != 0 && b->space != UNKNOWN_WIDTH)
                 space = b;
@@ -716,15 +794,10 @@ static struct box *layout_minmax_line(struct box *first, int *line_min, int *lin
             continue;
         }
 
-        if (b->type == BOX_INLINE_BLOCK &&
-            (css_computed_position(b->style) == CSS_POSITION_ABSOLUTE ||
-                css_computed_position(b->style) == CSS_POSITION_FIXED)) {
-            /* Abs-pos inline-blocks are out of flow (CSS 2.1 §9.3.2):
-             * compute own minmax for later use by layout_absolute,
-             * but don't contribute to parent's intrinsic width.
-             * Mirrors layout_minmax_block (L1053-1058) and
-             * layout_line pass 1 (L2788-2791). */
-            layout_minmax_block(b, font_func, content);
+        if (lh__box_is_inline_positioned(b)) {
+            /* Compute the positioned box's own intrinsic size, without
+             * contributing to its parent's line width or height. */
+            layout_minmax_box(b, font_func, content);
             continue;
         }
 
@@ -1282,7 +1355,7 @@ layout_minmax_block(struct box *block, const struct gui_layout_table *font_func,
         }
 
         min_type = css_computed_min_width(block->style, &value, &unit);
-        if (min_type == CSS_MIN_WIDTH_SET && unit != CSS_UNIT_PCT) {
+        if (min_type == CSS_MIN_WIDTH_SET && unit != CSS_UNIT_PCT && !lh__intrinsic_width_unit(unit)) {
             int val = 0;
             if (lh__length_to_px(block->style, &content->unit_len_ctx, -1, value, unit, &val)) {
                 if (min < val) {
@@ -1298,7 +1371,7 @@ layout_minmax_block(struct box *block, const struct gui_layout_table *font_func,
                 if (!is_flex_item) {
                     min = 0;
                 }
-            } else {
+            } else if (!lh__intrinsic_width_unit(unit)) {
                 int val = 0;
                 if (lh__length_to_px(block->style, &content->unit_len_ctx, -1, value, unit, &val)) {
                     if (val >= 0 && max > val) {
@@ -2634,7 +2707,7 @@ static bool layout_apply_minmax_height(const css_unit_ctx *unit_len_ctx, struct 
             if (unit == CSS_UNIT_PCT || unit == CSS_UNIT_CALC) {
                 if (containing_block && containing_block->height != AUTO &&
                     (box_is_out_of_flow(box) || htype == CSS_HEIGHT_SET ||
-                        (containing_block->flags & ASPECT_RATIO_HEIGHT))) {
+                        (containing_block->flags & (ASPECT_RATIO_HEIGHT | HEIGHT_STRETCHED)))) {
                     /* Box is absolutely positioned or its containing block has a valid
                      * specified height. (CSS 2.1 Section 10.5) */
                     available_height = containing_block->height;
@@ -2663,7 +2736,7 @@ static bool layout_apply_minmax_height(const css_unit_ctx *unit_len_ctx, struct 
             if (unit == CSS_UNIT_PCT || unit == CSS_UNIT_CALC) {
                 if (containing_block && containing_block->height != AUTO &&
                     (box_is_out_of_flow(box) || htype == CSS_HEIGHT_SET ||
-                        (containing_block->flags & ASPECT_RATIO_HEIGHT))) {
+                        (containing_block->flags & (ASPECT_RATIO_HEIGHT | HEIGHT_STRETCHED)))) {
                     /* Box is absolutely positioned or its containing block has a valid
                      * specified height. (CSS 2.1 Section 10.5) */
                     available_height = containing_block->height;
@@ -3087,6 +3160,15 @@ static bool box_needs_inline_alignment(const struct box *box)
     return box->type == BOX_INLINE_BLOCK || (box->type == BOX_INLINE && lh__box_is_object(box));
 }
 
+static bool box_needs_line_metrics(const struct box *box, const css_computed_style *parent_style)
+{
+    /* Identical styles have identical ascent/descent and need no font lookup.
+     * A different text style may extend above or below the parent's strut.
+     * Empty inline fragments must still be allowed to collapse through. */
+    return box_needs_inline_alignment(box) ||
+        (box->type == BOX_TEXT && box->length && box->style != parent_style);
+}
+
 static int layout_text_baseline(const html_content *content, const css_computed_style *style, int height)
 {
     plot_font_style_t fstyle;
@@ -3141,7 +3223,7 @@ static int layout_atomic_baseline(const struct box *box, int height, uint8_t ali
 }
 
 /**
- * Measure the baseline and line height for a line containing images/inline-blocks.
+ * Measure the baseline and line height for mixed text styles or inline objects.
  * The parent's zero-width strut contributes ascent and descent even if there
  * is no text. Top/bottom-aligned objects contribute height without extending
  * the baseline; middle alignment contributes on both sides of the baseline.
@@ -3149,17 +3231,17 @@ static int layout_atomic_baseline(const struct box *box, int height, uint8_t ali
 static bool layout_line_alignment_metrics(struct box *first, struct box *end, const html_content *content,
     int *height, int *baseline)
 {
-    bool has_object = false;
+    const css_computed_style *parent_style = first->parent->parent->style;
+    bool needs_metrics = false;
     for (struct box *b = first; b != end; b = b->next) {
-        if (box_needs_inline_alignment(b) && !box_is_out_of_flow(b)) {
-            has_object = true;
+        if (box_needs_line_metrics(b, parent_style) && !box_is_out_of_flow(b)) {
+            needs_metrics = true;
             break;
         }
     }
-    if (!has_object)
+    if (!needs_metrics)
         return false;
 
-    const css_computed_style *parent_style = first->parent->parent->style;
     int strut_height = line_height(&content->unit_len_ctx, parent_style);
     int above = layout_text_baseline(content, parent_style, strut_height);
     int below = strut_height - above;
@@ -3230,7 +3312,7 @@ static bool layout_line(struct box *first, int *width, int *y, int cx, int cy, s
     struct box *br_box = 0;
     bool move_y = false;
     bool place_below = false;
-    bool has_aligned_inline = false;
+    bool needs_line_metrics = false;
     bool has_content = false, after_space = false;
     int space_before = 0, space_after = 0;
     unsigned int inline_count = 0;
@@ -3289,13 +3371,11 @@ static bool layout_line(struct box *first, int *width, int *y, int cx, int cy, s
             b->width = 0;
             continue;
         }
-        if (b->type == BOX_INLINE_BLOCK &&
-            (css_computed_position(b->style) == CSS_POSITION_ABSOLUTE ||
-                css_computed_position(b->style) == CSS_POSITION_FIXED))
+        if (lh__box_is_inline_positioned(b))
             continue;
 
         assert(b->style != NULL);
-        has_aligned_inline |= box_needs_inline_alignment(b);
+        needs_line_metrics |= box_needs_line_metrics(b, first->parent->parent->style);
         font_plot_style_from_css(&content->unit_len_ctx, b->style, &fstyle);
 
         x += space_after;
@@ -3442,7 +3522,7 @@ static bool layout_line(struct box *first, int *width, int *y, int cx, int cy, s
 
     /* Include the strut descent when determining which floats this line meets. */
     int baseline;
-    if (has_aligned_inline)
+    if (needs_line_metrics)
         layout_line_alignment_metrics(first, b, content, &height, &baseline);
 
     /* find new sides using this height */
@@ -3469,9 +3549,7 @@ static bool layout_line(struct box *first, int *width, int *y, int cx, int cy, s
 
         NSLOG(layout, DEBUG, "pass 2: b %p, x %i", b, x);
 
-        if (b->type == BOX_INLINE_BLOCK &&
-            (css_computed_position(b->style) == CSS_POSITION_ABSOLUTE ||
-                css_computed_position(b->style) == CSS_POSITION_FIXED)) {
+        if (lh__box_is_inline_positioned(b)) {
             b->x = x + space_after;
 
         } else if (lh__box_is_inline_flow(b)) {
@@ -3739,14 +3817,8 @@ static bool layout_line(struct box *first, int *width, int *y, int cx, int cy, s
     for (d = first; d != b; d = d->next) {
         d->flags &= ~NEW_LINE;
 
-        if (d->type == BOX_INLINE_BLOCK &&
-            (css_computed_position(d->style) == CSS_POSITION_ABSOLUTE ||
-                css_computed_position(d->style) == CSS_POSITION_FIXED)) {
-            /* positioned inline-blocks:
-             * set static position (x,y) only, rest of positioning
-             * is handled later */
-            d->x += x0;
-            d->y = *y;
+        if (lh__box_is_inline_positioned(d)) {
+            /* Finish the static anchor after the line height is known. */
             continue;
         } else if ((d->type == BOX_INLINE && lh__box_is_replace(d) == false) || d->type == BOX_BR ||
             d->type == BOX_TEXT || d->type == BOX_INLINE_END) {
@@ -3775,12 +3847,35 @@ static bool layout_line(struct box *first, int *width, int *y, int cx, int cy, s
     assert(b != first || (move_y && 0 < used_height && (left || right)));
 
     /* Recompute from boxes actually placed on this line after wrapping. */
-    bool aligned_line = has_aligned_inline &&
+    bool aligned_line = needs_line_metrics &&
         layout_line_alignment_metrics(first, b, content, &used_height, &baseline);
 
     /* handle vertical-align by adjusting box y values */
     /** \todo  proper vertical alignment handling */
+    bool preceding_content = false;
     for (d = first; d != b; d = d->next) {
+        if (lh__box_is_inline_positioned(d)) {
+            /* CSS 2.1 10.3.7/10.6.4: inline static positions follow the
+             * insertion point; a hypothetical block starts at the block's
+             * content edge, below any preceding content on this line.
+             * Neither kind interrupts the actual in-flow text. */
+            switch (ns_computed_display_static(d->style)) {
+            case CSS_DISPLAY_INLINE:
+            case CSS_DISPLAY_INLINE_BLOCK:
+            case CSS_DISPLAY_INLINE_FLEX:
+            case CSS_DISPLAY_INLINE_GRID:
+            case CSS_DISPLAY_INLINE_TABLE:
+                d->x += x0;
+                d->y = *y;
+                break;
+            default:
+                d->x = 0;
+                d->y = *y + (preceding_content ? used_height : 0);
+                break;
+            }
+            continue;
+        }
+        preceding_content |= layout_inline_has_content(d);
         if (aligned_line && box_needs_inline_alignment(d) && !box_is_out_of_flow(d)) {
             css_fixed_or_calc value = (css_fixed_or_calc)0;
             css_unit unit = CSS_UNIT_PX;
@@ -4105,8 +4200,11 @@ bool layout_block_context(struct box *block, int viewport_height, html_content *
             /* CSS 2.1 §8.3.1: If the margin chain descended into a
              * first child (no border/padding separator), the collapsed
              * margin pushes the PARENT down, not the child inside
-             * the parent. Apply the margin here to the current box. */
-            if (margin_from_child && in_margin) {
+             * the parent. Apply the margin here to the current box.
+             * A chain reaching the formatting-context root consists entirely
+             * of collapsing empty blocks: leave it pending for finalization,
+             * where the last child's bottom margin is collected as well. */
+            if (margin_from_child && margin_collapse != block && in_margin) {
                 cy += (int)max_pos_margin - (int)max_neg_margin;
                 box->y += (int)max_pos_margin - (int)max_neg_margin;
                 in_margin = false;

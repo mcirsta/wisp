@@ -1148,47 +1148,23 @@ static bool box_normalise_inline_container(struct box *cont, const struct box *r
         next_child = child->next;
         switch (child->type) {
         case BOX_INLINE:
-            /* Flatten children of BOX_INLINE into the sibling list */
-            if (child->children != NULL) {
-                struct box *children = child->children;
-                struct box *last_child = child->last;
-                struct box *after = child->next;
-                struct box *c_child;
-
-                NSLOG(wisp, INFO, "    flattening INLINE %p children %p last %p after %p", child, children,
-                    last_child, after);
-
-                /* Update parent pointers of all children to the inline container */
-                for (c_child = children; c_child != NULL; c_child = c_child->next) {
-                    c_child->parent = cont;
-                    if (c_child == last_child)
-                        break;
-                }
-
-                /* Link children to follow BOX_INLINE */
-                child->next = children;
-                children->prev = child;
-
-                if (last_child) {
-                    last_child->next = after;
-                    if (after) {
-                        after->prev = last_child;
-                    } else {
-                        cont->last = last_child;
-                    }
-                }
-
-                child->children = NULL;
-                child->last = NULL;
-
-                /* Continue loop from formatting the first child we just pulled up */
-                next_child = children;
-            }
-            break; /* continue with next sibling (which is now the first child) */
+            /* Construction emits both DOM and generated inline children as
+             * siblings, including matching inline-end markers. */
+            assert(child->children == NULL);
+            break;
         case BOX_INLINE_END:
         case BOX_BR:
         case BOX_TEXT:
             /* ok */
+            break;
+        case BOX_TABLE:
+            /* Positioned tables keep table formatting and use this
+             * container only for their static-position anchor. */
+            assert(child->style != NULL &&
+                (css_computed_position(child->style) == CSS_POSITION_ABSOLUTE ||
+                    css_computed_position(child->style) == CSS_POSITION_FIXED));
+            if (!box_normalise_table(child, root, c))
+                return false;
             break;
         case BOX_INLINE_BLOCK:
             /* ok */
@@ -1264,7 +1240,6 @@ static bool box_normalise_inline_container(struct box *cont, const struct box *r
         case BOX_FLEX:
         case BOX_BLOCK:
         case BOX_INLINE_CONTAINER:
-        case BOX_TABLE:
         case BOX_TABLE_ROW_GROUP:
         case BOX_TABLE_ROW:
         case BOX_TABLE_CELL:

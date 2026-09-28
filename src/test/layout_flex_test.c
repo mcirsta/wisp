@@ -1051,6 +1051,61 @@ START_TEST(test_flex_minimum_width_layout)
 }
 END_TEST
 
+/* A definite nowrap line can be smaller than its natural contents. Reflow
+ * with a different height also checks that the stretch flag is scoped. */
+START_TEST(test_flex_stretched_height)
+{
+    static const char *names[] = {
+        "stretch", "minimum", "maximum", "auto margin", "wrapped", "start", "parent minimum", "parent maximum"};
+    struct flex_test_style values = {.width = -1,
+        .width_unit = CSS_UNIT_PX,
+        .min_width = -1,
+        .min_unit = CSS_UNIT_PX,
+        .max_width = -1,
+        .basis = -1,
+        .overflow = CSS_OVERFLOW_VISIBLE};
+    css_computed_style *item_style = flex_test_style_create(&values);
+    if (_i != 5)
+        flex_test_style_stretch(item_style, _i == 1 ? 80 : -1, _i == 2 ? 80 : -1, _i == 3);
+    values.container = true;
+    values.width = 400;
+    css_computed_style *parent_style = flex_test_style_create(&values);
+    if (_i >= 6)
+        flex_test_style_stretch(parent_style, _i == 6 ? 80 : -1, _i == 7 ? 80 : -1, false);
+    if (_i == 4)
+        flex_test_style_wrap(parent_style, CSS_FLEX_WRAP_WRAP);
+    struct box parent = {.type = BOX_FLEX, .style = parent_style, .width = 400, .height = AUTO};
+    struct box item = {
+        .type = BOX_BLOCK, .style = item_style, .parent = &parent, .min_width = {CSS_SIZE_SET, 200}, .max_width = 200};
+    parent.children = parent.last = &item;
+    html_content content = {.unit_len_ctx = {.viewport_width = INTTOFIX(1280),
+                                .viewport_height = INTTOFIX(900),
+                                .font_size_default = INTTOFIX(16),
+                                .font_size_minimum = INTTOFIX(6),
+                                .device_dpi = INTTOFIX(96),
+                                .root_style = parent_style}};
+    g_test_block_content_height = 100;
+    for (int pass = 0; pass < 2; pass++) {
+        int height = pass ? 150 : 60;
+        int expected = height;
+        if ((_i == 1 || _i == 6) && height < 80)
+            expected = 80;
+        if ((_i == 2 || _i == 7) && height > 80)
+            expected = 80;
+        if (_i == 3 || _i == 5 || (_i == 4 && height < 100))
+            expected = 100;
+        flex_test_style_alignment(parent_style, CSS_FLEX_DIRECTION_ROW, CSS_JUSTIFY_CONTENT_FLEX_START, height);
+        ck_assert(layout_flex(&parent, 400, &content));
+        ck_assert_msg(
+            item.height == expected, "%s pass %d: expected height %d, got %d", names[_i], pass, expected, item.height);
+        ck_assert_msg(!(item.flags & HEIGHT_STRETCHED), "%s pass %d: leaked stretch flag", names[_i], pass);
+    }
+    g_test_block_content_height = 50;
+    css_computed_style_destroy(item_style);
+    css_computed_style_destroy(parent_style);
+}
+END_TEST
+
 /* Test suite setup */
 /* A definite cross size transfers through the ratio into the automatic
  * minimum. Explicit min-width:0 and a specified width still take precedence. */
@@ -1218,6 +1273,7 @@ Suite *layout_flex_suite(void)
     tcase_add_test(tc_core, test_row_flex_min_height_unchanged);
 
     tcase_add_loop_test(tc_core, test_flex_minimum_width_layout, 0, 19);
+    tcase_add_loop_test(tc_core, test_flex_stretched_height, 0, 8);
 
     tcase_add_loop_test(tc_core, test_flex_ratio_minimum, 0, 4);
     tcase_add_loop_test(tc_core, test_flex_outer_size_alignment, 0, 8);

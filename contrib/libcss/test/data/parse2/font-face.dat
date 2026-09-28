@@ -1,0 +1,141 @@
+#data
+@font-face { font-family: "Source Sans Pro"; }
+#errors
+#expected
+| @font-face
+|  font-family: Source Sans Pro
+|  font-style: normal
+|  font-weight: normal
+#reset
+
+#data
+@font-face { font-family: Source /* comment */ Sans Pro   ; }
+#errors
+#expected
+| @font-face
+|  font-family: Source Sans Pro
+|  font-style: normal
+|  font-weight: normal
+#reset
+
+#data
+@font-face { font-family: "Source Sans Pro" /* trailing comment */ ; }
+#errors
+#expected
+| @font-face
+|  font-family: Source Sans Pro
+|  font-style: normal
+|  font-weight: normal
+#reset
+
+#data
+@font-face { font-family: "A, B"; }
+#errors
+#expected
+| @font-face
+|  font-family: A, B
+|  font-style: normal
+|  font-weight: normal
+#reset
+
+#data
+@font-face { font-family: A\,B; }
+#errors
+#expected
+| @font-face
+|  font-family: A,B
+|  font-style: normal
+|  font-weight: normal
+#reset
+
+#data
+@font-face { font-family: "Source Sans Pro", sans-serif; }
+#errors
+#expected
+| @font-face
+|  font-style: normal
+|  font-weight: normal
+#reset
+
+#data
+@font-face { font-family: Source Sans Pro, Other; }
+#errors
+#expected
+| @font-face
+|  font-style: normal
+|  font-weight: normal
+#reset
+
+#data
+@font-face { font-family: "Source Sans Pro",; }
+#errors
+#expected
+| @font-face
+|  font-style: normal
+|  font-weight: normal
+#reset
+
+#data
+@font-face { font-family: "Source Sans" Pro; }
+#errors
+#expected
+| @font-face
+|  font-style: normal
+|  font-weight: normal
+#reset
+
+#data
+@font-face { font-family: Source 123; }
+#errors
+#expected
+| @font-face
+|  font-style: normal
+|  font-weight: normal
+#reset
+
+#data
+@font-face { font-family: Source !important; }
+#errors
+#expected
+| @font-face
+|  font-style: normal
+|  font-weight: normal
+#reset
+
+#data
+@font-face { font-family: Original; font-family: "Wrong", sans-serif; }
+#errors
+#expected
+| @font-face
+|  font-family: Original
+|  font-style: normal
+|  font-weight: normal
+#reset
+
+#data
+@font-face { font-family: "Wrong", sans-serif; font-family: Valid; font-weight: bold; }
+#errors
+#expected
+| @font-face
+|  font-family: Valid
+|  font-style: normal
+|  font-weight: bold
+#reset
+
+#data
+@font-face { font-family: Original; font-family: Replacement; }
+#errors
+#expected
+| @font-face
+|  font-family: Replacement
+|  font-style: normal
+|  font-weight: normal
+#reset
+
+#data
+* { font-family: "Source Sans Pro", sans-serif; }
+#errors
+#expected
+| *
+|  font-family: 'Source Sans Pro', sans-serif
+#reset
