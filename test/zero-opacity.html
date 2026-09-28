@@ -1,0 +1,67 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Fully transparent HTML subtrees</title>
+<style>
+    body { margin: 8px; background: white; font: 16px/20px sans-serif; }
+    .case { width: 300px; margin-bottom: 4px; padding: 4px; border: 1px solid #bbb; }
+    .hidden { opacity: 0; background: #cc2255; border: 2px solid #cc2255; }
+    .reset { opacity: 1; visibility: visible; }
+    .after { display: inline-block; width: 12px; height: 12px; background: #168844; }
+    .block .hidden { height: 24px; }
+    .wrap { width: 140px; }
+    .float { height: 32px; }
+    .float .hidden { float: left; width: 30px; height: 24px; }
+    .stack .hidden { position: relative; width: 80px; height: 24px; }
+    .paint { position: absolute; left: 0; top: 0; width: 20px; height: 20px; background: #cc2255; }
+    .positive { z-index: 100; left: 20px; }
+    .negative { z-index: -1; }
+    .fixed { position: fixed; left: 370px; top: 10px; z-index: 999; }
+    .generated::before { content: "U"; position: absolute; left: 240px; top: 0; opacity: 1; color: #cc2255; }
+    .pseudo { position: relative; }
+    .own-before::before, .own-after::after {
+        content: "U"; display: inline-block; width: 20px; height: 20px; background: #cc2255; opacity: 0;
+    }
+    .flex .hidden { display: flex; }
+    .grid .hidden { display: grid; grid-template-columns: 40px 40px; }
+    .item { width: 30px; height: 20px; background: #cc2255; }
+    .visibility { visibility: hidden; }
+    .visibility .after { visibility: visible; }
+    /* REFERENCE OVERRIDES */
+</style>
+<div class="case block" id="block">
+    <div class="hidden" id="hit-target"><span class="reset">invisible</span></div><span class="after"></span>
+</div>
+<div class="case" id="inline">
+    before <span class="hidden">hidden <strong class="reset">still hidden</strong></span> <span class="after"></span>
+</div>
+<div class="case wrap" id="wrap">
+    <a class="hidden" href="#block">wrapped hidden words <b class="reset">wrapped hidden words</b></a>
+    <span class="after"></span>
+</div>
+<div class="case" id="split">
+    <span class="hidden">before<div class="reset">block inside inline</div>after</span><span class="after"></span>
+</div>
+<div class="case float" id="float"><span class="hidden"><span class="reset">x</span></span><span class="after"></span></div>
+<div class="case stack" id="stack">
+    <div class="hidden"><div class="reset"><div class="paint negative"></div><div class="paint positive"></div>
+        <div class="paint fixed"></div></div></div><span class="after"></span>
+</div>
+<div class="case pseudo" id="pseudo">
+    <span class="hidden generated"></span><span class="own-before">visible</span>
+    <div class="own-after">visible</div><span class="after"></span>
+</div>
+<div class="case" id="pre"><pre class="hidden">hidden
+<span class="reset">still hidden</span></pre><span class="after"></span></div>
+<div class="case" id="list"><ul class="hidden"><li class="reset">hidden marker and text</li></ul><span class="after"></span></div>
+<div class="case flex" id="flex">
+    <div class="hidden"><div class="item reset"></div><div class="item"></div></div><span class="after"></span>
+</div>
+<div class="case grid" id="grid">
+    <div class="hidden"><div class="item reset"></div><div class="item"></div></div><span class="after"></span>
+</div>
+<div class="case" id="table">
+    <table class="hidden"><tr><td class="reset">hidden</td></tr></table><span class="after"></span>
+</div>
+<div class="case" id="control"><div class="hidden"><input class="reset" value="hidden"></div><span class="after"></span></div>
+<!-- Visibility permits an explicit visible descendant; opacity does not. -->
+<div class="case visibility" id="visibility"><span class="after"></span></div>

@@ -1,0 +1,63 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Positioned generated content inside inline elements</title>
+<style>
+    body { margin: 0; background: white; font: 16px/20px sans-serif; }
+    .row { height: 60px; }
+    .case { float: left; position: relative; width: 220px; height: 60px; }
+    .icon::before, .real {
+        position: absolute; left: 20px; top: 7px;
+        width: 24px; height: 40px; background: #168844; color: black;
+    }
+    .icon::before { content: "U"; }
+    .inline-block .icon::before, .inline-block .real { display: inline-block; }
+    .block .icon::before, .block .real { display: block; }
+    .float { float: right; position: relative; width: 60px; height: 50px; }
+    .relative { position: relative; }
+    .flow .icon::before, .flow .real { position: static; }
+    .flow-inline .icon::before, .flow-inline .real { background: transparent; color: #168844; }
+    .fixed .icon::before, .fixed .real { position: fixed; top: auto; bottom: 20px; }
+    .fixed .real { left: 240px; }
+</style>
+<!-- Each left-hand case uses ::before; its right-hand reference uses a real
+     span with the same style. Compare painting as well as surrounding flow. -->
+<div class="row">
+    <div class="case" id="absolute"><span class="icon"></span>after</div>
+    <div class="case" id="absolute-reference"><span><span class="real">U</span></span>after</div>
+</div>
+<div class="row inline-block">
+    <div class="case" id="inline-block"><span class="icon"></span>after</div>
+    <div class="case" id="inline-block-reference"><span><span class="real">U</span></span>after</div>
+</div>
+<div class="row block">
+    <div class="case" id="block"><span class="icon"></span>after</div>
+    <div class="case" id="block-reference"><span><span class="real">U</span></span>after</div>
+</div>
+<div class="row">
+    <div class="case" id="float"><div class="float"><span class="icon"></span></div>after</div>
+    <div class="case" id="float-reference"><div class="float"><span><span class="real">U</span></span></div>after</div>
+</div>
+<div class="row">
+    <div class="case" id="text"><span class="icon">inside</span> after</div>
+    <div class="case" id="text-reference"><span><span class="real">U</span>inside</span> after</div>
+</div>
+<div class="row">
+    <div class="case" id="relative">prefix <span class="icon relative">inside</span> after</div>
+    <div class="case" id="relative-reference">prefix <span class="relative"><span class="real">U</span>inside</span> after</div>
+</div>
+<div class="row">
+    <div class="case" id="block-owner"><div class="icon">inside</div>after</div>
+    <div class="case" id="block-owner-reference"><div><span class="real">U</span>inside</div>after</div>
+</div>
+<div class="row flow flow-inline">
+    <div class="case" id="flow"><span class="icon"></span>after</div>
+    <div class="case" id="flow-reference"><span><span class="real">U</span></span>after</div>
+</div>
+<div class="row flow inline-block">
+    <div class="case" id="flow-inline-block"><span class="icon"></span>after</div>
+    <div class="case" id="flow-inline-block-reference"><span><span class="real">U</span></span>after</div>
+</div>
+<div class="row fixed">
+    <div class="case" id="fixed"><span class="icon"></span>after</div>
+    <div class="case" id="fixed-reference"><span><span class="real">U</span></span>after</div>
+</div>

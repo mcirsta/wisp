@@ -114,7 +114,8 @@ typedef enum {
     ASPECT_RATIO_HEIGHT = 1 << 14, /* auto height derived from the preferred ratio */
     HAS_BASELINE = 1 << 15, /* inline container has a laid-out in-flow line */
     IS_VIEWPORT = 1 << 16, /* synthetic containing block owned by html_content */
-    HAS_FIXED_DESCENDANT = 1 << 17 /* viewport-fixed descendant can escape clipping */
+    HAS_FIXED_DESCENDANT = 1 << 17, /* viewport-fixed descendant can escape clipping */
+    IS_OPACITY_ZERO = 1 << 18 /* this box or its DOM ancestor has zero opacity; still laid out and hit tested */
 } box_flags;
 
 

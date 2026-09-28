@@ -75,6 +75,8 @@ struct box_construct_ctx {
 struct box_construct_props {
     /** Style from which to inherit, or NULL if none */
     const css_computed_style *parent_style;
+    /** Paint state from the DOM parent, before inline boxes are flattened. */
+    box_flags inherited_flags;
     /** Current link target, or NULL if none */
     struct nsurl *href;
     /** Current frame target, or NULL if none */
@@ -180,6 +182,7 @@ static void box_extract_properties(dom_node *n, struct box_construct_props *prop
 
             if (parent_box != NULL) {
                 props->parent_style = parent_box->style;
+                props->inherited_flags = parent_box->flags & IS_OPACITY_ZERO;
                 props->href = parent_box->href;
                 props->target = parent_box->target;
                 props->title = parent_box->title;
@@ -645,6 +648,7 @@ static void box_construct_generate(dom_node *n, html_content *content, struct bo
     if (gen == NULL) {
         return;
     }
+    gen->flags |= box->flags & IS_OPACITY_ZERO;
 
     /* set box type from computed display */
     gen->type = box_map[computed_display];
@@ -818,6 +822,7 @@ static bool box_construct_marker(struct box *box, const char *title, struct box_
 
     box->list_marker = marker;
     marker->parent = box;
+    marker->flags |= box->flags & IS_OPACITY_ZERO;
 
     return true;
 }
@@ -913,6 +918,10 @@ static bool box_construct_element(struct box_construct_ctx *ctx, bool *convert_c
         styles, styles->styles[CSS_PSEUDO_ELEMENT_NONE], false, props.href, props.target, props.title, id, ctx->bctx);
     if (box == NULL)
         return false;
+
+    /* Opacity is not inherited CSS, but a transparent ancestor suppresses
+     * all descendants, including those attached as inline siblings. */
+    box->flags |= props.inherited_flags;
 
     /* If this is the root box, add it to the context */
     if (props.node_is_root)
@@ -1159,12 +1168,23 @@ static void box_construct_element_after(dom_node *n, html_content *content)
             enum css_display_e pseudo_display = ns_computed_display(before_style, false);
             box_type pseudo_type = box_map[pseudo_display];
 
+            if (pseudo_type == BOX_BLOCK &&
+                (css_computed_position(before_style) == CSS_POSITION_ABSOLUTE ||
+                    css_computed_position(before_style) == CSS_POSITION_FIXED)) {
+                /* Positioned content is blockified by CSS, but these children
+                 * are flattened into the parent's inline container. Use the
+                 * inline-block representation expected by inline layout for
+                 * out-of-flow boxes, as we do for positioned inline elements. */
+                pseudo_type = BOX_INLINE_BLOCK;
+            }
+
             /* Create pseudo-element box with correct type */
             struct box *pseudo_box = box_create(
                 NULL, (css_computed_style *)before_style, false, NULL, NULL, NULL, NULL, content->bctx);
 
             if (pseudo_box != NULL) {
                 pseudo_box->type = pseudo_type;
+                pseudo_box->flags |= box->flags & IS_OPACITY_ZERO;
                 bool has_content = false;
 
                 /* Fetch background image for pseudo-element */
@@ -1277,6 +1297,7 @@ static void box_construct_element_after(dom_node *n, html_content *content)
             box->id == NULL ? NULL : lwc_string_ref(box->id), content->bctx);
         if (inline_end != NULL) {
             inline_end->type = BOX_INLINE_END;
+            inline_end->flags |= box->flags & IS_OPACITY_ZERO;
 
             assert(props.inline_container != NULL);
 
@@ -1565,6 +1586,7 @@ static bool box_construct_text(struct box_construct_ctx *ctx)
 
         box->type = BOX_TEXT;
 
+        box->flags |= props.inherited_flags;
         box->text = talloc_strdup(ctx->bctx, text);
         free(text);
         if (box->text == NULL)
@@ -1670,6 +1692,7 @@ static bool box_construct_text(struct box_construct_ctx *ctx)
 
             box->type = BOX_TEXT;
 
+            box->flags |= props.inherited_flags;
             box->text = talloc_strdup(ctx->bctx, current);
             if (box->text == NULL) {
                 free(text);

@@ -1,0 +1,42 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Painting visible overflow from positioned boxes</title>
+<style>
+    body { margin: 20px; background: white; }
+    .case { position: relative; width: 480px; height: 60px; }
+    .host { position: relative; float: left; width: 180px; }
+    .paint, .generated::before {
+        position: absolute; left: 10px; top: 8px;
+        width: 24px; height: 24px; background: #168844; color: #168844;
+    }
+    .generated::before { content: "U"; }
+    #right .host { float: right; }
+    #block .host { float: none; }
+    #zero-width .host { width: 0; height: 40px; }
+    #nested .inner { position: relative; width: 0; height: 0; }
+    #absolute .host { position: absolute; left: 0; top: 0; width: 0; height: 0; }
+    #fixed .host { position: fixed; left: 20px; top: 440px; width: 0; height: 0; }
+    #offscreen .host { left: -1000px; width: 10px; height: 10px; }
+    #offscreen .paint { left: 1010px; }
+    #hidden-zero .host { height: 0; overflow: hidden; }
+    #hidden .host { width: 20px; height: 20px; overflow: hidden; }
+    #hidden .paint { position: relative; }
+    #clip .paint { clip: rect(auto, auto, 0, auto); }
+</style>
+<!-- The green square must paint despite its host's empty border box. -->
+<div class="case" id="left"><div class="host" id="left-host"><div class="paint"></div></div></div>
+<div class="case" id="right"><div class="host" id="right-host"><div class="paint"></div></div></div>
+<div class="case" id="pseudo"><div class="host" id="pseudo-host"><span class="generated"></span></div></div>
+<div class="case" id="block"><div class="host" id="block-host"><div class="paint"></div></div></div>
+<div class="case" id="zero-width"><div class="host" id="zero-width-host"><div class="paint"></div></div></div>
+<div class="case" id="nested">
+    <div class="host" id="nested-host"><div class="inner"><div class="paint"></div></div></div>
+</div>
+<div class="case" id="absolute"><div class="host" id="absolute-host"><div class="paint"></div></div></div>
+<div class="case" id="fixed"><div class="host" id="fixed-host"><div class="paint"></div></div></div>
+<!-- The host is off screen, but its overflowing child is on screen. -->
+<div class="case" id="offscreen"><div class="host" id="offscreen-host"><div class="paint"></div></div></div>
+<!-- Actual clipping must still suppress all or part of the green square. -->
+<div class="case" id="hidden-zero"><div class="host" id="hidden-zero-host"><div class="paint"></div></div></div>
+<div class="case" id="hidden"><div class="host" id="hidden-host"><div class="paint"></div></div></div>
+<div class="case" id="clip"><div class="host" id="clip-host"><div class="paint"></div></div></div>

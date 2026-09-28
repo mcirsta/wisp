@@ -1892,6 +1892,9 @@ bool html_redraw_box(const html_content *html, struct box *box, int x_parent, in
     const float scale, colour current_background_color, const struct content_redraw_data *data,
     const struct redraw_context *ctx)
 {
+    if (box->flags & IS_OPACITY_ZERO)
+        return true;
+
     const struct plotter_table *plot = ctx->plot;
     int x, y;
     int width, height;
@@ -2145,18 +2148,18 @@ bool html_redraw_box(const html_content *html, struct box *box, int x_parent, in
         border_bottom = box->border[BOTTOM].width * scale;
     }
 
-    /* calculate rectangle covering this box and descendants */
-    if (box->style && box->parent != NULL && css_computed_position(box->style) != CSS_POSITION_STATIC) {
-        /* positioned boxes: clip to their own box size */
-        r.x0 = x - border_left;
-        r.x1 = x + padding_width + border_right;
-    } else if (box->style && overflow_x != CSS_OVERFLOW_VISIBLE && box->parent != NULL) {
-        /* non-visible overflow: clip to box size */
+    bool has_css_clip = box->style && css_computed_position(box->style) == CSS_POSITION_ABSOLUTE &&
+        css_computed_clip(box->style, &css_rect) == CSS_CLIP_RECT;
+
+    /* Calculate the painting bounds. Positioning does not clip visible
+     * overflow: even an empty box can have visible descendants. Explicit
+     * clip rectangles still start at the border box for their auto edges. */
+    if (box->style && (has_css_clip || overflow_x != CSS_OVERFLOW_VISIBLE) && box->parent != NULL) {
+        /* explicit clipping or non-visible overflow: use box size */
         r.x0 = x - border_left;
         r.x1 = x + padding_width + border_right;
     } else {
-        /* visible overflow and not positioned: use descendant extents
-         */
+        /* visible overflow: use descendant extents */
         if (scale == 1.0) {
             r.x0 = x + box->descendant_x0;
             r.x1 = x + box->descendant_x1 + 1;
@@ -2181,17 +2184,12 @@ bool html_redraw_box(const html_content *html, struct box *box, int x_parent, in
     }
 
     /* calculate rectangle covering this box and descendants */
-    if (box->style && box->parent != NULL && css_computed_position(box->style) != CSS_POSITION_STATIC) {
-        /* positioned boxes: clip to their own box size */
-        r.y0 = y - border_top;
-        r.y1 = y + padding_height + border_bottom;
-    } else if (box->style && overflow_y != CSS_OVERFLOW_VISIBLE && box->parent != NULL) {
-        /* non-visible overflow: clip to box size */
+    if (box->style && (has_css_clip || overflow_y != CSS_OVERFLOW_VISIBLE) && box->parent != NULL) {
+        /* explicit clipping or non-visible overflow: use box size */
         r.y0 = y - border_top;
         r.y1 = y + padding_height + border_bottom;
     } else {
-        /* visible overflow and not positioned: use descendant extents
-         */
+        /* visible overflow: use descendant extents */
         if (scale == 1.0) {
             r.y0 = y + box->descendant_y0;
             r.y1 = y + box->descendant_y1 + 1;
@@ -2267,8 +2265,7 @@ bool html_redraw_box(const html_content *html, struct box *box, int x_parent, in
         goto cleanup;
     }
 
-    if (box->style != NULL && css_computed_position(box->style) == CSS_POSITION_ABSOLUTE &&
-        css_computed_clip(box->style, &css_rect) == CSS_CLIP_RECT) {
+    if (has_css_clip) {
         /* We have an absolutly positioned box with a clip rect */
         if (css_rect.left_auto == false)
             r.x0 = x - border_left +

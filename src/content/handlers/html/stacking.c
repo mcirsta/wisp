@@ -155,7 +155,9 @@ bool stacking_context_collect_subtree(struct stacking_context *negative_ctx, str
     struct box *c;
     int x_offset, y_offset;
 
-    if (box == NULL) {
+    /* Transparent subtrees must not leak positioned descendants into an
+     * ancestor's deferred paint list. Layout and hit testing are unaffected. */
+    if (box == NULL || (box->flags & IS_OPACITY_ZERO)) {
         return true;
     }
 

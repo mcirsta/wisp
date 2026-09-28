@@ -116,6 +116,11 @@ struct box *box_create(css_select_results *styles, css_computed_style *style, bo
     box->type = BOX_INLINE;
     box->flags = 0;
     box->flags = style_owned ? (box->flags | STYLE_OWNED) : box->flags;
+    if (style != NULL) {
+        css_fixed opacity;
+        if (css_computed_opacity(style, &opacity) == CSS_OPACITY_SET && opacity <= 0)
+            box->flags |= IS_OPACITY_ZERO;
+    }
     box->styles = styles;
     box->style = style;
     box->x = box->y = 0;
@@ -171,6 +176,9 @@ void box_add_child(struct box *parent, struct box *child)
 {
     assert(parent);
     assert(child);
+
+    /* Carry effective transparency through generated and anonymous boxes too. */
+    child->flags |= parent->flags & IS_OPACITY_ZERO;
 
 #ifdef DEBUG_ADD_CHILD
     /* Log when flex containers or their children are added */

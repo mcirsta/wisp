@@ -165,6 +165,18 @@ if(WISP_QT_CAPTURE)
         set_tests_properties(qt_scrolling_bounds PROPERTIES TIMEOUT 60)
         find_program(WISP_TEST_MAGICK magick)
         if(WISP_TEST_MAGICK)
+            add_test(NAME qt_zero_opacity
+                COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_zero_opacity.py
+                    $<TARGET_FILE:wisp-qt> ${WISP_TEST_MAGICK})
+            set_tests_properties(qt_zero_opacity PROPERTIES TIMEOUT 30)
+            add_test(NAME qt_visible_overflow
+                COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_visible_overflow.py
+                    $<TARGET_FILE:wisp-qt> ${WISP_TEST_MAGICK})
+            set_tests_properties(qt_visible_overflow PROPERTIES TIMEOUT 30)
+            add_test(NAME qt_positioned_pseudo
+                COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_positioned_pseudo.py
+                    $<TARGET_FILE:wisp-qt> ${WISP_TEST_MAGICK})
+            set_tests_properties(qt_positioned_pseudo PROPERTIES TIMEOUT 30)
             add_test(NAME qt_fractional_font_capture
                 COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_fractional_fonts.py
                     $<TARGET_FILE:wisp-qt> ${WISP_TEST_MAGICK})
