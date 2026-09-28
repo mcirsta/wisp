@@ -1557,11 +1557,42 @@ css_error node_is_disabled(void *pw, void *node, bool *match)
  */
 css_error node_is_checked(void *pw, void *node, bool *match)
 {
-    /** \todo Support checked nodes */
+    dom_exception exc;
+    dom_html_element_type tag_type;
+    dom_string *ns;
 
     *match = false;
 
-    return CSS_OK;
+    exc = dom_node_get_namespace(node, &ns);
+    if (exc != DOM_NO_ERR)
+        return CSS_NOMEM;
+    bool html = ns == NULL || dom_string_isequal(ns, corestring_dom_html_namespace);
+    dom_string_unref(ns);
+    if (!html)
+        return CSS_OK;
+
+    exc = dom_html_element_get_tag_type(node, &tag_type);
+    if (exc != DOM_NO_ERR)
+        return CSS_NOMEM;
+
+    /* Read current DOM state, not the default checked/selected attributes.
+     * Only checkable inputs and selected options match :checked. */
+    if (tag_type == DOM_HTML_ELEMENT_TYPE_INPUT) {
+        dom_string *type;
+        exc = dom_html_input_element_get_type(node, &type);
+        if (exc != DOM_NO_ERR)
+            return CSS_NOMEM;
+        bool checkable = type != NULL &&
+            (dom_string_caseless_lwc_isequal(type, corestring_lwc_checkbox) ||
+                dom_string_caseless_lwc_isequal(type, corestring_lwc_radio));
+        dom_string_unref(type);
+        if (checkable)
+            exc = dom_html_input_element_get_checked(node, match);
+    } else if (tag_type == DOM_HTML_ELEMENT_TYPE_OPTION) {
+        exc = dom_html_option_element_get_selected(node, match);
+    }
+
+    return exc == DOM_NO_ERR ? CSS_OK : CSS_NOMEM;
 }
 
 /**

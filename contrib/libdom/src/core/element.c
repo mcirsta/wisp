@@ -70,6 +70,13 @@ static void _dom_element_destroy_classes(struct dom_element *ele)
 }
 
 
+/* HTML class separators are ASCII whitespace. Unlike C isspace(), this
+ * excludes vertical tab; non-ASCII spaces also remain part of class names. */
+static inline bool _dom_element_is_class_space(char c)
+{
+    return c == ' ' || c == '\t' || c == '\n' || c == '\f' || c == '\r';
+}
+
 /**
  * Create element's class cache from class attribute value
  *
@@ -89,12 +96,12 @@ static dom_exception _dom_element_create_classes(struct dom_element *ele, const 
 
     /* Count number of classes */
     for (pos = value; *pos != '\0';) {
-        if (*pos != ' ') {
-            while (*pos != ' ' && *pos != '\0')
+        if (!_dom_element_is_class_space(*pos)) {
+            while (!_dom_element_is_class_space(*pos) && *pos != '\0')
                 pos++;
             n_classes++;
         } else {
-            while (*pos == ' ')
+            while (_dom_element_is_class_space(*pos))
                 pos++;
         }
     }
@@ -106,14 +113,14 @@ static dom_exception _dom_element_create_classes(struct dom_element *ele, const 
             return DOM_NO_MEM_ERR;
 
         for (pos = value, n_classes = 0; *pos != '\0';) {
-            if (*pos != ' ') {
+            if (!_dom_element_is_class_space(*pos)) {
                 const char *s = pos;
-                while (*pos != ' ' && *pos != '\0')
+                while (!_dom_element_is_class_space(*pos) && *pos != '\0')
                     pos++;
                 if (lwc_intern_string(s, pos - s, &classes[n_classes++]) != lwc_error_ok)
                     goto error;
             } else {
-                while (*pos == ' ')
+                while (_dom_element_is_class_space(*pos))
                     pos++;
             }
         }

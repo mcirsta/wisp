@@ -1,0 +1,48 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Checked selectors reveal sidebar content</title>
+<style>
+body { margin: 0; font: 16px/20px sans-serif; }
+.tabs { width: 300px; margin-bottom: 10px; }
+input { position: absolute; opacity: 0; }
+label { display: block; height: 20px; }
+.panel { display: none; height: 40px; background: #cfc; }
+input:checked + label + .panel { display: block; }
+input:not(:checked) + label { height: 30px; }
+.after { height: 10px; background: #acf; }
+.siblings { height: 20px; }
+.siblings .panel { height: 20px; }
+.siblings input:checked ~ .panel { display: block; }
+</style>
+<!-- The selected panel must exist without scripts, even when the radio is
+     invisible and outside a form, as in the Tion and Bihon sidebars. -->
+<div class="tabs" id="tabs">
+  <input type="radio" name="tabs" checked><label id="selected-label">Live</label>
+  <div class="panel" id="selected-panel">Selected articles</div>
+  <input type="radio" name="tabs"><label id="other-label">Other</label>
+  <div class="panel" id="other-panel">Hidden articles</div>
+</div>
+<div class="after" id="after-tabs"></div>
+<div class="tabs">
+  <input type="ChEcKbOx" checked="false"><label id="checkbox-label">Checked checkbox</label>
+  <div class="panel" id="checkbox-panel">A boolean attribute is true even with value "false".</div>
+</div>
+<div class="tabs">
+  <input type="checkbox"><label id="unchecked-label">Unchecked checkbox</label>
+  <div class="panel" id="unchecked-panel">Hidden</div>
+</div>
+<div class="tabs">
+  <input type="radio" checked disabled><label id="disabled-label">Disabled checked radio</label>
+  <div class="panel" id="disabled-panel">Disabled does not mean unchecked.</div>
+</div>
+<div class="tabs">
+  <input type="text" checked><label id="text-label">Text input</label>
+  <div class="panel" id="text-panel">Not a checkable control</div>
+</div>
+<div class="tabs">
+  <input checked><label id="default-label">Default input type</label>
+  <div class="panel" id="default-panel">Not a checkable control</div>
+</div>
+<!-- Same tags/classes and no input IDs exercise style sharing as well as ~. -->
+<div class="siblings"><input type="checkbox" checked><span></span><div class="panel" id="sibling-on"></div></div>
+<div class="siblings"><input type="checkbox"><span></span><div class="panel" id="sibling-off"></div></div>

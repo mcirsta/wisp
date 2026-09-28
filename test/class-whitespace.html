@@ -1,0 +1,24 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>HTML whitespace in CSS class names</title>
+<style>
+body { margin: 0; }
+.fallback { width: 240px; height: 10px; }
+.row { display: flex; width: 200px; margin-bottom: 4px; }
+.row.alt { width: 180px; }
+.row .tile { width: 60px; height: 30px; background: #8c8; }
+.row .tile.wide { width: 100px; background: #acf; }
+</style>
+<div id="space" class=" row "><div class="tile"></div><div class="tile wide"></div></div>
+<div id="newline" class="row
+        "><div class="tile"></div><div class="tile
+wide" id="newline-wide"></div></div>
+<div id="tab" class="&#9;row&#9;"><div class="tile"></div><div class="tile&#9;wide"></div></div>
+<div id="formfeed" class="&#12;row&#12;"><div class="tile"></div><div class="tile&#12;wide"></div></div>
+<div id="carriage" class="&#13;row&#13;"><div class="tile"></div><div class="tile&#13;wide"></div></div>
+<div id="crlf" class="&#13;&#10;row&#13;&#10;"><div class="tile"></div><div class="tile wide"></div></div>
+<div id="mixed" class=" &#9;row&#10;alt&#12;&#13; "><div class="tile"></div><div class="tile wide"></div></div>
+<!-- These characters are not HTML class separators. -->
+<div id="vertical-tab" class="fallback row&#11;alt"></div>
+<div id="nbsp" class="fallback row&nbsp;alt"></div>
+<div id="unicode-space" class="fallback row&#8195;alt"></div>
