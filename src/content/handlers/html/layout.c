@@ -5806,6 +5806,22 @@ static void layout_update_descendant_bbox(
     int child_x = child->x - off_x;
     int child_y = child->y - off_y;
 
+    if (child->abs_containing_block != NULL) {
+        /* Absolute coordinates belong to the containing block, which may skip
+         * the immediate parent (or the flattened inline fragment). Translate
+         * to this box before accumulating overflow, without scroll offsets. */
+        if (child->abs_containing_block == box) {
+            child_x = child->x;
+            child_y = child->y;
+        } else {
+            int box_x, box_y;
+            box_coords_unscrolled(child, &child_x, &child_y);
+            box_coords_unscrolled(box, &box_x, &box_y);
+            child_x -= box_x;
+            child_y -= box_y;
+        }
+    }
+
     bool html_object = (child->object && content_get_type(child->object) == CONTENT_HTML);
 
     enum css_overflow_e overflow_x = CSS_OVERFLOW_VISIBLE;

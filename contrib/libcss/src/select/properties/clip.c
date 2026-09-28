@@ -17,8 +17,10 @@
 css_error css__cascade_clip(uint32_t opv, css_style *style, css_select_state *state)
 {
     uint16_t value = CSS_CLIP_INHERIT;
+    /* These are bytecode units until css__to_css_unit below, including auto
+     * edges, which do not supply a unit in the bytecode. */
     css_computed_clip_rect rect = {
-        0, 0, 0, 0, CSS_UNIT_PX, CSS_UNIT_PX, CSS_UNIT_PX, CSS_UNIT_PX, false, false, false, false};
+        0, 0, 0, 0, UNIT_PX, UNIT_PX, UNIT_PX, UNIT_PX, false, false, false, false};
 
     if (hasFlagValue(opv) == false) {
         switch (getValue(opv) & CLIP_SHAPE_MASK) {

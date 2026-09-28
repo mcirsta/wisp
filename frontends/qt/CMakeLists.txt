@@ -152,6 +152,9 @@ if(WISP_QT_CAPTURE)
         add_test(NAME qt_last_child_margin
             COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_last_child_margin.py $<TARGET_FILE:wisp-qt>)
         set_tests_properties(qt_last_child_margin PROPERTIES TIMEOUT 30)
+        add_test(NAME qt_scrolling_bounds
+            COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_scrolling_bounds.py $<TARGET_FILE:wisp-qt>)
+        set_tests_properties(qt_scrolling_bounds PROPERTIES TIMEOUT 60)
         find_program(WISP_TEST_MAGICK magick)
         if(WISP_TEST_MAGICK)
             if(WISP_USE_WEBP)

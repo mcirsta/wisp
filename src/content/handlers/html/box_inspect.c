@@ -506,7 +506,7 @@ static bool box_nearest_text_box(struct box *box, int bx, int by, int fx, int fy
 
 
 /* Resolve coordinate ancestry before adding the viewport scroll offset. */
-static void box_coords_internal(struct box *box, int *x, int *y, const int *scroll)
+static void box_coords_internal(struct box *box, int *x, int *y, const int *scroll, bool unscrolled)
 {
     assert(box->style == NULL ||
         (css_computed_position(box->style) != CSS_POSITION_ABSOLUTE &&
@@ -516,7 +516,9 @@ static void box_coords_internal(struct box *box, int *x, int *y, const int *scro
     for (;;) {
         if (box->flags & IS_VIEWPORT) {
             int sx = 0, sy = 0;
-            if (scroll != NULL) {
+            if (unscrolled) {
+                return;
+            } else if (scroll != NULL) {
                 sx = scroll[0];
                 sy = scroll[1];
             } else {
@@ -539,20 +541,25 @@ static void box_coords_internal(struct box *box, int *x, int *y, const int *scro
         }
         if (box == NULL)
             return;
-        *x += box->x - scrollbar_get_offset(box->scroll_x);
-        *y += box->y - scrollbar_get_offset(box->scroll_y);
+        *x += box->x - (unscrolled ? 0 : scrollbar_get_offset(box->scroll_x));
+        *y += box->y - (unscrolled ? 0 : scrollbar_get_offset(box->scroll_y));
     }
 }
 
 void box_coords(struct box *box, int *x, int *y)
 {
-    box_coords_internal(box, x, y, NULL);
+    box_coords_internal(box, x, y, NULL, false);
 }
 
 void box_coords_at_scroll(struct box *box, int *x, int *y, int scroll_x, int scroll_y)
 {
     const int scroll[] = {scroll_x, scroll_y};
-    box_coords_internal(box, x, y, scroll);
+    box_coords_internal(box, x, y, scroll, false);
+}
+
+void box_coords_unscrolled(struct box *box, int *x, int *y)
+{
+    box_coords_internal(box, x, y, NULL, true);
 }
 
 

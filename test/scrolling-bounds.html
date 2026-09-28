@@ -1,0 +1,21 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Scrolling bounds of absolute descendants</title>
+<style>
+html, body { margin: 0; }
+#content { height: 1000px; background: #eef; }
+#nav { position: relative; margin: 0 30px; height: 200px; }
+#next { float: right; width: 40px; height: 40px; background: #acf; }
+#label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(1px, 1px, 1px, 1px); }
+#sprite { position: absolute; width: 0; height: 0; overflow: hidden; }
+#clip { position: relative; top: 100px; left: 20px; width: 100px; height: 80px; overflow: hidden; }
+#clipped { position: absolute; left: 10px; top: 10px; width: 800px; height: 900px; background: #aca; }
+#viewport-marker { position: fixed; left: 0; top: 0; width: 2px; height: 2px; }
+</style>
+<div id="content">
+  <div id="clip"><div id="clipped"></div></div>
+</div>
+<nav id="nav"><a id="next" href="#nav"><span id="label">Next page</span>&gt;</a></nav>
+<!-- Like CNX's icon definitions: zero-size, out of flow, after all content. -->
+<svg id="sprite" xmlns="http://www.w3.org/2000/svg"></svg>
+<div id="viewport-marker"></div>
