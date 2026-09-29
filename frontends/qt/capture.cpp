@@ -21,6 +21,7 @@ extern "C" {
 #include "wisp/keypress.h"
 #include "wisp/content.h"
 #include "wisp/content/content.h"
+#include "wisp/content/hlcache.h"
 }
 
 NS_Capture *NS_Capture::s_active = nullptr;
@@ -55,6 +56,7 @@ int NS_Capture::prepare(int &argc, char **argv)
                 "  --capture-point X,Y          Inspect a point in document layout pixels\n"
                 "  --capture-force-full-restyle Force the full-refresh reference path\n"
                 "  --capture-restart-partial-restyle Test invalidation during partial construction\n"
+                "  --capture-interrupt-restyle MODE Test close, navigate, shutdown or shutdown-full\n"
                 "DIR must be new or empty. Uses a temporary profile, 96 DPI, JS and animation off\n"
                 "by default. Core options such as --enable_javascript=1 can override defaults.\n"
                 "Writes page.png, dom.txt, boxes.txt and capture.json, then exits.\n"
@@ -83,6 +85,15 @@ int NS_Capture::prepare(int &argc, char **argv)
         if (arg == "--capture-dir") {
             m_directory = value;
             ok = !value.isEmpty();
+        } else if (arg == "--capture-interrupt-restyle") {
+#if defined(WISP_ENABLE_PARTIAL_UPDATES) && defined(WISP_PROFILE_RESTYLE)
+            ok = value == "close" || value == "navigate" || value == "shutdown" || value == "shutdown-full";
+            m_interrupt_restyle = value;
+            if (value == "shutdown-full")
+                m_force_full_restyle = true;
+#else
+            ok = false;
+#endif
         } else if (arg == "--capture-id") {
             m_inspect_ids.append(value);
             ok = !value.isEmpty();
@@ -155,6 +166,8 @@ int NS_Capture::prepare(int &argc, char **argv)
     QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, profilePath());
     QSettings::setPath(QSettings::IniFormat, QSettings::SystemScope, profilePath());
     s_active = this;
+    if (!m_interrupt_restyle.isEmpty())
+        QApplication::setQuitOnLastWindowClosed(false);
     return 0;
 }
 
@@ -212,11 +225,19 @@ bool NS_Capture::eventFilter(QObject *object, QEvent *event)
 
 void NS_Capture::poll()
 {
+    if (m_interrupted) {
+        if (nsqt_capture_restyle_lifecycle(m_interrupted, false)["settled"].toBool() ||
+            m_elapsed.elapsed() >= m_timeout_ms)
+            finishInterruption(m_elapsed.elapsed() >= m_timeout_ms);
+        return;
+    }
     if (!m_widget || m_bw == nullptr) {
         return;
     }
     auto *content = browser_window_get_content(m_bw);
     nsqt_capture_force_full_restyle(content, m_force_full_restyle, m_restart_partial_restyle);
+    if (!m_interrupt_restyle.isEmpty())
+        nsqt_capture_restyle_lifecycle(hlcache_handle_get_content(content), true);
     const bool done = content && content_get_status(content) == CONTENT_STATUS_DONE;
     if (m_elapsed.elapsed() >= m_timeout_ms) {
         finish("timeout");
@@ -251,9 +272,92 @@ void NS_Capture::poll()
             if (!ok)
                 finish("action_error");
         } else {
-            finish(url.startsWith("about:query/") ? "load_error" : "complete");
+            finish(!m_interrupt_restyle.isEmpty()    ? "interruption_not_reached"
+                    : url.startsWith("about:query/") ? "load_error"
+                                                     : "complete");
         }
     }
+}
+
+/* Called only after the renderer's callback has returned to the scheduler.
+ * The slow capture slices make real window/navigation events deterministic;
+ * never close a window reentrantly from inside box construction. */
+void NS_Capture::afterScheduledCallback()
+{
+    if (m_interrupt_restyle.isEmpty() || m_finished)
+        return;
+    if (!m_interrupted && m_bw) {
+        auto *content = browser_window_get_content(m_bw);
+        const auto state = nsqt_capture_restyle_lifecycle(hlcache_handle_get_content(content), true);
+        const bool started = m_interrupt_restyle == "shutdown-full"
+            ? state["building"].toBool() && state["styled_elements"].toInt() > 0
+            : state["partial"].toBool() && state["reused_styles"].toInt() > 0;
+        if (!started || !state["conversion"].toBool())
+            return;
+        m_interrupted = nsqt_capture_watch_content(content);
+        if (!m_interrupted) {
+            finish("interruption_error");
+            return;
+        }
+        m_before_interruption = state;
+        if (m_interrupt_restyle != "navigate") {
+            m_widget->window()->close();
+            // detach() stopped the ordinary capture timer; watch cached content.
+            m_timer.start(50);
+        } else {
+            struct nsurl *url = nullptr;
+            nserror error = nsurl_create("about:blank", &url);
+            if (error == NSERROR_OK) {
+                error = browser_window_navigate(m_bw, url, nullptr, BW_NAVIGATE_HISTORY, nullptr, nullptr, nullptr);
+                nsurl_unref(url);
+            }
+            if (error != NSERROR_OK) {
+                finishInterruption(true);
+                return;
+            }
+        }
+    }
+    if (m_interrupted) {
+        const auto state = nsqt_capture_restyle_lifecycle(m_interrupted, true);
+        if (state["building"].toBool() && !state["window_attached"].toBool())
+            m_closed_during_build = true;
+        if (m_interrupt_restyle.startsWith("shutdown"))
+            finishInterruption(false);
+    }
+}
+
+void NS_Capture::finishInterruption(bool timeout)
+{
+    const auto state = nsqt_capture_restyle_lifecycle(m_interrupted, false);
+    bool ok = !timeout && m_closed_during_build && !state["building"].toBool() && !state["locked"].toBool() &&
+        !state["conversion"].toBool() && !state["old_tree"].toBool() && state["table_entries"].toInt() == 0 &&
+        state["active_roots"].toInt() == 0 && state["pending_roots"].toInt() == 0 && state["restarts"].toInt() == 1;
+    if (m_interrupt_restyle.startsWith("shutdown"))
+        ok = !timeout && m_closed_during_build && state["building"].toBool() && state["conversion"].toBool();
+    QString current_url;
+    if (m_bw && browser_window_get_content(m_bw))
+        current_url = QString::fromUtf8(nsurl_access(hlcache_handle_get_url(browser_window_get_content(m_bw))));
+    if (m_interrupt_restyle == "navigate")
+        ok = ok && current_url == "about:blank";
+    auto *interrupted = m_interrupted;
+    nsqt_capture_unwatch_content(interrupted);
+    m_interrupted = nullptr;
+    // Releasing the last observer cancels an abandoned build synchronously;
+    // cache destruction happens later, after returning to the event loop.
+    const auto released = nsqt_capture_restyle_lifecycle(interrupted, false);
+    if (m_interrupt_restyle.startsWith("shutdown"))
+        ok = ok && !released["building"].toBool() && !released["locked"].toBool() && !released["conversion"].toBool() &&
+            released["table_entries"].toInt() == 0 && released["error"].toBool();
+    const QJsonObject report{{"result", ok ? "complete" : "interruption_error"}, {"mode", m_interrupt_restyle},
+        {"closed_during_build", m_closed_during_build}, {"before", m_before_interruption}, {"after", state},
+        {"current_url", current_url}, {"released", released}};
+    QSaveFile file(QDir(m_directory).filePath("interruption.json"));
+    const QByteArray data = QJsonDocument(report).toJson();
+    ok = file.open(QIODevice::WriteOnly) && file.write(data) == data.size() && file.commit() && ok;
+    m_finished = true;
+    m_timer.stop();
+    QApplication::closeAllWindows();
+    QCoreApplication::exit(ok ? 0 : 1);
 }
 
 bool NS_Capture::dump(const char *name, bool boxes)

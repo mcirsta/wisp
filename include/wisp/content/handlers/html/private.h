@@ -93,6 +93,7 @@ struct html_restyle_state {
     bool partial;
 #ifdef WISP_PROFILE_RESTYLE
     bool force_restart; /* Capture-only invalidation after construction has begun. */
+    bool slow_restyle; /* Capture lifecycle tests yield between small slices. */
 #endif
     bool force_full; /* Developer capture override, not a browser preference. */
 };

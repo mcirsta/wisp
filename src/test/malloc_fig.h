@@ -28,6 +28,7 @@
 #define WISP_TEST_MALLOC_FIG_H
 
 void malloc_limit(unsigned int count);
+void realloc_limit(unsigned int count);
 
 void *malloc(size_t size);
 

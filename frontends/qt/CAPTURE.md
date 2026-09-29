@@ -137,13 +137,14 @@ clock uses nanosecond-resolution monotonic timestamps where available, with the
 existing millisecond clock as a fallback on other platforms.
 
 `--capture-force-full-restyle` selects the full-refresh reference path at runtime.
-With the experimental `-DWISP_ENABLE_PARTIAL_UPDATES=ON`, native activation records
+With `WISP_ENABLE_PARTIAL_UPDATES` (default ON), native activation records
 all changed controls and coalesces their parent subtrees. Form edits record DOM
 changes immediately, including edits already synchronized before a tab click.
 The first refresh establishes a full baseline; subsequent eligible refreshes reuse
 composed styles outside those scopes. All refreshes still reconstruct and lay out
-the full document. The option defaults to OFF and adds no HTML tracking state when
-disabled. Libcss's per-sheet scope summary and revision stamp are always available.
+the full document. Reuse requires scripting to be disabled. Configuring the option
+OFF removes HTML tracking state. Libcss's per-sheet scope summary and revision
+stamp are always available. Existing build caches preserve an explicit OFF value.
 
 With profiling enabled, `update_mode` reports `partial_css` or `full`.
 `fallback_reason` is `none` on the selective path; full reasons include
@@ -169,6 +170,18 @@ injects a DOM-generation change after selective construction has begun. The same
 fixture and `qt_checked_interaction_restart` verify the resulting full restart,
 including resource and iframe behavior. Saved-page measurements are recorded in
 [the partial-update plan](../../src/docs/partial-updates.md).
+
+`--capture-interrupt-restyle MODE` tests document lifetime during a yielded
+rebuild. It requires both profiling and selective updates. Use `close` or
+`navigate` to close the real window or navigate to `about:blank` while an extra
+content observer lets the old document finish. `shutdown` drops that observer
+immediately after closing; `shutdown-full` does the same during a forced-full
+rebuild. These last two modes check cancellation when the last user leaves,
+followed by normal application shutdown. Only this diagnostic mode introduces
+short construction slices and delays to make the event ordering deterministic.
+It writes `interruption.json` with before/after/release state instead of the
+ordinary rendering artifacts. `qt_restyle_lifecycle` exercises all four modes
+with styles, resources, forms and an iframe alive.
 
 `action_ms` is the preceding capture action's synchronous duration, including
 target lookup and any scroll into view. Deferred restyling happens afterward.

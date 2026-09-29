@@ -1574,6 +1574,10 @@ static void convert_xml_to_box(void *p)
 
         /* Check for yield every 64 nodes */
         if ((++num_processed & 0x3F) == 0) {
+#if defined(WISP_ENABLE_PARTIAL_UPDATES) && defined(WISP_PROFILE_RESTYLE)
+            if (ctx->content->restyling && ctx->content->restyle.slow_restyle)
+                break;
+#endif
             nsu_getmonotonic_ms(&now_time);
             /* Yield if we've been running for more than 50ms */
             if (now_time - start_time > 50) {
@@ -1586,7 +1590,12 @@ static void convert_xml_to_box(void *p)
     HTML_PROFILE(
         if (ctx->content->restyling) ctx->content->restyle_profile.construction_ns += html_profile_now() - slice_start);
     /* More work to do: schedule a continuation */
-    guit->misc->schedule(0, (void *)convert_xml_to_box, ctx);
+    int delay = 0;
+#if defined(WISP_ENABLE_PARTIAL_UPDATES) && defined(WISP_PROFILE_RESTYLE)
+    if (ctx->content->restyling && ctx->content->restyle.slow_restyle)
+        delay = 50;
+#endif
+    guit->misc->schedule(delay, (void *)convert_xml_to_box, ctx);
 }
 
 

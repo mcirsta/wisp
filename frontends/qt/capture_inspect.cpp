@@ -334,6 +334,42 @@ bool nsqt_capture_settled(struct hlcache_handle *content)
     return !html->restyling && !html->restyle_pending && html->base.active == html->scripts_active;
 }
 
+static void captureContentChanged(struct content *, content_msg, const union content_msg_data *, void *)
+{
+}
+
+struct content *nsqt_capture_watch_content(struct hlcache_handle *handle)
+{
+    auto *content = hlcache_handle_get_content(handle);
+    return content && content_add_user(content, captureContentChanged, nullptr) ? content : nullptr;
+}
+
+void nsqt_capture_unwatch_content(struct content *content)
+{
+    content_remove_user(content, captureContentChanged, nullptr);
+}
+
+QJsonObject nsqt_capture_restyle_lifecycle(struct content *content, bool slow)
+{
+    Q_UNUSED(content);
+    Q_UNUSED(slow);
+#if defined(WISP_ENABLE_PARTIAL_UPDATES) && defined(WISP_PROFILE_RESTYLE)
+    if (content && content->handler->type() == CONTENT_HTML) {
+        auto *html = reinterpret_cast<html_content *>(content);
+        html->restyle.slow_restyle = slow;
+        return {{"settled", !html->restyling && !html->restyle_pending && html->base.active == html->scripts_active},
+            {"locked", html->base.locked}, {"building", html->restyling}, {"partial", html->restyle.partial},
+            {"window_attached", html->bw != nullptr}, {"conversion", html->box_conversion_context != nullptr},
+            {"old_tree", html->restyle_old_bctx != nullptr}, {"table_entries", double(html->restyle.count)},
+            {"active_roots", int(html->restyle.active.count)}, {"pending_roots", int(html->restyle.pending.count)},
+            {"reused_styles", int(html->restyle_profile.reused_styles)},
+            {"styled_elements", int(html->restyle_profile.styled_elements)},
+            {"error", html->base.status == CONTENT_STATUS_ERROR}, {"restarts", int(html->restyle_profile.restarts)}};
+    }
+#endif
+    return {};
+}
+
 void nsqt_capture_scroll(struct hlcache_handle *content, int x, int y)
 {
     union content_msg_data data = {};

@@ -1841,6 +1841,32 @@ static nserror html_close(struct content *c)
     return ret;
 }
 
+/* remove_user runs before the departing user is unlinked. A closed document
+ * with no remaining users cannot publish its in-progress presentation. Cancel
+ * it now: cache cleanup (including immediate shutdown) must not destroy locked
+ * content or leave a queued conversion pointing at freed storage. */
+static void html_remove_user(struct content *c)
+{
+    html_content *html = (html_content *)c;
+    if (!html->restyling || html->bw != NULL || content_count_users(c) != 1)
+        return;
+    if (html->box_conversion_context != NULL) {
+        nserror err = cancel_dom_to_box(html->box_conversion_context);
+        if (err != NSERROR_OK) {
+            NSLOG(wisp, CRITICAL, "Unable to cancel abandoned restyle: %d", err);
+            return;
+        }
+        html->box_conversion_context = NULL;
+    }
+    guit->misc->schedule(-1, html_restyle, html);
+    guit->misc->schedule(-1, html_deferred_reformat, html);
+    html->restyling = html->restyle_pending = html->pending_reformat = false;
+    html_restyle_reset(html);
+    /* The partial presentation is not reusable. Destruction owns both box
+     * contexts, forms and resources; no rollback or error broadcast is needed. */
+    content_set_error(c);
+}
+
 
 /**
  * Return an HTML content's selection context
@@ -2748,6 +2774,7 @@ static const content_handler html_content_handler = {
     .redraw = html_redraw,
     .open = html_open,
     .close = html_close,
+    .remove_user = html_remove_user,
     .get_selection = html_get_selection,
     .clear_selection = html_clear_selection,
     .get_contextual_content = html_get_contextual_content,

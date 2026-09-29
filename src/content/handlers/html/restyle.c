@@ -211,10 +211,11 @@ void html_restyle_reset(html_content *html)
 
 void html_restyle_close(html_content *html)
 {
-    /* Cached content can finish construction after its window closes. Keep the
-     * active table alive until the next slice restarts fully (or destruction
-     * cancels it). Simply clearing partial would leave uninvalidated node data.
-     * Advance the generation before dropping any newer checked-state batch. */
+    /* Content with remaining users can finish after its window closes. Keep the
+     * active table alive until the next slice restarts fully or the build is
+     * cancelled (on destruction or the last user's removal). Simply clearing
+     * partial would leave uninvalidated node data. Advance the generation before
+     * dropping any newer checked-state batch. */
     html_restyle_note_dom_change(html);
     html_restyle_discard_pending(html);
     if (!html->restyling)

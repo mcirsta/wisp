@@ -3,6 +3,7 @@
 
 #include <QElapsedTimer>
 #include <QJsonArray>
+#include <QJsonObject>
 #include <QVector>
 #include <QObject>
 #include <QPointer>
@@ -21,6 +22,7 @@ extern "C" {
 
 class QWidget;
 struct browser_window;
+struct content;
 
 /* Optional frontend-only diagnostics. No renderer state is accessed off-thread. */
 class NS_Capture : public QObject
@@ -39,6 +41,7 @@ public:
     void detach(struct browser_window *bw);
     void activity(struct browser_window *bw);
     void windowEvent(struct browser_window *bw, enum gui_window_event event);
+    void afterScheduledCallback();
 
 protected:
     bool eventFilter(QObject *object, QEvent *event) override;
@@ -47,6 +50,7 @@ private:
     void poll();
     void finish(const QString &result);
     bool dump(const char *name, bool boxes);
+    void finishInterruption(bool timeout);
 
     static NS_Capture *s_active;
     QString m_directory;
@@ -70,4 +74,8 @@ private:
     bool m_force_full_restyle = false;
     bool m_restart_partial_restyle = false;
     bool m_finished = false;
+    QString m_interrupt_restyle;
+    struct content *m_interrupted = nullptr;
+    QJsonObject m_before_interruption;
+    bool m_closed_during_build = false;
 };

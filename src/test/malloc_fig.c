@@ -29,10 +29,29 @@
 #include <limits.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 #include "test/malloc_fig.h"
 
 static unsigned int count = UINT_MAX;
+static unsigned int realloc_count = UINT_MAX;
+
+void realloc_limit(unsigned int newcount)
+{
+    realloc_count = newcount;
+}
+
+void *realloc(void *ptr, size_t size)
+{
+    static void *(*real_realloc)(void *, size_t) = NULL;
+    if (real_realloc == NULL)
+        real_realloc = dlsym(RTLD_NEXT, "realloc");
+    if (realloc_count == 0)
+        return NULL;
+    if (realloc_count != UINT_MAX)
+        realloc_count--;
+    return real_realloc(ptr, size);
+}
 
 void malloc_limit(unsigned int newcount)
 {

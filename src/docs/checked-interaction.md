@@ -51,8 +51,10 @@ without recursion and reads children after its callback, so textarea value
 synchronization may replace text children safely.
 
 There is no navigation, stylesheet reload, parser restart, or replay of page-load
-scripts/events. Fonts and inline SVG source caches also survive. Destruction
-cancels both queued refreshes and in-progress box conversion.
+scripts/events. Fonts and inline SVG source caches also survive. Closing a window
+cancels queued refreshes. An active rebuild may finish while another content user
+retains the document; removing its last user cancels conversion and marks the
+incomplete presentation unusable. Destruction releases both box trees and resources.
 
 Objects keep a DOM identity/request URL and cache handle while their box is
 absent. Reappearing images, backgrounds (including multiple layers), SVGs, and
@@ -73,11 +75,12 @@ context until rebinding also temporarily increases peak box memory. The
 [partial-update implementation plan](partial-updates.md) describes staged work
 to reuse unaffected styles first, then consider retained box regions and selective
 layout after measurement. Selective style reuse and a forced-full capture comparison
-are implemented behind `WISP_ENABLE_PARTIAL_UPDATES` (default OFF). After one full
+are implemented behind `WISP_ENABLE_PARTIAL_UPDATES` (default ON). After one full
 state refresh establishes a baseline, eligible updates select CSS only in dirty
 scopes and for elements without a reusable result. Input changes and unsupported
 selectors fall back to full selection; changes during conversion restart it before
-publication. Regional box replacement and partial layout remain planned. See the
+publication. Reuse currently requires scripting to be disabled. Regional box
+replacement and partial layout remain deferred. See the
 plan for ownership details, validation and current measurements.
 
 The radio-peer lookup now uses one document traversal instead of indexed NodeList

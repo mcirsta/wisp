@@ -33,6 +33,9 @@ extern "C" {
 }
 
 #include "qt/misc.h"
+#ifdef WISP_QT_CAPTURE
+#include "qt/capture.h"
+#endif
 
 #include "qt/application.cls.h"
 
@@ -89,6 +92,11 @@ int nsqt_schedule_run(void)
             unlnk_nscb->callback(unlnk_nscb->p);
 
             free(unlnk_nscb);
+
+#ifdef WISP_QT_CAPTURE
+            if (NS_Capture::active())
+                NS_Capture::active()->afterScheduledCallback();
+#endif
 
             /* need to deal with callback modifying the list. */
             if (schedule_list == NULL)

@@ -2,6 +2,7 @@
 #include <check.h>
 #include <stdlib.h>
 #include <string.h>
+#include <limits.h>
 #include <wisp/utils/corestrings.h>
 #include <wisp/utils/nsoption.h>
 #include <wisp/utils/nsurl.h>
@@ -10,6 +11,9 @@
 #include "content/urldb.h"
 #include "content/handlers/html/restyle.h"
 #include "content/handlers/css/internal.h"
+#ifdef WISP_TEST_ALLOC_FAILURE
+#include "test/malloc_fig.h"
+#endif
 
 static html_content html;
 
@@ -242,6 +246,73 @@ START_TEST(test_reuse_table_and_input_guards)
 }
 END_TEST
 
+#ifdef WISP_TEST_ALLOC_FAILURE
+START_TEST(test_allocation_fallbacks)
+{
+    dom_node *outside = node("outer");
+    css_select_results *original = calloc(1, sizeof(*original));
+    ck_assert_ptr_nonnull(original);
+    struct box old_box = {.styles = original};
+    dom_string *tag;
+    ck_assert_int_eq(dom_string_create((const uint8_t *)"div", 3, &tag), DOM_NO_ERR);
+    /* More than one vector allocation, so failure can also occur after the
+     * first allocation succeeded and must be released. */
+    for (unsigned i = 0; i < 150; i++) {
+        dom_element *child;
+        dom_node *inserted;
+        void *previous;
+        ck_assert_int_eq(dom_document_create_element(html.document, tag, &child), DOM_NO_ERR);
+        ck_assert_int_eq(dom_node_append_child(outside, child, &inserted), DOM_NO_ERR);
+        dom_node_unref(inserted);
+        ck_assert_int_eq(
+            dom_node_set_user_data(child, corestring_dom___ns_key_box_node_data, &old_box, NULL, &previous),
+            DOM_NO_ERR);
+        dom_node_unref(child);
+    }
+    dom_string_unref(tag);
+    ck_assert_int_eq(html_restyle_capture_inputs(&html), NSERROR_OK);
+    html_restyle_end(&html, true);
+    record("d");
+    if (_i < 2)
+        realloc_limit(_i);
+    html_restyle_begin(&html);
+    realloc_limit(UINT_MAX);
+    if (_i < 2) {
+        ck_assert_msg(!html.restyle.partial, "Table allocation failure %d must choose full selection", _i);
+        ck_assert_ptr_null(html.restyle.entries);
+#ifdef WISP_PROFILE_RESTYLE
+        ck_assert_str_eq(html.restyle_profile.fallback_reason, "reuse_table_failed");
+#endif
+    } else {
+        ck_assert(html.restyle.partial);
+        dom_node *child;
+        ck_assert_int_eq(dom_node_get_last_child(outside, &child), DOM_NO_ERR);
+        css_select_results *clone = original;
+        malloc_limit(0);
+        css_error error = css_select_results_clone(original, &clone);
+        malloc_limit(UINT_MAX);
+        ck_assert_int_eq(error, CSS_NOMEM);
+        ck_assert_ptr_eq(clone, original); /* Failure must not publish a container. */
+        malloc_limit(0);
+        nserror result = html_restyle_reuse_style(&html, child, &clone);
+        malloc_limit(UINT_MAX);
+        ck_assert_int_eq(result, NSERROR_OK);
+        ck_assert_ptr_null(clone); /* Construction must select this element afresh. */
+        ck_assert(html.restyle.partial);
+        ck_assert_int_eq(html_restyle_reuse_style(&html, child, &clone), NSERROR_OK);
+        ck_assert_ptr_nonnull(clone);
+        css_select_results_destroy(clone);
+        dom_node_unref(child);
+    }
+    html_restyle_end(&html, true);
+    ck_assert_ptr_null(html.restyle.entries);
+    ck_assert_int_eq(html.restyle.active.count, 0);
+    css_select_results_destroy(original);
+    dom_node_unref(outside);
+}
+END_TEST
+#endif
+
 int main(void)
 {
     if (nsoption_init(NULL, NULL, NULL) != NSERROR_OK || corestrings_init() != NSERROR_OK)
@@ -253,6 +324,9 @@ int main(void)
     tcase_add_test(tc, test_scope_capacity);
     tcase_add_test(tc, test_selector_scope_diagnostic);
     tcase_add_loop_test(tc, test_reuse_table_and_input_guards, 0, 10);
+#ifdef WISP_TEST_ALLOC_FAILURE
+    tcase_add_loop_test(tc, test_allocation_fallbacks, 0, 3);
+#endif
     tcase_add_loop_test(tc, test_edits_before_refresh, 0, 2);
     suite_add_tcase(suite, tc);
     SRunner *runner = srunner_create(suite);

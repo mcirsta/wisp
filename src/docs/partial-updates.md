@@ -1,11 +1,14 @@
 # Partial document updates: implementation plan
 
-Status: milestone A implemented and experimentally validated, 2026-09-29. The reviewed baseline is `eb3e03df`
+Status: milestone A validated and enabled by default, 2026-09-29. The reviewed baseline is `eb3e03df`
 (`Use stack scratch for small class selector lists`).
 
-The foundation is committed as `fdd92975`. Milestone A now reuses composed styles
+The foundation is committed as `fdd92975`, and milestone A as `180d7009`.
+Milestone A now reuses composed styles
 outside the changed controls' parent subtrees and still reconstructs and lays out
-the whole document. It remains gated by `WISP_ENABLE_PARTIAL_UPDATES`, default OFF.
+the whole document. `WISP_ENABLE_PARTIAL_UPDATES` now defaults to ON; configuring
+it OFF still removes the HTML tracking state and selects the full-refresh path.
+Existing CMake caches explicitly set to OFF keep that setting until reconfigured.
 Milestones B/C have not started. The steps below remain the implementation and
 acceptance checklist, with the concrete implementation choices recorded here.
 
@@ -37,11 +40,12 @@ acceptance checklist, with the concrete implementation choices recorded here.
   intact until normal retirement. Table allocation failure falls back before
   detachment; clone allocation failure selects that element normally. Errors after
   detachment retain the existing conversion-error behavior, not a rollback promise.
-- Closing a window cancels queued refreshes. Content retained by the cache may
+- Closing a window cancels queued refreshes. Content with additional users may
   finish an active construction without a window; its next partial slice restarts
-  fully. Active references survive until that restart/completion. Destruction
-  cancels construction and releases them immediately. This preserves the existing
-  cached-content lifecycle instead of leaving a half-built presentation on close.
+  fully. Active references survive until that restart/completion. Removing the
+  last user cancels construction, clears update references and marks the incomplete
+  presentation unusable. Destruction then owns both box contexts and resources.
+  This also fixes immediate shutdown during the existing full rebuild path.
 - Profiling distinguishes `partial_css` and `full`, counts fresh/reused results,
   references and restarts, and reports table capacity and cloned-container bytes.
   `--capture-restart-partial-restyle` injects invalidation during construction in
@@ -49,15 +53,15 @@ acceptance checklist, with the concrete implementation choices recorded here.
 
 ### Milestone A validation and measurements
 
-The enabled Debug (ASan/UBSan) and Release builds each passed 113 selected CSS,
+Before rollout, the enabled Debug (ASan/UBSan) and Release builds each passed 113 selected CSS,
 layout, Qt capture, form, DOM, URL-history and construction tests; the disabled
 Release build passed all 111 applicable tests. The three focused
 scope/sharing/tracking targets also passed with LeakSanitizer enabled. The small
 differential fixture exercises normal reuse and a forced restart; the extensive
 checked-state fixture also runs with restart injection to cover images and iframes.
 Unit tests cover close bookkeeping, newer edits and input-generation changes.
-Allocation fallbacks have been reviewed but not tested with deterministic OOM
-injection; real window close/navigation between slices is not automated by capture.
+The follow-up rollout checks below add deterministic allocation failures and
+real window close/navigation between construction slices.
 
 Saved-page checks used independent runs of the same Release/LTO binary, scripts
 disabled, 1280x900, 96 DPI. All 13 states in each run matched across 930 Tion and
@@ -100,10 +104,72 @@ the primary timing samples. Exhaustive inspection JSON is gzip-compressed to kee
 the development artifacts small. These ignored artifacts are supplementary to
 the repository fixtures and the measurements above.
 
-Keep the feature default OFF for now. The measurements justify milestone A on its
-own; they do not require starting region ownership or partial layout immediately.
-Initial navigation still uses full selection, and this comparison does not measure
-initial-load overhead against the pre-milestone binary.
+### Milestone A rollout checks (2026-09-29)
+
+The rollout passes 116 selected Debug tests under ASan/UBSan and 113 applicable
+Release tests with `WISP_PROFILE_RESTYLE=OFF`, including the allocation-failure
+cases below. The three focused scope/sharing/tracking targets also pass with
+LeakSanitizer enabled. A fresh option evaluation selects partial updates ON;
+profiling remains OFF by default.
+
+Release allocator injection now checks failure of the first reuse-table allocation,
+failure during later table growth, and failure to clone a result container. Both
+table failures discard transient state and choose full selection; clone failure
+leaves the old result untouched and asks construction to select that element
+normally. The test restores allocation before making assertions. ASan interposes
+allocation itself, so these failure cases run only in Release; sharing/lifetime
+tests also pass separately under LeakSanitizer.
+
+`qt_restyle_lifecycle` exercises real close/navigation after a construction slice
+has already reused styles. With another content user present, the document safely
+restarts fully and retires the old presentation. Two immediate-shutdown cases
+drop the last user during selective and full construction. These exposed a locked
+content destruction assertion: the new HTML `remove_user` hook cancels abandoned
+conversion before cache destruction. All four modes pass under ASan/UBSan.
+
+Long saved-page sequences run 300 alternating switches per site and mode: 1,200
+switches across Tion/Bihon and selective/full selection. All inspected control
+states, geometry, scroll and resource counts match, as do final PNG/DOM dumps.
+Resource counts stay at 201 for Tion and 289 for Bihon after the first reveal,
+with no active fetches at settled checkpoints. Every warmed selective update
+uses reuse, with no fallbacks or restarts.
+
+Those runs retain about 16 MiB of inspection JSON per process. Their RSS grows
+in both modes and Bihon's selective run sits about 11 MiB higher, so they are
+not a reliable renderer-only memory-plateau test. A second set of the same
+sequences omits element inspections, retaining only small state/profile records;
+it still checks resources, update modes and the final output against full selection.
+Across these additional 1,200 switches, RSS reaches a stable level after warmup.
+Late-run median RSS is 99.1 / 98.9 MiB for selective/full Tion and 97.1 / 96.7 MiB
+for Bihon. The selective path is about 0.3–0.4 MiB higher in these runs, with no
+continuing growth. This is process-level evidence over 300 switches per run,
+not an exhaustive leak proof. The larger offset in the inspection-heavy run
+does not persist in this lighter measurement.
+
+Initial-load comparison uses the pre-selective-CSS foundation `fdd92975` and this
+rollout, both Release/LTO with capture/profiling enabled, scripts off, 1280x900 and
+96 DPI. Each site uses two discarded warmups followed by eight samples per binary
+in repeated before/after/after/before order, without concurrent builds or tests.
+Every PNG and DOM dump matches. The main metric is capture elapsed time minus
+its final quiet interval: a proxy for time to last render activity, not a pure
+parse/layout timer. Process CPU includes startup, artifact writing and shutdown.
+
+| Saved page | Before / after last activity median | Before / after process CPU median | Before / after peak RSS median |
+| --- | --- | --- | --- |
+| Tion | 1,208.5 / 1,221.0 ms | 729.1 / 758.1 ms | 101.4 / 102.8 MiB |
+| Bihon | 1,725.0 / 1,750.0 ms | 690.7 / 710.9 ms | 95.8 / 96.7 MiB |
+
+The observed initial-load cost is about 1–1.5% to last render activity and 3–4%
+process CPU, with roughly 1 MiB more peak RSS. This is a modest tradeoff for the
+measured warmed refresh improvement, not zero overhead. Initial navigation still
+uses full CSS selection.
+
+Local rollout drivers, raw captures and reports are under
+`out/render-captures/partial-rollout-2026-09-29/`; `initial/report.json` records
+the initial-load samples, `stress/report.json` records inspected toggle sequences,
+and `memory/report.json` records the lighter memory checks.
+Milestones B/C remain deferred; this validation does not commit to retained box
+regions or partial layout.
 
 ## Recommendation and scope
 
@@ -219,8 +285,8 @@ Important consequences:
 6. No paint, hit testing or interaction may observe a half-published tree. Resource
    completions and resize requests must be deferred or incorporated before the
    update is published. Closing/navigating cancels queued work; an active rebuild
-   in cached content must either finish safely without a window or be cancelled
-   on destruction, releasing all update references.
+   with remaining users may finish safely without a window. Removing the last
+   user must cancel it before destruction, releasing all update references.
 7. Use the same settled output as a full refresh for the same DOM state and inputs.
    Preserve existing allowances for Qt-versus-Chromium font differences; those do
    not justify discrepancies between Wisp's own full and partial paths.
@@ -229,8 +295,9 @@ Important consequences:
 
 **Deliverable:** a repeatable comparison and work counters, with no rendering change.
 
-1. Add an experimental CMake option, proposed name `WISP_ENABLE_PARTIAL_UPDATES`,
-   initially OFF. Keep the existing full path intact. Allow captures in an enabled
+1. Add the CMake option `WISP_ENABLE_PARTIAL_UPDATES`, initially OFF during
+   development and now ON after milestone A validation. Keep the existing full
+   path intact. Allow captures in an enabled
    build to force that full path through a separate runtime capture flag, so the
    same binary can test both implementations. Gate that override with the existing
    capture/development facilities.
@@ -630,5 +697,6 @@ flaky hard-coded CTest threshold.
 9. **Rollout:** enable validated behavior by default, retain the full fallback and
    developer comparison switch, and update the behavior/profiling documentation.
 
-Start with commits 1–5. Milestones B and C are later decisions supported by the
-measurements from A; they are not prerequisites for delivering selective CSS work.
+Commits 1–5 and the milestone A rollout are complete. Milestones B and C remain
+later decisions supported by measurements; they are not prerequisites for
+delivering selective CSS work.
