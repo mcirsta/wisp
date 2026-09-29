@@ -1177,6 +1177,12 @@ static bool css__stylesheet_tree_uses_variables(const css_stylesheet *sheet)
         return true;
 
     for (rule = sheet->rule_list; rule != NULL; rule = rule->next) {
+        /* Match the import prefix used by css_stylesheet_next_pending_import().
+         * Later rules cannot introduce imports; local variables are covered by
+         * uses_variables above. Avoid scanning the whole sheet for every node. */
+        if (rule->type != CSS_RULE_UNKNOWN && rule->type != CSS_RULE_CHARSET && rule->type != CSS_RULE_IMPORT)
+            break;
+
         if (rule->type == CSS_RULE_IMPORT) {
             const css_rule_import *import = (const css_rule_import *)rule;
             if (css__stylesheet_tree_uses_variables(import->sheet))

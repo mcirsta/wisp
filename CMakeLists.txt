@@ -428,4 +428,7 @@ if(WISP_ENABLE_LIBCSS_TESTS)
 
   add_libcss_test_exe(libcss_calc_props ${LIBCSSL_TEST_DIR}/calc_props.c)
   add_test(NAME libcss_calc_props COMMAND libcss_calc_props)
+
+  add_libcss_test_exe(libcss_selector_hash ${LIBCSSL_TEST_DIR}/selector-hash.c)
+  add_test(NAME libcss_selector_hash COMMAND libcss_selector_hash)
 endif()

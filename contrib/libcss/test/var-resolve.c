@@ -955,6 +955,59 @@ static void test_variables_imported_by_literal_sheet(void)
     destroy_style_case(&ctx);
 }
 
+static void test_variable_import_prefix(void)
+{
+    style_case ctx = {0};
+    lwc_string *url = NULL;
+
+    /* A variable-free first import must not hide a later import's descendants.
+     * Charset rules are part of the prefix; imports after style rules are not. */
+    ctx.sheet = create_stylesheet_from_css(
+        "@charset \"UTF-8\"; @import 'empty.css'; @import 'bridge.css';"
+        "div { height: 31px; } @import 'ignored.css';", false, true);
+    css_stylesheet *empty = create_stylesheet_from_css("", false, false);
+    css_stylesheet *bridge = create_stylesheet_from_css(
+        "@charset \"UTF-8\"; @import 'vars.css'; div { height: 27px; }", false, true);
+    ctx.import_sheet = create_stylesheet_from_css(
+        "div { --w: 23px; width: var(--w); height: 19px; }"
+        "div::before { width: var(--w); }", false, false);
+    assert(!ctx.sheet->uses_variables && !bridge->uses_variables && !empty->uses_variables);
+    assert(ctx.import_sheet->uses_variables);
+    assert(css_stylesheet_register_import(ctx.sheet, empty) == CSS_OK);
+    assert(css_stylesheet_register_import(ctx.sheet, bridge) == CSS_OK);
+    assert(css_stylesheet_next_pending_import(ctx.sheet, &url) == CSS_INVALID);
+    assert(css_select_ctx_create(&ctx.select_ctx) == CSS_OK);
+    assert(css_select_ctx_append_sheet(ctx.select_ctx, ctx.sheet, CSS_ORIGIN_AUTHOR, NULL) == CSS_OK);
+    assert(lwc_intern_string("div", 3, &ctx.node_name) == lwc_error_ok);
+    ctx.node.name = ctx.node_name;
+
+    const css_computed_style *style = select_style_for_node(&ctx, &ctx.node, NULL, &ctx.results);
+    expect_length_type("unresolved nested import has no width", style, css_computed_width, CSS_WIDTH_AUTO);
+    expect_length_px("outer declaration before import arrives", style,
+        css_computed_height, CSS_HEIGHT_SET, 31);
+    destroy_node_data(&ctx.node);
+    css_select_results_destroy(ctx.results);
+    ctx.results = NULL;
+
+    /* No cached negative result: the same context must see a newly attached
+     * nested import when the caller requests fresh style selection. */
+    assert(css_stylesheet_next_pending_import(bridge, &url) == CSS_OK);
+    lwc_string_unref(url);
+    assert(css_stylesheet_register_import(bridge, ctx.import_sheet) == CSS_OK);
+    style = select_style_for_node(&ctx, &ctx.node, NULL, &ctx.results);
+    expect_length_px("variable through second and nested imports", style,
+        css_computed_width, CSS_WIDTH_SET, 23);
+    expect_length_px("outer declaration after import arrives", style,
+        css_computed_height, CSS_HEIGHT_SET, 31);
+    assert(ctx.results->styles[CSS_PSEUDO_ELEMENT_BEFORE] != NULL);
+    expect_length_px("nested import pseudo inherits variables",
+        ctx.results->styles[CSS_PSEUDO_ELEMENT_BEFORE], css_computed_width, CSS_WIDTH_SET, 23);
+
+    destroy_style_case(&ctx);
+    assert(css_stylesheet_destroy(bridge) == CSS_OK);
+    assert(css_stylesheet_destroy(empty) == CSS_OK);
+}
+
 static void test_pseudo_element_uses_element_vars(void)
 {
     style_case ctx;
@@ -1466,6 +1519,7 @@ int main(int argc, char **argv)
     test_inline_style_var_resolution();
     test_imported_sheet_custom_property();
     test_variables_imported_by_literal_sheet();
+    test_variable_import_prefix();
     test_pseudo_element_uses_element_vars();
     test_literal_fallback_value();
     test_shorthand_fallback_value();

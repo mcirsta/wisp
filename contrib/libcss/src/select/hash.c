@@ -25,6 +25,7 @@ typedef struct hash_entry {
 
 typedef struct hash_t {
 #define DEFAULT_SLOTS (1 << 6)
+#define MAX_CLASS_SLOTS (1 << 10)
     size_t n_slots;
 
     hash_entry *slots;
@@ -203,6 +204,68 @@ css_error css__selector_hash_destroy(css_selector_hash *hash)
     free(hash);
 
     return CSS_OK;
+}
+
+/**
+ * Size the class table after parsing, before selection starts.
+ *
+ * Small tables keep their original allocation. Larger ones aim for an average
+ * of at most two selectors per bucket, up to a bounded maximum. Allocation failure
+ * leaves the original table usable. Existing iterators must not be in use.
+ */
+void css__selector_hash_finish(css_selector_hash *hash)
+{
+    hash_t *table = &hash->classes;
+    size_t count = 0, n_slots = table->n_slots;
+    hash_entry *slots, **tails;
+
+    for (size_t i = 0; i < table->n_slots; i++) {
+        for (hash_entry *entry = &table->slots[i]; entry != NULL && entry->sel != NULL; entry = entry->next)
+            count++;
+    }
+    while (n_slots < MAX_CLASS_SLOTS && count > 2 * n_slots)
+        n_slots *= 2;
+    if (n_slots == table->n_slots)
+        return;
+
+    slots = calloc(n_slots, sizeof(*slots));
+    if (slots == NULL)
+        return;
+    tails = calloc(n_slots, sizeof(*tails));
+    if (tails == NULL) {
+        free(slots);
+        return;
+    }
+
+    /* Growing by a power of two only splits old buckets. Each new chain is
+     * a subsequence of one old chain, preserving specificity, rule order and
+     * ties. Reuse overflow nodes; the old embedded head always maps to an
+     * empty new bucket, so no more allocations are needed during the move. */
+    for (size_t i = 0; i < table->n_slots; i++) {
+        hash_entry *head = &table->slots[i];
+        for (hash_entry *entry = head, *next; entry != NULL && entry->sel != NULL; entry = next) {
+            size_t index = _hash_name(_class_name(entry->sel)) & (n_slots - 1);
+            next = entry->next;
+            if (tails[index] == NULL) {
+                slots[index] = *entry;
+                if (entry != head) {
+                    free(entry);
+                    hash->hash_size -= sizeof(*entry);
+                }
+                tails[index] = &slots[index];
+            } else {
+                tails[index]->next = entry;
+                tails[index] = entry;
+            }
+            tails[index]->next = NULL;
+        }
+    }
+
+    hash->hash_size += (n_slots - table->n_slots) * sizeof(*slots);
+    free(table->slots);
+    free(tails);
+    table->slots = slots;
+    table->n_slots = n_slots;
 }
 
 /**
@@ -795,8 +858,10 @@ css_error _remove_from_chain(css_selector_hash *ctx, hash_entry *head, const css
 
     if (prev == NULL) {
         if (search->next != NULL) {
-            head->sel = search->next->sel;
-            head->next = search->next->next;
+            search = search->next;
+            *head = *search;
+            free(search);
+            ctx->hash_size -= sizeof(hash_entry);
         } else {
             head->sel = NULL;
             head->next = NULL;

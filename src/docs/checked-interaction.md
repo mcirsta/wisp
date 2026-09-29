@@ -176,9 +176,7 @@ and the outer sheet's ordinary declarations overriding imported declarations.
 CPU sampling beginning at the first native state change identified two further
 candidates: Qt repeatedly resolves font families on font-cache misses, and the
 selector hash keeps only 64 buckets each for classes, IDs and element names.
-The font lookup investigation and change are recorded below. Growing selector
-tables remains a candidate requiring cascade-order and memory-accounting tests;
-no speedup is assumed for it.
+The font lookup and selective class-table growth changes are recorded below.
 
 ### Qt font family lookup
 
@@ -354,6 +352,110 @@ Local artifacts include `run_text_refit.py`, `text-refit-before.json`,
 directory below. Earlier `float-layout-*` artifacts describe the preliminary
 float-only experiment, not the complete fix.
 
+### Selective class-selector hash growth
+
+Each stylesheet previously kept 64 buckets for class selectors, regardless of
+size. A temporary lookup probe found that 93–94% of class-chain entries visited
+during these refreshes had a different class name from the query. Only six Tion
+sheets and seven Bihon sheets contained more than 128 class selectors; enlarging
+every small sheet would waste memory.
+
+At parse completion, class tables now grow in powers of two to target an average
+of two selectors per bucket, capped at 1,024 buckets. Tables with at most 128
+selectors stay at 64 buckets. Element and ID tables are unchanged. This is a
+one-time sizing step, with no extra work or state in the lookup path and no
+changes to generated CSS code or bytecode.
+
+Each new chain is a subsequence of one old chain, preserving specificity, source
+order, equal-order ties and selector bloom filters. Growth reuses existing
+overflow nodes. Both allocations happen before any mutation; failure leaves the
+original table usable. Hash size reporting accounts for the enlarged array and
+freed overflow nodes. The new removal tests also exposed and fixed an existing
+head-removal bug that lost the successor's bloom filter and leaked its node.
+
+Fresh paired Release measurements alternate the saved preceding libcss and the
+new library, using the same current core/frontend binary. Three fresh processes
+per variant and page, 12 native tab switches each, discard the first two switches
+per process: 30 warmed samples per variant and page. Medians in milliseconds:
+
+| Phase | Tion before | Tion now | Bihon before | Bihon now |
+| --- | ---: | ---: | ---: | ---: |
+| CSS selection/composition | 70.28 | 63.38 | 123.41 | 107.17 |
+| Layout/reformat | 42.15 | 43.70 | 75.97 | 75.40 |
+| **Complete refresh, before painting** | **118.65** | **115.20** | **212.75** | **194.51** |
+
+CSS work fell 9.8% and 13.2%; total refresh fell 2.9% and 8.6%. Layout is unchanged
+by this patch; timing variation there affects the total benefit, especially on
+Tion. These paired figures should be used instead of comparing absolute timings
+with older runs made under different machine conditions.
+
+Retained selector storage increases by 43,968 bytes (42.94 KiB) on Tion and
+46,016 bytes (44.94 KiB) on Bihon, excluding allocator overhead. The earlier
+prototype jumped all qualifying tables straight to 1,024 buckets and added
+148.34/178.34 KiB. The graduated policy trades some lookup speed for much less
+memory. Its largest temporary allocation is 40 KiB on this 64-bit build (new
+bucket array plus temporary tail pointers, before freeing the old array).
+A separate diagnostic measured all parse-completion sizing calls together at
+about 1.0/0.6 ms per page; it is not included in the refresh timing runs.
+
+All six final PNGs and DOM dumps are byte-identical to the control. Full box
+trees match after normalizing addresses, and all 78 inspected tab states match
+geometry, controls, scroll and resources. All 109 CSS, layout and Qt regression
+tests pass in both Debug (ASan/UBSan) and Release. `libcss_selector_hash` additionally
+passes LeakSanitizer; it covers growth thresholds/cap, pending imports, unchanged
+element/ID tables, case-insensitive lookup order, specificity ties, media and
+bloom filtering, both allocation failures, repeated finishing, insertion/removal
+and storage accounting.
+
+Local drivers and results in the artifact directory below:
+`run_selector_growth.py`, `selector-growth-{control,grown}.json`,
+`check_selector_growth.py`, `selector-growth-comparison.json`, and
+`selector-growth-memory.c`. The temporary memory probe is not shipped.
+
+### Shorter CSS-variable import scans
+
+`css__stylesheet_tree_uses_variables()` already returns immediately when a sheet
+contains local custom properties or `var()` references. Otherwise it previously
+walked every top-level rule to find imported sheets. It now stops at the end of
+the import prefix, using the same rule types as
+`css_stylesheet_next_pending_import()`. This follows the current parser and
+import-registration contract; future changes to that prefix must keep these
+scans in sync. Nested imports are still visited, and unresolved imports are
+checked afresh on later selections. There is no new cache, allocation, stored
+flag or generated-code change.
+
+A separate read-only probe replayed both variable-presence checks on the real
+selection inputs, asserting that their answers agree. Mean rule visits per
+warmed refresh, ten switches per page after two warm-ups:
+
+| Variable-presence scan | Tion | Bihon |
+| --- | ---: | ---: |
+| Before | 169,433 | 243,722 |
+| Now | 4,017 | 5,766 |
+
+Fresh alternating Release measurements use the same 30-sample protocol as above.
+The control already includes selective class-table growth; only the import scan
+differs. These timing runs do not include the temporary probe. Medians:
+
+| Phase | Tion before | Tion now | Bihon before | Bihon now |
+| --- | ---: | ---: | ---: | ---: |
+| CSS selection/composition (ms) | 57.82 | 55.98 | 96.46 | 94.64 |
+| **Complete refresh, before painting (ms)** | **105.71** | **104.02** | **176.82** | **173.37** |
+
+CSS work fell 3.2%/1.9%, and total refresh fell 1.6%/2.0%. This is a modest
+incremental improvement; compare within this paired run, not against absolute
+timings from the preceding experiment. No additional retained memory is needed.
+All six final PNGs, DOM dumps and normalized box trees match the control, as do
+all 78 inspected tab states. All 109 selected CSS, layout and Qt tests pass in
+both Debug and Release. The extended variable test also passes LeakSanitizer:
+it covers charset prefixes, an empty first import, nested variables reached
+through a later import, ignored late imports, attaching a previously unresolved
+import, cascade order and pseudo-element variable inheritance.
+
+Local artifacts: `run_import_scan.py`, `import-scan-{control,short}.json`,
+`check_import_scan.py`, `import-scan-comparison.json`, `import-scan-probe.c`, and
+`import-scan-counts.json` in the directory below. The probe is not shipped.
+
 ### Chromium comparison and measurement limits
 
 Chromium 153.0.8010.52, same files/viewport, page scripts disabled, aligned font
@@ -398,6 +500,8 @@ Local raw samples, reproducible drivers and the DOM microbenchmark are under
   disabled controls/fieldsets, explicit form ownership and live/default state.
 - `css_checked_test`: repeated checked-state invalidation with the same selection
   context.
+- `libcss_selector_hash`: bounded class-table growth, stable lookup order,
+  allocation failure, removal and memory accounting.
 - `qt_checked_interaction`: real mouse/keyboard input with JS disabled, repeated
   radio/checkbox switches, CSS variables and geometry, typed values in hidden
   panels, scroll preservation, generated/layered images, SVG reuse, and hidden/

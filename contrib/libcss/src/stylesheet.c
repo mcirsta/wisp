@@ -364,6 +364,8 @@ css_error css_stylesheet_data_done(css_stylesheet *sheet)
         sheet->cached_style = NULL;
     }
 
+    css__selector_hash_finish(sheet->selectors);
+
     /* Determine if there are any pending imports */
     for (r = sheet->rule_list; r != NULL; r = r->next) {
         const css_rule_import *i = (const css_rule_import *)r;
