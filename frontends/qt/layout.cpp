@@ -454,13 +454,42 @@ static void nsqt_font_cache_clear(void)
     pfcache.age = 0;
 }
 
+/* All requests are prefixes of the same string with unchanged font metrics,
+ * scale and spacing. Length is therefore sufficient as a key. Keep the full
+ * width and four recent prefixes for this callback only; no font/text lifetime
+ * or invalidation state escapes it. Shape each uncached prefix independently,
+ * just as before, so kerning and contextual shaping remain unchanged. */
+struct PrefixWidths {
+    const QFontMetricsF &metrics;
+    qreal scale;
+    int spacing;
+    qsizetype full_length;
+    struct Entry {
+        qsizetype length = -1;
+        qreal width = 0;
+    } entries[5];
+    unsigned next = 1;
+
+    qreal measure(const QString &prefix)
+    {
+        for (const Entry &entry : entries) {
+            if (entry.length == prefix.size())
+                return entry.width;
+        }
+        qreal width = text_advance(metrics, scale, spacing, prefix);
+        unsigned slot = prefix.size() == full_length ? 0 : next;
+        entries[slot] = {prefix.size(), width};
+        if (slot != 0)
+            next = next == 4 ? 1 : next + 1;
+        return width;
+    }
+};
+
 /**
  * Find the position in a string where an x coordinate falls.
  *
- * \param[in] metrics qt font metrics to measure with.
- * \param[in] scale residual font-size scale applied by the painter.
- * \param[in] spacing absolute letter spacing for zero-size glyphs.
- * \param[in] string UTF-8 string to measure
+ * \param[in] widths prefix measurements for this string and font.
+ * \param[in] qstr decoded string to measure
  * \param[in] length length of string, in bytes
  * \param[in] x coordinate to search for
  * \param[out] string_idx updated to offset in string of actual_x, [0..length]
@@ -470,7 +499,7 @@ static void nsqt_font_cache_clear(void)
  * code on faliure
  */
 static nserror
-layout_position(const QFontMetricsF &metrics, qreal scale, int spacing, const char *string, size_t length, int x,
+layout_position(PrefixWidths &widths, const QString &qstr, size_t length, int x,
     size_t *string_idx, int *actual_x)
 {
     qreal full_x;
@@ -487,13 +516,10 @@ layout_position(const QFontMetricsF &metrics, qreal scale, int spacing, const ch
     /* deal with negative or zero available width  */
     if (x <= 0) {
         *string_idx = 0;
-        /* Use QString for correct UTF-8 byte interpretation */
-        *actual_x = qRound(text_advance(metrics, scale, spacing, QString::fromUtf8(string, length)));
+        *actual_x = qRound(widths.measure(qstr));
         return NSERROR_OK;
     }
 
-    /* Use QString for proper UTF-8 handling */
-    QString qstr = QString::fromUtf8(string, length);
     int char_count = qstr.length();
 
     /* if it is assumed each character of the string will occupy more than a
@@ -504,7 +530,7 @@ layout_position(const QFontMetricsF &metrics, qreal scale, int spacing, const ch
     /* Convert character count back to byte position */
     str_len = qstr.left(chars_to_measure).toUtf8().length();
 
-    full_x = text_advance(metrics, scale, spacing, qstr.left(chars_to_measure));
+    full_x = widths.measure(qstr.left(chars_to_measure));
     if (full_x < x) {
         /* whole string fits */
         *string_idx = length;
@@ -520,7 +546,7 @@ layout_position(const QFontMetricsF &metrics, qreal scale, int spacing, const ch
         current_chars = char_count;
 
     str_len = qstr.left(current_chars).toUtf8().length();
-    measured_x = text_advance(metrics, scale, spacing, qstr.left(current_chars));
+    measured_x = widths.measure(qstr.left(current_chars));
 
     if (measured_x == 0) {
         *string_idx = 0;
@@ -538,14 +564,14 @@ layout_position(const QFontMetricsF &metrics, qreal scale, int spacing, const ch
                 break;
             }
             str_len = qstr.left(current_chars).toUtf8().length();
-            measured_x = text_advance(metrics, scale, spacing, qstr.left(current_chars));
+            measured_x = widths.measure(qstr.left(current_chars));
         }
     } else {
         /* too short try more chars until overflowing */
         qreal n_measured_x = measured_x;
         while (n_measured_x < x && current_chars < char_count) {
             size_t n_str_len = qstr.left(current_chars + 1).toUtf8().length();
-            n_measured_x = text_advance(metrics, scale, spacing, qstr.left(current_chars + 1));
+            n_measured_x = widths.measure(qstr.left(current_chars + 1));
             if (n_measured_x < x) {
                 measured_x = n_measured_x;
                 current_chars++;
@@ -616,7 +642,9 @@ static nserror nsqt_layout_position(
     QFontMetricsF metrics(*font, device);
     nserror res;
 
-    res = layout_position(metrics, font_scale(fstyle), fstyle->letter_spacing, string, length, x, string_idx, actual_x);
+    QString qstr = QString::fromUtf8(string, length);
+    PrefixWidths widths{metrics, font_scale(fstyle), fstyle->letter_spacing, qstr.size()};
+    res = layout_position(widths, qstr, length, x, string_idx, actual_x);
 
     delete font;
 
@@ -653,7 +681,7 @@ static nserror nsqt_layout_position(
 static nserror nsqt_layout_split(const struct plot_font_style *fstyle, const char *string, size_t length, int split,
     size_t *string_idx, int *actual_x)
 {
-    nserror res;
+    nserror res = NSERROR_OK;
     QFont *font = nsfont_style_to_font(fstyle);
     /* Use top-level widget as device for accurate metrics matching rendering */
     QPaintDevice *device = get_metrics_device();
@@ -663,18 +691,20 @@ static nserror nsqt_layout_split(const struct plot_font_style *fstyle, const cha
     size_t str_len;
     size_t last_word_end = 0; /* Both offset and width exclude the breaking space. */
     qreal scale = font_scale(fstyle);
-    qreal full_width = text_advance(metrics, scale, fstyle->letter_spacing, QString::fromUtf8(string, length));
-
-    res = layout_position(metrics, scale, fstyle->letter_spacing, string, length, split, &split_len, &split_x);
-    if (res != NSERROR_OK) {
-        delete font;
-        return res;
-    }
+    QString qstr = QString::fromUtf8(string, length);
+    PrefixWidths widths{metrics, scale, fstyle->letter_spacing, qstr.size()};
+    qreal full_width = widths.measure(qstr);
 
     if (length == 0 || full_width <= split) {
         *string_idx = length;
         *actual_x = qCeil(full_width);
         goto nsqt_layout_split_done;
+    }
+
+    res = layout_position(widths, qstr, length, split, &split_len, &split_x);
+    if (res != NSERROR_OK) {
+        delete font;
+        return res;
     }
 
     /* If the position estimate reaches the end despite overflowing (very
@@ -718,7 +748,7 @@ static nserror nsqt_layout_split(const struct plot_font_style *fstyle, const cha
         }
 
         /* Measure width WITHOUT trailing space - space is trimmed at line end */
-        qreal word_width = text_advance(metrics, scale, fstyle->letter_spacing, QString::fromUtf8(string, word_end));
+        qreal word_width = widths.measure(QString::fromUtf8(string, word_end));
 
         if (word_width <= split) {
             /* This word fits! Update last_word_end to this position */
@@ -738,7 +768,7 @@ static nserror nsqt_layout_split(const struct plot_font_style *fstyle, const cha
      * advance separately. Including that space in the offset but not the width
      * loses the gap when retained text boxes are placed together on reflow. */
     *string_idx = last_word_end;
-    *actual_x = qCeil(text_advance(metrics, scale, fstyle->letter_spacing, QString::fromUtf8(string, last_word_end)));
+    *actual_x = qCeil(widths.measure(QString::fromUtf8(string, last_word_end)));
 
 nsqt_layout_split_done:
     delete font;

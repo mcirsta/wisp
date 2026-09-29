@@ -456,6 +456,64 @@ Local artifacts: `run_import_scan.py`, `import-scan-{control,short}.json`,
 `check_import_scan.py`, `import-scan-comparison.json`, `import-scan-probe.c`, and
 `import-scan-counts.json` in the directory below. The probe is not shipped.
 
+### Reusing Qt text-prefix measurements
+
+The Qt splitter measures the complete string, estimates a character position,
+then checks whole-word boundaries. Those stages frequently measure the same
+prefix more than once. A callback-local `PrefixWidths` now keeps the complete
+width and four recent prefix widths on the stack. The font, residual scale,
+spacing and source text stay unchanged for the callback, so UTF-16 prefix length
+is sufficient as the key. Nothing survives the callback or needs invalidation
+when fonts, text or styles change.
+
+The splitter also shares its decoded string with the position routine and skips
+that routine when the full string already fits. Uncached prefixes still use the
+same independent Qt measurements; character estimates, word-break searches,
+UTF-8 offsets and fractional rounding retain their existing behavior. The
+ordinary width callback is unchanged, and there is no retained per-page memory
+increase or new allocation for the cache.
+
+Temporary probes counted `text_advance()` calls inside the splitter during ten
+warmed refreshes after two warm-ups. Mean counts per refresh:
+
+| Splitter work | Tion before | Tion now | Bihon before | Bihon now |
+| --- | ---: | ---: | ---: | ---: |
+| Split callbacks | 404 | 404 | 917 | 917 |
+| Prefix-width measurements | 2,576 | 1,980 | 5,742 | 4,552 |
+| Repeated measurements within one callback | 598 | 2 | 1,194 | 4 |
+
+Measurements fall by 23.1%/20.7%. The few remaining repeats follow eviction;
+increasing the fixed cache size for them would provide little benefit.
+
+Fresh alternating Release captures compare the preceding Qt binary at
+`1e6d41fc` with the optimized binary, using identical current libraries. Both
+include the CSS optimizations above. Three processes and 30 warmed samples per
+page/variant, without temporary probes; medians in milliseconds:
+
+| Phase | Tion before | Tion now | Bihon before | Bihon now |
+| --- | ---: | ---: | ---: | ---: |
+| CSS selection/composition | 52.51 | 52.94 | 96.05 | 97.30 |
+| Layout/reformat | 41.33 | 34.65 | 72.88 | 62.87 |
+| **Complete refresh, before painting** | **98.55** | **93.25** | **180.02** | **170.18** |
+
+Layout falls 16.2%/13.7%, with lower layout medians in every process pair.
+Complete refresh falls 5.4%/5.5%; unchanged CSS work still varies between runs.
+All six final PNGs, DOM dumps and normalized box trees match, and all 78 inspected
+tab states preserve geometry, controls, scroll and resources.
+
+All 44 layout/font/Qt tests pass in both Debug (ASan/UBSan) and Release. The
+extended split test compares complete-word results with independent width calls
+across fractional sizes, negative/zero/positive letter spacing, accents,
+combining marks, supplementary characters, emoji sequences, Arabic text and
+alternating narrow/wide words. Existing tests cover zero-size text, hit testing,
+late fonts and repeated/resized core layout. Temporary probes are removed from
+the production source.
+
+Local artifacts: `run_text_prefix.py`, `text-prefix-{control,cached}.json`,
+`check_text_prefix.py`, `text-prefix-comparison.json`, `text-prefix-counts.json`,
+and `text-prefix-probe.{cpp,h}` in the directory below. The copied control binary
+is `/tmp/wisp-text-prefix-control-qt`.
+
 ### Chromium comparison and measurement limits
 
 Chromium 153.0.8010.52, same files/viewport, page scripts disabled, aligned font

@@ -40,9 +40,43 @@ static void check_split(const plot_font_style_t &font, const char *text, const c
     int expected_width = measure(font, prefix, expected), width;
     REQUIRE(nsqt_layout_table->split(&font, text, std::strlen(text), expected_width + extra,
         &offset, &width) == NSERROR_OK);
+    if (offset != expected || width != expected_width)
+        std::fprintf(stderr, "split '%s' size=%d spacing=%d available=%d: got %zu/%d, expected %zu/%d\n",
+            text, font.size, font.letter_spacing, expected_width + extra, offset, width, expected, expected_width);
     REQUIRE(offset == expected);
     REQUIRE(width == expected_width);
     REQUIRE(offset == std::strlen(text) || text[offset] == ' ');
+}
+
+static void check_prefix_boundaries(const plot_font_style_t &base)
+{
+    // Compare split results to independent width calls at complete words.
+    // UTF-8 byte offsets differ from UTF-16 indices; shaping must still use
+    // the exact prefix, including combining marks, ligatures and bidi text.
+    const char *texts[] = {
+        "AVATAR office affinity final",
+        "caf\xc3\xa9 \xc8\x99tiri renderer final",
+        "a\u0301bc \U0001F600xyz \U0001F469\u200d\U0001F4BBxyz final",
+        "\u0633\u0644\u0627\u0645 \u0627\u0644\u0639\u0627\u0644\u0645 renderer final",
+        "iiiiiiiiiiiiiiiiiiiiiiii WWWWWWWWWWWWWWWWWWWWWWWW iii WWW iii WWW final",
+    };
+    for (int size : {9 * PLOT_STYLE_SCALE, 101 * PLOT_STYLE_SCALE / 8, 15 * PLOT_STYLE_SCALE}) {
+        for (int spacing : {-1, 0, 2}) {
+            plot_font_style_t font = base;
+            font.size = size;
+            font.letter_spacing = spacing;
+            for (const char *text : texts) {
+                QByteArray bytes(text);
+                for (int end = 1; end <= bytes.size(); end++) {
+                    if (end != bytes.size() && bytes[end] != ' ')
+                        continue;
+                    QByteArray prefix = bytes.left(end);
+                    for (int extra : {0, 1})
+                        check_split(font, text, prefix.constData(), extra);
+                }
+            }
+        }
+    }
 }
 
 int main(int argc, char **argv)
@@ -112,6 +146,7 @@ int main(int argc, char **argv)
     spacing.size = 39 * PLOT_STYLE_SCALE / 4;
     REQUIRE(measure(spacing, " ", 1) == 3);
 
+    check_prefix_boundaries(font);
     test_text_reflow(nsqt_layout_table);
     test_inline_spacing_reflow(nsqt_layout_table);
     test_fractional_text_reflow(nsqt_layout_table);
