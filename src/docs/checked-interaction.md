@@ -580,6 +580,57 @@ Local artifacts: `run_variable_candidates.py`, `check_variable_candidates.py`,
 `variable-candidates-counts.json` in the directory below. The unchanged library
 is saved in `/tmp/wisp-variable-rules-control/` for local reproduction.
 
+### Avoiding small class-selector scratch allocations
+
+`match_selectors_in_sheet()` used to allocate/free an array of class hash-chain
+cursors for every element/stylesheet match with a nonempty class list. It now
+uses an eight-entry local array, with the existing heap path for longer lists.
+Both success and error cleanup distinguish the two storage locations. Entries
+are filled by the same hash lookup before use; traversal and cascade order do
+not change. No zeroing, cache, shared state or generator change is needed.
+
+The fixed array costs 64 bytes of stack on this 64-bit build, with no retained
+per-page memory. A count-only probe recorded the class-count distribution over
+ten warmed refreshes. Eight entries cover 99.88%/99.92% of these temporary arrays;
+16 would cover no additional calls on either saved page. The remaining long
+lists have 22 classes. Mean heap allocations per refresh for this array:
+
+| Class-selector scratch allocations | Tion | Bihon |
+| --- | ---: | ---: |
+| Before | 85,904 | 191,770 |
+| With the eight-entry local buffer | 104 | 151 |
+
+As with the preceding optimization, a temporary switch alternated the heap-only
+and local-buffer paths inside each process. Three processes per page, 28 native
+tab switches per process, four warm-ups and ABBA ordering give 36 nearby pairs
+of the same panel per page. Both modes include the preceding rule-filter change.
+Median paired savings:
+
+| Phase | Tion saved (ms) | Bihon saved (ms) |
+| --- | ---: | ---: |
+| CSS selection/composition | 3.61 (5.99%) | 7.90 (7.89%) |
+| Complete refresh, before painting | 3.16 (3.17%) | 8.41 (4.82%) |
+
+CSS time improves in 25/36 Tion pairs and 31/36 Bihon pairs; layout is effectively
+unchanged. These are warmed native-tab refresh measurements, not initial-load
+or all-site guarantees. The temporary switch and counting code are removed.
+
+The independent production/control captures have identical final PNGs, DOM
+and normalized box trees, with all 26 inspected states matching. The alternating
+experiment adds six identical final captures and 174 matching states. All 104
+selected CSS/layout/Qt tests pass in Debug (ASan/UBSan, with the previously noted
+broad-suite leak exclusions) and Release. The expanded variable-resolution test
+also passes LeakSanitizer: it covers 0/1/8/9/16/17/40 classes, reversed class
+order, ordinary and variable cascade results, and failure cleanup followed by
+successful reselection for both storage paths.
+
+Local artifacts in the directory below: `selector-scratch-counts.json`,
+`selector-scratch-count.patch`, `selector-scratch-{control,stack,comparison}.json`,
+`run_selector_scratch_toggle.py`, `check_selector_scratch_toggle.py`,
+`selector-scratch-toggle{,-summary}.json`, `selector-scratch-toggle.c`, and
+`instrument_selector_scratch.py`. The preceding library is saved in
+`/tmp/wisp-selector-scratch-control/` for local reproduction.
+
 ### Chromium comparison and measurement limits
 
 Chromium 153.0.8010.52, same files/viewport, page scripts disabled, aligned font

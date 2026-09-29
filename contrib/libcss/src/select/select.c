@@ -1983,6 +1983,7 @@ css_error match_selectors_in_sheet(css_select_ctx *ctx, const css_stylesheet *sh
     css_selector_hash_iterator node_iterator;
     const css_selector **id_selectors = &empty_selector;
     css_selector_hash_iterator id_iterator;
+    const css_selector **local_class_selectors[8];
     const css_selector ***class_selectors = NULL;
     css_selector_hash_iterator class_iterator;
     const css_selector **univ_selectors = &empty_selector;
@@ -2005,10 +2006,15 @@ css_error match_selectors_in_sheet(css_select_ctx *ctx, const css_stylesheet *sh
 
     if (state->classes != NULL && n_classes > 0) {
         /* Find hash chains for node classes */
-        class_selectors = malloc(n_classes * sizeof(css_selector **));
-        if (class_selectors == NULL) {
-            error = CSS_NOMEM;
-            goto cleanup;
+        /* Most elements have few classes. Keep their temporary hash-chain
+         * cursors on the stack; larger class lists retain the heap path. */
+        class_selectors = local_class_selectors;
+        if (n_classes > N_ELEMENTS(local_class_selectors)) {
+            class_selectors = malloc(n_classes * sizeof(*class_selectors));
+            if (class_selectors == NULL) {
+                error = CSS_NOMEM;
+                goto cleanup;
+            }
         }
 
         for (i = 0; i < n_classes; i++) {
@@ -2082,7 +2088,7 @@ css_error match_selectors_in_sheet(css_select_ctx *ctx, const css_stylesheet *sh
 
     error = CSS_OK;
 cleanup:
-    if (class_selectors != NULL)
+    if (class_selectors != NULL && class_selectors != local_class_selectors)
         free(class_selectors);
 
     return error;

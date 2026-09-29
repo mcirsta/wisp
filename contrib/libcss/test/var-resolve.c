@@ -23,6 +23,8 @@ typedef struct test_node {
     struct test_node *parent;
     struct test_node *previous;
     void *libcss_node_data;
+    lwc_string **classes;
+    uint32_t n_classes;
 } test_node;
 
 typedef struct attribute_checks {
@@ -70,11 +72,13 @@ static css_error node_name(void *pw, void *node, css_qname *qname)
 
 static css_error node_classes(void *pw, void *node, lwc_string ***classes, uint32_t *n_classes)
 {
+    test_node *n = node;
     UNUSED(pw);
-    UNUSED(node);
 
-    *classes = NULL;
-    *n_classes = 0;
+    *classes = n->classes;
+    *n_classes = n->n_classes;
+    for (uint32_t i = 0; i < n->n_classes; i++)
+        lwc_string_ref(n->classes[i]);
 
     return CSS_OK;
 }
@@ -177,11 +181,12 @@ static css_error node_has_name(void *pw, void *node, const css_qname *qname, boo
 
 static css_error node_has_class(void *pw, void *node, lwc_string *name, bool *match)
 {
+    test_node *n = node;
     UNUSED(pw);
-    UNUSED(node);
-    UNUSED(name);
 
     *match = false;
+    for (uint32_t i = 0; i < n->n_classes && !*match; i++)
+        assert(lwc_string_isequal(n->classes[i], name, match) == lwc_error_ok);
 
     return CSS_OK;
 }
@@ -1021,6 +1026,66 @@ static void test_variable_import_prefix(void)
     assert(css_stylesheet_destroy(empty) == CSS_OK);
 }
 
+static css_error fail_class_match(void *pw, void *node, lwc_string *name, bool *match)
+{
+    UNUSED(pw);
+    UNUSED(node);
+    UNUSED(name);
+    UNUSED(match);
+    return CSS_NOMEM;
+}
+
+static void test_many_class_selectors(void)
+{
+    const uint32_t counts[] = {0, 1, 8, 9, 16, 17, 40};
+    lwc_string *names[40], *classes[40];
+    char css[4096] = "div { width: var(--w, 7px); height: 6px; }";
+    size_t used = strlen(css);
+    css_media media = {.type = CSS_MEDIA_ALL};
+    css_select_handler failing_handler = select_handler;
+    failing_handler.node_has_class = fail_class_match;
+
+    for (unsigned i = 0; i < 40; i++) {
+        char name[16];
+        snprintf(name, sizeof(name), "c%u", i);
+        assert(lwc_intern_string(name, strlen(name), &names[i]) == lwc_error_ok);
+        int written = snprintf(css + used, sizeof(css) - used,
+            ".%s { --w: %upx; height: %upx; }", name, 10 + i, 100 + i);
+        assert(written > 0 && (size_t)written < sizeof(css) - used);
+        used += written;
+    }
+    for (size_t i = 0; i < sizeof(counts) / sizeof(counts[0]); i++) {
+        style_case ctx;
+        setup_style_case(&ctx, css);
+        ctx.node.n_classes = counts[i];
+        ctx.node.classes = counts[i] != 0 ? classes : NULL;
+        for (unsigned reversed = 0; reversed < 2; reversed++) {
+            for (uint32_t j = 0; j < counts[i]; j++)
+                classes[j] = names[reversed ? counts[i] - j - 1 : j];
+
+            /* Exercise cleanup after full matching fails, for both short
+             * class lists and lists large enough to require heap scratch. */
+            if (counts[i] != 0) {
+                assert(css_select_style(ctx.select_ctx, &ctx.node, &unit_ctx, &media,
+                    NULL, &failing_handler, NULL, &ctx.results) == CSS_NOMEM);
+                assert(ctx.results == NULL);
+            }
+            const css_computed_style *style = select_style_for_node(&ctx, &ctx.node, NULL, &ctx.results);
+            char label[80];
+            snprintf(label, sizeof(label), "class count=%u reversed=%u variable cascade", counts[i], reversed);
+            expect_length_px(label, style, css_computed_width, CSS_WIDTH_SET, counts[i] ? 9 + counts[i] : 7);
+            snprintf(label, sizeof(label), "class count=%u reversed=%u ordinary cascade", counts[i], reversed);
+            expect_length_px(label, style, css_computed_height, CSS_HEIGHT_SET, counts[i] ? 99 + counts[i] : 6);
+            destroy_node_data(&ctx.node);
+            css_select_results_destroy(ctx.results);
+            ctx.results = NULL;
+        }
+        destroy_style_case(&ctx);
+    }
+    for (unsigned i = 0; i < 40; i++)
+        lwc_string_unref(names[i]);
+}
+
 static void test_collection_skips_ordinary_rules(void)
 {
     style_case ctx;
@@ -1564,6 +1629,7 @@ int main(int argc, char **argv)
     test_imported_sheet_custom_property();
     test_variables_imported_by_literal_sheet();
     test_variable_import_prefix();
+    test_many_class_selectors();
     test_collection_skips_ordinary_rules();
     test_pseudo_element_uses_element_vars();
     test_literal_fallback_value();
