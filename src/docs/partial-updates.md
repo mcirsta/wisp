@@ -9,7 +9,8 @@ outside the changed controls' parent subtrees and still reconstructs and lays ou
 the whole document. `WISP_ENABLE_PARTIAL_UPDATES` now defaults to ON; configuring
 it OFF still removes the HTML tracking state and selects the full-refresh path.
 Existing CMake caches explicitly set to OFF keep that setting until reconfigured.
-Milestones B/C have not started. The steps below remain the implementation and
+Milestone B's allocation preparation has started; boxes are not yet retained.
+Milestone C has not started. The steps below remain the implementation and
 acceptance checklist, with the concrete implementation choices recorded here.
 
 ### Milestone A implementation
@@ -168,8 +169,56 @@ Local rollout drivers, raw captures and reports are under
 `out/render-captures/partial-rollout-2026-09-29/`; `initial/report.json` records
 the initial-load samples, `stress/report.json` records inspected toggle sequences,
 and `memory/report.json` records the lighter memory checks.
-Milestones B/C remain deferred; this validation does not commit to retained box
-regions or partial layout.
+This completed the milestone A rollout. Subsequent milestone B work is recorded
+below; partial layout remains deferred.
+
+### Milestone B preparation: allocation ownership (2026-09-29)
+
+The first refactor keeps whole-document construction and layout. Generated
+content (`::before`/`::after`, text, images and inline-end markers) now uses the
+allocation owner already carried by `box_construct_ctx`. Normalization receives
+that owner explicitly and propagates it through block, inline, float, flex, grid
+and table recursion. Anonymous wrappers therefore no longer silently allocate
+under `html_content::bctx`. Current full construction passes the same context as
+before, so allocation count, box size and tree ownership are unchanged.
+
+The ownership regression uses real CSS selection, normalization and destructors.
+It repeatedly builds/frees a separately owned region containing flex/grid text,
+an orphan table cell, or a table inside a float. Anonymous wrappers must belong
+to the region; freeing it must return the document's allocation count to its
+baseline while an unaffected sibling and its shared styles remain usable.
+
+Validation passes all 116 selected Debug tests (ASan/UBSan), all 113 selected
+Release tests, and the focused ownership test with LeakSanitizer enabled. Both
+saved sidebar panels on both sites match the pre-refactor captures: PNG and DOM
+dumps are identical, complete box dumps match after removing pointer addresses,
+and inspected state/geometry/resource counts match across the click sequence.
+The local driver and captures are in
+`out/render-captures/region-preparation-2026-09-29/`. This is an ownership refactor,
+not a new performance claim or an enabled box-retention path.
+
+The saved-page audit found that both `.tabs` roots are block-level **flex**
+containers in floated sidebar columns (`probe-div-533` on Tion and `probe-div-655`
+on Bihon). Replacing only the revealed panel would omit the radio/label changes.
+A whole tab container is the useful boundary to investigate. Restricting roots
+to `BOX_BLOCK` would widen Tion to its surrounding module and Bihon to its much
+larger sidebar, including unrelated widgets and iframes. Supporting a whole flex
+container here requires construction/ownership validation; it does not imply
+flex layout independence or require changing the flex algorithm.
+
+Remaining prerequisites before retaining boxes:
+
+- Thread the owner through special-element construction: form controls, link
+  targets, object parameters and iframe records. Framesets remain a full fallback.
+- Route later text splits, numerical list-marker buffers and select-control text
+  updates to their region. Do not discover the arena with `talloc_parent()` in
+  hot loops: this bundled allocator walks preceding siblings to find the parent.
+  Choose an explicit owner representation before enabling region allocation.
+- Prove the complete boundary, including inline continuations, generated boxes,
+  float chains and pointers to containing blocks. Stage DOM mappings, form lists
+  and object/iframe bindings before publishing a replacement.
+- Verify repeated full layout on retained boxes against fresh construction.
+  Only then enable actual replacement, with its own measurements and fallback.
 
 ## Recommendation and scope
 
@@ -697,6 +746,7 @@ flaky hard-coded CTest threshold.
 9. **Rollout:** enable validated behavior by default, retain the full fallback and
    developer comparison switch, and update the behavior/profiling documentation.
 
-Commits 1–5 and the milestone A rollout are complete. Milestones B and C remain
-later decisions supported by measurements; they are not prerequisites for
-delivering selective CSS work.
+Commits 1–5 and the milestone A rollout are complete. Step 6 has started with
+explicit allocation propagation through generated content and normalization.
+Steps 7–8 still require their ownership and layout gates; they are not
+prerequisites for the already enabled selective CSS work.

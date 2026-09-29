@@ -6,6 +6,10 @@
 #include <libcss/gradient.h>
 #include <wisp/utils/corestrings.h>
 #include <wisp/utils/nsoption.h>
+#include <wisp/content/handlers/html/private.h>
+#include "content/handlers/html/box_manipulate.h"
+#include "content/handlers/html/box_normalise.h"
+#include "utils/talloc.h"
 #include "content/handlers/css/dump.h"
 #include "content/handlers/css/hints.h"
 #include "content/handlers/css/internal.h"
@@ -291,6 +295,82 @@ START_TEST(test_selective_matches_full)
 }
 END_TEST
 
+static struct box *region_box(box_type type, struct box *parent, void *owner, const css_computed_style *style)
+{
+    bool unstyled = type == BOX_INLINE_CONTAINER || type == BOX_FLOAT_LEFT;
+    struct box *box = box_create(
+        NULL, unstyled ? NULL : (css_computed_style *)style, false, NULL, NULL, NULL, NULL, owner);
+    ck_assert_ptr_nonnull(box);
+    box->type = type;
+    if (parent != NULL)
+        box_add_child(parent, box);
+    return box;
+}
+
+static void check_region_owner(const struct box *box, const void *owner)
+{
+    ck_assert_msg(talloc_parent(box) == owner, "Box type %d escaped the region allocator", box->type);
+    for (const struct box *child = box->children; child != NULL; child = child->next)
+        check_region_owner(child, owner);
+}
+
+/* Real normalization and destructors must retire every anonymous wrapper with
+ * its region, while the document and an unaffected sibling remain usable. */
+START_TEST(test_normalised_region_lifetime)
+{
+    static const char *cases[] = {"flex text", "grid text", "orphan cell", "table inside float"};
+    css_select_results *styles[NODE_COUNT];
+    select_tree(styles, NULL);
+    html_content html = {.bctx = talloc_zero(NULL, int),
+        .select_ctx = context.ctx,
+        .unit_len_ctx = units,
+        .universal = context.universal,
+        .base_url = context.base_url};
+    ck_assert_ptr_nonnull(html.bctx);
+    struct box *root = region_box(BOX_BLOCK, NULL, html.bctx, styles[ROOT]->styles[0]);
+    struct box *retained = region_box(BOX_BLOCK, root, html.bctx, styles[OUTSIDE]->styles[0]);
+    size_t document_blocks = talloc_total_blocks(html.bctx);
+
+    for (unsigned iteration = 0; iteration < 12; iteration++) {
+        void *owner = talloc_zero(html.bctx, int);
+        ck_assert_ptr_nonnull(owner);
+        struct box *region = region_box(BOX_BLOCK, root, owner, root->style);
+        struct box *parent = region;
+        if (_i < 2) {
+            parent = region_box(_i == 0 ? BOX_FLEX : BOX_GRID, parent, owner, root->style);
+        } else if (_i == 2) {
+            parent = region_box(BOX_TABLE_CELL, parent, owner, root->style);
+        } else {
+            parent = region_box(BOX_INLINE_CONTAINER, parent, owner, NULL);
+            parent = region_box(BOX_FLOAT_LEFT, parent, owner, NULL);
+            parent = region_box(BOX_TABLE, parent, owner, root->style);
+            parent = region_box(BOX_BLOCK, parent, owner, root->style);
+        }
+        parent = region_box(BOX_INLINE_CONTAINER, parent, owner, NULL);
+        struct box *text = region_box(BOX_TEXT, parent, owner, root->style);
+        text->text = talloc_strdup(owner, "region text");
+        ck_assert_ptr_nonnull(text->text);
+        text->length = strlen(text->text);
+        size_t before = talloc_total_blocks(owner);
+        ck_assert_msg(box_normalise_block(region, root, &html, owner), "%s: normalization failed", cases[_i]);
+        ck_assert_msg(talloc_total_blocks(owner) > before, "%s did not create an anonymous wrapper", cases[_i]);
+        check_region_owner(region, owner);
+        ck_assert_ptr_eq(root->children, retained);
+        ck_assert_ptr_eq(retained->next, region);
+        ck_assert_str_eq(text->text, "region text");
+        /* Unlink before retiring: retained tree links must never dangle. */
+        retained->next = NULL;
+        root->last = retained;
+        ck_assert_int_eq(talloc_free(owner), 0);
+        ck_assert_msg(talloc_total_blocks(html.bctx) == document_blocks,
+            "%s iteration %u leaked region storage into the document", cases[_i], iteration);
+        check_dynamic(styles[OUTSIDE]);
+    }
+    talloc_free(html.bctx);
+    release(styles);
+}
+END_TEST
+
 int main(void)
 {
     if (nsoption_init(NULL, NULL, NULL) != NSERROR_OK || corestrings_init() != NSERROR_OK ||
@@ -304,6 +384,7 @@ int main(void)
     tcase_add_checked_fixture(scope, setup, teardown);
     tcase_add_test(scope, test_selective_matches_full);
     tcase_add_test(scope, test_all_slots_and_aliased_styles);
+    tcase_add_loop_test(scope, test_normalised_region_lifetime, 0, 4);
     suite_add_tcase(suite, scope);
     SRunner *runner = srunner_create(suite);
     srunner_run_all(runner, CK_NORMAL);

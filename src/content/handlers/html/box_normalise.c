@@ -149,7 +149,8 @@ static bool calculate_table_row(struct columns *col_info, unsigned int col_span,
 }
 
 
-static bool box_normalise_table_row(struct box *row, const struct box *root, struct columns *col_info, html_content *c)
+static bool box_normalise_table_row(
+    struct box *row, const struct box *root, struct columns *col_info, html_content *c, void *box_context)
 {
     struct box *child;
     struct box *next_child;
@@ -173,7 +174,7 @@ static bool box_normalise_table_row(struct box *row, const struct box *root, str
         switch (child->type) {
         case BOX_TABLE_CELL:
             /* ok */
-            if (box_normalise_block(child, root, c) == false)
+            if (box_normalise_block(child, root, c, box_context) == false)
                 return false;
             cell = child;
             break;
@@ -196,7 +197,7 @@ static bool box_normalise_table_row(struct box *row, const struct box *root, str
             if (style == NULL)
                 return false;
 
-            cell = box_create(NULL, style, true, row->href, row->target, NULL, NULL, c->bctx);
+            cell = box_create(NULL, style, true, row->href, row->target, NULL, NULL, box_context);
             if (cell == NULL) {
                 css_computed_style_destroy(style);
                 return false;
@@ -232,7 +233,7 @@ static bool box_normalise_table_row(struct box *row, const struct box *root, str
                 row->last = cell;
             cell->parent = row;
 
-            if (box_normalise_block(cell, root, c) == false)
+            if (box_normalise_block(cell, root, c, box_context) == false)
                 return false;
             break;
         case BOX_INLINE:
@@ -279,8 +280,8 @@ static bool box_normalise_table_row(struct box *row, const struct box *root, str
 }
 
 
-static bool
-box_normalise_table_row_group(struct box *row_group, const struct box *root, struct columns *col_info, html_content *c)
+static bool box_normalise_table_row_group(
+    struct box *row_group, const struct box *root, struct columns *col_info, html_content *c, void *box_context)
 {
     struct box *child;
     struct box *next_child;
@@ -305,7 +306,7 @@ box_normalise_table_row_group(struct box *row_group, const struct box *root, str
         case BOX_TABLE_ROW:
             /* ok */
             group_row_count++;
-            if (box_normalise_table_row(child, root, col_info, c) == false)
+            if (box_normalise_table_row(child, root, col_info, c, box_context) == false)
                 return false;
             break;
         case BOX_FLEX:
@@ -327,7 +328,7 @@ box_normalise_table_row_group(struct box *row_group, const struct box *root, str
             if (style == NULL)
                 return false;
 
-            row = box_create(NULL, style, true, row_group->href, row_group->target, NULL, NULL, c->bctx);
+            row = box_create(NULL, style, true, row_group->href, row_group->target, NULL, NULL, box_context);
             if (row == NULL) {
                 css_computed_style_destroy(style);
                 return false;
@@ -364,7 +365,7 @@ box_normalise_table_row_group(struct box *row_group, const struct box *root, str
             row->parent = row_group;
 
             group_row_count++;
-            if (box_normalise_table_row(row, root, col_info, c) == false)
+            if (box_normalise_table_row(row, root, col_info, c, box_context) == false)
                 return false;
             break;
         case BOX_INLINE:
@@ -401,7 +402,7 @@ box_normalise_table_row_group(struct box *row_group, const struct box *root, str
             return false;
         }
 
-        row = box_create(NULL, style, true, row_group->href, row_group->target, NULL, NULL, c->bctx);
+        row = box_create(NULL, style, true, row_group->href, row_group->target, NULL, NULL, box_context);
         if (row == NULL) {
             css_computed_style_destroy(style);
             return false;
@@ -437,8 +438,8 @@ box_normalise_table_row_group(struct box *row_group, const struct box *root, str
  * \param c      Content containing table
  * \return True on success, false on memory exhaustion.
  */
-static bool
-box_normalise_table_spans(struct box *table, const struct box *root, struct span_info *spans, html_content *c)
+static bool box_normalise_table_spans(
+    struct box *table, const struct box *root, struct span_info *spans, html_content *c, void *box_context)
 {
     struct box *table_row_group;
     struct box *table_row;
@@ -515,7 +516,7 @@ box_normalise_table_spans(struct box *table, const struct box *root, struct span
                     if (style == NULL)
                         return false;
 
-                    cell = box_create(NULL, style, true, table_row->href, table_row->target, NULL, NULL, c->bctx);
+                    cell = box_create(NULL, style, true, table_row->href, table_row->target, NULL, NULL, box_context);
                     if (cell == NULL) {
                         css_computed_style_destroy(style);
                         return false;
@@ -571,7 +572,7 @@ box_normalise_table_spans(struct box *table, const struct box *root, struct span
 }
 
 
-static bool box_normalise_table(struct box *table, const struct box *root, html_content *c)
+static bool box_normalise_table(struct box *table, const struct box *root, html_content *c, void *box_context)
 {
     struct box *child;
     struct box *next_child;
@@ -606,7 +607,7 @@ static bool box_normalise_table(struct box *table, const struct box *root, html_
         switch (child->type) {
         case BOX_TABLE_ROW_GROUP:
             /* ok */
-            if (box_normalise_table_row_group(child, root, &col_info, c) == false) {
+            if (box_normalise_table_row_group(child, root, &col_info, c, box_context) == false) {
                 free(col_info.spans);
                 return false;
             }
@@ -632,7 +633,7 @@ static bool box_normalise_table(struct box *table, const struct box *root, html_
                 return false;
             }
 
-            row_group = box_create(NULL, style, true, table->href, table->target, NULL, NULL, c->bctx);
+            row_group = box_create(NULL, style, true, table->href, table->target, NULL, NULL, box_context);
             if (row_group == NULL) {
                 css_computed_style_destroy(style);
                 free(col_info.spans);
@@ -670,7 +671,7 @@ static bool box_normalise_table(struct box *table, const struct box *root, html_
                 table->last = row_group;
             row_group->parent = table;
 
-            if (box_normalise_table_row_group(row_group, root, &col_info, c) == false) {
+            if (box_normalise_table_row_group(row_group, root, &col_info, c, box_context) == false) {
                 free(col_info.spans);
                 return false;
             }
@@ -716,7 +717,7 @@ static bool box_normalise_table(struct box *table, const struct box *root, html_
             return false;
         }
 
-        row_group = box_create(NULL, style, true, table->href, table->target, NULL, NULL, c->bctx);
+        row_group = box_create(NULL, style, true, table->href, table->target, NULL, NULL, box_context);
         if (row_group == NULL) {
             css_computed_style_destroy(style);
             free(col_info.spans);
@@ -731,7 +732,7 @@ static bool box_normalise_table(struct box *table, const struct box *root, html_
             return false;
         }
 
-        row = box_create(NULL, style, true, row_group->href, row_group->target, NULL, NULL, c->bctx);
+        row = box_create(NULL, style, true, row_group->href, row_group->target, NULL, NULL, box_context);
         if (row == NULL) {
             css_computed_style_destroy(style);
             box_free(row_group);
@@ -749,7 +750,7 @@ static bool box_normalise_table(struct box *table, const struct box *root, html_
         table->rows = 1;
     }
 
-    if (box_normalise_table_spans(table, root, col_info.spans, c) == false) {
+    if (box_normalise_table_spans(table, root, col_info.spans, c, box_context) == false) {
         free(col_info.spans);
         return false;
     }
@@ -763,9 +764,9 @@ static bool box_normalise_table(struct box *table, const struct box *root, html_
     return true;
 }
 
-static bool box_normalise_grid(struct box *grid_container, const struct box *root, html_content *c);
+static bool box_normalise_grid(struct box *grid_container, const struct box *root, html_content *c, void *box_context);
 
-static bool box_normalise_flex(struct box *flex_container, const struct box *root, html_content *c)
+static bool box_normalise_flex(struct box *flex_container, const struct box *root, html_content *c, void *box_context)
 {
     struct box *child;
     struct box *next_child;
@@ -797,19 +798,19 @@ static bool box_normalise_flex(struct box *flex_container, const struct box *roo
         switch (child->type) {
         case BOX_FLEX:
             /* ok */
-            if (box_normalise_flex(child, root, c) == false)
+            if (box_normalise_flex(child, root, c, box_context) == false)
                 return false;
             break;
         case BOX_GRID:
         case BOX_INLINE_GRID:
             /* Recurse into grid children to normalize nested
              * flex/grid */
-            if (box_normalise_grid(child, root, c) == false)
+            if (box_normalise_grid(child, root, c, box_context) == false)
                 return false;
             break;
         case BOX_BLOCK:
             /* ok */
-            if (box_normalise_block(child, root, c) == false)
+            if (box_normalise_block(child, root, c, box_context) == false)
                 return false;
             break;
         case BOX_INLINE_CONTAINER:
@@ -827,7 +828,7 @@ static bool box_normalise_flex(struct box *flex_container, const struct box *roo
                 return false;
 
             implied_flex_item = box_create(
-                NULL, style, true, flex_container->href, flex_container->target, NULL, NULL, c->bctx);
+                NULL, style, true, flex_container->href, flex_container->target, NULL, NULL, box_context);
             if (implied_flex_item == NULL) {
                 css_computed_style_destroy(style);
                 return false;
@@ -858,12 +859,12 @@ static bool box_normalise_flex(struct box *flex_container, const struct box *roo
                 flex_container->last = implied_flex_item;
             implied_flex_item->parent = flex_container;
 
-            if (box_normalise_block(implied_flex_item, root, c) == false)
+            if (box_normalise_block(implied_flex_item, root, c, box_context) == false)
                 return false;
             break;
 
         case BOX_TABLE:
-            if (box_normalise_table(child, root, c) == false)
+            if (box_normalise_table(child, root, c, box_context) == false)
                 return false;
             break;
         case BOX_INLINE:
@@ -894,7 +895,7 @@ static bool box_normalise_flex(struct box *flex_container, const struct box *roo
                 return false;
 
             implied_flex_item = box_create(
-                NULL, style, true, flex_container->href, flex_container->target, NULL, NULL, c->bctx);
+                NULL, style, true, flex_container->href, flex_container->target, NULL, NULL, box_context);
             if (implied_flex_item == NULL) {
                 css_computed_style_destroy(style);
                 return false;
@@ -926,7 +927,7 @@ static bool box_normalise_flex(struct box *flex_container, const struct box *roo
                 flex_container->last = implied_flex_item;
             implied_flex_item->parent = flex_container;
 
-            if (box_normalise_table(implied_flex_item, root, c) == false)
+            if (box_normalise_table(implied_flex_item, root, c, box_context) == false)
                 return false;
             break;
         default:
@@ -937,7 +938,7 @@ static bool box_normalise_flex(struct box *flex_container, const struct box *roo
     return true;
 }
 
-static bool box_normalise_grid(struct box *grid_container, const struct box *root, html_content *c)
+static bool box_normalise_grid(struct box *grid_container, const struct box *root, html_content *c, void *box_context)
 {
     struct box *child;
     struct box *next_child;
@@ -966,17 +967,17 @@ static bool box_normalise_grid(struct box *grid_container, const struct box *roo
         switch (child->type) {
         case BOX_GRID:
             /* ok */
-            if (box_normalise_grid(child, root, c) == false)
+            if (box_normalise_grid(child, root, c, box_context) == false)
                 return false;
             break;
         case BOX_FLEX:
             /* ok */
-            if (box_normalise_flex(child, root, c) == false)
+            if (box_normalise_flex(child, root, c, box_context) == false)
                 return false;
             break;
         case BOX_BLOCK:
             /* ok */
-            if (box_normalise_block(child, root, c) == false)
+            if (box_normalise_block(child, root, c, box_context) == false)
                 return false;
             break;
         case BOX_INLINE_CONTAINER:
@@ -993,7 +994,7 @@ static bool box_normalise_grid(struct box *grid_container, const struct box *roo
                 return false;
 
             implied_grid_item = box_create(
-                NULL, style, true, grid_container->href, grid_container->target, NULL, NULL, c->bctx);
+                NULL, style, true, grid_container->href, grid_container->target, NULL, NULL, box_context);
             if (implied_grid_item == NULL) {
                 css_computed_style_destroy(style);
                 return false;
@@ -1024,12 +1025,12 @@ static bool box_normalise_grid(struct box *grid_container, const struct box *roo
                 grid_container->last = implied_grid_item;
             implied_grid_item->parent = grid_container;
 
-            if (box_normalise_block(implied_grid_item, root, c) == false)
+            if (box_normalise_block(implied_grid_item, root, c, box_context) == false)
                 return false;
             break;
 
         case BOX_TABLE:
-            if (box_normalise_table(child, root, c) == false)
+            if (box_normalise_table(child, root, c, box_context) == false)
                 return false;
             break;
         case BOX_INLINE:
@@ -1045,7 +1046,7 @@ static bool box_normalise_grid(struct box *grid_container, const struct box *roo
         case BOX_INLINE_BLOCK:
             /* Blockify */
             child->type = BOX_BLOCK;
-            if (box_normalise_block(child, root, c) == false)
+            if (box_normalise_block(child, root, c, box_context) == false)
                 return false;
             break;
         case BOX_FLOAT_LEFT:
@@ -1068,7 +1069,7 @@ static bool box_normalise_grid(struct box *grid_container, const struct box *roo
             child->style = style;
             child->flags |= STYLE_OWNED;
             child->type = BOX_BLOCK;
-            if (box_normalise_block(child, root, c) == false)
+            if (box_normalise_block(child, root, c, box_context) == false)
                 return false;
             break;
         case BOX_TABLE_ROW_GROUP:
@@ -1087,7 +1088,7 @@ static bool box_normalise_grid(struct box *grid_container, const struct box *roo
                 return false;
 
             implied_grid_item = box_create(
-                NULL, style, true, grid_container->href, grid_container->target, NULL, NULL, c->bctx);
+                NULL, style, true, grid_container->href, grid_container->target, NULL, NULL, box_context);
             if (implied_grid_item == NULL) {
                 css_computed_style_destroy(style);
                 return false;
@@ -1119,7 +1120,7 @@ static bool box_normalise_grid(struct box *grid_container, const struct box *roo
                 grid_container->last = implied_grid_item;
             implied_grid_item->parent = grid_container;
 
-            if (box_normalise_table(implied_grid_item, root, c) == false)
+            if (box_normalise_table(implied_grid_item, root, c, box_context) == false)
                 return false;
             break;
         default:
@@ -1130,7 +1131,7 @@ static bool box_normalise_grid(struct box *grid_container, const struct box *roo
     return true;
 }
 
-static bool box_normalise_inline_container(struct box *cont, const struct box *root, html_content *c)
+static bool box_normalise_inline_container(struct box *cont, const struct box *root, html_content *c, void *box_context)
 {
     struct box *child;
     struct box *next_child;
@@ -1163,22 +1164,22 @@ static bool box_normalise_inline_container(struct box *cont, const struct box *r
             assert(child->style != NULL &&
                 (css_computed_position(child->style) == CSS_POSITION_ABSOLUTE ||
                     css_computed_position(child->style) == CSS_POSITION_FIXED));
-            if (!box_normalise_table(child, root, c))
+            if (!box_normalise_table(child, root, c, box_context))
                 return false;
             break;
         case BOX_INLINE_BLOCK:
             /* ok */
-            if (box_normalise_block(child, root, c) == false)
+            if (box_normalise_block(child, root, c, box_context) == false)
                 return false;
             break;
         case BOX_INLINE_FLEX:
             /* ok */
-            if (box_normalise_flex(child, root, c) == false)
+            if (box_normalise_flex(child, root, c, box_context) == false)
                 return false;
             break;
         case BOX_INLINE_GRID:
             /* ok */
-            if (box_normalise_grid(child, root, c) == false)
+            if (box_normalise_grid(child, root, c, box_context) == false)
                 return false;
             break;
         case BOX_FLOAT_LEFT:
@@ -1188,34 +1189,34 @@ static bool box_normalise_inline_container(struct box *cont, const struct box *r
 
             switch (child->children->type) {
             case BOX_BLOCK:
-                if (box_normalise_block(child->children, root, c) == false)
+                if (box_normalise_block(child->children, root, c, box_context) == false)
                     return false;
                 break;
             case BOX_TABLE:
-                if (box_normalise_table(child->children, root, c) == false)
+                if (box_normalise_table(child->children, root, c, box_context) == false)
                     return false;
                 break;
             case BOX_FLEX:
-                if (box_normalise_flex(child->children, root, c) == false)
+                if (box_normalise_flex(child->children, root, c, box_context) == false)
                     return false;
                 break;
             case BOX_GRID:
-                if (box_normalise_grid(child->children, root, c) == false)
+                if (box_normalise_grid(child->children, root, c, box_context) == false)
                     return false;
                 break;
             case BOX_INLINE_BLOCK:
                 child->children->type = BOX_BLOCK;
-                if (box_normalise_block(child->children, root, c) == false)
+                if (box_normalise_block(child->children, root, c, box_context) == false)
                     return false;
                 break;
             case BOX_INLINE_FLEX:
                 child->children->type = BOX_FLEX;
-                if (box_normalise_flex(child->children, root, c) == false)
+                if (box_normalise_flex(child->children, root, c, box_context) == false)
                     return false;
                 break;
             case BOX_INLINE_GRID:
                 child->children->type = BOX_GRID;
-                if (box_normalise_grid(child->children, root, c) == false)
+                if (box_normalise_grid(child->children, root, c, box_context) == false)
                     return false;
                 break;
             default:
@@ -1256,7 +1257,7 @@ static bool box_normalise_inline_container(struct box *cont, const struct box *r
 }
 
 /* Exported function documented in html/box_normalise.h */
-bool box_normalise_block(struct box *block, const struct box *root, html_content *c)
+bool box_normalise_block(struct box *block, const struct box *root, html_content *c, void *box_context)
 {
     struct box *child;
     struct box *next_child;
@@ -1289,7 +1290,7 @@ bool box_normalise_block(struct box *block, const struct box *root, html_content
         case BOX_GRID:
         case BOX_INLINE_GRID:
             /* ok - treat grid containers similarly to flex */
-            if (box_normalise_grid(child, root, c) == false)
+            if (box_normalise_grid(child, root, c, box_context) == false)
                 return false;
             break;
         case BOX_FLEX:
@@ -1297,20 +1298,20 @@ bool box_normalise_block(struct box *block, const struct box *root, html_content
             /* ok */
             NSLOG(wisp, DEBUG, "box_normalise_block: calling box_normalise_flex for child=%p type=%d", child,
                 child->type);
-            if (box_normalise_flex(child, root, c) == false)
+            if (box_normalise_flex(child, root, c, box_context) == false)
                 return false;
             break;
         case BOX_BLOCK:
             /* ok */
-            if (box_normalise_block(child, root, c) == false)
+            if (box_normalise_block(child, root, c, box_context) == false)
                 return false;
             break;
         case BOX_INLINE_CONTAINER:
-            if (box_normalise_inline_container(child, root, c) == false)
+            if (box_normalise_inline_container(child, root, c, box_context) == false)
                 return false;
             break;
         case BOX_TABLE:
-            if (box_normalise_table(child, root, c) == false)
+            if (box_normalise_table(child, root, c, box_context) == false)
                 return false;
             break;
         case BOX_INLINE:
@@ -1340,7 +1341,7 @@ bool box_normalise_block(struct box *block, const struct box *root, html_content
             if (style == NULL)
                 return false;
 
-            table = box_create(NULL, style, true, block->href, block->target, NULL, NULL, c->bctx);
+            table = box_create(NULL, style, true, block->href, block->target, NULL, NULL, box_context);
             if (table == NULL) {
                 css_computed_style_destroy(style);
                 return false;
@@ -1372,7 +1373,7 @@ bool box_normalise_block(struct box *block, const struct box *root, html_content
                 block->last = table;
             table->parent = block;
 
-            if (box_normalise_table(table, root, c) == false)
+            if (box_normalise_table(table, root, c, box_context) == false)
                 return false;
             break;
         default:

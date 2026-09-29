@@ -50,7 +50,12 @@ struct html_content;
  * \param block  box of type BLOCK, INLINE_BLOCK, or TABLE_CELL
  * \param root   root box of document
  * \param c      content of boxes
+ * \param box_context  Allocation owner for all new anonymous boxes. The caller
+ *                     must keep borrowed parent/root styles alive separately.
  * \return true on success, false on memory exhaustion
+ *
+ * Normalize one allocation region at a time: this does not reparent existing
+ * storage or establish ownership for independently retained descendants.
  *
  * The tree is modified to satisfy the following:
  * \code
@@ -64,6 +69,6 @@ struct html_content;
  * as BLOCK) FLOAT_(LEFT|RIGHT)   exactly 1 BLOCK, TABLE or FLEX
  * \endcode
  */
-bool box_normalise_block(struct box *block, const struct box *root, struct html_content *c);
+bool box_normalise_block(struct box *block, const struct box *root, struct html_content *c, void *box_context);
 
 #endif
