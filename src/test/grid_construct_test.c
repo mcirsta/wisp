@@ -318,7 +318,8 @@ char *talloc_strndup(const void *ctx, const char *p, size_t n)
 }
 
 /* convert_special_elements stub */
-bool convert_special_elements(dom_node *node, struct html_content *c, struct box *box, bool *convert_children)
+bool convert_special_elements(dom_node *node, struct html_content *c, struct box *box, bool *convert_children,
+    void *box_context)
 {
     *convert_children = true;
     return true;

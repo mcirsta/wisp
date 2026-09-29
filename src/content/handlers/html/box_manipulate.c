@@ -290,17 +290,8 @@ void box_free(struct box *box)
 /* Exported function documented in html/box.h */
 void box_free_box(struct box *box)
 {
-    if (!(box->flags & CLONE)) {
-        if (box->gadget)
-            form_free_control(box->gadget);
-        if (box->scroll_x != NULL)
-            scrollbar_destroy(box->scroll_x);
-        if (box->scroll_y != NULL)
-            scrollbar_destroy(box->scroll_y);
-        if (box->styles != NULL)
-            css_select_results_destroy(box->styles);
-    }
-
+    /* box_create installs the destructor for all owned resources. Text clones
+     * have no destructor because their payload is borrowed. */
     talloc_free(box);
 }
 

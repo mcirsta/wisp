@@ -206,14 +206,30 @@ larger sidebar, including unrelated widgets and iframes. Supporting a whole flex
 container here requires construction/ownership validation; it does not imply
 flex layout independence or require changing the flex algorithm.
 
-Remaining prerequisites before retaining boxes:
+The second ownership step also passes the construction owner through special
+elements: control boxes, link targets, image text/maps, object parameters and
+iframe descriptors. Framesets still use the document owner and remain a full
+fallback. Later text splits allocate under their inline container; numerical
+marker buffers and control display strings belong to their boxes. Split clones
+are allocation siblings, so rejoining one cannot destroy a later live fragment.
+This adds no box field, arena per box, or allocator-parent lookup in layout.
 
-- Thread the owner through special-element construction: form controls, link
-  targets, object parameters and iframe records. Framesets remain a full fallback.
-- Route later text splits, numerical list-marker buffers and select-control text
-  updates to their region. Do not discover the arena with `talloc_parent()` in
-  hot loops: this bundled allocator walks preceding siblings to find the parent.
-  Choose an explicit owner representation before enabling region allocation.
+New tests repeatedly construct and retire special-element regions, exercise
+select text updates, and check that document storage returns to baseline. The
+Qt repeated-reflow tests now also check fragment ownership and retirement.
+They exposed two existing cleanup defects, both fixed: explicit `box_free()`
+destroyed selected styles before invoking the destructor that destroyed them
+again; submit/reset/button inputs outside forms looked up their control twice
+and leaked the first gadget. Explicit and arena retirement now share one cleanup.
+
+Validation: 116 selected Debug tests and 113 Release tests pass, as does the
+expanded ownership test with LeakSanitizer after the leak fix. Both saved panels
+on Tion and Bihon match the previous step's PNG, DOM, normalized box dumps and
+inspected state/geometry/resources. The driver and captures for this step are in
+`out/render-captures/region-owners-2026-09-29/`.
+
+Remaining prerequisites before retaining boxes (resume here):
+
 - Prove the complete boundary, including inline continuations, generated boxes,
   float chains and pointers to containing blocks. Stage DOM mappings, form lists
   and object/iframe bindings before publishing a replacement.
@@ -747,6 +763,8 @@ flaky hard-coded CTest threshold.
    developer comparison switch, and update the behavior/profiling documentation.
 
 Commits 1–5 and the milestone A rollout are complete. Step 6 has started with
-explicit allocation propagation through generated content and normalization.
+explicit allocation propagation through generated content, normalization and
+special elements, plus ownership of later text/control allocations. Bounded
+construction and staged publication are the next work; boxes are not yet retained.
 Steps 7–8 still require their ownership and layout gates; they are not
 prerequisites for the already enabled selective CSS work.

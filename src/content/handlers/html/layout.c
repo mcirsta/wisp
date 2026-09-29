@@ -2866,8 +2866,10 @@ static bool layout_text_box_split(
     if (!space)
         space_width = 0;
 
-    /* Create clone of split_box, c2 */
-    c2 = talloc_memdup(content->bctx, split_box, sizeof *c2);
+    /* Fragments share their inline container's lifetime. Keep them as allocation
+     * siblings: rejoining a fragment must not free any later live fragments. */
+    assert(split_box->parent != NULL && split_box->parent->type == BOX_INLINE_CONTAINER);
+    c2 = talloc_memdup(split_box->parent, split_box, sizeof *c2);
     if (!c2)
         return false;
     c2->flags |= CLONE;
@@ -4992,10 +4994,9 @@ static void layout__ordered_list_count(struct box *box)
 /**
  * Set up the marker text for a numerical list item.
  *
- * \param[in]  content  The HTML content.
  * \param[in]  box      The list item's main box.
  */
-static void layout__set_numerical_marker_text(const html_content *content, struct box *box)
+static void layout__set_numerical_marker_text(struct box *box)
 {
     struct box *marker = box->list_marker;
     size_t counter_len;
@@ -5010,7 +5011,7 @@ static void layout__set_numerical_marker_text(const html_content *content, struc
         LIST_MARKER_SIZE = 20,
     };
 
-    marker->text = talloc_array(content->bctx, char, LIST_MARKER_SIZE);
+    marker->text = talloc_array(marker, char, LIST_MARKER_SIZE);
     if (marker->text == NULL) {
         return;
     }
@@ -5021,7 +5022,7 @@ static void layout__set_numerical_marker_text(const html_content *content, struc
         if (counter_len >= LIST_MARKER_SIZE) {
             /* Use computed size as marker did not fit in
              * default allocation. */
-            marker->text = talloc_realloc(content->bctx, marker->text, char, counter_len + 1);
+            marker->text = talloc_realloc(marker, marker->text, char, counter_len + 1);
             if (marker->text == NULL) {
                 return;
             }
@@ -5069,7 +5070,7 @@ static void layout_lists(const html_content *content, struct box *box)
 
             if (layout__list_item_is_numerical(child)) {
                 if (marker->text == NULL) {
-                    layout__set_numerical_marker_text(content, child);
+                    layout__set_numerical_marker_text(child);
                 }
             }
             if (marker->object) {

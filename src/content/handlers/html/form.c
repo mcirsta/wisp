@@ -1166,11 +1166,11 @@ static nserror form__select_process_selection(html_content *html, struct form_co
     inline_box->text = 0;
 
     if (control->data.select.num_selected == 0) {
-        inline_box->text = talloc_strdup(html->bctx, messages_get("Form_None"));
+        inline_box->text = talloc_strdup(inline_box, messages_get("Form_None"));
     } else if (control->data.select.num_selected == 1) {
-        inline_box->text = talloc_strdup(html->bctx, control->data.select.current->text);
+        inline_box->text = talloc_strdup(inline_box, control->data.select.current->text);
     } else {
-        inline_box->text = talloc_strdup(html->bctx, messages_get("Form_Many"));
+        inline_box->text = talloc_strdup(inline_box, messages_get("Form_Many"));
     }
 
     if (!inline_box->text) {

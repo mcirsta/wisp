@@ -534,7 +534,7 @@ static bool box_get_attribute(dom_node *n, const char *attribute, void *context,
  * This is a load of hacks to ensure boxes replaced with textareas
  * can be handled by the layout code.
  */
-static bool box_input_text(html_content *html, struct box *box, struct dom_node *node)
+static bool box_input_text(html_content *html, struct box *box, struct dom_node *node, void *box_context)
 {
     struct box *inline_container, *inline_box;
     uint8_t display = css_computed_display_static(box->style);
@@ -557,15 +557,15 @@ static bool box_input_text(html_content *html, struct box *box, struct dom_node 
         }
     }
 
-    inline_container = box_create(NULL, 0, false, 0, 0, 0, 0, html->bctx);
+    inline_container = box_create(NULL, 0, false, 0, 0, 0, 0, box_context);
     if (!inline_container)
         return false;
     inline_container->type = BOX_INLINE_CONTAINER;
-    inline_box = box_create(NULL, box->style, false, 0, 0, box->title, 0, html->bctx);
+    inline_box = box_create(NULL, box->style, false, 0, 0, box->title, 0, box_context);
     if (!inline_box)
         return false;
     inline_box->type = BOX_TEXT;
-    inline_box->text = talloc_strdup(html->bctx, "");
+    inline_box->text = talloc_strdup(inline_box, "");
 
     box_add_child(inline_container, inline_box);
     box_add_child(box, inline_container);
@@ -663,7 +663,8 @@ no_memory:
 /**
  * special element handler for Anchor [12.2].
  */
-static bool box_a(dom_node *n, html_content *content, struct box *box, bool *convert_children)
+static bool box_a(dom_node *n, html_content *content, struct box *box, bool *convert_children,
+    void *box_context)
 {
     bool ok;
     nsurl *url;
@@ -718,7 +719,7 @@ static bool box_a(dom_node *n, html_content *content, struct box *box, bool *con
         else {
             /* 6.16 says that frame names must begin with [a-zA-Z]
              * This doesn't match reality, so just take anything */
-            box->target = talloc_strdup(content->bctx, dom_string_data(s));
+            box->target = talloc_strdup(box_context, dom_string_data(s));
             if (!box->target) {
                 dom_string_unref(s);
                 return false;
@@ -808,7 +809,8 @@ static bool box_canvas(dom_node *n, html_content *content, struct box *box, bool
  * Embedded object (not in any HTML specification:
  * see http://wp.netscape.com/assist/net_sites/new_html3_prop.html )
  */
-static bool box_embed(dom_node *n, html_content *content, struct box *box, bool *convert_children)
+static bool box_embed(dom_node *n, html_content *content, struct box *box, bool *convert_children,
+    void *box_context)
 {
     struct object_params *params;
     struct object_param *param;
@@ -821,7 +823,7 @@ static bool box_embed(dom_node *n, html_content *content, struct box *box, bool 
     if (box->style && ns_computed_display(box->style, box_is_root(n)) == CSS_DISPLAY_NONE)
         return true;
 
-    params = talloc(content->bctx, struct object_params);
+    params = talloc(box_context, struct object_params);
     if (params == NULL)
         return false;
 
@@ -894,7 +896,7 @@ static bool box_embed(dom_node *n, html_content *content, struct box *box, bool 
             return false;
         }
 
-        param = talloc(content->bctx, struct object_param);
+        param = talloc(box_context, struct object_param);
         if (param == NULL) {
             dom_node_unref(attr);
             dom_string_unref(value);
@@ -903,10 +905,10 @@ static bool box_embed(dom_node *n, html_content *content, struct box *box, bool 
             return false;
         }
 
-        param->name = talloc_strdup(content->bctx, dom_string_data(name));
-        param->value = talloc_strdup(content->bctx, dom_string_data(value));
+        param->name = talloc_strdup(box_context, dom_string_data(name));
+        param->value = talloc_strdup(box_context, dom_string_data(value));
         param->type = NULL;
-        param->valuetype = talloc_strdup(content->bctx, "data");
+        param->valuetype = talloc_strdup(box_context, "data");
         param->next = NULL;
 
         dom_string_unref(value);
@@ -969,7 +971,8 @@ static bool box_frameset(dom_node *n, html_content *content, struct box *box, bo
 /**
  * Inline subwindow [16.5].
  */
-static bool box_iframe(dom_node *n, html_content *content, struct box *box, bool *convert_children)
+static bool box_iframe(dom_node *n, html_content *content, struct box *box, bool *convert_children,
+    void *box_context)
 {
     nsurl *url;
     dom_string *s;
@@ -1006,7 +1009,7 @@ static bool box_iframe(dom_node *n, html_content *content, struct box *box, bool
     }
 
     /* create a new iframe */
-    iframe = talloc(content->bctx, struct content_html_iframe);
+    iframe = talloc(box_context, struct content_html_iframe);
     if (iframe == NULL) {
         nsurl_unref(url);
         return false;
@@ -1029,7 +1032,7 @@ static bool box_iframe(dom_node *n, html_content *content, struct box *box, bool
     /* fill in specified values */
     err = dom_element_get_attribute(n, corestring_dom_name, &s);
     if (err == DOM_NO_ERR && s != NULL) {
-        iframe->name = talloc_strdup(content->bctx, dom_string_data(s));
+        iframe->name = talloc_strdup(box_context, dom_string_data(s));
         dom_string_unref(s);
     }
 
@@ -1265,7 +1268,8 @@ static bool srcset_select_url(const char *srcset, int target_w, nsurl *base_url,
 /**
  * Embedded image [13.2].
  */
-static bool box_image(dom_node *n, html_content *content, struct box *box, bool *convert_children)
+static bool box_image(dom_node *n, html_content *content, struct box *box, bool *convert_children,
+    void *box_context)
 {
     bool ok;
     dom_string *s;
@@ -1287,7 +1291,7 @@ static bool box_image(dom_node *n, html_content *content, struct box *box, bool 
         dom_string_unref(s);
         if (alt == NULL)
             return false;
-        box->text = talloc_strdup(content->bctx, alt);
+        box->text = talloc_strdup(box_context, alt);
         free(alt);
         if (box->text == NULL)
             return false;
@@ -1299,7 +1303,7 @@ static bool box_image(dom_node *n, html_content *content, struct box *box, bool 
     }
 
     /* imagemap associated with this image */
-    if (!box_get_attribute(n, "usemap", content->bctx, &box->usemap))
+    if (!box_get_attribute(n, "usemap", box_context, &box->usemap))
         return false;
     if (box->usemap && box->usemap[0] == '#')
         box->usemap++;
@@ -1353,7 +1357,8 @@ static bool box_image(dom_node *n, html_content *content, struct box *box, bool 
 /**
  * Form control [17.4].
  */
-static bool box_input(dom_node *n, html_content *content, struct box *box, bool *convert_children)
+static bool box_input(dom_node *n, html_content *content, struct box *box, bool *convert_children,
+    void *box_context)
 {
     struct form_control *gadget;
     dom_string *type = NULL;
@@ -1375,7 +1380,7 @@ static bool box_input(dom_node *n, html_content *content, struct box *box, bool 
     err = dom_element_get_attribute(n, corestring_dom_type, &type);
     if ((err != DOM_NO_ERR) || (type == NULL)) {
         /* no type so "text" is assumed */
-        if (box_input_text(content, box, n) == false) {
+        if (box_input_text(content, box, n, box_context) == false) {
             return false;
         }
         *convert_children = false;
@@ -1383,7 +1388,7 @@ static bool box_input(dom_node *n, html_content *content, struct box *box, bool 
     }
 
     if (dom_string_caseless_lwc_isequal(type, corestring_lwc_password)) {
-        if (box_input_text(content, box, n) == false)
+        if (box_input_text(content, box, n, box_context) == false)
             goto no_memory;
 
     } else if (dom_string_caseless_lwc_isequal(type, corestring_lwc_file)) {
@@ -1401,29 +1406,30 @@ static bool box_input(dom_node *n, html_content *content, struct box *box, bool 
         dom_string_caseless_lwc_isequal(type, corestring_lwc_button)) {
         struct box *inline_container, *inline_box;
 
-        if (box_button(n, content, box, 0) == false)
-            goto no_memory;
+        /* The control is already attached above. Looking it up again creates
+         * another gadget for inputs outside a form and leaks the first one. */
+        box->type = BOX_INLINE_BLOCK;
 
-        inline_container = box_create(NULL, 0, false, 0, 0, 0, 0, content->bctx);
+        inline_container = box_create(NULL, 0, false, 0, 0, 0, 0, box_context);
         if (inline_container == NULL)
             goto no_memory;
 
         inline_container->type = BOX_INLINE_CONTAINER;
 
-        inline_box = box_create(NULL, box->style, false, 0, 0, box->title, 0, content->bctx);
+        inline_box = box_create(NULL, box->style, false, 0, 0, box->title, 0, box_context);
         if (inline_box == NULL)
             goto no_memory;
 
         inline_box->type = BOX_TEXT;
 
         if (box->gadget->value != NULL)
-            inline_box->text = talloc_strdup(content->bctx, box->gadget->value);
+            inline_box->text = talloc_strdup(inline_box, box->gadget->value);
         else if (box->gadget->type == GADGET_SUBMIT)
-            inline_box->text = talloc_strdup(content->bctx, messages_get("Form_Submit"));
+            inline_box->text = talloc_strdup(inline_box, messages_get("Form_Submit"));
         else if (box->gadget->type == GADGET_RESET)
-            inline_box->text = talloc_strdup(content->bctx, messages_get("Form_Reset"));
+            inline_box->text = talloc_strdup(inline_box, messages_get("Form_Reset"));
         else
-            inline_box->text = talloc_strdup(content->bctx, "Button");
+            inline_box->text = talloc_strdup(inline_box, "Button");
 
         if (inline_box->text == NULL)
             goto no_memory;
@@ -1462,7 +1468,7 @@ static bool box_input(dom_node *n, html_content *content, struct box *box, bool 
         }
     } else {
         /* unhandled type the default is "text" */
-        if (box_input_text(content, box, n) == false)
+        if (box_input_text(content, box, n, box_context) == false)
             goto no_memory;
     }
 
@@ -1496,7 +1502,8 @@ static bool box_noscript(dom_node *n, html_content *content, struct box *box, bo
 /**
  * Generic embedded object [13.3].
  */
-static bool box_object(dom_node *n, html_content *content, struct box *box, bool *convert_children)
+static bool box_object(dom_node *n, html_content *content, struct box *box, bool *convert_children,
+    void *box_context)
 {
     struct object_params *params;
     struct object_param *param;
@@ -1507,12 +1514,12 @@ static bool box_object(dom_node *n, html_content *content, struct box *box, bool
     if (box->style && ns_computed_display(box->style, box_is_root(n)) == CSS_DISPLAY_NONE)
         return true;
 
-    if (box_get_attribute(n, "usemap", content->bctx, &box->usemap) == false)
+    if (box_get_attribute(n, "usemap", box_context, &box->usemap) == false)
         return false;
     if (box->usemap && box->usemap[0] == '#')
         box->usemap++;
 
-    params = talloc(content->bctx, struct object_params);
+    params = talloc(box_context, struct object_params);
     if (params == NULL)
         return false;
 
@@ -1723,7 +1730,8 @@ static bool box_pre(dom_node *n, html_content *content, struct box *box, bool *c
 /**
  * Option selector [17.6].
  */
-static bool box_select(dom_node *n, html_content *content, struct box *box, bool *convert_children)
+static bool box_select(dom_node *n, html_content *content, struct box *box, bool *convert_children,
+    void *box_context)
 {
     struct box *inline_container;
     struct box *inline_box;
@@ -1832,11 +1840,11 @@ static bool box_select(dom_node *n, html_content *content, struct box *box, bool
     box->flags |= IS_REPLACED;
     gadget->box = box;
 
-    inline_container = box_create(NULL, 0, false, 0, 0, 0, 0, content->bctx);
+    inline_container = box_create(NULL, 0, false, 0, 0, 0, 0, box_context);
     if (inline_container == NULL)
         goto no_memory;
     inline_container->type = BOX_INLINE_CONTAINER;
-    inline_box = box_create(NULL, box->style, false, 0, 0, box->title, 0, content->bctx);
+    inline_box = box_create(NULL, box->style, false, 0, 0, box->title, 0, box_context);
     if (inline_box == NULL)
         goto no_memory;
     inline_box->type = BOX_TEXT;
@@ -1852,11 +1860,11 @@ static bool box_select(dom_node *n, html_content *content, struct box *box, bool
     }
 
     if (gadget->data.select.num_selected == 0)
-        inline_box->text = talloc_strdup(content->bctx, messages_get("Form_None"));
+        inline_box->text = talloc_strdup(inline_box, messages_get("Form_None"));
     else if (gadget->data.select.num_selected == 1)
-        inline_box->text = talloc_strdup(content->bctx, gadget->data.select.current->text);
+        inline_box->text = talloc_strdup(inline_box, gadget->data.select.current->text);
     else
-        inline_box->text = talloc_strdup(content->bctx, messages_get("Form_Many"));
+        inline_box->text = talloc_strdup(inline_box, messages_get("Form_Many"));
     if (inline_box->text == NULL)
         goto no_memory;
 
@@ -1873,7 +1881,8 @@ no_memory:
 /**
  * Multi-line text field [17.7].
  */
-static bool box_textarea(dom_node *n, html_content *content, struct box *box, bool *convert_children)
+static bool box_textarea(dom_node *n, html_content *content, struct box *box, bool *convert_children,
+    void *box_context)
 {
     /* Get the form_control for the DOM node */
     box->gadget = html_forms_get_control_for_node(content->forms, n);
@@ -1884,7 +1893,7 @@ static bool box_textarea(dom_node *n, html_content *content, struct box *box, bo
     box->gadget->html = content;
     box->gadget->box = box;
 
-    if (!box_input_text(content, box, n))
+    if (!box_input_text(content, box, n, box_context))
         return false;
 
     *convert_children = false;
@@ -1898,7 +1907,8 @@ static bool box_textarea(dom_node *n, html_content *content, struct box *box, bo
 
 
 /* exported interface documented in html/box_special.h */
-bool convert_special_elements(dom_node *node, html_content *content, struct box *box, bool *convert_children)
+bool convert_special_elements(dom_node *node, html_content *content, struct box *box, bool *convert_children,
+    void *box_context)
 {
     dom_exception exc;
     dom_html_element_type tag_type;
@@ -1911,7 +1921,7 @@ bool convert_special_elements(dom_node *node, html_content *content, struct box 
 
     switch (tag_type) {
     case DOM_HTML_ELEMENT_TYPE_A:
-        res = box_a(node, content, box, convert_children);
+        res = box_a(node, content, box, convert_children, box_context);
         break;
 
     case DOM_HTML_ELEMENT_TYPE_BODY:
@@ -1931,7 +1941,7 @@ bool convert_special_elements(dom_node *node, html_content *content, struct box 
         break;
 
     case DOM_HTML_ELEMENT_TYPE_EMBED:
-        res = box_embed(node, content, box, convert_children);
+        res = box_embed(node, content, box, convert_children, box_context);
         break;
 
     case DOM_HTML_ELEMENT_TYPE_FRAMESET:
@@ -1939,15 +1949,15 @@ bool convert_special_elements(dom_node *node, html_content *content, struct box 
         break;
 
     case DOM_HTML_ELEMENT_TYPE_IFRAME:
-        res = box_iframe(node, content, box, convert_children);
+        res = box_iframe(node, content, box, convert_children, box_context);
         break;
 
     case DOM_HTML_ELEMENT_TYPE_IMG:
-        res = box_image(node, content, box, convert_children);
+        res = box_image(node, content, box, convert_children, box_context);
         break;
 
     case DOM_HTML_ELEMENT_TYPE_INPUT:
-        res = box_input(node, content, box, convert_children);
+        res = box_input(node, content, box, convert_children, box_context);
         break;
 
     case DOM_HTML_ELEMENT_TYPE_NOSCRIPT:
@@ -1955,7 +1965,7 @@ bool convert_special_elements(dom_node *node, html_content *content, struct box 
         break;
 
     case DOM_HTML_ELEMENT_TYPE_OBJECT:
-        res = box_object(node, content, box, convert_children);
+        res = box_object(node, content, box, convert_children, box_context);
         break;
 
     case DOM_HTML_ELEMENT_TYPE_PRE:
@@ -1963,11 +1973,11 @@ bool convert_special_elements(dom_node *node, html_content *content, struct box 
         break;
 
     case DOM_HTML_ELEMENT_TYPE_SELECT:
-        res = box_select(node, content, box, convert_children);
+        res = box_select(node, content, box, convert_children, box_context);
         break;
 
     case DOM_HTML_ELEMENT_TYPE_TEXTAREA:
-        res = box_textarea(node, content, box, convert_children);
+        res = box_textarea(node, content, box, convert_children, box_context);
         break;
 
     default:

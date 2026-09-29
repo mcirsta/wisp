@@ -4,11 +4,16 @@
 #include <stdlib.h>
 #include <string.h>
 #include <libcss/gradient.h>
+#include <wisp/utils/errors.h>
+#include <wisp/utils/nsurl.h>
+#include <wisp/form.h>
 #include <wisp/utils/corestrings.h>
 #include <wisp/utils/nsoption.h>
 #include <wisp/content/handlers/html/private.h>
+#include <wisp/content/handlers/html/html.h>
 #include "content/handlers/html/box_manipulate.h"
 #include "content/handlers/html/box_normalise.h"
+#include "content/handlers/html/box_special.h"
 #include "utils/talloc.h"
 #include "content/handlers/css/dump.h"
 #include "content/handlers/css/hints.h"
@@ -371,6 +376,155 @@ START_TEST(test_normalised_region_lifetime)
 }
 END_TEST
 
+static dom_node *append_element(dom_node *parent, const char *tag)
+{
+    dom_string *name;
+    dom_node *node, *inserted;
+    ck_assert_int_eq(dom_string_create((const uint8_t *)tag, strlen(tag), &name), DOM_NO_ERR);
+    ck_assert_int_eq(dom_document_create_element(document, name, (dom_element **)&node), DOM_NO_ERR);
+    dom_string_unref(name);
+    ck_assert_int_eq(dom_node_append_child(parent, node, &inserted), DOM_NO_ERR);
+    dom_node_unref(inserted);
+    return node;
+}
+
+static void set_attribute(dom_node *node, const char *key, const char *value)
+{
+    dom_string *name, *text;
+    ck_assert_int_eq(dom_string_create((const uint8_t *)key, strlen(key), &name), DOM_NO_ERR);
+    ck_assert_int_eq(dom_string_create((const uint8_t *)value, strlen(value), &text), DOM_NO_ERR);
+    ck_assert_int_eq(dom_element_set_attribute(node, name, text), DOM_NO_ERR);
+    dom_string_unref(name);
+    dom_string_unref(text);
+}
+
+START_TEST(test_special_region_lifetime)
+{
+    enum { LINK, IMAGE, EMBED, OBJECT, IFRAME, INPUT_BUTTON, SELECT };
+    static const char *tags[] = {"a", "img", "embed", "object", "iframe", "input", "select"};
+    css_select_results *styles[NODE_COUNT];
+    select_tree(styles, NULL);
+    struct content_user sentinel = {0};
+    html_content html = {.base.user_list = &sentinel, .bctx = talloc_new(NULL)};
+    ck_assert_ptr_nonnull(html.bctx);
+    ck_assert_int_eq(nsurl_create("file:///region.html", &html.base_url), NSERROR_OK);
+    struct box *retained = region_box(BOX_BLOCK, NULL, html.bctx, styles[OUTSIDE]->styles[0]);
+    size_t document_blocks = talloc_total_blocks(html.bctx);
+    dom_node *node = append_element(nodes[ROOT], tags[_i]);
+    switch (_i) {
+    case LINK:
+        set_attribute(node, "target", "region-target");
+        break;
+    case IMAGE:
+        set_attribute(node, "alt", "image text");
+        set_attribute(node, "usemap", "region-map");
+        break;
+    case OBJECT:
+        set_attribute(node, "usemap", "region-map");
+        break;
+    case IFRAME:
+        set_attribute(node, "src", "child.html");
+        set_attribute(node, "name", "region-frame");
+        break;
+    case INPUT_BUTTON:
+        set_attribute(node, "type", "submit");
+        set_attribute(node, "value", "Go");
+        break;
+    case SELECT:
+        for (unsigned i = 0; i < 2; i++) {
+            dom_node *option = append_element(node, "option");
+            dom_string *text;
+            ck_assert_int_eq(dom_string_create((const uint8_t *)(i ? "Second" : "First"), i ? 6 : 5, &text),
+                DOM_NO_ERR);
+            ck_assert_int_eq(dom_node_set_text_content(option, text), DOM_NO_ERR);
+            dom_string_unref(text);
+            dom_node_unref(option);
+        }
+        break;
+    }
+    bool images = nsoption_bool(foreground_images);
+    nsoption_set_bool(foreground_images, true);
+    for (unsigned iteration = 0; iteration < 12; iteration++) {
+        void *owner = talloc_new(html.bctx);
+        ck_assert_ptr_nonnull(owner);
+        struct box *box = region_box(BOX_BLOCK, NULL, owner, styles[ROOT]->styles[0]);
+        bool children = true;
+        /* No image/embed/object source: exercise metadata and early-return
+         * ownership without starting a fetch. Iframes only create descriptors. */
+        ck_assert_msg(convert_special_elements(node, &html, box, &children, owner),
+            "%s iteration %u failed conversion", tags[_i], iteration);
+        ck_assert_msg(talloc_total_blocks(owner) > 2, "%s allocated no special content", tags[_i]);
+        check_region_owner(box, owner);
+        if (_i == LINK) {
+            ck_assert_str_eq(box->target, "region-target");
+            ck_assert_ptr_eq(talloc_parent(box->target), owner);
+        } else if (_i == IMAGE || _i == OBJECT) {
+            ck_assert_str_eq(box->usemap, "region-map");
+            ck_assert_ptr_eq(talloc_parent(box->usemap), owner);
+            if (_i == IMAGE) {
+                ck_assert_str_eq(box->text, "image text");
+                ck_assert_ptr_eq(talloc_parent(box->text), owner);
+            }
+        } else if (_i == IFRAME) {
+            ck_assert_ptr_eq(html.iframe->box, box);
+            ck_assert_ptr_eq(talloc_parent(html.iframe), owner);
+            ck_assert_ptr_eq(talloc_parent(html.iframe->name), owner);
+            ck_assert_str_eq(html.iframe->name, "region-frame");
+        } else if (_i == INPUT_BUTTON || _i == SELECT) {
+            ck_assert_ptr_nonnull(box->gadget);
+            struct box *text = box->children->children;
+            ck_assert_ptr_eq(talloc_parent(text->text), text);
+            if (_i == SELECT) {
+                size_t blocks = talloc_total_blocks(owner);
+                for (unsigned choice = 0; choice < 6; choice++) {
+                    ck_assert_int_eq(form_select_process_selection(box->gadget, choice % 2), NSERROR_OK);
+                    ck_assert_str_eq(text->text, choice % 2 ? "Second" : "First");
+                    ck_assert_ptr_eq(talloc_parent(text->text), text);
+                    ck_assert_uint_eq(talloc_total_blocks(owner), blocks);
+                }
+            } else {
+                ck_assert_str_eq(text->text, "Go");
+            }
+        }
+        /* Publication of iframe/form lists is a separate Milestone B gate.
+         * Detach our descriptor before retiring its owning region. */
+        html.iframe = NULL;
+        if (iteration % 2 != 0)
+            box_free(box);
+        ck_assert_int_eq(talloc_free(owner), 0);
+        ck_assert_msg(talloc_total_blocks(html.bctx) == document_blocks,
+            "%s iteration %u leaked storage into the document", tags[_i], iteration);
+        ck_assert_ptr_eq(retained->style, styles[OUTSIDE]->styles[0]);
+        check_dynamic(styles[OUTSIDE]);
+    }
+    nsoption_set_bool(foreground_images, images);
+    dom_node_unref(node);
+    talloc_free(html.bctx);
+    nsurl_unref(html.base_url);
+    release(styles);
+}
+END_TEST
+
+/* Explicit retirement must use the same single cleanup as arena retirement. */
+START_TEST(test_explicit_box_retirement)
+{
+    css_select_results *styles[NODE_COUNT], *owned;
+    select_tree(styles, NULL);
+    void *owner = talloc_new(NULL);
+    ck_assert_ptr_nonnull(owner);
+    for (unsigned iteration = 0; iteration < 12; iteration++) {
+        ck_assert_int_eq(css_select_results_clone(styles[OUTSIDE], &owned), CSS_OK);
+        struct box *box = box_create(owned, owned->styles[0], false, NULL, NULL, NULL, NULL, owner);
+        ck_assert_ptr_nonnull(box);
+        box_free(box);
+        ck_assert_uint_eq(talloc_total_blocks(owner), 1);
+        check_dynamic(styles[OUTSIDE]);
+    }
+    talloc_free(owner);
+    release(styles);
+}
+END_TEST
+
 int main(void)
 {
     if (nsoption_init(NULL, NULL, NULL) != NSERROR_OK || corestrings_init() != NSERROR_OK ||
@@ -385,6 +539,8 @@ int main(void)
     tcase_add_test(scope, test_selective_matches_full);
     tcase_add_test(scope, test_all_slots_and_aliased_styles);
     tcase_add_loop_test(scope, test_normalised_region_lifetime, 0, 4);
+    tcase_add_test(scope, test_explicit_box_retirement);
+    tcase_add_loop_test(scope, test_special_region_lifetime, 0, 7);
     suite_add_tcase(suite, scope);
     SRunner *runner = srunner_create(suite);
     srunner_run_all(runner, CK_NORMAL);

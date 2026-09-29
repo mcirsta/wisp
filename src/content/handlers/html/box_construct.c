@@ -918,7 +918,7 @@ static bool box_construct_element(struct box_construct_ctx *ctx, bool *convert_c
 
     box->type = box_construct_type(box->style, props.containing_block, props.node_is_root);
 
-    if (convert_special_elements(ctx->n, ctx->content, box, convert_children) == false) {
+    if (convert_special_elements(ctx->n, ctx->content, box, convert_children, ctx->bctx) == false) {
         NSLOG(wisp, WARNING, "Failed to convert special elements");
         goto error;
     }

@@ -15,7 +15,8 @@
 
 struct paragraph {
     html_content content;
-    struct box root, lines, text;
+    struct box root, text;
+    struct box *lines;
 };
 
 static void init(struct paragraph *p, const char *value, const struct gui_layout_table *fonts)
@@ -27,16 +28,18 @@ static void init(struct paragraph *p, const char *value, const struct gui_layout
     p->content.font_func = fonts;
     p->content.bctx = talloc_new(NULL);
     assert(p->content.bctx);
+    p->lines = talloc_zero(p->content.bctx, struct box);
+    assert(p->lines);
     p->root.type = BOX_BLOCK;
     p->root.style = create_block_style();
     style_set_margins(p->root.style, 0, 0, 0, 0);
     style_set_inline_metrics(p->root.style, 16, 23, CSS_VERTICAL_ALIGN_BASELINE);
-    p->root.children = p->root.last = &p->lines;
-    p->lines.type = BOX_INLINE_CONTAINER;
-    p->lines.parent = &p->root;
-    p->lines.children = p->lines.last = &p->text;
+    p->root.children = p->root.last = p->lines;
+    p->lines->type = BOX_INLINE_CONTAINER;
+    p->lines->parent = &p->root;
+    p->lines->children = p->lines->last = &p->text;
     p->text.type = BOX_TEXT;
-    p->text.parent = &p->lines;
+    p->text.parent = p->lines;
     p->text.style = p->root.style;
     p->text.text = (char *)value;
     p->text.length = strlen(value);
@@ -45,6 +48,10 @@ static void init(struct paragraph *p, const char *value, const struct gui_layout
 
 static void finish(struct paragraph *p)
 {
+    /* All split fragments must retire with their inline container, without
+     * leaving allocations under the longer-lived document. */
+    talloc_free(p->lines);
+    assert(talloc_total_blocks(p->content.bctx) == 1);
     talloc_free(p->content.bctx);
     destroy_mock_style(p->root.style);
 }
@@ -64,7 +71,9 @@ static void check_spaces(struct paragraph *p)
     int width, space;
     font_plot_style_from_css(&p->content.unit_len_ctx, p->root.style, &font);
     assert(fonts->width(&font, " ", 1, &space) == NSERROR_OK);
-    for (struct box *b = p->lines.children; b; b = b->next) {
+    for (struct box *b = p->lines->children; b; b = b->next) {
+        if (b->flags & CLONE)
+            assert(talloc_parent(b) == p->lines);
         assert(b->length > 0 && b->text[b->length - 1] != ' ');
         assert(fonts->width(&font, b->text, b->length, &width) == NSERROR_OK);
         if (b->width != width)
@@ -172,8 +181,8 @@ void test_fragment_rounding_reflow(const struct gui_layout_table *fonts)
                 fprintf(stderr, "fragment reflow case %zu, step %zu, width %d: retained %d, fresh %d\n",
                     i, j, cases[i].widths[j], retained.root.height, fresh.root.height);
             assert(retained.root.height == fresh.root.height);
-            struct box *expected = fresh.lines.children;
-            for (struct box *b = retained.lines.children; b; b = b->next) {
+            struct box *expected = fresh.lines->children;
+            for (struct box *b = retained.lines->children; b; b = b->next) {
                 while (expected->next && expected->next->text <= b->text)
                     expected = expected->next;
                 assert(b->y == expected->y);
@@ -193,11 +202,11 @@ void test_inline_spacing_reflow(const struct gui_layout_table *fonts)
     init(&p, "AA", fonts);
     struct box inlines[5] = {0};
     p.text.next = &inlines[0];
-    p.lines.last = &inlines[4];
+    p.lines->last = &inlines[4];
     for (size_t i = 0; i < 5; i++) {
         inlines[i].type = i < 2 ? BOX_INLINE : i == 2 ? BOX_TEXT : BOX_INLINE_END;
         inlines[i].style = p.root.style;
-        inlines[i].parent = &p.lines;
+        inlines[i].parent = p.lines;
         inlines[i].prev = i == 0 ? &p.text : &inlines[i - 1];
         inlines[i].next = i == 4 ? NULL : &inlines[i + 1];
     }
@@ -209,7 +218,7 @@ void test_inline_spacing_reflow(const struct gui_layout_table *fonts)
     inlines[2].text = "BB";
     inlines[2].length = 2;
     inlines[2].width = UNKNOWN_WIDTH;
-    p.root.max_width = p.lines.max_width = UNKNOWN_MAX_WIDTH;
+    p.root.max_width = p.lines->max_width = UNKNOWN_MAX_WIDTH;
     layout_minmax_box(&p.root, fonts, &p.content);
 
     plot_font_style_t font;

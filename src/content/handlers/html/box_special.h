@@ -28,8 +28,11 @@
 /**
  * call an elements special conversion handler
  *
+ * \param box_context Allocation owner for the construction region. Framesets
+ *                    remain document-owned and require full reconstruction.
  * \return true if box construction should continue else false on error.
  */
-bool convert_special_elements(dom_node *node, html_content *content, struct box *box, bool *convert_children);
+bool convert_special_elements(dom_node *node, html_content *content, struct box *box, bool *convert_children,
+    void *box_context);
 
 #endif
