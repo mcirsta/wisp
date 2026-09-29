@@ -423,3 +423,8 @@ if(NOT WIN32)
   )
   target_link_libraries(corestrings PRIVATE malloc_fig)
 endif()
+
+add_executable(form_state_test form_state_test.c)
+target_include_directories(form_state_test PRIVATE ${TEST_COMMON_INCLUDES} ${CMAKE_SOURCE_DIR}/include)
+target_link_libraries(form_state_test wisp ${CHECK_LIBRARIES})
+add_test(NAME form_state_test COMMAND form_state_test)

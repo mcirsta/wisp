@@ -53,6 +53,7 @@
 #include "content/handlers/html/box_normalise.h"
 #include "content/handlers/html/box_special.h"
 #include "content/handlers/html/object.h"
+#include "content/handlers/html/restyle_profile.h"
 
 /**
  * Context for box tree construction
@@ -812,7 +813,12 @@ static bool box_construct_element(struct box_construct_ctx *ctx, bool *convert_c
         root_style = ctx->root_box->style;
     }
 
+    HTML_PROFILE_START(style_start);
     styles = box_get_style(ctx->content, props.parent_style, root_style, ctx->n);
+    HTML_PROFILE(if (ctx->content->restyling) {
+        ctx->content->restyle_profile.css_ns += html_profile_now() - style_start;
+        ctx->content->restyle_profile.styled_elements++;
+    });
     if (styles == NULL)
         return false;
 
@@ -854,6 +860,9 @@ static bool box_construct_element(struct box_construct_ctx *ctx, bool *convert_c
         styles, styles->styles[CSS_PSEUDO_ELEMENT_NONE], false, props.href, props.target, props.title, id, ctx->bctx);
     if (box == NULL)
         return false;
+
+    /* Resource requests made by special elements also need DOM identity. */
+    box->node = dom_node_ref(ctx->n);
 
     /* Opacity is not inherited CSS, but a transparent ancestor suppresses
      * all descendants, including those attached as inline siblings. */
@@ -933,9 +942,6 @@ static bool box_construct_element(struct box_construct_ctx *ctx, bool *convert_c
     err = dom_node_set_user_data(ctx->n, corestring_dom___ns_key_box_node_data, box, NULL, (void *)&old_box);
     if (err != DOM_NO_ERR)
         return false;
-
-    /* Attach box to DOM node */
-    box->node = dom_node_ref(ctx->n);
 
     /* Kick off fetch for any background image */
     if (!box_fetch_background(box, ctx->content)) {
@@ -1274,6 +1280,9 @@ static bool box_construct_text(struct box_construct_ctx *ctx)
         }
 
         box->type = BOX_TEXT;
+        /* Inline elements are flattened into sibling boxes. Retain the DOM
+         * owner so a hit on their text still reaches the enclosing label. */
+        dom_node_get_parent_node(ctx->n, &box->text_owner);
 
         box->flags |= props.inherited_flags;
         box->text = talloc_strdup(ctx->bctx, text);
@@ -1380,6 +1389,7 @@ static bool box_construct_text(struct box_construct_ctx *ctx)
             }
 
             box->type = BOX_TEXT;
+            dom_node_get_parent_node(ctx->n, &box->text_owner);
 
             box->flags |= props.inherited_flags;
             box->text = talloc_strdup(ctx->bctx, current);
@@ -1428,7 +1438,9 @@ static bool box_construct_text(struct box_construct_ctx *ctx)
  */
 static void convert_xml_to_box(void *p)
 {
+    HTML_PROFILE_START(slice_start);
     struct box_construct_ctx *ctx = p;
+    HTML_PROFILE(if (ctx->content->restyling) ctx->content->restyle_profile.construction_slices++);
     dom_node *next;
     bool convert_children;
     uint32_t num_processed = 0;
@@ -1506,7 +1518,14 @@ static void convert_xml_to_box(void *p)
             root.children->parent = &root;
 
             /** \todo Remove box_normalise_block */
-            if (box_normalise_block(&root, ctx->root_box, (struct html_content *)ctx->content) == false) {
+            HTML_PROFILE_START(normalise_start);
+            bool normalised = box_normalise_block(&root, ctx->root_box, (struct html_content *)ctx->content);
+            HTML_PROFILE(if (ctx->content->restyling) {
+                uint64_t end = html_profile_now();
+                ctx->content->restyle_profile.normalise_ns += end - normalise_start;
+                ctx->content->restyle_profile.construction_ns += end - slice_start;
+            });
+            if (normalised == false) {
                 NSLOG(wisp, WARNING, "box_normalise_block failed");
                 ctx->cb(ctx->content, false);
                 if (ctx->root_box != NULL)
@@ -1536,6 +1555,8 @@ static void convert_xml_to_box(void *p)
     } while (true);
 
     NSLOG(wisp, DEBUG, "PROFILER: STOP Box construction slice %p", ctx);
+    HTML_PROFILE(
+        if (ctx->content->restyling) ctx->content->restyle_profile.construction_ns += html_profile_now() - slice_start);
     /* More work to do: schedule a continuation */
     guit->misc->schedule(0, (void *)convert_xml_to_box, ctx);
 }
@@ -1569,7 +1590,13 @@ nserror dom_to_box(dom_node *n, html_content *c, box_construct_complete_cb cb, v
 
     *box_conversion_context = ctx;
 
-    return guit->misc->schedule(0, (void *)convert_xml_to_box, ctx);
+    nserror err = guit->misc->schedule(0, (void *)convert_xml_to_box, ctx);
+    if (err != NSERROR_OK) {
+        dom_node_unref(ctx->n);
+        free(ctx);
+        *box_conversion_context = NULL;
+    }
+    return err;
 }
 
 

@@ -123,14 +123,20 @@ END_TEST
 START_TEST(test_current_dom_state)
 {
     dom_node *node = element("input", "checkbox", "http://www.w3.org/1999/xhtml");
-    /* libdom's click API sets current checkedness without adding an attribute. */
-    ck_assert_int_eq(dom_html_input_element_click((dom_html_input_element *)node), DOM_NO_ERR);
+    ck_assert_int_eq(dom_html_input_element_set_checked((dom_html_input_element *)node, true), DOM_NO_ERR);
     bool has_attribute;
     dom_string *checked = string("checked");
     ck_assert_int_eq(dom_element_has_attribute(node, checked, &has_attribute), DOM_NO_ERR);
     dom_string_unref(checked);
     ck_assert(!has_attribute);
     expect_checked(node, true, "current checkedness without checked attribute");
+    /* Reuse the document and selection context: stale node data must not win. */
+    for (int i = 0; i < 8; i++) {
+        bool state = i % 2 != 0;
+        ck_assert_int_eq(dom_html_input_element_set_checked((dom_html_input_element *)node, state), DOM_NO_ERR);
+        ck_assert_int_eq(nscss_invalidate_document(document), NSERROR_OK);
+        expect_checked(node, state, "reselection after invalidation");
+    }
     dom_node_unref(node);
 }
 END_TEST

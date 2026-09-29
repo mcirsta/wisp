@@ -36,6 +36,9 @@ struct content_html_frames;
  */
 nserror browser_window_create_iframes(struct browser_window *bw);
 
+/* Reattach existing browsing contexts after a parent box-tree rebuild. */
+nserror browser_window_rebind_iframes(struct browser_window *bw, bool success);
+
 /**
  * Recalculate iframe positions following a resize.
  *

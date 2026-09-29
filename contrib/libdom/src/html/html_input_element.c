@@ -168,7 +168,10 @@ dom_exception dom_html_input_element_get_checked(dom_html_input_element *ele, bo
  */
 dom_exception dom_html_input_element_set_checked(dom_html_input_element *ele, bool checked)
 {
-    return dom_html_element_set_bool_property(&ele->base, "checked", SLEN("checked"), checked);
+    /* Live checkedness is independent of the default checked attribute. */
+    ele->checked = checked;
+    ele->checked_set = true;
+    return DOM_NO_ERR;
 }
 
 /**

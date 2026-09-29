@@ -92,10 +92,15 @@ struct content_html_object {
     struct content_html_object *next; /**< Next in chain */
 
     struct hlcache_handle *content; /**< Content, or 0. */
-    struct box *box; /**< Node in box tree containing it. */
+    struct box *box; /**< Node in box tree containing it, or NULL while hidden. */
+    struct dom_node *node; /**< DOM identity retained across box reconstruction. */
+    struct nsurl *url; /**< Original request URL; NULL for inline buffers. */
     /** Bitmap of acceptable content types */
     content_type permitted_types;
     bool background; /**< This object is a background image. */
+    bool layout_resource; /**< Participates in loading/rendering, unlike a speculative no-box fetch. */
+    bool opened; /**< Attached to the parent's browser window by content_open. */
+    bool refresh_pending; /**< Defer embedded-document refresh while its box is absent. */
     uint32_t background_layer; /**< Index in the CSS image list, including none entries. */
 };
 

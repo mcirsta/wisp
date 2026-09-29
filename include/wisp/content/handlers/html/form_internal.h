@@ -312,13 +312,6 @@ void form_select_menu_callback(void *client_data, int x, int y, int width, int h
 
 
 /**
- * Set a radio form control and clear the others in the group.
- *
- * \param radio form control of type GADGET_RADIO
- */
-void form_radio_set(struct form_control *radio);
-
-/**
  * navigate browser window based on form submission.
  *
  * \param page_url content url

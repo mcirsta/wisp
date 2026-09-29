@@ -77,6 +77,70 @@ correct paint/z-order or transformed hit testing. Queries inspect the top-level
 document, not the DOM inside child frames. A missing ID is a valid diagnostic
 result and does not make a successfully rendered capture fail.
 
+## Click sequences
+
+Capture builds also accept ordered, repeatable actions. Each action waits for the
+previous refresh and resource loads to settle:
+
+```sh
+QT_QPA_PLATFORM=offscreen build/frontends/qt/wisp-qt \
+  --capture-dir /tmp/wisp-tabs --capture-size 600x700 \
+  --capture-id first-panel --capture-id second-panel --capture-id draft \
+  --capture-click-id draft --capture-type "written text" \
+  --capture-click-label second --capture-click-label first \
+  test/checked-interaction.html
+```
+
+`--capture-click-id ID` clicks the element's layout box; `--capture-click-label ID`
+clicks a visible label whose `for` names that input (even if the input has no box).
+Clicks use the normal core mouse path, scrolling the target into view if needed.
+`--capture-type TEXT` sends keyboard input to the focused control and
+`--capture-scroll X,Y` sets the document scroll position. Actions inspect and
+interact with the top-level document, using untransformed layout coordinates.
+
+`steps.json` records the initial inspection and each settled result, including
+live checked/input values, scroll offsets, resource counts, and elapsed time.
+The usual image/dumps describe the final state. `action_error` identifies a
+missing/unusable target or rejected key. JavaScript remains off by default.
+
+### Measuring checked-state refreshes
+
+Configure with both `-DWISP_QT_CAPTURE=ON -DWISP_PROFILE_RESTYLE=ON` to include
+`restyle_profile` in inspections and each settled step. The latter option defaults
+to OFF: its counters and clock reads are compiled out of normal builds. Keep
+`WISP_ENABLE_PERF_TRACE=OFF` for measurements; these counters do not emit log
+messages or allocate during the timed loops.
+
+The profile reports wall-clock milliseconds:
+
+- `invalidate_ms`: obtain the DOM node list and invalidate CSS selection caches.
+- `detach_ms`: clear interaction state, old gadgets and DOM-to-box mappings.
+- `css_ms`: element style selection/composition, including inline style parsing.
+- `boxes_ms`: other active box construction and DOM traversal.
+- `normalise_ms`: normalize the constructed box tree.
+- `construction_wait_ms`: time outside construction slices, including scheduler
+  gaps and callback overhead. `construction_ms` includes CSS, boxes and normalization.
+- `layout_ms`: the refresh's layout/reformat call.
+- `cleanup_ms`: rebind iframe windows, retire old boxes and publish the reformat.
+- `total_ms`: refresh callback start through reformat publication, excluding
+  painting, capture inspection and the artificial quiet period.
+- `paint_ms` / `paint_calls`: core HTML drawing accumulated after refresh start
+  and before the inspection. Artifact screenshots are produced later.
+- `through_last_paint_ms`: refresh start through the end of the last measured
+  draw. This is not physical screen-presentation latency.
+
+`styled_elements` and `construction_slices` describe the amount of work. CSS and
+normalization are subtracted from `boxes_ms` to avoid counting them twice. The
+clock uses nanosecond-resolution monotonic timestamps where available, with the
+existing millisecond clock as a fallback on other platforms.
+
+`action_ms` is the preceding capture action's synchronous duration, including
+target lookup and any scroll into view. Deferred restyling happens afterward.
+For repeat measurements, warm both panels first and check that resource counts
+remain constant. Newly fetched resources can cause follow-up layouts outside the
+profile's single refresh; keep those first-reveal samples separate. Compare an
+uninstrumented build using identical capture options to check measurement overhead.
+
 ## Reference comparison
 
 `compare_capture.py` runs Wisp and an installed Chromium with page JavaScript

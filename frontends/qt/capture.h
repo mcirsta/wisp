@@ -2,6 +2,8 @@
 #pragma once
 
 #include <QElapsedTimer>
+#include <QJsonArray>
+#include <QVector>
 #include <QObject>
 #include <QPointer>
 #include <QPoint>
@@ -50,6 +52,10 @@ private:
     QString m_directory;
     QString m_requested_url;
     QStringList m_inspect_ids;
+    QVector<QPair<QString, QString>> m_actions;
+    QJsonArray m_steps;
+    int m_action_index = 0;
+    double m_last_action_ms = 0;
     QPoint m_inspect_point{-1, -1};
     QSize m_size{1280, 900};
     int m_timeout_ms = 30000;

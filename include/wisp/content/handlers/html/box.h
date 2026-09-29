@@ -216,6 +216,8 @@ struct box {
      * DOM node that generated this box or NULL
      */
     struct dom_node *node;
+    /** DOM owner of flattened text, for input hit testing (not an element box). */
+    struct dom_node *text_owner;
 
     /**
      * Computed styles for elements and their pseudo elements.

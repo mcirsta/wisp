@@ -59,6 +59,7 @@
 #include "desktop/browser_private.h"
 #include "desktop/scrollbar.h"
 #include "desktop/selection.h"
+#include "content/handlers/html/restyle_profile.h"
 
 #include <libcss/gradient.h>
 #include <wisp/content/handlers/html/box.h>
@@ -3132,6 +3133,7 @@ bool html_redraw(
     };
 
     NSLOG(wisp, DEBUG, "PROFILER: START HTML redraw %p", c);
+    HTML_PROFILE_START(paint_start);
 
     box = html->layout;
 
@@ -3173,5 +3175,11 @@ bool html_redraw(
     }
 
     NSLOG(wisp, DEBUG, "PROFILER: STOP HTML redraw %p", c);
+    HTML_PROFILE(if (html->restyle_profile.start_ns != 0 && !html->restyling) {
+        uint64_t end = html_profile_now();
+        html->restyle_profile.paint_ns += end - paint_start;
+        html->restyle_profile.last_paint_ns = end;
+        html->restyle_profile.paint_calls++;
+    });
     return result;
 }

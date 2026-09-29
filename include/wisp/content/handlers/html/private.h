@@ -47,6 +47,17 @@ struct html_viewport {
     struct html_content *owner;
 };
 
+#ifdef WISP_PROFILE_RESTYLE
+/* Wall-clock durations; CSS and normalization are subsets of construction.
+ * Painting continues to accumulate until the next refresh starts. */
+struct html_restyle_profile {
+    uint64_t start_ns, construction_start_ns;
+    uint64_t invalidate_ns, detach_ns, css_ns, construction_ns, normalise_ns;
+    uint64_t construction_wall_ns, layout_ns, cleanup_ns, total_ns, paint_ns, last_paint_ns;
+    uint32_t styled_elements, construction_slices, paint_calls;
+};
+#endif
+
 /**
  * Pre-serialized inline SVG, stored in linked list during parsing.
  * The XML string is serialized during the parser callback to avoid
@@ -150,6 +161,15 @@ typedef struct html_content {
 
     /** Whether a reformat is pending (scheduled) */
     bool pending_reformat;
+    /** Deferred state-only restyle; no parsing or page-load lifecycle. */
+    bool restyle_pending;
+    bool restyling;
+#ifdef WISP_PROFILE_RESTYLE
+    struct html_restyle_profile restyle_profile;
+#endif
+    void *restyle_old_bctx;
+    struct content_html_iframe *restyle_old_iframe;
+    struct content_html_frames *restyle_old_frameset;
 
     /** Whether an initial layout has been done */
     bool had_initial_layout;
@@ -296,6 +316,7 @@ extern bool html_redraw_debug;
 
 
 /* in html/html.c */
+void html_request_restyle(html_content *html);
 
 /**
  * redraw a box

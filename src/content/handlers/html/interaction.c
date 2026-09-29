@@ -56,6 +56,8 @@
 #include <wisp/content/handlers/html/form_internal.h>
 #include <wisp/content/handlers/html/interaction.h>
 #include <wisp/content/handlers/html/private.h>
+#include "content/handlers/html/form_state.h"
+#include "content/handlers/html/stacking.h"
 #include "content/handlers/html/box_textarea.h"
 #include "content/handlers/html/font.h"
 #include "content/handlers/html/imagemap.h"
@@ -507,6 +509,8 @@ struct mouse_action_state {
 
     /** dom node */
     struct dom_node *node;
+    /** Label/control candidate, retained like links and gadgets during the walk. */
+    struct box *checkable_box;
 
     /** html object */
     struct {
@@ -559,6 +563,45 @@ struct mouse_action_state {
 };
 
 
+/* The walker visits structural order. Compare the outermost stacking contexts
+ * below the common ancestor so a transparent radio cannot steal a hit from a
+ * label (or its text) painted above it. Equal levels keep the existing order. */
+static bool checkable_hit_above(const struct box *a, const struct box *b)
+{
+    if (a == NULL || b == NULL)
+        return false;
+    const struct box *ac = a, *bc = b;
+    int ad = 0, bd = 0;
+    for (const struct box *p = a; p != NULL; p = p->parent)
+        ad++;
+    for (const struct box *p = b; p != NULL; p = p->parent)
+        bd++;
+    while (ad > bd) {
+        ac = ac->parent;
+        ad--;
+    }
+    while (bd > ad) {
+        bc = bc->parent;
+        bd--;
+    }
+    while (ac != bc) {
+        ac = ac->parent;
+        bc = bc->parent;
+    }
+    int32_t az = 0, bz = 0;
+    for (const struct box *p = a; p != ac; p = p->parent) {
+        int32_t z = box_get_z_index(p);
+        if (z != Z_INDEX_AUTO)
+            az = z;
+    }
+    for (const struct box *p = b; p != ac; p = p->parent) {
+        int32_t z = box_get_z_index(p);
+        if (z != Z_INDEX_AUTO)
+            bz = z;
+    }
+    return az > bz;
+}
+
 /**
  * iterate the box tree for deepest node at coordinates
  *
@@ -594,7 +637,7 @@ struct mouse_action_state {
  * text_box - text box
  * text_box_x - text_box
  */
-static nserror get_mouse_action_node(html_content *html, int x, int y, struct mouse_action_state *man)
+static nserror get_mouse_action_node(html_content *html, int x, int y, bool checkable, struct mouse_action_state *man)
 {
     struct box *box;
     int box_x = 0;
@@ -620,8 +663,15 @@ static nserror get_mouse_action_node(html_content *html, int x, int y, struct mo
             goto next_box;
         }
 
-        if (box->node != NULL) {
-            man->node = box->node;
+        dom_node *node = box->node != NULL ? box->node : box->text_owner;
+        if (node != NULL) {
+            man->node = node;
+            if (checkable) {
+                dom_node *target = html_checkable_target(node);
+                if (target != NULL && !checkable_hit_above(man->checkable_box, box))
+                    man->checkable_box = box;
+                dom_node_unref(target);
+            }
         }
 
         if (box->object) {
@@ -758,19 +808,10 @@ gadget_mouse_action(html_content *html, browser_mouse_state mouse, int x, int y,
 
     case GADGET_CHECKBOX:
         mas->result.status = messages_get("FormCheckbox");
-        if (mouse & BROWSER_MOUSE_CLICK_1) {
-            mas->gadget.control->selected = !mas->gadget.control->selected;
-            dom_html_input_element_set_checked(
-                (dom_html_input_element *)(mas->gadget.control->node), mas->gadget.control->selected);
-            html__redraw_a_box(html, mas->gadget.box);
-        }
         break;
 
     case GADGET_RADIO:
         mas->result.status = messages_get("FormRadio");
-        if (mouse & BROWSER_MOUSE_CLICK_1) {
-            form_radio_set(mas->gadget.control);
-        }
         break;
 
     case GADGET_IMAGE:
@@ -1150,9 +1191,14 @@ mouse_action_drag_none(html_content *html, struct browser_window *bw, browser_mo
      */
     static struct mouse_action_state mas;
 
-    res = get_mouse_action_node(html, x, y, &mas);
+    res = get_mouse_action_node(html, x, y, mouse & BROWSER_MOUSE_CLICK_1, &mas);
     if (res != NSERROR_OK) {
         return res;
+    }
+
+    if (mas.gadget.control != NULL && checkable_hit_above(mas.checkable_box, mas.gadget.box)) {
+        mas.gadget.control = NULL;
+        mas.gadget.box = NULL;
     }
 
     if (mouse & BROWSER_MOUSE_CLICK_4) {
@@ -1209,7 +1255,24 @@ mouse_action_drag_none(html_content *html, struct browser_window *bw, browser_mo
 
     /* fire dom click event */
     if (mouse & BROWSER_MOUSE_CLICK_1) {
-        fire_generic_dom_event(corestring_dom_click, mas.node, true, true);
+        dom_node *clicked = mas.node;
+        if (mas.gadget.control != NULL) {
+            clicked = mas.gadget.control->node;
+        } else if (mas.result.action == ACTION_NONE && mas.link.url == NULL && mas.checkable_box != NULL) {
+            /* Floats are visited before normal-flow boxes by box_at_point.
+             * Keep the interactive candidate, as we already do for links. */
+            clicked = mas.checkable_box->node != NULL ? mas.checkable_box->node : mas.checkable_box->text_owner;
+        }
+        dom_node *target = html_checkable_target(clicked);
+        bool activate = fire_generic_dom_event(corestring_dom_click, clicked, true, true);
+        if (activate && target != NULL && target != clicked)
+            activate = fire_generic_dom_event(corestring_dom_click, target, true, true);
+        if (activate && target != NULL && html_checkable_activate(target)) {
+            html_request_restyle(html);
+            fire_generic_dom_event(corestring_dom_input, target, true, false);
+            fire_generic_dom_event(corestring_dom_change, target, true, false);
+        }
+        dom_node_unref(target);
     }
 
     /* deferred actions that can cause this browser_window to be destroyed

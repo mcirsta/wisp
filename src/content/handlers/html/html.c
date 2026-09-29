@@ -56,6 +56,8 @@
 #include "content/textsearch.h"
 #include "desktop/scrollbar.h"
 #include "desktop/selection.h"
+#include "desktop/frames.h"
+#include "content/handlers/css/select.h"
 
 #include <wisp/content/handlers/html/box.h>
 #include <wisp/content/handlers/html/box_inspect.h>
@@ -73,6 +75,10 @@
 #include "content/handlers/html/layout.h"
 #include "content/handlers/html/object.h"
 #include "content/handlers/html/textselection.h"
+#include "content/handlers/html/restyle_profile.h"
+
+static void html_restyle(void *pw);
+static void html_restyle_free_old(html_content *html);
 
 #define CHUNK 4096
 
@@ -1259,7 +1265,7 @@ static void html_reformat(struct content *c, int width, int height)
      * This prevents unnecessary intermediate reformats that block download
      * completion processing and slow down overall page load.
      */
-    if (htmlc->had_initial_layout && c->active > htmlc->scripts_active) {
+    if (!htmlc->restyling && htmlc->had_initial_layout && c->active > htmlc->scripts_active) {
         PERF("html_reformat SKIPPED: %d objects still downloading", c->active - htmlc->scripts_active);
         return;
     }
@@ -1324,6 +1330,8 @@ static void html_reformat(struct content *c, int width, int height)
 void html_redraw_a_box(hlcache_handle *h, struct box *box)
 {
     int x, y;
+    if (box == NULL)
+        return;
 
     box_coords(box, &x, &y);
 
@@ -1422,6 +1430,140 @@ static void html_free_layout(html_content *htmlc)
     }
 }
 
+/* Retire a previous presentation only after embedded windows have been rebound. */
+static void html_restyle_free_old(html_content *html)
+{
+    if (html->restyle_old_iframe != NULL)
+        html_destroy_iframe(html->restyle_old_iframe);
+    if (html->restyle_old_frameset != NULL)
+        html_destroy_frameset(html->restyle_old_frameset);
+    talloc_free(html->restyle_old_bctx);
+    html->restyle_old_bctx = NULL;
+    html->restyle_old_iframe = NULL;
+    html->restyle_old_frameset = NULL;
+}
+
+static void html_restyle_done(html_content *html, bool success)
+{
+    HTML_PROFILE_START(layout_start);
+    HTML_PROFILE(
+        html->restyle_profile.construction_wall_ns = layout_start - html->restyle_profile.construction_start_ns);
+    html->box_conversion_context = NULL;
+    if (success) {
+        /* Force layout even if a newly visible image is still downloading. */
+        html->base.handler->reformat(&html->base, html->base.available_width, html->base.available_height);
+    }
+    HTML_PROFILE_START(cleanup_start);
+    HTML_PROFILE(html->restyle_profile.layout_ns = cleanup_start - layout_start);
+    html->base.locked = false;
+    html->restyling = false;
+    if (html->bw != NULL) {
+        nserror err = browser_window_rebind_iframes(html->bw, success);
+        if (err != NSERROR_OK)
+            NSLOG(wisp, WARNING, "Unable to update iframe windows after restyle: %d", err);
+    }
+    html_restyle_free_old(html);
+    if (!success) {
+        /* Construction frees its partial tree after this callback returns. */
+        html_object_free_objects(html);
+        content_broadcast_error(&html->base, NSERROR_NOMEM, NULL);
+        content_set_error(&html->base);
+        return;
+    }
+    /* Existing DOM, stylesheet context, history and load status are unchanged.
+     * A REFORMAT updates extents without a navigation or scroll reset. */
+    union content_msg_data data = {.background = false};
+    content_broadcast(&html->base, CONTENT_MSG_REFORMAT, &data);
+    HTML_PROFILE(uint64_t end = html_profile_now(); html->restyle_profile.cleanup_ns = end - cleanup_start;
+        html->restyle_profile.total_ns = end - html->restyle_profile.start_ns);
+    if (html->restyle_pending)
+        html_request_restyle(html);
+}
+
+static void html_restyle(void *pw)
+{
+    html_content *html = pw;
+    dom_nodelist *nodes = NULL;
+    dom_node *root = NULL;
+    dom_string *all = NULL;
+    uint32_t count = 0;
+
+    if (!html->restyle_pending || html->restyling || html->layout == NULL || html->box_conversion_context != NULL)
+        return;
+    HTML_PROFILE(html->restyle_profile = (struct html_restyle_profile){.start_ns = html_profile_now()});
+    if (dom_document_get_document_element(html->document, &root) != DOM_NO_ERR || root == NULL ||
+        dom_string_create((const uint8_t *)"*", 1, &all) != DOM_NO_ERR ||
+        dom_document_get_elements_by_tag_name(html->document, all, &nodes) != DOM_NO_ERR ||
+        dom_nodelist_get_length(nodes, &count) != DOM_NO_ERR ||
+        nscss_invalidate_document(html->document) != NSERROR_OK) {
+        dom_string_unref(all);
+        dom_nodelist_unref(nodes);
+        dom_node_unref(root);
+        return;
+    }
+    dom_string_unref(all);
+    HTML_PROFILE_START(detach_start);
+    HTML_PROFILE(html->restyle_profile.invalidate_ns = detach_start - html->restyle_profile.start_ns);
+
+    html->restyle_pending = false;
+    html->restyling = true;
+    html->base.locked = true;
+    guit->misc->schedule(-1, html_deferred_reformat, html);
+    html->pending_reformat = false;
+
+    /* Selection, drag and focus contain box pointers. Clear them before any
+     * gadget or box is destroyed; typed values are already synced to the DOM. */
+    selection_clear(html->sel, false);
+    html_set_selection(html, HTML_SELECTION_NONE, (union html_selection_owner){.none = true}, true);
+    html_set_drag_type(html, HTML_DRAG_NONE, (union html_drag_owner){.no_owner = true}, NULL);
+    html_set_focus(html, HTML_FOCUS_SELF, (union html_focus_owner){.self = true}, true, 0, 0, 0, NULL);
+    html->visible_select_menu = NULL;
+    if (html->base.textsearch.context != NULL) {
+        content_textsearch_destroy(html->base.textsearch.context);
+        html->base.textsearch.context = NULL;
+    }
+    for (uint32_t i = 0; i < count; i++) {
+        dom_node *node = NULL;
+        void *old = NULL;
+        dom_nodelist_item(nodes, i, &node);
+        struct box *box = box_for_node(node);
+        if (box != NULL && box->gadget != NULL) {
+            form_gadget_sync_with_dom(box->gadget);
+            form_free_control(box->gadget);
+        }
+        /* Clear even descendants of newly hidden panels. Their new conversion
+         * will not visit them, and must not leave stale DOM-to-box mappings. */
+        dom_node_set_user_data(node, corestring_dom___ns_key_box_node_data, NULL, NULL, &old);
+        dom_node_unref(node);
+    }
+    dom_nodelist_unref(nodes);
+    for (struct content_html_object *o = html->object_list; o != NULL; o = o->next)
+        o->box = NULL;
+
+    html->restyle_old_bctx = html->bctx;
+    html->restyle_old_iframe = html->iframe;
+    html->restyle_old_frameset = html->frameset;
+    html->bctx = NULL;
+    html->iframe = NULL;
+    html->frameset = NULL;
+    html->layout = NULL;
+    html->unit_len_ctx.root_style = NULL;
+    HTML_PROFILE(html->restyle_profile.construction_start_ns = html_profile_now();
+        html->restyle_profile.detach_ns = html->restyle_profile.construction_start_ns - detach_start);
+    nserror err = dom_to_box(root, html, html_restyle_done, &html->box_conversion_context);
+    dom_node_unref(root);
+    if (err != NSERROR_OK)
+        html_restyle_done(html, false);
+}
+
+void html_request_restyle(html_content *html)
+{
+    html->restyle_pending = true;
+    if (!html->restyling)
+        guit->misc->schedule(0, html_restyle, html);
+}
+
+
 /**
  * Destroy a CONTENT_HTML and free all resources it owns.
  */
@@ -1437,6 +1579,7 @@ static void html_destroy(struct content *c)
     guit->misc->schedule(-1, html_resume_conversion_cb, html);
     guit->misc->schedule(-1, script_resume_conversion_cb, html);
     guit->misc->schedule(-1, html_deferred_reformat, html);
+    guit->misc->schedule(-1, html_restyle, html);
 
     /* If we're still converting a layout, cancel it */
     if (html->box_conversion_context != NULL) {
@@ -1485,6 +1628,8 @@ static void html_destroy(struct content *c)
         talloc_free(html->frameset);
         html->frameset = NULL;
     }
+
+    html_restyle_free_old(html);
 
     /* Free layout FIRST - while DOM is still valid - so box destructor
      * can properly unref DOM nodes */
@@ -1604,6 +1749,9 @@ static nserror html_close(struct content *c)
     nserror ret = NSERROR_OK;
 
     selection_clear(htmlc->sel, false);
+
+    guit->misc->schedule(-1, html_restyle, htmlc);
+    htmlc->restyle_pending = false;
 
     /* clear the html content reference to the browser window */
     htmlc->bw = NULL;

@@ -240,6 +240,7 @@ struct browser_window {
 
     /** iframe parent box */
     struct box *box;
+    struct dom_node *iframe_node; /**< Stable identity while an iframe is hidden. */
 
     /** [cols * rows] children */
     struct browser_window *children;
@@ -247,6 +248,7 @@ struct browser_window {
 
     /** [iframe_count] iframes */
     int iframe_count;
+    int iframe_capacity; /**< Slots reserved for this DOM, including hidden iframes. */
     struct browser_window *iframes;
 
     /** browser window child of root browser window which has input focus */

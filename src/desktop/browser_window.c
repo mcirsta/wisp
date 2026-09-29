@@ -27,6 +27,7 @@
 #include <wisp/utils/config.h>
 
 #include <nsutils/time.h>
+#include <dom/dom.h>
 #include <limits.h>
 #include <math.h>
 #include <stdlib.h>
@@ -1702,6 +1703,8 @@ nserror browser_window_destroy_internal(struct browser_window *bw)
 
     browser_window_destroy_children(bw);
     browser_window_destroy_iframes(bw);
+    dom_node_unref(bw->iframe_node);
+    bw->iframe_node = NULL;
 
     /* Destroy scrollbars */
     if (bw->scroll_x != NULL) {

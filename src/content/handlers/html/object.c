@@ -155,6 +155,8 @@ void html_deferred_reformat(void *p)
     html_content *c = p;
     PERF("html_deferred_reformat called (active=%d)", c->base.active);
     c->pending_reformat = false;
+    if (c->restyling)
+        return;
 
     /* We cannot use content__reformat() here because it has an optimization
      * that returns early if the width/height haven't changed. For
@@ -192,10 +194,53 @@ static nserror html_object_callback(hlcache_handle *object, const hlcache_event 
 
     box = o->box;
 
+    /* These document-level queries remain valid while its box is absent. */
+    switch (event->type) {
+    case CONTENT_MSG_GETTHREAD:
+        *(event->data.jsthread) = NULL;
+        return NSERROR_OK;
+    case CONTENT_MSG_GETDIMS:
+        *(event->data.getdims.viewport_width) = content__get_width(&c->base);
+        *(event->data.getdims.viewport_height) = content__get_height(&c->base);
+        return NSERROR_OK;
+    case CONTENT_MSG_REFRESH:
+        if (content_get_type(object) == CONTENT_HTML)
+            guit->misc->schedule(event->data.delay * 1000, html_object_refresh, o);
+        return NSERROR_OK;
+    default:
+        break;
+    }
+
+    /* A hidden object keeps its cache handle, but owns no layout geometry.
+     * Construction may also yield while callbacks arrive for the new tree. */
+    if (box == NULL || c->restyling) {
+        if (event->type == CONTENT_MSG_LOADING && box != NULL && c->bw != NULL) {
+            content_open(object, c->bw, &c->base, box->object_params);
+            o->opened = true;
+        } else if (event->type == CONTENT_MSG_DONE) {
+            c->base.active--;
+            if (box != NULL)
+                html_object_done(box, object, o->background, o->background_layer);
+        } else if (event->type == CONTENT_MSG_ERROR) {
+            c->base.active--;
+            hlcache_handle_release(object);
+            o->content = NULL;
+            o->opened = false;
+        }
+        if (!c->restyling && c->base.active == c->scripts_active &&
+            (event->type == CONTENT_MSG_DONE || event->type == CONTENT_MSG_ERROR)) {
+            c->pending_reformat = true;
+            guit->misc->schedule(0, html_deferred_reformat, c);
+        }
+        return NSERROR_OK;
+    }
+
     switch (event->type) {
     case CONTENT_MSG_LOADING:
-        if (c->base.status != CONTENT_STATUS_LOADING && c->bw != NULL)
+        if (c->base.status != CONTENT_STATUS_LOADING && c->bw != NULL) {
             content_open(object, c->bw, &c->base, box->object_params);
+            o->opened = true;
+        }
         break;
 
     case CONTENT_MSG_READY:
@@ -319,6 +364,7 @@ static nserror html_object_callback(hlcache_handle *object, const hlcache_event 
         hlcache_handle_release(object);
 
         o->content = NULL;
+        o->opened = false;
 
         if (c->base.active == 0) {
             NSLOG(wisp, CRITICAL,
@@ -469,26 +515,8 @@ static nserror html_object_callback(hlcache_handle *object, const hlcache_event 
         }
         break;
 
-    case CONTENT_MSG_REFRESH:
-        if (content_get_type(object) == CONTENT_HTML) {
-            /* only for HTML objects */
-            guit->misc->schedule(event->data.delay * 1000, html_object_refresh, o);
-        }
-
-        break;
-
     case CONTENT_MSG_LINK:
         /* Don't care about favicons that aren't on top level content */
-        break;
-
-    case CONTENT_MSG_GETTHREAD:
-        /* Objects don't have JS threads */
-        *(event->data.jsthread) = NULL;
-        break;
-
-    case CONTENT_MSG_GETDIMS:
-        *(event->data.getdims.viewport_width) = content__get_width(&c->base);
-        *(event->data.getdims.viewport_height) = content__get_height(&c->base);
         break;
 
     case CONTENT_MSG_SCROLL:
@@ -571,7 +599,8 @@ static nserror html_object_callback(hlcache_handle *object, const hlcache_event 
         break;
     }
 
-    if (c->base.status == CONTENT_STATUS_READY && c->base.active == c->scripts_active &&
+    if ((c->base.status == CONTENT_STATUS_READY || c->base.status == CONTENT_STATUS_DONE) &&
+        c->base.active == c->scripts_active &&
         (event->type == CONTENT_MSG_LOADING || event->type == CONTENT_MSG_DONE || event->type == CONTENT_MSG_ERROR)) {
         /* all objects have arrived (only scripts may still be active) */
         PERF("ALL OBJECTS COMPLETE - scheduling final reformat (active=%d, scripts_active=%d)", c->base.active,
@@ -657,6 +686,7 @@ static bool html_replace_object(struct content_html_object *object, nsurl *url)
 
         hlcache_handle_release(object->content);
         object->content = NULL;
+        object->opened = false;
 
         object->box->object = NULL;
     }
@@ -696,6 +726,12 @@ static void html_object_refresh(void *p)
     struct content_html_object *object = p;
     nsurl *refresh_url;
 
+    if (object->box == NULL) {
+        object->refresh_pending = true;
+        return;
+    }
+    object->refresh_pending = false;
+
     assert(content_get_type(object->content) == CONTENT_HTML);
 
     refresh_url = content_get_refresh_url(object->content);
@@ -728,6 +764,7 @@ nserror html_object_open_objects(html_content *html, struct browser_window *bw)
             continue;
 
         content_open(object->content, bw, &html->base, object->box->object_params);
+        object->opened = true;
     }
     return NSERROR_OK;
 }
@@ -759,7 +796,7 @@ nserror html_object_abort_objects(html_content *htmlc)
             hlcache_handle_abort(object->content);
             hlcache_handle_release(object->content);
             object->content = NULL;
-            if (object->box != NULL) {
+            if (object->layout_resource) {
                 htmlc->base.active--;
                 NSLOG(wisp, INFO, "%d fetches active", htmlc->base.active);
             }
@@ -779,7 +816,7 @@ nserror html_object_close_objects(html_content *html)
     for (object = html->object_list; object != NULL; object = next) {
         next = object->next;
 
-        if (object->content == NULL || object->box == NULL)
+        if (object->content == NULL || !object->opened)
             continue;
 
         if (content_get_type(object->content) == CONTENT_NONE)
@@ -790,6 +827,7 @@ nserror html_object_close_objects(html_content *html)
         }
 
         content_close(object->content);
+        object->opened = false;
     }
     return NSERROR_OK;
 }
@@ -810,10 +848,42 @@ nserror html_object_free_objects(html_content *html)
             hlcache_handle_release(victim->content);
         }
 
+        dom_node_unref(victim->node);
+        if (victim->url != NULL)
+            nsurl_unref(victim->url);
         html->object_list = victim->next;
         free(victim);
     }
     return NSERROR_OK;
+}
+
+
+/* Rebind the same DOM resource rather than refetching it on every tab click.
+ * Unbound entries remain available while a panel is display:none. */
+static bool html_reuse_object(
+    html_content *c, struct box *box, nsurl *url, content_type permitted_types, bool background, uint32_t layer)
+{
+    if (box == NULL || (box->node == NULL && url == NULL))
+        return false;
+    for (struct content_html_object *o = c->object_list; o != NULL; o = o->next) {
+        if (!o->layout_resource || o->box != NULL || o->node != box->node || o->background != background ||
+            o->background_layer != layer || o->permitted_types != permitted_types ||
+            ((url == NULL) != (o->url == NULL)) || (url != NULL && !nsurl_compare(url, o->url, NSURL_COMPLETE)))
+            continue;
+        o->box = box;
+        /* A fetch can become usable while its panel is hidden. Attach it when
+         * shown; already-open embedded documents keep their existing state. */
+        if (o->content != NULL && !o->opened && c->bw != NULL && content_get_type(o->content) != CONTENT_NONE) {
+            content_open(o->content, c->bw, &c->base, box->object_params);
+            o->opened = true;
+        }
+        if (o->refresh_pending)
+            guit->misc->schedule(0, html_object_refresh, o);
+        if (o->content != NULL && content_get_status(o->content) == CONTENT_STATUS_DONE)
+            html_object_done(box, o->content, background, layer);
+        return true;
+    }
+    return false;
 }
 
 
@@ -825,6 +895,9 @@ static bool html_fetch_object_layer(
     hlcache_handle_callback object_callback;
     hlcache_child_context child;
     nserror error;
+
+    if (html_reuse_object(c, box, url, permitted_types, background, layer))
+        return true;
 
     PERF("OBJECT DISCOVER '%s' (bg=%d)", nsurl_access(url), background);
 
@@ -854,6 +927,9 @@ static bool html_fetch_object_layer(
     object->permitted_types = permitted_types;
     object->background = background;
     object->background_layer = layer;
+    object->layout_resource = box != NULL;
+    object->node = box != NULL && box->node != NULL ? dom_node_ref(box->node) : NULL;
+    object->url = nsurl_ref(url);
 
     /* Increment active BEFORE hlcache_handle_retrieve.
      * Callbacks can fire synchronously for cached content,
@@ -872,6 +948,9 @@ static bool html_fetch_object_layer(
             c->base.active--;
             NSLOG(wisp, INFO, "%d fetches active (retrieve failed)", c->base.active);
         }
+        dom_node_unref(object->node);
+        if (object->url != NULL)
+            nsurl_unref(object->url);
         free(object);
         return error != NSERROR_NOMEM;
     }
@@ -893,6 +972,9 @@ bool html_fetch_object_buffer(html_content *c, const uint8_t *data, size_t len, 
     hlcache_child_context child;
     nserror error;
 
+    if (html_reuse_object(c, box, NULL, permitted_types, false, 0))
+        return true;
+
     if (c->aborted)
         return true;
 
@@ -909,6 +991,8 @@ bool html_fetch_object_buffer(html_content *c, const uint8_t *data, size_t len, 
     object->box = box;
     object->permitted_types = permitted_types;
     object->background = false;
+    object->layout_resource = box != NULL;
+    object->node = box != NULL && box->node != NULL ? dom_node_ref(box->node) : NULL;
 
     if (box != NULL) {
         c->base.active++;
@@ -923,6 +1007,9 @@ bool html_fetch_object_buffer(html_content *c, const uint8_t *data, size_t len, 
             c->base.active--;
             NSLOG(wisp, INFO, "%d fetches active (buffer retrieve failed)", c->base.active);
         }
+        dom_node_unref(object->node);
+        if (object->url != NULL)
+            nsurl_unref(object->url);
         free(object);
         return error != NSERROR_NOMEM;
     }

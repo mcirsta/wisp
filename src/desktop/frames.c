@@ -21,6 +21,7 @@
  */
 
 #include <assert.h>
+#include <dom/dom.h>
 #include <limits.h>
 #include <math.h>
 #include <stdbool.h>
@@ -32,11 +33,13 @@
 #include <wisp/content/handlers/html/box.h>
 #include <wisp/content/handlers/html/box_inspect.h>
 #include <wisp/content/handlers/html/html.h>
+#include <wisp/content/handlers/html/html_save.h>
 #include <wisp/content/hlcache.h>
 #include <wisp/utils/log.h>
 #include <wisp/utils/utils.h>
 #include "wisp/content.h"
 
+#include "content/handlers/html/box_construct.h"
 #include "desktop/browser_private.h"
 #include "desktop/frames.h"
 #include "desktop/scrollbar.h"
@@ -175,95 +178,133 @@ nserror browser_window_invalidate_iframe(struct browser_window *bw)
     return NSERROR_OK;
 }
 
+/* Reserve addresses for the document's iframe nodes, even when their boxes
+ * do not exist yet. Revealing a panel can then open a new frame without moving
+ * or reloading existing browsing contexts. This is a state-only rebuild; DOM
+ * insertion/removal needs a separate window-container design. */
+static nserror browser_window_reserve_iframes(struct browser_window *bw)
+{
+    dom_string *tag;
+    dom_nodelist *nodes;
+    uint32_t count = 0;
+    if (dom_string_create((const uint8_t *)"iframe", 6, &tag) != DOM_NO_ERR)
+        return NSERROR_NOMEM;
+    dom_exception err = dom_document_get_elements_by_tag_name(html_get_document(bw->current_content), tag, &nodes);
+    dom_string_unref(tag);
+    if (err != DOM_NO_ERR)
+        return NSERROR_DOM;
+    err = dom_nodelist_get_length(nodes, &count);
+    dom_nodelist_unref(nodes);
+    if (err != DOM_NO_ERR || count > INT_MAX)
+        return NSERROR_DOM;
+    if (count == 0)
+        return NSERROR_OK;
+    bw->iframes = calloc(count, sizeof(*bw->iframes));
+    if (bw->iframes == NULL)
+        return NSERROR_NOMEM;
+    bw->iframe_capacity = count;
+    return NSERROR_OK;
+}
+
+static nserror browser_window_add_iframe(struct browser_window *bw, struct content_html_iframe *cur)
+{
+    if (bw->iframe_count == bw->iframe_capacity)
+        return NSERROR_NOMEM;
+    struct browser_window *window = &bw->iframes[bw->iframe_count++];
+    window->parent = bw;
+    window->browser_window_type = BROWSER_WINDOW_IFRAME;
+    nserror err = browser_window_initialise_common(BW_CREATE_NONE, window, NULL);
+    if (err != NSERROR_OK)
+        goto failed;
+    window->scrolling = cur->scrolling;
+    window->border = cur->border;
+    window->border_colour = cur->border_colour;
+    window->no_resize = true;
+    window->margin_width = cur->margin_width;
+    window->margin_height = cur->margin_height;
+    window->scale = bw->scale;
+    if (cur->name != NULL) {
+        window->name = strdup(cur->name);
+        if (window->name == NULL) {
+            err = NSERROR_NOMEM;
+            goto failed;
+        }
+    }
+    window->box = cur->box;
+    window->iframe_node = dom_node_ref(cur->box->node);
+    window->box->iframe = window;
+    struct rect rect;
+    box_bounds(window->box, &rect);
+    browser_window_set_position(window, rect.x0, rect.y0);
+    browser_window_set_dimensions(window, rect.x1 - rect.x0, rect.y1 - rect.y0);
+    return NSERROR_OK;
+failed:
+    browser_window_destroy_internal(window);
+    memset(window, 0, sizeof(*window));
+    bw->iframe_count--;
+    return err;
+}
+
 /* exported function documented in desktop/frames.h */
 nserror browser_window_create_iframes(struct browser_window *bw)
 {
-    nserror ret = NSERROR_OK;
-    struct browser_window *window;
+    if (content_get_type(bw->current_content) != CONTENT_HTML || html_get_iframe(bw->current_content) == NULL)
+        return NSERROR_OK;
+    nserror err = browser_window_reserve_iframes(bw);
+    if (err != NSERROR_OK)
+        return err;
     struct content_html_iframe *cur;
-    struct rect rect;
-    int iframes = 0;
-    int index;
-    struct content_html_iframe *iframe;
-
-    bw->iframe_count = 0;
-
-    /* only html contents can have iframes */
-    if (content_get_type(bw->current_content) != CONTENT_HTML) {
-        return NSERROR_OK;
-    }
-
-    /* obtain the iframes for this content */
-    iframe = html_get_iframe(bw->current_content);
-    if (iframe == NULL) {
-        return NSERROR_OK;
-    }
-
-    /* Count iframe list and allocate enough space within the
-     * browser window.
-     */
-    for (cur = iframe; cur; cur = cur->next) {
-        iframes++;
-    }
-    bw->iframes = calloc(iframes, sizeof(*bw));
-    if (!bw->iframes) {
-        return NSERROR_NOMEM;
-    }
-    bw->iframe_count = iframes;
-
-    index = 0;
-    for (cur = iframe; cur; cur = cur->next) {
-        window = &(bw->iframes[index++]);
-
-        /* Initialise common parts */
-        browser_window_initialise_common(BW_CREATE_NONE, window, NULL);
-
-        /* window characteristics */
-        window->browser_window_type = BROWSER_WINDOW_IFRAME;
-        window->scrolling = cur->scrolling;
-        window->border = cur->border;
-        window->border_colour = cur->border_colour;
-        window->no_resize = true;
-        window->margin_width = cur->margin_width;
-        window->margin_height = cur->margin_height;
-        window->scale = bw->scale;
-        if (cur->name != NULL) {
-            window->name = strdup(cur->name);
-            if (window->name == NULL) {
-                free(bw->iframes);
-                bw->iframes = 0;
-                bw->iframe_count = 0;
-                return NSERROR_NOMEM;
-            }
+    for (cur = html_get_iframe(bw->current_content); cur != NULL; cur = cur->next) {
+        err = browser_window_add_iframe(bw, cur);
+        if (err != NSERROR_OK) {
+            browser_window_destroy_iframes(bw);
+            return err;
         }
-
-        /* linking */
-        window->box = cur->box;
-        window->parent = bw;
-        window->box->iframe = window;
-
-        /* iframe dimensions */
-        box_bounds(window->box, &rect);
-
-        browser_window_set_position(window, rect.x0, rect.y0);
-        browser_window_set_dimensions(window, rect.x1 - rect.x0, rect.y1 - rect.y0);
     }
-
-    /* calculate dimensions */
     browser_window_update_extent(bw);
     browser_window_recalculate_iframes(bw);
-
-    index = 0;
-    for (cur = iframe; cur; cur = cur->next) {
-        window = &(bw->iframes[index++]);
-        if (cur->url) {
-            /* fetch iframe's content */
-            ret = browser_window_navigate(window, cur->url, hlcache_handle_get_url(bw->current_content),
+    int index = 0;
+    for (cur = html_get_iframe(bw->current_content); cur != NULL; cur = cur->next) {
+        struct browser_window *window = &bw->iframes[index++];
+        if (cur->url != NULL)
+            err = browser_window_navigate(window, cur->url, hlcache_handle_get_url(bw->current_content),
                 BW_NAVIGATE_UNVERIFIABLE, NULL, NULL, bw->current_content);
+    }
+    return err;
+}
+
+nserror browser_window_rebind_iframes(struct browser_window *bw, bool success)
+{
+    if (!success)
+        return browser_window_destroy_iframes(bw);
+    if (bw->iframes == NULL)
+        return browser_window_create_iframes(bw);
+    /* Detach all old boxes before opening newly visible frames. Their load
+     * callbacks must never redraw through the previous presentation. */
+    for (int i = 0; i < bw->iframe_count; i++) {
+        struct browser_window *window = &bw->iframes[i];
+        if (window->box != NULL)
+            window->box->iframe = NULL;
+        window->box = box_for_node(window->iframe_node);
+        if (window->box != NULL)
+            window->box->iframe = window;
+        else
+            browser_window_set_dimensions(window, 0, 0);
+    }
+    for (struct content_html_iframe *cur = html_get_iframe(bw->current_content); cur != NULL; cur = cur->next) {
+        if (cur->box->iframe != NULL)
+            continue;
+        nserror err = browser_window_add_iframe(bw, cur);
+        if (err != NSERROR_OK)
+            return err;
+        if (cur->url != NULL) {
+            err = browser_window_navigate(cur->box->iframe, cur->url, hlcache_handle_get_url(bw->current_content),
+                BW_NAVIGATE_UNVERIFIABLE, NULL, NULL, bw->current_content);
+            if (err != NSERROR_OK)
+                return err;
         }
     }
-
-    return ret;
+    return NSERROR_OK;
 }
 
 
@@ -305,6 +346,7 @@ nserror browser_window_destroy_iframes(struct browser_window *bw)
         free(bw->iframes);
         bw->iframes = NULL;
         bw->iframe_count = 0;
+        bw->iframe_capacity = 0;
     }
     return NSERROR_OK;
 }

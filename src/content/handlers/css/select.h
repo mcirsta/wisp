@@ -20,6 +20,7 @@
 #define WISP_CSS_SELECT_H_
 
 #include <stdint.h>
+#include <wisp/utils/errors.h>
 
 #include <dom/dom.h>
 
@@ -27,6 +28,9 @@
 
 struct content;
 struct nsurl;
+
+/** Drop selector caches for a document before reselecting dynamic state. */
+nserror nscss_invalidate_document(dom_document *document);
 
 /**
  * Selection context

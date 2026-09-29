@@ -1,0 +1,61 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Native checked-state interaction, without JavaScript</title>
+<style>
+  body { margin: 0; font: 16px/20px sans-serif; }
+  .spacer { height: 100px; }
+  .tabs { width: 300px; }
+  .tabs > input { display: none; }
+  .tabs > label { display: block; height: 20px; background: #ddd; }
+  .panel { display: none; height: 100px; }
+  .tabs > input:checked + label { background: #8d8; }
+  .tabs > input:checked + label + .panel { display: block; --panel-height: 100px; }
+  #second:checked + label + .panel { --panel-height: 60px; }
+  .inner { height: var(--panel-height); background: #cdf; }
+  #second-panel { height: 60px; }
+  #after { height: 10px; background: #333; }
+  #box:checked ~ #extra { display: block; }
+  #extra { display: none; height: 25px; }
+  #box-label, #disabled-label { display: block; height: 25px; }
+  input[type=text], textarea { display: block; width: 200px; height: 30px; }
+  .tail { height: 1200px; }
+  #new-frame-panel { display:none; }
+  #frame-toggle:checked ~ #new-frame-panel { display:block; }
+  img, svg { width: 8px; height: 8px; }
+  #tabs { background-image: url('data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'),
+       url('data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'); }
+  #tabs::before { content: ''; display: block; height: 0;
+       background-image: url('data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'); }
+</style>
+<div class="spacer"></div>
+<div class="tabs" id="tabs">
+  <input type="radio" name="tabs" id="first" checked>
+  <label for="first" id="first-label">First</label>
+  <div class="panel" id="first-panel"><div class="inner" id="first-inner">First panel<img src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"><input type="text" id="draft" value="draft"><iframe id="kept-frame" src="about:blank" style="width:100px;height:25px;border:0"></iframe></div></div>
+  <input type="radio" name="tabs" id="second">
+  <label for="second" id="second-label"><span id="second-text">Second</span></label>
+  <div class="panel" id="second-panel"><div class="inner" id="second-inner">Second panel<img src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"><svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"><circle cx="4" cy="4" r="3"/></svg><object data="data:text/html,%3Cp%3Eembedded%3C/p%3E" type="text/html" style="width:8px;height:8px"></object></div></div>
+</div>
+<div id="after"></div>
+<textarea id="notes">note</textarea>
+<input type="checkbox" id="box">
+<label for="box" id="box-label">Checkbox label</label>
+<div id="extra">Checkbox content</div>
+<input type="checkbox" id="disabled" disabled>
+<label for="disabled" id="disabled-label">Disabled</label>
+<label id="implicit-label"><input type="checkbox" id="implicit"><span id="implicit-text">Implicit label</span></label>
+<!-- Floats are hit-tested before the full-width normal-flow block behind them. -->
+<div style="float:right;width:200px;height:25px">
+  <input id="floating" type="checkbox" style="display:none">
+  <label id="floating-label" for="floating" style="display:block;height:25px">Floating label</label>
+</div>
+<div style="height:30px"></div>
+<input id="frame-toggle" type="checkbox" style="display:none">
+<label id="frame-toggle-label" for="frame-toggle" style="display:block;height:20px">New iframe</label>
+<div id="new-frame-panel" style="height:30px"><iframe src="about:blank" style="width:100px;height:25px;border:0"></iframe></div>
+<div style="position:relative;width:200px;height:25px">
+  <input type="radio" name="overlap" id="overlap-first" style="position:absolute;opacity:0;left:0;top:0;width:200px;height:25px;margin:0">
+  <label for="overlap-first" id="overlap-label" style="position:relative;z-index:1;display:block;width:200px;height:25px"><span>Label above radio</span></label>
+  <input type="radio" name="overlap" id="overlap-second" checked style="position:absolute;opacity:0;left:0;top:0;width:200px;height:25px;margin:0">
+</div>
+<div class="tail"></div>

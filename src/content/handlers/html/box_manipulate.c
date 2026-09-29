@@ -74,8 +74,15 @@ static int box_talloc_destructor(void *ptr)
     }
 
     if (!(b->flags & CLONE) && b->node != NULL) {
+        void *mapped = NULL, *old = NULL;
+        dom_node_get_user_data(b->node, corestring_dom___ns_key_box_node_data, &mapped);
+        if (mapped == b)
+            dom_node_set_user_data(b->node, corestring_dom___ns_key_box_node_data, NULL, NULL, &old);
         dom_node_unref(b->node);
     }
+
+    if (!(b->flags & CLONE))
+        dom_node_unref(b->text_owner);
 
     if (b->scroll_x != NULL) {
         data = scrollbar_get_data(b->scroll_x);
@@ -166,6 +173,7 @@ struct box *box_create(css_select_results *styles, css_computed_style *style, bo
     box->object_params = NULL;
     box->iframe = NULL;
     box->node = NULL;
+    box->text_owner = NULL;
 
     return box;
 }

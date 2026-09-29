@@ -325,6 +325,15 @@ static struct form_control *parse_input_element(struct form *forms, dom_html_inp
         }
     }
 
+    if (control->type == GADGET_FILE) {
+        /* File names originate from the picker, never from HTML attributes.
+         * Keep their displayed value when reconstructing the presentation. */
+        void *filename = NULL;
+        dom_node_get_user_data(input, corestring_dom___ns_key_file_name_node_data, &filename);
+        if (filename != NULL && dom_html_input_element_get_value(input, &ds_value) == DOM_NO_ERR && ds_value != NULL)
+            control->value = strndup(dom_string_data(ds_value), dom_string_byte_length(ds_value));
+    }
+
     if (control->type != GADGET_FILE && control->type != GADGET_IMAGE) {
         if (dom_html_input_element_get_value(input, &ds_value) == DOM_NO_ERR) {
             if (ds_value != NULL) {

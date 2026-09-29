@@ -14,8 +14,10 @@ extern "C" {
 #define restrict __restrict
 #include <dom/dom.h>
 #include "wisp/content.h"
+#include "wisp/browser_window.h"
 #include "wisp/content/hlcache.h"
 #include "wisp/content/handlers/html/box.h"
+#include "content/handlers/html/box_construct.h"
 #include "wisp/content/handlers/html/box_inspect.h"
 #include "wisp/content/handlers/html/html_save.h"
 #include "wisp/content/handlers/html/private.h"
@@ -214,6 +216,23 @@ QJsonObject nsqt_capture_inspect(struct hlcache_handle *content, const QStringLi
         return result;
     }
     result["status"] = "ok";
+    result["resource_count"] = int(html->num_objects);
+    result["active_resources"] = int(html->base.active - html->scripts_active);
+#ifdef WISP_PROFILE_RESTYLE
+    const auto &p = html->restyle_profile;
+    if (p.total_ns != 0) {
+        result["restyle_profile"] = QJsonObject{{"invalidate_ms", p.invalidate_ns / 1e6},
+            {"detach_ms", p.detach_ns / 1e6}, {"css_ms", p.css_ns / 1e6}, {"normalise_ms", p.normalise_ns / 1e6},
+            {"boxes_ms", (p.construction_ns - p.css_ns - p.normalise_ns) / 1e6},
+            {"construction_ms", p.construction_ns / 1e6},
+            {"construction_wait_ms", (p.construction_wall_ns - p.construction_ns) / 1e6},
+            {"layout_ms", p.layout_ns / 1e6}, {"cleanup_ms", p.cleanup_ns / 1e6}, {"total_ms", p.total_ns / 1e6},
+            {"paint_ms", p.paint_ns / 1e6},
+            {"through_last_paint_ms", p.last_paint_ns ? (p.last_paint_ns - p.start_ns) / 1e6 : 0},
+            {"styled_elements", int(p.styled_elements)}, {"construction_slices", int(p.construction_slices)},
+            {"paint_calls", int(p.paint_calls)}};
+    }
+#endif
     QJsonArray elements;
     for (const QString &id : ids) {
         const QByteArray utf8 = id.toUtf8();
@@ -224,6 +243,28 @@ QJsonObject nsqt_capture_inspect(struct hlcache_handle *content, const QStringLi
             dom_string_unref(key);
         }
         QJsonArray matches;
+        QJsonObject state;
+        if (element) {
+            const QString tag = domName(reinterpret_cast<dom_node *>(element));
+            if (tag == "input") {
+                bool checked = false;
+                dom_html_input_element_get_checked(reinterpret_cast<dom_html_input_element *>(element), &checked);
+                state["checked"] = checked;
+                dom_string *value = nullptr;
+                dom_html_input_element_get_value(reinterpret_cast<dom_html_input_element *>(element), &value);
+                if (value) {
+                    state["value"] = QString::fromUtf8(dom_string_data(value), dom_string_byte_length(value));
+                    dom_string_unref(value);
+                }
+            } else if (tag == "textarea") {
+                dom_string *value = nullptr;
+                dom_html_text_area_element_get_value(reinterpret_cast<dom_html_text_area_element *>(element), &value);
+                if (value) {
+                    state["value"] = QString::fromUtf8(dom_string_data(value), dom_string_byte_length(value));
+                    dom_string_unref(value);
+                }
+            }
+        }
         int count = 0;
         if (element) {
             QVector<struct box *> pending{root};
@@ -245,7 +286,7 @@ QJsonObject nsqt_capture_inspect(struct hlcache_handle *content, const QStringLi
                 !element    ? "not_found"
                     : count ? "ok"
                             : "no_box"},
-            {"box_count", count}, {"boxes", matches}});
+            {"box_count", count}, {"boxes", matches}, {"state", state}});
     }
     result["elements"] = elements;
     if (point.x() >= 0) {
@@ -260,4 +301,72 @@ QJsonObject nsqt_capture_inspect(struct hlcache_handle *content, const QStringLi
         result["point"] = QJsonObject{{"x", point.x()}, {"y", point.y()}, {"hit_count", count}, {"hits", hits}};
     }
     return result;
+}
+
+// Capture-only interaction hooks use the same core input path as the Qt widget.
+bool nsqt_capture_settled(struct hlcache_handle *content)
+{
+    if (!content || content_get_type(content) != CONTENT_HTML)
+        return true;
+    auto *html = reinterpret_cast<html_content *>(hlcache_handle_get_content(content));
+    return !html->restyling && !html->restyle_pending && html->base.active == html->scripts_active;
+}
+
+void nsqt_capture_scroll(struct hlcache_handle *content, int x, int y)
+{
+    union content_msg_data data = {};
+    data.scroll.x0 = x;
+    data.scroll.y0 = y;
+    content_broadcast(hlcache_handle_get_content(content), CONTENT_MSG_SCROLL, &data);
+}
+
+bool nsqt_capture_click(struct browser_window *bw, const QString &id, bool label)
+{
+    auto *content = browser_window_get_content(bw);
+    if (!content || content_get_type(content) != CONTENT_HTML)
+        return false;
+    dom_document *doc = html_get_document(content);
+    dom_node *target = nullptr;
+    dom_string *key = nullptr;
+    const QByteArray utf8 = id.toUtf8();
+    if (dom_string_create(reinterpret_cast<const uint8_t *>(utf8.constData()), utf8.size(), &key) != DOM_NO_ERR)
+        return false;
+    if (label) {
+        dom_string *tag = nullptr;
+        dom_nodelist *labels = nullptr;
+        dom_string_create(reinterpret_cast<const uint8_t *>("label"), 5, &tag);
+        if (tag && dom_document_get_elements_by_tag_name(doc, tag, &labels) == DOM_NO_ERR) {
+            uint32_t count = 0;
+            dom_nodelist_get_length(labels, &count);
+            for (uint32_t i = 0; i < count; i++) {
+                dom_nodelist_item(labels, i, &target);
+                if (attribute(target, "for") == id && box_for_node(target))
+                    break;
+                dom_node_unref(target);
+                target = nullptr;
+            }
+            dom_nodelist_unref(labels);
+        }
+        dom_string_unref(tag);
+    } else {
+        dom_document_get_element_by_id(doc, key, &target);
+    }
+    dom_string_unref(key);
+    auto *box = target ? box_for_node(target) : nullptr;
+    bool found = box && box_visible(box);
+    if (found) {
+        int x, y, sx, sy, width, height;
+        box_coords(box, &x, &y);
+        x += box->padding[LEFT] + qMax(1, box->width / 2);
+        y += box->padding[TOP] + qMax(1, box->height / 2);
+        browser_window_get_scroll(bw, &sx, &sy);
+        browser_window_get_dimensions(bw, &width, &height);
+        if (x < sx || x >= sx + width || y < sy || y >= sy + height)
+            nsqt_capture_scroll(content, qMax(0, x - width / 2), qMax(0, y - height / 2));
+        browser_window_mouse_click(bw, BROWSER_MOUSE_PRESS_1, x, y);
+        browser_window_mouse_click(bw, BROWSER_MOUSE_CLICK_1, x, y);
+        browser_window_mouse_track(bw, (browser_mouse_state)0, x, y);
+    }
+    dom_node_unref(target);
+    return found;
 }

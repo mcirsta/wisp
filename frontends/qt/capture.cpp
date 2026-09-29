@@ -18,6 +18,7 @@ extern "C" {
 #include "utils/nsurl.h"
 #include "wisp/browser.h"
 #include "wisp/browser_window.h"
+#include "wisp/keypress.h"
 #include "wisp/content.h"
 #include "wisp/content/content.h"
 }
@@ -47,6 +48,10 @@ int NS_Capture::prepare(int &argc, char **argv)
                 "  --capture-settle MS          Quiet period after load (default 500)\n"
                 "  --capture-timeout MS         Overall deadline (default 30000)\n"
                 "  --capture-id ID              Inspect an element (repeatable)\n"
+                "  --capture-click-id ID        Click an element after settling (repeatable)\n"
+                "  --capture-click-label FOR    Click a label associated with this input ID\n"
+                "  --capture-type TEXT           Type into the focused control\n"
+                "  --capture-scroll X,Y          Scroll before the next action\n"
                 "  --capture-point X,Y          Inspect a point in document layout pixels\n"
                 "DIR must be new or empty. Uses a temporary profile, 96 DPI, JS and animation off\n"
                 "by default. Core options such as --enable_javascript=1 can override defaults.\n"
@@ -71,6 +76,16 @@ int NS_Capture::prepare(int &argc, char **argv)
         } else if (arg == "--capture-id") {
             m_inspect_ids.append(value);
             ok = !value.isEmpty();
+        } else if (arg == "--capture-click-id" || arg == "--capture-click-label" || arg == "--capture-type" ||
+            arg == "--capture-scroll") {
+            m_actions.append({arg, value});
+            ok = !value.isEmpty();
+            if (arg == "--capture-scroll") {
+                const auto parts = value.split(',');
+                bool x_ok, y_ok;
+                const int x = parts.value(0).toInt(&x_ok), y = parts.value(1).toInt(&y_ok);
+                ok = parts.size() == 2 && x_ok && y_ok && x >= 0 && y >= 0;
+            }
         } else if (arg == "--capture-point") {
             const auto parts = value.split(',');
             bool x_ok, y_ok;
@@ -194,10 +209,39 @@ void NS_Capture::poll()
     const bool done = content && content_get_status(content) == CONTENT_STATUS_DONE;
     if (m_elapsed.elapsed() >= m_timeout_ms) {
         finish("timeout");
-    } else if (done && !m_loading && browser_window_redraw_ready(m_bw) &&
+    } else if (done && !m_loading && browser_window_redraw_ready(m_bw) && nsqt_capture_settled(content) &&
         m_elapsed.elapsed() - m_last_activity >= m_settle_ms) {
         const QString url = QString::fromUtf8(nsurl_access(hlcache_handle_get_url(content)));
-        finish(url.startsWith("about:query/") ? "load_error" : "complete");
+        if (!m_actions.isEmpty()) {
+            QJsonObject step = nsqt_capture_inspect(content, m_inspect_ids, m_inspect_point);
+            int sx, sy;
+            browser_window_get_scroll(m_bw, &sx, &sy);
+            step["scroll"] = QJsonObject{{"x", sx}, {"y", sy}};
+            step["elapsed_ms"] = m_elapsed.elapsed();
+            step["action_ms"] = m_last_action_ms;
+            m_steps.append(step);
+        }
+        if (m_action_index < m_actions.size()) {
+            const auto action = m_actions.at(m_action_index++);
+            QElapsedTimer action_timer;
+            action_timer.start();
+            bool ok = true;
+            if (action.first == "--capture-type") {
+                for (uint32_t key : action.second.toUcs4())
+                    ok = browser_window_key_press(m_bw, key) && ok;
+            } else if (action.first == "--capture-scroll") {
+                const auto xy = action.second.split(',');
+                nsqt_capture_scroll(content, xy[0].toInt(), xy[1].toInt());
+            } else {
+                ok = nsqt_capture_click(m_bw, action.second, action.first == "--capture-click-label");
+            }
+            m_last_action_ms = action_timer.nsecsElapsed() / 1e6;
+            activity(m_bw);
+            if (!ok)
+                finish("action_error");
+        } else {
+            finish(url.startsWith("about:query/") ? "load_error" : "complete");
+        }
     }
 }
 
@@ -252,6 +296,14 @@ void NS_Capture::finish(const QString &result)
         const bool saved = inspection_file.open(QIODevice::WriteOnly) && inspection_file.write(data) == data.size() &&
             inspection_file.commit();
         artifacts["inspection.json"] = saved;
+        output_ok = output_ok && saved;
+    }
+    if (!m_actions.isEmpty()) {
+        QSaveFile steps_file(QDir(m_directory).filePath("steps.json"));
+        const QByteArray data = QJsonDocument(m_steps).toJson();
+        const bool saved = steps_file.open(QIODevice::WriteOnly) && steps_file.write(data) == data.size() &&
+            steps_file.commit();
+        artifacts["steps.json"] = saved;
         output_ok = output_ok && saved;
     }
     const bool viewport_ok = QSize(width, height) == m_size && m_widget->size() == m_size;

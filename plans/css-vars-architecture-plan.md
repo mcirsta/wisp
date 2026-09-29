@@ -166,7 +166,12 @@ The phase descriptions below retain the full acceptance criteria. This delivery
 implements the core of phases 2–3 and basic sharing/lifetimes from phase 4,
 with partial baseline and integration work from phases 1, 5, and 6.
 
-Still needed: browser viewport/media/state/subtree invalidation coverage,
+Native radio/checkbox changes now exercise whole-document invalidation,
+including inherited custom properties, through real click tests. See
+[`checked-interaction.md`](../src/docs/checked-interaction.md) for the lifetime
+boundary and scope. This does not cover arbitrary state changes or DOM mutation.
+
+Still needed: browser viewport/media/other-state/subtree invalidation coverage,
 allocation-failure injection, complete memory accounting (including stylesheet
 token storage), allocation/peak-byte/token-copy counters, sparse-override and
 deep-scope timing sweeps, logging-overhead measurement, and page-level geometry

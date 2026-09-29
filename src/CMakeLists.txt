@@ -131,6 +131,7 @@ add_library(wisp ${WISP_LIB_TYPE}
 	content/handlers/html/font.c
 	content/handlers/html/font_face.c
 	content/handlers/html/form.c
+	content/handlers/html/form_state.c
 	content/handlers/html/forms.c
 	content/handlers/html/html.c
 	content/handlers/html/html_svg.c
