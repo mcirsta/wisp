@@ -1,4 +1,4 @@
-/* Class hash growth: parser integration, lookup order, storage and OOM. */
+/* Selector hash: parser integration, filtering, lookup order, storage and OOM. */
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -221,10 +221,50 @@ static void test_growth(void)
     assert(css_stylesheet_destroy(sheet) == CSS_OK);
 }
 
+static void test_custom_property_rules(void)
+{
+    const struct {
+        const char *declarations;
+        bool defines_variables;
+    } cases[] = {
+        {"width: 1px", false},
+        {"--w: 2px; width: 2px", true},
+        {"width: var(--w)", false},
+        {"margin: 1px 2px; --w: 3px !important", true},
+        {"height: 3px", false},
+        {"--w: initial; padding: 4px; height: var(--w)", true},
+        {"--bad: 5px !invalid; width: 5px", false},
+        {"width: 6px", false},
+    };
+    css_stylesheet_params params = {
+        .params_version = CSS_STYLESHEET_PARAMS_VERSION_1,
+        .level = CSS_LEVEL_3, .charset = "UTF-8", .url = "selector-filter", .resolve = resolve_url,
+    };
+    css_stylesheet *sheet;
+    assert(css_stylesheet_create(&params, &sheet) == CSS_OK);
+    for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
+        append_css(sheet, "div, .target, #target, * {");
+        append_css(sheet, cases[i].declarations);
+        append_css(sheet, "}");
+    }
+    assert(css_stylesheet_data_done(sheet) == CSS_OK);
+
+    /* Check first/last custom declarations, merging with generated shorthands,
+     * and recycling temporary styles between custom and ordinary declarations. */
+    css_rule *rule = sheet->rule_list;
+    for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++, rule = rule->next) {
+        assert(rule != NULL && rule->type == CSS_RULE_SELECTOR);
+        assert(rule->has_custom_properties == cases[i].defines_variables);
+    }
+
+    assert(css_stylesheet_destroy(sheet) == CSS_OK);
+}
+
 int main(void)
 {
     test_thresholds();
     test_growth();
+    test_custom_property_rules();
     puts("PASS");
     return 0;
 }

@@ -1343,7 +1343,7 @@ css_error css_select_style(css_select_ctx *ctx, void *node, const css_unit_ctx *
                 goto cleanup;
             }
 
-            if (sel->style != NULL) {
+            if (sel->style != NULL && sel->base.has_custom_properties) {
                 state.current_origin = CSS_ORIGIN_AUTHOR;
                 state.current_specificity = UINT32_MAX;
                 state.current_pseudo = CSS_PSEUDO_ELEMENT_NONE;
@@ -2047,10 +2047,13 @@ css_error match_selectors_in_sheet(css_select_ctx *ctx, const css_stylesheet *sh
          * selector here */
         assert(selector != NULL);
 
-        /* Match and handle the selector chain */
-        error = match_selector_chain(ctx, selector, state);
-        if (error != CSS_OK)
-            goto cleanup;
+        /* Ordinary rules cannot contribute custom properties. Filter here,
+         * once per candidate, rather than in every hash-chain iteration. */
+        if (!state->collecting_vars || selector->rule->has_custom_properties) {
+            error = match_selector_chain(ctx, selector, state);
+            if (error != CSS_OK)
+                goto cleanup;
+        }
 
         /* Advance to next selector in whichever chain we extracted
          * the processed selector from. */

@@ -514,6 +514,72 @@ Local artifacts: `run_text_prefix.py`, `text-prefix-{control,cached}.json`,
 and `text-prefix-probe.{cpp,h}` in the directory below. The copied control binary
 is `/tmp/wisp-text-prefix-control-qt`.
 
+### Filtering ordinary rules out of variable collection
+
+The parser now marks each rule that successfully stores a custom-property
+**definition**. An ordinary declaration using `var()` does not set this marker.
+The bit shares the rule's existing parent-type metadata byte: `css_rule`,
+`css_rule_selector` and `css_style` retain their previous sizes (32/48/24 bytes
+on this 64-bit build). There is no new allocation, per-element state or cache.
+
+During collection, selection checks the marker once per returned selector
+candidate, before full selector-chain matching. Inline styles without custom
+properties also skip collection. The normal cascade, selector hash traversal,
+imports, source order and specificity are unchanged. Custom-property parsing
+already has one shared handler, so the generated ordinary-property handlers and
+bytecode format need no changes. Storing the marker on the owning rule also
+avoids extra bookkeeping when temporary declaration styles are merged/recycled.
+
+A separate count-only probe measures collection-pass candidates before/after
+filtering. Means over ten warmed tab switches:
+
+| Full selector-chain matches attempted | Tion | Bihon |
+| --- | ---: | ---: |
+| Before | 9,156 | 13,847.5 |
+| Now | 5,337 | 7,676 |
+
+This removes 41.7%/44.6% of collection-pass matching attempts. Hash lookup work
+remains; the percentage is not a reduction in all CSS processing.
+
+Fresh-process timing comparisons were too variable to isolate this small gain.
+A temporary benchmark switch therefore alternated filtered and unfiltered
+refreshes within each process in ABBA order, with both panels equally represented.
+Three processes per page, 28 switches each, discarding the first four, produce
+36 pairs of nearby refreshes of the **same panel** per page. Both modes use the
+same binary and measurement overhead. Median paired savings:
+
+| Phase | Tion saved (ms) | Bihon saved (ms) |
+| --- | ---: | ---: |
+| CSS selection/composition | 2.23 (3.88%) | 4.28 (3.94%) |
+| Complete refresh, before painting | 2.23 (2.35%) | 4.32 (2.29%) |
+
+CSS time improves in 30/36 Tion pairs and 29/36 Bihon pairs. This is a modest
+incremental improvement; it is not an initial-load measurement, and these
+figures should not be compared directly with earlier absolute timing tables.
+Both the switch and counters are removed from production code.
+
+All six independent final PNGs, DOM dumps and normalized box trees match the
+control, as do all 78 inspected tab states. The within-process experiment adds
+six matching final captures and 174 matching states. All 104 selected CSS,
+layout and Qt tests pass in Debug (ASan/UBSan) and Release. The selector and
+variable-resolution tests also pass LeakSanitizer. The broad Debug suite uses
+`detect_leaks=0` for DOM/test cleanup leaks reproduced with the unchanged CSS
+library; address and undefined-behavior checks remain enabled.
+
+The new tests cover successful/invalid custom declarations, definitions before
+and after ordinary/generated declarations, variable references that define
+nothing, nested media rules and pseudo-element inheritance. A callback-counting
+regression test verifies that ordinary/deferred selectors are matched once and
+custom-property selectors twice; it fails against the previous library.
+
+Local artifacts: `run_variable_candidates.py`, `check_variable_candidates.py`,
+`variable-candidates-{control,filtered,comparison}.json`,
+`run_variable_candidates_toggle.py`, `check_variable_candidates_toggle.py`,
+`variable-candidates-toggle{,-summary}.json`, `variable-candidates-toggle.{c,patch}`,
+`instrument_variable_rules.py`, `variable-rules-probe.c` and
+`variable-candidates-counts.json` in the directory below. The unchanged library
+is saved in `/tmp/wisp-variable-rules-control/` for local reproduction.
+
 ### Chromium comparison and measurement limits
 
 Chromium 153.0.8010.52, same files/viewport, page scripts disabled, aligned font

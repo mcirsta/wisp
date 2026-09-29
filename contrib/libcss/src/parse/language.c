@@ -1875,6 +1875,8 @@ static css_error parseVariableDeclaration(css_language *c, const css_token *prop
         css__stylesheet_style_destroy(style);
         return error;
     }
+    if (opcode == CSS_PROP_CUSTOM_PROPERTY)
+        rule->has_custom_properties = true;
     c->sheet->uses_variables = true;
     *ctx = scan;
     return CSS_OK;

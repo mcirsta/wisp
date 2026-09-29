@@ -25,6 +25,10 @@ typedef struct test_node {
     void *libcss_node_data;
 } test_node;
 
+typedef struct attribute_checks {
+    unsigned ordinary, deferred, custom;
+} attribute_checks;
+
 static bool test_node_name_matches(test_node *n, const css_qname *qname)
 {
     bool match = false;
@@ -195,9 +199,18 @@ static css_error node_has_id(void *pw, void *node, lwc_string *name, bool *match
 
 static css_error node_has_attribute(void *pw, void *node, const css_qname *qname, bool *match)
 {
-    UNUSED(pw);
     UNUSED(node);
-    UNUSED(qname);
+
+    if (pw != NULL) {
+        attribute_checks *checks = pw;
+        const char *name = lwc_string_data(qname->name);
+        if (strcmp(name, "ordinary") == 0)
+            checks->ordinary++;
+        else if (strcmp(name, "deferred") == 0)
+            checks->deferred++;
+        else if (strcmp(name, "custom") == 0)
+            checks->custom++;
+    }
 
     *match = false;
 
@@ -1008,6 +1021,37 @@ static void test_variable_import_prefix(void)
     assert(css_stylesheet_destroy(empty) == CSS_OK);
 }
 
+static void test_collection_skips_ordinary_rules(void)
+{
+    style_case ctx;
+    attribute_checks checks = {0};
+    css_media media = {.type = CSS_MEDIA_ALL};
+
+    setup_style_case(&ctx,
+        "div[ordinary] { width: 99px; }"
+        "div[deferred] { width: var(--w); }"
+        "div[custom] { --w: 99px; }"
+        "@media all { div { --w: 7px; width: var(--w); } }"
+        "div::before { width: var(--w); }");
+    assert(css_select_style(ctx.select_ctx, &ctx.node, &unit_ctx, &media,
+        NULL, &select_handler, &checks, &ctx.results) == CSS_OK);
+
+    /* Attribute selectors do not match this node. Custom-property rules must
+     * still be tested in both passes, while ordinary/deferred rules need only
+     * the normal pass. This counts real matching work, not just stored flags. */
+    if (checks.ordinary != 1 || checks.deferred != 1 || checks.custom != 2) {
+        fprintf(stderr, "Attribute checks: ordinary=%u deferred=%u custom=%u (expected 1/1/2)\n",
+            checks.ordinary, checks.deferred, checks.custom);
+        abort();
+    }
+    expect_length_px("element still resolves variables", ctx.results->styles[CSS_PSEUDO_ELEMENT_NONE],
+        css_computed_width, CSS_WIDTH_SET, 7);
+    assert(ctx.results->styles[CSS_PSEUDO_ELEMENT_BEFORE] != NULL);
+    expect_length_px("pseudo created during normal cascade still inherits variables",
+        ctx.results->styles[CSS_PSEUDO_ELEMENT_BEFORE], css_computed_width, CSS_WIDTH_SET, 7);
+    destroy_style_case(&ctx);
+}
+
 static void test_pseudo_element_uses_element_vars(void)
 {
     style_case ctx;
@@ -1520,6 +1564,7 @@ int main(int argc, char **argv)
     test_imported_sheet_custom_property();
     test_variables_imported_by_literal_sheet();
     test_variable_import_prefix();
+    test_collection_skips_ordinary_rules();
     test_pseudo_element_uses_element_vars();
     test_literal_fallback_value();
     test_shorthand_fallback_value();
