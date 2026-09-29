@@ -289,6 +289,149 @@ START_TEST(test_mixed_text_baseline)
 }
 END_TEST
 
+static int baseline_queries, child_ascent;
+
+static nserror changing_metrics(const struct plot_font_style *style, int *ascent, int *descent)
+{
+    baseline_queries++;
+    if (style->size >= 24 * PLOT_STYLE_SCALE) {
+        *ascent = child_ascent;
+        *descent = style->size * 4 / (PLOT_STYLE_SCALE * 3) - child_ascent;
+    } else {
+        *ascent = 14;
+        *descent = 2;
+    }
+    return NSERROR_OK;
+}
+
+START_TEST(test_repeated_text_baselines)
+{
+    const struct gui_layout_table changing_fonts = {.width = width, .font_metrics = changing_metrics};
+    html_content content = {
+        .unit_len_ctx = {.viewport_width = INTTOFIX(200), .viewport_height = INTTOFIX(500),
+            .font_size_default = INTTOFIX(16), .device_dpi = INTTOFIX(96)},
+        .font_func = &changing_fonts,
+    };
+    struct box *root = make_box(BOX_BLOCK, 21, CSS_VERTICAL_ALIGN_BASELINE);
+    struct box *ic = make_box(BOX_INLINE_CONTAINER, 0, 0);
+    append(root, ic);
+    struct box *image = make_box(BOX_INLINE, 21, CSS_VERTICAL_ALIGN_BASELINE);
+    image->flags |= REPLACE_DIM;
+    style_set_width(image->style, 20, false);
+    style_set_height_px(image->style, 80);
+    append(ic, image);
+
+    enum { FRAGMENT_COUNT = 6 };
+    struct box *fragments[FRAGMENT_COUNT];
+    for (size_t i = 0; i < FRAGMENT_COUNT; i++) {
+        fragments[i] = make_box(BOX_TEXT, 33, CSS_VERTICAL_ALIGN_BASELINE);
+        if (i == 0) {
+            style_set_inline_metrics(fragments[i]->style, 32, 33, CSS_VERTICAL_ALIGN_BASELINE);
+        } else if (!_i) {
+            /* Retained fragments of one text run share its computed style. */
+            destroy_mock_style(fragments[i]->style);
+            fragments[i]->style = fragments[0]->style;
+        } else {
+            /* More distinct styles than fit in the cache must remain correct. */
+            style_set_inline_metrics(fragments[i]->style, 32 + 2 * i, 33, CSS_VERTICAL_ALIGN_BASELINE);
+        }
+        fragments[i]->text = "Ag";
+        fragments[i]->length = 2;
+        fragments[i]->width = UNKNOWN_WIDTH;
+        append(ic, fragments[i]);
+    }
+
+    const int ascents[] = {28, 18, 28};
+    for (size_t pass = 0; pass < sizeof(ascents) / sizeof(ascents[0]); pass++) {
+        /* A newly available font may change metrics without changing styles. */
+        child_ascent = ascents[pass];
+        baseline_queries = 0;
+        root->height = AUTO;
+        ck_assert(layout_block_context(root, 500, &content));
+        int child_baseline = (33 + child_ascent - (32 - child_ascent)) / 2;
+        int last_baseline = child_baseline - (_i ? FRAGMENT_COUNT - 1 : 0);
+        ck_assert_msg(image->y == 0 && ic->height == 80 + 33 - last_baseline,
+            "distinct styles %d, pass %zu: image y=%d, line height=%d", _i, pass, image->y, ic->height);
+        for (size_t i = 0; i < FRAGMENT_COUNT; i++) {
+            int baseline = child_baseline - (_i ? i : 0);
+            ck_assert_msg(fragments[i]->y + baseline == 80,
+                "distinct styles %d, pass %zu, fragment %zu: baseline=%d", _i, pass, i,
+                fragments[i]->y + baseline);
+        }
+        if (!_i) {
+            ck_assert_msg(baseline_queries == 2,
+                "pass %zu: expected one metric query per style, got %d", pass, baseline_queries);
+        }
+    }
+    if (!_i) {
+        for (size_t i = 1; i < FRAGMENT_COUNT; i++)
+            fragments[i]->style = NULL; /* The test helper owns the shared style only once. */
+    }
+    free_tree(root);
+}
+END_TEST
+
+enum { NESTED_FLOAT_DEPTH = 4 };
+
+START_TEST(test_nested_float_layout_once)
+{
+    int depth = _i % (NESTED_FLOAT_DEPTH + 1);
+    bool right = _i > NESTED_FLOAT_DEPTH;
+    const struct gui_layout_table counting_fonts = {.width = width, .font_metrics = changing_metrics};
+    html_content content = {
+        .unit_len_ctx = {.viewport_width = INTTOFIX(400), .viewport_height = INTTOFIX(500),
+            .font_size_default = INTTOFIX(16), .device_dpi = INTTOFIX(96)},
+        .font_func = &counting_fonts,
+    };
+    struct box *root = make_box(BOX_BLOCK, 20, CSS_VERTICAL_ALIGN_BASELINE);
+    struct box *parent = root;
+    struct box *floats[NESTED_FLOAT_DEPTH];
+    for (int i = 0; i < depth; i++) {
+        struct box *ic = make_box(BOX_INLINE_CONTAINER, 0, 0);
+        append(parent, ic);
+        floats[i] = make_box(right ? BOX_FLOAT_RIGHT : BOX_FLOAT_LEFT, 0, 0);
+        destroy_mock_style(floats[i]->style);
+        floats[i]->style = NULL;
+        append(ic, floats[i]);
+        parent = make_box(BOX_BLOCK, 20, CSS_VERTICAL_ALIGN_BASELINE);
+        style_set_width(parent->style, 50, true);
+        append(floats[i], parent);
+    }
+    struct box *ic = make_box(BOX_INLINE_CONTAINER, 0, 0);
+    append(parent, ic);
+    struct box *text = make_box(BOX_TEXT, 20, CSS_VERTICAL_ALIGN_BASELINE);
+    text->text = "x";
+    text->length = 1;
+    text->width = UNKNOWN_WIDTH;
+    append(ic, text);
+
+    const int widths[] = {400, 160, 320, 400};
+    for (size_t pass = 0; pass < sizeof(widths) / sizeof(widths[0]); pass++) {
+        root->width = widths[pass];
+        root->height = AUTO;
+        baseline_queries = 0;
+        ck_assert(layout_block_context(root, 500, &content));
+        /* The leaf line needs its parent and text metrics once each, however
+         * deeply nested the floats are. Resizing must still lay it out anew. */
+        ck_assert_msg(baseline_queries == 2,
+            "depth %d, right %d, width %d: expected 2 metric queries, got %d",
+            depth, right, root->width, baseline_queries);
+        ck_assert_int_eq(root->height, 20);
+        ck_assert_int_eq(text->y, 0);
+        int available = root->width;
+        for (int i = 0; i < depth; i++) {
+            int expected_width = available / 2;
+            ck_assert_msg(floats[i]->width == expected_width && floats[i]->height == 20 &&
+                    floats[i]->x == (right ? available - expected_width : 0) && floats[i]->y == 0,
+                "depth %d, level %d, right %d, width %d: float=(%d,%d %dx%d)", depth, i, right,
+                root->width, floats[i]->x, floats[i]->y, floats[i]->width, floats[i]->height);
+            available = expected_width;
+        }
+    }
+    free_tree(root);
+}
+END_TEST
+
 START_TEST(test_font_baseline_fallback)
 {
     plot_font_style_t style = {.size = 12 * PLOT_STYLE_SCALE};
@@ -313,6 +456,8 @@ int main(void)
     tcase_add_loop_test(tc, test_inline_block_alignment, 0, 4);
     tcase_add_loop_test(tc, test_inline_block_last_baseline, 0, 2);
     tcase_add_loop_test(tc, test_mixed_text_baseline, 0, sizeof(text_cases) / sizeof(text_cases[0]));
+    tcase_add_loop_test(tc, test_repeated_text_baselines, 0, 2);
+    tcase_add_loop_test(tc, test_nested_float_layout_once, 0, 2 * (NESTED_FLOAT_DEPTH + 1));
     tcase_add_test(tc, test_font_baseline_fallback);
     suite_add_tcase(suite, tc);
     SRunner *runner = srunner_create(suite);

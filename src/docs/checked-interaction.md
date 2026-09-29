@@ -231,6 +231,129 @@ measurement and ascent/descent queries remain candidates for the next focused
 investigation; changing shaping or line-breaking behavior is not part of this
 cache fix.
 
+### Repeated inline baseline measurements
+
+Inline layout measures baselines before choosing float boundaries, again after
+wrapping, and while positioning the resulting boxes. Those passes often request
+the same computed style and height. A four-entry stack cache now reuses these
+results within one `layout_line()` call. It includes height in the key to preserve
+half-leading rounding, makes no allocations, and expires before the next line or
+reflow. Computed styles remain alive and unchanged for that call; font loading
+and later style changes need no cache invalidation mechanism.
+
+A separate diagnostic counts nonzero-size `font_baseline()` calls during the
+12 post-click layouts per page, including warm-up. Queries fell from 11,805 to
+2,743 per layout on Tion and from 16,493 to 3,994 on Bihon: about 76% fewer.
+No probe is included in the production code or the timing runs below.
+
+Three fresh processes per version/page were run in alternating before/after
+order, again retaining 30 warmed samples. Both versions use the same Qt binary
+and dependencies; the control core is from `f373628a`. Medians in milliseconds:
+
+| Phase | Tion before | Tion now | Bihon before | Bihon now |
+| --- | ---: | ---: | ---: | ---: |
+| CSS selection/composition | 67.87 | 72.46 | 110.04 | 110.51 |
+| Layout/reformat | 63.11 | 57.29 | 104.49 | 96.40 |
+| Complete refresh, before painting | 136.65 | 136.74 | 224.26 | 215.91 |
+
+Layout improves by 9.2% and 7.7%, with lower layout medians in every process
+pair. Unchanged CSS work varies noticeably between runs, so there is no clear
+overall Tion refresh improvement in this batch. The result supports a modest
+layout saving, not another large end-to-end speedup.
+
+All six paired screenshots and DOM dumps are byte-identical. All 78 inspected
+states, scroll positions, resource counts and final document extents match.
+The baseline unit test covers shared text styles, cache eviction with different
+font metrics, odd line heights, and changing metrics between reflows. Twenty
+layout/font/capture tests pass in both Debug (ASan/UBSan) and Release.
+
+Text fitting remains the larger layout cost: the Qt splitter estimates a
+character position by measuring successive prefixes, then measures word
+boundaries. Investigation of repeated baseline queries also exposed redundant
+float layout, described below. Changing shaping, wrapping rules or persistent
+text-cache lifetimes would need separate justification.
+
+### Repeated float layout and stable text reflow
+
+`layout_line()` was fully laying out float contents in both its initial sizing
+pass and its placement pass. The first pass ignores float dimensions and resets
+the wrapper width to zero; placement sets up the containing context and lays out
+the contents again. The extra early call was introduced in `ddde5d6e` during
+inline-grid work. Nested floats multiply these passes: both saved sites' main
+article columns were laid out four times per document layout.
+
+Removing the early call makes those columns enter layout once, without adding
+cached state or changing float placement. A regression exercises zero to four
+nested left/right floats and repeated resizing. With the earlier baseline cache
+present, its leaf line makes two metric queries at every depth. Against the
+control library, it instead makes 4, 8, 16 and 32 queries at depths one through four.
+
+The removed passes also concealed a text-fitting inconsistency. Tion's
+`probe-div-564` measured 135px tall initially, then 120px after reflow at the same
+87px width. Its bold 13px text measures `patru victime` as 88px, but retained
+fragments add up to 36 + 3 + 48 = 87px. Flex therefore retained a 488px panel
+height while its child became 473px tall, leaving a visible 15px bottom gap after
+the float optimization. Chromium has no such final gap.
+
+Before laying out an inline container again, `layout_rejoin_text()` now restores
+text runs split by wrapping. It joins only adjacent layout-generated clones of
+the same styled source text, releases the shallow clones, restores the trailing
+space and invalidates the combined width. Actual DOM/style boundaries and normal
+space widths remain intact. Splitting also keeps the measured width when the
+whole remainder fits, replacing its estimate even when no further box is created.
+This makes wrapping independent of previous fragment boundaries, without another
+layout settling pass or persistent cache. Re-measuring and splitting restored
+runs costs some of the initial float-only speedup.
+
+The final comparison includes both float and text fixes. Its control includes
+the per-line baseline cache but neither fix. Three fresh processes per
+version/page ran in alternating order, yielding 30 warmed samples per page.
+Median times in milliseconds:
+
+| Phase | Tion before | Tion now | Bihon before | Bihon now |
+| --- | ---: | ---: | ---: | ---: |
+| Layout/reformat | 53.87 | 41.36 | 96.69 | 73.70 |
+| Complete refresh, before painting | 124.30 | 111.80 | 218.68 | 200.90 |
+
+Layout improves by 23.2% and 23.8%; total refresh by 10.1% and 8.1%. These final
+figures replace the preliminary float-only gains of 41% and 38%, which preceded
+the text correction. CSS work remains noisy and is unchanged by these fixes.
+
+Acceptance is based on settled rendering against Chromium, not equality between
+intermediate passes. Chromium 153.0.8010.52 used the same saved pages, 1280x900
+viewport, disabled scripts and aligned font preferences. Switching away and back
+produces identical final inspected geometry in Chromium. Final alternate panels:
+
+| Content-box height / gap | Wisp | Chromium |
+| --- | ---: | ---: |
+| Tion panel content box | 488px | 503px |
+| Tion child content | 488px | 503px |
+| Tion empty space below child | 0px | 0px |
+| Bihon panel and child content | 980px | 980px |
+| Bihon empty space below child | 0px | 0px |
+
+Each panel has an additional 10px top padding. Tion's affected headline now
+consistently occupies nine 15px lines, matching Chromium's 135px height. Its
+widths are 87px and 86.7188px respectively; other text-wrapping differences still
+make exact full-panel height an inappropriate cross-engine baseline. A scrolled
+capture confirms that the extra grey strip below the last article is gone.
+All six final Live-panel PNGs and DOM dumps match the control exactly.
+
+The Qt text regression covers rounding in both directions, multiple retained
+fragments, repeated widths and shrinking/widening, comparing final line breaks
+with a fresh layout. The fractional-font capture fixture checks a nested flex
+panel's final headline height and absence of a bottom gap. Both new regressions
+fail against the preceding float-only library. No temporary probe is part of
+the production source. All 42 layout/Qt tests pass in both Debug (ASan/UBSan)
+and Release; the additional whole-remainder width regression also passes in
+both configurations.
+
+Local artifacts include `run_text_refit.py`, `text-refit-before.json`,
+`text-refit-after.json`, `text-refit-final-tion/`, `text-refit-final-bihon/`,
+`compare_final_float.py` and `float-final-chromium-{tion,bihon}/` in the artifact
+directory below. Earlier `float-layout-*` artifacts describe the preliminary
+float-only experiment, not the complete fix.
+
 ### Chromium comparison and measurement limits
 
 Chromium 153.0.8010.52, same files/viewport, page scripts disabled, aligned font
@@ -259,7 +382,11 @@ not a precise estimate of timer cost. The earlier 450–830 ms figures included 
 
 Local raw samples, reproducible drivers and the DOM microbenchmark are under
 `out/render-captures/checked-timing-2026-09-29/` (`baseline.json`, `profiled.json`,
-`linear.json`, `variable-pass.json`, `family-cache-final.json`, `chromium.json`,
+`linear.json`, `variable-pass.json`, `family-cache-final.json`,
+`line-baselines-before.json`, `line-baselines-after.json`,
+`line-baselines-query-counts.json`, `float-layout-before.json`,
+`float-layout-after.json`, `float-layout-query-counts.json`,
+`float-layout-state-differences.json`, `chromium.json`,
 `nodelist-*.json`, `run_wisp.py`, `run_chromium.py`,
 `nodelist_benchmark.c`). See the capture guide for counter definitions.
 

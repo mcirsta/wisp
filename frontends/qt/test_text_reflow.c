@@ -2,6 +2,7 @@
 /* C-only layout headers are kept separate from the Qt test driver. */
 #undef NDEBUG
 #include <assert.h>
+#include <stdio.h>
 #include <string.h>
 #include <wisp/layout.h>
 #include <wisp/plot_style.h>
@@ -66,6 +67,9 @@ static void check_spaces(struct paragraph *p)
     for (struct box *b = p->lines.children; b; b = b->next) {
         assert(b->length > 0 && b->text[b->length - 1] != ' ');
         assert(fonts->width(&font, b->text, b->length, &width) == NSERROR_OK);
+        if (b->width != width)
+            fprintf(stderr, "text '%.*s': box width %d, measured %d, flags %x\n",
+                (int)b->length, b->text, b->width, width, b->flags);
         assert(b->width == width);
         if (b->next) {
             assert(b->space == space);
@@ -130,6 +134,55 @@ void test_fractional_text_reflow(const struct gui_layout_table *fonts)
     assert(estimated.root.height == 46);
     check_spaces(&estimated);
     finish(&estimated);
+
+    /* An overestimate can invoke split() even when the whole remainder fits.
+     * The box must retain that measured width without creating another clone. */
+    init(&estimated, "a", fonts);
+    estimated.text.width = 11;
+    layout(&estimated, 10);
+    assert(estimated.text.width == 10 && estimated.text.next == NULL);
+    check_spaces(&estimated);
+    finish(&estimated);
+}
+
+void test_fragment_rounding_reflow(const struct gui_layout_table *fonts)
+{
+    /* Whole-run rounding differs from summing rounded words and spaces in
+     * both directions. Layout history must not change the final line breaks. */
+    static const struct {
+        int font_px;
+        const char *text;
+        int widths[8];
+    } cases[] = {
+        {13, "aaaaa bbbbb", {81, 81, 82, 40, 81, 100, 82, 81}},
+        {14, "a b", {20, 21, 21, 9, 21, 100, 20, 21}},
+        {13, "aaaaa bbbbb ccccc ddddd eeeee fffff", {81, 81, 82, 160, 40, 300, 81, 82}},
+    };
+    for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
+        struct paragraph retained;
+        init(&retained, cases[i].text, fonts);
+        style_set_inline_metrics(retained.root.style, cases[i].font_px, 23, CSS_VERTICAL_ALIGN_BASELINE);
+        for (size_t j = 0; j < sizeof(cases[i].widths) / sizeof(cases[i].widths[0]); j++) {
+            struct paragraph fresh;
+            init(&fresh, cases[i].text, fonts);
+            style_set_inline_metrics(fresh.root.style, cases[i].font_px, 23, CSS_VERTICAL_ALIGN_BASELINE);
+            layout(&retained, cases[i].widths[j]);
+            layout(&fresh, cases[i].widths[j]);
+            if (retained.root.height != fresh.root.height)
+                fprintf(stderr, "fragment reflow case %zu, step %zu, width %d: retained %d, fresh %d\n",
+                    i, j, cases[i].widths[j], retained.root.height, fresh.root.height);
+            assert(retained.root.height == fresh.root.height);
+            struct box *expected = fresh.lines.children;
+            for (struct box *b = retained.lines.children; b; b = b->next) {
+                while (expected->next && expected->next->text <= b->text)
+                    expected = expected->next;
+                assert(b->y == expected->y);
+            }
+            check_spaces(&retained);
+            finish(&fresh);
+        }
+        finish(&retained);
+    }
 }
 
 void test_inline_spacing_reflow(const struct gui_layout_table *fonts)

@@ -14,6 +14,7 @@ extern "C" {
 #include <wisp/utils/nsoption.h>
 void test_text_reflow(const struct gui_layout_table *fonts);
 void test_fractional_text_reflow(const struct gui_layout_table *fonts);
+void test_fragment_rounding_reflow(const struct gui_layout_table *fonts);
 void test_inline_spacing_reflow(const struct gui_layout_table *fonts);
 }
 #include "qt/layout.h"
@@ -114,6 +115,7 @@ int main(int argc, char **argv)
     test_text_reflow(nsqt_layout_table);
     test_inline_spacing_reflow(nsqt_layout_table);
     test_fractional_text_reflow(nsqt_layout_table);
+    test_fragment_rounding_reflow(nsqt_layout_table);
     nsoption_finalise(nullptr, nullptr);
     std::puts("Qt text split: fractional/exact boundaries, widths, UTF-8 and repeated/resized layout passed.");
     return EXIT_SUCCESS;

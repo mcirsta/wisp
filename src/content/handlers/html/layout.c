@@ -3169,11 +3169,33 @@ static bool box_needs_line_metrics(const struct box *box, const css_computed_sty
         (box->type == BOX_TEXT && box->length && box->style != parent_style);
 }
 
-static int layout_text_baseline(const html_content *content, const css_computed_style *style, int height)
+/* Reuse measurements across the sizing and positioning passes of one line.
+ * Styles and fonts stay unchanged during that call; nothing survives reflow
+ * or a font load. Key by height too, to preserve half-leading rounding. */
+struct line_baselines {
+    struct {
+        const css_computed_style *style;
+        int height, baseline;
+    } entries[4];
+    unsigned int next;
+};
+
+static int layout_text_baseline(const html_content *content, const css_computed_style *style, int height,
+    struct line_baselines *baselines)
 {
+    for (size_t i = 0; i < sizeof(baselines->entries) / sizeof(baselines->entries[0]); i++) {
+        if (baselines->entries[i].style == style && baselines->entries[i].height == height)
+            return baselines->entries[i].baseline;
+    }
     plot_font_style_t fstyle;
     font_plot_style_from_css(&content->unit_len_ctx, style, &fstyle);
-    return font_baseline(content->font_func, &fstyle, height);
+    int baseline = font_baseline(content->font_func, &fstyle, height);
+    unsigned int slot = baselines->next;
+    baselines->entries[slot].style = style;
+    baselines->entries[slot].height = height;
+    baselines->entries[slot].baseline = baseline;
+    baselines->next = (slot + 1) % (sizeof(baselines->entries) / sizeof(baselines->entries[0]));
+    return baseline;
 }
 
 /* Find the last normal-flow line, looking through block descendants but not
@@ -3229,7 +3251,7 @@ static int layout_atomic_baseline(const struct box *box, int height, uint8_t ali
  * the baseline; middle alignment contributes on both sides of the baseline.
  */
 static bool layout_line_alignment_metrics(struct box *first, struct box *end, const html_content *content,
-    int *height, int *baseline)
+    int *height, int *baseline, struct line_baselines *baselines)
 {
     const css_computed_style *parent_style = first->parent->parent->style;
     bool needs_metrics = false;
@@ -3243,7 +3265,7 @@ static bool layout_line_alignment_metrics(struct box *first, struct box *end, co
         return false;
 
     int strut_height = line_height(&content->unit_len_ctx, parent_style);
-    int above = layout_text_baseline(content, parent_style, strut_height);
+    int above = layout_text_baseline(content, parent_style, strut_height, baselines);
     int below = strut_height - above;
     int aligned_height = strut_height;
 
@@ -3266,7 +3288,7 @@ static bool layout_line_alignment_metrics(struct box *first, struct box *end, co
         if (align == CSS_VERTICAL_ALIGN_BASELINE || align == CSS_VERTICAL_ALIGN_INHERIT ||
             (object && align == CSS_VERTICAL_ALIGN_MIDDLE)) {
             int a = object ? layout_atomic_baseline(b, h, align, parent_style, content) :
-                             layout_text_baseline(content, b->style, h);
+                             layout_text_baseline(content, b->style, h, baselines);
             above = max(above, a);
             below = max(below, h - a);
         } else {
@@ -3319,6 +3341,7 @@ static bool layout_line(struct box *first, int *width, int *y, int cx, int cy, s
     unsigned int i;
     const struct gui_layout_table *font_func = content->font_func;
     plot_font_style_t fstyle;
+    struct line_baselines baselines = {0};
 
     NSLOG(layout, DEBUG, "first %p, first->text '%.*s', width %i, y %i, cx %i, cy %i", first, (int)first->length,
         first->text, *width, *y, cx, cy);
@@ -3365,9 +3388,10 @@ static bool layout_line(struct box *first, int *width, int *y, int cx, int cy, s
             break;
 
         if (lh__box_is_float_box(b)) {
-            if (b->children && !layout_float(b->children, *width, content))
-                return false;
-
+            /* Floats do not contribute to line dimensions. Lay out their
+             * contents in pass 2, after setting the float container, when
+             * their size is needed for placement. Doing it here as well
+             * repeats the entire subtree at each level of nested floats. */
             b->width = 0;
             continue;
         }
@@ -3523,7 +3547,7 @@ static bool layout_line(struct box *first, int *width, int *y, int cx, int cy, s
     /* Include the strut descent when determining which floats this line meets. */
     int baseline;
     if (needs_line_metrics)
-        layout_line_alignment_metrics(first, b, content, &height, &baseline);
+        layout_line_alignment_metrics(first, b, content, &height, &baseline, &baselines);
 
     /* find new sides using this height */
     x0 = cx;
@@ -3696,6 +3720,12 @@ static bool layout_line(struct box *first, int *width, int *y, int cx, int cy, s
             font_plot_style_from_css(&content->unit_len_ctx, split_box->style, &fstyle);
             /** \todo handle errors */
             font_func->split(&fstyle, split_box->text, split_box->length, x1 - x0 - x - space_before, &split, &w);
+            if (split != 0 && split == split_box->length) {
+                /* The remainder's estimated width may have triggered this
+                 * call. Keep the measured width even when no split is needed. */
+                split_box->width = w;
+                split_box->flags |= MEASURED;
+            }
         }
 
         /* split == 0 implies that text can't be split */
@@ -3848,7 +3878,7 @@ static bool layout_line(struct box *first, int *width, int *y, int cx, int cy, s
 
     /* Recompute from boxes actually placed on this line after wrapping. */
     bool aligned_line = needs_line_metrics &&
-        layout_line_alignment_metrics(first, b, content, &used_height, &baseline);
+        layout_line_alignment_metrics(first, b, content, &used_height, &baseline, &baselines);
 
     /* handle vertical-align by adjusting box y values */
     /** \todo  proper vertical alignment handling */
@@ -3914,7 +3944,7 @@ static bool layout_line(struct box *first, int *width, int *y, int cx, int cy, s
             default:
             case CSS_VERTICAL_ALIGN_BASELINE:
                 if (aligned_line)
-                    d->y += baseline - layout_text_baseline(content, d->style, d->height);
+                    d->y += baseline - layout_text_baseline(content, d->style, d->height, &baselines);
                 else
                     d->y += 0.75 * (used_height - d->height);
                 break;
@@ -3930,12 +3960,12 @@ static bool layout_line(struct box *first, int *width, int *y, int cx, int cy, s
                 css_unit unit = CSS_UNIT_PX;
                 if (d->type == BOX_TEXT && d->length &&
                     css_computed_vertical_align(d->style, &value, &unit) == CSS_VERTICAL_ALIGN_BASELINE) {
-                    baseline = d->y - *y + layout_text_baseline(content, d->style, d->height);
+                    baseline = d->y - *y + layout_text_baseline(content, d->style, d->height, &baselines);
                     break;
                 }
             }
             if (d == b)
-                baseline = layout_text_baseline(content, first->parent->parent->style, used_height);
+                baseline = layout_text_baseline(content, first->parent->parent->style, used_height, &baselines);
         }
         first->parent->baseline = *y + baseline;
         first->parent->flags |= HAS_BASELINE;
@@ -3955,6 +3985,36 @@ static bool layout_line(struct box *first, int *width, int *y, int cx, int cy, s
     return true;
 }
 
+
+/* Restore a text run split by earlier wrapping. Adding separately rounded
+ * fragment/space widths can disagree with measuring the original text, so
+ * retained breaks must not become new shaping boundaries on reflow. Only
+ * layout-generated clones are joined; DOM/style boundaries stay intact. */
+static void layout_rejoin_text(struct box *box)
+{
+    if (box->type != BOX_TEXT || !box->text)
+        return;
+
+    while (box->next && (box->next->flags & CLONE) && box->next->type == BOX_TEXT &&
+        box->next->style == box->style) {
+        struct box *next = box->next;
+        size_t gap = box->text[box->length] == ' ' ? 1 : 0;
+        if (next->text != box->text + box->length + gap)
+            break;
+
+        box->length += gap + next->length;
+        box->space = next->space;
+        box->width = UNKNOWN_WIDTH;
+        box->flags &= ~MEASURED;
+        box->next = next->next;
+        if (box->next)
+            box->next->prev = box;
+        else
+            box->parent->last = box;
+        /* These shallow clones own no styles, DOM references or text. */
+        talloc_free(next);
+    }
+}
 
 /**
  * Layout lines of text or inline boxes with floats.
@@ -3992,6 +4052,8 @@ static bool layout_inline_container(
     has_text_children = false;
     for (c = inline_container->children; c; c = c->next) {
         bool is_pre = false;
+
+        layout_rejoin_text(c);
 
         if (c->style) {
             enum css_white_space_e whitespace;

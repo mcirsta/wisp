@@ -11,7 +11,7 @@ binary = Path(sys.argv[1]).resolve()
 magick = sys.argv[2]
 fixture = Path(__file__).resolve().parents[2] / "test/fractional-fonts.html"
 names = ("integer15", "fraction155", "fraction159", "integer16", "em", "rem", "percent", "calc",
-         "positive", "negative", "minimum", "wrap15", "wrap155")
+         "positive", "negative", "minimum", "wrap15", "wrap155", "panel", "articles", "headline")
 env = dict(os.environ, QT_QPA_PLATFORM="offscreen", QT_SCALE_FACTOR="1",
            QT_SCREEN_SCALE_FACTORS="1", QT_FONT_DPI="96")
 with tempfile.TemporaryDirectory(prefix="wisp-fractional-fonts-") as tmp:
@@ -40,6 +40,9 @@ with tempfile.TemporaryDirectory(prefix="wisp-fractional-fonts-") as tmp:
     assert abs(boxes["minimum"]["font"]["effective_pixel_size"] - minimum) < .002
     assert boxes["wrap15"]["content"]["height"] == 20, boxes["wrap15"]
     assert boxes["wrap155"]["content"]["height"] == 40, boxes["wrap155"]
+    assert boxes["headline"]["content"]["height"] == 30, boxes["headline"]
+    panel, articles = boxes["panel"]["content"], boxes["articles"]["border_box"]
+    assert panel["y"] + panel["height"] == articles["y"] + articles["height"], (panel, articles)
 
     def pixels(name):
         box = boxes[name]["border_box"]
