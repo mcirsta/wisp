@@ -41,6 +41,11 @@ work; this change does not claim to implement them.
    allocation context, and broadcast a reformat. The window retains its scroll
    offset, subject to ordinary clamping if the document becomes shorter.
 
+Cache invalidation and gadget/box detachment each use a single depth-first DOM
+walk, including hidden descendants. The shared iterator uses constant storage
+without recursion and reads children after its callback, so textarea value
+synchronization may replace text children safely.
+
 There is no navigation, stylesheet reload, parser restart, or replay of page-load
 scripts/events. Fonts and inline SVG source caches also survive. Destruction
 cancels both queued refreshes and in-progress box conversion.
@@ -74,7 +79,8 @@ counts were checked throughout. No compiler jobs ran alongside timed captures.
 
 The optional `WISP_PROFILE_RESTYLE` counters use monotonic wall-clock timestamps
 and aggregate in memory. These internal durations exclude the capture quiet
-period, inspection and artifact writing. Median times in milliseconds:
+period, inspection and artifact writing. Baseline medians before replacing the
+indexed DOM enumeration loops, in milliseconds:
 
 | Wisp phase | Tion | Bihon |
 | --- | ---: | ---: |
@@ -98,11 +104,11 @@ should not be interpreted as box allocation/structure overhead.
 
 ### Repeated DOM enumeration
 
-Both the cache-invalidation loop and the old-box-detachment loop call
+Both the cache-invalidation loop and the old-box-detachment loop originally called
 `dom_nodelist_item(list, i)` for every element. Libdom's implementation in
 `contrib/libdom/src/core/nodelist.c` restarts at the root for each index. Enumerating
-all indices therefore does quadratic traversal work. These loops were added by
-the checked-state implementation; they are a concrete first optimization target.
+all indices therefore does quadratic traversal work. Both loops now use
+`libdom_iterate_elements()` for linear traversal through the public DOM APIs.
 
 An isolated benchmark parsed each saved document and compared indexed enumeration
 with one depth-first walk through the public DOM APIs. Both methods found the
@@ -113,10 +119,34 @@ same element count. Seven repetitions, median milliseconds:
 | Tion | 1,493 | 66.88 | 0.111 |
 | Bihon | 2,099 | 136.77 | 0.176 |
 
-This isolates enumeration rather than timing a changed renderer. It supports
-replacing the two loops with linear traversal before introducing selective
-invalidation. The resulting whole-page speedup has not yet been measured; CSS
-selection and layout would still remain substantial costs.
+This microbenchmark isolates enumeration; the renderer measurements below include
+the actual cache invalidation and gadget detachment work as well.
+
+### Renderer after linear traversal
+
+The same Release configuration and 30 warmed samples per page, after replacing
+both indexed scans with the shared iterator. Median milliseconds:
+
+| Phase | Tion before | Tion after | Bihon before | Bihon after |
+| --- | ---: | ---: | ---: | ---: |
+| Invalidate CSS caches | 62.40 | 0.70 | 133.71 | 1.11 |
+| Detach old gadgets and box mappings | 63.72 | 0.25 | 137.33 | 0.37 |
+| Combined invalidation + detachment | 125.09 | 0.96 | 268.94 | 1.47 |
+| CSS selection/composition | 91.55 | 89.77 | 151.23 | 151.66 |
+| Layout/reformat | 110.29 | 109.41 | 172.01 | 171.53 |
+| **Complete refresh, before painting** | **331.72** | **205.08** | **599.23** | **332.51** |
+
+Combined rows are medians of per-sample sums. Total refresh time fell by 38.2%
+for Tion and 44.5% for Bihon; the 90th percentiles fell to 213.2 and 348.1 ms.
+Refresh through the end of drawing fell to 210.8 and 339.4 ms. CSS selection and
+layout remain whole-document work and account for almost all the remaining cost;
+the traversal fix does not introduce selective invalidation or parallelism.
+
+All six final screenshots and DOM dumps are byte-identical to their baseline
+captures. All 13 inspected states per run match the baseline panel geometry,
+control state and scroll offsets; resource counts remain stable. The focused
+DOM/CSS/form/box and Qt capture tests pass in Debug (ASan/UBSan) and Release.
+The traversal unit tests also pass with LeakSanitizer enabled.
 
 ### Chromium comparison and measurement limits
 
@@ -146,11 +176,13 @@ not a precise estimate of timer cost. The earlier 450–830 ms figures included 
 
 Local raw samples, reproducible drivers and the DOM microbenchmark are under
 `out/render-captures/checked-timing-2026-09-29/` (`baseline.json`, `profiled.json`,
-`chromium.json`, `nodelist-*.json`, `run_wisp.py`, `run_chromium.py`,
+`linear.json`, `chromium.json`, `nodelist-*.json`, `run_wisp.py`, `run_chromium.py`,
 `nodelist_benchmark.c`). See the capture guide for counter definitions.
 
 ## Checks
 
+- `libdom_iteration_test`: document/subtree order, hidden descendants, non-element
+  nodes, early callback errors, child replacement, empty roots and deep trees.
 - `form_state_test`: groups, explicit/implicit labels, interactive descendants,
   disabled controls/fieldsets, explicit form ownership and live/default state.
 - `css_checked_test`: repeated checked-state invalidation with the same selection

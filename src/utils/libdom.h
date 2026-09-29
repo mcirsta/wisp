@@ -45,6 +45,16 @@ typedef nserror (*libdom_iterate_cb)(dom_node *node, void *ctx);
 
 nserror libdom_iterate_child_elements(dom_node *parent, libdom_iterate_cb cb, void *ctx);
 
+/**
+ * Visit elements in depth-first order, including root if it is an element.
+ *
+ * Traversal stays within root's subtree and uses constant storage without
+ * recursion. The callback borrows each node; it may update its data or children,
+ * but must not remove or reparent the node or its ancestors. Children are read
+ * after the callback. A callback error stops traversal and is returned unchanged.
+ */
+nserror libdom_iterate_elements(dom_node *root, libdom_iterate_cb cb, void *ctx);
+
 nserror libdom_parse_file(const char *filename, const char *encoding, dom_document **doc);
 
 /**

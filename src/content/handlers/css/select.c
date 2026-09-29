@@ -27,6 +27,7 @@
 #include <wisp/utils/nsoption.h>
 #include <wisp/utils/nsurl.h>
 #include "desktop/system_colour.h"
+#include "utils/libdom.h"
 
 #include "content/handlers/css/hints.h"
 #include "content/handlers/css/internal.h"
@@ -1700,32 +1701,21 @@ css_error set_libcss_node_data(void *pw, void *node, void *libcss_node_data)
     return CSS_OK;
 }
 
+static nserror nscss_invalidate_element(dom_node *node, void *pw)
+{
+    void *data = NULL;
+    if (dom_node_get_user_data(node, corestring_dom___ns_key_libcss_node_data, &data) != DOM_NO_ERR)
+        return NSERROR_DOM;
+    if (data != NULL &&
+        css_libcss_node_data_handler(&selection_handler, CSS_NODE_MODIFIED, NULL, node, NULL, data) != CSS_OK)
+        return NSERROR_DOM;
+    return NSERROR_OK;
+}
+
 nserror nscss_invalidate_document(dom_document *document)
 {
-    dom_nodelist *nodes;
-    uint32_t count;
-    dom_string *all;
-    if (dom_string_create((const uint8_t *)"*", 1, &all) != DOM_NO_ERR)
-        return NSERROR_NOMEM;
-    dom_exception list_err = dom_document_get_elements_by_tag_name(document, all, &nodes);
-    dom_string_unref(all);
-    if (list_err != DOM_NO_ERR)
-        return NSERROR_DOM;
-    dom_exception err = dom_nodelist_get_length(nodes, &count);
-    for (uint32_t i = 0; err == DOM_NO_ERR && i < count; i++) {
-        dom_node *node;
-        void *data = NULL;
-        err = dom_nodelist_item(nodes, i, &node);
-        if (err != DOM_NO_ERR)
-            break;
-        err = dom_node_get_user_data(node, corestring_dom___ns_key_libcss_node_data, &data);
-        if (err == DOM_NO_ERR && data != NULL &&
-            css_libcss_node_data_handler(&selection_handler, CSS_NODE_MODIFIED, NULL, node, NULL, data) != CSS_OK)
-            err = DOM_NO_MEM_ERR;
-        dom_node_unref(node);
-    }
-    dom_nodelist_unref(nodes);
-    return err == DOM_NO_ERR ? NSERROR_OK : NSERROR_DOM;
+    /* NodeList item(i) rescans from the root for each index. Walk once instead. */
+    return libdom_iterate_elements((dom_node *)document, nscss_invalidate_element, NULL);
 }
 
 css_error get_libcss_node_data(void *pw, void *node, void **libcss_node_data)

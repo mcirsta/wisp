@@ -117,6 +117,48 @@ nserror libdom_iterate_child_elements(dom_node *parent, libdom_iterate_cb cb, vo
 }
 
 /* exported interface documented in libdom.h */
+nserror libdom_iterate_elements(dom_node *root, libdom_iterate_cb cb, void *ctx)
+{
+    if (root == NULL || cb == NULL)
+        return NSERROR_BAD_PARAMETER;
+
+    dom_node *node = dom_node_ref(root);
+    nserror result = NSERROR_DOM;
+    while (node != NULL) {
+        dom_node_type type;
+        if (dom_node_get_node_type(node, &type) != DOM_NO_ERR)
+            goto out;
+        if (type == DOM_ELEMENT_NODE) {
+            result = cb(node, ctx);
+            if (result != NSERROR_OK)
+                goto out;
+            result = NSERROR_DOM;
+        }
+
+        dom_node *next = NULL;
+        if (dom_node_get_first_child(node, &next) != DOM_NO_ERR)
+            goto out;
+        while (next == NULL && node != root) {
+            if (dom_node_get_next_sibling(node, &next) != DOM_NO_ERR)
+                goto out;
+            if (next == NULL) {
+                dom_node *parent = NULL;
+                if (dom_node_get_parent_node(node, &parent) != DOM_NO_ERR || parent == NULL)
+                    goto out;
+                dom_node_unref(node);
+                node = parent;
+            }
+        }
+        dom_node_unref(node);
+        node = next;
+    }
+    result = NSERROR_OK;
+out:
+    dom_node_unref(node);
+    return result;
+}
+
+/* exported interface documented in libdom.h */
 nserror libdom_hubbub_error_to_nserror(dom_hubbub_error error)
 {
     switch (error) {

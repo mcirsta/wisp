@@ -1480,28 +1480,35 @@ static void html_restyle_done(html_content *html, bool success)
         html_request_restyle(html);
 }
 
+static nserror html_restyle_detach_element(dom_node *node, void *pw)
+{
+    struct box *box = box_for_node(node);
+    void *old = NULL;
+
+    /* Clear even descendants of newly hidden panels. Their new conversion
+     * will not visit them, and must not leave stale DOM-to-box mappings. */
+    if (dom_node_set_user_data(node, corestring_dom___ns_key_box_node_data, NULL, NULL, &old) != DOM_NO_ERR)
+        return NSERROR_DOM;
+    if (box != NULL && box->gadget != NULL) {
+        form_gadget_sync_with_dom(box->gadget);
+        form_free_control(box->gadget);
+    }
+    return NSERROR_OK;
+}
+
 static void html_restyle(void *pw)
 {
     html_content *html = pw;
-    dom_nodelist *nodes = NULL;
     dom_node *root = NULL;
-    dom_string *all = NULL;
-    uint32_t count = 0;
 
     if (!html->restyle_pending || html->restyling || html->layout == NULL || html->box_conversion_context != NULL)
         return;
     HTML_PROFILE(html->restyle_profile = (struct html_restyle_profile){.start_ns = html_profile_now()});
     if (dom_document_get_document_element(html->document, &root) != DOM_NO_ERR || root == NULL ||
-        dom_string_create((const uint8_t *)"*", 1, &all) != DOM_NO_ERR ||
-        dom_document_get_elements_by_tag_name(html->document, all, &nodes) != DOM_NO_ERR ||
-        dom_nodelist_get_length(nodes, &count) != DOM_NO_ERR ||
         nscss_invalidate_document(html->document) != NSERROR_OK) {
-        dom_string_unref(all);
-        dom_nodelist_unref(nodes);
         dom_node_unref(root);
         return;
     }
-    dom_string_unref(all);
     HTML_PROFILE_START(detach_start);
     HTML_PROFILE(html->restyle_profile.invalidate_ns = detach_start - html->restyle_profile.start_ns);
 
@@ -1522,21 +1529,15 @@ static void html_restyle(void *pw)
         content_textsearch_destroy(html->base.textsearch.context);
         html->base.textsearch.context = NULL;
     }
-    for (uint32_t i = 0; i < count; i++) {
-        dom_node *node = NULL;
-        void *old = NULL;
-        dom_nodelist_item(nodes, i, &node);
-        struct box *box = box_for_node(node);
-        if (box != NULL && box->gadget != NULL) {
-            form_gadget_sync_with_dom(box->gadget);
-            form_free_control(box->gadget);
-        }
-        /* Clear even descendants of newly hidden panels. Their new conversion
-         * will not visit them, and must not leave stale DOM-to-box mappings. */
-        dom_node_set_user_data(node, corestring_dom___ns_key_box_node_data, NULL, NULL, &old);
-        dom_node_unref(node);
+    nserror err = libdom_iterate_elements(root, html_restyle_detach_element, NULL);
+    if (err != NSERROR_OK) {
+        html->base.locked = false;
+        html->restyling = false;
+        dom_node_unref(root);
+        content_broadcast_error(&html->base, err, NULL);
+        content_set_error(&html->base);
+        return;
     }
-    dom_nodelist_unref(nodes);
     for (struct content_html_object *o = html->object_list; o != NULL; o = o->next)
         o->box = NULL;
 
@@ -1550,7 +1551,7 @@ static void html_restyle(void *pw)
     html->unit_len_ctx.root_style = NULL;
     HTML_PROFILE(html->restyle_profile.construction_start_ns = html_profile_now();
         html->restyle_profile.detach_ns = html->restyle_profile.construction_start_ns - detach_start);
-    nserror err = dom_to_box(root, html, html_restyle_done, &html->box_conversion_context);
+    err = dom_to_box(root, html, html_restyle_done, &html->box_conversion_context);
     dom_node_unref(root);
     if (err != NSERROR_OK)
         html_restyle_done(html, false);

@@ -113,7 +113,7 @@ messages or allocate during the timed loops.
 
 The profile reports wall-clock milliseconds:
 
-- `invalidate_ms`: obtain the DOM node list and invalidate CSS selection caches.
+- `invalidate_ms`: walk DOM elements and invalidate CSS selection caches.
 - `detach_ms`: clear interaction state, old gadgets and DOM-to-box mappings.
 - `css_ms`: element style selection/composition, including inline style parsing.
 - `boxes_ms`: other active box construction and DOM traversal.
