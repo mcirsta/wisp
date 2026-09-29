@@ -53,6 +53,7 @@ int NS_Capture::prepare(int &argc, char **argv)
                 "  --capture-type TEXT           Type into the focused control\n"
                 "  --capture-scroll X,Y          Scroll before the next action\n"
                 "  --capture-point X,Y          Inspect a point in document layout pixels\n"
+                "  --capture-force-full-restyle Force the full-refresh reference path\n"
                 "DIR must be new or empty. Uses a temporary profile, 96 DPI, JS and animation off\n"
                 "by default. Core options such as --enable_javascript=1 can override defaults.\n"
                 "Writes page.png, dom.txt, boxes.txt and capture.json, then exits.\n"
@@ -64,6 +65,10 @@ int NS_Capture::prepare(int &argc, char **argv)
             continue;
         }
         requested = true;
+        if (arg == "--capture-force-full-restyle") {
+            m_force_full_restyle = true;
+            continue;
+        }
         if (++i == argc) {
             fprintf(stderr, "Missing value for %s\n", qPrintable(arg));
             return -1;
@@ -206,6 +211,7 @@ void NS_Capture::poll()
         return;
     }
     auto *content = browser_window_get_content(m_bw);
+    nsqt_capture_force_full_restyle(content, m_force_full_restyle);
     const bool done = content && content_get_status(content) == CONTENT_STATUS_DONE;
     if (m_elapsed.elapsed() >= m_timeout_ms) {
         finish("timeout");

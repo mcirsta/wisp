@@ -39,7 +39,7 @@ static dom_node *node(const char *id)
 static bool activate(const char *id)
 {
     dom_node *clicked = node(id), *target = html_checkable_target(clicked);
-    bool changed = target != NULL && html_checkable_activate(target);
+    bool changed = target != NULL && html_checkable_activate(target, NULL, NULL);
     dom_node_unref(target);
     dom_node_unref(clicked);
     return changed;
@@ -151,6 +151,95 @@ START_TEST(test_live_state_preserves_default)
 }
 END_TEST
 
+struct change_log {
+    dom_node *nodes[8];
+    bool checked[8];
+    unsigned count;
+};
+
+static void record_change(dom_node *node, void *pw)
+{
+    struct change_log *log = pw;
+    ck_assert_msg(log->count < 8, "Unexpected number of checked-state changes");
+    log->nodes[log->count] = dom_node_ref(node);
+    ck_assert_int_eq(
+        dom_html_input_element_get_checked((dom_html_input_element *)node, &log->checked[log->count]), DOM_NO_ERR);
+    log->count++;
+}
+
+static void expect_change(struct change_log *log, unsigned index, const char *id, bool value)
+{
+    dom_node *expected = node(id);
+    ck_assert_msg(index < log->count && log->nodes[index] == expected && log->checked[index] == value,
+        "Notification %u should be %s checked=%d", index, id, value);
+    dom_node_unref(expected);
+}
+
+static void clear_changes(struct change_log *log)
+{
+    for (unsigned i = 0; i < log->count; i++)
+        dom_node_unref(log->nodes[i]);
+    log->count = 0;
+}
+
+START_TEST(test_changed_peers)
+{
+    parse("<form id=f><input id=inside type=radio name=t checked>"
+          "<input id=idle type=radio name=t></form>"
+          "<div><input id=outside type=radio name=t form=f></div>"
+          "<input id=unowned type=radio name=t checked>"
+          "<input id=box type=checkbox><input id=disabled type=checkbox disabled>");
+    struct change_log log = {0};
+    dom_node *outside = node("outside"), *inside = node("inside"), *box = node("box");
+    ck_assert(html_checkable_activate(outside, record_change, &log));
+    ck_assert_int_eq(log.count, 2);
+    expect_change(&log, 0, "inside", false);
+    expect_change(&log, 1, "outside", true);
+    checked("unowned", true);
+    dom_node *idle = node("idle");
+    dom_string *checked_attribute = string("checked");
+    ck_assert_int_eq(dom_element_set_attribute(idle, checked_attribute, checked_attribute), DOM_NO_ERR);
+    dom_string_unref(checked_attribute);
+    checked("idle", false); /* Group activation established live state, separate from the default. */
+    dom_node_unref(idle);
+    clear_changes(&log);
+    ck_assert(!html_checkable_activate(outside, record_change, &log));
+    ck_assert_int_eq(log.count, 0);
+    ck_assert(html_checkable_activate(inside, record_change, &log));
+    ck_assert_int_eq(log.count, 2);
+    expect_change(&log, 0, "outside", false);
+    expect_change(&log, 1, "inside", true);
+    clear_changes(&log);
+    ck_assert(html_checkable_activate(box, record_change, &log));
+    ck_assert_int_eq(log.count, 1);
+    expect_change(&log, 0, "box", true);
+    clear_changes(&log);
+    dom_node *disabled = node("disabled");
+    ck_assert(!html_checkable_activate(disabled, record_change, &log));
+    ck_assert_int_eq(log.count, 0);
+    dom_node_unref(disabled);
+    dom_node_unref(box);
+    dom_node_unref(inside);
+    dom_node_unref(outside);
+}
+END_TEST
+
+START_TEST(test_multiple_checked_peers)
+{
+    parse("<div><input id=a type=radio name=t checked></div>"
+          "<div><input id=b type=radio name=t checked></div><input id=c type=radio name=t>");
+    struct change_log log = {0};
+    dom_node *target = node("c");
+    ck_assert(html_checkable_activate(target, record_change, &log));
+    ck_assert_int_eq(log.count, 3);
+    expect_change(&log, 0, "a", false);
+    expect_change(&log, 1, "b", false);
+    expect_change(&log, 2, "c", true);
+    clear_changes(&log);
+    dom_node_unref(target);
+}
+END_TEST
+
 int main(void)
 {
     if (corestrings_init() != NSERROR_OK)
@@ -162,6 +251,8 @@ int main(void)
     tcase_add_test(tc, test_labels);
     tcase_add_test(tc, test_disabled);
     tcase_add_test(tc, test_live_state_preserves_default);
+    tcase_add_test(tc, test_changed_peers);
+    tcase_add_test(tc, test_multiple_checked_peers);
     suite_add_tcase(suite, tc);
     SRunner *runner = srunner_create(suite);
     srunner_run_all(runner, CK_NORMAL);

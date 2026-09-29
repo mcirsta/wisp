@@ -134,6 +134,28 @@ normalization are subtracted from `boxes_ms` to avoid counting them twice. The
 clock uses nanosecond-resolution monotonic timestamps where available, with the
 existing millisecond clock as a fallback on other platforms.
 
+`--capture-force-full-restyle` selects the full-refresh reference path at runtime.
+With the experimental `-DWISP_ENABLE_PARTIAL_UPDATES=ON`, native activation records
+all changed controls and coalesces their parent subtrees. Form edits record DOM
+changes immediately, including edits already synchronized before a tab click.
+This is currently tracking only: all refreshes still rebuild and lay out the full
+document. The option defaults to OFF and adds no tracking state when disabled.
+
+With profiling enabled, `update_mode` currently reports `full`; `fallback_reason`
+distinguishes `forced_full`, `feature_disabled`, `dom_changed`, `scripting`,
+`full_request`, `scope_capacity`, `invalid_scope` and `partial_not_implemented`.
+`changed_controls` counts successful native state changes in the batch,
+`dirty_roots` counts the coalesced candidate scopes, and `invalidated_nodes` counts
+libcss node caches actually cleared. `reused_styles` and `temporary_bytes` remain
+zero until style reuse is implemented. The fixed tracking state and referenced
+DOM roots do not allocate a temporary reuse table.
+
+`qt_restyle_reference` replays edits and radio switches in ordinary and forced-full
+captures, checking each inspected state and the final PNG/DOM output. It verifies
+the reported reasons as well, so compiling the option alone cannot masquerade as
+partial rendering. Saved-page performance comparisons belong to the selective
+CSS milestone; this foundation does not claim refresh-time savings.
+
 `action_ms` is the preceding capture action's synchronous duration, including
 target lookup and any scroll into view. Deferred restyling happens afterward.
 For repeat measurements, warm both panels first and check that resource counts

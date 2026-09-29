@@ -1709,13 +1709,22 @@ static nserror nscss_invalidate_element(dom_node *node, void *pw)
     if (data != NULL &&
         css_libcss_node_data_handler(&selection_handler, CSS_NODE_MODIFIED, NULL, node, NULL, data) != CSS_OK)
         return NSERROR_DOM;
+    if (data != NULL && pw != NULL)
+        (*(uint32_t *)pw)++;
     return NSERROR_OK;
 }
 
 nserror nscss_invalidate_document(dom_document *document)
 {
     /* NodeList item(i) rescans from the root for each index. Walk once instead. */
-    return libdom_iterate_elements((dom_node *)document, nscss_invalidate_element, NULL);
+    return nscss_invalidate_subtree((dom_node *)document, NULL);
+}
+
+nserror nscss_invalidate_subtree(dom_node *root, uint32_t *invalidated)
+{
+    if (invalidated != NULL)
+        *invalidated = 0;
+    return libdom_iterate_elements(root, nscss_invalidate_element, invalidated);
 }
 
 css_error get_libcss_node_data(void *pw, void *node, void **libcss_node_data)

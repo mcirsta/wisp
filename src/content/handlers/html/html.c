@@ -76,8 +76,10 @@
 #include "content/handlers/html/object.h"
 #include "content/handlers/html/textselection.h"
 #include "content/handlers/html/restyle_profile.h"
+#include "content/handlers/html/restyle.h"
 
 static void html_restyle(void *pw);
+static void html_schedule_restyle(html_content *html);
 static void html_restyle_free_old(html_content *html);
 
 #define CHUNK 4096
@@ -1457,6 +1459,7 @@ static void html_restyle_done(html_content *html, bool success)
     HTML_PROFILE(html->restyle_profile.layout_ns = cleanup_start - layout_start);
     html->base.locked = false;
     html->restyling = false;
+    html_restyle_end(html, success);
     if (html->bw != NULL) {
         nserror err = browser_window_rebind_iframes(html->bw, success);
         if (err != NSERROR_OK)
@@ -1477,7 +1480,7 @@ static void html_restyle_done(html_content *html, bool success)
     HTML_PROFILE(uint64_t end = html_profile_now(); html->restyle_profile.cleanup_ns = end - cleanup_start;
         html->restyle_profile.total_ns = end - html->restyle_profile.start_ns);
     if (html->restyle_pending)
-        html_request_restyle(html);
+        html_schedule_restyle(html);
 }
 
 static nserror html_restyle_detach_element(dom_node *node, void *pw)
@@ -1504,11 +1507,14 @@ static void html_restyle(void *pw)
     if (!html->restyle_pending || html->restyling || html->layout == NULL || html->box_conversion_context != NULL)
         return;
     HTML_PROFILE(html->restyle_profile = (struct html_restyle_profile){.start_ns = html_profile_now()});
+    uint32_t *invalidated = NULL;
+    HTML_PROFILE(invalidated = &html->restyle_profile.invalidated_nodes);
     if (dom_document_get_document_element(html->document, &root) != DOM_NO_ERR || root == NULL ||
-        nscss_invalidate_document(html->document) != NSERROR_OK) {
+        nscss_invalidate_subtree((dom_node *)html->document, invalidated) != NSERROR_OK) {
         dom_node_unref(root);
         return;
     }
+    html_restyle_begin(html);
     HTML_PROFILE_START(detach_start);
     HTML_PROFILE(html->restyle_profile.invalidate_ns = detach_start - html->restyle_profile.start_ns);
 
@@ -1551,17 +1557,30 @@ static void html_restyle(void *pw)
     html->unit_len_ctx.root_style = NULL;
     HTML_PROFILE(html->restyle_profile.construction_start_ns = html_profile_now();
         html->restyle_profile.detach_ns = html->restyle_profile.construction_start_ns - detach_start);
+    html_restyle_capture_inputs(html);
     err = dom_to_box(root, html, html_restyle_done, &html->box_conversion_context);
     dom_node_unref(root);
     if (err != NSERROR_OK)
         html_restyle_done(html, false);
 }
 
-void html_request_restyle(html_content *html)
+static void html_schedule_restyle(html_content *html)
 {
     html->restyle_pending = true;
     if (!html->restyling)
         guit->misc->schedule(0, html_restyle, html);
+}
+
+void html_request_restyle(html_content *html)
+{
+    html_restyle_record_full(html, "full_request");
+    html_schedule_restyle(html);
+}
+
+void html_request_checked_restyle(html_content *html, dom_node *node)
+{
+    html_restyle_record_checked(html, node);
+    html_schedule_restyle(html);
 }
 
 
@@ -1581,6 +1600,8 @@ static void html_destroy(struct content *c)
     guit->misc->schedule(-1, script_resume_conversion_cb, html);
     guit->misc->schedule(-1, html_deferred_reformat, html);
     guit->misc->schedule(-1, html_restyle, html);
+
+    html_restyle_discard_pending(html);
 
     /* If we're still converting a layout, cancel it */
     if (html->box_conversion_context != NULL) {
@@ -1753,6 +1774,7 @@ static nserror html_close(struct content *c)
 
     guit->misc->schedule(-1, html_restyle, htmlc);
     htmlc->restyle_pending = false;
+    html_restyle_discard_pending(htmlc);
 
     /* clear the html content reference to the browser window */
     htmlc->bw = NULL;

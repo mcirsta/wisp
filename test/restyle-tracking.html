@@ -1,0 +1,31 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Restyle change tracking</title>
+<style>
+  body { margin: 10px; font: 14px/20px sans-serif; }
+  input[type=text], textarea { display: block; width: 180px; height: 30px; }
+  #field-message { height: 5px; background: red; }
+  #outside[value="x"] + #field-message { height: 17px; background: green; }
+  #notes-message { height: 9px; background: red; }
+  #notes:not(:empty) + #notes-message { height: 19px; background: green; }
+  #tabs { width: 300px; }
+  #tabs input { display: none; }
+  #tabs label { display: inline-block; width: 100px; height: 30px; }
+  .panel { display: none; }
+  #first:checked ~ #first-panel, #second:checked ~ #second-panel { display: block; }
+  #first-panel { height: 40px; background: #abcdef; }
+  #second-panel { height: 65px; background: #fedcba; }
+  #after { height: 10px; background: black; }
+</style>
+<!-- These edits affect sibling selectors outside the checked controls' scope. -->
+<div>
+  <input id="outside" type="text" value=""><div id="field-message"></div>
+  <textarea id="notes"></textarea><div id="notes-message"></div>
+</div>
+<section id="tabs">
+  <input id="first" type="radio" name="tabs" checked><label for="first">First</label>
+  <input id="second" type="radio" name="tabs"><label for="second">Second</label>
+  <div class="panel" id="first-panel">First panel</div>
+  <div class="panel" id="second-panel">Second panel</div>
+</section>
+<div id="after"></div>

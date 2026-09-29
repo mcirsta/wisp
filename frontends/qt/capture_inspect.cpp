@@ -221,7 +221,11 @@ QJsonObject nsqt_capture_inspect(struct hlcache_handle *content, const QStringLi
 #ifdef WISP_PROFILE_RESTYLE
     const auto &p = html->restyle_profile;
     if (p.total_ns != 0) {
-        result["restyle_profile"] = QJsonObject{{"invalidate_ms", p.invalidate_ns / 1e6},
+        result["restyle_profile"] = QJsonObject{{"update_mode", p.update_mode ? p.update_mode : "unknown"},
+            {"fallback_reason", p.fallback_reason ? p.fallback_reason : "unknown"},
+            {"changed_controls", int(p.changed_controls)}, {"dirty_roots", int(p.dirty_roots)},
+            {"invalidated_nodes", int(p.invalidated_nodes)}, {"reused_styles", int(p.reused_styles)},
+            {"temporary_bytes", double(p.temporary_bytes)}, {"invalidate_ms", p.invalidate_ns / 1e6},
             {"detach_ms", p.detach_ns / 1e6}, {"css_ms", p.css_ns / 1e6}, {"normalise_ms", p.normalise_ns / 1e6},
             {"boxes_ms", (p.construction_ns - p.css_ns - p.normalise_ns) / 1e6},
             {"construction_ms", p.construction_ns / 1e6},
@@ -304,6 +308,19 @@ QJsonObject nsqt_capture_inspect(struct hlcache_handle *content, const QStringLi
 }
 
 // Capture-only interaction hooks use the same core input path as the Qt widget.
+void nsqt_capture_force_full_restyle(struct hlcache_handle *content, bool force)
+{
+#ifdef WISP_ENABLE_PARTIAL_UPDATES
+    if (content && content_get_type(content) == CONTENT_HTML) {
+        auto *html = reinterpret_cast<html_content *>(hlcache_handle_get_content(content));
+        html->restyle.force_full = force;
+    }
+#else
+    Q_UNUSED(content);
+    Q_UNUSED(force);
+#endif
+}
+
 bool nsqt_capture_settled(struct hlcache_handle *content)
 {
     if (!content || content_get_type(content) != CONTENT_HTML)

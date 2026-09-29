@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 #include <string.h>
 #include <wisp/utils/corestrings.h>
+#include "utils/libdom.h"
 #include "content/handlers/html/form_state.h"
 
 static dom_html_element_type html_tag(dom_node *node)
@@ -186,52 +187,87 @@ static dom_exception input_form(dom_html_input_element *input, dom_html_form_ele
     return err;
 }
 
-bool html_checkable_activate(dom_node *input)
+struct radio_activation {
+    dom_node *input;
+    dom_string *name;
+    dom_html_form_element *form;
+    html_checkable_changed_cb notify;
+    void *pw;
+    bool changed;
+};
+
+static nserror uncheck_radio_peer(dom_node *other, void *pw)
+{
+    struct radio_activation *activation = pw;
+    dom_string *name = NULL;
+    dom_html_form_element *form = NULL;
+    bool checked = false;
+    nserror result = NSERROR_OK;
+    if (other == activation->input || !input_type(other, corestring_lwc_radio))
+        return NSERROR_OK;
+    if (dom_html_input_element_get_name((dom_html_input_element *)other, &name) != DOM_NO_ERR) {
+        result = NSERROR_DOM;
+        goto out;
+    }
+    if (name == NULL || !dom_string_isequal(name, activation->name))
+        goto out;
+    if (input_form((dom_html_input_element *)other, &form) != DOM_NO_ERR) {
+        result = NSERROR_DOM;
+        goto out;
+    }
+    if (form == activation->form) {
+        /* Preserve the existing live-state bookkeeping even for an unchecked
+         * peer, but only report changes that can affect selector matching. */
+        if (dom_html_input_element_get_checked((dom_html_input_element *)other, &checked) != DOM_NO_ERR ||
+            dom_html_input_element_set_checked((dom_html_input_element *)other, false) != DOM_NO_ERR) {
+            result = NSERROR_DOM;
+            goto out;
+        }
+        if (checked) {
+            activation->changed = true;
+            if (activation->notify != NULL)
+                activation->notify(other, activation->pw);
+        }
+    }
+out:
+    dom_node_unref(form);
+    dom_string_unref(name);
+    return result;
+}
+
+bool html_checkable_activate(dom_node *input, html_checkable_changed_cb changed, void *pw)
 {
     bool checked = false;
     if (!checkable(input) || input_disabled(input) ||
         dom_html_input_element_get_checked((dom_html_input_element *)input, &checked) != DOM_NO_ERR)
         return false;
-    if (input_type(input, corestring_lwc_checkbox))
-        return dom_html_input_element_set_checked((dom_html_input_element *)input, !checked) == DOM_NO_ERR;
+    if (input_type(input, corestring_lwc_checkbox)) {
+        if (dom_html_input_element_set_checked((dom_html_input_element *)input, !checked) != DOM_NO_ERR)
+            return false;
+        if (changed != NULL)
+            changed(input, pw);
+        return true;
+    }
     if (checked)
         return false;
 
-    dom_string *name = NULL;
-    dom_html_form_element *form = NULL;
     dom_document *doc = NULL;
-    dom_nodelist *nodes = NULL;
-    bool changed = false;
-    if (dom_html_input_element_get_name((dom_html_input_element *)input, &name) != DOM_NO_ERR ||
-        input_form((dom_html_input_element *)input, &form) != DOM_NO_ERR ||
+    struct radio_activation activation = {.input = input, .notify = changed, .pw = pw};
+    if (dom_html_input_element_get_name((dom_html_input_element *)input, &activation.name) != DOM_NO_ERR ||
+        input_form((dom_html_input_element *)input, &activation.form) != DOM_NO_ERR ||
         dom_node_get_owner_document(input, &doc) != DOM_NO_ERR)
         goto out;
-    if (name != NULL && dom_string_byte_length(name) != 0) {
-        uint32_t count;
-        if (dom_document_get_elements_by_tag_name(doc, corestring_dom_input, &nodes) != DOM_NO_ERR ||
-            dom_nodelist_get_length(nodes, &count) != DOM_NO_ERR)
-            goto out;
-        for (uint32_t i = 0; i < count; i++) {
-            dom_node *other = NULL;
-            dom_string *other_name = NULL;
-            dom_html_form_element *other_form = NULL;
-            if (dom_nodelist_item(nodes, i, &other) != DOM_NO_ERR)
-                goto out;
-            if (other != input && input_type(other, corestring_lwc_radio) &&
-                dom_html_input_element_get_name((dom_html_input_element *)other, &other_name) == DOM_NO_ERR &&
-                other_name != NULL && dom_string_isequal(name, other_name) &&
-                input_form((dom_html_input_element *)other, &other_form) == DOM_NO_ERR && other_form == form)
-                dom_html_input_element_set_checked((dom_html_input_element *)other, false);
-            dom_node_unref(other_form);
-            dom_string_unref(other_name);
-            dom_node_unref(other);
-        }
+    if (activation.name != NULL && dom_string_byte_length(activation.name) != 0 &&
+        libdom_iterate_elements((dom_node *)doc, uncheck_radio_peer, &activation) != NSERROR_OK)
+        goto out;
+    if (dom_html_input_element_set_checked((dom_html_input_element *)input, true) == DOM_NO_ERR) {
+        activation.changed = true;
+        if (changed != NULL)
+            changed(input, pw);
     }
-    changed = dom_html_input_element_set_checked((dom_html_input_element *)input, true) == DOM_NO_ERR;
 out:
-    dom_nodelist_unref(nodes);
     dom_node_unref(doc);
-    dom_node_unref(form);
-    dom_string_unref(name);
-    return changed;
+    dom_node_unref(activation.form);
+    dom_string_unref(activation.name);
+    return activation.changed;
 }

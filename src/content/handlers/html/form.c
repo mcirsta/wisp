@@ -60,6 +60,7 @@
 #include "utils/hashmap.h"
 #include "content/handlers/html/font.h"
 #include "content/handlers/html/layout.h"
+#include "content/handlers/html/restyle.h"
 
 #define MAX_SELECT_HEIGHT 210
 #define SELECT_LINE_SPACING 0.2
@@ -1808,6 +1809,36 @@ form_submit(nsurl *page_url, struct browser_window *target, struct form *form, s
 }
 
 
+/* Both live edits and later gadget synchronization write selector-visible DOM
+ * state. Notice edits now: a subsequent restyle may have nothing left to sync. */
+static dom_exception form_set_dom_value(struct form_control *control, dom_string *value)
+{
+#ifdef WISP_ENABLE_PARTIAL_UPDATES
+    dom_string *old = NULL;
+    dom_exception err = control->type == GADGET_TEXTAREA ? dom_node_get_text_content(control->node, &old)
+                                                         : dom_html_input_element_get_value(control->node, &old);
+    bool changed = err != DOM_NO_ERR || !dom_string_isequal(old, value);
+    if (!changed && control->type == GADGET_TEXTAREA) {
+        dom_node *child = NULL, *next = NULL;
+        dom_node_type type;
+        /* set_text_content replaces children with one text node. Even identical
+         * empty text can change :empty when that node did not previously exist. */
+        changed = dom_node_get_first_child(control->node, &child) != DOM_NO_ERR || child == NULL ||
+            dom_node_get_node_type(child, &type) != DOM_NO_ERR || type != DOM_TEXT_NODE ||
+            dom_node_get_next_sibling(child, &next) != DOM_NO_ERR || next != NULL;
+        dom_node_unref(next);
+        dom_node_unref(child);
+    }
+    /* Mark before writing: a failing setter may have partly changed the DOM. */
+    if (changed)
+        html_restyle_note_dom_change(control->html);
+    dom_string_unref(old);
+#endif
+    if (control->type == GADGET_TEXTAREA)
+        return dom_html_text_area_element_set_value(control->node, value);
+    return dom_html_input_element_set_value(control->node, value);
+}
+
 /* exported interface documented in html/form_internal.h */
 void form_gadget_update_value(struct form_control *control, char *value)
 {
@@ -1826,10 +1857,7 @@ void form_gadget_update_value(struct form_control *control, char *value)
             dom_string *str;
             err = dom_string_create((uint8_t *)value, strlen(value), &str);
             if (err == DOM_NO_ERR) {
-                if (control->type == GADGET_TEXTAREA)
-                    err = dom_html_text_area_element_set_value((dom_html_text_area_element *)(control->node), str);
-                else
-                    err = dom_html_input_element_set_value((dom_html_input_element *)(control->node), str);
+                err = form_set_dom_value(control, str);
                 dom_string_unref(str);
             }
         }
@@ -1883,11 +1911,7 @@ void form_gadget_sync_with_dom(struct form_control *control)
         }
         control->node_value = value;
         value = NULL;
-        if (control->type == GADGET_TEXTAREA) {
-            exc = dom_html_text_area_element_set_value(control->node, control->node_value);
-        } else {
-            exc = dom_html_input_element_set_value(control->node, control->node_value);
-        }
+        exc = form_set_dom_value(control, control->node_value);
         if (exc != DOM_NO_ERR) {
             goto out;
         }

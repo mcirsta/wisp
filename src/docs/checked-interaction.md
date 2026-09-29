@@ -28,7 +28,9 @@ work; this change does not claim to implement them.
 
 ## Presentation lifetime
 
-`html_request_restyle()` schedules a refresh on the existing main event loop:
+Native activation reports changes through `html_request_checked_restyle()`;
+`html_request_restyle()` remains the explicit whole-document request. Both
+schedule a refresh on the existing main event loop:
 
 1. Invalidate all libcss per-node selection data, including custom-property
    environments and sharing caches. Keep the stylesheet selection context.
@@ -65,9 +67,20 @@ outside this state-only refresh contract.
 
 This deliberately rebuilds the whole presentation. It costs one CSS selection,
 box-construction and layout pass per changed control; retaining the old allocation
-context until rebinding also temporarily increases peak box memory. Selective
-invalidation can be added at this boundary if measurements justify it. Neither
-parallel rendering nor a new dependency graph is required now.
+context until rebinding also temporarily increases peak box memory. The
+[partial-update implementation plan](partial-updates.md) describes staged work
+to reuse unaffected styles first, then consider retained box regions and selective
+layout after measurement. Experimental change tracking and a forced-full capture
+comparison are now implemented behind `WISP_ENABLE_PARTIAL_UPDATES` (default OFF).
+They record changed radio peers, coalesced parent scopes and form edits made before
+refresh, but still execute the full refresh. Selective style reuse, regional box
+replacement and partial layout remain planned. Neither parallel rendering nor a
+new dependency graph is required now.
+
+The radio-peer lookup now uses one document traversal instead of indexed NodeList
+lookups that repeatedly start from the root. It still resolves form ownership
+across the entire document, including external controls using `form=`. Activation
+reports each actual change, and an already checked radio remains a no-op.
 
 ## Measured refresh cost (2026-09-29)
 

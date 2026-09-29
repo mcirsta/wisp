@@ -34,7 +34,7 @@ static void attribute(dom_node *node, const char *name, const char *value)
     dom_string_unref(data);
 }
 
-static dom_node *element(const char *tag, const char *type, const char *ns)
+static dom_node *element_under(dom_node *parent, const char *tag, const char *type, const char *ns)
 {
     dom_element *node;
     dom_node *inserted;
@@ -42,11 +42,16 @@ static dom_node *element(const char *tag, const char *type, const char *ns)
     ck_assert_int_eq(dom_document_create_element_ns(document, namespace, name, &node), DOM_NO_ERR);
     dom_string_unref(namespace);
     dom_string_unref(name);
-    ck_assert_int_eq(dom_node_append_child(document, node, &inserted), DOM_NO_ERR);
+    ck_assert_int_eq(dom_node_append_child(parent, node, &inserted), DOM_NO_ERR);
     dom_node_unref(inserted);
     if (type != NULL)
         attribute((dom_node *)node, "type", type);
     return (dom_node *)node;
+}
+
+static dom_node *element(const char *tag, const char *type, const char *ns)
+{
+    return element_under((dom_node *)document, tag, type, ns);
 }
 
 static void expect_checked(dom_node *node, bool checked, const char *description)
@@ -160,6 +165,33 @@ START_TEST(test_foreign_element)
 }
 END_TEST
 
+START_TEST(test_subtree_invalidation)
+{
+    dom_node *root = element("div", NULL, NULL);
+    dom_node *a = element_under(root, "input", "checkbox", NULL);
+    dom_node *b = element_under(root, "input", "checkbox", NULL);
+    expect_checked(a, false, "first cached control");
+    expect_checked(b, false, "unrelated cached control");
+    void *before = NULL, *after = NULL;
+    ck_assert_int_eq(dom_node_get_user_data(b, corestring_dom___ns_key_libcss_node_data, &before), DOM_NO_ERR);
+    ck_assert_ptr_nonnull(before);
+    uint32_t count = 99;
+    ck_assert_int_eq(nscss_invalidate_subtree(a, &count), NSERROR_OK);
+    ck_assert_uint_eq(count, 1);
+    ck_assert_int_eq(dom_node_get_user_data(a, corestring_dom___ns_key_libcss_node_data, &after), DOM_NO_ERR);
+    ck_assert_ptr_null(after);
+    ck_assert_int_eq(dom_node_get_user_data(b, corestring_dom___ns_key_libcss_node_data, &after), DOM_NO_ERR);
+    ck_assert_ptr_eq(before, after);
+    ck_assert_int_eq(nscss_invalidate_subtree(a, &count), NSERROR_OK);
+    ck_assert_uint_eq(count, 0);
+    ck_assert_int_eq(dom_html_input_element_set_checked((dom_html_input_element *)a, true), DOM_NO_ERR);
+    expect_checked(a, true, "invalidated control reselects live state");
+    dom_node_unref(a);
+    dom_node_unref(b);
+    dom_node_unref(root);
+}
+END_TEST
+
 int main(void)
 {
     /* The production selector reads UA font defaults and HTML hints. */
@@ -173,6 +205,7 @@ int main(void)
     tcase_add_test(tc, test_current_dom_state);
     tcase_add_loop_test(tc, test_selected_option_state, 0, 2);
     tcase_add_test(tc, test_foreign_element);
+    tcase_add_test(tc, test_subtree_invalidation);
     suite_add_tcase(suite, tc);
     SRunner *runner = srunner_create(suite);
     srunner_run_all(runner, CK_NORMAL);

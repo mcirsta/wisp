@@ -1173,6 +1173,11 @@ static nserror default_mouse_action(html_content *html, struct browser_window *b
 }
 
 
+static void checked_state_changed(dom_node *node, void *pw)
+{
+    html_request_checked_restyle(pw, node);
+}
+
 /**
  * handle non dragging mouse actions
  */
@@ -1267,8 +1272,7 @@ mouse_action_drag_none(html_content *html, struct browser_window *bw, browser_mo
         bool activate = fire_generic_dom_event(corestring_dom_click, clicked, true, true);
         if (activate && target != NULL && target != clicked)
             activate = fire_generic_dom_event(corestring_dom_click, target, true, true);
-        if (activate && target != NULL && html_checkable_activate(target)) {
-            html_request_restyle(html);
+        if (activate && target != NULL && html_checkable_activate(target, checked_state_changed, html)) {
             fire_generic_dom_event(corestring_dom_input, target, true, false);
             fire_generic_dom_event(corestring_dom_change, target, true, false);
         }

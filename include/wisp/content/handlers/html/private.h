@@ -55,6 +55,25 @@ struct html_restyle_profile {
     uint64_t invalidate_ns, detach_ns, css_ns, construction_ns, normalise_ns;
     uint64_t construction_wall_ns, layout_ns, cleanup_ns, total_ns, paint_ns, last_paint_ns;
     uint32_t styled_elements, construction_slices, paint_calls;
+    const char *update_mode, *fallback_reason;
+    uint32_t changed_controls, dirty_roots, invalidated_nodes, reused_styles;
+    size_t temporary_bytes;
+};
+#endif
+
+#ifdef WISP_ENABLE_PARTIAL_UPDATES
+#define HTML_RESTYLE_MAX_ROOTS 8
+/* Pending roots own DOM references; active construction consumes a separate batch. */
+struct html_restyle_changes {
+    dom_node *roots[HTML_RESTYLE_MAX_ROOTS];
+    uint32_t count, changed_controls;
+    const char *full_reason;
+};
+
+struct html_restyle_state {
+    struct html_restyle_changes pending;
+    uint64_t dom_generation, styled_generation, active_generation;
+    bool force_full; /* Developer capture override, not a browser preference. */
 };
 #endif
 
@@ -164,6 +183,9 @@ typedef struct html_content {
     /** Deferred state-only restyle; no parsing or page-load lifecycle. */
     bool restyle_pending;
     bool restyling;
+#ifdef WISP_ENABLE_PARTIAL_UPDATES
+    struct html_restyle_state restyle;
+#endif
 #ifdef WISP_PROFILE_RESTYLE
     struct html_restyle_profile restyle_profile;
 #endif
@@ -317,6 +339,7 @@ extern bool html_redraw_debug;
 
 /* in html/html.c */
 void html_request_restyle(html_content *html);
+void html_request_checked_restyle(html_content *html, dom_node *node);
 
 /**
  * redraw a box
