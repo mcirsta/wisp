@@ -220,6 +220,11 @@ struct css_stylesheet {
     bool uses_revert; /**< Uses 'revert' property value */
     bool uses_variables; /**< Uses custom properties or var() references */
 
+    /* Monotonic local selector summary. Removal may leave a conservative false
+     * eligibility result; imports are checked separately when queried. */
+    bool checked_scope_unsafe;
+    uint64_t revision; /**< Changes to parsed rules/imports/disabled state */
+
     bool inline_style; /**< Is an inline style */
 
     size_t size; /**< Size, in bytes */
@@ -257,6 +262,8 @@ struct css_stylesheet {
     uint32_t var_values_capacity;
 
 };
+
+uint64_t css__stylesheet_next_revision(void);
 
 css_error css__stylesheet_style_create(css_stylesheet *sheet, css_style **style);
 css_error css__stylesheet_style_append(css_style *style, css_code_t code);

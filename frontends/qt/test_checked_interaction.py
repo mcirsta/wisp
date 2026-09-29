@@ -25,6 +25,7 @@ with tempfile.TemporaryDirectory(prefix="wisp-checked-interaction-") as tmp:
     destination = Path(tmp) / "capture"
     args = [str(binary), "--capture-dir", str(destination), "--capture-size", "600x700",
             "--capture-settle", "50", "--capture-timeout", "20000"]
+    args.extend(sys.argv[2:])
     for element_id in ids:
         args.extend(("--capture-id", element_id))
     for kind, value in actions:

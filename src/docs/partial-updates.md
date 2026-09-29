@@ -1,24 +1,109 @@
 # Partial document updates: implementation plan
 
-Status: implementation started, 2026-09-29. The reviewed baseline is `eb3e03df`
+Status: milestone A implemented and experimentally validated, 2026-09-29. The reviewed baseline is `eb3e03df`
 (`Use stack scratch for small class selector lists`).
 
-The first implementation slice adds the runtime full-refresh reference switch,
-profile metadata and a differential capture fixture; reports every changed radio
-peer through a linear document traversal; and tracks coalesced parent scopes and
-form edits made before or during refresh. Experimental tracking is gated by
-`WISP_ENABLE_PARTIAL_UPDATES`, default OFF. All rendering still uses a full refresh.
-Selector eligibility classification, actual style reuse, and saved-site comparisons
-of the selective path are the next work toward milestone A. Milestones B/C have
-not started. The steps below remain the implementation and acceptance checklist.
+The foundation is committed as `fdd92975`. Milestone A now reuses composed styles
+outside the changed controls' parent subtrees and still reconstructs and lays out
+the whole document. It remains gated by `WISP_ENABLE_PARTIAL_UPDATES`, default OFF.
+Milestones B/C have not started. The steps below remain the implementation and
+acceptance checklist, with the concrete implementation choices recorded here.
 
-Foundation validation: 108 selected CSS/layout/Qt/DOM tests passed in Debug
-(ASan/UBSan) and Release with tracking enabled; 107 passed in Release with tracking
-disabled. The final radio-bookkeeping adjustment also passed the focused enabled
-tests and Qt comparisons. The three focused form/CSS/tracking targets passed with
-LeakSanitizer enabled. Capture comparisons match control state, inspected geometry,
-resource counts and final PNG/DOM output. These are correctness checks, not a
-measurement of selective-update performance.
+### Milestone A implementation
+
+- Libcss classifies parsed selectors at insertion, with explicit combinator,
+  pseudo and rule allowlists. Each stylesheet retains one conservative unsafe
+  flag; each query checks its imports, including late registrations and disabled
+  sheets. A shared monotonic revision clock covers stylesheet and selection-context
+  changes without hashing inputs or storing per-element dependencies.
+- `css_select_results_clone()` allocates only a result container and references
+  every computed-style slot. Composition resolves a new style before interning;
+  published payloads are read-only. Ownership tests cover both destruction orders,
+  aliases across all pseudo slots, strings, backgrounds/gradients, tracks,
+  transforms, generated content and calculated lengths. No generator changes or
+  per-property equality classifier are needed.
+- HTML uses a sorted temporary node/result vector, borrowed from the old boxes
+  until conversion completes. It invalidates each dirty DOM subtree, including
+  hidden descendants. Nodes without a reusable result are selected normally;
+  their own node cache is cleared first, since hidden elements can retain cache
+  data despite having no box-owned result.
+- The first native refresh is full and establishes the reuse snapshot. Later
+  refreshes check DOM generations, stylesheet/import revisions, media and unit
+  inputs, dimensions, font preferences/availability, base URL and visited-link
+  history. Scripts-enabled or still-loading pages remain on the full path.
+  Native text edits and option selection invalidate reuse when they happen.
+- Between construction slices and before publication, changed inputs discard the
+  partial attempt and restart full selection. Old presentation ownership remains
+  intact until normal retirement. Table allocation failure falls back before
+  detachment; clone allocation failure selects that element normally. Errors after
+  detachment retain the existing conversion-error behavior, not a rollback promise.
+- Closing a window cancels queued refreshes. Content retained by the cache may
+  finish an active construction without a window; its next partial slice restarts
+  fully. Active references survive until that restart/completion. Destruction
+  cancels construction and releases them immediately. This preserves the existing
+  cached-content lifecycle instead of leaving a half-built presentation on close.
+- Profiling distinguishes `partial_css` and `full`, counts fresh/reused results,
+  references and restarts, and reports table capacity and cloned-container bytes.
+  `--capture-restart-partial-restyle` injects invalidation during construction in
+  profiling builds to exercise cleanup and compare with the full reference.
+
+### Milestone A validation and measurements
+
+The enabled Debug (ASan/UBSan) and Release builds each passed 113 selected CSS,
+layout, Qt capture, form, DOM, URL-history and construction tests; the disabled
+Release build passed all 111 applicable tests. The three focused
+scope/sharing/tracking targets also passed with LeakSanitizer enabled. The small
+differential fixture exercises normal reuse and a forced restart; the extensive
+checked-state fixture also runs with restart injection to cover images and iframes.
+Unit tests cover close bookkeeping, newer edits and input-generation changes.
+Allocation fallbacks have been reviewed but not tested with deterministic OOM
+injection; real window close/navigation between slices is not automated by capture.
+
+Saved-page checks used independent runs of the same Release/LTO binary, scripts
+disabled, 1280x900, 96 DPI. All 13 states in each run matched across 930 Tion and
+1,361 Bihon probe elements, including geometry, state, scroll and resource counts.
+Final PNG/DOM output matched for **both** sidebar panels. Resource counts stayed
+constant after the first reveal; warmed updates actually used `partial_css`, with
+zero fallbacks or restarts.
+
+The lightweight timing runs inspected only the two controls, avoiding retention
+of hundreds of overlapping box-tree inspections. Each site used four fresh
+processes in partial/full/full/partial order, 12 alternating switches per process;
+the first two switches were excluded, leaving 20 samples per mode. No builds or
+other regression jobs ran during measurement. Times exclude capture inspection,
+quiet waits and artifact writing.
+
+| Saved page | Full total median / p90 | Partial total median / p90 | Full / partial CSS median | Full / partial fresh selections | Reused results |
+| --- | --- | --- | --- | --- | --- |
+| Tion | 99.21 / 104.98 ms | 53.86 / 60.72 ms | 58.29 / 6.52 ms | 1,334 / 138 | 1,196 |
+| Bihon | 150.81 / 155.96 ms | 81.93 / 88.41 ms | 82.24 / 9.61 ms | 1,919 / 196 | 1,723 |
+
+These runs reduce median total refresh time by **45.7%** on both pages and CSS
+time by **88–89%**. The exhaustive-probe runs also improved (93.93 to 43.98 ms on
+Tion, 152.89 to 73.72 ms on Bihon), but retain substantial capture data and are
+not the memory reference. Layout still runs in full and accounts for about 79%
+of the lightweight partial-update time; its timings vary between runs, and this
+milestone makes no claim of reduced layout work.
+
+The temporary lookup vector peaks at **32 KiB** on each page and is released at
+completion. Tion clones 239,200 bytes of result containers (1,254 style references)
+and Bihon 344,600 bytes (1,785 references), sharing the existing property payloads.
+Those containers replace the new containers normal CSS selection would allocate;
+they are not a new permanent DOM cache. Whole-process peak RSS in the lightweight
+captures was 106.7–107.2 MiB for both Tion modes, and 97.5–98.2 MiB across the Bihon
+modes. This is comparable peak usage, not a precise allocation-difference estimate
+or a long-running memory-plateau test.
+
+Local drivers, reports and screenshots are under
+`out/render-captures/partial-updates-2026-09-29/`; `lightweight/report.json` holds
+the primary timing samples. Exhaustive inspection JSON is gzip-compressed to keep
+the development artifacts small. These ignored artifacts are supplementary to
+the repository fixtures and the measurements above.
+
+Keep the feature default OFF for now. The measurements justify milestone A on its
+own; they do not require starting region ownership or partial layout immediately.
+Initial navigation still uses full selection, and this comparison does not measure
+initial-load overhead against the pre-milestone binary.
 
 ## Recommendation and scope
 
@@ -87,7 +172,7 @@ dependency system, while avoiding the unrelated article and page chrome.
 
 | Area | Current implementation | Implication |
 | --- | --- | --- |
-| State changes | `src/content/handlers/html/form_state.c`, `interaction.c` | Activation returns a boolean, not the identities of all changed radios. |
+| State changes | `src/content/handlers/html/form_state.c`, `interaction.c` | Activation reports each changed radio through a callback, including peers with different parents. |
 | Refresh scheduler | `src/content/handlers/html/html.c`, `include/wisp/content/handlers/html/private.h` | Coalesces requests, clears presentation state, replaces the whole tree and retains the old allocation context until completion. |
 | CSS integration | `src/content/handlers/css/select.c`, `select.h` | `nscss_get_style()` composes element/pseudo styles with parent/root inputs; `nscss_invalidate_document()` clears every node's libcss data. |
 | Libcss cache | `contrib/libcss/src/select/select.c`, `select.h`, `variables.h` | Node data contains partial styles, bloom/sharing data and variable environments; it is not a cache of final composed box styles. |
@@ -133,7 +218,9 @@ Important consequences:
    only mutations during refresh cannot establish that the old styles are valid.
 6. No paint, hit testing or interaction may observe a half-published tree. Resource
    completions and resize requests must be deferred or incorporated before the
-   update is published. Closing/navigating cancels work and releases its references.
+   update is published. Closing/navigating cancels queued work; an active rebuild
+   in cached content must either finish safely without a window or be cancelled
+   on destruction, releasing all update references.
 7. Use the same settled output as a full refresh for the same DOM state and inputs.
    Preserve existing allowances for Qt-versus-Chromium font differences; those do
    not justify discrepancies between Wisp's own full and partial paths.

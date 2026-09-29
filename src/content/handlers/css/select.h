@@ -32,6 +32,7 @@ struct nsurl;
 /** Drop selector caches for a document before reselecting dynamic state. */
 nserror nscss_invalidate_document(dom_document *document);
 /* Include hidden descendants; optionally count node caches actually invalidated. */
+nserror nscss_invalidate_node(dom_node *node, uint32_t *invalidated);
 nserror nscss_invalidate_subtree(dom_node *root, uint32_t *invalidated);
 
 /**

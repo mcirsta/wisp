@@ -1131,6 +1131,8 @@ static nserror form__select_process_selection(html_content *html, struct form_co
      */
 
     inline_box = control->box->children->children;
+    /* Option selectedness also participates in :checked selectors. */
+    html_restyle_note_dom_change(html);
 
     for (count = 0, o = control->data.select.items; o != NULL; count++, o = o->next) {
         if (!control->data.select.multiple && o->selected) {

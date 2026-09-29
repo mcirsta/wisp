@@ -1720,6 +1720,13 @@ nserror nscss_invalidate_document(dom_document *document)
     return nscss_invalidate_subtree((dom_node *)document, NULL);
 }
 
+nserror nscss_invalidate_node(dom_node *node, uint32_t *invalidated)
+{
+    if (invalidated != NULL)
+        *invalidated = 0;
+    return nscss_invalidate_element(node, invalidated);
+}
+
 nserror nscss_invalidate_subtree(dom_node *root, uint32_t *invalidated)
 {
     if (invalidated != NULL)

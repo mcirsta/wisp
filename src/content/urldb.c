@@ -113,6 +113,8 @@
 #include <wisp/content/content.h>
 #include "content/urldb.h"
 
+static uint64_t visited_generation;
+
 /**
  * cookie entry.
  *
@@ -2722,6 +2724,7 @@ nserror urldb_init(void)
 /* exported interface documented in content/urldb.h */
 void urldb_destroy(void)
 {
+    visited_generation++;
     if (psl_ctx) {
         psl_free(psl_ctx);
         psl_ctx = NULL;
@@ -2926,8 +2929,10 @@ nserror urldb_load(const char *filename)
 
             if (!fgets(s, MAXIMUM_URL_LENGTH, fp))
                 break;
-            if (p)
+            if (p) {
                 p->urld.visits = (unsigned int)atoi(s);
+                visited_generation++;
+            }
 
             /* entry last use time */
             if (!fgets(s, MAXIMUM_URL_LENGTH, fp)) {
@@ -3138,6 +3143,11 @@ nserror urldb_set_url_content_type(nsurl *url, content_type type)
 
 
 /* exported interface documented in content/urldb.h */
+uint64_t urldb_visited_generation(void)
+{
+    return visited_generation;
+}
+
 nserror urldb_update_url_visit_data(nsurl *url)
 {
     struct path_data *p;
@@ -3150,6 +3160,8 @@ nserror urldb_update_url_visit_data(nsurl *url)
     }
 
     p->urld.last_visit = time(NULL);
+    if (p->urld.visits == 0)
+        visited_generation++;
     p->urld.visits++;
 
     return NSERROR_OK;
@@ -3168,6 +3180,8 @@ void urldb_reset_url_visit_data(nsurl *url)
         return;
 
     p->urld.last_visit = (time_t)0;
+    if (p->urld.visits != 0)
+        visited_generation++;
     p->urld.visits = 0;
 }
 

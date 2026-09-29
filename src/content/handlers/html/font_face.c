@@ -59,6 +59,12 @@ struct loaded_font {
 };
 
 static struct loaded_font *loaded_fonts = NULL;
+static uint64_t font_generation;
+
+uint64_t html_font_face_generation(void)
+{
+    return font_generation;
+}
 
 /** Count of pending font downloads */
 static int pending_font_count = 0;
@@ -186,6 +192,7 @@ static nserror font_fetch_callback(llcache_handle *handle, const llcache_event *
                 err = guit->layout->load_font_data(&dl->variant, data, size);
             }
             if (err == NSERROR_OK) {
+                font_generation++;
                 mark_font_loaded(&dl->variant);
             }
         }

@@ -198,11 +198,32 @@ css_error css_select_ctx_remove_sheet(css_select_ctx *ctx, const css_stylesheet 
 css_error css_select_ctx_count_sheets(css_select_ctx *ctx, uint32_t *count);
 css_error css_select_ctx_get_sheet(css_select_ctx *ctx, uint32_t index, const css_stylesheet **sheet);
 
+/**
+ * Whether a checkedness-only change can affect styles only inside each changed
+ * node's parent subtree. Includes all origins, media and registered imports.
+ * Unknown selector semantics and incomplete sheets return safe=false.
+ *
+ * This proves selector scope only: the client must also ensure that all other
+ * DOM, stylesheet, media and composition inputs are unchanged before reusing
+ * styles. Recheck after changing the context or registering imports. Optional
+ * revision receives a change stamp covering the context and all imported sheets
+ * when safe is true; a changed stamp requires full invalidation.
+ */
+css_error css_select_ctx_checked_parent_scope(css_select_ctx *ctx, bool *safe, uint64_t *revision);
+
 css_error
 css_select_default_style(css_select_ctx *ctx, css_select_handler *handler, void *pw, css_computed_style **style);
 css_error css_select_style(css_select_ctx *ctx, void *node, const css_unit_ctx *unit_ctx, const css_media *media,
     const css_stylesheet *inline_style, css_select_handler *handler, void *pw, css_select_results **result);
 css_error css_select_results_destroy(css_select_results *results);
+
+/**
+ * Allocate an independently owned result container referencing the same computed
+ * styles, including every pseudo-element slot. The styles remain read-only.
+ * Destroy either container first with css_select_results_destroy(). On failure
+ * the source and output pointer are unchanged.
+ */
+css_error css_select_results_clone(const css_select_results *results, css_select_results **clone);
 
 css_error css_select_font_faces(css_select_ctx *ctx, const css_media *media, const css_unit_ctx *unit_ctx,
     lwc_string *font_family, css_select_font_faces_results **result);

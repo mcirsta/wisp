@@ -1408,6 +1408,7 @@ static void html_destroy_iframe(struct content_html_iframe *iframe)
 
 static void html_free_layout(html_content *htmlc)
 {
+    html_restyle_reset(htmlc);
     if (htmlc->bctx != NULL) {
         /* freeing talloc context should let the entire box
          * set be destroyed
@@ -1507,14 +1508,16 @@ static void html_restyle(void *pw)
     if (!html->restyle_pending || html->restyling || html->layout == NULL || html->box_conversion_context != NULL)
         return;
     HTML_PROFILE(html->restyle_profile = (struct html_restyle_profile){.start_ns = html_profile_now()});
-    uint32_t *invalidated = NULL;
-    HTML_PROFILE(invalidated = &html->restyle_profile.invalidated_nodes);
-    if (dom_document_get_document_element(html->document, &root) != DOM_NO_ERR || root == NULL ||
-        nscss_invalidate_subtree((dom_node *)html->document, invalidated) != NSERROR_OK) {
+    if (dom_document_get_document_element(html->document, &root) != DOM_NO_ERR || root == NULL) {
         dom_node_unref(root);
         return;
     }
     html_restyle_begin(html);
+    if (html_restyle_invalidate(html) != NSERROR_OK) {
+        html_restyle_end(html, false);
+        dom_node_unref(root);
+        return;
+    }
     HTML_PROFILE_START(detach_start);
     HTML_PROFILE(html->restyle_profile.invalidate_ns = detach_start - html->restyle_profile.start_ns);
 
@@ -1539,6 +1542,7 @@ static void html_restyle(void *pw)
     if (err != NSERROR_OK) {
         html->base.locked = false;
         html->restyling = false;
+        html_restyle_end(html, false);
         dom_node_unref(root);
         content_broadcast_error(&html->base, err, NULL);
         content_set_error(&html->base);
@@ -1557,8 +1561,50 @@ static void html_restyle(void *pw)
     html->unit_len_ctx.root_style = NULL;
     HTML_PROFILE(html->restyle_profile.construction_start_ns = html_profile_now();
         html->restyle_profile.detach_ns = html->restyle_profile.construction_start_ns - detach_start);
-    html_restyle_capture_inputs(html);
-    err = dom_to_box(root, html, html_restyle_done, &html->box_conversion_context);
+    err = html_restyle_capture_inputs(html);
+    if (err == NSERROR_OK)
+        err = dom_to_box(root, html, html_restyle_done, &html->box_conversion_context);
+    dom_node_unref(root);
+    if (err != NSERROR_OK)
+        html_restyle_done(html, false);
+}
+
+/* Called by construction at a slice boundary, before publishing any new tree.
+ * Keep the original presentation alive while discarding the obsolete attempt. */
+void html_restyle_restart(html_content *html)
+{
+    dom_node *root = NULL;
+    nserror err;
+    assert(html->box_conversion_context == NULL);
+    HTML_PROFILE(html->restyle_profile.restarts++);
+    html_restyle_use_full(html, "inputs_changed_during_build");
+    err = libdom_iterate_elements((dom_node *)html->document, html_restyle_detach_element, NULL);
+    if (err != NSERROR_OK) {
+        html_restyle_done(html, false);
+        return;
+    }
+    for (struct content_html_object *o = html->object_list; o != NULL; o = o->next)
+        o->box = NULL;
+    if (html->iframe != NULL)
+        html_destroy_iframe(html->iframe);
+    if (html->frameset != NULL)
+        html_destroy_frameset(html->frameset);
+    html->iframe = NULL;
+    html->frameset = NULL;
+    talloc_free(html->bctx);
+    html->bctx = NULL;
+    html->layout = NULL;
+    html->unit_len_ctx.root_style = NULL;
+    if (dom_document_get_document_element(html->document, &root) != DOM_NO_ERR || root == NULL) {
+        dom_node_unref(root);
+        html_restyle_done(html, false);
+        return;
+    }
+    err = html_restyle_invalidate(html);
+    if (err == NSERROR_OK)
+        err = html_restyle_capture_inputs(html);
+    if (err == NSERROR_OK)
+        err = dom_to_box(root, html, html_restyle_done, &html->box_conversion_context);
     dom_node_unref(root);
     if (err != NSERROR_OK)
         html_restyle_done(html, false);
@@ -1601,7 +1647,7 @@ static void html_destroy(struct content *c)
     guit->misc->schedule(-1, html_deferred_reformat, html);
     guit->misc->schedule(-1, html_restyle, html);
 
-    html_restyle_discard_pending(html);
+    html_restyle_reset(html);
 
     /* If we're still converting a layout, cancel it */
     if (html->box_conversion_context != NULL) {
@@ -1774,7 +1820,7 @@ static nserror html_close(struct content *c)
 
     guit->misc->schedule(-1, html_restyle, htmlc);
     htmlc->restyle_pending = false;
-    html_restyle_discard_pending(htmlc);
+    html_restyle_close(htmlc);
 
     /* clear the html content reference to the browser window */
     htmlc->bw = NULL;

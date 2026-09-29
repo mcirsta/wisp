@@ -147,6 +147,12 @@ if(WISP_QT_CAPTURE)
                 COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_restyle_reference.py
                     $<TARGET_FILE:wisp-qt> $<BOOL:${WISP_ENABLE_PARTIAL_UPDATES}>)
             set_tests_properties(qt_restyle_reference PROPERTIES TIMEOUT 70)
+            if(WISP_ENABLE_PARTIAL_UPDATES)
+                add_test(NAME qt_checked_interaction_restart
+                    COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_checked_interaction.py
+                        $<TARGET_FILE:wisp-qt> --capture-restart-partial-restyle)
+                set_tests_properties(qt_checked_interaction_restart PROPERTIES TIMEOUT 40)
+            endif()
         endif()
         add_test(NAME qt_absolute_sizing
             COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_absolute_sizing.py $<TARGET_FILE:wisp-qt>)

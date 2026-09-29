@@ -16,6 +16,6 @@ QJsonObject nsqt_capture_inspect(struct hlcache_handle *content, const QStringLi
 
 struct browser_window;
 bool nsqt_capture_settled(struct hlcache_handle *content);
-void nsqt_capture_force_full_restyle(struct hlcache_handle *content, bool force);
+void nsqt_capture_force_full_restyle(struct hlcache_handle *content, bool force, bool restart);
 bool nsqt_capture_click(struct browser_window *bw, const QString &id, bool label);
 void nsqt_capture_scroll(struct hlcache_handle *content, int x, int y);

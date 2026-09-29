@@ -54,6 +54,7 @@
 #include "content/handlers/html/box_special.h"
 #include "content/handlers/html/object.h"
 #include "content/handlers/html/restyle_profile.h"
+#include "content/handlers/html/restyle.h"
 
 /**
  * Context for box tree construction
@@ -255,6 +256,14 @@ static css_select_results *box_get_style(
     css_stylesheet *inline_style = NULL;
     css_select_results *styles;
     nscss_select_ctx ctx;
+
+#ifdef WISP_ENABLE_PARTIAL_UPDATES
+    if (html_restyle_reuse_style(c, n, &styles) != NSERROR_OK)
+        return NULL;
+    if (styles != NULL)
+        return styles;
+#endif
+    HTML_PROFILE(if (c->restyling) c->restyle_profile.styled_elements++);
 
     /* Firstly, construct inline stylesheet, if any */
     if (nsoption_bool(author_level_css)) {
@@ -817,7 +826,6 @@ static bool box_construct_element(struct box_construct_ctx *ctx, bool *convert_c
     styles = box_get_style(ctx->content, props.parent_style, root_style, ctx->n);
     HTML_PROFILE(if (ctx->content->restyling) {
         ctx->content->restyle_profile.css_ns += html_profile_now() - style_start;
-        ctx->content->restyle_profile.styled_elements++;
     });
     if (styles == NULL)
         return false;
@@ -1432,6 +1440,17 @@ static bool box_construct_text(struct box_construct_ctx *ctx)
 }
 
 
+/* The current callback is already off the scheduler's queue. Release its
+ * traversal state before starting a replacement; do not cancel a running slice. */
+static void restart_restyle(struct box_construct_ctx *ctx)
+{
+    html_content *content = ctx->content;
+    dom_node_unref(ctx->n);
+    free(ctx);
+    content->box_conversion_context = NULL;
+    html_restyle_restart(content);
+}
+
 /**
  * Convert an ELEMENT node to a box tree fragment,
  * then schedule conversion of the next ELEMENT node
@@ -1440,6 +1459,10 @@ static void convert_xml_to_box(void *p)
 {
     HTML_PROFILE_START(slice_start);
     struct box_construct_ctx *ctx = p;
+    if (html_restyle_needs_restart(ctx->content)) {
+        restart_restyle(ctx);
+        return;
+    }
     HTML_PROFILE(if (ctx->content->restyling) ctx->content->restyle_profile.construction_slices++);
     dom_node *next;
     bool convert_children;
@@ -1508,6 +1531,11 @@ static void convert_xml_to_box(void *p)
         ctx->n = next;
 
         if (next == NULL) {
+            if (html_restyle_needs_restart(ctx->content)) {
+                HTML_PROFILE(ctx->content->restyle_profile.construction_ns += html_profile_now() - slice_start);
+                restart_restyle(ctx);
+                return;
+            }
             /* Conversion complete */
             struct box root;
 

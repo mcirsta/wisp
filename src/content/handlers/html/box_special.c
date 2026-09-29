@@ -50,6 +50,7 @@
 #include <wisp/content/handlers/html/form_internal.h>
 #include <wisp/content/handlers/html/html.h>
 #include <wisp/content/handlers/html/private.h>
+#include "content/handlers/html/restyle.h"
 #include "content/handlers/html/box_construct.h"
 #include "content/handlers/html/box_manipulate.h"
 #include "content/handlers/html/box_special.h"
@@ -1846,6 +1847,7 @@ static bool box_select(dom_node *n, html_content *content, struct box *box, bool
         gadget->data.select.current = gadget->data.select.items;
         gadget->data.select.current->initial_selected = gadget->data.select.current->selected = true;
         gadget->data.select.num_selected = 1;
+        html_restyle_note_dom_change(content);
         dom_html_option_element_set_selected(gadget->data.select.current->node, true);
     }
 

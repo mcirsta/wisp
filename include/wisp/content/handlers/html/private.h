@@ -58,6 +58,8 @@ struct html_restyle_profile {
     const char *update_mode, *fallback_reason;
     uint32_t changed_controls, dirty_roots, invalidated_nodes, reused_styles;
     size_t temporary_bytes;
+    size_t cloned_result_bytes;
+    uint32_t style_references, restarts;
 };
 #endif
 
@@ -70,9 +72,28 @@ struct html_restyle_changes {
     const char *full_reason;
 };
 
+struct html_restyle_inputs {
+    css_select_ctx *ctx;
+    unsigned char media[sizeof(css_media)];
+    css_fixed units[7];
+    uint64_t css_revision, font_generation, visited_generation;
+    struct nsurl *base_url;
+    int width, height, font_default, font_size, font_min_size;
+    bool author_css, valid;
+};
+
+struct html_restyle_entry;
+
 struct html_restyle_state {
-    struct html_restyle_changes pending;
+    struct html_restyle_changes pending, active;
+    struct html_restyle_inputs styled_inputs, active_inputs;
+    struct html_restyle_entry *entries;
+    size_t count, capacity;
     uint64_t dom_generation, styled_generation, active_generation;
+    bool partial;
+#ifdef WISP_PROFILE_RESTYLE
+    bool force_restart; /* Capture-only invalidation after construction has begun. */
+#endif
     bool force_full; /* Developer capture override, not a browser preference. */
 };
 #endif

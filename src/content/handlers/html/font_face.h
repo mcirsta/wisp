@@ -98,4 +98,7 @@ bool html_font_face_has_pending(void);
  */
 int html_font_face_pending_count(void);
 
+/* Loaded web fonts are shared by documents. */
+uint64_t html_font_face_generation(void);
+
 #endif /* NETSURF_HTML_FONT_FACE_H */

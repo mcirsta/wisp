@@ -18,7 +18,16 @@
 #include "select/dispatch.h"
 #include "select/font_face.h"
 #include "select/variables.h"
+#include "select/scope.h"
 #include "stylesheet.h"
+
+/* Like style refcounts and the arena, this is single-threaded. A shared clock
+ * lets a context take the maximum of its sheets' stamps without hashing inputs. */
+uint64_t css__stylesheet_next_revision(void)
+{
+    static uint64_t revision;
+    return ++revision;
+}
 
 static css_error _add_selectors(css_stylesheet *sheet, css_rule *rule);
 static css_error _remove_selectors(css_stylesheet *sheet, css_rule *rule);
@@ -365,6 +374,7 @@ css_error css_stylesheet_data_done(css_stylesheet *sheet)
     }
 
     css__selector_hash_finish(sheet->selectors);
+    sheet->revision = css__stylesheet_next_revision();
 
     /* Determine if there are any pending imports */
     for (r = sheet->rule_list; r != NULL; r = r->next) {
@@ -451,6 +461,7 @@ css_error css_stylesheet_register_import(css_stylesheet *parent, css_stylesheet 
 
         if (r->type == CSS_RULE_IMPORT && i->sheet == NULL) {
             i->sheet = import;
+            parent->revision = css__stylesheet_next_revision();
 
             return CSS_OK;
         }
@@ -574,6 +585,8 @@ css_error css_stylesheet_set_disabled(css_stylesheet *sheet, bool disabled)
     if (sheet == NULL)
         return CSS_BADPARM;
 
+    if (sheet->disabled != disabled)
+        sheet->revision = css__stylesheet_next_revision();
     sheet->disabled = disabled;
 
     /** \todo needs to trigger some event announcing styles have changed */
@@ -1292,6 +1305,8 @@ css_error css__stylesheet_rule_append_style(css_stylesheet *sheet, css_rule *rul
     if (sheet == NULL || rule == NULL || style == NULL)
         return CSS_BADPARM;
 
+    sheet->revision = css__stylesheet_next_revision();
+
     assert(rule->type == CSS_RULE_SELECTOR || rule->type == CSS_RULE_PAGE);
 
     if (rule->type == CSS_RULE_SELECTOR)
@@ -1443,6 +1458,8 @@ css_error css__stylesheet_add_rule(css_stylesheet *sheet, css_rule *rule, css_ru
     if (sheet == NULL || rule == NULL)
         return CSS_BADPARM;
 
+    sheet->revision = css__stylesheet_next_revision();
+
     /* Need to fill in rule's index field before adding selectors
      * because selector chains consider the rule index for sort order
      */
@@ -1537,6 +1554,8 @@ css_error css__stylesheet_remove_rule(css_stylesheet *sheet, css_rule *rule)
     if (sheet == NULL || rule == NULL)
         return CSS_BADPARM;
 
+    sheet->revision = css__stylesheet_next_revision();
+
     error = _remove_selectors(sheet, rule);
     if (error != CSS_OK)
         return error;
@@ -1598,6 +1617,9 @@ css_error _add_selectors(css_stylesheet *sheet, css_rule *rule)
         for (i = 0; i < rule->items; i++) {
             css_selector *sel = s->selectors[i];
 
+            if (!sheet->checked_scope_unsafe && !css__selector_checked_parent_scope(sheet, sel))
+                sheet->checked_scope_unsafe = true;
+
             error = css__selector_hash_insert(sheet->selectors, sel);
             if (error != CSS_OK) {
                 /* Failed, revert our changes */
@@ -1637,6 +1659,15 @@ css_error _add_selectors(css_stylesheet *sheet, css_rule *rule)
             }
         }
     } break;
+    case CSS_RULE_CHARSET:
+    case CSS_RULE_IMPORT:
+    case CSS_RULE_FONT_FACE:
+    case CSS_RULE_PAGE:
+        break;
+    default:
+        /* New rule semantics must opt in to the checked-state scope proof. */
+        sheet->checked_scope_unsafe = true;
+        break;
     }
 
     return CSS_OK;

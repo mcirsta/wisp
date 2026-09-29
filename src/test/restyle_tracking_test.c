@@ -1,10 +1,15 @@
-/* Verify update batches and live form edits before selective CSS is enabled. */
+/* Verify update scopes, input guards and transient style lookup lifetime. */
 #include <check.h>
 #include <stdlib.h>
 #include <string.h>
 #include <wisp/utils/corestrings.h>
+#include <wisp/utils/nsoption.h>
+#include <wisp/utils/nsurl.h>
+#include <wisp/content/handlers/html/box.h>
 #include <wisp/content/handlers/html/form_internal.h>
+#include "content/urldb.h"
 #include "content/handlers/html/restyle.h"
+#include "content/handlers/css/internal.h"
 
 static html_content html;
 
@@ -22,7 +27,9 @@ static dom_node *node(const char *id)
 static void setup(void)
 {
     memset(&html, 0, sizeof(html));
+    ck_assert_int_eq(css_select_ctx_create(&html.select_ctx), CSS_OK);
     html.had_initial_layout = true;
+    html.base.status = CONTENT_STATUS_DONE;
     const char *source = "<div id=outer><input id=a><div id=inner><input id=b><input id=c></div></div>"
                          "<section><input id=d></section><textarea id=notes>note</textarea>";
     dom_hubbub_parser *parser;
@@ -35,7 +42,8 @@ static void setup(void)
 
 static void teardown(void)
 {
-    html_restyle_discard_pending(&html);
+    html_restyle_reset(&html);
+    css_select_ctx_destroy(html.select_ctx);
     dom_node_unref(html.document);
 }
 
@@ -122,7 +130,7 @@ START_TEST(test_edits_before_refresh)
     record("b");
     html_restyle_begin(&html);
 #ifdef WISP_PROFILE_RESTYLE
-    ck_assert_str_eq(html.restyle_profile.fallback_reason, "partial_not_implemented");
+    ck_assert_str_eq(html.restyle_profile.fallback_reason, "no_reusable_styles");
 #endif
     html_restyle_capture_inputs(&html);
     form_gadget_update_value(control, strdup("newer"));
@@ -142,15 +150,109 @@ START_TEST(test_edits_before_refresh)
 }
 END_TEST
 
+START_TEST(test_selector_scope_diagnostic)
+{
+    css_stylesheet *sheet;
+    css_stylesheet_params params = {.params_version = CSS_STYLESHEET_PARAMS_VERSION_1,
+        .level = CSS_LEVEL_DEFAULT, .charset = "UTF-8", .url = "file:///scope.css", .resolve = nscss_resolve_url};
+    const char *css = ":host { color:red }";
+    ck_assert_int_eq(css_stylesheet_create(&params, &sheet), CSS_OK);
+    css_error error = css_stylesheet_append_data(sheet, (const uint8_t *)css, strlen(css));
+    ck_assert_msg(error == CSS_OK || error == CSS_NEEDDATA, "CSS parse error %d", error);
+    ck_assert_int_eq(css_stylesheet_data_done(sheet), CSS_OK);
+    ck_assert_int_eq(css_select_ctx_append_sheet(html.select_ctx, sheet, CSS_ORIGIN_AUTHOR, NULL), CSS_OK);
+    record("b");
+    html_restyle_begin(&html);
+#ifdef WISP_PROFILE_RESTYLE
+    ck_assert_str_eq(html.restyle_profile.fallback_reason, "selector_scope");
+#endif
+    ck_assert_int_eq(css_select_ctx_remove_sheet(html.select_ctx, sheet), CSS_OK);
+    css_stylesheet_destroy(sheet);
+}
+END_TEST
+
+START_TEST(test_reuse_table_and_input_guards)
+{
+    /* The style payload ownership is covered by css_style_reuse_test. Here an
+     * empty result is enough to test the real DOM lookup and batch lifetime. */
+    dom_node *outside = node("outer");
+    struct box old_box = {.styles = calloc(1, sizeof(css_select_results))};
+    ck_assert_ptr_nonnull(old_box.styles);
+    void *previous;
+    ck_assert_int_eq(dom_node_set_user_data(outside, corestring_dom___ns_key_box_node_data, &old_box, NULL, &previous),
+        DOM_NO_ERR);
+    ck_assert_int_eq(html_restyle_capture_inputs(&html), NSERROR_OK);
+    html_restyle_end(&html, true);
+    record("d"); /* Separate parent, so the outer subtree remains reusable. */
+    html_restyle_begin(&html);
+    ck_assert(html.restyle.partial);
+    ck_assert_uint_eq(html.restyle.count, 1);
+    ck_assert_int_eq(html_restyle_invalidate(&html), NSERROR_OK);
+    ck_assert_int_eq(html_restyle_capture_inputs(&html), NSERROR_OK);
+    ck_assert(!html_restyle_needs_restart(&html));
+    css_select_results *clone;
+    ck_assert_int_eq(html_restyle_reuse_style(&html, outside, &clone), NSERROR_OK);
+    ck_assert_ptr_nonnull(clone);
+    ck_assert_ptr_ne(clone, old_box.styles);
+
+    int font_default = nsoption_int(font_default);
+    bool author_css = nsoption_bool(author_level_css);
+    switch (_i) {
+    case 0: html_restyle_note_dom_change(&html); break;
+    case 1: html.base.available_width++; break;
+    case 2: html.unit_len_ctx.viewport_width++; break;
+    case 3: html.media.width++; break;
+    case 4: nsoption_set_int(font_default, font_default + 1); break;
+    case 5: nsoption_set_bool(author_level_css, !author_css); break;
+    case 6: record("b"); break; /* New checked state belongs to the pending batch. */
+    case 7: {
+        css_select_ctx_destroy(html.select_ctx);
+        ck_assert_int_eq(css_select_ctx_create(&html.select_ctx), CSS_OK);
+        break;
+    }
+    case 8: {
+        struct nsurl *url;
+        ck_assert_int_eq(nsurl_create("https://example.test/visited", &url), NSERROR_OK);
+        ck_assert(urldb_add_url(url));
+        ck_assert_int_eq(urldb_update_url_visit_data(url), NSERROR_OK);
+        nsurl_unref(url);
+        break;
+    }
+    case 9:
+        html.restyling = true;
+        record("b");
+        html_restyle_close(&html);
+        ck_assert_uint_eq(html.restyle.pending.count, 0);
+        ck_assert_ptr_nonnull(html.restyle.entries);
+        ck_assert(html.restyle.partial);
+        break;
+    }
+    ck_assert_msg(html_restyle_needs_restart(&html), "Changed input %d did not invalidate the active reuse", _i);
+    html_restyle_use_full(&html, "test_changed_inputs");
+    ck_assert_ptr_null(html.restyle.entries);
+    ck_assert_uint_eq(html.restyle.active.count, 0);
+    css_select_results_destroy(clone);
+    css_select_results_destroy(old_box.styles);
+    dom_node_set_user_data(outside, corestring_dom___ns_key_box_node_data, NULL, NULL, &previous);
+    dom_node_unref(outside);
+    nsoption_set_int(font_default, font_default);
+    nsoption_set_bool(author_level_css, author_css);
+    if (_i == 8)
+        urldb_destroy();
+}
+END_TEST
+
 int main(void)
 {
-    if (corestrings_init() != NSERROR_OK)
+    if (nsoption_init(NULL, NULL, NULL) != NSERROR_OK || corestrings_init() != NSERROR_OK)
         return EXIT_FAILURE;
     Suite *suite = suite_create("Restyle tracking");
     TCase *tc = tcase_create("Scopes and edit generations");
     tcase_add_checked_fixture(tc, setup, teardown);
     tcase_add_test(tc, test_coalescing_and_batches);
     tcase_add_test(tc, test_scope_capacity);
+    tcase_add_test(tc, test_selector_scope_diagnostic);
+    tcase_add_loop_test(tc, test_reuse_table_and_input_guards, 0, 10);
     tcase_add_loop_test(tc, test_edits_before_refresh, 0, 2);
     suite_add_tcase(suite, tc);
     SRunner *runner = srunner_create(suite);
@@ -158,5 +260,6 @@ int main(void)
     int failed = srunner_ntests_failed(runner);
     srunner_free(runner);
     corestrings_fini();
+    nsoption_finalise(NULL, NULL);
     return failed ? EXIT_FAILURE : EXIT_SUCCESS;
 }

@@ -68,5 +68,6 @@ private:
     QTimer m_timer;
     bool m_loading = true;
     bool m_force_full_restyle = false;
+    bool m_restart_partial_restyle = false;
     bool m_finished = false;
 };

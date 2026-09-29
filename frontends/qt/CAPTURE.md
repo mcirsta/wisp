@@ -113,9 +113,11 @@ messages or allocate during the timed loops.
 
 The profile reports wall-clock milliseconds:
 
-- `invalidate_ms`: walk DOM elements and invalidate CSS selection caches.
+- `invalidate_ms`: choose the update mode, prepare its temporary reuse table and
+  invalidate CSS selection caches in the required DOM scopes.
 - `detach_ms`: clear interaction state, old gadgets and DOM-to-box mappings.
-- `css_ms`: element style selection/composition, including inline style parsing.
+- `css_ms`: element style selection/composition or result cloning, including
+  inline style parsing when selection is needed.
 - `boxes_ms`: other active box construction and DOM traversal.
 - `normalise_ms`: normalize the constructed box tree.
 - `construction_wait_ms`: time outside construction slices, including scheduler
@@ -138,23 +140,35 @@ existing millisecond clock as a fallback on other platforms.
 With the experimental `-DWISP_ENABLE_PARTIAL_UPDATES=ON`, native activation records
 all changed controls and coalesces their parent subtrees. Form edits record DOM
 changes immediately, including edits already synchronized before a tab click.
-This is currently tracking only: all refreshes still rebuild and lay out the full
-document. The option defaults to OFF and adds no tracking state when disabled.
+The first refresh establishes a full baseline; subsequent eligible refreshes reuse
+composed styles outside those scopes. All refreshes still reconstruct and lay out
+the full document. The option defaults to OFF and adds no HTML tracking state when
+disabled. Libcss's per-sheet scope summary and revision stamp are always available.
 
-With profiling enabled, `update_mode` currently reports `full`; `fallback_reason`
-distinguishes `forced_full`, `feature_disabled`, `dom_changed`, `scripting`,
-`full_request`, `scope_capacity`, `invalid_scope` and `partial_not_implemented`.
+With profiling enabled, `update_mode` reports `partial_css` or `full`.
+`fallback_reason` is `none` on the selective path; full reasons include
+`forced_full`, `feature_disabled`, `dom_changed`, `scripting`, `full_request`,
+`scope_capacity`, `invalid_scope`, `selector_scope`, `loading`, `no_style_snapshot`,
+`inputs_changed`, `no_scope`, `no_reusable_styles`, `reuse_table_failed`,
+`detach_changed` and `inputs_changed_during_build`.
 `changed_controls` counts successful native state changes in the batch,
 `dirty_roots` counts the coalesced candidate scopes, and `invalidated_nodes` counts
-libcss node caches actually cleared. `reused_styles` and `temporary_bytes` remain
-zero until style reuse is implemented. The fixed tracking state and referenced
-DOM roots do not allocate a temporary reuse table.
+libcss node caches actually cleared. `styled_elements` counts fresh selections;
+`reused_styles` counts cloned result containers, with `style_references` counting
+their non-null style slots. `temporary_bytes` is the peak allocated lookup-table
+capacity; `cloned_result_bytes` sums the new containers' allocations. These are
+not whole-process peak memory figures, and exclude allocator overhead. `restarts`
+counts abandoned partial attempts; their work stays in the counters even though
+the final mode is full.
 
 `qt_restyle_reference` replays edits and radio switches in ordinary and forced-full
-captures, checking each inspected state and the final PNG/DOM output. It verifies
-the reported reasons as well, so compiling the option alone cannot masquerade as
-partial rendering. Saved-page performance comparisons belong to the selective
-CSS milestone; this foundation does not claim refresh-time savings.
+captures, checking each inspected state and the final PNG/DOM output. It requires
+later toggles to report `partial_css`, so fallback cannot make comparisons pass
+without exercising reuse. In profiling builds, `--capture-restart-partial-restyle`
+injects a DOM-generation change after selective construction has begun. The same
+fixture and `qt_checked_interaction_restart` verify the resulting full restart,
+including resource and iframe behavior. Saved-page measurements are recorded in
+[the partial-update plan](../../src/docs/partial-updates.md).
 
 `action_ms` is the preceding capture action's synchronous duration, including
 target lookup and any scroll into view. Deferred restyling happens afterward.

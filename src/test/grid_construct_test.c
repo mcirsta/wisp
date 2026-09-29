@@ -71,6 +71,23 @@ static void test_log(const char *fmt, va_list args)
 /* -------------------------------------------------------------------------- */
 /* MOCKS for box_construct.c */
 
+/* This fixture exercises initial construction, with no previous presentation. */
+nserror html_restyle_reuse_style(html_content *html, dom_node *node, css_select_results **styles)
+{
+    *styles = NULL;
+    return NSERROR_OK;
+}
+
+bool html_restyle_needs_restart(html_content *html)
+{
+    return false;
+}
+
+void html_restyle_restart(html_content *html)
+{
+    ck_abort_msg("Initial grid construction must not request a restyle restart");
+}
+
 /* We will identify styles by pointer equality using storage addresses */
 /* Large buffers to mimic opaque css_computed_style */
 static uint8_t mock_style_block_storage[4096];

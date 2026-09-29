@@ -27,6 +27,7 @@
 #include "select/propset.h"
 #include "select/select.h"
 #include "select/strings.h"
+#include "select/scope.h"
 #include "select/unit.h"
 #include "stylesheet.h"
 
@@ -50,6 +51,7 @@ typedef struct css_select_sheet {
  */
 struct css_select_ctx {
     uint32_t n_sheets; /**< Number of sheets */
+    uint64_t revision;
 
     css_select_sheet *sheets; /**< Array of sheets */
 
@@ -249,6 +251,7 @@ css_error css_select_ctx_create(css_select_ctx **result)
         return error;
     }
 
+    c->revision = css__stylesheet_next_revision();
     *result = c;
 
     return CSS_OK;
@@ -360,6 +363,7 @@ css_error css_select_ctx_insert_sheet(
     ctx->uses_revert |= sheet->uses_revert;
 
     ctx->n_sheets++;
+    ctx->revision = css__stylesheet_next_revision();
 
     return CSS_OK;
 }
@@ -389,6 +393,7 @@ css_error css_select_ctx_remove_sheet(css_select_ctx *ctx, const css_stylesheet 
     css__mq_query_destroy(ctx->sheets[index].media);
 
     ctx->n_sheets--;
+    ctx->revision = css__stylesheet_next_revision();
 
     memmove(&ctx->sheets[index], &ctx->sheets[index + 1], (ctx->n_sheets - index) * sizeof(css_select_sheet));
 
@@ -1541,11 +1546,26 @@ cleanup:
 }
 
 /**
- * Destroy a selection result set
+ * Clone the container, sharing the already refcounted, immutable style payloads.
  *
- * \param results  Result set to destroy
+ * \param results  Result set to share
+ * \param clone    Receives the independently owned container
  * \return CSS_OK on success, appropriate error otherwise
  */
+css_error css_select_results_clone(const css_select_results *results, css_select_results **clone)
+{
+    if (results == NULL || clone == NULL)
+        return CSS_BADPARM;
+    css_select_results *copy = malloc(sizeof(*copy));
+    if (copy == NULL)
+        return CSS_NOMEM;
+    for (uint32_t i = 0; i < CSS_PSEUDO_ELEMENT_COUNT; i++)
+        copy->styles[i] = css__computed_style_ref(results->styles[i]);
+    *clone = copy;
+    return CSS_OK;
+}
+
+/** Destroy a selection result set and release its style references. */
 css_error css_select_results_destroy(css_select_results *results)
 {
     uint32_t i;
@@ -1560,6 +1580,22 @@ css_error css_select_results_destroy(css_select_results *results)
 
     free(results);
 
+    return CSS_OK;
+}
+
+css_error css_select_ctx_checked_parent_scope(css_select_ctx *ctx, bool *safe, uint64_t *revision)
+{
+    if (ctx == NULL || safe == NULL)
+        return CSS_BADPARM;
+    *safe = false;
+    uint64_t current = ctx->revision;
+    for (uint32_t i = 0; i < ctx->n_sheets; i++) {
+        if (!css__sheet_checked_parent_scope(ctx->sheets[i].sheet, &current))
+            return CSS_OK;
+    }
+    *safe = true;
+    if (revision != NULL)
+        *revision = current;
     return CSS_OK;
 }
 

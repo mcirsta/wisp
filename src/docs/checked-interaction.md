@@ -32,8 +32,10 @@ Native activation reports changes through `html_request_checked_restyle()`;
 `html_request_restyle()` remains the explicit whole-document request. Both
 schedule a refresh on the existing main event loop:
 
-1. Invalidate all libcss per-node selection data, including custom-property
-   environments and sharing caches. Keep the stylesheet selection context.
+1. Invalidate libcss per-node selection data, including custom-property
+   environments and sharing caches. The default path invalidates the whole
+   document; the experimental selective path invalidates dirty parent subtrees
+   and reuses unaffected composed styles. Keep the stylesheet selection context.
 2. Clear box-owning selection, caret/focus, drag, search and select-menu state.
    Input values live in the existing DOM. Drop old gadget objects and DOM-to-box
    mappings, including descendants that may become hidden.
@@ -43,8 +45,8 @@ schedule a refresh on the existing main event loop:
    allocation context, and broadcast a reformat. The window retains its scroll
    offset, subject to ordinary clamping if the document becomes shorter.
 
-Cache invalidation and gadget/box detachment each use a single depth-first DOM
-walk, including hidden descendants. The shared iterator uses constant storage
+Cache invalidation and gadget/box detachment use depth-first DOM walks, including
+hidden descendants. The shared iterator uses constant storage
 without recursion and reads children after its callback, so textarea value
 synchronization may replace text children safely.
 
@@ -65,17 +67,18 @@ visible frames get initialized/loaded. A hidden frame keeps its browsing context
 and is rebound when shown. Arbitrary DOM insertion/removal of iframe elements is
 outside this state-only refresh contract.
 
-This deliberately rebuilds the whole presentation. It costs one CSS selection,
-box-construction and layout pass per changed control; retaining the old allocation
+This deliberately rebuilds the whole presentation. It costs one CSS update,
+box-construction and layout pass per coalesced batch; retaining the old allocation
 context until rebinding also temporarily increases peak box memory. The
 [partial-update implementation plan](partial-updates.md) describes staged work
 to reuse unaffected styles first, then consider retained box regions and selective
-layout after measurement. Experimental change tracking and a forced-full capture
-comparison are now implemented behind `WISP_ENABLE_PARTIAL_UPDATES` (default OFF).
-They record changed radio peers, coalesced parent scopes and form edits made before
-refresh, but still execute the full refresh. Selective style reuse, regional box
-replacement and partial layout remain planned. Neither parallel rendering nor a
-new dependency graph is required now.
+layout after measurement. Selective style reuse and a forced-full capture comparison
+are implemented behind `WISP_ENABLE_PARTIAL_UPDATES` (default OFF). After one full
+state refresh establishes a baseline, eligible updates select CSS only in dirty
+scopes and for elements without a reusable result. Input changes and unsupported
+selectors fall back to full selection; changes during conversion restart it before
+publication. Regional box replacement and partial layout remain planned. See the
+plan for ownership details, validation and current measurements.
 
 The radio-peer lookup now uses one document traversal instead of indexed NodeList
 lookups that repeatedly start from the root. It still resolves form ownership

@@ -18,11 +18,13 @@ env = dict(os.environ, QT_QPA_PLATFORM="offscreen", QT_SCALE_FACTOR="1",
            QT_SCREEN_SCALE_FACTORS="1", QT_FONT_DPI="96")
 
 
-def run(destination, force):
+def run(destination, force, restart=False):
     args = [str(binary), "--capture-dir", str(destination), "--capture-size", "600x500",
             "--capture-settle", "50", "--capture-timeout", "20000"]
     if force:
         args.append("--capture-force-full-restyle")
+    if restart:
+        args.append("--capture-restart-partial-restyle")
     for key in ids:
         args.extend(("--capture-id", key))
     for kind, value in actions:
@@ -37,12 +39,18 @@ def run(destination, force):
     for index in (5, 6, 7):
         step = steps[index]
         profile = step["restyle_profile"]
-        # Tracking is preparatory: no selective rendering is implemented yet.
-        assert profile["update_mode"] == "full", (force, index, profile)
-        reason = ("forced_full" if force else "dom_changed" if index == 5 else "partial_not_implemented")
-        assert profile["fallback_reason"] == (reason if tracking else "feature_disabled"), (force, index, profile)
+        partial = tracking and not force and not restart and index > 5
+        assert profile["update_mode"] == ("partial_css" if partial else "full"), (force, restart, index, profile)
+        reason = ("feature_disabled" if not tracking else "forced_full" if force else
+                  "dom_changed" if index == 5 else "inputs_changed_during_build" if restart else "none")
+        assert profile["fallback_reason"] == reason, (force, restart, index, profile)
         assert profile["invalidated_nodes"] > 0 and profile["styled_elements"] > 0, (force, index, profile)
-        assert profile["reused_styles"] == 0 and profile["temporary_bytes"] == 0, (force, index, profile)
+        if tracking and not force and index > 5:
+            assert profile["reused_styles"] > 0 and profile["temporary_bytes"] > 0, (index, profile)
+            assert profile["cloned_result_bytes"] > 0 and profile["style_references"] > 0, (index, profile)
+            assert profile["restarts"] == int(restart), (index, profile)
+        else:
+            assert profile["reused_styles"] == 0 and profile["temporary_bytes"] == 0, (force, index, profile)
         if tracking:
             assert profile["changed_controls"] == 2 and profile["dirty_roots"] == 1, (force, index, profile)
         elements = {e["id"]: e for e in step["elements"]}
@@ -57,11 +65,14 @@ def run(destination, force):
 
 
 with tempfile.TemporaryDirectory(prefix="wisp-restyle-reference-") as tmp:
-    normal, full = Path(tmp) / "normal", Path(tmp) / "full"
-    normal_steps, full_steps = run(normal, False), run(full, True)
-    for index, (a, b) in enumerate(zip(normal_steps, full_steps)):
-        for key in ("elements", "scroll", "resource_count", "active_resources", "status"):
-            assert a[key] == b[key], f"State {index} ({actions[index-1] if index else 'initial'}): {key} differs"
-    for name in ("page.png", "dom.txt"):
-        assert (normal / name).read_bytes() == (full / name).read_bytes(), f"Final {name} differs"
-print("Full-refresh reference: matching state, geometry, pixels and resources; edit and radio tracking verified.")
+    full = Path(tmp) / "full"
+    full_steps = run(full, True)
+    for name, restart in (("normal", False), ("restart", True)):
+        normal = Path(tmp) / name
+        normal_steps = run(normal, False, restart)
+        for index, (a, b) in enumerate(zip(normal_steps, full_steps)):
+            for key in ("elements", "scroll", "resource_count", "active_resources", "status"):
+                assert a[key] == b[key], f"{name}: state {index}: {key} differs"
+        for artifact in ("page.png", "dom.txt"):
+            assert (normal / artifact).read_bytes() == (full / artifact).read_bytes(), f"{name}: final {artifact} differs"
+print("Selective/full/restarted refreshes match state, geometry, pixels and resources.")

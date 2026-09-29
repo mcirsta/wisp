@@ -101,6 +101,9 @@ void urldb_set_auth_details(struct nsurl *url, const char *realm, const char *au
 const char *urldb_get_auth_details(struct nsurl *url, const char *realm);
 
 
+/* Changes to the boolean visited state, for conservative CSS reuse. */
+uint64_t urldb_visited_generation(void);
+
 /**
  * Update an URL's visit data
  *
