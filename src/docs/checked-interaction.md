@@ -176,10 +176,60 @@ and the outer sheet's ordinary declarations overriding imported declarations.
 CPU sampling beginning at the first native state change identified two further
 candidates: Qt repeatedly resolves font families on font-cache misses, and the
 selector hash keeps only 64 buckets each for classes, IDs and element names.
-A bounded family-resolution cache needs font-loading/alias invalidation tests;
-growing selector tables needs cascade-order and memory-accounting tests. Neither
-is implemented or assigned an expected speedup here. Layout is now the largest
-remaining phase, so font lookup/measurement is the next useful investigation.
+The font lookup investigation and change are recorded below. Growing selector
+tables remains a candidate requiring cascade-order and memory-accounting tests;
+no speedup is assumed for it.
+
+### Qt font family lookup
+
+Temporary frontend probes counted only work inside `layout_document()` after
+the first native state change. One process per page, 12 switches including
+warm-up; these are averages per layout and include probe overhead:
+
+| Operation | Tion | Bihon |
+| --- | ---: | ---: |
+| Complete-font cache queries | 14,173 | 20,247 |
+| Complete-font cache misses | 118 | 168 |
+| Family-resolution calls | 132 | 181 |
+| Family resolution time (ms) | 51.5 | 71.2 |
+| Text-advance measurement time (ms) | 42.1 | 69.7 |
+| Ascent/descent queries | 11,805 | 16,493 |
+
+Only seven family names were resolved on either page. The complete-font cache
+already hits on over 99% of queries, but a miss repeats family discovery for a
+new size, weight or family-list identity. A separate 64-entry LRU now caches
+family-name/slant resolution, including missing families, using owned Qt strings.
+It preserves CSS fallback order and the existing weight, size and shaping paths.
+Both caches clear on Qt font-database changes and after Wisp registers a web-font
+alias. Slot ages reset along with the complete-font cache's global age counter,
+so empty entries are reused immediately after clearing.
+
+The temporary timing probes are not part of the shipped code. Existing tests
+cover aliases, italic foundries and late web fonts; new cases also exercise
+cached missing names across sizes and application-font addition/removal.
+
+With the probes removed, the same three-process, 30-warmed-sample measurement
+gives these medians in milliseconds:
+
+| Phase | Tion before | Tion now | Bihon before | Bihon now |
+| --- | ---: | ---: | ---: | ---: |
+| CSS selection/composition | 63.85 | 63.32 | 106.20 | 109.07 |
+| Layout/reformat | 109.31 | 61.29 | 174.45 | 104.27 |
+| **Complete refresh, before painting** | **177.19** | **130.14** | **287.01** | **222.57** |
+| Subsequent core HTML drawing | 3.63 | 1.06 | 4.83 | 0.98 |
+
+Layout fell by 43.9% and 40.2%; total refresh fell by another 26.6% and 22.5%.
+All six screenshots and DOM dumps are byte-identical to the previous version,
+and all 78 inspected states preserve geometry, control values, scroll and resource
+counts. Seven focused font/text/capture tests pass in both Debug (ASan/UBSan) and
+Release. The earlier cache-only trial measured 130/219 ms; the final run above
+also includes the complete-font cache age reset. Small differences between the
+runs, especially in unchanged CSS work, are normal timing variation.
+
+CSS selection and layout now take roughly equal shares. Repeated text-advance
+measurement and ascent/descent queries remain candidates for the next focused
+investigation; changing shaping or line-breaking behavior is not part of this
+cache fix.
 
 ### Chromium comparison and measurement limits
 
@@ -209,7 +259,8 @@ not a precise estimate of timer cost. The earlier 450–830 ms figures included 
 
 Local raw samples, reproducible drivers and the DOM microbenchmark are under
 `out/render-captures/checked-timing-2026-09-29/` (`baseline.json`, `profiled.json`,
-`linear.json`, `variable-pass.json`, `chromium.json`, `nodelist-*.json`, `run_wisp.py`, `run_chromium.py`,
+`linear.json`, `variable-pass.json`, `family-cache-final.json`, `chromium.json`,
+`nodelist-*.json`, `run_wisp.py`, `run_chromium.py`,
 `nodelist_benchmark.c`). See the capture guide for counter definitions.
 
 ## Checks

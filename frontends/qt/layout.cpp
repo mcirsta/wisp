@@ -22,6 +22,7 @@
  */
 
 #include <QApplication>
+#include <QCache>
 #include <QFontDatabase>
 #include <QPainter>
 #include <QRawFont>
@@ -172,7 +173,7 @@ static void match_font_weight(QFont &font)
 
 /* Resolve one CSS family without accepting Qt's fallback for an unknown name.
  * Registered web fonts take priority over installed families of the same name. */
-static QString available_font_family(const QString &family, bool italic)
+static QString resolve_font_family(const QString &family, bool italic)
 {
 #if QT_CONFIG(fontconfig)
     /* hasFamily() also applies platform aliases, including weak fallbacks.
@@ -250,6 +251,25 @@ static QString available_font_family(const QString &family, bool italic)
     (void)italic;
     return {};
 #endif
+}
+
+/* Family resolution is independent of size and weight. Keep both successful
+ * lookups and missing names, bounded separately from the complete font cache. */
+static QCache<std::pair<QString, bool>, QString> font_family_cache(64);
+static void nsqt_font_cache_clear(void);
+
+static QString available_font_family(const QString &family, bool italic)
+{
+    static const auto connection = QObject::connect(
+        qApp, &QGuiApplication::fontDatabaseChanged, qApp, nsqt_font_cache_clear);
+    Q_UNUSED(connection);
+
+    const auto key = std::make_pair(family, italic);
+    if (const QString *cached = font_family_cache.object(key))
+        return *cached;
+    QString resolved = resolve_font_family(family, italic);
+    font_family_cache.insert(key, new QString(resolved));
+    return resolved;
 }
 
 /* Try CSS families in order, then the configured generic family. */
@@ -378,6 +398,8 @@ static QFont *nsfont_style_to_font(const struct plot_font_style *fstyle)
 
     if (pfcache.entries[oldest_idx].qfont != NULL) {
         delete pfcache.entries[oldest_idx].qfont;
+        /* A font-database notification may clear caches while resolving the replacement. */
+        pfcache.entries[oldest_idx].qfont = NULL;
     }
 
     pfcache.entries[oldest_idx].qfont = new_qfont_fstyle(fstyle);
@@ -415,17 +437,19 @@ QFont nsqt_capture_font(const struct plot_font_style *style)
 /**
  * Purge the Qt font cache
  *
- * Called when a new web font is downloaded and registered so that
+ * Called when the font database changes or a web-font alias is registered so that
  * subsequent text measurements do not use stale fallback fonts.
  */
 static void nsqt_font_cache_clear(void)
 {
-    NSLOG(wisp, INFO, "Purging Qt font pfcache to force re-evaluation of newly loaded web fonts");
+    NSLOG(wisp, INFO, "Purging Qt font caches after a font database or alias change");
+    font_family_cache.clear();
     for (int i = 0; i < PFCACHE_ENTRIES; i++) {
         if (pfcache.entries[i].qfont != NULL) {
             delete pfcache.entries[i].qfont;
             pfcache.entries[i].qfont = NULL;
         }
+        pfcache.entries[i].age = 0;
     }
     pfcache.age = 0;
 }

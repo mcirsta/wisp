@@ -146,7 +146,23 @@ int main(int argc, char **argv)
     REQUIRE(repaints == 1);
     late.check("web font alias and cached fallback invalidation", "Wisp Normal Test");
 
+    // A cached missing family must become available after a database change,
+    // and a cached successful lookup must disappear when that font is removed.
+    FontList installed_later({"Wisp Variable Test", "Wisp Weight Test"});
+    for (int size : {12, 15, 18}) {
+        installed_later.style.size = size * PLOT_STYLE_SCALE;
+        installed_later.check("missing family across font sizes", "Wisp Weight Test");
+    }
+    int variable_id = QFontDatabase::addApplicationFont(directory + "/variable.ttf");
+    REQUIRE(variable_id >= 0);
+    app.processEvents();
+    installed_later.check("database addition invalidates cached missing family", "Wisp Variable Test");
+    REQUIRE(QFontDatabase::removeApplicationFont(variable_id));
+    app.processEvents();
+    installed_later.check("database removal invalidates cached available family", "Wisp Weight Test");
+
     nsoption_finalise(nullptr, nullptr);
-    std::puts("Qt font fallback: family order, missing names, generics, aliases and late web fonts passed.");
+    std::puts("Qt font fallback: family order, missing names, generics, aliases, "
+              "late web fonts and database changes passed.");
     return EXIT_SUCCESS;
 }
