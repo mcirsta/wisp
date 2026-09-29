@@ -1766,9 +1766,13 @@ select_from_sheet(css_select_ctx *ctx, const css_stylesheet *sheet, css_origin o
             state->sheet = s;
             state->current_origin = origin;
 
-            error = match_selectors_in_sheet(ctx, s, state);
-            if (error != CSS_OK)
-                return error;
+            /* Imports are visited above even when this sheet has no variables.
+             * Ordinary declarations cannot contribute to the collection pass. */
+            if (!state->collecting_vars || s->uses_variables) {
+                error = match_selectors_in_sheet(ctx, s, state);
+                if (error != CSS_OK)
+                    return error;
+            }
 
             /* Find next sheet to process */
             if (sp > 0) {

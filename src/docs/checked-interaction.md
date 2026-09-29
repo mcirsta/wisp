@@ -148,6 +148,39 @@ control state and scroll offsets; resource counts remain stable. The focused
 DOM/CSS/form/box and Qt capture tests pass in Debug (ASan/UBSan) and Release.
 The traversal unit tests also pass with LeakSanitizer enabled.
 
+### Avoiding empty variable-collection passes
+
+When any stylesheet uses variables, selection first collects custom properties,
+then cascades ordinary properties. The collection pass previously searched every
+stylesheet's selectors even when that sheet contained no custom properties or
+`var()` references. `select_from_sheet()` now skips that work using the parser's
+existing `uses_variables` flag. Imported sheets are still visited independently;
+ordinary declarations still run in the normal cascade pass. No generator,
+bytecode, storage or cache-invalidation changes are needed.
+
+Repeating the same 30-sample protocol after this change gives:
+
+| Phase | Tion after traversal fix | Tion now | Bihon after traversal fix | Bihon now |
+| --- | ---: | ---: | ---: | ---: |
+| CSS selection/composition (ms) | 89.77 | 63.85 | 151.66 | 106.20 |
+| Layout/reformat (ms) | 109.41 | 109.31 | 171.53 | 174.45 |
+| **Complete refresh, before painting (ms)** | **205.08** | **177.19** | **332.51** | **287.01** |
+
+CSS selection fell by 28.9% and 30.0%; total refresh fell another 13.6% and
+13.7%. All six screenshots and DOM dumps remain byte-identical, as do the
+inspected control states, panel geometry and scroll offsets. All 64 Debug CSS/
+checked-state/capture tests pass, plus 14 focused Release tests. The new variable
+test covers imports through a literal-only sheet, pseudo-element inheritance,
+and the outer sheet's ordinary declarations overriding imported declarations.
+
+CPU sampling beginning at the first native state change identified two further
+candidates: Qt repeatedly resolves font families on font-cache misses, and the
+selector hash keeps only 64 buckets each for classes, IDs and element names.
+A bounded family-resolution cache needs font-loading/alias invalidation tests;
+growing selector tables needs cascade-order and memory-accounting tests. Neither
+is implemented or assigned an expected speedup here. Layout is now the largest
+remaining phase, so font lookup/measurement is the next useful investigation.
+
 ### Chromium comparison and measurement limits
 
 Chromium 153.0.8010.52, same files/viewport, page scripts disabled, aligned font
@@ -176,7 +209,7 @@ not a precise estimate of timer cost. The earlier 450–830 ms figures included 
 
 Local raw samples, reproducible drivers and the DOM microbenchmark are under
 `out/render-captures/checked-timing-2026-09-29/` (`baseline.json`, `profiled.json`,
-`linear.json`, `chromium.json`, `nodelist-*.json`, `run_wisp.py`, `run_chromium.py`,
+`linear.json`, `variable-pass.json`, `chromium.json`, `nodelist-*.json`, `run_wisp.py`, `run_chromium.py`,
 `nodelist_benchmark.c`). See the capture guide for counter definitions.
 
 ## Checks

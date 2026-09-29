@@ -922,6 +922,39 @@ static void test_imported_sheet_custom_property(void)
     destroy_style_case(&ctx);
 }
 
+static void test_variables_imported_by_literal_sheet(void)
+{
+    style_case ctx = {0};
+    lwc_string *url = NULL;
+
+    /* The outer sheet contributes only ordinary declarations. Skipping its
+     * variable-collection work must still visit imports and later cascade it. */
+    ctx.sheet = create_stylesheet_from_css(
+        "@import url(\"vars.css\"); div { height: 31px; }", false, true);
+    ctx.import_sheet = create_stylesheet_from_css(
+        "div { --w: 23px; width: var(--w); height: 19px; }"
+        "div::before { width: var(--w); }", false, false);
+    assert(!ctx.sheet->uses_variables);
+    assert(css_stylesheet_next_pending_import(ctx.sheet, &url) == CSS_OK);
+    lwc_string_unref(url);
+    assert(css_stylesheet_register_import(ctx.sheet, ctx.import_sheet) == CSS_OK);
+    assert(css_select_ctx_create(&ctx.select_ctx) == CSS_OK);
+    assert(css_select_ctx_append_sheet(ctx.select_ctx, ctx.sheet,
+        CSS_ORIGIN_AUTHOR, NULL) == CSS_OK);
+    assert(lwc_intern_string("div", 3, &ctx.node_name) == lwc_error_ok);
+    ctx.node.name = ctx.node_name;
+
+    const css_computed_style *style = select_style_for_node(&ctx, &ctx.node, NULL, &ctx.results);
+    expect_length_px("variable imported by literal sheet", style,
+        css_computed_width, CSS_WIDTH_SET, 23);
+    expect_length_px("literal outer declaration still cascades last", style,
+        css_computed_height, CSS_HEIGHT_SET, 31);
+    assert(ctx.results->styles[CSS_PSEUDO_ELEMENT_BEFORE] != NULL);
+    expect_length_px("imported pseudo inherits variables",
+        ctx.results->styles[CSS_PSEUDO_ELEMENT_BEFORE], css_computed_width, CSS_WIDTH_SET, 23);
+    destroy_style_case(&ctx);
+}
+
 static void test_pseudo_element_uses_element_vars(void)
 {
     style_case ctx;
@@ -1432,6 +1465,7 @@ int main(int argc, char **argv)
     test_inherited_custom_property_keeps_parent_value();
     test_inline_style_var_resolution();
     test_imported_sheet_custom_property();
+    test_variables_imported_by_literal_sheet();
     test_pseudo_element_uses_element_vars();
     test_literal_fallback_value();
     test_shorthand_fallback_value();
