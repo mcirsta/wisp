@@ -29,6 +29,7 @@
 
 void malloc_limit(unsigned int count);
 void realloc_limit(unsigned int count);
+void calloc_limit(unsigned int count);
 
 void *malloc(size_t size);
 

@@ -8,21 +8,29 @@ import sys
 import tempfile
 
 binary = Path(sys.argv[1]).resolve()
-fixture = Path(__file__).resolve().parents[2] / "test/checked-interaction.html"
+retained = "--retain" in sys.argv[2:]
+fixture = Path(__file__).resolve().parents[2] / ("test/restyle-tracking.html" if retained else "test/checked-interaction.html")
 env = dict(os.environ, QT_QPA_PLATFORM="offscreen", QT_SCALE_FACTOR="1",
            QT_SCREEN_SCALE_FACTORS="1", QT_FONT_DPI="96")
 with tempfile.TemporaryDirectory(prefix="wisp-restyle-lifecycle-") as tmp:
     tmp = Path(tmp)
     page = tmp / "lifecycle.html"
     # Ensure a partial slice yields with both old and newly constructed boxes.
-    source = fixture.read_text().replace("</style>", "</style><section>" + "<p>Unchanged text</p>" * 256 + "</section>", 1)
+    source = fixture.read_text()
+    if retained:
+        source = source.replace('<section id="tabs">', '<section id="tabs">' + "<span></span>" * 256)
+    else:
+        source = source.replace("</style>", "</style><section>" + "<p>Unchanged text</p>" * 256 + "</section>", 1)
     page.write_text(source)
-    for mode in ("close", "navigate", "shutdown", "shutdown-full"):
+    for mode in (("close", "navigate", "shutdown") if retained else ("close", "navigate", "shutdown", "shutdown-full")):
         out = tmp / mode
         args = [str(binary), "--capture-dir", str(out), "--capture-size", "600x700",
                 "--capture-settle", "50", "--capture-timeout", "20000",
                 "--capture-interrupt-restyle", mode, "--capture-click-label", "second",
-                "--capture-click-label", "first", str(page)]
+                "--capture-click-label", "first"]
+        if retained:
+            args += ["--capture-retain-boxes", "--capture-click-label", "second"]
+        args.append(str(page))
         result = subprocess.run(args, env=env, capture_output=True, text=True, timeout=30)
         report = out / "interruption.json"
         data = json.loads(report.read_text()) if report.exists() else {}
@@ -30,8 +38,10 @@ with tempfile.TemporaryDirectory(prefix="wisp-restyle-lifecycle-") as tmp:
         assert "runtime error:" not in result.stderr, (mode, result.stderr)
         assert data["result"] == "complete" and data["closed_during_build"], (mode, data)
         before, after = data["before"], data["after"]
-        assert before["building"] and before["conversion"] and before["old_tree"], (mode, data)
-        if mode == "shutdown-full":
+        assert before["building"] and before["conversion"] and before["old_tree"] == (not retained), (mode, data)
+        if retained:
+            assert before["retained_build"] and before["styled_elements"] > 0 and before["table_entries"] > 0, data
+        elif mode == "shutdown-full":
             assert not before["partial"] and before["styled_elements"] > 0, (mode, data)
         else:
             assert before["partial"] and before["reused_styles"] > 0 and before["table_entries"] > 0, (mode, data)

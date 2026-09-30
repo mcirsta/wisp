@@ -1587,6 +1587,7 @@ static void restart_restyle(struct box_construct_ctx *ctx)
 
 static void box_construct_region_normalise(struct box_construct_ctx *ctx)
 {
+    HTML_PROFILE_START(normalise_start);
     /* Placement used the real parent's type. This private wrapper only provides
      * the normalization entry point; it is never part of the result. */
     ctx->seed->type = BOX_BLOCK;
@@ -1603,6 +1604,11 @@ static void box_construct_region_normalise(struct box_construct_ctx *ctx)
     if (root != NULL)
         root->parent = NULL;
     talloc_free(ctx->seed);
+    HTML_PROFILE(if (ctx->content->restyling) {
+        uint64_t elapsed = html_profile_now() - normalise_start;
+        ctx->content->restyle_profile.normalise_ns += elapsed;
+        ctx->content->restyle_profile.construction_ns += elapsed;
+    });
     box_construct_region_complete(ctx, NSERROR_OK);
 }
 
@@ -1641,6 +1647,8 @@ static void convert_xml_to_box(void *p)
                 return;
             }
             if (ctx->region != NULL) {
+                HTML_PROFILE(if (ctx->content->restyling)
+                    ctx->content->restyle_profile.construction_ns += html_profile_now() - slice_start);
                 box_construct_region_normalise(ctx);
                 return;
             }

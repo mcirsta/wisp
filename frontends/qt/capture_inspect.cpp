@@ -25,6 +25,8 @@ extern "C" {
 #include "wisp/plot_style.h"
 #include "content/handlers/css/dump.h"
 #include "content/handlers/html/font.h"
+#include "desktop/scrollbar.h"
+#include "utils/talloc.h"
 #undef restrict
 #undef namespace
 }
@@ -130,7 +132,12 @@ static QJsonObject describe(struct box *box, const html_content *html)
     const css_unit_ctx *units = &html->unit_len_ctx;
     QJsonObject result = summary(box);
     result["owns_region"] = (box->flags & OWNS_REGION) != 0;
+    result["text_offset"] = double(box->byte_offset);
+    result["scrollbars"] = QJsonObject{{"horizontal", box->scroll_x != nullptr}, {"vertical", box->scroll_y != nullptr},
+        {"x", scrollbar_get_offset(box->scroll_x)}, {"y", scrollbar_get_offset(box->scroll_y)}};
 #ifdef WISP_ENABLE_PARTIAL_UPDATES
+    if (html->restyle.retain_boxes)
+        result["box_address"] = QString::number(reinterpret_cast<quintptr>(box), 16);
     if (box->flags & OWNS_REGION) {
         const char *reason;
         html_box_check_boundary(html, box, nullptr, &reason);
@@ -228,6 +235,10 @@ QJsonObject nsqt_capture_inspect(struct hlcache_handle *content, const QStringLi
     result["status"] = "ok";
     result["resource_count"] = int(html->num_objects);
     result["active_resources"] = int(html->base.active - html->scripts_active);
+#ifdef WISP_ENABLE_PARTIAL_UPDATES
+    if (html->restyle.retain_boxes)
+        result["tree_allocations"] = double(talloc_total_blocks(html->bctx));
+#endif
 #ifdef WISP_PROFILE_RESTYLE
     const auto &p = html->restyle_profile;
     if (p.total_ns != 0) {
@@ -242,6 +253,7 @@ QJsonObject nsqt_capture_inspect(struct hlcache_handle *content, const QStringLi
             {"construction_ms", p.construction_ns / 1e6},
             {"construction_wait_ms", (p.construction_wall_ns - p.construction_ns) / 1e6},
             {"layout_ms", p.layout_ns / 1e6}, {"cleanup_ms", p.cleanup_ns / 1e6}, {"total_ms", p.total_ns / 1e6},
+            {"publication_ms", p.publication_ns / 1e6},
             {"paint_ms", p.paint_ns / 1e6},
             {"through_last_paint_ms", p.last_paint_ns ? (p.last_paint_ns - p.start_ns) / 1e6 : 0},
             {"styled_elements", int(p.styled_elements)}, {"construction_slices", int(p.construction_slices)},
@@ -319,20 +331,24 @@ QJsonObject nsqt_capture_inspect(struct hlcache_handle *content, const QStringLi
 }
 
 // Capture-only interaction hooks use the same core input path as the Qt widget.
-void nsqt_capture_force_full_restyle(struct hlcache_handle *content, bool force, bool restart)
+void nsqt_capture_configure_restyle(struct hlcache_handle *content, bool force, bool restart, bool retain, bool fail)
 {
     Q_UNUSED(restart);
+    Q_UNUSED(fail);
 #ifdef WISP_ENABLE_PARTIAL_UPDATES
     if (content && content_get_type(content) == CONTENT_HTML) {
         auto *html = reinterpret_cast<html_content *>(hlcache_handle_get_content(content));
         html->restyle.force_full = force;
+        html->restyle.retain_boxes = retain;
 #ifdef WISP_PROFILE_RESTYLE
         html->restyle.force_restart = restart;
+        html->restyle.fail_retained_layout = fail;
 #endif
     }
 #else
     Q_UNUSED(content);
     Q_UNUSED(force);
+    Q_UNUSED(retain);
 #endif
 }
 
@@ -371,6 +387,8 @@ QJsonObject nsqt_capture_restyle_lifecycle(struct content *content, bool slow)
             {"locked", html->base.locked}, {"building", html->restyling}, {"partial", html->restyle.partial},
             {"window_attached", html->bw != nullptr}, {"conversion", html->box_conversion_context != nullptr},
             {"old_tree", html->restyle_old_bctx != nullptr}, {"table_entries", double(html->restyle.count)},
+            {"retained_build", html->restyle.retain_boxes && html->restyling &&
+                html->box_conversion_context != nullptr && html->restyle_old_bctx == nullptr},
             {"active_roots", int(html->restyle.active.count)}, {"pending_roots", int(html->restyle.pending.count)},
             {"reused_styles", int(html->restyle_profile.reused_styles)},
             {"styled_elements", int(html->restyle_profile.styled_elements)},

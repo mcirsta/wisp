@@ -1,6 +1,7 @@
 # Partial document updates: implementation plan
 
-Status: milestone A validated and enabled by default, 2026-09-29. The reviewed baseline is `eb3e03df`
+Status: milestone A enabled; milestone B live integration available through capture
+opt-in, 2026-09-30. The reviewed baseline is `eb3e03df`
 (`Use stack scratch for small class selector lists`).
 
 The foundation is committed as `fdd92975`, and milestone A as `180d7009`.
@@ -15,9 +16,13 @@ settled images and registering native controls with their forms can now be prepa
 without changing live state (`254424da`). Eligible checked-state scopes now acquire
 independent allocation owners during full reconstruction. DOM-to-box mapping
 changes can also be prepared without changing live mappings (`bacc9013`).
-Read-only boundary checks now cover box links, arena storage and borrowed styles.
-Coordinated region publication and retained-box layout validation remain pending;
-displayed boxes are not yet retained.
+Read-only boundary checks cover box links, arena storage and borrowed styles
+(`5b331865`). A synchronous coordinator now publishes one prepared region in tests,
+including DOM, form and resource bindings and retirement of its old arena.
+An allocation-free layout reset now passes repeated retained-tree/full-rebuild
+geometry comparisons. Live refresh now uses the builder and publisher through
+the Qt `--capture-retain-boxes` opt-in, followed by full layout. Ordinary browsing
+still reconstructs all boxes while milestone B rollout validation continues.
 Detached construction through native-control/SVG staging is committed as `610d6f5a`.
 Milestone C has not started. The steps below remain the implementation and
 acceptance checklist, with the concrete implementation choices recorded here.
@@ -656,21 +661,200 @@ driver and results are in `out/render-captures/box-boundaries-final-2026-09-30/`
 Actual region replacement remains disabled; these results do not establish
 retained-layout correctness or a refresh speedup.
 
-Remaining prerequisites before retaining boxes (resume here):
+### Milestone B coordinated region publication (2026-09-30)
 
-- Use the new allocation owners only after proving all publication conditions.
-  Mark successfully published candidate roots with the same ownership flag;
-  detached construction already owns their arena explicitly. Keep widget-bearing
-  and other unsupported content on the full-refresh path.
-- Retain the settled-image restriction initially. New requests, pending loads,
-  embedded documents and iframe-window rebinding require separate preparation
-  before those cases can use partial publication; otherwise choose full refresh.
-- Coordinate the box-boundary check, prepared mappings, resource/form bindings
-  and interaction-state cleanup, and validate input generations before replacing
-  one region. Keep several independent dirty regions on full reconstruction until
-  their combined ownership and binding publication is supported.
-- Verify repeated full layout on retained boxes against fresh construction.
-  Only then enable actual replacement, with its own measurements and fallback.
+`html_box_publish_region()` prepares and validates mappings, native form
+registrations and settled resource reuse together. It runs synchronously after
+detached construction, with the original tree still alive and input/painting
+excluded. It requires one active checked-state scope, unchanged captured inputs,
+an independently owned old root, a visible candidate root and successful boundary
+checks. Any preparation failure leaves the displayed tree, bindings and candidate
+ownership unchanged, allowing the caller to discard the candidate and rebuild.
+
+The three binding modules now expose a commit phase after preflight; their
+existing checked apply functions still work. All failure-prone work finishes
+before committing any binding. The coordinator then updates DOM mappings, forms
+and resources, splices the root at its exact sibling position, assigns its arena
+to the document and frees the old arena. It releases staged resource descriptors
+and copied SVG bytes after the document's existing resource records are bound.
+Publication adds no allocations or callbacks and consumes the caller's candidate
+pointer, preventing accidental cancellation of a published arena.
+
+The first publisher requires an idle interaction state. Active text selection,
+search, dragging, select menus and widget/embedded-content focus return a fallback
+reason without being cleared. Their normal cleanup broadcasts frontend callbacks;
+that remains in the full-refresh path. Unfocused unaffected controls retain their
+boxes, values and registrations. Frames/iframes, pending/new/changed resources,
+widget-bearing regions and several independent dirty scopes also require fallback.
+
+Both replacement boundaries must remain visible. Removing a boundary can join
+anonymous inline containers in its parent, requiring wider normalization. Hidden
+and revealed panels instead change inside their stable visible ancestor, as with
+the target tabs. A hidden old root still lacks an owned insertion boundary.
+
+Tests exercise first/middle/last/only-child replacement under block/flex/grid
+root formatters, unchanged outside boxes, repeated ownership retirement, input
+changes, interaction/frames/multi-scope rejection and publication after real text
+wrapping. One hundred checkbox-driven switches alternate hidden descendants while
+updating DOM mappings, actual form lists/indexes and a settled failed image record;
+the outside control and resource records survive and allocation counts plateau.
+Late resource rejection and Release allocation failures leave all bindings and
+the original tree intact. Settled image handles continue to be exercised by the
+separate resource-binding suite.
+
+The coordinator intentionally leaves the content locked. The caller must reset
+retained layout state, run full layout and refresh extents/selection offsets
+before exposing it or yielding. Failure after publication needs full reconstruction
+or the content-error path; the old arena cannot be rolled back. Tests here prove
+coordinated ownership publication, not settled retained-layout equivalence. No
+live refresh calls this coordinator yet.
+
+Validation: all 121 selected Debug tests and 118 Release tests pass, including
+140 Debug construction cases and 146 Release cases. The construction suite passes
+LeakSanitizer, and the coordinator, binding modules and tests compile with partial
+updates/profiling disabled. Both saved Tion/Bihon panels exactly match the prior
+PNGs, DOM, normalized boxes, state/geometry and resource counts across repeated
+switches. The driver and captures are in
+`out/render-captures/coordinated-publication-2026-09-30/`. Those captures exercise
+the unchanged live full-reconstruction path; the new coordinator is exercised by
+the construction/lifetime tests, not by the browser yet.
+
+### Milestone B retained layout reset (2026-09-30)
+
+`layout_reset_document()` discards derived state while keeping the normalized
+construction tree and its styles, DOM mappings, resource bindings and controls.
+It is compiled only with partial updates enabled. It is called after publication,
+with the content still locked/restyling, immediately before full layout; normal
+cached reflows do not use it.
+
+The reset walks structural children once, without a traversal allocation or new
+per-box fields. It rejoins layout-created text fragments **before intrinsic
+measurement**, clears measured widths and height/baseline flags, restores initial
+geometry and bounds, and clears float/positioning links and clear levels. Table
+column caches are discarded while normalized spans remain intact. Numeric list
+marker buffers are freed for regeneration; static symbolic marker strings remain.
+Scrollbar objects and offsets survive; their geometry still needs normal updating
+before the retained presentation is exposed.
+
+Construction/layout tests compare against independent full constructions at each
+target state, never against a second pass on the same mutated tree. All nine
+block/flex/grid parent/root combinations are tested at two viewport widths
+(18 cases), each with 24 region replacements alternating wide/narrow content
+and hidden descendants.
+They compare all box geometry, intrinsic widths, edges, text fragments, baseline
+flags, table columns, float/containing-block links and descendant overflow bounds.
+The retained content includes split inline text, floats/clear, relative/absolute/
+fixed positioning, inline blocks, aspect ratios, tables and symbolic/numeric lists.
+Outside boxes and the document root keep their identities; allocation counts
+plateau separately in each state.
+
+A separate forward/reversed Roman-list regression performs 100 replacements in
+each direction. Removing/reinstating the changed root's list marker renumbers an
+unaffected sibling from II to I and back. The sibling and its marker box survive,
+but its generated text and width must be recalculated. Release allocation-failure
+instrumentation also runs the reset with all new allocations refused.
+
+These tests validate retained layout geometry using deterministic font callbacks.
+They do not yet validate live browser painting, selection reindexing, scrollbar
+refresh, fetched-image relayout or post-publication failure recovery. The live
+browser still uses full reconstruction; no speed improvement is claimed yet.
+
+Validation: 121 selected Debug CTests and 118 Release CTests pass, including
+160 Debug construction cases and 166 Release cases. The complete construction
+suite passes LeakSanitizer. The new layout entry point and construction tests
+also compile with partial updates and restyle profiling disabled. The ordinary
+Qt capture suite still passes; saved-site retained captures await live integration.
+
+Separate existing layout finding: directly positioned grid children can hit
+`lh__available_height_for_box()`'s missing `float_container` assertion during a
+fresh Debug page load, before any retained update. The retained-layout fixtures
+keep their positioned descendants inside ordinary block children to isolate this
+work. Reproducer (also verified through the Qt capture frontend):
+
+```html
+<div style="display:grid;position:relative;width:200px">
+  <div>normal content</div>
+  <div style="position:absolute;top:10px;right:5px;width:40px">abs</div>
+  <div style="position:fixed;bottom:3px;right:9px;width:32px">fix</div>
+</div>
+```
+
+Track the grid sizing/positioning handoff separately; the new reset is not called
+on this fresh-load path and does not fix the underlying issue.
+
+### Milestone B live integration (2026-09-30)
+
+`--capture-retain-boxes` opts an actual browser document into retained-region
+updates. The first refresh establishes the style snapshot; a subsequent selective
+whole rebuild establishes allocation owners. Later eligible single-scope changes
+build a detached replacement while the old tree stays alive. Publication rechecks
+inputs and all bindings, replaces the owned region, then resets and lays out the
+whole document before exposing it. Unaffected boxes, styles, settled resources
+and unfocused controls survive. No scripting or threading changes are involved.
+
+Failure before publication discards the candidate and uses the full-rebuild path.
+Changed inputs also invalidate all node caches before retrying. Failure after
+publication enters the normal content-error path; retired storage is never used
+as a rollback tree. The existing close/navigation/last-user cancellation hooks
+also cancel detached construction through the same conversion-context slot.
+
+Full layout now propagates allocation failures through intrinsic grid/table
+sizing, inline and block recursion, numerical list markers and final absolute
+positioning. The HTML reformat wrapper honors failure, and callers suppress the
+success notification. Error injection exposed two assumptions in the browser's
+error-page handling: displayed content still needs its close callback, and a
+later failure needs the current request parameters for the error URL/retry action.
+Both are handled without exposing the incomplete layout.
+
+Successful retained updates reindex selection byte offsets, refresh document
+extents, and update existing element scrollbars before unlocking. Existing pixel
+offsets are preserved where possible and clamped by the scrollbar API. Newly
+needed scrollbars follow the ordinary paint path. Failed scrollbar allocation is
+reported and its temporary client data is freed.
+
+The new `qt_retained_restyle` compares independent full and retained runs, including
+settled images, multiple backgrounds, inline SVG, native controls, selection byte
+offsets, scrollbar appearance/removal and final PNG/DOM output. It verifies stable
+outside box addresses and per-state allocation counts. Additional variants cover
+widget fallback, pages with iframes, input changes during detached construction,
+and injected failure after publication. `qt_retained_lifecycle` closes, navigates
+and shuts down real windows between detached construction slices. Release unit
+tests exhaust successive allocation budgets for six layout shapes and compare
+successful output with an independently constructed reference.
+
+The conservative frame exclusion applies to the entire page. It is checked before
+detached construction, allowing such pages to retain milestone A's selective CSS
+reuse. In particular, the saved Bihon page has iframes and currently stays on
+`partial_css`; it must not repeatedly build a rejected candidate and redo full CSS
+selection. Tion can use `partial_boxes`. Expanding support to unaffected iframe
+windows remains separate work.
+
+Validation passes 123 selected Debug CTests (ASan/UBSan) and 119 Release CTests,
+including 160 Debug and 172 Release construction cases. The complete construction
+suite also passes LeakSanitizer. The affected core and capture translation units
+compile with partial updates and profiling disabled. No generator inputs changed.
+
+Saved-page comparisons cover both final sidebar panels on each site, with five
+or six alternating switches in each independent full/opt-in run. Inspected
+geometry, selection byte offsets, scroll and resource counts match; final PNG
+and DOM dumps are identical. Tion's unaffected ancestor identities stay unchanged
+after warmup, with 3,018/3,063 tree allocations alternating by state. Settled
+resources remain at 201 on Tion and 289 on Bihon. Bihon's warmed profiling samples
+confirm `partial_css` with no attempted publication. This is a short correctness
+and allocation-stability check, not the long-running rollout or timing gate.
+Drivers, captures and the report are in
+`out/render-captures/live-retained-2026-09-30/`.
+
+Remaining prerequisites before enabling retained boxes (resume here):
+
+- Finish rollout validation: extended saved-site repetitions, resource/memory
+  plateaus and interleaved Release final-pass timing against milestone A and full
+  selection. The initial live comparisons are not a new performance claim.
+- Audit retained element scroll offsets across nonzero offsets, shrinkage and
+  off-screen updates; the live regression covers scrollbar appearance/removal.
+- Decide whether to ship the conservative frame exclusion or separately validate
+  unaffected iframe retention for Bihon. Broader publication eligibility and
+  partial layout are independent follow-ups.
 
 ## Recommendation and scope
 
@@ -1198,11 +1382,9 @@ flaky hard-coded CTest threshold.
 9. **Rollout:** enable validated behavior by default, retain the full fallback and
    developer comparison switch, and update the behavior/profiling documentation.
 
-Commits 1–5 and the milestone A rollout are complete. Step 6 has started with
-explicit allocation propagation through generated content, normalization and
-special elements, plus ownership of later text/control allocations. Bounded
-construction and staged publication are the next work; boxes are not yet retained.
-Construction ancestry is now private to the builder; the full-document path and
-its DOM mapping publication remain active until the detached-build gates pass.
-Steps 7–8 still require their ownership and layout gates; they are not
-prerequisites for the already enabled selective CSS work.
+Commits 1–5 and the milestone A rollout are complete. Step 6's ownership, bounded
+construction and staged bindings are implemented. Step 7 now has live capture-only
+integration, retained full layout and failure recovery. Rollout validation remains
+before enabling retained boxes in ordinary browsing. Step 8 has not started; it is
+not a prerequisite for shipping retained boxes with full layout or for the already
+enabled selective CSS work.

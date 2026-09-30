@@ -114,7 +114,7 @@ const css_border_color_func border_color_funcs[4] = {
 };
 
 /* forward declaration to break cycles */
-static void
+static bool
 layout_minmax_block(struct box *block, const struct gui_layout_table *font_func, const html_content *content);
 
 /**
@@ -336,7 +336,7 @@ static int layout_text_indent(const css_unit_ctx *unit_len_ctx, const css_comput
  * \post  table->min_width.value and table->max_width filled in,
  *        0 <= table->min_width.value <= table->max_width
  */
-static void
+static bool
 layout_minmax_table(struct box *table, const struct gui_layout_table *font_func, const html_content *content)
 {
     unsigned int i, j;
@@ -350,11 +350,11 @@ layout_minmax_table(struct box *table, const struct gui_layout_table *font_func,
 
     /* check if the widths have already been calculated */
     if (table->max_width != UNKNOWN_MAX_WIDTH)
-        return;
+        return true;
 
     if (table_calculate_column_types(&content->unit_len_ctx, table) == false) {
         NSLOG(wisp, ERROR, "Could not establish table column types.");
-        return;
+        return false;
     }
     col = table->col;
 
@@ -392,7 +392,8 @@ layout_minmax_table(struct box *table, const struct gui_layout_table *font_func,
                 if (cell->columns != 1)
                     continue;
 
-                layout_minmax_block(cell, font_func, content);
+                if (!layout_minmax_block(cell, font_func, content))
+                    return false;
                 i = cell->start_column;
 
                 if (col[i].positioned)
@@ -416,7 +417,8 @@ layout_minmax_table(struct box *table, const struct gui_layout_table *font_func,
                 if (cell->columns == 1)
                     continue;
 
-                layout_minmax_block(cell, font_func, content);
+                if (!layout_minmax_block(cell, font_func, content))
+                    return false;
                 i = cell->start_column;
 
                 /* find min width so far of spanned columns, and
@@ -498,6 +500,7 @@ layout_minmax_table(struct box *table, const struct gui_layout_table *font_func,
     table->max_width += (table->columns + 1) * border_spacing_h;
 
     assert(0 <= table->min_width.value && table->min_width.value <= table->max_width);
+    return true;
 }
 
 /**
@@ -737,11 +740,12 @@ static struct box *layout_trailing_space(struct box *first, struct box *end)
  * \param first_line  true iff this is the first line in the inline container
  * \param line_has_height  updated to true or false, depending on line
  * \param font_func Font functions.
- * \return  first box in next line, or 0 if no more lines
+ * \param next receives the first box in the next line, or NULL at the end
+ * \return true on success, false on memory exhaustion
  * \post  0 <= *line_min <= *line_max
  */
-static struct box *layout_minmax_line(struct box *first, int *line_min, int *line_max, bool first_line,
-    bool *line_has_height, const struct gui_layout_table *font_func, const html_content *content)
+static bool layout_minmax_line(struct box *first, int *line_min, int *line_max, bool first_line,
+    bool *line_has_height, const struct gui_layout_table *font_func, const html_content *content, struct box **next)
 {
     int min = 0, max = 0, width, height, fixed;
     float frac;
@@ -782,10 +786,13 @@ static struct box *layout_minmax_line(struct box *first, int *line_min, int *lin
 
         if (lh__box_is_float_box(b)) {
             assert(b->children);
-            if (b->children->type == BOX_TABLE)
-                layout_minmax_table(b->children, font_func, content);
-            else
-                layout_minmax_block(b->children, font_func, content);
+            if (b->children->type == BOX_TABLE) {
+                if (!layout_minmax_table(b->children, font_func, content))
+                    return false;
+            } else {
+                if (!layout_minmax_block(b->children, font_func, content))
+                    return false;
+            }
             b->min_width.value = b->children->min_width.value;
             b->max_width = b->children->max_width;
             if (min < b->min_width.value)
@@ -797,7 +804,8 @@ static struct box *layout_minmax_line(struct box *first, int *line_min, int *lin
         if (lh__box_is_inline_positioned(b)) {
             /* Compute the positioned box's own intrinsic size, without
              * contributing to its parent's line width or height. */
-            layout_minmax_box(b, font_func, content);
+            if (!layout_minmax_box(b, font_func, content))
+                return false;
             continue;
         }
 
@@ -806,9 +814,11 @@ static struct box *layout_minmax_line(struct box *first, int *line_min, int *lin
 
         if (b->type == BOX_INLINE_BLOCK || b->type == BOX_INLINE_FLEX || b->type == BOX_INLINE_GRID) {
             if (b->type == BOX_INLINE_GRID) {
-                layout_minmax_grid(b, font_func, content);
+                if (!layout_minmax_grid(b, font_func, content))
+                    return false;
             } else {
-                layout_minmax_block(b, font_func, content);
+                if (!layout_minmax_block(b, font_func, content))
+                    return false;
             }
             if (min < b->min_width.value)
                 min = b->min_width.value;
@@ -1021,7 +1031,8 @@ static struct box *layout_minmax_line(struct box *first, int *line_min, int *lin
     assert(b != first);
     assert(0 <= *line_min);
     assert(*line_min <= *line_max);
-    return b;
+    *next = b;
+    return true;
 }
 
 
@@ -1034,7 +1045,7 @@ static struct box *layout_minmax_line(struct box *first, int *line_min, int *lin
  * \post  inline_container->min_width.value and inline_container->max_width filled in,
  *        0 <= inline_container->min_width.value <= inline_container->max_width
  */
-static void layout_minmax_inline_container(struct box *inline_container, bool *has_height,
+static bool layout_minmax_inline_container(struct box *inline_container, bool *has_height,
     const struct gui_layout_table *font_func, const html_content *content)
 {
     struct box *child;
@@ -1047,24 +1058,28 @@ static void layout_minmax_inline_container(struct box *inline_container, bool *h
 
     /* check if the widths have already been calculated */
     if (inline_container->max_width != UNKNOWN_MAX_WIDTH)
-        return;
+        return true;
 
-    *has_height = false;
+    bool height = false;
 
     for (child = inline_container->children; child;) {
-        child = layout_minmax_line(child, &line_min, &line_max, first_line, &line_has_height, font_func, content);
+        if (!layout_minmax_line(child, &line_min, &line_max, first_line, &line_has_height, font_func, content, &child))
+            return false;
         if (min < line_min)
             min = line_min;
         if (max < line_max)
             max = line_max;
         first_line = false;
-        *has_height |= line_has_height;
+        height |= line_has_height;
     }
 
+    if (has_height != NULL)
+        *has_height = height;
     inline_container->min_width.value = min;
     inline_container->max_width = max;
 
     assert(0 <= inline_container->min_width.value && inline_container->min_width.value <= inline_container->max_width);
+    return true;
 }
 
 /**
@@ -1076,7 +1091,7 @@ static void layout_minmax_inline_container(struct box *inline_container, bool *h
  * \post  block->min_width.value and block->max_width filled in,
  *        0 <= block->min_width.value <= block->max_width
  */
-static void
+static bool
 layout_minmax_block(struct box *block, const struct gui_layout_table *font_func, const html_content *content)
 {
     struct box *child;
@@ -1102,7 +1117,7 @@ layout_minmax_block(struct box *block, const struct gui_layout_table *font_func,
 
     /* check if the widths have already been calculated */
     if (block->max_width != UNKNOWN_MAX_WIDTH)
-        return;
+        return true;
 
     if (block->style != NULL) {
         wtype = css_computed_width(block->style, &width, &wunit);
@@ -1166,7 +1181,8 @@ layout_minmax_block(struct box *block, const struct gui_layout_table *font_func,
 
     if (block->object) {
         if (content_get_type(block->object) == CONTENT_HTML) {
-            layout_minmax_block(html_get_box_tree(block->object), font_func, content);
+            if (!layout_minmax_block(html_get_box_tree(block->object), font_func, content))
+                return false;
             min = html_get_box_tree(block->object)->min_width.value;
             max = html_get_box_tree(block->object)->max_width;
         } else {
@@ -1222,12 +1238,14 @@ layout_minmax_block(struct box *block, const struct gui_layout_table *font_func,
             switch (child->type) {
             case BOX_FLEX:
             case BOX_BLOCK:
-                layout_minmax_block(child, font_func, content);
+                if (!layout_minmax_block(child, font_func, content))
+                    return false;
                 if (child->flags & HAS_HEIGHT)
                     child_has_height = true;
                 break;
             case BOX_GRID:
-                layout_minmax_grid(child, font_func, content);
+                if (!layout_minmax_grid(child, font_func, content))
+                    return false;
                 if (child->flags & HAS_HEIGHT)
                     child_has_height = true;
                 break;
@@ -1235,13 +1253,15 @@ layout_minmax_block(struct box *block, const struct gui_layout_table *font_func,
                 if (block->flags & NEED_MIN)
                     child->flags |= NEED_MIN;
 
-                layout_minmax_inline_container(child, &child_has_height, font_func, content);
+                if (!layout_minmax_inline_container(child, &child_has_height, font_func, content))
+                    return false;
                 if (child_has_height && child == child->parent->children) {
                     block->flags |= MAKE_HEIGHT;
                 }
                 break;
             case BOX_TABLE:
-                layout_minmax_table(child, font_func, content);
+                if (!layout_minmax_table(child, font_func, content))
+                    return false;
                 /* todo: fix for zero height tables */
                 child_has_height = true;
                 child->flags |= MAKE_HEIGHT;
@@ -1451,6 +1471,7 @@ layout_minmax_block(struct box *block, const struct gui_layout_table *font_func,
 
     assert(0 <= block->min_width.value);
     assert(block->min_width.value <= block->max_width);
+    return true;
 }
 
 /**
@@ -1463,12 +1484,12 @@ layout_minmax_block(struct box *block, const struct gui_layout_table *font_func,
  * \param font_func font functions
  * \param content   The HTML content being laid out
  */
-void layout_minmax_box(struct box *box, const struct gui_layout_table *font_func, const html_content *content)
+bool layout_minmax_box(struct box *box, const struct gui_layout_table *font_func, const html_content *content)
 {
 
     /* Check if already calculated */
     if (box->max_width != UNKNOWN_MAX_WIDTH)
-        return;
+        return true;
 
     switch (box->type) {
     case BOX_BLOCK:
@@ -1476,17 +1497,21 @@ void layout_minmax_box(struct box *box, const struct gui_layout_table *font_func
     case BOX_TABLE_CELL:
     case BOX_FLEX:
     case BOX_INLINE_FLEX:
-        layout_minmax_block(box, font_func, content);
+        if (!layout_minmax_block(box, font_func, content))
+            return false;
         break;
     case BOX_GRID:
     case BOX_INLINE_GRID:
-        layout_minmax_grid(box, font_func, content);
+        if (!layout_minmax_grid(box, font_func, content))
+            return false;
         break;
     case BOX_TABLE:
-        layout_minmax_table(box, font_func, content);
+        if (!layout_minmax_table(box, font_func, content))
+            return false;
         break;
     case BOX_INLINE_CONTAINER:
-        layout_minmax_inline_container(box, NULL, font_func, content);
+        if (!layout_minmax_inline_container(box, NULL, font_func, content))
+            return false;
         break;
     default:
         NSLOG(layout, WARNING, "layout_minmax_box: unhandled box type %d", box->type);
@@ -1494,6 +1519,7 @@ void layout_minmax_box(struct box *box, const struct gui_layout_table *font_func
         box->max_width = 0;
         break;
     }
+    return true;
 }
 
 
@@ -4446,7 +4472,8 @@ bool layout_block_context(struct box *block, int viewport_height, html_content *
                     return false;
                 }
             } else {
-                layout_block_context(box, viewport_height, content);
+                if (!layout_block_context(box, viewport_height, content))
+                    return false;
             }
 
             cy += box->padding[TOP];
@@ -4996,7 +5023,7 @@ static void layout__ordered_list_count(struct box *box)
  *
  * \param[in]  box      The list item's main box.
  */
-static void layout__set_numerical_marker_text(struct box *box)
+static bool layout__set_numerical_marker_text(struct box *box)
 {
     struct box *marker = box->list_marker;
     size_t counter_len;
@@ -5011,26 +5038,34 @@ static void layout__set_numerical_marker_text(struct box *box)
         LIST_MARKER_SIZE = 20,
     };
 
-    marker->text = talloc_array(marker, char, LIST_MARKER_SIZE);
-    if (marker->text == NULL) {
-        return;
-    }
+    char *text = talloc_array(marker, char, LIST_MARKER_SIZE);
+    if (text == NULL)
+        return false;
 
     css_res = css_computed_format_list_style(
-        box->style, marker->list_value, marker->text, LIST_MARKER_SIZE, &counter_len);
+        box->style, marker->list_value, text, LIST_MARKER_SIZE, &counter_len);
     if (css_res == CSS_OK) {
         if (counter_len >= LIST_MARKER_SIZE) {
             /* Use computed size as marker did not fit in
              * default allocation. */
-            marker->text = talloc_realloc(marker, marker->text, char, counter_len + 1);
-            if (marker->text == NULL) {
-                return;
+            char *resized = talloc_realloc(marker, text, char, counter_len + 1);
+            if (resized == NULL) {
+                talloc_free(text);
+                return false;
             }
-            css_computed_format_list_style(box->style, marker->list_value, marker->text, counter_len + 1, &counter_len);
+            text = resized;
+            css_res = css_computed_format_list_style(
+                box->style, marker->list_value, text, counter_len + 1, &counter_len);
         }
-        marker->text[counter_len] = '\0';
-        marker->length = counter_len;
     }
+    if (css_res != CSS_OK) {
+        talloc_free(text);
+        return false;
+    }
+    text[counter_len] = '\0';
+    marker->text = text;
+    marker->length = counter_len;
+    return true;
 }
 
 /**
@@ -5058,7 +5093,7 @@ static bool layout__list_item_is_numerical(const struct box *b)
 /**
  * Layout list markers.
  */
-static void layout_lists(const html_content *content, struct box *box)
+static bool layout_lists(const html_content *content, struct box *box)
 {
     struct box *child;
 
@@ -5069,9 +5104,8 @@ static void layout_lists(const html_content *content, struct box *box)
             struct box *marker = child->list_marker;
 
             if (layout__list_item_is_numerical(child)) {
-                if (marker->text == NULL) {
-                    layout__set_numerical_marker_text(child);
-                }
+                if (marker->text == NULL && !layout__set_numerical_marker_text(child))
+                    return false;
             }
             if (marker->object) {
                 /* Image content dimensions are in CSS pixels */
@@ -5113,8 +5147,10 @@ static void layout_lists(const html_content *content, struct box *box)
                 child, marker, marker->text ? (int)marker->length : 0, marker->text ? marker->text : "", marker->x,
                 marker->y, child->children, child->children ? child->children->y : -999);
         }
-        layout_lists(content, child);
+        if (!layout_lists(content, child))
+            return false;
     }
+    return true;
 }
 
 
@@ -6447,10 +6483,73 @@ static void layout_log_final_box_heights(const css_unit_ctx *unit_len_ctx, struc
 }
 
 
+#ifdef WISP_ENABLE_PARTIAL_UPDATES
+static void layout_reset_box(struct box *box)
+{
+    /* Rejoin before intrinsic measurement, not just before line layout: old
+     * wrapping must not change a retained sibling's min/max contributions. */
+    layout_rejoin_text(box);
+    box->flags &= ~(NEW_LINE | MEASURED | HAS_HEIGHT | MAKE_HEIGHT | NEED_MIN |
+        HEIGHT_STRETCHED | ASPECT_RATIO_HEIGHT | HAS_BASELINE | HAS_FIXED_DESCENDANT);
+    box->x = box->y = box->height = 0;
+    box->width = UNKNOWN_WIDTH;
+    box->min_width = (struct css_size){.type = CSS_SIZE_AUTO, .value = 0};
+    box->max_width = UNKNOWN_MAX_WIDTH;
+    box->baseline = 0;
+    box->descendant_x0 = box->descendant_y0 = 0;
+    box->descendant_x1 = box->descendant_y1 = 0;
+    for (unsigned i = 0; i < 4; i++)
+        box->margin[i] = box->padding[i] = box->border[i].width = 0;
+    if (box->space != 0)
+        box->space = UNKNOWN_WIDTH;
+    box->byte_offset = 0;
+    box->float_children = box->next_float = box->float_container = NULL;
+    box->abs_containing_block = NULL;
+    box->clear_level = box->cached_place_below_level = 0;
+
+    /* Column types depend on cell styles/units; min/max and used widths are
+     * also cached here. Row/column spans belong to normalization and survive. */
+    talloc_free(box->col);
+    box->col = NULL;
+}
+
+/* exported function documented in html/layout.h */
+void layout_reset_document(html_content *content)
+{
+    struct box *root = content->layout, *box = root;
+    assert(content->base.locked && content->restyling);
+    assert(content->frameset == NULL);
+
+    /* Follow structural children only: float chains are derived, and markers
+     * are owned separately. No traversal stack or allocation per box. */
+    while (box != NULL) {
+        layout_reset_box(box);
+        if (box->list_marker != NULL) {
+            struct box *marker = box->list_marker;
+            layout_reset_box(marker);
+            marker->list_value = 1;
+            if (layout__list_item_is_numerical(box)) {
+                /* Numbering can change outside the replaced region. Symbolic
+                 * markers use static strings; only numerical text is owned. */
+                talloc_free(marker->text);
+                marker->text = NULL;
+                marker->length = 0;
+            }
+        }
+        if (box->children != NULL) {
+            box = box->children;
+            continue;
+        }
+        while (box != root && box->next == NULL)
+            box = box->parent;
+        box = box == root ? NULL : box->next;
+    }
+}
+#endif
+
 /* exported function documented in html/layout.h */
 bool layout_document(html_content *content, int width, int height)
 {
-    bool ret;
     struct box *doc = content->layout;
     const struct gui_layout_table *font_func = content->font_func;
 
@@ -6463,7 +6562,8 @@ bool layout_document(html_content *content, int width, int height)
         .owner = content,
     };
 
-    layout_minmax_block(doc, font_func, content);
+    if (!layout_minmax_block(doc, font_func, content))
+        return false;
 
     layout_block_find_dimensions(&content->unit_len_ctx, width, height, 0, 0, doc);
     doc->x = doc->margin[LEFT] + doc->border[LEFT].width;
@@ -6475,7 +6575,8 @@ bool layout_document(html_content *content, int width, int height)
     }
     doc->width = width;
 
-    ret = layout_block_context(doc, height, content);
+    if (!layout_block_context(doc, height, content))
+        return false;
 
     /* make <html> and <body> fill available height */
     if (doc->y + doc->padding[TOP] + doc->height + doc->padding[BOTTOM] + doc->border[BOTTOM].width +
@@ -6490,8 +6591,8 @@ bool layout_document(html_content *content, int width, int height)
                     doc->children->margin[BOTTOM]);
     }
 
-    layout_lists(content, doc);
-    layout_position_absolute(doc, doc, 0, 0, content);
+    if (!layout_lists(content, doc) || !layout_position_absolute(doc, doc, 0, 0, content))
+        return false;
     layout_position_relative(&content->unit_len_ctx, doc, doc, 0, 0);
 
     layout_calculate_descendant_bboxes(&content->unit_len_ctx, doc);
@@ -6499,5 +6600,5 @@ bool layout_document(html_content *content, int width, int height)
 
     NSLOG(wisp, DEBUG, "PROFILER: STOP layout_document %p", content);
 
-    return ret;
+    return true;
 }

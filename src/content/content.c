@@ -330,6 +330,8 @@ void content__reformat(struct content *c, bool background, int width, int height
         c->handler->reformat(c, width, height);
         c->locked = false;
 
+        if (c->status == CONTENT_STATUS_ERROR)
+            return;
         data.background = background;
         content_broadcast(c, CONTENT_MSG_REFORMAT, &data);
     }
@@ -774,8 +776,9 @@ nserror content_close(hlcache_handle *h)
         return NSERROR_BAD_PARAMETER;
     }
 
-    if ((c->status != CONTENT_STATUS_READY) && (c->status != CONTENT_STATUS_DONE)) {
-        /* status is not read or done so nothing to do */
+    if (c->status != CONTENT_STATUS_READY && c->status != CONTENT_STATUS_DONE && c->status != CONTENT_STATUS_ERROR) {
+        /* A displayed page can fail during a later reformat. Its window and
+         * interaction associations still need the ordinary close callback. */
         return NSERROR_INVALID;
     }
 

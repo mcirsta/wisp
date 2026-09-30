@@ -35,6 +35,24 @@
 
 static unsigned int count = UINT_MAX;
 static unsigned int realloc_count = UINT_MAX;
+static unsigned int calloc_count = UINT_MAX;
+
+void calloc_limit(unsigned int newcount)
+{
+    calloc_count = newcount;
+}
+
+void *calloc(size_t nmemb, size_t size)
+{
+    static void *(*real_calloc)(size_t, size_t) = NULL;
+    if (real_calloc == NULL)
+        real_calloc = dlsym(RTLD_NEXT, "calloc");
+    if (calloc_count == 0)
+        return NULL;
+    if (calloc_count != UINT_MAX)
+        calloc_count--;
+    return real_calloc(nmemb, size);
+}
 
 void realloc_limit(unsigned int newcount)
 {

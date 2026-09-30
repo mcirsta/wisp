@@ -134,6 +134,9 @@ nserror html_object_check_bindings(const struct html_object_binding_plan *plan);
  * caller must publish the candidate before yielding; it cannot just discard it.
  * A stale plan returns INVALID before changing any binding. Single use. */
 nserror html_object_apply_bindings(struct html_object_binding_plan *plan);
+/** Allocation-free write phase after all coordinated plans pass preflight.
+ * Requires locked/restyling publication, with no intervening callbacks. */
+void html_object_commit_bindings(struct html_object_binding_plan *plan);
 
 /** Release only preparation storage, never resource handles. */
 void html_object_discard_bindings(struct html_object_binding_plan *plan);

@@ -67,6 +67,8 @@
 #include <wisp/content/handlers/html/interaction.h>
 #include <wisp/content/handlers/html/private.h>
 #include "content/handlers/html/box_construct.h"
+#include "content/handlers/html/box_publish.h"
+#include "content/handlers/html/box_manipulate.h"
 #include "content/handlers/html/css.h"
 #include "content/handlers/html/dom_event.h"
 #include "content/handlers/html/font_face.h"
@@ -1242,7 +1244,7 @@ static void html_stop(struct content *c)
  * Reformat a CONTENT_HTML to a new width.
  */
 
-static void html_reformat(struct content *c, int width, int height)
+static bool html_layout(struct content *c, int width, int height)
 {
     html_content *htmlc = (html_content *)c;
     struct box *layout;
@@ -1255,7 +1257,7 @@ static void html_reformat(struct content *c, int width, int height)
      */
     if (htmlc->layout == NULL) {
         NSLOG(wisp, INFO, "Reflow skipped: layout is NULL");
-        return;
+        return true;
     }
 
 #ifndef WISP_ENABLE_INCREMENTAL_REFLOW
@@ -1269,7 +1271,7 @@ static void html_reformat(struct content *c, int width, int height)
      */
     if (!htmlc->restyling && htmlc->had_initial_layout && c->active > htmlc->scripts_active) {
         PERF("html_reformat SKIPPED: %d objects still downloading", c->active - htmlc->scripts_active);
-        return;
+        return true;
     }
 #endif
 
@@ -1288,7 +1290,10 @@ static void html_reformat(struct content *c, int width, int height)
     htmlc->unit_len_ctx.container_height = htmlc->unit_len_ctx.viewport_height;
     htmlc->unit_len_ctx.root_style = htmlc->layout->style;
 
-    layout_document(htmlc, width, height);
+    if (!layout_document(htmlc, width, height)) {
+        htmlc->reflowing = false;
+        return false;
+    }
     layout = htmlc->layout;
     PERF("html_reformat #%d DONE layout", reformat_count);
 
@@ -1319,6 +1324,15 @@ static void html_reformat(struct content *c, int width, int height)
         ms_interval = nsoption_uint(min_reflow_period) * 10;
     }
     c->reformat_time = ms_after + ms_interval;
+    return true;
+}
+
+static void html_reformat(struct content *c, int width, int height)
+{
+    if (!html_layout(c, width, height)) {
+        content_set_error(c);
+        content_broadcast_error(c, NSERROR_NOMEM, NULL);
+    }
 }
 
 
@@ -1446,21 +1460,77 @@ static void html_restyle_free_old(html_content *html)
     html->restyle_old_frameset = NULL;
 }
 
-static void html_restyle_done(html_content *html, bool success)
+#ifdef WISP_ENABLE_PARTIAL_UPDATES
+/* Retained scrollbars can be off-screen, so update them before paint/hit testing.
+ * Keep their pixel offsets where possible; the ordinary scrollbar resize API
+ * scales offsets proportionally. Reflow suppresses its redraw callbacks. */
+static bool html_restyle_scrollbars(html_content *html)
+{
+    struct box *root = html->layout, *box = root;
+    html->reflowing = true;
+    while (box != NULL) {
+        if (box->scroll_x != NULL || box->scroll_y != NULL) {
+            int x = scrollbar_get_offset(box->scroll_x), y = scrollbar_get_offset(box->scroll_y);
+            uint8_t ox = css_computed_overflow_x(box->style), oy = css_computed_overflow_y(box->style);
+            bool bottom = ox == CSS_OVERFLOW_SCROLL || (ox == CSS_OVERFLOW_AUTO && box_hscrollbar_present(box));
+            bool right = oy == CSS_OVERFLOW_SCROLL || (oy == CSS_OVERFLOW_AUTO && box_vscrollbar_present(box));
+            if (box_handle_scrollbars(&html->base, box, bottom, right) != NSERROR_OK) {
+                html->reflowing = false;
+                return false;
+            }
+            if (box->scroll_x != NULL)
+                scrollbar_set(box->scroll_x, x, false);
+            if (box->scroll_y != NULL)
+                scrollbar_set(box->scroll_y, y, false);
+        }
+        if (box->children != NULL) {
+            box = box->children;
+            continue;
+        }
+        while (box != root && box->next == NULL)
+            box = box->parent;
+        box = box == root ? NULL : box->next;
+    }
+    html->reflowing = false;
+    return true;
+}
+#endif
+
+static void html_restyle_finish(html_content *html, bool success, bool retained)
 {
     HTML_PROFILE_START(layout_start);
     HTML_PROFILE(
-        html->restyle_profile.construction_wall_ns = layout_start - html->restyle_profile.construction_start_ns);
+        html->restyle_profile.construction_wall_ns = layout_start - html->restyle_profile.construction_start_ns -
+            html->restyle_profile.publication_ns);
     html->box_conversion_context = NULL;
+#ifdef WISP_ENABLE_PARTIAL_UPDATES
+    if (success && retained)
+        layout_reset_document(html);
+#ifdef WISP_PROFILE_RESTYLE
+    if (retained && html->restyle.fail_retained_layout) {
+        html->restyle.fail_retained_layout = false;
+        success = false;
+    }
+#endif
+#endif
     if (success) {
         /* Force layout even if a newly visible image is still downloading. */
-        html->base.handler->reformat(&html->base, html->base.available_width, html->base.available_height);
+        success = html_layout(&html->base, html->base.available_width, html->base.available_height);
     }
+#ifdef WISP_ENABLE_PARTIAL_UPDATES
+    if (success && retained)
+        success = html_restyle_scrollbars(html);
+#else
+    (void)retained;
+#endif
     HTML_PROFILE_START(cleanup_start);
     HTML_PROFILE(html->restyle_profile.layout_ns = cleanup_start - layout_start);
-    html->base.locked = false;
     html->restyling = false;
     html_restyle_end(html, success);
+    if (success)
+        html->base.locked = false;
+    else
+        content_set_error(&html->base);
     if (html->bw != NULL) {
         nserror err = browser_window_rebind_iframes(html->bw, success);
         if (err != NSERROR_OK)
@@ -1468,10 +1538,11 @@ static void html_restyle_done(html_content *html, bool success)
     }
     html_restyle_free_old(html);
     if (!success) {
-        /* Construction frees its partial tree after this callback returns. */
+        /* Stop resource activity before handing the unusable content to the
+         * browser's error path. Its normal destruction owns the remaining tree. */
+        html->restyle_pending = false;
         html_object_free_objects(html);
         content_broadcast_error(&html->base, NSERROR_NOMEM, NULL);
-        content_set_error(&html->base);
         return;
     }
     /* Existing DOM, stylesheet context, history and load status are unchanged.
@@ -1482,6 +1553,11 @@ static void html_restyle_done(html_content *html, bool success)
         html->restyle_profile.total_ns = end - html->restyle_profile.start_ns);
     if (html->restyle_pending)
         html_schedule_restyle(html);
+}
+
+static void html_restyle_done(html_content *html, bool success)
+{
+    html_restyle_finish(html, success, false);
 }
 
 static nserror html_restyle_detach_element(dom_node *node, void *pw)
@@ -1500,33 +1576,15 @@ static nserror html_restyle_detach_element(dom_node *node, void *pw)
     return NSERROR_OK;
 }
 
-static void html_restyle(void *pw)
+static void html_restyle_start_full(html_content *html)
 {
-    html_content *html = pw;
     dom_node *root = NULL;
-
-    if (!html->restyle_pending || html->restyling || html->layout == NULL || html->box_conversion_context != NULL)
-        return;
-    HTML_PROFILE(html->restyle_profile = (struct html_restyle_profile){.start_ns = html_profile_now()});
+    HTML_PROFILE_START(detach_start);
     if (dom_document_get_document_element(html->document, &root) != DOM_NO_ERR || root == NULL) {
         dom_node_unref(root);
+        html_restyle_done(html, false);
         return;
     }
-    html_restyle_begin(html);
-    if (html_restyle_invalidate(html) != NSERROR_OK) {
-        html_restyle_end(html, false);
-        dom_node_unref(root);
-        return;
-    }
-    HTML_PROFILE_START(detach_start);
-    HTML_PROFILE(html->restyle_profile.invalidate_ns = detach_start - html->restyle_profile.start_ns);
-
-    html->restyle_pending = false;
-    html->restyling = true;
-    html->base.locked = true;
-    guit->misc->schedule(-1, html_deferred_reformat, html);
-    html->pending_reformat = false;
-
     /* Selection, drag and focus contain box pointers. Clear them before any
      * gadget or box is destroyed; typed values are already synced to the DOM. */
     selection_clear(html->sel, false);
@@ -1540,12 +1598,11 @@ static void html_restyle(void *pw)
     }
     nserror err = libdom_iterate_elements(root, html_restyle_detach_element, NULL);
     if (err != NSERROR_OK) {
-        html->base.locked = false;
         html->restyling = false;
         html_restyle_end(html, false);
         dom_node_unref(root);
-        content_broadcast_error(&html->base, err, NULL);
         content_set_error(&html->base);
+        content_broadcast_error(&html->base, err, NULL);
         return;
     }
     for (struct content_html_object *o = html->object_list; o != NULL; o = o->next)
@@ -1559,14 +1616,92 @@ static void html_restyle(void *pw)
     html->frameset = NULL;
     html->layout = NULL;
     html->unit_len_ctx.root_style = NULL;
-    HTML_PROFILE(html->restyle_profile.construction_start_ns = html_profile_now();
-        html->restyle_profile.detach_ns = html->restyle_profile.construction_start_ns - detach_start);
+    HTML_PROFILE(uint64_t now = html_profile_now();
+        if (html->restyle_profile.construction_start_ns == 0) html->restyle_profile.construction_start_ns = now;
+        html->restyle_profile.detach_ns += now - detach_start);
     err = html_restyle_capture_inputs(html);
     if (err == NSERROR_OK)
         err = dom_to_box(root, html, html_restyle_done, &html->box_conversion_context);
     dom_node_unref(root);
     if (err != NSERROR_OK)
         html_restyle_done(html, false);
+}
+
+#ifdef WISP_ENABLE_PARTIAL_UPDATES
+static void
+html_restyle_region_done(html_content *html, nserror error, struct box_construct_region *candidate, void *pw)
+{
+    (void)pw;
+    html->box_conversion_context = NULL;
+    const char *reason = error == NSERROR_INVALID ? "inputs_changed_during_build" : "region_build";
+    if (error == NSERROR_OK) {
+        HTML_PROFILE_START(publication_start);
+        error = html_box_publish_region(html, &candidate, &reason);
+        HTML_PROFILE(html->restyle_profile.publication_ns += html_profile_now() - publication_start);
+    }
+    if (error == NSERROR_OK) {
+        HTML_PROFILE(html->restyle_profile.update_mode = "partial_boxes");
+        /* A layout failure enters the normal content-error path. The retired
+         * region cannot be restored, and no incomplete tree may be exposed. */
+        html_restyle_finish(html, true, true);
+        return;
+    }
+    box_construct_region_destroy(candidate);
+    HTML_PROFILE(if (error == NSERROR_INVALID) html->restyle_profile.restarts++);
+    /* Candidate selection touched node caches. Invalidate fully before using
+     * the existing fallback; its presentation/bindings are still intact. */
+    html_restyle_use_full(html, reason);
+    if (html_restyle_invalidate(html) != NSERROR_OK) {
+        html_restyle_done(html, false);
+        return;
+    }
+    html_restyle_start_full(html);
+}
+#endif
+
+static void html_restyle(void *pw)
+{
+    html_content *html = pw;
+
+    if (!html->restyle_pending || html->restyling || html->layout == NULL || html->box_conversion_context != NULL)
+        return;
+    HTML_PROFILE(html->restyle_profile = (struct html_restyle_profile){.start_ns = html_profile_now()});
+    html_restyle_begin(html);
+    if (html_restyle_invalidate(html) != NSERROR_OK) {
+        html_restyle_end(html, false);
+        return;
+    }
+    HTML_PROFILE_START(detach_start);
+    HTML_PROFILE(html->restyle_profile.invalidate_ns = detach_start - html->restyle_profile.start_ns);
+
+    html->restyle_pending = false;
+    html->restyling = true;
+    html->base.locked = true;
+    guit->misc->schedule(-1, html_deferred_reformat, html);
+    html->pending_reformat = false;
+
+#ifdef WISP_ENABLE_PARTIAL_UPDATES
+    /* Frames are excluded by the publisher. Reject them before construction so
+     * these pages keep milestone A's style reuse instead of selecting twice. */
+    if (html->restyle.retain_boxes && html->restyle.partial && html->restyle.active.count == 1 &&
+        html->iframe == NULL && html->frameset == NULL) {
+        struct box *old = box_for_node(html->restyle.active.roots[0]);
+        if (box_construct_region_owner(old) != NULL) {
+            nserror err = html_restyle_capture_inputs(html);
+            HTML_PROFILE(html->restyle_profile.construction_start_ns = html_profile_now());
+            if (err == NSERROR_OK && html->restyle.partial)
+                err = dom_to_box_region(html->restyle.active.roots[0], html, old->parent, html->bctx,
+                    html_restyle_region_done, NULL, &html->box_conversion_context);
+            else if (err == NSERROR_OK)
+                err = NSERROR_INVALID;
+            if (err == NSERROR_OK)
+                return;
+            html_restyle_region_done(html, err, NULL, NULL);
+            return;
+        }
+    }
+#endif
+    html_restyle_start_full(html);
 }
 
 /* Called by construction at a slice boundary, before publishing any new tree.

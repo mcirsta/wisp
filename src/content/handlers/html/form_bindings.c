@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 #include <limits.h>
+#include <assert.h>
 #include <wisp/content/handlers/html/private.h>
 #include <wisp/content/handlers/html/form_internal.h>
 #include "content/handlers/html/form_bindings.h"
@@ -307,6 +308,13 @@ nserror html_form_apply_bindings(struct html_form_binding_plan *plan)
 {
     if (!plan->html->base.locked || !plan->html->restyling || html_form_check_bindings(plan) != NSERROR_OK)
         return NSERROR_INVALID;
+    html_form_commit_bindings(plan);
+    return NSERROR_OK;
+}
+
+void html_form_commit_bindings(struct html_form_binding_plan *plan)
+{
+    assert(plan->html->base.locked && plan->html->restyling && !plan->applied);
     for (size_t i = 0; i < plan->old_count; i++) {
         struct form_control *c = plan->old[i].control;
         c->form = NULL;
@@ -329,7 +337,6 @@ nserror html_form_apply_bindings(struct html_form_binding_plan *plan)
             hashmap_destroy(b->old_index);
     }
     plan->applied = true;
-    return NSERROR_OK;
 }
 
 void html_form_discard_bindings(struct html_form_binding_plan *plan)

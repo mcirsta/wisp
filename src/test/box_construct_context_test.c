@@ -25,8 +25,10 @@
 #include "content/handlers/html/form_bindings.h"
 #include "content/handlers/html/box_mappings.h"
 #include "content/handlers/html/box_boundary.h"
+#include "content/handlers/html/box_publish.h"
 #include "content/handlers/html/layout.h"
 #include "content/handlers/html/restyle.h"
+#include "desktop/selection.h"
 #include "utils/talloc.h"
 #include "utils/libdom.h"
 #ifdef WISP_TEST_ALLOC_FAILURE
@@ -1368,6 +1370,673 @@ static struct box *region_box(struct box *box, dom_node *node)
     return NULL;
 }
 
+/* Publication tests keep the displayed tree alive throughout candidate building.
+ * They intentionally stop before retained layout, which is a separate gate. */
+static void start_region_update(dom_node *control)
+{
+    html_restyle_record_checked(&html, control);
+    html_restyle_begin(&html);
+    ck_assert(html.restyle.partial);
+    ck_assert_int_eq(html_restyle_invalidate(&html), NSERROR_OK);
+    ck_assert_int_eq(html_restyle_capture_inputs(&html), NSERROR_OK);
+    html.restyling = html.base.locked = true;
+}
+
+static void end_region_update(void)
+{
+    html_restyle_end(&html, true);
+    html.restyling = html.base.locked = false;
+}
+
+static void finish_region(dom_node *scope)
+{
+    ck_assert_int_eq(begin_region(scope), NSERROR_OK);
+    while (scheduled != NULL)
+        run_slice();
+    ck_assert_int_eq(region_error, NSERROR_OK);
+}
+
+START_TEST(test_region_publication_positions)
+{
+    dom_node *outer = by_id("outer"), *body = by_id("body"), *outside = by_id("outside"), *link = by_id("link");
+    unsigned position = _i % 4;
+    const char *styles[] = {"display:block", "display:flex", "display:grid"};
+    attribute(outer, "style", styles[_i / 4]);
+    dom_node *moved;
+    if (position >= 2) {
+        dom_node *before = element(body, "div", NULL, NULL);
+        text(before, "before");
+        ck_assert_int_eq(dom_node_insert_before(body, before, outer, &moved), DOM_NO_ERR);
+        dom_node_unref(moved);
+    }
+    if (position == 0 || position == 3) {
+        ck_assert_int_eq(dom_node_remove_child(body, outside, &moved), DOM_NO_ERR);
+        dom_node_unref(moved);
+    }
+    struct box *old = build_owned_document();
+    struct box *parent = old->parent, *prev = old->prev, *next = old->next, *document = html.layout;
+    void *document_owner = html.bctx;
+    char *expected = snapshot();
+    size_t plateau = 0;
+    for (unsigned pass = 0; pass < 4; pass++) {
+        start_region_update(link);
+        finish_region(outer);
+        struct box *fresh = region->root;
+        const char *reason;
+        ck_assert_msg(html_box_publish_region(&html, &region, &reason) == NSERROR_OK,
+            "Position/formatter %d, pass %u: %s", _i, pass, reason);
+        ck_assert_ptr_null(region);
+        ck_assert(html.base.locked && html.restyling);
+        ck_assert_ptr_eq(html.layout, document);
+        ck_assert_ptr_eq(html.bctx, document_owner);
+        ck_assert_ptr_eq(box_for_node(outer), fresh);
+        ck_assert_ptr_eq(fresh->parent, parent);
+        ck_assert_ptr_eq(fresh->prev, prev);
+        ck_assert_ptr_eq(fresh->next, next);
+        ck_assert_ptr_eq(prev != NULL ? prev->next : parent->children, fresh);
+        ck_assert_ptr_eq(next != NULL ? next->prev : parent->last, fresh);
+        ck_assert_ptr_nonnull(box_construct_region_owner(fresh));
+        assert_live_mappings(html.layout);
+        char *actual = snapshot();
+        ck_assert_str_eq(actual, expected);
+        free(actual);
+        end_region_update();
+        if (pass == 0)
+            plateau = talloc_total_blocks(html.bctx);
+        ck_assert_uint_eq(talloc_total_blocks(html.bctx), plateau);
+    }
+    free(expected);
+    dom_node_unref(outer);
+    dom_node_unref(body);
+    dom_node_unref(outside);
+    dom_node_unref(link);
+}
+END_TEST
+
+START_TEST(test_region_publication_rejected)
+{
+    struct box *old = build_owned_document();
+    dom_node *outer = by_id("outer"), *link = by_id("link"), *outside = by_id("outside");
+    start_region_update(link);
+    if (_i == 12)
+        attribute(outer, "style", "display:none");
+    finish_region(outer);
+    struct box_construct_region *candidate = region;
+    const char *expected;
+    int width = html.base.available_width;
+    static const struct content_handler handler = {0};
+    html.base.handler = &handler;
+    switch (_i) {
+    case 0: html.base.locked = false; expected = "publication_state"; break;
+    case 1: html.restyle.dom_generation++; expected = "inputs_changed"; break;
+    case 2: html.base.available_width++; expected = "inputs_changed"; break;
+    case 3: html_restyle_record_checked(&html, link); expected = "inputs_changed"; break;
+    case 4: html.drag_type = HTML_DRAG_SCROLLBAR; expected = "active_interaction"; break;
+    case 5: html.selection_type = HTML_SELECTION_SELF; expected = "active_interaction"; break;
+    case 6: html.focus_type = HTML_FOCUS_TEXTAREA; expected = "active_interaction"; break;
+    case 7: html.visible_select_menu = (struct form_control *)old; expected = "active_interaction"; break;
+    case 8: html.base.textsearch.context = (struct textsearch_context *)old; expected = "active_interaction"; break;
+    case 9:
+        html.sel = selection_create(&html.base);
+        ck_assert_ptr_nonnull(html.sel);
+        selection_set_position(html.sel, 1, 3);
+        expected = "active_interaction";
+        break;
+    case 10: html.iframe = (struct content_html_iframe *)old; expected = "frames"; break;
+    case 11:
+        html.restyle.active.roots[1] = dom_node_ref(outside);
+        html.restyle.active.count = 2;
+        expected = "multiple_regions";
+        break;
+    case 12: expected = "hidden_boundary"; break;
+    default: old->flags &= ~OWNS_REGION; expected = "no_owned_region"; break;
+    }
+    char *before = snapshot(), *before_mappings = mapping_snapshot();
+    size_t blocks = talloc_total_blocks(html.bctx);
+    const char *reason;
+    ck_assert_int_eq(html_box_publish_region(&html, &region, &reason), NSERROR_NOT_IMPLEMENTED);
+    ck_assert_msg(strcmp(reason, expected) == 0, "Rejected variant %d: expected %s, got %s", _i, expected, reason);
+    ck_assert_ptr_eq(region, candidate);
+    ck_assert_ptr_eq(box_for_node(outer), old);
+    ck_assert_uint_eq(talloc_total_blocks(html.bctx), blocks);
+    char *after = snapshot(), *after_mappings = mapping_snapshot();
+    ck_assert_str_eq(after, before);
+    ck_assert_str_eq(after_mappings, before_mappings);
+    if (_i == 9)
+        ck_assert(selection_active(html.sel));
+    selection_destroy(html.sel);
+    html.sel = NULL;
+    html.iframe = NULL;
+    html.base.textsearch.context = NULL;
+    html.visible_select_menu = NULL;
+    html.base.available_width = width;
+    html_restyle_discard_pending(&html);
+    box_construct_region_destroy(region);
+    free(before);
+    free(after);
+    free(before_mappings);
+    free(after_mappings);
+    dom_node_unref(outer);
+    dom_node_unref(link);
+    dom_node_unref(outside);
+}
+END_TEST
+
+START_TEST(test_region_publication_after_layout)
+{
+    static const struct gui_layout_table fonts = {.width = boundary_font_width, .split = boundary_font_split};
+    dom_node *outer = by_id("outer"), *link = by_id("link"), *outside = by_id("outside");
+    attribute(outer, "style", "overflow:hidden;width:180px");
+    text(outer, "inside words that wrap and create borrowed text fragments for the retirement test");
+    text(outside, "outside words that wrap and must retain their original text and computed styles");
+    build_owned_document();
+    html.font_func = &fonts;
+    ck_assert(layout_document(&html, 300, 600));
+    struct box *retained = box_for_node(outside);
+    ck_assert_uint_gt(count_clones(retained), 0);
+    char *before = snapshot_box(retained);
+    start_region_update(link);
+    finish_region(outer);
+    const char *reason;
+    ck_assert_msg(html_box_publish_region(&html, &region, &reason) == NSERROR_OK, "After layout: %s", reason);
+    ck_assert_ptr_eq(box_for_node(outside), retained);
+    char *after = snapshot_box(retained);
+    ck_assert_str_eq(after, before); /* Reads retained fragments after old arena retirement. */
+    free(before);
+    free(after);
+    end_region_update();
+    dom_node_unref(outer);
+    dom_node_unref(link);
+    dom_node_unref(outside);
+}
+END_TEST
+
+/* Address-free geometry, including links used by painting/hit testing. Looking
+ * up paths also verifies that no float/positioning pointer escaped the tree. */
+static void describe_layout_link(FILE *stream, const struct box *box)
+{
+    if (box == NULL) {
+        fputs("-", stream);
+    } else if (box == &html.viewport.box) {
+        fputs("viewport", stream);
+    } else if (box == html.layout) {
+        fputs("root", stream);
+    } else {
+        if (box->parent == NULL)
+            ck_abort_msg("Layout link is outside the document");
+        describe_layout_link(stream, box->parent);
+        if (box == box->parent->list_marker) {
+            fputs(".marker", stream);
+        } else {
+            const struct box *child = box->parent->children;
+            unsigned index = 0;
+            while (child != NULL && child != box) {
+                child = child->next;
+                index++;
+            }
+            if (child != box)
+                ck_abort_msg("Layout link is absent from its parent's children");
+            fprintf(stream, ".%u", index);
+        }
+    }
+}
+
+static void describe_layout(FILE *stream, const struct box *box)
+{
+    describe_layout_link(stream, box);
+    fprintf(stream, " type=%d flags=%x xywh=%d,%d,%d,%d bounds=%d,%d,%d,%d minmax=%d,%d,%d space=%d",
+        box->type, box->flags & ~OWNS_REGION, box->x, box->y, box->width, box->height,
+        box->descendant_x0, box->descendant_y0, box->descendant_x1, box->descendant_y1,
+        box->min_width.type, box->min_width.value, box->max_width, box->space);
+    if (box->flags & HAS_BASELINE)
+        fprintf(stream, " baseline=%d", box->baseline);
+    for (unsigned i = 0; i < 4; i++)
+        fprintf(stream, " edge=%d,%d,%d", box->margin[i], box->padding[i], box->border[i].width);
+    if (box->text != NULL)
+        fprintf(stream, " text=%.*s", (int)box->length, box->text);
+    if (box->parent != NULL && box == box->parent->list_marker)
+        fprintf(stream, " counter=%d", box->list_value);
+    const struct box *links[] = {box->float_children, box->next_float, box->float_container,
+        box->abs_containing_block};
+    for (unsigned i = 0; i < sizeof(links) / sizeof(links[0]); i++) {
+        fputs(" link=", stream);
+        describe_layout_link(stream, links[i]);
+    }
+    if (box->col != NULL) {
+        for (unsigned i = 0; i < box->columns; i++)
+            fprintf(stream, " col=%d,%d,%d,%d,%d", box->col[i].type, box->col[i].width,
+                box->col[i].min, box->col[i].max, box->col[i].positioned);
+    }
+    fputc('\n', stream);
+    if (box->list_marker != NULL)
+        describe_layout(stream, box->list_marker);
+    for (const struct box *child = box->children; child != NULL; child = child->next)
+        describe_layout(stream, child);
+}
+
+static char *layout_snapshot(void)
+{
+    char *buffer;
+    size_t length;
+    FILE *stream = open_memstream(&buffer, &length);
+    ck_assert_ptr_nonnull(stream);
+    describe_layout(stream, html.layout);
+    ck_assert_int_eq(fclose(stream), 0);
+    return buffer;
+}
+
+static void assert_layout_matches(const char *expected, unsigned variant, unsigned pass)
+{
+    char *actual = layout_snapshot();
+    size_t at = 0, line = 0;
+    while (actual[at] != '\0' && actual[at] == expected[at]) {
+        if (actual[at++] == '\n')
+            line = at;
+    }
+    ck_assert_msg(actual[at] == expected[at],
+        "Layout variant %u, pass %u\nexpected: %.300s\nactual:   %.300s", variant, pass,
+        expected + line, actual + line);
+    free(actual);
+}
+
+static void discard_layout_tree(void)
+{
+    talloc_free(html.bctx);
+    html.bctx = NULL;
+    html.layout = NULL;
+    html.unit_len_ctx.root_style = NULL;
+}
+
+START_TEST(test_region_retained_layout)
+{
+    static const struct gui_layout_table fonts = {.width = boundary_font_width, .split = boundary_font_split};
+    const char *displays[] = {"block", "flex", "grid"};
+    const int width = _i < 9 ? 300 : 540;
+    const unsigned formatters = _i % 9;
+    dom_node *outer = by_id("outer"), *link = by_id("link"), *outside = by_id("outside");
+    /* The shared construction fixture has 96 nested inline ancestors to force
+     * scheduler slices. A shallow split inline is enough for layout repetition. */
+    dom_node *deep = by_id("deep"), *child, *removed;
+    ck_assert_int_eq(dom_node_get_first_child(deep, &child), DOM_NO_ERR);
+    ck_assert_int_eq(dom_node_remove_child(deep, child, &removed), DOM_NO_ERR);
+    dom_node_unref(child);
+    dom_node_unref(removed);
+    text(deep, "inside text");
+    text(element(deep, "div", "split", NULL), "split block");
+    text(deep, "tail");
+    dom_node_unref(deep);
+    char css[1800];
+    snprintf(css, sizeof(css),
+        "#body{display:%s;gap:9px;grid-template-columns:1fr 1fr;align-items:start}"
+        "#outer{display:%s;overflow:hidden;width:38%%;position:relative;flex-direction:column}"
+        "#outer.wide{width:62%%} #outer.wide #hidden{display:block}"
+        "#outer.wide .flex{display:none} #outer:not(.wide) .grid{display:none}"
+        "#outside{width:35%%;overflow:auto;max-height:280px}"
+        ".relative{position:relative;left:7px;top:11px}"
+        ".absolute{position:absolute;right:5px;top:10px;width:40px}"
+        ".fixed{position:fixed;bottom:3px;right:9px;width:32px}"
+        ".float{width:45px;margin:3px}.clear{clear:both}"
+        "table{display:table;width:90%%}tr{display:table-row}td{display:table-cell}"
+        "td:first-child{width:30%%} .symbol{list-style-type:disc}"
+        ".ratio{width:70%%;aspect-ratio:2/1}.atomic{display:inline-block;width:50%%}",
+        displays[formatters / 3], displays[formatters % 3]);
+    css_stylesheet *extra = add_sheet(css);
+    text(outer, "changed words spanning several lines with enough text to wrap");
+    dom_node *positioned = element(outer, "div", NULL, "relative");
+    text(element(positioned, "div", NULL, "absolute"), "abs");
+    text(element(positioned, "div", NULL, "fixed"), "fix");
+    text(outside, "retained words spanning several lines with spaces and an inline ");
+    text(element(outside, "span", NULL, NULL), "boundary");
+    text(outside, " and more words");
+    text(element(outside, "div", NULL, "float"), "float words wrap");
+    text(outside, "text beside a float followed by a clearing block");
+    text(element(outside, "div", NULL, "clear relative"), "retained relative words wrap again");
+    text(element(outside, "span", NULL, "atomic"), "inline block with a baseline");
+    element(outside, "div", NULL, "ratio");
+    dom_node *table = element(outside, "table", NULL, NULL);
+    dom_node *row = element(table, "tr", NULL, NULL);
+    text(element(row, "td", NULL, NULL), "cell one wraps");
+    text(element(row, "td", NULL, NULL), "cell two wraps too");
+    dom_node *list = element(outside, "ol", NULL, NULL);
+    attribute(list, "reversed", "");
+    text(element(list, "li", NULL, NULL), "retained numbered item");
+    text(element(list, "li", NULL, "symbol"), "retained symbolic item");
+    html.font_func = &fonts;
+
+    /* Independent full constructions, not a second layout of the same mutable
+     * tree. Separate variants keep viewport inputs stable during publication. */
+    char *expected[2];
+    html.unit_len_ctx.viewport_width = INTTOFIX(width);
+    for (unsigned state = 0; state < 2; state++) {
+        attribute(outer, "class", state & 1 ? "wide" : "");
+        ck_assert_int_eq(nscss_invalidate_document(html.document), NSERROR_OK);
+        build_document();
+        ck_assert(layout_document(&html, width, 600));
+        expected[state] = layout_snapshot();
+        discard_layout_tree();
+    }
+    attribute(outer, "class", "");
+    ck_assert_int_eq(nscss_invalidate_document(html.document), NSERROR_OK);
+    build_owned_document();
+    ck_assert(layout_document(&html, width, 600));
+    struct box *retained = box_for_node(outside), *document = html.layout;
+    ck_assert_uint_gt(count_clones(retained), 0);
+    size_t plateau[2] = {0};
+    for (unsigned pass = 0; pass < 24; pass++) {
+        unsigned state = pass % 2;
+        attribute(outer, "class", state & 1 ? "wide" : "");
+        start_region_update(link);
+        finish_region(outer);
+        const char *reason;
+        ck_assert_msg(html_box_publish_region(&html, &region, &reason) == NSERROR_OK,
+            "Layout variant %d pass %u: %s", _i, pass, reason);
+        layout_reset_document(&html);
+        ck_assert_ptr_eq(html.layout, document);
+        ck_assert_ptr_eq(box_for_node(outside), retained);
+        ck_assert_uint_eq(count_clones(html.layout), 0);
+        ck_assert(layout_document(&html, width, 600));
+        assert_layout_matches(expected[state], _i, pass);
+        end_region_update();
+        size_t blocks = talloc_total_blocks(html.bctx);
+        if (pass < 2)
+            plateau[state] = blocks;
+        ck_assert_msg(blocks == plateau[state], "Layout variant %d pass %u: allocations %zu != %zu",
+            _i, pass, blocks, plateau[state]);
+    }
+    for (unsigned state = 0; state < 2; state++)
+        free(expected[state]);
+    dom_node_unref(outer);
+    dom_node_unref(link);
+    dom_node_unref(outside);
+    remove_sheet(extra);
+}
+END_TEST
+
+START_TEST(test_region_retained_list_numbering)
+{
+    const char *markup = "<html id=root><body id=body><ol id=list>"
+        "<li id=outer><a id=link>changed item</a></li><li id=outside>kept item</li>"
+        "</ol></body></html>";
+    dom_hubbub_parser *parser;
+    dom_hubbub_parser_params params = {.enc = "UTF-8", .fix_enc = true};
+    dom_node_unref(html.document);
+    ck_assert_int_eq(dom_hubbub_parser_create(&params, &parser, &html.document), DOM_HUBBUB_OK);
+    ck_assert_int_eq(dom_hubbub_parser_parse_chunk(parser, (const uint8_t *)markup, strlen(markup)), DOM_HUBBUB_OK);
+    ck_assert_int_eq(dom_hubbub_parser_completed(parser), DOM_HUBBUB_OK);
+    dom_hubbub_parser_destroy(parser);
+    dom_node *outer = by_id("outer"), *link = by_id("link"), *outside = by_id("outside"), *list = by_id("list");
+    if (_i != 0) {
+        dom_node *moved;
+        attribute(list, "reversed", "");
+        ck_assert_int_eq(dom_node_insert_before(list, outside, outer, &moved), DOM_NO_ERR);
+        dom_node_unref(moved);
+    }
+    css_stylesheet *extra = add_sheet("#outer.wide{display:block}li{list-style-type:upper-roman}");
+    static const struct gui_layout_table fonts = {.width = boundary_font_width, .split = boundary_font_split};
+    html.font_func = &fonts;
+    char *expected[2];
+    for (unsigned state = 0; state < 2; state++) {
+        attribute(outer, "class", state ? "wide" : "");
+        ck_assert_int_eq(nscss_invalidate_document(html.document), NSERROR_OK);
+        build_document();
+        ck_assert(layout_document(&html, 300, 600));
+        expected[state] = layout_snapshot();
+        struct box *marker = box_for_node(outside)->list_marker;
+        ck_assert_int_eq(marker->list_value, state ? 1 : 2);
+        ck_assert_int_eq(marker->text[0], 'I');
+        ck_assert_msg(marker->text[1] == (state ? '.' : 'I'), "Unexpected Roman marker: %s", marker->text);
+        discard_layout_tree();
+    }
+    attribute(outer, "class", "");
+    ck_assert_int_eq(nscss_invalidate_document(html.document), NSERROR_OK);
+    build_owned_document();
+    ck_assert(layout_document(&html, 300, 600));
+    struct box *retained = box_for_node(outside), *marker = retained->list_marker;
+    size_t plateau[2] = {0};
+    for (unsigned pass = 0; pass < 100; pass++) {
+        unsigned state = pass % 2;
+        attribute(outer, "class", state ? "wide" : "");
+        start_region_update(link);
+        finish_region(outer);
+        const char *reason;
+        ck_assert_msg(html_box_publish_region(&html, &region, &reason) == NSERROR_OK,
+            "List variant %d pass %u: %s", _i, pass, reason);
+#ifdef WISP_TEST_ALLOC_FAILURE
+        malloc_limit(0); /* Reset itself must not need temporary storage. */
+#endif
+        layout_reset_document(&html);
+#ifdef WISP_TEST_ALLOC_FAILURE
+        malloc_limit(UINT_MAX);
+#endif
+        ck_assert(layout_document(&html, 300, 600));
+        ck_assert_ptr_eq(box_for_node(outside), retained);
+        ck_assert_ptr_eq(retained->list_marker, marker);
+        assert_layout_matches(expected[state], _i, pass);
+        end_region_update();
+        size_t blocks = talloc_total_blocks(html.bctx);
+        if (pass < 2)
+            plateau[state] = blocks;
+        ck_assert_uint_eq(blocks, plateau[state]);
+    }
+    free(expected[0]);
+    free(expected[1]);
+    dom_node_unref(outer);
+    dom_node_unref(link);
+    dom_node_unref(outside);
+    dom_node_unref(list);
+    remove_sheet(extra);
+}
+END_TEST
+
+/* Parser-established form owners and a failed image exercise all three binding
+ * plans together. The fetch boundary is recorded by this test's existing stub;
+ * no real network/cache operations are involved. */
+static css_stylesheet *publication_controls(void)
+{
+    const char *markup = "<html id=root><body id=body><form id=form><div id=outer>"
+        "<input id=link type=checkbox name=tabs><div class=on id=on><input id=first type=checkbox></div>"
+        "<div class=off id=off><input id=second type=checkbox></div><img id=image src=image.png>"
+        "</div><div id=outside><input id=outside-control type=checkbox value=kept></div></form></body></html>";
+    dom_hubbub_parser *parser;
+    dom_hubbub_parser_params params = {.enc = "UTF-8", .fix_enc = true};
+    dom_node_unref(html.document);
+    ck_assert_int_eq(dom_hubbub_parser_create(&params, &parser, &html.document), DOM_HUBBUB_OK);
+    ck_assert_int_eq(dom_hubbub_parser_parse_chunk(parser, (const uint8_t *)markup, strlen(markup)), DOM_HUBBUB_OK);
+    ck_assert_int_eq(dom_hubbub_parser_completed(parser), DOM_HUBBUB_OK);
+    dom_hubbub_parser_destroy(parser);
+    html.forms = html_forms_get_forms(html.encoding, (dom_html_document *)html.document);
+    ck_assert_ptr_nonnull(html.forms);
+    css_stylesheet *extra = add_sheet("form{display:block}.on{display:none}"
+        "#link:checked~.on{display:block}#link:checked~.off{display:none}");
+    record_fetches = true;
+    build_document();
+    html.base.active = 0; /* The recorded request is a settled failed URL. */
+    /* Mirror full-refresh gadget detachment before establishing live owners. */
+    while (html.forms->controls != NULL)
+        form_free_control(html.forms->controls);
+    html_object_free_objects(&html);
+    html.num_objects = 0;
+    dom_node *link = by_id("link");
+    void *old = begin_owned_rebuild(&link, 1);
+    while (scheduled != NULL)
+        run_slice();
+    finish_owned_rebuild(old, true);
+    html.base.active = 0;
+    record_fetches = false;
+    dom_node_unref(link);
+    return extra;
+}
+
+START_TEST(test_region_publication_bindings)
+{
+    css_stylesheet *extra = publication_controls();
+    dom_node *outer = by_id("outer"), *link = by_id("link"), *outside = by_id("outside-control");
+    dom_node *first = by_id("first"), *second = by_id("second"), *image = by_id("image");
+    struct form_control *untouched = box_for_node(outside)->gadget;
+    struct content_html_object *resource = html.object_list;
+    ck_assert_ptr_nonnull(resource);
+    size_t plateau[2] = {0};
+    for (unsigned i = 0; i < 100; i++) {
+        bool checked = i % 2 == 0;
+        ck_assert_int_eq(dom_html_input_element_set_checked((dom_html_input_element *)link, checked), DOM_NO_ERR);
+        start_region_update(link);
+        finish_region(outer);
+        struct box *fresh = region->root;
+        if (_i != 0) {
+            /* Refuse at resource preparation, after form/mapping preparation.
+             * None of those prepared changes may have reached the live tree. */
+            struct form saved = *html.forms;
+            struct box *old = box_for_node(outer), *old_image = resource->box;
+            char *before = mapping_snapshot();
+            resource->refresh_pending = true;
+            const char *reason;
+            ck_assert_int_eq(html_box_publish_region(&html, &region, &reason), NSERROR_NOT_IMPLEMENTED);
+            ck_assert_str_eq(reason, "resources");
+            ck_assert_mem_eq(html.forms, &saved, sizeof(saved));
+            ck_assert_ptr_eq(box_for_node(outer), old);
+            ck_assert_ptr_eq(resource->box, old_image);
+            char *after = mapping_snapshot();
+            ck_assert_str_eq(after, before);
+            free(before);
+            free(after);
+            resource->refresh_pending = false;
+        }
+        const char *reason;
+        ck_assert_msg(html_box_publish_region(&html, &region, &reason) == NSERROR_OK,
+            "Bindings pass %u: %s", i, reason);
+        ck_assert_ptr_null(region);
+        ck_assert_ptr_eq(box_for_node(outer), fresh);
+        ck_assert_ptr_eq(html.object_list, resource);
+        ck_assert_uint_eq(html.num_objects, 1);
+        ck_assert_ptr_eq(resource->box, box_for_node(image));
+        ck_assert_ptr_eq(box_for_node(outside)->gadget, untouched);
+        ck_assert_str_eq(untouched->value, "kept");
+        ck_assert_ptr_eq(html_forms_get_control_for_node(html.forms, outside), untouched);
+        ck_assert_ptr_null(box_for_node(checked ? second : first));
+        /* The get-or-create helper would recreate a hidden control. Inspect
+         * registration directly when checking that retirement removed one. */
+        for (struct form_control *c = html.forms->controls; c != NULL; c = c->next)
+            ck_assert_ptr_ne(c->node, checked ? second : first);
+        if (html.forms->control_index != NULL)
+            ck_assert_ptr_null(hashmap_lookup(html.forms->control_index, checked ? second : first));
+        ck_assert_ptr_eq(html_forms_get_control_for_node(html.forms, checked ? first : second),
+            box_for_node(checked ? first : second)->gadget);
+        ck_assert_int_eq(box_for_node(link)->gadget->selected, checked);
+        ck_assert_ptr_null(((struct box_construct_region *)box_construct_region_owner(fresh))->objects);
+        end_region_update();
+        size_t blocks = talloc_total_blocks(html.bctx);
+        if (i < 2)
+            plateau[checked] = blocks;
+        ck_assert_uint_eq(blocks, plateau[checked]);
+    }
+    dom_node_unref(outer);
+    dom_node_unref(link);
+    dom_node_unref(outside);
+    dom_node_unref(first);
+    dom_node_unref(second);
+    dom_node_unref(image);
+    remove_sheet(extra);
+}
+END_TEST
+
+#ifdef WISP_TEST_ALLOC_FAILURE
+START_TEST(test_layout_allocation_failures)
+{
+    static const char *contents[] = {
+        "<div class=grid><div>grid text wraps here</div><div>second item</div></div>",
+        "<span style='display:inline-block'><table><tr><td>cell text wraps here</td></tr></table></span>",
+        "<div style='float:left'><table><tr><td>floating cell</td></tr></table></div>",
+        "<div style='position:absolute;left:0;top:0;width:35px'>absolute words wrap into many fragments</div>",
+        "<ol><li>numbered item</li><li>second item</li></ol>",
+        "<div style='overflow:hidden;width:35px'>a separate block formatting context with wrapped text</div>",
+    };
+    char markup[600];
+    snprintf(markup, sizeof(markup),
+        "<html id=root><body><div style='width:70px'>%s</div></body></html>", contents[_i]);
+    dom_hubbub_parser *parser;
+    dom_hubbub_parser_params params = {.enc = "UTF-8", .fix_enc = true};
+    dom_node_unref(html.document);
+    ck_assert_int_eq(dom_hubbub_parser_create(&params, &parser, &html.document), DOM_HUBBUB_OK);
+    ck_assert_int_eq(dom_hubbub_parser_parse_chunk(parser, (const uint8_t *)markup, strlen(markup)), DOM_HUBBUB_OK);
+    ck_assert_int_eq(dom_hubbub_parser_completed(parser), DOM_HUBBUB_OK);
+    dom_hubbub_parser_destroy(parser);
+    css_stylesheet *extra = add_sheet("table{display:table}tr{display:table-row}td{display:table-cell}");
+    static const struct gui_layout_table fonts = {.width = boundary_font_width, .split = boundary_font_split};
+    html.font_func = &fonts;
+    build_document();
+    ck_assert(layout_document(&html, 300, 600));
+    char *expected = layout_snapshot();
+    discard_layout_tree();
+    unsigned limit;
+    for (limit = 0; limit < 128; limit++) {
+        ck_assert_int_eq(nscss_invalidate_document(html.document), NSERROR_OK);
+        build_document();
+        malloc_limit(limit);
+        calloc_limit(limit);
+        realloc_limit(limit);
+        bool success = layout_document(&html, 300, 600);
+        malloc_limit(UINT_MAX);
+        calloc_limit(UINT_MAX);
+        realloc_limit(UINT_MAX);
+        if (success) {
+            assert_layout_matches(expected, _i, limit);
+            break;
+        }
+        /* Failure is reported, not hidden behind invented geometry. The
+         * caller may destroy the incomplete tree and reconstruct safely. */
+        discard_layout_tree();
+    }
+    ck_assert_msg(limit > 0 && limit < 128, "Layout variant %d: first successful allocation budget %u", _i, limit);
+    free(expected);
+    remove_sheet(extra);
+}
+END_TEST
+
+START_TEST(test_region_publication_allocation_failures)
+{
+    css_stylesheet *extra = publication_controls();
+    dom_node *outer = by_id("outer"), *link = by_id("link");
+    start_region_update(link);
+    finish_region(outer);
+    struct box *old = box_for_node(outer);
+    struct box_construct_region *candidate = region;
+    struct form form = *html.forms;
+    struct content_html_object object = *html.object_list;
+    char *before = snapshot(), *mappings = mapping_snapshot();
+    size_t blocks = talloc_total_blocks(html.bctx);
+    unsigned limit;
+    for (limit = 0; limit < 256; limit++) {
+        malloc_limit(limit);
+        nserror err = html_box_publish_region(&html, &region, NULL);
+        malloc_limit(UINT_MAX);
+        if (err == NSERROR_OK)
+            break;
+        ck_assert_msg(err == NSERROR_NOMEM, "Allocation %u returned %d", limit, err);
+        ck_assert_ptr_eq(region, candidate);
+        ck_assert_ptr_eq(box_for_node(outer), old);
+        ck_assert_mem_eq(html.forms, &form, sizeof(form));
+        ck_assert_mem_eq(html.object_list, &object, sizeof(object));
+        ck_assert_uint_eq(talloc_total_blocks(html.bctx), blocks);
+        char *after = snapshot(), *after_mappings = mapping_snapshot();
+        ck_assert_str_eq(after, before);
+        ck_assert_str_eq(after_mappings, mappings);
+        free(after);
+        free(after_mappings);
+    }
+    ck_assert_uint_gt(limit, 10);
+    ck_assert_uint_lt(limit, 256);
+    ck_assert_ptr_null(region);
+    assert_live_mappings(html.layout);
+    end_region_update();
+    free(before);
+    free(mappings);
+    dom_node_unref(outer);
+    dom_node_unref(link);
+    remove_sheet(extra);
+}
+END_TEST
+#endif
+
 /* Use the parser here to establish actual DOM form ownership, including its
  * control index. A candidate must neither reuse nor unlink those gadgets. */
 START_TEST(test_detached_controls)
@@ -1935,6 +2604,14 @@ int main(void)
     tcase_add_test(tc, test_continuation_schedule_failure);
     tcase_add_loop_test(tc, test_list_image_cascade, 0, 4);
 #ifdef WISP_ENABLE_PARTIAL_UPDATES
+    tcase_add_loop_test(tc, test_region_publication_positions, 0, 12);
+    tcase_add_loop_test(tc, test_region_publication_rejected, 0, 14);
+    tcase_add_test(tc, test_region_publication_after_layout);
+    tcase_add_loop_test(tc, test_region_publication_bindings, 0, 2);
+#ifdef WISP_TEST_ALLOC_FAILURE
+    tcase_add_test(tc, test_region_publication_allocation_failures);
+    tcase_add_loop_test(tc, test_layout_allocation_failures, 0, 6);
+#endif
     tcase_add_loop_test(tc, test_boundary_candidate, 0, 6);
     tcase_add_loop_test(tc, test_boundary_crossings, 0, 13);
     tcase_add_test(tc, test_boundary_candidate_borrows_old);
@@ -1972,6 +2649,13 @@ int main(void)
     tcase_add_loop_test(tc, test_detached_staging_cleanup, 0, 3);
 #endif
     suite_add_tcase(suite, tc);
+#ifdef WISP_ENABLE_PARTIAL_UPDATES
+    tc = tcase_create("Retained layout");
+    tcase_add_checked_fixture(tc, setup, teardown);
+    tcase_add_loop_test(tc, test_region_retained_layout, 0, 18);
+    tcase_add_loop_test(tc, test_region_retained_list_numbering, 0, 2);
+    suite_add_tcase(suite, tc);
+#endif
     SRunner *runner = srunner_create(suite);
     srunner_run_all(runner, CK_NORMAL);
     int failed = srunner_ntests_failed(runner);

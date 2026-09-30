@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 #include <limits.h>
+#include <assert.h>
 #include <stdlib.h>
 #include <wisp/content/handlers/html/private.h>
 #include <wisp/utils/corestrings.h>
@@ -223,6 +224,13 @@ nserror html_box_apply_mappings(struct html_box_mapping_plan *plan)
 {
     if (!plan->html->base.locked || !plan->html->restyling || html_box_check_mappings(plan) != NSERROR_OK)
         return NSERROR_INVALID;
+    html_box_commit_mappings(plan);
+    return NSERROR_OK;
+}
+
+void html_box_commit_mappings(struct html_box_mapping_plan *plan)
+{
+    assert(plan->html->base.locked && plan->html->restyling && !plan->applied);
     for (size_t i = 0; i < plan->count; i++) {
         struct mapping *m = &plan->entries[i];
         if (m->prepared != NULL) {
@@ -232,7 +240,6 @@ nserror html_box_apply_mappings(struct html_box_mapping_plan *plan)
         }
     }
     plan->applied = true;
-    return NSERROR_OK;
 }
 
 void html_box_discard_mappings(struct html_box_mapping_plan *plan)

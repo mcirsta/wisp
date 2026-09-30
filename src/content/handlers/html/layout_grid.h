@@ -46,8 +46,9 @@ bool layout_grid(struct box *grid, int available_width, struct html_content *con
  * \param grid      box of type BOX_GRID
  * \param font_func font functions for text measurement
  * \param content   The HTML content being laid out.
+ * \return true on success, false on memory exhaustion
  * \post  grid->min_width and grid->max_width filled in
  */
-void layout_minmax_grid(struct box *grid, const struct gui_layout_table *font_func, const struct html_content *content);
+bool layout_minmax_grid(struct box *grid, const struct gui_layout_table *font_func, const struct html_content *content);
 
 #endif

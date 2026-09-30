@@ -160,7 +160,7 @@ void html_deferred_reformat(void *p)
     html_content *c = p;
     PERF("html_deferred_reformat called (active=%d)", c->base.active);
     c->pending_reformat = false;
-    if (c->restyling)
+    if (c->restyling || c->base.status == CONTENT_STATUS_ERROR)
         return;
 
     /* We cannot use content__reformat() here because it has an optimization
@@ -172,6 +172,8 @@ void html_deferred_reformat(void *p)
         c->base.locked = true;
         c->base.handler->reformat(&c->base, c->base.available_width, c->base.available_height);
         c->base.locked = false;
+        if (c->base.status == CONTENT_STATUS_ERROR)
+            return;
 
         union content_msg_data data = {.background = false};
         content_broadcast(&c->base, CONTENT_MSG_REFORMAT, &data);
@@ -1054,6 +1056,13 @@ nserror html_object_apply_bindings(struct html_object_binding_plan *plan)
 {
     if (!plan->html->base.locked || !plan->html->restyling || html_object_check_bindings(plan) != NSERROR_OK)
         return NSERROR_INVALID;
+    html_object_commit_bindings(plan);
+    return NSERROR_OK;
+}
+
+void html_object_commit_bindings(struct html_object_binding_plan *plan)
+{
+    assert(plan->html->base.locked && plan->html->restyling && !plan->applied);
     for (size_t i = 0; i < plan->count; i++) {
         const struct html_object_binding *b = &plan->bindings[i];
         struct content_html_object *o = b->object;
@@ -1070,7 +1079,6 @@ nserror html_object_apply_bindings(struct html_object_binding_plan *plan)
             html_object_done(o->box, o->content, o->background, o->background_layer);
     }
     plan->applied = true;
-    return NSERROR_OK;
 }
 
 void html_object_discard_bindings(struct html_object_binding_plan *plan)

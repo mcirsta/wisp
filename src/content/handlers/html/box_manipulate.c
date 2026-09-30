@@ -343,6 +343,7 @@ nserror box_handle_scrollbars(struct content *c, struct box *box, bool bottom, b
             res = scrollbar_create(false, visible_height, full_height, visible_height, data,
                 html_overflow_scroll_callback, &(box->scroll_y));
             if (res != NSERROR_OK) {
+                free(data);
                 return res;
             }
         } else {
@@ -353,13 +354,14 @@ nserror box_handle_scrollbars(struct content *c, struct box *box, bool bottom, b
         if (box->scroll_x == NULL) {
             data = malloc(sizeof(struct html_scrollbar_data));
             if (data == NULL) {
-                return NSERROR_OK;
+                return NSERROR_NOMEM;
             }
             data->c = c;
             data->box = box;
             res = scrollbar_create(true, visible_width - (right ? SCROLLBAR_WIDTH : 0), full_width, visible_width, data,
                 html_overflow_scroll_callback, &box->scroll_x);
             if (res != NSERROR_OK) {
+                free(data);
                 return res;
             }
         } else {

@@ -53,7 +53,7 @@ struct html_viewport {
 struct html_restyle_profile {
     uint64_t start_ns, construction_start_ns;
     uint64_t invalidate_ns, detach_ns, css_ns, construction_ns, normalise_ns;
-    uint64_t construction_wall_ns, layout_ns, cleanup_ns, total_ns, paint_ns, last_paint_ns;
+    uint64_t construction_wall_ns, publication_ns, layout_ns, cleanup_ns, total_ns, paint_ns, last_paint_ns;
     uint32_t styled_elements, construction_slices, paint_calls;
     const char *update_mode, *fallback_reason;
     uint32_t changed_controls, dirty_roots, invalidated_nodes, reused_styles;
@@ -94,8 +94,10 @@ struct html_restyle_state {
 #ifdef WISP_PROFILE_RESTYLE
     bool force_restart; /* Capture-only invalidation after construction has begun. */
     bool slow_restyle; /* Capture lifecycle tests yield between small slices. */
+    bool fail_retained_layout; /* Capture-only failure after irreversible publication. */
 #endif
     bool force_full; /* Developer capture override, not a browser preference. */
+    bool retain_boxes; /* Capture opt-in while milestone B is being validated. */
 };
 #endif
 

@@ -55,6 +55,8 @@ int NS_Capture::prepare(int &argc, char **argv)
                 "  --capture-scroll X,Y          Scroll before the next action\n"
                 "  --capture-point X,Y          Inspect a point in document layout pixels\n"
                 "  --capture-force-full-restyle Force the full-refresh reference path\n"
+                "  --capture-retain-boxes       Opt into experimental retained-region refresh\n"
+                "  --capture-fail-retained-layout Test error handling after region publication\n"
                 "  --capture-restart-partial-restyle Test invalidation during partial construction\n"
                 "  --capture-interrupt-restyle MODE Test close, navigate, shutdown or shutdown-full\n"
                 "DIR must be new or empty. Uses a temporary profile, 96 DPI, JS and animation off\n"
@@ -68,6 +70,24 @@ int NS_Capture::prepare(int &argc, char **argv)
             continue;
         }
         requested = true;
+        if (arg == "--capture-fail-retained-layout") {
+#if defined(WISP_ENABLE_PARTIAL_UPDATES) && defined(WISP_PROFILE_RESTYLE)
+            m_fail_retained_layout = m_retain_boxes = true;
+            continue;
+#else
+            fprintf(stderr, "Retained failure injection requires partial updates and restyle profiling\n");
+            return -1;
+#endif
+        }
+        if (arg == "--capture-retain-boxes") {
+#ifdef WISP_ENABLE_PARTIAL_UPDATES
+            m_retain_boxes = true;
+            continue;
+#else
+            fprintf(stderr, "Retained updates require WISP_ENABLE_PARTIAL_UPDATES\n");
+            return -1;
+#endif
+        }
         if (arg == "--capture-restart-partial-restyle") {
             m_restart_partial_restyle = true;
             continue;
@@ -235,11 +255,20 @@ void NS_Capture::poll()
         return;
     }
     auto *content = browser_window_get_content(m_bw);
-    nsqt_capture_force_full_restyle(content, m_force_full_restyle, m_restart_partial_restyle);
+    if (m_fail_retained_layout && m_failure_watch == nullptr && content)
+        m_failure_watch = nsqt_capture_watch_content(content);
+    if (m_failure_watch && nsqt_capture_restyle_lifecycle(m_failure_watch, false)["error"].toBool()) {
+        finish("content_error");
+        return;
+    }
+    nsqt_capture_configure_restyle(content, m_force_full_restyle, m_restart_partial_restyle,
+        m_retain_boxes, m_fail_retained_layout);
     if (!m_interrupt_restyle.isEmpty())
         nsqt_capture_restyle_lifecycle(hlcache_handle_get_content(content), true);
     const bool done = content && content_get_status(content) == CONTENT_STATUS_DONE;
-    if (m_elapsed.elapsed() >= m_timeout_ms) {
+    if (content && content_get_status(content) == CONTENT_STATUS_ERROR) {
+        finish("content_error");
+    } else if (m_elapsed.elapsed() >= m_timeout_ms) {
         finish("timeout");
     } else if (done && !m_loading && browser_window_redraw_ready(m_bw) && nsqt_capture_settled(content) &&
         m_elapsed.elapsed() - m_last_activity >= m_settle_ms) {
@@ -289,7 +318,9 @@ void NS_Capture::afterScheduledCallback()
     if (!m_interrupted && m_bw) {
         auto *content = browser_window_get_content(m_bw);
         const auto state = nsqt_capture_restyle_lifecycle(hlcache_handle_get_content(content), true);
-        const bool started = m_interrupt_restyle == "shutdown-full"
+        const bool started = m_retain_boxes
+            ? state["retained_build"].toBool() && state["styled_elements"].toInt() > 0
+            : m_interrupt_restyle == "shutdown-full"
             ? state["building"].toBool() && state["styled_elements"].toInt() > 0
             : state["partial"].toBool() && state["reused_styles"].toInt() > 0;
         if (!started || !state["conversion"].toBool())
@@ -463,6 +494,8 @@ void NS_Capture::finish(const QString &result)
         {"qt_version", qVersion()},
         {"qt_platform", QGuiApplication::platformName()},
         {"artifacts", artifacts},
+        {"restyle_state", m_fail_retained_layout
+            ? nsqt_capture_restyle_lifecycle(m_failure_watch, false) : QJsonObject()},
     };
     QSaveFile file(QDir(m_directory).filePath("capture.json"));
     const QByteArray json = QJsonDocument(metadata).toJson();
@@ -470,6 +503,10 @@ void NS_Capture::finish(const QString &result)
     const int exit_code = outcome == "complete" && image_saved && metadata_saved ? 0 : 1;
     fprintf(stderr, "Capture %s: %s%s\n", qPrintable(outcome), qPrintable(m_directory),
         metadata_saved ? "" : " (failed to write capture.json)");
+    if (m_failure_watch != nullptr) {
+        nsqt_capture_unwatch_content(m_failure_watch);
+        m_failure_watch = nullptr;
+    }
     // Close browser windows before tearing down the core and its options.
     QApplication::closeAllWindows();
     QCoreApplication::exit(exit_code);

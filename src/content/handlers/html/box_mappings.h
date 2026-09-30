@@ -28,6 +28,9 @@ nserror html_box_check_mappings(const struct html_box_mapping_plan *plan);
  * Requires locked/restyling publication; single use. Does not splice boxes or
  * retire old storage. Caller must finish publication before yielding. */
 nserror html_box_apply_mappings(struct html_box_mapping_plan *plan);
+/** Publication-only write phase. Requires a successful preflight of every
+ * coordinated plan, with input/painting excluded and no intervening callbacks. */
+void html_box_commit_mappings(struct html_box_mapping_plan *plan);
 void html_box_discard_mappings(struct html_box_mapping_plan *plan);
 #endif
 #endif

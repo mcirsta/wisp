@@ -120,9 +120,12 @@ The profile reports wall-clock milliseconds:
   inline style parsing when selection is needed.
 - `boxes_ms`: other active box construction and DOM traversal.
 - `normalise_ms`: normalize the constructed box tree.
+- `publication_ms`: validate and publish a detached region, including binding
+  preparation and old-region retirement; zero for whole reconstruction.
 - `construction_wait_ms`: time outside construction slices, including scheduler
   gaps and callback overhead. `construction_ms` includes CSS, boxes and normalization.
-- `layout_ms`: the refresh's layout/reformat call.
+- `layout_ms`: the refresh's layout/reformat call, including retained-state reset
+  and existing element scrollbar updates when retaining boxes.
 - `cleanup_ms`: rebind iframe windows, retire old boxes and publish the reformat.
 - `total_ms`: refresh callback start through reformat publication, excluding
   painting, capture inspection and the artificial quiet period.
@@ -146,7 +149,7 @@ the full document. Reuse requires scripting to be disabled. Configuring the opti
 OFF removes HTML tracking state. Libcss's per-sheet scope summary and revision
 stamp are always available. Existing build caches preserve an explicit OFF value.
 
-With profiling enabled, `update_mode` reports `partial_css` or `full`.
+With profiling enabled, `update_mode` reports `partial_css`, `partial_boxes` or `full`.
 `fallback_reason` is `none` on the selective path; full reasons include
 `forced_full`, `feature_disabled`, `dom_changed`, `scripting`, `full_request`,
 `scope_capacity`, `invalid_scope`, `selector_scope`, `loading`, `no_style_snapshot`,
@@ -182,6 +185,37 @@ short construction slices and delays to make the event ordering deterministic.
 It writes `interruption.json` with before/after/release state instead of the
 ordinary rendering artifacts. `qt_restyle_lifecycle` exercises all four modes
 with styles, resources, forms and an iframe alive.
+
+### Experimental retained boxes
+
+`--capture-retain-boxes` opts into milestone B with `WISP_ENABLE_PARTIAL_UPDATES`
+enabled. Warm both panels first: the style snapshot and independent region owners
+are established by the first two refreshes. Later eligible changes rebuild one
+stable block/flex/grid region and retain the surrounding boxes, followed by full
+document layout. Ordinary browsing still uses whole reconstruction.
+
+Active interactions, widgets within the changed region, unsupported resources,
+frames and unsafe ownership boundaries retain the conservative fallback. Pages
+with existing frames skip the detached attempt and can still use `partial_css`.
+Do not infer retention from matching screenshots: check `partial_boxes` in the
+profile or unchanged outside `box_address` values. This mode adds box addresses
+and `tree_allocations` (talloc block count, not bytes) to inspection output.
+All inspections also expose selection `text_offset` and element `scrollbars`
+presence/offsets. Addresses and allocation counts are diagnostics, not geometry
+reference fields.
+
+With profiling enabled, `--capture-restart-partial-restyle` combined with retention
+invalidates the detached attempt. `--capture-fail-retained-layout` implies retention
+and injects a failure after publication/reset. It must exit with `content_error`,
+clean update state, and the failed document detached from the window. A screenshot
+may show the ordinary error page; it must never show the incomplete retained tree.
+`capture.json` includes the failed document's `restyle_state` for this check.
+`qt_retained_restyle` tests these paths against independent full rebuilds, settled
+resource bindings, outside box identities, selection offsets and scrollbars.
+
+Combine `--capture-retain-boxes --capture-interrupt-restyle MODE` with at least
+three alternating clicks to interrupt a detached build. `qt_retained_lifecycle`
+covers `close`, `navigate` and `shutdown` with the original tree still live.
 
 `action_ms` is the preceding capture action's synchronous duration, including
 target lookup and any scroll into view. Deferred restyling happens afterward.

@@ -762,6 +762,8 @@ static nserror browser_window_content_ready(struct browser_window *bw)
         width /= bw->scale;
         height /= bw->scale;
         content_reformat(bw->current_content, false, width, height);
+        if (bw->current_content == NULL || content_get_status(bw->current_content) == CONTENT_STATUS_ERROR)
+            return NSERROR_NOMEM;
 
         /* Update window but don't scroll to top since this is a restart */
         browser_window_update(bw, false);
@@ -806,6 +808,8 @@ static nserror browser_window_content_ready(struct browser_window *bw)
     width /= bw->scale;
     height /= bw->scale;
     content_reformat(bw->current_content, false, width, height);
+    if (bw->current_content == NULL || content_get_status(bw->current_content) == CONTENT_STATUS_ERROR)
+        return NSERROR_NOMEM;
 
     /* history */
     if (bw->history_add && bw->history && !bw->internal_nav) {
@@ -1313,6 +1317,15 @@ static nserror browser_window__handle_error(struct browser_window *bw, hlcache_h
     if (c == bw->loading_content) {
         bw->loading_content = NULL;
     } else if (c == bw->current_content) {
+        content_close(c);
+        /* A later layout failure has no pending navigation parameters. The
+         * error page's URL bar and retry action need the failed page's request,
+         * just as they do when the original fetch fails. */
+        if (bw->loading_parameters.url == NULL) {
+            browser_window__free_fetch_parameters(&bw->loading_parameters);
+            bw->loading_parameters = bw->current_parameters;
+            memset(&bw->current_parameters, 0, sizeof(bw->current_parameters));
+        }
         bw->current_content = NULL;
         browser_window_remove_caret(bw, false);
     }

@@ -405,7 +405,7 @@ static int layout_grid_get_column_count(struct box *grid)
  * \param content   The HTML content being laid out.
  * \post  grid->min_width and grid->max_width filled in
  */
-void layout_minmax_grid(struct box *grid, const struct gui_layout_table *font_func, const html_content *content)
+bool layout_minmax_grid(struct box *grid, const struct gui_layout_table *font_func, const html_content *content)
 {
     struct box *child;
     int num_cols;
@@ -421,7 +421,7 @@ void layout_minmax_grid(struct box *grid, const struct gui_layout_table *font_fu
 
     /* Already calculated? */
     if (grid->max_width != UNKNOWN_MAX_WIDTH)
-        return;
+        return true;
 
     num_cols = layout_grid_get_column_count(grid);
 
@@ -431,9 +431,7 @@ void layout_minmax_grid(struct box *grid, const struct gui_layout_table *font_fu
     if (!col_min || !col_max) {
         free(col_min);
         free(col_max);
-        grid->min_width.value = 0;
-        grid->max_width = 0;
-        return;
+        return false;
     }
 
     /* Get column gap */
@@ -475,7 +473,11 @@ void layout_minmax_grid(struct box *grid, const struct gui_layout_table *font_fu
             child->max_width = 100;
 #else
             /* In production, use the dispatcher */
-            layout_minmax_box(child, font_func, content);
+            if (!layout_minmax_box(child, font_func, content)) {
+                free(col_min);
+                free(col_max);
+                return false;
+            }
 #endif
         }
 
@@ -539,6 +541,7 @@ void layout_minmax_grid(struct box *grid, const struct gui_layout_table *font_fu
     grid->flags |= HAS_HEIGHT;
 
     NSLOG(layout, DEBUG, "Grid %p minmax: min=%d max=%d cols=%d gap=%d", grid, min, max, num_cols, gap_px);
+    return true;
 }
 
 static void layout_grid_compute_tracks(struct box *grid, int available_width, int *col_widths, int num_cols,

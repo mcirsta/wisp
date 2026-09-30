@@ -72,10 +72,13 @@ private:
     QTimer m_timer;
     bool m_loading = true;
     bool m_force_full_restyle = false;
+    bool m_retain_boxes = false;
+    bool m_fail_retained_layout = false;
     bool m_restart_partial_restyle = false;
     bool m_finished = false;
     QString m_interrupt_restyle;
     struct content *m_interrupted = nullptr;
+    struct content *m_failure_watch = nullptr;
     QJsonObject m_before_interruption;
     bool m_closed_during_build = false;
 };

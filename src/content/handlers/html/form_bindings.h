@@ -26,6 +26,9 @@ nserror html_form_check_bindings(const struct html_form_binding_plan *plan);
  * caller has also spliced boxes and published mappings/resources. Old gadgets
  * become unlinked and can subsequently be destroyed safely. Single use. */
 nserror html_form_apply_bindings(struct html_form_binding_plan *plan);
+/** Allocation-free write phase after all coordinated plans pass preflight.
+ * Requires locked/restyling publication, with no intervening callbacks. */
+void html_form_commit_bindings(struct html_form_binding_plan *plan);
 
 /** Free only temporary preparation storage; never gadgets or live indexes. */
 void html_form_discard_bindings(struct html_form_binding_plan *plan);

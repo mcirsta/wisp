@@ -97,8 +97,9 @@ bool layout_flex_redistribute_auto_margins_vertical(struct box *flex);
  * \param box       box to calculate min/max width for
  * \param font_func font functions
  * \param content   The HTML content being laid out
+ * \return true on success, false on memory exhaustion
  */
-void layout_minmax_box(struct box *box, const struct gui_layout_table *font_func, const struct html_content *content);
+bool layout_minmax_box(struct box *box, const struct gui_layout_table *font_func, const struct html_content *content);
 
 /**
  * Perform grid layout on a grid container.

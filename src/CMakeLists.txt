@@ -134,6 +134,7 @@ add_library(wisp ${WISP_LIB_TYPE}
 	content/handlers/html/form_bindings.c
 	content/handlers/html/box_mappings.c
 	content/handlers/html/box_boundary.c
+	content/handlers/html/box_publish.c
 	content/handlers/html/form_state.c
 	content/handlers/html/restyle.c
 	content/handlers/html/forms.c
