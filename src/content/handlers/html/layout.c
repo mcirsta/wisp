@@ -1038,6 +1038,11 @@ static bool layout_minmax_line(struct box *first, int *line_min, int *line_max, 
 }
 
 
+#ifdef WISP_ENABLE_PARTIAL_UPDATES
+static bool layout_can_reuse_inline_intrinsics(const struct box *box);
+static void layout_discard_inline_layout(struct box *box);
+#endif
+
 /**
  * Calculate minimum and maximum width of an inline container.
  *
@@ -1071,6 +1076,13 @@ static bool layout_minmax_inline_container(struct box *inline_container, bool *h
             return true;
         }
         inline_container->max_width = UNKNOWN_MAX_WIDTH;
+        if (inline_container->flags & REUSE_INLINE_LAYOUT) {
+            /* Intrinsic measurement must see the original text runs, not
+             * fragments whose breaks came from the previous used width. */
+            layout_discard_inline_layout(inline_container);
+            HTML_PROFILE(if (content->restyling)
+                ((html_content *)content)->restyle_profile.inline_layout_intrinsic_misses++);
+        }
     }
 #endif
     /* check if the widths have already been calculated */
@@ -4070,10 +4082,26 @@ static void layout_rejoin_text(struct box *box)
     }
 }
 
+#ifdef WISP_ENABLE_PARTIAL_UPDATES
+static bool layout_can_reuse_inline_layout(const struct box *box)
+{
+    if (!layout_can_reuse_inline_intrinsics(box))
+        return false;
+    for (const struct box *child = box->children; child != NULL; child = child->next) {
+        /* The final relative-position pass mutates inline coordinates. BR
+         * clearance can depend on the line's position even with no floats. */
+        if (child->style == NULL || css_computed_position(child->style) != CSS_POSITION_STATIC ||
+            (child->type == BOX_BR && css_computed_clear(child->style) != CSS_CLEAR_NONE))
+            return false;
+    }
+    return true;
+}
+#endif
+
 /**
  * Layout lines of text or inline boxes with floats.
  *
- * \param box inline container box
+ * \param inline_container inline container box
  * \param width horizontal space available
  * \param cont ancestor box which defines horizontal space, for floats
  * \param cx box position relative to cont
@@ -4091,6 +4119,28 @@ static bool layout_inline_container(
     int curwidth, maxwidth = width;
 
     assert(inline_container->type == BOX_INLINE_CONTAINER);
+#ifdef WISP_ENABLE_PARTIAL_UPDATES
+    if (inline_container->flags & REUSE_INLINE_LAYOUT) {
+        if (inline_container->inline_layout_width == width && cont->float_children == NULL) {
+            /* No floats or positioned descendants: the saved coordinates are
+             * local to this container, independent of its new parent placement.
+             * Parent/ancestor styles and baseline requirements are unchanged. */
+            inline_container->flags &= ~REUSE_INLINE_LAYOUT;
+            HTML_PROFILE(if (content->restyling) content->restyle_profile.inline_layout_reuses++);
+            return true;
+        }
+        HTML_PROFILE(if (content->restyling) {
+            if (inline_container->inline_layout_width != width)
+                content->restyle_profile.inline_layout_width_misses++;
+            else
+                content->restyle_profile.inline_layout_float_misses++;
+        });
+        layout_discard_inline_layout(inline_container);
+    }
+    inline_container->flags &= ~INLINE_LAYOUT_VALID;
+#endif
+    HTML_PROFILE(if (content->restyling) content->restyle_profile.inline_layout_calculations++);
+    inline_container->width = width;
     inline_container->flags &= ~HAS_BASELINE;
 
     /* Only inline-block ancestors need this cache. Avoid extra font metrics
@@ -4145,6 +4195,13 @@ static bool layout_inline_container(
 
     inline_container->width = maxwidth;
     inline_container->height = y;
+#ifdef WISP_ENABLE_PARTIAL_UPDATES
+    if (content->restyle.reuse_inline_layout && cont->float_children == NULL &&
+        layout_can_reuse_inline_layout(inline_container)) {
+        inline_container->inline_layout_width = width;
+        inline_container->flags |= INLINE_LAYOUT_VALID;
+    }
+#endif
 
     /* Log inline container final dimensions */
     NSLOG(wisp, INFO, "INLINE_CONTAINER_DONE: ic=%p parent=%p ic_y=%d ic_height=%d (parent_list_marker=%p)",
@@ -4526,14 +4583,13 @@ bool layout_block_context(struct box *block, int viewport_height, html_content *
                 return false;
 
         } else if (box->type == BOX_INLINE_CONTAINER) {
-            box->width = box->parent->width;
             /* Detect if parent width is still the sentinel */
-            if (box->width == UNKNOWN_WIDTH || box->width > 100000000) {
+            if (box->parent->width == UNKNOWN_WIDTH || box->parent->width > 100000000) {
                 NSLOG(layout, WARNING,
                     "OVERFLOW_BUG: INLINE_CONTAINER %p inheriting huge parent_width=%d from parent %p", box,
                     box->parent->width, box->parent);
             }
-            if (!layout_inline_container(box, box->width, block, cx, cy, content))
+            if (!layout_inline_container(box, box->parent->width, block, cx, cy, content))
                 return false;
 
         } else if (box->type == BOX_TABLE) {
@@ -6536,15 +6592,19 @@ static void layout_reset_box(struct box *box)
      * wrapping must not change a retained sibling's min/max contributions. */
     layout_rejoin_text(box);
     box->flags &= ~(NEW_LINE | MEASURED | HAS_HEIGHT | MAKE_HEIGHT | NEED_MIN |
-        HEIGHT_STRETCHED | ASPECT_RATIO_HEIGHT | HAS_BASELINE | HAS_FIXED_DESCENDANT);
-    box->x = box->y = box->height = 0;
-    box->width = UNKNOWN_WIDTH;
+        HEIGHT_STRETCHED | ASPECT_RATIO_HEIGHT | HAS_FIXED_DESCENDANT);
+    box->x = box->y = 0;
+    if (!(box->flags & REUSE_INLINE_LAYOUT)) {
+        box->flags &= ~(HAS_BASELINE | INLINE_LAYOUT_VALID);
+        box->width = UNKNOWN_WIDTH;
+        box->height = box->baseline = 0;
+        box->inline_layout_width = 0;
+    }
     if (!(box->flags & REUSE_INLINE_INTRINSICS)) {
         box->min_width = (struct css_size){.type = CSS_SIZE_AUTO, .value = 0};
         box->max_width = UNKNOWN_MAX_WIDTH;
         box->flags &= ~(INLINE_INTRINSIC_HEIGHT | INLINE_INTRINSIC_NEED_MIN);
     }
-    box->baseline = 0;
     box->descendant_x0 = box->descendant_y0 = 0;
     box->descendant_x1 = box->descendant_y1 = 0;
     for (unsigned i = 0; i < 4; i++)
@@ -6562,6 +6622,18 @@ static void layout_reset_box(struct box *box)
     box->col = NULL;
 }
 
+/* Only text and inline markers were preserved. Reset/rejoin before either
+ * intrinsic measurement or line layout, without touching the parent's sizing. */
+static void layout_discard_inline_layout(struct box *box)
+{
+    box->flags &= ~(INLINE_LAYOUT_VALID | REUSE_INLINE_LAYOUT | HAS_BASELINE);
+    box->width = UNKNOWN_WIDTH;
+    box->height = box->baseline = 0;
+    box->inline_layout_width = 0;
+    for (struct box *child = box->children; child != NULL; child = child->next)
+        layout_reset_box(child);
+}
+
 /* exported function documented in html/layout.h */
 void layout_reset_document(html_content *content)
 {
@@ -6572,9 +6644,12 @@ void layout_reset_document(html_content *content)
     /* Follow structural children only: float chains are derived, and markers
      * are owned separately. No traversal stack or allocation per box. */
     while (box != NULL) {
-        box->flags &= ~REUSE_INLINE_INTRINSICS;
-        if (content->restyle.reuse_inline_intrinsics && layout_can_reuse_inline_intrinsics(box))
+        box->flags &= ~(REUSE_INLINE_INTRINSICS | REUSE_INLINE_LAYOUT);
+        if (!content->restyle.no_intrinsic_reuse && layout_can_reuse_inline_intrinsics(box))
             box->flags |= REUSE_INLINE_INTRINSICS;
+        if (content->restyle.reuse_inline_layout && (box->flags & REUSE_INLINE_INTRINSICS) &&
+            (box->flags & INLINE_LAYOUT_VALID) && layout_can_reuse_inline_layout(box))
+            box->flags |= REUSE_INLINE_LAYOUT;
         layout_reset_box(box);
         if (box->list_marker != NULL) {
             struct box *marker = box->list_marker;
@@ -6588,7 +6663,7 @@ void layout_reset_document(html_content *content)
                 marker->length = 0;
             }
         }
-        if (box->children != NULL) {
+        if (box->children != NULL && !(box->flags & REUSE_INLINE_LAYOUT)) {
             box = box->children;
             continue;
         }

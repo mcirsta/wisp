@@ -96,6 +96,9 @@ clicks a visible label whose `for` names that input (even if the input has no bo
 Clicks use the normal core mouse path, scrolling the target into view if needed.
 `--capture-type TEXT` sends keyboard input to the focused control and
 `--capture-scroll X,Y` sets the document scroll position.
+`--capture-resize WIDTHxHEIGHT` changes the content viewport through the widget's
+normal resize/reformat path and waits for it to settle before the next action.
+The final image and requested viewport use the last size in the sequence.
 `--capture-scroll-element ID,X,Y` sets an element's existing horizontal/vertical
 scrollbar offsets through the normal clamping/redraw API. IDs containing commas
 are not supported by this option. A nonzero offset without that scrollbar is an
@@ -149,7 +152,12 @@ The profile reports wall-clock milliseconds, except the explicitly named CPU met
 `styled_elements` and `construction_slices` describe the amount of work. CSS and
 normalization are subtracted from `boxes_ms` to avoid counting them twice. The
 `intrinsic_inline_calculations` and `intrinsic_inline_reuses` counters distinguish
-fresh inline-container intrinsic measurement from the experimental retained cache.
+fresh inline-container intrinsic measurement from retained measurement reuse.
+`inline_layout_calculations` and `inline_layout_reuses` count fresh line layout
+and reuse of completed lines. The `inline_layout_width_misses`,
+`inline_layout_float_misses` and `inline_layout_intrinsic_misses` counters explain
+why preserved lines had to be discarded. Width takes precedence when both width
+and incoming floats changed; containers excluded before preservation are not misses.
 The clock uses nanosecond-resolution monotonic timestamps where available, with the
 existing millisecond clock as a fallback on other platforms.
 
@@ -162,7 +170,8 @@ changes immediately, including edits already synchronized before a tab click.
 The first refresh establishes a full baseline; subsequent eligible refreshes reuse
 composed styles outside those scopes. Eligible single-region updates also retain
 outside boxes once independent region owners have been established, as described
-below. All refreshes still lay out the full document. Reuse requires scripting to
+below. All refreshes still traverse the document for layout; the optional line
+cache described below can skip eligible line work. Reuse requires scripting to
 be disabled. Configuring the option OFF removes HTML tracking state.
 Libcss's per-sheet scope summary and revision
 stamp are always available. Existing build caches preserve an explicit OFF value.
@@ -248,11 +257,15 @@ Combine `--capture-interrupt-restyle MODE` with at least three alternating click
 to interrupt a detached build. `qt_retained_lifecycle`
 covers `close`, `navigate` and `shutdown` with the original tree still live.
 
-### Experimental inline intrinsic reuse
+### Inline intrinsic reuse
 
-`--capture-reuse-inline-intrinsics` additionally keeps intrinsic min/max widths
-for unchanged text-only inline containers during a retained update. It requires
-partial updates and is OFF by default. Ordinary blocks' min/max fields are reused
+Eligible retained updates also keep intrinsic min/max widths for unchanged
+text-only inline containers by default. `--capture-no-intrinsic-reuse` disables
+this cache (and dependent line reuse), keeping selective styles and box retention.
+The original
+`--capture-reuse-inline-intrinsics` option still selects the default behavior;
+the last of these two options wins. Both require partial updates.
+Ordinary blocks' min/max fields are reused
 for CSS sizing during layout, so they are not treated as intrinsic caches.
 
 The eligible containers have a normal block parent and only text, inline markers
@@ -262,12 +275,40 @@ were requested. A changed minimum-width requirement triggers fresh measurement.
 Changed regions start without cached sizes, and every ancestor is remeasured.
 The existing publication input checks guard styles, fonts, units and viewport
 changes; rejected retained updates keep the normal reconstruction fallback.
+Configured generic font-family names are compared exactly, with an oversized
+snapshot falling back to reconstruction. Qt database/alias changes also advance
+the font generation, including on pages with only generic font families.
 
 This first milestone C step skips intrinsic measurement only. Line wrapping,
 block/flex/grid/table sizing, positioning, bounds, selection indexing and scrolling
 still run normally. No additional per-box fields or heap allocations are needed.
-Compare with the same capture without this option for fully reset retained layout,
+Compare with `--capture-no-intrinsic-reuse` for fully reset retained layout,
 and with `--capture-force-full-restyle` for independent full reconstructions.
+The retained-restyle comparison includes narrower/wider viewport changes between
+switches, viewport-sized text and a resize round trip. A changed input requires
+a fresh baseline; later eligible switches must resume reuse.
+
+### Completed inline lines (experiment)
+
+`--capture-reuse-inline-layout` opts into retaining completed text-only lines
+through eligible region updates. Ordinary browsing leaves this experiment off.
+It requires partial updates and the intrinsic cache. The inline container keeps
+its available-width input separately from its output/overflow width, along with
+its wrapped text fragments, local coordinates and any required baseline.
+
+Reuse requires the same available width, no incoming floats and unchanged
+intrinsic minimum-width requirements. Only static text/inline markers and hard
+breaks without clearance qualify; positioned inlines, atomic/replaced content,
+widgets and list markers remain excluded. A miss rejoins the text fragments and
+runs ordinary layout. The parent still calculates sizing, margins and placement;
+all flex/grid/table contexts, final positioning, bounds, selection indexing and
+scrollbar updates still run. The existing document input guards cover style,
+font and viewport changes before retained publication.
+
+Compare the option against the default intrinsic-only mode, as well as forced
+full reconstruction. `qt_retained_restyle` checks both modes, changed sibling
+widths, incoming floats, reconstruction fallbacks, resize, restart and scrolling.
+Disabling partial updates removes the cache and its width field entirely.
 
 `action_ms` is the preceding capture action's synchronous duration, including
 target lookup and any scroll into view. Deferred restyling happens afterward.

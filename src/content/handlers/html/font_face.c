@@ -66,6 +66,11 @@ uint64_t html_font_face_generation(void)
     return font_generation;
 }
 
+void html_font_face_notify_changed(void)
+{
+    font_generation++;
+}
+
 /** Count of pending font downloads */
 static int pending_font_count = 0;
 
@@ -192,7 +197,7 @@ static nserror font_fetch_callback(llcache_handle *handle, const llcache_event *
                 err = guit->layout->load_font_data(&dl->variant, data, size);
             }
             if (err == NSERROR_OK) {
-                font_generation++;
+                html_font_face_notify_changed();
                 mark_font_loaded(&dl->variant);
             }
         }

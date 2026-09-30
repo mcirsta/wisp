@@ -257,6 +257,11 @@ QJsonObject nsqt_capture_inspect(struct hlcache_handle *content, const QStringLi
             {"layout_reset_ms", p.layout_reset_ns / 1e6},
             {"intrinsic_inline_calculations", int(p.intrinsic_inline_calculations)},
             {"intrinsic_inline_reuses", int(p.intrinsic_inline_reuses)},
+            {"inline_layout_calculations", int(p.inline_layout_calculations)},
+            {"inline_layout_reuses", int(p.inline_layout_reuses)},
+            {"inline_layout_width_misses", int(p.inline_layout_width_misses)},
+            {"inline_layout_float_misses", int(p.inline_layout_float_misses)},
+            {"inline_layout_intrinsic_misses", int(p.inline_layout_intrinsic_misses)},
             {"publication_ms", p.publication_ns / 1e6},
             {"paint_ms", p.paint_ns / 1e6},
             {"through_last_paint_ms", p.last_paint_ns ? (p.last_paint_ns - p.start_ns) / 1e6 : 0},
@@ -336,17 +341,19 @@ QJsonObject nsqt_capture_inspect(struct hlcache_handle *content, const QStringLi
 
 // Capture-only interaction hooks use the same core input path as the Qt widget.
 void nsqt_capture_configure_restyle(struct hlcache_handle *content, bool force, bool restart, bool css_only, bool fail,
-    bool reuse_intrinsics)
+    bool no_intrinsic_reuse, bool reuse_inline_layout)
 {
     Q_UNUSED(restart);
     Q_UNUSED(fail);
-    Q_UNUSED(reuse_intrinsics);
+    Q_UNUSED(no_intrinsic_reuse);
+    Q_UNUSED(reuse_inline_layout);
 #ifdef WISP_ENABLE_PARTIAL_UPDATES
     if (content && content_get_type(content) == CONTENT_HTML) {
         auto *html = reinterpret_cast<html_content *>(hlcache_handle_get_content(content));
         html->restyle.force_full = force;
         html->restyle.css_only = css_only;
-        html->restyle.reuse_inline_intrinsics = reuse_intrinsics;
+        html->restyle.no_intrinsic_reuse = no_intrinsic_reuse;
+        html->restyle.reuse_inline_layout = reuse_inline_layout;
 #ifdef WISP_PROFILE_RESTYLE
         html->restyle.force_restart = restart;
         html->restyle.fail_retained_layout = fail;

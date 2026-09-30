@@ -1586,7 +1586,8 @@ static void describe_layout(FILE *stream, const struct box *box)
     describe_layout_link(stream, box);
     fprintf(stream, " type=%d flags=%x xywh=%d,%d,%d,%d bounds=%d,%d,%d,%d minmax=%d,%d,%d space=%d",
         box->type, box->flags & ~(OWNS_REGION | INLINE_INTRINSIC_HEIGHT | INLINE_INTRINSIC_NEED_MIN |
-            REUSE_INLINE_INTRINSICS), box->x, box->y, box->width, box->height,
+            REUSE_INLINE_INTRINSICS | INLINE_LAYOUT_VALID | REUSE_INLINE_LAYOUT),
+        box->x, box->y, box->width, box->height,
         box->descendant_x0, box->descendant_y0, box->descendant_x1, box->descendant_y1,
         box->min_width.type, box->min_width.value, box->max_width, box->space);
     if (box->flags & HAS_BASELINE)
@@ -1655,7 +1656,8 @@ START_TEST(test_region_retained_layout)
     const unsigned variant = _i % 18;
     const int width = variant < 9 ? 300 : 540;
     const unsigned formatters = variant % 9;
-    html.restyle.reuse_inline_intrinsics = _i >= 18;
+    html.restyle.no_intrinsic_reuse = _i < 18;
+    html.restyle.reuse_inline_layout = _i >= 36;
     dom_node *outer = by_id("outer"), *link = by_id("link"), *outside = by_id("outside");
     /* The shared construction fixture has 96 nested inline ancestors to force
      * scheduler slices. A shallow split inline is enough for layout repetition. */
@@ -1675,6 +1677,7 @@ START_TEST(test_region_retained_layout)
         "#outer.wide{width:62%%} #outer.wide #hidden{display:block}"
         "#outer.wide .flex{display:none} #outer:not(.wide) .grid{display:none}"
         "#outside{width:35%%;overflow:auto;max-height:280px}"
+        "#plain,.isolated{overflow:hidden}"
         ".relative{position:relative;left:7px;top:11px}"
         ".absolute{position:absolute;right:5px;top:10px;width:40px}"
         ".fixed{position:fixed;bottom:3px;right:9px;width:32px}"
@@ -1699,6 +1702,13 @@ START_TEST(test_region_retained_layout)
     text(element(plain, "span", NULL, NULL), "boundary and more words");
     element(plain, "br", NULL, NULL);
     text(plain, "after a hard break");
+    dom_node *guarded = element(outside, "div", NULL, "isolated");
+    text(guarded, "text with a positioned inline ");
+    text(element(guarded, "span", NULL, "relative"), "offset must not accumulate");
+    guarded = element(outside, "div", NULL, "isolated");
+    text(guarded, "text with a clearing hard break");
+    element(guarded, "br", NULL, "clear");
+    text(guarded, "after clearance");
     element(element(outside, "div", NULL, NULL), "span", NULL, NULL);
     text(element(outside, "span", NULL, "atomic"), "inline block with a baseline");
     element(outside, "div", NULL, "ratio");
@@ -1740,7 +1750,10 @@ START_TEST(test_region_retained_layout)
         ck_assert_msg(html_box_publish_region(&html, &region, &reason) == NSERROR_OK,
             "Layout variant %d pass %u: %s", _i, pass, reason);
         struct box *plain_inline = box_for_node(plain)->children;
-        if (html.restyle.reuse_inline_intrinsics && pass % 3 == 1) {
+        if (html.restyle.reuse_inline_layout)
+            ck_assert_msg(plain_inline->flags & INLINE_LAYOUT_VALID,
+                "Layout variant %d pass %u: fixture did not preserve completed lines", _i, pass);
+        if (!html.restyle.no_intrinsic_reuse && pass % 3 == 1) {
             /* A different minimum-width requirement must miss the cache, in
              * either direction. Perturb the old result so comparison with the
              * fresh tree also proves that this stale cache was not reused. */
@@ -1748,16 +1761,23 @@ START_TEST(test_region_retained_layout)
             plain_inline->min_width.value++;
             plain_inline->max_width++;
         }
+        if (html.restyle.reuse_inline_layout && pass % 3 == 2) {
+            /* A stale available-width key must discard the completed lines,
+             * even when intrinsic sizes and the real used width still match. */
+            plain_inline->inline_layout_width++;
+            plain_inline->height++;
+        }
         int cached_max = plain_inline->max_width;
         layout_reset_document(&html);
-        if (html.restyle.reuse_inline_intrinsics) {
+        if (!html.restyle.no_intrinsic_reuse) {
             ck_assert_msg((plain_inline->flags & REUSE_INLINE_INTRINSICS) &&
                 plain_inline->max_width == cached_max && cached_max != UNKNOWN_MAX_WIDTH,
                 "Layout variant %d pass %u: text intrinsic cache was discarded", _i, pass);
         }
         ck_assert_ptr_eq(html.layout, document);
         ck_assert_ptr_eq(box_for_node(outside), retained);
-        ck_assert_uint_eq(count_clones(html.layout), 0);
+        if (!html.restyle.reuse_inline_layout)
+            ck_assert_uint_eq(count_clones(html.layout), 0);
         ck_assert(layout_document(&html, width, 600));
         assert_layout_matches(expected[state], _i, pass);
         end_region_update();
@@ -2676,7 +2696,7 @@ int main(void)
 #ifdef WISP_ENABLE_PARTIAL_UPDATES
     tc = tcase_create("Retained layout");
     tcase_add_checked_fixture(tc, setup, teardown);
-    tcase_add_loop_test(tc, test_region_retained_layout, 0, 36);
+    tcase_add_loop_test(tc, test_region_retained_layout, 0, 54);
     tcase_add_loop_test(tc, test_region_retained_list_numbering, 0, 2);
     suite_add_tcase(suite, tc);
 #endif

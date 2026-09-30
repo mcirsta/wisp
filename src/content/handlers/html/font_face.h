@@ -24,7 +24,7 @@
 #ifndef WISP_HTML_FONT_FACE_H
 #define WISP_HTML_FONT_FACE_H
 
-#include <libcss/libcss.h>
+#include <libcss/types.h>
 #include <wisp/utils/errors.h>
 
 struct html_content;
@@ -98,7 +98,9 @@ bool html_font_face_has_pending(void);
  */
 int html_font_face_pending_count(void);
 
-/* Loaded web fonts are shared by documents. */
+/* Font availability is shared by documents. Frontends must notify changes to
+ * their font database/aliases so retained measurements cannot outlive them. */
 uint64_t html_font_face_generation(void);
+void html_font_face_notify_changed(void);
 
 #endif /* NETSURF_HTML_FONT_FACE_H */

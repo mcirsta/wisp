@@ -46,6 +46,7 @@ extern "C" {
 #include <wisp/ns_inttypes.h>
 #include "wisp/layout.h"
 #include "wisp/plot_style.h"
+#include "content/handlers/html/font_face.h"
 }
 
 #include "qt/layout.h"
@@ -260,10 +261,6 @@ static void nsqt_font_cache_clear(void);
 
 static QString available_font_family(const QString &family, bool italic)
 {
-    static const auto connection = QObject::connect(
-        qApp, &QGuiApplication::fontDatabaseChanged, qApp, nsqt_font_cache_clear);
-    Q_UNUSED(connection);
-
     const auto key = std::make_pair(family, italic);
     if (const QString *cached = font_family_cache.object(key))
         return *cached;
@@ -367,6 +364,10 @@ static struct {
  */
 static QFont *nsfont_style_to_font(const struct plot_font_style *fstyle)
 {
+    // Generic-only pages must also invalidate when installed fonts change.
+    static const auto connection = QObject::connect(
+        qApp, &QGuiApplication::fontDatabaseChanged, qApp, nsqt_font_cache_clear);
+    Q_UNUSED(connection);
     int idx;
     int oldest_idx = 0;
 
@@ -443,6 +444,7 @@ QFont nsqt_capture_font(const struct plot_font_style *style)
 static void nsqt_font_cache_clear(void)
 {
     NSLOG(wisp, INFO, "Purging Qt font caches after a font database or alias change");
+    html_font_face_notify_changed();
     font_family_cache.clear();
     for (int i = 0; i < PFCACHE_ENTRIES; i++) {
         if (pfcache.entries[i].qfont != NULL) {

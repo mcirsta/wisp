@@ -51,9 +51,11 @@ bool layout_document(struct html_content *content, int width, int height);
  * Content must remain locked/restyling until full layout, document extents and
  * selection indexing have been updated. This allocation-free reset is not a
  * substitute for layout and must not be used for ordinary cached reflows.
- * The capture-only intrinsic-reuse opt-in may preserve text-only inline
- * measurements when the retained publication's style/font/unit inputs match.
- * Used geometry and line wrapping are always discarded and recalculated.
+ * Preserves eligible text-only inline intrinsic measurements when the retained
+ * publication's style/font/unit inputs match, unless capture disables reuse.
+ * The opt-in inline-layout cache also preserves eligible completed lines until
+ * layout checks their available width and incoming floats. Parent placement and
+ * the document's final positioning/bounds passes still run normally.
  */
 void layout_reset_document(struct html_content *content);
 #endif

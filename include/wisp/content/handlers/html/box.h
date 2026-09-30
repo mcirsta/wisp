@@ -119,7 +119,9 @@ typedef enum {
     OWNS_REGION = 1 << 19, /* talloc parent owns this construction subtree; not a layout-isolation guarantee */
     INLINE_INTRINSIC_HEIGHT = 1 << 20, /* height result of inline intrinsic measurement, not used layout */
     INLINE_INTRINSIC_NEED_MIN = 1 << 21, /* NEED_MIN input used by that measurement */
-    REUSE_INLINE_INTRINSICS = 1 << 22 /* retained text-only container awaiting intrinsic-cache validation */
+    REUSE_INLINE_INTRINSICS = 1 << 22, /* retained text-only container awaiting intrinsic-cache validation */
+    INLINE_LAYOUT_VALID = 1 << 23, /* completed text-only lines without incoming floats */
+    REUSE_INLINE_LAYOUT = 1 << 24 /* preserved lines awaiting available-width/float validation */
 } box_flags;
 
 
@@ -407,6 +409,11 @@ struct box {
      * measured). May also be attached to inline markers or atomic inlines.
      */
     int space;
+
+#ifdef WISP_ENABLE_PARTIAL_UPDATES
+    /** Available width that produced cached inline lines; not their overflow width. */
+    int inline_layout_width;
+#endif
 
     /**
      * Byte offset within a textual representation of this content.

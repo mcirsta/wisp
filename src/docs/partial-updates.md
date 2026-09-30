@@ -1,7 +1,7 @@
 # Partial document updates: implementation plan
 
-Status: milestones A and B enabled for eligible native checked-state updates;
-milestone C's first intrinsic-reuse path is capture-only, 2026-09-30.
+Status: milestones A and B, plus milestone C's first inline intrinsic cache,
+enabled for eligible native checked-state updates, 2026-09-30.
 The reviewed baseline is `eb3e03df`
 (`Use stack scratch for small class selector lists`).
 
@@ -26,8 +26,9 @@ for eligible single-region changes, followed by full layout. Capture retains
 explicit CSS-only and full-rebuild reference modes. Pages with frames and unsafe
 regions keep the existing conservative reconstruction paths.
 Detached construction through native-control/SVG staging is committed as `610d6f5a`.
-Milestone C begins with text-only inline intrinsic reuse; used-layout reuse is
-still deferred. The steps below remain the implementation and
+Milestone C's text-only inline intrinsic reuse is enabled. Completed text-only
+line reuse is an opt-in experiment; broader block-layout reuse remains deferred.
+The steps below remain the implementation and
 acceptance checklist, with the concrete implementation choices recorded here.
 
 ### Milestone A implementation
@@ -1059,8 +1060,9 @@ full document layout.
 
 ### Milestone C: text-only inline intrinsic reuse (2026-09-30)
 
-The first bounded experiment is `--capture-reuse-inline-intrinsics`, OFF by
-default. The layout audit found that ordinary blocks overwrite their intrinsic
+The first bounded experiment (`ae37d926`) was the opt-in
+`--capture-reuse-inline-intrinsics`. The layout audit found that ordinary blocks
+overwrite their intrinsic
 min/max fields with CSS sizing constraints during used layout. Treating those
 fields as cached intrinsic sizes would be incorrect. Text-only inline containers
 retain their intrinsic fields and provide a smaller, independently testable start.
@@ -1073,8 +1075,8 @@ rejoined and all used geometry is reset. Fresh region boxes have unknown intrins
 sizes, and all ancestors and other container types are remeasured.
 
 Two bits in the existing flags word record the intrinsic height contribution and
-the previous `NEED_MIN` input; a third marks a preserved result awaiting validation. Reuse
-returns the height contribution as well as widths. A different `NEED_MIN` input
+the previous `NEED_MIN` input; a third marks a preserved result awaiting validation.
+Reuse returns the height contribution as well as widths. A different `NEED_MIN` input
 causes a miss in either direction. These are bits in the existing flags word,
 not new per-box storage or allocation. The existing retained-publication guards
 already require unchanged DOM outside the scope and matching style/font/unit/
@@ -1092,8 +1094,7 @@ both with and without reuse: block/flex/grid parents and changed regions, two
 viewport widths, repeated state changes, wrapped inline boundaries, hard breaks,
 empty inlines, floats, positioned content, tables and lists. A deliberate key
 mismatch and perturbed cached widths verify cache rejection without changing
-final geometry. Qt captures
-compare the opt-in path with both default retained layout and fresh rebuilds,
+final geometry. Qt captures compare the opt-in path with both default retained layout and fresh rebuilds,
 require actual cache hits and fewer calculations, and cover frame fallback and
 invalidation during detached construction.
 
@@ -1134,11 +1135,156 @@ allocation counts of 3,018/3,063. Its warmed median/p90/max refresh times are
 Drivers, raw captures and reports are under
 `out/render-captures/inline-intrinsics-2026-09-30/`.
 
-The experiment remains OFF by default. The next bounded decision is whether to
-enable this measured cache after its acceptance checks, before attempting reuse
-of used layout or widening eligibility. Ordinary block intrinsic reuse would
+These results support enabling this measured cache after its acceptance checks,
+before attempting reuse of used layout or widening eligibility. Ordinary block
+intrinsic reuse would
 need distinct cache storage or a clearer separation from used sizing; it must
 not reuse the existing fields blindly.
+
+### Inline intrinsic reuse rollout (2026-09-30)
+
+Eligible retained publication now uses text-only inline intrinsic reuse by
+default, in all frontends. The zero-initialized core state enables it without a
+frontend initialization hook. `--capture-no-intrinsic-reuse` retains the previous
+fully reset layout as a comparison path. The original opt-in remains accepted
+as an explicit request for the default behavior; CSS-only and forced-full modes
+still reconstruct all boxes and cannot reuse these measurements. Configuring
+partial updates OFF removes the core path as before.
+
+The capture runner now accepts ordered `--capture-resize WIDTHxHEIGHT` actions
+through the normal Qt widget resize and scheduled core reformat. The retained
+comparison switches tabs at narrower and wider sizes, returns to the original
+size and also performs a resize round trip without an intervening restyle.
+It exercises percentage text indentation, decorated inline edges, preserved
+whitespace, no-wrap content and viewport-sized fonts. Every settled state and
+the final pixels/DOM match independent full rebuilds. Profiling assertions
+require the next switch after a changed viewport to rebuild fully with zero
+intrinsic hits, then require eligible later updates to resume reuse. The first
+opt-in run of this regression passed under ASan/UBSan before changing the default.
+
+The rollout audit also closed a font-input gap: the existing input key tracked
+generic-family selection, font sizes and downloaded fonts, but not the configured
+generic family names or Qt's external font-database notifications. Input snapshots
+now copy the five names exactly into a bounded 512-byte buffer, including null
+versus empty and family boundaries. Oversized settings disable reuse rather than
+truncate or rely on a hash; two snapshots add 1 KiB per document with partial
+updates enabled, with no new heap allocations or per-box storage. Preference
+changes therefore invalidate both an existing baseline and an in-progress build.
+Qt's database/alias cache clear also advances the shared font generation, and its
+database subscription starts even for generic-only pages. Tests cover all five
+preferences, oversized-name fallback, generic-only database changes and web-font
+alias registration.
+
+The default-enabled build passes all 49 selected Debug layout/Qt/input-guard
+CTests and all 45 applicable tests in normal Release with profiling OFF. All
+178 construction cases also pass with LeakSanitizer enabled. The profile-enabled
+regression now requires cache hits with no capture override and compares them
+with the explicit uncached retained reference, so an accidental disabled default
+cannot silently pass the acceptance test.
+After the font-guard changes, the same 49 Debug and 45 Release CTests pass again,
+along with all 22 input-tracking cases under LeakSanitizer. The rebuilt Release
+configuration with partial updates OFF passes its full-refresh comparison and
+general Qt capture checks. Normal Release remains configured with profiling OFF.
+
+Ten normal Release captures compare both sidebar panels on saved Tion and Bihon
+against independent full rebuilds; Tion also compares the uncached retained mode.
+All settled inspected states, final PNG/DOM files and complete normalized box
+dumps match, including off-screen geometry and structural pointer relationships.
+Resources remain settled and constant (201 on Tion, 289 on Bihon); Tion's retained
+allocation counts remain 3,018/3,063. These are correctness checks, not new timing
+claims; the earlier interleaved measurement remains the evidence for the roughly
+10% Tion refresh improvement. Artifacts and the driver are under
+`out/render-captures/default-intrinsics-2026-09-30/`; the same checks repeated
+after the font guards are under
+`out/render-captures/default-intrinsics-font-guards-2026-09-30/`.
+
+Eligibility is unchanged by the intrinsic rollout. Its ordinary default still
+runs line wrapping and all used-layout passes for the full document. The next
+bounded experiment is recorded below.
+
+### Completed inline line reuse experiment (2026-09-30)
+
+`--capture-reuse-inline-layout` implements the first used-layout reuse path, off
+by default. It preserves eligible inline containers' wrapped text fragments,
+local coordinates, height, overflow width and baseline through retained reset.
+The parent still runs normal sizing, placement and margin collapse. All owning
+block/flex/grid/table contexts and final positioning/bounds/selection/scrollbar
+passes remain active; this does not skip whole blocks or translate later siblings.
+
+The key consists of the actual available width, the existing intrinsic `NEED_MIN`
+key and the style/font/unit/viewport inputs already guarded by retained publication.
+Available width is stored separately because an overflowing container's output
+width is not its original layout input. Both the completed layout and the new
+layout must have no incoming floats. Eligibility starts with the existing
+text-only intrinsic predicate, then excludes non-static inline styles and hard
+breaks with clearance. Those cases can depend on placement or have coordinates
+modified by the final positioning pass. No replaced content, widgets, atomic
+children or list-marker containers are added to the eligible set.
+
+A failed width/float check rejoins fragments and runs ordinary line layout. An
+intrinsic-key miss discards/rejoins the saved lines **before** min/max measurement,
+so old breaks cannot change shaping or intrinsic width. Only an explicitly
+preserved container can take the reuse branch; ordinary resize/reflow and further
+passes within the same layout use the existing line algorithm. Changed region
+boxes start without valid completed lines. Disabling intrinsic reuse also disables
+this dependent cache.
+
+Storage is two additional bits in the existing flags and one conditional `int`
+per box, with no added heap allocations. On this 64-bit build the integer occupies
+the four-byte alignment gap before `byte_offset`; `sizeof(struct box)` stays 432.
+Other ABIs can incur an extra integer and alignment padding. Partial-updates-OFF
+builds omit the field. Profiling counts completed-line hits, fresh calculations
+and width/float/intrinsic misses separately from intrinsic measurements.
+
+The construction comparison now has 54 layout variants across block/flex/grid
+combinations and two widths, each with 24 retained publications against independent
+fresh constructions. The last 18 enable line reuse and deliberately corrupt
+saved width keys/geometry or intrinsic keys/results to prove fallback. Coverage
+includes split text, positioned inlines, hard-break clearance and baselines.
+Qt also changes an unchanged paragraph's width by growing its flex sibling, and
+introduces an escaping float at the same width. Adding the float must miss the
+line cache; removing it keeps the pre-existing `float_crossing` reconstruction
+fallback. Resize, viewport fonts, scrolling, frames and an interrupted update
+remain compared with fresh constructions.
+
+Two interleaved Release/LTO timing rounds on saved Tion used 22 switches per
+process, discarded the first two, and collected 40 warmed samples per mode per
+round. The first order was default / lines / full / full / lines / default; the
+second swapped default and lines. No builds or other test runs overlapped timing.
+These are final refresh-call times, excluding capture quiet time and artifact I/O.
+
+| Mode | Round 1 refresh median / p90 (ms) | Round 2 refresh median / p90 (ms) | Round 2 layout wall / CPU median (ms) |
+| --- | ---: | ---: | ---: |
+| Default intrinsic reuse | 43.20 / 58.67 | 49.41 / 58.56 | 45.68 / 45.43 |
+| Opt-in completed lines | 37.04 / 41.68 | 36.65 / 42.30 | 32.69 / 32.50 |
+| Independent full rebuild | 93.15 / 101.47 | 90.62 / 101.08 | 34.97 / 34.77 |
+
+Tion consistently reuses 96 inline containers, reducing fresh line-layout calls
+from 583/601 to 487/505 per panel (about 16%). Its existing 285 intrinsic hits are
+unchanged. Both rounds favor the experiment, but default timings varied: these
+samples suggest roughly 14–26% faster refreshes, not a portable speed guarantee.
+The 300-switch line-reuse stress run has a 38.28 ms median, 43.72 ms p90 and
+59.25 ms maximum over 298 warmed samples. Tree allocation counts stay at
+3,018/3,063 and settled resources at 201. Its final pixels, DOM and full normalized
+box dump match independent full reconstruction.
+
+Twelve additional captures compare both panels on Tion and Bihon in full,
+default and line-reuse modes. All settled inspections and final images/DOM/box
+trees match. Bihon keeps its existing frame-related `partial_css` fallback and
+reports zero line-cache hits, as expected; its resources remain at 289.
+Artifacts, comparison code and reports are under
+`out/render-captures/inline-layout-2026-09-30/`.
+
+The implementation passes all 49 selected Debug layout/Qt/input-guard CTests.
+All 196 construction cases pass with LeakSanitizer, including the strengthened
+checks that require a valid line cache before injecting stale keys. The retained
+scroll regression also exercises the opt-in mode with nonzero offsets, shrinking
+content and off-screen updates. The rebuilt partial-updates-OFF configuration
+passes the full-refresh reference and general capture checks. All 45 applicable
+normal Release CTests pass with profiling OFF, and the twelve saved-page captures
+repeat successfully in that build. Release is left with profiling OFF.
+The experiment remains off by default pending rollout acceptance; wider block
+reuse stays deferred.
 
 ## Recommendation and scope
 
@@ -1557,6 +1703,9 @@ requires broad restructuring, retain milestone A and defer this phase.
    and intrinsic resource sizes. A formatting context alone does not prove that
    its size is independent. Exclude incoming float effects, escaping margin
    collapse and other dependencies until accounted for.
+   The first implementation uses the narrower text-only inline-container boundary
+   described above: its parent still handles block dependencies, and unchanged
+   width plus absence of floats/positioned inline content permits local line reuse.
 3. Reuse an eligible region's internal layout only when its inputs and content
    are unchanged. Let the parent perform normal placement of siblings and margin
    collapse. Do not implement a blanket vertical-delta translation of all later
@@ -1669,6 +1818,7 @@ flaky hard-coded CTest threshold.
 Commits 1–5 and the milestone A rollout are complete. Step 6's ownership, bounded
 construction and staged bindings are implemented. Step 7 has live integration,
 retained full layout and failure recovery, now enabled in ordinary browsing by
-the milestone B rollout. Step 8 begins with capture-only text intrinsic reuse;
-retaining used layout and its dependency propagation remain to be implemented.
-Neither is a prerequisite for the already enabled selective CSS and box retention.
+the milestone B rollout. Step 8 has enabled text-only intrinsic reuse and an
+opt-in completed-line experiment with width/float dependency checks. Wider used
+layout retention and its dependency propagation remain deferred; neither is a
+prerequisite for the already enabled selective CSS and box retention.

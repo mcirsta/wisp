@@ -37,6 +37,26 @@ static struct html_restyle_inputs inputs(html_content *html)
     value.font_generation = html_font_face_generation();
     if (css_select_ctx_checked_parent_scope(html->select_ctx, &value.valid, &value.css_revision) != CSS_OK)
         value.valid = false;
+    /* These names affect font measurement without changing composed styles.
+     * Copy exact values: option strings can be freed/replaced in place, and a
+     * hash collision must not make stale intrinsic widths reusable. Keep the
+     * snapshot bounded and allocation-free; unusually long names fall back. */
+    const char *families[] = {nsoption_charp(font_sans), nsoption_charp(font_serif), nsoption_charp(font_mono),
+        nsoption_charp(font_cursive), nsoption_charp(font_fantasy)};
+    size_t used = 0;
+    for (unsigned i = 0; i < sizeof(families) / sizeof(families[0]); i++) {
+        const char *name = families[i];
+        size_t size = name != NULL ? strlen(name) + 1 : 0;
+        if (size + 1 > sizeof(value.font_families) - used) {
+            value.valid = false;
+            break;
+        }
+        value.font_families[used++] = name != NULL;
+        if (name != NULL) {
+            memcpy(value.font_families + used, name, size);
+            used += size;
+        }
+    }
     /* There is no client font-measure callback today. A future callback needs
      * its own invalidation inputs before its composed values can be reused. */
     if (u->measure != NULL)
@@ -53,6 +73,7 @@ static bool same_inputs(const struct html_restyle_inputs *a, const struct html_r
         a->visited_generation == b->visited_generation && a->width == b->width && a->height == b->height &&
         a->font_default == b->font_default && a->font_size == b->font_size && a->font_min_size == b->font_min_size &&
         a->author_css == b->author_css && memcmp(a->units, b->units, sizeof(a->units)) == 0 &&
+        memcmp(a->font_families, b->font_families, sizeof(a->font_families)) == 0 &&
         memcmp(a->media, b->media, sizeof(a->media)) == 0;
 }
 

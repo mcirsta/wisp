@@ -18,6 +18,7 @@ extern "C" {
 #include <wisp/layout.h>
 #include <wisp/plot_style.h>
 #include <wisp/utils/nsoption.h>
+#include "content/handlers/html/font_face.h"
 }
 #include "qt/capture_inspect.h"
 #include "qt/layout.h"
@@ -83,6 +84,18 @@ int main(int argc, char **argv)
     nsoption_set_charp(font_mono, strdup("Wisp Weight Test"));
 
     // Keep each list alive while its address is a key in the frontend font cache.
+    FontList generic({}, PLOT_FONT_FAMILY_SERIF);
+    generic.check("generic without named families", "Wisp Normal Test");
+    // The core must observe availability changes even before a named-family
+    // lookup has subscribed to the database signal.
+    uint64_t generation = html_font_face_generation();
+    int generic_probe = QFontDatabase::addApplicationFont(directory + "/variable.ttf");
+    REQUIRE(generic_probe >= 0);
+    app.processEvents();
+    REQUIRE(html_font_face_generation() != generation);
+    REQUIRE(QFontDatabase::removeApplicationFont(generic_probe));
+    app.processEvents();
+
     FontList direct({"Wisp Normal Test", "Wisp Weight Test"});
     direct.check("first installed family wins", "Wisp Normal Test");
     FontList reversed({"Wisp Weight Test", "Wisp Normal Test"});
@@ -97,8 +110,6 @@ int main(int argc, char **argv)
     serif.check("configured serif fallback", "Wisp Normal Test");
     FontList mono({"Wisp Absent Font 927"}, PLOT_FONT_FAMILY_MONOSPACE);
     mono.check("configured monospace fallback", "Wisp Weight Test");
-    FontList generic({}, PLOT_FONT_FAMILY_SERIF);
-    generic.check("generic without named families", "Wisp Normal Test");
 
     QFont::insertSubstitutions("Wisp Registered Alias", {"Wisp Absent Font 927", "Wisp Weight Test"});
     FontList registered({"Wisp Registered Alias", "Wisp Normal Test"});
@@ -141,8 +152,10 @@ int main(int argc, char **argv)
     QByteArray data = file.readAll();
     char css_name[] = "Wisp Arriving Web Font";
     font_variant_id id = {css_name, CSS_FONT_WEIGHT_400, CSS_FONT_STYLE_NORMAL};
+    generation = html_font_face_generation();
     REQUIRE(nsqt_layout_table->load_font_data(&id,
         reinterpret_cast<const uint8_t *>(data.constData()), data.size()) == NSERROR_OK);
+    REQUIRE(html_font_face_generation() != generation);
     REQUIRE(repaints == 1);
     late.check("web font alias and cached fallback invalidation", "Wisp Normal Test");
 

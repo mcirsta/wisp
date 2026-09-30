@@ -16,13 +16,15 @@ env = dict(os.environ, QT_QPA_PLATFORM="offscreen", QT_SCALE_FACTOR="1",
 ids = ("outside", "notes", "retained-text", "tabs", "first", "second", "first-panel", "second-panel", "after")
 
 
-def run(out, page, options=(), switches=8, extra_ids=()):
+def run(out, page, options=(), switches=8, extra_ids=(), actions=None):
     args = [str(binary), "--capture-dir", str(out), "--capture-size", "600x500",
             "--capture-settle", "50", "--capture-timeout", "20000", *options]
     for key in (*ids, *extra_ids):
         args += ["--capture-id", key]
-    for index in range(switches):
-        args += ["--capture-click-label", "second" if index % 2 == 0 else "first"]
+    if actions is None:
+        actions = [("click-label", "second" if index % 2 == 0 else "first") for index in range(switches)]
+    for kind, value in actions:
+        args += ["--capture-" + kind, value]
     result = subprocess.run([*args, str(page)], env=env, capture_output=True, text=True, timeout=30)
     assert "runtime error:" not in result.stderr, result.stderr
     assert (out / "capture.json").exists(), (result.returncode, result.stderr)
@@ -40,7 +42,7 @@ def run(out, page, options=(), switches=8, extra_ids=()):
         return steps
     assert result.returncode == 0, (metadata, result.stderr)
     assert metadata["result"] == "complete" and metadata["load_complete"], metadata
-    assert len(steps) == switches + 1, (len(steps), result.stderr)
+    assert len(steps) == len(actions) + 1, (len(steps), result.stderr)
     return steps
 
 
@@ -85,6 +87,7 @@ with tempfile.TemporaryDirectory(prefix="wisp-retained-") as tmp:
     if profiling:
         for step in css_steps[2:]:
             assert step["restyle_profile"]["update_mode"] == "partial_css", step
+            assert step["restyle_profile"]["intrinsic_inline_reuses"] == 0, step
     assert steps[2]["resource_count"] >= 4, steps[2]
     for index, step in enumerate(steps[3:], 3):
         boxes = {e["id"]: e["boxes"] for e in step["elements"]}
@@ -107,18 +110,118 @@ with tempfile.TemporaryDirectory(prefix="wisp-retained-") as tmp:
 
     # Intrinsic reuse is separate from both style/box reuse and used layout.
     # Compare every state with fresh builds, not a second pass over the same tree.
-    intrinsic = tmp / "intrinsic"
-    intrinsic_steps = run(intrinsic, page, ("--capture-reuse-inline-intrinsics",))
-    compare(reference, intrinsic_steps)
+    uncached = tmp / "uncached"
+    uncached_steps = run(uncached, page, ("--capture-no-intrinsic-reuse",))
+    compare(reference, uncached_steps)
     if profiling:
-        for index, step in enumerate(intrinsic_steps[3:], 3):
+        for index, step in enumerate(steps[3:], 3):
             profile = step["restyle_profile"]
-            baseline = steps[index]["restyle_profile"]
+            baseline = uncached_steps[index]["restyle_profile"]
             assert profile["update_mode"] == "partial_boxes", profile
             assert profile["intrinsic_inline_reuses"] > 0, profile
+            assert baseline["update_mode"] == "partial_boxes" and baseline["intrinsic_inline_reuses"] == 0, baseline
             assert profile["intrinsic_inline_calculations"] < baseline["intrinsic_inline_calculations"], profile
     for artifact in ("page.png", "dom.txt"):
-        assert (intrinsic / artifact).read_bytes() == (full / artifact).read_bytes(), artifact
+        assert (uncached / artifact).read_bytes() == (full / artifact).read_bytes(), artifact
+
+    lines = tmp / "lines"
+    line_steps = run(lines, page, ("--capture-reuse-inline-layout",))
+    compare(reference, line_steps)
+    for artifact in ("page.png", "dom.txt"):
+        assert (lines / artifact).read_bytes() == (full / artifact).read_bytes(), artifact
+    if profiling:
+        for index, step in enumerate(line_steps[3:], 3):
+            profile = step["restyle_profile"]
+            assert profile["inline_layout_reuses"] > 0, profile
+            assert profile["inline_layout_calculations"] < steps[index]["restyle_profile"]["inline_layout_calculations"], profile
+
+    # A retained paragraph changes width when its flex sibling grows. A float
+    # introduced in the dirty scope can instead change wrapping at the same
+    # width. Both must reject old lines and agree with fresh construction.
+    dependency_source = '''<!doctype html><style>
+      body { margin:10px; font:14px/20px sans-serif; }
+      .context { width:440px; }
+      #tabs input { display:none; } .panel { display:none; }
+      #first:checked ~ #first-panel, #second:checked ~ #second-panel { display:block; }
+      #first-panel { width:90px; height:40px; background:#acf; }
+      #second-panel { width:210px; height:40px; background:#fca; }
+      #stable { width:180px; }
+      VARIANT
+    </style><label for="first">First</label> <label for="second">Second</label>
+    <div class="context"><section id="tabs">
+      <input id="first" type="radio" name="tabs" checked><input id="second" type="radio" name="tabs">
+      <div class="panel" id="first-panel"></div><div class="panel" id="second-panel"></div>
+    </section><div id="retained-text">WORDS <span style="padding:0 3px">at an inline boundary</span><br>WORDS</div></div>
+    <p id="stable">WORDS</p>'''.replace("WORDS", "Retained text with several words that wrap onto more than one line")
+    for name, css, miss in (
+            ("width", ".context{display:flex}#tabs{flex:0 0 auto}#retained-text{flex:1;min-width:0}", "width"),
+            ("float", "#first-panel{height:0}#second-panel{float:left;height:120px;width:130px}", "float")):
+        dependency = tmp / f"{name}.html"
+        dependency.write_text(dependency_source.replace("VARIANT", css))
+        fresh_dir, reused_dir = tmp / f"{name}-full", tmp / f"{name}-lines"
+        fresh = run(fresh_dir, dependency, ("--capture-force-full-restyle",), extra_ids=("stable",))
+        reused = run(reused_dir, dependency, ("--capture-reuse-inline-layout",), extra_ids=("stable",))
+        compare(fresh, reused)
+        for artifact in ("page.png", "dom.txt"):
+            assert (fresh_dir / artifact).read_bytes() == (reused_dir / artifact).read_bytes(), (name, artifact)
+        if profiling:
+            profiles = [step["restyle_profile"] for step in reused[3:]]
+            for index, profile in enumerate(profiles, 3):
+                if name == "float" and index % 2 == 0:
+                    # Removing an escaping float uses the existing publication
+                    # fallback; adding it must instead miss the line cache.
+                    assert profile["update_mode"] == "partial_css", profile
+                    assert profile["fallback_reason"] == "float_crossing", profile
+                    assert profile["inline_layout_reuses"] == 0, profile
+                else:
+                    assert profile["update_mode"] == "partial_boxes", (name, index, profile)
+            assert any(p[f"inline_layout_{miss}_misses"] > 0 for p in profiles), (name, profiles)
+            assert any(p["inline_layout_reuses"] > 0 for p in profiles), (name, profiles)
+
+    # Input changes must force a fresh baseline, then permit reuse again.
+    # Include viewport units, preserved whitespace and decorated inline edges;
+    # no JS or private invalidation hooks drive this resize sequence.
+    resized = tmp / "resized.html"
+    resized.write_text(source.replace('style="width:180px"', 'style="width:60%;text-indent:3%"')
+                       .replace('<span>across', '<span style="padding:1px 3px;margin:0 2px">across')
+                       .replace('<section id="tabs">',
+                                '<div id="viewport-text" style="font-size:2vw">Words sized to the viewport</div>'
+                                '<pre id="preserved">  kept spaces\nand a second line  </pre>'
+                                '<div id="nowrap" style="white-space:nowrap">Words that stay together</div>'
+                                '<section id="tabs">'))
+    actions = [("click-label", "second"), ("click-label", "first"), ("click-label", "second")]
+    resumed = [3]
+    invalidated = []
+    for size in ("340x620", "760x500", "600x500"):
+        actions.append(("resize", size))
+        invalidated.append(len(actions) + 1)
+        actions += [("click-label", key) for key in ("first", "second", "first", "second")]
+        resumed += [len(actions) - 1, len(actions)]
+    # A round trip without restyling also exercises ordinary reflow of cached boxes.
+    actions += [("resize", "420x560"), ("resize", "600x500"), ("click-label", "first")]
+    resumed.append(len(actions))
+    resize_ids = ("viewport-text", "preserved", "nowrap")
+    resize_full = run(tmp / "resize-full", resized, ("--capture-force-full-restyle",),
+                      extra_ids=resize_ids, actions=actions)
+    resize_reused = run(tmp / "resize-reused", resized, extra_ids=resize_ids, actions=actions)
+    compare(resize_full, resize_reused)
+    resize_lines = run(tmp / "resize-lines", resized, ("--capture-reuse-inline-layout",),
+                       extra_ids=resize_ids, actions=actions)
+    compare(resize_full, resize_lines)
+    for artifact in ("page.png", "dom.txt"):
+        assert (tmp / "resize-full" / artifact).read_bytes() == (tmp / "resize-reused" / artifact).read_bytes(), artifact
+        assert (tmp / "resize-full" / artifact).read_bytes() == (tmp / "resize-lines" / artifact).read_bytes(), artifact
+    if profiling:
+        for index in invalidated:
+            for series in (resize_reused, resize_lines):
+                profile = series[index]["restyle_profile"]
+                assert profile["update_mode"] == "full", (index, profile)
+                assert profile["fallback_reason"] == "inputs_changed", (index, profile)
+                assert profile["intrinsic_inline_reuses"] == profile["inline_layout_reuses"] == 0, (index, profile)
+        for index in resumed:
+            profile = resize_reused[index]["restyle_profile"]
+            assert profile["update_mode"] == "partial_boxes" and profile["intrinsic_inline_reuses"] > 0, (index, profile)
+            assert resize_lines[index]["restyle_profile"]["inline_layout_reuses"] > 0, (index, resize_lines[index])
 
     # The retained ancestor gains/loses a scrollbar as its tab contents grow.
     scrolling = tmp / "scrolling.html"
@@ -129,6 +232,8 @@ with tempfile.TemporaryDirectory(prefix="wisp-retained-") as tmp:
     scrolling_full = run(tmp / "scrolling-full", scrolling, ("--capture-force-full-restyle",), 6, ("viewport",))
     scrolling_steps = run(tmp / "scrolling-retained", scrolling, switches=6, extra_ids=("viewport",))
     compare(scrolling_full, scrolling_steps)
+    scrolling_lines = run(tmp / "scrolling-lines", scrolling, ("--capture-reuse-inline-layout",), 6, ("viewport",))
+    compare(scrolling_full, scrolling_lines)
     viewport = lambda step: next(e["boxes"][0] for e in step["elements"] if e["id"] == "viewport")
     for index, step in enumerate(scrolling_steps[3:], 3):
         assert viewport(step)["box_address"] == viewport(scrolling_steps[2])["box_address"], index
@@ -146,10 +251,8 @@ with tempfile.TemporaryDirectory(prefix="wisp-retained-") as tmp:
     frame = tmp / "frame.html"
     frame.write_text(source + '<iframe src="about:blank" width="60" height="25"></iframe>')
     frame_full = run(tmp / "frame-full", frame, ("--capture-force-full-restyle",), 4)
-    frame_steps = run(tmp / "frame-retained", frame, switches=4)
+    frame_steps = run(tmp / "frame-retained", frame, ("--capture-reuse-inline-layout",), switches=4)
     compare(frame_full, frame_steps)
-    frame_intrinsic = run(tmp / "frame-intrinsic", frame, ("--capture-reuse-inline-intrinsics",), 4)
-    compare(frame_full, frame_intrinsic)
     if profiling:
         for step in widget_steps[3:]:
             profile = step["restyle_profile"]
@@ -158,11 +261,10 @@ with tempfile.TemporaryDirectory(prefix="wisp-retained-") as tmp:
             assert 0 <= profile["boxes_ms"] <= profile["total_ms"], profile
         for step in frame_steps[2:]:
             assert step["restyle_profile"]["update_mode"] == "partial_css", step
-        for step in frame_intrinsic[2:]:
-            assert step["restyle_profile"]["update_mode"] == "partial_css", step
             assert step["restyle_profile"]["intrinsic_inline_reuses"] == 0, step
+            assert step["restyle_profile"]["inline_layout_reuses"] == 0, step
         restarted = run(tmp / "restart", page,
-                        ("--capture-restart-partial-restyle", "--capture-reuse-inline-intrinsics"))
+                        ("--capture-restart-partial-restyle", "--capture-reuse-inline-layout"))
         compare(reference, restarted)
         assert restarted[3]["restyle_profile"]["restarts"] == 1, restarted[3]
         assert restarted[3]["restyle_profile"]["fallback_reason"] == "inputs_changed_during_build", restarted[3]

@@ -58,6 +58,8 @@ struct html_restyle_profile {
     uint64_t layout_cpu_ns, layout_reset_ns;
     uint32_t styled_elements, construction_slices, paint_calls;
     uint32_t intrinsic_inline_calculations, intrinsic_inline_reuses;
+    uint32_t inline_layout_calculations, inline_layout_reuses;
+    uint32_t inline_layout_width_misses, inline_layout_float_misses, inline_layout_intrinsic_misses;
     const char *update_mode, *fallback_reason;
     uint32_t changed_controls, dirty_roots, invalidated_nodes, reused_styles;
     size_t temporary_bytes;
@@ -80,6 +82,7 @@ struct html_restyle_inputs {
     unsigned char media[sizeof(css_media)];
     css_fixed units[7];
     uint64_t css_revision, font_generation, visited_generation;
+    char font_families[512]; /* Exact packed generic names; oversized settings disable reuse. */
     struct nsurl *base_url;
     int width, height, font_default, font_size, font_min_size;
     bool author_css, valid;
@@ -101,7 +104,8 @@ struct html_restyle_state {
 #endif
     bool force_full; /* Developer capture override, not a browser preference. */
     bool css_only; /* Capture override: reuse CSS but reconstruct all boxes. */
-    bool reuse_inline_intrinsics; /* Capture opt-in for milestone C's first bounded cache. */
+    bool no_intrinsic_reuse; /* Capture override: remeasure all retained inline containers. */
+    bool reuse_inline_layout; /* Capture opt-in: preserve eligible completed text lines. */
 };
 #endif
 

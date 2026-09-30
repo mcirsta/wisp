@@ -46,6 +46,7 @@ int NS_Capture::prepare(int &argc, char **argv)
             fprintf(stdout,
                 "Usage: wisp-qt --capture-dir DIR [capture options] [core options] URL-or-file\n"
                 "  --capture-size WIDTHxHEIGHT  Content viewport (default 1280x900)\n"
+                "  --capture-resize WIDTHxHEIGHT Resize after settling (repeatable action)\n"
                 "  --capture-settle MS          Quiet period after load (default 500)\n"
                 "  --capture-timeout MS         Overall deadline (default 30000)\n"
                 "  --capture-id ID              Inspect an element (repeatable)\n"
@@ -57,7 +58,9 @@ int NS_Capture::prepare(int &argc, char **argv)
                 "  --capture-point X,Y          Inspect a point in document layout pixels\n"
                 "  --capture-force-full-restyle Force the full-refresh reference path\n"
                 "  --capture-css-only-restyle   Reuse CSS but reconstruct all boxes\n"
-                "  --capture-reuse-inline-intrinsics Test retained text-only intrinsic measurements\n"
+                "  --capture-no-intrinsic-reuse Remeasure all retained inline containers\n"
+                "  --capture-reuse-inline-layout Test reuse of completed text-only lines\n"
+                "  --capture-reuse-inline-intrinsics Use default text-only intrinsic reuse\n"
                 "  --capture-retain-boxes       Use default eligible retained-region refresh\n"
                 "  --capture-fail-retained-layout Test error handling after region publication\n"
                 "  --capture-restart-partial-restyle Test invalidation during partial construction\n"
@@ -96,9 +99,18 @@ int NS_Capture::prepare(int &argc, char **argv)
             m_css_only_restyle = true;
             continue;
         }
-        if (arg == "--capture-reuse-inline-intrinsics") {
+        if (arg == "--capture-reuse-inline-layout") {
 #ifdef WISP_ENABLE_PARTIAL_UPDATES
-            m_reuse_inline_intrinsics = true;
+            m_reuse_inline_layout = true;
+            continue;
+#else
+            fprintf(stderr, "Inline layout reuse requires WISP_ENABLE_PARTIAL_UPDATES\n");
+            return -1;
+#endif
+        }
+        if (arg == "--capture-reuse-inline-intrinsics" || arg == "--capture-no-intrinsic-reuse") {
+#ifdef WISP_ENABLE_PARTIAL_UPDATES
+            m_no_intrinsic_reuse = arg == "--capture-no-intrinsic-reuse";
             continue;
 #else
             fprintf(stderr, "Intrinsic reuse requires WISP_ENABLE_PARTIAL_UPDATES\n");
@@ -134,6 +146,12 @@ int NS_Capture::prepare(int &argc, char **argv)
         } else if (arg == "--capture-id") {
             m_inspect_ids.append(value);
             ok = !value.isEmpty();
+        } else if (arg == "--capture-resize") {
+            const auto parts = value.split('x');
+            const int width = parts.value(0).toInt(), height = parts.value(1).toInt();
+            ok = parts.size() == 2 && width > 0 && width <= 8192 && height > 0 && height <= 8192;
+            if (ok)
+                m_actions.append({arg, value});
         } else if (arg == "--capture-click-id" || arg == "--capture-click-label" || arg == "--capture-type" ||
             arg == "--capture-scroll" || arg == "--capture-scroll-element") {
             m_actions.append({arg, value});
@@ -280,7 +298,7 @@ void NS_Capture::poll()
         return;
     }
     nsqt_capture_configure_restyle(content, m_force_full_restyle, m_restart_partial_restyle,
-        m_css_only_restyle, m_fail_retained_layout, m_reuse_inline_intrinsics);
+        m_css_only_restyle, m_fail_retained_layout, m_no_intrinsic_reuse, m_reuse_inline_layout);
     if (!m_interrupt_restyle.isEmpty())
         nsqt_capture_restyle_lifecycle(hlcache_handle_get_content(content), true);
     const bool done = content && content_get_status(content) == CONTENT_STATUS_DONE;
@@ -305,7 +323,12 @@ void NS_Capture::poll()
             QElapsedTimer action_timer;
             action_timer.start();
             bool ok = true;
-            if (action.first == "--capture-type") {
+            if (action.first == "--capture-resize") {
+                const auto parts = action.second.split('x');
+                m_size = QSize(parts[0].toInt(), parts[1].toInt());
+                // Exercise the widget's normal scheduled reformat path.
+                m_widget->setFixedSize(m_size);
+            } else if (action.first == "--capture-type") {
                 for (uint32_t key : action.second.toUcs4())
                     ok = browser_window_key_press(m_bw, key) && ok;
             } else if (action.first == "--capture-scroll") {

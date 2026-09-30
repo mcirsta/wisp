@@ -10,12 +10,15 @@
 #include <wisp/content/handlers/html/form_internal.h>
 #include "content/urldb.h"
 #include "content/handlers/html/restyle.h"
+#include "content/handlers/html/font_face.h"
 #include "content/handlers/css/internal.h"
 #ifdef WISP_TEST_ALLOC_FAILURE
 #include "test/malloc_fig.h"
 #endif
 
 static html_content html;
+static const enum nsoption_e font_options[] = {
+    NSOPTION_font_sans, NSOPTION_font_serif, NSOPTION_font_mono, NSOPTION_font_cursive, NSOPTION_font_fantasy};
 
 static dom_node *node(const char *id)
 {
@@ -201,6 +204,7 @@ START_TEST(test_reuse_table_and_input_guards)
 
     int font_default = nsoption_int(font_default);
     bool author_css = nsoption_bool(author_level_css);
+    char *old_family = NULL;
     switch (_i) {
     case 0: html_restyle_note_dom_change(&html); break;
     case 1: html.base.available_width++; break;
@@ -230,6 +234,16 @@ START_TEST(test_reuse_table_and_input_guards)
         ck_assert_ptr_nonnull(html.restyle.entries);
         ck_assert(html.restyle.partial);
         break;
+    case 10: case 11: case 12: case 13: case 14: {
+        enum nsoption_e option = font_options[_i - 10];
+        const char *name = nsoptions[option].value.s;
+        old_family = name != NULL ? strdup(name) : NULL;
+        ck_assert_int_eq(nsoption_set_tbl_charp(nsoptions, option, strdup("changed font family")), NSERROR_OK);
+        break;
+    }
+    case 15:
+        html_font_face_notify_changed();
+        break;
     }
     ck_assert_msg(html_restyle_needs_restart(&html), "Changed input %d did not invalidate the active reuse", _i);
     html_restyle_use_full(&html, "test_changed_inputs");
@@ -241,8 +255,27 @@ START_TEST(test_reuse_table_and_input_guards)
     dom_node_unref(outside);
     nsoption_set_int(font_default, font_default);
     nsoption_set_bool(author_level_css, author_css);
+    if (_i >= 10 && _i < 15)
+        nsoption_set_tbl_charp(nsoptions, font_options[_i - 10], old_family);
     if (_i == 8)
         urldb_destroy();
+}
+END_TEST
+
+START_TEST(test_oversized_font_names_disable_reuse)
+{
+    const char *original = nsoption_charp(font_sans);
+    char *saved = original != NULL ? strdup(original) : NULL;
+    char *long_name = malloc(sizeof(html.restyle.active_inputs.font_families) + 1);
+    ck_assert_ptr_nonnull(long_name);
+    memset(long_name, 'a', sizeof(html.restyle.active_inputs.font_families));
+    long_name[sizeof(html.restyle.active_inputs.font_families)] = '\0';
+    nsoption_set_charp(font_sans, long_name);
+    ck_assert_int_eq(html_restyle_capture_inputs(&html), NSERROR_OK);
+    ck_assert_msg(!html.restyle.active_inputs.valid, "Oversized font names must disable reuse, not truncate");
+    nsoption_set_charp(font_sans, saved);
+    ck_assert_int_eq(html_restyle_capture_inputs(&html), NSERROR_OK);
+    ck_assert_msg(html.restyle.active_inputs.valid, "Normal font names must restore reuse eligibility");
 }
 END_TEST
 
@@ -323,7 +356,8 @@ int main(void)
     tcase_add_test(tc, test_coalescing_and_batches);
     tcase_add_test(tc, test_scope_capacity);
     tcase_add_test(tc, test_selector_scope_diagnostic);
-    tcase_add_loop_test(tc, test_reuse_table_and_input_guards, 0, 10);
+    tcase_add_loop_test(tc, test_reuse_table_and_input_guards, 0, 16);
+    tcase_add_test(tc, test_oversized_font_names_disable_reuse);
 #ifdef WISP_TEST_ALLOC_FAILURE
     tcase_add_loop_test(tc, test_allocation_fallbacks, 0, 3);
 #endif
