@@ -257,6 +257,11 @@ nserror nsurl_join(const nsurl *base, const char *rel, nsurl **result)
     *result = (nsurl *)strdup(rel);
     return NSERROR_OK;
 }
+nsurl *nsurl_ref(nsurl *url)
+{
+    return (nsurl *)strdup((const char *)url);
+}
+
 void nsurl_unref(nsurl *url)
 {
     if (url)
@@ -265,6 +270,12 @@ void nsurl_unref(nsurl *url)
 
 /* HTML Objects */
 bool html_fetch_object(struct html_content *c, struct nsurl *url, struct box *box, content_type type, bool params)
+{
+    return false;
+}
+
+bool html_fetch_object_buffer(struct html_content *c, const uint8_t *data, size_t len, const char *mime_type,
+    struct box *box, content_type permitted_types)
 {
     return false;
 }
@@ -278,6 +289,22 @@ char *squash_whitespace(const char *s)
 bool html_fetch_background(struct html_content *c, struct nsurl *url, struct box *box, content_type type, uint32_t layer)
 {
     return true;
+}
+
+int talloc_free(void *ptr)
+{
+    free(ptr);
+    return 0;
+}
+
+void *talloc_named_const(const void *context, size_t size, const char *name)
+{
+    return malloc(size);
+}
+
+void _talloc_set_destructor(const void *ptr, int (*destructor)(void *))
+{
+    /* Detached resources are exercised by the real construction-context test. */
 }
 
 void *_talloc_zero_array(const void *ctx, size_t element_size, unsigned count, const char *name)
@@ -312,17 +339,26 @@ char *talloc_strdup(const void *ctx, const char *p)
 {
     return strdup(p);
 }
+void *_talloc_memdup(const void *ctx, const void *p, size_t size, const char *name)
+{
+    void *copy = malloc(size);
+    if (copy != NULL)
+        memcpy(copy, p, size);
+    return copy;
+}
 char *talloc_strndup(const void *ctx, const char *p, size_t n)
 {
     return strndup(p, n);
 }
 
+struct box_construct_region;
+
 /* convert_special_elements stub */
-bool convert_special_elements(dom_node *node, struct html_content *c, struct box *box, bool *convert_children,
-    void *box_context)
+nserror convert_special_elements(dom_node *node, struct html_content *c, struct box *box, bool *convert_children,
+    void *box_context, struct box_construct_region *region)
 {
     *convert_children = true;
-    return true;
+    return NSERROR_OK;
 }
 
 /* Linker Stubs for box_get_style */
@@ -487,6 +523,7 @@ START_TEST(test_grid_construction)
     struct box_construct_ctx *ctx = calloc(1, sizeof(*ctx));
     ctx->content = &htmlc;
     ctx->n = (dom_node *)root_el; /* Start construction at Root element (HTML) */
+    ctx->root_node = dom_node_ref(root_el);
     ctx->root_box = NULL;
     ctx->cb = box_complete_cb;
     ctx->bctx = NULL;

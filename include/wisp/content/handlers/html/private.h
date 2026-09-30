@@ -469,6 +469,10 @@ dom_hubbub_error html_process_svg(void *ctx, dom_node *node);
 struct form *html_forms_get_forms(const char *docenc, dom_html_document *doc);
 struct form_control *html_forms_get_control_for_node(struct form *forms, dom_node *node);
 
+/* Fresh, unlinked native control for unpublished box construction. The caller
+ * owns it; publication must associate its DOM form before it becomes live. */
+nserror html_forms_create_detached_control(dom_node *node, struct form_control **result);
+
 
 /* in html/css_fetcher.c */
 /**

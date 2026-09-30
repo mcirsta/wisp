@@ -206,10 +206,10 @@ static struct form_control *parse_button_element(struct form *forms, dom_html_bu
 
     err = dom_html_button_element_get_value(button, &ds_value);
     if (err != DOM_NO_ERR)
-        goto out;
+        goto failed;
     err = dom_html_button_element_get_name(button, &ds_name);
     if (err != DOM_NO_ERR)
-        goto out;
+        goto failed;
 
     if (ds_value != NULL) {
         control->value = strndup(dom_string_data(ds_value), dom_string_byte_length(ds_value));
@@ -233,7 +233,11 @@ static struct form_control *parse_button_element(struct form *forms, dom_html_bu
 
     if (form != NULL && control != NULL)
         form_add_control(find_form(forms, form), control);
+    goto out;
 
+failed:
+    form_free_control(control);
+    control = NULL;
 out:
     if (form != NULL)
         dom_node_unref(form);
@@ -247,7 +251,7 @@ out:
     return control;
 }
 
-static struct form_control *parse_input_element(struct form *forms, dom_html_input_element *input)
+static struct form_control *parse_input_element(struct form *forms, dom_html_input_element *input, bool sync_dom)
 {
     struct form_control *control = NULL;
     dom_html_form_element *form = NULL;
@@ -266,8 +270,11 @@ static struct form_control *parse_input_element(struct form *forms, dom_html_inp
     if (dom_html_input_element_get_name(input, &ds_name) != DOM_NO_ERR)
         goto out;
 
-    if (ds_name != NULL)
+    if (ds_name != NULL) {
         name = strndup(dom_string_data(ds_name), dom_string_byte_length(ds_name));
+        if (name == NULL)
+            goto out;
+    }
 
     if (ds_type != NULL && dom_string_caseless_lwc_isequal(ds_type, corestring_lwc_password)) {
         control = form_new_control(input, GADGET_PASSWORD);
@@ -302,9 +309,9 @@ static struct form_control *parse_input_element(struct form *forms, dom_html_inp
 
     if (control->type == GADGET_CHECKBOX || control->type == GADGET_RADIO) {
         bool selected;
-        if (dom_html_input_element_get_checked(input, &selected) == DOM_NO_ERR) {
-            control->selected = selected;
-        }
+        if (dom_html_input_element_get_checked(input, &selected) != DOM_NO_ERR)
+            goto failed;
+        control->selected = selected;
     }
 
     if (control->type == GADGET_PASSWORD || control->type == GADGET_TEXTBOX) {
@@ -335,16 +342,13 @@ static struct form_control *parse_input_element(struct form *forms, dom_html_inp
     }
 
     if (control->type != GADGET_FILE && control->type != GADGET_IMAGE) {
-        if (dom_html_input_element_get_value(input, &ds_value) == DOM_NO_ERR) {
-            if (ds_value != NULL) {
-                control->value = strndup(dom_string_data(ds_value), dom_string_byte_length(ds_value));
-                if (control->value == NULL) {
-                    form_free_control(control);
-                    control = NULL;
-                    goto out;
-                }
-                control->length = strlen(control->value);
-            }
+        if (dom_html_input_element_get_value(input, &ds_value) != DOM_NO_ERR)
+            goto failed;
+        if (ds_value != NULL) {
+            control->value = strndup(dom_string_data(ds_value), dom_string_byte_length(ds_value));
+            if (control->value == NULL)
+                goto failed;
+            control->length = strlen(control->value);
         }
 
         if (control->type == GADGET_TEXTBOX || control->type == GADGET_PASSWORD) {
@@ -376,12 +380,17 @@ static struct form_control *parse_input_element(struct form *forms, dom_html_inp
             control->node_value = dom_string_ref(ds_value);
         }
         /* Force the gadget and DOM to be in sync */
-        form_gadget_sync_with_dom(control);
+        if (sync_dom)
+            form_gadget_sync_with_dom(control);
     }
 
     if (form != NULL && control != NULL)
         form_add_control(find_form(forms, form), control);
+    goto out;
 
+failed:
+    form_free_control(control);
+    control = NULL;
 out:
     if (form != NULL)
         dom_node_unref(form);
@@ -541,7 +550,7 @@ struct form_control *html_forms_get_control_for_node(struct form *forms, dom_nod
         if (dom_string_caseless_lwc_isequal(ds_name, corestring_lwc_button)) {
             ctl = parse_button_element(forms, (dom_html_button_element *)node);
         } else if (dom_string_caseless_lwc_isequal(ds_name, corestring_lwc_input)) {
-            ctl = parse_input_element(forms, (dom_html_input_element *)node);
+            ctl = parse_input_element(forms, (dom_html_input_element *)node, true);
         } else if (dom_string_caseless_lwc_isequal(ds_name, corestring_lwc_textarea)) {
             ctl = parse_textarea_element(forms, (dom_html_text_area_element *)node);
         } else if (dom_string_caseless_lwc_isequal(ds_name, corestring_lwc_select)) {
@@ -557,4 +566,36 @@ struct form_control *html_forms_get_control_for_node(struct form *forms, dom_nod
         dom_string_unref(ds_name);
 
     return ctl;
+}
+
+/* Construction only: no form-list/index links, DOM writes, or fallback gadget
+ * on failure. Text widgets and select default selection need separate staging. */
+nserror html_forms_create_detached_control(dom_node *node, struct form_control **result)
+{
+    dom_html_element_type tag;
+    *result = NULL;
+    if (dom_html_element_get_tag_type(node, &tag) != DOM_NO_ERR)
+        return NSERROR_DOM;
+    if (tag == DOM_HTML_ELEMENT_TYPE_BUTTON) {
+        *result = parse_button_element(NULL, (dom_html_button_element *)node);
+    } else if (tag == DOM_HTML_ELEMENT_TYPE_INPUT) {
+        dom_string *type = NULL;
+        if (dom_html_input_element_get_type((dom_html_input_element *)node, &type) != DOM_NO_ERR)
+            return NSERROR_DOM;
+        bool supported = type != NULL &&
+            (dom_string_caseless_lwc_isequal(type, corestring_lwc_checkbox) ||
+                dom_string_caseless_lwc_isequal(type, corestring_lwc_radio) ||
+                dom_string_caseless_lwc_isequal(type, corestring_lwc_hidden) ||
+                dom_string_caseless_lwc_isequal(type, corestring_lwc_submit) ||
+                dom_string_caseless_lwc_isequal(type, corestring_lwc_reset) ||
+                dom_string_caseless_lwc_isequal(type, corestring_lwc_button) ||
+                dom_string_caseless_lwc_isequal(type, corestring_lwc_image));
+        dom_string_unref(type);
+        if (!supported)
+            return NSERROR_NOT_IMPLEMENTED;
+        *result = parse_input_element(NULL, (dom_html_input_element *)node, false);
+    } else {
+        return NSERROR_NOT_IMPLEMENTED;
+    }
+    return *result != NULL ? NSERROR_OK : NSERROR_NOMEM;
 }

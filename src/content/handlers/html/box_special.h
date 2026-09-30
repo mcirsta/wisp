@@ -25,14 +25,17 @@
 #define WISP_HTML_BOX_SPECIAL_H
 
 
+struct box_construct_region;
+
 /**
  * call an elements special conversion handler
  *
  * \param box_context Allocation owner for the construction region. Framesets
  *                    remain document-owned and require full reconstruction.
- * \return true if box construction should continue else false on error.
+ * \param region Optional detached result: stage supported bindings there.
+ * \return NSERROR_OK, NSERROR_NOT_IMPLEMENTED for unsafe detached handlers, or an error.
  */
-bool convert_special_elements(dom_node *node, html_content *content, struct box *box, bool *convert_children,
-    void *box_context);
+nserror convert_special_elements(dom_node *node, html_content *content, struct box *box, bool *convert_children,
+    void *box_context, struct box_construct_region *region);
 
 #endif

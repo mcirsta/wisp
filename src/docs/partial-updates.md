@@ -9,7 +9,9 @@ outside the changed controls' parent subtrees and still reconstructs and lays ou
 the whole document. `WISP_ENABLE_PARTIAL_UPDATES` now defaults to ON; configuring
 it OFF still removes the HTML tracking state and selects the full-refresh path.
 Existing CMake caches explicitly set to OFF keep that setting until reconfigured.
-Milestone B's allocation preparation has started; boxes are not yet retained.
+Milestone B constructs detached block/flex/grid candidates with staged URL/SVG
+resources, iframe descriptors and independent native controls. Publication and
+retained-box layout validation remain pending; displayed boxes are not yet retained.
 Milestone C has not started. The steps below remain the implementation and
 acceptance checklist, with the concrete implementation choices recorded here.
 
@@ -228,11 +230,197 @@ on Tion and Bihon match the previous step's PNG, DOM, normalized box dumps and
 inspected state/geometry/resources. The driver and captures for this step are in
 `out/render-captures/region-owners-2026-09-29/`.
 
+### Milestone B preparation: construction ancestry (2026-09-30)
+
+Construction now carries its own active ancestor stack, including each inline
+owner's formatting container. Inheritance, inline flattening and `::after`
+generation no longer find their parents through published DOM-to-box mappings.
+This removes repeated DOM ancestor walks while keeping the same conversion and
+normalization rules. Traversal has an explicit root boundary and one shared step
+for an element and its intervening text nodes.
+
+The stack uses temporary storage proportional to nesting depth, initially 16
+entries (256 bytes on this 64-bit build). It grows only when necessary and is
+released on completion, cancellation, restart or failure. There is no new box
+field, per-box allocation or permanent document table. Full construction still
+writes the live DOM mappings; this step removes the dependency on reading them,
+not the need to stage publication later.
+
+`box_construct_context_test` runs real DOM/CSS selection and construction with a
+deterministic scheduler clock. It pauses a deeply nested build, removes published
+ancestor mappings, resumes and compares the complete structure and computed
+styles with an ordinary build. The fixture covers inline/block splits, generated
+content, hidden nodes, floats, flex/grid anonymous items, an orphan table cell,
+preformatted text and lists. It also checks cancellation before/after a slice
+and failed scheduling. The latter exposed an ignored continuation-scheduling
+error, now routed through normal construction failure cleanup.
+
+The lifetime test additionally exposed a tag-name reference leak in the inline
+SVG check: ordinary HTML tags took the lookup reference but did not release it.
+That cleanup now runs for both outcomes of the SVG check.
+
+Validation passes 117 selected Debug tests (ASan/UBSan), 114 Release tests with
+profiling disabled, and the construction-context/ownership tests with
+LeakSanitizer enabled. Both saved sidebar panels on Tion and Bihon still match
+the prior step's PNG, DOM, normalized box dumps and inspected state/geometry/
+resource counts. The local comparison driver and captures are in
+`out/render-captures/construction-context-2026-09-30/`. No new timing claim is
+made for this preparation step.
+
+### Milestone B preparation: detached region construction (2026-09-30)
+
+`dom_to_box_region()` now builds a bounded candidate using the same scheduled
+traversal, special-element dispatch and normalization as full construction. It is
+available with `WISP_ENABLE_PARTIAL_UPDATES`; the live restyle path does not call
+it yet. This is a construction building block, not enabled box retention or a
+new performance result.
+
+The builder seeds a private parent from the existing mapped DOM parent's style,
+link/title/target and effective opacity. It keeps the document-root style separate
+from the subtree boundary, so `rem` resolution and inherited values stay correct.
+The candidate owns its allocation arena, including generated/anonymous boxes and
+unlinked hidden boxes. Completion transfers that arena to the caller; failure or
+cancellation discards it. No live DOM-to-box mappings are overwritten. The caller
+must first invalidate dirty selector caches and keep the document and seed parent
+alive, including the inherited strings borrowed by the result.
+
+The initial boundary policy accepts an in-flow block, flex or grid directly under
+a mapped block/flex/grid DOM parent. It checks both the existing root and the new
+computed root. Hidden roots can produce an empty candidate. Inline continuations,
+floated/positioned roots, tables and boundaries crossing anonymous wrappers are
+rejected. Internal floats, inline splits, generated content and anonymous table/
+flex/grid boxes still use the ordinary construction rules. Accepting a candidate
+for construction does **not** prove it safe to publish into an already laid-out
+tree.
+
+The first detached builder refused binding-bearing content before making live
+changes. The following sections describe resource, iframe and native-control
+staging. Text/file inputs, selects, textareas, canvas and document-level special
+handlers still return `NSERROR_NOT_IMPLEMENTED`. The full refresh remains the
+eventual fallback.
+
+The real-DOM construction test now compares detached candidates against complete
+construction across block/flex/grid roots and parents, root-relative sizes, custom
+properties and inherited link/paint state. It checks that live structure, computed
+styles, all visible node mappings and binding lists survive construction and
+retirement. It also covers visibility changes, unsupported boundaries/handlers,
+before/after generated resources, cancellation, scheduling failures and a pending
+restyle restart. Generated box/text allocation failures now propagate instead of silently
+returning an incomplete successful candidate.
+
+Resource coverage found an existing list-image cascade bug: the shared URI helper
+used background-image's expanded computed enum for the generated one-bit
+list-style-image setter. A URI was truncated to the inheritance value. The helper
+now uses the list-image enum; the generator and storage format need no change.
+Regression cases cover URI, none, explicit inheritance and normal inheritance.
+
+Validation: 117 selected Debug tests and 114 Release tests pass, together with
+construction/ownership LeakSanitizer checks. The builder, special handlers and
+construction test also compile with partial updates and profiling disabled.
+Both saved panels on Tion and Bihon match the previous step exactly for PNG,
+DOM, normalized box dumps, inspected state/geometry and resource counts. The
+comparison driver and captures are in
+`out/render-captures/detached-regions-2026-09-30/`.
+
+### Milestone B preparation: stage resources and iframes (2026-09-30)
+
+Detached construction now records URL requests in its own arena. Images,
+responsive-image selection, CSS background layers, list images, generated URI
+content, `object` and `embed` all use the existing conversion rules. Each staged
+request preserves its destination box, referenced URL, accepted content types
+and background-layer index. Requests are not merged: repeated URLs and generated
+boxes without DOM nodes must keep their separate destinations.
+
+The shared construction request helper routes full-document construction straight
+to the existing fetch/reuse path. With a detached region, it only records a request:
+no cache lookup, live rebind, fetch, loading-counter change or content callback.
+An existing image can therefore finish against its original box while a candidate
+is under construction. These records do not yet select reusable handles or provide
+intrinsic image sizes; that belongs to publication preparation, not construction.
+No per-box field or permanent document table is added.
+
+Iframe conversion likewise produces region-owned descriptors using the existing
+URL, name, border, scrolling and margin rules. It appends them to the candidate's
+list instead of the live document list. It does not create or rebind browser
+windows. Discarding a candidate retires its URL references and descriptors with
+the arena, without touching live objects or iframe windows.
+
+The construction test intercepts the fetch boundary while retaining real DOM,
+CSS selection, special conversion and normalization. Full construction records
+its resource decisions; detached construction must produce the same URLs, types,
+layer indices, box structure and embedded-object parameters without crossing that
+fetch boundary. Tests also cover duplicate URLs, responsive source selection,
+hidden live bindings, changed URLs, hidden iframes, repeated candidate retirement,
+cancellation after a slice, failed scheduling and a later unsupported control.
+A Release-only allocator-failure check verifies that a failed request allocation
+leaves the preceding request list and live state unchanged. URL allocation and
+iframe-name allocation failures now propagate instead of silently omitting those
+parts of the candidate. The ordinary Qt tests and saved-site captures continue to
+exercise the actual fetch/reuse path.
+
+Validation: 117 selected Debug tests and 114 Release tests pass. The construction
+suite includes 52 Debug cases and 53 Release cases (the extra case injects an
+allocation failure). Construction/ownership LeakSanitizer checks also pass, and
+the builder, special handlers and test compile with partial updates and profiling
+disabled. Both saved Tion/Bihon panels exactly match the preceding step's PNG,
+DOM, normalized box dumps, state/geometry and resource counts. The comparison
+driver and captures are in `out/render-captures/staged-resources-2026-09-30/`.
+Live box replacement remains disabled; this step makes no performance claim.
+
+### Milestone B native controls and SVG buffer staging (2026-09-30)
+
+Detached candidates now support native checkbox/radio controls, buttons, and
+hidden/submit/reset/button/image inputs. The existing form parsers create fresh
+gadgets without looking up live gadgets, linking into form lists/indexes, or
+synchronizing values back to the DOM. Checked state comes from the current DOM,
+not the old gadget or the initial attribute. The candidate's boxes own these
+gadgets; retirement cannot unlink or modify the displayed controls. Image inputs
+use the same deferred URL requests as other images. Publication must associate
+the new gadgets with their DOM forms; construction intentionally leaves them
+unlinked. Failed parsing/allocation rejects the candidate instead of inventing
+the full builder's legacy fake gadget.
+
+Text/password and other text-like inputs, file inputs, selects and textareas stay
+unsupported by detached construction. Their widgets, file-picker state and
+select default-selection writes need separate treatment; expanding that support
+is not a prerequisite for the native sidebar-tab target.
+
+Inline SVG conversion now stages an owned copy of the serialized bytes and MIME
+type. Cached XML and lazy serialization use the same existing conversion rules.
+The full builder still submits buffers immediately; candidates do not enter the
+buffer cache, start fetches or change live resource counters. A partially allocated
+request is freed before it can enter the candidate list. SVG serialization/fetch
+errors now propagate instead of silently leaving an incomplete candidate.
+
+Tests compare native-control box structure and SVG bytes with the full builder,
+using real parsed form ownership and current checked-state changes. They verify
+live gadget pointers, form links/indexes, DOM mappings and resource records after
+success, repeated retirement, cancellation and scheduling failure. SVG buffers
+remain independent of their source cache. Release tests inject failures while
+copying buffers/MIME types and parsing control names/values; no partial request or
+fake control may survive. Text/widget types are explicitly rejected.
+
+Validation: 117 selected Debug tests and 114 Release tests pass. The construction
+suite now contains 61 Debug cases and 64 Release cases, including allocation
+failures. Its LeakSanitizer run passes. Construction, special handlers, form
+parsing and the fixture compile with partial updates/profiling disabled. Both
+saved Tion/Bihon panels match the preceding step's PNG, DOM, normalized box dumps,
+state/geometry and resource counts exactly after repeated tab switching. Captures
+and the comparison driver are in `out/render-captures/staged-controls-2026-09-30/`.
+The detached path remains unused by live refresh; no speedup is claimed yet.
+
 Remaining prerequisites before retaining boxes (resume here):
 
-- Prove the complete boundary, including inline continuations, generated boxes,
-  float chains and pointers to containing blocks. Stage DOM mappings, form lists
-  and object/iframe bindings before publishing a replacement.
+- Prepare resource reuse/new requests and iframe-window rebinding for publication.
+  Preserve callback ownership until commit; pending/completed/failed resources,
+  hidden bindings, changed URLs and duplicate generated requests need explicit
+  coverage. Staging a request alone does not prove it safe to publish.
+- Prepare native-control form/index association without allocating or modifying
+  live controls during the final commit. Keep widget-bearing and other unsupported
+  content on the full-refresh path.
+- Prove boundary closure, including inline continuations, generated boxes, float
+  chains and containing-block pointers. Stage mapping publication (including
+  hidden descendants) and validate input generations before replacing a region.
 - Verify repeated full layout on retained boxes against fresh construction.
   Only then enable actual replacement, with its own measurements and fallback.
 
@@ -766,5 +954,7 @@ Commits 1–5 and the milestone A rollout are complete. Step 6 has started with
 explicit allocation propagation through generated content, normalization and
 special elements, plus ownership of later text/control allocations. Bounded
 construction and staged publication are the next work; boxes are not yet retained.
+Construction ancestry is now private to the builder; the full-document path and
+its DOM mapping publication remain active until the detached-build gates pass.
 Steps 7–8 still require their ownership and layout gates; they are not
 prerequisites for the already enabled selective CSS work.

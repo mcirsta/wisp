@@ -451,7 +451,7 @@ START_TEST(test_special_region_lifetime)
         bool children = true;
         /* No image/embed/object source: exercise metadata and early-return
          * ownership without starting a fetch. Iframes only create descriptors. */
-        ck_assert_msg(convert_special_elements(node, &html, box, &children, owner),
+        ck_assert_msg(convert_special_elements(node, &html, box, &children, owner, NULL) == NSERROR_OK,
             "%s iteration %u failed conversion", tags[_i], iteration);
         ck_assert_msg(talloc_total_blocks(owner) > 2, "%s allocated no special content", tags[_i]);
         check_region_owner(box, owner);

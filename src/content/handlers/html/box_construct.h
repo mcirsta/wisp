@@ -72,10 +72,12 @@
 #ifndef WISP_HTML_BOX_CONSTRUCT_H
 #define WISP_HTML_BOX_CONSTRUCT_H
 
+#include <wisp/content_type.h>
+
 /**
  * Construct a box tree from a dom and html content
  *
- * \param n dom document
+ * \param n document element (the full-document entry point, not a subtree)
  * \param c content of type CONTENT_HTML to construct box tree in
  * \param cb callback to report conversion completion
  * \param box_conversion_context pointer that recives the conversion context
@@ -84,6 +86,73 @@
 nserror
 dom_to_box(struct dom_node *n, struct html_content *c, box_construct_complete_cb cb, void **box_conversion_context);
 
+
+/* A deferred request, owned by its unpublished region. The box (including
+ * object parameters) belongs to that same region. No cache handle or live object
+ * is borrowed here: callbacks must continue to address the displayed tree. */
+struct box_construct_object {
+    struct box_construct_object *next;
+    struct box *box;
+    struct nsurl *url;
+    /* URL requests have buffer == NULL; buffer requests have url == NULL.
+     * Serialized data and MIME type are copied, never borrowed from live state. */
+    uint8_t *buffer;
+    size_t buffer_length;
+    char *mime_type;
+    content_type permitted_types;
+    bool background;
+    uint32_t background_layer;
+};
+
+/* An unpublished tree and its allocation owner. root is NULL for display:none.
+ * This is construction output only: it is not yet safe to splice into layout. */
+struct box_construct_region {
+    struct box *root;
+    struct box_construct_object *objects;
+    struct content_html_iframe *iframes;
+};
+
+typedef void (*box_construct_region_cb)(
+    struct html_content *content, nserror error, struct box_construct_region *region, void *pw);
+
+#ifdef WISP_ENABLE_PARTIAL_UPDATES
+/**
+ * Construct an unpublished block/flex/grid subtree using the existing builder.
+ *
+ * parent must be the mapped DOM parent and remain alive, together with content
+ * and its document root, until completion/cancellation and result retirement.
+ * The result borrows inherited title/target strings from that parent. owner is
+ * a talloc parent for the result arena and must also outlive the operation.
+ *
+ * No live box mappings or resource/control bindings are published. CSS selection
+ * may update DOM selector caches; callers must invalidate dirty styles first.
+ * Resource requests (URLs and SVG buffers) and iframe descriptors are staged.
+ * Native buttons/checkboxes/radios are fresh gadgets, unlinked from live forms.
+ * No fetches, browser windows, or widgets are started. Text/file inputs, selects,
+ * textareas and unsupported boundaries return NOT_IMPLEMENTED
+ * (synchronously or through cb). An initial error schedules no callback.
+ * Success transfers the region to cb; failure passes NULL. Cancellation reports
+ * no callback. The conversion-context slot must initially be NULL; the caller
+ * clears it on completion.
+ *
+ * Publication still requires validation of input generations, boundary closure,
+ * and retained layout state; this entry point does not provide those guarantees.
+ */
+nserror dom_to_box_region(struct dom_node *node, struct html_content *content, const struct box *parent, void *owner,
+    box_construct_region_cb cb, void *pw, void **box_conversion_context);
+#endif
+
+/** Fetch through the existing document path, or stage a region-owned request.
+ * A non-NULL region never modifies live resource bindings or loading state. */
+bool box_construct_request_object(struct html_content *content, struct box_construct_region *region, struct nsurl *url,
+    struct box *box, content_type permitted_types, bool background, uint32_t layer);
+
+/** The buffer equivalent: a region owns a copy of both data and MIME type. */
+bool box_construct_request_buffer(struct html_content *content, struct box_construct_region *region,
+    const uint8_t *buffer, size_t length, const char *mime_type, struct box *box, content_type permitted_types);
+
+/** Retire an unpublished region, including unlinked/hidden construction boxes. */
+void box_construct_region_destroy(struct box_construct_region *region);
 
 /**
  * aborts any ongoing box construction

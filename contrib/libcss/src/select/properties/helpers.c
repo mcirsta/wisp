@@ -55,16 +55,18 @@ css_error css__cascade_bg_border_color(
 css_error css__cascade_uri_none(uint32_t opv, css_style *style, css_select_state *state,
     css_error (*fun)(css_computed_style *, uint8_t, lwc_string *))
 {
-    uint16_t value = CSS_BACKGROUND_IMAGE_INHERIT;
+    /* List images retain the one-bit URI/none representation: the pointer
+     * distinguishes them. Background images now use a separate, wider enum. */
+    uint16_t value = CSS_LIST_STYLE_IMAGE_INHERIT;
     lwc_string *uri = NULL;
 
     if (hasFlagValue(opv) == false) {
         switch (getValue(opv)) {
         case BACKGROUND_IMAGE_NONE:
-            value = CSS_BACKGROUND_IMAGE_NONE;
+            value = CSS_LIST_STYLE_IMAGE_NONE;
             break;
         case BACKGROUND_IMAGE_URI:
-            value = CSS_BACKGROUND_IMAGE_IMAGE;
+            value = CSS_LIST_STYLE_IMAGE_URI;
             css__stylesheet_string_get(style->sheet, *((css_code_t *)style->bytecode), &uri);
             advance_bytecode(style, sizeof(css_code_t));
             break;

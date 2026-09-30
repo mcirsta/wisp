@@ -56,6 +56,13 @@
 #include "content/handlers/html/restyle_profile.h"
 #include "content/handlers/html/restyle.h"
 
+/* Only the active DOM ancestry is needed during construction. Inline boxes
+ * are flattened in the output tree, so retain their formatting container too. */
+struct box_construct_ancestor {
+    struct box *box;
+    struct box *containing_block;
+};
+
 /**
  * Context for box tree construction
  */
@@ -63,12 +70,21 @@ struct box_construct_ctx {
     html_content *content; /**< Content we're constructing for */
 
     dom_node *n; /**< Current node to process */
+    dom_node *root_node; /**< Explicit traversal boundary; owns a DOM reference */
+    struct box_construct_ancestor *ancestors;
+    size_t depth, capacity;
 
     struct box *root_box; /**< Root box in the tree */
 
     box_construct_complete_cb cb; /**< Callback to invoke on completion */
 
-    int *bctx; /**< talloc context */
+    void *bctx; /**< talloc context */
+    const struct box *document_root; /**< Root style, distinct from subtree boundary */
+    struct box_construct_region *region; /**< Owned until detached success */
+    struct box *seed; /**< Private parent for detached construction */
+    box_construct_region_cb region_cb;
+    void *region_pw;
+    nserror error; /**< Also carries errors from generated content */
 };
 
 /**
@@ -124,119 +140,51 @@ static const box_type box_map[CSS_DISPLAY_INLINE_GRID + 1] = {
 _Static_assert(CSS_DISPLAY_INLINE_GRID == 0x14, "css_display_e has new values — update box_map");
 
 
-/**
- * determine if a box is the root node
- *
- * \param n node to check
- * \return true if node is root else false.
- */
-static inline bool box_is_root(dom_node *n)
+/* All exits, including cancellation and restyle restart, retire the ancestry
+ * stack. The current traversal node is released by the caller. */
+static void box_construct_ctx_free(struct box_construct_ctx *ctx)
 {
-    dom_node *parent;
-    dom_node_type type;
-    dom_exception err;
-
-    err = dom_node_get_parent_node(n, &parent);
-    if (err != DOM_NO_ERR)
-        return false;
-
-    if (parent != NULL) {
-        err = dom_node_get_node_type(parent, &type);
-
-        dom_node_unref(parent);
-
-        if (err != DOM_NO_ERR)
-            return false;
-
-        if (type != DOM_DOCUMENT_NODE)
-            return false;
-    }
-
-    return true;
+    dom_node_unref(ctx->root_node);
+    box_construct_region_destroy(ctx->region);
+    free(ctx->ancestors);
+    free(ctx);
 }
 
-/**
- * Extract transient construction properties
- *
- * \param n      Current DOM node to convert
- * \param props  Property object to populate
- */
-static void box_extract_properties(dom_node *n, struct box_construct_props *props)
+/** Extract inherited properties from the construction ancestry, not live DOM
+ * mappings. Called before entering an element or after leaving it. */
+static void box_extract_properties(const struct box_construct_ctx *ctx, struct box_construct_props *props)
 {
     memset(props, 0, sizeof(*props));
-
-    props->node_is_root = box_is_root(n);
-
-    /* Extract properties from containing DOM node */
-    if (props->node_is_root == false) {
-        dom_node *current_node = n;
-        dom_node *parent_node = NULL;
-        struct box *parent_box;
-        dom_exception err;
-
-        /* Find ancestor node containing parent box */
-        while (true) {
-            err = dom_node_get_parent_node(current_node, &parent_node);
-            if (err != DOM_NO_ERR || parent_node == NULL)
-                break;
-
-            parent_box = box_for_node(parent_node);
-
-            if (parent_box != NULL) {
-                props->parent_style = parent_box->style;
-                props->inherited_flags = parent_box->flags & IS_OPACITY_ZERO;
-                props->href = parent_box->href;
-                props->target = parent_box->target;
-                props->title = parent_box->title;
-
-                dom_node_unref(parent_node);
-                break;
-            } else {
-                if (current_node != n)
-                    dom_node_unref(current_node);
-                current_node = parent_node;
-                parent_node = NULL;
-            }
-        }
-
-        /* Find containing block (may be parent) */
-        while (true) {
-            struct box *b;
-
-            err = dom_node_get_parent_node(current_node, &parent_node);
-            if (err != DOM_NO_ERR || parent_node == NULL) {
-                if (current_node != n)
-                    dom_node_unref(current_node);
-                break;
-            }
-
-            if (current_node != n)
-                dom_node_unref(current_node);
-
-            b = box_for_node(parent_node);
-
-            /* Children of nodes that created an inline box
-             * will generate boxes which are attached as
-             * _siblings_ of the box generated for their
-             * parent node. Note, however, that we'll still
-             * use the parent node's styling as the parent
-             * style, above. */
-            if (b != NULL && b->type != BOX_INLINE && b->type != BOX_BR) {
-                props->containing_block = b;
-
-                dom_node_unref(parent_node);
-                break;
-            } else {
-                current_node = parent_node;
-                parent_node = NULL;
-            }
-        }
+    props->node_is_root = ctx->region == NULL && ctx->depth == 0;
+    if (ctx->depth != 0) {
+        const struct box_construct_ancestor *parent = &ctx->ancestors[ctx->depth - 1];
+        props->parent_style = parent->box->style;
+        props->inherited_flags = parent->box->flags & IS_OPACITY_ZERO;
+        props->href = parent->box->href;
+        props->target = parent->box->target;
+        props->title = parent->box->title;
+        props->containing_block = parent->containing_block;
     }
-
-    /* Compute current inline container, if any */
     if (props->containing_block != NULL && props->containing_block->last != NULL &&
         props->containing_block->last->type == BOX_INLINE_CONTAINER)
         props->inline_container = props->containing_block->last;
+}
+
+static bool box_construct_push(struct box_construct_ctx *ctx, struct box *box, struct box *containing_block)
+{
+    if (ctx->depth == ctx->capacity) {
+        size_t capacity = ctx->capacity == 0 ? 16 : ctx->capacity * 2;
+        if (capacity < ctx->capacity || capacity > SIZE_MAX / sizeof(*ctx->ancestors))
+            return false;
+        struct box_construct_ancestor *ancestors = realloc(ctx->ancestors, capacity * sizeof(*ancestors));
+        if (ancestors == NULL)
+            return false;
+        ctx->ancestors = ancestors;
+        ctx->capacity = capacity;
+    }
+    ctx->ancestors[ctx->depth++] = (struct box_construct_ancestor){
+        .box = box, .containing_block = box->type == BOX_INLINE || box->type == BOX_BR ? containing_block : box};
+    return true;
 }
 
 
@@ -303,6 +251,58 @@ static css_select_results *box_get_style(
 }
 
 
+static int box_construct_object_destroy(struct box_construct_object *object)
+{
+    nsurl_unref(object->url);
+    return 0;
+}
+
+/* exported function documented in html/box_construct.h */
+bool box_construct_request_object(html_content *content, struct box_construct_region *region, nsurl *url,
+    struct box *box, content_type permitted_types, bool background, uint32_t layer)
+{
+    if (region == NULL) {
+        return background ? html_fetch_background(content, url, box, permitted_types, layer)
+                          : html_fetch_object(content, url, box, permitted_types, false);
+    }
+    struct box_construct_object *object = talloc_zero(region, struct box_construct_object);
+    if (object == NULL)
+        return false;
+    object->url = nsurl_ref(url);
+    object->box = box;
+    object->permitted_types = permitted_types;
+    object->background = background;
+    object->background_layer = layer;
+    object->next = region->objects;
+    talloc_set_destructor(object, box_construct_object_destroy);
+    region->objects = object;
+    return true;
+}
+
+/* exported function documented in html/box_construct.h */
+bool box_construct_request_buffer(html_content *content, struct box_construct_region *region, const uint8_t *buffer,
+    size_t length, const char *mime_type, struct box *box, content_type permitted_types)
+{
+    if (region == NULL)
+        return html_fetch_object_buffer(content, buffer, length, mime_type, box, permitted_types);
+
+    struct box_construct_object *object = talloc_zero(region, struct box_construct_object);
+    if (object == NULL)
+        return false;
+    object->buffer = talloc_memdup(object, buffer, length);
+    object->mime_type = talloc_strdup(object, mime_type);
+    if (object->buffer == NULL || object->mime_type == NULL) {
+        talloc_free(object);
+        return false;
+    }
+    object->buffer_length = length;
+    object->box = box;
+    object->permitted_types = permitted_types;
+    object->next = region->objects;
+    region->objects = object;
+    return true;
+}
+
 /**
  * Create a box from a CSS content item.
  *
@@ -335,12 +335,15 @@ static struct box *create_content_box(const css_computed_content_item *item, con
             return NULL;
 
         box = box_create(NULL, (css_computed_style *)style, false, NULL, NULL, NULL, NULL, ctx->bctx);
-        if (box == NULL)
+        if (box == NULL) {
+            ctx->error = NSERROR_NOMEM;
             return NULL;
+        }
 
         box->type = BOX_TEXT;
         box->text = talloc_strndup(ctx->bctx, text_data, text_len);
         if (box->text == NULL) {
+            ctx->error = NSERROR_NOMEM;
             /* Can't free box here - relies on talloc cleanup */
             return NULL;
         }
@@ -358,6 +361,8 @@ static struct box *create_content_box(const css_computed_content_item *item, con
 
         error = nsurl_create(lwc_string_data(item->data.uri), &url);
         if (error != NSERROR_OK) {
+            if (error == NSERROR_NOMEM)
+                ctx->error = error;
             NSLOG(wisp, WARNING, "create_content_box: URI nsurl_create failed");
             break;
         }
@@ -365,6 +370,7 @@ static struct box *create_content_box(const css_computed_content_item *item, con
         /* Create box to hold the image object */
         box = box_create(NULL, (css_computed_style *)style, false, NULL, NULL, NULL, NULL, ctx->bctx);
         if (box == NULL) {
+            ctx->error = NSERROR_NOMEM;
             nsurl_unref(url);
             break;
         }
@@ -373,9 +379,10 @@ static struct box *create_content_box(const css_computed_content_item *item, con
         box->type = BOX_INLINE;
         box->flags |= IS_REPLACED;
 
-        /* Start async fetch - box->object will be set when done */
-        if (html_fetch_object(content, url, box, CONTENT_IMAGE, false) == false) {
-            NSLOG(wisp, WARNING, "create_content_box: URI html_fetch_object failed");
+        /* Request the image now, or defer it with the detached candidate. */
+        if (!box_construct_request_object(content, ctx->region, url, box, CONTENT_IMAGE, false, 0)) {
+            ctx->error = NSERROR_NOMEM;
+            NSLOG(wisp, WARNING, "create_content_box: URI request failed");
             nsurl_unref(url);
             /* Box allocation will be cleaned up by talloc */
             box = NULL;
@@ -383,7 +390,7 @@ static struct box *create_content_box(const css_computed_content_item *item, con
         }
 
         nsurl_unref(url);
-        NSLOG(wisp, DEEPDEBUG, "create_content_box: URI started fetch for %s", lwc_string_data(item->data.uri));
+        NSLOG(wisp, DEEPDEBUG, "create_content_box: URI requested %s", lwc_string_data(item->data.uri));
         break;
     }
 
@@ -423,6 +430,8 @@ static struct box *create_content_box(const css_computed_content_item *item, con
 
                     if (text_len > 0) {
                         box = box_create(NULL, (css_computed_style *)style, false, NULL, NULL, NULL, NULL, ctx->bctx);
+                        if (box == NULL)
+                            ctx->error = NSERROR_NOMEM;
                         if (box != NULL) {
                             box->type = BOX_TEXT;
                             box->text = talloc_strndup(ctx->bctx, text_data, text_len);
@@ -451,6 +460,8 @@ static struct box *create_content_box(const css_computed_content_item *item, con
         }
 
         box = box_create(NULL, (css_computed_style *)style, false, NULL, NULL, NULL, NULL, ctx->bctx);
+        if (box == NULL)
+            ctx->error = NSERROR_NOMEM;
         if (box != NULL) {
             box->type = BOX_TEXT;
             box->text = talloc_strdup(ctx->bctx, quote);
@@ -473,6 +484,10 @@ static struct box *create_content_box(const css_computed_content_item *item, con
         break;
     }
 
+    if (box != NULL && box->type == BOX_TEXT && box->text == NULL) {
+        ctx->error = NSERROR_NOMEM;
+        return NULL;
+    }
     return box;
 }
 
@@ -489,7 +504,7 @@ static struct box *create_content_box(const css_computed_content_item *item, con
  * \param bctx              Box context for memory allocation
  * \return true on success, false on memory allocation failure
  */
-static bool box_ensure_inline_container(struct box *containing_block, struct box **inline_container_ptr, int *bctx)
+static bool box_ensure_inline_container(struct box *containing_block, struct box **inline_container_ptr, void *bctx)
 {
     if (*inline_container_ptr != NULL) {
         return true; /* Already have one */
@@ -514,13 +529,13 @@ static bool box_ensure_inline_container(struct box *containing_block, struct box
 
 
 /**
- * Fetch background image for a box if specified in its style.
+ * Request background images for a box, staging them for detached construction.
  *
  * \param box      Box to fetch background for (must have style)
- * \param content  HTML content for resource fetching
+ * \param ctx      Construction and resource-binding policy
  * \return true on success, false on fetch failure
  */
-static bool box_fetch_background(struct box *box, html_content *content)
+static bool box_fetch_background(struct box *box, struct box_construct_ctx *ctx)
 {
     if (box->style == NULL || !nsoption_bool(background_images))
         return true;
@@ -535,8 +550,11 @@ static bool box_fetch_background(struct box *box, html_content *content)
                 return false;
         }
         nsurl *url;
-        if (nsurl_create(lwc_string_data(uri), &url) == NSERROR_OK) {
-            bool ok = html_fetch_background(content, url, box, image_types, i);
+        nserror error = nsurl_create(lwc_string_data(uri), &url);
+        if (error == NSERROR_NOMEM)
+            return false;
+        if (error == NSERROR_OK) {
+            bool ok = box_construct_request_object(ctx->content, ctx->region, url, box, image_types, true, i);
             nsurl_unref(url);
             if (!ok)
                 return false;
@@ -601,7 +619,7 @@ static box_type box_construct_type(const css_computed_style *style, const struct
 
 /* Insert ordinary and generated boxes by the same rules. In-flow blocks end
  * the current inline run; subsequent inline content starts a new container. */
-static bool box_construct_insert(struct box *box, struct box *parent, struct box **inline_container, int *bctx)
+static bool box_construct_insert(struct box *box, struct box *parent, struct box **inline_container, void *bctx)
 {
     if (parent == NULL)
         return true; /* Document root. */
@@ -637,12 +655,16 @@ static bool box_construct_insert(struct box *box, struct box *parent, struct box
     return true;
 }
 
-static void box_construct_inline_end(struct box *box, struct box *container, int *bctx)
+static void box_construct_inline_end(struct box *box, struct box *container, struct box_construct_ctx *ctx)
 {
-    struct box *end = box_create(NULL, box->style, false, box->href, box->target, box->title,
-        box->id == NULL ? NULL : lwc_string_ref(box->id), bctx);
-    if (end == NULL)
+    lwc_string *id = box->id == NULL ? NULL : lwc_string_ref(box->id);
+    struct box *end = box_create(NULL, box->style, false, box->href, box->target, box->title, id, ctx->bctx);
+    if (end == NULL) {
+        if (id != NULL)
+            lwc_string_unref(id);
+        ctx->error = NSERROR_NOMEM;
         return;
+    }
     end->type = BOX_INLINE_END;
     end->flags |= box->flags & IS_OPACITY_ZERO;
     box_add_child(container, end);
@@ -656,7 +678,6 @@ static void box_construct_inline_end(struct box *box, struct box *container, int
 static void box_construct_generate(dom_node *n, struct box_construct_ctx *ctx, struct box *owner,
     struct box_construct_props *props, const css_computed_style *style)
 {
-    html_content *content = ctx->content;
     if (style == NULL || (owner->flags & IS_REPLACED))
         return;
     switch (owner->type) {
@@ -685,12 +706,17 @@ static void box_construct_generate(dom_node *n, struct box_construct_ctx *ctx, s
 
     struct box *gen = box_create(
         NULL, (css_computed_style *)style, false, owner->href, owner->target, owner->title, NULL, ctx->bctx);
-    if (gen == NULL)
+    if (gen == NULL) {
+        ctx->error = NSERROR_NOMEM;
         return;
+    }
     gen->type = type;
     gen->flags |= owner->flags & IS_OPACITY_ZERO;
-    if (!box_fetch_background(gen, content) || !box_construct_insert(gen, parent, &container, ctx->bctx))
+    if (!box_fetch_background(gen, ctx) || !box_construct_insert(gen, parent, &container, ctx->bctx)) {
+        if (ctx->error == NSERROR_OK)
+            ctx->error = NSERROR_NOMEM;
         return;
+    }
     if (owner->type == BOX_INLINE)
         props->inline_container = container;
 
@@ -699,15 +725,19 @@ static void box_construct_generate(dom_node *n, struct box_construct_ctx *ctx, s
     struct box *text_container = type == BOX_INLINE ? container : NULL;
     for (; item != NULL && item->type != CSS_COMPUTED_CONTENT_NONE; item++) {
         struct box *child = create_content_box(item, style, ctx, n);
+        if (ctx->error != NSERROR_OK)
+            return;
         if (child == NULL)
             continue;
-        if (!box_ensure_inline_container(gen, &text_container, ctx->bctx))
+        if (!box_ensure_inline_container(gen, &text_container, ctx->bctx)) {
+            ctx->error = NSERROR_NOMEM;
             return;
+        }
         child->flags |= gen->flags & IS_OPACITY_ZERO;
         box_add_child(text_container, child);
     }
     if (type == BOX_INLINE)
-        box_construct_inline_end(gen, container, ctx->bctx);
+        box_construct_inline_end(gen, container, ctx);
 }
 
 
@@ -768,6 +798,7 @@ static bool box_construct_marker(struct box *box, const char *title, struct box_
         nsurl *url;
         nserror error;
 
+
         /* TODO: we get a url out of libcss as a lwc string, but
          *       earlier we already had it as a nsurl after we
          *       nsurl_joined it.  Can this be improved?
@@ -776,7 +807,7 @@ static bool box_construct_marker(struct box *box, const char *title, struct box_
         if (error != NSERROR_OK)
             return false;
 
-        if (html_fetch_object(ctx->content, url, marker, image_types, false) == false) {
+        if (!box_construct_request_object(ctx->content, ctx->region, url, marker, image_types, false, 0)) {
             nsurl_unref(url);
             return false;
         }
@@ -788,6 +819,17 @@ static bool box_construct_marker(struct box *box, const char *title, struct box_
     marker->flags |= box->flags & IS_OPACITY_ZERO;
 
     return true;
+}
+
+/* Initial detached boundary policy. Other types may need anonymous wrappers or
+ * inline continuations outside the requested subtree. Even an eligible type
+ * still needs closure validation before an eventual publication. */
+static bool box_construct_region_root(const struct box *box)
+{
+    return box != NULL && box->style != NULL &&
+        (box->type == BOX_BLOCK || box->type == BOX_FLEX || box->type == BOX_GRID) &&
+        css_computed_position(box->style) != CSS_POSITION_ABSOLUTE &&
+        css_computed_position(box->style) != CSS_POSITION_FIXED && css_computed_float(box->style) == CSS_FLOAT_NONE;
 }
 
 /**
@@ -810,7 +852,7 @@ static bool box_construct_element(struct box_construct_ctx *ctx, bool *convert_c
 
     assert(ctx->n != NULL);
 
-    box_extract_properties(ctx->n, &props);
+    box_extract_properties(ctx, &props);
 
     if (props.containing_block != NULL) {
         /* In case the containing block is a pre block, we clear
@@ -820,21 +862,20 @@ static bool box_construct_element(struct box_construct_ctx *ctx, bool *convert_c
     }
 
     if (props.node_is_root == false) {
-        root_style = ctx->root_box->style;
+        root_style = ctx->document_root->style;
     }
 
     HTML_PROFILE_START(style_start);
     styles = box_get_style(ctx->content, props.parent_style, root_style, ctx->n);
-    HTML_PROFILE(if (ctx->content->restyling) {
-        ctx->content->restyle_profile.css_ns += html_profile_now() - style_start;
-    });
+    HTML_PROFILE(
+        if (ctx->content->restyling) { ctx->content->restyle_profile.css_ns += html_profile_now() - style_start; });
     if (styles == NULL)
-        return false;
+        goto error;
 
     /* Extract title attribute, if present */
     err = dom_element_get_attribute(ctx->n, corestring_dom_title, &title0);
     if (err != DOM_NO_ERR)
-        return false;
+        goto error;
 
     if (title0 != NULL) {
         char *t = squash_whitespace(dom_string_data(title0));
@@ -842,20 +883,20 @@ static bool box_construct_element(struct box_construct_ctx *ctx, bool *convert_c
         dom_string_unref(title0);
 
         if (t == NULL)
-            return false;
+            goto error;
 
         props.title = talloc_strdup(ctx->bctx, t);
 
         free(t);
 
         if (props.title == NULL)
-            return false;
+            goto error;
     }
 
     /* Extract id attribute, if present */
     err = dom_element_get_attribute(ctx->n, corestring_dom_id, &s);
     if (err != DOM_NO_ERR)
-        return false;
+        goto error;
 
     if (s != NULL) {
         err = dom_string_intern(s, &id);
@@ -868,7 +909,7 @@ static bool box_construct_element(struct box_construct_ctx *ctx, bool *convert_c
     box = box_create(
         styles, styles->styles[CSS_PSEUDO_ELEMENT_NONE], false, props.href, props.target, props.title, id, ctx->bctx);
     if (box == NULL)
-        return false;
+        goto error;
 
     /* Resource requests made by special elements also need DOM identity. */
     box->node = dom_node_ref(ctx->n);
@@ -878,8 +919,10 @@ static bool box_construct_element(struct box_construct_ctx *ctx, bool *convert_c
     box->flags |= props.inherited_flags;
 
     /* If this is the root box, add it to the context */
-    if (props.node_is_root)
+    if (ctx->n == ctx->root_node)
         ctx->root_box = box;
+    if (props.node_is_root)
+        ctx->document_root = box;
 
     /* Deal with colspan/rowspan */
     err = dom_element_get_attribute(ctx->n, corestring_dom_colspan, &s);
@@ -918,7 +961,8 @@ static bool box_construct_element(struct box_construct_ctx *ctx, bool *convert_c
 
     box->type = box_construct_type(box->style, props.containing_block, props.node_is_root);
 
-    if (convert_special_elements(ctx->n, ctx->content, box, convert_children, ctx->bctx) == false) {
+    ctx->error = convert_special_elements(ctx->n, ctx->content, box, convert_children, ctx->bctx, ctx->region);
+    if (ctx->error != NSERROR_OK) {
         NSLOG(wisp, WARNING, "Failed to convert special elements");
         goto error;
     }
@@ -947,13 +991,25 @@ static bool box_construct_element(struct box_construct_ctx *ctx, bool *convert_c
         return true;
     }
 
-    /* Attach DOM node to box */
-    err = dom_node_set_user_data(ctx->n, corestring_dom___ns_key_box_node_data, box, NULL, (void *)&old_box);
-    if (err != DOM_NO_ERR)
-        return false;
+    if (ctx->region != NULL && ctx->n == ctx->root_node && !box_construct_region_root(box)) {
+        ctx->error = NSERROR_NOT_IMPLEMENTED;
+        goto error;
+    }
+
+    if (!box_construct_push(ctx, box, props.containing_block))
+        goto error;
+
+    /* Detached candidates must leave the displayed tree's mappings intact. */
+    if (ctx->region == NULL) {
+        err = dom_node_set_user_data(ctx->n, corestring_dom___ns_key_box_node_data, box, NULL, (void *)&old_box);
+        if (err != DOM_NO_ERR) {
+            ctx->error = NSERROR_DOM;
+            return false;
+        }
+    }
 
     /* Kick off fetch for any background image */
-    if (!box_fetch_background(box, ctx->content)) {
+    if (!box_fetch_background(box, ctx)) {
         goto error;
     }
 
@@ -976,6 +1032,11 @@ error:
         if (ctx->root_box == box)
             ctx->root_box = NULL;
         box_free(box);
+    } else {
+        if (styles != NULL)
+            css_select_results_destroy(styles);
+        if (id != NULL)
+            lwc_string_unref(id);
     }
     return false;
 }
@@ -989,30 +1050,33 @@ error:
  *
  * This will be called after all children of an element have been processed
  */
-static void box_construct_element_after(dom_node *n, struct box_construct_ctx *ctx)
+static void box_construct_element_after(dom_node *n, struct box_construct_ctx *ctx, struct box *box)
 {
     struct box_construct_props props;
-    struct box *box = box_for_node(n);
 
     assert(box != NULL);
 
-    box_extract_properties(n, &props);
+    box_extract_properties(ctx, &props);
 
     box_construct_generate(n, ctx, box, &props, box->styles->styles[CSS_PSEUDO_ELEMENT_AFTER]);
 
     if (box->type == BOX_INLINE || box->type == BOX_BR) {
         bool has_children;
-        if (dom_node_has_child_nodes(n, &has_children) != DOM_NO_ERR)
+        if (dom_node_has_child_nodes(n, &has_children) != DOM_NO_ERR) {
+            ctx->error = NSERROR_DOM;
             return;
+        }
 
         /* Generated siblings also need to be enclosed by the owner's inline
          * end, even if the DOM element itself is empty. */
         has_children |= box->next != NULL || props.containing_block->last != box->parent;
         if (!has_children || (box->flags & CONVERT_CHILDREN) == 0)
             return;
-        if (!box_ensure_inline_container(props.containing_block, &props.inline_container, ctx->bctx))
+        if (!box_ensure_inline_container(props.containing_block, &props.inline_container, ctx->bctx)) {
+            ctx->error = NSERROR_NOMEM;
             return;
-        box_construct_inline_end(box, props.inline_container, ctx->bctx);
+        }
+        box_construct_inline_end(box, props.inline_container, ctx);
     }
 }
 
@@ -1021,111 +1085,57 @@ static void box_construct_element_after(dom_node *n, struct box_construct_ctx *c
  * Find the next node in the DOM tree, completing element construction
  * where appropriate.
  *
- * \param n                 Current node
- * \param ctx               Construction context
+ * \param ctx               Construction context and current node
  * \param convert_children  Whether to consider children of \a n
- * \return Next node to process, or NULL if complete
- *
- * \note \a n will be unreferenced
+ * \return NSERROR_OK on success; ctx->n is NULL when complete.
+ *         On failure, ctx->n still owns the current node reference.
  */
-static dom_node *next_node(dom_node *n, struct box_construct_ctx *ctx, bool convert_children)
+static nserror next_node(struct box_construct_ctx *ctx, bool convert_children)
 {
-    dom_node *next = NULL;
-    bool has_children;
+    dom_node *n = ctx->n, *next = NULL;
     dom_exception err;
 
-    err = dom_node_has_child_nodes(n, &has_children);
-    if (err != DOM_NO_ERR) {
-        dom_node_unref(n);
-        return NULL;
-    }
-
-    if (convert_children && has_children) {
+    if (convert_children) {
         err = dom_node_get_first_child(n, &next);
-        if (err != DOM_NO_ERR) {
-            dom_node_unref(n);
-            return NULL;
-        }
-        dom_node_unref(n);
-    } else {
-        err = dom_node_get_next_sibling(n, &next);
-        if (err != DOM_NO_ERR) {
-            dom_node_unref(n);
-            return NULL;
-        }
-
+        if (err != DOM_NO_ERR)
+            return NSERROR_DOM;
         if (next != NULL) {
-            if (box_for_node(n) != NULL)
-                box_construct_element_after(n, ctx);
             dom_node_unref(n);
-        } else {
-            if (box_for_node(n) != NULL)
-                box_construct_element_after(n, ctx);
-
-            while (box_is_root(n) == false) {
-                dom_node *parent = NULL;
-                dom_node *parent_next = NULL;
-
-                err = dom_node_get_parent_node(n, &parent);
-                if (err != DOM_NO_ERR) {
-                    dom_node_unref(n);
-                    return NULL;
-                }
-
-                assert(parent != NULL);
-
-                err = dom_node_get_next_sibling(parent, &parent_next);
-                if (err != DOM_NO_ERR) {
-                    dom_node_unref(parent);
-                    dom_node_unref(n);
-                    return NULL;
-                }
-
-                if (parent_next != NULL) {
-                    dom_node_unref(parent_next);
-                    dom_node_unref(parent);
-                    break;
-                }
-
-                dom_node_unref(n);
-                n = parent;
-                parent = NULL;
-
-                if (box_for_node(n) != NULL) {
-                    box_construct_element_after(n, ctx);
-                }
-            }
-
-            if (box_is_root(n) == false) {
-                dom_node *parent = NULL;
-
-                err = dom_node_get_parent_node(n, &parent);
-                if (err != DOM_NO_ERR) {
-                    dom_node_unref(n);
-                    return NULL;
-                }
-
-                assert(parent != NULL);
-
-                err = dom_node_get_next_sibling(parent, &next);
-                if (err != DOM_NO_ERR) {
-                    dom_node_unref(parent);
-                    dom_node_unref(n);
-                    return NULL;
-                }
-
-                if (box_for_node(parent) != NULL) {
-                    box_construct_element_after(parent, ctx);
-                }
-
-                dom_node_unref(parent);
-            }
-
-            dom_node_unref(n);
+            ctx->n = next;
+            return NSERROR_OK;
         }
     }
 
-    return next;
+    while (true) {
+        /* Hidden/skipped elements and text nodes did not push an ancestor.
+         * Pop before generating ::after: it needs the owner's parent context. */
+        if (ctx->depth != 0 && ctx->ancestors[ctx->depth - 1].box->node == n) {
+            struct box *box = ctx->ancestors[--ctx->depth].box;
+            box_construct_element_after(n, ctx, box);
+            if (ctx->error != NSERROR_OK)
+                return ctx->error;
+        }
+        if (n == ctx->root_node) {
+            dom_node_unref(n);
+            ctx->n = NULL;
+            assert(ctx->depth == (ctx->region != NULL ? 1 : 0));
+            return NSERROR_OK;
+        }
+        err = dom_node_get_next_sibling(n, &next);
+        if (err != DOM_NO_ERR)
+            return NSERROR_DOM;
+        if (next == NULL) {
+            err = dom_node_get_parent_node(n, &next);
+            if (err != DOM_NO_ERR || next == NULL)
+                return NSERROR_DOM;
+            dom_node_unref(n);
+            ctx->n = n = next;
+        } else {
+            dom_node_unref(n);
+            ctx->n = next;
+            return NSERROR_OK;
+        }
+    }
 }
 
 
@@ -1207,7 +1217,7 @@ static bool box_construct_text(struct box_construct_ctx *ctx)
 
     assert(ctx->n != NULL);
 
-    box_extract_properties(ctx->n, &props);
+    box_extract_properties(ctx, &props);
 
     assert(props.containing_block != NULL);
 
@@ -1441,15 +1451,97 @@ static bool box_construct_text(struct box_construct_ctx *ctx)
 }
 
 
+/* Convert one element plus intervening non-element nodes. Both traversal and
+ * inherited state belong to ctx, independently of published DOM mappings. */
+static bool box_construct_step(struct box_construct_ctx *ctx)
+{
+    bool convert_children = true;
+    if (!box_construct_element(ctx, &convert_children) || ctx->error != NSERROR_OK)
+        return false;
+    if ((ctx->error = next_node(ctx, convert_children)) != NSERROR_OK)
+        return false;
+    while (ctx->n != NULL) {
+        dom_node_type type;
+        if (dom_node_get_node_type(ctx->n, &type) != DOM_NO_ERR) {
+            ctx->error = NSERROR_DOM;
+            return false;
+        }
+        if (type == DOM_ELEMENT_NODE)
+            break;
+        if (type == DOM_TEXT_NODE && !box_construct_text(ctx))
+            return false;
+        if ((ctx->error = next_node(ctx, true)) != NSERROR_OK)
+            return false;
+    }
+    return true;
+}
+
+
+/* Detached candidates have no live resource bindings to detach. Retire all
+ * temporary storage before notifying the owner, which may start another build. */
+static void box_construct_region_complete(struct box_construct_ctx *ctx, nserror error)
+{
+    html_content *content = ctx->content;
+    box_construct_region_cb cb = ctx->region_cb;
+    void *pw = ctx->region_pw;
+    struct box_construct_region *result = NULL;
+    if (error == NSERROR_OK) {
+        result = ctx->region;
+        ctx->region = NULL;
+    }
+    dom_node_unref(ctx->n);
+    box_construct_ctx_free(ctx);
+    cb(content, error, result, pw);
+}
+
+static void box_construct_failed(struct box_construct_ctx *ctx)
+{
+    if (ctx->region != NULL) {
+        box_construct_region_complete(ctx, ctx->error == NSERROR_OK ? NSERROR_NOMEM : ctx->error);
+        return;
+    }
+    /* The callback detaches resource bindings before the partial tree retires. */
+    ctx->cb(ctx->content, false);
+    dom_node_unref(ctx->n);
+    if (ctx->root_box != NULL)
+        box_free(ctx->root_box);
+    box_construct_ctx_free(ctx);
+}
+
 /* The current callback is already off the scheduler's queue. Release its
  * traversal state before starting a replacement; do not cancel a running slice. */
 static void restart_restyle(struct box_construct_ctx *ctx)
 {
+    if (ctx->region != NULL) {
+        box_construct_region_complete(ctx, NSERROR_INVALID);
+        return;
+    }
     html_content *content = ctx->content;
     dom_node_unref(ctx->n);
-    free(ctx);
+    box_construct_ctx_free(ctx);
     content->box_conversion_context = NULL;
     html_restyle_restart(content);
+}
+
+static void box_construct_region_normalise(struct box_construct_ctx *ctx)
+{
+    /* Placement used the real parent's type. This private wrapper only provides
+     * the normalization entry point; it is never part of the result. */
+    ctx->seed->type = BOX_BLOCK;
+    if (!box_normalise_block(ctx->seed, ctx->document_root, ctx->content, ctx->bctx)) {
+        box_construct_region_complete(ctx, NSERROR_NOMEM);
+        return;
+    }
+    struct box *root = ctx->seed->children;
+    if (root != NULL && (root != ctx->root_box || root->next != NULL)) {
+        box_construct_region_complete(ctx, NSERROR_NOT_IMPLEMENTED);
+        return;
+    }
+    ctx->region->root = root;
+    if (root != NULL)
+        root->parent = NULL;
+    talloc_free(ctx->seed);
+    box_construct_region_complete(ctx, NSERROR_OK);
 }
 
 /**
@@ -1465,8 +1557,6 @@ static void convert_xml_to_box(void *p)
         return;
     }
     HTML_PROFILE(if (ctx->content->restyling) ctx->content->restyle_profile.construction_slices++);
-    dom_node *next;
-    bool convert_children;
     uint32_t num_processed = 0;
     uint64_t start_time, now_time;
 
@@ -1474,67 +1564,22 @@ static void convert_xml_to_box(void *p)
     NSLOG(wisp, DEBUG, "PROFILER: START Box construction slice %p", ctx);
 
     do {
-        convert_children = true;
-
         assert(ctx->n != NULL);
-
-        if (box_construct_element(ctx, &convert_children) == false) {
-            NSLOG(wisp, WARNING, "box_construct_element failed");
-            ctx->cb(ctx->content, false);
-            dom_node_unref(ctx->n);
-            if (ctx->root_box != NULL)
-                box_free(ctx->root_box);
-            free(ctx);
+        if (!box_construct_step(ctx)) {
+            NSLOG(wisp, WARNING, "Box construction step failed");
+            box_construct_failed(ctx);
             NSLOG(wisp, DEBUG, "PROFILER: STOP Box construction slice %p", ctx);
             return;
         }
 
-        /* Find next element to process, converting text nodes as we go
-         */
-        next = next_node(ctx->n, ctx, convert_children);
-        while (next != NULL) {
-            dom_node_type type;
-            dom_exception err;
-
-            err = dom_node_get_node_type(next, &type);
-            if (err != DOM_NO_ERR) {
-                NSLOG(wisp, WARNING, "dom_node_get_node_type failed");
-                ctx->cb(ctx->content, false);
-                dom_node_unref(next);
-                if (ctx->root_box != NULL)
-                    box_free(ctx->root_box);
-                free(ctx);
-                NSLOG(wisp, DEBUG, "PROFILER: STOP Box construction slice %p", ctx);
-                return;
-            }
-
-            if (type == DOM_ELEMENT_NODE)
-                break;
-
-            if (type == DOM_TEXT_NODE) {
-                ctx->n = next;
-                if (box_construct_text(ctx) == false) {
-                    NSLOG(wisp, WARNING, "box_construct_text failed");
-                    ctx->cb(ctx->content, false);
-                    dom_node_unref(ctx->n);
-                    if (ctx->root_box != NULL)
-                        box_free(ctx->root_box);
-                    free(ctx);
-                    NSLOG(wisp, DEBUG, "PROFILER: STOP Box construction slice %p", ctx);
-                    return;
-                }
-            }
-
-            next = next_node(next, ctx, true);
-        }
-
-        // dom_node_unref(ctx->n);
-        ctx->n = next;
-
-        if (next == NULL) {
+        if (ctx->n == NULL) {
             if (html_restyle_needs_restart(ctx->content)) {
                 HTML_PROFILE(ctx->content->restyle_profile.construction_ns += html_profile_now() - slice_start);
                 restart_restyle(ctx);
+                return;
+            }
+            if (ctx->region != NULL) {
+                box_construct_region_normalise(ctx);
                 return;
             }
             /* Conversion complete */
@@ -1568,7 +1613,7 @@ static void convert_xml_to_box(void *p)
 
             assert(ctx->n == NULL);
 
-            free(ctx);
+            box_construct_ctx_free(ctx);
             NSLOG(wisp, DEBUG, "PROFILER: STOP Box construction slice %p", ctx);
             return;
         }
@@ -1596,7 +1641,8 @@ static void convert_xml_to_box(void *p)
     if (ctx->content->restyling && ctx->content->restyle.slow_restyle)
         delay = 50;
 #endif
-    guit->misc->schedule(delay, (void *)convert_xml_to_box, ctx);
+    if (guit->misc->schedule(delay, (void *)convert_xml_to_box, ctx) != NSERROR_OK)
+        box_construct_failed(ctx);
 }
 
 
@@ -1615,13 +1661,14 @@ nserror dom_to_box(dom_node *n, html_content *c, box_construct_complete_cb cb, v
         }
     }
 
-    ctx = malloc(sizeof(*ctx));
+    ctx = calloc(1, sizeof(*ctx));
     if (ctx == NULL) {
         return NSERROR_NOMEM;
     }
 
     ctx->content = c;
     ctx->n = dom_node_ref(n);
+    ctx->root_node = dom_node_ref(n);
     ctx->root_box = NULL;
     ctx->cb = cb;
     ctx->bctx = c->bctx;
@@ -1631,12 +1678,79 @@ nserror dom_to_box(dom_node *n, html_content *c, box_construct_complete_cb cb, v
     nserror err = guit->misc->schedule(0, (void *)convert_xml_to_box, ctx);
     if (err != NSERROR_OK) {
         dom_node_unref(ctx->n);
-        free(ctx);
+        box_construct_ctx_free(ctx);
         *box_conversion_context = NULL;
     }
     return err;
 }
 
+
+/* exported function documented in html/box_construct.h */
+void box_construct_region_destroy(struct box_construct_region *region)
+{
+    talloc_free(region);
+}
+
+#ifdef WISP_ENABLE_PARTIAL_UPDATES
+nserror dom_to_box_region(dom_node *node, html_content *content, const struct box *parent, void *owner,
+    box_construct_region_cb cb, void *pw, void **box_conversion_context)
+{
+    if (node == NULL || content == NULL || parent == NULL || cb == NULL || box_conversion_context == NULL)
+        return NSERROR_BAD_PARAMETER;
+    if (*box_conversion_context != NULL)
+        return NSERROR_BAD_PARAMETER;
+    dom_node_type type;
+    if (dom_node_get_node_type(node, &type) != DOM_NO_ERR)
+        return NSERROR_DOM;
+    if (type != DOM_ELEMENT_NODE || content->layout == NULL || content->enable_scripting ||
+        content->box_conversion_context != NULL || parent->node == NULL || parent->style == NULL ||
+        (parent->type != BOX_BLOCK && parent->type != BOX_FLEX && parent->type != BOX_GRID))
+        return NSERROR_NOT_IMPLEMENTED;
+    dom_node *dom_parent = NULL;
+    if (dom_node_get_parent_node(node, &dom_parent) != DOM_NO_ERR)
+        return NSERROR_DOM;
+    bool mapped_parent = dom_parent != NULL && dom_parent == parent->node && box_for_node(dom_parent) == parent;
+    dom_node_unref(dom_parent);
+    struct box *old = box_for_node(node);
+    if (!mapped_parent || (old != NULL && (!box_construct_region_root(old) || old->parent != parent)))
+        return NSERROR_NOT_IMPLEMENTED;
+
+    struct box_construct_ctx *ctx = calloc(1, sizeof(*ctx));
+    if (ctx == NULL)
+        return NSERROR_NOMEM;
+    ctx->content = content;
+    ctx->n = dom_node_ref(node);
+    ctx->root_node = dom_node_ref(node);
+    ctx->document_root = content->layout;
+    ctx->region_cb = cb;
+    ctx->region_pw = pw;
+    ctx->region = talloc_zero(owner, struct box_construct_region);
+    if (ctx->region == NULL)
+        goto no_memory;
+    ctx->bctx = ctx->region;
+    ctx->seed = box_create(NULL, parent->style, false, parent->href, parent->target, parent->title, NULL, ctx->bctx);
+    if (ctx->seed == NULL)
+        goto no_memory;
+    ctx->seed->type = parent->type;
+    ctx->seed->flags |= parent->flags & IS_OPACITY_ZERO;
+    if (!box_construct_push(ctx, ctx->seed, NULL))
+        goto no_memory;
+
+    nserror error = guit->misc->schedule(0, (void *)convert_xml_to_box, ctx);
+    if (error == NSERROR_OK) {
+        *box_conversion_context = ctx;
+        return NSERROR_OK;
+    }
+    dom_node_unref(ctx->n);
+    box_construct_ctx_free(ctx);
+    return error;
+
+no_memory:
+    dom_node_unref(ctx->n);
+    box_construct_ctx_free(ctx);
+    return NSERROR_NOMEM;
+}
+#endif
 
 /* exported function documented in html/box_construct.h */
 nserror cancel_dom_to_box(void *box_conversion_context)
@@ -1650,7 +1764,7 @@ nserror cancel_dom_to_box(void *box_conversion_context)
     }
 
     dom_node_unref(ctx->n);
-    free(ctx);
+    box_construct_ctx_free(ctx);
 
     return NSERROR_OK;
 }

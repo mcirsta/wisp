@@ -767,7 +767,8 @@ static bool box_button(dom_node *n, html_content *content, struct box *box, bool
 {
     struct form_control *gadget;
 
-    gadget = html_forms_get_control_for_node(content->forms, n);
+    /* Detached conversion supplies a fresh, unlinked gadget in the dispatcher. */
+    gadget = box->gadget != NULL ? box->gadget : html_forms_get_control_for_node(content->forms, n);
     if (!gadget)
         return false;
 
@@ -810,7 +811,7 @@ static bool box_canvas(dom_node *n, html_content *content, struct box *box, bool
  * see http://wp.netscape.com/assist/net_sites/new_html3_prop.html )
  */
 static bool box_embed(dom_node *n, html_content *content, struct box *box, bool *convert_children,
-    void *box_context)
+    void *box_context, struct box_construct_region *region)
 {
     struct object_params *params;
     struct object_param *param;
@@ -930,7 +931,7 @@ static bool box_embed(dom_node *n, html_content *content, struct box *box, bool 
 
     /* start fetch */
     box->flags |= IS_REPLACED;
-    return html_fetch_object(content, params->data, box, CONTENT_ANY, false);
+    return box_construct_request_object(content, region, params->data, box, CONTENT_ANY, false, 0);
 }
 
 
@@ -972,7 +973,7 @@ static bool box_frameset(dom_node *n, html_content *content, struct box *box, bo
  * Inline subwindow [16.5].
  */
 static bool box_iframe(dom_node *n, html_content *content, struct box *box, bool *convert_children,
-    void *box_context)
+    void *box_context, struct box_construct_region *region)
 {
     nsurl *url;
     dom_string *s;
@@ -1025,15 +1026,18 @@ static bool box_iframe(dom_node *n, html_content *content, struct box *box, bool
     iframe->scrolling = BW_SCROLLING_AUTO;
     iframe->border = true;
 
-    /* Add this iframe to the linked list of iframes */
-    iframe->next = content->iframe;
-    content->iframe = iframe;
+    /* Candidate descriptors must not enter the live browser-window list. */
+    struct content_html_iframe **iframes = region == NULL ? &content->iframe : &region->iframes;
+    iframe->next = *iframes;
+    *iframes = iframe;
 
     /* fill in specified values */
     err = dom_element_get_attribute(n, corestring_dom_name, &s);
     if (err == DOM_NO_ERR && s != NULL) {
         iframe->name = talloc_strdup(box_context, dom_string_data(s));
         dom_string_unref(s);
+        if (iframe->name == NULL)
+            return false;
     }
 
     err = dom_element_get_attribute(n, corestring_dom_frameborder, &s);
@@ -1269,7 +1273,7 @@ static bool srcset_select_url(const char *srcset, int target_w, nsurl *base_url,
  * Embedded image [13.2].
  */
 static bool box_image(dom_node *n, html_content *content, struct box *box, bool *convert_children,
-    void *box_context)
+    void *box_context, struct box_construct_region *region)
 {
     bool ok;
     dom_string *s;
@@ -1337,7 +1341,7 @@ static bool box_image(dom_node *n, html_content *content, struct box *box, bool 
 
     /* start fetch */
     box->flags |= IS_REPLACED;
-    ok = html_fetch_object(content, url, box, image_types, false);
+    ok = box_construct_request_object(content, region, url, box, image_types, false, 0);
     nsurl_unref(url);
 
     wtype = css_computed_width(box->style, &value, &wunit);
@@ -1358,7 +1362,7 @@ static bool box_image(dom_node *n, html_content *content, struct box *box, bool 
  * Form control [17.4].
  */
 static bool box_input(dom_node *n, html_content *content, struct box *box, bool *convert_children,
-    void *box_context)
+    void *box_context, struct box_construct_region *region)
 {
     struct form_control *gadget;
     dom_string *type = NULL;
@@ -1366,7 +1370,7 @@ static bool box_input(dom_node *n, html_content *content, struct box *box, bool 
     nsurl *url;
     nserror error;
 
-    gadget = html_forms_get_control_for_node(content->forms, n);
+    gadget = box->gadget != NULL ? box->gadget : html_forms_get_control_for_node(content->forms, n);
     if (gadget == NULL) {
         return false;
     }
@@ -1378,7 +1382,9 @@ static bool box_input(dom_node *n, html_content *content, struct box *box, bool 
 
     /* get entry type */
     err = dom_element_get_attribute(n, corestring_dom_type, &type);
-    if ((err != DOM_NO_ERR) || (type == NULL)) {
+    if (err != DOM_NO_ERR)
+        return false;
+    if (type == NULL) {
         /* no type so "text" is assumed */
         if (box_input_text(content, box, n, box_context) == false) {
             return false;
@@ -1458,7 +1464,7 @@ static bool box_input(dom_node *n, html_content *content, struct box *box, bool 
                  * we've got infinite inclusion. stop it here
                  */
                 if (nsurl_compare(url, content->base_url, NSURL_COMPLETE) == false) {
-                    if (!html_fetch_object(content, url, box, image_types, false)) {
+                    if (!box_construct_request_object(content, region, url, box, image_types, false, 0)) {
                         nsurl_unref(url);
                         goto no_memory;
                     }
@@ -1503,7 +1509,7 @@ static bool box_noscript(dom_node *n, html_content *content, struct box *box, bo
  * Generic embedded object [13.3].
  */
 static bool box_object(dom_node *n, html_content *content, struct box *box, bool *convert_children,
-    void *box_context)
+    void *box_context, struct box_construct_region *region)
 {
     struct object_params *params;
     struct object_param *param;
@@ -1709,7 +1715,8 @@ static bool box_object(dom_node *n, html_content *content, struct box *box, bool
 
     /* start fetch (MIME type is ok or not specified) */
     box->flags |= IS_REPLACED;
-    if (!html_fetch_object(content, params->data ? params->data : params->classid, box, CONTENT_ANY, false))
+    if (!box_construct_request_object(
+            content, region, params->data ? params->data : params->classid, box, CONTENT_ANY, false, 0))
         return false;
 
     *convert_children = false;
@@ -1907,8 +1914,8 @@ static bool box_textarea(dom_node *n, html_content *content, struct box *box, bo
 
 
 /* exported interface documented in html/box_special.h */
-bool convert_special_elements(dom_node *node, html_content *content, struct box *box, bool *convert_children,
-    void *box_context)
+nserror convert_special_elements(dom_node *node, html_content *content, struct box *box, bool *convert_children,
+    void *box_context, struct box_construct_region *region)
 {
     dom_exception exc;
     dom_html_element_type tag_type;
@@ -1919,12 +1926,20 @@ bool convert_special_elements(dom_node *node, html_content *content, struct box 
         tag_type = DOM_HTML_ELEMENT_TYPE__UNKNOWN;
     }
 
+    if (region != NULL && (tag_type == DOM_HTML_ELEMENT_TYPE_INPUT || tag_type == DOM_HTML_ELEMENT_TYPE_BUTTON)) {
+        nserror err = html_forms_create_detached_control(node, &box->gadget);
+        if (err != NSERROR_OK)
+            return err;
+    }
+
     switch (tag_type) {
     case DOM_HTML_ELEMENT_TYPE_A:
         res = box_a(node, content, box, convert_children, box_context);
         break;
 
     case DOM_HTML_ELEMENT_TYPE_BODY:
+        if (region != NULL)
+            return NSERROR_NOT_IMPLEMENTED;
         res = box_body(node, content, box, convert_children);
         break;
 
@@ -1937,27 +1952,31 @@ bool convert_special_elements(dom_node *node, html_content *content, struct box 
         break;
 
     case DOM_HTML_ELEMENT_TYPE_CANVAS:
+        if (region != NULL)
+            return NSERROR_NOT_IMPLEMENTED;
         res = box_canvas(node, content, box, convert_children);
         break;
 
     case DOM_HTML_ELEMENT_TYPE_EMBED:
-        res = box_embed(node, content, box, convert_children, box_context);
+        res = box_embed(node, content, box, convert_children, box_context, region);
         break;
 
     case DOM_HTML_ELEMENT_TYPE_FRAMESET:
+        if (region != NULL)
+            return NSERROR_NOT_IMPLEMENTED;
         res = box_frameset(node, content, box, convert_children);
         break;
 
     case DOM_HTML_ELEMENT_TYPE_IFRAME:
-        res = box_iframe(node, content, box, convert_children, box_context);
+        res = box_iframe(node, content, box, convert_children, box_context, region);
         break;
 
     case DOM_HTML_ELEMENT_TYPE_IMG:
-        res = box_image(node, content, box, convert_children, box_context);
+        res = box_image(node, content, box, convert_children, box_context, region);
         break;
 
     case DOM_HTML_ELEMENT_TYPE_INPUT:
-        res = box_input(node, content, box, convert_children, box_context);
+        res = box_input(node, content, box, convert_children, box_context, region);
         break;
 
     case DOM_HTML_ELEMENT_TYPE_NOSCRIPT:
@@ -1965,7 +1984,7 @@ bool convert_special_elements(dom_node *node, html_content *content, struct box 
         break;
 
     case DOM_HTML_ELEMENT_TYPE_OBJECT:
-        res = box_object(node, content, box, convert_children, box_context);
+        res = box_object(node, content, box, convert_children, box_context, region);
         break;
 
     case DOM_HTML_ELEMENT_TYPE_PRE:
@@ -1973,14 +1992,19 @@ bool convert_special_elements(dom_node *node, html_content *content, struct box 
         break;
 
     case DOM_HTML_ELEMENT_TYPE_SELECT:
+        if (region != NULL)
+            return NSERROR_NOT_IMPLEMENTED;
         res = box_select(node, content, box, convert_children, box_context);
         break;
 
     case DOM_HTML_ELEMENT_TYPE_TEXTAREA:
+        if (region != NULL)
+            return NSERROR_NOT_IMPLEMENTED;
         res = box_textarea(node, content, box, convert_children, box_context);
         break;
 
     default:
+        res = true;
         /* Check for SVG elements by tag name (not HTML element type) */
         {
             dom_string *tag_name = NULL;
@@ -2125,6 +2149,8 @@ bool convert_special_elements(dom_node *node, html_content *content, struct box 
                                 err = html_serialize_inline_svg((dom_element *)node, &css_ctx, &svg_xml, &svg_len);
                                 if (err != NSERROR_OK || svg_xml == NULL) {
                                     NSLOG(wisp, WARNING, "SVG: Failed to lazy serialize inline SVG");
+                                    dom_string_unref(tag_name);
+                                    return err != NSERROR_OK ? err : NSERROR_NOMEM;
                                 } else {
                                     /* We own this string and must free it after parsing */
                                     free_xml = true;
@@ -2137,8 +2163,8 @@ bool convert_special_elements(dom_node *node, html_content *content, struct box 
                                 /* Load inline SVG through buffer-based
                                  * content pipeline — no base64 encoding,
                                  * with content-hash dedup and pinned cache. */
-                                html_fetch_object_buffer(
-                                    content, (const uint8_t *)svg_xml, svg_len, "image/svg+xml", box, CONTENT_IMAGE);
+                                res = box_construct_request_buffer(content, region, (const uint8_t *)svg_xml,
+                                    svg_len, "image/svg+xml", box, CONTENT_IMAGE);
 
                                 NSLOG(wisp, DEBUG,
                                     "SVG: Loaded inline SVG via buffer "
@@ -2152,13 +2178,12 @@ bool convert_special_elements(dom_node *node, html_content *content, struct box 
                             }
                         }
                     }
-                    dom_string_unref(tag_name);
                 }
+                dom_string_unref(tag_name);
             }
-            res = true;
         }
         break;
     }
 
-    return res;
+    return res ? NSERROR_OK : NSERROR_NOMEM;
 }
