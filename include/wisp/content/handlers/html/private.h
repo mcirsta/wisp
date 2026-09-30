@@ -60,6 +60,9 @@ struct html_restyle_profile {
     uint32_t intrinsic_inline_calculations, intrinsic_inline_reuses;
     uint32_t inline_layout_calculations, inline_layout_reuses;
     uint32_t inline_layout_width_misses, inline_layout_float_misses, inline_layout_intrinsic_misses;
+    uint32_t inline_layout_repeat_same_width, inline_layout_repeat_changed_width;
+    uint32_t inline_layout_repeat_reuses;
+    uint32_t inline_layout_float_exclusions, inline_layout_other_exclusions;
     const char *update_mode, *fallback_reason;
     uint32_t changed_controls, dirty_roots, invalidated_nodes, reused_styles;
     size_t temporary_bytes;
@@ -105,7 +108,7 @@ struct html_restyle_state {
     bool force_full; /* Developer capture override, not a browser preference. */
     bool css_only; /* Capture override: reuse CSS but reconstruct all boxes. */
     bool no_intrinsic_reuse; /* Capture override: remeasure all retained inline containers. */
-    bool reuse_inline_layout; /* Capture opt-in: preserve eligible completed text lines. */
+    bool no_inline_layout_reuse; /* Capture override: reflow all retained text lines. */
 };
 #endif
 

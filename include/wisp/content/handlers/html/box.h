@@ -121,7 +121,8 @@ typedef enum {
     INLINE_INTRINSIC_NEED_MIN = 1 << 21, /* NEED_MIN input used by that measurement */
     REUSE_INLINE_INTRINSICS = 1 << 22, /* retained text-only container awaiting intrinsic-cache validation */
     INLINE_LAYOUT_VALID = 1 << 23, /* completed text-only lines without incoming floats */
-    REUSE_INLINE_LAYOUT = 1 << 24 /* preserved lines awaiting available-width/float validation */
+    REUSE_INLINE_LAYOUT = 1 << 24, /* preserved lines awaiting available-width/float validation */
+    INLINE_LAYOUT_CURRENT = 1 << 25 /* eligible lines validated during this update's layout pass */
 } box_flags;
 
 

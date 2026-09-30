@@ -74,7 +74,7 @@ private:
     bool m_force_full_restyle = false;
     bool m_css_only_restyle = false;
     bool m_no_intrinsic_reuse = false;
-    bool m_reuse_inline_layout = false;
+    bool m_no_inline_layout_reuse = false;
     bool m_fail_retained_layout = false;
     bool m_restart_partial_restyle = false;
     bool m_finished = false;

@@ -4126,6 +4126,7 @@ static bool layout_inline_container(
              * local to this container, independent of its new parent placement.
              * Parent/ancestor styles and baseline requirements are unchanged. */
             inline_container->flags &= ~REUSE_INLINE_LAYOUT;
+            inline_container->flags |= INLINE_LAYOUT_CURRENT;
             HTML_PROFILE(if (content->restyling) content->restyle_profile.inline_layout_reuses++);
             return true;
         }
@@ -4137,7 +4138,21 @@ static bool layout_inline_container(
         });
         layout_discard_inline_layout(inline_container);
     }
-    inline_container->flags &= ~INLINE_LAYOUT_VALID;
+    HTML_PROFILE(if (content->restyling && (inline_container->flags & INLINE_LAYOUT_VALID)) {
+        if (inline_container->inline_layout_width == width)
+            content->restyle_profile.inline_layout_repeat_same_width++;
+        else
+            content->restyle_profile.inline_layout_repeat_changed_width++;
+    });
+    if ((inline_container->flags & INLINE_LAYOUT_CURRENT) && inline_container->inline_layout_width == width &&
+        cont->float_children == NULL) {
+        /* Flex/grid can revisit the same text while resolving ancestor sizes.
+         * Keep their sizing passes, but reuse these independent local lines.
+         * The final positioning pass expires this permission before reflow. */
+        HTML_PROFILE(content->restyle_profile.inline_layout_repeat_reuses++);
+        return true;
+    }
+    inline_container->flags &= ~(INLINE_LAYOUT_VALID | INLINE_LAYOUT_CURRENT);
 #endif
     HTML_PROFILE(if (content->restyling) content->restyle_profile.inline_layout_calculations++);
     inline_container->width = width;
@@ -4196,10 +4211,18 @@ static bool layout_inline_container(
     inline_container->width = maxwidth;
     inline_container->height = y;
 #ifdef WISP_ENABLE_PARTIAL_UPDATES
-    if (content->restyle.reuse_inline_layout && cont->float_children == NULL &&
+    HTML_PROFILE(if (content->restyling && !content->restyle.no_inline_layout_reuse) {
+        if (!layout_can_reuse_inline_layout(inline_container))
+            content->restyle_profile.inline_layout_other_exclusions++;
+        else if (cont->float_children != NULL)
+            content->restyle_profile.inline_layout_float_exclusions++;
+    });
+    if (!content->restyle.no_inline_layout_reuse && cont->float_children == NULL &&
         layout_can_reuse_inline_layout(inline_container)) {
         inline_container->inline_layout_width = width;
         inline_container->flags |= INLINE_LAYOUT_VALID;
+        if (content->restyling && !content->restyle.no_intrinsic_reuse)
+            inline_container->flags |= INLINE_LAYOUT_CURRENT;
     }
 #endif
 
@@ -6040,6 +6063,12 @@ static void layout_position_relative(const css_unit_ctx *unit_len_ctx, struct bo
 
     assert(root);
 
+#ifdef WISP_ENABLE_PARTIAL_UPDATES
+    /* No further sizing uses the current-pass permission. Expire it on this
+     * existing walk so ordinary reflows cannot reuse an earlier pass's lines. */
+    root->flags &= ~(REUSE_INLINE_LAYOUT | INLINE_LAYOUT_CURRENT);
+#endif
+
     /* Normal children */
     for (box = root->children; box; box = box->next) {
 
@@ -6591,7 +6620,7 @@ static void layout_reset_box(struct box *box)
     /* Rejoin before intrinsic measurement, not just before line layout: old
      * wrapping must not change a retained sibling's min/max contributions. */
     layout_rejoin_text(box);
-    box->flags &= ~(NEW_LINE | MEASURED | HAS_HEIGHT | MAKE_HEIGHT | NEED_MIN |
+    box->flags &= ~(NEW_LINE | MEASURED | HAS_HEIGHT | MAKE_HEIGHT | NEED_MIN | INLINE_LAYOUT_CURRENT |
         HEIGHT_STRETCHED | ASPECT_RATIO_HEIGHT | HAS_FIXED_DESCENDANT);
     box->x = box->y = 0;
     if (!(box->flags & REUSE_INLINE_LAYOUT)) {
@@ -6626,7 +6655,7 @@ static void layout_reset_box(struct box *box)
  * intrinsic measurement or line layout, without touching the parent's sizing. */
 static void layout_discard_inline_layout(struct box *box)
 {
-    box->flags &= ~(INLINE_LAYOUT_VALID | REUSE_INLINE_LAYOUT | HAS_BASELINE);
+    box->flags &= ~(INLINE_LAYOUT_VALID | REUSE_INLINE_LAYOUT | INLINE_LAYOUT_CURRENT | HAS_BASELINE);
     box->width = UNKNOWN_WIDTH;
     box->height = box->baseline = 0;
     box->inline_layout_width = 0;
@@ -6647,7 +6676,7 @@ void layout_reset_document(html_content *content)
         box->flags &= ~(REUSE_INLINE_INTRINSICS | REUSE_INLINE_LAYOUT);
         if (!content->restyle.no_intrinsic_reuse && layout_can_reuse_inline_intrinsics(box))
             box->flags |= REUSE_INLINE_INTRINSICS;
-        if (content->restyle.reuse_inline_layout && (box->flags & REUSE_INLINE_INTRINSICS) &&
+        if (!content->restyle.no_inline_layout_reuse && (box->flags & REUSE_INLINE_INTRINSICS) &&
             (box->flags & INLINE_LAYOUT_VALID) && layout_can_reuse_inline_layout(box))
             box->flags |= REUSE_INLINE_LAYOUT;
         layout_reset_box(box);
@@ -6690,7 +6719,7 @@ bool layout_document(html_content *content, int width, int height)
     };
 
     if (!layout_minmax_block(doc, font_func, content))
-        return false;
+        goto failed;
 
     layout_block_find_dimensions(&content->unit_len_ctx, width, height, 0, 0, doc);
     doc->x = doc->margin[LEFT] + doc->border[LEFT].width;
@@ -6703,7 +6732,7 @@ bool layout_document(html_content *content, int width, int height)
     doc->width = width;
 
     if (!layout_block_context(doc, height, content))
-        return false;
+        goto failed;
 
     /* make <html> and <body> fill available height */
     if (doc->y + doc->padding[TOP] + doc->height + doc->padding[BOTTOM] + doc->border[BOTTOM].width +
@@ -6711,15 +6740,21 @@ bool layout_document(html_content *content, int width, int height)
         height) {
         doc->height = height -
             (doc->y + doc->padding[TOP] + doc->padding[BOTTOM] + doc->border[BOTTOM].width + doc->margin[BOTTOM]);
-        if (doc->children)
+        if (doc->children) {
+#ifdef WISP_ENABLE_PARTIAL_UPDATES
+            /* The first child can be an anonymous inline container when body
+             * is inline. Its stretched height is no longer the line result. */
+            doc->children->flags &= ~(INLINE_LAYOUT_VALID | INLINE_LAYOUT_CURRENT);
+#endif
             doc->children->height = doc->height -
                 (doc->children->margin[TOP] + doc->children->border[TOP].width + doc->children->padding[TOP] +
                     doc->children->padding[BOTTOM] + doc->children->border[BOTTOM].width +
                     doc->children->margin[BOTTOM]);
+        }
     }
 
     if (!layout_lists(content, doc) || !layout_position_absolute(doc, doc, 0, 0, content))
-        return false;
+        goto failed;
     layout_position_relative(&content->unit_len_ctx, doc, doc, 0, 0);
 
     layout_calculate_descendant_bboxes(&content->unit_len_ctx, doc);
@@ -6728,4 +6763,21 @@ bool layout_document(html_content *content, int width, int height)
     NSLOG(wisp, DEBUG, "PROFILER: STOP layout_document %p", content);
 
     return true;
+
+failed:
+#ifdef WISP_ENABLE_PARTIAL_UPDATES
+    /* Failed layout does not reach the final positioning walk. Never leave
+     * pass-local permissions behind, even when only part of the tree ran. */
+    for (struct box *box = doc; box != NULL;) {
+        box->flags &= ~(REUSE_INLINE_LAYOUT | INLINE_LAYOUT_CURRENT);
+        if (box->children != NULL) {
+            box = box->children;
+            continue;
+        }
+        while (box != doc && box->next == NULL)
+            box = box->parent;
+        box = box == doc ? NULL : box->next;
+    }
+#endif
+    return false;
 }

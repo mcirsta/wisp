@@ -1581,6 +1581,14 @@ static void describe_layout_link(FILE *stream, const struct box *box)
     }
 }
 
+static void assert_inline_layout_expired(const struct box *box)
+{
+    ck_assert_msg(!(box->flags & (REUSE_INLINE_LAYOUT | INLINE_LAYOUT_CURRENT)),
+        "Finished layout left pass-local inline reuse flags on box type %d", box->type);
+    for (const struct box *child = box->children; child != NULL; child = child->next)
+        assert_inline_layout_expired(child);
+}
+
 static void describe_layout(FILE *stream, const struct box *box)
 {
     describe_layout_link(stream, box);
@@ -1618,6 +1626,7 @@ static void describe_layout(FILE *stream, const struct box *box)
 
 static char *layout_snapshot(void)
 {
+    assert_inline_layout_expired(html.layout);
     char *buffer;
     size_t length;
     FILE *stream = open_memstream(&buffer, &length);
@@ -1657,7 +1666,7 @@ START_TEST(test_region_retained_layout)
     const int width = variant < 9 ? 300 : 540;
     const unsigned formatters = variant % 9;
     html.restyle.no_intrinsic_reuse = _i < 18;
-    html.restyle.reuse_inline_layout = _i >= 36;
+    html.restyle.no_inline_layout_reuse = _i < 36;
     dom_node *outer = by_id("outer"), *link = by_id("link"), *outside = by_id("outside");
     /* The shared construction fixture has 96 nested inline ancestors to force
      * scheduler slices. A shallow split inline is enough for layout repetition. */
@@ -1750,7 +1759,7 @@ START_TEST(test_region_retained_layout)
         ck_assert_msg(html_box_publish_region(&html, &region, &reason) == NSERROR_OK,
             "Layout variant %d pass %u: %s", _i, pass, reason);
         struct box *plain_inline = box_for_node(plain)->children;
-        if (html.restyle.reuse_inline_layout)
+        if (!html.restyle.no_inline_layout_reuse)
             ck_assert_msg(plain_inline->flags & INLINE_LAYOUT_VALID,
                 "Layout variant %d pass %u: fixture did not preserve completed lines", _i, pass);
         if (!html.restyle.no_intrinsic_reuse && pass % 3 == 1) {
@@ -1761,7 +1770,7 @@ START_TEST(test_region_retained_layout)
             plain_inline->min_width.value++;
             plain_inline->max_width++;
         }
-        if (html.restyle.reuse_inline_layout && pass % 3 == 2) {
+        if (!html.restyle.no_inline_layout_reuse && pass % 3 == 2) {
             /* A stale available-width key must discard the completed lines,
              * even when intrinsic sizes and the real used width still match. */
             plain_inline->inline_layout_width++;
@@ -1776,7 +1785,7 @@ START_TEST(test_region_retained_layout)
         }
         ck_assert_ptr_eq(html.layout, document);
         ck_assert_ptr_eq(box_for_node(outside), retained);
-        if (!html.restyle.reuse_inline_layout)
+        if (html.restyle.no_inline_layout_reuse)
             ck_assert_uint_eq(count_clones(html.layout), 0);
         ck_assert(layout_document(&html, width, 600));
         assert_layout_matches(expected[state], _i, pass);
@@ -1809,13 +1818,18 @@ START_TEST(test_region_retained_list_numbering)
     ck_assert_int_eq(dom_hubbub_parser_completed(parser), DOM_HUBBUB_OK);
     dom_hubbub_parser_destroy(parser);
     dom_node *outer = by_id("outer"), *link = by_id("link"), *outside = by_id("outside"), *list = by_id("list");
-    if (_i != 0) {
+    if (_i % 2 != 0) {
         dom_node *moved;
         attribute(list, "reversed", "");
         ck_assert_int_eq(dom_node_insert_before(list, outside, outer, &moved), DOM_NO_ERR);
         dom_node_unref(moved);
     }
-    css_stylesheet *extra = add_sheet("#outer.wide{display:block}li{list-style-type:upper-roman}");
+    /* An inline body puts an anonymous inline container first at the root.
+     * Viewport stretching must not turn its enlarged height into cached lines. */
+    char css[180];
+    snprintf(css, sizeof(css), "body{display:%s}#outer.wide{display:block}li{list-style-type:upper-roman}",
+        _i < 2 ? "block" : "inline");
+    css_stylesheet *extra = add_sheet(css);
     static const struct gui_layout_table fonts = {.width = boundary_font_width, .split = boundary_font_split};
     html.font_func = &fonts;
     char *expected[2];
@@ -1996,7 +2010,8 @@ START_TEST(test_layout_allocation_failures)
     };
     char markup[600];
     snprintf(markup, sizeof(markup),
-        "<html id=root><body><div style='width:70px'>%s</div></body></html>", contents[_i]);
+        "<html id=root><body><div>Completed text before a possible layout failure</div>"
+        "<div style='width:70px'>%s</div></body></html>", contents[_i]);
     dom_hubbub_parser *parser;
     dom_hubbub_parser_params params = {.enc = "UTF-8", .fix_enc = true};
     dom_node_unref(html.document);
@@ -2018,10 +2033,13 @@ START_TEST(test_layout_allocation_failures)
         malloc_limit(limit);
         calloc_limit(limit);
         realloc_limit(limit);
+        html.restyling = true;
         bool success = layout_document(&html, 300, 600);
+        html.restyling = false;
         malloc_limit(UINT_MAX);
         calloc_limit(UINT_MAX);
         realloc_limit(UINT_MAX);
+        assert_inline_layout_expired(html.layout);
         if (success) {
             assert_layout_matches(expected, _i, limit);
             break;
@@ -2697,7 +2715,7 @@ int main(void)
     tc = tcase_create("Retained layout");
     tcase_add_checked_fixture(tc, setup, teardown);
     tcase_add_loop_test(tc, test_region_retained_layout, 0, 54);
-    tcase_add_loop_test(tc, test_region_retained_list_numbering, 0, 2);
+    tcase_add_loop_test(tc, test_region_retained_list_numbering, 0, 4);
     suite_add_tcase(suite, tc);
 #endif
     SRunner *runner = srunner_create(suite);

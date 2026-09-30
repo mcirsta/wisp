@@ -17,7 +17,7 @@ QJsonObject nsqt_capture_inspect(struct hlcache_handle *content, const QStringLi
 struct browser_window;
 bool nsqt_capture_settled(struct hlcache_handle *content);
 void nsqt_capture_configure_restyle(struct hlcache_handle *content, bool force, bool restart, bool css_only, bool fail,
-    bool no_intrinsic_reuse, bool reuse_inline_layout);
+    bool no_intrinsic_reuse, bool no_inline_layout_reuse);
 struct content;
 struct content *nsqt_capture_watch_content(struct hlcache_handle *handle);
 void nsqt_capture_unwatch_content(struct content *content);

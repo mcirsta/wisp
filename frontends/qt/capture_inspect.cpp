@@ -262,6 +262,11 @@ QJsonObject nsqt_capture_inspect(struct hlcache_handle *content, const QStringLi
             {"inline_layout_width_misses", int(p.inline_layout_width_misses)},
             {"inline_layout_float_misses", int(p.inline_layout_float_misses)},
             {"inline_layout_intrinsic_misses", int(p.inline_layout_intrinsic_misses)},
+            {"inline_layout_repeat_same_width", int(p.inline_layout_repeat_same_width)},
+            {"inline_layout_repeat_changed_width", int(p.inline_layout_repeat_changed_width)},
+            {"inline_layout_repeat_reuses", int(p.inline_layout_repeat_reuses)},
+            {"inline_layout_float_exclusions", int(p.inline_layout_float_exclusions)},
+            {"inline_layout_other_exclusions", int(p.inline_layout_other_exclusions)},
             {"publication_ms", p.publication_ns / 1e6},
             {"paint_ms", p.paint_ns / 1e6},
             {"through_last_paint_ms", p.last_paint_ns ? (p.last_paint_ns - p.start_ns) / 1e6 : 0},
@@ -341,19 +346,19 @@ QJsonObject nsqt_capture_inspect(struct hlcache_handle *content, const QStringLi
 
 // Capture-only interaction hooks use the same core input path as the Qt widget.
 void nsqt_capture_configure_restyle(struct hlcache_handle *content, bool force, bool restart, bool css_only, bool fail,
-    bool no_intrinsic_reuse, bool reuse_inline_layout)
+    bool no_intrinsic_reuse, bool no_inline_layout_reuse)
 {
     Q_UNUSED(restart);
     Q_UNUSED(fail);
     Q_UNUSED(no_intrinsic_reuse);
-    Q_UNUSED(reuse_inline_layout);
+    Q_UNUSED(no_inline_layout_reuse);
 #ifdef WISP_ENABLE_PARTIAL_UPDATES
     if (content && content_get_type(content) == CONTENT_HTML) {
         auto *html = reinterpret_cast<html_content *>(hlcache_handle_get_content(content));
         html->restyle.force_full = force;
         html->restyle.css_only = css_only;
         html->restyle.no_intrinsic_reuse = no_intrinsic_reuse;
-        html->restyle.reuse_inline_layout = reuse_inline_layout;
+        html->restyle.no_inline_layout_reuse = no_inline_layout_reuse;
 #ifdef WISP_PROFILE_RESTYLE
         html->restyle.force_restart = restart;
         html->restyle.fail_retained_layout = fail;

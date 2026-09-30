@@ -1,7 +1,8 @@
 # Partial document updates: implementation plan
 
-Status: milestones A and B, plus milestone C's first inline intrinsic cache,
-enabled for eligible native checked-state updates, 2026-09-30.
+Status: the initial bounded scope and default-on rollout are complete, 2026-09-30.
+Milestones A and B, plus milestone C's bounded inline intrinsic/line reuse, are
+enabled for eligible native checked-state updates.
 The reviewed baseline is `eb3e03df`
 (`Use stack scratch for small class selector lists`).
 
@@ -26,8 +27,9 @@ for eligible single-region changes, followed by full layout. Capture retains
 explicit CSS-only and full-rebuild reference modes. Pages with frames and unsafe
 regions keep the existing conservative reconstruction paths.
 Detached construction through native-control/SVG staging is committed as `610d6f5a`.
-Milestone C's text-only inline intrinsic reuse is enabled. Completed text-only
-line reuse is an opt-in experiment; broader block-layout reuse remains deferred.
+Milestone C's text-only inline intrinsic and completed-line reuse are enabled.
+Eligible lines also avoid repeated work within one refresh's sizing passes.
+Broader block-layout reuse remains deferred.
 The steps below remain the implementation and
 acceptance checklist, with the concrete implementation choices recorded here.
 
@@ -1204,8 +1206,9 @@ bounded experiment is recorded below.
 
 ### Completed inline line reuse experiment (2026-09-30)
 
-`--capture-reuse-inline-layout` implements the first used-layout reuse path, off
-by default. It preserves eligible inline containers' wrapped text fragments,
+The first used-layout reuse path was introduced behind
+`--capture-reuse-inline-layout`, initially off by default. It preserves eligible
+inline containers' wrapped text fragments,
 local coordinates, height, overflow width and baseline through retained reset.
 The parent still runs normal sizing, placement and margin collapse. All owning
 block/flex/grid/table contexts and final positioning/bounds/selection/scrollbar
@@ -1283,8 +1286,143 @@ content and off-screen updates. The rebuilt partial-updates-OFF configuration
 passes the full-refresh reference and general capture checks. All 45 applicable
 normal Release CTests pass with profiling OFF, and the twelve saved-page captures
 repeat successfully in that build. Release is left with profiling OFF.
-The experiment remains off by default pending rollout acceptance; wider block
-reuse stays deferred.
+This completed the opt-in experiment. The default rollout is recorded below;
+wider block reuse stays deferred.
+
+### Completed inline line reuse rollout (2026-09-30)
+
+Eligible retained updates now reuse completed text-only lines by default in all
+frontends. The core's zero-initialized state selects this behavior; it does not
+depend on capture or frontend initialization. The eligibility rules and input
+guards are unchanged. `--capture-no-inline-layout-reuse` selects the previous
+intrinsic-only mode, while `--capture-no-intrinsic-reuse` disables both caches.
+The former line-reuse opt-in remains an explicit default alias. CSS-only and
+full-rebuild overrides still reconstruct their boxes and cannot reuse old lines.
+
+The retained-update regressions now require line-cache hits without an enabling
+flag, fewer fresh line-layout calls than the intrinsic-only opt-out, and matching
+full-reference geometry, pixels, selection offsets and resource state. Resize,
+incoming floats, changing flex allocations and nonzero/off-screen scroll offsets
+exercise the default. Existing restart, post-publication failure and document
+lifetime tests now also run with completed-line retention enabled.
+
+The broader default-on run exposed one missing invalidation in the experiment:
+the final viewport-height adjustment can overwrite the first child's height
+after line layout. When body is inline, that child can be an anonymous inline
+container. Reusing its stretched height on the next update grew the document
+beyond the independent full-build result. The adjustment now clears completed-line
+validity when overwriting the height; it preserves the existing viewport-fill
+behavior and introduces no new sizing rule. The list-retention comparison now
+covers both block and inline bodies, normal and reversed numbering, for 100
+publications each. Wider box-layout reuse would need the same discipline at
+every later geometry mutation.
+
+After the fix, all 49 selected Debug CTests and all 45 normal Release CTests
+pass, including restart, failure and lifecycle coverage. All 58 retained-layout
+variants pass with LeakSanitizer enabled. The partial-updates-OFF build passes
+its full-reference and general capture checks. The twelve final saved-page
+captures compare both Tion/Bihon panels in default, intrinsic-only and full modes:
+all inspected states, complete normalized box trees, DOM dumps and pixels match.
+The default-on 300-switch Tion run stays at 3,018/3,063 tree allocations and 201
+settled resources and also matches a fresh final reconstruction. Bihon keeps its
+existing frame fallback. Release remains configured with profiling OFF.
+
+Initial-load acceptance compares an isolated build of `a61c7c8a` with this rollout,
+both Release/LTO with profiling and logging OFF. Each binary loads each saved page
+once for warmup, then eight measured times in interleaved after/before/before/after
+order. No clicks, builds or other tests run during measurement. Compiler defines
+and optimization flags match; the baseline has its own renderer and support
+libraries. Fresh browser profiles, warm filesystem caches, disabled scripting and
+animation, and a 1280x900 viewport at 96 DPI match the previous protocol.
+
+| Saved page | Before / default-on last activity median (ms) | Before / default-on process CPU median (ms) | Before / default-on peak RSS median (MiB) |
+| --- | ---: | ---: | ---: |
+| Tion | 1,223 / 1,228 | 756.6 / 764.6 | 105.3 / 105.8 |
+| Bihon | 1,734 / 1,728 | 735.8 / 734.0 | 98.8 / 99.8 |
+
+All 36 captures, including warmups, match in PNG, DOM and complete normalized
+box trees. Last activity is capture elapsed time minus its final quiet interval,
+not an isolated parse/layout timer; process CPU includes startup, artifact writing
+and shutdown. Wall-time changes are +0.4% / -0.3%, and CPU changes +1.1% / -0.2%.
+This sample shows no material initial-load slowdown. Process peak RSS differs by
+about 0.4 / 1.0 MiB and includes Qt/image/font state; it is not a measurement of
+cache storage. The rollout adds no allocation or field to the experiment, and the
+repeated-update allocation plateau remains unchanged.
+
+Reports, manifests and rendering comparisons are under
+`out/render-captures/inline-layout-rollout-2026-09-30/`.
+
+### Repeated line layout within one update
+
+The next profile separated already eligible repeated lines from exclusions.
+After the default-on rollout, warmed Tion updates still performed 487/505 fresh
+inline-container layouts. Of those, 81/88 repeated an eligible result at the
+same width; 120 were excluded by incoming floats and 281 by other dependencies.
+Bihon performed 755/771 fresh calls, including 85/99 eligible same-width repeats,
+248 float exclusions and 322 other exclusions. These are calls, not unique boxes.
+Temporary tracing located the repeats mainly inside row-flex cross-axis stretch,
+including repeated visits through nested flex containers.
+
+Skipping that stretch pass just because the pixel height is unchanged would be
+incorrect: it can make the height definite for percentage-sized descendants.
+Instead, the existing narrow line cache now also permits reuse within the current
+update's layout pass. Freshly completed eligible lines and validated retained
+lines gain an `INLINE_LAYOUT_CURRENT` bit. Another visit still checks available
+width and incoming floats; other eligibility rules are unchanged. Ancestor
+block/flex/grid sizing and percentage resolution continue normally.
+
+The existing final relative-position walk expires this bit and any unconsumed
+retained-line permission before returning from layout. Failure exits clear both
+permissions with an allocation-free structural walk. Resets, discarded lines and
+the viewport-height overwrite also invalidate the bit. The bit occupies the
+existing flags word: no box field, allocation, generation table or extra
+successful-layout traversal is added. This additional reuse is enabled only
+during refresh, including full/CSS-only rebuilds; initial loading and ordinary
+reflows retain their existing behavior. The capture line/intrinsic opt-outs
+disable it as well. An independent full reference therefore also passes
+`--capture-no-inline-layout-reuse`.
+
+Profiling now exposes repeat hits, same/changed-width revisits, and float/other
+exclusions separately from the existing retained-line hit/miss counters. The
+extra eligibility diagnostics compile out with `WISP_PROFILE_RESTYLE=OFF`.
+Two interleaved Release/LTO rounds, with profiling ON and logging OFF, compare
+the preceding default-on implementation with this change. Each round uses
+40 warmed updates per site/version, excludes the first two switches, and runs
+without concurrent builds/tests; the second reverses the before/after order.
+Each saved baseline includes its own shared renderer/support libraries, verified
+with `ldd`. The independent full reference disables all line reuse.
+
+| Saved page | Fresh line calls before / after | Refresh median, round 1 (ms) | Refresh median, round 2 (ms) |
+| --- | ---: | ---: | ---: |
+| Tion | 487–505 / 406–417 | 39.24 / 28.61 | 35.60 / 27.08 |
+| Bihon | 755–771 / 670–672 | 78.83 / 64.65 | 76.87 / 62.27 |
+
+Round 2 gives approximately 24% / 19% lower median refresh time. Round 1 had
+substantial timing noise, especially Bihon's baseline tail, so the work counts
+are the stronger evidence. These are instrumented refresh times before painting,
+not initial-load or screen-presentation timings. Tion still reuses 96 retained
+containers plus 81/88 within-pass results; Bihon reuses 85/99 within-pass results
+while retaining its existing iframe-driven `partial_css` fallback. All measured
+steps and final PNGs, DOM and complete normalized box dumps match fresh layout.
+Tion remains at 3,018/3,063 tree allocations and 201 resources; Bihon at
+4,394/4,434 allocations and 289 resources. Float and other exclusions are
+unchanged; widening those rules remains separate work.
+
+Validation passes all 49 selected Debug ASan/UBSan and 45 normal Release CTests.
+The focused fixture requires repeat hits while a percentage-height descendant
+still resolves to the stretched height; a column stretch must reject a changed
+line width. Existing resize, incoming-float, restart, shutdown and scroll cases
+also pass. The C snapshots assert that successful layout leaves no pass-local
+permission anywhere in the structural tree. Allocation-failure cases run refresh
+layout and assert the same cleanup after unsuccessful exits; the Release
+construction suite passes all 210 cases. Profiling-OFF stress runs complete 300
+Tion switches and 100 Bihon switches with the same allocation/resource plateaus
+and final pixels/DOM/complete box trees as fresh uncached layout. The separately
+built partial-updates-OFF configuration passes full-refresh and capture checks.
+The normal Release build is left with profiling OFF.
+
+Saved-page measurements and independent rendering comparisons are under
+`out/render-captures/inline-layout-followup-2026-09-30/`.
 
 ## Recommendation and scope
 
@@ -1815,10 +1953,17 @@ flaky hard-coded CTest threshold.
 9. **Rollout:** enable validated behavior by default, retain the full fallback and
    developer comparison switch, and update the behavior/profiling documentation.
 
-Commits 1–5 and the milestone A rollout are complete. Step 6's ownership, bounded
-construction and staged bindings are implemented. Step 7 has live integration,
-retained full layout and failure recovery, now enabled in ordinary browsing by
-the milestone B rollout. Step 8 has enabled text-only intrinsic reuse and an
-opt-in completed-line experiment with width/float dependency checks. Wider used
-layout retention and its dependency propagation remain deferred; neither is a
-prerequisite for the already enabled selective CSS and box retention.
+Steps 1–9 are complete for the initial bounded scope. Milestone A reuses eligible
+styles; milestone B retains unaffected boxes around a safely replaced region;
+milestone C reuses eligible text intrinsics and completed lines, including repeated
+visits within one update. All three are enabled by default with tested full
+fallbacks, comparison switches and profiling documentation. No required rollout
+or implementation step remains for this scope.
+
+This is the planned stopping point. Wider block-layout retention and dependency
+propagation, additional float cases, and box retention on pages with existing
+iframes remain deferred extensions. Bihon still uses the documented CSS-only
+fallback, with within-pass line reuse. Parent layout and final positioning/bounds
+passes still run. Expand these boundaries only when measured benefit justifies
+the additional correctness and lifetime work; hover/focus, script-driven changes
+and paint-only updates are separate features.

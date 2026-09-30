@@ -88,6 +88,7 @@ with tempfile.TemporaryDirectory(prefix="wisp-retained-") as tmp:
         for step in css_steps[2:]:
             assert step["restyle_profile"]["update_mode"] == "partial_css", step
             assert step["restyle_profile"]["intrinsic_inline_reuses"] == 0, step
+            assert step["restyle_profile"]["inline_layout_reuses"] == 0, step
     assert steps[2]["resource_count"] >= 4, steps[2]
     for index, step in enumerate(steps[3:], 3):
         boxes = {e["id"]: e["boxes"] for e in step["elements"]}
@@ -120,20 +121,25 @@ with tempfile.TemporaryDirectory(prefix="wisp-retained-") as tmp:
             assert profile["update_mode"] == "partial_boxes", profile
             assert profile["intrinsic_inline_reuses"] > 0, profile
             assert baseline["update_mode"] == "partial_boxes" and baseline["intrinsic_inline_reuses"] == 0, baseline
+            assert baseline["inline_layout_reuses"] == 0, baseline
             assert profile["intrinsic_inline_calculations"] < baseline["intrinsic_inline_calculations"], profile
     for artifact in ("page.png", "dom.txt"):
         assert (uncached / artifact).read_bytes() == (full / artifact).read_bytes(), artifact
 
-    lines = tmp / "lines"
-    line_steps = run(lines, page, ("--capture-reuse-inline-layout",))
-    compare(reference, line_steps)
+    intrinsics = tmp / "intrinsics"
+    # The former opt-in remains an alias; a later opt-out must win.
+    intrinsic_steps = run(intrinsics, page,
+                          ("--capture-reuse-inline-layout", "--capture-no-inline-layout-reuse"))
+    compare(reference, intrinsic_steps)
     for artifact in ("page.png", "dom.txt"):
-        assert (lines / artifact).read_bytes() == (full / artifact).read_bytes(), artifact
+        assert (intrinsics / artifact).read_bytes() == (full / artifact).read_bytes(), artifact
     if profiling:
-        for index, step in enumerate(line_steps[3:], 3):
+        for index, step in enumerate(steps[3:], 3):
             profile = step["restyle_profile"]
+            baseline = intrinsic_steps[index]["restyle_profile"]
             assert profile["inline_layout_reuses"] > 0, profile
-            assert profile["inline_layout_calculations"] < steps[index]["restyle_profile"]["inline_layout_calculations"], profile
+            assert baseline["inline_layout_reuses"] == 0 and baseline["intrinsic_inline_reuses"] > 0, baseline
+            assert profile["inline_layout_calculations"] < baseline["inline_layout_calculations"], profile
 
     # A retained paragraph changes width when its flex sibling grows. A float
     # introduced in the dirty scope can instead change wrapping at the same
@@ -160,7 +166,7 @@ with tempfile.TemporaryDirectory(prefix="wisp-retained-") as tmp:
         dependency.write_text(dependency_source.replace("VARIANT", css))
         fresh_dir, reused_dir = tmp / f"{name}-full", tmp / f"{name}-lines"
         fresh = run(fresh_dir, dependency, ("--capture-force-full-restyle",), extra_ids=("stable",))
-        reused = run(reused_dir, dependency, ("--capture-reuse-inline-layout",), extra_ids=("stable",))
+        reused = run(reused_dir, dependency, extra_ids=("stable",))
         compare(fresh, reused)
         for artifact in ("page.png", "dom.txt"):
             assert (fresh_dir / artifact).read_bytes() == (reused_dir / artifact).read_bytes(), (name, artifact)
@@ -177,6 +183,39 @@ with tempfile.TemporaryDirectory(prefix="wisp-retained-") as tmp:
                     assert profile["update_mode"] == "partial_boxes", (name, index, profile)
             assert any(p[f"inline_layout_{miss}_misses"] > 0 for p in profiles), (name, profiles)
             assert any(p["inline_layout_reuses"] > 0 for p in profiles), (name, profiles)
+
+    # Stretch must still resolve percentage descendants even when its text
+    # lines can reuse an earlier result from the same layout pass.
+    stretch = tmp / "stretch.html"
+    stretch.write_text(source.replace('<section id="tabs">', '''
+      <div style="display:flex;width:280px;height:140px">
+        <div id="stretch-item" style="flex:1;min-width:0">
+          <p id="stretch-text" style="margin:0">Several words <span>across an inline boundary</span>
+            and enough text to wrap across more than one line.</p>
+          <div id="stretch-percent" style="height:50%;background:#acf"></div>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;width:280px">
+        <div id="stretch-column"><p id="stretch-column-text" style="margin:0">Short phrase</p></div>
+      </div><section id="tabs">'''))
+    stretch_ids = ("stretch-item", "stretch-text", "stretch-percent", "stretch-column", "stretch-column-text")
+    stretch_full = run(tmp / "stretch-full", stretch,
+                       ("--capture-force-full-restyle", "--capture-no-inline-layout-reuse"),
+                       extra_ids=stretch_ids)
+    stretch_reused = run(tmp / "stretch-reused", stretch, extra_ids=stretch_ids)
+    compare(stretch_full, stretch_reused)
+    for index, step in enumerate(stretch_reused):
+        box = next(e["boxes"][0] for e in step["elements"] if e["id"] == "stretch-percent")
+        assert box["content"]["height"] == 70, (index, box)
+        if profiling and index > 2:
+            profile = step["restyle_profile"]
+            assert profile["inline_layout_repeat_reuses"] > 0, (index, profile)
+            # The column first measures a narrow item, then stretches its width.
+            # That second visit must lay out its lines again.
+            assert profile["inline_layout_repeat_changed_width"] > 0, (index, profile)
+            assert stretch_full[index]["restyle_profile"]["inline_layout_repeat_reuses"] == 0, index
+    for artifact in ("page.png", "dom.txt"):
+        assert (tmp / "stretch-full" / artifact).read_bytes() == (tmp / "stretch-reused" / artifact).read_bytes(), artifact
 
     # Input changes must force a fresh baseline, then permit reuse again.
     # Include viewport units, preserved whitespace and decorated inline edges;
@@ -205,15 +244,15 @@ with tempfile.TemporaryDirectory(prefix="wisp-retained-") as tmp:
                       extra_ids=resize_ids, actions=actions)
     resize_reused = run(tmp / "resize-reused", resized, extra_ids=resize_ids, actions=actions)
     compare(resize_full, resize_reused)
-    resize_lines = run(tmp / "resize-lines", resized, ("--capture-reuse-inline-layout",),
-                       extra_ids=resize_ids, actions=actions)
-    compare(resize_full, resize_lines)
+    resize_intrinsics = run(tmp / "resize-intrinsics", resized, ("--capture-no-inline-layout-reuse",),
+                            extra_ids=resize_ids, actions=actions)
+    compare(resize_full, resize_intrinsics)
     for artifact in ("page.png", "dom.txt"):
         assert (tmp / "resize-full" / artifact).read_bytes() == (tmp / "resize-reused" / artifact).read_bytes(), artifact
-        assert (tmp / "resize-full" / artifact).read_bytes() == (tmp / "resize-lines" / artifact).read_bytes(), artifact
+        assert (tmp / "resize-full" / artifact).read_bytes() == (tmp / "resize-intrinsics" / artifact).read_bytes(), artifact
     if profiling:
         for index in invalidated:
-            for series in (resize_reused, resize_lines):
+            for series in (resize_reused, resize_intrinsics):
                 profile = series[index]["restyle_profile"]
                 assert profile["update_mode"] == "full", (index, profile)
                 assert profile["fallback_reason"] == "inputs_changed", (index, profile)
@@ -221,7 +260,8 @@ with tempfile.TemporaryDirectory(prefix="wisp-retained-") as tmp:
         for index in resumed:
             profile = resize_reused[index]["restyle_profile"]
             assert profile["update_mode"] == "partial_boxes" and profile["intrinsic_inline_reuses"] > 0, (index, profile)
-            assert resize_lines[index]["restyle_profile"]["inline_layout_reuses"] > 0, (index, resize_lines[index])
+            assert profile["inline_layout_reuses"] > 0, (index, profile)
+            assert resize_intrinsics[index]["restyle_profile"]["inline_layout_reuses"] == 0, index
 
     # The retained ancestor gains/loses a scrollbar as its tab contents grow.
     scrolling = tmp / "scrolling.html"
@@ -232,8 +272,9 @@ with tempfile.TemporaryDirectory(prefix="wisp-retained-") as tmp:
     scrolling_full = run(tmp / "scrolling-full", scrolling, ("--capture-force-full-restyle",), 6, ("viewport",))
     scrolling_steps = run(tmp / "scrolling-retained", scrolling, switches=6, extra_ids=("viewport",))
     compare(scrolling_full, scrolling_steps)
-    scrolling_lines = run(tmp / "scrolling-lines", scrolling, ("--capture-reuse-inline-layout",), 6, ("viewport",))
-    compare(scrolling_full, scrolling_lines)
+    scrolling_intrinsics = run(tmp / "scrolling-intrinsics", scrolling,
+                               ("--capture-no-inline-layout-reuse",), 6, ("viewport",))
+    compare(scrolling_full, scrolling_intrinsics)
     viewport = lambda step: next(e["boxes"][0] for e in step["elements"] if e["id"] == "viewport")
     for index, step in enumerate(scrolling_steps[3:], 3):
         assert viewport(step)["box_address"] == viewport(scrolling_steps[2])["box_address"], index
@@ -251,7 +292,7 @@ with tempfile.TemporaryDirectory(prefix="wisp-retained-") as tmp:
     frame = tmp / "frame.html"
     frame.write_text(source + '<iframe src="about:blank" width="60" height="25"></iframe>')
     frame_full = run(tmp / "frame-full", frame, ("--capture-force-full-restyle",), 4)
-    frame_steps = run(tmp / "frame-retained", frame, ("--capture-reuse-inline-layout",), switches=4)
+    frame_steps = run(tmp / "frame-retained", frame, switches=4)
     compare(frame_full, frame_steps)
     if profiling:
         for step in widget_steps[3:]:
@@ -263,8 +304,7 @@ with tempfile.TemporaryDirectory(prefix="wisp-retained-") as tmp:
             assert step["restyle_profile"]["update_mode"] == "partial_css", step
             assert step["restyle_profile"]["intrinsic_inline_reuses"] == 0, step
             assert step["restyle_profile"]["inline_layout_reuses"] == 0, step
-        restarted = run(tmp / "restart", page,
-                        ("--capture-restart-partial-restyle", "--capture-reuse-inline-layout"))
+        restarted = run(tmp / "restart", page, ("--capture-restart-partial-restyle",))
         compare(reference, restarted)
         assert restarted[3]["restyle_profile"]["restarts"] == 1, restarted[3]
         assert restarted[3]["restyle_profile"]["fallback_reason"] == "inputs_changed_during_build", restarted[3]

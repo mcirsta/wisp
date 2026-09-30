@@ -59,7 +59,8 @@ int NS_Capture::prepare(int &argc, char **argv)
                 "  --capture-force-full-restyle Force the full-refresh reference path\n"
                 "  --capture-css-only-restyle   Reuse CSS but reconstruct all boxes\n"
                 "  --capture-no-intrinsic-reuse Remeasure all retained inline containers\n"
-                "  --capture-reuse-inline-layout Test reuse of completed text-only lines\n"
+                "  --capture-no-inline-layout-reuse Reflow all retained text lines\n"
+                "  --capture-reuse-inline-layout Use default completed text-only lines\n"
                 "  --capture-reuse-inline-intrinsics Use default text-only intrinsic reuse\n"
                 "  --capture-retain-boxes       Use default eligible retained-region refresh\n"
                 "  --capture-fail-retained-layout Test error handling after region publication\n"
@@ -99,9 +100,9 @@ int NS_Capture::prepare(int &argc, char **argv)
             m_css_only_restyle = true;
             continue;
         }
-        if (arg == "--capture-reuse-inline-layout") {
+        if (arg == "--capture-reuse-inline-layout" || arg == "--capture-no-inline-layout-reuse") {
 #ifdef WISP_ENABLE_PARTIAL_UPDATES
-            m_reuse_inline_layout = true;
+            m_no_inline_layout_reuse = arg == "--capture-no-inline-layout-reuse";
             continue;
 #else
             fprintf(stderr, "Inline layout reuse requires WISP_ENABLE_PARTIAL_UPDATES\n");
@@ -298,7 +299,7 @@ void NS_Capture::poll()
         return;
     }
     nsqt_capture_configure_restyle(content, m_force_full_restyle, m_restart_partial_restyle,
-        m_css_only_restyle, m_fail_retained_layout, m_no_intrinsic_reuse, m_reuse_inline_layout);
+        m_css_only_restyle, m_fail_retained_layout, m_no_intrinsic_reuse, m_no_inline_layout_reuse);
     if (!m_interrupt_restyle.isEmpty())
         nsqt_capture_restyle_lifecycle(hlcache_handle_get_content(content), true);
     const bool done = content && content_get_status(content) == CONTENT_STATUS_DONE;

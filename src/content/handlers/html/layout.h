@@ -53,7 +53,7 @@ bool layout_document(struct html_content *content, int width, int height);
  * substitute for layout and must not be used for ordinary cached reflows.
  * Preserves eligible text-only inline intrinsic measurements when the retained
  * publication's style/font/unit inputs match, unless capture disables reuse.
- * The opt-in inline-layout cache also preserves eligible completed lines until
+ * The inline-layout cache also preserves eligible completed lines until
  * layout checks their available width and incoming floats. Parent placement and
  * the document's final positioning/bounds passes still run normally.
  */

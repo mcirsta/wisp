@@ -154,10 +154,21 @@ normalization are subtracted from `boxes_ms` to avoid counting them twice. The
 `intrinsic_inline_calculations` and `intrinsic_inline_reuses` counters distinguish
 fresh inline-container intrinsic measurement from retained measurement reuse.
 `inline_layout_calculations` and `inline_layout_reuses` count fresh line layout
-and reuse of completed lines. The `inline_layout_width_misses`,
+and reuse of completed lines retained from the previous update.
+`inline_layout_repeat_reuses` counts reuse within the current update's layout:
+ancestor sizing may revisit a container without changing its available width.
+`inline_layout_repeat_same_width` / `inline_layout_repeat_changed_width` count
+revisits with an eligible completed result before attempting that reuse.
+`inline_layout_float_exclusions` / `inline_layout_other_exclusions` count fresh
+calls which cannot save eligible lines because of incoming floats or other
+dependencies. These are calls, not counts of unique containers; the extra
+eligibility diagnostics are compiled only into profiling builds.
+The `inline_layout_width_misses`,
 `inline_layout_float_misses` and `inline_layout_intrinsic_misses` counters explain
 why preserved lines had to be discarded. Width takes precedence when both width
 and incoming floats changed; containers excluded before preservation are not misses.
+For a full reference with both forms of line reuse disabled, combine
+`--capture-force-full-restyle` with `--capture-no-inline-layout-reuse`.
 The clock uses nanosecond-resolution monotonic timestamps where available, with the
 existing millisecond clock as a fallback on other platforms.
 
@@ -170,7 +181,7 @@ changes immediately, including edits already synchronized before a tab click.
 The first refresh establishes a full baseline; subsequent eligible refreshes reuse
 composed styles outside those scopes. Eligible single-region updates also retain
 outside boxes once independent region owners have been established, as described
-below. All refreshes still traverse the document for layout; the optional line
+below. All refreshes still traverse the document for layout; the line
 cache described below can skip eligible line work. Reuse requires scripting to
 be disabled. Configuring the option OFF removes HTML tracking state.
 Libcss's per-sheet scope summary and revision
@@ -288,12 +299,14 @@ The retained-restyle comparison includes narrower/wider viewport changes between
 switches, viewport-sized text and a resize round trip. A changed input requires
 a fresh baseline; later eligible switches must resume reuse.
 
-### Completed inline lines (experiment)
+### Completed inline lines
 
-`--capture-reuse-inline-layout` opts into retaining completed text-only lines
-through eligible region updates. Ordinary browsing leaves this experiment off.
-It requires partial updates and the intrinsic cache. The inline container keeps
-its available-width input separately from its output/overflow width, along with
+Eligible retained updates also preserve completed text-only lines by default,
+in ordinary browsing and capture. `--capture-no-inline-layout-reuse` selects the
+intrinsic-only reference path. The original `--capture-reuse-inline-layout` flag
+remains an explicit request for the default; the last of these two options wins.
+Line reuse requires partial updates and the intrinsic cache. The inline container
+keeps its available-width input separately from its output/overflow width, along with
 its wrapped text fragments, local coordinates and any required baseline.
 
 Reuse requires the same available width, no incoming floats and unchanged
@@ -305,9 +318,17 @@ all flex/grid/table contexts, final positioning, bounds, selection indexing and
 scrollbar updates still run. The existing document input guards cover style,
 font and viewport changes before retained publication.
 
-Compare the option against the default intrinsic-only mode, as well as forced
-full reconstruction. `qt_retained_restyle` checks both modes, changed sibling
-widths, incoming floats, reconstruction fallbacks, resize, restart and scrolling.
+During an update, eligible lines can also be reused when flex/grid sizing visits
+them again at the same width. This includes full/CSS-only reconstruction: fresh
+lines are only reused later in that same pass. It does not skip ancestor sizing
+or percentage-height resolution. A pass-local flag expires during final
+positioning, or on layout failure; initial loading and ordinary resize reflows
+do not enable this additional reuse. It adds no allocation or per-box field.
+
+Compare the default against the intrinsic-only opt-out, as well as forced full
+reconstruction. `qt_retained_restyle` requires default cache hits and checks
+changed sibling widths, incoming floats, reconstruction fallbacks, resize,
+restart and scrolling.
 Disabling partial updates removes the cache and its width field entirely.
 
 `action_ms` is the preceding capture action's synchronous duration, including

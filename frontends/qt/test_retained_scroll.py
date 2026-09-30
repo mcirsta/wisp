@@ -14,13 +14,13 @@ env = dict(os.environ, QT_QPA_PLATFORM="offscreen", QT_SCALE_FACTOR="1",
 ids = ("viewport", "untouched", "scope", "large", "medium", "small")
 
 
-def run(out, page, actions, retained, reuse_lines=False):
+def run(out, page, actions, retained, no_lines=False):
     args = [str(binary), "--capture-dir", str(out), "--capture-size", "600x500",
             "--capture-settle", "50", "--capture-timeout", "30000"]
     if not retained:
         args.append("--capture-force-full-restyle")
-    if reuse_lines:
-        args.append("--capture-reuse-inline-layout")
+    if no_lines:
+        args.append("--capture-no-inline-layout-reuse")
     for key in ids:
         args += ["--capture-id", key]
     for kind, value in actions:
@@ -61,16 +61,16 @@ with tempfile.TemporaryDirectory(prefix="wisp-retained-scroll-") as directory:
                ("scroll-element", "untouched,75,60"), ("click-label", "medium"),
                ("click-label", "large"), ("scroll-element", "viewport,9999,9999"),
                ("click-label", "medium"), ("click-label", "small"), ("click-label", "large")]
-    for offscreen, reuse_lines in ((False, False), (True, False), (False, True), (True, True)):
+    for offscreen, no_lines in ((False, False), (True, False), (False, True), (True, True)):
         page = fixture
         if offscreen:
             source = fixture.read_text()
             labels = next(line for line in source.splitlines() if line.startswith('<div id="labels">'))
             page = tmp / "offscreen.html"
             page.write_text(source.replace(labels, "") + '<div style="height:900px"></div>' + labels)
-        name = ("offscreen" if offscreen else "visible") + ("-lines" if reuse_lines else "")
+        name = ("offscreen" if offscreen else "visible") + ("-intrinsics" if no_lines else "")
         out = tmp / name
-        steps = run(out, page, actions, True, reuse_lines)
+        steps = run(out, page, actions, True, no_lines)
         for i in range(4, len(steps)):
             for key in ("viewport", "untouched"):
                 assert box(steps[i], key)["box_address"] == box(steps[2], key)["box_address"], (offscreen, i, key)
@@ -86,12 +86,14 @@ with tempfile.TemporaryDirectory(prefix="wisp-retained-scroll-") as directory:
             profile = steps[i].get("restyle_profile")
             if profile:
                 assert profile["update_mode"] == "partial_boxes", (i, profile)
-                if reuse_lines:
+                if not no_lines:
                     assert profile["inline_layout_reuses"] > 0, (i, profile)
+                else:
+                    assert profile["inline_layout_reuses"] == 0, (i, profile)
         # Returning the viewport to view must not make a second, paint-dependent
         # correction. Compare all offsets and the final image with a fresh page.
         reveal_dir = tmp / ("reveal-" + name)
-        reveal = run(reveal_dir, page, actions + [("scroll", "0,0")], True, reuse_lines)
+        reveal = run(reveal_dir, page, actions + [("scroll", "0,0")], True, no_lines)
         for key in ("viewport", "untouched"):
             assert offsets(reveal[-1], key) == offsets(steps[-1], key), (offscreen, key)
         reference = tmp / ("fresh-" + name)
