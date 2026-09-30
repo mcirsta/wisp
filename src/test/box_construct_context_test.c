@@ -8,6 +8,7 @@
 #include <libdom/bindings/hubbub/parser.h>
 #include <wisp/desktop/gui_internal.h>
 #include <wisp/misc.h>
+#include <wisp/layout.h>
 #include <wisp/utils/corestrings.h>
 #include <wisp/utils/nsoption.h>
 #include <wisp/utils/nsurl.h>
@@ -23,6 +24,8 @@
 #include "content/handlers/html/html_svg.h"
 #include "content/handlers/html/form_bindings.h"
 #include "content/handlers/html/box_mappings.h"
+#include "content/handlers/html/box_boundary.h"
+#include "content/handlers/html/layout.h"
 #include "content/handlers/html/restyle.h"
 #include "utils/talloc.h"
 #include "utils/libdom.h"
@@ -798,6 +801,237 @@ static char *mapping_snapshot(void)
     ck_assert_int_eq(fclose(stream), 0);
     return buffer;
 }
+
+static struct box *build_owned_document(void)
+{
+    build_document();
+    dom_node *link = by_id("link"), *outer = by_id("outer");
+    void *previous = begin_owned_rebuild(&link, 1);
+    while (scheduled != NULL)
+        run_slice();
+    finish_owned_rebuild(previous, true);
+    struct box *box = box_for_node(outer);
+    ck_assert_ptr_nonnull(box_construct_region_owner(box));
+    dom_node_unref(link);
+    dom_node_unref(outer);
+    return box;
+}
+
+START_TEST(test_boundary_candidate)
+{
+    dom_node *outer = by_id("outer");
+    const char *display[] = {"display:block", "display:flex", "display:grid"};
+    attribute(outer, "style", display[_i % 3]);
+    attribute(outer, "class", "owned-boundary");
+    struct box *old = build_owned_document();
+    const char *reason;
+    ck_assert_msg(html_box_check_boundary(&html, old, NULL, &reason) == NSERROR_OK, "Live boundary: %s", reason);
+    if (_i >= 3)
+        attribute(outer, "style", "display:none");
+    ck_assert_int_eq(begin_region(outer), NSERROR_OK);
+    while (scheduled != NULL)
+        run_slice();
+    ck_assert_int_eq(region_error, NSERROR_OK);
+    char *before = mapping_snapshot();
+    size_t blocks = talloc_total_blocks(html.bctx);
+    for (unsigned i = 0; i < 4; i++) {
+        ck_assert_msg(html_box_check_boundary(&html, old, region, &reason) == NSERROR_OK,
+            "Candidate %d: %s", _i, reason);
+        ck_assert_uint_eq(talloc_total_blocks(html.bctx), blocks);
+    }
+    char *after = mapping_snapshot();
+    ck_assert_str_eq(after, before);
+    free(before);
+    free(after);
+    box_construct_region_destroy(region);
+    dom_node_unref(outer);
+}
+END_TEST
+
+/* Corrupt one association at a time, restore it before destruction. These are
+ * lifetime checks, not tests of how a particular CSS layout should look. */
+START_TEST(test_boundary_crossings)
+{
+    struct box *old = build_owned_document();
+    dom_node *outside_node = by_id("outside"), *link_node = by_id("link");
+    struct box *outside = box_for_node(outside_node), *link = box_for_node(link_node);
+    struct box saved_outside = *outside, saved_link = *link, saved_old = *old;
+    struct box *outside_text = outside->children->children;
+    char *saved_text = outside_text->text;
+    css_computed_style *saved_style = outside_text->style;
+    const char *expected;
+    void *owner = box_construct_region_owner(old);
+    struct box *marker = NULL;
+    void *marker_owner = NULL;
+    switch (_i) {
+    case 0: outside->inline_end = link; expected = "inline_crossing"; break;
+    case 1: link->inline_end = outside; expected = "inline_crossing"; break;
+    case 2: outside->float_children = link; expected = "float_crossing"; break;
+    case 3: link->next_float = outside; expected = "float_crossing"; break;
+    case 4: link->float_container = outside; expected = "float_crossing"; break;
+    case 5: outside->abs_containing_block = old; expected = "containing_block_crossing"; break;
+    case 6: outside->title = old->title + 1; expected = "borrowed_storage"; break;
+    case 7: outside->children->children->text = (char *)old->title + 2; expected = "borrowed_storage"; break;
+    case 8:
+        /* A borrowed generated style must have a surviving reference owner. */
+        outside->children->children->style = link->styles->styles[CSS_PSEUDO_ELEMENT_BEFORE];
+        expected = "borrowed_style";
+        break;
+    case 9: talloc_steal(html.bctx, link); expected = "box_ownership"; break;
+    case 10: talloc_steal(owner, outside); expected = "box_ownership"; break;
+    case 11:
+        for (struct box *box = old->children; box != NULL; box = box->next) {
+            if (box->children != NULL && box->children->list_marker != NULL) {
+                marker = box->children->list_marker;
+                break;
+            }
+        }
+        ck_assert_ptr_nonnull(marker);
+        marker_owner = talloc_parent(marker);
+        talloc_steal(html.bctx, marker);
+        expected = "box_ownership";
+        break;
+    default: old->last = NULL; expected = "tree_links"; break;
+    }
+    const char *reason;
+    ck_assert_int_eq(html_box_check_boundary(&html, old, NULL, &reason), NSERROR_NOT_IMPLEMENTED);
+    ck_assert_msg(strcmp(reason, expected) == 0, "Variant %d: expected %s, got %s", _i, expected, reason);
+    *outside = saved_outside;
+    *link = saved_link;
+    *old = saved_old;
+    outside_text->text = saved_text;
+    outside_text->style = saved_style;
+    if (_i == 9)
+        talloc_steal(owner, link);
+    if (_i == 10)
+        talloc_steal(html.bctx, outside);
+    if (marker != NULL)
+        talloc_steal(marker_owner, marker);
+    ck_assert_msg(html_box_check_boundary(&html, old, NULL, &reason) == NSERROR_OK, "Restored: %s", reason);
+    dom_node_unref(outside_node);
+    dom_node_unref(link_node);
+}
+END_TEST
+
+START_TEST(test_boundary_candidate_borrows_old)
+{
+    struct box *old = build_owned_document();
+    dom_node *outer = by_id("outer");
+    ck_assert_int_eq(begin_region(outer), NSERROR_OK);
+    while (scheduled != NULL)
+        run_slice();
+    ck_assert_int_eq(region_error, NSERROR_OK);
+    const char *title = region->root->title;
+    region->root->title = old->title;
+    const char *reason;
+    ck_assert_int_eq(html_box_check_boundary(&html, old, region, &reason), NSERROR_NOT_IMPLEMENTED);
+    ck_assert_str_eq(reason, "borrowed_storage");
+    region->root->title = title;
+    ck_assert_int_eq(html_box_check_boundary(&html, old, region, &reason), NSERROR_OK);
+    box_construct_region_destroy(region);
+    dom_node_unref(outer);
+}
+END_TEST
+
+static nserror boundary_font_width(const struct plot_font_style *style, const char *text, size_t length, int *width)
+{
+    *width = (int)length * 8;
+    return NSERROR_OK;
+}
+
+static nserror boundary_font_split(const struct plot_font_style *style, const char *text, size_t length,
+    int width, size_t *offset, int *actual)
+{
+    *offset = length;
+    for (size_t i = 1; i < length; i++) {
+        if (text[i] != ' ')
+            continue;
+        if (*offset == length || (int)i * 8 <= width)
+            *offset = i;
+        if ((int)i * 8 > width)
+            break;
+    }
+    *actual = (int)*offset * 8;
+    return NSERROR_OK;
+}
+
+static unsigned count_clones(const struct box *box)
+{
+    unsigned count = (box->flags & CLONE) != 0;
+    for (const struct box *child = box->children; child != NULL; child = child->next)
+        count += count_clones(child);
+    return count;
+}
+
+START_TEST(test_boundary_after_layout)
+{
+    static const struct gui_layout_table fonts = {.width = boundary_font_width, .split = boundary_font_split};
+    dom_node *outer = by_id("outer"), *outside = by_id("outside");
+    const char *styles[] = {"display:block;overflow:hidden;width:180px",
+        "display:flex;flex-direction:column;overflow:hidden;width:180px",
+        "display:grid;grid-template-columns:180px;overflow:hidden;width:180px"};
+    attribute(outer, "style", styles[_i]);
+    text(outer,
+        "many words that wrap across several lines within this narrow region and produce borrowed text fragments");
+    text(outside,
+        "more words that wrap across several lines outside the region and must remain valid after retirement");
+    struct box *old = build_owned_document();
+    html.font_func = &fonts;
+    ck_assert(layout_document(&html, 300, 600));
+    ck_assert_uint_gt(count_clones(old), 0);
+    ck_assert_uint_gt(count_clones(box_for_node(outside)), 0);
+    const char *reason;
+    ck_assert_msg(html_box_check_boundary(&html, old, NULL, &reason) == NSERROR_OK,
+        "Laid out variant %d: %s", _i, reason);
+    ck_assert_int_eq(begin_region(outer), NSERROR_OK);
+    while (scheduled != NULL)
+        run_slice();
+    ck_assert_int_eq(region_error, NSERROR_OK);
+    ck_assert_msg(html_box_check_boundary(&html, old, region, &reason) == NSERROR_OK,
+        "Replacement after layout %d: %s", _i, reason);
+    box_construct_region_destroy(region);
+    dom_node_unref(outer);
+    dom_node_unref(outside);
+}
+END_TEST
+
+#ifdef WISP_TEST_ALLOC_FAILURE
+START_TEST(test_boundary_allocation_failures)
+{
+    struct box *old = build_owned_document();
+    dom_node *outer = by_id("outer");
+    ck_assert_int_eq(begin_region(outer), NSERROR_OK);
+    while (scheduled != NULL)
+        run_slice();
+    ck_assert_int_eq(region_error, NSERROR_OK);
+    char *before = snapshot();
+    size_t blocks = talloc_total_blocks(html.bctx);
+    unsigned limit;
+    for (limit = 0; limit < 32; limit++) {
+        malloc_limit(limit);
+        nserror err = html_box_check_boundary(&html, old, region, NULL);
+        malloc_limit(UINT_MAX);
+        ck_assert_uint_eq(talloc_total_blocks(html.bctx), blocks);
+        char *after = snapshot();
+        ck_assert_str_eq(before, after);
+        free(after);
+        if (err == NSERROR_OK)
+            break;
+        ck_assert_int_eq(err, NSERROR_NOMEM);
+    }
+    ck_assert_uint_gt(limit, 0);
+    ck_assert_uint_lt(limit, 32);
+    realloc_limit(0);
+    nserror err = html_box_check_boundary(&html, old, region, NULL);
+    realloc_limit(UINT_MAX);
+    ck_assert_int_eq(err, NSERROR_NOMEM);
+    ck_assert_uint_eq(talloc_total_blocks(html.bctx), blocks);
+    box_construct_region_destroy(region);
+    dom_node_unref(outer);
+    free(before);
+}
+END_TEST
+#endif
 
 START_TEST(test_mapping_cancel_or_stale)
 {
@@ -1701,6 +1935,13 @@ int main(void)
     tcase_add_test(tc, test_continuation_schedule_failure);
     tcase_add_loop_test(tc, test_list_image_cascade, 0, 4);
 #ifdef WISP_ENABLE_PARTIAL_UPDATES
+    tcase_add_loop_test(tc, test_boundary_candidate, 0, 6);
+    tcase_add_loop_test(tc, test_boundary_crossings, 0, 13);
+    tcase_add_test(tc, test_boundary_candidate_borrows_old);
+    tcase_add_loop_test(tc, test_boundary_after_layout, 0, 3);
+#ifdef WISP_TEST_ALLOC_FAILURE
+    tcase_add_test(tc, test_boundary_allocation_failures);
+#endif
     tcase_add_loop_test(tc, test_mapping_publication, 0, 3);
     tcase_add_loop_test(tc, test_mapping_cancel_or_stale, 0, 8);
     tcase_add_loop_test(tc, test_mapping_reject_escaping_or_duplicate_nodes, 0, 3);

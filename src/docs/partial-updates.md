@@ -14,7 +14,8 @@ resources, iframe descriptors and independent native controls. Rebinding existin
 settled images and registering native controls with their forms can now be prepared
 without changing live state (`254424da`). Eligible checked-state scopes now acquire
 independent allocation owners during full reconstruction. DOM-to-box mapping
-changes can also be prepared without changing live mappings.
+changes can also be prepared without changing live mappings (`bacc9013`).
+Read-only boundary checks now cover box links, arena storage and borrowed styles.
 Coordinated region publication and retained-box layout validation remain pending;
 displayed boxes are not yet retained.
 Detached construction through native-control/SVG staging is committed as `610d6f5a`.
@@ -610,6 +611,51 @@ DOM, normalized boxes, state/geometry and resource counts across repeated tab
 switches. The driver and captures are in
 `out/render-captures/prepared-mappings-2026-09-30/`.
 
+### Milestone B box boundary checks (2026-09-30)
+
+`html_box_check_boundary()` validates one visible owned region and, optionally,
+its detached replacement. It walks the live tree, candidate and list markers;
+checks physical membership against their allocation arenas; and rejects inline
+continuations or float chains crossing the boundary. Incoming absolute-containing
+block pointers are rejected too. Outgoing absolute/fixed pointers into a surviving
+ancestor or the viewport are safe to retire and remain allowed. These checks do
+not imply layout independence: a successful replacement still requires full layout.
+
+The check inventories arena allocation ranges temporarily, using talloc's existing
+visitor. This catches borrowed text/title/target buffers and other arena storage,
+including interior text pointers from layout clones and hidden construction
+allocations. It does not call allocator-header functions on arbitrary borrowed
+pointers. A separate temporary set records the computed styles with surviving
+reference owners, so generated boxes and text fragments cannot keep a style alive
+merely by borrowing it. Shared, independently referenced styles remain valid.
+Nothing is added to boxes or retained after the check; allocation failure rejects
+preparation before any live changes.
+
+This is a box-storage check, not the coordinated publisher. DOM mappings,
+resource/form associations, external interaction state, generation checks and
+retained-layout reset still have their own requirements. The initial publisher
+should handle one coalesced dirty region and fall back for several independent
+regions. Independent successful checks cannot certify simultaneous retirement:
+one region could own data that another candidate borrows. Supporting that later
+requires checking the combined boundary and preparing shared bindings together.
+
+Qt capture diagnostics report `box_boundary` on owned roots. This runs only during
+inspection and does not add work to ordinary rendering. The existing selective/
+full/restarted comparison checks eligibility independently of rendered output.
+Tests cover block/flex/grid candidates, hiding a region, misplaced allocations,
+list-marker ownership, cross-boundary links, borrowed buffers/styles, allocation
+failure, and real full layout with text clones inside and outside the region.
+
+Validation: all 121 selected Debug tests and 118 Release tests pass, including
+111 Debug construction cases and 116 Release cases. The construction suite passes
+LeakSanitizer; boundary checking, capture inspection and their construction tests
+compile with partial updates and profiling disabled. Both saved Tion/Bihon panels
+report `box_boundary: ok` on every warmed tab switch. PNGs, DOM, normalized boxes,
+state/geometry and resource counts exactly match the preceding captures. The
+driver and results are in `out/render-captures/box-boundaries-final-2026-09-30/`.
+Actual region replacement remains disabled; these results do not establish
+retained-layout correctness or a refresh speedup.
+
 Remaining prerequisites before retaining boxes (resume here):
 
 - Use the new allocation owners only after proving all publication conditions.
@@ -619,10 +665,10 @@ Remaining prerequisites before retaining boxes (resume here):
 - Retain the settled-image restriction initially. New requests, pending loads,
   embedded documents and iframe-window rebinding require separate preparation
   before those cases can use partial publication; otherwise choose full refresh.
-- Prove boundary closure, including inline continuations, generated boxes, float
-  chains and containing-block pointers. Coordinate the prepared mappings,
-  resource/form bindings and interaction-state cleanup, and validate input
-  generations before replacing a region.
+- Coordinate the box-boundary check, prepared mappings, resource/form bindings
+  and interaction-state cleanup, and validate input generations before replacing
+  one region. Keep several independent dirty regions on full reconstruction until
+  their combined ownership and binding publication is supported.
 - Verify repeated full layout on retained boxes against fresh construction.
   Only then enable actual replacement, with its own measurements and fallback.
 

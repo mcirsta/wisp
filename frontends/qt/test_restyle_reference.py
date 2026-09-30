@@ -57,6 +57,8 @@ def run(destination, force, restart=False):
         for element in elements.values():
             for box in element["boxes"]:
                 assert box["owns_region"] == (partial and element["id"] == "tabs"), (force, restart, index, element)
+                if box["owns_region"]:
+                    assert box["box_boundary"] == "ok", (force, restart, index, element)
         for key, height in (("field-message", 17), ("notes-message", 19)):
             boxes = elements[key]["boxes"]
             assert boxes and boxes[0]["content"]["height"] == height, (force, index, key, elements[key])
@@ -69,6 +71,7 @@ def run(destination, force, restart=False):
         for element in step["elements"]:
             for box in element["boxes"]:
                 del box["owns_region"]
+                box.pop("box_boundary", None)
     return steps
 
 

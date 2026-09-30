@@ -18,6 +18,7 @@ extern "C" {
 #include "wisp/content/hlcache.h"
 #include "wisp/content/handlers/html/box.h"
 #include "content/handlers/html/box_construct.h"
+#include "content/handlers/html/box_boundary.h"
 #include "wisp/content/handlers/html/box_inspect.h"
 #include "wisp/content/handlers/html/html_save.h"
 #include "wisp/content/handlers/html/private.h"
@@ -124,10 +125,18 @@ static QJsonObject summary(struct box *box)
                 ph + box->border[TOP].width + box->border[BOTTOM].width)}};
 }
 
-static QJsonObject describe(struct box *box, const css_unit_ctx *units)
+static QJsonObject describe(struct box *box, const html_content *html)
 {
+    const css_unit_ctx *units = &html->unit_len_ctx;
     QJsonObject result = summary(box);
     result["owns_region"] = (box->flags & OWNS_REGION) != 0;
+#ifdef WISP_ENABLE_PARTIAL_UPDATES
+    if (box->flags & OWNS_REGION) {
+        const char *reason;
+        html_box_check_boundary(html, box, nullptr, &reason);
+        result["box_boundary"] = reason;
+    }
+#endif
     result["margin_trbl"] = QJsonArray{box->margin[TOP], box->margin[RIGHT], box->margin[BOTTOM], box->margin[LEFT]};
     result["padding_trbl"] = QJsonArray{
         box->padding[TOP], box->padding[RIGHT], box->padding[BOTTOM], box->padding[LEFT]};
@@ -278,7 +287,7 @@ QJsonObject nsqt_capture_inspect(struct hlcache_handle *content, const QStringLi
                 auto *candidate = pending.takeLast();
                 if (candidate->node == reinterpret_cast<dom_node *>(element)) {
                     if (++count <= 64) {
-                        matches.append(describe(candidate, &html->unit_len_ctx));
+                        matches.append(describe(candidate, html));
                     }
                 }
                 for (auto *child = candidate->last; child; child = child->prev) {
@@ -301,7 +310,7 @@ QJsonObject nsqt_capture_inspect(struct hlcache_handle *content, const QStringLi
         auto *box = root;
         while ((box = box_at_point(&html->unit_len_ctx, box, point.x(), point.y(), &x, &y))) {
             if (box_visible(box) && ++count <= 64) {
-                hits.append(describe(box, &html->unit_len_ctx));
+                hits.append(describe(box, html));
             }
         }
         result["point"] = QJsonObject{{"x", point.x()}, {"y", point.y()}, {"hit_count", count}, {"hits", hits}};
