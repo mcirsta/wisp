@@ -127,6 +127,7 @@ static QJsonObject summary(struct box *box)
 static QJsonObject describe(struct box *box, const css_unit_ctx *units)
 {
     QJsonObject result = summary(box);
+    result["owns_region"] = (box->flags & OWNS_REGION) != 0;
     result["margin_trbl"] = QJsonArray{box->margin[TOP], box->margin[RIGHT], box->margin[BOTTOM], box->margin[LEFT]};
     result["padding_trbl"] = QJsonArray{
         box->padding[TOP], box->padding[RIGHT], box->padding[BOTTOM], box->padding[LEFT]};

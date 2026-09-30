@@ -22,7 +22,10 @@
 #include "content/handlers/html/object.h"
 #include "content/handlers/html/html_svg.h"
 #include "content/handlers/html/form_bindings.h"
+#include "content/handlers/html/box_mappings.h"
+#include "content/handlers/html/restyle.h"
 #include "utils/talloc.h"
+#include "utils/libdom.h"
 #ifdef WISP_TEST_ALLOC_FAILURE
 #include "test/malloc_fig.h"
 #endif
@@ -237,6 +240,7 @@ static void setup(void)
     const char *css = "html,body,div,pre,ol,li {display:block} html {font:17px serif}"
                       "#outer {color:#123456} #link {font-size:21px} #hidden {display:none}"
                       "#link::before {content:'before'} #link::after {content:'after'}"
+                      ".owned-boundary::before {content:'scope before'} .owned-boundary::after {content:'scope after'}"
                       ".nest::after {content:'!'} #split::before {content:'block';display:block}"
                       ".float {float:left} .flex {display:flex} .grid {display:grid} .cell {display:table-cell}"
                       "pre {white-space:pre} li {display:list-item;list-style-type:decimal}";
@@ -265,6 +269,7 @@ static void teardown(void)
 {
     ck_assert_ptr_null(scheduled);
     ck_assert_ptr_null(html.box_conversion_context);
+    html_restyle_reset(&html);
     html_object_free_objects(&html);
     talloc_free(html.bctx);
     while (html.forms != NULL) {
@@ -294,7 +299,7 @@ static nserror begin(void)
  * pointer addresses. Outside nodes must not inherit an earlier inline's state. */
 static void describe(FILE *stream, const struct box *box)
 {
-    fprintf(stream, "(%d flags=%x columns=%u rows=%u", box->type, box->flags, box->columns, box->rows);
+    fprintf(stream, "(%d flags=%x columns=%u rows=%u", box->type, box->flags & ~OWNS_REGION, box->columns, box->rows);
     if (box->text != NULL)
         fprintf(stream, " text=%.*s", (int)box->length, box->text);
     if (box->href != NULL)
@@ -469,6 +474,190 @@ START_TEST(test_list_image_cascade)
 END_TEST
 
 #ifdef WISP_ENABLE_PARTIAL_UPDATES
+/* Exercise the real selective-style lifecycle: its full reconstruction is what
+ * first establishes owners for later retained-box work. Keep the old arena alive
+ * until borrowed styles have been cloned and the active table discarded. */
+static void *begin_owned_rebuild(dom_node **controls, size_t count)
+{
+    html.had_initial_layout = true;
+    html.base.status = CONTENT_STATUS_DONE;
+    ck_assert_int_eq(html_restyle_capture_inputs(&html), NSERROR_OK);
+    html_restyle_end(&html, true);
+    for (size_t i = 0; i < count; i++)
+        html_restyle_record_checked(&html, controls[i]);
+    html_restyle_begin(&html);
+    ck_assert(html.restyle.partial);
+    ck_assert_int_eq(html_restyle_invalidate(&html), NSERROR_OK);
+    void *old = html.bctx;
+    html.bctx = NULL;
+    html.layout = NULL;
+    html.restyling = true;
+    ck_assert_int_eq(html_restyle_capture_inputs(&html), NSERROR_OK);
+    ck_assert_int_eq(begin(), NSERROR_OK);
+    return old;
+}
+
+static void finish_owned_rebuild(void *old, bool success)
+{
+    html.restyling = false;
+    html_restyle_end(&html, success);
+    talloc_free(old);
+}
+
+static void owned_allocation(void *owner, const void *allocation)
+{
+    if (allocation == NULL)
+        return;
+    const void *p = allocation;
+    while (p != NULL && p != owner)
+        p = talloc_parent(p);
+    ck_assert_msg(p == owner, "Allocation %p escaped owner %p", allocation, owner);
+}
+
+static void owned_boxes(void *owner, const struct box *box)
+{
+    owned_allocation(owner, box);
+    owned_allocation(owner, box->text);
+    /* These fixtures define title/target inside the selected region. */
+    owned_allocation(owner, box->title);
+    owned_allocation(owner, box->target);
+    if (box->list_marker != NULL)
+        owned_boxes(owner, box->list_marker);
+    for (const struct box *child = box->children; child != NULL; child = child->next)
+        owned_boxes(owner, child);
+}
+
+START_TEST(test_live_region_owners)
+{
+    dom_node *outer = by_id("outer"), *link = by_id("link"), *outside = by_id("outside");
+    const char *styles[] = {"display:block", "display:flex", "display:grid"};
+    attribute(outer, "style", styles[_i]);
+    attribute(outer, "class", "owned-boundary");
+    /* Whitespace/text around two independent scopes must stay outside them. */
+    dom_node *outside_control = element(outside, "span", "outside-control", NULL);
+    text(outside_control, "sibling control");
+    dom_node *body = by_id("body");
+    text(body, "following scopes");
+    dom_node *nested = by_id("deep");
+    ck_assert_int_eq(begin(), NSERROR_OK);
+    while (scheduled != NULL)
+        run_slice();
+    ck_assert_ptr_null(box_construct_region_owner(box_for_node(outer)));
+    char *expected = snapshot();
+    size_t plateau = 0;
+    for (unsigned pass = 0; pass < 12; pass++) {
+        /* Overlapping changes coalesce; descendants get no extra arena. */
+        dom_node *controls[] = {link, nested, outside_control};
+        void *old = begin_owned_rebuild(controls, 3);
+        while (scheduled != NULL)
+            run_slice();
+        finish_owned_rebuild(old, true);
+        char *actual = snapshot();
+        ck_assert_str_eq(actual, expected);
+        free(actual);
+        struct box *box = box_for_node(outer), *sibling = box_for_node(outside);
+        void *owner = box_construct_region_owner(box), *other = box_construct_region_owner(sibling);
+        ck_assert_ptr_nonnull(owner);
+        ck_assert_ptr_nonnull(other);
+        ck_assert_ptr_ne(owner, other);
+        ck_assert_ptr_eq(talloc_parent(owner), html.bctx);
+        ck_assert_ptr_eq(talloc_parent(other), html.bctx);
+        ck_assert_ptr_null(box_construct_region_owner(box_for_node(link)));
+        owned_boxes(owner, box);
+        owned_boxes(other, sibling);
+        ck_assert_ptr_eq(talloc_parent(box_for_node(body)), html.bctx);
+        ck_assert_ptr_eq(talloc_parent(box_for_node(body)->last), html.bctx);
+        if (pass == 0)
+            plateau = talloc_total_blocks(html.bctx);
+        ck_assert_uint_eq(talloc_total_blocks(html.bctx), plateau);
+    }
+
+    /* Before layout adds cross-boundary links, detaching this physical subtree
+     * is sufficient to test arena retirement. This is not a publication test. */
+    struct box *box = box_for_node(outer), *parent = box->parent, *sibling = box_for_node(outside);
+    void *owner = box_construct_region_owner(box);
+    size_t remaining = talloc_total_blocks(html.bctx) - talloc_total_blocks(owner);
+    if (box->prev != NULL)
+        box->prev->next = box->next;
+    else
+        parent->children = box->next;
+    if (box->next != NULL)
+        box->next->prev = box->prev;
+    else
+        parent->last = box->prev;
+    talloc_free(owner);
+    ck_assert_uint_eq(talloc_total_blocks(html.bctx), remaining);
+    ck_assert_ptr_null(box_for_node(outer));
+    ck_assert_ptr_null(box_for_node(link));
+    ck_assert_ptr_eq(box_for_node(outside), sibling);
+    char *retained = snapshot(); /* Traverse and read styles after retirement. */
+    free(retained);
+    free(expected);
+    dom_node_unref(outer);
+    dom_node_unref(link);
+    dom_node_unref(outside);
+    dom_node_unref(body);
+    dom_node_unref(nested);
+}
+END_TEST
+
+START_TEST(test_live_owner_ineligible)
+{
+    const char *styles[] = {"display:none", "float:left", "position:absolute", "display:table", "display:inline",
+        "display:block", "display:block"};
+    dom_node *outer = by_id("outer"), *control = by_id("link"), *body = by_id("body");
+    attribute(outer, "style", styles[_i]);
+    if (_i == 5)
+        attribute(body, "style", "display:inline"); /* Flattened DOM parent. */
+    ck_assert_int_eq(begin(), NSERROR_OK);
+    while (scheduled != NULL)
+        run_slice();
+    char *expected = snapshot();
+    void *old = begin_owned_rebuild(&control, 1);
+    if (_i == 6) {
+        html_restyle_use_full(&html, "test_full_fallback");
+        ck_assert_int_eq(html_restyle_invalidate(&html), NSERROR_OK);
+    }
+    while (scheduled != NULL)
+        run_slice();
+    finish_owned_rebuild(old, true);
+    ck_assert_ptr_null(box_construct_region_owner(box_for_node(outer)));
+    char *actual = snapshot();
+    ck_assert_str_eq(actual, expected);
+    free(actual);
+    free(expected);
+    dom_node_unref(outer);
+    dom_node_unref(control);
+    dom_node_unref(body);
+}
+END_TEST
+
+START_TEST(test_live_owner_cancel_or_fail)
+{
+    ck_assert_int_eq(begin(), NSERROR_OK);
+    while (scheduled != NULL)
+        run_slice();
+    dom_node *control = by_id("link"), *outer = by_id("outer");
+    void *old = begin_owned_rebuild(&control, 1);
+    if (_i == 1) {
+        run_slice();
+        ck_assert_ptr_nonnull(scheduled);
+        ck_assert_ptr_nonnull(box_construct_region_owner(box_for_node(outer)));
+    }
+    if (_i == 2) {
+        reject_schedule = expect_failure = true;
+        run_slice();
+        ck_assert_ptr_null(scheduled);
+    } else {
+        ck_assert_int_eq(cancel_dom_to_box(html.box_conversion_context), NSERROR_OK);
+        html.box_conversion_context = NULL;
+    }
+    finish_owned_rebuild(old, false);
+    dom_node_unref(control);
+    dom_node_unref(outer);
+}
+END_TEST
+
 static struct box_construct_region *region;
 static void *region_context;
 static nserror region_error;
@@ -525,6 +714,231 @@ static void assert_live_tree(const char *expected, dom_node *node, struct box *o
     ck_assert_ptr_null(html.iframe);
     ck_assert_ptr_null(html.forms);
 }
+
+START_TEST(test_mapping_publication)
+{
+    dom_node *outer = by_id("outer"), *link = by_id("link"), *body = by_id("body"), *outside = by_id("outside");
+    if (_i == 2)
+        attribute(outer, "style", "display:none");
+    build_document();
+    void *previous = begin_owned_rebuild(&link, 1);
+    while (scheduled != NULL)
+        run_slice();
+    finish_owned_rebuild(previous, true);
+    struct box *old = box_for_node(outer), *sibling = box_for_node(outside);
+    void *old_owner = box_construct_region_owner(old);
+    ck_assert_msg(_i == 2 || old_owner != NULL, "Visible old scope lacks ownership");
+    char *live = snapshot();
+    attribute(outer, "style", _i == 1 ? "display:none" : "display:block");
+    ck_assert_int_eq(begin_region(outer), NSERROR_OK);
+    while (scheduled != NULL)
+        run_slice();
+    ck_assert_int_eq(region_error, NSERROR_OK);
+    struct html_box_mapping_plan *plan;
+    ck_assert_int_eq(html_box_prepare_mappings(&html, outer, old, region, html.bctx, &plan), NSERROR_OK);
+    assert_live_tree(live, outer, old);
+    ck_assert_int_eq(html_box_check_mappings(plan), NSERROR_OK);
+    ck_assert_int_eq(html_box_apply_mappings(plan), NSERROR_INVALID);
+    assert_live_tree(live, outer, old);
+    html.base.locked = html.restyling = true;
+    ck_assert_int_eq(html_box_apply_mappings(plan), NSERROR_OK);
+    ck_assert_int_eq(html_box_apply_mappings(plan), NSERROR_INVALID);
+    ck_assert_ptr_eq(box_for_node(outer), region->root);
+    ck_assert_ptr_eq(box_for_node(outside), sibling);
+    if (region->root != NULL)
+        assert_live_mappings(region->root);
+    else
+        ck_assert_ptr_null(box_for_node(link)); /* Hidden descendants are cleared too. */
+
+    /* Test-only splice before any layout: the full publisher still needs its
+     * separate closure/resource/interaction checks. This root is body's first
+     * child even when hidden, so no DOM-to-box insertion search is needed. */
+    struct box *parent = box_for_node(body);
+    struct box *next = old == NULL ? parent->children : old->next;
+    if (region->root != NULL) {
+        region->root->parent = parent;
+        region->root->next = next;
+        region->root->flags |= OWNS_REGION;
+        parent->children = region->root;
+        if (next != NULL)
+            next->prev = region->root;
+        else
+            parent->last = region->root;
+    } else {
+        parent->children = next;
+        if (next != NULL)
+            next->prev = NULL;
+        else
+            parent->last = NULL;
+    }
+    talloc_free(old_owner);
+    html_box_discard_mappings(plan);
+    assert_live_mappings(html.layout); /* Old destructors cannot erase new keys. */
+    free(live);
+    dom_node_unref(outer);
+    dom_node_unref(link);
+    dom_node_unref(body);
+    dom_node_unref(outside);
+}
+END_TEST
+
+static nserror describe_mapping(dom_node *node, void *pw)
+{
+    fprintf(pw, "%p:%p\n", (void *)node, (void *)box_for_node(node));
+    return NSERROR_OK;
+}
+
+static char *mapping_snapshot(void)
+{
+    char *buffer;
+    size_t length;
+    FILE *stream = open_memstream(&buffer, &length);
+    ck_assert_ptr_nonnull(stream);
+    ck_assert_int_eq(libdom_iterate_elements((dom_node *)html.document, describe_mapping, stream), NSERROR_OK);
+    ck_assert_int_eq(fclose(stream), 0);
+    return buffer;
+}
+
+START_TEST(test_mapping_cancel_or_stale)
+{
+    build_document();
+    dom_node *outer = by_id("outer"), *outside = by_id("outside");
+    struct box *old = box_for_node(outer);
+    ck_assert_int_eq(begin_region(outer), NSERROR_OK);
+    while (scheduled != NULL)
+        run_slice();
+    ck_assert_int_eq(region_error, NSERROR_OK);
+    size_t blocks = talloc_total_blocks(html.bctx);
+    struct html_box_mapping_plan *plan;
+    ck_assert_int_eq(html_box_prepare_mappings(&html, outer, old, region, html.bctx, &plan), NSERROR_OK);
+    void *saved_bctx = html.bctx;
+    struct box *saved_layout = html.layout, *saved_children = region->root->children, *saved_old_children = old->children;
+    void *ignored;
+    switch (_i) {
+    case 0: break; /* Successful preparation, then cancellation. */
+    case 1: html.restyle.dom_generation++; break;
+    case 2: html.bctx = NULL; break;
+    case 3: html.layout = NULL; break;
+    case 4:
+        ck_assert_int_eq(dom_node_set_user_data(outer, corestring_dom___ns_key_box_node_data,
+                             box_for_node(outside), NULL, &ignored), DOM_NO_ERR);
+        break;
+    case 5: region->root->children = NULL; break; /* Missing candidate mappings. */
+    case 6: element(outer, "div", NULL, NULL); break; /* Unrecorded DOM node. */
+    case 7: old->children = NULL; break; /* Missing live owning boxes. */
+    }
+    html.base.locked = html.restyling = true;
+    char *before = mapping_snapshot();
+    struct box *mapped = box_for_node(outer);
+    if (_i != 0) {
+        ck_assert_int_eq(html_box_check_mappings(plan), NSERROR_INVALID);
+        ck_assert_int_eq(html_box_apply_mappings(plan), NSERROR_INVALID);
+    }
+    ck_assert_ptr_eq(box_for_node(outer), mapped);
+    html_box_discard_mappings(plan);
+    char *after = mapping_snapshot();
+    ck_assert_str_eq(after, before);
+    free(after);
+    free(before);
+    html.bctx = saved_bctx;
+    html.layout = saved_layout;
+    ck_assert_uint_eq(talloc_total_blocks(html.bctx), blocks);
+    if (_i == 4)
+        ck_assert_int_eq(dom_node_set_user_data(outer, corestring_dom___ns_key_box_node_data, old, NULL, &ignored),
+            DOM_NO_ERR);
+    region->root->children = saved_children;
+    old->children = saved_old_children;
+    box_construct_region_destroy(region);
+    /* Cancellation never replaced any other element's existing mapping. */
+    ck_assert_ptr_eq(box_for_node(outer), old);
+    dom_node_unref(outer);
+    dom_node_unref(outside);
+}
+END_TEST
+
+START_TEST(test_mapping_reject_escaping_or_duplicate_nodes)
+{
+    build_document();
+    dom_node *outer = by_id("outer"), *outside = by_id("outside");
+    struct box *old = box_for_node(outer);
+    ck_assert_int_eq(begin_region(outer), NSERROR_OK);
+    while (scheduled != NULL)
+        run_slice();
+    ck_assert_int_eq(region_error, NSERROR_OK);
+    /* The first child with a node is the flattened link; inline containers
+     * themselves have no DOM identity. */
+    struct box *child = region->root->children->children;
+    ck_assert_ptr_nonnull(child->node);
+    dom_node *saved = child->node;
+    if (_i < 2)
+        child->node = _i == 0 ? outer : outside;
+    else
+        region->root->next = box_for_node(outside);
+    size_t blocks = talloc_total_blocks(html.bctx);
+    struct html_box_mapping_plan *plan;
+    nserror err = html_box_prepare_mappings(&html, outer, old, region, html.bctx, &plan);
+    ck_assert_int_eq(err, _i == 0 ? NSERROR_INVALID : NSERROR_NOT_IMPLEMENTED);
+    ck_assert_ptr_null(plan);
+    ck_assert_uint_eq(talloc_total_blocks(html.bctx), blocks);
+    ck_assert_ptr_eq(box_for_node(outer), old);
+    child->node = saved;
+    region->root->next = NULL;
+    box_construct_region_destroy(region);
+    dom_node_unref(outer);
+    dom_node_unref(outside);
+}
+END_TEST
+
+#ifdef WISP_TEST_ALLOC_FAILURE
+START_TEST(test_mapping_allocation_failures)
+{
+    build_document();
+    dom_node *outer = by_id("outer");
+    struct box *old = box_for_node(outer);
+    ck_assert_int_eq(begin_region(outer), NSERROR_OK);
+    while (scheduled != NULL)
+        run_slice();
+    ck_assert_int_eq(region_error, NSERROR_OK);
+    char *live = snapshot();
+    size_t blocks = talloc_total_blocks(html.bctx);
+    struct html_box_mapping_plan *plan = NULL;
+    unsigned fail_after;
+    for (fail_after = 0; fail_after < 512; fail_after++) {
+        malloc_limit(fail_after);
+        nserror err = html_box_prepare_mappings(&html, outer, old, region, html.bctx, &plan);
+        malloc_limit(UINT_MAX);
+        assert_live_tree(live, outer, old);
+        if (err == NSERROR_OK)
+            break;
+        ck_assert_msg(err == NSERROR_NOMEM, "Allocation %u returned %d", fail_after, err);
+        ck_assert_ptr_null(plan);
+        ck_assert_uint_eq(talloc_total_blocks(html.bctx), blocks);
+    }
+    ck_assert_uint_lt(fail_after, 512);
+    ck_assert_uint_gt(fail_after, 64); /* Failures include many reserved DOM slots. */
+    html_box_discard_mappings(plan);
+    realloc_limit(0);
+    nserror err = html_box_prepare_mappings(&html, outer, old, region, html.bctx, &plan);
+    realloc_limit(UINT_MAX);
+    ck_assert_int_eq(err, NSERROR_NOMEM);
+    ck_assert_ptr_null(plan);
+    ck_assert_uint_eq(talloc_total_blocks(html.bctx), blocks);
+    ck_assert_int_eq(html_box_prepare_mappings(&html, outer, old, region, html.bctx, &plan), NSERROR_OK);
+    html.base.locked = html.restyling = true;
+    malloc_limit(0);
+    realloc_limit(0);
+    err = html_box_apply_mappings(plan);
+    html_box_discard_mappings(plan);
+    malloc_limit(UINT_MAX);
+    realloc_limit(UINT_MAX);
+    ck_assert_int_eq(err, NSERROR_OK);
+    assert_live_mappings(region->root);
+    box_construct_region_destroy(region);
+    free(live);
+    dom_node_unref(outer);
+}
+END_TEST
+#endif
 
 /* Compare the same mixed subtree under block/flex/grid parents and with each
  * root formatter. Comparison includes generated boxes, normalization and styles. */
@@ -1287,6 +1701,15 @@ int main(void)
     tcase_add_test(tc, test_continuation_schedule_failure);
     tcase_add_loop_test(tc, test_list_image_cascade, 0, 4);
 #ifdef WISP_ENABLE_PARTIAL_UPDATES
+    tcase_add_loop_test(tc, test_mapping_publication, 0, 3);
+    tcase_add_loop_test(tc, test_mapping_cancel_or_stale, 0, 8);
+    tcase_add_loop_test(tc, test_mapping_reject_escaping_or_duplicate_nodes, 0, 3);
+#ifdef WISP_TEST_ALLOC_FAILURE
+    tcase_add_test(tc, test_mapping_allocation_failures);
+#endif
+    tcase_add_loop_test(tc, test_live_region_owners, 0, 3);
+    tcase_add_loop_test(tc, test_live_owner_ineligible, 0, 7);
+    tcase_add_loop_test(tc, test_live_owner_cancel_or_fail, 0, 3);
     tcase_add_loop_test(tc, test_detached_region, 0, 3);
     /* Inline roots are blockified only under flex/grid parents. */
     tcase_add_loop_test(tc, test_detached_region, 4, 6);

@@ -54,6 +54,9 @@ def run(destination, force, restart=False):
         if tracking:
             assert profile["changed_controls"] == 2 and profile["dirty_roots"] == 1, (force, index, profile)
         elements = {e["id"]: e for e in step["elements"]}
+        for element in elements.values():
+            for box in element["boxes"]:
+                assert box["owns_region"] == (partial and element["id"] == "tabs"), (force, restart, index, element)
         for key, height in (("field-message", 17), ("notes-message", 19)):
             boxes = elements[key]["boxes"]
             assert boxes and boxes[0]["content"]["height"] == height, (force, index, key, elements[key])
@@ -61,6 +64,11 @@ def run(destination, force, restart=False):
         other = "second" if selected == "first" else "first"
         assert elements[selected]["state"]["checked"] and not elements[other]["state"]["checked"], (force, index)
         assert elements[selected + "-panel"]["boxes"] and not elements[other + "-panel"]["boxes"], (force, index)
+    # Ownership intentionally differs; compare the complete rendered state below.
+    for step in steps:
+        for element in step["elements"]:
+            for box in element["boxes"]:
+                del box["owns_region"]
     return steps
 
 

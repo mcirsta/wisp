@@ -85,6 +85,9 @@ struct box_construct_ctx {
     box_construct_region_cb region_cb;
     void *region_pw;
     nserror error; /**< Also carries errors from generated content */
+#ifdef WISP_ENABLE_PARTIAL_UPDATES
+    dom_node *owner_node; /**< Borrowed boundary of an arena in full construction */
+#endif
 };
 
 /**
@@ -824,13 +827,53 @@ static bool box_construct_marker(struct box *box, const char *title, struct box_
 /* Initial detached boundary policy. Other types may need anonymous wrappers or
  * inline continuations outside the requested subtree. Even an eligible type
  * still needs closure validation before an eventual publication. */
+static bool box_construct_region_style(box_type type, const css_computed_style *style)
+{
+    return style != NULL && (type == BOX_BLOCK || type == BOX_FLEX || type == BOX_GRID) &&
+        css_computed_position(style) != CSS_POSITION_ABSOLUTE &&
+        css_computed_position(style) != CSS_POSITION_FIXED && css_computed_float(style) == CSS_FLOAT_NONE;
+}
+
 static bool box_construct_region_root(const struct box *box)
 {
-    return box != NULL && box->style != NULL &&
-        (box->type == BOX_BLOCK || box->type == BOX_FLEX || box->type == BOX_GRID) &&
-        css_computed_position(box->style) != CSS_POSITION_ABSOLUTE &&
-        css_computed_position(box->style) != CSS_POSITION_FIXED && css_computed_float(box->style) == CSS_FLOAT_NONE;
+    return box != NULL && box_construct_region_style(box->type, box->style);
 }
+
+#ifdef WISP_ENABLE_PARTIAL_UPDATES
+/* Establish ownership during a normal full reconstruction, only for scopes
+ * already selected by checked-state invalidation. Nested scopes share the outer
+ * arena. This does not enable replacement or prove boundary closure. */
+static void box_construct_begin_owner(
+    struct box_construct_ctx *ctx, const struct box_construct_props *props, const css_computed_style *style)
+{
+    if (ctx->region != NULL || ctx->owner_node != NULL || !ctx->content->restyling ||
+        !ctx->content->restyle.partial || ctx->depth == 0)
+        return;
+    const struct box *parent = ctx->ancestors[ctx->depth - 1].box;
+    if (parent != props->containing_block || parent->node == NULL ||
+        (parent->type != BOX_BLOCK && parent->type != BOX_FLEX && parent->type != BOX_GRID))
+        return;
+    for (uint32_t i = 0; i < ctx->content->restyle.active.count; i++) {
+        if (ctx->content->restyle.active.roots[i] != ctx->n)
+            continue;
+        if (!box_construct_region_style(box_construct_type(style, parent, false), style))
+            return;
+        void *owner = talloc_zero(ctx->bctx, int);
+        if (owner != NULL) {
+            ctx->bctx = owner;
+            ctx->owner_node = ctx->n;
+        }
+        /* Ownership is an optimization: allocation failure simply leaves this
+         * scope under the document owner, requiring full rebuild next time. */
+        return;
+    }
+}
+
+void *box_construct_region_owner(const struct box *box)
+{
+    return box != NULL && (box->flags & OWNS_REGION) ? talloc_parent(box) : NULL;
+}
+#endif
 
 /**
  * Construct the box tree for an XML element.
@@ -871,6 +914,10 @@ static bool box_construct_element(struct box_construct_ctx *ctx, bool *convert_c
         if (ctx->content->restyling) { ctx->content->restyle_profile.css_ns += html_profile_now() - style_start; });
     if (styles == NULL)
         goto error;
+
+#ifdef WISP_ENABLE_PARTIAL_UPDATES
+    box_construct_begin_owner(ctx, &props, styles->styles[CSS_PSEUDO_ELEMENT_NONE]);
+#endif
 
     /* Extract title attribute, if present */
     err = dom_element_get_attribute(ctx->n, corestring_dom_title, &title0);
@@ -996,6 +1043,13 @@ static bool box_construct_element(struct box_construct_ctx *ctx, bool *convert_c
         goto error;
     }
 
+#ifdef WISP_ENABLE_PARTIAL_UPDATES
+    /* Special handlers may change the provisional CSS box type. Such a scope
+     * can keep its allocations grouped, but must not advertise a usable owner. */
+    if (ctx->owner_node == ctx->n && box_construct_region_root(box))
+        box->flags |= OWNS_REGION;
+#endif
+
     if (!box_construct_push(ctx, box, props.containing_block))
         goto error;
 
@@ -1115,6 +1169,14 @@ static nserror next_node(struct box_construct_ctx *ctx, bool convert_children)
             if (ctx->error != NSERROR_OK)
                 return ctx->error;
         }
+#ifdef WISP_ENABLE_PARTIAL_UPDATES
+        /* Include the boundary's ::after in its arena, then return siblings and
+         * following text to the document owner. Also handles skipped roots. */
+        if (n == ctx->owner_node) {
+            ctx->bctx = ctx->content->bctx;
+            ctx->owner_node = NULL;
+        }
+#endif
         if (n == ctx->root_node) {
             dom_node_unref(n);
             ctx->n = NULL;

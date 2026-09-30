@@ -1746,6 +1746,67 @@ dom_exception _dom_node_get_feature(dom_node_internal *node, dom_string *feature
     return DOM_NO_ERR;
 }
 
+static dom_user_data *find_user_data(const dom_node_internal *node, const dom_string *key)
+{
+    for (dom_user_data *ud = node->user_data; ud != NULL; ud = ud->next)
+        if (dom_string_isequal(ud->key, key))
+            return ud;
+    return NULL;
+}
+
+void dom_node_discard_prepared_user_data(dom_user_data *entry)
+{
+    if (entry != NULL) {
+        dom_string_unref(entry->key);
+        free(entry);
+    }
+}
+
+static void remove_user_data(dom_node_internal *node, dom_user_data *ud)
+{
+    if (ud->next != NULL)
+        ud->next->prev = ud->prev;
+    if (ud->prev != NULL)
+        ud->prev->next = ud->next;
+    else
+        node->user_data = ud->next;
+    dom_node_discard_prepared_user_data(ud);
+}
+
+dom_exception dom_node_prepare_user_data(
+    dom_string *key, void *data, dom_user_data_handler handler, dom_user_data **entry)
+{
+    *entry = malloc(sizeof(**entry));
+    if (*entry == NULL)
+        return DOM_NO_MEM_ERR;
+    (*entry)->key = dom_string_ref(key);
+    (*entry)->data = data;
+    (*entry)->handler = handler;
+    return DOM_NO_ERR;
+}
+
+void dom_node_set_prepared_user_data(dom_node *node, dom_user_data *entry, void **previous)
+{
+    dom_node_internal *n = (dom_node_internal *)node;
+    dom_user_data *ud = find_user_data(n, entry->key);
+    *previous = ud == NULL ? NULL : ud->data;
+    if (entry->data == NULL) {
+        if (ud != NULL)
+            remove_user_data(n, ud);
+        dom_node_discard_prepared_user_data(entry);
+    } else if (ud != NULL) {
+        ud->data = entry->data;
+        ud->handler = entry->handler;
+        dom_node_discard_prepared_user_data(entry);
+    } else {
+        entry->prev = NULL;
+        entry->next = n->user_data;
+        if (entry->next != NULL)
+            entry->next->prev = entry;
+        n->user_data = entry;
+    }
+}
+
 /**
  * Associate an object to a key on this node
  *
@@ -1759,30 +1820,14 @@ dom_exception _dom_node_get_feature(dom_node_internal *node, dom_string *feature
 dom_exception _dom_node_set_user_data(
     dom_node_internal *node, dom_string *key, void *data, dom_user_data_handler handler, void **result)
 {
-    struct dom_user_data *ud = NULL;
+    struct dom_user_data *ud = find_user_data(node, key);
     void *prevdata = NULL;
 
-    /* Search for user data */
-    for (ud = node->user_data; ud != NULL; ud = ud->next) {
-        if (dom_string_isequal(ud->key, key))
-            break;
-    };
-
-    /* Remove it, if found and no new data */
-    if (data == NULL && ud != NULL) {
-        dom_string_unref(ud->key);
-
-        if (ud->next != NULL)
-            ud->next->prev = ud->prev;
-        if (ud->prev != NULL)
-            ud->prev->next = ud->next;
-        else
-            node->user_data = ud->next;
-
-        *result = ud->data;
-
-        free(ud);
-
+    /* Removing an absent key is a no-op, including under memory pressure. */
+    if (data == NULL) {
+        *result = ud == NULL ? NULL : ud->data;
+        if (ud != NULL)
+            remove_user_data(node, ud);
         return DOM_NO_ERR;
     }
 
@@ -1826,13 +1871,7 @@ dom_exception _dom_node_set_user_data(
  */
 dom_exception _dom_node_get_user_data(const dom_node_internal *node, const dom_string *key, void **result)
 {
-    struct dom_user_data *ud = NULL;
-
-    /* Search for user data */
-    for (ud = node->user_data; ud != NULL; ud = ud->next) {
-        if (dom_string_isequal(ud->key, key))
-            break;
-    };
+    struct dom_user_data *ud = find_user_data(node, key);
 
     if (ud != NULL)
         *result = ud->data;

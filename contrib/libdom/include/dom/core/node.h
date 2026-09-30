@@ -432,4 +432,16 @@ static inline dom_exception dom_node_get_user_data(const struct dom_node *node, 
 }
 #define dom_node_get_user_data(n, k, r) dom_node_get_user_data((dom_node *)(n), (k), (void **)(r))
 
+/** Libdom extension: prepare one user-data assignment without touching a node.
+ * The entry owns a key reference and borrows data; NULL data means removal.
+ * Publish consumes it without allocation or callbacks. Discard cancels an unused
+ * entry. Callers coordinating several assignments must validate their expected
+ * node/data state before publishing any of them, without yielding between writes.
+ * These functions do not provide DOM mutation or a general transaction API. */
+struct dom_user_data;
+dom_exception dom_node_prepare_user_data(
+    dom_string *key, void *data, dom_user_data_handler handler, struct dom_user_data **entry);
+void dom_node_set_prepared_user_data(dom_node *node, struct dom_user_data *entry, void **previous);
+void dom_node_discard_prepared_user_data(struct dom_user_data *entry);
+
 #endif

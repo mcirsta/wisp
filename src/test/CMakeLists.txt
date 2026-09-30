@@ -407,6 +407,11 @@ target_include_directories(dom_class_test PRIVATE ${TEST_COMMON_INCLUDES})
 target_link_libraries(dom_class_test dom ${CHECK_LIBRARIES})
 add_test(NAME dom_class_test COMMAND dom_class_test)
 
+add_executable(dom_userdata_test dom_userdata_test.c)
+target_include_directories(dom_userdata_test PRIVATE ${TEST_COMMON_INCLUDES})
+target_link_libraries(dom_userdata_test dom ${CHECK_LIBRARIES})
+add_test(NAME dom_userdata_test COMMAND dom_userdata_test)
+
 # ============================================================================
 # Unix-only Tests (require malloc_fig)
 # ============================================================================
@@ -415,6 +420,10 @@ if(NOT WIN32)
   add_library(malloc_fig SHARED ${CMAKE_SOURCE_DIR}/src/test/malloc_fig.c)
   target_include_directories(malloc_fig PRIVATE ${CMAKE_SOURCE_DIR}/src)
   target_link_libraries(malloc_fig PUBLIC dl)
+  if(CMAKE_BUILD_TYPE STREQUAL "Release")
+    target_link_libraries(dom_userdata_test malloc_fig)
+    target_compile_definitions(dom_userdata_test PRIVATE WISP_TEST_ALLOC_FAILURE)
+  endif()
 
   add_wisp_test(hashmap
     ${CMAKE_SOURCE_DIR}/src/utils/nsurl/nsurl.c

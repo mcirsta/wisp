@@ -36,10 +36,22 @@
 #include <wisp/content/handlers/html/private.h>
 #include "content/handlers/html/box_manipulate.h"
 #include "content/handlers/html/box_normalise.h"
+#include "utils/talloc.h"
 #include "content/handlers/html/table.h"
 
 /* Define to enable box normalise debug */
 #undef BOX_NORMALISE_DEBUG
+
+/* Only marked roots change allocation owner. Ordinary recursion remains in
+ * the current arena, including anonymous table/flex/grid/float wrappers. */
+static void *box_normalise_owner(const struct box *box, void *current)
+{
+#ifdef WISP_ENABLE_PARTIAL_UPDATES
+    if (box->flags & OWNS_REGION)
+        return talloc_parent(box);
+#endif
+    return current;
+}
 
 /**
  * Row spanning information for a cell
@@ -768,6 +780,7 @@ static bool box_normalise_grid(struct box *grid_container, const struct box *roo
 
 static bool box_normalise_flex(struct box *flex_container, const struct box *root, html_content *c, void *box_context)
 {
+    box_context = box_normalise_owner(flex_container, box_context);
     struct box *child;
     struct box *next_child;
     struct box *implied_flex_item;
@@ -940,6 +953,7 @@ static bool box_normalise_flex(struct box *flex_container, const struct box *roo
 
 static bool box_normalise_grid(struct box *grid_container, const struct box *root, html_content *c, void *box_context)
 {
+    box_context = box_normalise_owner(grid_container, box_context);
     struct box *child;
     struct box *next_child;
     struct box *implied_grid_item;
@@ -1259,6 +1273,7 @@ static bool box_normalise_inline_container(struct box *cont, const struct box *r
 /* Exported function documented in html/box_normalise.h */
 bool box_normalise_block(struct box *block, const struct box *root, html_content *c, void *box_context)
 {
+    box_context = box_normalise_owner(block, box_context);
     struct box *child;
     struct box *next_child;
     struct box *table;

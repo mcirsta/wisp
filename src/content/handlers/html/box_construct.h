@@ -116,6 +116,13 @@ typedef void (*box_construct_region_cb)(
     struct html_content *content, nserror error, struct box_construct_region *region, void *pw);
 
 #ifdef WISP_ENABLE_PARTIAL_UPDATES
+/** Allocation owner for an earmarked visible scope in a full reconstruction,
+ * or NULL if it has no independent owner. Includes generated/anonymous boxes
+ * and skipped descendants. Borrowed inherited data still belongs to ancestors.
+ * This alone does not certify safe replacement: bindings, physical boundary
+ * closure, input generations and retained layout must also be validated. */
+void *box_construct_region_owner(const struct box *box);
+
 /**
  * Construct an unpublished block/flex/grid subtree using the existing builder.
  *

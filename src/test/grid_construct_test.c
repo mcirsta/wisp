@@ -297,6 +297,12 @@ int talloc_free(void *ptr)
     return 0;
 }
 
+void *talloc_parent(const void *ptr)
+{
+    ck_abort_msg("Initial grid construction must not consult a region owner");
+    return NULL;
+}
+
 void *talloc_named_const(const void *context, size_t size, const char *name)
 {
     return malloc(size);

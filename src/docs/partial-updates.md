@@ -12,8 +12,11 @@ Existing CMake caches explicitly set to OFF keep that setting until reconfigured
 Milestone B constructs detached block/flex/grid candidates with staged URL/SVG
 resources, iframe descriptors and independent native controls. Rebinding existing
 settled images and registering native controls with their forms can now be prepared
-without changing live state. Complete publication
-and retained-box layout validation remain pending; displayed boxes are not yet retained.
+without changing live state (`254424da`). Eligible checked-state scopes now acquire
+independent allocation owners during full reconstruction. DOM-to-box mapping
+changes can also be prepared without changing live mappings.
+Coordinated region publication and retained-box layout validation remain pending;
+displayed boxes are not yet retained.
 Detached construction through native-control/SVG staging is committed as `610d6f5a`.
 Milestone C has not started. The steps below remain the implementation and
 acceptance checklist, with the concrete implementation choices recorded here.
@@ -508,17 +511,118 @@ These APIs still are not called by live restyling. They complete another publica
 prerequisite; they do not yet retain displayed boxes or demonstrate a tab-switch
 speedup.
 
+### Milestone B live region ownership (2026-09-30)
+
+Selective-style refresh still reconstructs the whole document, but now groups the
+allocations of eligible dirty scopes into their own arenas. The initial page load
+and first full refresh do not add arenas; the latter establishes the style-reuse
+snapshot needed for selective refresh. At most the existing eight coalesced dirty
+scopes are considered; nested changes share the outer scope. An unavailable arena allocation
+leaves ordinary document ownership in place and therefore requires full rebuild
+on a later switch.
+
+The ownership boundary starts before the root's title, special-element data and
+boxes are allocated, and ends after its generated `::after`. Siblings and following
+text return to the document owner. Block/flex/grid normalization switches owner
+only at marked roots, so anonymous wrappers stay with the scope that created them.
+Layout text splits already allocate under their owning inline containers.
+
+A single `OWNS_REGION` bit uses the existing box flags; box size is unchanged.
+`box_construct_region_owner()` retrieves a visible root's arena through its talloc
+parent. There is no new per-box pointer or permanent document lookup table. The Qt
+capture inspector exposes the flag as `owns_region` for diagnosing eligibility.
+The initial policy uses visible, in-flow block/flex/grid roots directly under a
+block/flex/grid DOM parent. Inline/anonymous boundary crossings, document roots,
+hidden roots and unsupported root types do not advertise an independent owner.
+Inherited strings may still belong to a stable ancestor. Special handlers that
+change the provisional root to an unsupported type also leave it unmarked.
+There is no registry for hidden boundaries: absent a visible owned root, a future
+replacement must widen to an eligible stable parent or use full reconstruction.
+
+Ownership is only one requirement for replacement. Resources, forms, interaction
+state, DOM mappings and layout links can still point into these arenas. The live
+path continues to free the whole previous tree. The next publication step must
+prove and clear those associations before using independent retirement; the flag
+does not promise that a subtree is safe to detach or lay out separately.
+
+The construction tests compare repeated ordinary and separately owned builds,
+including generated/hidden boxes, inline splits, floats, anonymous flex/grid/table
+wrappers and list markers. They verify allocation ancestry, stable allocation
+counts, coalesced scopes, independent siblings, root retirement before layout,
+full-fallback behavior and cancellation/failure at scheduled slices.
+
+Validation: all 119 selected Debug tests and 116 Release tests pass, including
+74 Debug construction cases and 77 Release cases. The construction suite passes
+LeakSanitizer, and the changed construction/normalization/capture code compiles
+with partial updates and profiling disabled. Both saved panels on Tion and Bihon
+exactly match the preceding PNG, DOM, normalized boxes, state/geometry and resource
+counts. Captures confirm that each `.tabs` root has its own arena on warmed
+switches, while surrounding containers remain under document ownership. The
+driver and captures are in `out/render-captures/live-region-owners-2026-09-30/`.
+The selective/full/restarted Qt comparison now checks ownership separately from
+rendered state. This is still preparation, not retained-box layout or a speedup.
+
+### Milestone B prepared DOM-to-box mappings (2026-09-30)
+
+`html_box_prepare_mappings()` walks every DOM element in the scope, including
+descendants hidden in either presentation. It records the existing mappings,
+ancestry and traversal order, then matches the candidate's owning element boxes
+by node identity. Generated anonymous boxes and layout clones do not publish
+duplicate mappings. Escaping/duplicate identities and inconsistent owning-box
+membership are refused. A missing candidate mapping clears the old one, including
+descendants that detached construction never visits because their ancestor is
+newly hidden.
+
+The temporary plan owns DOM references and a sorted lookup array. Preparation
+leaves live mappings untouched; discard releases only temporary storage.
+`html_box_check_mappings()` checks the DOM generation, ancestry/order, current
+document tree/arena, expected mappings and both trees' mapping membership before
+any write. Apply requires locked/restyling publication and validates the whole
+plan again. Publication is single-use and performs no allocations or callbacks.
+
+This requires a small libdom extension for detached user-data entries. Preparing
+an entry retains its key but does not attach it to any node. Publication consumes
+the entry using existing node storage or the reserved entry; cancellation simply
+frees it. Only changed mappings need reserved entries, and none remain as new
+bookkeeping after publication. This avoids an allocation failure halfway through
+publishing newly visible elements. Ordinary removal of an absent user-data key
+is also corrected to be a no-op instead of allocating an empty entry.
+
+The new DOM test covers preparation, replacement, deletion, cancellation, key
+lifetime, handler behavior and allocation-free publication. The real DOM/CSS
+construction suite now exercises mapping publication for visible, hidden and
+newly revealed scopes, and retirement of old owned boxes without erasing the new
+mappings. It checks stale plans before any writes, duplicate/outside identities,
+missing owning boxes, changed DOM structure, and allocation failure at each
+preparation allocation in Release.
+
+This is a mapping-publication building block, still unused by live refresh. It
+does not splice or retire boxes, certify general pointer closure, update resource
+or form bindings, clear interaction state, or reset retained layout. Its test-only
+splice happens before layout and is not the browser's region publisher.
+
+Validation: all 121 selected Debug tests and 118 Release tests pass. These include
+88 Debug construction cases and 92 Release cases, plus 4 Debug and 5 Release
+libdom user-data cases. Both suites pass LeakSanitizer. The changed mapping,
+construction, libdom and test sources compile with partial updates and profiling
+disabled. Both saved panels on Tion and Bihon exactly match the preceding PNG,
+DOM, normalized boxes, state/geometry and resource counts across repeated tab
+switches. The driver and captures are in
+`out/render-captures/prepared-mappings-2026-09-30/`.
+
 Remaining prerequisites before retaining boxes (resume here):
 
-- Establish allocation arenas for eligible regions during full construction so
-  old regions can actually be retired independently. Keep widget-bearing and other
-  unsupported content on the full-refresh path.
+- Use the new allocation owners only after proving all publication conditions.
+  Mark successfully published candidate roots with the same ownership flag;
+  detached construction already owns their arena explicitly. Keep widget-bearing
+  and other unsupported content on the full-refresh path.
 - Retain the settled-image restriction initially. New requests, pending loads,
   embedded documents and iframe-window rebinding require separate preparation
   before those cases can use partial publication; otherwise choose full refresh.
 - Prove boundary closure, including inline continuations, generated boxes, float
-  chains and containing-block pointers. Stage mapping publication (including
-  hidden descendants) and validate input generations before replacing a region.
+  chains and containing-block pointers. Coordinate the prepared mappings,
+  resource/form bindings and interaction-state cleanup, and validate input
+  generations before replacing a region.
 - Verify repeated full layout on retained boxes against fresh construction.
   Only then enable actual replacement, with its own measurements and fallback.
 
