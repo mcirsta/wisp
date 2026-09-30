@@ -73,8 +73,15 @@ with tempfile.TemporaryDirectory(prefix="wisp-retained-") as tmp:
     full = tmp / "full"
     reference = run(full, page, ("--capture-force-full-restyle",))
     retained = tmp / "retained"
-    steps = run(retained, page, ("--capture-retain-boxes",))
+    # No override: ordinary browsing and capture must both retain eligible boxes.
+    steps = run(retained, page)
     compare(reference, steps)
+    css_only = tmp / "css-only"
+    css_steps = run(css_only, page, ("--capture-css-only-restyle",))
+    compare(reference, css_steps)
+    if profiling:
+        for step in css_steps[2:]:
+            assert step["restyle_profile"]["update_mode"] == "partial_css", step
     assert steps[2]["resource_count"] >= 4, steps[2]
     for index, step in enumerate(steps[3:], 3):
         boxes = {e["id"]: e["boxes"] for e in step["elements"]}
@@ -89,6 +96,7 @@ with tempfile.TemporaryDirectory(prefix="wisp-retained-") as tmp:
             assert profile["reused_styles"] == 0 and profile["construction_wait_ms"] >= 0, profile
     for artifact in ("page.png", "dom.txt"):
         assert (retained / artifact).read_bytes() == (full / artifact).read_bytes(), artifact
+        assert (css_only / artifact).read_bytes() == (full / artifact).read_bytes(), artifact
 
     # The retained ancestor gains/loses a scrollbar as its tab contents grow.
     scrolling = tmp / "scrolling.html"
@@ -97,32 +105,36 @@ with tempfile.TemporaryDirectory(prefix="wisp-retained-") as tmp:
                          .replace('</section>', '</section></div>')
                          .replace('#second-panel { height: 65px;', '#second-panel { height: 240px;'))
     scrolling_full = run(tmp / "scrolling-full", scrolling, ("--capture-force-full-restyle",), 6, ("viewport",))
-    scrolling_steps = run(tmp / "scrolling-retained", scrolling, ("--capture-retain-boxes",), 6, ("viewport",))
+    scrolling_steps = run(tmp / "scrolling-retained", scrolling, switches=6, extra_ids=("viewport",))
     compare(scrolling_full, scrolling_steps)
     viewport = lambda step: next(e["boxes"][0] for e in step["elements"] if e["id"] == "viewport")
     for index, step in enumerate(scrolling_steps[3:], 3):
         assert viewport(step)["box_address"] == viewport(scrolling_steps[2])["box_address"], index
         assert viewport(step)["scrollbars"]["vertical"] == bool(index % 2), (index, viewport(step))
 
-    # A native widget inside the changing scope must take the full fallback.
+    # A native widget inside the changing scope requires whole reconstruction,
+    # but must preserve the existing CSS reuse when its inputs did not change.
     widget = tmp / "widget.html"
     widget.write_text(source.replace("First panel", 'First panel<textarea>kept value</textarea>'))
     widget_full = run(tmp / "widget-full", widget, ("--capture-force-full-restyle",), 4)
-    widget_steps = run(tmp / "widget-retained", widget, ("--capture-retain-boxes",), 4)
+    widget_steps = run(tmp / "widget-retained", widget, switches=4)
     compare(widget_full, widget_steps)
     # Known page-level exclusions keep selective CSS reuse. They must not build
     # a candidate only to discard it and redo full CSS selection on every toggle.
     frame = tmp / "frame.html"
     frame.write_text(source + '<iframe src="about:blank" width="60" height="25"></iframe>')
     frame_full = run(tmp / "frame-full", frame, ("--capture-force-full-restyle",), 4)
-    frame_steps = run(tmp / "frame-retained", frame, ("--capture-retain-boxes",), 4)
+    frame_steps = run(tmp / "frame-retained", frame, switches=4)
     compare(frame_full, frame_steps)
     if profiling:
-        assert widget_steps[3]["restyle_profile"]["update_mode"] == "full", widget_steps[3]
+        for step in widget_steps[3:]:
+            profile = step["restyle_profile"]
+            assert profile["update_mode"] == "partial_css" and profile["reused_styles"] > 0, profile
+            assert profile["fallback_reason"] != "none" and profile["restarts"] == 0, profile
+            assert 0 <= profile["boxes_ms"] <= profile["total_ms"], profile
         for step in frame_steps[2:]:
             assert step["restyle_profile"]["update_mode"] == "partial_css", step
-        restarted = run(tmp / "restart", page,
-                        ("--capture-retain-boxes", "--capture-restart-partial-restyle"))
+        restarted = run(tmp / "restart", page, ("--capture-restart-partial-restyle",))
         compare(reference, restarted)
         assert restarted[3]["restyle_profile"]["restarts"] == 1, restarted[3]
         assert restarted[3]["restyle_profile"]["fallback_reason"] == "inputs_changed_during_build", restarted[3]

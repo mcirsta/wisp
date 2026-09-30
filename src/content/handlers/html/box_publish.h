@@ -24,8 +24,8 @@ struct box_construct_region;
  * requires a full rebuild/content error; there is no rollback of retired boxes.
  *
  * Active interaction/search, frames and unsupported resources/widgets currently
- * require full refresh. Live refresh currently opts in through Qt capture while
- * rollout validation continues. reason optionally receives a static diagnostic string.
+ * require whole reconstruction. Eligible native checked-state updates use this
+ * path by default. reason optionally receives a static diagnostic string.
  */
 nserror
 html_box_publish_region(struct html_content *html, struct box_construct_region **candidate, const char **reason);

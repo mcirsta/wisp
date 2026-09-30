@@ -1,0 +1,27 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Retained container scroll offsets</title>
+<style>
+  body { margin: 10px; font: 14px/20px sans-serif; }
+  label { display: inline-block; padding: 5px; background: #ddd; }
+  .viewport { width: 240px; height: 140px; overflow: auto; margin: 10px 0; }
+  #scope input, .panel { display: none; }
+  #large:checked ~ #large-panel, #medium:checked ~ #medium-panel,
+  #small:checked ~ #small-panel { display: block; }
+  #large-panel { width: 620px; height: 600px; background: #bde; }
+  #medium-panel { width: 420px; height: 260px; background: #edb; }
+  #small-panel { width: 80px; height: 60px; background: #bed; }
+  #untouched div { width: 520px; height: 440px; background: #dbe; }
+</style>
+<div id="labels"><label for="large">Large</label><label for="medium">Medium</label><label for="small">Small</label></div>
+<div class="viewport" id="viewport">
+  <section id="scope">
+    <input id="large" name="size" type="radio" checked>
+    <input id="medium" name="size" type="radio">
+    <input id="small" name="size" type="radio">
+    <div id="large-panel" class="panel">Large panel</div>
+    <div id="medium-panel" class="panel">Medium panel</div>
+    <div id="small-panel" class="panel">Small panel</div>
+  </section>
+</div>
+<div class="viewport" id="untouched"><div>Unchanged scrollable content</div></div>

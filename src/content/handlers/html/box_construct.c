@@ -1634,6 +1634,8 @@ static void convert_xml_to_box(void *p)
     do {
         assert(ctx->n != NULL);
         if (!box_construct_step(ctx)) {
+            HTML_PROFILE(if (ctx->content->restyling)
+                ctx->content->restyle_profile.construction_ns += html_profile_now() - slice_start);
             NSLOG(wisp, WARNING, "Box construction step failed");
             box_construct_failed(ctx);
             NSLOG(wisp, DEBUG, "PROFILER: STOP Box construction slice %p", ctx);

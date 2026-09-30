@@ -1,7 +1,7 @@
 # Partial document updates: implementation plan
 
-Status: milestone A enabled; milestone B live integration available through capture
-opt-in, 2026-09-30. The reviewed baseline is `eb3e03df`
+Status: milestones A and B enabled for eligible native checked-state updates,
+2026-09-30. The reviewed baseline is `eb3e03df`
 (`Use stack scratch for small class selector lists`).
 
 The foundation is committed as `fdd92975`, and milestone A as `180d7009`.
@@ -20,9 +20,10 @@ Read-only boundary checks cover box links, arena storage and borrowed styles
 (`5b331865`). A synchronous coordinator now publishes one prepared region in tests,
 including DOM, form and resource bindings and retirement of its old arena.
 An allocation-free layout reset now passes repeated retained-tree/full-rebuild
-geometry comparisons. Live refresh now uses the builder and publisher through
-the Qt `--capture-retain-boxes` opt-in, followed by full layout. Ordinary browsing
-still reconstructs all boxes while milestone B rollout validation continues.
+geometry comparisons. Live refresh now uses the builder and publisher by default
+for eligible single-region changes, followed by full layout. Capture retains
+explicit CSS-only and full-rebuild reference modes. Pages with frames and unsafe
+regions keep the existing conservative reconstruction paths.
 Detached construction through native-control/SVG staging is committed as `610d6f5a`.
 Milestone C has not started. The steps below remain the implementation and
 acceptance checklist, with the concrete implementation choices recorded here.
@@ -784,16 +785,19 @@ on this fresh-load path and does not fix the underlying issue.
 
 ### Milestone B live integration (2026-09-30)
 
-`--capture-retain-boxes` opts an actual browser document into retained-region
-updates. The first refresh establishes the style snapshot; a subsequent selective
+Live integration was initially validated behind `--capture-retain-boxes`; the
+default rollout below enables the same guarded path for ordinary browsing.
+The first refresh establishes the style snapshot; a subsequent selective
 whole rebuild establishes allocation owners. Later eligible single-scope changes
 build a detached replacement while the old tree stays alive. Publication rechecks
 inputs and all bindings, replaces the owned region, then resets and lays out the
 whole document before exposing it. Unaffected boxes, styles, settled resources
 and unfocused controls survive. No scripting or threading changes are involved.
 
-Failure before publication discards the candidate and uses the full-rebuild path.
-Changed inputs also invalidate all node caches before retrying. Failure after
+Failure before publication discards the candidate and reconstructs the document.
+Unchanged inputs preserve milestone A's outside style reuse; only the dirty
+scopes touched by the candidate are invalidated again. Changed inputs instead
+invalidate all node caches and select fresh styles before retrying. Failure after
 publication enters the normal content-error path; retired storage is never used
 as a rollback tree. The existing close/navigation/last-user cancellation hooks
 also cancel detached construction through the same conversion-context slot.
@@ -845,16 +849,153 @@ and allocation-stability check, not the long-running rollout or timing gate.
 Drivers, captures and the report are in
 `out/render-captures/live-retained-2026-09-30/`.
 
-Remaining prerequisites before enabling retained boxes (resume here):
+### Milestone B rollout checks (2026-09-30)
 
-- Finish rollout validation: extended saved-site repetitions, resource/memory
-  plateaus and interleaved Release final-pass timing against milestone A and full
-  selection. The initial live comparisons are not a new performance claim.
-- Audit retained element scroll offsets across nonzero offsets, shrinkage and
-  off-screen updates; the live regression covers scrollbar appearance/removal.
-- Decide whether to ship the conservative frame exclusion or separately validate
-  unaffected iframe retention for Bihon. Broader publication eligibility and
-  partial layout are independent follow-ups.
+Live integration, publication and retained full layout are committed as `bb75b60e`.
+The new `qt_retained_scroll` uses the capture-only `--capture-scroll-element`
+action to test nonzero horizontal and vertical offsets. A changing container keeps
+valid pixel offsets, clamps both axes to independently measured full-rebuild maxima
+when it shrinks, clears offsets when overflow disappears, and starts at zero when
+overflow returns. An unaffected scrollable sibling keeps its offsets and identity
+through every update.
+
+The same sequence runs with labels below a tall spacer, moving both scrollable
+containers outside the viewport before each retained update. Offsets must already
+be correct before scrolling back to paint them. Final PNG output then matches an
+independent fresh page with the same offsets. Debug ASan/UBSan and uninstrumented
+Release pass; this check required no rendering change. The capture helper uses
+the existing scrollbar API and refuses to create missing scrollbars artificially.
+
+Release/LTO timing uses one profiling binary for all three modes, scripts off,
+1280x900 and 96 DPI. Each site runs CSS/retained/full/full/retained/CSS order with
+22 switches per process; the first two establish the baseline and are excluded.
+This gives 40 warmed samples per mode. No builds or other test jobs run during
+measurement. All inspected states, scroll offsets and resource counts match,
+as do final PNG/DOM files. No warmed update restarts or unexpectedly falls back.
+
+| Saved page | Full median / p90 | Selective CSS median / p90 | Retention opt-in median / p90 |
+| --- | --- | --- | --- |
+| Tion | 89.35 / 94.76 ms | 53.12 / 62.95 ms | 41.28 / 50.51 ms |
+| Bihon | 148.01 / 166.05 ms | 75.71 / 86.47 ms | 77.54 / 86.64 ms |
+
+Tion's retained update is **22.3% faster** at the median than milestone A in
+these runs. Fresh style selections fall from 138 to 36, with no outside result
+clones (previously 1,196 containers / 239,200 bytes allocated per update).
+CSS work falls from 6.55 to 1.70 ms and non-CSS construction from 3.01 to 0.09 ms.
+Publication, including safety checks and retirement, takes 0.87 ms. Full layout
+and retained-state reset still take 38.28 ms, about 93% of the retained refresh;
+this is not partial layout. The temporary reuse table still peaks at 32 KiB.
+
+Bihon uses `partial_css` in both selective modes because of its iframes. Its
+2.4% median difference is consistent with variation in the same path, not evidence
+of retained-box benefit or a new frame implementation. Phase timings exclude
+capture inspection, artifact I/O and the artificial quiet interval. Separate
+uninstrumented runs verify identical output and similar capture intervals, but
+the 50 ms capture polling quantizes those intervals too coarsely to establish
+an exact instrumentation-overhead percentage.
+
+Long runs perform 300 switches per site and mode: **1,800 switches** across Tion
+and Bihon. All settled resources remain at 201/289, with no active requests,
+restarts or unexpected update modes. Final PNG/DOM output matches the full
+reference. Retained Tion's tree allocations remain exactly 3,018/3,063 by panel;
+Bihon's selective fallback remains at 4,394/4,434. Element inspections are omitted
+in these runs to avoid retaining large, overlapping box descriptions.
+
+Late-window median RSS in MiB (full / CSS reuse / retention opt-in) is
+**98.08 / 98.37 / 98.68** for Tion and **95.75 / 96.12 / 96.38** for Bihon.
+Tion's retained late window spans 98.58–98.71 MiB; the other late windows are flat.
+Capture still retains roughly 400 KiB of serialized step/profile data per run,
+and RSS includes Qt/allocator caches. This supports bounded resource use over
+these sequences, not an exact renderer-only memory cost or exhaustive leak proof.
+
+One retained Tion stress run had a transient slow interval (70 updates above
+100 ms, with unchanged style counts and tree allocations). A separate 300-switch
+repeat after the final fallback change matched full-reference output and had no
+updates above 100 ms: median 49.50 ms, p90 62.01 ms, maximum 68.94 ms. Its allocation
+counts stayed unchanged and late median RSS was 98.33 MiB. The cause of the earlier
+interval is not established; these long-run wall times vary. Use the interleaved
+comparison above for the measured speedup, not as a tail-latency guarantee.
+
+Unsupported-region fallback now preserves CSS reuse when update inputs remain
+valid. The live widget fixture verifies this in addition to full-reference output;
+input-change injection still forces full selection. Failed construction slices
+also contribute to active construction timing, so a failed attempt's CSS time
+cannot be subtracted from an incomplete construction total.
+
+After that fallback change, all **124 selected Debug ASan/UBSan tests and 124
+Release tests with profiling enabled** pass. The scroll/capture/retention checks
+also pass after restoring the final Release build to profiling OFF. The affected
+core and capture translation units compile with partial updates and profiling
+disabled.
+
+The driver and raw timing/uninstrumented/stress reports are under
+`out/render-captures/retained-rollout-2026-09-30/`.
+
+### Milestone B default rollout (2026-09-30)
+
+The existing guarded path now runs by default in all frontends when
+`WISP_ENABLE_PARTIAL_UPDATES` is enabled. The zero-initialized HTML state permits
+retention; capture does not need to enable it. `--capture-css-only-restyle` selects
+milestone A for comparison, and `--capture-force-full-restyle` still selects the
+full reference and takes precedence. `--capture-retain-boxes` remains a compatibility
+alias for the default. Disabling partial updates at compile time still removes
+the tracking state and uses full reconstruction.
+
+Retention, nonzero/offscreen scrolling and lifecycle tests now exercise the
+default without an opt-in flag. The CSS-reuse reference and its injected restart
+tests explicitly select CSS-only mode. All paths still perform full layout.
+
+Rollout validation passed the selected CSS, DOM, ownership, layout and Qt suites:
+
+| Configuration | Passed CTests |
+| --- | ---: |
+| Debug ASan/UBSan, partial updates ON, profiling ON | 124 |
+| Release/LTO, partial updates ON, profiling OFF | 120 |
+| Fresh Debug ASan/UBSan build, partial updates OFF, profiling ON | 116 |
+
+The disabled build's reference test reports `feature_disabled` and full selection
+throughout. The enabled tests verify `partial_boxes` after warmup, CSS-only mode,
+rejected-region fallback, injected restart/error recovery and document lifetime.
+All three complete builds pass; no generator changes were needed.
+
+Twelve independent Release captures compare default, CSS-only and full refresh
+for both final tab states on both saved Tion and Bihon pages. Every inspected
+state matches in geometry, selection offsets, controls, scrolling and resources;
+final PNG and DOM artifacts match byte-for-byte. Tion's inspected outside boxes
+retain their addresses after warmup, with stable per-panel allocation counts.
+Bihon keeps its frame fallback. The driver and captures are under
+`out/render-captures/default-retained-2026-09-30/`. These are correctness runs;
+the earlier interleaved measurements remain the performance evidence.
+
+Initial full-page loading was also remeasured against the pre-selective-CSS
+foundation `fdd92975`, using the current working tree after the default rollout.
+Both binaries use Release/LTO with profiling and logging OFF. Each saved page has
+one discarded warmup per binary followed by eight measured runs per binary in
+interleaved after/before/before/after order. Browser profiles are fresh, filesystem
+caches are warm, scripts/animation are disabled and the viewport is 1280x900 at
+96 DPI. No builds or other test jobs run during measurement, and there are no tab
+clicks. All 36 captures, including warmups, have identical PNG and DOM output
+between versions for each site.
+
+| Saved page | Before / current last activity median | Before / current process CPU median | Before / current peak RSS median |
+| --- | --- | --- | --- |
+| Tion | 1,232.0 / 1,214.5 ms | 780.7 / 750.6 ms | 105.6 / 105.7 MiB |
+| Bihon | 1,758.0 / 1,753.0 ms | 714.5 / 718.1 ms | 99.1 / 99.3 MiB |
+
+As in the earlier initial-load check, last activity is capture elapsed time minus
+its final quiet interval, not an isolated parse/layout timer. Process CPU includes
+startup, artifact writing and shutdown. The observed wall-time differences are
+-1.4% on Tion and -0.3% on Bihon; process CPU changes by -3.9% and +0.5% respectively.
+These small differences do not show a systematic initial-load regression in this
+sample. They also do not establish a general initial-load speedup: initial
+navigation still performs full selection, construction and layout. Do not pool
+these results with the older profiling-enabled milestone A sample set.
+The driver, configuration/source manifest and raw captures are under
+`out/render-captures/initial-rollout-2026-09-30/`.
+
+Keep the current frame exclusion. Unaffected iframe retention for Bihon, broader
+publication eligibility and partial layout are separate follow-ups; none is
+required to ship this conservative path.
 
 ## Recommendation and scope
 
@@ -1383,8 +1524,8 @@ flaky hard-coded CTest threshold.
    developer comparison switch, and update the behavior/profiling documentation.
 
 Commits 1–5 and the milestone A rollout are complete. Step 6's ownership, bounded
-construction and staged bindings are implemented. Step 7 now has live capture-only
-integration, retained full layout and failure recovery. Rollout validation remains
-before enabling retained boxes in ordinary browsing. Step 8 has not started; it is
+construction and staged bindings are implemented. Step 7 has live integration,
+retained full layout and failure recovery, now enabled in ordinary browsing by
+the milestone B rollout. Step 8 has not started; it is
 not a prerequisite for shipping retained boxes with full layout or for the already
 enabled selective CSS work.

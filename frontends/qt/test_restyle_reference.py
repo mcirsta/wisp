@@ -20,7 +20,7 @@ env = dict(os.environ, QT_QPA_PLATFORM="offscreen", QT_SCALE_FACTOR="1",
 
 def run(destination, force, restart=False):
     args = [str(binary), "--capture-dir", str(destination), "--capture-size", "600x500",
-            "--capture-settle", "50", "--capture-timeout", "20000"]
+            "--capture-settle", "50", "--capture-timeout", "20000", "--capture-css-only-restyle"]
     if force:
         args.append("--capture-force-full-restyle")
     if restart:

@@ -97,7 +97,7 @@ struct html_restyle_state {
     bool fail_retained_layout; /* Capture-only failure after irreversible publication. */
 #endif
     bool force_full; /* Developer capture override, not a browser preference. */
-    bool retain_boxes; /* Capture opt-in while milestone B is being validated. */
+    bool css_only; /* Capture override: reuse CSS but reconstruct all boxes. */
 };
 #endif
 

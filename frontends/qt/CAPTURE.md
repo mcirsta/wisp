@@ -95,8 +95,13 @@ QT_QPA_PLATFORM=offscreen build/frontends/qt/wisp-qt \
 clicks a visible label whose `for` names that input (even if the input has no box).
 Clicks use the normal core mouse path, scrolling the target into view if needed.
 `--capture-type TEXT` sends keyboard input to the focused control and
-`--capture-scroll X,Y` sets the document scroll position. Actions inspect and
-interact with the top-level document, using untransformed layout coordinates.
+`--capture-scroll X,Y` sets the document scroll position.
+`--capture-scroll-element ID,X,Y` sets an element's existing horizontal/vertical
+scrollbar offsets through the normal clamping/redraw API. IDs containing commas
+are not supported by this option. A nonzero offset without that scrollbar is an
+action error; the diagnostic does not create scrollbars for unpainted elements.
+Actions inspect and interact with the top-level document, using untransformed
+layout coordinates.
 
 `steps.json` records the initial inspection and each settled result, including
 live checked/input values, scroll offsets, resource counts, and elapsed time.
@@ -140,17 +145,21 @@ clock uses nanosecond-resolution monotonic timestamps where available, with the
 existing millisecond clock as a fallback on other platforms.
 
 `--capture-force-full-restyle` selects the full-refresh reference path at runtime.
+`--capture-css-only-restyle` selects the milestone A reference: reuse eligible
+styles but reconstruct all boxes. The full override takes precedence if both are set.
 With `WISP_ENABLE_PARTIAL_UPDATES` (default ON), native activation records
 all changed controls and coalesces their parent subtrees. Form edits record DOM
 changes immediately, including edits already synchronized before a tab click.
 The first refresh establishes a full baseline; subsequent eligible refreshes reuse
-composed styles outside those scopes. All refreshes still reconstruct and lay out
-the full document. Reuse requires scripting to be disabled. Configuring the option
-OFF removes HTML tracking state. Libcss's per-sheet scope summary and revision
+composed styles outside those scopes. Eligible single-region updates also retain
+outside boxes once independent region owners have been established, as described
+below. All refreshes still lay out the full document. Reuse requires scripting to
+be disabled. Configuring the option OFF removes HTML tracking state.
+Libcss's per-sheet scope summary and revision
 stamp are always available. Existing build caches preserve an explicit OFF value.
 
 With profiling enabled, `update_mode` reports `partial_css`, `partial_boxes` or `full`.
-`fallback_reason` is `none` on the selective path; full reasons include
+`fallback_reason` is normally `none` on the selective path; full reasons include
 `forced_full`, `feature_disabled`, `dom_changed`, `scripting`, `full_request`,
 `scope_capacity`, `invalid_scope`, `selector_scope`, `loading`, `no_style_snapshot`,
 `inputs_changed`, `no_scope`, `no_reusable_styles`, `reuse_table_failed`,
@@ -165,13 +174,15 @@ not whole-process peak memory figures, and exclude allocator overhead. `restarts
 counts abandoned partial attempts; their work stays in the counters even though
 the final mode is full.
 
-`qt_restyle_reference` replays edits and radio switches in ordinary and forced-full
+`qt_restyle_reference` replays edits and radio switches in CSS-only and forced-full
 captures, checking each inspected state and the final PNG/DOM output. It requires
 later toggles to report `partial_css`, so fallback cannot make comparisons pass
 without exercising reuse. In profiling builds, `--capture-restart-partial-restyle`
 injects a DOM-generation change after selective construction has begun. The same
 fixture and `qt_checked_interaction_restart` verify the resulting full restart,
-including resource and iframe behavior. Saved-page measurements are recorded in
+including resource and iframe behavior. Use `--capture-css-only-restyle` to inject
+during whole construction; the default injects during a detached retained build.
+Saved-page measurements are recorded in
 [the partial-update plan](../../src/docs/partial-updates.md).
 
 `--capture-interrupt-restyle MODE` tests document lifetime during a yielded
@@ -184,22 +195,29 @@ followed by normal application shutdown. Only this diagnostic mode introduces
 short construction slices and delays to make the event ordering deterministic.
 It writes `interruption.json` with before/after/release state instead of the
 ordinary rendering artifacts. `qt_restyle_lifecycle` exercises all four modes
-with styles, resources, forms and an iframe alive.
+with styles, resources, forms and an iframe alive, using the CSS-only override.
 
-### Experimental retained boxes
+### Retained boxes
 
-`--capture-retain-boxes` opts into milestone B with `WISP_ENABLE_PARTIAL_UPDATES`
-enabled. Warm both panels first: the style snapshot and independent region owners
+Milestone B is enabled by default with `WISP_ENABLE_PARTIAL_UPDATES`, in ordinary
+browsing as well as capture. `--capture-retain-boxes` remains a compatibility alias
+for this default (and clears an earlier CSS-only override).
+Warm both panels first: the style snapshot and independent region owners
 are established by the first two refreshes. Later eligible changes rebuild one
 stable block/flex/grid region and retain the surrounding boxes, followed by full
-document layout. Ordinary browsing still uses whole reconstruction.
+document layout.
 
 Active interactions, widgets within the changed region, unsupported resources,
 frames and unsafe ownership boundaries retain the conservative fallback. Pages
 with existing frames skip the detached attempt and can still use `partial_css`.
+Other rejected candidates also preserve outside CSS reuse when inputs are still
+valid, re-invalidating their dirty scopes before whole reconstruction. In that
+case `fallback_reason` explains the region rejection despite `partial_css` mode;
+changed inputs require full selection and increment `restarts`.
 Do not infer retention from matching screenshots: check `partial_boxes` in the
-profile or unchanged outside `box_address` values. This mode adds box addresses
-and `tree_allocations` (talloc block count, not bytes) to inspection output.
+profile or unchanged outside `box_address` values. Default captures include box
+addresses and `tree_allocations` (talloc block count, not bytes) in inspection
+output; the CSS-only and full reference modes omit them.
 All inspections also expose selection `text_offset` and element `scrollbars`
 presence/offsets. Addresses and allocation counts are diagnostics, not geometry
 reference fields.
@@ -210,11 +228,15 @@ and injects a failure after publication/reset. It must exit with `content_error`
 clean update state, and the failed document detached from the window. A screenshot
 may show the ordinary error page; it must never show the incomplete retained tree.
 `capture.json` includes the failed document's `restyle_state` for this check.
-`qt_retained_restyle` tests these paths against independent full rebuilds, settled
-resource bindings, outside box identities, selection offsets and scrollbars.
+`qt_retained_restyle` compares the default with independent CSS-only and full
+rebuilds. It also checks the error paths, settled resource bindings, outside box
+identities, selection offsets and scrollbars.
+`qt_retained_scroll` checks nonzero offsets through growth, shrinkage and scrollbar
+removal, including updates while the container is off-screen. Maximum offsets and
+final pixels are compared with independently constructed full-reference pages.
 
-Combine `--capture-retain-boxes --capture-interrupt-restyle MODE` with at least
-three alternating clicks to interrupt a detached build. `qt_retained_lifecycle`
+Combine `--capture-interrupt-restyle MODE` with at least three alternating clicks
+to interrupt a detached build. `qt_retained_lifecycle`
 covers `close`, `navigate` and `shutdown` with the original tree still live.
 
 `action_ms` is the preceding capture action's synchronous duration, including

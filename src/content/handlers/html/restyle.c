@@ -354,7 +354,7 @@ bool html_restyle_needs_restart(html_content *html)
 #ifdef WISP_ENABLE_PARTIAL_UPDATES
     if (html->restyle.partial) {
         HTML_PROFILE(if (html->restyle.force_restart &&
-            (!html->restyle.retain_boxes || html->restyle_old_bctx == NULL) &&
+            (html->restyle.css_only || html->restyle_old_bctx == NULL) &&
             html->restyle_profile.styled_elements + html->restyle_profile.reused_styles != 0) {
             html->restyle.force_restart = false;
             html->restyle.dom_generation++;

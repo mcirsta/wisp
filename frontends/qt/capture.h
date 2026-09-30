@@ -72,7 +72,7 @@ private:
     QTimer m_timer;
     bool m_loading = true;
     bool m_force_full_restyle = false;
-    bool m_retain_boxes = false;
+    bool m_css_only_restyle = false;
     bool m_fail_retained_layout = false;
     bool m_restart_partial_restyle = false;
     bool m_finished = false;

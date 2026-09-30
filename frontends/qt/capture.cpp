@@ -53,9 +53,11 @@ int NS_Capture::prepare(int &argc, char **argv)
                 "  --capture-click-label FOR    Click a label associated with this input ID\n"
                 "  --capture-type TEXT           Type into the focused control\n"
                 "  --capture-scroll X,Y          Scroll before the next action\n"
+                "  --capture-scroll-element ID,X,Y Set an element's existing scrollbar offsets\n"
                 "  --capture-point X,Y          Inspect a point in document layout pixels\n"
                 "  --capture-force-full-restyle Force the full-refresh reference path\n"
-                "  --capture-retain-boxes       Opt into experimental retained-region refresh\n"
+                "  --capture-css-only-restyle   Reuse CSS but reconstruct all boxes\n"
+                "  --capture-retain-boxes       Use default eligible retained-region refresh\n"
                 "  --capture-fail-retained-layout Test error handling after region publication\n"
                 "  --capture-restart-partial-restyle Test invalidation during partial construction\n"
                 "  --capture-interrupt-restyle MODE Test close, navigate, shutdown or shutdown-full\n"
@@ -72,7 +74,8 @@ int NS_Capture::prepare(int &argc, char **argv)
         requested = true;
         if (arg == "--capture-fail-retained-layout") {
 #if defined(WISP_ENABLE_PARTIAL_UPDATES) && defined(WISP_PROFILE_RESTYLE)
-            m_fail_retained_layout = m_retain_boxes = true;
+            m_fail_retained_layout = true;
+            m_css_only_restyle = false;
             continue;
 #else
             fprintf(stderr, "Retained failure injection requires partial updates and restyle profiling\n");
@@ -81,12 +84,16 @@ int NS_Capture::prepare(int &argc, char **argv)
         }
         if (arg == "--capture-retain-boxes") {
 #ifdef WISP_ENABLE_PARTIAL_UPDATES
-            m_retain_boxes = true;
+            m_css_only_restyle = false;
             continue;
 #else
             fprintf(stderr, "Retained updates require WISP_ENABLE_PARTIAL_UPDATES\n");
             return -1;
 #endif
+        }
+        if (arg == "--capture-css-only-restyle") {
+            m_css_only_restyle = true;
+            continue;
         }
         if (arg == "--capture-restart-partial-restyle") {
             m_restart_partial_restyle = true;
@@ -118,14 +125,15 @@ int NS_Capture::prepare(int &argc, char **argv)
             m_inspect_ids.append(value);
             ok = !value.isEmpty();
         } else if (arg == "--capture-click-id" || arg == "--capture-click-label" || arg == "--capture-type" ||
-            arg == "--capture-scroll") {
+            arg == "--capture-scroll" || arg == "--capture-scroll-element") {
             m_actions.append({arg, value});
             ok = !value.isEmpty();
-            if (arg == "--capture-scroll") {
+            if (arg == "--capture-scroll" || arg == "--capture-scroll-element") {
                 const auto parts = value.split(',');
+                const int first = arg == "--capture-scroll-element" ? 1 : 0;
                 bool x_ok, y_ok;
-                const int x = parts.value(0).toInt(&x_ok), y = parts.value(1).toInt(&y_ok);
-                ok = parts.size() == 2 && x_ok && y_ok && x >= 0 && y >= 0;
+                const int x = parts.value(first).toInt(&x_ok), y = parts.value(first + 1).toInt(&y_ok);
+                ok = parts.size() == first + 2 && !parts.value(0).isEmpty() && x_ok && y_ok && x >= 0 && y >= 0;
             }
         } else if (arg == "--capture-point") {
             const auto parts = value.split(',');
@@ -262,7 +270,7 @@ void NS_Capture::poll()
         return;
     }
     nsqt_capture_configure_restyle(content, m_force_full_restyle, m_restart_partial_restyle,
-        m_retain_boxes, m_fail_retained_layout);
+        m_css_only_restyle, m_fail_retained_layout);
     if (!m_interrupt_restyle.isEmpty())
         nsqt_capture_restyle_lifecycle(hlcache_handle_get_content(content), true);
     const bool done = content && content_get_status(content) == CONTENT_STATUS_DONE;
@@ -293,6 +301,9 @@ void NS_Capture::poll()
             } else if (action.first == "--capture-scroll") {
                 const auto xy = action.second.split(',');
                 nsqt_capture_scroll(content, xy[0].toInt(), xy[1].toInt());
+            } else if (action.first == "--capture-scroll-element") {
+                const auto parts = action.second.split(',');
+                ok = nsqt_capture_scroll_element(content, parts[0], parts[1].toInt(), parts[2].toInt());
             } else {
                 ok = nsqt_capture_click(m_bw, action.second, action.first == "--capture-click-label");
             }
@@ -318,10 +329,10 @@ void NS_Capture::afterScheduledCallback()
     if (!m_interrupted && m_bw) {
         auto *content = browser_window_get_content(m_bw);
         const auto state = nsqt_capture_restyle_lifecycle(hlcache_handle_get_content(content), true);
-        const bool started = m_retain_boxes
-            ? state["retained_build"].toBool() && state["styled_elements"].toInt() > 0
-            : m_interrupt_restyle == "shutdown-full"
+        const bool started = m_interrupt_restyle == "shutdown-full"
             ? state["building"].toBool() && state["styled_elements"].toInt() > 0
+            : !m_css_only_restyle
+            ? state["retained_build"].toBool() && state["styled_elements"].toInt() > 0
             : state["partial"].toBool() && state["reused_styles"].toInt() > 0;
         if (!started || !state["conversion"].toBool())
             return;

@@ -136,7 +136,7 @@ static QJsonObject describe(struct box *box, const html_content *html)
     result["scrollbars"] = QJsonObject{{"horizontal", box->scroll_x != nullptr}, {"vertical", box->scroll_y != nullptr},
         {"x", scrollbar_get_offset(box->scroll_x)}, {"y", scrollbar_get_offset(box->scroll_y)}};
 #ifdef WISP_ENABLE_PARTIAL_UPDATES
-    if (html->restyle.retain_boxes)
+    if (!html->restyle.css_only && !html->restyle.force_full)
         result["box_address"] = QString::number(reinterpret_cast<quintptr>(box), 16);
     if (box->flags & OWNS_REGION) {
         const char *reason;
@@ -236,7 +236,7 @@ QJsonObject nsqt_capture_inspect(struct hlcache_handle *content, const QStringLi
     result["resource_count"] = int(html->num_objects);
     result["active_resources"] = int(html->base.active - html->scripts_active);
 #ifdef WISP_ENABLE_PARTIAL_UPDATES
-    if (html->restyle.retain_boxes)
+    if (!html->restyle.css_only && !html->restyle.force_full)
         result["tree_allocations"] = double(talloc_total_blocks(html->bctx));
 #endif
 #ifdef WISP_PROFILE_RESTYLE
@@ -331,7 +331,7 @@ QJsonObject nsqt_capture_inspect(struct hlcache_handle *content, const QStringLi
 }
 
 // Capture-only interaction hooks use the same core input path as the Qt widget.
-void nsqt_capture_configure_restyle(struct hlcache_handle *content, bool force, bool restart, bool retain, bool fail)
+void nsqt_capture_configure_restyle(struct hlcache_handle *content, bool force, bool restart, bool css_only, bool fail)
 {
     Q_UNUSED(restart);
     Q_UNUSED(fail);
@@ -339,7 +339,7 @@ void nsqt_capture_configure_restyle(struct hlcache_handle *content, bool force, 
     if (content && content_get_type(content) == CONTENT_HTML) {
         auto *html = reinterpret_cast<html_content *>(hlcache_handle_get_content(content));
         html->restyle.force_full = force;
-        html->restyle.retain_boxes = retain;
+        html->restyle.css_only = css_only;
 #ifdef WISP_PROFILE_RESTYLE
         html->restyle.force_restart = restart;
         html->restyle.fail_retained_layout = fail;
@@ -348,7 +348,7 @@ void nsqt_capture_configure_restyle(struct hlcache_handle *content, bool force, 
 #else
     Q_UNUSED(content);
     Q_UNUSED(force);
-    Q_UNUSED(retain);
+    Q_UNUSED(css_only);
 #endif
 }
 
@@ -387,7 +387,7 @@ QJsonObject nsqt_capture_restyle_lifecycle(struct content *content, bool slow)
             {"locked", html->base.locked}, {"building", html->restyling}, {"partial", html->restyle.partial},
             {"window_attached", html->bw != nullptr}, {"conversion", html->box_conversion_context != nullptr},
             {"old_tree", html->restyle_old_bctx != nullptr}, {"table_entries", double(html->restyle.count)},
-            {"retained_build", html->restyle.retain_boxes && html->restyling &&
+            {"retained_build", !html->restyle.css_only && html->restyling &&
                 html->box_conversion_context != nullptr && html->restyle_old_bctx == nullptr},
             {"active_roots", int(html->restyle.active.count)}, {"pending_roots", int(html->restyle.pending.count)},
             {"reused_styles", int(html->restyle_profile.reused_styles)},
@@ -404,6 +404,31 @@ void nsqt_capture_scroll(struct hlcache_handle *content, int x, int y)
     data.scroll.x0 = x;
     data.scroll.y0 = y;
     content_broadcast(hlcache_handle_get_content(content), CONTENT_MSG_SCROLL, &data);
+}
+
+bool nsqt_capture_scroll_element(struct hlcache_handle *content, const QString &id, int x, int y)
+{
+    if (!content || content_get_type(content) != CONTENT_HTML)
+        return false;
+    const QByteArray utf8 = id.toUtf8();
+    dom_string *key = nullptr;
+    dom_node *node = nullptr;
+    if (dom_string_create(reinterpret_cast<const uint8_t *>(utf8.constData()), utf8.size(), &key) != DOM_NO_ERR)
+        return false;
+    dom_document_get_element_by_id(html_get_document(content), key, &node);
+    dom_string_unref(key);
+    auto *box = node ? box_for_node(node) : nullptr;
+    const bool found = box && (x == 0 || box->scroll_x) && (y == 0 || box->scroll_y);
+    if (found) {
+        /* Use the normal scrollbar API, including clamping and redraw callbacks.
+         * Do not create scrollbars just to make an off-screen test pass. */
+        if (box->scroll_x)
+            scrollbar_set(box->scroll_x, x, false);
+        if (box->scroll_y)
+            scrollbar_set(box->scroll_y, y, false);
+    }
+    dom_node_unref(node);
+    return found;
 }
 
 bool nsqt_capture_click(struct browser_window *bw, const QString &id, bool label)

@@ -1647,10 +1647,15 @@ html_restyle_region_done(html_content *html, nserror error, struct box_construct
         return;
     }
     box_construct_region_destroy(candidate);
-    HTML_PROFILE(if (error == NSERROR_INVALID) html->restyle_profile.restarts++);
-    /* Candidate selection touched node caches. Invalidate fully before using
-     * the existing fallback; its presentation/bindings are still intact. */
-    html_restyle_use_full(html, reason);
+    if (error == NSERROR_INVALID || html_restyle_needs_restart(html)) {
+        HTML_PROFILE(html->restyle_profile.restarts++);
+        html_restyle_use_full(html, "inputs_changed_during_build");
+    } else {
+        /* An unsupported region did not touch the live boxes or outside node
+         * caches. Keep their reusable styles for whole-document construction;
+         * only the candidate's dirty scopes need invalidating again. */
+        HTML_PROFILE(html->restyle_profile.fallback_reason = reason);
+    }
     if (html_restyle_invalidate(html) != NSERROR_OK) {
         html_restyle_done(html, false);
         return;
@@ -1683,7 +1688,7 @@ static void html_restyle(void *pw)
 #ifdef WISP_ENABLE_PARTIAL_UPDATES
     /* Frames are excluded by the publisher. Reject them before construction so
      * these pages keep milestone A's style reuse instead of selecting twice. */
-    if (html->restyle.retain_boxes && html->restyle.partial && html->restyle.active.count == 1 &&
+    if (!html->restyle.css_only && html->restyle.partial && html->restyle.active.count == 1 &&
         html->iframe == NULL && html->frameset == NULL) {
         struct box *old = box_for_node(html->restyle.active.roots[0]);
         if (box_construct_region_owner(old) != NULL) {

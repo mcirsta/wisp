@@ -29,7 +29,9 @@ with tempfile.TemporaryDirectory(prefix="wisp-restyle-lifecycle-") as tmp:
                 "--capture-interrupt-restyle", mode, "--capture-click-label", "second",
                 "--capture-click-label", "first"]
         if retained:
-            args += ["--capture-retain-boxes", "--capture-click-label", "second"]
+            args += ["--capture-click-label", "second"]
+        else:
+            args.append("--capture-css-only-restyle")
         args.append(str(page))
         result = subprocess.run(args, env=env, capture_output=True, text=True, timeout=30)
         report = out / "interruption.json"

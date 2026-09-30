@@ -147,6 +147,9 @@ if(WISP_QT_CAPTURE)
                 COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_retained_restyle.py
                     $<TARGET_FILE:wisp-qt> $<BOOL:${WISP_PROFILE_RESTYLE}>)
             set_tests_properties(qt_retained_restyle PROPERTIES TIMEOUT 120)
+            add_test(NAME qt_retained_scroll
+                COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_retained_scroll.py $<TARGET_FILE:wisp-qt>)
+            set_tests_properties(qt_retained_scroll PROPERTIES TIMEOUT 90)
         endif()
         if(WISP_PROFILE_RESTYLE)
             add_test(NAME qt_restyle_reference
@@ -156,7 +159,7 @@ if(WISP_QT_CAPTURE)
             if(WISP_ENABLE_PARTIAL_UPDATES)
                 add_test(NAME qt_checked_interaction_restart
                     COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_checked_interaction.py
-                        $<TARGET_FILE:wisp-qt> --capture-restart-partial-restyle)
+                        $<TARGET_FILE:wisp-qt> --capture-css-only-restyle --capture-restart-partial-restyle)
                 set_tests_properties(qt_checked_interaction_restart PROPERTIES TIMEOUT 40)
                 add_test(NAME qt_restyle_lifecycle
                     COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_restyle_lifecycle.py
