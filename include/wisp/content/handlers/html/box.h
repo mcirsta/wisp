@@ -116,7 +116,10 @@ typedef enum {
     IS_VIEWPORT = 1 << 16, /* synthetic containing block owned by html_content */
     HAS_FIXED_DESCENDANT = 1 << 17, /* viewport-fixed descendant can escape clipping */
     IS_OPACITY_ZERO = 1 << 18, /* this box or its DOM ancestor has zero opacity; still laid out and hit tested */
-    OWNS_REGION = 1 << 19 /* talloc parent owns this construction subtree; not a layout-isolation guarantee */
+    OWNS_REGION = 1 << 19, /* talloc parent owns this construction subtree; not a layout-isolation guarantee */
+    INLINE_INTRINSIC_HEIGHT = 1 << 20, /* height result of inline intrinsic measurement, not used layout */
+    INLINE_INTRINSIC_NEED_MIN = 1 << 21, /* NEED_MIN input used by that measurement */
+    REUSE_INLINE_INTRINSICS = 1 << 22 /* retained text-only container awaiting intrinsic-cache validation */
 } box_flags;
 
 

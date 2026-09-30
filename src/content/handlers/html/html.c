@@ -1499,13 +1499,17 @@ static bool html_restyle_scrollbars(html_content *html)
 static void html_restyle_finish(html_content *html, bool success, bool retained)
 {
     HTML_PROFILE_START(layout_start);
+    HTML_PROFILE_CPU_START(layout_cpu_start);
     HTML_PROFILE(
         html->restyle_profile.construction_wall_ns = layout_start - html->restyle_profile.construction_start_ns -
             html->restyle_profile.publication_ns);
     html->box_conversion_context = NULL;
 #ifdef WISP_ENABLE_PARTIAL_UPDATES
-    if (success && retained)
+    if (success && retained) {
+        HTML_PROFILE_START(reset_start);
         layout_reset_document(html);
+        HTML_PROFILE(html->restyle_profile.layout_reset_ns = html_profile_now() - reset_start);
+    }
 #ifdef WISP_PROFILE_RESTYLE
     if (retained && html->restyle.fail_retained_layout) {
         html->restyle.fail_retained_layout = false;
@@ -1524,7 +1528,10 @@ static void html_restyle_finish(html_content *html, bool success, bool retained)
     (void)retained;
 #endif
     HTML_PROFILE_START(cleanup_start);
-    HTML_PROFILE(html->restyle_profile.layout_ns = cleanup_start - layout_start);
+    HTML_PROFILE(html->restyle_profile.layout_ns = cleanup_start - layout_start;
+        uint64_t cpu_end = html_profile_cpu_now();
+        if (layout_cpu_start != 0 && cpu_end >= layout_cpu_start)
+            html->restyle_profile.layout_cpu_ns = cpu_end - layout_cpu_start);
     html->restyling = false;
     html_restyle_end(html, success);
     if (success)

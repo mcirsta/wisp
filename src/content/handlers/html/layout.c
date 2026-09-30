@@ -43,6 +43,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "content/handlers/html/restyle_profile.h"
+
 #include <wisp/browser.h>
 #include <wisp/browser_window.h>
 #include <wisp/content.h>
@@ -1056,10 +1058,27 @@ static bool layout_minmax_inline_container(struct box *inline_container, bool *h
 
     assert(inline_container->type == BOX_INLINE_CONTAINER);
 
+#ifdef WISP_ENABLE_PARTIAL_UPDATES
+    if (inline_container->flags & REUSE_INLINE_INTRINSICS) {
+        inline_container->flags &= ~REUSE_INLINE_INTRINSICS;
+        /* NEED_MIN comes from the freshly measured ancestors. A cache measured
+         * with another requirement must not change their intrinsic contribution. */
+        if (!!(inline_container->flags & NEED_MIN) == !!(inline_container->flags & INLINE_INTRINSIC_NEED_MIN)) {
+            if (has_height != NULL)
+                *has_height = (inline_container->flags & INLINE_INTRINSIC_HEIGHT) != 0;
+            HTML_PROFILE(if (content->restyling)
+                ((html_content *)content)->restyle_profile.intrinsic_inline_reuses++);
+            return true;
+        }
+        inline_container->max_width = UNKNOWN_MAX_WIDTH;
+    }
+#endif
     /* check if the widths have already been calculated */
     if (inline_container->max_width != UNKNOWN_MAX_WIDTH)
         return true;
 
+    HTML_PROFILE(if (content->restyling)
+        ((html_content *)content)->restyle_profile.intrinsic_inline_calculations++);
     bool height = false;
 
     for (child = inline_container->children; child;) {
@@ -1077,6 +1096,13 @@ static bool layout_minmax_inline_container(struct box *inline_container, bool *h
         *has_height = height;
     inline_container->min_width.value = min;
     inline_container->max_width = max;
+#ifdef WISP_ENABLE_PARTIAL_UPDATES
+    inline_container->flags &= ~(INLINE_INTRINSIC_HEIGHT | INLINE_INTRINSIC_NEED_MIN);
+    if (height)
+        inline_container->flags |= INLINE_INTRINSIC_HEIGHT;
+    if (inline_container->flags & NEED_MIN)
+        inline_container->flags |= INLINE_INTRINSIC_NEED_MIN;
+#endif
 
     assert(0 <= inline_container->min_width.value && inline_container->min_width.value <= inline_container->max_width);
     return true;
@@ -6484,6 +6510,26 @@ static void layout_log_final_box_heights(const css_unit_ctx *unit_len_ctx, struc
 
 
 #ifdef WISP_ENABLE_PARTIAL_UPDATES
+/* Only these containers keep their intrinsic min/max fields through used
+ * layout. Blocks overwrite theirs with CSS sizing constraints. Exclude atomic
+ * children, floats and widgets: their measurement depends on more than the
+ * retained text/styles and the document inputs already checked by restyle. */
+static bool layout_can_reuse_inline_intrinsics(const struct box *box)
+{
+    if (box->type != BOX_INLINE_CONTAINER || box->max_width == UNKNOWN_MAX_WIDTH ||
+        box->parent == NULL || box->parent->type != BOX_BLOCK || box->parent->gadget != NULL ||
+        box->parent->object != NULL || box->parent->list_marker != NULL)
+        return false;
+    for (const struct box *child = box->children; child != NULL; child = child->next) {
+        if ((child->type != BOX_TEXT && child->type != BOX_INLINE && child->type != BOX_INLINE_END &&
+                child->type != BOX_BR) || child->children != NULL || child->object != NULL ||
+            child->gadget != NULL || child->list_marker != NULL ||
+            (child->flags & (IS_REPLACED | REPLACE_DIM | IFRAME)))
+            return false;
+    }
+    return true;
+}
+
 static void layout_reset_box(struct box *box)
 {
     /* Rejoin before intrinsic measurement, not just before line layout: old
@@ -6493,8 +6539,11 @@ static void layout_reset_box(struct box *box)
         HEIGHT_STRETCHED | ASPECT_RATIO_HEIGHT | HAS_BASELINE | HAS_FIXED_DESCENDANT);
     box->x = box->y = box->height = 0;
     box->width = UNKNOWN_WIDTH;
-    box->min_width = (struct css_size){.type = CSS_SIZE_AUTO, .value = 0};
-    box->max_width = UNKNOWN_MAX_WIDTH;
+    if (!(box->flags & REUSE_INLINE_INTRINSICS)) {
+        box->min_width = (struct css_size){.type = CSS_SIZE_AUTO, .value = 0};
+        box->max_width = UNKNOWN_MAX_WIDTH;
+        box->flags &= ~(INLINE_INTRINSIC_HEIGHT | INLINE_INTRINSIC_NEED_MIN);
+    }
     box->baseline = 0;
     box->descendant_x0 = box->descendant_y0 = 0;
     box->descendant_x1 = box->descendant_y1 = 0;
@@ -6523,6 +6572,9 @@ void layout_reset_document(html_content *content)
     /* Follow structural children only: float chains are derived, and markers
      * are owned separately. No traversal stack or allocation per box. */
     while (box != NULL) {
+        box->flags &= ~REUSE_INLINE_INTRINSICS;
+        if (content->restyle.reuse_inline_intrinsics && layout_can_reuse_inline_intrinsics(box))
+            box->flags |= REUSE_INLINE_INTRINSICS;
         layout_reset_box(box);
         if (box->list_marker != NULL) {
             struct box *marker = box->list_marker;

@@ -1,7 +1,8 @@
 # Partial document updates: implementation plan
 
-Status: milestones A and B enabled for eligible native checked-state updates,
-2026-09-30. The reviewed baseline is `eb3e03df`
+Status: milestones A and B enabled for eligible native checked-state updates;
+milestone C's first intrinsic-reuse path is capture-only, 2026-09-30.
+The reviewed baseline is `eb3e03df`
 (`Use stack scratch for small class selector lists`).
 
 The foundation is committed as `fdd92975`, and milestone A as `180d7009`.
@@ -25,7 +26,8 @@ for eligible single-region changes, followed by full layout. Capture retains
 explicit CSS-only and full-rebuild reference modes. Pages with frames and unsafe
 regions keep the existing conservative reconstruction paths.
 Detached construction through native-control/SVG staging is committed as `610d6f5a`.
-Milestone C has not started. The steps below remain the implementation and
+Milestone C begins with text-only inline intrinsic reuse; used-layout reuse is
+still deferred. The steps below remain the implementation and
 acceptance checklist, with the concrete implementation choices recorded here.
 
 ### Milestone A implementation
@@ -933,6 +935,8 @@ The driver and raw timing/uninstrumented/stress reports are under
 
 ### Milestone B default rollout (2026-09-30)
 
+The rollout and its validation are committed as `6b8ffc97`.
+
 The existing guarded path now runs by default in all frontends when
 `WISP_ENABLE_PARTIAL_UPDATES` is enabled. The zero-initialized HTML state permits
 retention; capture does not need to enable it. `--capture-css-only-restyle` selects
@@ -996,6 +1000,145 @@ The driver, configuration/source manifest and raw captures are under
 Keep the current frame exclusion. Unaffected iframe retention for Bihon, broader
 publication eligibility and partial layout are separate follow-ups; none is
 required to ship this conservative path.
+
+### Timing variability follow-up (2026-09-30)
+
+The earlier retained stress interval slowed several phases together: layout rose
+from roughly 42 ms to 149 ms, CSS selection from 1.8 ms to 7.2 ms, publication
+from 1 ms to 4.2 ms and painting from 1.2 ms to 4.8 ms. Work and allocation counts
+did not grow, and the run subsequently recovered. Those wall times alone cannot
+identify whether the renderer did more work, was blocked or was executing more
+slowly because of scheduling, CPU frequency or cache effects.
+
+Optional restyle profiling now adds `layout_cpu_ms`, measured with the rendering
+thread's CPU clock, and `layout_reset_ms`, a wall-time subset of `layout_ms`.
+The CPU value is null on platforms without a usable thread CPU clock. No process
+CPU or wall-clock substitute is used. Both metrics compile out with profiling
+disabled; the renderer's behavior and threading remain unchanged.
+
+Another 900 Tion switches (300 each in CSS-only, retained and full mode) were run
+with Release/LTO profiling, no concurrent builds/tests and the same capture settings
+as above. External diagnostics also sampled the main thread's scheduler wait and
+the reported frequency of its current CPU. After excluding the first two switches,
+the 298 samples per mode give:
+
+| Mode | Update median / p90 | Layout wall / CPU median | Reset median |
+| --- | --- | --- | --- |
+| CSS-only | 49.82 / 63.24 ms | 39.37 / 39.16 ms | 0 ms |
+| Retained boxes | 45.64 / 61.88 ms | 42.37 / 42.14 ms | 0.173 ms |
+| Full rebuild | 88.92 / 96.25 ms | 34.26 / 34.10 ms | 0 ms |
+
+Neither selective mode exceeds 100 ms; retained maximum is 65.64 ms. Full mode
+has 18 samples above 100 ms, with a maximum of 106.29 ms. The old prolonged
+retained slowdown did not recur. Retained layout's median wall-minus-CPU gap is
+0.25 ms, maximum 1.30 ms; sampled main-thread runqueue wait totals only 19 ms over
+the 38.5-second process. Reset takes about 0.4% of retained layout time, so reset
+itself is not the main remaining cost in this run.
+
+Sampled CPU frequencies range approximately 1.2–3.6 GHz, with different medians
+between modes (2.49 / 2.29 / 3.08 GHz for CSS / retained / full). These sparse
+samples include idle periods and cannot normalize the individual layout timings.
+They establish that execution conditions vary, not the cause of the old interval.
+Use the earlier interleaved comparison for the measured speedup; this sequential
+long run is diagnostic evidence, not a replacement speedup claim.
+
+All final PNG/DOM output and per-step resource state match across modes; there
+are no restarts or unexpected fallbacks. Retained allocation counts remain
+3,018/3,063 and resources remain at 201. Four focused Debug ASan/UBSan capture
+tests pass, covering CSS-only/full references, retained updates, restart/error
+injection and document lifetime. The raw captures, scheduler/frequency traces,
+driver and compact diagnosis are under
+`out/render-captures/restyle-cpu-2026-09-30/`.
+Release is restored to profiling OFF; its capture, retained-restyle and retained
+scroll tests also pass after the complete rebuild.
+
+The historical slowdown remains unexplained, not fixed. The extra measurements
+make a future occurrence actionable without changing the renderer speculatively.
+At this point milestone C had not started; the dominant known cost was still
+full document layout.
+
+### Milestone C: text-only inline intrinsic reuse (2026-09-30)
+
+The first bounded experiment is `--capture-reuse-inline-intrinsics`, OFF by
+default. The layout audit found that ordinary blocks overwrite their intrinsic
+min/max fields with CSS sizing constraints during used layout. Treating those
+fields as cached intrinsic sizes would be incorrect. Text-only inline containers
+retain their intrinsic fields and provide a smaller, independently testable start.
+
+After safe retained publication, the reset may preserve those container widths
+when their parent is a normal block and their children are only text, ordinary
+inline markers or hard breaks. Floats, atomic inline boxes, replaced content,
+widgets and list-marker parents are excluded. All text fragments are still
+rejoined and all used geometry is reset. Fresh region boxes have unknown intrinsic
+sizes, and all ancestors and other container types are remeasured.
+
+Two bits in the existing flags word record the intrinsic height contribution and
+the previous `NEED_MIN` input; a third marks a preserved result awaiting validation. Reuse
+returns the height contribution as well as widths. A different `NEED_MIN` input
+causes a miss in either direction. These are bits in the existing flags word,
+not new per-box storage or allocation. The existing retained-publication guards
+already require unchanged DOM outside the scope and matching style/font/unit/
+viewport inputs. The optimization is not used during ordinary resize/reflow or
+the CSS-only/full-reconstruction fallbacks.
+
+`intrinsic_inline_calculations` and `intrinsic_inline_reuses` expose work avoided,
+separately from CPU/wall timing. This step still runs every used-layout operation,
+including line wrapping at the newly assigned width, placement, flex/grid/table
+sizing, relative/absolute positioning, overflow bounds and scrollbar updates.
+It is not yet the phase 4 deliverable of retaining a block's internal used layout.
+
+Independent construction comparisons now run the 18 retained-layout variants
+both with and without reuse: block/flex/grid parents and changed regions, two
+viewport widths, repeated state changes, wrapped inline boundaries, hard breaks,
+empty inlines, floats, positioned content, tables and lists. A deliberate key
+mismatch and perturbed cached widths verify cache rejection without changing
+final geometry. Qt captures
+compare the opt-in path with both default retained layout and fresh rebuilds,
+require actual cache hits and fewer calculations, and cover frame fallback and
+invalidation during detached construction.
+
+Validation passes 48 Debug layout/Qt CTests, 178 construction cases under
+LeakSanitizer, three focused Release CTests, and the full-refresh capture reference
+in a separate Release build with partial updates disabled. No generator changes
+are needed. The normal Release build is restored to profiling OFF; its capture,
+retained-restyle and retained-scroll CTests pass, as does the strengthened
+construction comparison.
+
+The saved Tion comparison uses the same Release/LTO profiling binary, a 1280×900
+viewport at 96 DPI, settled resources and no scripts or animation. Six processes
+run retained / intrinsic / full / full / intrinsic / retained, with 22 switches
+each and the first two discarded: 40 warmed samples per mode. No builds or other
+tests run concurrently. Times are active refresh work before painting, in ms:
+
+| Mode | Total median / p90 | Layout wall median | Layout CPU median | Reset median |
+| --- | ---: | ---: | ---: | ---: |
+| Default retained boxes | 41.36 / 47.66 | 38.04 | 37.83 | 0.131 |
+| Retained + inline intrinsic reuse | 37.28 / 42.03 | 34.24 | 34.08 | 0.134 |
+| Forced full rebuild | 99.57 / 104.60 | 35.43 | 35.26 | 0 |
+
+The opt-in reduces median refresh time by about 9.9% against default retained
+layout in this run. Each switch reuses 285 container measurements; fresh
+calculations fall from 442/453 to 157/168 for the two panels. These figures are
+an incremental comparison, not a replacement for the earlier whole-page load or
+long-run measurements made in other sessions. Bihon's frame-containing document
+still uses the CSS-only fallback and does not benefit from this step.
+
+All inspected states and final PNG/DOM output match independent full rebuilds.
+Complete box dumps also match across all six captures, including off-screen
+geometry, intrinsic sizes, styles and float/inline relationships. Only addresses
+are normalized to traversal identities; geometry and pointer relationships are
+not discarded. A separate 300-switch opt-in run also ends with matching full
+box/DOM/pixel output, no restarts, 201 settled resources and stable per-panel
+allocation counts of 3,018/3,063. Its warmed median/p90/max refresh times are
+40.43/44.71/61.03 ms. It does not reproduce the earlier unexplained slowdown.
+Drivers, raw captures and reports are under
+`out/render-captures/inline-intrinsics-2026-09-30/`.
+
+The experiment remains OFF by default. The next bounded decision is whether to
+enable this measured cache after its acceptance checks, before attempting reuse
+of used layout or widening eligibility. Ordinary block intrinsic reuse would
+need distinct cache storage or a clearer separation from used sizing; it must
+not reuse the existing fields blindly.
 
 ## Recommendation and scope
 
@@ -1526,6 +1669,6 @@ flaky hard-coded CTest threshold.
 Commits 1–5 and the milestone A rollout are complete. Step 6's ownership, bounded
 construction and staged bindings are implemented. Step 7 has live integration,
 retained full layout and failure recovery, now enabled in ordinary browsing by
-the milestone B rollout. Step 8 has not started; it is
-not a prerequisite for shipping retained boxes with full layout or for the already
-enabled selective CSS work.
+the milestone B rollout. Step 8 begins with capture-only text intrinsic reuse;
+retaining used layout and its dependency propagation remain to be implemented.
+Neither is a prerequisite for the already enabled selective CSS and box retention.

@@ -116,7 +116,7 @@ to OFF: its counters and clock reads are compiled out of normal builds. Keep
 `WISP_ENABLE_PERF_TRACE=OFF` for measurements; these counters do not emit log
 messages or allocate during the timed loops.
 
-The profile reports wall-clock milliseconds:
+The profile reports wall-clock milliseconds, except the explicitly named CPU metric:
 
 - `invalidate_ms`: choose the update mode, prepare its temporary reuse table and
   invalidate CSS selection caches in the required DOM scopes.
@@ -131,6 +131,13 @@ The profile reports wall-clock milliseconds:
   gaps and callback overhead. `construction_ms` includes CSS, boxes and normalization.
 - `layout_ms`: the refresh's layout/reformat call, including retained-state reset
   and existing element scrollbar updates when retaining boxes.
+- `layout_cpu_ms`: CPU time consumed by the rendering thread over the same phase;
+  excludes time while that thread is not running and work on other threads.
+  Null if the platform has no usable thread CPU clock. A large wall/CPU gap points
+  to waiting or scheduling delays; CPU time can still vary with clock frequency,
+  cache behavior and the amount of work.
+- `layout_reset_ms`: the retained-state reset portion of `layout_ms`; zero for
+  whole reconstruction. Do not add it to layout time a second time.
 - `cleanup_ms`: rebind iframe windows, retire old boxes and publish the reformat.
 - `total_ms`: refresh callback start through reformat publication, excluding
   painting, capture inspection and the artificial quiet period.
@@ -141,7 +148,9 @@ The profile reports wall-clock milliseconds:
 
 `styled_elements` and `construction_slices` describe the amount of work. CSS and
 normalization are subtracted from `boxes_ms` to avoid counting them twice. The
-clock uses nanosecond-resolution monotonic timestamps where available, with the
+`intrinsic_inline_calculations` and `intrinsic_inline_reuses` counters distinguish
+fresh inline-container intrinsic measurement from the experimental retained cache.
+The clock uses nanosecond-resolution monotonic timestamps where available, with the
 existing millisecond clock as a fallback on other platforms.
 
 `--capture-force-full-restyle` selects the full-refresh reference path at runtime.
@@ -238,6 +247,27 @@ final pixels are compared with independently constructed full-reference pages.
 Combine `--capture-interrupt-restyle MODE` with at least three alternating clicks
 to interrupt a detached build. `qt_retained_lifecycle`
 covers `close`, `navigate` and `shutdown` with the original tree still live.
+
+### Experimental inline intrinsic reuse
+
+`--capture-reuse-inline-intrinsics` additionally keeps intrinsic min/max widths
+for unchanged text-only inline containers during a retained update. It requires
+partial updates and is OFF by default. Ordinary blocks' min/max fields are reused
+for CSS sizing during layout, so they are not treated as intrinsic caches.
+
+The eligible containers have a normal block parent and only text, inline markers
+or hard breaks; atomic boxes, floats, replaced content and widgets are excluded.
+The cache also records its height contribution and whether minimum word widths
+were requested. A changed minimum-width requirement triggers fresh measurement.
+Changed regions start without cached sizes, and every ancestor is remeasured.
+The existing publication input checks guard styles, fonts, units and viewport
+changes; rejected retained updates keep the normal reconstruction fallback.
+
+This first milestone C step skips intrinsic measurement only. Line wrapping,
+block/flex/grid/table sizing, positioning, bounds, selection indexing and scrolling
+still run normally. No additional per-box fields or heap allocations are needed.
+Compare with the same capture without this option for fully reset retained layout,
+and with `--capture-force-full-restyle` for independent full reconstructions.
 
 `action_ms` is the preceding capture action's synchronous duration, including
 target lookup and any scroll into view. Deferred restyling happens afterward.

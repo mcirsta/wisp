@@ -57,6 +57,7 @@ int NS_Capture::prepare(int &argc, char **argv)
                 "  --capture-point X,Y          Inspect a point in document layout pixels\n"
                 "  --capture-force-full-restyle Force the full-refresh reference path\n"
                 "  --capture-css-only-restyle   Reuse CSS but reconstruct all boxes\n"
+                "  --capture-reuse-inline-intrinsics Test retained text-only intrinsic measurements\n"
                 "  --capture-retain-boxes       Use default eligible retained-region refresh\n"
                 "  --capture-fail-retained-layout Test error handling after region publication\n"
                 "  --capture-restart-partial-restyle Test invalidation during partial construction\n"
@@ -94,6 +95,15 @@ int NS_Capture::prepare(int &argc, char **argv)
         if (arg == "--capture-css-only-restyle") {
             m_css_only_restyle = true;
             continue;
+        }
+        if (arg == "--capture-reuse-inline-intrinsics") {
+#ifdef WISP_ENABLE_PARTIAL_UPDATES
+            m_reuse_inline_intrinsics = true;
+            continue;
+#else
+            fprintf(stderr, "Intrinsic reuse requires WISP_ENABLE_PARTIAL_UPDATES\n");
+            return -1;
+#endif
         }
         if (arg == "--capture-restart-partial-restyle") {
             m_restart_partial_restyle = true;
@@ -270,7 +280,7 @@ void NS_Capture::poll()
         return;
     }
     nsqt_capture_configure_restyle(content, m_force_full_restyle, m_restart_partial_restyle,
-        m_css_only_restyle, m_fail_retained_layout);
+        m_css_only_restyle, m_fail_retained_layout, m_reuse_inline_intrinsics);
     if (!m_interrupt_restyle.isEmpty())
         nsqt_capture_restyle_lifecycle(hlcache_handle_get_content(content), true);
     const bool done = content && content_get_status(content) == CONTENT_STATUS_DONE;

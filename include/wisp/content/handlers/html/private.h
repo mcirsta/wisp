@@ -48,13 +48,16 @@ struct html_viewport {
 };
 
 #ifdef WISP_PROFILE_RESTYLE
-/* Wall-clock durations; CSS and normalization are subsets of construction.
+/* Wall-clock durations except layout_cpu_ns (zero when unavailable).
+ * CSS and normalization are subsets of construction; reset is part of layout.
  * Painting continues to accumulate until the next refresh starts. */
 struct html_restyle_profile {
     uint64_t start_ns, construction_start_ns;
     uint64_t invalidate_ns, detach_ns, css_ns, construction_ns, normalise_ns;
     uint64_t construction_wall_ns, publication_ns, layout_ns, cleanup_ns, total_ns, paint_ns, last_paint_ns;
+    uint64_t layout_cpu_ns, layout_reset_ns;
     uint32_t styled_elements, construction_slices, paint_calls;
+    uint32_t intrinsic_inline_calculations, intrinsic_inline_reuses;
     const char *update_mode, *fallback_reason;
     uint32_t changed_controls, dirty_roots, invalidated_nodes, reused_styles;
     size_t temporary_bytes;
@@ -98,6 +101,7 @@ struct html_restyle_state {
 #endif
     bool force_full; /* Developer capture override, not a browser preference. */
     bool css_only; /* Capture override: reuse CSS but reconstruct all boxes. */
+    bool reuse_inline_intrinsics; /* Capture opt-in for milestone C's first bounded cache. */
 };
 #endif
 

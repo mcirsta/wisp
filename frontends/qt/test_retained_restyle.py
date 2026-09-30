@@ -13,7 +13,7 @@ profiling = sys.argv[2] == "1"
 fixture = Path(__file__).resolve().parents[2] / "test/restyle-tracking.html"
 env = dict(os.environ, QT_QPA_PLATFORM="offscreen", QT_SCALE_FACTOR="1",
            QT_SCREEN_SCALE_FACTORS="1", QT_FONT_DPI="96")
-ids = ("outside", "notes", "tabs", "first", "second", "first-panel", "second-panel", "after")
+ids = ("outside", "notes", "retained-text", "tabs", "first", "second", "first-panel", "second-panel", "after")
 
 
 def run(out, page, options=(), switches=8, extra_ids=()):
@@ -69,6 +69,9 @@ with tempfile.TemporaryDirectory(prefix="wisp-retained-") as tmp:
     source = source.replace("</style>", f'#tabs{{background-image:url("{gif}"),url("{gif}")}}</style>')
     # Native controls are visible and registered; labels still drive the edits.
     source = source.replace("#tabs input { display: none; }", "#tabs input { width:12px;height:12px; }")
+    source = source.replace('<section id="tabs">',
+                            '<p id="retained-text" style="width:180px">Unchanged words that wrap '
+                            '<span>across an inline boundary</span><br>and a hard break.</p><section id="tabs">')
     page.write_text(source)
     full = tmp / "full"
     reference = run(full, page, ("--capture-force-full-restyle",))
@@ -94,9 +97,28 @@ with tempfile.TemporaryDirectory(prefix="wisp-retained-") as tmp:
             profile = step["restyle_profile"]
             assert profile["update_mode"] == "partial_boxes" and profile["publication_ms"] > 0, profile
             assert profile["reused_styles"] == 0 and profile["construction_wait_ms"] >= 0, profile
+            assert 0 <= profile["layout_reset_ms"] <= profile["layout_ms"], profile
+            if profile["layout_cpu_ms"] is not None:
+                # Allow the final CPU-clock read overhead, not a performance limit.
+                assert 0 < profile["layout_cpu_ms"] <= profile["layout_ms"] + 0.5, profile
     for artifact in ("page.png", "dom.txt"):
         assert (retained / artifact).read_bytes() == (full / artifact).read_bytes(), artifact
         assert (css_only / artifact).read_bytes() == (full / artifact).read_bytes(), artifact
+
+    # Intrinsic reuse is separate from both style/box reuse and used layout.
+    # Compare every state with fresh builds, not a second pass over the same tree.
+    intrinsic = tmp / "intrinsic"
+    intrinsic_steps = run(intrinsic, page, ("--capture-reuse-inline-intrinsics",))
+    compare(reference, intrinsic_steps)
+    if profiling:
+        for index, step in enumerate(intrinsic_steps[3:], 3):
+            profile = step["restyle_profile"]
+            baseline = steps[index]["restyle_profile"]
+            assert profile["update_mode"] == "partial_boxes", profile
+            assert profile["intrinsic_inline_reuses"] > 0, profile
+            assert profile["intrinsic_inline_calculations"] < baseline["intrinsic_inline_calculations"], profile
+    for artifact in ("page.png", "dom.txt"):
+        assert (intrinsic / artifact).read_bytes() == (full / artifact).read_bytes(), artifact
 
     # The retained ancestor gains/loses a scrollbar as its tab contents grow.
     scrolling = tmp / "scrolling.html"
@@ -126,6 +148,8 @@ with tempfile.TemporaryDirectory(prefix="wisp-retained-") as tmp:
     frame_full = run(tmp / "frame-full", frame, ("--capture-force-full-restyle",), 4)
     frame_steps = run(tmp / "frame-retained", frame, switches=4)
     compare(frame_full, frame_steps)
+    frame_intrinsic = run(tmp / "frame-intrinsic", frame, ("--capture-reuse-inline-intrinsics",), 4)
+    compare(frame_full, frame_intrinsic)
     if profiling:
         for step in widget_steps[3:]:
             profile = step["restyle_profile"]
@@ -134,7 +158,11 @@ with tempfile.TemporaryDirectory(prefix="wisp-retained-") as tmp:
             assert 0 <= profile["boxes_ms"] <= profile["total_ms"], profile
         for step in frame_steps[2:]:
             assert step["restyle_profile"]["update_mode"] == "partial_css", step
-        restarted = run(tmp / "restart", page, ("--capture-restart-partial-restyle",))
+        for step in frame_intrinsic[2:]:
+            assert step["restyle_profile"]["update_mode"] == "partial_css", step
+            assert step["restyle_profile"]["intrinsic_inline_reuses"] == 0, step
+        restarted = run(tmp / "restart", page,
+                        ("--capture-restart-partial-restyle", "--capture-reuse-inline-intrinsics"))
         compare(reference, restarted)
         assert restarted[3]["restyle_profile"]["restarts"] == 1, restarted[3]
         assert restarted[3]["restyle_profile"]["fallback_reason"] == "inputs_changed_during_build", restarted[3]

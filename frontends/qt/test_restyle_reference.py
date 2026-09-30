@@ -45,6 +45,9 @@ def run(destination, force, restart=False):
                   "dom_changed" if index == 5 else "inputs_changed_during_build" if restart else "none")
         assert profile["fallback_reason"] == reason, (force, restart, index, profile)
         assert profile["invalidated_nodes"] > 0 and profile["styled_elements"] > 0, (force, index, profile)
+        assert profile["layout_reset_ms"] == 0, (force, index, profile)
+        if profile["layout_cpu_ms"] is not None:
+            assert 0 < profile["layout_cpu_ms"] <= profile["layout_ms"] + 0.5, (force, index, profile)
         if tracking and not force and index > 5:
             assert profile["reused_styles"] > 0 and profile["temporary_bytes"] > 0, (index, profile)
             assert profile["cloned_result_bytes"] > 0 and profile["style_references"] > 0, (index, profile)

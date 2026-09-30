@@ -253,6 +253,10 @@ QJsonObject nsqt_capture_inspect(struct hlcache_handle *content, const QStringLi
             {"construction_ms", p.construction_ns / 1e6},
             {"construction_wait_ms", (p.construction_wall_ns - p.construction_ns) / 1e6},
             {"layout_ms", p.layout_ns / 1e6}, {"cleanup_ms", p.cleanup_ns / 1e6}, {"total_ms", p.total_ns / 1e6},
+            {"layout_cpu_ms", p.layout_cpu_ns ? QJsonValue(p.layout_cpu_ns / 1e6) : QJsonValue(QJsonValue::Null)},
+            {"layout_reset_ms", p.layout_reset_ns / 1e6},
+            {"intrinsic_inline_calculations", int(p.intrinsic_inline_calculations)},
+            {"intrinsic_inline_reuses", int(p.intrinsic_inline_reuses)},
             {"publication_ms", p.publication_ns / 1e6},
             {"paint_ms", p.paint_ns / 1e6},
             {"through_last_paint_ms", p.last_paint_ns ? (p.last_paint_ns - p.start_ns) / 1e6 : 0},
@@ -331,15 +335,18 @@ QJsonObject nsqt_capture_inspect(struct hlcache_handle *content, const QStringLi
 }
 
 // Capture-only interaction hooks use the same core input path as the Qt widget.
-void nsqt_capture_configure_restyle(struct hlcache_handle *content, bool force, bool restart, bool css_only, bool fail)
+void nsqt_capture_configure_restyle(struct hlcache_handle *content, bool force, bool restart, bool css_only, bool fail,
+    bool reuse_intrinsics)
 {
     Q_UNUSED(restart);
     Q_UNUSED(fail);
+    Q_UNUSED(reuse_intrinsics);
 #ifdef WISP_ENABLE_PARTIAL_UPDATES
     if (content && content_get_type(content) == CONTENT_HTML) {
         auto *html = reinterpret_cast<html_content *>(hlcache_handle_get_content(content));
         html->restyle.force_full = force;
         html->restyle.css_only = css_only;
+        html->restyle.reuse_inline_intrinsics = reuse_intrinsics;
 #ifdef WISP_PROFILE_RESTYLE
         html->restyle.force_restart = restart;
         html->restyle.fail_retained_layout = fail;
