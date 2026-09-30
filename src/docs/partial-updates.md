@@ -10,8 +10,11 @@ the whole document. `WISP_ENABLE_PARTIAL_UPDATES` now defaults to ON; configurin
 it OFF still removes the HTML tracking state and selects the full-refresh path.
 Existing CMake caches explicitly set to OFF keep that setting until reconfigured.
 Milestone B constructs detached block/flex/grid candidates with staged URL/SVG
-resources, iframe descriptors and independent native controls. Publication and
-retained-box layout validation remain pending; displayed boxes are not yet retained.
+resources, iframe descriptors and independent native controls. Rebinding existing
+settled images and registering native controls with their forms can now be prepared
+without changing live state. Complete publication
+and retained-box layout validation remain pending; displayed boxes are not yet retained.
+Detached construction through native-control/SVG staging is committed as `610d6f5a`.
 Milestone C has not started. The steps below remain the implementation and
 acceptance checklist, with the concrete implementation choices recorded here.
 
@@ -409,15 +412,110 @@ state/geometry and resource counts exactly after repeated tab switching. Capture
 and the comparison driver are in `out/render-captures/staged-controls-2026-09-30/`.
 The detached path remains unused by live refresh; no speedup is claimed yet.
 
+### Milestone B prepared image bindings (2026-09-30)
+
+`html_object_prepare_bindings()` builds a temporary plan while callbacks still
+refer to displayed boxes. Sources must belong to the replaced region or be
+unbound retained resources. Each source can serve only one candidate request;
+generated content with no DOM node cannot steal a handle from an unaffected box.
+The normal URL/node/type/layer matching is shared with full reconstruction. SVG
+requests additionally compare MIME type and cached source bytes, since DOM
+identity alone does not prove the serialization unchanged.
+
+The initial policy accepts completed images already opened for the document (or
+documents without a browser window), plus failed URL requests whose failed state
+the full path also preserves. Newly required/changed resources, pending loads,
+unopened images and embedded documents require full refresh. A failed SVG without
+source bytes cannot be proved identical and is also refused by preparation. This
+restriction allows warmed tab switches to reuse existing images without adding a
+second asynchronous fetch lifecycle; new resource activation can be added later.
+
+Applying the plan requires locked/restyling publication. It validates every record
+before writing any binding, then moves destinations or makes removed images hidden.
+Callback records and cache handles keep their identities, and counters do not
+change. Apply performs no allocations, fetches, opens, closes or scheduled work.
+Discarding a plan frees only its temporary array. There is no new per-object or
+per-box storage. This API does not splice boxes, publish mappings or register forms;
+it remains unused by live restyling until those publication gates are complete.
+
+The byte comparison also fixes an existing full-refresh issue: a cached SVG with
+changed serialized content was reused merely because its DOM node matched. Full
+reconstruction now requests the changed data. Its existing failed-resource policy
+is preserved when no source survives, avoiding a fresh failed record on every click.
+
+The new resource-binding suite covers successful transfer, source/destination
+background layers, duplicate generated requests, hidden/failed resources, changes
+to SVG bytes/MIME type, cancellation, stale-plan rejection before any writes, and
+100 hide/show cycles with stable resource counts and preparation storage. Release
+allocation failures verify cleanup during preparation and allocation-free apply.
+
+Validation: 118 selected Debug tests and 115 Release tests pass. The binding suite
+has 39 Debug cases and 41 Release cases, and its LeakSanitizer run passes. The
+resource code compiles with partial updates/profiling disabled. Both saved
+Tion/Bihon tabs exactly match the preceding captures (PNG, DOM, normalized boxes,
+state/geometry and resource counts); results and driver are under
+`out/render-captures/prepared-resources-2026-09-30/`. Actual region replacement
+is still disabled; these checks validate preparation/rebinding and full-path
+compatibility, not retained layout or a speedup.
+
+### Milestone B prepared form bindings (2026-09-30)
+
+`html_form_prepare_bindings()` prepares replacement registration lists and lookup
+indexes for only the forms touched by the old/new region. It uses the same libdom
+form association as ordinary construction, without introducing new form features.
+Unchanged controls keep their gadget identities and values, including text widgets
+outside the replaced region. Affected regions containing text widgets, selects or
+file inputs still require full refresh, even if the replacement hides them.
+
+Preparation leaves live gadgets, lists and indexes untouched. Existing controls
+are replaced in their list positions; newly visible controls append. This does not
+alter submission order, which comes from the DOM form collection. Controls without
+a form remain unregistered. A form already using the list-only lookup fallback
+keeps that mode. All storage is temporary or replaces an existing form index;
+there is no additional permanent per-box state.
+
+`html_form_check_bindings()` and `html_object_check_bindings()` expose read-only
+preflight so the eventual region publisher can validate both plans before changing
+either association. The caller must also validate DOM/style generations, boundary
+closure and candidate immutability. Form apply requires locked/restyling publication,
+rechecks ownership/list identities, then transfers the prepared lists/indexes without
+allocation, DOM writes or callbacks. Retiring gadgets are unlinked before destruction;
+discarding an unused plan frees only preparation storage.
+
+This exposed two existing form bookkeeping bugs. The index wrapped stored DOM-node
+keys but compared them with unwrapped lookup keys, causing lookups to miss and fall
+back to linear scans. It now uses consistent borrowed node identities. Control
+retirement now repairs the successor's backward link and removes only its own index
+entry, without allocation or erasing a replacement's registration.
+
+The new form-binding suite exercises multiple affected forms, an untouched form,
+formless controls, unchanged text values, index/list-only modes, cancellation,
+stale plans, unsupported controls, retirement order and 100 hide/show cycles.
+Release cases inject allocation failures during preparation and forbid allocation
+during apply/discard/old-region destruction. The real DOM/CSS detached-construction
+test also prepares form bindings from its normalized candidate and verifies that
+the displayed document stays untouched.
+
+Validation: 119 selected Debug tests and 116 Release tests pass. The form suite
+has 22 Debug cases and 23 Release cases; its LeakSanitizer run
+passes, and the changed code compiles with partial updates/profiling disabled.
+Both saved Tion/Bihon panels, including repeated tab switches, exactly match the
+preceding PNGs, DOM, normalized boxes, control state/geometry and resource counts.
+The comparison driver and captures are in
+`out/render-captures/prepared-forms-2026-09-30/`.
+
+These APIs still are not called by live restyling. They complete another publication
+prerequisite; they do not yet retain displayed boxes or demonstrate a tab-switch
+speedup.
+
 Remaining prerequisites before retaining boxes (resume here):
 
-- Prepare resource reuse/new requests and iframe-window rebinding for publication.
-  Preserve callback ownership until commit; pending/completed/failed resources,
-  hidden bindings, changed URLs and duplicate generated requests need explicit
-  coverage. Staging a request alone does not prove it safe to publish.
-- Prepare native-control form/index association without allocating or modifying
-  live controls during the final commit. Keep widget-bearing and other unsupported
-  content on the full-refresh path.
+- Establish allocation arenas for eligible regions during full construction so
+  old regions can actually be retired independently. Keep widget-bearing and other
+  unsupported content on the full-refresh path.
+- Retain the settled-image restriction initially. New requests, pending loads,
+  embedded documents and iframe-window rebinding require separate preparation
+  before those cases can use partial publication; otherwise choose full refresh.
 - Prove boundary closure, including inline continuations, generated boxes, float
   chains and containing-block pointers. Stage mapping publication (including
   hidden descendants) and validate input generations before replacing a region.

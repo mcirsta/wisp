@@ -112,4 +112,31 @@ void html_deferred_reformat(void *p);
 bool html_fetch_object_buffer(struct html_content *c, const uint8_t *data, size_t len, const char *mime_type,
     struct box *box, content_type permitted_types);
 
+#ifdef WISP_ENABLE_PARTIAL_UPDATES
+struct box_construct_region;
+struct html_object_binding_plan;
+
+/** Prepare reuse of settled image resources for a detached candidate. No live
+ * bindings, callbacks, cache handles or counters are changed. old_root may be
+ * NULL for a previously hidden region. New/changed requests, pending resources
+ * and embedded documents return NOT_IMPLEMENTED for full-refresh fallback.
+ * The document, old tree and candidate must outlive the plan; candidate is
+ * immutable until apply/discard. owner is a talloc allocation parent. */
+nserror html_object_prepare_bindings(struct html_content *html, struct box *old_root,
+    const struct box_construct_region *candidate, void *owner, struct html_object_binding_plan **result);
+
+/** Read-only preflight for coordinated resource/form publication. */
+nserror html_object_check_bindings(const struct html_object_binding_plan *plan);
+
+/** Revalidate then apply every prepared binding without allocation or callbacks.
+ * Must run inside publication with rendering/input excluded (locked/restyling).
+ * This does not splice boxes or publish DOM/form/iframe links. On success the
+ * caller must publish the candidate before yielding; it cannot just discard it.
+ * A stale plan returns INVALID before changing any binding. Single use. */
+nserror html_object_apply_bindings(struct html_object_binding_plan *plan);
+
+/** Release only preparation storage, never resource handles. */
+void html_object_discard_bindings(struct html_object_binding_plan *plan);
+#endif
+
 #endif

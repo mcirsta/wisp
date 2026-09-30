@@ -143,6 +143,9 @@ struct form {
     struct form *prev; /**< Previous form in doc. */
 };
 
+/** Create an empty DOM-node to control index, with the form index ownership rules. */
+hashmap_t *form_control_index_create(void);
+
 /**
  * Called by the select menu when it wants an area to be redrawn. The
  * coordinates are menu origin relative.

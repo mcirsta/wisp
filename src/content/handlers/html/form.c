@@ -1257,7 +1257,7 @@ void form_add_control(struct form *form, struct form_control *control)
 /* exported interface documented in html/form_internal.h */
 void form_free_control(struct form_control *control)
 {
-    struct form_control *c;
+    struct form_control *c, *prev = NULL;
     assert(control != NULL);
 
     NSLOG(wisp, INFO, "Control:%p name:%p value:%p initial:%p", control, control->name, control->value,
@@ -1297,29 +1297,24 @@ void form_free_control(struct form_control *control)
 
     /* unlink the control from the form */
     if (control->form != NULL) {
-        for (c = control->form->controls; c != NULL; c = c->next) {
-            if (c->next == control) {
-                c->next = control->next;
-                if (control->form->last_control == control)
-                    control->form->last_control = c;
-                break;
-            }
-            if (c == control) {
-                /* can only happen if control was first control
-                 */
+        for (c = control->form->controls; c != NULL && c != control; c = c->next)
+            prev = c;
+        if (c != NULL) {
+            if (prev != NULL)
+                prev->next = control->next;
+            else
                 control->form->controls = control->next;
-                if (control->form->last_control == control)
-                    control->form->controls = control->form->last_control = NULL;
-                break;
-            }
+            if (control->next != NULL)
+                control->next->prev = prev;
+            if (control->form->last_control == control)
+                control->form->last_control = prev;
         }
 
-        /* mark index entry as removed */
+        /* Retirement must neither allocate nor clear a replacement's mapping. */
         if (control->form->control_index != NULL) {
-            void **slot = hashmap_insert(control->form->control_index, control->node);
-            if (slot != NULL) {
-                *(struct form_control **)slot = NULL;
-            }
+            void **slot = hashmap_lookup(control->form->control_index, control->node);
+            if (slot != NULL && *slot == control)
+                hashmap_remove(control->form->control_index, control->node);
         }
     }
 
@@ -1967,14 +1962,13 @@ out:
 
 static void *map_key_clone(void *key)
 {
-    void **p = malloc(sizeof(void *));
-    if (p != NULL)
-        *p = key;
-    return p;
+    /* Keys are borrowed DOM-node identities, just like control->node. Keep
+     * stored and lookup keys in the same representation. */
+    return key;
 }
 static void map_key_destroy(void *key)
 {
-    free(key);
+    (void)key;
 }
 static uint32_t map_key_hash(void *key)
 {
@@ -1987,7 +1981,7 @@ static uint32_t map_key_hash(void *key)
 }
 static bool map_key_eq(void *a, void *b)
 {
-    return *(void **)a == *(void **)b;
+    return a == b;
 }
 static void *map_value_alloc(void *key)
 {
@@ -1999,6 +1993,12 @@ static void map_value_destroy(void *value)
 }
 static hashmap_parameters_t form_node_map_params = {
     map_key_clone, map_key_hash, map_key_eq, map_key_destroy, map_value_alloc, map_value_destroy};
+
+/* exported interface documented in html/form_internal.h */
+hashmap_t *form_control_index_create(void)
+{
+    return hashmap_create(&form_node_map_params);
+}
 
 /* exported interface documented in html/form_internal.h */
 struct form *form_new(void *node, const char *action, const char *target, form_method method, const char *charset,
@@ -2044,7 +2044,7 @@ struct form *form_new(void *node, const char *action, const char *target, form_m
 
     form->node = node;
 
-    form->control_index = hashmap_create(&form_node_map_params);
+    form->control_index = form_control_index_create();
 
     return form;
 }

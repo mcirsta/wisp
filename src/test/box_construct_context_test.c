@@ -21,6 +21,7 @@
 #include "content/handlers/html/box_construct.h"
 #include "content/handlers/html/object.h"
 #include "content/handlers/html/html_svg.h"
+#include "content/handlers/html/form_bindings.h"
 #include "utils/talloc.h"
 #ifdef WISP_TEST_ALLOC_FAILURE
 #include "test/malloc_fig.h"
@@ -805,6 +806,11 @@ START_TEST(test_detached_controls)
             ck_assert_ptr_nonnull(region->objects);
             ck_assert_ptr_eq(region->objects->box->node, nodes[4]);
             ck_assert_str_eq(nsurl_access(region->objects->url), "file:///button.png");
+            struct html_form_binding_plan *bindings;
+            ck_assert_int_eq(html_form_prepare_bindings(&html, box_for_node(outer), region->root, region, &bindings),
+                NSERROR_OK);
+            ck_assert_int_eq(html_form_check_bindings(bindings), NSERROR_OK);
+            html_form_discard_bindings(bindings);
             box_construct_region_destroy(region);
         }
         ck_assert_mem_eq(html.forms, &saved_form, sizeof(saved_form));

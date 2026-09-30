@@ -25,6 +25,7 @@
 #include <assert.h>
 #include <ctype.h>
 #include <stdint.h>
+#include <limits.h>
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
@@ -47,6 +48,10 @@
 #include <wisp/content/handlers/html/interaction.h>
 #include <wisp/content/handlers/html/private.h>
 #include "content/handlers/html/object.h"
+#ifdef WISP_ENABLE_PARTIAL_UPDATES
+#include "content/handlers/html/box_construct.h"
+#include "utils/talloc.h"
+#endif
 
 /* Performance tracing - enable via CMake: -DNEOSURF_ENABLE_PERF_TRACE=ON */
 #include <wisp/utils/perf.h>
@@ -858,18 +863,46 @@ nserror html_object_free_objects(html_content *html)
 }
 
 
+static bool html_object_matches(const struct content_html_object *object, const struct box *box, nsurl *url,
+    content_type permitted_types, bool background, uint32_t layer)
+{
+    return object->layout_resource && object->node == box->node && object->background == background &&
+        object->background_layer == layer && object->permitted_types == permitted_types &&
+        ((url == NULL && object->url == NULL) ||
+            (url != NULL && object->url != NULL && nsurl_compare(url, object->url, NSURL_COMPLETE)));
+}
+
+static bool html_object_buffer_matches(const struct content_html_object *object, const uint8_t *buffer,
+    size_t buffer_length, const char *mime_type)
+{
+    /* DOM identity alone is insufficient: a changed currentColor or SVG child
+     * must not reuse an older serialization. Compare the actual cached bytes. */
+    if (object->content == NULL)
+        return false;
+    size_t length = 0;
+    const uint8_t *source = content_get_source_data(object->content, &length);
+    lwc_string *mime = content_get_mime_type(object->content);
+    bool equal = source != NULL && length == buffer_length && mime != NULL &&
+        lwc_string_length(mime) == strlen(mime_type) &&
+        memcmp(lwc_string_data(mime), mime_type, lwc_string_length(mime)) == 0 && memcmp(source, buffer, length) == 0;
+    if (mime != NULL)
+        lwc_string_unref(mime);
+    return equal;
+}
+
 /* Rebind the same DOM resource rather than refetching it on every tab click.
  * Unbound entries remain available while a panel is display:none. */
-static bool html_reuse_object(
-    html_content *c, struct box *box, nsurl *url, content_type permitted_types, bool background, uint32_t layer)
+static bool html_reuse_object(html_content *c, struct box *box, nsurl *url, content_type permitted_types,
+    bool background, uint32_t layer, const uint8_t *buffer, size_t length, const char *mime_type)
 {
     if (box == NULL || (box->node == NULL && url == NULL))
         return false;
     for (struct content_html_object *o = c->object_list; o != NULL; o = o->next) {
-        if (!o->layout_resource || o->box != NULL || o->node != box->node || o->background != background ||
-            o->background_layer != layer || o->permitted_types != permitted_types ||
-            ((url == NULL) != (o->url == NULL)) || (url != NULL && !nsurl_compare(url, o->url, NSURL_COMPLETE)))
+        if (o->box != NULL || !html_object_matches(o, box, url, permitted_types, background, layer) ||
+            (buffer != NULL && o->content != NULL && !html_object_buffer_matches(o, buffer, length, mime_type)))
             continue;
+        /* Keep the existing failed-resource policy when no cached source
+         * survives. Do not accumulate a new failed SVG record on every click. */
         o->box = box;
         /* A fetch can become usable while its panel is hidden. Attach it when
          * shown; already-open embedded documents keep their existing state. */
@@ -886,6 +919,166 @@ static bool html_reuse_object(
     return false;
 }
 
+#ifdef WISP_ENABLE_PARTIAL_UPDATES
+struct html_object_binding {
+    struct content_html_object *object;
+    struct box *old_box;
+    struct hlcache_handle *content;
+    const struct box_construct_object *request; /* NULL: becomes hidden. */
+};
+
+struct html_object_binding_plan {
+    html_content *html;
+    struct content_html_object *head;
+    struct browser_window *bw;
+    unsigned num_objects;
+    size_t count;
+    struct html_object_binding *bindings;
+    bool applied;
+};
+
+static bool html_object_in_region(const struct box *box, const struct box *root)
+{
+    for (; box != NULL; box = box->parent)
+        if (box == root)
+            return true;
+    return false;
+}
+
+/* The first publication path requires no fetch/open/refresh calls at commit.
+ * Failed URL requests retain their existing failed state, as full reuse does. */
+static bool html_object_can_rebind(const html_content *html, const struct content_html_object *object)
+{
+    if (!object->layout_resource || object->permitted_types != CONTENT_IMAGE || object->refresh_pending)
+        return false;
+    return object->content == NULL ||
+        (content_get_status(object->content) == CONTENT_STATUS_DONE &&
+            content_get_type(object->content) == CONTENT_IMAGE && (html->bw == NULL || object->opened));
+}
+
+static bool html_object_matches_request(const struct content_html_object *object,
+    const struct box_construct_object *request)
+{
+    if (!html_object_matches(object, request->box, request->url, request->permitted_types, request->background,
+            request->background_layer))
+        return false;
+    if (request->buffer == NULL)
+        return request->url != NULL;
+    return html_object_buffer_matches(object, request->buffer, request->buffer_length, request->mime_type);
+}
+
+nserror html_object_prepare_bindings(html_content *html, struct box *old_root,
+    const struct box_construct_region *candidate, void *owner, struct html_object_binding_plan **result)
+{
+    *result = NULL;
+    size_t capacity = 0;
+    for (struct content_html_object *o = html->object_list; o != NULL; o = o->next)
+        if (html_object_in_region(o->box, old_root))
+            capacity++;
+    for (const struct box_construct_object *r = candidate->objects; r != NULL; r = r->next)
+        capacity++;
+    if (capacity > UINT_MAX)
+        return NSERROR_NOMEM;
+    struct html_object_binding_plan *plan = talloc_zero(owner, struct html_object_binding_plan);
+    if (plan == NULL)
+        return NSERROR_NOMEM;
+    if (capacity > 0) {
+        plan->bindings = talloc_array(plan, struct html_object_binding, capacity);
+        if (plan->bindings == NULL) {
+            talloc_free(plan);
+            return NSERROR_NOMEM;
+        }
+    }
+    plan->html = html;
+    plan->head = html->object_list;
+    plan->num_objects = html->num_objects;
+    plan->bw = html->bw;
+    for (struct content_html_object *o = html->object_list; o != NULL; o = o->next) {
+        if (!html_object_in_region(o->box, old_root))
+            continue;
+        if (!html_object_can_rebind(html, o))
+            goto unsupported;
+        plan->bindings[plan->count++] = (struct html_object_binding){o, o->box, o->content, NULL};
+    }
+    for (const struct box_construct_object *r = candidate->objects; r != NULL; r = r->next) {
+        bool found = false;
+        for (struct content_html_object *o = html->object_list; o != NULL; o = o->next) {
+            /* Never steal a handle from an unaffected box, including generated
+             * content without a DOM node. Each record serves one destination. */
+            if ((o->box != NULL && !html_object_in_region(o->box, old_root)) || !html_object_can_rebind(html, o) ||
+                !html_object_matches_request(o, r))
+                continue;
+            size_t i = 0;
+            while (i < plan->count && plan->bindings[i].object != o)
+                i++;
+            if (i < plan->count && plan->bindings[i].request != NULL)
+                continue;
+            if (i == plan->count)
+                plan->bindings[plan->count++] = (struct html_object_binding){o, o->box, o->content, NULL};
+            plan->bindings[i].request = r;
+            found = true;
+            break;
+        }
+        if (!found)
+            goto unsupported;
+    }
+    *result = plan;
+    return NSERROR_OK;
+
+unsupported:
+    talloc_free(plan);
+    return NSERROR_NOT_IMPLEMENTED;
+}
+
+nserror html_object_check_bindings(const struct html_object_binding_plan *plan)
+{
+    html_content *html = plan->html;
+    if (plan->applied || html->object_list != plan->head ||
+        html->num_objects != plan->num_objects || html->bw != plan->bw)
+        return NSERROR_INVALID;
+    /* Check every record before writing any. Callbacks may have completed,
+     * failed or rebound a resource while the candidate was being prepared. */
+    for (size_t i = 0; i < plan->count; i++) {
+        const struct html_object_binding *b = &plan->bindings[i];
+        struct content_html_object *o = html->object_list;
+        while (o != NULL && o != b->object)
+            o = o->next;
+        if (o == NULL || o->box != b->old_box || o->content != b->content || !html_object_can_rebind(html, o) ||
+            (b->request != NULL && !html_object_matches_request(o, b->request)))
+            return NSERROR_INVALID;
+    }
+    return NSERROR_OK;
+}
+
+nserror html_object_apply_bindings(struct html_object_binding_plan *plan)
+{
+    if (!plan->html->base.locked || !plan->html->restyling || html_object_check_bindings(plan) != NSERROR_OK)
+        return NSERROR_INVALID;
+    for (size_t i = 0; i < plan->count; i++) {
+        const struct html_object_binding *b = &plan->bindings[i];
+        struct content_html_object *o = b->object;
+        if (o->box != NULL) {
+            if (!o->background)
+                o->box->object = NULL;
+            else if (o->background_layer == 0)
+                o->box->background = NULL;
+            else
+                o->box->background_layers[o->background_layer - 1] = NULL;
+        }
+        o->box = b->request == NULL ? NULL : b->request->box;
+        if (o->box != NULL && o->content != NULL)
+            html_object_done(o->box, o->content, o->background, o->background_layer);
+    }
+    plan->applied = true;
+    return NSERROR_OK;
+}
+
+void html_object_discard_bindings(struct html_object_binding_plan *plan)
+{
+    talloc_free(plan);
+}
+#endif
+
 
 /* exported interface documented in html/object.h */
 static bool html_fetch_object_layer(
@@ -896,7 +1089,7 @@ static bool html_fetch_object_layer(
     hlcache_child_context child;
     nserror error;
 
-    if (html_reuse_object(c, box, url, permitted_types, background, layer))
+    if (html_reuse_object(c, box, url, permitted_types, background, layer, NULL, 0, NULL))
         return true;
 
     PERF("OBJECT DISCOVER '%s' (bg=%d)", nsurl_access(url), background);
@@ -972,7 +1165,7 @@ bool html_fetch_object_buffer(html_content *c, const uint8_t *data, size_t len, 
     hlcache_child_context child;
     nserror error;
 
-    if (html_reuse_object(c, box, NULL, permitted_types, false, 0))
+    if (html_reuse_object(c, box, NULL, permitted_types, false, 0, data, len, mime_type))
         return true;
 
     if (c->aborted)
