@@ -8,7 +8,8 @@
 
 static const int scrolls[] = {0, 100, 300, 380, 450, 0};
 
-/* Positions relative to the scrollport, measured with Chromium 153.0.8010.52.
+/* Positions relative to the scrollport, measured with Chromium 153.0.8010.52
+ * and Firefox 157.0 (both agree on every case).
  * Returning to zero is intentional: queries must never accumulate movement.
  * Geometry is in the scroller's unscrolled content coordinates. */
 static const struct {
@@ -48,6 +49,22 @@ static const struct {
             .inset_start = 10,
             .end_auto = true},
         {80, 10, -80, -160, -230, 80}},
+    {"tall-bottom",
+        {.border_start = 80,
+            .border_size = 180,
+            .containing_size = 400,
+            .scrollport_size = 120,
+            .inset_end = 10,
+            .start_auto = true},
+        {0, -70, -220, -300, -370, 0}},
+    {"tall-both",
+        {.border_start = 80,
+            .border_size = 180,
+            .containing_size = 400,
+            .scrollport_size = 120,
+            .inset_start = 10,
+            .inset_end = 20},
+        {10, 10, -80, -160, -230, 10}},
     {"margin",
         {.border_start = 80,
             .border_size = 40,
@@ -104,6 +121,33 @@ static const struct {
             .inset_end = 20,
             .reverse = true},
         {80, -20, -220, -300, -370, 80}},
+    /* Sibling spacing, rather than margins, leaves room for movement. */
+    {"wide-right",
+        {.border_start = 80,
+            .border_size = 240,
+            .containing_size = 500,
+            .scrollport_size = 200,
+            .inset_end = 10,
+            .start_auto = true},
+        {0, -50, -220, -300, -370, 0}},
+    {"wide-rtl-left",
+        {.border_start = 80,
+            .border_size = 240,
+            .containing_size = 500,
+            .scrollport_size = 200,
+            .inset_start = 10,
+            .end_auto = true,
+            .reverse = true},
+        {80, 10, -40, -120, -190, 80}},
+    {"wide-rtl-both",
+        {.border_start = 80,
+            .border_size = 240,
+            .containing_size = 500,
+            .scrollport_size = 200,
+            .inset_start = 10,
+            .inset_end = 20,
+            .reverse = true},
+        {0, -60, -60, -120, -190, 0}},
 };
 
 START_TEST(test_browser_axes)
@@ -155,32 +199,6 @@ START_TEST(test_containment_without_travel)
 }
 END_TEST
 
-START_TEST(test_oversized_end_inset)
-{
-    /* CSS Position 3 section 3.4 reduces the logical end inset even when the
-     * opposite inset is auto. Chromium currently differs for bottom-only tall
-     * boxes; this is a specification test, not a claimed Chromium match. */
-    struct box_sticky_axis axis = {.border_start = 80,
-        .border_size = 180,
-        .containing_size = 400,
-        .scrollport_start = 100,
-        .scrollport_size = 120,
-        .inset_end = 10,
-        .start_auto = true};
-    ck_assert_int_eq(box_sticky_axis_offset(&axis), 0);
-
-    axis = (struct box_sticky_axis){.border_start = 80,
-        .border_size = 240,
-        .containing_size = 500,
-        .scrollport_start = 100,
-        .scrollport_size = 200,
-        .inset_start = 10,
-        .inset_end = 20,
-        .reverse = true};
-    ck_assert_msg(box_sticky_axis_offset(&axis) == -40, "RTL reduces the left inset, preserving the right one");
-}
-END_TEST
-
 START_TEST(test_wide_arithmetic)
 {
     struct box_sticky_axis axis = {.border_start = INT_MAX - 100,
@@ -206,7 +224,6 @@ int main(void)
     tcase_add_loop_test(tc, test_browser_axes, 0, sizeof(browser_cases) / sizeof(browser_cases[0]));
     tcase_add_test(tc, test_auto_and_zero);
     tcase_add_test(tc, test_containment_without_travel);
-    tcase_add_test(tc, test_oversized_end_inset);
     tcase_add_test(tc, test_wide_arithmetic);
     suite_add_tcase(suite, tc);
     SRunner *runner = srunner_create(suite);

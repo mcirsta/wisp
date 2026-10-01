@@ -23,6 +23,15 @@ body { font: 14px/20px sans-serif; background: white; }
 .wide { width: 240px; left: 10px; right: 20px; margin-left: 80px; }
 .rtl { direction: rtl; }
 .rtl .sticky { margin-left: 80px; margin-right: 180px; }
+/* A sibling supplies the initial horizontal offset without margins limiting
+   sticky travel. In RTL, reverse flex flow keeps that same initial position. */
+.axis-row { display: flex; }
+.axis-row.rtl { flex-direction: row-reverse; }
+.axis-before { flex: none; width: 80px; }
+.axis-row .sticky { flex: none; width: 240px; margin: 0; direction: ltr; }
+.axis-left { left: 10px; }
+.axis-right { right: 10px; }
+.axis-both { left: 10px; right: 20px; }
 /* Containing-block/stacking checks run at scroll zero with auto insets. */
 .anchor { position: sticky; width: 180px; height: 80px; padding: 4px;
           border: 2px solid black; background: #228844; }
@@ -105,5 +114,22 @@ body { font: 14px/20px sans-serif; background: white; }
 </div></div>
 <div class="case"><div id="wide-rtl-scroll" class="scroller">
   <div class="containing rtl"><div id="wide-rtl" class="sticky wide"></div></div>
+  <div class="tail"></div>
+</div></div>
+
+<div class="case"><div id="tall-both-scroll" class="scroller">
+  <div class="containing"><div class="before"></div><div id="tall-both" class="sticky both tall"></div></div>
+  <div class="tail"></div>
+</div></div>
+<div class="case"><div id="wide-right-scroll" class="scroller" data-axis="x">
+  <div class="containing axis-row"><div class="axis-before"></div><div id="wide-right" class="sticky axis-right"></div></div>
+  <div class="tail"></div>
+</div></div>
+<div class="case"><div id="wide-rtl-left-scroll" class="scroller" data-axis="x">
+  <div class="containing axis-row rtl"><div class="axis-before"></div><div id="wide-rtl-left" class="sticky axis-left"></div></div>
+  <div class="tail"></div>
+</div></div>
+<div class="case"><div id="wide-rtl-both-scroll" class="scroller" data-axis="x">
+  <div class="containing axis-row rtl"><div class="axis-before"></div><div id="wide-rtl-both" class="sticky axis-both"></div></div>
   <div class="tail"></div>
 </div></div>

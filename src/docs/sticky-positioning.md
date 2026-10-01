@@ -60,9 +60,11 @@ support does not implement a site's scripted class changes.
 A sticky box retains its normal-flow space. Insets constrain its visual position
 against the nearest scrollport, subject to its containing block. Percentages use
 the relevant scrollport dimension. `auto` must remain distinguishable from zero.
-Oversized boxes require the specification's end-inset adjustment; containment uses
-its margin-sensitive position box. Sticky also establishes an absolute containing
-block and a stacking context, including with `z-index: auto`.
+With both insets specified, oversized boxes require the specification's end-inset
+adjustment. A sole specified inset remains binding, following the browser behavior
+documented below. Containment uses its margin-sensitive position box. Sticky also
+establishes an absolute containing block and a stacking context, including with
+`z-index: auto`.
 [CSS Positioned Layout, sections 2–3](https://www.w3.org/TR/css-position-3/#stickypos-insets).
 
 Scroll-container discovery must use overflow semantics, not scrollbar existence.
@@ -335,7 +337,7 @@ Stage 1 is in progress. The following parts are implemented:
   flags, signed margins, containing-block limits, logical-end adjustment and
   64-bit intermediate arithmetic. It takes resolved geometry only and is not
   yet called by the renderer.
-- `layout_sticky_test` covers ten Chromium reference sequences (60 positions),
+- `layout_sticky_test` covers fifteen Chromium/Firefox reference sequences (90 positions),
   plus auto/zero/negative insets, no movement room, oversized logical-end behavior
   and coordinate overflow. Each sequence returns to its original scroll offset.
 - Sticky establishes an absolute containing block and an auto-z stacking context.
@@ -352,17 +354,42 @@ Stage 1 is in progress. The following parts are implemented:
   sticky parser fixture were verified. No generator or CSS storage changes were
   needed; the Qt fixture exercises the real parsing/selection path.
 
-Reference measurements use Chromium 153.0.8010.52, scripts disabled, an 800x1200
-viewport and device scale 1. Values are recorded alongside the numeric unit cases.
-Local raw measurements are in
-`out/render-captures/sticky-foundation-2026-10-01/chromium-reference.json`.
+Reference measurements use Chromium 153.0.8010.52 and Firefox 157.0, scripts
+disabled, an 800x1200 viewport and device scale 1. Both browsers agree on all
+90 positions and all containing-block rectangles. Values are recorded alongside
+the numeric unit cases. Local raw measurements are in
+`out/render-captures/sticky-foundation-2026-10-01/`, in
+`chromium-reference.json` and `firefox-reference.json`.
 
-One edge case remains a compatibility question before renderer integration:
-`tall-bottom` has a 180px box, a 120px scrollport and only `bottom: 10px`.
-At scroll 100, Chromium places its top at -70px; the specification's logical-end
-inset reduction gives -20px. The unit test explicitly records the specification
-behavior separately from browser agreement. Check this against another engine
-and relevant conformance tests before treating it as settled compatibility.
+### Oversized single-inset compatibility decision
+
+The investigation resolved the previous `tall-bottom` discrepancy. With a 180px
+box, a 120px scrollport and only `bottom: 10px`, both browsers place the top at
+-70px at scroll 100. Our original solver produced -20px: treating the auto top as
+zero during end-inset adjustment weakened the specified bottom inset.
+
+Only apply logical-end reduction when both insets are specified. With one auto
+inset, retain the other inset unchanged, subject to the containing-block limits.
+This also fixes right-only positioning in LTR and left-only positioning in RTL.
+It is a deliberate compatibility choice: the current
+[Position 3 wording](https://drafts.csswg.org/css-position-3/#stickypos-insets)
+describes a broader adjustment, while
+[Chromium's implementation](https://github.com/chromium/chromium/blob/main/third_party/blink/renderer/core/layout/layout_box_model_object.cc)
+explicitly gates it on both insets being present. Local Firefox measurements
+independently confirm the same behavior.
+
+The new `tall-bottom`, `wide-right` and `wide-rtl-left` numeric cases all fail
+against the original solver and pass with the fix. `tall-both` and
+`wide-rtl-both` preserve opposing-inset precedence; the horizontal fixtures use a
+sibling to establish the normal position so large margins cannot mask movement.
+The existing WPT
+[LTR opposing-inset case](https://github.com/web-platform-tests/wpt/blob/master/css/css-position/sticky/position-sticky-left-and-right-overconstrained.html)
+and [RTL counterpart](https://github.com/web-platform-tests/wpt/blob/master/css/css-position/sticky/position-sticky-horizontal-rtl-overconstrained.html)
+were also reviewed; they exercise both specified edges, not the single-auto case.
+The former spec-only assertion has been replaced by measured browser regressions.
+Fix validation: all 18 unit cases in `layout_sticky_test` and the
+`qt_sticky_position` capture pass in Debug ASan/UBSan and Release. The captures
+retain their 100%/150% zoom checks. `git diff --check` is clean.
 
 No box fields, sticky metadata allocations or scroll-time work have been added.
 Remaining stage-1 work is eligibility, containing-block/scroll-container discovery,
@@ -370,7 +397,8 @@ resolved constraints and their layout/reset integration. Visual coordinates,
 painting, input, lifecycle coverage, saved-site validation and cost measurements
 remain subsequent work. Sticky headers do not yet stay visible during scrolling.
 
-Validation: Qt builds in Debug ASan/UBSan and Release, and Monkey builds in Debug.
+Foundation validation: Qt builds in Debug ASan/UBSan and Release, and Monkey
+builds in Debug.
 All 128 selected Debug and 117 selected Release tests pass, covering CSS, layout,
 grid, stacking, construction, retained updates and Qt captures, plus Monkey in
 Debug. The Debug capture test required a rerun with local loopback access because
