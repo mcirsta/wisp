@@ -95,6 +95,15 @@ set(QT_RESOURCES
 add_executable(wisp-qt ${QT_SOURCES} ${QT_RESOURCES})
 
 if(BUILD_TESTING AND WISP_ENABLE_TESTS)
+    add_executable(qt_text_cache_test test_text_cache.cpp layout.cpp)
+    target_compile_definitions(qt_text_cache_test PRIVATE WISP_QT_CAPTURE)
+    target_include_directories(qt_text_cache_test PRIVATE
+        ${CMAKE_SOURCE_DIR}/include ${CMAKE_SOURCE_DIR}/src ${CMAKE_SOURCE_DIR}/frontends)
+    target_link_libraries(qt_text_cache_test PRIVATE Qt6::Widgets wisp)
+    add_test(NAME qt_text_cache COMMAND qt_text_cache_test ${CMAKE_SOURCE_DIR}/test/fonts/normal-400.ttf)
+    set_tests_properties(qt_text_cache PROPERTIES TIMEOUT 30
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_SCALE_FACTOR=1;QT_SCREEN_SCALE_FACTORS=1;QT_FONT_DPI=96")
+
     add_executable(qt_font_weight_test test_font_weight.cpp layout.cpp)
     target_compile_definitions(qt_font_weight_test PRIVATE WISP_QT_CAPTURE)
     target_include_directories(qt_font_weight_test PRIVATE
@@ -324,7 +333,8 @@ target_link_libraries(wisp-qt PRIVATE Qt6::Widgets Qt6::Core Qt6::Gui wisp)
 # backends on other platforms keep using installed families and Qt substitutions.
 if(QT_FEATURE_fontconfig)
     find_package(Fontconfig REQUIRED)
-    foreach(font_target wisp-qt qt_font_weight_test qt_font_fallback_test qt_text_split_test qt_fractional_fonts_test)
+    foreach(font_target wisp-qt qt_font_weight_test qt_font_fallback_test qt_text_split_test qt_fractional_fonts_test
+            qt_text_cache_test)
         if(TARGET ${font_target})
             target_link_libraries(${font_target} PRIVATE Fontconfig::Fontconfig)
         endif()

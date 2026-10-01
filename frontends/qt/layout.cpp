@@ -22,6 +22,7 @@
  */
 
 #include <QApplication>
+#include <QByteArray>
 #include <QCache>
 #include <QFontDatabase>
 #include <QPainter>
@@ -357,6 +358,89 @@ static struct {
     struct pfcache_entry entries[PFCACHE_ENTRIES];
 } pfcache;
 
+/* One LRU on the Qt GUI thread, shared across pages and layout passes. Store final
+ * callback results, leaving Qt's shaping and our fitting/rounding unchanged.
+ * The cost includes owned UTF-8 and an allowance for key/hash/font bookkeeping;
+ * it is a memory budget estimate, not an exact allocator footprint. Very long
+ * runs bypass the cache so one paragraph cannot displace many short labels. */
+enum class TextOperation { Width, Split };
+struct TextMeasurementKey {
+    QFont font;
+    QByteArray text;
+    qreal dpi;
+    int size, flags, spacing, available;
+    TextOperation operation;
+
+    bool operator==(const TextMeasurementKey &other) const
+    {
+        return font == other.font && text == other.text && dpi == other.dpi && size == other.size &&
+            flags == other.flags && spacing == other.spacing && available == other.available &&
+            operation == other.operation;
+    }
+};
+
+static size_t qHash(const TextMeasurementKey &key, size_t seed = 0)
+{
+    return qHashMulti(
+        seed, key.font, key.text, key.dpi, key.size, key.flags, key.spacing, key.available, int(key.operation));
+}
+
+struct TextMeasurementResult {
+    size_t offset;
+    int width;
+};
+static QCache<TextMeasurementKey, TextMeasurementResult> text_cache(512 * 1024);
+static quint64 text_cache_generation;
+#ifdef WISP_QT_CAPTURE
+static quint64 text_cache_hits[2], text_cache_misses[2];
+#endif
+
+class TextMeasurement
+{
+public:
+    TextMeasurement(const QFont &font, const QFontMetricsF &metrics, const plot_font_style *style, const char *text,
+        size_t length, TextOperation operation, int available, quint64 generation)
+        : key{font, {}, metrics.fontDpi(), style->size, int(style->flags), style->letter_spacing, available, operation},
+          generation(generation), eligible(length <= 4096 && text_cache.maxCost() != 0)
+    {
+        /* Borrow for lookup only. Insertion below must copy the bytes: a box's
+         * text may change or disappear before the next layout callback. */
+        if (eligible)
+            key.text = QByteArray::fromRawData(text, qsizetype(length));
+    }
+
+    bool find(int *width, size_t *offset = nullptr) const
+    {
+        const auto *result = eligible ? text_cache.object(key) : nullptr;
+#ifdef WISP_QT_CAPTURE
+        (result ? text_cache_hits : text_cache_misses)[int(key.operation)]++;
+#endif
+        if (!result)
+            return false;
+        *width = result->width;
+        if (offset)
+            *offset = result->offset;
+        return true;
+    }
+
+    void insert(int width, size_t offset = 0)
+    {
+        /* Lazy font resolution can synchronously invalidate the font cache. */
+        if (!eligible || generation != text_cache_generation)
+            return;
+        qsizetype cost = sizeof(TextMeasurementKey) + sizeof(TextMeasurementResult) + 128 + key.text.size() + 1;
+        if (cost > text_cache.maxCost())
+            return;
+        key.text = QByteArray(key.text.constData(), key.text.size());
+        text_cache.insert(key, new TextMeasurementResult{offset, width}, cost);
+    }
+
+private:
+    TextMeasurementKey key;
+    quint64 generation;
+    bool eligible;
+};
+
 /**
  * get a qt font object for a given netsurf font style
  *
@@ -433,6 +517,21 @@ QFont nsqt_capture_font(const struct plot_font_style *style)
     std::unique_ptr<QFont> font(nsfont_style_to_font(style));
     return *font;
 }
+
+QJsonObject nsqt_capture_text_cache_stats()
+{
+    return {{"width_hits", qint64(text_cache_hits[0])}, {"width_misses", qint64(text_cache_misses[0])},
+        {"split_hits", qint64(text_cache_hits[1])}, {"split_misses", qint64(text_cache_misses[1])},
+        {"entries", text_cache.size()}, {"cost_bytes", text_cache.totalCost()}, {"budget_bytes", text_cache.maxCost()}};
+}
+
+void nsqt_capture_text_cache_limit(qsizetype bytes)
+{
+    text_cache.clear();
+    text_cache_generation++;
+    text_cache.setMaxCost(qMax(qsizetype(0), bytes));
+    text_cache_hits[0] = text_cache_hits[1] = text_cache_misses[0] = text_cache_misses[1] = 0;
+}
 #endif
 
 /**
@@ -444,6 +543,8 @@ QFont nsqt_capture_font(const struct plot_font_style *style)
 static void nsqt_font_cache_clear(void)
 {
     NSLOG(wisp, INFO, "Purging Qt font caches after a font database or alias change");
+    text_cache.clear();
+    text_cache_generation++;
     html_font_face_notify_changed();
     font_family_cache.clear();
     for (int i = 0; i < PFCACHE_ENTRIES; i++) {
@@ -601,10 +702,16 @@ layout_position(PrefixWidths &widths, const QString &qstr, size_t length, int x,
  */
 static nserror nsqt_layout_width(const struct plot_font_style *fstyle, const char *string, size_t length, int *width)
 {
+    quint64 generation = text_cache_generation;
     QFont *font = nsfont_style_to_font(fstyle);
     /* Use top-level widget as device for accurate metrics matching rendering */
     QPaintDevice *device = get_metrics_device();
     QFontMetricsF metrics(*font, device);
+    TextMeasurement cached(*font, metrics, fstyle, string, length, TextOperation::Width, 0, generation);
+    if (cached.find(width)) {
+        delete font;
+        return NSERROR_OK;
+    }
     /* IMPORTANT: Use QString::fromUtf8 to correctly interpret byte length as UTF-8.
      * Qt's horizontalAdvance(char*, len) treats len as CHARACTER count, not byte count! */
     QString qstr = QString::fromUtf8(string, length);
@@ -615,6 +722,7 @@ static nserror nsqt_layout_width(const struct plot_font_style *fstyle, const cha
      * their nearest-pixel gaps. SVG anchoring also uses the nearest pixel. */
     bool positioning = (fstyle->flags & FONTF_SIZE_PIXELS) || (length == 1 && string[0] == ' ');
     *width = positioning ? qRound(advance) : qCeil(advance);
+    cached.insert(*width);
 
     delete font;
     NSLOG(wisp, DEEPDEBUG, "fstyle: %p string:\"%.*s\", length: %" PRIsizet ", width: %dpx", fstyle, (int)length,
@@ -684,10 +792,16 @@ static nserror nsqt_layout_split(const struct plot_font_style *fstyle, const cha
     size_t *string_idx, int *actual_x)
 {
     nserror res = NSERROR_OK;
+    quint64 generation = text_cache_generation;
     QFont *font = nsfont_style_to_font(fstyle);
     /* Use top-level widget as device for accurate metrics matching rendering */
     QPaintDevice *device = get_metrics_device();
     QFontMetricsF metrics(*font, device);
+    TextMeasurement cached(*font, metrics, fstyle, string, length, TextOperation::Split, split, generation);
+    if (cached.find(actual_x, string_idx)) {
+        delete font;
+        return NSERROR_OK;
+    }
     size_t split_len;
     int split_x;
     size_t str_len;
@@ -773,6 +887,7 @@ static nserror nsqt_layout_split(const struct plot_font_style *fstyle, const cha
     *actual_x = qCeil(widths.measure(QString::fromUtf8(string, last_word_end)));
 
 nsqt_layout_split_done:
+    cached.insert(*actual_x, *string_idx);
     delete font;
     NSLOG(wisp, DEEPDEBUG,
         "fstyle: %p string:\"%.*s\", length: %" PRIsizet ", "

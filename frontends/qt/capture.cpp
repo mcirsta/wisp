@@ -49,6 +49,7 @@ int NS_Capture::prepare(int &argc, char **argv)
                 "  --capture-resize WIDTHxHEIGHT Resize after settling (repeatable action)\n"
                 "  --capture-settle MS          Quiet period after load (default 500)\n"
                 "  --capture-timeout MS         Overall deadline (default 30000)\n"
+                "  --capture-text-cache-bytes N Text cache budget (0 disables caching for comparison)\n"
                 "  --capture-id ID              Inspect an element (repeatable)\n"
                 "  --capture-click-id ID        Click an element after settling (repeatable)\n"
                 "  --capture-click-label FOR    Click a label associated with this input ID\n"
@@ -123,6 +124,11 @@ int NS_Capture::prepare(int &argc, char **argv)
         if (arg == "--capture-dir") {
             m_directory = value;
             ok = !value.isEmpty();
+        } else if (arg == "--capture-text-cache-bytes") {
+            const int bytes = value.toInt(&ok);
+            ok = ok && bytes >= 0;
+            if (ok)
+                nsqt_capture_text_cache_limit(bytes);
         } else if (arg == "--capture-interrupt-restyle") {
 #ifdef WISP_PROFILE_RESTYLE
             ok = value == "close" || value == "navigate" || value == "shutdown" || value == "shutdown-full";
@@ -530,6 +536,7 @@ void NS_Capture::finish(const QString &result)
         {"status", content ? QString::fromUtf8(content_get_status_message(content)) : QString()},
         {"elapsed_ms", elapsed},
         {"quiet_ms", elapsed - m_last_activity},
+        {"text_cache", nsqt_capture_text_cache_stats()},
         {"settle_ms", m_settle_ms},
         {"timeout_ms", m_timeout_ms},
         {"viewport", QJsonObject{{"width", width}, {"height", height}}},

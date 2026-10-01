@@ -100,6 +100,14 @@ int main(int argc, char **argv)
     direct.check("first installed family wins", "Wisp Normal Test");
     FontList reversed({"Wisp Weight Test", "Wisp Normal Test"});
     reversed.check("CSS order is preserved", "Wisp Weight Test");
+    // Identical numeric styles with different resolved families need separate
+    // measurement entries, even though both use the same generic fallback.
+    int normal_width, weight_width, repeated_width;
+    REQUIRE(nsqt_layout_table->width(&direct.style, "abcd", 4, &normal_width) == NSERROR_OK);
+    REQUIRE(nsqt_layout_table->width(&reversed.style, "abcd", 4, &weight_width) == NSERROR_OK);
+    REQUIRE(normal_width != weight_width);
+    REQUIRE(nsqt_layout_table->width(&direct.style, "abcd", 4, &repeated_width) == NSERROR_OK);
+    REQUIRE(repeated_width == normal_width);
     FontList missing({"Wisp Absent Font 927", "Wisp Normal Test"});
     font_miss_occurred = false;
     missing.check("skip missing first family", "Wisp Normal Test");
@@ -148,6 +156,12 @@ int main(int argc, char **argv)
     late.check("before web font arrives", "Wisp Weight Test");
     REQUIRE(font_miss_occurred);
     QFile file(directory + "/normal-400.ttf");
+    // Prime both result caches with the fallback before registering its alias.
+    int fallback_width, split_width;
+    size_t split_offset;
+    REQUIRE(nsqt_layout_table->width(&late.style, "a b c", 5, &fallback_width) == NSERROR_OK);
+    REQUIRE(nsqt_layout_table->split(&late.style, "a b c", 5, 24, &split_offset, &split_width) == NSERROR_OK);
+    REQUIRE(nsqt_capture_text_cache_stats()["entries"].toInteger() > 0);
     REQUIRE(file.open(QIODevice::ReadOnly));
     QByteArray data = file.readAll();
     char css_name[] = "Wisp Arriving Web Font";
@@ -157,7 +171,13 @@ int main(int argc, char **argv)
         reinterpret_cast<const uint8_t *>(data.constData()), data.size()) == NSERROR_OK);
     REQUIRE(html_font_face_generation() != generation);
     REQUIRE(repaints == 1);
+    REQUIRE(nsqt_capture_text_cache_stats()["entries"].toInteger() == 0);
     late.check("web font alias and cached fallback invalidation", "Wisp Normal Test");
+    int loaded_width;
+    REQUIRE(nsqt_layout_table->width(&late.style, "a b c", 5, &loaded_width) == NSERROR_OK);
+    REQUIRE(loaded_width != fallback_width);
+    REQUIRE(nsqt_layout_table->split(&late.style, "a b c", 5, 24, &split_offset, &split_width) == NSERROR_OK);
+    REQUIRE(split_offset == 3 && split_width == 24);
 
     // A cached missing family must become available after a database change,
     // and a cached successful lookup must disappear when that font is removed.
@@ -170,8 +190,12 @@ int main(int argc, char **argv)
     REQUIRE(variable_id >= 0);
     app.processEvents();
     installed_later.check("database addition invalidates cached missing family", "Wisp Variable Test");
+    REQUIRE(nsqt_capture_text_cache_stats()["entries"].toInteger() == 0);
+    REQUIRE(nsqt_layout_table->width(&installed_later.style, "a b c", 5, &loaded_width) == NSERROR_OK);
+    REQUIRE(nsqt_capture_text_cache_stats()["entries"].toInteger() > 0);
     REQUIRE(QFontDatabase::removeApplicationFont(variable_id));
     app.processEvents();
+    REQUIRE(nsqt_capture_text_cache_stats()["entries"].toInteger() == 0);
     installed_later.check("database removal invalidates cached available family", "Wisp Weight Test");
 
     nsoption_finalise(nullptr, nullptr);

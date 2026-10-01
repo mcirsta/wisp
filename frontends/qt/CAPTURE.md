@@ -32,6 +32,29 @@ Each run writes:
   elapsed/quiet time, zoom, DPI, device pixel ratio, font defaults, JavaScript,
   animation and Qt settings, and which artifacts were saved.
 
+## Text measurement cache comparisons
+
+The Qt frontend keeps width and line-splitting results in one shared LRU across
+pages and layout passes. The default budget is 512 KiB of estimated entry cost,
+including owned text and an allowance for bookkeeping; it is not a per-page
+allocation or an exact process-memory limit. Runs longer than 4096 UTF-8 bytes
+bypass the cache. Keys include the selected font, fractional sizing, letter
+spacing, metrics DPI, text bytes, operation and available width. Font database
+and web-font alias changes clear the entries. Shaping and fitting are unchanged.
+
+`capture.json` includes `text_cache` with width/split hits and misses, current
+entry count, estimated cost and budget in bytes. Counts cover the process,
+including entries subsequently evicted or invalidated. Misses include requests
+that bypass caching. `--capture-text-cache-bytes 0` disables caching for a
+reference capture; other nonnegative values allow budget comparisons. This
+override and the counters exist only in capture builds.
+
+For engine timing, use a Release build with `WISP_PROFILE_RESTYLE=ON` and request
+an inspection (for example `--capture-point 0,0`). Compare its `render_profile`
+layout time and call count across alternating cached/uncached runs, checking
+that PNGs and box trees agree. Keep resource loading separate from layout time,
+and use `steps.json` for resize or tab-switch comparisons.
+
 ## Focused inspection
 
 Add `--capture-id ID` (repeatable, literal ID without `#`) and/or
