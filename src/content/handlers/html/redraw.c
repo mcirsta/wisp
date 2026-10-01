@@ -71,6 +71,7 @@
 #include "content/handlers/html/layout.h"
 #include "content/handlers/html/redraw_helpers.h"
 #include "content/handlers/html/stacking.h"
+#include "content/handlers/html/box_sticky.h"
 #include "content/handlers/image/svg.h"
 
 bool html_redraw_debug = false;
@@ -1688,7 +1689,7 @@ static bool html_redraw_negative_zindex_children(const html_content *html, struc
 
     /* Collect only negative z-index children */
     for (c = box->children; c; c = c->next) {
-        if (c->type == BOX_FLOAT_LEFT || c->type == BOX_FLOAT_RIGHT) {
+        if ((c->type == BOX_FLOAT_LEFT || c->type == BOX_FLOAT_RIGHT) && !stacking_float_is_structural(c)) {
             continue;
         }
         int32_t z = box_get_z_index(c);
@@ -1739,6 +1740,10 @@ static bool html_redraw_box_children(const html_content *html, struct box *box, 
     int x_offset, y_offset;
     struct stacking_context negative_zindex; /* z-index < 0 */
     struct stacking_context positive_zindex; /* z-index >= 0 */
+    const struct stacking_coordinates coordinates = {.origin_x = data ? data->x : 0,
+        .origin_y = data ? data->y : 0,
+        .scroll_x = data ? data->viewport_x / scale - data->x : 0,
+        .scroll_y = data ? data->viewport_y / scale - data->y : 0};
     size_t i;
     bool render_ok = true;
 
@@ -1762,7 +1767,7 @@ static bool html_redraw_box_children(const html_content *html, struct box *box, 
 
     /* Pass 1: Collect positioned descendants, split by z-index sign */
     for (c = box->children; c; c = c->next) {
-        if (c->type == BOX_FLOAT_LEFT || c->type == BOX_FLOAT_RIGHT) {
+        if ((c->type == BOX_FLOAT_LEFT || c->type == BOX_FLOAT_RIGHT) && !stacking_float_is_structural(c)) {
             continue;
         }
         int32_t z = box_get_z_index(c);
@@ -1776,12 +1781,15 @@ static bool html_redraw_box_children(const html_content *html, struct box *box, 
         } else {
             /* Recurse into children to find positioned descendants
              */
-            if (!stacking_context_collect_subtree(&negative_zindex, &positive_zindex, c, x_offset, y_offset)) {
+            if (!stacking_context_collect_subtree(
+                    &negative_zindex, &positive_zindex, c, x_offset, y_offset, &coordinates)) {
                 goto fallback;
             }
         }
     }
     for (c = box->float_children; c; c = c->next_float) {
+        if (stacking_float_is_structural(c))
+            continue;
         int32_t z = box_get_z_index(c);
         if (z != Z_INDEX_AUTO) {
             struct stacking_context *ctx_ptr = (z < 0) ? &negative_zindex : &positive_zindex;
@@ -1789,7 +1797,8 @@ static bool html_redraw_box_children(const html_content *html, struct box *box, 
                 goto fallback;
             }
         } else {
-            if (!stacking_context_collect_subtree(&negative_zindex, &positive_zindex, c, x_offset, y_offset)) {
+            if (!stacking_context_collect_subtree(
+                    &negative_zindex, &positive_zindex, c, x_offset, y_offset, &coordinates)) {
                 goto fallback;
             }
         }
@@ -1810,7 +1819,7 @@ static bool html_redraw_box_children(const html_content *html, struct box *box, 
 
     /* Pass 2: Render in-flow children (z-index: auto) */
     for (c = box->children; c; c = c->next) {
-        if (c->type == BOX_FLOAT_LEFT || c->type == BOX_FLOAT_RIGHT) {
+        if ((c->type == BOX_FLOAT_LEFT || c->type == BOX_FLOAT_RIGHT) && !stacking_float_is_structural(c)) {
             continue;
         }
         int32_t z = box_get_z_index(c);
@@ -1825,6 +1834,8 @@ static bool html_redraw_box_children(const html_content *html, struct box *box, 
 
     /* Pass 3: Render floats */
     for (c = box->float_children; c; c = c->next_float) {
+        if (stacking_float_is_structural(c))
+            continue;
         int32_t z = box_get_z_index(c);
         if (z != Z_INDEX_AUTO) {
             continue; /* Already in deferred list */
@@ -1861,6 +1872,8 @@ fallback:
         }
     }
     for (c = box->float_children; c; c = c->next_float) {
+        if (stacking_float_is_structural(c))
+            continue;
         if (!html_redraw_box(html, c, x_offset, y_offset, clip, scale, current_background_color, data, ctx)) {
             return false;
         }
@@ -1895,6 +1908,21 @@ bool html_redraw_box(const html_content *html, struct box *box, int x_parent, in
 {
     if (box->flags & IS_OPACITY_ZERO)
         return true;
+
+    bool structural_float = (box->type == BOX_FLOAT_LEFT || box->type == BOX_FLOAT_RIGHT) &&
+        stacking_float_is_structural(box);
+    if (structural_float)
+        stacking_float_parent_coords(box, &x_parent, &y_parent);
+    if (!structural_float && !box->abs_containing_block &&
+        (box->sticky ||
+            ((box->flags & HAS_STICKY_ANCESTOR) && (box->type == BOX_FLOAT_LEFT || box->type == BOX_FLOAT_RIGHT)))) {
+        const int scroll[] = {
+            data ? data->viewport_x / scale - data->x : 0, data ? data->viewport_y / scale - data->y : 0};
+        int64_t dx, dy;
+        box_sticky_local_offset(box, scroll, &dx, &dy);
+        x_parent = box_sticky_coordinate((int64_t)x_parent + dx);
+        y_parent = box_sticky_coordinate((int64_t)y_parent + dy);
+    }
 
     const struct plotter_table *plot = ctx->plot;
     int x, y;
@@ -2091,6 +2119,8 @@ bool html_redraw_box(const html_content *html, struct box *box, int x_parent, in
                 viewport_clip.y1 = data->viewport_y + data->root_height;
                 clip = &viewport_clip;
             }
+            x_parent = x - box->x;
+            y_parent = y - box->y;
         } else {
             x = x_parent + box->x;
             y = y_parent + box->y;
@@ -2129,6 +2159,8 @@ bool html_redraw_box(const html_content *html, struct box *box, int x_parent, in
                 viewport_clip.y1 = data->viewport_y + data->root_height;
                 clip = &viewport_clip;
             }
+            x_parent = abs_x - box->x;
+            y_parent = abs_y - box->y;
             x = abs_x * scale;
             y = abs_y * scale;
         } else {
@@ -2151,6 +2183,23 @@ bool html_redraw_box(const html_content *html, struct box *box, int x_parent, in
 
     bool has_css_clip = box->style && css_computed_position(box->style) == CSS_POSITION_ABSOLUTE &&
         css_computed_clip(box->style, &css_rect) == CSS_CLIP_RECT;
+
+    /* Stacking collection can bypass an intermediate overflow container. Sticky
+     * contexts must retain its real clip, including positioned descendants. */
+    struct rect sticky_clip;
+    if (box->sticky || ((box->flags & HAS_STICKY_ANCESTOR) && box_creates_stacking_context(box))) {
+        const int scroll[] = {
+            data ? data->viewport_x / scale - data->x : 0, data ? data->viewport_y / scale - data->y : 0};
+        int ox = data ? data->x : 0, oy = data ? data->y : 0;
+        sticky_clip = (struct rect){floorf(clip->x0 / scale) - ox, floorf(clip->y0 / scale) - oy,
+            ceilf(clip->x1 / scale) - ox, ceilf(clip->y1 / scale) - oy};
+        if (!box_sticky_clip(box, scroll, &sticky_clip))
+            return true;
+        sticky_clip = (struct rect){fmaxf(clip->x0, (sticky_clip.x0 + ox) * scale),
+            fmaxf(clip->y0, (sticky_clip.y0 + oy) * scale), fminf(clip->x1, (sticky_clip.x1 + ox) * scale),
+            fminf(clip->y1, (sticky_clip.y1 + oy) * scale)};
+        clip = &sticky_clip;
+    }
 
     /* Calculate the painting bounds. Positioning does not clip visible
      * overflow: even an empty box can have visible descendants. Explicit
@@ -2211,6 +2260,20 @@ bool html_redraw_box(const html_content *html, struct box *box, int x_parent, in
             r.y1 = y + padding_height + border_bottom + margin_bottom > r.y1
                 ? y + padding_height + border_bottom + margin_bottom
                 : r.y1;
+        }
+    }
+
+    /* Settled descendant extents describe layout/scroll ranges, not sticky
+     * travel. Keep marked visible-overflow branches open to the current clip;
+     * real overflow and CSS clips continue to constrain their descendants. */
+    if ((box->flags & HAS_STICKY_DESCENDANT) && !has_css_clip) {
+        if (overflow_x == CSS_OVERFLOW_VISIBLE || !box->parent) {
+            r.x0 = clip->x0;
+            r.x1 = clip->x1;
+        }
+        if (overflow_y == CSS_OVERFLOW_VISIBLE || !box->parent) {
+            r.y0 = clip->y0;
+            r.y1 = clip->y1;
         }
     }
 
@@ -3003,25 +3066,10 @@ bool html_redraw_box(const html_content *html, struct box *box, int x_parent, in
                 dom_string_unref(name);
         }
 
-        /* FIX: For absolute positioned elements, compute correct parent position for children.
-         * Problem: box->x/y for absolute elements are relative to containing block, not x_parent/y_parent.
-         * Solution: Pass adjusted parent coords so (adj_parent + box->x/y) equals computed screen position.
-         * Per CSS 2.1 §9.6, absolute element's children are in normal flow relative to the absolute element. */
-        int child_x_parent, child_y_parent;
-        if (box->abs_containing_block != NULL) {
-            /* For absolute elements: we computed screen position x, y via box_coords().
-             * Children's offset = child_x_parent + box->x = x (we want)
-             * So child_x_parent = x - box->x */
-            child_x_parent = x / scale - box->x;
-            child_y_parent = y / scale - box->y;
-        } else {
-            /* Normal elements: use standard parent chain */
-            child_x_parent = x_parent;
-            child_y_parent = y_parent;
-        }
-
-        if (!html_redraw_box_children(html, box, child_x_parent, child_y_parent, child_clip_ptr, scale,
-                current_background_color, data, ctx)) {
+        /* Parent coordinates were normalized before painting; retain their
+         * integer layout precision instead of dividing rounded device pixels. */
+        if (!html_redraw_box_children(
+                html, box, x_parent, y_parent, child_clip_ptr, scale, current_background_color, data, ctx)) {
             {
                 result = false;
                 goto cleanup;
@@ -3132,6 +3180,7 @@ bool html_redraw(
 
     NSLOG(wisp, DEBUG, "PROFILER: START HTML redraw %p", c);
     HTML_PROFILE_START(paint_start);
+    HTML_PROFILE_CPU_START(paint_cpu_start);
 
     box = html->layout;
 
@@ -3173,6 +3222,8 @@ bool html_redraw(
     }
 
     NSLOG(wisp, DEBUG, "PROFILER: STOP HTML redraw %p", c);
+    HTML_PROFILE(html->render_profile.paint_calls++; html->render_profile.paint_ns += html_profile_now() - paint_start);
+    HTML_PROFILE(if (paint_cpu_start) html->render_profile.paint_cpu_ns += html_profile_cpu_now() - paint_cpu_start);
     HTML_PROFILE(if (html->restyle_profile.start_ns != 0 && !html->restyling) {
         uint64_t end = html_profile_now();
         html->restyle_profile.paint_ns += end - paint_start;

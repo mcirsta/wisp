@@ -254,13 +254,9 @@ add_wisp_test(svg_text_test
 )
 
 add_wisp_test(stacking_test
-  ${CMAKE_SOURCE_DIR}/src/content/handlers/html/stacking.c
-  ${CMAKE_SOURCE_DIR}/src/utils/utils.c
-  ${CMAKE_SOURCE_DIR}/src/utils/messages.c
-  ${CMAKE_SOURCE_DIR}/src/utils/hashtable.c
-  ${CMAKE_SOURCE_DIR}/src/test/log.c
   ${CMAKE_SOURCE_DIR}/src/test/stacking_test.c
 )
+target_link_libraries(stacking_test PRIVATE wisp)
 
 add_wisp_test(box_construct_race_test
   ${CMAKE_SOURCE_DIR}/src/utils/talloc.c
@@ -382,7 +378,9 @@ target_include_directories(layout_fixed_test PRIVATE ${TEST_COMMON_INCLUDES} ${C
 target_link_libraries(layout_fixed_test wisp ${CHECK_LIBRARIES})
 add_test(NAME layout_fixed_test COMMAND layout_fixed_test)
 
-add_executable(layout_sticky_test layout_sticky_test.c)
+add_executable(layout_sticky_test layout_sticky_test.c sticky_test_style.c)
+set_source_files_properties(sticky_test_style.c PROPERTIES INCLUDE_DIRECTORIES
+  "${CMAKE_SOURCE_DIR}/contrib/libcss/src;${CMAKE_BINARY_DIR}/contrib/libcss/src;${CMAKE_BINARY_DIR}/contrib/libcss/src/select;${CMAKE_BINARY_DIR}/contrib/libcss/src/generated")
 target_include_directories(layout_sticky_test PRIVATE ${TEST_COMMON_INCLUDES} ${CMAKE_SOURCE_DIR}/include)
 target_link_libraries(layout_sticky_test wisp ${CHECK_LIBRARIES})
 add_test(NAME layout_sticky_test COMMAND layout_sticky_test)

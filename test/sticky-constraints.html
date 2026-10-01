@@ -1,0 +1,51 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Sticky constraint preparation and retained updates</title>
+<style>
+html, body { margin: 0; font: 12px/16px sans-serif; }
+label { display: inline-block; padding: 4px; }
+.sticky { position: sticky; top: 10%; width: 50px; height: 20px; background: #284; }
+.port { overflow: hidden; width: 200px; height: 120px; padding: 4px; border: 2px solid; }
+.container { height: 300px; padding: 6px; border: 3px solid; }
+#scope { overflow: hidden; height: 100px; }
+#change:checked ~ #scope { height: 160px; }
+#change:checked ~ #scope #updated { height: 40px; }
+#change:checked ~ #scope #replaced { display: none; }
+#scope .sticky { top: calc(10% + 3px); }
+#untouched { height: 180px; }
+#hidden-header { top: calc(10% + 3px); left: 10%; margin: 5px 0 -2px; }
+#inner { overflow: auto; height: 60px; }
+#bars { overflow: scroll; }
+#bars-content { width: 400px; height: 300px; }
+#inline-header { display: inline-block; }
+#flex { display: flex; height: 70px; }
+#grid { display: grid; grid-template-columns: 100px; grid-template-rows: 70px; }
+#rtl { direction: rtl; }
+#logical { top: auto; inset-block: 10% auto; inset-inline: 7px auto; }
+#rtl-header { right: 7px; }
+#float-header { float: left; }
+#float-container { float: left; width: 100px; height: 60px; }
+#transformed { transform: translateX(2px); }
+#vertical { writing-mode: vertical-rl; }
+#auto { top: auto; }
+#tail { clear: both; height: 600px; }
+</style>
+<section id="region"><input type="checkbox" id="change"><label for="change">Change sticky content and container</label>
+<div id="scope"><div class="sticky" id="updated">Updated</div><div class="sticky" id="replaced">Replaced</div></div></section>
+<div id="untouched"><div class="sticky" id="viewport-header">Viewport</div></div>
+<div class="port" id="hidden"><div class="container" id="hidden-content"><div class="sticky" id="hidden-header">Hidden</div></div></div>
+<div class="port" id="outer"><div id="inner"><div class="sticky" id="inner-header">Auto</div></div></div>
+<div class="port" id="bars"><div id="bars-content"><div class="sticky" id="bars-header">Bars</div></div></div>
+<div id="inline-container"><span><span class="sticky" id="inline-header">Inline block</span></span></div>
+<div id="flex"><div class="sticky" id="flex-header">Flex</div></div>
+<div id="grid"><div class="sticky" id="grid-header">Grid</div></div>
+<div id="logical-container"><div class="sticky" id="logical">Logical LTR</div></div>
+<div id="rtl"><div class="sticky" id="rtl-header">Physical RTL</div></div>
+<div class="sticky" id="nested"><div class="sticky" id="nested-header">Nested</div></div>
+<div><span class="sticky" id="ordinary-inline">Inline unsupported</span></div>
+<div class="sticky" id="float-header">Float unsupported</div>
+<div id="float-container"><div class="sticky" id="in-float">In float</div></div>
+<div id="transformed"><div class="sticky" id="transform-header">Transform unsupported</div></div>
+<div id="vertical"><div class="sticky" id="vertical-header">Vertical unsupported</div></div>
+<div class="sticky" id="auto">Auto</div>
+<div id="tail"></div>

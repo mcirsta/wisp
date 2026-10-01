@@ -1,0 +1,34 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Sticky formatting, stacking and clipping contexts</title>
+<style>
+html,body {margin:0;background:white;font:12px/20px sans-serif}
+.container {position:absolute;top:80px;width:100px;height:300px}
+.flex {display:flex}
+.grid {display:grid;grid-template-rows:300px}
+.item {position:sticky;top:10px;width:100px;background:#228844}
+.start {align-self:flex-start;height:40px}
+.stack {position:absolute;z-index:0;top:80px;width:100px;height:500px}
+.before {height:80px}
+.header {position:sticky;top:10px;display:block;height:40px;background:#228844}
+.under {display:block;height:180px;background:#dd3333}
+#negative .header {z-index:-1}
+#positive .header {z-index:1}
+#clip {position:absolute;left:0;top:500px;width:120px;height:400px;clip:rect(0px,80px,80px,0px)}
+#clipped {position:sticky;top:10px;height:40px;background:#2255cc}
+#outer-port {position:absolute;left:0;top:900px;width:180px;height:180px;overflow:auto}
+#outer-content {height:500px}
+#inner-port {width:100px;height:100px;overflow:auto}
+#inner-content {height:500px}
+#nested {position:sticky;top:10px;height:40px;background:#228844}
+</style>
+<div id="hit-header"></div>
+<div class="container flex" style="left:0"><div class="item" id="flex-stretch"></div></div>
+<div class="container flex" style="left:120px"><div class="item start" id="flex-start"></div></div>
+<div class="container grid" style="left:240px"><div class="item" id="grid-stretch"></div></div>
+<div class="container grid" style="left:360px"><div class="item start" id="grid-start"></div></div>
+<div class="stack" id="negative" style="left:500px"><div class="before"></div><a class="header" href="#hit-header"></a><a class="under" href="#hit-under"></a></div>
+<div class="stack" id="positive" style="left:620px"><div class="before"></div><a class="header" href="#hit-header"></a><a class="under" href="#hit-under"></a></div>
+<div id="clip"><div id="clipped"></div></div>
+<div id="outer-port"><div id="outer-content"><div style="height:50px"></div><div id="inner-port"><div id="inner-content"><div class="before"></div><div id="nested"></div></div></div></div></div>
+<div style="height:1400px"></div><div id="hit-under"></div><div style="height:600px"></div>

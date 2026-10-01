@@ -34,6 +34,7 @@
 #include <wisp/utils/nsurl.h>
 #include "content/handlers/css/dump.h"
 #include "desktop/scrollbar.h"
+#include "content/handlers/html/box_sticky.h"
 
 #include <wisp/content/handlers/html/box.h>
 #include <wisp/content/handlers/html/box_inspect.h>
@@ -140,6 +141,14 @@ static bool box_contains_point(const css_unit_ctx *unit_len_ctx, const struct bo
             return true;
         }
     }
+    if ((box->flags & HAS_STICKY_DESCENDANT) &&
+        (!box->style || css_computed_overflow_x(box->style) == CSS_OVERFLOW_VISIBLE ||
+            (x >= 0 && x < box->padding[LEFT] + box->width + box->padding[RIGHT])) &&
+        (!box->style || css_computed_overflow_y(box->style) == CSS_OVERFLOW_VISIBLE ||
+            (y >= 0 && y < box->padding[TOP] + box->height + box->padding[BOTTOM]))) {
+        *physically = false;
+        return true;
+    }
     return false;
 }
 
@@ -157,6 +166,7 @@ static bool box_contains_point(const css_unit_ctx *unit_len_ctx, const struct bo
 static inline struct box *box_move_xy(struct box *b, enum box_walk_dir dir, int *x, int *y)
 {
     struct box *rb = NULL;
+    bool sticky_walk = b->sticky || (b->flags & HAS_STICKY_ANCESTOR);
 
     switch (dir) {
     case BOX_WALK_CHILDREN:
@@ -248,6 +258,13 @@ static inline struct box *box_move_xy(struct box *b, enum box_walk_dir dir, int 
         assert(0 && "Bad box walk type.");
     }
 
+    if (rb && (sticky_walk || rb->sticky || (rb->flags & HAS_STICKY_ANCESTOR))) {
+        box_coords(rb, x, y);
+        if (dir == BOX_WALK_PARENT || dir == BOX_WALK_FLOAT_CONTAINER) {
+            *x -= scrollbar_get_offset(rb->scroll_x);
+            *y -= scrollbar_get_offset(rb->scroll_y);
+        }
+    }
     return rb;
 }
 
@@ -388,11 +405,22 @@ static bool box_nearer_text_box(struct box *box, int bx, int by, int x, int y, i
     int x1 = bx + w;
     int yd = INT_MAX;
     int xd = INT_MAX;
+    int origin_x = bx, origin_y = by;
+
+    if (box->sticky || (box->flags & HAS_STICKY_ANCESTOR)) {
+        struct rect visible = {bx, by, x1, y1};
+        if (!box_sticky_clip(box, NULL, &visible))
+            return false;
+        bx = visible.x0;
+        by = visible.y0;
+        x1 = visible.x1;
+        y1 = visible.y1;
+    }
 
     if (x >= bx && x1 > x && y >= by && y1 > y) {
         *nearest = box;
-        *tx = bx;
-        *ty = by;
+        *tx = origin_x;
+        *ty = origin_y;
         return true;
     }
 
@@ -416,8 +444,8 @@ static bool box_nearer_text_box(struct box *box, int bx, int by, int x, int y, i
             *nr_yd = yd;
             *nr_xd = xd;
             *nearest = box;
-            *tx = bx;
-            *ty = by;
+            *tx = origin_x;
+            *ty = origin_y;
         }
     }
     return false;
@@ -486,6 +514,15 @@ static bool box_nearest_text_box(struct box *box, int bx, int by, int fx, int fy
             c_fx = fx;
             c_fy = fy;
         }
+        if (child->sticky || (child->flags & HAS_STICKY_ANCESTOR)) {
+            box_coords(child, &c_bx, &c_by);
+            c_bx -= scrollbar_get_offset(child->scroll_x);
+            c_by -= scrollbar_get_offset(child->scroll_y);
+            if (child->float_children) {
+                c_fx = c_bx;
+                c_fy = c_by;
+            }
+        }
         if (in_box && child->text && !child->object) {
             if (box_nearer_text_box(child, c_bx, c_by, x, y, dir, nearest, tx, ty, nr_xd, nr_yd))
                 return true;
@@ -506,11 +543,14 @@ static bool box_nearest_text_box(struct box *box, int bx, int by, int fx, int fy
 
 
 /* Resolve coordinate ancestry before adding the viewport scroll offset. */
-static void box_coords_internal(struct box *box, int *x, int *y, const int *scroll, bool unscrolled)
+static void box_coords_base(struct box *box, int *x, int *y, const int *scroll, bool unscrolled)
 {
-    assert(box->style == NULL ||
+    /* Anonymous control/text boxes share styles without independently becoming
+     * positioned boxes. Only principal positioned boxes require a binding. */
+    assert(box->node == NULL || box->style == NULL ||
         (css_computed_position(box->style) != CSS_POSITION_ABSOLUTE &&
-            css_computed_position(box->style) != CSS_POSITION_FIXED) || box->abs_containing_block != NULL);
+            css_computed_position(box->style) != CSS_POSITION_FIXED) ||
+        box->abs_containing_block != NULL);
     *x = box->x;
     *y = box->y;
     for (;;) {
@@ -543,6 +583,17 @@ static void box_coords_internal(struct box *box, int *x, int *y, const int *scro
             return;
         *x += box->x - (unscrolled ? 0 : scrollbar_get_offset(box->scroll_x));
         *y += box->y - (unscrolled ? 0 : scrollbar_get_offset(box->scroll_y));
+    }
+}
+
+static void box_coords_internal(struct box *box, int *x, int *y, const int *scroll, bool unscrolled)
+{
+    box_coords_base(box, x, y, scroll, unscrolled);
+    if (!unscrolled && (box->sticky || (box->flags & HAS_STICKY_ANCESTOR))) {
+        int64_t dx, dy;
+        box_sticky_total_offset(box, scroll, &dx, &dy);
+        *x = box_sticky_coordinate((int64_t)*x + dx);
+        *y = box_sticky_coordinate((int64_t)*y + dy);
     }
 }
 
@@ -619,7 +670,10 @@ box_at_point(const css_unit_ctx *unit_len_ctx, struct box *box, const int x, con
             fflush(stderr);
             assert(0 && "box_at_point infinite loop detected");
         }
-        if (box_contains_point(unit_len_ctx, box, x - *box_x, y - *box_y, &physically)) {
+        struct rect point_clip = {x, y, x + 1, y + 1};
+        bool visible_clip = !(box->sticky || (box->flags & HAS_STICKY_ANCESTOR)) ||
+            box_sticky_clip(box, NULL, &point_clip);
+        if (visible_clip && box_contains_point(unit_len_ctx, box, x - *box_x, y - *box_y, &physically)) {
             *box_x -= scrollbar_get_offset(box->scroll_x);
             *box_y -= scrollbar_get_offset(box->scroll_y);
 
@@ -901,6 +955,11 @@ struct box *box_pick_text_box(struct html_content *html, int x, int y, int dir, 
             if (x > x1)
                 x = x1;
         }
+    }
+
+    if (text_box == NULL) {
+        *dx = *dy = 0;
+        return NULL;
     }
 
     /* return coordinates relative to box */

@@ -1,0 +1,29 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Sticky geometry during retained updates</title>
+<style>
+html,body {margin:0;font:12px/20px sans-serif;background:white}
+#toolbar {position:fixed;top:0;left:360px;z-index:10;background:#ddd}
+label {display:inline-block;padding:5px}
+#scope {width:340px}
+#scope > input {display:none}
+#before {height:200px}
+#header {position:sticky;top:10%;height:60px;background:#228844}
+#inside {height:20px}
+#replace {height:20px;background:#2255cc}
+#body {height:1200px}
+#grow:checked ~ #container #header {height:80px}
+#grow:checked ~ #container #body {height:240px}
+#grow:checked ~ #container #replace {display:none}
+#hide:checked ~ #container #header {display:none}
+#tail {height:1800px}
+#untouched {position:absolute;left:360px;top:200px;width:180px;height:1200px}
+#other {position:sticky;top:120px;height:30px;background:#cc2255}
+</style>
+<nav id="toolbar"><label for="grow">Resize</label><label for="hide">Hide</label></nav>
+<section id="scope">
+  <input id="grow" type="checkbox"><input id="hide" type="checkbox">
+  <div id="container"><div id="before"></div><div id="header"><div id="inside">Sticky selectable text</div><div id="replace"></div></div><div id="body"></div></div>
+</section>
+<aside id="untouched"><div id="other">Retained sticky sibling</div></aside>
+<div id="tail"></div>

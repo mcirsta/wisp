@@ -69,6 +69,14 @@ struct html_restyle_profile {
     size_t cloned_result_bytes;
     uint32_t style_references, restarts;
 };
+
+/* Document-lifetime counters, including initial layout and scroll-only paints.
+ * Kept separate from per-update statistics, which reset on every restyle. */
+struct html_render_profile {
+    uint64_t layout_ns, paint_ns;
+    uint64_t layout_cpu_ns, paint_cpu_ns;
+    uint64_t layout_calls, paint_calls, sticky_queries, sticky_ancestor_steps;
+};
 #endif
 
 #define HTML_RESTYLE_MAX_ROOTS 8
@@ -219,6 +227,7 @@ typedef struct html_content {
     struct html_restyle_state restyle;
 #ifdef WISP_PROFILE_RESTYLE
     struct html_restyle_profile restyle_profile;
+    struct html_render_profile render_profile;
 #endif
     void *restyle_old_bctx;
     struct content_html_iframe *restyle_old_iframe;
@@ -242,6 +251,8 @@ typedef struct html_content {
     /** Box tree, or NULL. */
     struct box *layout;
     struct html_viewport viewport;
+    /** Sticky constraints are usable only after a complete successful layout. */
+    bool sticky_layout_valid;
     /** Document background colour. */
     colour background_colour;
 

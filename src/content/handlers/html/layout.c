@@ -44,6 +44,7 @@
 #include <string.h>
 
 #include "content/handlers/html/restyle_profile.h"
+#include "content/handlers/html/box_sticky.h"
 
 #include <wisp/browser.h>
 #include <wisp/browser_window.h>
@@ -2931,6 +2932,8 @@ static bool layout_text_box_split(
     if (!c2)
         return false;
     c2->flags |= CLONE;
+    c2->sticky = NULL;
+    c2->flags &= ~(HAS_STICKY_DESCENDANT | HAS_STICKY_ANCESTOR);
 
     /* Set remaining text in c2 */
     c2->text += used_length;
@@ -6351,7 +6354,7 @@ static void layout_calculate_descendant_bboxes(const css_unit_ctx *unit_len_ctx,
 
     if (box->iframe != NULL) {
         int x, y;
-        box_coords(box, &x, &y);
+        box_coords_unscrolled(box, &x, &y);
 
         browser_window_set_position(box->iframe, x, y);
         browser_window_set_dimensions(box->iframe, box->width, box->height);
@@ -6412,13 +6415,21 @@ static void layout_calculate_descendant_bboxes(const css_unit_ctx *unit_len_ctx,
     }
 }
 
-static void layout_log_final_box_heights(const css_unit_ctx *unit_len_ctx, struct box *box)
+/* Reuse the final diagnostic walk for constraint preparation after every box's
+ * descendant bounds have settled. This adds no separate document traversal. */
+static bool layout_finalize_boxes(html_content *content, struct box *box)
 {
+    const css_unit_ctx *unit_len_ctx = &content->unit_len_ctx;
     struct box *child;
 
-    if (box == NULL) {
-        return;
-    }
+    if (box == NULL)
+        return true;
+    box->flags &= ~(HAS_STICKY_DESCENDANT | HAS_STICKY_ANCESTOR);
+    if (box->parent && !(box->abs_containing_block && (box->abs_containing_block->flags & IS_VIEWPORT)) &&
+        ((box->parent->flags & HAS_STICKY_ANCESTOR) || (box->parent->sticky && box->parent->sticky->valid)))
+        box->flags |= HAS_STICKY_ANCESTOR;
+    if (!box_sticky_prepare(content, box))
+        return false;
 
     if (box->node != NULL) {
         const char *tag = "";
@@ -6569,16 +6580,20 @@ static void layout_log_final_box_heights(const css_unit_ctx *unit_len_ctx, struc
         if (child->type == BOX_FLOAT_LEFT || child->type == BOX_FLOAT_RIGHT) {
             continue;
         }
-        layout_log_final_box_heights(unit_len_ctx, child);
+        if (!layout_finalize_boxes(content, child))
+            return false;
     }
 
     for (child = box->float_children; child; child = child->next_float) {
-        layout_log_final_box_heights(unit_len_ctx, child);
+        if (!layout_finalize_boxes(content, child))
+            return false;
     }
 
     if (box->list_marker) {
-        layout_log_final_box_heights(unit_len_ctx, box->list_marker);
+        if (!layout_finalize_boxes(content, box->list_marker))
+            return false;
     }
+    return true;
 }
 
 
@@ -6608,7 +6623,9 @@ static void layout_reset_box(struct box *box)
      * wrapping must not change a retained sibling's min/max contributions. */
     layout_rejoin_text(box);
     box->flags &= ~(NEW_LINE | MEASURED | HAS_HEIGHT | MAKE_HEIGHT | NEED_MIN | INLINE_LAYOUT_CURRENT |
-        HEIGHT_STRETCHED | ASPECT_RATIO_HEIGHT | HAS_FIXED_DESCENDANT);
+        HEIGHT_STRETCHED | ASPECT_RATIO_HEIGHT | HAS_FIXED_DESCENDANT | HAS_STICKY_DESCENDANT | HAS_STICKY_ANCESTOR);
+    if (box->sticky)
+        box->sticky->valid = false;
     box->x = box->y = 0;
     if (!(box->flags & REUSE_INLINE_LAYOUT)) {
         box->flags &= ~(HAS_BASELINE | INLINE_LAYOUT_VALID);
@@ -6654,6 +6671,7 @@ static void layout_discard_inline_layout(struct box *box)
 void layout_reset_document(html_content *content)
 {
     struct box *root = content->layout, *box = root;
+    content->sticky_layout_valid = false;
     assert(content->base.locked && content->restyling);
     assert(content->frameset == NULL);
 
@@ -6693,9 +6711,13 @@ void layout_reset_document(html_content *content)
 bool layout_document(html_content *content, int width, int height)
 {
     struct box *doc = content->layout;
+    content->sticky_layout_valid = false;
     const struct gui_layout_table *font_func = content->font_func;
 
     NSLOG(wisp, DEBUG, "PROFILER: START layout_document %p", content);
+    HTML_PROFILE_START(document_layout_start);
+    HTML_PROFILE_CPU_START(document_layout_cpu_start);
+    HTML_PROFILE(content->render_profile.layout_calls++);
 
     NSLOG(layout, DEBUG, "Doing layout to %ix%i of %s", width, height, nsurl_access(content_get_url(&content->base)));
 
@@ -6742,7 +6764,12 @@ bool layout_document(html_content *content, int width, int height)
     layout_position_relative(&content->unit_len_ctx, doc, doc, 0, 0);
 
     layout_calculate_descendant_bboxes(&content->unit_len_ctx, doc);
-    layout_log_final_box_heights(&content->unit_len_ctx, doc);
+    if (!layout_finalize_boxes(content, doc))
+        goto failed;
+    content->sticky_layout_valid = true;
+    HTML_PROFILE(content->render_profile.layout_ns += html_profile_now() - document_layout_start);
+    HTML_PROFILE(if (document_layout_cpu_start)
+                     content->render_profile.layout_cpu_ns += html_profile_cpu_now() - document_layout_cpu_start);
 
     NSLOG(wisp, DEBUG, "PROFILER: STOP layout_document %p", content);
 

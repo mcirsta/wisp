@@ -676,6 +676,43 @@ static void test_cq_units_unset_container_falls_back_to_viewport(void)
     destroy_style_case(&ctx);
 }
 
+static void test_clip_units_roundtrip(void)
+{
+    static const struct {
+        const char *css;
+        css_unit units[4];
+        unsigned auto_mask;
+    } cases[] = {
+        {"* { clip: rect(1px, 2px, 3px, 4px); }", {CSS_UNIT_PX, CSS_UNIT_PX, CSS_UNIT_PX, CSS_UNIT_PX}, 0},
+        {"* { clip: rect(1em, 2rem, 3vh, 4q); }", {CSS_UNIT_EM, CSS_UNIT_REM, CSS_UNIT_VH, CSS_UNIT_Q}, 0},
+        {"* { clip: rect(auto, 2cqw, auto, 4px); }", {CSS_UNIT_PX, CSS_UNIT_CQW, CSS_UNIT_PX, CSS_UNIT_PX}, 5},
+        {"* { clip: rect(1px, auto, 3cqh, auto); }", {CSS_UNIT_PX, CSS_UNIT_PX, CSS_UNIT_CQH, CSS_UNIT_PX}, 10},
+    };
+    for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
+        style_case ctx;
+        const css_computed_style *selected = select_style_from_css(cases[i].css, &ctx);
+        css_computed_style *composed;
+        assert(css_computed_style_compose(selected, selected, &unit_ctx, &composed) == CSS_OK);
+        const css_computed_style *styles[] = {selected, composed};
+        for (size_t pass = 0; pass < 2; pass++) {
+            css_computed_clip_rect r = {0};
+            assert(css_computed_clip(styles[pass], &r) == CSS_CLIP_RECT);
+            css_unit units[] = {r.tunit, r.runit, r.bunit, r.lunit};
+            css_fixed values[] = {r.top, r.right, r.bottom, r.left};
+            bool automatic[] = {r.top_auto, r.right_auto, r.bottom_auto, r.left_auto};
+            for (unsigned edge = 0; edge < 4; edge++) {
+                assert(automatic[edge] == !!(cases[i].auto_mask & (1u << edge)));
+                if (!automatic[edge]) {
+                    assert(units[edge] == cases[i].units[edge]);
+                    assert(values[edge] == INTTOFIX(edge + 1));
+                }
+            }
+        }
+        css_computed_style_destroy(composed);
+        destroy_style_case(&ctx);
+    }
+}
+
 int main(void)
 {
     test_calc_property_getters();
@@ -689,6 +726,7 @@ int main(void)
     test_cqw_calc_width_uses_container();
     test_cq_units_zero_container_resolve_to_zero();
     test_cq_units_unset_container_falls_back_to_viewport();
+    test_clip_units_roundtrip();
 
     printf("PASS\n");
     return 0;

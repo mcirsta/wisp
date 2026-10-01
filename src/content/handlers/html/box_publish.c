@@ -95,6 +95,7 @@ nserror html_box_publish_region(html_content *html, struct box_construct_region 
         (err = html_form_check_bindings(forms)) != NSERROR_OK ||
         (err = html_object_check_bindings(objects)) != NSERROR_OK)
         goto done;
+    html->sticky_layout_valid = false;
     html_box_commit_mappings(mappings);
     html_form_commit_bindings(forms);
     html_object_commit_bindings(objects);

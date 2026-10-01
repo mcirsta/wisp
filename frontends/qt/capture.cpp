@@ -52,6 +52,9 @@ int NS_Capture::prepare(int &argc, char **argv)
                 "  --capture-id ID              Inspect an element (repeatable)\n"
                 "  --capture-click-id ID        Click an element after settling (repeatable)\n"
                 "  --capture-click-label FOR    Click a label associated with this input ID\n"
+                "  --capture-click-point X,Y    Click viewport CSS pixels without auto-scrolling\n"
+                "  --capture-scroll-point X,Y,DX,DY Scroll content/frame under viewport CSS pixels\n"
+                "  --capture-drag X1,Y1,X2,Y2   Drag between viewport CSS pixel positions\n"
                 "  --capture-type TEXT           Type into the focused control\n"
                 "  --capture-scroll X,Y          Scroll before the next action\n"
                 "  --capture-scroll-element ID,X,Y Set an element's existing scrollbar offsets\n"
@@ -138,11 +141,21 @@ int NS_Capture::prepare(int &argc, char **argv)
             ok = parts.size() == 2 && width > 0 && width <= 8192 && height > 0 && height <= 8192;
             if (ok)
                 m_actions.append({arg, value});
+        } else if (arg == "--capture-scroll-point" || arg == "--capture-drag") {
+            const auto parts = value.split(',');
+            ok = parts.size() == 4;
+            for (int part = 0; part < parts.size(); ++part) {
+                bool number;
+                const int pixels = parts[part].toInt(&number);
+                ok = ok && number && ((arg == "--capture-scroll-point" && part >= 2) || pixels >= 0);
+            }
+            if (ok)
+                m_actions.append({arg, value});
         } else if (arg == "--capture-click-id" || arg == "--capture-click-label" || arg == "--capture-type" ||
-            arg == "--capture-scroll" || arg == "--capture-scroll-element") {
+            arg == "--capture-scroll" || arg == "--capture-scroll-element" || arg == "--capture-click-point") {
             m_actions.append({arg, value});
             ok = !value.isEmpty();
-            if (arg == "--capture-scroll" || arg == "--capture-scroll-element") {
+            if (arg == "--capture-scroll" || arg == "--capture-scroll-element" || arg == "--capture-click-point") {
                 const auto parts = value.split(',');
                 const int first = arg == "--capture-scroll-element" ? 1 : 0;
                 bool x_ok, y_ok;
@@ -323,6 +336,16 @@ void NS_Capture::poll()
             } else if (action.first == "--capture-scroll-element") {
                 const auto parts = action.second.split(',');
                 ok = nsqt_capture_scroll_element(content, parts[0], parts[1].toInt(), parts[2].toInt());
+            } else if (action.first == "--capture-click-point") {
+                const auto xy = action.second.split(',');
+                nsqt_capture_click_point(m_bw, xy[0].toInt(), xy[1].toInt());
+            } else if (action.first == "--capture-scroll-point") {
+                const auto parts = action.second.split(',');
+                ok = nsqt_capture_scroll_point(
+                    m_bw, parts[0].toInt(), parts[1].toInt(), parts[2].toInt(), parts[3].toInt());
+            } else if (action.first == "--capture-drag") {
+                const auto parts = action.second.split(',');
+                nsqt_capture_drag(m_bw, parts[0].toInt(), parts[1].toInt(), parts[2].toInt(), parts[3].toInt());
             } else {
                 ok = nsqt_capture_click(m_bw, action.second, action.first == "--capture-click-label");
             }

@@ -1,6 +1,6 @@
 # Sticky positioning: implementation plan
 
-Status: implementation started; geometry and positioning foundation in progress.
+Status: stages 1–3 implemented and validated for the scope below.
 Updated 2026-10-01.
 
 ## Goal and scope
@@ -20,8 +20,13 @@ containers, including flex/grid items, in horizontal writing modes (LTR and RTL)
 Implement both axes and all four physical insets through one axis calculation.
 Include viewport and element scrolling, nested sticky containers, native controls,
 and ordinary/absolute/fixed/float descendants within that scope.
-Reuse the existing logical-inset mapping for these writing modes and test it;
-do not add a separate sticky-specific property parser.
+Reuse the existing inset parsing and test its supported forms; do not add a
+separate sticky-specific property parser. The parser currently expands
+`inset-block` to top/bottom and `inset-inline` to left/right at parse time. The
+latter is correct only for horizontal LTR. Start/end longhands and direction-aware
+logical inset mapping need separate CSS work; RTL sticky coverage here uses
+physical left/right insets. This corrects the original plan's assumption that
+complete horizontal logical-inset mapping already existed.
 
 All ordinary inline sticky boxes (including single-line inlines), sticky table
 rows/cells, a floated sticky box itself, vertical writing modes, and transformed
@@ -40,7 +45,7 @@ Paths in this document are relative to the repository root.
 | Area | Current code and implication |
 | --- | --- |
 | CSS | `contrib/libcss/properties.toml`, `[position]`, already accepts `STICKY` and uses three computed bits. `contrib/libcss/src/select/select_config.py` also reserves three bits. No bytecode/storage redesign is needed. |
-| Layout | `layout_document()` in `src/content/handlers/html/layout.c` runs normal layout, absolute positioning, relative positioning, then descendant bounds. Sticky has no positioning pass. |
+| Layout | `layout_document()` runs normal layout, absolute positioning, relative positioning, then descendant bounds. The existing final box walk now prepares sticky constraints, without moving layout boxes. |
 | Containing blocks | The first implementation slice adds sticky to the general ancestor branch in `layout_position_absolute()`. The existing immediate flex/inline-flex-parent branch remains compatible; direct and deeper descendants of block, flex/inline-flex and grid containers have capture coverage. |
 | Coordinates | `box_coords()`, `box_coords_at_scroll()` and `box_coords_unscrolled()` in `box_inspect.c` already distinguish viewport-fixed geometry and nested scrollbar offsets. |
 | Painting | `redraw.c` mixes inherited coordinates with containing-block coordinate queries, then culls against descendant bounds. |
@@ -331,7 +336,7 @@ temporary production feature gate is needed.
 
 ## Implementation record: first foundation slice (2026-10-01)
 
-Stage 1 is in progress. The following parts are implemented:
+The initial foundation slice implemented the following parts:
 
 - `box_sticky.c/.h` contains an allocation-free axis solver with explicit auto
   flags, signed margins, containing-block limits, logical-end adjustment and
@@ -391,12 +396,6 @@ Fix validation: all 18 unit cases in `layout_sticky_test` and the
 `qt_sticky_position` capture pass in Debug ASan/UBSan and Release. The captures
 retain their 100%/150% zoom checks. `git diff --check` is clean.
 
-No box fields, sticky metadata allocations or scroll-time work have been added.
-Remaining stage-1 work is eligibility, containing-block/scroll-container discovery,
-resolved constraints and their layout/reset integration. Visual coordinates,
-painting, input, lifecycle coverage, saved-site validation and cost measurements
-remain subsequent work. Sticky headers do not yet stay visible during scrolling.
-
 Foundation validation: Qt builds in Debug ASan/UBSan and Release, and Monkey
 builds in Debug.
 All 128 selected Debug and 117 selected Release tests pass, covering CSS, layout,
@@ -406,6 +405,235 @@ the sandbox initially blocked its HTTP server. Leak detection was disabled for
 the existing sanitizer suite. Python compilation and `git diff --check` pass.
 The selection expression is
 `^(libcss_|layout_|grid_|stacking_test|box_construct_|transform_clip_test|qt_|css_|restyle_|monkey_)`.
+
+### Settled constraint preparation (2026-10-01)
+
+Stage 1 now includes box-owned metadata and preparation in the existing final
+layout walk, after descendant bounds settle. Normal boxes and sticky boxes with
+all-auto insets allocate no record. Supported principal boxes resolve separate
+containing-block and scroll-container ancestors; anonymous inline wrappers are
+skipped. The root itself and generated boxes without a principal DOM node also
+remain unsupported. Root/body overflow propagation, mixed overflow axes, hidden/auto without
+a scrollbar and reserved scrollbar space have focused coverage. Insets resolve
+percentages and `calc()` against the scrollport dimension. Layout positions remain
+unchanged; prepared geometry uses unscrolled document coordinates and rejects
+unresolved or out-of-range integers.
+
+Each record is owned by its box and borrows only ancestors and the content owner.
+Text clones explicitly clear the owning pointer. Layout reset, live region
+publication, full rebuild/restart and tree destruction invalidate the document's
+constraints before modifying or freeing referenced geometry. Constraints become
+visible only after successful finalization. Repeated layout reuses allocations;
+unsupported boxes release existing records. Allocation failure propagates as a
+layout failure. The derived descendant flag is refreshed during preparation.
+
+`layout_sticky_test` now has 21 cases: the 18 scalar cases plus ancestor/geometry,
+lifetime and lazy-scrollbar tests. `qt_sticky_constraints` uses real parsed CSS
+and checks supported containers, nested sticky boxes, percentage/calculated and
+supported shorthand insets, RTL physical insets, unsupported geometry, root/body
+overflow, and default retained/full/uncached parity across repeated toggles,
+hide/reveal, resize and document scroll. It checks an unaffected sticky box is
+retained and allocations plateau after warm-up. Developer inspection reports
+prepared constraints and explicit unsupported reasons.
+
+Storage measured on this 64-bit build: `struct box` grows from 432 to 440 bytes
+(8 bytes, 1.85%); each active sticky record is 120 bytes plus an 80-byte talloc
+header. The following totals count every structural box and list marker in the
+settled top-level tree, including text clones. System malloc overhead/rounding and
+the small content-level validity field are excluded.
+
+| Saved page, 1280×900 | Boxes | Sticky records | Added bytes |
+| --- | ---: | ---: | ---: |
+| Tion | 2,587 | 2 | 21,096 |
+| Bihon | 3,779 | 1 | 30,432 |
+
+Both main headers prepare successfully against the viewport. Release captures
+with scripts disabled have identical PNG bytes and document extents before and
+after this preparation slice. Captures and `storage.json` are under
+`out/render-captures/sticky-constraints-2026-10-01/`.
+
+Validation: all 129 selected Debug ASan/UBSan tests and 118 selected Release tests
+pass with the same suite selection above, including the new Qt constraint test.
+Qt builds in both configurations and Monkey builds in Debug. The unit executable
+reports 21 passing cases. Sanitizer leak detection remains disabled as in the
+existing suite. Release reports the existing GCC serial LTO compilation notice;
+no new source warnings were introduced.
+
+At the end of this preparation slice, headers still had no visual displacement.
+The following slice connects those constraints to scrolling. Final timing
+comparisons belong to stage 3; preparation reuses an existing layout traversal.
+
+### Visual coordinates, painting and input (2026-10-01)
+
+Stage 2 resolves each queried ancestor chain from root to leaf using stack-local
+records. Nested sticky constraints reuse resolved ancestors; no heap allocation,
+CSS selection, box construction or layout is performed by the offset resolver.
+Explicit-scroll queries retain the supplied document scroll throughout.
+Ordinary descendants inherit displacement, absolute descendants use their
+containing block, viewport-fixed descendants remain independent, and float
+wrappers account for their distinct coordinate parent. A derived ancestor flag
+keeps ordinary coordinate queries on their existing path. Unscrolled coordinates
+and scroll extents remain layout data.
+
+Painting now applies displacement before culling and stacking. Marked branches
+can traverse beyond normal layout bounds while preserving actual overflow and
+CSS clips. Deferred stacking collection includes element scroll and normalized
+absolute origins. Floats structurally inside a stacking context paint there,
+even when layout associates them with an outer float container; otherwise a
+sticky header's background could cover its own float. Absolute painting retains
+integer layout coordinates across zoom instead of recovering them from rounded
+device pixels.
+
+Mouse actions choose the highest painted hit branch before accumulating links
+and controls. This prevents an underlying link from surviving when the sticky
+header wins. Nearest-text queries use visual coordinates and exclude clipped
+text. Frame positions are resolved on demand without reformatting. Frame tests
+also exposed shared static mouse-action state and duplicate parent activation;
+the state is now call-local and delegated input ends in the child document.
+Checkbox toggles and text entry exercise normal repaint and caret/control paths.
+
+An integration test exposed block width solving's use of the end margin for
+unused line space. Sticky containment now resolves explicitly specified CSS
+margins itself; auto margins retain their actual resolved share. Treating leftover
+line space as a specified zero margin had incorrectly prevented horizontal travel.
+
+`qt_sticky_scroll` checks 90 positions across 15 browser-referenced axis cases,
+invariant layout rectangles/allocations, solid-color paint probes, real ancestor
+clips, nested sticking, container limits and exact return-to-start PNGs. Native
+controls, overlapping links, iframe clicks and scrolling are exercised at 100%
+and 150% zoom. Two RTL flex cases use centered items to isolate sticky from an
+existing RTL flex-placement difference; Chromium measurements confirm those
+adjusted cases. The fixtures match client scrollport sizes: Wisp's existing
+horizontal-scrollbar layout adds reserved space to the specified height, unlike
+Chromium's outer-height accounting. This scrollbar-layout difference is separate
+from sticky positioning.
+
+The unit suite adds explicit-scroll ancestry and clipped text-selection cases,
+bringing it to 23 cases. Capture inspection now distinguishes visual rectangles
+from `layout_border_box`; viewport-point click/scroll actions allow overlap and
+frame tests without auto-scrolling to an element.
+
+Release smoke captures of saved Tion and Bihon pass at 1280×900 (initial, scroll
+1000 and clamped page end), and 800×600 (scroll 1000), with scripts disabled.
+Both 73px headers remain at viewport y=0. Initial PNG bytes and document extents
+match the preparation-only build. Captures and `site-smoke.json` are under
+`out/render-captures/sticky-scroll-2026-10-01/`. These establish working saved-site
+headers; they do not assess the sites' script-driven compact header states.
+
+Validation: all 130 selected Debug ASan/UBSan tests and 119 selected Release
+tests pass using the suite expression above. Debug completed in two batches
+after the outer command was terminated during the sticky-scroll capture; that
+capture and all remaining tests passed on rerun. The 23-case sticky unit suite
+was also rerun after adding the empty-selection guard. Qt builds in both
+configurations and Monkey builds in Debug. Leak detection remains disabled as in
+the existing suite. Python compilation and `git diff --check` pass. Release
+reports only the existing GCC serial LTO notice.
+
+### Lifecycle, clipping and reference validation (2026-10-01)
+
+`qt_sticky_lifecycle` exercises native checked-state updates at nonzero document
+scroll, changes inside the header and to its containing block, hide/reveal,
+replacement, repeated resize and return-to-start scrolling. Default retained and
+uncached updates agree with independent forced-full construction on every
+inspected geometry and the final image. Unchanged sticky boxes retain their
+identity, allocations plateau, and warmed updates actually use retained boxes.
+Profiling builds also interrupt real yielded builds by closing, navigating or
+shutting down the window, with live sticky records still in the old tree.
+`qt_sticky_resources` reveals a delayed image while the header is at its container
+limit and checks the subsequent decoding/layout updates its sticky constraints.
+
+The extended scroll fixture covers stretched/non-stretched flex and grid items,
+positive/negative stacking levels, two nested scrollports, and an absolute
+ancestor's explicit CSS clip at 100% and 150% zoom. An SVG image moves and paints with its header. Native text dragging inside a
+stuck header is checked at both zoom levels, alongside an ordinary static-header
+reference. Existing control, iframe, selection and overflow tests remain active.
+
+This validation found two existing bugs, fixed with regressions:
+
+- Dragging updated the selected byte range without publishing document selection
+  ownership. The tracking path now publishes it after movement and release.
+- The generated `clip` getter used unparenthesized masks and shifts, so pixel
+  lengths could be read as `em`. Its custom packing also used five unit bits
+  where the generator reserves six. The fix is in `select/overrides.py`, with
+  parsing, selection and composition tests for mixed units and automatic edges.
+  Generated outputs are not edited, and computed-style storage does not grow.
+
+Chromium 153.0.8010.52, with scripting disabled and matching saved DOM, fonts,
+viewport and actual scroll offsets, agrees exactly on all eight header rectangles:
+Tion and Bihon at 1280×900 (initial, scroll 1000 and page end) and 800×600 (scroll
+1000). The wide headers are 1010×73 at viewport (135, 0); the narrow headers are
+800×73 at (0, 0). This validates header geometry, not whole-page pixel equivalence
+or the sites' scripted compact-header transitions. Reference images and
+`chromium-sites.json` are under `out/render-captures/sticky-validation-2026-10-01/`.
+
+### Performance method and diagnostics
+
+Release measurements compare `c1df9926` (before settled metadata and visual
+integration) with the completed implementation. The baseline has only the same
+optional document-lifetime timing counters added, so both use identical
+`WISP_PROFILE_RESTYLE=ON` instrumentation. Captures use scripting disabled,
+1280×900, 96 DPI, offscreen Qt, disabled verbose tracing and CPU affinity to one
+core. Six alternating before/after pairs warm disk/font caches; reported values
+are medians of the last five. Each run loads once, performs fourteen scrolls and
+ten native tab switches. Initial layout includes all loading passes (two on each
+saved site, one on the ordinary control); warmed update figures use the last six
+switches. CPU time is reported alongside wall time because scheduling strongly
+affected the unpinned samples. These are core work timings, not display latency.
+
+Tion and the ordinary 500-paragraph control use retained boxes on warmed
+switches. Bihon uses CSS reuse with full box reconstruction in both versions;
+its numbers must not be described as retained-box timings. All measured scroll
+sequences leave the layout-call counter unchanged. Tion averages 67 sticky
+queries and 765 ancestry frames per paint, Bihon 18 queries and 123 frames. The
+ordinary control has no sticky records or queries. Inspection's own queries are
+excluded, and these counters compile out with the existing profiling option.
+
+Measurements exposed unnecessary calls to float and scrollbar helpers in
+ordinary stacking collection. Simple type/pointer guards remove that work.
+The normal path still has constant eligibility checks, but gains no scroll-time
+tree traversal, CSS selection or layout pass. Raw alternating runs are under
+`out/render-captures/sticky-validation-2026-10-01/benchmark-final-guarded/`.
+
+| Page | Initial layout CPU, before → after (ms) | Warmed update layout CPU (ms) | Scroll paint CPU per draw (ms) |
+| --- | ---: | ---: | ---: |
+| Tion | 85.23 → 84.45 | 21.15 → 20.58 | 13.20 → 13.90 |
+| Bihon | 151.92 → 152.48 | 37.28 → 38.25 | 3.93 → 5.58 |
+| Ordinary control | 10.93 → 11.03 | 1.64 → 1.66 | 0.38 → 0.43 |
+
+Initial and warmed layout medians remain within approximately 3%. Total warmed
+update wall times are 24.61 → 24.14 ms, 50.77 → 52.43 ms and 2.65 → 2.71 ms,
+respectively. Ordinary repainting retains about 0.05 ms of constant overhead in
+this sample; it does not resolve sticky ancestry. The saved-site repaint increases
+include drawing headers that previously scrolled out of view, so they are not
+isolated measurements of the positioning solver.
+
+An additional Bihon comparison replaces the sticky header with a viewport-fixed
+header of identical size and position, preserving its 73px flow space and 33px
+bottom margin with a placeholder. Both variants use the final binary and render
+identical final PNGs after the same scroll sequence. Five warmed alternating
+pairs give 5.88 ms CPU per paint for sticky versus 6.30 ms for fixed (7.23 versus
+7.65 ms wall time). This controls for the visible header's drawing cost: sticky
+is not slower than that reference in this sample. It does not establish an exact
+solver-only cost or imply a general advantage over fixed positioning. Results
+and fixtures are in `paint-compare-final/` under the same validation directory.
+
+### Final validation
+
+All 132 selected Debug ASan/UBSan tests and 121 selected Release tests pass using
+the suite expression above, split into bounded batches. This includes the full
+libcss selection suite after the generator fix, all sticky captures, existing
+layout/partial-update regressions, and Monkey in Debug. The sticky unit executable
+has 23 cases. Qt and Monkey build successfully; Release emits only the existing
+GCC serial-LTO notices. Sanitizer leak detection remains disabled as in the
+existing suite. Python compilation and `git diff --check` pass.
+
+The final Release suite runs with `WISP_PROFILE_RESTYLE=OFF`, restored after the
+measurements. Sticky behavior needs no profiling or capture option. Final saved
+Tion/Bihon captures reproduce all eight Chromium header rectangles and retain
+the stage-2 PNG bytes; results are in `final-sites/` under the validation directory.
+The planned implementation is complete. Ordinary inline/floated sticky boxes,
+sticky table rows/cells, vertical writing modes, transformed ancestry and full
+logical-inset mapping remain the explicit exclusions described under scope.
 
 ## Required fixture matrix
 

@@ -1422,6 +1422,7 @@ static void html_destroy_iframe(struct content_html_iframe *iframe)
 
 static void html_free_layout(html_content *htmlc)
 {
+    htmlc->sticky_layout_valid = false;
     html_restyle_reset(htmlc);
     if (htmlc->bctx != NULL) {
         /* freeing talloc context should let the entire box
@@ -1607,6 +1608,7 @@ static void html_restyle_start_full(html_content *html)
     for (struct content_html_object *o = html->object_list; o != NULL; o = o->next)
         o->box = NULL;
 
+    html->sticky_layout_valid = false;
     html->restyle_old_bctx = html->bctx;
     html->restyle_old_iframe = html->iframe;
     html->restyle_old_frameset = html->frameset;
@@ -1726,6 +1728,7 @@ void html_restyle_restart(html_content *html)
         html_destroy_frameset(html->frameset);
     html->iframe = NULL;
     html->frameset = NULL;
+    html->sticky_layout_valid = false;
     talloc_free(html->bctx);
     html->bctx = NULL;
     html->layout = NULL;

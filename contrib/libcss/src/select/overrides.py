@@ -19,9 +19,10 @@ static inline uint8_t get_clip(
 	bits >>= CLIP_SHIFT;
 
 	/*
-	26bits: tt tttr rrrr bbbb blll llTR BLyy:
+	30bits: tttttt rrrrrr bbbbbb llllll TRBLyy:
 	units: top | right | bottom | left
 	opcodes: top | right | bottom | left | type
+	Six unit bits, matching length in select_config.py.
 	*/
 
 	if ((bits & 0x3) == CSS_CLIP_RECT) {
@@ -31,16 +32,16 @@ static inline uint8_t get_clip(
 		rect->top_auto = (bits & 0x20);
 
 		rect->top = style->i.clip_a;
-		rect->tunit = bits & 0x3e00000 >> 21;
+		rect->tunit = (bits >> 24) & 0x3f;
 
 		rect->right = style->i.clip_b;
-		rect->runit = bits & 0x1f0000 >> 16;
+		rect->runit = (bits >> 18) & 0x3f;
 
 		rect->bottom = style->i.clip_c;
-		rect->bunit = (bits & 0xf800) >> 11;
+		rect->bunit = (bits >> 12) & 0x3f;
 
 		rect->left = style->i.clip_d;
-		rect->lunit = (bits & 0x7c0) >> 6;
+		rect->lunit = (bits >> 6) & 0x3f;
 	}
 
 	return (bits & 0x3);
@@ -56,9 +57,10 @@ static inline css_error set_clip(
 	bits = &style->i.bits[CLIP_INDEX];
 
 	/*
-	26bits: tt tttr rrrr bbbb blll llTR BLyy:
+	30bits: tttttt rrrrrr bbbbbb llllll TRBLyy:
 	units: top | right | bottom | left
 	opcodes: top | right | bottom | left | type
+	Six unit bits, matching length in select_config.py.
 	*/
 	*bits = (*bits & ~CLIP_MASK) |
 			(((uint32_t)type & 0x3) << CLIP_SHIFT);
@@ -69,11 +71,11 @@ static inline css_error set_clip(
 				(rect->bottom_auto ? 0x8 : 0) |
 				(rect->left_auto ? 0x4 : 0)) << CLIP_SHIFT);
 
-		*bits |= (((rect->tunit << 5) | rect->runit)
-				<< (CLIP_SHIFT + 16));
-
-		*bits |= (((rect->bunit << 5) | rect->lunit)
-				<< (CLIP_SHIFT + 6));
+		uint32_t units = (((uint32_t)rect->tunit & 0x3f) << 24) |
+				(((uint32_t)rect->runit & 0x3f) << 18) |
+				(((uint32_t)rect->bunit & 0x3f) << 12) |
+				(((uint32_t)rect->lunit & 0x3f) << 6);
+		*bits |= units << CLIP_SHIFT;
 
 		style->i.clip_a = rect->top;
 		style->i.clip_b = rect->right;

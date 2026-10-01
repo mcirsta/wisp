@@ -28,7 +28,9 @@
 #include <stdio.h>
 
 /**
- * Find the absolute coordinates of a box.
+ * Find visual document coordinates of a box, including sticky displacement and
+ * ancestor scrolling, before zoom/transforms. Subtract document scroll to obtain
+ * viewport coordinates.
  *
  * \param  box  the box to calculate coordinates of
  * \param  x    updated to x coordinate
@@ -39,7 +41,7 @@ void box_coords(struct box *box, int *x, int *y);
 /** As box_coords, with an explicit viewport scroll offset (layout pixels). */
 void box_coords_at_scroll(struct box *box, int *x, int *y, int scroll_x, int scroll_y);
 
-/** Absolute layout coordinates, ignoring viewport and ancestor scroll offsets. */
+/** Absolute layout coordinates, ignoring sticky displacement and all scroll offsets. */
 void box_coords_unscrolled(struct box *box, int *x, int *y);
 
 

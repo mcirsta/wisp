@@ -26,8 +26,10 @@
 #include <stdlib.h>
 
 #include <wisp/content/handlers/html/box.h>
+#include <wisp/content/handlers/html/box_inspect.h>
 #include <wisp/utils/utils.h>
 #include "content/handlers/html/stacking.h"
+#include "desktop/scrollbar.h"
 
 /* See stacking.h for documentation */
 bool box_creates_stacking_context(const struct box *box)
@@ -151,7 +153,7 @@ void stacking_context_fini(struct stacking_context *ctx)
 
 /* See stacking.h for documentation */
 bool stacking_context_collect_subtree(struct stacking_context *negative_ctx, struct stacking_context *positive_ctx,
-    struct box *box, int x_parent, int y_parent)
+    struct box *box, int x_parent, int y_parent, const struct stacking_coordinates *coordinates)
 {
     struct box *c;
     int x_offset, y_offset;
@@ -162,9 +164,21 @@ bool stacking_context_collect_subtree(struct stacking_context *negative_ctx, str
         return true;
     }
 
-    /* Calculate this box's position */
+    if (box->type == BOX_FLOAT_LEFT || box->type == BOX_FLOAT_RIGHT)
+        stacking_float_parent_coords(box, &x_parent, &y_parent);
+    if (box->abs_containing_block) {
+        int x, y;
+        box_coords_at_scroll(box, &x, &y, coordinates->scroll_x, coordinates->scroll_y);
+        x_parent = x + coordinates->origin_x - box->x;
+        y_parent = y + coordinates->origin_y - box->y;
+    }
+    /* Calculate this box's content position, including element scrolling. */
     x_offset = x_parent + box->x;
     y_offset = y_parent + box->y;
+    if (box->scroll_x)
+        x_offset -= scrollbar_get_offset(box->scroll_x);
+    if (box->scroll_y)
+        y_offset -= scrollbar_get_offset(box->scroll_y);
 
     /* Check if this box has explicit z-index */
     int32_t z = box_get_z_index(box);
@@ -181,20 +195,99 @@ bool stacking_context_collect_subtree(struct stacking_context *negative_ctx, str
 
     /* Recurse into children to find positioned descendants */
     for (c = box->children; c; c = c->next) {
-        if (c->type == BOX_FLOAT_LEFT || c->type == BOX_FLOAT_RIGHT) {
+        if ((c->type == BOX_FLOAT_LEFT || c->type == BOX_FLOAT_RIGHT) && !stacking_float_is_structural(c)) {
             continue; /* Handle floats separately */
         }
-        if (!stacking_context_collect_subtree(negative_ctx, positive_ctx, c, x_offset, y_offset)) {
+        if (!stacking_context_collect_subtree(negative_ctx, positive_ctx, c, x_offset, y_offset, coordinates)) {
             return false;
         }
     }
 
     /* Also check float children */
     for (c = box->float_children; c; c = c->next_float) {
-        if (!stacking_context_collect_subtree(negative_ctx, positive_ctx, c, x_offset, y_offset)) {
+        if (stacking_float_is_structural(c))
+            continue;
+        if (!stacking_context_collect_subtree(negative_ctx, positive_ctx, c, x_offset, y_offset, coordinates)) {
             return false;
         }
     }
 
     return true;
+}
+
+bool stacking_float_is_structural(const struct box *box)
+{
+    if (box->type != BOX_FLOAT_LEFT && box->type != BOX_FLOAT_RIGHT)
+        return false;
+    for (const struct box *p = box->parent; p && p != box->float_container; p = p->parent)
+        if (box_creates_stacking_context(p))
+            return true;
+    return false;
+}
+
+void stacking_float_parent_coords(struct box *box, int *x, int *y)
+{
+    if (!stacking_float_is_structural(box))
+        return;
+    int bx, by, px, py;
+    box_coords_unscrolled(box, &bx, &by);
+    box_coords_unscrolled(box->parent, &px, &py);
+    *x += bx - px - box->x;
+    *y += by - py - box->y;
+}
+
+/* The walker visits structural order. Compare the outermost stacking contexts
+ * below the common ancestor so a transparent radio cannot steal a hit from a
+ * label (or its text) painted above it. Equal levels keep the existing order. */
+bool stacking_box_above(const struct box *a, const struct box *b)
+{
+    if (a == NULL || b == NULL)
+        return false;
+    const struct box *ac = a, *bc = b;
+    int ad = 0, bd = 0;
+    for (const struct box *p = a; p != NULL; p = p->parent)
+        ad++;
+    for (const struct box *p = b; p != NULL; p = p->parent)
+        bd++;
+    while (ad > bd) {
+        ac = ac->parent;
+        ad--;
+    }
+    while (bd > ad) {
+        bc = bc->parent;
+        bd--;
+    }
+    while (ac != bc) {
+        ac = ac->parent;
+        bc = bc->parent;
+    }
+    int32_t az = 0, bz = 0;
+    for (const struct box *p = a; p != ac; p = p->parent) {
+        int32_t z = box_get_z_index(p);
+        if (z != Z_INDEX_AUTO)
+            az = z;
+    }
+    for (const struct box *p = b; p != ac; p = p->parent) {
+        int32_t z = box_get_z_index(p);
+        if (z != Z_INDEX_AUTO)
+            bz = z;
+    }
+    if (az != bz)
+        return az > bz;
+    /* Match the renderer's phases: in-flow, floats, then zero/positive contexts.
+     * The interaction walker visits floats first, so equal z alone is not enough. */
+    int ap = 0, bp = 0;
+    for (const struct box *p = a; p != ac; p = p->parent) {
+        if (box_get_z_index(p) != Z_INDEX_AUTO)
+            ap = 2;
+        else if (ap == 0 && (p->type == BOX_FLOAT_LEFT || p->type == BOX_FLOAT_RIGHT))
+            ap = 1;
+    }
+    for (const struct box *p = b; p != ac; p = p->parent) {
+        if (box_get_z_index(p) != Z_INDEX_AUTO)
+            bp = 2;
+        else if (bp == 0 && (p->type == BOX_FLOAT_LEFT || p->type == BOX_FLOAT_RIGHT))
+            bp = 1;
+    }
+    return ap > bp;
 }

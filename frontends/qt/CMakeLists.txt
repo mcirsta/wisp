@@ -256,6 +256,22 @@ if(WISP_QT_CAPTURE)
                 COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_sticky_position.py
                     $<TARGET_FILE:wisp-qt> ${WISP_TEST_MAGICK})
             set_tests_properties(qt_sticky_position PROPERTIES TIMEOUT 45)
+            add_test(NAME qt_sticky_constraints
+                COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_sticky_constraints.py
+                    $<TARGET_FILE:wisp-qt>)
+            set_tests_properties(qt_sticky_constraints PROPERTIES TIMEOUT 120)
+            add_test(NAME qt_sticky_scroll
+                COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_sticky_scroll.py
+                    $<TARGET_FILE:wisp-qt> ${WISP_TEST_MAGICK})
+            set_tests_properties(qt_sticky_scroll PROPERTIES TIMEOUT 120)
+            add_test(NAME qt_sticky_lifecycle
+                COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_sticky_lifecycle.py
+                    $<TARGET_FILE:wisp-qt> $<$<BOOL:${WISP_PROFILE_RESTYLE}>:--interruptions>)
+            set_tests_properties(qt_sticky_lifecycle PROPERTIES TIMEOUT 120)
+            add_test(NAME qt_sticky_resources
+                COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_sticky_resources.py
+                    $<TARGET_FILE:wisp-qt>)
+            set_tests_properties(qt_sticky_resources PROPERTIES TIMEOUT 60)
             add_test(NAME qt_inline_baseline
                 COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_inline_baseline.py
                     $<TARGET_FILE:wisp-qt> ${WISP_TEST_MAGICK})

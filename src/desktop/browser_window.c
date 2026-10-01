@@ -62,6 +62,7 @@
 #include <wisp/desktop/hotlist.h>
 #include <wisp/desktop/textinput.h>
 #include "desktop/browser_private.h"
+#include <wisp/content/handlers/html/box_inspect.h>
 #include "desktop/frames.h"
 #include "desktop/knockout.h"
 #include "desktop/scrollbar.h"
@@ -2603,6 +2604,13 @@ void browser_window_get_position(struct browser_window *bw, bool root, int *pos_
             /* Iframe and Frame handling is identical;
              * fall though */
         case BROWSER_WINDOW_IFRAME:
+            /* A sticky ancestor moves frame presentation without reformatting
+             * its document. Resolve the origin on demand, also before paint. */
+            if (bw->box && (bw->box->sticky || (bw->box->flags & HAS_STICKY_ANCESTOR))) {
+                box_coords(bw->box, &bw->x, &bw->y);
+                bw->x += bw->box->padding[LEFT];
+                bw->y += bw->box->padding[TOP];
+            }
             *pos_x += (bw->x - scrollbar_get_offset(bw->scroll_x)) * bw->scale;
             *pos_y += (bw->y - scrollbar_get_offset(bw->scroll_y)) * bw->scale;
             break;

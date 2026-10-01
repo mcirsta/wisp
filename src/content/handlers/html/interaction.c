@@ -373,22 +373,22 @@ mouse_action_drag_selection(html_content *html, struct browser_window *bw, brows
 
         drag_owner.no_owner = true;
         html_set_drag_type(html, HTML_DRAG_NONE, drag_owner, NULL);
-
-        return NSERROR_OK;
+    } else {
+        if (selection_dragging_start(html->sel)) {
+            dir = 1;
+        }
+        box = box_pick_text_box(html, x, y, dir, &dx, &dy);
+        if (box != NULL) {
+            font_plot_style_from_css(&html->unit_len_ctx, box->style, &fstyle);
+            guit->layout->position(&fstyle, box->text, box->length, dx, &idx, &pixel_offset);
+            selection_track(html->sel, mouse, box->byte_offset + idx);
+        }
     }
-
-    if (selection_dragging_start(html->sel)) {
-        dir = 1;
-    }
-
-    box = box_pick_text_box(html, x, y, dir, &dx, &dy);
-    if (box != NULL) {
-        font_plot_style_from_css(&html->unit_len_ctx, box->style, &fstyle);
-
-        guit->layout->position(&fstyle, box->text, box->length, dx, &idx, &pixel_offset);
-
-        selection_track(html->sel, mouse, box->byte_offset + idx);
-    }
+    /* A new drag starts with an empty range. Its first movement can establish
+     * the selection without another click, so publish that ownership here. */
+    bool active = selection_active(html->sel);
+    html_set_selection(
+        html, active ? HTML_SELECTION_SELF : HTML_SELECTION_NONE, (union html_selection_owner){.none = !active}, true);
     return NSERROR_OK;
 }
 
@@ -563,45 +563,6 @@ struct mouse_action_state {
 };
 
 
-/* The walker visits structural order. Compare the outermost stacking contexts
- * below the common ancestor so a transparent radio cannot steal a hit from a
- * label (or its text) painted above it. Equal levels keep the existing order. */
-static bool checkable_hit_above(const struct box *a, const struct box *b)
-{
-    if (a == NULL || b == NULL)
-        return false;
-    const struct box *ac = a, *bc = b;
-    int ad = 0, bd = 0;
-    for (const struct box *p = a; p != NULL; p = p->parent)
-        ad++;
-    for (const struct box *p = b; p != NULL; p = p->parent)
-        bd++;
-    while (ad > bd) {
-        ac = ac->parent;
-        ad--;
-    }
-    while (bd > ad) {
-        bc = bc->parent;
-        bd--;
-    }
-    while (ac != bc) {
-        ac = ac->parent;
-        bc = bc->parent;
-    }
-    int32_t az = 0, bz = 0;
-    for (const struct box *p = a; p != ac; p = p->parent) {
-        int32_t z = box_get_z_index(p);
-        if (z != Z_INDEX_AUTO)
-            az = z;
-    }
-    for (const struct box *p = b; p != ac; p = p->parent) {
-        int32_t z = box_get_z_index(p);
-        if (z != Z_INDEX_AUTO)
-            bz = z;
-    }
-    return az > bz;
-}
-
 /**
  * iterate the box tree for deepest node at coordinates
  *
@@ -648,6 +609,16 @@ static nserror get_mouse_action_node(html_content *html, int x, int y, bool chec
     man->node = html->layout->node; /* Default dom node to the <HTML> */
     man->result.pointer = BROWSER_POINTER_DEFAULT;
 
+    /* Resolve paint order once, then collect actions only along the winning
+     * branch. An underlying link/control must not survive in accumulated state
+     * after an opaque higher context wins the hit. */
+    struct box *leaf = html->layout, *hit = html->layout;
+    int hx = 0, hy = 0;
+    while ((hit = box_at_point(&html->unit_len_ctx, hit, x, y, &hx, &hy))) {
+        if (box_visible(hit) && !stacking_box_above(leaf, hit))
+            leaf = hit;
+    }
+
     /* search the box tree for a link, imagemap, form control, or
      * box with scrollbars
      */
@@ -668,7 +639,7 @@ static nserror get_mouse_action_node(html_content *html, int x, int y, bool chec
             man->node = node;
             if (checkable) {
                 dom_node *target = html_checkable_target(node);
-                if (target != NULL && !checkable_hit_above(man->checkable_box, box))
+                if (target != NULL && !stacking_box_above(man->checkable_box, box))
                     man->checkable_box = box;
                 dom_node_unref(target);
             }
@@ -761,7 +732,15 @@ static nserror get_mouse_action_node(html_content *html, int x, int y, bool chec
 
     next_box:
         /* iterate to next box */
-        box = box_at_point(&html->unit_len_ctx, box, x, y, &box_x, &box_y);
+        struct box *next = leaf == box ? NULL : leaf;
+        while (next && next->parent != box)
+            next = next->parent;
+        box = next;
+        if (box) {
+            box_coords(box, &box_x, &box_y);
+            box_x -= scrollbar_get_offset(box->scroll_x);
+            box_y -= scrollbar_get_offset(box->scroll_y);
+        }
     } while (box != NULL);
 
     /* use of box_x, box_y, or content below this point is probably a
@@ -1189,19 +1168,15 @@ mouse_action_drag_none(html_content *html, struct browser_window *bw, browser_mo
     union content_msg_data msg_data;
     lwc_string *path;
 
-    /**
-     * computed state
-     *
-     * not on heap to avoid allocation or stack because it is large
-     */
-    static struct mouse_action_state mas;
+    /* Frame dispatch re-enters this function, so state belongs to this call. */
+    struct mouse_action_state mas;
 
     res = get_mouse_action_node(html, x, y, mouse & BROWSER_MOUSE_CLICK_1, &mas);
     if (res != NSERROR_OK) {
         return res;
     }
 
-    if (mas.gadget.control != NULL && checkable_hit_above(mas.checkable_box, mas.gadget.box)) {
+    if (mas.gadget.control != NULL && stacking_box_above(mas.checkable_box, mas.gadget.box)) {
         mas.gadget.control = NULL;
         mas.gadget.box = NULL;
     }
@@ -1234,7 +1209,9 @@ mouse_action_drag_none(html_content *html, struct browser_window *bw, browser_mo
         /* \todo should have a drag-saving object msg */
 
     } else if (mas.iframe != NULL) {
-        res = iframe_mouse_action(bw, mouse, x, y, &mas);
+        /* The child document owns this input. Do not activate its control a
+         * second time in the parent after returning from recursive dispatch. */
+        return iframe_mouse_action(bw, mouse, x, y, &mas);
 
     } else if (mas.html_object.box != NULL) {
         res = html_object_mouse_action(html, bw, mouse, x, y, &mas);

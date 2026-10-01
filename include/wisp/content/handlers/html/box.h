@@ -35,6 +35,7 @@
 
 struct content;
 struct box;
+struct box_sticky;
 struct browser_window;
 struct html_content;
 struct nsurl;
@@ -122,7 +123,9 @@ typedef enum {
     REUSE_INLINE_INTRINSICS = 1 << 22, /* retained text-only container awaiting intrinsic-cache validation */
     INLINE_LAYOUT_VALID = 1 << 23, /* completed text-only lines without incoming floats */
     REUSE_INLINE_LAYOUT = 1 << 24, /* preserved lines awaiting available-width/float validation */
-    INLINE_LAYOUT_CURRENT = 1 << 25 /* eligible lines validated during this update's layout pass */
+    INLINE_LAYOUT_CURRENT = 1 << 25, /* eligible lines validated during this update's layout pass */
+    HAS_STICKY_DESCENDANT = 1 << 26, /* derived during final constraint preparation */
+    HAS_STICKY_ANCESTOR = 1 << 27 /* visual queries may need an ancestor's displacement */
 } box_flags;
 
 
@@ -302,6 +305,9 @@ struct box {
      * boxes or when not yet computed.
      */
     struct box *abs_containing_block;
+
+    /** Optional settled sticky constraints, talloc-owned by this box. */
+    struct box_sticky *sticky;
 
     /**
      * Level below which subsequent floats must be cleared.  This

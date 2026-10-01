@@ -1,0 +1,41 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Sticky paint and interaction</title>
+<style>
+html,body {margin:0;font:12px/16px sans-serif;background:white}
+#before {height:80px}
+#region {width:300px;height:500px}
+#header {position:sticky;top:10px;width:300px;height:80px;background:#228844}
+#header-link {display:block;width:60px;height:20px;background:#228844}
+#absolute {position:absolute;left:80px;top:0;width:20px;height:20px;background:#2255cc}
+#picture {position:absolute;left:80px;top:40px;width:20px;height:20px}
+#floating {float:right;width:20px;height:20px;background:#cc2255}
+#fixed {position:fixed;right:10px;top:10px;width:20px;height:20px;background:#663399}
+#check {position:absolute;left:110px;top:0;width:14px;height:14px;margin:0}
+#field {position:absolute;left:150px;top:0;width:45px;height:20px;margin:0;padding:0;border:0}
+#frame {position:absolute;left:220px;top:25px;width:60px;height:40px;border:0}
+#under {display:block;width:300px;height:180px;background:#dd3333}
+#port {position:absolute;left:340px;top:100px;width:120px;height:150px;overflow:auto;background:#ddd}
+#port-content {height:450px}
+#port-before {height:50px}
+#outer {position:sticky;top:10px;height:80px;background:#228844}
+#inner {position:sticky;top:25px;height:20px;width:40px;background:#2255cc}
+#clip-port {position:absolute;left:500px;top:20px;width:100px;height:80px;overflow:hidden}
+#clipped {position:sticky;top:0;width:180px;height:80px;background:#228844}
+#tail {height:1000px}
+</style>
+<div id="hit-header"></div>
+<div id="before"></div>
+<div id="region">
+  <div id="header">
+    <a id="header-link" href="#hit-header"></a>
+    <div id="absolute"></div><div id="floating"></div><div id="fixed"></div>
+    <img id="picture" alt="" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20'%3E%3Crect width='20' height='20' fill='%232255cc'/%3E%3C/svg%3E">
+    <input id="check" type="checkbox"><input id="field" value="">
+    <iframe id="frame" src="sticky-frame.html"></iframe>
+  </div>
+  <a id="under" href="#hit-under"></a>
+</div>
+<div id="port"><div id="port-content"><div id="port-before"></div><div id="outer"><div id="inner"></div></div></div></div>
+<div id="clip-port"><div id="clipped"></div></div>
+<div id="tail"></div><div id="hit-under"></div>

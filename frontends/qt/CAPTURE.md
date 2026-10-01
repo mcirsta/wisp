@@ -52,6 +52,30 @@ with flex alignment/direction/growth and grid auto-flow values. This is not a
 complete modern CSS serializer. The font report identifies the primary font;
 individual glyph fallback can use additional fonts.
 
+Sticky boxes report a `sticky` object: `prepared` includes the containing block,
+scrolling ancestor (or `viewport: true`) and resolved `x`/`y` axis constraints in
+unscrolled document coordinates. Auto insets are JSON null. `auto` means all four
+insets are auto; `unsupported` includes a stable reason; `invalid` means constraints
+are unavailable. `offset` is the current sticky correction relative to the
+coordinate parent's inherited displacement. Existing rectangles describe visual
+positions; `layout_border_box` excludes all scrolling and sticky displacement.
+`sticky_layout_valid` describes the completed document pass. `box_storage` counts
+structural boxes (including list markers/text clones), allocated sticky records
+and their structure sizes; it excludes allocator overhead and embedded documents.
+This census runs only in developer inspection, never in production scrolling.
+
+With `WISP_PROFILE_RESTYLE=ON`, `render_profile` reports document-lifetime
+`layout_calls`, `paint_calls`, `layout_ms` and `paint_ms`, including initial
+loading and scroll-only paints. The corresponding `layout_cpu_ms` and
+`paint_cpu_ms` exclude scheduling delays where a thread CPU clock is available;
+otherwise they are null. Compare counter differences between settled steps to
+separate scrolling from initial loading or restyling. Paint times measure core
+HTML redraw, not screen presentation or capture-file writing.
+`sticky_queries` counts resolved sticky coordinate queries and
+`sticky_ancestor_steps` counts the ancestry frames assembled for them (not every
+subsequent constraint lookup). Inspection's own coordinate queries are excluded.
+These counters and clocks compile out with the existing profiling option.
+
 Font diagnostics distinguish `weight` (the CSS request), `selected_weight`
 (the weight requested from Qt after CSS fallback matching), and `face_weight`
 (the static font's OpenType OS/2 weight). `resolved_style` names the loaded face.
@@ -69,9 +93,9 @@ inline elements can own several boxes. Reports include up to 64 matching boxes,
 64 immediate children per box, and 12 ancestors; counts expose truncated box
 and child lists. Duplicate IDs select the first DOM match.
 
-Coordinates are the engine's **unscaled document layout coordinates, before
-CSS transforms**, including ancestor scrolling. At 100% zoom and scroll position
-zero they correspond to screenshot coordinates. Point queries reuse the core
+Visual rectangles use **unscaled document coordinates, before CSS transforms**,
+including element scrolling and sticky displacement. Subtract document scroll
+and multiply by page zoom to obtain screenshot coordinates. Point queries reuse the core
 hit-test walk and report its visible candidates; this is not a guarantee of
 correct paint/z-order or transformed hit testing. Queries inspect the top-level
 document, not the DOM inside child frames. A missing ID is a valid diagnostic
@@ -91,9 +115,17 @@ QT_QPA_PLATFORM=offscreen build/frontends/qt/wisp-qt \
   test/checked-interaction.html
 ```
 
-`--capture-click-id ID` clicks the element's layout box; `--capture-click-label ID`
+`--capture-click-id ID` clicks the element's visual box; `--capture-click-label ID`
 clicks a visible label whose `for` names that input (even if the input has no box).
 Clicks use the normal core mouse path, scrolling the target into view if needed.
+`--capture-click-point X,Y` instead clicks a fixed viewport position in unscaled
+CSS pixels, without auto-scrolling. `--capture-scroll-point X,Y,DX,DY` sends a
+scroll to the content under that viewport point, including a child iframe; signed
+deltas use layout pixels. An unconsumed scroll is an action error. Both options
+use normal core input dispatch and account for page zoom.
+`--capture-drag X1,Y1,X2,Y2` sends a primary-button press, drag, movement and
+release between viewport CSS pixel positions. It follows the same core input
+sequence as Qt; inspection reports the resulting selected text as `selection`.
 `--capture-type TEXT` sends keyboard input to the focused control and
 `--capture-scroll X,Y` sets the document scroll position.
 `--capture-resize WIDTHxHEIGHT` changes the content viewport through the widget's
@@ -103,8 +135,9 @@ The final image and requested viewport use the last size in the sequence.
 scrollbar offsets through the normal clamping/redraw API. IDs containing commas
 are not supported by this option. A nonzero offset without that scrollbar is an
 action error; the diagnostic does not create scrollbars for unpainted elements.
-Actions inspect and interact with the top-level document, using untransformed
-layout coordinates.
+ID-based actions address the top-level document. Point actions can forward into
+child frames, but inspection still describes the top-level DOM only. CSS transforms
+are outside these helpers' coordinate support.
 
 `steps.json` records the initial inspection and each settled result, including
 live checked/input values, scroll offsets, resource counts, and elapsed time.

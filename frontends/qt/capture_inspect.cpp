@@ -19,6 +19,7 @@ extern "C" {
 #include "wisp/content/handlers/html/box.h"
 #include "content/handlers/html/box_construct.h"
 #include "content/handlers/html/box_boundary.h"
+#include "content/handlers/html/box_sticky.h"
 #include "wisp/content/handlers/html/box_inspect.h"
 #include "wisp/content/handlers/html/html_save.h"
 #include "wisp/content/handlers/html/private.h"
@@ -117,14 +118,59 @@ static QJsonObject summary(struct box *box)
     while (owner && !owner->node) {
         owner = owner->parent;
     }
+    int lx, ly;
+    box_coords_unscrolled(box, &lx, &ly);
     return {{"node", identity(box->node)}, {"owner_node", identity(owner ? owner->node : nullptr)},
         {"box_type", types.value(box->type, "unknown")},
         {"content", rectangle(x + box->padding[LEFT], y + box->padding[TOP], box->width, box->height)},
         {"padding_box", rectangle(x, y, pw, ph)},
+        {"layout_border_box",
+            rectangle(lx - box->border[LEFT].width, ly - box->border[TOP].width,
+                pw + box->border[LEFT].width + box->border[RIGHT].width,
+                ph + box->border[TOP].width + box->border[BOTTOM].width)},
         {"border_box",
             rectangle(x - box->border[LEFT].width, y - box->border[TOP].width,
                 pw + box->border[LEFT].width + box->border[RIGHT].width,
                 ph + box->border[TOP].width + box->border[BOTTOM].width)}};
+}
+
+static QJsonObject describeSticky(struct box *box, const html_content *html)
+{
+    const char *unsupported = box_sticky_unsupported(box);
+    const auto *sticky = box_sticky_get(box);
+    QJsonObject detail{{"status", unsupported ? "unsupported" : sticky ? "prepared" : "invalid"}};
+    if (!unsupported && !sticky && html->sticky_layout_valid) {
+        css_fixed_or_calc value;
+        css_unit unit;
+        if (css_computed_top(box->style, &value, &unit) == CSS_TOP_AUTO &&
+            css_computed_right(box->style, &value, &unit) == CSS_RIGHT_AUTO &&
+            css_computed_bottom(box->style, &value, &unit) == CSS_BOTTOM_AUTO &&
+            css_computed_left(box->style, &value, &unit) == CSS_LEFT_AUTO)
+            detail["status"] = "auto";
+    }
+    if (unsupported)
+        detail["reason"] = unsupported;
+    if (sticky) {
+        int64_t dx, dy;
+        box_sticky_local_offset(box, nullptr, &dx, &dy);
+        detail["offset"] = QJsonObject{{"x", double(dx)}, {"y", double(dy)}};
+        const auto axis = [](const box_sticky_axis &a) {
+            return QJsonObject{{"border_start", a.border_start}, {"border_size", a.border_size},
+                {"containing_start", a.containing_start}, {"containing_size", a.containing_size},
+                {"scrollport_start", a.scrollport_start}, {"scrollport_size", a.scrollport_size},
+                {"margin_start", a.margin_start}, {"margin_end", a.margin_end},
+                {"inset_start", a.start_auto ? QJsonValue(QJsonValue::Null) : QJsonValue(a.inset_start)},
+                {"inset_end", a.end_auto ? QJsonValue(QJsonValue::Null) : QJsonValue(a.inset_end)},
+                {"reverse", a.reverse}};
+        };
+        detail["containing_block"] = summary(sticky->containing_block);
+        detail["scrolling_ancestor"] = sticky->scrolling_ancestor->flags & IS_VIEWPORT
+            ? QJsonObject{{"viewport", true}}
+            : summary(sticky->scrolling_ancestor);
+        detail["x"] = axis(sticky->x);
+        detail["y"] = axis(sticky->y);
+    }
+    return detail;
 }
 
 static QJsonObject describe(struct box *box, const html_content *html)
@@ -150,6 +196,8 @@ static QJsonObject describe(struct box *box, const html_content *html)
     if (box->abs_containing_block) {
         result["absolute_containing_block"] = summary(box->abs_containing_block);
     }
+    if (box->style && css_computed_position(box->style) == CSS_POSITION_STICKY)
+        result["sticky"] = describeSticky(box, html);
     QJsonArray parents, children;
     for (auto *parent = box->parent; parent && parents.size() < 12; parent = parent->parent) {
         parents.append(summary(parent));
@@ -233,9 +281,38 @@ QJsonObject nsqt_capture_inspect(struct hlcache_handle *content, const QStringLi
     result["status"] = "ok";
     result["resource_count"] = int(html->num_objects);
     result["active_resources"] = int(html->base.active - html->scripts_active);
+    result["sticky_layout_valid"] = html->sticky_layout_valid;
+    char *selection = html->bw ? browser_window_get_selection(html->bw) : nullptr;
+    if (selection) {
+        result["selection"] = QString::fromUtf8(selection);
+        free(selection);
+    }
+    // Capture-only census: production scrolling never traverses the tree for statistics.
+    size_t boxes = 0, sticky_records = 0;
+    QVector<struct box *> census{root};
+    while (!census.isEmpty()) {
+        const auto *box = census.takeLast();
+        ++boxes;
+        sticky_records += box->sticky != nullptr;
+        for (auto *child = box->children; child; child = child->next)
+            census.append(child);
+        if (box->list_marker)
+            census.append(box->list_marker);
+    }
+    result["box_storage"] = QJsonObject{{"boxes", double(boxes)}, {"box_bytes", double(sizeof(struct box))},
+        {"sticky_records", double(sticky_records)}, {"sticky_record_bytes", double(sizeof(struct box_sticky))}};
     if (!html->restyle.css_only && !html->restyle.force_full)
         result["tree_allocations"] = double(talloc_total_blocks(html->bctx));
 #ifdef WISP_PROFILE_RESTYLE
+    const auto render_before = html->render_profile;
+    result["render_profile"] = QJsonObject{{"layout_calls", double(render_before.layout_calls)},
+        {"layout_ms", render_before.layout_ns / 1e6}, {"paint_calls", double(render_before.paint_calls)},
+        {"paint_ms", render_before.paint_ns / 1e6}, {"sticky_queries", double(render_before.sticky_queries)},
+        {"layout_cpu_ms",
+            render_before.layout_cpu_ns ? QJsonValue(render_before.layout_cpu_ns / 1e6) : QJsonValue(QJsonValue::Null)},
+        {"paint_cpu_ms",
+            render_before.paint_cpu_ns ? QJsonValue(render_before.paint_cpu_ns / 1e6) : QJsonValue(QJsonValue::Null)},
+        {"sticky_ancestor_steps", double(render_before.sticky_ancestor_steps)}};
     const auto &p = html->restyle_profile;
     if (p.total_ns != 0) {
         result["restyle_profile"] = QJsonObject{{"update_mode", p.update_mode ? p.update_mode : "unknown"},
@@ -337,6 +414,10 @@ QJsonObject nsqt_capture_inspect(struct hlcache_handle *content, const QStringLi
         }
         result["point"] = QJsonObject{{"x", point.x()}, {"y", point.y()}, {"hit_count", count}, {"hits", hits}};
     }
+#ifdef WISP_PROFILE_RESTYLE
+    // Synchronous inspection queries must not count as application scroll work.
+    html->render_profile = render_before;
+#endif
     return result;
 }
 
@@ -481,10 +562,49 @@ bool nsqt_capture_click(struct browser_window *bw, const QString &id, bool label
         browser_window_get_dimensions(bw, &width, &height);
         if (x < sx || x >= sx + width || y < sy || y >= sy + height)
             nsqt_capture_scroll(content, qMax(0, x - width / 2), qMax(0, y - height / 2));
-        browser_window_mouse_click(bw, BROWSER_MOUSE_PRESS_1, x, y);
-        browser_window_mouse_click(bw, BROWSER_MOUSE_CLICK_1, x, y);
-        browser_window_mouse_track(bw, (browser_mouse_state)0, x, y);
+        // Sticky/fixed geometry can change when bringing the target into view.
+        box_coords(box, &x, &y);
+        x += box->padding[LEFT] + qMax(1, box->width / 2);
+        y += box->padding[TOP] + qMax(1, box->height / 2);
+        const float scale = browser_window_get_scale(bw);
+        browser_window_mouse_click(bw, BROWSER_MOUSE_PRESS_1, x * scale, y * scale);
+        browser_window_mouse_click(bw, BROWSER_MOUSE_CLICK_1, x * scale, y * scale);
+        browser_window_mouse_track(bw, (browser_mouse_state)0, x * scale, y * scale);
     }
     dom_node_unref(target);
     return found;
+}
+
+void nsqt_capture_click_point(struct browser_window *bw, int x, int y)
+{
+    int sx, sy;
+    browser_window_get_scroll(bw, &sx, &sy);
+    const float scale = browser_window_get_scale(bw);
+    const int px = (x + sx) * scale, py = (y + sy) * scale;
+    browser_window_mouse_click(bw, BROWSER_MOUSE_PRESS_1, px, py);
+    browser_window_mouse_click(bw, BROWSER_MOUSE_CLICK_1, px, py);
+    browser_window_mouse_track(bw, (browser_mouse_state)0, px, py);
+}
+
+bool nsqt_capture_scroll_point(struct browser_window *bw, int x, int y, int dx, int dy)
+{
+    int sx, sy;
+    browser_window_get_scroll(bw, &sx, &sy);
+    const float scale = browser_window_get_scale(bw);
+    return browser_window_scroll_at_point(bw, (x + sx) * scale, (y + sy) * scale, dx, dy);
+}
+
+void nsqt_capture_drag(struct browser_window *bw, int x1, int y1, int x2, int y2)
+{
+    int sx, sy;
+    browser_window_get_scroll(bw, &sx, &sy);
+    const float scale = browser_window_get_scale(bw);
+    x1 = (x1 + sx) * scale;
+    y1 = (y1 + sy) * scale;
+    x2 = (x2 + sx) * scale;
+    y2 = (y2 + sy) * scale;
+    browser_window_mouse_click(bw, BROWSER_MOUSE_PRESS_1, x1, y1);
+    browser_window_mouse_click(bw, BROWSER_MOUSE_DRAG_1, x1, y1);
+    browser_window_mouse_track(bw, (browser_mouse_state)(BROWSER_MOUSE_HOLDING_1 | BROWSER_MOUSE_DRAG_ON), x2, y2);
+    browser_window_mouse_track(bw, BROWSER_MOUSE_HOVER, x2, y2);
 }
