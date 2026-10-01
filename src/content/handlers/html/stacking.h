@@ -36,8 +36,8 @@ struct box;
 /**
  * Determine if a box creates a stacking context.
  *
- * A box creates a stacking context if it is positioned
- * (absolute, relative, or fixed) AND has an explicit z-index value.
+ * Positioned boxes with explicit z-index, fixed/sticky boxes even with auto
+ * z-index, and transformed elements establish stacking contexts.
  *
  * \param box  Box to check
  * \return true if box creates a stacking context
@@ -47,7 +47,7 @@ bool box_creates_stacking_context(const struct box *box);
 /**
  * Get the effective z-index for a box.
  *
- * Returns Z_INDEX_AUTO when no stacking context is established. Fixed boxes
+ * Returns Z_INDEX_AUTO when no stacking context is established. Fixed/sticky boxes
  * and transformed elements with auto z-index have effective stack level zero.
  *
  * \param box  Box to get z-index for

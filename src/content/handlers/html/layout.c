@@ -5922,7 +5922,9 @@ layout_position_absolute(struct box *box, struct box *containing_block, int cx, 
                 return false;
             if (!layout_position_absolute(c, c, 0, 0, content))
                 return false;
-        } else if ((c->style && css_computed_position(c->style) == CSS_POSITION_RELATIVE) || layout_has_transform(c)) {
+        } else if ((c->style && (css_computed_position(c->style) == CSS_POSITION_RELATIVE ||
+                                   css_computed_position(c->style) == CSS_POSITION_STICKY)) ||
+            layout_has_transform(c)) {
             if (!layout_position_absolute(c, c, 0, 0, content))
                 return false;
         } else {

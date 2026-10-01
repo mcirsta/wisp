@@ -1,0 +1,109 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Sticky positioning geometry and containing blocks</title>
+<style>
+html, body { margin: 0; padding: 0; }
+body { font: 14px/20px sans-serif; background: white; }
+.case { margin: 16px; }
+/* Hidden creates a scroll container without introducing platform scrollbar
+   widths into the axis reference. Developer tools set scrollTop/scrollLeft. */
+.scroller { width: 200px; height: 120px; overflow: hidden; background: #ddd; }
+.containing { width: 500px; height: 400px; }
+.before { height: 80px; }
+.sticky { position: sticky; width: 60px; height: 40px; background: #cc2255; }
+.tail { height: 300px; width: 800px; }
+.top { top: 10px; }
+.bottom { bottom: 10px; }
+.both { top: 10px; bottom: 20px; }
+.tall { height: 180px; }
+.margin { margin-bottom: 30px; }
+.negative-margin { margin-bottom: -20px; }
+.left { left: 10px; margin-left: 80px; }
+.right { right: 10px; margin-left: 250px; }
+.wide { width: 240px; left: 10px; right: 20px; margin-left: 80px; }
+.rtl { direction: rtl; }
+.rtl .sticky { margin-left: 80px; margin-right: 180px; }
+/* Containing-block/stacking checks run at scroll zero with auto insets. */
+.anchor { position: sticky; width: 180px; height: 80px; padding: 4px;
+          border: 2px solid black; background: #228844; }
+.flex { display: flex; }
+.inline-flex { display: inline-flex; }
+/* Fix the row size to isolate the containing-block check from track sizing. */
+.grid { display: grid; grid-template-rows: 80px; }
+.intermediate { width: 60px; height: 30px; margin: 9px; }
+.absolute { position: absolute; left: 13px; top: 17px; width: 11px; height: 7px;
+            background: #2255cc; }
+.direct { left: 31px; }
+#stack { position: relative; width: 200px; height: 100px; }
+#stack-header { position: sticky; width: 100px; height: 60px; background: #228844; }
+#stack-child { position: absolute; left: 10px; top: 10px; width: 30px; height: 30px;
+               background: #cc2255; z-index: 999; }
+#stack-cover { position: absolute; left: 0; top: 0; width: 50px; height: 50px;
+               background: #2255cc; z-index: 1; }
+</style>
+
+<div class="case"><div id="anchor-block" class="anchor">
+  <div id="block-direct" class="absolute direct"></div>
+  <div class="intermediate"><div id="block-deep" class="absolute"></div></div>
+</div></div>
+<div class="case"><div id="anchor-flex" class="anchor flex">
+  <div id="flex-direct" class="absolute direct"></div>
+  <div class="intermediate"><div id="flex-deep" class="absolute"></div></div>
+</div></div>
+<div class="case"><div id="anchor-inline-flex" class="anchor inline-flex">
+  <div id="inline-flex-direct" class="absolute direct"></div>
+  <div class="intermediate"><div id="inline-flex-deep" class="absolute"></div></div>
+</div></div>
+<div class="case"><div id="anchor-grid" class="anchor grid">
+  <div id="grid-direct" class="absolute direct"></div>
+  <div class="intermediate"><div id="grid-deep" class="absolute"></div></div>
+</div></div>
+<div class="case"><div id="stack">
+  <div id="stack-header"><div id="stack-child"></div></div>
+  <div id="stack-cover"></div>
+</div></div>
+
+<div class="case"><div id="top-scroll" class="scroller">
+  <div class="containing"><div class="before"></div><div id="top" class="sticky top"></div></div>
+  <div class="tail"></div>
+</div></div>
+<div class="case"><div id="bottom-scroll" class="scroller">
+  <div class="containing"><div class="before"></div><div id="bottom" class="sticky bottom"></div></div>
+  <div class="tail"></div>
+</div></div>
+<div class="case"><div id="both-scroll" class="scroller">
+  <div class="containing"><div class="before"></div><div id="both" class="sticky both"></div></div>
+  <div class="tail"></div>
+</div></div>
+<div class="case"><div id="tall-top-scroll" class="scroller">
+  <div class="containing"><div class="before"></div><div id="tall-top" class="sticky top tall"></div></div>
+  <div class="tail"></div>
+</div></div>
+<div class="case"><div id="tall-bottom-scroll" class="scroller">
+  <div class="containing"><div class="before"></div><div id="tall-bottom" class="sticky bottom tall"></div></div>
+  <div class="tail"></div>
+</div></div>
+<div class="case"><div id="margin-scroll" class="scroller">
+  <div class="containing"><div class="before"></div><div id="margin" class="sticky top margin"></div></div>
+  <div class="tail"></div>
+</div></div>
+<div class="case"><div id="negative-margin-scroll" class="scroller">
+  <div class="containing"><div class="before"></div><div id="negative-margin" class="sticky top negative-margin"></div></div>
+  <div class="tail"></div>
+</div></div>
+<div class="case"><div id="left-scroll" class="scroller">
+  <div class="containing"><div id="left" class="sticky left"></div></div>
+  <div class="tail"></div>
+</div></div>
+<div class="case"><div id="right-scroll" class="scroller">
+  <div class="containing"><div id="right" class="sticky right"></div></div>
+  <div class="tail"></div>
+</div></div>
+<div class="case"><div id="wide-scroll" class="scroller">
+  <div class="containing"><div id="wide" class="sticky wide"></div></div>
+  <div class="tail"></div>
+</div></div>
+<div class="case"><div id="wide-rtl-scroll" class="scroller">
+  <div class="containing rtl"><div id="wide-rtl" class="sticky wide"></div></div>
+  <div class="tail"></div>
+</div></div>

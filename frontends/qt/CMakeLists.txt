@@ -252,6 +252,10 @@ if(WISP_QT_CAPTURE)
                 COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_fixed_position.py
                     $<TARGET_FILE:wisp-qt> ${WISP_TEST_MAGICK})
             set_tests_properties(qt_fixed_position PROPERTIES TIMEOUT 45)
+            add_test(NAME qt_sticky_position
+                COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_sticky_position.py
+                    $<TARGET_FILE:wisp-qt> ${WISP_TEST_MAGICK})
+            set_tests_properties(qt_sticky_position PROPERTIES TIMEOUT 45)
             add_test(NAME qt_inline_baseline
                 COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_inline_baseline.py
                     $<TARGET_FILE:wisp-qt> ${WISP_TEST_MAGICK})

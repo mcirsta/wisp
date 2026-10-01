@@ -1114,6 +1114,60 @@ START_TEST(test_grid_border_after_row_growth)
 }
 END_TEST
 
+START_TEST(test_grid_out_of_flow_children)
+{
+    struct grid_item_test_style values = {.width = 20, .max_width = -1};
+    css_computed_style *flow_style = grid_item_test_style_create(&values);
+    values.position = _i == 0 ? CSS_POSITION_ABSOLUTE : CSS_POSITION_FIXED;
+    css_computed_style *positioned_style = grid_item_test_style_create(&values);
+    ck_assert_ptr_nonnull(flow_style);
+    ck_assert_ptr_nonnull(positioned_style);
+    const char *name = _i == 0 ? "absolute" : "fixed";
+    struct box grid = {
+        .type = BOX_GRID, .width = 840, .height = AUTO, .style = (css_computed_style *)explicit_grid_style};
+    struct box items[5] = {0};
+    for (int i = 0; i < 5; i++) {
+        items[i].type = BOX_BLOCK;
+        items[i].style = i % 2 ? flow_style : positioned_style;
+        items[i].parent = &grid;
+        items[i].width = 20;
+        items[i].height = i % 2 ? 40 : 400;
+        items[i].prev = i ? &items[i - 1] : NULL;
+        items[i].next = i < 4 ? &items[i + 1] : NULL;
+    }
+    grid.children = &items[0];
+    grid.last = &items[4];
+    html_content content = {0};
+    content.unit_len_ctx.device_dpi = INTTOFIX(96);
+    content.unit_len_ctx.font_size_default = INTTOFIX(16);
+
+    for (int run = 0; run < 2; run++) {
+        for (int i = 0; i < 5; i += 2) {
+            items[i].x = 123;
+            items[i].y = 456;
+        }
+        ck_assert(layout_grid(&grid, 840, &content));
+        ck_assert_msg(grid.height == 40, "%s run %d: out-of-flow children changed grid height to %d",
+            name, run, grid.height);
+        for (int i = 0; i < 5; i++) {
+            if (i % 2) {
+                ck_assert_msg(items[i].x == (i / 2) * 280 && items[i].y == 0,
+                    "%s run %d: in-flow item %d occupies wrong cell (%d,%d)", name, run, i,
+                    items[i].x, items[i].y);
+            } else {
+                ck_assert_msg(items[i].height == 400 && items[i].width == 20,
+                    "%s run %d: out-of-flow item %d was sized by grid layout", name, run, i);
+                ck_assert_msg(items[i].x == 0 && items[i].y == 0,
+                    "%s run %d: out-of-flow item %d retained stale position (%d,%d)", name, run, i,
+                    items[i].x, items[i].y);
+            }
+        }
+    }
+    css_computed_style_destroy(flow_style);
+    css_computed_style_destroy(positioned_style);
+}
+END_TEST
+
 Suite *grid_test_suite(void)
 {
     Suite *s = suite_create("grid_layout");
@@ -1125,6 +1179,7 @@ Suite *grid_test_suite(void)
     tcase_add_test(tc, test_grid_explicit_column_only);
     tcase_add_loop_test(tc, test_grid_item_sizing, 0, sizeof(sizing_cases) / sizeof(sizing_cases[0]));
     tcase_add_test(tc, test_grid_border_after_row_growth);
+    tcase_add_loop_test(tc, test_grid_out_of_flow_children, 0, 2);
     suite_add_tcase(s, tc);
     return s;
 }

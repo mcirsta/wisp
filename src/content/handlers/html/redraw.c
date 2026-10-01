@@ -2370,7 +2370,6 @@ bool html_redraw_box(const html_content *html, struct box *box, int x_parent, in
                 cls = dom_string_data(class_attr);
             }
         }
-        uint8_t pos_enum = (box->style != NULL) ? css_computed_position(box->style) : CSS_POSITION_STATIC;
         uint8_t bg_attach = (box->style != NULL) ? css_computed_background_attachment(box->style)
                                                  : CSS_BACKGROUND_ATTACHMENT_SCROLL;
         // TODO remove in production
@@ -2392,10 +2391,9 @@ bool html_redraw_box(const html_content *html, struct box *box, int x_parent, in
             bool abs_full_width = (bg_extent >= root_w_scaled - tol);
             bool is_root_or_body = (box->parent == NULL) || (box->parent != NULL && box->parent->parent == NULL);
 
-            /* Viewport background expansion rules:
-             * 1. position: fixed - always expand (CSS spec)
-             * 2. background-attachment: fixed - always expand (CSS spec)
-             * 3. Root/body elements - expand if full-width
+            /* Existing viewport background handling:
+             * 1. background-attachment: fixed
+             * 2. Root/body elements if full-width
              *
              * For all other elements, do NOT expand - log if they would have
              * matched the old heuristics so we can detect if needed. */

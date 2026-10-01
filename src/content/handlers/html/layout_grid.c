@@ -452,9 +452,7 @@ bool layout_minmax_grid(struct box *grid, const struct gui_layout_table *font_fu
     for (child = grid->children; child; child = child->next) {
         /* Skip absolutely positioned children - they don't affect
          * intrinsic sizing */
-        if (child->style &&
-            (css_computed_position(child->style) == CSS_POSITION_ABSOLUTE ||
-                css_computed_position(child->style) == CSS_POSITION_FIXED)) {
+        if (child->style && lh__box_is_absolute(child)) {
             continue;
         }
 
@@ -781,8 +779,15 @@ static bool layout_grid_prepare(struct grid_layout_ctx *ctx, int available_width
     NSLOG(layout, INFO, "GRID LAYOUT: allocated %dx%d occupation grid (dense=%d)", ctx->num_cols,
         ctx->occupied_max_rows, ctx->is_dense);
 
-    for (struct box *child = grid->children; child; child = child->next)
+    for (struct box *child = grid->children; child; child = child->next) {
+        /* Absolute/fixed children do not occupy grid cells. Their separate
+         * positioning pass also needs a fresh fallback origin on reflow. */
+        if (child->style && lh__box_is_absolute(child)) {
+            child->x = child->y = 0;
+            continue;
+        }
         ctx->item_count++;
+    }
     if (ctx->item_count > 0) {
         ctx->item_cache = calloc(ctx->item_count, sizeof(struct grid_item_cache));
         if (!ctx->item_cache)
@@ -1424,6 +1429,8 @@ bool layout_grid(struct box *grid, int available_width, html_content *content)
     for (int pass = 1; pass <= 2; pass++) {
         NSLOG(layout, INFO, "GRID PLACEMENT: Starting pass %d", pass);
         for (struct box *child = grid->children; child; child = child->next) {
+            if (child->style && lh__box_is_absolute(child))
+                continue;
             struct grid_placement placement = {0};
             get_grid_item_placement(child->style, &placement.col_start, &placement.col_end, &placement.row_start,
                 &placement.row_end, &placement.col_span, &placement.row_span);

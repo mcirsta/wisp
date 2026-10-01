@@ -6,6 +6,7 @@
 #include <libcss/computed.h>
 
 struct grid_item_test_style {
+    uint8_t position; /* Zero defaults to static. */
     int width; /* INT_MIN means auto; otherwise pixels or percent. */
     bool percent_width;
     bool border_box;

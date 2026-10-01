@@ -42,14 +42,15 @@ int32_t box_get_z_index(const struct box *box)
         return Z_INDEX_AUTO;
     }
 
-    /* Transforms and fixed boxes establish stacking contexts even with auto
+    /* Transforms, fixed and sticky boxes establish stacking contexts even with auto
      * z-index. Keep their descendants inside that context during collection. */
     uint32_t count = 0;
     const css_transform_function *functions = NULL;
     bool transformed = box->node &&
         css_computed_transform(box->style, &count, &functions) == CSS_TRANSFORM_FUNCTIONS && count > 0;
     uint8_t pos = css_computed_position(box->style);
-    bool is_positioned = (pos == CSS_POSITION_RELATIVE || pos == CSS_POSITION_ABSOLUTE || pos == CSS_POSITION_FIXED);
+    bool is_positioned = (pos == CSS_POSITION_RELATIVE || pos == CSS_POSITION_ABSOLUTE ||
+        pos == CSS_POSITION_FIXED || pos == CSS_POSITION_STICKY);
 
     if (!is_positioned) {
         return transformed ? 0 : Z_INDEX_AUTO;
@@ -59,7 +60,7 @@ int32_t box_get_z_index(const struct box *box)
     uint8_t z_type = css_computed_z_index(box->style, &z_index);
 
     return (z_type == CSS_Z_INDEX_SET) ? z_index :
-        ((pos == CSS_POSITION_FIXED || transformed) ? 0 : Z_INDEX_AUTO);
+        ((pos == CSS_POSITION_FIXED || pos == CSS_POSITION_STICKY || transformed) ? 0 : Z_INDEX_AUTO);
 }
 
 /* See stacking.h for documentation */

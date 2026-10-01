@@ -1,6 +1,7 @@
 # Sticky positioning: implementation plan
 
-Status: proposed, not implemented. Updated 2026-10-01.
+Status: implementation started; geometry and positioning foundation in progress.
+Updated 2026-10-01.
 
 ## Goal and scope
 
@@ -22,12 +23,15 @@ and ordinary/absolute/fixed/float descendants within that scope.
 Reuse the existing logical-inset mapping for these writing modes and test it;
 do not add a separate sticky-specific property parser.
 
-Fragmented inline sticky boxes, sticky table rows/cells, a floated sticky box
-itself, vertical writing modes, and transformed coordinate systems requiring new
-transform-aware hit testing are follow-up work. Preserve their current in-flow
+All ordinary inline sticky boxes (including single-line inlines), sticky table
+rows/cells, a floated sticky box itself, vertical writing modes, and transformed
+coordinate systems requiring new transform-aware hit testing are follow-up work.
+Preserve their current in-flow
 behavior and report unsupported sticky geometry in developer inspection; do not
 claim full CSS sticky conformance. Page zoom is in scope. Existing transform and
 fixed-position behavior must retain its regression coverage.
+Keep the existing completed-line reuse exclusion for positioned inline children.
+Ordinary text inside a supported sticky block can still use eligible line caches.
 
 ## Existing implementation
 
@@ -37,7 +41,7 @@ Paths in this document are relative to the repository root.
 | --- | --- |
 | CSS | `contrib/libcss/properties.toml`, `[position]`, already accepts `STICKY` and uses three computed bits. `contrib/libcss/src/select/select_config.py` also reserves three bits. No bytecode/storage redesign is needed. |
 | Layout | `layout_document()` in `src/content/handlers/html/layout.c` runs normal layout, absolute positioning, relative positioning, then descendant bounds. Sticky has no positioning pass. |
-| Containing blocks | `layout_position_absolute()` recognizes relative ancestors and transforms; sticky ancestors are missing. |
+| Containing blocks | The first implementation slice adds sticky to the general ancestor branch in `layout_position_absolute()`. The existing immediate flex/inline-flex-parent branch remains compatible; direct and deeper descendants of block, flex/inline-flex and grid containers have capture coverage. |
 | Coordinates | `box_coords()`, `box_coords_at_scroll()` and `box_coords_unscrolled()` in `box_inspect.c` already distinguish viewport-fixed geometry and nested scrollbar offsets. |
 | Painting | `redraw.c` mixes inherited coordinates with containing-block coordinate queries, then culls against descendant bounds. |
 | Interaction | `box_next_xy()`/`box_at_point()` and `interaction.c` walk boxes separately from painting. Matching coordinates alone do not establish matching paint order. |
@@ -63,8 +67,9 @@ block and a stacking context, including with `z-index: auto`.
 
 Scroll-container discovery must use overflow semantics, not scrollbar existence.
 `hidden`, `auto` and `scroll` can establish a scroll container even without a
-visible scrollbar. `visible` does not; `clip`, if supported, is different from
-`hidden`. Account for cross-axis overflow computation and root/body overflow
+visible scrollbar. `visible` does not. `overflow: clip` is unsupported in the
+current parser/property enum and is outside this work; do not map it to `hidden`.
+Account for cross-axis overflow computation and root/body overflow
 propagation to the viewport.
 [CSS Overflow, sections 3.1 and 3.3](https://www.w3.org/TR/css-overflow-3/#overflow-properties).
 
@@ -178,6 +183,8 @@ same already-resolved ancestor shifts.
 
 - Add sticky to the ancestor branch in `layout_position_absolute()` so positioned
   header children use the header as their containing block, even at scroll zero.
+  Reconcile this with the existing immediate flex-parent branch. Test both direct
+  and deeper absolute descendants of block, flex/inline-flex and grid containers.
 - Add sticky to `box_get_z_index()` and its automatic stacking-context handling.
 - Keep abs/fixed-only flow exclusion and blockification checks abs/fixed-only.
   Audit position checks individually; do not replace them wholesale with a
@@ -191,6 +198,11 @@ Apply the shared offset before visibility rejection, backgrounds, borders, child
 painting and stacking-context collection. Audit every path that supplies
 `x_parent/y_parent` to a collected stacking entry; reparented painting must not
 lose or duplicate an ancestor's sticky offset. Cover both unit and non-unit zoom.
+Keep the pixel regression showing that a sticky header's ordinary background
+remains within its box. In `redraw.c`, viewport background expansion depends on
+background attachment and the root/body check. The first slice removes the unused
+`pos_enum` local and the stale claim that `position: fixed` always expands. No
+sticky-specific background exception is needed.
 
 The existing `descendant_*` fields serve culling and scroll extents. Do not
 inflate them with a broad possible sticky movement range merely to defeat
@@ -314,6 +326,58 @@ scrolling causes no CSS/construction/layout work, and no unexplained regression
 remains on pages without sticky content. Update this document with results and
 any explicitly deferred cases. Commit these coherent stages separately; no
 temporary production feature gate is needed.
+
+## Implementation record: first foundation slice (2026-10-01)
+
+Stage 1 is in progress. The following parts are implemented:
+
+- `box_sticky.c/.h` contains an allocation-free axis solver with explicit auto
+  flags, signed margins, containing-block limits, logical-end adjustment and
+  64-bit intermediate arithmetic. It takes resolved geometry only and is not
+  yet called by the renderer.
+- `layout_sticky_test` covers ten Chromium reference sequences (60 positions),
+  plus auto/zero/negative insets, no movement room, oversized logical-end behavior
+  and coordinate overflow. Each sequence returns to its original scroll offset.
+- Sticky establishes an absolute containing block and an auto-z stacking context.
+  The Qt regression checks direct/deeper absolute children of block, flex,
+  inline-flex and grid containers, in-flow size, stacking isolation and bounded
+  backgrounds at 100% and 150% zoom.
+- The grid fixture exposed a separate prerequisite bug: absolute/fixed children
+  were excluded from intrinsic sizing but still entered grid placement. Placement
+  and item counting now skip them, and reflow resets their fallback origin.
+  Two unit cases check cell occupancy, dimensions and repeated layout. Explicit
+  row sizing keeps the sticky fixture independent of the existing grid issue
+  where an auto-sized track can overwrite a specified container height.
+- The existing generated position parser, three-bit computed representation and
+  sticky parser fixture were verified. No generator or CSS storage changes were
+  needed; the Qt fixture exercises the real parsing/selection path.
+
+Reference measurements use Chromium 153.0.8010.52, scripts disabled, an 800x1200
+viewport and device scale 1. Values are recorded alongside the numeric unit cases.
+Local raw measurements are in
+`out/render-captures/sticky-foundation-2026-10-01/chromium-reference.json`.
+
+One edge case remains a compatibility question before renderer integration:
+`tall-bottom` has a 180px box, a 120px scrollport and only `bottom: 10px`.
+At scroll 100, Chromium places its top at -70px; the specification's logical-end
+inset reduction gives -20px. The unit test explicitly records the specification
+behavior separately from browser agreement. Check this against another engine
+and relevant conformance tests before treating it as settled compatibility.
+
+No box fields, sticky metadata allocations or scroll-time work have been added.
+Remaining stage-1 work is eligibility, containing-block/scroll-container discovery,
+resolved constraints and their layout/reset integration. Visual coordinates,
+painting, input, lifecycle coverage, saved-site validation and cost measurements
+remain subsequent work. Sticky headers do not yet stay visible during scrolling.
+
+Validation: Qt builds in Debug ASan/UBSan and Release, and Monkey builds in Debug.
+All 128 selected Debug and 117 selected Release tests pass, covering CSS, layout,
+grid, stacking, construction, retained updates and Qt captures, plus Monkey in
+Debug. The Debug capture test required a rerun with local loopback access because
+the sandbox initially blocked its HTTP server. Leak detection was disabled for
+the existing sanitizer suite. Python compilation and `git diff --check` pass.
+The selection expression is
+`^(libcss_|layout_|grid_|stacking_test|box_construct_|transform_clip_test|qt_|css_|restyle_|monkey_)`.
 
 ## Required fixture matrix
 

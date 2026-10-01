@@ -25,7 +25,7 @@ css_computed_style *grid_item_test_style_create(const struct grid_item_test_styl
         return NULL;
     }
     set_display(style, CSS_DISPLAY_BLOCK);
-    set_position(style, CSS_POSITION_STATIC);
+    set_position(style, v->position ? v->position : CSS_POSITION_STATIC);
     set_float(style, CSS_FLOAT_NONE);
     set_box_sizing(style, v->border_box ? CSS_BOX_SIZING_BORDER_BOX : CSS_BOX_SIZING_CONTENT_BOX);
     set_height(style, CSS_HEIGHT_SET, (css_fixed_or_calc)INTTOFIX(40), CSS_UNIT_PX);
