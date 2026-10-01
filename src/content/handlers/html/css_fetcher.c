@@ -178,14 +178,15 @@ static void html_css_fetcher_send_callback(const fetch_msg *msg, html_css_fetche
 static void html_css_fetcher_poll(lwc_string *scheme)
 {
     fetch_msg msg;
-    html_css_fetcher_context *c, *next;
+    html_css_fetcher_context *c;
+    size_t remaining;
 
-    if (ring == NULL)
-        return;
-
-    /* Iterate over ring, processing each pending fetch */
-    c = ring;
-    do {
+    /* Removing an entry moves the head, so it cannot be an end marker.
+     * Bound this poll's work even if callbacks keep adding new fetches. */
+    RING_GETSIZE(html_css_fetcher_context, ring, remaining);
+    for (; remaining > 0 && ring != NULL; remaining--) {
+        /* Re-entrant callbacks may have removed other entries. */
+        c = ring;
         /* Ignore fetches that have been flagged as locked.
          * This allows safe re-entrant calls to this function.
          * Re-entrancy can occur if, as a result of a callback,
@@ -193,7 +194,7 @@ static void html_css_fetcher_poll(lwc_string *scheme)
          * again.
          */
         if (c->locked == true) {
-            next = c->r_next;
+            ring = c->r_next;
             continue;
         }
 
@@ -253,18 +254,9 @@ static void html_css_fetcher_poll(lwc_string *scheme)
             assert(c->locked == false);
         }
 
-        /* Compute next fetch item at the last possible moment as
-         * processing this item may have added to the ring.
-         */
-        next = c->r_next;
-
         fetch_remove_from_queues(c->parent_fetch);
         fetch_free(c->parent_fetch);
-
-        /* Advance to next ring entry, exiting if we've reached
-         * the start of the ring or the ring has become empty
-         */
-    } while ((c = next) != ring && ring != NULL);
+    }
 }
 
 /* exported interface documented in html_internal.h */

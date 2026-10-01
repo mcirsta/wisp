@@ -149,14 +149,15 @@ static void fetch_javascript_abort(void *ctx)
 /** callback to poll for additional resource fetch contents */
 static void fetch_javascript_poll(lwc_string *scheme)
 {
-    struct fetch_javascript_context *c, *next;
+    struct fetch_javascript_context *c;
+    size_t remaining;
 
-    if (ring == NULL)
-        return;
-
-    /* Iterate over ring, processing each pending fetch */
-    c = ring;
-    do {
+    /* Removing an entry moves the head, so it cannot be an end marker.
+     * Bound this poll's work even if callbacks keep adding new fetches. */
+    RING_GETSIZE(struct fetch_javascript_context, ring, remaining);
+    for (; remaining > 0 && ring != NULL; remaining--) {
+        /* Re-entrant callbacks may have removed other entries. */
+        c = ring;
         /* Ignore fetches that have been flagged as locked.
          * This allows safe re-entrant calls to this function.
          * Re-entrancy can occur if, as a result of a callback,
@@ -164,7 +165,7 @@ static void fetch_javascript_poll(lwc_string *scheme)
          * again.
          */
         if (c->locked == true) {
-            next = c->r_next;
+            ring = c->r_next;
             continue;
         }
 
@@ -174,18 +175,9 @@ static void fetch_javascript_poll(lwc_string *scheme)
             fetch_javascript_handler(c);
         }
 
-        /* Compute next fetch item at the last possible moment
-         * as processing this item may have added to the ring
-         */
-        next = c->r_next;
-
         fetch_remove_from_queues(c->fetchh);
         fetch_free(c->fetchh);
-
-        /* Advance to next ring entry, exiting if we've reached
-         * the start of the ring or the ring has become empty
-         */
-    } while ((c = next) != ring && ring != NULL);
+    }
 }
 
 /**

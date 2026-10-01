@@ -90,6 +90,19 @@ set(NSURL_SOURCES
 )
 add_wisp_test(nsurl ${NSURL_SOURCES})
 
+# Exercise the real scheme fetchers with a small fetch-core callback harness.
+add_wisp_test(fetcher_poll_test
+  ${CMAKE_SOURCE_DIR}/src/content/handlers/html/css_fetcher.c
+  ${CMAKE_SOURCE_DIR}/src/content/handlers/javascript/fetcher.c
+  ${CMAKE_SOURCE_DIR}/src/utils/nsurl/nsurl.c
+  ${CMAKE_SOURCE_DIR}/src/utils/nsurl/parse.c
+  ${CMAKE_SOURCE_DIR}/src/utils/idna.c
+  ${CMAKE_SOURCE_DIR}/src/utils/punycode.c
+  ${CMAKE_SOURCE_DIR}/src/utils/corestrings.c
+  ${CMAKE_SOURCE_DIR}/src/test/log.c
+  ${CMAKE_SOURCE_DIR}/src/test/fetcher_poll_test.c
+)
+
 set(URLDBTEST_SOURCES
   ${CMAKE_SOURCE_DIR}/src/utils/nsurl/nsurl.c
   ${CMAKE_SOURCE_DIR}/src/utils/nsurl/parse.c
