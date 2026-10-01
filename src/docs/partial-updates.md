@@ -1,17 +1,18 @@
 # Partial document updates: implementation plan
 
-Status: the initial bounded scope and default-on rollout are complete, 2026-09-30.
+Status: the initial bounded scope and rollout are complete; partial updates are
+standard in every build, 2026-10-01.
 Milestones A and B, plus milestone C's bounded inline intrinsic/line reuse, are
-enabled for eligible native checked-state updates.
+used for eligible native checked-state updates.
 The reviewed baseline is `eb3e03df`
 (`Use stack scratch for small class selector lists`).
 
 The foundation is committed as `fdd92975`, and milestone A as `180d7009`.
-Milestone A now reuses composed styles
-outside the changed controls' parent subtrees and still reconstructs and lays out
-the whole document. `WISP_ENABLE_PARTIAL_UPDATES` now defaults to ON; configuring
-it OFF still removes the HTML tracking state and selects the full-refresh path.
-Existing CMake caches explicitly set to OFF keep that setting until reconfigured.
+Milestone A introduced composed-style reuse outside the changed controls' parent
+subtrees while retaining whole-document construction and layout. The temporary
+build-time feature switch and its disabled
+implementation have now been removed. Full reconstruction remains the runtime
+fallback for unsupported cases and a developer capture reference.
 Milestone B constructs detached block/flex/grid candidates with staged URL/SVG
 resources, iframe descriptors and independent native controls. Rebinding existing
 settled images and registering native controls with their forms can now be prepared
@@ -30,8 +31,30 @@ Detached construction through native-control/SVG staging is committed as `610d6f
 Milestone C's text-only inline intrinsic and completed-line reuse are enabled.
 Eligible lines also avoid repeated work within one refresh's sizing passes.
 Broader block-layout reuse remains deferred.
-The steps below remain the implementation and
-acceptance checklist, with the concrete implementation choices recorded here.
+The dated sections below record implementation and validation history, including
+the temporary feature switch used before this cleanup. Their disabled-build
+results describe those earlier revisions. Current builds always include partial
+updates; only capture/profiling instrumentation remains optional. The steps below
+record the implementation and acceptance checklist.
+
+### Standard implementation cleanup (2026-10-01)
+
+The temporary CMake feature option, all partial-update feature guards and the
+disabled-mode stubs are removed from the renderer, capture helpers and tests.
+Ownership, style reuse, line reuse and their eligibility checks are now standard
+code in every build. Full reconstruction is still required for initial state,
+unsupported dependencies and invalidated inputs; forced-full/CSS-only capture
+overrides continue to test those runtime paths independently. Only optional
+profiling, capture support and diagnostic injection remain conditional.
+
+Both complete builds, including regenerated CSS sources, succeed without the
+retired compiler definition. Validation passes 131 selected Debug ASan/UBSan
+CTests, including six Monkey tests, and 120 Release CTests with profiling OFF.
+Twelve independent saved-page captures compare both Tion/Bihon panels against
+the preceding release and fresh uncached layout: inspected states, resources,
+allocation plateaus, final PNGs, DOM and complete normalized box trees match.
+No generator inputs or layout algorithms change in this cleanup. Comparison
+artifacts are under `out/render-captures/partial-always-on-2026-10-01/`.
 
 ### Milestone A implementation
 
@@ -287,10 +310,10 @@ made for this preparation step.
 
 ### Milestone B preparation: detached region construction (2026-09-30)
 
-`dom_to_box_region()` now builds a bounded candidate using the same scheduled
-traversal, special-element dispatch and normalization as full construction. It is
-available with `WISP_ENABLE_PARTIAL_UPDATES`; the live restyle path does not call
-it yet. This is a construction building block, not enabled box retention or a
+At this stage, `dom_to_box_region()` built a bounded candidate using the same
+scheduled traversal, special-element dispatch and normalization as full construction. It was
+behind the temporary feature switch at this stage; the live restyle path did not
+call it yet. This was a construction building block, not enabled box retention or a
 new performance result.
 
 The builder seeds a private parent from the existing mapped DOM parent's style,
@@ -940,13 +963,13 @@ The driver and raw timing/uninstrumented/stress reports are under
 
 The rollout and its validation are committed as `6b8ffc97`.
 
-The existing guarded path now runs by default in all frontends when
-`WISP_ENABLE_PARTIAL_UPDATES` is enabled. The zero-initialized HTML state permits
+At this rollout, the guarded path became the default in all frontends with the
+temporary feature switch enabled. The zero-initialized HTML state permits
 retention; capture does not need to enable it. `--capture-css-only-restyle` selects
 milestone A for comparison, and `--capture-force-full-restyle` still selects the
 full reference and takes precedence. `--capture-retain-boxes` remains a compatibility
-alias for the default. Disabling partial updates at compile time still removes
-the tracking state and uses full reconstruction.
+alias for the default. At that time, disabling partial updates at compile time
+removed the tracking state and used full reconstruction.
 
 Retention, nonzero/offscreen scrolling and lifecycle tests now exercise the
 default without an opt-in flag. The CSS-reuse reference and its injected restart
@@ -960,10 +983,10 @@ Rollout validation passed the selected CSS, DOM, ownership, layout and Qt suites
 | Release/LTO, partial updates ON, profiling OFF | 120 |
 | Fresh Debug ASan/UBSan build, partial updates OFF, profiling ON | 116 |
 
-The disabled build's reference test reports `feature_disabled` and full selection
-throughout. The enabled tests verify `partial_boxes` after warmup, CSS-only mode,
+The disabled build's reference test reported `feature_disabled` and full selection
+throughout. The enabled tests verified `partial_boxes` after warmup, CSS-only mode,
 rejected-region fallback, injected restart/error recovery and document lifetime.
-All three complete builds pass; no generator changes were needed.
+All three complete builds passed; no generator changes were needed.
 
 Twelve independent Release captures compare default, CSS-only and full refresh
 for both final tab states on both saved Tion and Bihon pages. Every inspected
@@ -1548,11 +1571,11 @@ Important consequences:
 
 **Deliverable:** a repeatable comparison and work counters, with no rendering change.
 
-1. Add the CMake option `WISP_ENABLE_PARTIAL_UPDATES`, initially OFF during
-   development and now ON after milestone A validation. Keep the existing full
-   path intact. Allow captures in an enabled
-   build to force that full path through a separate runtime capture flag, so the
-   same binary can test both implementations. Gate that override with the existing
+1. Keep full reconstruction available as the runtime fallback and an independent
+   capture reference. The temporary CMake feature switch used during development
+   has been removed after rollout validation; partial updates are always built.
+   Captures can force full reconstruction through a runtime capture flag, so the
+   same binary tests both behaviors. Keep that override in the existing
    capture/development facilities.
 2. Extend `WISP_PROFILE_RESTYLE` and capture JSON with update mode, fallback reason,
    dirty roots, invalidated nodes, freshly selected elements, reused styles and
@@ -1569,8 +1592,7 @@ Important consequences:
 **Gate:** the forced-full path reproduces the current tests and captures. Capture
 failures identify the action, update mode, element and differing field. Tests must
 assert from the recorded update mode that a later partial run actually used the
-partial path; the compile-time option alone is insufficient. Fallback must not
-silently make all comparisons pass.
+partial path. Fallback must not silently make all comparisons pass.
 
 ## Phase 1: record changes and compute conservative CSS scopes
 
@@ -1923,8 +1945,8 @@ LD_LIBRARY_PATH=/tmp/wisp-check-install/lib \
   -R '^(libcss_|css_.*test|layout_.*test|qt_)'
 ```
 
-Let Ninja choose its default parallelism. Build and test both feature-enabled and
-feature-disabled configurations before enabling a milestone by default.
+Let Ninja choose its default parallelism. Build and test with profiling enabled
+and disabled; partial updates are included in both configurations.
 
 For timing, follow [the capture profiling protocol](../../frontends/qt/CAPTURE.md).
 Use Release/LTO, optional restyle counters and no trace logging. Warm both panels,

@@ -85,9 +85,7 @@ struct box_construct_ctx {
     box_construct_region_cb region_cb;
     void *region_pw;
     nserror error; /**< Also carries errors from generated content */
-#ifdef WISP_ENABLE_PARTIAL_UPDATES
     dom_node *owner_node; /**< Borrowed boundary of an arena in full construction */
-#endif
 };
 
 /**
@@ -208,12 +206,10 @@ static css_select_results *box_get_style(
     css_select_results *styles;
     nscss_select_ctx ctx;
 
-#ifdef WISP_ENABLE_PARTIAL_UPDATES
     if (html_restyle_reuse_style(c, n, &styles) != NSERROR_OK)
         return NULL;
     if (styles != NULL)
         return styles;
-#endif
     HTML_PROFILE(if (c->restyling) c->restyle_profile.styled_elements++);
 
     /* Firstly, construct inline stylesheet, if any */
@@ -839,7 +835,6 @@ static bool box_construct_region_root(const struct box *box)
     return box != NULL && box_construct_region_style(box->type, box->style);
 }
 
-#ifdef WISP_ENABLE_PARTIAL_UPDATES
 /* Establish ownership during a normal full reconstruction, only for scopes
  * already selected by checked-state invalidation. Nested scopes share the outer
  * arena. This does not enable replacement or prove boundary closure. */
@@ -873,7 +868,6 @@ void *box_construct_region_owner(const struct box *box)
 {
     return box != NULL && (box->flags & OWNS_REGION) ? talloc_parent(box) : NULL;
 }
-#endif
 
 /**
  * Construct the box tree for an XML element.
@@ -915,9 +909,7 @@ static bool box_construct_element(struct box_construct_ctx *ctx, bool *convert_c
     if (styles == NULL)
         goto error;
 
-#ifdef WISP_ENABLE_PARTIAL_UPDATES
     box_construct_begin_owner(ctx, &props, styles->styles[CSS_PSEUDO_ELEMENT_NONE]);
-#endif
 
     /* Extract title attribute, if present */
     err = dom_element_get_attribute(ctx->n, corestring_dom_title, &title0);
@@ -1043,12 +1035,10 @@ static bool box_construct_element(struct box_construct_ctx *ctx, bool *convert_c
         goto error;
     }
 
-#ifdef WISP_ENABLE_PARTIAL_UPDATES
     /* Special handlers may change the provisional CSS box type. Such a scope
      * can keep its allocations grouped, but must not advertise a usable owner. */
     if (ctx->owner_node == ctx->n && box_construct_region_root(box))
         box->flags |= OWNS_REGION;
-#endif
 
     if (!box_construct_push(ctx, box, props.containing_block))
         goto error;
@@ -1169,14 +1159,12 @@ static nserror next_node(struct box_construct_ctx *ctx, bool convert_children)
             if (ctx->error != NSERROR_OK)
                 return ctx->error;
         }
-#ifdef WISP_ENABLE_PARTIAL_UPDATES
         /* Include the boundary's ::after in its arena, then return siblings and
          * following text to the document owner. Also handles skipped roots. */
         if (n == ctx->owner_node) {
             ctx->bctx = ctx->content->bctx;
             ctx->owner_node = NULL;
         }
-#endif
         if (n == ctx->root_node) {
             dom_node_unref(n);
             ctx->n = NULL;
@@ -1692,7 +1680,7 @@ static void convert_xml_to_box(void *p)
 
         /* Check for yield every 64 nodes */
         if ((++num_processed & 0x3F) == 0) {
-#if defined(WISP_ENABLE_PARTIAL_UPDATES) && defined(WISP_PROFILE_RESTYLE)
+#ifdef WISP_PROFILE_RESTYLE
             if (ctx->content->restyling && ctx->content->restyle.slow_restyle)
                 break;
 #endif
@@ -1709,7 +1697,7 @@ static void convert_xml_to_box(void *p)
         if (ctx->content->restyling) ctx->content->restyle_profile.construction_ns += html_profile_now() - slice_start);
     /* More work to do: schedule a continuation */
     int delay = 0;
-#if defined(WISP_ENABLE_PARTIAL_UPDATES) && defined(WISP_PROFILE_RESTYLE)
+#ifdef WISP_PROFILE_RESTYLE
     if (ctx->content->restyling && ctx->content->restyle.slow_restyle)
         delay = 50;
 #endif
@@ -1763,7 +1751,6 @@ void box_construct_region_destroy(struct box_construct_region *region)
     talloc_free(region);
 }
 
-#ifdef WISP_ENABLE_PARTIAL_UPDATES
 nserror dom_to_box_region(dom_node *node, html_content *content, const struct box *parent, void *owner,
     box_construct_region_cb cb, void *pw, void **box_conversion_context)
 {
@@ -1822,7 +1809,6 @@ no_memory:
     box_construct_ctx_free(ctx);
     return NSERROR_NOMEM;
 }
-#endif
 
 /* exported function documented in html/box_construct.h */
 nserror cancel_dom_to_box(void *box_conversion_context)

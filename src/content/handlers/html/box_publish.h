@@ -4,7 +4,6 @@
 
 #include <wisp/utils/errors.h>
 
-#ifdef WISP_ENABLE_PARTIAL_UPDATES
 struct html_content;
 struct box_construct_region;
 
@@ -29,5 +28,4 @@ struct box_construct_region;
  */
 nserror
 html_box_publish_region(struct html_content *html, struct box_construct_region **candidate, const char **reason);
-#endif
 #endif

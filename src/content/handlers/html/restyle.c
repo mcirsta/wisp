@@ -11,7 +11,6 @@
 #include "content/handlers/html/restyle.h"
 #include "content/handlers/html/restyle_profile.h"
 
-#ifdef WISP_ENABLE_PARTIAL_UPDATES
 struct html_restyle_entry {
     dom_node *node;
     const css_select_results *styles; /* Borrowed until the old bctx is retired. */
@@ -104,19 +103,15 @@ static bool contains(dom_node *root, dom_node *node, bool *match)
     }
     return true;
 }
-#endif
 
 void html_restyle_record_full(html_content *html, const char *reason)
 {
-#ifdef WISP_ENABLE_PARTIAL_UPDATES
     clear_roots(&html->restyle.pending);
     html->restyle.pending.full_reason = reason;
-#endif
 }
 
 void html_restyle_record_checked(html_content *html, dom_node *node)
 {
-#ifdef WISP_ENABLE_PARTIAL_UPDATES
     struct html_restyle_changes *changes = &html->restyle.pending;
     dom_node *parent = NULL;
     changes->changed_controls++;
@@ -154,26 +149,20 @@ void html_restyle_record_checked(html_content *html, dom_node *node)
 invalid:
     dom_node_unref(parent);
     html_restyle_record_full(html, "invalid_scope");
-#endif
 }
 
 void html_restyle_note_dom_change(html_content *html)
 {
-#ifdef WISP_ENABLE_PARTIAL_UPDATES
     if (html != NULL && html->had_initial_layout)
         html->restyle.dom_generation++;
-#endif
 }
 
 void html_restyle_discard_pending(html_content *html)
 {
-#ifdef WISP_ENABLE_PARTIAL_UPDATES
     clear_roots(&html->restyle.pending);
     memset(&html->restyle.pending, 0, sizeof(html->restyle.pending));
-#endif
 }
 
-#ifdef WISP_ENABLE_PARTIAL_UPDATES
 static void discard_active(html_content *html)
 {
     clear_roots(&html->restyle.active);
@@ -219,15 +208,12 @@ static nserror collect_style(dom_node *node, void *pw)
     state->entries[state->count++] = (struct html_restyle_entry){node, box->styles};
     return NSERROR_OK;
 }
-#endif
 
 void html_restyle_reset(html_content *html)
 {
     html_restyle_discard_pending(html);
-#ifdef WISP_ENABLE_PARTIAL_UPDATES
     discard_active(html);
     html->restyle.styled_inputs.valid = false;
-#endif
 }
 
 void html_restyle_close(html_content *html)
@@ -245,16 +231,13 @@ void html_restyle_close(html_content *html)
 
 void html_restyle_use_full(html_content *html, const char *reason)
 {
-#ifdef WISP_ENABLE_PARTIAL_UPDATES
     discard_active(html);
-#endif
     HTML_PROFILE(html->restyle_profile.update_mode = "full"; html->restyle_profile.fallback_reason = reason);
 }
 
 void html_restyle_begin(html_content *html)
 {
     HTML_PROFILE(html->restyle_profile.update_mode = "full");
-#ifdef WISP_ENABLE_PARTIAL_UPDATES
     struct html_restyle_state *state = &html->restyle;
     discard_active(html);
     state->active = state->pending;
@@ -296,16 +279,12 @@ void html_restyle_begin(html_content *html)
     HTML_PROFILE(html->restyle_profile.update_mode = "partial_css";
         html->restyle_profile.fallback_reason = NULL;
         html->restyle_profile.temporary_bytes = state->capacity * sizeof(*state->entries));
-#else
-    HTML_PROFILE(html->restyle_profile.fallback_reason = "feature_disabled");
-#endif
 }
 
 nserror html_restyle_invalidate(html_content *html)
 {
     uint32_t count = 0;
     nserror err;
-#ifdef WISP_ENABLE_PARTIAL_UPDATES
     if (html->restyle.partial) {
         for (uint32_t i = 0; i < html->restyle.active.count; i++) {
             uint32_t part;
@@ -314,9 +293,7 @@ nserror html_restyle_invalidate(html_content *html)
             if (err != NSERROR_OK)
                 return err;
         }
-    } else
-#endif
-    {
+    } else {
         err = nscss_invalidate_subtree((dom_node *)html->document, &count);
         if (err != NSERROR_OK)
             return err;
@@ -327,7 +304,6 @@ nserror html_restyle_invalidate(html_content *html)
 
 nserror html_restyle_capture_inputs(html_content *html)
 {
-#ifdef WISP_ENABLE_PARTIAL_UPDATES
     /* Detachment can synchronize a previously unseen selector-visible edit. */
     if (html->restyle.partial && html->restyle.dom_generation != html->restyle.styled_generation) {
         html_restyle_use_full(html, "detach_changed");
@@ -337,14 +313,12 @@ nserror html_restyle_capture_inputs(html_content *html)
     }
     html->restyle.active_generation = html->restyle.dom_generation;
     html->restyle.active_inputs = inputs(html);
-#endif
     return NSERROR_OK;
 }
 
 nserror html_restyle_reuse_style(html_content *html, dom_node *node, css_select_results **styles)
 {
     *styles = NULL;
-#ifdef WISP_ENABLE_PARTIAL_UPDATES
     if (html->restyle.partial) {
         struct html_restyle_entry key = {.node = node};
         const struct html_restyle_entry *entry = bsearch(&key, html->restyle.entries, html->restyle.count,
@@ -366,13 +340,11 @@ nserror html_restyle_reuse_style(html_content *html, dom_node *node, css_select_
         HTML_PROFILE(html->restyle_profile.invalidated_nodes += invalidated);
         return err;
     }
-#endif
     return NSERROR_OK;
 }
 
 bool html_restyle_needs_restart(html_content *html)
 {
-#ifdef WISP_ENABLE_PARTIAL_UPDATES
     if (html->restyle.partial) {
         HTML_PROFILE(if (html->restyle.force_restart &&
             (html->restyle.css_only || html->restyle_old_bctx == NULL) &&
@@ -385,13 +357,11 @@ bool html_restyle_needs_restart(html_content *html)
             html->restyle.pending.changed_controls != 0 || html->restyle.pending.full_reason != NULL ||
             !same_inputs(&current, &html->restyle.active_inputs);
     }
-#endif
     return false;
 }
 
 void html_restyle_end(html_content *html, bool success)
 {
-#ifdef WISP_ENABLE_PARTIAL_UPDATES
     if (success) {
         struct html_restyle_inputs current = inputs(html);
         html->restyle.styled_generation = html->restyle.active_generation;
@@ -402,5 +372,4 @@ void html_restyle_end(html_content *html, bool success)
         html->restyle.styled_inputs.valid = false;
     }
     discard_active(html);
-#endif
 }

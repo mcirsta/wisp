@@ -115,7 +115,6 @@ struct box_construct_region {
 typedef void (*box_construct_region_cb)(
     struct html_content *content, nserror error, struct box_construct_region *region, void *pw);
 
-#ifdef WISP_ENABLE_PARTIAL_UPDATES
 /** Allocation owner for an earmarked visible scope in a full reconstruction,
  * or NULL if it has no independent owner. Includes generated/anonymous boxes
  * and skipped descendants. Borrowed inherited data still belongs to ancestors.
@@ -147,7 +146,6 @@ void *box_construct_region_owner(const struct box *box);
  */
 nserror dom_to_box_region(struct dom_node *node, struct html_content *content, const struct box *parent, void *owner,
     box_construct_region_cb cb, void *pw, void **box_conversion_context);
-#endif
 
 /** Fetch through the existing document path, or stage a region-owned request.
  * A non-NULL region never modifies live resource bindings or loading state. */

@@ -44,7 +44,6 @@ struct gui_layout_table;
  */
 bool layout_document(struct html_content *content, int width, int height);
 
-#ifdef WISP_ENABLE_PARTIAL_UPDATES
 /**
  * Discard derived layout state after publishing a replacement box region.
  * The normalized construction tree, styles, resources and widgets survive.
@@ -58,6 +57,5 @@ bool layout_document(struct html_content *content, int width, int height);
  * the document's final positioning/bounds passes still run normally.
  */
 void layout_reset_document(struct html_content *content);
-#endif
 
 #endif

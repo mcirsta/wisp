@@ -6,7 +6,6 @@
 #include "content/handlers/html/box_construct.h"
 #include "utils/talloc.h"
 
-#ifdef WISP_ENABLE_PARTIAL_UPDATES
 struct allocation {
     uintptr_t start;
     size_t size;
@@ -240,4 +239,3 @@ nserror html_box_check_boundary(const html_content *html, const struct box *old_
     talloc_free(b);
     return err;
 }
-#endif

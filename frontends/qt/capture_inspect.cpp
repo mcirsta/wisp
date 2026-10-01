@@ -135,7 +135,6 @@ static QJsonObject describe(struct box *box, const html_content *html)
     result["text_offset"] = double(box->byte_offset);
     result["scrollbars"] = QJsonObject{{"horizontal", box->scroll_x != nullptr}, {"vertical", box->scroll_y != nullptr},
         {"x", scrollbar_get_offset(box->scroll_x)}, {"y", scrollbar_get_offset(box->scroll_y)}};
-#ifdef WISP_ENABLE_PARTIAL_UPDATES
     if (!html->restyle.css_only && !html->restyle.force_full)
         result["box_address"] = QString::number(reinterpret_cast<quintptr>(box), 16);
     if (box->flags & OWNS_REGION) {
@@ -143,7 +142,6 @@ static QJsonObject describe(struct box *box, const html_content *html)
         html_box_check_boundary(html, box, nullptr, &reason);
         result["box_boundary"] = reason;
     }
-#endif
     result["margin_trbl"] = QJsonArray{box->margin[TOP], box->margin[RIGHT], box->margin[BOTTOM], box->margin[LEFT]};
     result["padding_trbl"] = QJsonArray{
         box->padding[TOP], box->padding[RIGHT], box->padding[BOTTOM], box->padding[LEFT]};
@@ -235,10 +233,8 @@ QJsonObject nsqt_capture_inspect(struct hlcache_handle *content, const QStringLi
     result["status"] = "ok";
     result["resource_count"] = int(html->num_objects);
     result["active_resources"] = int(html->base.active - html->scripts_active);
-#ifdef WISP_ENABLE_PARTIAL_UPDATES
     if (!html->restyle.css_only && !html->restyle.force_full)
         result["tree_allocations"] = double(talloc_total_blocks(html->bctx));
-#endif
 #ifdef WISP_PROFILE_RESTYLE
     const auto &p = html->restyle_profile;
     if (p.total_ns != 0) {
@@ -350,9 +346,6 @@ void nsqt_capture_configure_restyle(struct hlcache_handle *content, bool force, 
 {
     Q_UNUSED(restart);
     Q_UNUSED(fail);
-    Q_UNUSED(no_intrinsic_reuse);
-    Q_UNUSED(no_inline_layout_reuse);
-#ifdef WISP_ENABLE_PARTIAL_UPDATES
     if (content && content_get_type(content) == CONTENT_HTML) {
         auto *html = reinterpret_cast<html_content *>(hlcache_handle_get_content(content));
         html->restyle.force_full = force;
@@ -364,11 +357,6 @@ void nsqt_capture_configure_restyle(struct hlcache_handle *content, bool force, 
         html->restyle.fail_retained_layout = fail;
 #endif
     }
-#else
-    Q_UNUSED(content);
-    Q_UNUSED(force);
-    Q_UNUSED(css_only);
-#endif
 }
 
 bool nsqt_capture_settled(struct hlcache_handle *content)
@@ -398,7 +386,7 @@ QJsonObject nsqt_capture_restyle_lifecycle(struct content *content, bool slow)
 {
     Q_UNUSED(content);
     Q_UNUSED(slow);
-#if defined(WISP_ENABLE_PARTIAL_UPDATES) && defined(WISP_PROFILE_RESTYLE)
+#ifdef WISP_PROFILE_RESTYLE
     if (content && content->handler->type() == CONTENT_HTML) {
         auto *html = reinterpret_cast<html_content *>(content);
         html->restyle.slow_restyle = slow;

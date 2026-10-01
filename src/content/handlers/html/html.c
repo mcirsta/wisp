@@ -1460,7 +1460,6 @@ static void html_restyle_free_old(html_content *html)
     html->restyle_old_frameset = NULL;
 }
 
-#ifdef WISP_ENABLE_PARTIAL_UPDATES
 /* Retained scrollbars can be off-screen, so update them before paint/hit testing.
  * Keep their pixel offsets where possible; the ordinary scrollbar resize API
  * scales offsets proportionally. Reflow suppresses its redraw callbacks. */
@@ -1494,7 +1493,6 @@ static bool html_restyle_scrollbars(html_content *html)
     html->reflowing = false;
     return true;
 }
-#endif
 
 static void html_restyle_finish(html_content *html, bool success, bool retained)
 {
@@ -1504,7 +1502,6 @@ static void html_restyle_finish(html_content *html, bool success, bool retained)
         html->restyle_profile.construction_wall_ns = layout_start - html->restyle_profile.construction_start_ns -
             html->restyle_profile.publication_ns);
     html->box_conversion_context = NULL;
-#ifdef WISP_ENABLE_PARTIAL_UPDATES
     if (success && retained) {
         HTML_PROFILE_START(reset_start);
         layout_reset_document(html);
@@ -1516,17 +1513,12 @@ static void html_restyle_finish(html_content *html, bool success, bool retained)
         success = false;
     }
 #endif
-#endif
     if (success) {
         /* Force layout even if a newly visible image is still downloading. */
         success = html_layout(&html->base, html->base.available_width, html->base.available_height);
     }
-#ifdef WISP_ENABLE_PARTIAL_UPDATES
     if (success && retained)
         success = html_restyle_scrollbars(html);
-#else
-    (void)retained;
-#endif
     HTML_PROFILE_START(cleanup_start);
     HTML_PROFILE(html->restyle_profile.layout_ns = cleanup_start - layout_start;
         uint64_t cpu_end = html_profile_cpu_now();
@@ -1634,7 +1626,6 @@ static void html_restyle_start_full(html_content *html)
         html_restyle_done(html, false);
 }
 
-#ifdef WISP_ENABLE_PARTIAL_UPDATES
 static void
 html_restyle_region_done(html_content *html, nserror error, struct box_construct_region *candidate, void *pw)
 {
@@ -1669,7 +1660,6 @@ html_restyle_region_done(html_content *html, nserror error, struct box_construct
     }
     html_restyle_start_full(html);
 }
-#endif
 
 static void html_restyle(void *pw)
 {
@@ -1692,7 +1682,6 @@ static void html_restyle(void *pw)
     guit->misc->schedule(-1, html_deferred_reformat, html);
     html->pending_reformat = false;
 
-#ifdef WISP_ENABLE_PARTIAL_UPDATES
     /* Frames are excluded by the publisher. Reject them before construction so
      * these pages keep milestone A's style reuse instead of selecting twice. */
     if (!html->restyle.css_only && html->restyle.partial && html->restyle.active.count == 1 &&
@@ -1712,7 +1701,6 @@ static void html_restyle(void *pw)
             return;
         }
     }
-#endif
     html_restyle_start_full(html);
 }
 

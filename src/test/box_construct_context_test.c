@@ -478,7 +478,6 @@ START_TEST(test_list_image_cascade)
 }
 END_TEST
 
-#ifdef WISP_ENABLE_PARTIAL_UPDATES
 /* Exercise the real selective-style lifecycle: its full reconstruction is what
  * first establishes owners for later retained-box work. Keep the old arena alive
  * until borrowed styles have been cloned and the active table discarded. */
@@ -2647,7 +2646,6 @@ START_TEST(test_detached_cancel_or_fail)
     dom_node_unref(outer);
 }
 END_TEST
-#endif
 
 int main(void)
 {
@@ -2665,7 +2663,6 @@ int main(void)
     tcase_add_test(tc, test_initial_schedule_failure);
     tcase_add_test(tc, test_continuation_schedule_failure);
     tcase_add_loop_test(tc, test_list_image_cascade, 0, 4);
-#ifdef WISP_ENABLE_PARTIAL_UPDATES
     tcase_add_loop_test(tc, test_region_publication_positions, 0, 12);
     tcase_add_loop_test(tc, test_region_publication_rejected, 0, 14);
     tcase_add_test(tc, test_region_publication_after_layout);
@@ -2709,15 +2706,12 @@ int main(void)
     tcase_add_loop_test(tc, test_detached_control_allocation_failure, 0, 2);
 #endif
     tcase_add_loop_test(tc, test_detached_staging_cleanup, 0, 3);
-#endif
     suite_add_tcase(suite, tc);
-#ifdef WISP_ENABLE_PARTIAL_UPDATES
     tc = tcase_create("Retained layout");
     tcase_add_checked_fixture(tc, setup, teardown);
     tcase_add_loop_test(tc, test_region_retained_layout, 0, 54);
     tcase_add_loop_test(tc, test_region_retained_list_numbering, 0, 4);
     suite_add_tcase(suite, tc);
-#endif
     SRunner *runner = srunner_create(suite);
     srunner_run_all(runner, CK_NORMAL);
     int failed = srunner_ntests_failed(runner);

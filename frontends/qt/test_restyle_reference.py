@@ -8,7 +8,6 @@ import sys
 import tempfile
 
 binary = Path(sys.argv[1]).resolve()
-tracking = sys.argv[2] == "1"
 fixture = Path(__file__).resolve().parents[2] / "test/restyle-tracking.html"
 ids = ("outside", "field-message", "notes", "notes-message", "tabs", "first", "second",
        "first-panel", "second-panel", "after")
@@ -39,23 +38,22 @@ def run(destination, force, restart=False):
     for index in (5, 6, 7):
         step = steps[index]
         profile = step["restyle_profile"]
-        partial = tracking and not force and not restart and index > 5
+        partial = not force and not restart and index > 5
         assert profile["update_mode"] == ("partial_css" if partial else "full"), (force, restart, index, profile)
-        reason = ("feature_disabled" if not tracking else "forced_full" if force else
+        reason = ("forced_full" if force else
                   "dom_changed" if index == 5 else "inputs_changed_during_build" if restart else "none")
         assert profile["fallback_reason"] == reason, (force, restart, index, profile)
         assert profile["invalidated_nodes"] > 0 and profile["styled_elements"] > 0, (force, index, profile)
         assert profile["layout_reset_ms"] == 0, (force, index, profile)
         if profile["layout_cpu_ms"] is not None:
             assert 0 < profile["layout_cpu_ms"] <= profile["layout_ms"] + 0.5, (force, index, profile)
-        if tracking and not force and index > 5:
+        if not force and index > 5:
             assert profile["reused_styles"] > 0 and profile["temporary_bytes"] > 0, (index, profile)
             assert profile["cloned_result_bytes"] > 0 and profile["style_references"] > 0, (index, profile)
             assert profile["restarts"] == int(restart), (index, profile)
         else:
             assert profile["reused_styles"] == 0 and profile["temporary_bytes"] == 0, (force, index, profile)
-        if tracking:
-            assert profile["changed_controls"] == 2 and profile["dirty_roots"] == 1, (force, index, profile)
+        assert profile["changed_controls"] == 2 and profile["dirty_roots"] == 1, (force, index, profile)
         elements = {e["id"]: e for e in step["elements"]}
         for element in elements.values():
             for box in element["boxes"]:

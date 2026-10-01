@@ -1810,7 +1810,6 @@ form_submit(nsurl *page_url, struct browser_window *target, struct form *form, s
  * state. Notice edits now: a subsequent restyle may have nothing left to sync. */
 static dom_exception form_set_dom_value(struct form_control *control, dom_string *value)
 {
-#ifdef WISP_ENABLE_PARTIAL_UPDATES
     dom_string *old = NULL;
     dom_exception err = control->type == GADGET_TEXTAREA ? dom_node_get_text_content(control->node, &old)
                                                          : dom_html_input_element_get_value(control->node, &old);
@@ -1830,7 +1829,6 @@ static dom_exception form_set_dom_value(struct form_control *control, dom_string
     if (changed)
         html_restyle_note_dom_change(control->html);
     dom_string_unref(old);
-#endif
     if (control->type == GADGET_TEXTAREA)
         return dom_html_text_area_element_set_value(control->node, value);
     return dom_html_input_element_set_value(control->node, value);

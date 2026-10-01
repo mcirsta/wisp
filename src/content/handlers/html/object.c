@@ -48,10 +48,8 @@
 #include <wisp/content/handlers/html/interaction.h>
 #include <wisp/content/handlers/html/private.h>
 #include "content/handlers/html/object.h"
-#ifdef WISP_ENABLE_PARTIAL_UPDATES
 #include "content/handlers/html/box_construct.h"
 #include "utils/talloc.h"
-#endif
 
 /* Performance tracing - enable via CMake: -DNEOSURF_ENABLE_PERF_TRACE=ON */
 #include <wisp/utils/perf.h>
@@ -921,7 +919,6 @@ static bool html_reuse_object(html_content *c, struct box *box, nsurl *url, cont
     return false;
 }
 
-#ifdef WISP_ENABLE_PARTIAL_UPDATES
 struct html_object_binding {
     struct content_html_object *object;
     struct box *old_box;
@@ -1085,7 +1082,6 @@ void html_object_discard_bindings(struct html_object_binding_plan *plan)
 {
     talloc_free(plan);
 }
-#endif
 
 
 /* exported interface documented in html/object.h */

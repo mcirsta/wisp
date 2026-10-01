@@ -9,7 +9,6 @@
 #include "utils/libdom.h"
 #include "utils/talloc.h"
 
-#ifdef WISP_ENABLE_PARTIAL_UPDATES
 struct mapping {
     dom_node *node, *parent;
     struct box *old, *fresh;
@@ -246,4 +245,3 @@ void html_box_discard_mappings(struct html_box_mapping_plan *plan)
 {
     talloc_free(plan);
 }
-#endif

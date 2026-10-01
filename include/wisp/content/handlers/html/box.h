@@ -411,10 +411,8 @@ struct box {
      */
     int space;
 
-#ifdef WISP_ENABLE_PARTIAL_UPDATES
     /** Available width that produced cached inline lines; not their overflow width. */
     int inline_layout_width;
-#endif
 
     /**
      * Byte offset within a textual representation of this content.

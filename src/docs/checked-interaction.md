@@ -69,20 +69,18 @@ visible frames get initialized/loaded. A hidden frame keeps its browsing context
 and is rebound when shown. Arbitrary DOM insertion/removal of iframe elements is
 outside this state-only refresh contract.
 
-This deliberately rebuilds the whole presentation. It costs one CSS update,
-box-construction and layout pass per coalesced batch; retaining the old allocation
-context until rebinding also temporarily increases peak box memory. The
-[partial-update implementation plan](partial-updates.md) describes staged work
-to reuse unaffected styles first, then consider retained box regions and selective
-layout after measurement. Selective style reuse and a forced-full capture comparison
-are implemented behind `WISP_ENABLE_PARTIAL_UPDATES` (default ON). After one full
-state refresh establishes a baseline, eligible updates select CSS only in dirty
-scopes and for elements without a reusable result. Input changes and unsupported
-selectors fall back to full selection; changes during conversion restart it before
-publication. Reuse currently requires scripting to be disabled. Region ownership
-preparation has started; box replacement and partial layout are not implemented
-yet. See the
-plan for ownership details, validation and current measurements.
+Full reconstruction remains the fallback for updates that cannot safely reuse
+styles or boxes. Partial updates are now standard in every build, without a
+compile-time feature switch. After a full state refresh establishes a baseline,
+eligible updates select CSS only in dirty scopes and for elements without a
+reusable result. Safe region updates also retain unaffected boxes and eligible
+text measurements/completed lines. Parent layout, final positioning and bounds
+updates still run. Input changes and unsupported selectors fall back to full
+selection; changes during conversion restart it before publication. Reuse
+currently requires scripting to be disabled. The forced-full capture mode
+remains an independent test reference. See the
+[partial-update implementation record](partial-updates.md) for ownership,
+fallbacks, validation and measurements.
 
 The radio-peer lookup now uses one document traversal instead of indexed NodeList
 lookups that repeatedly start from the root. It still resolves form ownership

@@ -145,7 +145,6 @@ option(WISP_ENABLE_GPROF "Enable gprof profiling instrumentation (-pg)" OFF)
 option(WISP_ENABLE_FINSTRUMENT "Enable function tracing (-finstrument-functions)" OFF)
 option(WISP_ENABLE_PERF_TRACE "Enable PERF() macro timing traces to stderr" OFF)
 option(WISP_PROFILE_RESTYLE "Collect checked-state refresh timings for capture inspection" OFF)
-option(WISP_ENABLE_PARTIAL_UPDATES "Enable selective CSS and retained-box updates for native checked state" ON)
 option(WISP_ENABLE_INCREMENTAL_REFLOW "Enable incremental page reflow as images load (slower but progressive)" OFF)
 option(WISP_USE_NATIVE_GRADIENTS "Use native frontend gradient rendering when available (faster, better quality)" ON)
 option(WISP_DEVICE_PIXEL_LAYOUT "Layout engine works in device pixels (requires DPI scaling for images)" ${DEFAULT_DEVICE_PIXEL_LAYOUT})
@@ -162,10 +161,6 @@ endif()
 
 if(WISP_PROFILE_RESTYLE)
     add_compile_definitions(WISP_PROFILE_RESTYLE=1)
-endif()
-
-if(WISP_ENABLE_PARTIAL_UPDATES)
-    add_compile_definitions(WISP_ENABLE_PARTIAL_UPDATES=1)
 endif()
 
 if(WISP_ENABLE_INCREMENTAL_REFLOW)

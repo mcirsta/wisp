@@ -4,7 +4,6 @@
 
 #include <wisp/utils/errors.h>
 
-#ifdef WISP_ENABLE_PARTIAL_UPDATES
 struct html_content;
 struct box;
 struct box_construct_region;
@@ -26,5 +25,4 @@ struct box_construct_region;
  */
 nserror html_box_check_boundary(const struct html_content *html, const struct box *old_root,
     const struct box_construct_region *candidate, const char **reason);
-#endif
 #endif

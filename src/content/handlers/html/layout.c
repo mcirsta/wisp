@@ -1038,10 +1038,8 @@ static bool layout_minmax_line(struct box *first, int *line_min, int *line_max, 
 }
 
 
-#ifdef WISP_ENABLE_PARTIAL_UPDATES
 static bool layout_can_reuse_inline_intrinsics(const struct box *box);
 static void layout_discard_inline_layout(struct box *box);
-#endif
 
 /**
  * Calculate minimum and maximum width of an inline container.
@@ -1063,7 +1061,6 @@ static bool layout_minmax_inline_container(struct box *inline_container, bool *h
 
     assert(inline_container->type == BOX_INLINE_CONTAINER);
 
-#ifdef WISP_ENABLE_PARTIAL_UPDATES
     if (inline_container->flags & REUSE_INLINE_INTRINSICS) {
         inline_container->flags &= ~REUSE_INLINE_INTRINSICS;
         /* NEED_MIN comes from the freshly measured ancestors. A cache measured
@@ -1084,7 +1081,6 @@ static bool layout_minmax_inline_container(struct box *inline_container, bool *h
                 ((html_content *)content)->restyle_profile.inline_layout_intrinsic_misses++);
         }
     }
-#endif
     /* check if the widths have already been calculated */
     if (inline_container->max_width != UNKNOWN_MAX_WIDTH)
         return true;
@@ -1108,13 +1104,11 @@ static bool layout_minmax_inline_container(struct box *inline_container, bool *h
         *has_height = height;
     inline_container->min_width.value = min;
     inline_container->max_width = max;
-#ifdef WISP_ENABLE_PARTIAL_UPDATES
     inline_container->flags &= ~(INLINE_INTRINSIC_HEIGHT | INLINE_INTRINSIC_NEED_MIN);
     if (height)
         inline_container->flags |= INLINE_INTRINSIC_HEIGHT;
     if (inline_container->flags & NEED_MIN)
         inline_container->flags |= INLINE_INTRINSIC_NEED_MIN;
-#endif
 
     assert(0 <= inline_container->min_width.value && inline_container->min_width.value <= inline_container->max_width);
     return true;
@@ -4082,7 +4076,6 @@ static void layout_rejoin_text(struct box *box)
     }
 }
 
-#ifdef WISP_ENABLE_PARTIAL_UPDATES
 static bool layout_can_reuse_inline_layout(const struct box *box)
 {
     if (!layout_can_reuse_inline_intrinsics(box))
@@ -4096,7 +4089,6 @@ static bool layout_can_reuse_inline_layout(const struct box *box)
     }
     return true;
 }
-#endif
 
 /**
  * Layout lines of text or inline boxes with floats.
@@ -4119,7 +4111,6 @@ static bool layout_inline_container(
     int curwidth, maxwidth = width;
 
     assert(inline_container->type == BOX_INLINE_CONTAINER);
-#ifdef WISP_ENABLE_PARTIAL_UPDATES
     if (inline_container->flags & REUSE_INLINE_LAYOUT) {
         if (inline_container->inline_layout_width == width && cont->float_children == NULL) {
             /* No floats or positioned descendants: the saved coordinates are
@@ -4153,7 +4144,6 @@ static bool layout_inline_container(
         return true;
     }
     inline_container->flags &= ~(INLINE_LAYOUT_VALID | INLINE_LAYOUT_CURRENT);
-#endif
     HTML_PROFILE(if (content->restyling) content->restyle_profile.inline_layout_calculations++);
     inline_container->width = width;
     inline_container->flags &= ~HAS_BASELINE;
@@ -4210,7 +4200,6 @@ static bool layout_inline_container(
 
     inline_container->width = maxwidth;
     inline_container->height = y;
-#ifdef WISP_ENABLE_PARTIAL_UPDATES
     HTML_PROFILE(if (content->restyling && !content->restyle.no_inline_layout_reuse) {
         if (!layout_can_reuse_inline_layout(inline_container))
             content->restyle_profile.inline_layout_other_exclusions++;
@@ -4224,7 +4213,6 @@ static bool layout_inline_container(
         if (content->restyling && !content->restyle.no_intrinsic_reuse)
             inline_container->flags |= INLINE_LAYOUT_CURRENT;
     }
-#endif
 
     /* Log inline container final dimensions */
     NSLOG(wisp, INFO, "INLINE_CONTAINER_DONE: ic=%p parent=%p ic_y=%d ic_height=%d (parent_list_marker=%p)",
@@ -6063,11 +6051,9 @@ static void layout_position_relative(const css_unit_ctx *unit_len_ctx, struct bo
 
     assert(root);
 
-#ifdef WISP_ENABLE_PARTIAL_UPDATES
     /* No further sizing uses the current-pass permission. Expire it on this
      * existing walk so ordinary reflows cannot reuse an earlier pass's lines. */
     root->flags &= ~(REUSE_INLINE_LAYOUT | INLINE_LAYOUT_CURRENT);
-#endif
 
     /* Normal children */
     for (box = root->children; box; box = box->next) {
@@ -6594,7 +6580,6 @@ static void layout_log_final_box_heights(const css_unit_ctx *unit_len_ctx, struc
 }
 
 
-#ifdef WISP_ENABLE_PARTIAL_UPDATES
 /* Only these containers keep their intrinsic min/max fields through used
  * layout. Blocks overwrite theirs with CSS sizing constraints. Exclude atomic
  * children, floats and widgets: their measurement depends on more than the
@@ -6701,7 +6686,6 @@ void layout_reset_document(html_content *content)
         box = box == root ? NULL : box->next;
     }
 }
-#endif
 
 /* exported function documented in html/layout.h */
 bool layout_document(html_content *content, int width, int height)
@@ -6741,11 +6725,9 @@ bool layout_document(html_content *content, int width, int height)
         doc->height = height -
             (doc->y + doc->padding[TOP] + doc->padding[BOTTOM] + doc->border[BOTTOM].width + doc->margin[BOTTOM]);
         if (doc->children) {
-#ifdef WISP_ENABLE_PARTIAL_UPDATES
             /* The first child can be an anonymous inline container when body
              * is inline. Its stretched height is no longer the line result. */
             doc->children->flags &= ~(INLINE_LAYOUT_VALID | INLINE_LAYOUT_CURRENT);
-#endif
             doc->children->height = doc->height -
                 (doc->children->margin[TOP] + doc->children->border[TOP].width + doc->children->padding[TOP] +
                     doc->children->padding[BOTTOM] + doc->children->border[BOTTOM].width +
@@ -6765,7 +6747,6 @@ bool layout_document(html_content *content, int width, int height)
     return true;
 
 failed:
-#ifdef WISP_ENABLE_PARTIAL_UPDATES
     /* Failed layout does not reach the final positioning walk. Never leave
      * pass-local permissions behind, even when only part of the tree ran. */
     for (struct box *box = doc; box != NULL;) {
@@ -6778,6 +6759,5 @@ failed:
             box = box->parent;
         box = box == doc ? NULL : box->next;
     }
-#endif
     return false;
 }

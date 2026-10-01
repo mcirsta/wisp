@@ -112,7 +112,6 @@ void html_deferred_reformat(void *p);
 bool html_fetch_object_buffer(struct html_content *c, const uint8_t *data, size_t len, const char *mime_type,
     struct box *box, content_type permitted_types);
 
-#ifdef WISP_ENABLE_PARTIAL_UPDATES
 struct box_construct_region;
 struct html_object_binding_plan;
 
@@ -140,6 +139,5 @@ void html_object_commit_bindings(struct html_object_binding_plan *plan);
 
 /** Release only preparation storage, never resource handles. */
 void html_object_discard_bindings(struct html_object_binding_plan *plan);
-#endif
 
 #endif

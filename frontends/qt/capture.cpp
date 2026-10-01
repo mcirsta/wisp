@@ -78,45 +78,30 @@ int NS_Capture::prepare(int &argc, char **argv)
         }
         requested = true;
         if (arg == "--capture-fail-retained-layout") {
-#if defined(WISP_ENABLE_PARTIAL_UPDATES) && defined(WISP_PROFILE_RESTYLE)
+#ifdef WISP_PROFILE_RESTYLE
             m_fail_retained_layout = true;
             m_css_only_restyle = false;
             continue;
 #else
-            fprintf(stderr, "Retained failure injection requires partial updates and restyle profiling\n");
+            fprintf(stderr, "Retained failure injection requires restyle profiling\n");
             return -1;
 #endif
         }
         if (arg == "--capture-retain-boxes") {
-#ifdef WISP_ENABLE_PARTIAL_UPDATES
             m_css_only_restyle = false;
             continue;
-#else
-            fprintf(stderr, "Retained updates require WISP_ENABLE_PARTIAL_UPDATES\n");
-            return -1;
-#endif
         }
         if (arg == "--capture-css-only-restyle") {
             m_css_only_restyle = true;
             continue;
         }
         if (arg == "--capture-reuse-inline-layout" || arg == "--capture-no-inline-layout-reuse") {
-#ifdef WISP_ENABLE_PARTIAL_UPDATES
             m_no_inline_layout_reuse = arg == "--capture-no-inline-layout-reuse";
             continue;
-#else
-            fprintf(stderr, "Inline layout reuse requires WISP_ENABLE_PARTIAL_UPDATES\n");
-            return -1;
-#endif
         }
         if (arg == "--capture-reuse-inline-intrinsics" || arg == "--capture-no-intrinsic-reuse") {
-#ifdef WISP_ENABLE_PARTIAL_UPDATES
             m_no_intrinsic_reuse = arg == "--capture-no-intrinsic-reuse";
             continue;
-#else
-            fprintf(stderr, "Intrinsic reuse requires WISP_ENABLE_PARTIAL_UPDATES\n");
-            return -1;
-#endif
         }
         if (arg == "--capture-restart-partial-restyle") {
             m_restart_partial_restyle = true;
@@ -136,7 +121,7 @@ int NS_Capture::prepare(int &argc, char **argv)
             m_directory = value;
             ok = !value.isEmpty();
         } else if (arg == "--capture-interrupt-restyle") {
-#if defined(WISP_ENABLE_PARTIAL_UPDATES) && defined(WISP_PROFILE_RESTYLE)
+#ifdef WISP_PROFILE_RESTYLE
             ok = value == "close" || value == "navigate" || value == "shutdown" || value == "shutdown-full";
             m_interrupt_restyle = value;
             if (value == "shutdown-full")

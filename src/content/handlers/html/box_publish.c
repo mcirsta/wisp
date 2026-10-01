@@ -11,7 +11,6 @@
 #include "desktop/selection.h"
 #include "utils/talloc.h"
 
-#ifdef WISP_ENABLE_PARTIAL_UPDATES
 /* These states can hold box pointers, text offsets or a frontend caret. Their
  * normal cleanup broadcasts callbacks. Keep that work in the existing fallback,
  * outside the no-callback publication interval. Unfocused outside widgets keep
@@ -132,4 +131,3 @@ done:
         *reason = err == NSERROR_NOMEM ? "no_memory" : why;
     return err;
 }
-#endif

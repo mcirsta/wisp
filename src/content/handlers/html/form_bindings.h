@@ -4,7 +4,6 @@
 
 #include <wisp/utils/errors.h>
 
-#ifdef WISP_ENABLE_PARTIAL_UPDATES
 struct html_content;
 struct box;
 struct html_form_binding_plan;
@@ -32,6 +31,5 @@ void html_form_commit_bindings(struct html_form_binding_plan *plan);
 
 /** Free only temporary preparation storage; never gadgets or live indexes. */
 void html_form_discard_bindings(struct html_form_binding_plan *plan);
-#endif
 
 #endif

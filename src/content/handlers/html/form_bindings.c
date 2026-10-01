@@ -6,7 +6,6 @@
 #include "content/handlers/html/form_bindings.h"
 #include "utils/talloc.h"
 
-#ifdef WISP_ENABLE_PARTIAL_UPDATES
 struct control_binding {
     struct form_control *control;
     struct box *box;
@@ -343,4 +342,3 @@ void html_form_discard_bindings(struct html_form_binding_plan *plan)
 {
     talloc_free(plan);
 }
-#endif

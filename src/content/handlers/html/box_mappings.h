@@ -5,7 +5,6 @@
 #include <dom/core/node.h>
 #include <wisp/utils/errors.h>
 
-#ifdef WISP_ENABLE_PARTIAL_UPDATES
 struct html_content;
 struct box;
 struct box_construct_region;
@@ -32,5 +31,4 @@ nserror html_box_apply_mappings(struct html_box_mapping_plan *plan);
  * coordinated plan, with input/painting excluded and no intervening callbacks. */
 void html_box_commit_mappings(struct html_box_mapping_plan *plan);
 void html_box_discard_mappings(struct html_box_mapping_plan *plan);
-#endif
 #endif

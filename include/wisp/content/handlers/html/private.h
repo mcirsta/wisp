@@ -71,7 +71,6 @@ struct html_restyle_profile {
 };
 #endif
 
-#ifdef WISP_ENABLE_PARTIAL_UPDATES
 #define HTML_RESTYLE_MAX_ROOTS 8
 /* Pending roots own DOM references; active construction consumes a separate batch. */
 struct html_restyle_changes {
@@ -110,7 +109,6 @@ struct html_restyle_state {
     bool no_intrinsic_reuse; /* Capture override: remeasure all retained inline containers. */
     bool no_inline_layout_reuse; /* Capture override: reflow all retained text lines. */
 };
-#endif
 
 /**
  * Pre-serialized inline SVG, stored in linked list during parsing.
@@ -218,9 +216,7 @@ typedef struct html_content {
     /** Deferred state-only restyle; no parsing or page-load lifecycle. */
     bool restyle_pending;
     bool restyling;
-#ifdef WISP_ENABLE_PARTIAL_UPDATES
     struct html_restyle_state restyle;
-#endif
 #ifdef WISP_PROFILE_RESTYLE
     struct html_restyle_profile restyle_profile;
 #endif

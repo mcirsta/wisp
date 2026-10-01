@@ -175,21 +175,20 @@ existing millisecond clock as a fallback on other platforms.
 `--capture-force-full-restyle` selects the full-refresh reference path at runtime.
 `--capture-css-only-restyle` selects the milestone A reference: reuse eligible
 styles but reconstruct all boxes. The full override takes precedence if both are set.
-With `WISP_ENABLE_PARTIAL_UPDATES` (default ON), native activation records
-all changed controls and coalesces their parent subtrees. Form edits record DOM
-changes immediately, including edits already synchronized before a tab click.
+Native activation records all changed controls and coalesces their parent
+subtrees. Form edits record DOM changes immediately, including edits already
+synchronized before a tab click.
 The first refresh establishes a full baseline; subsequent eligible refreshes reuse
 composed styles outside those scopes. Eligible single-region updates also retain
 outside boxes once independent region owners have been established, as described
 below. All refreshes still traverse the document for layout; the line
 cache described below can skip eligible line work. Reuse requires scripting to
-be disabled. Configuring the option OFF removes HTML tracking state.
-Libcss's per-sheet scope summary and revision
-stamp are always available. Existing build caches preserve an explicit OFF value.
+be disabled. Partial updates are part of every build; there is no feature switch.
+Libcss's per-sheet scope summary and revision stamp are always available.
 
 With profiling enabled, `update_mode` reports `partial_css`, `partial_boxes` or `full`.
 `fallback_reason` is normally `none` on the selective path; full reasons include
-`forced_full`, `feature_disabled`, `dom_changed`, `scripting`, `full_request`,
+`forced_full`, `dom_changed`, `scripting`, `full_request`,
 `scope_capacity`, `invalid_scope`, `selector_scope`, `loading`, `no_style_snapshot`,
 `inputs_changed`, `no_scope`, `no_reusable_styles`, `reuse_table_failed`,
 `detach_changed` and `inputs_changed_during_build`.
@@ -215,7 +214,7 @@ Saved-page measurements are recorded in
 [the partial-update plan](../../src/docs/partial-updates.md).
 
 `--capture-interrupt-restyle MODE` tests document lifetime during a yielded
-rebuild. It requires both profiling and selective updates. Use `close` or
+rebuild. It requires restyle profiling. Use `close` or
 `navigate` to close the real window or navigate to `about:blank` while an extra
 content observer lets the old document finish. `shutdown` drops that observer
 immediately after closing; `shutdown-full` does the same during a forced-full
@@ -228,9 +227,9 @@ with styles, resources, forms and an iframe alive, using the CSS-only override.
 
 ### Retained boxes
 
-Milestone B is enabled by default with `WISP_ENABLE_PARTIAL_UPDATES`, in ordinary
-browsing as well as capture. `--capture-retain-boxes` remains a compatibility alias
-for this default (and clears an earlier CSS-only override).
+Milestone B is always built, for ordinary browsing as well as capture.
+`--capture-retain-boxes` remains a compatibility alias for this default
+(and clears an earlier CSS-only override).
 Warm both panels first: the style snapshot and independent region owners
 are established by the first two refreshes. Later eligible changes rebuild one
 stable block/flex/grid region and retain the surrounding boxes, followed by full
@@ -275,7 +274,7 @@ text-only inline containers by default. `--capture-no-intrinsic-reuse` disables
 this cache (and dependent line reuse), keeping selective styles and box retention.
 The original
 `--capture-reuse-inline-intrinsics` option still selects the default behavior;
-the last of these two options wins. Both require partial updates.
+the last of these two options wins.
 Ordinary blocks' min/max fields are reused
 for CSS sizing during layout, so they are not treated as intrinsic caches.
 
@@ -305,7 +304,7 @@ Eligible retained updates also preserve completed text-only lines by default,
 in ordinary browsing and capture. `--capture-no-inline-layout-reuse` selects the
 intrinsic-only reference path. The original `--capture-reuse-inline-layout` flag
 remains an explicit request for the default; the last of these two options wins.
-Line reuse requires partial updates and the intrinsic cache. The inline container
+Line reuse requires the intrinsic cache. The inline container
 keeps its available-width input separately from its output/overflow width, along with
 its wrapped text fragments, local coordinates and any required baseline.
 

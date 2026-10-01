@@ -46,10 +46,8 @@
  * the current arena, including anonymous table/flex/grid/float wrappers. */
 static void *box_normalise_owner(const struct box *box, void *current)
 {
-#ifdef WISP_ENABLE_PARTIAL_UPDATES
     if (box->flags & OWNS_REGION)
         return talloc_parent(box);
-#endif
     return current;
 }
 
