@@ -172,6 +172,9 @@ static void nsoption_validate(struct nsoption_s *opts, struct nsoption_s *defs)
     if (opts[NSOPTION_memory_cache_size].value.i < 0) {
         opts[NSOPTION_memory_cache_size].value.i = 0;
     }
+    if (opts[NSOPTION_image_cache_size].value.i < 0) {
+        opts[NSOPTION_image_cache_size].value.i = 0;
+    }
 
     /* to aid migration from old, broken, configuration files this
      * checks to see if all the system colours are set to black

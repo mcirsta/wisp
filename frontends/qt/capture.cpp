@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 #include "qt/capture.h"
 #include "qt/capture_inspect.h"
+#include "qt/widget.cls.h"
 
 #include <QApplication>
 #include <QDir>
@@ -11,6 +12,7 @@
 #include <QPixmap>
 #include <QSaveFile>
 #include <QSettings>
+#include <QScreen>
 #include <QWidget>
 
 extern "C" {
@@ -50,6 +52,9 @@ int NS_Capture::prepare(int &argc, char **argv)
                 "  --capture-settle MS          Quiet period after load (default 500)\n"
                 "  --capture-timeout MS         Overall deadline (default 30000)\n"
                 "  --capture-text-cache-bytes N Text cache budget (0 disables caching for comparison)\n"
+                "  --capture-bitmap-cache-bytes N Scaled bitmap cache budget (0 disables caching)\n"
+                "  --capture-no-scroll-blit     Repaint the full viewport for scroll comparisons\n"
+                "  --capture-screen            Grab displayed pixels (requires screen capture support)\n"
                 "  --capture-id ID              Inspect an element (repeatable)\n"
                 "  --capture-click-id ID        Click an element after settling (repeatable)\n"
                 "  --capture-click-label FOR    Click a label associated with this input ID\n"
@@ -81,6 +86,14 @@ int NS_Capture::prepare(int &argc, char **argv)
             continue;
         }
         requested = true;
+        if (arg == "--capture-no-scroll-blit") {
+            nsqt_capture_disable_scroll_blit = true;
+            continue;
+        }
+        if (arg == "--capture-screen") {
+            m_screen_capture = true;
+            continue;
+        }
         if (arg == "--capture-fail-retained-layout") {
 #ifdef WISP_PROFILE_RESTYLE
             m_fail_retained_layout = true;
@@ -129,6 +142,11 @@ int NS_Capture::prepare(int &argc, char **argv)
             ok = ok && bytes >= 0;
             if (ok)
                 nsqt_capture_text_cache_limit(bytes);
+        } else if (arg == "--capture-bitmap-cache-bytes") {
+            const int bytes = value.toInt(&ok);
+            ok = ok && bytes >= 0;
+            if (ok)
+                nsqt_capture_bitmap_cache_limit(bytes);
         } else if (arg == "--capture-interrupt-restyle") {
 #ifdef WISP_PROFILE_RESTYLE
             ok = value == "close" || value == "navigate" || value == "shutdown" || value == "shutdown-full";
@@ -286,6 +304,17 @@ bool NS_Capture::eventFilter(QObject *object, QEvent *event)
 
 void NS_Capture::poll()
 {
+    if (m_screen_capture && m_widget) {
+        // Scrollbars can appear after loading. Keep the fixed viewport clear
+        // of the surrounding controls when capturing actual displayed pixels.
+        QWidget *window = m_widget->window();
+        QSize needed = window->size().expandedTo(window->minimumSizeHint());
+        if (window->size() != needed) {
+            window->resize(needed);
+            activity(m_bw);
+            return;
+        }
+    }
     if (m_interrupted) {
         if (nsqt_capture_restyle_lifecycle(m_interrupted, false)["settled"].toBool() ||
             m_elapsed.elapsed() >= m_timeout_ms)
@@ -320,6 +349,8 @@ void NS_Capture::poll()
             browser_window_get_scroll(m_bw, &sx, &sy);
             step["scroll"] = QJsonObject{{"x", sx}, {"y", sy}};
             step["elapsed_ms"] = m_elapsed.elapsed();
+            step["widget_paint"] = static_cast<NS_Widget *>(m_widget.data())->capturePaintStats();
+            step["bitmap_cache"] = nsqt_capture_bitmap_cache_stats();
             step["action_ms"] = m_last_action_ms;
             m_steps.append(step);
         }
@@ -477,10 +508,19 @@ void NS_Capture::finish(const QString &result)
     bool dom_saved = false;
     bool boxes_saved = false;
     QSize pixels(0, 0);
+    const auto widget_paint = static_cast<NS_Widget *>(m_widget.data())->capturePaintStats();
     if (ready) {
         // QWidget::grab uses the normal paintEvent, plotters and font metrics.
         // No thumbnail scaling, browser chrome or extra layout pass is involved.
-        const QPixmap picture = m_widget->grab();
+        QPixmap picture;
+        if (m_screen_capture) {
+            // A QWidget grab repaints, hiding stale pixels left by a bad blit.
+            const QPoint offset = m_widget->mapTo(m_widget->window(), QPoint());
+            picture = m_widget->screen()->grabWindow(
+                m_widget->window()->winId(), offset.x(), offset.y(), m_widget->width(), m_widget->height());
+        } else {
+            picture = m_widget->grab();
+        }
         pixels = picture.size();
         image_saved = picture.save(QDir(m_directory).filePath("page.png"), "PNG");
         output_ok = image_saved;
@@ -537,6 +577,8 @@ void NS_Capture::finish(const QString &result)
         {"elapsed_ms", elapsed},
         {"quiet_ms", elapsed - m_last_activity},
         {"text_cache", nsqt_capture_text_cache_stats()},
+        {"bitmap_cache", nsqt_capture_bitmap_cache_stats()},
+        {"widget_paint", widget_paint},
         {"settle_ms", m_settle_ms},
         {"timeout_ms", m_timeout_ms},
         {"viewport", QJsonObject{{"width", width}, {"height", height}}},
@@ -554,8 +596,8 @@ void NS_Capture::finish(const QString &result)
         {"qt_version", qVersion()},
         {"qt_platform", QGuiApplication::platformName()},
         {"artifacts", artifacts},
-        {"restyle_state", m_fail_retained_layout
-            ? nsqt_capture_restyle_lifecycle(m_failure_watch, false) : QJsonObject()},
+        {"restyle_state",
+            m_fail_retained_layout ? nsqt_capture_restyle_lifecycle(m_failure_watch, false) : QJsonObject()},
     };
     QSaveFile file(QDir(m_directory).filePath("capture.json"));
     const QByteArray json = QJsonDocument(metadata).toJson();

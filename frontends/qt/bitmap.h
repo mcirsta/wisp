@@ -24,4 +24,8 @@
  */
 extern struct gui_bitmap_table *nsqt_bitmap_table;
 
+class QImage;
+/** Smoothly scaled pixels; returned by value to stay valid across LRU eviction. */
+QImage nsqt_bitmap_scaled(const QImage *image, int width, int height);
+
 #endif

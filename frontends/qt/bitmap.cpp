@@ -24,7 +24,13 @@
 #include <stddef.h>
 
 #include <QImage>
+#include <QCache>
 #include <QPainter>
+
+#ifdef WISP_QT_CAPTURE
+#include <QElapsedTimer>
+#include "qt/capture_inspect.h"
+#endif
 
 extern "C" {
 
@@ -38,6 +44,64 @@ extern "C" {
 
 #include "qt/bitmap.h"
 #include "qt/plotters.h"
+
+/* The Qt GUI thread owns both source bitmaps and this shared LRU. Keep one
+ * scaled size per bitmap so zooming/resizing cannot retain every old size.
+ * Entries own only scaled pixels, never the source image. */
+struct ScaledBitmap {
+    qint64 source_key;
+    QImage image;
+};
+static QCache<const QImage *, ScaledBitmap> scaled_bitmaps(16 * 1024 * 1024);
+#ifdef WISP_QT_CAPTURE
+static quint64 scaled_hits, scaled_misses;
+static qint64 scaled_ns;
+
+QJsonObject nsqt_capture_bitmap_cache_stats()
+{
+    return {{"hits", qint64(scaled_hits)}, {"misses", qint64(scaled_misses)}, {"entries", scaled_bitmaps.size()},
+        {"cost_bytes", scaled_bitmaps.totalCost()}, {"budget_bytes", scaled_bitmaps.maxCost()},
+        {"scale_ms", scaled_ns / 1e6}};
+}
+
+void nsqt_capture_bitmap_cache_limit(qsizetype bytes)
+{
+    scaled_bitmaps.clear();
+    scaled_bitmaps.setMaxCost(qMax(qsizetype(0), bytes));
+    scaled_hits = scaled_misses = 0;
+    scaled_ns = 0;
+}
+#endif
+
+QImage nsqt_bitmap_scaled(const QImage *image, int width, int height)
+{
+    if (image->width() == width && image->height() == height)
+        return *image;
+    const auto *cached = scaled_bitmaps.object(image);
+    if (cached && cached->source_key == image->cacheKey() && cached->image.size() == QSize(width, height)) {
+#ifdef WISP_QT_CAPTURE
+        scaled_hits++;
+#endif
+        return cached->image;
+    }
+#ifdef WISP_QT_CAPTURE
+    scaled_misses++;
+#endif
+    /* A failed or oversized replacement must also release the old scaled size. */
+    scaled_bitmaps.remove(image);
+#ifdef WISP_QT_CAPTURE
+    QElapsedTimer timer;
+    timer.start();
+#endif
+    QImage scaled = image->scaled(width, height, Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
+#ifdef WISP_QT_CAPTURE
+    scaled_ns += timer.nsecsElapsed();
+#endif
+    qsizetype cost = scaled.sizeInBytes() + sizeof(ScaledBitmap) + 64;
+    if (!scaled.isNull() && cost <= scaled_bitmaps.maxCost())
+        scaled_bitmaps.insert(image, new ScaledBitmap{image->cacheKey(), scaled}, cost);
+    return scaled;
+}
 
 
 /**
@@ -69,6 +133,7 @@ static void *nsqt_bitmap_create(int width, int height, enum gui_bitmap_flags fla
 static void nsqt_bitmap_destroy(void *bitmap)
 {
     QImage *img = (QImage *)bitmap;
+    scaled_bitmaps.remove(img);
     delete img;
 }
 
@@ -105,6 +170,7 @@ static bool nsqt_bitmap_get_opaque(void *bitmap)
 static unsigned char *nsqt_bitmap_get_buffer(void *bitmap)
 {
     QImage *img = (QImage *)bitmap;
+    scaled_bitmaps.remove(img);
     return img->bits();
 }
 
@@ -155,6 +221,9 @@ static int nsqt_bitmap_get_height(void *bitmap)
  */
 static void nsqt_bitmap_modified(void *bitmap)
 {
+    /* A decoder may write through an earlier bits() pointer. In that case Qt
+     * cannot observe the write and cacheKey() alone would stay unchanged. */
+    scaled_bitmaps.remove((QImage *)bitmap);
 }
 
 
@@ -175,6 +244,7 @@ static void nsqt_bitmap_modified(void *bitmap)
 static nserror nsqt_bitmap_render(struct bitmap *bitmap, struct hlcache_handle *content)
 {
     QImage *dimg = (QImage *)bitmap;
+    scaled_bitmaps.remove(dimg);
     QPainter *painter;
     struct redraw_context ctx = {
         .interactive = false,

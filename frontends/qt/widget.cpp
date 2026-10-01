@@ -23,6 +23,10 @@
 
 #include <QPaintEvent>
 #include <QPainter>
+#ifdef WISP_QT_CAPTURE
+#include "qt/capture_inspect.h"
+bool nsqt_capture_disable_scroll_blit;
+#endif
 
 extern "C" {
 #include "utils/errors.h"
@@ -55,6 +59,8 @@ NS_Widget::NS_Widget(QWidget *parent, NS_Actions *actions, struct browser_window
 {
     setFocusPolicy(Qt::StrongFocus);
     setMouseTracking(true);
+    // paintEvent fills every damaged pixel before drawing page content.
+    setAttribute(Qt::WA_OpaquePaintEvent);
 }
 
 
@@ -134,6 +140,7 @@ void NS_Widget::focusOutEvent(QFocusEvent *event)
  */
 void NS_Widget::resizeEvent(QResizeEvent *event)
 {
+    m_scroll_blit_ready = false;
     if (m_bw == nullptr) {
         return;
     }
@@ -146,6 +153,7 @@ void NS_Widget::resizeEvent(QResizeEvent *event)
  */
 void NS_Widget::invalidateBrowserWindow()
 {
+    m_scroll_blit_ready = false;
     m_bw = nullptr;
 }
 
@@ -155,21 +163,28 @@ void NS_Widget::invalidateBrowserWindow()
  */
 void NS_Widget::paintEvent(QPaintEvent *event)
 {
+    QPainter painter(this);
+    painter.fillRect(event->rect(), Qt::white);
     if (m_bw == nullptr) {
         return;
     }
-    QPainter *painter = new QPainter(this);
+    // Invalidation during rendering must leave this false for the next scroll.
+    m_scroll_blit_ready = true;
+#ifdef WISP_QT_CAPTURE
+    m_paint_calls++;
+    m_paint_pixels += quint64(event->rect().width()) * event->rect().height();
+#endif
 
     /* Enable antialiasing for smoother edges on diagonal lines and curves */
-    painter->setRenderHint(QPainter::Antialiasing, true);
-    painter->setRenderHint(QPainter::TextAntialiasing, true);
-    painter->setRenderHint(QPainter::SmoothPixmapTransform, true);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    painter.setRenderHint(QPainter::TextAntialiasing, true);
+    painter.setRenderHint(QPainter::SmoothPixmapTransform, true);
 
     struct redraw_context ctx = {
         .interactive = true,
         .background_images = true,
         .plot = &nsqt_plotters,
-        .priv = painter,
+        .priv = &painter,
     };
     /* netsurf render clip region coordinates */
     struct rect clip = {
@@ -179,11 +194,12 @@ void NS_Widget::paintEvent(QPaintEvent *event)
         .y1 = event->rect().top() + event->rect().height(),
     };
 
-    browser_window_redraw(m_bw, -m_xoffset, -m_yoffset, &clip, &ctx);
+    if (!browser_window_redraw(m_bw, -m_xoffset, -m_yoffset, &clip, &ctx))
+        m_scroll_blit_ready = false;
 
     redraw_caret(&clip, &ctx);
 
-    delete painter;
+    m_painted_dpr = devicePixelRatioF();
 }
 
 
@@ -580,6 +596,7 @@ void NS_Widget::setCaret(bool visible, int cx, int cy, int ch)
  */
 nserror NS_Widget::invalidate(const struct rect *rect)
 {
+    m_scroll_blit_ready = false;
     if (rect == NULL) {
         update();
     } else {
@@ -594,8 +611,7 @@ nserror NS_Widget::invalidate(const struct rect *rect)
  */
 void NS_Widget::setHorizontalScroll(int value)
 {
-    m_xoffset = value;
-    update();
+    scrollTo(value, m_yoffset);
 }
 
 /**
@@ -603,9 +619,38 @@ void NS_Widget::setHorizontalScroll(int value)
  */
 void NS_Widget::setVerticalScroll(int value)
 {
-    m_yoffset = value;
-    update();
+    scrollTo(m_xoffset, value);
 }
+
+void NS_Widget::scrollTo(int x, int y)
+{
+    int dx = m_xoffset - x, dy = m_yoffset - y;
+    if (dx == 0 && dy == 0)
+        return;
+    m_xoffset = x;
+    m_yoffset = y;
+    qreal dpr = devicePixelRatioF();
+    bool reuse = m_scroll_blit_ready && m_caret_frame == 0 && isVisible() && qAbs(dx) < width() &&
+        qAbs(dy) < height() && dpr == m_painted_dpr && qFuzzyIsNull(dx * dpr - qRound(dx * dpr)) &&
+        qFuzzyIsNull(dy * dpr - qRound(dy * dpr)) && browser_window_can_scroll_blit(m_bw);
+#ifdef WISP_QT_CAPTURE
+    reuse = reuse && !nsqt_capture_disable_scroll_blit;
+    (reuse ? m_scroll_blits : m_scroll_repaints)++;
+#endif
+    m_scroll_blit_ready = false;
+    if (reuse)
+        QWidget::scroll(dx, dy, rect());
+    else
+        update();
+}
+
+#ifdef WISP_QT_CAPTURE
+QJsonObject NS_Widget::capturePaintStats() const
+{
+    return {{"scroll_blits", qint64(m_scroll_blits)}, {"scroll_repaints", qint64(m_scroll_repaints)},
+        {"paint_calls", qint64(m_paint_calls)}, {"paint_pixels", qint64(m_paint_pixels)}};
+}
+#endif
 
 
 QSize NS_Widget::sizeHint() const

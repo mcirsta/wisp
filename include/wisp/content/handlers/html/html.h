@@ -40,6 +40,7 @@ struct rect;
 struct browser_window;
 struct content;
 struct hlcache_handle;
+
 struct http_parameter;
 struct imagemap;
 struct object_params;
@@ -51,6 +52,9 @@ struct search_context;
 struct selection;
 struct nsurl;
 struct plot_font_style;
+
+/** True only for a settled layout without viewport-dependent painting. */
+bool html_scroll_blit_safe(struct hlcache_handle *h);
 
 /**
  * Container for stylesheets used by an HTML document

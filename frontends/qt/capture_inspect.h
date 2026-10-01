@@ -14,6 +14,9 @@ qreal nsqt_capture_font_scale(const struct plot_font_style *style);
 QFont nsqt_capture_font(const struct plot_font_style *style);
 QJsonObject nsqt_capture_text_cache_stats();
 void nsqt_capture_text_cache_limit(qsizetype bytes);
+QJsonObject nsqt_capture_bitmap_cache_stats();
+void nsqt_capture_bitmap_cache_limit(qsizetype bytes);
+extern bool nsqt_capture_disable_scroll_blit;
 QJsonObject nsqt_capture_inspect(struct hlcache_handle *content, const QStringList &ids, const QPoint &point);
 
 struct browser_window;

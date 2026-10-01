@@ -49,6 +49,7 @@ extern "C" {
 }
 
 #include "qt/layout.h"
+#include "qt/bitmap.h"
 #include "qt/plotters.h"
 #include "qt/window.h"
 
@@ -381,13 +382,10 @@ static nserror nsqt_plot_bitmap(const struct redraw_context *ctx, struct bitmap 
     bool repeat_y = (flags & BITMAPF_REPEAT_Y) != 0;
 
     /* Scale image to target size if different from source */
-    QImage scaled_img;
     if (width != img->width() || height != img->height()) {
         painter->setRenderHint(QPainter::SmoothPixmapTransform, true);
-        scaled_img = img->scaled(width, height, Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
-    } else {
-        scaled_img = *img;
     }
+    QImage scaled_img = nsqt_bitmap_scaled(img, width, height);
 
     /* No tiling needed - just draw single image */
     if (!repeat_x && !repeat_y) {

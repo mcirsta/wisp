@@ -89,8 +89,11 @@ NSOPTION_STRING(accept_language, NULL)
 /** Accept-Charset header. */
 NSOPTION_STRING(accept_charset, NULL)
 
-/** Preferred maximum size of memory cache / bytes. */
+/** Preferred maximum size of source-data memory cache / bytes. */
 NSOPTION_INTEGER(memory_cache_size, 12 * 1024 * 1024)
+
+/** Preferred maximum size of decoded image cache / bytes. */
+NSOPTION_INTEGER(image_cache_size, 32 * 1024 * 1024)
 
 /** Preferred location of disc cache, or NULL for system provided location */
 NSOPTION_STRING(disc_cache_path, NULL)

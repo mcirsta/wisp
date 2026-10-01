@@ -39,7 +39,8 @@ General Options
  font_fantasy         | string |  NULL     | Default fantasy font             
  accept_language      | string |  NULL     | Accept-Language header.          
  accept_charset       | string |  NULL     | Accept-Charset header.           
- memory_cache_size    | int    | 12MiB     | Preferred maximum size of memory cache in bytes. 
+ memory_cache_size    | int    | 12MiB     | Preferred maximum size of source-data memory cache in bytes.
+ image_cache_size     | int    | 32MiB     | Preferred maximum size of decoded image cache in bytes, independent of source data. Previously this used one quarter of memory_cache_size.
  disc_cache_size      | uint   | 1GiB      | Preferred expiry size of disc cache in bytes. 
  disc_cache_age       | int    | 28        | Preferred expiry age of disc cache in days. 
  disc_cache_path      | string |  NULL     | Path to disc cache, NULL means to use system path |

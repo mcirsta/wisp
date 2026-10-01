@@ -48,6 +48,9 @@ public:
     void set_pointer(enum gui_pointer_shape shape);
     void setCaret(bool visible, int x, int y, int height);
     void invalidateBrowserWindow(); /**< Nullify m_bw before destruction */
+#ifdef WISP_QT_CAPTURE
+    QJsonObject capturePaintStats() const;
+#endif
 
 public slots:
     void setHorizontalScroll(int value);
@@ -64,6 +67,12 @@ protected:
     void resizeEvent(QResizeEvent *event);
 
 private:
+    void scrollTo(int x, int y);
+    bool m_scroll_blit_ready = false;
+    qreal m_painted_dpr = 0;
+#ifdef WISP_QT_CAPTURE
+    quint64 m_scroll_blits = 0, m_scroll_repaints = 0, m_paint_pixels = 0, m_paint_calls = 0;
+#endif
     /**
      * map qt event modifiers to browser mouse state keyboard modifiers
      */

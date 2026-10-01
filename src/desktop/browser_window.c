@@ -2566,6 +2566,15 @@ bool browser_window_redraw_ready(struct browser_window *bw)
     return true;
 }
 
+bool browser_window_can_scroll_blit(struct browser_window *bw)
+{
+    /* Fractional zoom currently rounds the redraw origin through layout pixels;
+     * it is not always an exact translation by the GUI scrollbar delta. */
+    return bw && bw->window && !bw->parent && !bw->children && bw->scale == 1.0f && bw->current_content &&
+        content_get_status(bw->current_content) == CONTENT_STATUS_DONE && browser_window_redraw_ready(bw) &&
+        content_get_type(bw->current_content) == CONTENT_HTML && html_scroll_blit_safe(bw->current_content);
+}
+
 
 /* exported interface, documented in browser_private.h */
 void browser_window_update_extent(struct browser_window *bw)

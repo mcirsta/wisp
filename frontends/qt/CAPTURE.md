@@ -55,6 +55,43 @@ layout time and call count across alternating cached/uncached runs, checking
 that PNGs and box trees agree. Keep resource loading separate from layout time,
 and use `steps.json` for resize or tab-switch comparisons.
 
+## Image caching and scrolling comparisons
+
+The decoded-image cache now has its own `image_cache_size` option (32 MiB by
+default); it no longer takes one quarter of `memory_cache_size`. This is the
+existing cache's preferred retention target, not a hard cap on live image memory.
+The Qt frontend also keeps one scaled size per source bitmap in a shared
+16 MiB LRU, with estimated bookkeeping included in its cost. Both caches fill
+on demand across pages. Mutation, decoder notifications and bitmap destruction
+invalidate scaled copies; changing the target dimensions replaces the old size.
+
+`bitmap_cache` in `capture.json` and each settled step reports hits, misses,
+entries, estimated cost, budget and cumulative scaling wall time (`scale_ms`).
+`--capture-bitmap-cache-bytes 0` disables scaled-image retention for comparison.
+Use `steps.json` differences after warm-up to measure repeated paints. Qt can
+use worker threads internally when scaling, so renderer-thread `paint_cpu_ms`
+alone does not account for all that work; also compare `paint_ms`.
+
+Eligible scrolls reuse Qt's backing-store pixels and redraw the exposed strip.
+The engine records eligibility during the existing completed-layout walk;
+scrolling adds no box-tree scan. Sticky/fixed boxes, fixed backgrounds (including
+additional layers), embedded documents, unfinished rendering, non-default page
+zoom, active carets and fractional physical-pixel movement use full repainting.
+Resize and content invalidation also require fresh pixels before reuse. Qt can
+independently fall back to repainting, for example when another widget overlaps.
+
+`--capture-no-scroll-blit` forces full viewport repainting. `widget_paint` reports
+eligible `scroll_blits` requests, fallback `scroll_repaints`, paint calls and
+the summed damaged bounding-rectangle area in logical pixels (`paint_pixels`).
+Widget counters are sampled before the final capture. Normal `QWidget::grab()`
+repaints, which can hide stale pixels, so test scroll correctness with
+`--capture-screen` under Xvfb/`QT_QPA_PLATFORM=xcb`. This grabs the displayed
+viewport without repainting it and enlarges the surrounding capture window as
+needed to keep scrollbars from overlapping the fixed viewport. Screen capture
+must be supported by the Qt platform, and the viewport must fit on that screen.
+`qt_scroll_reuse` compares these native pixels against full repaints and checks
+that eligible cases actually paint less area.
+
 ## Focused inspection
 
 Add `--capture-id ID` (repeatable, literal ID without `#`) and/or

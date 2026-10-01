@@ -170,14 +170,11 @@ nserror wisp_init(const char *store_path)
     /* Set up the max attempts made to fetch a timing out resource */
     hlcache_parameters.llcache.fetch_attempts = nsoption_uint(max_retried_fetches);
 
-    /* image cache is 25% of total memory cache size */
-    image_cache_parameters.limit = hlcache_parameters.llcache.limit / 4;
+    /* Decoded pixels need their own budget, independent of compressed source data. */
+    image_cache_parameters.limit = nsoption_int(image_cache_size);
 
     /* image cache hysteresis is 20% of the image cache size */
     image_cache_parameters.hysteresis = image_cache_parameters.limit / 5;
-
-    /* account for image cache use from total */
-    hlcache_parameters.llcache.limit -= image_cache_parameters.limit;
 
     /* set backing store target limit */
     hlcache_parameters.llcache.store.limit = nsoption_uint(disc_cache_size);

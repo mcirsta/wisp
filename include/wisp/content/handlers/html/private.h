@@ -253,6 +253,8 @@ typedef struct html_content {
     struct html_viewport viewport;
     /** Sticky constraints are usable only after a complete successful layout. */
     bool sticky_layout_valid;
+    /** Settled page pixels translate uniformly when the viewport scrolls. */
+    bool scroll_blit_safe;
     /** Document background colour. */
     colour background_colour;
 

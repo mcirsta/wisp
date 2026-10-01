@@ -6431,6 +6431,21 @@ static bool layout_finalize_boxes(html_content *content, struct box *box)
 
     if (box == NULL)
         return true;
+    /* Reuse this settled-tree walk; scrolling itself must not scan the DOM.
+     * These features can paint pixels that do not translate with the page. */
+    if ((box->style &&
+            (css_computed_position(box->style) == CSS_POSITION_FIXED ||
+                css_computed_position(box->style) == CSS_POSITION_STICKY)) ||
+        (box->flags & IFRAME) || (box->object && content_get_type(box->object) == CONTENT_HTML))
+        content->scroll_blit_safe = false;
+    if (content->scroll_blit_safe && box->style) {
+        for (uint32_t i = 0; i < css_computed_background_layer_count(box->style); i++) {
+            if (css_computed_background_attachment_layer(box->style, i) == CSS_BACKGROUND_ATTACHMENT_FIXED) {
+                content->scroll_blit_safe = false;
+                break;
+            }
+        }
+    }
     box->flags &= ~(HAS_STICKY_DESCENDANT | HAS_STICKY_ANCESTOR);
     if (box->parent && !(box->abs_containing_block && (box->abs_containing_block->flags & IS_VIEWPORT)) &&
         ((box->parent->flags & HAS_STICKY_ANCESTOR) || (box->parent->sticky && box->parent->sticky->valid)))
@@ -6772,6 +6787,7 @@ bool layout_document(html_content *content, int width, int height)
     layout_position_relative(&content->unit_len_ctx, doc, doc, 0, 0);
 
     layout_calculate_descendant_bboxes(&content->unit_len_ctx, doc);
+    content->scroll_blit_safe = true;
     if (!layout_finalize_boxes(content, doc))
         goto failed;
     content->sticky_layout_valid = true;

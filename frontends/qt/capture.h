@@ -78,6 +78,7 @@ private:
     bool m_fail_retained_layout = false;
     bool m_restart_partial_restyle = false;
     bool m_finished = false;
+    bool m_screen_capture = false;
     QString m_interrupt_restyle;
     struct content *m_interrupted = nullptr;
     struct content *m_failure_watch = nullptr;
