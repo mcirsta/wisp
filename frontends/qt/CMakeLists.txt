@@ -188,6 +188,9 @@ if(WISP_QT_CAPTURE)
         add_test(NAME qt_flex_image_sizing
             COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_flex_image_sizing.py $<TARGET_FILE:wisp-qt>)
         set_tests_properties(qt_flex_image_sizing PROPERTIES TIMEOUT 30)
+        add_test(NAME qt_flex_minimum_sizing
+            COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_flex_minimum_sizing.py $<TARGET_FILE:wisp-qt>)
+        set_tests_properties(qt_flex_minimum_sizing PROPERTIES TIMEOUT 45)
         add_test(NAME qt_checked_selector
             COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_checked_selector.py $<TARGET_FILE:wisp-qt>)
         set_tests_properties(qt_checked_selector PROPERTIES TIMEOUT 30)

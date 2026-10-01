@@ -139,6 +139,7 @@ struct box *box_create(css_select_results *styles, css_computed_style *style, bo
         box->margin[i] = box->padding[i] = box->border[i].width = 0;
     box->scroll_x = box->scroll_y = NULL;
     box->min_width = (struct css_size){.type = CSS_SIZE_AUTO, .value = 0};
+    box->content_min_width = 0;
     box->max_width = UNKNOWN_MAX_WIDTH;
     box->byte_offset = 0;
     box->text = NULL;

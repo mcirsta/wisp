@@ -19,6 +19,13 @@
   .columns { display: flex; gap: 20px; }
   .news { flex: 1; min-width: 0; background: #aecbf0; }
   .sidebar { width: 150px; flex-shrink: 0; background: #d0e7b5; }
+  .shrink-row { display: flex; width: 100px; margin: 5px 0; background: #ddd; }
+  .shrink-item { width: 80px; min-height: 20px; background: #aecbf0; }
+  .edges > * { padding: 0 10px; border: 2px solid; margin: 0 3px; }
+  .border-box > * { box-sizing: border-box; }
+  .inline { display: inline-flex; }
+  .optional { display: none; width: 60px; height: 20px; }
+  #grow:checked ~ .shrink-row .optional { display: block; }
 </style>
 <p>Automatic minimum: blue item stays 600px wide and overflows the 400px row.</p>
 <div class="row"><div id="auto" class="item"><div class="wide"></div></div></div>
@@ -37,3 +44,25 @@
   <div id="news" class="news"><div class="wide"></div></div>
   <aside id="sidebar" class="sidebar">Sidebar</aside>
 </div></main></div>
+<p>Preferred widths are flex bases, not automatic minimums. Each empty item shrinks to 50px.</p>
+<div class="shrink-row"><a id="empty" class="shrink-item"></a><a class="shrink-item"></a></div>
+<div class="shrink-row"><div id="short-text" class="shrink-item">a a</div><div class="shrink-item"></div></div>
+<div class="shrink-row"><div id="long-text" class="shrink-item">unbreakableunbreakableunbreakable</div><div id="long-peer" class="shrink-item"></div></div>
+<div class="shrink-row inline"><div id="inline-text" class="shrink-item">unbreakableunbreakableunbreakable</div><div class="shrink-item"></div></div>
+<div class="shrink-row"><div id="nested-block" class="shrink-item"><div style="width:60px;height:20px"></div></div><div id="nested-peer" class="shrink-item"></div></div>
+<div class="shrink-row"><div id="nested-flex" class="shrink-item" style="display:flex;gap:5px"><div style="width:30px;flex-shrink:0"></div><div style="width:20px;flex-shrink:0"></div></div><div class="shrink-item"></div></div>
+<div class="shrink-row edges"><div id="content-edges" class="shrink-item"></div><div class="shrink-item"></div></div>
+<div class="shrink-row edges border-box"><div id="border-edges" class="shrink-item"></div><div class="shrink-item"></div></div>
+<div class="shrink-row"><div id="explicit-min" class="shrink-item" style="min-width:60px"></div><div class="shrink-item"></div></div>
+<div class="shrink-row"><div id="explicit-zero" class="shrink-item zero">unbreakableunbreakableunbreakable</div><div class="shrink-item"></div></div>
+<div class="shrink-row"><div id="maximum" class="shrink-item" style="max-width:25px"></div><div id="maximum-peer" class="shrink-item"></div></div>
+<div class="shrink-row" style="gap:20px"><div id="gap" class="shrink-item"></div><div class="shrink-item"></div></div>
+<div class="shrink-row"><div id="no-shrink" class="shrink-item" style="flex-shrink:0"></div><div id="shrinking-peer" class="shrink-item"></div></div>
+<div class="shrink-row"><div id="basis" class="shrink-item" style="flex-basis:60px"></div><div class="shrink-item" style="flex-basis:60px"></div></div>
+<div class="shrink-row"><div id="out-of-flow" class="shrink-item" style="position:relative"><div style="position:absolute;width:600px"></div></div><div class="shrink-item"></div></div>
+<div class="shrink-row"><div id="ratio" class="shrink-item" style="height:30px;aspect-ratio:2"></div><div class="shrink-item"></div></div>
+<p>The intrinsic contribution still includes the preferred width: 160px total.</p>
+<div id="intrinsic-row" class="inline"><div class="shrink-item"></div><div class="shrink-item"></div></div>
+<p>Changing content must invalidate the content minimum, including retained updates.</p>
+<input id="grow" type="checkbox"><label for="grow">Show 60px content</label>
+<div class="shrink-row"><div id="dynamic" class="shrink-item"><div class="optional"></div></div><div id="dynamic-peer" class="shrink-item"></div></div>

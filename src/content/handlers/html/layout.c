@@ -1170,8 +1170,10 @@ layout_minmax_block(struct box *block, const struct gui_layout_table *font_func,
     } else if (block->parent && (block->parent->flags & NEED_MIN) && wtype != CSS_WIDTH_SET) {
         /* box inside shrink-to-fit context; need minimum width */
         block->flags |= NEED_MIN;
-    } else if (block->parent && (block->parent->type == BOX_FLEX || block->parent->type == BOX_GRID)) {
-        /* box is flex item */
+    } else if (block->parent &&
+        (lh__box_is_flex_container(block->parent) || block->parent->type == BOX_GRID ||
+            block->parent->type == BOX_INLINE_GRID)) {
+        /* Flex/grid items need their content minimum even with a set width. */
         block->flags |= NEED_MIN;
     }
 
@@ -1363,6 +1365,11 @@ layout_minmax_block(struct box *block, const struct gui_layout_table *font_func,
         box_dump(stderr, block, 0, true);
         assert(0);
     }
+
+    /* Preserve the content minimum for flex's automatic minimum (§4.5).
+     * The preferred-width floor below belongs only to the item's intrinsic
+     * contribution (§9.9.3); using it as an auto minimum prevents shrinking. */
+    block->content_min_width = min;
 
     /* Apply CSS width / min-width / max-width constraints.
      *
@@ -6635,6 +6642,7 @@ static void layout_reset_box(struct box *box)
     }
     if (!(box->flags & REUSE_INLINE_INTRINSICS)) {
         box->min_width = (struct css_size){.type = CSS_SIZE_AUTO, .value = 0};
+        box->content_min_width = 0;
         box->max_width = UNKNOWN_MAX_WIDTH;
         box->flags &= ~(INLINE_INTRINSIC_HEIGHT | INLINE_INTRINSIC_NEED_MIN);
     }

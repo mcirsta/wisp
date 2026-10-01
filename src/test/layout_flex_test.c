@@ -1029,6 +1029,7 @@ START_TEST(test_flex_minimum_width_layout)
         .width = AUTO,
         .height = AUTO,
         .min_width = {CSS_SIZE_SET, intrinsic_width},
+        .content_min_width = 600,
         .max_width = intrinsic_width};
     flex.children = flex.last = &item;
     html_content content = {.unit_len_ctx = {
@@ -1043,11 +1044,91 @@ START_TEST(test_flex_minimum_width_layout)
     ck_assert_int_eq(item.width, expected);
     /* Reformatting must not replace the intrinsic caches with used sizes. */
     ck_assert_int_eq(item.min_width.value, intrinsic_width);
+    ck_assert_int_eq(item.content_min_width, 600);
     ck_assert_int_eq(item.max_width, intrinsic_width);
     ck_assert(layout_flex(&flex, 400, &content));
     ck_assert_int_eq(item.width, expected);
     css_computed_style_destroy(item_style);
     css_computed_style_destroy(container_style);
+}
+END_TEST
+
+static const struct {
+    const char *name;
+    int content_min;
+    int explicit_min;
+    uint8_t overflow;
+    int expected[2];
+} flex_shrink_minimum_cases[] = {
+    {"empty", 0, -1, CSS_OVERFLOW_VISIBLE, {50, 70}},
+    {"short content", 30, -1, CSS_OVERFLOW_VISIBLE, {50, 70}},
+    {"content floor", 60, -1, CSS_OVERFLOW_VISIBLE, {60, 70}},
+    {"preferred cap", 120, -1, CSS_OVERFLOW_VISIBLE, {80, 80}},
+    {"explicit zero", 120, 0, CSS_OVERFLOW_VISIBLE, {50, 70}},
+    {"explicit minimum", 0, 70, CSS_OVERFLOW_VISIBLE, {70, 70}},
+    {"hidden overflow", 120, -1, CSS_OVERFLOW_HIDDEN, {50, 70}},
+};
+
+/* Two 80px items in a narrower row. The preferred-width contribution must
+ * remain cached, while the real flex solver uses the separate content floor. */
+START_TEST(test_flex_shrink_content_minimum)
+{
+    struct flex_test_style values = {.container = true,
+        .width = 100,
+        .width_unit = CSS_UNIT_PX,
+        .min_width = -1,
+        .min_unit = CSS_UNIT_PX,
+        .max_width = -1,
+        .basis = -1,
+        .overflow = CSS_OVERFLOW_VISIBLE};
+    css_computed_style *parent_style = flex_test_style_create(&values);
+    values.container = false;
+    values.width = 80;
+    css_computed_style *peer_style = flex_test_style_create(&values);
+    values.min_width = flex_shrink_minimum_cases[_i].explicit_min;
+    values.overflow = flex_shrink_minimum_cases[_i].overflow;
+    css_computed_style *item_style = flex_test_style_create(&values);
+    ck_assert_ptr_nonnull(parent_style);
+    ck_assert_ptr_nonnull(peer_style);
+    ck_assert_ptr_nonnull(item_style);
+    int content_min = flex_shrink_minimum_cases[_i].content_min;
+    int contribution = content_min > 80 ? content_min : 80;
+    struct box parent = {.type = BOX_FLEX, .style = parent_style};
+    struct box item = {.type = BOX_BLOCK,
+        .parent = &parent,
+        .style = item_style,
+        .min_width = {CSS_SIZE_SET, contribution},
+        .content_min_width = content_min,
+        .max_width = contribution};
+    struct box peer = {.type = BOX_BLOCK,
+        .parent = &parent,
+        .style = peer_style,
+        .min_width = {CSS_SIZE_SET, 80},
+        .content_min_width = 0,
+        .max_width = 80,
+        .prev = &item};
+    parent.children = &item;
+    parent.last = item.next = &peer;
+    html_content content = {.unit_len_ctx = {.viewport_width = INTTOFIX(1280),
+                                .viewport_height = INTTOFIX(900),
+                                .font_size_default = INTTOFIX(16),
+                                .font_size_minimum = INTTOFIX(6),
+                                .device_dpi = INTTOFIX(96),
+                                .root_style = parent_style}};
+    for (int pass = 0; pass < 2; pass++) {
+        parent.width = pass ? 140 : 100;
+        ck_assert(layout_flex(&parent, parent.width, &content));
+        int expected = flex_shrink_minimum_cases[_i].expected[pass];
+        ck_assert_msg(item.width == expected && peer.width == parent.width - expected,
+            "%s, pass %d: widths %d/%d, expected %d/%d", flex_shrink_minimum_cases[_i].name, pass, item.width,
+            peer.width, expected, parent.width - expected);
+        ck_assert_int_eq(item.min_width.value, contribution);
+        ck_assert_int_eq(item.max_width, contribution);
+        ck_assert_int_eq(item.content_min_width, content_min);
+    }
+    css_computed_style_destroy(item_style);
+    css_computed_style_destroy(peer_style);
+    css_computed_style_destroy(parent_style);
 }
 END_TEST
 
@@ -1075,8 +1156,12 @@ START_TEST(test_flex_stretched_height)
     if (_i == 4)
         flex_test_style_wrap(parent_style, CSS_FLEX_WRAP_WRAP);
     struct box parent = {.type = BOX_FLEX, .style = parent_style, .width = 400, .height = AUTO};
-    struct box item = {
-        .type = BOX_BLOCK, .style = item_style, .parent = &parent, .min_width = {CSS_SIZE_SET, 200}, .max_width = 200};
+    struct box item = {.type = BOX_BLOCK,
+        .style = item_style,
+        .parent = &parent,
+        .min_width = {CSS_SIZE_SET, 200},
+        .content_min_width = 200,
+        .max_width = 200};
     parent.children = parent.last = &item;
     html_content content = {.unit_len_ctx = {.viewport_width = INTTOFIX(1280),
                                 .viewport_height = INTTOFIX(900),
@@ -1175,8 +1260,14 @@ START_TEST(test_flex_outer_size_alignment)
     flex_test_style_alignment(parent_style, direction,
         center ? CSS_JUSTIFY_CONTENT_CENTER : CSS_JUSTIFY_CONTENT_FLEX_END, 400);
     struct box parent = {.type = BOX_FLEX, .style = parent_style, .width = 400, .height = AUTO};
-    struct box item = {.type = BOX_BLOCK, .style = item_style, .parent = &parent,
-        .width = AUTO, .height = AUTO, .min_width = {CSS_SIZE_SET, 136}, .max_width = 136};
+    struct box item = {.type = BOX_BLOCK,
+        .style = item_style,
+        .parent = &parent,
+        .width = AUTO,
+        .height = AUTO,
+        .min_width = {CSS_SIZE_SET, 136},
+        .content_min_width = 100,
+        .max_width = 136};
     parent.children = parent.last = &item;
     html_content content = {.unit_len_ctx = {.viewport_width = INTTOFIX(1280),
         .viewport_height = INTTOFIX(900), .font_size_default = INTTOFIX(16),
@@ -1428,6 +1519,8 @@ Suite *layout_flex_suite(void)
     tcase_add_test(tc_core, test_row_flex_min_height_unchanged);
 
     tcase_add_loop_test(tc_core, test_flex_minimum_width_layout, 0, 19);
+    tcase_add_loop_test(tc_core, test_flex_shrink_content_minimum, 0,
+        sizeof(flex_shrink_minimum_cases) / sizeof(flex_shrink_minimum_cases[0]));
     tcase_add_loop_test(tc_core, test_flex_stretched_height, 0, 8);
 
     tcase_add_loop_test(tc_core, test_flex_ratio_minimum, 0, 4);

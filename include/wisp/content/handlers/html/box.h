@@ -392,6 +392,13 @@ struct box {
     struct css_size min_width;
 
     /**
+     * Block content minimum before its own width/min/max constraints and outer
+     * edges. Measured with min/max widths; used for non-replaced flex items'
+     * automatic minimum, which differs from their intrinsic contribution.
+     */
+    int content_min_width;
+
+    /**
      * Width that would be taken with no line breaks. Must be
      * non-negative.
      */
@@ -458,14 +465,14 @@ struct box {
     unsigned int start_column;
 
     /**
-     * Array of table column data for TABLE only.
-     */
-    struct column *col;
-
-    /**
      * List item value.
      */
     int list_value;
+
+    /**
+     * Array of table column data for TABLE only.
+     */
+    struct column *col;
 
     /**
      * List marker box if this is a list-item, or NULL.
