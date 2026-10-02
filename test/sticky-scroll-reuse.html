@@ -1,0 +1,42 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Sticky scroll reuse: alpha, overflowing descendants and stacking</title>
+<style>
+body {margin:0;min-width:1500px;font:18px/24px sans-serif;background:#cba}
+.before {height:140px}
+.region {height:850px;width:950px;margin-left:60px}
+header {position:sticky;top:15px;left:10px;height:100px;width:680px;
+    background:rgba(230,40,100,.55);z-index:1;border:7px solid #146}
+.overflow {position:absolute;top:75px;left:530px;width:220px;height:95px;
+    background:rgba(30,170,210,.65);border:4px solid #851}
+.nested {position:sticky;top:40px;width:210px;height:30px;background:#ccc}
+.floating {float:right;width:100px;height:30px;background:#fe9}
+header:after {content:"Pseudo";position:absolute;top:-15px;left:390px;background:#fc6}
+p {margin:0;height:55px;border-bottom:3px solid #475}
+.over {position:absolute;top:350px;left:140px;width:360px;height:70px;background:#ec9;z-index:2}
+footer {height:1000px;background:#777}
+</style>
+<div class="before"></div>
+<div class="region">
+  <header>Translucent sticky header
+    <div class="nested">Nested sticky</div>
+    <div class="floating">Float</div>
+    <div class="overflow">Overflowing child</div>
+  </header>
+  <p>Content row 0 crosses behind the transparent header</p>
+  <p>Content row 1 crosses behind the transparent header</p>
+  <p>Content row 2 crosses behind the transparent header</p>
+  <p>Content row 3 crosses behind the transparent header</p>
+  <p>Content row 4 crosses behind the transparent header</p>
+  <p>Content row 5 crosses behind the transparent header</p>
+  <p>Content row 6 crosses behind the transparent header</p>
+  <p>Content row 7 crosses behind the transparent header</p>
+  <p>Content row 8 crosses behind the transparent header</p>
+  <p>Content row 9 crosses behind the transparent header</p>
+  <p>Content row 10 crosses behind the transparent header</p>
+  <p>Content row 11 crosses behind the transparent header</p>
+  <p>Content row 12 crosses behind the transparent header</p>
+  <p>Content row 13 crosses behind the transparent header</p>
+</div>
+<div class="over">Higher stacking content crosses header</div>
+<footer>Tail</footer>

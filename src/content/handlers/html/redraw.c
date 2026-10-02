@@ -3010,7 +3010,10 @@ static bool html_redraw_box(const html_content *html, struct box *box, int x_par
         }
     } else if (box->iframe) {
         /* Offset is passed to browser window redraw unscaled */
-        browser_window_redraw(box->iframe, x + padding_left, y + padding_top, &r, ctx);
+        if (!browser_window_redraw(box->iframe, x + padding_left, y + padding_top, &r, ctx)) {
+            result = false;
+            goto cleanup;
+        }
 
     } else if (box->gadget && box->gadget->type == GADGET_CHECKBOX) {
         if (!html_redraw_checkbox(x + padding_left, y + padding_top, width, height, box->gadget->selected, ctx)) {

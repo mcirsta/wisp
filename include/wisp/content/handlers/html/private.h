@@ -76,6 +76,7 @@ struct html_render_profile {
     uint64_t layout_ns, paint_ns;
     uint64_t layout_cpu_ns, paint_cpu_ns;
     uint64_t layout_calls, paint_calls, sticky_queries, sticky_ancestor_steps;
+    uint64_t scroll_damage_queries, scroll_damage_boxes, scroll_damage_ns;
 };
 #endif
 
@@ -253,8 +254,8 @@ typedef struct html_content {
     struct html_viewport viewport;
     /** Sticky constraints are usable only after a complete successful layout. */
     bool sticky_layout_valid;
-    /** Settled page pixels translate uniformly when the viewport scrolls. */
-    bool scroll_blit_safe;
+    /** Settled page can reuse scrolled pixels after repainting sticky/frame damage. */
+    bool scroll_reuse_safe;
     /** Partial paint passes do not trim transformed drawing geometry. */
     bool redraw_region_safe;
     /** Document background colour. */

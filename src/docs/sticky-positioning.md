@@ -669,7 +669,7 @@ the question. Do not run verbose logging in timing comparisons.
 
 ## Investigation: sticky headers with viewport reuse (2026-10-02)
 
-Status: architecture approved; stage 1 implemented as recorded below. The
+Status: stages 1–3 implemented as recorded below. The
 experiments and measurements in this section remain prototype results.
 The existing sticky implementation remains complete within its documented scope.
 Commit `6bce3b8f` added scaled-image caching and viewport reuse for eligible pages;
@@ -870,7 +870,127 @@ pixels versus 1,152,000 for the full viewport. This validates region painting,
 not automatic sticky damage calculation or scrolling speed. Captures and the
 reproduction script are in `out/render-captures/sticky-scroll-stage1/`.
 
-**Next:** stage 2's sparse sticky-damage query and scroll-reuse integration,
-followed by stage 3's embedded-frame damage and lifecycle validation. Sticky,
-fixed and iframe scroll guards remain active; this stage does not yet enable
-the prototype's sticky scrolling speedup.
+At this checkpoint sticky, fixed and iframe scroll guards remained active.
+Stage 2 below enables sticky reuse; it retains the other guards.
+
+### Implementation progress: sticky scroll reuse (2026-10-02)
+
+Stage 2 is implemented and enabled for eligible pages. The browser-window API
+now queries scroll damage using explicit old/new document viewports. It returns
+repaint rectangles through a callback or requests full repainting. The HTML
+implementation is isolated in `content/handlers/html/scroll_damage.c` and uses
+the existing sticky coordinates, descendant bounds and ancestor clipping.
+
+The walk prunes branches without sticky descendants, visits nested sticky boxes
+independently, and allocates no core storage or persistent box-pointer registry.
+Ordinary pages still need only a root check. Unchanged document position and
+coverage need no extra damage; equal clipped coverage alone is insufficient,
+because different ink can move through the same clip. Old damage includes only
+pixels actually copied from the old viewport. New damage repaints the normal
+stacking order, including the changing backdrop of translucent headers.
+
+Qt merges this damage with the exposed strips. More than 32 disjoint rectangles,
+or coverage of at least 75% of the viewport, selects full repainting before any
+copy. Existing pending-paint, caret, visibility, zoom, DPR, resize and readiness
+checks remain. Fixed elements, fixed backgrounds, transforms, frames/HTML
+objects and visible select menus retain conservative fallback. In particular,
+two axis updates before painting can copy for the first axis and fully repaint
+for the second; the implementation does not reuse an unfinished paint.
+
+Five C unit tests cover copied/current coverage, unchanged branches, nested
+movement, real ancestor clips, refusal/lifecycle guards, and moving ink with
+identical clipped bounds. Native Qt comparisons cover threshold crossing in both
+directions, containing-block limits, horizontal scrolling, overlapping alpha,
+generated content, floats, nested sticky/scroll containers, stacking, DPR 1/2 and
+both damage budgets. They verify that the final compared step actually reuses
+pixels where expected. The existing scroll test now expects eligible sticky
+pages to reuse pixels. Across the selected layout, redraw, restyle, Qt and Monkey
+suites, all 73 tests pass with ASan/UBSan (leak detection disabled). Debug
+Qt/Monkey, Release capture Qt and capture-disabled production Qt build.
+
+Production-code measurements are saved in
+`out/render-captures/sticky-scroll-stage2/measurements.json`, with a reproduction
+script and native captures. They use Release LTO with optional aggregate profiling
+enabled, a 1280x900 viewport, CPU affinity to CPU 4, warm image caches, three
+alternating full/reuse pairs and fifteen measured 30px scrolls per run:
+
+| Saved Tion | Full core paint CPU (ms/scroll) | Reuse core paint CPU (ms/scroll) | Repainted area |
+| --- | ---: | ---: | ---: |
+| DPR 1 | 8.37 | 1.08 | 11.6% |
+| DPR 2 | 15.27 | 1.17 | 11.6% |
+
+These are medians of run averages for core HTML painting, excluding Qt pixel
+copying, screen presentation, load and capture work. They are not end-to-end
+frame times or directly comparable to the earlier prototype's widget-paint
+timings. The damage query visits 29 boxes and takes about 0.007–0.008ms per scroll.
+No layout or image-scaling cache misses occurred during measured scrolling.
+Native pixels match full repainting at both densities. Saved Bihon also matches,
+but still takes full repainting because of its embedded frames; this stage
+claims no Bihon speedup.
+
+Stage 3 below completes conservative embedded-frame damage and the additional
+lifecycle coverage; the measurements above record the stage-2 checkpoint.
+
+### Implementation progress: frames and lifecycle (2026-10-02)
+
+Stage 3 extends the sparse damage walk to embedded frames. A derived
+`HAS_IFRAME_DESCENDANT` bit is prepared in the existing final layout walk and
+cleared with other derived metadata on reset, text splitting and finalization.
+There is no extra per-box allocation or registry. Each frame contributes its
+old copied coverage and current visible coverage even if its outer box only
+translates. This conservatively repaints its entire viewport, including nested
+frames and child fixed/sticky content, in normal stacking order.
+
+Before copying, the browser-window layer also checks settled partial-paint
+eligibility recursively through child browser windows. It does not walk their
+box trees. An unsettled, transformed or otherwise unsupported child keeps the
+full-repaint fallback. HTML now propagates a child redraw failure instead of
+ignoring it, so Qt cannot mark incomplete painting reusable. Root fixed content,
+fixed backgrounds, transforms, HTML objects, zoom, fractional device movement,
+visible select menus and excessive damage keep their existing fallbacks.
+
+Native comparisons exercise nested/fixed child content, sticky and floated
+frames, frames crossing viewport edges, child scrolling/invalidation, resize,
+hide/show restyling, several actions before painting, carets and selection.
+A pending caret removal exposed a reuse-guard gap: the caret flag was cleared
+before its erase repaint. Caret changes now invalidate reuse until painting
+finishes. The body-selection pixel comparison also exposed an existing Qt
+invalidation error: document rectangles were passed directly to `QWidget::update`
+after scrolling. Qt now subtracts the viewport scroll offset, matching the core
+invalidation contract. This fixes repainting of selections and child-frame
+updates at nonzero scroll offsets. Capture-only batched actions reproduce the
+pending-paint sequences; capture mode also freezes caret blinking. The frame-only damage contribution has a C unit
+regression alongside the sticky coverage cases.
+
+Validation: all 74 selected layout, redraw, restyle, Qt and Monkey tests pass
+with ASan/UBSan (leak detection disabled), using the installed Check library.
+Debug Qt/Monkey, Release capture Qt and production Qt with capture/profiling
+compiled out all build. Native selection comparisons also cover simultaneous
+horizontal/vertical viewport offsets at DPR 1 and 2.
+
+Production-code measurements and native captures are retained under
+`out/render-captures/sticky-scroll-stage3/`, with `measure_sites.py` and
+`measurements.json`. The method matches stage 2: Release LTO, optional aggregate
+profiling, 1280x900 viewport, warm caches, CPU 4 affinity, three alternating
+full/reuse pairs and fifteen measured 30px scrolls per run. Medians of run-average
+core HTML paint CPU time:
+
+| Saved page | DPR | Full paint (ms/scroll) | Reuse (ms/scroll) | Repainted area |
+| --- | ---: | ---: | ---: | ---: |
+| Tion | 1 | 8.39 | 1.53 | 11.6% |
+| Tion | 2 | 17.31 | 1.30 | 11.6% |
+| Bihon | 1 | 3.28 | 0.83 | 15.2% |
+| Bihon | 2 | 6.06 | 0.95 | 15.2% |
+
+All compared native pixels match full repainting. Every measured optimized
+scroll reused pixels; none triggered layout or an image-scaling cache miss.
+Damage queries visit 29 boxes on Tion and 91 on Bihon, taking about
+0.009–0.011ms per scroll. These figures exclude Qt copying and presentation;
+they are painting measurements, not frame-rate guarantees. Run-to-run CPU
+variation also means differences from the stage-2 checkpoint should not be
+interpreted as an isolated change in performance.
+
+The three-stage scroll-reuse implementation is complete within the documented
+eligibility limits. Extending reuse to transforms, root fixed backgrounds or
+other fallback cases is separate work, justified by measurements rather than a
+requirement for this optimization.

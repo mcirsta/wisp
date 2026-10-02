@@ -53,8 +53,9 @@ struct selection;
 struct nsurl;
 struct plot_font_style;
 
-/** True only for a settled layout without viewport-dependent painting. */
-bool html_scroll_blit_safe(struct hlcache_handle *h);
+/** HTML implementation of browser_window_get_scroll_damage(). */
+bool html_get_scroll_damage(struct hlcache_handle *h, const struct rect *old_viewport, const struct rect *new_viewport,
+    browser_window_scroll_damage_cb add, void *pw);
 
 /** Whether this settled document supports independent partial paint passes. */
 bool html_redraw_region_safe(struct hlcache_handle *h);

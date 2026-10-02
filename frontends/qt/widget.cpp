@@ -23,6 +23,7 @@
 
 #include <QPaintEvent>
 #include <QPainter>
+#include <climits>
 #ifdef WISP_QT_CAPTURE
 #include "qt/capture_inspect.h"
 bool nsqt_capture_disable_scroll_blit;
@@ -547,6 +548,10 @@ void NS_Widget::set_pointer(enum gui_pointer_shape set_shape)
  */
 void NS_Widget::setCaret(bool visible, int cx, int cy, int ch)
 {
+    /* Removing a caret queues a repaint too. Until it finishes, the backing
+     * store still contains the old XOR ink, even though m_caret_frame is zero. */
+    if (m_caret_frame != 0 || visible)
+        m_scroll_blit_ready = false;
     /* compute area to redraw and update caret position */
     if (m_caret_frame != 0) {
         int x0, y0, x1, y1;
@@ -606,7 +611,8 @@ nserror NS_Widget::invalidate(const struct rect *rect)
     if (rect == NULL) {
         update();
     } else {
-        update(rect->x0, rect->y0, rect->x1 - rect->x0, rect->y1 - rect->y0);
+        // Core invalidation uses scaled document coordinates; QWidget uses viewport pixels.
+        update(rect->x0 - m_xoffset, rect->y0 - m_yoffset, rect->x1 - rect->x0, rect->y1 - rect->y0);
     }
     return NSERROR_OK;
 }
@@ -633,21 +639,46 @@ void NS_Widget::scrollTo(int x, int y)
     int dx = m_xoffset - x, dy = m_yoffset - y;
     if (dx == 0 && dy == 0)
         return;
-    m_xoffset = x;
-    m_yoffset = y;
     qreal dpr = devicePixelRatioF();
     bool reuse = m_scroll_blit_ready && m_caret_frame == 0 && isVisible() && qAbs(dx) < width() &&
         qAbs(dy) < height() && dpr == m_painted_dpr && qFuzzyIsNull(dx * dpr - qRound(dx * dpr)) &&
-        qFuzzyIsNull(dy * dpr - qRound(dy * dpr)) && browser_window_can_scroll_blit(m_bw);
+        qFuzzyIsNull(dy * dpr - qRound(dy * dpr)) && qint64(qMax(x, m_xoffset)) + width() <= INT_MAX &&
+        qint64(qMax(y, m_yoffset)) + height() <= INT_MAX;
 #ifdef WISP_QT_CAPTURE
     reuse = reuse && !nsqt_capture_disable_scroll_blit;
+#endif
+    QRegion damage;
+    if (reuse) {
+        // Include the newly exposed strips in the complexity/area budget.
+        damage = QRegion(rect()) - QRegion(rect().translated(dx, dy));
+        const struct rect oldViewport = {m_xoffset, m_yoffset, m_xoffset + width(), m_yoffset + height()};
+        const struct rect newViewport = {x, y, x + width(), y + height()};
+        reuse = browser_window_get_scroll_damage(
+            m_bw, &oldViewport, &newViewport,
+            [](const struct rect *r, void *pw) {
+                auto *region = static_cast<QRegion *>(pw);
+                *region += QRect(r->x0, r->y0, r->x1 - r->x0, r->y1 - r->y0);
+                return region->rectCount() <= 32;
+            },
+            &damage);
+        qint64 pixels = 0;
+        for (const QRect &r : damage)
+            pixels += qint64(r.width()) * r.height();
+        // Many paint passes or a nearly full repaint cost more than the copy saves.
+        reuse = reuse && pixels * 4 < qint64(width()) * height() * 3;
+    }
+    m_xoffset = x;
+    m_yoffset = y;
+#ifdef WISP_QT_CAPTURE
     (reuse ? m_scroll_blits : m_scroll_repaints)++;
 #endif
     m_scroll_blit_ready = false;
-    if (reuse)
+    if (reuse) {
         QWidget::scroll(dx, dy, rect());
-    else
+        update(damage);
+    } else {
         update();
+    }
 }
 
 #ifdef WISP_QT_CAPTURE

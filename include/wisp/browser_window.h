@@ -579,8 +579,19 @@ bool browser_window_redraw(
  */
 bool browser_window_redraw_ready(struct browser_window *bw);
 
-/** Whether a root viewport can reuse translated pixels during scrolling. */
-bool browser_window_can_scroll_blit(struct browser_window *bw);
+/** Add a damage rectangle, returning false to request a full repaint. */
+typedef bool (*browser_window_scroll_damage_cb)(const struct rect *damage, void *pw);
+
+/**
+ * Query repaint areas needed for a proposed root viewport scroll copy.
+ * Viewports are equal-sized rectangles in unscaled document pixels. Emitted
+ * rectangles use new viewport coordinates and exclusive far edges; the caller
+ * must also repaint newly exposed strips. No layout or coordinate mutation.
+ * False means full repaint: discard any rectangles already emitted. Only settled
+ * HTML at scale 1 is supported. The callback may refuse excessive damage.
+ */
+bool browser_window_get_scroll_damage(struct browser_window *bw, const struct rect *old_viewport,
+    const struct rect *new_viewport, browser_window_scroll_damage_cb add, void *pw);
 
 /** Whether this document and its child frames support partial paint passes. */
 bool browser_window_can_redraw_regions(struct browser_window *bw);

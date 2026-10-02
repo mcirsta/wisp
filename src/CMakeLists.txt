@@ -150,6 +150,7 @@ add_library(wisp ${WISP_LIB_TYPE}
 	content/handlers/html/redraw.c
 	content/handlers/html/redraw_border.c
 	content/handlers/html/redraw_helpers.c
+	content/handlers/html/scroll_damage.c
 	content/handlers/html/stacking.c
 	content/handlers/html/script.c
 	content/handlers/html/table.c

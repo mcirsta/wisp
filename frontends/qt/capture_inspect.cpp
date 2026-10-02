@@ -282,6 +282,7 @@ QJsonObject nsqt_capture_inspect(struct hlcache_handle *content, const QStringLi
     result["resource_count"] = int(html->num_objects);
     result["active_resources"] = int(html->base.active - html->scripts_active);
     result["sticky_layout_valid"] = html->sticky_layout_valid;
+    result["select_menu_open"] = html->visible_select_menu != nullptr;
     char *selection = html->bw ? browser_window_get_selection(html->bw) : nullptr;
     if (selection) {
         result["selection"] = QString::fromUtf8(selection);
@@ -308,6 +309,9 @@ QJsonObject nsqt_capture_inspect(struct hlcache_handle *content, const QStringLi
     result["render_profile"] = QJsonObject{{"layout_calls", double(render_before.layout_calls)},
         {"layout_ms", render_before.layout_ns / 1e6}, {"paint_calls", double(render_before.paint_calls)},
         {"paint_ms", render_before.paint_ns / 1e6}, {"sticky_queries", double(render_before.sticky_queries)},
+        {"scroll_damage_queries", double(render_before.scroll_damage_queries)},
+        {"scroll_damage_boxes", double(render_before.scroll_damage_boxes)},
+        {"scroll_damage_ms", render_before.scroll_damage_ns / 1e6},
         {"layout_cpu_ms",
             render_before.layout_cpu_ns ? QJsonValue(render_before.layout_cpu_ns / 1e6) : QJsonValue(QJsonValue::Null)},
         {"paint_cpu_ms",

@@ -24,3 +24,11 @@ css_computed_style *sticky_test_style(uint8_t position, uint8_t overflow_x, uint
     set_right(style, CSS_RIGHT_AUTO, (css_fixed_or_calc)0, CSS_UNIT_PX);
     return style;
 }
+
+void sticky_test_set_clip(css_computed_style *style, int top, int right, int bottom, int left)
+{
+    css_computed_clip_rect clip = {.top = INTTOFIX(top), .right = INTTOFIX(right),
+        .bottom = INTTOFIX(bottom), .left = INTTOFIX(left),
+        .tunit = CSS_UNIT_PX, .runit = CSS_UNIT_PX, .bunit = CSS_UNIT_PX, .lunit = CSS_UNIT_PX};
+    set_clip(style, CSS_CLIP_RECT, &clip);
+}

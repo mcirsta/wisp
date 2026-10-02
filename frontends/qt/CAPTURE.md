@@ -72,17 +72,18 @@ Use `steps.json` differences after warm-up to measure repeated paints. Qt can
 use worker threads internally when scaling, so renderer-thread `paint_cpu_ms`
 alone does not account for all that work; also compare `paint_ms`.
 
-Eligible scrolls reuse Qt's backing-store pixels and redraw the exposed strip.
-The engine records eligibility during the existing completed-layout walk;
-scrolling adds no box-tree scan. Sticky/fixed boxes, fixed backgrounds (including
-additional layers), embedded documents, unfinished rendering, non-default page
+Eligible scrolls reuse Qt's backing-store pixels and redraw the exposed strips
+plus old/new sticky paint coverage. The engine records eligibility during the
+existing completed-layout walk and prunes unaffected branches during the damage
+query. Fixed boxes, fixed backgrounds (including additional layers), transforms,
+embedded documents, unfinished rendering, non-default page
 zoom, active carets and fractional physical-pixel movement use full repainting.
 Resize and content invalidation also require fresh pixels before reuse. Qt can
 independently fall back to repainting, for example when another widget overlaps.
 
 `--capture-no-scroll-blit` forces full viewport repainting. `widget_paint` reports
 eligible `scroll_blits` requests, fallback `scroll_repaints`, paint calls and
-the summed damaged bounding-rectangle area in logical pixels (`paint_pixels`).
+the summed renderer clip area in logical pixels (`paint_pixels`).
 Widget counters are sampled before the final capture. Normal `QWidget::grab()`
 repaints, which can hide stale pixels, so test scroll correctness with
 `--capture-screen` under Xvfb/`QT_QPA_PLATFORM=xcb`. This grabs the displayed
@@ -91,6 +92,26 @@ needed to keep scrollbars from overlapping the fixed viewport. Screen capture
 must be supported by the Qt platform, and the viewport must fit on that screen.
 `qt_scroll_reuse` compares these native pixels against full repaints and checks
 that eligible cases actually paint less area.
+`qt_sticky_scroll_reuse` additionally covers sticky thresholds, containing-block
+limits, nested movement, overflow, stacking, translucent content, and damage
+budgets. Sticky pages are eligible at scale 1 when other fallback conditions are
+absent. Embedded frames contribute their whole visible rectangle to damage,
+including nested child content. Child documents must also be settled and support
+partial painting. Fixed content in the root document, transforms and fixed
+backgrounds still require full repainting. More than 32 disjoint rectangles or
+damage covering at least 75% of the viewport also selects a full repaint.
+`qt_frame_scroll_reuse` covers frames containing fixed and nested content, floated
+and sticky frames, resize, restyling, invalidation, batched actions, caret removal,
+text selection and open select menus. All native reuse tests share a CTest screen
+resource lock.
+
+`--capture-batch N` runs the next N actions in one callback without returning to
+the event loop between them (2–64 actions; no nesting). For example,
+`--capture-batch 2 --capture-scroll 0,100 --capture-scroll 0,130` tests a second
+scroll before the first has painted. Each batch produces one settled step in
+`steps.json`; `action_ms` covers the whole batch. Ordinary actions still settle
+individually. Capture mode disables caret blinking for reproducible pixels and
+reports `select_menu_open` in inspection/steps.
 
 `--capture-repaint 'X,Y,W,H;X,Y,W,H'` requests one or more viewport rectangles
 after settling, without changing page content. It is a repeatable action and
@@ -145,6 +166,10 @@ HTML redraw, not screen presentation or capture-file writing.
 `sticky_queries` counts resolved sticky coordinate queries and
 `sticky_ancestor_steps` counts the ancestry frames assembled for them (not every
 subsequent constraint lookup). Inspection's own coordinate queries are excluded.
+`scroll_damage_queries`, `scroll_damage_boxes` and `scroll_damage_ms` record the
+core's sparse scroll-damage queries, visited boxes and elapsed query time. They
+exclude Qt's region merging, pixel copying and painting. Ordinary eligible pages
+visit only the root; there is no DOM or complete box-tree scan on scroll.
 These counters and clocks compile out with the existing profiling option.
 
 Font diagnostics distinguish `weight` (the CSS request), `selected_weight`

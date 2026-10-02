@@ -2940,7 +2940,7 @@ static bool layout_text_box_split(
         return false;
     c2->flags |= CLONE;
     c2->sticky = NULL;
-    c2->flags &= ~(HAS_STICKY_DESCENDANT | HAS_STICKY_ANCESTOR);
+    c2->flags &= ~(HAS_STICKY_DESCENDANT | HAS_STICKY_ANCESTOR | HAS_IFRAME_DESCENDANT);
 
     /* Set remaining text in c2 */
     c2->text += used_length;
@@ -6436,22 +6436,27 @@ static bool layout_finalize_boxes(html_content *content, struct box *box)
      * Embedded HTML objects have no browser-window query for their descendants. */
     if (layout_has_transform(box) || (box->object && content_get_type(box->object) == CONTENT_HTML))
         content->redraw_region_safe = false;
-    /* Reuse this settled-tree walk; scrolling itself must not scan the DOM.
-     * These features can paint pixels that do not translate with the page. */
-    if ((box->style &&
-            (css_computed_position(box->style) == CSS_POSITION_FIXED ||
-                css_computed_position(box->style) == CSS_POSITION_STICKY)) ||
-        (box->flags & IFRAME) || (box->object && content_get_type(box->object) == CONTENT_HTML))
-        content->scroll_blit_safe = false;
-    if (content->scroll_blit_safe && box->style) {
+    /* Sticky movement and frames have a sparse damage query. Other viewport-dependent
+     * painting still needs a full repaint; scrolling must not scan the DOM. */
+    if ((box->style && css_computed_position(box->style) == CSS_POSITION_FIXED) ||
+        (box->object && content_get_type(box->object) == CONTENT_HTML))
+        content->scroll_reuse_safe = false;
+    if (content->scroll_reuse_safe && box->style) {
         for (uint32_t i = 0; i < css_computed_background_layer_count(box->style); i++) {
             if (css_computed_background_attachment_layer(box->style, i) == CSS_BACKGROUND_ATTACHMENT_FIXED) {
-                content->scroll_blit_safe = false;
+                content->scroll_reuse_safe = false;
                 break;
             }
         }
     }
-    box->flags &= ~(HAS_STICKY_DESCENDANT | HAS_STICKY_ANCESTOR);
+    box->flags &= ~(HAS_STICKY_DESCENDANT | HAS_STICKY_ANCESTOR | HAS_IFRAME_DESCENDANT);
+    if (box->flags & IFRAME) {
+        for (struct box *ancestor = box->parent; ancestor; ancestor = ancestor->parent) {
+            if (ancestor->flags & HAS_IFRAME_DESCENDANT)
+                break;
+            ancestor->flags |= HAS_IFRAME_DESCENDANT;
+        }
+    }
     if (box->parent && !(box->abs_containing_block && (box->abs_containing_block->flags & IS_VIEWPORT)) &&
         ((box->parent->flags & HAS_STICKY_ANCESTOR) || (box->parent->sticky && box->parent->sticky->valid)))
         box->flags |= HAS_STICKY_ANCESTOR;
@@ -6650,7 +6655,8 @@ static void layout_reset_box(struct box *box)
      * wrapping must not change a retained sibling's min/max contributions. */
     layout_rejoin_text(box);
     box->flags &= ~(NEW_LINE | MEASURED | HAS_HEIGHT | MAKE_HEIGHT | NEED_MIN | INLINE_LAYOUT_CURRENT |
-        HEIGHT_STRETCHED | ASPECT_RATIO_HEIGHT | HAS_FIXED_DESCENDANT | HAS_STICKY_DESCENDANT | HAS_STICKY_ANCESTOR);
+        HEIGHT_STRETCHED | ASPECT_RATIO_HEIGHT | HAS_FIXED_DESCENDANT | HAS_STICKY_DESCENDANT | HAS_STICKY_ANCESTOR |
+        HAS_IFRAME_DESCENDANT);
     if (box->sticky)
         box->sticky->valid = false;
     box->x = box->y = 0;
@@ -6792,7 +6798,7 @@ bool layout_document(html_content *content, int width, int height)
     layout_position_relative(&content->unit_len_ctx, doc, doc, 0, 0);
 
     layout_calculate_descendant_bboxes(&content->unit_len_ctx, doc);
-    content->scroll_blit_safe = true;
+    content->scroll_reuse_safe = true;
     content->redraw_region_safe = true;
     if (!layout_finalize_boxes(content, doc))
         goto failed;

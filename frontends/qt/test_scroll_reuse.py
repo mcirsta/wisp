@@ -74,7 +74,7 @@ with tempfile.TemporaryDirectory(prefix='wisp-scroll-reuse-') as temp:
         actual, stats = run(case, page)
         reference, full = run(case + '-full', page, reference=True, no_cache=True)
         assert actual == reference, (case, 'cached/scrolled pixels differ from full repaint')
-        if case in ('ordinary', 'tiled'):
+        if case in ('ordinary', 'tiled', 'sticky', 'iframe'):
             assert stats['widget_paint']['scroll_blits'] > 0, (case, stats)
             assert stats['widget_paint']['paint_pixels'] < full['widget_paint']['paint_pixels'], (stats, full)
         else:

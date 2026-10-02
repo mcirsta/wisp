@@ -398,6 +398,11 @@ target_include_directories(layout_sticky_test PRIVATE ${TEST_COMMON_INCLUDES} ${
 target_link_libraries(layout_sticky_test wisp ${CHECK_LIBRARIES})
 add_test(NAME layout_sticky_test COMMAND layout_sticky_test)
 
+add_executable(scroll_damage_test scroll_damage_test.c sticky_test_style.c)
+target_include_directories(scroll_damage_test PRIVATE ${TEST_COMMON_INCLUDES} ${CMAKE_SOURCE_DIR}/include)
+target_link_libraries(scroll_damage_test wisp ${CHECK_LIBRARIES})
+add_test(NAME scroll_damage_test COMMAND scroll_damage_test)
+
 add_executable(textarea_placeholder_test textarea_placeholder_test.c)
 target_include_directories(textarea_placeholder_test PRIVATE ${TEST_COMMON_INCLUDES} ${CMAKE_SOURCE_DIR}/include)
 target_link_libraries(textarea_placeholder_test wisp ${CHECK_LIBRARIES})

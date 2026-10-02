@@ -72,6 +72,7 @@ int NS_Capture::prepare(int &argc, char **argv)
                 "Usage: wisp-qt --capture-dir DIR [capture options] [core options] URL-or-file\n"
                 "  --capture-size WIDTHxHEIGHT  Content viewport (default 1280x900)\n"
                 "  --capture-resize WIDTHxHEIGHT Resize after settling (repeatable action)\n"
+                "  --capture-batch N            Run the next N actions without painting between them\n"
                 "  --capture-settle MS          Quiet period after load (default 500)\n"
                 "  --capture-timeout MS         Overall deadline (default 30000)\n"
                 "  --capture-text-cache-bytes N Text cache budget (0 disables caching for comparison)\n"
@@ -183,6 +184,11 @@ int NS_Capture::prepare(int &argc, char **argv)
         } else if (arg == "--capture-id") {
             m_inspect_ids.append(value);
             ok = !value.isEmpty();
+        } else if (arg == "--capture-batch") {
+            const int count = value.toInt(&ok);
+            ok = ok && count >= 2 && count <= 64;
+            if (ok)
+                m_actions.append({arg, value});
         } else if (arg == "--capture-repaint") {
             repaintRegion(value, &ok);
             if (ok)
@@ -254,6 +260,22 @@ int NS_Capture::prepare(int &argc, char **argv)
             return -1;
         }
     }
+    for (int i = 0; i < m_actions.size(); ++i) {
+        if (m_actions[i].first != "--capture-batch")
+            continue;
+        const int end = i + m_actions[i].second.toInt();
+        if (end >= m_actions.size()) {
+            fprintf(stderr, "Capture batch has too few following actions\n");
+            return -1;
+        }
+        while (++i <= end) {
+            if (m_actions[i].first == "--capture-batch") {
+                fprintf(stderr, "Capture batches cannot be nested\n");
+                return -1;
+            }
+        }
+        --i;
+    }
     m_requested_url = QString::fromLocal8Bit(argv[argc - 1]);
     QDir output(m_directory);
     if ((output.exists() &&
@@ -272,6 +294,8 @@ int NS_Capture::prepare(int &argc, char **argv)
     QSettings::setDefaultFormat(QSettings::IniFormat);
     QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, profilePath());
     QSettings::setPath(QSettings::IniFormat, QSettings::SystemScope, profilePath());
+    // A capture must not depend on which phase of the caret blink was sampled.
+    QApplication::setCursorFlashTime(0);
     s_active = this;
     if (!m_interrupt_restyle.isEmpty())
         QApplication::setQuitOnLastWindowClosed(false);
@@ -383,38 +407,43 @@ void NS_Capture::poll()
             m_steps.append(step);
         }
         if (m_action_index < m_actions.size()) {
-            const auto action = m_actions.at(m_action_index++);
+            int count = 1;
+            if (m_actions[m_action_index].first == "--capture-batch")
+                count = m_actions[m_action_index++].second.toInt();
             QElapsedTimer action_timer;
             action_timer.start();
             bool ok = true;
-            if (action.first == "--capture-resize") {
-                const auto parts = action.second.split('x');
-                m_size = QSize(parts[0].toInt(), parts[1].toInt());
-                // Exercise the widget's normal scheduled reformat path.
-                m_widget->setFixedSize(m_size);
-            } else if (action.first == "--capture-repaint") {
-                m_widget->update(repaintRegion(action.second, &ok));
-            } else if (action.first == "--capture-type") {
-                for (uint32_t key : action.second.toUcs4())
-                    ok = browser_window_key_press(m_bw, key) && ok;
-            } else if (action.first == "--capture-scroll") {
-                const auto xy = action.second.split(',');
-                nsqt_capture_scroll(content, xy[0].toInt(), xy[1].toInt());
-            } else if (action.first == "--capture-scroll-element") {
-                const auto parts = action.second.split(',');
-                ok = nsqt_capture_scroll_element(content, parts[0], parts[1].toInt(), parts[2].toInt());
-            } else if (action.first == "--capture-click-point") {
-                const auto xy = action.second.split(',');
-                nsqt_capture_click_point(m_bw, xy[0].toInt(), xy[1].toInt());
-            } else if (action.first == "--capture-scroll-point") {
-                const auto parts = action.second.split(',');
-                ok = nsqt_capture_scroll_point(
-                    m_bw, parts[0].toInt(), parts[1].toInt(), parts[2].toInt(), parts[3].toInt());
-            } else if (action.first == "--capture-drag") {
-                const auto parts = action.second.split(',');
-                nsqt_capture_drag(m_bw, parts[0].toInt(), parts[1].toInt(), parts[2].toInt(), parts[3].toInt());
-            } else {
-                ok = nsqt_capture_click(m_bw, action.second, action.first == "--capture-click-label");
+            while (count-- > 0 && ok) {
+                const auto action = m_actions.at(m_action_index++);
+                if (action.first == "--capture-resize") {
+                    const auto parts = action.second.split('x');
+                    m_size = QSize(parts[0].toInt(), parts[1].toInt());
+                    // Exercise the widget's normal scheduled reformat path.
+                    m_widget->setFixedSize(m_size);
+                } else if (action.first == "--capture-repaint") {
+                    m_widget->update(repaintRegion(action.second, &ok));
+                } else if (action.first == "--capture-type") {
+                    for (uint32_t key : action.second.toUcs4())
+                        ok = browser_window_key_press(m_bw, key) && ok;
+                } else if (action.first == "--capture-scroll") {
+                    const auto xy = action.second.split(',');
+                    nsqt_capture_scroll(content, xy[0].toInt(), xy[1].toInt());
+                } else if (action.first == "--capture-scroll-element") {
+                    const auto parts = action.second.split(',');
+                    ok = nsqt_capture_scroll_element(content, parts[0], parts[1].toInt(), parts[2].toInt());
+                } else if (action.first == "--capture-click-point") {
+                    const auto xy = action.second.split(',');
+                    nsqt_capture_click_point(m_bw, xy[0].toInt(), xy[1].toInt());
+                } else if (action.first == "--capture-scroll-point") {
+                    const auto parts = action.second.split(',');
+                    ok = nsqt_capture_scroll_point(
+                        m_bw, parts[0].toInt(), parts[1].toInt(), parts[2].toInt(), parts[3].toInt());
+                } else if (action.first == "--capture-drag") {
+                    const auto parts = action.second.split(',');
+                    nsqt_capture_drag(m_bw, parts[0].toInt(), parts[1].toInt(), parts[2].toInt(), parts[3].toInt());
+                } else {
+                    ok = nsqt_capture_click(m_bw, action.second, action.first == "--capture-click-label");
+                }
             }
             m_last_action_ms = action_timer.nsecsElapsed() / 1e6;
             activity(m_bw);

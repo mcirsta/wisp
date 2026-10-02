@@ -58,6 +58,7 @@
 #include "desktop/selection.h"
 #include "desktop/frames.h"
 #include "content/handlers/css/select.h"
+#include "content/handlers/html/scroll_damage.h"
 
 #include <wisp/content/handlers/html/box.h>
 #include <wisp/content/handlers/html/box_inspect.h>
@@ -2562,10 +2563,11 @@ struct box *html_get_box_tree(hlcache_handle *h)
     return c->layout;
 }
 
-bool html_scroll_blit_safe(hlcache_handle *h)
+bool html_get_scroll_damage(hlcache_handle *h, const struct rect *old_viewport, const struct rect *new_viewport,
+    browser_window_scroll_damage_cb add, void *pw)
 {
     html_content *html = (html_content *)hlcache_handle_get_content(h);
-    return html->sticky_layout_valid && html->scroll_blit_safe && html->redraw_region_safe && !html->restyling;
+    return html_compute_scroll_damage(html, old_viewport, new_viewport, add, pw);
 }
 
 bool html_redraw_region_safe(hlcache_handle *h)

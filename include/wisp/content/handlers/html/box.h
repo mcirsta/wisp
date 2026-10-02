@@ -125,7 +125,8 @@ typedef enum {
     REUSE_INLINE_LAYOUT = 1 << 24, /* preserved lines awaiting available-width/float validation */
     INLINE_LAYOUT_CURRENT = 1 << 25, /* eligible lines validated during this update's layout pass */
     HAS_STICKY_DESCENDANT = 1 << 26, /* derived during final constraint preparation */
-    HAS_STICKY_ANCESTOR = 1 << 27 /* visual queries may need an ancestor's displacement */
+    HAS_STICKY_ANCESTOR = 1 << 27, /* visual queries may need an ancestor's displacement */
+    HAS_IFRAME_DESCENDANT = 1 << 28 /* sparse scroll damage includes embedded viewports */
 } box_flags;
 
 

@@ -2566,13 +2566,13 @@ bool browser_window_redraw_ready(struct browser_window *bw)
     return true;
 }
 
-bool browser_window_can_scroll_blit(struct browser_window *bw)
+bool browser_window_get_scroll_damage(struct browser_window *bw, const struct rect *old_viewport,
+    const struct rect *new_viewport, browser_window_scroll_damage_cb add, void *pw)
 {
     /* Fractional zoom currently rounds the redraw origin through layout pixels;
      * it is not always an exact translation by the GUI scrollbar delta. */
-    return bw && bw->window && !bw->parent && !bw->children && bw->scale == 1.0f && bw->current_content &&
-        content_get_status(bw->current_content) == CONTENT_STATUS_DONE && browser_window_redraw_ready(bw) &&
-        content_get_type(bw->current_content) == CONTENT_HTML && html_scroll_blit_safe(bw->current_content);
+    return bw && bw->window && !bw->parent && bw->scale == 1.0f && browser_window_can_redraw_regions(bw) &&
+        html_get_scroll_damage(bw->current_content, old_viewport, new_viewport, add, pw);
 }
 
 bool browser_window_can_redraw_regions(struct browser_window *bw)
