@@ -582,6 +582,9 @@ bool browser_window_redraw_ready(struct browser_window *bw);
 /** Whether a root viewport can reuse translated pixels during scrolling. */
 bool browser_window_can_scroll_blit(struct browser_window *bw);
 
+/** Whether this document and its child frames support partial paint passes. */
+bool browser_window_can_redraw_regions(struct browser_window *bw);
+
 /**
  * Get the position of the current browser window with respect to the root or
  * parent browser window

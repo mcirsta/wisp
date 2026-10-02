@@ -255,6 +255,8 @@ typedef struct html_content {
     bool sticky_layout_valid;
     /** Settled page pixels translate uniformly when the viewport scrolls. */
     bool scroll_blit_safe;
+    /** Partial paint passes do not trim transformed drawing geometry. */
+    bool redraw_region_safe;
     /** Document background colour. */
     colour background_colour;
 

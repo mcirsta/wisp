@@ -131,13 +131,16 @@ static nserror nsqt_plot_clip(const struct redraw_context *ctx, const struct rec
 {
     QPainter *painter = (QPainter *)ctx->priv;
 
-    /* Clip rect is in world coordinates, but setClipRect interprets coords
-     * in the current (transformed) coordinate space. We need to apply the
-     * inverse transform to get correct world-space clipping. */
-    QTransform inv = painter->worldTransform().inverted();
-    QRectF worldClip(clip->x0, clip->y0, clip->x1 - clip->x0, clip->y1 - clip->y0);
-    QRectF transformedClip = inv.mapRect(worldClip);
-    painter->setClipRect(transformedClip);
+    /* Plotter clips are in target coordinates, independent of CSS transforms.
+     * Establish the clip there, then restore the drawing transform. Mapping an
+     * inverse bounding rectangle expands rotated clips into other paint areas. */
+    const QTransform transform = painter->worldTransform();
+    const QRectF targetClip(clip->x0, clip->y0, clip->x1 - clip->x0, clip->y1 - clip->y0);
+    if (!transform.isIdentity())
+        painter->setWorldTransform(QTransform());
+    painter->setClipRect(targetClip);
+    if (!transform.isIdentity())
+        painter->setWorldTransform(transform);
     return NSERROR_OK;
 }
 

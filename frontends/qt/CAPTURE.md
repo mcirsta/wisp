@@ -92,6 +92,17 @@ must be supported by the Qt platform, and the viewport must fit on that screen.
 `qt_scroll_reuse` compares these native pixels against full repaints and checks
 that eligible cases actually paint less area.
 
+`--capture-repaint 'X,Y,W,H;X,Y,W,H'` requests one or more viewport rectangles
+after settling, without changing page content. It is a repeatable action and
+uses the widget's normal damage-region painting. Compare `--capture-screen`
+output with a full-viewport repaint to find clipping or repeated-alpha errors.
+`qt_paint_damage` covers these comparisons, transformed content, embedded frames,
+and scrollbar edges crossing the viewport during scrolling. `paint_pixels`
+counts the disjoint rectangles sent to the renderer, rather than their bounding
+rectangle; `paint_calls` continues to count Qt paint events. Unsupported partial
+painting (currently including CSS transforms) uses one full-viewport pass, so its
+reported area is the full viewport even when Qt only updates a smaller region.
+
 ## Focused inspection
 
 Add `--capture-id ID` (repeatable, literal ID without `#`) and/or

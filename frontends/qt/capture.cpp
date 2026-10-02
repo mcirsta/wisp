@@ -10,6 +10,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QPixmap>
+#include <QRegion>
 #include <QSaveFile>
 #include <QSettings>
 #include <QScreen>
@@ -27,6 +28,28 @@ extern "C" {
 }
 
 NS_Capture *NS_Capture::s_active = nullptr;
+
+/* Viewport rectangles, separated by semicolons, for native damage tests. */
+static QRegion repaintRegion(const QString &value, bool *ok)
+{
+    QRegion region;
+    *ok = false;
+    for (const QString &item : value.split(';')) {
+        const auto parts = item.split(',');
+        if (parts.size() != 4)
+            return {};
+        int pixels[4];
+        for (int i = 0; i < 4; ++i) {
+            bool number;
+            pixels[i] = parts[i].toInt(&number);
+            if (!number || pixels[i] < (i < 2 ? 0 : 1) || pixels[i] > 8192)
+                return {};
+        }
+        region += QRect(pixels[0], pixels[1], pixels[2], pixels[3]);
+    }
+    *ok = !region.isEmpty();
+    return region;
+}
 
 NS_Capture *NS_Capture::active()
 {
@@ -54,6 +77,7 @@ int NS_Capture::prepare(int &argc, char **argv)
                 "  --capture-text-cache-bytes N Text cache budget (0 disables caching for comparison)\n"
                 "  --capture-bitmap-cache-bytes N Scaled bitmap cache budget (0 disables caching)\n"
                 "  --capture-no-scroll-blit     Repaint the full viewport for scroll comparisons\n"
+                "  --capture-repaint X,Y,W,H[;...] Repaint viewport rectangles after settling\n"
                 "  --capture-screen            Grab displayed pixels (requires screen capture support)\n"
                 "  --capture-id ID              Inspect an element (repeatable)\n"
                 "  --capture-click-id ID        Click an element after settling (repeatable)\n"
@@ -159,6 +183,10 @@ int NS_Capture::prepare(int &argc, char **argv)
         } else if (arg == "--capture-id") {
             m_inspect_ids.append(value);
             ok = !value.isEmpty();
+        } else if (arg == "--capture-repaint") {
+            repaintRegion(value, &ok);
+            if (ok)
+                m_actions.append({arg, value});
         } else if (arg == "--capture-resize") {
             const auto parts = value.split('x');
             const int width = parts.value(0).toInt(), height = parts.value(1).toInt();
@@ -364,6 +392,8 @@ void NS_Capture::poll()
                 m_size = QSize(parts[0].toInt(), parts[1].toInt());
                 // Exercise the widget's normal scheduled reformat path.
                 m_widget->setFixedSize(m_size);
+            } else if (action.first == "--capture-repaint") {
+                m_widget->update(repaintRegion(action.second, &ok));
             } else if (action.first == "--capture-type") {
                 for (uint32_t key : action.second.toUcs4())
                     ok = browser_window_key_press(m_bw, key) && ok;

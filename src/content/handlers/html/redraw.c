@@ -1647,9 +1647,9 @@ static bool html_redraw_text_box(const html_content *html, struct box *box, int 
     return true;
 }
 
-bool html_redraw_box(const html_content *html, struct box *box, int x_parent, int y_parent, const struct rect *clip,
-    float scale, colour current_background_color, const struct content_redraw_data *data,
-    const struct redraw_context *ctx);
+static bool html_redraw_box(const html_content *html, struct box *box, int x_parent, int y_parent,
+    const struct rect *clip, float scale, colour current_background_color, const struct content_redraw_data *data,
+    const struct rect *paint_clip, const struct redraw_context *ctx);
 
 /**
  * Render children with negative z-index before parent's background.
@@ -1665,12 +1665,13 @@ bool html_redraw_box(const html_content *html, struct box *box, int x_parent, in
  * \param  scale     scale for redraw
  * \param  current_background_color  background colour
  * \param  data      redraw data
+ * \param  paint_clip Immutable paint-pass boundary, including the document viewport
  * \param  ctx       redraw context
  * \return true if successful, false otherwise
  */
 static bool html_redraw_negative_zindex_children(const html_content *html, struct box *box, int x_parent, int y_parent,
     const struct rect *clip, float scale, colour current_background_color, const struct content_redraw_data *data,
-    const struct redraw_context *ctx)
+    const struct rect *paint_clip, const struct redraw_context *ctx)
 {
     struct box *c;
     int x_offset, y_offset;
@@ -1707,7 +1708,8 @@ static bool html_redraw_negative_zindex_children(const html_content *html, struc
         stacking_context_sort(&negative_zindex);
         for (i = 0; i < negative_zindex.count; i++) {
             if (!html_redraw_box(html, negative_zindex.entries[i].box, negative_zindex.entries[i].x_parent,
-                    negative_zindex.entries[i].y_parent, clip, scale, current_background_color, data, ctx)) {
+                    negative_zindex.entries[i].y_parent, clip, scale, current_background_color, data, paint_clip,
+                    ctx)) {
                 stacking_context_fini(&negative_zindex);
                 return false;
             }
@@ -1728,13 +1730,14 @@ static bool html_redraw_negative_zindex_children(const html_content *html, struc
  * \param  clip      clip rectangle
  * \param  scale     scale for redraw
  * \param  current_background_color  background colour under this box
+ * \param  paint_clip Immutable paint-pass boundary, including the document viewport
  * \param  ctx	     current redraw context
  * \return true if successful, false otherwise
  */
 
 static bool html_redraw_box_children(const html_content *html, struct box *box, int x_parent, int y_parent,
     const struct rect *clip, float scale, colour current_background_color, const struct content_redraw_data *data,
-    const struct redraw_context *ctx)
+    const struct rect *paint_clip, const struct redraw_context *ctx)
 {
     struct box *c;
     int x_offset, y_offset;
@@ -1810,7 +1813,8 @@ static bool html_redraw_box_children(const html_content *html, struct box *box, 
         stacking_context_sort(&negative_zindex);
         for (i = 0; i < negative_zindex.count; i++) {
             if (!html_redraw_box(html, negative_zindex.entries[i].box, negative_zindex.entries[i].x_parent,
-                    negative_zindex.entries[i].y_parent, clip, scale, current_background_color, data, ctx)) {
+                    negative_zindex.entries[i].y_parent, clip, scale, current_background_color, data, paint_clip,
+                    ctx)) {
                 render_ok = false;
                 goto cleanup;
             }
@@ -1826,7 +1830,8 @@ static bool html_redraw_box_children(const html_content *html, struct box *box, 
         if (z != Z_INDEX_AUTO) {
             continue; /* Already in deferred list */
         }
-        if (!html_redraw_box(html, c, x_offset, y_offset, clip, scale, current_background_color, data, ctx)) {
+        if (!html_redraw_box(
+                html, c, x_offset, y_offset, clip, scale, current_background_color, data, paint_clip, ctx)) {
             render_ok = false;
             goto cleanup;
         }
@@ -1840,7 +1845,8 @@ static bool html_redraw_box_children(const html_content *html, struct box *box, 
         if (z != Z_INDEX_AUTO) {
             continue; /* Already in deferred list */
         }
-        if (!html_redraw_box(html, c, x_offset, y_offset, clip, scale, current_background_color, data, ctx)) {
+        if (!html_redraw_box(
+                html, c, x_offset, y_offset, clip, scale, current_background_color, data, paint_clip, ctx)) {
             render_ok = false;
             goto cleanup;
         }
@@ -1852,7 +1858,8 @@ static bool html_redraw_box_children(const html_content *html, struct box *box, 
         stacking_context_sort(&positive_zindex);
         for (i = 0; i < positive_zindex.count; i++) {
             if (!html_redraw_box(html, positive_zindex.entries[i].box, positive_zindex.entries[i].x_parent,
-                    positive_zindex.entries[i].y_parent, clip, scale, current_background_color, data, ctx)) {
+                    positive_zindex.entries[i].y_parent, clip, scale, current_background_color, data, paint_clip,
+                    ctx)) {
                 render_ok = false;
                 goto cleanup;
             }
@@ -1866,7 +1873,8 @@ fallback:
     stacking_context_fini(&positive_zindex);
     for (c = box->children; c; c = c->next) {
         if (c->type != BOX_FLOAT_LEFT && c->type != BOX_FLOAT_RIGHT) {
-            if (!html_redraw_box(html, c, x_offset, y_offset, clip, scale, current_background_color, data, ctx)) {
+            if (!html_redraw_box(
+                    html, c, x_offset, y_offset, clip, scale, current_background_color, data, paint_clip, ctx)) {
                 return false;
             }
         }
@@ -1874,7 +1882,8 @@ fallback:
     for (c = box->float_children; c; c = c->next_float) {
         if (stacking_float_is_structural(c))
             continue;
-        if (!html_redraw_box(html, c, x_offset, y_offset, clip, scale, current_background_color, data, ctx)) {
+        if (!html_redraw_box(
+                html, c, x_offset, y_offset, clip, scale, current_background_color, data, paint_clip, ctx)) {
             return false;
         }
     }
@@ -1896,15 +1905,16 @@ cleanup:
  * \param  clip      clip rectangle
  * \param  scale     scale for redraw
  * \param  current_background_color  background colour under this box
+ * \param  paint_clip Immutable paint-pass boundary, including the document viewport
  * \param  ctx	     current redraw context
  * \return true if successful, false otherwise
  *
  * x, y, clip_[xy][01] are in target coordinates.
  */
 
-bool html_redraw_box(const html_content *html, struct box *box, int x_parent, int y_parent, const struct rect *clip,
-    const float scale, colour current_background_color, const struct content_redraw_data *data,
-    const struct redraw_context *ctx)
+static bool html_redraw_box(const html_content *html, struct box *box, int x_parent, int y_parent,
+    const struct rect *clip, const float scale, colour current_background_color, const struct content_redraw_data *data,
+    const struct rect *paint_clip, const struct redraw_context *ctx)
 {
     if (box->flags & IS_OPACITY_ZERO)
         return true;
@@ -2111,13 +2121,6 @@ bool html_redraw_box(const html_content *html, struct box *box, int x_parent, in
             if (data != NULL) {
                 x += data->x;
                 y += data->y;
-
-                /* For absolute elements, use viewport clip instead of inherited DOM clip */
-                viewport_clip.x0 = data->viewport_x;
-                viewport_clip.y0 = data->viewport_y;
-                viewport_clip.x1 = data->viewport_x + data->root_width;
-                viewport_clip.y1 = data->viewport_y + data->root_height;
-                clip = &viewport_clip;
             }
             x_parent = x - box->x;
             y_parent = y - box->y;
@@ -2151,13 +2154,6 @@ bool html_redraw_box(const html_content *html, struct box *box, int x_parent, in
             if (data != NULL) {
                 abs_x += data->x;
                 abs_y += data->y;
-
-                /* For absolute elements, use viewport clip instead of inherited DOM clip */
-                viewport_clip.x0 = data->viewport_x;
-                viewport_clip.y0 = data->viewport_y;
-                viewport_clip.x1 = data->viewport_x + data->root_width;
-                viewport_clip.y1 = data->viewport_y + data->root_height;
-                clip = &viewport_clip;
             }
             x_parent = abs_x - box->x;
             y_parent = abs_y - box->y;
@@ -2179,6 +2175,17 @@ bool html_redraw_box(const html_content *html, struct box *box, int x_parent, in
         border_top = box->border[TOP].width * scale;
         border_right = box->border[RIGHT].width * scale;
         border_bottom = box->border[BOTTOM].width * scale;
+    }
+
+    /* Positioned descendants may escape a DOM ancestor's clip, but never the
+     * requested paint area. paint_clip is unchanged throughout this document's
+     * walk; a nested HTML redraw starts with its own frame/content clip. */
+    if (box->abs_containing_block != NULL && data != NULL) {
+        viewport_clip = (struct rect){data->viewport_x, data->viewport_y, data->viewport_x + data->root_width,
+            data->viewport_y + data->root_height};
+        if (html_clip_intersect_box(&viewport_clip, paint_clip, false) == CLIP_RESULT_EMPTY)
+            return true;
+        clip = &viewport_clip;
     }
 
     bool has_css_clip = box->style && css_computed_position(box->style) == CSS_POSITION_ABSOLUTE &&
@@ -2284,9 +2291,10 @@ bool html_redraw_box(const html_content *html, struct box *box, int x_parent, in
         if (box->flags & HAS_FIXED_DESCENDANT) {
             int px = box->abs_containing_block ? x / scale - box->x : x_parent;
             int py = box->abs_containing_block ? y / scale - box->y : y_parent;
-            return html_redraw_negative_zindex_children(html, box, px, py, clip, scale,
-                       current_background_color, data, ctx) &&
-                html_redraw_box_children(html, box, px, py, clip, scale, current_background_color, data, ctx);
+            return html_redraw_negative_zindex_children(
+                       html, box, px, py, clip, scale, current_background_color, data, paint_clip, ctx) &&
+                html_redraw_box_children(
+                    html, box, px, py, clip, scale, current_background_color, data, paint_clip, ctx);
         }
         return true; /* Early return BEFORE push_transform, no cleanup needed */
     }
@@ -2312,7 +2320,8 @@ bool html_redraw_box(const html_content *html, struct box *box, int x_parent, in
         if ((ctx->plot->group_start) && (ctx->plot->group_start(ctx, "hidden box") != NSERROR_OK)) {
             return false;
         }
-        if (!html_redraw_box_children(html, box, x_parent, y_parent, &r, scale, current_background_color, data, ctx)) {
+        if (!html_redraw_box_children(
+                html, box, x_parent, y_parent, &r, scale, current_background_color, data, paint_clip, ctx)) {
             return false;
         }
         return ((!ctx->plot->group_end) || (ctx->plot->group_end(ctx) == NSERROR_OK));
@@ -2397,7 +2406,7 @@ bool html_redraw_box(const html_content *html, struct box *box, int x_parent, in
      * background. This only applies if this box doesn't create its own
      * stacking context. */
     if (!html_redraw_negative_zindex_children(
-            html, box, x_parent, y_parent, &r, scale, current_background_color, data, ctx)) {
+            html, box, x_parent, y_parent, &r, scale, current_background_color, data, paint_clip, ctx)) {
         {
             {
                 result = false;
@@ -2510,12 +2519,9 @@ bool html_redraw_box(const html_content *html, struct box *box, int x_parent, in
             p.x1 = (int)((-vp_x + root_w) * scale);
             p.y0 = (int)(-vp_y * scale);
             p.y1 = (int)((-vp_y + root_h) * scale);
-            if (ctx->plot->clip(ctx, &p) != NSERROR_OK) {
-                {
-                    result = false;
-                    goto cleanup;
-                }
-            }
+            /* Viewport backgrounds can escape the element clip, never the
+             * immutable boundary of this paint pass (or child document). */
+            html_clip_intersect_box(&p, paint_clip, false);
         }
         if (!box->parent) {
             /* Root element, special case:
@@ -2539,6 +2545,10 @@ bool html_redraw_box(const html_content *html, struct box *box, int x_parent, in
         }
         /* valid clipping rectangles only */
         if ((p.x0 < p.x1) && (p.y0 < p.y1)) {
+            if (expand_viewport_bg && ctx->interactive && ctx->plot->clip(ctx, &p) != NSERROR_OK) {
+                result = false;
+                goto cleanup;
+            }
             /* plot background */
             if (!html_redraw_background(
                     x, y, box, scale, &p, &current_background_color, bg_box, &html->unit_len_ctx, ctx)) {
@@ -2550,10 +2560,6 @@ bool html_redraw_box(const html_content *html, struct box *box, int x_parent, in
             if (expand_viewport_bg) {
                 NSLOG(layout, INFO, "bg draw post: tag %s class %s box %p rect x0 %i x1 %i", tag, cls, box, p.x0, p.x1);
             }
-            if (class_attr != NULL)
-                dom_string_unref(class_attr);
-            if (name != NULL)
-                dom_string_unref(name);
             /* restore previous graphics window */
             if (ctx->plot->clip(ctx, &r) != NSERROR_OK) {
                 {
@@ -2562,6 +2568,10 @@ bool html_redraw_box(const html_content *html, struct box *box, int x_parent, in
                 }
             }
         }
+        if (class_attr != NULL)
+            dom_string_unref(class_attr);
+        if (name != NULL)
+            dom_string_unref(name);
     }
 
     /* borders for block level content and replaced inlines */
@@ -3068,8 +3078,8 @@ bool html_redraw_box(const html_content *html, struct box *box, int x_parent, in
 
         /* Parent coordinates were normalized before painting; retain their
          * integer layout precision instead of dividing rounded device pixels. */
-        if (!html_redraw_box_children(
-                html, box, x_parent, y_parent, child_clip_ptr, scale, current_background_color, data, ctx)) {
+        if (!html_redraw_box_children(html, box, x_parent, y_parent, child_clip_ptr, scale, current_background_color,
+                data, paint_clip, ctx)) {
             {
                 result = false;
                 goto cleanup;
@@ -3090,7 +3100,7 @@ bool html_redraw_box(const html_content *html, struct box *box, int x_parent, in
     if (box->list_marker) {
         if (!html_redraw_box(html, box->list_marker, x_parent + box->x - scrollbar_get_offset(box->scroll_x),
                 y_parent + box->y - scrollbar_get_offset(box->scroll_y), clip, scale, current_background_color, data,
-                ctx)) {
+                paint_clip, ctx)) {
             {
                 result = false;
                 goto cleanup;
@@ -3207,7 +3217,7 @@ bool html_redraw(
         result &= (ctx->plot->rectangle(ctx, &pstyle_fill_bg, clip) == NSERROR_OK);
 
         result &= html_redraw_box(
-            html, box, data->x, data->y, clip, data->scale, pstyle_fill_bg.fill_colour, data, ctx);
+            html, box, data->x, data->y, clip, data->scale, pstyle_fill_bg.fill_colour, data, clip, ctx);
     }
 
     if (select) {

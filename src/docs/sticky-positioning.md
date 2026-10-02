@@ -666,3 +666,211 @@ sticky allocations or extra scroll-time tree pass. On sticky pages, count offset
 resolutions and ancestor visits in optional diagnostics to catch repeated deep
 walks. Prefer existing instrumentation; add counters only where it cannot answer
 the question. Do not run verbose logging in timing comparisons.
+
+## Investigation: sticky headers with viewport reuse (2026-10-02)
+
+Status: architecture approved; stage 1 implemented as recorded below. The
+experiments and measurements in this section remain prototype results.
+The existing sticky implementation remains complete within its documented scope.
+Commit `6bce3b8f` added scaled-image caching and viewport reuse for eligible pages;
+sticky/fixed pages still take its full-repaint fallback. This section describes
+how to extend that optimization without changing sticky layout or adding a
+compositor. It supersedes neither the positioning rules nor the exclusions above.
+
+### Recommended architecture
+
+Reuse the viewport pixels and repaint the areas affected by sticky movement,
+using the normal page painter and its normal stacking order. Keep these areas
+separate from the newly exposed scroll strip. This handles translucent headers,
+overlapping content, changing sticky offsets and containing-block limits without
+maintaining a separate header image.
+
+For each affected subtree, calculate its old and new **paint coverage**, using
+explicit old/new document scroll offsets. After the viewport copy, damage is the
+union of:
+
+- Old coverage clipped to the old viewport, translated by the copy delta, then
+  clipped to the new viewport. Only pixels actually copied can leave remnants.
+- New coverage clipped to the new viewport. Repaint this even when the header
+  stays at the same screen position: content behind a translucent header changes.
+- The newly exposed strip, already invalidated by `QWidget::scroll()`.
+
+The core should expose one query returning damaged rectangles or a full-repaint
+fallback. Keep Qt's `QRegion` and copying policy in the frontend. Reuse
+`box_coords_at_scroll()`, the settled sticky constraints and real ancestor clips;
+do not resolve CSS, run layout or mutate box coordinates during this query.
+
+Use the existing descendant flags to prune the box walk. Tion required only
+29 box visits out of 2,587, including its two prepared sticky boxes. There is no
+measured reason to introduce a persistent registry of descendant pointers.
+If adding frame/fixed damage later, extend settled subtree metadata and its
+existing invalidation/reset paths rather than scanning the document on every
+scroll. Ordinary eligible pages should retain their constant-time fast path.
+
+Paint coverage must include borders, text ink and overflowing descendants, not
+just the header rectangle. Tion's 73px header has descendant extents reaching
+87px below its origin; Bihon's reach 103px and extend beyond its 1010px width.
+Nested sticky descendants need their own contributions because their movement
+is not encoded in the parent's settled descendant bounds. Transformed content
+requires transformed paint bounds or a fallback. Do not inflate layout/scroll
+extents to solve a painting problem.
+
+Bound damage-region complexity and fall back when damage is too fragmented,
+covers most of the viewport, or cannot be bounded reliably. Preserve the existing
+readiness, pending-paint, resize, caret, zoom and device-pixel checks. Layout and
+partial restyling must invalidate/recompute eligibility through the existing
+settled-layout lifecycle. Production paint state must be scoped to each redraw,
+with no new global renderer state.
+
+### Paint contracts that need fixing first
+
+1. **Damage clips must not expand.** `html_redraw_box()` currently replaces the
+   inherited clip with the viewport for positioned boxes. With multiple damage
+   rectangles this can repaint another rectangle during the same event, causing
+   repeated alpha blending. Preserve an immutable boundary for the current paint
+   pass separately from CSS/ancestor clips. Positioning can escape an ancestor's
+   CSS clip where appropriate; it cannot escape the requested paint area. Child
+   documents must retain their own viewport boundary as well.
+2. **Scrollbar painting and bounds must agree.** A small page with no sticky
+   elements reproduces a missing antialiased scrollbar edge after viewport reuse
+   in the unchanged Release binary. A scroll container starts at document y=900;
+   at a 900px viewport it is rejected as an empty intersection, but after a 100px
+   scroll a full repaint draws ink at viewport y=799. The copied pixels are blank
+   there and the exposed strip starts at y=800. Fix the scrollbar's actual paint
+   clipping/bounds contract, with a regression, rather than adding an arbitrary
+   seam expansion to the scroll algorithm.
+3. **Qt must use the damage region.** `paintEvent()` currently passes
+   `event->rect()` to the engine. The rectangle can cover nearly the entire
+   viewport even when the actual damage is just a header and a bottom strip.
+   Paint disjoint regions with the immutable per-pass boundary. Qt's automatic
+   event clip covers the whole region, so it alone cannot prevent one pass from
+   drawing into another pass's rectangle. See the
+   [QPaintEvent region documentation](https://doc.qt.io/qt-6/qpaintevent.html#region).
+
+An isolated frontend clip limit fixes the translucent-overlap reproduction.
+Enforcing the limit in the core additionally fixes the tested partial/full
+differences for embedded documents containing fixed content. This supports a
+core contract fix, with a frontend boundary as needed, rather than relying on
+Qt to hide excessive drawing. It does not establish that all existing frame
+positioning is correct.
+
+### Measurements and limits
+
+Experiments live in
+`out/render-captures/sticky-scroll-investigation-2026-10-02/`. They compile copied
+sources and link separate binaries against the current Release build. Repository
+renderer sources and normal build outputs are unchanged. The prototype caches
+eligibility for a static capture and uses experiment-only scoped globals; these
+are measurement shortcuts, **not the proposed production implementation**.
+
+The final benchmark uses Release LTO, native Qt/Xvfb screen captures, a 1280x900
+logical viewport, warmed decoded/scaled image caches, CPU affinity to CPU 4,
+three alternating full/optimized pairs, and nineteen measured 30px scrolls per
+run after warming the exact path. Both modes use the same experimental core
+paint-boundary fix. Figures below are median renderer-thread CPU milliseconds
+spent painting each scroll, excluding load, waits, screenshots and presentation.
+They measure scrolling, not page-load or layout speed.
+
+| Saved page | Device pixel ratio | Full paint CPU (ms) | Reuse plus damage CPU (ms) | Repainted area |
+| --- | ---: | ---: | ---: | ---: |
+| Tion | 1 | 21.43 | 10.92 | 12.0% |
+| Bihon | 1 | 10.00 | 5.10 | 15.4% |
+| Tion | 2 | 32.40 | 16.87 | 12.0% |
+| Bihon | 2 | 19.35 | 4.72 | 15.4% |
+
+The sparse damage query took about 0.014–0.017ms per scroll. Including both
+embedded-frame branches, Bihon visited 91 of 3,779 boxes. Synchronous dispatch,
+including the viewport copy and damage query, is recorded separately in
+`core-benchmark.json`. Timing varies between runs; these are local prototype
+measurements, not frame-rate guarantees. The normal-density results support
+roughly halving painting cost. Three paint passes still repeat some traversal;
+region merging is a possible later tuning step if measurement justifies it.
+
+All four final benchmark cases have identical captured pixels between full
+painting and reuse, and match the corresponding original-core captures. No new
+image-scaling cache misses occurred during the measured scrolls. Separate
+fixtures exercise sticky thresholds, containing-block limits, overlap, nested
+sticky boxes, child overflow, transparency, horizontal movement and DPR 1/2.
+The initial prototype deliberately preserved failures: the scrollbar case
+remains unresolved; the transparency and tested frame failures pass after the
+paint-boundary experiment. This is not a substitute for the production lifecycle
+and sanitizer suites.
+
+Bihon's measurement also enables **conservative repainting of embedded-frame
+rectangles**. Its two saved blank frames otherwise trigger the current fallback.
+This benefit will require the frame clipping contract and native frame tests;
+merely removing the existing iframe guard is not sufficient. The experiment also
+checked nonblank frames containing fixed content. Keep fixed backgrounds,
+unbounded/transformed effects and other unsupported cases on full repaint until
+their coverage is proven.
+
+### Suggested implementation sequence
+
+1. Establish immutable paint-pass clipping and correct the scrollbar boundary
+   inconsistency. Add small native partial/full pixel regressions first.
+2. Add the core sticky-damage query using settled metadata and paint bounds, then
+   connect it to Qt region painting and existing viewport reuse. Validate stick,
+   unstick, reverse/diagonal scrolling, overflow, alpha, stacking and nested cases.
+3. Add conservative frame-rectangle handling after child-viewport clipping is
+   covered. Exercise resize, restyle/retained-box replacement, content invalidation,
+   several scroll events before paint, caret/select overlays, DPR and fallback
+   cases; repeat the saved-site comparisons and timings.
+
+This is several focused changes, not a sticky-layout rewrite. Scrolling only
+the area below a presumed opaque header relies on geometry/occlusion assumptions
+that do not cover general sticky content. Separate composited header layers would
+require new stacking, caching and invalidation machinery without a demonstrated
+need here. The proposed geometry and paint contracts remain useful if rendering
+later becomes parallel; this optimization needs no rendering threads or new
+full-viewport image cache.
+
+### Implementation progress: paint boundaries (2026-10-02)
+
+Stage 1 is implemented. The experiments and timing table above describe the
+earlier prototype; they are not measurements of enabled sticky scroll reuse.
+
+- HTML redraw now carries an immutable paint-pass clip through recursive and
+  deferred painting. Positioned descendants and viewport backgrounds can reset
+  an ancestor clip without escaping the requested region or child-document clip.
+- Scrollbars clip their outline ink to their allocated rectangle and restore
+  the caller's clip. This resolves the native scrolling seam preserved by the
+  prototype's scrollbar fixture.
+- Qt paints disjoint damage rectangles separately, preserving painter state
+  between passes and drawing the XOR caret only once per event. Plotter clips
+  are established in target coordinates, including when a transform is active.
+- Capture builds support `--capture-repaint 'X,Y,W,H;...'`. The new native
+  `qt_paint_damage` regression compares displayed pixels with full repainting;
+  it covers alpha, positioned/pseudo content, embedded frames, zoom, DPR 1/2,
+  scrollbar edges, and the transform fallback below. The native tests share a
+  CTest resource lock so their Xvfb runs do not interfere.
+
+The rotated-background fixture exposed an existing coordinate-space problem:
+some background geometry is trimmed against the target clip before the CSS
+transform is applied. Correct target clipping alone does not fix that geometry.
+For now, documents containing CSS transforms use one full-viewport core paint
+pass, with Qt's system region limiting actual displayed writes, and cannot reuse
+scrolled pixels. This is the conservative transformed-content fallback proposed
+above, not a complete transform-rendering fix. See the
+[CSS transform rendering model](https://www.w3.org/TR/css-transforms-1/#transform-rendering)
+and [Qt paint-event clipping](https://doc.qt.io/qt-6/qwidget.html#paintEvent).
+
+Eligibility is recomputed in the existing final layout walk. Painting reads
+settled metadata and checks child-document eligibility; it does not scan box
+trees. Tests cover adding/removing a transform by restyling and a transformed
+child frame. Loading/unsettled content, framesets, non-HTML content and embedded
+HTML objects also use a full-viewport pass conservatively.
+
+Validation: 71 selected Debug ASan/UBSan layout, redraw, restyle, Qt and Monkey
+tests pass using the system Check library (leak detection disabled as in the
+existing capture runs). Debug Qt/Monkey, Release capture Qt and production Qt
+with capture disabled all build successfully. Release native captures of the
+saved Tion and Bihon pages at scroll position 700px match exactly between disjoint
+and full repainting at DPR 1 and 2. Those disjoint passes paint 281,600 logical
+pixels versus 1,152,000 for the full viewport. This validates region painting,
+not automatic sticky damage calculation or scrolling speed. Captures and the
+reproduction script are in `out/render-captures/sticky-scroll-stage1/`.
+
+**Next:** stage 2's sparse sticky-damage query and scroll-reuse integration,
+followed by stage 3's embedded-frame damage and lifecycle validation. Sticky,
+fixed and iframe scroll guards remain active; this stage does not yet enable
+the prototype's sticky scrolling speedup.

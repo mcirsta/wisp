@@ -114,6 +114,8 @@ with tempfile.TemporaryDirectory(prefix="wisp-capture-test-") as tmp:
     for options in (["--capture-dir", str(first)],
                     ["--capture-dir", str(root / "invalid"), "--capture-size", "0x480"],
                     ["--capture-dir", str(root / "invalid"), "--capture-point", "x,2"],
+                    ["--capture-dir", str(root / "invalid"), "--capture-repaint", "0,0,0,40"],
+                    ["--capture-dir", str(root / "invalid"), "--capture-repaint", "0,0,20,40;bad"],
                     ["--capture-dir", str(root / "invalid"), str(local)]):
         process = subprocess.run([str(binary), *options, str(local)], env=env,
                                  capture_output=True, timeout=5)

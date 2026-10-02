@@ -2575,6 +2575,22 @@ bool browser_window_can_scroll_blit(struct browser_window *bw)
         content_get_type(bw->current_content) == CONTENT_HTML && html_scroll_blit_safe(bw->current_content);
 }
 
+bool browser_window_can_redraw_regions(struct browser_window *bw)
+{
+    if (!bw || bw->children || !bw->current_content || content_get_status(bw->current_content) != CONTENT_STATUS_DONE ||
+        !browser_window_redraw_ready(bw) || content_get_type(bw->current_content) != CONTENT_HTML ||
+        !html_redraw_region_safe(bw->current_content))
+        return false;
+
+    /* Child documents can finish layout independently of their parent. Query
+     * their settled metadata here; never traverse their box trees at paint time. */
+    for (int i = 0; i < bw->iframe_count; i++) {
+        if (!browser_window_can_redraw_regions(&bw->iframes[i]))
+            return false;
+    }
+    return true;
+}
+
 
 /* exported interface, documented in browser_private.h */
 void browser_window_update_extent(struct browser_window *bw)

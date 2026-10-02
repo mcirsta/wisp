@@ -6431,6 +6431,11 @@ static bool layout_finalize_boxes(html_content *content, struct box *box)
 
     if (box == NULL)
         return true;
+    /* Background geometry is still trimmed before applying CSS transforms.
+     * Use a full viewport pass until that coordinate-space mixing is fixed.
+     * Embedded HTML objects have no browser-window query for their descendants. */
+    if (layout_has_transform(box) || (box->object && content_get_type(box->object) == CONTENT_HTML))
+        content->redraw_region_safe = false;
     /* Reuse this settled-tree walk; scrolling itself must not scan the DOM.
      * These features can paint pixels that do not translate with the page. */
     if ((box->style &&
@@ -6788,6 +6793,7 @@ bool layout_document(html_content *content, int width, int height)
 
     layout_calculate_descendant_bboxes(&content->unit_len_ctx, doc);
     content->scroll_blit_safe = true;
+    content->redraw_region_safe = true;
     if (!layout_finalize_boxes(content, doc))
         goto failed;
     content->sticky_layout_valid = true;

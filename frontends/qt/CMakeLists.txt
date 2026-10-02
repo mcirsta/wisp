@@ -159,6 +159,10 @@ if(WISP_QT_CAPTURE)
             add_test(NAME qt_scroll_reuse COMMAND ${WISP_TEST_XVFB_RUN} -a -s "-screen 0 1920x1600x24"
                 ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_scroll_reuse.py $<TARGET_FILE:wisp-qt>)
             set_tests_properties(qt_scroll_reuse PROPERTIES TIMEOUT 120)
+            add_test(NAME qt_paint_damage COMMAND ${WISP_TEST_XVFB_RUN} -a -s "-screen 0 1920x1600x24"
+                ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_paint_damage.py $<TARGET_FILE:wisp-qt>)
+            set_tests_properties(qt_paint_damage PROPERTIES TIMEOUT 90)
+            set_tests_properties(qt_scroll_reuse qt_paint_damage PROPERTIES RESOURCE_LOCK qt_native_screen)
         endif()
         add_test(NAME qt_render_capture
             COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_capture.py $<TARGET_FILE:wisp-qt>)

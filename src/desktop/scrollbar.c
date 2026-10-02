@@ -232,11 +232,9 @@ static inline nserror scrollbar_rectangle(const struct redraw_context *ctx, stru
 }
 
 
-/*
- * Exported interface.  Documented in scrollbar.h
- */
-nserror scrollbar_redraw(
-    struct scrollbar *s, int x, int y, const struct rect *clip, float scale, const struct redraw_context *ctx)
+/* Paint with the scrollbar's allocated rectangle already clipped. */
+static nserror
+scrollbar_redraw_contents(struct scrollbar *s, int x, int y, float scale, const struct redraw_context *ctx)
 {
     int w = SCROLLBAR_WIDTH;
     int bar_pos, bar_c0, bar_c1;
@@ -276,11 +274,6 @@ nserror scrollbar_redraw(
     }
 
     bar_c0 = (s->horizontal ? area.x0 : area.y0) + w + bar_pos;
-
-    /* if scrollbar is outside the clipping rectangle, nothing to render */
-    if ((area.x1 < clip->x0) || (area.y1 < clip->y0) || (clip->x1 < area.x0) || (clip->y1 < area.y0)) {
-        return NSERROR_OK;
-    }
 
     if (s->horizontal) {
         /* scrollbar is horizontal */
@@ -493,6 +486,35 @@ nserror scrollbar_redraw(
 /*
  * Exported interface.  Documented in scrollbar.h
  */
+nserror scrollbar_redraw(
+    struct scrollbar *s, int x, int y, const struct rect *clip, float scale, const struct redraw_context *ctx)
+{
+    /* Outlines can have antialiased ink outside their centreline. Keep that ink
+     * inside the allocated widget, matching its layout and invalidation bounds.
+     * The far edges are exclusive, unlike the outline's last pixel coordinates. */
+    struct rect bounds = {x * scale, y * scale, (x + (s->horizontal ? s->length : SCROLLBAR_WIDTH)) * scale,
+        (y + (s->horizontal ? SCROLLBAR_WIDTH : s->length)) * scale};
+    if (bounds.x0 < clip->x0)
+        bounds.x0 = clip->x0;
+    if (bounds.y0 < clip->y0)
+        bounds.y0 = clip->y0;
+    if (bounds.x1 > clip->x1)
+        bounds.x1 = clip->x1;
+    if (bounds.y1 > clip->y1)
+        bounds.y1 = clip->y1;
+    if (bounds.x0 >= bounds.x1 || bounds.y0 >= bounds.y1)
+        return NSERROR_OK;
+
+    nserror res = ctx->plot->clip(ctx, &bounds);
+    if (res != NSERROR_OK)
+        return res;
+    res = scrollbar_redraw_contents(s, x, y, scale, ctx);
+    nserror restore = ctx->plot->clip(ctx, clip);
+    return res == NSERROR_OK ? restore : res;
+}
+
+
+/* Exported interface. Documented in scrollbar.h. */
 void scrollbar_set(struct scrollbar *s, int value, bool bar_pos)
 {
     int well_length;

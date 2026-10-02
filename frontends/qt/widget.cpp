@@ -172,7 +172,6 @@ void NS_Widget::paintEvent(QPaintEvent *event)
     m_scroll_blit_ready = true;
 #ifdef WISP_QT_CAPTURE
     m_paint_calls++;
-    m_paint_pixels += quint64(event->rect().width()) * event->rect().height();
 #endif
 
     /* Enable antialiasing for smoother edges on diagonal lines and curves */
@@ -186,18 +185,25 @@ void NS_Widget::paintEvent(QPaintEvent *event)
         .plot = &nsqt_plotters,
         .priv = &painter,
     };
-    /* netsurf render clip region coordinates */
-    struct rect clip = {
-        .x0 = event->rect().left(),
-        .y0 = event->rect().top(),
-        .x1 = event->rect().left() + event->rect().width(),
-        .y1 = event->rect().top() + event->rect().height(),
-    };
+    // Keep disjoint damage separate; its bounding rectangle can span the page.
+    // Unsupported drawing needs one full viewport pass. Qt's system clip still
+    // restricts the displayed writes to the actual damage region.
+    const QRegion paintRegion = browser_window_can_redraw_regions(m_bw) ? event->region() : QRegion(rect());
+    for (const QRect &area : paintRegion) {
+#ifdef WISP_QT_CAPTURE
+        m_paint_pixels += quint64(area.width()) * area.height();
+#endif
+        painter.save();
+        struct rect clip = {area.x(), area.y(), area.x() + area.width(), area.y() + area.height()};
+        if (!browser_window_redraw(m_bw, -m_xoffset, -m_yoffset, &clip, &ctx))
+            m_scroll_blit_ready = false;
+        painter.restore();
+    }
 
-    if (!browser_window_redraw(m_bw, -m_xoffset, -m_yoffset, &clip, &ctx))
-        m_scroll_blit_ready = false;
-
-    redraw_caret(&clip, &ctx);
+    // The caret uses XOR, so draw it once through Qt's complete event clip.
+    struct rect caret_clip = {event->rect().x(), event->rect().y(), event->rect().x() + event->rect().width(),
+        event->rect().y() + event->rect().height()};
+    redraw_caret(&caret_clip, &ctx);
 
     m_painted_dpr = devicePixelRatioF();
 }

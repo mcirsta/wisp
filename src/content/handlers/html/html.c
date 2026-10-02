@@ -2565,7 +2565,13 @@ struct box *html_get_box_tree(hlcache_handle *h)
 bool html_scroll_blit_safe(hlcache_handle *h)
 {
     html_content *html = (html_content *)hlcache_handle_get_content(h);
-    return html->sticky_layout_valid && html->scroll_blit_safe && !html->restyling;
+    return html->sticky_layout_valid && html->scroll_blit_safe && html->redraw_region_safe && !html->restyling;
+}
+
+bool html_redraw_region_safe(hlcache_handle *h)
+{
+    html_content *html = (html_content *)hlcache_handle_get_content(h);
+    return html->sticky_layout_valid && html->redraw_region_safe && !html->restyling;
 }
 
 /**
