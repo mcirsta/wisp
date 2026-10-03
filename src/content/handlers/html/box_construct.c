@@ -759,18 +759,30 @@ static const char *box_disclosure_symbol(const css_computed_style *style, bool o
  * \param box      Box to attach marker to
  * \param title    Current title attribute
  * \param ctx      Box construction context
- * \param parent   Current block-level container
  * \return true on success, false on memory exhaustion
  */
-static bool box_construct_marker(struct box *box, const char *title, struct box_construct_ctx *ctx, struct box *parent)
+static bool box_construct_marker(struct box *box, const char *title, struct box_construct_ctx *ctx)
 {
     lwc_string *image_uri;
     struct box *marker;
     enum css_list_style_type_e list_style_type;
 
-    marker = box_create(NULL, box->style, false, NULL, NULL, title, NULL, ctx->bctx);
-    if (marker == false)
+    /* The selected pseudo style supplies inherited text properties. Its box
+     * properties (and the list item's borders/background/dimensions) must not
+     * affect marker layout. Both inside and outside markers own this style. */
+    const css_computed_style *text_style = box->styles && box->styles->styles[CSS_PSEUDO_ELEMENT_MARKER]
+        ? box->styles->styles[CSS_PSEUDO_ELEMENT_MARKER] : box->style;
+    nscss_select_ctx select = {.ctx = ctx->content->select_ctx,
+        .quirks = ctx->content->quirks == DOM_DOCUMENT_QUIRKS_MODE_FULL,
+        .base_url = ctx->content->base_url, .universal = ctx->content->universal};
+    css_computed_style *style = nscss_get_blank_style(&select, &ctx->content->unit_len_ctx, text_style);
+    if (style == NULL)
         return false;
+    marker = box_create(NULL, style, true, NULL, NULL, title, NULL, ctx->bctx);
+    if (marker == NULL) {
+        css_computed_style_destroy(style);
+        return false;
+    }
 
     bool inside = css_computed_list_style_position(box->style) == CSS_LIST_STYLE_POSITION_INSIDE;
     marker->type = inside ? BOX_TEXT : BOX_BLOCK;
@@ -780,7 +792,7 @@ static bool box_construct_marker(struct box *box, const char *title, struct box_
     switch (list_style_type) {
     case CSS_LIST_STYLE_TYPE_DISCLOSURE_OPEN:
     case CSS_LIST_STYLE_TYPE_DISCLOSURE_CLOSED:
-        marker->text = (char *)box_disclosure_symbol(box->style, list_style_type == CSS_LIST_STYLE_TYPE_DISCLOSURE_OPEN);
+        marker->text = (char *)box_disclosure_symbol(style, list_style_type == CSS_LIST_STYLE_TYPE_DISCLOSURE_OPEN);
         marker->length = 3;
         break;
 
@@ -835,16 +847,7 @@ static bool box_construct_marker(struct box *box, const char *title, struct box_
     box->list_marker = marker;
     marker->flags |= box->flags & IS_OPACITY_ZERO;
     if (inside) {
-        /* Normal inline children participate in wrapping, sizing and hit testing.
-         * Only inherited properties belong to a marker, not the list item's
-         * positioning, border, background or dimensions. */
-        nscss_select_ctx select = {.ctx = ctx->content->select_ctx,
-            .quirks = ctx->content->quirks == DOM_DOCUMENT_QUIRKS_MODE_FULL,
-            .base_url = ctx->content->base_url, .universal = ctx->content->universal};
-        marker->style = nscss_get_blank_style(&select, &ctx->content->unit_len_ctx, box->style);
-        if (marker->style == NULL)
-            return false;
-        marker->flags |= STYLE_OWNED;
+        /* Ordinary inline children participate in wrapping, sizing and hit testing. */
         struct box *container = NULL;
         if (!box_ensure_inline_container(box, &container, ctx->bctx))
             return false;
@@ -1184,7 +1187,7 @@ static bool box_construct_element(struct box_construct_ctx *ctx, bool *convert_c
 
     if (!(box->flags & CONTENTS_SKIPPED) &&
         ns_computed_display(box->style, props.node_is_root) == CSS_DISPLAY_LIST_ITEM) {
-        if (!box_construct_marker(box, props.title, ctx, props.containing_block))
+        if (!box_construct_marker(box, props.title, ctx))
             goto error;
     }
     if (!box_construct_insert(box, props.containing_block, &props.inline_container, ctx->bctx))

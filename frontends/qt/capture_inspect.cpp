@@ -187,6 +187,25 @@ static int highlightedFragments(struct box *box, const html_content *html, box_f
     return count;
 }
 
+// Share the existing CSS serializer between element and marker diagnostics.
+static QString computedStyleDump(const css_computed_style *style)
+{
+    QString result;
+    FILE *stream = style ? tmpfile() : nullptr;
+    if (stream) {
+        nscss_dump_computed_style(stream, style);
+        if (fflush(stream) == 0 && fseek(stream, 0, SEEK_SET) == 0) {
+            QFile file;
+            if (file.open(stream, QIODevice::ReadOnly)) {
+                result = QString::fromUtf8(file.readAll());
+                file.close(); // QFile does not own the FILE* by default.
+            }
+        }
+        fclose(stream);
+    }
+    return result;
+}
+
 static QJsonObject describe(struct box *box, const html_content *html)
 {
     const css_unit_ctx *units = &html->unit_len_ctx;
@@ -217,6 +236,7 @@ static QJsonObject describe(struct box *box, const html_content *html)
         description["text"] = marker->text ? QString::fromUtf8(marker->text, marker->length) : QString();
         description["outside"] = box_has_outside_marker(box);
         description["value"] = marker->list_value;
+        description["computed_style_dump"] = computedStyleDump(marker->style);
         result["list_marker"] = description;
     }
     if (box->abs_containing_block) {
@@ -238,19 +258,7 @@ static QJsonObject describe(struct box *box, const html_content *html)
     result["children"] = children;
     result["child_count"] = child_count;
     if (box->style) {
-        // Reuse the existing serializer; avoid maintaining a second CSS serializer.
-        FILE *stream = tmpfile();
-        if (stream) {
-            nscss_dump_computed_style(stream, box->style);
-            if (fflush(stream) == 0 && fseek(stream, 0, SEEK_SET) == 0) {
-                QFile file;
-                if (file.open(stream, QIODevice::ReadOnly)) {
-                    result["computed_style_dump"] = QString::fromUtf8(file.readAll());
-                    file.close(); // QFile does not own the FILE* by default.
-                }
-            }
-            fclose(stream);
-        }
+        result["computed_style_dump"] = computedStyleDump(box->style);
         // The legacy dump predates flex/grid. Include useful modern layout values.
         css_fixed grow = 0, shrink = 0;
         css_computed_flex_grow(box->style, &grow);

@@ -1,0 +1,33 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Marker font and colour styling</title>
+<style>
+body { margin:40px; font:16px/24px monospace; color:#123456; }
+details, ul, ol { margin:0 0 16px; padding:0; }
+li { margin-left:40px; }
+.inside { list-style-position:inside; }
+.large::marker { font-size:24px; font-weight:bold; color:#c02040; }
+.small::marker { font-size:8px; color:#008040; }
+#disclosure { --marker-colour:#c02040; }
+#disclosure::marker { color:var(--marker-colour); font-style:italic; }
+[open] > #disclosure::marker { color:#008040; font-size:20px; }
+#ignored::marker {
+    color:#008040; position:absolute; display:none; width:200px; height:200px;
+    margin:100px; padding:100px; border:20px solid red; background:yellow;
+    list-style:none outside;
+}
+#decorated { border:2px solid; padding:4px; background:#eee; }
+#image { list-style:inside url('data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="12" height="12"%3E%3Crect width="12" height="12" fill="green"/%3E%3C/svg%3E'); }
+#image::marker { width:200px; height:200px; color:red; }
+#none { list-style:none inside; }
+#none::marker { color:red; font-size:40px; }
+</style>
+<details id="details"><summary id="disclosure" class="large"><span id="label">Styled disclosure</span></summary><p>Body</p></details>
+<ol class="inside" start="9"><li id="inside" class="large"><span id="inside-label">Inside</span></li></ol>
+<ol start="9"><li id="outside" class="large"><span id="outside-label">Outside</span></li></ol>
+<ol><li id="small" class="small"><span id="small-label">Small outside</span></li></ol>
+<ol class="inside"><li id="ignored"><span id="ignored-label">Ignored box properties</span></li></ol>
+<ol class="inside"><li id="control"><span id="control-label">Control</span></li></ol>
+<ol><li id="decorated"><span id="decorated-label">Decorated outside</span></li></ol>
+<ul><li id="image"><span id="image-label">Image</span></li></ul>
+<ul><li id="none"></li></ul>

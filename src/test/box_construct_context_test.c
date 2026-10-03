@@ -1825,9 +1825,11 @@ START_TEST(test_region_retained_list_numbering)
     }
     /* An inline body puts an anonymous inline container first at the root.
      * Viewport stretching must not turn its enlarged height into cached lines. */
-    char css[180];
+    char css[360];
     snprintf(css, sizeof(css),
-        "body{display:%s}#outer.wide{display:block}li{list-style:upper-roman %s}",
+        "body{display:%s}#outer.wide{display:block}li{list-style:upper-roman %s}"
+        "li::marker{color:#c02040;font-size:24px;position:absolute;border:8px solid}"
+        "#outer::marker{color:#008040}",
         _i % 4 < 2 ? "block" : "inline", _i < 4 ? "outside" : "inside");
     css_stylesheet *extra = add_sheet(css);
     static const struct gui_layout_table fonts = {.width = boundary_font_width, .split = boundary_font_split};
@@ -1850,6 +1852,10 @@ START_TEST(test_region_retained_list_numbering)
     build_owned_document();
     ck_assert(layout_document(&html, 300, 600));
     struct box *retained = box_for_node(outside), *marker = retained->list_marker;
+    css_color color;
+    ck_assert(marker->flags & STYLE_OWNED);
+    ck_assert_int_eq(css_computed_position(marker->style), CSS_POSITION_STATIC);
+    ck_assert_int_eq(css_computed_border_top_style(marker->style), CSS_BORDER_STYLE_NONE);
     size_t plateau[2] = {0};
     for (unsigned pass = 0; pass < 100; pass++) {
         unsigned state = pass % 2;
@@ -1869,6 +1875,8 @@ START_TEST(test_region_retained_list_numbering)
         ck_assert(layout_document(&html, 300, 600));
         ck_assert_ptr_eq(box_for_node(outside), retained);
         ck_assert_ptr_eq(retained->list_marker, marker);
+        ck_assert_int_eq(css_computed_color(marker->style, &color), CSS_COLOR_COLOR);
+        ck_assert_uint_eq(color, 0xffc02040);
         assert_layout_matches(expected[state], _i, pass);
         end_region_update();
         size_t blocks = talloc_total_blocks(html.bctx);

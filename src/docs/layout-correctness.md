@@ -28,7 +28,8 @@ The supported behavior and repeatable checks are in
 Basic collapse, disclosure markers, mouse activation and search/fragment reveal are implemented;
 see [details.md](details.md). Remaining work:
 
-- Keyboard focus/activation through the browser's native focus handling.
+- Keyboard focus/activation through shared document focus handling; the
+  investigation and implementation sequence are in [details.md](details.md#keyboard-focus-follow-up).
 - Exclusive `name` groups, including parser and DOM attribute changes.
 - The `HTMLDetailsElement` scripting interface and queued/coalesced `toggle`
   events, rather than firing an incorrect synchronous substitute.
@@ -48,12 +49,23 @@ Reproducer: `test/disclosure-markers.html`, `#rtl` (explicit CSS direction).
 Removing its CSS rule isolates the HTML attribute issue. Initial captures are in
 `out/render-captures/disclosure-markers-2026-10-03/chromium/`.
 
-## Marker styling and narrow counters
+## Marker content, outside baselines and narrow counters
 
-`::marker` selectors are parsed and selected, but box construction does not yet
-use that pseudo-element's style or `content`. Ordinary `list-style` properties
-and inherited text styling work. Applying the supported marker properties and
-content is separate work shared by summaries and ordinary lists.
+Marker font and colour styles now use the selected `::marker` style for both
+inside and outside markers. Custom `::marker { content:... }` remains unused;
+generated contents need shared counter/content handling for summaries and lists.
+
+Outside markers still use independent vertical layout: `layout_lists` sets text
+markers to `y=0`, and their ascent/descent does not contribute to the first line.
+In `test/marker-styling.html`, `#outside` has a 24px marker beside 16px text with
+24px line-height: Wisp's item is 24px tall, Chromium's is 27px, with the text
+baseline shifted to accommodate the larger marker. `#small` and the padded
+`#decorated` also expose marker/first-line baseline differences. Fix this through
+shared first-line metrics, accounting for first block children, wrapping/floats
+and retained inline-layout reuse, rather than a font-size-dependent y correction
+in `layout_lists`. Inside markers already participate in normal line metrics.
+
+Evidence: `out/render-captures/marker-styling-2026-10-03/initial/`.
 
 A very narrow inside counter also differs from Chromium: `#spaced-marker` in
 `test/disclosure-markers.html` uses a negative Korean counter in an 8px item.

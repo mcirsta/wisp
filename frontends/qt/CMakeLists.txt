@@ -259,6 +259,9 @@ if(WISP_QT_CAPTURE)
         add_test(NAME qt_disclosure_markers
             COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_disclosure_markers.py $<TARGET_FILE:wisp-qt>)
         set_tests_properties(qt_disclosure_markers PROPERTIES TIMEOUT 90)
+        add_test(NAME qt_marker_styling
+            COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_marker_styling.py $<TARGET_FILE:wisp-qt>)
+        set_tests_properties(qt_marker_styling PROPERTIES TIMEOUT 90)
         add_test(NAME qt_details_search
             COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_details_search.py $<TARGET_FILE:wisp-qt>)
         set_tests_properties(qt_details_search PROPERTIES TIMEOUT 120)
