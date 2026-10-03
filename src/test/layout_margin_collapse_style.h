@@ -59,6 +59,9 @@ void style_set_horizontal_edges(css_computed_style *s, int padding, int border);
 /** Set overflow-x and overflow-y to hidden. */
 void style_set_overflow_hidden(css_computed_style *s);
 
+/** Set display:flow-root while preserving visible overflow. */
+void style_set_flow_root(css_computed_style *s);
+
 /** Set position: absolute. */
 void style_set_position_absolute(css_computed_style *s);
 

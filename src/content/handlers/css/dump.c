@@ -831,6 +831,9 @@ void nscss_dump_computed_style(FILE *stream, const css_computed_style *style)
     case CSS_DISPLAY_BLOCK:
         fprintf(stream, "display: block ");
         break;
+    case CSS_DISPLAY_FLOW_ROOT:
+        fprintf(stream, "display: flow-root ");
+        break;
     case CSS_DISPLAY_LIST_ITEM:
         fprintf(stream, "display: list-item ");
         break;

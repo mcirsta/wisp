@@ -3,18 +3,6 @@
 Only unresolved work belongs here. Completed changes and validation history are
 in Git; the regression fixtures remain in the test suite.
 
-## `display:flow-root`
-
-The extended hidden-until-found comparison exposed missing support: a float
-escaped its intended container and shifted later content. Implement a proper
-block formatting context through the CSS display representation and box/layout
-paths, including generated property code. Do not translate it to
-`overflow:hidden`: flow-root establishes a context without clipping overflow.
-
-Cover float containment, avoidance of outside floats, margin isolation and
-visible overflow. Original evidence:
-`out/render-captures/until-found-2026-10-03/chromium-extended/`.
-
 ## Image ratio precision
 
 Bihon's `probe-img-62` is 111×99 in Wisp versus 111×100 in Chromium. Another 55
@@ -27,6 +15,21 @@ Review precision and rounding in the shared ratio-sizing path. Do not compensate
 in absolute positioning or stretch images to their containing block. Cover
 intrinsic and CSS ratios, min/max constraints and both normal/positioned images.
 Evidence: `out/render-captures/absolute-images-2026-10-03/`.
+
+## Positioned content loses clicks to later blocks
+
+An absolutely positioned label with `z-index:auto` fails to toggle its checkbox
+where a later normal-flow block overlaps it. Chromium identifies the label at
+the same point; Wisp includes the label in its hit list but the native click
+does not activate it. Setting `z-index:1` makes the click work. The failure
+occurs with ordinary `display:block` as well as `flow-root`, with or without
+label text.
+
+Review hit-testing order against painting/stacking order, including positioned
+descendants inside inline containers. Fix the shared ordering rather than
+special-casing labels. Reproductions and native click captures are in
+`out/render-captures/flow-root-2026-10-03/label-probe/`; the Chromium comparison
+is in the adjacent `label-comparison/` directory (point `241,15`).
 
 ## Fontconfig shutdown allocations
 

@@ -132,6 +132,9 @@ static const char *const dump_keywords_display[] = {
     [DISPLAY_NONE] = "none",
     [DISPLAY_FLEX] = "flex",
     [DISPLAY_INLINE_FLEX] = "inline-flex",
+    [DISPLAY_GRID] = "grid",
+    [DISPLAY_INLINE_GRID] = "inline-grid",
+    [DISPLAY_FLOW_ROOT] = "flow-root",
 };
 
 static const char *const dump_keywords_empty_cells[] = {

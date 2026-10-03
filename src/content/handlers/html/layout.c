@@ -1680,6 +1680,16 @@ static bool box_has_positive_percentage_height(const css_unit_ctx *unit_len_ctx,
     return lh__length_to_px(box->style, unit_len_ctx, available, value, unit, &height) && height > 0;
 }
 
+/* Style/containment reasons for giving an ordinary block its own formatting
+ * context. Keep this separate from overflow clipping: flow-root does not clip.
+ * Atomic inline boxes, floats, flex and grid have their own layout paths. */
+static bool box_style_creates_block_context(const struct box *box)
+{
+    return box->style && (css_computed_display(box->style, false) == CSS_DISPLAY_FLOW_ROOT ||
+        css_computed_overflow_x(box->style) != CSS_OVERFLOW_VISIBLE ||
+        css_computed_overflow_y(box->style) != CSS_OVERFLOW_VISIBLE || (box->flags & CONTENTS_SKIPPED));
+}
+
 /**
  * Check if a box prevents margins from collapsing through it.
  * CSS 2.1 §8.3.1: A box's own margins collapse only if it does not
@@ -1694,12 +1704,9 @@ static inline bool box_prevents_collapse_through(const css_unit_ctx *unit_len_ct
      * when empty. Their top and bottom margins are never adjoining. */
     if (box->type == BOX_FLEX || box->type == BOX_GRID)
         return true;
-    /* Overflow establishes a block formatting context. Even when empty,
-     * its top and bottom margins are separate (CSS 2.1 §8.3.1), so its
-     * bottom margin still needs collecting after layout. */
-    if (box->type == BOX_BLOCK && box->style &&
-        (css_computed_overflow_x(box->style) != CSS_OVERFLOW_VISIBLE ||
-            css_computed_overflow_y(box->style) != CSS_OVERFLOW_VISIBLE))
+    /* Independent block contexts keep top and bottom margins separate even
+     * when empty, so collect their bottom margin after layout. */
+    if (box->type == BOX_BLOCK && box_style_creates_block_context(box))
         return true;
     if (box->flags & (MAKE_HEIGHT | ASPECT_RATIO_HEIGHT))
         return true;
@@ -1797,9 +1804,7 @@ static struct box *layout_next_margin_block(const css_unit_ctx *unit_len_ctx, st
              * a following sibling's top margin. */
             if (box->type == BOX_FLEX || box->type == BOX_GRID || box->flags & (MAKE_HEIGHT | CONTENTS_SKIPPED) ||
                 box->border[TOP].width || box->padding[TOP] ||
-                (box->style &&
-                    (css_computed_overflow_x(box->style) != CSS_OVERFLOW_VISIBLE ||
-                        css_computed_overflow_y(box->style) != CSS_OVERFLOW_VISIBLE)) ||
+                box_style_creates_block_context(box) ||
                 (box->type == BOX_INLINE_CONTAINER && box_inline_container_has_line_boxes(box)) ||
                 (box_has_positive_min_height(unit_len_ctx, box) && !box_has_in_flow_block_children(box))) {
                 /* Collapse to this box; return it */
@@ -1810,8 +1815,7 @@ static struct box *layout_next_margin_block(const css_unit_ctx *unit_len_ctx, st
 
         /* Find next box */
         if (box->type == BOX_BLOCK && !box->object && box->children && box->style &&
-            css_computed_overflow_x(box->style) == CSS_OVERFLOW_VISIBLE &&
-            css_computed_overflow_y(box->style) == CSS_OVERFLOW_VISIBLE && box_has_in_flow_block_children(box)) {
+            !box_style_creates_block_context(box) && box_has_in_flow_block_children(box)) {
             /* Down into children — crossing a parent-child boundary.
              * CSS 2.1 §8.3.1: margin may collapse with first child.
              * Only descend for in-flow block-level children; inline
@@ -4409,7 +4413,7 @@ static void layout_block_log_box(const struct box *box, const struct box *block)
 
 /* Measure before positioning: table widths depend on available float space. */
 static bool layout_block_size_child(struct box *box, struct box *block, int viewport_height, html_content *content,
-    struct block_layout_state *state, enum css_overflow_e overflow_x, enum css_overflow_e overflow_y)
+    struct block_layout_state *state)
 {
     int lm, rm;
     /* Width measurement must use the space below a float that this box
@@ -4439,8 +4443,7 @@ static bool layout_block_size_child(struct box *box, struct box *block, int view
             }
 
             if (!lh__box_is_object(box) && box->style && block->float_children &&
-                (overflow_x != CSS_OVERFLOW_VISIBLE || overflow_y != CSS_OVERFLOW_VISIBLE ||
-                    (box->flags & CONTENTS_SKIPPED))) {
+                box_style_creates_block_context(box)) {
                 int top = state->cy + (int)state->max_pos_margin - (int)state->max_neg_margin;
                 state->y = layout_block_avoid_floats(
                     &content->unit_len_ctx, box, viewport_height, block->float_children, state->cx, max(top, clear_y));
@@ -4501,7 +4504,7 @@ static bool layout_block_size_child(struct box *box, struct box *block, int view
 
 /* Resolve the pending margin chain, then apply dimensions and clearance. */
 static bool layout_block_position_child(struct box *box, struct box *block, int viewport_height, html_content *content,
-    struct block_layout_state *state, enum css_overflow_e overflow_x, enum css_overflow_e overflow_y)
+    struct block_layout_state *state)
 {
     /* If we don't know which box the current margin collapses
      * through to, find out.  Update the pos/neg margin values. */
@@ -4533,7 +4536,7 @@ static bool layout_block_position_child(struct box *box, struct box *block, int 
      * CSS clearance is handled separately from this geometric constraint. */
     state->y = 0;
 
-    if (!layout_block_size_child(box, block, viewport_height, content, state, overflow_x, overflow_y))
+    if (!layout_block_size_child(box, block, viewport_height, content, state))
         return false;
 
     /* Position box: horizontal. */
@@ -4983,7 +4986,7 @@ bool layout_block_context(struct box *block, int viewport_height, html_content *
         if (box->type == BOX_INLINE_CONTAINER && box_inline_container_only_floats(box)) {
             struct block_layout_state saved = state;
             int flow_y = box->y;
-            if (!layout_block_position_child(box, block, viewport_height, content, &state, overflow_x, overflow_y) ||
+            if (!layout_block_position_child(box, block, viewport_height, content, &state) ||
                 !layout_inline_container(box, box->parent->width, block, state.cx, state.cy, content))
                 return false;
             state = saved;
@@ -4991,15 +4994,12 @@ bool layout_block_context(struct box *block, int viewport_height, html_content *
             state.y = flow_y;
             goto advance_to_next_box;
         }
-        if (!layout_block_position_child(box, block, viewport_height, content, &state, overflow_x, overflow_y))
+        if (!layout_block_position_child(box, block, viewport_height, content, &state))
             return false;
 
-        /* Unless the box has an overflow style of visible, the box
-         * establishes a new block context. */
+        /* Lay out independent contexts with their own float list and margins. */
         if (box->type == BOX_FLEX || box->type == BOX_GRID ||
-            (box->type == BOX_BLOCK && box->style &&
-                (overflow_x != CSS_OVERFLOW_VISIBLE || overflow_y != CSS_OVERFLOW_VISIBLE ||
-                    (box->flags & CONTENTS_SKIPPED)))) {
+            (box->type == BOX_BLOCK && box_style_creates_block_context(box))) {
 
             if (!layout_block_child_context(box, viewport_height, content, &state, overflow_x, overflow_y))
                 return false;

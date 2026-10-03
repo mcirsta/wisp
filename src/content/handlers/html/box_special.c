@@ -549,6 +549,7 @@ static bool box_input_text(html_content *html, struct box *box, struct dom_node 
         case CSS_DISPLAY_GRID:
         case CSS_DISPLAY_FLEX:
         case CSS_DISPLAY_BLOCK:
+        case CSS_DISPLAY_FLOW_ROOT:
             box->type = BOX_BLOCK;
             break;
         default:

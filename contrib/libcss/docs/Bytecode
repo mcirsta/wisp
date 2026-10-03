@@ -492,7 +492,8 @@ Opcodes
 		10    => flex,
 		11    => inline-flex,
 		12    => grid,
-		13    => inline-grid
+		13    => inline-grid,
+		14    => flow-root
 		other => Reserved for future expansion.
 
 21 - elevation

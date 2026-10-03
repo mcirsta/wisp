@@ -1,0 +1,61 @@
+#data
+* { display: flow-root; }
+#errors
+#expected
+| *
+|  display: flow-root
+#reset
+
+#data
+* { display: FLOW-ROOT !important; }
+#errors
+#expected
+| *
+|  display: flow-root !important
+#reset
+
+#data
+* { display: inherit; }
+#errors
+#expected
+| *
+|  display: inherit
+#reset
+
+#data
+* { display: initial; }
+#errors
+#expected
+| *
+|  display: initial
+#reset
+
+#data
+* { display: grid; }
+#errors
+#expected
+| *
+|  display: grid
+#reset
+
+#data
+* { display: inline-grid; }
+#errors
+#expected
+| *
+|  display: inline-grid
+#reset
+
+#data
+* { display: flow-rootish; }
+#errors
+#expected
+| *
+#reset
+
+#data
+* { display: flow-root none; }
+#errors
+#expected
+| *
+#reset

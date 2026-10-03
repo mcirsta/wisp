@@ -12,7 +12,7 @@ fixture = Path(__file__).resolve().parents[2] / "test/hidden-until-found.html"
 ids = ("visible", "outer", "nested", "target", "second", "second-text", "fixed-size", "minimum",
        "flex", "flex-child", "grid", "grid-child", "override", "override-text", "display-override",
        "display-text", "inline", "none", "blocked", "blocked-target", "css-hidden", "css-text",
-       "wrapped", "transformed", "after", "float-hidden", "image", "image-sized", "input", "textarea",
+       "wrapped", "transformed", "after", "float-case", "float-hidden", "image", "image-sized", "input", "textarea",
        "select", "row", "cell-visible", "cell", "cell-text", "inherit", "initial", "unset", "noninherited", "variable")
 env = dict(os.environ, QT_QPA_PLATFORM="offscreen", QT_SCALE_FACTOR="1",
            QT_SCREEN_SCALE_FACTORS="1", QT_FONT_DPI="96")
@@ -76,6 +76,7 @@ with tempfile.TemporaryDirectory(prefix="wisp-until-found-") as tmp:
         r = box(initial, key)["border_box"]
         assert (r["width"], r["height"]) == size, (key, r)
     assert box(initial, "float-hidden")["border_box"]["x"] == 100
+    assert box(initial, "float-case")["border_box"]["height"] == 60
     assert not box(initial, "override")["contents_skipped"]
     assert box(initial, "override-text")["border_box"]["height"] == 20
     assert not box(initial, "inline")["contents_skipped"]

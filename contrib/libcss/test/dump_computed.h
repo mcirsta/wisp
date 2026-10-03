@@ -1624,6 +1624,9 @@ static void dump_computed_style(const css_computed_style *style, char *buf, size
     case CSS_DISPLAY_INLINE_GRID:
         wrote = snprintf(ptr, *len, "display: inline-grid\n");
         break;
+    case CSS_DISPLAY_FLOW_ROOT:
+        wrote = snprintf(ptr, *len, "display: flow-root\n");
+        break;
     default:
         wrote = 0;
         break;

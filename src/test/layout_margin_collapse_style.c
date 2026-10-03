@@ -98,6 +98,11 @@ void style_set_overflow_hidden(css_computed_style *s)
     set_overflow_y(s, CSS_OVERFLOW_HIDDEN);
 }
 
+void style_set_flow_root(css_computed_style *s)
+{
+    set_display(s, CSS_DISPLAY_FLOW_ROOT);
+}
+
 void style_set_width(css_computed_style *s, int value, bool percent)
 {
     set_width(s, value < 0 ? CSS_WIDTH_AUTO : CSS_WIDTH_SET,

@@ -388,6 +388,7 @@ enum {
     INFINITE,
     GRID,
     INLINE_GRID,
+    FLOW_ROOT,
     STICKY,
     CALC,
     LAB,

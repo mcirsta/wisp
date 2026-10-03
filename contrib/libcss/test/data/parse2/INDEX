@@ -29,3 +29,4 @@ dodgy-media-block.dat		Media block with incomplete ruleset
 svg.dat				SVG property tests
 calc.dat			calc() tests
 content-visibility.dat		Hidden content and invalid keywords
+display.dat			Display keywords and invalid combinations

@@ -116,7 +116,7 @@ static const content_type image_types = CONTENT_IMAGE;
 
 /* Mapping from CSS display to box type.
  * Uses designated initializers so order doesn't matter. */
-static const box_type box_map[CSS_DISPLAY_INLINE_GRID + 1] = {
+static const box_type box_map[CSS_DISPLAY_FLOW_ROOT + 1] = {
     [CSS_DISPLAY_INHERIT] = BOX_BLOCK,
     [CSS_DISPLAY_INLINE] = BOX_INLINE,
     [CSS_DISPLAY_BLOCK] = BOX_BLOCK,
@@ -138,8 +138,9 @@ static const box_type box_map[CSS_DISPLAY_INLINE_GRID + 1] = {
     [CSS_DISPLAY_INLINE_FLEX] = BOX_INLINE_FLEX,
     [CSS_DISPLAY_GRID] = BOX_GRID,
     [CSS_DISPLAY_INLINE_GRID] = BOX_INLINE_GRID,
+    [CSS_DISPLAY_FLOW_ROOT] = BOX_BLOCK,
 };
-_Static_assert(CSS_DISPLAY_INLINE_GRID == 0x14, "css_display_e has new values — update box_map");
+_Static_assert(CSS_DISPLAY_FLOW_ROOT == 0x15, "css_display_e has new values — update box_map");
 
 
 /* All exits, including cancellation and restyle restart, retire the ancestry

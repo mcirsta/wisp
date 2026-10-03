@@ -542,15 +542,18 @@ START_TEST(test_no_collapse_abspos_skipped)
 }
 END_TEST
 
-START_TEST(test_no_collapse_overflow_hidden)
+START_TEST(test_block_context_contains_margins)
 {
     html_content *content = create_test_content();
 
     struct box *root = create_box_with_style(200);
 
-    /* Parent with overflow:hidden — creates new BFC */
+    /* Both styles create a BFC; flow-root preserves visible overflow. */
     struct box *p = create_box_with_style(200);
-    style_set_overflow_hidden(p->style);
+    if (_i)
+        style_set_flow_root(p->style);
+    else
+        style_set_overflow_hidden(p->style);
 
     struct box *c = create_box_with_style(200);
     style_set_height_px(c->style, 10);
@@ -563,17 +566,19 @@ START_TEST(test_no_collapse_overflow_hidden)
     bool ok = layout_block_context(root, 768, content);
     ck_assert(ok);
 
-    /* overflow:hidden starts new BFC. Child margin stays inside.
+    /* Child margin stays inside the new BFC.
      * p.y = 0, c.y = 20 (margin applied inside new BFC) */
-    ck_assert_msg(p->y == 0, "overflow_hidden: expected p->y=0, got %d", p->y);
-    ck_assert_msg(c->y == 20, "overflow_hidden: expected c->y=20, got %d", c->y);
+    ck_assert_msg(p->y == 0, "BFC (flow-root=%d): expected p->y=0, got %d", _i, p->y);
+    ck_assert_msg(c->y == 20, "BFC (flow-root=%d): expected c->y=20, got %d", _i, c->y);
 
     free_box_tree(root);
     destroy_test_content(content);
 }
 END_TEST
 
-START_TEST(test_empty_overflow_hidden_margins)
+enum { EMPTY_BFC_CASE_COUNT = 12 };
+
+START_TEST(test_empty_block_context_margins)
 {
     const struct {
         int top, bottom, next_top, expected_next;
@@ -582,13 +587,17 @@ START_TEST(test_empty_overflow_hidden_margins)
         { 20, 30, 10, 50 }, /* Own margins stay separate; sibling margins collapse. */
         { 20, -15, 10, 15 },
     };
-    int variant = _i / 4;
+    int variant = (_i % EMPTY_BFC_CASE_COUNT) / 4;
+    bool flow_root = _i >= EMPTY_BFC_CASE_COUNT;
     bool empty_child = (_i & 1) != 0;
     bool wrapped = (_i & 2) != 0;
     html_content *content = create_test_content();
     struct box *root = create_box_with_style(200);
     struct box *slot = create_box_with_style(200);
-    style_set_overflow_hidden(slot->style);
+    if (flow_root)
+        style_set_flow_root(slot->style);
+    else
+        style_set_overflow_hidden(slot->style);
     style_set_margins(slot->style, margins[variant].top, 0, margins[variant].bottom, 0);
     if (empty_child)
         add_child(slot, create_box_with_style(200));
@@ -1858,9 +1867,11 @@ START_TEST(test_last_child_min_height_blocks)
 END_TEST
 
 
+enum { FLOAT_AVOIDANCE_CASE_COUNT = 64 };
+
 /* Fixed/percentage widths must move below floats when they do not fit;
  * auto widths may shrink alongside them, subject to min-width and edges. */
-START_TEST(test_overflow_block_avoids_floats)
+START_TEST(test_block_context_avoids_floats)
 {
     static const struct {
         int width;
@@ -1879,7 +1890,8 @@ START_TEST(test_overflow_block_avoids_floats)
     };
     int profile = _i % 4; /* left, right, both sides, two left floats */
     int variant = (_i / 4) % 8;
-    int parent_padding = _i >= 32 ? 10 : 0;
+    int parent_padding = (_i % FLOAT_AVOIDANCE_CASE_COUNT) >= 32 ? 10 : 0;
+    bool flow_root = _i >= FLOAT_AVOIDANCE_CASE_COUNT;
     html_content *content = create_test_content();
     struct box *root = create_box_with_style(360);
     root->padding[LEFT] = root->padding[RIGHT] = parent_padding;
@@ -1901,7 +1913,10 @@ START_TEST(test_overflow_block_avoids_floats)
     }
     struct box *b = create_box_with_style(360);
     style_set_margins(b->style, 0, 0, 0, 0);
-    style_set_overflow_hidden(b->style);
+    if (flow_root)
+        style_set_flow_root(b->style);
+    else
+        style_set_overflow_hidden(b->style);
     style_set_width(b->style, cases[variant].width, cases[variant].percent);
     style_set_min_width(b->style, cases[variant].min_width);
     style_set_horizontal_edges(b->style, cases[variant].padding, cases[variant].border);
@@ -1917,9 +1932,10 @@ START_TEST(test_overflow_block_avoids_floats)
     add_child(root, next);
 
     ck_assert(layout_block_context(root, 768, content));
-    ck_assert_int_eq(b->x, parent_padding + cases[variant].x[profile] + cases[variant].border);
-    ck_assert_int_eq(b->y, cases[variant].y[profile] + cases[variant].border);
-    ck_assert_int_eq(b->width, cases[variant].used_width[profile]);
+    ck_assert_msg(b->x == parent_padding + cases[variant].x[profile] + cases[variant].border &&
+            b->y == cases[variant].y[profile] + cases[variant].border && b->width == cases[variant].used_width[profile],
+        "float avoidance (flow-root=%d, variant=%d, profile=%d, padding=%d): got x/y/width=%d/%d/%d",
+        flow_root, variant, profile, parent_padding, b->x, b->y, b->width);
     ck_assert_int_eq(next->y, b->y + 20);
     free_box_tree(root);
     destroy_test_content(content);
@@ -1981,13 +1997,13 @@ static Suite *margin_collapse_suite(void)
 
     TCase *tc_excl = tcase_create("Exclusion Rules");
     tcase_add_test(tc_excl, test_no_collapse_abspos_skipped);
-    tcase_add_test(tc_excl, test_no_collapse_overflow_hidden);
-    tcase_add_loop_test(tc_excl, test_empty_overflow_hidden_margins, 0, 12);
+    tcase_add_loop_test(tc_excl, test_block_context_contains_margins, 0, 2);
+    tcase_add_loop_test(tc_excl, test_empty_block_context_margins, 0, 2 * EMPTY_BFC_CASE_COUNT);
     tcase_add_loop_test(tc_excl, test_wrapped_formatting_context_margins, 0, 16);
     suite_add_tcase(s, tc_excl);
 
     TCase *tc_floats = tcase_create("Float Avoidance");
-    tcase_add_loop_test(tc_floats, test_overflow_block_avoids_floats, 0, 64);
+    tcase_add_loop_test(tc_floats, test_block_context_avoids_floats, 0, 2 * FLOAT_AVOIDANCE_CASE_COUNT);
     suite_add_tcase(s, tc_floats);
 
     return s;

@@ -271,6 +271,9 @@ if(WISP_QT_CAPTURE)
         add_test(NAME qt_float_clearance
             COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_float_clearance.py $<TARGET_FILE:wisp-qt>)
         set_tests_properties(qt_float_clearance PROPERTIES TIMEOUT 30)
+        add_test(NAME qt_flow_root
+            COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_flow_root.py $<TARGET_FILE:wisp-qt>)
+        set_tests_properties(qt_flow_root PROPERTIES TIMEOUT 30)
         add_test(NAME qt_empty_min_height
             COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_empty_min_height.py $<TARGET_FILE:wisp-qt>)
         set_tests_properties(qt_empty_min_height PROPERTIES TIMEOUT 30)

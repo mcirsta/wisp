@@ -1,0 +1,110 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Flow-root formatting contexts</title>
+<style>
+html,body { margin:0; font-size:0; background:white; }
+/* Each bordered case isolates its floats and margin chain. Its dimensions do
+   not depend on the tested display value. Overflow tests stay inside it. */
+.case { position:relative; width:300px; height:140px; border:1px solid; margin:0 0 12px; overflow:hidden; }
+.root { display:flow-root; }
+.float { float:left; width:40px; height:40px; }
+.after { height:10px; }
+#overflow-root, #clipped-root { width:100px; height:10px; }
+#overflow-child, #clipped-child { width:140px; height:30px; background:#168844; }
+#clipped-root { overflow:hidden; }
+#overflow-after, #clipped-after { margin-top:40px; }
+#pseudo-root::before { content:""; display:flow-root; height:20px; margin:10px 0; }
+#toggle { position:absolute; right:4px; top:4px; }
+#toggle-label { position:absolute; right:30px; top:4px; width:60px; height:20px; z-index:1; font:12px/20px sans-serif; background:#888; }
+#toggle:checked ~ #switch-root { display:block; }
+</style>
+<div class="case" id="overflow-case">
+  <div class="root" id="overflow-root"><div id="overflow-child"></div></div>
+  <div class="after" id="overflow-after"></div>
+</div>
+<div class="case" id="clipped-case">
+  <div class="root" id="clipped-root"><div id="clipped-child"></div></div>
+  <div class="after" id="clipped-after"></div>
+</div>
+<div class="case" id="contain-case">
+  <div class="root" id="contain-root"><div class="float" id="contain-child"></div></div>
+  <div class="after" id="contain-after"></div>
+</div>
+<div class="case" id="margins-case">
+  <div class="root" id="margins-root"><div id="margins-child" style="height:10px;margin:20px 0 30px"></div></div>
+  <div class="after" id="margins-after"></div>
+</div>
+<div class="case" id="empty-case">
+  <div style="height:10px;margin-bottom:5px"></div>
+  <div class="root" id="empty-root" style="margin:20px 0 30px"></div>
+  <div class="after" id="empty-after" style="margin-top:40px"></div>
+</div>
+<div class="case" id="alongside-case">
+  <div class="float" style="width:80px;height:60px"></div>
+  <div class="root" id="alongside-root"><div id="alongside-child" style="height:10px"></div></div>
+  <div class="after" id="alongside-after"></div>
+</div>
+<div class="case" id="below-case">
+  <div class="float" style="width:80px;height:60px"></div>
+  <div class="root" id="below-root" style="width:260px"><div id="below-child" style="height:10px"></div></div>
+  <div class="after" id="below-after"></div>
+</div>
+<div class="case" id="clear-case">
+  <div class="float" style="width:80px;height:60px"></div>
+  <div class="root" id="clear-root" style="clear:both"><div id="clear-child" style="height:10px"></div></div>
+  <div class="after" id="clear-after"></div>
+</div>
+<div class="case" id="isolate-case">
+  <div class="float" style="width:80px;height:80px"></div>
+  <div class="root" id="isolate-root" style="width:100px">
+    <div id="isolate-child" style="clear:both;height:10px;margin-top:20px"></div>
+  </div>
+  <div class="after" id="isolate-after"></div>
+</div>
+<div class="case" id="inherit-case">
+  <div class="root" id="inherit-root"><div id="inherit-child" style="display:inherit">
+    <div class="float"></div>
+  </div></div>
+  <div class="after" id="inherit-after"></div>
+</div>
+<div class="case" id="variable-case">
+  <div id="variable-root" style="--layout:flow-root;display:var(--layout)"><div class="float" id="variable-child"></div></div>
+  <div class="after" id="variable-after"></div>
+</div>
+<div class="case" id="span-case">
+  <span class="root" id="span-root"><span class="float" id="span-child"></span></span>
+  <div class="after" id="span-after"></div>
+</div>
+<div class="case" id="positioned-case">
+  <div class="root" id="positioned-root" style="position:absolute;left:10px;top:10px;width:120px">
+    <div class="float" id="positioned-child"></div>
+  </div>
+  <div class="after" id="positioned-after"></div>
+</div>
+<div class="case" id="floating-case">
+  <div class="root" id="floating-root" style="float:left;width:100px"><div class="float" id="floating-child"></div></div>
+  <div class="after" id="floating-after" style="clear:both"></div>
+</div>
+<div class="case" id="flex-case">
+  <div style="display:flex;align-items:flex-start">
+    <div class="root" id="flex-root" style="width:120px;flex:none"><div class="float" id="flex-child"></div></div>
+    <div style="width:30px;height:10px"></div>
+  </div>
+  <div class="after" id="flex-after"></div>
+</div>
+<div class="case" id="grid-case">
+  <div style="display:grid;grid-template-columns:120px 30px;align-items:start">
+    <div class="root" id="grid-root"><div class="float" id="grid-child"></div></div>
+    <div style="height:10px"></div>
+  </div>
+  <div class="after" id="grid-after"></div>
+</div>
+<div class="case" id="pseudo-case">
+  <div class="root" id="pseudo-root"><div class="float" id="pseudo-child" style="height:30px"></div></div>
+  <div class="after" id="pseudo-after"></div>
+</div>
+<div class="case" id="switch-case">
+  <input type="checkbox" id="toggle"><label id="toggle-label" for="toggle">Toggle</label>
+  <div class="root" id="switch-root"><div class="float" id="switch-child"></div></div>
+  <div class="after" id="switch-after"></div>
+</div>
