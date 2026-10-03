@@ -5587,6 +5587,11 @@ static bool layout_lists(const html_content *content, struct box *box)
                     }
                 }
 #endif
+                /* Detached outside markers bypass ordinary object layout.
+                 * SVG content needs its resolved viewport to parse shapes;
+                 * loading alone only supplies the intrinsic dimensions. */
+                if (content_can_reformat(marker->object))
+                    content_reformat(marker->object, false, marker->width, marker->height);
                 marker->x = -marker->width;
                 marker->y = (line_height(&content->unit_len_ctx, marker->style) - marker->height) / 2;
             } else if (marker->text) {

@@ -69,13 +69,9 @@ children. Remaining cases need distinct layout decisions:
 - A line moved below a blocking float retains the existing one-pixel clearance
   gap. `#below-float` in `test/outside-marker-baseline.html` is one pixel taller
   than Chromium; marker and text baselines align.
-- The outside SVG image marker in that fixture loads and contributes dimensions
-  but is not painted. Explicit `fill="black"` makes no difference. Image-marker
-  sizing/alignment is tested, but its missing paint needs a separate investigation
-  through object redraw and clipping. Inside image markers already paint.
 
 Evidence: `out/render-captures/outside-marker-2026-10-03/probe.html`, `probe-fixed/`,
-`image-check/` and `complete/`.
+and `complete/`.
 
 A very narrow inside counter also differs from Chromium: `#spaced-marker` in
 `test/disclosure-markers.html` uses a negative Korean counter in an 8px item.

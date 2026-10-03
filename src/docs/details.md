@@ -59,6 +59,12 @@ line cache stores only the last baseline. Direct list-item line reuse was alread
 excluded. Empty/float-only items and flex/grid/table baseline export need separate
 handling; see the backlog.
 
+Outside image markers also reformat their content after their dimensions are
+resolved, as ordinary image boxes do. This matters for SVG: loading reads the
+intrinsic dimensions, while reformat parses the shapes at the resolved viewport.
+Detached markers previously skipped that step and painted an empty diagram.
+The existing content layer skips repeated reformats at unchanged dimensions.
+
 Documents containing details use the same DOM search path as hidden-until-found.
 Discovery visits the summary first, then the body regardless of its open state,
 while respecting ordinary hidden/display/content-visibility barriers. Only the
@@ -122,8 +128,8 @@ and allocation stability.
 `qt_outside_marker_baseline` uses the bundled test font to check first-line pushes,
 smaller markers, wrapping, padding, nested blocks, zero line-height, relative
 positioning, float-only attempts before a real line, clearing line breaks, image
-geometry and resize
-stability. Pixel checks compare text-marker and content baselines. Unit tests
+geometry and resize stability. Pixel checks compare text/image-marker and content
+baselines; `qt_marker_styling` also checks inside SVG marker paint. Unit tests
 change marker font sizes repeatedly; retained-list tests also cover nested,
 wrapped content over 100 updates per variant.
 Libcss tests cover parsing, composition, glyph formatting and CSS direction.
@@ -148,12 +154,18 @@ The outside-baseline follow-up has Chromium comparisons and test logs in
 `out/render-captures/outside-marker-2026-10-03/`. The original marker-styling
 fixture's item heights now match Chromium, including the formerly 24px-tall
 outside item, which is now 27px. The extended fixture tracks the remaining
-one-pixel float-clearance difference and missing outside-image paint explicitly.
+one-pixel float-clearance difference. Its missing outside-image paint was fixed
+by the subsequent viewport-reformat change described above.
 The final extended reference is in `complete/`. Validation passed 33 selected
 Debug tests (ASan/UBSan) and eight Release tests. Four Debug capture tests needed
 a rerun because their process launches overlapped the final executable relink;
 all four passed once the build finished. See `tests-debug.log`,
 `tests-debug-rerun.log` and `tests-release.log`.
+
+The outside-image follow-up passed 13 selected tests in both Debug (ASan/UBSan)
+and Release. Its pixel assertion failed before the fix; the 12×40 SVG rectangle
+now paints all 480 expected pixels. Before/after captures, the saved Chromium
+comparison and test logs are in `out/render-captures/outside-marker-image-2026-10-03/`.
 
 There is also an intentional difference in the float-containing cases. Chromium
 moves the float's visible box down with the marker but still sizes its flow-root

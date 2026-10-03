@@ -89,7 +89,8 @@ with tempfile.TemporaryDirectory(prefix="wisp-outside-baseline-") as tmp:
             assert ys, ("missing ink", rect)
             return max(ys) + 1
 
-        for name in ("tall", "short", "padded", "block-first", "empty-before", "floats", "bfc", "nested-list", "block-floats", "br-float"):
+        for name in ("tall", "short", "padded", "block-first", "empty-before", "floats", "bfc", "nested-list",
+                     "block-floats", "br-float", "image"):
             marker = box(steps[-1], name)["list_marker"]["border_box"]
             label = box(steps[-1], name + "-text")["border_box"]
             assert ink_bottom(marker) == ink_bottom(label, 12), (name, marker, label)

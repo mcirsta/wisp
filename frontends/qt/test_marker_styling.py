@@ -90,7 +90,7 @@ with tempfile.TemporaryDirectory(prefix="wisp-marker-styles-") as tmp:
 
     if magick:
         for name, rgb in (("disclosure", (192, 32, 64)), ("inside", (192, 32, 64)),
-                          ("outside", (192, 32, 64)), ("ignored", (0, 128, 64))):
+                          ("outside", (192, 32, 64)), ("ignored", (0, 128, 64)), ("image", (0, 128, 0))):
             rect = box(steps[-1], name)["list_marker"]["border_box"]
             geometry = f'{rect["width"]}x{rect["height"]}+{rect["x"]}+{rect["y"]}'
             pixels = subprocess.run([magick, str(root / "resize/page.png"), "-crop", geometry,
