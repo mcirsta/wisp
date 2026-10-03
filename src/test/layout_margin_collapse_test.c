@@ -928,6 +928,116 @@ START_TEST(test_margin_chain_receiver)
 }
 END_TEST
 
+/* The empty box's own top excludes its bottom and later sibling margins.
+ * Empty descendants join its top, while following flow uses the full chain. */
+static const struct {
+    const char *name;
+    int previous, top, bottom, child_top, child_bottom, following, empty_y, following_y;
+    bool nested;
+} empty_position_cases[] = {
+    {"positive", 12, 15, 25, 0, 0, 50, 75, 110, false},
+    {"negative", -12, -15, -25, 0, 0, -50, 45, 10, false},
+    {"mixed", 12, -15, 25, 0, 0, 50, 57, 95, false},
+    {"mixed-negative", -12, 15, -25, 0, 0, -50, 63, 25, false},
+    {"nested-positive", 12, 15, 25, 30, 40, 50, 100, 110, true},
+    {"nested-negative", -12, -15, -25, -30, -40, -50, 20, 10, true},
+    {"nested-mixed", 12, -15, 25, 30, -40, 50, 50, 70, true},
+};
+enum { EMPTY_POSITION_CASE_COUNT = sizeof(empty_position_cases) / sizeof(empty_position_cases[0]) };
+
+START_TEST(test_empty_margin_position)
+{
+    html_content *content = create_test_content();
+    struct box *root = create_box_with_style(200);
+    struct box *prefix = create_box_with_style(200);
+    style_set_height_px(prefix->style, 60);
+    prefix->flags |= HAS_HEIGHT | MAKE_HEIGHT;
+    style_set_margins(prefix->style, 0, 0, empty_position_cases[_i].previous, 0);
+    add_child(root, prefix);
+    struct box *empty = create_box_with_style(200);
+    style_set_margins(empty->style, empty_position_cases[_i].top, 0, empty_position_cases[_i].bottom, 0);
+    add_child(root, empty);
+    struct box *child = NULL;
+    if (empty_position_cases[_i].nested) {
+        child = create_box_with_style(200);
+        style_set_margins(child->style, empty_position_cases[_i].child_top, 0,
+            empty_position_cases[_i].child_bottom, 0);
+        add_child(empty, child);
+    }
+    struct box *following = create_box_with_style(200);
+    style_set_height_px(following->style, 10);
+    following->flags |= HAS_HEIGHT | MAKE_HEIGHT;
+    style_set_margins(following->style, empty_position_cases[_i].following, 0, 0, 0);
+    add_child(root, following);
+    for (int pass = 0; pass < 2; pass++) {
+        root->height = AUTO;
+        ck_assert(layout_block_context(root, 768, content));
+        ck_assert_msg(empty->y == empty_position_cases[_i].empty_y && empty->height == 0,
+            "%s pass %d: expected empty y/h=%d/0, got %d/%d", empty_position_cases[_i].name, pass,
+            empty_position_cases[_i].empty_y, empty->y, empty->height);
+        ck_assert_msg(following->y == empty_position_cases[_i].following_y &&
+                root->height == empty_position_cases[_i].following_y + 10,
+            "%s pass %d: expected following y=%d, got %d; root height=%d", empty_position_cases[_i].name, pass,
+            empty_position_cases[_i].following_y, following->y, root->height);
+        if (child) {
+            ck_assert_msg(child->y == 0 && child->height == 0,
+                "%s pass %d: child must share empty parent's top; y/h=%d/%d",
+                empty_position_cases[_i].name, pass, child->y, child->height);
+        }
+    }
+    free_box_tree(root);
+    destroy_test_content(content);
+}
+END_TEST
+
+/* Clearance must not receive a second offset when the empty branch finishes.
+ * With no actual clearance, the normal empty-box positioning still applies. */
+START_TEST(test_empty_margin_position_with_clear)
+{
+    bool nested = _i % 2;
+    int prefix_height = _i < 2 ? 10 : 100;
+    html_content *content = create_test_content();
+    struct box *root = create_box_with_style(200);
+    struct box *ic = calloc(1, sizeof(*ic));
+    ck_assert_ptr_nonnull(ic);
+    ic->type = BOX_INLINE_CONTAINER;
+    add_child(root, ic);
+    struct box *fl = create_box_with_style(10);
+    fl->type = BOX_FLOAT_LEFT;
+    struct box *float_content = create_box_with_style(10);
+    style_set_width(float_content->style, 10, false);
+    style_set_height_px(float_content->style, 80);
+    float_content->flags |= HAS_HEIGHT | MAKE_HEIGHT;
+    add_child(fl, float_content);
+    add_child(ic, fl);
+    struct box *prefix = create_box_with_style(200);
+    style_set_height_px(prefix->style, prefix_height);
+    prefix->flags |= HAS_HEIGHT | MAKE_HEIGHT;
+    style_set_margins(prefix->style, 0, 0, 20, 0);
+    add_child(root, prefix);
+    struct box *empty = create_box_with_style(200);
+    struct box *wrapper = nested ? create_box_with_style(200) : root;
+    if (nested)
+        add_child(root, wrapper);
+    add_child(wrapper, empty);
+    style_set_clear(empty->style, CSS_CLEAR_BOTH);
+    style_set_margins(empty->style, 15, 0, 25, 0);
+    struct box *following = create_box_with_style(200);
+    style_set_height_px(following->style, 10);
+    following->flags |= HAS_HEIGHT | MAKE_HEIGHT;
+    style_set_margins(following->style, 50, 0, 0, 0);
+    add_child(root, following);
+    ck_assert(layout_block_context(root, 768, content));
+    int expected = prefix_height == 10 ? 80 : nested ? 125 : 120;
+    int actual = empty->y + (nested ? wrapper->y : 0);
+    ck_assert_msg(actual == expected && empty->height == 0,
+        "clear (nested=%d, prefix=%d): expected empty y/h=%d/0, got %d/%d",
+        nested, prefix_height, expected, actual, empty->height);
+    free_box_tree(root);
+    destroy_test_content(content);
+}
+END_TEST
+
 /**
  * Test: self-collapsing block whose children are all out-of-flow (abspos).
  *
@@ -1820,6 +1930,8 @@ static Suite *margin_collapse_suite(void)
     tcase_add_test(tc_through, test_nested_collapse_through);
     tcase_add_loop_test(tc_through, test_nested_empty_margin_chain, 0, 2 * EMPTY_CHAIN_CASE_COUNT);
     tcase_add_loop_test(tc_through, test_margin_chain_receiver, 0, 4 * MARGIN_RECEIVER_CASE_COUNT);
+    tcase_add_loop_test(tc_through, test_empty_margin_position, 0, EMPTY_POSITION_CASE_COUNT);
+    tcase_add_loop_test(tc_through, test_empty_margin_position_with_clear, 0, 4);
     tcase_add_test(tc_through, test_no_collapse_through_border);
     tcase_add_test(tc_through, test_collapse_through_abspos_children);
     tcase_add_test(tc_through, test_collapse_through_skips_abspos_next_sibling);

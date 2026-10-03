@@ -40,11 +40,8 @@ with tempfile.TemporaryDirectory(prefix="wisp-empty-min-height-") as tmp:
     for key, height in heights.items():
         b, parent = rect(key), rect(key + "-case")
         assert b["height"] == height, (key, b, height)
-        top = {"last": 10, "child-margin": 30, "margin": 15, "empty-child": 15}.get(key, 0)
-        # The zero-minimum control checks collapsed spacing, not the empty
-        # box's own position (a separate existing collapse-positioning issue).
-        if key != "zero":
-            assert b["y"] == parent["y"] + 1 + top, (key, b, parent)
+        top = {"last": 10, "child-margin": 30, "margin": 15, "empty-child": 15, "zero": 15}.get(key, 0)
+        assert b["y"] == parent["y"] + 1 + top, (key, b, parent)
         if key not in ("last", "only"):
             gap = 25 if key in ("margin", "empty-child", "child-margin") else 0
             expected = parent["y"] + 1 + (25 if key == "zero" else top + height + gap)

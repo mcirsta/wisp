@@ -4259,7 +4259,40 @@ struct block_layout_state {
     struct box *margin_collapse; /* End of the pending adjoining-margin chain. */
     struct box *margin_top;      /* Parent or sibling that receives its offset. */
     bool in_margin;
+    /* Margins visited by layout, excluding future edges found by lookahead. */
+    unsigned int seen_pos_margin, seen_neg_margin;
+    struct box *empty_margin_box; /* Outermost empty branch awaiting its own position. */
+    bool margin_applied;          /* A parent has already taken this chain's offset. */
 };
+
+static void layout_block_record_margin(struct block_layout_state *state, int margin)
+{
+    if (state->margin_applied || margin == AUTO)
+        return;
+    if (margin > 0)
+        state->seen_pos_margin = max(state->seen_pos_margin, (unsigned int)margin);
+    else if (margin < 0)
+        state->seen_neg_margin = max(state->seen_neg_margin, -(unsigned int)margin);
+}
+
+/* The flow cursor has already advanced using the unshifted position. Moving
+ * this empty branch now cannot change sibling spacing or ancestor heights.
+ * Nested self-collapsing children share their parent's top edge. */
+static void layout_block_finish_empty_margin(struct box *box, struct block_layout_state *state)
+{
+    if (box_is_out_of_flow(box))
+        return;
+    if (box == state->margin_collapse) {
+        state->margin_applied = false;
+        state->seen_pos_margin = state->seen_neg_margin = 0;
+    }
+    if (box == state->empty_margin_box) {
+        assert(box->height == 0);
+        box->y += (int)state->seen_pos_margin - (int)state->seen_neg_margin;
+        state->empty_margin_box = NULL;
+    }
+    layout_block_record_margin(state, box->margin[BOTTOM]);
+}
 
 static void layout_block_log_box(const struct box *box, const struct box *block)
 {
@@ -4397,6 +4430,7 @@ static bool layout_block_position_child(struct box *box, struct box *block, int 
             &state->max_pos_margin, &state->max_neg_margin, &state->margin_top);
         /* We have a margin that has not yet been applied. */
         state->in_margin = true;
+        state->margin_applied = false;
     }
 
     /* CSS 2.1 §8.3.1: parent/first-child collapse moves the parent,
@@ -4409,6 +4443,8 @@ static bool layout_block_position_child(struct box *box, struct box *block, int 
         state->margin_top = NULL;
         state->in_margin = false;
         state->max_pos_margin = state->max_neg_margin = 0;
+        state->margin_applied = true;
+        state->seen_pos_margin = state->seen_neg_margin = 0;
     }
 
     /* Clearance. */
@@ -4444,13 +4480,25 @@ static bool layout_block_position_child(struct box *box, struct box *block, int 
         /* Current margin has been applied. */
         state->in_margin = false;
         state->max_pos_margin = state->max_neg_margin = 0;
+        state->margin_applied = true;
+        state->seen_pos_margin = state->seen_neg_margin = 0;
     }
+
+    layout_block_record_margin(state, box->margin[TOP]);
+    if (!state->margin_applied && state->empty_margin_box == NULL && box->type == BOX_BLOCK &&
+        !box_prevents_collapse_through(&content->unit_len_ctx, box))
+        state->empty_margin_box = box;
 
     /* Handle clearance */
     if (box->type != BOX_INLINE_CONTAINER && (state->y > 0) && (state->cy < state->y)) {
         /* box clears something*/
         box->y += state->y - state->cy;
         state->cy = state->y;
+        /* Clearance breaks the adjoining top-margin chain. This top is
+         * already positioned, and enclosing boxes no longer collapse
+         * through the cleared child. */
+        state->empty_margin_box = NULL;
+        state->seen_pos_margin = state->seen_neg_margin = 0;
     }
 
     return true;
@@ -4565,6 +4613,7 @@ static void layout_block_place_table(struct box *box, const struct box *block, s
 static struct box *
 layout_block_advance(struct box *box, struct box *block, html_content *content, struct block_layout_state *state)
 {
+    layout_block_finish_empty_margin(box, state);
     if (!box->next) {
         /* No more siblings:
          * up to first ancestor with a sibling. */
@@ -4616,6 +4665,8 @@ layout_block_advance(struct box *box, struct box *block, html_content *content, 
                 state->margin_collapse = NULL;
                 state->in_margin = false;
                 state->max_pos_margin = state->max_neg_margin = 0;
+                state->margin_applied = false;
+                state->seen_pos_margin = state->seen_neg_margin = 0;
             }
 
             if (box->height == AUTO) {
@@ -4641,6 +4692,7 @@ layout_block_advance(struct box *box, struct box *block, html_content *content, 
             state->cx -= box->x;
 
             state->y = box->y + box->padding[TOP] + box->height + box->padding[BOTTOM] + box->border[BOTTOM].width;
+            layout_block_finish_empty_margin(box, state);
 
         } while (box->next == NULL);
         if (box == block)

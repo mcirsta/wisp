@@ -126,3 +126,52 @@ Negative margins after 40px of content
   </div>
   <div class="receiver" id="lookahead-negative-trailing-empty-receiver"><div><div class="leaf" id="lookahead-negative-trailing-empty-leaf"></div></div></div>
 </div>
+
+<!-- Empty boxes have their own positions even though their margins collapse
+     through to later content. The positioned dot must follow that own top. -->
+<style>
+.position-empty { position: relative; outline: 1px solid #b34; }
+.position-dot { position: absolute; top: 0; left: 0; width: 3px; height: 3px; background: #b34; }
+</style>
+<div class="case" id="position-positive-case">
+  <div style="height:60px;margin-bottom:12px"></div>
+  <div class="position-empty" id="position-positive-empty" style="margin:15px 0 25px"><div class="position-dot" id="position-positive-dot"></div></div>
+  <div id="position-positive-after" style="height:10px;margin-top:50px"></div>
+</div>
+<div class="case" id="position-negative-case">
+  <div style="height:60px;margin-bottom:-12px"></div>
+  <div class="position-empty" id="position-negative-empty" style="margin:-15px 0 -25px"><div class="position-dot" id="position-negative-dot"></div></div>
+  <div id="position-negative-after" style="height:10px;margin-top:-50px"></div>
+</div>
+<div class="case" id="position-mixed-case">
+  <div style="height:60px;margin-bottom:12px"></div>
+  <div class="position-empty" id="position-mixed-empty" style="margin:-15px 0 25px"><div class="position-dot" id="position-mixed-dot"></div></div>
+  <div id="position-mixed-after" style="height:10px;margin-top:50px"></div>
+</div>
+<div class="case" id="position-mixed-negative-case">
+  <div style="height:60px;margin-bottom:-12px"></div>
+  <div class="position-empty" id="position-mixed-negative-empty" style="margin:15px 0 -25px"><div class="position-dot" id="position-mixed-negative-dot"></div></div>
+  <div id="position-mixed-negative-after" style="height:10px;margin-top:-50px"></div>
+</div>
+<div class="case" id="position-nested-positive-case">
+  <div style="height:60px;margin-bottom:12px"></div>
+  <div class="position-empty" id="position-nested-positive-empty" style="margin:15px 0 25px"><div id="position-nested-positive-child" style="margin:30px 0 40px"></div><div class="position-dot" id="position-nested-positive-dot"></div></div>
+  <div id="position-nested-positive-after" style="height:10px;margin-top:50px"></div>
+</div>
+<div class="case" id="position-nested-negative-case">
+  <div style="height:60px;margin-bottom:-12px"></div>
+  <div class="position-empty" id="position-nested-negative-empty" style="margin:-15px 0 -25px"><div id="position-nested-negative-child" style="margin:-30px 0 -40px"></div><div class="position-dot" id="position-nested-negative-dot"></div></div>
+  <div id="position-nested-negative-after" style="height:10px;margin-top:-50px"></div>
+</div>
+<div class="case" id="position-nested-mixed-case">
+  <div style="height:60px;margin-bottom:12px"></div>
+  <div class="position-empty" id="position-nested-mixed-empty" style="margin:-15px 0 25px"><div id="position-nested-mixed-child" style="margin:30px 0 -40px"></div><div class="position-dot" id="position-nested-mixed-dot"></div></div>
+  <div id="position-nested-mixed-after" style="height:10px;margin-top:50px"></div>
+</div>
+<div class="case" id="position-parent-case">
+  <div style="height:60px;margin-bottom:12px"></div>
+  <div id="position-parent-wrapper" style="margin-top:15px">
+    <div class="position-empty" id="position-parent-empty" style="margin:30px 0 40px"><div style="margin:7px 0 10px"></div><div class="position-dot" id="position-parent-dot"></div></div>
+    <div id="position-parent-after" style="height:10px;margin-top:50px"></div>
+  </div>
+</div>
