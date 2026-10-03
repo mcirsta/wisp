@@ -951,7 +951,8 @@ static void test_variables_imported_by_literal_sheet(void)
         "@import url(\"vars.css\"); div { height: 31px; }", false, true);
     ctx.import_sheet = create_stylesheet_from_css(
         "div { --w: 23px; width: var(--w); height: 19px; }"
-        "div::before { width: var(--w); }", false, false);
+        "div::before { width: var(--local); height: var(--w); }"
+        "div::before { --local: 29px; }", false, false);
     assert(!ctx.sheet->uses_variables);
     assert(css_stylesheet_next_pending_import(ctx.sheet, &url) == CSS_OK);
     lwc_string_unref(url);
@@ -968,8 +969,10 @@ static void test_variables_imported_by_literal_sheet(void)
     expect_length_px("literal outer declaration still cascades last", style,
         css_computed_height, CSS_HEIGHT_SET, 31);
     assert(ctx.results->styles[CSS_PSEUDO_ELEMENT_BEFORE] != NULL);
+    expect_length_px("imported pseudo defers local variables",
+        ctx.results->styles[CSS_PSEUDO_ELEMENT_BEFORE], css_computed_width, CSS_WIDTH_SET, 29);
     expect_length_px("imported pseudo inherits variables",
-        ctx.results->styles[CSS_PSEUDO_ELEMENT_BEFORE], css_computed_width, CSS_WIDTH_SET, 23);
+        ctx.results->styles[CSS_PSEUDO_ELEMENT_BEFORE], css_computed_height, CSS_HEIGHT_SET, 23);
     destroy_style_case(&ctx);
 }
 
@@ -1310,6 +1313,66 @@ static void test_pseudo_local_scopes(void)
     destroy_style_case(&ctx);
 }
 
+static void test_deferred_pseudo_variable_cascade(void)
+{
+    style_case ctx;
+    select_style_from_css(
+        "div { --w: 10px; --alias: var(--w); }"
+        "div::before { width: var(--w); height: var(--alias); margin-left: var(--w); }"
+        "::before { --w: 20px !important; width: 99px; }"
+        "div::before { --w: 30px !important; --alias: inherit; }"
+        "div::after { width: var(--w, 41px); height: var(--alias); --w: initial; }"
+        "div::backdrop { width: var(--w); --w: 50px; }", &ctx);
+    const css_computed_style *before = ctx.results->styles[CSS_PSEUDO_ELEMENT_BEFORE];
+    expect_length_px("deferred declarations preserve order and consumer specificity",
+        before, css_computed_width, CSS_WIDTH_SET, 30);
+    expect_length_px("deferred pseudo inherits completed element alias",
+        before, css_computed_height, CSS_HEIGHT_SET, 10);
+    expect_length_px("second use reuses completed pseudo variables",
+        before, css_computed_margin_left, CSS_MARGIN_SET, 30);
+    expect_length_px("after has its own invalid local binding",
+        ctx.results->styles[CSS_PSEUDO_ELEMENT_AFTER], css_computed_width, CSS_WIDTH_SET, 41);
+    expect_length_px("after inherits element rather than before",
+        ctx.results->styles[CSS_PSEUDO_ELEMENT_AFTER], css_computed_height, CSS_HEIGHT_SET, 10);
+    expect_length_px("deferred variables also work on backdrop",
+        ctx.results->styles[CSS_PSEUDO_ELEMENT_BACKDROP], css_computed_width, CSS_WIDTH_SET, 50);
+    destroy_style_case(&ctx);
+
+    setup_style_case(&ctx,
+        "div::before { --w: revert; --i: 32px !important; width: 99px !important; height: var(--i); }");
+    css_stylesheet *user = create_stylesheet_from_css(
+        "div::before { --w: 16px; --i: 19px !important; width: var(--w) !important; }", false, false);
+    assert(css_select_ctx_insert_sheet(ctx.select_ctx, user, 0, CSS_ORIGIN_USER, NULL) == CSS_OK);
+    select_style_for_node(&ctx, &ctx.node, NULL, &ctx.results);
+    before = ctx.results->styles[CSS_PSEUDO_ELEMENT_BEFORE];
+    expect_length_px("deferred revert and consumer origin preserved",
+        before, css_computed_width, CSS_WIDTH_SET, 16);
+    expect_length_px("deferred custom property origin and importance preserved",
+        before, css_computed_height, CSS_HEIGHT_SET, 19);
+    destroy_style_case(&ctx);
+    css_stylesheet_destroy(user);
+}
+
+static void test_deferred_pseudo_variable_cycles(void)
+{
+    style_case ctx;
+    select_style_from_css(
+        "div { --a: 10px; }"
+        "div::before { width: var(--a, 21px); height: var(--b, 22px); }"
+        "div::before { --a: var(--b); --b: var(--a); }"
+        "div::after { --a: 30px; width: var(--a); }"
+        "div::marker { --a: var(--a); width: 7px; }", &ctx);
+    expect_length_px("deferred cycle masks inherited value",
+        ctx.results->styles[CSS_PSEUDO_ELEMENT_BEFORE], css_computed_width, CSS_WIDTH_SET, 21);
+    expect_length_px("deferred cycle remains invalid on subsequent use",
+        ctx.results->styles[CSS_PSEUDO_ELEMENT_BEFORE], css_computed_height, CSS_HEIGHT_SET, 22);
+    expect_length_px("pseudo cycle does not escape its environment",
+        ctx.results->styles[CSS_PSEUDO_ELEMENT_AFTER], css_computed_width, CSS_WIDTH_SET, 30);
+    expect_length_px("unused cyclic declarations leave literal properties intact",
+        ctx.results->styles[CSS_PSEUDO_ELEMENT_MARKER], css_computed_width, CSS_WIDTH_SET, 7);
+    destroy_style_case(&ctx);
+}
+
 static void test_empty_and_invalid_values(void)
 {
     style_case ctx;
@@ -1644,6 +1707,8 @@ int main(int argc, char **argv)
 
     test_cross_generation_dependencies();
     test_pseudo_local_scopes();
+    test_deferred_pseudo_variable_cascade();
+    test_deferred_pseudo_variable_cycles();
     test_empty_and_invalid_values();
     test_css_wide_custom_values();
     test_custom_property_origins();

@@ -62,6 +62,15 @@ struct revert_data {
     css_computed_style *style[CSS_PSEUDO_ELEMENT_COUNT];
 };
 
+/* Borrowed matched declarations, retained only for this selection. Pseudo
+ * variables are evaluated when an ordinary property first consumes var(). */
+typedef struct css_pseudo_var_rule {
+    const css_style *style;
+    css_origin origin;
+    uint32_t specificity;
+    css_pseudo_element pseudo;
+} css_pseudo_var_rule;
+
 /**
  * Selection state
  */
@@ -98,6 +107,9 @@ typedef struct css_select_state {
     css_var_context *var_ctx[CSS_PSEUDO_ELEMENT_COUNT];
     css_var_context *var_parent; /* Inherited snapshot before empty-overlay reuse */
     bool collecting_vars; /* First pass: collect final custom properties only */
+    css_pseudo_var_rule *pseudo_var_rules;
+    uint32_t n_pseudo_var_rules;
+    uint32_t pseudo_var_rules_capacity;
 
     prop_state props[CSS_N_PROPERTIES][CSS_PSEUDO_ELEMENT_COUNT];
 } css_select_state;

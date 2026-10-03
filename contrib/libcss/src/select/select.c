@@ -965,6 +965,7 @@ static void css_select__finalise_selection_state(css_select_state *state)
     for (uint32_t i = 0; i < CSS_PSEUDO_ELEMENT_COUNT; i++)
         css__variables_ctx_destroy(state->var_ctx[i]);
     css__variables_ctx_destroy(state->var_parent);
+    free(state->pseudo_var_rules);
 
     if (state->classes != NULL) {
         for (uint32_t i = 0; i < state->n_classes; i++) {
@@ -1363,19 +1364,11 @@ css_error css_select_style(css_select_ctx *ctx, void *node, const css_unit_ctx *
         state.collecting_vars = false;
     }
 
-    /* Publish the element environment before resolving its pseudo-elements.
-     * Pseudo declarations were collected into independent local builders. */
+    /* Children inherit the completed element environment. Pseudo-element
+     * declarations stay deferred until an ordinary property uses var(). */
     error = css__variables_ctx_finalize(&state.var_ctx[CSS_PSEUDO_ELEMENT_NONE]);
     if (error != CSS_OK)
         goto cleanup;
-    for (j = CSS_PSEUDO_ELEMENT_NONE + 1; j < CSS_PSEUDO_ELEMENT_COUNT; j++) {
-        if (state.var_ctx[j] == NULL)
-            continue;
-        state.var_ctx[j]->parent = css__variables_ctx_ref(state.var_ctx[CSS_PSEUDO_ELEMENT_NONE]);
-        error = css__variables_ctx_finalize(&state.var_ctx[j]);
-        if (error != CSS_OK)
-            goto cleanup;
-    }
 
     /* Iterate through the top-level stylesheets, selecting styles
      * from those which apply to our current media requirements and
@@ -2996,7 +2989,72 @@ static void cascade_skip_property(css_style *style, css_code_t opv)
     }
 }
 
+static css_error cascade_style_properties(const css_style *style, css_select_state *state);
+
+static css_error defer_pseudo_variables(const css_style *style, css_select_state *state)
+{
+    if (state->n_pseudo_var_rules == state->pseudo_var_rules_capacity) {
+        uint32_t capacity = state->pseudo_var_rules_capacity;
+        css_pseudo_var_rule *rules;
+        if (capacity > UINT32_MAX / 2)
+            return CSS_NOMEM;
+        capacity = capacity == 0 ? 4 : capacity * 2;
+        if (sizeof(*rules) > SIZE_MAX / capacity)
+            return CSS_NOMEM;
+        rules = realloc(state->pseudo_var_rules, capacity * sizeof(*rules));
+        if (rules == NULL)
+            return CSS_NOMEM;
+        state->pseudo_var_rules = rules;
+        state->pseudo_var_rules_capacity = capacity;
+    }
+    state->pseudo_var_rules[state->n_pseudo_var_rules++] = (css_pseudo_var_rule){
+        style, state->current_origin, state->current_specificity, state->current_pseudo};
+    return CSS_OK;
+}
+
+static css_error select_pseudo_variables(css_select_state *state)
+{
+    css_var_context **vars = &state->var_ctx[state->current_pseudo];
+    css_origin origin = state->current_origin;
+    uint32_t specificity = state->current_specificity;
+    css_error error;
+
+    if (*vars != NULL)
+        return CSS_OK;
+    error = css__variables_ctx_clone_inherited(state->var_ctx[CSS_PSEUDO_ELEMENT_NONE], vars);
+    if (error != CSS_OK)
+        return error;
+
+    /* Replay all matching declarations, including ones appearing after this
+     * var() use. Keep their original order, origin and specificity. No selector
+     * rematching or ordinary-property cascading is needed here. */
+    state->collecting_vars = true;
+    for (uint32_t i = 0; i < state->n_pseudo_var_rules; i++) {
+        const css_pseudo_var_rule *rule = &state->pseudo_var_rules[i];
+        if (rule->pseudo != state->current_pseudo)
+            continue;
+        state->current_origin = rule->origin;
+        state->current_specificity = rule->specificity;
+        error = cascade_style_properties(rule->style, state);
+        if (error != CSS_OK)
+            break;
+    }
+    state->collecting_vars = false;
+    state->current_origin = origin;
+    state->current_specificity = specificity;
+    if (error != CSS_OK)
+        return error;
+    return css__variables_ctx_finalize(vars);
+}
+
 css_error cascade_style(const css_style *style, css_select_state *state)
+{
+    if (state->collecting_vars && state->current_pseudo != CSS_PSEUDO_ELEMENT_NONE)
+        return defer_pseudo_variables(style, state);
+    return cascade_style_properties(style, state);
+}
+
+static css_error cascade_style_properties(const css_style *style, css_select_state *state)
 {
     css_style s = *style;
 
@@ -3038,6 +3096,11 @@ css_error cascade_style(const css_style *style, css_select_state *state)
                     css__stylesheet_var_value_get(s.sheet, value_id),
                     state->current_origin, state->current_specificity, isImportant(opv));
             } else {
+                if (state->current_pseudo != CSS_PSEUDO_ELEMENT_NONE) {
+                    error = select_pseudo_variables(state);
+                    if (error != CSS_OK)
+                        return error;
+                }
                 css_var_context *env = *vars != NULL ? *vars : state->var_ctx[CSS_PSEUDO_ELEMENT_NONE];
                 error = css__resolve_var_property(name, value_id, env, s.sheet, isImportant(opv), state);
             }
