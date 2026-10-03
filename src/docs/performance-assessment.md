@@ -1,7 +1,9 @@
 # Performance assessment
 
 Original assessment: 2026-10-01. Reassessed against the implementation and
-saved benchmark results on 2026-10-02.
+saved benchmark results on 2026-10-02. Selector matching was investigated on
+2026-10-03; section 8 records the results and adoption of the 256-bit filter.
+Section 9 records the long-paragraph investigation and production Qt fitting change.
 
 Scope: page-load and rendering performance of the Qt frontend. The rendering
 engine remains single-threaded. JavaScript execution is outside this assessment.
@@ -77,7 +79,7 @@ trees and DOM dumps. Its separate settled-capture results are preserved in
 No further work is indicated for this bug. Network readiness was a separate
 change, described in section 4.
 
-## 2. Text measurement: cache complete; expensive misses remain
+## 2. Text measurement: cache and ordinary long-paragraph fitting complete
 
 Commit `bf390ff9` adds a shared 512 KiB cache in
 [`frontends/qt/layout.cpp`](../../frontends/qt/layout.cpp). It caches width and
@@ -107,11 +109,11 @@ a localhost proxy. Figures are medians of five alternating runs after discarding
 the first sample. Images and normalized box trees matched across cache sizes.
 Evidence: `out/render-captures/text-cache-2026-10-01/layout/benchmark.json`.
 
-Remaining candidates:
+Follow-up status:
 
-- On a split-cache miss, Qt still measures the whole remaining string. Repeating
-  this for successive lines of a long paragraph can approach quadratic work.
-  The cache especially does not solve this for inputs above its size limit.
+- The repeated full-remainder measurements on ordinary split-cache misses are
+  addressed by the bounded word search in section 9. Negative spacing, zero-size
+  text and leading-space inputs retain the existing position-based fitting.
 - `PrefixWidths` already reuses the full-string width and four recent prefix
   measurements within one callback. Position fitting estimates a starting point
   and adjusts it; the original description of an entirely naive character scan
@@ -120,11 +122,10 @@ Remaining candidates:
   cache lookup. The original estimate was about 5% of measurement work, and the
   first Qt/font initialization cost about 50 ms. Neither is a current profile.
 
-The fresh profile in section 6 confirms the long-paragraph scaling issue, while
-all split requests in the saved pages are at most 1,078 bytes. Prioritize the
-measured HotNews CSS work first. A text-fitting change must preserve kerning,
-fractional fitting and fallback-font behavior; cache size alone does not solve
-first-pass processing of long, distinct suffixes.
+The fresh profile in section 6 confirmed the long-paragraph scaling issue, while
+all split requests in those saved pages were at most 1,078 bytes. Section 9
+records its focused fix, which preserves whole-prefix shaping, fractional
+fitting and the existing fallback-font behavior without increasing cache size.
 
 ## 3. Images and scrolling: complete within supported cases
 
@@ -420,8 +421,8 @@ to fitting. Each new line measures the full remaining suffix before finding its
 break, and these first-pass suffixes are distinct cache keys. This explains the
 near-quadratic trend even below the cache's 4096-byte admission limit. Increasing
 the cache budget does not address that cause. At 16 KiB, split-miss work accounts
-for roughly 267 ms of the 271 ms layout cost. This is a valid future optimization,
-but the synthetic results should not be presented as current saved-site delays.
+for roughly 267 ms of the 271 ms layout cost. Section 9 addresses this for ordinary
+text; these historical synthetic results are not current saved-site delays.
 
 ### Evidence and reproduction
 
@@ -501,17 +502,268 @@ the isolated instrumentation and before/after probe binaries, and test/build
 logs. Profiling code exists only in the ignored probe copies. Reproduce the
 paired comparison with `run_paired.py` after all builds/tests have finished.
 
+## 8. Ordinary selector matching: investigation, 2026-10-03
+
+Investigated commit `fe0415c1` using HotNews, Tion and Bihon. The counts below
+describe the original 128-bit filter. Following the isolated experiment, the
+256-bit filter was adopted as the production default. Profiling counters remain
+in the ignored `out/render-captures/selector-profile-2026-10-03/` source/build copies.
+
+The ordinary pass first searches element/class/ID/universal hash chains, rejects
+some rules using ancestor Bloom filters and media conditions, then matches the
+remaining selector chains against DOM nodes. Variable collection was counted
+separately. A selector-chain call is one candidate check, not a whole-page pass;
+a successful check may cascade several ordinary declarations.
+
+| Ordinary-pass work per saved-page load | HotNews | Tion | Bihon |
+|---|---:|---:|---:|
+| Style selections | 2,397 | 1,341 | 1,932 |
+| Stylesheet lookup setups | 26,367 | 132,759 | 281,208 |
+| Hash entries examined | 317,779 | 501,630 | 720,755 |
+| Candidates reaching full selector matching | 111,854 | 79,655 | 118,090 |
+| Successful selector matches | 44,511 | 10,695 | 15,090 |
+| Generic parent-node callbacks | 124,923 | 281,078 | 420,674 |
+| Named-ancestor callbacks | 12,967 | 6,467 | 7,890 |
+| Ancestor rejection-cache hits | 13,179 | 19,056 | 29,790 |
+
+Named-ancestor callbacks can inspect multiple ancestors internally, so these
+callback counts are not total DOM-node visits. Sibling work is much smaller:
+ordinary sibling-count callbacks inspect 19,332 / 25,816 / 36,155 positions,
+including terminating checks. Whole-style sharing searches take less than
+0.5 ms in each capture and are not the next optimization target.
+
+The existing ancestor filter rejects about 45% / 79% / 78% of the hash candidates
+that reach it. It works, but its 128-bit summary has collisions: a rule can pass
+this preliminary test even when a required ancestor class or ID does not exist.
+The full matcher and rejection cache then discover that absence. No selected
+node had a fully saturated fallback filter in the diagnostic captures, ruling
+out the missing-parent-data fallback as the cause for these loads.
+
+### Bounded experiment: the existing 256-bit Bloom-filter setting
+
+LibCSS already supports 128-, 256- and 512-bit filters. The isolated experiment
+changes `CSS_BLOOM_SIZE` from 4 to 8; it does not add another cache or matcher.
+Possible matches still pass through ordinary matching under the
+[Selectors combinator rules](https://www.w3.org/TR/selectors-4/#descendant-combinators).
+
+| Paired measurement | HotNews | Tion | Bihon |
+|---|---:|---:|---:|
+| Total CSS selection, 128-bit | 178.5 ms | 68.2 ms | 114.6 ms |
+| Total CSS selection, 256-bit | 179.1 ms | 62.7 ms | 107.3 ms |
+| Ordinary selector candidates, 256-bit | 102,870 | 58,896 | 87,930 |
+| Generic parent callbacks, 256-bit | 112,381 | 186,894 | 299,355 |
+| Estimated additional filter storage | 130 KiB | 506 KiB | 662 KiB |
+
+Tion/Bihon parent callbacks fall by 34% / 29%, while total CSS selection improves
+by about 8% / 6%. HotNews has no meaningful timing improvement. Successful
+selector-match counts are identical before and after on all three pages.
+These are CSS timings, not predicted improvements to total live-page loading.
+
+The memory figures describe filter storage, not measured process RSS. Hash-table
+accounting gives exact increases of 95,152 / 497,056 / 647,360 bytes for the
+distinct selector hashes reached during these captures. Add approximately
+16 bytes per styled node for its ancestor filter. Empty hash bucket heads also
+contain a filter and therefore contribute to the increase; the cost is not
+just 16 bytes per successful selector or DOM element.
+
+### Many small stylesheets are another source of repeated setup
+
+The three pages visit 11 / 97 / 144 distinct stylesheet objects. Imports or
+repeated registrations can visit a sheet more than once per element. In the
+256-bit diagnostic run, only 11,886 / 10,182 / 16,023 stylesheet lookup setups
+yield any candidate. Thus about 92% of Tion's and 94% of Bihon's setups yield
+nothing, despite repeated element/class/ID/universal lookups.
+
+This supports investigating a cheap per-node test that rejects irrelevant
+stylesheets before iterator setup. It does not justify skipping a sheet just
+because it matched nothing in this capture: later nodes, media changes, imports
+and restyles can make it relevant. No such optimization was implemented here,
+and no speedup is claimed for it. Merging all stylesheet indexes would be a
+larger architectural change and is not the recommended first step.
+
+### Validation, timing limits and recommendation
+
+Release/LTO, Qt offscreen at 1280x900 and 96 DPI, CPU 4, JavaScript disabled,
+fresh process/settings and blocked live requests, as in the earlier experiments.
+The initial investigation used three normal runs, three counter/coarse-timer
+runs and two detailed-timer runs per page, after warmups. Detailed per-callback
+timers substantially perturb CSS selection and were used only for diagnosis.
+The size comparison reports medians from five alternating pairs of coarse-probe
+captures per page, plus separate metadata inspections; all builds finish before measuring.
+The experimental metadata collection is disabled during paired timing runs.
+
+The ordinary stylesheet scopes include candidate lookup, matching, cascading and
+nested `var()` resolution. They are only part of total CSS selection; do not
+attribute all remaining HotNews CSS time to ancestor searches or add overlapping
+timer totals. Timings carry instrumentation overhead; the structural counts are
+the stronger evidence for the mechanism.
+
+All **57 measured captures** match within each page in PNG, DOM and normalized
+box trees, across normal, diagnostic and experimental builds.
+
+The production change sets `CSS_BLOOM_SIZE` to 8, using the existing allocation,
+merge and subset-check paths. It adds no runtime option, cache or profiling code.
+The memory trade-off is recorded above. Follow it with measured work on empty
+stylesheet setups if further selector optimization is worthwhile. The findings
+support focused tuning of the existing architecture rather than a selector-engine rewrite.
+
+Adoption validation: Debug and Release/LTO builds succeeded. All **80 selected
+CSS/restyle tests** passed, including selector-hash filtering, style reuse,
+checked-state interaction, retained/full/restarted restyling, lifecycle and
+generated-content coverage. Before/after uninstrumented Release captures of
+HotNews, Tion, Bihon, CNX, Haiku and three Phoronix pages at 1280x900 and 390x900
+produce identical PNGs, DOM and normalized box trees: **32 captures, 16 matching
+pairs**. These captures check correctness, not a new performance estimate.
+Build/test logs, the preserved 128-bit binary and the comparison script/results
+are under `out/render-captures/bloom-256-adoption-2026-10-03/`.
+
+Evidence: `results.json`, `bloom-results.json`, `findings.json`, per-page sheet
+inventories, capture outputs and build logs under the directory above. `prepare.py`
+recreates the initial probe; `experiment.py` preserves its binary and changes only
+the isolated build for the larger-filter comparison. `run.py` and
+`compare_bloom.py` reproduce the two measurement phases.
+
+## 9. Long-paragraph text fitting: investigation and implementation, 2026-10-03
+
+The baseline includes the 256-bit CSS filter. The investigation initially used
+isolated prototypes; the refined approach is now the default Qt split callback.
+The temporary source copies, executables, scripts and investigation results are in
+`out/render-captures/paragraph-fitting-2026-10-03/`.
+
+### Root cause and architectural scope
+
+The core's `layout_text_box_split()` already estimates the remaining fragment's
+width by subtracting the fitted text and breaking space. It does not require
+the exact width of the entire remainder to place the next line. However,
+the original `nsqt_layout_split()` measured that whole remainder on every cache
+miss before calling the character-position estimator and adjusting to a word
+boundary. The next line repeated the same work on a slightly shorter string.
+
+At 16 KiB, 201 split calls process 1,656,614 suffix bytes. In the diagnostic run,
+full-remainder shaping consumes 237.0 ms of 267.1 ms inside split misses (89%);
+other prefix shaping consumes 29.3 ms and UTF-8 decoding only 0.24 ms. At 32 KiB,
+the full-remainder share rises to 94%. These are overlapping diagnostic wall
+timers, not additional time to add to the layout CPU measurements below.
+
+The expensive operation is Qt shaping, but the repeated work comes from our
+fitting algorithm. The full suffixes are different cache keys, so increasing
+the result-cache budget does not remove the first-pass cost. Fixing this does
+not require new box ownership, persistent paragraph state or a layout API change.
+
+### Isolated fitting experiments
+
+The first prototype walks the existing space-separated word boundaries and
+measures each candidate prefix until the next complete word does not fit. It
+reduces 16 KiB layout from 271.3 to 29.5 ms, but repeated short-prefix measurements
+regress desktop Haiku from 27.5 to 31.8 ms and the Phoronix homepage from 39.1 to
+45.6 ms. Those regressions were confirmed with five alternating pairs per viewport.
+
+The refined prototype grows candidate word counts geometrically until it finds
+an overflowing prefix, then narrows the bracket to the last fitting word. It
+shapes each actual prefix with the same font, fractional scale and letter
+spacing; it does not sum independent character or word widths. Both experiments
+avoid decoding the entire suffix merely to select the next line.
+
+This distinction matters: Qt documents that
+[`horizontalAdvance(text, length)`](https://doc.qt.io/qt-6/qfontmetricsf.html)
+can analyse all of `text` even when `length` is shorter. Passing a shorter length
+against the same full paragraph is therefore not the proposed optimization.
+The experiment retains the existing space-break opportunities; it is not an
+implementation of the broader language-dependent breaking rules in
+[CSS Text](https://www.w3.org/TR/css-text-3/#line-breaking).
+
+Five alternating pairs after warmups, uninstrumented Release/LTO, one ASCII
+paragraph at 640 px wide with 16 px/24 px sans-serif text:
+
+| Paragraph size | Current layout CPU | Refined prototype layout CPU |
+|---|---:|---:|
+| 2 KiB | 7.7 ms | 2.8 ms |
+| 4 KiB | 22.3 ms | 5.2 ms |
+| 8 KiB | 77.4 ms | 9.8 ms |
+| 16 KiB | 269.2 ms | 18.8 ms |
+| 32 KiB | 982.2 ms | 37.5 ms |
+
+The first refined 16 KiB batch was noisy (270–512 ms baseline, 19–44 ms prototype).
+The table uses a separate five-pair repeat of that case; both batches are retained.
+
+For fixed line width and this text, the prototype scales approximately linearly
+with paragraph length. These are single long text nodes, not a claim that an
+ordinary article containing many short paragraphs currently costs this much.
+
+### Saved pages and validation
+
+Three alternating pairs per saved-page viewport confirm that the refinement
+removes the initial regressions: desktop Haiku is 27.6 versus 27.6 ms and the
+Phoronix homepage 39.0 versus 38.4 ms. CNX improves from 44.3 to 32.8 ms at desktop
+width and 49.3 to 31.9 ms at mobile width. Most other changes are small: desktop
+Tion/Bihon improve by about 2.7 ms; desktop HotNews is unchanged and mobile
+HotNews increases from 127.0 to 128.1 ms. These are layout CPU medians, not live
+page-load improvements, and small differences should not be overinterpreted.
+
+Across both prototypes, diagnostics and the repeat, **435 measured captures**
+produce identical PNG, DOM and normalized box trees within all **29 page/viewport
+groups**. These cover five ASCII lengths, eight text/spacing edge fixtures and
+eight saved pages at desktop and mobile widths. Capture configuration is Qt
+offscreen at 96 DPI, CPU 4, JavaScript disabled, fresh process/profile and blocked
+live requests. Builds and tests finish before timing batches. `method.json`,
+`findings.json` and the raw result files preserve the configurations and samples.
+
+### Production implementation and limits
+
+The implementation deliberately retains the position-based algorithm for negative letter
+spacing, zero font size and leading spaces. Negative spacing can make advances
+non-monotonic; the full-fit and overflow semantics need explicit care before
+replacing that path. Tiny positive font sizes, unbreakable text, positive spacing,
+Arabic, mixed-direction text, combining marks and emoji matched existing output
+in the diagnostic fixtures. This checks parity with Wisp, not complete text
+conformance against another browser.
+
+The callback keeps font selection, result caching and logging together. A small
+helper scans byte offsets at the existing space boundaries; the word search
+grows and narrows its bracket without allocating an index of the paragraph.
+Position-based fitting remains in a separate helper for the exceptional inputs
+above. There is no runtime opt-in, new cache or instrumentation in production.
+
+The text-split regression now compares long-run results against independently
+enumerated prefix widths, including exact/fractional boundaries, UTF-8 offsets,
+overlong words, trailing/repeated spaces, NBSP and a bounded input buffer. It
+also guards a negative-spacing run whose whole string fits while its first word
+does not, and zero-size text with different spacing. The real layout test checks
+retained versus fresh long paragraphs at six widths, with no float and with
+left/right floats that narrow the first three lines. Fragment widths, spaces,
+line assignments and horizontal bounds are checked.
+
+The core's space consumption and measured-fragment width contract are unchanged.
+Paragraph-wide `QTextLayout` integration remains unnecessary for this focused fix.
+
+### Adoption validation
+
+Debug and Release/LTO builds succeeded. All **18 selected Debug regressions**
+and **three Release text regressions** passed. The Debug run keeps ASan, UBSan
+and engine leak detection enabled, with a temporary suppression for allocations
+inside `libfontconfig.so.1`: the same 1,895-byte leak report was reproduced using
+the original fitter. The suppression is confined to the validation artifacts.
+
+The production comparison uses the same capture method as the investigation:
+five alternating pairs for ASCII scaling, three pairs per saved-page viewport
+and single pairs for the text edge fixtures. All **162 measured captures** have
+identical PNG, DOM and normalized box trees within the **29 comparison groups**.
+Production layout CPU medians are 270.7 → 19.3 ms for 16 KiB and 948.0 → 36.5 ms
+for 32 KiB. CNX changes from 45.4 → 33.2 ms at desktop width and 50.3 → 32.8 ms
+at mobile width. Haiku desktop is effectively unchanged (27.6 → 28.0 ms).
+
+Evidence, the preserved baseline binary, reproduction script and all build/test
+logs are in `out/render-captures/paragraph-fitting-adoption-2026-10-03/`.
+
 ## Recommended next work
 
-1. The unused pseudo-variable work is addressed. Before adding variable-result
-   caching, profile the remaining element setup and ordinary CSS work separately;
-   identical local declaration sets alone do not prove safe result reuse.
-2. Address long-paragraph suffix measurement if long articles or synthetic scaling
-   become the next priority; it is confirmed, but does not explain the saved-site
-   timings above.
-3. Investigate ordinary selector work on Tion/Bihon only as a separate measured
-   optimization. Scheduler replacement and broader layout/scroll reuse remain
-   lower priorities.
+1. Return to rendering correctness and reading usability. The focused Qt
+   text-fitting improvement in section 9 is now enabled by default.
+2. Defer irrelevant-stylesheet rejection unless further profiling justifies it.
+   The measured 256-bit ancestor filter is already the default; section 8 records
+   its benefit and memory cost.
+3. Further variable-result caching, scheduler replacement and broader layout/scroll
+   reuse need separate evidence and remain lower priorities.
 4. Validate the migrated event loops on native Windows and Haiku, and complete
    GTK build/runtime checks when those frontends are in scope. The original four
    Qt performance priorities are complete.

@@ -87,6 +87,11 @@ void style_set_height_px(css_computed_style *s, int px)
         set_height(s, CSS_HEIGHT_SET, (css_fixed_or_calc)INTTOFIX(px), CSS_UNIT_PX);
 }
 
+void style_set_clear(css_computed_style *s, uint8_t clear)
+{
+    set_clear(s, clear);
+}
+
 void style_set_overflow_hidden(css_computed_style *s)
 {
     set_overflow_x(s, CSS_OVERFLOW_HIDDEN);

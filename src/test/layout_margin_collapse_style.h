@@ -44,6 +44,9 @@ void style_set_padding_top(css_computed_style *s, int px);
  */
 void style_set_height_px(css_computed_style *s, int px);
 
+/** Set float clearance. */
+void style_set_clear(css_computed_style *s, uint8_t clear);
+
 /** Set width in px or percent; a negative value means auto. */
 void style_set_width(css_computed_style *s, int value, bool percent);
 

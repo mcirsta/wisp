@@ -72,6 +72,8 @@ static void check_spaces(struct paragraph *p)
     font_plot_style_from_css(&p->content.unit_len_ctx, p->root.style, &font);
     assert(fonts->width(&font, " ", 1, &space) == NSERROR_OK);
     for (struct box *b = p->lines->children; b; b = b->next) {
+        if (b->type != BOX_TEXT)
+            continue;
         if (b->flags & CLONE)
             assert(talloc_parent(b) == p->lines);
         assert(b->length > 0 && b->text[b->length - 1] != ' ');
@@ -112,6 +114,77 @@ void test_text_reflow(const struct gui_layout_table *fonts)
             finish(&fresh);
         }
         finish(&retained);
+    }
+}
+
+static void add_float(struct paragraph *p, css_computed_style *style, bool right)
+{
+    struct box *floating = talloc_zero(p->lines, struct box);
+    assert(floating);
+    struct box *child = talloc_zero(floating, struct box);
+    assert(child);
+    floating->type = right ? BOX_FLOAT_RIGHT : BOX_FLOAT_LEFT;
+    floating->parent = p->lines;
+    floating->children = floating->last = child;
+    floating->next = &p->text;
+    p->text.prev = floating;
+    p->lines->children = floating;
+    child->type = BOX_BLOCK;
+    child->parent = floating;
+    child->style = style;
+    child->height = AUTO;
+    child->max_width = UNKNOWN_MAX_WIDTH;
+    child->flags |= HAS_HEIGHT | MAKE_HEIGHT;
+}
+
+void test_long_text_reflow(const struct gui_layout_table *fonts, const char *text)
+{
+    /* Compare line assignments as well as height: retained layouts can have
+     * different fragment boundaries while still placing exactly the same text. */
+    const int widths[] = {640, 240, 240, 900, 369, 640};
+    for (int variant = 0; variant < 3; variant++) {
+        css_computed_style *float_style = create_block_style();
+        style_set_clear(float_style, CSS_CLEAR_NONE);
+        style_set_margins(float_style, 0, 0, 0, 0);
+        style_set_width(float_style, 80, false);
+        style_set_height_px(float_style, 69); // Narrow the first three 23px lines.
+        struct paragraph retained;
+        init(&retained, text, fonts);
+        if (variant)
+            add_float(&retained, float_style, variant == 2);
+        for (size_t i = 0; i < sizeof(widths) / sizeof(widths[0]); i++) {
+            struct paragraph fresh;
+            init(&fresh, text, fonts);
+            if (variant)
+                add_float(&fresh, float_style, variant == 2);
+            layout(&retained, widths[i]);
+            layout(&fresh, widths[i]);
+            check_spaces(&retained);
+            check_spaces(&fresh);
+            assert(retained.root.height == fresh.root.height);
+            struct box *expected = &fresh.text;
+            bool beside_float = false, below_float = false;
+            for (struct box *b = &retained.text; b; b = b->next) {
+                while (expected->next && expected->next->text <= b->text)
+                    expected = expected->next;
+                if (b->y != expected->y)
+                    fprintf(stderr, "long reflow variant %d, step %zu, width %d, byte %zu: y %d, expected %d\n",
+                        variant, i, widths[i], (size_t)(b->text - text), b->y, expected->y);
+                assert(b->y == expected->y);
+                int left = variant == 1 && b->y < 69 ? 80 : 0;
+                int right = widths[i] - (variant == 2 && b->y < 69 ? 80 : 0);
+                if (b->x < left || b->x + b->width > right)
+                    fprintf(stderr, "long reflow bounds variant %d, step %zu, byte %zu: x=%d y=%d width=%d, [%d,%d]\n",
+                        variant, i, (size_t)(b->text - text), b->x, b->y, b->width, left, right);
+                assert(b->x >= left && b->x + b->width <= right);
+                beside_float |= b->y < 69;
+                below_float |= b->y >= 69;
+            }
+            assert(beside_float && below_float);
+            finish(&fresh);
+        }
+        finish(&retained);
+        destroy_mock_style(float_style);
     }
 }
 

@@ -31,6 +31,7 @@
 #include <QWidget>
 #include <QtEndian>
 #include <QtMath>
+#include <cstring>
 #include <stddef.h>
 #include <utility>
 
@@ -766,62 +767,96 @@ static nserror nsqt_layout_position(
 }
 
 
-/**
- * Find where to split a string to make it fit a width.
- *
- * \param[in] fstyle style for this text
- * \param[in] string UTF-8 string to measure
- * \param[in] length length of string, in bytes
- * \param[in] split width to split on
- * \param[out] string_idx updated to index in string of actual_x, [1..length]
- * \param[out] actual_x updated to x coordinate of character closest to x
- * \return NSERROR_OK or appropriate error code on faliure
- *
- * On exit, string_idx indicates first character after split point.
- *
- * \note string_idx of 0 must never be returned.
- *
- *   Returns:
- *     string_idx giving split point closest to x, where actual_x < x
- *   else
- *     string_idx giving split point closest to x, where actual_x >= x
- *
- * Returning string_idx == length means no split possible
- */
-static nserror nsqt_layout_split(const struct plot_font_style *fstyle, const char *string, size_t length, int split,
-    size_t *string_idx, int *actual_x)
+/* Advance over count space-delimited words, reducing count if the text ends.
+ * Break positions are UTF-8 byte offsets before the space; a terminal position
+ * includes any trailing space, matching the whole-string width contract. */
+static size_t advance_words(const char *string, size_t length, size_t start, size_t &count)
 {
-    nserror res = NSERROR_OK;
-    quint64 generation = text_cache_generation;
-    QFont *font = nsfont_style_to_font(fstyle);
-    /* Use top-level widget as device for accurate metrics matching rendering */
-    QPaintDevice *device = get_metrics_device();
-    QFontMetricsF metrics(*font, device);
-    TextMeasurement cached(*font, metrics, fstyle, string, length, TextOperation::Split, split, generation);
-    if (cached.find(actual_x, string_idx)) {
-        delete font;
-        return NSERROR_OK;
+    for (size_t i = 0; i < count; i++) {
+        const char *space = static_cast<const char *>(std::memchr(string + start, ' ', length - start));
+        size_t end = space == nullptr ? length : size_t(space - string);
+        if (end == length) {
+            count = i + 1;
+            return end;
+        }
+        if (i + 1 == count)
+            return end;
+        start = end + 1;
     }
+    return length;
+}
+
+/* Find a fitting prefix without shaping the entire remaining paragraph for
+ * every line. Grow the word-count bracket, then narrow it. Shape each candidate
+ * as a complete string: adding individual word advances would lose kerning and
+ * contextual shaping, and horizontalAdvance(full_text, length) still analyses
+ * full_text. No decoded text or measurements outlive this callback. */
+static void layout_split_words(const QFontMetricsF &metrics, qreal scale, int spacing,
+    const char *string, size_t length, int split, size_t *string_idx, int *actual_x)
+{
+    auto measure = [&](size_t end) {
+        return text_advance(metrics, scale, spacing, QString::fromUtf8(string, end));
+    };
+    size_t low_end = 0, low_words = 0, high_words = 0, step = 1;
+    qreal low_width = 0;
+    for (;;) {
+        size_t count = step;
+        size_t end = advance_words(string, length, low_words == 0 ? 0 : low_end + 1, count);
+        qreal width = measure(end);
+        high_words = low_words + count;
+        if (width > split) {
+            if (low_words == 0) {
+                /* Even an overlong first word must make progress. */
+                low_end = end;
+                low_width = width;
+            }
+            break;
+        }
+        low_end = end;
+        low_width = width;
+        low_words = high_words;
+        if (end == length)
+            break;
+        step *= 2;
+    }
+    while (high_words > low_words + 1) {
+        size_t count = (high_words - low_words) / 2;
+        size_t end = advance_words(string, length, low_end + 1, count);
+        qreal width = measure(end);
+        if (width <= split) {
+            low_end = end;
+            low_width = width;
+            low_words += count;
+        } else {
+            high_words = low_words + count;
+        }
+    }
+    *string_idx = low_end;
+    *actual_x = qCeil(low_width);
+}
+
+/* Preserve position-based fitting for runs outside the word search's
+ * assumptions, notably negative spacing: a later prefix may be narrower. */
+static nserror layout_split_with_position(const QFontMetricsF &metrics, qreal scale, int spacing,
+    const char *string, size_t length, int split, size_t *string_idx, int *actual_x)
+{
     size_t split_len;
     int split_x;
     size_t str_len;
     size_t last_word_end = 0; /* Both offset and width exclude the breaking space. */
-    qreal scale = font_scale(fstyle);
     QString qstr = QString::fromUtf8(string, length);
-    PrefixWidths widths{metrics, scale, fstyle->letter_spacing, qstr.size()};
+    PrefixWidths widths{metrics, scale, spacing, qstr.size()};
     qreal full_width = widths.measure(qstr);
 
     if (length == 0 || full_width <= split) {
         *string_idx = length;
         *actual_x = qCeil(full_width);
-        goto nsqt_layout_split_done;
+        return NSERROR_OK;
     }
 
-    res = layout_position(widths, qstr, length, split, &split_len, &split_x);
-    if (res != NSERROR_OK) {
-        delete font;
+    nserror res = layout_position(widths, qstr, length, split, &split_len, &split_x);
+    if (res != NSERROR_OK)
         return res;
-    }
 
     /* If the position estimate reaches the end despite overflowing (very
      * narrow glyphs), restart at the first word. A zero estimate likewise
@@ -886,7 +921,57 @@ static nserror nsqt_layout_split(const struct plot_font_style *fstyle, const cha
     *string_idx = last_word_end;
     *actual_x = qCeil(widths.measure(QString::fromUtf8(string, last_word_end)));
 
-nsqt_layout_split_done:
+    return NSERROR_OK;
+}
+
+
+/**
+ * Find where to split a string to make it fit a width.
+ *
+ * \param[in] fstyle style for this text
+ * \param[in] string UTF-8 string to measure
+ * \param[in] length length of string, in bytes
+ * \param[in] split width to split on
+ * \param[out] string_idx updated to index in string of actual_x, [1..length]
+ * \param[out] actual_x updated to x coordinate of character closest to x
+ * \return NSERROR_OK or appropriate error code on faliure
+ *
+ * On exit, string_idx indicates first character after split point.
+ *
+ * \note string_idx of 0 must never be returned.
+ *
+ *   Returns:
+ *     string_idx giving split point closest to x, where actual_x <= x
+ *   else
+ *     string_idx giving split point closest to x, where actual_x > x
+ *
+ * Returning string_idx == length means no split possible
+ */
+static nserror nsqt_layout_split(const struct plot_font_style *fstyle, const char *string, size_t length, int split,
+    size_t *string_idx, int *actual_x)
+{
+    nserror res = NSERROR_OK;
+    quint64 generation = text_cache_generation;
+    QFont *font = nsfont_style_to_font(fstyle);
+    /* Use top-level widget as device for accurate metrics matching rendering */
+    QPaintDevice *device = get_metrics_device();
+    QFontMetricsF metrics(*font, device);
+    TextMeasurement cached(*font, metrics, fstyle, string, length, TextOperation::Split, split, generation);
+    if (cached.find(actual_x, string_idx)) {
+        delete font;
+        return NSERROR_OK;
+    }
+    qreal scale = font_scale(fstyle);
+    if (length > 0 && string[0] != ' ' && fstyle->letter_spacing >= 0 && scale > 0) {
+        layout_split_words(metrics, scale, fstyle->letter_spacing, string, length, split, string_idx, actual_x);
+    } else {
+        res = layout_split_with_position(
+            metrics, scale, fstyle->letter_spacing, string, length, split, string_idx, actual_x);
+    }
+    if (res != NSERROR_OK) {
+        delete font;
+        return res;
+    }
     cached.insert(*actual_x, *string_idx);
     delete font;
     NSLOG(wisp, DEEPDEBUG,

@@ -16,6 +16,7 @@ void test_text_reflow(const struct gui_layout_table *fonts);
 void test_fractional_text_reflow(const struct gui_layout_table *fonts);
 void test_fragment_rounding_reflow(const struct gui_layout_table *fonts);
 void test_inline_spacing_reflow(const struct gui_layout_table *fonts);
+void test_long_text_reflow(const struct gui_layout_table *fonts, const char *text);
 }
 #include "qt/layout.h"
 #include "qt/misc.h"
@@ -79,6 +80,99 @@ static void check_prefix_boundaries(const plot_font_style_t &base)
     }
 }
 
+/* Independently enumerate complete prefixes. Integer width() rounds up, so its
+ * fit decision must agree with split()'s unrounded advance at integer limits. */
+static void check_word_fit(const plot_font_style_t &font, const QByteArray &text, int available)
+{
+    size_t expected = text.size(), offset;
+    int expected_width = measure(font, text.constData(), text.size()), actual;
+    if (expected_width > available) {
+        int end = text.indexOf(' ');
+        if (end < 0)
+            end = text.size();
+        expected = end;
+        expected_width = measure(font, text.constData(), end);
+        while (expected_width <= available && end < text.size()) {
+            end = text.indexOf(' ', end + 1);
+            if (end < 0)
+                end = text.size();
+            int width = measure(font, text.constData(), end);
+            if (width > available)
+                break;
+            expected = end;
+            expected_width = width;
+        }
+    }
+    REQUIRE(nsqt_layout_table->split(
+        &font, text.constData(), text.size(), available, &offset, &actual) == NSERROR_OK);
+    if (offset != expected || actual != expected_width)
+        std::fprintf(stderr, "word fit length=%lld size=%d spacing=%d available=%d: got %zu/%d, expected %zu/%d\n",
+            (long long)text.size(), font.size, font.letter_spacing, available, offset, actual, expected, expected_width);
+    REQUIRE(offset == expected && actual == expected_width);
+    REQUIRE(text.isEmpty() || offset > 0);
+    REQUIRE(offset == size_t(text.size()) || text[offset] == ' ');
+}
+
+static void check_long_paragraphs(const plot_font_style_t &base)
+{
+    QByteArray paragraph;
+    for (int i = 0; i < 160; i++) {
+        paragraph += "AVATAR café a\u0301bc \U0001F469\u200d\U0001F4BB office ";
+        paragraph += QByteArray::number(i) + " renderer ";
+    }
+    REQUIRE(paragraph.size() > 4096); // Exercise misses beyond the result cache's admission limit.
+    for (int size : {12 * PLOT_STYLE_SCALE, 101 * PLOT_STYLE_SCALE / 8}) {
+        for (int spacing : {0, 2}) {
+            plot_font_style_t font = base;
+            font.size = size;
+            font.letter_spacing = spacing;
+            for (int available : {-1, 0, 1, 23, 24, 240, 640, 4096})
+                check_word_fit(font, paragraph, available);
+            for (int words : {1, 2, 3, 7, 8, 15, 16, 31, 32, 127}) {
+                int end = -1;
+                for (int i = 0; i < words; i++)
+                    end = paragraph.indexOf(' ', end + 1);
+                REQUIRE(end > 0);
+                int width = measure(font, paragraph.constData(), end);
+                check_word_fit(font, paragraph, width);
+                check_word_fit(font, paragraph, width - 1);
+            }
+        }
+    }
+    // An overlong word is consumed whole; NBSP is not an ASCII-space break.
+    QByteArray word(8192, 'a');
+    check_word_fit(base, word, 240);
+    check_word_fit(base, word + " next", 240);
+    check_word_fit(base, "a\u00a0b next", 1);
+    for (const char *text : {"a b ", "a  b  c   ", "a b c d e f g h"}) {
+        QByteArray bytes(text);
+        int width = measure(base, text, bytes.size());
+        for (int available : {0, 23, width - 1, width, width + 1})
+            check_word_fit(base, bytes, available);
+    }
+    // Bound the input by length, even when more words follow in its buffer.
+    size_t offset;
+    int actual;
+    REQUIRE(nsqt_layout_table->split(&base, "a b ignored", 3, 1000, &offset, &actual) == NSERROR_OK);
+    REQUIRE(offset == 3 && actual == measure(base, "a b", 3));
+
+    // Negative spacing can make the whole run fit while its first word does not.
+    plot_font_style_t special = base;
+    special.letter_spacing = -8;
+    QByteArray shrinking = "a a a a a a a a";
+    int full = measure(special, shrinking.constData(), shrinking.size());
+    REQUIRE(measure(special, "a", 1) > full);
+    check_word_fit(special, shrinking, full);
+    special.size = 0;
+    for (int spacing : {-1, 0, 2}) {
+        special.letter_spacing = spacing;
+        check_word_fit(special, paragraph, 240);
+    }
+    // Retained fragments must rejoin and split consistently when widths change.
+    paragraph.chop(1);
+    test_long_text_reflow(nsqt_layout_table, paragraph.constData());
+}
+
 int main(int argc, char **argv)
 {
     QApplication app(argc, argv);
@@ -106,6 +200,8 @@ int main(int argc, char **argv)
     check_split(font, "unbreakable", "unbreakable", -1);
     check_split(font, "alpha beta", "alpha", -measure(font, "alpha", 5));
     check_split(font, "alpha beta", "alpha", -measure(font, "alpha", 5) - 10);
+    check_split(font, " alpha beta", " alpha", 0);
+    check_split(font, " alpha beta ", " alpha beta ", 0);
 
     QFont face(QString::fromUtf8(family));
     face.setPixelSize(16);
@@ -147,6 +243,7 @@ int main(int argc, char **argv)
     REQUIRE(measure(spacing, " ", 1) == 3);
 
     check_prefix_boundaries(font);
+    check_long_paragraphs(font);
     test_text_reflow(nsqt_layout_table);
     test_inline_spacing_reflow(nsqt_layout_table);
     test_fractional_text_reflow(nsqt_layout_table);
