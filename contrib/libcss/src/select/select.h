@@ -15,6 +15,7 @@
 
 #include "stylesheet.h"
 #include "select/variables.h"
+#include "select/hash.h"
 
 /**
  * Item in the reject cache (only class and id types are valid)
@@ -98,6 +99,7 @@ typedef struct css_select_state {
     lwc_string *id; /* Node id, if any */
     lwc_string **classes; /* Node classes, if any */
     uint32_t n_classes; /* Number of classes */
+    css_selector_filter filter; /* Current node's selector lookup keys */
 
     reject_item reject_cache[128]; /* Reject cache (filled from end) */
     reject_item *next_reject; /* Next free slot in reject cache */

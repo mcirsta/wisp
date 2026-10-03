@@ -32,6 +32,8 @@ typedef struct hash_t {
 } hash_t;
 
 struct css_selector_hash {
+    css_selector_filter filter;
+
     hash_t elements;
 
     hash_t classes;
@@ -63,6 +65,42 @@ static css_error _iterate_universal(
 /* Get case insensitive hash value for a name.
  * All element/class/id names are known to have their insensitive ptr set. */
 #define _hash_name(name) lwc_string_hash_value(name->insensitive)
+
+static uint64_t _filter_bit(lwc_hash hash)
+{
+    return UINT64_C(1) << (hash & 63);
+}
+
+css_error css__selector_filter_init(css_selector_filter *filter,
+    lwc_string *element, lwc_string *id, lwc_string **classes, uint32_t n_classes)
+{
+    lwc_hash hash;
+
+    memset(filter, 0, sizeof(*filter));
+    if (lwc_string_caseless_hash_value(element, &hash) != lwc_error_ok)
+        return CSS_NOMEM;
+    filter->element = _filter_bit(hash);
+    if (id != NULL) {
+        if (lwc_string_caseless_hash_value(id, &hash) != lwc_error_ok)
+            return CSS_NOMEM;
+        filter->id = _filter_bit(hash);
+    }
+    for (uint32_t i = 0; i < n_classes; i++) {
+        if (lwc_string_caseless_hash_value(classes[i], &hash) != lwc_error_ok)
+            return CSS_NOMEM;
+        filter->classes |= _filter_bit(hash);
+    }
+    return CSS_OK;
+}
+
+bool css__selector_hash_may_match(const css_selector_hash *hash, const css_selector_filter *filter)
+{
+    /* Attribute/pseudo-only and universal selectors have no required name.
+     * Ignore media and ancestor conditions here: the normal iterators check
+     * them. Removed keys may leave bits set, which is likewise conservative. */
+    return hash->universal.sel != NULL || (hash->filter.element & filter->element) != 0 ||
+        (hash->filter.classes & filter->classes) != 0 || (hash->filter.id & filter->id) != 0;
+}
 
 
 /* No bytecode if rule body is empty or wholly invalid --
@@ -291,12 +329,16 @@ css_error css__selector_hash_insert(css_selector_hash *hash, const css_selector 
         index = _hash_name(name) & mask;
 
         error = _insert_into_chain(hash, &hash->ids.slots[index], selector);
+        if (error == CSS_OK)
+            hash->filter.id |= _filter_bit(_hash_name(name));
     } else if ((name = _class_name(selector)) != NULL) {
         /* Named class */
         mask = hash->classes.n_slots - 1;
         index = _hash_name(name) & mask;
 
         error = _insert_into_chain(hash, &hash->classes.slots[index], selector);
+        if (error == CSS_OK)
+            hash->filter.classes |= _filter_bit(_hash_name(name));
     } else if (lwc_string_length(selector->data.qname.name) != 1 ||
         lwc_string_data(selector->data.qname.name)[0] != '*') {
         /* Named element */
@@ -304,6 +346,8 @@ css_error css__selector_hash_insert(css_selector_hash *hash, const css_selector 
         index = _hash_name(selector->data.qname.name) & mask;
 
         error = _insert_into_chain(hash, &hash->elements.slots[index], selector);
+        if (error == CSS_OK)
+            hash->filter.element |= _filter_bit(_hash_name(selector->data.qname.name));
     } else {
         /* Universal chain */
         error = _insert_into_chain(hash, &hash->universal, selector);

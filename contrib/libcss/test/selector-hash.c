@@ -26,6 +26,8 @@ static void *test_calloc(size_t count, size_t size)
 #define css__selector_hash_find_by_id test_hash_find_by_id
 #define css__selector_hash_find_universal test_hash_find_universal
 #define css__selector_hash_size test_hash_size
+#define css__selector_filter_init test_filter_init
+#define css__selector_hash_may_match test_hash_may_match
 #define calloc test_calloc
 #include "../src/select/hash.c"
 #undef calloc
@@ -134,6 +136,12 @@ static void compare_lookups(css_selector_hash *before, css_selector_hash *after)
             const css_selector **a, **b;
             assert(test_hash_find_by_class(before, &req, &ai, &a) == CSS_OK);
             assert(test_hash_find_by_class(after, &req, &bi, &b) == CSS_OK);
+            css_selector_filter filter;
+            assert(test_filter_init(&filter, req.qname.name, NULL, &req.class, 1) == CSS_OK);
+            if (*a != NULL || *b != NULL) {
+                assert(test_hash_may_match(before, &filter));
+                assert(test_hash_may_match(after, &filter));
+            }
             size_t matched = 0;
             while (*a != NULL || *b != NULL) {
                 if (*a != *b) {
@@ -213,6 +221,14 @@ static void test_growth(void)
             _chain_bloom_generate(head->sel, expected);
             assert(memcmp(expected, head->sel_chain_bloom, sizeof(expected)) == 0);
             assert(test_hash_remove(after, head->sel) == CSS_OK);
+            if (head->sel != NULL) {
+                /* Removing one key must not clear a bit needed by another
+                 * key in the same bucket (and therefore the same filter bit). */
+                css_selector_filter filter;
+                lwc_string *name = _class_name(head->sel);
+                assert(test_filter_init(&filter, head->sel->data.qname.name, NULL, &name, 1) == CSS_OK);
+                assert(test_hash_may_match(after, &filter));
+            }
             check_size(after);
         }
     }
@@ -260,11 +276,103 @@ static void test_custom_property_rules(void)
     assert(css_stylesheet_destroy(sheet) == CSS_OK);
 }
 
+static void test_sheet_filter(void)
+{
+    const struct {
+        const char *css;
+        const char *element;
+        const char *id;
+        const char *class;
+        bool possible;
+    } cases[] = {
+        {"", "div", NULL, NULL, false},
+        {"span {color:red}", "div", NULL, NULL, false},
+        {"div {color:red}", "DIV", NULL, NULL, true},
+        {".target {color:red}", "div", NULL, NULL, false},
+        {".target {color:red}", "div", NULL, "TARGET", true},
+        {"#target {color:red}", "div", NULL, "target", false},
+        {"#target {color:red}", "div", "TARGET", NULL, true},
+        {".target {color:red}", "div", "target", NULL, false},
+        {".ancestor .target {color:red}", "div", NULL, "target", true},
+        {".ancestor > .target + .last {color:red}", "div", NULL, "last", true},
+        {"* {color:red}", "div", NULL, NULL, true},
+        {"[title] {color:red}", "div", NULL, NULL, true},
+        {":checked {color:red}", "input", NULL, NULL, true},
+        {":not(.target) {color:red}", "div", NULL, NULL, true},
+        {"::before {content:'x'}", "div", NULL, NULL, true},
+        {"@media print {.target {color:red}}", "div", NULL, "target", true},
+        {".target {--width:25px}", "div", NULL, "target", true},
+        {".unused {} #target {color:red}", "div", "target", NULL, true},
+        {"@namespace x 'urn:test'; x|div {color:red}", "div", NULL, NULL, true},
+        {"@namespace 'urn:test'; div {color:red}", "div", NULL, NULL, true},
+        {"@namespace 'urn:test'; @namespace ''; div {color:red}", "div", NULL, NULL, true},
+        {"@namespace x 'urn:test'; @namespace x ''; x|div {color:red}", "div", NULL, NULL, true},
+        {"@namespace x ''; @namespace x 'urn:test'; x|div {color:red}", "div", NULL, NULL, true},
+        {"@namespace x ''; x|div {color:red}", "div", NULL, NULL, true},
+    };
+    for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
+        css_stylesheet_params params = {
+            .params_version = CSS_STYLESHEET_PARAMS_VERSION_1,
+            .level = CSS_LEVEL_3, .charset = "UTF-8", .url = "sheet-filter", .resolve = resolve_url,
+        };
+        css_stylesheet *sheet;
+        css_selector_filter filter;
+        lwc_string *element, *id = NULL, *classes[2];
+        uint32_t n_classes = 0;
+        assert(css_stylesheet_create(&params, &sheet) == CSS_OK);
+        append_css(sheet, cases[i].css);
+        assert(css_stylesheet_data_done(sheet) == CSS_OK);
+        assert(lwc_intern_string(cases[i].element, strlen(cases[i].element), &element) == lwc_error_ok);
+        if (cases[i].id != NULL)
+            assert(lwc_intern_string(cases[i].id, strlen(cases[i].id), &id) == lwc_error_ok);
+        if (cases[i].class != NULL) {
+            /* The matching class need not be the first class. */
+            assert(lwc_intern_string("unrelated", 9, &classes[n_classes++]) == lwc_error_ok);
+            assert(lwc_intern_string(cases[i].class, strlen(cases[i].class), &classes[n_classes++]) == lwc_error_ok);
+        }
+        assert(test_filter_init(&filter, element, id, classes, n_classes) == CSS_OK);
+        if (test_hash_may_match(sheet->selectors, &filter) != cases[i].possible) {
+            fprintf(stderr, "Sheet filter case %zu failed: %s\n", i, cases[i].css);
+            abort();
+        }
+
+        /* A summary must survive copying, table growth and rule removal.
+         * It may retain false positives after removal, but reinsertion must
+         * always permit the selector, including keys sharing a filter bit. */
+        css_selector_hash *copy = copy_hash(sheet->selectors);
+        hash_t *tables[] = {&copy->elements, &copy->classes, &copy->ids};
+        for (size_t t = 0; t < 3; t++) {
+            for (size_t slot = 0; slot < tables[t]->n_slots; slot++) {
+                hash_entry *head = &tables[t]->slots[slot];
+                if (head->sel != NULL) {
+                    const css_selector *selector = head->sel;
+                    assert(test_hash_remove(copy, selector) == CSS_OK);
+                    assert(test_hash_insert(copy, selector) == CSS_OK);
+                }
+            }
+        }
+        assert(test_hash_may_match(copy, &filter) == cases[i].possible);
+        if (copy->universal.sel != NULL) {
+            while (copy->universal.sel != NULL)
+                assert(test_hash_remove(copy, copy->universal.sel) == CSS_OK);
+            assert(!test_hash_may_match(copy, &filter));
+        }
+        assert(test_hash_destroy(copy) == CSS_OK);
+        lwc_string_unref(element);
+        if (id != NULL)
+            lwc_string_unref(id);
+        for (uint32_t c = 0; c < n_classes; c++)
+            lwc_string_unref(classes[c]);
+        assert(css_stylesheet_destroy(sheet) == CSS_OK);
+    }
+}
+
 int main(void)
 {
     test_thresholds();
     test_growth();
     test_custom_property_rules();
+    test_sheet_filter();
     puts("PASS");
     return 0;
 }

@@ -22,6 +22,18 @@ struct css_selector;
 
 typedef struct css_selector_hash css_selector_hash;
 
+/* Conservative summaries of the rightmost selector keys and a node's names.
+ * Hash collisions only admit extra lookups; zero intersection rules them out. */
+typedef struct css_selector_filter {
+    uint64_t element;
+    uint64_t classes;
+    uint64_t id;
+} css_selector_filter;
+
+css_error css__selector_filter_init(css_selector_filter *filter,
+    lwc_string *element, lwc_string *id, lwc_string **classes, uint32_t n_classes);
+bool css__selector_hash_may_match(const css_selector_hash *hash, const css_selector_filter *filter);
+
 struct css_hash_selection_requirments {
     css_qname qname; /* Element name, or universal "*" */
     lwc_string *class; /* Name of class, or NULL */

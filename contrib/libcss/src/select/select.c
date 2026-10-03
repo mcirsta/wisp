@@ -1074,6 +1074,12 @@ static css_error css_select__initialise_selection_state(css_select_state *state,
         goto failed;
     }
 
+    error = css__selector_filter_init(&state->filter,
+        state->element.name, state->id, state->classes, state->n_classes);
+    if (error != CSS_OK) {
+        goto failed;
+    }
+
     /* Node pseudo classes */
     error = handler->node_is_link(pw, node, &match);
     if (error != CSS_OK) {
@@ -2020,6 +2026,10 @@ css_error match_selectors_in_sheet(css_select_ctx *ctx, const css_stylesheet *sh
     css_select_rule_source src = {CSS_SELECT_RULE_SRC_ELEMENT, 0};
     struct css_hash_selection_requirments req;
     css_error error;
+
+    /* Check only this sheet's index; select_from_sheet still visits imports. */
+    if (!css__selector_hash_may_match(sheet->selectors, &state->filter))
+        return CSS_OK;
 
     /* Set up general selector chain requirments */
     req.media = state->media;

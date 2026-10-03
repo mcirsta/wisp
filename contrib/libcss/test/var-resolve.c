@@ -1029,6 +1029,38 @@ static void test_variable_import_prefix(void)
     assert(css_stylesheet_destroy(empty) == CSS_OK);
 }
 
+static void test_unmatched_sheet_import(void)
+{
+    for (unsigned variables = 0; variables < 2; variables++) {
+        style_case ctx = {0};
+        /* The outer sheet cannot match div. Its late import still can, in
+         * both the ordinary-only pass and the custom-property collection pass. */
+        ctx.sheet = create_stylesheet_from_css(
+            "@import 'late.css'; span {width:99px}", false, true);
+        ctx.import_sheet = create_stylesheet_from_css(variables ?
+            "div {width:var(--w); --w:23px} div::before {width:var(--w)}" :
+            "div {width:23px} div::before {width:23px}", false, false);
+        assert(css_select_ctx_create(&ctx.select_ctx) == CSS_OK);
+        assert(css_select_ctx_append_sheet(ctx.select_ctx, ctx.sheet, CSS_ORIGIN_AUTHOR, NULL) == CSS_OK);
+        assert(lwc_intern_string("div", 3, &ctx.node_name) == lwc_error_ok);
+        ctx.node.name = ctx.node_name;
+
+        const css_computed_style *style = select_style_for_node(&ctx, &ctx.node, NULL, &ctx.results);
+        expect_length_type("unmatched sheet before import", style, css_computed_width, CSS_WIDTH_AUTO);
+        destroy_node_data(&ctx.node);
+        css_select_results_destroy(ctx.results);
+        ctx.results = NULL;
+
+        assert(css_stylesheet_register_import(ctx.sheet, ctx.import_sheet) == CSS_OK);
+        style = select_style_for_node(&ctx, &ctx.node, NULL, &ctx.results);
+        expect_length_px("late import through unmatched sheet", style, css_computed_width, CSS_WIDTH_SET, 23);
+        assert(ctx.results->styles[CSS_PSEUDO_ELEMENT_BEFORE] != NULL);
+        expect_length_px("late imported pseudo through unmatched sheet",
+            ctx.results->styles[CSS_PSEUDO_ELEMENT_BEFORE], css_computed_width, CSS_WIDTH_SET, 23);
+        destroy_style_case(&ctx);
+    }
+}
+
 static css_error fail_class_match(void *pw, void *node, lwc_string *name, bool *match)
 {
     UNUSED(pw);
@@ -1692,6 +1724,7 @@ int main(int argc, char **argv)
     test_imported_sheet_custom_property();
     test_variables_imported_by_literal_sheet();
     test_variable_import_prefix();
+    test_unmatched_sheet_import();
     test_many_class_selectors();
     test_collection_skips_ordinary_rules();
     test_pseudo_element_uses_element_vars();

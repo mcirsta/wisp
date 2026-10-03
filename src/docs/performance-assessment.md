@@ -4,6 +4,7 @@ Original assessment: 2026-10-01. Reassessed against the implementation and
 saved benchmark results on 2026-10-02. Selector matching was investigated on
 2026-10-03; section 8 records the results and adoption of the 256-bit filter.
 Section 9 records the long-paragraph investigation and production Qt fitting change.
+Section 10 records the stylesheet lookup filter and its validation.
 
 Scope: page-load and rendering performance of the Qt frontend. The rendering
 engine remains single-threaded. JavaScript execution is outside this assessment.
@@ -13,6 +14,10 @@ a fresh Release profile after the polling migration. Section 7 records the
 subsequent CSS-variable improvement and its before/after measurements.
 
 ## Current status
+
+This performance work is wrapped up for now as of 2026-10-03. Development returns
+to rendering correctness and reading usability; the deferred candidates below
+are reference material, not the current work queue.
 
 All four priorities from the original assessment are implemented in Qt and
 enabled in normal builds. Network readiness adapters now cover every frontend
@@ -25,12 +30,13 @@ broad rewrite is needed.
 | Original finding | Status | Current position |
 |---|---|---|
 | Inline CSS/JavaScript fetch queues process one item per poll | Done | Bounded batches process queued local work without a periodic timer. |
-| Repeated Qt text measurements | Done for repeated width/split results | A shared 512 KiB cache avoids reshaping identical inputs; expensive misses remain possible. |
+| Repeated Qt text measurements | Done for repeated results and ordinary long-paragraph fitting | A shared 512 KiB cache avoids reshaping identical inputs; bounded word-prefix fitting removes repeated full-suffix shaping in the ordinary case. |
 | Images rescaled on every paint | Done | A shared 16 MiB cache retains scaled images. |
 | Full viewport repaint on every scroll | Done for eligible scrolling | Pixel reuse includes sticky content and embedded frames; unsupported cases repaint fully. |
 | Small decoded-image cache tied to source cache | Done | Decoded images have an independent 32 MiB default budget. |
 | Network driven by a 10 ms poll | Migrated across frontends | Socket readiness and libcurl deadlines replace the polling API and fallback; native Windows/Haiku validation remains. |
 | Repeated work collecting CSS variables | Unused pseudo evaluation removed | HotNews variable setup falls from about 97 ms to 42 ms in the paired follow-up. Parent inheritance remains shared; further local-result caching is deferred. |
+| Ordinary selector lookup overhead | Focused improvements complete | The 256-bit ancestor filter and 24-byte per-sheet key summary reject unnecessary matching/setup; sections 8 and 10 record the measurements. |
 | Final full reflow after loading | Policy retained | Text caching reduces its cost; further layout reuse requires evidence. |
 | Scheduler list scans and font-metrics setup | Low priority | No current measurement justifies making these the next project. |
 
@@ -577,8 +583,8 @@ nothing, despite repeated element/class/ID/universal lookups.
 This supports investigating a cheap per-node test that rejects irrelevant
 stylesheets before iterator setup. It does not justify skipping a sheet just
 because it matched nothing in this capture: later nodes, media changes, imports
-and restyles can make it relevant. No such optimization was implemented here,
-and no speedup is claimed for it. Merging all stylesheet indexes would be a
+and restyles can make it relevant. The follow-up in section 10 implements and
+measures that rejection. Merging all stylesheet indexes would be a
 larger architectural change and is not the recommended first step.
 
 ### Validation, timing limits and recommendation
@@ -755,13 +761,92 @@ at mobile width. Haiku desktop is effectively unchanged (27.6 → 28.0 ms).
 Evidence, the preserved baseline binary, reproduction script and all build/test
 logs are in `out/render-captures/paragraph-fitting-adoption-2026-10-03/`.
 
+## 10. Avoid unnecessary stylesheet lookup setup, 2026-10-03
+
+Implemented against `8d8b6b0c`, after the 256-bit ancestor filter and Qt paragraph
+fitting changes. Each selector hash now contains three 64-bit summaries of its
+indexed element, class and ID keys. Selection builds the corresponding summary
+of the current node once. If all three intersections are empty and the sheet has
+no universal-chain selectors, its iterator setup is skipped.
+
+The summaries use the same case-insensitive hashes and rightmost-key choice as
+the existing index. Collisions can only cause unnecessary lookups. Universal,
+attribute-only, pseudo-only and negation-only selectors bypass this rejection.
+The normal matcher retains responsibility for actual case/namespace checks,
+ancestors, media conditions and specificity under the
+[Selectors matching rules](https://www.w3.org/TR/selectors-4/#match).
+
+Successful insertion sets the relevant bit. Removal deliberately leaves named
+bits set, since another key can share the bit; this can reduce filtering after
+many mutations but cannot hide a remaining rule. Table growth preserves the
+summary. Nothing is cached about a node's match result, so a fresh selection
+uses its current classes and ID. Imports are traversed before checking each
+sheet's own index, preserving
+[import processing](https://www.w3.org/TR/css-cascade-5/#import-processing) even
+when the importing sheet has no matching keys. Both the ordinary and variable
+collection passes use the filter; inline declarations and font-face lookup keep
+their existing paths.
+
+Storage increases by **24 bytes per stylesheet selector hash**, plus 24 temporary
+bytes in a selection state. The summary needs no separate allocation or persistent per-node data.
+For Bihon's 144 distinct sheet hashes, the added summary storage is about 3.4 KiB.
+No code generators, public APIs or frontend-specific selection code needed changes.
+The optimization is enabled unconditionally; no experimental option remains.
+
+### Measured effect
+
+Five alternating before/after pairs per page, after warmups, Release/LTO at
+1280x900, Qt offscreen at 96 DPI on CPU 4, JavaScript disabled, fresh processes
+and blocked live requests. Separate libraries contain coarse CSS-selection
+timing and aggregate counters; production sources contain neither. Builds
+finish before timing runs.
+
+| Saved page | CSS selection before | After | Ordinary setups skipped |
+|---|---:|---:|---:|
+| HotNews | 161.1 ms | 162.8 ms | 11,494 / 26,367 (44%) |
+| Tion | 43.7 ms | 39.0 ms | 112,539 / 132,759 (85%) |
+| Bihon | 72.4 ms | 61.6 ms | 249,288 / 281,208 (89%) |
+
+Tion/Bihon improve by about **11% / 15%** in total CSS-selection time. HotNews
+shows no meaningful benefit. These are instrumented CSS timings, not whole-page
+load gains or directly comparable to the more heavily instrumented section 8.
+Ordinary and variable-pass candidate counts remain identical. All **30 measured
+captures** match in PNG, DOM and normalized box trees.
+
+### Regression coverage
+
+Selector-hash tests cover key categories, case handling, multiple classes,
+combinators, universal/attribute/pseudo/negation selectors, media-contained and
+custom-property rules, namespaces, collisions, table growth, removal and
+reinsertion. Selection tests check a late import through a nonmatching outer
+sheet for both literal and variable declarations, including pseudo-elements.
+
+The namespace cases exposed an existing parser crash, also reproduced against
+the preserved baseline library: namespace strings were unreferenced when NULL
+on first assignment or for an empty namespace. The three release sites now
+check whether a string exists. Tests include default and prefixed declarations,
+replacement and the empty namespace allowed by
+[CSS Namespaces](https://www.w3.org/TR/css-namespaces-3/#declaration).
+
+Debug and Release/LTO builds succeeded. All **80 selected Debug CSS/restyle tests**
+and **two Release selector/variable regressions** pass. Debug keeps ASan, UBSan
+and engine leak detection enabled with the baseline-verified Fontconfig-only
+suppression described in section 9. The final, uninstrumented production build
+also matches the preserved baseline for all eight saved sites at 1280x900 and
+390x900: **32 captures, 16 pairs**, identical in PNG, DOM and normalized box trees.
+Those single-pair production captures validate output, not load-time speedups.
+
+Reproduction scripts, baseline/probe libraries, timing samples, captures and
+build/test logs are preserved in
+`out/render-captures/stylesheet-lookup-2026-10-03/`.
+
 ## Recommended next work
 
 1. Return to rendering correctness and reading usability. The focused Qt
    text-fitting improvement in section 9 is now enabled by default.
-2. Defer irrelevant-stylesheet rejection unless further profiling justifies it.
-   The measured 256-bit ancestor filter is already the default; section 8 records
-   its benefit and memory cost.
+2. The 256-bit ancestor filter and conservative stylesheet rejection are now
+   defaults; sections 8 and 10 record their benefits and memory costs. Further
+   selector tuning should wait for a new measured bottleneck.
 3. Further variable-result caching, scheduler replacement and broader layout/scroll
    reuse need separate evidence and remain lower priorities.
 4. Validate the migrated event loops on native Windows and Haiku, and complete
