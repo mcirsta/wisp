@@ -2992,6 +2992,25 @@ static void add_float_to_container(struct box *cont, struct box *b)
 }
 
 
+/* Float positions use formatting-context coordinates. Moving a completed line
+ * or block must keep the exclusion list and later float placement consistent. */
+static void layout_shift_float(struct box *box, int shift)
+{
+    struct box *cont = box->float_container;
+    struct box **link = &cont->float_children;
+    while (*link && *link != box)
+        link = &(*link)->next_float;
+    assert(*link == box);
+    *link = box->next_float;
+    box->y += shift;
+    add_float_to_container(cont, box);
+    /* Subsequent floats cannot start above an earlier float's top edge. */
+    cont->cached_place_below_level = max(cont->cached_place_below_level, box->y);
+    if (css_computed_clear(box->children->style) != CSS_CLEAR_NONE)
+        cont->clear_level = max(cont->clear_level, box->y);
+}
+
+
 /**
  * Split a text box.
  *
@@ -3362,6 +3381,35 @@ static int layout_text_baseline(const html_content *content, const css_computed_
     return baseline;
 }
 
+/* Only list-item descendants need first-baseline propagation. Stop at atomic
+ * formatting contexts and out-of-flow ancestors; their contents cannot provide
+ * an ordinary block's first line. A list item can itself be positioned/floated. */
+static bool layout_needs_first_baseline(const struct box *box)
+{
+    for (; box && box->type == BOX_BLOCK; box = box->parent) {
+        if (box_has_outside_marker(box))
+            return true;
+        if (box_is_out_of_flow(box))
+            break;
+    }
+    return false;
+}
+
+/* Outside markers align to the first content baseline. A taller ascent pushes
+ * that content down; marker descent does not enlarge the content's line box.
+ * Offset is the content's top relative to the list item, before the push. */
+static int layout_align_outside_marker(struct box *owner, const html_content *content,
+    int offset, int baseline, struct line_baselines *baselines)
+{
+    struct box *marker = owner->list_marker;
+    if (!box_has_outside_marker(owner) || (!marker->object && !marker->length))
+        return 0;
+    int ascent = marker->object ? marker->height :
+        layout_text_baseline(content, marker->style, marker->height, baselines);
+    marker->y = offset + max(0, baseline - ascent);
+    return max(0, ascent - baseline);
+}
+
 /* Find the last normal-flow line, looking through block descendants but not
  * into floats, positioned boxes or independent flex/grid/table contexts. The
  * inline container records its baseline during layout, so no text is remeasured. */
@@ -3414,11 +3462,11 @@ static int layout_atomic_baseline(const struct box *box, int height, uint8_t ali
  * is no text. Top/bottom-aligned objects contribute height without extending
  * the baseline; middle alignment contributes on both sides of the baseline.
  */
-static bool layout_line_alignment_metrics(struct box *first, struct box *end, const html_content *content,
+static bool layout_line_alignment_metrics(struct box *first, struct box *end, bool force, const html_content *content,
     int *height, int *baseline, struct line_baselines *baselines)
 {
     const css_computed_style *parent_style = first->parent->parent->style;
-    bool needs_metrics = false;
+    bool needs_metrics = force;
     for (struct box *b = first; b != end; b = b->next) {
         if (box_needs_line_metrics(b, parent_style) && !box_is_out_of_flow(b)) {
             needs_metrics = true;
@@ -3478,12 +3526,14 @@ static bool layout_line_alignment_metrics(struct box *first, struct box *end, co
  * \param  indent  apply any first-line indent
  * \param  has_text_children  at least one TEXT in the inline_container
  * \param  record_baseline  retain the last line baseline for an inline-block ancestor
+ * \param  record_first_baseline  retain the block's first line for an outside marker
  * \param  next_box  updated to first box for next line, or 0 at end
  * \param  content  memory pool for any new boxes
  * \return  true on success, false on memory exhaustion
  */
 static bool layout_line(struct box *first, int *width, int *y, int cx, int cy, struct box *cont, bool indent,
-    bool has_text_children, bool record_baseline, html_content *content, struct box **next_box)
+    bool has_text_children, bool record_baseline, bool record_first_baseline,
+    html_content *content, struct box **next_box)
 {
     int height, used_height;
     int x0 = 0;
@@ -3498,7 +3548,9 @@ static bool layout_line(struct box *first, int *width, int *y, int cx, int cy, s
     struct box *br_box = 0;
     bool move_y = false;
     bool place_below = false;
-    bool needs_line_metrics = false;
+    struct box *owner = first->parent->parent;
+    bool outside_marker = box_has_outside_marker(owner) && !(owner->flags & HAS_BASELINE);
+    bool needs_line_metrics = outside_marker;
     bool has_content = false, after_space = false;
     int space_before = 0, space_after = 0;
     unsigned int inline_count = 0;
@@ -3710,8 +3762,11 @@ static bool layout_line(struct box *first, int *width, int *y, int cx, int cy, s
 
     /* Include the strut descent when determining which floats this line meets. */
     int baseline;
-    if (needs_line_metrics)
-        layout_line_alignment_metrics(first, b, content, &height, &baseline, &baselines);
+    if (needs_line_metrics && layout_line_alignment_metrics(
+            first, b, outside_marker && (height > 0 || has_text_children),
+            content, &height, &baseline, &baselines) && outside_marker) {
+        height += layout_align_outside_marker(owner, content, first->parent->y + *y, baseline, &baselines);
+    }
 
     /* find new sides using this height */
     x0 = cx;
@@ -4009,8 +4064,14 @@ static bool layout_line(struct box *first, int *width, int *y, int cx, int cy, s
         break;
     }
 
+    bool line_has_content = false;
     for (d = first; d != b; d = d->next) {
         d->flags &= ~NEW_LINE;
+
+        if ((record_baseline || record_first_baseline) && !box_is_out_of_flow(d) &&
+            !lh__box_is_float_box(d) && (layout_inline_has_content(d) || d->type == BOX_BR ||
+                ((d->type == BOX_INLINE || d->type == BOX_INLINE_END) && box_inline_has_edges(d))))
+            line_has_content = true;
 
         if (lh__box_is_inline_positioned(d)) {
             /* Finish the static anchor after the line height is known. */
@@ -4043,7 +4104,20 @@ static bool layout_line(struct box *first, int *width, int *y, int cx, int cy, s
 
     /* Recompute from boxes actually placed on this line after wrapping. */
     bool aligned_line = needs_line_metrics &&
-        layout_line_alignment_metrics(first, b, content, &used_height, &baseline, &baselines);
+        layout_line_alignment_metrics(first, b, outside_marker && line_has_content,
+            content, &used_height, &baseline, &baselines);
+
+    if (outside_marker && aligned_line && line_has_content && move_y) {
+        int push = layout_align_outside_marker(owner, content, first->parent->y + *y, baseline, &baselines);
+        *y += push;
+        cy += push;
+        for (d = first; push && d != b; d = d->next) {
+            if (lh__box_is_float_box(d))
+                layout_shift_float(d, push);
+            else if (!box_is_out_of_flow(d))
+                d->y += push;
+        }
+    }
 
     /* handle vertical-align by adjusting box y values */
     /** \todo  proper vertical alignment handling */
@@ -4117,7 +4191,7 @@ static bool layout_line(struct box *first, int *width, int *y, int cx, int cy, s
         }
     }
 
-    if (record_baseline && b != first && move_y && used_height > 0) {
+    if (line_has_content && move_y) {
         if (!aligned_line) {
             /* Preserve the actual baseline of the existing text-only path. */
             for (d = first; d != b; d = d->next) {
@@ -4132,8 +4206,14 @@ static bool layout_line(struct box *first, int *width, int *y, int cx, int cy, s
             if (d == b)
                 baseline = layout_text_baseline(content, first->parent->parent->style, used_height, &baselines);
         }
-        first->parent->baseline = *y + baseline;
-        first->parent->flags |= HAS_BASELINE;
+        if (record_baseline) {
+            first->parent->baseline = *y + baseline;
+            first->parent->flags |= HAS_BASELINE;
+        }
+        if (record_first_baseline && !(owner->flags & HAS_BASELINE)) {
+            owner->baseline = first->parent->y + *y + baseline;
+            owner->flags |= HAS_BASELINE;
+        }
     }
 
     /* handle clearance for br */
@@ -4184,6 +4264,11 @@ static void layout_rejoin_text(struct box *box)
 static bool layout_can_reuse_inline_layout(const struct box *box)
 {
     if (!layout_can_reuse_inline_intrinsics(box))
+        return false;
+    /* Cached inline containers retain only their last baseline. First-baseline
+     * list layout must republish its block baseline after ancestor positions
+     * and marker fonts have been resolved. Intrinsic widths remain reusable. */
+    if (layout_needs_first_baseline(box->parent))
         return false;
     for (const struct box *child = box->children; child != NULL; child = child->next) {
         /* The final relative-position pass mutates inline coordinates. BR
@@ -4259,6 +4344,7 @@ static bool layout_inline_container(
     while (ancestor && ancestor->type == BOX_BLOCK)
         ancestor = ancestor->parent;
     bool record_baseline = ancestor && ancestor->type == BOX_INLINE_BLOCK;
+    bool record_first_baseline = layout_needs_first_baseline(inline_container->parent);
 
     NSLOG(layout, DEBUG, "inline_container %p, width %i, cont %p, cx %i, cy %i", inline_container, width, cont, cx, cy);
 
@@ -4296,7 +4382,7 @@ static bool layout_inline_container(
          * may contain a stale min_width value from minmax calculation */
         curwidth = (inline_container->width > width) ? width : inline_container->width;
         if (!layout_line(c, &curwidth, &y, cx, cy + y, cont, first_line, has_text_children, record_baseline,
-                content, &next))
+                record_first_baseline, content, &next))
             return false;
         maxwidth = max(maxwidth, curwidth);
         c = next;
@@ -4507,6 +4593,8 @@ static bool layout_block_size_child(struct box *box, struct box *block, int view
 static bool layout_block_position_child(struct box *box, struct box *block, int viewport_height, html_content *content,
     struct block_layout_state *state)
 {
+    if (box->type == BOX_BLOCK)
+        box->flags &= ~HAS_BASELINE;
     /* If we don't know which box the current margin collapses
      * through to, find out.  Update the pos/neg margin values. */
     if (state->margin_collapse == NULL) {
@@ -4721,12 +4809,52 @@ static void layout_block_place_table(struct box *box, const struct box *block, s
 }
 
 
+/* Ordinary descendants keep float coordinates in their shared formatting
+ * context, not in their structural parent. Moving a completed block therefore
+ * also moves these floats and restores their bottom-edge ordering. Independent
+ * contexts move with the block normally and must not be adjusted twice. */
+static void layout_shift_block_floats(struct box *box, int shift)
+{
+    if ((box->type != BOX_BLOCK && box->type != BOX_INLINE_CONTAINER) || box_is_out_of_flow(box) ||
+        (box->type == BOX_BLOCK && box_style_creates_block_context(box)))
+        return;
+    for (struct box *child = box->children; child; child = child->next) {
+        if (lh__box_is_float_box(child)) {
+            layout_shift_float(child, shift);
+        } else {
+            layout_shift_block_floats(child, shift);
+        }
+    }
+}
+
+/* A block child exports its first line in pre-relative-position coordinates.
+ * Align before advancing sibling flow so the push contributes to auto heights.
+ * Borders are outside the box's coordinate origin but inside its baseline. */
+static void layout_block_first_baseline(struct box *box, html_content *content, struct block_layout_state *state)
+{
+    struct box *parent = box->parent;
+    if (box->type != BOX_BLOCK || !(box->flags & HAS_BASELINE) || box_is_out_of_flow(box) ||
+        parent == NULL || (parent->flags & HAS_BASELINE) || !layout_needs_first_baseline(parent))
+        return;
+    struct line_baselines baselines = {0};
+    int push = layout_align_outside_marker(parent, content, box->y - box->border[TOP].width,
+        box->border[TOP].width + box->baseline, &baselines);
+    if (push)
+        layout_shift_block_floats(box, push);
+    box->y += push;
+    state->y += push;
+    state->cy += push;
+    parent->baseline = box->y + box->baseline;
+    parent->flags |= HAS_BASELINE;
+}
+
 /* Finish completed ancestors and return the next sibling, or NULL at the
  * formatting-context boundary. Heights are constrained before updating the
  * flow cursor; margins that cannot escape stay inside their parent. */
 static struct box *
 layout_block_advance(struct box *box, struct box *block, html_content *content, struct block_layout_state *state)
 {
+    layout_block_first_baseline(box, content, state);
     layout_block_finish_empty_margin(box, state);
     if (!box->next) {
         /* No more siblings:
@@ -4809,6 +4937,7 @@ layout_block_advance(struct box *box, struct box *block, html_content *content, 
             state->cx -= box->x;
 
             state->y = box->y + box->padding[TOP] + box->height + box->padding[BOTTOM] + box->border[BOTTOM].width;
+            layout_block_first_baseline(box, content, state);
             layout_block_finish_empty_margin(box, state);
 
         } while (box->next == NULL);
@@ -4906,6 +5035,7 @@ bool layout_block_context(struct box *block, int viewport_height, html_content *
     block->float_children = NULL;
     block->cached_place_below_level = 0;
     block->clear_level = 0;
+    block->flags &= ~HAS_BASELINE;
 
     /* special case if the block contains an object */
     if (block->object) {

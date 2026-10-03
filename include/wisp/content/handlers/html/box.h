@@ -113,7 +113,7 @@ typedef enum {
     IS_REPLACED = 1 << 12, /* box is a replaced element */
     HEIGHT_STRETCHED = 1 << 13, /* height assigned by parent flex sizing or cross-axis stretch */
     ASPECT_RATIO_HEIGHT = 1 << 14, /* auto height derived from the preferred ratio */
-    HAS_BASELINE = 1 << 15, /* inline container has a laid-out in-flow line */
+    HAS_BASELINE = 1 << 15, /* cached line baseline; see box::baseline */
     IS_VIEWPORT = 1 << 16, /* synthetic containing block owned by html_content */
     HAS_FIXED_DESCENDANT = 1 << 17, /* viewport-fixed descendant can escape clipping */
     IS_OPACITY_ZERO = 1 << 18, /* this box or its DOM ancestor has zero opacity; still laid out and hit tested */
@@ -409,7 +409,8 @@ struct box {
      */
     int max_width;
 
-    /** Last line's baseline relative to this inline container; valid with HAS_BASELINE. */
+    /** With HAS_BASELINE: last line in an inline container, or first in-flow
+     * line in a block used for outside-marker alignment. Relative to this box. */
     int baseline;
 
 

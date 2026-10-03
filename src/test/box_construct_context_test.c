@@ -1806,8 +1806,11 @@ END_TEST
 
 START_TEST(test_region_retained_list_numbering)
 {
-    const char *markup = "<html id=root><body id=body><ol id=list>"
+    const char *markup = _i < 8 ? "<html id=root><body id=body><ol id=list>"
         "<li id=outer><a id=link>changed item</a></li><li id=outside>kept item</li>"
+        "</ol></body></html>" :
+        "<html id=root><body id=body><ol id=list><li id=outer><a id=link>changed item</a></li>"
+        "<li id=outside><div style='width:90px'><div>kept item with multiple wrapped lines</div></div></li>"
         "</ol></body></html>";
     dom_hubbub_parser *parser;
     dom_hubbub_parser_params params = {.enc = "UTF-8", .fix_enc = true};
@@ -1830,7 +1833,7 @@ START_TEST(test_region_retained_list_numbering)
         "body{display:%s}#outer.wide{display:block}li{list-style:upper-roman %s}"
         "li::marker{color:#c02040;font-size:24px;position:absolute;border:8px solid}"
         "#outer::marker{color:#008040}",
-        _i % 4 < 2 ? "block" : "inline", _i < 4 ? "outside" : "inside");
+        _i % 4 < 2 ? "block" : "inline", _i % 8 < 4 ? "outside" : "inside");
     css_stylesheet *extra = add_sheet(css);
     static const struct gui_layout_table fonts = {.width = boundary_font_width, .split = boundary_font_split};
     html.font_func = &fonts;
@@ -2719,7 +2722,7 @@ int main(void)
     tc = tcase_create("Retained layout");
     tcase_add_checked_fixture(tc, setup, teardown);
     tcase_add_loop_test(tc, test_region_retained_layout, 0, 54);
-    tcase_add_loop_test(tc, test_region_retained_list_numbering, 0, 8);
+    tcase_add_loop_test(tc, test_region_retained_list_numbering, 0, 16);
     suite_add_tcase(suite, tc);
     SRunner *runner = srunner_create(suite);
     srunner_run_all(runner, CK_NORMAL);

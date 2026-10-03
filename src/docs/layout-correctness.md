@@ -49,23 +49,33 @@ Reproducer: `test/disclosure-markers.html`, `#rtl` (explicit CSS direction).
 Removing its CSS rule isolates the HTML attribute issue. Initial captures are in
 `out/render-captures/disclosure-markers-2026-10-03/chromium/`.
 
-## Marker content, outside baselines and narrow counters
+## Remaining marker compatibility
 
 Marker font and colour styles now use the selected `::marker` style for both
 inside and outside markers. Custom `::marker { content:... }` remains unused;
 generated contents need shared counter/content handling for summaries and lists.
 
-Outside markers still use independent vertical layout: `layout_lists` sets text
-markers to `y=0`, and their ascent/descent does not contribute to the first line.
-In `test/marker-styling.html`, `#outside` has a 24px marker beside 16px text with
-24px line-height: Wisp's item is 24px tall, Chromium's is 27px, with the text
-baseline shifted to accommodate the larger marker. `#small` and the padded
-`#decorated` also expose marker/first-line baseline differences. Fix this through
-shared first-line metrics, accounting for first block children, wrapping/floats
-and retained inline-layout reuse, rather than a font-size-dependent y correction
-in `layout_lists`. Inside markers already participate in normal line metrics.
+Outside markers now align with the first in-flow line through ordinary block
+children. Remaining cases need distinct layout decisions:
 
-Evidence: `out/render-captures/marker-styling-2026-10-03/initial/`.
+- Empty or float-only items still reserve no line for an outside marker. In the
+  probe below, a 32px marker with 24px line-height gives Wisp a zero-height item,
+  while Chromium reserves 30px. Marker-only lines must also participate in margin
+  collapse decisions, rather than applying a minimum-height after layout.
+- First baselines from flex/grid/table children are not propagated to the list
+  item. A flex child in the same probe gives a 24px item versus Chromium's 30px.
+  This needs the relevant formatting context's baseline rules, not descent into
+  its first DOM child.
+- A line moved below a blocking float retains the existing one-pixel clearance
+  gap. `#below-float` in `test/outside-marker-baseline.html` is one pixel taller
+  than Chromium; marker and text baselines align.
+- The outside SVG image marker in that fixture loads and contributes dimensions
+  but is not painted. Explicit `fill="black"` makes no difference. Image-marker
+  sizing/alignment is tested, but its missing paint needs a separate investigation
+  through object redraw and clipping. Inside image markers already paint.
+
+Evidence: `out/render-captures/outside-marker-2026-10-03/probe.html`, `probe-fixed/`,
+`image-check/` and `complete/`.
 
 A very narrow inside counter also differs from Chromium: `#spaced-marker` in
 `test/disclosure-markers.html` uses a negative Korean counter in an 8px item.

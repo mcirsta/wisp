@@ -39,8 +39,25 @@ Marker text uses the selected `::marker` font and colour, composed into an
 anonymous style that excludes positioning, dimensions, borders and backgrounds.
 The same construction applies to inside and outside list markers. The originating
 item still supplies `list-style-type`, `list-style-image` and placement. Custom
-marker `content`, whitespace interoperability and outside-marker baseline sizing
-remain in the correctness backlog.
+marker `content`, whitespace interoperability and the remaining special marker
+cases are in the correctness backlog.
+
+Outside markers use the first content baseline. A taller marker ascent pushes
+the first line (or first block child with a baseline) down; a smaller marker moves
+down to meet the content. The marker's descent does not enlarge the content line.
+This follows the observed Chromium behavior; outside-marker placement is not
+fully specified by CSS Lists. Ordinary block descendants export their first
+baseline through the existing `baseline` field, while inline containers keep
+their last baseline for inline-block alignment. No box fields were added.
+Floats introduced on the pushed line or inside a pushed block move with it.
+Their shared formatting-context list is reordered for subsequent float/clearance
+queries, and following float placement respects their new positions.
+
+First-baseline propagation is limited to outside-list descendants. Their nested
+inline containers reuse intrinsic widths, but reformat lines because the existing
+line cache stores only the last baseline. Direct list-item line reuse was already
+excluded. Empty/float-only items and flex/grid/table baseline export need separate
+handling; see the backlog.
 
 Documents containing details use the same DOM search path as hidden-until-found.
 Discovery visits the summary first, then the body regardless of its open state,
@@ -102,6 +119,13 @@ isolation, images, resizing, native restyling and actual painted colour when
 ImageMagick is available. The construction tests compare retained inside/outside
 list updates against fresh layouts, including numbering changes, marker styling
 and allocation stability.
+`qt_outside_marker_baseline` uses the bundled test font to check first-line pushes,
+smaller markers, wrapping, padding, nested blocks, zero line-height, relative
+positioning, float-only attempts before a real line, clearing line breaks, image
+geometry and resize
+stability. Pixel checks compare text-marker and content baselines. Unit tests
+change marker font sizes repeatedly; retained-list tests also cover nested,
+wrapped content over 100 updates per variant.
 Libcss tests cover parsing, composition, glyph formatting and CSS direction.
 
 Reference captures are in `out/render-captures/details-2026-10-03/`. The prior
@@ -118,10 +142,31 @@ builds. Marker styling subsequently passed 79 selected Debug tests (with ASan an
 UBSan) and eight Release tests, including painted colours and retained-list
 updates. Logs and the Chromium comparison are in
 `out/render-captures/marker-styling-2026-10-03/`; the outside-marker baseline
-difference is tracked in the backlog.
+difference prompted the follow-up below.
+
+The outside-baseline follow-up has Chromium comparisons and test logs in
+`out/render-captures/outside-marker-2026-10-03/`. The original marker-styling
+fixture's item heights now match Chromium, including the formerly 24px-tall
+outside item, which is now 27px. The extended fixture tracks the remaining
+one-pixel float-clearance difference and missing outside-image paint explicitly.
+The final extended reference is in `complete/`. Validation passed 33 selected
+Debug tests (ASan/UBSan) and eight Release tests. Four Debug capture tests needed
+a rerun because their process launches overlapped the final executable relink;
+all four passed once the build finished. See `tests-debug.log`,
+`tests-debug-rerun.log` and `tests-release.log`.
+
+There is also an intentional difference in the float-containing cases. Chromium
+moves the float's visible box down with the marker but still sizes its flow-root
+and clears subsequent content using the old float position. For example, in the
+`final/` capture `#block-floats-float` ends at y=942, yet the following `clear:both`
+block starts at y=936. Wisp keeps exclusion geometry consistent with the moved
+float, following the [clearance rule](https://www.w3.org/TR/CSS22/visuren.html#flow-control).
+The regression therefore checks clearance and flow-root height against the final
+float edge rather than copying Chromium's six-pixel overlap.
 
 References: [details and summary behavior](https://html.spec.whatwg.org/multipage/interactive-elements.html#the-details-element),
 [native rendering](https://html.spec.whatwg.org/multipage/rendering.html#the-details-and-summary-elements),
 [counter styles](https://www.w3.org/TR/css-counter-styles-3/#disclosure-open),
 [marker layout and default styles](https://drafts.csswg.org/css-lists/#marker-pseudo),
+[Chromium outside-marker baseline placement](https://chromium.googlesource.com/chromium/src/+/refs/heads/main/third_party/blink/renderer/core/layout/list/unpositioned_list_marker.cc),
 and [ancestor revealing](https://html.spec.whatwg.org/multipage/interaction.html#ancestor-revealing-algorithm).

@@ -79,6 +79,8 @@ static void free_tree(struct box *b)
         next = c->next;
         free_tree(c);
     }
+    if (box_has_outside_marker(b))
+        free_tree(b->list_marker);
     if (b->style)
         destroy_mock_style(b->style);
     free(b);
@@ -128,6 +130,57 @@ START_TEST(test_inline_object_baseline)
     if (with_text && cases[variant].align == CSS_VERTICAL_ALIGN_BASELINE) {
         plot_font_style_t style = {.size = 12 * PLOT_STYLE_SCALE};
         ck_assert_int_eq(text->y + font_baseline(&fonts, &style, text->height), image->y + image->height);
+    }
+    free_tree(root);
+}
+END_TEST
+
+START_TEST(test_outside_marker_baseline)
+{
+    html_content content = {
+        .unit_len_ctx = {.viewport_width = INTTOFIX(200), .viewport_height = INTTOFIX(500),
+            .font_size_default = INTTOFIX(16), .device_dpi = INTTOFIX(96)},
+        .font_func = &scaled_fonts,
+    };
+    struct box *root = make_box(BOX_BLOCK, 24, CSS_VERTICAL_ALIGN_BASELINE);
+    struct box *marker = make_box(BOX_BLOCK, 24, CSS_VERTICAL_ALIGN_BASELINE);
+    root->list_marker = marker;
+    marker->parent = root;
+    marker->text = "1.";
+    marker->length = 2;
+    marker->height = 24;
+    struct box *parent = root;
+    if (_i != 0) {
+        parent = make_box(BOX_BLOCK, 24, CSS_VERTICAL_ALIGN_BASELINE);
+        append(root, parent);
+        if (_i == 2) {
+            style_set_padding_top(parent->style, 6);
+            style_set_border_top(parent->style, 2);
+        }
+    }
+    struct box *ic = make_box(BOX_INLINE_CONTAINER, 0, 0);
+    struct box *text = make_box(BOX_TEXT, 24, CSS_VERTICAL_ALIGN_BASELINE);
+    text->text = "Ag";
+    text->length = 2;
+    text->width = UNKNOWN_WIDTH;
+    append(parent, ic);
+    append(ic, text);
+
+    /* Reflow both directions: cached first baselines must not retain the push
+     * from an earlier, larger marker. The mock font has 7/8 ascent, 1/8 descent. */
+    const int sizes[] = {32, 12, 16, 32};
+    for (size_t pass = 0; pass < sizeof(sizes) / sizeof(sizes[0]); pass++) {
+        style_set_inline_metrics(marker->style, sizes[pass], 24, CSS_VERTICAL_ALIGN_BASELINE);
+        root->height = AUTO;
+        ck_assert(layout_block_context(root, 500, &content));
+        int marker_ascent = (24 + sizes[pass] * 3 / 4) / 2;
+        int text_baseline = ic->y + text->y + 18 + (parent == root ? 0 : parent->y);
+        ck_assert_msg(marker->y + marker_ascent == text_baseline,
+            "nesting %d, font %d: marker baseline %d, text baseline %d",
+            _i, sizes[pass], marker->y + marker_ascent, text_baseline);
+        int expected_height = _i == 2 ? 32 : (sizes[pass] == 32 ? 30 : 24);
+        ck_assert_msg(root->height == expected_height,
+            "nesting %d, font %d: height %d, expected %d", _i, sizes[pass], root->height, expected_height);
     }
     free_tree(root);
 }
@@ -456,6 +509,7 @@ int main(void)
     tcase_add_loop_test(tc, test_inline_block_alignment, 0, 4);
     tcase_add_loop_test(tc, test_inline_block_last_baseline, 0, 2);
     tcase_add_loop_test(tc, test_mixed_text_baseline, 0, sizeof(text_cases) / sizeof(text_cases[0]));
+    tcase_add_loop_test(tc, test_outside_marker_baseline, 0, 3);
     tcase_add_loop_test(tc, test_repeated_text_baselines, 0, 2);
     tcase_add_loop_test(tc, test_nested_float_layout_once, 0, 2 * (NESTED_FLOAT_DEPTH + 1));
     tcase_add_test(tc, test_font_baseline_fallback);

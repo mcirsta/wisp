@@ -1,0 +1,38 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Outside markers share the first content baseline</title>
+<style>
+@font-face { font-family:"Wisp Normal Test"; src:url("fonts/normal-400.ttf"); }
+body { margin:40px; font:20px/36px "Wisp Normal Test"; color:black; }
+ol { margin:0; padding:0; }
+.case { display:flow-root; margin:0 0 12px 60px; width:240px; }
+.case > ol > li::marker { font-size:40px; }
+#short::marker { font-size:10px; }
+#padded { padding:6px; border:2px solid #aaa; }
+#block-first > div { padding:6px; border:2px solid #aaa; }
+#wrapped { width:80px; }
+.float { float:left; width:36px; height:48px; background:#ddd; }
+#below-float .float { width:230px; }
+#relative > div { position:relative; top:8px; }
+#bfc > div { overflow:hidden; padding:6px; }
+#zero { line-height:0; }
+#image { list-style-image:url('data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="12" height="40"%3E%3Crect width="12" height="40" fill="black"/%3E%3C/svg%3E'); }
+</style>
+<!-- The bundled font has 800/200 ascent/descent per 1000 units. With a 36px
+     line-height, the 40px marker's baseline is 30px and the 20px text's is 24px.
+     Only the first line moves by 6px; glyph ink ends on the baseline. -->
+<section class="case"><ol><li id="tall"><span id="tall-text">H</span></li></ol></section>
+<section class="case"><ol><li id="short"><span id="short-text">H</span></li></ol></section>
+<section class="case"><ol><li id="wrapped">HHHH HHHH HHHH</li></ol></section>
+<section class="case"><ol><li id="padded"><span id="padded-text">H</span></li></ol></section>
+<section class="case"><ol><li id="block-first"><div><div><span id="block-first-text">H</span></div></div></li></ol></section>
+<section class="case"><ol><li id="empty-before"><div style="height:20px"></div><div><span id="empty-before-text">H</span></div></li></ol></section>
+<section class="case" id="floats-case"><ol><li id="floats"><div class="float" id="direct-float">H</div><span id="floats-text">H</span></li></ol></section>
+<section class="case"><ol><li id="below-float"><div class="float">H</div><span id="below-float-text">HHH</span></li></ol></section>
+<section class="case"><ol><li id="bfc"><div><span id="bfc-text">H</span></div></li></ol></section>
+<section class="case"><ol><li id="nested-list"><ol><li><span id="nested-list-text">H</span></li></ol></li></ol></section>
+<section class="case"><ol><li id="relative"><div><span id="relative-text">H</span></div></li></ol></section>
+<section class="case"><ol><li id="zero"><span id="zero-text">H</span></li></ol></section>
+<section class="case"><ol><li id="image"><span id="image-text">H</span></li></ol></section>
+<section class="case" id="block-floats-case"><ol><li id="block-floats"><div><div class="float" id="block-floats-float">H</div><span id="block-floats-text">H</span></div></li></ol><div id="block-floats-clear" style="clear:both;height:8px"></div></section>
+<section class="case"><ol><li id="br-float"><div class="float" id="br-floating">H</div><span id="br-float-text">H</span><br clear="all"><span id="br-next">H</span></li></ol></section>
