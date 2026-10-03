@@ -68,6 +68,8 @@ static dom_node *html_box_event_node(const struct box *box)
 {
     if (box->node != NULL)
         return box->node;
+    if (box->flags & (TEXT_BEFORE | TEXT_AFTER))
+        return box->text_node;
     dom_node *parent = NULL;
     if (box->text_node != NULL)
         dom_node_get_parent_node(box->text_node, &parent);

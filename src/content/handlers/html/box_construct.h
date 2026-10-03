@@ -73,6 +73,7 @@
 #define WISP_HTML_BOX_CONSTRUCT_H
 
 #include <wisp/content_type.h>
+#include <wisp/content/handlers/html/box.h>
 #include <libcss/libcss.h>
 
 struct html_content;
@@ -82,6 +83,12 @@ struct dom_node;
 css_select_results *box_get_style(struct html_content *c, const css_computed_style *parent_style,
     const css_computed_style *root_style, struct dom_node *n);
 void box_text_transform(char *s, unsigned int len, enum css_text_transform_e transform);
+/* Text from one generated-content item, allocated under owner with talloc.
+ * Non-text and unsupported items return NULL with NSERROR_OK. */
+nserror box_generated_text(const css_computed_content_item *item, struct dom_node *node, void *owner, char **text);
+/* Formatting decisions shared with search discovery before boxes exist. */
+box_type box_construct_type(const css_computed_style *style, box_type parent_type, bool root);
+bool box_type_generates_content(box_type type);
 
 /**
  * Construct a box tree from a dom and html content

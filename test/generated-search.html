@@ -1,0 +1,50 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Generated text Find in Page</title>
+<style>
+body { margin:0; font:16px/20px monospace; }
+p { margin:4px; }
+.same::before, .same::after { content:'needle'; }
+#attribute::before { content:'prefix ' attr(data-label) ' suffix'; }
+#quoted::after { content:open-quote 'quotation' close-quote; }
+#wrapped { width:80px; }
+#wrapped::before { content:'alpha beta gamma delta'; }
+#nested::after { content:'nested-token'; }
+#inline::before { content:'inline-token'; }
+#none::before { content:'forbidden-none'; display:none; }
+#invisible::before { content:'forbidden-visibility'; visibility:hidden; }
+#skipped::before { content:'forbidden-contents'; display:block; content-visibility:hidden; }
+#ordinary-hidden::before { content:'forbidden-hidden'; }
+#image::before { content:'forbidden-image'; }
+#pseudo-visible { visibility:hidden; }
+#pseudo-visible::before { content:'visibility-override'; visibility:visible; }
+#label::before { content:'Toggle'; }
+#flex { display:flex; }
+#grid { display:grid; }
+#flex-child, #grid-child { display:table-cell; }
+#flex-child::before { content:'flex-token'; }
+#grid-child::after { content:'grid-token'; }
+#canvas::before { content:'canvas-token'; }
+#hidden-image::before, #hidden-input::before, #hidden-svg::before { content:'forbidden-replacement'; }
+</style>
+<p class="same" id="first">needle</p>
+<div hidden="until-found" id="outer"><p class="same" id="second">needle</p></div>
+<p id="attribute" data-label="attribute-token"></p>
+<p id="quoted"></p>
+<div id="wrapped" hidden="until-found"></div>
+<div id="nested-outer" hidden="until-found"><p id="nested"></p></div>
+<p id="inline-parent"><span id="inline"></span></p>
+<p id="none"></p><p id="invisible"></p><p id="skipped"></p>
+<p id="ordinary-hidden" hidden></p>
+<img id="image" src="aspect-ratio-image.svg">
+<p id="pseudo-visible"></p>
+<input type="checkbox" id="toggle"><label for="toggle" id="label"></label>
+<!-- Flex/grid blockification must also be applied before hidden descendants have boxes. -->
+<div id="flex" hidden="until-found"><div id="flex-child"></div></div>
+<div id="grid" hidden="until-found"><div id="grid-child"></div></div>
+<div id="canvas-outer" hidden="until-found"><canvas id="canvas"></canvas></div>
+<div id="replaced-outer" hidden="until-found">
+  <img id="hidden-image" src="aspect-ratio-image.svg">
+  <input id="hidden-input">
+  <svg id="hidden-svg" width="20" height="20"><rect width="20" height="20"/></svg>
+</div>

@@ -25,6 +25,14 @@ boxes after publication. Wrapped fragments of one DOM text node are supported.
 Ordinary documents retain rendered-box searching. Text boxes reuse their former
 DOM pointer slot rather than growing the box structure.
 
+Generated `::before`/`::after` text participates in DOM discovery in rendering
+order: before, child content, after. Matches retain the originating element,
+pseudo phase and offsets, so identical strings from those three sources remain
+distinct across rebuilding and line splitting. Rendering and search share the
+string/attribute/default-quote extraction and formatting-type rules. Unsupported
+generated items (such as counters) are not invented by search. Source identity
+uses the existing text-node pointer and box flags; it adds no per-box fields.
+
 Query replacement, clearing, failure, navigation and teardown release references
 and cancel pending work. Highlights are destroyed before the frontend window,
 because selection cleanup can request a redraw.
@@ -42,12 +50,16 @@ outside this feature; unsupported values are not silently accepted.
   nested/self-target fragments, search order, show-all, wrapped/transformed text,
   query replacement/clear during reveal, ordinary search and closing with highlights.
 - `qt_hidden_attribute`: ordinary hidden, author overrides and hidden radios.
+- `qt_generated_search`: generated-source identity/order, strings/attributes/quotes,
+  nested reveal, wrapping, hidden flex/grid blockification, JS-disabled canvas
+  fallback, excluded pseudo content/replaced owners, cancellation and native label clicks.
 - `libcss_parse2_auto_content-visibility_dat`: generated parser and bytecode dump.
 
 Capture builds support `--capture-find TEXT`, `--capture-find-back TEXT`,
 `--capture-find-all TEXT`, and `--capture-find-case TEXT`. Empty `--capture-find`
 clears the query. Inspection includes the hidden attribute, skipped-content state
-and highlighted-fragment count. These diagnostics use the optional Qt capture build.
+and highlighted-fragment counts (total and separately before/after). These
+diagnostics use the optional Qt capture build.
 
 Reference artifacts: `out/render-captures/until-found-2026-10-03/`.
 Unresolved findings are tracked only in [the correctness backlog](layout-correctness.md).

@@ -304,6 +304,43 @@ bool box_construct_request_buffer(html_content *content, struct box_construct_re
     return true;
 }
 
+/* Keep discovery and rendering on the same generated-text path. */
+nserror box_generated_text(const css_computed_content_item *item, dom_node *node, void *owner, char **text)
+{
+    *text = NULL;
+    switch (item->type) {
+    case CSS_COMPUTED_CONTENT_STRING:
+        *text = talloc_strndup(owner, lwc_string_data(item->data.string), lwc_string_length(item->data.string));
+        break;
+    case CSS_COMPUTED_CONTENT_ATTR: {
+        dom_string *name = NULL, *value = NULL;
+        if (node == NULL || item->data.attr == NULL)
+            return NSERROR_OK;
+        if (dom_string_create_interned((const uint8_t *)lwc_string_data(item->data.attr),
+                lwc_string_length(item->data.attr), &name) != DOM_NO_ERR)
+            return NSERROR_NOMEM;
+        dom_exception error = dom_element_get_attribute(node, name, &value);
+        dom_string_unref(name);
+        if (error != DOM_NO_ERR)
+            return NSERROR_DOM;
+        if (value == NULL)
+            return NSERROR_OK;
+        *text = talloc_strndup(owner, dom_string_data(value), dom_string_length(value));
+        dom_string_unref(value);
+        break;
+    }
+    case CSS_COMPUTED_CONTENT_OPEN_QUOTE:
+    case CSS_COMPUTED_CONTENT_CLOSE_QUOTE:
+        /* Preserve the renderer's existing default quotes. Nested/custom
+         * quotes and counter evaluation remain separate rendering work. */
+        *text = talloc_strdup(owner, "\"");
+        break;
+    default:
+        return NSERROR_OK;
+    }
+    return *text != NULL ? NSERROR_OK : NSERROR_NOMEM;
+}
+
 /**
  * Create a box from a CSS content item.
  *
@@ -327,30 +364,27 @@ static struct box *create_content_box(const css_computed_content_item *item, con
     struct box *box = NULL;
 
     switch (item->type) {
-    case CSS_COMPUTED_CONTENT_STRING: {
-        /* Text content - most common case */
-        const char *text_data = lwc_string_data(item->data.string);
-        size_t text_len = lwc_string_length(item->data.string);
-
-        if (text_len == 0)
+    case CSS_COMPUTED_CONTENT_STRING:
+    case CSS_COMPUTED_CONTENT_ATTR:
+    case CSS_COMPUTED_CONTENT_OPEN_QUOTE:
+    case CSS_COMPUTED_CONTENT_CLOSE_QUOTE: {
+        char *text;
+        ctx->error = box_generated_text(item, node, ctx->bctx, &text);
+        if (ctx->error != NSERROR_OK || text == NULL)
             return NULL;
-
+        if (*text == 0) {
+            talloc_free(text);
+            return NULL;
+        }
         box = box_create(NULL, (css_computed_style *)style, false, NULL, NULL, NULL, NULL, ctx->bctx);
         if (box == NULL) {
             ctx->error = NSERROR_NOMEM;
+            talloc_free(text);
             return NULL;
         }
-
         box->type = BOX_TEXT;
-        box->text = talloc_strndup(ctx->bctx, text_data, text_len);
-        if (box->text == NULL) {
-            ctx->error = NSERROR_NOMEM;
-            /* Can't free box here - relies on talloc cleanup */
-            return NULL;
-        }
-        box->length = text_len;
-
-        NSLOG(wisp, DEEPDEBUG, "create_content_box: STRING '%.*s'", (int)(text_len > 50 ? 50 : text_len), text_data);
+        box->text = text;
+        box->length = strlen(text);
         break;
     }
 
@@ -408,68 +442,6 @@ static struct box *create_content_box(const css_computed_content_item *item, con
          * TODO: Implement counters support */
         NSLOG(wisp, DEEPDEBUG, "create_content_box: COUNTERS (not implemented)");
         box = NULL;
-        break;
-    }
-
-    case CSS_COMPUTED_CONTENT_ATTR: {
-        /* Attribute value - get from DOM node */
-        if (node != NULL && item->data.attr != NULL) {
-            dom_string *attr_value = NULL;
-            dom_string *attr_name = NULL;
-            dom_exception err;
-
-            err = dom_string_create_interned(
-                (const uint8_t *)lwc_string_data(item->data.attr), lwc_string_length(item->data.attr), &attr_name);
-
-            if (err == DOM_NO_ERR && attr_name != NULL) {
-                err = dom_element_get_attribute(node, attr_name, &attr_value);
-                dom_string_unref(attr_name);
-
-                if (err == DOM_NO_ERR && attr_value != NULL) {
-                    const char *text_data = dom_string_data(attr_value);
-                    size_t text_len = dom_string_length(attr_value);
-
-                    if (text_len > 0) {
-                        box = box_create(NULL, (css_computed_style *)style, false, NULL, NULL, NULL, NULL, ctx->bctx);
-                        if (box == NULL)
-                            ctx->error = NSERROR_NOMEM;
-                        if (box != NULL) {
-                            box->type = BOX_TEXT;
-                            box->text = talloc_strndup(ctx->bctx, text_data, text_len);
-                            box->length = text_len;
-                            NSLOG(wisp, DEEPDEBUG, "create_content_box: ATTR '%.*s'",
-                                (int)(text_len > 50 ? 50 : text_len), text_data);
-                        }
-                    }
-                    dom_string_unref(attr_value);
-                }
-            }
-        }
-        break;
-    }
-
-    case CSS_COMPUTED_CONTENT_OPEN_QUOTE:
-    case CSS_COMPUTED_CONTENT_CLOSE_QUOTE: {
-        /* Quote characters - would need to check 'quotes' property.
-         * Default quotes are typically " and '
-         * TODO: Implement proper quote handling with nesting level */
-        const char *quote;
-        if (item->type == CSS_COMPUTED_CONTENT_OPEN_QUOTE) {
-            quote = "\""; /* Default open quote */
-        } else {
-            quote = "\""; /* Default close quote */
-        }
-
-        box = box_create(NULL, (css_computed_style *)style, false, NULL, NULL, NULL, NULL, ctx->bctx);
-        if (box == NULL)
-            ctx->error = NSERROR_NOMEM;
-        if (box != NULL) {
-            box->type = BOX_TEXT;
-            box->text = talloc_strdup(ctx->bctx, quote);
-            box->length = strlen(quote);
-            NSLOG(wisp, DEEPDEBUG, "create_content_box: %s_QUOTE",
-                item->type == CSS_COMPUTED_CONTENT_OPEN_QUOTE ? "OPEN" : "CLOSE");
-        }
         break;
     }
 
@@ -574,13 +546,14 @@ static bool box_parent_is_flex_or_grid(const struct box *parent)
 
 /* Choose a formatting type and a representation suitable for placement.
  * The computed CSS display remains unchanged. */
-static box_type box_construct_type(const css_computed_style *style, const struct box *parent, bool root)
+box_type box_construct_type(const css_computed_style *style, box_type parent_type, bool root)
 {
     if (root)
         return BOX_BLOCK;
 
     box_type type = box_map[ns_computed_display(style, false)];
-    bool item = box_parent_is_flex_or_grid(parent);
+    bool item = parent_type == BOX_FLEX || parent_type == BOX_INLINE_FLEX ||
+        parent_type == BOX_GRID || parent_type == BOX_INLINE_GRID;
     uint8_t position = css_computed_position(style);
 
     if (!item && (position == CSS_POSITION_ABSOLUTE || position == CSS_POSITION_FIXED)) {
@@ -673,15 +646,9 @@ static void box_construct_inline_end(struct box *box, struct box *container, str
     end->inline_end = box;
 }
 
-/* Generate content at the same traversal point as an equivalent DOM child:
- * before children for ::before, after children for ::after. Inline owners use
- * their containing block, just as their real children do. */
-static void box_construct_generate(dom_node *n, struct box_construct_ctx *ctx, struct box *owner,
-    struct box_construct_props *props, const css_computed_style *style)
+bool box_type_generates_content(box_type type)
 {
-    if (style == NULL || (owner->flags & (IS_REPLACED | CONTENTS_SKIPPED)))
-        return;
-    switch (owner->type) {
+    switch (type) {
     case BOX_INLINE:
     case BOX_BLOCK:
     case BOX_INLINE_BLOCK:
@@ -689,10 +656,23 @@ static void box_construct_generate(dom_node *n, struct box_construct_ctx *ctx, s
     case BOX_INLINE_FLEX:
     case BOX_GRID:
     case BOX_INLINE_GRID:
-        break;
+        return true;
     default:
-        return;
+        return false;
     }
+}
+
+/* Generate content at the same traversal point as an equivalent DOM child:
+ * before children for ::before, after children for ::after. Inline owners use
+ * their containing block, just as their real children do. */
+static void box_construct_generate(dom_node *n, struct box_construct_ctx *ctx, struct box *owner,
+    struct box_construct_props *props, css_pseudo_element pseudo)
+{
+    const css_computed_style *style = owner->styles->styles[pseudo];
+    if (style == NULL || (owner->flags & (IS_REPLACED | CONTENTS_SKIPPED)))
+        return;
+    if (!box_type_generates_content(owner->type))
+        return;
 
     const css_computed_content_item *item;
     uint8_t content_type = css_computed_content(style, &item);
@@ -701,7 +681,7 @@ static void box_construct_generate(dom_node *n, struct box_construct_ctx *ctx, s
 
     struct box *parent = owner->type == BOX_INLINE ? props->containing_block : owner;
     struct box *container = parent->last != NULL && parent->last->type == BOX_INLINE_CONTAINER ? parent->last : NULL;
-    box_type type = box_construct_type(style, parent, false);
+    box_type type = box_construct_type(style, parent != NULL ? parent->type : BOX_NONE, false);
     if (type == BOX_NONE)
         return;
 
@@ -740,6 +720,10 @@ static void box_construct_generate(dom_node *n, struct box_construct_ctx *ctx, s
             return;
         }
         child->flags |= gen->flags & IS_OPACITY_ZERO;
+        if (child->type == BOX_TEXT) {
+            child->text_node = dom_node_ref(n);
+            child->flags |= pseudo == CSS_PSEUDO_ELEMENT_BEFORE ? TEXT_BEFORE : TEXT_AFTER;
+        }
         box_add_child(text_container, child);
     }
     if (type == BOX_INLINE)
@@ -858,7 +842,7 @@ static void box_construct_begin_owner(
     for (uint32_t i = 0; i < ctx->content->restyle.active.count; i++) {
         if (ctx->content->restyle.active.roots[i] != ctx->n)
             continue;
-        if (!box_construct_region_style(box_construct_type(style, parent, false), style))
+        if (!box_construct_region_style(box_construct_type(style, parent != NULL ? parent->type : BOX_NONE, false), style))
             return;
         void *owner = talloc_zero(ctx->bctx, int);
         if (owner != NULL) {
@@ -1005,7 +989,8 @@ static bool box_construct_element(struct box_construct_ctx *ctx, bool *convert_c
         dom_string_unref(s);
     }
 
-    box->type = box_construct_type(box->style, props.containing_block, props.node_is_root);
+    box->type = box_construct_type(
+        box->style, props.containing_block != NULL ? props.containing_block->type : BOX_NONE, props.node_is_root);
 
     ctx->error = convert_special_elements(ctx->n, ctx->content, box, convert_children, ctx->bctx, ctx->region);
     if (ctx->error != NSERROR_OK) {
@@ -1090,7 +1075,7 @@ static bool box_construct_element(struct box_construct_ctx *ctx, bool *convert_c
     if (!box_construct_insert(box, props.containing_block, &props.inline_container, ctx->bctx))
         goto error;
 
-    box_construct_generate(ctx->n, ctx, box, &props, box->styles->styles[CSS_PSEUDO_ELEMENT_BEFORE]);
+    box_construct_generate(ctx->n, ctx, box, &props, CSS_PSEUDO_ELEMENT_BEFORE);
 
     return true;
 
@@ -1125,7 +1110,7 @@ static void box_construct_element_after(dom_node *n, struct box_construct_ctx *c
 
     box_extract_properties(ctx, &props);
 
-    box_construct_generate(n, ctx, box, &props, box->styles->styles[CSS_PSEUDO_ELEMENT_AFTER]);
+    box_construct_generate(n, ctx, box, &props, CSS_PSEUDO_ELEMENT_AFTER);
 
     if (box->type == BOX_INLINE || box->type == BOX_BR) {
         bool has_children;

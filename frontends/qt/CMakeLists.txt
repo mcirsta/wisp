@@ -253,6 +253,9 @@ if(WISP_QT_CAPTURE)
         add_test(NAME qt_hidden_until_found
             COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_hidden_until_found.py $<TARGET_FILE:wisp-qt>)
         set_tests_properties(qt_hidden_until_found PROPERTIES TIMEOUT 120)
+        add_test(NAME qt_generated_search
+            COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_generated_search.py $<TARGET_FILE:wisp-qt>)
+        set_tests_properties(qt_generated_search PROPERTIES TIMEOUT 120)
         add_test(NAME qt_class_whitespace
             COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_class_whitespace.py $<TARGET_FILE:wisp-qt>)
         set_tests_properties(qt_class_whitespace PROPERTIES TIMEOUT 30)

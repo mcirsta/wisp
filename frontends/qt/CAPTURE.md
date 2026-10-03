@@ -153,6 +153,14 @@ with flex alignment/direction/growth and grid auto-flow values. This is not a
 complete modern CSS serializer. The font report identifies the primary font;
 individual glyph fallback can use additional fonts.
 
+Find-in-page actions (`--capture-find`, `--capture-find-back`, `--capture-find-all`
+and `--capture-find-case`) accept query text; an empty `--capture-find` clears it.
+Inspected boxes report `highlighted_fragments` and the generated-text subsets
+`highlighted_before_fragments` / `highlighted_after_fragments`. These count
+highlighted text fragments in that box's subtree, not matches or characters.
+Inline text can be flattened into the surrounding inline container; inspect its
+containing block when checking an inline owner's generated content.
+
 Sticky boxes report a `sticky` object: `prepared` includes the containing block,
 scrolling ancestor (or `viewport: true`) and resolved `x`/`y` axis constraints in
 unscrolled document coordinates. Auto insets are JSON null. `auto` means all four

@@ -174,16 +174,16 @@ static QJsonObject describeSticky(struct box *box, const html_content *html)
     return detail;
 }
 
-static int highlightedFragments(struct box *box, const html_content *html)
+static int highlightedFragments(struct box *box, const html_content *html, box_flags generated = box_flags(0))
 {
     unsigned start, end;
-    int count = box->text && html->base.textsearch.context &&
+    int count = box->text && (generated == 0 || (box->flags & generated)) && html->base.textsearch.context &&
             content_textsearch_ishighlighted(
                 html->base.textsearch.context, box->byte_offset, box->byte_offset + box->length, &start, &end)
         ? 1
         : 0;
     for (auto *child = box->children; child; child = child->next)
-        count += highlightedFragments(child, html);
+        count += highlightedFragments(child, html, generated);
     return count;
 }
 
@@ -194,6 +194,8 @@ static QJsonObject describe(struct box *box, const html_content *html)
     result["owns_region"] = (box->flags & OWNS_REGION) != 0;
     result["contents_skipped"] = (box->flags & CONTENTS_SKIPPED) != 0;
     result["highlighted_fragments"] = highlightedFragments(box, html);
+    result["highlighted_before_fragments"] = highlightedFragments(box, html, TEXT_BEFORE);
+    result["highlighted_after_fragments"] = highlightedFragments(box, html, TEXT_AFTER);
     result["text_offset"] = double(box->byte_offset);
     result["scrollbars"] = QJsonObject{{"horizontal", box->scroll_x != nullptr}, {"vertical", box->scroll_y != nullptr},
         {"x", scrollbar_get_offset(box->scroll_x)}, {"y", scrollbar_get_offset(box->scroll_y)}};
