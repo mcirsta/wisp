@@ -275,27 +275,14 @@ static void layout_get_object_dimensions(const css_unit_ctx *unit_len_ctx, struc
         else
             *height = intrinsic_height;
 
-        /* Check if object-fit is set to something other than fill.
-         * If so, we should NOT recalculate width when max-height constrains,
-         * because object-fit will handle the aspect ratio mismatch. */
-        uint8_t object_fit = CSS_OBJECT_FIT_FILL;
-        if (box->style) {
-            object_fit = css_computed_object_fit(box->style);
-        }
-        bool preserve_box_width = css_ratio || (object_fit != CSS_OBJECT_FIT_FILL);
-
-        /* CSS 2.1 Section 10.7: Apply min/max-height constraints.
-         * If tentative height exceeds max-height, use max-height.
-         * Only recalculate width if object-fit is fill (default behavior). */
+        /* CSS 2.2 10.7: height constraints do not change a resolved width.
+         * With both dimensions auto, proportional scaling is handled above.
+         * object-fit affects painting, not sizing. */
         if (max_height >= 0 && *height > max_height) {
             *height = max_height;
-            if (!preserve_box_width && eff_ratio_h != 0)
-                *width = (*height * eff_ratio_w) / eff_ratio_h;
         }
         if (min_height.type == CSS_SIZE_SET && min_height.value > 0 && *height < min_height.value) {
             *height = min_height.value;
-            if (!preserve_box_width && eff_ratio_h != 0)
-                *width = (*height * eff_ratio_w) / eff_ratio_h;
         }
     }
 
@@ -5784,6 +5771,9 @@ layout_absolute_resolve_vertical(struct box *box, const struct box *containing_b
 static bool layout_absolute(struct box *box, struct box *containing_block, int cx, int cy, html_content *content)
 {
     struct absolute_layout layout;
+    int max_height;
+    struct css_size min_height;
+    bool replaced_object = box->object && content_get_type(box->object) != CONTENT_HTML;
     int *margin = box->margin;
     int *padding = box->padding;
     struct box_border *border = box->border;
@@ -5821,8 +5811,22 @@ static bool layout_absolute(struct box *box, struct box *containing_block, int c
      * boxes because a box can't be floated and absolutely positioned. */
     box->float_container = containing_block;
     layout_find_dimensions(&content->unit_len_ctx, layout.available_width, -1, box, box->style, &layout.width,
-        &layout.height, &layout.max_width, &layout.min_width, 0, 0, margin, padding, border);
+        &layout.height, &layout.max_width, &layout.min_width, replaced_object ? &max_height : NULL,
+        replaced_object ? &min_height : NULL, margin, padding, border);
     box->float_container = NULL;
+
+    if (replaced_object) {
+        /* CSS 2.2 10.3.8 / 10.6.5: resolve replaced dimensions before
+         * solving the inset equations. Opposing insets position an image;
+         * they do not stretch its auto dimensions like a non-replaced box.
+         * Resolve limits against the containing block's padding box too. */
+        layout_get_object_dimensions(&content->unit_len_ctx, box, &layout.width, &layout.height, layout.min_width,
+            layout.max_width, min_height, max_height, layout.available_width);
+        if (max_height >= 0)
+            layout.height = min(layout.height, max_height);
+        if (min_height.type == CSS_SIZE_SET)
+            layout.height = max(layout.height, min_height.value);
+    }
 
     layout_absolute_log_box(box, containing_block, &layout);
     layout_absolute_resolve_horizontal(box, containing_block, &layout);
@@ -5856,7 +5860,8 @@ static bool layout_absolute(struct box *box, struct box *containing_block, int c
         /** \todo Inline ancestors */
     }
     box->height = layout.height;
-    layout_apply_minmax_height(&content->unit_len_ctx, box, containing_block);
+    if (!replaced_object)
+        layout_apply_minmax_height(&content->unit_len_ctx, box, containing_block);
 
     if (box->parent && lh__box_is_flex_container(box->parent) && (auto_x || auto_y)) {
         layout_absolute_flex_static_position(box, cx, cy, auto_x, auto_y);
