@@ -127,9 +127,7 @@ with tempfile.TemporaryDirectory(prefix="wisp-retained-") as tmp:
         assert (uncached / artifact).read_bytes() == (full / artifact).read_bytes(), artifact
 
     intrinsics = tmp / "intrinsics"
-    # The former opt-in remains an alias; a later opt-out must win.
-    intrinsic_steps = run(intrinsics, page,
-                          ("--capture-reuse-inline-layout", "--capture-no-inline-layout-reuse"))
+    intrinsic_steps = run(intrinsics, page, ("--capture-no-inline-layout-reuse",))
     compare(reference, intrinsic_steps)
     for artifact in ("page.png", "dom.txt"):
         assert (intrinsics / artifact).read_bytes() == (full / artifact).read_bytes(), artifact

@@ -46,6 +46,8 @@ code in every build. Full reconstruction is still required for initial state,
 unsupported dependencies and invalidated inputs; forced-full/CSS-only capture
 overrides continue to test those runtime paths independently. Only optional
 profiling, capture support and diagnostic injection remain conditional.
+The obsolete capture opt-in aliases were also removed on 2026-10-02; normal
+browsing and captures use the completed optimizations without enabling switches.
 
 Both complete builds, including regenerated CSS sources, succeed without the
 retired compiler definition. Validation passes 131 selected Debug ASan/UBSan
@@ -813,7 +815,7 @@ on this fresh-load path and does not fix the underlying issue.
 
 ### Milestone B live integration (2026-09-30)
 
-Live integration was initially validated behind `--capture-retain-boxes`; the
+Live integration was initially validated with a capture-only opt-in; the
 default rollout below enables the same guarded path for ordinary browsing.
 The first refresh establishes the style snapshot; a subsequent selective
 whole rebuild establishes allocation owners. Later eligible single-scope changes
@@ -967,9 +969,9 @@ At this rollout, the guarded path became the default in all frontends with the
 temporary feature switch enabled. The zero-initialized HTML state permits
 retention; capture does not need to enable it. `--capture-css-only-restyle` selects
 milestone A for comparison, and `--capture-force-full-restyle` still selects the
-full reference and takes precedence. `--capture-retain-boxes` remains a compatibility
-alias for the default. At that time, disabling partial updates at compile time
-removed the tracking state and used full reconstruction.
+full reference and takes precedence. The temporary opt-in alias has since been
+removed. At that time, disabling partial updates at compile time removed the
+tracking state and used full reconstruction.
 
 Retention, nonzero/offscreen scrolling and lifecycle tests now exercise the
 default without an opt-in flag. The CSS-reuse reference and its injected restart
@@ -1085,9 +1087,8 @@ full document layout.
 
 ### Milestone C: text-only inline intrinsic reuse (2026-09-30)
 
-The first bounded experiment (`ae37d926`) was the opt-in
-`--capture-reuse-inline-intrinsics`. The layout audit found that ordinary blocks
-overwrite their intrinsic
+The first bounded experiment (`ae37d926`) used a capture-only opt-in, since
+removed. The layout audit found that ordinary blocks overwrite their intrinsic
 min/max fields with CSS sizing constraints during used layout. Treating those
 fields as cached intrinsic sizes would be incorrect. Text-only inline containers
 retain their intrinsic fields and provide a smaller, independently testable start.
@@ -1229,8 +1230,8 @@ bounded experiment is recorded below.
 
 ### Completed inline line reuse experiment (2026-09-30)
 
-The first used-layout reuse path was introduced behind
-`--capture-reuse-inline-layout`, initially off by default. It preserves eligible
+The first used-layout reuse path was introduced as a capture-only experiment;
+its opt-in was removed after the default rollout. It preserves eligible
 inline containers' wrapped text fragments,
 local coordinates, height, overflow width and baseline through retained reset.
 The parent still runs normal sizing, placement and margin collapse. All owning

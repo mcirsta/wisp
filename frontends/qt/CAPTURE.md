@@ -5,6 +5,14 @@ It reuses the browser's actual Qt widget paint path and existing DOM/box dumps.
 All capture code and hooks compile out when the option is OFF. No changes to
 the renderer, code generators or threading model are needed.
 
+The performance optimizations are standard in normal builds, including builds
+with capture and profiling disabled: batched CSS/JavaScript fetch processing,
+partial document updates and eligible inline reuse, the 512 KiB Qt text cache,
+the 32 MiB decoded-image cache, the 16 MiB Qt scaled-image cache, and eligible
+viewport reuse around sticky content and embedded frames. These optimizations
+have no build-time feature switches. Capture overrides below select
+reference behavior for regression tests; profiling flags only collect diagnostics.
+
 ```sh
 cmake -S . -B build -DWISP_QT_CAPTURE=ON
 cmake --build build --target wisp-qt
@@ -73,11 +81,12 @@ use worker threads internally when scaling, so renderer-thread `paint_cpu_ms`
 alone does not account for all that work; also compare `paint_ms`.
 
 Eligible scrolls reuse Qt's backing-store pixels and redraw the exposed strips
-plus old/new sticky paint coverage. The engine records eligibility during the
-existing completed-layout walk and prunes unaffected branches during the damage
-query. Fixed boxes, fixed backgrounds (including additional layers), transforms,
-embedded documents, unfinished rendering, non-default page
-zoom, active carets and fractional physical-pixel movement use full repainting.
+plus old/new sticky and embedded-frame paint coverage. The engine records
+eligibility during the existing completed-layout walk and prunes unaffected
+branches during the damage query. Root fixed boxes/backgrounds (including
+additional layers), transforms, unsupported embedded documents, unfinished
+rendering, non-default page zoom, active carets and fractional physical-pixel
+movement use full repainting.
 Resize and content invalidation also require fresh pixels before reuse. Qt can
 independently fall back to repainting, for example when another widget overlaps.
 
@@ -357,8 +366,6 @@ with styles, resources, forms and an iframe alive, using the CSS-only override.
 ### Retained boxes
 
 Milestone B is always built, for ordinary browsing as well as capture.
-`--capture-retain-boxes` remains a compatibility alias for this default
-(and clears an earlier CSS-only override).
 Warm both panels first: the style snapshot and independent region owners
 are established by the first two refreshes. Later eligible changes rebuild one
 stable block/flex/grid region and retain the surrounding boxes, followed by full
@@ -401,9 +408,6 @@ covers `close`, `navigate` and `shutdown` with the original tree still live.
 Eligible retained updates also keep intrinsic min/max widths for unchanged
 text-only inline containers by default. `--capture-no-intrinsic-reuse` disables
 this cache (and dependent line reuse), keeping selective styles and box retention.
-The original
-`--capture-reuse-inline-intrinsics` option still selects the default behavior;
-the last of these two options wins.
 Ordinary blocks' min/max fields are reused
 for CSS sizing during layout, so they are not treated as intrinsic caches.
 
@@ -431,8 +435,7 @@ a fresh baseline; later eligible switches must resume reuse.
 
 Eligible retained updates also preserve completed text-only lines by default,
 in ordinary browsing and capture. `--capture-no-inline-layout-reuse` selects the
-intrinsic-only reference path. The original `--capture-reuse-inline-layout` flag
-remains an explicit request for the default; the last of these two options wins.
+intrinsic-only reference path.
 Line reuse requires the intrinsic cache. The inline container
 keeps its available-width input separately from its output/overflow width, along with
 its wrapped text fragments, local coordinates and any required baseline.

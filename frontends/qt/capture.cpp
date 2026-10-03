@@ -94,9 +94,6 @@ int NS_Capture::prepare(int &argc, char **argv)
                 "  --capture-css-only-restyle   Reuse CSS but reconstruct all boxes\n"
                 "  --capture-no-intrinsic-reuse Remeasure all retained inline containers\n"
                 "  --capture-no-inline-layout-reuse Reflow all retained text lines\n"
-                "  --capture-reuse-inline-layout Use default completed text-only lines\n"
-                "  --capture-reuse-inline-intrinsics Use default text-only intrinsic reuse\n"
-                "  --capture-retain-boxes       Use default eligible retained-region refresh\n"
                 "  --capture-fail-retained-layout Test error handling after region publication\n"
                 "  --capture-restart-partial-restyle Test invalidation during partial construction\n"
                 "  --capture-interrupt-restyle MODE Test close, navigate, shutdown or shutdown-full\n"
@@ -129,20 +126,16 @@ int NS_Capture::prepare(int &argc, char **argv)
             return -1;
 #endif
         }
-        if (arg == "--capture-retain-boxes") {
-            m_css_only_restyle = false;
-            continue;
-        }
         if (arg == "--capture-css-only-restyle") {
             m_css_only_restyle = true;
             continue;
         }
-        if (arg == "--capture-reuse-inline-layout" || arg == "--capture-no-inline-layout-reuse") {
-            m_no_inline_layout_reuse = arg == "--capture-no-inline-layout-reuse";
+        if (arg == "--capture-no-inline-layout-reuse") {
+            m_no_inline_layout_reuse = true;
             continue;
         }
-        if (arg == "--capture-reuse-inline-intrinsics" || arg == "--capture-no-intrinsic-reuse") {
-            m_no_intrinsic_reuse = arg == "--capture-no-intrinsic-reuse";
+        if (arg == "--capture-no-intrinsic-reuse") {
+            m_no_intrinsic_reuse = true;
             continue;
         }
         if (arg == "--capture-restart-partial-restyle") {
