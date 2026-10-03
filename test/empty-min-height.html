@@ -1,0 +1,29 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Empty block height constraints</title>
+<style>
+body { margin:0; font:16px/20px sans-serif; }
+.case { width:300px; border:1px solid; margin-bottom:5px; }
+.minimum { min-height:60px; background:#cdf; }
+.marker { height:10px; background:#393; }
+.edges { padding:8px; border:2px solid; }
+</style>
+<div class="case" id="first-case"><div class="minimum" id="first"></div><div class="marker" id="first-end"></div></div>
+<div class="case" id="last-case"><div class="marker"></div><div class="minimum" id="last"></div></div>
+<div class="case" id="only-case"><div class="minimum" id="only"></div></div>
+<div class="case" id="nested-case"><div id="wrapper"><div class="minimum" id="nested"></div></div><div class="marker" id="nested-end"></div></div>
+<div class="case" id="margin-case"><div class="minimum" id="margin" style="margin:15px 0 25px"></div><div class="marker" id="margin-end"></div></div>
+<div class="case" id="short-case"><div class="minimum" id="short" style="height:20px"></div><div class="marker" id="short-end"></div></div>
+<div class="case" id="max-case"><div id="max" style="height:100px;max-height:40px"></div><div class="marker" id="max-end"></div></div>
+<div class="case" id="conflict-case"><div class="minimum" id="conflict" style="height:100px;max-height:40px"></div><div class="marker" id="conflict-end"></div></div>
+<div class="case" id="border-box-case"><div class="minimum edges" id="border-box" style="box-sizing:border-box"></div><div class="marker" id="border-box-end"></div></div>
+<div class="case" id="content-box-case"><div class="minimum edges" id="content-box"></div><div class="marker" id="content-box-end"></div></div>
+<div class="case" id="percent-case" style="height:200px"><div id="percent" style="min-height:30%"></div><div class="marker" id="percent-end"></div></div>
+<div class="case" id="indefinite-case"><div id="indefinite" style="min-height:30%"></div><div class="marker" id="indefinite-end"></div></div>
+<div class="case" id="calc-case"><div id="calc" style="min-height:calc(40px + 20px)"></div><div class="marker" id="calc-end"></div></div>
+<div class="case" id="whitespace-case"><div class="minimum" id="whitespace"> 
+ </div><div class="marker" id="whitespace-end"></div></div>
+<div class="case" id="hidden-child-case"><div class="minimum" id="hidden-child"><span hidden>Hidden</span></div><div class="marker" id="hidden-child-end"></div></div>
+<div class="case" id="zero-case"><div id="zero" style="min-height:0;margin:15px 0 25px"></div><div class="marker" id="zero-end"></div></div>
+<div class="case" id="empty-child-case"><div class="minimum" id="empty-child" style="margin:15px 0 25px"><div style="margin:7px 0 11px"></div></div><div class="marker" id="empty-child-end"></div></div>
+<div class="case" id="child-margin-case"><div class="minimum" id="child-margin" style="margin:15px 0 25px"><div style="margin:30px 0 10px"></div></div><div class="marker" id="child-margin-end"></div></div>

@@ -146,6 +146,12 @@ void style_set_min_height(css_computed_style *s, int px)
         set_min_height(s, CSS_MIN_HEIGHT_AUTO, (css_fixed_or_calc)0, CSS_UNIT_PX);
 }
 
+void style_set_max_height(css_computed_style *s, int px)
+{
+    set_max_height(s, px < 0 ? CSS_MAX_HEIGHT_NONE : CSS_MAX_HEIGHT_SET, (css_fixed_or_calc)INTTOFIX(px < 0 ? 0 : px),
+        CSS_UNIT_PX);
+}
+
 void destroy_mock_style(css_computed_style *s)
 {
     free(s);

@@ -1541,6 +1541,66 @@ START_TEST(test_last_child_parent_mb_larger)
 }
 END_TEST
 
+static const struct {
+    const char *name;
+    int height, minimum, maximum, expected;
+} empty_height_cases[] = {
+    {"auto minimum", -1, 60, -1, 60},
+    {"explicit below minimum", 20, 60, -1, 60},
+    {"explicit above maximum", 100, 0, 40, 40},
+    {"minimum overrides maximum", 100, 60, 40, 60},
+};
+#define EMPTY_HEIGHT_CASE_COUNT (sizeof(empty_height_cases) / sizeof(empty_height_cases[0]))
+
+START_TEST(test_empty_block_height_constraints)
+{
+    unsigned variant = _i % EMPTY_HEIGHT_CASE_COUNT;
+    unsigned position = _i / EMPTY_HEIGHT_CASE_COUNT; /* first, last, only */
+    html_content *content = create_test_content();
+    struct box *root = create_box_with_style(200);
+    if (position == 1) {
+        struct box *before = create_box_with_style(200);
+        style_set_height_px(before->style, 10);
+        before->flags |= HAS_HEIGHT | MAKE_HEIGHT;
+        add_child(root, before);
+    }
+    struct box *leaf = create_box_with_style(200);
+    style_set_height_px(leaf->style, empty_height_cases[variant].height);
+    style_set_min_height(leaf->style, empty_height_cases[variant].minimum);
+    style_set_max_height(leaf->style, empty_height_cases[variant].maximum);
+    style_set_margins(leaf->style, 15, 0, 25, 0);
+    if (empty_height_cases[variant].height > 0)
+        leaf->flags |= HAS_HEIGHT | MAKE_HEIGHT;
+    add_child(root, leaf);
+    struct box *after = NULL;
+    if (position == 0) {
+        after = create_box_with_style(200);
+        style_set_height_px(after->style, 10);
+        style_set_margins(after->style, 35, 0, 0, 0);
+        after->flags |= HAS_HEIGHT | MAKE_HEIGHT;
+        add_child(root, after);
+    }
+    for (int pass = 0; pass < 2; pass++) {
+        root->height = AUTO;
+        ck_assert(layout_block_context(root, 768, content));
+        int expected_height = empty_height_cases[variant].expected;
+        int expected_y = position == 1 ? 25 : 15;
+        ck_assert_msg(leaf->height == expected_height && leaf->y == expected_y,
+            "%s (position=%u pass=%d): expected leaf y/height %d/%d, got %d/%d", empty_height_cases[variant].name,
+            position, pass, expected_y, expected_height, leaf->y, leaf->height);
+        int expected_root = expected_y + expected_height + (after ? 35 + 10 : 25);
+        ck_assert_msg(root->height == expected_root, "%s (position=%u pass=%d): expected ancestor height %d, got %d",
+            empty_height_cases[variant].name, position, pass, expected_root, root->height);
+        if (after)
+            ck_assert_msg(after->y == expected_y + expected_height + 35,
+                "%s (pass=%d): sibling y=%d must include the constrained leaf and collapsed bottom margin",
+                empty_height_cases[variant].name, pass, after->y);
+    }
+    free_box_tree(root);
+    destroy_test_content(content);
+}
+END_TEST
+
 START_TEST(test_last_child_min_height_blocks)
 {
     html_content *content = create_test_content();
@@ -1694,6 +1754,10 @@ static Suite *margin_collapse_suite(void)
     tcase_add_test(tc_last, test_last_child_parent_mb_larger);
     tcase_add_test(tc_last, test_last_child_min_height_blocks);
     suite_add_tcase(s, tc_last);
+
+    TCase *tc_empty_height = tcase_create("Empty Block Constraints");
+    tcase_add_loop_test(tc_empty_height, test_empty_block_height_constraints, 0, 3 * EMPTY_HEIGHT_CASE_COUNT);
+    suite_add_tcase(s, tc_empty_height);
 
     TCase *tc_excl = tcase_create("Exclusion Rules");
     tcase_add_test(tc_excl, test_no_collapse_abspos_skipped);

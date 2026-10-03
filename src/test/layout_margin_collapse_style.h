@@ -71,6 +71,9 @@ void style_set_padding_bottom(css_computed_style *s, int px);
 /** Set CSS min-height on a style (in px). 0 = auto. */
 void style_set_min_height(css_computed_style *s, int px);
 
+/** Set CSS max-height in px; a negative value means none. */
+void style_set_max_height(css_computed_style *s, int px);
+
 /** Set explicit font size, line height and vertical alignment for inline tests. */
 void style_set_inline_metrics(css_computed_style *s, int font_px, int line_px, uint8_t align);
 
