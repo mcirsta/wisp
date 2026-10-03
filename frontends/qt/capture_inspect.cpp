@@ -27,6 +27,7 @@ extern "C" {
 #include "content/handlers/css/dump.h"
 #include "content/handlers/html/font.h"
 #include "desktop/scrollbar.h"
+#include "content/textsearch.h"
 #include "utils/talloc.h"
 #undef restrict
 #undef namespace
@@ -173,11 +174,26 @@ static QJsonObject describeSticky(struct box *box, const html_content *html)
     return detail;
 }
 
+static int highlightedFragments(struct box *box, const html_content *html)
+{
+    unsigned start, end;
+    int count = box->text && html->base.textsearch.context &&
+            content_textsearch_ishighlighted(
+                html->base.textsearch.context, box->byte_offset, box->byte_offset + box->length, &start, &end)
+        ? 1
+        : 0;
+    for (auto *child = box->children; child; child = child->next)
+        count += highlightedFragments(child, html);
+    return count;
+}
+
 static QJsonObject describe(struct box *box, const html_content *html)
 {
     const css_unit_ctx *units = &html->unit_len_ctx;
     QJsonObject result = summary(box);
     result["owns_region"] = (box->flags & OWNS_REGION) != 0;
+    result["contents_skipped"] = (box->flags & CONTENTS_SKIPPED) != 0;
+    result["highlighted_fragments"] = highlightedFragments(box, html);
     result["text_offset"] = double(box->byte_offset);
     result["scrollbars"] = QJsonObject{{"horizontal", box->scroll_x != nullptr}, {"vertical", box->scroll_y != nullptr},
         {"x", scrollbar_get_offset(box->scroll_x)}, {"y", scrollbar_get_offset(box->scroll_y)}};
@@ -363,6 +379,8 @@ QJsonObject nsqt_capture_inspect(struct hlcache_handle *content, const QStringLi
         QJsonArray matches;
         QJsonObject state;
         if (element) {
+            const QString hidden = attribute(reinterpret_cast<dom_node *>(element), "hidden");
+            state["hidden"] = hidden.isNull() ? QJsonValue(QJsonValue::Null) : QJsonValue(hidden);
             const QString tag = domName(reinterpret_cast<dom_node *>(element));
             if (tag == "input") {
                 bool checked = false;

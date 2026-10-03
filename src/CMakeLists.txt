@@ -120,6 +120,8 @@ add_library(wisp ${WISP_LIB_TYPE}
 	content/handlers/css/hints.c
 	content/handlers/css/select.c
 	content/handlers/html/box_construct.c
+	content/handlers/html/content_visibility.c
+	content/handlers/html/search.c
 	content/handlers/html/box_inspect.c
 	content/handlers/html/box_manipulate.c
 	content/handlers/html/box_normalise.c

@@ -126,7 +126,8 @@ typedef enum {
     INLINE_LAYOUT_CURRENT = 1 << 25, /* eligible lines validated during this update's layout pass */
     HAS_STICKY_DESCENDANT = 1 << 26, /* derived during final constraint preparation */
     HAS_STICKY_ANCESTOR = 1 << 27, /* visual queries may need an ancestor's displacement */
-    HAS_IFRAME_DESCENDANT = 1 << 28 /* sparse scroll damage includes embedded viewports */
+    HAS_IFRAME_DESCENDANT = 1 << 28, /* sparse scroll damage includes embedded viewports */
+    CONTENTS_SKIPPED = 1 << 29 /* content-visibility:hidden; keep only the principal box */
 } box_flags;
 
 
@@ -227,8 +228,8 @@ struct box {
      * DOM node that generated this box or NULL
      */
     struct dom_node *node;
-    /** DOM owner of flattened text, for input hit testing (not an element box). */
-    struct dom_node *text_owner;
+    /** Source DOM text node; line fragments borrow the original reference. */
+    struct dom_node *text_node;
 
     /**
      * Computed styles for elements and their pseudo elements.

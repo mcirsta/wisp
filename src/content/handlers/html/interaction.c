@@ -62,6 +62,20 @@
 #include "content/handlers/html/font.h"
 #include "content/handlers/html/imagemap.h"
 
+/* Event targets remain elements, while text boxes retain their source node
+ * for stable search ranges. The live document owns the returned parent. */
+static dom_node *html_box_event_node(const struct box *box)
+{
+    if (box->node != NULL)
+        return box->node;
+    dom_node *parent = NULL;
+    if (box->text_node != NULL)
+        dom_node_get_parent_node(box->text_node, &parent);
+    dom_node_unref(parent);
+    return parent;
+}
+
+
 /**
  * Get pointer shape for given box
  *
@@ -634,10 +648,10 @@ static nserror get_mouse_action_node(html_content *html, int x, int y, bool chec
             goto next_box;
         }
 
-        dom_node *node = box->node != NULL ? box->node : box->text_owner;
+        dom_node *node = html_box_event_node(box);
         if (node != NULL) {
             man->node = node;
-            if (checkable) {
+            if (checkable && !(box->flags & CONTENTS_SKIPPED)) {
                 dom_node *target = html_checkable_target(node);
                 if (target != NULL && !stacking_box_above(man->checkable_box, box))
                     man->checkable_box = box;
@@ -645,7 +659,7 @@ static nserror get_mouse_action_node(html_content *html, int x, int y, bool chec
             }
         }
 
-        if (box->object) {
+        if (box->object && !(box->flags & CONTENTS_SKIPPED)) {
             if (content_get_type(box->object) == CONTENT_HTML) {
                 man->html_object.box = box;
                 man->html_object.pos_x = box_x;
@@ -655,7 +669,7 @@ static nserror get_mouse_action_node(html_content *html, int x, int y, bool chec
             }
         }
 
-        if (box->iframe) {
+        if (box->iframe && !(box->flags & CONTENTS_SKIPPED)) {
             man->iframe = box->iframe;
         }
 
@@ -672,7 +686,7 @@ static nserror get_mouse_action_node(html_content *html, int x, int y, bool chec
             man->link.is_imagemap = true;
         }
 
-        if (box->gadget) {
+        if (box->gadget && !(box->flags & CONTENTS_SKIPPED)) {
             man->gadget.control = box->gadget;
             man->gadget.box = box;
             man->gadget.box_x = box_x;
@@ -1243,7 +1257,7 @@ mouse_action_drag_none(html_content *html, struct browser_window *bw, browser_mo
         } else if (mas.result.action == ACTION_NONE && mas.link.url == NULL && mas.checkable_box != NULL) {
             /* Floats are visited before normal-flow boxes by box_at_point.
              * Keep the interactive candidate, as we already do for links. */
-            clicked = mas.checkable_box->node != NULL ? mas.checkable_box->node : mas.checkable_box->text_owner;
+            clicked = html_box_event_node(mas.checkable_box);
         }
         dom_node *target = html_checkable_target(clicked);
         bool activate = fire_generic_dom_event(corestring_dom_click, clicked, true, true);

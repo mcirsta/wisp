@@ -55,6 +55,7 @@
 #include "content/handlers/html/object.h"
 #include "content/handlers/html/restyle_profile.h"
 #include "content/handlers/html/restyle.h"
+#include "content/handlers/html/content_visibility.h"
 
 /* Only the active DOM ancestry is needed during construction. Inline boxes
  * are flattened in the output tree, so retain their formatting container too. */
@@ -198,7 +199,7 @@ static bool box_construct_push(struct box_construct_ctx *ctx, struct box *box, s
  * \param  n               node in xml tree
  * \return  the new style, or NULL on memory exhaustion
  */
-static css_select_results *box_get_style(
+css_select_results *box_get_style(
     html_content *c, const css_computed_style *parent_style, const css_computed_style *root_style, dom_node *n)
 {
     dom_string *s = NULL;
@@ -677,7 +678,7 @@ static void box_construct_inline_end(struct box *box, struct box *container, str
 static void box_construct_generate(dom_node *n, struct box_construct_ctx *ctx, struct box *owner,
     struct box_construct_props *props, const css_computed_style *style)
 {
-    if (style == NULL || (owner->flags & IS_REPLACED))
+    if (style == NULL || (owner->flags & (IS_REPLACED | CONTENTS_SKIPPED)))
         return;
     switch (owner->type) {
     case BOX_INLINE:
@@ -718,6 +719,11 @@ static void box_construct_generate(dom_node *n, struct box_construct_ctx *ctx, s
     }
     if (owner->type == BOX_INLINE)
         props->inline_container = container;
+    if (css_computed_content_visibility(style) == CSS_CONTENT_VISIBILITY_HIDDEN &&
+        html_content_visibility_applies(style, false)) {
+        gen->flags |= CONTENTS_SKIPPED;
+        return;
+    }
 
     /* An empty string still generates the styled box (e.g. an empty icon).
      * Text and image items use one content path for all owner/display types. */
@@ -1035,6 +1041,21 @@ static bool box_construct_element(struct box_construct_ctx *ctx, bool *convert_c
         goto error;
     }
 
+    if (html_until_found(ctx->n))
+        ctx->content->has_until_found = true;
+    if (css_computed_content_visibility(box->style) == CSS_CONTENT_VISIBILITY_HIDDEN &&
+        html_content_visibility_applies(box->style, (box->flags & IS_REPLACED) != 0)) {
+        box->flags |= CONTENTS_SKIPPED;
+        *convert_children = false;
+        /* Special controls may already have constructed their internal boxes. */
+        while (box->children != NULL) {
+            struct box *child = box->children;
+            box->children = child->next;
+            box_free(child);
+        }
+        box->last = NULL;
+    }
+
     /* Special handlers may change the provisional CSS box type. Such a scope
      * can keep its allocations grouped, but must not advertise a usable owner. */
     if (ctx->owner_node == ctx->n && box_construct_region_root(box))
@@ -1060,7 +1081,8 @@ static bool box_construct_element(struct box_construct_ctx *ctx, bool *convert_c
     if (*convert_children)
         box->flags |= CONVERT_CHILDREN;
 
-    if (ns_computed_display(box->style, props.node_is_root) == CSS_DISPLAY_LIST_ITEM) {
+    if (!(box->flags & CONTENTS_SKIPPED) &&
+        ns_computed_display(box->style, props.node_is_root) == CSS_DISPLAY_LIST_ITEM) {
         if (!box_construct_marker(box, props.title, ctx, props.containing_block))
             goto error;
     }
@@ -1201,7 +1223,7 @@ static nserror next_node(struct box_construct_ctx *ctx, bool convert_children)
  * (which covers most Latin characters including Romanian diacritics),
  * the transformation is done in-place.
  */
-static void box_text_transform(char *s, unsigned int len, enum css_text_transform_e tt)
+void box_text_transform(char *s, unsigned int len, enum css_text_transform_e tt)
 {
     size_t off = 0;
     bool prev_was_space = true; /* For capitalize: treat start as after space */
@@ -1349,9 +1371,9 @@ static bool box_construct_text(struct box_construct_ctx *ctx)
         }
 
         box->type = BOX_TEXT;
-        /* Inline elements are flattened into sibling boxes. Retain the DOM
-         * owner so a hit on their text still reaches the enclosing label. */
-        dom_node_get_parent_node(ctx->n, &box->text_owner);
+        /* Preserve source identity through line splitting and reveal restyles.
+         * Hit testing resolves the enclosing element from this text node. */
+        box->text_node = dom_node_ref(ctx->n);
 
         box->flags |= props.inherited_flags;
         box->text = talloc_strdup(ctx->bctx, text);
@@ -1458,7 +1480,7 @@ static bool box_construct_text(struct box_construct_ctx *ctx)
             }
 
             box->type = BOX_TEXT;
-            dom_node_get_parent_node(ctx->n, &box->text_owner);
+            box->text_node = dom_node_ref(ctx->n);
 
             box->flags |= props.inherited_flags;
             box->text = talloc_strdup(ctx->bctx, current);

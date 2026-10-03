@@ -76,6 +76,8 @@ struct list_entry {
      * content specific selection object
      */
     struct selection *sel;
+    void *data;
+    bool available;
 };
 
 /**
@@ -109,6 +111,8 @@ struct textsearch_context {
     char *string;
     bool prev_case_sens;
     bool newsearch;
+    bool pending_reveal;
+    search_flags_t flags;
 };
 
 
@@ -151,6 +155,8 @@ static void free_matches(struct textsearch_context *textsearch)
         if (cur->sel) {
             selection_destroy(cur->sel);
         }
+        if (cur->data != NULL)
+            textsearch->c->handler->textsearch_free_match(cur->data);
         free(cur);
     }
 }
@@ -166,7 +172,7 @@ static void search_show_all(bool all, struct textsearch_context *context)
 
     for (a = context->found->next; a; a = a->next) {
         bool add = true;
-        if (!all && a != context->current) {
+        if (!a->available || (!all && a != context->current)) {
             add = false;
             if (a->sel) {
                 selection_destroy(a->sel);
@@ -194,16 +200,59 @@ static void search_show_all(bool all, struct textsearch_context *context)
  * \param string_len length of search string
  * \param flags flags to control the search.
  */
-static nserror search_text(struct textsearch_context *context, const char *string, int string_len, search_flags_t flags)
+static nserror search_present(struct textsearch_context *context, search_flags_t flags)
 {
     struct rect bounds;
     union content_msg_data msg_data;
-    bool case_sensitive, forwards, showall;
+    for (struct list_entry *entry = context->found->next; entry != NULL; entry = entry->next) {
+        if (entry->data == NULL)
+            continue;
+        struct textsearch_range range = {0};
+        nserror error = context->c->handler->textsearch_resolve(
+            context->c, entry->data, entry == context->current, &range);
+        entry->available = false;
+        if (error == NSERROR_NEED_DATA) {
+            context->pending_reveal = true;
+            return NSERROR_OK;
+        }
+        if (error != NSERROR_OK)
+            return error;
+        entry->available = range.available;
+        entry->start_idx = range.start_idx;
+        entry->end_idx = range.end_idx;
+        entry->start_box = range.start_box;
+        entry->end_box = range.end_box;
+    }
+    context->pending_reveal = false;
+    textsearch_broadcast(context, CONTENT_TEXTSEARCH_MATCH, context->current != NULL, NULL);
+    search_show_all((flags & SEARCH_FLAG_SHOWALL) != 0, context);
+    textsearch_broadcast(
+        context, CONTENT_TEXTSEARCH_BACK, context->current != NULL && context->current->prev != NULL, NULL);
+    textsearch_broadcast(
+        context, CONTENT_TEXTSEARCH_FORWARD, context->current != NULL && context->current->next != NULL, NULL);
+    if (context->current == NULL || !context->current->available)
+        return NSERROR_OK;
+    nserror error = context->c->handler->textsearch_bounds(context->c, context->current->start_idx,
+        context->current->end_idx, context->current->start_box, context->current->end_box, &bounds);
+    if (error == NSERROR_OK) {
+        msg_data.scroll.area = true;
+        msg_data.scroll.x0 = bounds.x0;
+        msg_data.scroll.y0 = bounds.y0;
+        msg_data.scroll.x1 = bounds.x1;
+        msg_data.scroll.y1 = bounds.y1;
+        content_broadcast(context->c, CONTENT_MSG_SCROLL, &msg_data);
+    }
+    return error;
+}
+
+static nserror search_text(struct textsearch_context *context, const char *string, int string_len, search_flags_t flags)
+{
+    bool case_sensitive, forwards;
     nserror res = NSERROR_OK;
 
     case_sensitive = ((flags & SEARCH_FLAG_CASE_SENSITIVE) != 0) ? true : false;
     forwards = ((flags & SEARCH_FLAG_FORWARDS) != 0) ? true : false;
-    showall = ((flags & SEARCH_FLAG_SHOWALL) != 0) ? true : false;
+    context->flags = flags;
 
     if (context->c == NULL) {
         return res;
@@ -235,6 +284,10 @@ static nserror search_text(struct textsearch_context *context, const char *strin
         /* indicate find operation finished */
         textsearch_broadcast(context, CONTENT_TEXTSEARCH_FIND, false, NULL);
 
+        if (res == NSERROR_NEED_DATA) {
+            context->pending_reveal = true;
+            return NSERROR_OK;
+        }
         if (res != NSERROR_OK) {
             free_matches(context);
             return res;
@@ -257,38 +310,7 @@ static nserror search_text(struct textsearch_context *context, const char *strin
         }
     }
 
-    /* update match state */
-    textsearch_broadcast(context, CONTENT_TEXTSEARCH_MATCH, (context->current != NULL), NULL);
-
-    search_show_all(showall, context);
-
-    /* update back state */
-    textsearch_broadcast(
-        context, CONTENT_TEXTSEARCH_BACK, ((context->current != NULL) && (context->current->prev != NULL)), NULL);
-
-    /* update forward state */
-    textsearch_broadcast(
-        context, CONTENT_TEXTSEARCH_FORWARD, ((context->current != NULL) && (context->current->next != NULL)), NULL);
-
-
-    if (context->current == NULL) {
-        /* no current match */
-        return res;
-    }
-
-    /* call content match bounds handler */
-    res = context->c->handler->textsearch_bounds(context->c, context->current->start_idx, context->current->end_idx,
-        context->current->start_box, context->current->end_box, &bounds);
-    if (res == NSERROR_OK) {
-        msg_data.scroll.area = true;
-        msg_data.scroll.x0 = bounds.x0;
-        msg_data.scroll.y0 = bounds.y0;
-        msg_data.scroll.x1 = bounds.x1;
-        msg_data.scroll.y1 = bounds.y1;
-        content_broadcast(context->c, CONTENT_MSG_SCROLL, &msg_data);
-    }
-
-    return res;
+    return search_present(context, flags);
 }
 
 
@@ -387,12 +409,12 @@ static nserror content_textsearch_create(struct content *c, void *gui_data, stru
 
     type = c->handler->type();
 
-    context = malloc(sizeof(struct textsearch_context));
+    context = calloc(1, sizeof(struct textsearch_context));
     if (context == NULL) {
         return NSERROR_NOMEM;
     }
 
-    search_head = malloc(sizeof(struct list_entry));
+    search_head = calloc(1, sizeof(struct list_entry));
     if (search_head == NULL) {
         free(context);
         return NSERROR_NOMEM;
@@ -552,6 +574,7 @@ nserror content_textsearch_add_match(struct textsearch_context *context, unsigne
     entry->start_box = start_box;
     entry->end_box = end_box;
     entry->sel = NULL;
+    entry->available = true;
 
     entry->next = NULL;
     entry->prev = context->found->prev;
@@ -567,6 +590,43 @@ nserror content_textsearch_add_match(struct textsearch_context *context, unsigne
     return NSERROR_OK;
 }
 
+
+/* exported interface, documented in content/textsearch.h */
+nserror content_textsearch_add_deferred_match(struct textsearch_context *context, void *match)
+{
+    nserror error = content_textsearch_add_match(context, 0, 0, NULL, NULL);
+    if (error == NSERROR_OK) {
+        context->found->prev->data = match;
+        context->found->prev->available = false;
+    }
+    return error;
+}
+
+bool content_textsearch_prepare_restyle(struct content *c)
+{
+    struct textsearch_context *context = c->textsearch.context;
+    if (context == NULL || !context->pending_reveal)
+        return false;
+    for (struct list_entry *entry = context->found->next; entry != NULL; entry = entry->next) {
+        if (entry->sel != NULL)
+            selection_destroy(entry->sel);
+        entry->sel = NULL;
+        entry->start_box = entry->end_box = NULL;
+        entry->available = false;
+    }
+    return true;
+}
+
+void content_textsearch_resume(struct content *c)
+{
+    struct textsearch_context *context = c->textsearch.context;
+    if (context == NULL || !context->pending_reveal)
+        return;
+    if (context->newsearch)
+        content_textsearch_step(context, context->flags, c->textsearch.string);
+    else
+        search_present(context, context->flags);
+}
 
 /* exported interface, documented in content/textsearch.h */
 bool content_textsearch_ishighlighted(struct textsearch_context *textsearch, unsigned start_offset, unsigned end_offset,
@@ -603,6 +663,7 @@ nserror content_textsearch_destroy(struct textsearch_context *textsearch)
     textsearch_broadcast(textsearch, CONTENT_TEXTSEARCH_FORWARD, true, NULL);
 
     free_matches(textsearch);
+    free(textsearch->found);
     free(textsearch);
 
     return NSERROR_OK;

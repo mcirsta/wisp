@@ -1,0 +1,37 @@
+#data
+* { content-visibility: visible; }
+#errors
+#expected
+| *
+|  content-visibility: visible
+#reset
+
+#data
+* { content-visibility: hidden !important; }
+#errors
+#expected
+| *
+|  content-visibility: hidden !important
+#reset
+
+#data
+* { content-visibility: inherit; }
+#errors
+#expected
+| *
+|  content-visibility: inherit
+#reset
+
+#data
+* { content-visibility: auto; }
+#errors
+#expected
+| *
+#reset
+
+#data
+* { content-visibility: none; }
+#errors
+#expected
+| *
+#reset

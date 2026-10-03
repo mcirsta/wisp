@@ -489,6 +489,7 @@ static const char *opcode_names[] = {
     "object-position",
     "transform",
     [CSS_PROP_ASPECT_RATIO] = "aspect-ratio",
+    [CSS_PROP_CONTENT_VISIBILITY] = "content-visibility",
 };
 
 static void dump_css_fixed(css_fixed f, char **ptr)

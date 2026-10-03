@@ -22,6 +22,7 @@ extern "C" {
 #include "wisp/browser.h"
 #include "wisp/browser_window.h"
 #include "wisp/keypress.h"
+#include "wisp/desktop/search.h"
 #include "wisp/content.h"
 #include "wisp/content/content.h"
 #include "wisp/content/hlcache.h"
@@ -86,6 +87,10 @@ int NS_Capture::prepare(int &argc, char **argv)
                 "  --capture-click-point X,Y    Click viewport CSS pixels without auto-scrolling\n"
                 "  --capture-scroll-point X,Y,DX,DY Scroll content/frame under viewport CSS pixels\n"
                 "  --capture-drag X1,Y1,X2,Y2   Drag between viewport CSS pixel positions\n"
+                "  --capture-find TEXT          Find next match (empty text clears search)\n"
+                "  --capture-find-back TEXT     Find previous match\n"
+                "  --capture-find-all TEXT      Find next match and highlight visible matches\n"
+                "  --capture-find-case TEXT     Find next case-sensitive match\n"
                 "  --capture-type TEXT           Type into the focused control\n"
                 "  --capture-scroll X,Y          Scroll before the next action\n"
                 "  --capture-scroll-element ID,X,Y Set an element's existing scrollbar offsets\n"
@@ -203,9 +208,11 @@ int NS_Capture::prepare(int &argc, char **argv)
             if (ok)
                 m_actions.append({arg, value});
         } else if (arg == "--capture-click-id" || arg == "--capture-click-label" || arg == "--capture-type" ||
-            arg == "--capture-scroll" || arg == "--capture-scroll-element" || arg == "--capture-click-point") {
+            arg == "--capture-scroll" || arg == "--capture-scroll-element" || arg == "--capture-click-point" ||
+            arg == "--capture-find" || arg == "--capture-find-back" || arg == "--capture-find-all" ||
+            arg == "--capture-find-case") {
             m_actions.append({arg, value});
-            ok = !value.isEmpty();
+            ok = !value.isEmpty() || arg == "--capture-find";
             if (arg == "--capture-scroll" || arg == "--capture-scroll-element" || arg == "--capture-click-point") {
                 const auto parts = value.split(',');
                 const int first = arg == "--capture-scroll-element" ? 1 : 0;
@@ -418,6 +425,18 @@ void NS_Capture::poll()
                 } else if (action.first == "--capture-type") {
                     for (uint32_t key : action.second.toUcs4())
                         ok = browser_window_key_press(m_bw, key) && ok;
+                } else if (action.first.startsWith("--capture-find")) {
+                    if (action.second.isEmpty()) {
+                        browser_window_search_clear(m_bw);
+                    } else {
+                        int flags = action.first == "--capture-find-back" ? SEARCH_FLAG_BACKWARDS
+                                                                          : SEARCH_FLAG_FORWARDS;
+                        if (action.first == "--capture-find-all")
+                            flags |= SEARCH_FLAG_SHOWALL;
+                        if (action.first == "--capture-find-case")
+                            flags |= SEARCH_FLAG_CASE_SENSITIVE;
+                        browser_window_search(m_bw, nullptr, search_flags_t(flags), action.second.toUtf8().constData());
+                    }
                 } else if (action.first == "--capture-scroll") {
                     const auto xy = action.second.split(',');
                     nsqt_capture_scroll(content, xy[0].toInt(), xy[1].toInt());

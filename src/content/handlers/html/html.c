@@ -54,6 +54,8 @@
 #include "content/content_factory.h"
 #include "content/handlers/javascript/js.h"
 #include "content/textsearch.h"
+#include "content/handlers/html/content_visibility.h"
+#include "content/handlers/html/search.h"
 #include "desktop/scrollbar.h"
 #include "desktop/selection.h"
 #include "desktop/frames.h"
@@ -1550,6 +1552,7 @@ static void html_restyle_finish(html_content *html, bool success, bool retained)
      * A REFORMAT updates extents without a navigation or scroll reset. */
     union content_msg_data data = {.background = false};
     content_broadcast(&html->base, CONTENT_MSG_REFORMAT, &data);
+    content_textsearch_resume(&html->base);
     HTML_PROFILE(uint64_t end = html_profile_now(); html->restyle_profile.cleanup_ns = end - cleanup_start;
         html->restyle_profile.total_ns = end - html->restyle_profile.start_ns);
     if (html->restyle_pending)
@@ -1593,7 +1596,7 @@ static void html_restyle_start_full(html_content *html)
     html_set_drag_type(html, HTML_DRAG_NONE, (union html_drag_owner){.no_owner = true}, NULL);
     html_set_focus(html, HTML_FOCUS_SELF, (union html_focus_owner){.self = true}, true, 0, 0, 0, NULL);
     html->visible_select_menu = NULL;
-    if (html->base.textsearch.context != NULL) {
+    if (html->base.textsearch.context != NULL && !content_textsearch_prepare_restyle(&html->base)) {
         content_textsearch_destroy(html->base.textsearch.context);
         html->base.textsearch.context = NULL;
     }
@@ -2677,6 +2680,23 @@ bool html_get_id_offset(hlcache_handle *h, lwc_string *frag_id, int *x, int *y)
     if (content_get_type(h) != CONTENT_HTML)
         return false;
 
+    html_content *html = (html_content *)hlcache_handle_get_content(h);
+    if (html->restyling || html->restyle_pending)
+        return false;
+    if (html->has_until_found) {
+        dom_string *id = NULL;
+        dom_node *target = NULL;
+        if (dom_string_create((const uint8_t *)lwc_string_data(frag_id), lwc_string_length(frag_id), &id) != DOM_NO_ERR)
+            return false;
+        dom_document_get_element_by_id(html->document, id, &target);
+        dom_string_unref(id);
+        bool changed = false;
+        nserror error = target == NULL ? NSERROR_OK : html_reveal_ancestors(html, target, &changed);
+        dom_node_unref(target);
+        if (changed || error != NSERROR_OK)
+            return false; /* REFORMAT retries after the replacement layout is published. */
+    }
+
     layout = html_get_box_tree(h);
 
     if ((pos = box_find_by_id(layout, frag_id)) != 0) {
@@ -2886,6 +2906,8 @@ html_textsearch_find(struct content *c, struct textsearch_context *context, cons
 {
     html_content *html = (html_content *)c;
 
+    if (html->has_until_found)
+        return html_textsearch_dom(c, context, pattern, p_len, csens);
     if (html->layout == NULL) {
         return NSERROR_INVALID;
     }
@@ -2940,6 +2962,8 @@ static const content_handler html_content_handler = {
     .exec = html_exec,
     .saw_insecure_objects = html_saw_insecure_objects,
     .textsearch_find = html_textsearch_find,
+    .textsearch_resolve = html_textsearch_resolve,
+    .textsearch_free_match = html_textsearch_free_match,
     .textsearch_bounds = html_textsearch_bounds,
     .textselection_redraw = html_textselection_redraw,
     .textselection_copy = html_textselection_copy,

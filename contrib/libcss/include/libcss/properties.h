@@ -678,6 +678,12 @@ enum css_visibility_e {
     CSS_VISIBILITY_COLLAPSE = 0x3
 };
 
+enum css_content_visibility_e {
+    CSS_CONTENT_VISIBILITY_INHERIT = 0x0,
+    CSS_CONTENT_VISIBILITY_VISIBLE = 0x1,
+    CSS_CONTENT_VISIBILITY_HIDDEN = 0x2
+};
+
 enum css_white_space_e {
     CSS_WHITE_SPACE_INHERIT = 0x0,
     CSS_WHITE_SPACE_NORMAL = 0x1,

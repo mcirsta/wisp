@@ -82,7 +82,7 @@ static int box_talloc_destructor(void *ptr)
     }
 
     if (!(b->flags & CLONE))
-        dom_node_unref(b->text_owner);
+        dom_node_unref(b->text_node);
 
     if (b->scroll_x != NULL) {
         data = scrollbar_get_data(b->scroll_x);
@@ -175,7 +175,7 @@ struct box *box_create(css_select_results *styles, css_computed_style *style, bo
     box->object_params = NULL;
     box->iframe = NULL;
     box->node = NULL;
-    box->text_owner = NULL;
+    box->text_node = NULL;
 
     return box;
 }

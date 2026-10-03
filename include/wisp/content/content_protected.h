@@ -45,6 +45,7 @@ struct rect;
 struct browser_window;
 struct browser_window_features;
 struct textsearch_context;
+struct textsearch_range;
 struct box;
 struct selection;
 struct selection_string;
@@ -125,6 +126,10 @@ struct content_handler {
      */
     nserror (*textsearch_bounds)(struct content *c, unsigned start_idx, unsigned end_idx, struct box *start_ptr,
         struct box *end_ptr, struct rect *bounds_out);
+
+    /** Optional stable matches, resolved again after a reveal replaces boxes. */
+    nserror (*textsearch_resolve)(struct content *c, void *match, bool activate, struct textsearch_range *range);
+    void (*textsearch_free_match)(void *match);
 
     /**
      * redraw an area of selected text

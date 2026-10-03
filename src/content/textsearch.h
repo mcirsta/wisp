@@ -31,6 +31,19 @@ struct content;
 struct hlcache_handle;
 struct box;
 
+struct textsearch_range {
+    unsigned start_idx, end_idx;
+    struct box *start_box, *end_box;
+    bool available;
+};
+
+/* Stable content-owned match data; ownership transfers only on success. */
+nserror content_textsearch_add_deferred_match(struct textsearch_context *context, void *match);
+/* Preserve only a search waiting for its own reveal. Drops all box references
+ * and highlights before reconstruction, then resolves against the new layout. */
+bool content_textsearch_prepare_restyle(struct content *c);
+void content_textsearch_resume(struct content *c);
+
 /**
  * Free text search a content
  *

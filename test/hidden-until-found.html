@@ -1,0 +1,62 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Hidden until found</title>
+<style>
+body { margin:0; font:16px/20px sans-serif; }
+p { margin:0; }
+.panel { margin:10px; border:2px solid green; padding:8px; width:260px; background:#ddf; }
+.panel::before { content:'Generated content'; display:block; height:20px; }
+#nested { margin:0; }
+#target { height:60px; }
+#fixed-size { height:30px; }
+#minimum { min-height:40px; }
+#flex { display:flex; }
+#grid { display:grid; }
+#override { content-visibility:visible; }
+#display-override { display:block; }
+#none { display:none; }
+#css-hidden { content-visibility:hidden; }
+#wrapped { width:80px; }
+#transformed { text-transform:uppercase; }
+#spacer { height:600px; }
+#after { height:30px; }
+</style>
+<a id="fragment" href="#target">Reveal nested target</a>
+<a id="blocked-fragment" href="#blocked-target">Blocked target</a>
+<p id="visible">needle visible</p>
+<div id="outer" class="panel" hidden="UnTiL-FoUnD">
+  <div id="nested" class="panel" hidden="until-found"><p id="target">needle nested</p></div>
+</div>
+<div id="second" class="panel" hidden="until-found"><p id="second-text">needle second</p></div>
+<div id="fixed-size" class="panel" hidden="until-found"><p id="fixed-text">Fixed size contents</p></div>
+<div id="minimum" class="panel" hidden="until-found"><p>Minimum contents</p></div>
+<div id="flex" class="panel" hidden="until-found"><p id="flex-child">Flex contents</p></div>
+<div id="grid" class="panel" hidden="until-found"><p id="grid-child">Grid contents</p></div>
+<div id="override" hidden="until-found"><p id="override-text">Visible override</p></div>
+<div id="display-override" hidden="until-found"><p id="display-text">Display alone doesn't reveal</p></div>
+<span id="inline" hidden="until-found">Inline visible</span>
+<div id="none" hidden="until-found"><p id="none-text">needle unavailable</p></div>
+<div hidden><div id="blocked" hidden="until-found"><p id="blocked-target">needle ordinary hidden</p></div></div>
+<div id="css-hidden"><p id="css-text">needle CSS hidden</p></div>
+<div id="wrapped" hidden="until-found">alpha beta gamma delta epsilon</div>
+<div id="transformed" hidden="until-found">mixed Case</div>
+<div id="spacer"></div><div id="after">End</div>
+<!-- Extra rendering/property cases stay after the search/scroll fixture. -->
+<div id="float-case" style="overflow:hidden;width:400px">
+  <div style="float:left;width:100px;height:60px"></div>
+  <div id="float-hidden" hidden="until-found" style="height:30px;border:1px solid">Hidden float neighbor</div>
+</div>
+<div><img id="image" style="content-visibility:hidden;border:2px solid" src="aspect-ratio-image.svg"></div>
+<div><img id="image-sized" style="content-visibility:hidden;width:60px;height:30px;border:2px solid" src="aspect-ratio-image.svg"></div>
+<input id="input" hidden="until-found" value="Hidden control" style="width:100px;height:20px">
+<textarea id="textarea" hidden="until-found" style="width:100px;height:20px">Hidden textarea</textarea>
+<select id="select" hidden="until-found" style="width:100px;height:20px"><option>Hidden option</option></select>
+<table style="border-spacing:0"><tr id="row" hidden="until-found"><td id="cell-visible">Visible cell</td></tr></table>
+<table style="border-spacing:0"><tr><td id="cell" hidden="until-found" style="padding:5px"><p id="cell-text">Hidden cell</p></td></tr></table>
+<span style="content-visibility:hidden">
+  <span id="inherit" style="display:inline-block;content-visibility:inherit">Inherited hidden</span>
+  <span id="initial" style="display:inline-block;content-visibility:initial">Initial visible</span>
+  <span id="unset" style="display:inline-block;content-visibility:unset">Unset visible</span>
+  <span id="noninherited" style="display:inline-block">Not inherited</span>
+</span>
+<div id="variable" style="--skip:hidden;content-visibility:var(--skip)">Hidden through variable</div>

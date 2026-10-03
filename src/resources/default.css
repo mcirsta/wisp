@@ -12,10 +12,14 @@ head {
 	display: none;
 }
 
-/* HTML hidden is a UA default which author CSS may override.
- * until-found uses the legacy hidden fallback until ancestor revealing is supported. */
-[hidden]:not(embed) {
+/* HTML hidden defaults can be overridden by author CSS. Attribute equality
+ * in the HTML selector handler is ASCII case insensitive. */
+[hidden]:not([hidden=until-found]):not(embed) {
 	display: none;
+}
+
+[hidden=until-found]:not(embed) {
+	content-visibility: hidden;
 }
 
 /* HTML's legacy embed exception retains a zero-sized replaced box. */

@@ -145,6 +145,9 @@ static void layout_get_object_dimensions(const css_unit_ctx *unit_len_ctx, struc
      * pixels which would need conversion. */
     int intrinsic_width = content_get_width(box->object);
     int intrinsic_height = content_get_height(box->object);
+    bool contents_skipped = (box->flags & CONTENTS_SKIPPED) != 0;
+    if (contents_skipped)
+        intrinsic_width = intrinsic_height = 0;
 
     /* Check for an explicit intrinsic ratio from the content handler.
      * This is set only when the content has no real intrinsic dimensions
@@ -152,7 +155,7 @@ static void layout_get_object_dimensions(const css_unit_ctx *unit_len_ctx, struc
      * The ratio acts as the signal to use containing-block sizing. */
     int ratio_w = 0;
     int ratio_h = 0;
-    bool has_ratio_only = content_get_intrinsic_ratio(box->object, &ratio_w, &ratio_h);
+    bool has_ratio_only = !contents_skipped && content_get_intrinsic_ratio(box->object, &ratio_w, &ratio_h);
 
     /* For all ratio-based calculations below, we use either the explicit
      * ratio (viewBox-only) or the intrinsic dimensions as the ratio source. */
@@ -200,8 +203,8 @@ static void layout_get_object_dimensions(const css_unit_ctx *unit_len_ctx, struc
         } else {
             /* No intrinsic dimensions or ratio —
              * CSS default object size (300×150). */
-            *width = 300;
-            *height = 150;
+            *width = contents_skipped ? 0 : 300;
+            *height = contents_skipped ? 0 : 150;
         }
 
         if (css_ratio) {
@@ -1652,6 +1655,8 @@ static inline bool box_has_in_flow_block_children(const struct box *box)
  */
 static inline bool box_prevents_collapse_through(const struct box *box)
 {
+    if (box->flags & CONTENTS_SKIPPED)
+        return true;
     /* Flex/grid containers establish independent formatting contexts, even
      * when empty. Their top and bottom margins are never adjoining. */
     if (box->type == BOX_FLEX || box->type == BOX_GRID)
@@ -1728,10 +1733,11 @@ static struct box *layout_next_margin_block(const css_unit_ctx *unit_len_ctx, st
             /* Check whether box is the box current margin collapses to.
              * Position inline content (including floats) before collecting
              * a following sibling's top margin. */
-            if (box->type == BOX_FLEX || box->type == BOX_GRID || box->flags & MAKE_HEIGHT || box->border[TOP].width ||
-                box->padding[TOP] ||
-                (box->style && (css_computed_overflow_x(box->style) != CSS_OVERFLOW_VISIBLE ||
-                    css_computed_overflow_y(box->style) != CSS_OVERFLOW_VISIBLE)) ||
+            if (box->type == BOX_FLEX || box->type == BOX_GRID || box->flags & (MAKE_HEIGHT | CONTENTS_SKIPPED) ||
+                box->border[TOP].width || box->padding[TOP] ||
+                (box->style &&
+                    (css_computed_overflow_x(box->style) != CSS_OVERFLOW_VISIBLE ||
+                        css_computed_overflow_y(box->style) != CSS_OVERFLOW_VISIBLE)) ||
                 (box->type == BOX_INLINE_CONTAINER && box_inline_container_has_line_boxes(box))) {
                 /* Collapse to this box; return it */
                 return box;
@@ -4439,7 +4445,8 @@ bool layout_block_context(struct box *block, int viewport_height, html_content *
                 }
 
                 if (!lh__box_is_object(box) && box->style && block->float_children &&
-                    (overflow_x != CSS_OVERFLOW_VISIBLE || overflow_y != CSS_OVERFLOW_VISIBLE)) {
+                    (overflow_x != CSS_OVERFLOW_VISIBLE || overflow_y != CSS_OVERFLOW_VISIBLE ||
+                        (box->flags & CONTENTS_SKIPPED))) {
                     int top = cy + (int)max_pos_margin - (int)max_neg_margin;
                     y = layout_block_avoid_floats(&content->unit_len_ctx, box, viewport_height,
                         block->float_children, cx, max(top, y));
@@ -4534,7 +4541,8 @@ bool layout_block_context(struct box *block, int viewport_height, html_content *
          * establishes a new block context. */
         if (box->type == BOX_FLEX || box->type == BOX_GRID ||
             (box->type == BOX_BLOCK && box->style &&
-                (overflow_x != CSS_OVERFLOW_VISIBLE || overflow_y != CSS_OVERFLOW_VISIBLE))) {
+                (overflow_x != CSS_OVERFLOW_VISIBLE || overflow_y != CSS_OVERFLOW_VISIBLE ||
+                    (box->flags & CONTENTS_SKIPPED)))) {
 
             if (box->type == BOX_FLEX || box->type == BOX_INLINE_FLEX) {
                 const char *tag = "";

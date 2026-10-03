@@ -2054,3 +2054,12 @@ inherited = false
 cascade = "none"
 computed = "none"
 parse = "WRAP:css__parse_padding_side"
+
+[content_visibility]
+enum = "CSS_PROP_CONTENT_VISIBILITY"
+inherited = false
+cascade = "ident"
+computed = "auto"
+bits = 2
+initial = "VISIBLE"
+parse = "IDENT:( INHERIT: INITIAL: REVERT: UNSET: VISIBLE:0,CONTENT_VISIBILITY_VISIBLE HIDDEN:0,CONTENT_VISIBILITY_HIDDEN IDENT:)"

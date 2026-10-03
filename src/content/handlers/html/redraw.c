@@ -2854,7 +2854,9 @@ static bool html_redraw_box(const html_content *html, struct box *box, int x_par
     }
 
 
-    if (box->object && width != 0 && height != 0) {
+    if (box->flags & CONTENTS_SKIPPED) {
+        /* Background and borders above belong to the principal box. */
+    } else if (box->object && width != 0 && height != 0) {
         struct content_redraw_data obj_data;
         struct rect object_clip = r;
 

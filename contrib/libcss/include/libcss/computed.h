@@ -418,6 +418,8 @@ uint8_t css_computed_unicode_bidi(const css_computed_style *style);
 
 uint8_t css_computed_visibility(const css_computed_style *style);
 
+uint8_t css_computed_content_visibility(const css_computed_style *style);
+
 uint8_t css_computed_list_style_position(const css_computed_style *style);
 
 uint8_t css_computed_text_align(const css_computed_style *style);

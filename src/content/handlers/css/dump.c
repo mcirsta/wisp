@@ -1744,6 +1744,9 @@ void nscss_dump_computed_style(FILE *stream, const css_computed_style *style)
         break;
     }
 
+    fprintf(stream, "content-visibility: %s ",
+        css_computed_content_visibility(style) == CSS_CONTENT_VISIBILITY_HIDDEN ? "hidden" : "visible");
+
     /* visibility */
     val = css_computed_visibility(style);
     switch (val) {

@@ -28,3 +28,4 @@ units.dat			Length unit tests
 dodgy-media-block.dat		Media block with incomplete ruleset
 svg.dat				SVG property tests
 calc.dat			calc() tests
+content-visibility.dat		Hidden content and invalid keywords

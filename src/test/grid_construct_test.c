@@ -71,6 +71,18 @@ static void test_log(const char *fmt, va_list args)
 /* -------------------------------------------------------------------------- */
 /* MOCKS for box_construct.c */
 
+/* This isolated grid harness mocks style selection and has no hidden nodes.
+ * Actual content-visibility selection/construction is covered by the capture test. */
+bool html_until_found(dom_node *node)
+{
+    return false;
+}
+
+bool html_content_visibility_applies(const css_computed_style *style, bool replaced)
+{
+    return true;
+}
+
 /* This fixture exercises initial construction, with no previous presentation. */
 nserror html_restyle_reuse_style(html_content *html, dom_node *node, css_select_results **styles)
 {

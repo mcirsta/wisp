@@ -49,6 +49,7 @@
 #include <wisp/window.h>
 #include "content/content_debug.h"
 #include "content/urldb.h"
+#include "content/textsearch.h"
 
 #include <wisp/content/handlers/html/box.h>
 #include <wisp/content/handlers/html/form_internal.h>
@@ -1714,6 +1715,11 @@ static void scheduled_reformat(void *vbw)
 nserror browser_window_destroy_internal(struct browser_window *bw)
 {
     assert(bw);
+
+    /* Search cleanup redraws its highlights and updates frontend controls.
+     * Do it while the window, frames and scrollbars are still alive. */
+    if (bw->current_content != NULL)
+        content_textsearch_clear(bw->current_content);
 
     browser_window_destroy_children(bw);
     browser_window_destroy_iframes(bw);

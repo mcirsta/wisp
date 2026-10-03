@@ -10,10 +10,10 @@ import tempfile
 
 binary = Path(sys.argv[1]).resolve()
 fixture = Path(__file__).resolve().parents[2] / "test/hidden-attribute.html"
-hidden = ("bare", "empty", "keyword", "mixed-case", "false-value", "invalid", "until-found",
+hidden = ("bare", "empty", "keyword", "mixed-case", "false-value", "invalid",
           "parent", "child", "generated", "first", "second", "disabled")
 shown = ("visible", "sheet-override", "inline-override")
-ids = (*hidden, *shown, "embedded", "embed-sized", "tabs", "first-panel", "second-panel", "after")
+ids = (*hidden, *shown, "until-found", "embedded", "embed-sized", "tabs", "first-panel", "second-panel", "after")
 actions = ("second", "first", "disabled")
 env = dict(os.environ, QT_QPA_PLATFORM="offscreen", QT_SCALE_FACTOR="1",
            QT_SCREEN_SCALE_FACTORS="1", QT_FONT_DPI="96")
@@ -43,6 +43,8 @@ with tempfile.TemporaryDirectory(prefix="wisp-hidden-attribute-") as tmp:
 
         for key in hidden:
             assert not elements[key]["boxes"], f"Step {index}: {key} must have no layout box"
+        assert elements["until-found"]["boxes"][0]["contents_skipped"], index
+        assert rect("until-found")["height"] == 0, index
         for key in shown:
             box = rect(key)
             assert (box["width"], box["height"]) == (120, 20), (index, key, box)
