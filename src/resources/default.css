@@ -12,6 +12,19 @@ head {
 	display: none;
 }
 
+/* HTML hidden is a UA default which author CSS may override.
+ * until-found uses the legacy hidden fallback until ancestor revealing is supported. */
+[hidden]:not(embed) {
+	display: none;
+}
+
+/* HTML's legacy embed exception retains a zero-sized replaced box. */
+embed[hidden] {
+	display: inline;
+	width: 0;
+	height: 0;
+}
+
 body {
 	display: block;
 	margin: 0;

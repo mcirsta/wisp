@@ -1,0 +1,43 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>HTML hidden defaults and native label activation</title>
+<style>
+  body { margin: 0; font: 16px/20px sans-serif; }
+  .shown { display: block; width: 120px; height: 20px; }
+  .generated::before { content: "Hidden generated text"; }
+  #tabs { width: 300px; }
+  label { display: block; height: 20px; }
+  #first-panel { height: 30px; }
+  #second-panel { height: 50px; }
+  #first:checked ~ #first-panel, #second:checked ~ #second-panel { display: block; }
+  #after { height: 10px; }
+</style>
+<div hidden id="bare">Hidden</div>
+<div hidden="" id="empty">Hidden</div>
+<div hidden="hidden" id="keyword">Hidden</div>
+<div HIDDEN="HiDdEn" id="mixed-case">Hidden</div>
+<div hidden="false" id="false-value">An invalid value still means hidden</div>
+<div hidden="other" id="invalid">Hidden</div>
+<!-- Legacy fallback until content-visibility and ancestor revealing are supported. -->
+<div hidden="until-found" id="until-found">Hidden</div>
+<div hidden id="parent"><div class="shown" id="child">Cannot override a hidden ancestor</div></div>
+<div hidden class="generated" id="generated">Hidden</div>
+<div class="shown" id="visible">No hidden attribute</div>
+<div hidden class="shown" id="sheet-override">Author stylesheet override</div>
+<div hidden id="inline-override" style="display:block;width:120px;height:20px">Inline override</div>
+<!-- HTML gives embed[hidden] a zero-sized box instead of display:none. -->
+<div><embed hidden id="embedded"
+  type="image/gif" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"></div>
+<div><embed hidden id="embed-sized" width="40" height="30"
+  type="image/gif" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"></div>
+<div id="tabs">
+  <input hidden type="radio" name="tabs" id="first" checked>
+  <label for="first">First</label>
+  <input hidden type="radio" name="tabs" id="second">
+  <label for="second">Second</label>
+  <div hidden id="first-panel">First panel</div>
+  <div hidden id="second-panel">Second panel</div>
+</div>
+<div id="after"></div>
+<input hidden disabled type="checkbox" id="disabled">
+<label for="disabled">Disabled control</label>
