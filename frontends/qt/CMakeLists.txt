@@ -217,6 +217,9 @@ if(WISP_QT_CAPTURE)
         add_test(NAME qt_absolute_sizing
             COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_absolute_sizing.py $<TARGET_FILE:wisp-qt>)
         set_tests_properties(qt_absolute_sizing PROPERTIES TIMEOUT 30)
+        add_test(NAME qt_positioned_stacking
+            COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_positioned_stacking.py $<TARGET_FILE:wisp-qt>)
+        set_tests_properties(qt_positioned_stacking PROPERTIES TIMEOUT 30)
         add_test(NAME qt_absolute_images
             COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_absolute_images.py $<TARGET_FILE:wisp-qt>)
         set_tests_properties(qt_absolute_images PROPERTIES TIMEOUT 30)

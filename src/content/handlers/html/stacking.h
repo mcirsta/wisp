@@ -61,6 +61,10 @@ bool box_creates_stacking_context(const struct box *box);
  */
 int32_t box_get_z_index(const struct box *box);
 
+/** Paint level, including positioned auto boxes at level zero. Unlike
+ * box_get_z_index(), this does not imply an isolated stacking context. */
+int32_t box_get_paint_z_index(const struct box *box);
+
 /**
  * Compare two boxes by z-index for sorting.
  *
@@ -126,12 +130,11 @@ void stacking_context_sort(struct stacking_context *ctx);
 void stacking_context_fini(struct stacking_context *ctx);
 
 /**
- * Recursively collect positioned elements with explicit z-index from subtree.
+ * Collect the positioned paint participants of one real stacking context.
  *
- * This finds all descendants with z-index != auto and adds them to the
- * appropriate stacking context based on z-index sign (negative or positive).
- * It stops recursion when it finds a positioned element (which will be
- * rendered separately with its own subtree).
+ * Positioned auto boxes enter the zero-level list, but their positioned
+ * descendants still participate in the surrounding context. Only a real
+ * stacking context stops collection into its subtree.
  *
  * \param negative_ctx  Stacking context for z-index < 0 elements
  * \param positive_ctx  Stacking context for z-index >= 0 elements
@@ -143,11 +146,11 @@ void stacking_context_fini(struct stacking_context *ctx);
 bool stacking_context_collect_subtree(struct stacking_context *negative_ctx, struct stacking_context *positive_ctx,
     struct box *box, int x_parent, int y_parent, const struct stacking_coordinates *coordinates);
 
-/** Whether a paints above b in distinct stacking branches. Equal levels retain
- * interaction traversal order, including deepest descendants within a branch. */
+/** Whether a paints above b in distinct stacking branches. Positioned ties use
+ * structural tree order; ancestor/child ties prefer the deepest hit. */
 bool stacking_box_above(const struct box *a, const struct box *b);
 
-/** Floats inside an intervening stacking context paint in their structural
+/** Floats inside an intervening positioned paint group paint in their structural
  * subtree, despite retaining the outer formatting context's layout origin. */
 bool stacking_float_is_structural(const struct box *box);
 void stacking_float_parent_coords(struct box *box, int *x, int *y);

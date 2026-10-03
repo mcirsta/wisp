@@ -28,8 +28,133 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <wisp/content/handlers/html/box.h>
 
 #include "content/handlers/html/stacking.h"
+
+css_computed_style *stacking_test_style(uint8_t position, bool automatic, int32_t z);
+
+START_TEST(stacking_auto_position_test)
+{
+    static const uint8_t positions[] = {CSS_POSITION_STATIC, CSS_POSITION_RELATIVE, CSS_POSITION_ABSOLUTE,
+        CSS_POSITION_FIXED, CSS_POSITION_STICKY};
+    struct box root = {0};
+    struct box box = {.type = BOX_BLOCK, .parent = &root,
+        .style = stacking_test_style(positions[_i], true, 0)};
+    ck_assert_ptr_nonnull(box.style);
+    ck_assert_int_eq(box_creates_stacking_context(&box), _i >= 3);
+    ck_assert_int_eq(box_get_paint_z_index(&box), _i == 0 ? Z_INDEX_AUTO : 0);
+    css_computed_style_destroy(box.style);
+}
+END_TEST
+
+START_TEST(stacking_auto_collection_test)
+{
+    struct box root = {0};
+    struct box outer = {.type = BOX_BLOCK, .parent = &root, .x = 3, .y = 4,
+        .style = stacking_test_style(CSS_POSITION_ABSOLUTE, _i == 0, 0)};
+    struct box high = {.type = BOX_BLOCK, .parent = &outer,
+        .style = stacking_test_style(CSS_POSITION_ABSOLUTE, false, 2)};
+    struct box low = {.type = BOX_BLOCK, .parent = &outer,
+        .style = stacking_test_style(CSS_POSITION_ABSOLUTE, false, -2)};
+    struct box automatic = {.type = BOX_BLOCK, .parent = &outer,
+        .style = stacking_test_style(CSS_POSITION_RELATIVE, true, 0)};
+    struct box isolated = {.type = BOX_BLOCK, .parent = &outer,
+        .style = stacking_test_style(CSS_POSITION_RELATIVE, false, 0)};
+    struct box inner = {.type = BOX_BLOCK, .parent = &isolated,
+        .style = stacking_test_style(CSS_POSITION_ABSOLUTE, false, 99)};
+    outer.children = &high;
+    high.next = &low;
+    low.next = &automatic;
+    automatic.next = &isolated;
+    isolated.children = &inner;
+    struct stacking_context negative, positive;
+    struct stacking_coordinates coords = {0};
+    stacking_context_init(&negative);
+    stacking_context_init(&positive);
+    ck_assert(stacking_context_collect_subtree(&negative, &positive, &outer, 10, 20, &coords));
+    ck_assert_int_eq(negative.count, _i == 0 ? 1 : 0);
+    ck_assert_int_eq(positive.count, _i == 0 ? 4 : 1);
+    stacking_context_sort(&positive);
+    ck_assert_ptr_eq(positive.entries[0].box, &outer);
+    if (_i == 0) {
+        ck_assert_ptr_eq(negative.entries[0].box, &low);
+        ck_assert_ptr_eq(positive.entries[1].box, &automatic);
+        ck_assert_ptr_eq(positive.entries[2].box, &isolated);
+        ck_assert_ptr_eq(positive.entries[3].box, &high);
+        ck_assert_int_eq(positive.entries[3].x_parent, 13);
+        ck_assert_int_eq(positive.entries[3].y_parent, 24);
+    }
+    stacking_context_fini(&negative);
+    stacking_context_fini(&positive);
+    css_computed_style_destroy(inner.style);
+    css_computed_style_destroy(isolated.style);
+    css_computed_style_destroy(automatic.style);
+    css_computed_style_destroy(low.style);
+    css_computed_style_destroy(high.style);
+    css_computed_style_destroy(outer.style);
+}
+END_TEST
+
+START_TEST(stacking_auto_hit_order_test)
+{
+    struct box root = {0};
+    struct box automatic = {.type = BOX_BLOCK, .parent = &root,
+        .style = stacking_test_style(CSS_POSITION_ABSOLUTE, _i == 0, 0)};
+    struct box text = {.type = BOX_TEXT, .parent = &automatic};
+    struct box flow = {.type = BOX_BLOCK, .parent = &root};
+    struct box high = {.type = BOX_BLOCK, .parent = &automatic,
+        .style = stacking_test_style(CSS_POSITION_ABSOLUTE, false, 2)};
+    struct box sibling = {.type = BOX_BLOCK, .parent = &root,
+        .style = stacking_test_style(CSS_POSITION_ABSOLUTE, false, 1)};
+    struct box low = {.type = BOX_BLOCK, .parent = &automatic,
+        .style = stacking_test_style(CSS_POSITION_ABSOLUTE, false, -1)};
+    ck_assert(stacking_box_above(&text, &flow));
+    ck_assert(!stacking_box_above(&flow, &text));
+    ck_assert_int_eq(stacking_box_above(&high, &sibling), _i == 0);
+    ck_assert_int_eq(stacking_box_above(&sibling, &high), _i != 0);
+    ck_assert_int_eq(stacking_box_above(&automatic, &low), _i == 0);
+    ck_assert_int_eq(stacking_box_above(&low, &automatic), _i != 0);
+    ck_assert(!stacking_box_above(&automatic, &automatic));
+    css_computed_style_destroy(automatic.style);
+    css_computed_style_destroy(high.style);
+    css_computed_style_destroy(sibling.style);
+    css_computed_style_destroy(low.style);
+}
+END_TEST
+
+START_TEST(stacking_float_tree_order_test)
+{
+    struct box root = {.type = BOX_BLOCK};
+    struct box wrapper = {.type = BOX_FLOAT_LEFT, .parent = &root, .float_container = &root};
+    struct box positioned = {.type = BOX_BLOCK, .parent = &wrapper,
+        .style = stacking_test_style(CSS_POSITION_RELATIVE, true, 0)};
+    struct box sibling = {.type = BOX_BLOCK, .parent = &root,
+        .style = stacking_test_style(CSS_POSITION_RELATIVE, true, 0)};
+    wrapper.children = &positioned;
+    root.float_children = &wrapper;
+    root.children = _i == 0 ? &wrapper : &sibling;
+    if (_i == 0)
+        wrapper.next = &sibling;
+    else
+        sibling.next = &wrapper;
+    ck_assert_int_eq(stacking_box_above(&positioned, &sibling), _i != 0);
+    ck_assert_int_eq(stacking_box_above(&sibling, &positioned), _i == 0);
+    struct stacking_context negative, positive;
+    struct stacking_coordinates coords = {0};
+    stacking_context_init(&negative);
+    stacking_context_init(&positive);
+    ck_assert(stacking_context_collect_subtree(&negative, &positive, &root, 0, 0, &coords));
+    ck_assert_int_eq(negative.count, 0);
+    ck_assert_int_eq(positive.count, 2);
+    stacking_context_sort(&positive);
+    ck_assert_ptr_eq(positive.entries[_i].box, &positioned);
+    stacking_context_fini(&negative);
+    stacking_context_fini(&positive);
+    css_computed_style_destroy(positioned.style);
+    css_computed_style_destroy(sibling.style);
+}
+END_TEST
 
 /**
  * Test stacking context initialization
@@ -287,6 +412,10 @@ static TCase *stacking_context_case_create(void)
     tcase_add_test(tc, stacking_context_sort_single_test);
     tcase_add_test(tc, stacking_context_fini_test);
     tcase_add_test(tc, stacking_context_negative_zindex_test);
+    tcase_add_loop_test(tc, stacking_auto_position_test, 0, 5);
+    tcase_add_loop_test(tc, stacking_auto_collection_test, 0, 2);
+    tcase_add_loop_test(tc, stacking_auto_hit_order_test, 0, 2);
+    tcase_add_loop_test(tc, stacking_float_tree_order_test, 0, 2);
 
     return tc;
 }

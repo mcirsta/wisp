@@ -1652,75 +1652,6 @@ static bool html_redraw_box(const html_content *html, struct box *box, int x_par
     const struct rect *paint_clip, const struct redraw_context *ctx);
 
 /**
- * Render children with negative z-index before parent's background.
- *
- * This function collects children with negative z-index and renders them
- * BEFORE the parent's background is drawn, per CSS stacking order spec.
- *
- * \param  html      html content
- * \param  box       box to render negative z-index children of
- * \param  x_parent  coordinate of parent box
- * \param  y_parent  coordinate of parent box
- * \param  clip      clip rectangle
- * \param  scale     scale for redraw
- * \param  current_background_color  background colour
- * \param  data      redraw data
- * \param  paint_clip Immutable paint-pass boundary, including the document viewport
- * \param  ctx       redraw context
- * \return true if successful, false otherwise
- */
-static bool html_redraw_negative_zindex_children(const html_content *html, struct box *box, int x_parent, int y_parent,
-    const struct rect *clip, float scale, colour current_background_color, const struct content_redraw_data *data,
-    const struct rect *paint_clip, const struct redraw_context *ctx)
-{
-    struct box *c;
-    int x_offset, y_offset;
-    struct stacking_context negative_zindex;
-    size_t i;
-
-    /* Only process if this box doesn't create a stacking context itself */
-    if (box_creates_stacking_context(box)) {
-        return true; /* Stacking context isolates children */
-    }
-
-    x_offset = x_parent + box->x - scrollbar_get_offset(box->scroll_x);
-    y_offset = y_parent + box->y - scrollbar_get_offset(box->scroll_y);
-
-    stacking_context_init(&negative_zindex);
-
-    /* Collect only negative z-index children */
-    for (c = box->children; c; c = c->next) {
-        if ((c->type == BOX_FLOAT_LEFT || c->type == BOX_FLOAT_RIGHT) && !stacking_float_is_structural(c)) {
-            continue;
-        }
-        int32_t z = box_get_z_index(c);
-        if (z != Z_INDEX_AUTO && z < 0) {
-            if (!stacking_context_add(&negative_zindex, c, z, x_offset, y_offset)) {
-                stacking_context_fini(&negative_zindex);
-                return true; /* Fallback: let normal path handle
-                              */
-            }
-        }
-    }
-
-    /* Render negative z-index children sorted */
-    if (negative_zindex.count > 0) {
-        stacking_context_sort(&negative_zindex);
-        for (i = 0; i < negative_zindex.count; i++) {
-            if (!html_redraw_box(html, negative_zindex.entries[i].box, negative_zindex.entries[i].x_parent,
-                    negative_zindex.entries[i].y_parent, clip, scale, current_background_color, data, paint_clip,
-                    ctx)) {
-                stacking_context_fini(&negative_zindex);
-                return false;
-            }
-        }
-    }
-
-    stacking_context_fini(&negative_zindex);
-    return true;
-}
-
-/**
  * Draw the various children of a box.
  *
  * \param  html	     html content
@@ -1768,48 +1699,21 @@ static bool html_redraw_box_children(const html_content *html, struct box *box, 
      * 7. Positive z-index stacking contexts (sorted)
      */
 
-    /* Pass 1: Collect positioned descendants, split by z-index sign */
-    for (c = box->children; c; c = c->next) {
-        if ((c->type == BOX_FLOAT_LEFT || c->type == BOX_FLOAT_RIGHT) && !stacking_float_is_structural(c)) {
-            continue;
-        }
-        int32_t z = box_get_z_index(c);
-        if (z != Z_INDEX_AUTO) {
-            /* Collect into appropriate list based on z-index sign
-             */
-            struct stacking_context *ctx_ptr = (z < 0) ? &negative_zindex : &positive_zindex;
-            if (!stacking_context_add(ctx_ptr, c, z, x_offset, y_offset)) {
-                goto fallback;
-            }
-        } else {
-            /* Recurse into children to find positioned descendants
-             */
+    /* Each real context collects once. Ordinary and positioned-auto boxes
+     * paint their in-flow contents here; their positioned descendants are
+     * already owned by the surrounding context's deferred lists. */
+    bool owns_stacking = box->parent == NULL || box_creates_stacking_context(box);
+    if (owns_stacking) {
+        for (c = box->children; c; c = c->next) {
             if (!stacking_context_collect_subtree(
-                    &negative_zindex, &positive_zindex, c, x_offset, y_offset, &coordinates)) {
-                goto fallback;
-            }
-        }
-    }
-    for (c = box->float_children; c; c = c->next_float) {
-        if (stacking_float_is_structural(c))
-            continue;
-        int32_t z = box_get_z_index(c);
-        if (z != Z_INDEX_AUTO) {
-            struct stacking_context *ctx_ptr = (z < 0) ? &negative_zindex : &positive_zindex;
-            if (!stacking_context_add(ctx_ptr, c, z, x_offset, y_offset)) {
-                goto fallback;
-            }
-        } else {
-            if (!stacking_context_collect_subtree(
-                    &negative_zindex, &positive_zindex, c, x_offset, y_offset, &coordinates)) {
-                goto fallback;
-            }
+                    &negative_zindex, &positive_zindex, c, x_offset, y_offset, &coordinates))
+                goto collection_failed;
         }
     }
 
-    /* Negative children of a stacking context belong above its own background.
-     * Non-context ancestors use the earlier negative-child pass. */
-    if (box_creates_stacking_context(box) && negative_zindex.count > 0) {
+    /* Negative contexts paint above this context's background, below its
+     * ordinary descendants (CSS 2.2 Appendix E.2). */
+    if (negative_zindex.count > 0) {
         stacking_context_sort(&negative_zindex);
         for (i = 0; i < negative_zindex.count; i++) {
             if (!html_redraw_box(html, negative_zindex.entries[i].box, negative_zindex.entries[i].x_parent,
@@ -1821,12 +1725,12 @@ static bool html_redraw_box_children(const html_content *html, struct box *box, 
         }
     }
 
-    /* Pass 2: Render in-flow children (z-index: auto) */
+    /* Paint ordinary in-flow children. Positioned auto boxes are deferred. */
     for (c = box->children; c; c = c->next) {
         if ((c->type == BOX_FLOAT_LEFT || c->type == BOX_FLOAT_RIGHT) && !stacking_float_is_structural(c)) {
             continue;
         }
-        int32_t z = box_get_z_index(c);
+        int32_t z = box_get_paint_z_index(c);
         if (z != Z_INDEX_AUTO) {
             continue; /* Already in deferred list */
         }
@@ -1841,7 +1745,7 @@ static bool html_redraw_box_children(const html_content *html, struct box *box, 
     for (c = box->float_children; c; c = c->next_float) {
         if (stacking_float_is_structural(c))
             continue;
-        int32_t z = box_get_z_index(c);
+        int32_t z = box_get_paint_z_index(c);
         if (z != Z_INDEX_AUTO) {
             continue; /* Already in deferred list */
         }
@@ -1867,27 +1771,9 @@ static bool html_redraw_box_children(const html_content *html, struct box *box, 
     }
     goto cleanup;
 
-fallback:
-    /* Allocation failed - render in document order as fallback */
-    stacking_context_fini(&negative_zindex);
-    stacking_context_fini(&positive_zindex);
-    for (c = box->children; c; c = c->next) {
-        if (c->type != BOX_FLOAT_LEFT && c->type != BOX_FLOAT_RIGHT) {
-            if (!html_redraw_box(
-                    html, c, x_offset, y_offset, clip, scale, current_background_color, data, paint_clip, ctx)) {
-                return false;
-            }
-        }
-    }
-    for (c = box->float_children; c; c = c->next_float) {
-        if (stacking_float_is_structural(c))
-            continue;
-        if (!html_redraw_box(
-                html, c, x_offset, y_offset, clip, scale, current_background_color, data, paint_clip, ctx)) {
-            return false;
-        }
-    }
-    return true;
+collection_failed:
+    /* Do not paint a partial deferred list or silently omit its descendants. */
+    render_ok = false;
 
 cleanup:
     stacking_context_fini(&negative_zindex);
@@ -2191,21 +2077,20 @@ static bool html_redraw_box(const html_content *html, struct box *box, int x_par
     bool has_css_clip = box->style && css_computed_position(box->style) == CSS_POSITION_ABSOLUTE &&
         css_computed_clip(box->style, &css_rect) == CSS_CLIP_RECT;
 
-    /* Stacking collection can bypass an intermediate overflow container. Sticky
-     * contexts must retain its real clip, including positioned descendants. */
-    struct rect sticky_clip;
-    if (box->sticky || ((box->flags & HAS_STICKY_ANCESTOR) && box_creates_stacking_context(box))) {
+    /* Deferred paint must retain clips that the collection walk bypassed. */
+    struct rect ancestor_clip;
+    if (box_get_paint_z_index(box) != Z_INDEX_AUTO) {
         const int scroll[] = {
             data ? data->viewport_x / scale - data->x : 0, data ? data->viewport_y / scale - data->y : 0};
         int ox = data ? data->x : 0, oy = data ? data->y : 0;
-        sticky_clip = (struct rect){floorf(clip->x0 / scale) - ox, floorf(clip->y0 / scale) - oy,
+        ancestor_clip = (struct rect){floorf(clip->x0 / scale) - ox, floorf(clip->y0 / scale) - oy,
             ceilf(clip->x1 / scale) - ox, ceilf(clip->y1 / scale) - oy};
-        if (!box_sticky_clip(box, scroll, &sticky_clip))
+        if (!box_clip_to_ancestors(html, box, scroll, &ancestor_clip))
             return true;
-        sticky_clip = (struct rect){fmaxf(clip->x0, (sticky_clip.x0 + ox) * scale),
-            fmaxf(clip->y0, (sticky_clip.y0 + oy) * scale), fminf(clip->x1, (sticky_clip.x1 + ox) * scale),
-            fminf(clip->y1, (sticky_clip.y1 + oy) * scale)};
-        clip = &sticky_clip;
+        ancestor_clip = (struct rect){fmaxf(clip->x0, (ancestor_clip.x0 + ox) * scale),
+            fmaxf(clip->y0, (ancestor_clip.y0 + oy) * scale), fminf(clip->x1, (ancestor_clip.x1 + ox) * scale),
+            fminf(clip->y1, (ancestor_clip.y1 + oy) * scale)};
+        clip = &ancestor_clip;
     }
 
     /* Calculate the painting bounds. Positioning does not clip visible
@@ -2291,9 +2176,7 @@ static bool html_redraw_box(const html_content *html, struct box *box, int x_par
         if (box->flags & HAS_FIXED_DESCENDANT) {
             int px = box->abs_containing_block ? x / scale - box->x : x_parent;
             int py = box->abs_containing_block ? y / scale - box->y : y_parent;
-            return html_redraw_negative_zindex_children(
-                       html, box, px, py, clip, scale, current_background_color, data, paint_clip, ctx) &&
-                html_redraw_box_children(
+            return html_redraw_box_children(
                     html, box, px, py, clip, scale, current_background_color, data, paint_clip, ctx);
         }
         return true; /* Early return BEFORE push_transform, no cleanup needed */
@@ -2395,19 +2278,6 @@ static bool html_redraw_box(const html_content *html, struct box *box, int x_par
         /* clip box is fine, clip to it */
         r = *clip;
         if (ctx->plot->clip(ctx, &r) != NSERROR_OK) {
-            {
-                result = false;
-                goto cleanup;
-            }
-        }
-    }
-
-    /* CSS 2.1: Render children with negative z-index BEFORE parent's
-     * background. This only applies if this box doesn't create its own
-     * stacking context. */
-    if (!html_redraw_negative_zindex_children(
-            html, box, x_parent, y_parent, &r, scale, current_background_color, data, paint_clip, ctx)) {
-        {
             {
                 result = false;
                 goto cleanup;

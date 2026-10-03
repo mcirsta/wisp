@@ -3,21 +3,6 @@
 Only unresolved work belongs here. Completed changes and validation history are
 in Git; the regression fixtures remain in the test suite.
 
-## Positioned content loses clicks to later blocks
-
-An absolutely positioned label with `z-index:auto` fails to toggle its checkbox
-where a later normal-flow block overlaps it. Chromium identifies the label at
-the same point; Wisp includes the label in its hit list but the native click
-does not activate it. Setting `z-index:1` makes the click work. The failure
-occurs with ordinary `display:block` as well as `flow-root`, with or without
-label text.
-
-Review hit-testing order against painting/stacking order, including positioned
-descendants inside inline containers. Fix the shared ordering rather than
-special-casing labels. Reproductions and native click captures are in
-`out/render-captures/flow-root-2026-10-03/label-probe/`; the Chromium comparison
-is in the adjacent `label-comparison/` directory (point `241,15`).
-
 ## Fontconfig shutdown allocations
 
 Five font captures report 1,895 bytes in 43 allocations rooted in

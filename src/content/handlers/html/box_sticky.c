@@ -418,11 +418,24 @@ bool box_sticky_clip(const struct box *box, const int scroll[2], struct rect *cl
         sticky = box_sticky_get(p);
     if (!sticky)
         return true;
+    return box_clip_to_ancestors(sticky->owner, box, scroll, clip);
+}
+
+bool box_clip_to_ancestors(const struct html_content *html, const struct box *box,
+    const int scroll[2], struct rect *clip)
+{
+    const struct box *overflow_from = NULL;
     for (const struct box *p = box; p && p->parent; p = p->parent) {
         if (p->abs_containing_block && (p->abs_containing_block->flags & IS_VIEWPORT))
             break;
+        /* An absolute descendant escapes overflow between itself and its
+         * containing block (CSS 2.2 11.1.1), but not that block's own clip. */
+        if (!overflow_from && p->abs_containing_block)
+            overflow_from = p->abs_containing_block;
         struct box *ancestor = p->parent;
-        bool overflow = scroll_container(sticky->owner, ancestor);
+        if (ancestor == overflow_from)
+            overflow_from = NULL;
+        bool overflow = !overflow_from && scroll_container(html, ancestor);
         css_computed_clip_rect css_clip;
         bool explicit_clip = ancestor->style && css_computed_position(ancestor->style) == CSS_POSITION_ABSOLUTE &&
             css_computed_clip(ancestor->style, &css_clip) == CSS_CLIP_RECT;
@@ -449,7 +462,7 @@ bool box_sticky_clip(const struct box *box, const int scroll[2], struct rect *cl
                     ancestor->border[RIGHT].width,
                 y + ancestor->padding[TOP] + ancestor->height + ancestor->padding[BOTTOM] +
                     ancestor->border[BOTTOM].width};
-            const css_unit_ctx *units = &sticky->owner->unit_len_ctx;
+            const css_unit_ctx *units = &html->unit_len_ctx;
             if (!css_clip.left_auto)
                 r.x0 = x - ancestor->border[LEFT].width +
                     FIXTOINT(css_unit_len2device_px(ancestor->style, units, css_clip.left, css_clip.lunit));

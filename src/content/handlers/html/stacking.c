@@ -65,6 +65,15 @@ int32_t box_get_z_index(const struct box *box)
         ((pos == CSS_POSITION_FIXED || pos == CSS_POSITION_STICKY || transformed) ? 0 : Z_INDEX_AUTO);
 }
 
+int32_t box_get_paint_z_index(const struct box *box)
+{
+    int32_t z = box_get_z_index(box);
+    if (z == Z_INDEX_AUTO && box && box->style &&
+        css_computed_position(box->style) != CSS_POSITION_STATIC)
+        return 0;
+    return z;
+}
+
 /* See stacking.h for documentation */
 int stacking_compare_z_index(const void *a, const void *b)
 {
@@ -164,9 +173,7 @@ bool stacking_context_collect_subtree(struct stacking_context *negative_ctx, str
         return true;
     }
 
-    if (box->type == BOX_FLOAT_LEFT || box->type == BOX_FLOAT_RIGHT)
-        stacking_float_parent_coords(box, &x_parent, &y_parent);
-    if (box->abs_containing_block) {
+    if (box->abs_containing_block || box->type == BOX_FLOAT_LEFT || box->type == BOX_FLOAT_RIGHT) {
         int x, y;
         box_coords_at_scroll(box, &x, &y, coordinates->scroll_x, coordinates->scroll_y);
         x_parent = x + coordinates->origin_x - box->x;
@@ -180,33 +187,21 @@ bool stacking_context_collect_subtree(struct stacking_context *negative_ctx, str
     if (box->scroll_y)
         y_offset -= scrollbar_get_offset(box->scroll_y);
 
-    /* Check if this box has explicit z-index */
-    int32_t z = box_get_z_index(box);
+    int32_t z = box_get_paint_z_index(box);
     if (z != Z_INDEX_AUTO) {
         /* Collect into appropriate list based on z-index sign */
         struct stacking_context *ctx = (z < 0) ? negative_ctx : positive_ctx;
         if (!stacking_context_add(ctx, box, z, x_parent, y_parent)) {
             return false; /* Allocation failed */
         }
-        /* Don't recurse into this subtree - it will be rendered
-         * separately when we render this deferred element */
-        return true;
+        /* Auto positioning defers paint without isolating descendants. */
+        if (box_creates_stacking_context(box))
+            return true;
     }
 
-    /* Recurse into children to find positioned descendants */
+    /* Collect in structural tree order, including floats. Their separate
+     * formatting-context list is a layout/paint index, not document order. */
     for (c = box->children; c; c = c->next) {
-        if ((c->type == BOX_FLOAT_LEFT || c->type == BOX_FLOAT_RIGHT) && !stacking_float_is_structural(c)) {
-            continue; /* Handle floats separately */
-        }
-        if (!stacking_context_collect_subtree(negative_ctx, positive_ctx, c, x_offset, y_offset, coordinates)) {
-            return false;
-        }
-    }
-
-    /* Also check float children */
-    for (c = box->float_children; c; c = c->next_float) {
-        if (stacking_float_is_structural(c))
-            continue;
         if (!stacking_context_collect_subtree(negative_ctx, positive_ctx, c, x_offset, y_offset, coordinates)) {
             return false;
         }
@@ -220,7 +215,7 @@ bool stacking_float_is_structural(const struct box *box)
     if (box->type != BOX_FLOAT_LEFT && box->type != BOX_FLOAT_RIGHT)
         return false;
     for (const struct box *p = box->parent; p && p != box->float_container; p = p->parent)
-        if (box_creates_stacking_context(p))
+        if (box_get_paint_z_index(p) != Z_INDEX_AUTO)
             return true;
     return false;
 }
@@ -236,9 +231,8 @@ void stacking_float_parent_coords(struct box *box, int *x, int *y)
     *y += by - py - box->y;
 }
 
-/* The walker visits structural order. Compare the outermost stacking contexts
- * below the common ancestor so a transparent radio cannot steal a hit from a
- * label (or its text) painted above it. Equal levels keep the existing order. */
+/* Compare the outermost stacking contexts below the common ancestor, then
+ * paint phase and tree order. The hit walker's float order is not paint order. */
 bool stacking_box_above(const struct box *a, const struct box *b)
 {
     if (a == NULL || b == NULL)
@@ -261,6 +255,14 @@ bool stacking_box_above(const struct box *a, const struct box *b)
         ac = ac->parent;
         bc = bc->parent;
     }
+    /* A real context's background is below even its negative children. An
+     * auto-positioned ancestor does not isolate those children this way. */
+    if (ac && (!ac->parent || box_creates_stacking_context(ac))) {
+        if (a == ac)
+            return false;
+        if (b == ac)
+            return true;
+    }
     int32_t az = 0, bz = 0;
     for (const struct box *p = a; p != ac; p = p->parent) {
         int32_t z = box_get_z_index(p);
@@ -278,16 +280,31 @@ bool stacking_box_above(const struct box *a, const struct box *b)
      * The interaction walker visits floats first, so equal z alone is not enough. */
     int ap = 0, bp = 0;
     for (const struct box *p = a; p != ac; p = p->parent) {
-        if (box_get_z_index(p) != Z_INDEX_AUTO)
+        if (box_get_paint_z_index(p) != Z_INDEX_AUTO)
             ap = 2;
         else if (ap == 0 && (p->type == BOX_FLOAT_LEFT || p->type == BOX_FLOAT_RIGHT))
             ap = 1;
     }
     for (const struct box *p = b; p != ac; p = p->parent) {
-        if (box_get_z_index(p) != Z_INDEX_AUTO)
+        if (box_get_paint_z_index(p) != Z_INDEX_AUTO)
             bp = 2;
         else if (bp == 0 && (p->type == BOX_FLOAT_LEFT || p->type == BOX_FLOAT_RIGHT))
             bp = 1;
     }
-    return ap > bp;
+    if (ap != bp)
+        return ap > bp;
+    /* Equal positioned levels use tree order, even when the hit walker visits
+     * a later float before its earlier normal-flow siblings. Ancestor/child
+     * ties still prefer the deepest hit. */
+    if (ap == 2 && ac && a != ac && b != ac) {
+        while (a->parent != ac)
+            a = a->parent;
+        while (b->parent != ac)
+            b = b->parent;
+        for (const struct box *p = a->next; p; p = p->next)
+            if (p == b)
+                return false;
+        return true;
+    }
+    return false;
 }

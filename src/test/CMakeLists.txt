@@ -293,7 +293,10 @@ add_wisp_test(svg_text_test
 
 add_wisp_test(stacking_test
   ${CMAKE_SOURCE_DIR}/src/test/stacking_test.c
+  ${CMAKE_SOURCE_DIR}/src/test/stacking_test_style.c
 )
+set_source_files_properties(stacking_test_style.c PROPERTIES INCLUDE_DIRECTORIES
+  "${CMAKE_SOURCE_DIR}/contrib/libcss/src;${CMAKE_BINARY_DIR}/contrib/libcss/src;${CMAKE_BINARY_DIR}/contrib/libcss/src/select;${CMAKE_BINARY_DIR}/contrib/libcss/src/generated")
 target_link_libraries(stacking_test PRIVATE wisp)
 
 add_wisp_test(box_construct_race_test

@@ -67,6 +67,11 @@ void box_sticky_local_offset(const struct box *box, const int scroll[2], int64_t
  * when stacking collection or hit traversal bypasses ordinary ancestry. */
 bool box_sticky_clip(const struct box *box, const int scroll[2], struct rect *clip);
 
+/** Intersect document-space bounds with ancestor overflow/CSS clips. Used by
+ * deferred painting, which can bypass those ancestors' recursive redraw. */
+bool box_clip_to_ancestors(const struct html_content *html, const struct box *box,
+    const int scroll[2], struct rect *clip);
+
 /** Narrow only at the existing integer coordinate boundary. */
 static inline int box_sticky_coordinate(int64_t value)
 {
