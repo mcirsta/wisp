@@ -38,7 +38,7 @@
  * Has to be 4, 8, or 16.
  * Larger increases optimisation of style selection engine but uses more memory.
  */
-#define CSS_BLOOM_SIZE 4
+#define CSS_BLOOM_SIZE 8
 
 
 /* Check valid bloom filter size */
