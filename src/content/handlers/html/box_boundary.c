@@ -119,10 +119,15 @@ static nserror check_box(struct boundary *b, const struct box *box, bool inside,
         return reject(b, "tree_links");
     if (box->next != NULL && (box->next->prev != box || box->next->parent != box->parent))
         return reject(b, "tree_links");
-    if (box->list_marker != NULL &&
-        (box->list_marker->parent != box || box->list_marker->prev != NULL || box->list_marker->next != NULL ||
-            box->list_marker->children != NULL || box->list_marker->list_marker != NULL))
-        return reject(b, "marker_links");
+    if (box->list_marker != NULL) {
+        const struct box *marker = box->list_marker;
+        bool outside = box_has_outside_marker(box);
+        if (marker->prev != NULL || marker->children != NULL || marker->list_marker != NULL ||
+            (outside ? marker->next != NULL :
+                (marker->parent != box->children || !box_is_inside_marker(marker) ||
+                    marker->parent->children != marker)))
+            return reject(b, "marker_links");
+    }
     const struct box *links[] = {box->inline_end, box->float_children, box->next_float, box->float_container};
     for (size_t i = 0; i < sizeof(links) / sizeof(links[0]); i++) {
         if (links[i] != NULL && (fresh ? !in_arena(&b->fresh, links[i]) : in_arena(&b->old, links[i]) != inside))
@@ -170,8 +175,8 @@ static nserror walk_tree(struct boundary *b, const struct box *root, bool fresh,
             return err;
         /* Find the next box, clearing membership when the walk leaves the old
          * subtree. No arena lookup or ancestor search is needed for that state. */
-        if (box->list_marker != NULL || box->children != NULL) {
-            box = box->list_marker != NULL ? box->list_marker : box->children;
+        if (box_has_outside_marker(box) || box->children != NULL) {
+            box = box_has_outside_marker(box) ? box->list_marker : box->children;
             continue;
         }
         while (box != root) {

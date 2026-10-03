@@ -78,6 +78,29 @@ bool html_until_found(dom_node *node)
     return false;
 }
 
+/* Native disclosure behavior is covered by qt_details_search. */
+bool html_is_details(dom_node *node)
+{
+    return false;
+}
+
+bool html_details_open(dom_node *node)
+{
+    ck_abort_msg("Grid fixture has no details elements");
+    return false;
+}
+
+nserror html_details_summary(dom_node *node, dom_node **summary)
+{
+    ck_abort_msg("Grid fixture has no details elements");
+    return NSERROR_INVALID;
+}
+
+const char *messages_get(const char *key)
+{
+    return key;
+}
+
 bool html_content_visibility_applies(const css_computed_style *style, bool replaced)
 {
     return true;

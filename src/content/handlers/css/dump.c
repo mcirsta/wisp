@@ -1161,6 +1161,12 @@ void nscss_dump_computed_style(FILE *stream, const css_computed_style *style)
     /* list-style-type */
     val = css_computed_list_style_type(style);
     switch (val) {
+    case CSS_LIST_STYLE_TYPE_DISCLOSURE_OPEN:
+        fprintf(stream, "list-style-type: disclosure-open ");
+        break;
+    case CSS_LIST_STYLE_TYPE_DISCLOSURE_CLOSED:
+        fprintf(stream, "list-style-type: disclosure-closed ");
+        break;
     case CSS_LIST_STYLE_TYPE_DISC:
         fprintf(stream, "list-style-type: disc ");
         break;

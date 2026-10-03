@@ -637,6 +637,23 @@ static const struct list_counter_style lcs_square = {
     .suffix = " ",
 };
 
+/* Disclosure symbols follow horizontal writing direction. */
+static const symbol_t disclosure_open_symbols[] = {"\xE2\x96\xBE"};
+static const symbol_t disclosure_closed_symbols[] = {"\xE2\x96\xB8"};
+static const symbol_t disclosure_closed_rtl_symbols[] = {"\xE2\x97\x82"};
+static const struct list_counter_style lcs_disclosure_open = {
+    .name = "disclosure-open", .system = calc_cyclic_system,
+    .symbols = disclosure_open_symbols, .items = 1, .suffix = " ",
+};
+static const struct list_counter_style lcs_disclosure_closed = {
+    .name = "disclosure-closed", .system = calc_cyclic_system,
+    .symbols = disclosure_closed_symbols, .items = 1, .suffix = " ",
+};
+static const struct list_counter_style lcs_disclosure_closed_rtl = {
+    .name = "disclosure-closed", .system = calc_cyclic_system,
+    .symbols = disclosure_closed_rtl_symbols, .items = 1, .suffix = " ",
+};
+
 static const symbol_t binary_symbols[] = {"0", "1"};
 static const struct list_counter_style lcs_binary = {
     .name = "binary",
@@ -1063,6 +1080,10 @@ static const struct list_counter_style lcs_korean_hanja_formal = {
 static const struct list_counter_style *counter_style_from_computed_style(const css_computed_style *style)
 {
     switch (get_list_style_type(style)) {
+    case CSS_LIST_STYLE_TYPE_DISCLOSURE_OPEN:
+        return &lcs_disclosure_open;
+    case CSS_LIST_STYLE_TYPE_DISCLOSURE_CLOSED:
+        return get_direction(style) == CSS_DIRECTION_RTL ? &lcs_disclosure_closed_rtl : &lcs_disclosure_closed;
     case CSS_LIST_STYLE_TYPE_DISC:
         return &lcs_disc;
     case CSS_LIST_STYLE_TYPE_CIRCLE:

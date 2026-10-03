@@ -119,7 +119,7 @@ coords_from_range(struct box *box, unsigned start_idx, unsigned end_idx, struct 
     }
 
     /* If box has a list marker */
-    if (box->list_marker) {
+    if (box_has_outside_marker(box)) {
         /* do the marker box before continuing with the rest of the
          * list element */
         res = coords_from_range(box->list_marker, start_idx, end_idx, rdwi, true);
@@ -293,7 +293,7 @@ static nserror selection_copy(struct box *box, const css_unit_ctx *unit_len_ctx,
     }
 
     /* If box has a list marker */
-    if (box->list_marker) {
+    if (box_has_outside_marker(box)) {
         /* do the marker box before continuing with the rest of the
          * list element */
         res = selection_copy(box->list_marker, unit_len_ctx, start_idx, end_idx, selstr, before, first, true);
@@ -388,7 +388,7 @@ static unsigned selection_label_subtree(struct box *box, unsigned idx)
     }
 
     while (child) {
-        if (child->list_marker) {
+        if (box_has_outside_marker(child)) {
             idx = selection_label_subtree(child->list_marker, idx);
         }
 

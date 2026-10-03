@@ -218,6 +218,8 @@ static const char *const dump_keywords_list_style_type[] = {
     [LIST_STYLE_TYPE_LOWER_ALPHA] = "lower-alpha",
     [LIST_STYLE_TYPE_UPPER_ALPHA] = "upper-alpha",
     [LIST_STYLE_TYPE_NONE] = "none",
+    [LIST_STYLE_TYPE_DISCLOSURE_OPEN] = "disclosure-open",
+    [LIST_STYLE_TYPE_DISCLOSURE_CLOSED] = "disclosure-closed",
 };
 
 static const char *const dump_keywords_overflow_x[] = {

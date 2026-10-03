@@ -161,6 +161,10 @@ highlighted text fragments in that box's subtree, not matches or characters.
 Inline text can be flattened into the surrounding inline container; inspect its
 containing block when checking an inline owner's generated content.
 
+Element `state` includes a boolean `open` for `details`, alongside the existing
+`hidden` attribute and form-control state. The native disclosure and search
+checks use it to distinguish revealed contents from merely painted text.
+
 Sticky boxes report a `sticky` object: `prepared` includes the containing block,
 scrolling ancestor (or `viewport: true`) and resolved `x`/`y` axis constraints in
 unscrolled document coordinates. Auto insets are JSON null. `auto` means all four
@@ -580,3 +584,8 @@ rejection of mismatched or failed captures:
 ```sh
 python3 frontends/qt/test_compare_capture.py build/frontends/qt/wisp-qt
 ```
+
+For list items, inspection includes `list_marker` with its text, number, geometry
+and `outside` flag. Inside markers are counted once in the ordinary child tree.
+`qt_disclosure_markers` covers native summary arrows and inside-list layout,
+including wrapping, image markers, resizing, activation and selection.

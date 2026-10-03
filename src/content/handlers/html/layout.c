@@ -857,7 +857,7 @@ static bool layout_minmax_line(struct box *first, int *line_min, int *line_max, 
                 continue;
 
             no_wrap_box = (css_computed_white_space(b->style) == CSS_WHITE_SPACE_NOWRAP ||
-                css_computed_white_space(b->style) == CSS_WHITE_SPACE_PRE);
+                css_computed_white_space(b->style) == CSS_WHITE_SPACE_PRE || box_is_inside_marker(b));
 
             if (b->width == UNKNOWN_WIDTH) {
                 /** \todo handle errors */
@@ -3877,7 +3877,8 @@ static bool layout_line(struct box *first, int *width, int *y, int cx, int cy, s
 
         x = x_previous;
 
-        if (!no_wrap && (split_box->type == BOX_INLINE || split_box->type == BOX_TEXT) && !split_box->object &&
+        if (!no_wrap && !box_is_inside_marker(split_box) &&
+            (split_box->type == BOX_INLINE || split_box->type == BOX_TEXT) && !split_box->object &&
             !(split_box->flags & REPLACE_DIM) && !(split_box->flags & IFRAME) && !split_box->gadget &&
             split_box->text) {
 
@@ -5409,6 +5410,8 @@ static bool layout__list_item_is_numerical(const struct box *b)
     case CSS_LIST_STYLE_TYPE_DISC: /* Fall through. */
     case CSS_LIST_STYLE_TYPE_CIRCLE: /* Fall through. */
     case CSS_LIST_STYLE_TYPE_SQUARE: /* Fall through. */
+    case CSS_LIST_STYLE_TYPE_DISCLOSURE_OPEN: /* Fall through. */
+    case CSS_LIST_STYLE_TYPE_DISCLOSURE_CLOSED: /* Fall through. */
     case CSS_LIST_STYLE_TYPE_NONE:
         return false;
 
@@ -5418,7 +5421,7 @@ static bool layout__list_item_is_numerical(const struct box *b)
 }
 
 /**
- * Layout list markers.
+ * Prepare marker text before intrinsic/line layout, and position outside markers.
  */
 static bool layout_lists(const html_content *content, struct box *box)
 {
@@ -5434,7 +5437,14 @@ static bool layout_lists(const html_content *content, struct box *box)
                 if (marker->text == NULL && !layout__set_numerical_marker_text(child))
                     return false;
             }
-            if (marker->object) {
+            if (!box_has_outside_marker(child)) {
+                marker->type = marker->object || !marker->text ? BOX_INLINE : BOX_TEXT;
+                /* The marker's separator uses the font's space, rather than the
+                 * fixed outside-marker gap. Keep it out of the atomic text. */
+                while (marker->length && marker->text[marker->length - 1] == ' ')
+                    marker->length--;
+                marker->space = marker->object || marker->length ? UNKNOWN_WIDTH : 0;
+            } else if (marker->object) {
                 /* Image content dimensions are in CSS pixels */
                 marker->width = content_get_width(marker->object);
                 marker->height = content_get_height(marker->object);
@@ -5465,8 +5475,10 @@ static bool layout_lists(const html_content *content, struct box *box)
                 marker->width = 0;
                 marker->height = 0;
             }
-            /* Gap between marker and content */
-            marker->x -= 4;
+            /* Gap between outside marker and content. Inside markers use the
+             * normal inline layout path, including their measured separator. */
+            if (box_has_outside_marker(child))
+                marker->x -= 4;
 
             /* Log marker positioning relative to LI */
             NSLOG(wisp, INFO,
@@ -6656,7 +6668,7 @@ static void layout_calculate_descendant_bboxes(const css_unit_ctx *unit_len_ctx,
         layout_update_descendant_bbox(unit_len_ctx, box, child, 0, 0);
     }
 
-    if (box->list_marker) {
+    if (box_has_outside_marker(box)) {
         child = box->list_marker;
         layout_calculate_descendant_bboxes(unit_len_ctx, child);
 
@@ -6863,7 +6875,7 @@ static bool layout_finalize_boxes(html_content *content, struct box *box)
             return false;
     }
 
-    if (box->list_marker) {
+    if (box_has_outside_marker(box)) {
         if (!layout_finalize_boxes(content, box->list_marker))
             return false;
     }
@@ -6963,7 +6975,8 @@ void layout_reset_document(html_content *content)
         layout_reset_box(box);
         if (box->list_marker != NULL) {
             struct box *marker = box->list_marker;
-            layout_reset_box(marker);
+            if (box_has_outside_marker(box))
+                layout_reset_box(marker);
             marker->list_value = 1;
             if (layout__list_item_is_numerical(box)) {
                 /* Numbering can change outside the replaced region. Symbolic
@@ -7002,7 +7015,7 @@ bool layout_document(html_content *content, int width, int height)
         .owner = content,
     };
 
-    if (!layout_minmax_block(doc, font_func, content))
+    if (!layout_lists(content, doc) || !layout_minmax_block(doc, font_func, content))
         goto failed;
 
     layout_block_find_dimensions(&content->unit_len_ctx, width, height, 0, 0, doc);
@@ -7035,7 +7048,7 @@ bool layout_document(html_content *content, int width, int height)
         }
     }
 
-    if (!layout_lists(content, doc) || !layout_position_absolute(doc, doc, 0, 0, content))
+    if (!layout_position_absolute(doc, doc, 0, 0, content))
         goto failed;
     layout_position_relative(&content->unit_len_ctx, doc, doc, 0, 0);
 

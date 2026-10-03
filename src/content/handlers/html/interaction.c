@@ -57,6 +57,7 @@
 #include <wisp/content/handlers/html/interaction.h>
 #include <wisp/content/handlers/html/private.h>
 #include "content/handlers/html/form_state.h"
+#include "content/handlers/html/details.h"
 #include "content/handlers/html/stacking.h"
 #include "content/handlers/html/box_textarea.h"
 #include "content/handlers/html/font.h"
@@ -68,7 +69,9 @@ static dom_node *html_box_event_node(const struct box *box)
 {
     if (box->node != NULL)
         return box->node;
-    if (box->flags & (TEXT_BEFORE | TEXT_AFTER))
+    dom_node_type type;
+    if (box->text_node != NULL && dom_node_get_node_type(box->text_node, &type) == DOM_NO_ERR &&
+        type == DOM_ELEMENT_NODE)
         return box->text_node;
     dom_node *parent = NULL;
     if (box->text_node != NULL)
@@ -1269,7 +1272,11 @@ mouse_action_drag_none(html_content *html, struct browser_window *bw, browser_mo
             fire_generic_dom_event(corestring_dom_input, target, true, false);
             fire_generic_dom_event(corestring_dom_change, target, true, false);
         }
+        if (activate && target == NULL && mas.result.action == ACTION_NONE && mas.gadget.control == NULL)
+            res = html_details_activate(html, clicked);
         dom_node_unref(target);
+        if (res != NSERROR_OK)
+            return res;
     }
 
     /* deferred actions that can cause this browser_window to be destroyed

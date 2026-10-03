@@ -563,3 +563,21 @@
 |  content: counters(section,  / ) counter(item, upper-alpha) attr('title') url('icon.png') no-close-quote !important
 |  display: block
 #reset
+
+#data
+* { list-style: disclosure-closed inside; }
+#errors
+#expected
+| *
+|  list-style-image: none
+|  list-style-position: inside
+|  list-style-type: disclosure-closed
+#reset
+
+#data
+* { list-style-type: disclosure-open; }
+#errors
+#expected
+| *
+|  list-style-type: disclosure-open
+#reset

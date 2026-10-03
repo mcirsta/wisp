@@ -7,6 +7,7 @@
 #include "content/handlers/css/select.h"
 #include "content/handlers/html/content_visibility.h"
 #include "content/handlers/html/restyle.h"
+#include "content/handlers/html/details.h"
 
 css_select_results *html_visibility_style(
     html_content *html, dom_node *node, const css_computed_style *parent, const css_computed_style *root)
@@ -59,6 +60,33 @@ bool html_until_found(dom_node *node)
     return found;
 }
 
+/* Recheck ancestry after an earlier beforematch handler may have moved the
+ * target into a summary, another section, or outside the live document. */
+static nserror reveal_details(html_content *html, dom_node *details, dom_node *target, bool *changed)
+{
+    dom_node *node = dom_node_ref(target);
+    bool hidden = false, connected = false;
+    while (node != NULL) {
+        dom_node *parent = NULL;
+        connected = node == (dom_node *)html->document;
+        dom_exception err = dom_node_get_parent_node(node, &parent);
+        if (parent == details)
+            hidden = html_details_hides_child(details, node);
+        dom_node_unref(node);
+        if (err != DOM_NO_ERR) {
+            dom_node_unref(parent);
+            return NSERROR_DOM;
+        }
+        node = parent;
+    }
+    if (!hidden || !connected)
+        return NSERROR_OK;
+    nserror err = html_details_set_open(details, true);
+    if (err == NSERROR_OK)
+        *changed = true;
+    return err;
+}
+
 /* Hold the ancestor chain while dispatching events. It may be changed by a
  * beforematch listener; never borrow a box across the resulting restyle. */
 nserror html_reveal_ancestors(html_content *html, dom_node *target, bool *changed)
@@ -89,7 +117,8 @@ nserror html_reveal_ancestors(html_content *html, dom_node *target, bool *change
             capacity = next;
         }
         chain[count++] = node;
-        found |= html_until_found(node);
+        dom_node *child = count > 1 ? chain[count - 2] : target;
+        found |= html_until_found(node) || html_details_hides_child(node, child);
         if (dom_node_get_parent_node(node, &node) != DOM_NO_ERR) {
             result = NSERROR_DOM;
             goto done;
@@ -124,6 +153,11 @@ nserror html_reveal_ancestors(html_content *html, dom_node *target, bool *change
             goto done;
     }
     for (size_t i = 0; i < count; i++) {
+        if (html_is_details(chain[i])) {
+            result = reveal_details(html, chain[i], target, changed);
+            if (result != NSERROR_OK)
+                goto done;
+        }
         if (!html_until_found(chain[i]) ||
             !html_content_visibility_applies(styles[i]->styles[CSS_PSEUDO_ELEMENT_NONE], false))
             continue;

@@ -10,6 +10,7 @@
 #include "content/handlers/html/box_construct.h"
 #include "content/handlers/html/content_visibility.h"
 #include "content/handlers/html/search.h"
+#include "content/handlers/html/details.h"
 
 /* Source identity and normalized character range survive destruction of every
  * layout box. This allocation exists only while the find bar holds matches. */
@@ -203,7 +204,7 @@ static nserror search_node(
     bool skipped = css_computed_content_visibility(style) == CSS_CONTENT_VISIBILITY_HIDDEN &&
         html_content_visibility_applies(style, box != NULL && (box->flags & IS_REPLACED));
     nserror error = NSERROR_OK;
-    dom_node *child = NULL;
+    dom_node *child = NULL, *summary = NULL;
     if (css_computed_display(style, false) == CSS_DISPLAY_NONE || (skipped && !html_until_found(node)))
         goto done;
     box_type type_for_children = box != NULL ? box->type : box_construct_type(style, parent_type, parent == NULL);
@@ -214,13 +215,22 @@ static nserror search_node(
         if (error != NSERROR_OK)
             goto done;
     }
+    bool details = html_is_details(node);
+    if (details) {
+        error = html_details_summary(node, &summary);
+        if (error == NSERROR_OK && summary != NULL)
+            error = search_node(walk, summary, style, type_for_children);
+        if (error != NSERROR_OK)
+            goto done;
+    }
     if (dom_node_get_first_child(node, &child) != DOM_NO_ERR) {
         error = NSERROR_DOM;
         goto done;
     }
     while (child != NULL) {
         dom_node *next = NULL;
-        error = search_node(walk, child, style, type_for_children);
+        if (child != summary)
+            error = search_node(walk, child, style, details ? BOX_BLOCK : type_for_children);
         if (error == NSERROR_OK && dom_node_get_next_sibling(child, &next) != DOM_NO_ERR)
             error = NSERROR_DOM;
         dom_node_unref(child);
@@ -232,6 +242,7 @@ static nserror search_node(
         error = search_generated(walk, node, styles->styles[CSS_PSEUDO_ELEMENT_AFTER], TEXT_AFTER);
 done:
     dom_node_unref(child);
+    dom_node_unref(summary);
     if (selected != NULL)
         css_select_results_destroy(selected);
     return error;

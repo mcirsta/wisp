@@ -655,6 +655,12 @@ static void dump_counter(lwc_string *name, uint32_t value, char **ptr)
     value >>= CONTENT_COUNTER_STYLE_SHIFT;
 
     switch (value) {
+    case LIST_STYLE_TYPE_DISCLOSURE_OPEN:
+        *ptr += sprintf(*ptr, ", disclosure-open");
+        break;
+    case LIST_STYLE_TYPE_DISCLOSURE_CLOSED:
+        *ptr += sprintf(*ptr, ", disclosure-closed");
+        break;
     case LIST_STYLE_TYPE_DISC:
         *ptr += sprintf(*ptr, ", disc");
         break;
@@ -712,6 +718,12 @@ static void dump_counters(lwc_string *name, lwc_string *separator, uint32_t valu
     value >>= CONTENT_COUNTERS_STYLE_SHIFT;
 
     switch (value) {
+    case LIST_STYLE_TYPE_DISCLOSURE_OPEN:
+        *ptr += sprintf(*ptr, ", disclosure-open");
+        break;
+    case LIST_STYLE_TYPE_DISCLOSURE_CLOSED:
+        *ptr += sprintf(*ptr, ", disclosure-closed");
+        break;
     case LIST_STYLE_TYPE_DISC:
         *ptr += sprintf(*ptr, ", disc");
         break;

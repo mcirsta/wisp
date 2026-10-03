@@ -72,7 +72,7 @@ static bool scroll_damage(struct html_content *html, struct box *box, const stru
         if (!scroll_damage(html, child, old_viewport, new_viewport, add, pw))
             return false;
     }
-    return !box->list_marker || scroll_damage(html, box->list_marker, old_viewport, new_viewport, add, pw);
+    return !box_has_outside_marker(box) || scroll_damage(html, box->list_marker, old_viewport, new_viewport, add, pw);
 }
 
 bool html_compute_scroll_damage(struct html_content *html, const struct rect *old_viewport,

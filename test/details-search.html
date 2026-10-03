@@ -1,0 +1,51 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Native details and Find in Page</title>
+<style>
+body { margin:0; font:16px/20px monospace; }
+details { margin:4px; padding:4px; border:1px solid; }
+p { margin:0; }
+summary { list-style:none; }
+#generated::before { content:'generated-token'; }
+#blocked-text { display:none; }
+#css-hidden { content-visibility:hidden; }
+#far { margin-top:700px; }
+#flex-details { display:flex; gap:10px; }
+</style>
+<a id="fragment" href="#deep-text">Reveal nested target</a>
+<a id="summary-fragment" href="#first-summary">Summary only</a>
+<a id="self-fragment" href="#first">Details itself</a>
+<a id="blocked-fragment" href="#blocked-text">Hidden target</a>
+<p id="visible">needle</p>
+<details id="first">
+  <summary id="first-summary"><span id="summary-label">summary-token</span></summary>
+  <p id="first-text">needle first</p>
+  <summary id="second-summary">second-summary-token</summary>
+  <p id="tail">tail-token</p>
+</details>
+<details id="outer"><summary id="outer-summary">Outer</summary>
+  <div id="until" hidden="until-found">
+    <details id="inner"><summary id="inner-summary">Inner</summary>
+      <p id="deep-text">needle deep</p><p id="generated"></p>
+    </details>
+  </div>
+</details>
+<div hidden="until-found" id="until-outer"><details id="mixed"><summary>Mixed</summary>
+  <p id="mixed-text">mixed-token</p>
+</details></div>
+<details id="preopen" open="false"><summary>Open is boolean</summary><p id="preopen-text">already open</p></details>
+<details id="reordered"><p id="before-summary">order-token body</p>
+  <summary id="late-summary">order-token summary</summary><p id="after-summary">order-token after</p>
+</details>
+<details id="fallback"><p id="fallback-text">default-token</p></details>
+<details id="blocked"><summary>Blocked</summary><p id="blocked-text">forbidden-display</p></details>
+<div hidden><details id="ordinary-hidden"><summary>Hidden</summary><p>forbidden-hidden</p></details></div>
+<div id="css-hidden"><details id="contents-hidden"><summary>Hidden</summary><p>forbidden-contents</p></details></div>
+<details id="interactive"><summary id="interactive-summary"><span id="interactive-label">Controls</span>
+  <a id="summary-link" href="#visible">link</a>
+  <input type="checkbox" id="checkbox"><label id="checkbox-label" for="checkbox">check</label>
+</summary><p id="interactive-text">interactive-token</p></details>
+<details id="far"><summary>Far away</summary><p id="far-text">far-token</p></details>
+<details id="flex-details" open><summary id="flex-summary">Flex</summary>
+  <p id="flex-one">One</p><p id="flex-two">Two</p>
+</details>

@@ -56,12 +56,16 @@
 #include "content/handlers/html/restyle_profile.h"
 #include "content/handlers/html/restyle.h"
 #include "content/handlers/html/content_visibility.h"
+#include "content/handlers/html/details.h"
+#include <wisp/utils/messages.h>
 
 /* Only the active DOM ancestry is needed during construction. Inline boxes
  * are flattened in the output tree, so retain their formatting container too. */
 struct box_construct_ancestor {
     struct box *box;
     struct box *containing_block;
+    dom_node *summary; /* owned only for a details element */
+    bool details, details_open;
 };
 
 /**
@@ -147,6 +151,8 @@ _Static_assert(CSS_DISPLAY_FLOW_ROOT == 0x15, "css_display_e has new values — 
  * stack. The current traversal node is released by the caller. */
 static void box_construct_ctx_free(struct box_construct_ctx *ctx)
 {
+    for (size_t i = 0; i < ctx->depth; i++)
+        dom_node_unref(ctx->ancestors[i].summary);
     dom_node_unref(ctx->root_node);
     box_construct_region_destroy(ctx->region);
     free(ctx->ancestors);
@@ -185,8 +191,17 @@ static bool box_construct_push(struct box_construct_ctx *ctx, struct box *box, s
         ctx->ancestors = ancestors;
         ctx->capacity = capacity;
     }
-    ctx->ancestors[ctx->depth++] = (struct box_construct_ancestor){
+    struct box_construct_ancestor *ancestor = &ctx->ancestors[ctx->depth];
+    *ancestor = (struct box_construct_ancestor){
         .box = box, .containing_block = box->type == BOX_INLINE || box->type == BOX_BR ? containing_block : box};
+    ancestor->details = html_is_details(box->node);
+    if (ancestor->details) {
+        ctx->error = html_details_summary(box->node, &ancestor->summary);
+        if (ctx->error != NSERROR_OK)
+            return false;
+        ancestor->details_open = html_details_open(box->node);
+    }
+    ctx->depth++;
     return true;
 }
 
@@ -731,6 +746,13 @@ static void box_construct_generate(dom_node *n, struct box_construct_ctx *ctx, s
 }
 
 
+static const char *box_disclosure_symbol(const css_computed_style *style, bool open)
+{
+    if (open)
+        return "\342\226\276"; /* U+25BE BLACK DOWN-POINTING SMALL TRIANGLE */
+    return css_computed_direction(style) == CSS_DIRECTION_RTL ? "\342\227\202" : "\342\226\270";
+}
+
 /**
  * Construct a list marker box
  *
@@ -750,12 +772,18 @@ static bool box_construct_marker(struct box *box, const char *title, struct box_
     if (marker == false)
         return false;
 
-    marker->type = BOX_BLOCK;
+    bool inside = css_computed_list_style_position(box->style) == CSS_LIST_STYLE_POSITION_INSIDE;
+    marker->type = inside ? BOX_TEXT : BOX_BLOCK;
 
     list_style_type = css_computed_list_style_type(box->style);
 
-    /** \todo marker content (list-style-type) */
     switch (list_style_type) {
+    case CSS_LIST_STYLE_TYPE_DISCLOSURE_OPEN:
+    case CSS_LIST_STYLE_TYPE_DISCLOSURE_CLOSED:
+        marker->text = (char *)box_disclosure_symbol(box->style, list_style_type == CSS_LIST_STYLE_TYPE_DISCLOSURE_OPEN);
+        marker->length = 3;
+        break;
+
     case CSS_LIST_STYLE_TYPE_DISC:
         /* 2022 BULLET */
         marker->text = (char *)"\342\200\242";
@@ -805,9 +833,25 @@ static bool box_construct_marker(struct box *box, const char *title, struct box_
     }
 
     box->list_marker = marker;
-    marker->parent = box;
     marker->flags |= box->flags & IS_OPACITY_ZERO;
-
+    if (inside) {
+        /* Normal inline children participate in wrapping, sizing and hit testing.
+         * Only inherited properties belong to a marker, not the list item's
+         * positioning, border, background or dimensions. */
+        nscss_select_ctx select = {.ctx = ctx->content->select_ctx,
+            .quirks = ctx->content->quirks == DOM_DOCUMENT_QUIRKS_MODE_FULL,
+            .base_url = ctx->content->base_url, .universal = ctx->content->universal};
+        marker->style = nscss_get_blank_style(&select, &ctx->content->unit_len_ctx, box->style);
+        if (marker->style == NULL)
+            return false;
+        marker->flags |= STYLE_OWNED;
+        struct box *container = NULL;
+        if (!box_ensure_inline_container(box, &container, ctx->bctx))
+            return false;
+        box_add_child(container, marker);
+    } else {
+        marker->parent = box;
+    }
     return true;
 }
 
@@ -858,6 +902,77 @@ static void box_construct_begin_owner(
 void *box_construct_region_owner(const struct box *box)
 {
     return box != NULL && (box->flags & OWNS_REGION) ? talloc_parent(box) : NULL;
+}
+
+/* Anonymous UA boxes inherit text properties without copying the details
+ * element's margins, borders or formatting mode. They never publish DOM mappings. */
+static struct box *box_construct_details_block(
+    struct box_construct_ctx *ctx, struct box *owner, struct box *parent)
+{
+    nscss_select_ctx select = {.ctx = ctx->content->select_ctx,
+        .quirks = ctx->content->quirks == DOM_DOCUMENT_QUIRKS_MODE_FULL,
+        .base_url = ctx->content->base_url, .universal = ctx->content->universal};
+    css_computed_style *style = nscss_get_blank_style(&select, &ctx->content->unit_len_ctx, owner->style);
+    if (style == NULL)
+        return NULL;
+    struct box *block = box_create(NULL, style, true, NULL, NULL, NULL, NULL, ctx->bctx);
+    if (block == NULL) {
+        css_computed_style_destroy(style);
+        return NULL;
+    }
+    block->type = BOX_BLOCK;
+    block->flags |= owner->flags & IS_OPACITY_ZERO;
+    struct box *container = NULL;
+    if (!box_construct_insert(block, parent, &container, ctx->bctx))
+        return NULL;
+    return block;
+}
+
+static bool box_construct_details_legend(struct box_construct_ctx *ctx, struct box *owner,
+    const struct box_construct_props *props)
+{
+    struct box *parent = owner->type == BOX_INLINE ? props->containing_block : owner;
+    struct box *legend = box_construct_details_block(ctx, owner, parent);
+    struct box *container = NULL;
+    if (legend == NULL || !box_ensure_inline_container(legend, &container, ctx->bctx))
+        return false;
+    /* The anonymous UA legend has no author-selectable summary node. Its
+     * disclosure symbol is ordinary inline content, using the same glyphs. */
+    struct box *arrow = box_create(NULL, legend->style, false, NULL, NULL, NULL, NULL, ctx->bctx);
+    if (arrow == NULL)
+        return false;
+    arrow->type = BOX_TEXT;
+    arrow->text = (char *)box_disclosure_symbol(legend->style, html_details_open(owner->node));
+    arrow->length = 3;
+    arrow->space = UNKNOWN_WIDTH;
+    arrow->text_node = dom_node_ref(owner->node);
+    arrow->flags |= owner->flags & IS_OPACITY_ZERO;
+    box_add_child(container, arrow);
+    struct box *text = box_create(NULL, legend->style, false, NULL, NULL, NULL, NULL, ctx->bctx);
+    if (text == NULL)
+        return false;
+    text->type = BOX_TEXT;
+    text->text = talloc_strdup(ctx->bctx, messages_get("Details"));
+    if (text->text == NULL)
+        return false;
+    text->length = strlen(text->text);
+    text->text_node = dom_node_ref(owner->node);
+    text->flags |= owner->flags & IS_OPACITY_ZERO;
+    box_add_child(container, text);
+    return true;
+}
+
+/* The second slot is one block, not a separate flex/grid item for every DOM
+ * child. Closed details retain this empty slot but do not construct its contents. */
+static bool box_construct_details_contents(struct box_construct_ctx *ctx, struct box_construct_ancestor *owner)
+{
+    struct box *block = box_construct_details_block(ctx, owner->box, owner->containing_block);
+    if (block == NULL)
+        return false;
+    if (!owner->details_open)
+        block->flags |= CONTENTS_SKIPPED;
+    owner->containing_block = block;
+    return true;
 }
 
 /**
@@ -1027,8 +1142,8 @@ static bool box_construct_element(struct box_construct_ctx *ctx, bool *convert_c
         goto error;
     }
 
-    if (html_until_found(ctx->n))
-        ctx->content->has_until_found = true;
+    if (html_until_found(ctx->n) || html_is_details(ctx->n))
+        ctx->content->has_revealable_content = true;
     if (css_computed_content_visibility(box->style) == CSS_CONTENT_VISIBILITY_HIDDEN &&
         html_content_visibility_applies(box->style, (box->flags & IS_REPLACED) != 0)) {
         box->flags |= CONTENTS_SKIPPED;
@@ -1076,6 +1191,11 @@ static bool box_construct_element(struct box_construct_ctx *ctx, bool *convert_c
         goto error;
 
     box_construct_generate(ctx->n, ctx, box, &props, CSS_PSEUDO_ELEMENT_BEFORE);
+
+    const struct box_construct_ancestor *ancestor = &ctx->ancestors[ctx->depth - 1];
+    if (*convert_children && ancestor->details && ancestor->summary == NULL &&
+        !box_construct_details_legend(ctx, box, &props))
+        goto error;
 
     return true;
 
@@ -1148,7 +1268,17 @@ static nserror next_node(struct box_construct_ctx *ctx, bool convert_children)
     dom_exception err;
 
     if (convert_children) {
-        err = dom_node_get_first_child(n, &next);
+        struct box_construct_ancestor *owner = ctx->depth ? &ctx->ancestors[ctx->depth - 1] : NULL;
+        if (owner != NULL && owner->box->node == n && owner->details) {
+            /* The summary slot precedes the collapsible contents, even if the
+             * first summary occurs later in DOM order. */
+            next = dom_node_ref(owner->summary);
+            if (next == NULL && !box_construct_details_contents(ctx, owner))
+                return NSERROR_NOMEM;
+            err = next != NULL || !owner->details_open ? DOM_NO_ERR : dom_node_get_first_child(n, &next);
+        } else {
+            err = dom_node_get_first_child(n, &next);
+        }
         if (err != DOM_NO_ERR)
             return NSERROR_DOM;
         if (next != NULL) {
@@ -1162,7 +1292,9 @@ static nserror next_node(struct box_construct_ctx *ctx, bool convert_children)
         /* Hidden/skipped elements and text nodes did not push an ancestor.
          * Pop before generating ::after: it needs the owner's parent context. */
         if (ctx->depth != 0 && ctx->ancestors[ctx->depth - 1].box->node == n) {
-            struct box *box = ctx->ancestors[--ctx->depth].box;
+            struct box_construct_ancestor *owner = &ctx->ancestors[--ctx->depth];
+            struct box *box = owner->box;
+            dom_node_unref(owner->summary);
             box_construct_element_after(n, ctx, box);
             if (ctx->error != NSERROR_OK)
                 return ctx->error;
@@ -1179,7 +1311,20 @@ static nserror next_node(struct box_construct_ctx *ctx, bool convert_children)
             assert(ctx->depth == (ctx->region != NULL ? 1 : 0));
             return NSERROR_OK;
         }
-        err = dom_node_get_next_sibling(n, &next);
+        next = NULL;
+        struct box_construct_ancestor *parent = ctx->depth ? &ctx->ancestors[ctx->depth - 1] : NULL;
+        if (parent != NULL && parent->details && n == parent->summary) {
+            if (!box_construct_details_contents(ctx, parent))
+                return NSERROR_NOMEM;
+            err = parent->details_open ? dom_node_get_first_child(parent->box->node, &next) : DOM_NO_ERR;
+        } else {
+            err = dom_node_get_next_sibling(n, &next);
+        }
+        if (err == DOM_NO_ERR && parent != NULL && parent->details && next == parent->summary && next != NULL) {
+            dom_node *summary = next;
+            err = dom_node_get_next_sibling(summary, &next);
+            dom_node_unref(summary);
+        }
         if (err != DOM_NO_ERR)
             return NSERROR_DOM;
         if (next == NULL) {

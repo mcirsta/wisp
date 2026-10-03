@@ -2683,7 +2683,7 @@ bool html_get_id_offset(hlcache_handle *h, lwc_string *frag_id, int *x, int *y)
     html_content *html = (html_content *)hlcache_handle_get_content(h);
     if (html->restyling || html->restyle_pending)
         return false;
-    if (html->has_until_found) {
+    if (html->has_revealable_content) {
         dom_string *id = NULL;
         dom_node *target = NULL;
         if (dom_string_create((const uint8_t *)lwc_string_data(frag_id), lwc_string_length(frag_id), &id) != DOM_NO_ERR)
@@ -2906,7 +2906,7 @@ html_textsearch_find(struct content *c, struct textsearch_context *context, cons
 {
     html_content *html = (html_content *)c;
 
-    if (html->has_until_found)
+    if (html->has_revealable_content)
         return html_textsearch_dom(c, context, pattern, p_len, csens);
     if (html->layout == NULL) {
         return NSERROR_INVALID;

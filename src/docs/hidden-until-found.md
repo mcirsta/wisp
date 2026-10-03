@@ -18,6 +18,10 @@ the DOM, requests the ordinary full restyle, and retains DOM targets across the
 asynchronous work. Native revealing works with JavaScript disabled. Attribute
 keywords are ASCII case insensitive.
 
+Closed `details` ancestors share this reveal and search path; their summary stays
+visible and does not itself trigger expansion. See [details.md](details.md) for
+native disclosure behavior and its regression coverage.
+
 Documents containing until-found use DOM text discovery with computed-style
 filtering and rendering's whitespace/text-transform rules. Matches retain DOM
 text identity and normalized offsets; highlighting is rebound to new layout

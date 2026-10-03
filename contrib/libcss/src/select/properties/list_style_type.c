@@ -175,6 +175,12 @@ css_error css__cascade_list_style_type(uint32_t opv, css_style *style, css_selec
         case LIST_STYLE_TYPE_KOREAN_HANJA_INFORMAL:
             value = CSS_LIST_STYLE_TYPE_KOREAN_HANJA_INFORMAL;
             break;
+        case LIST_STYLE_TYPE_DISCLOSURE_OPEN:
+            value = CSS_LIST_STYLE_TYPE_DISCLOSURE_OPEN;
+            break;
+        case LIST_STYLE_TYPE_DISCLOSURE_CLOSED:
+            value = CSS_LIST_STYLE_TYPE_DISCLOSURE_CLOSED;
+            break;
         case LIST_STYLE_TYPE_KOREAN_HANJA_FORMAL:
             value = CSS_LIST_STYLE_TYPE_KOREAN_HANJA_FORMAL;
             break;

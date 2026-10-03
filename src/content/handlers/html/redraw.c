@@ -2972,7 +2972,7 @@ static bool html_redraw_box(const html_content *html, struct box *box, int x_par
         }
 
     /* list marker */
-    if (box->list_marker) {
+    if (box_has_outside_marker(box)) {
         if (!html_redraw_box(html, box->list_marker, x_parent + box->x - scrollbar_get_offset(box->scroll_x),
                 y_parent + box->y - scrollbar_get_offset(box->scroll_y), clip, scale, current_background_color, data,
                 paint_clip, ctx)) {

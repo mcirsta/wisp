@@ -338,7 +338,7 @@ static void describe(FILE *stream, const struct box *box)
         ck_assert_ptr_eq(box->inline_end->inline_end, box);
         fputs(" inline-end", stream);
     }
-    if (box->list_marker != NULL)
+    if (box_has_outside_marker(box))
         describe(stream, box->list_marker);
     for (const struct box *child = box->children; child != NULL; child = child->next) {
         ck_assert_ptr_eq(child->parent, box);
@@ -525,7 +525,7 @@ static void owned_boxes(void *owner, const struct box *box)
     /* These fixtures define title/target inside the selected region. */
     owned_allocation(owner, box->title);
     owned_allocation(owner, box->target);
-    if (box->list_marker != NULL)
+    if (box_has_outside_marker(box))
         owned_boxes(owner, box->list_marker);
     for (const struct box *child = box->children; child != NULL; child = child->next)
         owned_boxes(owner, child);
@@ -1603,7 +1603,7 @@ static void describe_layout(FILE *stream, const struct box *box)
         fprintf(stream, " edge=%d,%d,%d", box->margin[i], box->padding[i], box->border[i].width);
     if (box->text != NULL)
         fprintf(stream, " text=%.*s", (int)box->length, box->text);
-    if (box->parent != NULL && box == box->parent->list_marker)
+    if (box_is_inside_marker(box) || (box->parent != NULL && box == box->parent->list_marker))
         fprintf(stream, " counter=%d", box->list_value);
     const struct box *links[] = {box->float_children, box->next_float, box->float_container,
         box->abs_containing_block};
@@ -1617,7 +1617,7 @@ static void describe_layout(FILE *stream, const struct box *box)
                 box->col[i].min, box->col[i].max, box->col[i].positioned);
     }
     fputc('\n', stream);
-    if (box->list_marker != NULL)
+    if (box_has_outside_marker(box))
         describe_layout(stream, box->list_marker);
     for (const struct box *child = box->children; child != NULL; child = child->next)
         describe_layout(stream, child);
@@ -1826,8 +1826,9 @@ START_TEST(test_region_retained_list_numbering)
     /* An inline body puts an anonymous inline container first at the root.
      * Viewport stretching must not turn its enlarged height into cached lines. */
     char css[180];
-    snprintf(css, sizeof(css), "body{display:%s}#outer.wide{display:block}li{list-style-type:upper-roman}",
-        _i < 2 ? "block" : "inline");
+    snprintf(css, sizeof(css),
+        "body{display:%s}#outer.wide{display:block}li{list-style:upper-roman %s}",
+        _i % 4 < 2 ? "block" : "inline", _i < 4 ? "outside" : "inside");
     css_stylesheet *extra = add_sheet(css);
     static const struct gui_layout_table fonts = {.width = boundary_font_width, .split = boundary_font_split};
     html.font_func = &fonts;
@@ -2710,7 +2711,7 @@ int main(void)
     tc = tcase_create("Retained layout");
     tcase_add_checked_fixture(tc, setup, teardown);
     tcase_add_loop_test(tc, test_region_retained_layout, 0, 54);
-    tcase_add_loop_test(tc, test_region_retained_list_numbering, 0, 4);
+    tcase_add_loop_test(tc, test_region_retained_list_numbering, 0, 8);
     suite_add_tcase(suite, tc);
     SRunner *runner = srunner_create(suite);
     srunner_run_all(runner, CK_NORMAL);

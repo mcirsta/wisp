@@ -205,7 +205,7 @@ void extract_text(struct box *box, bool *first, save_text_whitespace *before, st
     assert(box);
 
     /* If box has a list marker */
-    if (box->list_marker) {
+    if (box_has_outside_marker(box)) {
         /* do the marker box before continuing with the rest of the
          * list element */
         extract_text(box->list_marker, first, before, save);

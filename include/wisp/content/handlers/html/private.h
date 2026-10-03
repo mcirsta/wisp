@@ -225,8 +225,8 @@ typedef struct html_content {
     /** Deferred state-only restyle; no parsing or page-load lifecycle. */
     bool restyle_pending;
     bool restyling;
-    /** Enables DOM-backed searching after until-found has appeared in this document. */
-    bool has_until_found;
+    /** Enables DOM-backed searching after until-found or details has appeared. */
+    bool has_revealable_content;
     struct html_restyle_state restyle;
 #ifdef WISP_PROFILE_RESTYLE
     struct html_restyle_profile restyle_profile;

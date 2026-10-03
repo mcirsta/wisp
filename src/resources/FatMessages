@@ -3815,6 +3815,7 @@ it.gtk.gtkProgress:Progressi
 nl.gtk.gtkProgress:Voortgang
 zh_CN.gtk.gtkProgress:进展
 
+en.all.Details:Details
 en.gtk.gtkDetails:Details
 de.gtk.gtkDetails:Details
 fr.gtk.gtkDetails:Détails

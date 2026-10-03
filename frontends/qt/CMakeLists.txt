@@ -256,6 +256,12 @@ if(WISP_QT_CAPTURE)
         add_test(NAME qt_generated_search
             COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_generated_search.py $<TARGET_FILE:wisp-qt>)
         set_tests_properties(qt_generated_search PROPERTIES TIMEOUT 120)
+        add_test(NAME qt_disclosure_markers
+            COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_disclosure_markers.py $<TARGET_FILE:wisp-qt>)
+        set_tests_properties(qt_disclosure_markers PROPERTIES TIMEOUT 90)
+        add_test(NAME qt_details_search
+            COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_details_search.py $<TARGET_FILE:wisp-qt>)
+        set_tests_properties(qt_details_search PROPERTIES TIMEOUT 120)
         add_test(NAME qt_class_whitespace
             COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_class_whitespace.py $<TARGET_FILE:wisp-qt>)
         set_tests_properties(qt_class_whitespace PROPERTIES TIMEOUT 30)

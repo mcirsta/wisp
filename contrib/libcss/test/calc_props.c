@@ -713,6 +713,40 @@ static void test_clip_units_roundtrip(void)
     }
 }
 
+static void test_disclosure_counter_styles(void)
+{
+    static const struct {
+        const char *css;
+        uint8_t type;
+        const char *text;
+    } cases[] = {
+        {"* { list-style:disclosure-open inside }", CSS_LIST_STYLE_TYPE_DISCLOSURE_OPEN, "\xe2\x96\xbe "},
+        {"* { list-style:disclosure-closed inside }", CSS_LIST_STYLE_TYPE_DISCLOSURE_CLOSED, "\xe2\x96\xb8 "},
+        {"* { direction:rtl; list-style:disclosure-closed inside }",
+            CSS_LIST_STYLE_TYPE_DISCLOSURE_CLOSED, "\xe2\x97\x82 "},
+    };
+    for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
+        style_case ctx;
+        const css_computed_style *selected = select_style_from_css(cases[i].css, &ctx);
+        css_computed_style *composed;
+        assert(css_computed_style_compose(selected, selected, &unit_ctx, &composed) == CSS_OK);
+        const css_computed_style *styles[] = {selected, composed};
+        for (size_t pass = 0; pass < 2; pass++) {
+            assert(css_computed_list_style_type(styles[pass]) == cases[i].type);
+            assert(css_computed_list_style_position(styles[pass]) == CSS_LIST_STYLE_POSITION_INSIDE);
+            for (int value = -1; value <= 1; value++) {
+                char text[16] = {0};
+                size_t length;
+                assert(css_computed_format_list_style(styles[pass], value, text, sizeof(text), &length) == CSS_OK);
+                assert(length == strlen(cases[i].text));
+                assert(memcmp(text, cases[i].text, length) == 0);
+            }
+        }
+        css_computed_style_destroy(composed);
+        destroy_style_case(&ctx);
+    }
+}
+
 int main(void)
 {
     test_calc_property_getters();
@@ -727,6 +761,7 @@ int main(void)
     test_cq_units_zero_container_resolve_to_zero();
     test_cq_units_unset_container_falls_back_to_viewport();
     test_clip_units_roundtrip();
+    test_disclosure_counter_styles();
 
     printf("PASS\n");
     return 0;

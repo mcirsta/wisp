@@ -230,7 +230,7 @@ struct box {
      * DOM node that generated this box or NULL
      */
     struct dom_node *node;
-    /** Source DOM text node, or originating element for TEXT_BEFORE/TEXT_AFTER.
+    /** Source DOM text node, or originating element for generated/UA text.
      * Line fragments borrow the original reference. */
     struct dom_node *text_node;
 
@@ -480,7 +480,9 @@ struct box {
     struct column *col;
 
     /**
-     * List marker box if this is a list-item, or NULL.
+     * List marker box if this is a list-item, or NULL. Outside markers have
+     * this box as parent but are not children. Inside markers are ordinary
+     * children of our first inline container; this pointer is only an alias.
      */
     struct box *list_marker;
 
@@ -523,6 +525,20 @@ struct box {
      */
     struct browser_window *iframe;
 };
+
+/* Only outside markers need separate traversal/painting. */
+static inline bool box_has_outside_marker(const struct box *box)
+{
+    return box->list_marker != NULL && box->list_marker->parent == box;
+}
+
+/* Generated marker strings use the UA ::marker white-space:pre default.
+ * Identification also serves tree validation without an extra per-box flag. */
+static inline bool box_is_inside_marker(const struct box *box)
+{
+    return box->parent != NULL && box->parent->type == BOX_INLINE_CONTAINER && box->parent->parent != NULL &&
+        box->parent->parent->list_marker == box;
+}
 
 static inline struct hlcache_handle *box_background_layer(const struct box *box, uint32_t layer)
 {

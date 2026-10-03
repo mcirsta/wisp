@@ -1,0 +1,43 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Disclosure and inside list markers</title>
+<style>
+body { margin:20px; font:16px/24px monospace; }
+details { margin-bottom:8px; }
+p, ul, ol { margin:0; }
+ul, ol { padding-left:40px; }
+#wrap { width:180px; }
+#none { list-style:none; }
+#block { display:block; }
+#outside { list-style-position:outside; }
+#custom { list-style:square inside; }
+#empty-none { list-style:none inside; }
+#rtl { direction:rtl; }
+#generated::before { content:'before '; }
+#inside-list, #reversed-list { list-style-position:inside; }
+#narrow-item, #spaced-marker { width:8px; }
+#decorated { padding:4px; border:2px solid; background:#eee; }
+#image-list { list-style:inside url('data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="12" height="12"%3E%3Crect width="12" height="12" fill="green"/%3E%3C/svg%3E'); }
+</style>
+<details id="closed-details"><summary id="closed"><span id="closed-text">Closed</span></summary><p>Body</p></details>
+<details id="open-details" open><summary id="open"><span id="open-text">Open</span></summary><p>Body</p></details>
+<details><summary id="wrap"><span id="wrap-text">one two three four five six seven eight nine</span></summary></details>
+<details><summary id="none"><span id="none-text">No marker</span></summary></details>
+<details><summary id="block"><span id="block-text">Block summary</span></summary></details>
+<details><summary id="outside"><span id="outside-text">Outside</span></summary></details>
+<details><summary id="custom"><span id="custom-text">Square</span></summary></details>
+<details><summary id="generated"><span id="generated-text">Text</span></summary></details>
+<details open><summary id="primary">First</summary><summary id="secondary">Second</summary></details>
+<details id="default"><p>Default legend</p></details>
+<details><summary id="empty"></summary></details>
+<details><summary id="empty-none"></summary></details>
+<details><summary id="block-first"><div id="block-child">Block child</div></summary></details>
+<details dir="rtl"><summary id="rtl">RTL</summary></details>
+<ol id="inside-list" start="9"><li id="nine"><span id="nine-text">Nine</span></li>
+<li id="ten"><span id="ten-text">Ten</span></li><li id="explicit" value="42">Forty-two</li></ol>
+<ol id="reversed-list" reversed><li id="reversed-first">Two</li><li id="reversed-last">One</li></ol>
+<ol style="list-style:upper-roman inside" start="23"><li id="narrow-item">Narrow</li></ol>
+<ul id="image-list"><li id="image-item"><span id="image-text">Image</span></li></ul>
+
+<ol style="list-style:korean-hangul-formal inside" start="-1"><li id="spaced-marker">Word</li></ol>
+<details><summary id="decorated"><span id="decorated-text">Decorated</span></summary></details>

@@ -39,6 +39,20 @@ div {
 	display: block;
 }
 
+details, summary {
+	display: block;
+}
+
+details > summary:first-of-type {
+	display: list-item;
+	list-style: disclosure-closed inside;
+	cursor: pointer;
+}
+
+details[open] > summary:first-of-type {
+	list-style-type: disclosure-open;
+}
+
 h1 {
 	display: block;
 	font-size: 2em;

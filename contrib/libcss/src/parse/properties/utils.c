@@ -42,13 +42,11 @@ css_error css__parse_list_style_type_value(css_language *c, const css_token *ide
  *	  upper-latin, armenian, georgian, lower-alpha, upper-alpha,
  *	  none)
  */
-#define MAP_ENTRIES 52
     bool match;
-    int midx;
     const struct {
         int stringid;
         int value;
-    } mapping[MAP_ENTRIES] = {{DISC, LIST_STYLE_TYPE_DISC}, {CIRCLE, LIST_STYLE_TYPE_CIRCLE},
+    } mapping[] = {{DISC, LIST_STYLE_TYPE_DISC}, {CIRCLE, LIST_STYLE_TYPE_CIRCLE},
         {SQUARE, LIST_STYLE_TYPE_SQUARE}, {DECIMAL, LIST_STYLE_TYPE_DECIMAL},
         {DECIMAL_LEADING_ZERO, LIST_STYLE_TYPE_DECIMAL_LEADING_ZERO}, {LOWER_ROMAN, LIST_STYLE_TYPE_LOWER_ROMAN},
         {UPPER_ROMAN, LIST_STYLE_TYPE_UPPER_ROMAN}, {LOWER_GREEK, LIST_STYLE_TYPE_LOWER_GREEK},
@@ -73,9 +71,10 @@ css_error css__parse_list_style_type_value(css_language *c, const css_token *ide
         {JAPANESE_FORMAL, LIST_STYLE_TYPE_JAPANESE_FORMAL},
         {KOREAN_HANGUL_FORMAL, LIST_STYLE_TYPE_KOREAN_HANGUL_FORMAL},
         {KOREAN_HANJA_INFORMAL, LIST_STYLE_TYPE_KOREAN_HANJA_INFORMAL},
-        {KOREAN_HANJA_FORMAL, LIST_STYLE_TYPE_KOREAN_HANJA_FORMAL}};
+        {KOREAN_HANJA_FORMAL, LIST_STYLE_TYPE_KOREAN_HANJA_FORMAL},
+        {DISCLOSURE_OPEN, LIST_STYLE_TYPE_DISCLOSURE_OPEN}, {DISCLOSURE_CLOSED, LIST_STYLE_TYPE_DISCLOSURE_CLOSED}};
 
-    for (midx = 0; midx < MAP_ENTRIES; midx++) {
+    for (size_t midx = 0; midx < sizeof(mapping) / sizeof(mapping[0]); midx++) {
         if ((lwc_string_caseless_isequal(ident->idata, c->strings[mapping[midx].stringid], &match) == lwc_error_ok &&
                 match)) {
             *value = mapping[midx].value;

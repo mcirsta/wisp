@@ -120,7 +120,7 @@ static bool box_contains_point(const css_unit_ctx *unit_len_ctx, const struct bo
         *physically = true;
         return true;
     }
-    if (box->list_marker && box->list_marker->x - box->x <= x + box->list_marker->border[LEFT].width &&
+    if (box_has_outside_marker(box) && box->list_marker->x - box->x <= x + box->list_marker->border[LEFT].width &&
         x < box->list_marker->x - box->x + box->list_marker->padding[LEFT] + box->list_marker->width +
                 box->list_marker->border[RIGHT].width + box->list_marker->padding[RIGHT] &&
         box->list_marker->y - box->y <= y + box->list_marker->border[TOP].width &&
@@ -527,7 +527,7 @@ static bool box_nearest_text_box(struct box *box, int bx, int by, int fx, int fy
             if (box_nearer_text_box(child, c_bx, c_by, x, y, dir, nearest, tx, ty, nr_xd, nr_yd))
                 return true;
         } else {
-            if (child->list_marker) {
+            if (box_has_outside_marker(child)) {
                 if (box_nearer_text_box(child->list_marker, c_bx + child->list_marker->x, c_by + child->list_marker->y,
                         x, y, dir, nearest, tx, ty, nr_xd, nr_yd))
                     return true;
@@ -873,7 +873,7 @@ void box_dump(FILE *stream, struct box *box, unsigned int depth, bool style)
     }
     fprintf(stream, "\n");
 
-    if (box->list_marker) {
+    if (box_has_outside_marker(box)) {
         for (i = 0; i != depth; i++)
             fprintf(stream, "  ");
         fprintf(stream, "list_marker:\n");

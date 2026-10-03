@@ -211,6 +211,14 @@ static QJsonObject describe(struct box *box, const html_content *html)
         box->padding[TOP], box->padding[RIGHT], box->padding[BOTTOM], box->padding[LEFT]};
     result["visible"] = box_visible(box);
     result["text"] = box->text ? QString::fromUtf8(box->text, qMin(box->length, size_t(200))) : QString();
+    if (box->list_marker) {
+        auto *marker = box->list_marker;
+        QJsonObject description = summary(marker);
+        description["text"] = marker->text ? QString::fromUtf8(marker->text, marker->length) : QString();
+        description["outside"] = box_has_outside_marker(box);
+        description["value"] = marker->list_value;
+        result["list_marker"] = description;
+    }
     if (box->abs_containing_block) {
         result["absolute_containing_block"] = summary(box->abs_containing_block);
     }
@@ -315,7 +323,7 @@ QJsonObject nsqt_capture_inspect(struct hlcache_handle *content, const QStringLi
         sticky_records += box->sticky != nullptr;
         for (auto *child = box->children; child; child = child->next)
             census.append(child);
-        if (box->list_marker)
+        if (box_has_outside_marker(box))
             census.append(box->list_marker);
     }
     result["box_storage"] = QJsonObject{{"boxes", double(boxes)}, {"box_bytes", double(sizeof(struct box))},
@@ -384,6 +392,8 @@ QJsonObject nsqt_capture_inspect(struct hlcache_handle *content, const QStringLi
             const QString hidden = attribute(reinterpret_cast<dom_node *>(element), "hidden");
             state["hidden"] = hidden.isNull() ? QJsonValue(QJsonValue::Null) : QJsonValue(hidden);
             const QString tag = domName(reinterpret_cast<dom_node *>(element));
+            if (tag == "details")
+                state["open"] = !attribute(reinterpret_cast<dom_node *>(element), "open").isNull();
             if (tag == "input") {
                 bool checked = false;
                 dom_html_input_element_get_checked(reinterpret_cast<dom_html_input_element *>(element), &checked);

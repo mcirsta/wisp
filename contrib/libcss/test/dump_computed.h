@@ -2316,6 +2316,12 @@ static void dump_computed_style(const css_computed_style *style, char *buf, size
     case CSS_LIST_STYLE_TYPE_INHERIT:
         wrote = snprintf(ptr, *len, "list-style-type: inherit\n");
         break;
+    case CSS_LIST_STYLE_TYPE_DISCLOSURE_OPEN:
+        wrote = snprintf(ptr, *len, "list-style-type: disclosure-open\n");
+        break;
+    case CSS_LIST_STYLE_TYPE_DISCLOSURE_CLOSED:
+        wrote = snprintf(ptr, *len, "list-style-type: disclosure-closed\n");
+        break;
     case CSS_LIST_STYLE_TYPE_DISC:
         wrote = snprintf(ptr, *len, "list-style-type: disc\n");
         break;
