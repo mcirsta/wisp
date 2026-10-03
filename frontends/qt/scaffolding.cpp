@@ -35,9 +35,10 @@ extern "C" {
 #include "qt/scaffolding.cls.h"
 #include "qt/scaffoldstyle.cls.h"
 #include "qt/window.cls.h"
+#include <QPointer>
 #include <QSettings>
 
-static NS_Scaffold *current = nullptr; /**< currently selected scaffold */
+static QPointer<NS_Scaffold> current; /**< currently selected scaffold */
 
 ScaffoldStyle::ScaffoldStyle(QObject *parent) : QProxyStyle()
 {

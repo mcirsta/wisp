@@ -59,6 +59,7 @@ extern "C" {
 #include "qt/cookies.cls.h"
 #include "qt/global_history.cls.h"
 #include "qt/page_info.cls.h"
+#include "qt/scaffolding.cls.h"
 #include "qt/settings.cls.h"
 
 #ifdef WISP_QT_CAPTURE
@@ -493,6 +494,20 @@ NS_Application::NS_Application(int &argc, char **argv, struct wisp_table *nsqt_t
 NS_Application::~NS_Application()
 {
     nserror res;
+
+    /* The event loop has stopped. Deleting the last tab can queue another
+     * deleteLater() for its scaffold which will no longer be delivered.
+     * Close live browser tabs while the core exists, then release their UI. */
+    QList<NS_Scaffold *> scaffolds;
+    for (QWidget *widget : topLevelWidgets()) {
+        if (auto *scaffold = qobject_cast<NS_Scaffold *>(widget))
+            scaffolds.append(scaffold);
+    }
+    // Collect first: deleting a scaffold also deletes its top-level menus.
+    for (NS_Scaffold *scaffold : scaffolds) {
+        scaffold->close();
+        delete scaffold;
+    }
 
     delete m_cookies_window;
     delete m_global_history_window;

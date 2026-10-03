@@ -259,7 +259,9 @@ static QString resolve_font_family(const QString &family, bool italic)
 /* Family resolution is independent of size and weight. Keep both successful
  * lookups and missing names, bounded separately from the complete font cache. */
 static QCache<std::pair<QString, bool>, QString> font_family_cache(64);
+static QMetaObject::Connection font_database_connection;
 static void nsqt_font_cache_clear(void);
+static void nsqt_font_cache_fini(void);
 
 static QString available_font_family(const QString &family, bool italic)
 {
@@ -450,9 +452,13 @@ private:
 static QFont *nsfont_style_to_font(const struct plot_font_style *fstyle)
 {
     // Generic-only pages must also invalidate when installed fonts change.
-    static const auto connection = QObject::connect(
-        qApp, &QGuiApplication::fontDatabaseChanged, qApp, nsqt_font_cache_clear);
-    Q_UNUSED(connection);
+    if (!font_database_connection) {
+        /* Release our QFonts while Qt's font backend still exists. Static
+         * caches otherwise retain shared font engines past QApplication. */
+        qAddPostRoutine(nsqt_font_cache_fini);
+        font_database_connection =
+            QObject::connect(qApp, &QGuiApplication::fontDatabaseChanged, qApp, nsqt_font_cache_clear);
+    }
     int idx;
     int oldest_idx = 0;
 
@@ -536,17 +542,15 @@ void nsqt_capture_text_cache_limit(qsizetype bytes)
 #endif
 
 /**
- * Purge the Qt font cache
+ * Release frontend font ownership before Qt tears down its font backend.
  *
- * Called when the font database changes or a web-font alias is registered so that
- * subsequent text measurements do not use stale fallback fonts.
+ * Also used for invalidation. Shutdown must not log or notify the HTML engine,
+ * which NS_Application has already finalised before Qt calls post routines.
  */
-static void nsqt_font_cache_clear(void)
+static void nsqt_font_cache_release(void)
 {
-    NSLOG(wisp, INFO, "Purging Qt font caches after a font database or alias change");
     text_cache.clear();
     text_cache_generation++;
-    html_font_face_notify_changed();
     font_family_cache.clear();
     for (int i = 0; i < PFCACHE_ENTRIES; i++) {
         if (pfcache.entries[i].qfont != NULL) {
@@ -556,6 +560,21 @@ static void nsqt_font_cache_clear(void)
         pfcache.entries[i].age = 0;
     }
     pfcache.age = 0;
+}
+
+static void nsqt_font_cache_clear(void)
+{
+    NSLOG(wisp, INFO, "Purging Qt font caches after a font database or alias change");
+    nsqt_font_cache_release();
+    html_font_face_notify_changed();
+}
+
+static void nsqt_font_cache_fini(void)
+{
+    // Removing Qt's application fonts during teardown must not notify the core.
+    QObject::disconnect(font_database_connection);
+    font_database_connection = {};
+    nsqt_font_cache_release();
 }
 
 /* All requests are prefixes of the same string with unchanged font metrics,

@@ -14,6 +14,7 @@ extern "C" {
 #include <wisp/layout.h>
 #include <wisp/plot_style.h>
 #include <wisp/utils/nsoption.h>
+#include "content/handlers/html/font_face.h"
 }
 #include "qt/capture_inspect.h"
 #include "qt/layout.h"
@@ -67,12 +68,10 @@ protected:
     }
 };
 
-int main(int argc, char **argv)
+static void test_cache(const QString &font_path)
 {
-    QApplication app(argc, argv);
-    REQUIRE(argc == 2);
     REQUIRE(nsoption_init(nullptr, nullptr, nullptr) == NSERROR_OK);
-    int id = QFontDatabase::addApplicationFont(QString::fromLocal8Bit(argv[1]));
+    int id = QFontDatabase::addApplicationFont(font_path);
     REQUIRE(id >= 0);
     QByteArray family = QFontDatabase::applicationFontFamilies(id).first().toUtf8();
     nsoption_set_charp(font_sans, strdup(family.constData()));
@@ -187,8 +186,26 @@ int main(int argc, char **argv)
     nsqt_capture_text_cache_limit(0);
     REQUIRE(measure(base, "a b", 23) == at144);
 
+    // Leave live QFont keys in the cache to exercise QApplication teardown.
+    nsqt_capture_text_cache_limit(budget);
+    measure(base, "a b", 23);
+    REQUIRE(stat("entries") == 2);
     nsoption_finalise(nullptr, nullptr);
+}
+
+int main(int argc, char **argv)
+{
+    uint64_t generation;
+    {
+        QApplication app(argc, argv);
+        REQUIRE(argc == 2);
+        test_cache(QString::fromLocal8Bit(argv[1]));
+        generation = html_font_face_generation();
+    }
+    REQUIRE(stat("entries") == 0);
+    // Removing Qt's application fonts must not notify an already stopped core.
+    REQUIRE(html_font_face_generation() == generation);
     std::puts(
-        "Qt text cache: uncached parity, UTF-8, fractional/zero sizing, spacing, styles, ownership and LRU passed.");
+        "Qt text cache: uncached parity, UTF-8, fractional/zero sizing, spacing, styles, ownership, LRU and shutdown passed.");
     return EXIT_SUCCESS;
 }

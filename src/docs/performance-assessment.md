@@ -749,6 +749,9 @@ and **three Release text regressions** passed. The Debug run keeps ASan, UBSan
 and engine leak detection enabled, with a temporary suppression for allocations
 inside `libfontconfig.so.1`: the same 1,895-byte leak report was reproduced using
 the original fitter. The suppression is confined to the validation artifacts.
+Subsequent correctness work fixed the shutdown ownership: remaining tab windows
+are deleted before core teardown, and frontend font caches are released before
+Qt's font backend. Current tests no longer need that suppression.
 
 The production comparison uses the same capture method as the investigation:
 five alternating pairs for ASCII scaling, three pairs per saved-page viewport
