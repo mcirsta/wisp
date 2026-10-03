@@ -91,7 +91,7 @@ set(NSURL_SOURCES
 add_wisp_test(nsurl ${NSURL_SOURCES})
 
 # Exercise the real scheme fetchers with a small fetch-core callback harness.
-add_wisp_test(fetcher_poll_test
+add_wisp_test(fetcher_queue_test
   ${CMAKE_SOURCE_DIR}/src/content/handlers/html/css_fetcher.c
   ${CMAKE_SOURCE_DIR}/src/content/handlers/javascript/fetcher.c
   ${CMAKE_SOURCE_DIR}/src/utils/nsurl/nsurl.c
@@ -100,8 +100,33 @@ add_wisp_test(fetcher_poll_test
   ${CMAKE_SOURCE_DIR}/src/utils/punycode.c
   ${CMAKE_SOURCE_DIR}/src/utils/corestrings.c
   ${CMAKE_SOURCE_DIR}/src/test/log.c
-  ${CMAKE_SOURCE_DIR}/src/test/fetcher_poll_test.c
+  ${CMAKE_SOURCE_DIR}/src/test/fetcher_queue_test.c
 )
+
+# Native event-wait adapters used by Monkey, Haiku and Windows.
+add_executable(socket_events_test socket_events_test.c ../utils/socket.c)
+target_include_directories(socket_events_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
+if(WIN32)
+  target_link_libraries(socket_events_test PRIVATE ws2_32)
+endif()
+add_test(NAME socket_events_test COMMAND socket_events_test)
+set_tests_properties(socket_events_test PROPERTIES TIMEOUT 15)
+
+# Exercise GTK's source lifetime without needing a display or full GTK build.
+if(UNIX)
+  pkg_check_modules(EVENT_GLIB QUIET IMPORTED_TARGET glib-2.0)
+  if(EVENT_GLIB_FOUND)
+    add_executable(glib_socket_events_test socket_events_test.c
+      ${CMAKE_SOURCE_DIR}/frontends/gtk/socket.c
+      ${CMAKE_SOURCE_DIR}/frontends/gtk/schedule.c log.c)
+    target_compile_definitions(glib_socket_events_test PRIVATE WISP_TEST_GLIB)
+    target_include_directories(glib_socket_events_test PRIVATE
+      ${CMAKE_SOURCE_DIR}/include ${CMAKE_SOURCE_DIR}/include/wisp ${CMAKE_SOURCE_DIR}/frontends)
+    target_link_libraries(glib_socket_events_test PRIVATE PkgConfig::EVENT_GLIB)
+    add_test(NAME glib_socket_events_test COMMAND glib_socket_events_test)
+    set_tests_properties(glib_socket_events_test PROPERTIES TIMEOUT 15)
+  endif()
+endif()
 
 set(URLDBTEST_SOURCES
   ${CMAKE_SOURCE_DIR}/src/utils/nsurl/nsurl.c

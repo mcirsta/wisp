@@ -38,7 +38,7 @@ int gui_init_replicant(int argc, char **argv);
 extern "C" nserror gui_401login_open(struct nsurl *url, const char *realm, const char *username, const char *password,
     nserror (*cb)(const char *username, const char *password, void *pw), void *cbpw);
 
-extern "C" void nsbeos_gui_poll(void);
+extern "C" void nsbeos_gui_wait(void);
 
 extern char *options_file_location;
 

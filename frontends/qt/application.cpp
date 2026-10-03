@@ -65,9 +65,6 @@ extern "C" {
 #include "qt/capture.h"
 #endif
 
-// QTimer
-// QSocketNotifier
-
 #ifndef WISP_HOMEPAGE
 #define WISP_HOMEPAGE "about:welcome"
 #endif

@@ -63,6 +63,7 @@ set(QT_SOURCES
     resources.cpp
     scaffolding.cpp
     settings.cpp
+    socket.cpp
     statussplitter.cpp
     urlbar.cpp
     window.cpp
@@ -95,6 +96,17 @@ set(QT_RESOURCES
 add_executable(wisp-qt ${QT_SOURCES} ${QT_RESOURCES})
 
 if(BUILD_TESTING AND WISP_ENABLE_TESTS)
+    if(UNIX AND WISP_QT_CAPTURE)
+        add_executable(qt_fetch_events_test test_fetch_events.cpp socket.cpp)
+        target_include_directories(qt_fetch_events_test PRIVATE
+            ${CMAKE_SOURCE_DIR}/include ${CMAKE_SOURCE_DIR}/src ${CMAKE_SOURCE_DIR}/frontends)
+        target_link_libraries(qt_fetch_events_test PRIVATE Qt6::Core wisp)
+        add_test(NAME qt_fetch_events COMMAND Python3::Interpreter
+            ${CMAKE_CURRENT_SOURCE_DIR}/test_fetch_events.py
+            $<TARGET_FILE:qt_fetch_events_test> $<TARGET_FILE:wisp-qt>)
+        set_tests_properties(qt_fetch_events PROPERTIES TIMEOUT 30)
+    endif()
+
     add_executable(qt_bitmap_cache_test test_bitmap_cache.cpp bitmap.cpp)
     target_compile_definitions(qt_bitmap_cache_test PRIVATE WISP_QT_CAPTURE)
     target_include_directories(qt_bitmap_cache_test PRIVATE

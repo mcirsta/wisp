@@ -24,6 +24,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <wisp/utils/socket.h>
 #include "wisp/content/fetch.h"
 #include "wisp/fetch.h"
 #include "wisp/utils/file.h"
@@ -114,6 +115,7 @@ nserror nsw32_get_resource_data(const char *path, const uint8_t **data_out, size
 /** win32 fetch operation table */
 static struct gui_fetch_table fetch_table = {
     .filetype = fetch_filetype,
+    .socket_watch = wisp_socket_watch,
 
     .get_resource_url = NULL,
     .get_resource_data = nsw32_get_resource_data,

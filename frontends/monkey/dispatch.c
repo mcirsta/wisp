@@ -61,22 +61,26 @@ void monkey_free_handlers(void)
 bool monkey_process_command(void)
 {
     char buffer[PATH_MAX];
+    if (fgets(buffer, sizeof(buffer), stdin) == NULL)
+        return false;
+    monkey_dispatch_command(buffer);
+    return true;
+}
+
+void monkey_dispatch_command(char *buffer)
+{
     int argc = 0;
     char **argv = NULL;
     char *p, *r = NULL;
     handle_command_fn fn = NULL;
     char **nargv;
 
-    if (fgets(buffer, PATH_MAX, stdin) == NULL) {
-        return false;
-    }
-
     /* The last command may have no trailing newline. */
     buffer[strcspn(buffer, "\r\n")] = '\0';
 
     argv = malloc(sizeof *argv);
     if (argv == NULL) {
-        return true;
+        return;
     }
     argc = 1;
     *argv = buffer;
@@ -111,5 +115,4 @@ bool monkey_process_command(void)
     }
 
     free(argv);
-    return true;
 }

@@ -38,6 +38,10 @@ foreach(LANG ${MESSAGES_LANGUAGES})
 endforeach()
 add_custom_target(monkey_messages DEPENDS ${GENERATED_MESSAGES_FILES})
 
+if(WIN32)
+  list(APPEND MONKEY_SRCS input.c)
+endif()
+
 add_executable(nsmonkey ${MONKEY_SRCS})
 add_dependencies(nsmonkey monkey_messages)
 
@@ -68,6 +72,9 @@ if(WISP_ENABLE_TESTS)
     add_test(NAME monkey_driver COMMAND Python3::Interpreter
         ${MONKEY_TEST_DIR}/monkey_driver_test.py $<TARGET_FILE:nsmonkey>)
     set_tests_properties(monkey_driver PROPERTIES TIMEOUT 40 LABELS monkey)
+    add_test(NAME monkey_fetch_events COMMAND Python3::Interpreter
+        ${CMAKE_SOURCE_DIR}/frontends/qt/test_fetch_events.py --monkey $<TARGET_FILE:nsmonkey>)
+    set_tests_properties(monkey_fetch_events PROPERTIES TIMEOUT 30 LABELS monkey)
 endif()
 
 if(WIN32 AND CMAKE_BUILD_TYPE MATCHES Debug)
@@ -107,3 +114,10 @@ endif()
 
 install(TARGETS nsmonkey DESTINATION ${CMAKE_INSTALL_BINDIR})
 install(DIRECTORY ${GENERATED_MESSAGES_DIR}/ DESTINATION ${CMAKE_INSTALL_DATADIR}/wisp)
+
+if(WISP_ENABLE_TESTS AND WIN32)
+  add_executable(monkey_input_test test_input.c input.c)
+  target_include_directories(monkey_input_test PRIVATE ${CMAKE_SOURCE_DIR}/frontends)
+  add_test(NAME monkey_input_test COMMAND monkey_input_test)
+  set_tests_properties(monkey_input_test PROPERTIES TIMEOUT 10)
+endif()

@@ -44,7 +44,7 @@ typedef struct {
 /** List of all callbacks. */
 static BList *callbacks = NULL;
 
-/** earliest deadline. It's used for select() in gui_poll() */
+/** earliest deadline. It's used for select() in nsbeos_gui_wait() */
 bigtime_t earliest_callback_timeout = B_INFINITE_TIMEOUT;
 
 

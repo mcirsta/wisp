@@ -1010,62 +1010,13 @@ static nserror nsgtk_setup(int argc, char **argv, char **respath)
 }
 
 
-/**
- * Run the gtk event loop.
- *
- * The same as the standard gtk_main loop except this ensures active
- * FD are added to the gtk poll event set.
- */
+/** Run scheduled engine work and block on GTK's sources and socket watches. */
 static void nsgtk_main(void)
 {
-    fd_set read_fd_set, write_fd_set, exc_fd_set;
-    int max_fd;
-    GPollFD *fd_list[1000];
-    unsigned int fd_count;
-
     while (!nsgtk_complete) {
-        max_fd = -1;
-        fd_count = 0;
-        FD_ZERO(&read_fd_set);
-        FD_ZERO(&write_fd_set);
-        FD_ZERO(&exc_fd_set);
-
-        while (gtk_events_pending())
-            gtk_main_iteration_do(TRUE);
-
         schedule_run();
-
-        fetch_fdset(&read_fd_set, &write_fd_set, &exc_fd_set, &max_fd);
-        for (int i = 0; i <= max_fd; i++) {
-            if (FD_ISSET(i, &read_fd_set)) {
-                GPollFD *fd = malloc(sizeof *fd);
-                fd->fd = i;
-                fd->events = G_IO_IN | G_IO_HUP | G_IO_ERR;
-                g_main_context_add_poll(0, fd, 0);
-                fd_list[fd_count++] = fd;
-            }
-            if (FD_ISSET(i, &write_fd_set)) {
-                GPollFD *fd = malloc(sizeof *fd);
-                fd->fd = i;
-                fd->events = G_IO_OUT | G_IO_ERR;
-                g_main_context_add_poll(0, fd, 0);
-                fd_list[fd_count++] = fd;
-            }
-            if (FD_ISSET(i, &exc_fd_set)) {
-                GPollFD *fd = malloc(sizeof *fd);
-                fd->fd = i;
-                fd->events = G_IO_ERR;
-                g_main_context_add_poll(0, fd, 0);
-                fd_list[fd_count++] = fd;
-            }
-        }
-
-        gtk_main_iteration();
-
-        for (unsigned int i = 0; i != fd_count; i++) {
-            g_main_context_remove_poll(0, fd_list[i]);
-            free(fd_list[i]);
-        }
+        if (!nsgtk_complete)
+            gtk_main_iteration();
     }
 }
 

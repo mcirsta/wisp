@@ -222,6 +222,7 @@ add_library(wisp ${WISP_LIB_TYPE}
 	utils/nsoption.c
 	utils/punycode.c
 	utils/ssl_certs.c
+	utils/socket.c
 	utils/talloc.c
 	utils/time.c
 	utils/url.c

@@ -34,6 +34,7 @@
 #include <assert.h>
 #include <errno.h>
 #include <inttypes.h>
+#include <limits.h>
 #include <stdbool.h>
 #include <string.h>
 #include <strings.h>
@@ -243,6 +244,7 @@ struct cert_info {
 struct curl_fetch_info {
     struct fetch *fetch_handle; /**< The fetch handle we're parented by. */
     CURL *curl_handle; /**< cURL handle if being fetched, or 0. */
+    struct curl_fetch_info *r_prev, *r_next; /**< Active transfers. */
     bool sent_ssl_chain; /**< Have we tried to send the SSL chain */
     bool had_headers; /**< Headers have been processed. */
     bool abort; /**< Abort requested. */
@@ -299,6 +301,32 @@ static char fetch_proxy_userpwd[100];
 /** Interlock to prevent initiation during callbacks */
 static bool inside_curl = false;
 
+static struct curl_fetch_info *curl_active;
+static void fetch_curl_timeout(void *unused);
+static void fetch_curl_abort_pending(void *unused);
+static void fetch_curl_socket_ready(intptr_t socket, unsigned events, void *unused);
+
+/* These callbacks only register work. In particular, a zero curl timeout must
+ * run on a later event-loop turn, never recursively inside curl_multi_add_handle. */
+static int fetch_curl_timer(CURLM *multi, long timeout_ms, void *unused)
+{
+    int delay = timeout_ms < 0 ? -1 : timeout_ms > INT_MAX ? INT_MAX : (int)timeout_ms;
+    nserror error = guit->misc->schedule(delay, fetch_curl_timeout, NULL);
+    return error == NSERROR_OK || (delay < 0 && error == NSERROR_NOT_FOUND) ? 0 : -1;
+}
+
+static int fetch_curl_socket(CURL *easy, curl_socket_t socket, int action, void *unused, void *socket_data)
+{
+    unsigned events = 0;
+    if (action == CURL_POLL_IN || action == CURL_POLL_INOUT)
+        events |= GUI_SOCKET_READ;
+    if (action == CURL_POLL_OUT || action == CURL_POLL_INOUT)
+        events |= GUI_SOCKET_WRITE;
+    if (!nsoption_bool(suppress_curl_debug))
+        NSLOG(wisp, DEEPDEBUG, "Curl socket %" PRIdPTR " interests: %u", (intptr_t)socket, events);
+    return guit->fetch->socket_watch((intptr_t)socket, events, fetch_curl_socket_ready, NULL) == NSERROR_OK ? 0 : -1;
+}
+
 
 /**
  * Initialise a cURL fetcher.
@@ -324,6 +352,8 @@ static void fetch_curl_finalise(lwc_string *scheme)
     NSLOG(wisp, INFO, "Finalise cURL fetcher %s", lwc_string_data(scheme));
     if (curl_fetchers_registered == 0) {
         CURLMcode codem;
+        guit->misc->schedule(-1, fetch_curl_timeout, NULL);
+        guit->misc->schedule(-1, fetch_curl_abort_pending, NULL);
         /* All the fetchers have been finalised. */
         NSLOG(wisp, INFO, "All cURL fetchers finalised, closing down cURL");
 
@@ -332,6 +362,10 @@ static void fetch_curl_finalise(lwc_string *scheme)
         codem = curl_multi_cleanup(fetch_curl_multi);
         if (codem != CURLM_OK)
             NSLOG(wisp, INFO, "curl_multi_cleanup failed: ignoring");
+
+        /* Cleanup may issue a final timer callback. */
+        guit->misc->schedule(-1, fetch_curl_timeout, NULL);
+        fetch_curl_multi = NULL;
 
         curl_global_cleanup();
 
@@ -434,6 +468,7 @@ static struct curl_fetch_info *fetch_alloc(void)
         return NULL;
 
     fetch->curl_handle = NULL;
+    fetch->r_prev = fetch->r_next = NULL;
     fetch->sent_ssl_chain = false;
     fetch->had_headers = false;
     fetch->abort = false;
@@ -1267,6 +1302,7 @@ static bool fetch_curl_initiate_fetch(struct curl_fetch_info *fetch, CURL *handl
     /* add to the global curl multi handle */
     codem = curl_multi_add_handle(fetch_curl_multi, fetch->curl_handle);
     assert(codem == CURLM_OK || codem == CURLM_CALL_MULTI_PERFORM);
+    RING_INSERT(curl_active, fetch);
 
     return true;
 }
@@ -1374,6 +1410,7 @@ static void fetch_curl_stop(struct curl_fetch_info *f)
     NSLOG(wisp, INFO, "fetch %p, url '%s'", f, nsurl_access(f->url));
 
     if (f->curl_handle) {
+        RING_REMOVE(curl_active, f);
         /* remove from curl multi handle */
         codem = curl_multi_remove_handle(fetch_curl_multi, f->curl_handle);
         assert(codem == CURLM_OK);
@@ -1398,6 +1435,7 @@ static void fetch_curl_abort(void *vf)
         if (inside_curl) {
             NSLOG(wisp, DEBUG, "Deferring cleanup");
             f->abort = true;
+            guit->misc->schedule(0, fetch_curl_abort_pending, NULL);
         } else {
             NSLOG(wisp, DEBUG, "Immediate abort");
             fetch_curl_stop(f);
@@ -1409,6 +1447,25 @@ static void fetch_curl_abort(void *vf)
     }
 }
 
+
+/* An abort from a callback must not wait for another packet or a progress
+ * notification. Other callbacks may abort a different, currently idle request. */
+static void fetch_curl_abort_pending(void *unused)
+{
+    struct curl_fetch_info *f;
+    while (curl_active != NULL) {
+        f = curl_active;
+        do {
+            if (f->abort)
+                break;
+            f = f->r_next;
+        } while (f != curl_active);
+        if (!f->abort)
+            break;
+        fetch_curl_stop(f);
+        fetch_free(f->fetch_handle);
+    }
+}
 
 /**
  * Free a fetch structure and associated resources.
@@ -1616,76 +1673,49 @@ static void fetch_curl_done(CURL *curl_handle, CURLcode result)
 }
 
 
-/**
- * Do some work on current fetches.
- *
- * Must be called regularly to make progress on fetches.
- */
-static void fetch_curl_poll(lwc_string *scheme_ignored)
+/** Drive curl once, then drain completions before allowing queued starts. */
+static void fetch_curl_run(curl_socket_t socket, int events)
 {
     int running, queue;
-    CURLMcode codem;
-    CURLMsg *curl_msg;
+    CURLMcode code;
+    CURLMsg *message;
 
-    if (nsoption_bool(suppress_curl_debug) == false) {
-        fd_set read_fd_set, write_fd_set, exc_fd_set;
-        int max_fd = -1;
-        int i;
-
-        FD_ZERO(&read_fd_set);
-        FD_ZERO(&write_fd_set);
-        FD_ZERO(&exc_fd_set);
-
-        codem = curl_multi_fdset(fetch_curl_multi, &read_fd_set, &write_fd_set, &exc_fd_set, &max_fd);
-        assert(codem == CURLM_OK);
-
-        NSLOG(wisp, DEEPDEBUG, "Curl file descriptor states (maxfd=%i):", max_fd);
-        for (i = 0; i <= max_fd; i++) {
-            bool read = false;
-            bool write = false;
-            bool error = false;
-
-            if (FD_ISSET(i, &read_fd_set)) {
-                read = true;
-            }
-            if (FD_ISSET(i, &write_fd_set)) {
-                write = true;
-            }
-            if (FD_ISSET(i, &exc_fd_set)) {
-                error = true;
-            }
-            if (read || write || error) {
-                NSLOG(wisp, DEEPDEBUG, "  fd %i: %s %s %s", i, read ? "read" : "    ", write ? "write" : "     ",
-                    error ? "error" : "     ");
-            }
-        }
-    }
-
-    /* do any possible work on the current fetches */
+    assert(!inside_curl);
     inside_curl = true;
     do {
-        codem = curl_multi_perform(fetch_curl_multi, &running);
-        if (codem != CURLM_OK && codem != CURLM_CALL_MULTI_PERFORM) {
-            NSLOG(wisp, WARNING, "curl_multi_perform: %i %s", codem, curl_multi_strerror(codem));
-            return;
-        }
-    } while (codem == CURLM_CALL_MULTI_PERFORM);
+        code = curl_multi_socket_action(fetch_curl_multi, socket, events, &running);
+    } while (code == CURLM_CALL_MULTI_PERFORM);
 
-    /* process curl results */
-    curl_msg = curl_multi_info_read(fetch_curl_multi, &queue);
-    while (curl_msg) {
-        switch (curl_msg->msg) {
-        case CURLMSG_DONE:
-            fetch_curl_done(curl_msg->easy_handle, curl_msg->data.result);
-            break;
-        default:
-            break;
-        }
-        curl_msg = curl_multi_info_read(fetch_curl_multi, &queue);
+    while ((message = curl_multi_info_read(fetch_curl_multi, &queue)) != NULL) {
+        if (message->msg == CURLMSG_DONE)
+            fetch_curl_done(message->easy_handle, message->data.result);
+    }
+    if (code != CURLM_OK) {
+        NSLOG(wisp, ERROR, "curl multi action: %s", curl_multi_strerror(code));
+        /* libcurl requires removing all handles after a multi error before
+         * transfers may start again. Report failure instead of leaving them hung. */
+        while (curl_active != NULL)
+            fetch_curl_done(curl_active->curl_handle, CURLE_FAILED_INIT);
     }
     inside_curl = false;
 }
 
+static void fetch_curl_timeout(void *unused)
+{
+    fetch_curl_run(CURL_SOCKET_TIMEOUT, 0);
+}
+
+static void fetch_curl_socket_ready(intptr_t socket, unsigned events, void *unused)
+{
+    int action = 0;
+    if (events & GUI_SOCKET_READ)
+        action |= CURL_CSELECT_IN;
+    if (events & GUI_SOCKET_WRITE)
+        action |= CURL_CSELECT_OUT;
+    if (events & GUI_SOCKET_ERROR)
+        action |= CURL_CSELECT_ERR;
+    fetch_curl_run((curl_socket_t)socket, action);
+}
 
 /**
  * Callback function for fetch progress.
@@ -1759,7 +1789,7 @@ static int fetch_curl_socket_close(void *clientp, curl_socket_t item)
 {
     (void)clientp;
 
-    return guit->fetch->socket_close((int)item);
+    return guit->fetch->socket_close((intptr_t)item);
 }
 
 /**
@@ -1896,18 +1926,6 @@ static size_t fetch_curl_header(char *data, size_t size, size_t nmemb, void *_f)
 #undef SKIP_ST
 }
 
-static int fetch_curl_fdset(lwc_string *scheme, fd_set *read_set, fd_set *write_set, fd_set *error_set)
-{
-    CURLMcode code;
-    int maxfd = -1;
-
-    code = curl_multi_fdset(fetch_curl_multi, read_set, write_set, error_set, &maxfd);
-    assert(code == CURLM_OK);
-
-    return maxfd;
-}
-
-
 /* exported function documented in content/fetchers/curl.h */
 nserror fetch_curl_register(void)
 {
@@ -1921,8 +1939,6 @@ nserror fetch_curl_register(void)
         .start = fetch_curl_start,
         .abort = fetch_curl_abort,
         .free = fetch_curl_free,
-        .poll = fetch_curl_poll,
-        .fdset = fetch_curl_fdset,
         .finalise = fetch_curl_finalise};
 
 #if LIBCURL_VERSION_NUM >= 0x073800
@@ -1948,6 +1964,13 @@ nserror fetch_curl_register(void)
     fetch_curl_multi = curl_multi_init();
     if (!fetch_curl_multi) {
         NSLOG(wisp, INFO, "curl_multi_init failed.");
+        return NSERROR_INIT_FAILED;
+    }
+
+    if (curl_multi_setopt(fetch_curl_multi, CURLMOPT_SOCKETFUNCTION, fetch_curl_socket) != CURLM_OK ||
+        curl_multi_setopt(fetch_curl_multi, CURLMOPT_TIMERFUNCTION, fetch_curl_timer) != CURLM_OK) {
+        curl_multi_cleanup(fetch_curl_multi);
+        fetch_curl_multi = NULL;
         return NSERROR_INIT_FAILED;
     }
 

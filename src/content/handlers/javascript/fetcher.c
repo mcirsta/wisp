@@ -62,7 +62,7 @@ static inline bool fetch_javascript_send_callback(const fetch_msg *msg, struct f
 
 
 /**
- * called from poll to progress fetch.
+ * called from the work queue to progress a fetch.
  *
  * \todo This is currently completely unimplemented and just returns 204
  */
@@ -138,22 +138,22 @@ static void fetch_javascript_abort(void *ctx)
 {
     struct fetch_javascript_context *c = ctx;
 
-    /* To avoid the poll loop having to deal with the fetch context
+    /* To avoid the work loop having to deal with the fetch context
      * disappearing from under it, we simply flag the abort here.
-     * The poll loop itself will perform the appropriate cleanup.
+     * The work loop itself will perform the appropriate cleanup.
      */
     c->aborted = true;
 }
 
 
-/** callback to poll for additional resource fetch contents */
-static void fetch_javascript_poll(lwc_string *scheme)
+/** callback to process queued resource fetches */
+static void fetch_javascript_run(lwc_string *scheme)
 {
     struct fetch_javascript_context *c;
     size_t remaining;
 
     /* Removing an entry moves the head, so it cannot be an end marker.
-     * Bound this poll's work even if callbacks keep adding new fetches. */
+     * Bound this turn's work even if callbacks keep adding new fetches. */
     RING_GETSIZE(struct fetch_javascript_context, ring, remaining);
     for (; remaining > 0 && ring != NULL; remaining--) {
         /* Re-entrant callbacks may have removed other entries. */
@@ -161,8 +161,7 @@ static void fetch_javascript_poll(lwc_string *scheme)
         /* Ignore fetches that have been flagged as locked.
          * This allows safe re-entrant calls to this function.
          * Re-entrancy can occur if, as a result of a callback,
-         * the interested party causes fetch_poll() to be called
-         * again.
+         * the interested party runs the event loop again.
          */
         if (c->locked == true) {
             ring = c->r_next;
@@ -194,7 +193,7 @@ nserror fetch_javascript_register(void)
         .start = fetch_javascript_start,
         .abort = fetch_javascript_abort,
         .free = fetch_javascript_free,
-        .poll = fetch_javascript_poll,
+        .run = fetch_javascript_run,
         .finalise = fetch_javascript_finalise};
 
     return fetcher_add(scheme, &fetcher_ops);

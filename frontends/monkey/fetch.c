@@ -16,6 +16,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include <wisp/utils/socket.h>
 #include <limits.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -33,7 +34,6 @@
 
 extern char **respaths;
 
-
 static nsurl *gui_get_resource_url(const char *path)
 {
     char buf[PATH_MAX];
@@ -48,6 +48,7 @@ static struct gui_fetch_table fetch_table = {
     .filetype = monkey_fetch_filetype,
 
     .get_resource_url = gui_get_resource_url,
+    .socket_watch = wisp_socket_watch,
 };
 
 struct gui_fetch_table *monkey_fetch_table = &fetch_table;

@@ -743,7 +743,7 @@ int32 nsbeos_replicant_main_thread(void *_arg)
     int32 ret = 0;
 
     while (!nsbeos_done) {
-        nsbeos_gui_poll();
+        nsbeos_gui_wait();
     }
 
     wisp_exit();

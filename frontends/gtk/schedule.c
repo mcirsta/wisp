@@ -30,6 +30,7 @@
 typedef struct {
     void (*callback)(void *); /**< The callback function. */
     void *context; /**< The context for the callback. */
+    guint source; /**< GLib timeout source, zero after it fires. */
     bool callback_killed; /**< Whether or not this was killed. */
 } _nsgtk_callback_t;
 
@@ -47,6 +48,7 @@ static gboolean nsgtk_schedule_generic_callback(gpointer data)
         /* This callback instance has been killed. */
         NSLOG(schedule, DEBUG, "CB at %p already dead.", cb);
     }
+    cb->source = 0;
     queued_callbacks = g_list_remove(queued_callbacks, cb);
     pending_callbacks = g_list_append(pending_callbacks, cb);
     return FALSE;
@@ -81,7 +83,18 @@ static nserror schedule_remove(void (*callback)(void *p), void *cbctx)
         .callback_killed = false,
     };
 
-    g_list_foreach(queued_callbacks, nsgtk_schedule_kill_callback, &cb_match);
+    /* Cancel the actual timeout too: a replaced curl deadline must not leave
+     * an idle wakeup behind. Pending/running batches still use tombstones. */
+    for (GList *link = queued_callbacks, *next; link != NULL; link = next) {
+        next = link->next;
+        _nsgtk_callback_t *cb = link->data;
+        if (cb->callback == callback && cb->context == cbctx) {
+            g_source_remove(cb->source);
+            queued_callbacks = g_list_delete_link(queued_callbacks, link);
+            free(cb);
+            cb_match.callback_killed = true;
+        }
+    }
     g_list_foreach(pending_callbacks, nsgtk_schedule_kill_callback, &cb_match);
     g_list_foreach(this_run, nsgtk_schedule_kill_callback, &cb_match);
 
@@ -106,12 +119,14 @@ nserror nsgtk_schedule(int t, void (*callback)(void *p), void *cbctx)
     }
 
     cb = malloc(sizeof(_nsgtk_callback_t));
+    if (cb == NULL)
+        return NSERROR_NOMEM;
     cb->callback = callback;
     cb->context = cbctx;
     cb->callback_killed = false;
     /* Prepend is faster right now. */
     queued_callbacks = g_list_prepend(queued_callbacks, cb);
-    g_timeout_add(t, nsgtk_schedule_generic_callback, cb);
+    cb->source = g_timeout_add(t, nsgtk_schedule_generic_callback, cb);
 
     return NSERROR_OK;
 }

@@ -40,6 +40,7 @@ extern "C" {
 
 #include "qt/fetch.h"
 #include "qt/resources.h"
+#include "qt/socket.h"
 
 /**
  * Determine the MIME type of a local file.
@@ -150,6 +151,7 @@ static struct gui_fetch_table fetch_table = {
     .mimetype = NULL,
     .socket_open = NULL,
     .socket_close = NULL,
+    .socket_watch = nsqt_socket_watch,
 };
 
 struct gui_fetch_table *nsqt_fetch_table = &fetch_table;

@@ -414,16 +414,16 @@ static void fetch_resource_abort(void *ctx)
 {
     struct fetch_resource_context *c = ctx;
 
-    /* To avoid the poll loop having to deal with the fetch context
+    /* To avoid the work loop having to deal with the fetch context
      * disappearing from under it, we simply flag the abort here.
-     * The poll loop itself will perform the appropriate cleanup.
+     * The work loop itself will perform the appropriate cleanup.
      */
     c->aborted = true;
 }
 
 
-/** callback to poll for additional resource fetch contents */
-static void fetch_resource_poll(lwc_string *scheme)
+/** callback to process queued resource fetches */
+static void fetch_resource_run(lwc_string *scheme)
 {
     struct fetch_resource_context *c, *save_ring = NULL;
 
@@ -435,8 +435,7 @@ static void fetch_resource_poll(lwc_string *scheme)
         /* Ignore fetches that have been flagged as locked.
          * This allows safe re-entrant calls to this function.
          * Re-entrancy can occur if, as a result of a callback,
-         * the interested party causes fetch_poll() to be called
-         * again.
+         * the interested party runs the event loop again.
          */
         if (c->locked == true) {
             RING_INSERT(save_ring, c);
@@ -469,7 +468,7 @@ nserror fetch_resource_register(void)
         .start = fetch_resource_start,
         .abort = fetch_resource_abort,
         .free = fetch_resource_free,
-        .poll = fetch_resource_poll,
+        .run = fetch_resource_run,
         .finalise = fetch_resource_finalise};
 
     return fetcher_add(scheme, &fetcher_ops);

@@ -26,6 +26,7 @@
 #include <sys/types.h>
 #include <stdbool.h>
 #include <unistd.h>
+#include <wisp/utils/socket.h>
 #include <windows.h>
 
 #include "wisp/browser_window.h"
@@ -126,10 +127,12 @@ void win32_run(void)
     MSG Msg;
     int timeout;
 
-    NSLOG(wisp, INFO, "Starting messgae dispatcher");
+    NSLOG(wisp, INFO, "Starting message dispatcher");
 
     while (!win32_quit) {
         timeout = schedule_run();
+        if (win32_quit)
+            break;
 
         DWORD wait_timeout;
         if (timeout < 0) {
@@ -138,9 +141,17 @@ void win32_run(void)
             wait_timeout = (DWORD)timeout;
         }
 
-        DWORD wait_result = MsgWaitForMultipleObjectsEx(0, NULL, wait_timeout, QS_ALLINPUT, MWMO_INPUTAVAILABLE);
+        HANDLE socket_event = wisp_socket_event();
+        DWORD count = socket_event != NULL ? 1 : 0;
+        DWORD wait_result = MsgWaitForMultipleObjectsEx(count, &socket_event, wait_timeout, QS_ALLINPUT,
+            MWMO_INPUTAVAILABLE);
 
-        if (wait_result == WAIT_OBJECT_0) {
+        if (wait_result == WAIT_FAILED) {
+            NSLOG(wisp, CRITICAL, "Event wait failed: %lu", GetLastError());
+            win32_quit = true;
+        } else if (count != 0 && wait_result == WAIT_OBJECT_0) {
+            wisp_socket_dispatch();
+        } else if (wait_result == WAIT_OBJECT_0 + count) {
             while (PeekMessage(&Msg, NULL, 0, 0, PM_REMOVE)) {
                 if (Msg.message == WM_QUIT) {
                     win32_quit = true;

@@ -118,9 +118,9 @@ static struct fetch *add_request(unsigned kind)
     return fetch;
 }
 
-static void poll(unsigned kind)
+static void run_batch(unsigned kind)
 {
-    registered[kind].ops.poll(registered[kind].scheme);
+    registered[kind].ops.run(registered[kind].scheme);
 }
 
 static void check_completed(const struct fetch *fetch)
@@ -150,7 +150,7 @@ static void teardown(void)
         ck_assert_ptr_null(requests[i].context);
     }
     for (unsigned kind = 0; kind < FETCHER_COUNT; kind++) {
-        poll(kind); /* Empty rings must remain safe. */
+        run_batch(kind); /* Empty rings must remain safe. */
         registered[kind].ops.finalise(registered[kind].scheme);
         lwc_string_unref(registered[kind].scheme);
     }
@@ -163,7 +163,7 @@ START_TEST(test_batch)
     unsigned count = _i < FETCHER_COUNT ? 1 : 24;
     for (unsigned i = 0; i < count; i++)
         add_request(kind);
-    poll(kind);
+    run_batch(kind);
     for (unsigned i = 0; i < count; i++)
         check_completed(&requests[i]);
 }
@@ -171,9 +171,9 @@ END_TEST
 
 static void reenter(const fetch_msg *message, struct fetch *fetch)
 {
-    /* Every callback re-enters, including callbacks reached from nested polls.
+    /* Every callback re-enters, including callbacks reached from nested runs.
      * The active contexts must stay alive and must not receive duplicate data. */
-    poll(fetch->kind);
+    run_batch(fetch->kind);
 }
 
 START_TEST(test_reentrant_batch)
@@ -182,7 +182,7 @@ START_TEST(test_reentrant_batch)
     unsigned kind = _i % FETCHER_COUNT;
     for (unsigned i = 0; i < count; i++)
         add_request(kind)->on_message = reenter;
-    poll(kind);
+    run_batch(kind);
     for (unsigned i = 0; i < count; i++)
         check_completed(&requests[i]);
 }
@@ -194,7 +194,7 @@ static void abort_during_callback(const fetch_msg *message, struct fetch *fetch)
         return;
     struct fetch *target = abort_target != NULL ? abort_target : fetch;
     registered[target->kind].ops.abort(target->context);
-    poll(fetch->kind);
+    run_batch(fetch->kind);
 }
 
 START_TEST(test_css_abort_during_callback)
@@ -204,7 +204,7 @@ START_TEST(test_css_abort_during_callback)
     add_request(CSS_FETCHER);
     callback_trigger = _i + 1; /* Each of the three headers, data and finish. */
     first->on_message = abort_during_callback;
-    poll(CSS_FETCHER);
+    run_batch(CSS_FETCHER);
     ck_assert_uint_eq(first->callbacks, callback_trigger);
     ck_assert_uint_eq(first->freed, 1);
     check_completed(&requests[1]);
@@ -225,7 +225,7 @@ START_TEST(test_abort_pending)
         first->on_message = abort_during_callback;
         callback_trigger = 1;
     }
-    poll(kind);
+    run_batch(kind);
     if (_i < FETCHER_COUNT)
         ck_assert_uint_eq(first->callbacks, 0);
     else
@@ -247,14 +247,14 @@ START_TEST(test_callback_queue_is_bounded)
     unsigned kind = _i;
     for (unsigned i = 0; i < 3; i++)
         add_request(kind)->on_message = enqueue_on_finish;
-    poll(kind);
+    run_batch(kind);
     ck_assert_uint_eq(request_count, 6);
     for (unsigned i = 0; i < 3; i++) {
         check_completed(&requests[i]);
         ck_assert_uint_eq(requests[i + 3].callbacks, 0);
         requests[i + 3].on_message = NULL;
     }
-    poll(kind);
+    run_batch(kind);
     for (unsigned i = 3; i < request_count; i++)
         check_completed(&requests[i]);
 }
@@ -262,7 +262,7 @@ END_TEST
 
 int main(void)
 {
-    Suite *suite = suite_create("Scheme fetcher polling");
+    Suite *suite = suite_create("Scheme fetcher queued work");
     TCase *test = tcase_create("batch, callbacks and lifetime");
     tcase_add_checked_fixture(test, setup, teardown);
     tcase_add_loop_test(test, test_batch, 0, 2 * FETCHER_COUNT);

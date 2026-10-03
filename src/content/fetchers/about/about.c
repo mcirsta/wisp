@@ -586,18 +586,18 @@ static void fetch_about_abort(void *ctx)
 {
     struct fetch_about_context *c = ctx;
 
-    /* To avoid the poll loop having to deal with the fetch context
+    /* To avoid the work loop having to deal with the fetch context
      * disappearing from under it, we simply flag the abort here.
-     * The poll loop itself will perform the appropriate cleanup.
+     * The work loop itself will perform the appropriate cleanup.
      */
     c->aborted = true;
 }
 
 
 /**
- * callback to poll for additional about fetch contents
+ * callback to process queued about fetch contents
  */
-static void fetch_about_poll(lwc_string *scheme)
+static void fetch_about_run(lwc_string *scheme)
 {
     struct fetch_about_context *c, *save_ring = NULL;
 
@@ -610,8 +610,7 @@ static void fetch_about_poll(lwc_string *scheme)
         /* Ignore fetches that have been flagged as locked.
          * This allows safe re-entrant calls to this function.
          * Re-entrancy can occur if, as a result of a callback,
-         * the interested party causes fetch_poll() to be called
-         * again.
+         * the interested party runs the event loop again.
          */
         if (c->locked == true) {
             RING_INSERT(save_ring, c);
@@ -649,7 +648,7 @@ nserror fetch_about_register(void)
         .start = fetch_about_start,
         .abort = fetch_about_abort,
         .free = fetch_about_free,
-        .poll = fetch_about_poll,
+        .run = fetch_about_run,
         .finalise = fetch_about_finalise};
 
     return fetcher_add(scheme, &fetcher_ops);

@@ -63,16 +63,6 @@
 /** The maximum number of fetchers that can be added */
 #define MAX_FETCHERS 10
 
-/** The time in ms between polling the fetchers.
- *
- * \todo The schedule timeout should be profiled to see if there is a
- * better value or even if it needs to be dynamic.
- */
-#define SCHEDULE_TIME 10
-
-/** The fdset timeout in ms */
-#define FDSET_TIMEOUT 1000
-
 /**
  * Information about a fetcher for a given scheme.
  */
@@ -204,7 +194,7 @@ static void dump_rings(void)
 /**
  * Dispatch as many jobs as we have room to dispatch.
  *
- * @return true if there are active fetchers that require polling else false.
+ * @return true if there are active fetches, else false.
  */
 static bool fetch_dispatch_jobs(void)
 {
@@ -229,21 +219,26 @@ static bool fetch_dispatch_jobs(void)
     return (all_active > 0);
 }
 
-static void fetcher_poll(void *unused)
+static void fetcher_run(void *unused)
 {
     int fetcherd;
 
     if (fetch_dispatch_jobs()) {
-        NSLOG(fetch, DEBUG, "Polling fetchers");
+        NSLOG(fetch, DEBUG, "Running queued fetch work");
         for (fetcherd = 0; fetcherd < MAX_FETCHERS; fetcherd++) {
-            if (fetchers[fetcherd].refcount > 0) {
-                /* fetcher present */
-                fetchers[fetcherd].ops.poll(fetchers[fetcherd].scheme);
+            if (fetchers[fetcherd].refcount > 1 && fetchers[fetcherd].ops.run != NULL) {
+                fetchers[fetcherd].ops.run(fetchers[fetcherd].scheme);
             }
         }
 
-        /* schedule active fetchers to run again in 10ms */
-        guit->misc->schedule(SCHEDULE_TIME, fetcher_poll, NULL);
+        /* Bounded local batches may leave ready work for another turn.
+         * Network transfers advance only from socket events or curl deadlines. */
+        for (fetcherd = 0; fetcherd < MAX_FETCHERS; fetcherd++) {
+            if (fetchers[fetcherd].refcount > 1 && fetchers[fetcherd].ops.run != NULL) {
+                guit->misc->schedule(0, fetcher_run, NULL);
+                break;
+            }
+        }
     }
 }
 
@@ -291,6 +286,7 @@ nserror fetcher_init(void)
 /* exported interface documented in content/fetchers.h */
 void fetcher_quit(void)
 {
+    guit->misc->schedule(-1, fetcher_run, NULL);
     int fetcherd; /* fetcher index */
     for (fetcherd = 0; fetcherd < MAX_FETCHERS; fetcherd++) {
         if (fetchers[fetcherd].refcount > 1) {
@@ -343,64 +339,6 @@ nserror fetcher_add(lwc_string *scheme, const struct fetcher_operation_table *op
     fetchers[fetcherd].ops = *ops;
 
     fetch_ref_fetcher(fetcherd);
-
-    return NSERROR_OK;
-}
-
-/* exported interface documented in content/fetch.h */
-nserror fetch_fdset(fd_set *read_fd_set, fd_set *write_fd_set, fd_set *except_fd_set, int *maxfd_out)
-{
-    int maxfd = -1;
-    int fetcherd; /* fetcher index */
-
-    if (!fetch_dispatch_jobs()) {
-        NSLOG(fetch, DEBUG, "No jobs");
-        *maxfd_out = -1;
-        return NSERROR_OK;
-    }
-
-    NSLOG(fetch, DEBUG, "Polling fetchers");
-
-    for (fetcherd = 0; fetcherd < MAX_FETCHERS; fetcherd++) {
-        if (fetchers[fetcherd].refcount > 0) {
-            /* fetcher present */
-            fetchers[fetcherd].ops.poll(fetchers[fetcherd].scheme);
-        }
-    }
-
-    FD_ZERO(read_fd_set);
-    FD_ZERO(write_fd_set);
-    FD_ZERO(except_fd_set);
-
-    for (fetcherd = 0; fetcherd < MAX_FETCHERS; fetcherd++) {
-        if ((fetchers[fetcherd].refcount > 0) && (fetchers[fetcherd].ops.fdset != NULL)) {
-            /* fetcher present */
-            int fetcher_maxfd;
-            fetcher_maxfd = fetchers[fetcherd].ops.fdset(
-                fetchers[fetcherd].scheme, read_fd_set, write_fd_set, except_fd_set);
-            if (fetcher_maxfd > maxfd)
-                maxfd = fetcher_maxfd;
-        }
-    }
-
-    if (maxfd >= 0) {
-        /* change the scheduled poll to happen is a 1000ms as
-         * we assume fetching an fdset means the fetchers will
-         * be run by the client waking up on data available on
-         * the fd and re-calling fetcher_fdset() if this does
-         * not happen the fetch polling will continue as
-         * usual.
-         */
-        /** @note adjusting the schedule time is only done for
-         * curl currently. This is because as it is assumed to
-         * be the only fetcher that can possibly have fd to
-         * select on. All the other fetchers continue to need
-         * polling frequently.
-         */
-        guit->misc->schedule(FDSET_TIMEOUT, fetcher_poll, NULL);
-    }
-
-    *maxfd_out = maxfd;
 
     return NSERROR_OK;
 }
@@ -472,11 +410,8 @@ nserror fetch_start(nsurl *url, nsurl *referer, fetch_callback callback, void *p
     RING_INSERT(queue_ring, fetch);
 
     /* Ask the queue to run. */
-    if (fetch_dispatch_jobs()) {
-        NSLOG(fetch, DEBUG, "scheduling poll");
-        /* schedule active fetchers to run again in 10ms */
-        guit->misc->schedule(10, fetcher_poll, NULL);
-    }
+    fetch_dispatch_jobs();
+    guit->misc->schedule(0, fetcher_run, NULL);
 
     *fetch_out = fetch;
     return NSERROR_OK;
@@ -715,6 +650,11 @@ void fetch_remove_from_queues(struct fetch *fetch)
 
     NSLOG(fetch, DEBUG, "Fetch ring is now %d elements.", all_active);
     NSLOG(fetch, DEBUG, "Queue ring is now %d elements.", all_queued);
+
+    /* Completion can free a slot while inside a backend callback. Dispatch on
+     * the next turn, after the backend has unwound (curl cannot be reentered). */
+    if (queue_ring != NULL)
+        guit->misc->schedule(0, fetcher_run, NULL);
 }
 
 

@@ -31,11 +31,20 @@
 
 struct nsurl;
 
+/** Socket readiness, independent of the frontend and network library. */
+enum gui_socket_event {
+    GUI_SOCKET_READ = 1,
+    GUI_SOCKET_WRITE = 2,
+    GUI_SOCKET_ERROR = 4
+};
+
+typedef void (*gui_socket_callback)(intptr_t socket, unsigned events, void *pw);
+
 /**
  * function table for fetcher operations.
  */
 struct gui_fetch_table {
-    /* Mandantory entries */
+    /* Mandatory file-type operation; socket_watch below is also mandatory. */
 
     /**
      * Determine the MIME type of a local file.
@@ -48,7 +57,7 @@ struct gui_fetch_table {
      */
     const char *(*filetype)(const char *unix_path);
 
-    /* Optional entries */
+    /* Optional entries, except socket_watch (documented below). */
 
     /**
      * Translate resource to full url.
@@ -111,7 +120,7 @@ struct gui_fetch_table {
      * \param protocol Protocol
      * \return Socket descriptor on success, -1 on error and errno set
      */
-    int (*socket_open)(int domain, int type, int protocol);
+    intptr_t (*socket_open)(int domain, int type, int protocol);
 
     /**
      * Close a socket
@@ -119,7 +128,21 @@ struct gui_fetch_table {
      * \param socket Socket descriptor
      * \return 0 on success, -1 on error and errno set
      */
-    int (*socket_close)(int socket);
+    int (*socket_close)(intptr_t socket);
+
+    /**
+     * Replace the readiness watch for a socket, or remove it when events is 0.
+     * Interests are GUI_SOCKET_READ and/or GUI_SOCKET_WRITE. A readiness
+     * callback may additionally report GUI_SOCKET_ERROR.
+     *
+     * Callbacks run on the engine's event-loop thread, never synchronously from
+     * this function. A callback may replace/remove any watch, including itself.
+     * Removal must suppress outstanding notifications before the descriptor can
+     * be reused. The frontend watches readiness only; it does not own the socket.
+     *
+     * Mandatory. There is no periodic network polling fallback.
+     */
+    nserror (*socket_watch)(intptr_t socket, unsigned events, gui_socket_callback callback, void *pw);
 };
 
 #endif

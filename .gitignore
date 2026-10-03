@@ -13,6 +13,7 @@ install-finstrument
 build-ctest
 build-css-vars
 build-css-vars-release
+build-events-gtk
 build-inc
 _staging
 build-ninja

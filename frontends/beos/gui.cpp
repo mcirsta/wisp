@@ -24,6 +24,7 @@
 #include <sys/types.h>
 #include <assert.h>
 #include <ctype.h>
+#include <errno.h>
 #include <limits.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -66,7 +67,7 @@ extern "C" {
 #include "wisp/wisp.h"
 #include "wisp/search.h"
 #include "wisp/url_db.h"
-#include "content/fetch.h"
+#include <wisp/utils/socket.h>
 }
 
 #include "beos/gui.h"
@@ -724,19 +725,21 @@ void nsbeos_pipe_message_top(BMessage *message, BWindow *_this, struct beos_scaf
 }
 
 
-void nsbeos_gui_poll(void)
+void nsbeos_gui_wait(void)
 {
     fd_set read_fd_set, write_fd_set, exc_fd_set;
     int max_fd;
     struct timeval timeout;
-    unsigned int fd_count = 0;
+    int fd_count;
+    struct timeval *wait_timeout = NULL;
     bigtime_t next_schedule = 0;
 
     /* run the scheduler */
     schedule_run();
+    if (nsbeos_done)
+        return;
 
-    /* get any active fetcher fd */
-    fetch_fdset(&read_fd_set, &write_fd_set, &exc_fd_set, &max_fd);
+    max_fd = wisp_socket_fdset(&read_fd_set, &write_fd_set, &exc_fd_set);
 
     // our own event pipe
     FD_SET(sEventPipe[0], &read_fd_set);
@@ -744,30 +747,31 @@ void nsbeos_gui_poll(void)
     // max of all the fds in the set, plus one for select()
     max_fd = MAX(max_fd, sEventPipe[0]) + 1;
 
-    // compute schedule timeout
+    // Only a real scheduled deadline limits the blocking wait.
     if (earliest_callback_timeout != B_INFINITE_TIMEOUT) {
-        next_schedule = earliest_callback_timeout - system_time();
-    } else {
-        next_schedule = earliest_callback_timeout;
+        next_schedule = MAX((bigtime_t)0, earliest_callback_timeout - system_time());
+        timeout.tv_sec = (long)(next_schedule / 1000000LL);
+        timeout.tv_usec = (long)(next_schedule % 1000000LL);
+        wait_timeout = &timeout;
     }
 
-    // we're quite late already...
-    if (next_schedule < 0)
-        next_schedule = 0;
-
-    timeout.tv_sec = (long)(next_schedule / 1000000LL);
-    timeout.tv_usec = (long)(next_schedule % 1000000LL);
-
-    NSLOG(wisp, DEEPDEBUG, "gui_poll: select(%d, ..., %Ldus", max_fd, next_schedule);
-    fd_count = select(max_fd, &read_fd_set, &write_fd_set, &exc_fd_set, &timeout);
-    NSLOG(wisp, DEEPDEBUG, "select: %d\n", fd_count);
+    fd_count = select(max_fd, &read_fd_set, &write_fd_set, &exc_fd_set, wait_timeout);
+    if (fd_count < 0) {
+        if (errno != EINTR) {
+            NSLOG(wisp, CRITICAL, "Event wait failed: %s", strerror(errno));
+            nsbeos_done = true;
+        }
+        return;
+    }
+    if (fd_count > 0)
+        wisp_socket_ready(&read_fd_set, &write_fd_set, &exc_fd_set);
 
     if (fd_count > 0 && FD_ISSET(sEventPipe[0], &read_fd_set)) {
         BMessage *message;
         int len = read(sEventPipe[0], &message, sizeof(void *));
-        NSLOG(wisp, DEEPDEBUG, "gui_poll: BMessage ? %d read", len);
+        NSLOG(wisp, DEEPDEBUG, "gui_wait: BMessage ? %d read", len);
         if (len == sizeof(void *)) {
-            NSLOG(wisp, DEEPDEBUG, "gui_poll: BMessage.what %-4.4s\n", (char *)&(message->what));
+            NSLOG(wisp, DEEPDEBUG, "gui_wait: BMessage.what %-4.4s\n", (char *)&(message->what));
             nsbeos_dispatch_event(message);
         }
     }
@@ -955,6 +959,7 @@ static struct gui_fetch_table beos_fetch_table = {
     NULL, // fetch_mimetype
     NULL, // socket open
     NULL, // socket close
+    wisp_socket_watch,
 };
 
 static struct gui_misc_table beos_misc_table = {
@@ -1043,7 +1048,7 @@ int main(int argc, char **argv)
     gui_init(argc, argv);
 
     while (!nsbeos_done) {
-        nsbeos_gui_poll();
+        nsbeos_gui_wait();
     }
 
     wisp_exit();

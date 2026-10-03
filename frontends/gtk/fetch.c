@@ -34,6 +34,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <stdint.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -49,6 +50,7 @@
 #include <wisp/utils/nsurl.h>
 
 #include "gtk/fetch.h"
+#include "gtk/socket.h"
 #include "gtk/gui.h"
 #include "gtk/resources.h"
 
@@ -260,6 +262,7 @@ static nsurl *nsgtk_get_resource_url(const char *path)
 }
 
 static struct gui_fetch_table fetch_table = {
+    .socket_watch = nsgtk_socket_watch,
     .filetype = fetch_filetype,
 
     .get_resource_url = nsgtk_get_resource_url,

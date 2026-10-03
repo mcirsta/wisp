@@ -131,9 +131,9 @@ static void fetch_rsrc_abort(void *ctx)
 {
     struct fetch_rsrc_context *c = (struct fetch_rsrc_context *)ctx;
 
-    /* To avoid the poll loop having to deal with the fetch context
+    /* To avoid the work loop having to deal with the fetch context
      * disappearing from under it, we simply flag the abort here.
-     * The poll loop itself will perform the appropriate cleanup.
+     * The work loop itself will perform the appropriate cleanup.
      */
     c->aborted = true;
 }
@@ -246,7 +246,7 @@ static bool fetch_rsrc_process(struct fetch_rsrc_context *c)
     return true;
 }
 
-static void fetch_rsrc_poll(lwc_string *scheme)
+static void fetch_rsrc_run(lwc_string *scheme)
 {
     fetch_msg msg;
     struct fetch_rsrc_context *c, *next;
@@ -264,8 +264,7 @@ static void fetch_rsrc_poll(lwc_string *scheme)
         /* Ignore fetches that have been flagged as locked.
          * This allows safe re-entrant calls to this function.
          * Re-entrancy can occur if, as a result of a callback,
-         * the interested party causes fetch_poll() to be called
-         * again.
+         * the interested party runs the event loop again.
          */
         if (c->locked == true) {
             continue;
@@ -357,7 +356,7 @@ void fetch_rsrc_register(void)
     nserror ret;
 
     const struct fetcher_operation_table fetcher_ops_rsrc = {fetch_rsrc_initialise, fetch_rsrc_can_fetch,
-        fetch_rsrc_setup, fetch_rsrc_start, fetch_rsrc_abort, fetch_rsrc_free, fetch_rsrc_poll, NULL,
+        fetch_rsrc_setup, fetch_rsrc_start, fetch_rsrc_abort, fetch_rsrc_free, fetch_rsrc_run,
         fetch_rsrc_finalise};
 
     err = find_app_resources();

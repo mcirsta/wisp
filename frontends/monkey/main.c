@@ -16,12 +16,14 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include <wisp/utils/socket.h>
 #include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #ifdef _WIN32
 #include <winsock2.h>
 #include <windows.h>
+#include "monkey/input.h"
 #else
 #include <sys/select.h>
 #endif
@@ -281,95 +283,62 @@ static struct gui_misc_table monkey_misc_table = {
 
 static void monkey_run(void)
 {
-    fd_set read_fd_set, write_fd_set, exc_fd_set;
-    int max_fd;
-    int rdy_fd;
-    int schedtm;
-    struct timeval tv;
-    struct timeval *timeout;
-
-    while (!monkey_done) {
-
-        /* discover the next scheduled event time */
-        schedtm = monkey_schedule_run();
-
-        /* clears fdset */
-        fetch_fdset(&read_fd_set, &write_fd_set, &exc_fd_set, &max_fd);
-
-
-#ifndef _WIN32
-        if (max_fd < 0) {
-            max_fd = 0;
-        }
-        FD_SET(0, &read_fd_set);
-        FD_SET(0, &exc_fd_set);
+#ifdef _WIN32
+    if (!monkey_input_start())
+        die("Unable to start command input reader");
 #endif
-
-        /* setup timeout */
-        switch (schedtm) {
-        case -1:
-            NSLOG(wisp, INFO, "Iterate blocking");
+    while (!monkey_done) {
+        int schedtm = monkey_schedule_run();
+        /* Keep the driver protocol's POLL messages: these describe blocking
+         * event waits, not periodic checks for network or command activity. */
+        if (schedtm == -1)
             moutf(MOUT_GENERIC, "POLL BLOCKING");
-            timeout = NULL;
-            break;
-
-        case 0:
-            NSLOG(wisp, INFO, "Iterate immediate");
-            tv.tv_sec = 0;
-            tv.tv_usec = 0;
-            timeout = &tv;
-            break;
-
-        default:
-            NSLOG(wisp, INFO, "Iterate non-blocking");
+        else if (schedtm > 0)
             moutf(MOUT_GENERIC, "POLL TIMED %d", schedtm);
-            tv.tv_sec = schedtm / 1000; /* miliseconds to seconds */
-            tv.tv_usec = (schedtm % 1000) * 1000; /* remainder to microseconds */
-            timeout = &tv;
-            break;
-        }
 
 #ifdef _WIN32
-        if (max_fd < 0) {
-            if (schedtm == -1) {
-                Sleep(1);
-            } else if (schedtm == 0) {
-                Sleep(0);
-            } else {
-                Sleep((DWORD)schedtm);
-            }
-        } else {
-            rdy_fd = select(max_fd + 1, &read_fd_set, &write_fd_set, &exc_fd_set, timeout);
-            if (rdy_fd < 0) {
-                NSLOG(wisp, CRITICAL, "Unable to select: %s", strerror(errno));
-                Sleep(1);
-            }
-        }
-        {
-            DWORD avail = 0;
-            HANDLE hIn = GetStdHandle(STD_INPUT_HANDLE);
-            if (hIn != INVALID_HANDLE_VALUE) {
-                if (PeekNamedPipe(hIn, NULL, 0, NULL, &avail, NULL)) {
-                    if (avail > 0 && !monkey_process_command())
-                        monkey_done = true;
-                } else if (GetLastError() == ERROR_BROKEN_PIPE) {
-                    monkey_done = true;
-                }
-            }
+        HANDLE events[2] = { monkey_input_event(), wisp_socket_event() };
+        DWORD count = events[1] != NULL ? 2 : 1;
+        DWORD ready = WaitForMultipleObjects(count, events, FALSE, schedtm < 0 ? INFINITE : (DWORD)schedtm);
+        if (ready == WAIT_OBJECT_0) {
+            char *command = monkey_input_command();
+            if (command == NULL)
+                monkey_done = true;
+            else
+                monkey_dispatch_command(command);
+            if (!monkey_done)
+                monkey_input_next();
+        } else if (count == 2 && ready == WAIT_OBJECT_0 + 1) {
+            wisp_socket_dispatch();
+        } else if (ready == WAIT_FAILED) {
+            /* Fatal wait failure: process exit also stops the input reader. */
+            die("Unable to wait for events");
         }
 #else
-        rdy_fd = select(max_fd + 1, &read_fd_set, &write_fd_set, &exc_fd_set, timeout);
-        if (rdy_fd < 0) {
-            NSLOG(wisp, CRITICAL, "Unable to select: %s", strerror(errno));
-            monkey_done = true;
-        } else if (rdy_fd > 0) {
-            if (FD_ISSET(0, &read_fd_set)) {
-                if (!monkey_process_command())
-                    monkey_done = true;
+        fd_set read_fd_set, write_fd_set, exc_fd_set;
+        int max_fd = wisp_socket_fdset(&read_fd_set, &write_fd_set, &exc_fd_set);
+        if (max_fd < STDIN_FILENO)
+            max_fd = STDIN_FILENO;
+        FD_SET(STDIN_FILENO, &read_fd_set);
+        struct timeval tv = { schedtm / 1000, (schedtm % 1000) * 1000 };
+        int ready = select(max_fd + 1, &read_fd_set, &write_fd_set, &exc_fd_set, schedtm < 0 ? NULL : &tv);
+        if (ready < 0) {
+            if (errno != EINTR) {
+                NSLOG(wisp, CRITICAL, "Unable to wait for events: %s", strerror(errno));
+                monkey_done = true;
             }
+        } else if (ready > 0) {
+            wisp_socket_ready(&read_fd_set, &write_fd_set, &exc_fd_set);
+            if (FD_ISSET(STDIN_FILENO, &read_fd_set) && !monkey_process_command())
+                monkey_done = true;
         }
 #endif
     }
+#ifdef _WIN32
+    /* The only normal exits are QUIT and EOF, both delivered by the reader.
+     * No new read has been requested, so joining never waits on stdin. */
+    monkey_input_finish();
+#endif
 }
 
 #if (!defined(NDEBUG) && defined(HAVE_EXECINFO))

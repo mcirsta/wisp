@@ -28,6 +28,8 @@ nserror monkey_register_handler(const char *cmd, handle_command_fn fn);
 /* Return false when the command stream has closed. */
 bool monkey_process_command(void);
 
+void monkey_dispatch_command(char *buffer);
+
 void monkey_free_handlers(void);
 
 #endif /* NETSURF_MONKEY_DISPATCH_H */

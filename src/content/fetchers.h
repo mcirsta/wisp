@@ -26,7 +26,6 @@
 #define _WISP_DESKTOP_FETCHERS_H_
 
 #include <libwapcaplet/libwapcaplet.h>
-#include <wisp/utils/inet.h> /* this is necessary for the fd_set definition */
 
 struct nsurl;
 struct fetch_multipart_data;
@@ -39,11 +38,12 @@ struct fetch;
  * These are the operations a fetcher must implement.
  *
  * Each fetcher is called once for initialisaion and finalisation.
- * The poll entry point will be called to allow all active fetches to progress.
+ * The optional run entry point advances queued local work. Network fetchers
+ * register socket readiness and one-shot timers instead.
  * The flow of a fetch operation is:
  *   URL is checked for aceptability.
  *   setup with all applicable data.
- *   start is called before the first poll
+ *   start is called before the first run
  *   after completion or abort it is freed
  *
  */
@@ -85,14 +85,9 @@ struct fetcher_operation_table {
     void (*free)(void *fetch);
 
     /**
-     * poll a fetcher to let it make progress.
+     * Run pending work. NULL for fetchers driven by socket/timer callbacks.
      */
-    void (*poll)(lwc_string *scheme);
-
-    /**
-     * update an fdset with the FDs needed to poll cleanly
-     */
-    int (*fdset)(lwc_string *scheme, fd_set *read_set, fd_set *write_set, fd_set *error_set);
+    void (*run)(lwc_string *scheme);
 
     /**
      * Finalise the fetcher.

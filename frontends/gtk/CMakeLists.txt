@@ -19,6 +19,7 @@ add_executable(wisp-gtk
 	gui.c
 	misc.c
 	schedule.c
+	socket.c
 	layout_pango.c
 	bitmap.c
 	plotters.c

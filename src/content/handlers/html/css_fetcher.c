@@ -161,9 +161,9 @@ static void html_css_fetcher_abort(void *ctx)
 {
     html_css_fetcher_context *c = ctx;
 
-    /* To avoid the poll loop having to deal with the fetch context
+    /* To avoid the work loop having to deal with the fetch context
      * disappearing from under it, we simply flag the abort here.
-     * The poll loop itself will perform the appropriate cleanup.
+     * The work loop itself will perform the appropriate cleanup.
      */
     c->aborted = true;
 }
@@ -175,14 +175,14 @@ static void html_css_fetcher_send_callback(const fetch_msg *msg, html_css_fetche
     c->locked = false;
 }
 
-static void html_css_fetcher_poll(lwc_string *scheme)
+static void html_css_fetcher_run(lwc_string *scheme)
 {
     fetch_msg msg;
     html_css_fetcher_context *c;
     size_t remaining;
 
     /* Removing an entry moves the head, so it cannot be an end marker.
-     * Bound this poll's work even if callbacks keep adding new fetches. */
+     * Bound this turn's work even if callbacks keep adding new fetches. */
     RING_GETSIZE(html_css_fetcher_context, ring, remaining);
     for (; remaining > 0 && ring != NULL; remaining--) {
         /* Re-entrant callbacks may have removed other entries. */
@@ -190,8 +190,7 @@ static void html_css_fetcher_poll(lwc_string *scheme)
         /* Ignore fetches that have been flagged as locked.
          * This allows safe re-entrant calls to this function.
          * Re-entrancy can occur if, as a result of a callback,
-         * the interested party causes fetch_poll() to be called
-         * again.
+         * the interested party runs the event loop again.
          */
         if (c->locked == true) {
             ring = c->r_next;
@@ -268,7 +267,7 @@ nserror html_css_fetcher_register(void)
         .start = html_css_fetcher_start,
         .abort = html_css_fetcher_abort,
         .free = html_css_fetcher_free,
-        .poll = html_css_fetcher_poll,
+        .run = html_css_fetcher_run,
         .finalise = html_css_fetcher_finalise};
 
     return fetcher_add(lwc_string_ref(corestring_lwc_x_ns_css), &html_css_fetcher_ops);

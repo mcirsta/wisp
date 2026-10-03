@@ -518,12 +518,12 @@ static char *gui_default_mimetype(const char *path)
     return strdup(guit->fetch->filetype(path));
 }
 
-static int gui_default_socket_open(int domain, int type, int protocol)
+static intptr_t gui_default_socket_open(int domain, int type, int protocol)
 {
-    return (int)socket(domain, type, protocol);
+    return (intptr_t)socket(domain, type, protocol);
 }
 
-static int gui_default_socket_close(int fd)
+static int gui_default_socket_close(intptr_t fd)
 {
     return (int)ns_close_socket(fd);
 }
@@ -537,7 +537,7 @@ static nserror verify_fetch_register(struct gui_fetch_table *gft)
     }
 
     /* check the mandantory fields are set */
-    if (gft->filetype == NULL) {
+    if (gft->filetype == NULL || gft->socket_watch == NULL) {
         return NSERROR_BAD_PARAMETER;
     }
 
