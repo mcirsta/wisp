@@ -885,6 +885,43 @@ START_TEST(test_aspect_ratio_content_minimum)
 }
 END_TEST
 
+static const struct {
+    const char *ratio;
+    int size;
+    bool to_height;
+    int expected;
+} ratio_rounding_cases[] = {
+    {"1.11", 111, true, 100},
+    {"111/100", 111, true, 100},
+    {"1.98", 202, true, 102},
+    {"198/100", 202, true, 102},
+    {"3", 100, true, 33},
+    {"3", 101, true, 34},
+    {"2", 101, true, 51},
+    {"1.25", 31, false, 39},
+    {"3/2", 3, false, 5},
+    {"1.98", 0, true, 0},
+    {"0/1", 100, true, AUTO},
+    {"1/0", 100, false, AUTO},
+    {"1.11", AUTO, true, AUTO},
+    {"1/100", INT_MAX, true, INT_MAX},
+};
+
+START_TEST(test_aspect_ratio_rounding)
+{
+    select_ctx ctx;
+    char css[128];
+    snprintf(css, sizeof(css), "* { aspect-ratio:%s; }", ratio_rounding_cases[_i].ratio);
+    const css_computed_style *style = select_style_from_css(css, &ctx);
+    struct box box = {.type = BOX_BLOCK, .style = (css_computed_style *)style};
+    int result = layout_ratio_dimension(&box, ratio_rounding_cases[_i].size, ratio_rounding_cases[_i].to_height);
+    ck_assert_msg(result == ratio_rounding_cases[_i].expected,
+        "ratio %s, size %d, to_height %d: expected %d, got %d", ratio_rounding_cases[_i].ratio,
+        ratio_rounding_cases[_i].size, ratio_rounding_cases[_i].to_height, ratio_rounding_cases[_i].expected, result);
+    destroy_select_ctx(&ctx);
+}
+END_TEST
+
 START_TEST(test_aspect_ratio_height_constraints)
 {
     select_ctx ctx;
@@ -1446,6 +1483,8 @@ Suite *layout_calc_suite(void)
 
     tcase_add_loop_test(tc_core, test_aspect_ratio_parse, 0, sizeof(ratio_cases) / sizeof(ratio_cases[0]));
     tcase_add_test(tc_core, test_aspect_ratio_dimensions);
+    tcase_add_loop_test(tc_core, test_aspect_ratio_rounding, 0,
+        sizeof(ratio_rounding_cases) / sizeof(ratio_rounding_cases[0]));
     tcase_add_test(tc_core, test_aspect_ratio_height_constraints);
     tcase_add_loop_test(tc_core, test_aspect_ratio_compose, 0, 2);
     tcase_add_loop_test(tc_core, test_aspect_ratio_content_minimum, 0, 3);

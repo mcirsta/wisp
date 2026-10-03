@@ -471,6 +471,14 @@ static inline int lh__available_height_for_box(const struct box *box, int viewpo
     return -1;
 }
 
+/* Ratio calculations retain their fraction until conversion to integer layout
+ * pixels. Truncation biases every scaled image downward and can turn an almost
+ * integral result (including CSS fixed-point error) into a whole missing pixel. */
+static inline int layout_round_ratio_dimension(double result)
+{
+    return result < 0 ? 0 : result >= INT_MAX ? INT_MAX : (int)(result + 0.5);
+}
+
 /** Transfer a content-box dimension through the specified preferred ratio.
  * Border-box ratios include padding/borders on both axes, never margins.
  * The caller selects between this and a replaced element's natural ratio. */
@@ -493,7 +501,7 @@ static inline int layout_ratio_dimension(const struct box *box, int size, bool t
     }
     double result = to_height ? (size + horizontal) * height / width - vertical
                               : (size + vertical) * width / height - horizontal;
-    return result < 0 ? 0 : result > INT_MAX ? INT_MAX : (int)result;
+    return layout_round_ratio_dimension(result);
 }
 
 /** Called after layout has chosen the used width and refreshed CSS height. */

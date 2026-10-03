@@ -180,7 +180,7 @@ static void layout_get_object_dimensions(const css_unit_ctx *unit_len_ctx, struc
              * (e.g., SVG with viewBox only).  Per CSS Images 3 §5.2:
              * use containing block width, compute height from ratio. */
             *width = containing_block_width;
-            *height = (*width * ratio_h) / ratio_w;
+            *height = layout_round_ratio_dimension((double)*width * ratio_h / ratio_w);
         } else if (intrinsic_width > 0 && intrinsic_height > 0) {
             /* Has intrinsic dimensions — use them (existing behavior) */
 
@@ -223,7 +223,7 @@ static void layout_get_object_dimensions(const css_unit_ctx *unit_len_ctx, struc
         }
         if (scaled && (css_ratio || eff_ratio_w != 0)) {
             *height = css_ratio ? layout_ratio_dimension(box, *width, true)
-                                : (int)((int64_t)*width * eff_ratio_h / eff_ratio_w);
+                                : layout_round_ratio_dimension((double)*width * eff_ratio_h / eff_ratio_w);
         }
 
         /* Apply min/max-height constraints */
@@ -238,7 +238,7 @@ static void layout_get_object_dimensions(const css_unit_ctx *unit_len_ctx, struc
         }
         if (scaled && (css_ratio || eff_ratio_h != 0)) {
             *width = css_ratio ? layout_ratio_dimension(box, *height, false)
-                               : (int)((int64_t)*height * eff_ratio_w / eff_ratio_h);
+                               : layout_round_ratio_dimension((double)*height * eff_ratio_w / eff_ratio_h);
         }
 
     } else if (*width == AUTO) {
@@ -251,7 +251,7 @@ static void layout_get_object_dimensions(const css_unit_ctx *unit_len_ctx, struc
         if (css_ratio)
             *width = layout_ratio_dimension(box, *height, false);
         else if (eff_ratio_h != 0)
-            *width = (*height * eff_ratio_w) / eff_ratio_h;
+            *width = layout_round_ratio_dimension((double)*height * eff_ratio_w / eff_ratio_h);
         else
             *width = intrinsic_width;
 
@@ -271,7 +271,7 @@ static void layout_get_object_dimensions(const css_unit_ctx *unit_len_ctx, struc
         if (css_ratio)
             *height = layout_ratio_dimension(box, *width, true);
         else if (eff_ratio_w != 0)
-            *height = (*width * eff_ratio_h) / eff_ratio_w;
+            *height = layout_round_ratio_dimension((double)*width * eff_ratio_h / eff_ratio_w);
         else
             *height = intrinsic_height;
 

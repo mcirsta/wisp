@@ -6,6 +6,7 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
+from urllib.parse import quote
 
 IMAGE = Path(__file__).resolve().parents[2] / "test/test_data/object_fit/test_small.png"  # 100 x 75
 
@@ -49,6 +50,40 @@ def cases():
     yield "svg-ratio", base + "aspect-ratio:1", (10, 10, 120, 120), ""
     yield "flow-minimum", "position:static;display:block;width:120px;min-height:120px", (0, 0, 120, 120), ""
     yield "flow-maximum", "position:static;display:block;width:120px;max-height:40px", (0, 0, 120, 40), ""
+    # Round the final ratio-derived dimension to Wisp's integer layout pixels.
+    # Decimal and exact-ratio equivalents must not lose a whole pixel. Include
+    # rounding down, up and ties, both transfer directions and size constraints.
+    for position in ("static", "absolute"):
+        yield (f"round-{position}-viewbox", f"position:{position};display:block;inset:0",
+               (0, 0, 101, 76), "width:101px")
+        for name, style, width, height in (
+            ("decimal", "width:111px;aspect-ratio:1.11", 111, 100),
+            ("exact", "width:111px;aspect-ratio:111/100", 111, 100),
+            ("thumbnail", "width:202px;aspect-ratio:1.98", 202, 102),
+            ("thumbnail-exact", "width:202px;aspect-ratio:198/100", 202, 102),
+            ("natural-up", "width:101px", 101, 76),
+            ("natural-down", "width:99px", 99, 74),
+            ("natural-tie", "width:102px", 102, 77),
+            ("natural-height", "height:77px", 103, 77),
+            ("css-height", "height:31px;aspect-ratio:1.25", 39, 31),
+            ("css-down", "width:100px;aspect-ratio:3", 100, 33),
+            ("css-tie", "width:101px;aspect-ratio:2", 101, 51),
+            ("auto-natural", "width:101px;aspect-ratio:auto 1.11", 101, 76),
+            ("min-width", "min-width:101px", 101, 76),
+            ("max-width", "max-width:99px", 99, 74),
+            ("min-height", "min-height:77px", 103, 77),
+            ("max-height", "max-height:74px", 99, 74),
+            ("width-limit", "width:120px;max-width:101px", 101, 76),
+            ("height-limit", "height:90px;max-height:77px", 103, 77),
+            ("css-limit", "min-width:111px;aspect-ratio:1.11", 111, 100),
+            ("css-max-height", "width:111px;aspect-ratio:1.11;max-height:99px", 111, 99),
+            ("border-box", "width:111px;aspect-ratio:1.11;box-sizing:border-box;padding:5px;border:1px solid",
+             111, 100),
+        ):
+            # Both insets reproduce the original positioned-image bug; the
+            # normal-flow controls must use precisely the same sizing rules.
+            yield (f"round-{position}-{name}", f"position:{position};display:block;inset:0;{style}",
+                   (0, 0, width, height), "")
 
 
 def fixture_html():
@@ -57,8 +92,12 @@ def fixture_html():
              'img{position:absolute;background:#9dc}</style>']
     for name, style, _, parent_style in cases():
         image = IMAGE.parents[2] / "aspect-ratio-image.svg" if name.startswith("svg-") else IMAGE
+        url = image.as_uri()
+        if name.endswith("-viewbox"):
+            url = "data:image/svg+xml," + quote('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 75">'
+                                                '<rect width="100" height="75" fill="green"/></svg>')
         parts.append(f'<div class="parent" id="{name}-parent" style="{parent_style}">'
-                     f'<img id="{name}" src="{image.as_uri()}" style="{style}"></div>')
+                     f'<img id="{name}" src="{url}" style="{style}"></div>')
     return '\n'.join(parts)
 
 
