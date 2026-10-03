@@ -839,6 +839,95 @@ START_TEST(test_nested_empty_margin_chain)
 }
 END_TEST
 
+/* Lookahead may cross empty siblings before finding a parent whose first
+ * child's margin collapses outside it. Empty siblings must keep zero height
+ * and must not receive that later margin. Empty children inside the receiving
+ * parent, however, move with it (CSS 2.1 section 8.3.1). */
+static const char *const margin_receiver_variants[] = {
+    "empty blocks / leaf", "empty inline / leaf",
+    "empty blocks / nested parent", "empty inline / nested parent",
+    "empty blocks / parent with empty first child", "empty inline / parent with empty first child",
+};
+enum { MARGIN_RECEIVER_CASE_COUNT = sizeof(margin_receiver_variants) / sizeof(margin_receiver_variants[0]) };
+
+START_TEST(test_margin_chain_receiver)
+{
+    int variant = _i % MARGIN_RECEIVER_CASE_COUNT;
+    int margin = (_i / MARGIN_RECEIVER_CASE_COUNT) % 2 == 0 ? 150 : -150;
+    bool inside_prefix = _i >= 2 * MARGIN_RECEIVER_CASE_COUNT;
+    html_content *content = create_test_content();
+    struct box *root = create_box_with_style(200);
+    struct box *prefix = create_box_with_style(200);
+    struct box *prefix_content = prefix;
+    if (inside_prefix) {
+        prefix_content = create_box_with_style(200);
+        add_child(prefix, prefix_content);
+    }
+    style_set_height_px(prefix_content->style, 200);
+    prefix_content->flags |= HAS_HEIGHT | MAKE_HEIGHT;
+    add_child(root, prefix);
+
+    struct box *empty = create_box_with_style(200);
+    struct box *inner = create_box_with_style(200);
+    add_child(inside_prefix ? prefix : root, empty);
+    add_child(empty, inner);
+    if (variant % 2) {
+        struct box *ic = calloc(1, sizeof(*ic));
+        ck_assert_ptr_nonnull(ic);
+        ic->type = BOX_INLINE_CONTAINER;
+        add_child(inner, ic);
+        struct box *inline_box = create_box_with_style(0);
+        inline_box->type = BOX_INLINE;
+        add_child(ic, inline_box);
+    } else {
+        add_child(inner, create_box_with_style(200));
+    }
+
+    struct box *receiver = create_box_with_style(200);
+    struct box *leaf = receiver;
+    struct box *inside_empty = NULL;
+    add_child(root, receiver);
+    if (variant >= 2) {
+        struct box *wrapper = create_box_with_style(200);
+        leaf = create_box_with_style(200);
+        add_child(receiver, wrapper);
+        if (variant >= 4) {
+            inside_empty = create_box_with_style(200);
+            add_child(wrapper, inside_empty);
+            add_child(inside_empty, create_box_with_style(200));
+        }
+        add_child(wrapper, leaf);
+    }
+    style_set_margins(leaf->style, margin, 0, 0, 0);
+    style_set_height_px(leaf->style, 10);
+    leaf->flags |= HAS_HEIGHT | MAKE_HEIGHT;
+    for (int pass = 0; pass < 2; pass++) {
+        root->height = AUTO;
+        ck_assert(layout_block_context(root, 768, content));
+        ck_assert_msg(prefix->height == 200 && empty->y == 200 && empty->height == 0 &&
+                inner->y == 0 && inner->height == 0,
+            "%s (margin=%d, pass=%d, inside prefix=%d): prefix height=%d, empty y/h=%d/%d, inner y/h=%d/%d",
+            margin_receiver_variants[variant], margin, pass, inside_prefix, prefix->height,
+            empty->y, empty->height, inner->y, inner->height);
+        ck_assert_msg(receiver->y == 200 + margin && receiver->height == 10 && root->height == 210 + margin,
+            "%s (margin=%d, pass=%d): receiver y/h=%d/%d, root height=%d",
+            margin_receiver_variants[variant], margin, pass, receiver->y, receiver->height, root->height);
+        if (variant >= 2) {
+            ck_assert_msg(receiver->children->y == 0 && leaf->y == 0,
+                "%s (margin=%d, pass=%d): wrapper/leaf y=%d/%d",
+                margin_receiver_variants[variant], margin, pass, receiver->children->y, leaf->y);
+        }
+        if (inside_empty) {
+            ck_assert_msg(inside_empty->y == 0 && inside_empty->height == 0,
+                "%s (margin=%d, pass=%d): inside empty y/h=%d/%d",
+                margin_receiver_variants[variant], margin, pass, inside_empty->y, inside_empty->height);
+        }
+    }
+    free_box_tree(root);
+    destroy_test_content(content);
+}
+END_TEST
+
 /**
  * Test: self-collapsing block whose children are all out-of-flow (abspos).
  *
@@ -1730,6 +1819,7 @@ static Suite *margin_collapse_suite(void)
     tcase_add_test(tc_through, test_no_collapse_through_height);
     tcase_add_test(tc_through, test_nested_collapse_through);
     tcase_add_loop_test(tc_through, test_nested_empty_margin_chain, 0, 2 * EMPTY_CHAIN_CASE_COUNT);
+    tcase_add_loop_test(tc_through, test_margin_chain_receiver, 0, 4 * MARGIN_RECEIVER_CASE_COUNT);
     tcase_add_test(tc_through, test_no_collapse_through_border);
     tcase_add_test(tc_through, test_collapse_through_abspos_children);
     tcase_add_test(tc_through, test_collapse_through_skips_abspos_next_sibling);

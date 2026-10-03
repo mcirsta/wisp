@@ -1697,15 +1697,15 @@ static inline bool box_prevents_collapse_through(const css_unit_ctx *unit_len_ct
  * \param  viewport_height  height of viewport in px
  * \param  max_pos_margin  updated to to maximum positive margin encountered
  * \param  max_neg_margin  updated to to maximum negative margin encountered
- * \param  crossed_parent_child  set to true if the margin chain descended
- *         into a child (parent-first-child collapse per CSS 2.1 §8.3.1)
+ * \param  margin_top  first box whose top edge receives the collapsed margin;
+ *         NULL when the chain reaches the formatting-context boundary
  * \return  next box that current margin collapses to, or NULL if none.
  */
 static struct box *layout_next_margin_block(const css_unit_ctx *unit_len_ctx, struct box *box, struct box *block,
-    int viewport_height, unsigned int *max_pos_margin, unsigned int *max_neg_margin, bool *crossed_parent_child)
+    int viewport_height, unsigned int *max_pos_margin, unsigned int *max_neg_margin, struct box **margin_top)
 {
     assert(block != NULL);
-    *crossed_parent_child = false;
+    *margin_top = box;
 
     while (box != NULL) {
 
@@ -1755,7 +1755,6 @@ static struct box *layout_next_margin_block(const css_unit_ctx *unit_len_ctx, st
              * Only descend for in-flow block-level children; inline
              * containers are anonymous wrappers without block margins
              * and are handled via box_prevents_collapse_through. */
-            *crossed_parent_child = true;
             box = box->children;
         } else {
             bool walked_up = false;
@@ -1772,6 +1771,8 @@ static struct box *layout_next_margin_block(const css_unit_ctx *unit_len_ctx, st
                  * Go up to first ancestor with a sibling. */
                 walked_up = true;
                 do {
+                    if (box == *margin_top)
+                        *margin_top = box->parent;
                     box = box->parent;
 
                     /* Check if we've reached the block boundary BEFORE
@@ -1781,6 +1782,7 @@ static struct box *layout_next_margin_block(const css_unit_ctx *unit_len_ctx, st
                          * outside the block formatting context.
                          * Don't accumulate this block's margin-bottom
                          * as it belongs to the outer context. */
+                        *margin_top = NULL;
                         return block;
                     }
 
@@ -1832,11 +1834,17 @@ static struct box *layout_next_margin_block(const css_unit_ctx *unit_len_ctx, st
              * CSS 2.1 §8.3.1 only allows collapse with the next in-flow
              * sibling, so skip out-of-flow boxes here and let the top of
              * the loop compute margins for the next valid participant. */
+            struct box *previous = box;
             box = box->next;
             while (box != NULL && box_is_out_of_flow(box)) {
                 NSLOG(layout, DEBUG, "margin collapse: skipping out-of-flow sibling %p type=%d", box, box->type);
                 box = box->next;
             }
+            /* Leaving an empty branch transfers the receiving edge to the
+             * next sibling. Moving between children keeps their enclosing
+             * parent's top edge as the receiver. */
+            if (previous == *margin_top)
+                *margin_top = box;
         }
     }
 
@@ -4248,7 +4256,8 @@ static bool layout_inline_container(
 struct block_layout_state {
     int cx, cy, y;
     unsigned int max_pos_margin, max_neg_margin;
-    struct box *margin_collapse;
+    struct box *margin_collapse; /* End of the pending adjoining-margin chain. */
+    struct box *margin_top;      /* Parent or sibling that receives its offset. */
     bool in_margin;
 };
 
@@ -4384,25 +4393,22 @@ static bool layout_block_position_child(struct box *box, struct box *block, int 
     /* If we don't know which box the current margin collapses
      * through to, find out.  Update the pos/neg margin values. */
     if (state->margin_collapse == NULL) {
-        bool margin_from_child = false;
         state->margin_collapse = layout_next_margin_block(&content->unit_len_ctx, box, block, viewport_height,
-            &state->max_pos_margin, &state->max_neg_margin, &margin_from_child);
+            &state->max_pos_margin, &state->max_neg_margin, &state->margin_top);
         /* We have a margin that has not yet been applied. */
         state->in_margin = true;
+    }
 
-        /* CSS 2.1 §8.3.1: If the margin chain descended into a
-         * first child (no border/padding separator), the collapsed
-         * margin pushes the PARENT down, not the child inside
-         * the parent. Apply the margin here to the current box.
-         * A chain reaching the formatting-context root consists entirely
-         * of collapsing empty blocks: leave it pending for finalization,
-         * where the last child's bottom margin is collected as well. */
-        if (margin_from_child && state->margin_collapse != block && state->in_margin) {
-            state->cy += (int)state->max_pos_margin - (int)state->max_neg_margin;
-            box->y += (int)state->max_pos_margin - (int)state->max_neg_margin;
-            state->in_margin = false;
-            state->max_pos_margin = state->max_neg_margin = 0;
-        }
+    /* CSS 2.1 §8.3.1: parent/first-child collapse moves the parent,
+     * while preceding self-collapsing siblings do not consume the margin.
+     * Lookahead identifies both the end of the chain and its receiving top
+     * edge; these can be different boxes. */
+    if (state->margin_top == box && state->margin_collapse != box && state->in_margin) {
+        state->cy += (int)state->max_pos_margin - (int)state->max_neg_margin;
+        box->y += (int)state->max_pos_margin - (int)state->max_neg_margin;
+        state->margin_top = NULL;
+        state->in_margin = false;
+        state->max_pos_margin = state->max_neg_margin = 0;
     }
 
     /* Clearance. */

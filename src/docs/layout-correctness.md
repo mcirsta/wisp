@@ -62,6 +62,44 @@ inspected geometry and the initial viewport screenshots are unchanged.
 
 Artifacts: `out/render-captures/absolute-images-2026-10-03/`.
 
+## Margin lookahead receiving box — 2026-10-03
+
+Margin lookahead previously reported whether it had crossed any parent/child
+boundary. Layout then applied the accumulated margin to the current box, even
+when that boundary belonged to a later sibling. An empty wrapper could receive
+that later margin, and an empty inline container inside it could turn the offset
+into a false auto height.
+
+Lookahead now records which top edge should receive the margin, separately from
+where the adjoining-margin chain ends. Passing an entirely empty sibling moves
+that receiving edge forward; descending through a parent's adjoining children
+keeps the parent's top edge. The normal traversal applies the margin when it
+reaches that box. This adds one pointer to the stack state, with no allocation,
+extra tree pass or feature switch.
+
+Tion's desktop `probe-div-10` and `probe-div-11` now have zero height instead of
+150px. Its rail starts at y=165 instead of y=315, matching Chromium, while keeping
+the 8000px minimum. The same correction removes false height from trailing empty
+descendants: Tion's `probe-div-485/486` shrink from 80px to 54px (Chromium 54.40625),
+and Bihon's `probe-div-92/93` from 47px to 27px (Chromium 27.203125). Their following
+content moves accordingly. Initial viewport screenshots are unchanged at both
+1280×900 and 390×900; these affected regions lie outside the captured viewport.
+
+The C margin suite adds 24 cases, each laid out twice: positive/negative margins,
+empty block/inline descendants, later nested parents, empty first children, and
+empty tails inside nonempty ancestors. `qt_empty_block_margins` also checks these
+relationships in real HTML before and after two resizes. The new capture test
+fails against the previous Release binary. All 42 new inspected fixture boxes
+match Chromium exactly; two older empty-box coordinate discrepancies remain
+as described below.
+
+Validation: all 67 selected Debug layout/grid/Qt tests and five focused Release
+checks passed. Five Debug font captures use the established Fontconfig-only
+LSan suppression; the other 62 run without suppression. The expanded 24-case C
+regression also passes in both builds.
+
+Artifacts: `out/render-captures/empty-margin-lookahead-2026-10-03/`.
+
 ## Follow-up: positioning a self-collapsing empty block
 
 The `zero` control in `test/empty-min-height.html` still exposes a pre-existing
@@ -70,19 +108,21 @@ places the empty box at its parent's content top; Chromium places it 15px lower.
 Both engines put the following marker 25px below the content top and give the
 wrapper the same height. This is independent of the positive-minimum fix.
 
-Investigate how margin lookahead assigns positions to intermediate self-collapsing
-boxes, following [CSS adjoining-margin positioning](https://www.w3.org/TR/CSS22/box.html#collapsing-margins).
-Moving the flow cursor again would double-count the already-correct sibling gap;
-cover nested chains and negative margins before changing that bookkeeping. The
-current regression checks this control's collapsed spacing, not its incorrect
-empty-box coordinate.
+The related `mixed-second` and `negative-second` controls in
+`test/empty-block-margins.html` also need their own positions to reflect margins
+encountered before them, separately from the final collapsed flow spacing.
+Removing the premature application of future margins above exposes the same
+limitation in additional empty advertising wrappers: their coordinates can move
+farther from Chromium even though the enclosing heights and following content's
+margin spacing are corrected. Do not claim full empty-box positioning is fixed.
 
-The saved Tion desktop rail also retains a smaller offset: `probe-div-10` and
-`probe-div-11` have 150px auto heights in Wisp versus zero in Chromium, both before
-and after this fix. Consequently the rail begins at y=315 instead of y=165 even
-though its minimum and content heights are now correct. Reduce this nested empty
-wrapper/margin case separately; it is not evidence that the 8000px minimum is
-still ignored. The relation to the zero-height placement issue is not yet proven.
+Follow [CSS adjoining-margin positioning](https://www.w3.org/TR/CSS22/box.html#collapsing-margins):
+a self-collapsing box whose margins join its parent's top is positioned at that
+top; otherwise its top is where it would be with a nonzero bottom border. These
+positions must not affect the positions of other boxes. Keep the running margins
+before each empty box distinct from lookahead's complete margin chain, and cover
+nested chains, negative margins and positioned descendants. Moving the shared
+flow cursor to fix these coordinates would double-count sibling spacing; this
+needs a separate bookkeeping change rather than another placement exception.
 
-Reduction captures, Chromium references, saved-site comparisons and validation
-logs: `out/render-captures/empty-min-height-2026-10-03/`.
+Original reductions: `out/render-captures/empty-min-height-2026-10-03/`.

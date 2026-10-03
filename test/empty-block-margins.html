@@ -70,3 +70,59 @@ Negative margins after 40px of content
   </div>
   <div class="marker" id="negative-marker"></div>
 </div>
+
+<!-- The margin below belongs to the later leaf/parent, not to the empty
+     sibling. Inline spans model Tion's empty metadata fragments. Pixel-only
+     geometry makes these cases independent of font metrics. -->
+<style>
+.lookahead .prefix { height: 200px; }
+.lookahead .receiver { background: #fed; }
+.lookahead .leaf { height: 10px; margin-top: 150px; background: #167747; }
+.lookahead.negative .leaf { margin-top: -150px; }
+</style>
+<div class="case lookahead positive" id="lookahead-positive-leaf-case">
+  <div class="prefix"></div>
+  <div id="lookahead-positive-leaf-empty"><div id="lookahead-positive-leaf-inner"><span></span></div></div>
+  <div class="leaf" id="lookahead-positive-leaf-leaf"></div>
+</div>
+<div class="case lookahead positive" id="lookahead-positive-parent-case">
+  <div class="prefix"></div>
+  <div id="lookahead-positive-parent-empty"><div id="lookahead-positive-parent-inner"><span></span></div></div>
+  <div class="receiver" id="lookahead-positive-parent-receiver"><div><div class="leaf" id="lookahead-positive-parent-leaf"></div></div></div>
+</div>
+<div class="case lookahead positive" id="lookahead-positive-first-empty-case">
+  <div class="prefix"></div>
+  <div id="lookahead-positive-first-empty-empty"><div id="lookahead-positive-first-empty-inner"><span></span></div></div>
+  <div class="receiver" id="lookahead-positive-first-empty-receiver"><div><div id="lookahead-positive-first-empty-inside"><div></div></div><div class="leaf" id="lookahead-positive-first-empty-leaf"></div></div></div>
+</div>
+<div class="case lookahead negative" id="lookahead-negative-leaf-case">
+  <div class="prefix"></div>
+  <div id="lookahead-negative-leaf-empty"><div id="lookahead-negative-leaf-inner"><span></span></div></div>
+  <div class="leaf" id="lookahead-negative-leaf-leaf"></div>
+</div>
+<div class="case lookahead negative" id="lookahead-negative-parent-case">
+  <div class="prefix"></div>
+  <div id="lookahead-negative-parent-empty"><div id="lookahead-negative-parent-inner"><span></span></div></div>
+  <div class="receiver" id="lookahead-negative-parent-receiver"><div><div class="leaf" id="lookahead-negative-parent-leaf"></div></div></div>
+</div>
+<div class="case lookahead negative" id="lookahead-negative-first-empty-case">
+  <div class="prefix"></div>
+  <div id="lookahead-negative-first-empty-empty"><div id="lookahead-negative-first-empty-inner"><span></span></div></div>
+  <div class="receiver" id="lookahead-negative-first-empty-receiver"><div><div id="lookahead-negative-first-empty-inside"><div></div></div><div class="leaf" id="lookahead-negative-first-empty-leaf"></div></div></div>
+</div>
+<!-- A trailing empty descendant must not inflate a nonempty ancestor. -->
+<div class="case lookahead positive" id="lookahead-positive-trailing-empty-case">
+  <div id="lookahead-positive-trailing-empty-prefix">
+    <div class="prefix"></div>
+    <div id="lookahead-positive-trailing-empty-empty"><div id="lookahead-positive-trailing-empty-inner"><span></span></div></div>
+  </div>
+  <div class="receiver" id="lookahead-positive-trailing-empty-receiver"><div><div class="leaf" id="lookahead-positive-trailing-empty-leaf"></div></div></div>
+</div>
+<!-- A trailing empty descendant must not inflate a nonempty ancestor. -->
+<div class="case lookahead negative" id="lookahead-negative-trailing-empty-case">
+  <div id="lookahead-negative-trailing-empty-prefix">
+    <div class="prefix"></div>
+    <div id="lookahead-negative-trailing-empty-empty"><div id="lookahead-negative-trailing-empty-inner"><span></span></div></div>
+  </div>
+  <div class="receiver" id="lookahead-negative-trailing-empty-receiver"><div><div class="leaf" id="lookahead-negative-trailing-empty-leaf"></div></div></div>
+</div>
