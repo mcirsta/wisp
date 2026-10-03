@@ -990,12 +990,20 @@ START_TEST(test_empty_margin_position)
 }
 END_TEST
 
-/* Clearance must not receive a second offset when the empty branch finishes.
- * With no actual clearance, the normal empty-box positioning still applies. */
+enum { CLEARANCE_PREFIX_COUNT = 3, CLEARANCE_CASE_COUNT = 2 * CLEARANCE_PREFIX_COUNT };
+
+/* CSS 2.1 sections 8.3.1 and 9.5.2: decide clearance from the hypothetical
+ * top, split the adjoining margins there, and contain the resulting chain
+ * in its parent. No actual clearance means ordinary margin collapse. */
 START_TEST(test_empty_margin_position_with_clear)
 {
+    static const int prefix_heights[CLEARANCE_PREFIX_COUNT] = {10, 70, 100};
+    static const int empty_positions[CLEARANCE_CASE_COUNT] = {80, 80, 90, 95, 120, 125};
+    static const int following_positions[CLEARANCE_CASE_COUNT] = {115, 140, 120, 120, 150, 150};
+    static const int parent_positions[CLEARANCE_PREFIX_COUNT] = {30, 95, 125};
+    static const int parent_heights[CLEARANCE_PREFIX_COUNT] = {60, 0, 0};
     bool nested = _i % 2;
-    int prefix_height = _i < 2 ? 10 : 100;
+    int prefix_height = prefix_heights[_i / 2];
     html_content *content = create_test_content();
     struct box *root = create_box_with_style(200);
     struct box *ic = calloc(1, sizeof(*ic));
@@ -1027,12 +1035,22 @@ START_TEST(test_empty_margin_position_with_clear)
     following->flags |= HAS_HEIGHT | MAKE_HEIGHT;
     style_set_margins(following->style, 50, 0, 0, 0);
     add_child(root, following);
-    ck_assert(layout_block_context(root, 768, content));
-    int expected = prefix_height == 10 ? 80 : nested ? 125 : 120;
-    int actual = empty->y + (nested ? wrapper->y : 0);
-    ck_assert_msg(actual == expected && empty->height == 0,
-        "clear (nested=%d, prefix=%d): expected empty y/h=%d/0, got %d/%d",
-        nested, prefix_height, expected, actual, empty->height);
+    for (int pass = 0; pass < 2; pass++) {
+        root->height = AUTO;
+        ck_assert(layout_block_context(root, 768, content));
+        int actual = empty->y + (nested ? wrapper->y : 0);
+        ck_assert_msg(actual == empty_positions[_i] && empty->height == 0,
+            "clear (nested=%d, prefix=%d), pass %d: expected empty y/h=%d/0, got %d/%d",
+            nested, prefix_height, pass, empty_positions[_i], actual, empty->height);
+        ck_assert_msg(following->y == following_positions[_i] && root->height == following_positions[_i] + 10,
+            "clear (nested=%d, prefix=%d), pass %d: expected following y=%d, got %d; root height=%d",
+            nested, prefix_height, pass, following_positions[_i], following->y, root->height);
+        if (nested) {
+            ck_assert_msg(wrapper->y == parent_positions[_i / 2] && wrapper->height == parent_heights[_i / 2],
+                "clear (prefix=%d), pass %d: expected parent y/h=%d/%d, got %d/%d",
+                prefix_height, pass, parent_positions[_i / 2], parent_heights[_i / 2], wrapper->y, wrapper->height);
+        }
+    }
     free_box_tree(root);
     destroy_test_content(content);
 }
@@ -1931,7 +1949,7 @@ static Suite *margin_collapse_suite(void)
     tcase_add_loop_test(tc_through, test_nested_empty_margin_chain, 0, 2 * EMPTY_CHAIN_CASE_COUNT);
     tcase_add_loop_test(tc_through, test_margin_chain_receiver, 0, 4 * MARGIN_RECEIVER_CASE_COUNT);
     tcase_add_loop_test(tc_through, test_empty_margin_position, 0, EMPTY_POSITION_CASE_COUNT);
-    tcase_add_loop_test(tc_through, test_empty_margin_position_with_clear, 0, 4);
+    tcase_add_loop_test(tc_through, test_empty_margin_position_with_clear, 0, CLEARANCE_CASE_COUNT);
     tcase_add_test(tc_through, test_no_collapse_through_border);
     tcase_add_test(tc_through, test_collapse_through_abspos_children);
     tcase_add_test(tc_through, test_collapse_through_skips_abspos_next_sibling);

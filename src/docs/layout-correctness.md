@@ -3,28 +3,6 @@
 Only unresolved work belongs here. Completed changes and validation history are
 in Git; the regression fixtures remain in the test suite.
 
-## Empty-block clearance beside floats
-
-The committed implementation already calculates some `clear:both` positions and
-following gaps incorrectly. A float 80px tall, a 10px preceding block with 20px
-bottom margin, then an empty cleared block with 15px/25px vertical margins places
-a following block with 50px top margin at y=130; Chromium uses y=115 (relative to
-the containing content top). Wrapping the cleared block changes the discrepancy.
-With a 70px preceding block, Wisp introduces clearance even though the empty
-block's hypothetical top including margins is already below the float.
-
-Review the hypothetical position used to calculate clearance and which margins
-remain adjoining afterward. This involves flow spacing and ancestor heights,
-not just the empty box's own coordinate. Preserve the ordinary empty-position
-fix: actual clearance ends its pending position adjustment, preventing the
-margin from being added twice.
-
-The six-case reduction and comparisons against the committed library are in
-`out/render-captures/empty-margin-position-2026-10-03/clearance.html`,
-`clearance-baseline/` and `clearance-final/`. The margin unit suite checks empty
-positions with and without actual clearance; the remaining following-gap and
-ancestor-height differences are not asserted as correct behavior.
-
 ## `display:flow-root`
 
 The extended hidden-until-found comparison exposed missing support: a float
