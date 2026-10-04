@@ -104,11 +104,9 @@ bool layout_block_context(struct box *block, int viewport_height, html_content *
     return true;
 }
 
-/* Mock layout_flex_redistribute_auto_margins_vertical for test isolation */
-bool layout_flex_redistribute_auto_margins_vertical(struct box *flex)
+bool layout_flex(struct box *flex, int available_width, html_content *content)
 {
-    /* Stub - does nothing in test, the real function redistributes auto margins */
-    return true;
+    return layout_block_context(flex, -1, content);
 }
 
 /* Stub for layout_table - called by layout_grid */
@@ -1103,8 +1101,8 @@ START_TEST(test_grid_border_after_row_growth)
     content.unit_len_ctx.device_dpi = INTTOFIX(96);
     content.unit_len_ctx.font_size_default = INTTOFIX(16);
     ck_assert(layout_grid(&grid, 840, &content));
-    /* The taller second item triggers pass 3 for the first item. Its padding
-     * edge must still include the top border after that second positioning. */
+    /* Final positioning must include the top border even when a later item
+     * makes the shared row taller. */
     ck_assert_int_eq(first.y, 6);
     ck_assert_int_eq(second.y, 6);
     ck_assert_int_eq(first.x, 130);
@@ -1168,6 +1166,71 @@ START_TEST(test_grid_out_of_flow_children)
 }
 END_TEST
 
+/* Isolate track contributions and first-baseline selection from text metrics.
+ * Real text, nesting, grid order and native reflows are covered by the Qt fixture. */
+static const struct {
+    const char *name;
+    uint8_t align;
+    int first_height, first_baseline, top, bottom;
+    int grid_height, first_y, second_y, baseline;
+} baseline_cases[] = {
+    {"baseline group", CSS_ALIGN_SELF_BASELINE, 20, 11, 0, 0, 40, 19, 0, 30},
+    {"positive margins", CSS_ALIGN_SELF_BASELINE, 20, 14, 20, 25, 69, 20, 4, 34},
+    {"negative margins", CSS_ALIGN_SELF_BASELINE, 20, 14, -10, -8, 36, 16, 0, 30},
+    {"auto margin excludes item", CSS_ALIGN_SELF_BASELINE, 20, 11, AUTO, 0, 40, 20, 0, 30},
+    {"center after row growth", CSS_ALIGN_SELF_CENTER, 20, 11, 0, 0, 40, 10, 0, 21},
+    {"end after row growth", CSS_ALIGN_SELF_FLEX_END, 20, 11, 0, 0, 40, 20, 0, 31},
+    {"stretch keeps fixed height", CSS_ALIGN_SELF_STRETCH, 18, 11, 0, 0, 40, 0, 0, 11},
+    {"empty first item", CSS_ALIGN_SELF_FLEX_START, 18, -1, 0, 0, 40, 0, 0, 18},
+};
+
+START_TEST(test_grid_first_baseline)
+{
+    const size_t index = _i;
+    const char *name = baseline_cases[index].name;
+    struct grid_item_test_style values = {.width = AUTO, .max_width = -1};
+    css_computed_style *styles[2] = {grid_item_test_style_create(&values), grid_item_test_style_create(&values)};
+    ck_assert_ptr_nonnull(styles[0]);
+    ck_assert_ptr_nonnull(styles[1]);
+    grid_test_set_block_alignment(
+        styles[0], baseline_cases[index].align, baseline_cases[index].first_height, baseline_cases[index].top, 0);
+    grid_test_set_block_alignment(styles[1], baseline_cases[index].align, 40, 0, baseline_cases[index].bottom);
+    struct box grid = {
+        .type = BOX_INLINE_GRID, .width = 300, .height = AUTO, .style = (css_computed_style *)explicit_grid_style};
+    struct box items[2] = {
+        {.type = BOX_BLOCK, .style = styles[0], .parent = &grid, .next = &items[1]},
+        {.type = BOX_BLOCK, .style = styles[1], .parent = &grid, .prev = &items[0]},
+    };
+    grid.children = &items[0];
+    grid.last = &items[1];
+    html_content content = {0};
+    content.unit_len_ctx.device_dpi = INTTOFIX(96);
+    content.unit_len_ctx.font_size_default = INTTOFIX(16);
+    for (int run = 0; run < 2; run++) {
+        items[0].baseline = baseline_cases[index].first_baseline;
+        items[0].flags = items[0].baseline < 0 ? 0 : HAS_BASELINE;
+        items[1].baseline = 30;
+        items[1].flags = HAS_BASELINE;
+        grid.baseline = 999; /* A previous layout must not supply the result. */
+        grid.flags |= HAS_BASELINE;
+        ck_assert_msg(layout_grid(&grid, 300, &content), "%s run %d: layout failed", name, run);
+        ck_assert_msg(grid.height == baseline_cases[index].grid_height && items[0].y == baseline_cases[index].first_y &&
+                items[1].y == baseline_cases[index].second_y,
+            "%s run %d: height/y0/y1 = %d/%d/%d, expected %d/%d/%d", name, run, grid.height, items[0].y, items[1].y,
+            baseline_cases[index].grid_height, baseline_cases[index].first_y, baseline_cases[index].second_y);
+        ck_assert_msg((grid.flags & HAS_BASELINE) && grid.baseline == baseline_cases[index].baseline,
+            "%s run %d: baseline %d, expected %d", name, run, grid.baseline, baseline_cases[index].baseline);
+        ck_assert_msg(items[0].height == baseline_cases[index].first_height && items[1].height == 40,
+            "%s run %d: alignment changed explicit heights", name, run);
+    }
+    grid.children = grid.last = NULL;
+    ck_assert(layout_grid(&grid, 300, &content));
+    ck_assert_msg(!(grid.flags & HAS_BASELINE) && grid.height == 0, "%s: empty grid kept its old baseline", name);
+    css_computed_style_destroy(styles[0]);
+    css_computed_style_destroy(styles[1]);
+}
+END_TEST
+
 Suite *grid_test_suite(void)
 {
     Suite *s = suite_create("grid_layout");
@@ -1180,6 +1243,7 @@ Suite *grid_test_suite(void)
     tcase_add_loop_test(tc, test_grid_item_sizing, 0, sizeof(sizing_cases) / sizeof(sizing_cases[0]));
     tcase_add_test(tc, test_grid_border_after_row_growth);
     tcase_add_loop_test(tc, test_grid_out_of_flow_children, 0, 2);
+    tcase_add_loop_test(tc, test_grid_first_baseline, 0, sizeof(baseline_cases) / sizeof(baseline_cases[0]));
     suite_add_tcase(s, tc);
     return s;
 }
@@ -1188,13 +1252,14 @@ Suite *grid_test_suite(void)
 void setup_corestrings(void)
 {
     dom_string_create((const uint8_t *)"class", 5, &corestring_dom_class);
-    /* The old placement fixtures model the default margin:0. A zeroed
+    /* The old placement fixtures model the default margins and auto height. A zeroed
      * computed-style bitfield actually reads as inherit/auto, not zero. */
     void *styles[] = {dummy_style, span_test_grid_style, span_test_child_style, span_test_wide_style,
         column_dense_grid_style, column_dense_child_style, column_dense_tall_style, explicit_grid_style,
         explicit_auto_style, explicit_fixed_style, explicit_col_only_style, explicit_grid_4col_style};
     for (size_t i = 0; i < sizeof(styles) / sizeof(styles[0]); i++) {
         grid_test_set_horizontal_margins(styles[i], 0, 0);
+        grid_test_set_block_alignment(styles[i], CSS_ALIGN_SELF_AUTO, AUTO, 0, 0);
     }
 }
 

@@ -410,7 +410,7 @@ struct box {
     int max_width;
 
     /** With HAS_BASELINE: last line in an inline container, or first baseline
-     * exported by block/flex layout. Relative to this box's padding-edge origin. */
+     * exported by block/flex/grid layout. Relative to this box's padding-edge origin. */
     int baseline;
 
 

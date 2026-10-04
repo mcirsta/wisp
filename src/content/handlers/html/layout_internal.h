@@ -149,6 +149,11 @@ static inline bool lh__box_is_flex_container(const struct box *b)
     return b->type == BOX_FLEX || b->type == BOX_INLINE_FLEX;
 }
 
+static inline bool lh__box_is_grid_container(const struct box *b)
+{
+    return b->type == BOX_GRID || b->type == BOX_INLINE_GRID;
+}
+
 /** Layout helper: Check whether box is inline level. (Includes BR.) */
 static inline bool lh__box_is_inline_level(const struct box *b)
 {
@@ -326,16 +331,21 @@ static inline bool lh__flex_baseline_item(const struct box *flex, const struct b
         item->margin[TOP] != AUTO && item->margin[BOTTOM] != AUTO;
 }
 
-/* Record first baselines only for their consumers. Ordinary blocks propagate
- * them; flex layout selects its own item after ordering and line placement. */
+/* Record first baselines only for their consumers. Formatting contexts select
+ * their contributing item after placement; ordinary blocks propagate it. */
 static inline bool layout_needs_first_baseline(const struct box *box)
 {
-    for (; box && (box->type == BOX_BLOCK || lh__box_is_flex_container(box)); box = box->parent) {
-        if (box_has_outside_marker(box) || box->type == BOX_INLINE_FLEX)
+    for (; box && (box->type == BOX_BLOCK || lh__box_is_flex_container(box) || lh__box_is_grid_container(box));
+        box = box->parent) {
+        if (box_has_outside_marker(box) || box->type == BOX_INLINE_FLEX || box->type == BOX_INLINE_GRID)
             return true;
         if (box->style && lh__box_is_absolute(box))
             break;
         if (lh__box_is_flex_item(box) && lh__flex_baseline_item(box->parent, box))
+            return true;
+        if (box->parent && lh__box_is_grid_container(box->parent) && box->style &&
+            lh__box_align_self(box->parent, box) == CSS_ALIGN_SELF_BASELINE && box->margin[TOP] != AUTO &&
+            box->margin[BOTTOM] != AUTO)
             return true;
     }
     return false;
@@ -343,7 +353,7 @@ static inline bool layout_needs_first_baseline(const struct box *box)
 
 /* Baseline relative to the padding-edge origin. A box without one uses its
  * bottom border edge. A scrolling block's baseline cannot escape that edge. */
-static inline int lh__flex_item_baseline(const struct box *box)
+static inline int lh__box_first_baseline(const struct box *box)
 {
     int bottom = box->padding[TOP] + box->height + box->padding[BOTTOM] + box->border[BOTTOM].width;
     if (!(box->flags & HAS_BASELINE))

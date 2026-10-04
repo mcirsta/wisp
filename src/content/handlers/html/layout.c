@@ -3569,7 +3569,8 @@ static int line_height(const css_unit_ctx *unit_len_ctx, const css_computed_styl
 
 static bool box_needs_inline_alignment(const struct box *box)
 {
-    return box->type == BOX_INLINE_BLOCK || (box->type == BOX_INLINE && lh__box_is_object(box));
+    return box->type == BOX_INLINE_BLOCK || box->type == BOX_INLINE_FLEX || box->type == BOX_INLINE_GRID ||
+        (box->type == BOX_INLINE && lh__box_is_object(box));
 }
 
 static bool box_needs_line_metrics(const css_unit_ctx *unit_len_ctx, const struct box *box,
@@ -3703,7 +3704,7 @@ static int layout_atomic_baseline(const struct box *box, int height, uint8_t ali
     bool text_button = box->gadget && (box->gadget->type == GADGET_BUTTON ||
         box->gadget->type == GADGET_SUBMIT || box->gadget->type == GADGET_RESET);
     int baseline;
-    if (lh__box_is_flex_container(box) && (box->flags & HAS_BASELINE))
+    if ((lh__box_is_flex_container(box) || lh__box_is_grid_container(box)) && (box->flags & HAS_BASELINE))
         return box->margin[TOP] + box->border[TOP].width + box->baseline;
     if (box->type == BOX_INLINE_BLOCK && !lh__box_is_object(box) &&
         (text_button || (css_computed_overflow_x(box->style) == CSS_OVERFLOW_VISIBLE &&
@@ -5358,10 +5359,9 @@ static void layout_shift_block_floats(struct box *box, int shift)
 static void layout_block_first_baseline(struct box *box, html_content *content, struct block_layout_state *state)
 {
     struct box *parent = box->parent;
-    if ((box->type != BOX_BLOCK && !lh__box_is_flex_container(box)) ||
-        !(box->flags & HAS_BASELINE) || box_is_out_of_flow(box) ||
-        parent == NULL || parent->type != BOX_BLOCK || (parent->flags & HAS_BASELINE) ||
-        !layout_needs_first_baseline(parent))
+    if ((box->type != BOX_BLOCK && !lh__box_is_flex_container(box) && !lh__box_is_grid_container(box)) ||
+        !(box->flags & HAS_BASELINE) || box_is_out_of_flow(box) || parent == NULL || parent->type != BOX_BLOCK ||
+        (parent->flags & HAS_BASELINE) || !layout_needs_first_baseline(parent))
         return;
     struct line_baselines baselines = {0};
     int push = layout_align_outside_marker(parent, content, box->y - box->border[TOP].width,

@@ -1,0 +1,191 @@
+<!doctype html><meta charset="utf-8"><style>@font-face{font-family:Test;src:url(fonts/normal-400.ttf)}body{margin:20px;font:20px/36px Test}ol{margin:0;padding:0}.case{display:flow-root;width:240px;margin:0 0 12px 70px}li{margin:0;list-style:decimal outside;background:#eee}li::marker{font-size:40px}.grid{display:grid;grid-template-columns:120px 120px}</style>
+<title>Grid first baselines and final row alignment</title>
+<style>
+#switch { position:absolute; left:4px; top:4px; }
+#switch:checked ~ .case #row-child0 { font-size:40px; }
+#switch:checked ~ .case #standalone-grid { align-items:center !important; }
+</style>
+<!-- Bundled font: 20px/36px content baseline=24px; 40px/36px marker baseline=30px.
+     Expected geometry was independently captured in Chromium. Native restyles
+     change the exported baseline and alignment within a standalone row. -->
+<input type="checkbox" id="switch">
+
+<div id="row-case" class="case">
+  <ol>
+    <li id="row-item"><div id="row-grid" class="grid"><div id="row-child0">H</div><div id="row-child1">H</div></div></li>
+  </ol>
+  <div id="row-after" style="height:8px;background:green"></div></div>
+<div id="baseline-case" class="case">
+  <ol>
+    <li id="baseline-item"><div id="baseline-grid" class="grid" style="align-items:baseline"><div id="baseline-child0" style="font-size:10px;line-height:20px">H</div><div id="baseline-child1" style="font-size:40px;line-height:40px">H</div></div></li>
+  </ol>
+  <div id="baseline-after" style="height:8px;background:green"></div></div>
+<div id="baseline-margins-case" class="case">
+  <ol>
+    <li id="baseline-margins-item"><div id="baseline-margins-grid" class="grid" style="align-items:baseline"><div id="baseline-margins-child0" style="margin-top:20px;line-height:20px">H</div><div id="baseline-margins-child1" style="margin-bottom:25px;font-size:40px;line-height:40px">H</div></div></li>
+  </ol>
+  <div id="baseline-margins-after" style="height:8px;background:green"></div></div>
+<div id="baseline-negative-case" class="case">
+  <ol>
+    <li id="baseline-negative-item"><div id="baseline-negative-grid" class="grid" style="align-items:baseline"><div id="baseline-negative-child0" style="margin-top:-10px;line-height:20px">H</div><div id="baseline-negative-child1" style="margin-bottom:-8px;font-size:40px;line-height:40px">H</div></div></li>
+  </ol>
+  <div id="baseline-negative-after" style="height:8px;background:green"></div></div>
+<div id="baseline-second-case" class="case">
+  <ol>
+    <li id="baseline-second-item"><div id="baseline-second-grid" class="grid" style="align-items:flex-start"><div id="baseline-second-child0" style="font-size:10px">H</div><div id="baseline-second-child1" style="align-self:baseline">H</div></div></li>
+  </ol>
+  <div id="baseline-second-after" style="height:8px;background:green"></div></div>
+<div id="center-case" class="case">
+  <ol>
+    <li id="center-item"><div id="center-grid" class="grid" style="grid-template-rows:80px;align-items:center"><div id="center-child0">H</div><div id="center-child1" style="font-size:40px;line-height:60px">H</div></div></li>
+  </ol>
+  <div id="center-after" style="height:8px;background:green"></div></div>
+<div id="end-case" class="case">
+  <ol>
+    <li id="end-item"><div id="end-grid" class="grid" style="grid-template-rows:80px;align-items:flex-end"><div id="end-child0">H</div><div id="end-child1" style="font-size:40px;line-height:60px">H</div></div></li>
+  </ol>
+  <div id="end-after" style="height:8px;background:green"></div></div>
+<div id="late-center-case" class="case">
+  <ol>
+    <li id="late-center-item"><div id="late-center-grid" class="grid" style="align-items:center"><div id="late-center-child0">H</div><div id="late-center-child1" style="font-size:40px;line-height:60px">H</div></div></li>
+  </ol>
+  <div id="late-center-after" style="height:8px;background:green"></div></div>
+<div id="late-end-case" class="case">
+  <ol>
+    <li id="late-end-item"><div id="late-end-grid" class="grid" style="align-items:flex-end"><div id="late-end-child0">H</div><div id="late-end-child1" style="font-size:40px;line-height:60px">H</div></div></li>
+  </ol>
+  <div id="late-end-after" style="height:8px;background:green"></div></div>
+<div id="empty-first-case" class="case">
+  <ol>
+    <li id="empty-first-item"><div id="empty-first-grid" class="grid"><div id="empty-first-child0" style="height:18px;"></div><div id="empty-first-child1">H</div></div></li>
+  </ol>
+  <div id="empty-first-after" style="height:8px;background:green"></div></div>
+<div id="empty-all-case" class="case">
+  <ol>
+    <li id="empty-all-item"><div id="empty-all-grid" class="grid"><div id="empty-all-child0" style="height:18px;"></div><div id="empty-all-child1" style="height:24px;"></div></div></li>
+  </ol>
+  <div id="empty-all-after" style="height:8px;background:green"></div></div>
+<div id="padded-case" class="case">
+  <ol>
+    <li id="padded-item"><div id="padded-grid" class="grid" style="padding:5px;border:2px solid"><div id="padded-child0" style="padding:4px;border:1px solid">H</div><div id="padded-child1">H</div></div></li>
+  </ol>
+  <div id="padded-after" style="height:8px;background:green"></div></div>
+<div id="clipped-case" class="case">
+  <ol>
+    <li id="clipped-item"><div id="clipped-grid" class="grid"><div id="clipped-child0" style="overflow:hidden;height:20px">H</div><div id="clipped-child1">H</div></div></li>
+  </ol>
+  <div id="clipped-after" style="height:8px;background:green"></div></div>
+<div id="nested-case" class="case">
+  <ol>
+    <li id="nested-item"><div id="nested-grid" class="grid"><div id="nested-child0"><div id="nested-nested" style="display:grid;padding-top:5px"><div id="nested-inner">H</div></div></div><div id="nested-child1">H</div></div></li>
+  </ol>
+  <div id="nested-after" style="height:8px;background:green"></div></div>
+<div id="relative-case" class="case">
+  <ol>
+    <li id="relative-item"><div id="relative-grid" class="grid"><div id="relative-child0" style="position:relative;top:9px">H</div><div id="relative-child1">H</div></div></li>
+  </ol>
+  <div id="relative-after" style="height:8px;background:green"></div></div>
+<div id="abs-first-case" class="case">
+  <ol>
+    <li id="abs-first-item"><div id="abs-first-grid" class="grid" style="position:relative"><div id="abs-first-child0" style="position:absolute;top:70px;font-size:40px">H</div><div id="abs-first-child1">H</div></div></li>
+  </ol>
+  <div id="abs-first-after" style="height:8px;background:green"></div></div>
+<div id="fixed-child-case" class="case">
+  <ol>
+    <li id="fixed-child-item"><div id="fixed-child-grid" class="grid"><div id="fixed-child-child0" style="height:18px">H</div><div id="fixed-child-child1">H</div></div></li>
+  </ol>
+  <div id="fixed-child-after" style="height:8px;background:green"></div></div>
+<div id="wrapped-text-case" class="case">
+  <ol>
+    <li id="wrapped-text-item"><div id="wrapped-text-grid" class="grid"><div id="wrapped-text-child0" style="width:35px;">H H H</div><div id="wrapped-text-child1">H</div></div></li>
+  </ol>
+  <div id="wrapped-text-after" style="height:8px;background:green"></div></div>
+<div id="standalone-case" class="case">
+  <ol><div id="standalone-item"><div id="standalone-grid" class="grid" style="align-items:baseline"><div id="standalone-child0" style="font-size:10px;line-height:20px">H</div><div id="standalone-child1" style="font-size:40px;line-height:40px">H</div></div></div></ol>
+  <div id="standalone-after" style="height:8px;background:green"></div></div>
+<div id="placement-case" class="case">
+  <ol>
+    <li id="placement-item"><div id="placement-grid" class="grid"><div id="placement-child0" style="grid-column:2;grid-row:1">H</div><div id="placement-child1" style="grid-column:1;grid-row:1;font-size:10px">H</div></div></li>
+  </ol>
+  <div id="placement-after" style="height:8px;background:green"></div></div>
+<div id="empty-row-case" class="case">
+  <ol>
+    <li id="empty-row-item"><div id="empty-row-grid" class="grid" style="grid-template-rows:15px auto"><div id="empty-row-child0" style="grid-column:2;grid-row:2">H</div><div id="empty-row-child1" style="grid-column:1;grid-row:2;font-size:10px">H</div></div></li>
+  </ol>
+  <div id="empty-row-after" style="height:8px;background:green"></div></div>
+<div id="repeat-row-case" class="case">
+  <ol>
+    <li id="repeat-row-item"><div id="repeat-row-grid" class="grid" style="grid-template-rows:15px repeat(1,36px)"><div id="repeat-row-child0" style="grid-column:2;grid-row:2">H</div><div id="repeat-row-child1" style="grid-column:1;grid-row:2;font-size:10px">H</div></div></li>
+  </ol>
+  <div id="repeat-row-after" style="height:8px;background:green"></div></div>
+<div id="two-rows-case" class="case">
+  <ol>
+    <li id="two-rows-item"><div id="two-rows-grid" class="grid" style="align-items:baseline"><div id="two-rows-child0" style="font-size:10px;line-height:20px">H</div><div id="two-rows-child1" style="font-size:40px;line-height:40px">H</div><div id="two-rows-child2" style="grid-column:1;grid-row:2">H</div></div></li>
+  </ol>
+  <div id="two-rows-after" style="height:8px;background:green"></div></div>
+<div id="span-case" class="case">
+  <ol>
+    <li id="span-item"><div id="span-grid" class="grid" style="align-items:baseline"><div id="span-child0" style="grid-row:span 2;font-size:10px;line-height:20px">H</div><div id="span-child1" style="font-size:40px;line-height:40px">H</div><div id="span-child2" style="grid-column:2;grid-row:2">H</div></div></li>
+  </ol>
+  <div id="span-after" style="height:8px;background:green"></div></div>
+<div id="auto-margin-case" class="case">
+  <ol>
+    <li id="auto-margin-item"><div id="auto-margin-grid" class="grid" style="grid-template-rows:80px;align-items:baseline"><div id="auto-margin-child0" style="margin-top:auto">H</div><div id="auto-margin-child1" style="font-size:40px;line-height:40px">H</div></div></li>
+  </ol>
+  <div id="auto-margin-after" style="height:8px;background:green"></div></div>
+<div id="fixed-row-case" class="case">
+  <ol>
+    <li id="fixed-row-item"><div id="fixed-row-grid" class="grid" style="grid-template-rows:20px;align-items:baseline"><div id="fixed-row-child0" style="font-size:10px;line-height:20px">H</div><div id="fixed-row-child1" style="font-size:40px;line-height:40px">H</div></div></li>
+  </ol>
+  <div id="fixed-row-after" style="height:8px;background:green"></div></div>
+<div id="grow-first-row-case" class="case">
+  <ol>
+    <li id="grow-first-row-item"><div id="grow-first-row-grid" class="grid" style="align-items:baseline"><div id="grow-first-row-child0" style="grid-row:2;grid-column:1">H</div><div id="grow-first-row-child1" style="grid-row:1;grid-column:1;font-size:10px;line-height:20px">H</div><div id="grow-first-row-child2" style="font-size:40px;line-height:40px">H</div></div></li>
+  </ol>
+  <div id="grow-first-row-after" style="height:8px;background:green"></div></div>
+<div id="nested-flex-case" class="case">
+  <ol>
+    <li id="nested-flex-item"><div id="nested-flex-grid" class="grid"><div id="nested-flex-child0"><div id="nested-flex-nested" style="display:flex;padding-top:5px"><div id="nested-flex-inner">H</div></div></div><div id="nested-flex-child1">H</div></div></li>
+  </ol>
+  <div id="nested-flex-after" style="height:8px;background:green"></div></div>
+<div id="nested-flex-baseline-case" class="case">
+  <ol>
+    <li id="nested-flex-baseline-item"><div id="nested-flex-baseline-grid" class="grid" style="align-items:baseline"><div id="nested-flex-baseline-child0"><div id="nested-flex-baseline-nested" style="display:flex;padding-top:5px"><div id="nested-flex-baseline-inner">H</div></div></div><div id="nested-flex-baseline-child1" style="font-size:40px;line-height:40px">H</div></div></li>
+  </ol>
+  <div id="nested-flex-baseline-after" style="height:8px;background:green"></div></div>
+<div id="grid-in-flex-case" class="case">
+  <ol>
+    <li id="grid-in-flex-item"><div id="grid-in-flex-outer" style="display:flex;align-items:baseline"><div id="grid-in-flex-grid" class="grid"><div id="grid-in-flex-child0">H</div><div id="grid-in-flex-child1">H</div></div><div id="grid-in-flex-peer" style="font-size:40px;line-height:40px">H</div></div></li>
+  </ol>
+  <div id="grid-in-flex-after" style="height:8px;background:green"></div></div>
+<div id="direct-flex-case" class="case">
+  <ol>
+    <li id="direct-flex-item"><div id="direct-flex-grid" class="grid" style="align-items:baseline"><div id="direct-flex-child0" style="display:flex;align-items:baseline;"><div id="direct-flex-inner" style="font-size:10px;line-height:20px">H</div><div id="direct-flex-inner2" style="font-size:30px;line-height:40px">H</div></div><div id="direct-flex-child1" style="font-size:40px;line-height:40px">H</div></div></li>
+  </ol>
+  <div id="direct-flex-after" style="height:8px;background:green"></div></div>
+<div id="direct-grid-case" class="case">
+  <ol>
+    <li id="direct-grid-item"><div id="direct-grid-grid" class="grid" style="align-items:baseline"><div id="direct-grid-child0" style="display:grid;grid-template-columns:1fr 1fr;align-items:baseline;"><div id="direct-grid-inner" style="font-size:10px;line-height:20px">H</div><div id="direct-grid-inner2" style="font-size:30px;line-height:40px">H</div></div><div id="direct-grid-child1" style="font-size:40px;line-height:40px">H</div></div></li>
+  </ol>
+  <div id="direct-grid-after" style="height:8px;background:green"></div></div>
+<div id="stretch-flex-case" class="case">
+  <ol>
+    <li id="stretch-flex-item"><div id="stretch-flex-grid" class="grid" style="grid-template-rows:80px"><div id="stretch-flex-child0" style="display:flex;align-items:center;"><div id="stretch-flex-inner">H</div></div><div id="stretch-flex-child1">H</div></div></li>
+  </ol>
+  <div id="stretch-flex-after" style="height:8px;background:green"></div></div>
+<div id="stretch-column-case" class="case">
+  <ol>
+    <li id="stretch-column-item"><div id="stretch-column-grid" class="grid" style="grid-template-rows:80px"><div id="stretch-column-child0" style="display:flex;flex-direction:column;justify-content:center;"><div id="stretch-column-inner">H</div></div><div id="stretch-column-child1">H</div></div></li>
+  </ol>
+  <div id="stretch-column-after" style="height:8px;background:green"></div></div>
+<div id="no-items-case" class="case">
+  <ol>
+    <li id="no-items-item"><div id="no-items-grid" class="grid"></div></li>
+  </ol>
+  <div id="no-items-after" style="height:8px;background:green"></div></div>
+<div class="case" id="inline-case"><div id="inline-item"><span id="inline-grid" style="display:inline-grid;"><span id="inline-child0">H H H</span></span><span id="inline-label">H</span></div><div id="inline-after" style="height:8px"></div></div>
+<div class="case" id="inline-wrap-case"><div id="inline-wrap-item"><span id="inline-wrap-grid" style="display:inline-grid;width:35px"><span id="inline-wrap-child0">H H H</span></span><span id="inline-wrap-label">H</span></div><div id="inline-wrap-after" style="height:8px"></div></div>
+<div class="case" id="inline-mixed-case"><div id="inline-mixed-item"><span id="inline-mixed-grid" style="display:inline-grid;"><span id="inline-mixed-child0">H H H</span></span><span id="inline-mixed-label" style="font-size:40px;line-height:40px">H</span></div><div id="inline-mixed-after" style="height:8px"></div></div>
+<div class="case" id="inline-wrap-mixed-case"><div id="inline-wrap-mixed-item"><span id="inline-wrap-mixed-grid" style="display:inline-grid;width:35px"><span id="inline-wrap-mixed-child0">H H H</span></span><span id="inline-wrap-mixed-label" style="font-size:40px;line-height:40px">H</span></div><div id="inline-wrap-mixed-after" style="height:8px"></div></div>
+<div class="case" id="inline-flex-mixed-case"><div id="inline-flex-mixed-item"><span id="inline-flex-mixed-grid" style="display:inline-flex;"><span id="inline-flex-mixed-child0">H H H</span></span><span id="inline-flex-mixed-label" style="font-size:40px;line-height:40px">H</span></div><div id="inline-flex-mixed-after" style="height:8px"></div></div>
+<div class="case" id="inline-flex-wrap-mixed-case"><div id="inline-flex-wrap-mixed-item"><span id="inline-flex-wrap-mixed-grid" style="display:inline-flex;width:35px"><span id="inline-flex-wrap-mixed-child0">H H H</span></span><span id="inline-flex-wrap-mixed-label" style="font-size:40px;line-height:40px">H</span></div><div id="inline-flex-wrap-mixed-after" style="height:8px"></div></div>

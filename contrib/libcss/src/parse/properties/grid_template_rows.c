@@ -252,7 +252,8 @@ css_error css__parse_grid_template_rows_internal(
     while (num_tracks < MAX_GRID_TRACKS) {
         grid_track_t track = {0};
 
-        /* Skip whitespace (implicit in token iteration) */
+        /* Keywords and repeat() must see the next track, not its separator. */
+        consumeWhitespace(vector, ctx);
         token = parserutils_vector_peek(vector, *ctx);
         if (token == NULL) {
             break; /* End of input */

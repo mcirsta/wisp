@@ -49,18 +49,23 @@ Reproducer: `test/disclosure-markers.html`, `#rtl` (explicit CSS direction).
 Removing its CSS rule isolates the HTML attribute issue. Initial captures are in
 `out/render-captures/disclosure-markers-2026-10-03/chromium/`.
 
+The grid baseline comparison also confirmed an existing alignment-keyword gap:
+`align-items: start` / `end` are ignored; `flex-start` / `flex-end` work. These
+need distinct logical alignment values because aliasing them changes the meaning
+in flex containers with `wrap-reverse`. Reproducer: `end` and `late-end` in
+`out/render-captures/grid-baseline-2026-10-04/before/`; the permanent grid baseline
+fixture uses the supported flex-prefixed spelling to isolate layout behavior.
+
 ## Remaining marker compatibility
 
 Marker font and colour styles now use the selected `::marker` style for both
 inside and outside markers. Custom `::marker { content:... }` remains unused;
 generated contents need shared counter/content handling for summaries and lists.
 
-Outside markers now align with the first baseline through ordinary block and
-flex children. Grid and table baselines are still not exported, either to a list
-item or to an enclosing flex baseline group. These need their formatting
-context's baseline selection and alignment rules, not descent into the first
-DOM child. The implemented flex propagation covers first baselines in horizontal
-writing.
+Outside markers now align with first baselines through ordinary block, flex and
+grid children in horizontal writing. Table baselines still need their row/cell
+baseline selection and alignment rules before they can be exported to a list
+item or an enclosing flex/grid baseline group.
 
 A very narrow inside counter also differs from Chromium: `#spaced-marker` in
 `test/disclosure-markers.html` uses a negative Korean counter in an 8px item.

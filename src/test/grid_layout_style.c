@@ -51,3 +51,15 @@ css_computed_style *grid_item_test_style_create(const struct grid_item_test_styl
 #undef SET_EDGES
     return style;
 }
+
+void grid_test_set_block_alignment(css_computed_style *style, uint8_t align, int height, int top, int bottom)
+{
+    set_align_self(style, align);
+    set_height(style, height == INT_MIN ? CSS_HEIGHT_AUTO : CSS_HEIGHT_SET,
+        (css_fixed_or_calc)INTTOFIX(height == INT_MIN ? 0 : height), CSS_UNIT_PX);
+    set_margin_top(style, top == INT_MIN ? CSS_MARGIN_AUTO : CSS_MARGIN_SET,
+        (css_fixed_or_calc)INTTOFIX(top == INT_MIN ? 0 : top), CSS_UNIT_PX);
+    set_margin_bottom(style, bottom == INT_MIN ? CSS_MARGIN_AUTO : CSS_MARGIN_SET,
+        (css_fixed_or_calc)INTTOFIX(bottom == INT_MIN ? 0 : bottom), CSS_UNIT_PX);
+    set_overflow_y(style, CSS_OVERFLOW_VISIBLE);
+}

@@ -71,7 +71,7 @@ typedef enum {
 
 /**
  * Cached placement info for a grid item.
- * Used to avoid re-parsing CSS in pass 3.
+ * Retained until track sizing finishes, so alignment only uses final sizes.
  */
 struct grid_item_cache {
     struct box *box; /**< The grid item box */
@@ -80,7 +80,7 @@ struct grid_item_cache {
     int col_span; /**< Column span */
     int row_span; /**< Row span */
     uint8_t align; /**< Vertical alignment (CSS_ALIGN_ITEMS_*) */
-    bool needs_restretch; /**< Whether this item needs re-stretch in pass 3 */
+    bool baseline; /**< Participates in its row's first-baseline group */
 };
 
 /**
@@ -703,14 +703,15 @@ struct grid_layout_ctx {
     int num_cols, num_rows, gap_px;
     int *col_widths, *row_heights;
     int row_heights_capacity, max_row;
-    bool *row_first_item_done;
+    int *row_baselines;
+    css_computed_grid_track *row_tracks;
+    int32_t row_track_count;
     bool flow_is_column, is_dense;
     int auto_col, auto_row;
     bool *occupied;
     int occupied_max_rows;
     struct grid_item_cache *item_cache;
     int item_count, cache_idx;
-    bool needs_pass3;
 };
 
 /* Requested CSS grid lines and the resolved grid area for one item. */
@@ -722,7 +723,7 @@ struct grid_placement {
 static void layout_grid_cleanup(struct grid_layout_ctx *ctx)
 {
     free(ctx->item_cache);
-    free(ctx->row_first_item_done);
+    free(ctx->row_baselines);
     free(ctx->occupied);
     free(ctx->row_heights);
     free(ctx->col_widths);
@@ -758,11 +759,12 @@ static bool layout_grid_prepare(struct grid_layout_ctx *ctx, int available_width
     ctx->row_heights = calloc(ctx->row_heights_capacity, sizeof(int));
     if (!ctx->row_heights)
         return false;
-    ctx->row_first_item_done = calloc(ctx->row_heights_capacity, sizeof(bool));
-    if (!ctx->row_first_item_done)
-        return false;
     if (!init_row_heights_from_css(grid->style, &ctx->row_heights, &ctx->row_heights_capacity))
         return false;
+
+    if (grid->style &&
+        css_computed_grid_template_rows(grid->style, &ctx->row_track_count, &ctx->row_tracks) == CSS_GRID_TEMPLATE_SET)
+        ctx->max_row = ctx->row_track_count;
 
     uint8_t auto_flow = CSS_GRID_AUTO_FLOW_ROW;
     if (grid->style != NULL)
@@ -952,6 +954,34 @@ static void layout_grid_resolve_placement(const struct grid_layout_ctx *ctx, str
     }
 }
 
+/* Preserve the item's inner formatting context for both measurement and stretch. */
+static bool layout_grid_item_contents(const struct grid_layout_ctx *ctx, struct box *child, int available_width)
+{
+    bool success = true;
+    child->float_container = ctx->grid;
+    switch (child->type) {
+    case BOX_BLOCK:
+    case BOX_INLINE_BLOCK:
+        success = layout_block_context(child, -1, ctx->content);
+        break;
+    case BOX_FLEX:
+    case BOX_INLINE_FLEX:
+        success = layout_flex(child, available_width, ctx->content);
+        break;
+    case BOX_GRID:
+    case BOX_INLINE_GRID:
+        success = layout_grid(child, available_width, ctx->content);
+        break;
+    case BOX_TABLE:
+        success = layout_table(child, available_width, ctx->content);
+        break;
+    default:
+        break;
+    }
+    child->float_container = NULL;
+    return success;
+}
+
 /* Resolve inline sizing, lay out contents, then distribute inline auto margins. */
 static bool layout_grid_size_item(const struct grid_layout_ctx *ctx, struct box *child, int child_width)
 {
@@ -995,21 +1025,9 @@ static bool layout_grid_size_item(const struct grid_layout_ctx *ctx, struct box 
     child->margin[LEFT] = margin_left;
     child->margin[RIGHT] = margin_right;
 
-    /* Recursively layout the child */
-    if (child->type == BOX_BLOCK || child->type == BOX_INLINE_BLOCK || child->type == BOX_FLEX ||
-        child->type == BOX_INLINE_FLEX || child->type == BOX_GRID || child->type == BOX_INLINE_GRID) {
-        child->float_container = ctx->grid;
-        if (!layout_block_context(child, -1, ctx->content)) {
-            return false;
-        }
-        child->float_container = NULL;
-    } else if (child->type == BOX_TABLE) {
-        child->float_container = ctx->grid;
-        if (!layout_table(child, child_width, ctx->content)) {
-            return false;
-        }
-        child->float_container = NULL;
-    }
+    child->flags &= ~(HEIGHT_STRETCHED | ASPECT_RATIO_HEIGHT);
+    if (!layout_grid_item_contents(ctx, child, child_width))
+        return false;
 
     /* Auto margins absorb only positive free space, including after
      * a table or nested layout has adjusted the item's used width. */
@@ -1020,179 +1038,177 @@ static bool layout_grid_size_item(const struct grid_layout_ctx *ctx, struct box 
     return true;
 }
 
-/* Grow row heights and flag earlier items affected by that growth. */
-static bool
-layout_grid_update_rows(struct grid_layout_ctx *ctx, const struct box *child, const struct grid_placement *placement)
+/* Resolve normal separately from explicit stretch: a preferred ratio makes
+ * normal use start alignment (CSS Box Alignment §6.1). */
+static uint8_t layout_grid_item_alignment(const struct box *grid, const struct box *child)
 {
-    /* Content layout must finish before its height contributes to a row. */
-    assert(lh__is_resolved(child->height));
-    /* Track row heights for all spanned rows - include padding and border */
-    int total_height = child->height + child->padding[TOP] + child->padding[BOTTOM] + child->border[TOP].width +
-        child->border[BOTTOM].width;
-    /* Ensure row_span is at least 1 to avoid division by zero */
-    assert(placement->row_span >= 1 && "row_span must be at least 1");
-    int height_per_row = total_height / placement->row_span;
+    uint8_t align = child->style ? css_computed_align_self(child->style) : CSS_ALIGN_SELF_AUTO;
+    if (align == CSS_ALIGN_SELF_AUTO)
+        align = grid->style ? css_computed_align_items(grid->style) : CSS_ALIGN_ITEMS_NORMAL;
+    if (align == CSS_ALIGN_ITEMS_NORMAL)
+        align = layout_ratio_dimension(child, child->width, true) != AUTO ? CSS_ALIGN_ITEMS_FLEX_START
+                                                                          : CSS_ALIGN_ITEMS_STRETCH;
+    return align;
+}
 
-    NSLOG(layout, WARNING,
-        "GRID ROW_HEIGHT: child %p content_h=%d pad=%d,%d border=%d,%d total=%d row_span=%d height_per_row=%d", child,
-        child->height, child->padding[TOP], child->padding[BOTTOM], child->border[TOP].width,
-        child->border[BOTTOM].width, total_height, placement->row_span, height_per_row);
+static bool layout_grid_row_is_fixed(const struct grid_layout_ctx *ctx, int row)
+{
+    return row < ctx->row_track_count && ctx->row_tracks != NULL && ctx->row_tracks[row].unit < CSS_UNIT_FR;
+}
 
-    for (int r = placement->row; r < placement->row + placement->row_span; r++) {
-        if (!ensure_row_capacity(&ctx->row_heights, &ctx->row_heights_capacity, r)) {
-            return false;
-        }
-        if (height_per_row > ctx->row_heights[r]) {
-            NSLOG(layout, WARNING, "GRID ROW_HEIGHT UPDATE: row[%d] %d -> %d (from child %p)", r, ctx->row_heights[r],
-                height_per_row, child);
-            /* If this row already had an item, mark those items for re-stretch */
-            if (ctx->row_first_item_done[r]) {
-                ctx->needs_pass3 = true;
-                NSLOG(layout, WARNING, "GRID: needs_pass3 set TRUE because row[%d] already had item", r);
-                /* Mark all cached items in this row for re-stretch */
-                for (int ci = 0; ci < ctx->cache_idx; ci++) {
-                    if (ctx->item_cache[ci].item_row <= r &&
-                        r < ctx->item_cache[ci].item_row + ctx->item_cache[ci].row_span) {
-                        ctx->item_cache[ci].needs_restretch = true;
-                    }
-                }
-            }
-            ctx->row_heights[r] = height_per_row;
-        }
-        ctx->row_first_item_done[r] = true;
+/* Size non-spanning items first, then distribute any spanning deficit over
+ * content-sized tracks. Fixed rows remain fixed even when a baseline overflows. */
+static void layout_grid_grow_rows(struct grid_layout_ctx *ctx, const struct grid_item_cache *item, int height)
+{
+    int remaining = height - (item->row_span - 1) * ctx->gap_px;
+    int growable = 0;
+    int end = item->item_row + item->row_span;
+    for (int r = item->item_row; r < end; r++) {
+        remaining -= ctx->row_heights[r];
+        if (!layout_grid_row_is_fixed(ctx, r))
+            growable++;
     }
+    for (int r = item->item_row; r < end && remaining > 0 && growable > 0; r++) {
+        if (layout_grid_row_is_fixed(ctx, r))
+            continue;
+        int extra = (remaining + growable - 1) / growable;
+        ctx->row_heights[r] += extra;
+        remaining -= extra;
+        growable--;
+    }
+}
 
-    /* Track max row for grid height calculation */
-    if (placement->row + placement->row_span > ctx->max_row) {
-        ctx->max_row = placement->row + placement->row_span;
+/* Baseline shims are part of each item's intrinsic contribution, including
+ * margins and spanning items. No per-box persistent baseline storage is added. */
+static bool layout_grid_size_rows(struct grid_layout_ctx *ctx)
+{
+    if (ctx->max_row == 0)
+        return true;
+    if (!ensure_row_capacity(&ctx->row_heights, &ctx->row_heights_capacity, ctx->max_row - 1))
+        return false;
+    bool has_baselines = false;
+    for (int i = 0; i < ctx->cache_idx; i++)
+        has_baselines |= ctx->item_cache[i].baseline;
+    if (has_baselines) {
+        ctx->row_baselines = malloc(ctx->max_row * sizeof(int));
+        if (ctx->row_baselines == NULL)
+            return false;
+        for (int r = 0; r < ctx->max_row; r++)
+            ctx->row_baselines[r] = INT_MIN;
+        for (int i = 0; i < ctx->cache_idx; i++) {
+            const struct grid_item_cache *item = &ctx->item_cache[i];
+            if (item->baseline) {
+                const struct box *b = item->box;
+                int baseline = b->margin[TOP] + b->border[TOP].width + lh__box_first_baseline(b);
+                ctx->row_baselines[item->item_row] = max(ctx->row_baselines[item->item_row], baseline);
+            }
+        }
+    }
+    for (int spanning = 0; spanning < 2; spanning++) {
+        for (int i = 0; i < ctx->cache_idx; i++) {
+            const struct grid_item_cache *item = &ctx->item_cache[i];
+            if ((item->row_span > 1) != spanning)
+                continue;
+            const struct box *b = item->box;
+            assert(lh__is_resolved(b->height));
+            int height = b->height + lh__delta_outer_height(b);
+            if (item->baseline)
+                height += ctx->row_baselines[item->item_row] -
+                    (b->margin[TOP] + b->border[TOP].width + lh__box_first_baseline(b));
+            layout_grid_grow_rows(ctx, item, height);
+        }
     }
     return true;
 }
 
-/* Stretch makes the block size definite. An auto inline size can then be
- * transferred through the ratio; repeat content layout only if width changes. */
-static bool layout_grid_stretch_item(const struct grid_layout_ctx *ctx, struct box *child, int height)
+/* Re-layout at a definite stretched height so percentages, nested flex layout
+ * and its exported baseline all see the final size. */
+static bool
+layout_grid_stretch_item(const struct grid_layout_ctx *ctx, struct box *child, int available_width, int height)
 {
-    child->height = height;
-    css_fixed_or_calc value = (css_fixed_or_calc)0;
-    css_unit unit = CSS_UNIT_PX;
-    if (child->style == NULL || css_computed_width(child->style, &value, &unit) != CSS_WIDTH_AUTO)
-        return true;
-    int width = layout_ratio_dimension(child, height, false);
-    if (width == AUTO)
-        return true;
-
-    int max_width;
-    struct css_size min_width;
-    layout_find_dimensions(&ctx->content->unit_len_ctx, ctx->grid->width, -1, child,
+    int max_width, max_height;
+    struct css_size min_width, min_height;
+    layout_find_dimensions(&ctx->content->unit_len_ctx, available_width, -1, child,
         &(struct layout_dimension_outputs){
             .max_width = &max_width,
             .min_width = &min_width,
+            .max_height = &max_height,
+            .min_height = &min_height,
         });
+    if (max_height >= 0)
+        height = min(height, max_height);
+    if (min_height.type == CSS_SIZE_SET)
+        height = max(height, min_height.value);
+    int width = child->width;
+    css_fixed_or_calc value = (css_fixed_or_calc)0;
+    css_unit unit = CSS_UNIT_PX;
+    if (child->style && css_computed_width(child->style, &value, &unit) == CSS_WIDTH_AUTO) {
+        int ratio_width = layout_ratio_dimension(child, height, false);
+        if (ratio_width != AUTO)
+            width = ratio_width;
+    }
     if (max_width >= 0)
         width = min(width, max_width);
     if (min_width.type == CSS_SIZE_SET)
         width = max(width, min_width.value);
-    if (width == child->width)
+    if (width == child->width && height == child->height)
         return true;
     child->width = width;
+    child->height = height;
     child->flags &= ~ASPECT_RATIO_HEIGHT;
-    child->float_container = ctx->grid;
-    bool success = layout_block_context(child, -1, ctx->content);
-    child->float_container = NULL;
+    child->flags |= HEIGHT_STRETCHED;
+    int margin[4];
+    memcpy(margin, child->margin, sizeof(margin));
+    bool success = layout_grid_item_contents(ctx, child, available_width);
+    memcpy(child->margin, margin, sizeof(margin));
+    child->flags &= ~HEIGHT_STRETCHED;
     return success;
 }
 
-/* Apply the current row sizes and return the alignment to cache for pass 3. */
-static bool layout_grid_align_item(const struct grid_layout_ctx *ctx, struct box *child,
-    const struct grid_placement *placement, uint8_t *resolved_align)
+/* Every item is aligned once, after all rows have their final size. */
+static bool layout_grid_align_item(const struct grid_layout_ctx *ctx, const struct grid_item_cache *item)
 {
-    /* Determine vertical alignment for this grid item */
-    uint8_t align = CSS_ALIGN_ITEMS_STRETCH; /* default */
-
-    /* Check align-self on the child first */
-    if (child->style) {
-        uint8_t align_self = css_computed_align_self(child->style);
-        if (align_self == CSS_ALIGN_SELF_AUTO) {
-            /* Use align-items from grid container */
-            if (ctx->grid->style) {
-                align = css_computed_align_items(ctx->grid->style);
-            }
-        } else {
-            /* Use align-self value */
-            align = align_self;
-        }
-    } else if (ctx->grid->style) {
-        /* No child style, use grid container's align-items */
-        align = css_computed_align_items(ctx->grid->style);
-    }
-
-    /* Normal stretches ordinary grid items, but preserves a preferred ratio.
-     * Keep explicit stretch distinct from normal (CSS Box Alignment §6.1). */
-    if (align == CSS_ALIGN_ITEMS_NORMAL) {
-        align = layout_ratio_dimension(child, child->width, true) != AUTO ? CSS_ALIGN_ITEMS_FLEX_START
-                                                                          : CSS_ALIGN_ITEMS_STRETCH;
-    }
-
-    /* Calculate total available height for this item */
-    int spanned_height = 0;
-    for (int r = placement->row; r < placement->row + placement->row_span; r++) {
+    struct box *child = item->box;
+    int spanned_height = (item->row_span - 1) * ctx->gap_px;
+    for (int r = item->item_row; r < item->item_row + item->row_span; r++)
         spanned_height += ctx->row_heights[r];
-        if (r > placement->row) {
-            spanned_height += ctx->gap_px;
-        }
-    }
-
-    /* Apply alignment */
-    int content_height = child->height; /* Height from layout */
-    int align_offset = 0;
-
-    switch (align) {
-    case CSS_ALIGN_ITEMS_STRETCH: {
-        /* Stretch to fill entire spanned height - subtract padding/border */
-        int stretch_height = spanned_height - child->padding[TOP] - child->padding[BOTTOM] - child->border[TOP].width -
-            child->border[BOTTOM].width;
-        if (stretch_height < 0) {
-            stretch_height = 0;
-        }
-        if (!layout_grid_stretch_item(ctx, child, stretch_height))
+    int edges = lh__delta_outer_height(child);
+    bool auto_top = child->margin[TOP] == AUTO;
+    bool auto_bottom = child->margin[BOTTOM] == AUTO;
+    css_fixed_or_calc value = (css_fixed_or_calc)0;
+    css_unit unit = CSS_UNIT_PX;
+    if (item->align == CSS_ALIGN_ITEMS_STRETCH && !auto_top && !auto_bottom &&
+        (!child->style || css_computed_height(child->style, &value, &unit) == CSS_HEIGHT_AUTO)) {
+        int available_width = (item->col_span - 1) * ctx->gap_px;
+        for (int c = item->item_col; c < item->item_col + item->col_span; c++)
+            available_width += ctx->col_widths[c];
+        if (!layout_grid_stretch_item(ctx, child, available_width, max(0, spanned_height - edges)))
             return false;
-        align_offset = 0;
-        break;
     }
-    case CSS_ALIGN_ITEMS_FLEX_START:
-    case CSS_ALIGN_ITEMS_BASELINE:
-        /* Align to start (top) - keep content height */
-        align_offset = 0;
-        break;
-    case CSS_ALIGN_ITEMS_FLEX_END:
-        /* Align to end (bottom) */
-        align_offset = spanned_height - content_height;
-        if (align_offset < 0)
-            align_offset = 0;
-        break;
-    case CSS_ALIGN_ITEMS_CENTER:
-        /* Center vertically */
-        align_offset = (spanned_height - content_height) / 2;
-        if (align_offset < 0)
-            align_offset = 0;
-        break;
-    default:
-        /* Unknown - default to stretch */
-        child->height = spanned_height;
-        align_offset = 0;
-        break;
+    int space = spanned_height - child->height - edges;
+    int offset = 0;
+    if (auto_top || auto_bottom) {
+        int free = max(0, space);
+        if (auto_top)
+            child->margin[TOP] = free / (auto_bottom ? 2 : 1);
+        if (auto_bottom)
+            child->margin[BOTTOM] = free - (auto_top ? child->margin[TOP] : 0);
+    } else if (item->baseline) {
+        offset = ctx->row_baselines[item->item_row] -
+            (child->margin[TOP] + child->border[TOP].width + lh__box_first_baseline(child));
+    } else if (item->align == CSS_ALIGN_ITEMS_CENTER) {
+        offset = space / 2;
+    } else if (item->align == CSS_ALIGN_ITEMS_FLEX_END) {
+        offset = space;
     }
-
-    /* Calculate y position (sum of row heights before item_row + container padding) */
-    int child_y = ctx->grid->padding[TOP];
-    for (int r = 0; r < placement->row; r++) {
-        child_y += ctx->row_heights[r] + ctx->gap_px;
-    }
-    /* Apply alignment offset within the grid area */
-    child_y += align_offset;
-    child->y = child_y + child->border[TOP].width;
-    *resolved_align = align;
+    int y = ctx->grid->padding[TOP];
+    for (int r = 0; r < item->item_row; r++)
+        y += ctx->row_heights[r] + ctx->gap_px;
+    child->y = y + offset + child->margin[TOP] + child->border[TOP].width;
+    int x = ctx->grid->padding[LEFT];
+    for (int c = 0; c < item->item_col; c++)
+        x += ctx->col_widths[c] + ctx->gap_px;
+    child->x = x + child->margin[LEFT] + child->border[LEFT].width;
     return true;
 }
 
@@ -1209,45 +1225,19 @@ layout_grid_layout_item(struct grid_layout_ctx *ctx, struct box *child, const st
         }
     }
 
-    /* Calculate x position (sum of columns before item_col + container padding) */
-    int child_x = ctx->grid->padding[LEFT];
-    for (int c = 0; c < placement->col; c++) {
-        child_x += ctx->col_widths[c] + ctx->gap_px;
-    }
-    if (!layout_grid_size_item(ctx, child, child_width) || !layout_grid_update_rows(ctx, child, placement))
+    if (!layout_grid_size_item(ctx, child, child_width))
         return false;
-    uint8_t align;
-    if (!layout_grid_align_item(ctx, child, placement, &align))
-        return false;
-    child->x = child_x + child->margin[LEFT] + child->border[LEFT].width;
-    int child_y = child->y - child->border[TOP].width;
-
-    /* Cache placement info for pass 3 optimization */
-    if (ctx->item_cache != NULL && ctx->cache_idx < ctx->item_count) {
-        ctx->item_cache[ctx->cache_idx].box = child;
-        ctx->item_cache[ctx->cache_idx].item_col = placement->col;
-        ctx->item_cache[ctx->cache_idx].item_row = placement->row;
-        ctx->item_cache[ctx->cache_idx].col_span = placement->col_span;
-        ctx->item_cache[ctx->cache_idx].row_span = placement->row_span;
-        ctx->item_cache[ctx->cache_idx].align = align;
-        ctx->item_cache[ctx->cache_idx].needs_restretch = false;
-        ctx->cache_idx++;
-    }
-
-    NSLOG(layout, INFO, "Grid item placed: col=%d-%d row=%d-%d x=%d y=%d w=%d h=%d", placement->col,
-        placement->col + placement->col_span, placement->row, placement->row + placement->row_span, child_x, child_y,
-        child->width, child->height);
-
-    /* Redistribute auto margins for column flex grid items.
-     * This is needed because flex layout happens before the grid item's
-     * final height is known. Now that height is set, redistribute space. */
-    if (child->type == BOX_FLEX && child->style) {
-        uint8_t flex_dir = css_computed_flex_direction(child->style);
-        bool is_column = (flex_dir == CSS_FLEX_DIRECTION_COLUMN || flex_dir == CSS_FLEX_DIRECTION_COLUMN_REVERSE);
-        if (is_column) {
-            layout_flex_redistribute_auto_margins_vertical(child);
-        }
-    }
+    uint8_t align = layout_grid_item_alignment(ctx->grid, child);
+    ctx->item_cache[ctx->cache_idx++] = (struct grid_item_cache){
+        .box = child,
+        .item_col = placement->col,
+        .item_row = placement->row,
+        .col_span = placement->col_span,
+        .row_span = placement->row_span,
+        .align = align,
+        .baseline = align == CSS_ALIGN_ITEMS_BASELINE && child->margin[TOP] != AUTO && child->margin[BOTTOM] != AUTO,
+    };
+    ctx->max_row = max(ctx->max_row, placement->row + placement->row_span);
     return true;
 }
 
@@ -1313,86 +1303,24 @@ static void layout_grid_advance_placement(struct grid_layout_ctx *ctx, const str
     }
 }
 
-/* Revisit only cached items whose row grew after their initial layout. */
-static bool layout_grid_restretch_items(const struct grid_layout_ctx *ctx)
+/* CSS Grid §10.6: use a first-row baseline group, otherwise the first
+ * item in row-major grid order (with a border-edge fallback for empty items). */
+static void layout_grid_first_baseline(const struct grid_layout_ctx *ctx)
 {
-    /* Pass 3: Apply final stretch and positioning using cached data.
-     * OPTIMIZATION: Instead of re-parsing CSS for all items, use cached placement info.
-     * Only process items that were marked for re-stretch. */
-    if (ctx->needs_pass3 && ctx->item_cache != NULL) {
-        NSLOG(layout, INFO, "GRID LAYOUT: Pass 3 (optimized) - processing %d cached items", ctx->cache_idx);
-        for (int ci = 0; ci < ctx->cache_idx; ci++) {
-            struct grid_item_cache *cached = &ctx->item_cache[ci];
-
-            /* Skip items that don't need re-stretch */
-            if (!cached->needs_restretch) {
-                continue;
-            }
-
-            struct box *child = cached->box;
-            int item_row = cached->item_row;
-            int row_span = cached->row_span;
-            uint8_t align = cached->align;
-
-            /* Calculate spanned height with final row_heights */
-            int spanned_height = 0;
-            for (int r = item_row; r < item_row + row_span && r < ctx->max_row; r++) {
-                spanned_height += ctx->row_heights[r];
-                if (r > item_row) {
-                    spanned_height += ctx->gap_px;
-                }
-            }
-
-            /* Store original height to detect if we need re-layout */
-            int original_height = child->height;
-
-            /* Apply stretch */
-            if (align == CSS_ALIGN_ITEMS_STRETCH) {
-                int stretch_height = spanned_height - child->padding[TOP] - child->padding[BOTTOM] -
-                    child->border[TOP].width - child->border[BOTTOM].width;
-                if (stretch_height < 0)
-                    stretch_height = 0;
-                if (!layout_grid_stretch_item(ctx, child, stretch_height))
-                    return false;
-            }
-
-            /* Recalculate y position with final row_heights */
-            int final_y = ctx->grid->padding[TOP];
-            for (int r = 0; r < item_row; r++) {
-                final_y += ctx->row_heights[r] + ctx->gap_px;
-            }
-            child->y = final_y + child->border[TOP].width;
-
-            NSLOG(layout, INFO, "Grid pass 3: item at row=%d height=%d->%d y=%d (cached)", item_row, original_height,
-                child->height, child->y);
-
-            /* If height changed, redistribute auto margins in nested flex containers */
-            if (child->height != original_height && child->type == BOX_FLEX) {
-                uint8_t flex_dir = css_computed_flex_direction(child->style);
-                bool is_column = (flex_dir == CSS_FLEX_DIRECTION_COLUMN ||
-                    flex_dir == CSS_FLEX_DIRECTION_COLUMN_REVERSE);
-
-                if (is_column) {
-                    layout_flex_redistribute_auto_margins_vertical(child);
-
-                    /* Also check if any children are column flex containers */
-                    for (struct box *grandchild = child->children; grandchild; grandchild = grandchild->next) {
-                        if (grandchild->type == BOX_FLEX && grandchild->style) {
-                            uint8_t gc_dir = css_computed_flex_direction(grandchild->style);
-                            bool gc_is_column = (gc_dir == CSS_FLEX_DIRECTION_COLUMN ||
-                                gc_dir == CSS_FLEX_DIRECTION_COLUMN_REVERSE);
-                            if (gc_is_column) {
-                                layout_flex_redistribute_auto_margins_vertical(grandchild);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    } else {
-        NSLOG(layout, INFO, "GRID LAYOUT: Pass 3 skipped - no items needed re-stretch");
+    if (!layout_needs_first_baseline(ctx->grid) || ctx->cache_idx == 0)
+        return;
+    const struct grid_item_cache *first = &ctx->item_cache[0];
+    for (int i = 1; i < ctx->cache_idx; i++) {
+        const struct grid_item_cache *item = &ctx->item_cache[i];
+        if (item->item_row < first->item_row ||
+            (item->item_row == first->item_row &&
+                (item->baseline > first->baseline ||
+                    (item->baseline == first->baseline && item->item_col < first->item_col))))
+            first = item;
     }
-    return true;
+    ctx->grid->baseline = first->box->y + lh__box_first_baseline(first->box);
+    ctx->grid->flags |= HAS_BASELINE;
+    ctx->grid->baseline = lh__box_first_baseline(ctx->grid);
 }
 
 /* Publish final dimensions once all rows have been laid out. */
@@ -1432,6 +1360,9 @@ bool layout_grid(struct box *grid, int available_width, html_content *content)
 {
     struct grid_layout_ctx ctx = {.grid = grid, .content = content};
     bool success = false;
+    grid->flags &= ~HAS_BASELINE;
+    if (lh__is_resolved(grid->width) && grid->width >= 0)
+        available_width = grid->width;
     if (!layout_grid_prepare(&ctx, available_width))
         goto cleanup;
 
@@ -1458,9 +1389,14 @@ bool layout_grid(struct box *grid, int available_width, html_content *content)
             layout_grid_advance_placement(&ctx, &placement);
         }
     }
-    if (!layout_grid_restretch_items(&ctx))
+    if (!layout_grid_size_rows(&ctx))
         goto cleanup;
+    for (int i = 0; i < ctx.cache_idx; i++) {
+        if (!layout_grid_align_item(&ctx, &ctx.item_cache[i]))
+            goto cleanup;
+    }
     layout_grid_set_dimensions(&ctx);
+    layout_grid_first_baseline(&ctx);
     success = true;
 cleanup:
     layout_grid_cleanup(&ctx);

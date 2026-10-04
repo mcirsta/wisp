@@ -1739,7 +1739,7 @@ static bool layout_flex__place_line_items_main(struct flex_ctx *ctx, struct flex
         /* CSS FLEXBOX §9.8 COMPLIANCE: Cross Size Determination */
         cross_size = box_size_cross + lh__delta_outer_cross(ctx->flex, b);
         if (lh__flex_baseline_item(ctx->flex, b)) {
-            int ascent = b->margin[TOP] + b->border[TOP].width + lh__flex_item_baseline(b);
+            int ascent = b->margin[TOP] + b->border[TOP].width + lh__box_first_baseline(b);
             int descent = cross_size - ascent;
             line->baseline = line->has_baseline ? max(line->baseline, ascent) : ascent;
             line->descent = line->has_baseline ? max(line->descent, descent) : descent;
@@ -1916,7 +1916,7 @@ static void layout_flex__place_line_items_cross(struct flex_ctx *ctx, struct fle
             if (lh__flex_baseline_item(ctx->flex, b)) {
                 int baseline = ctx->wrap == CSS_FLEX_WRAP_WRAP_REVERSE ?
                     line->cross_size + extra - line->descent : line->baseline;
-                b->y = ctx->flex->padding[TOP] + line->pos + baseline - lh__flex_item_baseline(b);
+                b->y = ctx->flex->padding[TOP] + line->pos + baseline - lh__box_first_baseline(b);
             } else {
                 /* Baselines perpendicular to the cross axis, or auto cross
                  * margins with no free space, use start alignment. */
@@ -2017,9 +2017,9 @@ static void layout_flex__first_baseline(const struct flex_ctx *ctx, struct box *
             }
         }
     }
-    flex->baseline = item->y + lh__flex_item_baseline(item);
+    flex->baseline = item->y + lh__box_first_baseline(item);
     flex->flags |= HAS_BASELINE;
-    flex->baseline = lh__flex_item_baseline(flex);
+    flex->baseline = lh__box_first_baseline(flex);
 }
 
 bool layout_flex(struct box *flex, int available_width, html_content *content)
