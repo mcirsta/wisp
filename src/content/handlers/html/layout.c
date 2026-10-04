@@ -3570,6 +3570,108 @@ static bool layout_line_alignment_metrics(struct box *first, struct box *end, bo
 }
 
 
+/* Inline box boundaries are transparent to wrapping (CSS Text 3, 5.1).
+ * Keep the existing whitespace/atomic-inline opportunities, but do not let an
+ * opening/closing decoration become a break merely because it is a box. */
+struct inline_wrap_state {
+    bool content;
+    bool space;
+    bool atomic;
+    const struct box *empty_end;
+    bool empty_space, empty_atomic;
+};
+
+static bool layout_inline_wraps(const struct box *box)
+{
+    enum css_white_space_e ws = css_computed_white_space(box->style);
+    return ws != CSS_WHITE_SPACE_NOWRAP && ws != CSS_WHITE_SPACE_PRE && !box_is_inside_marker(box);
+}
+
+static bool layout_inline_atomic(const struct box *box)
+{
+    return lh__box_is_replace(box) || box->type == BOX_INLINE_BLOCK ||
+        box->type == BOX_INLINE_FLEX || box->type == BOX_INLINE_GRID;
+}
+
+/* Closing edges stay with the preceding content. A pending space or atomic
+ * boundary is consumed before the next opening edge or content box. */
+static bool layout_inline_break_before(struct inline_wrap_state *state, const struct box *box)
+{
+    if (!lh__box_is_inline_flow(box) || lh__box_is_inline_positioned(box))
+        return false;
+
+    /* Generated inside markers have an unbreakable internal string, but the
+     * list item's whitespace mode governs wrapping between marker and label. */
+    bool marker = box_is_inside_marker(box);
+    bool atomic = layout_inline_atomic(box) || marker;
+    bool wrap = layout_inline_wraps(marker ? box->parent->parent : box);
+    if (box == state->empty_end) {
+        /* A space can break after intervening empty spans as well as before
+         * them. Real content cancels this pending opportunity below. */
+        state->space |= state->empty_space;
+        state->atomic |= state->empty_atomic;
+        state->empty_end = NULL;
+    }
+    bool boundary = box->type != BOX_INLINE_END && state->content &&
+        (state->space || (wrap && (state->atomic || atomic)));
+    /* Empty elements may use a single BOX_INLINE rather than paired markers. */
+    bool empty_inline = box->type == BOX_INLINE && !box->inline_end && !layout_inline_has_content(box);
+    if (boundary && !empty_inline) {
+        if (box->type == BOX_INLINE && box->inline_end && !atomic && !state->empty_end) {
+            state->empty_end = box->inline_end;
+            state->empty_space = state->space;
+            state->empty_atomic = state->atomic;
+        }
+        state->space = state->atomic = false;
+    }
+    if (layout_inline_has_content(box)) {
+        state->empty_end = NULL;
+        state->content = true;
+        state->space = false;
+        state->atomic = atomic && wrap;
+    }
+    state->space |= state->content && box->space != 0 && wrap;
+    return boundary;
+}
+
+/* A legal break, either before box or inside its text. Text prefix widths are
+ * measured only if this fallback is used, not for every fitting text box. */
+struct inline_line_break {
+    struct box *box;
+    size_t offset;
+    int x;
+    int left, right;
+    int clear_level;
+    int place_below_level;
+};
+
+static struct inline_line_break layout_inline_break(
+    struct box *box, size_t offset, int x, int left, int right, struct box *cont)
+{
+    return (struct inline_line_break){box, offset, x, left, right, cont->clear_level, cont->cached_place_below_level};
+}
+
+/* Floats encountered after a rolled-back break belong to the next attempt.
+ * Restore the placement constraints too; retaining either would make the
+ * retried float constrain its own placement or enter the list twice. */
+static void layout_line_rollback_floats(struct box *first, struct box *end, struct box *cont,
+    const struct inline_line_break *point)
+{
+    for (struct box *box = first; box != end; box = box->next) {
+        if (!lh__box_is_float_box(box))
+            continue;
+        struct box **link = &cont->float_children;
+        while (*link && *link != box)
+            link = &(*link)->next_float;
+        if (*link) {
+            *link = box->next_float;
+            box->next_float = NULL;
+        }
+    }
+    cont->clear_level = point->clear_level;
+    cont->cached_place_below_level = point->place_below_level;
+}
+
 /**
  * Position a line of boxes in inline formatting context.
  *
@@ -3596,12 +3698,11 @@ static bool layout_line(struct box *first, int *width, int *y, int cx, int cy, s
     int float_advance = 0;
     int x0 = 0;
     int x1 = *width;
-    int x, h, x_previous;
+    int x, h;
     int fy = cy;
     struct box *left;
     struct box *right;
     struct box *b;
-    struct box *split_box = 0;
     struct box *d;
     struct box *br_box = 0;
     bool move_y = false;
@@ -3610,8 +3711,10 @@ static bool layout_line(struct box *first, int *width, int *y, int cx, int cy, s
     bool outside_marker = box_has_outside_marker(owner) && !(owner->flags & HAS_BASELINE);
     bool needs_line_metrics = outside_marker;
     bool has_content = false, after_space = false;
-    int space_before = 0, space_after = 0;
-    unsigned int inline_count = 0;
+    int space_after = 0;
+    struct inline_wrap_state wrap_state = {0};
+    struct inline_line_break last_break = {0}, first_inline = {0};
+    struct box *retry_left = NULL, *retry_right = NULL;
     unsigned int i;
     const struct gui_layout_table *font_func = content->font_func;
     plot_font_style_t fstyle;
@@ -3643,14 +3746,18 @@ static bool layout_line(struct box *first, int *width, int *y, int cx, int cy, s
          * look better with no minimum line-height */
         used_height = height = 0;
 
-    /* pass 1: find height of line assuming sides at top of line: loop
-     * body executed at least once
+    /* pass 1: find height of line assuming sides at top of line. Prepare the
+     * entire last unbreakable run, including any overflowing closing edges.
+     * Loop body executed at least once;
      * keep in sync with the loop in layout_minmax_line() */
 
     NSLOG(layout, DEBUG, "x0 %i, x1 %i, x1 - x0 %i", x0, x1, x1 - x0);
 
 
-    for (x = 0, b = first; x <= x1 - x0 && b != 0; b = b->next) {
+    for (x = 0, b = first; b != NULL; b = b->next) {
+        bool boundary = layout_inline_break_before(&wrap_state, b);
+        if (x > x1 - x0 && boundary)
+            break;
         struct css_size min_width, min_height;
         int max_width, max_height;
 
@@ -3839,14 +3946,24 @@ static bool layout_line(struct box *first, int *width, int *y, int cx, int cy, s
     if (x1 < x0)
         x1 = x0;
 
-    space_after = space_before = 0;
+    struct box *measured_end = b;
+    space_after = 0;
     has_content = after_space = false;
+    wrap_state = (struct inline_wrap_state){0};
 
     /* pass 2: place boxes in line: loop body executed at least once */
 
     NSLOG(layout, DEBUG, "x0 %i, x1 %i, x1 - x0 %i", x0, x1, x1 - x0);
 
-    for (x = x_previous = 0, b = first; x <= x1 - x0 && b; b = b->next) {
+    for (x = 0, b = first; b; b = b->next) {
+        bool boundary = layout_inline_break_before(&wrap_state, b);
+        if (boundary) {
+            if (x > x1 - x0)
+                break; /* The first unbreakable run overflows as a unit. */
+            last_break = layout_inline_break(b, 0, x, x0, x1, cont);
+        }
+        if (b == measured_end && b->type != BOX_BR)
+            break;
 
         NSLOG(layout, DEBUG, "pass 2: b %p, x %i", b, x);
 
@@ -3856,7 +3973,11 @@ static bool layout_line(struct box *first, int *width, int *y, int cx, int cy, s
         } else if (lh__box_is_inline_flow(b)) {
             assert(b->width != UNKNOWN_WIDTH);
 
-            x_previous = x;
+            if (first_inline.box == NULL) {
+                first_inline = layout_inline_break(b, 0, x, x0, x1, cont);
+                retry_left = left;
+                retry_right = right;
+            }
             x += space_after;
             b->x = x;
 
@@ -3880,17 +4001,62 @@ static bool layout_line(struct box *first, int *width, int *y, int cx, int cy, s
                     b->parent ? b->parent->y : -1, cy);
             }
 
-            space_before = space_after;
             space_after = layout_inline_space(b, &has_content, &after_space, font_func, content);
-            split_box = b;
             move_y = true;
-            inline_count++;
+
+            bool text_wrap = b->text && b->length && !layout_inline_atomic(b) && layout_inline_wraps(b);
+            if (x > x1 - x0) {
+                size_t split = 0;
+                int w = 0;
+                if (text_wrap) {
+                    font_plot_style_from_css(&content->unit_len_ctx, b->style, &fstyle);
+                    font_func->split(&fstyle, b->text, b->length, x1 - x0 - b->x, &split, &w);
+                    if (split == b->length) {
+                        x += w - b->width;
+                        b->width = w;
+                        b->flags |= MEASURED;
+                    }
+                }
+                if (split && split < b->length &&
+                    (b->x + w <= x1 - x0 || (!last_break.box && !retry_left && !retry_right))) {
+                    if (!layout_text_box_split(content, &fstyle, b, split, w))
+                        return false;
+                    x = b->x + w;
+                    b = b->next;
+                    break;
+                }
+                if (x > x1 - x0 && last_break.box) {
+                    struct box *end = b->next;
+                    b = last_break.box;
+                    x = last_break.x;
+                    if (last_break.offset) {
+                        font_plot_style_from_css(&content->unit_len_ctx, b->style, &fstyle);
+                        font_func->width(&fstyle, b->text, last_break.offset, &w);
+                        if (!layout_text_box_split(content, &fstyle, b, last_break.offset, w))
+                            return false;
+                        x += w;
+                        b = b->next;
+                    }
+                    layout_line_rollback_floats(b, end, cont, &last_break);
+                    x0 = last_break.left;
+                    x1 = last_break.right;
+                    break;
+                }
+            }
+            if (x <= x1 - x0 && text_wrap) {
+                /* This whole text fits. Retain its last internal opportunity
+                 * in case a joined word/closing edge overflows later. */
+                size_t offset = b->length;
+                while (offset > 0 && b->text[offset - 1] != ' ')
+                    offset--;
+                if (offset > 1)
+                    last_break = layout_inline_break(b, offset - 1, b->x, x0, x1, cont);
+            }
         } else if (b->type == BOX_BR) {
             b->x = x;
             b->width = 0;
             br_box = b;
             b = b->next;
-            split_box = 0;
             move_y = true;
             break;
 
@@ -3976,105 +4142,27 @@ static bool layout_line(struct box *first, int *width, int *y, int cx, int cy, s
                     right = b;
             }
             add_float_to_container(cont, b);
-
-            split_box = 0;
         }
     }
 
-    if (x1 - x0 < x && split_box) {
-        /* the last box went over the end */
-        size_t split = 0;
-        int w;
-        bool no_wrap = css_computed_white_space(split_box->style) == CSS_WHITE_SPACE_NOWRAP ||
-            css_computed_white_space(split_box->style) == CSS_WHITE_SPACE_PRE;
-
-        x = x_previous;
-
-        if (!no_wrap && !box_is_inside_marker(split_box) &&
-            (split_box->type == BOX_INLINE || split_box->type == BOX_TEXT) && !split_box->object &&
-            !(split_box->flags & REPLACE_DIM) && !(split_box->flags & IFRAME) && !split_box->gadget &&
-            split_box->text) {
-
-            font_plot_style_from_css(&content->unit_len_ctx, split_box->style, &fstyle);
-            /** \todo handle errors */
-            font_func->split(&fstyle, split_box->text, split_box->length, x1 - x0 - x - space_before, &split, &w);
-            if (split != 0 && split == split_box->length) {
-                /* The remainder's estimated width may have triggered this
-                 * call. Keep the measured width even when no split is needed. */
-                split_box->width = w;
-                split_box->flags |= MEASURED;
-            }
-        }
-
-        /* split == 0 implies that text can't be split */
-
-        if (split == 0)
-            w = split_box->width;
-
-
-        NSLOG(layout, DEBUG,
-            "splitting: split_box %p \"%.*s\", spilt %" PRIsizet ", w %i, left %p, right %p, inline_count %u",
-            split_box, (int)split_box->length, split_box->text, split, w, left, right, inline_count);
-
-        if ((split == 0 || x1 - x0 <= x + space_before + w) && !left && !right && inline_count == 1) {
-            /* first word of box doesn't fit, but no floats and
-             * first box on line so force in */
-            if (split == 0 || split == split_box->length) {
-                /* only one word in this box, or not text
-                 * or white-space:nowrap */
-                b = split_box->next;
-            } else {
-                /* cut off first word for this line */
-                if (!layout_text_box_split(content, &fstyle, split_box, split, w))
-                    return false;
-                b = split_box->next;
-            }
-            x += space_before + w;
-
-            NSLOG(layout, DEBUG, "forcing");
-
-        } else if ((split == 0 || x1 - x0 < x + space_before + w) && inline_count == 1) {
-            /* first word of first box doesn't fit (strictly exceeds available width),
-             * and a float is taking some of the width so move below it */
-            assert(left || right);
-            /* Retry at the first bottom edge: the line may fit alongside
-             * a taller float. find_sides excludes a float at its bottom,
-             * so no extra pixel is needed to make progress. */
-            if (!left)
-                float_advance = right->y + right->height - cy;
-            else if (!right)
-                float_advance = left->y + left->height - cy;
-            else
-                float_advance = min(left->y + left->height, right->y + right->height) - cy;
-            float_advance = max(0, float_advance);
-
-            b = split_box;
-
-            NSLOG(layout, DEBUG, "moving below float");
-
-        } else if (split == 0 || x1 - x0 < x + space_before + w) {
-            /* first word of box doesn't fit (strictly exceeds width) so leave box
-             * for next line */
-            b = split_box;
-
-            NSLOG(layout, DEBUG, "leaving for next line");
-
-        } else {
-            /* fit as many words as possible */
-            assert(split != 0);
-
-            NSLOG(layout, DEBUG, "'%.*s' %i %" PRIsizet " %i", (int)split_box->length, split_box->text, x1 - x0, split,
-                w);
-
-            if (split != split_box->length) {
-                if (!layout_text_box_split(content, &fstyle, split_box, split, w))
-                    return false;
-                b = split_box->next;
-            }
-            x += space_before + w;
-
-            NSLOG(layout, DEBUG, "fitting words");
-        }
+    if (x1 - x0 < x && first_inline.box && (retry_left || retry_right)) {
+        /* Retry the entire first run at the nearest float bottom. Leading
+         * floats have already been placed and stay above the retried text.
+         * An interposed float cannot push its preceding unbreakable content
+         * below itself: that run overflows alongside it instead. */
+        if (!retry_left)
+            float_advance = retry_right->y + retry_right->height - cy;
+        else if (!retry_right)
+            float_advance = retry_left->y + retry_left->height - cy;
+        else
+            float_advance = min(retry_left->y + retry_left->height, retry_right->y + retry_right->height) - cy;
+        float_advance = max(0, float_advance);
+        layout_line_rollback_floats(first_inline.box, b, cont, &first_inline);
+        b = first_inline.box;
+        x = first_inline.x;
+        x0 = first_inline.left;
+        x1 = first_inline.right;
+        br_box = NULL;
         move_y = true;
     }
 

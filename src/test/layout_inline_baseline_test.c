@@ -668,7 +668,8 @@ START_TEST(test_line_at_float_boundary)
 {
     int variant = _i % FLOAT_BOUNDARY_CASE_COUNT;
     bool preceding_container = (_i / FLOAT_BOUNDARY_CASE_COUNT) % 2;
-    int wrappers = _i / (2 * FLOAT_BOUNDARY_CASE_COUNT);
+    int wrappers = (_i / (2 * FLOAT_BOUNDARY_CASE_COUNT)) % (FLOAT_BOUNDARY_MAX_WRAPPERS + 1);
+    bool decorated = _i >= 2 * FLOAT_BOUNDARY_CASE_COUNT * (FLOAT_BOUNDARY_MAX_WRAPPERS + 1);
     const struct gui_layout_table boundary_fonts = {.width = width, .split = split_word, .font_metrics = metrics};
     html_content content = {
         .unit_len_ctx = {.viewport_width = INTTOFIX(600), .viewport_height = INTTOFIX(500),
@@ -705,6 +706,8 @@ START_TEST(test_line_at_float_boundary)
     struct box *starts[FLOAT_BOUNDARY_MAX_WRAPPERS];
     for (int i = 0; i < wrappers; i++) {
         starts[i] = make_box(BOX_INLINE, 20, CSS_VERTICAL_ALIGN_BASELINE);
+        if (decorated)
+            style_set_horizontal_edges(starts[i]->style, 5, 0);
         append(ic, starts[i]);
     }
     append(ic, text);
@@ -721,9 +724,19 @@ START_TEST(test_line_at_float_boundary)
         ck_assert(layout_block_context(root, 500, &content));
         int x = pass == 1 ? float_boundary_cases[variant].left_width : float_boundary_cases[variant].x;
         int y = pass == 1 ? 0 : float_boundary_cases[variant].y;
+        if (decorated && wrappers) {
+            /* The bare word fits exactly beside this float; its decorations
+             * make the complete run too wide, so all of it must move below. */
+            if (pass != 1 && float_boundary_cases[variant].left_width == 152) {
+                x = 0;
+                y = 40;
+            }
+            x += wrappers * 5;
+        }
         ck_assert_msg(text->x == x && text->y == y && ic->height == y + 20,
-            "%s (preceding container=%d, wrappers=%d), width %d: expected text %d/%d, line bottom %d; got %d/%d, %d",
-            float_boundary_cases[variant].name, preceding_container, wrappers, widths[pass], x, y, y + 20,
+            "%s (preceding container=%d, wrappers=%d, decorated=%d), width %d: "
+            "expected text %d/%d, line bottom %d; got %d/%d, %d",
+            float_boundary_cases[variant].name, preceding_container, wrappers, decorated, widths[pass], x, y, y + 20,
             text->x, text->y, ic->height);
     }
     free_tree(root);
@@ -746,7 +759,7 @@ int main(void)
     tcase_add_loop_test(tc, test_repeated_text_baselines, 0, 2);
     tcase_add_loop_test(tc, test_nested_float_layout_once, 0, 2 * (NESTED_FLOAT_DEPTH + 1));
     tcase_add_loop_test(tc, test_line_at_float_boundary, 0,
-        2 * (FLOAT_BOUNDARY_MAX_WRAPPERS + 1) * FLOAT_BOUNDARY_CASE_COUNT);
+        4 * (FLOAT_BOUNDARY_MAX_WRAPPERS + 1) * FLOAT_BOUNDARY_CASE_COUNT);
     tcase_add_test(tc, test_font_baseline_fallback);
     suite_add_tcase(suite, tc);
     SRunner *runner = srunner_create(suite);
