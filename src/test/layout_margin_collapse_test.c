@@ -954,10 +954,30 @@ static const struct {
 };
 enum { EMPTY_POSITION_CASE_COUNT = sizeof(empty_position_cases) / sizeof(empty_position_cases[0]) };
 
+static struct box *add_margin_test_float(struct box *parent)
+{
+    struct box *ic = calloc(1, sizeof(*ic));
+    ck_assert_ptr_nonnull(ic);
+    ic->type = BOX_INLINE_CONTAINER;
+    add_child(parent, ic);
+    struct box *floating = create_box_with_style(10);
+    floating->type = BOX_FLOAT_LEFT;
+    add_child(ic, floating);
+    struct box *float_content = create_box_with_style(10);
+    style_set_width(float_content->style, 10, false);
+    style_set_height_px(float_content->style, 8);
+    float_content->flags |= HAS_HEIGHT | MAKE_HEIGHT;
+    add_child(floating, float_content);
+    return floating;
+}
+
+enum { EMPTY_FLOAT_POSITION_COUNT = 5 };
+
 START_TEST(test_empty_margin_position)
 {
     int variant = _i % EMPTY_POSITION_CASE_COUNT;
-    bool with_float = _i >= EMPTY_POSITION_CASE_COUNT;
+    int float_position = _i / EMPTY_POSITION_CASE_COUNT;
+    struct box *floats[2] = {NULL, NULL};
     html_content *content = create_test_content();
     struct box *root = create_box_with_style(200);
     struct box *prefix = create_box_with_style(200);
@@ -968,6 +988,8 @@ START_TEST(test_empty_margin_position)
     struct box *empty = create_box_with_style(200);
     style_set_margins(empty->style, empty_position_cases[variant].top, 0, empty_position_cases[variant].bottom, 0);
     add_child(root, empty);
+    if (float_position == 2 || float_position == 4)
+        floats[0] = add_margin_test_float(empty);
     struct box *child = NULL;
     if (empty_position_cases[variant].nested) {
         child = create_box_with_style(200);
@@ -975,23 +997,11 @@ START_TEST(test_empty_margin_position)
             empty_position_cases[variant].child_bottom, 0);
         add_child(empty, child);
     }
-    /* A float-only inline container must leave the same adjoining margin
-     * chain as the empty control, while its float follows the empty top. */
-    struct box *floating = NULL;
-    if (with_float) {
-        struct box *ic = calloc(1, sizeof(*ic));
-        ck_assert_ptr_nonnull(ic);
-        ic->type = BOX_INLINE_CONTAINER;
-        add_child(child ? child : empty, ic);
-        floating = create_box_with_style(10);
-        floating->type = BOX_FLOAT_LEFT;
-        add_child(ic, floating);
-        struct box *float_content = create_box_with_style(10);
-        style_set_width(float_content->style, 10, false);
-        style_set_height_px(float_content->style, 8);
-        float_content->flags |= HAS_HEIGHT | MAKE_HEIGHT;
-        add_child(floating, float_content);
-    }
+    /* Exercise floats inside the leaf, before/after the child, and both. */
+    if (float_position == 1)
+        floats[0] = add_margin_test_float(child ? child : empty);
+    if (float_position == 3 || float_position == 4)
+        floats[1] = add_margin_test_float(empty);
     struct box *following = create_box_with_style(200);
     style_set_height_px(following->style, 10);
     following->flags |= HAS_HEIGHT | MAKE_HEIGHT;
@@ -1002,10 +1012,13 @@ START_TEST(test_empty_margin_position)
         ck_assert(layout_block_context(root, 768, content));
         ck_assert_msg(empty->y == empty_position_cases[variant].empty_y && empty->height == 0,
             "%s (float=%d) pass %d: expected empty y/h=%d/0, got %d/%d",
-            empty_position_cases[variant].name, with_float, pass,
+            empty_position_cases[variant].name, float_position, pass,
             empty_position_cases[variant].empty_y, empty->y, empty->height);
         int expected_height = empty_position_cases[variant].following_y + 10;
-        if (floating) {
+        for (size_t f = 0; f < sizeof(floats) / sizeof(floats[0]); f++) {
+            struct box *floating = floats[f];
+            if (!floating)
+                continue;
             int float_bottom = empty_position_cases[variant].empty_y + 8;
             if (expected_height < float_bottom)
                 expected_height = float_bottom;
@@ -1015,7 +1028,7 @@ START_TEST(test_empty_margin_position)
         }
         ck_assert_msg(following->y == empty_position_cases[variant].following_y && root->height == expected_height,
             "%s (float=%d) pass %d: expected following y=%d, got %d; root height=%d (expected %d)",
-            empty_position_cases[variant].name, with_float, pass,
+            empty_position_cases[variant].name, float_position, pass,
             empty_position_cases[variant].following_y, following->y, root->height, expected_height);
         if (child) {
             ck_assert_msg(child->y == 0 && child->height == 0,
@@ -2153,7 +2166,7 @@ static Suite *margin_collapse_suite(void)
     tcase_add_test(tc_through, test_nested_collapse_through);
     tcase_add_loop_test(tc_through, test_nested_empty_margin_chain, 0, 2 * EMPTY_CHAIN_CASE_COUNT);
     tcase_add_loop_test(tc_through, test_margin_chain_receiver, 0, 4 * MARGIN_RECEIVER_CASE_COUNT);
-    tcase_add_loop_test(tc_through, test_empty_margin_position, 0, 2 * EMPTY_POSITION_CASE_COUNT);
+    tcase_add_loop_test(tc_through, test_empty_margin_position, 0, EMPTY_FLOAT_POSITION_COUNT * EMPTY_POSITION_CASE_COUNT);
     tcase_add_loop_test(tc_through, test_empty_margin_position_with_clear, 0, CLEARANCE_CASE_COUNT);
     tcase_add_test(tc_through, test_no_collapse_through_border);
     tcase_add_test(tc_through, test_collapse_through_abspos_children);

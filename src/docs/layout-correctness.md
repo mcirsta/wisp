@@ -87,25 +87,32 @@ styling/whitespace support, rather than a language-specific exception.
 Evidence: `out/render-captures/disclosure-markers-2026-10-03/chromium-extended/`
 and `marker-style-reference/inspection.json` in the same artifact directory.
 
-## Remaining float placement cases
+## Remaining parent/child margin cases
 
-Ordinary float-only blocks now preserve adjoining margins, and place floats
-using their containing block's own top rather than a following sibling's margin.
-`qt_float_only_margins` covers 35 cases; the margin-position unit tests also run
-with floats, including nested positive/negative margin chains.
+Two adjacent cases found while checking interleaved floats remain. Both are
+present in the capture made at `8ae6edbe`, before the lookahead fix; these are
+existing limitations, not regressions introduced by that fix.
 
-One pre-existing case remains:
+- **Clearance when a child's large top margin would move its parent.** With
+  parent `margin:13px 0 17px`, a 40×48 left float, and an empty child with
+  `clear:left;margin:100px 0 29px`, Wisp places the child at y=113 and leaves
+  the parent zero-height. Chromium places the child at the float's bottom,
+  y=61, and gives the parent 48px height. Lookahead currently commits the
+  parent's top before placing the float, so the later clearance decision
+  tests the child's margin against that already committed position. Resolving
+  this needs the hypothetical parent/child collapsed top as well as the actual
+  float position; simply skipping the float or clamping the child would be
+  incorrect. Reproducer: `#clear-large-case`.
+- **Fixed-height parents stop first-child top-margin lookahead.** In the same
+  structure with `height:40px` on the parent and an uncleared empty child with
+  `margin:23px 0 29px`, Wisp puts the parent at y=13, while Chromium uses y=29.
+  `MAKE_HEIGHT` currently stops the scan before the child. Height separates the
+  parent's bottom margin but does not by itself separate its top from its
+  first child's top. Address that distinction separately, including controls
+  without floats and with nonempty children. Reproducer: `#parent-height-case`.
 
-- A float before a later empty block child still interrupts lookahead too early.
-  With a parent margin of `13px 0 17px`, a 40×48 float, then an empty child with
-  `margin:23px 0 29px`, Wisp positions the parent at y=13 and its following 8px
-  sibling at y=42; Chromium puts both at y=29. The parent's height is zero in
-  both. This is `#before-empty` in `float-only-margins-2026-10-04/edge.html`;
-  `#between-empty` adds another float after the empty child. Lookahead commits
-  the enclosing top before reaching the later child margins. Resolving this
-  needs coordination between pending ancestor margins and float placement.
-
-Coordinates above are relative to the enclosing flow-root's content edge.
-Evidence is in `out/render-captures/float-only-margins-2026-10-04/`: `before/`,
-`extended/`, and `edge-before/` versus `edge/`. The latter confirms that the
-interleaved-float cases are unchanged from the prior implementation.
+Coordinates are relative to the enclosing flow-root's content edge. Evidence:
+`out/render-captures/interleaved-floats-2026-10-04/probe.html`, `before/` and
+`after2/`. The other exploratory case with default-font text has a 1px normal
+line-height difference; the regression fixture uses an explicit line-height to
+isolate margin geometry.

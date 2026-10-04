@@ -76,6 +76,37 @@ def cases():
     ):
         yield name, dict(top=-13, bottom=-17) | options, expected
 
+    # Floats before/between block children must not commit the parent's top
+    # before those children's adjoining margins have been collected.
+    for name, options, top, child_top, child_height, parent_height, float_top, after in (
+        ("before-child", {}, 29, 29, 0, 0, 29, 29),
+        ("between-children", dict(float_after_child=True), 29, 29, 0, 0, 29, 29),
+        ("before-wrapped", dict(wrap=True), 29, 29, 0, 0, 29, 29),
+        ("before-right", dict(side="right"), 29, 29, 0, 0, 29, 29),
+        ("before-following", dict(after=70), 29, 29, 0, 0, 29, 70),
+        ("before-last", dict(last=True), 29, 29, 0, 0, 29, None),
+        ("before-prefix", dict(prefix=60, previous=31), 91, 91, 0, 0, 91, 91),
+        ("before-negative", dict(child="margin:-23px 0 -29px"), -16, -16, 0, 0, -16, -12),
+        ("before-mixed", dict(child="margin:23px 0 -29px"), -6, -6, 0, 0, -6, -6),
+        ("before-clear", dict(child="clear:left"), 13, 61, 0, 54, 13, 84),
+        ("before-unmatched-clear", dict(child="clear:right"), 29, 29, 0, 0, 29, 29),
+        ("before-height", dict(child="height:10px"), 23, 23, 10, 10, 23, 62),
+        ("before-padding", dict(child="padding-top:5px"), 23, 23, 5, 5, 23, 57),
+        ("before-minimum", dict(child="min-height:20px"), 23, 23, 20, 20, 23, 72),
+        ("before-parent-padding", dict(style="padding-top:5px"), 13, 41, 0, 5, 18, 47),
+        ("before-parent-bottom", dict(style="padding-bottom:7px"), 29, 29, 0, 7, 29, 53),
+        ("before-parent-minimum", dict(style="min-height:20px"), 29, 29, 0, 20, 29, 66),
+        ("before-line", dict(text_after=True, style="font:13px/20px sans-serif"), 29, 29, 0, 20, 29, 66),
+    ):
+        expected = dict(empty=(top, parent_height), inner=(child_top, child_height), floating=(float_top, 48))
+        if after is not None:
+            expected["after"] = (after, 8)
+        if options.get("wrap"):
+            expected["wrapper"] = (top, parent_height)
+        if options.get("float_after_child"):
+            expected["second"] = (float_top, 20)
+        yield name, dict(child="") | options, expected
+
 
 def fixture_html():
     parts = ['<!doctype html><meta charset="utf-8"><title>Float-only margins</title><style>',
@@ -95,6 +126,12 @@ def fixture_html():
         if c.get("break_clear"):
             floating += f'<br style="clear:{c["break_clear"]}">'
         inside = element("inner", floating, c.get("inner", "")) if c.get("nested") else floating
+        if "child" in c:
+            inside += element("inner", style="margin:23px 0 29px;" + c["child"])
+        if c.get("float_after_child"):
+            inside += element("second", style="float:left;width:40px;height:20px;background:#66c")
+        if c.get("text_after"):
+            inside += "text"
         empty = element("empty", inside,
                         f'margin:{c.get("top", 13)}px 0 {c.get("bottom", 17)}px;{c.get("style", "")}',
                         c.get("tag", "div"))

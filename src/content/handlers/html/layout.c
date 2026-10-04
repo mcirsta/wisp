@@ -1864,6 +1864,8 @@ static struct box *layout_next_margin_block(const css_unit_ctx *unit_len_ctx, st
     *margin_top = box;
     if (clearance_box)
         *clearance_box = NULL;
+    struct box *first_float = NULL;
+    bool left_float = false, right_float = false;
 
     while (box != NULL) {
 
@@ -1877,6 +1879,14 @@ static struct box *layout_next_margin_block(const css_unit_ctx *unit_len_ctx, st
             if (box->style) {
                 layout_find_dimensions(unit_len_ctx, box->parent->width, viewport_height, box, box->style, NULL, NULL,
                     NULL, NULL, NULL, NULL, box->margin, box->padding, box->border);
+
+                /* A hypothetical parent top may cross float-only containers,
+                 * but clearance needs their positions first. Return the float
+                 * barrier without borrowing the cleared child's margins. */
+                enum css_clear_e clear = css_computed_clear(box->style);
+                if (first_float && ((left_float && (clear == CSS_CLEAR_LEFT || clear == CSS_CLEAR_BOTH)) ||
+                        (right_float && (clear == CSS_CLEAR_RIGHT || clear == CSS_CLEAR_BOTH))))
+                    return first_float;
 
                 /* CSS 2.1 section 9.5.2: decide clearance using the top edge
                  * with clear:none, before joining this margin to its parent
@@ -1909,11 +1919,22 @@ static struct box *layout_next_margin_block(const css_unit_ctx *unit_len_ctx, st
             /* Check whether box is the box current margin collapses to.
              * Position inline content (including floats) before collecting
              * a following sibling's top margin. */
+            bool float_only = boundary && !clearance_box && box->type == BOX_INLINE_CONTAINER &&
+                box_inline_container_only_floats(unit_len_ctx, box);
+            if (float_only) {
+                if (!first_float)
+                    first_float = box;
+                for (const struct box *child = box->children; child; child = child->next) {
+                    left_float |= child->type == BOX_FLOAT_LEFT;
+                    right_float |= child->type == BOX_FLOAT_RIGHT;
+                }
+            }
             if (box->type == BOX_FLEX || box->type == BOX_GRID || box->flags & (MAKE_HEIGHT | CONTENTS_SKIPPED) ||
                 box_has_outside_marker_line(box) || lh__box_is_replace(box) ||
                 box->border[TOP].width || box->padding[TOP] ||
                 box_style_creates_block_context(box) ||
-                (box->type == BOX_INLINE_CONTAINER && box_inline_container_has_line_boxes(unit_len_ctx, box)) ||
+                (box->type == BOX_INLINE_CONTAINER && !float_only &&
+                    box_inline_container_has_line_boxes(unit_len_ctx, box)) ||
                 (box_has_positive_min_height(unit_len_ctx, box) && !box_has_in_flow_block_children(box))) {
                 /* Collapse to this box; return it */
                 return box;
@@ -4791,11 +4812,38 @@ static bool layout_block_position_child(struct box *box, struct box *block, int 
         state->margin_applied = false;
     }
 
+    /* A float does not end parent/child margin collapse. Resolve the parent's
+     * own top past float-only containers, bounded so later siblings cannot
+     * move it. If clearance needs an unplaced float, keep the original barrier
+     * and resume after positioning that float. */
+    bool resolved_parent_top = false;
+    if (state->margin_top == box && state->in_margin && state->margin_collapse &&
+        state->margin_collapse->type == BOX_INLINE_CONTAINER &&
+        box_inline_container_only_floats(&content->unit_len_ctx, state->margin_collapse)) {
+        unsigned int positive = state->max_pos_margin, negative = state->max_neg_margin;
+        struct box *top;
+        struct box *end = layout_next_margin_block(&content->unit_len_ctx, box, block, viewport_height,
+            &positive, &negative, &top, state->cy, box, NULL);
+        if (end && !(end->type == BOX_INLINE_CONTAINER &&
+                box_inline_container_only_floats(&content->unit_len_ctx, end))) {
+            state->max_pos_margin = positive;
+            state->max_neg_margin = negative;
+            if (end == box && !box_prevents_collapse_through(&content->unit_len_ctx, box)) {
+                /* Its own bottom is still adjoining. Keep the flow cursor
+                 * pending and position this empty branch when it finishes. */
+                state->margin_top = NULL;
+            } else {
+                state->margin_collapse = end;
+                resolved_parent_top = true;
+            }
+        }
+    }
+
     /* CSS 2.1 §8.3.1: parent/first-child collapse moves the parent,
      * while preceding self-collapsing siblings do not consume the margin.
      * Lookahead identifies both the end of the chain and its receiving top
      * edge; these can be different boxes. */
-    if (state->margin_top == box && state->margin_collapse != box && state->in_margin) {
+    if (state->margin_top == box && (state->margin_collapse != box || resolved_parent_top) && state->in_margin) {
         state->cy += (int)state->max_pos_margin - (int)state->max_neg_margin;
         box->y += (int)state->max_pos_margin - (int)state->max_neg_margin;
         state->margin_top = NULL;
@@ -5057,7 +5105,9 @@ layout_block_advance(struct box *box, struct box *block, html_content *content, 
             }
 
             /* Apply bottom margin */
-            if (box->margin[BOTTOM] > 0 && (unsigned int)box->margin[BOTTOM] > state->max_pos_margin) {
+            if (state->margin_applied && !box_prevents_collapse_through(&content->unit_len_ctx, box)) {
+                /* This empty child's bottom already joined its parent's top. */
+            } else if (box->margin[BOTTOM] > 0 && (unsigned int)box->margin[BOTTOM] > state->max_pos_margin) {
                 state->max_pos_margin = (unsigned int)box->margin[BOTTOM];
             } else if (box->margin[BOTTOM] != AUTO && box->margin[BOTTOM] < 0 &&
                 (unsigned int)(-box->margin[BOTTOM]) > state->max_neg_margin)
@@ -5335,7 +5385,8 @@ bool layout_block_context(struct box *block, int viewport_height, html_content *
                 !layout_inline_container(box, box->parent->width, block, state.cx, state.cy, content))
                 return false;
             state = saved;
-            state.margin_collapse = NULL;
+            if (!state.margin_applied || state.margin_collapse == box)
+                state.margin_collapse = NULL;
             state.y = flow_y;
             goto advance_to_next_box;
         }
@@ -5379,7 +5430,7 @@ bool layout_block_context(struct box *block, int viewport_height, html_content *
         if (box->type == BOX_BLOCK && !box->object && !(box->iframe) && box->children) {
             /* Down into children. */
 
-            if (box == state.margin_collapse) {
+            if (box == state.margin_collapse && state.margin_top != NULL) {
                 /* Current margin collapsed though to this box.
                  * Unset margin_collapse. */
                 state.margin_collapse = NULL;
