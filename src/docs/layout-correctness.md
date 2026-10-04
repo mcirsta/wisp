@@ -78,20 +78,30 @@ This reproduces before the baseline changes. Initial evidence:
 `fixture.html`. The permanent `test/table-baseline.html` checks collapsed-table
 content alignment without accepting the incorrect cell edges as a baseline.
 
-## Grid intrinsic sizing
+## Grid container heights
 
-`layout_minmax_grid()` calculates track/child widths and gaps without applying
-the grid container's own specified width and outer edges. An empty inline-grid
-with `width:40px` therefore contributes zero intrinsic width, although layout
-still gives it 40px. In a shrink-to-fit inline-block, a following 40px inline-block
-wraps when Chromium keeps both on one line. Review the grid's shared intrinsic
-size accounting, including width/min/max constraints and box sizing, rather than
-adding an empty-grid exception.
+`layout_grid_set_dimensions()` overwrites a resolved CSS height with the sum of
+row heights unless the grid was stretched or has an aspect ratio. An empty grid
+with `height:10px` becomes zero-height; a border-box grid with overflowing children
+can grow beyond its specified height. Review definite/auto height handling and
+height limits across block, inline, floated and nested grid entry points.
 
-This reproduces in the unchanged `a3ef0181` build, before the collapsed-space font
-fix. Evidence: `out/render-captures/space-font-2026-10-04/fixture.html`, `#grid-line`,
-and `before/` in that directory. The `nowrap/` capture isolates the grid issue
-after correcting the space width. The permanent space-font fixture includes a
-40px grid child so it tests whitespace independently of this sizing problem.
+This reproduces in the unchanged `5ae1c124` build, before the intrinsic-width
+fix. Evidence: `out/render-captures/grid-intrinsic-2026-10-04/fixture.html` and
+`before/`, especially `#empty-fixed-grid` and `#border-maximum-grid`. The permanent
+width fixture uses auto heights so it does not accept the incorrect heights.
+
+## Zero-height float exclusion
+
+A zero-height floated grid still moves the following inline-block horizontally
+on the same line: Wisp places it at x=40 relative to the case; Chromium places it
+at x=0. The grid itself has zero height in both engines. Check same-line float
+placement and exclusion accounting, including ordinary block floats; do not
+special-case grids.
+
+This also reproduces in the unchanged `5ae1c124` build. Evidence:
+`out/render-captures/grid-intrinsic-2026-10-04/zero-float.html`, `#float-grid-peer`,
+`zero-float-before/` and `permanent/reference/` in the same directory. The permanent
+width regression uses a nonempty float to isolate intrinsic sizing.
 
 All artifact paths above are under `out/render-captures/`.

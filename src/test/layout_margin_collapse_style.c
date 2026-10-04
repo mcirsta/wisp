@@ -126,6 +126,12 @@ void style_set_min_width(css_computed_style *s, int px)
     set_min_width(s, CSS_MIN_WIDTH_SET, (css_fixed_or_calc)INTTOFIX(px), CSS_UNIT_PX);
 }
 
+void style_set_max_width(css_computed_style *s, int px)
+{
+    set_max_width(
+        s, px < 0 ? CSS_MAX_WIDTH_NONE : CSS_MAX_WIDTH_SET, (css_fixed_or_calc)INTTOFIX(px < 0 ? 0 : px), CSS_UNIT_PX);
+}
+
 void style_set_horizontal_edges(css_computed_style *s, int padding, int border)
 {
     set_padding_left(s, CSS_PADDING_SET, (css_fixed_or_calc)INTTOFIX(padding), CSS_UNIT_PX);

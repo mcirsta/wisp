@@ -898,6 +898,90 @@ static void append_intrinsic_text(struct box *ic, const char *value, bool space)
     append(ic, text);
 }
 
+/* Exercise the shared outer-size contract through block, flex and grid entry
+ * points. Cached child contributions isolate container constraints from tracks. */
+static const struct {
+    const char *name;
+    int preferred, minimum, maximum, content_min, content_max;
+    bool border_box;
+    int padding, border, margin;
+    int normal_min, normal_max, flex_min, flex_max;
+} intrinsic_container_cases[] = {
+    {"empty fixed", 40, 0, -1, 0, 0, false, 0, 0, 0, 40, 40, 40, 40},
+    {"preferred", 40, 0, -1, 30, 60, false, 0, 0, 0, 40, 40, 40, 60},
+    {"auto", -1, 0, -1, 30, 60, false, 0, 0, 0, 30, 60, 30, 60},
+    {"empty minimum", -1, 60, -1, 0, 0, false, 0, 0, 0, 60, 60, 60, 60},
+    {"maximum", -1, 0, 40, 50, 80, false, 0, 0, 0, 40, 40, 40, 40},
+    {"minimum wins", -1, 80, 40, 30, 60, false, 0, 0, 0, 80, 80, 80, 80},
+    {"fixed minimum wins", 20, 80, 40, 30, 60, false, 0, 0, 0, 80, 80, 80, 80},
+    {"content edges", 40, 0, -1, 0, 0, false, 3, 2, 7, 64, 64, 64, 64},
+    {"border edges", 40, 0, -1, 0, 0, true, 3, 2, 7, 54, 54, 54, 54},
+    {"border floor", 2, 0, -1, 0, 0, true, 3, 2, 0, 10, 10, 10, 10},
+    {"border minimum", -1, 60, -1, 55, 55, true, 3, 2, 0, 65, 65, 65, 65},
+    {"border maximum", -1, 0, 60, 55, 55, true, 3, 2, 0, 60, 60, 60, 60},
+    {"border preferred floor", 60, 0, -1, 55, 55, true, 3, 2, 0, 60, 60, 65, 65},
+    {"border conflict", -1, 80, 40, 30, 60, true, 3, 2, 0, 80, 80, 80, 80},
+};
+#define INTRINSIC_CONTAINER_CASE_COUNT (sizeof(intrinsic_container_cases) / sizeof(intrinsic_container_cases[0]))
+
+static const struct {
+    box_type type;
+    bool flex_item;
+} intrinsic_container_modes[] = {
+    {BOX_INLINE_BLOCK, false},
+    {BOX_INLINE_FLEX, false},
+    {BOX_INLINE_GRID, false},
+    {BOX_GRID, false},
+    {BOX_BLOCK, true},
+    {BOX_FLEX, true},
+    {BOX_GRID, true},
+};
+#define INTRINSIC_CONTAINER_MODE_COUNT (sizeof(intrinsic_container_modes) / sizeof(intrinsic_container_modes[0]))
+
+START_TEST(test_intrinsic_container_constraints)
+{
+    const size_t index = _i % INTRINSIC_CONTAINER_CASE_COUNT;
+    const unsigned mode = _i / INTRINSIC_CONTAINER_CASE_COUNT;
+    const bool flex_item = intrinsic_container_modes[mode].flex_item;
+    const box_type type = intrinsic_container_modes[mode].type;
+    html_content content = {.unit_len_ctx = {.device_dpi = INTTOFIX(96), .font_size_default = INTTOFIX(16)}};
+    struct box parent = {.type = BOX_FLEX};
+    struct box *box = make_box(type, 20, CSS_VERTICAL_ALIGN_BASELINE);
+    if (type == BOX_FLEX || type == BOX_INLINE_FLEX)
+        style_set_flex_or_grid(box->style, false);
+    if (type == BOX_GRID || type == BOX_INLINE_GRID)
+        style_set_flex_or_grid(box->style, true);
+    box->max_width = UNKNOWN_MAX_WIDTH;
+    if (flex_item)
+        box->parent = &parent;
+    style_set_width(box->style, intrinsic_container_cases[index].preferred, false);
+    style_set_min_width(box->style, intrinsic_container_cases[index].minimum);
+    style_set_max_width(box->style, intrinsic_container_cases[index].maximum);
+    style_set_box_sizing(box->style,
+        intrinsic_container_cases[index].border_box ? CSS_BOX_SIZING_BORDER_BOX : CSS_BOX_SIZING_CONTENT_BOX);
+    style_set_horizontal_edges(
+        box->style, intrinsic_container_cases[index].padding, intrinsic_container_cases[index].border);
+    style_set_margins(
+        box->style, 0, intrinsic_container_cases[index].margin, 0, intrinsic_container_cases[index].margin);
+    struct box *child = make_box(BOX_BLOCK, 20, CSS_VERTICAL_ALIGN_BASELINE);
+    child->min_width.value = intrinsic_container_cases[index].content_min;
+    child->max_width = intrinsic_container_cases[index].content_max;
+    append(box, child);
+    for (int run = 0; run < 2; run++) {
+        ck_assert(layout_minmax_box(box, &fonts, &content));
+        int expected_min = flex_item ? intrinsic_container_cases[index].flex_min
+                                     : intrinsic_container_cases[index].normal_min;
+        int expected_max = flex_item ? intrinsic_container_cases[index].flex_max
+                                     : intrinsic_container_cases[index].normal_max;
+        ck_assert_msg(box->min_width.value == expected_min && box->max_width == expected_max,
+            "%s type=%d flex-item=%d run=%d: expected %d/%d, got %d/%d", intrinsic_container_cases[index].name, type,
+            flex_item, run, expected_min, expected_max, box->min_width.value, box->max_width);
+        ck_assert_int_eq(box->content_min_width, intrinsic_container_cases[index].content_min);
+    }
+    free_tree(box);
+}
+END_TEST
+
 START_TEST(test_inline_intrinsic_run)
 {
     html_content content = {
@@ -1223,6 +1307,8 @@ int main(void)
     TCase *intrinsics = tcase_create("Intrinsic inline runs");
     tcase_add_loop_test(intrinsics, test_inline_intrinsic_run, 0,
         sizeof(intrinsic_run_cases) / sizeof(intrinsic_run_cases[0]));
+    tcase_add_loop_test(intrinsics, test_intrinsic_container_constraints, 0,
+        INTRINSIC_CONTAINER_MODE_COUNT * INTRINSIC_CONTAINER_CASE_COUNT);
     suite_add_tcase(suite, intrinsics);
     TCase *alignment = tcase_create("Line alignment");
     tcase_add_loop_test(alignment, test_line_overflow_alignment, 0, 2 * TEXT_ALIGNMENT_COUNT);

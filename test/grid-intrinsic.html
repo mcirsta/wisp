@@ -1,0 +1,36 @@
+<!doctype html><meta charset="utf-8"><title>Grid intrinsic container sizes</title>
+<style>
+@font-face{font-family:Test;src:url(fonts/normal-400.ttf)}
+body{margin:20px;font:20px/40px Test}.case{display:flow-root;margin:0 0 8px}.line{display:inline-block;vertical-align:top;background:#ddd}
+.grid{display:inline-grid;vertical-align:top;background:#58a}.grid i{display:block;height:10px}.peer{display:inline-block;width:40px;height:10px;vertical-align:top;background:#a85}
+#switch{position:absolute;left:300px;top:0}
+#switch:checked ~ .case .grid{min-width:90px;max-width:90px}
+.flex-line{display:flex;width:160px;align-items:start}.flex-line .grid{width:200px}
+.flex-line .peer{flex:none}
+</style><input id="switch" type="checkbox" aria-label="Change grid constraints">
+<div class="case" id="empty-fixed-case"><div class="line" id="empty-fixed-line"><div class="grid" id="empty-fixed-grid" style="width:40px"></div> <b class="peer" id="empty-fixed-peer"></b></div></div>
+<div class="case" id="fixed-overflow-case"><div class="line" id="fixed-overflow-line"><div class="grid" id="fixed-overflow-grid" style="width:40px"><i style="width:80px"></i></div> <b class="peer" id="fixed-overflow-peer"></b></div></div>
+<div class="case" id="auto-content-case"><div class="line" id="auto-content-line"><div class="grid" id="auto-content-grid" style=""><i style="width:40px"></i></div> <b class="peer" id="auto-content-peer"></b></div></div>
+<div class="case" id="content-box-case"><div class="line" id="content-box-line"><div class="grid" id="content-box-grid" style="width:40px;padding:3px;border:2px solid;margin:0 7px"></div> <b class="peer" id="content-box-peer"></b></div></div>
+<div class="case" id="border-box-case"><div class="line" id="border-box-line"><div class="grid" id="border-box-grid" style="width:40px;box-sizing:border-box;padding:3px;border:2px solid;margin:0 7px"></div> <b class="peer" id="border-box-peer"></b></div></div>
+<div class="case" id="border-floor-case"><div class="line" id="border-floor-line"><div class="grid" id="border-floor-grid" style="width:2px;box-sizing:border-box;padding:3px;border:2px solid"></div> <b class="peer" id="border-floor-peer"></b></div></div>
+<div class="case" id="auto-edges-case"><div class="line" id="auto-edges-line"><div class="grid" id="auto-edges-grid" style="padding:3px;border:2px solid;margin:0 7px"><i style="width:40px"></i></div> <b class="peer" id="auto-edges-peer"></b></div></div>
+<div class="case" id="minimum-case"><div class="line" id="minimum-line"><div class="grid" id="minimum-grid" style="min-width:60px"></div> <b class="peer" id="minimum-peer"></b></div></div>
+<div class="case" id="maximum-case"><div class="line" id="maximum-line"><div class="grid" id="maximum-grid" style="max-width:60px"><i style="width:80px"></i></div> <b class="peer" id="maximum-peer"></b></div></div>
+<div class="case" id="min-wins-case"><div class="line" id="min-wins-line"><div class="grid" id="min-wins-grid" style="min-width:80px;max-width:40px"></div> <b class="peer" id="min-wins-peer"></b></div></div>
+<div class="case" id="fixed-min-wins-case"><div class="line" id="fixed-min-wins-line"><div class="grid" id="fixed-min-wins-grid" style="width:20px;min-width:80px;max-width:40px"></div> <b class="peer" id="fixed-min-wins-peer"></b></div></div>
+<div class="case" id="fixed-maximum-case"><div class="line" id="fixed-maximum-line"><div class="grid" id="fixed-maximum-grid" style="width:80px;max-width:40px"></div> <b class="peer" id="fixed-maximum-peer"></b></div></div>
+<div class="case" id="border-minimum-case"><div class="line" id="border-minimum-line"><div class="grid" id="border-minimum-grid" style="min-width:60px;box-sizing:border-box;padding:3px;border:2px solid"></div> <b class="peer" id="border-minimum-peer"></b></div></div>
+<div class="case" id="border-maximum-case"><div class="line" id="border-maximum-line"><div class="grid" id="border-maximum-grid" style="max-width:60px;box-sizing:border-box;padding:3px;border:2px solid"><i style="width:80px"></i></div> <b class="peer" id="border-maximum-peer"></b></div></div>
+<div class="case" id="border-min-wins-case"><div class="line" id="border-min-wins-line"><div class="grid" id="border-min-wins-grid" style="min-width:80px;max-width:40px;box-sizing:border-box;padding:3px;border:2px solid"></div> <b class="peer" id="border-min-wins-peer"></b></div></div>
+<div class="case" id="border-content-min-case"><div class="line" id="border-content-min-line"><div class="grid" id="border-content-min-grid" style="min-width:60px;box-sizing:border-box;padding:3px;border:2px solid"><i style="width:55px"></i></div> <b class="peer" id="border-content-min-peer"></b></div></div>
+<div class="case" id="border-content-max-case"><div class="line" id="border-content-max-line"><div class="grid" id="border-content-max-grid" style="max-width:60px;box-sizing:border-box;padding:3px;border:2px solid"><i style="width:55px"></i></div> <b class="peer" id="border-content-max-peer"></b></div></div>
+<div class="case" id="calc-case"><div class="line" id="calc-line"><div class="grid" id="calc-grid" style="width:calc(20px + 20px)"></div> <b class="peer" id="calc-peer"></b></div></div>
+<div class="case" id="auto-margins-case"><div class="line" id="auto-margins-line"><div class="grid" id="auto-margins-grid" style="width:40px;margin:0 auto"></div> <b class="peer" id="auto-margins-peer"></b></div></div>
+<div class="case" id="tracks-case"><div class="line" id="tracks-line"><div class="grid" id="tracks-grid" style="grid-template-columns:20px 30px;column-gap:10px"></div> <b class="peer" id="tracks-peer"></b></div></div>
+<div class="case" id="tracks-edges-case"><div class="line" id="tracks-edges-line"><div class="grid" id="tracks-edges-grid" style="grid-template-columns:20px 30px;column-gap:10px;padding:3px;border:2px solid"></div> <b class="peer" id="tracks-edges-peer"></b></div></div>
+<div class="case" id="nested-case"><div class="line" id="nested-line"><div class="grid" id="nested-grid" style=""><div style="display:grid;width:40px"><i style="width:10px"></i></div></div> <b class="peer" id="nested-peer"></b></div></div>
+<div class="case" id="block-grid-case"><div class="line" id="block-grid-line"><div class="grid" id="block-grid-grid" style="display:grid;width:40px"></div> <b class="peer" id="block-grid-peer"></b></div></div>
+<div class="case" id="float-grid-case"><div class="line" id="float-grid-line"><div class="grid" id="float-grid-grid" style="float:left;width:40px"><i style="width:10px"></i></div> <b class="peer" id="float-grid-peer"></b></div></div>
+<div class="case" id="flex-shrink-case"><div class="line flex-line" id="flex-shrink-line"><div class="grid" id="flex-shrink-grid"><i style="width:40px"></i></div><b class="peer" id="flex-shrink-peer"></b></div></div>
+<div class="case" id="flex-border-case"><div class="line flex-line" id="flex-border-line"><div class="grid" id="flex-border-grid" style="box-sizing:border-box;padding:3px;border:2px solid"><i style="width:40px"></i></div><b class="peer" id="flex-border-peer"></b></div></div>

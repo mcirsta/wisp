@@ -393,7 +393,7 @@ static int layout_grid_get_column_count(struct box *grid)
 }
 
 /**
- * Calculate minimum and maximum width of a grid container.
+ * Calculate content widths from grid tracks, before container constraints/edges.
  *
  * This function calculates the intrinsic min/max width based on:
  * - Grid track definitions (fixed, fr, percentage)
@@ -403,9 +403,11 @@ static int layout_grid_get_column_count(struct box *grid)
  * \param grid      box of type BOX_GRID
  * \param font_func font functions for text measurement
  * \param content   The HTML content being laid out.
- * \post  grid->min_width and grid->max_width filled in
+ * \param minimum   Receives the min-content track width.
+ * \param maximum   Receives the max-content track width.
  */
-bool layout_minmax_grid(struct box *grid, const struct gui_layout_table *font_func, const html_content *content)
+bool layout_minmax_grid_content(
+    struct box *grid, const struct gui_layout_table *font_func, const html_content *content, int *minimum, int *maximum)
 {
     struct box *child;
     int num_cols;
@@ -418,10 +420,6 @@ bool layout_minmax_grid(struct box *grid, const struct gui_layout_table *font_fu
     int min = 0, max = 0;
 
     assert(grid->type == BOX_GRID || grid->type == BOX_INLINE_GRID);
-
-    /* Already calculated? */
-    if (grid->max_width != UNKNOWN_MAX_WIDTH)
-        return true;
 
     num_cols = layout_grid_get_column_count(grid);
 
@@ -534,9 +532,8 @@ bool layout_minmax_grid(struct box *grid, const struct gui_layout_table *font_fu
     if (max < min)
         max = min;
 
-    grid->min_width.value = min;
-    grid->max_width = max;
-    grid->flags |= HAS_HEIGHT;
+    *minimum = min;
+    *maximum = max;
 
     NSLOG(layout, DEBUG, "Grid %p minmax: min=%d max=%d cols=%d gap=%d", grid, min, max, num_cols, gap_px);
     return true;

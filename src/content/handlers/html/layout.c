@@ -1176,6 +1176,54 @@ static bool layout_minmax_inline_container(struct box *inline_container, bool *h
     return true;
 }
 
+/* Apply preferred/min/max inline sizes to content-based contributions. Keep
+ * both bounds in content-box coordinates, and let the minimum win conflicts.
+ * Flex items use the preferred width as a floor (Flexbox 9.9.3). */
+static void layout_minmax_constraints(
+    const struct box *box, const css_unit_ctx *unit_ctx, int border_padding, int *minimum, int *maximum)
+{
+    bool flex_item = lh__box_is_flex_item(box);
+    int inset = css_computed_box_sizing(box->style) == CSS_BOX_SIZING_BORDER_BOX ? border_padding : 0;
+    css_fixed_or_calc value = (css_fixed_or_calc)0;
+    css_unit unit = CSS_UNIT_PX;
+    int pixels;
+
+    uint8_t type = css_computed_width(box->style, &value, &unit);
+    if (type == CSS_WIDTH_SET && unit == CSS_UNIT_PCT) {
+        if (!flex_item)
+            *minimum = 0;
+    } else if (css_computed_width_px(box->style, unit_ctx, -1, &pixels) == CSS_WIDTH_SET) {
+        pixels = max(0, pixels - inset);
+        if (flex_item) {
+            *minimum = max(*minimum, pixels);
+            *maximum = max(*maximum, pixels);
+        } else {
+            *minimum = *maximum = pixels;
+        }
+    }
+
+    type = css_computed_max_width(box->style, &value, &unit);
+    if (type == CSS_MAX_WIDTH_SET) {
+        if (unit == CSS_UNIT_PCT) {
+            if (!flex_item)
+                *minimum = 0;
+        } else if (!lh__intrinsic_width_unit(unit) &&
+            lh__length_to_px(box->style, unit_ctx, -1, value, unit, &pixels)) {
+            pixels = max(0, pixels - inset);
+            *minimum = min(*minimum, pixels);
+            *maximum = min(*maximum, pixels);
+        }
+    }
+
+    type = css_computed_min_width(box->style, &value, &unit);
+    if (type == CSS_MIN_WIDTH_SET && unit != CSS_UNIT_PCT && !lh__intrinsic_width_unit(unit) &&
+        lh__length_to_px(box->style, unit_ctx, -1, value, unit, &pixels)) {
+        pixels = max(0, pixels - inset);
+        *minimum = max(*minimum, pixels);
+        *maximum = max(*maximum, pixels);
+    }
+}
+
 /**
  * Calculate minimum and maximum width of a block.
  *
@@ -1198,9 +1246,6 @@ layout_minmax_block(struct box *block, const struct gui_layout_table *font_func,
     enum css_height_e htype = CSS_HEIGHT_AUTO;
     css_fixed_or_calc height = (css_fixed_or_calc)0;
     css_unit hunit = CSS_UNIT_PX;
-    enum css_box_sizing_e bs = CSS_BOX_SIZING_CONTENT_BOX;
-    bool using_min_border_box = false;
-    bool using_max_border_box = false;
     bool child_has_height = false;
     int flex_item_count = 0; /* Count of flex items for gap calculation */
     int flex_gap = 0; /* Gap between flex items in pixels */
@@ -1216,7 +1261,6 @@ layout_minmax_block(struct box *block, const struct gui_layout_table *font_func,
     if (block->style != NULL) {
         wtype = css_computed_width(block->style, &width, &wunit);
         htype = css_computed_height(block->style, &height, &hunit);
-        bs = css_computed_box_sizing(block->style);
     }
 
     /* set whether the minimum width is of any interest for this box */
@@ -1316,6 +1360,12 @@ layout_minmax_block(struct box *block, const struct gui_layout_table *font_func,
         /** \todo do we need to know the min/max width of the iframe's
          * content? */
         block->flags |= HAS_HEIGHT;
+    } else if (block->type == BOX_GRID || block->type == BOX_INLINE_GRID) {
+        /* Tracks determine content sizes; the common block path below applies
+         * the container's constraints and outer edges exactly once. */
+        if (!layout_minmax_grid_content(block, font_func, content, &min, &max))
+            return false;
+        block->flags |= HAS_HEIGHT;
     } else {
         /* For horizontal flex containers, get the column-gap for intrinsic sizing.
          * Per CSS spec, gaps contribute to the intrinsic main size. */
@@ -1333,14 +1383,9 @@ layout_minmax_block(struct box *block, const struct gui_layout_table *font_func,
         for (child = block->children; child; child = child->next) {
             switch (child->type) {
             case BOX_FLEX:
+            case BOX_GRID:
             case BOX_BLOCK:
                 if (!layout_minmax_block(child, font_func, content))
-                    return false;
-                if (child->flags & HAS_HEIGHT)
-                    child_has_height = true;
-                break;
-            case BOX_GRID:
-                if (!layout_minmax_grid(child, font_func, content))
                     return false;
                 if (child->flags & HAS_HEIGHT)
                     child_has_height = true;
@@ -1432,78 +1477,12 @@ layout_minmax_block(struct box *block, const struct gui_layout_table *font_func,
      * contribution (§9.9.3); using it as an auto minimum prevents shrinking. */
     block->content_min_width = min;
 
-    /* Apply CSS width / min-width / max-width constraints.
-     *
-     * For normal blocks, an explicit width replaces the content-based
-     * min/max (the block's intrinsic size IS the specified width).
-     *
-     * For flex items, CSS Flexbox §9.9.3 says the intrinsic size
-     * contribution is the LARGER of content size and preferred size
-     * (if not auto), clamped by min/max main size.  So the explicit
-     * width acts as a floor, not a replacement. */
-    if (block->type != BOX_TABLE_CELL) {
-        bool border_box = bs == CSS_BOX_SIZING_BORDER_BOX;
-        bool is_flex_item = lh__box_is_flex_item(block);
-        enum css_max_width_e max_type;
-        enum css_min_width_e min_type;
-        css_unit unit = CSS_UNIT_PX;
-        css_fixed_or_calc value = (css_fixed_or_calc)0;
-        int width;
-
-        enum css_width_e wtype;
-        wtype = css_computed_width(block->style, &value, &unit);
-
-        if (wtype == CSS_WIDTH_SET && unit == CSS_UNIT_PCT) {
-            if (!is_flex_item) {
-                min = 0;
-            }
-            /* For flex items with percentage width, the content-based
-             * min/max computed from children is kept as-is. */
-        } else if (css_computed_width_px(block->style, &content->unit_len_ctx, -1, &width) == CSS_WIDTH_SET) {
-            if (is_flex_item) {
-                /* CSS Flexbox §9.9.3: contribution = max(content, preferred).
-                 * Preferred size is a floor for the content-based sizes. */
-                if (width > min)
-                    min = width;
-                if (width > max)
-                    max = width;
-            } else {
-                /* Normal block: preferred size replaces content sizes. */
-                min = max = width;
-            }
-            using_max_border_box = border_box;
-            using_min_border_box = border_box;
-        }
-
-        min_type = css_computed_min_width(block->style, &value, &unit);
-        if (min_type == CSS_MIN_WIDTH_SET && unit != CSS_UNIT_PCT && !lh__intrinsic_width_unit(unit)) {
-            int val = 0;
-            if (lh__length_to_px(block->style, &content->unit_len_ctx, -1, value, unit, &val)) {
-                if (min < val) {
-                    min = val;
-                    using_min_border_box = border_box;
-                }
-            }
-        }
-
-        max_type = css_computed_max_width(block->style, &value, &unit);
-        if (max_type == CSS_MAX_WIDTH_SET) {
-            if (unit == CSS_UNIT_PCT) {
-                if (!is_flex_item) {
-                    min = 0;
-                }
-            } else if (!lh__intrinsic_width_unit(unit)) {
-                int val = 0;
-                if (lh__length_to_px(block->style, &content->unit_len_ctx, -1, value, unit, &val)) {
-                    if (val >= 0 && max > val) {
-                        max = val;
-                        using_max_border_box = border_box;
-                    }
-                }
-            }
-        }
-    }
-    NSLOG(layout, DEBUG, "MINMAX_BLOCK %p: after constraints min=%d max=%d", block, min, max);
+    /* Intrinsic contributions use content widths until constraints have been
+     * applied. Resolve border-box values before comparing them with content. */
+    calculate_mbp_width(&content->unit_len_ctx, block->style, LEFT, false, true, true, &extra_fixed, &extra_frac);
+    calculate_mbp_width(&content->unit_len_ctx, block->style, RIGHT, false, true, true, &extra_fixed, &extra_frac);
+    if (block->type != BOX_TABLE_CELL)
+        layout_minmax_constraints(block, &content->unit_len_ctx, extra_fixed, &min, &max);
 
     if (htype == CSS_HEIGHT_SET && hunit != CSS_UNIT_PCT) {
         bool positive = false;
@@ -1521,26 +1500,7 @@ layout_minmax_block(struct box *block, const struct gui_layout_table *font_func,
         }
     }
 
-    /* add margins, border, padding to min, max widths */
-    /* Note: we don't know available width here so percentage margin
-     * and paddings are wrong. */
-    calculate_mbp_width(&content->unit_len_ctx, block->style, LEFT, false, true, true, &extra_fixed, &extra_frac);
-    calculate_mbp_width(&content->unit_len_ctx, block->style, RIGHT, false, true, true, &extra_fixed, &extra_frac);
-
-    if (using_max_border_box) {
-        max -= extra_fixed;
-        max = max(max, 0);
-    }
-
-    if (using_min_border_box) {
-        min -= extra_fixed;
-        min = max(min, 0);
-    }
-
-    if (max < min) {
-        min = max;
-    }
-
+    /* Add the outer edges after constraining the content size. */
     calculate_mbp_width(&content->unit_len_ctx, block->style, LEFT, true, false, false, &extra_fixed, &extra_frac);
     calculate_mbp_width(&content->unit_len_ctx, block->style, RIGHT, true, false, false, &extra_fixed, &extra_frac);
 
@@ -1598,12 +1558,9 @@ bool layout_minmax_box(struct box *box, const struct gui_layout_table *font_func
     case BOX_TABLE_CELL:
     case BOX_FLEX:
     case BOX_INLINE_FLEX:
-        if (!layout_minmax_block(box, font_func, content))
-            return false;
-        break;
     case BOX_GRID:
     case BOX_INLINE_GRID:
-        if (!layout_minmax_grid(box, font_func, content))
+        if (!layout_minmax_block(box, font_func, content))
             return false;
         break;
     case BOX_TABLE:

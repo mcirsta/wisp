@@ -57,6 +57,9 @@ void style_set_width(css_computed_style *s, int value, bool percent);
 /** Set min-width in px. */
 void style_set_min_width(css_computed_style *s, int px);
 
+/** Set max-width in px; a negative value means none. */
+void style_set_max_width(css_computed_style *s, int px);
+
 /** Set left/right padding and borders to the same widths, in px. */
 void style_set_horizontal_edges(css_computed_style *s, int padding, int border);
 

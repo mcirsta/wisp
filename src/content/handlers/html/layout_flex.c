@@ -910,7 +910,8 @@ static inline bool layout_flex__base_and_main_sizes(
          * size. An explicit minimum (including zero) never uses this floor.
          * CSS Flexbox §4.5 caps auto by definite preferred and maximum sizes. */
         int automatic_min = max(0, b->min_width.value - delta_outer_main);
-        if ((b->type == BOX_BLOCK || b->type == BOX_FLEX) && b->object == NULL && !(b->flags & IFRAME)) {
+        if ((b->type == BOX_BLOCK || b->type == BOX_FLEX || b->type == BOX_GRID) && b->object == NULL &&
+            !(b->flags & IFRAME)) {
             /* Block intrinsic contributions include a preferred-width floor.
              * The auto minimum needs the content minimum before that floor,
              * already measured without this box's padding/border/margins. */
