@@ -40,6 +40,8 @@ static const char *const dump_keywords_align_content[] = {
 
 static const char *const dump_keywords_align_items[] = {
     [ALIGN_ITEMS_NORMAL] = "normal",
+    [ALIGN_ITEMS_START] = "start",
+    [ALIGN_ITEMS_END] = "end",
     [ALIGN_ITEMS_STRETCH] = "stretch",
     [ALIGN_ITEMS_FLEX_START] = "flex-start",
     [ALIGN_ITEMS_FLEX_END] = "flex-end",
@@ -49,6 +51,8 @@ static const char *const dump_keywords_align_items[] = {
 
 static const char *const dump_keywords_align_self[] = {
     [ALIGN_SELF_NORMAL] = "normal",
+    [ALIGN_SELF_START] = "start",
+    [ALIGN_SELF_END] = "end",
     [ALIGN_SELF_STRETCH] = "stretch",
     [ALIGN_SELF_FLEX_START] = "flex-start",
     [ALIGN_SELF_FLEX_END] = "flex-end",

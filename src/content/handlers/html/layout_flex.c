@@ -1822,7 +1822,7 @@ static bool layout_flex__collect_items_into_lines(struct flex_ctx *ctx)
  */
 static void layout_flex__place_line_items_cross(struct flex_ctx *ctx, struct flex_line_data *line, int extra)
 {
-    enum box_side cross_start = ctx->horizontal ? TOP : LEFT;
+    enum box_side cross_low = ctx->horizontal ? TOP : LEFT;
     size_t item_count = line->first + line->count;
 
     for (size_t i = line->first; i < item_count; i++) {
@@ -1844,16 +1844,16 @@ static void layout_flex__place_line_items_cross(struct flex_ctx *ctx, struct fle
         /* CSS Flexbox §8.1: "Prior to alignment via justify-content and align-self,
          * any positive free space is distributed to auto margins in that dimension."
          * Handle auto margins on the cross axis before applying align-self. */
-        enum box_side cross_end = ctx->horizontal ? BOTTOM : RIGHT;
-        bool has_auto_margin_cross_start = (b->margin[cross_start] == AUTO);
-        bool has_auto_margin_cross_end = (b->margin[cross_end] == AUTO);
+        enum box_side cross_high = ctx->horizontal ? BOTTOM : RIGHT;
+        bool has_auto_margin_cross_low = (b->margin[cross_low] == AUTO);
+        bool has_auto_margin_cross_high = (b->margin[cross_high] == AUTO);
 
-        if (cross_free_space > 0 && (has_auto_margin_cross_start || has_auto_margin_cross_end)) {
+        if (cross_free_space > 0 && (has_auto_margin_cross_low || has_auto_margin_cross_high)) {
             int extra_cross_pre = 0;
-            int auto_margin_count = (has_auto_margin_cross_start ? 1 : 0) + (has_auto_margin_cross_end ? 1 : 0);
+            int auto_margin_count = (has_auto_margin_cross_low ? 1 : 0) + (has_auto_margin_cross_high ? 1 : 0);
             int margin_per_auto = cross_free_space / auto_margin_count;
 
-            if (has_auto_margin_cross_start) {
+            if (has_auto_margin_cross_low) {
                 extra_cross_pre = margin_per_auto;
             }
 
@@ -1861,16 +1861,13 @@ static void layout_flex__place_line_items_cross(struct flex_ctx *ctx, struct fle
                 b, cross_free_space, auto_margin_count, margin_per_auto, extra_cross_pre);
 
             /* Position with auto margin offset */
-            *box_pos_cross = ctx->flex->padding[cross_start] + line->pos + extra_cross_pre +
-                b->border[cross_start].width;
+            *box_pos_cross = ctx->flex->padding[cross_low] + line->pos + extra_cross_pre + b->border[cross_low].width;
             continue; /* Skip align-self handling since auto margins take precedence */
         }
 
-        switch (lh__box_align_self(ctx->flex, b)) {
-        default:
-            /* Fall through. */
-        case CSS_ALIGN_SELF_STRETCH:
-            if (!has_auto_margin_cross_start && !has_auto_margin_cross_end &&
+        enum css_align_self_e align = lh__box_align_self(ctx->flex, b);
+        if (align == CSS_ALIGN_SELF_STRETCH) {
+            if (!has_auto_margin_cross_low && !has_auto_margin_cross_high &&
                 lh__box_size_cross_is_auto(ctx->horizontal, b)) {
                 int old_cross_size = *box_size_cross;
                 int target_cross_size = max(0, old_cross_size + cross_free_space);
@@ -1901,33 +1898,17 @@ static void layout_flex__place_line_items_cross(struct flex_ctx *ctx, struct fle
                     }
                 }
             }
-            /* Fall through. */
-        case CSS_ALIGN_SELF_FLEX_START:
-            *box_pos_cross = ctx->flex->padding[cross_start] + line->pos + lh__non_auto_margin(b, cross_start) +
-                b->border[cross_start].width;
-            break;
-
-        case CSS_ALIGN_SELF_FLEX_END:
-            *box_pos_cross = ctx->flex->padding[cross_start] + line->pos + cross_free_space +
-                lh__non_auto_margin(b, cross_start) + b->border[cross_start].width;
-            break;
-
-        case CSS_ALIGN_SELF_BASELINE:
-            if (lh__flex_baseline_item(ctx->flex, b)) {
-                int baseline = ctx->wrap == CSS_FLEX_WRAP_WRAP_REVERSE ?
-                    line->cross_size + extra - line->descent : line->baseline;
-                b->y = ctx->flex->padding[TOP] + line->pos + baseline - lh__box_first_baseline(b);
-            } else {
-                /* Baselines perpendicular to the cross axis, or auto cross
-                 * margins with no free space, use start alignment. */
-                *box_pos_cross = ctx->flex->padding[cross_start] + line->pos +
-                    lh__non_auto_margin(b, cross_start) + b->border[cross_start].width;
-            }
-            break;
-        case CSS_ALIGN_SELF_CENTER:
-            *box_pos_cross = ctx->flex->padding[cross_start] + line->pos + cross_free_space / 2 +
-                lh__non_auto_margin(b, cross_start) + b->border[cross_start].width;
-            break;
+            /* Stretch can stop at a min/max size, leaving space to align. */
+            cross_free_space = line->cross_size + extra - *box_size_cross - lh__delta_outer_cross(ctx->flex, b);
+        }
+        if (align == CSS_ALIGN_SELF_BASELINE && lh__flex_baseline_item(ctx->flex, b)) {
+            int baseline = ctx->wrap == CSS_FLEX_WRAP_WRAP_REVERSE ? line->cross_size + extra - line->descent
+                                                                   : line->baseline;
+            b->y = ctx->flex->padding[TOP] + line->pos + baseline - lh__box_first_baseline(b);
+        } else {
+            *box_pos_cross = ctx->flex->padding[cross_low] + line->pos +
+                lh__flex_cross_offset(ctx->flex, align, cross_free_space) + lh__non_auto_margin(b, cross_low) +
+                b->border[cross_low].width;
         }
     }
 }
@@ -1939,10 +1920,9 @@ static void layout_flex__place_line_items_cross(struct flex_ctx *ctx, struct fle
  */
 static void layout_flex__place_lines(struct flex_ctx *ctx)
 {
-    bool reversed = ctx->wrap == CSS_FLEX_WRAP_WRAP_REVERSE;
-    int line_pos = reversed ? ctx->cross_size : 0;
-    int post_multiplier = reversed ? 0 : 1;
-    int pre_multiplier = reversed ? -1 : 0;
+    bool reversed = lh__flex_cross_reversed(ctx->flex);
+    int cross_size = ctx->available_cross == AUTO ? ctx->cross_size : ctx->available_cross;
+    int line_pos = reversed ? cross_size : 0;
     int extra_remainder = 0;
     int extra = 0;
 
@@ -1956,16 +1936,20 @@ static void layout_flex__place_lines(struct flex_ctx *ctx)
     for (size_t i = 0; i < ctx->line.count; i++) {
         struct flex_line_data *line = &ctx->line.data[i];
 
-        line_pos += pre_multiplier * line->cross_size;
+        int line_extra = extra + (extra_remainder > 0 ? 1 : 0);
+        int used_size = line->cross_size + line_extra;
+        if (reversed)
+            line_pos -= used_size;
         line->pos = line_pos;
-        line_pos += post_multiplier * line->cross_size + extra + extra_remainder;
+        if (!reversed)
+            line_pos += used_size;
 
         /* Add cross_gap between lines (not after the last line) */
         if (i < ctx->line.count - 1 && ctx->cross_gap > 0) {
             line_pos += (!reversed ? 1 : -1) * ctx->cross_gap;
         }
 
-        layout_flex__place_line_items_cross(ctx, line, extra + extra_remainder);
+        layout_flex__place_line_items_cross(ctx, line, line_extra);
 
         if (extra_remainder > 0) {
 

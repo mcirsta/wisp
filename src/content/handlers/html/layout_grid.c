@@ -1198,7 +1198,7 @@ static bool layout_grid_align_item(const struct grid_layout_ctx *ctx, const stru
             (child->margin[TOP] + child->border[TOP].width + lh__box_first_baseline(child));
     } else if (item->align == CSS_ALIGN_ITEMS_CENTER) {
         offset = space / 2;
-    } else if (item->align == CSS_ALIGN_ITEMS_FLEX_END) {
+    } else if (item->align == CSS_ALIGN_ITEMS_FLEX_END || item->align == CSS_ALIGN_ITEMS_END) {
         offset = space;
     }
     int y = ctx->grid->padding[TOP];

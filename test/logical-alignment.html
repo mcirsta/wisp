@@ -1,0 +1,501 @@
+<!doctype html><meta charset="utf-8"><title>Logical cross-axis alignment</title>
+<style>@font-face{font-family:Test;src:url(fonts/normal-400.ttf)}
+body{margin:20px;font:14px/20px Test}.case{display:flow-root;margin-bottom:12px}
+.container{width:130px;height:100px;padding:4px;border:2px solid;background:#eee}
+.item{flex:0 0 auto;width:40px;height:20px;background:#39a}.peer{width:60px;height:40px;background:#b65}
+.third{width:70px;height:70px;background:#694}</style>
+<style>
+#switch { position:absolute; left:2px; top:2px; }
+#switch:checked ~ .case #row-nowrap-start-container,
+#switch:checked ~ .case #grid-start-container { align-items:end !important; }
+#switch:checked ~ .case #self-override-item { align-self:start !important; }
+#switch:checked ~ .case #column-nowrap-end-container { direction:rtl; }
+#switch:checked ~ .case #multi-row-wrap-end-container { flex-wrap:wrap-reverse !important; }
+</style>
+<!-- Fixed dimensions and a bundled font isolate alignment from text metrics.
+     Chromium supplied the initial geometry. Native checkbox restyles switch
+     logical values, item overrides, direction and wrapping without script. -->
+<input type="checkbox" id="switch">
+
+<div class="case">
+  <div id="grid-start-container" class="container" style="display:grid;grid-template-columns:50px 80px;grid-template-rows:100px;align-items:start">
+  <div id="grid-start-item" class="item" style="">H</div>
+  <div id="grid-start-peer" class="item peer">H</div>
+</div></div>
+<div class="case">
+  <div id="grid-end-container" class="container" style="display:grid;grid-template-columns:50px 80px;grid-template-rows:100px;align-items:end">
+  <div id="grid-end-item" class="item" style="">H</div>
+  <div id="grid-end-peer" class="item peer">H</div>
+</div></div>
+<div class="case">
+  <div id="grid-flex-start-container" class="container" style="display:grid;grid-template-columns:50px 80px;grid-template-rows:100px;align-items:flex-start">
+  <div id="grid-flex-start-item" class="item" style="">H</div>
+  <div id="grid-flex-start-peer" class="item peer">H</div>
+</div></div>
+<div class="case">
+  <div id="grid-flex-end-container" class="container" style="display:grid;grid-template-columns:50px 80px;grid-template-rows:100px;align-items:flex-end">
+  <div id="grid-flex-end-item" class="item" style="">H</div>
+  <div id="grid-flex-end-peer" class="item peer">H</div>
+</div></div>
+<div class="case">
+  <div id="grid-center-container" class="container" style="display:grid;grid-template-columns:50px 80px;grid-template-rows:100px;align-items:center">
+  <div id="grid-center-item" class="item" style="">H</div>
+  <div id="grid-center-peer" class="item peer">H</div>
+</div></div>
+<div class="case">
+  <div id="grid-stretch-container" class="container" style="display:grid;grid-template-columns:50px 80px;grid-template-rows:100px;align-items:stretch">
+  <div id="grid-stretch-item" class="item" style="">H</div>
+  <div id="grid-stretch-peer" class="item peer">H</div>
+</div></div>
+<div class="case">
+  <div id="row-nowrap-start-container" class="container" style="display:flex;flex-direction:row;flex-wrap:nowrap;align-items:start">
+  <div id="row-nowrap-start-item" class="item" style="">H</div>
+  <div id="row-nowrap-start-peer" class="item peer">H</div>
+</div></div>
+<div class="case">
+  <div id="row-nowrap-end-container" class="container" style="display:flex;flex-direction:row;flex-wrap:nowrap;align-items:end">
+  <div id="row-nowrap-end-item" class="item" style="">H</div>
+  <div id="row-nowrap-end-peer" class="item peer">H</div>
+</div></div>
+<div class="case">
+  <div id="row-nowrap-flex-start-container" class="container" style="display:flex;flex-direction:row;flex-wrap:nowrap;align-items:flex-start">
+  <div id="row-nowrap-flex-start-item" class="item" style="">H</div>
+  <div id="row-nowrap-flex-start-peer" class="item peer">H</div>
+</div></div>
+<div class="case">
+  <div id="row-nowrap-flex-end-container" class="container" style="display:flex;flex-direction:row;flex-wrap:nowrap;align-items:flex-end">
+  <div id="row-nowrap-flex-end-item" class="item" style="">H</div>
+  <div id="row-nowrap-flex-end-peer" class="item peer">H</div>
+</div></div>
+<div class="case">
+  <div id="row-nowrap-center-container" class="container" style="display:flex;flex-direction:row;flex-wrap:nowrap;align-items:center">
+  <div id="row-nowrap-center-item" class="item" style="">H</div>
+  <div id="row-nowrap-center-peer" class="item peer">H</div>
+</div></div>
+<div class="case">
+  <div id="row-nowrap-stretch-container" class="container" style="display:flex;flex-direction:row;flex-wrap:nowrap;align-items:stretch">
+  <div id="row-nowrap-stretch-item" class="item" style="">H</div>
+  <div id="row-nowrap-stretch-peer" class="item peer">H</div>
+</div></div>
+<div class="case">
+  <div id="row-wrap-reverse-start-container" class="container" style="display:flex;flex-direction:row;flex-wrap:wrap-reverse;align-items:start">
+  <div id="row-wrap-reverse-start-item" class="item" style="">H</div>
+  <div id="row-wrap-reverse-start-peer" class="item peer">H</div>
+</div></div>
+<div class="case">
+  <div id="row-wrap-reverse-end-container" class="container" style="display:flex;flex-direction:row;flex-wrap:wrap-reverse;align-items:end">
+  <div id="row-wrap-reverse-end-item" class="item" style="">H</div>
+  <div id="row-wrap-reverse-end-peer" class="item peer">H</div>
+</div></div>
+<div class="case">
+  <div id="row-wrap-reverse-flex-start-container" class="container" style="display:flex;flex-direction:row;flex-wrap:wrap-reverse;align-items:flex-start">
+  <div id="row-wrap-reverse-flex-start-item" class="item" style="">H</div>
+  <div id="row-wrap-reverse-flex-start-peer" class="item peer">H</div>
+</div></div>
+<div class="case">
+  <div id="row-wrap-reverse-flex-end-container" class="container" style="display:flex;flex-direction:row;flex-wrap:wrap-reverse;align-items:flex-end">
+  <div id="row-wrap-reverse-flex-end-item" class="item" style="">H</div>
+  <div id="row-wrap-reverse-flex-end-peer" class="item peer">H</div>
+</div></div>
+<div class="case">
+  <div id="row-wrap-reverse-center-container" class="container" style="display:flex;flex-direction:row;flex-wrap:wrap-reverse;align-items:center">
+  <div id="row-wrap-reverse-center-item" class="item" style="">H</div>
+  <div id="row-wrap-reverse-center-peer" class="item peer">H</div>
+</div></div>
+<div class="case">
+  <div id="row-wrap-reverse-stretch-container" class="container" style="display:flex;flex-direction:row;flex-wrap:wrap-reverse;align-items:stretch">
+  <div id="row-wrap-reverse-stretch-item" class="item" style="">H</div>
+  <div id="row-wrap-reverse-stretch-peer" class="item peer">H</div>
+</div></div>
+<div class="case">
+  <div id="row-reverse-nowrap-start-container" class="container" style="display:flex;flex-direction:row-reverse;flex-wrap:nowrap;align-items:start">
+  <div id="row-reverse-nowrap-start-item" class="item" style="">H</div>
+  <div id="row-reverse-nowrap-start-peer" class="item peer">H</div>
+</div></div>
+<div class="case">
+  <div id="row-reverse-nowrap-end-container" class="container" style="display:flex;flex-direction:row-reverse;flex-wrap:nowrap;align-items:end">
+  <div id="row-reverse-nowrap-end-item" class="item" style="">H</div>
+  <div id="row-reverse-nowrap-end-peer" class="item peer">H</div>
+</div></div>
+<div class="case">
+  <div id="row-reverse-nowrap-flex-start-container" class="container" style="display:flex;flex-direction:row-reverse;flex-wrap:nowrap;align-items:flex-start">
+  <div id="row-reverse-nowrap-flex-start-item" class="item" style="">H</div>
+  <div id="row-reverse-nowrap-flex-start-peer" class="item peer">H</div>
+</div></div>
+<div class="case">
+  <div id="row-reverse-nowrap-flex-end-container" class="container" style="display:flex;flex-direction:row-reverse;flex-wrap:nowrap;align-items:flex-end">
+  <div id="row-reverse-nowrap-flex-end-item" class="item" style="">H</div>
+  <div id="row-reverse-nowrap-flex-end-peer" class="item peer">H</div>
+</div></div>
+<div class="case">
+  <div id="row-reverse-nowrap-center-container" class="container" style="display:flex;flex-direction:row-reverse;flex-wrap:nowrap;align-items:center">
+  <div id="row-reverse-nowrap-center-item" class="item" style="">H</div>
+  <div id="row-reverse-nowrap-center-peer" class="item peer">H</div>
+</div></div>
+<div class="case">
+  <div id="row-reverse-nowrap-stretch-container" class="container" style="display:flex;flex-direction:row-reverse;flex-wrap:nowrap;align-items:stretch">
+  <div id="row-reverse-nowrap-stretch-item" class="item" style="">H</div>
+  <div id="row-reverse-nowrap-stretch-peer" class="item peer">H</div>
+</div></div>
+<div class="case">
+  <div id="row-reverse-wrap-reverse-start-container" class="container" style="display:flex;flex-direction:row-reverse;flex-wrap:wrap-reverse;align-items:start">
+  <div id="row-reverse-wrap-reverse-start-item" class="item" style="">H</div>
+  <div id="row-reverse-wrap-reverse-start-peer" class="item peer">H</div>
+</div></div>
+<div class="case">
+  <div id="row-reverse-wrap-reverse-end-container" class="container" style="display:flex;flex-direction:row-reverse;flex-wrap:wrap-reverse;align-items:end">
+  <div id="row-reverse-wrap-reverse-end-item" class="item" style="">H</div>
+  <div id="row-reverse-wrap-reverse-end-peer" class="item peer">H</div>
+</div></div>
+<div class="case">
+  <div id="row-reverse-wrap-reverse-flex-start-container" class="container" style="display:flex;flex-direction:row-reverse;flex-wrap:wrap-reverse;align-items:flex-start">
+  <div id="row-reverse-wrap-reverse-flex-start-item" class="item" style="">H</div>
+  <div id="row-reverse-wrap-reverse-flex-start-peer" class="item peer">H</div>
+</div></div>
+<div class="case">
+  <div id="row-reverse-wrap-reverse-flex-end-container" class="container" style="display:flex;flex-direction:row-reverse;flex-wrap:wrap-reverse;align-items:flex-end">
+  <div id="row-reverse-wrap-reverse-flex-end-item" class="item" style="">H</div>
+  <div id="row-reverse-wrap-reverse-flex-end-peer" class="item peer">H</div>
+</div></div>
+<div class="case">
+  <div id="row-reverse-wrap-reverse-center-container" class="container" style="display:flex;flex-direction:row-reverse;flex-wrap:wrap-reverse;align-items:center">
+  <div id="row-reverse-wrap-reverse-center-item" class="item" style="">H</div>
+  <div id="row-reverse-wrap-reverse-center-peer" class="item peer">H</div>
+</div></div>
+<div class="case">
+  <div id="row-reverse-wrap-reverse-stretch-container" class="container" style="display:flex;flex-direction:row-reverse;flex-wrap:wrap-reverse;align-items:stretch">
+  <div id="row-reverse-wrap-reverse-stretch-item" class="item" style="">H</div>
+  <div id="row-reverse-wrap-reverse-stretch-peer" class="item peer">H</div>
+</div></div>
+<div class="case">
+  <div id="column-nowrap-start-container" class="container" style="display:flex;flex-direction:column;flex-wrap:nowrap;align-items:start">
+  <div id="column-nowrap-start-item" class="item" style="">H</div>
+  <div id="column-nowrap-start-peer" class="item peer">H</div>
+</div></div>
+<div class="case">
+  <div id="column-nowrap-end-container" class="container" style="display:flex;flex-direction:column;flex-wrap:nowrap;align-items:end">
+  <div id="column-nowrap-end-item" class="item" style="">H</div>
+  <div id="column-nowrap-end-peer" class="item peer">H</div>
+</div></div>
+<div class="case">
+  <div id="column-nowrap-flex-start-container" class="container" style="display:flex;flex-direction:column;flex-wrap:nowrap;align-items:flex-start">
+  <div id="column-nowrap-flex-start-item" class="item" style="">H</div>
+  <div id="column-nowrap-flex-start-peer" class="item peer">H</div>
+</div></div>
+<div class="case">
+  <div id="column-nowrap-flex-end-container" class="container" style="display:flex;flex-direction:column;flex-wrap:nowrap;align-items:flex-end">
+  <div id="column-nowrap-flex-end-item" class="item" style="">H</div>
+  <div id="column-nowrap-flex-end-peer" class="item peer">H</div>
+</div></div>
+<div class="case">
+  <div id="column-nowrap-center-container" class="container" style="display:flex;flex-direction:column;flex-wrap:nowrap;align-items:center">
+  <div id="column-nowrap-center-item" class="item" style="">H</div>
+  <div id="column-nowrap-center-peer" class="item peer">H</div>
+</div></div>
+<div class="case">
+  <div id="column-nowrap-stretch-container" class="container" style="display:flex;flex-direction:column;flex-wrap:nowrap;align-items:stretch">
+  <div id="column-nowrap-stretch-item" class="item" style="">H</div>
+  <div id="column-nowrap-stretch-peer" class="item peer">H</div>
+</div></div>
+<div class="case">
+  <div id="column-wrap-reverse-start-container" class="container" style="display:flex;flex-direction:column;flex-wrap:wrap-reverse;align-items:start">
+  <div id="column-wrap-reverse-start-item" class="item" style="">H</div>
+  <div id="column-wrap-reverse-start-peer" class="item peer">H</div>
+</div></div>
+<div class="case">
+  <div id="column-wrap-reverse-end-container" class="container" style="display:flex;flex-direction:column;flex-wrap:wrap-reverse;align-items:end">
+  <div id="column-wrap-reverse-end-item" class="item" style="">H</div>
+  <div id="column-wrap-reverse-end-peer" class="item peer">H</div>
+</div></div>
+<div class="case">
+  <div id="column-wrap-reverse-flex-start-container" class="container" style="display:flex;flex-direction:column;flex-wrap:wrap-reverse;align-items:flex-start">
+  <div id="column-wrap-reverse-flex-start-item" class="item" style="">H</div>
+  <div id="column-wrap-reverse-flex-start-peer" class="item peer">H</div>
+</div></div>
+<div class="case">
+  <div id="column-wrap-reverse-flex-end-container" class="container" style="display:flex;flex-direction:column;flex-wrap:wrap-reverse;align-items:flex-end">
+  <div id="column-wrap-reverse-flex-end-item" class="item" style="">H</div>
+  <div id="column-wrap-reverse-flex-end-peer" class="item peer">H</div>
+</div></div>
+<div class="case">
+  <div id="column-wrap-reverse-center-container" class="container" style="display:flex;flex-direction:column;flex-wrap:wrap-reverse;align-items:center">
+  <div id="column-wrap-reverse-center-item" class="item" style="">H</div>
+  <div id="column-wrap-reverse-center-peer" class="item peer">H</div>
+</div></div>
+<div class="case">
+  <div id="column-wrap-reverse-stretch-container" class="container" style="display:flex;flex-direction:column;flex-wrap:wrap-reverse;align-items:stretch">
+  <div id="column-wrap-reverse-stretch-item" class="item" style="">H</div>
+  <div id="column-wrap-reverse-stretch-peer" class="item peer">H</div>
+</div></div>
+<div class="case">
+  <div id="column-reverse-nowrap-start-container" class="container" style="display:flex;flex-direction:column-reverse;flex-wrap:nowrap;align-items:start">
+  <div id="column-reverse-nowrap-start-item" class="item" style="">H</div>
+  <div id="column-reverse-nowrap-start-peer" class="item peer">H</div>
+</div></div>
+<div class="case">
+  <div id="column-reverse-nowrap-end-container" class="container" style="display:flex;flex-direction:column-reverse;flex-wrap:nowrap;align-items:end">
+  <div id="column-reverse-nowrap-end-item" class="item" style="">H</div>
+  <div id="column-reverse-nowrap-end-peer" class="item peer">H</div>
+</div></div>
+<div class="case">
+  <div id="column-reverse-nowrap-flex-start-container" class="container" style="display:flex;flex-direction:column-reverse;flex-wrap:nowrap;align-items:flex-start">
+  <div id="column-reverse-nowrap-flex-start-item" class="item" style="">H</div>
+  <div id="column-reverse-nowrap-flex-start-peer" class="item peer">H</div>
+</div></div>
+<div class="case">
+  <div id="column-reverse-nowrap-flex-end-container" class="container" style="display:flex;flex-direction:column-reverse;flex-wrap:nowrap;align-items:flex-end">
+  <div id="column-reverse-nowrap-flex-end-item" class="item" style="">H</div>
+  <div id="column-reverse-nowrap-flex-end-peer" class="item peer">H</div>
+</div></div>
+<div class="case">
+  <div id="column-reverse-nowrap-center-container" class="container" style="display:flex;flex-direction:column-reverse;flex-wrap:nowrap;align-items:center">
+  <div id="column-reverse-nowrap-center-item" class="item" style="">H</div>
+  <div id="column-reverse-nowrap-center-peer" class="item peer">H</div>
+</div></div>
+<div class="case">
+  <div id="column-reverse-nowrap-stretch-container" class="container" style="display:flex;flex-direction:column-reverse;flex-wrap:nowrap;align-items:stretch">
+  <div id="column-reverse-nowrap-stretch-item" class="item" style="">H</div>
+  <div id="column-reverse-nowrap-stretch-peer" class="item peer">H</div>
+</div></div>
+<div class="case">
+  <div id="column-reverse-wrap-reverse-start-container" class="container" style="display:flex;flex-direction:column-reverse;flex-wrap:wrap-reverse;align-items:start">
+  <div id="column-reverse-wrap-reverse-start-item" class="item" style="">H</div>
+  <div id="column-reverse-wrap-reverse-start-peer" class="item peer">H</div>
+</div></div>
+<div class="case">
+  <div id="column-reverse-wrap-reverse-end-container" class="container" style="display:flex;flex-direction:column-reverse;flex-wrap:wrap-reverse;align-items:end">
+  <div id="column-reverse-wrap-reverse-end-item" class="item" style="">H</div>
+  <div id="column-reverse-wrap-reverse-end-peer" class="item peer">H</div>
+</div></div>
+<div class="case">
+  <div id="column-reverse-wrap-reverse-flex-start-container" class="container" style="display:flex;flex-direction:column-reverse;flex-wrap:wrap-reverse;align-items:flex-start">
+  <div id="column-reverse-wrap-reverse-flex-start-item" class="item" style="">H</div>
+  <div id="column-reverse-wrap-reverse-flex-start-peer" class="item peer">H</div>
+</div></div>
+<div class="case">
+  <div id="column-reverse-wrap-reverse-flex-end-container" class="container" style="display:flex;flex-direction:column-reverse;flex-wrap:wrap-reverse;align-items:flex-end">
+  <div id="column-reverse-wrap-reverse-flex-end-item" class="item" style="">H</div>
+  <div id="column-reverse-wrap-reverse-flex-end-peer" class="item peer">H</div>
+</div></div>
+<div class="case">
+  <div id="column-reverse-wrap-reverse-center-container" class="container" style="display:flex;flex-direction:column-reverse;flex-wrap:wrap-reverse;align-items:center">
+  <div id="column-reverse-wrap-reverse-center-item" class="item" style="">H</div>
+  <div id="column-reverse-wrap-reverse-center-peer" class="item peer">H</div>
+</div></div>
+<div class="case">
+  <div id="column-reverse-wrap-reverse-stretch-container" class="container" style="display:flex;flex-direction:column-reverse;flex-wrap:wrap-reverse;align-items:stretch">
+  <div id="column-reverse-wrap-reverse-stretch-item" class="item" style="">H</div>
+  <div id="column-reverse-wrap-reverse-stretch-peer" class="item peer">H</div>
+</div></div>
+<div class="case">
+  <div id="rtl-nowrap-start-container" class="container" style="display:flex;direction:rtl;flex-direction:column;flex-wrap:nowrap;align-items:start">
+  <div id="rtl-nowrap-start-item" class="item" style="">H</div>
+  <div id="rtl-nowrap-start-peer" class="item peer">H</div>
+</div></div>
+<div class="case">
+  <div id="rtl-nowrap-end-container" class="container" style="display:flex;direction:rtl;flex-direction:column;flex-wrap:nowrap;align-items:end">
+  <div id="rtl-nowrap-end-item" class="item" style="">H</div>
+  <div id="rtl-nowrap-end-peer" class="item peer">H</div>
+</div></div>
+<div class="case">
+  <div id="rtl-nowrap-flex-start-container" class="container" style="display:flex;direction:rtl;flex-direction:column;flex-wrap:nowrap;align-items:flex-start">
+  <div id="rtl-nowrap-flex-start-item" class="item" style="">H</div>
+  <div id="rtl-nowrap-flex-start-peer" class="item peer">H</div>
+</div></div>
+<div class="case">
+  <div id="rtl-nowrap-flex-end-container" class="container" style="display:flex;direction:rtl;flex-direction:column;flex-wrap:nowrap;align-items:flex-end">
+  <div id="rtl-nowrap-flex-end-item" class="item" style="">H</div>
+  <div id="rtl-nowrap-flex-end-peer" class="item peer">H</div>
+</div></div>
+<div class="case">
+  <div id="rtl-nowrap-center-container" class="container" style="display:flex;direction:rtl;flex-direction:column;flex-wrap:nowrap;align-items:center">
+  <div id="rtl-nowrap-center-item" class="item" style="">H</div>
+  <div id="rtl-nowrap-center-peer" class="item peer">H</div>
+</div></div>
+<div class="case">
+  <div id="rtl-nowrap-stretch-container" class="container" style="display:flex;direction:rtl;flex-direction:column;flex-wrap:nowrap;align-items:stretch">
+  <div id="rtl-nowrap-stretch-item" class="item" style="">H</div>
+  <div id="rtl-nowrap-stretch-peer" class="item peer">H</div>
+</div></div>
+<div class="case">
+  <div id="rtl-wrap-reverse-start-container" class="container" style="display:flex;direction:rtl;flex-direction:column;flex-wrap:wrap-reverse;align-items:start">
+  <div id="rtl-wrap-reverse-start-item" class="item" style="">H</div>
+  <div id="rtl-wrap-reverse-start-peer" class="item peer">H</div>
+</div></div>
+<div class="case">
+  <div id="rtl-wrap-reverse-end-container" class="container" style="display:flex;direction:rtl;flex-direction:column;flex-wrap:wrap-reverse;align-items:end">
+  <div id="rtl-wrap-reverse-end-item" class="item" style="">H</div>
+  <div id="rtl-wrap-reverse-end-peer" class="item peer">H</div>
+</div></div>
+<div class="case">
+  <div id="rtl-wrap-reverse-flex-start-container" class="container" style="display:flex;direction:rtl;flex-direction:column;flex-wrap:wrap-reverse;align-items:flex-start">
+  <div id="rtl-wrap-reverse-flex-start-item" class="item" style="">H</div>
+  <div id="rtl-wrap-reverse-flex-start-peer" class="item peer">H</div>
+</div></div>
+<div class="case">
+  <div id="rtl-wrap-reverse-flex-end-container" class="container" style="display:flex;direction:rtl;flex-direction:column;flex-wrap:wrap-reverse;align-items:flex-end">
+  <div id="rtl-wrap-reverse-flex-end-item" class="item" style="">H</div>
+  <div id="rtl-wrap-reverse-flex-end-peer" class="item peer">H</div>
+</div></div>
+<div class="case">
+  <div id="rtl-wrap-reverse-center-container" class="container" style="display:flex;direction:rtl;flex-direction:column;flex-wrap:wrap-reverse;align-items:center">
+  <div id="rtl-wrap-reverse-center-item" class="item" style="">H</div>
+  <div id="rtl-wrap-reverse-center-peer" class="item peer">H</div>
+</div></div>
+<div class="case">
+  <div id="rtl-wrap-reverse-stretch-container" class="container" style="display:flex;direction:rtl;flex-direction:column;flex-wrap:wrap-reverse;align-items:stretch">
+  <div id="rtl-wrap-reverse-stretch-item" class="item" style="">H</div>
+  <div id="rtl-wrap-reverse-stretch-peer" class="item peer">H</div>
+</div></div>
+<div class="case">
+  <div id="multi-row-wrap-start-container" class="container" style="display:flex;flex-direction:row;flex-wrap:wrap;align-items:start">
+  <div id="multi-row-wrap-start-item" class="item" style="">H</div>
+  <div id="multi-row-wrap-start-peer" class="item peer">H</div>
+  <div id="multi-row-wrap-start-third" class="item third">H</div>
+</div></div>
+<div class="case">
+  <div id="multi-row-wrap-end-container" class="container" style="display:flex;flex-direction:row;flex-wrap:wrap;align-items:end">
+  <div id="multi-row-wrap-end-item" class="item" style="">H</div>
+  <div id="multi-row-wrap-end-peer" class="item peer">H</div>
+  <div id="multi-row-wrap-end-third" class="item third">H</div>
+</div></div>
+<div class="case">
+  <div id="multi-row-wrap-flex-start-container" class="container" style="display:flex;flex-direction:row;flex-wrap:wrap;align-items:flex-start">
+  <div id="multi-row-wrap-flex-start-item" class="item" style="">H</div>
+  <div id="multi-row-wrap-flex-start-peer" class="item peer">H</div>
+  <div id="multi-row-wrap-flex-start-third" class="item third">H</div>
+</div></div>
+<div class="case">
+  <div id="multi-row-wrap-flex-end-container" class="container" style="display:flex;flex-direction:row;flex-wrap:wrap;align-items:flex-end">
+  <div id="multi-row-wrap-flex-end-item" class="item" style="">H</div>
+  <div id="multi-row-wrap-flex-end-peer" class="item peer">H</div>
+  <div id="multi-row-wrap-flex-end-third" class="item third">H</div>
+</div></div>
+<div class="case">
+  <div id="multi-row-wrap-reverse-start-container" class="container" style="display:flex;flex-direction:row;flex-wrap:wrap-reverse;align-items:start">
+  <div id="multi-row-wrap-reverse-start-item" class="item" style="">H</div>
+  <div id="multi-row-wrap-reverse-start-peer" class="item peer">H</div>
+  <div id="multi-row-wrap-reverse-start-third" class="item third">H</div>
+</div></div>
+<div class="case">
+  <div id="multi-row-wrap-reverse-end-container" class="container" style="display:flex;flex-direction:row;flex-wrap:wrap-reverse;align-items:end">
+  <div id="multi-row-wrap-reverse-end-item" class="item" style="">H</div>
+  <div id="multi-row-wrap-reverse-end-peer" class="item peer">H</div>
+  <div id="multi-row-wrap-reverse-end-third" class="item third">H</div>
+</div></div>
+<div class="case">
+  <div id="multi-row-wrap-reverse-flex-start-container" class="container" style="display:flex;flex-direction:row;flex-wrap:wrap-reverse;align-items:flex-start">
+  <div id="multi-row-wrap-reverse-flex-start-item" class="item" style="">H</div>
+  <div id="multi-row-wrap-reverse-flex-start-peer" class="item peer">H</div>
+  <div id="multi-row-wrap-reverse-flex-start-third" class="item third">H</div>
+</div></div>
+<div class="case">
+  <div id="multi-row-wrap-reverse-flex-end-container" class="container" style="display:flex;flex-direction:row;flex-wrap:wrap-reverse;align-items:flex-end">
+  <div id="multi-row-wrap-reverse-flex-end-item" class="item" style="">H</div>
+  <div id="multi-row-wrap-reverse-flex-end-peer" class="item peer">H</div>
+  <div id="multi-row-wrap-reverse-flex-end-third" class="item third">H</div>
+</div></div>
+<div class="case">
+  <div id="multi-column-wrap-start-container" class="container" style="display:flex;flex-direction:column;flex-wrap:wrap;align-items:start">
+  <div id="multi-column-wrap-start-item" class="item" style="">H</div>
+  <div id="multi-column-wrap-start-peer" class="item peer">H</div>
+  <div id="multi-column-wrap-start-third" class="item third">H</div>
+</div></div>
+<div class="case">
+  <div id="multi-column-wrap-end-container" class="container" style="display:flex;flex-direction:column;flex-wrap:wrap;align-items:end">
+  <div id="multi-column-wrap-end-item" class="item" style="">H</div>
+  <div id="multi-column-wrap-end-peer" class="item peer">H</div>
+  <div id="multi-column-wrap-end-third" class="item third">H</div>
+</div></div>
+<div class="case">
+  <div id="multi-column-wrap-flex-start-container" class="container" style="display:flex;flex-direction:column;flex-wrap:wrap;align-items:flex-start">
+  <div id="multi-column-wrap-flex-start-item" class="item" style="">H</div>
+  <div id="multi-column-wrap-flex-start-peer" class="item peer">H</div>
+  <div id="multi-column-wrap-flex-start-third" class="item third">H</div>
+</div></div>
+<div class="case">
+  <div id="multi-column-wrap-flex-end-container" class="container" style="display:flex;flex-direction:column;flex-wrap:wrap;align-items:flex-end">
+  <div id="multi-column-wrap-flex-end-item" class="item" style="">H</div>
+  <div id="multi-column-wrap-flex-end-peer" class="item peer">H</div>
+  <div id="multi-column-wrap-flex-end-third" class="item third">H</div>
+</div></div>
+<div class="case">
+  <div id="multi-column-wrap-reverse-start-container" class="container" style="display:flex;flex-direction:column;flex-wrap:wrap-reverse;align-items:start">
+  <div id="multi-column-wrap-reverse-start-item" class="item" style="">H</div>
+  <div id="multi-column-wrap-reverse-start-peer" class="item peer">H</div>
+  <div id="multi-column-wrap-reverse-start-third" class="item third">H</div>
+</div></div>
+<div class="case">
+  <div id="multi-column-wrap-reverse-end-container" class="container" style="display:flex;flex-direction:column;flex-wrap:wrap-reverse;align-items:end">
+  <div id="multi-column-wrap-reverse-end-item" class="item" style="">H</div>
+  <div id="multi-column-wrap-reverse-end-peer" class="item peer">H</div>
+  <div id="multi-column-wrap-reverse-end-third" class="item third">H</div>
+</div></div>
+<div class="case">
+  <div id="multi-column-wrap-reverse-flex-start-container" class="container" style="display:flex;flex-direction:column;flex-wrap:wrap-reverse;align-items:flex-start">
+  <div id="multi-column-wrap-reverse-flex-start-item" class="item" style="">H</div>
+  <div id="multi-column-wrap-reverse-flex-start-peer" class="item peer">H</div>
+  <div id="multi-column-wrap-reverse-flex-start-third" class="item third">H</div>
+</div></div>
+<div class="case">
+  <div id="multi-column-wrap-reverse-flex-end-container" class="container" style="display:flex;flex-direction:column;flex-wrap:wrap-reverse;align-items:flex-end">
+  <div id="multi-column-wrap-reverse-flex-end-item" class="item" style="">H</div>
+  <div id="multi-column-wrap-reverse-flex-end-peer" class="item peer">H</div>
+  <div id="multi-column-wrap-reverse-flex-end-third" class="item third">H</div>
+</div></div>
+<div class="case">
+  <div id="absolute-start-container" class="container" style="display:flex;position:relative;flex-wrap:wrap-reverse;align-items:start">
+  <div id="absolute-start-item" class="item" style="position:absolute">H</div>
+</div></div>
+<div class="case">
+  <div id="absolute-end-container" class="container" style="display:flex;position:relative;flex-wrap:wrap-reverse;align-items:end">
+  <div id="absolute-end-item" class="item" style="position:absolute">H</div>
+</div></div>
+<div class="case">
+  <div id="absolute-flex-start-container" class="container" style="display:flex;position:relative;flex-wrap:wrap-reverse;align-items:flex-start">
+  <div id="absolute-flex-start-item" class="item" style="position:absolute">H</div>
+</div></div>
+<div class="case">
+  <div id="absolute-flex-end-container" class="container" style="display:flex;position:relative;flex-wrap:wrap-reverse;align-items:flex-end">
+  <div id="absolute-flex-end-item" class="item" style="position:absolute">H</div>
+</div></div>
+<div class="case">
+  <div id="self-override-container" class="container" style="display:flex;align-items:start">
+  <div id="self-override-item" class="item" style="align-self:end">H</div>
+  <div id="self-override-peer" class="item peer">H</div>
+</div></div>
+<div class="case">
+  <div id="auto-margin-container" class="container" style="display:flex;align-items:end">
+  <div id="auto-margin-item" class="item" style="margin-bottom:auto">H</div>
+  <div id="auto-margin-peer" class="item peer">H</div>
+</div></div>
+<div class="case">
+  <div id="both-auto-container" class="container" style="display:flex;align-items:end">
+  <div id="both-auto-item" class="item" style="margin-top:auto;margin-bottom:auto">H</div>
+  <div id="both-auto-peer" class="item peer">H</div>
+</div></div>
+<div class="case">
+  <div id="edges-container" class="container" style="display:flex;align-items:end">
+  <div id="edges-item" class="item" style="margin:3px 4px 5px 6px;padding:2px;border:1px solid">H</div>
+  <div id="edges-peer" class="item peer">H</div>
+</div></div>
+<div class="case">
+  <div id="overflow-container" class="container" style="display:flex;align-items:end">
+  <div id="overflow-item" class="item" style="height:140px">H</div>
+  <div id="overflow-peer" class="item peer">H</div>
+</div></div>
+<div class="case">
+  <div id="natural-start-container" class="container" style="display:flex;align-items:start">
+  <div id="natural-start-item" class="item" style="height:auto">H</div>
+  <div id="natural-start-peer" class="item peer">H</div>
+</div></div>
+<div class="case">
+  <div id="natural-end-container" class="container" style="display:grid;grid-template-columns:50px 80px;grid-template-rows:100px;align-items:end">
+  <div id="natural-end-item" class="item" style="height:auto">H</div>
+  <div id="natural-end-peer" class="item peer">H</div>
+</div></div>
+<div class="case">
+  <div id="reverse-stretch-container" class="container" style="display:flex;flex-wrap:wrap-reverse;align-items:stretch">
+  <div id="reverse-stretch-item" class="item" style="height:auto;max-height:30px">H</div>
+  <div id="reverse-stretch-peer" class="item peer">H</div>
+</div></div>

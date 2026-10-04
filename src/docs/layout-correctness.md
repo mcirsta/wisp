@@ -49,13 +49,6 @@ Reproducer: `test/disclosure-markers.html`, `#rtl` (explicit CSS direction).
 Removing its CSS rule isolates the HTML attribute issue. Initial captures are in
 `out/render-captures/disclosure-markers-2026-10-03/chromium/`.
 
-The grid baseline comparison also confirmed an existing alignment-keyword gap:
-`align-items: start` / `end` are ignored; `flex-start` / `flex-end` work. These
-need distinct logical alignment values because aliasing them changes the meaning
-in flex containers with `wrap-reverse`. Reproducer: `end` and `late-end` in
-`out/render-captures/grid-baseline-2026-10-04/before/`; the permanent grid baseline
-fixture uses the supported flex-prefixed spelling to isolate layout behavior.
-
 ## Remaining marker compatibility
 
 Marker font and colour styles now use the selected `::marker` style for both

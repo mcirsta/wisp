@@ -6335,16 +6335,7 @@ static void layout_absolute_flex_static_position(struct box *box, int cx, int cy
     if (lh__flex_direction_reversed(flex))
         main_offset = main_free - main_offset;
 
-    switch (lh__box_align_self(flex, box)) {
-    case CSS_ALIGN_SELF_FLEX_END:
-        cross_offset = cross_free;
-        break;
-    case CSS_ALIGN_SELF_CENTER:
-        cross_offset = cross_free / 2;
-        break;
-    default:
-        break;
-    }
+    cross_offset = lh__flex_cross_offset(flex, lh__box_align_self(flex, box), cross_free);
 
     if (auto_x) {
         box->x = cx + flex->padding[LEFT] + (horizontal ? main_offset : cross_offset) + lh__non_auto_margin(box, LEFT) +

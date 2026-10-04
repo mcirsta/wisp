@@ -322,6 +322,31 @@ static inline enum css_align_self_e lh__box_align_self(const struct box *flex, c
     return align_self == CSS_ALIGN_SELF_NORMAL ? CSS_ALIGN_SELF_STRETCH : align_self;
 }
 
+/* Physical cross-axis placement in horizontal writing. Logical start/end
+ * follow the container's writing direction; flex-start/end also reverse with
+ * wrap-reverse. Keep this shared with absolute children's static positions. */
+static inline bool lh__flex_cross_reversed(const struct box *flex)
+{
+    bool rtl_column = !lh__flex_main_is_horizontal(flex) && css_computed_direction(flex->style) == CSS_DIRECTION_RTL;
+    return rtl_column != (css_computed_flex_wrap(flex->style) == CSS_FLEX_WRAP_WRAP_REVERSE);
+}
+
+static inline int lh__flex_cross_offset(const struct box *flex, enum css_align_self_e align, int free_space)
+{
+    if (align == CSS_ALIGN_SELF_CENTER)
+        return free_space / 2;
+    bool end = align == CSS_ALIGN_SELF_END || align == CSS_ALIGN_SELF_FLEX_END;
+    bool reversed;
+    if (align == CSS_ALIGN_SELF_START || align == CSS_ALIGN_SELF_END) {
+        reversed = !lh__flex_main_is_horizontal(flex) && css_computed_direction(flex->style) == CSS_DIRECTION_RTL;
+    } else {
+        /* Stretch with a definite/clamped size, and unsupported baseline
+         * orientations, fall back to flex-start. */
+        reversed = lh__flex_cross_reversed(flex);
+    }
+    return end != reversed ? free_space : 0;
+}
+
 /* Horizontal writing: only row items without auto cross margins participate
  * in a shared first-baseline group. Column baseline alignment falls back to start. */
 static inline bool lh__flex_baseline_item(const struct box *flex, const struct box *item)

@@ -1179,6 +1179,8 @@ static const struct {
     {"negative margins", CSS_ALIGN_SELF_BASELINE, 20, 14, -10, -8, 36, 16, 0, 30},
     {"auto margin excludes item", CSS_ALIGN_SELF_BASELINE, 20, 11, AUTO, 0, 40, 20, 0, 30},
     {"center after row growth", CSS_ALIGN_SELF_CENTER, 20, 11, 0, 0, 40, 10, 0, 21},
+    {"logical start after row growth", CSS_ALIGN_SELF_START, 20, 11, 0, 0, 40, 0, 0, 11},
+    {"logical end after row growth", CSS_ALIGN_SELF_END, 20, 11, 0, 0, 40, 20, 0, 31},
     {"end after row growth", CSS_ALIGN_SELF_FLEX_END, 20, 11, 0, 0, 40, 20, 0, 31},
     {"stretch keeps fixed height", CSS_ALIGN_SELF_STRETCH, 18, 11, 0, 0, 40, 0, 0, 11},
     {"empty first item", CSS_ALIGN_SELF_FLEX_START, 18, -1, 0, 0, 40, 0, 0, 18},

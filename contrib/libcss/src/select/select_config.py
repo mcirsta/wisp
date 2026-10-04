@@ -29,8 +29,8 @@ values = {
 style = {
     # Style group, only opcode
     ('align_content', 3),
-    ('align_items', 3),
-    ('align_self', 3),
+    ('align_items', 4),
+    ('align_self', 4),
     ('background_attachment', 2),
     ('background_repeat', 3),
     ('border_collapse', 2),

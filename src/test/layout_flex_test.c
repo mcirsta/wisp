@@ -1545,6 +1545,130 @@ START_TEST(test_flex_first_baseline)
 }
 END_TEST
 
+/* Physical low/high edge expectations for logical and flex-relative values. */
+static const struct {
+    const char *name;
+    bool column, rtl, reverse_wrap;
+    bool high[4];
+} cross_alignment_cases[] = {
+    {"row", false, false, false, {false, true, false, true}},
+    {"reversed row wrapping", false, false, true, {false, true, true, false}},
+    {"column", true, false, false, {false, true, false, true}},
+    {"reversed column wrapping", true, false, true, {false, true, true, false}},
+    {"RTL column", true, true, false, {true, false, true, false}},
+    {"RTL reversed column wrapping", true, true, true, {true, false, false, true}},
+};
+static const uint8_t cross_alignments[] = {
+    CSS_ALIGN_ITEMS_START, CSS_ALIGN_ITEMS_END, CSS_ALIGN_ITEMS_FLEX_START, CSS_ALIGN_ITEMS_FLEX_END};
+enum { CROSS_ALIGNMENT_COUNT = sizeof(cross_alignments) / sizeof(cross_alignments[0]) };
+
+START_TEST(test_flex_cross_alignment)
+{
+    int variant = _i / CROSS_ALIGNMENT_COUNT, alignment = _i % CROSS_ALIGNMENT_COUNT;
+    bool column = cross_alignment_cases[variant].column;
+    struct flex_test_style values = {.container = true,
+        .width = 130,
+        .width_unit = CSS_UNIT_PX,
+        .min_width = -1,
+        .max_width = -1,
+        .basis = -1,
+        .overflow = CSS_OVERFLOW_VISIBLE};
+    css_computed_style *style = flex_test_style_create(&values);
+    flex_test_style_alignment(
+        style, column ? CSS_FLEX_DIRECTION_COLUMN : CSS_FLEX_DIRECTION_ROW, CSS_JUSTIFY_CONTENT_FLEX_START, 100);
+    flex_test_style_cross(style,
+        cross_alignment_cases[variant].reverse_wrap ? CSS_FLEX_WRAP_WRAP_REVERSE : CSS_FLEX_WRAP_NOWRAP,
+        cross_alignment_cases[variant].rtl, cross_alignments[alignment]);
+    struct box flex = {.type = BOX_FLEX, .style = style, .width = 130, .height = AUTO};
+    struct box items[2] = {0};
+    values.container = false;
+    for (int i = 0; i < 2; i++) {
+        values.width = i ? 60 : 40;
+        items[i] = (struct box){.type = BOX_BLOCK,
+            .parent = &flex,
+            .style = flex_test_style_create(&values),
+            .width = values.width,
+            .height = AUTO,
+            .min_width = {CSS_SIZE_SET, values.width},
+            .max_width = values.width,
+            .content_min_width = values.width};
+        flex_test_style_alignment(items[i].style, CSS_FLEX_DIRECTION_ROW, CSS_JUSTIFY_CONTENT_FLEX_START, i ? 40 : 20);
+    }
+    items[0].next = &items[1];
+    items[1].prev = &items[0];
+    flex.children = &items[0];
+    flex.last = &items[1];
+    html_content content = {.unit_len_ctx = {.viewport_width = INTTOFIX(800),
+                                .viewport_height = INTTOFIX(600),
+                                .font_size_default = INTTOFIX(16),
+                                .device_dpi = INTTOFIX(96),
+                                .root_style = style}};
+    for (int pass = 0; pass < 3; pass++) {
+        int available = pass == 1 ? 170 : 130;
+        flex.width = available;
+        ck_assert(layout_flex(&flex, available, &content));
+        for (int i = 0; i < 2; i++) {
+            int free = column ? available - items[i].width : 100 - items[i].height;
+            int expected = cross_alignment_cases[variant].high[alignment] ? free : 0;
+            int actual = column ? items[i].x : items[i].y;
+            ck_assert_msg(actual == expected, "%s, alignment %u, pass %d, item %d: cross position %d, expected %d",
+                cross_alignment_cases[variant].name, cross_alignments[alignment], pass, i, actual, expected);
+        }
+    }
+    for (int i = 0; i < 2; i++)
+        css_computed_style_destroy(items[i].style);
+    css_computed_style_destroy(style);
+}
+END_TEST
+
+START_TEST(test_flex_cross_line_rounding)
+{
+    struct flex_test_style values = {.container = true,
+        .width = 80,
+        .width_unit = CSS_UNIT_PX,
+        .min_width = -1,
+        .max_width = -1,
+        .basis = -1,
+        .overflow = CSS_OVERFLOW_VISIBLE};
+    css_computed_style *style = flex_test_style_create(&values);
+    flex_test_style_alignment(style, CSS_FLEX_DIRECTION_ROW, CSS_JUSTIFY_CONTENT_FLEX_START, 162);
+    flex_test_style_cross(style, _i ? CSS_FLEX_WRAP_WRAP_REVERSE : CSS_FLEX_WRAP_WRAP, false, CSS_ALIGN_ITEMS_START);
+    struct box flex = {.type = BOX_FLEX, .style = style, .width = 80, .height = AUTO};
+    struct box items[3] = {0};
+    const int heights[] = {20, 40, 70};
+    /* 32 spare pixels become 11, 11, 10; no pixel may be counted twice. */
+    const int positions[2][3] = {{0, 31, 82}, {131, 80, 0}};
+    values.container = false;
+    for (int i = 0; i < 3; i++) {
+        items[i] = (struct box){.type = BOX_BLOCK,
+            .parent = &flex,
+            .style = flex_test_style_create(&values),
+            .width = 80,
+            .height = AUTO,
+            .min_width = {CSS_SIZE_SET, 80},
+            .max_width = 80,
+            .content_min_width = 80,
+            .prev = i ? &items[i - 1] : NULL,
+            .next = i == 2 ? NULL : &items[i + 1]};
+        flex_test_style_alignment(items[i].style, CSS_FLEX_DIRECTION_ROW, CSS_JUSTIFY_CONTENT_FLEX_START, heights[i]);
+    }
+    flex.children = &items[0];
+    flex.last = &items[2];
+    html_content content = {.unit_len_ctx = {.viewport_width = INTTOFIX(800),
+                                .viewport_height = INTTOFIX(600),
+                                .font_size_default = INTTOFIX(16),
+                                .device_dpi = INTTOFIX(96),
+                                .root_style = style}};
+    ck_assert(layout_flex(&flex, 80, &content));
+    for (int i = 0; i < 3; i++) {
+        ck_assert_msg(items[i].y == positions[_i][i], "reversed=%d item=%d: y=%d, expected %d", _i, i, items[i].y,
+            positions[_i][i]);
+        css_computed_style_destroy(items[i].style);
+    }
+    css_computed_style_destroy(style);
+}
+END_TEST
+
 Suite *layout_flex_suite(void)
 {
     Suite *s;
@@ -1592,6 +1716,9 @@ Suite *layout_flex_suite(void)
 #ifndef NDEBUG
     tcase_add_loop_test_raise_signal(tc_core, test_flex_redistribute_requires_resolved_height, SIGABRT, 0, 2);
 #endif
+    tcase_add_loop_test(tc_core, test_flex_cross_alignment, 0,
+        CROSS_ALIGNMENT_COUNT * sizeof(cross_alignment_cases) / sizeof(cross_alignment_cases[0]));
+    tcase_add_loop_test(tc_core, test_flex_cross_line_rounding, 0, 2);
     suite_add_tcase(s, tc_core);
 
     return s;

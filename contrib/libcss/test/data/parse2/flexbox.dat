@@ -1711,3 +1711,95 @@
 |  min-width: auto !important
 |  min-height: auto !important
 #reset
+
+#data
+* { align-items: start; }
+#errors
+#expected
+| *
+|  align-items: start
+#reset
+
+#data
+* { align-items: end; }
+#errors
+#expected
+| *
+|  align-items: end
+#reset
+
+#data
+* { align-items: START !important; }
+#errors
+#expected
+| *
+|  align-items: start !important
+#reset
+
+#data
+* { align-items: END; }
+#errors
+#expected
+| *
+|  align-items: end
+#reset
+
+#data
+* { align-items: start end; }
+#errors
+#expected
+| *
+#reset
+
+#data
+* { align-items: end invalid; }
+#errors
+#expected
+| *
+#reset
+
+#data
+* { align-self: start; }
+#errors
+#expected
+| *
+|  align-self: start
+#reset
+
+#data
+* { align-self: end; }
+#errors
+#expected
+| *
+|  align-self: end
+#reset
+
+#data
+* { align-self: START !important; }
+#errors
+#expected
+| *
+|  align-self: start !important
+#reset
+
+#data
+* { align-self: END; }
+#errors
+#expected
+| *
+|  align-self: end
+#reset
+
+#data
+* { align-self: start end; }
+#errors
+#expected
+| *
+#reset
+
+#data
+* { align-self: end invalid; }
+#errors
+#expected
+| *
+#reset

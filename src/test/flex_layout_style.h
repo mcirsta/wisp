@@ -29,6 +29,7 @@ void flex_test_style_ratio(css_computed_style *style, int height, int numerator,
 void flex_test_style_alignment(css_computed_style *style, uint8_t direction, uint8_t justify, int height);
 void flex_test_style_stretch(css_computed_style *style, int minimum, int maximum, bool auto_margin);
 void flex_test_style_shrink(css_computed_style *style, int shrink);
+void flex_test_style_cross(css_computed_style *style, uint8_t wrap, bool rtl, uint8_t align);
 void flex_test_style_wrap(css_computed_style *style, uint8_t wrap);
 void flex_test_style_baseline(css_computed_style *style, int top_margin, int bottom_margin);
 

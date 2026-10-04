@@ -374,6 +374,8 @@ enum {
     BORDER_BOX,
     STRETCH,
     INLINE_FLEX,
+    START,
+    END,
     FLEX_START,
     FLEX_END,
     SPACE_BETWEEN,

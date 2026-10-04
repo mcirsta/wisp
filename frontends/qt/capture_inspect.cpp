@@ -275,8 +275,9 @@ static QJsonObject describe(struct box *box, const html_content *html)
                     "inherit", "flex-start", "flex-end", "center", "space-between", "space-around", "space-evenly"}
                     .value(css_computed_justify_content(box->style))},
             {"align-items",
-                QStringList{"inherit", "stretch", "flex-start", "flex-end", "center", "baseline", "", "normal"}.value(
-                    css_computed_align_items(box->style))},
+                QStringList{
+                    "inherit", "stretch", "flex-start", "flex-end", "center", "baseline", "", "normal", "start", "end"}
+                    .value(css_computed_align_items(box->style))},
             {"grid-auto-flow",
                 QStringList{"inherit", "row", "column", "row dense", "column dense"}.value(
                     css_computed_grid_auto_flow(box->style))}};

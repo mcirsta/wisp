@@ -1308,6 +1308,9 @@ Opcodes
 		2     => flex-end,
 		3     => center,
 		4     => baseline,
+		5     => normal,
+		6     => start,
+		7     => end,
 		other => Reserved for future expansion.
 
 74 - align-self
@@ -1318,6 +1321,9 @@ Opcodes
 		3     => center,
 		4     => baseline,
 		5     => auto,
+		6     => normal,
+		7     => start,
+		8     => end,
 		other => Reserved for future expansion.
 
 75 - flex-basis

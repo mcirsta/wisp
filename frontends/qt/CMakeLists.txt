@@ -271,6 +271,9 @@ if(WISP_QT_CAPTURE)
         add_test(NAME qt_block_marker_fallback
             COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_block_marker_fallback.py $<TARGET_FILE:wisp-qt>)
         set_tests_properties(qt_block_marker_fallback PROPERTIES TIMEOUT 40)
+        add_test(NAME qt_logical_alignment
+            COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_logical_alignment.py $<TARGET_FILE:wisp-qt>)
+        set_tests_properties(qt_logical_alignment PROPERTIES TIMEOUT 40)
         add_test(NAME qt_table_baseline
             COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_table_baseline.py $<TARGET_FILE:wisp-qt>)
         set_tests_properties(qt_table_baseline PROPERTIES TIMEOUT 40)

@@ -283,6 +283,12 @@ static void dump_computed_style(const css_computed_style *style, char *buf, size
     case CSS_ALIGN_ITEMS_NORMAL:
         wrote = snprintf(ptr, *len, "align-items: normal\n");
         break;
+    case CSS_ALIGN_ITEMS_START:
+        wrote = snprintf(ptr, *len, "align-items: start\n");
+        break;
+    case CSS_ALIGN_ITEMS_END:
+        wrote = snprintf(ptr, *len, "align-items: end\n");
+        break;
     case CSS_ALIGN_ITEMS_STRETCH:
         wrote = snprintf(ptr, *len, "align-items: stretch\n");
         break;
@@ -313,6 +319,12 @@ static void dump_computed_style(const css_computed_style *style, char *buf, size
         break;
     case CSS_ALIGN_SELF_NORMAL:
         wrote = snprintf(ptr, *len, "align-self: normal\n");
+        break;
+    case CSS_ALIGN_SELF_START:
+        wrote = snprintf(ptr, *len, "align-self: start\n");
+        break;
+    case CSS_ALIGN_SELF_END:
+        wrote = snprintf(ptr, *len, "align-self: end\n");
         break;
     case CSS_ALIGN_SELF_STRETCH:
         wrote = snprintf(ptr, *len, "align-self: stretch\n");
