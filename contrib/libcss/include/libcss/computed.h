@@ -311,6 +311,12 @@ css_error css_computed_length_to_px(
     const css_computed_style *style, const css_unit_ctx *unit_ctx, int available_px, css_fixed_or_calc length,
     css_unit unit, int *px_out);
 
+/** Test whether a length is known to be zero without a percentage basis.
+ * Resolves calc() without rounding to integer pixels. Expressions requiring
+ * a percentage basis (or failing evaluation) conservatively return false. */
+bool css_computed_length_is_zero(const css_computed_style *style, const css_unit_ctx *unit_ctx,
+    css_fixed_or_calc length, css_unit unit);
+
 uint8_t css_computed_width(const css_computed_style *style, css_fixed_or_calc *length, css_unit *unit);
 
 uint8_t css_computed_empty_cells(const css_computed_style *style);

@@ -118,16 +118,9 @@ interleaved-float cases are unchanged from the prior implementation.
 
 ## Remaining inline edge cases
 
-- A calculated inline edge that resolves to zero can still interrupt margin
-  collapse. `#zero-calc` in `decorated-inline-lines-2026-10-04/edges.html` wraps
-  a block in `padding-left:calc(5px - 5px)`. The gap before the block is 18px
-  instead of Chromium's 13px; literal `padding-left:0` correctly gives 13px.
-  Final line sizing uses the resolved zero edge, but margin lookahead still
-  treats unresolved `calc()` edges conservatively. Resolve these consistently
-  with the containing width and CSS unit context before committing the margin
-  chain; do not special-case this expression.
 - Decorated span boundaries can become invalid wrapping opportunities around
-  an unbreakable word. In the same fixture, `#wrap-left`, `#wrap-right` and
+  an unbreakable word. In `decorated-inline-lines-2026-10-04/edges.html`,
+  `#wrap-left`, `#wrap-right` and
   `#wrap-both` put a 240px word in a 200px container with 5px padding on the
   named sides. Wisp uses 40px, 40px and 60px respectively; Chromium overflows
   the word and its edges together on a single 20px line. Empty opening/closing
@@ -136,6 +129,20 @@ interleaved-float cases are unchanged from the prior implementation.
   including real whitespace and text runs; suppressing decorated line height
   would reintroduce the now-fixed empty-span sizing bug.
 
-Both limitations existed before the decorated-inline sizing correction.
+This limitation existed before the decorated-inline sizing correction.
 Evidence: `out/render-captures/decorated-inline-lines-2026-10-04/edges.html`,
 `edges-before/` and `edges-after/` (the latter includes the Chromium reference).
+
+LibCSS still does not simplify percentage terms that cancel inside `calc()`.
+For example, `padding-left:calc(50% - 50%)` and `calc(0% + 0px)` on an inline
+wrapper give a 38px gap before its block child; Firefox gives 13px. Evaluating
+without a percentage basis fails before the zero result can be established,
+so the shared inline-edge check conservatively creates a line. This needs
+expression simplification in LibCSS, not testing arbitrary containing widths
+or special-casing expressions in layout. Ordinary nonzero percentage expressions
+must continue to create a line even when their used pixel value happens to be
+zero; both Chromium and Firefox do that.
+
+Reproducer and comparisons: `out/render-captures/calc-inline-margins-2026-10-04/`
+(`cancel-probe.html`, `cancel-probe.json`, `cancel-wisp/`); the percentage behavior
+is also covered by `qt_calc_inline_margins`.

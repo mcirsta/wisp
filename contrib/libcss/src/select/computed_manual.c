@@ -259,6 +259,22 @@ css_error css_computed_length_to_px(
     }
 }
 
+bool css_computed_length_is_zero(const css_computed_style *style, const css_unit_ctx *unit_ctx,
+    css_fixed_or_calc length, css_unit unit)
+{
+    if (unit == CSS_UNIT_CALC) {
+        css_fixed value;
+        css_unit out_unit;
+        return css_calculator_calculate(style->calc, unit_ctx, -1, length.calc, style, &out_unit, &value) == CSS_OK &&
+            value == 0;
+    }
+    if (length.value == 0)
+        return true;
+    if (unit == CSS_UNIT_PCT)
+        return false;
+    return css_unit_len2device_px(style, unit_ctx, length.value, unit) == 0;
+}
+
 uint8_t css_computed_width(const css_computed_style *style, css_fixed_or_calc *length, css_unit *unit)
 {
     css_fixed_or_calc length_ = {.value = 0};

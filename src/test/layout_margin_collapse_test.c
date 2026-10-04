@@ -1410,6 +1410,108 @@ START_TEST(test_split_inline_margins)
 }
 END_TEST
 
+/* Percentage edges stay nonzero even in a zero-width container; literal zero
+ * edges remain phantom. Intrinsic height hints must not override either rule,
+ * including across ordinary block ancestors and repeated reflow. */
+START_TEST(test_inline_edges_at_nested_width)
+{
+    int sign = _i % 2 == 0 ? 1 : -1;
+    bool separates = _i >= 2;
+    html_content *content = create_test_content();
+    struct box *root = create_box_with_style(0);
+    struct box *before = create_box_with_style(0);
+    struct box *outer = create_box_with_style(0);
+    struct box *inner = create_box_with_style(0);
+    struct box *child = create_box_with_style(0);
+    struct box *after = create_box_with_style(0);
+    struct box *blocks[] = {root, before, outer, inner, child, after};
+    for (size_t i = 0; i < sizeof(blocks) / sizeof(blocks[0]); i++) {
+        blocks[i]->max_width = UNKNOWN_MAX_WIDTH;
+        style_set_width(blocks[i]->style, -1, false);
+        style_set_inline_metrics(blocks[i]->style, 16, 20, CSS_VERTICAL_ALIGN_BASELINE);
+    }
+    style_set_width(outer->style, 50, true);
+    style_set_width(inner->style, 50, true);
+    style_set_height_px(before->style, 30);
+    style_set_height_px(child->style, 30);
+    style_set_height_px(after->style, 30);
+    style_set_margins(before->style, 0, 0, sign * 5, 0);
+    style_set_margins(child->style, sign * 13, 0, sign * 17, 0);
+    style_set_margins(after->style, sign * 7, 0, 0, 0);
+    add_child(root, before);
+    add_child(root, outer);
+    add_child(outer, inner);
+    add_child(root, after);
+    struct box *fragments[2], *markers[2];
+    for (int i = 0; i < 2; i++) {
+        fragments[i] = calloc(1, sizeof(struct box));
+        ck_assert_ptr_nonnull(fragments[i]);
+        fragments[i]->type = BOX_INLINE_CONTAINER;
+        fragments[i]->max_width = UNKNOWN_MAX_WIDTH;
+        markers[i] = create_box_with_style(0);
+        markers[i]->type = i == 0 ? BOX_INLINE : BOX_INLINE_END;
+        style_set_inline_metrics(markers[i]->style, 16, 20, CSS_VERTICAL_ALIGN_BASELINE);
+        style_set_percentage_padding(markers[i]->style, separates ? 50 : 0);
+        add_child(fragments[i], markers[i]);
+        add_child(inner, fragments[i]);
+        if (i == 0)
+            add_child(inner, child);
+    }
+    markers[0]->inline_end = markers[1];
+    markers[1]->inline_end = markers[0];
+    ck_assert(layout_minmax_box(root, content->font_func, content));
+    const int widths[] = {0, 400, 0};
+    for (size_t pass = 0; pass < sizeof(widths) / sizeof(widths[0]); pass++) {
+        root->width = widths[pass];
+        root->height = AUTO;
+        ck_assert(layout_block_context(root, 768, content));
+        int line_height = separates ? 20 : 0;
+        int top = child->y + inner->y + outer->y;
+        int before_gap = top - before->y - before->height;
+        int after_gap = after->y - top - child->height;
+        ck_assert_msg(inner->width == widths[pass] / 4 && fragments[0]->height == line_height &&
+                fragments[1]->height == line_height,
+            "pass %zu, sign %d: inner width %d, line heights %d/%d", pass, sign, inner->width,
+            fragments[0]->height, fragments[1]->height);
+        ck_assert_msg(before_gap == sign * (separates ? 18 : 13) + line_height &&
+                after_gap == sign * (separates ? 24 : 17) + line_height,
+            "pass %zu, sign %d: gaps %d/%d", pass, sign, before_gap, after_gap);
+    }
+    free_box_tree(root);
+    destroy_test_content(content);
+}
+END_TEST
+
+/* Replaced blocks have intrinsic content even without box-tree children.
+ * A zero-height image also keeps its own top/bottom margins separate. */
+START_TEST(test_replaced_block_margins)
+{
+    int image_height = _i == 0 ? 0 : 20;
+    html_content *content = create_test_content();
+    struct box *root = create_box_with_style(200);
+    struct box *before = create_box_with_style(200);
+    struct box *image = create_box_with_style(20);
+    struct box *after = create_box_with_style(200);
+    style_set_height_px(before->style, 30);
+    style_set_height_px(image->style, image_height);
+    style_set_height_px(after->style, 30);
+    before->flags |= HAS_HEIGHT | MAKE_HEIGHT;
+    after->flags |= HAS_HEIGHT | MAKE_HEIGHT;
+    image->flags |= HAS_HEIGHT | REPLACE_DIM;
+    style_set_margins(before->style, 0, 0, 5, 0);
+    style_set_margins(image->style, 13, 0, 17, 0);
+    style_set_margins(after->style, 7, 0, 0, 0);
+    add_child(root, before);
+    add_child(root, image);
+    add_child(root, after);
+    ck_assert(layout_block_context(root, 768, content));
+    ck_assert_msg(image->height == image_height && image->y == 43 && after->y == 60 + image_height,
+        "replaced height %d: image y=%d h=%d, following y=%d", image_height, image->y, image->height, after->y);
+    free_box_tree(root);
+    destroy_test_content(content);
+}
+END_TEST
+
 /* A wrapper's bottom margin must not leak above its flex/grid child.
  * Exercise both auto-height content and an empty formatting context, whose
  * own top/bottom margins also cannot collapse through each other. */
@@ -2002,6 +2104,8 @@ static Suite *margin_collapse_suite(void)
     tcase_add_test(tc_through, test_collapse_through_skips_abspos_next_sibling);
     tcase_add_test(tc_through, test_collapse_through_empty_ic);
     tcase_add_loop_test(tc_through, test_split_inline_margins, 0, 2 * SPLIT_INLINE_VARIANT_COUNT);
+    tcase_add_loop_test(tc_through, test_inline_edges_at_nested_width, 0, 4);
+    tcase_add_loop_test(tc_through, test_replaced_block_margins, 0, 2);
     suite_add_tcase(s, tc_through);
 
     TCase *tc_parent = tcase_create("Parent-First-Child Collapse");

@@ -129,6 +129,12 @@ void style_set_position_absolute(css_computed_style *s)
     set_position(s, CSS_POSITION_ABSOLUTE);
 }
 
+void style_set_percentage_padding(css_computed_style *s, int percent)
+{
+    set_padding_left(s, CSS_PADDING_SET, (css_fixed_or_calc)INTTOFIX(percent), CSS_UNIT_PCT);
+    set_padding_right(s, CSS_PADDING_SET, (css_fixed_or_calc)INTTOFIX(percent), CSS_UNIT_PCT);
+}
+
 void style_set_border_bottom(css_computed_style *s, int width)
 {
     set_border_bottom_width(s, CSS_BORDER_WIDTH_WIDTH, (css_fixed_or_calc)INTTOFIX(width), CSS_UNIT_PX);

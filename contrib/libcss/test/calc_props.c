@@ -545,6 +545,33 @@ static void test_length_to_px_invalid_percent(void)
     destroy_style_case(&ctx);
 }
 
+static void test_length_is_zero(void)
+{
+    static const struct {
+        const char *value;
+        bool zero;
+    } cases[] = {
+        {"0px", true}, {"0%", true}, {"50%", false}, {"0.5px", false},
+        {"calc(5px - 5px)", true}, {"calc(10px - 5px)", false},
+        {"calc(5px - 10px)", false}, {"calc(0.75px - 0.25px)", false},
+        {"calc(1em - 16px)", true}, {"calc(50% - 100px)", false},
+    };
+    for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
+        char css[128];
+        snprintf(css, sizeof(css), "* { font-size:16px; margin-left:%s; }", cases[i].value);
+        style_case ctx;
+        const css_computed_style *style = select_style_from_css(css, &ctx);
+        css_fixed_or_calc length = {.value = 0};
+        css_unit unit = CSS_UNIT_PX;
+        assert(css_computed_margin_left(style, &length, &unit) == CSS_MARGIN_SET);
+        if (css_computed_length_is_zero(style, &unit_ctx, length, unit) != cases[i].zero) {
+            printf("FAIL - zero classification for %s\n", cases[i].value);
+            exit(EXIT_FAILURE);
+        }
+        destroy_style_case(&ctx);
+    }
+}
+
 static void test_relative_offsets_with_calc(void)
 {
     style_case ctx;
@@ -751,6 +778,7 @@ int main(void)
 {
     test_calc_property_getters();
     test_length_to_px_invalid_percent();
+    test_length_is_zero();
     test_relative_offsets_with_calc();
     test_width_px_calc();
     test_flex_basis_px_calc();

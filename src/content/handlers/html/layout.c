@@ -1280,9 +1280,9 @@ layout_minmax_block(struct box *block, const struct gui_layout_table *font_func,
 
                 if (!layout_minmax_inline_container(child, &child_has_height, font_func, content))
                     return false;
-                if (child_has_height && child == child->parent->children) {
-                    block->flags |= MAKE_HEIGHT;
-                }
+                /* Intrinsic height is only a conservative hint for empty
+                 * inline fragments. Margin lookahead checks whether their
+                 * edges create a line; content does not set MAKE_HEIGHT. */
                 break;
             case BOX_TABLE:
                 if (!layout_minmax_table(child, font_func, content))
@@ -1576,9 +1576,10 @@ static inline bool box_has_vertical_separator(const struct box *box)
 /* CSS Inline 3, phantom line boxes: only inline-axis edges make an empty
  * fragment participate in a line. In horizontal layout the opening fragment
  * owns the left edge and its closing fragment owns the right edge, including
- * when a block splits them into separate inline containers. Margin lookahead
- * needs computed values before layout; keep unresolved calc() conservative. */
-static bool box_inline_has_edges(const struct box *box)
+ * when a block splits them into separate inline containers. Use the same
+ * computed-value test for margin lookahead and final line sizing: a nonzero
+ * percentage is not zero just because its containing width makes it so. */
+static bool box_inline_has_edges(const css_unit_ctx *unit_len_ctx, const struct box *box)
 {
     if (box->style == NULL)
         return false;
@@ -1591,40 +1592,31 @@ static bool box_inline_has_edges(const struct box *box)
         css_fixed_or_calc value = (css_fixed_or_calc)0;
         css_unit unit = CSS_UNIT_PX;
         if (margin_funcs[side](box->style, &value, &unit) == CSS_MARGIN_SET &&
-            (unit == CSS_UNIT_CALC || value.value != 0))
+            !css_computed_length_is_zero(box->style, unit_len_ctx, value, unit))
             return true;
         if (padding_funcs[side](box->style, &value, &unit) == CSS_PADDING_SET &&
-            (unit == CSS_UNIT_CALC || value.value != 0))
+            !css_computed_length_is_zero(box->style, unit_len_ctx, value, unit))
             return true;
         if (border_style_funcs[side](box->style) > CSS_BORDER_STYLE_HIDDEN) {
             uint8_t type = border_width_funcs[side](box->style, &value, &unit);
-            if (type != CSS_BORDER_WIDTH_WIDTH || unit == CSS_UNIT_CALC || value.value != 0)
+            if (type != CSS_BORDER_WIDTH_WIDTH ||
+                !css_computed_length_is_zero(box->style, unit_len_ctx, value, unit))
                 return true;
         }
     }
     return false;
 }
 
-/* After placement use resolved edges: calc() and percentages may be zero.
- * Opening and closing fragments carry only their respective horizontal edge. */
-static bool layout_inline_has_edges(const struct box *box)
-{
-    return (box->type != BOX_INLINE_END &&
-               (box->margin[LEFT] || box->padding[LEFT] || box->border[LEFT].width)) ||
-        ((box->type == BOX_INLINE_END || box->inline_end == NULL) &&
-            (box->margin[RIGHT] || box->padding[RIGHT] || box->border[RIGHT].width));
-}
-
 /* Whether an inline container interrupts margin lookahead. Floats also need
  * positioning before looking past their container. Collapsed whitespace is
  * stored in box->space, while preserved whitespace has its own text box. */
-static inline bool box_inline_container_has_line_boxes(const struct box *box)
+static inline bool box_inline_container_has_line_boxes(const css_unit_ctx *unit_len_ctx, const struct box *box)
 {
     for (struct box *c = box->children; c != NULL; c = c->next) {
         if (box_is_out_of_flow(c))
             continue;
         if ((c->type == BOX_INLINE || c->type == BOX_INLINE_END) && !lh__box_is_replace(c) &&
-            !(c->text && c->length) && !box_inline_has_edges(c))
+            !(c->text && c->length) && !box_inline_has_edges(unit_len_ctx, c))
             continue;
         return true;
     }
@@ -1633,7 +1625,7 @@ static inline bool box_inline_container_has_line_boxes(const struct box *box)
 
 /* Float wrappers interrupt lookahead until positioned, but do not create
  * in-flow line boxes or separate the surrounding blocks' margins. */
-static bool box_inline_container_only_floats(const struct box *box)
+static bool box_inline_container_only_floats(const css_unit_ctx *unit_len_ctx, const struct box *box)
 {
     bool floats = false;
     for (const struct box *child = box->children; child; child = child->next) {
@@ -1641,7 +1633,7 @@ static bool box_inline_container_only_floats(const struct box *box)
             floats = true;
         } else if (!box_is_out_of_flow(child) &&
             !((child->type == BOX_INLINE || child->type == BOX_INLINE_END) && !lh__box_is_replace(child) &&
-                !(child->text && child->length) && !box_inline_has_edges(child))) {
+                !(child->text && child->length) && !box_inline_has_edges(unit_len_ctx, child))) {
             return false;
         }
     }
@@ -1732,6 +1724,10 @@ static inline bool box_prevents_collapse_through(const css_unit_ctx *unit_len_ct
         return true;
     if (box->flags & CONTENTS_SKIPPED)
         return true;
+    /* Replaced content has its own intrinsic dimensions; having no box
+     * children does not make an image or form control an empty block. */
+    if (lh__box_is_replace(box))
+        return true;
     /* Flex/grid containers establish independent formatting contexts, even
      * when empty. Their top and bottom margins are never adjoining. */
     if (box->type == BOX_FLEX || box->type == BOX_GRID)
@@ -1749,7 +1745,8 @@ static inline bool box_prevents_collapse_through(const css_unit_ctx *unit_len_ct
     /* Floats stop lookahead until positioned, but do not supply an in-flow
      * line that could separate this block's own top and bottom margins. */
     if (box->type == BOX_INLINE_CONTAINER)
-        return box_inline_container_has_line_boxes(box) && !box_inline_container_only_floats(box);
+        return box_inline_container_has_line_boxes(unit_len_ctx, box) &&
+            !box_inline_container_only_floats(unit_len_ctx, box);
     /* In-flow descendants can separate the margins even before layout sets
      * MAKE_HEIGHT. This also covers a zero-height flex/grid inside wrappers. */
     if (box->type == BOX_BLOCK) {
@@ -1837,10 +1834,10 @@ static struct box *layout_next_margin_block(const css_unit_ctx *unit_len_ctx, st
              * Position inline content (including floats) before collecting
              * a following sibling's top margin. */
             if (box->type == BOX_FLEX || box->type == BOX_GRID || box->flags & (MAKE_HEIGHT | CONTENTS_SKIPPED) ||
-                box_has_outside_marker_line(box) ||
+                box_has_outside_marker_line(box) || lh__box_is_replace(box) ||
                 box->border[TOP].width || box->padding[TOP] ||
                 box_style_creates_block_context(box) ||
-                (box->type == BOX_INLINE_CONTAINER && box_inline_container_has_line_boxes(box)) ||
+                (box->type == BOX_INLINE_CONTAINER && box_inline_container_has_line_boxes(unit_len_ctx, box)) ||
                 (box_has_positive_min_height(unit_len_ctx, box) && !box_has_in_flow_block_children(box))) {
                 /* Collapse to this box; return it */
                 return box;
@@ -3378,7 +3375,8 @@ static bool box_needs_inline_alignment(const struct box *box)
     return box->type == BOX_INLINE_BLOCK || (box->type == BOX_INLINE && lh__box_is_object(box));
 }
 
-static bool box_needs_line_metrics(const struct box *box, const css_computed_style *parent_style)
+static bool box_needs_line_metrics(const css_unit_ctx *unit_len_ctx, const struct box *box,
+    const css_computed_style *parent_style)
 {
     /* Identical styles have identical ascent/descent and need no font lookup.
      * A different text style may extend above or below the parent's strut.
@@ -3387,7 +3385,7 @@ static bool box_needs_line_metrics(const struct box *box, const css_computed_sty
     return box_needs_inline_alignment(box) ||
         (box->type == BOX_TEXT && box->length && box->style != parent_style) ||
         ((box->type == BOX_INLINE || box->type == BOX_INLINE_END) &&
-            (box->style != parent_style || box_inline_has_edges(box)));
+            (box->style != parent_style || box_inline_has_edges(unit_len_ctx, box)));
 }
 
 /* Reuse measurements across the sizing and positioning passes of one line.
@@ -3527,7 +3525,7 @@ static bool layout_line_alignment_metrics(struct box *first, struct box *end, bo
     const css_computed_style *parent_style = first->parent->parent->style;
     bool needs_metrics = force;
     for (struct box *b = first; b != end; b = b->next) {
-        if (box_needs_line_metrics(b, parent_style) && !box_is_out_of_flow(b)) {
+        if (box_needs_line_metrics(&content->unit_len_ctx, b, parent_style) && !box_is_out_of_flow(b)) {
             needs_metrics = true;
             break;
         }
@@ -3675,7 +3673,7 @@ static bool layout_line(struct box *first, int *width, int *y, int cx, int cy, s
             continue;
 
         assert(b->style != NULL);
-        needs_line_metrics |= box_needs_line_metrics(b, first->parent->parent->style);
+        needs_line_metrics |= box_needs_line_metrics(&content->unit_len_ctx, b, first->parent->parent->style);
         font_plot_style_from_css(&content->unit_len_ctx, b->style, &fstyle);
 
         x += space_after;
@@ -4126,7 +4124,8 @@ static bool layout_line(struct box *first, int *width, int *y, int cx, int cy, s
 
         if (!line_has_content && !box_is_out_of_flow(d) && !lh__box_is_float_box(d) &&
             (layout_inline_has_content(d) || d->type == BOX_TEXT || d->type == BOX_BR ||
-                ((d->type == BOX_INLINE || d->type == BOX_INLINE_END) && layout_inline_has_edges(d))))
+                ((d->type == BOX_INLINE || d->type == BOX_INLINE_END) &&
+                    box_inline_has_edges(&content->unit_len_ctx, d))))
             line_has_content = true;
 
         if (lh__box_is_inline_positioned(d)) {
@@ -4739,9 +4738,13 @@ static bool layout_block_position_child(struct box *box, struct box *block, int 
         }
     }
 
-    /* Vertical margin */
-    if (((box->type == BOX_BLOCK && (box->flags & HAS_HEIGHT)) || box->type == BOX_FLEX || box->type == BOX_GRID ||
-            box->type == BOX_TABLE || (box->type == BOX_INLINE_CONTAINER && box_inline_container_has_line_boxes(box)) ||
+    /* Intrinsic HAS_HEIGHT is conservative for empty inline fragments. Do
+     * not consume the pending chain at a block that still collapses through. */
+    if (((box->type == BOX_BLOCK && (box->flags & HAS_HEIGHT) &&
+             box_prevents_collapse_through(&content->unit_len_ctx, box)) ||
+            box->type == BOX_FLEX || box->type == BOX_GRID ||
+            box->type == BOX_TABLE || (box->type == BOX_INLINE_CONTAINER &&
+                box_inline_container_has_line_boxes(&content->unit_len_ctx, box)) ||
             state->margin_collapse == box) &&
         state->in_margin == true) {
         /* Margin goes above this box. */
@@ -5193,7 +5196,7 @@ bool layout_block_context(struct box *block, int viewport_height, html_content *
         /* Position floats at the current margin edge without consuming the
          * adjoining margins. Once their geometry is known, restart lookahead
          * so the following block can decide whether clearance is needed. */
-        if (box->type == BOX_INLINE_CONTAINER && box_inline_container_only_floats(box) &&
+        if (box->type == BOX_INLINE_CONTAINER && box_inline_container_only_floats(&content->unit_len_ctx, box) &&
             !box_has_outside_marker_line(box->parent)) {
             struct block_layout_state saved = state;
             int flow_y = box->y;
