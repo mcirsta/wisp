@@ -1163,6 +1163,73 @@ START_TEST(test_empty_margin_position_with_clear)
 }
 END_TEST
 
+/* A first child's top margin would move its ancestor and an internal float
+ * together. Large margins therefore cannot avoid clearance of that float. */
+static const int parent_clearance_margins[] = {23, 48, 100};
+static const struct {
+    const char *name;
+    bool right_float;
+    uint8_t clear;
+    bool matching;
+} parent_clearance_sides[] = {
+    {"left", false, CSS_CLEAR_LEFT, true},
+    {"right", true, CSS_CLEAR_RIGHT, true},
+    {"unmatched", false, CSS_CLEAR_RIGHT, false},
+};
+enum {
+    PARENT_CLEARANCE_MARGIN_COUNT = sizeof(parent_clearance_margins) / sizeof(parent_clearance_margins[0]),
+    PARENT_CLEARANCE_SIDE_COUNT = sizeof(parent_clearance_sides) / sizeof(parent_clearance_sides[0]),
+    PARENT_CLEARANCE_CASE_COUNT = 2 * PARENT_CLEARANCE_MARGIN_COUNT * PARENT_CLEARANCE_SIDE_COUNT,
+};
+
+START_TEST(test_parent_float_clearance)
+{
+    int margin = parent_clearance_margins[_i % PARENT_CLEARANCE_MARGIN_COUNT];
+    int side = (_i / PARENT_CLEARANCE_MARGIN_COUNT) % PARENT_CLEARANCE_SIDE_COUNT;
+    int height = _i / (PARENT_CLEARANCE_MARGIN_COUNT * PARENT_CLEARANCE_SIDE_COUNT) ? 10 : 0;
+    html_content *content = create_test_content();
+    struct box *root = create_box_with_style(300);
+    struct box *parent = create_box_with_style(300);
+    style_set_margins(parent->style, 13, 0, 17, 0);
+    add_child(root, parent);
+    struct box *floating = add_margin_test_float(parent);
+    floating->type = parent_clearance_sides[side].right_float ? BOX_FLOAT_RIGHT : BOX_FLOAT_LEFT;
+    style_set_height_px(floating->children->style, 48);
+    struct box *child = create_box_with_style(300);
+    style_set_clear(child->style, parent_clearance_sides[side].clear);
+    style_set_margins(child->style, margin, 0, 29, 0);
+    style_set_height_px(child->style, height);
+    if (height)
+        child->flags |= MAKE_HEIGHT | HAS_HEIGHT;
+    add_child(parent, child);
+    struct box *after = create_box_with_style(300);
+    style_set_height_px(after->style, 8);
+    after->flags |= MAKE_HEIGHT | HAS_HEIGHT;
+    add_child(root, after);
+    bool matching = parent_clearance_sides[side].matching;
+    int parent_y = matching ? 13 : (height ? margin : (margin > 29 ? margin : 29));
+    int parent_height = matching ? (height ? 58 : 48 + (margin < 29 ? 29 - margin : 0)) : height;
+    int child_y = matching ? 48 : 0;
+    int after_y = parent_y + parent_height + (height ? 29 : matching ? 17 : 0);
+    int root_height = after_y + 8 > parent_y + 48 ? after_y + 8 : parent_y + 48;
+    for (int pass = 0; pass < 3; pass++) {
+        root->width = pass == 1 ? 500 : 300;
+        root->height = AUTO;
+        ck_assert(layout_block_context(root, 768, content));
+        ck_assert_msg(parent->y == parent_y && parent->height == parent_height &&
+                child->y == child_y && child->height == height && floating->y == parent_y &&
+                after->y == after_y && root->height == root_height,
+            "%s margin=%d height=%d pass=%d: parent y/h=%d/%d expected %d/%d; "
+            "child y/h=%d/%d expected %d/%d; float=%d expected %d; after=%d expected %d; root=%d expected %d",
+            parent_clearance_sides[side].name, margin, height, pass, parent->y, parent->height,
+            parent_y, parent_height, child->y, child->height, child_y, height, floating->y,
+            parent_y, after->y, after_y, root->height, root_height);
+    }
+    free_box_tree(root);
+    destroy_test_content(content);
+}
+END_TEST
+
 /**
  * Test: self-collapsing block whose children are all out-of-flow (abspos).
  *
@@ -2168,6 +2235,7 @@ static Suite *margin_collapse_suite(void)
     tcase_add_loop_test(tc_through, test_margin_chain_receiver, 0, 4 * MARGIN_RECEIVER_CASE_COUNT);
     tcase_add_loop_test(tc_through, test_empty_margin_position, 0, EMPTY_FLOAT_POSITION_COUNT * EMPTY_POSITION_CASE_COUNT);
     tcase_add_loop_test(tc_through, test_empty_margin_position_with_clear, 0, CLEARANCE_CASE_COUNT);
+    tcase_add_loop_test(tc_through, test_parent_float_clearance, 0, PARENT_CLEARANCE_CASE_COUNT);
     tcase_add_test(tc_through, test_no_collapse_through_border);
     tcase_add_test(tc_through, test_collapse_through_abspos_children);
     tcase_add_test(tc_through, test_collapse_through_skips_abspos_next_sibling);

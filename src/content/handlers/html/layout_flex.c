@@ -1018,10 +1018,18 @@ static void layout_flex_ctx__populate_item_data(struct flex_ctx *ctx, const stru
         struct flex_item_data *item = &ctx->item.data[i++];
 
         b->float_container = b->parent;
-        layout_find_dimensions(ctx->unit_len_ctx, available_width, -1, b, b->style, &b->width, &b->height,
-            horizontal ? &item->max_main : &item->max_cross, horizontal ? &item->min_main : &item->min_cross,
-            horizontal ? &item->max_cross : &item->max_main, horizontal ? &item->min_cross : &item->min_main, b->margin,
-            b->padding, b->border);
+        layout_find_dimensions(ctx->unit_len_ctx, available_width, -1, b,
+            &(struct layout_dimension_outputs){
+                .width = &b->width,
+                .height = &b->height,
+                .max_width = horizontal ? &item->max_main : &item->max_cross,
+                .min_width = horizontal ? &item->min_main : &item->min_cross,
+                .max_height = horizontal ? &item->max_cross : &item->max_main,
+                .min_height = horizontal ? &item->min_cross : &item->min_main,
+                .margin = b->margin,
+                .padding = b->padding,
+                .border = b->border,
+            });
         b->float_container = NULL;
 
         /* layout_find_dimensions uses legacy wrappers which resolve auto to
@@ -1990,9 +1998,17 @@ bool layout_flex(struct box *flex, int available_width, html_content *content)
     bool height_was_stretched = (flex->flags & HEIGHT_STRETCHED) != 0;
     int *height_ptr = height_was_stretched ? NULL : &flex->height;
 
-    layout_find_dimensions(ctx->unit_len_ctx, available_width, -1, flex, flex->style, NULL, /* width - already set */
-        height_ptr, /* height - NULL if already definite from stretch */
-        &max_width, &min_width, &max_height, &min_height, flex->margin, flex->padding, flex->border);
+    layout_find_dimensions(ctx->unit_len_ctx, available_width, -1, flex,
+        &(struct layout_dimension_outputs){
+            .height = height_ptr,
+            .max_width = &max_width,
+            .min_width = &min_width,
+            .max_height = &max_height,
+            .min_height = &min_height,
+            .margin = flex->margin,
+            .padding = flex->padding,
+            .border = flex->border,
+        });
 
     if (height_was_stretched) {
         NSLOG(flex, DEBUG, "box %p: preserved stretched height %d", flex, flex->height);

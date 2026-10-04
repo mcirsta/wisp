@@ -592,34 +592,38 @@ lh__intrinsic_width(const struct box *box, const css_unit_ctx *unit_ctx, int ava
     return min(maximum, max(minimum, available_width - edges));
 }
 
-/**
- * Calculate width, height, and thickness of margins, paddings, and borders.
- *
- * \param  unit_len_ctx     Length conversion context
- * \param  available_width  width of containing block
- * \param  viewport_height  height of viewport in pixels or -ve if unknown
- * \param  box              current box
- * \param  style            style giving width, height, margins, paddings,
- *                          and borders
- * \param  width            updated to width, may be NULL
- * \param  height           updated to height, may be NULL
- * \param  max_width        updated to max-width, may be NULL
- * \param  min_width        updated to min-width, may be NULL
- * \param  max_height       updated to max-height, may be NULL
- * \param  min_height       updated to min-height, may be NULL
- * \param  margin           filled with margins, may be NULL
- * \param  padding          filled with paddings, may be NULL
- * \param  border           filled with border widths, may be NULL
- */
-static inline void layout_find_dimensions(const css_unit_ctx *unit_len_ctx, int available_width, int viewport_height,
-    const struct box *box, const css_computed_style *style, int *width, int *height, int *max_width,
-    struct css_size *min_width, int *max_height, struct css_size *min_height, int margin[4], int padding[4],
-    struct box_border border[4])
+/* Optional destinations for CSS dimensions. Omitted members are not computed;
+ * callers may write directly into box fields or keep separate working values. */
+struct layout_dimension_outputs {
+    int *width;
+    int *height;
+    int *max_width;
+    struct css_size *min_width;
+    int *max_height;
+    struct css_size *min_height;
+    int *margin;
+    int *padding;
+    struct box_border *border;
+};
+
+/* One containing-block resolution and length context per measurement. */
+struct layout_dimension_context {
+    const struct box *box;
+    css_unit_ctx unit_len_ctx;
+    int available_width;
+    int available_height;
+};
+
+static inline void
+layout_find_preferred_dimensions(const struct layout_dimension_context *ctx, const struct layout_dimension_outputs *out)
 {
-    int available_height = lh__available_height_for_box(box, viewport_height);
-    css_unit_ctx box_unit_ctx = lh__with_container_dimensions(unit_len_ctx, available_width, available_height);
-    const css_unit_ctx *box_unit_len_ctx = &box_unit_ctx;
-    unsigned int i;
+    const struct box *box = ctx->box;
+    const css_computed_style *style = ctx->box->style;
+    const css_unit_ctx *box_unit_len_ctx = &ctx->unit_len_ctx;
+    int available_width = ctx->available_width;
+    int available_height = ctx->available_height;
+    int *width = out->width;
+    int *height = out->height;
 
     if (width) {
         css_fixed_or_calc value = (css_fixed_or_calc)0;
@@ -641,24 +645,9 @@ static inline void layout_find_dimensions(const css_unit_ctx *unit_len_ctx, int 
 
         htype = css_computed_height(style, &value, &unit);
 
-        if (htype == CSS_HEIGHT_SET) {
-            if (unit == CSS_UNIT_PCT || unit == CSS_UNIT_CALC) {
-                if (unit == CSS_UNIT_PCT) {
-                    if (available_height >= 0) {
-                        *height = FPCT_OF_INT_TOINT(value.value, available_height);
-                    } else {
-                        /* percentage height not permissible */
-                        *height = AUTO;
-                    }
-                } else {
-                    if (!lh__length_to_px(style, box_unit_len_ctx, available_height, value, unit, height)) {
-                        *height = AUTO;
-                    }
-                }
-            } else {
-                *height = FIXTOINT(css_unit_len2device_px(style, box_unit_len_ctx, value.value, unit));
-            }
-        } else {
+        /* Percentage-dependent heights need a definite containing height. */
+        if (htype != CSS_HEIGHT_SET ||
+            !lh__length_to_px(style, box_unit_len_ctx, available_height, value, unit, height)) {
             *height = AUTO;
         }
 
@@ -666,6 +655,17 @@ static inline void layout_find_dimensions(const css_unit_ctx *unit_len_ctx, int 
             layout_handle_box_sizing(box_unit_len_ctx, box, available_width, false, height);
         }
     }
+}
+
+static inline void
+layout_find_width_limits(const struct layout_dimension_context *ctx, const struct layout_dimension_outputs *out)
+{
+    const struct box *box = ctx->box;
+    const css_computed_style *style = ctx->box->style;
+    const css_unit_ctx *box_unit_len_ctx = &ctx->unit_len_ctx;
+    int available_width = ctx->available_width;
+    int *max_width = out->max_width;
+    struct css_size *min_width = out->min_width;
 
     if (max_width) {
         enum css_max_width_e type;
@@ -729,6 +729,18 @@ static inline void layout_find_dimensions(const css_unit_ctx *unit_len_ctx, int 
             layout_handle_box_sizing(box_unit_len_ctx, box, available_width, true, &min_width->value);
         }
     }
+}
+
+static inline void
+layout_find_height_limits(const struct layout_dimension_context *ctx, const struct layout_dimension_outputs *out)
+{
+    const struct box *box = ctx->box;
+    const css_computed_style *style = ctx->box->style;
+    const css_unit_ctx *box_unit_len_ctx = &ctx->unit_len_ctx;
+    int available_width = ctx->available_width;
+    int available_height = ctx->available_height;
+    int *max_height = out->max_height;
+    struct css_size *min_height = out->min_height;
 
     if (max_height) {
         css_fixed_or_calc value = (css_fixed_or_calc)0;
@@ -751,8 +763,20 @@ static inline void layout_find_dimensions(const css_unit_ctx *unit_len_ctx, int 
             layout_handle_box_sizing(box_unit_len_ctx, box, available_width, false, &min_height->value);
         }
     }
+}
 
-    for (i = 0; i != 4; i++) {
+static inline void
+layout_find_box_edges(const struct layout_dimension_context *ctx, const struct layout_dimension_outputs *out)
+{
+    const struct box *box = ctx->box;
+    const css_computed_style *style = ctx->box->style;
+    const css_unit_ctx *box_unit_len_ctx = &ctx->unit_len_ctx;
+    int available_width = ctx->available_width;
+    int *margin = out->margin;
+    int *padding = out->padding;
+    struct box_border *border = out->border;
+
+    for (unsigned int i = 0; i != 4; i++) {
         if (margin) {
             enum css_margin_e type = CSS_MARGIN_AUTO;
             css_fixed_or_calc value = (css_fixed_or_calc)0;
@@ -826,6 +850,17 @@ static inline void layout_find_dimensions(const css_unit_ctx *unit_len_ctx, int 
                 border[i].width = 0;
         }
     }
+}
+
+static inline void
+layout_find_ratio_width(const struct layout_dimension_context *ctx, const struct layout_dimension_outputs *out)
+{
+    const struct box *box = ctx->box;
+    int *width = out->width;
+    int *height = out->height;
+    int *max_height = out->max_height;
+    struct css_size *min_height = out->min_height;
+
     if (width && height && *width == AUTO && *height != AUTO && box->object == NULL) {
         int source_height = *height;
         if (max_height && *max_height >= 0 && source_height > *max_height) {
@@ -836,6 +871,32 @@ static inline void layout_find_dimensions(const css_unit_ctx *unit_len_ctx, int 
         }
         *width = layout_ratio_dimension(box, source_height, false);
     }
+}
+
+/**
+ * Resolve the requested CSS sizes, constraints and box edges.
+ *
+ * available_width is the containing block width; viewport_height is negative
+ * when unknown. Use box->style consistently for lengths and box sizing.
+ * Destinations may alias box members: preserve the measurement order, and
+ * transfer aspect-ratio only after the requested edges have been written.
+ */
+static inline void layout_find_dimensions(const css_unit_ctx *unit_len_ctx, int available_width, int viewport_height,
+    const struct box *box, const struct layout_dimension_outputs *out)
+{
+    int available_height = lh__available_height_for_box(box, viewport_height);
+    const struct layout_dimension_context ctx = {
+        .box = box,
+        .unit_len_ctx = lh__with_container_dimensions(unit_len_ctx, available_width, available_height),
+        .available_width = available_width,
+        .available_height = available_height,
+    };
+
+    layout_find_preferred_dimensions(&ctx, out);
+    layout_find_width_limits(&ctx, out);
+    layout_find_height_limits(&ctx, out);
+    layout_find_box_edges(&ctx, out);
+    layout_find_ratio_width(&ctx, out);
 }
 
 #endif

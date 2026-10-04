@@ -960,8 +960,16 @@ static bool layout_grid_size_item(const struct grid_layout_ctx *ctx, struct box 
     /* CSS constraints are separate from the cached intrinsic widths. */
     struct css_size item_min_width;
     int item_max_width;
-    layout_find_dimensions(&ctx->content->unit_len_ctx, child_width, -1, child, child->style, &child->width,
-        &child->height, &item_max_width, &item_min_width, NULL, NULL, child->margin, child->padding, child->border);
+    layout_find_dimensions(&ctx->content->unit_len_ctx, child_width, -1, child,
+        &(struct layout_dimension_outputs){
+            .width = &child->width,
+            .height = &child->height,
+            .max_width = &item_max_width,
+            .min_width = &item_min_width,
+            .margin = child->margin,
+            .padding = child->padding,
+            .border = child->border,
+        });
 
     bool auto_left = child->margin[LEFT] == AUTO;
     bool auto_right = child->margin[RIGHT] == AUTO;
@@ -1076,8 +1084,11 @@ static bool layout_grid_stretch_item(const struct grid_layout_ctx *ctx, struct b
 
     int max_width;
     struct css_size min_width;
-    layout_find_dimensions(&ctx->content->unit_len_ctx, ctx->grid->width, -1, child, child->style, NULL, NULL,
-        &max_width, &min_width, NULL, NULL, NULL, NULL, NULL);
+    layout_find_dimensions(&ctx->content->unit_len_ctx, ctx->grid->width, -1, child,
+        &(struct layout_dimension_outputs){
+            .max_width = &max_width,
+            .min_width = &min_width,
+        });
     if (max_width >= 0)
         width = min(width, max_width);
     if (min_width.type == CSS_SIZE_SET)

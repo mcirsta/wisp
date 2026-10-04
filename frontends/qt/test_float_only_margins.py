@@ -97,6 +97,39 @@ def cases():
         ("before-parent-bottom", dict(style="padding-bottom:7px"), 29, 29, 0, 7, 29, 53),
         ("before-parent-minimum", dict(style="min-height:20px"), 29, 29, 0, 20, 29, 66),
         ("before-line", dict(text_after=True, style="font:13px/20px sans-serif"), 29, 29, 0, 20, 29, 66),
+        ("child-clear-large", dict(child="clear:left;margin-top:100px"), 13, 61, 0, 48, 13, 78),
+        ("child-clear-zero-amount", dict(child="clear:left;margin-top:48px"), 13, 61, 0, 48, 13, 78),
+        ("child-clear-large-right", dict(side="right", child="clear:right;margin-top:100px"), 13, 61, 0, 48, 13, 78),
+        ("child-clear-large-both", dict(child="clear:both;margin-top:100px"), 13, 61, 0, 48, 13, 78),
+        ("child-clear-large-unmatched", dict(child="clear:right;margin-top:100px"), 100, 100, 0, 0, 100, 100),
+        ("child-clear-large-nonempty", dict(child="clear:left;margin-top:100px;height:10px"), 13, 61, 10, 58, 13, 100),
+        ("child-clear-large-unmatched-height", dict(child="clear:right;margin-top:100px;height:10px"),
+         100, 100, 10, 10, 100, 139),
+        ("child-clear-large-padded-child", dict(child="clear:left;margin-top:100px;padding-top:5px"),
+         13, 61, 5, 53, 13, 95),
+        ("child-clear-large-padded-parent", dict(child="clear:left;margin-top:100px", style="padding-top:5px"),
+         13, 118, 0, 5, 18, 118),
+        ("child-clear-large-bottom-parent", dict(child="clear:left;margin-top:100px", style="padding-bottom:7px"),
+         13, 61, 0, 55, 13, 85),
+        ("child-clear-large-minimum-parent", dict(child="clear:left;margin-top:100px", style="min-height:20px"),
+         13, 61, 0, 48, 13, 78),
+        ("child-clear-large-fixed-parent", dict(child="clear:left;margin-top:100px", style="height:40px"),
+         13, 61, 0, 40, 13, 70),
+        ("child-clear-large-negative-parent", dict(top=-13, child="clear:left;margin-top:100px"),
+         -13, 35, 0, 48, -13, 52),
+        ("child-clear-large-prefix", dict(prefix=60, previous=31, child="clear:left;margin-top:100px"),
+         91, 139, 0, 48, 91, 156),
+        ("child-clear-large-wrapped", dict(wrap=True, child="clear:left;margin-top:100px"), 13, 61, 0, 48, 13, 78),
+        ("child-clear-large-nested", dict(child_wrapper="margin:31px 0 37px", child="clear:left;margin-top:100px"),
+         31, 79, 0, 48, 31, 116),
+        ("child-clear-large-empty-sibling", dict(before_child="margin:23px 0 29px", child="clear:left;margin-top:100px"),
+         29, 77, 0, 48, 29, 94),
+        ("child-clear-large-nonempty-sibling", dict(before_child="height:10px;margin:23px 0 29px", before_height=10,
+                                             child="clear:left;margin-top:100px"), 23, 133, 0, 10, 23, 133),
+        ("child-clear-large-line-before", dict(text_before=True, style="font:13px/20px sans-serif",
+                                        child="clear:left;margin-top:100px"), 13, 133, 0, 20, 13, 133),
+        ("child-clear-large-line-after", dict(text_after=True, style="font:13px/20px sans-serif",
+                                       child="clear:left;margin-top:100px"), 13, 61, 0, 68, 13, 98),
     ):
         expected = dict(empty=(top, parent_height), inner=(child_top, child_height), floating=(float_top, 48))
         if after is not None:
@@ -105,6 +138,10 @@ def cases():
             expected["wrapper"] = (top, parent_height)
         if options.get("float_after_child"):
             expected["second"] = (float_top, 20)
+        if "child_wrapper" in options:
+            expected["middle"] = (top, parent_height)
+        if "before_child" in options:
+            expected["before"] = (top, options.get("before_height", 0))
         yield name, dict(child="") | options, expected
 
 
@@ -126,8 +163,15 @@ def fixture_html():
         if c.get("break_clear"):
             floating += f'<br style="clear:{c["break_clear"]}">'
         inside = element("inner", floating, c.get("inner", "")) if c.get("nested") else floating
+        if c.get("text_before"):
+            inside = "text" + inside
+        if "before_child" in c:
+            inside += element("before", style=c["before_child"])
         if "child" in c:
-            inside += element("inner", style="margin:23px 0 29px;" + c["child"])
+            child = element("inner", style="margin:23px 0 29px;" + c["child"])
+            if "child_wrapper" in c:
+                child = element("middle", child, c["child_wrapper"])
+            inside += child
         if c.get("float_after_child"):
             inside += element("second", style="float:left;width:40px;height:20px;background:#66c")
         if c.get("text_after"):

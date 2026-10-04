@@ -624,7 +624,10 @@ START_TEST(test_layout_find_dimensions_calc_height_unknown_is_auto)
     box.type = BOX_BLOCK;
     box.style = (css_computed_style *)style;
 
-    layout_find_dimensions(&unit_ctx, 200, -1, &box, style, NULL, &height, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
+    layout_find_dimensions(&unit_ctx, 200, -1, &box,
+        &(struct layout_dimension_outputs){
+            .height = &height,
+        });
     ck_assert_int_eq(height, AUTO);
 
     destroy_select_ctx(&ctx);
@@ -642,7 +645,10 @@ START_TEST(test_layout_find_dimensions_calc_height_uses_viewport)
     box.type = BOX_BLOCK;
     box.style = (css_computed_style *)style;
 
-    layout_find_dimensions(&unit_ctx, 200, 300, &box, style, NULL, &height, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
+    layout_find_dimensions(&unit_ctx, 200, 300, &box,
+        &(struct layout_dimension_outputs){
+            .height = &height,
+        });
     ck_assert_int_eq(height, 160);
 
     destroy_select_ctx(&ctx);
@@ -667,8 +673,12 @@ START_TEST(test_layout_find_dimensions_cq_units_use_box_container)
     cq_ctx.container_width = 999 * (1 << CSS_RADIX_POINT);
     cq_ctx.container_height = 777 * (1 << CSS_RADIX_POINT);
 
-    layout_find_dimensions(
-        &cq_ctx, 200, 300, &box, style, &width, &height, NULL, NULL, NULL, NULL, margin, NULL, NULL);
+    layout_find_dimensions(&cq_ctx, 200, 300, &box,
+        &(struct layout_dimension_outputs){
+            .width = &width,
+            .height = &height,
+            .margin = margin,
+        });
 
     ck_assert_int_eq(width, 100);
     ck_assert_int_eq(height, 75);
@@ -857,8 +867,14 @@ START_TEST(test_aspect_ratio_dimensions)
     const css_computed_style *style = select_style_from_css(
         "* { aspect-ratio: 2; height: 100px; box-sizing: border-box; padding: 10px; border: 2px solid; }", &ctx);
     struct box box = {.type = BOX_BLOCK, .style = (css_computed_style *)style};
-    layout_find_dimensions(&unit_ctx, 500, -1, &box, style, &box.width, &box.height, NULL, NULL, NULL, NULL, box.margin,
-        box.padding, box.border);
+    layout_find_dimensions(&unit_ctx, 500, -1, &box,
+        &(struct layout_dimension_outputs){
+            .width = &box.width,
+            .height = &box.height,
+            .margin = box.margin,
+            .padding = box.padding,
+            .border = box.border,
+        });
     ck_assert_int_eq(box.height, 76);
     ck_assert_int_eq(box.width, 176);
     ck_assert_int_eq(layout_ratio_dimension(&box, 176, true), 76);
@@ -937,8 +953,16 @@ START_TEST(test_aspect_ratio_height_constraints)
     struct box box = {.type = BOX_BLOCK, .style = (css_computed_style *)style, .parent = &parent};
     int max_height;
     struct css_size min_height;
-    layout_find_dimensions(&unit_ctx, 500, -1, &box, style, &box.width, &box.height, NULL, NULL, &max_height,
-        &min_height, box.margin, box.padding, box.border);
+    layout_find_dimensions(&unit_ctx, 500, -1, &box,
+        &(struct layout_dimension_outputs){
+            .width = &box.width,
+            .height = &box.height,
+            .max_height = &max_height,
+            .min_height = &min_height,
+            .margin = box.margin,
+            .padding = box.padding,
+            .border = box.border,
+        });
     ck_assert_int_eq(min_height.type, CSS_SIZE_SET);
     ck_assert_int_eq(min_height.value, 126);
     ck_assert_int_eq(max_height, 146);
@@ -1021,8 +1045,12 @@ START_TEST(test_logical_spacing)
         css, sizeof(css), "* { font-size:16px; padding:0; margin:0; %s; }", logical_spacing_cases[_i].declarations);
     const css_computed_style *style = select_style_from_css(css, &ctx);
     struct box box = {.type = BOX_BLOCK, .style = (css_computed_style *)style};
-    layout_find_dimensions(
-        &unit_ctx, 400, -1, &box, style, NULL, NULL, NULL, NULL, NULL, NULL, box.margin, box.padding, box.border);
+    layout_find_dimensions(&unit_ctx, 400, -1, &box,
+        &(struct layout_dimension_outputs){
+            .margin = box.margin,
+            .padding = box.padding,
+            .border = box.border,
+        });
     for (int side = 0; side < 4; side++) {
         ck_assert_int_eq(box.padding[side], logical_spacing_cases[_i].padding[side]);
         ck_assert_int_eq(box.margin[side], logical_spacing_cases[_i].margin[side]);
@@ -1041,8 +1069,12 @@ START_TEST(test_logical_spacing_inherit)
     css_computed_style *composed = NULL;
     ck_assert_int_eq(css_computed_style_compose(parent, child, &unit_ctx, &composed), CSS_OK);
     struct box box = {.type = BOX_BLOCK, .style = composed};
-    layout_find_dimensions(
-        &unit_ctx, 400, -1, &box, composed, NULL, NULL, NULL, NULL, NULL, NULL, box.margin, box.padding, box.border);
+    layout_find_dimensions(&unit_ctx, 400, -1, &box,
+        &(struct layout_dimension_outputs){
+            .margin = box.margin,
+            .padding = box.padding,
+            .border = box.border,
+        });
     ck_assert_int_eq(box.padding[TOP], 11);
     ck_assert_int_eq(box.padding[BOTTOM], 13);
     ck_assert_int_eq(box.padding[LEFT], 5);
@@ -1061,8 +1093,12 @@ START_TEST(test_logical_spacing_specificity)
     const css_computed_style *style = select_style_from_css(
         "div { padding-top:7px; margin-bottom:9px; } * { padding-block:20px; margin-block:10px; }", &ctx);
     struct box box = {.type = BOX_BLOCK, .style = (css_computed_style *)style};
-    layout_find_dimensions(
-        &unit_ctx, 400, -1, &box, style, NULL, NULL, NULL, NULL, NULL, NULL, box.margin, box.padding, box.border);
+    layout_find_dimensions(&unit_ctx, 400, -1, &box,
+        &(struct layout_dimension_outputs){
+            .margin = box.margin,
+            .padding = box.padding,
+            .border = box.border,
+        });
     ck_assert_int_eq(box.padding[TOP], 7);
     ck_assert_int_eq(box.padding[BOTTOM], 20);
     ck_assert_int_eq(box.margin[TOP], 10);

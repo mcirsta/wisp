@@ -89,30 +89,29 @@ and `marker-style-reference/inspection.json` in the same artifact directory.
 
 ## Remaining parent/child margin cases
 
-Two adjacent cases found while checking interleaved floats remain. Both are
-present in the capture made at `8ae6edbe`, before the lookahead fix; these are
-existing limitations, not regressions introduced by that fix.
+- **Fixed-height parents stop first-child top-margin lookahead.** With parent
+  `margin:13px 0 17px;height:40px`, a 40×48 left float, and an uncleared empty
+  child with `margin:23px 0 29px`, Wisp puts the parent at y=13, while Chromium
+  uses y=29. `MAKE_HEIGHT` currently stops the scan before the child. Height
+  separates the parent's bottom margin but does not by itself separate its top
+  from its first child's top. Address that distinction separately, including
+  controls without floats and with nonempty children. Reproducer:
+  `#parent-height-case` in `interleaved-floats-2026-10-04/probe.html`; captures
+  `before/` and `after2/` confirm this predates the float lookahead changes.
+- **Restore parent/child collapse when a deferred clearance decision finds no
+  clearance.** With parent `margin:13px 0 17px`, a zero-height left float and
+  an empty child with `clear:left;margin:100px 0 29px`, Wisp leaves the parent
+  and float at y=13 and puts the child and following sibling at y=113. Firefox
+  moves the whole adjoining chain to y=100. Chromium instead leaves the parent,
+  float and child at y=13 and puts the following sibling at y=30, treating this
+  float-edge case as clearance. The existing clearance tests follow Firefox's
+  ordinary-collapse behavior when no clearance is needed. Supporting it here
+  requires resolving the provisional ancestor top again after float sizing,
+  with corresponding float placement; do not introduce clearance solely to
+  avoid that work. Reproducer: `#zero-float-case` in
+  `parent-clearance-2026-10-04/fixture.html`. `before/` and `second-debug/`
+  confirm Wisp's geometry is unchanged by the nonzero-float clearance fix;
+  `firefox.json` provides the independent reference.
 
-- **Clearance when a child's large top margin would move its parent.** With
-  parent `margin:13px 0 17px`, a 40×48 left float, and an empty child with
-  `clear:left;margin:100px 0 29px`, Wisp places the child at y=113 and leaves
-  the parent zero-height. Chromium places the child at the float's bottom,
-  y=61, and gives the parent 48px height. Lookahead currently commits the
-  parent's top before placing the float, so the later clearance decision
-  tests the child's margin against that already committed position. Resolving
-  this needs the hypothetical parent/child collapsed top as well as the actual
-  float position; simply skipping the float or clamping the child would be
-  incorrect. Reproducer: `#clear-large-case`.
-- **Fixed-height parents stop first-child top-margin lookahead.** In the same
-  structure with `height:40px` on the parent and an uncleared empty child with
-  `margin:23px 0 29px`, Wisp puts the parent at y=13, while Chromium uses y=29.
-  `MAKE_HEIGHT` currently stops the scan before the child. Height separates the
-  parent's bottom margin but does not by itself separate its top from its
-  first child's top. Address that distinction separately, including controls
-  without floats and with nonempty children. Reproducer: `#parent-height-case`.
-
-Coordinates are relative to the enclosing flow-root's content edge. Evidence:
-`out/render-captures/interleaved-floats-2026-10-04/probe.html`, `before/` and
-`after2/`. The other exploratory case with default-font text has a 1px normal
-line-height difference; the regression fixture uses an explicit line-height to
-isolate margin geometry.
+Coordinates are relative to the enclosing flow-root's content edge. All
+artifact paths above are under `out/render-captures/`.

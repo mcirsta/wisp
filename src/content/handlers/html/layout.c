@@ -120,22 +120,22 @@ const css_border_color_func border_color_funcs[4] = {
 static bool
 layout_minmax_block(struct box *block, const struct gui_layout_table *font_func, const html_content *content);
 
+/* Resolved CSS constraints, separate from a box's cached intrinsic widths. */
+struct layout_size_limits {
+    struct css_size min_width;
+    int max_width;
+    struct css_size min_height;
+    int max_height;
+};
+
 /**
- * Compute the size of replaced boxes with auto dimensions, according to
- * content.
- *
- * \param  box     Box with object
- * \param  width   Width value in px or AUTO.  If AUTO, updated to value in px.
- * \param  height  Height value in px or AUTO. If AUTO, updated to value in px.
- * \param  min_width  Box's min width, as given by layout_find_dimensions.
- * \param  max_width  Box's max width, as given by layout_find_dimensions.
- * \param  min_height  Box's min height, as given by layout_find_dimensions.
- * \param  max_height  Box's max height, as given by layout_find_dimensions.
- *
+ * Resolve replaced content's auto dimensions using its natural size or ratio.
+ * Width/height are updated in place; limits are the resolved CSS constraints.
+ * containing_block_width is negative during the intrinsic-width pass.
  * See CSS 2.1 sections 10.3 and 10.6.
  */
-static void layout_get_object_dimensions(const css_unit_ctx *unit_len_ctx, struct box *box, int *width, int *height,
-    struct css_size min_width, int max_width, struct css_size min_height, int max_height, int containing_block_width)
+static void layout_get_object_dimensions(
+    struct box *box, int *width, int *height, const struct layout_size_limits *limits, int containing_block_width)
 {
     assert(box->object != NULL);
     assert(width != NULL && height != NULL);
@@ -172,7 +172,8 @@ static void layout_get_object_dimensions(const css_unit_ctx *unit_len_ctx, struc
     NSLOG(layout, DEBUG,
         "OBJ_DIM box %p: input w=%d h=%d intrinsic=%dx%d ratio=%dx%d has_ratio_only=%d cb_w=%d limits w[%d,%d] h[%d,%d]",
         box, *width, *height, intrinsic_width, intrinsic_height, ratio_w, ratio_h, has_ratio_only,
-        containing_block_width, min_width.value, max_width, min_height.value, max_height);
+        containing_block_width, limits->min_width.value, limits->max_width, limits->min_height.value,
+        limits->max_height);
 
     if (*width == AUTO && *height == AUTO) {
         if (has_ratio_only && ratio_w > 0 && ratio_h > 0 && containing_block_width > 0) {
@@ -213,12 +214,12 @@ static void layout_get_object_dimensions(const css_unit_ctx *unit_len_ctx, struc
 
         /* Apply min/max-width constraints */
         bool scaled = false;
-        if (min_width.type == CSS_SIZE_SET && min_width.value > 0 && min_width.value > *width) {
-            *width = min_width.value;
+        if (limits->min_width.type == CSS_SIZE_SET && limits->min_width.value > 0 && limits->min_width.value > *width) {
+            *width = limits->min_width.value;
             scaled = true;
         }
-        if (max_width >= 0 && max_width < *width) {
-            *width = max_width;
+        if (limits->max_width >= 0 && limits->max_width < *width) {
+            *width = limits->max_width;
             scaled = true;
         }
         if (scaled && (css_ratio || eff_ratio_w != 0)) {
@@ -228,12 +229,13 @@ static void layout_get_object_dimensions(const css_unit_ctx *unit_len_ctx, struc
 
         /* Apply min/max-height constraints */
         scaled = false;
-        if (min_height.type == CSS_SIZE_SET && min_height.value > 0 && min_height.value > *height) {
-            *height = min_height.value;
+        if (limits->min_height.type == CSS_SIZE_SET && limits->min_height.value > 0 &&
+            limits->min_height.value > *height) {
+            *height = limits->min_height.value;
             scaled = true;
         }
-        if (max_height >= 0 && max_height < *height) {
-            *height = max_height;
+        if (limits->max_height >= 0 && limits->max_height < *height) {
+            *height = limits->max_height;
             scaled = true;
         }
         if (scaled && (css_ratio || eff_ratio_h != 0)) {
@@ -244,10 +246,10 @@ static void layout_get_object_dimensions(const css_unit_ctx *unit_len_ctx, struc
     } else if (*width == AUTO) {
         /* Resolve the given height's limits before transferring through the
          * ratio. This also covers percentages resolved by flex stretching. */
-        if (max_height >= 0)
-            *height = min(*height, max_height);
-        if (min_height.type == CSS_SIZE_SET)
-            *height = max(*height, min_height.value);
+        if (limits->max_height >= 0)
+            *height = min(*height, limits->max_height);
+        if (limits->min_height.type == CSS_SIZE_SET)
+            *height = max(*height, limits->min_height.value);
         if (css_ratio)
             *width = layout_ratio_dimension(box, *height, false);
         else if (eff_ratio_h != 0)
@@ -255,18 +257,18 @@ static void layout_get_object_dimensions(const css_unit_ctx *unit_len_ctx, struc
         else
             *width = intrinsic_width;
 
-        if (min_width.type == CSS_SIZE_SET && min_width.value > 0 && min_width.value > *width)
-            *width = min_width.value;
-        if (max_width >= 0 && max_width < *width)
-            *width = max_width;
+        if (limits->min_width.type == CSS_SIZE_SET && limits->min_width.value > 0 && limits->min_width.value > *width)
+            *width = limits->min_width.value;
+        if (limits->max_width >= 0 && limits->max_width < *width)
+            *width = limits->max_width;
 
     } else if (*height == AUTO) {
         /* Have given width; height is calculated from ratio */
 
-        if (min_width.type == CSS_SIZE_SET && min_width.value > 0 && min_width.value > *width)
-            *width = min_width.value;
-        if (max_width >= 0 && max_width < *width)
-            *width = max_width;
+        if (limits->min_width.type == CSS_SIZE_SET && limits->min_width.value > 0 && limits->min_width.value > *width)
+            *width = limits->min_width.value;
+        if (limits->max_width >= 0 && limits->max_width < *width)
+            *width = limits->max_width;
 
         if (css_ratio)
             *height = layout_ratio_dimension(box, *width, true);
@@ -278,11 +280,12 @@ static void layout_get_object_dimensions(const css_unit_ctx *unit_len_ctx, struc
         /* CSS 2.2 10.7: height constraints do not change a resolved width.
          * With both dimensions auto, proportional scaling is handled above.
          * object-fit affects painting, not sizing. */
-        if (max_height >= 0 && *height > max_height) {
-            *height = max_height;
+        if (limits->max_height >= 0 && *height > limits->max_height) {
+            *height = limits->max_height;
         }
-        if (min_height.type == CSS_SIZE_SET && min_height.value > 0 && *height < min_height.value) {
-            *height = min_height.value;
+        if (limits->min_height.type == CSS_SIZE_SET && limits->min_height.value > 0 &&
+            *height < limits->min_height.value) {
+            *height = limits->min_height.value;
         }
     }
 
@@ -617,51 +620,39 @@ static int layout_minmax_object_width(struct box *box, const html_content *conte
         css_unit u = CSS_UNIT_PX;
 
         if (css_computed_max_height(box->style, &v, &u) == CSS_MAX_HEIGHT_SET && u != CSS_UNIT_PCT) {
-            if (u == CSS_UNIT_CALC) {
-                if (!lh__length_to_px(box->style, &content->unit_len_ctx, -1, v, u, &obj_max_h)) {
-                    obj_max_h = INT_MAX;
-                }
-            } else {
-                obj_max_h = FIXTOINT(css_unit_len2device_px(box->style, &content->unit_len_ctx, v.value, u));
-            }
+            if (!lh__length_to_px(box->style, &content->unit_len_ctx, -1, v, u, &obj_max_h))
+                obj_max_h = INT_MAX;
         }
         if (css_computed_max_width(box->style, &v, &u) == CSS_MAX_WIDTH_SET && u != CSS_UNIT_PCT &&
             !lh__intrinsic_width_unit(u)) {
-            if (u == CSS_UNIT_CALC) {
-                if (!lh__length_to_px(box->style, &content->unit_len_ctx, -1, v, u, &obj_max_w)) {
-                    obj_max_w = INT_MAX;
-                }
-            } else {
-                obj_max_w = FIXTOINT(css_unit_len2device_px(box->style, &content->unit_len_ctx, v.value, u));
-            }
+            if (!lh__length_to_px(box->style, &content->unit_len_ctx, -1, v, u, &obj_max_w))
+                obj_max_w = INT_MAX;
         }
         if (css_computed_min_height(box->style, &v, &u) == CSS_MIN_HEIGHT_SET && u != CSS_UNIT_PCT) {
             obj_min_h.type = CSS_SIZE_SET;
-            if (u == CSS_UNIT_CALC) {
-                if (!lh__length_to_px(box->style, &content->unit_len_ctx, -1, v, u, &obj_min_h.value)) {
-                    obj_min_h.type = CSS_SIZE_AUTO;
-                    obj_min_h.value = 0;
-                }
-            } else {
-                obj_min_h.value = FIXTOINT(css_unit_len2device_px(box->style, &content->unit_len_ctx, v.value, u));
+            if (!lh__length_to_px(box->style, &content->unit_len_ctx, -1, v, u, &obj_min_h.value)) {
+                obj_min_h.type = CSS_SIZE_AUTO;
+                obj_min_h.value = 0;
             }
         }
         if (css_computed_min_width(box->style, &v, &u) == CSS_MIN_WIDTH_SET && u != CSS_UNIT_PCT &&
             !lh__intrinsic_width_unit(u)) {
             obj_min_w.type = CSS_SIZE_SET;
-            if (u == CSS_UNIT_CALC) {
-                if (!lh__length_to_px(box->style, &content->unit_len_ctx, -1, v, u, &obj_min_w.value)) {
-                    obj_min_w.type = CSS_SIZE_AUTO;
-                    obj_min_w.value = 0;
-                }
-            } else {
-                obj_min_w.value = FIXTOINT(css_unit_len2device_px(box->style, &content->unit_len_ctx, v.value, u));
+            if (!lh__length_to_px(box->style, &content->unit_len_ctx, -1, v, u, &obj_min_w.value)) {
+                obj_min_w.type = CSS_SIZE_AUTO;
+                obj_min_w.value = 0;
             }
         }
     }
 
-    layout_get_object_dimensions(&content->unit_len_ctx, box, &width, &height, obj_min_w, obj_max_w, obj_min_h,
-        obj_max_h, -1 /* containing block width unknown during minmax pass */);
+    layout_get_object_dimensions(box, &width, &height,
+        &(struct layout_size_limits){
+            .min_width = obj_min_w,
+            .max_width = obj_max_w,
+            .min_height = obj_min_h,
+            .max_height = obj_max_h,
+        },
+        -1 /* containing block width unknown during minmax pass */);
 
     return width;
 }
@@ -1839,32 +1830,69 @@ static inline bool box_prevents_collapse_through(const css_unit_ctx *unit_len_ct
 
 static bool layout_clear(struct box *fl, enum css_clear_e clear, int *y);
 
-/**
- * Find next block that current margin collapses to.
- *
- * \param  unit_len_ctx  Length conversion context
- * \param  box    box to start tree-order search from (top margin is included)
- * \param  block  box responsible for current block fromatting context
- * \param  viewport_height  height of viewport in px
- * \param  max_pos_margin  updated to to maximum positive margin encountered
- * \param  max_neg_margin  updated to to maximum negative margin encountered
- * \param  margin_top  first box whose top edge receives the collapsed margin;
- *         NULL when the chain reaches the formatting-context boundary
- * \param  cy  flow position before this margin chain
- * \param  boundary  stop before crossing this box's bottom edge, or NULL
- * \param  clearance_box  receives a box needing clearance; NULL disables
- *         clearance checks when finding a hypothetical top edge
- * \return  next box that current margin collapses to, or NULL if none.
- */
-static struct box *layout_next_margin_block(const css_unit_ctx *unit_len_ctx, struct box *box, struct box *block,
-    int viewport_height, unsigned int *max_pos_margin, unsigned int *max_neg_margin, struct box **margin_top,
-    int cy, struct box *boundary, struct box **clearance_box)
+static bool box_is_descendant_of(const struct box *box, const struct box *ancestor)
 {
-    assert(block != NULL);
-    *margin_top = box;
-    if (clearance_box)
-        *clearance_box = NULL;
-    struct box *first_float = NULL;
+    for (box = box->parent; box; box = box->parent) {
+        if (box == ancestor)
+            return true;
+    }
+    return false;
+}
+
+/* If the cleared child's top would join an ancestor's top, a float inside
+ * that same adjoining chain moves with the ancestor. Its positive outer
+ * height necessarily extends below their shared hypothetical top, regardless
+ * of how large the child's margin is. External floats do not move with it. */
+static bool layout_clear_adjoining_float(const struct box *box, const struct box *parent,
+    const struct box *floats, enum css_clear_e clear)
+{
+    if (!parent || !box_is_descendant_of(box, parent))
+        return false;
+    for (const struct box *fl = floats; fl; fl = fl->next_float) {
+        if (fl->height > 0 &&
+            ((fl->type == BOX_FLOAT_LEFT && (clear == CSS_CLEAR_LEFT || clear == CSS_CLEAR_BOTH)) ||
+                (fl->type == BOX_FLOAT_RIGHT && (clear == CSS_CLEAR_RIGHT || clear == CSS_CLEAR_BOTH))) &&
+            box_is_descendant_of(fl, parent))
+            return true;
+    }
+    return false;
+}
+
+/* Flow scans decide clearance using floats already positioned in this BFC.
+ * Top scans find a hypothetical/bounded top without applying clearance; they
+ * can cross float-only containers and report a deferred clearance decision. */
+enum margin_scan_mode {
+    MARGIN_SCAN_FLOW,
+    MARGIN_SCAN_TOP,
+};
+
+struct margin_scan {
+    const css_unit_ctx *unit_len_ctx;
+    struct box *block;             /* Formatting-context root. */
+    int viewport_height;
+    int flow_y;                   /* Position before the adjoining margins. */
+    enum margin_scan_mode mode;
+    struct box *boundary;          /* Stop before this box's bottom, or NULL. */
+    struct box *adjoining_parent;  /* Positioned top still adjoining the chain. */
+};
+
+struct margin_scan_result {
+    /* Start with the caller's pending margins; the scan adds adjoining edges. */
+    unsigned int positive, negative;
+    struct box *top;               /* Edge receiving the margin, or NULL at the BFC boundary. */
+    struct box *clearance;         /* Box requiring clearance from positioned floats. */
+    struct box *pending_clearance; /* Box requiring a decision after float placement. */
+};
+
+/* Find the end of the adjoining-margin chain in tree order. The result's
+ * margin totals accumulate; its three box outputs are reset for each scan. */
+static struct box *layout_next_margin_block(struct box *box, const struct margin_scan *scan,
+    struct margin_scan_result *result)
+{
+    assert(scan->block != NULL);
+    result->top = box;
+    result->clearance = NULL;
+    result->pending_clearance = NULL;
     bool left_float = false, right_float = false;
 
     while (box != NULL) {
@@ -1877,41 +1905,52 @@ static struct box *layout_next_margin_block(const css_unit_ctx *unit_len_ctx, st
 
             /* Get margins */
             if (box->style) {
-                layout_find_dimensions(unit_len_ctx, box->parent->width, viewport_height, box, box->style, NULL, NULL,
-                    NULL, NULL, NULL, NULL, box->margin, box->padding, box->border);
+                layout_find_dimensions(scan->unit_len_ctx, box->parent->width, scan->viewport_height, box,
+                    &(struct layout_dimension_outputs){
+                        .margin = box->margin,
+                        .padding = box->padding,
+                        .border = box->border,
+                    });
 
                 /* A hypothetical parent top may cross float-only containers,
-                 * but clearance needs their positions first. Return the float
-                 * barrier without borrowing the cleared child's margins. */
+                 * but clearance needs their positions first. End this chain
+                 * before borrowing the potentially cleared child's margins. */
                 enum css_clear_e clear = css_computed_clear(box->style);
-                if (first_float && ((left_float && (clear == CSS_CLEAR_LEFT || clear == CSS_CLEAR_BOTH)) ||
-                        (right_float && (clear == CSS_CLEAR_RIGHT || clear == CSS_CLEAR_BOTH))))
-                    return first_float;
+                if ((left_float && (clear == CSS_CLEAR_LEFT || clear == CSS_CLEAR_BOTH)) ||
+                    (right_float && (clear == CSS_CLEAR_RIGHT || clear == CSS_CLEAR_BOTH))) {
+                    result->pending_clearance = box;
+                    return box;
+                }
 
                 /* CSS 2.1 section 9.5.2: decide clearance using the top edge
                  * with clear:none, before joining this margin to its parent
                  * or preceding sibling. Bound the hypothetical search at this
                  * box so a later sibling cannot move its empty top edge. */
-                if (clearance_box && css_computed_clear(box->style) != CSS_CLEAR_NONE) {
+                if (scan->mode == MARGIN_SCAN_FLOW && clear != CSS_CLEAR_NONE) {
                     int floor;
-                    if (layout_clear(block->float_children, css_computed_clear(box->style), &floor)) {
-                        unsigned int positive = *max_pos_margin, negative = *max_neg_margin;
-                        struct box *top;
-                        layout_next_margin_block(unit_len_ctx, box, block, viewport_height,
-                            &positive, &negative, &top, cy, box, NULL);
-                        if (cy + (int)positive - (int)negative < floor) {
-                            *clearance_box = box;
+                    if (layout_clear(scan->block->float_children, css_computed_clear(box->style), &floor)) {
+                        struct margin_scan hypothetical = *scan;
+                        hypothetical.mode = MARGIN_SCAN_TOP;
+                        hypothetical.boundary = box;
+                        hypothetical.adjoining_parent = NULL;
+                        struct margin_scan_result top = {
+                            .positive = result->positive, .negative = result->negative};
+                        layout_next_margin_block(box, &hypothetical, &top);
+                        if (scan->flow_y + (int)top.positive - (int)top.negative < floor ||
+                            layout_clear_adjoining_float(
+                                box, scan->adjoining_parent, scan->block->float_children, clear)) {
+                            result->clearance = box;
                             return box;
                         }
                     }
                 }
 
                 /* Apply top margin */
-                if (box->margin[TOP] > 0 && (unsigned int)box->margin[TOP] > *max_pos_margin) {
-                    *max_pos_margin = (unsigned int)box->margin[TOP];
+                if (box->margin[TOP] > 0 && (unsigned int)box->margin[TOP] > result->positive) {
+                    result->positive = (unsigned int)box->margin[TOP];
                 } else if (box->margin[TOP] != AUTO && box->margin[TOP] < 0 &&
-                    -(unsigned int)box->margin[TOP] > *max_neg_margin) {
-                    *max_neg_margin = -(unsigned int)box->margin[TOP];
+                    -(unsigned int)box->margin[TOP] > result->negative) {
+                    result->negative = -(unsigned int)box->margin[TOP];
                 }
             }
 
@@ -1919,11 +1958,9 @@ static struct box *layout_next_margin_block(const css_unit_ctx *unit_len_ctx, st
             /* Check whether box is the box current margin collapses to.
              * Position inline content (including floats) before collecting
              * a following sibling's top margin. */
-            bool float_only = boundary && !clearance_box && box->type == BOX_INLINE_CONTAINER &&
-                box_inline_container_only_floats(unit_len_ctx, box);
+            bool float_only = scan->boundary && scan->mode == MARGIN_SCAN_TOP && box->type == BOX_INLINE_CONTAINER &&
+                box_inline_container_only_floats(scan->unit_len_ctx, box);
             if (float_only) {
-                if (!first_float)
-                    first_float = box;
                 for (const struct box *child = box->children; child; child = child->next) {
                     left_float |= child->type == BOX_FLOAT_LEFT;
                     right_float |= child->type == BOX_FLOAT_RIGHT;
@@ -1934,8 +1971,8 @@ static struct box *layout_next_margin_block(const css_unit_ctx *unit_len_ctx, st
                 box->border[TOP].width || box->padding[TOP] ||
                 box_style_creates_block_context(box) ||
                 (box->type == BOX_INLINE_CONTAINER && !float_only &&
-                    box_inline_container_has_line_boxes(unit_len_ctx, box)) ||
-                (box_has_positive_min_height(unit_len_ctx, box) && !box_has_in_flow_block_children(box))) {
+                    box_inline_container_has_line_boxes(scan->unit_len_ctx, box)) ||
+                (box_has_positive_min_height(scan->unit_len_ctx, box) && !box_has_in_flow_block_children(box))) {
                 /* Collapse to this box; return it */
                 return box;
             }
@@ -1959,9 +1996,9 @@ static struct box *layout_next_margin_block(const css_unit_ctx *unit_len_ctx, st
              * collapse with its Bottom margin (and thus does not
              * collapse with Parent Bottom or Next Sibling Top).
              * We should NOT walk up in this case. */
-            bool collapses_through = !box_prevents_collapse_through(unit_len_ctx, box);
+            bool collapses_through = !box_prevents_collapse_through(scan->unit_len_ctx, box);
 
-            if (box == boundary)
+            if (box == scan->boundary)
                 return box;
             if (!box->next && collapses_through) {
                 /* No more siblings AND box collapses through:
@@ -1970,34 +2007,34 @@ static struct box *layout_next_margin_block(const css_unit_ctx *unit_len_ctx, st
                 do {
                     /* A bounded search includes empty descendants' bottom
                      * margins, but excludes the boundary's own bottom. */
-                    if (boundary && !box_prevents_collapse_through(unit_len_ctx, box)) {
+                    if (scan->boundary && !box_prevents_collapse_through(scan->unit_len_ctx, box)) {
                         if (box->margin[BOTTOM] > 0)
-                            *max_pos_margin = max(*max_pos_margin, (unsigned int)box->margin[BOTTOM]);
+                            result->positive = max(result->positive, (unsigned int)box->margin[BOTTOM]);
                         else if (box->margin[BOTTOM] != AUTO && box->margin[BOTTOM] < 0)
-                            *max_neg_margin = max(*max_neg_margin, -(unsigned int)box->margin[BOTTOM]);
+                            result->negative = max(result->negative, -(unsigned int)box->margin[BOTTOM]);
                     }
-                    if (box == *margin_top)
-                        *margin_top = box->parent;
+                    if (box == result->top)
+                        result->top = box->parent;
                     box = box->parent;
-                    if (box == boundary)
+                    if (box == scan->boundary)
                         return box;
 
                     /* Check if we've reached the block boundary BEFORE
                      * accumulating any margins from it */
-                    if (box == block) {
+                    if (box == scan->block) {
                         /* Margins don't collapse with stuff
                          * outside the block formatting context.
                          * Don't accumulate this block's margin-bottom
                          * as it belongs to the outer context. */
-                        *margin_top = NULL;
-                        return block;
+                        result->top = NULL;
+                        return scan->block;
                     }
 
                     /* CSS 2.1 §8.3.1: Top padding or a positive minimum
                      * prevents collapsing through the parent. Its first
                      * child's top margin may still have joined this chain,
                      * but the parent's bottom margin is separate. */
-                    if (box->padding[TOP] || box_has_positive_min_height(unit_len_ctx, box)) {
+                    if (box->padding[TOP] || box_has_positive_min_height(scan->unit_len_ctx, box)) {
                         return box;
                     }
 
@@ -2029,12 +2066,12 @@ static struct box *layout_next_margin_block(const css_unit_ctx *unit_len_ctx, st
              * (self-collapsing — no height, no in-flow content), then
              * its top and bottom margins ARE adjoining, and the bottom
              * margin is part of the same collapsing chain. */
-            if ((!walked_up || !box_prevents_collapse_through(unit_len_ctx, box)) && !box->padding[BOTTOM]) {
-                if (box->margin[BOTTOM] > 0 && (unsigned int)box->margin[BOTTOM] > *max_pos_margin) {
-                    *max_pos_margin = (unsigned int)box->margin[BOTTOM];
+            if ((!walked_up || !box_prevents_collapse_through(scan->unit_len_ctx, box)) && !box->padding[BOTTOM]) {
+                if (box->margin[BOTTOM] > 0 && (unsigned int)box->margin[BOTTOM] > result->positive) {
+                    result->positive = (unsigned int)box->margin[BOTTOM];
                 } else if (box->margin[BOTTOM] != AUTO && box->margin[BOTTOM] < 0 &&
-                    -(unsigned int)box->margin[BOTTOM] > *max_neg_margin)
-                    *max_neg_margin = -(unsigned int)box->margin[BOTTOM];
+                    -(unsigned int)box->margin[BOTTOM] > result->negative)
+                    result->negative = -(unsigned int)box->margin[BOTTOM];
             }
 
             /* To next sibling.
@@ -2050,8 +2087,8 @@ static struct box *layout_next_margin_block(const css_unit_ctx *unit_len_ctx, st
             /* Leaving an empty branch transfers the receiving edge to the
              * next sibling. Moving between children keeps their enclosing
              * parent's top edge as the receiver. */
-            if (previous == *margin_top)
-                *margin_top = box;
+            if (previous == result->top)
+                result->top = box;
         }
     }
 
@@ -2281,8 +2318,18 @@ static void layout_block_find_dimensions(
     struct box_border *border = box->border;
     const css_computed_style *style = box->style;
 
-    layout_find_dimensions(unit_len_ctx, available_width, viewport_height, box, style, &width, &height, &max_width,
-        &min_width, &max_height, &min_height, margin, padding, border);
+    layout_find_dimensions(unit_len_ctx, available_width, viewport_height, box,
+        &(struct layout_dimension_outputs){
+            .width = &width,
+            .height = &height,
+            .max_width = &max_width,
+            .min_width = &min_width,
+            .max_height = &max_height,
+            .min_height = &min_height,
+            .margin = margin,
+            .padding = padding,
+            .border = border,
+        });
 
     /* Debug: Log what layout_find_dimensions computed */
     NSLOG(layout, DEBUG,
@@ -2326,8 +2373,14 @@ static void layout_block_find_dimensions(
 
     if (box->object && !(box->flags & REPLACE_DIM) && content_get_type(box->object) != CONTENT_HTML) {
         /* block-level replaced element, see 10.3.4 and 10.6.2 */
-        layout_get_object_dimensions(
-            unit_len_ctx, box, &width, &height, min_width, max_width, min_height, max_height, available_width);
+        layout_get_object_dimensions(box, &width, &height,
+            &(struct layout_size_limits){
+                .min_width = min_width,
+                .max_width = max_width,
+                .min_height = min_height,
+                .max_height = max_height,
+            },
+            available_width);
     }
 
     box->width = layout_solve_width(box, available_width, width, lm, rm, max_width, min_width.value);
@@ -2502,8 +2555,12 @@ bool layout_table(struct box *table, int available_width, html_content *content)
     memcpy(col, table->col, sizeof(col[0]) * columns);
 
     /* find margins, paddings, and borders for table and cells */
-    layout_find_dimensions(&content->unit_len_ctx, available_width, -1, table, style, 0, 0, 0, 0, 0, 0, table->margin,
-        table->padding, table->border);
+    layout_find_dimensions(&content->unit_len_ctx, available_width, -1, table,
+        &(struct layout_dimension_outputs){
+            .margin = table->margin,
+            .padding = table->padding,
+            .border = table->border,
+        });
     for (row_group = table->children; row_group; row_group = row_group->next) {
         for (row = row_group->children; row; row = row->next) {
             for (c = row->children; c; c = c->next) {
@@ -2512,8 +2569,11 @@ bool layout_table(struct box *table, int available_width, html_content *content)
 
                 assert(c->style);
                 table_used_border_for_cell(&content->unit_len_ctx, c);
-                layout_find_dimensions(&content->unit_len_ctx, available_width, -1, c, c->style, 0, 0, 0, 0, 0, 0, 0,
-                    c->padding, c->border);
+                layout_find_dimensions(&content->unit_len_ctx, available_width, -1, c,
+                    &(struct layout_dimension_outputs){
+                        .padding = c->padding,
+                        .border = c->border,
+                    });
 
                 overflow_x = css_computed_overflow_x(c->style);
                 overflow_y = css_computed_overflow_y(c->style);
@@ -3225,14 +3285,13 @@ static bool layout_text_box_split(
  *
  * \param  unit_len_ctx          CSS length conversion context for document.
  * \param  available_width  Max width available in pixels
- * \param  style	    Box's style
  * \param  box		    Box for which to find dimensions
  *				Box margins, borders, paddings, width and
  *				height are updated.
  */
-static void layout_float_find_dimensions(
-    const css_unit_ctx *unit_len_ctx, int available_width, const css_computed_style *style, struct box *box)
+static void layout_float_find_dimensions(const css_unit_ctx *unit_len_ctx, int available_width, struct box *box)
 {
+    const css_computed_style *style = box->style;
     int width, height, max_width, max_height;
     struct css_size min_width;
     struct css_size min_height;
@@ -3246,8 +3305,18 @@ static void layout_float_find_dimensions(
     int scrollbar_width_y = (overflow_y == CSS_OVERFLOW_SCROLL || overflow_y == CSS_OVERFLOW_AUTO) ? SCROLLBAR_WIDTH
                                                                                                    : 0;
 
-    layout_find_dimensions(unit_len_ctx, available_width, -1, box, style, &width, &height, &max_width, &min_width,
-        &max_height, &min_height, margin, padding, border);
+    layout_find_dimensions(unit_len_ctx, available_width, -1, box,
+        &(struct layout_dimension_outputs){
+            .width = &width,
+            .height = &height,
+            .max_width = &max_width,
+            .min_width = &min_width,
+            .max_height = &max_height,
+            .min_height = &min_height,
+            .margin = margin,
+            .padding = padding,
+            .border = border,
+        });
 
     if (margin[LEFT] == AUTO)
         margin[LEFT] = 0;
@@ -3262,8 +3331,14 @@ static void layout_float_find_dimensions(
     if (box->object && !(box->flags & REPLACE_DIM) && content_get_type(box->object) != CONTENT_HTML) {
         /* Floating replaced element, with intrinsic width or height.
          * See 10.3.6 and 10.6.2 */
-        layout_get_object_dimensions(
-            unit_len_ctx, box, &width, &height, min_width, max_width, min_height, max_height, available_width);
+        layout_get_object_dimensions(box, &width, &height,
+            &(struct layout_size_limits){
+                .min_width = min_width,
+                .max_width = max_width,
+                .min_height = min_height,
+                .max_height = max_height,
+            },
+            available_width);
     } else if (box->gadget &&
         (box->gadget->type == GADGET_TEXTBOX || box->gadget->type == GADGET_PASSWORD ||
             box->gadget->type == GADGET_FILE || box->gadget->type == GADGET_TEXTAREA)) {
@@ -3353,7 +3428,7 @@ static bool layout_float(struct box *b, int width, html_content *content)
 {
     assert(b->type == BOX_TABLE || b->type == BOX_BLOCK || b->type == BOX_INLINE_BLOCK || b->type == BOX_FLEX ||
         b->type == BOX_GRID || b->type == BOX_INLINE_FLEX || b->type == BOX_INLINE_GRID);
-    layout_float_find_dimensions(&content->unit_len_ctx, width, b->style, b);
+    layout_float_find_dimensions(&content->unit_len_ctx, width, b);
 
     if (b->type == BOX_TABLE || b->type == BOX_INLINE_FLEX || b->type == BOX_INLINE_GRID || b->type == BOX_GRID ||
         b->type == BOX_FLEX ||
@@ -3842,8 +3917,12 @@ static bool layout_line(struct box *first, int *width, int *y, int cx, int cy, s
 
         if (b->type == BOX_INLINE) {
             /* calculate borders, margins, and padding */
-            layout_find_dimensions(
-                &content->unit_len_ctx, *width, -1, b, b->style, 0, 0, 0, 0, 0, 0, b->margin, b->padding, b->border);
+            layout_find_dimensions(&content->unit_len_ctx, *width, -1, b,
+                &(struct layout_dimension_outputs){
+                    .margin = b->margin,
+                    .padding = b->padding,
+                    .border = b->border,
+                });
             for (i = 0; i != 4; i++)
                 if (b->margin[i] == AUTO)
                     b->margin[i] = 0;
@@ -3914,12 +3993,25 @@ static bool layout_line(struct box *first, int *width, int *y, int cx, int cy, s
         /* inline replaced, 10.3.2 and 10.6.2 */
         assert(b->style);
 
-        layout_find_dimensions(&content->unit_len_ctx, *width, -1, b, b->style, &b->width, &b->height, &max_width,
-            &min_width, &max_height, &min_height, NULL, NULL, NULL);
+        layout_find_dimensions(&content->unit_len_ctx, *width, -1, b,
+            &(struct layout_dimension_outputs){
+                .width = &b->width,
+                .height = &b->height,
+                .max_width = &max_width,
+                .min_width = &min_width,
+                .max_height = &max_height,
+                .min_height = &min_height,
+            });
 
         if (b->object && !(b->flags & REPLACE_DIM)) {
-            layout_get_object_dimensions(&content->unit_len_ctx, b, &b->width, &b->height, min_width, max_width,
-                min_height, max_height, *width /* containing block / available line width */);
+            layout_get_object_dimensions(b, &b->width, &b->height,
+                &(struct layout_size_limits){
+                    .min_width = min_width,
+                    .max_width = max_width,
+                    .min_height = min_height,
+                    .max_height = max_height,
+                },
+                *width /* containing block / available line width */);
         } else if (b->flags & IFRAME) {
             /* TODO: should we look at the content dimensions? */
             if (b->width == AUTO)
@@ -4635,7 +4727,19 @@ struct block_layout_state {
     bool margin_applied;          /* A parent has already taken this chain's offset. */
     struct box *clearance_box;    /* Lookahead found a required clearance boundary. */
     struct box *clearance_parent; /* Cleared empty margins cannot escape this bottom. */
+    struct box *adjoining_parent; /* Positioned top still adjoining the first child chain. */
+    struct box *pending_clearance; /* First child awaiting preceding float geometry. */
 };
+
+static void layout_block_adjoining_parent(struct block_layout_state *state, struct box *box)
+{
+    if (box->type != BOX_BLOCK || !box->children || box->border[TOP].width || box->padding[TOP] ||
+        box_style_creates_block_context(box) || lh__box_is_replace(box)) {
+        state->adjoining_parent = NULL;
+    } else if (!state->adjoining_parent || !box_is_descendant_of(box, state->adjoining_parent)) {
+        state->adjoining_parent = box;
+    }
+}
 
 static void layout_block_record_margin(struct block_layout_state *state, int margin)
 {
@@ -4654,7 +4758,10 @@ static void layout_block_finish_empty_margin(struct box *box, struct block_layou
 {
     if (box_is_out_of_flow(box))
         return;
+    if (box == state->adjoining_parent)
+        state->adjoining_parent = NULL;
     if (box == state->margin_collapse) {
+        state->adjoining_parent = NULL;
         state->margin_applied = false;
         state->seen_pos_margin = state->seen_neg_margin = 0;
     }
@@ -4795,6 +4902,106 @@ static bool layout_block_size_child(struct box *box, struct box *block, int view
 }
 
 
+/* Refresh the lookahead result without changing whether its margin has
+ * already been consumed. Callers own that transition and deferred decisions. */
+static void layout_block_scan_margins(struct box *box, struct box *block, int viewport_height,
+    const html_content *content, struct block_layout_state *state)
+{
+    const struct margin_scan scan = {
+        .unit_len_ctx = &content->unit_len_ctx, .block = block, .viewport_height = viewport_height,
+        .flow_y = state->cy, .mode = MARGIN_SCAN_FLOW, .boundary = state->clearance_parent,
+        .adjoining_parent = state->adjoining_parent};
+    struct margin_scan_result result = {.positive = state->max_pos_margin, .negative = state->max_neg_margin};
+    state->margin_collapse = layout_next_margin_block(box, &scan, &result);
+    state->max_pos_margin = result.positive;
+    state->max_neg_margin = result.negative;
+    state->margin_top = result.top;
+    state->clearance_box = result.clearance;
+}
+
+/* Resolve a parent's top past float-only containers, bounded so later siblings
+ * cannot move it. Stop before a potentially cleared child's margins and defer
+ * that decision until the preceding floats have their final geometry. */
+static bool layout_block_resolve_parent_top(struct box *box, struct box *block, int viewport_height,
+    const html_content *content, struct block_layout_state *state)
+{
+    if (state->margin_top != box || !state->in_margin || !state->margin_collapse ||
+        state->margin_collapse->type != BOX_INLINE_CONTAINER ||
+        !box_inline_container_only_floats(&content->unit_len_ctx, state->margin_collapse))
+        return false;
+
+    const struct margin_scan scan = {
+        .unit_len_ctx = &content->unit_len_ctx, .block = block, .viewport_height = viewport_height,
+        .flow_y = state->cy, .mode = MARGIN_SCAN_TOP, .boundary = box};
+    struct margin_scan_result result = {.positive = state->max_pos_margin, .negative = state->max_neg_margin};
+    struct box *end = layout_next_margin_block(box, &scan, &result);
+    state->pending_clearance = result.pending_clearance;
+    if (!end || (end->type == BOX_INLINE_CONTAINER &&
+            box_inline_container_only_floats(&content->unit_len_ctx, end)))
+        return false;
+
+    state->max_pos_margin = result.positive;
+    state->max_neg_margin = result.negative;
+    if (end == box && !box_prevents_collapse_through(&content->unit_len_ctx, box)) {
+        /* Its own bottom is still adjoining. Keep the flow cursor pending and
+         * position this empty branch when it finishes. */
+        state->margin_top = NULL;
+        return false;
+    }
+    state->margin_collapse = end;
+    return true;
+}
+
+/* Consuming the pending margin is one transition, whether its receiving edge
+ * is a parent found by lookahead or the current in-flow child. */
+static void layout_block_consume_margin(struct box *box, struct block_layout_state *state)
+{
+    state->cy += (int)state->max_pos_margin - (int)state->max_neg_margin;
+    box->y += (int)state->max_pos_margin - (int)state->max_neg_margin;
+    state->in_margin = false;
+    state->max_pos_margin = state->max_neg_margin = 0;
+    state->margin_applied = true;
+    state->seen_pos_margin = state->seen_neg_margin = 0;
+    state->clearance_parent = NULL;
+    layout_block_adjoining_parent(state, box);
+}
+
+/* Clearance separates this top from the preceding chain. An empty box keeps
+ * its own top/bottom margins adjoining, bounded by the cleared parent edge. */
+static void layout_block_apply_clearance(struct box *box, struct box *block, int viewport_height,
+    const html_content *content, struct block_layout_state *state)
+{
+    int floor = state->cy;
+    layout_clear(block->float_children, css_computed_clear(box->style), &floor);
+    bool empty = !box_prevents_collapse_through(&content->unit_len_ctx, box);
+    struct margin_scan_result top = {0};
+    if (empty) {
+        const struct margin_scan scan = {
+            .unit_len_ctx = &content->unit_len_ctx, .block = block, .viewport_height = viewport_height,
+            .flow_y = state->cy, .mode = MARGIN_SCAN_TOP, .boundary = box};
+        layout_next_margin_block(box, &scan, &top);
+    }
+    /* Empty boxes retain an adjoining top/bottom chain. Keep the cursor
+     * above that chain so its top margin is not counted again below it. */
+    int position = floor + box->border[TOP].width - ((int)top.positive - (int)top.negative);
+    box->y += position - state->cy;
+    state->cy = position;
+    state->max_pos_margin = state->max_neg_margin = 0;
+    state->seen_pos_margin = state->seen_neg_margin = 0;
+    state->empty_margin_box = empty ? box : NULL;
+    state->margin_applied = !empty;
+    state->in_margin = empty;
+    state->clearance_parent = empty ? box->parent : NULL;
+    state->adjoining_parent = NULL;
+    state->clearance_box = NULL;
+    state->margin_top = NULL;
+    state->margin_collapse = box;
+    if (empty) {
+        layout_block_scan_margins(box, block, viewport_height, content, state);
+    }
+}
+
+
 /* Resolve the pending margin chain, then apply dimensions and clearance. */
 static bool layout_block_position_child(struct box *box, struct box *block, int viewport_height, html_content *content,
     struct block_layout_state *state)
@@ -4804,54 +5011,30 @@ static bool layout_block_position_child(struct box *box, struct box *block, int 
     /* If we don't know which box the current margin collapses
      * through to, find out.  Update the pos/neg margin values. */
     if (state->margin_collapse == NULL) {
-        state->margin_collapse = layout_next_margin_block(&content->unit_len_ctx, box, block, viewport_height,
-            &state->max_pos_margin, &state->max_neg_margin, &state->margin_top,
-            state->cy, state->clearance_parent, &state->clearance_box);
+        layout_block_scan_margins(box, block, viewport_height, content, state);
         /* We have a margin that has not yet been applied. */
         state->in_margin = true;
         state->margin_applied = false;
     }
 
-    /* A float does not end parent/child margin collapse. Resolve the parent's
-     * own top past float-only containers, bounded so later siblings cannot
-     * move it. If clearance needs an unplaced float, keep the original barrier
-     * and resume after positioning that float. */
-    bool resolved_parent_top = false;
-    if (state->margin_top == box && state->in_margin && state->margin_collapse &&
-        state->margin_collapse->type == BOX_INLINE_CONTAINER &&
-        box_inline_container_only_floats(&content->unit_len_ctx, state->margin_collapse)) {
-        unsigned int positive = state->max_pos_margin, negative = state->max_neg_margin;
-        struct box *top;
-        struct box *end = layout_next_margin_block(&content->unit_len_ctx, box, block, viewport_height,
-            &positive, &negative, &top, state->cy, box, NULL);
-        if (end && !(end->type == BOX_INLINE_CONTAINER &&
-                box_inline_container_only_floats(&content->unit_len_ctx, end))) {
-            state->max_pos_margin = positive;
-            state->max_neg_margin = negative;
-            if (end == box && !box_prevents_collapse_through(&content->unit_len_ctx, box)) {
-                /* Its own bottom is still adjoining. Keep the flow cursor
-                 * pending and position this empty branch when it finishes. */
-                state->margin_top = NULL;
-            } else {
-                state->margin_collapse = end;
-                resolved_parent_top = true;
-            }
-        }
-    }
+    bool resolved_parent_top = layout_block_resolve_parent_top(box, block, viewport_height, content, state);
 
     /* CSS 2.1 §8.3.1: parent/first-child collapse moves the parent,
      * while preceding self-collapsing siblings do not consume the margin.
      * Lookahead identifies both the end of the chain and its receiving top
      * edge; these can be different boxes. */
     if (state->margin_top == box && (state->margin_collapse != box || resolved_parent_top) && state->in_margin) {
-        state->cy += (int)state->max_pos_margin - (int)state->max_neg_margin;
-        box->y += (int)state->max_pos_margin - (int)state->max_neg_margin;
+        layout_block_consume_margin(box, state);
         state->margin_top = NULL;
-        state->in_margin = false;
-        state->max_pos_margin = state->max_neg_margin = 0;
-        state->margin_applied = true;
-        state->seen_pos_margin = state->seen_neg_margin = 0;
-        state->clearance_parent = NULL;
+    }
+
+    /* Parent lookahead may have stopped here before the preceding floats
+     * were placed. Their final geometry is now available for clearance. */
+    if (state->pending_clearance == box) {
+        state->pending_clearance = NULL;
+        layout_block_scan_margins(box, block, viewport_height, content, state);
+        state->in_margin = true;
+        state->margin_applied = false;
     }
 
     /* Float avoidance may supply a minimum padding-edge position. Actual
@@ -4871,36 +5054,8 @@ static bool layout_block_position_child(struct box *box, struct box *block, int 
         state->cy += box->border[TOP].width;
     }
 
-    if (state->clearance_box == box) {
-        int floor = state->cy;
-        layout_clear(block->float_children, css_computed_clear(box->style), &floor);
-        bool empty = !box_prevents_collapse_through(&content->unit_len_ctx, box);
-        unsigned int positive = 0, negative = 0;
-        struct box *top;
-        if (empty) {
-            layout_next_margin_block(&content->unit_len_ctx, box, block, viewport_height,
-                &positive, &negative, &top, state->cy, box, NULL);
-        }
-        /* Empty boxes retain an adjoining top/bottom chain. Keep the cursor
-         * above that chain so its top margin is not counted again below it. */
-        int position = floor + box->border[TOP].width - ((int)positive - (int)negative);
-        box->y += position - state->cy;
-        state->cy = position;
-        state->max_pos_margin = state->max_neg_margin = 0;
-        state->seen_pos_margin = state->seen_neg_margin = 0;
-        state->empty_margin_box = empty ? box : NULL;
-        state->margin_applied = !empty;
-        state->in_margin = empty;
-        state->clearance_parent = empty ? box->parent : NULL;
-        state->clearance_box = NULL;
-        state->margin_top = NULL;
-        state->margin_collapse = box;
-        if (empty) {
-            state->margin_collapse = layout_next_margin_block(&content->unit_len_ctx, box, block, viewport_height,
-                &state->max_pos_margin, &state->max_neg_margin, &state->margin_top,
-                state->cy, state->clearance_parent, &state->clearance_box);
-        }
-    }
+    if (state->clearance_box == box)
+        layout_block_apply_clearance(box, block, viewport_height, content, state);
 
     /* Intrinsic HAS_HEIGHT is conservative for empty inline fragments. Do
      * not consume the pending chain at a block that still collapses through. */
@@ -4914,16 +5069,8 @@ static bool layout_block_position_child(struct box *box, struct box *block, int 
         /* Margin goes above this box. */
         NSLOG(wisp, INFO, "MARGIN_COLLAPSE: box=%p type=%d cy_before=%d max_pos_margin=%u max_neg_margin=%u", box,
             box->type, state->cy, state->max_pos_margin, state->max_neg_margin);
-        state->cy += (int)state->max_pos_margin - (int)state->max_neg_margin;
-        box->y += (int)state->max_pos_margin - (int)state->max_neg_margin;
+        layout_block_consume_margin(box, state);
         NSLOG(wisp, INFO, "MARGIN_COLLAPSE: box=%p cy_after=%d box->y=%d", box, state->cy, box->y);
-
-        /* Current margin has been applied. */
-        state->in_margin = false;
-        state->max_pos_margin = state->max_neg_margin = 0;
-        state->margin_applied = true;
-        state->seen_pos_margin = state->seen_neg_margin = 0;
-        state->clearance_parent = NULL;
     }
 
     layout_block_record_margin(state, box->margin[TOP]);
@@ -5292,8 +5439,14 @@ bool layout_block_context(struct box *block, int viewport_height, html_content *
             return false;
         /* No min constraints for block objects */
         struct css_size no_min = {.type = CSS_SIZE_AUTO, .value = 0};
-        layout_get_object_dimensions(
-            &content->unit_len_ctx, block, &temp_width, &block->height, no_min, INT_MAX, no_min, INT_MAX, block->width);
+        layout_get_object_dimensions(block, &temp_width, &block->height,
+            &(struct layout_size_limits){
+                .min_width = no_min,
+                .max_width = INT_MAX,
+                .min_height = no_min,
+                .max_height = INT_MAX,
+            },
+            block->width);
         if (block->width == UNKNOWN_WIDTH || block->width >= 100000000) {
             fprintf(stderr, "LAYOUT_ERROR: block %p has INVALID width %d after layout_block_object\n", (void *)block,
                 block->width);
@@ -5373,10 +5526,14 @@ bool layout_block_context(struct box *block, int viewport_height, html_content *
             state.max_pos_margin = state.seen_pos_margin;
             state.max_neg_margin = state.seen_neg_margin;
             if (state.empty_margin_box) {
-                struct box *top;
-                layout_next_margin_block(&content->unit_len_ctx, state.empty_margin_box, block, viewport_height,
-                    &state.max_pos_margin, &state.max_neg_margin, &top,
-                    state.cy, state.empty_margin_box, NULL);
+                const struct margin_scan scan = {
+                    .unit_len_ctx = &content->unit_len_ctx, .block = block, .viewport_height = viewport_height,
+                    .flow_y = state.cy, .mode = MARGIN_SCAN_TOP, .boundary = state.empty_margin_box};
+                struct margin_scan_result result = {
+                    .positive = state.max_pos_margin, .negative = state.max_neg_margin};
+                layout_next_margin_block(state.empty_margin_box, &scan, &result);
+                state.max_pos_margin = result.positive;
+                state.max_neg_margin = result.negative;
             }
             state.margin_collapse = box;
             state.margin_top = NULL;
@@ -6410,9 +6567,18 @@ static bool layout_absolute(struct box *box, struct box *containing_block, int c
      * containing block box member. This is unused for absolutely positioned
      * boxes because a box can't be floated and absolutely positioned. */
     box->float_container = containing_block;
-    layout_find_dimensions(&content->unit_len_ctx, layout.available_width, -1, box, box->style, &layout.width,
-        &layout.height, &layout.max_width, &layout.min_width, replaced_object ? &max_height : NULL,
-        replaced_object ? &min_height : NULL, margin, padding, border);
+    layout_find_dimensions(&content->unit_len_ctx, layout.available_width, -1, box,
+        &(struct layout_dimension_outputs){
+            .width = &layout.width,
+            .height = &layout.height,
+            .max_width = &layout.max_width,
+            .min_width = &layout.min_width,
+            .max_height = replaced_object ? &max_height : NULL,
+            .min_height = replaced_object ? &min_height : NULL,
+            .margin = margin,
+            .padding = padding,
+            .border = border,
+        });
     box->float_container = NULL;
 
     if (replaced_object) {
@@ -6420,8 +6586,14 @@ static bool layout_absolute(struct box *box, struct box *containing_block, int c
          * solving the inset equations. Opposing insets position an image;
          * they do not stretch its auto dimensions like a non-replaced box.
          * Resolve limits against the containing block's padding box too. */
-        layout_get_object_dimensions(&content->unit_len_ctx, box, &layout.width, &layout.height, layout.min_width,
-            layout.max_width, min_height, max_height, layout.available_width);
+        layout_get_object_dimensions(box, &layout.width, &layout.height,
+            &(struct layout_size_limits){
+                .min_width = layout.min_width,
+                .max_width = layout.max_width,
+                .min_height = min_height,
+                .max_height = max_height,
+            },
+            layout.available_width);
         if (max_height >= 0)
             layout.height = min(layout.height, max_height);
         if (min_height.type == CSS_SIZE_SET)
