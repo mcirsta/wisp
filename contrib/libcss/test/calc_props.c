@@ -555,6 +555,21 @@ static void test_length_is_zero(void)
         {"calc(5px - 5px)", true}, {"calc(10px - 5px)", false},
         {"calc(5px - 10px)", false}, {"calc(0.75px - 0.25px)", false},
         {"calc(1em - 16px)", true}, {"calc(50% - 100px)", false},
+        {"calc(1px / 3 - 1px / 3)", true},
+        {"calc(0%)", true}, {"calc(0% + 0px)", true}, {"calc(50% - 50%)", true},
+        {"calc((50% + 5px) - (50% + 5px))", true},
+        {"calc(2 * (25% + 2px) - 50% - 4px)", true},
+        {"calc((25% + 2px) * 2 - 50% - 4px)", true},
+        {"calc((100% + 20px) / 2 - 50% - 10px)", true},
+        {"calc(50% - 50% + 1em - 16px)", true},
+        {"calc((50% + 10px) * 0)", true},
+        {"calc(0 * (50% + 10px))", true},
+        {"calc(50% - 25%)", false}, {"calc(50% - 50% + 0.5px)", false},
+        {"calc(50% - 50% - 0.5px)", false}, {"calc(50% + 5px - 5px)", false},
+        /* Lost precision and saturation must not prove a coefficient zero. */
+        {"calc(1% / 2048)", false}, {"calc((1 / 2048) * 1%)", false},
+        {"calc(0.001% * 0.5)", false},
+        {"calc(1500000% + 1500000% - 1500000% - 1500000%)", false},
     };
     for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
         char css[128];
@@ -570,6 +585,46 @@ static void test_length_is_zero(void)
         }
         destroy_style_case(&ctx);
     }
+}
+
+static void test_zero_analysis_preserves_percentage_resolution(void)
+{
+    const char *values[] = {"calc(0%)", "calc(50% - 50%)", "calc((50% + 10px) - (50% + 10px))"};
+    for (size_t i = 0; i < sizeof(values) / sizeof(values[0]); i++) {
+        char css[128];
+        snprintf(css, sizeof(css), "* { width:%s; }", values[i]);
+        style_case ctx;
+        const css_computed_style *style = select_style_from_css(css, &ctx);
+        css_fixed_or_calc length;
+        css_unit unit;
+        assert(css_computed_width(style, &length, &unit) == CSS_WIDTH_SET);
+        assert(unit == CSS_UNIT_CALC);
+        /* Repeat to check calculator-stack reuse and ensure the zero query
+         * never rewrites the expression or discards its percentage type. */
+        for (int pass = 0; pass < 2; pass++) {
+            int px;
+            assert(css_computed_length_is_zero(style, &unit_ctx, length, unit));
+            assert(css_computed_width_px(style, &unit_ctx, -1, &px) == CSS_WIDTH_AUTO);
+            assert(css_computed_length_to_px(style, &unit_ctx, -1, length, unit, &px) == CSS_INVALID);
+            assert(css_computed_width_px(style, &unit_ctx, 200, &px) == CSS_WIDTH_SET);
+            assert(px == 0);
+        }
+        destroy_style_case(&ctx);
+    }
+}
+
+static void test_calc_division_by_zero(void)
+{
+    style_case ctx;
+    const css_computed_style *style = select_style_from_css("* { width:calc(1px / 0); }", &ctx);
+    css_fixed_or_calc length;
+    css_unit unit;
+    int px;
+    assert(css_computed_width(style, &length, &unit) == CSS_WIDTH_SET);
+    assert(unit == CSS_UNIT_CALC);
+    assert(!css_computed_length_is_zero(style, &unit_ctx, length, unit));
+    assert(css_computed_length_to_px(style, &unit_ctx, 200, length, unit, &px) == CSS_INVALID);
+    destroy_style_case(&ctx);
 }
 
 static void test_relative_offsets_with_calc(void)
@@ -779,6 +834,8 @@ int main(void)
     test_calc_property_getters();
     test_length_to_px_invalid_percent();
     test_length_is_zero();
+    test_zero_analysis_preserves_percentage_resolution();
+    test_calc_division_by_zero();
     test_relative_offsets_with_calc();
     test_width_px_calc();
     test_flex_basis_px_calc();

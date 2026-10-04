@@ -78,7 +78,7 @@ void css_calculator_unref(css_calculator *calc)
 
 /****************************** Helpers ************************************/
 
-static css_error css__calculator_push(css_calculator *calc, unit unit, css_fixed value)
+static css_error css__calculator_push(css_calculator *calc, unit unit, css_fixed value, css_fixed percent)
 {
     if (calc->stack_ptr == calc->stack_alloc) {
         css_calculator_stack_entry *newstack = realloc(
@@ -91,12 +91,13 @@ static css_error css__calculator_push(css_calculator *calc, unit unit, css_fixed
     }
     calc->stack[calc->stack_ptr].unit = unit;
     calc->stack[calc->stack_ptr].value = value;
+    calc->stack[calc->stack_ptr].percent = percent;
     calc->stack_ptr += 1;
 
     return CSS_OK;
 }
 
-static css_error css__calculator_pop(css_calculator *calc, unit *unit, css_fixed *value)
+static css_error css__calculator_pop(css_calculator *calc, unit *unit, css_fixed *value, css_fixed *percent)
 {
     if (calc->stack_ptr == 0) {
         return CSS_INVALID;
@@ -105,21 +106,22 @@ static css_error css__calculator_pop(css_calculator *calc, unit *unit, css_fixed
     calc->stack_ptr -= 1;
     *unit = calc->stack[calc->stack_ptr].unit;
     *value = calc->stack[calc->stack_ptr].value;
+    *percent = calc->stack[calc->stack_ptr].percent;
 
     return CSS_OK;
 }
 
-#define CALC_PUSH(unit, value)                                                                                         \
+#define CALC_PUSH(unit, value, percent)                                                                                \
     do {                                                                                                               \
-        ret = css__calculator_push(calc, unit, value);                                                                 \
+        ret = css__calculator_push(calc, unit, value, percent);                                                        \
         if (ret != CSS_OK) {                                                                                           \
             return ret;                                                                                                \
         }                                                                                                              \
     } while (0)
 
-#define CALC_POP(unit, value)                                                                                          \
+#define CALC_POP(unit, value, percent)                                                                                 \
     do {                                                                                                               \
-        ret = css__calculator_pop(calc, &unit, &value);                                                                \
+        ret = css__calculator_pop(calc, &unit, &value, &percent);                                                      \
         if (ret != CSS_OK) {                                                                                           \
             return ret;                                                                                                \
         }                                                                                                              \
@@ -183,9 +185,46 @@ static css_error css__normalise_unit(
 
 /****************************** Compute ************************************/
 
-/* Exported function, documented in calc.h */
-css_error css_calculator_calculate(css_calculator *calc, const css_unit_ctx *unit_ctx, int32_t available,
-    lwc_string *expr, const css_computed_style *style, css_unit *unit_out, css_fixed *value_out)
+/* Zero classification must not mistake a rounded or saturated coefficient
+ * for cancellation. Decline expressions we cannot represent exactly. */
+static css_error css__calculator_exact_op(css_code_t op, css_fixed left, css_fixed right, css_fixed *out)
+{
+    int64_t result;
+    switch (op) {
+    case CALC_ADD:
+        result = (int64_t)left + right;
+        break;
+    case CALC_SUBTRACT:
+        result = (int64_t)left - right;
+        break;
+    case CALC_MULTIPLY:
+        result = (int64_t)left * right;
+        if (result % F_1 != 0)
+            return CSS_INVALID;
+        result /= F_1;
+        break;
+    case CALC_DIVIDE:
+        if (right == 0)
+            return CSS_INVALID;
+        result = (int64_t)left * F_1;
+        if (result % right != 0)
+            return CSS_INVALID;
+        result /= right;
+        break;
+    default:
+        return CSS_INVALID;
+    }
+    if (result < INT32_MIN || result > INT32_MAX)
+        return CSS_INVALID;
+    *out = result;
+    return CSS_OK;
+}
+
+/* A non-NULL percent_out preserves the percentage coefficient for analysis.
+ * Ordinary used-value evaluation still resolves each percentage as before. */
+static css_error css__calculator_calculate(css_calculator *calc, const css_unit_ctx *unit_ctx, int32_t available,
+    lwc_string *expr, const css_computed_style *style, css_unit *unit_out, css_fixed *value_out,
+    css_fixed *percent_out)
 {
     css_error ret = CSS_OK;
     /* Alignment note: lwc string data is always very well aligned */
@@ -201,38 +240,50 @@ css_error css_calculator_calculate(css_calculator *calc, const css_unit_ctx *uni
         case CALC_PUSH_VALUE: {
             css_fixed v = (css_fixed)(*codeptr++);
             unit u = (unit)(*codeptr++);
-            ret = css__normalise_unit(unit_ctx, style, available, &u, &v);
-            if (ret != CSS_OK) {
-                return ret;
+            css_fixed percent = 0;
+            if (percent_out != NULL && u == UNIT_PCT) {
+                percent = v;
+                v = 0;
+                u = UNIT_PX;
+            } else {
+                ret = css__normalise_unit(unit_ctx, style, available, &u, &v);
+                if (ret != CSS_OK) {
+                    return ret;
+                }
             }
-            CALC_PUSH(u, v);
+            CALC_PUSH(u, v, percent);
             break;
         }
         case CALC_PUSH_NUMBER: {
             css_fixed v = (css_fixed)(*codeptr++);
-            CALC_PUSH(UNIT_CALC_NUMBER, v);
+            CALC_PUSH(UNIT_CALC_NUMBER, v, 0);
             break;
         }
         case CALC_ADD: /* fallthrough */
         case CALC_SUBTRACT: {
             unit u_left, u_right;
-            css_fixed v_left, v_right;
-            CALC_POP(u_right, v_right);
-            CALC_POP(u_left, v_left);
-            if (op == CALC_ADD) {
+            css_fixed v_left, v_right, p_left, p_right;
+            CALC_POP(u_right, v_right, p_right);
+            CALC_POP(u_left, v_left, p_left);
+            if (percent_out != NULL) {
+                if (u_left != u_right ||
+                    css__calculator_exact_op(op, v_left, v_right, &v_left) != CSS_OK ||
+                    css__calculator_exact_op(op, p_left, p_right, &p_left) != CSS_OK)
+                    return CSS_INVALID;
+            } else if (op == CALC_ADD) {
                 v_left = css_add_fixed(v_left, v_right);
             } else {
                 v_left = css_subtract_fixed(v_left, v_right);
             }
-            CALC_PUSH(u_left, v_left);
+            CALC_PUSH(u_left, v_left, p_left);
             break;
         }
         case CALC_MULTIPLY: /* fallthrough */
         case CALC_DIVIDE: {
             unit u_left, u_right;
-            css_fixed v_left, v_right;
-            CALC_POP(u_right, v_right);
-            CALC_POP(u_left, v_left);
+            css_fixed v_left, v_right, p_left, p_right;
+            CALC_POP(u_right, v_right, p_right);
+            CALC_POP(u_left, v_left, p_left);
 
             if (op == CALC_MULTIPLY && u_left == UNIT_CALC_NUMBER) {
                 unit u_tmp = u_left;
@@ -241,19 +292,29 @@ css_error css_calculator_calculate(css_calculator *calc, const css_unit_ctx *uni
                 v_left = v_right;
                 u_right = u_tmp;
                 v_right = v_tmp;
+                css_fixed p_tmp = p_left;
+                p_left = p_right;
+                p_right = p_tmp;
             }
 
             if (u_right != UNIT_CALC_NUMBER) {
                 return CSS_INVALID;
             }
 
-            if (op == CALC_MULTIPLY) {
+            if (op == CALC_DIVIDE && v_right == 0)
+                return CSS_INVALID;
+
+            if (percent_out != NULL) {
+                if (css__calculator_exact_op(op, v_left, v_right, &v_left) != CSS_OK ||
+                    css__calculator_exact_op(op, p_left, v_right, &p_left) != CSS_OK)
+                    return CSS_INVALID;
+            } else if (op == CALC_MULTIPLY) {
                 v_left = css_multiply_fixed(v_left, v_right);
             } else {
                 v_left = css_divide_fixed(v_left, v_right);
             }
 
-            CALC_PUSH(u_left, v_left);
+            CALC_PUSH(u_left, v_left, p_left);
             break;
         }
         case CALC_FINISH: /* Should not happen */
@@ -268,6 +329,28 @@ css_error css_calculator_calculate(css_calculator *calc, const css_unit_ctx *uni
 
     *unit_out = css__to_css_unit(calc->stack[0].unit);
     *value_out = calc->stack[0].value;
+    if (percent_out != NULL)
+        *percent_out = calc->stack[0].percent;
 
     return CSS_OK;
+}
+
+/* Exported functions, documented in calc.h. */
+css_error css_calculator_calculate(css_calculator *calc, const css_unit_ctx *unit_ctx, int32_t available,
+    lwc_string *expr, const css_computed_style *style, css_unit *unit_out, css_fixed *value_out)
+{
+    return css__calculator_calculate(calc, unit_ctx, available, expr, style, unit_out, value_out, NULL);
+}
+
+bool css_calculator_length_is_zero(css_calculator *calc, const css_unit_ctx *unit_ctx,
+    lwc_string *expr, const css_computed_style *style)
+{
+    css_fixed value, percent;
+    css_unit unit;
+    /* Preserve normal fixed-point evaluation when no percentage is needed.
+     * Only the unresolved case needs separate coefficient analysis. */
+    if (css_calculator_calculate(calc, unit_ctx, -1, expr, style, &unit, &value) == CSS_OK)
+        return value == 0;
+    return css__calculator_calculate(calc, unit_ctx, -1, expr, style, &unit, &value, &percent) == CSS_OK &&
+        unit == CSS_UNIT_PX && value == 0 && percent == 0;
 }

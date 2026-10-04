@@ -13,6 +13,18 @@ import tempfile
 PROFILES = (
     ("literal", "padding", "0px", "", "", (200, 400), (False, False)),
     ("percent-zero", "padding", "0%", "", "", (200, 400), (False, False)),
+    # Firefox collapses all these provably zero edges. Chromium collapses
+    # pure percentage cancellation but retains a line for mixed 0px + 0%.
+    ("calc-percent-zero", "padding", "calc(0% + 0px)", "", "", (200, 400), (False, False)),
+    ("cancel-percent", "padding", "calc(50% - 50%)", "", "", (200, 400), (False, False)),
+    ("cancel-margin", "margin", "calc(50% - 50%)", "", "", (200, 400), (False, False)),
+    ("cancel-mixed", "padding", "calc((50% + 5px) - (50% + 5px))", "", "",
+     (200, 400), (False, False)),
+    ("cancel-scaled", "padding", "calc(2 * (25% + 2px) - 50% - 4px)", "", "",
+     (200, 400), (False, False)),
+    ("cancel-divided", "padding", "calc((100% + 20px) / 2 - 50% - 10px)", "", "",
+     (200, 400), (False, False)),
+    ("cancel-fraction", "padding", "calc(50% - 50% + 0.5px)", "", "", (200, 400), (True, True)),
     ("fraction", "padding", "calc(0.75px - 0.25px)", "", "", (200, 400), (True, True)),
     ("text", "text", "0px", "", "", (200, 400), (True, True)),
     ("zero-padding", "padding", "calc(5px - 5px)", "", "", (200, 400), (False, False)),
@@ -98,7 +110,8 @@ def main():
                 has_edge = profile[-1][index % 2]
                 # A computed nonzero edge reserves the explicit 20px line,
                 # even when percentages resolve to zero or pixels round down.
-                # Both Chromium and Firefox use this distinction.
+                # Both browsers keep percentage-dependent edges; see the
+                # profiles above for their mixed-zero cancellation difference.
                 expected = (18 * sign + 20 if has_edge and side == "left" else 13 * sign,
                             24 * sign + 20 if has_edge and side == "right" else 17 * sign)
                 gaps = (child["y"] - before["y"] - before["height"],

@@ -115,19 +115,3 @@ Coordinates above are relative to the enclosing flow-root's content edge.
 Evidence is in `out/render-captures/float-only-margins-2026-10-04/`: `before/`,
 `extended/`, and `edge-before/` versus `edge/`. The latter confirms that the
 interleaved-float cases are unchanged from the prior implementation.
-
-## Remaining inline edge cases
-
-LibCSS still does not simplify percentage terms that cancel inside `calc()`.
-For example, `padding-left:calc(50% - 50%)` and `calc(0% + 0px)` on an inline
-wrapper give a 38px gap before its block child; Firefox gives 13px. Evaluating
-without a percentage basis fails before the zero result can be established,
-so the shared inline-edge check conservatively creates a line. This needs
-expression simplification in LibCSS, not testing arbitrary containing widths
-or special-casing expressions in layout. Ordinary nonzero percentage expressions
-must continue to create a line even when their used pixel value happens to be
-zero; both Chromium and Firefox do that.
-
-Reproducer and comparisons: `out/render-captures/calc-inline-margins-2026-10-04/`
-(`cancel-probe.html`, `cancel-probe.json`, `cancel-wisp/`); the percentage behavior
-is also covered by `qt_calc_inline_margins`.

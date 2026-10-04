@@ -263,10 +263,7 @@ bool css_computed_length_is_zero(const css_computed_style *style, const css_unit
     css_fixed_or_calc length, css_unit unit)
 {
     if (unit == CSS_UNIT_CALC) {
-        css_fixed value;
-        css_unit out_unit;
-        return css_calculator_calculate(style->calc, unit_ctx, -1, length.calc, style, &out_unit, &value) == CSS_OK &&
-            value == 0;
+        return css_calculator_length_is_zero(style->calc, unit_ctx, length.calc, style);
     }
     if (length.value == 0)
         return true;

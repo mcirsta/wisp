@@ -17,6 +17,7 @@
 typedef struct {
     unit unit;
     css_fixed value;
+    css_fixed percent;
 } css_calculator_stack_entry;
 
 typedef struct {
@@ -85,5 +86,11 @@ void css_calculator_unref(css_calculator *calc);
  */
 css_error css_calculator_calculate(css_calculator *calc, const css_unit_ctx *unit_ctx, int32_t available,
     lwc_string *expr, const css_computed_style *style, css_unit *unit_out, css_fixed *value_out);
+
+/** Test whether a length expression has zero length and percentage components.
+ * Does not change the expression or resolve its percentage against a size.
+ * Inexact percentage analysis or failed evaluation conservatively returns false. */
+bool css_calculator_length_is_zero(css_calculator *calc, const css_unit_ctx *unit_ctx,
+    lwc_string *expr, const css_computed_style *style);
 
 #endif /* css_select_calc_h_ */

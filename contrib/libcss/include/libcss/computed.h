@@ -312,8 +312,10 @@ css_error css_computed_length_to_px(
     css_unit unit, int *px_out);
 
 /** Test whether a length is known to be zero without a percentage basis.
- * Resolves calc() without rounding to integer pixels. Expressions requiring
- * a percentage basis (or failing evaluation) conservatively return false. */
+ * Tests calc() length and percentage components separately, without changing
+ * the stored expression or rounding to integer pixels. Unresolved nonzero
+ * percentages, inexact coefficient analysis and failed evaluation
+ * conservatively return false. */
 bool css_computed_length_is_zero(const css_computed_style *style, const css_unit_ctx *unit_ctx,
     css_fixed_or_calc length, css_unit unit);
 
