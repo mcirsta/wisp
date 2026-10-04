@@ -25,6 +25,7 @@ void style_set_flex_or_grid(css_computed_style *s, bool grid);
 
 /** Configure a table, row group, row or cell with separate borders and zero spacing. */
 void style_set_table_display(css_computed_style *s, uint8_t display);
+void style_set_box_sizing(css_computed_style *s, uint8_t sizing);
 
 /**
  * Set CSS margins on a style (in px).

@@ -66,22 +66,30 @@ styling/whitespace support, rather than a language-specific exception.
 Evidence: `out/render-captures/disclosure-markers-2026-10-03/chromium-extended/`
 and `marker-style-reference/inspection.json` in the same artifact directory.
 
-## Table formatting beyond baseline alignment
+## Collapsed table borders
 
-Two existing limitations were confirmed by the table baseline comparison:
+Collapsed borders are not shared correctly between row/cell edges. In the
+`collapsed` case, 2px cell borders give a 44px cell at y=0 in Wisp versus a
+42px cell at y=1 in Chromium. Text, marker and overall table geometry now agree;
+the remaining difference belongs to collapsed-border geometry and painting.
 
-- `display:inline-table` still uses the block-table representation. It starts a
-  new block instead of joining the surrounding line. Supporting it needs box
-  construction and inline layout integration using the table's exported baseline.
-  The `inline` comparison case is 100px tall in Wisp versus 60px in Chromium.
-- Collapsed borders are not shared correctly between row/cell edges. In the
-  `collapsed` case, 2px cell borders give a 44px cell at y=0 in Wisp versus a
-  42px cell at y=1 in Chromium. Text, marker and overall table geometry now agree;
-  the remaining difference belongs to collapsed-border geometry and painting.
-
-Both limitations reproduce before the baseline changes. Initial evidence:
+This reproduces before the baseline changes. Initial evidence:
 `out/render-captures/table-baseline-2026-10-04/before/` and its adjacent
 `fixture.html`. The permanent `test/table-baseline.html` checks collapsed-table
 content alignment without accepting the incorrect cell edges as a baseline.
+
+## Font selection for collapsed spaces
+
+A whitespace-only text node after an atomic inline is folded into the preceding
+box's `space` field. Measurement then uses that box's font, losing the whitespace
+node's own style. A 40px inline-block followed by a space in a 20px parent gives a
+10px gap instead of Chromium's 5px with the regression font. Retain the correct
+whitespace style through construction and reflow; guessing the parent style at
+measurement time would fail inside differently styled inline wrappers.
+
+This predates inline-table support and reproduces with ordinary inline-blocks in
+the unchanged `cab78f6e` build. Evidence:
+`out/render-captures/inline-table-2026-10-04/space-control.html` and
+`space-control/` in the same directory.
 
 All artifact paths above are under `out/render-captures/`.

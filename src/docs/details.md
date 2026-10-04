@@ -53,11 +53,11 @@ Floats introduced on the pushed line or inside a pushed block move with it.
 Their shared formatting-context list is reordered for subsequent float/clearance
 queries, and following float placement respects their new positions.
 
-First-baseline propagation is limited to outside-list descendants. Their nested
-inline containers reuse intrinsic widths, but reformat lines because the existing
-line cache stores only the last baseline. Direct list-item line reuse was already
-excluded. Block-child-only marker fallback and flex/grid/table baseline export
-need separate handling; see the backlog.
+First-baseline propagation supports outside markers, table cells and flex/grid
+alignment. Nested inline containers reuse intrinsic widths, but reformat lines
+when their first baseline is needed because the line cache stores only the last
+baseline. Direct list-item line reuse is also excluded. Block-only items reserve
+space for their markers, and flex/grid/table descendants export their baselines.
 
 An empty item, or one containing only floats, positioned content or collapsed
 inline whitespace, still has a marker line. The item's normal line metrics and

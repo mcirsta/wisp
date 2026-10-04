@@ -60,6 +60,11 @@ void style_set_table_display(css_computed_style *s, uint8_t display)
     set_border_spacing(s, CSS_BORDER_SPACING_SET, (css_fixed_or_calc)0, CSS_UNIT_PX, (css_fixed_or_calc)0, CSS_UNIT_PX);
 }
 
+void style_set_box_sizing(css_computed_style *s, uint8_t sizing)
+{
+    set_box_sizing(s, sizing);
+}
+
 void style_set_margins(css_computed_style *s, int top, int right, int bottom, int left)
 {
     if (top != INT_MIN)

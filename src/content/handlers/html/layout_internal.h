@@ -136,11 +136,25 @@ static inline bool lh__box_is_float_box(const struct box *b)
     return b->type == BOX_FLOAT_LEFT || b->type == BOX_FLOAT_RIGHT;
 }
 
+/* Tables share their inner formatter at block and inline level. Construction
+ * places inline tables directly in an inline container, just like positioned
+ * tables (whose static anchor also belongs to the inline stream). */
+static inline bool lh__box_is_inline_table(const struct box *b)
+{
+    return b->type == BOX_TABLE && b->parent && b->parent->type == BOX_INLINE_CONTAINER;
+}
+
+/* Atomic inline containers have their own inner layout and one outer box. */
+static inline bool lh__box_is_atomic_inline(const struct box *b)
+{
+    return b->type == BOX_INLINE_BLOCK || b->type == BOX_INLINE_FLEX || b->type == BOX_INLINE_GRID ||
+        lh__box_is_inline_table(b);
+}
+
 /** Layout helper: Check whether box takes part in inline flow. */
 static inline bool lh__box_is_inline_flow(const struct box *b)
 {
-    return b->type == BOX_INLINE || b->type == BOX_INLINE_FLEX || b->type == BOX_INLINE_BLOCK ||
-        b->type == BOX_INLINE_GRID || b->type == BOX_TEXT || b->type == BOX_INLINE_END;
+    return b->type == BOX_INLINE || b->type == BOX_TEXT || b->type == BOX_INLINE_END || lh__box_is_atomic_inline(b);
 }
 
 /** Layout helper: Check whether box takes part in inline flow. */
@@ -172,8 +186,7 @@ static inline bool lh__box_is_flex_item(const struct box *b)
     return b->parent != NULL && lh__box_is_flex_container(b->parent) && !(b->style && lh__box_is_absolute(b));
 }
 
-/* Out-of-flow boxes in an inline container retain their inner formatter.
- * A table can occur here only when positioned, never as an in-flow table. */
+/* Out-of-flow boxes in an inline container retain their inner formatter. */
 static inline bool lh__box_is_inline_positioned(const struct box *b)
 {
     return (b->type == BOX_INLINE_BLOCK || b->type == BOX_INLINE_FLEX || b->type == BOX_INLINE_GRID ||

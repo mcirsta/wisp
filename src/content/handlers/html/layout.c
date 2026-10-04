@@ -473,8 +473,14 @@ layout_minmax_table(struct box *table, const struct gui_layout_table *font_func,
         table_max += col[i].max;
     }
 
+    /* Spacing belongs inside the table's content width. A specified width
+     * includes it; only intrinsic cell widths need it added separately. */
+    table_min += (table->columns + 1) * border_spacing_h;
+    table_max += (table->columns + 1) * border_spacing_h;
+
     /* fixed width takes priority, unless it is too narrow */
     if (css_computed_width_px(table->style, &content->unit_len_ctx, -1, &width) == CSS_WIDTH_SET) {
+        layout_handle_box_sizing(&content->unit_len_ctx, table, 0, true, &width);
         if (table_min < width)
             table_min = width;
         if (table_max < width)
@@ -492,8 +498,6 @@ layout_minmax_table(struct box *table, const struct gui_layout_table *font_func,
         extra_frac = 0.9;
     table->min_width.value = (table_min + extra_fixed) / (1.0 - extra_frac);
     table->max_width = (table_max + extra_fixed) / (1.0 - extra_frac);
-    table->min_width.value += (table->columns + 1) * border_spacing_h;
-    table->max_width += (table->columns + 1) * border_spacing_h;
 
     assert(0 <= table->min_width.value && table->min_width.value <= table->max_width);
     return true;
@@ -660,8 +664,7 @@ static int layout_minmax_object_width(struct box *box, const html_content *conte
 /* Empty inline markers do not interrupt a run of collapsible spaces. */
 static bool layout_inline_has_content(const struct box *box)
 {
-    return (box->text && box->length != 0) || lh__box_is_replace(box) || box->type == BOX_INLINE_BLOCK ||
-        box->type == BOX_INLINE_FLEX || box->type == BOX_INLINE_GRID;
+    return (box->text && box->length != 0) || lh__box_is_replace(box) || lh__box_is_atomic_inline(box);
 }
 
 /**
@@ -734,8 +737,7 @@ static bool layout_inline_wraps(const struct box *box)
 
 static bool layout_inline_atomic(const struct box *box)
 {
-    return lh__box_is_replace(box) || box->type == BOX_INLINE_BLOCK ||
-        box->type == BOX_INLINE_FLEX || box->type == BOX_INLINE_GRID;
+    return lh__box_is_replace(box) || lh__box_is_atomic_inline(box);
 }
 
 /* Closing edges stay with the preceding content. A pending space or atomic
@@ -877,14 +879,9 @@ static bool layout_minmax_line(struct box *first, int *line_min, int *line_max, 
         max += space_after;
         space_after = layout_inline_space(b, &has_content, &after_space, font_func, content);
 
-        if (b->type == BOX_INLINE_BLOCK || b->type == BOX_INLINE_FLEX || b->type == BOX_INLINE_GRID) {
-            if (b->type == BOX_INLINE_GRID) {
-                if (!layout_minmax_grid(b, font_func, content))
-                    return false;
-            } else {
-                if (!layout_minmax_block(b, font_func, content))
-                    return false;
-            }
+        if (lh__box_is_atomic_inline(b)) {
+            if (!layout_minmax_box(b, font_func, content))
+                return false;
             min_run += b->min_width.value;
             /* Log if adding a huge max_width that will cause overflow */
             if (b->max_width > 1000000000) {
@@ -894,7 +891,7 @@ static bool layout_minmax_line(struct box *first, int *line_min, int *line_max, 
             }
             max += b->max_width;
 
-            if (b->flags & HAS_HEIGHT)
+            if ((b->flags & HAS_HEIGHT) || b->type == BOX_TABLE)
                 *line_has_height = true;
             continue;
         }
@@ -2709,9 +2706,7 @@ bool layout_table(struct box *table, int available_width, html_content *content)
 
     /* find specified table width, or available width if auto-width */
     if (css_computed_width_px(style, &content->unit_len_ctx, available_width, &table_width) == CSS_WIDTH_SET) {
-        /* specified width includes border */
-        table_width -= table->border[LEFT].width + table->border[RIGHT].width;
-        table_width = table_width < 0 ? 0 : table_width;
+        layout_handle_box_sizing(&content->unit_len_ctx, table, available_width, true, &table_width);
 
         auto_width = table_width;
     } else {
@@ -3010,7 +3005,7 @@ bool layout_table(struct box *table, int available_width, html_content *content)
             row->height = row_height;
             row_group_height += row_height + border_spacing_v;
         }
-        row_group->x = 0;
+        row_group->x = table->padding[LEFT];
         row_group->y = table_height;
         row_group->width = table_width;
         row_group->height = row_group_height;
@@ -3596,8 +3591,7 @@ static int line_height(const css_unit_ctx *unit_len_ctx, const css_computed_styl
 
 static bool box_needs_inline_alignment(const struct box *box)
 {
-    return box->type == BOX_INLINE_BLOCK || box->type == BOX_INLINE_FLEX || box->type == BOX_INLINE_GRID ||
-        (box->type == BOX_INLINE && lh__box_is_object(box));
+    return lh__box_is_atomic_inline(box) || (box->type == BOX_INLINE && lh__box_is_object(box));
 }
 
 static bool box_needs_line_metrics(const css_unit_ctx *unit_len_ctx, const struct box *box,
@@ -3731,7 +3725,9 @@ static int layout_atomic_baseline(const struct box *box, int height, uint8_t ali
     bool text_button = box->gadget && (box->gadget->type == GADGET_BUTTON ||
         box->gadget->type == GADGET_SUBMIT || box->gadget->type == GADGET_RESET);
     int baseline;
-    if ((lh__box_is_flex_container(box) || lh__box_is_grid_container(box)) && (box->flags & HAS_BASELINE))
+    /* CSS 2.1 17.5.3: an inline table exports its first row's baseline. */
+    if ((lh__box_is_flex_container(box) || lh__box_is_grid_container(box) || box->type == BOX_TABLE) &&
+        (box->flags & HAS_BASELINE))
         return box->margin[TOP] + box->border[TOP].width + box->baseline;
     if (box->type == BOX_INLINE_BLOCK && !lh__box_is_object(box) &&
         (text_button || (css_computed_overflow_x(box->style) == CSS_OVERFLOW_VISIBLE &&
@@ -3951,7 +3947,7 @@ static bool layout_line(struct box *first, int *width, int *y, int cx, int cy, s
         x += space_after;
         space_after = layout_inline_space(b, &has_content, &after_space, font_func, content);
 
-        if (b->type == BOX_INLINE_BLOCK || b->type == BOX_INLINE_FLEX || b->type == BOX_INLINE_GRID) {
+        if (lh__box_is_atomic_inline(b)) {
             /* minmax MUST have been calculated by parent's minmax pass */
             assert(b->max_width != UNKNOWN_MAX_WIDTH && "inline-level block reached layout_line without minmax");
 
@@ -4163,8 +4159,7 @@ static bool layout_line(struct box *first, int *width, int *y, int cx, int cy, s
             x += space_after;
             b->x = x;
 
-            if ((b->type == BOX_INLINE && !b->inline_end) || b->type == BOX_INLINE_BLOCK ||
-                b->type == BOX_INLINE_FLEX || b->type == BOX_INLINE_GRID) {
+            if ((b->type == BOX_INLINE && !b->inline_end) || lh__box_is_atomic_inline(b)) {
                 b->x += b->margin[LEFT] + b->border[LEFT].width;
                 x = b->x + b->padding[LEFT] + b->width + b->padding[RIGHT] + b->border[RIGHT].width + b->margin[RIGHT];
             } else if (b->type == BOX_INLINE) {
@@ -4420,9 +4415,8 @@ static bool layout_line(struct box *first, int *width, int *y, int cx, int cy, s
                 /* text */
                 used_height = d->height;
             }
-        } else if ((d->type == BOX_INLINE) || d->type == BOX_INLINE_BLOCK || d->type == BOX_INLINE_FLEX ||
-            d->type == BOX_INLINE_GRID) {
-            /* replaced inlines, inline-blocks, inline-flex, inline-grid */
+        } else if (d->type == BOX_INLINE || lh__box_is_atomic_inline(d)) {
+            /* Replaced inlines and atomic inline containers. */
             d->x += x0;
             d->y = *y + d->border[TOP].width + d->margin[TOP];
             h = d->margin[TOP] + d->border[TOP].width + d->padding[TOP] + d->height + d->padding[BOTTOM] +

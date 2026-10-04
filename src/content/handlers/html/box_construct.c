@@ -618,9 +618,10 @@ static bool box_construct_insert(struct box *box, struct box *parent, struct box
     bool item = box_parent_is_flex_or_grid(parent);
     uint8_t float_value = css_computed_float(box->style);
     bool floated = !item && !positioned && (float_value == CSS_FLOAT_LEFT || float_value == CSS_FLOAT_RIGHT);
-    /* There is no inline table box type. Positioned tables can still use an
-     * inline container for their anchor, while retaining table formatting. */
-    bool inline_table = !item && positioned && box->type == BOX_TABLE;
+    /* The table formatter is shared: the parent determines whether its outer
+     * box joins a line, is floated, or participates in block/flex/grid layout. */
+    bool inline_table = !item && box->type == BOX_TABLE &&
+        (positioned || ns_computed_display(box->style, false) == CSS_DISPLAY_INLINE_TABLE);
     bool inline_level = box->type == BOX_INLINE || box->type == BOX_BR || box->type == BOX_INLINE_BLOCK ||
         box->type == BOX_INLINE_FLEX || box->type == BOX_INLINE_GRID || inline_table;
 

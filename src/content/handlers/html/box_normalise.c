@@ -1171,10 +1171,10 @@ static bool box_normalise_inline_container(struct box *cont, const struct box *r
             /* ok */
             break;
         case BOX_TABLE:
-            /* Positioned tables keep table formatting and use this
-             * container only for their static-position anchor. */
+            /* Inline and positioned tables retain the same inner formatter. */
             assert(child->style != NULL &&
-                (css_computed_position(child->style) == CSS_POSITION_ABSOLUTE ||
+                (ns_computed_display(child->style, false) == CSS_DISPLAY_INLINE_TABLE ||
+                    css_computed_position(child->style) == CSS_POSITION_ABSOLUTE ||
                     css_computed_position(child->style) == CSS_POSITION_FIXED));
             if (!box_normalise_table(child, root, c, box_context))
                 return false;

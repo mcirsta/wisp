@@ -1105,6 +1105,100 @@ START_TEST(test_table_first_baseline)
 }
 END_TEST
 
+static const struct {
+    const char *name;
+    bool border_box, edges;
+    uint8_t align;
+} inline_table_cases[] = {
+    {"content box", false, false, CSS_VERTICAL_ALIGN_BASELINE},
+    {"content box with edges", false, true, CSS_VERTICAL_ALIGN_BASELINE},
+    {"border box with edges", true, true, CSS_VERTICAL_ALIGN_BASELINE},
+    {"top alignment", false, true, CSS_VERTICAL_ALIGN_TOP},
+    {"bottom alignment", false, true, CSS_VERTICAL_ALIGN_BOTTOM},
+};
+enum { INLINE_TABLE_CASE_COUNT = sizeof(inline_table_cases) / sizeof(inline_table_cases[0]) };
+
+START_TEST(test_inline_table_placement)
+{
+    const struct gui_layout_table table_fonts = {.width = width, .split = split_word, .font_metrics = scaled_metrics};
+    html_content content = {.unit_len_ctx = {.viewport_width = INTTOFIX(200),
+                                .viewport_height = INTTOFIX(500),
+                                .font_size_default = INTTOFIX(16),
+                                .device_dpi = INTTOFIX(96)},
+        .font_func = &table_fonts};
+    struct box *root = make_box(BOX_INLINE_BLOCK, 40, CSS_VERTICAL_ALIGN_BASELINE);
+    style_set_inline_metrics(root->style, 32, 40, CSS_VERTICAL_ALIGN_BASELINE);
+    style_set_width(root->style, -1, false);
+    struct box *ic = make_box(BOX_INLINE_CONTAINER, 0, 0);
+    ic->max_width = UNKNOWN_MAX_WIDTH;
+    append(root, ic);
+    struct box *before = make_box(BOX_TEXT, 40, CSS_VERTICAL_ALIGN_BASELINE);
+    style_set_inline_metrics(before->style, 32, 40, CSS_VERTICAL_ALIGN_BASELINE);
+    before->text = "H";
+    before->length = 1;
+    before->width = UNKNOWN_WIDTH;
+    append(ic, before);
+    struct box *table = make_table_box(BOX_TABLE, CSS_DISPLAY_INLINE_TABLE);
+    struct column column = {.type = COLUMN_WIDTH_AUTO};
+    table->columns = 1;
+    table->col = &column;
+    table->max_width = UNKNOWN_MAX_WIDTH;
+    style_set_width(table->style, 80, false);
+    style_set_box_sizing(
+        table->style, inline_table_cases[_i].border_box ? CSS_BOX_SIZING_BORDER_BOX : CSS_BOX_SIZING_CONTENT_BOX);
+    style_set_inline_metrics(table->style, 16, 24, inline_table_cases[_i].align);
+    if (inline_table_cases[_i].edges)
+        style_set_horizontal_edges(table->style, 3, 2);
+    append(ic, table);
+    struct box *group = make_table_box(BOX_TABLE_ROW_GROUP, CSS_DISPLAY_TABLE_ROW_GROUP);
+    append(table, group);
+    for (int i = 0; i < 2; i++) {
+        struct box *row = make_table_box(BOX_TABLE_ROW, CSS_DISPLAY_TABLE_ROW);
+        struct box *cell = make_table_box(BOX_TABLE_CELL, CSS_DISPLAY_TABLE_CELL);
+        cell->columns = cell->rows = 1;
+        cell->max_width = UNKNOWN_MAX_WIDTH;
+        append(group, row);
+        append(row, cell);
+        append_cell_text(cell, 16, 24)->max_width = UNKNOWN_MAX_WIDTH;
+    }
+    struct box *after = make_box(BOX_TEXT, 40, CSS_VERTICAL_ALIGN_BASELINE);
+    style_set_inline_metrics(after->style, 32, 40, CSS_VERTICAL_ALIGN_BASELINE);
+    after->text = "H";
+    after->length = 1;
+    after->width = UNKNOWN_WIDTH;
+    append(ic, after);
+    root->max_width = UNKNOWN_MAX_WIDTH;
+    ck_assert(layout_minmax_box(root, &table_fonts, &content));
+    int edges = inline_table_cases[_i].edges ? 10 : 0;
+    int border_width = 80 + (inline_table_cases[_i].border_box ? 0 : edges);
+    ck_assert_msg(table->min_width.value == border_width && table->max_width == border_width &&
+            root->min_width.value == border_width && root->max_width == border_width + 16,
+        "%s: table min/max=%d/%d, parent=%d/%d; table outer width=%d", inline_table_cases[_i].name,
+        table->min_width.value, table->max_width, root->min_width.value, root->max_width, border_width);
+
+    /* At exact fit the text and table stay together. One pixel less moves the
+     * trailing text, and widening restores the same tree's first-row baseline. */
+    const int widths[] = {border_width + 16, border_width + 15, border_width + 16};
+    for (size_t pass = 0; pass < sizeof(widths) / sizeof(widths[0]); pass++) {
+        root->width = widths[pass];
+        root->height = AUTO;
+        ck_assert_msg(layout_block_context(root, 500, &content), "%s: layout failed", inline_table_cases[_i].name);
+        int y = inline_table_cases[_i].align == CSS_VERTICAL_ALIGN_BASELINE ? 14 : 0;
+        int line_height = 48 + y;
+        ck_assert_msg(table->x == 8 + (edges ? 2 : 0) && table->y == y && table->width == border_width - edges &&
+                table->height == 48 && table->baseline == 18 && group->x == (edges ? 3 : 0),
+            "%s pass %zu: table=(%d,%d %dx%d), baseline=%d, group x=%d", inline_table_cases[_i].name, pass, table->x,
+            table->y, table->width, table->height, table->baseline, group->x);
+        int after_y = pass == 1 ? line_height : 0;
+        ck_assert_msg(after->x == (pass == 1 ? 0 : 8 + border_width) && after->y == after_y &&
+                root->height == line_height + (pass == 1 ? 40 : 0),
+            "%s pass %zu: trailing text=(%d,%d), parent height=%d", inline_table_cases[_i].name, pass, after->x,
+            after->y, root->height);
+    }
+    free_tree(root);
+}
+END_TEST
+
 int main(void)
 {
     if (nsoption_init(NULL, NULL, NULL) != NSERROR_OK)
@@ -1135,6 +1229,7 @@ int main(void)
     suite_add_tcase(suite, alignment);
     TCase *tables = tcase_create("Table baselines");
     tcase_add_loop_test(tables, test_table_first_baseline, 0, TABLE_BASELINE_CASE_COUNT);
+    tcase_add_loop_test(tables, test_inline_table_placement, 0, INLINE_TABLE_CASE_COUNT);
     suite_add_tcase(suite, tables);
     SRunner *runner = srunner_create(suite);
     srunner_set_fork_status(runner, CK_NOFORK);
