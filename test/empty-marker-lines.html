@@ -1,0 +1,48 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Outside markers provide lines for empty list items</title>
+<style>
+@font-face { font-family:Test; src:url("fonts/normal-400.ttf"); }
+body { margin:20px; font:20px/36px Test; }
+#switch { position:absolute; left:4px; top:4px; }
+ol { margin:0; padding:0; }
+.case { display:flow-root; margin:0 0 10px 70px; width:240px; }
+li { margin:13px 0 17px; list-style:decimal outside; background:#eee; }
+li::marker { font-size:40px; }
+#small::marker { font-size:10px; }
+.float { float:left; width:40px; height:48px; background:#bbb; }
+.tail { height:8px; background:green; }
+#fixed { height:10px; }
+#min { min-height:60px; }
+#max { max-height:10px; }
+#none { list-style:none; }
+#zero { line-height:0; }
+#padded { padding:6px; border:2px solid; }
+#flowroot { overflow:hidden; }
+#negative { margin-top:-13px; margin-bottom:-17px; }
+#atomic { display:inline-block; }
+#atomic li { margin:0; }
+#image { list-style-image:url('data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="12" height="40"%3E%3Crect width="12" height="40"/%3E%3C/svg%3E'); }
+#switch:checked ~ .case li::marker { font-size:20px; }
+#switch:checked ~ .case #removed { list-style:none; }
+</style>
+<!-- A 40px marker has a 30px baseline; the 20px item strut has a 24px
+     baseline and 12px descent. Their line is therefore 42px tall.
+     Each flow-root keeps the test's margins from escaping its wrapper. -->
+<input type="checkbox" id="switch">
+<section class="case" id="empty-case"><ol><li id="empty"></li></ol><div class="tail" id="empty-tail"></div></section>
+<section class="case" id="small-case"><ol><li id="small"></li></ol><div class="tail" id="small-tail"></div></section>
+<section class="case" id="float-case"><ol><li id="float"><div class="float" id="floated"></div></li></ol><div class="tail" id="float-tail"></div></section>
+<section class="case" id="abs-case"><ol><li id="abs"><div style="position:absolute;width:20px;height:40px" id="positioned"></div></li></ol><div class="tail" id="abs-tail"></div></section>
+<section class="case" id="spaces-case"><ol><li id="spaces"> <span> </span> </li></ol><div class="tail" id="spaces-tail"></div></section>
+<section class="case" id="fixed-case"><ol><li id="fixed"></li></ol><div class="tail" id="fixed-tail"></div></section>
+<section class="case" id="min-case"><ol><li id="min"></li></ol><div class="tail" id="min-tail"></div></section>
+<section class="case" id="max-case"><ol><li id="max"></li></ol><div class="tail" id="max-tail"></div></section>
+<section class="case" id="none-case"><ol><li id="none"></li></ol><div class="tail" id="none-tail"></div></section>
+<section class="case" id="zero-case"><ol><li id="zero"></li></ol><div class="tail" id="zero-tail"></div></section>
+<section class="case" id="padded-case"><ol><li id="padded"></li></ol><div class="tail" id="padded-tail"></div></section>
+<section class="case" id="flowroot-case"><ol><li id="flowroot"><div class="float" id="contained-float"></div></li></ol><div class="tail" id="flowroot-tail"></div></section>
+<section class="case" id="image-case"><ol><li id="image"></li></ol><div class="tail" id="image-tail"></div></section>
+<section class="case" id="negative-case"><ol><li id="negative"></li></ol><div class="tail" id="negative-tail"></div></section>
+<section class="case" id="removed-case"><ol><li id="removed"></li></ol><div class="tail" id="removed-tail"></div></section>
+<section class="case" id="inline-case"><span id="atomic"><ol><li id="atomic-item"></li></ol></span><span id="adjacent">H</span></section>

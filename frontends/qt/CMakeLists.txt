@@ -265,6 +265,9 @@ if(WISP_QT_CAPTURE)
         add_test(NAME qt_outside_marker_baseline
             COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_outside_marker_baseline.py $<TARGET_FILE:wisp-qt>)
         set_tests_properties(qt_outside_marker_baseline PROPERTIES TIMEOUT 60)
+        add_test(NAME qt_empty_marker_lines
+            COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_empty_marker_lines.py $<TARGET_FILE:wisp-qt>)
+        set_tests_properties(qt_empty_marker_lines PROPERTIES TIMEOUT 60)
         add_test(NAME qt_details_search
             COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_details_search.py $<TARGET_FILE:wisp-qt>)
         set_tests_properties(qt_details_search PROPERTIES TIMEOUT 120)

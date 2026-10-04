@@ -56,8 +56,20 @@ queries, and following float placement respects their new positions.
 First-baseline propagation is limited to outside-list descendants. Their nested
 inline containers reuse intrinsic widths, but reformat lines because the existing
 line cache stores only the last baseline. Direct list-item line reuse was already
-excluded. Empty/float-only items and flex/grid/table baseline export need separate
-handling; see the backlog.
+excluded. Block-child-only marker fallback and flex/grid/table baseline export
+need separate handling; see the backlog.
+
+An empty item, or one containing only floats, positioned content or collapsed
+inline whitespace, still has a marker line. The item's normal line metrics and
+marker ascent determine its height; this line also separates its top and bottom
+margins. Floats and positioned static anchors follow the line's baseline push.
+CSS height/min-height/max-height constraints still apply normally. Items with no
+marker keep their ordinary empty-block behavior.
+
+This reuses the existing line layout when there is an inline container. Truly
+empty items reserve the same line during block sizing, before applying height
+constraints, and export its baseline for enclosing inline-blocks. No anonymous
+boxes, per-box fields or alternate rendering paths are added.
 
 Outside image markers also reformat their content after their dimensions are
 resolved, as ordinary image boxes do. This matters for SVG: loading reads the
@@ -134,6 +146,14 @@ change marker font sizes repeatedly; retained-list tests also cover nested,
 wrapped content over 100 updates per variant.
 Libcss tests cover parsing, composition, glyph formatting and CSS direction.
 
+`qt_empty_marker_lines` checks empty/float-only items, positioned content,
+whitespace, text/image markers, positive and negative margins, constrained
+heights, inline-block baselines, resizing and native marker-style changes.
+The C baseline suite repeats marker font changes for empty formatting-context
+roots, ordinary items and float-only items. Retained construction tests include
+empty outside items in forward/reversed lists with block/inline body styles,
+comparing fresh layout and allocation stability over 100 updates per variant.
+
 Reference captures are in `out/render-captures/details-2026-10-03/`. The prior
 Release capture exposes the closed body; the new fixture's inspected visible
 rectangles match Chromium with author-disabled summary markers. Native marker
@@ -166,6 +186,13 @@ The outside-image follow-up passed 13 selected tests in both Debug (ASan/UBSan)
 and Release. Its pixel assertion failed before the fix; the 12×40 SVG rectangle
 now paints all 480 expected pixels. Before/after captures, the saved Chromium
 comparison and test logs are in `out/render-captures/outside-marker-image-2026-10-03/`.
+
+The marker-only line follow-up passed 34 selected Debug tests (ASan/UBSan) and
+11 Release tests. Fourteen fixture cases match Chromium's item heights, top
+offsets and following-sibling positions; the inline-block baseline also aligns.
+Comparisons and test logs are in `out/render-captures/empty-markers-2026-10-03/`.
+The flow-root/float case retains the intentional float-geometry difference below:
+Wisp includes the moved float in its 54px height; Chromium reports 48px.
 
 There is also an intentional difference in the float-containing cases. Chromium
 moves the float's visible box down with the marker but still sizes its flow-root

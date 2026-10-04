@@ -135,6 +135,64 @@ START_TEST(test_inline_object_baseline)
 }
 END_TEST
 
+START_TEST(test_empty_marker_line)
+{
+    html_content content = {
+        .unit_len_ctx = {.viewport_width = INTTOFIX(200), .viewport_height = INTTOFIX(500),
+            .font_size_default = INTTOFIX(16), .device_dpi = INTTOFIX(96)},
+        .font_func = &scaled_fonts,
+    };
+    struct box *root = make_box(BOX_BLOCK, 24, CSS_VERTICAL_ALIGN_BASELINE);
+    struct box *item = root, *tail = NULL, *floating = NULL;
+    if (_i != 0) {
+        item = make_box(BOX_BLOCK, 24, CSS_VERTICAL_ALIGN_BASELINE);
+        style_set_margins(item->style, 13, 0, 17, 0);
+        append(root, item);
+        tail = make_box(BOX_BLOCK, 24, CSS_VERTICAL_ALIGN_BASELINE);
+        style_set_height_px(tail->style, 8);
+        /* Intrinsic layout normally records this before block layout. */
+        tail->flags |= HAS_HEIGHT | MAKE_HEIGHT;
+        append(root, tail);
+    }
+    if (_i == 2) {
+        struct box *ic = make_box(BOX_INLINE_CONTAINER, 0, 0);
+        floating = make_box(BOX_FLOAT_LEFT, 0, 0);
+        struct box *child = make_box(BOX_BLOCK, 24, CSS_VERTICAL_ALIGN_BASELINE);
+        style_set_width(child->style, 40, false);
+        style_set_height_px(child->style, 48);
+        child->max_width = 40;
+        append(item, ic);
+        append(ic, floating);
+        append(floating, child);
+    }
+    struct box *marker = make_box(BOX_BLOCK, 24, CSS_VERTICAL_ALIGN_BASELINE);
+    item->list_marker = marker;
+    marker->parent = item;
+    marker->text = "1.";
+    marker->length = 2;
+    marker->height = 24;
+    const int sizes[] = {32, 12, 16, 32};
+    for (size_t pass = 0; pass < sizeof(sizes) / sizeof(sizes[0]); pass++) {
+        style_set_inline_metrics(marker->style, sizes[pass], 24, CSS_VERTICAL_ALIGN_BASELINE);
+        root->height = AUTO;
+        ck_assert(layout_block_context(root, 500, &content));
+        int push = sizes[pass] == 32 ? 6 : 0;
+        ck_assert_msg(item->height == 24 + push && (item->flags & HAS_BASELINE) &&
+                item->baseline == 18 + push,
+            "variant %d font %d: height %d baseline %d", _i, sizes[pass], item->height, item->baseline);
+        if (tail) {
+            ck_assert_msg(item->y == 13 && tail->y == 13 + item->height + 17,
+                "variant %d font %d: item y %d, tail y %d", _i, sizes[pass], item->y, tail->y);
+        }
+        if (floating) {
+            ck_assert_msg(floating->y == item->y + push,
+                "font %d: float y %d, item y %d push %d", sizes[pass], floating->y, item->y, push);
+        }
+    }
+    free_tree(root);
+}
+END_TEST
+
 START_TEST(test_outside_marker_baseline)
 {
     html_content content = {
@@ -510,6 +568,7 @@ int main(void)
     tcase_add_loop_test(tc, test_inline_block_last_baseline, 0, 2);
     tcase_add_loop_test(tc, test_mixed_text_baseline, 0, sizeof(text_cases) / sizeof(text_cases[0]));
     tcase_add_loop_test(tc, test_outside_marker_baseline, 0, 3);
+    tcase_add_loop_test(tc, test_empty_marker_line, 0, 3);
     tcase_add_loop_test(tc, test_repeated_text_baselines, 0, 2);
     tcase_add_loop_test(tc, test_nested_float_layout_once, 0, 2 * (NESTED_FLOAT_DEPTH + 1));
     tcase_add_test(tc, test_font_baseline_fallback);

@@ -1808,9 +1808,11 @@ START_TEST(test_region_retained_list_numbering)
 {
     const char *markup = _i < 8 ? "<html id=root><body id=body><ol id=list>"
         "<li id=outer><a id=link>changed item</a></li><li id=outside>kept item</li>"
-        "</ol></body></html>" :
+        "</ol></body></html>" : _i < 16 ?
         "<html id=root><body id=body><ol id=list><li id=outer><a id=link>changed item</a></li>"
         "<li id=outside><div style='width:90px'><div>kept item with multiple wrapped lines</div></div></li>"
+        "</ol></body></html>" :
+        "<html id=root><body id=body><ol id=list><li id=outer><a id=link>changed item</a></li><li id=outside></li>"
         "</ol></body></html>";
     dom_hubbub_parser *parser;
     dom_hubbub_parser_params params = {.enc = "UTF-8", .fix_enc = true};
@@ -2722,7 +2724,9 @@ int main(void)
     tc = tcase_create("Retained layout");
     tcase_add_checked_fixture(tc, setup, teardown);
     tcase_add_loop_test(tc, test_region_retained_layout, 0, 54);
-    tcase_add_loop_test(tc, test_region_retained_list_numbering, 0, 16);
+    /* Direct/nested content with inside/outside markers, plus four retained
+     * empty outside items (forward/reversed lists, block/inline body). */
+    tcase_add_loop_test(tc, test_region_retained_list_numbering, 0, 20);
     suite_add_tcase(suite, tc);
     SRunner *runner = srunner_create(suite);
     srunner_run_all(runner, CK_NORMAL);

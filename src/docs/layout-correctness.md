@@ -58,12 +58,15 @@ generated contents need shared counter/content handling for summaries and lists.
 Outside markers now align with the first in-flow line through ordinary block
 children. Remaining cases need distinct layout decisions:
 
-- Empty or float-only items still reserve no line for an outside marker. In the
-  probe below, a 32px marker with 24px line-height gives Wisp a zero-height item,
-  while Chromium reserves 30px. Marker-only lines must also participate in margin
-  collapse decisions, rather than applying a minimum-height after layout.
+- Items containing only block children with no line baseline still omit the
+  fallback marker height. In `empty-markers-2026-10-03/probe.html`, a 40px marker
+  with 36px line-height and an empty block child gives Wisp a zero-height item,
+  while Chromium reserves 36px. A 20px-tall block child similarly gives 20px
+  versus 36px. This block-child fallback has different sizing and child-margin
+  rules from the implemented marker-only inline line.
 - First baselines from flex/grid/table children are not propagated to the list
-  item. A flex child in the same probe gives a 24px item versus Chromium's 30px.
+  item. A flex child in `outside-marker-2026-10-03/probe.html` gives a 24px item
+  versus Chromium's 30px.
   This needs the relevant formatting context's baseline rules, not descent into
   its first DOM child.
 - A line moved below a blocking float retains the existing one-pixel clearance
@@ -72,6 +75,9 @@ children. Remaining cases need distinct layout decisions:
 
 Evidence: `out/render-captures/outside-marker-2026-10-03/probe.html`, `probe-fixed/`,
 and `complete/`.
+
+The block-child fallback comparisons are in
+`out/render-captures/empty-markers-2026-10-03/after/`.
 
 A very narrow inside counter also differs from Chromium: `#spaced-marker` in
 `test/disclosure-markers.html` uses a negative Korean counter in an 8px item.
@@ -83,3 +89,15 @@ styling/whitespace support, rather than a language-specific exception.
 
 Evidence: `out/render-captures/disclosure-markers-2026-10-03/chromium-extended/`
 and `marker-style-reference/inspection.json` in the same artifact directory.
+
+## Margins around float-only blocks without markers
+
+The marker-only comparison also isolates an existing margin error when no marker
+is present: `#none-float` in `empty-markers-2026-10-03/probe.html` uses
+`list-style:none`, top/bottom margins of 13px/17px and a 48px-tall float.
+Relative to the enclosing flow-root, Wisp puts the item at y=26 and its following
+block at y=43; Chromium puts both at y=17. The item correctly has zero height in
+both engines. Investigate the saved/restored margin state around float-only
+inline containers, independently of marker line sizing.
+
+Evidence: `out/render-captures/empty-markers-2026-10-03/after/`.

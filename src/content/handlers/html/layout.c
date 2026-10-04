@@ -1651,6 +1651,21 @@ static inline bool box_has_in_flow_block_children(const struct box *box)
     return false;
 }
 
+/* An outside marker supplies a line even when its inline formatting context
+ * contains only floats, positioned boxes or collapsed whitespace. Block-child
+ * marker fallback has different sizing and margin rules. */
+static bool box_has_outside_marker_line(const struct box *box)
+{
+    if (!box_has_outside_marker(box) || (!box->list_marker->object && !box->list_marker->length) ||
+        (box->flags & CONTENTS_SKIPPED))
+        return false;
+    for (const struct box *child = box->children; child; child = child->next) {
+        if (child->type != BOX_INLINE_CONTAINER && !box_is_out_of_flow(child))
+            return false;
+    }
+    return true;
+}
+
 /* A nonzero used minimum separates an otherwise empty block's margins.
  * Resolve percentages against the same definite containing height as sizing. */
 static bool box_has_positive_min_height(const css_unit_ctx *unit_len_ctx, const struct box *box)
@@ -1698,6 +1713,8 @@ static bool box_style_creates_block_context(const struct box *box)
  */
 static inline bool box_prevents_collapse_through(const css_unit_ctx *unit_len_ctx, const struct box *box)
 {
+    if (box_has_outside_marker_line(box))
+        return true;
     if (box->flags & CONTENTS_SKIPPED)
         return true;
     /* Flex/grid containers establish independent formatting contexts, even
@@ -1803,6 +1820,7 @@ static struct box *layout_next_margin_block(const css_unit_ctx *unit_len_ctx, st
              * Position inline content (including floats) before collecting
              * a following sibling's top margin. */
             if (box->type == BOX_FLEX || box->type == BOX_GRID || box->flags & (MAKE_HEIGHT | CONTENTS_SKIPPED) ||
+                box_has_outside_marker_line(box) ||
                 box->border[TOP].width || box->padding[TOP] ||
                 box_style_creates_block_context(box) ||
                 (box->type == BOX_INLINE_CONTAINER && box_inline_container_has_line_boxes(box)) ||
@@ -3410,6 +3428,21 @@ static int layout_align_outside_marker(struct box *owner, const html_content *co
     return max(0, ascent - baseline);
 }
 
+/* No inline container was needed for this empty item. Reserve the same strut
+ * and marker ascent as inline layout, before applying CSS height constraints. */
+static int layout_empty_marker_line(struct box *box, const html_content *content)
+{
+    if ((box->flags & HAS_BASELINE) || !box_has_outside_marker_line(box))
+        return 0;
+    struct line_baselines baselines = {0};
+    int height = line_height(&content->unit_len_ctx, box->style);
+    int baseline = layout_text_baseline(content, box->style, height, &baselines);
+    int push = layout_align_outside_marker(box, content, box->padding[TOP], baseline, &baselines);
+    box->baseline = box->padding[TOP] + baseline + push;
+    box->flags |= HAS_BASELINE;
+    return max(0, height + push);
+}
+
 /* Find the last normal-flow line, looking through block descendants but not
  * into floats, positioned boxes or independent flex/grid/table contexts. The
  * inline container records its baseline during layout, so no text is remeasured. */
@@ -3426,6 +3459,12 @@ static bool layout_last_line_baseline(const struct box *box, int *baseline)
             *baseline += child->y;
             return true;
         }
+    }
+    /* Empty marker-only items have a line without an inline container. Its
+     * first baseline is also its last, including inside an inline-block. */
+    if ((box->flags & HAS_BASELINE) && box_has_outside_marker_line(box)) {
+        *baseline = box->baseline;
+        return true;
     }
     return false;
 }
@@ -4101,6 +4140,14 @@ static bool layout_line(struct box *first, int *width, int *y, int cx, int cy, s
     first->flags |= NEW_LINE;
 
     assert(b != first || (move_y && 0 < used_height && (left || right)));
+
+    /* A marker-only inline formatting context still has a strut. Do not claim
+     * an empty attempt beside a float when actual text is waiting on a later
+     * line, or when a following block must provide the marker's baseline. */
+    if (outside_marker && !has_text_children && b == NULL && box_has_outside_marker_line(owner)) {
+        line_has_content = true;
+        move_y = true;
+    }
 
     /* Recompute from boxes actually placed on this line after wrapping. */
     bool aligned_line = needs_line_metrics &&
@@ -4914,6 +4961,12 @@ layout_block_advance(struct box *box, struct box *block, html_content *content, 
                 state->clearance_parent = NULL;
             }
 
+            int marker_height = layout_empty_marker_line(box, content);
+            if (marker_height > 0) {
+                int extra = max(0, box->padding[TOP] + marker_height - state->y);
+                state->y += extra;
+                state->cy += extra;
+            }
             if (box->height == AUTO) {
                 box->height = state->y - box->padding[TOP];
 
@@ -4992,6 +5045,9 @@ layout_block_advance(struct box *box, struct box *block, html_content *content, 
 
 static void layout_block_finish(struct box *block, html_content *content, struct block_layout_state *state)
 {
+    int marker_height = layout_empty_marker_line(block, content);
+    if (marker_height > 0)
+        state->cy = max(state->cy, block->padding[TOP] + marker_height);
     /* Account for bottom margin of last contained block */
     state->cy += state->max_pos_margin - state->max_neg_margin;
 
@@ -5114,7 +5170,8 @@ bool layout_block_context(struct box *block, int viewport_height, html_content *
         /* Position floats at the current margin edge without consuming the
          * adjoining margins. Once their geometry is known, restart lookahead
          * so the following block can decide whether clearance is needed. */
-        if (box->type == BOX_INLINE_CONTAINER && box_inline_container_only_floats(box)) {
+        if (box->type == BOX_INLINE_CONTAINER && box_inline_container_only_floats(box) &&
+            !box_has_outside_marker_line(box->parent)) {
             struct block_layout_state saved = state;
             int flow_y = box->y;
             if (!layout_block_position_child(box, block, viewport_height, content, &state) ||
@@ -5179,9 +5236,12 @@ bool layout_block_context(struct box *block, int viewport_height, html_content *
         } else if (box->type == BOX_BLOCK || box->object || box->flags & IFRAME)
             state.cy += box->padding[TOP];
 
-        if (box->type == BOX_BLOCK && box->height == AUTO) {
-            box->height = 0;
-            layout_block_add_scrollbar(box, BOTTOM);
+        if (box->type == BOX_BLOCK) {
+            int marker_height = layout_empty_marker_line(box, content);
+            if (box->height == AUTO) {
+                box->height = marker_height;
+                layout_block_add_scrollbar(box, BOTTOM);
+            }
         }
 
         /* Leaves do not take the ancestor-unwind path in layout_block_advance.
