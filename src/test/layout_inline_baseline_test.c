@@ -282,6 +282,110 @@ START_TEST(test_empty_marker_line)
 }
 END_TEST
 
+/* Block-only fallback supplies height without inventing a line baseline or
+ * moving children. Explicit constraints still use the normal sizing path. */
+static const struct {
+    const char *name;
+    int child_height, top, bottom, padding;
+    enum { MARKER_AUTO, MARKER_FIXED, MARKER_MIN, MARKER_MAX } constraint;
+    int item_top, item_height, child_y, after_y;
+} block_marker_cases[] = {
+    {"empty", 0, 0, 0, 0, MARKER_AUTO, 13, 24, 0, 54},
+    {"short", 20, 0, 0, 0, MARKER_AUTO, 13, 24, 0, 54},
+    {"tall", 60, 0, 0, 0, MARKER_AUTO, 13, 60, 0, 90},
+    {"margins", 0, 11, 17, 0, MARKER_AUTO, 17, 24, 0, 58},
+    {"large margins", 0, 70, 90, 0, MARKER_AUTO, 90, 24, 0, 204},
+    {"negative margins", 0, -23, -29, 0, MARKER_AUTO, -16, 24, 0, -4},
+    {"fixed", 0, 0, 0, 0, MARKER_FIXED, 13, 10, 0, 40},
+    {"minimum", 0, 0, 0, 0, MARKER_MIN, 13, 60, 0, 90},
+    {"maximum", 0, 0, 0, 0, MARKER_MAX, 13, 10, 0, 40},
+    {"padding", 0, 11, 17, 5, MARKER_AUTO, 13, 19, 16, 54},
+    /* -1 requests real inline text, whose baseline aligns the marker instead. */
+    {"text", -1, 0, 0, 0, MARKER_AUTO, 13, 30, 6, 60},
+};
+enum { BLOCK_MARKER_CASE_COUNT = sizeof(block_marker_cases) / sizeof(block_marker_cases[0]) };
+
+START_TEST(test_block_marker_fallback)
+{
+    int variant = _i % BLOCK_MARKER_CASE_COUNT;
+    bool wrapped = _i >= BLOCK_MARKER_CASE_COUNT;
+    html_content content = {
+        .unit_len_ctx = {.viewport_width = INTTOFIX(200), .viewport_height = INTTOFIX(500),
+            .font_size_default = INTTOFIX(16), .device_dpi = INTTOFIX(96)},
+        .font_func = &scaled_fonts,
+    };
+    struct box *root = make_box(BOX_BLOCK, 24, CSS_VERTICAL_ALIGN_BASELINE);
+    struct box *wrapper = wrapped ? make_box(BOX_BLOCK, 24, CSS_VERTICAL_ALIGN_BASELINE) : root;
+    if (wrapped)
+        append(root, wrapper);
+    struct box *item = make_box(BOX_BLOCK, 24, CSS_VERTICAL_ALIGN_BASELINE);
+    style_set_margins(item->style, 13, 0, 17, 0);
+    style_set_padding_top(item->style, block_marker_cases[variant].padding);
+    if (block_marker_cases[variant].constraint == MARKER_FIXED) {
+        style_set_height_px(item->style, 10);
+        item->flags |= MAKE_HEIGHT | HAS_HEIGHT;
+    } else if (block_marker_cases[variant].constraint == MARKER_MIN) {
+        style_set_min_height(item->style, 60);
+    } else if (block_marker_cases[variant].constraint == MARKER_MAX) {
+        style_set_max_height(item->style, 10);
+    }
+    append(wrapper, item);
+    struct box *child = make_box(BOX_BLOCK, 24, CSS_VERTICAL_ALIGN_BASELINE);
+    style_set_height_px(child->style, block_marker_cases[variant].child_height);
+    style_set_margins(child->style, block_marker_cases[variant].top, 0, block_marker_cases[variant].bottom, 0);
+    append(item, child);
+    bool text = block_marker_cases[variant].child_height < 0;
+    if (text) {
+        struct box *ic = make_box(BOX_INLINE_CONTAINER, 0, 0);
+        struct box *label = make_box(BOX_TEXT, 24, CSS_VERTICAL_ALIGN_BASELINE);
+        label->text = "H";
+        label->length = 1;
+        label->width = UNKNOWN_WIDTH;
+        append(child, ic);
+        append(ic, label);
+    } else if (block_marker_cases[variant].child_height > 0) {
+        child->flags |= MAKE_HEIGHT;
+    }
+    if (text || block_marker_cases[variant].child_height > 0) {
+        /* Match the intrinsic pass: content sets HAS_HEIGHT, not MAKE_HEIGHT. */
+        root->flags |= HAS_HEIGHT;
+        wrapper->flags |= HAS_HEIGHT;
+        item->flags |= HAS_HEIGHT;
+        child->flags |= HAS_HEIGHT;
+    }
+    struct box *marker = make_box(BOX_BLOCK, 24, CSS_VERTICAL_ALIGN_BASELINE);
+    style_set_inline_metrics(marker->style, 32, 24, CSS_VERTICAL_ALIGN_BASELINE);
+    marker->text = "1.";
+    marker->length = 2;
+    marker->height = 24;
+    marker->parent = item;
+    item->list_marker = marker;
+    struct box *after = make_box(BOX_BLOCK, 24, CSS_VERTICAL_ALIGN_BASELINE);
+    style_set_height_px(after->style, 8);
+    after->flags |= MAKE_HEIGHT | HAS_HEIGHT;
+    append(root, after);
+    const int widths[] = {200, 320, 200};
+    for (size_t pass = 0; pass < sizeof(widths) / sizeof(widths[0]); pass++) {
+        root->width = widths[pass];
+        root->height = AUTO;
+        ck_assert(layout_block_context(root, 500, &content));
+        int top = item->y + (wrapped ? wrapper->y : 0);
+        ck_assert_msg(top == block_marker_cases[variant].item_top &&
+                item->height == block_marker_cases[variant].item_height &&
+                child->y == block_marker_cases[variant].child_y && after->y == block_marker_cases[variant].after_y &&
+                root->height == block_marker_cases[variant].after_y + 8 &&
+                !!(item->flags & HAS_BASELINE) == text && marker->y == 0,
+            "%s wrapped=%d pass=%zu: item=%d/%d expected %d/%d; child=%d expected %d; "
+            "after=%d expected %d; root=%d; baseline=%d marker=%d",
+            block_marker_cases[variant].name, wrapped, pass, top, item->height,
+            block_marker_cases[variant].item_top, block_marker_cases[variant].item_height,
+            child->y, block_marker_cases[variant].child_y, after->y, block_marker_cases[variant].after_y,
+            root->height, !!(item->flags & HAS_BASELINE), marker->y);
+    }
+    free_tree(root);
+}
+END_TEST
+
 START_TEST(test_outside_marker_baseline)
 {
     html_content content = {
@@ -870,6 +974,7 @@ int main(void)
     tcase_add_loop_test(tc, test_mixed_text_baseline, 0, sizeof(text_cases) / sizeof(text_cases[0]));
     tcase_add_loop_test(tc, test_outside_marker_baseline, 0, 3);
     tcase_add_loop_test(tc, test_empty_marker_line, 0, 3);
+    tcase_add_loop_test(tc, test_block_marker_fallback, 0, 2 * BLOCK_MARKER_CASE_COUNT);
     tcase_add_loop_test(tc, test_empty_inline_metrics, 0, 4 * EMPTY_INLINE_CASE_COUNT);
     tcase_add_loop_test(tc, test_repeated_text_baselines, 0, 2);
     tcase_add_loop_test(tc, test_nested_float_layout_once, 0, 2 * (NESTED_FLOAT_DEPTH + 1));

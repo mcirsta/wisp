@@ -56,25 +56,14 @@ inside and outside markers. Custom `::marker { content:... }` remains unused;
 generated contents need shared counter/content handling for summaries and lists.
 
 Outside markers now align with the first in-flow line through ordinary block
-children. Remaining cases need distinct layout decisions:
-
-- Items containing only block children with no line baseline still omit the
-  fallback marker height. In `empty-markers-2026-10-03/probe.html`, a 40px marker
-  with 36px line-height and an empty block child gives Wisp a zero-height item,
-  while Chromium reserves 36px. A 20px-tall block child similarly gives 20px
-  versus 36px. This block-child fallback has different sizing and child-margin
-  rules from the implemented marker-only inline line.
-- First baselines from flex/grid/table children are not propagated to the list
-  item. A flex child in `outside-marker-2026-10-03/probe.html` gives a 24px item
-  versus Chromium's 30px.
-  This needs the relevant formatting context's baseline rules, not descent into
-  its first DOM child.
+children. First baselines from flex/grid/table children are not propagated to
+the list item. A flex child in `outside-marker-2026-10-03/probe.html` gives a
+24px item versus Chromium's 30px.
+This needs the relevant formatting context's baseline rules, not descent into
+its first DOM child.
 
 Evidence: `out/render-captures/outside-marker-2026-10-03/probe.html`, `probe-fixed/`,
 and `complete/`.
-
-The block-child fallback comparisons are in
-`out/render-captures/empty-markers-2026-10-03/after/`.
 
 A very narrow inside counter also differs from Chromium: `#spaced-marker` in
 `test/disclosure-markers.html` uses a negative Korean counter in an 8px item.

@@ -1725,13 +1725,18 @@ static inline bool box_has_in_flow_block_children(const struct box *box)
     return false;
 }
 
+static bool box_has_outside_marker_content(const struct box *box)
+{
+    return box_has_outside_marker(box) && (box->list_marker->object || box->list_marker->length) &&
+        !(box->flags & CONTENTS_SKIPPED);
+}
+
 /* An outside marker supplies a line even when its inline formatting context
  * contains only floats, positioned boxes or collapsed whitespace. Block-child
  * marker fallback has different sizing and margin rules. */
 static bool box_has_outside_marker_line(const struct box *box)
 {
-    if (!box_has_outside_marker(box) || (!box->list_marker->object && !box->list_marker->length) ||
-        (box->flags & CONTENTS_SKIPPED))
+    if (!box_has_outside_marker_content(box))
         return false;
     for (const struct box *child = box->children; child; child = child->next) {
         if (child->type != BOX_INLINE_CONTAINER && !box_is_out_of_flow(child))
@@ -1787,7 +1792,7 @@ static bool box_style_creates_block_context(const struct box *box)
  */
 static inline bool box_prevents_collapse_through(const css_unit_ctx *unit_len_ctx, const struct box *box)
 {
-    if (box_has_outside_marker_line(box))
+    if (box_has_outside_marker_content(box))
         return true;
     if (box->flags & CONTENTS_SKIPPED)
         return true;
@@ -1973,10 +1978,12 @@ static struct box *layout_next_margin_block(struct box *box, const struct margin
                     right_float |= child->type == BOX_FLOAT_RIGHT;
                 }
             }
-            /* A specified height separates the bottom edge, not the first
-             * child's top. Keep looking down through ordinary block children. */
+            /* Content or a specified height separates the bottom edge, not a
+             * first block child's top. Stop at an inline-content leaf instead
+             * of losing the chain's end and recollecting its ancestor margins. */
             if (box->type == BOX_FLEX || box->type == BOX_GRID || box->flags & CONTENTS_SKIPPED ||
-                ((box->flags & MAKE_HEIGHT) && !box_has_in_flow_block_children(box)) ||
+                (!box_has_in_flow_block_children(box) && ((box->flags & MAKE_HEIGHT) ||
+                    (box->type == BOX_BLOCK && box_prevents_collapse_through(scan->unit_len_ctx, box)))) ||
                 box_has_outside_marker_line(box) || lh__box_is_replace(box) || box->border[TOP].width ||
                 box->padding[TOP] || box_style_creates_block_context(box) ||
                 (box->type == BOX_INLINE_CONTAINER && !float_only &&
@@ -3634,12 +3641,28 @@ static int layout_align_outside_marker(struct box *owner, const html_content *co
     return max(0, ascent - baseline);
 }
 
-/* No inline container was needed for this empty item. Reserve the same strut
- * and marker ascent as inline layout, before applying CSS height constraints. */
-static int layout_empty_marker_line(struct box *box, const html_content *content)
+/* A marker without a content baseline still needs space. Inline-only items
+ * use the ordinary strut; block children keep their own positions and margins.
+ * Their fallback marker occupies the top of the border box, without exporting
+ * a synthetic content baseline. CSS height constraints are applied afterward. */
+static int layout_marker_min_height(struct box *box, const html_content *content)
 {
-    if ((box->flags & HAS_BASELINE) || !box_has_outside_marker_line(box))
+    if ((box->flags & HAS_BASELINE) || !box_has_outside_marker_content(box))
         return 0;
+    if (!box_has_outside_marker_line(box)) {
+        struct box *marker = box->list_marker;
+        marker->y = -box->border[TOP].width;
+        int height = marker->height;
+        if (marker->object) {
+            struct line_baselines baselines = {0};
+            int strut = line_height(&content->unit_len_ctx, marker->style);
+            int baseline = layout_text_baseline(content, marker->style, strut, &baselines);
+            marker->y += max(0, baseline - marker->height);
+            height = max(strut, marker->height + max(0, strut - baseline));
+        }
+        return max(0, height - box->border[TOP].width - box->padding[TOP] -
+            box->padding[BOTTOM] - box->border[BOTTOM].width);
+    }
     struct line_baselines baselines = {0};
     int height = line_height(&content->unit_len_ctx, box->style);
     int baseline = layout_text_baseline(content, box->style, height, &baselines);
@@ -5433,7 +5456,7 @@ layout_block_advance(struct box *box, struct box *block, html_content *content, 
                 state->clearance_parent = NULL;
             }
 
-            int marker_height = layout_empty_marker_line(box, content);
+            int marker_height = layout_marker_min_height(box, content);
             if (marker_height > 0) {
                 int extra = max(0, box->padding[TOP] + marker_height - state->y);
                 state->y += extra;
@@ -5519,11 +5542,11 @@ layout_block_advance(struct box *box, struct box *block, html_content *content, 
 
 static void layout_block_finish(struct box *block, html_content *content, struct block_layout_state *state)
 {
-    int marker_height = layout_empty_marker_line(block, content);
+    /* Contained margins contribute to flow height before the marker minimum. */
+    state->cy += state->max_pos_margin - state->max_neg_margin;
+    int marker_height = layout_marker_min_height(block, content);
     if (marker_height > 0)
         state->cy = max(state->cy, block->padding[TOP] + marker_height);
-    /* Account for bottom margin of last contained block */
-    state->cy += state->max_pos_margin - state->max_neg_margin;
 
     /* Increase height to contain any floats inside (CSS 2.1 10.6.7). */
     for (struct box *box = block->float_children; box; box = box->next_float) {
@@ -5722,9 +5745,10 @@ bool layout_block_context(struct box *block, int viewport_height, html_content *
         if (box->type == BOX_BLOCK && !box->object && !(box->iframe) && box->children) {
             /* Down into children. */
 
-            if (box == state.margin_collapse && state.margin_top != NULL) {
-                /* Current margin collapsed though to this box.
-                 * Unset margin_collapse. */
+            if (box == state.margin_collapse && (state.margin_top != NULL ||
+                    box->padding[TOP] || box->border[TOP].width)) {
+                /* A top separator starts a new child margin chain even when
+                 * an ancestor already consumed this box's outer top margin. */
                 state.margin_collapse = NULL;
             }
 
@@ -5737,7 +5761,7 @@ bool layout_block_context(struct box *block, int viewport_height, html_content *
             state.cy += box->padding[TOP];
 
         if (box->type == BOX_BLOCK) {
-            int marker_height = layout_empty_marker_line(box, content);
+            int marker_height = layout_marker_min_height(box, content);
             if (box->height == AUTO) {
                 box->height = marker_height;
                 layout_block_add_scrollbar(box, BOTTOM);

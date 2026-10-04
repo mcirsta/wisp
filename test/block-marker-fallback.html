@@ -1,0 +1,66 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Outside marker fallback for block children</title>
+<style>@font-face{font-family:Test;src:url(fonts/normal-400.ttf)}body{margin:20px;font:20px/36px Test}ol{margin:0;padding:0}.case{display:flow-root;width:240px;margin:0 0 10px 70px}li{margin:13px 0 17px;list-style:decimal outside;background:#eee}li::marker{font-size:40px}</style>
+<style>
+#switch { position:absolute; left:4px; top:4px; }
+.switched { display:none; }
+#switch:checked ~ .case .switched { display:inline; }
+#switch:checked ~ .case #none-item { list-style:decimal outside !important; }
+#switch:checked ~ .case #fixed-item,
+#switch:checked ~ .case #fixed-margins-item,
+#switch:checked ~ .case #image-fixed-item { height:auto !important; }
+#switch:checked ~ .case #max-item,
+#switch:checked ~ .case #max-margins-item { max-height:none !important; }
+</style>
+<!-- The bundled font makes metrics deterministic. Block-child fallback uses
+     the marker's own line (36px, or 46px with the image), without moving the
+     children. Text content instead aligns to a real baseline (42px).
+     Explicit height/max-height remain constraints in Wisp. Chromium's fallback
+     overrides those limits, while Firefox adds no block-child fallback height. -->
+<input type="checkbox" id="switch">
+<section class="case" id="empty-case"><ol><li id="empty-item" style=""><div id="empty-child" style=""><span class="switched">H</span></div></li></ol><div id="empty-after" style="height:8px;background:green"></div></section>
+<section class="case" id="short-case"><ol><li id="short-item" style=""><div id="short-child" style="height:20px"></div></li></ol><div id="short-after" style="height:8px;background:green"></div></section>
+<section class="case" id="tall-case"><ol><li id="tall-item" style=""><div id="tall-child" style="height:60px"></div></li></ol><div id="tall-after" style="height:8px;background:green"></div></section>
+<section class="case" id="empty-margins-case"><ol><li id="empty-margins-item" style=""><div id="empty-margins-child" style="margin:11px 0 17px"></div></li></ol><div id="empty-margins-after" style="height:8px;background:green"></div></section>
+<section class="case" id="short-margins-case"><ol><li id="short-margins-item" style=""><div id="short-margins-child" style="height:20px;margin:11px 0 17px"></div></li></ol><div id="short-margins-after" style="height:8px;background:green"></div></section>
+<section class="case" id="large-margins-case"><ol><li id="large-margins-item" style=""><div id="large-margins-child" style="margin:70px 0 90px"></div></li></ol><div id="large-margins-after" style="height:8px;background:green"></div></section>
+<section class="case" id="negative-margins-case"><ol><li id="negative-margins-item" style=""><div id="negative-margins-child" style="margin:-23px 0 -29px"></div></li></ol><div id="negative-margins-after" style="height:8px;background:green"></div></section>
+<section class="case" id="negative-short-case"><ol><li id="negative-short-item" style=""><div id="negative-short-child" style="height:20px;margin:-23px 0 -29px"></div></li></ol><div id="negative-short-after" style="height:8px;background:green"></div></section>
+<section class="case" id="negative-item-case"><ol><li id="negative-item-item" style="margin:-13px 0 -17px"><div id="negative-item-child" style=""></div></li></ol><div id="negative-item-after" style="height:8px;background:green"></div></section>
+<section class="case" id="fixed-case"><ol><li id="fixed-item" style="height:10px"><div id="fixed-child" style=""></div></li></ol><div id="fixed-after" style="height:8px;background:green"></div></section>
+<section class="case" id="max-case"><ol><li id="max-item" style="max-height:10px"><div id="max-child" style=""></div></li></ol><div id="max-after" style="height:8px;background:green"></div></section>
+<section class="case" id="min-case"><ol><li id="min-item" style="min-height:60px"><div id="min-child" style=""></div></li></ol><div id="min-after" style="height:8px;background:green"></div></section>
+<section class="case" id="zero-case"><ol><li id="zero-item" style="line-height:0"><div id="zero-child" style=""></div></li></ol><div id="zero-after" style="height:8px;background:green"></div></section>
+<section class="case" id="small-marker-case"><ol><li id="small-marker-item" style=""><div id="small-marker-child" style=""></div></li></ol><div id="small-marker-after" style="height:8px;background:green"></div></section>
+<style>#small-marker-item::marker{font-size:10px}</style>
+<section class="case" id="large-line-case"><ol><li id="large-line-item" style="line-height:60px"><div id="large-line-child" style=""></div></li></ol><div id="large-line-after" style="height:8px;background:green"></div></section>
+<section class="case" id="padded-case"><ol><li id="padded-item" style="padding:6px;border:2px solid"><div id="padded-child" style=""></div></li></ol><div id="padded-after" style="height:8px;background:green"></div></section>
+<section class="case" id="bottom-pad-case"><ol><li id="bottom-pad-item" style="padding-bottom:7px"><div id="bottom-pad-child" style="margin:11px 0 17px"></div></li></ol><div id="bottom-pad-after" style="height:8px;background:green"></div></section>
+<section class="case" id="top-pad-case"><ol><li id="top-pad-item" style="padding-top:5px"><div id="top-pad-child" style="margin:11px 0 17px"></div></li></ol><div id="top-pad-after" style="height:8px;background:green"></div></section>
+<section class="case" id="flowroot-case"><ol><li id="flowroot-item" style="overflow:hidden"><div id="flowroot-child" style="margin:11px 0 17px"></div></li></ol><div id="flowroot-after" style="height:8px;background:green"></div></section>
+<section class="case" id="flowroot-short-case"><ol><li id="flowroot-short-item" style="display:flow-root"><div id="flowroot-short-child" style="height:20px;margin:11px 0 17px"></div></li></ol><div id="flowroot-short-after" style="height:8px;background:green"></div></section>
+<section class="case" id="nested-case"><ol><li id="nested-item" style=""><div id="nested-wrapper" style=""><div id="nested-child" style=""></div></div></li></ol><div id="nested-after" style="height:8px;background:green"></div></section>
+<section class="case" id="nested-margin-case"><ol><li id="nested-margin-item" style=""><div id="nested-margin-wrapper" style=""><div id="nested-margin-child" style="margin:11px 0 17px"></div></div></li></ol><div id="nested-margin-after" style="height:8px;background:green"></div></section>
+<section class="case" id="nested-float-case"><ol><li id="nested-float-item" style=""><div id="nested-float-child" style=""><div id="nested-float-floating" style="float:left;width:40px;height:48px;background:#bbb"></div></div></li></ol><div id="nested-float-after" style="height:8px;background:green"></div></section>
+<section class="case" id="direct-float-case"><ol><li id="direct-float-item" style=""><div id="direct-float-floating" style="float:left;width:40px;height:48px;background:#bbb"></div><div id="direct-float-child" style=""></div></li></ol><div id="direct-float-after" style="height:8px;background:green"></div></section>
+<section class="case" id="nested-float-root-case"><ol><li id="nested-float-root-item" style="overflow:hidden"><div id="nested-float-root-child" style=""><div id="nested-float-root-floating" style="float:left;width:40px;height:48px;background:#bbb"></div></div></li></ol><div id="nested-float-root-after" style="height:8px;background:green"></div></section>
+<section class="case" id="cleared-case"><ol><li id="cleared-item" style=""><div id="cleared-floating" style="float:left;width:40px;height:48px;background:#bbb"></div><div id="cleared-child" style="clear:both;margin:11px 0 17px"></div></li></ol><div id="cleared-after" style="height:8px;background:green"></div></section>
+<section class="case" id="none-case"><ol><li id="none-item" style="list-style:none"><div id="none-child" style=""></div></li></ol><div id="none-after" style="height:8px;background:green"></div></section>
+<section class="case" id="image-case"><ol><li id="image-item" style=";list-style-image:url(&#x27;data:image/svg+xml,%3Csvg xmlns=&quot;http://www.w3.org/2000/svg&quot; width=&quot;12&quot; height=&quot;40&quot;%3E%3Crect width=&quot;12&quot; height=&quot;40&quot;/%3E%3C/svg%3E&#x27;)"><div id="image-child" style=""></div></li></ol><div id="image-after" style="height:8px;background:green"></div></section>
+<section class="case" id="block-bfc-case"><ol><li id="block-bfc-item" style=""><div id="block-bfc-child" style="display:flow-root"></div></li></ol><div id="block-bfc-after" style="height:8px;background:green"></div></section>
+<section class="case" id="block-bfc-short-case"><ol><li id="block-bfc-short-item" style=""><div id="block-bfc-short-child" style="display:flow-root;height:20px"></div></li></ol><div id="block-bfc-short-after" style="height:8px;background:green"></div></section>
+<section class="case" id="padded-child-case"><ol><li id="padded-child-item" style=""><div id="padded-child-child" style="padding:6px;border:2px solid"></div></li></ol><div id="padded-child-after" style="height:8px;background:green"></div></section>
+<section class="case" id="relative-child-case"><ol><li id="relative-child-item" style=""><div id="relative-child-child" style="position:relative;top:15px"></div></li></ol><div id="relative-child-after" style="height:8px;background:green"></div></section>
+<section class="case" id="text-case"><ol><li id="text-item" style=""><div id="text-child" style="">H</div></li></ol><div id="text-after" style="height:8px;background:green"></div></section>
+<section class="case" id="before-empty-text-case"><ol><li id="before-empty-text-item" style=""><div id="before-empty-text-child" style=""></div><div id="before-empty-text-text" style="">H</div></li></ol><div id="before-empty-text-after" style="height:8px;background:green"></div></section>
+<section class="case" id="flex-empty-case"><ol><li id="flex-empty-item" style=""><div id="flex-empty-child" style="display:flex"></div></li></ol><div id="flex-empty-after" style="height:8px;background:green"></div></section>
+<section class="case" id="grid-empty-case"><ol><li id="grid-empty-item" style=""><div id="grid-empty-child" style="display:grid"></div></li></ol><div id="grid-empty-after" style="height:8px;background:green"></div></section>
+<section class="case" id="nested-list-case"><ol><li id="nested-list-item" style=""><ol><li id="nested-list-inner-item" style=""><div id="nested-list-child" style=""></div></li></ol></li></ol><div id="nested-list-after" style="height:8px;background:green"></div></section>
+<section class="case" id="inside-case"><ol><li id="inside-item" style="list-style-position:inside"><div id="inside-child" style=""></div></li></ol><div id="inside-after" style="height:8px;background:green"></div></section>
+<section class="case" id="image-short-case"><ol><li id="image-short-item" style=";list-style-image:url(&#x27;data:image/svg+xml,%3Csvg xmlns=&quot;http://www.w3.org/2000/svg&quot; width=&quot;12&quot; height=&quot;40&quot;%3E%3Crect width=&quot;12&quot; height=&quot;40&quot;/%3E%3C/svg%3E&#x27;)"><div id="image-short-child" style="height:20px"></div></li></ol><div id="image-short-after" style="height:8px;background:green"></div></section>
+<section class="case" id="image-fixed-case"><ol><li id="image-fixed-item" style="height:10px;list-style-image:url(&#x27;data:image/svg+xml,%3Csvg xmlns=&quot;http://www.w3.org/2000/svg&quot; width=&quot;12&quot; height=&quot;40&quot;%3E%3Crect width=&quot;12&quot; height=&quot;40&quot;/%3E%3C/svg%3E&#x27;)"><div id="image-fixed-child" style=""></div></li></ol><div id="image-fixed-after" style="height:8px;background:green"></div></section>
+<section class="case" id="fixed-margins-case"><ol><li id="fixed-margins-item" style="height:10px"><div id="fixed-margins-child" style="margin:11px 0 17px"></div></li></ol><div id="fixed-margins-after" style="height:8px;background:green"></div></section>
+<section class="case" id="max-margins-case"><ol><li id="max-margins-item" style="max-height:10px"><div id="max-margins-child" style="margin:11px 0 17px"></div></li></ol><div id="max-margins-after" style="height:8px;background:green"></div></section>
+<section class="case" id="min-margins-case"><ol><li id="min-margins-item" style="min-height:60px"><div id="min-margins-child" style="margin:11px 0 17px"></div></li></ol><div id="min-margins-after" style="height:8px;background:green"></div></section>
+<section class="case" id="zero-margins-case"><ol><li id="zero-margins-item" style="line-height:0"><div id="zero-margins-child" style="margin:11px 0 17px"></div></li></ol><div id="zero-margins-after" style="height:8px;background:green"></div></section>
