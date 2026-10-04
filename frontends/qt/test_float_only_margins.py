@@ -195,6 +195,90 @@ def cases():
             yield name + ("-float" if floating else "-plain"), case, expected
 
 
+    # Deferred clearance with measured zero-height floats: Firefox reference.
+    # Chromium introduces clearance at this coincident edge; these cases use
+    # the same no-clearance/equality rule as our existing clearance tests.
+    for name, options, expected in (
+        ("plain", {},
+         {"empty": (100, 0), "floating": (100, 0), "inner": (100, 0), "after": (100, 8)}),
+        ("small", {"child": "clear:left;margin-top:23px"},
+         {"empty": (29, 0), "floating": (29, 0), "inner": (29, 0), "after": (29, 8)}),
+        ("zero", {"child": "clear:left;margin-top:0"},
+         {"empty": (29, 0), "floating": (29, 0), "inner": (29, 0), "after": (29, 8)}),
+        ("negative", {"child": "clear:left;margin-top:-23px"},
+         {"empty": (6, 0), "floating": (6, 0), "inner": (6, 0), "after": (6, 8)}),
+        ("nonempty", {"child": "clear:left;margin-top:100px;height:10px"},
+         {"empty": (100, 10), "floating": (100, 0), "inner": (100, 10), "after": (139, 8)}),
+        ("padded-child", {"child": "clear:left;margin-top:100px;padding-top:5px"},
+         {"empty": (100, 5), "floating": (100, 0), "inner": (100, 5), "after": (134, 8)}),
+        ("unmatched", {"child": "clear:right;margin-top:100px"},
+         {"empty": (100, 0), "floating": (100, 0), "inner": (100, 0), "after": (100, 8)}),
+        ("right", {"side": "right", "child": "clear:right;margin-top:100px", "float_x": 260},
+         {"empty": (100, 0), "floating": (100, 0), "inner": (100, 0), "after": (100, 8)}),
+        ("both", {"child": "clear:both;margin-top:100px"},
+         {"empty": (100, 0), "floating": (100, 0), "inner": (100, 0), "after": (100, 8)}),
+        ("parent-pad", {"style": "padding-top:5px"},
+         {"empty": (13, 5), "floating": (18, 0), "inner": (118, 0), "after": (118, 8)}),
+        ("parent-border", {"style": "border-top:3px solid"},
+         {"empty": (13, 3), "floating": (16, 0), "inner": (116, 0), "after": (116, 8)}),
+        ("parent-flowroot", {"style": "display:flow-root"},
+         {"empty": (13, 100), "floating": (13, 0), "inner": (113, 0), "after": (130, 8)}),
+        ("parent-min", {"style": "min-height:20px"},
+         {"empty": (100, 20), "floating": (100, 0), "inner": (100, 0), "after": (137, 8)}),
+        ("parent-fixed", {"style": "height:40px"},
+         {"empty": (100, 40), "floating": (100, 0), "inner": (100, 0), "after": (157, 8)}),
+        ("nested", {"child_wrapper": ""},
+         {"empty": (100, 0), "floating": (100, 0), "middle": (100, 0), "inner": (100, 0), "after": (100, 8)}),
+        ("wrap", {"wrap": True},
+         {"wrapper": (100, 0), "empty": (100, 0), "floating": (100, 0), "inner": (100, 0), "after": (100, 8)}),
+        ("before-empty", {"before_child": "margin:23px 0 29px"},
+         {"empty": (100, 0), "floating": (100, 0), "before": (100, 0), "inner": (100, 0), "after": (100, 8)}),
+        ("before-height", {"before_child": "height:10px;margin:23px 0 29px"},
+         {"empty": (23, 10), "floating": (23, 0), "before": (23, 10), "inner": (133, 0), "after": (133, 8)}),
+        ("nested-margins", {"child_wrapper": "margin:31px 0 37px"},
+         {"empty": (100, 0), "floating": (100, 0), "middle": (100, 0), "inner": (100, 0), "after": (100, 8)}),
+        ("after-text", {"text_after": True},
+         {"empty": (100, 20), "floating": (100, 0), "inner": (100, 0), "after": (137, 8)}),
+        ("before-text", {"text_before": True},
+         {"empty": (13, 20), "floating": (13, 0), "inner": (133, 0), "after": (133, 8)}),
+        ("before-prefix", {"prefix": 60, "previous": 31},
+         {"prefix": (0, 60), "empty": (160, 0), "floating": (160, 0), "inner": (160, 0), "after": (160, 8)}),
+        ("negative-parent", {"top": -13},
+         {"empty": (87, 0), "floating": (87, 0), "inner": (87, 0), "after": (87, 8)}),
+        ("negative-margin", {"top": -13, "child": "clear:left;margin-top:-100px"},
+         {"empty": (-71, 0), "floating": (-71, 0), "inner": (-71, 0), "after": (-71, 8)}),
+        ("bottom-large", {"child": "clear:left;margin:100px 0 170px"},
+         {"empty": (170, 0), "floating": (170, 0), "inner": (170, 0), "after": (170, 8)}),
+        ("after-large", {"after": 200},
+         {"empty": (100, 0), "floating": (100, 0), "inner": (100, 0), "after": (200, 8)}),
+        ("parent-large", {"top": 150},
+         {"empty": (150, 0), "floating": (150, 0), "inner": (150, 0), "after": (150, 8)}),
+        ("negative-both", {"top": -13, "child": "clear:left;margin:-100px 0 -29px"},
+         {"empty": (-100, 0), "floating": (-100, 0), "inner": (-100, 0), "after": (-83, 8)}),
+        ("two-clears", {"later_child": "clear:left;margin:200px 0 39px"},
+         {"empty": (200, 0), "floating": (200, 0), "inner": (200, 0), "later": (200, 0), "after": (200, 8)}),
+        ("two-clears-small", {"later_child": "clear:left;margin:11px 0 39px"},
+         {"empty": (100, 0), "floating": (100, 0), "inner": (100, 0), "later": (100, 0), "after": (100, 8)}),
+        ("two-floats", {"float_after_child": True, "later_height": 0, "later_child": "clear:left;margin:200px 0 39px"},
+         {"empty": (200, 0), "floating": (200, 0), "inner": (200, 0),
+          "second": (200, 0), "later": (200, 0), "after": (200, 8)}),
+        ("float-margin", {"float_style": "margin-top:5px"},
+         {"empty": (13, 5), "floating": (18, 0), "inner": (18, 0), "after": (35, 8)}),
+        ("float-negative", {"float_style": "margin-bottom:-20px"},
+         {"empty": (100, 0), "floating": (100, 0), "inner": (100, 0), "after": (100, 8)}),
+        ("parent-max", {"style": "height:40px;max-height:20px"},
+         {"empty": (100, 20), "floating": (100, 0), "inner": (100, 0), "after": (137, 8)}),
+        ("external-pass", {"external": "left", "child": "clear:left;margin-top:200px"},
+         {"external": (0, 160), "empty": (200, 0), "floating": (200, 0), "inner": (200, 0), "after": (200, 8)}),
+        ("external-right-pass", {"external": "right", "side": "right",
+                                 "child": "clear:right;margin-top:200px", "float_x": 260},
+         {"external": (0, 160), "empty": (200, 0), "floating": (200, 0), "inner": (200, 0), "after": (200, 8)}),
+    ):
+        options = dict(float_height=0, float_x=0, child="clear:left;margin-top:100px") | options
+        options["style"] = "font:13px/20px sans-serif;" + options.get("style", "")
+        yield "deferred-" + name, options, expected
+
+
 def fixture_html():
     parts = ['<!doctype html><meta charset="utf-8"><title>Float-only margins</title><style>',
              'body{margin:0}.case{display:flow-root;width:300px;border:1px solid;margin:10px}',
@@ -204,7 +288,8 @@ def fixture_html():
             return f'<{tag} id="{name}-{role}" style="{style}">{inside}</{tag}>'
 
         floating = "" if c.get("no_float") else element(
-            "floating", style=f'float:{c.get("side", "left")};width:40px;height:48px;background:#c66')
+            "floating", style=f'float:{c.get("side", "left")};width:40px;'
+                              f'height:{c.get("float_height", 48)}px;background:#c66;{c.get("float_style", "")}')
         if c.get("two"):
             floating += element("second", style=f'float:left;width:{c.get("second_width", 280)}px;'
                                 f'clear:{c.get("second_clear", "none")};height:20px;background:#66c')
@@ -223,7 +308,10 @@ def fixture_html():
                 child = element("middle", child, c["child_wrapper"])
             inside += child
         if c.get("float_after_child"):
-            inside += element("second", style="float:left;width:40px;height:20px;background:#66c")
+            inside += element("second", style=f'float:left;width:40px;'
+                                              f'height:{c.get("later_height", 20)}px;background:#66c')
+        if c.get("later_child"):
+            inside += element("later", style=c["later_child"])
         if c.get("text_after"):
             inside += "text"
         empty = element("empty", inside,
@@ -237,6 +325,8 @@ def fixture_html():
             "after", style=f'height:8px;margin-top:{c.get("after", 0)}px;clear:{c.get("clear", "none")};background:#6a6')
         prefix = element("prefix", style=f'height:{c["prefix"]}px;margin-bottom:{c.get("previous", 0)}px') \
             if "prefix" in c else ""
+        if c.get("external"):
+            prefix += element("external", style=f'float:{c["external"]};width:40px;height:160px')
         if c.get("preceding"):
             prefix += element("preceding", style="float:left;width:40px;height:16px;background:#cc6")
         parts.append(f'<section class="case" id="{name}-case">{prefix}{empty}{after}</section>')
@@ -252,12 +342,12 @@ def main():
         fixture.write_text(fixture_html())
         dest = Path(tmp) / "capture"
         args = [str(binary), "--capture-dir", str(dest), "--capture-size", "390x800",
-                "--capture-settle", "100", "--capture-timeout", "8000",
+                "--capture-settle", "100", "--capture-timeout", "15000",
                 "--capture-resize", "500x900", "--capture-resize", "390x800", "--enable_javascript=0"]
         for name, _, expected in cases():
             for suffix in ("case", *expected):
                 args += ["--capture-id", name + "-" + suffix]
-        process = subprocess.run([*args, str(fixture)], env=env, capture_output=True, text=True, timeout=20)
+        process = subprocess.run([*args, str(fixture)], env=env, capture_output=True, text=True, timeout=35)
         assert process.returncode == 0, process.stderr
         assert "runtime error:" not in process.stderr, process.stderr
         meta = json.loads((dest / "capture.json").read_text())
@@ -267,17 +357,20 @@ def main():
         for index, report in enumerate(steps):
             assert all(e["status"] == "ok" and e.get("boxes") for e in report["elements"]), report["elements"]
             boxes = {e["id"]: e["boxes"][0]["border_box"] for e in report["elements"]}
-            for name, _, expected in cases():
+            for name, options, expected in cases():
                 case = boxes[name + "-case"]
                 for suffix, geometry in expected.items():
                     box = boxes[name + "-" + suffix]
                     actual = box["y"] - case["y"] - 1, box["height"]
                     assert actual == geometry, (index, name, suffix, actual, geometry)
+                if options.get("float_x") is not None:
+                    actual_x = boxes[name + "-floating"]["x"] - case["x"] - 1
+                    assert actual_x == options["float_x"], (index, name, actual_x, options["float_x"])
                 # A negative bottom margin can put the final flow edge above
                 # an earlier block's bottom; that visible overflow adds no height.
                 flow_top, flow_height = expected.get("after", expected["empty"])
                 float_ends = [expected[key][0] + expected[key][1]
-                              for key in ("floating", "second", "preceding") if key in expected]
+                              for key in ("floating", "second", "preceding", "external") if key in expected]
                 height = max(0, flow_top + flow_height, *float_ends) + 2
                 assert case["height"] == height, (index, name, case, height)
         assert steps[0]["elements"] == steps[2]["elements"], "Resize round trip changed geometry"

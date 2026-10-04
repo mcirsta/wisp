@@ -87,22 +87,4 @@ styling/whitespace support, rather than a language-specific exception.
 Evidence: `out/render-captures/disclosure-markers-2026-10-03/chromium-extended/`
 and `marker-style-reference/inspection.json` in the same artifact directory.
 
-## Remaining parent/child margin cases
-
-- **Restore parent/child collapse when a deferred clearance decision finds no
-  clearance.** With parent `margin:13px 0 17px`, a zero-height left float and
-  an empty child with `clear:left;margin:100px 0 29px`, Wisp leaves the parent
-  and float at y=13 and puts the child and following sibling at y=113. Firefox
-  moves the whole adjoining chain to y=100. Chromium instead leaves the parent,
-  float and child at y=13 and puts the following sibling at y=30, treating this
-  float-edge case as clearance. The existing clearance tests follow Firefox's
-  ordinary-collapse behavior when no clearance is needed. Supporting it here
-  requires resolving the provisional ancestor top again after float sizing,
-  with corresponding float placement; do not introduce clearance solely to
-  avoid that work. Reproducer: `#zero-float-case` in
-  `parent-clearance-2026-10-04/fixture.html`. `before/` and `second-debug/`
-  confirm Wisp's geometry is unchanged by the nonzero-float clearance fix;
-  `firefox.json` provides the independent reference.
-
-Coordinates are relative to the enclosing flow-root's content edge. All
-artifact paths above are under `out/render-captures/`.
+All artifact paths above are under `out/render-captures/`.

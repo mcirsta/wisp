@@ -1839,31 +1839,14 @@ static bool box_is_descendant_of(const struct box *box, const struct box *ancest
     return false;
 }
 
-/* If the cleared child's top would join an ancestor's top, a float inside
- * that same adjoining chain moves with the ancestor. Its positive outer
- * height necessarily extends below their shared hypothetical top, regardless
- * of how large the child's margin is. External floats do not move with it. */
-static bool layout_clear_adjoining_float(const struct box *box, const struct box *parent,
-    const struct box *floats, enum css_clear_e clear)
-{
-    if (!parent || !box_is_descendant_of(box, parent))
-        return false;
-    for (const struct box *fl = floats; fl; fl = fl->next_float) {
-        if (fl->height > 0 &&
-            ((fl->type == BOX_FLOAT_LEFT && (clear == CSS_CLEAR_LEFT || clear == CSS_CLEAR_BOTH)) ||
-                (fl->type == BOX_FLOAT_RIGHT && (clear == CSS_CLEAR_RIGHT || clear == CSS_CLEAR_BOTH))) &&
-            box_is_descendant_of(fl, parent))
-            return true;
-    }
-    return false;
-}
-
 /* Flow scans decide clearance using floats already positioned in this BFC.
  * Top scans find a hypothetical/bounded top without applying clearance; they
- * can cross float-only containers and report a deferred clearance decision. */
+ * can cross float-only containers and report a deferred clearance decision.
+ * Resumed top scans also decide clearance against the floats now positioned. */
 enum margin_scan_mode {
     MARGIN_SCAN_FLOW,
     MARGIN_SCAN_TOP,
+    MARGIN_SCAN_RESUME_TOP,
 };
 
 struct margin_scan {
@@ -1874,6 +1857,7 @@ struct margin_scan {
     enum margin_scan_mode mode;
     struct box *boundary;          /* Stop before this box's bottom, or NULL. */
     struct box *adjoining_parent;  /* Positioned top still adjoining the chain. */
+    int applied_margin;           /* Provisional offset when resuming a parent top. */
 };
 
 struct margin_scan_result {
@@ -1883,6 +1867,29 @@ struct margin_scan_result {
     struct box *clearance;         /* Box requiring clearance from positioned floats. */
     struct box *pending_clearance; /* Box requiring a decision after float placement. */
 };
+
+/* Internal floats move with an adjoining parent's hypothetical top. External
+ * floats keep their formatting-context coordinates. Compare against both in
+ * that hypothetical position, including zero-height and negative-margin floats. */
+static int layout_clear_adjoining_floor(const struct margin_scan *scan, const struct box *box, int margin, int floor)
+{
+    const struct box *parent = scan->adjoining_parent;
+    enum css_clear_e clear = css_computed_clear(box->style);
+    int shift = margin - scan->applied_margin;
+    if (!parent || !box_is_descendant_of(box, parent))
+        return floor;
+    floor = INT_MIN;
+    for (const struct box *fl = scan->block->float_children; fl; fl = fl->next_float) {
+        if ((fl->type == BOX_FLOAT_LEFT && (clear == CSS_CLEAR_LEFT || clear == CSS_CLEAR_BOTH)) ||
+            (fl->type == BOX_FLOAT_RIGHT && (clear == CSS_CLEAR_RIGHT || clear == CSS_CLEAR_BOTH))) {
+            int bottom = fl->y + fl->height;
+            if (box_is_descendant_of(fl, parent))
+                bottom += shift;
+            floor = max(floor, bottom);
+        }
+    }
+    return floor;
+}
 
 /* Find the end of the adjoining-margin chain in tree order. The result's
  * margin totals accumulate; its three box outputs are reset for each scan. */
@@ -1926,7 +1933,7 @@ static struct box *layout_next_margin_block(struct box *box, const struct margin
                  * with clear:none, before joining this margin to its parent
                  * or preceding sibling. Bound the hypothetical search at this
                  * box so a later sibling cannot move its empty top edge. */
-                if (scan->mode == MARGIN_SCAN_FLOW && clear != CSS_CLEAR_NONE) {
+                if (scan->mode != MARGIN_SCAN_TOP && clear != CSS_CLEAR_NONE) {
                     int floor;
                     if (layout_clear(scan->block->float_children, css_computed_clear(box->style), &floor)) {
                         struct margin_scan hypothetical = *scan;
@@ -1936,9 +1943,9 @@ static struct box *layout_next_margin_block(struct box *box, const struct margin
                         struct margin_scan_result top = {
                             .positive = result->positive, .negative = result->negative};
                         layout_next_margin_block(box, &hypothetical, &top);
-                        if (scan->flow_y + (int)top.positive - (int)top.negative < floor ||
-                            layout_clear_adjoining_float(
-                                box, scan->adjoining_parent, scan->block->float_children, clear)) {
+                        int margin = (int)top.positive - (int)top.negative;
+                        floor = layout_clear_adjoining_floor(scan, box, margin, floor);
+                        if (scan->flow_y + margin < floor) {
                             result->clearance = box;
                             return box;
                         }
@@ -1958,7 +1965,7 @@ static struct box *layout_next_margin_block(struct box *box, const struct margin
             /* Check whether box is the box current margin collapses to.
              * Position inline content (including floats) before collecting
              * a following sibling's top margin. */
-            bool float_only = scan->boundary && scan->mode == MARGIN_SCAN_TOP && box->type == BOX_INLINE_CONTAINER &&
+            bool float_only = scan->boundary && scan->mode != MARGIN_SCAN_FLOW && box->type == BOX_INLINE_CONTAINER &&
                 box_inline_container_only_floats(scan->unit_len_ctx, box);
             if (float_only) {
                 for (const struct box *child = box->children; child; child = child->next) {
@@ -4733,7 +4740,11 @@ struct block_layout_state {
     struct box *clearance_box;    /* Lookahead found a required clearance boundary. */
     struct box *clearance_parent; /* Cleared empty margins cannot escape this bottom. */
     struct box *adjoining_parent; /* Positioned top still adjoining the first child chain. */
-    struct box *pending_clearance; /* First child awaiting preceding float geometry. */
+    struct {
+        struct box *parent;
+        struct box *clearance;     /* First child awaiting preceding float geometry. */
+        unsigned int positive, negative;
+    } provisional_top;            /* Consumed margins awaiting the clearance decision. */
 };
 
 static void layout_block_adjoining_parent(struct block_layout_state *state, struct box *box)
@@ -4940,7 +4951,12 @@ static bool layout_block_resolve_parent_top(struct box *box, struct box *block, 
         .flow_y = state->cy, .mode = MARGIN_SCAN_TOP, .boundary = box};
     struct margin_scan_result result = {.positive = state->max_pos_margin, .negative = state->max_neg_margin};
     struct box *end = layout_next_margin_block(box, &scan, &result);
-    state->pending_clearance = result.pending_clearance;
+    state->provisional_top.clearance = result.pending_clearance;
+    if (result.pending_clearance) {
+        state->provisional_top.parent = box;
+        state->provisional_top.positive = result.positive;
+        state->provisional_top.negative = result.negative;
+    }
     if (!end || (end->type == BOX_INLINE_CONTAINER &&
             box_inline_container_only_floats(&content->unit_len_ctx, end)))
         return false;
@@ -5007,6 +5023,115 @@ static void layout_block_apply_clearance(struct box *box, struct box *block, int
 }
 
 
+/* A revised parent top can also expose different horizontal space beside
+ * external floats. Replay the preceding float-only containers through ordinary
+ * float placement, preserving external floats and never reading future boxes'
+ * geometry from an earlier layout pass. This rare retry adds no persistent state. */
+static bool layout_block_reposition_floats(struct box *parent, struct box *stop, struct box *block,
+    html_content *content, int shift)
+{
+    if (!shift)
+        return true;
+    struct box *floats = block->float_children;
+    block->float_children = NULL;
+    block->clear_level = block->cached_place_below_level = 0;
+    while (floats) {
+        struct box *fl = floats;
+        floats = fl->next_float;
+        if (box_is_descendant_of(fl, parent))
+            continue;
+        add_float_to_container(block, fl);
+        if (css_computed_clear(fl->children->style) != CSS_CLEAR_NONE)
+            block->clear_level = max(block->clear_level, fl->y);
+    }
+
+    int cx = 0, cy = shift;
+    for (struct box *ancestor = parent; ancestor != block; ancestor = ancestor->parent) {
+        cx += ancestor->x;
+        cy += ancestor->y;
+    }
+    struct box *box = parent->children;
+    while (box != stop) {
+        assert(box);
+        cx += box->x;
+        cy += box->y;
+        if (box->type == BOX_INLINE_CONTAINER && box_inline_container_only_floats(&content->unit_len_ctx, box)) {
+            if (!layout_inline_container(box, box->parent->width, block, cx, cy, content))
+                return false;
+        } else if (box->type == BOX_BLOCK && box->children && !box_is_out_of_flow(box) &&
+            !box_style_creates_block_context(box)) {
+            box = box->children;
+            continue;
+        }
+        while (!box->next) {
+            cx -= box->x;
+            cy -= box->y;
+            box = box->parent;
+            assert(box != parent);
+        }
+        cx -= box->x;
+        cy -= box->y;
+        box = box->next;
+    }
+    return true;
+}
+
+/* Resume the bounded parent-top scan with the original adjoining margins.
+ * No clearance means revising that parent's provisional position, rather than
+ * applying the child's margins a second time inside it. */
+static bool layout_block_resolve_clearance(struct box *box, struct box *block, int viewport_height,
+    html_content *content, struct block_layout_state *state)
+{
+    struct box *parent = state->provisional_top.parent;
+    assert(parent && box_is_descendant_of(box, parent));
+    assert(state->margin_applied);
+    int applied = (int)state->provisional_top.positive - (int)state->provisional_top.negative;
+    const struct margin_scan scan = {
+        .unit_len_ctx = &content->unit_len_ctx, .block = block, .viewport_height = viewport_height,
+        .flow_y = state->cy - applied, .mode = MARGIN_SCAN_RESUME_TOP, .boundary = parent,
+        .adjoining_parent = parent, .applied_margin = applied};
+    struct margin_scan_result result = {
+        .positive = state->provisional_top.positive, .negative = state->provisional_top.negative};
+    struct box *end = layout_next_margin_block(box, &scan, &result);
+    state->provisional_top.clearance = NULL;
+    if (result.clearance == box) {
+        layout_block_scan_margins(box, block, viewport_height, content, state);
+        state->in_margin = true;
+        state->margin_applied = false;
+        return true;
+    }
+
+    int margin = (int)result.positive - (int)result.negative;
+    if (!layout_block_reposition_floats(parent, box, block, content, margin - applied))
+        return false;
+    state->margin_collapse = end;
+    state->margin_top = NULL;
+    state->clearance_box = result.clearance;
+    state->provisional_top.clearance = result.pending_clearance;
+    state->provisional_top.positive = result.positive;
+    state->provisional_top.negative = result.negative;
+    if (end == parent && !box_prevents_collapse_through(&content->unit_len_ctx, parent)) {
+        /* The whole parent collapses through. Restore the pending flow edge;
+         * its own position is finalized separately from its following sibling. */
+        parent->y -= applied;
+        state->cy -= applied;
+        state->max_pos_margin = state->seen_pos_margin = result.positive;
+        state->max_neg_margin = state->seen_neg_margin = result.negative;
+        state->empty_margin_box = parent;
+        state->margin_applied = false;
+        state->in_margin = true;
+        state->adjoining_parent = NULL;
+        /* The bounded top excludes the parent's own bottom. Resume ordinary
+         * flow lookahead to include that edge and the following siblings. */
+        layout_block_scan_margins(box, block, viewport_height, content, state);
+    } else {
+        parent->y += margin - applied;
+        state->cy += margin - applied;
+    }
+    return true;
+}
+
+
 /* Resolve the pending margin chain, then apply dimensions and clearance. */
 static bool layout_block_position_child(struct box *box, struct box *block, int viewport_height, html_content *content,
     struct block_layout_state *state)
@@ -5035,11 +5160,9 @@ static bool layout_block_position_child(struct box *box, struct box *block, int 
 
     /* Parent lookahead may have stopped here before the preceding floats
      * were placed. Their final geometry is now available for clearance. */
-    if (state->pending_clearance == box) {
-        state->pending_clearance = NULL;
-        layout_block_scan_margins(box, block, viewport_height, content, state);
-        state->in_margin = true;
-        state->margin_applied = false;
+    if (state->provisional_top.clearance == box) {
+        if (!layout_block_resolve_clearance(box, block, viewport_height, content, state))
+            return false;
     }
 
     /* Float avoidance may supply a minimum padding-edge position. Actual

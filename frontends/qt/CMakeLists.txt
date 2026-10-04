@@ -297,7 +297,7 @@ if(WISP_QT_CAPTURE)
         set_tests_properties(qt_float_clearance PROPERTIES TIMEOUT 30)
         add_test(NAME qt_float_only_margins
             COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_float_only_margins.py $<TARGET_FILE:wisp-qt>)
-        set_tests_properties(qt_float_only_margins PROPERTIES TIMEOUT 30)
+        set_tests_properties(qt_float_only_margins PROPERTIES TIMEOUT 40)
         add_test(NAME qt_float_boundaries
             COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_float_boundaries.py $<TARGET_FILE:wisp-qt>)
         set_tests_properties(qt_float_boundaries PROPERTIES TIMEOUT 30)
