@@ -30,5 +30,6 @@ void flex_test_style_alignment(css_computed_style *style, uint8_t direction, uin
 void flex_test_style_stretch(css_computed_style *style, int minimum, int maximum, bool auto_margin);
 void flex_test_style_shrink(css_computed_style *style, int shrink);
 void flex_test_style_wrap(css_computed_style *style, uint8_t wrap);
+void flex_test_style_baseline(css_computed_style *style, int top_margin, int bottom_margin);
 
 #endif

@@ -97,6 +97,29 @@ static void free_tree(struct box *b)
     free(b);
 }
 
+START_TEST(test_positioned_parent_text_line)
+{
+    html_content content = {.unit_len_ctx = {.viewport_width = INTTOFIX(200), .viewport_height = INTTOFIX(500),
+        .font_size_default = INTTOFIX(16), .device_dpi = INTTOFIX(96)}, .font_func = &fonts};
+    struct box *root = make_box(BOX_BLOCK, 24, CSS_VERTICAL_ALIGN_BASELINE);
+    style_set_position_absolute(root->style);
+    struct box *ic = make_box(BOX_INLINE_CONTAINER, 0, 0);
+    struct box *text = make_box(BOX_TEXT, 24, CSS_VERTICAL_ALIGN_BASELINE);
+    destroy_mock_style(text->style);
+    text->style = root->style; /* Direct text shares the positioned parent's style. */
+    text->text = "H";
+    text->length = 1;
+    text->width = UNKNOWN_WIDTH;
+    append(root, ic);
+    append(ic, text);
+    ck_assert(layout_block_context(root, 500, &content));
+    ck_assert_msg(root->height == 24 && ic->height == 24,
+        "Direct text must occupy a line inside a positioned block: block=%d line=%d", root->height, ic->height);
+    text->style = NULL;
+    free_tree(root);
+}
+END_TEST
+
 START_TEST(test_inline_object_baseline)
 {
     static const struct {
@@ -975,6 +998,7 @@ int main(void)
     tcase_add_loop_test(tc, test_outside_marker_baseline, 0, 3);
     tcase_add_loop_test(tc, test_empty_marker_line, 0, 3);
     tcase_add_loop_test(tc, test_block_marker_fallback, 0, 2 * BLOCK_MARKER_CASE_COUNT);
+    tcase_add_test(tc, test_positioned_parent_text_line);
     tcase_add_loop_test(tc, test_empty_inline_metrics, 0, 4 * EMPTY_INLINE_CASE_COUNT);
     tcase_add_loop_test(tc, test_repeated_text_baselines, 0, 2);
     tcase_add_loop_test(tc, test_nested_float_layout_once, 0, 2 * (NESTED_FLOAT_DEPTH + 1));

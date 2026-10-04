@@ -1485,6 +1485,66 @@ START_TEST(test_flex_redistribute_requires_resolved_height)
 END_TEST
 #endif
 
+static const struct {
+    const char *name;
+    int top, bottom, height;
+    bool reverse_wrap, reverse_column, synthetic;
+    int line_height, first_y, second_y, baseline;
+} baseline_cases[] = {
+    {"natural", 0, 0, -1, false, false, false, 40, 19, 0, 32},
+    {"positive margins", 20, 25, -1, false, false, false, 66, 20, 1, 33},
+    {"negative margins", -10, -8, -1, false, false, false, 39, 19, 0, 32},
+    {"definite cross size", 0, 0, 80, false, false, false, 80, 19, 0, 32},
+    {"reverse wrap", 0, 0, 80, true, false, false, 80, 59, 40, 72},
+    {"auto margin excluded", AUTO, 0, 80, false, false, false, 80, 60, 0, 32},
+    {"auto reverse column", 0, 0, -1, false, true, false, 60, 40, 0, 32},
+    {"border fallback", 0, 0, -1, false, false, true, 40, 20, 0, 40},
+};
+
+START_TEST(test_flex_first_baseline)
+{
+    struct flex_test_style values = {.container = true, .width = 200, .width_unit = CSS_UNIT_PX,
+        .min_width = -1, .max_width = -1, .basis = -1, .overflow = CSS_OVERFLOW_VISIBLE};
+    css_computed_style *style = flex_test_style_create(&values);
+    uint8_t direction = baseline_cases[_i].reverse_column ? CSS_FLEX_DIRECTION_COLUMN_REVERSE : CSS_FLEX_DIRECTION_ROW;
+    flex_test_style_alignment(style, direction, CSS_JUSTIFY_CONTENT_FLEX_START, baseline_cases[_i].height);
+    if (baseline_cases[_i].reverse_wrap)
+        flex_test_style_wrap(style, CSS_FLEX_WRAP_WRAP_REVERSE);
+    struct box flex = {.type = BOX_INLINE_FLEX, .style = style, .width = 200, .height = AUTO};
+    struct box items[2] = {0};
+    values.container = false;
+    values.width = 40;
+    for (int i = 0; i < 2; i++) {
+        items[i] = (struct box){.type = BOX_BLOCK, .parent = &flex, .style = flex_test_style_create(&values),
+            .width = 40, .height = AUTO, .min_width = {CSS_SIZE_SET, 40}, .max_width = 40,
+            .content_min_width = 40, .baseline = i ? 32 : 13,
+            .flags = baseline_cases[_i].synthetic ? 0 : HAS_BASELINE};
+        flex_test_style_alignment(items[i].style, CSS_FLEX_DIRECTION_ROW, CSS_JUSTIFY_CONTENT_FLEX_START, i ? 40 : 20);
+        flex_test_style_baseline(items[i].style, i ? 0 : baseline_cases[_i].top, i ? baseline_cases[_i].bottom : 0);
+    }
+    items[0].next = &items[1];
+    items[1].prev = &items[0];
+    flex.children = &items[0];
+    flex.last = &items[1];
+    html_content content = {.unit_len_ctx = {.viewport_width = INTTOFIX(800), .viewport_height = INTTOFIX(600),
+        .font_size_default = INTTOFIX(16), .device_dpi = INTTOFIX(96), .root_style = style}};
+    for (int pass = 0; pass < 2; pass++) {
+        flex.width = 200 + pass * 60;
+        ck_assert(layout_flex(&flex, flex.width, &content));
+        ck_assert_msg(flex.height == baseline_cases[_i].line_height &&
+                items[0].y == baseline_cases[_i].first_y && items[1].y == baseline_cases[_i].second_y &&
+                (flex.flags & HAS_BASELINE) && flex.baseline == baseline_cases[_i].baseline,
+            "%s pass=%d: height=%d expected %d; positions=%d/%d expected %d/%d; baseline=%d expected %d",
+            baseline_cases[_i].name, pass, flex.height, baseline_cases[_i].line_height,
+            items[0].y, items[1].y, baseline_cases[_i].first_y, baseline_cases[_i].second_y,
+            flex.baseline, baseline_cases[_i].baseline);
+    }
+    css_computed_style_destroy(items[0].style);
+    css_computed_style_destroy(items[1].style);
+    css_computed_style_destroy(style);
+}
+END_TEST
+
 Suite *layout_flex_suite(void)
 {
     Suite *s;
@@ -1528,6 +1588,7 @@ Suite *layout_flex_suite(void)
     tcase_add_loop_test(tc_core, test_flex_redistribute_out_of_flow, 0, 4);
     tcase_add_loop_test(tc_core, test_flex_out_of_flow_sizing, 0, 16);
     tcase_add_loop_test(tc_core, test_column_flex_shrink_layout, 0, 2 * COLUMN_SHRINK_CASES);
+    tcase_add_loop_test(tc_core, test_flex_first_baseline, 0, sizeof(baseline_cases) / sizeof(baseline_cases[0]));
 #ifndef NDEBUG
     tcase_add_loop_test_raise_signal(tc_core, test_flex_redistribute_requires_resolved_height, SIGABRT, 0, 2);
 #endif

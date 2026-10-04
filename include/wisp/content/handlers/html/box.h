@@ -409,8 +409,8 @@ struct box {
      */
     int max_width;
 
-    /** With HAS_BASELINE: last line in an inline container, or first in-flow
-     * line in a block used for outside-marker alignment. Relative to this box. */
+    /** With HAS_BASELINE: last line in an inline container, or first baseline
+     * exported by block/flex layout. Relative to this box's padding-edge origin. */
     int baseline;
 
 

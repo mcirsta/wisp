@@ -55,15 +55,12 @@ Marker font and colour styles now use the selected `::marker` style for both
 inside and outside markers. Custom `::marker { content:... }` remains unused;
 generated contents need shared counter/content handling for summaries and lists.
 
-Outside markers now align with the first in-flow line through ordinary block
-children. First baselines from flex/grid/table children are not propagated to
-the list item. A flex child in `outside-marker-2026-10-03/probe.html` gives a
-24px item versus Chromium's 30px.
-This needs the relevant formatting context's baseline rules, not descent into
-its first DOM child.
-
-Evidence: `out/render-captures/outside-marker-2026-10-03/probe.html`, `probe-fixed/`,
-and `complete/`.
+Outside markers now align with the first baseline through ordinary block and
+flex children. Grid and table baselines are still not exported, either to a list
+item or to an enclosing flex baseline group. These need their formatting
+context's baseline selection and alignment rules, not descent into the first
+DOM child. The implemented flex propagation covers first baselines in horizontal
+writing.
 
 A very narrow inside counter also differs from Chromium: `#spaced-marker` in
 `test/disclosure-markers.html` uses a negative Korean counter in an 8px item.

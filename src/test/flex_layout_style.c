@@ -1,4 +1,6 @@
 /* Keep libcss generated setters separate from Wisp's conflicting enum names. */
+#include <limits.h>
+
 #include "select/propset.h"
 #include "select/propget.h"
 #include "flex_layout_style.h"
@@ -69,7 +71,16 @@ void flex_test_style_alignment(css_computed_style *style, uint8_t direction, uin
 {
     set_flex_direction(style, direction);
     set_justify_content(style, justify);
-    set_height(style, CSS_HEIGHT_SET, (css_fixed_or_calc)INTTOFIX(height), CSS_UNIT_PX);
+    set_height(style, height < 0 ? CSS_HEIGHT_AUTO : CSS_HEIGHT_SET,
+        (css_fixed_or_calc)INTTOFIX(height < 0 ? 0 : height), CSS_UNIT_PX);
+}
+
+void flex_test_style_baseline(css_computed_style *style, int top_margin, int bottom_margin)
+{
+    set_align_self(style, CSS_ALIGN_SELF_BASELINE);
+    set_margin_top(style, top_margin == INT_MIN ? CSS_MARGIN_AUTO : CSS_MARGIN_SET,
+        (css_fixed_or_calc)INTTOFIX(top_margin == INT_MIN ? 0 : top_margin), CSS_UNIT_PX);
+    set_margin_bottom(style, CSS_MARGIN_SET, (css_fixed_or_calc)INTTOFIX(bottom_margin), CSS_UNIT_PX);
 }
 
 void flex_test_style_stretch(css_computed_style *style, int minimum, int maximum, bool auto_margin)

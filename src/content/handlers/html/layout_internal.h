@@ -317,6 +317,40 @@ static inline enum css_align_self_e lh__box_align_self(const struct box *flex, c
     return align_self == CSS_ALIGN_SELF_NORMAL ? CSS_ALIGN_SELF_STRETCH : align_self;
 }
 
+/* Horizontal writing: only row items without auto cross margins participate
+ * in a shared first-baseline group. Column baseline alignment falls back to start. */
+static inline bool lh__flex_baseline_item(const struct box *flex, const struct box *item)
+{
+    return lh__flex_main_is_horizontal(flex) &&
+        lh__box_align_self(flex, item) == CSS_ALIGN_SELF_BASELINE &&
+        item->margin[TOP] != AUTO && item->margin[BOTTOM] != AUTO;
+}
+
+/* Record first baselines only for their consumers. Ordinary blocks propagate
+ * them; flex layout selects its own item after ordering and line placement. */
+static inline bool layout_needs_first_baseline(const struct box *box)
+{
+    for (; box && (box->type == BOX_BLOCK || lh__box_is_flex_container(box)); box = box->parent) {
+        if (box_has_outside_marker(box) || box->type == BOX_INLINE_FLEX)
+            return true;
+        if (box->style && lh__box_is_absolute(box))
+            break;
+        if (lh__box_is_flex_item(box) && lh__flex_baseline_item(box->parent, box))
+            return true;
+    }
+    return false;
+}
+
+/* Baseline relative to the padding-edge origin. A box without one uses its
+ * bottom border edge. A scrolling block's baseline cannot escape that edge. */
+static inline int lh__flex_item_baseline(const struct box *box)
+{
+    int bottom = box->padding[TOP] + box->height + box->padding[BOTTOM] + box->border[BOTTOM].width;
+    if (!(box->flags & HAS_BASELINE))
+        return bottom;
+    return css_computed_overflow_y(box->style) == CSS_OVERFLOW_VISIBLE ? box->baseline : min(box->baseline, bottom);
+}
+
 /**
  * Determine width of margin, borders, and padding on one side of a box.
  *

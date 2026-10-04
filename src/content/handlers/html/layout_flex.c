@@ -90,6 +90,8 @@ struct flex_item_data {
 struct flex_line_data {
     int main_size;
     int cross_size;
+    int baseline, descent;
+    bool has_baseline;
 
     int used_main_size;
     int main_auto_margin_count;
@@ -1529,7 +1531,14 @@ static bool layout_flex__place_line_items_main(struct flex_ctx *ctx, struct flex
           ctx->flex, ctx->available_main, line->used_main_size, line->count);
 
     if (ctx->main_reversed) {
-        main_pos = lh__box_size_main(ctx->horizontal, ctx->flex) - main_pos;
+        int main_size = lh__box_size_main(ctx->horizontal, ctx->flex);
+        /* An auto-height column has no container main size yet. Use the
+         * resolved available size, or its items plus gaps. The reverse origin
+         * is the content end measured from the physical start padding. */
+        if (main_size == AUTO)
+            main_size = ctx->available_main != AUTO ? ctx->available_main :
+                line->used_main_size + (int)(line->count - 1) * ctx->main_gap;
+        main_pos = ctx->flex->padding[layout_flex__main_end_side(ctx)] + main_size;
     }
 
     if (ctx->available_main != AUTO && ctx->available_main != UNKNOWN_WIDTH &&
@@ -1729,6 +1738,13 @@ static bool layout_flex__place_line_items_main(struct flex_ctx *ctx, struct flex
 
         /* CSS FLEXBOX §9.8 COMPLIANCE: Cross Size Determination */
         cross_size = box_size_cross + lh__delta_outer_cross(ctx->flex, b);
+        if (lh__flex_baseline_item(ctx->flex, b)) {
+            int ascent = b->margin[TOP] + b->border[TOP].width + lh__flex_item_baseline(b);
+            int descent = cross_size - ascent;
+            line->baseline = line->has_baseline ? max(line->baseline, ascent) : ascent;
+            line->descent = line->has_baseline ? max(line->descent, descent) : descent;
+            line->has_baseline = true;
+        }
         if (line->cross_size < cross_size) {
             NSLOG(flex, WARNING, "LINE CROSS_SIZE update: box %p type=%d height=%d -> line->cross_size=%d", b, b->type,
                 box_size_cross, cross_size);
@@ -1736,6 +1752,8 @@ static bool layout_flex__place_line_items_main(struct flex_ctx *ctx, struct flex
         }
     }
 
+    if (line->has_baseline)
+        line->cross_size = max(line->cross_size, line->baseline + line->descent);
     return true;
 }
 
@@ -1895,7 +1913,17 @@ static void layout_flex__place_line_items_cross(struct flex_ctx *ctx, struct fle
             break;
 
         case CSS_ALIGN_SELF_BASELINE:
-            /* Fall through. */
+            if (lh__flex_baseline_item(ctx->flex, b)) {
+                int baseline = ctx->wrap == CSS_FLEX_WRAP_WRAP_REVERSE ?
+                    line->cross_size + extra - line->descent : line->baseline;
+                b->y = ctx->flex->padding[TOP] + line->pos + baseline - lh__flex_item_baseline(b);
+            } else {
+                /* Baselines perpendicular to the cross axis, or auto cross
+                 * margins with no free space, use start alignment. */
+                *box_pos_cross = ctx->flex->padding[cross_start] + line->pos +
+                    lh__non_auto_margin(b, cross_start) + b->border[cross_start].width;
+            }
+            break;
         case CSS_ALIGN_SELF_CENTER:
             *box_pos_cross = ctx->flex->padding[cross_start] + line->pos + cross_free_space / 2 +
                 lh__non_auto_margin(b, cross_start) + b->border[cross_start].width;
@@ -1969,6 +1997,31 @@ static int flex_item_cmp(const void *a, const void *b)
     return (int)(fa->original_index - fb->original_index);
 }
 
+/* Export the first baseline in horizontal writing after ordering, wrapping,
+ * alignment and late size adjustments. A row's baseline group takes priority;
+ * otherwise use its startmost item, synthesizing from the border if necessary. */
+static void layout_flex__first_baseline(const struct flex_ctx *ctx, struct box *flex)
+{
+    if (!layout_needs_first_baseline(flex) || ctx->line.count == 0 || ctx->item.count == 0)
+        return;
+    const struct flex_line_data *line = &ctx->line.data[
+        ctx->wrap == CSS_FLEX_WRAP_WRAP_REVERSE ? ctx->line.count - 1 : 0];
+    size_t first = line->first;
+    size_t last = first + line->count;
+    struct box *item = ctx->item.data[ctx->main_reversed ? last - 1 : first].box;
+    if (ctx->horizontal) {
+        for (size_t i = first; i < last; i++) {
+            if (lh__flex_baseline_item(flex, ctx->item.data[i].box)) {
+                item = ctx->item.data[i].box;
+                break;
+            }
+        }
+    }
+    flex->baseline = item->y + lh__flex_item_baseline(item);
+    flex->flags |= HAS_BASELINE;
+    flex->baseline = lh__flex_item_baseline(flex);
+}
+
 bool layout_flex(struct box *flex, int available_width, html_content *content)
 {
     int max_height;
@@ -1977,6 +2030,7 @@ bool layout_flex(struct box *flex, int available_width, html_content *content)
     struct css_size min_width;
     struct flex_ctx *ctx;
     bool success = false;
+    flex->flags &= ~HAS_BASELINE;
 
     ctx = layout_flex_ctx__create(content, flex);
     if (ctx == NULL) {
@@ -2134,6 +2188,7 @@ bool layout_flex(struct box *flex, int available_width, html_content *content)
         }
     }
 
+    layout_flex__first_baseline(ctx, flex);
     success = true;
 
 cleanup:

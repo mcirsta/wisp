@@ -1626,7 +1626,9 @@ bool layout_minmax_box(struct box *box, const struct gui_layout_table *font_func
  */
 static inline bool box_is_out_of_flow(const struct box *box)
 {
-    return box->style != NULL &&
+    /* Text borrows its parent's style, including position, but remains in
+     * that parent's line. It is not an independently positioned element. */
+    return box->type != BOX_TEXT && box->style != NULL &&
         (css_computed_position(box->style) == CSS_POSITION_ABSOLUTE ||
             css_computed_position(box->style) == CSS_POSITION_FIXED);
 }
@@ -3612,20 +3614,6 @@ static int layout_text_baseline(const html_content *content, const css_computed_
     return baseline;
 }
 
-/* Only list-item descendants need first-baseline propagation. Stop at atomic
- * formatting contexts and out-of-flow ancestors; their contents cannot provide
- * an ordinary block's first line. A list item can itself be positioned/floated. */
-static bool layout_needs_first_baseline(const struct box *box)
-{
-    for (; box && box->type == BOX_BLOCK; box = box->parent) {
-        if (box_has_outside_marker(box))
-            return true;
-        if (box_is_out_of_flow(box))
-            break;
-    }
-    return false;
-}
-
 /* Outside markers align to the first content baseline. A taller ascent pushes
  * that content down; marker descent does not enlarge the content's line box.
  * Offset is the content's top relative to the list item, before the push. */
@@ -3715,6 +3703,8 @@ static int layout_atomic_baseline(const struct box *box, int height, uint8_t ali
     bool text_button = box->gadget && (box->gadget->type == GADGET_BUTTON ||
         box->gadget->type == GADGET_SUBMIT || box->gadget->type == GADGET_RESET);
     int baseline;
+    if (lh__box_is_flex_container(box) && (box->flags & HAS_BASELINE))
+        return box->margin[TOP] + box->border[TOP].width + box->baseline;
     if (box->type == BOX_INLINE_BLOCK && !lh__box_is_object(box) &&
         (text_button || (css_computed_overflow_x(box->style) == CSS_OVERFLOW_VISIBLE &&
                             css_computed_overflow_y(box->style) == CSS_OVERFLOW_VISIBLE)) &&
@@ -3832,7 +3822,7 @@ static void layout_line_rollback_floats(struct box *first, struct box *end, stru
  * \param  indent  apply any first-line indent
  * \param  has_text_children  at least one TEXT in the inline_container
  * \param  record_baseline  retain the last line baseline for an inline-block ancestor
- * \param  record_first_baseline  retain the block's first line for an outside marker
+ * \param  record_first_baseline  retain the block's first line for marker/flex alignment
  * \param  next_box  updated to first box for next line, or 0 at end
  * \param  content  memory pool for any new boxes
  * \return  true on success, false on memory exhaustion
@@ -4598,7 +4588,7 @@ static bool layout_can_reuse_inline_layout(const struct box *box)
     if (!layout_can_reuse_inline_intrinsics(box))
         return false;
     /* Cached inline containers retain only their last baseline. First-baseline
-     * list layout must republish its block baseline after ancestor positions
+     * layout must republish its block baseline after ancestor positions
      * and marker fonts have been resolved. Intrinsic widths remain reusable. */
     if (layout_needs_first_baseline(box->parent))
         return false;
@@ -5368,8 +5358,10 @@ static void layout_shift_block_floats(struct box *box, int shift)
 static void layout_block_first_baseline(struct box *box, html_content *content, struct block_layout_state *state)
 {
     struct box *parent = box->parent;
-    if (box->type != BOX_BLOCK || !(box->flags & HAS_BASELINE) || box_is_out_of_flow(box) ||
-        parent == NULL || (parent->flags & HAS_BASELINE) || !layout_needs_first_baseline(parent))
+    if ((box->type != BOX_BLOCK && !lh__box_is_flex_container(box)) ||
+        !(box->flags & HAS_BASELINE) || box_is_out_of_flow(box) ||
+        parent == NULL || parent->type != BOX_BLOCK || (parent->flags & HAS_BASELINE) ||
+        !layout_needs_first_baseline(parent))
         return;
     struct line_baselines baselines = {0};
     int push = layout_align_outside_marker(parent, content, box->y - box->border[TOP].width,
