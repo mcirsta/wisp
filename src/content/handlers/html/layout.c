@@ -1731,8 +1731,10 @@ static inline bool box_prevents_collapse_through(const css_unit_ctx *unit_len_ct
         return true;
     if (box_has_vertical_separator(box) || box_has_positive_min_height(unit_len_ctx, box))
         return true;
+    /* Floats stop lookahead until positioned, but do not supply an in-flow
+     * line that could separate this block's own top and bottom margins. */
     if (box->type == BOX_INLINE_CONTAINER)
-        return box_inline_container_has_line_boxes(box);
+        return box_inline_container_has_line_boxes(box) && !box_inline_container_only_floats(box);
     /* In-flow descendants can separate the margins even before layout sets
      * MAKE_HEIGHT. This also covers a zero-height flex/grid inside wrappers. */
     if (box->type == BOX_BLOCK) {
@@ -5174,6 +5176,21 @@ bool layout_block_context(struct box *block, int viewport_height, html_content *
             !box_has_outside_marker_line(box->parent)) {
             struct block_layout_state saved = state;
             int flow_y = box->y;
+            /* A float follows preceding margins and its containing block's
+             * own top, not the full chain found past that block by lookahead.
+             * For a deferred empty branch, include its descendants' margins
+             * but stop before its own bottom and any following siblings. */
+            state.max_pos_margin = state.seen_pos_margin;
+            state.max_neg_margin = state.seen_neg_margin;
+            if (state.empty_margin_box) {
+                struct box *top;
+                layout_next_margin_block(&content->unit_len_ctx, state.empty_margin_box, block, viewport_height,
+                    &state.max_pos_margin, &state.max_neg_margin, &top,
+                    state.cy, state.empty_margin_box, NULL);
+            }
+            state.margin_collapse = box;
+            state.margin_top = NULL;
+            state.in_margin = true;
             if (!layout_block_position_child(box, block, viewport_height, content, &state) ||
                 !layout_inline_container(box, box->parent->width, block, state.cx, state.cy, content))
                 return false;

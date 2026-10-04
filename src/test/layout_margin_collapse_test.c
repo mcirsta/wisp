@@ -956,42 +956,71 @@ enum { EMPTY_POSITION_CASE_COUNT = sizeof(empty_position_cases) / sizeof(empty_p
 
 START_TEST(test_empty_margin_position)
 {
+    int variant = _i % EMPTY_POSITION_CASE_COUNT;
+    bool with_float = _i >= EMPTY_POSITION_CASE_COUNT;
     html_content *content = create_test_content();
     struct box *root = create_box_with_style(200);
     struct box *prefix = create_box_with_style(200);
     style_set_height_px(prefix->style, 60);
     prefix->flags |= HAS_HEIGHT | MAKE_HEIGHT;
-    style_set_margins(prefix->style, 0, 0, empty_position_cases[_i].previous, 0);
+    style_set_margins(prefix->style, 0, 0, empty_position_cases[variant].previous, 0);
     add_child(root, prefix);
     struct box *empty = create_box_with_style(200);
-    style_set_margins(empty->style, empty_position_cases[_i].top, 0, empty_position_cases[_i].bottom, 0);
+    style_set_margins(empty->style, empty_position_cases[variant].top, 0, empty_position_cases[variant].bottom, 0);
     add_child(root, empty);
     struct box *child = NULL;
-    if (empty_position_cases[_i].nested) {
+    if (empty_position_cases[variant].nested) {
         child = create_box_with_style(200);
-        style_set_margins(child->style, empty_position_cases[_i].child_top, 0,
-            empty_position_cases[_i].child_bottom, 0);
+        style_set_margins(child->style, empty_position_cases[variant].child_top, 0,
+            empty_position_cases[variant].child_bottom, 0);
         add_child(empty, child);
+    }
+    /* A float-only inline container must leave the same adjoining margin
+     * chain as the empty control, while its float follows the empty top. */
+    struct box *floating = NULL;
+    if (with_float) {
+        struct box *ic = calloc(1, sizeof(*ic));
+        ck_assert_ptr_nonnull(ic);
+        ic->type = BOX_INLINE_CONTAINER;
+        add_child(child ? child : empty, ic);
+        floating = create_box_with_style(10);
+        floating->type = BOX_FLOAT_LEFT;
+        add_child(ic, floating);
+        struct box *float_content = create_box_with_style(10);
+        style_set_width(float_content->style, 10, false);
+        style_set_height_px(float_content->style, 8);
+        float_content->flags |= HAS_HEIGHT | MAKE_HEIGHT;
+        add_child(floating, float_content);
     }
     struct box *following = create_box_with_style(200);
     style_set_height_px(following->style, 10);
     following->flags |= HAS_HEIGHT | MAKE_HEIGHT;
-    style_set_margins(following->style, empty_position_cases[_i].following, 0, 0, 0);
+    style_set_margins(following->style, empty_position_cases[variant].following, 0, 0, 0);
     add_child(root, following);
     for (int pass = 0; pass < 2; pass++) {
         root->height = AUTO;
         ck_assert(layout_block_context(root, 768, content));
-        ck_assert_msg(empty->y == empty_position_cases[_i].empty_y && empty->height == 0,
-            "%s pass %d: expected empty y/h=%d/0, got %d/%d", empty_position_cases[_i].name, pass,
-            empty_position_cases[_i].empty_y, empty->y, empty->height);
-        ck_assert_msg(following->y == empty_position_cases[_i].following_y &&
-                root->height == empty_position_cases[_i].following_y + 10,
-            "%s pass %d: expected following y=%d, got %d; root height=%d", empty_position_cases[_i].name, pass,
-            empty_position_cases[_i].following_y, following->y, root->height);
+        ck_assert_msg(empty->y == empty_position_cases[variant].empty_y && empty->height == 0,
+            "%s (float=%d) pass %d: expected empty y/h=%d/0, got %d/%d",
+            empty_position_cases[variant].name, with_float, pass,
+            empty_position_cases[variant].empty_y, empty->y, empty->height);
+        int expected_height = empty_position_cases[variant].following_y + 10;
+        if (floating) {
+            int float_bottom = empty_position_cases[variant].empty_y + 8;
+            if (expected_height < float_bottom)
+                expected_height = float_bottom;
+            ck_assert_msg(floating->y == empty_position_cases[variant].empty_y && floating->height == 8,
+                "%s pass %d: expected float y/h=%d/8, got %d/%d", empty_position_cases[variant].name, pass,
+                empty_position_cases[variant].empty_y, floating->y, floating->height);
+        }
+        ck_assert_msg(following->y == empty_position_cases[variant].following_y && root->height == expected_height,
+            "%s (float=%d) pass %d: expected following y=%d, got %d; root height=%d (expected %d)",
+            empty_position_cases[variant].name, with_float, pass,
+            empty_position_cases[variant].following_y, following->y, root->height, expected_height);
         if (child) {
             ck_assert_msg(child->y == 0 && child->height == 0,
                 "%s pass %d: child must share empty parent's top; y/h=%d/%d",
-                empty_position_cases[_i].name, pass, child->y, child->height);
+                empty_position_cases[variant].name, pass, child->y, child->height);
         }
     }
     free_box_tree(root);
@@ -1964,7 +1993,7 @@ static Suite *margin_collapse_suite(void)
     tcase_add_test(tc_through, test_nested_collapse_through);
     tcase_add_loop_test(tc_through, test_nested_empty_margin_chain, 0, 2 * EMPTY_CHAIN_CASE_COUNT);
     tcase_add_loop_test(tc_through, test_margin_chain_receiver, 0, 4 * MARGIN_RECEIVER_CASE_COUNT);
-    tcase_add_loop_test(tc_through, test_empty_margin_position, 0, EMPTY_POSITION_CASE_COUNT);
+    tcase_add_loop_test(tc_through, test_empty_margin_position, 0, 2 * EMPTY_POSITION_CASE_COUNT);
     tcase_add_loop_test(tc_through, test_empty_margin_position_with_clear, 0, CLEARANCE_CASE_COUNT);
     tcase_add_test(tc_through, test_no_collapse_through_border);
     tcase_add_test(tc_through, test_collapse_through_abspos_children);

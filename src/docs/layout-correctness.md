@@ -90,14 +90,31 @@ styling/whitespace support, rather than a language-specific exception.
 Evidence: `out/render-captures/disclosure-markers-2026-10-03/chromium-extended/`
 and `marker-style-reference/inspection.json` in the same artifact directory.
 
-## Margins around float-only blocks without markers
+## Remaining float placement cases
 
-The marker-only comparison also isolates an existing margin error when no marker
-is present: `#none-float` in `empty-markers-2026-10-03/probe.html` uses
-`list-style:none`, top/bottom margins of 13px/17px and a 48px-tall float.
-Relative to the enclosing flow-root, Wisp puts the item at y=26 and its following
-block at y=43; Chromium puts both at y=17. The item correctly has zero height in
-both engines. Investigate the saved/restored margin state around float-only
-inline containers, independently of marker line sizing.
+Ordinary float-only blocks now preserve adjoining margins, and place floats
+using their containing block's own top rather than a following sibling's margin.
+`qt_float_only_margins` covers 24 cases; the margin-position unit tests also run
+with floats, including nested positive/negative margin chains.
 
-Evidence: `out/render-captures/empty-markers-2026-10-03/after/`.
+Two separate pre-existing cases remain:
+
+- A float before a later empty block child still interrupts lookahead too early.
+  With a parent margin of `13px 0 17px`, a 40×48 float, then an empty child with
+  `margin:23px 0 29px`, Wisp positions the parent at y=13 and its following 8px
+  sibling at y=42; Chromium puts both at y=29. The parent's height is zero in
+  both. This is `#before-empty` in `float-only-margins-2026-10-04/edge.html`;
+  `#between-empty` adds another float after the empty child. Lookahead commits
+  the enclosing top before reaching the later child margins. Resolving this
+  needs coordination between pending ancestor margins and float placement.
+- A float whose containing block starts above the shared formatting context's
+  top is clamped to y=0. In `float-only-margins-2026-10-04/probe.html`,
+  `#negative-empty` has margins `-13px 0 -17px` and correctly starts at y=-13,
+  but its 48px float stays at y=0 rather than following it. Float placement's
+  zero-initialized `clear_level` and `cached_place_below_level` are implicated;
+  negative margins that leave the float at positive coordinates already pass.
+
+Coordinates above are relative to the enclosing flow-root's content edge.
+Evidence is in `out/render-captures/float-only-margins-2026-10-04/`: `before/`,
+`extended/`, and `edge-before/` versus `edge/`. The latter confirms that the
+interleaved-float cases are unchanged from the prior implementation.
