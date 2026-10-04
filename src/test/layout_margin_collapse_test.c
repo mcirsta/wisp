@@ -1831,6 +1831,81 @@ START_TEST(test_first_child_margin_top)
 }
 END_TEST
 
+/* A specified height separates the parent's bottom from its children, but
+ * its first child's top still collapses. Empty children also join their own
+ * bottom to that top chain. Floats must move with the resulting parent top. */
+static const struct {
+    const char *name;
+    int parent_height, child_height;
+    int child_top, child_bottom, parent_top, parent_bottom;
+    int expected_top, expected_after;
+    int minimum, maximum, expected_height;
+} fixed_parent_margin_cases[] = {
+    {"empty", 40, 0, 23, 29, 13, 17, 29, 86, 0, -1, 40},
+    {"nonempty", 40, 10, 23, 29, 13, 17, 23, 80, 0, -1, 40},
+    {"negative-child", 40, 0, -23, -29, 13, 17, -16, 41, 0, -1, 40},
+    {"mixed-child", 40, 0, 23, -29, 13, 17, -6, 51, 0, -1, 40},
+    {"negative-parent", 40, 0, 23, 29, -13, -17, 16, 39, 0, -1, 40},
+    {"large-child", 40, 0, 100, 29, 13, 17, 100, 157, 0, -1, 40},
+    {"zero-empty", 0, 0, 23, 29, 13, 17, 29, 29, 0, -1, 0},
+    {"zero-nonempty", 0, 10, 23, 29, 13, 17, 23, 40, 0, -1, 0},
+    {"minimum", 40, 0, 23, 29, 13, 17, 29, 106, 60, -1, 60},
+    {"maximum", 60, 0, 23, 29, 13, 17, 29, 86, 0, 40, 40},
+    {"conflict", 40, 0, 23, 29, 13, 17, 29, 106, 60, 20, 60},
+};
+enum { FIXED_PARENT_MARGIN_CASE_COUNT = sizeof(fixed_parent_margin_cases) / sizeof(fixed_parent_margin_cases[0]) };
+
+START_TEST(test_fixed_parent_first_child_margins)
+{
+    int variant = _i % FIXED_PARENT_MARGIN_CASE_COUNT;
+    bool with_float = _i >= FIXED_PARENT_MARGIN_CASE_COUNT;
+    html_content *content = create_test_content();
+    struct box *root = create_box_with_style(300);
+    struct box *parent = create_box_with_style(300);
+    style_set_margins(parent->style, fixed_parent_margin_cases[variant].parent_top, 0,
+        fixed_parent_margin_cases[variant].parent_bottom, 0);
+    style_set_height_px(parent->style, fixed_parent_margin_cases[variant].parent_height);
+    int expected_height = fixed_parent_margin_cases[variant].expected_height;
+    style_set_min_height(parent->style, fixed_parent_margin_cases[variant].minimum);
+    style_set_max_height(parent->style, fixed_parent_margin_cases[variant].maximum);
+    if (fixed_parent_margin_cases[variant].parent_height > 0)
+        parent->flags |= MAKE_HEIGHT | HAS_HEIGHT;
+    add_child(root, parent);
+    struct box *floating = with_float ? add_margin_test_float(parent) : NULL;
+    if (floating)
+        style_set_height_px(floating->children->style, 48);
+    struct box *child = create_box_with_style(300);
+    style_set_margins(child->style, fixed_parent_margin_cases[variant].child_top, 0,
+        fixed_parent_margin_cases[variant].child_bottom, 0);
+    style_set_height_px(child->style, fixed_parent_margin_cases[variant].child_height);
+    if (fixed_parent_margin_cases[variant].child_height > 0)
+        child->flags |= MAKE_HEIGHT | HAS_HEIGHT;
+    add_child(parent, child);
+    struct box *after = create_box_with_style(300);
+    style_set_height_px(after->style, 8);
+    after->flags |= MAKE_HEIGHT | HAS_HEIGHT;
+    add_child(root, after);
+    int top = fixed_parent_margin_cases[variant].expected_top;
+    int next = fixed_parent_margin_cases[variant].expected_after;
+    int root_height = with_float && top + 48 > next + 8 ? top + 48 : next + 8;
+    for (int pass = 0; pass < 3; pass++) {
+        root->width = pass == 1 ? 500 : 300;
+        root->height = AUTO;
+        ck_assert(layout_block_context(root, 768, content));
+        ck_assert_msg(parent->y == top && parent->height == expected_height && child->y == 0 &&
+                child->height == fixed_parent_margin_cases[variant].child_height && (!floating || floating->y == top) &&
+                after->y == next && root->height == root_height,
+            "%s float=%d pass=%d: parent y/h=%d/%d expected %d/%d; child y/h=%d/%d expected 0/%d; "
+            "float y=%d expected %d; after=%d expected %d; root=%d expected %d",
+            fixed_parent_margin_cases[variant].name, with_float, pass, parent->y, parent->height, top, expected_height,
+            child->y, child->height, fixed_parent_margin_cases[variant].child_height, floating ? floating->y : top, top,
+            after->y, next, root->height, root_height);
+    }
+    free_box_tree(root);
+    destroy_test_content(content);
+}
+END_TEST
+
 
 /* ========================================================================
  * Additional Parent-Last-Child Tests
@@ -2225,6 +2300,7 @@ static Suite *margin_collapse_suite(void)
     tcase_add_test(tc_sibling, test_sibling_no_margin);
     tcase_add_test(tc_sibling, test_three_siblings_cascade);
     tcase_add_test(tc_sibling, test_first_child_margin_top);
+    tcase_add_loop_test(tc_sibling, test_fixed_parent_first_child_margins, 0, 2 * FIXED_PARENT_MARGIN_CASE_COUNT);
     suite_add_tcase(s, tc_sibling);
 
     TCase *tc_through = tcase_create("Collapse Through");

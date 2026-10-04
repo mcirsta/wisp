@@ -89,15 +89,6 @@ and `marker-style-reference/inspection.json` in the same artifact directory.
 
 ## Remaining parent/child margin cases
 
-- **Fixed-height parents stop first-child top-margin lookahead.** With parent
-  `margin:13px 0 17px;height:40px`, a 40×48 left float, and an uncleared empty
-  child with `margin:23px 0 29px`, Wisp puts the parent at y=13, while Chromium
-  uses y=29. `MAKE_HEIGHT` currently stops the scan before the child. Height
-  separates the parent's bottom margin but does not by itself separate its top
-  from its first child's top. Address that distinction separately, including
-  controls without floats and with nonempty children. Reproducer:
-  `#parent-height-case` in `interleaved-floats-2026-10-04/probe.html`; captures
-  `before/` and `after2/` confirm this predates the float lookahead changes.
 - **Restore parent/child collapse when a deferred clearance decision finds no
   clearance.** With parent `margin:13px 0 17px`, a zero-height left float and
   an empty child with `clear:left;margin:100px 0 29px`, Wisp leaves the parent

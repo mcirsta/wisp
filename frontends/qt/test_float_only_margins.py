@@ -144,6 +144,56 @@ def cases():
             expected["before"] = (top, options.get("before_height", 0))
         yield name, dict(child="") | options, expected
 
+    # A parent's specified height separates its bottom edge, not its first
+    # child's top. Check the same chains with and without preceding floats.
+    for name, options, top, height, child_top, child_height, float_top, after in (
+        ("fixed-empty", {}, 29, 40, 29, 0, 29, 86),
+        ("fixed-child-height", dict(child="height:10px"), 23, 40, 23, 10, 23, 80),
+        ("fixed-child-padding", dict(child="padding-top:5px"), 23, 40, 23, 5, 23, 80),
+        ("fixed-negative", dict(child="margin:-23px 0 -29px"), -16, 40, -16, 0, -16, 41),
+        ("fixed-mixed", dict(child="margin:23px 0 -29px"), -6, 40, -6, 0, -6, 51),
+        ("fixed-parent-negative", dict(top=-13, bottom=-17), 16, 40, 16, 0, 16, 39),
+        ("fixed-following", dict(after=70), 29, 40, 29, 0, 29, 139),
+        ("fixed-prefix", dict(prefix=60, previous=31), 91, 40, 91, 0, 91, 148),
+        ("fixed-top-padding", dict(style="height:40px;padding-top:5px"), 13, 45, 41, 0, 18, 75),
+        ("fixed-top-border", dict(style="height:40px;border-top:3px solid"), 13, 43, 39, 0, 16, 73),
+        ("fixed-bottom-padding", dict(style="height:40px;padding-bottom:7px"), 29, 47, 29, 0, 29, 93),
+        ("fixed-bottom-border", dict(style="height:40px;border-bottom:3px solid"), 29, 43, 29, 0, 29, 89),
+        ("fixed-minimum", dict(style="height:40px;min-height:60px"), 29, 60, 29, 0, 29, 106),
+        ("fixed-maximum", dict(style="height:60px;max-height:40px"), 29, 40, 29, 0, 29, 86),
+        ("fixed-minmax-conflict", dict(style="height:40px;min-height:60px;max-height:20px"),
+         29, 60, 29, 0, 29, 106),
+        ("fixed-zero-empty", dict(style="height:0"), 29, 0, 29, 0, 29, 29),
+        ("fixed-zero-nonempty", dict(style="height:0", child="height:10px"), 23, 0, 23, 10, 23, 40),
+        ("fixed-calc", dict(style="height:calc(20px + 20px)"), 29, 40, 29, 0, 29, 86),
+        ("fixed-flowroot", dict(style="height:40px;display:flow-root"), 13, 40, 36, 0, 13, 70),
+        ("fixed-child-flowroot", dict(child="display:flow-root"), 23, 40, 23, 0, 23, 80),
+        ("fixed-nested", dict(child_wrapper="margin:31px 0 37px"), 37, 40, 37, 0, 37, 94),
+        ("fixed-nested-height", dict(child_wrapper="height:20px;margin:31px 0 37px"), 31, 40, 31, 0, 31, 88),
+        ("fixed-wrapped", dict(wrap=True), 29, 40, 29, 0, 29, 86),
+        ("fixed-unmatched-clear", dict(child="clear:right"), 29, 40, 29, 0, 29, 86),
+        ("fixed-text-before", dict(text_before=True), 13, 40, 56, 0, 13, 70),
+        ("fixed-text-after", dict(text_after=True), 29, 40, 29, 0, 29, 86),
+        ("fixed-before-empty", dict(before_child="margin:31px 0 37px"), 37, 40, 37, 0, 37, 94),
+        ("fixed-before-height", dict(before_child="height:10px;margin:31px 0 37px"), 31, 40, 78, 0, 31, 88),
+        ("fixed-between-floats", dict(float_after_child=True), 29, 40, 29, 0, 29, 86),
+    ):
+        for floating in (False, True):
+            expected = dict(empty=(top, height), inner=(child_top, child_height), after=(after, 8))
+            if floating:
+                expected["floating"] = (float_top, 48)
+            if options.get("wrap"):
+                expected["wrapper"] = (top, height)
+            if "child_wrapper" in options:
+                expected["middle"] = (top, 20 if name == "fixed-nested-height" else 0)
+            if "before_child" in options:
+                expected["before"] = (top, 10 if name == "fixed-before-height" else 0)
+            if options.get("float_after_child"):
+                expected["second"] = (top, 20)
+            case = dict(style="height:40px", child="", no_float=not floating) | options
+            case["style"] += ";font:13px/20px sans-serif"
+            yield name + ("-float" if floating else "-plain"), case, expected
+
 
 def fixture_html():
     parts = ['<!doctype html><meta charset="utf-8"><title>Float-only margins</title><style>',
@@ -223,8 +273,12 @@ def main():
                     box = boxes[name + "-" + suffix]
                     actual = box["y"] - case["y"] - 1, box["height"]
                     assert actual == geometry, (index, name, suffix, actual, geometry)
-                # The flow-root contains the final in-flow edge and both floats.
-                height = max(0, *(top + height for top, height in expected.values())) + 2
+                # A negative bottom margin can put the final flow edge above
+                # an earlier block's bottom; that visible overflow adds no height.
+                flow_top, flow_height = expected.get("after", expected["empty"])
+                float_ends = [expected[key][0] + expected[key][1]
+                              for key in ("floating", "second", "preceding") if key in expected]
+                height = max(0, flow_top + flow_height, *float_ends) + 2
                 assert case["height"] == height, (index, name, case, height)
         assert steps[0]["elements"] == steps[2]["elements"], "Resize round trip changed geometry"
     print(f"Float-only margins: {len(list(cases()))} cases passed before and after resizing.")

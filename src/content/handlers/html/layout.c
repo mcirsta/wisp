@@ -1966,10 +1966,12 @@ static struct box *layout_next_margin_block(struct box *box, const struct margin
                     right_float |= child->type == BOX_FLOAT_RIGHT;
                 }
             }
-            if (box->type == BOX_FLEX || box->type == BOX_GRID || box->flags & (MAKE_HEIGHT | CONTENTS_SKIPPED) ||
-                box_has_outside_marker_line(box) || lh__box_is_replace(box) ||
-                box->border[TOP].width || box->padding[TOP] ||
-                box_style_creates_block_context(box) ||
+            /* A specified height separates the bottom edge, not the first
+             * child's top. Keep looking down through ordinary block children. */
+            if (box->type == BOX_FLEX || box->type == BOX_GRID || box->flags & CONTENTS_SKIPPED ||
+                ((box->flags & MAKE_HEIGHT) && !box_has_in_flow_block_children(box)) ||
+                box_has_outside_marker_line(box) || lh__box_is_replace(box) || box->border[TOP].width ||
+                box->padding[TOP] || box_style_creates_block_context(box) ||
                 (box->type == BOX_INLINE_CONTAINER && !float_only &&
                     box_inline_container_has_line_boxes(scan->unit_len_ctx, box)) ||
                 (box_has_positive_min_height(scan->unit_len_ctx, box) && !box_has_in_flow_block_children(box))) {
@@ -2005,14 +2007,14 @@ static struct box *layout_next_margin_block(struct box *box, const struct margin
                  * Go up to first ancestor with a sibling. */
                 walked_up = true;
                 do {
-                    /* A bounded search includes empty descendants' bottom
-                     * margins, but excludes the boundary's own bottom. */
-                    if (scan->boundary && !box_prevents_collapse_through(scan->unit_len_ctx, box)) {
-                        if (box->margin[BOTTOM] > 0)
-                            result->positive = max(result->positive, (unsigned int)box->margin[BOTTOM]);
-                        else if (box->margin[BOTTOM] != AUTO && box->margin[BOTTOM] < 0)
-                            result->negative = max(result->negative, -(unsigned int)box->margin[BOTTOM]);
-                    }
+                    /* Empty descendants' bottoms join the top chain too.
+                     * The boundary's own bottom is excluded above. */
+                    if (box->margin[BOTTOM] > 0)
+                        result->positive = max(result->positive, (unsigned int)box->margin[BOTTOM]);
+                    else if (box->margin[BOTTOM] != AUTO && box->margin[BOTTOM] < 0)
+                        result->negative = max(result->negative, -(unsigned int)box->margin[BOTTOM]);
+                    struct box *child = box;
+                    bool includes_parent_top = box != result->top;
                     if (box == result->top)
                         result->top = box->parent;
                     box = box->parent;
@@ -2030,12 +2032,15 @@ static struct box *layout_next_margin_block(struct box *box, const struct margin
                         return scan->block;
                     }
 
-                    /* CSS 2.1 §8.3.1: Top padding or a positive minimum
-                     * prevents collapsing through the parent. Its first
-                     * child's top margin may still have joined this chain,
-                     * but the parent's bottom margin is separate. */
-                    if (box->padding[TOP] || box_has_positive_min_height(scan->unit_len_ctx, box)) {
-                        return box;
+                    /* First-child margins can join a parent's top without
+                     * joining its bottom. Stop when that parent cannot itself
+                     * collapse through, including one with a specified height. */
+                    if (box_prevents_collapse_through(scan->unit_len_ctx, box)) {
+                        /* If this scan began at an ancestor's top, the last
+                         * adjoining edge is the child, before the parent's
+                         * non-adjoining content. Keep that end distinct from
+                         * the parent which receives the collapsed offset. */
+                        return includes_parent_top ? child : box;
                     }
 
                     /* NOTE: We do NOT accumulate parent's margin[BOTTOM] here.
@@ -5269,16 +5274,21 @@ layout_block_advance(struct box *box, struct box *block, html_content *content, 
              * margins can't collapse through.
              * CSS 2.1 §8.3.1: last-child bottom margin collapses
              * with parent only if parent has:
-             * - height: auto (no MAKE_HEIGHT)
+             * - height: auto, unless the whole box collapses through
              * - min-height: 0
              * - no bottom padding
              * - no bottom border
              * - no adjoining chain from a self-collapsing cleared child */
             bool has_min_height = box_has_positive_min_height(&content->unit_len_ctx, box);
             bool contains_clearance = box == state->clearance_parent;
+            /* Dimensions were refreshed before descending into this parent.
+             * A definite zero height also contains a nonempty child's bottom
+             * margin; MAKE_HEIGHT only records positive intrinsic heights.
+             * A self-collapsing zero-height box still shares its top chain. */
+            bool separates_height = box->height != AUTO && box_prevents_collapse_through(&content->unit_len_ctx, box);
             if (box->type == BOX_BLOCK &&
-                ((box->flags & (MAKE_HEIGHT | ASPECT_RATIO_HEIGHT)) || has_min_height || contains_clearance ||
-                    box->padding[BOTTOM] != 0 || box->border[BOTTOM].width != 0)) {
+                (separates_height || has_min_height || contains_clearance || box->padding[BOTTOM] != 0 ||
+                    box->border[BOTTOM].width != 0)) {
 
                 /* CSS 2.1 sections 8.3.1 and 10.6.3: clearance or bottom
                  * padding/border keeps the child's collapsed margin inside
@@ -5318,11 +5328,13 @@ layout_block_advance(struct box *box, struct box *block, html_content *content, 
 
             /* Apply any min-height and max-height to
              * boxes in normal flow */
+            int previous_height = box->height;
             if (box->style && css_computed_position(box->style) != CSS_POSITION_ABSOLUTE &&
                 layout_apply_minmax_height(&content->unit_len_ctx, box, NULL)) {
-                /* Height altered */
-                /* Set current cy */
-                state->cy += box->height - (state->y - box->padding[TOP]);
+                /* The unconstrained height was already accounted for above.
+                 * Advance only by the constraint's change, even when the
+                 * specified height differs from the children's flow height. */
+                state->cy += box->height - previous_height;
             }
 
             state->cy += box->padding[BOTTOM] + box->border[BOTTOM].width;
