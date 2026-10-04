@@ -116,20 +116,26 @@ Evidence is in `out/render-captures/float-only-margins-2026-10-04/`: `before/`,
 `extended/`, and `edge-before/` versus `edge/`. The latter confirms that the
 interleaved-float cases are unchanged from the prior implementation.
 
-## Empty decorated inline lines
+## Remaining inline edge cases
 
-Undecorated opening/closing fragments no longer add blank lines before or after
-wrapped text. A separate existing case remains: an otherwise empty span with
-horizontal padding, border or margin fails to reserve its line height.
+- A calculated inline edge that resolves to zero can still interrupt margin
+  collapse. `#zero-calc` in `decorated-inline-lines-2026-10-04/edges.html` wraps
+  a block in `padding-left:calc(5px - 5px)`. The gap before the block is 18px
+  instead of Chromium's 13px; literal `padding-left:0` correctly gives 13px.
+  Final line sizing uses the resolved zero edge, but margin lookahead still
+  treats unresolved `calc()` edges conservatively. Resolve these consistently
+  with the containing width and CSS unit context before committing the margin
+  chain; do not special-case this expression.
+- Decorated span boundaries can become invalid wrapping opportunities around
+  an unbreakable word. In the same fixture, `#wrap-left`, `#wrap-right` and
+  `#wrap-both` put a 240px word in a 200px container with 5px padding on the
+  named sides. Wisp uses 40px, 40px and 60px respectively; Chromium overflows
+  the word and its edges together on a single 20px line. Empty opening/closing
+  fragments are still counted as independent candidates by the line breaker.
+  The fix must preserve legal break opportunities across inline boundaries,
+  including real whitespace and text runs; suppressing decorated line height
+  would reintroduce the now-fixed empty-span sizing bug.
 
-With `font:20px/20px Test` and no text in the container, `<span
-style="padding-left:5px"></span>`, `border:1px solid`, and `margin-left:5px`
-each create a 20px line in Chromium but a zero-height line in Wisp. The inline
-edges already prevent margin collapse, but `layout_line` only raises used height
-for text and atomic inline boxes. The empty decorated fragment's own height is
-not included. Resolve which fragments actually participate before extending
-line metrics; a vertical margin alone does not create a line in Chromium.
-
-Evidence: `out/render-captures/empty-inline-lines-2026-10-04/controls.html`,
-`#padded`, `#bordered`, `#margin-left` and `#margin-top`, with Wisp/Chromium
-captures in `controls/`.
+Both limitations existed before the decorated-inline sizing correction.
+Evidence: `out/render-captures/decorated-inline-lines-2026-10-04/edges.html`,
+`edges-before/` and `edges-after/` (the latter includes the Chromium reference).

@@ -18,3 +18,39 @@ body { margin:0; font:20px/20px Test; }
 <div class="case" id="pre-space"><span style="white-space:pre"> </span><div class="after" id="pre-space-after"></div></div>
 <div class="case" id="atomic"><span><span style="display:inline-block;width:20px;height:10px;vertical-align:top"></span></span><div class="after" id="atomic-after"></div></div>
 <div class="case" id="positioned"><span><span style="position:absolute;width:20px;height:20px"></span></span><div class="after" id="positioned-after"></div></div>
+
+<!-- Only horizontal fragment edges create a line; fonts set its height. -->
+<div class="case" id="edge-padding-left"><span style="padding-left:5px"></span><div class="after" id="edge-padding-left-after"></div></div>
+<div class="case" id="edge-padding-right"><span style="padding-right:5px"></span><div class="after" id="edge-padding-right-after"></div></div>
+<div class="case" id="edge-padding-top"><span style="padding-top:8px"></span><div class="after" id="edge-padding-top-after"></div></div>
+<div class="case" id="edge-padding-bottom"><span style="padding-bottom:8px"></span><div class="after" id="edge-padding-bottom-after"></div></div>
+<div class="case" id="edge-border-left"><span style="border-left:2px solid"></span><div class="after" id="edge-border-left-after"></div></div>
+<div class="case" id="edge-border-right"><span style="border-right:2px solid"></span><div class="after" id="edge-border-right-after"></div></div>
+<div class="case" id="edge-border-top"><span style="border-top:2px solid"></span><div class="after" id="edge-border-top-after"></div></div>
+<div class="case" id="edge-border-bottom"><span style="border-bottom:2px solid"></span><div class="after" id="edge-border-bottom-after"></div></div>
+<div class="case" id="edge-margin-left"><span style="margin-left:5px"></span><div class="after" id="edge-margin-left-after"></div></div>
+<div class="case" id="edge-margin-right"><span style="margin-right:5px"></span><div class="after" id="edge-margin-right-after"></div></div>
+<div class="case" id="edge-margin-top"><span style="margin-top:5px"></span><div class="after" id="edge-margin-top-after"></div></div>
+<div class="case" id="edge-margin-bottom"><span style="margin-bottom:5px"></span><div class="after" id="edge-margin-bottom-after"></div></div>
+<div class="case" id="edge-margin-negative"><span style="margin-left:-5px"></span><div class="after" id="edge-margin-negative-after"></div></div>
+<div class="case" id="edge-border-hidden"><span style="border-left:2px hidden"></span><div class="after" id="edge-border-hidden-after"></div></div>
+<div class="case" id="edge-border-none"><span style="border-left:2px none"></span><div class="after" id="edge-border-none-after"></div></div>
+<div class="case" id="edge-border-zero"><span style="border-left:0 solid"></span><div class="after" id="edge-border-zero-after"></div></div>
+<div class="case" id="edge-calc-zero"><span style="padding-left:calc(5px - 5px)"></span><div class="after" id="edge-calc-zero-after"></div></div>
+<div class="case" id="edge-calc-nonzero"><span style="padding-left:calc(5px + 5px)"></span><div class="after" id="edge-calc-nonzero-after"></div></div>
+<div class="case" id="edge-percent"><span style="padding-left:10%"></span><div class="after" id="edge-percent-after"></div></div>
+<div class="case" id="edge-big"><span style="border-left:2px solid;font-size:40px;line-height:40px"></span><div class="after" id="edge-big-after"></div></div>
+<div class="case" id="edge-big-tight"><span style="border-left:2px solid;font-size:40px;line-height:20px"></span><div class="after" id="edge-big-tight-after"></div></div>
+<div class="case" id="edge-small"><span style="padding-left:5px;font-size:10px;line-height:10px"></span><div class="after" id="edge-small-after"></div></div>
+<div class="case" id="edge-tall-line"><span style="padding-left:5px;line-height:40px"></span><div class="after" id="edge-tall-line-after"></div></div>
+<div class="case" id="edge-zero-line"><span style="padding-left:5px;line-height:0"></span><div class="after" id="edge-zero-line-after"></div></div>
+<div class="case" id="edge-zero-font"><span style="padding-left:5px;font-size:0;line-height:0"></span><div class="after" id="edge-zero-font-after"></div></div>
+<div class="case" id="edge-top"><span style="padding-left:5px;font-size:40px;line-height:40px;vertical-align:top"></span><div class="after" id="edge-top-after"></div></div>
+<div class="case" id="edge-bottom"><span style="padding-left:5px;font-size:40px;line-height:40px;vertical-align:bottom"></span><div class="after" id="edge-bottom-after"></div></div>
+<div class="case" id="split-left"><span style="padding-left:5px"><div id="split-left-child" style="height:12px"></div></span><div class="after" id="split-left-after"></div></div>
+<div class="case" id="split-right"><span style="padding-right:5px"><div id="split-right-child" style="height:12px"></div></span><div class="after" id="split-right-after"></div></div>
+<div class="case" id="split-vertical"><span style="padding-top:5px"><div id="split-vertical-child" style="height:12px"></div></span><div class="after" id="split-vertical-after"></div></div>
+<div class="case" id="split-both"><span style="padding:5px"><div id="split-both-child" style="height:12px"></div></span><div class="after" id="split-both-after"></div></div>
+<div class="case" id="nested-large" style="font-size:40px;line-height:40px"><span><span style="padding-left:5px"></span></span><div class="after" id="nested-large-after"></div></div>
+<div class="case" id="empty-large"><span style="font-size:40px;line-height:40px"></span>H<div class="after" id="empty-large-after"></div></div>
+<div class="case" id="parent-zero" style="font-size:0;line-height:0"><span style="padding-left:5px;font:20px/20px Test"></span><div class="after" id="parent-zero-after"></div></div>

@@ -1573,16 +1573,21 @@ static inline bool box_has_vertical_separator(const struct box *box)
     return box->padding[TOP] || box->padding[BOTTOM] || box->border[TOP].width || box->border[BOTTOM].width;
 }
 
-/* Empty inline fragments around a block do not separate margins (CSS 2.1
- * 9.4.2). Check computed edges: layout has not populated their box dimensions
- * yet. Horizontal edges also make an otherwise empty inline participate in
- * a line, so all four sides matter. Keep unresolved calc() edges as
- * separators, as before. */
+/* CSS Inline 3, phantom line boxes: only inline-axis edges make an empty
+ * fragment participate in a line. In horizontal layout the opening fragment
+ * owns the left edge and its closing fragment owns the right edge, including
+ * when a block splits them into separate inline containers. Margin lookahead
+ * needs computed values before layout; keep unresolved calc() conservative. */
 static bool box_inline_has_edges(const struct box *box)
 {
     if (box->style == NULL)
         return false;
-    for (unsigned int side = 0; side < 4; side++) {
+    const unsigned int sides[] = {LEFT, RIGHT};
+    for (size_t i = 0; i < sizeof(sides) / sizeof(sides[0]); i++) {
+        unsigned int side = sides[i];
+        if ((side == LEFT && box->type == BOX_INLINE_END) ||
+            (side == RIGHT && box->type == BOX_INLINE && box->inline_end))
+            continue;
         css_fixed_or_calc value = (css_fixed_or_calc)0;
         css_unit unit = CSS_UNIT_PX;
         if (margin_funcs[side](box->style, &value, &unit) == CSS_MARGIN_SET &&
@@ -1598,6 +1603,16 @@ static bool box_inline_has_edges(const struct box *box)
         }
     }
     return false;
+}
+
+/* After placement use resolved edges: calc() and percentages may be zero.
+ * Opening and closing fragments carry only their respective horizontal edge. */
+static bool layout_inline_has_edges(const struct box *box)
+{
+    return (box->type != BOX_INLINE_END &&
+               (box->margin[LEFT] || box->padding[LEFT] || box->border[LEFT].width)) ||
+        ((box->type == BOX_INLINE_END || box->inline_end == NULL) &&
+            (box->margin[RIGHT] || box->padding[RIGHT] || box->border[RIGHT].width));
 }
 
 /* Whether an inline container interrupts margin lookahead. Floats also need
@@ -3367,9 +3382,12 @@ static bool box_needs_line_metrics(const struct box *box, const css_computed_sty
 {
     /* Identical styles have identical ascent/descent and need no font lookup.
      * A different text style may extend above or below the parent's strut.
-     * Empty inline fragments must still be allowed to collapse through. */
+     * Empty inline fragments also contribute their font's strut on real lines;
+     * a line containing only undecorated fragments still collapses to zero. */
     return box_needs_inline_alignment(box) ||
-        (box->type == BOX_TEXT && box->length && box->style != parent_style);
+        (box->type == BOX_TEXT && box->length && box->style != parent_style) ||
+        ((box->type == BOX_INLINE || box->type == BOX_INLINE_END) &&
+            (box->style != parent_style || box_inline_has_edges(box)));
 }
 
 /* Reuse measurements across the sizing and positioning passes of one line.
@@ -4108,7 +4126,7 @@ static bool layout_line(struct box *first, int *width, int *y, int cx, int cy, s
 
         if (!line_has_content && !box_is_out_of_flow(d) && !lh__box_is_float_box(d) &&
             (layout_inline_has_content(d) || d->type == BOX_TEXT || d->type == BOX_BR ||
-                ((d->type == BOX_INLINE || d->type == BOX_INLINE_END) && box_inline_has_edges(d))))
+                ((d->type == BOX_INLINE || d->type == BOX_INLINE_END) && layout_inline_has_edges(d))))
             line_has_content = true;
 
         if (lh__box_is_inline_positioned(d)) {

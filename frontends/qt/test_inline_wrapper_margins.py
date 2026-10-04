@@ -9,8 +9,8 @@ import tempfile
 
 binary = Path(sys.argv[1]).resolve()
 fixture = Path(__file__).resolve().parents[2] / "test/inline-wrapper-margins.html"
-empty = ("plain", "link", "nested", "spaces", "relative", "positioned")
-cases = (*empty, "text", "break", "preserved", "inlineblock", "negative")
+empty = ("plain", "link", "nested", "spaces", "relative", "positioned", "vertical-padding")
+cases = (*empty, "text", "break", "preserved", "inlineblock", "negative", "left-padding", "right-padding")
 env = dict(os.environ, QT_QPA_PLATFORM="offscreen", QT_SCALE_FACTOR="1",
            QT_SCREEN_SCALE_FACTORS="1", QT_FONT_DPI="96")
 with tempfile.TemporaryDirectory(prefix="wisp-inline-margins-") as tmp:
@@ -41,6 +41,9 @@ with tempfile.TemporaryDirectory(prefix="wisp-inline-margins-") as tmp:
         # Three 30px blocks + collapsed gaps 13/17px + two 1px borders.
         assert boxes[name]["height"] == 122, (name, boxes[name])
     assert gaps("negative") == (-13, -17), gaps("negative")
+    # Each horizontal edge creates a line only in the fragment owning it.
+    assert gaps("left-padding") == (38, 17), gaps("left-padding")
+    assert gaps("right-padding") == (13, 44), gaps("right-padding")
     for name in ("text", "preserved"):
         # Authored 20px line height: 5 + 20 + 13 before, 17 + 20 + 7 after.
         assert gaps(name) == (38, 44), (name, gaps(name))

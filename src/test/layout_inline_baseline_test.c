@@ -145,6 +145,84 @@ START_TEST(test_inline_object_baseline)
 }
 END_TEST
 
+static const struct {
+    int font, line, height, y;
+    uint8_t align;
+} empty_inline_cases[] = {
+    {16, 20, 20, 0, CSS_VERTICAL_ALIGN_BASELINE},
+    {32, 40, 40, 0, CSS_VERTICAL_ALIGN_BASELINE},
+    {32, 20, 26, 0, CSS_VERTICAL_ALIGN_BASELINE},
+    {8, 10, 20, 8, CSS_VERTICAL_ALIGN_BASELINE},
+    {16, 40, 40, 0, CSS_VERTICAL_ALIGN_BASELINE},
+    {16, 0, 20, 10, CSS_VERTICAL_ALIGN_BASELINE},
+    {0, 0, 20, 16, CSS_VERTICAL_ALIGN_BASELINE},
+    {32, 40, 40, 0, CSS_VERTICAL_ALIGN_TOP},
+    {32, 40, 40, 0, CSS_VERTICAL_ALIGN_BOTTOM},
+};
+enum { EMPTY_INLINE_CASE_COUNT = sizeof(empty_inline_cases) / sizeof(empty_inline_cases[0]) };
+
+START_TEST(test_empty_inline_metrics)
+{
+    /* Keep the mock font sizes literal, independent of the user's minimum. */
+    int minimum_font = nsoption_int(font_min_size);
+    nsoption_set_int(font_min_size, 0);
+    int variant = _i % EMPTY_INLINE_CASE_COUNT;
+    int mode = _i / EMPTY_INLINE_CASE_COUNT; /* phantom, left edge, right edge, adjacent text */
+    html_content content = {
+        .unit_len_ctx = {.viewport_width = INTTOFIX(320), .viewport_height = INTTOFIX(500),
+            .font_size_default = INTTOFIX(16), .device_dpi = INTTOFIX(96)},
+        .font_func = &scaled_fonts,
+    };
+    struct box *root = make_box(BOX_BLOCK, 20, CSS_VERTICAL_ALIGN_BASELINE);
+    struct box *ic = make_box(BOX_INLINE_CONTAINER, 0, 0);
+    struct box *start = make_box(BOX_INLINE, 20, CSS_VERTICAL_ALIGN_BASELINE);
+    struct box *end = make_box(BOX_INLINE_END, 20, CSS_VERTICAL_ALIGN_BASELINE);
+    start->inline_end = end;
+    end->inline_end = start;
+    style_set_inline_metrics(start->style, empty_inline_cases[variant].font,
+        empty_inline_cases[variant].line, empty_inline_cases[variant].align);
+    style_set_inline_metrics(end->style, empty_inline_cases[variant].font,
+        empty_inline_cases[variant].line, empty_inline_cases[variant].align);
+    style_set_margins(start->style, 0, mode == 2 ? 5 : 0, 0, mode == 1 ? 5 : 0);
+    style_set_margins(end->style, 0, mode == 2 ? 5 : 0, 0, mode == 1 ? 5 : 0);
+    append(root, ic);
+    append(ic, start);
+    append(ic, end);
+    struct box *text = NULL;
+    if (mode == 3) {
+        text = make_box(BOX_TEXT, 20, CSS_VERTICAL_ALIGN_BASELINE);
+        /* Only the empty span differs from the parent; the text itself must
+         * not be what triggers mixed-font alignment. */
+        destroy_mock_style(text->style);
+        text->style = root->style;
+        text->text = "H";
+        text->length = 1;
+        text->width = UNKNOWN_WIDTH;
+        append(ic, text);
+    }
+    const int widths[] = {200, 320, 200};
+    for (size_t pass = 0; pass < sizeof(widths) / sizeof(widths[0]); pass++) {
+        root->width = widths[pass];
+        root->height = AUTO;
+        ck_assert(layout_block_context(root, 500, &content));
+        int expected = mode ? empty_inline_cases[variant].height : 0;
+        ck_assert_msg(ic->height == expected && root->height == expected,
+            "mode %d, font %d, line %d, width %d: expected %d; inline %d, block %d", mode,
+            empty_inline_cases[variant].font, empty_inline_cases[variant].line, widths[pass], expected,
+            ic->height, root->height);
+        if (mode) {
+            ck_assert_msg(start->y == empty_inline_cases[variant].y,
+                "mode %d, variant %d, width %d: span y %d, expected %d", mode, variant, widths[pass],
+                start->y, empty_inline_cases[variant].y);
+        }
+    }
+    if (text)
+        text->style = NULL; /* Shared with root. */
+    free_tree(root);
+    nsoption_set_int(font_min_size, minimum_font);
+}
+END_TEST
+
 START_TEST(test_empty_marker_line)
 {
     html_content content = {
@@ -664,6 +742,7 @@ int main(void)
     tcase_add_loop_test(tc, test_mixed_text_baseline, 0, sizeof(text_cases) / sizeof(text_cases[0]));
     tcase_add_loop_test(tc, test_outside_marker_baseline, 0, 3);
     tcase_add_loop_test(tc, test_empty_marker_line, 0, 3);
+    tcase_add_loop_test(tc, test_empty_inline_metrics, 0, 4 * EMPTY_INLINE_CASE_COUNT);
     tcase_add_loop_test(tc, test_repeated_text_baselines, 0, 2);
     tcase_add_loop_test(tc, test_nested_float_layout_once, 0, 2 * (NESTED_FLOAT_DEPTH + 1));
     tcase_add_loop_test(tc, test_line_at_float_boundary, 0,

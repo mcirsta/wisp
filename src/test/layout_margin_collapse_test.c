@@ -1324,7 +1324,9 @@ START_TEST(test_split_inline_margins)
 {
     int variant = _i % SPLIT_INLINE_VARIANT_COUNT;
     int sign = _i < SPLIT_INLINE_VARIANT_COUNT ? 1 : -1;
-    bool separates = variant >= 4 && variant <= 9;
+    /* Vertical padding alone leaves a phantom line; only horizontal edges
+     * make empty fragments separate margins (CSS Inline 3, section 2.3). */
+    bool separates = variant >= 4 && variant <= 9 && variant != 6;
     html_content *content = create_test_content();
     struct box *root = create_box_with_style(200);
     struct box *before = create_box_with_style(200);
