@@ -34,7 +34,7 @@
  * Layout a grid container.
  *
  * \param  grid             box of type BOX_GRID or BOX_INLINE_GRID
- * \param  available_width  width of containing block
+ * \param  available_width  width of containing block (grid->width is the used track area)
  * \param  content          memory pool for any new boxes
  * \return  true on success, false on memory exhaustion
  */

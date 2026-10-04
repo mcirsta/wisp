@@ -1,0 +1,46 @@
+<!doctype html><meta charset="utf-8"><title>Grid container heights and gaps</title>
+<style>
+@font-face{font-family:Test;src:url(fonts/normal-400.ttf)}
+body{margin:20px;font:16px/20px Test}.case{display:flow-root;width:240px;margin-bottom:80px;background:#eee}
+.grid{display:grid;width:100px;align-content:start;background:#58a}.grid i{display:block;background:#a85}.inner{background:#8b5}
+#switch{position:absolute;left:300px;top:0}
+#switch:checked ~ .case .grid{height:20px!important;min-height:0!important;max-height:none!important}
+</style><input type="checkbox" id="switch" aria-label="Change grid heights">
+<!-- Start-aligned tracks isolate container sizing from spare-space distribution.
+     The nested grid has a fixed height: grid-area percentage resolution is a separate backlog item. -->
+<div class="case" id="empty-case" style=""><div class="grid" id="empty-grid" style="height:30px"></div></div>
+<div class="case" id="overflow-case" style=""><div class="grid" id="overflow-grid" style="height:30px"><i style="height:60px"></i></div></div>
+<div class="case" id="zero-case" style=""><div class="grid" id="zero-grid" style="height:0"><i style="height:10px"></i></div></div>
+<div class="case" id="auto-case" style=""><div class="grid" id="auto-grid" style=""><i style="height:30px"></i></div></div>
+<div class="case" id="minimum-case" style=""><div class="grid" id="minimum-grid" style="min-height:40px"></div></div>
+<div class="case" id="maximum-case" style=""><div class="grid" id="maximum-grid" style="max-height:30px"><i style="height:60px"></i></div></div>
+<div class="case" id="min-wins-case" style=""><div class="grid" id="min-wins-grid" style="height:20px;min-height:40px;max-height:10px"></div></div>
+<div class="case" id="border-height-case" style=""><div class="grid" id="border-height-grid" style="height:30px;padding:3px;border:2px solid;box-sizing:border-box"><i style="height:60px"></i></div></div>
+<div class="case" id="border-floor-case" style=""><div class="grid" id="border-floor-grid" style="height:2px;padding:3px;border:2px solid;box-sizing:border-box"></div></div>
+<div class="case" id="border-min-case" style=""><div class="grid" id="border-min-grid" style="min-height:30px;padding:3px;border:2px solid;box-sizing:border-box"></div></div>
+<div class="case" id="border-max-case" style=""><div class="grid" id="border-max-grid" style="max-height:30px;padding:3px;border:2px solid;box-sizing:border-box"><i style="height:60px"></i></div></div>
+<div class="case" id="percent-case" style="height:100px"><div class="grid" id="percent-grid" style="height:50%"></div></div>
+<div class="case" id="percent-limits-case" style="height:100px"><div class="grid" id="percent-limits-grid" style="height:90%;max-height:40%;min-height:60%"></div></div>
+<div class="case" id="indefinite-case" style=""><div class="grid" id="indefinite-grid" style="height:50%;max-height:20%;min-height:80%"><i style="height:30px"></i></div></div>
+<div class="case" id="calc-case" style="height:100px"><div class="grid" id="calc-grid" style="height:calc(50% - 10px)"></div></div>
+<div class="case" id="percent-padding-case" style="width:200px"><div class="grid" id="percent-padding-grid" style="height:80px;padding:10%;box-sizing:border-box"></div></div>
+<div class="case" id="inline-case" style=""><div class="grid" id="inline-grid" style="display:inline-grid;height:30px"></div></div>
+<div class="case" id="float-case" style=""><div class="grid" id="float-grid" style="float:left;height:30px"></div></div>
+<div class="case" id="absolute-case" style="height:50px;position:relative"><div class="grid" id="absolute-grid" style="position:absolute;top:0;left:0;height:30px"></div></div>
+<div class="case" id="absolute-percent-case" style="height:100px;position:relative;padding:10px"><div class="grid" id="absolute-percent-grid" style="position:absolute;top:0;left:0;height:50%"></div></div>
+<div class="case" id="ratio-case" style=""><div class="grid" id="ratio-grid" style="aspect-ratio:2/1"></div></div>
+<div class="case" id="ratio-content-case" style=""><div class="grid" id="ratio-content-grid" style="aspect-ratio:2/1"><i style="height:80px"></i></div></div>
+<div class="case" id="ratio-minzero-case" style=""><div class="grid" id="ratio-minzero-grid" style="aspect-ratio:2/1;min-height:0"><i style="height:80px"></i></div></div>
+<div class="case" id="ratio-max-case" style=""><div class="grid" id="ratio-max-grid" style="aspect-ratio:2/1;max-height:30px"></div></div>
+<div class="case" id="nested-case" style=""><div class="grid" id="nested-grid" style="height:60px"><div class="grid inner" id="nested-inner" style="height:20px"><i style="height:10px"></i></div></div></div>
+<div class="case" id="flex-stretch-case" style="display:flex;height:60px"><div class="grid" id="flex-stretch-grid" style=""><i style="height:10px"></i></div></div>
+<div class="case" id="flex-column-case" style="display:flex;flex-direction:column;height:40px"><div class="grid" id="flex-column-grid" style="height:80px;flex-shrink:1;min-height:0"></div></div>
+<div class="case" id="grid-stretch-case" style="display:grid;grid-template-rows:60px"><div class="grid" id="grid-stretch-grid" style=""><i style="height:10px"></i></div></div>
+<div class="case" id="rows-case" style=""><div class="grid" id="rows-grid" style="row-gap:8px;column-gap:3px"><i style="height:10px"></i><i id="rows-second" style="height:20px"></i></div></div>
+<div class="case" id="row-percent-auto-case" style=""><div class="grid" id="row-percent-auto-grid" style="row-gap:10%"><i style="height:10px"></i><i id="row-percent-auto-second" style="height:20px"></i></div></div>
+<div class="case" id="row-percent-fixed-case" style=""><div class="grid" id="row-percent-fixed-grid" style="height:100px;row-gap:10%"><i style="height:10px"></i><i id="row-percent-fixed-second" style="height:20px"></i></div></div>
+<div class="case" id="row-calc-case" style=""><div class="grid" id="row-calc-grid" style="row-gap:calc(3px + 5px)"><i style="height:10px"></i><i id="row-calc-second" style="height:20px"></i></div></div>
+<div class="case" id="two-axis-case" style=""><div class="grid" id="two-axis-grid" style="grid-template-columns:40px 40px;column-gap:3px;row-gap:8px"><i style="height:10px"></i><i id="two-axis-second" style="height:10px"></i><i id="two-axis-third" style="height:10px"></i></div></div>
+<div class="case" id="resize-case" style="width:100%"><div class="grid" id="resize-grid" style="width:calc(100% - 140px);aspect-ratio:2/1"></div></div>
+<div class="case" id="flex-padding-case" style="display:flex;width:200px;align-items:start"><div class="grid" id="flex-padding-grid" style="height:80px;box-sizing:border-box;padding:10%"></div></div>
+<div class="case" id="nested-padding-case" style="display:grid;grid-template-columns:200px;width:240px;align-items:start"><div class="grid" id="nested-padding-grid" style="height:80px;box-sizing:border-box;padding:10%"></div></div>

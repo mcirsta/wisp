@@ -1124,10 +1124,10 @@ class MultiFileGenerator:
             'letter_spacing': '(UNIT_LENGTH)',
             'word_spacing': '(UNIT_LENGTH)',
             'outline_width': '(UNIT_LENGTH)',
-            'column_gap': '(UNIT_LENGTH)',
+            'column_gap': '(UNIT_LENGTH | UNIT_PCT)',
             'column_rule_width': '(UNIT_LENGTH)',
             'column_width': '(UNIT_LENGTH)',
-            'row_gap': '(UNIT_LENGTH)',
+            'row_gap': '(UNIT_LENGTH | UNIT_PCT)',
             # ANGLE type
             'azimuth': '(UNIT_ANGLE)',
             'elevation': '(UNIT_ANGLE)',

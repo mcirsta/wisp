@@ -12,20 +12,13 @@
 
 #include "content/handlers/html/layout.h"
 #include "wisp/content/handlers/html/box.h"
+#include "wisp/content/handlers/html/private.h"
 #include "wisp/css.h"
 #include "wisp/types.h"
 #include "wisp/utils/errors.h"
 #include "wisp/utils/log.h"
 
-/* Forward declare html_content to satisfy layout_internal.h */
-typedef struct html_content html_content;
-
 #include "content/handlers/html/layout_internal.h"
-
-/* Mock dependencies */
-struct html_content {
-    struct css_unit_ctx unit_len_ctx;
-};
 
 /* Mock content/layout functions */
 bool layout_block_context(struct box *block, int viewport_height, html_content *content)
@@ -207,6 +200,7 @@ START_TEST(test_inline_grid_auto_width_fails_assert)
     grid->height = UNKNOWN_WIDTH;
 
     struct html_content content = {0};
+    content.unit_len_ctx.device_dpi = INTTOFIX(96);
 
     /* Call layout_grid */
     /* This should calculate width.

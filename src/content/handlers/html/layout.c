@@ -5258,7 +5258,7 @@ static bool layout_block_child_context(struct box *box, int viewport_height, htm
             dom_string_unref(name);
     } else if (box->type == BOX_GRID || box->type == BOX_INLINE_GRID) {
         NSLOG(layout, DEBUG, "calling layout_grid for grid container %p width %i", box, box->width);
-        if (!layout_grid(box, box->width, content)) {
+        if (!layout_grid(box, box->parent->width, content)) {
             return false;
         }
     } else {
@@ -6529,7 +6529,8 @@ layout_absolute_resolve_horizontal(struct box *box, const struct box *containing
 
 /* Dispatch the inner formatter after horizontal sizing has chosen the width.
  * Preserve each formatter's existing containing-block setup. */
-static bool layout_absolute_contents(struct box *box, struct box *containing_block, html_content *content)
+static bool
+layout_absolute_contents(struct box *box, struct box *containing_block, int containing_width, html_content *content)
 {
     int width = box->width;
 
@@ -6556,7 +6557,7 @@ static bool layout_absolute_contents(struct box *box, struct box *containing_blo
     } else if (box->type == BOX_GRID || box->type == BOX_INLINE_GRID) {
         box->float_container = containing_block;
         NSLOG(layout, INFO, "calling layout_grid for positioned grid %p width %i", box, width);
-        if (!layout_grid(box, width, content))
+        if (!layout_grid(box, containing_width, content))
             return false;
         box->float_container = NULL;
     }
@@ -6750,7 +6751,7 @@ static bool layout_absolute(struct box *box, struct box *containing_block, int c
     NSLOG(layout, INFO, "abs box %p: width %i parent %p parent.width %i", box, box->width, containing_block,
         containing_block->width);
 
-    if (!layout_absolute_contents(box, containing_block, content))
+    if (!layout_absolute_contents(box, containing_block, layout.available_width, content))
         return false;
     layout_absolute_resolve_vertical(box, containing_block, &layout);
 

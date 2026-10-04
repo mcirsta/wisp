@@ -9,6 +9,7 @@
 #include <wisp/content/handlers/html/private.h>
 #include <wisp/content/handlers/html/box.h>
 #include "html/layout_internal.h"
+#include "html/layout_grid.h"
 #include "html/font.h"
 #include "layout_margin_collapse_style.h"
 
@@ -982,6 +983,73 @@ START_TEST(test_intrinsic_container_constraints)
 }
 END_TEST
 
+static const struct {
+    const char *name;
+    int preferred, minimum, maximum, content, padding, border;
+    bool border_box, stretched;
+    int expected;
+} grid_height_cases[] = {
+    {"empty fixed", 30, 0, -1, 0, 0, 0, false, false, 30},
+    {"overflow fixed", 30, 0, -1, 60, 0, 0, false, false, 30},
+    {"zero fixed", 0, 0, -1, 60, 0, 0, false, false, 0},
+    {"auto content", -1, 0, -1, 30, 0, 0, false, false, 30},
+    {"empty minimum", -1, 40, -1, 0, 0, 0, false, false, 40},
+    {"auto maximum", -1, 0, 30, 60, 0, 0, false, false, 30},
+    {"minimum wins", 20, 40, 10, 0, 0, 0, false, false, 40},
+    {"border box", 30, 0, -1, 60, 3, 2, true, false, 20},
+    {"border floor", 2, 0, -1, 0, 3, 2, true, false, 0},
+    {"border minimum", -1, 30, -1, 0, 3, 2, true, false, 20},
+    {"border maximum", -1, 0, 30, 60, 3, 2, true, false, 20},
+    {"stretched auto", -1, 0, -1, 10, 0, 0, false, true, 70},
+    {"flex overrides preferred", 20, 0, -1, 10, 0, 0, false, true, 70},
+};
+#define GRID_HEIGHT_CASE_COUNT (sizeof(grid_height_cases) / sizeof(grid_height_cases[0]))
+
+START_TEST(test_grid_container_height)
+{
+    size_t index = _i % GRID_HEIGHT_CASE_COUNT;
+    box_type type = _i < GRID_HEIGHT_CASE_COUNT ? BOX_GRID : BOX_INLINE_GRID;
+    html_content content = {
+        .unit_len_ctx = {.device_dpi = INTTOFIX(96), .font_size_default = INTTOFIX(16)}, .font_func = &fonts};
+    struct box *grid = make_box(type, 20, CSS_VERTICAL_ALIGN_BASELINE);
+    style_set_flex_or_grid(grid->style, true);
+    style_set_height_px(grid->style, grid_height_cases[index].preferred);
+    style_set_min_height(grid->style, grid_height_cases[index].minimum);
+    style_set_max_height(grid->style, grid_height_cases[index].maximum);
+    style_set_box_sizing(
+        grid->style, grid_height_cases[index].border_box ? CSS_BOX_SIZING_BORDER_BOX : CSS_BOX_SIZING_CONTENT_BOX);
+    style_set_padding_top(grid->style, grid_height_cases[index].padding);
+    style_set_padding_bottom(grid->style, grid_height_cases[index].padding);
+    style_set_border_top(grid->style, grid_height_cases[index].border);
+    style_set_border_bottom(grid->style, grid_height_cases[index].border);
+    struct box *child = make_box(BOX_BLOCK, 20, CSS_VERTICAL_ALIGN_BASELINE);
+    style_set_width(child->style, 20, false);
+    style_set_height_px(child->style, grid_height_cases[index].content);
+    append(grid, child);
+    /* Deliberately leave a previous used height in place: auto heights must
+     * be remeasured, while an explicit parent-assigned stretch must survive. */
+    grid->height = 70;
+    for (int run = 0; run < 2; run++) {
+        if (grid_height_cases[index].stretched)
+            grid->flags |= HEIGHT_STRETCHED;
+        ck_assert(layout_grid(grid, 200, &content));
+        ck_assert_msg(grid->height == grid_height_cases[index].expected,
+            "%s type=%d run=%d: expected height %d, got %d", grid_height_cases[index].name, type, run,
+            grid_height_cases[index].expected, grid->height);
+        ck_assert_int_eq(child->height, grid_height_cases[index].content);
+    }
+    if (!grid_height_cases[index].stretched && grid_height_cases[index].preferred < 0 &&
+        grid_height_cases[index].minimum == 0) {
+        grid->children = grid->last = NULL;
+        ck_assert(layout_grid(grid, 200, &content));
+        ck_assert_msg(grid->height == 0, "%s: removed contents left a stale auto height %d",
+            grid_height_cases[index].name, grid->height);
+        free_tree(child);
+    }
+    free_tree(grid);
+}
+END_TEST
+
 START_TEST(test_inline_intrinsic_run)
 {
     html_content content = {
@@ -1309,6 +1377,7 @@ int main(void)
         sizeof(intrinsic_run_cases) / sizeof(intrinsic_run_cases[0]));
     tcase_add_loop_test(intrinsics, test_intrinsic_container_constraints, 0,
         INTRINSIC_CONTAINER_MODE_COUNT * INTRINSIC_CONTAINER_CASE_COUNT);
+    tcase_add_loop_test(intrinsics, test_grid_container_height, 0, 2 * GRID_HEIGHT_CASE_COUNT);
     suite_add_tcase(suite, intrinsics);
     TCase *alignment = tcase_create("Line alignment");
     tcase_add_loop_test(alignment, test_line_overflow_alignment, 0, 2 * TEXT_ALIGNMENT_COUNT);

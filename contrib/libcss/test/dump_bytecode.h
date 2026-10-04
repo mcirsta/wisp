@@ -681,8 +681,10 @@ static void dump_bytecode_column_count(struct dump_bytecode_cursor *cursor, uint
     }
 }
 
-static void dump_bytecode_column_gap(struct dump_bytecode_cursor *cursor, uint32_t value, char **ptr)
+static void dump_bytecode_gap(struct dump_bytecode_cursor *cursor, uint32_t value, char **ptr)
 {
+    assert(COLUMN_GAP_SET == (enum op_column_gap)ROW_GAP_SET);
+    assert(COLUMN_GAP_NORMAL == (enum op_column_gap)ROW_GAP_NORMAL);
     switch (value) {
     case COLUMN_GAP_SET:
         dump_bytecode_length(cursor, ptr);
@@ -1466,7 +1468,8 @@ static const struct dump_bytecode_property dump_bytecode_properties[CSS_N_PROPER
     [CSS_PROP_COLOR] = READER(color),
     [CSS_PROP_COLUMN_COUNT] = READER(column_count),
     [CSS_PROP_COLUMN_FILL] = KEYWORDS(column_fill),
-    [CSS_PROP_COLUMN_GAP] = READER(column_gap),
+    [CSS_PROP_COLUMN_GAP] = READER(gap),
+    [CSS_PROP_ROW_GAP] = READER(gap),
     [CSS_PROP_COLUMN_SPAN] = KEYWORDS(column_span),
     [CSS_PROP_CONTENT] = READER(content),
     [CSS_PROP_COUNTER_INCREMENT] = READER(counter),

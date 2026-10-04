@@ -735,7 +735,7 @@ layout_flex_item(const struct flex_ctx *ctx, const struct flex_item_data *item, 
         break;
     case BOX_GRID:
         b->float_container = b->parent;
-        success = layout_grid(b, available_width, ctx->content);
+        success = layout_grid(b, ctx->flex->width, ctx->content);
         b->float_container = NULL;
         break;
     default:

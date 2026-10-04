@@ -1,0 +1,40 @@
+#data
+* { row-gap: 10%; column-gap: 20%; }
+#errors
+#expected
+| *
+|  row-gap: 10%
+|  column-gap: 20%
+#reset
+
+#data
+* { gap: 10% 20%; }
+#errors
+#expected
+| *
+|  row-gap: 10%
+|  column-gap: 20%
+#reset
+
+#data
+* { gap: 25%; }
+#errors
+#expected
+| *
+|  row-gap: 25%
+|  column-gap: 25%
+#reset
+
+#data
+* { row-gap: -10%; column-gap: -20%; }
+#errors
+#expected
+| *
+#reset
+
+#data
+* { row-gap: 10deg; column-gap: 20s; }
+#errors
+#expected
+| *
+#reset
