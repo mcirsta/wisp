@@ -321,7 +321,7 @@ struct box {
     int clear_level;
 
     /**
-     * Level below which floats have been placed.
+     * Highest top edge of previously placed floats. Valid only with float_children.
      */
     int cached_place_below_level;
 

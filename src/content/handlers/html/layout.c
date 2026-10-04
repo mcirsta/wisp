@@ -839,6 +839,8 @@ static bool layout_minmax_line(struct box *first, int *line_min, int *line_max, 
         NSLOG(layout, DEBUG, "%p: min %i, max %i", b, min, max);
 
         if (b->type == BOX_BR) {
+            /* A forced break creates a line even without text. */
+            *line_has_height = true;
             b = b->next;
             break;
         }
@@ -1835,7 +1837,7 @@ static inline bool box_prevents_collapse_through(const css_unit_ctx *unit_len_ct
     return false;
 }
 
-static int layout_clear(struct box *fl, enum css_clear_e clear);
+static bool layout_clear(struct box *fl, enum css_clear_e clear, int *y);
 
 /**
  * Find next block that current margin collapses to.
@@ -1881,8 +1883,8 @@ static struct box *layout_next_margin_block(const css_unit_ctx *unit_len_ctx, st
                  * or preceding sibling. Bound the hypothetical search at this
                  * box so a later sibling cannot move its empty top edge. */
                 if (clearance_box && css_computed_clear(box->style) != CSS_CLEAR_NONE) {
-                    int floor = layout_clear(block->float_children, css_computed_clear(box->style));
-                    if (floor > 0) {
+                    int floor;
+                    if (layout_clear(block->float_children, css_computed_clear(box->style), &floor)) {
                         unsigned int positive = *max_pos_margin, negative = *max_neg_margin;
                         struct box *top;
                         layout_next_margin_block(unit_len_ctx, box, block, viewport_height,
@@ -2041,20 +2043,21 @@ static struct box *layout_next_margin_block(const css_unit_ctx *unit_len_ctx, st
  *
  * \param  fl	  first float in float list
  * \param  clear  type of clear
- * \return  y coordinate relative to ancestor box for floats
+ * \param  y     receives the bottom edge in formatting-context coordinates
+ * \return  whether a matching float supplied a clearance edge
  */
-static int layout_clear(struct box *fl, enum css_clear_e clear)
+static bool layout_clear(struct box *fl, enum css_clear_e clear, int *y)
 {
-    int y = 0;
+    bool found = false;
     for (; fl; fl = fl->next_float) {
-        if ((clear == CSS_CLEAR_LEFT || clear == CSS_CLEAR_BOTH) && fl->type == BOX_FLOAT_LEFT)
-            if (y < fl->y + fl->height)
-                y = fl->y + fl->height;
-        if ((clear == CSS_CLEAR_RIGHT || clear == CSS_CLEAR_BOTH) && fl->type == BOX_FLOAT_RIGHT)
-            if (y < fl->y + fl->height)
-                y = fl->y + fl->height;
+        if (((clear == CSS_CLEAR_LEFT || clear == CSS_CLEAR_BOTH) && fl->type == BOX_FLOAT_LEFT) ||
+            ((clear == CSS_CLEAR_RIGHT || clear == CSS_CLEAR_BOTH) && fl->type == BOX_FLOAT_RIGHT)) {
+            if (!found || *y < fl->y + fl->height)
+                *y = fl->y + fl->height;
+            found = true;
+        }
     }
-    return y;
+    return found;
 }
 
 
@@ -3075,8 +3078,13 @@ static void add_float_to_container(struct box *cont, struct box *b)
 
     assert(b->type == BOX_FLOAT_LEFT || b->type == BOX_FLOAT_RIGHT);
 
+    /* These limits exist only after a float has been placed. Its top can be
+     * negative in the shared formatting context; zero is not a lower bound.
+     * Every placed float also constrains later floats' top edges (CSS 2.2 9.5.1). */
+    cont->cached_place_below_level = box ? max(cont->cached_place_below_level, b->y) : b->y;
     if (box == NULL) {
         /* No other float children */
+        cont->clear_level = b->y;
         b->next_float = NULL;
         cont->float_children = b;
         return;
@@ -3110,8 +3118,6 @@ static void layout_shift_float(struct box *box, int shift)
     *link = box->next_float;
     box->y += shift;
     add_float_to_container(cont, box);
-    /* Subsequent floats cannot start above an earlier float's top edge. */
-    cont->cached_place_below_level = max(cont->cached_place_below_level, box->y);
     if (css_computed_clear(box->children->style) != CSS_CLEAR_NONE)
         cont->clear_level = max(cont->clear_level, box->y);
 }
@@ -3380,7 +3386,7 @@ static void place_float_below(struct box *c, int width, int cx, int y, struct bo
     struct box *left;
     struct box *right;
 
-    yy = y > cont->cached_place_below_level ? y : cont->cached_place_below_level;
+    yy = cont->float_children ? max(y, cont->cached_place_below_level) : y;
 
     NSLOG(layout, DEBUG, "c %p, width %i, cx %i, y %i, cont %p", c, width, cx, y, cont);
 
@@ -4098,8 +4104,8 @@ static bool layout_line(struct box *first, int *width, int *y, int cx, int cy, s
                     (css_computed_clear(d->style) == CSS_CLEAR_LEFT && left == 0) ||
                     (css_computed_clear(d->style) == CSS_CLEAR_RIGHT && right == 0) ||
                     (css_computed_clear(d->style) == CSS_CLEAR_BOTH && left == 0 && right == 0)) &&
-                (!place_below || (left == 0 && right == 0 && x == 0)) && cy >= cont->clear_level &&
-                cy >= cont->cached_place_below_level) {
+                (!place_below || (left == 0 && right == 0 && x == 0)) &&
+                (!cont->float_children || (cy >= cont->clear_level && cy >= cont->cached_place_below_level))) {
                 /* + not cleared or,
                  *   cleared and there are no floats to clear
                  * + fits without needing to be placed below or,
@@ -4122,8 +4128,9 @@ static bool layout_line(struct box *first, int *width, int *y, int cx, int cy, s
             } else {
                 /* cleared or doesn't fit on line */
                 /* place below into next available space */
-                int fcy = (cy > cont->clear_level) ? cy : cont->clear_level;
-                fcy = (fcy > cont->cached_place_below_level) ? fcy : cont->cached_place_below_level;
+                int fcy = cy;
+                if (cont->float_children)
+                    fcy = max(fcy, max(cont->clear_level, cont->cached_place_below_level));
                 fy = (fy > fcy) ? fy : fcy;
                 fy = (fy == cy) ? fy + height : fy;
 
@@ -4140,7 +4147,8 @@ static bool layout_line(struct box *first, int *width, int *y, int cx, int cy, s
                     else
                         b->x = cx + *width - b->width;
 
-                    fcy = layout_clear(cont->float_children, css_computed_clear(d->style));
+                    /* left/right already identify a float on the cleared side. */
+                    layout_clear(cont->float_children, css_computed_clear(d->style), &fcy);
                     if (fcy > cont->clear_level)
                         cont->clear_level = fcy;
                     if (b->y < fcy)
@@ -4393,8 +4401,9 @@ static bool layout_line(struct box *first, int *width, int *y, int cx, int cy, s
 
     /* handle clearance for br */
     if (br_box && css_computed_clear(br_box->style) != CSS_CLEAR_NONE) {
-        int clear_y = layout_clear(cont->float_children, css_computed_clear(br_box->style));
-        if (used_height < clear_y - cy)
+        int clear_y;
+        if (layout_clear(cont->float_children, css_computed_clear(br_box->style), &clear_y) &&
+            used_height < clear_y - cy)
             used_height = clear_y - cy;
     }
 
@@ -4680,8 +4689,9 @@ static bool layout_block_size_child(struct box *box, struct box *block, int view
     int lm, rm;
     /* Width measurement must use the space below a float that this box
      * clears. Applying clearance to the margin chain happens afterward. */
-    int clear_y = state->clearance_box == box
-        ? layout_clear(block->float_children, css_computed_clear(box->style)) : 0;
+    int clear_y = state->cy + (int)state->max_pos_margin - (int)state->max_neg_margin;
+    if (state->clearance_box == box)
+        layout_clear(block->float_children, css_computed_clear(box->style), &clear_y);
 
     /* Blocks establishing a block formatting context get minimum
      * left and right margins to avoid any floats. */
@@ -4814,7 +4824,8 @@ static bool layout_block_position_child(struct box *box, struct box *block, int 
     }
 
     if (state->clearance_box == box) {
-        int floor = layout_clear(block->float_children, css_computed_clear(box->style));
+        int floor = state->cy;
+        layout_clear(block->float_children, css_computed_clear(box->style), &floor);
         bool empty = !box_prevents_collapse_through(&content->unit_len_ctx, box);
         unsigned int positive = 0, negative = 0;
         struct box *top;

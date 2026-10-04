@@ -53,6 +53,29 @@ def cases():
             expected["wrapper"] = (top, 0)
         yield f"two-floats-{int(wrapped)}", dict(two=True, wrap=wrapped), expected
 
+    for name, options, expected in (
+        ("negative", {}, dict(empty=(-13, 0), floating=(-13, 48), after=(-17, 8))),
+        ("negative-right", dict(side="right"), dict(empty=(-13, 0), floating=(-13, 48), after=(-17, 8))),
+        ("negative-deep", dict(top=-73), dict(empty=(-73, 0), floating=(-73, 48), after=(-73, 8))),
+        ("negative-clear", dict(top=-73, clear="both"),
+         dict(empty=(-73, 0), floating=(-73, 48), after=(-25, 8))),
+        ("negative-unmatched-block-clear", dict(top=-73, clear="right"),
+         dict(empty=(-73, 0), floating=(-73, 48), after=(-73, 8))),
+        ("negative-br-clear", dict(top=-73, break_clear="left", style="font:20px/20px sans-serif"),
+         dict(empty=(-73, 48), floating=(-73, 48), after=(-42, 8))),
+        ("negative-br-unmatched", dict(top=-73, break_clear="right", style="font:20px/20px sans-serif"),
+         dict(empty=(-73, 20), floating=(-73, 48), after=(-70, 8))),
+        ("negative-two", dict(top=-73, two=True),
+         dict(empty=(-73, 0), floating=(-73, 48), second=(-25, 20), after=(-73, 8))),
+        ("negative-clear-float", dict(top=-73, two=True, second_width=40, second_clear="left"),
+         dict(empty=(-73, 0), floating=(-73, 48), second=(-25, 20), after=(-73, 8))),
+        ("negative-unmatched-clear", dict(top=-73, two=True, second_width=40, second_clear="right"),
+         dict(empty=(-73, 0), floating=(-73, 48), second=(-73, 20), after=(-73, 8))),
+        ("negative-after-float", dict(top=-100, prefix=60, preceding=True),
+         dict(prefix=(0, 60), preceding=(60, 16), empty=(-40, 0), floating=(60, 48), after=(-40, 8))),
+    ):
+        yield name, dict(top=-13, bottom=-17) | options, expected
+
 
 def fixture_html():
     parts = ['<!doctype html><meta charset="utf-8"><title>Float-only margins</title><style>',
@@ -65,9 +88,12 @@ def fixture_html():
         floating = "" if c.get("no_float") else element(
             "floating", style=f'float:{c.get("side", "left")};width:40px;height:48px;background:#c66')
         if c.get("two"):
-            floating += element("second", style="float:left;width:280px;height:20px;background:#66c")
+            floating += element("second", style=f'float:left;width:{c.get("second_width", 280)}px;'
+                                f'clear:{c.get("second_clear", "none")};height:20px;background:#66c')
         if c.get("inner_clear"):
             floating += element("cleared", style="clear:both;margin:11px 0 19px")
+        if c.get("break_clear"):
+            floating += f'<br style="clear:{c["break_clear"]}">'
         inside = element("inner", floating, c.get("inner", "")) if c.get("nested") else floating
         empty = element("empty", inside,
                         f'margin:{c.get("top", 13)}px 0 {c.get("bottom", 17)}px;{c.get("style", "")}',
@@ -80,6 +106,8 @@ def fixture_html():
             "after", style=f'height:8px;margin-top:{c.get("after", 0)}px;clear:{c.get("clear", "none")};background:#6a6')
         prefix = element("prefix", style=f'height:{c["prefix"]}px;margin-bottom:{c.get("previous", 0)}px') \
             if "prefix" in c else ""
+        if c.get("preceding"):
+            prefix += element("preceding", style="float:left;width:40px;height:16px;background:#cc6")
         parts.append(f'<section class="case" id="{name}-case">{prefix}{empty}{after}</section>')
     return "\n".join(parts)
 
@@ -115,7 +143,7 @@ def main():
                     actual = box["y"] - case["y"] - 1, box["height"]
                     assert actual == geometry, (index, name, suffix, actual, geometry)
                 # The flow-root contains the final in-flow edge and both floats.
-                height = max(top + height for top, height in expected.values()) + 2
+                height = max(0, *(top + height for top, height in expected.values())) + 2
                 assert case["height"] == height, (index, name, case, height)
         assert steps[0]["elements"] == steps[2]["elements"], "Resize round trip changed geometry"
     print(f"Float-only margins: {len(list(cases()))} cases passed before and after resizing.")

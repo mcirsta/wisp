@@ -1028,6 +1028,62 @@ START_TEST(test_empty_margin_position)
 }
 END_TEST
 
+static const int float_placement_origins[] = {-73, 0, 27};
+static const uint8_t float_placement_clears[] = {CSS_CLEAR_NONE, CSS_CLEAR_LEFT, CSS_CLEAR_RIGHT};
+enum {
+    FLOAT_PLACEMENT_ORIGIN_COUNT = sizeof(float_placement_origins) / sizeof(float_placement_origins[0]),
+    FLOAT_PLACEMENT_CLEAR_COUNT = sizeof(float_placement_clears) / sizeof(float_placement_clears[0]),
+};
+
+START_TEST(test_float_placement_coordinates)
+{
+    int origin = float_placement_origins[_i / FLOAT_PLACEMENT_CLEAR_COUNT];
+    uint8_t clear = float_placement_clears[_i % FLOAT_PLACEMENT_CLEAR_COUNT];
+    html_content *content = create_test_content();
+    struct box *root = create_box_with_style(300);
+    /* A real block's automatic minimum resolves to zero, even when all its
+     * descendants finish above the formatting context's origin. */
+    style_set_min_height(root->style, 0);
+    struct box *parent = create_box_with_style(300);
+    style_set_margins(parent->style, origin, 0, 0, 0);
+    add_child(root, parent);
+    struct box *ic = calloc(1, sizeof(*ic));
+    ck_assert_ptr_nonnull(ic);
+    ic->type = BOX_INLINE_CONTAINER;
+    add_child(parent, ic);
+    struct box *floats[2];
+    for (int i = 0; i < 2; i++) {
+        floats[i] = create_box_with_style(0);
+        floats[i]->type = BOX_FLOAT_LEFT;
+        add_child(ic, floats[i]);
+        struct box *child = create_box_with_style(0);
+        style_set_width(child->style, i ? 280 : 40, false);
+        style_set_height_px(child->style, i ? 20 : 48);
+        style_set_clear(child->style, i ? clear : CSS_CLEAR_NONE);
+        child->flags |= HAS_HEIGHT | MAKE_HEIGHT;
+        add_child(floats[i], child);
+    }
+    const int widths[] = {300, 500, 300};
+    for (size_t pass = 0; pass < sizeof(widths) / sizeof(widths[0]); pass++) {
+        root->width = widths[pass];
+        root->height = AUTO;
+        ck_assert(layout_block_context(root, 768, content));
+        bool below = clear == CSS_CLEAR_LEFT || widths[pass] < 320;
+        int second_y = origin + (below ? 48 : 0);
+        int height = origin + (below ? 68 : 48);
+        if (height < 0)
+            height = 0;
+        ck_assert_msg(parent->y == origin && parent->height == 0 && floats[0]->y == origin &&
+                floats[1]->y == second_y && floats[1]->x == (below ? 0 : 40) && root->height == height,
+            "origin %d, clear %u, width %d: parent=%d/%d, floats=(%d,%d), second x=%d, root height=%d",
+            origin, clear, widths[pass], parent->y, parent->height, floats[0]->y, floats[1]->y,
+            floats[1]->x, root->height);
+    }
+    free_box_tree(root);
+    destroy_test_content(content);
+}
+END_TEST
+
 enum { CLEARANCE_PREFIX_COUNT = 3, CLEARANCE_CASE_COUNT = 2 * CLEARANCE_PREFIX_COUNT };
 
 /* CSS 2.1 sections 8.3.1 and 9.5.2: decide clearance from the hypothetical
@@ -2139,6 +2195,8 @@ static Suite *margin_collapse_suite(void)
 
     TCase *tc_floats = tcase_create("Float Avoidance");
     tcase_add_loop_test(tc_floats, test_block_context_avoids_floats, 0, 2 * FLOAT_AVOIDANCE_CASE_COUNT);
+    tcase_add_loop_test(tc_floats, test_float_placement_coordinates, 0,
+        FLOAT_PLACEMENT_ORIGIN_COUNT * FLOAT_PLACEMENT_CLEAR_COUNT);
     suite_add_tcase(s, tc_floats);
 
     return s;

@@ -91,10 +91,10 @@ and `marker-style-reference/inspection.json` in the same artifact directory.
 
 Ordinary float-only blocks now preserve adjoining margins, and place floats
 using their containing block's own top rather than a following sibling's margin.
-`qt_float_only_margins` covers 24 cases; the margin-position unit tests also run
+`qt_float_only_margins` covers 35 cases; the margin-position unit tests also run
 with floats, including nested positive/negative margin chains.
 
-Two separate pre-existing cases remain:
+One pre-existing case remains:
 
 - A float before a later empty block child still interrupts lookahead too early.
   With a parent margin of `13px 0 17px`, a 40×48 float, then an empty child with
@@ -104,12 +104,6 @@ Two separate pre-existing cases remain:
   `#between-empty` adds another float after the empty child. Lookahead commits
   the enclosing top before reaching the later child margins. Resolving this
   needs coordination between pending ancestor margins and float placement.
-- A float whose containing block starts above the shared formatting context's
-  top is clamped to y=0. In `float-only-margins-2026-10-04/probe.html`,
-  `#negative-empty` has margins `-13px 0 -17px` and correctly starts at y=-13,
-  but its 48px float stays at y=0 rather than following it. Float placement's
-  zero-initialized `clear_level` and `cached_place_below_level` are implicated;
-  negative margins that leave the float at positive coordinates already pass.
 
 Coordinates above are relative to the enclosing flow-root's content edge.
 Evidence is in `out/render-captures/float-only-margins-2026-10-04/`: `before/`,
