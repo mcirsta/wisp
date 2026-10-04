@@ -118,25 +118,15 @@ interleaved-float cases are unchanged from the prior implementation.
 
 ## Remaining inline edge cases
 
-Intrinsic minimum widths still treat text boxes independently and omit ordinary
-inline decorations. A shrink-to-fit inline-block in a 200px parent containing
-one 240px word with 5px padding on both ends gets a 240px width in Wisp versus
-Chromium's 250px. Splitting that word between two decorated spans gives 200px
-versus 260px. Line layout now keeps these unbreakable runs together, but
-`layout_minmax_line()` still needs to accumulate their complete minimum width.
-This predates the line-breaking correction and affects shrink-to-fit sizing;
-it should share the same break-opportunity rules rather than compensate in
-inline-block layout.
+**Pre-existing:** overlong lines differ under `text-align:center` and `right`.
+A decorated 250px run in a 200px container starts at the left content edge in
+Chromium, while Wisp aligns it with negative remaining space (text x=-20/-45
+instead of x=5). Review overflow alignment together with text direction;
+ordinary fitting-line alignment is covered by `qt_inline_wrapping`.
 
 Reproducer: `out/render-captures/inline-wrap-2026-10-04/intrinsic-probe.html`
-(`#decorated`, `#joined`), with the previous behavior and Chromium reference in
-`intrinsic-before/`.
-
-Overlong lines also differ under `text-align:center` and `right`: the decorated
-250px run in the same probe starts at the left content edge in Chromium, while
-Wisp aligns it with negative remaining space (text x=-20/-45 instead of x=5).
-Review overflow alignment together with text direction; ordinary fitting-line
-alignment is covered by `qt_inline_wrapping`.
+(`#center`, `#right`). Before-change captures and the Chromium reference are in
+`intrinsic-before/` in the same directory.
 
 LibCSS still does not simplify percentage terms that cancel inside `calc()`.
 For example, `padding-left:calc(50% - 50%)` and `calc(0% + 0px)` on an inline

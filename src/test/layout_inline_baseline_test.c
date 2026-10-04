@@ -1,6 +1,7 @@
 /* Inline text and object baselines, using the real block/inline layout code. */
 #include <check.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include <wisp/layout.h>
 #include <wisp/plot_style.h>
@@ -743,6 +744,69 @@ START_TEST(test_line_at_float_boundary)
 }
 END_TEST
 
+static const struct {
+    const char *name, *prefix, *inside, *suffix;
+    bool space_before, space_inside;
+    int minimum, maximum;
+} intrinsic_run_cases[] = {
+    {"one word", NULL, "AAAAAAAAAA", NULL, false, false, 90, 90},
+    {"joined prefix", "AAAAA", "AAAAA", NULL, false, false, 90, 90},
+    {"joined last word", "AA BBB", "CCC", NULL, false, false, 58, 82},
+    {"internal space", NULL, "AA BBBB", NULL, false, false, 37, 66},
+    {"joined suffix", NULL, "AAAA", "BBBB", false, false, 74, 74},
+    {"internal space and suffix", NULL, "AA BBBB", "CCC", false, false, 61, 90},
+    {"space before opening", "AA", "BBBB", NULL, true, false, 42, 66},
+    {"space before closing", NULL, "AAAA", "CCC", false, true, 42, 74},
+    {"trailing space", NULL, "AAAA", NULL, false, true, 42, 42},
+    {"empty span", NULL, NULL, NULL, false, false, 10, 10},
+};
+
+static void append_intrinsic_text(struct box *ic, const char *value, bool space)
+{
+    struct box *text = make_box(BOX_TEXT, 20, CSS_VERTICAL_ALIGN_BASELINE);
+    text->text = (char *)value;
+    text->length = strlen(value);
+    text->width = UNKNOWN_WIDTH;
+    text->space = space ? UNKNOWN_WIDTH : 0;
+    append(ic, text);
+}
+
+START_TEST(test_inline_intrinsic_run)
+{
+    html_content content = {
+        .unit_len_ctx = {.viewport_width = INTTOFIX(200), .viewport_height = INTTOFIX(500),
+            .font_size_default = INTTOFIX(16), .device_dpi = INTTOFIX(96)},
+        .font_func = &fonts,
+    };
+    struct box *root = make_box(BOX_INLINE_BLOCK, 20, CSS_VERTICAL_ALIGN_BASELINE);
+    style_set_width(root->style, -1, false);
+    root->max_width = UNKNOWN_MAX_WIDTH;
+    struct box *ic = make_box(BOX_INLINE_CONTAINER, 0, 0);
+    ic->max_width = UNKNOWN_MAX_WIDTH;
+    append(root, ic);
+    if (intrinsic_run_cases[_i].prefix)
+        append_intrinsic_text(ic, intrinsic_run_cases[_i].prefix, intrinsic_run_cases[_i].space_before);
+    struct box *opening = make_box(BOX_INLINE, 20, CSS_VERTICAL_ALIGN_BASELINE);
+    style_set_horizontal_edges(opening->style, 5, 0);
+    append(ic, opening);
+    if (intrinsic_run_cases[_i].inside)
+        append_intrinsic_text(ic, intrinsic_run_cases[_i].inside, intrinsic_run_cases[_i].space_inside);
+    struct box *closing = make_box(BOX_INLINE_END, 20, CSS_VERTICAL_ALIGN_BASELINE);
+    opening->inline_end = closing;
+    closing->inline_end = opening;
+    append(ic, closing);
+    if (intrinsic_run_cases[_i].suffix)
+        append_intrinsic_text(ic, intrinsic_run_cases[_i].suffix, false);
+
+    ck_assert(layout_minmax_box(root, &fonts, &content));
+    ck_assert_msg(ic->min_width.value == intrinsic_run_cases[_i].minimum &&
+            ic->max_width == intrinsic_run_cases[_i].maximum,
+        "%s: expected min/max %d/%d, got %d/%d", intrinsic_run_cases[_i].name,
+        intrinsic_run_cases[_i].minimum, intrinsic_run_cases[_i].maximum, ic->min_width.value, ic->max_width);
+    free_tree(root);
+}
+END_TEST
+
 int main(void)
 {
     if (nsoption_init(NULL, NULL, NULL) != NSERROR_OK)
@@ -762,6 +826,10 @@ int main(void)
         4 * (FLOAT_BOUNDARY_MAX_WRAPPERS + 1) * FLOAT_BOUNDARY_CASE_COUNT);
     tcase_add_test(tc, test_font_baseline_fallback);
     suite_add_tcase(suite, tc);
+    TCase *intrinsics = tcase_create("Intrinsic inline runs");
+    tcase_add_loop_test(intrinsics, test_inline_intrinsic_run, 0,
+        sizeof(intrinsic_run_cases) / sizeof(intrinsic_run_cases[0]));
+    suite_add_tcase(suite, intrinsics);
     SRunner *runner = srunner_create(suite);
     srunner_set_fork_status(runner, CK_NOFORK);
     srunner_run_all(runner, CK_VERBOSE);

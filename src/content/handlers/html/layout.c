@@ -724,6 +724,70 @@ static struct box *layout_trailing_space(struct box *first, struct box *end)
     return NULL;
 }
 
+/* Inline box boundaries are transparent to wrapping (CSS Text 3, 5.1).
+ * Keep the existing whitespace/atomic-inline opportunities, but do not let an
+ * opening/closing decoration become a break merely because it is a box. */
+struct inline_wrap_state {
+    bool content;
+    bool space;
+    bool atomic;
+    const struct box *empty_end;
+    bool empty_space, empty_atomic;
+};
+
+static bool layout_inline_wraps(const struct box *box)
+{
+    enum css_white_space_e ws = css_computed_white_space(box->style);
+    return ws != CSS_WHITE_SPACE_NOWRAP && ws != CSS_WHITE_SPACE_PRE && !box_is_inside_marker(box);
+}
+
+static bool layout_inline_atomic(const struct box *box)
+{
+    return lh__box_is_replace(box) || box->type == BOX_INLINE_BLOCK ||
+        box->type == BOX_INLINE_FLEX || box->type == BOX_INLINE_GRID;
+}
+
+/* Closing edges stay with the preceding content. A pending space or atomic
+ * boundary is consumed before the next opening edge or content box. */
+static bool layout_inline_break_before(struct inline_wrap_state *state, const struct box *box)
+{
+    if (!lh__box_is_inline_flow(box) || lh__box_is_inline_positioned(box))
+        return false;
+
+    /* Generated inside markers have an unbreakable internal string, but the
+     * list item's whitespace mode governs wrapping between marker and label. */
+    bool marker = box_is_inside_marker(box);
+    bool atomic = layout_inline_atomic(box) || marker;
+    bool wrap = layout_inline_wraps(marker ? box->parent->parent : box);
+    if (box == state->empty_end) {
+        /* A space can break after intervening empty spans as well as before
+         * them. Real content cancels this pending opportunity below. */
+        state->space |= state->empty_space;
+        state->atomic |= state->empty_atomic;
+        state->empty_end = NULL;
+    }
+    bool boundary = box->type != BOX_INLINE_END && state->content &&
+        (state->space || (wrap && (state->atomic || atomic)));
+    /* Empty elements may use a single BOX_INLINE rather than paired markers. */
+    bool empty_inline = box->type == BOX_INLINE && !box->inline_end && !layout_inline_has_content(box);
+    if (boundary && !empty_inline) {
+        if (box->type == BOX_INLINE && box->inline_end && !atomic && !state->empty_end) {
+            state->empty_end = box->inline_end;
+            state->empty_space = state->space;
+            state->empty_atomic = state->atomic;
+        }
+        state->space = state->atomic = false;
+    }
+    if (layout_inline_has_content(box)) {
+        state->empty_end = NULL;
+        state->content = true;
+        state->space = false;
+        state->atomic = atomic && wrap;
+    }
+    state->space |= state->content && box->space != 0 && wrap;
+    return boundary;
+}
+
 /**
  * Calculate minimum and maximum width of a line.
  *
@@ -749,6 +813,8 @@ static bool layout_minmax_line(struct box *first, int *line_min, int *line_max, 
     bool no_wrap;
     bool has_content = false, after_space = false;
     int space_after = 0;
+    int min_run = 0, trailing_min_space = 0;
+    struct inline_wrap_state wrap_state = {0};
 
     assert(first->parent);
     assert(first->parent->parent);
@@ -802,6 +868,19 @@ static bool layout_minmax_line(struct box *first, int *line_min, int *line_max, 
             continue;
         }
 
+        /* Min-content takes every legal break. Inline fragments and adjacent
+         * text nodes remain in the same run unless line layout can break there.
+         * A collapsed space may precede closing edges; trim it at the eventual
+         * break without dropping those edges from the run. */
+        if (layout_inline_break_before(&wrap_state, b)) {
+            min = max(min, min_run - trailing_min_space);
+            min_run = trailing_min_space = 0;
+        } else {
+            min_run += space_after;
+            trailing_min_space += space_after;
+        }
+        if (layout_inline_has_content(b))
+            trailing_min_space = 0;
         max += space_after;
         space_after = layout_inline_space(b, &has_content, &after_space, font_func, content);
 
@@ -813,8 +892,7 @@ static bool layout_minmax_line(struct box *first, int *line_min, int *line_max, 
                 if (!layout_minmax_block(b, font_func, content))
                     return false;
             }
-            if (min < b->min_width.value)
-                min = b->min_width.value;
+            min_run += b->min_width.value;
             /* Log if adding a huge max_width that will cause overflow */
             if (b->max_width > 1000000000) {
                 NSLOG(layout, WARNING,
@@ -836,15 +914,18 @@ static bool layout_minmax_line(struct box *first, int *line_min, int *line_max, 
             calculate_mbp_width(&content->unit_len_ctx, b->style, LEFT, true, true, true, &fixed, &frac);
             if (!b->inline_end)
                 calculate_mbp_width(&content->unit_len_ctx, b->style, RIGHT, true, true, true, &fixed, &frac);
-            if (0 < fixed)
+            if (0 < fixed) {
                 max += fixed;
+                min_run += fixed;
+            }
             *line_has_height = true;
-            /* \todo  update min width, consider fractional extra */
         } else if (b->type == BOX_INLINE_END) {
             fixed = frac = 0;
             calculate_mbp_width(&content->unit_len_ctx, b->inline_end->style, RIGHT, true, true, true, &fixed, &frac);
-            if (0 < fixed)
+            if (0 < fixed) {
                 max += fixed;
+                min_run += fixed;
+            }
 
             *line_has_height = true;
             continue;
@@ -852,12 +933,8 @@ static bool layout_minmax_line(struct box *first, int *line_min, int *line_max, 
 
         if (lh__box_is_replace(b) == false) {
             /* inline non-replaced, 10.3.1 and 10.6.1 */
-            bool no_wrap_box;
             if (!b->text)
                 continue;
-
-            no_wrap_box = (css_computed_white_space(b->style) == CSS_WHITE_SPACE_NOWRAP ||
-                css_computed_white_space(b->style) == CSS_WHITE_SPACE_PRE || box_is_inside_marker(b));
 
             if (b->width == UNKNOWN_WIDTH) {
                 /** \todo handle errors */
@@ -886,29 +963,25 @@ static bool layout_minmax_line(struct box *first, int *line_min, int *line_max, 
                 }
             }
             max += b->width;
-            if (no_wrap) {
-                /* Don't wrap due to block style,
-                 * so min is the same as max */
-                min = max;
-
-            } else if (no_wrap_box) {
-                /* This inline box can't be wrapped,
-                 * for min, consider box's width */
-                if (min < b->width)
-                    min = b->width;
-
+            if (no_wrap || !layout_inline_wraps(b)) {
+                min_run += b->width;
             } else if (b->parent->flags & NEED_MIN) {
-                /* If we care what the minimum width is,
-                 * calculate it.  (It's only needed if we're
-                 * shrinking-to-fit.) */
-                /* min = widest single word */
+                /* Only measure words when an ancestor needs min-content.
+                 * The first/last word can join text or edges in adjacent boxes.
+                 * Reuse the existing width for a single-word text box. */
                 i = 0;
                 do {
                     for (j = i; j != b->length && b->text[j] != ' '; j++)
                         ;
-                    font_func->width(&fstyle, b->text + i, j - i, &width);
-                    if (min < width)
-                        min = width;
+                    if (i == 0 && j == b->length && (b->flags & MEASURED))
+                        width = b->width;
+                    else
+                        font_func->width(&fstyle, b->text + i, j - i, &width);
+                    min_run += width;
+                    if (j != b->length) {
+                        min = max(min, min_run);
+                        min_run = 0;
+                    }
                     i = j + 1;
                 } while (j != b->length);
             }
@@ -988,14 +1061,15 @@ static bool layout_minmax_line(struct box *first, int *line_min, int *line_max, 
                 width = FIXTOINT(css_unit_len2device_px(b->style, &content->unit_len_ctx, INTTOFIX(1), CSS_UNIT_EM));
         }
 
-        if (min < width && !box_has_percentage_max_width(b))
-            min = width;
+        if (width > 0 && !box_has_percentage_max_width(b))
+            min_run += width;
         if (width > 0)
             max += width;
 
         *line_has_height = true;
     }
 
+    min = max(min, min_run - trailing_min_space);
     struct box *trailing_space = layout_trailing_space(first, b);
     if (trailing_space) {
         max -= trailing_space->space;
@@ -3569,70 +3643,6 @@ static bool layout_line_alignment_metrics(struct box *first, struct box *end, bo
     return true;
 }
 
-
-/* Inline box boundaries are transparent to wrapping (CSS Text 3, 5.1).
- * Keep the existing whitespace/atomic-inline opportunities, but do not let an
- * opening/closing decoration become a break merely because it is a box. */
-struct inline_wrap_state {
-    bool content;
-    bool space;
-    bool atomic;
-    const struct box *empty_end;
-    bool empty_space, empty_atomic;
-};
-
-static bool layout_inline_wraps(const struct box *box)
-{
-    enum css_white_space_e ws = css_computed_white_space(box->style);
-    return ws != CSS_WHITE_SPACE_NOWRAP && ws != CSS_WHITE_SPACE_PRE && !box_is_inside_marker(box);
-}
-
-static bool layout_inline_atomic(const struct box *box)
-{
-    return lh__box_is_replace(box) || box->type == BOX_INLINE_BLOCK ||
-        box->type == BOX_INLINE_FLEX || box->type == BOX_INLINE_GRID;
-}
-
-/* Closing edges stay with the preceding content. A pending space or atomic
- * boundary is consumed before the next opening edge or content box. */
-static bool layout_inline_break_before(struct inline_wrap_state *state, const struct box *box)
-{
-    if (!lh__box_is_inline_flow(box) || lh__box_is_inline_positioned(box))
-        return false;
-
-    /* Generated inside markers have an unbreakable internal string, but the
-     * list item's whitespace mode governs wrapping between marker and label. */
-    bool marker = box_is_inside_marker(box);
-    bool atomic = layout_inline_atomic(box) || marker;
-    bool wrap = layout_inline_wraps(marker ? box->parent->parent : box);
-    if (box == state->empty_end) {
-        /* A space can break after intervening empty spans as well as before
-         * them. Real content cancels this pending opportunity below. */
-        state->space |= state->empty_space;
-        state->atomic |= state->empty_atomic;
-        state->empty_end = NULL;
-    }
-    bool boundary = box->type != BOX_INLINE_END && state->content &&
-        (state->space || (wrap && (state->atomic || atomic)));
-    /* Empty elements may use a single BOX_INLINE rather than paired markers. */
-    bool empty_inline = box->type == BOX_INLINE && !box->inline_end && !layout_inline_has_content(box);
-    if (boundary && !empty_inline) {
-        if (box->type == BOX_INLINE && box->inline_end && !atomic && !state->empty_end) {
-            state->empty_end = box->inline_end;
-            state->empty_space = state->space;
-            state->empty_atomic = state->atomic;
-        }
-        state->space = state->atomic = false;
-    }
-    if (layout_inline_has_content(box)) {
-        state->empty_end = NULL;
-        state->content = true;
-        state->space = false;
-        state->atomic = atomic && wrap;
-    }
-    state->space |= state->content && box->space != 0 && wrap;
-    return boundary;
-}
 
 /* A legal break, either before box or inside its text. Text prefix widths are
  * measured only if this fallback is used, not for every fitting text box. */
