@@ -69,9 +69,6 @@ children. Remaining cases need distinct layout decisions:
   versus Chromium's 30px.
   This needs the relevant formatting context's baseline rules, not descent into
   its first DOM child.
-- A line moved below a blocking float retains the existing one-pixel clearance
-  gap. `#below-float` in `test/outside-marker-baseline.html` is one pixel taller
-  than Chromium; marker and text baselines align.
 
 Evidence: `out/render-captures/outside-marker-2026-10-03/probe.html`, `probe-fixed/`,
 and `complete/`.
@@ -118,3 +115,22 @@ Coordinates above are relative to the enclosing flow-root's content edge.
 Evidence is in `out/render-captures/float-only-margins-2026-10-04/`: `before/`,
 `extended/`, and `edge-before/` versus `edge/`. The latter confirms that the
 interleaved-float cases are unchanged from the prior implementation.
+
+## Empty inline fragments at line breaks
+
+An undecorated span's opening or closing fragment can still reserve a blank line
+when its text cannot fit. In `float-boundaries-2026-10-04/probe.html`:
+
+- `#text-zero-target`: a 180×0 float followed by a span containing a 48px word
+  in a 200px container puts the text at y=20 instead of Chromium's y=0.
+- `#text-oversize-target`: after a 180×40 float, a span containing an unbreakable
+  240px word puts the text correctly at y=40, but the closing inline fragment
+  adds another 20px below it. The parent becomes 80px tall instead of 60px.
+
+Both examples use a bundled font and `line-height:20px`. Plain text without the
+span passes. The non-content fragments need consistent zero-height treatment
+in the inline line builder, separately from its float-retry distance.
+This predates the float-bottom boundary fix; that fix removes the extra pixel
+and retries at the first usable float edge but does not change fragment sizing.
+
+Evidence: `out/render-captures/float-boundaries-2026-10-04/before/` and `after/`.

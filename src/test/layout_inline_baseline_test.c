@@ -37,6 +37,16 @@ static nserror width(const struct plot_font_style *style, const char *text, size
 
 static const struct gui_layout_table fonts = {.width = width, .font_metrics = metrics};
 
+/* The boundary tests use one unbreakable word, so the split callback returns
+ * that whole word even when it is wider than the available line. */
+static nserror split_word(const struct plot_font_style *style, const char *text, size_t length,
+    int available, size_t *offset, int *actual)
+{
+    (void)available;
+    *offset = length;
+    return width(style, text, length, actual);
+}
+
 static nserror scaled_metrics(const struct plot_font_style *style, int *ascent, int *descent)
 {
     int pixels = (style->size * 4) / (PLOT_STYLE_SCALE * 3);
@@ -557,6 +567,75 @@ START_TEST(test_font_baseline_fallback)
 }
 END_TEST
 
+static const struct {
+    const char *name;
+    int left_width, left_height, right_width, right_height, word_width, x, y;
+} float_boundary_cases[] = {
+    {"left", 180, 40, 0, 0, 48, 0, 40},
+    {"right", 0, 0, 180, 40, 48, 0, 40},
+    {"shorter left", 90, 40, 90, 80, 48, 0, 40},
+    {"shorter right", 90, 80, 90, 40, 48, 90, 40},
+    {"both needed", 90, 40, 90, 80, 144, 0, 80},
+    {"equal bottoms", 90, 40, 90, 40, 48, 0, 40},
+    {"exact fit", 152, 40, 0, 0, 48, 152, 0},
+    {"oversized word", 180, 40, 0, 0, 240, 0, 40},
+};
+enum { FLOAT_BOUNDARY_CASE_COUNT = sizeof(float_boundary_cases) / sizeof(float_boundary_cases[0]) };
+
+START_TEST(test_line_at_float_boundary)
+{
+    int variant = _i % FLOAT_BOUNDARY_CASE_COUNT;
+    bool preceding_container = _i >= FLOAT_BOUNDARY_CASE_COUNT;
+    const struct gui_layout_table boundary_fonts = {.width = width, .split = split_word, .font_metrics = metrics};
+    html_content content = {
+        .unit_len_ctx = {.viewport_width = INTTOFIX(600), .viewport_height = INTTOFIX(500),
+            .font_size_default = INTTOFIX(16), .device_dpi = INTTOFIX(96)},
+        .font_func = &boundary_fonts,
+    };
+    struct box *root = make_box(BOX_BLOCK, 20, CSS_VERTICAL_ALIGN_BASELINE);
+    struct box *ic = make_box(BOX_INLINE_CONTAINER, 0, 0);
+    append(root, ic);
+    for (int side = 0; side < 2; side++) {
+        int w = side ? float_boundary_cases[variant].right_width : float_boundary_cases[variant].left_width;
+        int h = side ? float_boundary_cases[variant].right_height : float_boundary_cases[variant].left_height;
+        if (w == 0)
+            continue;
+        struct box *floating = make_box(side ? BOX_FLOAT_RIGHT : BOX_FLOAT_LEFT, 20, CSS_VERTICAL_ALIGN_BASELINE);
+        struct box *child = make_box(BOX_BLOCK, 20, CSS_VERTICAL_ALIGN_BASELINE);
+        style_set_width(child->style, w, false);
+        style_set_height_px(child->style, h);
+        style_set_clear(child->style, CSS_CLEAR_NONE);
+        child->flags |= HAS_HEIGHT | MAKE_HEIGHT;
+        append(floating, child);
+        append(ic, floating);
+    }
+    if (preceding_container) {
+        struct box *block = make_box(BOX_BLOCK, 20, CSS_VERTICAL_ALIGN_BASELINE);
+        append(root, block);
+        ic = make_box(BOX_INLINE_CONTAINER, 0, 0);
+        append(block, ic);
+    }
+    struct box *text = make_box(BOX_TEXT, 20, CSS_VERTICAL_ALIGN_BASELINE);
+    text->text = "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXX";
+    text->length = float_boundary_cases[variant].word_width / 8;
+    text->width = UNKNOWN_WIDTH;
+    append(ic, text);
+    const int widths[] = {200, 600, 200};
+    for (size_t pass = 0; pass < sizeof(widths) / sizeof(widths[0]); pass++) {
+        root->width = widths[pass];
+        root->height = AUTO;
+        ck_assert(layout_block_context(root, 500, &content));
+        int x = pass == 1 ? float_boundary_cases[variant].left_width : float_boundary_cases[variant].x;
+        int y = pass == 1 ? 0 : float_boundary_cases[variant].y;
+        ck_assert_msg(text->x == x && text->y == y && ic->height == y + 20,
+            "%s (preceding container=%d), width %d: expected text %d/%d, line bottom %d; got %d/%d, %d",
+            float_boundary_cases[variant].name, preceding_container, widths[pass], x, y, y + 20,
+            text->x, text->y, ic->height);
+    }
+    free_tree(root);
+}
+END_TEST
+
 int main(void)
 {
     if (nsoption_init(NULL, NULL, NULL) != NSERROR_OK)
@@ -571,6 +650,7 @@ int main(void)
     tcase_add_loop_test(tc, test_empty_marker_line, 0, 3);
     tcase_add_loop_test(tc, test_repeated_text_baselines, 0, 2);
     tcase_add_loop_test(tc, test_nested_float_layout_once, 0, 2 * (NESTED_FLOAT_DEPTH + 1));
+    tcase_add_loop_test(tc, test_line_at_float_boundary, 0, 2 * FLOAT_BOUNDARY_CASE_COUNT);
     tcase_add_test(tc, test_font_baseline_fallback);
     suite_add_tcase(suite, tc);
     SRunner *runner = srunner_create(suite);

@@ -173,8 +173,9 @@ difference prompted the follow-up below.
 The outside-baseline follow-up has Chromium comparisons and test logs in
 `out/render-captures/outside-marker-2026-10-03/`. The original marker-styling
 fixture's item heights now match Chromium, including the formerly 24px-tall
-outside item, which is now 27px. The extended fixture tracks the remaining
-one-pixel float-clearance difference. Its missing outside-image paint was fixed
+outside item, which is now 27px. The extended fixture also caught the one-pixel
+float-clearance difference, subsequently fixed by retrying at the exact float
+bottom edge. Its missing outside-image paint was fixed
 by the subsequent viewport-reformat change described above.
 The final extended reference is in `complete/`. Validation passed 33 selected
 Debug tests (ASan/UBSan) and eight Release tests. Four Debug capture tests needed

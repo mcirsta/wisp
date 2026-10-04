@@ -4020,20 +4020,16 @@ static bool layout_line(struct box *first, int *width, int *y, int cx, int cy, s
             /* first word of first box doesn't fit (strictly exceeds available width),
              * and a float is taking some of the width so move below it */
             assert(left || right);
-            used_height = 0;
-            if (left) {
-
-                NSLOG(layout, DEBUG, "cy %i, left->y %i, left->height %i", cy, left->y, left->height);
-
-                used_height = left->y + left->height - cy + 1;
-
-                NSLOG(layout, DEBUG, "used_height %i", used_height);
-            }
-            if (right && used_height < right->y + right->height - cy + 1)
-                used_height = right->y + right->height - cy + 1;
-
-            if (used_height < 0)
-                used_height = 0;
+            /* Retry at the first bottom edge: the line may fit alongside
+             * a taller float. find_sides excludes a float at its bottom,
+             * so no extra pixel is needed to make progress. */
+            if (!left)
+                used_height = right->y + right->height - cy;
+            else if (!right)
+                used_height = left->y + left->height - cy;
+            else
+                used_height = min(left->y + left->height, right->y + right->height) - cy;
+            used_height = max(0, used_height);
 
             b = split_box;
 
@@ -4842,14 +4838,13 @@ static void layout_block_place_table(struct box *box, const struct box *block, s
             break;
         if (!left && !right)
             break;
-        else if (!left)
-            state->y = right->y + right->height + 1;
+        /* The bottom edge itself is outside the float's exclusion area. */
+        if (!left)
+            state->y = right->y + right->height;
         else if (!right)
-            state->y = left->y + left->height + 1;
-        else if (left->y + left->height < right->y + right->height)
-            state->y = left->y + left->height + 1;
+            state->y = left->y + left->height;
         else
-            state->y = right->y + right->height + 1;
+            state->y = min(left->y + left->height, right->y + right->height);
     }
     box->x += x0 - state->cx;
     state->cx = x0;

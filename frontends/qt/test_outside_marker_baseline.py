@@ -12,8 +12,8 @@ binary = Path(sys.argv[1]).resolve()
 fixture = Path(__file__).resolve().parents[2] / "test/outside-marker-baseline.html"
 heights = {"tall": 42, "short": 36, "wrapped": 114, "padded": 58, "block-first": 52,
            "empty-before": 62, "floats": 42, "bfc": 48, "nested-list": 42, "relative": 42,
-           "zero": 6, "image": 52, "block-floats": 42, "br-float": 90}
-names = (*heights, "below-float")
+           "zero": 6, "image": 52, "block-floats": 42, "br-float": 90, "below-float": 90}
+names = tuple(heights)
 labels = tuple(n + "-text" for n in names if n != "wrapped")
 env = dict(os.environ, QT_QPA_PLATFORM="offscreen", QT_SCALE_FACTOR="1", QT_FONT_DPI="96")
 magick = shutil.which("magick")
@@ -30,7 +30,7 @@ with tempfile.TemporaryDirectory(prefix="wisp-outside-baseline-") as tmp:
     args = [str(binary), "--capture-dir", str(destination), "--capture-size", "700x1200",
             "--capture-settle", "100", "--capture-timeout", "12000", "--enable_javascript=0"]
     for name in (*names, *labels, "direct-float", "floats-case", "block-floats-case",
-                 "block-floats-float", "block-floats-clear", "br-floating", "br-next"):
+                 "block-floats-float", "block-floats-clear", "br-floating", "br-next", "blocking-float"):
         args += ["--capture-id", name]
     args += ["--capture-resize", "500x1200", "--capture-resize", "700x1200"]
     process = subprocess.run([*args, fixture.as_uri()], env=env, capture_output=True, text=True, timeout=30)
@@ -57,7 +57,8 @@ with tempfile.TemporaryDirectory(prefix="wisp-outside-baseline-") as tmp:
         # first text line. The marker must follow the text below that float.
         owner = box(step, "below-float")["border_box"]
         marker = box(step, "below-float")["list_marker"]["border_box"]
-        assert marker["y"] >= owner["y"] + 48, (marker, owner)
+        blocking = box(step, "blocking-float")["border_box"]
+        assert marker["y"] == blocking["y"] + blocking["height"], (marker, blocking)
         assert marker["y"] + 30 == owner["y"] + owner["height"] - 12, (marker, owner)
         # Floats introduced on the pushed line move with it. Both the containing
         # flow-root and subsequent clearance must use their final geometry.
