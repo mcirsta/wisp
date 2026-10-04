@@ -1,0 +1,29 @@
+<!doctype html><meta charset="utf-8"><title>Source fonts of collapsed spaces</title>
+<style>@font-face{font-family:Test;src:url(fonts/normal-400.ttf)}
+body{margin:20px;font:20px/60px Test}.case{display:flow-root;margin:0 0 10px}.line{display:inline-block;background:#ddd;vertical-align:top}
+.atom{display:inline-block;width:40px;height:10px;background:#58a;font-weight:normal;vertical-align:baseline}
+.big{font-size:40px}.huge{font-size:60px}#switch{position:absolute;left:300px;top:0}
+#reflow-case{margin-right:200px}
+#switch:checked ~ .case .owner{font-size:60px}#switch:checked ~ .case .big{font-size:20px}
+</style><input type="checkbox" id="switch" aria-label="Change fonts">
+<div id="block-case" class="case"><div id="block-line" class="line"><b class="atom big"></b> <b class="atom" id="block-peer"></b></div></div>
+<div id="flex-case" class="case"><div id="flex-line" class="line"><b class="atom big" style="display:inline-flex"></b> <b class="atom" id="flex-peer"></b></div></div>
+<div id="grid-case" class="case"><div id="grid-line" class="line"><b class="atom big" style="display:inline-grid"><span style="width:40px;height:10px"></span></b> <b class="atom" id="grid-peer"></b></div></div>
+<div id="table-case" class="case"><div id="table-line" class="line"><b class="atom big" style="display:inline-table"></b> <b class="atom" id="table-peer"></b></div></div>
+<div id="image-case" class="case"><div id="image-line" class="line"><img class="atom big" style="display:inline" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='10'/%3E"> <b class="atom" id="image-peer"></b></div></div>
+<div id="text-end-case" class="case"><div id="text-end-line" class="line"><span class="big">A</span> <b class="atom" id="text-end-peer"></b></div></div>
+<div id="leading-text-case" class="case"><div id="leading-text-line" class="line"><b class="atom big"></b> A<b class="atom" id="leading-text-peer"></b></div></div>
+<div id="inside-case" class="case"><div id="inside-line" class="line"><b class="atom"></b><span class="big"> A</span><b class="atom" id="inside-peer"></b></div></div>
+<div id="wrapper-case" class="case"><div id="wrapper-line" class="line"><span class="huge"><b class="atom big"></b> <b class="atom" id="wrapper-peer"></b></span></div></div>
+<div id="first-space-case" class="case"><div id="first-space-line" class="line"><span class="big">A </span> <b class="atom" id="first-space-peer"></b></div></div>
+<div id="empty-first-case" class="case"><div id="empty-first-line" class="line"><b class="atom big"></b><span> </span><span class="huge"> </span><b class="atom" id="empty-first-peer"></b></div></div>
+<div id="leading-case" class="case"><div id="leading-line" class="line"> <span class="big"> </span><b class="atom" id="leading-peer"></b></div></div>
+<div id="trailing-case" class="case"><div id="trailing-line" class="line"><span class="big">A</span> <span class="huge"> </span><b class="atom" id="trailing-peer"></b> </div></div>
+<div id="wrap-fit-case" class="case"><div id="wrap-fit-line" class="line" style="width:85px"><b class="atom big"></b> <b class="atom" id="wrap-fit-peer"></b></div></div>
+<div id="wrap-narrow-case" class="case"><div id="wrap-narrow-line" class="line" style="width:84px"><b class="atom big"></b> <b class="atom" id="wrap-narrow-peer"></b></div></div>
+<div id="nowrap-atom-case" class="case"><div id="nowrap-atom-line" class="line" style="width:84px"><b class="atom big" style="white-space:nowrap"></b> A<b class="atom" id="nowrap-atom-peer"></b></div></div>
+<div id="nowrap-parent-case" class="case"><div id="nowrap-parent-line" class="line" style="width:84px;white-space:nowrap"><b class="atom big" style="white-space:normal"></b> <b class="atom" id="nowrap-parent-peer"></b></div></div>
+<div id="internal-break-case" class="case"><div id="internal-break-line" class="line" style="width:100px"><span class="big">AA AA</span> <b class="atom" id="internal-break-peer"></b></div></div>
+<div id="internal-fit-case" class="case"><div id="internal-fit-line" class="line" style="width:100px"><span class="big">AA AA</span> A<b class="atom" id="internal-fit-peer"></b></div></div>
+<div id="reflow-case" class="case"><div id="reflow-line" class="line" style="width:100%"><span class="big">AA AA</span> <b class="atom" id="reflow-peer"></b></div></div>
+<div id="restyle-case" class="case"><div id="restyle-line" class="line"><span class="owner"><b class="atom big"></b> <b class="atom" id="restyle-peer"></b></span></div></div>

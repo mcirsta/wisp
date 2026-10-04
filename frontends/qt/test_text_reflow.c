@@ -91,8 +91,54 @@ static void check_spaces(struct paragraph *p)
     }
 }
 
+static void test_folded_space_reflow(const struct gui_layout_table *fonts)
+{
+    struct paragraph p;
+    init(&p, "AAAAAAAA BBBBBBBB", fonts);
+    css_computed_style *space_style = create_block_style();
+    style_set_inline_metrics(space_style, 32, 23, CSS_VERTICAL_ALIGN_BASELINE);
+    p.text.space = UNKNOWN_WIDTH;
+    p.text.space_style = space_style;
+    struct box peer = {.type = BOX_INLINE, .flags = REPLACE_DIM, .parent = p.lines, .prev = &p.text};
+    peer.style = create_block_style();
+    style_set_inline_metrics(peer.style, 16, 23, CSS_VERTICAL_ALIGN_BASELINE);
+    style_set_width(peer.style, 10, false);
+    style_set_height_px(peer.style, 10);
+    style_set_margins(peer.style, 0, 0, 0, 0);
+    p.text.next = &peer;
+    p.lines->last = &peer;
+    plot_font_style_t font;
+    int full_width, first_width, last_width, inner_space, outer_space;
+    font_plot_style_from_css(&p.content.unit_len_ctx, p.text.style, &font);
+    assert(fonts->width(&font, p.text.text, p.text.length, &full_width) == NSERROR_OK);
+    assert(fonts->width(&font, "AAAAAAAA", 8, &first_width) == NSERROR_OK);
+    assert(fonts->width(&font, "BBBBBBBB", 8, &last_width) == NSERROR_OK);
+    assert(fonts->width(&font, " ", 1, &inner_space) == NSERROR_OK);
+    font_plot_style_from_css(&p.content.unit_len_ctx, space_style, &font);
+    assert(fonts->width(&font, " ", 1, &outer_space) == NSERROR_OK);
+    assert(inner_space != outer_space);
+    int narrow = (first_width > last_width ? first_width : last_width) + outer_space + 10;
+    const int widths[] = {narrow, full_width + outer_space + 10, narrow};
+    for (size_t i = 0; i < sizeof(widths) / sizeof(widths[0]); i++) {
+        layout(&p, widths[i]);
+        struct box *last = peer.prev;
+        assert(last->space_style == space_style && last->space == outer_space);
+        if (i == 1) {
+            assert(last == &p.text && peer.x == full_width + outer_space);
+        } else {
+            assert(last != &p.text && (last->flags & CLONE));
+            assert(p.text.space_style == NULL && p.text.space == inner_space);
+            assert(peer.x == last_width + outer_space && peer.y >= last->y);
+        }
+    }
+    finish(&p);
+    destroy_mock_style(peer.style);
+    destroy_mock_style(space_style);
+}
+
 void test_text_reflow(const struct gui_layout_table *fonts)
 {
+    test_folded_space_reflow(fonts);
     const char *values[] = {
         "With the proprietary Chaos Group V-RAY renderer, there was an upset in better performance on Windows "
             "with the RTX GPU back-end.",

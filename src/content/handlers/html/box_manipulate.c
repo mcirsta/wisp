@@ -145,6 +145,7 @@ struct box *box_create(css_select_results *styles, css_computed_style *style, bo
     box->text = NULL;
     box->length = 0;
     box->space = 0;
+    box->space_style = NULL;
     box->href = (href == NULL) ? NULL : nsurl_ref(href);
     box->target = target;
     box->title = title;

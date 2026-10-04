@@ -686,7 +686,7 @@ static int layout_inline_space(struct box *box, bool *has_content, bool *after_s
     *after_space = true;
     if (box->space == UNKNOWN_WIDTH) {
         plot_font_style_t style;
-        font_plot_style_from_css(&content->unit_len_ctx, box->style, &style);
+        font_plot_style_from_css(&content->unit_len_ctx, box->space_style ? box->space_style : box->style, &style);
         font_func->width(&style, " ", 1, &box->space);
     }
     return box->space;
@@ -777,7 +777,12 @@ static bool layout_inline_break_before(struct inline_wrap_state *state, const st
         state->space = false;
         state->atomic = atomic && wrap;
     }
-    state->space |= state->content && box->space != 0 && wrap;
+    /* A folded space follows its source's white-space policy as well as its
+     * font; an adjacent atomic inline may override either inherited value. */
+    if (state->content && box->space != 0) {
+        uint8_t ws = css_computed_white_space(box->space_style ? box->space_style : box->style);
+        state->space |= marker ? wrap : ws != CSS_WHITE_SPACE_NOWRAP && ws != CSS_WHITE_SPACE_PRE;
+    }
     return boundary;
 }
 
@@ -1066,8 +1071,10 @@ static bool layout_minmax_line(struct box *first, int *line_min, int *line_max, 
         /* This is a paragraph/BR boundary, not a soft wrap. These spaces
          * can never reappear on reflow; discard them so an exact-fit line
          * cannot push its closing inline markers onto an empty next line. */
-        for (struct box *d = trailing_space; d != b; d = d->next)
+        for (struct box *d = trailing_space; d != b; d = d->next) {
             d->space = 0;
+            d->space_style = NULL;
+        }
     }
     if (no_wrap)
         min = max;
@@ -3263,23 +3270,20 @@ static void layout_shift_float(struct box *box, int shift)
 static bool layout_text_box_split(
     html_content *content, plot_font_style_t *fstyle, struct box *split_box, size_t new_length, int new_width)
 {
-    int space_width = split_box->space;
+    int space_width = 0;
     struct box *c2;
     const struct gui_layout_table *font_func = content->font_func;
     bool space = (split_box->text[new_length] == ' ');
     int used_length = new_length + (space ? 1 : 0);
 
-    if ((space && space_width == 0) || space_width == UNKNOWN_WIDTH) {
-        /* We're need to add a space, and we don't know how big
-         * it's to be, OR we have a space of unknown width anyway;
-         * Calculate space width */
-        font_func->width(fstyle, " ", 1, &space_width);
+    if (space) {
+        /* This is an internal text break. The original trailing space can
+         * come from a different DOM style and belongs to the last fragment. */
+        if (split_box->space_style == NULL && split_box->space != UNKNOWN_WIDTH && split_box->space != 0)
+            space_width = split_box->space;
+        else
+            font_func->width(fstyle, " ", 1, &space_width);
     }
-
-    if (split_box->space == UNKNOWN_WIDTH)
-        split_box->space = space_width;
-    if (!space)
-        space_width = 0;
 
     /* Fragments share their inline container's lifetime. Keep them as allocation
      * siblings: rejoining a fragment must not free any later live fragments. */
@@ -3304,6 +3308,7 @@ static bool layout_text_box_split(
     split_box->flags |= MEASURED;
     split_box->length = new_length;
     split_box->space = space_width;
+    split_box->space_style = NULL;
 
     /* Insert c2 into box list */
     c2->next = split_box->next;
@@ -4593,6 +4598,7 @@ static void layout_rejoin_text(struct box *box)
 
         box->length += gap + next->length;
         box->space = next->space;
+        box->space_style = next->space_style;
         box->width = UNKNOWN_WIDTH;
         box->flags &= ~MEASURED;
         box->next = next->next;

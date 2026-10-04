@@ -248,6 +248,11 @@ struct box {
      */
     css_computed_style *style;
 
+    /** Source style of a folded space when different from this box's style.
+     * Borrowed from an element's styles, like style; NULL uses style. Text
+     * fragments carry it with the original trailing space, not internal breaks. */
+    const css_computed_style *space_style;
+
     /**
      *  value of id attribute (or name for anchors)
      */

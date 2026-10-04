@@ -1409,6 +1409,16 @@ void box_text_transform(char *s, unsigned int len, enum css_text_transform_e tt)
 }
 
 
+/* Folding whitespace into its preceding box must retain the source font.
+ * Keep the first space in a collapsible run, including across text nodes. */
+static void box_construct_space(struct box *box, const css_computed_style *style)
+{
+    if (box != NULL && box->space == 0) {
+        box->space = UNKNOWN_WIDTH;
+        box->space_style = style == box->style ? NULL : style;
+    }
+}
+
 /**
  * Construct the box tree for an XML text node.
  *
@@ -1449,7 +1459,7 @@ static bool box_construct_text(struct box_construct_ctx *ctx)
             if (props.inline_container != NULL) {
                 assert(props.inline_container->last != NULL);
 
-                props.inline_container->last->space = UNKNOWN_WIDTH;
+                box_construct_space(props.inline_container->last, props.parent_style);
             }
 
             free(text);
@@ -1534,8 +1544,7 @@ static bool box_construct_text(struct box_construct_ctx *ctx)
 
             memmove(box->text, &box->text[1], box->length);
 
-            if (box->prev != NULL)
-                box->prev->space = UNKNOWN_WIDTH;
+            box_construct_space(box->prev, props.parent_style);
         }
     } else {
         /* white-space: pre */

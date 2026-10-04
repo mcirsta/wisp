@@ -333,6 +333,10 @@ static void describe(FILE *stream, const struct box *box)
     }
     if (box->style != NULL)
         nscss_dump_computed_style(stream, box->style);
+    if (box->space_style != NULL) {
+        fputs(" space-style=", stream);
+        nscss_dump_computed_style(stream, box->space_style);
+    }
     if (box->type == BOX_INLINE && box->inline_end != NULL) {
         ck_assert_int_eq(box->inline_end->type, BOX_INLINE_END);
         ck_assert_ptr_eq(box->inline_end->inline_end, box);
@@ -362,6 +366,32 @@ static char *snapshot(void)
 {
     return snapshot_box(html.layout);
 }
+
+START_TEST(test_folded_space_source_style)
+{
+    dom_node *body = by_id("body");
+    dom_node *row = element(body, "div", "space-row", NULL);
+    attribute(row, "style", "font-size:20px");
+    dom_node *first = element(row, "span", "space-first", NULL);
+    attribute(first, "style", _i == 2 ? "font-size:40px" : "display:inline-block;font-size:40px");
+    if (_i == 2)
+        text(first, "A");
+    text(row, _i == 1 ? " B" : " ");
+    text(row, " "); /* Duplicate whitespace must not replace the first source. */
+    element(row, "span", "space-last", NULL);
+    ck_assert_int_eq(begin(), NSERROR_OK);
+    while (scheduled != NULL)
+        run_slice();
+    struct box *source = box_for_node(row), *previous = box_for_node(first);
+    if (_i == 2)
+        previous = previous->inline_end;
+    ck_assert_ptr_nonnull(previous);
+    ck_assert_int_eq(previous->space, UNKNOWN_WIDTH);
+    ck_assert_ptr_eq(previous->space_style, source->style);
+    ck_assert_ptr_ne(previous->space_style, previous->style);
+    dom_node_unref(body);
+}
+END_TEST
 
 START_TEST(test_unpublished_ancestor_mappings)
 {
@@ -860,6 +890,7 @@ START_TEST(test_boundary_crossings)
     struct box *outside_text = outside->children->children;
     char *saved_text = outside_text->text;
     css_computed_style *saved_style = outside_text->style;
+    const css_computed_style *saved_space_style = outside_text->space_style;
     const char *expected;
     void *owner = box_construct_region_owner(old);
     struct box *marker = NULL;
@@ -892,6 +923,10 @@ START_TEST(test_boundary_crossings)
         talloc_steal(html.bctx, marker);
         expected = "box_ownership";
         break;
+    case 13:
+        outside_text->space_style = link->styles->styles[CSS_PSEUDO_ELEMENT_BEFORE];
+        expected = "borrowed_style";
+        break;
     default: old->last = NULL; expected = "tree_links"; break;
     }
     const char *reason;
@@ -902,6 +937,7 @@ START_TEST(test_boundary_crossings)
     *old = saved_old;
     outside_text->text = saved_text;
     outside_text->style = saved_style;
+    outside_text->space_style = saved_space_style;
     if (_i == 9)
         talloc_steal(owner, link);
     if (_i == 10)
@@ -2686,7 +2722,8 @@ int main(void)
     tcase_add_loop_test(tc, test_layout_allocation_failures, 0, 6);
 #endif
     tcase_add_loop_test(tc, test_boundary_candidate, 0, 6);
-    tcase_add_loop_test(tc, test_boundary_crossings, 0, 13);
+    tcase_add_loop_test(tc, test_boundary_crossings, 0, 14);
+    tcase_add_loop_test(tc, test_folded_space_source_style, 0, 3);
     tcase_add_test(tc, test_boundary_candidate_borrows_old);
     tcase_add_loop_test(tc, test_boundary_after_layout, 0, 3);
 #ifdef WISP_TEST_ALLOC_FAILURE

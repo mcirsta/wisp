@@ -154,10 +154,13 @@ static nserror check_box(struct boundary *b, const struct box *box, bool inside,
             err = keep_style(b, box->styles->styles[i]);
         return err;
     }
-    if (box->style != NULL) {
-        uintptr_t key = (uintptr_t)box->style;
-        if (b->count == 0 || bsearch(&key, b->styles, b->count, sizeof(key), compare_style) == NULL)
-            return reject(b, "borrowed_style");
+    const css_computed_style *borrowed[] = {box->style, box->space_style};
+    for (size_t i = 0; i < sizeof(borrowed) / sizeof(borrowed[0]); i++) {
+        if (borrowed[i] != NULL) {
+            uintptr_t key = (uintptr_t)borrowed[i];
+            if (b->count == 0 || bsearch(&key, b->styles, b->count, sizeof(key), compare_style) == NULL)
+                return reject(b, "borrowed_style");
+        }
     }
     return NSERROR_OK;
 }

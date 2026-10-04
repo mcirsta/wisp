@@ -78,18 +78,20 @@ This reproduces before the baseline changes. Initial evidence:
 `fixture.html`. The permanent `test/table-baseline.html` checks collapsed-table
 content alignment without accepting the incorrect cell edges as a baseline.
 
-## Font selection for collapsed spaces
+## Grid intrinsic sizing
 
-A whitespace-only text node after an atomic inline is folded into the preceding
-box's `space` field. Measurement then uses that box's font, losing the whitespace
-node's own style. A 40px inline-block followed by a space in a 20px parent gives a
-10px gap instead of Chromium's 5px with the regression font. Retain the correct
-whitespace style through construction and reflow; guessing the parent style at
-measurement time would fail inside differently styled inline wrappers.
+`layout_minmax_grid()` calculates track/child widths and gaps without applying
+the grid container's own specified width and outer edges. An empty inline-grid
+with `width:40px` therefore contributes zero intrinsic width, although layout
+still gives it 40px. In a shrink-to-fit inline-block, a following 40px inline-block
+wraps when Chromium keeps both on one line. Review the grid's shared intrinsic
+size accounting, including width/min/max constraints and box sizing, rather than
+adding an empty-grid exception.
 
-This predates inline-table support and reproduces with ordinary inline-blocks in
-the unchanged `cab78f6e` build. Evidence:
-`out/render-captures/inline-table-2026-10-04/space-control.html` and
-`space-control/` in the same directory.
+This reproduces in the unchanged `a3ef0181` build, before the collapsed-space font
+fix. Evidence: `out/render-captures/space-font-2026-10-04/fixture.html`, `#grid-line`,
+and `before/` in that directory. The `nowrap/` capture isolates the grid issue
+after correcting the space width. The permanent space-font fixture includes a
+40px grid child so it tests whitespace independently of this sizing problem.
 
 All artifact paths above are under `out/render-captures/`.
