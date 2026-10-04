@@ -807,6 +807,57 @@ START_TEST(test_inline_intrinsic_run)
 }
 END_TEST
 
+static const uint8_t text_alignments[] = {CSS_TEXT_ALIGN_LEFT, CSS_TEXT_ALIGN_RIGHT, CSS_TEXT_ALIGN_CENTER,
+    CSS_TEXT_ALIGN_DEFAULT, CSS_TEXT_ALIGN_LIBCSS_LEFT, CSS_TEXT_ALIGN_LIBCSS_RIGHT, CSS_TEXT_ALIGN_LIBCSS_CENTER};
+enum { TEXT_ALIGNMENT_COUNT = sizeof(text_alignments) / sizeof(text_alignments[0]) };
+
+START_TEST(test_line_overflow_alignment)
+{
+    const struct gui_layout_table word_fonts = {.width = width, .split = split_word, .font_metrics = metrics};
+    html_content content = {
+        .unit_len_ctx = {.viewport_width = INTTOFIX(200), .viewport_height = INTTOFIX(500),
+            .font_size_default = INTTOFIX(16), .device_dpi = INTTOFIX(96)},
+        .font_func = &word_fonts,
+    };
+    uint8_t align = text_alignments[_i % TEXT_ALIGNMENT_COUNT];
+    bool rtl = _i >= TEXT_ALIGNMENT_COUNT;
+    struct box *root = make_box(BOX_BLOCK, 20, CSS_VERTICAL_ALIGN_BASELINE);
+    style_set_text_alignment(root->style, align, rtl ? CSS_DIRECTION_RTL : CSS_DIRECTION_LTR);
+    struct box *ic = make_box(BOX_INLINE_CONTAINER, 0, 0);
+    append(root, ic);
+    struct box *opening = make_box(BOX_INLINE, 20, CSS_VERTICAL_ALIGN_BASELINE);
+    style_set_horizontal_edges(opening->style, 5, 0);
+    append(ic, opening);
+    append_intrinsic_text(ic, "AAAAAAAAAA", true);
+    struct box *text = ic->last;
+    struct box *closing = make_box(BOX_INLINE_END, 20, CSS_VERTICAL_ALIGN_BASELINE);
+    opening->inline_end = closing;
+    closing->inline_end = opening;
+    append(ic, closing);
+
+    /* 80px word + 10px edges; trailing collapsed space is excluded. Test
+     * overflow, exact fit, spare room and repeat layout on the same tree. */
+    const int widths[] = {60, 90, 140, 60};
+    for (size_t pass = 0; pass < sizeof(widths) / sizeof(widths[0]); pass++) {
+        root->width = widths[pass];
+        root->height = AUTO;
+        ck_assert(layout_block_context(root, 500, &content));
+        int remaining = widths[pass] - 90;
+        int expected = 0;
+        if (remaining < 0 || align == CSS_TEXT_ALIGN_DEFAULT)
+            expected = rtl ? remaining : 0;
+        else if (align == CSS_TEXT_ALIGN_RIGHT || align == CSS_TEXT_ALIGN_LIBCSS_RIGHT)
+            expected = remaining;
+        else if (align == CSS_TEXT_ALIGN_CENTER || align == CSS_TEXT_ALIGN_LIBCSS_CENTER)
+            expected = remaining / 2;
+        ck_assert_msg(text->x == expected + 5 && text->y == 0 && ic->height == 20,
+            "align %u, rtl %d, width %d: text=(%d,%d), line height=%d; expected x=%d, y=0, height=20",
+            align, rtl, widths[pass], text->x, text->y, ic->height, expected + 5);
+    }
+    free_tree(root);
+}
+END_TEST
+
 int main(void)
 {
     if (nsoption_init(NULL, NULL, NULL) != NSERROR_OK)
@@ -830,6 +881,9 @@ int main(void)
     tcase_add_loop_test(intrinsics, test_inline_intrinsic_run, 0,
         sizeof(intrinsic_run_cases) / sizeof(intrinsic_run_cases[0]));
     suite_add_tcase(suite, intrinsics);
+    TCase *alignment = tcase_create("Line alignment");
+    tcase_add_loop_test(alignment, test_line_overflow_alignment, 0, 2 * TEXT_ALIGNMENT_COUNT);
+    suite_add_tcase(suite, alignment);
     SRunner *runner = srunner_create(suite);
     srunner_set_fork_status(runner, CK_NOFORK);
     srunner_run_all(runner, CK_VERBOSE);

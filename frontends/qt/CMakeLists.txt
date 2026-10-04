@@ -310,6 +310,9 @@ if(WISP_QT_CAPTURE)
         add_test(NAME qt_inline_intrinsics
             COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_inline_intrinsics.py $<TARGET_FILE:wisp-qt>)
         set_tests_properties(qt_inline_intrinsics PROPERTIES TIMEOUT 30)
+        add_test(NAME qt_inline_alignment
+            COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_inline_alignment.py $<TARGET_FILE:wisp-qt>)
+        set_tests_properties(qt_inline_alignment PROPERTIES TIMEOUT 30)
         add_test(NAME qt_flow_root
             COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_flow_root.py $<TARGET_FILE:wisp-qt>)
         set_tests_properties(qt_flow_root PROPERTIES TIMEOUT 30)

@@ -4188,8 +4188,15 @@ static bool layout_line(struct box *first, int *width, int *y, int cx, int cy, s
         }
     }
 
+    /* CSS Text 3 section 6.1: an overflowing line is start-aligned.
+     * Use the available line interval, after floats and indentation, and
+     * keep the ordinary alignment when the trimmed contents fit. */
+    enum css_text_align_e align = css_computed_text_align(owner->style);
+    if (x > x1 - x0)
+        align = CSS_TEXT_ALIGN_DEFAULT;
+
     /* set positions */
-    switch (css_computed_text_align(first->parent->parent->style)) {
+    switch (align) {
     case CSS_TEXT_ALIGN_RIGHT:
     case CSS_TEXT_ALIGN_LIBCSS_RIGHT:
         x0 = x1 - x;
@@ -4205,7 +4212,7 @@ static bool layout_line(struct box *first, int *width, int *y, int cx, int cy, s
         break;
     case CSS_TEXT_ALIGN_DEFAULT:
         /* None; consider text direction */
-        switch (css_computed_direction(first->parent->parent->style)) {
+        switch (css_computed_direction(owner->style)) {
         case CSS_DIRECTION_LTR:
             /* leave on left */
             break;

@@ -174,3 +174,9 @@ void style_set_inline_metrics(css_computed_style *s, int font_px, int line_px, u
     set_line_height(s, CSS_LINE_HEIGHT_DIMENSION, (css_fixed_or_calc)INTTOFIX(line_px), CSS_UNIT_PX);
     set_vertical_align(s, align, (css_fixed_or_calc)0, CSS_UNIT_PX);
 }
+
+void style_set_text_alignment(css_computed_style *s, uint8_t align, uint8_t direction)
+{
+    set_text_align(s, align);
+    set_direction(s, direction);
+}

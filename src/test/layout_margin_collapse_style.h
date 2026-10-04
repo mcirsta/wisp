@@ -83,6 +83,9 @@ void style_set_max_height(css_computed_style *s, int px);
 /** Set explicit font size, line height and vertical alignment for inline tests. */
 void style_set_inline_metrics(css_computed_style *s, int font_px, int line_px, uint8_t align);
 
+/** Set line alignment and base direction. */
+void style_set_text_alignment(css_computed_style *s, uint8_t align, uint8_t direction);
+
 /** Free a mock style created by create_block_style(). */
 void destroy_mock_style(css_computed_style *s);
 

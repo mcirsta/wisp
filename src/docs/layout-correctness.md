@@ -118,16 +118,6 @@ interleaved-float cases are unchanged from the prior implementation.
 
 ## Remaining inline edge cases
 
-**Pre-existing:** overlong lines differ under `text-align:center` and `right`.
-A decorated 250px run in a 200px container starts at the left content edge in
-Chromium, while Wisp aligns it with negative remaining space (text x=-20/-45
-instead of x=5). Review overflow alignment together with text direction;
-ordinary fitting-line alignment is covered by `qt_inline_wrapping`.
-
-Reproducer: `out/render-captures/inline-wrap-2026-10-04/intrinsic-probe.html`
-(`#center`, `#right`). Before-change captures and the Chromium reference are in
-`intrinsic-before/` in the same directory.
-
 LibCSS still does not simplify percentage terms that cancel inside `calc()`.
 For example, `padding-left:calc(50% - 50%)` and `calc(0% + 0px)` on an inline
 wrapper give a 38px gap before its block child; Firefox gives 13px. Evaluating
