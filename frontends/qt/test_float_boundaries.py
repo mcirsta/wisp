@@ -28,10 +28,8 @@ PROFILES = (
 
 
 def cases():
-    for kind in ("text", "wrapped", "table"):
+    for kind in ("text", "wrapped", "nested", "table"):
         for name, floats, width, x, y in PROFILES:
-            if kind == "wrapped" and name not in ("left", "short-left", "short-right"):
-                continue
             yield f"{kind}-{name}", kind, floats, width, x, y
 
 
@@ -49,8 +47,11 @@ def fixture_html():
         if kind == "table":
             content += (f'<table id="{name}-target" style="width:{width}px"><tr><td>'
                         '<div style="height:20px;background:#666"></div></td></tr></table>')
-        elif kind == "wrapped":
-            content += f'<span id="{name}-target">{"H" * (width // 12)}</span>'
+        elif kind in ("wrapped", "nested"):
+            word = "H" * (width // 12)
+            if kind == "nested":
+                word = f"<span>{word}</span>"
+            content += f'<span id="{name}-target">{word}</span>'
         else:
             content += "H" * (width // 12)
         # The next in-flow edge reveals line height even beside a taller float.

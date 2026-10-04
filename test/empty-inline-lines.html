@@ -1,0 +1,20 @@
+<!doctype html><meta charset="utf-8"><title>Empty inline lines</title>
+<style>
+@font-face { font-family:Test; src:url("fonts/normal-400.ttf"); }
+body { margin:0; font:20px/20px Test; }
+.case { display:flow-root; width:200px; margin:10px; border:1px solid; }
+.after { height:8px; background:#6a6; }
+</style>
+<div class="case" id="empty"><span><span></span></span><div class="after" id="empty-after"></div></div>
+<div class="case" id="collapsed"><span> <span> </span> </span><div class="after" id="collapsed-after"></div></div>
+<div class="case" id="oversize"><span><span>HHHHHHHHHHHHHHHHHHHH</span></span><div class="after" id="oversize-after"></div></div>
+<div class="case" id="break"><span><br></span><div class="after" id="break-after"></div></div>
+<div class="case" id="two-breaks"><span><br><br></span><div class="after" id="two-breaks-after"></div></div>
+<div class="case" id="pre-newline"><span style="white-space:pre">
+</span><div class="after" id="pre-newline-after"></div></div>
+<div class="case" id="pre-two-newlines"><span style="white-space:pre-wrap">
+
+</span><div class="after" id="pre-two-newlines-after"></div></div>
+<div class="case" id="pre-space"><span style="white-space:pre"> </span><div class="after" id="pre-space-after"></div></div>
+<div class="case" id="atomic"><span><span style="display:inline-block;width:20px;height:10px;vertical-align:top"></span></span><div class="after" id="atomic-after"></div></div>
+<div class="case" id="positioned"><span><span style="position:absolute;width:20px;height:20px"></span></span><div class="after" id="positioned-after"></div></div>

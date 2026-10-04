@@ -3577,6 +3577,7 @@ static bool layout_line(struct box *first, int *width, int *y, int cx, int cy, s
     html_content *content, struct box **next_box)
 {
     int height, used_height;
+    int float_advance = 0;
     int x0 = 0;
     int x1 = *width;
     int x, h, x_previous;
@@ -4024,12 +4025,12 @@ static bool layout_line(struct box *first, int *width, int *y, int cx, int cy, s
              * a taller float. find_sides excludes a float at its bottom,
              * so no extra pixel is needed to make progress. */
             if (!left)
-                used_height = right->y + right->height - cy;
+                float_advance = right->y + right->height - cy;
             else if (!right)
-                used_height = left->y + left->height - cy;
+                float_advance = left->y + left->height - cy;
             else
-                used_height = min(left->y + left->height, right->y + right->height) - cy;
-            used_height = max(0, used_height);
+                float_advance = min(left->y + left->height, right->y + right->height) - cy;
+            float_advance = max(0, float_advance);
 
             b = split_box;
 
@@ -4105,8 +4106,8 @@ static bool layout_line(struct box *first, int *width, int *y, int cx, int cy, s
     for (d = first; d != b; d = d->next) {
         d->flags &= ~NEW_LINE;
 
-        if ((record_baseline || record_first_baseline) && !box_is_out_of_flow(d) &&
-            !lh__box_is_float_box(d) && (layout_inline_has_content(d) || d->type == BOX_BR ||
+        if (!line_has_content && !box_is_out_of_flow(d) && !lh__box_is_float_box(d) &&
+            (layout_inline_has_content(d) || d->type == BOX_TEXT || d->type == BOX_BR ||
                 ((d->type == BOX_INLINE || d->type == BOX_INLINE_END) && box_inline_has_edges(d))))
             line_has_content = true;
 
@@ -4137,7 +4138,7 @@ static bool layout_line(struct box *first, int *width, int *y, int cx, int cy, s
 
     first->flags |= NEW_LINE;
 
-    assert(b != first || (move_y && 0 < used_height && (left || right)));
+    assert(b != first || (move_y && 0 < float_advance && (left || right)));
 
     /* A marker-only inline formatting context still has a strut. Do not claim
      * an empty attempt beside a float when actual text is waiting on a later
@@ -4147,8 +4148,15 @@ static bool layout_line(struct box *first, int *width, int *y, int cx, int cy, s
         move_y = true;
     }
 
+    /* CSS 2.1 9.4.2: undecorated inline fragments alone do not create a
+     * line. Text waiting on a later line must not give these fragments the
+     * container's strut. Empty BOX_TEXT nodes still preserve explicit newlines.
+     * Keep the distance to retry below a float separate from line height. */
+    if (!line_has_content)
+        used_height = 0;
+
     /* Recompute from boxes actually placed on this line after wrapping. */
-    bool aligned_line = needs_line_metrics &&
+    bool aligned_line = line_has_content && needs_line_metrics &&
         layout_line_alignment_metrics(first, b, outside_marker && line_has_content,
             content, &used_height, &baseline, &baselines);
 
@@ -4236,7 +4244,7 @@ static bool layout_line(struct box *first, int *width, int *y, int cx, int cy, s
         }
     }
 
-    if (line_has_content && move_y) {
+    if ((record_baseline || record_first_baseline) && line_has_content && move_y) {
         if (!aligned_line) {
             /* Preserve the actual baseline of the existing text-only path. */
             for (d = first; d != b; d = d->next) {
@@ -4269,7 +4277,7 @@ static bool layout_line(struct box *first, int *width, int *y, int cx, int cy, s
     }
 
     if (move_y)
-        *y += used_height;
+        *y += max(used_height, float_advance);
     *next_box = b;
     *width = x; /* return actual width */
     return true;

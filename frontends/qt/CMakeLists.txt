@@ -298,6 +298,9 @@ if(WISP_QT_CAPTURE)
         add_test(NAME qt_float_boundaries
             COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_float_boundaries.py $<TARGET_FILE:wisp-qt>)
         set_tests_properties(qt_float_boundaries PROPERTIES TIMEOUT 30)
+        add_test(NAME qt_empty_inline_lines
+            COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_empty_inline_lines.py $<TARGET_FILE:wisp-qt>)
+        set_tests_properties(qt_empty_inline_lines PROPERTIES TIMEOUT 30)
         add_test(NAME qt_flow_root
             COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_flow_root.py $<TARGET_FILE:wisp-qt>)
         set_tests_properties(qt_flow_root PROPERTIES TIMEOUT 30)

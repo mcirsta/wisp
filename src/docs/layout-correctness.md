@@ -116,21 +116,20 @@ Evidence is in `out/render-captures/float-only-margins-2026-10-04/`: `before/`,
 `extended/`, and `edge-before/` versus `edge/`. The latter confirms that the
 interleaved-float cases are unchanged from the prior implementation.
 
-## Empty inline fragments at line breaks
+## Empty decorated inline lines
 
-An undecorated span's opening or closing fragment can still reserve a blank line
-when its text cannot fit. In `float-boundaries-2026-10-04/probe.html`:
+Undecorated opening/closing fragments no longer add blank lines before or after
+wrapped text. A separate existing case remains: an otherwise empty span with
+horizontal padding, border or margin fails to reserve its line height.
 
-- `#text-zero-target`: a 180×0 float followed by a span containing a 48px word
-  in a 200px container puts the text at y=20 instead of Chromium's y=0.
-- `#text-oversize-target`: after a 180×40 float, a span containing an unbreakable
-  240px word puts the text correctly at y=40, but the closing inline fragment
-  adds another 20px below it. The parent becomes 80px tall instead of 60px.
+With `font:20px/20px Test` and no text in the container, `<span
+style="padding-left:5px"></span>`, `border:1px solid`, and `margin-left:5px`
+each create a 20px line in Chromium but a zero-height line in Wisp. The inline
+edges already prevent margin collapse, but `layout_line` only raises used height
+for text and atomic inline boxes. The empty decorated fragment's own height is
+not included. Resolve which fragments actually participate before extending
+line metrics; a vertical margin alone does not create a line in Chromium.
 
-Both examples use a bundled font and `line-height:20px`. Plain text without the
-span passes. The non-content fragments need consistent zero-height treatment
-in the inline line builder, separately from its float-retry distance.
-This predates the float-bottom boundary fix; that fix removes the extra pixel
-and retries at the first usable float edge but does not change fragment sizing.
-
-Evidence: `out/render-captures/float-boundaries-2026-10-04/before/` and `after/`.
+Evidence: `out/render-captures/empty-inline-lines-2026-10-04/controls.html`,
+`#padded`, `#bordered`, `#margin-left` and `#margin-top`, with Wisp/Chromium
+captures in `controls/`.
