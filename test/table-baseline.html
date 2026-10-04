@@ -1,0 +1,131 @@
+<!doctype html><meta charset="utf-8"><style>@font-face{font-family:Test;src:url(fonts/normal-400.ttf)}body{margin:20px;font:20px/36px Test}ol{margin:0;padding:0}.case{display:flow-root;width:280px;margin:0 0 12px 70px}li{margin:0;list-style:decimal outside;background:#eee}li::marker{font-size:40px}table{width:200px;border-collapse:separate;border-spacing:0;padding:0}td{padding:0;vertical-align:baseline}</style>
+<title>Table first baselines and cell alignment</title>
+<style>
+#switch { position:absolute; left:4px; top:4px; }
+#switch:checked ~ .case #row-cell0 { font-size:40px; }
+#switch:checked ~ .case #standalone-cell0 { vertical-align:middle; }
+</style>
+<!-- Bundled font: 20px/36px content baseline=24px; 40px/36px marker baseline=30px.
+     Expected geometry was captured independently in Chromium. Rows must grow
+     for baseline alignment before row-span and middle/bottom placement.
+     Native restyles change a baseline and a cell's alignment. -->
+<input type="checkbox" id="switch">
+
+<div id="row-case" style="" class="case">
+  <ol><li id="row-item" style="" ><table id="row-table" style="" ><tbody><tr id="row-row0" style="" ><td id="row-cell0" style="" ><div id="row-content0" style="" >H</div></td><td id="row-cell1" style="" ><div id="row-content1" style="" >H</div></td></tr></tbody></table></li></ol>
+  <div id="row-after" style="height:8px;background:green" ></div></div>
+<div id="mixed-case" style="" class="case">
+  <ol><li id="mixed-item" style="" ><table id="mixed-table" style="" ><tbody><tr id="mixed-row0" style="" ><td id="mixed-cell0" style="font-size:10px;line-height:20px" ><div id="mixed-content0" style="" >H</div></td><td id="mixed-cell1" style="font-size:40px;line-height:40px" ><div id="mixed-content1" style="" >H</div></td></tr></tbody></table></li></ol>
+  <div id="mixed-after" style="height:8px;background:green" ></div></div>
+<div id="padding-case" style="" class="case">
+  <ol><li id="padding-item" style="" ><table id="padding-table" style="" ><tbody><tr id="padding-row0" style="" ><td id="padding-cell0" style="padding-top:20px;line-height:20px" ><div id="padding-content0" style="" >H</div></td><td id="padding-cell1" style="padding-bottom:25px;font-size:40px;line-height:40px" ><div id="padding-content1" style="" >H</div></td></tr></tbody></table></li></ol>
+  <div id="padding-after" style="height:8px;background:green" ></div></div>
+<div id="edges-case" style="" class="case">
+  <ol><li id="edges-item" style="" ><table id="edges-table" style="padding:5px;border:2px solid;border-spacing:3px 4px" ><tbody><tr id="edges-row0" style="" ><td id="edges-cell0" style="padding:4px;border:1px solid" ><div id="edges-content0" style="" >H</div></td><td id="edges-cell1" style="" ><div id="edges-content1" style="" >H</div></td></tr></tbody></table></li></ol>
+  <div id="edges-after" style="height:8px;background:green" ></div></div>
+<div id="middle-case" style="" class="case">
+  <ol><li id="middle-item" style="" ><table id="middle-table" style="" ><tbody><tr id="middle-row0" style="" ><td id="middle-cell0" style="vertical-align:middle;font-size:10px;line-height:20px" ><div id="middle-content0" style="" >H</div></td><td id="middle-cell1" style="font-size:40px;line-height:60px" ><div id="middle-content1" style="" >H</div></td></tr></tbody></table></li></ol>
+  <div id="middle-after" style="height:8px;background:green" ></div></div>
+<div id="bottom-case" style="" class="case">
+  <ol><li id="bottom-item" style="" ><table id="bottom-table" style="" ><tbody><tr id="bottom-row0" style="" ><td id="bottom-cell0" style="vertical-align:bottom;font-size:10px;line-height:20px" ><div id="bottom-content0" style="" >H</div></td><td id="bottom-cell1" style="font-size:40px;line-height:60px" ><div id="bottom-content1" style="" >H</div></td></tr></tbody></table></li></ol>
+  <div id="bottom-after" style="height:8px;background:green" ></div></div>
+<div id="no-baseline-case" style="" class="case">
+  <ol><li id="no-baseline-item" style="" ><table id="no-baseline-table" style="" ><tbody><tr id="no-baseline-row0" style="" ><td id="no-baseline-cell0" style="vertical-align:top;font-size:10px;line-height:20px" ><div id="no-baseline-content0" style="" >H</div></td><td id="no-baseline-cell1" style="vertical-align:middle;font-size:40px;line-height:60px" ><div id="no-baseline-content1" style="" >H</div></td></tr></tbody></table></li></ol>
+  <div id="no-baseline-after" style="height:8px;background:green" ></div></div>
+<div id="all-top-case" style="" class="case">
+  <ol><li id="all-top-item" style="" ><table id="all-top-table" style="" ><tbody><tr id="all-top-row0" style="" ><td id="all-top-cell0" style="vertical-align:top" ><div id="all-top-content0" style="" >H</div></td><td id="all-top-cell1" style="vertical-align:top" ><div id="all-top-content1" style="" >H</div></td></tr></tbody></table></li></ol>
+  <div id="all-top-after" style="height:8px;background:green" ></div></div>
+<div id="all-bottom-case" style="" class="case">
+  <ol><li id="all-bottom-item" style="" ><table id="all-bottom-table" style="" ><tbody><tr id="all-bottom-row0" style="" ><td id="all-bottom-cell0" style="vertical-align:bottom;font-size:10px;line-height:20px" ><div id="all-bottom-content0" style="" >H</div></td><td id="all-bottom-cell1" style="vertical-align:bottom;font-size:40px;line-height:60px" ><div id="all-bottom-content1" style="" >H</div></td></tr></tbody></table></li></ol>
+  <div id="all-bottom-after" style="height:8px;background:green" ></div></div>
+<div id="all-middle-case" style="" class="case">
+  <ol><li id="all-middle-item" style="" ><table id="all-middle-table" style="" ><tbody><tr id="all-middle-row0" style="" ><td id="all-middle-cell0" style="vertical-align:middle;font-size:10px;line-height:20px" ><div id="all-middle-content0" style="" >H</div></td><td id="all-middle-cell1" style="vertical-align:middle;font-size:40px;line-height:60px" ><div id="all-middle-content1" style="" >H</div></td></tr></tbody></table></li></ol>
+  <div id="all-middle-after" style="height:8px;background:green" ></div></div>
+<div id="invalid-align-case" style="" class="case">
+  <ol><li id="invalid-align-item" style="" ><table id="invalid-align-table" style="" ><tbody><tr id="invalid-align-row0" style="" ><td id="invalid-align-cell0" style="vertical-align:super;font-size:10px;line-height:20px" ><div id="invalid-align-content0" style="" >H</div></td><td id="invalid-align-cell1" style="font-size:40px;line-height:40px" ><div id="invalid-align-content1" style="" >H</div></td></tr></tbody></table></li></ol>
+  <div id="invalid-align-after" style="height:8px;background:green" ></div></div>
+<div id="empty-first-case" style="" class="case">
+  <ol><li id="empty-first-item" style="" ><table id="empty-first-table" style="" ><tbody><tr id="empty-first-row0" style="" ><td id="empty-first-cell0" style="" ><div id="empty-first-content0" style="" ></div></td><td id="empty-first-cell1" style="" ><div id="empty-first-content1" style="" >H</div></td></tr></tbody></table></li></ol>
+  <div id="empty-first-after" style="height:8px;background:green" ></div></div>
+<div id="empty-all-case" style="" class="case">
+  <ol><li id="empty-all-item" style="" ><table id="empty-all-table" style="" ><tbody><tr id="empty-all-row0" style="" ><td id="empty-all-cell0" style="" ><div id="empty-all-content0" style="" ></div></td><td id="empty-all-cell1" style="" ><div id="empty-all-content1" style="" ></div></td></tr></tbody></table></li></ol>
+  <div id="empty-all-after" style="height:8px;background:green" ></div></div>
+<div id="empty-sized-case" style="" class="case">
+  <ol><li id="empty-sized-item" style="" ><table id="empty-sized-table" style="" ><tbody><tr id="empty-sized-row0" style="" ><td id="empty-sized-cell0" style="height:18px;" ><div id="empty-sized-content0" style="" ></div></td><td id="empty-sized-cell1" style="height:24px;" ><div id="empty-sized-content1" style="" ></div></td></tr></tbody></table></li></ol>
+  <div id="empty-sized-after" style="height:8px;background:green" ></div></div>
+<div id="fixed-cell-case" style="" class="case">
+  <ol><li id="fixed-cell-item" style="" ><table id="fixed-cell-table" style="" ><tbody><tr id="fixed-cell-row0" style="" ><td id="fixed-cell-cell0" style="height:80px;font-size:10px;line-height:20px" ><div id="fixed-cell-content0" style="" >H</div></td><td id="fixed-cell-cell1" style="font-size:40px;line-height:40px" ><div id="fixed-cell-content1" style="" >H</div></td></tr></tbody></table></li></ol>
+  <div id="fixed-cell-after" style="height:8px;background:green" ></div></div>
+<div id="row-height-case" style="" class="case">
+  <ol><li id="row-height-item" style="" ><table id="row-height-table" style="" ><tbody><tr id="row-height-row0" style="height:80px" ><td id="row-height-cell0" style="font-size:10px;line-height:20px" ><div id="row-height-content0" style="" >H</div></td><td id="row-height-cell1" style="font-size:40px;line-height:40px" ><div id="row-height-content1" style="" >H</div></td></tr></tbody></table></li></ol>
+  <div id="row-height-after" style="height:8px;background:green" ></div></div>
+<div id="nested-block-case" style="" class="case">
+  <ol><li id="nested-block-item" style="" ><table id="nested-block-table" style="" ><tbody><tr id="nested-block-row0" style="" ><td id="nested-block-cell0" style="" ><div id="nested-block-content0" style="" ><div id="nested-block-inner" style="padding-top:5px" >H</div></div></td><td id="nested-block-cell1" style="font-size:40px;line-height:40px" ><div id="nested-block-content1" style="" >H</div></td></tr></tbody></table></li></ol>
+  <div id="nested-block-after" style="height:8px;background:green" ></div></div>
+<div id="nested-flex-case" style="" class="case">
+  <ol><li id="nested-flex-item" style="" ><table id="nested-flex-table" style="" ><tbody><tr id="nested-flex-row0" style="" ><td id="nested-flex-cell0" style="" ><div id="nested-flex-content0" style="" ><div id="nested-flex-inner" style="padding-top:5px;display:flex" >H</div></div></td><td id="nested-flex-cell1" style="font-size:40px;line-height:40px" ><div id="nested-flex-content1" style="" >H</div></td></tr></tbody></table></li></ol>
+  <div id="nested-flex-after" style="height:8px;background:green" ></div></div>
+<div id="nested-grid-case" style="" class="case">
+  <ol><li id="nested-grid-item" style="" ><table id="nested-grid-table" style="" ><tbody><tr id="nested-grid-row0" style="" ><td id="nested-grid-cell0" style="" ><div id="nested-grid-content0" style="" ><div id="nested-grid-inner" style="padding-top:5px;display:grid" >H</div></div></td><td id="nested-grid-cell1" style="font-size:40px;line-height:40px" ><div id="nested-grid-content1" style="" >H</div></td></tr></tbody></table></li></ol>
+  <div id="nested-grid-after" style="height:8px;background:green" ></div></div>
+<div id="nested-table-case" style="" class="case">
+  <ol><li id="nested-table-item" style="" ><table id="nested-table-table" style="" ><tbody><tr id="nested-table-row0" style="" ><td id="nested-table-cell0" style="" ><div id="nested-table-content0" style="" ><table id="nested-table-inner" style="width:80px;border-spacing:0" ><tbody><tr><td><div id="nested-table-nested-text" style="" >H</div></td></tr></tbody></table></div></td><td id="nested-table-cell1" style="font-size:40px;line-height:40px" ><div id="nested-table-content1" style="" >H</div></td></tr></tbody></table></li></ol>
+  <div id="nested-table-after" style="height:8px;background:green" ></div></div>
+<div id="clipped-case" style="" class="case">
+  <ol><li id="clipped-item" style="" ><table id="clipped-table" style="" ><tbody><tr id="clipped-row0" style="" ><td id="clipped-cell0" style="" ><div id="clipped-content0" style="height:0;overflow:hidden" >H</div></td><td id="clipped-cell1" style="" ><div id="clipped-content1" style="" >H</div></td></tr></tbody></table></li></ol>
+  <div id="clipped-after" style="height:8px;background:green" ></div></div>
+<div id="float-only-case" style="" class="case">
+  <ol><li id="float-only-item" style="" ><table id="float-only-table" style="" ><tbody><tr id="float-only-row0" style="" ><td id="float-only-cell0" style="" ><div id="float-only-content0" style="float:left;height:45px" >H</div></td><td id="float-only-cell1" style="font-size:40px;line-height:40px" ><div id="float-only-content1" style="" >H</div></td></tr></tbody></table></li></ol>
+  <div id="float-only-after" style="height:8px;background:green" ></div></div>
+<div id="relative-case" style="" class="case">
+  <ol><li id="relative-item" style="" ><table id="relative-table" style="" ><tbody><tr id="relative-row0" style="" ><td id="relative-cell0" style="" ><div id="relative-content0" style="position:relative;top:9px" >H</div></td><td id="relative-cell1" style="font-size:40px;line-height:40px" ><div id="relative-content1" style="" >H</div></td></tr></tbody></table></li></ol>
+  <div id="relative-after" style="height:8px;background:green" ></div></div>
+<div id="abs-first-case" style="" class="case">
+  <ol><li id="abs-first-item" style="" ><table id="abs-first-table" style="" ><tbody><tr id="abs-first-row0" style="" ><td id="abs-first-cell0" style="" ><div id="abs-first-absolute" style="position:absolute;top:70px;font-size:40px" >H</div><div id="abs-first-content0" style="" >H</div></td><td id="abs-first-cell1" style="" ><div id="abs-first-content1" style="" >H</div></td></tr></tbody></table></li></ol>
+  <div id="abs-first-after" style="height:8px;background:green" ></div></div>
+<div id="two-rows-case" style="" class="case">
+  <ol><li id="two-rows-item" style="" ><table id="two-rows-table" style="" ><tbody><tr id="two-rows-row0" style="" ><td id="two-rows-cell0" style="font-size:10px;line-height:20px" ><div id="two-rows-content0" style="" >H</div></td><td id="two-rows-cell1" style="font-size:40px;line-height:40px" ><div id="two-rows-content1" style="" >H</div></td></tr><tr id="two-rows-row1" style="" ><td id="two-rows-cell2" style="" ><div id="two-rows-content2" style="" >H</div></td></tr></tbody></table></li></ol>
+  <div id="two-rows-after" style="height:8px;background:green" ></div></div>
+<div id="span-case" style="" class="case">
+  <ol><li id="span-item" style="" ><table id="span-table" style="" ><tbody><tr id="span-row0" style="" ><td id="span-cell0" style="font-size:10px;line-height:20px" rowspan="2"><div id="span-content0" style="" >H</div></td><td id="span-cell1" style="font-size:40px;line-height:40px" ><div id="span-content1" style="" >H</div></td></tr><tr id="span-row1" style="" ><td id="span-cell2" style="" ><div id="span-content2" style="" >H</div></td></tr></tbody></table></li></ol>
+  <div id="span-after" style="height:8px;background:green" ></div></div>
+<div id="span-tall-case" style="" class="case">
+  <ol><li id="span-tall-item" style="" ><table id="span-tall-table" style="" ><tbody><tr id="span-tall-row0" style="" ><td id="span-tall-cell0" style="font-size:60px;line-height:70px" rowspan="2"><div id="span-tall-content0" style="" >H</div></td><td id="span-tall-cell1" style="font-size:10px;line-height:20px" ><div id="span-tall-content1" style="" >H</div></td></tr><tr id="span-tall-row1" style="" ><td id="span-tall-cell2" style="" ><div id="span-tall-content2" style="" >H</div></td></tr></tbody></table></li></ol>
+  <div id="span-tall-after" style="height:8px;background:green" ></div></div>
+<div id="span-top-case" style="" class="case">
+  <ol><li id="span-top-item" style="" ><table id="span-top-table" style="" ><tbody><tr id="span-top-row0" style="" ><td id="span-top-cell0" style="font-size:60px;line-height:70px" rowspan="2"><div id="span-top-content0" style="" >H</div></td><td id="span-top-cell1" style="vertical-align:top;font-size:10px;line-height:20px" ><div id="span-top-content1" style="" >H</div></td></tr><tr id="span-top-row1" style="" ><td id="span-top-cell2" style="" ><div id="span-top-content2" style="" >H</div></td></tr></tbody></table></li></ol>
+  <div id="span-top-after" style="height:8px;background:green" ></div></div>
+<div id="collapsed-case" style="" class="case">
+  <ol><li id="collapsed-item" style="" ><table id="collapsed-table" style="border-collapse:collapse" ><tbody><tr id="collapsed-row0" style="" ><td id="collapsed-cell0" style="border:2px solid;font-size:10px;line-height:20px" ><div id="collapsed-content0" style="" >H</div></td><td id="collapsed-cell1" style="border:2px solid;font-size:40px;line-height:40px" ><div id="collapsed-content1" style="" >H</div></td></tr></tbody></table></li></ol>
+  <div id="collapsed-after" style="height:8px;background:green" ></div></div>
+<div id="in-flex-case" style="" class="case">
+  <ol><li id="in-flex-item" style="" ><div id="in-flex-outer" style="display:flex;align-items:baseline;" ><table id="in-flex-table" style="" ><tbody><tr id="in-flex-row0" style="" ><td id="in-flex-cell0" style="" ><div id="in-flex-content0" style="" >H</div></td><td id="in-flex-cell1" style="" ><div id="in-flex-content1" style="" >H</div></td></tr></tbody></table><div id="in-flex-peer" style="font-size:40px;line-height:40px" >H</div></div></li></ol>
+  <div id="in-flex-after" style="height:8px;background:green" ></div></div>
+<div id="in-grid-case" style="" class="case">
+  <ol><li id="in-grid-item" style="" ><div id="in-grid-outer" style="display:grid;align-items:baseline;grid-template-columns:200px 80px" ><table id="in-grid-table" style="" ><tbody><tr id="in-grid-row0" style="" ><td id="in-grid-cell0" style="" ><div id="in-grid-content0" style="" >H</div></td><td id="in-grid-cell1" style="" ><div id="in-grid-content1" style="" >H</div></td></tr></tbody></table><div id="in-grid-peer" style="font-size:40px;line-height:40px" >H</div></div></li></ol>
+  <div id="in-grid-after" style="height:8px;background:green" ></div></div>
+<div id="standalone-case" style="" class="case"><div id="standalone-item" style="" ><table id="standalone-table" style="" ><tbody><tr id="standalone-row0" style="" ><td id="standalone-cell0" style="font-size:10px;line-height:20px" ><div id="standalone-content0" style="" >H</div></td><td id="standalone-cell1" style="font-size:40px;line-height:40px" ><div id="standalone-content1" style="" >H</div></td></tr></tbody></table></div><div id="standalone-after" style="height:8px;background:green" ></div></div>
+<div id="float-shift-case" style="" class="case">
+  <ol><li id="float-shift-item" style="" ><table id="float-shift-table" style="" ><tbody><tr id="float-shift-row0" style="" ><td id="float-shift-cell0" style="" ><div id="float-shift-content0" style="float:left;height:45px" >H</div></td><td id="float-shift-cell1" style="font-size:80px;line-height:80px" ><div id="float-shift-content1" style="" >H</div></td></tr></tbody></table></li></ol>
+  <div id="float-shift-after" style="height:8px;background:green" ></div></div>
+<div id="float-middle-case" style="" class="case">
+  <ol><li id="float-middle-item" style="" ><table id="float-middle-table" style="" ><tbody><tr id="float-middle-row0" style="" ><td id="float-middle-cell0" style=";vertical-align:middle" ><div id="float-middle-content0" style="float:left;height:45px" >H</div></td><td id="float-middle-cell1" style="font-size:80px;line-height:80px" ><div id="float-middle-content1" style="" >H</div></td></tr></tbody></table></li></ol>
+  <div id="float-middle-after" style="height:8px;background:green" ></div></div>
+<div id="float-bottom-case" style="" class="case">
+  <ol><li id="float-bottom-item" style="" ><table id="float-bottom-table" style="" ><tbody><tr id="float-bottom-row0" style="" ><td id="float-bottom-cell0" style=";vertical-align:bottom" ><div id="float-bottom-content0" style="float:left;height:45px" >H</div></td><td id="float-bottom-cell1" style="font-size:80px;line-height:80px" ><div id="float-bottom-content1" style="" >H</div></td></tr></tbody></table></li></ol>
+  <div id="float-bottom-after" style="height:8px;background:green" ></div></div>
+<div id="nested-float-case" style="" class="case">
+  <ol><li id="nested-float-item" style="" ><table id="nested-float-table" style="" ><tbody><tr id="nested-float-row0" style="" ><td id="nested-float-cell0" style="" ><div id="nested-float-content0" style="" ><div id="nested-float-inner" style="float:left;height:45px" >H</div></div></td><td id="nested-float-cell1" style="font-size:80px;line-height:80px" ><div id="nested-float-content1" style="" >H</div></td></tr></tbody></table></li></ol>
+  <div id="nested-float-after" style="height:8px;background:green" ></div></div>
+<div id="direct-case" style="" class="case">
+  <ol><li id="direct-item" style="" ><table id="direct-table" style="" ><tbody><tr id="direct-row0" style="" ><td id="direct-cell0" style=";font-size:10px;line-height:20px" >H</td><td id="direct-cell1" style=";font-size:40px;line-height:40px" >H</td></tr></tbody></table></li></ol>
+  <div id="direct-after" style="height:8px;background:green" ></div></div>
+<div id="empty-padded-case" style="" class="case">
+  <ol><li id="empty-padded-item" style="" ><table id="empty-padded-table" style="" ><tbody><tr id="empty-padded-row0" style="" ><td id="empty-padded-cell0" style=";padding-top:5px;padding-bottom:7px" ><div id="empty-padded-content0" style="" ></div></td><td id="empty-padded-cell1" style=";height:24px" ><div id="empty-padded-content1" style="" ></div></td></tr></tbody></table></li></ol>
+  <div id="empty-padded-after" style="height:8px;background:green" ></div></div>
+<div id="wrapped-case" style="" class="case">
+  <ol><li id="wrapped-item" style="" ><table id="wrapped-table" style="" ><tbody><tr id="wrapped-row0" style="" ><td id="wrapped-cell0" style=";font-size:10px;line-height:20px" ><div id="wrapped-content0" style="" >H<br>H</div></td><td id="wrapped-cell1" style="font-size:40px;line-height:40px" ><div id="wrapped-content1" style="" >H</div></td></tr></tbody></table></li></ol>
+  <div id="wrapped-after" style="height:8px;background:green" ></div></div>
+<div id="groups-case" style="" class="case">
+  <ol><li id="groups-item" style="" ><table id="groups-table" style=";" ><tbody><tr id="groups-row0" style="" ><td id="groups-cell0" style="font-size:10px;line-height:20px" ><div id="groups-content0" style="" >H</div></td><td id="groups-cell1" style="font-size:40px;line-height:40px" ><div id="groups-content1" style="" >H</div></td></tr></tbody><tbody><tr id="groups-row1" style="" ><td id="groups-cell2" style="" ><div id="groups-content2" style="" >H</div></td></tr></tbody></table></li></ol>
+  <div id="groups-after" style="height:8px;background:green" ></div></div>

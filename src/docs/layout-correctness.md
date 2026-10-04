@@ -62,11 +62,6 @@ Marker font and colour styles now use the selected `::marker` style for both
 inside and outside markers. Custom `::marker { content:... }` remains unused;
 generated contents need shared counter/content handling for summaries and lists.
 
-Outside markers now align with first baselines through ordinary block, flex and
-grid children in horizontal writing. Table baselines still need their row/cell
-baseline selection and alignment rules before they can be exported to a list
-item or an enclosing flex/grid baseline group.
-
 A very narrow inside counter also differs from Chromium: `#spaced-marker` in
 `test/disclosure-markers.html` uses a negative Korean counter in an 8px item.
 Wisp keeps the generated marker together (48px item height); Chromium wraps it
@@ -77,5 +72,23 @@ styling/whitespace support, rather than a language-specific exception.
 
 Evidence: `out/render-captures/disclosure-markers-2026-10-03/chromium-extended/`
 and `marker-style-reference/inspection.json` in the same artifact directory.
+
+## Table formatting beyond baseline alignment
+
+Two existing limitations were confirmed by the table baseline comparison:
+
+- `display:inline-table` still uses the block-table representation. It starts a
+  new block instead of joining the surrounding line. Supporting it needs box
+  construction and inline layout integration using the table's exported baseline.
+  The `inline` comparison case is 100px tall in Wisp versus 60px in Chromium.
+- Collapsed borders are not shared correctly between row/cell edges. In the
+  `collapsed` case, 2px cell borders give a 44px cell at y=0 in Wisp versus a
+  42px cell at y=1 in Chromium. Text, marker and overall table geometry now agree;
+  the remaining difference belongs to collapsed-border geometry and painting.
+
+Both limitations reproduce before the baseline changes. Initial evidence:
+`out/render-captures/table-baseline-2026-10-04/before/` and its adjacent
+`fixture.html`. The permanent `test/table-baseline.html` checks collapsed-table
+content alignment without accepting the incorrect cell edges as a baseline.
 
 All artifact paths above are under `out/render-captures/`.

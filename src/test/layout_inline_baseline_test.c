@@ -985,6 +985,126 @@ START_TEST(test_line_overflow_alignment)
 }
 END_TEST
 
+/* Exercise row sizing separately from box construction and frontend metrics. */
+static struct box *make_table_box(box_type type, uint8_t display)
+{
+    struct box *box = make_box(type, 24, CSS_VERTICAL_ALIGN_BASELINE);
+    style_set_table_display(box->style, display);
+    return box;
+}
+
+static struct box *append_cell_text(struct box *cell, int font, int line)
+{
+    style_set_inline_metrics(cell->style, font, line, CSS_VERTICAL_ALIGN_BASELINE);
+    struct box *ic = make_box(BOX_INLINE_CONTAINER, 0, 0);
+    struct box *text = make_box(BOX_TEXT, line, CSS_VERTICAL_ALIGN_BASELINE);
+    style_set_inline_metrics(text->style, font, line, CSS_VERTICAL_ALIGN_BASELINE);
+    text->text = "H";
+    text->length = 1;
+    text->width = UNKNOWN_WIDTH;
+    append(cell, ic);
+    append(ic, text);
+    return ic;
+}
+
+enum table_baseline_case {
+    TABLE_BASELINE,
+    TABLE_MIDDLE,
+    TABLE_BOTTOM,
+    TABLE_TOP,
+    TABLE_NO_BASELINE,
+    TABLE_PADDED,
+    TABLE_CELL_MIN,
+    TABLE_ROW_MIN,
+    TABLE_EMPTY,
+    TABLE_SPAN,
+    TABLE_BASELINE_CASE_COUNT
+};
+
+START_TEST(test_table_first_baseline)
+{
+    static const char *names[] = {"baseline", "middle", "bottom", "top", "no baseline group", "padded", "cell minimum",
+        "row minimum", "empty", "row span"};
+    html_content content = {.unit_len_ctx = {.viewport_width = INTTOFIX(200),
+                                .viewport_height = INTTOFIX(500),
+                                .font_size_default = INTTOFIX(16),
+                                .device_dpi = INTTOFIX(96)},
+        .font_func = &scaled_fonts};
+    struct box *table = make_table_box(BOX_TABLE, CSS_DISPLAY_TABLE);
+    struct column columns[2] = {{.type = COLUMN_WIDTH_FIXED, .width = 100, .min = 100, .max = 100},
+        {.type = COLUMN_WIDTH_FIXED, .width = 100, .min = 100, .max = 100}};
+    table->columns = 2;
+    table->col = columns;
+    style_set_width(table->style, 200, false);
+    struct box *group = make_table_box(BOX_TABLE_ROW_GROUP, CSS_DISPLAY_TABLE_ROW_GROUP);
+    struct box *row = make_table_box(BOX_TABLE_ROW, CSS_DISPLAY_TABLE_ROW);
+    append(table, group);
+    append(group, row);
+    struct box *cells[2], *lines[2] = {NULL, NULL};
+    for (int i = 0; i < 2; i++) {
+        cells[i] = make_table_box(BOX_TABLE_CELL, CSS_DISPLAY_TABLE_CELL);
+        cells[i]->columns = cells[i]->rows = 1;
+        cells[i]->start_column = i;
+        append(row, cells[i]);
+        if (_i != TABLE_EMPTY || i != 0)
+            lines[i] = append_cell_text(cells[i], 16, 24);
+    }
+    uint8_t align = _i == TABLE_MIDDLE                 ? CSS_VERTICAL_ALIGN_MIDDLE
+        : _i == TABLE_BOTTOM                           ? CSS_VERTICAL_ALIGN_BOTTOM
+        : (_i == TABLE_TOP || _i == TABLE_NO_BASELINE) ? CSS_VERTICAL_ALIGN_TOP
+                                                       : CSS_VERTICAL_ALIGN_BASELINE;
+    style_set_inline_metrics(cells[0]->style, 16, 24, align);
+    if (_i == TABLE_PADDED)
+        style_set_padding_top(cells[0]->style, 20);
+    if (_i == TABLE_CELL_MIN)
+        style_set_height_px(cells[0]->style, 80);
+    if (_i == TABLE_ROW_MIN)
+        style_set_height_px(row->style, 80);
+    if (_i == TABLE_SPAN) {
+        cells[0]->rows = 2;
+        style_set_inline_metrics(cells[0]->style, 64, 72, CSS_VERTICAL_ALIGN_BASELINE);
+        style_set_inline_metrics(lines[0]->children->style, 64, 72, CSS_VERTICAL_ALIGN_BASELINE);
+        struct box *last = make_table_box(BOX_TABLE_ROW, CSS_DISPLAY_TABLE_ROW);
+        struct box *cell = make_table_box(BOX_TABLE_CELL, CSS_DISPLAY_TABLE_CELL);
+        cell->columns = cell->rows = 1;
+        cell->start_column = 1;
+        append(group, last);
+        append(last, cell);
+        append_cell_text(cell, 16, 24);
+    }
+    /* Reuse the same boxes, changing font metrics and then restoring them. */
+    for (int pass = 0; pass < 3; pass++) {
+        int font = pass == 1 ? 48 : 32, line = font + 8;
+        style_set_inline_metrics(cells[1]->style, font, line,
+            _i == TABLE_NO_BASELINE ? CSS_VERTICAL_ALIGN_TOP : CSS_VERTICAL_ALIGN_BASELINE);
+        style_set_inline_metrics(lines[1]->children->style, font, line, CSS_VERTICAL_ALIGN_BASELINE);
+        ck_assert_msg(layout_table(table, 200, &content), "%s, pass %d: layout failed", names[_i], pass);
+        int first = _i == TABLE_EMPTY ? 0 : _i == TABLE_SPAN ? 60 : _i == TABLE_PADDED ? 38 : 18;
+        int second = 4 + font * 7 / 8;
+        int baseline = _i == TABLE_NO_BASELINE ? line : max(first, second);
+        int shift = align == CSS_VERTICAL_ALIGN_MIDDLE ? (line - 24) / 2
+            : align == CSS_VERTICAL_ALIGN_BOTTOM       ? line - 24
+            : align == CSS_VERTICAL_ALIGN_TOP          ? 0
+                                                       : baseline - first;
+        int row_height = line + max(0, first - second);
+        if (_i == TABLE_CELL_MIN || _i == TABLE_ROW_MIN)
+            row_height = 80;
+        int height = row_height + (_i == TABLE_SPAN ? 24 : 0);
+        int y = shift + (_i == TABLE_PADDED ? 20 : 0);
+        ck_assert_msg((table->flags & HAS_BASELINE) && table->baseline == baseline && row->height == row_height &&
+                table->height == height,
+            "%s, pass %d: baseline=%d row=%d table=%d; expected %d/%d/%d", names[_i], pass, table->baseline,
+            row->height, table->height, baseline, row_height, height);
+        ck_assert_msg(cells[0]->padding[TOP] == y && (!lines[0] || lines[0]->y == y),
+            "%s, pass %d: first content top=%d, line=%d; expected %d", names[_i], pass, cells[0]->padding[TOP],
+            lines[0] ? lines[0]->y : -1, y);
+        ck_assert_msg(
+            lines[1]->y == max(0, first - second), "%s, pass %d: second line top=%d", names[_i], pass, lines[1]->y);
+    }
+    free_tree(table);
+}
+END_TEST
+
 int main(void)
 {
     if (nsoption_init(NULL, NULL, NULL) != NSERROR_OK)
@@ -1013,6 +1133,9 @@ int main(void)
     TCase *alignment = tcase_create("Line alignment");
     tcase_add_loop_test(alignment, test_line_overflow_alignment, 0, 2 * TEXT_ALIGNMENT_COUNT);
     suite_add_tcase(suite, alignment);
+    TCase *tables = tcase_create("Table baselines");
+    tcase_add_loop_test(tables, test_table_first_baseline, 0, TABLE_BASELINE_CASE_COUNT);
+    suite_add_tcase(suite, tables);
     SRunner *runner = srunner_create(suite);
     srunner_set_fork_status(runner, CK_NOFORK);
     srunner_run_all(runner, CK_VERBOSE);

@@ -271,6 +271,9 @@ if(WISP_QT_CAPTURE)
         add_test(NAME qt_block_marker_fallback
             COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_block_marker_fallback.py $<TARGET_FILE:wisp-qt>)
         set_tests_properties(qt_block_marker_fallback PROPERTIES TIMEOUT 40)
+        add_test(NAME qt_table_baseline
+            COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_table_baseline.py $<TARGET_FILE:wisp-qt>)
+        set_tests_properties(qt_table_baseline PROPERTIES TIMEOUT 40)
         add_test(NAME qt_grid_baseline
             COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_grid_baseline.py $<TARGET_FILE:wisp-qt>)
         set_tests_properties(qt_grid_baseline PROPERTIES TIMEOUT 40)

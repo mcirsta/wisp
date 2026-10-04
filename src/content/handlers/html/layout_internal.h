@@ -335,9 +335,12 @@ static inline bool lh__flex_baseline_item(const struct box *flex, const struct b
  * their contributing item after placement; ordinary blocks propagate it. */
 static inline bool layout_needs_first_baseline(const struct box *box)
 {
-    for (; box && (box->type == BOX_BLOCK || lh__box_is_flex_container(box) || lh__box_is_grid_container(box));
+    for (; box &&
+        (box->type == BOX_BLOCK || box->type == BOX_TABLE_CELL || box->type == BOX_TABLE ||
+            lh__box_is_flex_container(box) || lh__box_is_grid_container(box));
         box = box->parent) {
-        if (box_has_outside_marker(box) || box->type == BOX_INLINE_FLEX || box->type == BOX_INLINE_GRID)
+        if (box_has_outside_marker(box) || box->type == BOX_TABLE_CELL || box->type == BOX_INLINE_FLEX ||
+            box->type == BOX_INLINE_GRID)
             return true;
         if (box->style && lh__box_is_absolute(box))
             break;

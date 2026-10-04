@@ -23,6 +23,9 @@ css_computed_style *create_block_style(void);
 /** Use a block-level flex or grid formatting context. */
 void style_set_flex_or_grid(css_computed_style *s, bool grid);
 
+/** Configure a table, row group, row or cell with separate borders and zero spacing. */
+void style_set_table_display(css_computed_style *s, uint8_t display);
+
 /**
  * Set CSS margins on a style (in px).
  * Pass INT_MIN for any edge to leave it unchanged.

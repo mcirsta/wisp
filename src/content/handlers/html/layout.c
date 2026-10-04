@@ -1802,9 +1802,9 @@ static inline bool box_prevents_collapse_through(const css_unit_ctx *unit_len_ct
      * children does not make an image or form control an empty block. */
     if (lh__box_is_replace(box))
         return true;
-    /* Flex/grid containers establish independent formatting contexts, even
-     * when empty. Their top and bottom margins are never adjoining. */
-    if (box->type == BOX_FLEX || box->type == BOX_GRID)
+    /* Flex/grid/table containers establish independent formatting contexts,
+     * even when empty. Their top and bottom margins are never adjoining. */
+    if (box->type == BOX_FLEX || box->type == BOX_GRID || box->type == BOX_TABLE)
         return true;
     /* Independent block contexts keep top and bottom margins separate even
      * when empty, so collect their bottom margin after layout. */
@@ -1822,12 +1822,12 @@ static inline bool box_prevents_collapse_through(const css_unit_ctx *unit_len_ct
         return box_inline_container_has_line_boxes(unit_len_ctx, box) &&
             !box_inline_container_only_floats(unit_len_ctx, box);
     /* In-flow descendants can separate the margins even before layout sets
-     * MAKE_HEIGHT. This also covers a zero-height flex/grid inside wrappers. */
+     * MAKE_HEIGHT. This also covers zero-height independent contexts inside wrappers. */
     if (box->type == BOX_BLOCK) {
         for (struct box *c = box->children; c != NULL; c = c->next) {
             if (!box_is_out_of_flow(c) &&
                 (c->type == BOX_BLOCK || c->type == BOX_INLINE_CONTAINER || c->type == BOX_FLEX ||
-                    c->type == BOX_GRID) &&
+                    c->type == BOX_GRID || c->type == BOX_TABLE) &&
                 box_prevents_collapse_through(unit_len_ctx, c))
                 return true;
         }
@@ -2505,21 +2505,103 @@ static void layout_block_add_scrollbar(struct box *box, int which)
 }
 
 
-/**
- * Moves the children of a box by a specified amount
- *
- * \param  box  top of tree of boxes
- * \param  x	the amount to move children by horizontally
- * \param  y	the amount to move children by vertically
- */
-static void layout_move_children(struct box *box, int x, int y)
+/* CSS 2.2 §17.5.3: inline-only vertical-align values fall back to baseline
+ * on table cells. Keep selection identical during row sizing and placement. */
+static uint8_t layout_table_cell_alignment(const struct box *cell)
 {
-    assert(box);
-
-    for (box = box->children; box; box = box->next) {
-        box->x += x;
-        box->y += y;
+    css_fixed_or_calc value = (css_fixed_or_calc)0;
+    css_unit unit = CSS_UNIT_PX;
+    uint8_t align = css_computed_vertical_align(cell->style, &value, &unit);
+    switch (align) {
+    case CSS_VERTICAL_ALIGN_TOP:
+    case CSS_VERTICAL_ALIGN_MIDDLE:
+    case CSS_VERTICAL_ALIGN_BOTTOM:
+        return align;
+    default:
+        return CSS_VERTICAL_ALIGN_BASELINE;
     }
+}
+
+/* Measure natural contents before minimum heights or row-span padding change
+ * the cell's geometry. Empty cells synthesize at their natural content bottom. */
+static bool layout_table_measure_row(struct box *row, const int *xs, int spacing, html_content *content)
+{
+    row->flags &= ~HAS_BASELINE;
+    for (struct box *cell = row->children; cell; cell = cell->next) {
+        cell->width = xs[cell->start_column + cell->columns] - xs[cell->start_column] - spacing -
+            cell->border[LEFT].width - cell->padding[LEFT] - cell->padding[RIGHT] - cell->border[RIGHT].width;
+        cell->height = AUTO;
+        if (!layout_block_context(cell, -1, content))
+            return false;
+        /* These existing scratch fields remain valid until final alignment. */
+        cell->descendant_y0 = cell->height;
+        cell->descendant_y1 = cell->padding[BOTTOM];
+        if (!(cell->flags & HAS_BASELINE)) {
+            cell->baseline = cell->padding[TOP] + cell->height;
+            cell->flags |= HAS_BASELINE;
+        }
+        if (layout_table_cell_alignment(cell) == CSS_VERTICAL_ALIGN_BASELINE) {
+            int baseline = cell->border[TOP].width + cell->baseline;
+            row->baseline = (row->flags & HAS_BASELINE) ? max(row->baseline, baseline) : baseline;
+            row->flags |= HAS_BASELINE;
+        }
+        css_fixed_or_calc value = (css_fixed_or_calc)0;
+        css_unit unit = CSS_UNIT_PX;
+        int height;
+        /* Cell height is a minimum for row sizing, not a content baseline. */
+        if (css_computed_height(cell->style, &value, &unit) == CSS_HEIGHT_SET &&
+            lh__length_to_px(cell->style, &content->unit_len_ctx, -1, value, unit, &height))
+            cell->height = max(cell->height, height);
+        cell->x = xs[cell->start_column] + cell->border[LEFT].width;
+        cell->y = cell->border[TOP].width;
+    }
+    return true;
+}
+
+/* Moving every float in this formatting context by the same amount preserves
+ * its exclusion-list order. Independent nested contexts move with their box. */
+static void layout_table_shift_cell(struct box *cell, int shift)
+{
+    if (shift == 0)
+        return;
+    cell->padding[TOP] += shift;
+    cell->padding[BOTTOM] -= shift;
+    cell->baseline += shift;
+    for (struct box *child = cell->children; child; child = child->next)
+        child->y += shift;
+    for (struct box *floating = cell->float_children; floating; floating = floating->next_float)
+        floating->y += shift;
+}
+
+/* Row-span heights are final now. Baseline cells align to their starting row;
+ * middle/bottom cells use their complete span. Rows without a baseline group
+ * export the lowest natural content bottom after alignment. */
+static void layout_table_align_row(struct box *row)
+{
+    bool baseline_group = row->flags & HAS_BASELINE;
+    int fallback = row->children ? 0 : row->height;
+    for (struct box *cell = row->children; cell; cell = cell->next) {
+        int spare = (cell->padding[BOTTOM] - cell->descendant_y1) + (cell->height - cell->descendant_y0);
+        int shift = 0;
+        switch (layout_table_cell_alignment(cell)) {
+        case CSS_VERTICAL_ALIGN_BASELINE:
+            shift = row->baseline - cell->border[TOP].width - cell->baseline;
+            break;
+        case CSS_VERTICAL_ALIGN_MIDDLE:
+            shift = spare / 2;
+            break;
+        case CSS_VERTICAL_ALIGN_BOTTOM:
+            shift = spare;
+            break;
+        default:
+            break;
+        }
+        layout_table_shift_cell(cell, shift);
+        fallback = max(fallback, cell->y + cell->padding[TOP] + cell->descendant_y0);
+    }
+    if (!baseline_group)
+        row->baseline = fallback;
+    row->flags |= HAS_BASELINE;
 }
 
 
@@ -2540,7 +2622,6 @@ bool layout_table(struct box *table, int available_width, html_content *content)
     int spare_width;
     int relative_sum = 0;
     int border_spacing_h = 0, border_spacing_v = 0;
-    int spare_height;
     int positioned_columns = 0;
     struct box *containing_block = NULL;
     struct box *c;
@@ -2557,6 +2638,8 @@ bool layout_table(struct box *table, int available_width, html_content *content)
     assert(style);
     assert(table->children && table->children->children);
     assert(columns);
+
+    table->flags &= ~HAS_BASELINE;
 
     /* allocate working buffers */
     col = malloc(columns * sizeof col[0]);
@@ -2868,49 +2951,26 @@ bool layout_table(struct box *table, int available_width, html_content *content)
                     row_height = 0;
                 }
             }
+            if (!layout_table_measure_row(row, xs, border_spacing_h, content)) {
+                free(col);
+                free(excess_y);
+                free(row_span);
+                free(row_span_cell);
+                free(xs);
+                return false;
+            }
+            /* A spanning baseline cell still reserves its ascent in the first
+             * row. Its remaining descent can be accommodated by later rows. */
+            if (row->flags & HAS_BASELINE)
+                row_height = max(row_height, row->baseline);
             for (c = row->children; c; c = c->next) {
-                assert(c->style);
-                c->width = xs[c->start_column + c->columns] - xs[c->start_column] - border_spacing_h -
-                    c->border[LEFT].width - c->padding[LEFT] - c->padding[RIGHT] - c->border[RIGHT].width;
-                c->float_children = 0;
-                c->cached_place_below_level = 0;
-
-                c->height = AUTO;
-                if (!layout_block_context(c, -1, content)) {
-                    free(col);
-                    free(excess_y);
-                    free(row_span);
-                    free(row_span_cell);
-                    free(xs);
-                    return false;
-                }
-                /* warning: c->descendant_y0 and
-                 * c->descendant_y1 used as temporary storage
-                 * until after vertical alignment is complete */
-                c->descendant_y0 = c->height;
-                c->descendant_y1 = c->padding[BOTTOM];
-
-                htype = css_computed_height(c->style, &value, &unit);
-
-                if (htype == CSS_HEIGHT_SET && unit != CSS_UNIT_PCT) {
-                    /* some sites use height="1" or similar
-                     * to attempt to make cells as small as
-                     * possible, so treat it as a minimum */
-                    int h = 0;
-                    if (lh__length_to_px(c->style, &content->unit_len_ctx, -1, value, unit, &h)) {
-                        if (c->height < h)
-                            c->height = h;
-                    }
-                }
-                /* specified row height is treated as a minimum
-                 */
-                if (c->height < row_height)
-                    c->height = row_height;
-                c->x = xs[c->start_column] + c->border[LEFT].width;
-                c->y = c->border[TOP].width;
+                int shift = layout_table_cell_alignment(c) == CSS_VERTICAL_ALIGN_BASELINE
+                    ? row->baseline - c->border[TOP].width - c->baseline
+                    : 0;
+                int required = max(c->height, c->descendant_y0 + shift);
                 for (i = 0; i != c->columns; i++) {
                     row_span[c->start_column + i] = c->rows;
-                    excess_y[c->start_column + i] = c->border[TOP].width + c->padding[TOP] + c->height +
+                    excess_y[c->start_column + i] = c->border[TOP].width + c->padding[TOP] + required +
                         c->padding[BOTTOM] + c->border[BOTTOM].width;
                     row_span_cell[c->start_column + i] = 0;
                 }
@@ -2956,50 +3016,17 @@ bool layout_table(struct box *table, int available_width, html_content *content)
         row_group->height = row_group_height;
         table_height += row_group_height;
     }
-    /* Table height is either the height of the contents, or specified
-     * height if greater */
-    table_height = max(table_height, min_height);
-    table_height += table->padding[BOTTOM];
+    /* Row positions include leading padding, but box->height stores content
+     * height. Outer layout adds both padding edges separately. */
+    table_height = max(table_height - table->padding[TOP], min_height);
     /** \todo distribute spare height over the row groups / rows / cells */
 
-    /* perform vertical alignment */
     for (row_group = table->children; row_group; row_group = row_group->next) {
         for (row = row_group->children; row; row = row->next) {
-            for (c = row->children; c; c = c->next) {
-                enum css_vertical_align_e vertical_align;
-
-                /* unextended bottom padding is in
-                 * c->descendant_y1, and unextended
-                 * cell height is in c->descendant_y0 */
-                spare_height = (c->padding[BOTTOM] - c->descendant_y1) + (c->height - c->descendant_y0);
-
-                vertical_align = css_computed_vertical_align(c->style, &value, &unit);
-
-                switch (vertical_align) {
-                case CSS_VERTICAL_ALIGN_SUB:
-                case CSS_VERTICAL_ALIGN_SUPER:
-                case CSS_VERTICAL_ALIGN_TEXT_TOP:
-                case CSS_VERTICAL_ALIGN_TEXT_BOTTOM:
-                case CSS_VERTICAL_ALIGN_SET:
-                case CSS_VERTICAL_ALIGN_BASELINE:
-                    /* todo: baseline alignment, for now
-                     * just use ALIGN_TOP */
-                case CSS_VERTICAL_ALIGN_TOP:
-                    break;
-                case CSS_VERTICAL_ALIGN_MIDDLE:
-                    c->padding[TOP] += spare_height / 2;
-                    c->padding[BOTTOM] -= spare_height / 2;
-                    layout_move_children(c, 0, spare_height / 2);
-                    break;
-                case CSS_VERTICAL_ALIGN_BOTTOM:
-                    c->padding[TOP] += spare_height;
-                    c->padding[BOTTOM] -= spare_height;
-                    layout_move_children(c, 0, spare_height);
-                    break;
-                case CSS_VERTICAL_ALIGN_INHERIT:
-                    assert(0);
-                    break;
-                }
+            layout_table_align_row(row);
+            if (!(table->flags & HAS_BASELINE)) {
+                table->baseline = row_group->y + row->y + row->baseline;
+                table->flags |= HAS_BASELINE;
             }
         }
     }
@@ -5359,19 +5386,22 @@ static void layout_shift_block_floats(struct box *box, int shift)
 static void layout_block_first_baseline(struct box *box, html_content *content, struct block_layout_state *state)
 {
     struct box *parent = box->parent;
-    if ((box->type != BOX_BLOCK && !lh__box_is_flex_container(box) && !lh__box_is_grid_container(box)) ||
-        !(box->flags & HAS_BASELINE) || box_is_out_of_flow(box) || parent == NULL || parent->type != BOX_BLOCK ||
-        (parent->flags & HAS_BASELINE) || !layout_needs_first_baseline(parent))
+    if ((box->type != BOX_BLOCK && box->type != BOX_TABLE && !lh__box_is_flex_container(box) &&
+            !lh__box_is_grid_container(box)) ||
+        !(box->flags & HAS_BASELINE) || box_is_out_of_flow(box) || parent == NULL ||
+        (parent->type != BOX_BLOCK && parent->type != BOX_TABLE_CELL) || (parent->flags & HAS_BASELINE) ||
+        !layout_needs_first_baseline(parent))
         return;
     struct line_baselines baselines = {0};
-    int push = layout_align_outside_marker(parent, content, box->y - box->border[TOP].width,
-        box->border[TOP].width + box->baseline, &baselines);
+    int baseline = lh__box_first_baseline(box);
+    int push = layout_align_outside_marker(
+        parent, content, box->y - box->border[TOP].width, box->border[TOP].width + baseline, &baselines);
     if (push)
         layout_shift_block_floats(box, push);
     box->y += push;
     state->y += push;
     state->cy += push;
-    parent->baseline = box->y + box->baseline;
+    parent->baseline = box->y + baseline;
     parent->flags |= HAS_BASELINE;
 }
 
@@ -5749,8 +5779,10 @@ bool layout_block_context(struct box *block, int viewport_height, html_content *
             box->y = state.y;
             state.cy += state.y;
             continue;
-        } else if (box->type == BOX_BLOCK || box->object || box->flags & IFRAME)
-            state.cy += box->padding[TOP];
+        }
+        /* Completed children, including tables, occupy both padding edges.
+         * Keep the context cursor consistent with the sibling position below. */
+        state.cy += box->padding[TOP];
 
         if (box->type == BOX_BLOCK) {
             int marker_height = layout_marker_min_height(box, content);
