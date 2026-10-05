@@ -4,6 +4,23 @@ Wisp implements the reading-oriented core of HTML `details` by default, with
 JavaScript disabled as well as enabled. Presence of `open` controls expansion;
 `open="false"` is still open because this is a boolean attribute.
 
+Nonempty `name` attributes form exclusive groups within the same DOM tree,
+including detached trees. Names match exactly, including case and whitespace;
+empty or missing names do not group. Following the HTML standard's
+[details attribute-change and insertion algorithms](https://html.spec.whatwg.org/multipage/interactive-elements.html#the-details-element),
+adding `open` closes the other open member. Inserting an already-open member or
+changing its name closes that member if the group already has one open. Parser
+insertion therefore preserves the first open member, regardless of attribute
+order. Updating the value of an existing `open` attribute is not a new opening.
+
+Libdom enforces these rules after attribute values/lists and inserted subtrees
+are in place. Native activation and search/fragment reveal use the same attribute
+operations. This avoids delayed repair during layout and adds no per-node state
+or group cache. Subtree insertion, moves, replacement, clones, document fragments,
+attribute-node replacement and direct attribute value changes share the rules.
+The specialized scripting interface, queued `toggle` events and keyboard focus
+remain separate work in the [correctness backlog](layout-correctness.md).
+
 The first direct `summary` is rendered first and remains visible when closed.
 Other children, including additional summaries and raw text, belong to the
 collapsible contents. A missing summary gets an anonymous, localized “Details”
@@ -124,6 +141,14 @@ form editing, frame/chrome boundaries and reference/allocation stability. This i
 a separate feature pass, not part of the native mouse/search implementation.
 
 ## Validation
+
+`dom_details_test` derives expected open states directly from the HTML algorithms.
+It covers parser chunks, exact name matching, detached trees, subtree moves and
+replacement, fragments, clones, namespace isolation, and attribute changes through
+`setAttribute`, `setAttributeNS`, attribute nodes, `nodeValue` and `textContent`.
+`qt_details_groups` checks actual visible contents after native clicks, Find in
+Page, fragment reveal and resizing, with JavaScript disabled and enabled. These
+checks do not use Chromium output as their oracle.
 
 `qt_details_search` exercises initial collapse, boolean `open`, summary placement,
 native clicks, default legends, interactive summary descendants, details-only

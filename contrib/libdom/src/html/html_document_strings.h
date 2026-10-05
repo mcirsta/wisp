@@ -31,6 +31,8 @@ HTML_DOCUMENT_STRINGS_ACTION1(title)
 HTML_DOCUMENT_STRINGS_ACTION1(lang)
 HTML_DOCUMENT_STRINGS_ACTION1(dir)
 HTML_DOCUMENT_STRINGS_ACTION1(class)
+/* HTMLDetailsElement boolean attribute */
+HTML_DOCUMENT_STRINGS_ACTION1(open)
 /* Useful attributes used by HTMLHtmlElement */
 HTML_DOCUMENT_STRINGS_ACTION1(version)
 /* Useful attributes used by HTMLHeadElement */

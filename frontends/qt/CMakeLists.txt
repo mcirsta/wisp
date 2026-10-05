@@ -304,6 +304,9 @@ if(WISP_QT_CAPTURE)
         add_test(NAME qt_details_search
             COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_details_search.py $<TARGET_FILE:wisp-qt>)
         set_tests_properties(qt_details_search PROPERTIES TIMEOUT 120)
+        add_test(NAME qt_details_groups
+            COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_details_groups.py $<TARGET_FILE:wisp-qt>)
+        set_tests_properties(qt_details_groups PROPERTIES TIMEOUT 120)
         add_test(NAME qt_class_whitespace
             COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_class_whitespace.py $<TARGET_FILE:wisp-qt>)
         set_tests_properties(qt_class_whitespace PROPERTIES TIMEOUT 30)

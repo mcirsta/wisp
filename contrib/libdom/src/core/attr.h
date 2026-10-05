@@ -41,6 +41,7 @@ dom_exception _dom_attr_normalize(dom_node_internal *node);
 dom_exception _dom_attr_lookup_prefix(dom_node_internal *node, dom_string *namespace, dom_string **result);
 dom_exception _dom_attr_is_default_namespace(dom_node_internal *node, dom_string *namespace, bool *result);
 dom_exception _dom_attr_lookup_namespace(dom_node_internal *node, dom_string *prefix, dom_string **result);
+/* DOM: Attr.textContent and Attr.nodeValue both set the attribute value. */
 #define DOM_NODE_VTABLE_ATTR                                                                                           \
     _dom_node_try_destroy, _dom_node_get_node_name, _dom_attr_get_node_value, /*overload*/                             \
         _dom_node_set_node_value, _dom_node_get_node_type, _dom_node_get_parent_node, _dom_node_get_child_nodes,       \
@@ -51,7 +52,7 @@ dom_exception _dom_attr_lookup_namespace(dom_node_internal *node, dom_string *pr
         _dom_node_normalize, _dom_node_is_supported, _dom_node_get_namespace, _dom_node_get_prefix,                    \
         _dom_attr_set_prefix, /*overload*/                                                                             \
         _dom_node_get_local_name, _dom_node_has_attributes, _dom_node_get_base, _dom_node_compare_document_position,   \
-        _dom_node_get_text_content, _dom_node_set_text_content, _dom_node_is_same,                                     \
+        _dom_node_get_text_content, _dom_node_set_node_value, _dom_node_is_same,                                       \
         _dom_attr_lookup_prefix, /*overload*/                                                                          \
         _dom_attr_is_default_namespace, /*overload*/                                                                   \
         _dom_attr_lookup_namespace, /*overload*/                                                                       \

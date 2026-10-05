@@ -37,6 +37,7 @@
 #include "core/string.h"
 #include "core/text.h"
 #include "events/mutation_event.h"
+#include "html/html_details_element.h"
 
 static bool _dom_node_permitted_child(const dom_node_internal *parent, const dom_node_internal *child);
 static inline dom_exception _dom_node_attach(
@@ -45,7 +46,7 @@ static inline void _dom_node_detach(dom_node_internal *node);
 static inline dom_exception _dom_node_attach_range(dom_node_internal *first, dom_node_internal *last,
     dom_node_internal *parent, dom_node_internal *previous, dom_node_internal *next);
 static inline dom_exception _dom_node_detach_range(dom_node_internal *first, dom_node_internal *last);
-static inline void _dom_node_replace(dom_node_internal *old, dom_node_internal *replacement);
+static inline dom_exception _dom_node_replace(dom_node_internal *old, dom_node_internal *replacement);
 
 static const struct dom_node_vtable node_vtable = {{DOM_NODE_EVENT_TARGET_VTABLE}, DOM_NODE_VTABLE};
 
@@ -946,7 +947,7 @@ dom_exception _dom_node_replace_child(
     dom_node_remove_pending(new_child);
 
     /* Perform the replacement */
-    _dom_node_replace(old_child, new_child);
+    dom_exception err = _dom_node_replace(old_child, new_child);
 
     /* Sort out the return value */
     dom_node_ref(old_child);
@@ -954,7 +955,7 @@ dom_exception _dom_node_replace_child(
     dom_node_mark_pending(old_child);
     *result = old_child;
 
-    return DOM_NO_ERR;
+    return err;
 }
 
 /**
@@ -2148,6 +2149,11 @@ dom_exception _dom_node_attach_range(dom_node_internal *first, dom_node_internal
 
     for (n = first; n != last->next; n = n->next) {
         n->parent = parent;
+    }
+    for (n = first; n != last->next; n = n->next) {
+        err = _dom_html_details_inserted(n);
+        if (err != DOM_NO_ERR)
+            return err;
         /* Dispatch a DOMNodeInserted event */
         err = dom_node_dispatch_node_change_event(parent->owner, n, parent, DOM_MUTATION_ADDITION, &success);
         if (err != DOM_NO_ERR)
@@ -2216,7 +2222,7 @@ dom_exception _dom_node_detach_range(dom_node_internal *first, dom_node_internal
  * or an empty document fragment node) then this essentially just removes
  * the old node from its parent.  It is up to the caller to deal with that.
  */
-void _dom_node_replace(dom_node_internal *old, dom_node_internal *replacement)
+dom_exception _dom_node_replace(dom_node_internal *old, dom_node_internal *replacement)
 {
     dom_node_internal *first, *last;
     dom_node_internal *n;
@@ -2240,7 +2246,7 @@ void _dom_node_replace(dom_node_internal *old, dom_node_internal *replacement)
             old->parent->last_child = old->previous;
         }
         old->previous = old->next = old->parent = NULL;
-        return;
+        return DOM_NO_ERR;
     }
 
     /* We're replacing old with first-to-last */
@@ -2262,6 +2268,12 @@ void _dom_node_replace(dom_node_internal *old, dom_node_internal *replacement)
     }
 
     old->previous = old->next = old->parent = NULL;
+    for (n = first; n != last->next; n = n->next) {
+        dom_exception err = _dom_html_details_inserted(n);
+        if (err != DOM_NO_ERR)
+            return err;
+    }
+    return DOM_NO_ERR;
 }
 
 /**

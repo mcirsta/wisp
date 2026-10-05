@@ -31,6 +31,7 @@
 #include "core/namednodemap.h"
 #include "core/node.h"
 #include "events/mutation_event.h"
+#include "html/html_details_element.h"
 
 const struct dom_element_vtable _dom_element_vtable = {
     {{DOM_NODE_EVENT_TARGET_VTABLE}, DOM_NODE_VTABLE_ELEMENT}, DOM_ELEMENT_VTABLE};
@@ -1655,6 +1656,10 @@ _dom_element_set_attr(struct dom_element *element, dom_string *namespace, dom_st
         dom_node_unref(attr);
         dom_node_remove_pending(attr);
 
+        err = _dom_html_details_attribute_changed(element, namespace, name, true);
+        if (err != DOM_NO_ERR)
+            return err;
+
         success = true;
         err = _dom_dispatch_subtree_modified_event(doc, (dom_event_target *)element, &success);
         if (err != DOM_NO_ERR)
@@ -1818,7 +1823,13 @@ dom_exception _dom_element_set_attr_node(
     match = _dom_element_attr_list_find_by_name(element->attributes, name, namespace);
 
     *result = NULL;
+    bool replaced = match != NULL;
     if (match != NULL) {
+        if (match->attr == attr) {
+            *result = (dom_attr *)dom_node_ref(attr);
+            dom_string_unref(name);
+            return DOM_NO_ERR;
+        }
         /* Disptach DOMNodeRemoval event */
         dom_string *old = NULL;
         doc = dom_node_get_owner(element);
@@ -1832,6 +1843,11 @@ dom_exception _dom_element_set_attr_node(
 
         dom_node_ref(old_attr);
 
+        if (element->attributes == match) {
+            element->attributes = _dom_element_attr_list_next(match);
+            if (element->attributes == match)
+                element->attributes = NULL;
+        }
         _dom_element_attr_list_node_unlink(match);
         _dom_element_attr_list_node_destroy(match);
 
@@ -1903,20 +1919,17 @@ dom_exception _dom_element_set_attr_node(
         return err;
     }
 
-    success = true;
-    err = _dom_dispatch_subtree_modified_event(doc, (dom_event_target *)element, &success);
-    if (err != DOM_NO_ERR) {
-        _dom_element_attr_list_node_destroy(match);
-        return err;
-    }
-
     /* Link into element's attribute list */
     if (element->attributes == NULL)
         element->attributes = match;
     else
         _dom_element_attr_list_insert(element->attributes, match);
 
-    return DOM_NO_ERR;
+    err = _dom_html_details_attribute_changed(element, namespace, attr_node->name, !replaced);
+    if (err != DOM_NO_ERR)
+        return err;
+    success = true;
+    return _dom_dispatch_subtree_modified_event(doc, (dom_event_target *)element, &success);
 }
 
 /**

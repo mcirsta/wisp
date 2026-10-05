@@ -27,7 +27,6 @@ Remaining work beyond the [native details implementation](details.md):
 
 - Keyboard focus/activation through shared document focus handling; the
   investigation and implementation sequence are in [details.md](details.md#keyboard-focus-follow-up).
-- Exclusive `name` groups, including parser and DOM attribute changes.
 - The `HTMLDetailsElement` scripting interface and queued/coalesced `toggle`
   events, rather than firing an incorrect synchronous substitute.
 - Author styling of `::details-content`; the current contents block is anonymous.

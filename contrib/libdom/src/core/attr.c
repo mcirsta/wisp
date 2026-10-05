@@ -22,6 +22,7 @@
 #include "core/element.h"
 #include "core/entity_ref.h"
 #include "core/node.h"
+#include "html/html_details_element.h"
 
 struct dom_element;
 
@@ -547,7 +548,11 @@ dom_exception _dom_attr_set_value(struct dom_attr *attr, dom_string *value)
     if (err != DOM_NO_ERR)
         return err;
 
-    err = dom_element_parse_attribute(a->parent, name, value, &parsed);
+    /* A newly created or removed Attr has no element-specific parser. */
+    if (a->parent != NULL)
+        err = dom_element_parse_attribute(a->parent, name, value, &parsed);
+    else
+        parsed = dom_string_ref(value);
     dom_string_unref(name);
     if (err != DOM_NO_ERR) {
         return err;
@@ -581,6 +586,19 @@ dom_exception _dom_attr_set_value(struct dom_attr *attr, dom_string *value)
 
     /* Now the attribute node is specified */
     attr->specified = true;
+
+    if (_dom_html_is_details(a->parent)) {
+        /* Attribute construction sets parent before attaching to the list.
+         * Only a value change on an already attached Attr runs these steps. */
+        dom_attr *attached = NULL;
+        err = dom_element_get_attribute_node_ns(a->parent, a->namespace, a->name, &attached);
+        bool installed = attached == attr;
+        dom_node_unref(attached);
+        if (err != DOM_NO_ERR)
+            return err;
+        if (installed)
+            return _dom_html_details_attribute_changed((dom_element *)a->parent, a->namespace, a->name, false);
+    }
 
     return DOM_NO_ERR;
 }

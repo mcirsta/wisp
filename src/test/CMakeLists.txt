@@ -456,6 +456,11 @@ target_include_directories(dom_class_test PRIVATE ${TEST_COMMON_INCLUDES})
 target_link_libraries(dom_class_test dom ${CHECK_LIBRARIES})
 add_test(NAME dom_class_test COMMAND dom_class_test)
 
+add_executable(dom_details_test dom_details_test.c)
+target_include_directories(dom_details_test PRIVATE ${TEST_COMMON_INCLUDES})
+target_link_libraries(dom_details_test dom ${CHECK_LIBRARIES})
+add_test(NAME dom_details_test COMMAND dom_details_test)
+
 add_executable(dom_userdata_test dom_userdata_test.c)
 target_include_directories(dom_userdata_test PRIVATE ${TEST_COMMON_INCLUDES})
 target_link_libraries(dom_userdata_test dom ${CHECK_LIBRARIES})
