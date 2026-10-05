@@ -26,6 +26,11 @@ p { margin:4px; }
 #grid-child::after { content:'grid-token'; }
 #canvas::before { content:'canvas-token'; }
 #hidden-image::before, #hidden-input::before, #hidden-svg::before { content:'forbidden-replacement'; }
+.fallback-object { display:block; }
+.fallback-object::before { content:attr(data-before); }
+.fallback-object::after { content:attr(data-after); }
+#embedded-object::before { content:'forbidden-object-pseudo'; }
+#embedded-child::before { content:'forbidden-object-child-pseudo'; }
 </style>
 <p class="same" id="first">needle</p>
 <div hidden="until-found" id="outer"><p class="same" id="second">needle</p></div>
@@ -47,4 +52,25 @@ p { margin:4px; }
   <img id="hidden-image" src="aspect-ratio-image.svg">
   <input id="hidden-input">
   <svg id="hidden-svg" width="20" height="20"><rect width="20" height="20"/></svg>
+</div>
+<!-- HTML object fallback is normal content, including its generated children.
+     Known unsupported MIME types may use fallback without fetching. -->
+<div id="object-outer" hidden="until-found">
+  <object id="fallback-object" class="fallback-object" data-before="fallback-token" data-after="fallback-after">fallback body</object>
+</div>
+<details id="empty-outer"><summary>Empty object resource</summary>
+  <object id="empty-object" class="fallback-object" data="" data-before="empty-token"></object>
+</details>
+<div id="unsupported-outer" hidden="until-found">
+  <object id="unsupported-object" class="fallback-object" data="aspect-ratio-image.svg" type="application/x-wisp-unsupported" data-before="unsupported-token">
+    <object id="nested-object" class="fallback-object" data-before="nested-object-token"></object>
+  </object>
+</div>
+<div id="embedded-outer" hidden="until-found">
+  <object id="embedded-object" data="aspect-ratio-image.svg" type="image/svg+xml">
+    <div id="embedded-child">forbidden-object-body</div>
+  </object>
+</div>
+<div id="unicode-outer" hidden="until-found">
+  <object id="unicode-object" class="fallback-object" data-before="știre-β-token"></object>
 </div>

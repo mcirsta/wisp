@@ -8,6 +8,7 @@
 #include <wisp/utils/corestrings.h>
 #include <wisp/utils/string.h>
 #include "content/handlers/html/box_construct.h"
+#include "content/handlers/html/box_special.h"
 #include "content/handlers/html/content_visibility.h"
 #include "content/handlers/html/search.h"
 #include "content/handlers/html/details.h"
@@ -131,8 +132,7 @@ static nserror search_generated(struct html_search_walk *walk, dom_node *node,
 /* Pseudos are generated only for supported, non-replaced owners. A skipped
  * subtree has no boxes yet; exclude special elements whose contents use a
  * replacement renderer, instead of inventing text which cannot be highlighted.
- * Resource-dependent fallback (e.g. object) needs the converter's decision;
- * discovery conservatively excludes it until that element has a box. */
+ * Object fallback is resolved with the converter's preflight in search_node. */
 static bool search_generated_owner(const html_content *html, dom_node *node, const struct box *box)
 {
     if (box != NULL)
@@ -148,7 +148,6 @@ static bool search_generated_owner(const html_content *html, dom_node *node, con
         case DOM_HTML_ELEMENT_TYPE_SELECT:
         case DOM_HTML_ELEMENT_TYPE_IFRAME:
         case DOM_HTML_ELEMENT_TYPE_EMBED:
-        case DOM_HTML_ELEMENT_TYPE_OBJECT:
             return false;
         case DOM_HTML_ELEMENT_TYPE_CANVAS:
             if (html->enable_scripting)
@@ -207,6 +206,26 @@ static nserror search_node(
     dom_node *child = NULL, *summary = NULL;
     if (css_computed_display(style, false) == CSS_DISPLAY_NONE || (skipped && !html_until_found(node)))
         goto done;
+    dom_html_element_type tag;
+    if (dom_html_element_get_tag_type(node, &tag) == DOM_NO_ERR && tag == DOM_HTML_ELEMENT_TYPE_OBJECT) {
+        /* HTML object fallback participates as ordinary child content. An
+         * embedded resource suppresses both those children and ::before/after
+         * (CSS Pseudo 4). Use the same preflight even before boxes exist. */
+        if (box != NULL) {
+            if (box->flags & IS_REPLACED)
+                goto done;
+        } else {
+            struct object_params *params = NULL;
+            if (!box_object_prepare(node, walk->html, NULL, &params)) {
+                error = NSERROR_NOMEM;
+                goto done;
+            }
+            bool embedded = params != NULL;
+            talloc_free(params);
+            if (embedded)
+                goto done;
+        }
+    }
     box_type type_for_children = box != NULL ? box->type : box_construct_type(style, parent_type, parent == NULL);
     bool generated = styles != NULL && box_type_generates_content(type_for_children) &&
         search_generated_owner(walk->html, node, box);

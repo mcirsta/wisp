@@ -24,8 +24,19 @@
 #ifndef WISP_HTML_BOX_SPECIAL_H
 #define WISP_HTML_BOX_SPECIAL_H
 
+#include <stdbool.h>
+#include <dom/dom.h>
+#include <wisp/utils/errors.h>
 
+struct html_content;
+struct box;
 struct box_construct_region;
+struct object_params;
+
+/* Prepare an object's resource parameters without fetching or constructing
+ * boxes. On success, NULL means known fallback; otherwise the caller owns a
+ * talloc allocation under owner. Shared with discovery in skipped subtrees. */
+bool box_object_prepare(dom_node *node, struct html_content *content, void *owner, struct object_params **result);
 
 /**
  * call an elements special conversion handler
@@ -35,7 +46,7 @@ struct box_construct_region;
  * \param region Optional detached result: stage supported bindings there.
  * \return NSERROR_OK, NSERROR_NOT_IMPLEMENTED for unsafe detached handlers, or an error.
  */
-nserror convert_special_elements(dom_node *node, html_content *content, struct box *box, bool *convert_children,
+nserror convert_special_elements(dom_node *node, struct html_content *content, struct box *box, bool *convert_children,
     void *box_context, struct box_construct_region *region);
 
 #endif

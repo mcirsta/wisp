@@ -37,6 +37,14 @@ string/attribute/default-quote extraction and formatting-type rules. Unsupported
 generated items (such as counters) are not invented by search. Source identity
 uses the existing text-node pointer and box flags; it adds no per-box fields.
 
+Object fallback uses the same resource-parameter preflight in construction and
+discovery. Missing/empty resources and known unsupported declared types can
+expose ordinary and generated fallback text even before boxes exist. Objects
+using an embedded resource suppress their fallback children and generated
+pseudos in search as in rendering. Discovery does not fetch resources or publish
+boxes; later load/decoding failures remain in the correctness backlog. Generated
+`attr()` text preserves its complete UTF-8 byte sequence.
+
 Query replacement, clearing, failure, navigation and teardown release references
 and cancel pending work. Highlights are destroyed before the frontend window,
 because selection cleanup can request a redraw.
@@ -56,7 +64,12 @@ outside this feature; unsupported values are not silently accepted.
 - `qt_hidden_attribute`: ordinary hidden, author overrides and hidden radios.
 - `qt_generated_search`: generated-source identity/order, strings/attributes/quotes,
   nested reveal, wrapping, hidden flex/grid blockification, JS-disabled canvas
-  fallback, excluded pseudo content/replaced owners, cancellation and native label clicks.
+  fallback, object fallback before construction, unsupported MIME types, UTF-8
+  attributes, excluded pseudo content/replaced owners, cancellation and native label clicks.
+- `box_construct_context_test`: shared object preflight agrees with construction,
+  makes no requests or mappings, releases temporary parameters, and preserves
+  generated UTF-8 attribute text. Existing detached-resource tests cover both
+  normal and retained construction.
 - `libcss_parse2_auto_content-visibility_dat`: generated parser and bytecode dump.
 
 Capture builds support `--capture-find TEXT`, `--capture-find-back TEXT`,

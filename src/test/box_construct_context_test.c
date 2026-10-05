@@ -21,6 +21,7 @@
 #include "content/handlers/css/internal.h"
 #include "content/handlers/css/select.h"
 #include "content/handlers/html/box_construct.h"
+#include "content/handlers/html/box_special.h"
 #include "content/handlers/html/object.h"
 #include "content/handlers/html/html_svg.h"
 #include "content/handlers/html/form_bindings.h"
@@ -2354,6 +2355,79 @@ START_TEST(test_detached_svg_buffers)
 }
 END_TEST
 
+START_TEST(test_generated_attribute_utf8)
+{
+    dom_node *outer = by_id("outer");
+    attribute(outer, "data-label", "știre-β-token");
+    css_computed_content_item item = {.type = CSS_COMPUTED_CONTENT_ATTR};
+    ck_assert_int_eq(lwc_intern_string("data-label", 10, &item.data.attr), lwc_error_ok);
+    char *generated = NULL;
+    ck_assert_int_eq(box_generated_text(&item, outer, NULL, &generated), NSERROR_OK);
+    ck_assert_ptr_nonnull(generated);
+    ck_assert_str_eq(generated, "știre-β-token");
+    talloc_free(generated);
+    lwc_string_unref(item.data.attr);
+    dom_node_unref(outer);
+}
+END_TEST
+
+static const struct {
+    const char *data, *type;
+    bool fallback;
+} object_preflight_cases[] = {
+    {NULL, NULL, true},
+    {"", NULL, true},
+    {"plot.svg", "application/x-wisp-unsupported", true},
+    {"plot.svg", NULL, false},
+};
+
+START_TEST(test_object_fallback_preflight)
+{
+    /* HTML requires fallback without data, and permits early fallback for an
+     * unsupported declared type. Preflight must agree with real construction
+     * without publishing mappings, requesting resources or retaining memory. */
+    dom_node *outer = by_id("outer");
+    dom_node *object = element(outer, "object", "object", NULL);
+    attribute(object, "style", "display:block");
+    dom_node *child = element(object, "div", "object-fallback", NULL);
+    text(child, "fallback");
+    if (object_preflight_cases[_i].data != NULL)
+        attribute(object, "data", object_preflight_cases[_i].data);
+    if (object_preflight_cases[_i].type != NULL)
+        attribute(object, "type", object_preflight_cases[_i].type);
+    record_fetches = true;
+    void *owner = talloc_new(NULL);
+    ck_assert_ptr_nonnull(owner);
+    for (unsigned i = 0; i < 3; i++) {
+        struct object_params *params = NULL;
+        ck_assert(box_object_prepare(object, &html, owner, &params));
+        ck_assert_msg((params == NULL) == object_preflight_cases[_i].fallback,
+            "preflight case %d: data=%s type=%s", _i,
+            object_preflight_cases[_i].data ? object_preflight_cases[_i].data : "(missing)",
+            object_preflight_cases[_i].type ? object_preflight_cases[_i].type : "(missing)");
+        if (params != NULL) {
+            ck_assert_ptr_eq(talloc_parent(params), owner);
+            ck_assert_str_eq(nsurl_access(params->data), "file:///plot.svg");
+        }
+        talloc_free(params);
+        ck_assert_uint_eq(talloc_total_blocks(owner), 1);
+        ck_assert_uint_eq(html.num_objects, 0);
+        ck_assert_ptr_null(box_for_node(object));
+    }
+    talloc_free(owner);
+    build_document();
+    record_fetches = false;
+    struct box *box = box_for_node(object);
+    ck_assert_ptr_nonnull(box);
+    ck_assert_msg(((box->flags & IS_REPLACED) == 0) == object_preflight_cases[_i].fallback,
+        "construction disagrees with preflight case %d", _i);
+    ck_assert_msg((box_for_node(child) != NULL) == object_preflight_cases[_i].fallback,
+        "fallback child conversion disagrees with preflight case %d", _i);
+    ck_assert_uint_eq(html.num_objects, object_preflight_cases[_i].fallback ? 0 : 1);
+    dom_node_unref(outer);
+}
+END_TEST
+
 static void compare_requests(const struct box_construct_region *candidate)
 {
     const struct box_construct_object *request = candidate->objects;
@@ -2748,6 +2822,9 @@ int main(void)
     tcase_add_loop_test(tc, test_detached_reject_bindings, 0, sizeof(unsafe_tags) / sizeof(unsafe_tags[0]));
     tcase_add_loop_test(tc, test_detached_cancel_or_fail, 0, 5);
     tcase_add_loop_test(tc, test_detached_resource_requests, 0, sizeof(resource_css) / sizeof(resource_css[0]));
+    tcase_add_loop_test(tc, test_object_fallback_preflight, 0,
+        sizeof(object_preflight_cases) / sizeof(object_preflight_cases[0]));
+    tcase_add_test(tc, test_generated_attribute_utf8);
     tcase_add_loop_test(tc, test_detached_resource_identity, 0, 2);
     tcase_add_test(tc, test_detached_iframes);
     tcase_add_loop_test(tc, test_detached_controls, 0, 3);

@@ -340,7 +340,7 @@ nserror box_generated_text(const css_computed_content_item *item, dom_node *node
             return NSERROR_DOM;
         if (value == NULL)
             return NSERROR_OK;
-        *text = talloc_strndup(owner, dom_string_data(value), dom_string_length(value));
+        *text = talloc_strndup(owner, dom_string_data(value), dom_string_byte_length(value));
         dom_string_unref(value);
         break;
     }

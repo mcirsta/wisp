@@ -1506,38 +1506,21 @@ static bool box_noscript(dom_node *n, html_content *content, struct box *box, bo
 }
 
 
-/**
- * Generic embedded object [13.3].
- */
-static bool box_object(dom_node *n, html_content *content, struct box *box, bool *convert_children,
-    void *box_context, struct box_construct_region *region)
+/* Shared, side-effect-free preflight for construction and search in skipped
+ * subtrees. NULL means the existing loader will use ordinary fallback contents;
+ * non-NULL is a request candidate, not proof that a later fetch will succeed. */
+bool box_object_prepare(dom_node *n, html_content *content, void *owner, struct object_params **result)
 {
     struct object_params *params;
-    struct object_param *param;
     dom_string *codebase, *classid, *data;
-    dom_node *c;
     dom_exception err;
+    *result = NULL;
 
-    if (box->style && ns_computed_display(box->style, box_is_root(n)) == CSS_DISPLAY_NONE)
-        return true;
-
-    if (box_get_attribute(n, "usemap", box_context, &box->usemap) == false)
-        return false;
-    if (box->usemap && box->usemap[0] == '#')
-        box->usemap++;
-
-    params = talloc(box_context, struct object_params);
+    params = talloc_zero(owner, struct object_params);
     if (params == NULL)
         return false;
 
     _talloc_set_destructor(params, (int (*)(void *))box_object_talloc_destructor);
-
-    params->data = NULL;
-    params->type = NULL;
-    params->codetype = NULL;
-    params->codebase = NULL;
-    params->classid = NULL;
-    params->params = NULL;
 
     /* codebase, classid, and data are URLs
      * (codebase is the base for the other two) */
@@ -1545,7 +1528,7 @@ static bool box_object(dom_node *n, html_content *content, struct box *box, bool
     if (err == DOM_NO_ERR && codebase != NULL) {
         if (box_extract_link(content, codebase, content->base_url, &params->codebase) == false) {
             dom_string_unref(codebase);
-            return false;
+            goto error;
         }
         dom_string_unref(codebase);
     }
@@ -1556,7 +1539,7 @@ static bool box_object(dom_node *n, html_content *content, struct box *box, bool
     if (err == DOM_NO_ERR && classid != NULL) {
         if (box_extract_link(content, classid, params->codebase, &params->classid) == false) {
             dom_string_unref(classid);
-            return false;
+            goto error;
         }
         dom_string_unref(classid);
     }
@@ -1565,27 +1548,27 @@ static bool box_object(dom_node *n, html_content *content, struct box *box, bool
     if (err == DOM_NO_ERR && data != NULL) {
         if (box_extract_link(content, data, params->codebase, &params->data) == false) {
             dom_string_unref(data);
-            return false;
+            goto error;
         }
         dom_string_unref(data);
     }
 
     if (params->classid == NULL && params->data == NULL)
         /* nothing to embed; ignore */
-        return true;
+        goto fallback;
 
     /* Don't include ourself */
     if (params->classid != NULL && nsurl_compare(content->base_url, params->classid, NSURL_COMPLETE))
-        return true;
+        goto fallback;
 
     if (params->data != NULL && nsurl_compare(content->base_url, params->data, NSURL_COMPLETE))
-        return true;
+        goto fallback;
 
     /* codetype and type are MIME types */
     if (box_get_attribute(n, "codetype", params, &params->codetype) == false)
-        return false;
+        goto error;
     if (box_get_attribute(n, "type", params, &params->type) == false)
-        return false;
+        goto error;
 
     /* classid && !data => classid is used (consult codetype)
      * (classid || !classid) && data => data is used (consult type)
@@ -1597,12 +1580,12 @@ static bool box_object(dom_node *n, html_content *content, struct box *box, bool
 
         lerror = lwc_intern_string(params->codetype, strlen(params->codetype), &icodetype);
         if (lerror != lwc_error_ok)
-            return false;
+            goto error;
 
         if (content_factory_type_from_mime_type(icodetype) == CONTENT_NONE) {
             /* can't handle this MIME type */
             lwc_string_unref(icodetype);
-            return true;
+            goto fallback;
         }
 
         lwc_string_unref(icodetype);
@@ -1614,16 +1597,52 @@ static bool box_object(dom_node *n, html_content *content, struct box *box, bool
 
         lerror = lwc_intern_string(params->type, strlen(params->type), &itype);
         if (lerror != lwc_error_ok)
-            return false;
+            goto error;
 
         if (content_factory_type_from_mime_type(itype) == CONTENT_NONE) {
             /* can't handle this MIME type */
             lwc_string_unref(itype);
-            return true;
+            goto fallback;
         }
 
         lwc_string_unref(itype);
     }
+
+    *result = params;
+    return true;
+
+fallback:
+    talloc_free(params);
+    return true;
+error:
+    talloc_free(params);
+    return false;
+}
+
+
+/**
+ * Generic embedded object [13.3].
+ */
+static bool box_object(dom_node *n, html_content *content, struct box *box, bool *convert_children,
+    void *box_context, struct box_construct_region *region)
+{
+    struct object_params *params;
+    struct object_param *param;
+    dom_node *c;
+    dom_exception err;
+
+    if (box->style && ns_computed_display(box->style, box_is_root(n)) == CSS_DISPLAY_NONE)
+        return true;
+
+    if (box_get_attribute(n, "usemap", box_context, &box->usemap) == false)
+        return false;
+    if (box->usemap && box->usemap[0] == '#')
+        box->usemap++;
+
+    if (!box_object_prepare(n, content, box_context, &params))
+        return false;
+    if (params == NULL)
+        return true;
 
     /* add parameters to linked list */
     err = dom_node_get_first_child(n, &c);

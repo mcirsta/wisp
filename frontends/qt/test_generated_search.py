@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
-"""Generated text search identity, order, reveal, wrapping and cancellation."""
+"""Generated text search identity, order, reveal, wrapping and cancellation.
+
+Object expectations follow HTML's fallback algorithm and CSS Pseudo 4's
+suppression of generated children on replaced owners, not a browser snapshot:
+https://html.spec.whatwg.org/multipage/iframe-embed-object.html#the-object-element
+https://drafts.csswg.org/css-pseudo-4/#generated-content
+"""
 import json
 import os
 from pathlib import Path
@@ -11,7 +17,9 @@ binary = Path(sys.argv[1]).resolve()
 fixture = Path(__file__).resolve().parents[2] / "test/generated-search.html"
 ids = ("first", "outer", "second", "attribute", "quoted", "wrapped", "nested-outer", "nested",
        "inline-parent", "none", "invisible", "skipped", "ordinary-hidden", "image", "pseudo-visible", "toggle", "label",
-       "flex", "flex-child", "grid", "grid-child", "canvas-outer", "canvas", "replaced-outer")
+       "flex", "flex-child", "grid", "grid-child", "canvas-outer", "canvas", "replaced-outer",
+       "object-outer", "fallback-object", "empty-outer", "empty-object", "unsupported-outer", "unsupported-object",
+       "nested-object", "embedded-outer", "embedded-object", "embedded-child", "unicode-outer", "unicode-object")
 env = dict(os.environ, QT_QPA_PLATFORM="offscreen", QT_SCALE_FACTOR="1",
            QT_SCREEN_SCALE_FACTORS="1", QT_FONT_DPI="96")
 
@@ -39,6 +47,22 @@ def counts(step, name, total, before=0, after=0):
 
 with tempfile.TemporaryDirectory(prefix="wisp-generated-search-") as tmp:
     root = Path(tmp)
+    steps = capture(root / "object-fallback", [("find", "fallback-token"), ("find", "fallback-after"),
+        ("find", "empty-token"), ("find", "unsupported-token"), ("find", "nested-object-token"),
+        ("find-case", "știre-β-token")])
+    for name in ("fallback-object", "empty-object", "unsupported-object", "nested-object", "unicode-object"):
+        assert not steps[0][name]["boxes"], name
+    assert steps[1]["object-outer"]["state"]["hidden"] is None
+    counts(steps[1], "fallback-object", 1, before=1)
+    counts(steps[2], "fallback-object", 1, after=1)
+    assert steps[3]["empty-outer"]["state"]["open"]
+    counts(steps[3], "empty-object", 1, before=1)
+    assert steps[4]["unsupported-outer"]["state"]["hidden"] is None
+    counts(steps[4], "unsupported-object", 1, before=1)
+    counts(steps[5], "nested-object", 1, before=1)
+    assert steps[6]["unicode-outer"]["state"]["hidden"] is None
+    counts(steps[6], "unicode-object", 1, before=1)
+
     steps = capture(root / "order", [("find", "needle")] * 6 + [("find-back", "needle"), ("find-all", "needle")])
     for i, name in ((1, "first"), (4, "second")):
         counts(steps[i], name, 1, before=1)
@@ -78,6 +102,7 @@ with tempfile.TemporaryDirectory(prefix="wisp-generated-search-") as tmp:
         counts(steps[-1], name, 0)
     assert steps[-1]["ordinary-hidden"]["state"]["hidden"] is not None
     assert steps[-1]["replaced-outer"]["state"]["hidden"] == "until-found"
+    assert steps[-1]["embedded-outer"]["state"]["hidden"] == "until-found"
 
     for name, query in (("clear", ""), ("replace", "attribute-token")):
         steps = capture(root / name, [("batch", "2"), ("find", "beta gamma"), ("find", query)])
