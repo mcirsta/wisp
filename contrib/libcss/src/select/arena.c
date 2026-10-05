@@ -100,7 +100,7 @@ arena__compare_grid_tracks(const struct css_computed_grid_track *a, const struct
     }
 
     /* Compare track arrays element by element until terminator */
-    while ((a->value != 0 || a->unit != 0) && (b->value != 0 || b->unit != 0)) {
+    while ((a->unit != CSS_UNIT_GRID_END) && (b->unit != CSS_UNIT_GRID_END)) {
         if (a->value != b->value || a->unit != b->unit || a->min_unit != b->min_unit || a->max_value != b->max_value ||
             a->max_unit != b->max_unit) {
             return false;
@@ -110,7 +110,7 @@ arena__compare_grid_tracks(const struct css_computed_grid_track *a, const struct
     }
 
     /* Check both reached terminator */
-    if ((a->value != 0 || a->unit != 0) || (b->value != 0 || b->unit != 0)) {
+    if ((a->unit != CSS_UNIT_GRID_END) || (b->unit != CSS_UNIT_GRID_END)) {
         return false;
     }
 

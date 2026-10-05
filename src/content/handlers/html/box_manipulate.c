@@ -129,6 +129,7 @@ struct box *box_create(css_select_results *styles, css_computed_style *style, bo
             box->flags |= IS_OPACITY_ZERO;
     }
     box->styles = styles;
+    box->containing_size = NULL;
     box->style = style;
     box->x = box->y = 0;
     box->width = UNKNOWN_WIDTH;

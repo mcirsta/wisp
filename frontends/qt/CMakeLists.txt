@@ -337,6 +337,13 @@ if(WISP_QT_CAPTURE)
         add_test(NAME qt_grid_height
             COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_grid_height.py $<TARGET_FILE:wisp-qt>)
         set_tests_properties(qt_grid_height PROPERTIES TIMEOUT 40)
+        foreach(grid_fixture IN ITEMS grid-rows grid-areas grid-row-constraints)
+            string(REPLACE "-" "_" grid_test ${grid_fixture})
+            add_test(NAME qt_${grid_test}
+                COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_grid_tracks.py
+                    $<TARGET_FILE:wisp-qt> ${grid_fixture})
+            set_tests_properties(qt_${grid_test} PROPERTIES TIMEOUT 40)
+        endforeach()
         add_test(NAME qt_inline_alignment
             COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_inline_alignment.py $<TARGET_FILE:wisp-qt>)
         set_tests_properties(qt_inline_alignment PROPERTIES TIMEOUT 30)

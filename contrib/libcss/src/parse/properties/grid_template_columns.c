@@ -52,11 +52,11 @@ static css_error parse_track_size(css_language *c, const parserutils_vector *vec
     /* Check for keywords: auto, min-content, max-content */
     if (token->type == CSS_TOKEN_IDENT) {
         if ((lwc_string_caseless_isequal(token->idata, c->strings[AUTO], &match) == lwc_error_ok && match)) {
-            /* 'auto' - treat as 1fr for layout purposes */
+            /* Preserve auto independently of flexible tracks. */
             parserutils_vector_iterate(vector, ctx);
             track->type = TRACK_SIMPLE;
-            track->value = INTTOFIX(1);
-            track->unit = UNIT_FR;
+            track->value = 0;
+            track->unit = UNIT_GRID_AUTO;
             return CSS_OK;
         } else if ((lwc_string_caseless_isequal(token->idata, c->strings[MIN_CONTENT], &match) == lwc_error_ok &&
                        match)) {
@@ -110,8 +110,7 @@ static css_error parse_track_size(css_language *c, const parserutils_vector *vec
                 } else if ((lwc_string_caseless_isequal(token->idata, c->strings[AUTO], &match) == lwc_error_ok &&
                                match)) {
                     parserutils_vector_iterate(vector, ctx);
-                    min_unit = UNIT_FR;
-                    min_value = INTTOFIX(1);
+                    min_unit = UNIT_GRID_AUTO;
                 } else {
                     *ctx = orig_ctx;
                     return CSS_INVALID;
@@ -156,8 +155,7 @@ static css_error parse_track_size(css_language *c, const parserutils_vector *vec
                 } else if ((lwc_string_caseless_isequal(token->idata, c->strings[AUTO], &match) == lwc_error_ok &&
                                match)) {
                     parserutils_vector_iterate(vector, ctx);
-                    max_unit = UNIT_FR;
-                    max_value = INTTOFIX(1);
+                    max_unit = UNIT_GRID_AUTO;
                 } else {
                     *ctx = orig_ctx;
                     return CSS_INVALID;

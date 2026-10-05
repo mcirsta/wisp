@@ -78,28 +78,6 @@ This reproduces before the baseline changes. Initial evidence:
 `fixture.html`. The permanent `test/table-baseline.html` checks collapsed-table
 content alignment without accepting the incorrect cell edges as a baseline.
 
-## Grid track sizing and grid-area percentages
-
-Definite container height is not yet distributed to rows. In a 60px grid with
-default content alignment, a 10px child with `align-self:end` stays at y=0;
-Chromium stretches the auto row and places it at y=50. Explicit fractional rows
-also need the available-height track-sizing pass. Handle track sizing and content
-alignment together rather than shifting individual items around the missing rows.
-
-Percentage heights of grid items currently use the whole grid container instead
-of their grid area. A 60px start-aligned grid containing a nested `height:50%`
-grid with a 10px child gives that nested grid 30px; Chromium first sizes the auto
-row from content and resolves the nested grid to 5px. This requires grid-area
-containing dimensions and percentage re-layout after track sizing, including
-spans and definiteness, rather than a nested-grid special case.
-
-Both limitations reproduce in the unchanged `68d1b42f` build. Evidence:
-`out/render-captures/grid-height-2026-10-04/fixture.html`, `#auto-tracks-child`
-and `#nested-inner`, with `before/` and `after/` captures. The earlier height bug
-also shrank the outer grid; the corrected container exposes the incorrect
-percentage basis more clearly. The permanent height fixture uses start-aligned
-rows and a fixed-height nested child to isolate container sizing.
-
 ## Zero-height float exclusion
 
 A zero-height floated grid still moves the following inline-block horizontally

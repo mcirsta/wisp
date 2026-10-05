@@ -284,6 +284,11 @@ struct box {
      */
     struct box *parent;
 
+    /** Borrowed containing-size input while a formatting context is laid out.
+     * NULL uses the box tree. Grid items use their area, not the grid container.
+     * The caller restores this pointer before its sizing context is released. */
+    const struct layout_containing_size *containing_size;
+
     /**
      * INLINE_END box corresponding to this INLINE box, or INLINE
      * box corresponding to this INLINE_END box.

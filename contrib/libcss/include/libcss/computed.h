@@ -52,6 +52,7 @@ typedef struct css_computed_counter {
  *   - value and min_unit contain the minimum constraint
  *   - max_value and max_unit contain the maximum constraint
  */
+/* Stored arrays end with CSS_UNIT_GRID_END, never with a zero-length track. */
 typedef struct css_computed_grid_track {
     css_fixed value; /**< Track size value (or min value for minmax) */
     css_unit unit; /**< CSS_UNIT_FR, CSS_UNIT_PX, CSS_UNIT_MINMAX, etc. */

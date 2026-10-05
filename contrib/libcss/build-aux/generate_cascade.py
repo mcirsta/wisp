@@ -185,7 +185,8 @@ def parse_opcodes_from_spec(parse_spec, prop_upper):
         value_part = parts[1]
         if ',' in value_part:
             _, opcode_name = value_part.split(',', 1)
-            opcodes.append(opcode_name)
+            if opcode_name not in opcodes:
+                opcodes.append(opcode_name)
     
     return opcodes
 

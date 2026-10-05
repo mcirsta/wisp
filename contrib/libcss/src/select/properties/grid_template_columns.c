@@ -79,7 +79,7 @@ css_error css__cascade_grid_template_columns(uint32_t opv, css_style *style, css
 
                 /* Terminator */
                 tracks[n_tracks].value = 0;
-                tracks[n_tracks].unit = 0;
+                tracks[n_tracks].unit = CSS_UNIT_GRID_END;
                 tracks[n_tracks].min_unit = 0;
                 tracks[n_tracks].max_value = 0;
                 tracks[n_tracks].max_unit = 0;

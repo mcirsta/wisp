@@ -169,7 +169,7 @@ static inline css_error css__copy_computed_content_item_array(
     return CSS_OK;
 }
 
-/** Copy zero-value terminated array of css_computed_grid_track items. */
+/** Copy CSS_UNIT_GRID_END-terminated array of css_computed_grid_track items. */
 static inline css_error
 css__copy_grid_track_array(const css_computed_grid_track *orig, css_computed_grid_track **copy_out)
 {
@@ -177,9 +177,8 @@ css__copy_grid_track_array(const css_computed_grid_track *orig, css_computed_gri
     css_computed_grid_track *copy = NULL;
 
     if (orig != NULL) {
-        /* Count tracks - terminated by a track with value=0 and unit=0
-         */
-        for (const css_computed_grid_track *t = orig; t->value != 0 || t->unit != 0; t++) {
+        /* Zero-length tracks remain ordinary entries. */
+        for (const css_computed_grid_track *t = orig; t->unit != CSS_UNIT_GRID_END; t++) {
             count++;
         }
 

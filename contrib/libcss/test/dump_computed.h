@@ -81,8 +81,12 @@ static size_t dump_css_unit(css_fixed val, css_unit unit, char *ptr, size_t len)
     size_t ret = 0;
 
     /* Keyword units don't have a numeric value - handle them first */
-    if (unit == CSS_UNIT_MIN_CONTENT || unit == CSS_UNIT_MAX_CONTENT || unit == CSS_UNIT_FIT_CONTENT) {
+    if (unit == CSS_UNIT_MIN_CONTENT || unit == CSS_UNIT_MAX_CONTENT || unit == CSS_UNIT_FIT_CONTENT ||
+        unit == CSS_UNIT_GRID_AUTO) {
         switch (unit) {
+        case CSS_UNIT_GRID_AUTO:
+            ret = snprintf(ptr, len, "auto");
+            break;
         case CSS_UNIT_MIN_CONTENT:
             ret = snprintf(ptr, len, "min-content");
             break;

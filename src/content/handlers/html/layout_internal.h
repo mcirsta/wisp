@@ -37,6 +37,12 @@ struct gui_layout_table;
 
 #define AUTO INT_MIN
 
+/* Explicit formatting-context input. A negative height is indefinite; a
+ * definite zero is distinct. This is independent of parent box geometry. */
+struct layout_containing_size {
+    int width, height;
+};
+
 /* For assertions at the point a layout value is consumed as pixels.
  * Negative margins/coordinates are valid. This does not resolve auto or
  * validate an available-size parameter whose API uses -1 for indefinite. */
@@ -506,34 +512,35 @@ static inline css_unit_ctx lh__with_container_dimensions(
     return ctx;
 }
 
-static inline int lh__available_height_for_box(const struct box *box, int viewport_height)
+static inline struct box *lh__containing_block_for_box(const struct box *box)
 {
-    struct box *containing_block = NULL;
-    enum css_height_e cbhtype = CSS_HEIGHT_AUTO;
-
-    if (box == NULL || box->style == NULL) {
-        return -1;
-    }
-
-    if ((css_computed_position(box->style) == CSS_POSITION_ABSOLUTE ||
-            css_computed_position(box->style) == CSS_POSITION_FIXED) && box->parent) {
-        assert(box->float_container);
-        containing_block = box->float_container;
-    } else if (box->parent && (box->parent->type == BOX_FLOAT_LEFT || box->parent->type == BOX_FLOAT_RIGHT)) {
+    if (box == NULL || box->style == NULL)
+        return NULL;
+    if (lh__box_is_absolute(box) && box->parent)
+        return box->float_container ? box->float_container : box->abs_containing_block;
+    if (box->parent && (box->parent->type == BOX_FLOAT_LEFT || box->parent->type == BOX_FLOAT_RIGHT)) {
         struct box *cb = box->parent;
-
         while (cb != NULL &&
             (cb->style == NULL || cb->type == BOX_INLINE_CONTAINER || cb->type == BOX_FLOAT_LEFT ||
-                cb->type == BOX_FLOAT_RIGHT)) {
+                cb->type == BOX_FLOAT_RIGHT))
             cb = cb->parent;
-        }
-        containing_block = cb;
-    } else if (box->parent && box->parent->type != BOX_INLINE_CONTAINER) {
-        containing_block = box->parent;
-    } else if (box->parent && box->parent->type == BOX_INLINE_CONTAINER) {
-        assert(box->parent->parent);
-        containing_block = box->parent->parent;
+        return cb;
     }
+    if (box->parent && box->parent->type == BOX_INLINE_CONTAINER) {
+        assert(box->parent->parent);
+        return box->parent->parent;
+    }
+    return box->parent;
+}
+
+static inline int lh__available_height_for_box(const struct box *box, int viewport_height)
+{
+    if (box == NULL || box->style == NULL)
+        return -1;
+    if (box->containing_size != NULL)
+        return box->containing_size->height;
+    struct box *containing_block = lh__containing_block_for_box(box);
+    enum css_height_e cbhtype = CSS_HEIGHT_AUTO;
 
     if (containing_block != NULL && containing_block->style != NULL) {
         css_fixed_or_calc f = (css_fixed_or_calc)0;
@@ -969,6 +976,8 @@ layout_find_ratio_width(const struct layout_dimension_context *ctx, const struct
 static inline void layout_find_dimensions(const css_unit_ctx *unit_len_ctx, int available_width, int viewport_height,
     const struct box *box, const struct layout_dimension_outputs *out)
 {
+    if (box->containing_size != NULL)
+        available_width = box->containing_size->width;
     int available_height = lh__available_height_for_box(box, viewport_height);
     const struct layout_dimension_context ctx = {
         .box = box,

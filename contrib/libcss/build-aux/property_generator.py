@@ -1332,8 +1332,10 @@ class MultiFileGenerator:
         
         elif ident_kws:
             # Pure IDENT-only type
-            for idx, (_kw, _flags, opc_name) in enumerate(ident_kws):
-                opcodes.append((opc_name, f"0x{idx:04x}"))
+            for _kw, _flags, opc_name in ident_kws:
+                # Several spellings may map to the same keyword value.
+                if not any(n == opc_name for n, _ in opcodes):
+                    opcodes.append((opc_name, f"0x{len(opcodes):04x}"))
         
         else:
             return None

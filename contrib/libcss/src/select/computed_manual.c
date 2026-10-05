@@ -440,7 +440,7 @@ css_computed_grid_template_columns(const css_computed_style *style, int32_t *n_t
     /* Count tracks if requested */
     if (n_tracks != NULL && t != NULL) {
         int32_t count = 0;
-        while (t[count].value != 0 || t[count].unit != 0) {
+        while (t[count].unit != CSS_UNIT_GRID_END) {
             count++;
         }
         *n_tracks = count;
@@ -464,7 +464,7 @@ css_computed_grid_template_rows(const css_computed_style *style, int32_t *n_trac
     /* Count tracks if requested */
     if (n_tracks != NULL && t != NULL) {
         int32_t count = 0;
-        while (t[count].value != 0 || t[count].unit != 0) {
+        while (t[count].unit != CSS_UNIT_GRID_END) {
             count++;
         }
         *n_tracks = count;

@@ -128,7 +128,9 @@ typedef enum css_unit {
      * Followed by two values: min value, then max value */
     CSS_UNIT_MINMAX = 0x24,
 
-    CSS_UNIT_NUMBER = 0x25 /* Unitless number (e.g., scale factors, line-height multipliers) */
+    CSS_UNIT_NUMBER = 0x25, /* Unitless number (e.g., scale factors, line-height multipliers) */
+    CSS_UNIT_GRID_AUTO = 0x26, /* Grid track auto, distinct from a flexible track. */
+    CSS_UNIT_GRID_END = 0x27 /* Track-array terminator; 0px is a valid track. */
 } css_unit;
 
 /**

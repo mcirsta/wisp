@@ -655,6 +655,82 @@ START_TEST(test_layout_find_dimensions_calc_height_uses_viewport)
 }
 END_TEST
 
+START_TEST(test_grid_track_storage)
+{
+    select_ctx ctx, inherit_ctx;
+    const css_computed_style *style = select_style_from_css(
+        "* { grid-template-rows:0px auto 1fr minmax(0,auto); grid-template-columns:0px auto 1fr minmax(0,auto); }",
+        &ctx);
+    const css_computed_style *inherit = select_style_from_css_node(
+        "* { grid-template-rows:inherit; grid-template-columns:inherit; }", &inherit_ctx, false);
+    css_computed_style *composed;
+    ck_assert_int_eq(css_computed_style_compose(style, inherit, &unit_ctx, &composed), CSS_OK);
+    for (int pass = 0; pass < 2; pass++) {
+        const css_computed_style *s = pass ? composed : style;
+        for (int columns = 0; columns < 2; columns++) {
+            int32_t count;
+            css_computed_grid_track *tracks;
+            uint8_t type = columns ? css_computed_grid_template_columns(s, &count, &tracks)
+                                   : css_computed_grid_template_rows(s, &count, &tracks);
+            ck_assert_int_eq(type, CSS_GRID_TEMPLATE_SET);
+            ck_assert_msg(
+                count == 4, "pass=%d columns=%d: zero-length track truncated count to %d", pass, columns, count);
+            ck_assert_int_eq(tracks[0].unit, CSS_UNIT_PX);
+            ck_assert_int_eq(tracks[0].value, 0);
+            ck_assert_int_eq(tracks[1].unit, CSS_UNIT_GRID_AUTO);
+            ck_assert_int_eq(tracks[2].unit, CSS_UNIT_FR);
+            ck_assert_int_eq(tracks[3].unit, CSS_UNIT_MINMAX);
+            ck_assert_int_eq(tracks[3].max_unit, CSS_UNIT_GRID_AUTO);
+            ck_assert_int_eq(tracks[4].unit, CSS_UNIT_GRID_END);
+        }
+    }
+    css_computed_style_destroy(composed);
+    destroy_select_ctx(&inherit_ctx);
+    destroy_select_ctx(&ctx);
+}
+END_TEST
+
+START_TEST(test_layout_explicit_containing_size)
+{
+    select_ctx ctx;
+    const css_computed_style *style = select_style_from_css(
+        "* { width:50%; height:50%; min-height:60%; max-height:40%; padding:10%; box-sizing:border-box; }", &ctx);
+    struct box parent = {.type = BOX_GRID, .style = (css_computed_style *)style, .width = 200, .height = 300};
+    struct layout_containing_size area = {.width = 80, .height = 40};
+    struct box child = {
+        .type = BOX_BLOCK, .parent = &parent, .style = (css_computed_style *)style, .containing_size = &area};
+    struct css_size minimum;
+    int width, height, maximum;
+    const struct layout_dimension_outputs out = {
+        .width = &width, .height = &height, .min_height = &minimum, .max_height = &maximum};
+    layout_find_dimensions(&unit_ctx, 200, -1, &child, &out);
+    ck_assert_int_eq(width, 24);
+    ck_assert_int_eq(height, 4);
+    ck_assert_int_eq(minimum.value, 8);
+    ck_assert_int_eq(maximum, 0);
+
+    area.height = 0;
+    layout_find_dimensions(&unit_ctx, 200, -1, &child, &out);
+    ck_assert_int_eq(height, 0);
+    ck_assert_int_eq(minimum.type, CSS_SIZE_SET);
+    ck_assert_int_eq(maximum, 0);
+
+    area.height = -1;
+    layout_find_dimensions(&unit_ctx, 200, -1, &child, &out);
+    ck_assert_int_eq(height, AUTO);
+    ck_assert_int_eq(minimum.type, CSS_SIZE_AUTO);
+    ck_assert_int_eq(maximum, -1);
+
+    child.containing_size = NULL;
+    layout_find_dimensions(&unit_ctx, 200, -1, &child, &out);
+    ck_assert_int_eq(width, 60);
+    ck_assert_int_eq(height, 110);
+    ck_assert_int_eq(parent.width, 200);
+    ck_assert_int_eq(parent.height, 300);
+    destroy_select_ctx(&ctx);
+}
+END_TEST
+
 START_TEST(test_layout_find_dimensions_cq_units_use_box_container)
 {
     select_ctx ctx;
@@ -1510,6 +1586,8 @@ Suite *layout_calc_suite(void)
     tcase_add_test(tc_core, test_calculate_mbp_width_calc);
     tcase_add_test(tc_core, test_layout_find_dimensions_calc_height_unknown_is_auto);
     tcase_add_test(tc_core, test_layout_find_dimensions_calc_height_uses_viewport);
+    tcase_add_test(tc_core, test_layout_explicit_containing_size);
+    tcase_add_test(tc_core, test_grid_track_storage);
     tcase_add_test(tc_core, test_layout_find_dimensions_cq_units_use_box_container);
     tcase_add_test(tc_core, test_lh_length_to_px_cq_units_zero_container_resolve_to_zero);
     tcase_add_test(tc_core, test_lh_length_to_px_cq_units_unset_container_uses_viewport);

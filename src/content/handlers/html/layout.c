@@ -3020,102 +3020,30 @@ bool layout_table(struct box *table, int available_width, html_content *content)
  */
 static bool layout_apply_minmax_height(const css_unit_ctx *unit_len_ctx, struct box *box, struct box *container)
 {
-    int h;
-    struct box *containing_block = NULL;
-    bool updated = false;
-
-    /* Find containing block for percentage heights */
-    if (box_is_out_of_flow(box)) {
-        /* Box is absolutely positioned */
-        containing_block = container ? container : box->abs_containing_block;
-        assert(containing_block);
-    } else if (box->parent && (box->parent->type == BOX_FLOAT_LEFT || box->parent->type == BOX_FLOAT_RIGHT)) {
-        /* Box is child of a float wrapper - walk up to find containing block with style.
-         * Skip BOX_INLINE_CONTAINER and BOX_FLOAT_* which have NULL styles by design. */
-        struct box *cb = box->parent;
-        while (cb != NULL &&
-            (cb->style == NULL || cb->type == BOX_INLINE_CONTAINER || cb->type == BOX_FLOAT_LEFT ||
-                cb->type == BOX_FLOAT_RIGHT)) {
-            cb = cb->parent;
-        }
-        containing_block = cb;
-    } else if (box->parent && box->parent->type != BOX_INLINE_CONTAINER) {
-        /* Box is a block level element */
-        containing_block = box->parent;
-    } else if (box->parent && box->parent->type == BOX_INLINE_CONTAINER) {
-        /* Box is an inline block */
-        assert(box->parent->parent);
-        containing_block = box->parent->parent;
+    if (box->style == NULL)
+        return false;
+    const struct box *cb = container ? container : lh__containing_block_for_box(box);
+    int width = cb ? cb->width : box->width;
+    int height = container ? container->height : lh__available_height_for_box(box, -1);
+    if (box->containing_size) {
+        width = box->containing_size->width;
+        height = box->containing_size->height;
     }
-
-    if (box->style) {
-        enum css_height_e htype = CSS_HEIGHT_AUTO;
-        css_fixed_or_calc value = (css_fixed_or_calc)0;
-        css_unit unit = CSS_UNIT_PX;
-
-        if (containing_block && containing_block->style) {
-            htype = css_computed_height(containing_block->style, &value, &unit);
-        }
-
-        /* max-height */
-        if (css_computed_max_height(box->style, &value, &unit) == CSS_MAX_HEIGHT_SET) {
-            int available_height = -1;
-
-            if (unit == CSS_UNIT_PCT || unit == CSS_UNIT_CALC) {
-                if (containing_block && containing_block->height != AUTO &&
-                    (box_is_out_of_flow(box) || htype == CSS_HEIGHT_SET ||
-                        (containing_block->flags & (ASPECT_RATIO_HEIGHT | HEIGHT_STRETCHED)))) {
-                    /* Box is absolutely positioned or its containing block has a valid
-                     * specified height. (CSS 2.1 Section 10.5) */
-                    available_height = containing_block->height;
-                }
-            }
-
-            if (!(unit == CSS_UNIT_PCT && available_height < 0)) {
-                int avail = (unit == CSS_UNIT_PCT || unit == CSS_UNIT_CALC) ? available_height : -1;
-                if (!lh__length_to_px(box->style, unit_len_ctx, avail, value, unit, &h)) {
-                    h = box->height;
-                } else {
-                    int containing_width = containing_block ? containing_block->width : box->width;
-                    layout_handle_box_sizing(unit_len_ctx, box, containing_width, false, &h);
-                }
-                if (h < box->height) {
-                    box->height = h;
-                    updated = true;
-                }
-            }
-        }
-
-        /* min-height */
-        if (ns_computed_min_height(box->style, &value, &unit) == CSS_MIN_HEIGHT_SET) {
-            int available_height = -1;
-
-            if (unit == CSS_UNIT_PCT || unit == CSS_UNIT_CALC) {
-                if (containing_block && containing_block->height != AUTO &&
-                    (box_is_out_of_flow(box) || htype == CSS_HEIGHT_SET ||
-                        (containing_block->flags & (ASPECT_RATIO_HEIGHT | HEIGHT_STRETCHED)))) {
-                    /* Box is absolutely positioned or its containing block has a valid
-                     * specified height. (CSS 2.1 Section 10.5) */
-                    available_height = containing_block->height;
-                }
-            }
-
-            if (!(unit == CSS_UNIT_PCT && available_height < 0)) {
-                int avail = (unit == CSS_UNIT_PCT || unit == CSS_UNIT_CALC) ? available_height : -1;
-                if (!lh__length_to_px(box->style, unit_len_ctx, avail, value, unit, &h)) {
-                    h = box->height;
-                } else {
-                    int containing_width = containing_block ? containing_block->width : box->width;
-                    layout_handle_box_sizing(unit_len_ctx, box, containing_width, false, &h);
-                }
-                if (h > box->height) {
-                    box->height = h;
-                    updated = true;
-                }
-            }
-        }
-    }
-    return updated;
+    const struct layout_dimension_context ctx = {
+        .box = box,
+        .unit_len_ctx = lh__with_container_dimensions(unit_len_ctx, width, height),
+        .available_width = width,
+        .available_height = height,
+    };
+    struct css_size minimum;
+    int maximum;
+    layout_find_height_limits(&ctx, &(struct layout_dimension_outputs){.min_height = &minimum, .max_height = &maximum});
+    int previous = box->height;
+    if (maximum >= 0)
+        box->height = min(box->height, maximum);
+    if (minimum.type == CSS_SIZE_SET)
+        box->height = max(box->height, minimum.value);
+    return previous != box->height;
 }
 
 

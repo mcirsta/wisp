@@ -102,6 +102,7 @@ typedef enum unit {
     UNIT_MIN_CONTENT = (1 << 14) + 1,
     UNIT_MAX_CONTENT = (1 << 14) + 2,
     UNIT_MINMAX = (1 << 14) + 3, /* Grid minmax() marker */
+    UNIT_GRID_AUTO = (1 << 14) + 4,
 
     /* These are special only to the CALC bytecodes */
     UNIT_CALC_ANY = (1 << 20),

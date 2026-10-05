@@ -1,0 +1,23 @@
+#data
+* { align-content:normal; }
+#errors
+#expected
+| *
+|  align-content: stretch
+#reset
+
+#data
+* { align-content:start; }
+#errors
+#expected
+| *
+|  align-content: flex-start
+#reset
+
+#data
+* { align-content:end; }
+#errors
+#expected
+| *
+|  align-content: flex-end
+#reset
