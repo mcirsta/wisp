@@ -1265,7 +1265,8 @@ parsePseudo(css_language *c, const parserutils_vector *vector, int32_t *ctx, boo
         css_selector_type type;
     } pseudo_lut[] = {{FIRST_CHILD, CSS_SELECTOR_PSEUDO_CLASS}, {LINK, CSS_SELECTOR_PSEUDO_CLASS},
         {VISITED, CSS_SELECTOR_PSEUDO_CLASS}, {HOVER, CSS_SELECTOR_PSEUDO_CLASS}, {ACTIVE, CSS_SELECTOR_PSEUDO_CLASS},
-        {FOCUS, CSS_SELECTOR_PSEUDO_CLASS}, {LANG, CSS_SELECTOR_PSEUDO_CLASS}, {LEFT, CSS_SELECTOR_PSEUDO_CLASS},
+        {FOCUS, CSS_SELECTOR_PSEUDO_CLASS}, {LANG, CSS_SELECTOR_PSEUDO_CLASS}, {DIR, CSS_SELECTOR_PSEUDO_CLASS},
+        {LEFT, CSS_SELECTOR_PSEUDO_CLASS},
         {RIGHT, CSS_SELECTOR_PSEUDO_CLASS}, {FIRST, CSS_SELECTOR_PSEUDO_CLASS}, {ROOT, CSS_SELECTOR_PSEUDO_CLASS},
         {HOST, CSS_SELECTOR_PSEUDO_CLASS},
         {NTH_CHILD, CSS_SELECTOR_PSEUDO_CLASS}, {NTH_LAST_CHILD, CSS_SELECTOR_PSEUDO_CLASS},
@@ -1358,12 +1359,15 @@ parsePseudo(css_language *c, const parserutils_vector *vector, int32_t *ctx, boo
     if (in_not && (type == CSS_SELECTOR_PSEUDO_ELEMENT || pseudo_lut[lut_idx].index == NOT))
         return CSS_INVALID;
 
+    if (pseudo_lut[lut_idx].index == DIR && token->type != CSS_TOKEN_FUNCTION)
+        return CSS_INVALID;
+
     if (token->type == CSS_TOKEN_FUNCTION) {
         int fun_type = pseudo_lut[lut_idx].index;
 
         consumeWhitespace(vector, ctx);
 
-        if (fun_type == LANG) {
+        if (fun_type == LANG || fun_type == DIR) {
             /* IDENT */
             token = parserutils_vector_iterate(vector, ctx);
             if (token == NULL || token->type != CSS_TOKEN_IDENT)

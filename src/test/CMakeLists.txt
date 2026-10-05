@@ -441,6 +441,11 @@ target_include_directories(css_checked_test PRIVATE ${TEST_COMMON_INCLUDES} ${CM
 target_link_libraries(css_checked_test wisp ${CHECK_LIBRARIES})
 add_test(NAME css_checked_test COMMAND css_checked_test)
 
+add_executable(css_direction_test css_direction_test.c)
+target_include_directories(css_direction_test PRIVATE ${TEST_COMMON_INCLUDES} ${CMAKE_SOURCE_DIR}/include)
+target_link_libraries(css_direction_test wisp ${CHECK_LIBRARIES})
+add_test(NAME css_direction_test COMMAND css_direction_test)
+
 add_executable(css_style_reuse_test css_style_reuse_test.c)
 target_include_directories(css_style_reuse_test PRIVATE ${TEST_COMMON_INCLUDES} ${CMAKE_SOURCE_DIR}/include)
 target_link_libraries(css_style_reuse_test wisp ${CHECK_LIBRARIES})

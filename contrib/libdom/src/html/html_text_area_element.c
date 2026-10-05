@@ -203,19 +203,11 @@ dom_exception dom_html_text_area_element_set_default_value(dom_html_text_area_el
  */
 dom_exception dom_html_text_area_element_get_value(dom_html_text_area_element *ele, dom_string **value)
 {
-    dom_exception err;
-
-    if (ele->value_set == false) {
-        err = dom_node_get_text_content((dom_node *)ele, &ele->value);
-        if (err == DOM_NO_ERR) {
-            ele->default_value_set = true;
-            if (ele->default_value_set == false) {
-                ele->default_value_set = true;
-                ele->default_value = ele->value;
-                dom_string_ref(ele->default_value);
-            }
-        }
-    }
+    /* Until a live value is set, read the current child text. A getter must
+     * neither freeze the default value nor overwrite an owned cached string
+     * on each read (e.g. repeated :dir() selection). */
+    if (ele->value_set == false)
+        return dom_node_get_text_content((dom_node *)ele, value);
 
     *value = ele->value;
 

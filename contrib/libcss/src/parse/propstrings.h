@@ -87,6 +87,7 @@ enum {
     ACTIVE,
     FOCUS,
     LANG,
+    DIR,
     FIRST,
     ROOT,
     HOST,

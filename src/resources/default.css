@@ -12,16 +12,14 @@ head {
 	display: none;
 }
 
-/* Explicit HTML direction keywords (HTML Rendering, Bidirectional text).
+/* HTML semantic direction defaults (independent of author CSS direction).
  * https://html.spec.whatwg.org/multipage/rendering.html#bidirectional-text
- * Attribute equality is ASCII case insensitive in the HTML selector handler.
- * Keep these at UA origin so author direction, including revert, cascades normally.
- * Automatic directionality and inline bidi isolation require separate support. */
-[dir=ltr] {
+ * Inline bidi isolation/reordering requires separate layout support. */
+[dir]:dir(ltr), bdi:dir(ltr), input[type=tel]:dir(ltr) {
 	direction: ltr;
 }
 
-[dir=rtl] {
+[dir]:dir(rtl), bdi:dir(rtl) {
 	direction: rtl;
 }
 

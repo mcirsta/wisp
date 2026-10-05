@@ -12,12 +12,14 @@ head {
 	display: none;
 }
 
-/* Explicit HTML direction keywords; author CSS can override these UA defaults. */
-[dir=ltr] {
+/* HTML semantic direction defaults (independent of author CSS direction).
+ * https://html.spec.whatwg.org/multipage/rendering.html#bidirectional-text
+ * Inline bidi isolation/reordering requires separate layout support. */
+[dir]:dir(ltr), bdi:dir(ltr), input[type=tel]:dir(ltr) {
 	direction: ltr;
 }
 
-[dir=rtl] {
+[dir]:dir(rtl), bdi:dir(rtl) {
 	direction: rtl;
 }
 

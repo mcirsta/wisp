@@ -31,7 +31,10 @@ static bool local_pseudo(const css_stylesheet *sheet, const css_selector_detail 
         }
         if (named(sheet, detail, NTH_OF_TYPE) || named(sheet, detail, NTH_LAST_OF_TYPE))
             return detail->value_type == CSS_SELECTOR_DETAIL_VALUE_NTH;
-        if (named(sheet, detail, LANG))
+        /* HTML directionality can read descendants, but checkedness and CSS
+         * changes do not alter it. DOM text/attribute/value edits still require
+         * the caller's general invalidation, outside this checked-only proof. */
+        if (named(sheet, detail, LANG) || named(sheet, detail, DIR))
             return detail->value_type == CSS_SELECTOR_DETAIL_VALUE_STRING && detail->value.string != NULL;
     }
     if (detail->value_type != CSS_SELECTOR_DETAIL_VALUE_STRING || detail->value.string != NULL)

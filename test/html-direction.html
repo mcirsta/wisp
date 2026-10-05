@@ -1,12 +1,14 @@
 <!doctype html>
 <meta charset="utf-8">
-<title>Explicit HTML direction defaults</title>
+<title>HTML direction defaults and semantic direction selectors</title>
 <style>
 body { margin: 8px; font: 16px/24px sans-serif; }
 .line { width: 200px; margin-bottom: 2px; }
 .chip { display: inline-block; width: 20px; height: 10px; background: teal; }
 .sheet { direction: ltr; }
 .revert { direction: revert; }
+.semantic:dir(ltr) { color: #123456; }
+.semantic:dir(rtl) { color: #654321; }
 #switch:checked ~ main .live { direction: ltr; }
 table { table-layout: fixed; border-collapse: separate; border-spacing: 0; width: 60px; }
 td { padding: 0; height: 10px; }
@@ -28,6 +30,19 @@ td { padding: 0; height: 10px; }
 <div id="empty" class="line" dir=""><i id="empty-chip" class="chip"></i></div>
 </section>
 <div id="live" class="line live" dir="rtl"><i id="live-chip" class="chip"></i></div>
+<!-- Hidden text participates in HTML's DOM algorithm, independent of layout. -->
+<div id="auto-rtl" class="line semantic" dir="auto"><span hidden>123 א</span><i id="auto-rtl-chip" class="chip"></i></div>
+<div id="auto-ltr" class="line semantic" dir="auto"><span hidden>123 Latin א</span><i id="auto-ltr-chip" class="chip"></i></div>
+<div id="auto-excluded" class="line semantic" dir="auto"><span dir="rtl" hidden>א</span><span hidden>Latin</span><i id="auto-excluded-chip" class="chip"></i></div>
+<bdi id="bdi-auto" class="line semantic" style="display:block"><span hidden>א</span><i id="bdi-auto-chip" class="chip"></i></bdi>
+<section dir="rtl" style="direction:ltr">
+<div id="semantic-reset" class="line semantic" dir=""><i id="semantic-reset-chip" class="chip"></i></div>
+<div id="css-inherit" class="line semantic"><i id="css-inherit-chip" class="chip"></i></div>
+<div id="auto-neutral" class="line semantic" dir="auto"><span hidden>123</span><i id="auto-neutral-chip" class="chip"></i></div>
+<input id="telephone" class="semantic" type="TeL" value="123">
+<input id="auto-input" class="semantic" dir="auto" value="א">
+<textarea id="auto-textarea" class="semantic" dir="auto">א</textarea>
+</section>
 <table id="table" dir="rtl"><tr dir="ltr"><td id="table-a" style="width:20px"></td><td id="table-b" style="width:40px"></td></tr></table>
 <table id="table-override" class="sheet" dir="rtl"><tr><td id="override-a" style="width:20px"></td><td id="override-b" style="width:40px"></td></tr></table>
 </main>

@@ -180,7 +180,8 @@ css_error css_libcss_node_data_handler(css_select_handler *handler, css_node_dat
 
     UNUSED(clone_node);
 
-    if (handler == NULL || libcss_node_data == NULL || handler->handler_version != CSS_SELECT_HANDLER_VERSION_1) {
+    if (handler == NULL || libcss_node_data == NULL || (handler->handler_version != CSS_SELECT_HANDLER_VERSION_1 &&
+            handler->handler_version != CSS_SELECT_HANDLER_VERSION_2)) {
         return CSS_BADPARM;
     }
 
@@ -489,7 +490,8 @@ css_select_default_style(css_select_ctx *ctx, css_select_handler *handler, void 
 {
     css_error error;
 
-    if (ctx == NULL || style == NULL || handler == NULL || handler->handler_version != CSS_SELECT_HANDLER_VERSION_1)
+    if (ctx == NULL || style == NULL || handler == NULL || (handler->handler_version != CSS_SELECT_HANDLER_VERSION_1 &&
+            handler->handler_version != CSS_SELECT_HANDLER_VERSION_2))
         return CSS_BADPARM;
 
     /* Ensure the ctx has a default style */
@@ -1256,7 +1258,8 @@ css_error css_select_style(css_select_ctx *ctx, void *node, const css_unit_ctx *
     bool uses_variables;
 
     if (ctx == NULL || node == NULL || result == NULL || handler == NULL ||
-        handler->handler_version != CSS_SELECT_HANDLER_VERSION_1)
+        (handler->handler_version != CSS_SELECT_HANDLER_VERSION_1 &&
+            handler->handler_version != CSS_SELECT_HANDLER_VERSION_2))
         return CSS_BADPARM;
 
     error = handler->parent_node(pw, node, &parent);
@@ -2630,6 +2633,11 @@ css_error match_detail(css_select_ctx *ctx, void *node, const css_selector_detai
             flags = CSS_NODE_FLAGS_NONE;
         } else if (detail->qname.name == ctx->str.target) {
             error = state->handler->node_is_target(state->pw, node, match);
+        } else if (detail->qname.name == ctx->str.dir) {
+            *match = false;
+            if (state->handler->handler_version >= CSS_SELECT_HANDLER_VERSION_2 &&
+                state->handler->node_is_dir != NULL)
+                error = state->handler->node_is_dir(state->pw, node, detail->value.string, match);
         } else if (detail->qname.name == ctx->str.lang) {
             error = state->handler->node_is_lang(state->pw, node, detail->value.string, match);
         } else if (detail->qname.name == ctx->str.enabled) {

@@ -31,19 +31,26 @@ Remaining work beyond the [native details implementation](details.md):
   events, rather than firing an incorrect synchronous substitute.
 - Author styling of `::details-content`; the current contents block is anonymous.
 
-## Automatic HTML direction and bidi inline ordering
+## Direction changes during editing and bidi inline ordering
 
-HTML directionality resolution (`dir="auto"`, `bdi`, and `:dir()` matching) is
-still unimplemented. This also leaves directionality-based UA defaults for
-invalid/empty `dir` attributes incomplete when HTML ancestry and inherited CSS
-direction differ. The follow-up must use the HTML directionality algorithms,
-not infer semantic direction from the computed CSS `direction` property.
+Native input/textarea edits update the DOM value and mark general style
+invalidation, but do not request immediate restyling. If an edit changes automatic
+directionality, `:dir()` and UA direction defaults update on the next restyle.
+The follow-up needs prompt selector invalidation while preserving the active
+editor's focus, caret and selection; rebuilding the page on each keystroke is
+not an acceptable substitute. The semantic resolver already reads current form
+values and supports reselection after DOM text, attribute and value changes.
 
 CSS direction aligns the line but does not reorder its inline boxes. The
 disclosure glyph follows CSS direction, but remains before the label in the
 left-to-right box sequence. This needs shared bidi isolation/reordering, not a
-summary-specific swap. Vertical writing-mode layout is also outside the current
-horizontal marker implementation.
+summary-specific swap. `bdi` direction resolution alone does not implement its
+Unicode isolation. Also pending are `unicode-bidi:plaintext` per-paragraph
+layout and separate directionality for text from directionality-capable HTML
+attributes such as placeholders. These follow the
+[HTML directionality algorithms](https://html.spec.whatwg.org/multipage/dom.html#the-dir-attribute)
+and [bidirectional rendering rules](https://html.spec.whatwg.org/multipage/rendering.html#bidirectional-text).
+Shadow trees and vertical writing-mode layout are not currently implemented.
 
 Reproducer: `test/disclosure-markers.html`, `#rtl`. Initial captures are in
 `out/render-captures/disclosure-markers-2026-10-03/chromium/`.

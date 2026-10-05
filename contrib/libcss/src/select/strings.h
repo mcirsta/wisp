@@ -32,6 +32,7 @@ typedef struct {
     lwc_string *empty;
     lwc_string *target;
     lwc_string *lang;
+    lwc_string *dir;
     lwc_string *enabled;
     lwc_string *disabled;
     lwc_string *checked;

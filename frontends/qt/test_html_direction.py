@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Explicit HTML dir defaults, CSS cascade and inherited layout direction.
+"""HTML dir defaults, semantic :dir(), CSS cascade and inherited layout direction.
 
 Expected directions follow HTML's rendering rules; alignment and column order
 follow CSS 2.2, without a browser snapshot as the oracle. This does not test bidi
-reordering or automatic directionality, which remain separate work.
+reordering or live editing direction changes, which remain separate work.
 
 https://html.spec.whatwg.org/multipage/rendering.html#bidirectional-text
 https://www.w3.org/TR/CSS22/text.html#alignment-prop
@@ -20,7 +20,13 @@ binary = Path(sys.argv[1]).resolve()
 fixture = Path(__file__).resolve().parents[2] / "test/html-direction.html"
 directions = dict(ltr="ltr", rtl="rtl", upper="rtl", mixed="rtl", sheet="ltr", inline="ltr",
                   revert="rtl", padded="ltr", inherit="rtl", reset="ltr", invalid="rtl", empty="rtl", live="rtl")
+directions.update({"auto-rtl": "rtl", "auto-ltr": "ltr", "auto-excluded": "ltr", "bdi-auto": "rtl",
+                   "semantic-reset": "rtl", "css-inherit": "ltr", "auto-neutral": "ltr"})
+semantic = {"auto-rtl": "rtl", "auto-ltr": "ltr", "auto-excluded": "ltr", "bdi-auto": "rtl",
+            "semantic-reset": "rtl", "css-inherit": "rtl", "auto-neutral": "ltr",
+            "telephone": "ltr", "auto-input": "rtl", "auto-textarea": "rtl"}
 ids = [key for name in directions for key in (name, name + "-chip")]
+ids += ["telephone", "auto-input", "auto-textarea"]
 ids += ["table", "table-a", "table-b", "table-override", "override-a", "override-b"]
 env = dict(os.environ, QT_QPA_PLATFORM="offscreen", QT_SCALE_FACTOR="1", QT_SCREEN_SCALE_FACTORS="1", QT_FONT_DPI="96")
 
@@ -56,6 +62,12 @@ with tempfile.TemporaryDirectory(prefix="wisp-html-direction-") as tmp:
             parent, child = rect(key), rect(key + "-chip")
             expected_x = parent["width"] - child["width"] if direction == "rtl" else 0
             assert child["x"] - parent["x"] == expected_x, (index, key, parent, child)
+        for key, direction in semantic.items():
+            dump = box(key)["computed_style_dump"]
+            color = "#ff654321" if direction == "rtl" else "#ff123456"
+            assert f"color: {color}" in dump, (index, key, direction, dump)
+            if key not in directions:
+                assert f"direction: {direction} " in dump, (index, key, direction)
         # Row/cell direction cannot change the direction of the table's columns.
         for table, a, b, rtl in (("table", "table-a", "table-b", True),
                                   ("table-override", "override-a", "override-b", False)):
@@ -63,4 +75,4 @@ with tempfile.TemporaryDirectory(prefix="wisp-html-direction-") as tmp:
             assert first["width"] == 20 and second["width"] == 40, (index, table, first, second)
             assert first["x"] - parent["x"] == (40 if rtl else 0), (index, table, first)
             assert second["x"] - parent["x"] == (0 if rtl else 20), (index, table, second)
-print("HTML direction: explicit keywords, inheritance, author overrides, revert, columns and native restyles passed.")
+print("HTML direction: keywords, auto, bdi, semantic selectors, CSS overrides, columns and native restyles passed.")

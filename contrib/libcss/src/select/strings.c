@@ -92,6 +92,10 @@ css_error css_select_strings_intern(css_select_strings *str)
     if (error != lwc_error_ok)
         return css_error_from_lwc_error(error);
 
+    error = lwc_intern_string("dir", SLEN("dir"), &str->dir);
+    if (error != lwc_error_ok)
+        return css_error_from_lwc_error(error);
+
     error = lwc_intern_string("lang", SLEN("lang"), &str->lang);
     if (error != lwc_error_ok)
         return css_error_from_lwc_error(error);
@@ -222,6 +226,7 @@ void css_select_strings_unref(css_select_strings *str)
     lwc_string_unref(str->empty);
     lwc_string_unref(str->target);
     lwc_string_unref(str->lang);
+    lwc_string_unref(str->dir);
     lwc_string_unref(str->enabled);
     lwc_string_unref(str->disabled);
     lwc_string_unref(str->checked);

@@ -32,6 +32,7 @@
 #include "content/handlers/css/hints.h"
 #include "content/handlers/css/internal.h"
 #include "content/handlers/css/select.h"
+#include "content/handlers/html/direction.h"
 
 static css_error node_name(void *pw, void *node, css_qname *qname);
 static css_error node_classes(void *pw, void *node, lwc_string ***classes, uint32_t *n_classes);
@@ -68,6 +69,7 @@ static css_error node_is_disabled(void *pw, void *node, bool *match);
 static css_error node_is_checked(void *pw, void *node, bool *match);
 static css_error node_is_target(void *pw, void *node, bool *match);
 static css_error node_is_lang(void *pw, void *node, lwc_string *lang, bool *match);
+static css_error node_is_dir(void *pw, void *node, lwc_string *direction, bool *match);
 static css_error ua_default_for_property(void *pw, uint32_t property, css_hint *hint);
 static css_error set_libcss_node_data(void *pw, void *node, void *libcss_node_data);
 static css_error get_libcss_node_data(void *pw, void *node, void **libcss_node_data);
@@ -76,7 +78,7 @@ static css_error get_libcss_node_data(void *pw, void *node, void **libcss_node_d
  * Selection callback table for libcss
  */
 static css_select_handler selection_handler = {
-    CSS_SELECT_HANDLER_VERSION_1,
+    CSS_SELECT_HANDLER_VERSION_2,
 
     node_name,
     node_classes,
@@ -114,7 +116,27 @@ static css_select_handler selection_handler = {
     ua_default_for_property,
     set_libcss_node_data,
     get_libcss_node_data,
+    node_is_dir,
 };
+
+static css_error node_is_dir(void *pw, void *node, lwc_string *direction, bool *match)
+{
+    bool rtl;
+    (void)pw;
+    *match = false;
+    /* Selectors 4: any single identifier parses, but only ltr/rtl can match. */
+    if (direction == NULL || lwc_string_length(direction) != 3)
+        return CSS_OK;
+    const char *name = lwc_string_data(direction);
+    bool wanted_rtl = strncasecmp(name, "rtl", 3) == 0;
+    if (!wanted_rtl && strncasecmp(name, "ltr", 3) != 0)
+        return CSS_OK;
+    dom_exception err = html_element_direction(node, &rtl);
+    if (err != DOM_NO_ERR)
+        return err == DOM_NO_MEM_ERR ? CSS_NOMEM : CSS_INVALID;
+    *match = rtl == wanted_rtl;
+    return CSS_OK;
+}
 
 static css_error nscss_error_handler(void *pw, css_stylesheet *sheet, css_error error, const char *msg)
 {

@@ -64,7 +64,10 @@ typedef struct css_select_results {
     css_computed_style *styles[CSS_PSEUDO_ELEMENT_COUNT];
 } css_select_results;
 
-typedef enum css_select_handler_version { CSS_SELECT_HANDLER_VERSION_1 = 1 } css_select_handler_version;
+typedef enum css_select_handler_version {
+    CSS_SELECT_HANDLER_VERSION_1 = 1,
+    CSS_SELECT_HANDLER_VERSION_2 = 2
+} css_select_handler_version;
 
 typedef struct css_select_handler {
     /** ABI version of this structure */
@@ -141,6 +144,9 @@ typedef struct css_select_handler {
      * \return CSS_OK on success, or appropriate error otherwise
      */
     css_error (*get_libcss_node_data)(void *pw, void *node, void **libcss_node_data);
+    /** Version 2: document-language directionality for :dir(), independent of
+     * CSS direction. Optional; version 1 clients do not match :dir(). */
+    css_error (*node_is_dir)(void *pw, void *node, lwc_string *direction, bool *match);
 } css_select_handler;
 
 /**
