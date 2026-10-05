@@ -7,17 +7,39 @@ in Git; the regression fixtures remain in the test suite.
 
 Cross-node phrases remain unimplemented.
 
-Resource-dependent fallback still needs loading/decoding state shared between
-conversion and discovery in skipped subtrees. In particular, `html_object_failed`
-currently does nothing, so an object whose requested resource fails never
-constructs its fallback children. Repairing this needs a persistent failure
-decision across reconstruction, avoiding repeated failed requests. Images
-without a usable source and other fallback-capable elements also need review;
-skipped image owners still conservatively exclude generated text. This is
-separate from an object's initial attribute/type decision.
+Remaining resource-dependent fallback coverage:
+
+- Resource discovery for objects that have never been constructed in skipped subtrees.
+  Search currently reads known request state without starting downloads.
+- Object `error`/`load` events need the specified task lifecycle. Late bitmap
+  conversion failures also need to reach the representation decision when an
+  image decoder has already reported successful content completion.
+- Images without a usable source and other fallback-capable elements still need
+  review; skipped image owners conservatively exclude generated text.
+
+Object expectations follow the [HTML object representation algorithm](https://html.spec.whatwg.org/multipage/iframe-embed-object.html#the-object-element),
+including its resource-availability, failed-load and image-handler steps.
 
 The supported behavior and repeatable checks are in
 [hidden-until-found.md](hidden-until-found.md).
+
+## Embedded HTML document sizing
+
+`test/object-document-sizing.html` reproduces automatic sizing of an object
+containing an HTML document: at a 700×600 viewport, the block's content box is
+698×0 and the inline object's is 300×169. The explicitly sized control is 240×60.
+[HTML's embedded-content rendering rules](https://html.spec.whatwg.org/multipage/rendering.html#embedded-content-rendering-rules)
+make these replaced elements. With no natural dimensions or ratio, the applicable
+[CSS replaced-width](https://www.w3.org/TR/CSS22/visudet.html#inline-replaced-width)
+and [height rules](https://www.w3.org/TR/CSS22/visudet.html#inline-replaced-height)
+give the unconstrained cases 300×150 at this viewport.
+
+Review document viewport sizing together across block/inline layout: current
+paths read the child document's laid-out dimensions as intrinsic data, use its
+min/max content widths, and overwrite inline auto heights after child reformat.
+Fix the shared sizing model rather than adding a zero-height special case. The
+pending-object regression uses explicit HTML-object dimensions to isolate loading
+and fallback transitions from this separate sizing work.
 
 ## Details compatibility beyond native reading/search
 

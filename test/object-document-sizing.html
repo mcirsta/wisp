@@ -1,0 +1,16 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Embedded HTML document sizing</title>
+<style>
+  body { margin: 0; font: 16px/20px sans-serif; }
+  object { border: 1px solid; }
+  #block { display: block; }
+  #sized { display: block; width: 240px; height: 60px; }
+</style>
+<!-- Backlog reproduction: a nested HTML document supplies no natural size.
+     CSS 2.2 10.3.2/10.3.4 and 10.6.2 give the unconstrained replaced box a
+     default 300px by 150px size at this viewport. The explicit control should
+     remain 240px by 60px. Loading/fallback transitions have separate tests. -->
+<object id="block" data="data:text/html,%3Cp%3EEmbedded%20document%3C/p%3E">Fallback</object>
+<object id="inline" data="data:text/html,%3Cp%3EEmbedded%20document%3C/p%3E">Fallback</object>
+<object id="sized" data="data:text/html,%3Cp%3EEmbedded%20document%3C/p%3E">Fallback</object>

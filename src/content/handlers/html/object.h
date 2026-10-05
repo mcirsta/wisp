@@ -28,6 +28,19 @@ struct html_content;
 struct browser_window;
 struct box;
 struct nsurl;
+struct dom_node;
+
+enum html_object_state {
+    HTML_OBJECT_UNKNOWN,
+    HTML_OBJECT_PENDING,
+    HTML_OBJECT_AVAILABLE,
+    HTML_OBJECT_FAILED
+};
+
+/** Read-only resource state, also available to search without boxes. A changed
+ * URL is independent of a previous request. This does not start a fetch. */
+enum html_object_state html_object_get_state(
+    const struct html_content *html, struct dom_node *node, const struct nsurl *url);
 
 /**
  * Start a fetch for an object required by a page.
@@ -44,7 +57,7 @@ struct nsurl;
  * \return true on success, false on memory exhaustion
  */
 bool html_fetch_background(
-    struct html_content *c, nsurl *url, struct box *box, content_type permitted_types, uint32_t layer);
+    struct html_content *c, struct nsurl *url, struct box *box, content_type permitted_types, uint32_t layer);
 
 bool html_fetch_object(
     struct html_content *c, struct nsurl *url, struct box *box, content_type permitted_types, bool background);

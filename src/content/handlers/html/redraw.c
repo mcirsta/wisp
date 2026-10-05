@@ -2853,7 +2853,7 @@ static bool html_redraw_box(const html_content *html, struct box *box, int x_par
                 dom_string_unref(name);
             /* Show image fail */
             /* Unicode (U+FFFC) 'OBJECT REPLACEMENT CHARACTER' */
-            const char *obj = "\xef\xbf\xbc";
+            static const char obj[] = "\xef\xbf\xbc";
             int obj_width;
             int obj_x = x + padding_left;
             nserror res;

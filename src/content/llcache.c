@@ -3994,6 +3994,32 @@ const char *llcache_handle_get_header(const llcache_handle *handle, const char *
 }
 
 /* See llcache.h for documentation */
+unsigned llcache_handle_get_http_status(const llcache_handle *handle)
+{
+    const llcache_object *object = handle == NULL ? NULL : handle->object;
+    if (object == NULL || object->num_headers == 0)
+        return 0;
+
+    /* A response start discards the previous headers. Its status line remains
+     * the first entry, including in snapshots and serialized cache metadata.
+     * libcurl also supplies an HTTP/2 or HTTP/3 status line in this form. */
+    const char *line = object->headers[0].name;
+    if (strncmp(line, "HTTP/", 5) != 0)
+        return 0;
+    const char *status = strchr(line, ' ');
+    if (status == NULL)
+        return 0;
+    status++;
+    unsigned code = 0;
+    for (unsigned i = 0; i < 3; i++) {
+        if (status[i] < '0' || status[i] > '9')
+            return 0;
+        code = code * 10 + status[i] - '0';
+    }
+    return status[3] == '\0' || status[3] == ' ' ? code : 0;
+}
+
+/* See llcache.h for documentation */
 bool llcache_handle_references_same_object(const llcache_handle *a, const llcache_handle *b)
 {
     return a->object == b->object;

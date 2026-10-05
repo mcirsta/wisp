@@ -11,6 +11,7 @@
 #include "content/handlers/html/box_special.h"
 #include "content/handlers/html/content_visibility.h"
 #include "content/handlers/html/search.h"
+#include "content/handlers/html/object.h"
 #include "content/handlers/html/details.h"
 
 /* Source identity and normalized character range survive destruction of every
@@ -220,7 +221,9 @@ static nserror search_node(
                 error = NSERROR_NOMEM;
                 goto done;
             }
-            bool embedded = params != NULL;
+            bool embedded = params != NULL &&
+                html_object_get_state(walk->html, node, params->data ? params->data : params->classid) !=
+                    HTML_OBJECT_PENDING;
             talloc_free(params);
             if (embedded)
                 goto done;

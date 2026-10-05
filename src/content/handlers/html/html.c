@@ -303,6 +303,10 @@ static void html_box_convert_done(html_content *c, bool success)
         c->conversion_restart_pending = false;
         guit->misc->schedule(0, html_resume_conversion_cb, c);
     }
+    /* A resource failure can request fallback while the initial converter is
+     * yielding. html_restyle cannot run until this tree has been published. */
+    if (c->restyle_pending)
+        html_schedule_restyle(c);
 }
 
 /* Documented in html_internal.h */
@@ -310,6 +314,8 @@ nserror html_proceed_to_done(html_content *html)
 {
     switch (content__get_status(&html->base)) {
     case CONTENT_STATUS_READY:
+        if (html->restyle_pending || html->restyling)
+            return NSERROR_OK;
         if (html->base.active != html->scripts_active) {
             NSLOG(wisp, DEBUG, "proceed_to_done: waiting for scripts (active=%d scripts=%d)", html->base.active,
                 html->scripts_active);
@@ -1557,6 +1563,8 @@ static void html_restyle_finish(html_content *html, bool success, bool retained)
         html->restyle_profile.total_ns = end - html->restyle_profile.start_ns);
     if (html->restyle_pending)
         html_schedule_restyle(html);
+    else
+        html_proceed_to_done(html);
 }
 
 static void html_restyle_done(html_content *html, bool success)

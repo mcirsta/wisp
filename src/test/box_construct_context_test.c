@@ -2419,10 +2419,9 @@ START_TEST(test_object_fallback_preflight)
     record_fetches = false;
     struct box *box = box_for_node(object);
     ck_assert_ptr_nonnull(box);
-    ck_assert_msg(((box->flags & IS_REPLACED) == 0) == object_preflight_cases[_i].fallback,
-        "construction disagrees with preflight case %d", _i);
-    ck_assert_msg((box_for_node(child) != NULL) == object_preflight_cases[_i].fallback,
-        "fallback child conversion disagrees with preflight case %d", _i);
+    /* The mocked request is still pending: its fallback must also be built. */
+    ck_assert_msg(!(box->flags & IS_REPLACED), "Replaced pending object in case %d", _i);
+    ck_assert_msg(box_for_node(child) != NULL, "Missing fallback child in case %d", _i);
     ck_assert_uint_eq(html.num_objects, object_preflight_cases[_i].fallback ? 0 : 1);
     dom_node_unref(outer);
 }

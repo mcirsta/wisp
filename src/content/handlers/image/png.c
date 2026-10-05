@@ -542,6 +542,14 @@ static bool nspng_convert(struct content *c)
     /* clean up png structures */
     png_destroy_read_struct(&png_c->png, &png_c->info, 0);
 
+    /* EOF before the image-info callback is not a usable partial image. A
+     * signature-only/truncated header otherwise reaches DONE with no size or
+     * bitmap, hiding object fallback and failing only when later painted. */
+    if (c->width <= 0 || c->height <= 0) {
+        content_broadcast_error(c, NSERROR_PNG_ERROR, NULL);
+        return false;
+    }
+
     /* set title text */
     title = messages_get_buff("PNGTitle", nsurl_access_leaf(llcache_handle_get_url(c->llcache)), c->width, c->height);
     if (title != NULL) {

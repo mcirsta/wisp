@@ -1,0 +1,29 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Object resource failure and fallback</title>
+<style>
+body { margin: 12px; font: 14px/20px sans-serif; }
+object { display: block; }
+object::before { content: attr(data-label); }
+span { display: block; }
+</style>
+<details id="panel" open>
+  <summary id="summary">Object resources</summary>
+  <object id="missing" data="object-fallback-missing.png" data-label="missing-generated-token">
+    <span id="missing-child">missing-child-token</span>
+    <object id="nested" data="object-fallback-nested.png">
+      <span id="nested-child">nested-child-token</span>
+    </object>
+  </object>
+  <object id="corrupt" data="data:image/png;base64,iVBORw0KGgo=" data-label="corrupt-generated-token">
+    <span id="corrupt-child">corrupt-child-token</span>
+  </object>
+  <object id="unfetchable" data="wisp-no-fetch-handler:/object" data-label="unfetchable-generated-token">
+    <span id="unfetchable-child">unfetchable-child-token</span>
+  </object>
+  <object id="valid" width="8" height="8"
+      data="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"
+      data-label="forbidden-generated-token">
+    <span id="valid-child">forbidden-child-token</span>
+  </object>
+</details>

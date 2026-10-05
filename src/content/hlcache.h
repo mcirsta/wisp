@@ -71,7 +71,10 @@ enum hlcache_retrieve_flag {
     /** It's permitted to convert this request into a download */
     HLCACHE_RETRIEVE_MAY_DOWNLOAD = (1 << 31),
     /* Permit content-type sniffing */
-    HLCACHE_RETRIEVE_SNIFF_TYPE = (1 << 30)
+    HLCACHE_RETRIEVE_SNIFF_TYPE = (1 << 30),
+    /** Reject non-2xx HTTP responses for this consumer, including cache hits.
+     * Other consumers of the shared response may still display its body. */
+    HLCACHE_RETRIEVE_REQUIRE_OK = (1 << 29)
 };
 
 /**

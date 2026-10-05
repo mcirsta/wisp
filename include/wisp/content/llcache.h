@@ -280,6 +280,10 @@ const uint8_t *llcache_handle_get_source_data(const llcache_handle *handle, size
  */
 const char *llcache_handle_get_header(const llcache_handle *handle, const char *key);
 
+/** Final response status, or 0 when no HTTP status is available. Reads retained
+ * headers, so redirects, cache hits and revalidated representations agree. */
+unsigned llcache_handle_get_http_status(const llcache_handle *handle);
+
 /**
  * Determine if the same underlying object is referenced by the given handles
  *

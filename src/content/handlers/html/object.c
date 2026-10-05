@@ -76,18 +76,84 @@ struct content_html_object *html_get_objects(hlcache_handle *h, unsigned int *n)
     return c->object_list;
 }
 
-/**
- * Handle object fetching or loading failure.
- *
- * \param  box         box containing object which failed to load
- * \param  content     document of type CONTENT_HTML
- * \param  background  the object was the background image for the box
- */
-
-static void html_object_failed(struct box *box, html_content *content, bool background)
+static bool html_object_available(const struct content_html_object *object)
 {
-    /* Nothing to do */
-    return;
+    if (object->content == NULL)
+        return false;
+    content_status status = content_get_status(object->content);
+    return status == CONTENT_STATUS_READY || status == CONTENT_STATUS_DONE;
+}
+
+enum html_object_state html_object_get_state(const html_content *html, dom_node *node, const nsurl *url)
+{
+    if (node == NULL || url == NULL)
+        return HTML_OBJECT_UNKNOWN;
+    for (const struct content_html_object *o = html->object_list; o != NULL; o = o->next) {
+        if (o->layout_resource && !o->background && o->permitted_types == CONTENT_ANY && o->node == node &&
+            o->url != NULL && nsurl_compare(url, o->url, NSURL_COMPLETE)) {
+            if (o->failed)
+                return HTML_OBJECT_FAILED;
+            return html_object_available(o) ? HTML_OBJECT_AVAILABLE : HTML_OBJECT_PENDING;
+        }
+    }
+    return HTML_OBJECT_UNKNOWN;
+}
+
+static bool html_object_has_fallback(const struct content_html_object *object)
+{
+    if (!object->layout_resource || object->background || object->permitted_types != CONTENT_ANY ||
+        object->node == NULL)
+        return false;
+    dom_string *name = NULL;
+    bool fallback = dom_node_get_node_name(object->node, &name) == DOM_NO_ERR &&
+        dom_string_caseless_lwc_isequal(name, corestring_lwc_object);
+    dom_string_unref(name);
+    return fallback;
+}
+
+static uint32_t html_object_fetch_flags(const struct content_html_object *object)
+{
+    /* HTML's object algorithm falls back on HTTP errors. The body remains
+     * available to navigations and other consumers sharing the cache entry. */
+    return HLCACHE_RETRIEVE_SNIFF_TYPE | (html_object_has_fallback(object) ? HLCACHE_RETRIEVE_REQUIRE_OK : 0);
+}
+
+static bool html_object_can_open(const struct content_html_object *object)
+{
+    return object->content != NULL && object->box != NULL && !object->opened &&
+        content_get_type(object->content) != CONTENT_NONE &&
+        (!html_object_has_fallback(object) ||
+            ((object->box->flags & IS_REPLACED) && html_object_available(object)));
+}
+
+/* HTML's object algorithm represents the children when the requested resource
+ * cannot be loaded/rendered. Keep that decision with the request, not its box:
+ * the box can be absent while hidden or replaced during sliced reconstruction. */
+static void html_object_failed(struct content_html_object *object)
+{
+    html_content *html = (html_content *)object->parent;
+    struct box *box = object->box;
+    if (box != NULL) {
+        if (!object->background)
+            box->object = NULL;
+        else if (object->background_layer == 0)
+            box->background = NULL;
+        else
+            box->background_layers[object->background_layer - 1] = NULL;
+    }
+    /* A refresh callback may still be queued when an embedded document fails. */
+    if (object->permitted_types == CONTENT_ANY)
+        guit->misc->schedule(-1, html_object_refresh, object);
+    object->refresh_pending = false;
+    if (object->content != NULL)
+        hlcache_handle_release(object->content);
+    object->content = NULL;
+    object->opened = false;
+    object->failed = true;
+
+    /* Images, CSS backgrounds and embed have no object fallback children. */
+    if (!html->aborted && html_object_has_fallback(object))
+        html_request_restyle(html);
 }
 
 /**
@@ -216,10 +282,24 @@ static nserror html_object_callback(hlcache_handle *object, const hlcache_event 
         break;
     }
 
+    /* HTML's object algorithm uses fallback until the resource is available.
+     * Reconstruct through the normal path: attaching content to a fallback box
+     * would leave its children and generated content in the live tree. The
+     * request survives hiding and sliced construction, so neither loses this
+     * transition. READY is sufficient for an embedded document to be laid out. */
+    if (html_object_has_fallback(o) && (box == NULL || !(box->flags & IS_REPLACED)) &&
+        (event->type == CONTENT_MSG_READY || event->type == CONTENT_MSG_DONE)) {
+        if (event->type == CONTENT_MSG_DONE)
+            c->base.active--;
+        if (!c->aborted)
+            html_request_restyle(c);
+        return NSERROR_OK;
+    }
+
     /* A hidden object keeps its cache handle, but owns no layout geometry.
      * Construction may also yield while callbacks arrive for the new tree. */
     if (box == NULL || c->restyling) {
-        if (event->type == CONTENT_MSG_LOADING && box != NULL && c->bw != NULL) {
+        if (event->type == CONTENT_MSG_LOADING && c->bw != NULL && html_object_can_open(o)) {
             content_open(object, c->bw, &c->base, box->object_params);
             o->opened = true;
         } else if (event->type == CONTENT_MSG_DONE) {
@@ -228,9 +308,7 @@ static nserror html_object_callback(hlcache_handle *object, const hlcache_event 
                 html_object_done(box, object, o->background, o->background_layer);
         } else if (event->type == CONTENT_MSG_ERROR) {
             c->base.active--;
-            hlcache_handle_release(object);
-            o->content = NULL;
-            o->opened = false;
+            html_object_failed(o);
         }
         if (!c->restyling && c->base.active == c->scripts_active &&
             (event->type == CONTENT_MSG_DONE || event->type == CONTENT_MSG_ERROR)) {
@@ -242,7 +320,7 @@ static nserror html_object_callback(hlcache_handle *object, const hlcache_event 
 
     switch (event->type) {
     case CONTENT_MSG_LOADING:
-        if (c->base.status != CONTENT_STATUS_LOADING && c->bw != NULL) {
+        if (c->base.status != CONTENT_STATUS_LOADING && c->bw != NULL && html_object_can_open(o)) {
             content_open(object, c->bw, &c->base, box->object_params);
             o->opened = true;
         }
@@ -360,17 +438,6 @@ static nserror html_object_callback(hlcache_handle *object, const hlcache_event 
         break;
 
     case CONTENT_MSG_ERROR:
-        if (o->background) {
-            if (o->background_layer == 0)
-                box->background = NULL;
-            else
-                box->background_layers[o->background_layer - 1] = NULL;
-        }
-        hlcache_handle_release(object);
-
-        o->content = NULL;
-        o->opened = false;
-
         if (c->base.active == 0) {
             NSLOG(wisp, CRITICAL,
                 "ACTIVE UNDERFLOW! object_cb ERROR decrement when 0 "
@@ -380,7 +447,7 @@ static nserror html_object_callback(hlcache_handle *object, const hlcache_event 
         c->base.active--;
         NSLOG(wisp, INFO, "%d fetches active", c->base.active);
 
-        html_object_failed(box, c, o->background);
+        html_object_failed(o);
 
         break;
 
@@ -708,7 +775,7 @@ static bool html_replace_object(struct content_html_object *object, nsurl *url)
     }
 
     /* initialise fetch */
-    error = hlcache_handle_retrieve(url, HLCACHE_RETRIEVE_SNIFF_TYPE, content_get_url(&c->base), NULL,
+    error = hlcache_handle_retrieve(url, html_object_fetch_flags(object), content_get_url(&c->base), NULL,
         html_object_callback, object, &child, object->permitted_types, &object->content);
 
     if (error != NSERROR_OK) {
@@ -717,6 +784,8 @@ static bool html_replace_object(struct content_html_object *object, nsurl *url)
             page->base.active--;
             NSLOG(wisp, INFO, "%d fetches active (retrieve failed)", page->base.active);
         }
+        if (error != NSERROR_NOMEM)
+            html_object_failed(object);
         return false;
     }
 
@@ -762,10 +831,7 @@ nserror html_object_open_objects(html_content *html, struct browser_window *bw)
     for (object = html->object_list; object != NULL; object = next) {
         next = object->next;
 
-        if (object->content == NULL || object->box == NULL)
-            continue;
-
-        if (content_get_type(object->content) == CONTENT_NONE)
+        if (!html_object_can_open(object))
             continue;
 
         content_open(object->content, bw, &html->base, object->box->object_params);
@@ -906,13 +972,14 @@ static bool html_reuse_object(html_content *c, struct box *box, nsurl *url, cont
         o->box = box;
         /* A fetch can become usable while its panel is hidden. Attach it when
          * shown; already-open embedded documents keep their existing state. */
-        if (o->content != NULL && !o->opened && c->bw != NULL && content_get_type(o->content) != CONTENT_NONE) {
+        if (c->bw != NULL && html_object_can_open(o)) {
             content_open(o->content, c->bw, &c->base, box->object_params);
             o->opened = true;
         }
         if (o->refresh_pending)
             guit->misc->schedule(0, html_object_refresh, o);
-        if (o->content != NULL && content_get_status(o->content) == CONTENT_STATUS_DONE)
+        if (o->content != NULL && (content_get_status(o->content) == CONTENT_STATUS_DONE ||
+                (html_object_has_fallback(o) && html_object_available(o))))
             html_object_done(box, o->content, background, layer);
         return true;
     }
@@ -1138,18 +1205,22 @@ static bool html_fetch_object_layer(
         NSLOG(wisp, INFO, "%d fetches active (pre-retrieve)", c->base.active);
     }
 
-    error = hlcache_handle_retrieve(url, HLCACHE_RETRIEVE_SNIFF_TYPE, content_get_url(&c->base), NULL, object_callback,
-        object, &child, object->permitted_types, &object->content);
+    error = hlcache_handle_retrieve(url, html_object_fetch_flags(object), content_get_url(&c->base), NULL,
+        object_callback, object, &child, object->permitted_types, &object->content);
     if (error != NSERROR_OK) {
         if (box != NULL) {
             c->base.active--;
             NSLOG(wisp, INFO, "%d fetches active (retrieve failed)", c->base.active);
         }
-        dom_node_unref(object->node);
-        if (object->url != NULL)
+        if (error == NSERROR_NOMEM || box == NULL) {
+            dom_node_unref(object->node);
             nsurl_unref(object->url);
-        free(object);
-        return error != NSERROR_NOMEM;
+            free(object);
+            return error != NSERROR_NOMEM;
+        }
+        /* A synchronous retrieval error needs the same retained decision as
+         * an asynchronous load/decode error. Otherwise every rebuild retries. */
+        html_object_failed(object);
     }
 
     /* add to content object list */

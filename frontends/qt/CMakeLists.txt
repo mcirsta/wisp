@@ -274,6 +274,12 @@ if(WISP_QT_CAPTURE)
         add_test(NAME qt_generated_search
             COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_generated_search.py $<TARGET_FILE:wisp-qt>)
         set_tests_properties(qt_generated_search PROPERTIES TIMEOUT 120)
+        add_test(NAME qt_object_fallback
+            COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_object_fallback.py $<TARGET_FILE:wisp-qt>)
+        set_tests_properties(qt_object_fallback PROPERTIES TIMEOUT 60)
+        add_test(NAME qt_object_http_fallback
+            COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_object_http_fallback.py $<TARGET_FILE:wisp-qt>)
+        set_tests_properties(qt_object_http_fallback PROPERTIES TIMEOUT 60)
         add_test(NAME qt_disclosure_markers
             COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_disclosure_markers.py $<TARGET_FILE:wisp-qt>)
         set_tests_properties(qt_disclosure_markers PROPERTIES TIMEOUT 90)

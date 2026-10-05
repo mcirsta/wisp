@@ -1608,6 +1608,9 @@ bool box_object_prepare(dom_node *n, html_content *content, void *owner, struct 
         lwc_string_unref(itype);
     }
 
+    if (html_object_get_state(content, n, params->data ? params->data : params->classid) == HTML_OBJECT_FAILED)
+        goto fallback;
+
     *result = params;
     return true;
 
@@ -1733,13 +1736,19 @@ static bool box_object(dom_node *n, html_content *content, struct box *box, bool
 
     box->object_params = params;
 
-    /* start fetch (MIME type is ok or not specified) */
+    /* A synchronous cache hit can already represent the resource. Otherwise
+     * HTML requires fallback until enough data is available to process it. */
+    nsurl *url = params->data ? params->data : params->classid;
     box->flags |= IS_REPLACED;
-    if (!box_construct_request_object(
-            content, region, params->data ? params->data : params->classid, box, CONTENT_ANY, false, 0))
+    if (!box_construct_request_object(content, region, url, box, CONTENT_ANY, false, 0))
         return false;
 
-    *convert_children = false;
+    if (html_object_get_state(content, n, url) == HTML_OBJECT_AVAILABLE) {
+        *convert_children = false;
+    } else {
+        box->flags &= ~IS_REPLACED;
+        box->object = NULL;
+    }
     return true;
 }
 

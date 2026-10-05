@@ -41,9 +41,23 @@ Object fallback uses the same resource-parameter preflight in construction and
 discovery. Missing/empty resources and known unsupported declared types can
 expose ordinary and generated fallback text even before boxes exist. Objects
 using an embedded resource suppress their fallback children and generated
-pseudos in search as in rendering. Discovery does not fetch resources or publish
-boxes; later load/decoding failures remain in the correctness backlog. Generated
-`attr()` text preserves its complete UTF-8 byte sequence.
+pseudos in search as in rendering. Reported load/decode failures are retained on
+the DOM resource record and request ordinary reconstruction, including failures
+during initial construction or while hidden/rebuilding. The resulting fallback
+is searchable without refetching the same failed request on each rebuild.
+Discovery only reads this state; it does not fetch resources or publish boxes.
+Pending object requests represent their fallback children and generated content.
+The existing cache READY/DONE state marks a usable resource; ordinary reconstruction
+then removes fallback and attaches the retained resource. READY embedded documents
+can receive their containing box's layout without waiting for DONE. Availability
+transitions survive hiding and sliced reconstruction, and search reads known
+pending state even when that object's box is absent. No extra resource-state
+field or separate rendering path is needed.
+Objects reject unsuccessful HTTP responses both during loading and on cache
+hits, even if their bodies are decodable. This is a per-consumer cache policy:
+the shared response remains available to direct navigation and ordinary images.
+Generated `attr()` text preserves its complete UTF-8 byte sequence. Remaining
+resource lifecycle coverage is listed in the correctness backlog.
 
 Query replacement, clearing, failure, navigation and teardown release references
 and cancel pending work. Highlights are destroyed before the frontend window,
@@ -70,6 +84,22 @@ outside this feature; unsupported values are not silently accepted.
   makes no requests or mappings, releases temporary parameters, and preserves
   generated UTF-8 attribute text. Existing detached-resource tests cover both
   normal and retained construction.
+- `object_fallback_test`: synchronous retrieval failure, asynchronous failure
+  while visible/hidden/rebuilding, retained URL/node identity, changed URLs,
+  memory exhaustion, completion gating and non-object exclusions. Pending-to-ready
+  transitions never attach into fallback geometry; reconstruction reuses and opens
+  READY resources before DONE, including completion while hidden/rebuilding.
+- `qt_object_fallback`: missing files, unfetchable schemes, truncated PNG headers,
+  nested fallback, successful embedded images, generated/ordinary fallback search,
+  repeated disclosure changes and a larger construction tree. Resource records
+  remain at a fixed count across updates.
+- `qt_object_http_fallback`: 404/500 responses with decodable bodies, empty errors,
+  redirects to success/failure, successful 200/206 responses, shared pending
+  requests in both consumer orders, warm image-cache reuse, repeated updates
+  without refetching, and readable/searchable top-level HTTP error documents.
+  Pending responses wait for requests from nested fallback objects, proving
+  fallback construction before resource availability. Successful images and HTML
+  documents remove fallback children/pseudos; failures retain them.
 - `libcss_parse2_auto_content-visibility_dat`: generated parser and bytecode dump.
 
 Capture builds support `--capture-find TEXT`, `--capture-find-back TEXT`,

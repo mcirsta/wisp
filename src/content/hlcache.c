@@ -331,6 +331,14 @@ static nserror hlcache_find_content(hlcache_retrieval_ctx *ctx, lwc_string *effe
     return error;
 }
 
+static bool hlcache_http_status_acceptable(const llcache_handle *handle, uint32_t flags)
+{
+    if (!(flags & HLCACHE_RETRIEVE_REQUIRE_OK))
+        return true;
+    unsigned status = llcache_handle_get_http_status(handle);
+    return status == 0 || (status >= 200 && status <= 299);
+}
+
 /**
  * Migrate a retrieval context into its final destination content
  *
@@ -344,10 +352,12 @@ static nserror hlcache_migrate_ctx(hlcache_retrieval_ctx *ctx, lwc_string *effec
 {
     content_type type = CONTENT_NONE;
     nserror error = NSERROR_OK;
+    bool status_ok = hlcache_http_status_acceptable(ctx->llcache, ctx->flags);
 
     ctx->migrate_target = true;
 
-    if ((effective_type != NULL) && hlcache_type_is_acceptable(effective_type, ctx->accepted_types, &type)) {
+    if (status_ok && effective_type != NULL &&
+        hlcache_type_is_acceptable(effective_type, ctx->accepted_types, &type)) {
         error = hlcache_find_content(ctx, effective_type);
         if (error != NSERROR_OK && error != NSERROR_NEED_DATA) {
             if (ctx->handle->cb != NULL) {
@@ -363,7 +373,7 @@ static nserror hlcache_migrate_ctx(hlcache_retrieval_ctx *ctx, lwc_string *effec
             llcache_handle_abort(ctx->llcache);
             llcache_handle_release(ctx->llcache);
         }
-    } else if (type == CONTENT_NONE && (ctx->flags & HLCACHE_RETRIEVE_MAY_DOWNLOAD)) {
+    } else if (status_ok && type == CONTENT_NONE && (ctx->flags & HLCACHE_RETRIEVE_MAY_DOWNLOAD)) {
         /* Unknown type, and we can download, so convert */
         llcache_handle_force_stream(ctx->llcache);
 
@@ -379,17 +389,17 @@ static nserror hlcache_migrate_ctx(hlcache_retrieval_ctx *ctx, lwc_string *effec
         /* Ensure caller knows we need data */
         error = NSERROR_NEED_DATA;
     } else {
-        /* Unacceptable type: report error */
-        NSLOG(wisp, ERROR, "UnacceptableType for %s. Effective type: %s. Accepted types: %d",
-            nsurl_access(hlcache_handle_get_url(ctx->handle)),
+        /* Reject only this retrieval, not the shared response. */
+        NSLOG(wisp, INFO, "%s for %s. Effective type: %s. Accepted types: %d",
+            status_ok ? "UnacceptableType" : "Not2xx", nsurl_access(hlcache_handle_get_url(ctx->handle)),
             effective_type ? lwc_string_data(effective_type) : "NULL", ctx->accepted_types);
 
         if (ctx->handle->cb != NULL) {
             hlcache_event hlevent;
 
             hlevent.type = CONTENT_MSG_ERROR;
-            hlevent.data.errordata.errorcode = NSERROR_UNKNOWN;
-            hlevent.data.errordata.errormsg = messages_get("UnacceptableType");
+            hlevent.data.errordata.errorcode = NSERROR_BAD_CONTENT;
+            hlevent.data.errordata.errormsg = messages_get(status_ok ? "UnacceptableType" : "Not2xx");
 
             ctx->handle->cb(ctx->handle, &hlevent, ctx->handle->pw);
         }
@@ -437,6 +447,8 @@ static nserror hlcache_llcache_callback(llcache_handle *handle, const llcache_ev
         }
         break;
     case LLCACHE_EVENT_HAD_HEADERS:
+        if (!hlcache_http_status_acceptable(handle, ctx->flags))
+            return hlcache_migrate_ctx(ctx, NULL);
         error = mimesniff_compute_effective_type(llcache_handle_get_header(handle, "Content-Type"), NULL, 0,
             ctx->flags & HLCACHE_RETRIEVE_SNIFF_TYPE, ctx->accepted_types == CONTENT_IMAGE, &effective_type);
         if (error == NSERROR_OK || error == NSERROR_NOT_FOUND) {
@@ -684,6 +696,11 @@ nserror hlcache_handle_retrieve(nsurl *url, uint32_t flags, nsurl *referer, llca
 
                 if ((content_get_type(&entry_handle) & accepted_types) == 0)
                     continue;
+
+                /* A response may have been decoded for a less restrictive
+                 * consumer. Apply this request's policy before callbacks. */
+                if (!hlcache_http_status_acceptable(content_get_llcache_handle(entry->content), flags))
+                    return NSERROR_BAD_CONTENT;
 
                 /* Found shareable content */
                 NSLOG(wisp, DEBUG, "FETCH: cache HIT (sync callback) '%s'", nsurl_access(url));
