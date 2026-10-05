@@ -1,0 +1,33 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Explicit HTML direction defaults</title>
+<style>
+body { margin: 8px; font: 16px/24px sans-serif; }
+.line { width: 200px; margin-bottom: 2px; }
+.chip { display: inline-block; width: 20px; height: 10px; background: teal; }
+.sheet { direction: ltr; }
+.revert { direction: revert; }
+#switch:checked ~ main .live { direction: ltr; }
+table { table-layout: fixed; border-collapse: separate; border-spacing: 0; width: 60px; }
+td { padding: 0; height: 10px; }
+</style>
+<input id="switch" type="checkbox"><label id="switch-label" for="switch">Override live RTL with author CSS</label>
+<main dir="ltr">
+<div id="ltr" class="line" dir="ltr"><i id="ltr-chip" class="chip"></i></div>
+<div id="rtl" class="line" dir="rtl"><i id="rtl-chip" class="chip"></i></div>
+<div id="upper" class="line" dir="RTL"><i id="upper-chip" class="chip"></i></div>
+<div id="mixed" class="line" dir="rTl"><i id="mixed-chip" class="chip"></i></div>
+<div id="sheet" class="line sheet" dir="rtl"><i id="sheet-chip" class="chip"></i></div>
+<div id="inline" class="line" dir="rtl" style="direction:ltr"><i id="inline-chip" class="chip"></i></div>
+<div id="revert" class="line revert" dir="rtl"><i id="revert-chip" class="chip"></i></div>
+<div id="padded" class="line" dir=" rtl "><i id="padded-chip" class="chip"></i></div>
+<section dir="rtl">
+<div id="inherit" class="line"><i id="inherit-chip" class="chip"></i></div>
+<div id="reset" class="line" dir="LtR"><i id="reset-chip" class="chip"></i></div>
+<div id="invalid" class="line" dir="unknown"><i id="invalid-chip" class="chip"></i></div>
+<div id="empty" class="line" dir=""><i id="empty-chip" class="chip"></i></div>
+</section>
+<div id="live" class="line live" dir="rtl"><i id="live-chip" class="chip"></i></div>
+<table id="table" dir="rtl"><tr dir="ltr"><td id="table-a" style="width:20px"></td><td id="table-b" style="width:40px"></td></tr></table>
+<table id="table-override" class="sheet" dir="rtl"><tr><td id="override-a" style="width:20px"></td><td id="override-b" style="width:40px"></td></tr></table>
+</main>

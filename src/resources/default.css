@@ -12,6 +12,19 @@ head {
 	display: none;
 }
 
+/* Explicit HTML direction keywords (HTML Rendering, Bidirectional text).
+ * https://html.spec.whatwg.org/multipage/rendering.html#bidirectional-text
+ * Attribute equality is ASCII case insensitive in the HTML selector handler.
+ * Keep these at UA origin so author direction, including revert, cascades normally.
+ * Automatic directionality and inline bidi isolation require separate support. */
+[dir=ltr] {
+	direction: ltr;
+}
+
+[dir=rtl] {
+	direction: rtl;
+}
+
 /* HTML hidden defaults can be overridden by author CSS. Attribute equality
  * in the HTML selector handler is ASCII case insensitive. */
 [hidden]:not([hidden=until-found]):not(embed) {

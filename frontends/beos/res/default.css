@@ -12,6 +12,15 @@ head {
 	display: none;
 }
 
+/* Explicit HTML direction keywords; author CSS can override these UA defaults. */
+[dir=ltr] {
+	direction: ltr;
+}
+
+[dir=rtl] {
+	direction: rtl;
+}
+
 body {
 	display: block;
 	margin: 0;

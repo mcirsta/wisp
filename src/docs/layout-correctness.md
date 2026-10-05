@@ -31,18 +31,21 @@ Remaining work beyond the [native details implementation](details.md):
   events, rather than firing an incorrect synchronous substitute.
 - Author styling of `::details-content`; the current contents block is anonymous.
 
-## HTML direction and bidi inline ordering
+## Automatic HTML direction and bidi inline ordering
 
-The disclosure-marker comparison exposed two existing direction limitations:
-HTML `dir="rtl"` does not select CSS `direction:rtl`, and explicit CSS direction
-aligns the line but does not reorder its inline boxes. The disclosure glyph
-itself follows CSS direction, but remains before the label in the left-to-right
-box sequence. This needs a shared direction/bidi implementation, not a
+HTML directionality resolution (`dir="auto"`, `bdi`, and `:dir()` matching) is
+still unimplemented. This also leaves directionality-based UA defaults for
+invalid/empty `dir` attributes incomplete when HTML ancestry and inherited CSS
+direction differ. The follow-up must use the HTML directionality algorithms,
+not infer semantic direction from the computed CSS `direction` property.
+
+CSS direction aligns the line but does not reorder its inline boxes. The
+disclosure glyph follows CSS direction, but remains before the label in the
+left-to-right box sequence. This needs shared bidi isolation/reordering, not a
 summary-specific swap. Vertical writing-mode layout is also outside the current
 horizontal marker implementation.
 
-Reproducer: `test/disclosure-markers.html`, `#rtl` (explicit CSS direction).
-Removing its CSS rule isolates the HTML attribute issue. Initial captures are in
+Reproducer: `test/disclosure-markers.html`, `#rtl`. Initial captures are in
 `out/render-captures/disclosure-markers-2026-10-03/chromium/`.
 
 ## Custom marker content
