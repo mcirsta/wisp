@@ -140,11 +140,12 @@ static void layout_get_object_dimensions(
     assert(box->object != NULL);
     assert(width != NULL && height != NULL);
 
-    /* Intrinsic dimensions from image content are in CSS pixels (the native
-     * pixel dimensions of the image file). Only CONTENT_HTML reports device
-     * pixels which would need conversion. */
-    int intrinsic_width = content_get_width(box->object);
-    int intrinsic_height = content_get_height(box->object);
+    /* A nested document has no natural dimensions: its laid-out extent depends
+     * on the viewport we give it. Only image content supplies a natural size.
+     * Keep the default 300x150 size separate from an intrinsic aspect ratio. */
+    bool document = content_get_type(box->object) == CONTENT_HTML;
+    int intrinsic_width = document ? 0 : content_get_width(box->object);
+    int intrinsic_height = document ? 0 : content_get_height(box->object);
     bool contents_skipped = (box->flags & CONTENTS_SKIPPED) != 0;
     if (contents_skipped)
         intrinsic_width = intrinsic_height = 0;
@@ -155,7 +156,8 @@ static void layout_get_object_dimensions(
      * The ratio acts as the signal to use containing-block sizing. */
     int ratio_w = 0;
     int ratio_h = 0;
-    bool has_ratio_only = !contents_skipped && content_get_intrinsic_ratio(box->object, &ratio_w, &ratio_h);
+    bool has_ratio_only = !document && !contents_skipped &&
+        content_get_intrinsic_ratio(box->object, &ratio_w, &ratio_h);
 
     /* For all ratio-based calculations below, we use either the explicit
      * ratio (viewBox-only) or the intrinsic dimensions as the ratio source. */
@@ -255,7 +257,7 @@ static void layout_get_object_dimensions(
         else if (eff_ratio_h != 0)
             *width = layout_round_ratio_dimension((double)*height * eff_ratio_w / eff_ratio_h);
         else
-            *width = intrinsic_width;
+            *width = document && !contents_skipped ? 300 : intrinsic_width;
 
         if (limits->min_width.type == CSS_SIZE_SET && limits->min_width.value > 0 && limits->min_width.value > *width)
             *width = limits->min_width.value;
@@ -275,7 +277,7 @@ static void layout_get_object_dimensions(
         else if (eff_ratio_w != 0)
             *height = layout_round_ratio_dimension((double)*width * eff_ratio_h / eff_ratio_w);
         else
-            *height = intrinsic_height;
+            *height = document && !contents_skipped ? 150 : intrinsic_height;
 
         /* CSS 2.2 10.7: height constraints do not change a resolved width.
          * With both dimensions auto, proportional scaling is handled above.
@@ -287,6 +289,16 @@ static void layout_get_object_dimensions(
             *height < limits->min_height.value) {
             *height = limits->min_height.value;
         }
+    } else {
+        /* Specified replaced sizes obey the same constraints as auto sizes. */
+        if (limits->max_width >= 0)
+            *width = min(*width, limits->max_width);
+        if (limits->min_width.type == CSS_SIZE_SET)
+            *width = max(*width, limits->min_width.value);
+        if (limits->max_height >= 0)
+            *height = min(*height, limits->max_height);
+        if (limits->min_height.type == CSS_SIZE_SET)
+            *height = max(*height, limits->min_height.value);
     }
 
     /* DIAG: Log final computed dimensions */
@@ -1322,40 +1334,33 @@ layout_minmax_block(struct box *block, const struct gui_layout_table *font_func,
     }
 
     if (block->object) {
-        if (content_get_type(block->object) == CONTENT_HTML) {
-            if (!layout_minmax_block(html_get_box_tree(block->object), font_func, content))
-                return false;
-            min = html_get_box_tree(block->object)->min_width.value;
-            max = html_get_box_tree(block->object)->max_width;
-        } else {
-            /* Use constrained intrinsic width, respecting
-             * max-height/max-width via aspect-ratio scaling */
-            int obj_w = AUTO, obj_h = AUTO;
+        /* Use constrained intrinsic width, respecting
+         * max-height/max-width via aspect-ratio scaling */
+        int obj_w = AUTO, obj_h = AUTO;
 
-            if (wtype == CSS_WIDTH_SET && wunit != CSS_UNIT_PCT) {
-                if (wunit == CSS_UNIT_CALC) {
-                    int px = 0;
-                    if (lh__length_to_px(block->style, &content->unit_len_ctx, -1, width, wunit, &px)) {
-                        obj_w = px;
-                    }
-                } else {
-                    obj_w = FIXTOINT(css_unit_len2device_px(block->style, &content->unit_len_ctx, width.value, wunit));
+        if (wtype == CSS_WIDTH_SET && wunit != CSS_UNIT_PCT) {
+            if (wunit == CSS_UNIT_CALC) {
+                int px = 0;
+                if (lh__length_to_px(block->style, &content->unit_len_ctx, -1, width, wunit, &px)) {
+                    obj_w = px;
                 }
+            } else {
+                obj_w = FIXTOINT(css_unit_len2device_px(block->style, &content->unit_len_ctx, width.value, wunit));
             }
-            if (htype == CSS_HEIGHT_SET && hunit != CSS_UNIT_PCT) {
-                if (hunit == CSS_UNIT_CALC) {
-                    int px = 0;
-                    if (lh__length_to_px(block->style, &content->unit_len_ctx, -1, height, hunit, &px)) {
-                        obj_h = px;
-                    }
-                } else {
-                    obj_h = FIXTOINT(css_unit_len2device_px(block->style, &content->unit_len_ctx, height.value, hunit));
-                }
-            }
-
-            min = max = layout_minmax_object_width(block, content, obj_w, obj_h);
-            NSLOG(layout, DEBUG, "MINMAX_BLOCK object %p: after helper min=%d max=%d", block, min, max);
         }
+        if (htype == CSS_HEIGHT_SET && hunit != CSS_UNIT_PCT) {
+            if (hunit == CSS_UNIT_CALC) {
+                int px = 0;
+                if (lh__length_to_px(block->style, &content->unit_len_ctx, -1, height, hunit, &px)) {
+                    obj_h = px;
+                }
+            } else {
+                obj_h = FIXTOINT(css_unit_len2device_px(block->style, &content->unit_len_ctx, height.value, hunit));
+            }
+        }
+
+        min = max = layout_minmax_object_width(block, content, obj_w, obj_h);
+        NSLOG(layout, DEBUG, "MINMAX_BLOCK object %p: after helper min=%d max=%d", block, min, max);
 
         block->flags |= HAS_HEIGHT;
     } else if (block->flags & IFRAME) {
@@ -2357,7 +2362,7 @@ static void layout_block_find_dimensions(
             dom_string_unref(name);
     }
 
-    if (box->object && !(box->flags & REPLACE_DIM) && content_get_type(box->object) != CONTENT_HTML) {
+    if (box->object && !(box->flags & REPLACE_DIM)) {
         /* block-level replaced element, see 10.3.4 and 10.6.2 */
         layout_get_object_dimensions(box, &width, &height,
             &(struct layout_size_limits){
@@ -2449,7 +2454,14 @@ static void layout_block_add_scrollbar(struct box *box, int which)
             (box->object && content_get_type(box->object) == CONTENT_HTML))) {
         /* make space for scrollbar, unless height is AUTO */
         if (box->height != AUTO && (overflow_x == CSS_OVERFLOW_SCROLL || box_hscrollbar_present(box))) {
-            box->padding[BOTTOM] += SCROLLBAR_WIDTH;
+            int space = SCROLLBAR_WIDTH;
+            if (lh__box_is_replace(box)) {
+                /* Replaced sizing already fixed the outer content area.
+                 * Reserve the scrollbar inside it, as for the width below. */
+                space = min(space, max(0, box->height));
+                box->height -= space;
+            }
+            box->padding[BOTTOM] += space;
         }
 
     } else if (which == RIGHT &&
@@ -2461,10 +2473,11 @@ static void layout_block_add_scrollbar(struct box *box, int which)
         css_unit hunit = CSS_UNIT_PX;
         htype = css_computed_height(box->style, &height, &hunit);
 
-        if (which == RIGHT && box->width != AUTO && htype == CSS_HEIGHT_SET &&
+        if (which == RIGHT && box->width != AUTO && (htype == CSS_HEIGHT_SET || lh__box_is_replace(box)) &&
             (overflow_y == CSS_OVERFLOW_SCROLL || box_vscrollbar_present(box))) {
-            box->width -= SCROLLBAR_WIDTH;
-            box->padding[RIGHT] += SCROLLBAR_WIDTH;
+            int space = min(SCROLLBAR_WIDTH, max(0, box->width));
+            box->width -= space;
+            box->padding[RIGHT] += space;
         }
     }
 }
@@ -3077,11 +3090,9 @@ static bool layout_block_object(struct box *block)
     NSLOG(layout, DEBUG, "block %p, object %p, width %i", block, hlcache_handle_get_url(block->object), block->width);
 
     if (content_can_reformat(block->object)) {
-        /* HTML content computes its own height from content flow,
-         * so pass height=1 as a placeholder.  Non-HTML content
-         * (SVG, images) needs the actual box height as viewport. */
-        int reformat_h = (content_get_type(block->object) == CONTENT_HTML) ? 1 : block->height;
-        content_reformat(block->object, false, block->width, reformat_h);
+        /* The replaced box establishes the embedded document's viewport;
+         * the document's resulting extent must not size that box in return. */
+        content_reformat(block->object, false, block->width, block->height);
     } else {
         /* Non-HTML objects */
         /* this case handled already in
@@ -3274,7 +3285,7 @@ static void layout_float_find_dimensions(const css_unit_ctx *unit_len_ctx, int a
         padding[BOTTOM] += scrollbar_width_x;
     }
 
-    if (box->object && !(box->flags & REPLACE_DIM) && content_get_type(box->object) != CONTENT_HTML) {
+    if (box->object && !(box->flags & REPLACE_DIM)) {
         /* Floating replaced element, with intrinsic width or height.
          * See 10.3.6 and 10.6.2 */
         layout_get_object_dimensions(box, &width, &height,
@@ -3983,21 +3994,10 @@ static bool layout_line(struct box *first, int *width, int *y, int cx, int cy, s
         }
 
         /* Reformat object to new box size */
-        if (b->object && content_can_reformat(b->object) && b->width != content_get_available_width(b->object)) {
-            css_fixed_or_calc value = (css_fixed_or_calc)0;
-            css_unit unit = CSS_UNIT_PX;
-            enum css_height_e htype = css_computed_height(b->style, &value, &unit);
-
+        if (b->object && content_can_reformat(b->object)) {
+            /* content_reformat skips unchanged viewports, including height.
+             * The child document's content extent is not an intrinsic size. */
             content_reformat(b->object, false, b->width, b->height);
-
-            /* Only update height from content for HTML/iframe objects that may have
-             * dynamic height. For images and SVGs with fixed intrinsic aspect ratio,
-             * we've already calculated the correct scaled height in
-             * layout_get_object_dimensions - don't overwrite it with the intrinsic height. */
-            if (htype == CSS_HEIGHT_AUTO && content_get_type(b->object) == CONTENT_HTML) {
-                b->height = FIXTOINT(
-                    css_unit_device2css_px(INTTOFIX(content_get_height(b->object)), content->unit_len_ctx.device_dpi));
-            }
         }
 
         if (height < b->height)
@@ -5518,9 +5518,8 @@ bool layout_block_context(struct box *block, int viewport_height, html_content *
     /* special case if the block contains an object */
     if (block->object) {
         int temp_width = block->width;
-        if (!layout_block_object(block))
-            return false;
-        /* No min constraints for block objects */
+        /* Width is already solved; resolve the remaining auto height before
+         * applying its CSS constraints below. */
         struct css_size no_min = {.type = CSS_SIZE_AUTO, .value = 0};
         layout_get_object_dimensions(block, &temp_width, &block->height,
             &(struct layout_size_limits){
@@ -5530,11 +5529,15 @@ bool layout_block_context(struct box *block, int viewport_height, html_content *
                 .max_height = INT_MAX,
             },
             block->width);
+        /* Flex/grid callers can arrive with auto height: finish its constraints
+         * before giving the child content its viewport. Width is already solved
+         * by the enclosing formatting context. */
+        layout_apply_minmax_height(&content->unit_len_ctx, block, NULL);
         if (block->width == UNKNOWN_WIDTH || block->width >= 100000000) {
             fprintf(stderr, "LAYOUT_ERROR: block %p has INVALID width %d after layout_block_object\n", (void *)block,
                 block->width);
         }
-        return true;
+        return layout_block_object(block);
     } else if (block->flags & REPLACE_DIM) {
         return true;
     }
@@ -5633,9 +5636,10 @@ bool layout_block_context(struct box *block, int viewport_height, html_content *
         if (!layout_block_position_child(box, block, viewport_height, content, &state))
             return false;
 
-        /* Lay out independent contexts with their own float list and margins. */
-        if (box->type == BOX_FLEX || box->type == BOX_GRID ||
-            (box->type == BOX_BLOCK && box_style_creates_block_context(box))) {
+        /* Replaced contents use their own viewport below, not the formatting
+         * context selected for ordinary children by display/overflow. */
+        if (!box->object && (box->type == BOX_FLEX || box->type == BOX_GRID ||
+            (box->type == BOX_BLOCK && box_style_creates_block_context(box)))) {
 
             if (!layout_block_child_context(box, viewport_height, content, &state, overflow_x, overflow_y))
                 return false;
@@ -5696,8 +5700,10 @@ bool layout_block_context(struct box *block, int viewport_height, html_content *
         }
 
         /* Leaves do not take the ancestor-unwind path in layout_block_advance.
-         * Constrain them before advancing the flow cursor or sizing ancestors. */
-        if (box->type == BOX_BLOCK && box->style != NULL)
+         * Constrain them before advancing the flow cursor or sizing ancestors.
+         * Loaded replaced objects were constrained during size resolution,
+         * before any scrollbar space was reserved inside their content area. */
+        if (box->type == BOX_BLOCK && box->style != NULL && (!box->object || (box->flags & REPLACE_DIM)))
             layout_apply_minmax_height(&content->unit_len_ctx, box, NULL);
 
         state.cy += box->height + box->padding[BOTTOM] + box->border[BOTTOM].width;
@@ -6608,7 +6614,7 @@ static bool layout_absolute(struct box *box, struct box *containing_block, int c
     struct absolute_layout layout;
     int max_height;
     struct css_size min_height;
-    bool replaced_object = box->object && content_get_type(box->object) != CONTENT_HTML;
+    bool replaced_object = box->object != NULL;
     int *margin = box->margin;
     int *padding = box->padding;
     struct box_border *border = box->border;

@@ -7,7 +7,7 @@
   #block { display: block; }
   #sized { display: block; width: 240px; height: 60px; }
 </style>
-<!-- Backlog reproduction: a nested HTML document supplies no natural size.
+<!-- A nested HTML document supplies no natural size.
      CSS 2.2 10.3.2/10.3.4 and 10.6.2 give the unconstrained replaced box a
      default 300px by 150px size at this viewport. The explicit control should
      remain 240px by 60px. Loading/fallback transitions have separate tests. -->

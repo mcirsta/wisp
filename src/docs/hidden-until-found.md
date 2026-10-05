@@ -100,6 +100,13 @@ outside this feature; unsupported values are not silently accepted.
   Pending responses wait for requests from nested fallback objects, proving
   fallback construction before resource availability. Successful images and HTML
   documents remove fallback children/pseudos; failures retain them.
+- `qt_object_document_sizing`: embedded HTML documents have no natural dimensions
+  or ratio; the shared replaced-element sizing path resolves their viewport before
+  laying out their contents. Covers default/one-axis/explicit sizes, constraints,
+  aspect ratios, box sizing and overflowing contents in eight formatting contexts,
+  with repeated resize and disclosure changes. The basic manual fixture remains
+  `test/object-document-sizing.html`. Expectations follow HTML embedded-content
+  rendering and CSS replaced sizing; source links are in the test.
 - `libcss_parse2_auto_content-visibility_dat`: generated parser and bytecode dump.
 
 Capture builds support `--capture-find TEXT`, `--capture-find-back TEXT`,
