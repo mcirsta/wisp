@@ -221,9 +221,13 @@ static nserror search_node(
                 error = NSERROR_NOMEM;
                 goto done;
             }
+            /* HTML's object algorithm uses fallback until a resource is
+             * available. A URL on a never-constructed owner is only a request
+             * candidate, not evidence of embedded content. Discovery stays
+             * read-only; revealing an active match starts normal construction. */
             bool embedded = params != NULL &&
-                html_object_get_state(walk->html, node, params->data ? params->data : params->classid) !=
-                    HTML_OBJECT_PENDING;
+                html_object_get_state(walk->html, node, params->data ? params->data : params->classid) ==
+                    HTML_OBJECT_AVAILABLE;
             talloc_free(params);
             if (embedded)
                 goto done;

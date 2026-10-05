@@ -9,8 +9,6 @@ Cross-node phrases remain unimplemented.
 
 Remaining resource-dependent fallback coverage:
 
-- Resource discovery for objects that have never been constructed in skipped subtrees.
-  Search currently reads known request state without starting downloads.
 - Object `error`/`load` events need the specified task lifecycle. Late bitmap
   conversion failures also need to reach the representation decision when an
   image decoder has already reported successful content completion.

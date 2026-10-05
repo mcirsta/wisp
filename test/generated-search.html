@@ -66,11 +66,13 @@ p { margin:4px; }
     <object id="nested-object" class="fallback-object" data-before="nested-object-token"></object>
   </object>
 </div>
-<div id="embedded-outer" hidden="until-found">
+<!-- Load first, then close: an available resource suppresses fallback even
+     when search later visits its owner without a box. -->
+<details id="embedded-outer" open><summary id="embedded-summary">Loaded object</summary>
   <object id="embedded-object" data="aspect-ratio-image.svg" type="image/svg+xml">
     <div id="embedded-child">forbidden-object-body</div>
   </object>
-</div>
+</details>
 <div id="unicode-outer" hidden="until-found">
   <object id="unicode-object" class="fallback-object" data-before="știre-β-token"></object>
 </div>

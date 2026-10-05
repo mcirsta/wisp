@@ -51,6 +51,27 @@ pending_page = ('<!doctype html><style>object{display:block}object::before{conte
                     f'<span id="fallback-{key}">Provisional {key} fallback</span>'
                     f'<object data="/probe-{key}"></object></object>' for key in pending_kinds) + '</details>')
 
+# Find-in-page makes closed details / hidden-until-found contents searchable
+# synchronously. A resource candidate is still fallback until it is available:
+# https://html.spec.whatwg.org/multipage/interaction.html#interaction-with-details-and-hidden=until-found
+search_cases = {f'{wrapper}-{result}-{source}': (wrapper, result, source)
+                for wrapper in ('details', 'hidden') for result in ('failure', 'success')
+                for source in ('body', 'before')}
+
+
+def search_page(key):
+    wrapper, _, _ = search_cases[key]
+    opening = '<details id="panel"><summary id="summary">Reveal</summary>' if wrapper == 'details' else (
+        '<div id="panel" hidden="until-found">')
+    closing = '</details>' if wrapper == 'details' else '</div>'
+    return ('<!doctype html><style>object,#fallback{display:block}'
+            'object::before{content:attr(data-before)}</style>'
+            '<p id="outside">searchable outside</p>' + opening +
+            f'<object id="owner" data="/search-resource/{key}" data-before="searchable {key}-before">'
+            f'<span id="fallback">searchable {key}-body</span></object>' + closing +
+            '<div hidden><object data="/forbidden"><span>searchable forbidden</span></object></div>'
+            '<div style="content-visibility:hidden"><object data="/forbidden">searchable forbidden</object></div>')
+
 
 class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
@@ -61,6 +82,13 @@ class Handler(BaseHTTPRequestHandler):
             mime, body = "text/html", page.encode()
         elif self.path == "/pending":
             mime, body = "text/html", pending_page.encode()
+        elif self.path.startswith("/search/"):
+            mime, body = "text/html", search_page(self.path.removeprefix("/search/")).encode()
+        elif self.path.startswith("/search-resource/"):
+            key = self.path.removeprefix("/search-resource/")
+            # Let the reveal layout finish before the representation changes.
+            time.sleep(0.2)
+            status = 404 if search_cases[key][1] == 'failure' else 200
         elif self.path.startswith("/pending-"):
             key = self.path.removeprefix("/pending-")
             # A nested object requested by the fallback releases the parent.
@@ -176,8 +204,39 @@ try:
             assert step["resource_count"] == steps[0]["resource_count"] == 6, (index, step["resource_count"])
         for key in pending_kinds:
             assert requests[f"/pending-{key}"] == requests[f"/probe-{key}"] == 1, (key, requests)
+
+        for key, (wrapper, result, source) in search_cases.items():
+            query = f'{key}-{source}'
+            actions = [('find-all', 'searchable'), ('find', query), ('find', query)]
+            if wrapper == 'details':
+                actions += [('click-id', 'summary'), ('find', query)]
+            steps = capture(root / key, origin + '/search/' + key,
+                            ('panel', 'owner', 'fallback', 'outside'), actions)
+            for index, step in enumerate(steps):
+                elements = {e['id']: e for e in step['elements']}
+                assert step['active_resources'] == 0, (key, index, step['active_resources'])
+                # Merely collecting hidden matches must neither load resources
+                # nor open ancestors. Only choosing a match reveals its owner.
+                assert step['resource_count'] == (0 if index < 2 else 1), (key, index, step['resource_count'])
+                if index == 1:
+                    assert elements['outside']['boxes'][0]['highlighted_fragments'] == 1, (key, index)
+                revealed = index >= 2 and not (wrapper == 'details' and
+                                               (index == 4 or (index == 5 and result == 'success')))
+                panel = elements['panel']['state']
+                assert (panel['open'] if wrapper == 'details' else panel['hidden'] is None) == revealed, (
+                    key, index, panel)
+                assert bool(elements['owner']['boxes']) == revealed, (key, index, elements['owner'])
+                assert bool(elements['fallback']['boxes']) == (revealed and result == 'failure'), (
+                    key, index, elements['fallback'])
+                if revealed and result == 'success':
+                    assert elements['owner']['boxes'][0]['child_count'] == 0, (key, index, elements['owner'])
+                if revealed and result == 'failure':
+                    match = elements['owner' if source == 'before' else 'fallback']['boxes'][0]
+                    assert match['highlighted_fragments'] == 1, (key, index, match['highlighted_fragments'])
+            assert requests['/search-resource/' + key] == 1, (key, requests)
+        assert requests['/forbidden'] == 0, requests
 finally:
     server.shutdown()
     thread.join()
     server.server_close()
-print("HTTP object fallback: errors, cache reuse, pending fallback and replacement by images/documents passed.")
+print("HTTP object fallback: errors, cache reuse, pending replacement and search/reveal before construction passed.")

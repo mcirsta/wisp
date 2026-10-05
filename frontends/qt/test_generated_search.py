@@ -97,12 +97,12 @@ with tempfile.TemporaryDirectory(prefix="wisp-generated-search-") as tmp:
         counts(steps[i], owner if child == "canvas" else child, 1, before, after)
 
     # Excluded pseudo boxes must not become matches or reveal ordinary hidden content.
-    steps = capture(root / "excluded", [("find-all", "forbidden")])
+    steps = capture(root / "excluded", [("click-id", "embedded-summary"), ("find-all", "forbidden")])
     for name in ("none", "invisible", "skipped", "image"):
         counts(steps[-1], name, 0)
     assert steps[-1]["ordinary-hidden"]["state"]["hidden"] is not None
     assert steps[-1]["replaced-outer"]["state"]["hidden"] == "until-found"
-    assert steps[-1]["embedded-outer"]["state"]["hidden"] == "until-found"
+    assert not steps[-1]["embedded-outer"]["state"]["open"]
 
     for name, query in (("clear", ""), ("replace", "attribute-token")):
         steps = capture(root / name, [("batch", "2"), ("find", "beta gamma"), ("find", query)])

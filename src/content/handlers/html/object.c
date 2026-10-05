@@ -151,8 +151,13 @@ static void html_object_failed(struct content_html_object *object)
     object->opened = false;
     object->failed = true;
 
-    /* Images, CSS backgrounds and embed have no object fallback children. */
-    if (!html->aborted && html_object_has_fallback(object))
+    /* Images, CSS backgrounds and embed have no object fallback children.
+     * A settled fallback tree also needs no reconstruction: pending -> failed
+     * keeps the same representation. Rebuilding it would discard active find
+     * highlights even though their text has not changed. During construction
+     * retain the retry, since not every box has been published yet. */
+    if (!html->aborted && html_object_has_fallback(object) &&
+        (box == NULL || (box->flags & IS_REPLACED) || html->restyling))
         html_request_restyle(html);
 }
 

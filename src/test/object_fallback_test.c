@@ -159,6 +159,7 @@ enum failure_timing { VISIBLE, HIDDEN, REBUILDING, REBUILDING_HIDDEN, SYNCHRONOU
 
 START_TEST(test_failure_survives_boxes)
 {
+    box.flags |= IS_REPLACED;
     if (_i == SYNCHRONOUS_CALLBACK)
         synchronous_error = true;
     if (_i == RETRIEVAL_ERROR)
@@ -215,6 +216,21 @@ START_TEST(test_failure_survives_boxes)
     ck_assert_ptr_nonnull(params);
     ck_assert(html_object_get_state(&html, node, params->data) == HTML_OBJECT_UNKNOWN);
     talloc_free(owner);
+}
+END_TEST
+
+START_TEST(test_pending_failure_keeps_fallback)
+{
+    ck_assert(html_fetch_object(&html, url, &box, CONTENT_ANY, false));
+    ck_assert_int_eq(html_object_get_state(&html, node, url), HTML_OBJECT_PENDING);
+    ck_assert(!(box.flags & IS_REPLACED));
+    fail_request();
+    ck_assert_int_eq(html_object_get_state(&html, node, url), HTML_OBJECT_FAILED);
+    ck_assert_ptr_null(box.object);
+    ck_assert_int_eq(html.base.active, 0);
+    ck_assert_uint_eq(releases, 1);
+    ck_assert_uint_eq(restyles, 0);
+    ck_assert(!html.restyle_pending);
 }
 END_TEST
 
@@ -360,6 +376,7 @@ int main(void)
     TCase *tc = tcase_create("Failure lifetime");
     tcase_add_checked_fixture(tc, setup, teardown);
     tcase_add_loop_test(tc, test_failure_survives_boxes, 0, TIMINGS);
+    tcase_add_test(tc, test_pending_failure_keeps_fallback);
     tcase_add_loop_test(tc, test_pending_becomes_available, VISIBLE, REBUILDING_HIDDEN + 1);
     tcase_add_test(tc, test_ready_resource_rebinds_before_done);
     tcase_add_loop_test(tc, test_non_object_failures, 0, 5);
