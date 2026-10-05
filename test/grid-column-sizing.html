@@ -1,0 +1,55 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Grid column sizing: unresolved standards cases</title>
+<!-- Manual reproducer for the correctness backlog, not an accepted Wisp baseline.
+     CSS Grid 1 sections 7.2, 7.2.4 and 11.7 define the expected column widths below:
+     https://www.w3.org/TR/css-grid-1/#track-sizing
+     https://www.w3.org/TR/css-grid-1/#fr-unit
+     https://www.w3.org/TR/css-grid-1/#algo-flex-tracks
+     Every container is 300px wide, without gaps or item edges. Content-sized
+     cases contain one fixed 60px child, avoiding font-dependent measurements. -->
+<style>
+    body { margin: 20px; }
+    .grid { display: grid; width: 300px; column-gap: 0; row-gap: 0; margin: 0 0 20px; }
+    .grid > div { height: 10px; min-width: 0; margin: 0; padding: 0; border: 0; background: orange; }
+    .grid > div + div { background: blue; }
+    .content { width: 60px; height: 10px; }
+</style>
+
+<!-- Control: 200px / 100px. -->
+<div class="grid" id="integer-control" style="grid-template-columns: 2fr 1fr">
+    <div id="integer-control-a"></div><div id="integer-control-b"></div>
+</div>
+
+<!-- 100px / 200px: fractional weights must survive until pixel allocation. -->
+<div class="grid" id="fractional" style="grid-template-columns: 0.5fr 1fr">
+    <div id="fractional-a"></div><div id="fractional-b"></div>
+</div>
+
+<!-- 75px / 75px: a total flex factor below one leaves space unfilled. -->
+<div class="grid" id="partial-fill" style="grid-template-columns: 0.25fr 0.25fr">
+    <div id="partial-fill-a"></div><div id="partial-fill-b"></div>
+</div>
+
+<!-- 200px / 100px: minmax's flexible maximum supplies the track weight. -->
+<div class="grid" id="minmax-weight" style="grid-template-columns: minmax(0px, 2fr) 1fr">
+    <div id="minmax-weight-a"></div><div id="minmax-weight-b"></div>
+</div>
+
+<!-- 200px / 100px: the minimum freezes the first track above an equal share. -->
+<div class="grid" id="minmax-minimum" style="grid-template-columns: minmax(200px, 1fr) 1fr">
+    <div id="minmax-minimum-a"></div><div id="minmax-minimum-b"></div>
+</div>
+
+<!-- 200px / 100px: a maximum below the minimum is floored by the minimum. -->
+<div class="grid" id="minmax-floor" style="grid-template-columns: minmax(200px, 100px) 1fr">
+    <div id="minmax-floor-a"></div><div id="minmax-floor-b"></div>
+</div>
+
+<!-- 60px / 240px: intrinsic tracks measure their contents, not an fr share. -->
+<div class="grid" id="min-content" style="grid-template-columns: min-content 1fr">
+    <div id="min-content-a"><div class="content"></div></div><div id="min-content-b"></div>
+</div>
+<div class="grid" id="max-content" style="grid-template-columns: max-content 1fr">
+    <div id="max-content-a"><div class="content"></div></div><div id="max-content-b"></div>
+</div>

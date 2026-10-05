@@ -3,6 +3,39 @@
 Only unresolved work belongs here. Completed changes and validation history are
 in Git; the regression fixtures remain in the test suite.
 
+## Grid column track sizing
+
+Confirmed against CSS Grid 1's [track sizing definitions](https://www.w3.org/TR/css-grid-1/#track-sizing),
+[fractional units](https://www.w3.org/TR/css-grid-1/#fr-unit), and
+[flexible track algorithm](https://www.w3.org/TR/css-grid-1/#algo-flex-tracks).
+These are specification requirements, not Chromium-derived expectations.
+In `test/grid-column-sizing.html`, each grid is 300px wide with no gaps or item
+edges. The intrinsic cases contain a fixed 60px child; the other items are empty.
+
+| Columns | Required widths | Wisp widths (2026-10-05) |
+| --- | --- | --- |
+| `2fr 1fr` (passing control) | 200 / 100 | 200 / 100 |
+| `0.5fr 1fr` | 100 / 200 | 0 / 300 |
+| `0.25fr 0.25fr` | 75 / 75 | 0 / 0 |
+| `minmax(0px, 2fr) 1fr` | 200 / 100 | 0 / 150 |
+| `minmax(200px, 1fr) 1fr` | 200 / 100 | 0 / 150 |
+| `minmax(200px, 100px) 1fr` | 200 / 100 | 100 / 200 |
+| `min-content 1fr` or `max-content 1fr` | 60 / 240 | 150 / 150 |
+
+The shared cause is the approximate column algorithm in
+`layout_grid_compute_tracks()`: it truncates flex factors to integers, skips
+dynamic `minmax()` tracks during distribution, ignores their minima, and treats
+intrinsic tracks as `1fr`. These branches date to the January grid implementation
+(`f40f636a` / `08ad3c58`); the recent row-sizing work did not replace them.
+Treat this as one column-sizing task. Preserve fractional factors, establish
+track base sizes and growth limits from their definitions and item contributions,
+then distribute space subject to those limits. Adding a special case for each
+fixture would leave the underlying sizing model incorrect.
+
+Debug and Release captures completed successfully and reproduced all seven
+failures; the integer-weight control passed in both. Evidence:
+`out/render-captures/standards-audit-2026-10-05/`.
+
 ## Find in Page coverage
 
 Cross-node phrases remain unimplemented.
@@ -72,6 +105,9 @@ Collapsed borders are not shared correctly between row/cell edges. In the
 `collapsed` case, 2px cell borders give a 44px cell at y=0 in Wisp versus a
 42px cell at y=1 in Chromium. Text, marker and overall table geometry now agree;
 the remaining difference belongs to collapsed-border geometry and painting.
+CSS 2.2 [section 17.6.2](https://www.w3.org/TR/CSS22/tables.html#collapsing-borders)
+places collapsed borders on shared grid lines, with half-width edge accounting;
+this is not an implementation-defined browser preference.
 
 This reproduces before the baseline changes. Initial evidence:
 `out/render-captures/table-baseline-2026-10-04/before/` and its adjacent
@@ -85,6 +121,9 @@ Non-positioned floats paint over overlapping inline-blocks. In
 10px of the orange float; Wisp paints orange over them. The positive-height case
 uses a negative inline margin to reproduce the overlap independently of
 zero-height float exclusion. Geometry agrees with Chromium in both cases.
+CSS 2.2 [Appendix E.2](https://www.w3.org/TR/CSS22/zindex.html#painting-order)
+paints ordinary floats before inline content; the overlap therefore violates the
+specified painting order independently of the browser comparison.
 
 The existing `html_redraw_box_children()` paints all ordinary descendants,
 including their inline content, before its float list. This needs separate
