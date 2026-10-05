@@ -2491,10 +2491,12 @@ static uint8_t layout_table_cell_alignment(const struct box *cell)
  * the cell's geometry. Empty cells synthesize at their natural content bottom. */
 static bool layout_table_measure_row(struct box *row, const int *xs, int spacing, html_content *content)
 {
+    const struct box *table = row->parent->parent;
     row->flags &= ~HAS_BASELINE;
     for (struct box *cell = row->children; cell; cell = cell->next) {
-        cell->width = xs[cell->start_column + cell->columns] - xs[cell->start_column] - spacing -
-            cell->border[LEFT].width - cell->padding[LEFT] - cell->padding[RIGHT] - cell->border[RIGHT].width;
+        unsigned int column = table_cell_start_column(table, cell);
+        cell->width = xs[column + cell->columns] - xs[column] - spacing - cell->border[LEFT].width -
+            cell->padding[LEFT] - cell->padding[RIGHT] - cell->border[RIGHT].width;
         cell->height = AUTO;
         if (!layout_block_context(cell, -1, content))
             return false;
@@ -2517,7 +2519,7 @@ static bool layout_table_measure_row(struct box *row, const int *xs, int spacing
         if (css_computed_height(cell->style, &value, &unit) == CSS_HEIGHT_SET &&
             lh__length_to_px(cell->style, &content->unit_len_ctx, -1, value, unit, &height))
             cell->height = max(cell->height, height);
-        cell->x = xs[cell->start_column] + cell->border[LEFT].width;
+        cell->x = xs[column] + cell->border[LEFT].width;
         cell->y = cell->border[TOP].width;
     }
     return true;
@@ -2893,10 +2895,14 @@ bool layout_table(struct box *table, int available_width, html_content *content)
         table_width = auto_width;
     }
 
+    /* Grid coordinates are physical left-to-right, while column widths and
+     * row-span bookkeeping remain indexed in source order. */
+    bool rtl = css_computed_direction(style) == CSS_DIRECTION_RTL;
     xs[0] = x = border_spacing_h;
     for (i = 0; i != columns; i++) {
-        if (!col[i].positioned)
-            x += col[i].width + border_spacing_h;
+        unsigned int column = rtl ? columns - 1 - i : i;
+        if (!col[column].positioned)
+            x += col[column].width + border_spacing_h;
         xs[i + 1] = x;
         row_span[i] = 0;
         excess_y[i] = 0;

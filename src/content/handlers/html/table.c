@@ -362,7 +362,7 @@ static void table_assign_cell_borders(struct box *table, const struct table_bord
         unsigned int group_end = y + table_group_rows(group);
         for (struct box *row = group->children; row; row = row->next, y++) {
             for (struct box *cell = row->children; cell; cell = cell->next) {
-                unsigned int left = cell->start_column, right = left + cell->columns;
+                unsigned int left = table_cell_start_column(table, cell), right = left + cell->columns;
                 unsigned int bottom = cell->rows < group_end - y ? y + cell->rows : group_end;
                 for (unsigned int side = 0; side < 4; side++)
                     cell->border[side] = (struct box_border){.style = CSS_BORDER_STYLE_NONE};
@@ -429,13 +429,13 @@ bool table_prepare_borders(const css_unit_ctx *ctx, struct box *table)
         unsigned int group_end = y + table_group_rows(group);
         for (struct box *row = group->children; row; row = row->next, y++) {
             for (struct box *cell = row->children; cell; cell = cell->next) {
-                unsigned int right = cell->start_column + cell->columns;
+                unsigned int left = table_cell_start_column(table, cell), right = left + cell->columns;
                 unsigned int bottom = cell->rows < group_end - y ? y + cell->rows : group_end;
                 for (unsigned int r = y; r < bottom; r++)
-                    for (unsigned int c = cell->start_column + 1; c < right; c++)
+                    for (unsigned int c = left + 1; c < right; c++)
                         grid->vertical[(size_t)r * (grid->columns + 1) + c].border.style = CSS_BORDER_STYLE_HIDDEN;
                 for (unsigned int r = y + 1; r < bottom; r++)
-                    for (unsigned int c = cell->start_column; c < right; c++)
+                    for (unsigned int c = left; c < right; c++)
                         grid->horizontal[(size_t)r * grid->columns + c].border.style = CSS_BORDER_STYLE_HIDDEN;
             }
         }
@@ -451,8 +451,8 @@ bool table_prepare_borders(const css_unit_ctx *ctx, struct box *table)
             table_offer_perimeter(ctx, grid, row, y, y + 1, 0, grid->columns, rtl);
             for (struct box *cell = row->children; cell; cell = cell->next) {
                 unsigned int bottom = cell->rows < group_end - y ? y + cell->rows : group_end;
-                table_offer_perimeter(
-                    ctx, grid, cell, y, bottom, cell->start_column, cell->start_column + cell->columns, rtl);
+                unsigned int left = table_cell_start_column(table, cell);
+                table_offer_perimeter(ctx, grid, cell, y, bottom, left, left + cell->columns, rtl);
             }
         }
     }

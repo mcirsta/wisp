@@ -42,12 +42,6 @@ box sequence. This needs a shared direction/bidi implementation, not a
 summary-specific swap. Vertical writing-mode layout is also outside the current
 horizontal marker implementation.
 
-The same direction gap affects tables: explicit `direction:rtl` still leaves
-columns in left-to-right order. CSS 2.2
-[17.5](https://www.w3.org/TR/CSS22/tables.html#table-layout) requires the opposite
-column order. This predates the collapsed-border work; border tie-breaking alone
-does not implement table direction.
-
 Reproducer: `test/disclosure-markers.html`, `#rtl` (explicit CSS direction).
 Removing its CSS rule isolates the HTML attribute issue. Initial captures are in
 `out/render-captures/disclosure-markers-2026-10-03/chromium/`.

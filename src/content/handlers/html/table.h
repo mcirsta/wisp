@@ -51,6 +51,16 @@ struct table_data {
     struct table_border_grid *borders;
 };
 
+/* Normalization and width calculation number columns in source order. Convert
+ * a cell's span to physical grid columns only for placement and shared edges.
+ * CSS 2.2 17.5: the table's direction governs this, not the row/cell direction. */
+static inline unsigned int table_cell_start_column(const struct box *table, const struct box *cell)
+{
+    return css_computed_direction(table->style) == CSS_DIRECTION_RTL
+        ? table->columns - cell->start_column - cell->columns
+        : cell->start_column;
+}
+
 /* True only for a table or one of its cells using a prepared collapsed grid. */
 static inline bool table_has_collapsed_borders(const struct box *box)
 {

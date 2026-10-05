@@ -1350,6 +1350,66 @@ START_TEST(test_table_first_baseline)
 }
 END_TEST
 
+/* CSS 2.2 17.5: direction changes physical columns without changing source
+ * column widths or the row-span bookkeeping. Repeat on the same box tree. */
+START_TEST(test_table_column_direction)
+{
+    html_content content = {.unit_len_ctx = {.viewport_width = INTTOFIX(200),
+                                .viewport_height = INTTOFIX(500),
+                                .font_size_default = INTTOFIX(16),
+                                .device_dpi = INTTOFIX(96)},
+        .font_func = &scaled_fonts};
+    struct box *table = make_table_box(BOX_TABLE, CSS_DISPLAY_TABLE);
+    struct column columns[] = {{.type = COLUMN_WIDTH_FIXED, .width = 20, .min = 20, .max = 20},
+        {.type = COLUMN_WIDTH_FIXED, .width = 40, .min = 40, .max = 40},
+        {.type = COLUMN_WIDTH_FIXED, .width = 60, .min = 60, .max = 60}};
+    struct table_data data = {.columns = columns};
+    table->table = &data;
+    table->columns = 3;
+    style_set_width(table->style, 120, false);
+    struct box *group = make_table_box(BOX_TABLE_ROW_GROUP, CSS_DISPLAY_TABLE_ROW_GROUP);
+    struct box *rows[2], *cells[4];
+    append(table, group);
+    for (int i = 0; i < 2; i++) {
+        rows[i] = make_table_box(BOX_TABLE_ROW, CSS_DISPLAY_TABLE_ROW);
+        append(group, rows[i]);
+    }
+    for (int i = 0; i < 4; i++) {
+        cells[i] = make_table_box(BOX_TABLE_CELL, CSS_DISPLAY_TABLE_CELL);
+        cells[i]->start_column = i == 3 ? 1 : i;
+        cells[i]->columns = i == 3 ? 2 : 1;
+        cells[i]->rows = i == 0 ? 2 : 1;
+        append(rows[i == 3], cells[i]);
+        append_cell_text(cells[i], 16, 24);
+    }
+    const int widths[] = {20, 40, 60, 100};
+    const int positions[][4] = {{0, 20, 60, 20}, {100, 60, 0, 0}};
+    for (unsigned int pass = 0; pass < 3; pass++) {
+        bool rtl = pass == 1;
+        style_set_text_alignment(table->style, CSS_TEXT_ALIGN_DEFAULT, rtl ? CSS_DIRECTION_RTL : CSS_DIRECTION_LTR);
+        /* Row and cell direction is deliberately opposite to the table. */
+        for (int i = 0; i < 2; i++)
+            style_set_text_alignment(
+                rows[i]->style, CSS_TEXT_ALIGN_DEFAULT, rtl ? CSS_DIRECTION_LTR : CSS_DIRECTION_RTL);
+        for (int i = 0; i < 4; i++)
+            style_set_text_alignment(
+                cells[i]->style, CSS_TEXT_ALIGN_DEFAULT, rtl ? CSS_DIRECTION_LTR : CSS_DIRECTION_RTL);
+        ck_assert_msg(layout_table(table, 200, &content), "direction pass %u: layout failed", pass);
+        ck_assert_int_eq(table->width, 120);
+        ck_assert_int_eq(table->height, 48);
+        for (int i = 0; i < 4; i++) {
+            ck_assert_msg(cells[i]->x == positions[rtl][i] && cells[i]->width == widths[i],
+                "direction pass %u, cell %d: x=%d width=%d; expected x=%d width=%d", pass, i, cells[i]->x,
+                cells[i]->width, positions[rtl][i], widths[i]);
+            ck_assert_int_eq(cells[i]->start_column, i == 3 ? 1 : i);
+        }
+        ck_assert_int_eq(rows[1]->y, 24);
+        ck_assert_int_eq(cells[0]->height + cells[0]->padding[TOP] + cells[0]->padding[BOTTOM], 48);
+    }
+    free_tree(table);
+}
+END_TEST
+
 static const struct {
     const char *name;
     bool border_box, edges;
@@ -1478,6 +1538,7 @@ int main(void)
     tcase_add_loop_test(alignment, test_line_overflow_alignment, 0, 2 * TEXT_ALIGNMENT_COUNT);
     suite_add_tcase(suite, alignment);
     TCase *tables = tcase_create("Table baselines");
+    tcase_add_test(tables, test_table_column_direction);
     tcase_add_loop_test(tables, test_table_first_baseline, 0, TABLE_BASELINE_CASE_COUNT);
     tcase_add_loop_test(tables, test_inline_table_placement, 0, INLINE_TABLE_CASE_COUNT);
     suite_add_tcase(suite, tables);

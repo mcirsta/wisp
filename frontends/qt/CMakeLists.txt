@@ -227,6 +227,10 @@ if(WISP_QT_CAPTURE)
                 COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_table_collapsed_borders.py
                     $<TARGET_FILE:wisp-qt> ${WISP_TEST_MAGICK})
             set_tests_properties(qt_table_collapsed_borders PROPERTIES TIMEOUT 80)
+            add_test(NAME qt_table_direction
+                COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_table_direction.py
+                    $<TARGET_FILE:wisp-qt> ${WISP_TEST_MAGICK})
+            set_tests_properties(qt_table_direction PROPERTIES TIMEOUT 80)
         endif()
         add_test(NAME qt_positioned_stacking
             COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_positioned_stacking.py $<TARGET_FILE:wisp-qt>)
