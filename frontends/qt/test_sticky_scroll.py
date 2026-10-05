@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Browser-referenced sticky scrolling, layout stability and visible paint/hits."""
+"""CSS sticky constraints, layout stability and visible paint/hits."""
 import json
 import os
 from pathlib import Path
@@ -10,7 +10,12 @@ import tempfile
 binary, magick = sys.argv[1:3]
 root = Path(__file__).resolve().parents[2]
 env = dict(os.environ, QT_QPA_PLATFORM='offscreen', QT_SCALE_FACTOR='1', QT_SCREEN_SCALE_FACTORS='1', QT_FONT_DPI='96')
-# Chromium 153 and Firefox 157 measured sequences from sticky-position.html.
+# CSS Position 3 section 3.4: https://www.w3.org/TR/css-position-3/#stickypos-insets
+# Auto insets count as zero when sizing the sticky view rectangle; reduce its
+# logical-end inset until the box fits. Only non-auto sides constrain movement.
+# For tall-bottom the effective bottom is -60px; wide-right/wide-rtl-left use
+# -40px at the logical end. At scroll 100 all three remain at their normal -20px
+# position. Chromium 153 / Firefox 157 differ there; other sequences agree.
 # The last two cases use a centered item (also checked in Chromium), isolating
 # sticky from Wisp's existing RTL flex placement difference. Wisp adds horizontal
 # scrollbar space to the CSS height; these dimensions preserve the same 200x120
@@ -18,11 +23,11 @@ env = dict(os.environ, QT_QPA_PLATFORM='offscreen', QT_SCALE_FACTOR='1', QT_SCRE
 references = {
     'top': [80, 10, 10, -20, -90, 80], 'bottom': [70, -20, -220, -300, -370, 70],
     'both': [60, 10, 10, -20, -90, 60], 'tall-top': [80, 10, -80, -160, -230, 80],
-    'tall-bottom': [0, -70, -220, -300, -370, 0], 'tall-both': [10, 10, -80, -160, -230, 10],
+    'tall-bottom': [0, -20, -220, -300, -370, 0], 'tall-both': [10, 10, -80, -160, -230, 10],
     'margin': [80, 10, 10, -50, -120, 80], 'negative-margin': [80, 10, 10, 0, -70, 80],
     'left': [80, 10, 10, 10, -10, 80], 'right': [250, 150, -50, -130, -200, 250],
     'wide': [80, 10, -40, -120, -190, 80], 'wide-rtl': [80, -20, -220, -300, -370, 80],
-    'wide-right': [0, -50, -220, -300, -370, 0], 'wide-rtl-left': [80, 10, -140, -220, -290, 80],
+    'wide-right': [0, -20, -220, -300, -370, 0], 'wide-rtl-left': [80, -20, -140, -220, -290, 80],
     'wide-rtl-both': [0, -60, -140, -220, -290, 0],
 }
 scrolls = [0, 100, 300, 380, 450, 0]
@@ -167,4 +172,4 @@ with tempfile.TemporaryDirectory(prefix='wisp-sticky-scroll-') as directory:
         if step.get('render_profile'):
             assert step['render_profile']['layout_calls'] == steps[0]['render_profile']['layout_calls'], step['render_profile']
 
-print('Sticky scrolling: browser geometry, paint, clipping, stacking, native/frame input and round trips passed.')
+print('Sticky scrolling: CSS constraints, paint, clipping, stacking, native/frame input and round trips passed.')

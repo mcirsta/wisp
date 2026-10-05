@@ -1,4 +1,4 @@
-/* Numeric sticky constraints. Browser references: test/sticky-position.html. */
+/* Numeric sticky constraints. HTML fixture: test/sticky-position.html. */
 #include <check.h>
 #include <inttypes.h>
 #include <limits.h>
@@ -18,15 +18,17 @@ css_computed_style *sticky_test_style(uint8_t position, uint8_t overflow_x, uint
 
 static const int scrolls[] = {0, 100, 300, 380, 450, 0};
 
-/* Positions relative to the scrollport, measured with Chromium 153.0.8010.52
- * and Firefox 157.0 (both agree on every case).
+/* Positions relative to the scrollport, following CSS Position 3 section 3.4:
+ * https://www.w3.org/TR/css-position-3/#stickypos-insets
+ * Chromium 153.0.8010.52 and Firefox 157.0 agree except for the single-inset
+ * oversized cases documented below; their measurements are not the rule.
  * Returning to zero is intentional: queries must never accumulate movement.
  * Geometry is in the scroller's unscrolled content coordinates. */
 static const struct {
     const char *name;
     struct box_sticky_axis axis;
     int positions[sizeof(scrolls) / sizeof(scrolls[0])];
-} browser_cases[] = {
+} axis_cases[] = {
     {"top",
         {.border_start = 80,
             .border_size = 40,
@@ -59,6 +61,9 @@ static const struct {
             .inset_start = 10,
             .end_auto = true},
         {80, 10, -80, -160, -230, 80}},
+    /* Auto top contributes zero to a 110px view rectangle. Expanding it to
+     * 180px reduces bottom:10px to -60px. At scroll 100 the normal top is -20px,
+     * already inside that constraint, so the box must not shift to -70px. */
     {"tall-bottom",
         {.border_start = 80,
             .border_size = 180,
@@ -66,7 +71,7 @@ static const struct {
             .scrollport_size = 120,
             .inset_end = 10,
             .start_auto = true},
-        {0, -70, -220, -300, -370, 0}},
+        {0, -20, -220, -300, -370, 0}},
     {"tall-both",
         {.border_start = 80,
             .border_size = 180,
@@ -131,7 +136,9 @@ static const struct {
             .inset_end = 20,
             .reverse = true},
         {80, -20, -220, -300, -370, 80}},
-    /* Sibling spacing, rather than margins, leaves room for movement. */
+    /* Sibling spacing, rather than margins, leaves room for movement.
+     * A 240px box in a 200px scrollport reduces the logical-end inset to
+     * -40px: right in LTR, left in RTL. Auto on the other side stays nonbinding. */
     {"wide-right",
         {.border_start = 80,
             .border_size = 240,
@@ -139,7 +146,7 @@ static const struct {
             .scrollport_size = 200,
             .inset_end = 10,
             .start_auto = true},
-        {0, -50, -220, -300, -370, 0}},
+        {0, -20, -220, -300, -370, 0}},
     {"wide-rtl-left",
         {.border_start = 80,
             .border_size = 240,
@@ -148,7 +155,7 @@ static const struct {
             .inset_start = 10,
             .end_auto = true,
             .reverse = true},
-        {80, 10, -40, -120, -190, 80}},
+        {80, -20, -40, -120, -190, 80}},
     {"wide-rtl-both",
         {.border_start = 80,
             .border_size = 240,
@@ -160,14 +167,14 @@ static const struct {
         {0, -60, -60, -120, -190, 0}},
 };
 
-START_TEST(test_browser_axes)
+START_TEST(test_axes)
 {
     for (size_t i = 0; i < sizeof(scrolls) / sizeof(scrolls[0]); i++) {
-        struct box_sticky_axis axis = browser_cases[_i].axis;
+        struct box_sticky_axis axis = axis_cases[_i].axis;
         axis.scrollport_start = scrolls[i];
         int64_t position = axis.border_start + box_sticky_axis_offset(&axis) - scrolls[i];
-        ck_assert_msg(position == browser_cases[_i].positions[i], "%s at scroll %d: got %" PRId64 ", expected %d",
-            browser_cases[_i].name, scrolls[i], position, browser_cases[_i].positions[i]);
+        ck_assert_msg(position == axis_cases[_i].positions[i], "%s at scroll %d: got %" PRId64 ", expected %d",
+            axis_cases[_i].name, scrolls[i], position, axis_cases[_i].positions[i]);
     }
 }
 END_TEST
@@ -507,7 +514,7 @@ int main(void)
 {
     Suite *suite = suite_create("Sticky geometry");
     TCase *tc = tcase_create("Resolved axis constraints");
-    tcase_add_loop_test(tc, test_browser_axes, 0, sizeof(browser_cases) / sizeof(browser_cases[0]));
+    tcase_add_loop_test(tc, test_axes, 0, sizeof(axis_cases) / sizeof(axis_cases[0]));
     tcase_add_test(tc, test_auto_and_zero);
     tcase_add_test(tc, test_containment_without_travel);
     tcase_add_test(tc, test_wide_arithmetic);

@@ -38,18 +38,16 @@ static int64_t axis_offset(const struct box_sticky_axis *axis, int64_t box_shift
     int64_t view_end = axis->scrollport_start + port_shift + axis->scrollport_size -
         (axis->end_auto ? 0 : axis->inset_end);
 
-    /* Only competing specified insets need logical-end reduction. An auto
-     * opposite edge is unconstrained, so preserve a sole specified inset even
-     * for an oversized box. This follows Chromium/Firefox; see the compatibility
-     * decision in docs/sticky-positioning.md. */
-    if (!axis->start_auto && !axis->end_auto) {
-        int64_t deficit = axis->border_size - (view_end - view_start);
-        if (deficit > 0) {
-            if (axis->reverse)
-                view_start -= deficit;
-            else
-                view_end += deficit;
-        }
+    /* CSS Position 3 section 3.4: auto insets count as zero when sizing the
+     * sticky view rectangle. Reduce the logical-end inset until the border
+     * box fits, even with an auto opposite inset. Auto sides still do not
+     * constrain movement below. */
+    int64_t deficit = axis->border_size - (view_end - view_start);
+    if (deficit > 0) {
+        if (axis->reverse)
+            view_start -= deficit;
+        else
+            view_end += deficit;
     }
 
     int64_t offset = 0;
