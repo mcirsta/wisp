@@ -322,6 +322,10 @@ if(WISP_QT_CAPTURE)
         add_test(NAME qt_float_boundaries
             COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_float_boundaries.py $<TARGET_FILE:wisp-qt>)
         set_tests_properties(qt_float_boundaries PROPERTIES TIMEOUT 30)
+        add_test(NAME qt_zero_height_floats
+            COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_layout_geometry.py
+                $<TARGET_FILE:wisp-qt> zero-height-floats)
+        set_tests_properties(qt_zero_height_floats PROPERTIES TIMEOUT 40)
         add_test(NAME qt_empty_inline_lines
             COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_empty_inline_lines.py $<TARGET_FILE:wisp-qt>)
         set_tests_properties(qt_empty_inline_lines PROPERTIES TIMEOUT 30)
@@ -340,7 +344,7 @@ if(WISP_QT_CAPTURE)
         foreach(grid_fixture IN ITEMS grid-rows grid-areas grid-row-constraints)
             string(REPLACE "-" "_" grid_test ${grid_fixture})
             add_test(NAME qt_${grid_test}
-                COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_grid_tracks.py
+                COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_layout_geometry.py
                     $<TARGET_FILE:wisp-qt> ${grid_fixture})
             set_tests_properties(qt_${grid_test} PROPERTIES TIMEOUT 40)
         endforeach()

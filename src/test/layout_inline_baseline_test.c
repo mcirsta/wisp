@@ -776,6 +776,97 @@ END_TEST
 
 static const struct {
     const char *name;
+    int height, top, bottom, exclusion;
+} float_outer_height_cases[] = {
+    {"empty", 0, 0, 0, 0},
+    {"cancelled height", 20, 0, -20, 0},
+    {"negative outer height", 20, 0, -30, 0},
+    {"offset empty", 0, 10, -10, 0},
+    {"positive height", 1, 0, 0, 40},
+    {"positive margin", 0, 10, 0, 40},
+};
+enum { FLOAT_OUTER_HEIGHT_COUNT = sizeof(float_outer_height_cases) / sizeof(float_outer_height_cases[0]) };
+
+START_TEST(test_float_outer_height_exclusion)
+{
+    int variant = _i % FLOAT_OUTER_HEIGHT_COUNT;
+    bool right = (_i / FLOAT_OUTER_HEIGHT_COUNT) % 2;
+    bool prior = (_i / (2 * FLOAT_OUTER_HEIGHT_COUNT)) % 2;
+    bool atomic = _i >= 4 * FLOAT_OUTER_HEIGHT_COUNT;
+    const struct gui_layout_table boundary_fonts = {.width = width, .split = split_word, .font_metrics = metrics};
+    html_content content = {
+        .unit_len_ctx = {.viewport_width = INTTOFIX(240),
+            .viewport_height = INTTOFIX(500),
+            .font_size_default = INTTOFIX(16),
+            .device_dpi = INTTOFIX(96)},
+        .font_func = &boundary_fonts,
+    };
+    int line_height = prior ? 80 : 20;
+    struct box *root = make_box(BOX_BLOCK, line_height, CSS_VERTICAL_ALIGN_BASELINE);
+    uint8_t align = right ? CSS_TEXT_ALIGN_RIGHT : CSS_TEXT_ALIGN_LEFT;
+    style_set_text_alignment(root->style, align, CSS_DIRECTION_LTR);
+    struct box *ic = make_box(BOX_INLINE_CONTAINER, 0, 0);
+    append(root, ic);
+    struct box *floating = NULL;
+    for (int i = 0; i <= prior; i++) {
+        floating = make_box(right ? BOX_FLOAT_RIGHT : BOX_FLOAT_LEFT, 0, 0);
+        struct box *child = make_box(BOX_BLOCK, 20, CSS_VERTICAL_ALIGN_BASELINE);
+        bool tested = i == prior;
+        style_set_width(child->style, tested && prior ? 160 : 40, false);
+        style_set_height_px(child->style, tested ? float_outer_height_cases[variant].height : 40);
+        style_set_clear(child->style, tested && prior ? CSS_CLEAR_BOTH : CSS_CLEAR_NONE);
+        if (tested)
+            style_set_margins(
+                child->style, float_outer_height_cases[variant].top, 0, float_outer_height_cases[variant].bottom, 0);
+        child->flags |= HAS_HEIGHT | MAKE_HEIGHT;
+        append(floating, child);
+        append(ic, floating);
+    }
+    if (prior) {
+        /* A preceding cleared float lies inside this tall line's vertical
+         * range. Zero/negative outer heights still have no exclusion area. */
+        struct box *block = make_box(BOX_BLOCK, line_height, CSS_VERTICAL_ALIGN_BASELINE);
+        style_set_text_alignment(block->style, align, CSS_DIRECTION_LTR);
+        append(root, block);
+        ic = make_box(BOX_INLINE_CONTAINER, 0, 0);
+        append(block, ic);
+    }
+    struct box *target = make_box(atomic ? BOX_INLINE_BLOCK : BOX_TEXT, line_height, CSS_VERTICAL_ALIGN_TOP);
+    if (atomic) {
+        style_set_width(target->style, 40, false);
+        style_set_height_px(target->style, line_height);
+        target->flags |= HAS_HEIGHT | MAKE_HEIGHT;
+    } else {
+        target->text = "XXXX";
+        target->length = 4;
+        target->width = UNKNOWN_WIDTH;
+    }
+    append(ic, target);
+    const int widths[] = {200, 240, 200};
+    for (size_t pass = 0; pass < sizeof(widths) / sizeof(widths[0]); pass++) {
+        root->width = widths[pass];
+        root->height = AUTO;
+        ck_assert(layout_block_context(root, 500, &content));
+        int exclusion = float_outer_height_cases[variant].exclusion;
+        if (prior)
+            exclusion = exclusion ? 160 : 40;
+        int x = right ? root->width - exclusion - (atomic ? 40 : 32) : exclusion;
+        ck_assert_msg(target->x == x && target->y == 0 && ic->height == line_height,
+            "%s right=%d prior=%d atomic=%d width=%d: expected x=%d y=0 line=%d, got %d/%d/%d",
+            float_outer_height_cases[variant].name, right, prior, atomic, root->width, x, line_height, target->x,
+            target->y, ic->height);
+        ck_assert_msg(floating->height ==
+                    float_outer_height_cases[variant].height + float_outer_height_cases[variant].top +
+                        float_outer_height_cases[variant].bottom &&
+                floating->y == (prior ? 40 : 0),
+            "%s: exclusion must not change the float's outer geometry", float_outer_height_cases[variant].name);
+    }
+    free_tree(root);
+}
+END_TEST
+
+static const struct {
+    const char *name;
     int left_width, left_height, right_width, right_height, word_width, x, y;
 } float_boundary_cases[] = {
     {"left", 180, 40, 0, 0, 48, 0, 40},
@@ -1368,6 +1459,7 @@ int main(void)
     tcase_add_loop_test(tc, test_empty_inline_metrics, 0, 4 * EMPTY_INLINE_CASE_COUNT);
     tcase_add_loop_test(tc, test_repeated_text_baselines, 0, 2);
     tcase_add_loop_test(tc, test_nested_float_layout_once, 0, 2 * (NESTED_FLOAT_DEPTH + 1));
+    tcase_add_loop_test(tc, test_float_outer_height_exclusion, 0, 8 * FLOAT_OUTER_HEIGHT_COUNT);
     tcase_add_loop_test(tc, test_line_at_float_boundary, 0,
         4 * (FLOAT_BOUNDARY_MAX_WRAPPERS + 1) * FLOAT_BOUNDARY_CASE_COUNT);
     tcase_add_test(tc, test_font_baseline_fallback);

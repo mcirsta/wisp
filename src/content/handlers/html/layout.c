@@ -2128,7 +2128,9 @@ static void find_sides(struct box *fl, int y0, int y1, int *x0, int *x1, struct 
             return;
         }
         fy0 = fl->y;
-        if (y0 < fy1 && fy0 <= y1) {
+        /* CSS 2.2 9.5: zero/negative outer heights have no exclusion area,
+         * even when their position falls inside the queried line range. */
+        if (fl->height > 0 && y0 < fy1 && fy0 <= y1) {
             if (fl->type == BOX_FLOAT_LEFT) {
                 fx1 = fl->x + fl->width;
                 if (*x0 < fx1) {
@@ -4163,17 +4165,22 @@ static bool layout_line(struct box *first, int *width, int *y, int cx, int cy, s
                  *   this line is empty with no floats
                  * + current y, cy, is below the clear level
                  *
-                 * Float affects current line */
+                 * Place on this line, but only a positive outer height
+                 * shortens it. Keep all floats in the placement/clear list. */
                 if (b->type == BOX_FLOAT_LEFT) {
                     b->x = cx + x0;
-                    if (b->width > 0)
-                        x0 += b->width;
-                    left = b;
+                    if (b->height > 0) {
+                        if (b->width > 0)
+                            x0 += b->width;
+                        left = b;
+                    }
                 } else {
                     b->x = cx + x1 - b->width;
-                    if (b->width > 0)
-                        x1 -= b->width;
-                    right = b;
+                    if (b->height > 0) {
+                        if (b->width > 0)
+                            x1 -= b->width;
+                        right = b;
+                    }
                 }
                 b->y = cy;
             } else {

@@ -78,17 +78,24 @@ This reproduces before the baseline changes. Initial evidence:
 `fixture.html`. The permanent `test/table-baseline.html` checks collapsed-table
 content alignment without accepting the incorrect cell edges as a baseline.
 
-## Zero-height float exclusion
+## Float and inline content paint order
 
-A zero-height floated grid still moves the following inline-block horizontally
-on the same line: Wisp places it at x=40 relative to the case; Chromium places it
-at x=0. The grid itself has zero height in both engines. Check same-line float
-placement and exclusion accounting, including ordinary block floats; do not
-special-case grids.
+Non-positioned floats paint over overlapping inline-blocks. In
+`test/float-inline-paint-order.html`, both brown peers should cover the upper
+10px of the orange float; Wisp paints orange over them. The positive-height case
+uses a negative inline margin to reproduce the overlap independently of
+zero-height float exclusion. Geometry agrees with Chromium in both cases.
 
-This also reproduces in the unchanged `5ae1c124` build. Evidence:
-`out/render-captures/grid-intrinsic-2026-10-04/zero-float.html`, `#float-grid-peer`,
-`zero-float-before/` and `permanent/reference/` in the same directory. The permanent
-width regression uses a nonempty float to isolate intrinsic sizing.
+The existing `html_redraw_box_children()` paints all ordinary descendants,
+including their inline content, before its float list. This needs separate
+block-background, float and inline painting phases within the correct stacking
+scope; simply moving the float loop before all children would put floats behind
+block backgrounds. Preserve clipping, positioned descendants and hit-test order
+while fixing the shared traversal.
+
+The painter is unchanged from `6b6cdbea`; the positive-height case also uses
+the same layout branch as that revision. Evidence:
+`out/render-captures/zero-floats-2026-10-05/paint-overlap/`. The zero-height fix
+exposes the existing paint-order problem by removing the incorrect horizontal gap.
 
 All artifact paths above are under `out/render-captures/`.

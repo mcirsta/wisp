@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Grid tracks and area sizing, checked against Chromium geometry.
+"""Static layout geometry, checked against independent browser references.
 
 The adjacent HTML/JSON pairs in test/ use a bundled font and fixed content sizes.
 JSON rectangles are relative to each case, in x/y/width/height order. A pair of
 rectangles means unchecked/checked; a single rectangle applies to both states.
-One pixel of tolerance allows Wisp's integer layout to round fractional tracks.
-The fixture's 20px body margin and 50px case gap also check cumulative placement.
+One pixel of tolerance allows Wisp's integer layout to round fractional sizes.
+Fixtures use a 20px body margin and a configurable case gap to check cumulative placement.
 """
 import json
 import os
@@ -23,7 +23,7 @@ def main():
     ids = ["switch"] + [name + "-" + part for name, boxes in expected["cases"].items() for part in boxes]
     env = dict(os.environ, QT_QPA_PLATFORM="offscreen", QT_SCALE_FACTOR="1",
                QT_SCREEN_SCALE_FACTORS="1", QT_FONT_DPI="96")
-    with tempfile.TemporaryDirectory(prefix="wisp-grid-tracks-") as tmp:
+    with tempfile.TemporaryDirectory(prefix="wisp-layout-geometry-") as tmp:
         destination = Path(tmp) / "capture"
         args = [str(binary), "--capture-dir", str(destination), "--capture-size", f"{width}x{height}",
                 "--capture-settle", "100", "--capture-timeout", "15000", "--enable_javascript=0"]
@@ -58,7 +58,7 @@ def main():
                     actual = (box["x"] - origin["x"], box["y"] - origin["y"], box["width"], box["height"])
                     assert all(abs(a - b) <= 1 for a, b in zip(actual, wanted)), (index, key, actual, wanted)
                     if part == "case":
-                        next_y += wanted[3] + 50
+                        next_y += wanted[3] + expected.get("case_gap", 50)
         # Returning to the initial viewport/style must restore all box geometry,
         # including baselines, flags and overflow, not just the asserted edges.
         for report in steps:

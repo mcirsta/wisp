@@ -1,0 +1,6 @@
+<!doctype html><meta charset="utf-8"><title>Float and inline-block painting order</title>
+<!-- Both brown inline-blocks should paint over the upper half of the orange float.
+The positive-height case isolates painting from zero-height float exclusion. -->
+<style>body{margin:20px}.case{display:flow-root;width:200px;margin-bottom:40px;background:#eee}.float{float:left;width:40px;background:#fa8}.peer{display:inline-block;width:40px;height:10px;background:#a85;vertical-align:top}</style>
+<div id="positive-case" class="case"><div id="positive-float" class="float" style="height:20px"></div><i id="positive-peer" class="peer" style="margin-left:-40px"></i></div>
+<div id="zero-case" class="case"><div id="zero-float" class="float" style="height:0"><div style="height:20px;background:#fa8"></div></div><i id="zero-peer" class="peer"></i></div>
