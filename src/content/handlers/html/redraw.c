@@ -28,6 +28,7 @@
  * Redrawing CONTENT_HTML implementation.
  */
 
+#include "content/handlers/html/table.h"
 #include <dom/dom.h>
 #include <wisp/utils/config.h>
 #include <assert.h>
@@ -1708,9 +1709,11 @@ static bool html_redraw_box_children(const html_content *html, struct box *box, 
     x_offset = x_parent + box->x - scrollbar_get_offset(box->scroll_x);
     y_offset = y_parent + box->y - scrollbar_get_offset(box->scroll_y);
 
-    if (phase != BOX_PAINT_ALL)
-        return html_redraw_box_phase(
-            html, box, x_offset, y_offset, clip, scale, current_background_color, data, paint_clip, ctx, phase);
+    if (phase != BOX_PAINT_ALL) {
+        return html_redraw_box_phase(html, box, x_offset, y_offset, clip, scale, current_background_color, data,
+                   paint_clip, ctx, phase) &&
+            (phase != BOX_PAINT_BLOCK || html_redraw_table_borders(box, x_offset, y_offset, clip, scale, ctx));
+    }
 
     /* Initialize separate stacking contexts for negative and positive */
     stacking_context_init(&negative_zindex);
@@ -1766,6 +1769,10 @@ static bool html_redraw_box_children(const html_content *html, struct box *box, 
         }
         if (!html_redraw_box_phase(
                 html, box, x_offset, y_offset, clip, scale, current_background_color, data, paint_clip, ctx, pass)) {
+            render_ok = false;
+            goto cleanup;
+        }
+        if (pass == BOX_PAINT_BLOCK && !html_redraw_table_borders(box, x_offset, y_offset, clip, scale, ctx)) {
             render_ok = false;
             goto cleanup;
         }
@@ -2448,7 +2455,8 @@ static bool html_redraw_box(const html_content *html, struct box *box, int x_par
     }
 
     /* borders for block level content and replaced inlines */
-    if (paint_background && box->style && box->type != BOX_TEXT && box->type != BOX_INLINE_END &&
+    if (paint_background && !table_has_collapsed_borders(box) && box->style && box->type != BOX_TEXT &&
+        box->type != BOX_INLINE_END &&
         (box->type != BOX_INLINE || box->object || box->flags & IFRAME || box->flags & REPLACE_DIM ||
             (box->gadget != NULL &&
                 (box->gadget->type == GADGET_TEXTAREA || box->gadget->type == GADGET_TEXTBOX ||

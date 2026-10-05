@@ -167,7 +167,7 @@ struct box *box_create(css_select_results *styles, css_computed_style *style, bo
     box->cached_place_below_level = 0;
     box->list_value = 1;
     box->list_marker = NULL;
-    box->col = NULL;
+    box->table = NULL;
     box->gadget = NULL;
     box->usemap = NULL;
     box->id = id;

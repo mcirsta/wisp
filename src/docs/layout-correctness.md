@@ -42,6 +42,12 @@ box sequence. This needs a shared direction/bidi implementation, not a
 summary-specific swap. Vertical writing-mode layout is also outside the current
 horizontal marker implementation.
 
+The same direction gap affects tables: explicit `direction:rtl` still leaves
+columns in left-to-right order. CSS 2.2
+[17.5](https://www.w3.org/TR/CSS22/tables.html#table-layout) requires the opposite
+column order. This predates the collapsed-border work; border tie-breaking alone
+does not implement table direction.
+
 Reproducer: `test/disclosure-markers.html`, `#rtl` (explicit CSS direction).
 Removing its CSS rule isolates the HTML attribute issue. Initial captures are in
 `out/render-captures/disclosure-markers-2026-10-03/chromium/`.
@@ -51,19 +57,14 @@ Removing its CSS rule isolates the HTML attribute issue. Initial captures are in
 Custom `::marker { content:... }` remains unused. Generated contents need shared
 counter/content handling for summaries and lists.
 
-## Collapsed table borders
+## Table column styling
 
-Collapsed borders are not shared correctly between row/cell edges. In the
-`collapsed` case, 2px cell borders give a 44px cell at y=0 in Wisp versus a
-42px cell at y=1 in Chromium. Text, marker and overall table geometry now agree;
-the remaining difference belongs to collapsed-border geometry and painting.
-CSS 2.2 [section 17.6.2](https://www.w3.org/TR/CSS22/tables.html#collapsing-borders)
-places collapsed borders on shared grid lines, with half-width edge accounting;
-this is not an implementation-defined browser preference.
-
-This reproduces before the baseline changes. Initial evidence:
-`out/render-captures/table-baseline-2026-10-04/before/` and its adjacent
-`fixture.html`. The permanent `test/table-baseline.html` checks collapsed-table
-content alignment without accepting the incorrect cell edges as a baseline.
+`display:table-column` and `display:table-column-group` are currently discarded
+by box construction. Their styles therefore cannot participate in column sizing,
+backgrounds or collapsed-border conflicts. This predates the shared-border fix;
+table, row-group, row and cell borders now share resolved grid segments.
+Supporting column styles needs retained column/column-group data from construction,
+then integration with the existing table grid (CSS 2.2
+[17.3](https://www.w3.org/TR/CSS22/tables.html#columns)).
 
 All artifact paths above are under `out/render-captures/`.

@@ -268,6 +268,16 @@ static nserror nsqt_plot_rectangle(const struct redraw_context *ctx, const plot_
 static nserror
 nsqt_plot_polygon(const struct redraw_context *ctx, const plot_style_t *style, const int *p, unsigned int n)
 {
+    if (n < 3 || style->fill_type == PLOT_OP_TYPE_NONE)
+        return NSERROR_OK;
+    QPainter *painter = (QPainter *)ctx->priv;
+    nsqt_set_style(painter, style);
+    painter->setPen(Qt::NoPen); /* The polygon interface specifies fill only. */
+    QPolygon polygon;
+    polygon.reserve(n);
+    for (unsigned int i = 0; i < n; i++)
+        polygon.append(QPoint(p[2 * i], p[2 * i + 1]));
+    painter->drawPolygon(polygon, Qt::WindingFill);
     return NSERROR_OK;
 }
 

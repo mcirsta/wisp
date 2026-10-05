@@ -486,9 +486,9 @@ struct box {
     int list_value;
 
     /**
-     * Array of table column data for TABLE only.
+     * Column sizing and shared borders, allocated for TABLE only.
      */
-    struct column *col;
+    struct table_data *table;
 
     /**
      * List marker box if this is a list-item, or NULL. Outside markers have

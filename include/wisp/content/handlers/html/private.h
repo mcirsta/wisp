@@ -477,6 +477,9 @@ bool html_redraw(
 
 
 /* in html/redraw_border.c */
+bool html_redraw_table_borders(
+    const struct box *table, int x, int y, const struct rect *clip, float scale, const struct redraw_context *ctx);
+
 bool html_redraw_borders(struct box *box, int x_parent, int y_parent, int p_width, int p_height,
     const struct rect *clip, float scale, const struct redraw_context *ctx);
 

@@ -8,6 +8,7 @@
 #include <wisp/utils/nsoption.h>
 #include <wisp/content/handlers/html/private.h>
 #include <wisp/content/handlers/html/box.h>
+#include "content/handlers/html/table.h"
 #include "html/layout_internal.h"
 #include "html/layout_grid.h"
 #include "html/font.h"
@@ -1277,7 +1278,8 @@ START_TEST(test_table_first_baseline)
     struct column columns[2] = {{.type = COLUMN_WIDTH_FIXED, .width = 100, .min = 100, .max = 100},
         {.type = COLUMN_WIDTH_FIXED, .width = 100, .min = 100, .max = 100}};
     table->columns = 2;
-    table->col = columns;
+    struct table_data data = {.columns = columns};
+    table->table = &data;
     style_set_width(table->style, 200, false);
     struct box *group = make_table_box(BOX_TABLE_ROW_GROUP, CSS_DISPLAY_TABLE_ROW_GROUP);
     struct box *row = make_table_box(BOX_TABLE_ROW, CSS_DISPLAY_TABLE_ROW);
@@ -1384,7 +1386,8 @@ START_TEST(test_inline_table_placement)
     struct box *table = make_table_box(BOX_TABLE, CSS_DISPLAY_INLINE_TABLE);
     struct column column = {.type = COLUMN_WIDTH_AUTO};
     table->columns = 1;
-    table->col = &column;
+    struct table_data data = {.columns = &column};
+    table->table = &data;
     table->max_width = UNKNOWN_MAX_WIDTH;
     style_set_width(table->style, 80, false);
     style_set_box_sizing(

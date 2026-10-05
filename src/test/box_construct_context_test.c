@@ -1,4 +1,5 @@
 /* Construction ancestry must survive slices without consulting published boxes. */
+#include "content/handlers/html/table.h"
 #include <check.h>
 #include <limits.h>
 #include <stdio.h>
@@ -1647,10 +1648,10 @@ static void describe_layout(FILE *stream, const struct box *box)
         fputs(" link=", stream);
         describe_layout_link(stream, links[i]);
     }
-    if (box->col != NULL) {
+    if (box->table != NULL) {
         for (unsigned i = 0; i < box->columns; i++)
-            fprintf(stream, " col=%d,%d,%d,%d,%d", box->col[i].type, box->col[i].width,
-                box->col[i].min, box->col[i].max, box->col[i].positioned);
+            fprintf(stream, " col=%d,%d,%d,%d,%d", box->table->columns[i].type, box->table->columns[i].width,
+                box->table->columns[i].min, box->table->columns[i].max, box->table->columns[i].positioned);
     }
     fputc('\n', stream);
     if (box_has_outside_marker(box))

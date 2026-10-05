@@ -32,19 +32,9 @@
 #include <wisp/content/handlers/html/box.h>
 #include "content/handlers/html/table.h"
 
-/* Define to enable verbose table debug */
-#undef TABLE_DEBUG
-
-/**
- * Container for border values during table border calculations
- */
-struct border {
-    enum css_border_style_e style; /**< border-style */
-    enum css_border_color_e color; /**< border-color type */
-    css_color c; /**< border-color value */
-    css_fixed width; /**< border-width length */
-    css_unit unit; /**< border-width units */
-};
+#include <stdint.h>
+#include <limits.h>
+#include <string.h>
 
 static inline bool table__length_to_px_int(const css_computed_style *style, const css_unit_ctx *unit_len_ctx,
     css_fixed_or_calc length, css_unit unit, int *px_out)
@@ -56,797 +46,6 @@ static inline bool table__length_to_px_int(const css_computed_style *style, cons
     return true;
 }
 
-static inline css_fixed table__length_to_fixed_px(
-    const css_computed_style *style, const css_unit_ctx *unit_len_ctx, css_fixed_or_calc length, css_unit unit)
-{
-    if (unit == CSS_UNIT_CALC) {
-        int px = 0;
-        if (css_computed_length_to_px(style, unit_len_ctx, -1, length, unit, &px) == CSS_OK) {
-            return INTTOFIX(px);
-        }
-        return 0;
-    }
-    return css_unit_len2device_px(style, unit_len_ctx, length.value, unit);
-}
-
-
-/**
- * Determine if a border style is more eyecatching than another
- *
- * \param unit_len_ctx  Length conversion context
- * \param a        Reference border style
- * \param a_src    Source of \a a
- * \param b        Candidate border style
- * \param b_src    Source of \a b
- * \return True if \a b is more eyecatching than \a a
- */
-static bool table_border_is_more_eyecatching(
-    const css_unit_ctx *unit_len_ctx, const struct border *a, box_type a_src, const struct border *b, box_type b_src)
-{
-    css_fixed awidth, bwidth;
-    int impact = 0;
-
-    /* See CSS 2.1 $17.6.2.1 */
-
-    /* 1 + 2 -- hidden beats everything, none beats nothing */
-    if (a->style == CSS_BORDER_STYLE_HIDDEN || b->style == CSS_BORDER_STYLE_NONE)
-        return false;
-
-    if (b->style == CSS_BORDER_STYLE_HIDDEN || a->style == CSS_BORDER_STYLE_NONE)
-        return true;
-
-    /* 3a -- wider borders beat narrow ones */
-    /* The widths must be absolute, which will be the case
-     * if they've come from a computed style. */
-    assert(a->unit != CSS_UNIT_EM && a->unit != CSS_UNIT_EX);
-    assert(b->unit != CSS_UNIT_EM && b->unit != CSS_UNIT_EX);
-    awidth = css_unit_len2device_px(NULL, unit_len_ctx, a->width, a->unit);
-    bwidth = css_unit_len2device_px(NULL, unit_len_ctx, b->width, b->unit);
-
-    if (awidth < bwidth)
-        return true;
-    else if (bwidth < awidth)
-        return false;
-
-    /* 3b -- sort by style */
-    switch (a->style) {
-    case CSS_BORDER_STYLE_DOUBLE:
-        impact++; /* Fall through */
-    case CSS_BORDER_STYLE_SOLID:
-        impact++; /* Fall through */
-    case CSS_BORDER_STYLE_DASHED:
-        impact++; /* Fall through */
-    case CSS_BORDER_STYLE_DOTTED:
-        impact++; /* Fall through */
-    case CSS_BORDER_STYLE_RIDGE:
-        impact++; /* Fall through */
-    case CSS_BORDER_STYLE_OUTSET:
-        impact++; /* Fall through */
-    case CSS_BORDER_STYLE_GROOVE:
-        impact++; /* Fall through */
-    case CSS_BORDER_STYLE_INSET:
-        impact++; /* Fall through */
-    default:
-        break;
-    }
-
-    switch (b->style) {
-    case CSS_BORDER_STYLE_DOUBLE:
-        impact--; /* Fall through */
-    case CSS_BORDER_STYLE_SOLID:
-        impact--; /* Fall through */
-    case CSS_BORDER_STYLE_DASHED:
-        impact--; /* Fall through */
-    case CSS_BORDER_STYLE_DOTTED:
-        impact--; /* Fall through */
-    case CSS_BORDER_STYLE_RIDGE:
-        impact--; /* Fall through */
-    case CSS_BORDER_STYLE_OUTSET:
-        impact--; /* Fall through */
-    case CSS_BORDER_STYLE_GROOVE:
-        impact--; /* Fall through */
-    case CSS_BORDER_STYLE_INSET:
-        impact--; /* Fall through */
-    default:
-        break;
-    }
-
-    if (impact < 0)
-        return true;
-    else if (impact > 0)
-        return false;
-
-    /* 4a -- sort by origin */
-    impact = 0;
-
-    /** \todo COL/COL_GROUP */
-    switch (a_src) {
-    case BOX_TABLE_CELL:
-        impact++; /* Fall through */
-    case BOX_TABLE_ROW:
-        impact++; /* Fall through */
-    case BOX_TABLE_ROW_GROUP:
-        impact++; /* Fall through */
-    case BOX_TABLE:
-        impact++; /* Fall through */
-    default:
-        break;
-    }
-
-    /** \todo COL/COL_GROUP */
-    switch (b_src) {
-    case BOX_TABLE_CELL:
-        impact--; /* Fall through */
-    case BOX_TABLE_ROW:
-        impact--; /* Fall through */
-    case BOX_TABLE_ROW_GROUP:
-        impact--; /* Fall through */
-    case BOX_TABLE:
-        impact--; /* Fall through */
-    default:
-        break;
-    }
-
-    if (impact < 0)
-        return true;
-    else if (impact > 0)
-        return false;
-
-    /* 4b -- furthest left (if direction: ltr) and towards top wins */
-    /** \todo Currently assumes b satisifies this */
-    return true;
-}
-
-
-/**
- * Process a table
- *
- * \param unit_len_ctx  Length conversion context
- * \param table    Table to process
- * \param a        Current border style for cell
- * \param a_src    Source of \a a
- *
- * \post \a a will be updated with most eyecatching style
- * \post \a a_src will be updated also
- */
-static void
-table_cell_top_process_table(const css_unit_ctx *unit_len_ctx, struct box *table, struct border *a, box_type *a_src)
-{
-    struct border b;
-    box_type b_src;
-
-    /* Top border of table */
-    b.style = css_computed_border_top_style(table->style);
-    b.color = css_computed_border_top_color(table->style, &b.c);
-    {
-        css_fixed_or_calc bw = (css_fixed_or_calc)0;
-        css_unit bu = CSS_UNIT_PX;
-        css_computed_border_top_width(table->style, &bw, &bu);
-        b.width = table__length_to_fixed_px(table->style, unit_len_ctx, bw, bu);
-    }
-    b.unit = CSS_UNIT_PX;
-    b_src = BOX_TABLE;
-
-    if (table_border_is_more_eyecatching(unit_len_ctx, a, *a_src, &b, b_src)) {
-        *a = b;
-        *a_src = b_src;
-    }
-}
-
-
-/**
- * Process a row
- *
- * \param unit_len_ctx  Length conversion context
- * \param cell     Cell being considered
- * \param row      Row to process
- * \param a        Current border style for cell
- * \param a_src    Source of \a a
- * \return true if row has cells, false otherwise
- *
- * \post \a a will be updated with most eyecatching style
- * \post \a a_src will be updated also
- */
-static bool table_cell_top_process_row(
-    const css_unit_ctx *unit_len_ctx, struct box *cell, struct box *row, struct border *a, box_type *a_src)
-{
-    struct border b;
-    box_type b_src;
-
-    /* Bottom border of row */
-    b.style = css_computed_border_bottom_style(row->style);
-    b.color = css_computed_border_bottom_color(row->style, &b.c);
-    {
-        css_fixed_or_calc bw = (css_fixed_or_calc)0;
-        css_unit bu = CSS_UNIT_PX;
-        css_computed_border_bottom_width(row->style, &bw, &bu);
-        b.width = table__length_to_fixed_px(row->style, unit_len_ctx, bw, bu);
-    }
-    b.unit = CSS_UNIT_PX;
-    b_src = BOX_TABLE_ROW;
-
-    if (table_border_is_more_eyecatching(unit_len_ctx, a, *a_src, &b, b_src)) {
-        *a = b;
-        *a_src = b_src;
-    }
-
-    if (row->children == NULL) {
-        /* Row is empty, so consider its top border */
-        b.style = css_computed_border_top_style(row->style);
-        b.color = css_computed_border_top_color(row->style, &b.c);
-        {
-            css_fixed_or_calc bw = (css_fixed_or_calc)0;
-            css_unit bu = CSS_UNIT_PX;
-            css_computed_border_top_width(row->style, &bw, &bu);
-            b.width = table__length_to_fixed_px(row->style, unit_len_ctx, bw, bu);
-        }
-        b.unit = CSS_UNIT_PX;
-        b_src = BOX_TABLE_ROW;
-
-        if (table_border_is_more_eyecatching(unit_len_ctx, a, *a_src, &b, b_src)) {
-            *a = b;
-            *a_src = b_src;
-        }
-
-        return false;
-    } else {
-        /* Process cells that are directly above the cell being
-         * considered. They may not be in this row, but in one of the
-         * rows above it in the case where rowspan > 1. */
-        struct box *c;
-        bool processed = false;
-
-        while (processed == false) {
-            for (c = row->children; c != NULL; c = c->next) {
-                /* Ignore cells to the left */
-                if (c->start_column + c->columns - 1 < cell->start_column)
-                    continue;
-                /* Ignore cells to the right */
-                if (c->start_column > cell->start_column + cell->columns - 1)
-                    continue;
-
-                /* Flag that we've processed a cell */
-                processed = true;
-
-                /* Consider bottom border */
-                b.style = css_computed_border_bottom_style(c->style);
-                b.color = css_computed_border_bottom_color(c->style, &b.c);
-                {
-                    css_fixed_or_calc bw = (css_fixed_or_calc)0;
-                    css_unit bu = CSS_UNIT_PX;
-                    css_computed_border_bottom_width(c->style, &bw, &bu);
-                    b.width = table__length_to_fixed_px(c->style, unit_len_ctx, bw, bu);
-                }
-                b.unit = CSS_UNIT_PX;
-                b_src = BOX_TABLE_CELL;
-
-                if (table_border_is_more_eyecatching(unit_len_ctx, a, *a_src, &b, b_src)) {
-                    *a = b;
-                    *a_src = b_src;
-                }
-            }
-
-            if (processed == false) {
-                /* There must be a preceding row */
-                assert(row->prev != NULL);
-
-                row = row->prev;
-            }
-        }
-    }
-
-    return true;
-}
-
-
-/**
- * Process a group
- *
- * \param unit_len_ctx  Length conversion context
- * \param cell     Cell being considered
- * \param group    Group to process
- * \param a        Current border style for cell
- * \param a_src    Source of \a a
- * \return true if group has non-empty rows, false otherwise
- *
- * \post \a a will be updated with most eyecatching style
- * \post \a a_src will be updated also
- */
-static bool table_cell_top_process_group(
-    const css_unit_ctx *unit_len_ctx, struct box *cell, struct box *group, struct border *a, box_type *a_src)
-{
-    struct border b;
-    box_type b_src;
-
-    /* Bottom border of group */
-    b.style = css_computed_border_bottom_style(group->style);
-    b.color = css_computed_border_bottom_color(group->style, &b.c);
-    {
-        css_fixed_or_calc bw = (css_fixed_or_calc)0;
-        css_unit bu = CSS_UNIT_PX;
-        css_computed_border_bottom_width(group->style, &bw, &bu);
-        b.width = table__length_to_fixed_px(group->style, unit_len_ctx, bw, bu);
-    }
-    b.unit = CSS_UNIT_PX;
-    b_src = BOX_TABLE_ROW_GROUP;
-
-    if (table_border_is_more_eyecatching(unit_len_ctx, a, *a_src, &b, b_src)) {
-        *a = b;
-        *a_src = b_src;
-    }
-
-    if (group->last != NULL) {
-        /* Process rows in group, starting with last */
-        struct box *row = group->last;
-
-        while (table_cell_top_process_row(unit_len_ctx, cell, row, a, a_src) == false) {
-            if (row->prev == NULL) {
-                return false;
-            } else {
-                row = row->prev;
-            }
-        }
-    } else {
-        /* Group is empty, so consider its top border */
-        b.style = css_computed_border_top_style(group->style);
-        b.color = css_computed_border_top_color(group->style, &b.c);
-        {
-            css_fixed_or_calc bw = (css_fixed_or_calc)0;
-            css_unit bu = CSS_UNIT_PX;
-            css_computed_border_top_width(group->style, &bw, &bu);
-            b.width = table__length_to_fixed_px(group->style, unit_len_ctx, bw, bu);
-        }
-        b.unit = CSS_UNIT_PX;
-        b_src = BOX_TABLE_ROW_GROUP;
-
-        if (table_border_is_more_eyecatching(unit_len_ctx, a, *a_src, &b, b_src)) {
-            *a = b;
-            *a_src = b_src;
-        }
-
-        return false;
-    }
-
-    return true;
-}
-
-
-/**
- * Calculate used values of border-left-{style,color,width}
- *
- * \param unit_len_ctx  Length conversion context
- * \param cell     Table cell to consider
- */
-static void table_used_left_border_for_cell(const css_unit_ctx *unit_len_ctx, struct box *cell)
-{
-    struct border a, b;
-    box_type a_src, b_src;
-
-    /** \todo Need column and column_group, too */
-
-    /* Initialise to computed left border for cell */
-    a.style = css_computed_border_left_style(cell->style);
-    a.color = css_computed_border_left_color(cell->style, &a.c);
-    {
-        css_fixed_or_calc bw = (css_fixed_or_calc)0;
-        css_unit bu = CSS_UNIT_PX;
-        css_computed_border_left_width(cell->style, &bw, &bu);
-        a.width = table__length_to_fixed_px(cell->style, unit_len_ctx, bw, bu);
-    }
-    a.unit = CSS_UNIT_PX;
-    a_src = BOX_TABLE_CELL;
-
-    if (cell->prev != NULL || cell->start_column != 0) {
-        /* Cell to the left -- consider its right border */
-        struct box *prev = NULL;
-
-        if (cell->prev == NULL) {
-            struct box *row;
-
-            /* Spanned from a previous row in current row group */
-            for (row = cell->parent; row != NULL; row = row->prev) {
-                for (prev = row->children; prev != NULL; prev = prev->next) {
-                    if (prev->start_column + prev->columns == cell->start_column)
-                        break;
-                }
-
-                if (prev != NULL)
-                    break;
-            }
-
-            assert(prev != NULL);
-        } else {
-            prev = cell->prev;
-        }
-
-        b.style = css_computed_border_right_style(prev->style);
-        b.color = css_computed_border_right_color(prev->style, &b.c);
-        {
-            css_fixed_or_calc bw = (css_fixed_or_calc)0;
-            css_unit bu = CSS_UNIT_PX;
-            css_computed_border_right_width(prev->style, &bw, &bu);
-            b.width = table__length_to_fixed_px(prev->style, unit_len_ctx, bw, bu);
-        }
-        b.unit = CSS_UNIT_PX;
-        b_src = BOX_TABLE_CELL;
-
-        if (table_border_is_more_eyecatching(unit_len_ctx, &a, a_src, &b, b_src)) {
-            a = b;
-            a_src = b_src;
-        }
-    } else {
-        /* First cell in row, so consider rows and row group */
-        struct box *row = cell->parent;
-        struct box *group = row->parent;
-        struct box *table = group->parent;
-        unsigned int rows = cell->rows;
-
-        while (rows-- > 0 && row != NULL) {
-            /* Spanned rows -- consider their left border */
-            b.style = css_computed_border_left_style(row->style);
-            b.color = css_computed_border_left_color(row->style, &b.c);
-            {
-                css_fixed_or_calc bw = (css_fixed_or_calc)0;
-                css_unit bu = CSS_UNIT_PX;
-                css_computed_border_left_width(row->style, &bw, &bu);
-                b.width = table__length_to_fixed_px(row->style, unit_len_ctx, bw, bu);
-            }
-            b.unit = CSS_UNIT_PX;
-            b_src = BOX_TABLE_ROW;
-
-            if (table_border_is_more_eyecatching(unit_len_ctx, &a, a_src, &b, b_src)) {
-                a = b;
-                a_src = b_src;
-            }
-
-            row = row->next;
-        }
-
-        /** \todo can cells span row groups? */
-
-        /* Row group -- consider its left border */
-        b.style = css_computed_border_left_style(group->style);
-        b.color = css_computed_border_left_color(group->style, &b.c);
-        {
-            css_fixed_or_calc bw = (css_fixed_or_calc)0;
-            css_unit bu = CSS_UNIT_PX;
-            css_computed_border_left_width(group->style, &bw, &bu);
-            b.width = table__length_to_fixed_px(group->style, unit_len_ctx, bw, bu);
-        }
-        b.unit = CSS_UNIT_PX;
-        b_src = BOX_TABLE_ROW_GROUP;
-
-        if (table_border_is_more_eyecatching(unit_len_ctx, &a, a_src, &b, b_src)) {
-            a = b;
-            a_src = b_src;
-        }
-
-        /* The table itself -- consider its left border */
-        b.style = css_computed_border_left_style(table->style);
-        b.color = css_computed_border_left_color(table->style, &b.c);
-        {
-            css_fixed_or_calc bw = (css_fixed_or_calc)0;
-            css_unit bu = CSS_UNIT_PX;
-            css_computed_border_left_width(table->style, &bw, &bu);
-            b.width = table__length_to_fixed_px(table->style, unit_len_ctx, bw, bu);
-        }
-        b.unit = CSS_UNIT_PX;
-        b_src = BOX_TABLE;
-
-        if (table_border_is_more_eyecatching(unit_len_ctx, &a, a_src, &b, b_src)) {
-            a = b;
-            a_src = b_src;
-        }
-    }
-
-    /* a now contains the used left border for the cell */
-    cell->border[LEFT].style = a.style;
-    cell->border[LEFT].c = a.c;
-    cell->border[LEFT].width = FIXTOINT(css_unit_len2device_px(cell->style, unit_len_ctx, a.width, a.unit));
-}
-
-
-/**
- * Calculate used values of border-top-{style,color,width}
- *
- * \param unit_len_ctx  Length conversion context
- * \param cell     Table cell to consider
- */
-static void table_used_top_border_for_cell(const css_unit_ctx *unit_len_ctx, struct box *cell)
-{
-    struct border a, b;
-    box_type a_src, b_src;
-    struct box *row = cell->parent;
-    bool process_group = false;
-
-    /* Initialise to computed top border for cell */
-    a.style = css_computed_border_top_style(cell->style);
-    css_computed_border_top_color(cell->style, &a.c);
-    {
-        css_fixed_or_calc bw = (css_fixed_or_calc)0;
-        css_unit bu = CSS_UNIT_PX;
-        css_computed_border_top_width(cell->style, &bw, &bu);
-        a.width = table__length_to_fixed_px(cell->style, unit_len_ctx, bw, bu);
-    }
-    a.unit = CSS_UNIT_PX;
-    a_src = BOX_TABLE_CELL;
-
-    /* Top border of row */
-    b.style = css_computed_border_top_style(row->style);
-    css_computed_border_top_color(row->style, &b.c);
-    {
-        css_fixed_or_calc bw = (css_fixed_or_calc)0;
-        css_unit bu = CSS_UNIT_PX;
-        css_computed_border_top_width(row->style, &bw, &bu);
-        b.width = table__length_to_fixed_px(row->style, unit_len_ctx, bw, bu);
-    }
-    b.unit = CSS_UNIT_PX;
-    b_src = BOX_TABLE_ROW;
-
-    if (table_border_is_more_eyecatching(unit_len_ctx, &a, a_src, &b, b_src)) {
-        a = b;
-        a_src = b_src;
-    }
-
-    if (row->prev != NULL) {
-        /* Consider row(s) above */
-        while (table_cell_top_process_row(unit_len_ctx, cell, row->prev, &a, &a_src) == false) {
-            if (row->prev->prev == NULL) {
-                /* Consider row group */
-                process_group = true;
-                break;
-            } else {
-                row = row->prev;
-            }
-        }
-    } else {
-        process_group = true;
-    }
-
-    if (process_group) {
-        struct box *group = row->parent;
-
-        /* Top border of row group */
-        b.style = css_computed_border_top_style(group->style);
-        b.color = css_computed_border_top_color(group->style, &b.c);
-        {
-            css_fixed_or_calc bw = (css_fixed_or_calc)0;
-            css_unit bu = CSS_UNIT_PX;
-            css_computed_border_top_width(group->style, &bw, &bu);
-            b.width = table__length_to_fixed_px(group->style, unit_len_ctx, bw, bu);
-        }
-        b.unit = CSS_UNIT_PX;
-        b_src = BOX_TABLE_ROW_GROUP;
-
-        if (table_border_is_more_eyecatching(unit_len_ctx, &a, a_src, &b, b_src)) {
-            a = b;
-            a_src = b_src;
-        }
-
-        if (group->prev == NULL) {
-            /* Top border of table */
-            table_cell_top_process_table(unit_len_ctx, group->parent, &a, &a_src);
-        } else {
-            /* Process previous group(s) */
-            while (table_cell_top_process_group(unit_len_ctx, cell, group->prev, &a, &a_src) == false) {
-                if (group->prev->prev == NULL) {
-                    /* Top border of table */
-                    table_cell_top_process_table(unit_len_ctx, group->parent, &a, &a_src);
-                    break;
-                } else {
-                    group = group->prev;
-                }
-            }
-        }
-    }
-
-    /* a now contains the used top border for the cell */
-    cell->border[TOP].style = a.style;
-    cell->border[TOP].c = a.c;
-    cell->border[TOP].width = FIXTOINT(css_unit_len2device_px(cell->style, unit_len_ctx, a.width, a.unit));
-}
-
-/**
- * Calculate used values of border-right-{style,color,width}
- *
- * \param unit_len_ctx  Length conversion context
- * \param cell     Table cell to consider
- */
-static void table_used_right_border_for_cell(const css_unit_ctx *unit_len_ctx, struct box *cell)
-{
-    struct border a, b;
-    box_type a_src, b_src;
-
-    /** \todo Need column and column_group, too */
-
-    /* Initialise to computed right border for cell */
-    a.style = css_computed_border_right_style(cell->style);
-    css_computed_border_right_color(cell->style, &a.c);
-    {
-        css_fixed_or_calc bw = (css_fixed_or_calc)0;
-        css_unit bu = CSS_UNIT_PX;
-        css_computed_border_right_width(cell->style, &bw, &bu);
-        a.width = table__length_to_fixed_px(cell->style, unit_len_ctx, bw, bu);
-    }
-    a.unit = CSS_UNIT_PX;
-    a_src = BOX_TABLE_CELL;
-
-    if (cell->next != NULL || cell->start_column + cell->columns != cell->parent->parent->parent->columns) {
-        /* Cell is not at right edge of table -- no right border */
-        a.style = CSS_BORDER_STYLE_NONE;
-        a.width = 0;
-        a.unit = CSS_UNIT_PX;
-    } else {
-        /* Last cell in row, so consider rows and row group */
-        struct box *row = cell->parent;
-        struct box *group = row->parent;
-        struct box *table = group->parent;
-        unsigned int rows = cell->rows;
-
-        while (rows-- > 0 && row != NULL) {
-            /* Spanned rows -- consider their right border */
-            b.style = css_computed_border_right_style(row->style);
-            b.color = css_computed_border_right_color(row->style, &b.c);
-            {
-                css_fixed_or_calc bw = (css_fixed_or_calc)0;
-                css_unit bu = CSS_UNIT_PX;
-                css_computed_border_right_width(row->style, &bw, &bu);
-                b.width = table__length_to_fixed_px(row->style, unit_len_ctx, bw, bu);
-            }
-            b.unit = CSS_UNIT_PX;
-            b_src = BOX_TABLE_ROW;
-
-            if (table_border_is_more_eyecatching(unit_len_ctx, &a, a_src, &b, b_src)) {
-                a = b;
-                a_src = b_src;
-            }
-
-            row = row->next;
-        }
-
-        /** \todo can cells span row groups? */
-
-        /* Row group -- consider its right border */
-        b.style = css_computed_border_right_style(group->style);
-        b.color = css_computed_border_right_color(group->style, &b.c);
-        {
-            css_fixed_or_calc bw = (css_fixed_or_calc)0;
-            css_unit bu = CSS_UNIT_PX;
-            css_computed_border_right_width(group->style, &bw, &bu);
-            b.width = table__length_to_fixed_px(group->style, unit_len_ctx, bw, bu);
-        }
-        b.unit = CSS_UNIT_PX;
-        b_src = BOX_TABLE_ROW_GROUP;
-
-        if (table_border_is_more_eyecatching(unit_len_ctx, &a, a_src, &b, b_src)) {
-            a = b;
-            a_src = b_src;
-        }
-
-        /* The table itself -- consider its right border */
-        b.style = css_computed_border_right_style(table->style);
-        b.color = css_computed_border_right_color(table->style, &b.c);
-        {
-            css_fixed_or_calc bw = (css_fixed_or_calc)0;
-            css_unit bu = CSS_UNIT_PX;
-            css_computed_border_right_width(table->style, &bw, &bu);
-            b.width = table__length_to_fixed_px(table->style, unit_len_ctx, bw, bu);
-        }
-        b.unit = CSS_UNIT_PX;
-        b_src = BOX_TABLE;
-
-        if (table_border_is_more_eyecatching(unit_len_ctx, &a, a_src, &b, b_src)) {
-            a = b;
-            a_src = b_src;
-        }
-    }
-
-    /* a now contains the used right border for the cell */
-    cell->border[RIGHT].style = a.style;
-    cell->border[RIGHT].c = a.c;
-    cell->border[RIGHT].width = FIXTOINT(css_unit_len2device_px(cell->style, unit_len_ctx, a.width, a.unit));
-}
-
-
-/**
- * Calculate used values of border-bottom-{style,color,width}
- *
- * \param unit_len_ctx  Length conversion context
- * \param cell     Table cell to consider
- */
-static void table_used_bottom_border_for_cell(const css_unit_ctx *unit_len_ctx, struct box *cell)
-{
-    struct border a, b;
-    box_type a_src, b_src;
-    struct box *row = cell->parent;
-    unsigned int rows = cell->rows;
-
-    /* Initialise to computed bottom border for cell */
-    a.style = css_computed_border_bottom_style(cell->style);
-    css_computed_border_bottom_color(cell->style, &a.c);
-    {
-        css_fixed_or_calc bw = (css_fixed_or_calc)0;
-        css_unit bu = CSS_UNIT_PX;
-        css_computed_border_bottom_width(cell->style, &bw, &bu);
-        a.width = table__length_to_fixed_px(cell->style, unit_len_ctx, bw, bu);
-    }
-    a.unit = CSS_UNIT_PX;
-    a_src = BOX_TABLE_CELL;
-
-    while (rows-- > 0 && row != NULL)
-        row = row->next;
-
-    /** \todo Can cells span row groups? */
-
-    if (row != NULL) {
-        /* Cell is not at bottom edge of table -- no bottom border */
-        a.style = CSS_BORDER_STYLE_NONE;
-        a.width = 0;
-        a.unit = CSS_UNIT_PX;
-    } else {
-        /* Cell at bottom of table, so consider row and row group */
-        struct box *row = cell->parent;
-        struct box *group = row->parent;
-        struct box *table = group->parent;
-
-        /* Bottom border of row */
-        b.style = css_computed_border_bottom_style(row->style);
-        b.color = css_computed_border_bottom_color(row->style, &b.c);
-        {
-            css_fixed_or_calc bw = (css_fixed_or_calc)0;
-            css_unit bu = CSS_UNIT_PX;
-            css_computed_border_bottom_width(row->style, &bw, &bu);
-            b.width = table__length_to_fixed_px(row->style, unit_len_ctx, bw, bu);
-        }
-        b.unit = CSS_UNIT_PX;
-        b_src = BOX_TABLE_ROW;
-
-        if (table_border_is_more_eyecatching(unit_len_ctx, &a, a_src, &b, b_src)) {
-            a = b;
-            a_src = b_src;
-        }
-
-        /* Row group -- consider its bottom border */
-        b.style = css_computed_border_bottom_style(group->style);
-        b.color = css_computed_border_bottom_color(group->style, &b.c);
-        {
-            css_fixed_or_calc bw = (css_fixed_or_calc)0;
-            css_unit bu = CSS_UNIT_PX;
-            css_computed_border_bottom_width(group->style, &bw, &bu);
-            b.width = table__length_to_fixed_px(group->style, unit_len_ctx, bw, bu);
-        }
-        b.unit = CSS_UNIT_PX;
-        b_src = BOX_TABLE_ROW_GROUP;
-
-        if (table_border_is_more_eyecatching(unit_len_ctx, &a, a_src, &b, b_src)) {
-            a = b;
-            a_src = b_src;
-        }
-
-        /* The table itself -- consider its bottom border */
-        b.style = css_computed_border_bottom_style(table->style);
-        b.color = css_computed_border_bottom_color(table->style, &b.c);
-        {
-            css_fixed_or_calc bw = (css_fixed_or_calc)0;
-            css_unit bu = CSS_UNIT_PX;
-            css_computed_border_bottom_width(table->style, &bw, &bu);
-            b.width = table__length_to_fixed_px(table->style, unit_len_ctx, bw, bu);
-        }
-        b.unit = CSS_UNIT_PX;
-        b_src = BOX_TABLE;
-
-        if (table_border_is_more_eyecatching(unit_len_ctx, &a, a_src, &b, b_src)) {
-            a = b;
-        }
-    }
-
-    /* a now contains the used bottom border for the cell */
-    cell->border[BOTTOM].style = a.style;
-    cell->border[BOTTOM].c = a.c;
-    cell->border[BOTTOM].width = FIXTOINT(css_unit_len2device_px(cell->style, unit_len_ctx, a.width, a.unit));
-}
-
-
 /* exported interface documented in html/table.h */
 bool table_calculate_column_types(const css_unit_ctx *unit_len_ctx, struct box *table)
 {
@@ -854,13 +53,19 @@ bool table_calculate_column_types(const css_unit_ctx *unit_len_ctx, struct box *
     struct column *col;
     struct box *row_group, *row, *cell;
 
-    if (table->col)
-        /* table->col already constructed, for example frameset table */
+    if (table->table)
+        /* Column sizing is cached until layout_reset_box(). */
         return true;
 
-    table->col = col = talloc_array(table, struct column, table->columns);
-    if (!col)
+    table->table = talloc_zero(table, struct table_data);
+    if (!table->table)
         return false;
+    table->table->columns = col = talloc_array(table->table, struct column, table->columns);
+    if (!col) {
+        talloc_free(table->table);
+        table->table = NULL;
+        return false;
+    }
 
     for (i = 0; i != table->columns; i++) {
         col[i].type = COLUMN_WIDTH_UNKNOWN;
@@ -1005,83 +210,282 @@ bool table_calculate_column_types(const css_unit_ctx *unit_len_ctx, struct box *
             col[i].type = COLUMN_WIDTH_AUTO;
     }
 
-#ifdef TABLE_DEBUG
-    for (i = 0; i != table->columns; i++)
-        NSLOG(wisp, INFO, "table %p, column %u: type %s, width %i", table, i,
-            ((const char *[]){
-                "UNKNOWN",
-                "FIXED",
-                "AUTO",
-                "PERCENT",
-                "RELATIVE",
-            })[col[i].type],
-            col[i].width);
-#endif
 
     return true;
 }
 
 
-/* exported interface documented in html/table.h */
-void table_used_border_for_cell(const css_unit_ctx *unit_len_ctx, struct box *cell)
+/* Read a border once per originating box, not once per adjacent cell. */
+static void table_read_borders(
+    const css_unit_ctx *ctx, const struct box *box, unsigned int row, struct table_border_edge borders[4])
 {
-    int side;
-
-    assert(cell->type == BOX_TABLE_CELL);
-
-    if (css_computed_border_collapse(cell->style) == CSS_BORDER_COLLAPSE_SEPARATE) {
-        css_fixed_or_calc width = (css_fixed_or_calc)0;
-        css_unit unit = CSS_UNIT_PX;
-
-        /* Left border */
-        cell->border[LEFT].style = css_computed_border_left_style(cell->style);
-        css_computed_border_left_color(cell->style, &cell->border[LEFT].c);
-        css_computed_border_left_width(cell->style, &width, &unit);
-        if (!table__length_to_px_int(cell->style, unit_len_ctx, width, unit, &cell->border[LEFT].width)) {
-            cell->border[LEFT].width = 0;
+    static uint8_t (*const styles[])(const css_computed_style *) = {css_computed_border_top_style,
+        css_computed_border_right_style, css_computed_border_bottom_style, css_computed_border_left_style};
+    static uint8_t (*const colors[])(const css_computed_style *, css_color *) = {css_computed_border_top_color,
+        css_computed_border_right_color, css_computed_border_bottom_color, css_computed_border_left_color};
+    static uint8_t (*const widths[])(const css_computed_style *, css_fixed_or_calc *, css_unit *) = {
+        css_computed_border_top_width, css_computed_border_right_width, css_computed_border_bottom_width,
+        css_computed_border_left_width};
+    for (unsigned int side = 0; side < 4; side++) {
+        borders[side] = (struct table_border_edge){.border.style = CSS_BORDER_STYLE_NONE, .owner = box, .row = row};
+        struct box_border *border = &borders[side].border;
+        if (!box->style)
+            continue;
+        border->style = styles[side](box->style);
+        colors[side](box->style, &border->c);
+        if (border->style > CSS_BORDER_STYLE_HIDDEN) {
+            css_fixed_or_calc width = (css_fixed_or_calc)0;
+            css_unit unit = CSS_UNIT_PX;
+            widths[side](box->style, &width, &unit);
+            if (unit == CSS_UNIT_CALC) {
+                table__length_to_px_int(box->style, ctx, width, unit, &border->width);
+                borders[side].priority_width = INTTOFIX(border->width);
+            } else {
+                borders[side].priority_width = css_unit_len2device_px(box->style, ctx, width.value, unit);
+                border->width = FIXTOINT(borders[side].priority_width);
+            }
         }
+    }
+}
 
-        /* Top border */
-        cell->border[TOP].style = css_computed_border_top_style(cell->style);
-        css_computed_border_top_color(cell->style, &cell->border[TOP].c);
-        css_computed_border_top_width(cell->style, &width, &unit);
-        if (!table__length_to_px_int(cell->style, unit_len_ctx, width, unit, &cell->border[TOP].width)) {
-            cell->border[TOP].width = 0;
+static int table_border_style_rank(enum css_border_style_e style)
+{
+    switch (style) {
+    case CSS_BORDER_STYLE_DOUBLE:
+        return 8;
+    case CSS_BORDER_STYLE_SOLID:
+        return 7;
+    case CSS_BORDER_STYLE_DASHED:
+        return 6;
+    case CSS_BORDER_STYLE_DOTTED:
+        return 5;
+    case CSS_BORDER_STYLE_RIDGE:
+        return 4;
+    case CSS_BORDER_STYLE_OUTSET:
+        return 3;
+    case CSS_BORDER_STYLE_GROOVE:
+        return 2;
+    case CSS_BORDER_STYLE_INSET:
+        return 1;
+    default:
+        return 0;
+    }
+}
+
+static int table_border_source_rank(const struct box *box)
+{
+    if (!box)
+        return 0;
+    switch (box->type) {
+    case BOX_TABLE_CELL:
+        return 4;
+    case BOX_TABLE_ROW:
+        return 3;
+    case BOX_TABLE_ROW_GROUP:
+        return 2;
+    default:
+        return 1;
+    }
+}
+
+static void
+table_offer_border(struct table_border_edge *edge, const struct table_border_edge *candidate, bool horizontal, bool rtl)
+{
+    const struct box_border *old = &edge->border, *border = &candidate->border;
+    /* Hidden also marks grid lines inside a spanning cell: no border may cross it. */
+    if (old->style == CSS_BORDER_STYLE_HIDDEN || border->style == CSS_BORDER_STYLE_NONE)
+        return;
+    if (border->style != CSS_BORDER_STYLE_HIDDEN && old->style != CSS_BORDER_STYLE_NONE) {
+        if (candidate->priority_width != edge->priority_width) {
+            if (candidate->priority_width < edge->priority_width)
+                return;
+        } else if (border->style != old->style) {
+            if (table_border_style_rank(border->style) < table_border_style_rank(old->style))
+                return;
+        } else if (table_border_source_rank(candidate->owner) != table_border_source_rank(edge->owner)) {
+            if (table_border_source_rank(candidate->owner) < table_border_source_rank(edge->owner))
+                return;
+        } else {
+            /* Prefer the cell above a horizontal edge, or the cell on the
+             * direction's leading side of a vertical edge. Source-row order
+             * alone is insufficient when a neighbour spans several rows. */
+            bool before = candidate->column != edge->column
+                ? (rtl ? candidate->column > edge->column : candidate->column < edge->column)
+                : candidate->row < edge->row;
+            if (horizontal && candidate->row != edge->row)
+                before = candidate->row < edge->row;
+            if (!before)
+                return;
         }
+    }
+    *edge = *candidate;
+}
 
-        /* Right border */
-        cell->border[RIGHT].style = css_computed_border_right_style(cell->style);
-        css_computed_border_right_color(cell->style, &cell->border[RIGHT].c);
-        css_computed_border_right_width(cell->style, &width, &unit);
-        if (!table__length_to_px_int(cell->style, unit_len_ctx, width, unit, &cell->border[RIGHT].width)) {
-            cell->border[RIGHT].width = 0;
+static void table_offer_perimeter(const css_unit_ctx *ctx, struct table_border_grid *grid, const struct box *box,
+    unsigned int top, unsigned int bottom, unsigned int left, unsigned int right, bool rtl)
+{
+    struct table_border_edge borders[4];
+    table_read_borders(ctx, box, top, borders);
+    for (unsigned int side = 0; side < 4; side++)
+        borders[side].column = left;
+    for (unsigned int x = left; x < right; x++) {
+        table_offer_border(&grid->horizontal[(size_t)top * grid->columns + x], &borders[TOP], true, rtl);
+        table_offer_border(&grid->horizontal[(size_t)bottom * grid->columns + x], &borders[BOTTOM], true, rtl);
+    }
+    for (unsigned int y = top; y < bottom; y++) {
+        table_offer_border(&grid->vertical[(size_t)y * (grid->columns + 1) + left], &borders[LEFT], false, rtl);
+        table_offer_border(&grid->vertical[(size_t)y * (grid->columns + 1) + right], &borders[RIGHT], false, rtl);
+    }
+}
+
+static void table_max_border(struct box_border *used, const struct table_border_edge *edge)
+{
+    if (edge->border.width > used->width)
+        *used = edge->border;
+}
+
+static unsigned int table_group_rows(const struct box *group)
+{
+    unsigned int rows = 0;
+    for (const struct box *row = group->children; row; row = row->next)
+        rows++;
+    return rows;
+}
+
+static void table_assign_cell_borders(struct box *table, const struct table_border_grid *grid)
+{
+    /* CSS 2.2 17.6.2: center borders on grid lines. For odd device widths,
+     * consistently assign the extra pixel to the right/bottom half. Each cell
+     * reserves its inward half, using the widest segment on a spanned side. */
+    unsigned int y = 0;
+    for (struct box *group = table->children; group; group = group->next) {
+        unsigned int group_end = y + table_group_rows(group);
+        for (struct box *row = group->children; row; row = row->next, y++) {
+            for (struct box *cell = row->children; cell; cell = cell->next) {
+                unsigned int left = cell->start_column, right = left + cell->columns;
+                unsigned int bottom = cell->rows < group_end - y ? y + cell->rows : group_end;
+                for (unsigned int side = 0; side < 4; side++)
+                    cell->border[side] = (struct box_border){.style = CSS_BORDER_STYLE_NONE};
+                for (unsigned int c = left; c < right; c++) {
+                    table_max_border(&cell->border[TOP], &grid->horizontal[(size_t)y * grid->columns + c]);
+                    table_max_border(&cell->border[BOTTOM], &grid->horizontal[(size_t)bottom * grid->columns + c]);
+                }
+                for (unsigned int r = y; r < bottom; r++) {
+                    table_max_border(&cell->border[LEFT], &grid->vertical[(size_t)r * (grid->columns + 1) + left]);
+                    table_max_border(&cell->border[RIGHT], &grid->vertical[(size_t)r * (grid->columns + 1) + right]);
+                }
+                for (unsigned int side = 0; side < 4; side++)
+                    cell->border[side].width = (cell->border[side].width + (side == LEFT || side == TOP)) / 2;
+            }
         }
+    }
+}
 
-        /* Bottom border */
-        cell->border[BOTTOM].style = css_computed_border_bottom_style(cell->style);
-        css_computed_border_bottom_color(cell->style, &cell->border[BOTTOM].c);
-        css_computed_border_bottom_width(cell->style, &width, &unit);
-        if (!table__length_to_px_int(cell->style, unit_len_ctx, width, unit, &cell->border[BOTTOM].width)) {
-            cell->border[BOTTOM].width = 0;
-        }
-    } else {
-        /* Left border */
-        table_used_left_border_for_cell(unit_len_ctx, cell);
-
-        /* Top border */
-        table_used_top_border_for_cell(unit_len_ctx, cell);
-
-        /* Right border */
-        table_used_right_border_for_cell(unit_len_ctx, cell);
-
-        /* Bottom border */
-        table_used_bottom_border_for_cell(unit_len_ctx, cell);
+bool table_prepare_borders(const css_unit_ctx *ctx, struct box *table)
+{
+    if (table->table->borders)
+        return true;
+    if (css_computed_border_collapse(table->style) != CSS_BORDER_COLLAPSE_COLLAPSE) {
+        for (struct box *group = table->children; group; group = group->next)
+            for (struct box *row = group->children; row; row = row->next)
+                for (struct box *cell = row->children; cell; cell = cell->next) {
+                    struct table_border_edge borders[4];
+                    table_read_borders(ctx, cell, 0, borders);
+                    for (unsigned int side = 0; side < 4; side++)
+                        cell->border[side] = borders[side].border;
+                }
+        return true;
     }
 
-    /* Finally, ensure that any borders configured as
-     * hidden or none have zero width. (c.f. layout_find_dimensions) */
-    for (side = 0; side != 4; side++) {
-        if (cell->border[side].style == CSS_BORDER_STYLE_HIDDEN || cell->border[side].style == CSS_BORDER_STYLE_NONE)
-            cell->border[side].width = 0;
+    struct table_border_grid *grid = talloc_zero(table->table, struct table_border_grid);
+    if (!grid)
+        return false;
+    grid->columns = table->columns;
+    for (struct box *group = table->children; group; group = group->next)
+        grid->rows += table_group_rows(group);
+    /* The bundled talloc takes unsigned array counts, even on 64-bit hosts. */
+    uint64_t horizontal_count = ((uint64_t)grid->rows + 1) * grid->columns;
+    uint64_t vertical_count = (uint64_t)grid->rows * ((uint64_t)grid->columns + 1);
+    if (grid->rows == UINT_MAX || grid->columns == UINT_MAX || horizontal_count > UINT_MAX ||
+        vertical_count > UINT_MAX) {
+        talloc_free(grid);
+        return false;
     }
+    grid->horizontal = talloc_zero_array(grid, struct table_border_edge, horizontal_count);
+    grid->vertical = talloc_zero_array(grid, struct table_border_edge, vertical_count);
+    grid->x = talloc_array(grid, int, (size_t)grid->columns + 1);
+    grid->y = talloc_array(grid, int, (size_t)grid->rows + 1);
+    if (!grid->horizontal || !grid->vertical || !grid->x || !grid->y) {
+        talloc_free(grid);
+        return false;
+    }
+    for (size_t i = 0; i < horizontal_count; i++)
+        grid->horizontal[i].border.style = CSS_BORDER_STYLE_NONE;
+    for (size_t i = 0; i < vertical_count; i++)
+        grid->vertical[i].border.style = CSS_BORDER_STYLE_NONE;
+
+    unsigned int y = 0;
+    for (struct box *group = table->children; group; group = group->next) {
+        unsigned int group_end = y + table_group_rows(group);
+        for (struct box *row = group->children; row; row = row->next, y++) {
+            for (struct box *cell = row->children; cell; cell = cell->next) {
+                unsigned int right = cell->start_column + cell->columns;
+                unsigned int bottom = cell->rows < group_end - y ? y + cell->rows : group_end;
+                for (unsigned int r = y; r < bottom; r++)
+                    for (unsigned int c = cell->start_column + 1; c < right; c++)
+                        grid->vertical[(size_t)r * (grid->columns + 1) + c].border.style = CSS_BORDER_STYLE_HIDDEN;
+                for (unsigned int r = y + 1; r < bottom; r++)
+                    for (unsigned int c = cell->start_column; c < right; c++)
+                        grid->horizontal[(size_t)r * grid->columns + c].border.style = CSS_BORDER_STYLE_HIDDEN;
+            }
+        }
+    }
+
+    bool rtl = css_computed_direction(table->style) == CSS_DIRECTION_RTL;
+    table_offer_perimeter(ctx, grid, table, 0, grid->rows, 0, grid->columns, rtl);
+    y = 0;
+    for (struct box *group = table->children; group; group = group->next) {
+        unsigned int group_end = y + table_group_rows(group);
+        table_offer_perimeter(ctx, grid, group, y, group_end, 0, grid->columns, rtl);
+        for (struct box *row = group->children; row; row = row->next, y++) {
+            table_offer_perimeter(ctx, grid, row, y, y + 1, 0, grid->columns, rtl);
+            for (struct box *cell = row->children; cell; cell = cell->next) {
+                unsigned int bottom = cell->rows < group_end - y ? y + cell->rows : group_end;
+                table_offer_perimeter(
+                    ctx, grid, cell, y, bottom, cell->start_column, cell->start_column + cell->columns, rtl);
+            }
+        }
+    }
+
+    table_assign_cell_borders(table, grid);
+
+    for (unsigned int side = 0; side < 4; side++)
+        table->border[side] = (struct box_border){.style = CSS_BORDER_STYLE_NONE};
+    if (grid->rows && grid->columns) {
+        table->border[LEFT] = grid->vertical[0].border;
+        table->border[RIGHT] = grid->vertical[grid->columns].border;
+        for (unsigned int c = 0; c < grid->columns; c++) {
+            table_max_border(&table->border[TOP], &grid->horizontal[c]);
+            table_max_border(&table->border[BOTTOM], &grid->horizontal[(size_t)grid->rows * grid->columns + c]);
+        }
+    }
+    for (unsigned int side = 0; side < 4; side++)
+        table->border[side].width = (table->border[side].width + (side == RIGHT || side == BOTTOM)) / 2;
+    table->table->borders = grid;
+    return true;
+}
+
+void table_position_borders(struct box *table, const int *columns)
+{
+    struct table_border_grid *grid = table->table->borders;
+    if (!grid)
+        return;
+    memcpy(grid->x, columns, ((size_t)grid->columns + 1) * sizeof(*columns));
+    unsigned int y = 0;
+    grid->y[0] = 0;
+    for (const struct box *group = table->children; group; group = group->next)
+        for (const struct box *row = group->children; row; row = row->next) {
+            grid->y[y++] = group->y + row->y;
+            grid->y[y] = group->y + row->y + row->height;
+        }
 }

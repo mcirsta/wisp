@@ -37,6 +37,7 @@
 #include "content/handlers/html/box_sticky.h"
 
 #include <wisp/content/handlers/html/box.h>
+#include "content/handlers/html/table.h"
 #include <wisp/content/handlers/html/box_inspect.h>
 #include <wisp/content/handlers/html/private.h>
 
@@ -854,13 +855,13 @@ void box_dump(FILE *stream, struct box *box, unsigned int depth, bool style)
         fprintf(stream, " next_float %p", box->next_float);
     if (box->float_container)
         fprintf(stream, " float_container %p", box->float_container);
-    if (box->col) {
+    if (box->table) {
         fprintf(stream, " (columns");
         for (i = 0; i != box->columns; i++) {
             fprintf(stream, " (%s %s %i %i %i)",
-                ((const char *[]){"UNKNOWN", "FIXED", "AUTO", "PERCENT", "RELATIVE"})[box->col[i].type],
-                ((const char *[]){"normal", "positioned"})[box->col[i].positioned], box->col[i].width, box->col[i].min,
-                box->col[i].max);
+                ((const char *[]){"UNKNOWN", "FIXED", "AUTO", "PERCENT", "RELATIVE"})[box->table->columns[i].type],
+                ((const char *[]){"normal", "positioned"})[box->table->columns[i].positioned],
+                box->table->columns[i].width, box->table->columns[i].min, box->table->columns[i].max);
         }
         fprintf(stream, ")");
     }

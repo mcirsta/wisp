@@ -26,8 +26,38 @@
 #define WISP_HTML_TABLE_H
 
 #include <stdbool.h>
+#include <wisp/content/handlers/html/box.h>
 
 struct box;
+
+/* One resolved border per grid segment, shared by layout and painting. Source
+ * information implements CSS 2.2 17.6.2.1 ties and visibility inheritance. */
+struct table_border_edge {
+    struct box_border border;
+    css_fixed priority_width; /* Preserve width ordering before device-pixel rounding. */
+    const struct box *owner;
+    unsigned int row, column;
+};
+
+struct table_border_grid {
+    unsigned int rows, columns;
+    struct table_border_edge *horizontal; /* (rows + 1) * columns */
+    struct table_border_edge *vertical; /* rows * (columns + 1) */
+    int *x, *y; /* Grid line coordinates relative to the table padding origin. */
+};
+
+struct table_data {
+    struct column *columns;
+    struct table_border_grid *borders;
+};
+
+/* True only for a table or one of its cells using a prepared collapsed grid. */
+static inline bool table_has_collapsed_borders(const struct box *box)
+{
+    if (box->type == BOX_TABLE_CELL && box->parent && box->parent->parent)
+        box = box->parent->parent->parent;
+    return box && box->type == BOX_TABLE && box->table && box->table->borders;
+}
 
 
 /**
@@ -37,20 +67,23 @@ struct box;
  * \param table box of type BOX_TABLE
  * \return true on success, false on memory exhaustion
  *
- * The table->col array is allocated and type and width are filled in for each
+ * The table->table->columns array is allocated and filled in for each
  * column.
  */
 bool table_calculate_column_types(const css_unit_ctx *unit_len_ctx, struct box *table);
 
 
 /**
- * Calculate used values of border-{trbl}-{style,color,width} for table cells.
+ * Resolve shared edges before intrinsic sizing, and populate cell used borders.
  *
  * \param unit_len_ctx Length conversion context
- * \param cell Table cell to consider
+ * \param table Normalized table with column data
  *
- * \post \a cell's border array is populated
+ * \return false on allocation failure
  */
-void table_used_border_for_cell(const css_unit_ctx *unit_len_ctx, struct box *cell);
+bool table_prepare_borders(const css_unit_ctx *unit_len_ctx, struct box *table);
+
+/* Save grid positions after row layout. No allocations or style selection. */
+void table_position_borders(struct box *table, const int *columns);
 
 #endif

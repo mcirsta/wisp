@@ -8,7 +8,11 @@
 #include "wisp/types.h"
 #include "wisp/utils/errors.h"
 
+#include "content/handlers/html/table.h"
+
 /* Under test */
+bool html_redraw_table_borders(
+    const struct box *table, int x, int y, const struct rect *clip, float scale, const struct redraw_context *ctx);
 bool html_redraw_borders(struct box *box, int x, int y, int p_width, int p_height, const struct rect *clip, float scale,
     const struct redraw_context *ctx);
 
@@ -138,11 +142,42 @@ START_TEST(test_borders_left_only_geometry)
 }
 END_TEST
 
+/* Odd border widths share one grid line. Painting expands outwards while
+ * cells reserve only inward halves; a table-level clip may cut those halves. */
+START_TEST(test_collapsed_grid_geometry)
+{
+    struct table_border_edge horizontal[2] = {
+        {.border = {.style = CSS_BORDER_STYLE_SOLID, .width = 2, .c = 0xff112233}},
+        {.border = {.style = CSS_BORDER_STYLE_SOLID, .width = 2, .c = 0xff112233}}};
+    struct table_border_edge vertical[2] = {{.border = {.style = CSS_BORDER_STYLE_SOLID, .width = 3, .c = 0xff112233}},
+        {.border = {.style = CSS_BORDER_STYLE_SOLID, .width = 3, .c = 0xff112233}}};
+    int x[] = {0, 20}, y[] = {0, 10};
+    struct table_border_grid grid = {
+        .rows = 1, .columns = 1, .horizontal = horizontal, .vertical = vertical, .x = x, .y = y};
+    struct table_data data = {.borders = &grid};
+    struct box table = {.type = BOX_TABLE, .table = &data};
+    struct rect clip = _i == 0 ? (struct rect){0, 0, 100, 100} : (struct rect){10, 20, 31, 30};
+    const struct rect expected[][4] = {{{9, 19, 12, 31}, {29, 19, 32, 31}, {9, 19, 32, 21}, {9, 29, 32, 31}},
+        {{10, 20, 12, 30}, {29, 20, 31, 30}, {10, 20, 31, 21}, {10, 29, 31, 30}}};
+    capture_t cap = {0};
+    struct redraw_context ctx = {.plot = &cap_plotters, .priv = &cap};
+    ck_assert(html_redraw_table_borders(&table, 10, 20, &clip, 1, &ctx));
+    ck_assert_int_eq(cap.rectangle_count, 4);
+    for (int side = 0; side < 4; side++) {
+        const struct rect *got = &cap.rectangles[side], *want = &expected[_i][side];
+        ck_assert_msg(got->x0 == want->x0 && got->y0 == want->y0 && got->x1 == want->x1 && got->y1 == want->y1,
+            "clip case %d, segment %d: (%d,%d)-(%d,%d), expected (%d,%d)-(%d,%d)", _i, side, got->x0, got->y0, got->x1,
+            got->y1, want->x0, want->y0, want->x1, want->y1);
+    }
+}
+END_TEST
+
 Suite *renderer_suite(void)
 {
     Suite *s = suite_create("renderer_borders");
     TCase *tc = tcase_create("borders_left");
     tcase_add_test(tc, test_borders_left_only_geometry);
+    tcase_add_loop_test(tc, test_collapsed_grid_geometry, 0, 2);
     suite_add_tcase(s, tc);
     return s;
 }

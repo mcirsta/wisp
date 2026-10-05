@@ -1,0 +1,88 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Collapsed table borders: shared edges and conflict resolution</title>
+<style>
+/* CSS 2.2 17.6.2/17.6.2.1. Dimensions use fixed blocks, independent of fonts.
+   Every border is centered on a grid line. 2px divides 1/1; this engine assigns
+   an odd border's extra pixel to its right/bottom half, consistently. */
+html, body { margin: 0; background: white; font-size: 0; line-height: 0 }
+#switch { display: none }
+label { display: block; width: 50px; height: 20px; background: #cccccc }
+.case { display: inline-block; vertical-align: top; width: 150px; height: 130px; padding: 12px }
+table { border-collapse: collapse; border-spacing: 0; margin: 0 }
+td { border: 2px solid #000000; padding: 0; vertical-align: top; background: #ffffcc }
+td > div { width: 32px; height: 20px; background: #ffffff }
+#odd td { border-width: 3px }
+#padding { padding: 15px }
+#override td { border-collapse: separate }
+#wide .left { border-right: 6px solid #ff0000 }
+#hidden .left { border-right: 12px hidden }
+#hidden .right { border-left: 8px solid #0000ff }
+#none .left { border-right: 20px none }
+#none .right { border-left: 4px solid #0000ff }
+#style .left { border-right: 6px double #ff0000 }
+#style .right { border-left: 6px solid #0000ff }
+#width .left { border-right: 6px double #ff0000 }
+#width .right { border-left: 8px solid #0000ff }
+#tie .left { border-right-color: #ff0000 }
+#tie .right { border-left-color: #0000ff }
+#origin { border: 6px solid #0000ff }
+#origin tbody { border: 6px solid #00ff00 }
+#origin tr { border: 6px solid #ff00ff }
+#origin td { border: 6px solid #ff0000 }
+#row { border: 6px solid #0000ff }
+#row tbody { border: 6px solid #00ff00 }
+#row tr { border: 6px solid #ff00ff }
+#group { border: 6px solid #0000ff }
+#group tbody { border: 6px solid #00ff00 }
+#table { border: 6px solid #0000ff }
+#colspan .span { border-bottom: 4px solid #00ff00 }
+#colspan .strong { border-top: 6px solid #ff0000 }
+#rowspan .upper { border-left: 6px solid #0000ff }
+#rowspan .lower { border-left: 4px solid #00ff00; border-top: 6px solid #ff0000 }
+#groups tbody:first-child { border-bottom: 6px solid #ff0000 }
+#groups tbody + tbody { border-top: 6px solid #0000ff }
+#spill tr + tr td { border-left: 10px solid #ff0000; border-right: 10px solid #ff0000 }
+#separate { border-collapse: separate }
+#switch:checked ~ main #toggle td { border-width: 6px; border-color: #ff0000 }
+#switch:checked ~ main #model { border-collapse: separate }
+#visible { visibility: hidden }
+#visible .right { visibility: visible }
+#nested td { padding: 4px }
+#nested table td { padding: 0; border: 4px solid #0000ff }
+#fraction .left { border-right: 4.2px solid #ff0000 }
+#fraction .right { border-left: 4.8px solid #0000ff }
+#borderbox { box-sizing: border-box; width: 80px; border: 10px solid #ff0000; padding: 15px }
+#span-tie .upper { border-right-color: #0000ff }
+#span-tie .lower { border-right-color: #00ff00 }
+#span-tie .span { border-left-color: #ff0000 }
+</style>
+<input id="switch" type="checkbox"><label id="activate" for="switch"></label>
+<main>
+<div class="case"><table id="even"><tr><td id="even-a"><div></div></td><td id="even-b"><div></div></td></tr><tr><td id="even-c"><div></div></td><td><div></div></td></tr></table></div>
+<div class="case"><table id="odd"><tr><td id="odd-a"><div></div></td><td id="odd-b"><div></div></td></tr><tr><td id="odd-c"><div></div></td><td><div></div></td></tr></table></div>
+<div class="case"><table id="padding"><tr><td id="padding-a"><div></div></td><td><div></div></td></tr></table></div>
+<div class="case"><table id="override"><tr><td id="override-a"><div></div></td><td><div></div></td></tr></table></div>
+<div class="case"><table id="wide"><tr><td id="wide-a" class="left"><div></div></td><td id="wide-b"><div></div></td></tr></table></div>
+<div class="case"><table id="hidden"><tr><td id="hidden-a" class="left"><div></div></td><td id="hidden-b" class="right"><div></div></td></tr></table></div>
+<div class="case"><table id="none"><tr><td id="none-a" class="left"><div></div></td><td id="none-b" class="right"><div></div></td></tr></table></div>
+<div class="case"><table id="style"><tr><td id="style-a" class="left"><div></div></td><td id="style-b" class="right"><div></div></td></tr></table></div>
+<div class="case"><table id="width"><tr><td id="width-a" class="left"><div></div></td><td id="width-b" class="right"><div></div></td></tr></table></div>
+<div class="case"><table id="tie"><tr><td id="tie-a" class="left"><div></div></td><td id="tie-b" class="right"><div></div></td></tr></table></div>
+<div class="case"><table id="origin"><tr><td id="origin-a"><div></div></td></tr></table></div>
+<div class="case"><table id="row"><tr><td id="row-a"><div></div></td></tr></table></div>
+<div class="case"><table id="group"><tr><td id="group-a"><div></div></td></tr></table></div>
+<div class="case"><table id="table"><tr><td id="table-a"><div></div></td></tr></table></div>
+<div class="case"><table id="colspan"><tr><td id="colspan-a" class="span" colspan="2"><div></div></td></tr><tr><td id="colspan-b" class="strong"><div></div></td><td id="colspan-c"><div></div></td></tr></table></div>
+<div class="case"><table id="rowspan"><tr><td id="rowspan-a" rowspan="2"><div></div></td><td id="rowspan-b" class="upper"><div></div></td></tr><tr><td id="rowspan-c" class="lower"><div></div></td></tr></table></div>
+<div class="case"><table id="groups"><tbody><tr><td id="groups-a"><div></div></td></tr></tbody><tbody><tr><td id="groups-b"><div></div></td></tr></tbody></table></div>
+<div class="case"><table id="spill"><tr><td id="spill-a"><div></div></td></tr><tr><td id="spill-b"><div></div></td></tr></table></div>
+<div class="case"><table id="separate"><tr><td id="separate-a"><div></div></td><td id="separate-b"><div></div></td></tr></table></div>
+<div class="case"><table id="toggle"><tr><td id="toggle-a"><div></div></td><td id="toggle-b"><div></div></td></tr></table></div>
+<div class="case"><table id="model"><tr><td id="model-a"><div></div></td><td id="model-b"><div></div></td></tr></table></div>
+<div class="case"><table id="visible"><tr><td id="visible-a"><div></div></td><td id="visible-b" class="right"><div></div></td></tr></table></div>
+<div class="case"><table id="nested"><tr><td id="nested-a"><table id="inner"><tr><td id="inner-a"><div></div></td></tr></table></td></tr></table></div>
+<div class="case"><table id="fraction"><tr><td id="fraction-a" class="left"><div></div></td><td id="fraction-b" class="right"><div></div></td></tr></table></div>
+<div class="case"><table id="borderbox"><tr><td id="borderbox-a"><div></div></td></tr></table></div>
+<div class="case"><table id="span-tie"><tr><td id="span-tie-a" class="upper"><div></div></td><td id="span-tie-b" class="span" rowspan="2"><div></div></td></tr><tr><td id="span-tie-c" class="lower"><div></div></td></tr></table></div>
+</main>

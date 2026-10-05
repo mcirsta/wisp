@@ -52,9 +52,11 @@ CASES = {
     "groups": (76, (0, 76), 2, [(19, 20), (0, 40), (40, 36)]),
 }
 
-# Collapsed-border edge sharing is separate backlog work. This fixture checks
-# its content and marker alignment without blessing the known cell-box discrepancy.
+# Shared 2px collapsed borders reserve 1px on each side of the grid line.
 EXTRA = {
+    "collapsed-row0": ("collapsed", (1, 42)),
+    "collapsed-cell0": ("collapsed", (1, 42)),
+    "collapsed-cell1": ("collapsed", (1, 42)),
     "row-row0": ("row", (6, 36)),
     "row-cell0": ("row", (6, 36)),
     "row-cell1": ("row", (6, 36)),

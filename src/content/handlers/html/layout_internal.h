@@ -30,6 +30,7 @@
 #include <stdint.h>
 
 #include <wisp/content/handlers/html/box.h>
+#include "content/handlers/html/table.h"
 #include <wisp/utils/utils.h>
 
 struct html_content;
@@ -479,6 +480,17 @@ static inline void calculate_mbp_width(const css_unit_ctx *unit_len_ctx, const c
     }
 }
 
+/* Intrinsic sizing and border-box constraints must use the same edges as
+ * table layout. Collapsed cells reserve half borders; the table has no padding. */
+static inline void layout_used_mbp_width(
+    const css_unit_ctx *ctx, const struct box *box, unsigned int side, bool margin, int *fixed, float *fraction)
+{
+    bool collapse = table_has_collapsed_borders(box);
+    calculate_mbp_width(ctx, box->style, side, margin, !collapse, !collapse || box->type != BOX_TABLE, fixed, fraction);
+    if (collapse)
+        *fixed += box->border[side].width;
+}
+
 static inline bool lh__length_to_px(const css_computed_style *style, const css_unit_ctx *unit_len_ctx,
     int available_px, css_fixed_or_calc length, css_unit unit, int *px_out)
 {
@@ -651,8 +663,8 @@ static inline void layout_handle_box_sizing(
         int fixed = 0;
         float frac = 0;
 
-        calculate_mbp_width(unit_len_ctx, box->style, setwidth ? LEFT : TOP, false, true, true, &fixed, &frac);
-        calculate_mbp_width(unit_len_ctx, box->style, setwidth ? RIGHT : BOTTOM, false, true, true, &fixed, &frac);
+        layout_used_mbp_width(unit_len_ctx, box, setwidth ? LEFT : TOP, false, &fixed, &frac);
+        layout_used_mbp_width(unit_len_ctx, box, setwidth ? RIGHT : BOTTOM, false, &fixed, &frac);
         orig -= frac * available_width + fixed;
         *dimension = orig > 0 ? orig : 0;
     }
@@ -671,8 +683,8 @@ lh__intrinsic_width(const struct box *box, const css_unit_ctx *unit_ctx, int ava
     assert(box->max_width != UNKNOWN_MAX_WIDTH);
     int edges = 0;
     float fraction = 0;
-    calculate_mbp_width(unit_ctx, box->style, LEFT, true, true, true, &edges, &fraction);
-    calculate_mbp_width(unit_ctx, box->style, RIGHT, true, true, true, &edges, &fraction);
+    layout_used_mbp_width(unit_ctx, box, LEFT, true, &edges, &fraction);
+    layout_used_mbp_width(unit_ctx, box, RIGHT, true, &edges, &fraction);
     if (available_width >= 0)
         edges += fraction * available_width;
     int minimum = max(0, box->min_width.value - edges);
@@ -906,10 +918,16 @@ layout_find_box_edges(const struct layout_dimension_context *ctx, const struct l
             } else {
                 padding[i] = FIXTOINT(css_unit_len2device_px(style, box_unit_len_ctx, value.value, unit));
             }
+            if (box->type == BOX_TABLE && css_computed_border_collapse(style) == CSS_BORDER_COLLAPSE_COLLAPSE)
+                padding[i] = 0;
         }
 
         /* Table cell borders are populated in table.c */
         if (border && box->type != BOX_TABLE_CELL) {
+            if (table_has_collapsed_borders(box)) {
+                border[i] = box->border[i];
+                continue;
+            }
             enum css_border_style_e bstyle = CSS_BORDER_STYLE_NONE;
             css_color color = 0;
             css_fixed_or_calc value = (css_fixed_or_calc)0;

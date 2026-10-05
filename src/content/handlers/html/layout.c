@@ -352,7 +352,9 @@ layout_minmax_table(struct box *table, const struct gui_layout_table *font_func,
         NSLOG(wisp, ERROR, "Could not establish table column types.");
         return false;
     }
-    col = table->col;
+    col = table->table->columns;
+    if (!table_prepare_borders(&content->unit_len_ctx, table))
+        return false;
 
     /* start with 0 except for fixed-width columns */
     for (i = 0; i != table->columns; i++) {
@@ -488,8 +490,8 @@ layout_minmax_table(struct box *table, const struct gui_layout_table *font_func,
     }
 
     /* add margins, border, padding to min, max widths */
-    calculate_mbp_width(&content->unit_len_ctx, table->style, LEFT, true, true, true, &extra_fixed, &extra_frac);
-    calculate_mbp_width(&content->unit_len_ctx, table->style, RIGHT, true, true, true, &extra_fixed, &extra_frac);
+    layout_used_mbp_width(&content->unit_len_ctx, table, LEFT, true, &extra_fixed, &extra_frac);
+    layout_used_mbp_width(&content->unit_len_ctx, table, RIGHT, true, &extra_fixed, &extra_frac);
     if (extra_fixed < 0)
         extra_fixed = 0;
     if (extra_frac < 0)
@@ -1479,8 +1481,8 @@ layout_minmax_block(struct box *block, const struct gui_layout_table *font_func,
 
     /* Intrinsic contributions use content widths until constraints have been
      * applied. Resolve border-box values before comparing them with content. */
-    calculate_mbp_width(&content->unit_len_ctx, block->style, LEFT, false, true, true, &extra_fixed, &extra_frac);
-    calculate_mbp_width(&content->unit_len_ctx, block->style, RIGHT, false, true, true, &extra_fixed, &extra_frac);
+    layout_used_mbp_width(&content->unit_len_ctx, block, LEFT, false, &extra_fixed, &extra_frac);
+    layout_used_mbp_width(&content->unit_len_ctx, block, RIGHT, false, &extra_fixed, &extra_frac);
     if (block->type != BOX_TABLE_CELL)
         layout_minmax_constraints(block, &content->unit_len_ctx, extra_fixed, &min, &max);
 
@@ -2604,6 +2606,9 @@ bool layout_table(struct box *table, int available_width, html_content *content)
 
     table->flags &= ~HAS_BASELINE;
 
+    if (!table_prepare_borders(&content->unit_len_ctx, table))
+        return false;
+
     /* allocate working buffers */
     col = malloc(columns * sizeof col[0]);
     excess_y = malloc(columns * sizeof excess_y[0]);
@@ -2619,7 +2624,7 @@ bool layout_table(struct box *table, int available_width, html_content *content)
         return false;
     }
 
-    memcpy(col, table->col, sizeof(col[0]) * columns);
+    memcpy(col, table->table->columns, sizeof(col[0]) * columns);
 
     /* find margins, paddings, and borders for table and cells */
     layout_find_dimensions(&content->unit_len_ctx, available_width, -1, table,
@@ -2635,7 +2640,6 @@ bool layout_table(struct box *table, int available_width, html_content *content)
                 enum css_overflow_e overflow_y;
 
                 assert(c->style);
-                table_used_border_for_cell(&content->unit_len_ctx, c);
                 layout_find_dimensions(&content->unit_len_ctx, available_width, -1, c,
                     &(struct layout_dimension_outputs){
                         .padding = c->padding,
@@ -2998,6 +3002,7 @@ bool layout_table(struct box *table, int available_width, html_content *content)
     if (table->margin[BOTTOM] == AUTO)
         table->margin[BOTTOM] = 0;
 
+    table_position_borders(table, xs);
     free(col);
     free(excess_y);
     free(row_span);
@@ -7236,6 +7241,17 @@ static void layout_calculate_descendant_bboxes(const css_unit_ctx *unit_len_ctx,
     /* Initialise box's descendant box to border edge box */
     layout_get_box_bbox(
         unit_len_ctx, box, &box->descendant_x0, &box->descendant_y0, &box->descendant_x1, &box->descendant_y1);
+    if (box->type == BOX_TABLE && table_has_collapsed_borders(box)) {
+        const struct table_border_grid *grid = box->table->borders;
+        /* CSS 2.2 uses the first row to size the table's left/right outer
+         * borders. Wider borders in subsequent rows overflow that box. */
+        for (unsigned int row = 0; row < grid->rows; row++) {
+            const struct table_border_edge *edge = &grid->vertical[(size_t)row * (grid->columns + 1)];
+            box->descendant_x0 = min(box->descendant_x0, grid->x[0] - edge[0].border.width / 2);
+            box->descendant_x1 = max(
+                box->descendant_x1, grid->x[grid->columns] + (edge[grid->columns].border.width + 1) / 2);
+        }
+    }
     if (box->type == BOX_INLINE_GRID && box->descendant_x1 > 100000000) {
         fprintf(stderr, "BBOX_RESULT: BOX_INLINE_GRID %p AFTER layout_get_box_bbox descendant_x1=%d\n", (void *)box,
             box->descendant_x1);
@@ -7581,8 +7597,8 @@ static void layout_reset_box(struct box *box)
 
     /* Column types depend on cell styles/units; min/max and used widths are
      * also cached here. Row/column spans belong to normalization and survive. */
-    talloc_free(box->col);
-    box->col = NULL;
+    talloc_free(box->table);
+    box->table = NULL;
 }
 
 /* Only text and inline markers were preserved. Reset/rejoin before either

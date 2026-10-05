@@ -22,8 +22,10 @@
  * Redrawing CONTENT_HTML borders implementation.
  */
 
+#include "content/handlers/html/table.h"
 #include <stdbool.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include <wisp/utils/log.h>
 #include <wisp/utils/utils.h>
@@ -840,5 +842,91 @@ bool html_redraw_inline_borders(struct box *box, struct rect b, const struct rec
         }
     }
 
+    return true;
+}
+
+/* Maximum perpendicular width at a grid junction. Extending to these half
+ * widths closes corners even when adjacent segments have different widths. */
+static int
+table_junction_width(const struct table_border_grid *grid, unsigned int row, unsigned int col, bool horizontal)
+{
+    int width = 0;
+    if (horizontal) {
+        if (row > 0)
+            width = grid->vertical[(size_t)(row - 1) * (grid->columns + 1) + col].border.width;
+        if (row < grid->rows)
+            width = max(width, grid->vertical[(size_t)row * (grid->columns + 1) + col].border.width);
+    } else {
+        if (col > 0)
+            width = grid->horizontal[(size_t)row * grid->columns + col - 1].border.width;
+        if (col < grid->columns)
+            width = max(width, grid->horizontal[(size_t)row * grid->columns + col].border.width);
+    }
+    return width;
+}
+
+static bool html_redraw_table_edge(const struct table_border_grid *grid, const struct table_border_edge *edge,
+    unsigned int row, unsigned int col, bool horizontal, int x, int y, float scale, const struct rect *clip,
+    const struct redraw_context *ctx)
+{
+    const struct box_border *border = &edge->border;
+    if (!border->width || nscss_color_is_transparent(border->c) ||
+        (edge->owner && edge->owner->style && css_computed_visibility(edge->owner->style) == CSS_VISIBILITY_HIDDEN))
+        return true;
+    int before = border->width / 2, after = border->width - before;
+    int start = table_junction_width(grid, row, col, horizontal);
+    int end = table_junction_width(grid, row + !horizontal, col + horizontal, horizontal);
+    struct rect r;
+    if (horizontal) {
+        r = (struct rect){x + grid->x[col] - start / 2, y + grid->y[row] - before, x + grid->x[col + 1] + (end + 1) / 2,
+            y + grid->y[row] + after};
+    } else {
+        r = (struct rect){x + grid->x[col] - before, y + grid->y[row] - start / 2, x + grid->x[col] + after,
+            y + grid->y[row + 1] + (end + 1) / 2};
+    }
+    r.x0 *= scale;
+    r.y0 *= scale;
+    r.x1 *= scale;
+    r.y1 *= scale;
+    if (r.x0 >= clip->x1 || r.x1 <= clip->x0 || r.y0 >= clip->y1 || r.y1 <= clip->y0)
+        return true;
+    int points[8];
+    if (horizontal) {
+        int p[] = {r.x0, r.y1, r.x0, r.y0, r.x1, r.y0, r.x1, r.y1};
+        memcpy(points, p, sizeof(points));
+    } else {
+        int p[] = {r.x1, r.y0, r.x0, r.y0, r.x0, r.y1, r.x1, r.y1};
+        memcpy(points, p, sizeof(points));
+    }
+    enum css_border_style_e style = border->style;
+    /* CSS 2.2 17.6.3 changes the rendering (not the conflict priority). */
+    if (style == CSS_BORDER_STYLE_INSET)
+        style = CSS_BORDER_STYLE_RIDGE;
+    else if (style == CSS_BORDER_STYLE_OUTSET)
+        style = CSS_BORDER_STYLE_GROOVE;
+    return html_redraw_border_plot(horizontal ? TOP : RIGHT, points, nscss_color_to_ns(border->c), style,
+               horizontal ? r.y1 - r.y0 : r.x1 - r.x0, true, clip, ctx) == NSERROR_OK;
+}
+
+bool html_redraw_table_borders(
+    const struct box *table, int x, int y, const struct rect *clip, float scale, const struct redraw_context *ctx)
+{
+    if (table->type != BOX_TABLE || !table_has_collapsed_borders(table))
+        return true;
+    const struct table_border_grid *grid = table->table->borders;
+    /* Cell backgrounds may have changed the plotter clip. Borders straddle
+     * cell edges and belong to the table's clip, not to the last visited cell. */
+    if (ctx->plot->clip(ctx, clip) != NSERROR_OK)
+        return false;
+    for (unsigned int row = 0; row < grid->rows; row++)
+        for (unsigned int col = 0; col <= grid->columns; col++)
+            if (!html_redraw_table_edge(grid, &grid->vertical[(size_t)row * (grid->columns + 1) + col], row, col, false,
+                    x, y, scale, clip, ctx))
+                return false;
+    for (unsigned int row = 0; row <= grid->rows; row++)
+        for (unsigned int col = 0; col < grid->columns; col++)
+            if (!html_redraw_table_edge(
+                    grid, &grid->horizontal[(size_t)row * grid->columns + col], row, col, true, x, y, scale, clip, ctx))
+                return false;
     return true;
 }

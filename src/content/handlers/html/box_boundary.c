@@ -140,7 +140,7 @@ static nserror check_box(struct boundary *b, const struct box *box, bool inside,
     if (!fresh && inside)
         return NSERROR_OK;
     const void *storage[] = {
-        box->text, box->title, box->target, box->col, box->usemap, box->background_layers, box->object_params};
+        box->text, box->title, box->target, box->table, box->usemap, box->background_layers, box->object_params};
     for (size_t i = 0; i < sizeof(storage) / sizeof(storage[0]); i++)
         if (in_arena(&b->old, storage[i]))
             return reject(b, "borrowed_storage");
