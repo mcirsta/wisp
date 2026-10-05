@@ -26,12 +26,19 @@
 
 #include <stdbool.h>
 #include <dom/dom.h>
+#include <libcss/computed.h>
 #include <wisp/utils/errors.h>
 
 struct html_content;
 struct box;
 struct box_construct_region;
 struct object_params;
+struct nsurl;
+
+/* Read-only image source/representation preflight, shared with search. The
+ * caller owns a URL reference (possibly NULL); no resource is fetched here. */
+bool box_image_prepare(dom_node *node, struct html_content *content, const css_computed_style *style,
+    struct nsurl **url, bool *replaced);
 
 /* Prepare an object's resource parameters without fetching or constructing
  * boxes. On success, NULL means known fallback; otherwise the caller owns a

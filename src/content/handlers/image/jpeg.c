@@ -44,6 +44,7 @@
 #define JPEG_INTERNAL_OPTIONS
 #include "jpeg.h"
 #include "jpeglib.h"
+#include "jerror.h"
 
 /** absolute minimum size of a jpeg below which it is not even worth
  * trying to read header data
@@ -240,8 +241,9 @@ nsjpeg__decode_client_fmt(struct jpeg_decompress_struct *cinfo, uint8_t *volatil
 /**
  * create a bitmap from jpeg content.
  */
-static struct bitmap *jpeg_cache_convert(struct content *c)
+static struct bitmap *jpeg_cache_convert(struct content *c, nserror *error)
 {
+    *error = NSERROR_BAD_CONTENT;
     const uint8_t *source_data; /* Jpeg source data */
     size_t source_size; /* length of Jpeg source data */
     struct jpeg_decompress_struct cinfo;
@@ -267,6 +269,8 @@ static struct bitmap *jpeg_cache_convert(struct content *c)
 
     /* handler for fatal errors during decompression */
     if (setjmp(setjmp_buffer)) {
+        if (cinfo.err->msg_code == JERR_OUT_OF_MEMORY)
+            *error = NSERROR_NOMEM;
         jpeg_destroy_decompress(&cinfo);
         return bitmap;
     }
@@ -317,6 +321,7 @@ static struct bitmap *jpeg_cache_convert(struct content *c)
     /* create opaque bitmap (jpegs cannot be transparent) */
     bitmap = guit->bitmap->create(cinfo.output_width, cinfo.output_height, BITMAP_OPAQUE);
     if (bitmap == NULL) {
+        *error = NSERROR_NOMEM;
         /* empty bitmap could not be created */
         jpeg_destroy_decompress(&cinfo);
         return NULL;
@@ -324,6 +329,7 @@ static struct bitmap *jpeg_cache_convert(struct content *c)
 
     pixels = guit->bitmap->get_buffer(bitmap);
     if (pixels == NULL) {
+        *error = NSERROR_NOMEM;
         /* bitmap with no buffer available */
         guit->bitmap->destroy(bitmap);
         jpeg_destroy_decompress(&cinfo);

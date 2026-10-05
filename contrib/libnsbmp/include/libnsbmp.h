@@ -71,8 +71,10 @@ typedef struct bmp_image {
     uint32_t width;
     /** heigth of BMP (valid after _analyse) */
     uint32_t height;
-    /** whether the image has been decoded */
+    /** Whether a complete or usable partial bitmap has been decoded. */
     bool decoded;
+    /** Result of the last decode; memory failures may be retried. */
+    bmp_result decode_result;
     /** decoded image */
     void *bitmap;
 
@@ -186,9 +188,10 @@ bmp_result ico_analyse(ico_collection *ico, size_t size, uint8_t *data);
 /**
  * Decode a BMP
  *
- * This function decodes the BMP data such that bmp->bitmap is a valid
- * image. The state of bmp->decoded is set to TRUE on exit such that it
- * can easily be identified which BMPs are in a fully decoded state.
+ * On success bmp->decoded is true. A data error may also leave it true when
+ * pixels were recovered, allowing the caller to display a partial image.
+ * It is false when no usable pixels were decoded or memory was unavailable.
+ * decode_result records the result; callers may retry memory failures.
  *
  * \param bmp the BMP image to decode
  * \return BMP_OK on success
@@ -218,6 +221,7 @@ bmp_result bmp_decode_trans(bmp_image *bmp, uint32_t transparent_colour);
  *
  * This function finds the BMP with dimensions as close to a specified set
  * as possible from the images in the collection.
+ * Entries with a permanent decode failure and no usable pixels are skipped.
  *
  * \param ico the ICO collection to examine
  * \param width the preferred width (0 to use ICO header width)

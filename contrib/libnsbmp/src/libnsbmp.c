@@ -52,11 +52,6 @@ static inline int8_t read_int8(uint8_t *data, unsigned int o)
 }
 #endif
 
-static inline uint8_t read_uint8(uint8_t *data, unsigned int o)
-{
-    return (uint8_t)data[o];
-}
-
 static inline int16_t read_int16(uint8_t *data, unsigned int o)
 {
     return (int16_t)(data[o] | (data[o + 1] << 8));
@@ -91,16 +86,17 @@ static bmp_result bmp_info_header_parse(bmp_image *bmp, uint8_t *data)
     int32_t width, height;
     uint8_t palette_size;
     unsigned int flags = 0;
+    uint32_t file_header_size = bmp->ico ? 0 : BMP_FILE_HEADER_SIZE;
 
     /* must be at least enough data for a core header */
-    if (bmp->buffer_size < (BMP_FILE_HEADER_SIZE + BITMAPCOREHEADER)) {
+    if (bmp->buffer_size < (file_header_size + BITMAPCOREHEADER)) {
         return BMP_INSUFFICIENT_DATA;
     }
 
     header_size = read_uint32(data, 0);
 
     /* ensure there is enough data for the declared header size*/
-    if ((bmp->buffer_size - BMP_FILE_HEADER_SIZE) < header_size) {
+    if ((bmp->buffer_size - file_header_size) < header_size) {
         return BMP_INSUFFICIENT_DATA;
     }
 
@@ -133,7 +129,7 @@ static bmp_result bmp_info_header_parse(bmp_image *bmp, uint8_t *data)
          * the spec.
          */
         if (bmp->ico) {
-            if ((width > 256) || (height > 512)) {
+            if ((width > 256) || (height < 2) || (height > 512) || (height & 1)) {
                 return BMP_DATA_ERROR;
             } else {
                 bmp->width = width;
@@ -211,7 +207,7 @@ static bmp_result bmp_info_header_parse(bmp_image *bmp, uint8_t *data)
          * the spec.
          */
         if (bmp->ico) {
-            if ((width > 256) || (height > 512)) {
+            if ((width > 256) || (height < 2) || (height > 512) || (height & 1)) {
                 return BMP_DATA_ERROR;
             } else {
                 bmp->width = width;
@@ -266,7 +262,7 @@ static bmp_result bmp_info_header_parse(bmp_image *bmp, uint8_t *data)
         if (bmp->encoding == BMP_ENCODING_BITFIELDS) {
             if (header_size == 40) {
                 header_size += 12;
-                if (bmp->buffer_size < (14 + header_size))
+                if (bmp->buffer_size < (file_header_size + header_size))
                     return BMP_INSUFFICIENT_DATA;
                 for (i = 0; i < 3; i++)
                     bmp->mask[i] = read_uint32(data, 40 + (i << 2));
@@ -316,7 +312,7 @@ static bmp_result bmp_info_header_parse(bmp_image *bmp, uint8_t *data)
          */
 
         /* boundary checking */
-        if (bmp->buffer_size < (14 + header_size + ((uint64_t)4 * bmp->colours)))
+        if (bmp->buffer_size < (file_header_size + header_size + (uint64_t)palette_size * bmp->colours))
             return BMP_INSUFFICIENT_DATA;
 
         /* create the colour table */
@@ -325,7 +321,7 @@ static bmp_result bmp_info_header_parse(bmp_image *bmp, uint8_t *data)
             return BMP_INSUFFICIENT_MEMORY;
         for (i = 0; i < bmp->colours; i++) {
             uint32_t colour = data[2] | (data[1] << 8) | (data[0] << 16);
-            if (bmp->opaque)
+            if (bmp->opaque || bmp->ico)
                 colour |= ((uint32_t)0xff << 24);
             data += palette_size;
             bmp->colour_table[i] = read_uint32((uint8_t *)&colour, 0);
@@ -395,23 +391,6 @@ static bmp_result bmp_file_header_parse(bmp_image *bmp, uint8_t *data)
 
 
 /**
- * Allocates memory for the next BMP in an ICO collection
- *
- * Sets proper structure values
- *
- * \param ico the ICO collection to add the image to
- * \param image a pointer to the ICO image to be initialised
- */
-static bmp_result next_ico_image(ico_collection *ico, ico_image *image)
-{
-    bmp_create(&image->bmp, &ico->bitmap_callbacks);
-    image->next = ico->first;
-    ico->first = image;
-    return BMP_OK;
-}
-
-
-/**
  * Parse the icon file header
  *
  * \param ico The icon collection.
@@ -460,38 +439,32 @@ static bmp_result ico_header_parse(ico_collection *ico, uint8_t *data)
      * bitmap data)
      */
     for (i = 0; i < count; i++) {
-        ico_image *image;
-        image = calloc(1, sizeof(ico_image));
+        uint32_t size = read_uint32(data, 8);
+        uint32_t offset = read_uint32(data, 12);
+        data += ICO_DIR_ENTRY_SIZE;
+        /* Validate offsets before forming pointers. A damaged member must
+         * not prevent another independently stored image from being used. */
+        if (offset > ico->buffer_size || size > ico->buffer_size - offset)
+            continue;
+
+        ico_image *image = calloc(1, sizeof(ico_image));
         if (!image)
             return BMP_INSUFFICIENT_MEMORY;
-        result = next_ico_image(ico, image);
-        if (result != BMP_OK)
-            return result;
-        image->bmp.width = read_uint8(data, 0);
-        if (image->bmp.width == 0)
-            image->bmp.width = 256;
-        image->bmp.height = read_uint8(data, 1);
-        if (image->bmp.height == 0)
-            image->bmp.height = 256;
-        image->bmp.buffer_size = read_uint32(data, 8);
-        image->bmp.bmp_data = ico->ico_data + read_uint32(data, 12);
-        if (image->bmp.bmp_data + image->bmp.buffer_size > ico->ico_data + ico->buffer_size)
-            return BMP_INSUFFICIENT_DATA;
+        bmp_create(&image->bmp, &ico->bitmap_callbacks);
+        image->bmp.buffer_size = size;
+        image->bmp.bmp_data = ico->ico_data + offset;
         image->bmp.ico = true;
-        data += ICO_DIR_ENTRY_SIZE;
-
-        /* Ensure that the bitmap data resides in the buffer */
-        if (image->bmp.bmp_data - ico->ico_data >= 0 &&
-            (uint32_t)(image->bmp.bmp_data - ico->ico_data) >= ico->buffer_size)
-            return BMP_DATA_ERROR;
-
-        /* Ensure that we have sufficient data to read the bitmap */
-        if (image->bmp.buffer_size - ICO_DIR_ENTRY_SIZE >= ico->buffer_size - (ico->ico_data - data))
-            return BMP_INSUFFICIENT_DATA;
 
         result = bmp_info_header_parse(&image->bmp, image->bmp.bmp_data);
-        if (result != BMP_OK)
-            return result;
+        if (result != BMP_OK) {
+            bmp_finalise(&image->bmp);
+            free(image);
+            if (result == BMP_INSUFFICIENT_MEMORY)
+                return result;
+            continue;
+        }
+        image->next = ico->first;
+        ico->first = image;
 
         /* adjust the size based on the images available */
         area = image->bmp.width * image->bmp.height;
@@ -501,7 +474,7 @@ static bmp_result ico_header_parse(ico_collection *ico, uint8_t *data)
             max_area = area;
         }
     }
-    return BMP_OK;
+    return ico->first != NULL ? BMP_OK : BMP_DATA_ERROR;
 }
 
 
@@ -533,7 +506,6 @@ static bmp_result bmp_decode_rgb32(bmp_image *bmp, uint8_t **start, int bytes)
         return BMP_INSUFFICIENT_MEMORY;
     bottom = top + (uint64_t)swidth * (bmp->height - 1);
     end = data + bytes;
-    bmp->decoded = true;
 
     /* Determine transparent index */
     if (bmp->limited_trans) {
@@ -582,6 +554,7 @@ static bmp_result bmp_decode_rgb32(bmp_image *bmp, uint8_t **start, int bytes)
                 scanline[x] = read_uint32((uint8_t *)&scanline[x], 0);
             }
         }
+        bmp->decoded = true;
     }
     *start = data;
     return BMP_OK;
@@ -619,7 +592,6 @@ static bmp_result bmp_decode_rgb24(bmp_image *bmp, uint8_t **start, int bytes)
     bottom = top + (uint64_t)swidth * (bmp->height - 1);
     end = data + bytes;
     addr = ((intptr_t)data) & 3;
-    bmp->decoded = true;
 
     /* Determine transparent index */
     if (bmp->limited_trans) {
@@ -655,6 +627,7 @@ static bmp_result bmp_decode_rgb24(bmp_image *bmp, uint8_t **start, int bytes)
         while (addr != (((intptr_t)data) & 3)) {
             data++;
         }
+        bmp->decoded = true;
     }
     *start = data;
     return BMP_OK;
@@ -688,7 +661,6 @@ static bmp_result bmp_decode_rgb16(bmp_image *bmp, uint8_t **start, int bytes)
     bottom = top + (uint64_t)swidth * (bmp->height - 1);
     end = data + bytes;
     addr = ((intptr_t)data) & 3;
-    bmp->decoded = true;
 
     /* Determine transparent index */
     if (bmp->limited_trans) {
@@ -716,7 +688,7 @@ static bmp_result bmp_decode_rgb16(bmp_image *bmp, uint8_t **start, int bytes)
                             scanline[x] |= ((word & bmp->mask[i]) << bmp->shift[i]);
                         else
                             scanline[x] |= ((word & bmp->mask[i]) >> (-bmp->shift[i]));
-                    if (bmp->opaque)
+                    if (bmp->opaque || bmp->ico)
                         scanline[x] |= ((unsigned)0xff << 24);
                 }
                 data += 2;
@@ -731,7 +703,7 @@ static bmp_result bmp_decode_rgb16(bmp_image *bmp, uint8_t **start, int bytes)
                     /* 16-bit RGB defaults to RGB555 */
                     scanline[x] = ((word & (31 << 0)) << 19) | ((word & (31 << 5)) << 6) | ((word & (31 << 10)) >> 7);
                 }
-                if (bmp->opaque)
+                if (bmp->opaque || bmp->ico)
                     scanline[x] |= ((unsigned)0xff << 24);
                 data += 2;
                 scanline[x] = read_uint32((uint8_t *)&scanline[x], 0);
@@ -739,6 +711,7 @@ static bmp_result bmp_decode_rgb16(bmp_image *bmp, uint8_t **start, int bytes)
         }
         while (addr != (((intptr_t)data) & 3))
             data += 2;
+        bmp->decoded = true;
     }
     *start = data;
     return BMP_OK;
@@ -780,10 +753,11 @@ static bmp_result bmp_decode_rgb(bmp_image *bmp, uint8_t **start, int bytes)
     bottom = top + (uint64_t)swidth * (bmp->height - 1);
     end = data + bytes;
     addr = ((intptr_t)data) & 3;
-    bmp->decoded = true;
 
     /* Determine transparent index */
     if (bmp->limited_trans) {
+        if (data == end)
+            return BMP_INSUFFICIENT_DATA;
         uint32_t idx = (*data >> bit_shifts[0]) & bit_mask;
         if (idx >= bmp->colours)
             return BMP_DATA_ERROR;
@@ -805,13 +779,13 @@ static bmp_result bmp_decode_rgb(bmp_image *bmp, uint8_t **start, int bytes)
                 cur_byte = *data++;
             }
             idx = (cur_byte >> bit_shifts[bit++]) & bit_mask;
-            if (idx < bmp->colours) {
-                /* ensure colour table index is in bounds */
-                scanline[x] = bmp->colour_table[idx];
-                if ((bmp->limited_trans) && (scanline[x] == bmp->transparent_index)) {
-                    scanline[x] = bmp->trans_colour;
-                }
+            if (idx >= bmp->colours)
+                return BMP_DATA_ERROR;
+            scanline[x] = bmp->colour_table[idx];
+            if ((bmp->limited_trans) && (scanline[x] == bmp->transparent_index)) {
+                scanline[x] = bmp->trans_colour;
             }
+            bmp->decoded = true;
         }
         while (addr != (((intptr_t)data) & 3))
             data++;
@@ -847,7 +821,7 @@ static bmp_result bmp_decode_mask(bmp_image *bmp, uint8_t *data, int bytes)
     addr = ((intptr_t)data) & 3;
 
     for (y = 0; y < bmp->height; y++) {
-        if ((data + (bmp->width >> 3)) > end)
+        if (data > end || (size_t)(end - data) < (bmp->width + 7) / 8)
             return BMP_INSUFFICIENT_DATA;
         scanline = (void *)(bottom - (y * swidth));
         for (x = 0; x < bmp->width; x++) {
@@ -897,7 +871,6 @@ static bmp_result bmp_decode_rle8(bmp_image *bmp, uint8_t *data, int bytes)
         return BMP_INSUFFICIENT_MEMORY;
     bottom = top + (uint64_t)swidth * (bmp->height - 1);
     end = data + bytes;
-    bmp->decoded = true;
 
     do {
         if (data + 2 > end)
@@ -967,10 +940,15 @@ static bmp_result bmp_decode_rle8(bmp_image *bmp, uint8_t *data, int bytes)
                     if (idx >= bmp->colours)
                         return BMP_DATA_ERROR;
                     scanline[x++] = bmp->colour_table[idx];
+                    bmp->decoded = true;
                 }
 
-                if ((length & 1) && (*data++ != 0x00))
-                    return BMP_DATA_ERROR;
+                if (length & 1) {
+                    if (data == end)
+                        return BMP_INSUFFICIENT_DATA;
+                    if (*data++ != 0x00)
+                        return BMP_DATA_ERROR;
+                }
 
                 break;
             }
@@ -1014,6 +992,7 @@ static bmp_result bmp_decode_rle8(bmp_image *bmp, uint8_t *data, int bytes)
                     }
                 }
                 scanline[x++] = pixel;
+                bmp->decoded = true;
             }
         }
     } while (data < end);
@@ -1050,7 +1029,6 @@ static bmp_result bmp_decode_rle4(bmp_image *bmp, uint8_t *data, int bytes)
         return BMP_INSUFFICIENT_MEMORY;
     bottom = top + (uint64_t)swidth * (bmp->height - 1);
     end = data + bytes;
-    bmp->decoded = true;
 
     do {
         if (data + 2 > end)
@@ -1127,11 +1105,16 @@ static bmp_result bmp_decode_rle4(bmp_image *bmp, uint8_t *data, int bytes)
                             return BMP_DATA_ERROR;
                         scanline[x++] = bmp->colour_table[pixel & 0xf];
                     }
+                    bmp->decoded = true;
                 }
                 length = (length + 1) >> 1;
 
-                if ((length & 1) && (*data++ != 0x00))
-                    return BMP_DATA_ERROR;
+                if (length & 1) {
+                    if (data == end)
+                        return BMP_INSUFFICIENT_DATA;
+                    if (*data++ != 0x00)
+                        return BMP_DATA_ERROR;
+                }
 
                 break;
             }
@@ -1177,6 +1160,7 @@ static bmp_result bmp_decode_rle4(bmp_image *bmp, uint8_t *data, int bytes)
                     scanline[x++] = pixel;
                 else
                     scanline[x++] = pixel2;
+                bmp->decoded = true;
             }
         }
     } while (data < end);
@@ -1231,6 +1215,8 @@ bmp_result bmp_analyse(bmp_image *bmp, size_t size, uint8_t *data)
 /* exported interface documented in libnsbmp.h */
 bmp_result ico_analyse(ico_collection *ico, size_t size, uint8_t *data)
 {
+    if (size > UINT32_MAX)
+        return BMP_DATA_ERROR;
     /* ensure we aren't already initialised */
     if (ico->first)
         return BMP_OK;
@@ -1252,6 +1238,11 @@ bmp_result bmp_decode(bmp_image *bmp)
 
     assert(bmp->bitmap);
 
+    bmp->decoded = false;
+    if (bmp->bitmap_offset > bmp->buffer_size) {
+        bmp->decode_result = BMP_INSUFFICIENT_DATA;
+        return bmp->decode_result;
+    }
     data = bmp->bmp_data + bmp->bitmap_offset;
     bytes = bmp->buffer_size - bmp->bitmap_offset;
 
@@ -1303,9 +1294,21 @@ bmp_result bmp_decode(bmp_image *bmp)
 
     /* icons with less than 32bpp have a 1bpp alpha mask */
     if ((result == BMP_OK) && (bmp->ico) && (bmp->bpp != 32)) {
-        bytes = (uintptr_t)bmp->bmp_data + bmp->buffer_size - (uintptr_t)data;
-        result = bmp_decode_mask(bmp, data, bytes);
+        size_t offset = data - bmp->bmp_data;
+        if (offset > bmp->buffer_size) {
+            result = BMP_INSUFFICIENT_DATA;
+        } else {
+            bytes = bmp->buffer_size - offset;
+            result = bmp_decode_mask(bmp, data, bytes);
+        }
     }
+    /* Even an empty RLE image can complete successfully. Data errors may
+     * retain recovered pixels; memory errors must allow a clean retry. */
+    if (result == BMP_OK)
+        bmp->decoded = true;
+    else if (result == BMP_INSUFFICIENT_MEMORY)
+        bmp->decoded = false;
+    bmp->decode_result = result;
     return result;
 }
 
@@ -1324,17 +1327,20 @@ bmp_image *ico_find(ico_collection *ico, uint16_t width, uint16_t height)
 {
     bmp_image *bmp = NULL;
     ico_image *image;
-    int x, y, cur, distance = (1 << 24);
+    int64_t x, y, cur, distance = INT64_MAX;
 
     if (width == 0)
         width = ico->width;
     if (height == 0)
         height = ico->height;
     for (image = ico->first; image; image = image->next) {
+        if (!image->bmp.decoded && image->bmp.decode_result != BMP_OK &&
+            image->bmp.decode_result != BMP_INSUFFICIENT_MEMORY)
+            continue;
         if ((image->bmp.width == width) && (image->bmp.height == height))
             return &image->bmp;
-        x = image->bmp.width - width;
-        y = image->bmp.height - height;
+        x = (int64_t)image->bmp.width - width;
+        y = (int64_t)image->bmp.height - height;
         cur = (x * x) + (y * y);
         if (cur < distance) {
             distance = cur;

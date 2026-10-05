@@ -7,6 +7,7 @@
 #include <wisp/content/handlers/html/box.h>
 #include <wisp/utils/corestrings.h>
 #include <wisp/utils/string.h>
+#include <wisp/utils/nsurl.h>
 #include "content/handlers/html/box_construct.h"
 #include "content/handlers/html/box_special.h"
 #include "content/handlers/html/content_visibility.h"
@@ -39,10 +40,12 @@ void html_textsearch_free_match(void *data)
     free(match);
 }
 
-static char *search_text(dom_node *node, const css_computed_style *style)
+static char *search_text(dom_node *node, const css_computed_style *style, bool image_alt)
 {
     dom_string *data = NULL;
-    if (dom_characterdata_get_data(node, &data) != DOM_NO_ERR || data == NULL)
+    dom_exception error = image_alt ? dom_element_get_attribute(node, corestring_dom_alt, &data)
+                                    : dom_characterdata_get_data(node, &data);
+    if (error != DOM_NO_ERR || data == NULL)
         return NULL;
     uint8_t space = css_computed_white_space(style);
     char *text = space == CSS_WHITE_SPACE_NORMAL || space == CSS_WHITE_SPACE_NOWRAP
@@ -133,7 +136,7 @@ static nserror search_generated(struct html_search_walk *walk, dom_node *node,
 /* Pseudos are generated only for supported, non-replaced owners. A skipped
  * subtree has no boxes yet; exclude special elements whose contents use a
  * replacement renderer, instead of inventing text which cannot be highlighted.
- * Object fallback is resolved with the converter's preflight in search_node. */
+ * Image/object fallback is resolved with the converter's preflight in search_node. */
 static bool search_generated_owner(const html_content *html, dom_node *node, const struct box *box)
 {
     if (box != NULL)
@@ -142,7 +145,6 @@ static bool search_generated_owner(const html_content *html, dom_node *node, con
     if (dom_html_element_get_tag_type(node, &tag) == DOM_NO_ERR) {
         switch (tag) {
         case DOM_HTML_ELEMENT_TYPE_BR:
-        case DOM_HTML_ELEMENT_TYPE_IMG:
         case DOM_HTML_ELEMENT_TYPE_INPUT:
         case DOM_HTML_ELEMENT_TYPE_BUTTON:
         case DOM_HTML_ELEMENT_TYPE_TEXTAREA:
@@ -177,7 +179,7 @@ static nserror search_node(
     if (type == DOM_TEXT_NODE) {
         if (parent == NULL || css_computed_visibility(parent) != CSS_VISIBILITY_VISIBLE)
             return NSERROR_OK;
-        char *text = search_text(node, parent);
+        char *text = search_text(node, parent, false);
         if (text == NULL)
             return NSERROR_NOMEM;
         nserror error = search_matches(walk, node, text, 0);
@@ -207,8 +209,20 @@ static nserror search_node(
     dom_node *child = NULL, *summary = NULL;
     if (css_computed_display(style, false) == CSS_DISPLAY_NONE || (skipped && !html_until_found(node)))
         goto done;
-    dom_html_element_type tag;
-    if (dom_html_element_get_tag_type(node, &tag) == DOM_NO_ERR && tag == DOM_HTML_ELEMENT_TYPE_OBJECT) {
+    dom_html_element_type tag = DOM_HTML_ELEMENT_TYPE__UNKNOWN;
+    dom_html_element_get_tag_type(node, &tag);
+    bool image = tag == DOM_HTML_ELEMENT_TYPE_IMG;
+    bool image_replaced = image && box != NULL && (box->flags & IS_REPLACED);
+    if (image && box == NULL) {
+        nsurl *url = NULL;
+        if (!box_image_prepare(node, walk->html, style, &url, &image_replaced)) {
+            error = NSERROR_NOMEM;
+            goto done;
+        }
+        if (url != NULL)
+            nsurl_unref(url);
+    }
+    if (tag == DOM_HTML_ELEMENT_TYPE_OBJECT) {
         /* HTML object fallback participates as ordinary child content. An
          * embedded resource suppresses both those children and ::before/after
          * (CSS Pseudo 4). Use the same preflight even before boxes exist. */
@@ -234,12 +248,25 @@ static nserror search_node(
         }
     }
     box_type type_for_children = box != NULL ? box->type : box_construct_type(style, parent_type, parent == NULL);
-    bool generated = styles != NULL && box_type_generates_content(type_for_children) &&
+    bool generated = styles != NULL && !image_replaced && box_type_generates_content(type_for_children) &&
         search_generated_owner(walk->html, node, box);
     if (generated) {
         error = search_generated(walk, node, styles->styles[CSS_PSEUDO_ELEMENT_BEFORE], TEXT_BEFORE);
         if (error != NSERROR_OK)
             goto done;
+    }
+    if (image) {
+        if (!image_replaced && css_computed_visibility(style) == CSS_VISIBILITY_VISIBLE) {
+            char *text = search_text(node, style, true);
+            if (text == NULL) {
+                error = NSERROR_NOMEM;
+                goto done;
+            }
+            error = search_matches(walk, node, text, 0);
+            free(text);
+        }
+        /* IMG represents its alternative, never any DOM children. */
+        goto after;
     }
     bool details = html_is_details(node);
     if (details) {
@@ -264,6 +291,7 @@ static nserror search_node(
         if (error != NSERROR_OK)
             break;
     }
+after:
     if (error == NSERROR_OK && generated)
         error = search_generated(walk, node, styles->styles[CSS_PSEUDO_ELEMENT_AFTER], TEXT_AFTER);
 done:

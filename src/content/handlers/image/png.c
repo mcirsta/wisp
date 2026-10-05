@@ -441,8 +441,9 @@ static png_bytep *calc_row_pointers(struct bitmap *bitmap)
  *
  * This routine generates a bitmap object from a PNG image content
  */
-static struct bitmap *png_cache_convert(struct content *c)
+static struct bitmap *png_cache_convert(struct content *c, nserror *error)
 {
+    *error = NSERROR_PNG_ERROR;
     png_structp png_ptr;
     png_infop info_ptr;
     png_infop end_info_ptr;
@@ -459,17 +460,20 @@ static struct bitmap *png_cache_convert(struct content *c)
 
     png_ptr = png_create_read_struct(PNG_LIBPNG_VER_STRING, NULL, nspng_error, nspng_warning);
     if (png_ptr == NULL) {
+        *error = NSERROR_NOMEM;
         return NULL;
     }
 
     info_ptr = png_create_info_struct(png_ptr);
     if (info_ptr == NULL) {
+        *error = NSERROR_NOMEM;
         png_destroy_read_struct(&png_ptr, NULL, NULL);
         return NULL;
     }
 
     end_info_ptr = png_create_info_struct(png_ptr);
     if (end_info_ptr == NULL) {
+        *error = NSERROR_NOMEM;
         png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
         return NULL;
     }
@@ -495,6 +499,7 @@ static struct bitmap *png_cache_convert(struct content *c)
     /* Claim the required memory for the converted PNG */
     bitmap = guit->bitmap->create(width, height, BITMAP_NONE);
     if (bitmap == NULL) {
+        *error = NSERROR_NOMEM;
         /* cleanup and bail */
         goto png_cache_convert_error;
     }
@@ -504,6 +509,7 @@ static struct bitmap *png_cache_convert(struct content *c)
     if (row_pointers != NULL) {
         png_read_image(png_ptr, (png_bytep *)row_pointers);
     } else {
+        *error = NSERROR_NOMEM;
         guit->bitmap->destroy((struct bitmap *)bitmap);
         bitmap = NULL;
     }

@@ -23,10 +23,27 @@
 #ifndef WISP_IMAGE_IMAGE_H_
 #define WISP_IMAGE_IMAGE_H_
 
+#include <stdbool.h>
 #include <wisp/utils/errors.h>
 
 struct bitmap;
+struct content;
 struct content_redraw_data;
+
+/** Zero-initialized state owned by an image handler or cache entry. */
+struct image_decode_error {
+    struct content *content;
+    nserror error;
+    bool pending;
+};
+
+/** Report a permanent decode failure after painting/conversion unwinds.
+ * Allocation failures remain retryable. Call again if scheduling failed.
+ */
+void image_decode_error_schedule(struct image_decode_error *state, struct content *content, nserror error);
+
+/** Cancel a queued notification before releasing its owner. */
+void image_decode_error_cancel(struct image_decode_error *state);
 
 /** Initialise the content handlers for image types.
  */

@@ -43,6 +43,7 @@ typedef struct nsico_content {
     struct content base;
 
     struct ico_collection *ico; /** ICO collection data */
+    struct image_decode_error decode_error;
 } nsico_content;
 
 /**
@@ -166,45 +167,47 @@ static bool nsico_convert(struct content *c)
     return true;
 }
 
-static bool nsico__decode(struct bmp_image *ico)
+static struct bitmap *nsico_bitmap(nsico_content *ico, int width, int height)
 {
-    if (ico->decoded == false) {
-        NSLOG(wisp, DEBUG, "Decoding ICO %p", ico);
-        if (bmp_decode(ico) != BMP_OK) {
-            return false;
+    struct bmp_image *bmp;
+    if (ico->base.status == CONTENT_STATUS_LOADING)
+        return NULL;
+    width = clamp(width, 0, UINT16_MAX);
+    height = clamp(height, 0, UINT16_MAX);
+    /* ico_find skips entries already known to have no usable pixels. */
+    while ((bmp = ico_find(ico->ico, width, height)) != NULL) {
+        if (bmp->decoded)
+            return bmp->bitmap;
+        bmp_result result = bmp_decode(bmp);
+        if (result == BMP_INSUFFICIENT_MEMORY)
+            return NULL;
+        if (!bmp->decoded) {
+            continue;
         }
-
-        bitmap_format_to_client(ico->bitmap,
+        /* Convert a usable partial bitmap as well as a complete one, exactly
+         * once. A failed entry must never become a raw-format cache hit. */
+        bitmap_format_to_client(bmp->bitmap,
             &(bitmap_fmt_t){
                 .layout = BITMAP_LAYOUT_R8G8B8A8,
                 .pma = bitmap_fmt.pma,
             });
-        guit->bitmap->modified(ico->bitmap);
+        guit->bitmap->modified(bmp->bitmap);
+        return bmp->bitmap;
     }
-
-    return true;
+    image_decode_error_schedule(&ico->decode_error, &ico->base, NSERROR_ICO_ERROR);
+    return NULL;
 }
 
 static bool nsico_redraw(
     struct content *c, struct content_redraw_data *data, const struct rect *clip, const struct redraw_context *ctx)
 {
     nsico_content *ico = (nsico_content *)c;
-    struct bmp_image *bmp;
-
-    /* select most appropriate sized icon for size */
-    bmp = ico_find(ico->ico, data->width, data->height);
-    if (bmp == NULL) {
-        /* return error */
-        NSLOG(wisp, INFO, "Failed to select icon");
+    struct bitmap *bitmap = nsico_bitmap(ico, data->width, data->height);
+    if (bitmap == NULL) {
         return false;
     }
 
-    /* ensure its decided */
-    if (!nsico__decode(bmp)) {
-        return false;
-    }
-
-    return image_bitmap_plot(bmp->bitmap, data, clip, ctx);
+    return image_bitmap_plot(bitmap, data, clip, ctx);
 }
 
 
@@ -212,6 +215,7 @@ static void nsico_destroy(struct content *c)
 {
     nsico_content *ico = (nsico_content *)c;
 
+    image_decode_error_cancel(&ico->decode_error);
     ico_finalise(ico->ico);
     free(ico->ico);
 }
@@ -255,20 +259,7 @@ static void *nsico_get_internal(const struct content *c, void *context)
     nsico_content *ico = (nsico_content *)c;
     /* TODO: Pick best size for purpose.
      *       Currently assumes it's for a URL bar. */
-    struct bmp_image *bmp;
-
-    bmp = ico_find(ico->ico, 16, 16);
-    if (bmp == NULL) {
-        /* return error */
-        NSLOG(wisp, INFO, "Failed to select icon");
-        return NULL;
-    }
-
-    if (!nsico__decode(bmp)) {
-        return NULL;
-    }
-
-    return bmp->bitmap;
+    return nsico_bitmap(ico, 16, 16);
 }
 
 static content_type nsico_content_type(void)
@@ -279,24 +270,13 @@ static content_type nsico_content_type(void)
 static bool nsico_is_opaque(struct content *c)
 {
     nsico_content *ico = (nsico_content *)c;
-    struct bmp_image *bmp;
 
     /**
      * \todo Pick best size for purpose. Currently assumes
      *         it's for a URL bar.
      */
-    bmp = ico_find(ico->ico, 16, 16);
-    if (bmp == NULL) {
-        /* return error */
-        NSLOG(wisp, INFO, "Failed to select icon");
-        return false;
-    }
-
-    if (!nsico__decode(bmp)) {
-        return false;
-    }
-
-    return guit->bitmap->get_opaque(bmp->bitmap);
+    struct bitmap *bitmap = nsico_bitmap(ico, 16, 16);
+    return bitmap != NULL && guit->bitmap->get_opaque(bitmap);
 }
 
 static const content_handler nsico_content_handler = {

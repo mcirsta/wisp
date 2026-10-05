@@ -84,8 +84,9 @@ static nserror nsjpegxl_create(const content_handler *handler, lwc_string *imime
 /**
  * create a bitmap from jpeg xl content.
  */
-static struct bitmap *jpegxl_cache_convert(struct content *c)
+static struct bitmap *jpegxl_cache_convert(struct content *c, nserror *error)
 {
+    *error = NSERROR_BAD_CONTENT;
     struct bitmap *bitmap = NULL;
     JxlDecoder *jxldec;
     JxlDecoderStatus decstatus;
@@ -100,6 +101,7 @@ static struct bitmap *jpegxl_cache_convert(struct content *c)
 
     jxldec = JxlDecoderCreate(NULL);
     if (jxldec == NULL) {
+        *error = NSERROR_NOMEM;
         NSLOG(wisp, ERROR, "Unable to allocate decoder");
         return NULL;
     }
@@ -114,6 +116,7 @@ static struct bitmap *jpegxl_cache_convert(struct content *c)
     decstatus = JxlDecoderSubscribeEvents(jxldec, JXL_DEC_FULL_IMAGE);
     if (decstatus != JXL_DEC_SUCCESS) {
         NSLOG(wisp, ERROR, "Unable to subscribe");
+        JxlDecoderDestroy(jxldec);
         return NULL;
     }
     src_data = content__get_source_data(c, &src_size);
@@ -121,6 +124,7 @@ static struct bitmap *jpegxl_cache_convert(struct content *c)
     decstatus = JxlDecoderSetInput(jxldec, src_data, src_size);
     if (decstatus != JXL_DEC_SUCCESS) {
         NSLOG(wisp, ERROR, "unable to set input");
+        JxlDecoderDestroy(jxldec);
         return NULL;
     }
 
@@ -146,6 +150,7 @@ static struct bitmap *jpegxl_cache_convert(struct content *c)
         bitmap = guit->bitmap->create(c->width, c->height, BITMAP_NONE);
     }
     if (bitmap == NULL) {
+        *error = NSERROR_NOMEM;
         /* empty bitmap could not be created */
         JxlDecoderDestroy(jxldec);
         return NULL;
@@ -154,6 +159,7 @@ static struct bitmap *jpegxl_cache_convert(struct content *c)
     /* ensure buffer was allocated */
     output = guit->bitmap->get_buffer(bitmap);
     if (output == NULL) {
+        *error = NSERROR_NOMEM;
         /* bitmap with no buffer available */
         guit->bitmap->destroy(bitmap);
         JxlDecoderDestroy(jxldec);

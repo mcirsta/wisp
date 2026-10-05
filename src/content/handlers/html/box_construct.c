@@ -118,6 +118,8 @@ struct box_construct_props {
 
 static const content_type image_types = CONTENT_IMAGE;
 
+static bool box_construct_text_data(struct box_construct_ctx *ctx, const char *data, size_t length);
+
 /* Mapping from CSS display to box type.
  * Uses designated initializers so order doesn't matter. */
 static const box_type box_map[CSS_DISPLAY_FLOW_ROOT + 1] = {
@@ -1196,6 +1198,17 @@ static bool box_construct_element(struct box_construct_ctx *ctx, bool *convert_c
 
     box_construct_generate(ctx->n, ctx, box, &props, CSS_PSEUDO_ELEMENT_BEFORE);
 
+    /* Non-replaced image alternatives participate as ordinary text between
+     * the owner's pseudos, with the same wrapping, CSS and source identity as
+     * DOM text. Keeping text on the owner would bypass its child painting. */
+    if (box->text != NULL && !(box->flags & (IS_REPLACED | CONTENTS_SKIPPED))) {
+        if (!box_construct_text_data(ctx, box->text, box->length))
+            goto error;
+        talloc_free(box->text);
+        box->text = NULL;
+        box->length = 0;
+    }
+
     const struct box_construct_ancestor *ancestor = &ctx->ancestors[ctx->depth - 1];
     if (*convert_children && ancestor->details && ancestor->summary == NULL &&
         !box_construct_details_legend(ctx, box, &props))
@@ -1243,10 +1256,11 @@ static void box_construct_element_after(dom_node *n, struct box_construct_ctx *c
             return;
         }
 
-        /* Generated siblings also need to be enclosed by the owner's inline
-         * end, even if the DOM element itself is empty. */
-        has_children |= box->next != NULL || props.containing_block->last != box->parent;
-        if (!has_children || (box->flags & CONVERT_CHILDREN) == 0)
+        /* Generated siblings and image alternatives need an inline end even
+         * when the owner's DOM children are absent or intentionally ignored. */
+        has_children = (has_children && (box->flags & CONVERT_CHILDREN)) || box->next != NULL ||
+            props.containing_block->last != box->parent;
+        if (!has_children)
             return;
         if (!box_ensure_inline_container(props.containing_block, &props.inline_container, ctx->bctx)) {
             ctx->error = NSERROR_NOMEM;
@@ -1420,17 +1434,17 @@ static void box_construct_space(struct box *box, const css_computed_style *style
 }
 
 /**
- * Construct the box tree for an XML text node.
+ * Construct ordinary text from a DOM text node or a non-replaced image's alt.
  *
  * \param  ctx  Tree construction context
+ * \param  data  Borrowed, NUL-terminated UTF-8 text
+ * \param  length  Text length in bytes
  * \return  true on success, false on memory exhaustion
  */
-static bool box_construct_text(struct box_construct_ctx *ctx)
+static bool box_construct_text_data(struct box_construct_ctx *ctx, const char *data, size_t length)
 {
     struct box_construct_props props;
     struct box *box = NULL;
-    dom_string *content;
-    dom_exception err;
 
     assert(ctx->n != NULL);
 
@@ -1438,17 +1452,11 @@ static bool box_construct_text(struct box_construct_ctx *ctx)
 
     assert(props.containing_block != NULL);
 
-    err = dom_characterdata_get_data(ctx->n, &content);
-    if (err != DOM_NO_ERR || content == NULL)
-        return false;
-
     if (css_computed_white_space(props.parent_style) == CSS_WHITE_SPACE_NORMAL ||
         css_computed_white_space(props.parent_style) == CSS_WHITE_SPACE_NOWRAP) {
         char *text;
 
-        text = squash_whitespace(dom_string_data(content));
-
-        dom_string_unref(content);
+        text = squash_whitespace(data);
 
         if (text == NULL)
             return false;
@@ -1549,7 +1557,7 @@ static bool box_construct_text(struct box_construct_ctx *ctx)
     } else {
         /* white-space: pre */
         char *text;
-        size_t text_len = dom_string_byte_length(content);
+        size_t text_len = length;
         size_t i;
         char *current;
         enum css_white_space_e white_space = css_computed_white_space(props.parent_style);
@@ -1559,12 +1567,11 @@ static bool box_construct_text(struct box_construct_ctx *ctx)
             white_space == CSS_WHITE_SPACE_PRE_WRAP);
 
         text = malloc(text_len + 1);
-        dom_string_unref(content);
 
         if (text == NULL)
             return false;
 
-        memcpy(text, dom_string_data(content), text_len);
+        memcpy(text, data, text_len);
         text[text_len] = '\0';
 
         /* TODO: Handle tabs properly */
@@ -1664,6 +1671,16 @@ static bool box_construct_text(struct box_construct_ctx *ctx)
     }
 
     return true;
+}
+
+static bool box_construct_text(struct box_construct_ctx *ctx)
+{
+    dom_string *content = NULL;
+    if (dom_characterdata_get_data(ctx->n, &content) != DOM_NO_ERR || content == NULL)
+        return false;
+    bool ok = box_construct_text_data(ctx, dom_string_data(content), dom_string_byte_length(content));
+    dom_string_unref(content);
+    return ok;
 }
 
 

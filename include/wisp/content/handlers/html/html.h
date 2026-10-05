@@ -107,6 +107,7 @@ struct content_html_object {
     content_type permitted_types;
     bool background; /**< This object is a background image. */
     bool layout_resource; /**< Participates in loading/rendering, unlike a speculative no-box fetch. */
+    bool active; /**< This request still contributes to its parent's active count. */
     bool failed; /**< Request/decode failure retained across reconstruction; distinct from an aborted handle. */
     bool opened; /**< Attached to the parent's browser window by content_open. */
     bool refresh_pending; /**< Defer embedded-document refresh while its box is absent. */

@@ -62,8 +62,51 @@ field or separate rendering path is needed.
 Objects reject unsuccessful HTTP responses both during loading and on cache
 hits, even if their bodies are decodable. This is a per-consumer cache policy:
 the shared response remains available to direct navigation and ordinary images.
+Raster sources handled by the shared image cache, GIF, BMP and ICO handlers also reach fallback
+when failure is detected during later bitmap conversion. A shared notification helper
+defers the error until conversion/painting has unwound; handlers do not repeatedly decode known bad
+data. Explicit allocation failures remain retryable. HTML requests release their
+loading contribution once, so an error after DONE cannot underflow the page's
+counter or consume another request's contribution. This implements the HTML
+[object image-handler fallback rule](https://html.spec.whatwg.org/multipage/iframe-embed-object.html#the-object-element);
+DOM `load`/`error` event task ordering remains separate work.
+
+GIF decoder failures invalidate the compositing cache, including allocation failures;
+a second attempt cannot mistake a damaged or absent bitmap for a decoded frame.
+Decoder-accepted partial GIFs remain usable. If a later animation frame fails, Wisp
+stops animation and recomposes its last successfully decoded frame, or tries the first
+frame if none has yet been painted. Keeping that usable frame is a recovery policy;
+HTML requires fallback when the image cannot be rendered, not for every animation
+error. Opaque 1×1 images use the plotter's opaque colour encoding when drawn through
+the rectangle optimization, and fully transparent pixels remain invisible.
+
+BMP/ICO decoding distinguishes usable partial pixels from failed attempts. A usable
+bitmap is converted to the frontend format once, even when its source is incomplete.
+ICO selection skips malformed headers and entries that permanently failed without
+producing pixels, trying the remaining sizes before reporting failure. Truncated
+colour/mask data preserves recovered pixels; missing mask bits leave those pixels
+opaque. These recovery choices do not prescribe another browser's handling of
+malformed files. Pixel-decoding memory failures remain retryable, including failure
+to access the mask buffer after colour decoding. Qt honours bitmap-clear requests so unwritten
+pixels do not expose uninitialized memory. Header/palette bounds distinguish an ICO
+DIB from a standalone BMP file, including small icons without a BMP file header.
+
 Generated `attr()` text preserves its complete UTF-8 byte sequence. Remaining
 resource lifecycle coverage is listed in the correctness backlog.
+
+Image alternatives follow the [HTML image rendering rules](https://html.spec.whatwg.org/multipage/rendering.html#images-3).
+With a nonempty `alt`, absent/empty sources, disabled foreground images and known
+failed requests use ordinary text; available or expected images remain replaced.
+Missing/empty alternatives stay replaced, as do sized alternatives in quirks mode.
+Construction and discovery share source selection and this representation decision.
+Discovery does not fetch unrequested images to find out whether they will fail.
+Non-replaced alternatives use the ordinary text path, including wrapping,
+whitespace, text transformation, selection and source identity across rebuilding.
+Their `::before` and `::after` participate in rendering and search, while IMG DOM
+children are ignored. Failure transitions reuse the existing resource state and
+reconstruction machinery, including errors from late pixel decoding. Empty sources
+do not issue a layout request for the document itself. The existing responsive
+source-selection policy is unchanged.
 
 Query replacement, clearing, failure, navigation and teardown release references
 and cancel pending work. Highlights are destroyed before the frontend window,
@@ -86,15 +129,37 @@ outside this feature; unsupported values are not silently accepted.
   nested reveal, wrapping, hidden flex/grid blockification, JS-disabled canvas
   fallback, object fallback before construction, unsupported MIME types, UTF-8
   attributes, excluded pseudo content/replaced owners, cancellation and native label clicks.
+- `qt_image_fallback`: alternative-text wrapping and inline geometry against
+  ordinary-text references; whitespace/transformation; ordinary and DOM-based
+  search; generated text; self/ancestor reveal and closed details; immediate and
+  late decode failures; stable resource counts; disabled images, srcset and quirks
+  mode exclusions. Expectations come from HTML/CSS, not another browser's pixels.
 - `box_construct_context_test`: shared object preflight agrees with construction,
   makes no requests or mappings, releases temporary parameters, and preserves
   generated UTF-8 attribute text. Existing detached-resource tests cover both
   normal and retained construction.
+  Image preflight also covers missing/empty/srcset sources, foreground-image
+  preferences, quirks sizing, ignored DOM children and side-effect-free discovery.
 - `object_fallback_test`: synchronous retrieval failure, asynchronous failure
   while visible/hidden/rebuilding, retained URL/node identity, changed URLs,
   memory exhaustion, completion gating and non-object exclusions. Pending-to-ready
   transitions never attach into fallback geometry; reconstruction reuses and opens
   READY resources before DONE, including completion while hidden/rebuilding.
+  Late decoding errors after DONE preserve an unrelated active request's count,
+  including while the failed object's box is hidden or being reconstructed.
+  Image failures with alternative text request reconstruction at each of those
+  lifecycle points; images without alternatives and backgrounds stay excluded.
+- `image_cache_failure_test`: deferred notification from speculative conversion,
+  bitmap lookup and redraw, no repeated conversion of invalid sources,
+  cancellation on destruction, notification-scheduling retry, suppression of duplicate
+  errors, allocation-failure retry and purge/reconversion.
+- `gif_decode_failure_test`: real decoder errors cannot become successful cache hits;
+  bitmap allocation can retry, earlier frames can be recomposed after a damaged
+  frame, and usable truncated pixel data stays accepted.
+- `bmp_decode_failure_test`: complete/partial/unusable pixels at 1, 4, 8, 16, 24 and
+  32 bits per pixel, invalid palette indices, truncated masks and RLE padding,
+  memory retries, alternate entries, malformed member headers and extreme requested sizes.
+- `qt_bitmap_cache`: bitmap allocation/clearing as well as scaled-image cache coverage.
 - `qt_object_fallback`: missing files, unfetchable schemes, truncated PNG headers,
   nested fallback, successful embedded images, generated/ordinary fallback search,
   repeated disclosure changes and a larger construction tree. Resource records
@@ -110,6 +175,18 @@ outside this feature; unsupported values are not silently accepted.
   generated fallback in closed details and hidden-until-found sections. Discovery
   makes no requests, reveal starts one, delayed errors keep the highlight, and
   success removes fallback. Repeated search/reveal reuses the known request state.
+- `qt_object_decode_failure`: WebP and JPEG sources with valid dimensions but
+  undecodable pixels, with both speculative and deferred conversion. Covers
+  shared objects/images/backgrounds, successful resources, stable loading and
+  resource counts, fallback search/highlights and repeated disclosure changes.
+- `qt_object_gif_failure`: shared corrupt GIF objects expose searchable fallback;
+  partial images and damaged animations with a usable earlier frame suppress it.
+  Pixel checks cover recovered frames, normal animation, partial transparency and
+  opaque/transparent 1×1 drawing, with animation on/off and repeated disclosure changes.
+- `qt_object_ico_failure`: shared unusable ICO/BMP objects expose searchable fallback;
+  alternate icon sizes, incomplete images and valid transparent images suppress it.
+  Pixel checks cover all supported ICO depths, channel conversion, recovered pixels,
+  missing masks and cleared canvas areas across resize and repeated disclosure changes.
 - `qt_object_document_sizing`: embedded HTML documents have no natural dimensions
   or ratio; the shared replaced-element sizing path resolves their viewport before
   laying out their contents. Covers default/one-axis/explicit sizes, constraints,

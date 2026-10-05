@@ -38,6 +38,7 @@
 #include "desktop/bitmap.h"
 
 #include "content/handlers/image/bmp.h"
+#include "content/handlers/image/image.h"
 
 /** bmp context. */
 typedef struct nsbmp_content {
@@ -46,6 +47,7 @@ typedef struct nsbmp_content {
     bmp_image *bmp; /** BMP image data */
 
     struct bitmap *bitmap; /**< Created NetSurf bitmap */
+    struct image_decode_error decode_error;
 } nsbmp_content;
 
 /**
@@ -165,18 +167,20 @@ static bool nsbmp_convert(struct content *c)
     return true;
 }
 
-static bool nsbmp_redraw(
-    struct content *c, struct content_redraw_data *data, const struct rect *clip, const struct redraw_context *ctx)
+static struct bitmap *nsbmp_bitmap(nsbmp_content *bmp)
 {
-    nsbmp_content *bmp = (nsbmp_content *)c;
-    bitmap_flags_t flags = BITMAPF_NONE;
-
+    if (bmp->bitmap == NULL)
+        return NULL;
+    if (bmp->decode_error.error != NSERROR_OK) {
+        image_decode_error_schedule(&bmp->decode_error, &bmp->base, bmp->decode_error.error);
+        return NULL;
+    }
     if (bmp->bmp->decoded == false) {
-        bmp_result res;
-        res = bmp_decode(bmp->bmp);
-        /* allow short or incomplete image data giving a partial image*/
-        if ((res != BMP_OK) && (res != BMP_INSUFFICIENT_DATA) && (res != BMP_DATA_ERROR)) {
-            return false;
+        bmp_result res = bmp_decode(bmp->bmp);
+        if (!bmp->bmp->decoded) {
+            image_decode_error_schedule(&bmp->decode_error, &bmp->base,
+                res == BMP_INSUFFICIENT_MEMORY ? NSERROR_NOMEM : NSERROR_BMP_ERROR);
+            return NULL;
         }
 
         bitmap_format_to_client(bmp->bitmap,
@@ -186,13 +190,24 @@ static bool nsbmp_redraw(
             });
         guit->bitmap->modified(bmp->bitmap);
     }
+    return bmp->bitmap;
+}
+
+static bool nsbmp_redraw(
+    struct content *c, struct content_redraw_data *data, const struct rect *clip, const struct redraw_context *ctx)
+{
+    nsbmp_content *bmp = (nsbmp_content *)c;
+    bitmap_flags_t flags = BITMAPF_NONE;
+    struct bitmap *bitmap = nsbmp_bitmap(bmp);
+    if (bitmap == NULL)
+        return false;
 
     if (data->repeat_x)
         flags |= BITMAPF_REPEAT_X;
     if (data->repeat_y)
         flags |= BITMAPF_REPEAT_Y;
 
-    return (ctx->plot->bitmap(ctx, bmp->bitmap, data->x, data->y, data->width, data->height, data->background_colour,
+    return (ctx->plot->bitmap(ctx, bitmap, data->x, data->y, data->width, data->height, data->background_colour,
                 flags) == NSERROR_OK);
 }
 
@@ -201,6 +216,7 @@ static void nsbmp_destroy(struct content *c)
 {
     nsbmp_content *bmp = (nsbmp_content *)c;
 
+    image_decode_error_cancel(&bmp->decode_error);
     bmp_finalise(bmp->bmp);
     free(bmp->bmp);
 }
@@ -244,7 +260,7 @@ static void *nsbmp_get_internal(const struct content *c, void *context)
 {
     nsbmp_content *bmp = (nsbmp_content *)c;
 
-    return bmp->bitmap;
+    return nsbmp_bitmap(bmp);
 }
 
 static content_type nsbmp_content_type(void)
@@ -256,11 +272,8 @@ static bool nsbmp_content_is_opaque(struct content *c)
 {
     nsbmp_content *bmp = (nsbmp_content *)c;
 
-    if (bmp->bitmap != NULL) {
-        return guit->bitmap->get_opaque(bmp->bitmap);
-    }
-
-    return false;
+    struct bitmap *bitmap = nsbmp_bitmap(bmp);
+    return bitmap != NULL && guit->bitmap->get_opaque(bitmap);
 }
 
 static const content_handler nsbmp_content_handler = {

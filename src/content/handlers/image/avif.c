@@ -75,8 +75,9 @@ static nserror avif_create(const content_handler *handler, lwc_string *imime_typ
 /**
  * Create a bitmap from AVIF content.
  */
-static struct bitmap *avif_cache_convert(struct content *c)
+static struct bitmap *avif_cache_convert(struct content *c, nserror *error)
 {
+    *error = NSERROR_BAD_CONTENT;
     const uint8_t *source_data;
     size_t source_size;
     avifDecoder *decoder = NULL;
@@ -96,6 +97,7 @@ static struct bitmap *avif_cache_convert(struct content *c)
     /* Create decoder */
     decoder = avifDecoderCreate();
     if (decoder == NULL) {
+        *error = NSERROR_NOMEM;
         NSLOG(wisp, ERROR, "AVIF: Failed to create decoder");
         return NULL;
     }
@@ -108,6 +110,8 @@ static struct bitmap *avif_cache_convert(struct content *c)
     /* Set memory source */
     result = avifDecoderSetIOMemory(decoder, source_data, source_size);
     if (result != AVIF_RESULT_OK) {
+        if (result == AVIF_RESULT_OUT_OF_MEMORY)
+            *error = NSERROR_NOMEM;
         NSLOG(wisp, ERROR, "AVIF: SetIOMemory failed: %s", avifResultToString(result));
         avifDecoderDestroy(decoder);
         return NULL;
@@ -116,6 +120,8 @@ static struct bitmap *avif_cache_convert(struct content *c)
     /* Parse the image header */
     result = avifDecoderParse(decoder);
     if (result != AVIF_RESULT_OK) {
+        if (result == AVIF_RESULT_OUT_OF_MEMORY)
+            *error = NSERROR_NOMEM;
         NSLOG(wisp, ERROR, "AVIF: Parse failed: %s", avifResultToString(result));
         avifDecoderDestroy(decoder);
         return NULL;
@@ -124,6 +130,8 @@ static struct bitmap *avif_cache_convert(struct content *c)
     /* Decode the first (and only for static) image */
     result = avifDecoderNextImage(decoder);
     if (result != AVIF_RESULT_OK) {
+        if (result == AVIF_RESULT_OUT_OF_MEMORY)
+            *error = NSERROR_NOMEM;
         NSLOG(wisp, ERROR, "AVIF: Decode failed: %s", avifResultToString(result));
         avifDecoderDestroy(decoder);
         return NULL;
@@ -139,6 +147,7 @@ static struct bitmap *avif_cache_convert(struct content *c)
     /* Create bitmap */
     bitmap = guit->bitmap->create(decoder->image->width, decoder->image->height, bmap_flags);
     if (bitmap == NULL) {
+        *error = NSERROR_NOMEM;
         NSLOG(wisp, ERROR, "AVIF: Failed to create bitmap");
         avifDecoderDestroy(decoder);
         return NULL;
@@ -146,6 +155,7 @@ static struct bitmap *avif_cache_convert(struct content *c)
 
     pixels = guit->bitmap->get_buffer(bitmap);
     if (pixels == NULL) {
+        *error = NSERROR_NOMEM;
         NSLOG(wisp, ERROR, "AVIF: Failed to get bitmap buffer");
         guit->bitmap->destroy(bitmap);
         avifDecoderDestroy(decoder);
@@ -188,6 +198,8 @@ static struct bitmap *avif_cache_convert(struct content *c)
     /* Convert YUV to RGB */
     result = avifImageYUVToRGB(decoder->image, &rgb);
     if (result != AVIF_RESULT_OK) {
+        if (result == AVIF_RESULT_OUT_OF_MEMORY)
+            *error = NSERROR_NOMEM;
         NSLOG(wisp, ERROR, "AVIF: YUV to RGB conversion failed: %s", avifResultToString(result));
         guit->bitmap->destroy(bitmap);
         avifDecoderDestroy(decoder);

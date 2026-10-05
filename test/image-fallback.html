@@ -1,0 +1,36 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Image alternatives use ordinary text and generated children</title>
+<style>
+body { margin:0; font:16px/20px monospace; }
+p { margin:0; }
+img { display:block; }
+img::before { content:attr(data-before); }
+img::after { content:attr(data-after); }
+#wrapped, #wrapped-reference { width:90px; }
+#pre, #pre-reference { white-space:pre; text-transform:uppercase; }
+#inline, #inline-reference { display:inline; width:250px; height:100px; padding:2px; border:1px solid; }
+#empty, #no-alt { display:inline; }
+</style>
+<img id="visible" alt="visible-alt" data-before="visible-before " data-after=" visible-after">
+<div hidden="until-found" id="hidden"><img id="hidden-image" alt="hidden-alt" data-before="hidden-before" data-after="hidden-after"></div>
+<details id="closed"><summary id="closed-summary">Never opened</summary>
+  <img id="closed-image" src="" alt="closed-alt" data-before="closed-before">
+</details>
+<img id="self-hidden" hidden="until-found" alt="self-alt" data-before="self-before">
+<img id="spaces" src=" &#9;&#10; " alt="spaces-alt">
+<img id="wrapped" alt="alpha beta gamma delta"><div id="wrapped-reference">alpha beta gamma delta</div>
+<img id="pre" alt="first&#10;second"><div id="pre-reference">first
+second</div>
+<p id="inline-parent"><img id="inline" alt="inline-alt"> trailing</p>
+<p><span id="inline-reference">inline-alt</span> trailing</p>
+<img id="empty" alt="" data-before="forbidden-empty"><img id="no-alt" data-before="forbidden-no-alt">
+<img id="valid" src="aspect-ratio-image.svg" alt="valid-alternative" width="30" height="20" data-before="forbidden-valid">
+<img id="srcset" src="" srcset="aspect-ratio-image.svg 800w" alt="srcset-alternative" width="30" height="20" data-before="forbidden-srcset">
+<details id="failed" open><summary id="failed-summary">Failed image</summary>
+  <img id="failed-image" src="data:image/png;base64,AAAA" alt="failed-alt" data-before="failed-before" data-after="failed-after">
+</details>
+<div hidden="until-found" id="expected"><img id="unrequested" src="aspect-ratio-image.svg" alt="unrequested-alt" data-before="forbidden-unrequested"></div>
+<details id="loaded" open><summary id="loaded-summary">Loaded image</summary>
+  <img id="loaded-image" src="aspect-ratio-image.svg" alt="loaded-alternative" data-before="forbidden-loaded" width="30" height="20">
+</details>

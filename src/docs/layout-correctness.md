@@ -9,11 +9,10 @@ Cross-node phrases remain unimplemented.
 
 Remaining resource-dependent fallback coverage:
 
-- Object `error`/`load` events need the specified task lifecycle. Late bitmap
-  conversion failures also need to reach the representation decision when an
-  image decoder has already reported successful content completion.
-- Images without a usable source and other fallback-capable elements still need
-  review; skipped image owners conservatively exclude generated text.
+- Object `error`/`load` events need the specified task lifecycle.
+- Other fallback-capable elements still need a discovery/rendering review.
+  Image alternatives that remain replaced (while pending or sized in quirks
+  mode) are not included by DOM-based discovery yet.
 
 Object expectations follow the [HTML object representation algorithm](https://html.spec.whatwg.org/multipage/iframe-embed-object.html#the-object-element),
 including its resource-availability, failed-load and image-handler steps.

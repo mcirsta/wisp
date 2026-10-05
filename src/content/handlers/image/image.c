@@ -21,7 +21,9 @@
 
 #include <wisp/bitmap.h>
 #include <wisp/content.h>
+#include <wisp/content/content_protected.h>
 #include <wisp/desktop/gui_internal.h>
+#include <wisp/misc.h>
 #include <wisp/plotters.h>
 #include <wisp/utils/log.h>
 #include <wisp/utils/messages.h>
@@ -40,6 +42,35 @@
 #include "content/handlers/image/avif.h"
 #include "content/handlers/image/svg.h"
 #include "content/handlers/image/webp.h"
+
+static void image_decode_error_callback(void *pw)
+{
+    struct image_decode_error *state = pw;
+    state->pending = false;
+    if (state->content->status == CONTENT_STATUS_ERROR)
+        return;
+    content_set_error(state->content);
+    /* A consumer may release the owner. Do not touch state afterwards. */
+    content_broadcast_error(state->content, state->error, NULL);
+}
+
+void image_decode_error_schedule(struct image_decode_error *state, struct content *content, nserror error)
+{
+    if (error == NSERROR_OK || error == NSERROR_NOMEM)
+        return;
+    state->content = content;
+    state->error = error;
+    if (!state->pending && content->status != CONTENT_STATUS_ERROR)
+        state->pending = guit->misc->schedule(0, image_decode_error_callback, state) == NSERROR_OK;
+}
+
+void image_decode_error_cancel(struct image_decode_error *state)
+{
+    if (state->pending) {
+        guit->misc->schedule(-1, image_decode_error_callback, state);
+        state->pending = false;
+    }
+}
 
 /**
  * Initialise image content handlers
@@ -121,7 +152,7 @@ bool image_bitmap_plot(
     int width;
     int height;
     unsigned char *pixel;
-    plot_style_t fill_style;
+    plot_style_t fill_style = {0};
     struct rect area;
 
     width = guit->bitmap->get_width(bitmap);
@@ -133,6 +164,10 @@ bool image_bitmap_plot(
             fill_style.fill_colour = bitmap_pixel_to_colour(pixel);
 
             if (guit->bitmap->get_opaque(bitmap) || ((fill_style.fill_colour & 0xff000000) == 0xff000000)) {
+
+                /* Bitmap alpha is coverage; plot colours use zero in the
+                 * high byte for an opaque fill. This branch is opaque. */
+                fill_style.fill_colour &= 0x00ffffff;
 
                 area = *clip;
 

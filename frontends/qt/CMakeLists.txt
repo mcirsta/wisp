@@ -219,6 +219,14 @@ if(WISP_QT_CAPTURE)
         set_tests_properties(qt_absolute_sizing PROPERTIES TIMEOUT 30)
         find_program(WISP_TEST_MAGICK magick)
         if(WISP_TEST_MAGICK)
+            add_test(NAME qt_object_gif_failure
+                COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_object_gif_failure.py
+                    $<TARGET_FILE:wisp-qt> ${WISP_TEST_MAGICK})
+            set_tests_properties(qt_object_gif_failure PROPERTIES TIMEOUT 60)
+            add_test(NAME qt_object_ico_failure
+                COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_object_ico_failure.py
+                    $<TARGET_FILE:wisp-qt> ${WISP_TEST_MAGICK})
+            set_tests_properties(qt_object_ico_failure PROPERTIES TIMEOUT 60)
             add_test(NAME qt_float_paint_order
                 COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_float_paint_order.py
                     $<TARGET_FILE:wisp-qt> ${WISP_TEST_MAGICK})
@@ -274,12 +282,21 @@ if(WISP_QT_CAPTURE)
         add_test(NAME qt_generated_search
             COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_generated_search.py $<TARGET_FILE:wisp-qt>)
         set_tests_properties(qt_generated_search PROPERTIES TIMEOUT 120)
+
+        add_test(NAME qt_image_fallback
+            COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_image_fallback.py $<TARGET_FILE:wisp-qt>)
+        set_tests_properties(qt_image_fallback PROPERTIES TIMEOUT 90)
         add_test(NAME qt_object_fallback
             COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_object_fallback.py $<TARGET_FILE:wisp-qt>)
         set_tests_properties(qt_object_fallback PROPERTIES TIMEOUT 60)
         add_test(NAME qt_object_http_fallback
             COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_object_http_fallback.py $<TARGET_FILE:wisp-qt>)
         set_tests_properties(qt_object_http_fallback PROPERTIES TIMEOUT 60)
+        if(WISP_USE_WEBP AND WISP_USE_JPEG)
+            add_test(NAME qt_object_decode_failure
+                COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_object_decode_failure.py $<TARGET_FILE:wisp-qt>)
+            set_tests_properties(qt_object_decode_failure PROPERTIES TIMEOUT 60)
+        endif()
         add_test(NAME qt_object_document_sizing
             COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_object_document_sizing.py $<TARGET_FILE:wisp-qt>)
         set_tests_properties(qt_object_document_sizing PROPERTIES TIMEOUT 60)

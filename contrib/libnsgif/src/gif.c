@@ -1832,6 +1832,10 @@ nsgif_error nsgif_frame_decode(nsgif_t *gif, uint32_t frame, nsgif_bitmap_t **bi
     for (uint32_t f = start_frame; f <= frame; f++) {
         ret = nsgif__process_frame(gif, f, true);
         if (ret != NSGIF_OK) {
+            /* Processing can modify the shared bitmap before failing. It
+             * must not become a cache hit, including after allocation
+             * failure. Restart composition on the next decode attempt. */
+            gif->decoded_frame = NSGIF_FRAME_INVALID;
             return ret;
         }
     }

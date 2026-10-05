@@ -1270,6 +1270,95 @@ static bool srcset_select_url(const char *srcset, int target_w, nsurl *base_url,
 }
 
 
+/* Use the same source selection for construction and discovery without boxes. */
+static bool box_image_source(dom_node *n, html_content *content, nsurl **url)
+{
+    dom_string *s;
+    dom_exception err;
+    *url = NULL;
+    if (!nsoption_bool(foreground_images))
+        return true;
+
+    /* Try srcset first for responsive image selection */
+    err = dom_element_get_attribute(n, corestring_dom_srcset, &s);
+    if (err == DOM_NO_ERR && s != NULL) {
+        /* Use reasonable default target width for image selection.
+         * This reduces bandwidth significantly on image-heavy sites. */
+        int target_width = 800;
+
+        if (srcset_select_url(dom_string_data(s), target_width, content->base_url, url)) {
+            NSLOG(layout, DEBUG, "srcset: selected URL for target %dpx", target_width);
+        }
+        dom_string_unref(s);
+    }
+
+    /* Fall back to src attribute if srcset didn't work */
+    if (*url == NULL) {
+        err = dom_element_get_attribute(n, corestring_dom_src, &s);
+        if (err != DOM_NO_ERR || s == NULL)
+            return true;
+
+        /* An empty source is unavailable, not a request for this document. */
+        const char *src = dom_string_data(s);
+        while (ascii_is_space(*src))
+            src++;
+        if (*src == 0) {
+            dom_string_unref(s);
+            return true;
+        }
+        if (box_extract_link(content, s, content->base_url, url) == false) {
+            dom_string_unref(s);
+            return false;
+        }
+        dom_string_unref(s);
+    }
+
+    return true;
+}
+
+static bool box_image_is_replaced(dom_node *n, html_content *content, const css_computed_style *style,
+    const nsurl *url, bool *replaced)
+{
+    *replaced = true;
+    /* HTML rendering 15.4.2: available or expected images stay replaced.
+     * Known failures and absent/disabled sources can instead represent text.
+     * An unrequested source is still expected; discovery must not fetch it. */
+    if (url != NULL && html_object_get_state(content, n, url) != HTML_OBJECT_FAILED)
+        return true;
+    dom_string *alt = NULL;
+    dom_exception err = dom_element_get_attribute(n, corestring_dom_alt, &alt);
+    if (err != DOM_NO_ERR)
+        return false;
+    bool has_text = alt != NULL && dom_string_byte_length(alt) != 0;
+    dom_string_unref(alt);
+    if (!has_text)
+        return true; /* Missing/empty alternatives do not create pseudo children. */
+
+    css_fixed_or_calc value;
+    css_unit unit;
+    if (content->quirks == DOM_DOCUMENT_QUIRKS_MODE_FULL &&
+        (css_computed_width(style, &value, &unit) == CSS_WIDTH_SET ||
+            css_computed_height(style, &value, &unit) == CSS_HEIGHT_SET))
+        return true;
+    *replaced = false;
+    return true;
+}
+
+
+bool box_image_prepare(dom_node *n, html_content *content, const css_computed_style *style,
+    nsurl **url, bool *replaced)
+{
+    if (!box_image_source(n, content, url))
+        return false;
+    if (box_image_is_replaced(n, content, style, *url, replaced))
+        return true;
+    if (*url != NULL)
+        nsurl_unref(*url);
+    *url = NULL;
+    return false;
+}
+
+
 /**
  * Embedded image [13.2].
  */
@@ -1289,61 +1378,50 @@ static bool box_image(dom_node *n, html_content *content, struct box *box, bool 
     if (box->style && ns_computed_display(box->style, box_is_root(n)) == CSS_DISPLAY_NONE)
         return true;
 
-    /* handle alt text */
-    err = dom_element_get_attribute(n, corestring_dom_alt, &s);
-    if (err == DOM_NO_ERR && s != NULL) {
-        char *alt = squash_whitespace(dom_string_data(s));
-        dom_string_unref(s);
-        if (alt == NULL)
-            return false;
-        box->text = talloc_strdup(box_context, alt);
-        free(alt);
-        if (box->text == NULL)
-            return false;
-        box->length = strlen(box->text);
-    }
-
-    if (nsoption_bool(foreground_images) == false) {
-        return true;
-    }
-
     /* imagemap associated with this image */
     if (!box_get_attribute(n, "usemap", box_context, &box->usemap))
         return false;
     if (box->usemap && box->usemap[0] == '#')
         box->usemap++;
 
-    /* Try srcset first for responsive image selection */
-    url = NULL;
-    err = dom_element_get_attribute(n, corestring_dom_srcset, &s);
+    bool replaced;
+    if (!box_image_prepare(n, content, box->style, &url, &replaced))
+        return false;
+    *convert_children = false; /* IMG's DOM children never render. */
+    if (replaced)
+        box->flags |= IS_REPLACED;
+    ok = true;
+    if (url != NULL) {
+        ok = box_construct_request_object(content, region, url, box, image_types, false, 0);
+        /* A synchronous failure is already represented in the resource list. */
+        if (ok && replaced) {
+            ok = box_image_is_replaced(n, content, box->style, url, &replaced);
+            if (!replaced)
+                box->flags &= ~IS_REPLACED;
+        }
+        nsurl_unref(url);
+    }
+    if (!ok)
+        return false;
+
+    err = dom_element_get_attribute(n, corestring_dom_alt, &s);
     if (err == DOM_NO_ERR && s != NULL) {
-        /* Use reasonable default target width for image selection.
-         * This reduces bandwidth significantly on image-heavy sites. */
-        int target_width = 800;
-
-        if (srcset_select_url(dom_string_data(s), target_width, content->base_url, &url)) {
-            NSLOG(layout, DEBUG, "srcset: selected URL for target %dpx", target_width);
+        if (replaced) {
+            /* Keep the existing single-line placeholder for replaced images. */
+            char *alt = squash_whitespace(dom_string_data(s));
+            box->text = alt != NULL ? talloc_strdup(box_context, alt) : NULL;
+            free(alt);
+        } else {
+            /* Ordinary text construction applies CSS whitespace processing. */
+            box->text = talloc_strndup(box_context, dom_string_data(s), dom_string_byte_length(s));
         }
         dom_string_unref(s);
-    }
-
-    /* Fall back to src attribute if srcset didn't work */
-    if (url == NULL) {
-        err = dom_element_get_attribute(n, corestring_dom_src, &s);
-        if (err != DOM_NO_ERR || s == NULL)
-            return true;
-
-        if (box_extract_link(content, s, content->base_url, &url) == false) {
-            dom_string_unref(s);
+        if (box->text == NULL)
             return false;
-        }
-        dom_string_unref(s);
+        box->length = strlen(box->text);
     }
-
-    /* start fetch */
-    box->flags |= IS_REPLACED;
-    ok = box_construct_request_object(content, region, url, box, image_types, false, 0);
-    nsurl_unref(url);
+    if (!replaced)
+        return true;
 
     wtype = css_computed_width(box->style, &value, &wunit);
     htype = css_computed_height(box->style, &value, &hunit);

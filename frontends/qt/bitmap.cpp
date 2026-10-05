@@ -26,6 +26,7 @@
 #include <QImage>
 #include <QCache>
 #include <QPainter>
+#include <new>
 
 #ifdef WISP_QT_CAPTURE
 #include <QElapsedTimer>
@@ -121,7 +122,14 @@ static void *nsqt_bitmap_create(int width, int height, enum gui_bitmap_flags fla
         qfmt = QImage::Format_ARGB32;
     }
 
-    return new QImage(width, height, qfmt);
+    auto *image = new (std::nothrow) QImage(width, height, qfmt);
+    if (image == nullptr || image->isNull()) {
+        delete image;
+        return nullptr;
+    }
+    if (flags & BITMAP_CLEAR)
+        image->fill(0);
+    return image;
 }
 
 

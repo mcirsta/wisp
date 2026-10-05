@@ -126,8 +126,9 @@ static bool webp_decode_first_frame(const uint8_t *source, size_t size, struct b
 /**
  * create a bitmap from webp content.
  */
-static struct bitmap *webp_cache_convert(struct content *c)
+static struct bitmap *webp_cache_convert(struct content *c, nserror *error)
 {
+    *error = NSERROR_BAD_CONTENT;
     const uint8_t *source_data; /* webp source data */
     size_t source_size; /* length of webp source data */
     VP8StatusCode webpres;
@@ -147,6 +148,8 @@ static struct bitmap *webp_cache_convert(struct content *c)
     webpres = WebPGetFeatures(source_data, source_size, &webpfeatures);
 
     if (webpres != VP8_STATUS_OK) {
+        if (webpres == VP8_STATUS_OUT_OF_MEMORY)
+            *error = NSERROR_NOMEM;
         return NULL;
     }
 
@@ -161,12 +164,14 @@ static struct bitmap *webp_cache_convert(struct content *c)
     /* create bitmap */
     bitmap = guit->bitmap->create(webpfeatures.width, webpfeatures.height, bmap_flags);
     if (bitmap == NULL) {
+        *error = NSERROR_NOMEM;
         /* empty bitmap could not be created */
         return NULL;
     }
 
     pixels = guit->bitmap->get_buffer(bitmap);
     if (pixels == NULL) {
+        *error = NSERROR_NOMEM;
         /* bitmap with no buffer available */
         guit->bitmap->destroy(bitmap);
         return NULL;
@@ -177,7 +182,9 @@ static struct bitmap *webp_cache_convert(struct content *c)
     if (webpfeatures.has_animation) {
         /* WebP playback is deliberately unsupported: cache only frame one. */
         decoded = webp_decode_first_frame(source_data, source_size, bitmap, &webp_fmt) ? pixels : NULL;
-    } else if (bitmap_fmt.pma) {
+    } else {
+        /* The advanced decoder reports allocation failures separately from
+         * malformed input in both premultiplied and straight-alpha formats. */
         WebPDecoderConfig cfg;
         if (!WebPInitDecoderConfig(&cfg)) {
             guit->bitmap->destroy(bitmap);
@@ -190,40 +197,26 @@ static struct bitmap *webp_cache_convert(struct content *c)
         switch (webp_fmt.layout) {
         default:
             webp_fmt.layout = BITMAP_LAYOUT_R8G8B8A8;
-            cfg.output.colorspace = MODE_rgbA;
+            cfg.output.colorspace = bitmap_fmt.pma ? MODE_rgbA : MODE_RGBA;
             break;
         case BITMAP_LAYOUT_R8G8B8A8:
-            cfg.output.colorspace = MODE_rgbA;
+            cfg.output.colorspace = bitmap_fmt.pma ? MODE_rgbA : MODE_RGBA;
             break;
         case BITMAP_LAYOUT_B8G8R8A8:
-            cfg.output.colorspace = MODE_bgrA;
+            cfg.output.colorspace = bitmap_fmt.pma ? MODE_bgrA : MODE_BGRA;
             break;
         case BITMAP_LAYOUT_A8R8G8B8:
-            cfg.output.colorspace = MODE_Argb;
+            cfg.output.colorspace = bitmap_fmt.pma ? MODE_Argb : MODE_ARGB;
             break;
         }
         webpres = WebPDecode(source_data, source_size, &cfg);
         if (webpres != VP8_STATUS_OK) {
+            if (webpres == VP8_STATUS_OUT_OF_MEMORY)
+                *error = NSERROR_NOMEM;
             guit->bitmap->destroy(bitmap);
             return NULL;
         }
         decoded = pixels;
-    } else {
-        switch (webp_fmt.layout) {
-        default:
-            webp_fmt.layout = BITMAP_LAYOUT_R8G8B8A8;
-            decoded = WebPDecodeRGBAInto(source_data, source_size, pixels, rowstride * webpfeatures.height, rowstride);
-            break;
-        case BITMAP_LAYOUT_R8G8B8A8:
-            decoded = WebPDecodeRGBAInto(source_data, source_size, pixels, rowstride * webpfeatures.height, rowstride);
-            break;
-        case BITMAP_LAYOUT_B8G8R8A8:
-            decoded = WebPDecodeBGRAInto(source_data, source_size, pixels, rowstride * webpfeatures.height, rowstride);
-            break;
-        case BITMAP_LAYOUT_A8R8G8B8:
-            decoded = WebPDecodeARGBInto(source_data, source_size, pixels, rowstride * webpfeatures.height, rowstride);
-            break;
-        }
     }
     if (decoded == NULL) {
         /* decode failed */

@@ -37,6 +37,15 @@ static void compare(QImage *image, int width, int height)
 int main(int argc, char **argv)
 {
     QApplication app(argc, argv);
+    // Partial image decoders rely on the allocation contract for unwritten
+    // pixels. A zero-size/failed QImage must not masquerade as a bitmap.
+    REQUIRE(nsqt_bitmap_table->create(0, 10, BITMAP_NONE) == nullptr);
+    auto *cleared = static_cast<QImage *>(nsqt_bitmap_table->create(13, 7, BITMAP_CLEAR));
+    REQUIRE(cleared && !cleared->isNull());
+    for (int y = 0; y < cleared->height(); y++)
+        for (int x = 0; x < cleared->width(); x++)
+            REQUIRE(cleared->pixel(x, y) == 0);
+    nsqt_bitmap_table->destroy(cleared);
     auto *image = static_cast<QImage *>(nsqt_bitmap_table->create(64, 48, BITMAP_NONE));
     REQUIRE(image && !image->isNull());
     auto *pixels = reinterpret_cast<QRgb *>(nsqt_bitmap_table->get_buffer(image));

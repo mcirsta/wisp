@@ -60,6 +60,7 @@ struct image_cache_entry_s {
     struct bitmap *bitmap;
     /** routine to convert content into bitmap */
     image_cache_convert_fn *convert;
+    struct image_decode_error decode_error;
 
     /* Statistics for replacement algorithm */
 
@@ -138,6 +139,19 @@ struct image_cache_s {
 
 /** image cache state */
 static struct image_cache_s *image_cache = NULL;
+
+static void image_cache__convert(struct image_cache_entry_s *entry)
+{
+    if (entry->decode_error.error == NSERROR_OK && entry->convert != NULL) {
+        nserror error = NSERROR_UNKNOWN;
+        entry->bitmap = entry->convert(entry->content, &error);
+        if (entry->bitmap == NULL)
+            image_decode_error_schedule(&entry->decode_error, entry->content,
+                error == NSERROR_OK ? NSERROR_UNKNOWN : error);
+    } else if (entry->decode_error.error != NSERROR_OK) {
+        image_decode_error_schedule(&entry->decode_error, entry->content, entry->decode_error.error);
+    }
+}
 
 
 /**
@@ -275,6 +289,7 @@ static void image_cache__free_bitmap(struct image_cache_entry_s *centry)
  */
 static void image_cache__free_entry(struct image_cache_entry_s *centry)
 {
+    image_decode_error_cancel(&centry->decode_error);
 #ifdef IMAGE_CACHE_VERBOSE
     NSLOG(wisp, INFO, "freeing %p ", centry);
 #endif
@@ -343,9 +358,7 @@ struct bitmap *image_cache_get_bitmap(const struct content *c)
     }
 
     if (centry->bitmap == NULL) {
-        if (centry->convert != NULL) {
-            centry->bitmap = centry->convert(centry->content);
-        }
+        image_cache__convert(centry);
 
         if (centry->bitmap != NULL) {
             image_cache_stats_bitmap_add(centry);
@@ -520,7 +533,7 @@ nserror image_cache_add(struct content *content, struct bitmap *bitmap, image_ca
     } else {
         /* no bitmap, check to see if we should speculatively convert */
         if ((centry->convert != NULL) && (image_cache_speculate(content) == true)) {
-            centry->bitmap = centry->convert(centry->content);
+            image_cache__convert(centry);
 
             if (centry->bitmap != NULL) {
                 image_cache_stats_bitmap_add(centry);
@@ -749,9 +762,7 @@ bool image_cache_redraw(
     }
 
     if (centry->bitmap == NULL) {
-        if (centry->convert != NULL) {
-            centry->bitmap = centry->convert(centry->content);
-        }
+        image_cache__convert(centry);
 
         if (centry->bitmap != NULL) {
             image_cache_stats_bitmap_add(centry);

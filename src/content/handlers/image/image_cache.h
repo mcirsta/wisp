@@ -44,7 +44,10 @@ struct content;
 struct content_redraw_data;
 struct redraw_context;
 
-typedef struct bitmap *(image_cache_convert_fn)(struct content * content);
+/* On failure return NULL and set error. Allocation failures remain retryable;
+ * other errors mean the complete source cannot be rendered. No callbacks may
+ * be broadcast here: conversion can run inside painting or hit testing. */
+typedef struct bitmap *(image_cache_convert_fn)(struct content *content, nserror *error);
 
 struct image_cache_parameters {
     /** How frequently the background cache clean process is run (ms) */

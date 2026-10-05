@@ -2427,6 +2427,74 @@ START_TEST(test_object_fallback_preflight)
 }
 END_TEST
 
+static const struct {
+    const char *src, *srcset, *alt, *style;
+    bool quirks, images, replaced, request;
+} image_preflight_cases[] = {
+    {NULL, NULL, "alternative", "display:block", false, true, false, false},
+    {"", NULL, "alternative", "display:block", false, true, false, false},
+    {" \t\n", NULL, "alternative", "display:block", false, true, false, false},
+    {NULL, NULL, "", "display:block", false, true, true, false},
+    {NULL, NULL, NULL, "display:block", false, true, true, false},
+    {"plot.svg", NULL, "alternative", "display:block", false, true, true, true},
+    {"", "plot.svg 800w", "alternative", "display:block", false, true, true, true},
+    {"plot.svg", NULL, "alternative", "display:block", false, false, false, false},
+    {NULL, NULL, "alternative", "width:50px;height:20px", true, true, true, false},
+    {NULL, NULL, "alternative", "display:block", true, true, false, false},
+    {NULL, NULL, "alternative", "width:50px;height:20px", false, true, false, false},
+};
+
+START_TEST(test_image_fallback_preflight)
+{
+    dom_node *outer = by_id("outer");
+    dom_node *image = element(outer, "img", "image-fallback", NULL);
+    attribute(image, "style", image_preflight_cases[_i].style);
+    if (image_preflight_cases[_i].src != NULL)
+        attribute(image, "src", image_preflight_cases[_i].src);
+    if (image_preflight_cases[_i].srcset != NULL)
+        attribute(image, "srcset", image_preflight_cases[_i].srcset);
+    if (image_preflight_cases[_i].alt != NULL)
+        attribute(image, "alt", image_preflight_cases[_i].alt);
+    /* IMG ignores DOM children even when it represents its alternative. */
+    dom_node *child = element(image, "div", "ignored-image-child", NULL);
+    text(child, "not rendered");
+    html.quirks = image_preflight_cases[_i].quirks ? DOM_DOCUMENT_QUIRKS_MODE_FULL : DOM_DOCUMENT_QUIRKS_MODE_NONE;
+    nsoption_set_bool(foreground_images, image_preflight_cases[_i].images);
+    css_select_results *styles = box_get_style(&html, NULL, NULL, image);
+    ck_assert_ptr_nonnull(styles);
+    for (unsigned i = 0; i < 3; i++) {
+        nsurl *source = NULL;
+        bool replaced;
+        ck_assert(box_image_prepare(image, &html, styles->styles[CSS_PSEUDO_ELEMENT_NONE], &source, &replaced));
+        ck_assert_msg(replaced == image_preflight_cases[_i].replaced, "Image representation case %d", _i);
+        ck_assert_msg((source != NULL) == image_preflight_cases[_i].request, "Image URL case %d", _i);
+        if (source != NULL) {
+            ck_assert_str_eq(nsurl_access(source), "file:///plot.svg");
+            nsurl_unref(source);
+        }
+        ck_assert_uint_eq(html.num_objects, 0);
+        ck_assert_ptr_null(box_for_node(image));
+    }
+    css_select_results_destroy(styles);
+    /* This standalone selection also populates ancestor selector data. Real
+     * discovery runs after those ancestors have already been constructed. */
+    dom_node *root = by_id("root");
+    ck_assert_int_eq(nscss_invalidate_subtree(root, NULL), NSERROR_OK);
+    dom_node_unref(root);
+    record_fetches = true;
+    build_document();
+    record_fetches = false;
+    struct box *box = box_for_node(image);
+    ck_assert_ptr_nonnull(box);
+    ck_assert_msg(!!(box->flags & IS_REPLACED) == image_preflight_cases[_i].replaced,
+        "Construction disagrees with image preflight case %d", _i);
+    ck_assert_ptr_null(box_for_node(child));
+    ck_assert_uint_eq(html.num_objects, image_preflight_cases[_i].request ? 1 : 0);
+    nsoption_set_bool(foreground_images, true);
+    dom_node_unref(outer);
+}
+END_TEST
+
 static void compare_requests(const struct box_construct_region *candidate)
 {
     const struct box_construct_object *request = candidate->objects;
@@ -2823,6 +2891,8 @@ int main(void)
     tcase_add_loop_test(tc, test_detached_resource_requests, 0, sizeof(resource_css) / sizeof(resource_css[0]));
     tcase_add_loop_test(tc, test_object_fallback_preflight, 0,
         sizeof(object_preflight_cases) / sizeof(object_preflight_cases[0]));
+    tcase_add_loop_test(tc, test_image_fallback_preflight, 0,
+        sizeof(image_preflight_cases) / sizeof(image_preflight_cases[0]));
     tcase_add_test(tc, test_generated_attribute_utf8);
     tcase_add_loop_test(tc, test_detached_resource_identity, 0, 2);
     tcase_add_test(tc, test_detached_iframes);

@@ -131,7 +131,8 @@ static void setup(void)
     cache_callback = NULL;
     cache_pw = NULL;
     const char source[] = "<!doctype html><object id=object data=broken.png>fallback</object>"
-                          "<object id=other data=broken.png>other</object><img id=image><embed id=embed>";
+                          "<object id=other data=broken.png>other</object><img id=image><embed id=embed>"
+                          "<img id=image-alt src=broken.png alt='alternative'>";
     dom_hubbub_parser *parser;
     dom_hubbub_parser_params params = {.enc = "UTF-8", .fix_enc = true};
     ck_assert_int_eq(dom_hubbub_parser_create(&params, &parser, &html.document), DOM_HUBBUB_OK);
@@ -156,6 +157,33 @@ static void teardown(void)
 }
 
 enum failure_timing { VISIBLE, HIDDEN, REBUILDING, REBUILDING_HIDDEN, SYNCHRONOUS_CALLBACK, RETRIEVAL_ERROR, TIMINGS };
+
+START_TEST(test_image_failure_changes_representation)
+{
+    dom_node *image = by_id("image-alt");
+    box.node = image;
+    box.flags |= IS_REPLACED;
+    if (_i == SYNCHRONOUS_CALLBACK)
+        synchronous_error = true;
+    if (_i == RETRIEVAL_ERROR)
+        retrieve_error = NSERROR_NO_FETCH_HANDLER;
+    ck_assert(html_fetch_object(&html, url, &box, CONTENT_IMAGE, false));
+    ck_assert(!(request_flags & HLCACHE_RETRIEVE_REQUIRE_OK));
+    if (_i < SYNCHRONOUS_CALLBACK) {
+        ck_assert_int_eq(html_object_get_state(&html, image, url), HTML_OBJECT_PENDING);
+        if (_i == HIDDEN || _i == REBUILDING_HIDDEN)
+            html.object_list->box = NULL;
+        html.restyling = _i == REBUILDING || _i == REBUILDING_HIDDEN;
+        fail_request();
+    }
+    ck_assert_msg(html_object_get_state(&html, image, url) == HTML_OBJECT_FAILED,
+        "Image failure lost at timing %d", _i);
+    ck_assert_msg(restyles == 1, "Image alt needs reconstruction at timing %d, got %u", _i, restyles);
+    ck_assert_int_eq(html.base.active, 0);
+    ck_assert_uint_eq(releases, _i == RETRIEVAL_ERROR ? 0 : 1);
+    dom_node_unref(image);
+}
+END_TEST
 
 START_TEST(test_failure_survives_boxes)
 {
@@ -299,6 +327,31 @@ START_TEST(test_ready_resource_rebinds_before_done)
 }
 END_TEST
 
+START_TEST(test_decode_failure_after_done)
+{
+    box.flags |= IS_REPLACED;
+    ck_assert(html_fetch_object(&html, url, &box, CONTENT_ANY, false));
+    resource_status = CONTENT_STATUS_DONE;
+    hlcache_event event = {.type = CONTENT_MSG_DONE};
+    ck_assert_int_eq(cache_callback(handle(), &event, cache_pw), NSERROR_OK);
+    ck_assert_int_eq(html.base.active, 0);
+    ck_assert_ptr_eq(box.object, handle());
+    if (_i == HIDDEN || _i == REBUILDING_HIDDEN) {
+        html.object_list->box = NULL;
+        box.object = NULL;
+    }
+    html.restyling = _i == REBUILDING || _i == REBUILDING_HIDDEN;
+    /* An unrelated request must not be completed by this late failure. */
+    html.base.active = 1;
+    fail_request();
+    ck_assert_msg(html.base.active == 1, "Late error changed active count at timing %d", _i);
+    ck_assert_int_eq(html_object_get_state(&html, node, url), HTML_OBJECT_FAILED);
+    ck_assert_ptr_null(box.object);
+    ck_assert_uint_eq(restyles, 1);
+    ck_assert_uint_eq(releases, 1);
+}
+END_TEST
+
 START_TEST(test_non_object_failures)
 {
     const char *id = _i == 0 ? "image" : _i == 1 ? "embed" : "object";
@@ -376,9 +429,11 @@ int main(void)
     TCase *tc = tcase_create("Failure lifetime");
     tcase_add_checked_fixture(tc, setup, teardown);
     tcase_add_loop_test(tc, test_failure_survives_boxes, 0, TIMINGS);
+    tcase_add_loop_test(tc, test_image_failure_changes_representation, 0, TIMINGS);
     tcase_add_test(tc, test_pending_failure_keeps_fallback);
     tcase_add_loop_test(tc, test_pending_becomes_available, VISIBLE, REBUILDING_HIDDEN + 1);
     tcase_add_test(tc, test_ready_resource_rebinds_before_done);
+    tcase_add_loop_test(tc, test_decode_failure_after_done, VISIBLE, REBUILDING_HIDDEN + 1);
     tcase_add_loop_test(tc, test_non_object_failures, 0, 5);
     tcase_add_test(tc, test_memory_failure_is_not_fallback);
     tcase_add_test(tc, test_null_handle_is_not_failure);

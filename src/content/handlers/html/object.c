@@ -89,7 +89,7 @@ enum html_object_state html_object_get_state(const html_content *html, dom_node 
     if (node == NULL || url == NULL)
         return HTML_OBJECT_UNKNOWN;
     for (const struct content_html_object *o = html->object_list; o != NULL; o = o->next) {
-        if (o->layout_resource && !o->background && o->permitted_types == CONTENT_ANY && o->node == node &&
+        if (o->layout_resource && !o->background && o->node == node &&
             o->url != NULL && nsurl_compare(url, o->url, NSURL_COMPLETE)) {
             if (o->failed)
                 return HTML_OBJECT_FAILED;
@@ -111,6 +111,20 @@ static bool html_object_has_fallback(const struct content_html_object *object)
     return fallback;
 }
 
+static bool html_object_has_image_alt(const struct content_html_object *object)
+{
+    dom_html_element_type tag;
+    if (!object->layout_resource || object->background || object->node == NULL ||
+        object->permitted_types != CONTENT_IMAGE ||
+        dom_html_element_get_tag_type(object->node, &tag) != DOM_NO_ERR || tag != DOM_HTML_ELEMENT_TYPE_IMG)
+        return false;
+    dom_string *alt = NULL;
+    bool text = dom_element_get_attribute(object->node, corestring_dom_alt, &alt) == DOM_NO_ERR &&
+        alt != NULL && dom_string_byte_length(alt) != 0;
+    dom_string_unref(alt);
+    return text;
+}
+
 static uint32_t html_object_fetch_flags(const struct content_html_object *object)
 {
     /* HTML's object algorithm falls back on HTTP errors. The body remains
@@ -124,6 +138,14 @@ static bool html_object_can_open(const struct content_html_object *object)
         content_get_type(object->content) != CONTENT_NONE &&
         (!html_object_has_fallback(object) ||
             ((object->box->flags & IS_REPLACED) && html_object_available(object)));
+}
+
+static void html_object_finished(struct content_html_object *object)
+{
+    if (object->active) {
+        object->parent->active--;
+        object->active = false;
+    }
 }
 
 /* HTML's object algorithm represents the children when the requested resource
@@ -151,12 +173,13 @@ static void html_object_failed(struct content_html_object *object)
     object->opened = false;
     object->failed = true;
 
-    /* Images, CSS backgrounds and embed have no object fallback children.
+    /* Failed images with alt text change from replaced to ordinary text.
+     * Backgrounds and embed have no fallback children.
      * A settled fallback tree also needs no reconstruction: pending -> failed
      * keeps the same representation. Rebuilding it would discard active find
      * highlights even though their text has not changed. During construction
      * retain the retry, since not every box has been published yet. */
-    if (!html->aborted && html_object_has_fallback(object) &&
+    if (!html->aborted && (html_object_has_fallback(object) || html_object_has_image_alt(object)) &&
         (box == NULL || (box->flags & IS_REPLACED) || html->restyling))
         html_request_restyle(html);
 }
@@ -270,6 +293,12 @@ static nserror html_object_callback(hlcache_handle *object, const hlcache_event 
 
     box = o->box;
 
+    /* Pixel decoding can fail after download completion. A terminal callback
+     * consumes this request's loading contribution at most once, including
+     * while hidden or being reconstructed. */
+    if (event->type == CONTENT_MSG_DONE || event->type == CONTENT_MSG_ERROR)
+        html_object_finished(o);
+
     /* These document-level queries remain valid while its box is absent. */
     switch (event->type) {
     case CONTENT_MSG_GETTHREAD:
@@ -294,8 +323,6 @@ static nserror html_object_callback(hlcache_handle *object, const hlcache_event 
      * transition. READY is sufficient for an embedded document to be laid out. */
     if (html_object_has_fallback(o) && (box == NULL || !(box->flags & IS_REPLACED)) &&
         (event->type == CONTENT_MSG_READY || event->type == CONTENT_MSG_DONE)) {
-        if (event->type == CONTENT_MSG_DONE)
-            c->base.active--;
         if (!c->aborted)
             html_request_restyle(c);
         return NSERROR_OK;
@@ -308,11 +335,9 @@ static nserror html_object_callback(hlcache_handle *object, const hlcache_event 
             content_open(object, c->bw, &c->base, box->object_params);
             o->opened = true;
         } else if (event->type == CONTENT_MSG_DONE) {
-            c->base.active--;
             if (box != NULL)
                 html_object_done(box, object, o->background, o->background_layer);
         } else if (event->type == CONTENT_MSG_ERROR) {
-            c->base.active--;
             html_object_failed(o);
         }
         if (!c->restyling && c->base.active == c->scripts_active &&
@@ -368,20 +393,13 @@ static nserror html_object_callback(hlcache_handle *object, const hlcache_event 
         break;
 
     case CONTENT_MSG_DONE:
-        PERF("Object DONE (remaining=%d)", c->base.active - 1);
+        PERF("Object DONE (remaining=%d)", c->base.active);
         NSLOG(wisp, WARNING,
             "SVGDIAG obj_cb DONE: content=%p type=%d box=%p "
             "box.w=%d box.h=%d box.object=%p box.flags=0x%x "
             "content.w=%d content.h=%d",
             object, content_get_type(object), box, box->width, box->height, box->object, box->flags,
             content_get_width(object), content_get_height(object));
-        if (c->base.active == 0) {
-            NSLOG(wisp, CRITICAL,
-                "ACTIVE UNDERFLOW! object_cb DONE decrement when 0 "
-                "[content=%p object=%p]",
-                c, object);
-        }
-        c->base.active--;
         NSLOG(wisp, INFO, "%d fetches active (scripts_active=%d)", c->base.active, c->scripts_active);
 
         html_object_done(box, object, o->background, o->background_layer);
@@ -443,13 +461,6 @@ static nserror html_object_callback(hlcache_handle *object, const hlcache_event 
         break;
 
     case CONTENT_MSG_ERROR:
-        if (c->base.active == 0) {
-            NSLOG(wisp, CRITICAL,
-                "ACTIVE UNDERFLOW! object_cb ERROR decrement when 0 "
-                "[content=%p object=%p]",
-                c, object);
-        }
-        c->base.active--;
         NSLOG(wisp, INFO, "%d fetches active", c->base.active);
 
         html_object_failed(o);
@@ -756,10 +767,7 @@ static bool html_replace_object(struct content_html_object *object, nsurl *url)
 
     if (object->content != NULL) {
         /* remove existing object */
-        if (content_get_status(object->content) != CONTENT_STATUS_DONE) {
-            c->base.active--;
-            NSLOG(wisp, INFO, "%d fetches active", c->base.active);
-        }
+        html_object_finished(object);
 
         hlcache_handle_release(object->content);
         object->content = NULL;
@@ -778,6 +786,7 @@ static bool html_replace_object(struct content_html_object *object, nsurl *url)
         NSLOG(wisp, INFO, "%d fetches active (pre-retrieve)", page->base.active);
         page->base.status = CONTENT_STATUS_READY;
     }
+    object->active = true;
 
     /* initialise fetch */
     error = hlcache_handle_retrieve(url, html_object_fetch_flags(object), content_get_url(&c->base), NULL,
@@ -785,6 +794,7 @@ static bool html_replace_object(struct content_html_object *object, nsurl *url)
 
     if (error != NSERROR_OK) {
         /* Decrement the counters we just incremented */
+        object->active = false;
         for (page = c; page != NULL; page = page->page) {
             page->base.active--;
             NSLOG(wisp, INFO, "%d fetches active (retrieve failed)", page->base.active);
@@ -872,10 +882,7 @@ nserror html_object_abort_objects(html_content *htmlc)
             hlcache_handle_abort(object->content);
             hlcache_handle_release(object->content);
             object->content = NULL;
-            if (object->layout_resource) {
-                htmlc->base.active--;
-                NSLOG(wisp, INFO, "%d fetches active", htmlc->base.active);
-            }
+            html_object_finished(object);
             break;
         }
     }
@@ -1207,6 +1214,7 @@ static bool html_fetch_object_layer(
      */
     if (box != NULL) {
         c->base.active++;
+        object->active = true;
         NSLOG(wisp, INFO, "%d fetches active (pre-retrieve)", c->base.active);
     }
 
@@ -1214,7 +1222,7 @@ static bool html_fetch_object_layer(
         object_callback, object, &child, object->permitted_types, &object->content);
     if (error != NSERROR_OK) {
         if (box != NULL) {
-            c->base.active--;
+            html_object_finished(object);
             NSLOG(wisp, INFO, "%d fetches active (retrieve failed)", c->base.active);
         }
         if (error == NSERROR_NOMEM || box == NULL) {
@@ -1269,6 +1277,7 @@ bool html_fetch_object_buffer(html_content *c, const uint8_t *data, size_t len, 
 
     if (box != NULL) {
         c->base.active++;
+        object->active = true;
         NSLOG(wisp, INFO, "%d fetches active (pre-buffer-retrieve)", c->base.active);
     }
 
@@ -1277,7 +1286,7 @@ bool html_fetch_object_buffer(html_content *c, const uint8_t *data, size_t len, 
 
     if (error != NSERROR_OK) {
         if (box != NULL) {
-            c->base.active--;
+            html_object_finished(object);
             NSLOG(wisp, INFO, "%d fetches active (buffer retrieve failed)", c->base.active);
         }
         dom_node_unref(object->node);

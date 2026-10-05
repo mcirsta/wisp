@@ -61,6 +61,9 @@ typedef struct gif_content {
 
     nsgif_t *gif; /**< GIF animation data */
     uint32_t current_frame; /**< current frame to display [0...(max-1)] */
+    uint32_t last_good_frame; /**< Last displayed frame, or frame zero before the first decode. */
+    bool animation_failed; /**< Keep a usable frame when later animation data is corrupt. */
+    struct image_decode_error decode_error;
 } gif_content;
 
 static inline nserror gif__nsgif_error_to_ns(nsgif_error gif_res)
@@ -176,6 +179,9 @@ static nserror gif__animate(gif_content *gif, bool redraw)
     uint32_t delay;
     uint32_t f;
 
+    if (gif->animation_failed)
+        return NSERROR_OK;
+
     gif_res = nsgif_frame_prepare(gif->gif, &rect, &delay, &f);
     if (gif_res != NSGIF_OK) {
         return gif__nsgif_error_to_ns(gif_res);
@@ -281,12 +287,34 @@ static bool gif_convert(struct content *c)
  */
 static nsgif_error gif_get_frame(gif_content *gif, nsgif_bitmap_t **bitmap)
 {
+    if (gif->decode_error.error != NSERROR_OK) {
+        image_decode_error_schedule(&gif->decode_error, &gif->base, gif->decode_error.error);
+        return NSGIF_ERR_DATA_FRAME;
+    }
+
     uint32_t current_frame = gif->current_frame;
-    if (!nsoption_bool(animate_images)) {
+    if (!gif->animation_failed && !nsoption_bool(animate_images)) {
         current_frame = 0;
     }
 
-    return nsgif_frame_decode(gif->gif, current_frame, bitmap);
+    nsgif_error error = nsgif_frame_decode(gif->gif, current_frame, bitmap);
+    if (error != NSGIF_OK && error != NSGIF_ERR_OOM) {
+        gif->animation_failed = true;
+        guit->misc->schedule(-1, gif_animate_cb, gif);
+        /* A bad later frame does not make the entire image unrenderable.
+         * Recompose a known good frame (or try the first if none was painted).
+         * The decoder owns one shared bitmap, so retaining its pointer alone
+         * would retain the damaged frame instead. */
+        if (current_frame != gif->last_good_frame) {
+            gif->current_frame = gif->last_good_frame;
+            error = nsgif_frame_decode(gif->gif, gif->current_frame, bitmap);
+        }
+        if (error != NSGIF_OK)
+            image_decode_error_schedule(&gif->decode_error, &gif->base, gif__nsgif_error_to_ns(error));
+    } else if (error == NSGIF_OK) {
+        gif->last_good_frame = current_frame;
+    }
+    return error;
 }
 
 static bool gif_redraw(
@@ -307,6 +335,7 @@ static void gif_destroy(struct content *c)
     gif_content *gif = (gif_content *)c;
 
     /* Free all the associated memory buffers */
+    image_decode_error_cancel(&gif->decode_error);
     guit->misc->schedule(-1, gif_animate_cb, c);
     nsgif_destroy(gif->gif);
 }
