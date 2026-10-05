@@ -4,6 +4,11 @@
 #include "select/propset.h"
 #include "grid_layout_style.h"
 
+void grid_test_set_justify_content(css_computed_style *style, uint8_t justify)
+{
+    set_justify_content(style, justify);
+}
+
 void grid_test_set_horizontal_margins(css_computed_style *style, int left, int right)
 {
     set_margin_left(style, left == INT_MIN ? CSS_MARGIN_AUTO : CSS_MARGIN_SET,
@@ -61,5 +66,6 @@ void grid_test_set_block_alignment(css_computed_style *style, uint8_t align, int
         (css_fixed_or_calc)INTTOFIX(top == INT_MIN ? 0 : top), CSS_UNIT_PX);
     set_margin_bottom(style, bottom == INT_MIN ? CSS_MARGIN_AUTO : CSS_MARGIN_SET,
         (css_fixed_or_calc)INTTOFIX(bottom == INT_MIN ? 0 : bottom), CSS_UNIT_PX);
+    set_overflow_x(style, CSS_OVERFLOW_VISIBLE);
     set_overflow_y(style, CSS_OVERFLOW_VISIBLE);
 }

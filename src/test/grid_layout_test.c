@@ -1145,19 +1145,18 @@ START_TEST(test_grid_out_of_flow_children)
             items[i].y = 456;
         }
         ck_assert(layout_grid(&grid, 840, &content));
-        ck_assert_msg(grid.height == 40, "%s run %d: out-of-flow children changed grid height to %d",
-            name, run, grid.height);
+        ck_assert_msg(
+            grid.height == 40, "%s run %d: out-of-flow children changed grid height to %d", name, run, grid.height);
         for (int i = 0; i < 5; i++) {
             if (i % 2) {
                 ck_assert_msg(items[i].x == (i / 2) * 280 && items[i].y == 0,
-                    "%s run %d: in-flow item %d occupies wrong cell (%d,%d)", name, run, i,
-                    items[i].x, items[i].y);
+                    "%s run %d: in-flow item %d occupies wrong cell (%d,%d)", name, run, i, items[i].x, items[i].y);
             } else {
                 ck_assert_msg(items[i].height == 400 && items[i].width == 20,
                     "%s run %d: out-of-flow item %d was sized by grid layout", name, run, i);
                 ck_assert_msg(items[i].x == 0 && items[i].y == 0,
-                    "%s run %d: out-of-flow item %d retained stale position (%d,%d)", name, run, i,
-                    items[i].x, items[i].y);
+                    "%s run %d: out-of-flow item %d retained stale position (%d,%d)", name, run, i, items[i].x,
+                    items[i].y);
             }
         }
     }
@@ -1233,6 +1232,84 @@ START_TEST(test_grid_first_baseline)
 }
 END_TEST
 
+static const struct {
+    const char *name;
+    css_computed_grid_track first;
+    css_fixed second;
+    int minimum, maximum;
+    int widths[2][2];
+} column_cases[] = {
+    {"fractional", {.unit = CSS_UNIT_FR, .value = (1 << CSS_RADIX_POINT) / 2}, (1 << CSS_RADIX_POINT), 0, 0,
+        {{100, 200}, {120, 240}}},
+    {"partial fill", {.unit = CSS_UNIT_FR, .value = (1 << CSS_RADIX_POINT) / 4}, (1 << CSS_RADIX_POINT) / 4, 0, 0,
+        {{75, 75}, {90, 90}}},
+    {"minmax weight",
+        {.unit = CSS_UNIT_MINMAX,
+            .min_unit = CSS_UNIT_PX,
+            .max_unit = CSS_UNIT_FR,
+            .max_value = (2 << CSS_RADIX_POINT)},
+        (1 << CSS_RADIX_POINT), 0, 0, {{200, 100}, {240, 120}}},
+    {"minmax minimum",
+        {.unit = CSS_UNIT_MINMAX,
+            .min_unit = CSS_UNIT_PX,
+            .value = (200 << CSS_RADIX_POINT),
+            .max_unit = CSS_UNIT_FR,
+            .max_value = (1 << CSS_RADIX_POINT)},
+        (1 << CSS_RADIX_POINT), 0, 0, {{200, 100}, {200, 160}}},
+    {"minimum wins",
+        {.unit = CSS_UNIT_MINMAX,
+            .min_unit = CSS_UNIT_PX,
+            .value = (200 << CSS_RADIX_POINT),
+            .max_unit = CSS_UNIT_PX,
+            .max_value = (100 << CSS_RADIX_POINT)},
+        (1 << CSS_RADIX_POINT), 0, 0, {{200, 100}, {200, 160}}},
+    {"min-content", {.unit = CSS_UNIT_MIN_CONTENT}, (1 << CSS_RADIX_POINT), 40, 120, {{40, 260}, {40, 320}}},
+    {"max-content", {.unit = CSS_UNIT_MAX_CONTENT}, (1 << CSS_RADIX_POINT), 40, 120, {{120, 180}, {120, 240}}},
+    {"auto minimum", {.unit = CSS_UNIT_FR, .value = (1 << CSS_RADIX_POINT)}, (1 << CSS_RADIX_POINT), 200, 200,
+        {{200, 100}, {200, 160}}},
+    {"zero fr minimum", {.unit = CSS_UNIT_FR}, (1 << CSS_RADIX_POINT), 60, 60, {{60, 240}, {60, 300}}},
+};
+
+/* Grid 7.2.4 and 11.4-11.7. Repeat with a different available width to ensure
+ * each pass rebuilds track sizes while preserving item intrinsic measurements. */
+START_TEST(test_grid_column_tracks)
+{
+    css_computed_grid_track saved[4];
+    memcpy(saved, mock_grid_tracks, sizeof(saved));
+    mock_grid_tracks[0] = column_cases[_i].first;
+    mock_grid_tracks[1] = (css_computed_grid_track){.unit = CSS_UNIT_FR, .value = column_cases[_i].second};
+    mock_grid_tracks[2] = (css_computed_grid_track){.unit = CSS_UNIT_PX};
+    struct box grid = {.type = BOX_GRID, .height = AUTO, .style = (css_computed_style *)dummy_style};
+    struct box items[2] = {0};
+    for (int i = 0; i < 2; i++) {
+        items[i].type = BOX_BLOCK;
+        items[i].style = (css_computed_style *)explicit_auto_style;
+        items[i].parent = &grid;
+        items[i].width = items[i].height = AUTO;
+    }
+    items[0].min_width.value = column_cases[_i].minimum;
+    items[0].max_width = column_cases[_i].maximum;
+    grid.children = &items[0];
+    grid.last = items[0].next = &items[1];
+    items[1].prev = &items[0];
+    html_content content = {0};
+    content.unit_len_ctx.device_dpi = INTTOFIX(96);
+    content.unit_len_ctx.font_size_default = INTTOFIX(16);
+    for (int pass = 0; pass < 2; pass++) {
+        grid.width = 300 + 60 * pass;
+        ck_assert_msg(layout_grid(&grid, grid.width, &content), "%s: layout failed", column_cases[_i].name);
+        for (int i = 0; i < 2; i++)
+            ck_assert_msg(items[i].width == column_cases[_i].widths[pass][i],
+                "%s pass %d item %d: width %d, expected %d", column_cases[_i].name, pass, i, items[i].width,
+                column_cases[_i].widths[pass][i]);
+        ck_assert_int_eq(items[1].x, items[0].width);
+        ck_assert_int_eq(items[0].min_width.value, column_cases[_i].minimum);
+        ck_assert_int_eq(items[0].max_width, column_cases[_i].maximum);
+    }
+    memcpy(mock_grid_tracks, saved, sizeof(saved));
+}
+END_TEST
+
 Suite *grid_test_suite(void)
 {
     Suite *s = suite_create("grid_layout");
@@ -1246,6 +1323,7 @@ Suite *grid_test_suite(void)
     tcase_add_test(tc, test_grid_border_after_row_growth);
     tcase_add_loop_test(tc, test_grid_out_of_flow_children, 0, 2);
     tcase_add_loop_test(tc, test_grid_first_baseline, 0, sizeof(baseline_cases) / sizeof(baseline_cases[0]));
+    tcase_add_loop_test(tc, test_grid_column_tracks, 0, sizeof(column_cases) / sizeof(column_cases[0]));
     suite_add_tcase(s, tc);
     return s;
 }
@@ -1260,6 +1338,7 @@ void setup_corestrings(void)
         column_dense_grid_style, column_dense_child_style, column_dense_tall_style, explicit_grid_style,
         explicit_auto_style, explicit_fixed_style, explicit_col_only_style, explicit_grid_4col_style};
     for (size_t i = 0; i < sizeof(styles) / sizeof(styles[0]); i++) {
+        grid_test_set_justify_content(styles[i], CSS_JUSTIFY_CONTENT_NORMAL);
         grid_test_set_horizontal_margins(styles[i], 0, 0);
         grid_test_set_block_alignment(styles[i], CSS_ALIGN_SELF_AUTO, AUTO, 0, 0);
     }

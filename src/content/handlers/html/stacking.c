@@ -210,25 +210,62 @@ bool stacking_context_collect_subtree(struct stacking_context *negative_ctx, str
     return true;
 }
 
-bool stacking_float_is_structural(const struct box *box)
+enum box_paint_phase stacking_box_phase(const struct box *box)
 {
-    if (box->type != BOX_FLOAT_LEFT && box->type != BOX_FLOAT_RIGHT)
-        return false;
-    for (const struct box *p = box->parent; p && p != box->float_container; p = p->parent)
-        if (box_get_paint_z_index(p) != Z_INDEX_AUTO)
-            return true;
-    return false;
+    if (box->type == BOX_FLOAT_LEFT || box->type == BOX_FLOAT_RIGHT)
+        return BOX_PAINT_FLOAT;
+    if (box->type == BOX_INLINE_CONTAINER || box->type == BOX_INLINE || box->type == BOX_INLINE_END ||
+        box->type == BOX_TEXT || box->type == BOX_BR || box->type == BOX_INLINE_BLOCK || box->type == BOX_INLINE_FLEX ||
+        box->type == BOX_INLINE_GRID ||
+        (box->type == BOX_TABLE && box->parent && box->parent->type == BOX_INLINE_CONTAINER))
+        return BOX_PAINT_INLINE;
+    /* Flex/grid items paint like inline-blocks (Flexbox §4.3, Grid §6.5). */
+    if (box->parent &&
+        (box->parent->type == BOX_FLEX || box->parent->type == BOX_INLINE_FLEX || box->parent->type == BOX_GRID ||
+            box->parent->type == BOX_INLINE_GRID))
+        return BOX_PAINT_INLINE;
+    return BOX_PAINT_BLOCK;
+}
+
+bool stacking_box_is_atomic(const struct box *box)
+{
+    enum box_paint_phase phase = stacking_box_phase(box);
+    return phase == BOX_PAINT_FLOAT ||
+        (phase == BOX_PAINT_INLINE && box->type != BOX_INLINE_CONTAINER && box->type != BOX_INLINE &&
+            box->type != BOX_INLINE_END && box->type != BOX_TEXT && box->type != BOX_BR);
 }
 
 void stacking_float_parent_coords(struct box *box, int *x, int *y)
 {
-    if (!stacking_float_is_structural(box))
+    if (box->type != BOX_FLOAT_LEFT && box->type != BOX_FLOAT_RIGHT)
         return;
     int bx, by, px, py;
     box_coords_unscrolled(box, &bx, &by);
     box_coords_unscrolled(box->parent, &px, &py);
     *x += bx - px - box->x;
     *y += by - py - box->y;
+}
+
+/* Find a hit's phase in the common ancestor's paint group. Atomic inlines
+ * and floats contain ordinary descendants, but never trap positioned ones. */
+static void stacking_branch_level(const struct box *box, const struct box *ancestor, int32_t *z, int *phase)
+{
+    bool positioned = false;
+    *z = 0;
+    *phase = box == ancestor ? BOX_PAINT_BLOCK : stacking_box_phase(box);
+    for (const struct box *p = box; p != ancestor; p = p->parent) {
+        int32_t level = box_get_z_index(p);
+        if (level != Z_INDEX_AUTO) {
+            *z = level;
+            positioned = true;
+        } else if (box_get_paint_z_index(p) != Z_INDEX_AUTO) {
+            positioned = true;
+        } else if (!positioned && stacking_box_is_atomic(p)) {
+            *phase = stacking_box_phase(p);
+        }
+    }
+    if (positioned)
+        *phase = BOX_PAINT_ALL; /* Positioned zero/positive paint after inlines. */
 }
 
 /* Compare the outermost stacking contexts below the common ancestor, then
@@ -263,40 +300,17 @@ bool stacking_box_above(const struct box *a, const struct box *b)
         if (b == ac)
             return true;
     }
-    int32_t az = 0, bz = 0;
-    for (const struct box *p = a; p != ac; p = p->parent) {
-        int32_t z = box_get_z_index(p);
-        if (z != Z_INDEX_AUTO)
-            az = z;
-    }
-    for (const struct box *p = b; p != ac; p = p->parent) {
-        int32_t z = box_get_z_index(p);
-        if (z != Z_INDEX_AUTO)
-            bz = z;
-    }
+    int32_t az, bz;
+    int ap, bp;
+    stacking_branch_level(a, ac, &az, &ap);
+    stacking_branch_level(b, ac, &bz, &bp);
     if (az != bz)
         return az > bz;
-    /* Match the renderer's phases: in-flow, floats, then zero/positive contexts.
-     * The interaction walker visits floats first, so equal z alone is not enough. */
-    int ap = 0, bp = 0;
-    for (const struct box *p = a; p != ac; p = p->parent) {
-        if (box_get_paint_z_index(p) != Z_INDEX_AUTO)
-            ap = 2;
-        else if (ap == 0 && (p->type == BOX_FLOAT_LEFT || p->type == BOX_FLOAT_RIGHT))
-            ap = 1;
-    }
-    for (const struct box *p = b; p != ac; p = p->parent) {
-        if (box_get_paint_z_index(p) != Z_INDEX_AUTO)
-            bp = 2;
-        else if (bp == 0 && (p->type == BOX_FLOAT_LEFT || p->type == BOX_FLOAT_RIGHT))
-            bp = 1;
-    }
     if (ap != bp)
         return ap > bp;
-    /* Equal positioned levels use tree order, even when the hit walker visits
-     * a later float before its earlier normal-flow siblings. Ancestor/child
-     * ties still prefer the deepest hit. */
-    if (ap == 2 && ac && a != ac && b != ac) {
+    /* All equal phases use structural tree order, including floats. The
+     * interaction walker visits the formatting-context float list first. */
+    if (ac && a != ac && b != ac) {
         while (a->parent != ac)
             a = a->parent;
         while (b->parent != ac)
@@ -306,5 +320,5 @@ bool stacking_box_above(const struct box *a, const struct box *b)
                 return false;
         return true;
     }
-    return false;
+    return b == ac && a != ac;
 }

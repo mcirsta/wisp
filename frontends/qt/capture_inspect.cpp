@@ -272,7 +272,8 @@ static QJsonObject describe(struct box *box, const html_content *html)
             {"flex-grow", FIXTOFLT(grow)}, {"flex-shrink", FIXTOFLT(shrink)},
             {"justify-content",
                 QStringList{
-                    "inherit", "flex-start", "flex-end", "center", "space-between", "space-around", "space-evenly"}
+                    "inherit", "flex-start", "flex-end", "center", "space-between", "space-around", "space-evenly",
+                    "normal", "stretch"}
                     .value(css_computed_justify_content(box->style))},
             {"align-items",
                 QStringList{

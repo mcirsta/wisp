@@ -947,6 +947,7 @@
 #errors
 #expected
 | *
+|  justify-content: stretch
 #reset
 
 #data
@@ -1010,6 +1011,7 @@
 #errors
 #expected
 | *
+|  justify-content: stretch !important
 #reset
 
 #data
@@ -1802,4 +1804,12 @@
 #errors
 #expected
 | *
+#reset
+
+#data
+* { justify-content: normal; }
+#errors
+#expected
+| *
+|  justify-content: normal
 #reset

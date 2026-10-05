@@ -20,6 +20,7 @@ struct grid_item_test_style {
 
 css_computed_style *grid_item_test_style_create(const struct grid_item_test_style *values);
 void grid_test_set_horizontal_margins(css_computed_style *style, int left, int right);
+void grid_test_set_justify_content(css_computed_style *style, uint8_t justify);
 
 void grid_test_set_block_alignment(css_computed_style *style, uint8_t align, int height, int top, int bottom);
 

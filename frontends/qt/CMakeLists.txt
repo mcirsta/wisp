@@ -217,6 +217,13 @@ if(WISP_QT_CAPTURE)
         add_test(NAME qt_absolute_sizing
             COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_absolute_sizing.py $<TARGET_FILE:wisp-qt>)
         set_tests_properties(qt_absolute_sizing PROPERTIES TIMEOUT 30)
+        find_program(WISP_TEST_MAGICK magick)
+        if(WISP_TEST_MAGICK)
+            add_test(NAME qt_float_paint_order
+                COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_float_paint_order.py
+                    $<TARGET_FILE:wisp-qt> ${WISP_TEST_MAGICK})
+            set_tests_properties(qt_float_paint_order PROPERTIES TIMEOUT 40)
+        endif()
         add_test(NAME qt_positioned_stacking
             COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_positioned_stacking.py $<TARGET_FILE:wisp-qt>)
         set_tests_properties(qt_positioned_stacking PROPERTIES TIMEOUT 30)
@@ -341,7 +348,7 @@ if(WISP_QT_CAPTURE)
         add_test(NAME qt_grid_height
             COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_grid_height.py $<TARGET_FILE:wisp-qt>)
         set_tests_properties(qt_grid_height PROPERTIES TIMEOUT 40)
-        foreach(grid_fixture IN ITEMS grid-rows grid-areas grid-row-constraints)
+        foreach(grid_fixture IN ITEMS grid-rows grid-areas grid-row-constraints grid-column-sizing)
             string(REPLACE "-" "_" grid_test ${grid_fixture})
             add_test(NAME qt_${grid_test}
                 COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_layout_geometry.py
@@ -360,7 +367,6 @@ if(WISP_QT_CAPTURE)
         add_test(NAME qt_scrolling_bounds
             COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_scrolling_bounds.py $<TARGET_FILE:wisp-qt>)
         set_tests_properties(qt_scrolling_bounds PROPERTIES TIMEOUT 60)
-        find_program(WISP_TEST_MAGICK magick)
         if(WISP_TEST_MAGICK)
             add_test(NAME qt_zero_opacity
                 COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_zero_opacity.py

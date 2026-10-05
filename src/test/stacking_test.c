@@ -156,6 +156,56 @@ START_TEST(stacking_float_tree_order_test)
 }
 END_TEST
 
+/* The hit traversal visits float lists before the structural tree. These
+ * comparisons must therefore be symmetric rather than relying on visit order. */
+START_TEST(stacking_ordinary_phase_test)
+{
+    struct box root = {.type = BOX_BLOCK};
+    struct box floating = {.type = BOX_FLOAT_LEFT, .parent = &root};
+    struct box float_content = {.type = BOX_TEXT, .parent = &floating};
+    struct box block = {.type = BOX_BLOCK, .parent = &root};
+    struct box inline_content = {.type = BOX_INLINE_BLOCK, .parent = &block};
+    struct box nested_float = {.type = BOX_FLOAT_LEFT, .parent = &inline_content};
+    root.children = &block;
+    block.next = &floating; /* A later float still belongs below inline content. */
+    ck_assert(stacking_box_above(&float_content, &block));
+    ck_assert(!stacking_box_above(&block, &float_content));
+    ck_assert(stacking_box_above(&inline_content, &float_content));
+    ck_assert(!stacking_box_above(&float_content, &inline_content));
+    ck_assert(stacking_box_above(&nested_float, &float_content));
+    ck_assert(!stacking_box_above(&float_content, &nested_float));
+    ck_assert(stacking_box_above(&nested_float, &inline_content));
+    ck_assert(!stacking_box_above(&inline_content, &nested_float));
+}
+END_TEST
+
+START_TEST(stacking_atomic_tree_order_test)
+{
+    const box_type types[] = {BOX_FLOAT_LEFT, BOX_FLOAT_RIGHT, BOX_INLINE_BLOCK, BOX_INLINE_FLEX, BOX_INLINE_GRID};
+    struct box root = {.type = BOX_BLOCK};
+    struct box first = {.type = types[_i], .parent = &root};
+    struct box second = {.type = types[_i], .parent = &root};
+    struct box text = {.type = BOX_TEXT, .parent = &first};
+    struct box block = {.type = BOX_BLOCK, .parent = &second};
+    first.next = &second;
+    ck_assert_msg(stacking_box_above(&block, &text), "later atomic group type %d must cover earlier text", types[_i]);
+    ck_assert_msg(!stacking_box_above(&text, &block), "earlier text must not escape atomic group type %d", types[_i]);
+}
+END_TEST
+
+START_TEST(stacking_float_coordinates_test)
+{
+    struct box root = {.type = BOX_BLOCK, .x = 10, .y = 20};
+    struct box block = {.type = BOX_BLOCK, .parent = &root, .x = 7, .y = 11};
+    struct box line = {.type = BOX_INLINE_CONTAINER, .parent = &block, .y = 3};
+    struct box floating = {.type = BOX_FLOAT_LEFT, .parent = &line, .float_container = &root, .x = 60, .y = 30};
+    int x = 17, y = 34;
+    stacking_float_parent_coords(&floating, &x, &y);
+    ck_assert_int_eq(x, 10);
+    ck_assert_int_eq(y, 20);
+}
+END_TEST
+
 /**
  * Test stacking context initialization
  */
@@ -403,6 +453,9 @@ static TCase *stacking_context_case_create(void)
     TCase *tc;
     tc = tcase_create("Stacking context");
 
+    tcase_add_test(tc, stacking_float_coordinates_test);
+    tcase_add_test(tc, stacking_ordinary_phase_test);
+    tcase_add_loop_test(tc, stacking_atomic_tree_order_test, 0, 5);
     tcase_add_test(tc, stacking_context_init_test);
     tcase_add_test(tc, stacking_context_add_test);
     tcase_add_test(tc, stacking_context_add_many_test);

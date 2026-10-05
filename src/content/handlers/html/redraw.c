@@ -1649,7 +1649,31 @@ static bool html_redraw_text_box(const html_content *html, struct box *box, int 
 
 static bool html_redraw_box(const html_content *html, struct box *box, int x_parent, int y_parent,
     const struct rect *clip, float scale, colour current_background_color, const struct content_redraw_data *data,
-    const struct rect *paint_clip, const struct redraw_context *ctx);
+    const struct rect *paint_clip, const struct redraw_context *ctx, enum box_paint_phase phase);
+
+/* Traverse the structural tree in each phase, preserving ancestor clips and
+ * scroll offsets. The float list is a layout index, not CSS tree order. */
+static bool html_redraw_box_phase(const html_content *html, struct box *box, int x, int y, const struct rect *clip,
+    float scale, colour background, const struct content_redraw_data *data, const struct rect *paint_clip,
+    const struct redraw_context *ctx, enum box_paint_phase phase)
+{
+    for (struct box *c = box->children; c; c = c->next) {
+        if (box_get_paint_z_index(c) != Z_INDEX_AUTO)
+            continue; /* Deferred by the nearest real stacking context. */
+        bool atomic = stacking_box_is_atomic(c);
+        if (atomic && stacking_box_phase(c) != phase)
+            continue;
+        if (!atomic && !c->children && stacking_box_phase(c) != phase &&
+            !(phase == BOX_PAINT_INLINE &&
+                (c->object || c->gadget || (c->flags & REPLACE_DIM) || c->iframe || box_has_outside_marker(c) ||
+                    c->scroll_x || c->scroll_y)))
+            continue;
+        if (!html_redraw_box(
+                html, c, x, y, clip, scale, background, data, paint_clip, ctx, atomic ? BOX_PAINT_ALL : phase))
+            return false;
+    }
+    return true;
+}
 
 /**
  * Draw the various children of a box.
@@ -1668,7 +1692,7 @@ static bool html_redraw_box(const html_content *html, struct box *box, int x_par
 
 static bool html_redraw_box_children(const html_content *html, struct box *box, int x_parent, int y_parent,
     const struct rect *clip, float scale, colour current_background_color, const struct content_redraw_data *data,
-    const struct rect *paint_clip, const struct redraw_context *ctx)
+    const struct rect *paint_clip, const struct redraw_context *ctx, enum box_paint_phase phase)
 {
     struct box *c;
     int x_offset, y_offset;
@@ -1683,6 +1707,10 @@ static bool html_redraw_box_children(const html_content *html, struct box *box, 
 
     x_offset = x_parent + box->x - scrollbar_get_offset(box->scroll_x);
     y_offset = y_parent + box->y - scrollbar_get_offset(box->scroll_y);
+
+    if (phase != BOX_PAINT_ALL)
+        return html_redraw_box_phase(
+            html, box, x_offset, y_offset, clip, scale, current_background_color, data, paint_clip, ctx, phase);
 
     /* Initialize separate stacking contexts for negative and positive */
     stacking_context_init(&negative_zindex);
@@ -1717,40 +1745,27 @@ static bool html_redraw_box_children(const html_content *html, struct box *box, 
         stacking_context_sort(&negative_zindex);
         for (i = 0; i < negative_zindex.count; i++) {
             if (!html_redraw_box(html, negative_zindex.entries[i].box, negative_zindex.entries[i].x_parent,
-                    negative_zindex.entries[i].y_parent, clip, scale, current_background_color, data, paint_clip,
-                    ctx)) {
+                    negative_zindex.entries[i].y_parent, clip, scale, current_background_color, data, paint_clip, ctx,
+                    BOX_PAINT_ALL)) {
                 render_ok = false;
                 goto cleanup;
             }
         }
     }
 
-    /* Paint ordinary in-flow children. Positioned auto boxes are deferred. */
-    for (c = box->children; c; c = c->next) {
-        if ((c->type == BOX_FLOAT_LEFT || c->type == BOX_FLOAT_RIGHT) && !stacking_float_is_structural(c)) {
-            continue;
-        }
-        int32_t z = box_get_paint_z_index(c);
-        if (z != Z_INDEX_AUTO) {
-            continue; /* Already in deferred list */
-        }
-        if (!html_redraw_box(
-                html, c, x_offset, y_offset, clip, scale, current_background_color, data, paint_clip, ctx)) {
+    /* CSS 2.2 Appendix E.2 steps 4–7. A block background must stay below
+     * floats even when that block's inline contents paint above them. */
+    for (enum box_paint_phase pass = BOX_PAINT_BLOCK; pass <= BOX_PAINT_INLINE; pass++) {
+        /* Decorations of an atomic/root box belong to its inline phase too. */
+        if (pass == BOX_PAINT_INLINE && box->style && css_computed_visibility(box->style) != CSS_VISIBILITY_HIDDEN &&
+            css_computed_text_decoration(box->style) != CSS_TEXT_DECORATION_NONE &&
+            (ctx->plot->clip(ctx, clip) != NSERROR_OK ||
+                !html_redraw_text_decoration(box, x_parent, y_parent, scale, current_background_color, ctx))) {
             render_ok = false;
             goto cleanup;
         }
-    }
-
-    /* Pass 3: Render floats */
-    for (c = box->float_children; c; c = c->next_float) {
-        if (stacking_float_is_structural(c))
-            continue;
-        int32_t z = box_get_paint_z_index(c);
-        if (z != Z_INDEX_AUTO) {
-            continue; /* Already in deferred list */
-        }
-        if (!html_redraw_box(
-                html, c, x_offset, y_offset, clip, scale, current_background_color, data, paint_clip, ctx)) {
+        if (!html_redraw_box_phase(
+                html, box, x_offset, y_offset, clip, scale, current_background_color, data, paint_clip, ctx, pass)) {
             render_ok = false;
             goto cleanup;
         }
@@ -1762,8 +1777,8 @@ static bool html_redraw_box_children(const html_content *html, struct box *box, 
         stacking_context_sort(&positive_zindex);
         for (i = 0; i < positive_zindex.count; i++) {
             if (!html_redraw_box(html, positive_zindex.entries[i].box, positive_zindex.entries[i].x_parent,
-                    positive_zindex.entries[i].y_parent, clip, scale, current_background_color, data, paint_clip,
-                    ctx)) {
+                    positive_zindex.entries[i].y_parent, clip, scale, current_background_color, data, paint_clip, ctx,
+                    BOX_PAINT_ALL)) {
                 render_ok = false;
                 goto cleanup;
             }
@@ -1800,18 +1815,15 @@ cleanup:
 
 static bool html_redraw_box(const html_content *html, struct box *box, int x_parent, int y_parent,
     const struct rect *clip, const float scale, colour current_background_color, const struct content_redraw_data *data,
-    const struct rect *paint_clip, const struct redraw_context *ctx)
+    const struct rect *paint_clip, const struct redraw_context *ctx, enum box_paint_phase phase)
 {
     if (box->flags & IS_OPACITY_ZERO)
         return true;
 
-    bool structural_float = (box->type == BOX_FLOAT_LEFT || box->type == BOX_FLOAT_RIGHT) &&
-        stacking_float_is_structural(box);
+    bool structural_float = box->type == BOX_FLOAT_LEFT || box->type == BOX_FLOAT_RIGHT;
     if (structural_float)
         stacking_float_parent_coords(box, &x_parent, &y_parent);
-    if (!structural_float && !box->abs_containing_block &&
-        (box->sticky ||
-            ((box->flags & HAS_STICKY_ANCESTOR) && (box->type == BOX_FLOAT_LEFT || box->type == BOX_FLOAT_RIGHT)))) {
+    if (!structural_float && !box->abs_containing_block && box->sticky) {
         const int scroll[] = {
             data ? data->viewport_x / scale - data->x : 0, data ? data->viewport_y / scale - data->y : 0};
         int64_t dx, dy;
@@ -1819,6 +1831,9 @@ static bool html_redraw_box(const html_content *html, struct box *box, int x_par
         x_parent = box_sticky_coordinate((int64_t)x_parent + dx);
         y_parent = box_sticky_coordinate((int64_t)y_parent + dy);
     }
+
+    bool paint_background = phase == BOX_PAINT_ALL || phase == stacking_box_phase(box);
+    bool paint_content = phase == BOX_PAINT_ALL || phase == BOX_PAINT_INLINE;
 
     const struct plotter_table *plot = ctx->plot;
     int x, y;
@@ -1969,26 +1984,6 @@ static bool html_redraw_box(const html_content *html, struct box *box, int x_par
             /* Mark that we need a transform, but don't push yet - wait until after early bailouts */
             need_transform = !is_identity;
         }
-    }
-
-    {
-        const char *tag = "";
-        const char *cls = "";
-        dom_string *name = NULL;
-        dom_string *class_attr = NULL;
-        if (box->node != NULL) {
-            if (dom_node_get_node_name(box->node, &name) == DOM_NO_ERR && name != NULL) {
-                tag = dom_string_data(name);
-            }
-            if (dom_element_get_attribute(box->node, corestring_dom_class, &class_attr) == DOM_NO_ERR &&
-                class_attr != NULL) {
-                cls = dom_string_data(class_attr);
-            }
-        }
-        if (class_attr != NULL)
-            dom_string_unref(class_attr);
-        if (name != NULL)
-            dom_string_unref(name);
     }
 
     /* avoid trivial FP maths */
@@ -2177,7 +2172,7 @@ static bool html_redraw_box(const html_content *html, struct box *box, int x_par
             int px = box->abs_containing_block ? x / scale - box->x : x_parent;
             int py = box->abs_containing_block ? y / scale - box->y : y_parent;
             return html_redraw_box_children(
-                    html, box, px, py, clip, scale, current_background_color, data, paint_clip, ctx);
+                html, box, px, py, clip, scale, current_background_color, data, paint_clip, ctx, phase);
         }
         return true; /* Early return BEFORE push_transform, no cleanup needed */
     }
@@ -2194,7 +2189,7 @@ static bool html_redraw_box(const html_content *html, struct box *box, int x_par
                     html_redraw_printing_top_cropped = r.y0;
                 return true; /* Early return BEFORE push_transform, no cleanup needed */
             }
-        } else
+        } else if (paint_content)
             box->flags |= PRINTED; /*it won't be printed anymore*/
     }
 
@@ -2204,7 +2199,7 @@ static bool html_redraw_box(const html_content *html, struct box *box, int x_par
             return false;
         }
         if (!html_redraw_box_children(
-                html, box, x_parent, y_parent, &r, scale, current_background_color, data, paint_clip, ctx)) {
+                html, box, x_parent, y_parent, &r, scale, current_background_color, data, paint_clip, ctx, phase)) {
             return false;
         }
         return ((!ctx->plot->group_end) || (ctx->plot->group_end(ctx) == NSERROR_OK));
@@ -2294,7 +2289,8 @@ static bool html_redraw_box(const html_content *html, struct box *box, int x_par
      * its background rendered. Otherwise filter out linebreaks,
      * optimize away non-differing inlines, only plot background
      * for BOX_TEXT it's in an inline */
-    if (bg_box && bg_box->type != BOX_BR && bg_box->type != BOX_TEXT && bg_box->type != BOX_INLINE_END &&
+    if (paint_background && bg_box && bg_box->type != BOX_BR && bg_box->type != BOX_TEXT &&
+        bg_box->type != BOX_INLINE_END &&
         (bg_box->type != BOX_INLINE || bg_box->object || bg_box->flags & IFRAME || box->flags & REPLACE_DIM ||
             (bg_box->gadget != NULL &&
                 (bg_box->gadget->type == GADGET_TEXTAREA || bg_box->gadget->type == GADGET_TEXTBOX ||
@@ -2444,8 +2440,15 @@ static bool html_redraw_box(const html_content *html, struct box *box, int x_par
             dom_string_unref(name);
     }
 
+    if (!paint_background && bg_box && bg_box->style) {
+        css_color bg;
+        css_computed_background_color(bg_box->style, &bg);
+        if (!nscss_color_is_transparent(bg))
+            current_background_color = nscss_color_to_ns(bg);
+    }
+
     /* borders for block level content and replaced inlines */
-    if (box->style && box->type != BOX_TEXT && box->type != BOX_INLINE_END &&
+    if (paint_background && box->style && box->type != BOX_TEXT && box->type != BOX_INLINE_END &&
         (box->type != BOX_INLINE || box->object || box->flags & IFRAME || box->flags & REPLACE_DIM ||
             (box->gadget != NULL &&
                 (box->gadget->type == GADGET_TEXTAREA || box->gadget->type == GADGET_TEXTBOX ||
@@ -2478,7 +2481,7 @@ static bool html_redraw_box(const html_content *html, struct box *box, int x_par
     }
 
     /* backgrounds and borders for non-replaced inlines */
-    if (box->style && box->type == BOX_INLINE && box->inline_end &&
+    if (paint_background && box->style && box->type == BOX_INLINE &&
         (html_redraw_box_has_background(box) || border_top || border_right || border_bottom || border_left)) {
         /* inline backgrounds and borders span other boxes and may
          * wrap onto separate lines */
@@ -2559,8 +2562,8 @@ static bool html_redraw_box(const html_content *html, struct box *box, int x_par
             b.x1 = ib_x + ib_p_width + ib_b_right;
             p.x1 = b.x1 < r.x1 ? b.x1 : r.x1;
 
-            if (ib == box->inline_end)
-                /* reached end of BOX_INLINE span */
+            if (!box->inline_end || ib == box->inline_end)
+                /* An empty inline fragment has no separate end marker. */
                 break;
         }
         /* plot background and borders for last rectangle of
@@ -2588,7 +2591,7 @@ static bool html_redraw_box(const html_content *html, struct box *box, int x_par
     }
 
     /* Debug outlines */
-    if (html_redraw_debug) {
+    if (paint_background && html_redraw_debug) {
         int margin_left, margin_right;
         int margin_top, margin_bottom;
         if (scale == 1.0) {
@@ -2704,8 +2707,12 @@ static bool html_redraw_box(const html_content *html, struct box *box, int x_par
         }
     }
 
+    const struct rect *child_clip = overflow_x == CSS_OVERFLOW_VISIBLE && overflow_y == CSS_OVERFLOW_VISIBLE ? clip
+                                                                                                             : &r;
+
     /* text decoration */
-    if ((box->type != BOX_TEXT) && box->style && css_computed_text_decoration(box->style) != CSS_TEXT_DECORATION_NONE) {
+    if (paint_content && (phase != BOX_PAINT_ALL || !box->children) && box->type != BOX_TEXT && box->style &&
+        css_computed_text_decoration(box->style) != CSS_TEXT_DECORATION_NONE) {
         if (!html_redraw_text_decoration(box, x_parent, y_parent, scale, current_background_color, ctx)) {
             {
                 result = false;
@@ -2714,7 +2721,7 @@ static bool html_redraw_box(const html_content *html, struct box *box, int x_par
         }
     }
 
-    if (box->node != NULL) {
+    if (paint_content && box->node != NULL) {
         exc = dom_html_element_get_tag_type(box->node, &tag_type);
         if (exc != DOM_NO_ERR) {
             tag_type = DOM_HTML_ELEMENT_TYPE__UNKNOWN;
@@ -2724,7 +2731,14 @@ static bool html_redraw_box(const html_content *html, struct box *box, int x_par
     }
 
 
-    if (box->flags & CONTENTS_SKIPPED) {
+    if (!paint_content) {
+        if (!(box->flags & CONTENTS_SKIPPED) &&
+            !html_redraw_box_children(html, box, x_parent, y_parent, child_clip, scale, current_background_color, data,
+                paint_clip, ctx, phase)) {
+            result = false;
+            goto cleanup;
+        }
+    } else if (box->flags & CONTENTS_SKIPPED) {
         /* Background and borders above belong to the principal box. */
     } else if (box->object && width != 0 && height != 0) {
         struct content_redraw_data obj_data;
@@ -2926,35 +2940,10 @@ static bool html_redraw_box(const html_content *html, struct box *box, int x_par
         }
 
     } else {
-        const struct rect *child_clip_ptr = &r;
-        if (overflow_x == CSS_OVERFLOW_VISIBLE && overflow_y == CSS_OVERFLOW_VISIBLE) {
-            child_clip_ptr = clip;
-        }
-        {
-            const char *tag = "";
-            const char *cls = "";
-            dom_string *name = NULL;
-            dom_string *class_attr = NULL;
-            if (box->node != NULL) {
-                if (dom_node_get_node_name(box->node, &name) == DOM_NO_ERR && name != NULL) {
-                    tag = dom_string_data(name);
-                }
-                if (dom_element_get_attribute(box->node, corestring_dom_class, &class_attr) == DOM_NO_ERR &&
-                    class_attr != NULL) {
-                    cls = dom_string_data(class_attr);
-                }
-            }
-
-            if (class_attr != NULL)
-                dom_string_unref(class_attr);
-            if (name != NULL)
-                dom_string_unref(name);
-        }
-
         /* Parent coordinates were normalized before painting; retain their
          * integer layout precision instead of dividing rounded device pixels. */
-        if (!html_redraw_box_children(html, box, x_parent, y_parent, child_clip_ptr, scale, current_background_color,
-                data, paint_clip, ctx)) {
+        if (!html_redraw_box_children(html, box, x_parent, y_parent, child_clip, scale, current_background_color, data,
+                paint_clip, ctx, phase)) {
             {
                 result = false;
                 goto cleanup;
@@ -2972,10 +2961,10 @@ static bool html_redraw_box(const html_content *html, struct box *box, int x_par
         }
 
     /* list marker */
-    if (box_has_outside_marker(box)) {
+    if (paint_content && box_has_outside_marker(box)) {
         if (!html_redraw_box(html, box->list_marker, x_parent + box->x - scrollbar_get_offset(box->scroll_x),
                 y_parent + box->y - scrollbar_get_offset(box->scroll_y), clip, scale, current_background_color, data,
-                paint_clip, ctx)) {
+                paint_clip, ctx, BOX_PAINT_ALL)) {
             {
                 result = false;
                 goto cleanup;
@@ -2984,7 +2973,8 @@ static bool html_redraw_box(const html_content *html, struct box *box, int x_par
     }
 
     /* scrollbars */
-    if (((box->style && box->type != BOX_BR && box->type != BOX_TABLE && box->type != BOX_INLINE &&
+    if (paint_content &&
+        ((box->style && box->type != BOX_BR && box->type != BOX_TABLE && box->type != BOX_INLINE &&
              box->type != BOX_FLEX && box->type != BOX_INLINE_FLEX && box->type != BOX_GRID &&
              box->type != BOX_INLINE_GRID && (box->gadget == NULL || box->gadget->type != GADGET_TEXTAREA) &&
              (overflow_x == CSS_OVERFLOW_SCROLL || overflow_x == CSS_OVERFLOW_AUTO ||
@@ -3092,7 +3082,7 @@ bool html_redraw(
         result &= (ctx->plot->rectangle(ctx, &pstyle_fill_bg, clip) == NSERROR_OK);
 
         result &= html_redraw_box(
-            html, box, data->x, data->y, clip, data->scale, pstyle_fill_bg.fill_colour, data, clip, ctx);
+            html, box, data->x, data->y, clip, data->scale, pstyle_fill_bg.fill_colour, data, clip, ctx, BOX_PAINT_ALL);
     }
 
     if (select) {

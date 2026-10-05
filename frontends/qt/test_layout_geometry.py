@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Static layout geometry, checked against independent browser references.
+"""Static layout geometry, checked against each fixture's documented expectations.
 
-The adjacent HTML/JSON pairs in test/ use a bundled font and fixed content sizes.
+The adjacent HTML/JSON pairs in test/ use fixed content sizes or a bundled font.
 JSON rectangles are relative to each case, in x/y/width/height order. A pair of
 rectangles means unchecked/checked; a single rectangle applies to both states.
 One pixel of tolerance allows Wisp's integer layout to round fractional sizes.

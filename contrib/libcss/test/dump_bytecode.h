@@ -193,6 +193,8 @@ static const char *const dump_keywords_font_weight[] = {
 };
 
 static const char *const dump_keywords_justify_content[] = {
+    [JUSTIFY_CONTENT_NORMAL] = "normal",
+    [JUSTIFY_CONTENT_STRETCH] = "stretch",
     [JUSTIFY_CONTENT_FLEX_START] = "flex-start",
     [JUSTIFY_CONTENT_FLEX_END] = "flex-end",
     [JUSTIFY_CONTENT_CENTER] = "center",

@@ -67,7 +67,7 @@ grid-column-start: auto
 grid-row-end: auto
 grid-row-start: auto
 height: auto
-justify-content: flex-start
+justify-content: normal
 left: auto
 letter-spacing: normal
 line-height: normal
@@ -184,7 +184,7 @@ grid-column-start: auto
 grid-row-end: auto
 grid-row-start: auto
 height: auto
-justify-content: flex-start
+justify-content: normal
 left: auto
 letter-spacing: normal
 line-height: normal
@@ -302,7 +302,7 @@ grid-column-start: auto
 grid-row-end: auto
 grid-row-start: auto
 height: auto
-justify-content: flex-start
+justify-content: normal
 left: auto
 letter-spacing: normal
 line-height: normal
@@ -421,7 +421,7 @@ grid-column-start: auto
 grid-row-end: auto
 grid-row-start: auto
 height: auto
-justify-content: flex-start
+justify-content: normal
 left: auto
 letter-spacing: normal
 line-height: normal
@@ -536,7 +536,7 @@ grid-column-start: auto
 grid-row-end: auto
 grid-row-start: auto
 height: auto
-justify-content: flex-start
+justify-content: normal
 left: auto
 letter-spacing: normal
 line-height: normal
@@ -655,7 +655,7 @@ grid-column-start: auto
 grid-row-end: auto
 grid-row-start: auto
 height: auto
-justify-content: flex-start
+justify-content: normal
 left: auto
 letter-spacing: normal
 line-height: normal
@@ -773,7 +773,7 @@ grid-column-start: auto
 grid-row-end: auto
 grid-row-start: auto
 height: auto
-justify-content: flex-start
+justify-content: normal
 left: auto
 letter-spacing: normal
 line-height: normal
@@ -891,7 +891,7 @@ grid-column-start: auto
 grid-row-end: auto
 grid-row-start: auto
 height: auto
-justify-content: flex-start
+justify-content: normal
 left: auto
 letter-spacing: normal
 line-height: normal
@@ -1009,7 +1009,7 @@ grid-column-start: auto
 grid-row-end: auto
 grid-row-start: auto
 height: auto
-justify-content: flex-start
+justify-content: normal
 left: auto
 letter-spacing: normal
 line-height: normal
@@ -1124,7 +1124,7 @@ grid-column-start: auto
 grid-row-end: auto
 grid-row-start: auto
 height: auto
-justify-content: flex-start
+justify-content: normal
 left: auto
 letter-spacing: normal
 line-height: normal
@@ -1242,7 +1242,7 @@ grid-column-start: auto
 grid-row-end: auto
 grid-row-start: auto
 height: auto
-justify-content: flex-start
+justify-content: normal
 left: auto
 letter-spacing: normal
 line-height: normal
@@ -1362,7 +1362,7 @@ grid-column-start: auto
 grid-row-end: auto
 grid-row-start: auto
 height: auto
-justify-content: flex-start
+justify-content: normal
 left: auto
 letter-spacing: normal
 line-height: normal
@@ -1482,7 +1482,7 @@ grid-column-start: auto
 grid-row-end: auto
 grid-row-start: auto
 height: auto
-justify-content: flex-start
+justify-content: normal
 left: auto
 letter-spacing: normal
 line-height: normal

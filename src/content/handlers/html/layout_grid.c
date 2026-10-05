@@ -105,12 +105,13 @@ static grid_placement_phase_t get_placement_phase(int col_start, int row_start)
     }
 }
 
-/* Per-layout row sizing state; no additional storage in persistent boxes. */
-struct grid_row {
+/* Per-layout track sizing state; no additional storage in persistent boxes. */
+struct grid_track {
     int size, limit, offset; /**< limit == -1 is an unresolved/infinite growth limit. */
     int planned_size, planned_limit, increase;
     css_fixed flex;
-    bool flexible, intrinsic_min, intrinsic_max, auto_min, stretch;
+    css_unit min_unit, max_unit;
+    bool flexible, intrinsic_min, intrinsic_max, auto_min, stretch, infinitely_growable;
 };
 
 /**
@@ -299,318 +300,18 @@ static int layout_grid_get_column_count(struct box *grid)
     return 1; /* Default to 1 column */
 }
 
-/**
- * Calculate content widths from grid tracks, before container constraints/edges.
- *
- * This function calculates the intrinsic min/max width based on:
- * - Grid track definitions (fixed, fr, percentage)
- * - Column gaps
- * - Content min/max widths per column
- *
- * \param grid      box of type BOX_GRID
- * \param font_func font functions for text measurement
- * \param content   The HTML content being laid out.
- * \param minimum   Receives the min-content track width.
- * \param maximum   Receives the max-content track width.
- */
-bool layout_minmax_grid_content(
-    struct box *grid, const struct gui_layout_table *font_func, const html_content *content, int *minimum, int *maximum)
-{
-    struct box *child;
-    int num_cols;
-    int32_t n_tracks = 0;
-    css_computed_grid_track *tracks = NULL;
-    int gap_px = 0;
-    int *col_min = NULL;
-    int *col_max = NULL;
-    int i, col_idx;
-    int min = 0, max = 0;
-
-    assert(grid->type == BOX_GRID || grid->type == BOX_INLINE_GRID);
-
-    num_cols = layout_grid_get_column_count(grid);
-
-    /* Allocate per-column min/max arrays */
-    col_min = calloc(num_cols, sizeof(int));
-    col_max = calloc(num_cols, sizeof(int));
-    if (!col_min || !col_max) {
-        free(col_min);
-        free(col_max);
-        return false;
-    }
-
-    /* Get column gap */
-    if (grid->style != NULL) {
-        css_fixed_or_calc gap_len = (css_fixed_or_calc)0;
-        css_unit gap_unit = CSS_UNIT_PX;
-        if (css_computed_column_gap(grid->style, &gap_len, &gap_unit) == CSS_COLUMN_GAP_SET) {
-            int available_inline = (grid->width != AUTO && grid->width != UNKNOWN_WIDTH) ? grid->width : -1;
-            if (!lh__length_to_px(grid->style, &content->unit_len_ctx, available_inline, gap_len, gap_unit, &gap_px)) {
-                gap_px = 0;
-            }
-        }
-    }
-
-    /* Recursively calculate min/max for all children and accumulate
-     * per-column. Children are placed in columns in order. */
-    col_idx = 0;
-    for (child = grid->children; child; child = child->next) {
-        /* Skip absolutely positioned children - they don't affect
-         * intrinsic sizing */
-        if (child->style && lh__box_is_absolute(child)) {
-            continue;
-        }
-
-        /* Recursively calculate child's min/max.
-         * This is called during the minmax phase, so children
-         * have not been processed yet. We must calculate their
-         * minmax recursively.
-         *
-         * We use layout_minmax_box for the main library, but
-         * for testing purposes grid_layout_test has stubs. */
-        if (child->max_width == UNKNOWN_MAX_WIDTH) {
-#ifdef TESTING
-            /* In test environment, just use safe defaults
-             * since we don't have full layout.c linked */
-            child->min_width.value = 0;
-            child->max_width = 100;
-#else
-            /* In production, use the dispatcher */
-            if (!layout_minmax_box(child, font_func, content)) {
-                free(col_min);
-                free(col_max);
-                return false;
-            }
-#endif
-        }
-
-        /* Accumulate child min/max into the column */
-        if (child->min_width.value > col_min[col_idx])
-            col_min[col_idx] = child->min_width.value;
-        if (child->max_width > col_max[col_idx])
-            col_max[col_idx] = child->max_width;
-
-        col_idx = (col_idx + 1) % num_cols;
-    }
-
-    /* Get track definitions */
-    if (grid->style != NULL) {
-        css_computed_grid_template_columns(grid->style, &n_tracks, &tracks);
-    }
-
-    /* Calculate grid min/max from tracks and content */
-    for (i = 0; i < num_cols; i++) {
-        int track_min = col_min[i];
-        int track_max = col_max[i];
-
-        if (n_tracks > 0 && tracks != NULL) {
-            css_computed_grid_track *t = &tracks[i % n_tracks];
-
-            if (t->unit == CSS_UNIT_PX) {
-                /* Fixed track: use the fixed size */
-                int fixed_w = FIXTOINT(css_unit_len2device_px(grid->style, &content->unit_len_ctx, t->value, t->unit));
-                track_min = fixed_w;
-                track_max = fixed_w;
-            } else if (t->unit == CSS_UNIT_FR) {
-                /* FR track: use content min/max (already set)
-                 */
-            } else if (t->unit == CSS_UNIT_PCT) {
-                /* Percentage: contributes 0 to intrinsic size
-                 */
-                track_min = 0;
-                track_max = 0;
-            }
-        }
-
-        min += track_min;
-        max += track_max;
-    }
-
-    /* Add column gaps */
-    if (num_cols > 1) {
-        min += (num_cols - 1) * gap_px;
-        max += (num_cols - 1) * gap_px;
-    }
-
-    free(col_min);
-    free(col_max);
-
-    /* Ensure max >= min */
-    if (max < min)
-        max = min;
-
-    *minimum = min;
-    *maximum = max;
-
-    NSLOG(layout, DEBUG, "Grid %p minmax: min=%d max=%d cols=%d gap=%d", grid, min, max, num_cols, gap_px);
-    return true;
-}
-
-static void layout_grid_compute_tracks(struct box *grid, int available_width, int *col_widths, int num_cols,
-    const css_computed_style *style, const css_unit_ctx *unit_len_ctx)
-{
-    int32_t n_tracks = 0;
-    css_computed_grid_track *tracks = NULL;
-    css_fixed_or_calc gap_len = (css_fixed_or_calc)0;
-    css_unit gap_unit = CSS_UNIT_PX;
-    int gap_px = 0;
-    int total_gap_width = 0;
-    int i;
-    int used_width = 0;
-    int fr_tracks = 0;
-    int fr_total = 0;
-
-    /* Get column gap */
-    if (css_computed_column_gap(style, &gap_len, &gap_unit) == CSS_COLUMN_GAP_SET) {
-        if (!lh__length_to_px(style, unit_len_ctx, available_width, gap_len, gap_unit, &gap_px)) {
-            gap_px = 0;
-        }
-    }
-    NSLOG(layout, DEEPDEBUG, "Column Gap: %d px (from val %d unit %d)", gap_px, gap_len, gap_unit);
-
-    /* Calculate total gap width consumed */
-    if (num_cols > 1) {
-        /* Parameters:
-         * box->width is the available width for the grid container
-         */
-        NSLOG(layout, DEEPDEBUG, "Grid Layout Compute Tracks: Available Width %d, Num Cols %d", available_width,
-            num_cols);
-        total_gap_width = (num_cols - 1) * gap_px;
-    }
-
-    /* Get explicit track definitions */
-    if (css_computed_grid_template_columns(style, &n_tracks, &tracks) == CSS_GRID_TEMPLATE_SET && n_tracks > 0) {
-        /* Use parsed tracks */
-        for (i = 0; i < num_cols; i++) {
-            /* Cycle through tracks if num_cols > n_tracks (implicit
-             * grid) */
-            css_computed_grid_track *t = &tracks[i % n_tracks];
-
-            NSLOG(layout, DEEPDEBUG, "Track %d: unit=%d value=%d (FR=%d PX=%d)", i, t->unit, FIXTOINT(t->value),
-                CSS_UNIT_FR, CSS_UNIT_PX);
-            if (t->unit == CSS_UNIT_FR) {
-                fr_tracks++;
-                fr_total += FIXTOINT(t->value);
-                NSLOG(layout, DEEPDEBUG, "Track %d is FR: val %d", i, FIXTOINT(t->value));
-                col_widths[i] = 0; /* Will be assigned later */
-            } else if (t->unit == CSS_UNIT_MIN_CONTENT || t->unit == CSS_UNIT_MAX_CONTENT ||
-                t->unit == CSS_UNIT_GRID_AUTO) {
-                /* Treat min/max-content as auto/1fr for now to
-                 * ensure visibility */
-                fr_tracks++;
-                fr_total += 1;
-                NSLOG(layout, DEEPDEBUG, "Track %d is Content (fallback to 1fr)", i);
-                col_widths[i] = 0;
-            } else if (t->unit == CSS_UNIT_MINMAX) {
-                /* For minmax(min, max), try to use max if it's
-                 * a Length */
-                /* If max is also dynamic, fallback to 1fr */
-                if (t->max_unit == CSS_UNIT_PX || t->max_unit == CSS_UNIT_EM || t->max_unit == CSS_UNIT_PCT) {
-                    int w = FIXTOINT(css_unit_len2device_px(style, unit_len_ctx, t->max_value, t->max_unit));
-                    if (t->max_unit == CSS_UNIT_PCT) {
-                        /* Resolve percentage against
-                         * available width */
-                        w = (w * available_width) / 100; // approximation if
-                                                         // conversion not fully
-                                                         // context-aware
-                    }
-                    col_widths[i] = w;
-                    used_width += w;
-                    NSLOG(layout, DEEPDEBUG, "Track %d is MINMAX(..., %d %s) -> width %d", i, FIXTOINT(t->max_value),
-                        "fixed", w);
-                } else {
-                    /* Max is FR or Content -> Treat as 1fr
-                     */
-                    fr_tracks++;
-                    fr_total += 1;
-                    NSLOG(layout, DEEPDEBUG, "Track %d is MINMAX(..., dynamic) -> fallback to 1fr", i);
-                    col_widths[i] = 0;
-                }
-
-            } else {
-                /* Handle fixed units (px, etc) */
-                if (t->unit == CSS_UNIT_PX || t->unit == CSS_UNIT_EM) {
-                    int w = FIXTOINT(css_unit_len2device_px(style, unit_len_ctx, t->value, t->unit));
-                    col_widths[i] = w;
-                    used_width += w;
-                    NSLOG(layout, DEEPDEBUG, "Track %d is Fixed: %d", i, w);
-                } else {
-                    col_widths[i] = 0; /* Auto/Other fallback */
-                }
-            }
-        }
-    } else {
-        /* Fallback: treat as 1fr for all columns */
-        fr_tracks = num_cols;
-        fr_total = num_cols;
-        for (i = 0; i < num_cols; i++)
-            col_widths[i] = 0;
-    }
-
-    /* Distribute remaining space to FR tracks */
-    int remaining_width = available_width - used_width - total_gap_width;
-    if (remaining_width < 0)
-        remaining_width = 0;
-
-    /* Guard: if the grid has indefinite width (e.g. inline-grid with auto
-     * width), fr tracks cannot be meaningfully distributed from infinite
-     * space. Clamp to 0 so fr tracks get zero width rather than nonsense.
-     * TODO: CSS Grid spec §11.5 says fr tracks in an indefinite context
-     * should resolve to max-content size — implement proper intrinsic
-     * sizing when content-based track sizing is available. */
-    if (available_width == UNKNOWN_WIDTH && fr_tracks > 0) {
-        assert(0 &&
-            "Grid with indefinite width has fr tracks — "
-            "fr distribution is not yet spec-correct");
-        remaining_width = 0;
-    }
-
-    if (fr_tracks > 0 && fr_total > 0) {
-        NSLOG(layout, DEEPDEBUG, "Distributing FR: Remaining %d, FR Total %d", remaining_width, fr_total);
-        int px_per_fr = remaining_width / fr_total;
-        NSLOG(layout, DEEPDEBUG, "PX per FR: %d", px_per_fr);
-        for (i = 0; i < num_cols; i++) {
-            /* Check if this column was an FR track.
-               We need to re-check the track definition or use a
-               flag. Re-checking logic for simplicity.
-            */
-            bool is_fr = false;
-            int fr_val = 0;
-
-            if (n_tracks > 0) {
-                css_computed_grid_track *t = &tracks[i % n_tracks];
-                if (t->unit == CSS_UNIT_FR) {
-                    is_fr = true;
-                    fr_val = FIXTOINT(t->value);
-                } else if (t->unit == CSS_UNIT_MIN_CONTENT || t->unit == CSS_UNIT_MAX_CONTENT ||
-                    t->unit == CSS_UNIT_GRID_AUTO) {
-                    /* min-content/max-content were marked
-                     * for FR distribution */
-                    is_fr = true;
-                    fr_val = 1;
-                }
-            } else {
-                is_fr = true; /* Fallback all fr */
-                fr_val = 1;
-            }
-
-            if (is_fr) {
-                col_widths[i] = px_per_fr * fr_val;
-            }
-        }
-    }
-}
-
 /* Per-call scratch state. Helpers borrow these buffers; layout_grid owns
  * their lifetime. No state is shared between nested grid layouts. */
 struct grid_layout_ctx {
     struct box *grid;
     html_content *content;
+    const css_unit_ctx *unit_len_ctx;
     struct css_size min_height;
     int max_height;
     int num_cols, num_rows, column_gap, row_gap;
-    int *col_widths;
-    struct grid_row *rows;
+    int available_width;
+    struct grid_track *columns;
+    struct grid_track *rows;
     int row_capacity, max_row;
     int *row_baselines;
     css_computed_grid_track *row_tracks;
@@ -635,7 +336,7 @@ static void layout_grid_cleanup(struct grid_layout_ctx *ctx)
     free(ctx->row_baselines);
     free(ctx->occupied);
     free(ctx->rows);
-    free(ctx->col_widths);
+    free(ctx->columns);
 }
 
 /* Resolve the container separately from its rows. Refresh auto heights on each
@@ -644,7 +345,7 @@ static void layout_grid_prepare_height(struct grid_layout_ctx *ctx, int containi
 {
     struct box *grid = ctx->grid;
     bool stretched = (grid->flags & HEIGHT_STRETCHED) != 0;
-    layout_find_dimensions(&ctx->content->unit_len_ctx, containing_width, -1, grid,
+    layout_find_dimensions(ctx->unit_len_ctx, containing_width, -1, grid,
         &(struct layout_dimension_outputs){
             .height = stretched ? NULL : &grid->height,
             .min_height = &ctx->min_height,
@@ -672,7 +373,7 @@ static void layout_grid_resolve_row_gap(struct grid_layout_ctx *ctx)
     ctx->row_gap = 0;
     int height = ctx->grid->height == AUTO ? -1 : ctx->grid->height;
     if (css_computed_row_gap(ctx->grid->style, &value, &unit) == CSS_ROW_GAP_SET &&
-        !lh__length_to_px(ctx->grid->style, &ctx->content->unit_len_ctx, height, value, unit, &ctx->row_gap))
+        !lh__length_to_px(ctx->grid->style, ctx->unit_len_ctx, height, value, unit, &ctx->row_gap))
         ctx->row_gap = 0;
     ctx->row_gap = max(0, ctx->row_gap);
 }
@@ -685,24 +386,19 @@ static bool layout_grid_prepare(struct grid_layout_ctx *ctx, int available_width
     ctx->num_cols = layout_grid_get_column_count(grid);
     NSLOG(layout, WARNING, "GRID LAYOUT: grid=%p avail_w=%d num_cols=%d children=%p", grid, available_width,
         ctx->num_cols, grid->children);
-    ctx->col_widths = malloc(sizeof(int) * ctx->num_cols);
-    if (!ctx->col_widths)
+    ctx->available_width = available_width;
+    ctx->columns = calloc(ctx->num_cols, sizeof(*ctx->columns));
+    if (!ctx->columns)
         return false;
 
     css_fixed_or_calc gap_len = (css_fixed_or_calc)0;
     css_unit gap_unit = CSS_UNIT_PX;
     if (grid->style != NULL && css_computed_column_gap(grid->style, &gap_len, &gap_unit) == CSS_COLUMN_GAP_SET) {
-        if (!lh__length_to_px(
-                grid->style, &ctx->content->unit_len_ctx, available_width, gap_len, gap_unit, &ctx->column_gap)) {
+        if (!lh__length_to_px(grid->style, ctx->unit_len_ctx, available_width, gap_len, gap_unit, &ctx->column_gap)) {
             ctx->column_gap = 0;
         }
     }
     layout_grid_resolve_row_gap(ctx);
-    layout_grid_compute_tracks(
-        grid, available_width, ctx->col_widths, ctx->num_cols, grid->style, &ctx->content->unit_len_ctx);
-    for (int i = 0; i < ctx->num_cols; i++) {
-        NSLOG(layout, WARNING, "GRID LAYOUT: col[%d] width=%d", i, ctx->col_widths[i]);
-    }
 
     if (grid->style &&
         css_computed_grid_template_rows(grid->style, &ctx->row_track_count, &ctx->row_tracks) == CSS_GRID_TEMPLATE_SET)
@@ -727,7 +423,6 @@ static bool layout_grid_prepare(struct grid_layout_ctx *ctx, int available_width
         /* Absolute/fixed children do not occupy grid cells. Their separate
          * positioning pass also needs a fresh fallback origin on reflow. */
         if (child->style && lh__box_is_absolute(child)) {
-            child->x = child->y = 0;
             continue;
         }
         ctx->item_count++;
@@ -932,7 +627,7 @@ static bool layout_grid_size_item(const struct grid_layout_ctx *ctx, struct box 
     /* CSS constraints are separate from the cached intrinsic widths. */
     struct css_size item_min_width, item_min_height;
     int item_max_width, item_max_height;
-    layout_find_dimensions(&ctx->content->unit_len_ctx, child_width, -1, child,
+    layout_find_dimensions(ctx->unit_len_ctx, child_width, -1, child,
         &(struct layout_dimension_outputs){
             .width = &child->width,
             .height = &child->height,
@@ -1016,23 +711,22 @@ static uint8_t layout_grid_item_alignment(const struct box *grid, const struct b
     return align;
 }
 
-static bool layout_grid_track_length(const struct grid_layout_ctx *ctx, css_fixed value, css_unit unit, int *length)
+/* The same track definitions apply on both axes. An indefinite percentage
+ * is auto during intrinsic sizing (Grid 7.2.1 / 11.4). */
+static bool
+layout_grid_track_length(const struct grid_layout_ctx *ctx, int available, css_fixed value, css_unit unit, int *length)
 {
     if (unit >= CSS_UNIT_FR && unit != CSS_UNIT_PCT)
         return false;
-    int height = ctx->grid->height == AUTO ? -1 : ctx->grid->height;
-    return lh__length_to_px(
-        ctx->grid->style, &ctx->content->unit_len_ctx, height, (css_fixed_or_calc)value, unit, length);
+    return lh__length_to_px(ctx->grid->style, ctx->unit_len_ctx, available, (css_fixed_or_calc)value, unit, length);
 }
 
-/* Keep track minima, growth limits and flexibility separate. In particular,
- * minmax(0,1fr) has no content minimum, and auto is not a fractional track. */
-static struct grid_row layout_grid_init_row(const struct grid_layout_ctx *ctx, int index)
+static struct grid_track
+layout_grid_init_track(const struct grid_layout_ctx *ctx, const css_computed_grid_track *track, int available)
 {
     css_unit min_unit = CSS_UNIT_GRID_AUTO, max_unit = CSS_UNIT_GRID_AUTO;
     css_fixed min_value = 0, max_value = 0;
-    if (index < ctx->row_track_count && ctx->row_tracks != NULL) {
-        const css_computed_grid_track *track = &ctx->row_tracks[index];
+    if (track != NULL) {
         min_unit = max_unit = track->unit;
         min_value = max_value = track->value;
         if (track->unit == CSS_UNIT_MINMAX) {
@@ -1043,22 +737,35 @@ static struct grid_row layout_grid_init_row(const struct grid_layout_ctx *ctx, i
             min_unit = CSS_UNIT_GRID_AUTO;
         }
     }
-    struct grid_row row = {0};
-    row.intrinsic_min = !layout_grid_track_length(ctx, min_value, min_unit, &row.size);
-    row.auto_min = min_unit == CSS_UNIT_GRID_AUTO || (min_unit == CSS_UNIT_PCT && ctx->grid->height == AUTO);
-    row.size = max(0, row.size);
-    row.flexible = max_unit == CSS_UNIT_FR;
-    row.flex = row.flexible ? max(0, max_value) : 0;
-    row.intrinsic_max = !row.flexible && !layout_grid_track_length(ctx, max_value, max_unit, &row.limit);
-    row.limit = row.flexible || row.intrinsic_max ? -1 : max(row.size, row.limit);
-    row.stretch = max_unit == CSS_UNIT_GRID_AUTO || (max_unit == CSS_UNIT_PCT && ctx->grid->height == AUTO);
-    return row;
+    if (available < 0) {
+        if (min_unit == CSS_UNIT_PCT)
+            min_unit = CSS_UNIT_GRID_AUTO;
+        if (max_unit == CSS_UNIT_PCT)
+            max_unit = CSS_UNIT_GRID_AUTO;
+    }
+    struct grid_track result = {.min_unit = min_unit, .max_unit = max_unit};
+    result.intrinsic_min = !layout_grid_track_length(ctx, available, min_value, min_unit, &result.size);
+    result.auto_min = min_unit == CSS_UNIT_GRID_AUTO;
+    result.size = max(0, result.size);
+    result.flexible = max_unit == CSS_UNIT_FR;
+    result.flex = result.flexible ? max(0, max_value) : 0;
+    result.intrinsic_max = !result.flexible &&
+        !layout_grid_track_length(ctx, available, max_value, max_unit, &result.limit);
+    result.limit = result.flexible || result.intrinsic_max ? -1 : max(result.size, result.limit);
+    result.stretch = max_unit == CSS_UNIT_GRID_AUTO;
+    return result;
+}
+
+static struct grid_track layout_grid_init_row(const struct grid_layout_ctx *ctx, int index)
+{
+    const css_computed_grid_track *track = index < ctx->row_track_count ? &ctx->row_tracks[index] : NULL;
+    return layout_grid_init_track(ctx, track, ctx->grid->height == AUTO ? -1 : ctx->grid->height);
 }
 
 static bool layout_grid_init_rows(struct grid_layout_ctx *ctx)
 {
     if (ctx->max_row > ctx->row_capacity) {
-        struct grid_row *rows = realloc(ctx->rows, ctx->max_row * sizeof(*rows));
+        struct grid_track *rows = realloc(ctx->rows, ctx->max_row * sizeof(*rows));
         if (rows == NULL)
             return false;
         ctx->rows = rows;
@@ -1071,52 +778,68 @@ static bool layout_grid_init_rows(struct grid_layout_ctx *ctx)
 
 /* Size non-spanning items first, then distribute any spanning deficit over
  * content-sized tracks. Fixed rows remain fixed even when a baseline overflows. */
-static double layout_grid_find_fr(const struct grid_layout_ctx *ctx, int first, int end, int space);
+static double layout_grid_find_fr(const struct grid_track *tracks, int count, int space);
 
-enum grid_row_growth { GRID_ROW_MINIMUM, GRID_ROW_CONTENT_MINIMUM, GRID_ROW_MAXIMUM };
+enum grid_track_growth {
+    GRID_TRACK_MINIMUM,
+    GRID_TRACK_CONTENT_MINIMUM,
+    GRID_TRACK_MAX_CONTENT_MINIMUM,
+    GRID_TRACK_MAXIMUM,
+    GRID_TRACK_MAX_CONTENT_MAXIMUM
+};
 
-static bool layout_grid_row_affected(const struct grid_row *row, enum grid_row_growth growth)
+static bool layout_grid_track_affected(const struct grid_track *row, enum grid_track_growth growth)
 {
-    if (growth == GRID_ROW_MAXIMUM)
+    switch (growth) {
+    case GRID_TRACK_MINIMUM:
+        return row->intrinsic_min;
+    case GRID_TRACK_CONTENT_MINIMUM:
+        return row->intrinsic_min && !row->auto_min;
+    case GRID_TRACK_MAX_CONTENT_MINIMUM:
+        return row->min_unit == CSS_UNIT_MAX_CONTENT;
+    case GRID_TRACK_MAXIMUM:
         return row->intrinsic_max;
-    return row->intrinsic_min && (growth == GRID_ROW_MINIMUM || !row->auto_min);
+    case GRID_TRACK_MAX_CONTENT_MAXIMUM:
+        return row->intrinsic_max && row->max_unit != CSS_UNIT_MIN_CONTENT;
+    }
+    return false;
 }
 
-static int layout_grid_row_growth_capacity(
-    const struct grid_row *row, enum grid_row_growth growth, int pass, bool prefer_intrinsic_max)
+static int layout_grid_track_growth_capacity(
+    const struct grid_track *row, enum grid_track_growth growth, int pass, bool prefer_intrinsic_max)
 {
-    bool affected = layout_grid_row_affected(row, growth);
+    bool affected = layout_grid_track_affected(row, growth);
     bool eligible = pass == 1 ? !affected : affected;
     if (pass == 2 && prefer_intrinsic_max)
         eligible &= row->intrinsic_max;
     if (!eligible)
         return 0;
-    if (pass == 2 || row->limit < 0)
+    if (pass == 2 || row->limit < 0 || (growth >= GRID_TRACK_MAXIMUM && row->infinitely_growable))
         return INT_MAX;
-    int size = growth == GRID_ROW_MAXIMUM ? max(row->size, row->limit) : row->size;
+    int size = growth >= GRID_TRACK_MAXIMUM ? max(row->size, row->limit) : row->size;
     return max(0, row->limit - size - row->increase);
 }
 
 /* Freeze at growth limits before redistributing to other tracks. Only after
  * those are exhausted may intrinsic minima grow beyond their limits. The
  * per-item increases stay separate from the same-span group's planned sizes. */
-static void layout_grid_distribute_rows(struct grid_row *rows, int count, int space, enum grid_row_growth growth)
+static void layout_grid_distribute_tracks(struct grid_track *rows, int count, int space, enum grid_track_growth growth)
 {
     bool prefer_intrinsic_max = false;
     for (int r = 0; r < count; r++)
-        prefer_intrinsic_max |= layout_grid_row_affected(&rows[r], growth) && rows[r].intrinsic_max;
+        prefer_intrinsic_max |= layout_grid_track_affected(&rows[r], growth) && rows[r].intrinsic_max;
     /* Affected tracks up to limits, other tracks up to limits, then the
      * permitted intrinsic tracks beyond limits (Grid 11.5.1). */
     for (int pass = 0; pass < 3 && space > 0; pass++) {
         for (;;) {
             int growable = 0;
             for (int r = 0; r < count; r++)
-                growable += layout_grid_row_growth_capacity(&rows[r], growth, pass, prefer_intrinsic_max) > 0;
+                growable += layout_grid_track_growth_capacity(&rows[r], growth, pass, prefer_intrinsic_max) > 0;
             if (growable == 0 || space == 0)
                 break;
             int share = max(1, space / growable);
             for (int r = 0; r < count && space > 0; r++) {
-                int capacity = layout_grid_row_growth_capacity(&rows[r], growth, pass, prefer_intrinsic_max);
+                int capacity = layout_grid_track_growth_capacity(&rows[r], growth, pass, prefer_intrinsic_max);
                 int extra = min(space, min(share, capacity));
                 rows[r].increase += extra;
                 space -= extra;
@@ -1125,41 +848,58 @@ static void layout_grid_distribute_rows(struct grid_row *rows, int count, int sp
     }
 }
 
-static void layout_grid_grow_rows(
-    struct grid_layout_ctx *ctx, const struct grid_item_cache *item, int height, enum grid_row_growth growth)
+static void
+layout_grid_grow_tracks(struct grid_track *tracks, int count, int gap, int contribution, enum grid_track_growth growth)
 {
-    int remaining = height - (item->row_span - 1) * ctx->row_gap;
+    int remaining = contribution - (count - 1) * gap;
     int growable = 0;
-    int end = item->item_row + item->row_span;
-    if (item->row_span > 1) {
+    if (count > 1) {
         bool flexible = false;
-        for (int r = item->item_row; r < end; r++)
-            flexible |= ctx->rows[r].flexible;
+        for (int r = 0; r < count; r++)
+            flexible |= tracks[r].flexible;
         if (flexible) {
-            if (growth == GRID_ROW_MAXIMUM)
+            if (growth >= GRID_TRACK_MAXIMUM)
                 return;
-            double fraction = layout_grid_find_fr(ctx, item->item_row, end, remaining);
-            for (int r = item->item_row; r < end; r++) {
-                struct grid_row *row = &ctx->rows[r];
-                if (row->flexible && layout_grid_row_affected(row, growth))
-                    row->planned_size = max(
-                        row->planned_size, layout_round_ratio_dimension(fraction * FIXTOFLT(row->flex)));
+            double factors = 0;
+            for (int r = 0; r < count; r++) {
+                remaining -= tracks[r].size;
+                if (tracks[r].flexible && layout_grid_track_affected(&tracks[r], growth)) {
+                    factors += FIXTOFLT(tracks[r].flex);
+                    growable++;
+                }
+            }
+            if (remaining <= 0 || growable == 0)
+                return;
+            /* Grid 11.5 step 4: distribute the deficit by flex factors.
+             * Below a total factor of one, share the unclaimed part equally;
+             * partial fill applies to final fr expansion, not item minima. */
+            double assigned = 0;
+            int rounded = 0;
+            for (int r = 0; r < count; r++) {
+                struct grid_track *row = &tracks[r];
+                if (row->flexible && layout_grid_track_affected(row, growth)) {
+                    assigned += remaining *
+                        (FIXTOFLT(row->flex) / max(1.0, factors) + max(0.0, 1.0 - factors) / growable);
+                    int next = layout_round_ratio_dimension(assigned);
+                    row->planned_size = max(row->planned_size, row->size + next - rounded);
+                    rounded = next;
+                }
             }
             return;
         }
     }
-    for (int r = item->item_row; r < end; r++) {
-        struct grid_row *row = &ctx->rows[r];
+    for (int r = 0; r < count; r++) {
+        struct grid_track *row = &tracks[r];
         row->increase = 0;
-        remaining -= growth == GRID_ROW_MAXIMUM ? max(row->size, row->limit) : row->size;
-        growable += layout_grid_row_affected(row, growth);
+        remaining -= growth >= GRID_TRACK_MAXIMUM ? max(row->size, row->limit) : row->size;
+        growable += layout_grid_track_affected(row, growth);
     }
     if (growable == 0)
         return;
-    layout_grid_distribute_rows(&ctx->rows[item->item_row], item->row_span, remaining, growth);
-    for (int r = item->item_row; r < end; r++) {
-        struct grid_row *row = &ctx->rows[r];
-        if (growth == GRID_ROW_MAXIMUM)
+    layout_grid_distribute_tracks(tracks, count, remaining, growth);
+    for (int r = 0; r < count; r++) {
+        struct grid_track *row = &tracks[r];
+        if (growth >= GRID_TRACK_MAXIMUM)
             row->planned_limit = max(row->planned_limit, max(row->size, row->limit) + row->increase);
         else
             row->planned_size = max(row->planned_size, row->size + row->increase);
@@ -1184,7 +924,7 @@ static int layout_grid_minimum_contribution(const struct grid_layout_ctx *ctx, c
     struct css_size minimum;
     const struct layout_dimension_context dims = {
         .box = child,
-        .unit_len_ctx = lh__with_container_dimensions(&ctx->content->unit_len_ctx, item->area.width, item->area.height),
+        .unit_len_ctx = lh__with_container_dimensions(ctx->unit_len_ctx, item->area.width, item->area.height),
         .available_width = item->area.width,
         .available_height = item->area.height,
     };
@@ -1196,7 +936,7 @@ static int layout_grid_minimum_contribution(const struct grid_layout_ctx *ctx, c
     bool auto_min = false, flexible = false, fixed_max = true;
     int cap = (item->row_span - 1) * ctx->row_gap;
     for (int r = item->item_row; r < item->item_row + item->row_span; r++) {
-        const struct grid_row *row = &ctx->rows[r];
+        const struct grid_track *row = &ctx->rows[r];
         auto_min |= row->auto_min;
         flexible |= row->flexible;
         fixed_max &= !row->intrinsic_max && !row->flexible;
@@ -1254,7 +994,7 @@ static bool layout_grid_size_rows(struct grid_layout_ctx *ctx)
         if (next_span == INT_MAX)
             break;
         span = next_span;
-        for (enum grid_row_growth growth = GRID_ROW_MINIMUM; growth <= GRID_ROW_MAXIMUM; growth++) {
+        for (enum grid_track_growth growth = GRID_TRACK_MINIMUM; growth <= GRID_TRACK_MAXIMUM; growth++) {
             for (int r = 0; r < ctx->max_row; r++) {
                 ctx->rows[r].planned_size = ctx->rows[r].size;
                 ctx->rows[r].planned_limit = ctx->rows[r].limit;
@@ -1265,15 +1005,15 @@ static bool layout_grid_size_rows(struct grid_layout_ctx *ctx)
                     continue;
                 const struct box *b = item->box;
                 assert(lh__is_resolved(b->height));
-                int height = growth == GRID_ROW_MINIMUM ? layout_grid_minimum_contribution(ctx, item)
-                                                        : b->height + lh__delta_outer_height(b);
+                int height = growth == GRID_TRACK_MINIMUM ? layout_grid_minimum_contribution(ctx, item)
+                                                          : b->height + lh__delta_outer_height(b);
                 if (item->baseline)
                     height += ctx->row_baselines[item->item_row] -
                         (b->margin[TOP] + b->border[TOP].width + lh__box_first_baseline(b));
-                layout_grid_grow_rows(ctx, item, height, growth);
+                layout_grid_grow_tracks(&ctx->rows[item->item_row], item->row_span, ctx->row_gap, height, growth);
             }
             for (int r = 0; r < ctx->max_row; r++) {
-                struct grid_row *row = &ctx->rows[r];
+                struct grid_track *row = &ctx->rows[r];
                 row->size = row->planned_size;
                 row->limit = row->planned_limit;
                 if (row->limit >= 0)
@@ -1298,13 +1038,13 @@ static int layout_grid_rows_height(const struct grid_layout_ctx *ctx)
 /* CSS Grid 11.7.1: freeze tracks whose content minimum exceeds their share,
  * then recompute the fraction for the others. Factors below one retain their
  * partial share; they must not be rounded to an integer number of fr units. */
-static double layout_grid_find_fr(const struct grid_layout_ctx *ctx, int first, int end, int space)
+static double layout_grid_find_fr(const struct grid_track *tracks, int count, int space)
 {
     double fraction = (double)INT_MAX * 1024;
-    for (int pass = first; pass <= end; pass++) {
+    for (int pass = 0; pass <= count; pass++) {
         double leftover = space, factors = 0;
-        for (int r = first; r < end; r++) {
-            const struct grid_row *row = &ctx->rows[r];
+        for (int r = 0; r < count; r++) {
+            const struct grid_track *row = &tracks[r];
             double factor = FIXTOFLT(row->flex);
             if (!row->flexible || factor == 0 || factor * fraction < row->size)
                 leftover -= row->size;
@@ -1323,21 +1063,270 @@ static double layout_grid_find_fr(const struct grid_layout_ctx *ctx, int first, 
 
 /* Maximize non-flexible tracks up to their growth limits before sizing fr.
  * Auto-height rows use those limits as their natural content size. */
-static void layout_grid_maximize_rows(struct grid_layout_ctx *ctx)
+static void layout_grid_maximize_tracks(struct grid_track *tracks, int count, int free)
 {
-    int free = ctx->grid->height == AUTO ? INT_MAX : max(0, ctx->grid->height - layout_grid_rows_height(ctx));
     while (free > 0) {
-        int count = 0;
-        for (int r = 0; r < ctx->max_row; r++)
-            count += ctx->rows[r].limit > ctx->rows[r].size;
-        if (count == 0)
+        int growable = 0;
+        for (int r = 0; r < count; r++)
+            growable += tracks[r].limit > tracks[r].size;
+        if (growable == 0)
             break;
-        int share = max(1, free / count);
-        for (int r = 0; r < ctx->max_row && free > 0; r++) {
-            struct grid_row *row = &ctx->rows[r];
+        int share = max(1, free / growable);
+        for (int r = 0; r < count && free > 0; r++) {
+            struct grid_track *row = &tracks[r];
             int extra = min(free, min(share, max(0, row->limit - row->size)));
             row->size += extra;
             free -= extra;
+        }
+    }
+}
+
+static void layout_grid_maximize_rows(struct grid_layout_ctx *ctx)
+{
+    int free = ctx->grid->height == AUTO ? INT_MAX : max(0, ctx->grid->height - layout_grid_rows_height(ctx));
+    layout_grid_maximize_tracks(ctx->rows, ctx->max_row, free);
+}
+
+enum grid_size_constraint { GRID_SIZE_DEFINITE, GRID_SIZE_MIN_CONTENT, GRID_SIZE_MAX_CONTENT };
+
+/* Intrinsic contributions are already measured by the shared min/max pass.
+ * Percentages in an intrinsic grid area are cyclic, so its outer percentage
+ * edges contribute zero here and resolve during final item layout. */
+static int layout_grid_column_minimum(const struct grid_layout_ctx *ctx, const struct grid_item_cache *item)
+{
+    const struct box *child = item->box;
+    if (child->style == NULL)
+        return child->min_width.value;
+    css_fixed_or_calc value = (css_fixed_or_calc)0;
+    css_unit unit = CSS_UNIT_PX;
+    int preferred;
+    if (css_computed_width_px(child->style, ctx->unit_len_ctx, -1, &preferred) == CSS_WIDTH_SET)
+        return child->min_width.value;
+
+    int edges = 0;
+    float fraction = 0;
+    calculate_mbp_width(ctx->unit_len_ctx, child->style, LEFT, true, true, true, &edges, &fraction);
+    calculate_mbp_width(ctx->unit_len_ctx, child->style, RIGHT, true, true, true, &edges, &fraction);
+    const struct layout_dimension_context dims = {
+        .box = child,
+        .unit_len_ctx = lh__with_container_dimensions(ctx->unit_len_ctx, 0, -1),
+        .available_width = 0,
+        .available_height = -1,
+    };
+    if (css_computed_min_width(child->style, &value, &unit) == CSS_MIN_WIDTH_SET) {
+        struct css_size minimum;
+        layout_find_width_limits(&dims, &(struct layout_dimension_outputs){.min_width = &minimum});
+        if (minimum.type == CSS_SIZE_SET)
+            return minimum.value + edges;
+    }
+
+    bool auto_min = false, flexible = false, fixed_max = true;
+    int cap = (item->col_span - 1) * ctx->column_gap;
+    for (int c = item->item_col; c < item->item_col + item->col_span; c++) {
+        const struct grid_track *track = &ctx->columns[c];
+        auto_min |= track->auto_min;
+        flexible |= track->flexible;
+        fixed_max &= !track->intrinsic_max && !track->flexible;
+        cap += max(0, track->limit);
+    }
+    if (!auto_min || (item->col_span > 1 && flexible) ||
+        css_computed_overflow_x(child->style) != CSS_OVERFLOW_VISIBLE ||
+        css_computed_overflow_y(child->style) != CSS_OVERFLOW_VISIBLE)
+        return edges;
+    int content = child->min_width.value;
+    /* The ordinary block intrinsic pass suppresses a cyclic percentage's
+     * minimum contribution; Grid's automatic minimum still uses its content. */
+    if (css_computed_width(child->style, &value, &unit) == CSS_WIDTH_SET && unit == CSS_UNIT_PCT &&
+        (child->type == BOX_BLOCK || child->type == BOX_GRID || child->type == BOX_FLEX) && child->object == NULL)
+        content = max(content, child->content_min_width + edges);
+    return fixed_max ? min(content, max(edges, cap)) : content;
+}
+
+static int layout_grid_columns_width(const struct grid_layout_ctx *ctx)
+{
+    int width = max(0, ctx->num_cols - 1) * ctx->column_gap;
+    for (int c = 0; c < ctx->num_cols; c++)
+        width += ctx->columns[c].size;
+    return width;
+}
+
+static bool layout_grid_column_flex_span(const struct grid_layout_ctx *ctx, const struct grid_item_cache *item)
+{
+    if (item->col_span > 1)
+        for (int c = item->item_col; c < item->item_col + item->col_span; c++)
+            if (ctx->columns[c].flexible)
+                return true;
+    return false;
+}
+
+static int layout_grid_column_contribution(const struct grid_layout_ctx *ctx, const struct grid_item_cache *item,
+    enum grid_track_growth growth, enum grid_size_constraint constraint)
+{
+    if (growth == GRID_TRACK_MAX_CONTENT_MINIMUM || growth == GRID_TRACK_MAX_CONTENT_MAXIMUM)
+        return item->box->max_width;
+    if (growth != GRID_TRACK_MINIMUM)
+        return item->box->min_width.value;
+    int contribution = layout_grid_column_minimum(ctx, item);
+    if (constraint != GRID_SIZE_DEFINITE) {
+        int cap = (item->col_span - 1) * ctx->column_gap;
+        bool fixed_max = true;
+        for (int c = item->item_col; c < item->item_col + item->col_span; c++) {
+            const struct grid_track *track = &ctx->columns[c];
+            fixed_max &= !track->intrinsic_max && !track->flexible;
+            cap += max(0, track->limit);
+        }
+        int limited = item->box->min_width.value;
+        if (fixed_max)
+            limited = min(limited, cap);
+        contribution = max(contribution, limited);
+    }
+    return contribution;
+}
+
+/* Planned increases within a span group are simultaneous. Flexible spans are
+ * considered together after non-flexible spans (Grid 11.5 steps 3 and 4). */
+static void layout_grid_grow_columns(
+    struct grid_layout_ctx *ctx, enum grid_size_constraint constraint, int span, bool flexible_spans)
+{
+    for (enum grid_track_growth growth = GRID_TRACK_MINIMUM; growth <= GRID_TRACK_MAX_CONTENT_MAXIMUM; growth++) {
+        for (int c = 0; c < ctx->num_cols; c++) {
+            struct grid_track *track = &ctx->columns[c];
+            track->planned_size = track->size;
+            track->planned_limit = track->limit;
+            if (growth == GRID_TRACK_MAXIMUM)
+                track->infinitely_growable = track->limit < 0;
+        }
+        for (int i = 0; i < ctx->cache_idx; i++) {
+            const struct grid_item_cache *item = &ctx->item_cache[i];
+            if (layout_grid_column_flex_span(ctx, item) != flexible_spans ||
+                (!flexible_spans && item->col_span != span))
+                continue;
+            int contribution = layout_grid_column_contribution(ctx, item, growth, constraint);
+            layout_grid_grow_tracks(
+                &ctx->columns[item->item_col], item->col_span, ctx->column_gap, contribution, growth);
+        }
+        for (int c = 0; c < ctx->num_cols; c++) {
+            struct grid_track *track = &ctx->columns[c];
+            track->size = track->planned_size;
+            track->limit = track->planned_limit;
+            if (track->limit >= 0)
+                track->limit = max(track->size, track->limit);
+        }
+    }
+    for (int c = 0; c < ctx->num_cols; c++)
+        ctx->columns[c].infinitely_growable = false;
+}
+
+static void layout_grid_intrinsic_columns(struct grid_layout_ctx *ctx, enum grid_size_constraint constraint)
+{
+    int span = 0;
+    bool flexible_spans = false;
+    for (;;) {
+        int next_span = INT_MAX;
+        for (int i = 0; i < ctx->cache_idx; i++) {
+            const struct grid_item_cache *item = &ctx->item_cache[i];
+            if (layout_grid_column_flex_span(ctx, item))
+                flexible_spans = true;
+            else if (item->col_span > span)
+                next_span = min(next_span, item->col_span);
+        }
+        if (next_span == INT_MAX)
+            break;
+        span = next_span;
+        layout_grid_grow_columns(ctx, constraint, span, false);
+    }
+    if (flexible_spans)
+        layout_grid_grow_columns(ctx, constraint, 0, true);
+    for (int c = 0; c < ctx->num_cols; c++)
+        if (!ctx->columns[c].flexible)
+            ctx->columns[c].limit = max(ctx->columns[c].size, ctx->columns[c].limit);
+}
+
+static void layout_grid_align_columns(struct grid_layout_ctx *ctx)
+{
+    uint8_t align = css_computed_justify_content(ctx->grid->style);
+    int free = ctx->available_width - layout_grid_columns_width(ctx);
+    if ((align == CSS_JUSTIFY_CONTENT_NORMAL || align == CSS_JUSTIFY_CONTENT_STRETCH) && free > 0) {
+        int count = 0;
+        for (int c = 0; c < ctx->num_cols; c++)
+            count += ctx->columns[c].stretch;
+        for (int c = 0; c < ctx->num_cols && count > 0; c++) {
+            if (ctx->columns[c].stretch) {
+                int extra = free / count;
+                ctx->columns[c].size += extra;
+                free -= extra;
+                count--;
+            }
+        }
+    }
+    int x = 0;
+    for (int c = 0; c < ctx->num_cols; c++) {
+        int offset = 0;
+        switch (align) {
+        case CSS_JUSTIFY_CONTENT_FLEX_END:
+            offset = free;
+            break;
+        case CSS_JUSTIFY_CONTENT_CENTER:
+            offset = free / 2;
+            break;
+        case CSS_JUSTIFY_CONTENT_SPACE_BETWEEN:
+            if (ctx->num_cols > 1)
+                offset = (int64_t)max(0, free) * c / (ctx->num_cols - 1);
+            break;
+        case CSS_JUSTIFY_CONTENT_SPACE_AROUND:
+            offset = (int64_t)max(0, free) * (2 * c + 1) / (2 * ctx->num_cols);
+            break;
+        case CSS_JUSTIFY_CONTENT_SPACE_EVENLY:
+            offset = (int64_t)max(0, free) * (c + 1) / (ctx->num_cols + 1);
+            break;
+        }
+        ctx->columns[c].offset = x + offset;
+        x += ctx->columns[c].size + ctx->column_gap;
+    }
+}
+
+/* Grid 11.4-11.8: initialize, resolve intrinsic contributions, maximize,
+ * expand fr, then stretch auto tracks. The intrinsic container pass uses the
+ * same placement and sizing algorithm with zero/infinite available free space. */
+static void layout_grid_size_columns(struct grid_layout_ctx *ctx, enum grid_size_constraint constraint)
+{
+    int32_t count = 0;
+    css_computed_grid_track *definitions = NULL;
+    if (ctx->grid->style)
+        css_computed_grid_template_columns(ctx->grid->style, &count, &definitions);
+    int available = constraint == GRID_SIZE_DEFINITE ? ctx->available_width : -1;
+    for (int c = 0; c < ctx->num_cols; c++)
+        ctx->columns[c] = layout_grid_init_track(ctx, c < count ? &definitions[c] : NULL, available);
+    layout_grid_intrinsic_columns(ctx, constraint);
+    int free = constraint == GRID_SIZE_MIN_CONTENT
+        ? 0
+        : (constraint == GRID_SIZE_MAX_CONTENT ? INT_MAX : max(0, available - layout_grid_columns_width(ctx)));
+    layout_grid_maximize_tracks(ctx->columns, ctx->num_cols, free);
+    double fraction = 0;
+    if (constraint == GRID_SIZE_DEFINITE) {
+        fraction = layout_grid_find_fr(
+            ctx->columns, ctx->num_cols, available - max(0, ctx->num_cols - 1) * ctx->column_gap);
+    } else if (constraint == GRID_SIZE_MAX_CONTENT) {
+        for (int c = 0; c < ctx->num_cols; c++)
+            if (ctx->columns[c].flexible)
+                fraction = max(fraction, ctx->columns[c].size / max(1.0, FIXTOFLT(ctx->columns[c].flex)));
+        for (int i = 0; i < ctx->cache_idx; i++) {
+            const struct grid_item_cache *item = &ctx->item_cache[i];
+            int space = item->box->max_width - (item->col_span - 1) * ctx->column_gap;
+            fraction = max(fraction, layout_grid_find_fr(&ctx->columns[item->item_col], item->col_span, space));
+        }
+    }
+    for (int c = 0; c < ctx->num_cols; c++)
+        if (ctx->columns[c].flexible)
+            ctx->columns[c].size = max(
+                ctx->columns[c].size, layout_round_ratio_dimension(fraction * FIXTOFLT(ctx->columns[c].flex)));
+    if (constraint == GRID_SIZE_DEFINITE)
+        layout_grid_align_columns(ctx);
+    else {
+        int offset = 0;
+        for (int c = 0; c < ctx->num_cols; c++) {
+            ctx->columns[c].offset = offset;
+            offset += ctx->columns[c].size + ctx->column_gap;
         }
     }
 }
@@ -1348,14 +1337,14 @@ static void layout_grid_expand_flexible_rows(struct grid_layout_ctx *ctx)
     int available = ctx->grid->height;
     if (available == AUTO) {
         for (int r = 0; r < ctx->max_row; r++) {
-            const struct grid_row *row = &ctx->rows[r];
+            const struct grid_track *row = &ctx->rows[r];
             if (row->flexible)
                 fraction = max(fraction, row->size / max(1.0, FIXTOFLT(row->flex)));
         }
         for (int i = 0; i < ctx->cache_idx; i++) {
             const struct grid_item_cache *item = &ctx->item_cache[i];
             int size = item->box->height + lh__delta_outer_height(item->box) - (item->row_span - 1) * ctx->row_gap;
-            fraction = max(fraction, layout_grid_find_fr(ctx, item->item_row, item->item_row + item->row_span, size));
+            fraction = max(fraction, layout_grid_find_fr(&ctx->rows[item->item_row], item->row_span, size));
         }
         int natural = max(0, ctx->max_row - 1) * ctx->row_gap;
         for (int r = 0; r < ctx->max_row; r++)
@@ -1368,7 +1357,7 @@ static void layout_grid_expand_flexible_rows(struct grid_layout_ctx *ctx)
             available = max(available, ctx->min_height.value);
     }
     if (available != AUTO)
-        fraction = layout_grid_find_fr(ctx, 0, ctx->max_row, available - max(0, ctx->max_row - 1) * ctx->row_gap);
+        fraction = layout_grid_find_fr(ctx->rows, ctx->max_row, available - max(0, ctx->max_row - 1) * ctx->row_gap);
     for (int r = 0; r < ctx->max_row; r++)
         if (ctx->rows[r].flexible)
             ctx->rows[r].size = max(
@@ -1456,7 +1445,7 @@ layout_grid_stretch_item(const struct grid_layout_ctx *ctx, struct box *child, i
 {
     int max_width, max_height;
     struct css_size min_width, min_height;
-    layout_find_dimensions(&ctx->content->unit_len_ctx, available_width, -1, child,
+    layout_find_dimensions(ctx->unit_len_ctx, available_width, -1, child,
         &(struct layout_dimension_outputs){
             .max_width = &max_width,
             .min_width = &min_width,
@@ -1516,8 +1505,8 @@ static bool layout_grid_height_depends_on_area(const struct box *box)
 static bool layout_grid_finish_item(const struct grid_layout_ctx *ctx, const struct grid_item_cache *item)
 {
     struct box *child = item->box;
-    const struct grid_row *first = &ctx->rows[item->item_row];
-    const struct grid_row *last = &ctx->rows[item->item_row + item->row_span - 1];
+    const struct grid_track *first = &ctx->rows[item->item_row];
+    const struct grid_track *last = &ctx->rows[item->item_row + item->row_span - 1];
     int spanned_height = last->offset + last->size - first->offset;
     const struct layout_containing_size area = {.width = item->area.width, .height = spanned_height};
     const struct layout_containing_size *previous = child->containing_size;
@@ -1545,8 +1534,8 @@ done:
 static void layout_grid_align_item(const struct grid_layout_ctx *ctx, const struct grid_item_cache *item)
 {
     struct box *child = item->box;
-    const struct grid_row *first = &ctx->rows[item->item_row];
-    const struct grid_row *last = &ctx->rows[item->item_row + item->row_span - 1];
+    const struct grid_track *first = &ctx->rows[item->item_row];
+    const struct grid_track *last = &ctx->rows[item->item_row + item->row_span - 1];
     int spanned_height = last->offset + last->size - first->offset;
     int edges = lh__delta_outer_height(child);
     bool auto_top = child->margin[TOP] == AUTO;
@@ -1569,28 +1558,21 @@ static void layout_grid_align_item(const struct grid_layout_ctx *ctx, const stru
     }
     int y = ctx->grid->padding[TOP] + first->offset;
     child->y = y + offset + child->margin[TOP] + child->border[TOP].width;
-    int x = ctx->grid->padding[LEFT];
-    for (int c = 0; c < item->item_col; c++)
-        x += ctx->col_widths[c] + ctx->column_gap;
+    int x = ctx->grid->padding[LEFT] + ctx->columns[item->item_col].offset;
     child->x = x + child->margin[LEFT] + child->border[LEFT].width;
 }
 
 /* Lay out one resolved grid area and cache its placement for the final pass. */
-static bool
-layout_grid_layout_item(struct grid_layout_ctx *ctx, struct box *child, const struct grid_placement *placement)
+static bool layout_grid_layout_item(struct grid_layout_ctx *ctx, struct grid_item_cache *item)
 {
-    /* Calculate child width (sum of spanned columns + gaps) */
-    int child_width = 0;
-    for (int c = placement->col; c < placement->col + placement->col_span; c++) {
-        child_width += ctx->col_widths[c];
-        if (c > placement->col) {
-            child_width += ctx->column_gap; /* Add gap between columns */
-        }
-    }
+    struct box *child = item->box;
+    const struct grid_track *first = &ctx->columns[item->item_col];
+    const struct grid_track *last = &ctx->columns[item->item_col + item->col_span - 1];
+    int child_width = last->offset + last->size - first->offset;
 
-    struct layout_containing_size area = {.width = child_width, .height = (placement->row_span - 1) * ctx->row_gap};
-    for (int r = placement->row; r < placement->row + placement->row_span; r++) {
-        struct grid_row row = layout_grid_init_row(ctx, r);
+    struct layout_containing_size area = {.width = child_width, .height = (item->row_span - 1) * ctx->row_gap};
+    for (int r = item->item_row; r < item->item_row + item->row_span; r++) {
+        struct grid_track row = layout_grid_init_row(ctx, r);
         if (row.intrinsic_min || row.intrinsic_max || row.flexible || row.size != row.limit) {
             area.height = -1;
             break;
@@ -1600,17 +1582,9 @@ layout_grid_layout_item(struct grid_layout_ctx *ctx, struct box *child, const st
     if (!layout_grid_measure_item(ctx, child, &area))
         return false;
     uint8_t align = layout_grid_item_alignment(ctx->grid, child);
-    ctx->item_cache[ctx->cache_idx++] = (struct grid_item_cache){
-        .box = child,
-        .item_col = placement->col,
-        .item_row = placement->row,
-        .col_span = placement->col_span,
-        .row_span = placement->row_span,
-        .align = align,
-        .baseline = align == CSS_ALIGN_ITEMS_BASELINE && child->margin[TOP] != AUTO && child->margin[BOTTOM] != AUTO,
-        .area = area,
-    };
-    ctx->max_row = max(ctx->max_row, placement->row + placement->row_span);
+    item->align = align;
+    item->baseline = align == CSS_ALIGN_ITEMS_BASELINE && child->margin[TOP] != AUTO && child->margin[BOTTOM] != AUTO;
+    item->area = area;
     return true;
 }
 
@@ -1723,7 +1697,7 @@ static void layout_grid_set_dimensions(struct grid_layout_ctx *ctx)
     if (ctx->grid->width == UNKNOWN_WIDTH || ctx->grid->width < 0) {
         int intrinsic_width = 0;
         for (int i = 0; i < ctx->num_cols; i++) {
-            intrinsic_width += ctx->col_widths[i];
+            intrinsic_width += ctx->columns[i].size;
         }
         if (ctx->num_cols > 1) {
             intrinsic_width += ctx->column_gap * (ctx->num_cols - 1);
@@ -1732,22 +1706,13 @@ static void layout_grid_set_dimensions(struct grid_layout_ctx *ctx)
     }
 }
 
-bool layout_grid(struct box *grid, int available_width, html_content *content)
+static void layout_grid_place_items(struct grid_layout_ctx *ctx)
 {
-    struct grid_layout_ctx ctx = {.grid = grid, .content = content};
-    bool success = false;
-    grid->flags &= ~HAS_BASELINE;
-    layout_grid_prepare_height(&ctx, available_width);
-    if (lh__is_resolved(grid->width) && grid->width >= 0)
-        available_width = grid->width;
-    if (!layout_grid_prepare(&ctx, available_width))
-        goto cleanup;
-
     /* Reserve fully definite items first. Then place the remaining items in
      * DOM order, preserving the shared auto-placement cursor between passes. */
     for (int pass = 1; pass <= 2; pass++) {
         NSLOG(layout, INFO, "GRID PLACEMENT: Starting pass %d", pass);
-        for (struct box *child = grid->children; child; child = child->next) {
+        for (struct box *child = ctx->grid->children; child; child = child->next) {
             if (child->style && lh__box_is_absolute(child))
                 continue;
             struct grid_placement placement = {0};
@@ -1760,12 +1725,74 @@ bool layout_grid(struct box *grid, int available_width, html_content *content)
                 "GRID PLACEMENT pass=%d item_phase=%d: col_start=%d col_end=%d row_start=%d row_end=%d col_span=%d row_span=%d",
                 pass, phase, placement.col_start, placement.col_end, placement.row_start, placement.row_end,
                 placement.col_span, placement.row_span);
-            layout_grid_resolve_placement(&ctx, &placement);
-            if (!layout_grid_layout_item(&ctx, child, &placement))
-                goto cleanup;
-            layout_grid_advance_placement(&ctx, &placement);
+            layout_grid_resolve_placement(ctx, &placement);
+            ctx->item_cache[ctx->cache_idx++] = (struct grid_item_cache){
+                .box = child,
+                .item_col = placement.col,
+                .item_row = placement.row,
+                .col_span = placement.col_span,
+                .row_span = placement.row_span,
+            };
+            ctx->max_row = max(ctx->max_row, placement.row + placement.row_span);
+            layout_grid_advance_placement(ctx, &placement);
         }
     }
+}
+
+/* Container min/max widths use exactly the same placed items and track
+ * definitions as final layout, without laying out descendants or mutating
+ * their used dimensions. Percentage tracks/gaps are cyclic in this pass. */
+bool layout_minmax_grid_content(
+    struct box *grid, const struct gui_layout_table *font_func, const html_content *content, int *minimum, int *maximum)
+{
+    struct grid_layout_ctx ctx = {.grid = grid, .unit_len_ctx = &content->unit_len_ctx};
+    bool success = false;
+    for (struct box *child = grid->children; child; child = child->next) {
+        if (child->style && lh__box_is_absolute(child))
+            continue;
+        if (child->max_width == UNKNOWN_MAX_WIDTH) {
+#ifdef TESTING
+            child->min_width.value = 0;
+            child->max_width = 100;
+#else
+            if (!layout_minmax_box(child, font_func, content))
+                return false;
+#endif
+        }
+    }
+    if (!layout_grid_prepare(&ctx, -1))
+        goto cleanup;
+    layout_grid_place_items(&ctx);
+    layout_grid_size_columns(&ctx, GRID_SIZE_MIN_CONTENT);
+    *minimum = layout_grid_columns_width(&ctx);
+    layout_grid_size_columns(&ctx, GRID_SIZE_MAX_CONTENT);
+    *maximum = max(*minimum, layout_grid_columns_width(&ctx));
+    success = true;
+cleanup:
+    layout_grid_cleanup(&ctx);
+    return success;
+}
+
+bool layout_grid(struct box *grid, int available_width, html_content *content)
+{
+    struct grid_layout_ctx ctx = {.grid = grid, .content = content, .unit_len_ctx = &content->unit_len_ctx};
+    bool success = false;
+    grid->flags &= ~HAS_BASELINE;
+    for (struct box *child = grid->children; child; child = child->next)
+        if (child->style && lh__box_is_absolute(child))
+            child->x = child->y = 0;
+    layout_grid_prepare_height(&ctx, available_width);
+    if (lh__is_resolved(grid->width) && grid->width >= 0)
+        available_width = grid->width;
+    if (!layout_grid_prepare(&ctx, available_width))
+        goto cleanup;
+
+    layout_grid_place_items(&ctx);
+    layout_grid_size_columns(
+        &ctx, lh__is_resolved(available_width) && available_width >= 0 ? GRID_SIZE_DEFINITE : GRID_SIZE_MAX_CONTENT);
+    for (int i = 0; i < ctx.cache_idx; i++)
+        if (!layout_grid_layout_item(&ctx, &ctx.item_cache[i]))
+            goto cleanup;
     if (!layout_grid_size_rows(&ctx))
         goto cleanup;
     layout_grid_maximize_rows(&ctx);

@@ -30,6 +30,17 @@
 
 struct box;
 
+/** CSS 2.2 Appendix E.2: ordinary descendants between negative and zero
+ * stack levels. ALL starts a real or atomic (float/inline-block) paint group. */
+enum box_paint_phase { BOX_PAINT_BLOCK, BOX_PAINT_FLOAT, BOX_PAINT_INLINE, BOX_PAINT_ALL };
+
+/** Phase of this box's own background/content, excluding positioned levels. */
+enum box_paint_phase stacking_box_phase(const struct box *box);
+
+/** Floats and atomic inlines paint their ordinary contents as a group, while
+ * positioned descendants still belong to the nearest real stacking context. */
+bool stacking_box_is_atomic(const struct box *box);
+
 /** Shared unscaled origin/explicit document scroll for deferred painting. */
 struct stacking_coordinates {
     int origin_x, origin_y;
@@ -146,13 +157,11 @@ void stacking_context_fini(struct stacking_context *ctx);
 bool stacking_context_collect_subtree(struct stacking_context *negative_ctx, struct stacking_context *positive_ctx,
     struct box *box, int x_parent, int y_parent, const struct stacking_coordinates *coordinates);
 
-/** Whether a paints above b in distinct stacking branches. Positioned ties use
+/** Whether a paints above b in distinct stacking branches. Equal-phase ties use
  * structural tree order; ancestor/child ties prefer the deepest hit. */
 bool stacking_box_above(const struct box *a, const struct box *b);
 
-/** Floats inside an intervening positioned paint group paint in their structural
- * subtree, despite retaining the outer formatting context's layout origin. */
-bool stacking_float_is_structural(const struct box *box);
+/** Convert a float's formatting-context origin for structural-tree painting. */
 void stacking_float_parent_coords(struct box *box, int *x, int *y);
 
 #endif /* NEOSURF_HTML_STACKING_H */

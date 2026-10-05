@@ -50,7 +50,7 @@ style = {
     ('font_style', 2),
     ('font_variant', 2),
     ('font_weight', 4),
-    ('justify_content', 3),
+    ('justify_content', 4),
     ('list_style_position', 2),
     ('list_style_type', 6),
     ('overflow_x', 3),

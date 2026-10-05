@@ -1,55 +1,89 @@
-<!doctype html>
-<meta charset="utf-8">
-<title>Grid column sizing: unresolved standards cases</title>
-<!-- Manual reproducer for the correctness backlog, not an accepted Wisp baseline.
-     CSS Grid 1 sections 7.2, 7.2.4 and 11.7 define the expected column widths below:
-     https://www.w3.org/TR/css-grid-1/#track-sizing
-     https://www.w3.org/TR/css-grid-1/#fr-unit
-     https://www.w3.org/TR/css-grid-1/#algo-flex-tracks
-     Every container is 300px wide, without gaps or item edges. Content-sized
-     cases contain one fixed 60px child, avoiding font-dependent measurements. -->
+<!doctype html><meta charset="utf-8"><title>CSS Grid column sizing</title>
+<!-- Expected sizes are derived from CSS Grid 1 sections 7.2.1, 7.2.4 and 11.4-11.8:
+https://www.w3.org/TR/css-grid-1/#track-sizing
+https://www.w3.org/TR/css-grid-1/#algo-track-sizing
+The paired JSON stores specification-derived geometry, not browser snapshots.
+Fixed-size children avoid font-dependent widths. The checkbox changes width to
+360px, the narrow viewport uses 240px, and the default width is 300px. -->
 <style>
-    body { margin: 20px; }
-    .grid { display: grid; width: 300px; column-gap: 0; row-gap: 0; margin: 0 0 20px; }
-    .grid > div { height: 10px; min-width: 0; margin: 0; padding: 0; border: 0; background: orange; }
-    .grid > div + div { background: blue; }
-    .content { width: 60px; height: 10px; }
-</style>
-
-<!-- Control: 200px / 100px. -->
-<div class="grid" id="integer-control" style="grid-template-columns: 2fr 1fr">
-    <div id="integer-control-a"></div><div id="integer-control-b"></div>
-</div>
-
-<!-- 100px / 200px: fractional weights must survive until pixel allocation. -->
-<div class="grid" id="fractional" style="grid-template-columns: 0.5fr 1fr">
-    <div id="fractional-a"></div><div id="fractional-b"></div>
-</div>
-
-<!-- 75px / 75px: a total flex factor below one leaves space unfilled. -->
-<div class="grid" id="partial-fill" style="grid-template-columns: 0.25fr 0.25fr">
-    <div id="partial-fill-a"></div><div id="partial-fill-b"></div>
-</div>
-
-<!-- 200px / 100px: minmax's flexible maximum supplies the track weight. -->
-<div class="grid" id="minmax-weight" style="grid-template-columns: minmax(0px, 2fr) 1fr">
-    <div id="minmax-weight-a"></div><div id="minmax-weight-b"></div>
-</div>
-
-<!-- 200px / 100px: the minimum freezes the first track above an equal share. -->
-<div class="grid" id="minmax-minimum" style="grid-template-columns: minmax(200px, 1fr) 1fr">
-    <div id="minmax-minimum-a"></div><div id="minmax-minimum-b"></div>
-</div>
-
-<!-- 200px / 100px: a maximum below the minimum is floored by the minimum. -->
-<div class="grid" id="minmax-floor" style="grid-template-columns: minmax(200px, 100px) 1fr">
-    <div id="minmax-floor-a"></div><div id="minmax-floor-b"></div>
-</div>
-
-<!-- 60px / 240px: intrinsic tracks measure their contents, not an fr share. -->
-<div class="grid" id="min-content" style="grid-template-columns: min-content 1fr">
-    <div id="min-content-a"><div class="content"></div></div><div id="min-content-b"></div>
-</div>
-<div class="grid" id="max-content" style="grid-template-columns: max-content 1fr">
-    <div id="max-content-a"><div class="content"></div></div><div id="max-content-b"></div>
-</div>
+body { margin:20px; font-size:0; line-height:0; }
+#switch { position:fixed; right:8px; top:8px; width:16px; height:16px; font-size:13px; z-index:10; }
+.case { display:flow-root; width:300px; margin-bottom:50px; }
+.grid { display:grid; width:calc(100vw - 120px); max-width:300px; align-items:start; }
+.grid > div { margin:0; padding:0; border:0; min-height:10px; background:orange; }
+.grid > div + div { background:blue; }
+.word { display:inline-block; width:40px; height:10px; vertical-align:top; }
+#switch:checked ~ .case > .grid { width:360px; max-width:none; }
+</style><input id="switch" type="checkbox">
+<div class="case" id="integer-control-case"><div class="grid" id="integer-control-grid" style="grid-template-columns:2fr 1fr;column-gap:0px;"><div id="integer-control-a" style=""></div><div id="integer-control-b"></div></div></div>
+<div class="case" id="fractional-case"><div class="grid" id="fractional-grid" style="grid-template-columns:.5fr 1fr;column-gap:0px;"><div id="fractional-a" style=""></div><div id="fractional-b"></div></div></div>
+<div class="case" id="partial-fill-case"><div class="grid" id="partial-fill-grid" style="grid-template-columns:.25fr .25fr;column-gap:0px;"><div id="partial-fill-a" style=""></div><div id="partial-fill-b"></div></div></div>
+<div class="case" id="minmax-weight-case"><div class="grid" id="minmax-weight-grid" style="grid-template-columns:minmax(0px,2fr) 1fr;column-gap:0px;"><div id="minmax-weight-a" style=""></div><div id="minmax-weight-b"></div></div></div>
+<div class="case" id="minmax-minimum-case"><div class="grid" id="minmax-minimum-grid" style="grid-template-columns:minmax(200px,1fr) 1fr;column-gap:0px;"><div id="minmax-minimum-a" style=""></div><div id="minmax-minimum-b"></div></div></div>
+<div class="case" id="minmax-floor-case"><div class="grid" id="minmax-floor-grid" style="grid-template-columns:minmax(200px,100px) 1fr;column-gap:0px;"><div id="minmax-floor-a" style=""></div><div id="minmax-floor-b"></div></div></div>
+<div class="case" id="min-content-case"><div class="grid" id="min-content-grid" style="grid-template-columns:min-content 1fr;column-gap:0px;"><div id="min-content-a" style=""><b style="display:block;width:60px;height:10px"></b></div><div id="min-content-b"></div></div></div>
+<div class="case" id="max-content-case"><div class="grid" id="max-content-grid" style="grid-template-columns:max-content 1fr;column-gap:0px;"><div id="max-content-a" style=""><b style="display:block;width:60px;height:10px"></b></div><div id="max-content-b"></div></div></div>
+<div class="case" id="auto-fr-case"><div class="grid" id="auto-fr-grid" style="grid-template-columns:auto 1fr;column-gap:0px;"><div id="auto-fr-a" style=""><b style="display:block;width:60px;height:10px"></b></div><div id="auto-fr-b"></div></div></div>
+<div class="case" id="auto-stretch-case"><div class="grid" id="auto-stretch-grid" style="grid-template-columns:auto auto;column-gap:0px;"><div id="auto-stretch-a" style=""><b style="display:block;width:60px;height:10px"></b></div><div id="auto-stretch-b"><b style="display:block;width:20px;height:10px"></b></div></div></div>
+<div class="case" id="auto-start-case"><div class="grid" id="auto-start-grid" style="grid-template-columns:auto auto;column-gap:0px;justify-content:flex-start;"><div id="auto-start-a" style=""><b style="display:block;width:60px;height:10px"></b></div><div id="auto-start-b"><b style="display:block;width:20px;height:10px"></b></div></div></div>
+<div class="case" id="auto-explicit-stretch-case"><div class="grid" id="auto-explicit-stretch-grid" style="grid-template-columns:auto auto;column-gap:0px;justify-content:stretch;"><div id="auto-explicit-stretch-a" style=""><b style="display:block;width:60px;height:10px"></b></div><div id="auto-explicit-stretch-b"><b style="display:block;width:20px;height:10px"></b></div></div></div>
+<div class="case" id="fr-minimum-case"><div class="grid" id="fr-minimum-grid" style="grid-template-columns:1fr 1fr;column-gap:0px;"><div id="fr-minimum-a" style=""><b style="display:block;width:200px;height:10px"></b></div><div id="fr-minimum-b"></div></div></div>
+<div class="case" id="fr-zero-minimum-case"><div class="grid" id="fr-zero-minimum-grid" style="grid-template-columns:minmax(0px,1fr) 1fr;column-gap:0px;"><div id="fr-zero-minimum-a" style=""><b style="display:block;width:200px;height:10px"></b></div><div id="fr-zero-minimum-b"></div></div></div>
+<div class="case" id="fr-scroll-case"><div class="grid" id="fr-scroll-grid" style="grid-template-columns:1fr 1fr;column-gap:0px;"><div id="fr-scroll-a" style="overflow:hidden;"><b style="display:block;width:200px;height:10px"></b></div><div id="fr-scroll-b"></div></div></div>
+<div class="case" id="fr-explicit-minimum-case"><div class="grid" id="fr-explicit-minimum-grid" style="grid-template-columns:1fr 1fr;column-gap:0px;"><div id="fr-explicit-minimum-a" style="min-width:220px;"></div><div id="fr-explicit-minimum-b"></div></div></div>
+<div class="case" id="zero-fr-case"><div class="grid" id="zero-fr-grid" style="grid-template-columns:0fr 1fr;column-gap:0px;"><div id="zero-fr-a" style=""><b style="display:block;width:60px;height:10px"></b></div><div id="zero-fr-b"></div></div></div>
+<div class="case" id="zero-fr-zero-minimum-case"><div class="grid" id="zero-fr-zero-minimum-grid" style="grid-template-columns:minmax(0px,0fr) 1fr;column-gap:0px;"><div id="zero-fr-zero-minimum-a" style=""></div><div id="zero-fr-zero-minimum-b"></div></div></div>
+<div class="case" id="percentage-case"><div class="grid" id="percentage-grid" style="grid-template-columns:25% 1fr;column-gap:0px;"><div id="percentage-a" style=""></div><div id="percentage-b"></div></div></div>
+<div class="case" id="em-case"><div class="grid" id="em-grid" style="grid-template-columns:2em 1fr;column-gap:0px;font-size:20px;"><div id="em-a" style=""></div><div id="em-b"></div></div></div>
+<div class="case" id="auto-cap-case"><div class="grid" id="auto-cap-grid" style="grid-template-columns:minmax(auto,50px) 1fr;column-gap:0px;"><div id="auto-cap-a" style=""><b style="display:block;width:80px;height:10px"></b></div><div id="auto-cap-b"></div></div></div>
+<div class="case" id="intrinsic-over-cap-case"><div class="grid" id="intrinsic-over-cap-grid" style="grid-template-columns:minmax(min-content,50px) 1fr;column-gap:0px;"><div id="intrinsic-over-cap-a" style=""><b style="display:block;width:80px;height:10px"></b></div><div id="intrinsic-over-cap-b"></div></div></div>
+<div class="case" id="gap-fr-case"><div class="grid" id="gap-fr-grid" style="grid-template-columns:1fr 3fr;column-gap:20px;"><div id="gap-fr-a" style=""></div><div id="gap-fr-b"></div></div></div>
+<div class="case" id="bounded-case"><div class="grid" id="bounded-grid" style="grid-template-columns:minmax(40px,80px) minmax(10px,60px);column-gap:0px;"><div id="bounded-a" style=""></div><div id="bounded-b"></div></div></div>
+<div class="case" id="intrinsic-placement-case"><div class="grid" id="intrinsic-placement-grid" style="grid-template-columns:min-content 1fr;column-gap:0px;"><div id="intrinsic-placement-a" style="grid-column:2;grid-row:1;"><b style="display:block;width:80px;height:10px"></b></div><div id="intrinsic-placement-b"><b style="display:block;width:20px;height:10px"></b></div></div></div>
+<div class="case" id="wrapping-min-case"><div class="grid" id="wrapping-min-grid" style="grid-template-columns:min-content 1fr;column-gap:0px;"><div id="wrapping-min-a" style=""><b class="word"></b> <b class="word"></b> <b class="word"></b></div><div id="wrapping-min-b"></div></div></div>
+<div class="case" id="wrapping-max-case"><div class="grid" id="wrapping-max-grid" style="grid-template-columns:max-content 1fr;column-gap:0px;"><div id="wrapping-max-a" style=""><b class="word"></b> <b class="word"></b> <b class="word"></b></div><div id="wrapping-max-b"></div></div></div>
+<div class="case" id="wrapping-range-case"><div class="grid" id="wrapping-range-grid" style="grid-template-columns:minmax(min-content,max-content) 1fr;column-gap:0px;"><div id="wrapping-range-a" style=""><b class="word"></b> <b class="word"></b> <b class="word"></b></div><div id="wrapping-range-b"></div></div></div>
+<div class="case" id="max-content-minimum-case"><div class="grid" id="max-content-minimum-grid" style="grid-template-columns:minmax(max-content,1fr) 1fr;column-gap:0px;"><div id="max-content-minimum-a" style=""><b style="display:block;width:200px;height:10px"></b></div><div id="max-content-minimum-b"></div></div></div>
+<div class="case" id="span-fixed-case"><div class="grid" id="span-fixed-grid" style="grid-template-columns:50px min-content 1fr;column-gap:0px;">
+<div id="span-fixed-0" style="grid-column:1;grid-row:1"></div>
+<div id="span-fixed-1" style="grid-column:2;grid-row:1"></div>
+<div id="span-fixed-2" style="grid-column:3;grid-row:1"></div>
+<div id="span-fixed-span0" style="grid-column:1 / span 2;grid-row:2;"><b style="display:block;width:200px;height:10px"></b></div>
+</div></div>
+<div class="case" id="span-gap-case"><div class="grid" id="span-gap-grid" style="grid-template-columns:50px min-content 1fr;column-gap:10px;">
+<div id="span-gap-0" style="grid-column:1;grid-row:1"></div>
+<div id="span-gap-1" style="grid-column:2;grid-row:1"></div>
+<div id="span-gap-2" style="grid-column:3;grid-row:1"></div>
+<div id="span-gap-span0" style="grid-column:1 / span 2;grid-row:2;"><b style="display:block;width:200px;height:10px"></b></div>
+</div></div>
+<div class="case" id="span-auto-case"><div class="grid" id="span-auto-grid" style="grid-template-columns:auto auto 1fr;column-gap:0px;">
+<div id="span-auto-0" style="grid-column:1;grid-row:1"></div>
+<div id="span-auto-1" style="grid-column:2;grid-row:1"></div>
+<div id="span-auto-2" style="grid-column:3;grid-row:1"></div>
+<div id="span-auto-span0" style="grid-column:1 / span 2;grid-row:2;"><b style="display:block;width:200px;height:10px"></b></div>
+</div></div>
+<div class="case" id="span-order-case"><div class="grid" id="span-order-grid" style="grid-template-columns:auto auto auto;column-gap:0px;justify-content:flex-start;">
+<div id="span-order-0" style="grid-column:1;grid-row:1"></div>
+<div id="span-order-1" style="grid-column:2;grid-row:1"></div>
+<div id="span-order-2" style="grid-column:3;grid-row:1"></div>
+<div id="span-order-span0" style="grid-column:1 / span 2;grid-row:2;"><b style="display:block;width:200px;height:10px"></b></div>
+<div id="span-order-span1" style="grid-column:2 / span 2;grid-row:3;"><b style="display:block;width:100px;height:10px"></b></div>
+</div></div>
+<div class="case" id="span-reversed-case"><div class="grid" id="span-reversed-grid" style="grid-template-columns:auto auto auto;column-gap:0px;justify-content:flex-start;">
+<div id="span-reversed-0" style="grid-column:1;grid-row:1"></div>
+<div id="span-reversed-1" style="grid-column:2;grid-row:1"></div>
+<div id="span-reversed-2" style="grid-column:3;grid-row:1"></div>
+<div id="span-reversed-span0" style="grid-column:2 / span 2;grid-row:2;"><b style="display:block;width:100px;height:10px"></b></div>
+<div id="span-reversed-span1" style="grid-column:1 / span 2;grid-row:3;"><b style="display:block;width:200px;height:10px"></b></div>
+</div></div>
+<div class="case" id="span-partial-fr-case"><div class="grid" id="span-partial-fr-grid" style="grid-template-columns:.25fr .25fr;column-gap:0px;">
+<div id="span-partial-fr-0" style="grid-column:1;grid-row:1"></div>
+<div id="span-partial-fr-1" style="grid-column:2;grid-row:1"></div>
+<div id="span-partial-fr-span0" style="grid-column:1 / span 2;grid-row:2;min-width:200px;"><b style="display:block;width:200px;height:10px"></b></div>
+</div></div>
+<div class="case" id="inline-weighted-case"><div class="grid" id="inline-weighted-grid" style="display:inline-grid;vertical-align:top;width:auto!important;max-width:none!important;grid-template-columns:2fr 1fr"><div id="inline-weighted-a"><b style="display:block;width:80px;height:10px"></b></div><div id="inline-weighted-b"><b style="display:block;width:20px;height:10px"></b></div></div></div>
+<div class="case" id="inline-fractional-case"><div class="grid" id="inline-fractional-grid" style="display:inline-grid;vertical-align:top;width:auto!important;max-width:none!important;grid-template-columns:.5fr 1fr"><div id="inline-fractional-a"><b style="display:block;width:60px;height:10px"></b></div><div id="inline-fractional-b"><b style="display:block;width:20px;height:10px"></b></div></div></div>
+<div class="case" id="inline-minmax-case"><div class="grid" id="inline-minmax-grid" style="display:inline-grid;vertical-align:top;width:auto!important;max-width:none!important;grid-template-columns:minmax(40px,80px) 1fr"><div id="inline-minmax-a"><b style="display:block;width:0px;height:10px"></b></div><div id="inline-minmax-b"><b style="display:block;width:60px;height:10px"></b></div></div></div>
+<div class="case" id="inline-percentage-case"><div class="grid" id="inline-percentage-grid" style="display:inline-grid;vertical-align:top;width:auto!important;max-width:none!important;grid-template-columns:50% 50%"><div id="inline-percentage-a"><b style="display:block;width:60px;height:10px"></b></div><div id="inline-percentage-b"><b style="display:block;width:20px;height:10px"></b></div></div></div>
+<div class="case" id="span-growth-limit-case"><div class="grid" id="span-growth-limit-grid" style="grid-template-columns:auto auto;justify-content:flex-start"><div id="span-growth-limit-a" style="grid-column:1;grid-row:1"><b style="display:block;width:10px;height:10px"></b></div><div id="span-growth-limit-span" style="grid-column:1 / span 2;grid-row:2"><b class="word" style="width:30px"></b> <b class="word" style="width:30px"></b> <b class="word" style="width:30px"></b> <b class="word" style="width:10px"></b></div></div></div>
+<div class="case" id="span-growth-limit-reversed-case"><div class="grid" id="span-growth-limit-reversed-grid" style="grid-template-columns:auto auto;justify-content:flex-start"><div id="span-growth-limit-reversed-span" style="grid-column:1 / span 2;grid-row:2"><b class="word" style="width:30px"></b> <b class="word" style="width:30px"></b> <b class="word" style="width:30px"></b> <b class="word" style="width:10px"></b></div><div id="span-growth-limit-reversed-a" style="grid-column:1;grid-row:1"><b style="display:block;width:10px;height:10px"></b></div></div></div>

@@ -2172,6 +2172,12 @@ static void dump_computed_style(const css_computed_style *style, char *buf, size
     /* justify-content */
     val = css_computed_justify_content(style);
     switch (val) {
+    case CSS_JUSTIFY_CONTENT_NORMAL:
+        wrote = snprintf(ptr, *len, "justify-content: normal\n");
+        break;
+    case CSS_JUSTIFY_CONTENT_STRETCH:
+        wrote = snprintf(ptr, *len, "justify-content: stretch\n");
+        break;
     case CSS_JUSTIFY_CONTENT_INHERIT:
         wrote = snprintf(ptr, *len, "justify-content: inherit\n");
         break;
