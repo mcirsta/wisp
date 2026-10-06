@@ -19,6 +19,39 @@ is evidence linking it to our changes. Browser comparisons can supply evidence,
 but do not replace the standards basis for a fix. Resuming discovery does not
 require exhausting every item in this document.
 
+## Tion/Bihon non-JavaScript batch (2026-10-06)
+
+The flex shrink defect below remains from this bounded reassessment. Checked
+both live homepages
+at 1280px and 390px widths, then compared the stable September 28 snapshots with
+JavaScript disabled in Wisp and the reference browser. Expected values in the
+reductions below come from CSS rules, not reference-browser pixel preferences.
+This finding has not been established as a regression from our recent changes.
+
+### Use inner flex bases for shrink weights
+
+Wisp stores an outer flex base, then uses that size directly when scaling
+`flex-shrink`. CSS Flexbox [9.7](https://www.w3.org/TR/css-flexbox-1/#resolve-flexible-lengths)
+requires the inner flex base for this weight; outer sizes still belong in
+free-space accounting. In `src/content/handlers/html/layout_flex.c`, follow
+`layout_flex__base_and_main_sizes()` through
+`layout_flex__distribute_free_main()`.
+
+Two empty items with 100px content widths in a 200px flex row, one with a 100px
+right margin, must shrink to 50px each. Wisp gives 34px and 67px. Substituting
+100px padding or border reproduces the same error; a no-edge control passes.
+Both sites' social-link rows use shrinking items with horizontal margins, so
+they exercise this path. Text wrapping also contributes to their appearance;
+fixing this defect alone is not a promise of identical wrapping.
+Completion requires margin/padding/border and no-edge controls, checking
+box-sizing and both flex axes, while retaining min/max freezing behavior.
+
+Reproducers and completed captures are under
+`out/render-captures/tion-bihon-2026-10-06/`: `flex-shrink-edges.html`
+(`flex-shrink-probe/`). Missing lazy-loaded photos require site scripting;
+native control sizes and small font/rounding differences were not classified as
+new standards defects. This batch does not reopen fallback work.
+
 ## Find in Page coverage
 
 Cross-node phrases remain unimplemented.
@@ -88,5 +121,29 @@ table, row-group, row and cell borders now share resolved grid segments.
 Supporting column styles needs retained column/column-group data from construction,
 then integration with the existing table grid (CSS 2.2
 [17.3](https://www.w3.org/TR/CSS22/tables.html#columns)).
+
+## JavaScript-driven HotNews sidebar (deferred)
+
+The live article sidebar headed "Ultima oră" stays on its loading placeholders.
+Source inspection on 2026-10-06 confirmed that the initial headline list is empty.
+The site's `app2.js` finds `[data-hn2-latest-articles="frontend"]`, fetches
+`/wp-json/hn2/v1/dynamic-fragments`, inserts `latest_articles.html` through
+`innerHTML`, and changes classes to hide the placeholders and show the list.
+The public endpoint returned HTTP 200 with 12 headline items during the check.
+
+This is missing JavaScript/DOM integration, not evidence of blurred text or a
+recent layout regression. Wisp's QuickJS `document.querySelectorAll()` still
+unconditionally returns an empty array; its element objects, `innerHTML` and
+class operations are also stubs. The selector stub predates this correctness
+series. Real queries must follow the [DOM selector APIs](https://dom.spec.whatwg.org/#dom-parentnode-queryselectorall).
+Enabling scripting alone is insufficient. A later bounded JS investigation must
+establish the bundle's other prerequisites; the first runtime failure was not
+measured here. No site-specific replacement or JS expansion is part of this batch.
+
+The saved HotNews homepage under `sites/` already contains headline list items
+and `data-hn2-latest-hydrated="1"`. That explains why the saved version can show
+the widget without executing its loading script; it does not establish that the
+live widget previously worked. Evidence, fetched source and response are in
+`out/render-captures/hotnews-sidebar-2026-10-06/`.
 
 All artifact paths above are under `out/render-captures/`.

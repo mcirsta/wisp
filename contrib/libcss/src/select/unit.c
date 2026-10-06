@@ -489,7 +489,37 @@ css_error css_unit_compute_absolute_font_size(const css_hint_length *ref_length,
     return CSS_OK;
 }
 
-/* Exported function, documented in utils/unit.h. */
+/* Exported function, documented in select/unit.h. */
+void css_unit_compute_line_height(
+    const css_computed_style *style, const css_unit_ctx *ctx, css_hint_length *length)
+{
+    css_unit unit = length->unit;
+    if (unit == CSS_UNIT_EM || unit == CSS_UNIT_PCT || unit == CSS_UNIT_REM || unit == CSS_UNIT_EX ||
+        unit == CSS_UNIT_CH || unit == CSS_UNIT_IC) {
+        const css_computed_style *reference = unit == CSS_UNIT_REM ? ctx->root_style : style;
+        css_fixed_or_calc font = {.value = ctx->font_size_default};
+        css_unit font_unit = CSS_UNIT_PX;
+        if (reference != NULL)
+            get_font_size(reference, &font, &font_unit);
+        if (font_unit != CSS_UNIT_CALC &&
+            (ctx->measure == NULL || unit == CSS_UNIT_EM || unit == CSS_UNIT_PCT || unit == CSS_UNIT_REM)) {
+            css_hint_length font_size = {.value = font.value, .unit = font_unit};
+            css_hint hint = {.status = CSS_FONT_SIZE_DIMENSION, .data.length = *length};
+            if (unit == CSS_UNIT_REM)
+                hint.data.length.unit = CSS_UNIT_EM;
+            css_unit_compute_absolute_font_size(&font_size, ctx->root_style, ctx->font_size_default, &hint);
+            *length = hint.data.length;
+        } else {
+            css_fixed basis = css_unit_len2css_px(style, ctx, F_1, unit == CSS_UNIT_PCT ? CSS_UNIT_EM : unit);
+            length->value = FMUL(length->value, basis);
+            if (unit == CSS_UNIT_PCT)
+                length->value = FDIV(length->value, F_100);
+            length->unit = CSS_UNIT_PX;
+        }
+    }
+}
+
+/* Exported function, documented in select/unit.h. */
 css_fixed css_unit_angle2deg(const css_unit unit, const css_fixed angle)
 {
     if (unit == CSS_UNIT_GRAD) {

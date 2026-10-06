@@ -33,6 +33,12 @@ css_fixed css_unit_len2px_mq(const css_unit_ctx *ctx, const css_fixed length, co
 css_error css_unit_compute_absolute_font_size(const css_hint_length *ref_length, const css_computed_style *root_style,
     css_fixed font_size_default, css_hint *size);
 
+/** Resolve a line-height operand against its declaring element's font.
+ * Font-relative values become absolute lengths. A viewport/container-sized font keeps
+ * that unit so layout can still update it on resize without reselecting CSS. */
+void css_unit_compute_line_height(
+    const css_computed_style *style, const css_unit_ctx *ctx, css_hint_length *length);
+
 /**
  * Convert any angle to degrees.
  *

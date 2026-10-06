@@ -13,6 +13,7 @@
 typedef struct test_node {
     lwc_string *name;
     void *libcss_node_data;
+    struct test_node *parent;
 } test_node;
 
 static css_error resolve_url(void *pw, const char *base, lwc_string *rel, lwc_string **abs)
@@ -96,8 +97,7 @@ static css_error named_generic_sibling_node(void *pw, void *node, const css_qnam
 static css_error parent_node(void *pw, void *node, void **parent)
 {
     UNUSED(pw);
-    UNUSED(node);
-    *parent = NULL;
+    *parent = ((test_node *)node)->parent;
     return CSS_OK;
 }
 
@@ -428,7 +428,7 @@ static css_unit_ctx unit_ctx = {
     .measure = NULL,
 };
 
-static css_computed_style *select_style_from_css(const char *css, style_case *ctx)
+static css_computed_style *select_style_from_css_for_node(const char *css, style_case *ctx, bool is_child)
 {
     css_stylesheet_params params = {
         .params_version = CSS_STYLESHEET_PARAMS_VERSION_1,
@@ -462,7 +462,8 @@ static css_computed_style *select_style_from_css(const char *css, style_case *ct
 
     assert(lwc_intern_string("div", 3, &ctx->node_name) == lwc_error_ok);
 
-    test_node node = {.name = ctx->node_name, .libcss_node_data = NULL};
+    test_node parent = {.name = ctx->node_name};
+    test_node node = {.name = ctx->node_name, .parent = is_child ? &parent : NULL};
     assert(css_select_style(ctx->select_ctx, &node, &unit_ctx, &media, NULL, &select_handler, NULL, &ctx->results) ==
         CSS_OK);
     if (node.libcss_node_data != NULL) {
@@ -474,6 +475,11 @@ static css_computed_style *select_style_from_css(const char *css, style_case *ct
     assert(ctx->results->styles[CSS_PSEUDO_ELEMENT_NONE] != NULL);
 
     return ctx->results->styles[CSS_PSEUDO_ELEMENT_NONE];
+}
+
+static css_computed_style *select_style_from_css(const char *css, style_case *ctx)
+{
+    return select_style_from_css_for_node(css, ctx, false);
 }
 
 static void destroy_style_case(style_case *ctx)
@@ -829,6 +835,89 @@ static void test_disclosure_counter_styles(void)
     }
 }
 
+static void expect_line_height(const char *label, const char *stage, const css_computed_style *style,
+    uint8_t expected_type, css_fixed expected_value)
+{
+    css_fixed_or_calc value = {0};
+    css_unit unit = CSS_UNIT_PX;
+    uint8_t type = css_computed_line_height(style, &value, &unit);
+    if (type != expected_type || (type != CSS_LINE_HEIGHT_NORMAL && value.value != expected_value) ||
+        (type == CSS_LINE_HEIGHT_DIMENSION && unit != CSS_UNIT_PX)) {
+        printf("FAIL - line-height %s (%s): type=%u unit=%d value=%d; expected type=%u value=%d\n",
+            label, stage, type, unit, value.value, expected_type, expected_value);
+        exit(EXIT_FAILURE);
+    }
+}
+
+static void test_line_height_inheritance(void)
+{
+    /* CSS 2.2 10.8.1: lengths/percentages inherit as absolute lengths;
+     * numbers and normal retain their type. Expected values are CSS pixels,
+     * including fractional values, independent of device DPI. */
+    const struct {
+        const char *declarations;
+        uint8_t type;
+        css_fixed value;
+    } cases[] = {
+        {"line-height:1em", CSS_LINE_HEIGHT_DIMENSION, INTTOFIX(40)},
+        {"line-height:125%", CSS_LINE_HEIGHT_DIMENSION, INTTOFIX(50)},
+        {"line-height:1rem", CSS_LINE_HEIGHT_DIMENSION, INTTOFIX(40)},
+        {"line-height:1ic", CSS_LINE_HEIGHT_DIMENSION, INTTOFIX(40)},
+        {"line-height:1ex", CSS_LINE_HEIGHT_DIMENSION, FMUL(INTTOFIX(40), FLTTOFIX(.6))},
+        {"line-height:1ch", CSS_LINE_HEIGHT_DIMENSION, FMUL(INTTOFIX(40), FLTTOFIX(.4))},
+        {"line-height:40px", CSS_LINE_HEIGHT_DIMENSION, INTTOFIX(40)},
+        {"line-height:1.25", CSS_LINE_HEIGHT_NUMBER, FLTTOFIX(1.25)},
+        {"line-height:normal", CSS_LINE_HEIGHT_NORMAL, 0},
+        {"font-size:15.5px;line-height:200%", CSS_LINE_HEIGHT_DIMENSION, INTTOFIX(31)},
+        {"font-size:15.5px;line-height:1em", CSS_LINE_HEIGHT_DIMENSION, FLTTOFIX(15.5)},
+        {"font-size:0;line-height:1em", CSS_LINE_HEIGHT_DIMENSION, 0},
+        {"font-size:calc(30px + 10px);line-height:1em", CSS_LINE_HEIGHT_DIMENSION, INTTOFIX(40)},
+        {"font-size:calc(30px + 10px);line-height:calc(10px + 1em)", CSS_LINE_HEIGHT_DIMENSION, INTTOFIX(50)},
+        {"line-height:calc(1em + 10px)", CSS_LINE_HEIGHT_DIMENSION, INTTOFIX(50)},
+        {"line-height:calc(125% + 10px)", CSS_LINE_HEIGHT_DIMENSION, INTTOFIX(60)},
+        {"font-size:15.5px;line-height:calc(200% + 1px)", CSS_LINE_HEIGHT_DIMENSION, INTTOFIX(32)},
+        {"line-height:calc(1 + .25)", CSS_LINE_HEIGHT_NUMBER, FLTTOFIX(1.25)},
+        {"line-height:calc(1em - 50px)", CSS_LINE_HEIGHT_DIMENSION, 0},
+    };
+    style_case child_ctx, grandchild_ctx, override_ctx;
+    const css_computed_style *child = select_style_from_css_for_node("* {font-size:20px}", &child_ctx, true);
+    const css_computed_style *grandchild = select_style_from_css_for_node(
+        "* {font-size:10px;line-height:inherit}", &grandchild_ctx, true);
+    const css_computed_style *override = select_style_from_css_for_node(
+        "* {font-size:20px;line-height:1em}", &override_ctx, true);
+    for (int dpi = 96; dpi <= 192; dpi += 96) {
+        unit_ctx.device_dpi = INTTOFIX(dpi);
+        for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
+            char css[160];
+            snprintf(css, sizeof(css), "* {font-size:40px;%s}", cases[i].declarations);
+            style_case parent_ctx;
+            const css_computed_style *parent = select_style_from_css(css, &parent_ctx);
+            expect_line_height(cases[i].declarations, "root selection", parent, cases[i].type, cases[i].value);
+            css_unit_ctx compose_ctx = unit_ctx;
+            compose_ctx.root_style = parent;
+            css_computed_style *composed_child, *composed_grandchild, *overridden;
+            assert(css_computed_style_compose(parent, child, &compose_ctx, &composed_child) == CSS_OK);
+            expect_line_height(cases[i].declarations, "implicit inheritance", composed_child,
+                cases[i].type, cases[i].value);
+            assert(css_computed_style_compose(
+                       composed_child, grandchild, &compose_ctx, &composed_grandchild) == CSS_OK);
+            expect_line_height(cases[i].declarations, "explicit inheritance", composed_grandchild,
+                cases[i].type, cases[i].value);
+            assert(css_computed_style_compose(parent, override, &compose_ctx, &overridden) == CSS_OK);
+            expect_line_height(cases[i].declarations, "child declaration", overridden,
+                CSS_LINE_HEIGHT_DIMENSION, INTTOFIX(20));
+            css_computed_style_destroy(overridden);
+            css_computed_style_destroy(composed_grandchild);
+            css_computed_style_destroy(composed_child);
+            destroy_style_case(&parent_ctx);
+        }
+    }
+    unit_ctx.device_dpi = F_96;
+    destroy_style_case(&override_ctx);
+    destroy_style_case(&grandchild_ctx);
+    destroy_style_case(&child_ctx);
+}
+
 int main(void)
 {
     test_calc_property_getters();
@@ -847,6 +936,7 @@ int main(void)
     test_cq_units_unset_container_falls_back_to_viewport();
     test_clip_units_roundtrip();
     test_disclosure_counter_styles();
+    test_line_height_inheritance();
 
     printf("PASS\n");
     return 0;

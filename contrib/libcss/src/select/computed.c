@@ -33,7 +33,8 @@ static css_error compute_absolute_border_side_width(css_computed_style *style, c
     css_error (*set)(css_computed_style *style, uint8_t type, css_fixed_or_calc len, css_unit unit));
 static css_error compute_absolute_sides(css_computed_style *style, const css_hint_length *ex_size);
 static css_error compute_absolute_clip(css_computed_style *style, const css_hint_length *ex_size);
-static css_error compute_absolute_line_height(css_computed_style *style, const css_hint_length *ex_size);
+static css_error compute_absolute_line_height(
+    const css_computed_style *parent, css_computed_style *style, const css_unit_ctx *unit_ctx);
 static css_error compute_absolute_margins(css_computed_style *style, const css_hint_length *ex_size);
 static css_error compute_absolute_padding(css_computed_style *style, const css_hint_length *ex_size);
 static css_error compute_absolute_vertical_align(css_computed_style *style, const css_hint_length *ex_size);
@@ -488,7 +489,7 @@ css__compute_absolute_values(const css_computed_style *parent, css_computed_styl
         return error;
 
     /* Fix up line-height (must be before vertical-align) */
-    error = compute_absolute_line_height(style, &ex_size.data.length);
+    error = compute_absolute_line_height(parent, style, unit_ctx);
     if (error != CSS_OK)
         return error;
 
@@ -820,31 +821,66 @@ css_error compute_absolute_clip(css_computed_style *style, const css_hint_length
 /**
  * Compute absolute line-height
  *
- * \param style      Style to process
- * \param ex_size    Ex size, in ems
+ * \param parent    Parent style, or NULL for the root
+ * \param style     Style to process (font-size already computed)
+ * \param unit_ctx  Client length conversion context
  * \return CSS_OK on success
  */
-css_error compute_absolute_line_height(css_computed_style *style, const css_hint_length *ex_size)
+css_error compute_absolute_line_height(
+    const css_computed_style *parent, css_computed_style *style, const css_unit_ctx *unit_ctx)
 {
     css_fixed_or_calc length = (css_fixed_or_calc)0;
     css_unit unit = CSS_UNIT_PX;
     uint8_t type;
-    css_error error;
 
     type = get_line_height(style, &length, &unit);
+    if (type != CSS_LINE_HEIGHT_DIMENSION || unit == CSS_UNIT_PX)
+        return CSS_OK;
 
-    if (type == CSS_LINE_HEIGHT_DIMENSION) {
-        if (unit == CSS_UNIT_EX) {
-            length.value = FMUL(length.value, ex_size->value);
-            unit = ex_size->unit;
-        }
+    /* CSS 2.2 10.8.1: lengths and percentages compute before inheritance.
+     * Numbers and normal remain relative to each descendant's font. Keep
+     * fractional lengths here, without device scaling or a used-font clamp. */
+    css_unit_ctx ctx = *unit_ctx;
+    ctx.font_size_minimum = 0;
+    if (parent == NULL)
+        ctx.root_style = style;
 
-        error = set_line_height(style, type, length, unit);
+    if (unit == CSS_UNIT_CALC) {
+        lwc_string *resolved;
+        bool needs_layout;
+        css_error error = css_calculator_resolve_line_height(length.calc, style, &ctx, &resolved, &needs_layout);
         if (error != CSS_OK)
             return error;
+        if (needs_layout) {
+            length.calc = resolved;
+            error = set_line_height(style, type, length, CSS_UNIT_CALC);
+            lwc_string_unref(resolved);
+            return error;
+        }
+        css_fixed value;
+        error = css_calculator_calculate(style->calc, &ctx, -1, resolved, style, &unit, &value);
+        lwc_string_unref(resolved);
+        /* Leave unsupported expressions to the existing used-value fallback. */
+        if (error == CSS_INVALID)
+            return CSS_OK;
+        if (error != CSS_OK)
+            return error;
+        if (unit != CSS_UNIT_PX && unit != CSS_UNIT_NUMBER)
+            return CSS_OK;
+        length.value = value < 0 ? 0 : value;
+        if (unit == CSS_UNIT_NUMBER)
+            type = CSS_LINE_HEIGHT_NUMBER;
+        unit = CSS_UNIT_PX;
+    } else {
+        /* Wisp resolves viewport/container lengths during reflow. Preserve
+         * their dependency; they do not depend on the inheriting child's font. */
+        css_hint_length resolved = {.value = length.value, .unit = unit};
+        css_unit_compute_line_height(style, &ctx, &resolved);
+        length.value = resolved.value;
+        unit = resolved.unit;
     }
 
-    return CSS_OK;
+    return set_line_height(style, type, length, unit);
 }
 
 /**

@@ -5,6 +5,8 @@
  * Copyright 2024 Daniel Silverstone <dsilvers@netsurf-browser.org>
  */
 
+#include <string.h>
+
 #include "libcss/hint.h"
 
 #include "select/calc.h"
@@ -340,6 +342,71 @@ css_error css_calculator_calculate(css_calculator *calc, const css_unit_ctx *uni
     lwc_string *expr, const css_computed_style *style, css_unit *unit_out, css_fixed *value_out)
 {
     return css__calculator_calculate(calc, unit_ctx, available, expr, style, unit_out, value_out, NULL);
+}
+
+static bool line_height_needs_layout(css_unit unit)
+{
+    return unit != CSS_UNIT_PX && unit != CSS_UNIT_IN && unit != CSS_UNIT_CM && unit != CSS_UNIT_MM &&
+        unit != CSS_UNIT_Q && unit != CSS_UNIT_PT && unit != CSS_UNIT_PC;
+}
+
+css_error css_calculator_resolve_line_height(lwc_string *expr, const css_computed_style *style,
+    const css_unit_ctx *unit_ctx, lwc_string **result, bool *needs_layout)
+{
+    const css_code_t *code = (const css_code_t *)(const void *)lwc_string_data(expr);
+    css_code_t *resolved = NULL;
+    size_t bytes = lwc_string_length(expr);
+    *needs_layout = false;
+
+    /* Expressions are immutable interned bytecode. Copy only when a font-relative
+     * operand needs to be frozen; inherited, already-resolved expressions share
+     * their original storage. Keep viewport/container operands for reflow. */
+    for (size_t i = 0; code[i] != CALC_FINISH;) {
+        if (code[i] == CALC_PUSH_NUMBER) {
+            i += 2;
+        } else if (code[i] == CALC_PUSH_VALUE) {
+            css_unit unit = css__to_css_unit(code[i + 2]);
+            css_hint_length length = {.value = (css_fixed)code[i + 1], .unit = unit};
+            switch (unit) {
+            case CSS_UNIT_PCT:
+            case CSS_UNIT_EM:
+            case CSS_UNIT_EX:
+            case CSS_UNIT_CH:
+            case CSS_UNIT_IC:
+            case CSS_UNIT_REM:
+                css_unit_compute_line_height(style, unit_ctx, &length);
+                if (line_height_needs_layout(length.unit))
+                    *needs_layout = true;
+                break;
+            default:
+                /* Absolute lengths and numbers can be folded immediately. */
+                if ((code[i + 2] & UNIT_LENGTH) && line_height_needs_layout(unit))
+                    *needs_layout = true;
+                i += 3;
+                continue;
+            }
+            if (resolved == NULL) {
+                resolved = malloc(bytes);
+                if (resolved == NULL)
+                    return CSS_NOMEM;
+                memcpy(resolved, code, bytes);
+            }
+            resolved[i + 1] = (css_code_t)length.value;
+            /* Length units share their bytecode/public-enum offsets. */
+            resolved[i + 2] = UNIT_LENGTH + length.unit;
+            assert(css__to_css_unit(resolved[i + 2]) == length.unit);
+            i += 3;
+        } else {
+            i++;
+        }
+    }
+    if (resolved == NULL) {
+        *result = lwc_string_ref(expr);
+        return CSS_OK;
+    }
+    lwc_error error = lwc_intern_string((const char *)resolved, bytes, result);
+    free(resolved);
+    return error == lwc_error_ok ? CSS_OK : CSS_NOMEM;
 }
 
 bool css_calculator_length_is_zero(css_calculator *calc, const css_unit_ctx *unit_ctx,

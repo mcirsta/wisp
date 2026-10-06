@@ -380,6 +380,9 @@ if(WISP_QT_CAPTURE)
         add_test(NAME qt_empty_inline_lines
             COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_empty_inline_lines.py $<TARGET_FILE:wisp-qt>)
         set_tests_properties(qt_empty_inline_lines PROPERTIES TIMEOUT 30)
+        add_test(NAME qt_line_height_inheritance
+            COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_line_height_inheritance.py $<TARGET_FILE:wisp-qt>)
+        set_tests_properties(qt_line_height_inheritance PROPERTIES TIMEOUT 30)
         add_test(NAME qt_inline_wrapping
             COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_inline_wrapping.py $<TARGET_FILE:wisp-qt>)
         set_tests_properties(qt_inline_wrapping PROPERTIES TIMEOUT 30)

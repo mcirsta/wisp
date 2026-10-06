@@ -76,7 +76,7 @@ void css_calculator_unref(css_calculator *calc);
  *
  * \param calc The calculator to use
  * \param unit_ctx The display context for resolving units
- * \param available The available space (for percentages)
+ * \param available The available space in integer device pixels (for percentages)
  * \param style The style from which the expression was derived
  * \param expr The expression to compute
  * \param unit_out The computed unit is placed here
@@ -86,6 +86,12 @@ void css_calculator_unref(css_calculator *calc);
  */
 css_error css_calculator_calculate(css_calculator *calc, const css_unit_ctx *unit_ctx, int32_t available,
     lwc_string *expr, const css_computed_style *style, css_unit *unit_out, css_fixed *value_out);
+
+/** Resolve font-relative operands and percentages in a line-height expression
+ * before inheritance, preserving fractional CSS pixels. Returns an owned
+ * expression reference and whether viewport/container units still need layout. */
+css_error css_calculator_resolve_line_height(lwc_string *expr, const css_computed_style *style,
+    const css_unit_ctx *unit_ctx, lwc_string **result, bool *needs_layout);
 
 /** Test whether a length expression has zero length and percentage components.
  * Does not change the expression or resolve its percentage against a size.

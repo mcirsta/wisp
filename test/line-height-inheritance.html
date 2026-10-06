@@ -1,0 +1,57 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Line-height computes before inheritance</title>
+<style>
+    html { font-size: 40px; }
+    body { margin: 0; }
+    .case { font: 40px sans-serif; margin-bottom: 10px; background: #eee; }
+    .child { font-size: 20px; }
+    #em { line-height: 1em; }
+    #percent { line-height: 125%; }
+    #number { line-height: 1.25; }
+    #pixels { line-height: 40px; }
+    #normal, #normal-control { line-height: normal; }
+    #normal-control { font-size: 20px; }
+    #rem { line-height: 1rem; }
+    #calc { line-height: calc(1em + 10px); }
+    #calc-number { line-height: calc(1 + .25); }
+    #fraction { font-size: 15.5px; line-height: 200%; }
+    #calc-fraction { font-size: 15.5px; line-height: calc(200% + 1px); }
+    #variable { --leading: 1em; line-height: var(--leading); }
+    #shorthand { font: 40px/1em sans-serif; }
+    #nested { line-height: 1em; }
+    #nested .child { line-height: inherit; }
+    #grandchild { font-size: 10px; }
+    #override { line-height: 1em; }
+    #override-child { line-height: 1em; }
+    #viewport { line-height: 10vw; }
+    #calc-viewport { line-height: calc(1em + 10vw); }
+    #calc-percent-viewport { font-size: 15.5px; line-height: calc(200% + 10vw); }
+    #viewport-font { font-size: 10vw; line-height: 1em; }
+    #viewport-font-percent { font-size: 5vw; line-height: 200%; }
+    #viewport-font-calc { font-size: 10vw; line-height: calc(1em + 10px); }
+</style>
+<!-- CSS 2.2 10.8.1: lengths and percentages compute before inheritance.
+     Numbers and normal use the child's font. Two explicit lines avoid any
+     dependence on wrapping, and the fractional cases retain the parent's basis. -->
+<div id="em" class="case"><div id="em-child" class="child">One<br>Two</div></div>
+<div id="percent" class="case"><div id="percent-child" class="child">One<br>Two</div></div>
+<div id="number" class="case"><div id="number-child" class="child">One<br>Two</div></div>
+<div id="pixels" class="case"><div id="pixels-child" class="child">One<br>Two</div></div>
+<div id="normal" class="case"><div id="normal-child" class="child">One<br>Two</div></div>
+<div id="normal-control" class="case">One<br>Two</div>
+<div id="rem" class="case"><div id="rem-child" class="child">One<br>Two</div></div>
+<div id="calc" class="case"><div id="calc-child" class="child">One<br>Two</div></div>
+<div id="calc-number" class="case"><div id="calc-number-child" class="child">One<br>Two</div></div>
+<div id="fraction" class="case"><div id="fraction-child" class="child">One<br>Two</div></div>
+<div id="calc-fraction" class="case"><div id="calc-fraction-child" class="child">One<br>Two</div></div>
+<div id="variable" class="case"><div id="variable-child" class="child">One<br>Two</div></div>
+<div id="shorthand" class="case"><div id="shorthand-child" class="child">One<br>Two</div></div>
+<div id="nested" class="case"><div class="child"><div id="grandchild">One<br>Two</div></div></div>
+<div id="override" class="case"><div id="override-child" class="child">One<br>Two</div></div>
+<div id="viewport" class="case"><div id="viewport-child" class="child">One<br>Two</div></div>
+<div id="calc-viewport" class="case"><div id="calc-viewport-child" class="child">One<br>Two</div></div>
+<div id="calc-percent-viewport" class="case"><div id="calc-percent-viewport-child" class="child">One<br>Two</div></div>
+<div id="viewport-font" class="case"><div id="viewport-font-child" class="child">One<br>Two</div></div>
+<div id="viewport-font-percent" class="case"><div id="viewport-font-percent-child" class="child">One<br>Two</div></div>
+<div id="viewport-font-calc" class="case"><div id="viewport-font-calc-child" class="child">One<br>Two</div></div>
