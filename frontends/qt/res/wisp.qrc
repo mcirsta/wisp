@@ -7,6 +7,7 @@
 	<file>user.css</file>
         <file>languages</file>
 	<file>wisp.png</file>
+	<file alias="wisp.ico">../../../src/resources/wisp.ico</file>
 	<file>favicon.png</file>
 	<file alias="throbber1.png">throbber/throbber1.png</file>
 	<file alias="throbber2.png">throbber/throbber2.png</file>

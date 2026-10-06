@@ -157,18 +157,9 @@ void NS_Scaffold::changeTabTitle(const char *title)
 
 void NS_Scaffold::changeTabIcon(const QIcon &icon)
 {
-    QObject *tabsender = sender();
-    QWidget *tabwidget;
-
-    for (int index = 0; (tabwidget = (NS_Window *)widget(index)) != nullptr; index++) {
-        if (tabwidget == tabsender) {
-            setTabIcon(index, icon);
-            if (isTabVisible(index)) {
-                setWindowIcon(icon);
-            }
-            break;
-        }
-    }
+    const int index = indexOf(qobject_cast<QWidget *>(sender()));
+    if (index >= 0)
+        setTabIcon(index, icon);
 }
 
 

@@ -445,6 +445,7 @@ struct JSContext {
     struct list_head link;
 
     uint16_t binary_object_count;
+    bool job_queue_closed; /* Wisp: the document no longer accepts jobs. */
     int binary_object_size;
 
     JSShape *array_shape; /* initial shape for Array objects */
@@ -1927,6 +1928,11 @@ int JS_EnqueueJob(JSContext *ctx, JSJobFunc *job_func, int argc, JSValueConst *a
 
     assert(!rt->in_free);
 
+    /* A retired document can still be referenced by objects awaiting GC.
+       Silently discard jobs without taking ownership of their arguments. */
+    if (ctx->job_queue_closed)
+        return 0;
+
     e = js_malloc(ctx, sizeof(*e) + argc * sizeof(JSValue));
     if (!e)
         return -1;
@@ -1943,6 +1949,27 @@ int JS_EnqueueJob(JSContext *ctx, JSJobFunc *job_func, int argc, JSValueConst *a
 bool JS_IsJobPending(JSRuntime *rt)
 {
     return !list_empty(&rt->job_list);
+}
+
+/* Wisp extension for retiring a document without running its callbacks. */
+void JS_CloseContextJobs(JSContext *ctx)
+{
+    JSRuntime *rt = ctx->rt;
+    struct list_head *el, *next;
+    int i;
+
+    /* Releasing arguments can itself enqueue FinalizationRegistry jobs. */
+    ctx->job_queue_closed = true;
+    list_for_each_safe(el, next, &rt->job_list)
+    {
+        JSJobEntry *e = list_entry(el, JSJobEntry, link);
+        if (e->ctx != ctx)
+            continue;
+        list_del(&e->link);
+        for (i = 0; i < e->argc; i++)
+            JS_FreeValueRT(rt, e->argv[i]);
+        js_free_rt(rt, e);
+    }
 }
 
 /* return < 0 if exception, 0 if no job pending, 1 if a job was

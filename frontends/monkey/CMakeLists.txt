@@ -75,6 +75,9 @@ if(WISP_ENABLE_TESTS)
     add_test(NAME monkey_fetch_events COMMAND Python3::Interpreter
         ${CMAKE_SOURCE_DIR}/frontends/qt/test_fetch_events.py --monkey $<TARGET_FILE:nsmonkey>)
     set_tests_properties(monkey_fetch_events PROPERTIES TIMEOUT 30 LABELS monkey)
+    add_test(NAME monkey_browser_loading COMMAND Python3::Interpreter
+        ${MONKEY_TEST_DIR}/browser_loading_test.py --monkey $<TARGET_FILE:nsmonkey>)
+    set_tests_properties(monkey_browser_loading PROPERTIES TIMEOUT 40 LABELS monkey)
 endif()
 
 if(WIN32 AND CMAKE_BUILD_TYPE MATCHES Debug)

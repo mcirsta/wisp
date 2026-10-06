@@ -105,6 +105,15 @@ if(BUILD_TESTING AND WISP_ENABLE_TESTS)
             ${CMAKE_CURRENT_SOURCE_DIR}/test_fetch_events.py
             $<TARGET_FILE:qt_fetch_events_test> $<TARGET_FILE:wisp-qt>)
         set_tests_properties(qt_fetch_events PROPERTIES TIMEOUT 30)
+        add_test(NAME qt_browser_loading COMMAND Python3::Interpreter
+            ${CMAKE_SOURCE_DIR}/src/test/browser_loading_test.py --qt $<TARGET_FILE:wisp-qt>)
+        set_tests_properties(qt_browser_loading PROPERTIES TIMEOUT 40)
+        add_test(NAME qt_js_navigation_cleanup COMMAND Python3::Interpreter
+            ${CMAKE_CURRENT_SOURCE_DIR}/test_js_navigation_cleanup.py $<TARGET_FILE:wisp-qt>)
+        set_tests_properties(qt_js_navigation_cleanup PROPERTIES TIMEOUT 30)
+        add_test(NAME qt_favicons COMMAND Python3::Interpreter
+            ${CMAKE_CURRENT_SOURCE_DIR}/test_favicons.py $<TARGET_FILE:wisp-qt>)
+        set_tests_properties(qt_favicons PROPERTIES TIMEOUT 40)
     endif()
 
     add_executable(qt_bitmap_cache_test test_bitmap_cache.cpp bitmap.cpp)
@@ -231,6 +240,13 @@ if(WISP_QT_CAPTURE)
                 COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_float_paint_order.py
                     $<TARGET_FILE:wisp-qt> ${WISP_TEST_MAGICK})
             set_tests_properties(qt_float_paint_order PROPERTIES TIMEOUT 40)
+            if(WISP_TEST_XVFB_RUN)
+                add_test(NAME qt_float_paint_bounds
+                    COMMAND ${WISP_TEST_XVFB_RUN} -a -s "-screen 0 1920x1600x24"
+                        ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_float_paint_bounds.py
+                        $<TARGET_FILE:wisp-qt> ${WISP_TEST_MAGICK})
+                set_tests_properties(qt_float_paint_bounds PROPERTIES TIMEOUT 90 RESOURCE_LOCK qt_native_screen)
+            endif()
             add_test(NAME qt_table_collapsed_borders
                 COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_table_collapsed_borders.py
                     $<TARGET_FILE:wisp-qt> ${WISP_TEST_MAGICK})
@@ -540,3 +556,8 @@ target_include_directories(wisp-qt PRIVATE
 )
 
 install(TARGETS wisp-qt DESTINATION bin)
+if(UNIX AND NOT APPLE)
+    install(FILES res/wisp-qt.desktop DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
+    install(FILES ${CMAKE_SOURCE_DIR}/appimage/wisp.png
+        DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/48x48/apps)
+endif()

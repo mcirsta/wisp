@@ -40,6 +40,16 @@ Each run writes:
   elapsed/quiet time, zoom, DPI, device pixel ratio, font defaults, JavaScript,
   animation and Qt settings, and which artifacts were saved.
 
+`status` uses the browser window's navigation message: its duration starts before
+retrieval and finishes when the document and its frames finish loading. It is
+independent of temporary link/hover text. `elapsed_ms` also includes capture
+setup and settling; it is not the same metric. `cursor_shape` records the Qt
+cursor enum so tests can detect a busy cursor left behind after completion.
+
+`icons` in `capture.json` and `steps.json` records SHA-256 hashes of the 16×16
+RGBA application, window and tab icons, plus each tab's title and selection
+state. This checks favicon updates without relying on desktop theme styling.
+
 ## Text measurement cache comparisons
 
 The Qt frontend keeps width and line-splitting results in one shared LRU across

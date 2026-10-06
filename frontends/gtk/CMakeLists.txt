@@ -56,3 +56,8 @@ target_link_libraries(wisp-gtk wisp m ${WISP_COMMON_LIBS} ${GTK_LIBRARIES})
 install(TARGETS wisp-gtk DESTINATION ${CMAKE_INSTALL_BINDIR})
 install(DIRECTORY res/ DESTINATION ${CMAKE_INSTALL_DATADIR}/wisp-gtk)
 install(FILES ${CMAKE_CURRENT_BINARY_DIR}/res/default.css DESTINATION ${CMAKE_INSTALL_DATADIR}/wisp-gtk)
+if(UNIX AND NOT APPLE)
+    install(FILES res/wisp-gtk.desktop DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
+    install(FILES ${CMAKE_SOURCE_DIR}/appimage/wisp.png
+        DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/48x48/apps)
+endif()

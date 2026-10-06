@@ -1,0 +1,19 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Floats remain visible below their anonymous line</title>
+<style>
+  /* CSS 2.2 Appendix E.2 step 5 paints floating descendants. A zero-height
+     normal-flow wrapper does not clip them (11.1.1, overflow:visible). */
+  html, body { margin: 0; background: white; }
+  header { height: 95px; }
+  #stage { display: flow-root; width: 600px; margin-left: 20px; }
+  #wrapper { height: 0; padding: 17px 0 0 23px; }
+  #column { float: left; width: 120px; height: 1000px; }
+  #first { height: 500px; background: #2266cc; }
+  #second { height: 500px; background: #66bb88; }
+  footer { clear: both; height: 600px; }
+  /* CASE_STYLE */
+</style>
+<header></header>
+<div id="stage"><div id="wrapper"><div id="column"><div id="first"></div><div id="second"></div></div></div></div>
+<footer></footer>

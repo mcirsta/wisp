@@ -499,6 +499,14 @@ nserror browser_window_schedule_reformat(struct browser_window *bw);
  */
 void browser_window_set_pointer(struct browser_window *bw, browser_pointer_shape shape);
 
+/**
+ * Get the root window's loading/completion message, excluding hover text.
+ * The returned string is borrowed and may change on the next browser event.
+ *
+ * \param bw Browser window, or one of its frames
+ */
+const char *browser_window_get_status_message(struct browser_window *bw);
+
 
 /**
  * Start drag scrolling the contents of the browser window

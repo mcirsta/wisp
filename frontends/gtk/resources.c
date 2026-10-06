@@ -293,21 +293,21 @@ static nserror init_direct_resource(char **respath, struct nsgtk_resource_s *res
 static nserror init_pixbuf_resource(char **respath, struct nsgtk_resource_s *resource)
 {
 #ifdef WITH_BUILTIN_PIXBUF
-    if (strncmp(resource->name, "menu_cursor.png", resource->len) == 0) {
+    if (menu_cursor_pixdata != NULL && strncmp(resource->name, "menu_cursor.png", resource->len) == 0) {
         resource->path = (char *)&menu_cursor_pixdata[0];
         resource->type = NSGTK_RESOURCE_INLINE;
         NSLOG(wisp, INFO, "Found builtin for %s", resource->name);
         return NSERROR_OK;
     }
 
-    if (strncmp(resource->name, "wisp.xpm", resource->len) == 0) {
+    if (wisp_pixdata != NULL && strncmp(resource->name, "wisp.xpm", resource->len) == 0) {
         resource->path = (char *)&wisp_pixdata[0];
         resource->type = NSGTK_RESOURCE_INLINE;
         NSLOG(wisp, INFO, "Found builtin for %s", resource->name);
         return NSERROR_OK;
     }
 
-    if (strncmp(resource->name, "favicon.png", resource->len) == 0) {
+    if (favicon_pixdata != NULL && strncmp(resource->name, "favicon.png", resource->len) == 0) {
         resource->path = (char *)&favicon_pixdata[0];
         resource->type = NSGTK_RESOURCE_INLINE;
         NSLOG(wisp, INFO, "Found builtin for %s", resource->name);

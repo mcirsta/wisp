@@ -34,6 +34,149 @@ START_TEST(test_quickjs_init_finalise)
 }
 END_TEST
 
+static int cancelled_job_objects_freed;
+static int executed_job_order;
+
+static void cancelled_job_finalizer(JSRuntime *rt, JSValueConst value)
+{
+    (void)rt;
+    (void)value;
+    cancelled_job_objects_freed++;
+}
+
+static JSValue record_job(JSContext *ctx, int argc, JSValueConst *argv)
+{
+    int32_t value;
+    ck_assert_int_eq(argc, 1);
+    ck_assert_int_eq(JS_ToInt32(ctx, &value, argv[0]), 0);
+    executed_job_order = executed_job_order * 10 + value;
+    return JS_UNDEFINED;
+}
+
+START_TEST(test_quickjs_cancel_jobs)
+{
+    JSRuntime *rt = JS_NewRuntime();
+    JSContext *retired = JS_NewContext(rt);
+    JSContext *active = JS_NewContext(rt);
+    JSContext *executed = NULL;
+    JSClassID class_id = 0;
+    JSClassDef class_def = {.class_name = "QueuedObject", .finalizer = cancelled_job_finalizer};
+    JSValue object, value;
+
+    cancelled_job_objects_freed = executed_job_order = 0;
+    JS_NewClassID(rt, &class_id);
+    ck_assert_int_eq(JS_NewClass(rt, class_id, &class_def), 0);
+    object = JS_NewObjectClass(retired, class_id);
+    ck_assert(!JS_IsException(object));
+    ck_assert_int_eq(JS_EnqueueJob(retired, record_job, 1, &object), 0);
+    value = JS_NewInt32(active, 1);
+    ck_assert_int_eq(JS_EnqueueJob(active, record_job, 1, &value), 0);
+    ck_assert_int_eq(JS_EnqueueJob(retired, record_job, 1, &object), 0);
+    value = JS_NewInt32(active, 2);
+    ck_assert_int_eq(JS_EnqueueJob(active, record_job, 1, &value), 0);
+    JS_FreeValue(retired, object);
+    ck_assert_int_eq(cancelled_job_objects_freed, 0);
+
+    JS_CloseContextJobs(retired);
+    JS_CloseContextJobs(retired); /* Closing twice must be harmless. */
+    ck_assert_int_eq(executed_job_order, 0);
+    ck_assert_int_eq(cancelled_job_objects_freed, 1);
+    object = JS_NewObjectClass(retired, class_id);
+    ck_assert(!JS_IsException(object));
+    ck_assert_int_eq(JS_EnqueueJob(retired, record_job, 1, &object), 0);
+    JS_FreeValue(retired, object);
+    ck_assert_msg(cancelled_job_objects_freed == 2, "A closed context retained a new job's argument");
+    JS_FreeContext(retired);
+    JS_RunGC(rt);
+
+    for (int i = 0; i < 2; i++) {
+        ck_assert_int_eq(JS_ExecutePendingJob(rt, &executed), 1);
+        ck_assert_ptr_eq(executed, active);
+    }
+    ck_assert_int_eq(executed_job_order, 12);
+    ck_assert(!JS_IsJobPending(rt));
+    JS_CloseContextJobs(active);
+    JS_FreeContext(active);
+    JS_FreeRuntime(rt);
+}
+END_TEST
+
+START_TEST(test_quickjs_cancel_promise_jobs)
+{
+    JSRuntime *rt = JS_NewRuntime();
+    JSContext *retired = JS_NewContext(rt);
+    JSContext *active = JS_NewContext(rt);
+    JSContext *executed = NULL;
+    const char *code = "var order = 0;"
+                       "Promise.resolve().then(function() { order = order * 10 + 1; });"
+                       "Promise.resolve().then(function() { order = order * 10 + 2; });";
+    JSValue result;
+    int32_t order;
+
+    result = JS_Eval(retired, code, strlen(code), "retired", JS_EVAL_TYPE_GLOBAL);
+    ck_assert(!JS_IsException(result));
+    JS_FreeValue(retired, result);
+    result = JS_Eval(active, code, strlen(code), "active", JS_EVAL_TYPE_GLOBAL);
+    ck_assert(!JS_IsException(result));
+    JS_FreeValue(active, result);
+
+    JS_CloseContextJobs(retired);
+    result = JS_Eval(retired, "order", 5, "retired", JS_EVAL_TYPE_GLOBAL);
+    ck_assert_int_eq(JS_ToInt32(retired, &order, result), 0);
+    ck_assert_int_eq(order, 0);
+    JS_FreeValue(retired, result);
+    JS_FreeContext(retired);
+    JS_RunGC(rt);
+
+    for (int i = 0; i < 2; i++) {
+        ck_assert_int_eq(JS_ExecutePendingJob(rt, &executed), 1);
+        ck_assert_ptr_eq(executed, active);
+    }
+    ck_assert(!JS_IsJobPending(rt));
+    result = JS_Eval(active, "order", 5, "active", JS_EVAL_TYPE_GLOBAL);
+    ck_assert_int_eq(JS_ToInt32(active, &order, result), 0);
+    ck_assert_int_eq(order, 12);
+    JS_FreeValue(active, result);
+    JS_FreeContext(active);
+    JS_FreeRuntime(rt);
+}
+END_TEST
+
+START_TEST(test_quickjs_cancel_finalization_jobs)
+{
+    JSRuntime *rt = JS_NewRuntime();
+    JSContext *ctx = JS_NewContext(rt);
+    const char *code = "var finalized = 0;"
+                       "var registry = new FinalizationRegistry(function() { finalized++; });"
+                       "var target = {}; registry.register(target, 1);"
+                       "Promise.resolve(target).then(function() {}); target = null;"
+                       "var later = {}; later.self = later;"
+                       "registry.register(later, 2); later = null;";
+    JSValue result = JS_Eval(ctx, code, strlen(code), "finalization", JS_EVAL_TYPE_GLOBAL);
+    int32_t finalized;
+
+    ck_assert(!JS_IsException(result));
+    JS_FreeValue(ctx, result);
+    ck_assert(JS_IsJobPending(rt));
+
+    /* The Promise job holds target alive. Releasing it during cancellation
+     * attempts to queue a FinalizationRegistry callback for this context. */
+    JS_CloseContextJobs(ctx);
+    ck_assert_msg(!JS_IsJobPending(rt), "FinalizationRegistry queued a callback during cancellation");
+
+    /* The unreachable cycle survives until GC: closing must also prevent
+     * jobs from appearing after the cancellation pass has finished. */
+    JS_RunGC(rt);
+    ck_assert_msg(!JS_IsJobPending(rt), "FinalizationRegistry queued a callback after cancellation");
+    result = JS_Eval(ctx, "finalized", 9, "finalization", JS_EVAL_TYPE_GLOBAL);
+    ck_assert_int_eq(JS_ToInt32(ctx, &finalized, result), 0);
+    ck_assert_int_eq(finalized, 0);
+    JS_FreeValue(ctx, result);
+    JS_FreeContext(ctx);
+    JS_FreeRuntime(rt);
+}
+END_TEST
+
 /**
  * Test creating and destroying a heap.
  */
@@ -838,6 +981,9 @@ Suite *quickjs_suite(void)
     tcase_add_test(tc_core, test_quickjs_heap_create_destroy);
     tcase_add_test(tc_core, test_quickjs_thread_create_destroy);
     tcase_add_test(tc_core, test_quickjs_multiple_threads);
+    tcase_add_test(tc_core, test_quickjs_cancel_jobs);
+    tcase_add_test(tc_core, test_quickjs_cancel_promise_jobs);
+    tcase_add_test(tc_core, test_quickjs_cancel_finalization_jobs);
     suite_add_tcase(s, tc_core);
 
     /* Execution test case */

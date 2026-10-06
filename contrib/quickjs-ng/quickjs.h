@@ -1052,6 +1052,11 @@ JS_EXTERN int JS_EnqueueJob(JSContext *ctx, JSJobFunc *job_func, int argc, JSVal
 JS_EXTERN bool JS_IsJobPending(JSRuntime *rt);
 JS_EXTERN int JS_ExecutePendingJob(JSRuntime *rt, JSContext **pctx);
 
+/* Wisp extension: permanently close this context's job queue and discard
+   pending jobs without executing them. Future JS_EnqueueJob calls for this
+   context return 0 without retaining arguments. Other contexts are unaffected. */
+JS_EXTERN void JS_CloseContextJobs(JSContext *ctx);
+
 /* Structure to retrieve (de)serialized SharedArrayBuffer objects. */
 typedef struct JSSABTab {
     uint8_t **tab;

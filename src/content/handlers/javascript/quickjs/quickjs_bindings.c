@@ -62,7 +62,7 @@ struct jsheap {
 /**
  * JavaScript thread structure.
  *
- * Maps to QuickJS's JSContext - one per browsing context.
+ * Maps to QuickJS's JSContext - one per document.
  */
 struct jsthread {
     jsheap *heap;
@@ -86,7 +86,7 @@ struct jsthread {
 void *qjs_get_window_priv(JSContext *ctx)
 {
     struct jsthread *t = JS_GetContextOpaque(ctx);
-    if (t == NULL) {
+    if (t == NULL || t->closed) {
         return NULL;
     }
     return t->win_priv;
@@ -350,6 +350,14 @@ nserror js_closethread(jsthread *thread)
     NSLOG(wisp, DEBUG, "Closing QuickJS thread %p", thread);
 
     thread->closed = true;
+    thread->win_priv = NULL;
+    thread->doc_priv = NULL;
+    if (thread->ctx != NULL) {
+        /* Closing a document must not execute Promise callbacks: they can
+         * navigate while the browser is still replacing its content. Old
+         * and new documents share a runtime, so close only our own queue. */
+        JS_CloseContextJobs(thread->ctx);
+    }
 
     return NSERROR_OK;
 }
@@ -368,17 +376,8 @@ void js_destroythread(jsthread *thread)
     NSLOG(wisp, DEBUG, "Destroying QuickJS thread %p (heap %p)", thread, heap);
 
     if (thread->ctx != NULL) {
-        /* Execute any pending jobs before freeing context.
-         * This is required by QuickJS to properly clean up Promise
-         * callbacks and other async operations that hold references
-         * to function objects.
-         */
-        JSRuntime *rt = JS_GetRuntime(thread->ctx);
-        JSContext *ctx1;
-        while (JS_ExecutePendingJob(rt, &ctx1) > 0) {
-            /* Drain the job queue */
-        }
-
+        js_closethread(thread);
+        JS_SetContextOpaque(thread->ctx, NULL);
         JS_FreeContext(thread->ctx);
         thread->ctx = NULL;
     }

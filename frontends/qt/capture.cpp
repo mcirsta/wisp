@@ -4,6 +4,7 @@
 #include "qt/widget.cls.h"
 
 #include <QApplication>
+#include <QCryptographicHash>
 #include <QDir>
 #include <QEvent>
 #include <QFontInfo>
@@ -14,6 +15,7 @@
 #include <QSaveFile>
 #include <QSettings>
 #include <QScreen>
+#include <QTabWidget>
 #include <QWidget>
 
 extern "C" {
@@ -29,6 +31,30 @@ extern "C" {
 }
 
 NS_Capture *NS_Capture::s_active = nullptr;
+
+// Hash displayed icon pixels, not QIcon cache keys (which vary between runs).
+static QString iconDigest(const QIcon &icon)
+{
+    const QImage pixels = icon.pixmap(16, 16).toImage().convertToFormat(QImage::Format_RGBA8888);
+    if (pixels.isNull())
+        return {};
+    return QString::fromLatin1(QCryptographicHash::hash(
+        QByteArrayView(reinterpret_cast<const char *>(pixels.constBits()), pixels.sizeInBytes()),
+        QCryptographicHash::Sha256).toHex());
+}
+
+static QJsonObject captureIcons(QWidget *widget)
+{
+    QJsonArray tabs;
+    auto *scaffold = qobject_cast<QTabWidget *>(widget->window());
+    if (scaffold) {
+        for (int i = 0; i < scaffold->count(); ++i)
+            tabs.append(QJsonObject{{"title", scaffold->tabText(i)},
+                {"icon", iconDigest(scaffold->tabIcon(i))}, {"current", i == scaffold->currentIndex()}});
+    }
+    return {{"application", iconDigest(QApplication::windowIcon())},
+        {"window", iconDigest(widget->window()->windowIcon())}, {"tabs", tabs}};
+}
 
 /* Viewport rectangles, separated by semicolons, for native damage tests. */
 static QRegion repaintRegion(const QString &value, bool *ok)
@@ -404,6 +430,7 @@ void NS_Capture::poll()
             step["widget_paint"] = static_cast<NS_Widget *>(m_widget.data())->capturePaintStats();
             step["bitmap_cache"] = nsqt_capture_bitmap_cache_stats();
             step["action_ms"] = m_last_action_ms;
+            step["icons"] = captureIcons(m_widget);
             m_steps.append(step);
         }
         if (m_action_index < m_actions.size()) {
@@ -644,7 +671,9 @@ void NS_Capture::finish(const QString &result)
         {"content_url", content ? QString::fromUtf8(nsurl_access(hlcache_handle_get_url(content))) : QString()},
         {"title", QString::fromUtf8(browser_window_get_title(m_bw))},
         {"load_complete", done && !m_loading},
-        {"status", content ? QString::fromUtf8(content_get_status_message(content)) : QString()},
+        {"status", QString::fromUtf8(browser_window_get_status_message(m_bw))},
+        {"cursor_shape", m_widget->cursor().shape()},
+        {"icons", captureIcons(m_widget)},
         {"elapsed_ms", elapsed},
         {"quiet_ms", elapsed - m_last_activity},
         {"text_cache", nsqt_capture_text_cache_stats()},

@@ -275,10 +275,11 @@ struct gui_window_table {
     nserror (*set_url)(struct gui_window *gw, struct nsurl *url);
 
     /**
-     * Set a favicon for a gui window.
+     * Set a page favicon for the tab or other page-specific UI.
+     * The application/window/taskbar icon must keep the frontend's Wisp logo.
      *
      * \param gw window to update.
-     * \param icon handle to object to use as icon.
+     * \param icon handle to object to use as icon, or NULL for the default.
      */
     void (*set_icon)(struct gui_window *gw, struct hlcache_handle *icon);
 

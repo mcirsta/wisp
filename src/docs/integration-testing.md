@@ -36,6 +36,18 @@ The general test build also requires Check, as described in the build
 instructions. Each Monkey test has a CTest timeout. Driver lifecycle checks
 exercise EOF, commands without a final newline, timeout cleanup and final events.
 
+`monkey_browser_loading` uses a local HTTP server to check response/body delays,
+images, stylesheets, frames, redirects, cancellation, failures, and restoration
+of the mouse cursor without further input. The matching `qt_browser_loading`
+capture test checks the displayed navigation duration and actual Qt cursor.
+
+`qt_js_navigation_cleanup` enables JavaScript on a local consent-style form and
+checks that pending Promise callbacks cannot navigate during document cleanup
+or window shutdown. `test_quickjs` checks that cancellation releases queued
+arguments and preserves other contexts' callbacks and their ordering.
+It also checks that closing a context prevents new jobs, including
+`FinalizationRegistry` callbacks triggered while releasing objects or by later GC.
+
 Run one YAML test directly:
 
 ```sh

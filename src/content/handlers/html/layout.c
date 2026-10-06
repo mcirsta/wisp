@@ -7050,13 +7050,9 @@ static void layout_position_relative(const css_unit_ctx *unit_len_ctx, struct bo
  *
  * \param  unit_len_ctx  Length conversion context
  * \param  box      box find bounding box of
- * \param  desc_x0  updated to left of box's bbox
- * \param  desc_y0  updated to top of box's bbox
- * \param  desc_x1  updated to right of box's bbox
- * \param  desc_y1  updated to bottom of box's bbox
+ * \return Border bounds, including the existing text overflow allowance.
  */
-static void layout_get_box_bbox(
-    const css_unit_ctx *unit_len_ctx, struct box *box, int *desc_x0, int *desc_y0, int *desc_x1, int *desc_y1)
+static struct rect layout_get_box_bbox(const css_unit_ctx *unit_len_ctx, struct box *box)
 {
     /* Final geometry consumes pixels, never unresolved layout states. */
     assert(lh__is_resolved(box->width));
@@ -7068,22 +7064,17 @@ static void layout_get_box_bbox(
     }
 #endif
     /* Catch boxes with unresolved width - this would cause overflow */
-    /* Catch boxes with unresolved width - this would cause overflow */
     if (box->width == UNKNOWN_WIDTH || box->width >= 100000000) {
         int pos = (box->style) ? css_computed_position(box->style) : -1;
         fprintf(stderr, "CRITICAL: Box %p Type %d Position %d has invalid width %d in layout_get_box_bbox\n",
             (void *)box, box->type, pos, box->width);
         struct box *p = box->parent;
         int depth = 0;
-        int box_type = box->parent ? box->parent->type : -1;
 
         fprintf(stderr, "CRITICAL: Box %p (width %d) Ancestry:\n", (void *)box, box->width);
 
         while (p && depth < 20) {
             fprintf(stderr, "CRITICAL: Ancestor[%d] %p type %d width %d\n", depth, (void *)p, p->type, p->width);
-            if (p->type == 1 /* BOX_BLOCK */ && p->parent && p->parent->type == 17 /* INLINE_GRID */) {
-                /* Interesting case */
-            }
             p = p->parent;
             depth++;
         }
@@ -7108,13 +7099,12 @@ static void layout_get_box_bbox(
         abort();
     }
 
-    *desc_x0 = -box->border[LEFT].width;
-    *desc_y0 = -box->border[TOP].width;
-    *desc_x1 = box->padding[LEFT] + box->width + box->padding[RIGHT] + box->border[RIGHT].width;
-    *desc_y1 = box->padding[TOP] + box->height + box->padding[BOTTOM] + box->border[BOTTOM].width;
+    struct rect bounds = {-box->border[LEFT].width, -box->border[TOP].width,
+        box->padding[LEFT] + box->width + box->padding[RIGHT] + box->border[RIGHT].width,
+        box->padding[TOP] + box->height + box->padding[BOTTOM] + box->border[BOTTOM].width};
 
     /* Assert: result must be reasonable */
-    assert(*desc_x1 < 100000000 && "desc_x1 calculation produced huge value");
+    assert(bounds.x1 < 100000000 && "desc_x1 calculation produced huge value");
 
     /* To stop the top of text getting clipped when css line-height is
      * reduced, we increase the top of the descendant bbox. */
@@ -7133,8 +7123,9 @@ static void layout_get_box_bbox(
             text_height = css_unit_len2device_px(box->style, unit_len_ctx, font_size.value, font_unit);
         }
         text_height = FIXTOINT(text_height * 3 / 4);
-        *desc_y0 = (*desc_y0 < -text_height) ? *desc_y0 : -text_height;
+        bounds.y0 = min(bounds.y0, -text_height);
     }
+    return bounds;
 }
 
 
@@ -7144,28 +7135,25 @@ static void layout_get_box_bbox(
  * \param  unit_len_ctx  Length conversion context
  * \param  box      box to update
  * \param  child    a box, which may affect box's descendant bbox
- * \param  off_x    offset to apply to child->x coord to treat as child of box
- * \param  off_y    offset to apply to child->y coord to treat as child of box
  */
-static void layout_update_descendant_bbox(
-    const css_unit_ctx *unit_len_ctx, struct box *box, struct box *child, int off_x, int off_y)
+static void layout_update_descendant_bbox(const css_unit_ctx *unit_len_ctx, struct box *box, struct box *child)
 {
     if (child->abs_containing_block && (child->abs_containing_block->flags & IS_VIEWPORT))
         return;
 
-    int child_desc_x0, child_desc_y0, child_desc_x1, child_desc_y1;
-
-    /* get coordinates of child relative to box */
-    int child_x = child->x - off_x;
-    int child_y = child->y - off_y;
-
-    if (child->abs_containing_block != NULL) {
-        /* Absolute coordinates belong to the containing block, which may skip
-         * the immediate parent (or the flattened inline fragment). Translate
-         * to this box before accumulating overflow, without scroll offsets. */
-        if (child->abs_containing_block == box) {
-            child_x = child->x;
-            child_y = child->y;
+    int child_x = child->x, child_y = child->y;
+    struct box *coordinate_parent = child->abs_containing_block;
+    if (!coordinate_parent) {
+        coordinate_parent = (child->type == BOX_FLOAT_LEFT || child->type == BOX_FLOAT_RIGHT) ? child->float_container
+                                                                                              : child->parent;
+    }
+    if (coordinate_parent != box) {
+        /* Inline contents are flattened siblings; floats and positioned boxes
+         * use a coordinate ancestor that can skip structural parents. Put all
+         * of them in this box's unscrolled coordinate space before unioning. */
+        if (box->type == BOX_INLINE && coordinate_parent == box->parent) {
+            child_x -= box->x;
+            child_y -= box->y;
         } else {
             int box_x, box_y;
             box_coords_unscrolled(child, &child_x, &child_y);
@@ -7191,38 +7179,32 @@ static void layout_update_descendant_bbox(
         child->width >= -1 && child->width < 100000000 && "child has invalid width in layout_update_descendant_bbox");
 
     /* Get child's border edge */
-    layout_get_box_bbox(unit_len_ctx, child, &child_desc_x0, &child_desc_y0, &child_desc_x1, &child_desc_y1);
+    struct rect bounds = layout_get_box_bbox(unit_len_ctx, child);
 
     if (overflow_x == CSS_OVERFLOW_VISIBLE && html_object == false) {
         /* get child's descendant bbox relative to box */
-        child_desc_x0 = child->descendant_x0;
-        child_desc_x1 = child->descendant_x1;
+        bounds.x0 = child->descendant_x0;
+        bounds.x1 = child->descendant_x1;
         /* Assert: child's descendant_x1 must be reasonable */
-        assert(child_desc_x1 < 100000000 && "child has INT_MAX descendant_x1 - propagating to parent");
+        assert(bounds.x1 < 100000000 && "child has INT_MAX descendant_x1 - propagating to parent");
     }
     if (overflow_y == CSS_OVERFLOW_VISIBLE && html_object == false) {
         /* get child's descendant bbox relative to box */
-        child_desc_y0 = child->descendant_y0;
-        child_desc_y1 = child->descendant_y1;
+        bounds.y0 = child->descendant_y0;
+        bounds.y1 = child->descendant_y1;
     }
 
-    child_desc_x0 += child_x;
-    child_desc_y0 += child_y;
-    child_desc_x1 += child_x;
-    child_desc_y1 += child_y;
+    bounds.x0 += child_x;
+    bounds.y0 += child_y;
+    bounds.x1 += child_x;
+    bounds.y1 += child_y;
 
     /* increase box's descendant bbox to contain descendants */
-    if (child_desc_x0 < box->descendant_x0)
-        box->descendant_x0 = child_desc_x0;
-    if (child_desc_y0 < box->descendant_y0)
-        box->descendant_y0 = child_desc_y0;
-    if (box->descendant_x1 < child_desc_x1) {
-        /* Assert: catch INT_MAX propagation */
-        assert(child_desc_x1 < 100000000 && "About to set box->descendant_x1 to INT_MAX from child");
-        box->descendant_x1 = child_desc_x1;
-    }
-    if (box->descendant_y1 < child_desc_y1)
-        box->descendant_y1 = child_desc_y1;
+    assert(bounds.x1 < 100000000 && "About to set box->descendant_x1 to INT_MAX from child");
+    box->descendant_x0 = min(box->descendant_x0, bounds.x0);
+    box->descendant_y0 = min(box->descendant_y0, bounds.y0);
+    box->descendant_x1 = max(box->descendant_x1, bounds.x1);
+    box->descendant_y1 = max(box->descendant_y1, bounds.y1);
 }
 
 
@@ -7251,8 +7233,11 @@ static void layout_calculate_descendant_bboxes(const css_unit_ctx *unit_len_ctx,
     }
 
     /* Initialise box's descendant box to border edge box */
-    layout_get_box_bbox(
-        unit_len_ctx, box, &box->descendant_x0, &box->descendant_y0, &box->descendant_x1, &box->descendant_y1);
+    struct rect bounds = layout_get_box_bbox(unit_len_ctx, box);
+    box->descendant_x0 = bounds.x0;
+    box->descendant_y0 = bounds.y0;
+    box->descendant_x1 = bounds.x1;
+    box->descendant_y1 = bounds.y1;
     if (box->type == BOX_TABLE && table_has_collapsed_borders(box)) {
         const struct table_border_grid *grid = box->table->borders;
         /* CSS 2.2 uses the first row to size the table's left/right outer
@@ -7301,7 +7286,7 @@ static void layout_calculate_descendant_bboxes(const css_unit_ctx *unit_len_ctx,
             if (child->type == BOX_FLOAT_LEFT || child->type == BOX_FLOAT_RIGHT)
                 continue;
 
-            layout_update_descendant_bbox(unit_len_ctx, box, child, box->x, box->y);
+            layout_update_descendant_bbox(unit_len_ctx, box, child);
 
             if (child == box->inline_end)
                 break;
@@ -7313,36 +7298,27 @@ static void layout_calculate_descendant_bboxes(const css_unit_ctx *unit_len_ctx,
         /* Box's children aren't displayed if the box is replaced */
         return;
 
+    /* Paint walks the structural tree (CSS 2.2 Appendix E.2). Bounds used to
+     * prune that walk must include floats through every intervening ancestor,
+     * even a zero-height inline container. Walking the formatting-context
+     * float list separately would bypass those ancestors' bounds/clips.
+     * Keep each box's content extents here and apply its overflow when merging
+     * it into its parent. This does not change any normal-flow dimensions. */
     for (child = box->children; child; child = child->next) {
-        if (child->type == BOX_FLOAT_LEFT || child->type == BOX_FLOAT_RIGHT)
-            continue;
-
         layout_calculate_descendant_bboxes(unit_len_ctx, child);
 
         /* Catch if child has invalid descendant values after processing */
         assert(child->descendant_x1 < 100000000 &&
             "Child has huge descendant_x1 after layout_calculate_descendant_bboxes");
 
-        if (box->style && css_computed_overflow_x(box->style) == CSS_OVERFLOW_HIDDEN &&
-            css_computed_overflow_y(box->style) == CSS_OVERFLOW_HIDDEN)
-            continue;
-
-        layout_update_descendant_bbox(unit_len_ctx, box, child, 0, 0);
-    }
-
-    for (child = box->float_children; child; child = child->next_float) {
-        assert(child->type == BOX_FLOAT_LEFT || child->type == BOX_FLOAT_RIGHT);
-
-        layout_calculate_descendant_bboxes(unit_len_ctx, child);
-
-        layout_update_descendant_bbox(unit_len_ctx, box, child, 0, 0);
+        layout_update_descendant_bbox(unit_len_ctx, box, child);
     }
 
     if (box_has_outside_marker(box)) {
         child = box->list_marker;
         layout_calculate_descendant_bboxes(unit_len_ctx, child);
 
-        layout_update_descendant_bbox(unit_len_ctx, box, child, 0, 0);
+        layout_update_descendant_bbox(unit_len_ctx, box, child);
     }
 }
 

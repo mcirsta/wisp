@@ -47,11 +47,8 @@ class NS_Window : public QWidget
 
 public:
     NS_Window(QWidget *parent, struct browser_window *bw);
-    ~NS_Window();
 
     void destroy(void);
-
-    nserror advance_throbber(bool cont);
 
     /* static wrappers to be able to call instance methods */
     static nserror static_set_scroll(struct gui_window *gw, const struct rect *rect);
@@ -73,7 +70,7 @@ public:
 
 signals:
     void titleChanged(const char *title);
-    void iconChanged(const QIcon &icon);
+    void faviconChanged(const QIcon &icon);
 
 protected:
     void closeEvent(QCloseEvent *event);
@@ -90,10 +87,6 @@ private:
     QScrollBar *m_hscrollbar;
     /** status text label */
     QLabel *m_status;
-    /** current throbber frame or 0 to use favicon */
-    unsigned int m_throbber_frame;
-    /** current favicon */
-    QIcon *m_favicon;
 
     /**
      * set the current position of the scroll bars
@@ -111,9 +104,4 @@ private:
      * Update the extent of the underlying canvas
      */
     nserror update_extent();
-
-    /**
-     * Set the favicoin
-     */
-    void set_favicon(QIcon *icon);
 };

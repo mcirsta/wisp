@@ -156,8 +156,16 @@ struct browser_window {
      */
     struct gui_window *window;
 
-    /** Busy indicator is active. */
+    /** This document is loading (descendants track their own loads). */
     bool throbbing;
+    /** Root-window loading interval, including all descendant frames. */
+    struct {
+        bool active;
+        uint64_t started;
+        char status[120]; /**< Final status, independent of transient hover text. */
+    } load;
+    /** Requested cursor before the loading override (root window only). */
+    browser_pointer_shape pointer;
     /** Add loading_content to the window history when it loads. */
     bool history_add;
     /** Internal navigation, do not update URL etc */
@@ -254,9 +262,6 @@ struct browser_window {
     /** browser window child of root browser window which has input focus */
     struct browser_window *focus;
 
-    /** Last time a link was followed in this window */
-    uint64_t last_action;
-
     /** Current selection */
     struct {
         struct browser_window *bw;
@@ -329,7 +334,7 @@ nserror browser_window_invalidate_rect(struct browser_window *bw, struct rect *r
  * Change the status bar of a browser window.
  *
  * \param  bw	 browser window
- * \param  text  new status text (copied)
+ * \param  text  new status text (copied), or NULL to restore loading status
  */
 void browser_window_set_status(struct browser_window *bw, const char *text);
 

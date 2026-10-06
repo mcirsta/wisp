@@ -703,7 +703,9 @@ nserror browser_window_create_frameset(struct browser_window *bw)
 
 void browser_window_recalculate_frameset(struct browser_window *bw)
 {
-    if (content_get_type(bw->current_content) != CONTENT_HTML) {
+    /* Initial content reformat precedes creation of the child windows. There
+     * are no frame dimensions to recalculate until that creation completes. */
+    if (bw->children == NULL || content_get_type(bw->current_content) != CONTENT_HTML) {
         return;
     }
 

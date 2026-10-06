@@ -50,13 +50,6 @@ extern "C" {
 #ifdef WISP_QT_CAPTURE
 #include "qt/capture.h"
 #endif
-/**
- * time (in ms) between throbber animation frame updates
- */
-#define THROBBER_FRAME_TIME (100)
-
-#define THROBBER_FRAME_COUNT (8)
-
 struct gui_window {
     class NS_Window *window;
 };
@@ -66,7 +59,7 @@ struct gui_window {
  * netsurf window class constructor
  */
 NS_Window::NS_Window(QWidget *parent, struct browser_window *bw)
-    : QWidget(parent), m_bw(bw), m_throbber_frame(0), m_favicon(new QIcon(":favicon.png"))
+    : QWidget(parent), m_bw(bw)
 {
     setFocusPolicy(Qt::StrongFocus);
 
@@ -114,12 +107,6 @@ NS_Window::NS_Window(QWidget *parent, struct browser_window *bw)
     addAction(m_actions->m_quit);
     addAction(m_actions->m_newtab);
     addAction(m_actions->m_newwindow);
-}
-
-NS_Window::~NS_Window()
-{
-    advance_throbber(false);
-    delete m_favicon;
 }
 
 void NS_Window::closeEvent(QCloseEvent *event)
@@ -249,27 +236,6 @@ nserror NS_Window::update_extent()
     return NSERROR_OK;
 }
 
-// Throbber functionality removed to prevent repaint loop hangs
-
-nserror NS_Window::advance_throbber(bool cont)
-{
-    return NSERROR_OK;
-}
-
-void NS_Window::set_favicon(QIcon *icon)
-{
-    delete m_favicon;
-    if (icon == nullptr) {
-        m_favicon = new QIcon(":favicon.png");
-    } else {
-        m_favicon = icon;
-    }
-
-    if (m_throbber_frame == 0) {
-        iconChanged(*m_favicon);
-    }
-}
-
 /* static methods */
 
 /**
@@ -297,25 +263,25 @@ void NS_Window::static_set_title(struct gui_window *gw, const char *title)
 
 
 /**
- * Set the icon of a window.
+ * Set the tab's favicon; never change the application's window icon.
  *
- * \param gw The gui window to set title of.
- * \param title new window title
+ * \param gw The gui window whose tab should be updated.
+ * \param icon_handle Favicon content, or NULL to restore the default.
  */
 void NS_Window::static_set_icon(struct gui_window *gw, struct hlcache_handle *icon_handle)
 {
-    QIcon *icon = nullptr;
+    QIcon icon;
 
     if (icon_handle != NULL) {
         struct bitmap *icon_bitmap = NULL;
         icon_bitmap = content_get_bitmap(icon_handle);
         if (icon_bitmap != NULL) {
             const QImage img = *(QImage *)icon_bitmap;
-            icon = new QIcon(QPixmap::fromImage(img, Qt::AutoColor));
+            icon = QIcon(QPixmap::fromImage(img, Qt::AutoColor));
         }
     }
 
-    gw->window->set_favicon(icon);
+    emit gw->window->faviconChanged(icon.isNull() ? QIcon(":favicon.ico") : icon);
 }
 
 
@@ -382,7 +348,7 @@ nserror NS_Window::static_set_url(struct gui_window *gw, struct nsurl *url)
  */
 nserror NS_Window::static_event(struct gui_window *gw, enum gui_window_event event)
 {
-    nserror res;
+    nserror res = NSERROR_OK;
 
 #ifdef WISP_QT_CAPTURE
     if (NS_Capture::active()) {
@@ -399,12 +365,10 @@ nserror NS_Window::static_event(struct gui_window *gw, enum gui_window_event eve
         break;
 
     case GW_EVENT_START_THROBBER:
-        res = gw->window->advance_throbber(true);
         gw->window->m_actions->update(NS_Actions::UpdateActive);
         break;
 
     case GW_EVENT_STOP_THROBBER:
-        res = gw->window->advance_throbber(false);
         gw->window->m_actions->update(NS_Actions::UpdateInactive);
         break;
 
@@ -583,9 +547,9 @@ NS_Window::static_create(struct browser_window *bw, struct gui_window *existing,
         return NULL;
     }
 
-    tabidx = scaffold->addTab(gw->window, messages_get("NewTab"));
+    tabidx = scaffold->addTab(gw->window, QIcon(":favicon.ico"), messages_get("NewTab"));
     connect(gw->window, &NS_Window::titleChanged, scaffold, &NS_Scaffold::changeTabTitle);
-    connect(gw->window, &NS_Window::iconChanged, scaffold, &NS_Scaffold::changeTabIcon);
+    connect(gw->window, &NS_Window::faviconChanged, scaffold, &NS_Scaffold::changeTabIcon);
     if (flags & GW_CREATE_FOREGROUND) {
         scaffold->setCurrentIndex(tabidx);
     }

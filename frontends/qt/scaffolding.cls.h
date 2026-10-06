@@ -51,8 +51,8 @@ public slots:
     /**
      * scaffolding slot to change tab icon
      *
-     * iterates all the tabs to check if the signal came from one on this
-     * notebook and if so update the icon.
+     * Update only the emitting tab, including background tabs. Application
+     * and top-level window icons always retain the Wisp logo.
      */
     void changeTabIcon(const QIcon &icon);
 

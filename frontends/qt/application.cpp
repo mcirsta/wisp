@@ -22,6 +22,7 @@
  */
 
 #include <QDir>
+#include <QIcon>
 #include <QResource>
 #include <QScreen>
 #include <QSettings>
@@ -379,6 +380,9 @@ NS_Application::NS_Application(int &argc, char **argv, struct wisp_table *nsqt_t
     setOrganizationName("Wisp");
     setOrganizationDomain("wispbrowser.com");
     setApplicationName("Wisp");
+    setDesktopFileName("wisp-qt");
+    // Application/window identity stays independent of each tab's favicon.
+    setWindowIcon(QIcon(":wisp.ico"));
 
     // set up scheduler timer
     m_schedule_timer = new QTimer(this);

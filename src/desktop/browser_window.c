@@ -368,7 +368,7 @@ static bool browser_window_check_throbber(struct browser_window *bw)
 
 
 /**
- * Start the busy indicator.
+ * Start a document load and, if needed, the root's navigation interval.
  *
  * \param bw browser window
  */
@@ -379,12 +379,19 @@ static nserror browser_window_start_throbber(struct browser_window *bw)
     while (bw->parent)
         bw = bw->parent;
 
+    if (bw->load.active)
+        return NSERROR_OK;
+
+    bw->load.active = true;
+    bw->load.status[0] = '\0';
+    nsu_getmonotonic_ms(&bw->load.started);
+    browser_window_set_pointer(bw, bw->pointer);
     return guit->window->event(bw->window, GW_EVENT_START_THROBBER);
 }
 
 
 /**
- * Stop the busy indicator.
+ * Retire a document load; finish the UI state once every frame is idle.
  *
  * \param bw browser window
  */
@@ -398,12 +405,42 @@ static nserror browser_window_stop_throbber(struct browser_window *bw)
         bw = bw->parent;
     }
 
-    if (!browser_window_check_throbber(bw)) {
+    if (bw->load.active && !browser_window_check_throbber(bw)) {
+        uint64_t now;
+        nsu_getmonotonic_ms(&now);
+        bw->load.active = false;
+        /* Stop/error paths supply their own terminal message. A document's
+         * content timer excludes the initial response wait and other frames. */
+        if (bw->load.status[0] == '\0') {
+            snprintf(bw->load.status, sizeof(bw->load.status), "%s (%.1fs)", messages_get("Done"),
+                (double)(now - bw->load.started) / 1000);
+        }
+        browser_window_set_status(bw, NULL);
+        browser_window_set_pointer(bw, bw->pointer);
         res = guit->window->event(bw->window, GW_EVENT_STOP_THROBBER);
+    } else if (bw->load.active) {
+        browser_window_set_status(bw, NULL);
     }
     return res;
 }
 
+
+/** Release this document's favicon and cancel any unfinished request. */
+static void browser_window_release_favicon(struct browser_window *bw)
+{
+    if (bw->favicon.loading != NULL) {
+        hlcache_handle_replace_callback(bw->favicon.loading, NULL, NULL);
+        hlcache_handle_abort(bw->favicon.loading);
+        hlcache_handle_release(bw->favicon.loading);
+        bw->favicon.loading = NULL;
+    }
+    if (bw->favicon.current != NULL) {
+        content_close(bw->favicon.current);
+        hlcache_handle_release(bw->favicon.current);
+        bw->favicon.current = NULL;
+    }
+    bw->favicon.failed = false;
+}
 
 /**
  * Callback for fetchcache() for browser window favicon fetches.
@@ -863,7 +900,7 @@ static nserror browser_window_content_ready(struct browser_window *bw)
     /* new content; set scroll_to_top */
     browser_window_update(bw, true);
     content_open(bw->current_content, bw, 0, 0);
-    browser_window_set_status(bw, content_get_status_message(bw->current_content));
+    browser_window_set_status(bw, NULL);
 
     /* frames */
     res = browser_window_create_frameset(bw);
@@ -902,7 +939,6 @@ static nserror browser_window_content_done(struct browser_window *bw)
     }
 
     browser_window_update(bw, false);
-    browser_window_set_status(bw, content_get_status_message(bw->current_content));
     browser_window_stop_throbber(bw);
     browser_window_update_favicon(bw->current_content, bw, NULL);
 
@@ -1316,6 +1352,12 @@ static nserror browser_window__handle_error(struct browser_window *bw, hlcache_h
     NSLOG(
         wisp, INFO, "browser_window__handle_error: code=%d message='%s' url='%s'", code, message, nsurl_access(url));
 
+    /* Errors can also arise after loading, for example during a later layout.
+     * Include the error page in an active interval before preserving its reason. */
+    browser_window_start_throbber(bw);
+    if (bw->parent == NULL)
+        snprintf(bw->load.status, sizeof(bw->load.status), "%s", message);
+
     if (c == bw->loading_content) {
         bw->loading_content = NULL;
     } else if (c == bw->current_content) {
@@ -1352,6 +1394,8 @@ static nserror browser_window__handle_error(struct browser_window *bw, hlcache_h
         break;
     }
 
+    if (res != NSERROR_OK)
+        browser_window_stop_throbber(bw);
     return res;
 }
 
@@ -1418,7 +1462,7 @@ static nserror browser_window_callback(hlcache_handle *c, const hlcache_event *e
 #endif
         {
             bw->refresh_interval = -1;
-            browser_window_set_status(bw, content_get_status_message(c));
+            browser_window_set_status(bw, NULL);
         }
         break;
 
@@ -1447,25 +1491,10 @@ static nserror browser_window_callback(hlcache_handle *c, const hlcache_event *e
         break;
 
     case CONTENT_MSG_STATUS:
-        if (event->data.explicit_status_text == NULL) {
-            /* Object content's status text updated */
-            const char *status = NULL;
-            if (bw->loading_content != NULL) {
-                /* Give preference to any loading content */
-                status = content_get_status_message(bw->loading_content);
-            }
-
-            if (status == NULL) {
-                status = content_get_status_message(c);
-            }
-
-            if (status != NULL) {
-                browser_window_set_status(bw, status);
-            }
-        } else {
-            /* Object content wants to set explicit message */
-            browser_window_set_status(bw, event->data.explicit_status_text);
-        }
+        /* NULL restores the whole navigation's status, not an old page's or
+         * child document's Done message. Explicit link/selection text remains
+         * transient and does not replace the final loading message. */
+        browser_window_set_status(bw, event->data.explicit_status_text);
         break;
 
     case CONTENT_MSG_REFORMAT:
@@ -1775,17 +1804,7 @@ nserror browser_window_destroy_internal(struct browser_window *bw)
         bw->current_content = NULL;
     }
 
-    if (bw->favicon.loading != NULL) {
-        hlcache_handle_abort(bw->favicon.loading);
-        hlcache_handle_release(bw->favicon.loading);
-        bw->favicon.loading = NULL;
-    }
-
-    if (bw->favicon.current != NULL) {
-        content_close(bw->favicon.current);
-        hlcache_handle_release(bw->favicon.current);
-        bw->favicon.current = NULL;
-    }
+    browser_window_release_favicon(bw);
 
     if (bw->jsheap != NULL) {
         js_destroyheap(bw->jsheap);
@@ -2906,9 +2925,6 @@ nserror browser_window_create(enum browser_window_create_flags flags, nsurl *url
     ret->no_resize = true;
     ret->focus = ret;
 
-    /* initialise last action with creation time */
-    nsu_getmonotonic_ms(&ret->last_action);
-
     /* The existing gui_window is on the top-level existing
      * browser_window. */
     existing = browser_window_get_root(existing);
@@ -2990,6 +3006,7 @@ nserror browser_window_initialise_common(
     bw->scroll_y = NULL;
 
     bw->focus = NULL;
+    bw->pointer = BROWSER_POINTER_AUTO;
 
     /* initialise status text cache */
     bw->status.text = NULL;
@@ -3298,6 +3315,9 @@ static nserror navigate_internal_real(struct browser_window *bw, struct browser_
         fetch_flags |= HLCACHE_RETRIEVE_MAY_DOWNLOAD;
     }
 
+    /* Start before retrieval so DNS, connection setup and response waiting
+     * belong to the same interval as document and frame processing. */
+    browser_window_start_throbber(bw);
     res = hlcache_handle_retrieve(params->url, fetch_flags | HLCACHE_RETRIEVE_SNIFF_TYPE, params->referrer,
         fetch_is_post ? &post : NULL, browser_window_callback, bw, params->parent_charset != NULL ? &child : NULL,
         CONTENT_ANY, &c);
@@ -3305,7 +3325,9 @@ static nserror navigate_internal_real(struct browser_window *bw, struct browser_
     switch (res) {
     case NSERROR_OK:
         bw->loading_content = c;
-        browser_window_start_throbber(bw);
+        /* A previous page's late favicon must neither replace the new tab icon
+         * nor prevent this document from starting its own favicon request. */
+        browser_window_release_favicon(bw);
         if (bw->window != NULL) {
             guit->window->set_icon(bw->window, NULL);
         }
@@ -3319,15 +3341,14 @@ static nserror navigate_internal_real(struct browser_window *bw, struct browser_
          * unverifiable content?
          */
         res = guit->misc->launch_url(params->url);
-        break;
+        /* fall through */
 
     default: /* report error to user */
-        browser_window_set_status(bw, messages_get_errorcode(res));
+        if (res != NSERROR_OK && bw->parent == NULL)
+            snprintf(bw->load.status, sizeof(bw->load.status), "%s", messages_get_errorcode(res));
+        browser_window_stop_throbber(bw);
         break;
     }
-
-    /* Record time */
-    nsu_getmonotonic_ms(&bw->last_action);
 
     return res;
 }
@@ -3836,6 +3857,11 @@ void browser_window_stop(struct browser_window *bw)
 {
     int children, index;
 
+    /* Aborting READY content can synchronously send DONE. Preserve cancellation
+     * before invoking it, so that callback cannot report a successful load. */
+    if (bw->parent == NULL && bw->load.active)
+        snprintf(bw->load.status, sizeof(bw->load.status), "%s", messages_get("Stopped"));
+
     if (bw->loading_content != NULL) {
         hlcache_handle_abort(bw->loading_content);
         hlcache_handle_release(bw->loading_content);
@@ -3914,13 +3940,36 @@ nserror browser_window_reload(struct browser_window *bw, bool all)
 }
 
 
-/* Exported interface, documented in neosurf/browser_window.h */
+/* Exported interface, documented in wisp/browser_window.h */
+const char *browser_window_get_status_message(struct browser_window *bw)
+{
+    bw = browser_window_get_root(bw);
+    if (!bw->load.active && bw->load.status[0] != '\0')
+        return bw->load.status;
+
+    hlcache_handle *content = bw->loading_content ? bw->loading_content : bw->current_content;
+    if (content != NULL &&
+        (content_get_status(content) == CONTENT_STATUS_LOADING ||
+            content_get_status(content) == CONTENT_STATUS_READY)) {
+        const char *status = content_get_status_message(content);
+        if (status != NULL)
+            return status;
+    }
+    /* The root may be DONE while its frames are still loading. */
+    return bw->load.active ? messages_get("Loading") : "";
+}
+
+
+/* Exported interface, documented in desktop/browser_private.h */
 void browser_window_set_status(struct browser_window *bw, const char *text)
 {
     int text_len;
     /* find topmost window */
     while (bw->parent)
         bw = bw->parent;
+
+    if (text == NULL)
+        text = browser_window_get_status_message(bw);
 
     if ((bw->status.text != NULL) && (strcmp(text, bw->status.text) == 0)) {
         /* status text is unchanged */
@@ -3952,25 +4001,23 @@ void browser_window_set_pointer(struct browser_window *bw, browser_pointer_shape
 {
     struct browser_window *root = browser_window_get_root(bw);
     gui_pointer_shape gui_shape;
-    bool loading;
     uint64_t ms_now;
 
     assert(root);
     assert(root->window);
 
-    loading = ((bw->loading_content != NULL) ||
-        ((bw->current_content != NULL) && (content_get_status(bw->current_content) == CONTENT_STATUS_READY)));
+    root->pointer = shape;
 
     nsu_getmonotonic_ms(&ms_now);
 
-    if (loading && ((ms_now - bw->last_action) < 1000)) {
-        /* If loading and less than 1 second since last link followed,
+    if (root->load.active && ((ms_now - root->load.started) < 1000)) {
+        /* If loading and less than 1 second since navigation started,
          * force progress indicator pointer */
         gui_shape = GUI_POINTER_PROGRESS;
 
     } else if (shape == BROWSER_POINTER_AUTO) {
         /* Up to browser window to decide */
-        if (loading) {
+        if (root->load.active) {
             gui_shape = GUI_POINTER_PROGRESS;
         } else {
             gui_shape = GUI_POINTER_DEFAULT;
@@ -4249,9 +4296,7 @@ bool browser_window_reload_available(struct browser_window *bw)
 /* exported interface documented in neosurf/browser_window.h */
 bool browser_window_stop_available(struct browser_window *bw)
 {
-    return (bw &&
-        (bw->loading_content ||
-            (bw->current_content && (content_get_status(bw->current_content) != CONTENT_STATUS_DONE))));
+    return bw && browser_window_check_throbber(bw);
 }
 
 /* exported interface documented in neosurf/browser_window.h */
