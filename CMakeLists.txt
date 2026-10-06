@@ -246,7 +246,11 @@ option(WISP_ENABLE_LTO "Enable Link Time Optimization" ${DEFAULT_WISP_ENABLE_LTO
 
 if(WISP_ENABLE_LTO)
     add_compile_options(-flto -ffunction-sections -fdata-sections)
-    add_link_options(-flto -Wl,--gc-sections)
+    # GCC's plain -flto can compile LTO partitions serially under Ninja.
+    # Let GCC use the jobserver or detect CPU parallelism, keeping full LTO.
+    add_link_options(
+        "$<IF:$<OR:$<LINK_LANG_AND_ID:C,GNU>,$<LINK_LANG_AND_ID:CXX,GNU>>,-flto=auto,-flto>"
+        -Wl,--gc-sections)
     message(STATUS "Enabled Link Time Optimization (LTO)")
 endif()
 

@@ -44,3 +44,20 @@ At build-time, Wisp requires the following programs:
 WebP support (`WISP_USE_WEBP=ON`, the default) requires `libwebp` and
 `libwebpdemux`. Animated WebP images display their fully composited first frame;
 playback is not currently supported.
+
+For an optimized Linux build, select Release explicitly (the Ninja generator
+does not select a build type):
+
+```sh
+cmake -S . -B build-release -G Ninja -DCMAKE_BUILD_TYPE=Release
+cmake --build build-release
+```
+
+LTO is enabled by default for non-Debug configurations. With GCC, the link step
+uses `-flto=auto` so LTO compilation can use the available CPU cores while keeping
+full optimization. Ninja's own parallelism is left at its default.
+
+With CMake 3.29 or newer, an installed alternative linker can be selected using
+`-DCMAKE_LINKER_TYPE=GOLD` or `-DCMAKE_LINKER_TYPE=MOLD`. This is optional; parallel
+LTO also works with the default GNU linker. LLVM lld supports Clang's LTO format,
+not GCC's, so it cannot directly replace the linker in a GCC LTO build.
