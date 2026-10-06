@@ -1132,6 +1132,85 @@ START_TEST(test_flex_shrink_content_minimum)
 }
 END_TEST
 
+static const struct {
+    const char *name;
+    int margin, padding, border;
+    bool border_box;
+    int minimum, maximum, shrink, grow, inner_basis;
+    int available[2], first[2], second[2];
+} flex_shrink_edge_cases[] = {
+    {"no edges", 0, 0, 0, false, 0, -1, 1, 0, 100, {100, 160}, {50, 80}, {50, 80}},
+    {"margin", 50, 0, 0, false, 0, -1, 1, 0, 100, {200, 260}, {50, 80}, {50, 80}},
+    {"padding", 0, 50, 0, false, 0, -1, 1, 0, 100, {200, 260}, {50, 80}, {50, 80}},
+    {"border", 0, 0, 50, false, 0, -1, 1, 0, 100, {200, 260}, {50, 80}, {50, 80}},
+    {"border-box basis", 0, 25, 25, true, 0, -1, 1, 0, 100, {200, 260}, {50, 80}, {50, 80}},
+    {"negative margin", -20, 0, 0, false, 0, -1, 1, 0, 100, {100, 160}, {70, 100}, {70, 100}},
+    {"weighted", 50, 0, 0, false, 0, -1, 3, 0, 100, {200, 260}, {25, 70}, {75, 90}},
+    {"minimum freezes", 0, 50, 0, false, 80, -1, 1, 0, 100, {200, 260}, {80, 80}, {20, 80}},
+    {"maximum freezes", 0, 50, 0, false, 0, 60, 1, 0, 100, {180, 240}, {40, 60}, {40, 80}},
+    {"inflexible", 50, 0, 0, false, 0, -1, 0, 0, 100, {200, 260}, {100, 100}, {0, 60}},
+    {"zero inner basis", 50, 0, 0, false, 0, -1, 1, 0, 0, {150, 210}, {0, 0}, {50, 100}},
+    {"growth unchanged", 50, 0, 0, false, 0, -1, 1, 1, 100, {400, 460}, {150, 180}, {150, 180}},
+};
+
+enum { FLEX_SHRINK_EDGE_CASES = sizeof(flex_shrink_edge_cases) / sizeof(flex_shrink_edge_cases[0]) };
+
+/* Flexbox 9.7 weights shrink by inner bases, while free space uses outer
+ * sizes. Exercise the real solver, including freezing and a resize round trip. */
+START_TEST(test_flex_shrink_inner_basis)
+{
+    int variant = _i % FLEX_SHRINK_EDGE_CASES;
+    bool reverse = _i >= FLEX_SHRINK_EDGE_CASES;
+    struct flex_test_style values = {.container = true, .reverse = reverse, .width = 200,
+        .width_unit = CSS_UNIT_PX, .min_width = 0, .min_unit = CSS_UNIT_PX, .max_width = -1,
+        .basis = -1, .overflow = CSS_OVERFLOW_VISIBLE};
+    css_computed_style *parent_style = flex_test_style_create(&values);
+    values.container = false;
+    values.width = values.basis = 100;
+    values.grow = flex_shrink_edge_cases[variant].grow;
+    css_computed_style *peer_style = flex_test_style_create(&values);
+    values.margin = flex_shrink_edge_cases[variant].margin;
+    values.padding = flex_shrink_edge_cases[variant].padding;
+    values.border = flex_shrink_edge_cases[variant].border;
+    values.border_box = flex_shrink_edge_cases[variant].border_box;
+    values.min_width = flex_shrink_edge_cases[variant].minimum;
+    values.max_width = flex_shrink_edge_cases[variant].maximum;
+    values.width = values.basis = flex_shrink_edge_cases[variant].inner_basis;
+    if (values.border_box) {
+        values.width += 2 * (values.padding + values.border);
+        values.basis = values.width;
+    }
+    css_computed_style *item_style = flex_test_style_create(&values);
+    ck_assert_ptr_nonnull(parent_style);
+    ck_assert_ptr_nonnull(peer_style);
+    ck_assert_ptr_nonnull(item_style);
+    flex_test_style_shrink(item_style, flex_shrink_edge_cases[variant].shrink);
+    struct box parent = {.type = BOX_FLEX, .style = parent_style};
+    struct box item = {.type = BOX_BLOCK, .parent = &parent, .style = item_style,
+        .min_width = {CSS_SIZE_SET, 0}, .max_width = 200};
+    struct box peer = {.type = BOX_BLOCK, .parent = &parent, .style = peer_style,
+        .min_width = {CSS_SIZE_SET, 0}, .max_width = 100, .prev = &item};
+    parent.children = &item;
+    parent.last = item.next = &peer;
+    html_content content = {.unit_len_ctx = {.viewport_width = INTTOFIX(1280),
+        .viewport_height = INTTOFIX(900), .font_size_default = INTTOFIX(16),
+        .device_dpi = INTTOFIX(96), .root_style = parent_style}};
+    for (int pass = 0; pass < 3; pass++) {
+        int size = pass == 1;
+        parent.width = flex_shrink_edge_cases[variant].available[size];
+        ck_assert(layout_flex(&parent, parent.width, &content));
+        int first = flex_shrink_edge_cases[variant].first[size];
+        int second = flex_shrink_edge_cases[variant].second[size];
+        ck_assert_msg(item.width == first && peer.width == second,
+            "%s reverse=%d pass=%d: widths %d/%d, expected %d/%d",
+            flex_shrink_edge_cases[variant].name, reverse, pass, item.width, peer.width, first, second);
+    }
+    css_computed_style_destroy(item_style);
+    css_computed_style_destroy(peer_style);
+    css_computed_style_destroy(parent_style);
+}
+END_TEST
+
 /* A definite nowrap line can be smaller than its natural contents. Reflow
  * with a different height also checks that the stretch flag is scoped. */
 START_TEST(test_flex_stretched_height)
@@ -1705,6 +1784,7 @@ Suite *layout_flex_suite(void)
     tcase_add_loop_test(tc_core, test_flex_minimum_width_layout, 0, 19);
     tcase_add_loop_test(tc_core, test_flex_shrink_content_minimum, 0,
         sizeof(flex_shrink_minimum_cases) / sizeof(flex_shrink_minimum_cases[0]));
+    tcase_add_loop_test(tc_core, test_flex_shrink_inner_basis, 0, 2 * FLEX_SHRINK_EDGE_CASES);
     tcase_add_loop_test(tc_core, test_flex_stretched_height, 0, 8);
 
     tcase_add_loop_test(tc_core, test_flex_ratio_minimum, 0, 4);

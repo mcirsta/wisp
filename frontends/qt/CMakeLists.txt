@@ -261,6 +261,9 @@ if(WISP_QT_CAPTURE)
         add_test(NAME qt_flex_column_sizing
             COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_flex_column_sizing.py $<TARGET_FILE:wisp-qt>)
         set_tests_properties(qt_flex_column_sizing PROPERTIES TIMEOUT 30)
+        add_test(NAME qt_flex_shrink_edges
+            COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_flex_shrink_edges.py $<TARGET_FILE:wisp-qt>)
+        set_tests_properties(qt_flex_shrink_edges PROPERTIES TIMEOUT 40)
         add_test(NAME qt_flex_image_sizing
             COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_flex_image_sizing.py $<TARGET_FILE:wisp-qt>)
         set_tests_properties(qt_flex_image_sizing PROPERTIES TIMEOUT 30)

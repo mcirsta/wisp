@@ -70,7 +70,8 @@ struct flex_item_data {
     int max_cross;
 
     int target_main_size;
-    int base_size;
+    int base_size; /* Outer base, used for free-space accounting. */
+    int inner_base_size; /* Content base, used for scaled flex-shrink. */
     int main_size;
     size_t line;
 
@@ -903,6 +904,7 @@ static inline bool layout_flex__base_and_main_sizes(
 
     /* Auto bases have been resolved from layout or intrinsic measurement. */
     assert(lh__is_resolved(item->base_size));
+    item->inner_base_size = item->base_size;
     item->base_size += delta_outer_main;
 
     if (ctx->horizontal && item->min_main.type == CSS_SIZE_AUTO) {
@@ -1381,7 +1383,9 @@ static inline void layout_flex__distribute_free_main(struct flex_ctx *ctx, struc
                 continue;
             }
 
-            scaled_shrink_factor = FMUL(item->shrink, INTTOFIX(item->base_size));
+            /* Flexbox §9.7: weight by the inner flex base; fixed outer edges
+             * consume space but must not increase an item's share of shrink. */
+            scaled_shrink_factor = FMUL(item->shrink, INTTOFIX(item->inner_base_size));
             scaled_shrink_factor_sum += scaled_shrink_factor;
         }
 
@@ -1399,7 +1403,7 @@ static inline void layout_flex__distribute_free_main(struct flex_ctx *ctx, struc
                 continue;
             }
 
-            scaled_shrink_factor = FMUL(item->shrink, INTTOFIX(item->base_size));
+            scaled_shrink_factor = FMUL(item->shrink, INTTOFIX(item->inner_base_size));
             ratio = FDIV(scaled_shrink_factor, scaled_shrink_factor_sum);
             result = FMUL(INTTOFIX(abs(remaining_free_main)), ratio) + remainder;
 

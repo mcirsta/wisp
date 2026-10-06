@@ -19,39 +19,6 @@ is evidence linking it to our changes. Browser comparisons can supply evidence,
 but do not replace the standards basis for a fix. Resuming discovery does not
 require exhausting every item in this document.
 
-## Tion/Bihon non-JavaScript batch (2026-10-06)
-
-The flex shrink defect below remains from this bounded reassessment. Checked
-both live homepages
-at 1280px and 390px widths, then compared the stable September 28 snapshots with
-JavaScript disabled in Wisp and the reference browser. Expected values in the
-reductions below come from CSS rules, not reference-browser pixel preferences.
-This finding has not been established as a regression from our recent changes.
-
-### Use inner flex bases for shrink weights
-
-Wisp stores an outer flex base, then uses that size directly when scaling
-`flex-shrink`. CSS Flexbox [9.7](https://www.w3.org/TR/css-flexbox-1/#resolve-flexible-lengths)
-requires the inner flex base for this weight; outer sizes still belong in
-free-space accounting. In `src/content/handlers/html/layout_flex.c`, follow
-`layout_flex__base_and_main_sizes()` through
-`layout_flex__distribute_free_main()`.
-
-Two empty items with 100px content widths in a 200px flex row, one with a 100px
-right margin, must shrink to 50px each. Wisp gives 34px and 67px. Substituting
-100px padding or border reproduces the same error; a no-edge control passes.
-Both sites' social-link rows use shrinking items with horizontal margins, so
-they exercise this path. Text wrapping also contributes to their appearance;
-fixing this defect alone is not a promise of identical wrapping.
-Completion requires margin/padding/border and no-edge controls, checking
-box-sizing and both flex axes, while retaining min/max freezing behavior.
-
-Reproducers and completed captures are under
-`out/render-captures/tion-bihon-2026-10-06/`: `flex-shrink-edges.html`
-(`flex-shrink-probe/`). Missing lazy-loaded photos require site scripting;
-native control sizes and small font/rounding differences were not classified as
-new standards defects. This batch does not reopen fallback work.
-
 ## Find in Page coverage
 
 Cross-node phrases remain unimplemented.

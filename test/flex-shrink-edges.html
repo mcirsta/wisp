@@ -1,0 +1,219 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Flex shrink uses inner base sizes</title>
+<style>
+    body { margin: 0; }
+    .case { display: flex; align-items: flex-start; margin-bottom: 8px; background: #eee; }
+    .case > div { flex: 0 1 100px; min-width: 0; min-height: 0; background: #79c; }
+    .case > .b { background: #c97; }
+    .row { width: calc(100vw - 300px); height: 16px; }
+    .row > div { width: 100px; height: 16px; }
+    .column { height: calc(100vw - 300px); width: 16px; }
+    .column > div { height: 100px; width: 16px; }
+    .row.reverse { flex-direction: row-reverse; }
+    .column { flex-direction: column; }
+    .column.reverse { flex-direction: column-reverse; }
+    .row.margin > .a, .row.auto-basis > .a, .row.weighted > .a,
+    .row.inflexible > .a, .row.zero > .a, .row.growth > .a { margin-right: 100px; }
+    .column.margin > .a, .column.auto-basis > .a, .column.weighted > .a,
+    .column.inflexible > .a, .column.zero > .a, .column.growth > .a { margin-bottom: 100px; }
+    .row.padding > .a, .row.minimum > .a, .row.maximum > .a { padding-right: 100px; }
+    .column.padding > .a, .column.minimum > .a, .column.maximum > .a { padding-bottom: 100px; }
+    .row.border > .a { border-right: 100px solid #975; }
+    .column.border > .a { border-bottom: 100px solid #975; }
+    .border-box > .a { box-sizing: border-box; flex-basis: 200px; }
+    .row.border-box > .a { width: 200px; padding-right: 50px; border-right: 50px solid #975; }
+    .column.border-box > .a { height: 200px; padding-bottom: 50px; border-bottom: 50px solid #975; }
+    .auto-basis > div { flex-basis: auto; }
+    .weighted > .a { flex-shrink: 3; }
+    .row.minimum > .a { min-width: 80px; }
+    .column.minimum > .a { min-height: 80px; }
+    .row.maximum > .a { max-width: 60px; }
+    .column.maximum > .a { max-height: 60px; }
+    .row.maximum { width: calc(100vw - 260px); }
+    .column.maximum { height: calc(100vw - 260px); }
+    .inflexible > .a { flex-shrink: 0; }
+    .row.negative > .a { margin-right: -40px; }
+    .column.negative > .a { margin-bottom: -40px; }
+    .zero > .a, .all-zero > div { flex-basis: 0; width: 0; height: 0; }
+    .row.all-zero > div { margin-right: 100px; }
+    .column.all-zero > div { margin-bottom: 100px; }
+    .row.control, .row.negative, .row.all-zero { width: calc(100vw - 400px); }
+    .column.control, .column.negative, .column.all-zero { height: calc(100vw - 400px); }
+    .row.zero { width: calc(100vw - 350px); }
+    .column.zero { height: calc(100vw - 350px); }
+    .growth > div { flex-grow: 1; }
+    .row.growth { width: calc(100vw - 100px); }
+    .column.growth { height: calc(100vw - 100px); }
+</style>
+<!-- Flexbox 9.7: shrink weights use content bases, free space uses outer sizes.
+     Empty items remove font/wrapping dependencies. The viewport-based main size
+     exercises repeated layout without changing the items' 100px bases. -->
+<div id="row-control" class="case row control">
+    <div id="row-control-a" class="a"></div><div id="row-control-b" class="b"></div>
+</div>
+<div id="row-margin" class="case row margin">
+    <div id="row-margin-a" class="a"></div><div id="row-margin-b" class="b"></div>
+</div>
+<div id="row-padding" class="case row padding">
+    <div id="row-padding-a" class="a"></div><div id="row-padding-b" class="b"></div>
+</div>
+<div id="row-border" class="case row border">
+    <div id="row-border-a" class="a"></div><div id="row-border-b" class="b"></div>
+</div>
+<div id="row-border-box" class="case row border-box">
+    <div id="row-border-box-a" class="a"></div><div id="row-border-box-b" class="b"></div>
+</div>
+<div id="row-auto-basis" class="case row auto-basis">
+    <div id="row-auto-basis-a" class="a"></div><div id="row-auto-basis-b" class="b"></div>
+</div>
+<div id="row-weighted" class="case row weighted">
+    <div id="row-weighted-a" class="a"></div><div id="row-weighted-b" class="b"></div>
+</div>
+<div id="row-minimum" class="case row minimum">
+    <div id="row-minimum-a" class="a"></div><div id="row-minimum-b" class="b"></div>
+</div>
+<div id="row-maximum" class="case row maximum">
+    <div id="row-maximum-a" class="a"></div><div id="row-maximum-b" class="b"></div>
+</div>
+<div id="row-inflexible" class="case row inflexible">
+    <div id="row-inflexible-a" class="a"></div><div id="row-inflexible-b" class="b"></div>
+</div>
+<div id="row-negative" class="case row negative">
+    <div id="row-negative-a" class="a"></div><div id="row-negative-b" class="b"></div>
+</div>
+<div id="row-zero" class="case row zero">
+    <div id="row-zero-a" class="a"></div><div id="row-zero-b" class="b"></div>
+</div>
+<div id="row-all-zero" class="case row all-zero">
+    <div id="row-all-zero-a" class="a"></div><div id="row-all-zero-b" class="b"></div>
+</div>
+<div id="row-growth" class="case row growth">
+    <div id="row-growth-a" class="a"></div><div id="row-growth-b" class="b"></div>
+</div>
+<div id="row-reverse-control" class="case row reverse control">
+    <div id="row-reverse-control-a" class="a"></div><div id="row-reverse-control-b" class="b"></div>
+</div>
+<div id="row-reverse-margin" class="case row reverse margin">
+    <div id="row-reverse-margin-a" class="a"></div><div id="row-reverse-margin-b" class="b"></div>
+</div>
+<div id="row-reverse-padding" class="case row reverse padding">
+    <div id="row-reverse-padding-a" class="a"></div><div id="row-reverse-padding-b" class="b"></div>
+</div>
+<div id="row-reverse-border" class="case row reverse border">
+    <div id="row-reverse-border-a" class="a"></div><div id="row-reverse-border-b" class="b"></div>
+</div>
+<div id="row-reverse-border-box" class="case row reverse border-box">
+    <div id="row-reverse-border-box-a" class="a"></div><div id="row-reverse-border-box-b" class="b"></div>
+</div>
+<div id="row-reverse-auto-basis" class="case row reverse auto-basis">
+    <div id="row-reverse-auto-basis-a" class="a"></div><div id="row-reverse-auto-basis-b" class="b"></div>
+</div>
+<div id="row-reverse-weighted" class="case row reverse weighted">
+    <div id="row-reverse-weighted-a" class="a"></div><div id="row-reverse-weighted-b" class="b"></div>
+</div>
+<div id="row-reverse-minimum" class="case row reverse minimum">
+    <div id="row-reverse-minimum-a" class="a"></div><div id="row-reverse-minimum-b" class="b"></div>
+</div>
+<div id="row-reverse-maximum" class="case row reverse maximum">
+    <div id="row-reverse-maximum-a" class="a"></div><div id="row-reverse-maximum-b" class="b"></div>
+</div>
+<div id="row-reverse-inflexible" class="case row reverse inflexible">
+    <div id="row-reverse-inflexible-a" class="a"></div><div id="row-reverse-inflexible-b" class="b"></div>
+</div>
+<div id="row-reverse-negative" class="case row reverse negative">
+    <div id="row-reverse-negative-a" class="a"></div><div id="row-reverse-negative-b" class="b"></div>
+</div>
+<div id="row-reverse-zero" class="case row reverse zero">
+    <div id="row-reverse-zero-a" class="a"></div><div id="row-reverse-zero-b" class="b"></div>
+</div>
+<div id="row-reverse-all-zero" class="case row reverse all-zero">
+    <div id="row-reverse-all-zero-a" class="a"></div><div id="row-reverse-all-zero-b" class="b"></div>
+</div>
+<div id="row-reverse-growth" class="case row reverse growth">
+    <div id="row-reverse-growth-a" class="a"></div><div id="row-reverse-growth-b" class="b"></div>
+</div>
+<div id="column-control" class="case column control">
+    <div id="column-control-a" class="a"></div><div id="column-control-b" class="b"></div>
+</div>
+<div id="column-margin" class="case column margin">
+    <div id="column-margin-a" class="a"></div><div id="column-margin-b" class="b"></div>
+</div>
+<div id="column-padding" class="case column padding">
+    <div id="column-padding-a" class="a"></div><div id="column-padding-b" class="b"></div>
+</div>
+<div id="column-border" class="case column border">
+    <div id="column-border-a" class="a"></div><div id="column-border-b" class="b"></div>
+</div>
+<div id="column-border-box" class="case column border-box">
+    <div id="column-border-box-a" class="a"></div><div id="column-border-box-b" class="b"></div>
+</div>
+<div id="column-auto-basis" class="case column auto-basis">
+    <div id="column-auto-basis-a" class="a"></div><div id="column-auto-basis-b" class="b"></div>
+</div>
+<div id="column-weighted" class="case column weighted">
+    <div id="column-weighted-a" class="a"></div><div id="column-weighted-b" class="b"></div>
+</div>
+<div id="column-minimum" class="case column minimum">
+    <div id="column-minimum-a" class="a"></div><div id="column-minimum-b" class="b"></div>
+</div>
+<div id="column-maximum" class="case column maximum">
+    <div id="column-maximum-a" class="a"></div><div id="column-maximum-b" class="b"></div>
+</div>
+<div id="column-inflexible" class="case column inflexible">
+    <div id="column-inflexible-a" class="a"></div><div id="column-inflexible-b" class="b"></div>
+</div>
+<div id="column-negative" class="case column negative">
+    <div id="column-negative-a" class="a"></div><div id="column-negative-b" class="b"></div>
+</div>
+<div id="column-zero" class="case column zero">
+    <div id="column-zero-a" class="a"></div><div id="column-zero-b" class="b"></div>
+</div>
+<div id="column-all-zero" class="case column all-zero">
+    <div id="column-all-zero-a" class="a"></div><div id="column-all-zero-b" class="b"></div>
+</div>
+<div id="column-growth" class="case column growth">
+    <div id="column-growth-a" class="a"></div><div id="column-growth-b" class="b"></div>
+</div>
+<div id="column-reverse-control" class="case column reverse control">
+    <div id="column-reverse-control-a" class="a"></div><div id="column-reverse-control-b" class="b"></div>
+</div>
+<div id="column-reverse-margin" class="case column reverse margin">
+    <div id="column-reverse-margin-a" class="a"></div><div id="column-reverse-margin-b" class="b"></div>
+</div>
+<div id="column-reverse-padding" class="case column reverse padding">
+    <div id="column-reverse-padding-a" class="a"></div><div id="column-reverse-padding-b" class="b"></div>
+</div>
+<div id="column-reverse-border" class="case column reverse border">
+    <div id="column-reverse-border-a" class="a"></div><div id="column-reverse-border-b" class="b"></div>
+</div>
+<div id="column-reverse-border-box" class="case column reverse border-box">
+    <div id="column-reverse-border-box-a" class="a"></div><div id="column-reverse-border-box-b" class="b"></div>
+</div>
+<div id="column-reverse-auto-basis" class="case column reverse auto-basis">
+    <div id="column-reverse-auto-basis-a" class="a"></div><div id="column-reverse-auto-basis-b" class="b"></div>
+</div>
+<div id="column-reverse-weighted" class="case column reverse weighted">
+    <div id="column-reverse-weighted-a" class="a"></div><div id="column-reverse-weighted-b" class="b"></div>
+</div>
+<div id="column-reverse-minimum" class="case column reverse minimum">
+    <div id="column-reverse-minimum-a" class="a"></div><div id="column-reverse-minimum-b" class="b"></div>
+</div>
+<div id="column-reverse-maximum" class="case column reverse maximum">
+    <div id="column-reverse-maximum-a" class="a"></div><div id="column-reverse-maximum-b" class="b"></div>
+</div>
+<div id="column-reverse-inflexible" class="case column reverse inflexible">
+    <div id="column-reverse-inflexible-a" class="a"></div><div id="column-reverse-inflexible-b" class="b"></div>
+</div>
+<div id="column-reverse-negative" class="case column reverse negative">
+    <div id="column-reverse-negative-a" class="a"></div><div id="column-reverse-negative-b" class="b"></div>
+</div>
+<div id="column-reverse-zero" class="case column reverse zero">
+    <div id="column-reverse-zero-a" class="a"></div><div id="column-reverse-zero-b" class="b"></div>
+</div>
+<div id="column-reverse-all-zero" class="case column reverse all-zero">
+    <div id="column-reverse-all-zero-a" class="a"></div><div id="column-reverse-all-zero-b" class="b"></div>
+</div>
+<div id="column-reverse-growth" class="case column reverse growth">
+    <div id="column-reverse-growth-a" class="a"></div><div id="column-reverse-growth-b" class="b"></div>
+</div>
