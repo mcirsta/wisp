@@ -510,18 +510,24 @@ void html_finish_conversion(html_content *htmlc)
         /* Non-fatal - continue with box conversion */
     }
 
-    /* Register this content for font completion callback (only on first call) */
+    /* Collect this document's applicable faces after all stylesheets are ready. */
     if (htmlc->font_wait_start_ms == 0) {
-        html_font_face_init(htmlc, htmlc->select_ctx);
+        error = html_font_face_init(htmlc, htmlc->select_ctx);
+        if (error != NSERROR_OK) {
+            dom_node_unref(html);
+            content_broadcast_error(&htmlc->base, error, NULL);
+            content_set_error(&htmlc->base);
+            return;
+        }
     }
 
     /* Wait for fonts before starting box conversion to avoid FOUT */
-    if (html_font_face_has_pending()) {
+    if (html_font_face_has_pending(htmlc)) {
         /* Store timestamp on first delay */
         if (htmlc->font_wait_start_ms == 0) {
             nsu_getmonotonic_ms(&htmlc->font_wait_start_ms);
-            NSLOG(wisp, INFO, "Delaying box conversion - waiting for %d pending fonts (started at %llu ms)",
-                html_font_face_pending_count(), htmlc->font_wait_start_ms);
+            NSLOG(wisp, INFO, "Delaying box conversion - waiting for %u pending fonts (started at %llu ms)",
+                html_font_face_pending_count(htmlc), htmlc->font_wait_start_ms);
         }
         dom_node_unref(html);
         /* Will be called again when fonts complete */
@@ -1221,9 +1227,17 @@ static void html_stop(struct content *c)
         /* Still loading; simply flag that we've been aborted
          * html_convert/html_finish_conversion will do the rest */
         htmlc->aborted = true;
+        html_font_face_stop(htmlc);
         if (htmlc->jsthread != NULL) {
             /* Close the JS thread to cancel out any callbacks */
             js_closethread(htmlc->jsthread);
+        }
+        if (htmlc->font_wait_start_ms != 0) {
+            /* Cancelling fonts removes the callback which would unlock this
+             * conversion. Stop without broadcasting: the browser may already
+             * have destroyed its frontend window during close. */
+            htmlc->font_wait_start_ms = 0;
+            content_set_error(c);
         }
         break;
 
@@ -1815,7 +1829,7 @@ static void html_destroy(struct content *c)
         form_free(f);
     }
 
-    /* Clean up font waiting state */
+    /* Cancel downloads and release this document's native font registrations. */
     html_font_face_fini(html);
 
     imagemap_destroy(html);

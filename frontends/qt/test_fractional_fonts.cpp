@@ -15,9 +15,7 @@ extern "C" {
 #include <wisp/utils/nsoption.h>
 }
 #include "qt/layout.h"
-#include "qt/misc.h"
 
-nserror nsqt_schedule(int, void (*)(void *), void *) { return NSERROR_OK; }
 
 #define REQUIRE(expr) do { if (!(expr)) { \
     std::fprintf(stderr, "line %d: %s\n", __LINE__, #expr); std::exit(EXIT_FAILURE); \

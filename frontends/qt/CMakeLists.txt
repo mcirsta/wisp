@@ -1,6 +1,12 @@
 cmake_minimum_required(VERSION 3.16)
 
 find_package(Qt6 COMPONENTS Widgets Core Gui REQUIRED)
+find_package(Freetype REQUIRED)
+
+# Decode downloaded font containers and assign private Qt identities once per
+# load. Text shaping and painting continue to use Qt on every platform.
+add_library(qt_webfont STATIC webfont.cpp)
+target_link_libraries(qt_webfont PRIVATE Qt6::Gui Freetype::Freetype)
 
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
@@ -96,7 +102,15 @@ set(QT_RESOURCES
 add_executable(wisp-qt ${QT_SOURCES} ${QT_RESOURCES})
 
 if(BUILD_TESTING AND WISP_ENABLE_TESTS)
+    add_executable(qt_webfont_data_test test_webfont_data.cpp)
+    target_link_libraries(qt_webfont_data_test PRIVATE Qt6::Widgets qt_webfont)
+    add_test(NAME qt_webfont_data COMMAND qt_webfont_data_test ${CMAKE_SOURCE_DIR}/test/fonts)
+    set_tests_properties(qt_webfont_data PROPERTIES TIMEOUT 30 ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
     if(UNIX AND WISP_QT_CAPTURE)
+        add_test(NAME qt_font_face_isolation COMMAND Python3::Interpreter
+            ${CMAKE_CURRENT_SOURCE_DIR}/test_font_face_isolation.py $<TARGET_FILE:wisp-qt>)
+        set_tests_properties(qt_font_face_isolation PROPERTIES TIMEOUT 30)
         add_executable(qt_fetch_events_test test_fetch_events.cpp socket.cpp)
         target_include_directories(qt_fetch_events_test PRIVATE
             ${CMAKE_SOURCE_DIR}/include ${CMAKE_SOURCE_DIR}/src ${CMAKE_SOURCE_DIR}/frontends)
@@ -111,6 +125,9 @@ if(BUILD_TESTING AND WISP_ENABLE_TESTS)
         add_test(NAME qt_js_navigation_cleanup COMMAND Python3::Interpreter
             ${CMAKE_CURRENT_SOURCE_DIR}/test_js_navigation_cleanup.py $<TARGET_FILE:wisp-qt>)
         set_tests_properties(qt_js_navigation_cleanup PROPERTIES TIMEOUT 30)
+        add_test(NAME qt_font_documents COMMAND Python3::Interpreter
+            ${CMAKE_CURRENT_SOURCE_DIR}/test_font_documents.py $<TARGET_FILE:wisp-qt>)
+        set_tests_properties(qt_font_documents PROPERTIES TIMEOUT 35)
         add_test(NAME qt_favicons COMMAND Python3::Interpreter
             ${CMAKE_CURRENT_SOURCE_DIR}/test_favicons.py $<TARGET_FILE:wisp-qt>)
         set_tests_properties(qt_favicons PROPERTIES TIMEOUT 40)
@@ -141,6 +158,15 @@ if(BUILD_TESTING AND WISP_ENABLE_TESTS)
     target_link_libraries(qt_font_weight_test PRIVATE Qt6::Widgets wisp)
     add_test(NAME qt_font_weight COMMAND qt_font_weight_test ${CMAKE_SOURCE_DIR}/test/fonts)
     set_tests_properties(qt_font_weight PROPERTIES TIMEOUT 30
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_SCALE_FACTOR=1;QT_SCREEN_SCALE_FACTORS=1;QT_FONT_DPI=96")
+
+    add_executable(qt_font_resources_test test_font_resources.cpp layout.cpp)
+    target_compile_definitions(qt_font_resources_test PRIVATE WISP_QT_CAPTURE)
+    target_include_directories(qt_font_resources_test PRIVATE
+        ${CMAKE_SOURCE_DIR}/include ${CMAKE_SOURCE_DIR}/src ${CMAKE_SOURCE_DIR}/frontends)
+    target_link_libraries(qt_font_resources_test PRIVATE Qt6::Widgets wisp)
+    add_test(NAME qt_font_resources COMMAND qt_font_resources_test ${CMAKE_SOURCE_DIR}/test/fonts/normal-400.ttf)
+    set_tests_properties(qt_font_resources PROPERTIES TIMEOUT 30
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_SCALE_FACTOR=1;QT_SCREEN_SCALE_FACTORS=1;QT_FONT_DPI=96")
 
     add_executable(qt_font_fallback_test test_font_fallback.cpp layout.cpp)
@@ -537,11 +563,18 @@ target_compile_definitions(wisp-qt PRIVATE
 
 target_link_libraries(wisp-qt PRIVATE Qt6::Widgets Qt6::Core Qt6::Gui wisp)
 
+foreach(font_target wisp-qt qt_font_resources_test qt_font_weight_test qt_font_fallback_test qt_text_split_test qt_fractional_fonts_test
+        qt_text_cache_test)
+    if(TARGET ${font_target})
+        target_link_libraries(${font_target} PRIVATE qt_webfont)
+    endif()
+endforeach()
+
 # Use the same alias configuration as Qt on Fontconfig platforms. Native Qt
 # backends on other platforms keep using installed families and Qt substitutions.
 if(QT_FEATURE_fontconfig)
     find_package(Fontconfig REQUIRED)
-    foreach(font_target wisp-qt qt_font_weight_test qt_font_fallback_test qt_text_split_test qt_fractional_fonts_test
+    foreach(font_target wisp-qt qt_font_resources_test qt_font_weight_test qt_font_fallback_test qt_text_split_test qt_fractional_fonts_test
             qt_text_cache_test)
         if(TARGET ${font_target})
             target_link_libraries(${font_target} PRIVATE Fontconfig::Fontconfig)

@@ -1607,7 +1607,7 @@ css_error css_select_ctx_checked_parent_scope(css_select_ctx *ctx, bool *safe, u
  * \param ctx          Selection context
  * \param media        Currently active media spec
  * \param unit_ctx     Current unit conversion context.
- * \param font_family  Font family to search for
+ * \param font_family  Font family to search for, or NULL for all families
  * \param result       Pointer to location to receive result
  * \return CSS_OK on success, appropriate error otherwise.
  */
@@ -1619,9 +1619,10 @@ css_error css_select_font_faces(css_select_ctx *ctx, const css_media *media, con
     css_select_font_faces_state state;
     uint32_t n_font_faces;
 
-    if (ctx == NULL || font_family == NULL || result == NULL)
+    if (ctx == NULL || media == NULL || unit_ctx == NULL || result == NULL)
         return CSS_BADPARM;
 
+    *result = NULL;
     memset(&state, 0, sizeof(css_select_font_faces_state));
     state.font_family = font_family;
     state.media = media;
@@ -1838,8 +1839,11 @@ static css_error _select_font_face_from_rule(const css_rule_font_face *rule, css
     if (mq_rule_good_for_media((const css_rule *)rule, state->unit_ctx, state->media, str)) {
         bool correct_family = false;
 
-        if (lwc_string_isequal(rule->font_face->font_family, state->font_family, &correct_family) == lwc_error_ok &&
-            correct_family) {
+        if (rule->font_face->font_family != NULL &&
+            (state->font_family == NULL ||
+                (lwc_string_caseless_isequal(rule->font_face->font_family, state->font_family, &correct_family) ==
+                        lwc_error_ok &&
+                    correct_family))) {
             css_select_font_faces_list *faces = NULL;
             const css_font_face **new_faces;
             uint32_t index;
@@ -1873,6 +1877,14 @@ static css_error _select_font_face_from_rule(const css_rule_font_face *rule, css
     return CSS_OK;
 }
 
+/* Advance within one sheet, climbing grouping rules without recursion. */
+static const css_rule *font_face_next_rule(const css_rule *rule)
+{
+    while (rule->next == NULL && rule->ptype == CSS_RULE_PARENT_RULE)
+        rule = rule->parent;
+    return rule->next;
+}
+
 static css_error select_font_faces_from_sheet(
     const css_stylesheet *sheet, css_origin origin, css_select_font_faces_state *state, const css_select_strings *str)
 {
@@ -1885,7 +1897,7 @@ static css_error select_font_faces_from_sheet(
         /* Find first non-charset rule, if we're at the list head */
         if (rule == s->rule_list) {
             while (rule != NULL && rule->type == CSS_RULE_CHARSET)
-                rule = rule->next;
+                rule = font_face_next_rule(rule);
         }
 
         if (rule != NULL && rule->type == CSS_RULE_IMPORT) {
@@ -1903,7 +1915,7 @@ static css_error select_font_faces_from_sheet(
                 rule = s->rule_list;
             } else {
                 /* Not applicable; skip over it */
-                rule = rule->next;
+                rule = font_face_next_rule(rule);
             }
         } else if (rule != NULL && rule->type == CSS_RULE_FONT_FACE) {
             css_error error;
@@ -1913,7 +1925,7 @@ static css_error select_font_faces_from_sheet(
             if (error != CSS_OK)
                 return error;
 
-            rule = rule->next;
+            rule = font_face_next_rule(rule);
         } else if (rule == NULL) {
             /* Find next sheet to process */
             if (sp > 0) {
@@ -1924,7 +1936,14 @@ static css_error select_font_faces_from_sheet(
                 s = NULL;
             }
         } else {
-            rule = rule->next;
+            const css_rule *child = NULL;
+            if (rule->type == CSS_RULE_MEDIA)
+                child = ((const css_rule_media *)rule)->first_child;
+            else if (rule->type == CSS_RULE_LAYER)
+                child = ((const css_rule_layer *)rule)->first_child;
+            else if (rule->type == CSS_RULE_SUPPORTS)
+                child = ((const css_rule_supports *)rule)->first_child;
+            rule = child != NULL ? child : font_face_next_rule(rule);
         }
     } while (s != NULL);
 

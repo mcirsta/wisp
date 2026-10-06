@@ -49,7 +49,6 @@
 #define SPLIT_CACHE_MAX_ENTRIES 16384
 #define WSTR_CACHE_MAX_BYTES (16 * 1024 * 1024)
 #define FONT_CACHE_MAX_ENTRIES 256
-#define FONT_MAP_MAX_ENTRIES 256
 
 HWND font_hwnd;
 
@@ -65,123 +64,27 @@ static HDC get_text_hdc(void)
     return s_text_hdc;
 }
 
-/*
- * CSS font name -> internal font name mapping
- * When a web font is loaded via @font-face, the CSS family name may differ
- * from the font's internal name. This hashmap stores the mapping.
- */
-typedef struct {
-    char *css_name; /* CSS family name (key) */
-} font_map_key_t;
+/* Downloaded faces belong to the document, even though GDI registrations are
+ * process-wide. Native family/weight matching remains the Windows backend's. */
+struct win32_web_font {
+    uint64_t font_set;
+    uint32_t order;
+    char *css_name;
+    char *internal_name;
+    HANDLE handle;
+    struct win32_web_font *next;
+};
+static struct win32_web_font *web_fonts;
 
-typedef struct {
-    char *internal_name; /* Font's internal family name */
-} font_map_value_t;
-
-static void *fm_key_clone(void *key)
+static const char *font_map_lookup(uint64_t font_set, const char *css_name)
 {
-    font_map_key_t *src = (font_map_key_t *)key;
-    font_map_key_t *k = malloc(sizeof(font_map_key_t));
-    if (k == NULL)
-        return NULL;
-    k->css_name = src->css_name ? strdup(src->css_name) : NULL;
-    if (src->css_name != NULL && k->css_name == NULL) {
-        free(k);
-        return NULL;
+    const struct win32_web_font *best = NULL;
+    for (const struct win32_web_font *font = web_fonts; font != NULL; font = font->next) {
+        if (font->font_set == font_set && strcasecmp(font->css_name, css_name) == 0 &&
+            (best == NULL || font->order > best->order))
+            best = font;
     }
-    return k;
-}
-
-static void fm_key_destroy(void *key)
-{
-    font_map_key_t *k = (font_map_key_t *)key;
-    if (k->css_name)
-        free(k->css_name);
-    free(k);
-}
-
-static uint32_t fm_key_hash(void *key)
-{
-    font_map_key_t *k = (font_map_key_t *)key;
-    uint32_t h = 2166136261u;
-    if (k->css_name != NULL) {
-        const char *p = k->css_name;
-        while (*p) {
-            h = (h ^ (uint32_t)tolower((unsigned char)*p)) * 16777619u;
-            p++;
-        }
-    }
-    return h;
-}
-
-static bool fm_key_eq(void *a, void *b)
-{
-    font_map_key_t *ka = (font_map_key_t *)a;
-    font_map_key_t *kb = (font_map_key_t *)b;
-    if (ka->css_name == NULL && kb->css_name == NULL)
-        return true;
-    if (ka->css_name == NULL || kb->css_name == NULL)
-        return false;
-    return strcasecmp(ka->css_name, kb->css_name) == 0;
-}
-
-static void *fm_value_alloc(void *key)
-{
-    return calloc(1, sizeof(font_map_value_t));
-}
-
-static void fm_value_destroy(void *value)
-{
-    font_map_value_t *v = (font_map_value_t *)value;
-    if (v) {
-        if (v->internal_name)
-            free(v->internal_name);
-        free(v);
-    }
-}
-
-static hashmap_parameters_t font_map_params = {
-    fm_key_clone, fm_key_hash, fm_key_eq, fm_key_destroy, fm_value_alloc, fm_value_destroy};
-
-static hashmap_t *font_css_map = NULL;
-
-/**
- * Look up the internal font name for a CSS family name.
- * Returns the internal name if found, NULL otherwise.
- */
-static const char *font_map_lookup(const char *css_name)
-{
-    if (font_css_map == NULL || css_name == NULL)
-        return NULL;
-    font_map_key_t key = {.css_name = (char *)css_name};
-    void *slot = hashmap_lookup(font_css_map, &key);
-    if (slot != NULL) {
-        font_map_value_t *v = (font_map_value_t *)slot;
-        return v->internal_name;
-    }
-    return NULL;
-}
-
-/**
- * Store a CSS name -> internal name mapping.
- */
-static void font_map_insert(const char *css_name, const char *internal_name)
-{
-    if (css_name == NULL || internal_name == NULL)
-        return;
-    if (font_css_map == NULL) {
-        font_css_map = hashmap_create(&font_map_params);
-        if (font_css_map == NULL)
-            return;
-    }
-    font_map_key_t key = {.css_name = (char *)css_name};
-    void *slot = hashmap_insert(font_css_map, &key);
-    if (slot != NULL) {
-        font_map_value_t *v = (font_map_value_t *)slot;
-        if (v->internal_name)
-            free(v->internal_name);
-        v->internal_name = strdup(internal_name);
-    }
+    return best != NULL ? best->internal_name : NULL;
 }
 
 #ifdef WISP_WOFF_DECODE
@@ -551,6 +454,7 @@ static char *ttf_get_family_name(const uint8_t *data, size_t size)
 
 /* Font cache keyed by family/size/weight/flags/letter_spacing */
 typedef struct {
+    uint64_t font_set;
     int family;
     int size;
     int weight;
@@ -568,6 +472,7 @@ static void *fc_key_clone(void *key)
     }
 
     /* Initialize all fields first */
+    k->font_set = src->font_set;
     k->family = src->family;
     k->size = src->size;
     k->weight = src->weight;
@@ -599,6 +504,8 @@ static uint32_t fc_key_hash(void *key)
 {
     font_key_t *k = (font_key_t *)key;
     uint32_t h = 2166136261u;
+    h = (h ^ (uint32_t)k->font_set) * 16777619u;
+    h = (h ^ (uint32_t)(k->font_set >> 32)) * 16777619u;
     h = (h ^ (uint32_t)k->family) * 16777619u;
     h = (h ^ (uint32_t)k->size) * 16777619u;
     h = (h ^ (uint32_t)k->weight) * 16777619u;
@@ -623,8 +530,8 @@ static bool fc_key_eq(void *a, void *b)
     font_key_t *ka = (font_key_t *)a;
     font_key_t *kb = (font_key_t *)b;
 
-    if (ka->family != kb->family || ka->size != kb->size || ka->weight != kb->weight || ka->flags != kb->flags ||
-        ka->letter_spacing != kb->letter_spacing) {
+    if (ka->font_set != kb->font_set || ka->family != kb->family || ka->size != kb->size || ka->weight != kb->weight ||
+        ka->flags != kb->flags || ka->letter_spacing != kb->letter_spacing) {
         return false;
     }
 
@@ -673,6 +580,7 @@ static hashmap_t *font_cache = NULL;
 static uint64_t font_gen = 0;
 
 typedef struct {
+    uint64_t font_set;
     int family;
     int size;
     int weight;
@@ -725,6 +633,8 @@ static uint32_t sc_key_hash(void *key)
 {
     split_key_t *k = (split_key_t *)key;
     uint32_t h = 2166136261u;
+    h = (h ^ (uint32_t)k->font_set) * 16777619u;
+    h = (h ^ (uint32_t)(k->font_set >> 32)) * 16777619u;
     h = (h ^ (uint32_t)k->family) * 16777619u;
     h = (h ^ (uint32_t)k->size) * 16777619u;
     h = (h ^ (uint32_t)k->weight) * 16777619u;
@@ -744,8 +654,8 @@ static bool sc_key_eq(void *a, void *b)
 {
     split_key_t *ka = (split_key_t *)a;
     split_key_t *kb = (split_key_t *)b;
-    if (ka->family != kb->family || ka->size != kb->size || ka->weight != kb->weight || ka->flags != kb->flags ||
-        ka->letter_spacing != kb->letter_spacing || ka->x != kb->x || ka->len != kb->len) {
+    if (ka->font_set != kb->font_set || ka->family != kb->family || ka->size != kb->size || ka->weight != kb->weight ||
+        ka->flags != kb->flags || ka->letter_spacing != kb->letter_spacing || ka->x != kb->x || ka->len != kb->len) {
         return false;
     }
     if (ka->len == 0) {
@@ -1047,23 +957,11 @@ static const char *select_face_name(const plot_font_style_t *style, DWORD *out_f
         while (*families != NULL) {
             const char *candidate = lwc_string_data(*families);
 
-            /* First try: check if CSS name exists directly */
-            if (win32_font_family_exists(candidate)) {
-                if (out_family != NULL) {
+            const char *internal = font_map_lookup(style->font_set, candidate);
+            if (internal != NULL || win32_font_family_exists(candidate)) {
+                if (out_family != NULL)
                     *out_family = FF_DONTCARE | DEFAULT_PITCH;
-                }
-                return candidate;
-            }
-
-            /* Second try: check if we have a CSS->internal name mapping
-             * Note: AddFontMemResourceEx fonts are NOT enumerable via EnumFontFamilies,
-             * but they ARE available for CreateFont. Trust the mapping. */
-            const char *internal = font_map_lookup(candidate);
-            if (internal != NULL) {
-                if (out_family != NULL) {
-                    *out_family = FF_DONTCARE | DEFAULT_PITCH;
-                }
-                return internal;
+                return internal != NULL ? internal : candidate;
             }
 
             families++;
@@ -1115,6 +1013,7 @@ static HFONT get_cached_font(const plot_font_style_t *style)
     const char *face;
 
     face = select_face_name(style, NULL);
+    key.font_set = style->font_set;
     key.family = style->family;
     key.size = style->size;
     key.weight = style->weight;
@@ -1437,6 +1336,7 @@ static nserror win32_font_split(
 
     if (split_cache != NULL) {
         split_key_t key;
+        key.font_set = style->font_set;
         key.family = style->family;
         key.size = style->size;
         key.weight = style->weight;
@@ -1479,6 +1379,10 @@ static nserror win32_font_split(
 
 void win32_font_caches_flush(void)
 {
+    if (font_cache != NULL) {
+        hashmap_destroy(font_cache);
+        font_cache = NULL;
+    }
     if (split_cache != NULL) {
         hashmap_destroy(split_cache);
         split_cache = NULL;
@@ -1504,7 +1408,7 @@ nserror html_font_face_load_data(const struct font_variant_id *id, const uint8_t
 #endif
 
     /* Validate input parameters */
-    if (id == NULL || id->family_name == NULL || data == NULL || size == 0) {
+    if (id == NULL || id->family_name == NULL || id->font_set == 0 || data == NULL || size == 0) {
         return NSERROR_BAD_PARAMETER;
     }
 
@@ -1550,22 +1454,51 @@ nserror html_font_face_load_data(const struct font_variant_id *id, const uint8_t
     }
 #endif
 
-    /* Store mapping from CSS name to internal name */
-    if (internal_name != NULL) {
-        NSLOG(wisp, INFO, "Loaded web font: CSS '%s' (weight=%d style=%d) -> internal '%s'", id->family_name,
-            id->weight, id->style, internal_name);
-        font_map_insert(id->family_name, internal_name);
-        free(internal_name);
-    } else {
-        /* No internal name found, use CSS name as-is */
-        NSLOG(wisp, INFO, "Loaded web font: '%s' (weight=%d style=%d, no internal name found)", id->family_name,
-            id->weight, id->style);
+    if (internal_name == NULL) {
+        RemoveFontMemResourceEx(font_handle);
+        return NSERROR_INVALID;
     }
+    struct win32_web_font *font = calloc(1, sizeof(*font));
+    if (font != NULL)
+        font->css_name = strdup(id->family_name);
+    if (font == NULL || font->css_name == NULL) {
+        RemoveFontMemResourceEx(font_handle);
+        free(internal_name);
+        if (font != NULL) {
+            free(font->css_name);
+            free(font);
+        }
+        return NSERROR_NOMEM;
+    }
+    font->font_set = id->font_set;
+    font->order = id->order;
+    font->internal_name = internal_name;
+    font->handle = font_handle;
+    font->next = web_fonts;
+    web_fonts = font;
 
     win32_font_caches_flush();
     return NSERROR_OK;
 }
 
+
+static void win32_release_font_set(uint64_t font_set)
+{
+    win32_font_caches_flush();
+    struct win32_web_font **link = &web_fonts;
+    while (*link != NULL) {
+        struct win32_web_font *font = *link;
+        if (font->font_set != font_set) {
+            link = &font->next;
+            continue;
+        }
+        *link = font->next;
+        RemoveFontMemResourceEx(font->handle);
+        free(font->css_name);
+        free(font->internal_name);
+        free(font);
+    }
+}
 
 /** win32 font operations table */
 static struct gui_layout_table layout_table = {
@@ -1573,6 +1506,7 @@ static struct gui_layout_table layout_table = {
     .position = win32_font_position,
     .split = win32_font_split,
     .load_font_data = html_font_face_load_data,
+    .release_font_set = win32_release_font_set,
 };
 
 struct gui_layout_table *win32_layout_table = &layout_table;

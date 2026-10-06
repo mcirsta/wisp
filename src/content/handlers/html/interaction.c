@@ -223,7 +223,7 @@ static size_t html_selection_drag_end(struct html_content *html, browser_mouse_s
     if (box) {
         plot_font_style_t fstyle;
 
-        font_plot_style_from_css(&html->unit_len_ctx, box->style, &fstyle);
+        font_plot_style_from_css(html, box->style, &fstyle);
 
         guit->layout->position(&fstyle, box->text, box->length, dx, &idx, &pixel_offset);
 
@@ -398,7 +398,7 @@ mouse_action_drag_selection(html_content *html, struct browser_window *bw, brows
         }
         box = box_pick_text_box(html, x, y, dir, &dx, &dy);
         if (box != NULL) {
-            font_plot_style_from_css(&html->unit_len_ctx, box->style, &fstyle);
+            font_plot_style_from_css(html, box->style, &fstyle);
             guit->layout->position(&fstyle, box->text, box->length, dx, &idx, &pixel_offset);
             selection_track(html->sel, mouse, box->byte_offset + idx);
         }
@@ -1089,7 +1089,7 @@ static nserror default_mouse_action(html_content *html, struct browser_window *b
         size_t idx;
         plot_font_style_t fstyle;
 
-        font_plot_style_from_css(&html->unit_len_ctx, mas->text.box->style, &fstyle);
+        font_plot_style_from_css(html, mas->text.box->style, &fstyle);
 
         guit->layout->position(
             &fstyle, mas->text.box->text, mas->text.box->length, x - mas->text.box_x, &idx, &pixel_offset);

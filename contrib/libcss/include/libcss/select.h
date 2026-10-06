@@ -231,6 +231,7 @@ css_error css_select_results_destroy(css_select_results *results);
  */
 css_error css_select_results_clone(const css_select_results *results, css_select_results **clone);
 
+/* A NULL font_family enumerates all applicable faces in document order. */
 css_error css_select_font_faces(css_select_ctx *ctx, const css_media *media, const css_unit_ctx *unit_ctx,
     lwc_string *font_family, css_select_font_faces_results **result);
 css_error css_select_font_faces_results_destroy(css_select_font_faces_results *results);

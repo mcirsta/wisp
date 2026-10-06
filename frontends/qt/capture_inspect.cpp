@@ -283,7 +283,7 @@ static QJsonObject describe(struct box *box, const html_content *html)
                 QStringList{"inherit", "row", "column", "row dense", "column dense"}.value(
                     css_computed_grid_auto_flow(box->style))}};
         plot_font_style_t style;
-        font_plot_style_from_css(units, box->style, &style);
+        font_plot_style_from_css(html, box->style, &style);
         const QFont font = nsqt_capture_font(&style);
         const QRawFont face = QRawFont::fromFont(font);
         const bool variable = !face.fontTable("fvar").isEmpty();

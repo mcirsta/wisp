@@ -45,6 +45,35 @@ WebP support (`WISP_USE_WEBP=ON`, the default) requires `libwebp` and
 `libwebpdemux`. Animated WebP images display their fully composited first frame;
 playback is not currently supported.
 
+The Qt frontend also requires FreeType development files. FreeType decodes
+downloaded font containers so each CSS face can be registered with a private Qt
+identity; text shaping and rendering still use Qt. WOFF2 decoding requires a
+FreeType build with Brotli support.
+
+Web-font selection uses the CSS family and weight/style descriptors before
+constructing a `QFont`. Each downloaded face receives a private in-memory native
+name because Qt's public `QFont` API selects by name, not a font resource handle.
+The adapter aligns native style metadata with the CSS descriptors so fallback
+and synthesis see the CSS request too. Glyphs, advances and shaping tables are
+preserved; the original downloaded files are unchanged.
+
+Web-font downloads and CSS family bindings belong to the document, as required
+by [CSS Fonts](https://www.w3.org/TR/css-fonts-3/#font-face-rule). Applicable rules
+are collected from its loaded stylesheets, including imports; a page waits only
+for its own fonts. The existing URL cache shares downloaded bytes. Qt additionally
+shares immutable native faces when both file bytes and CSS weight/style descriptors
+match, without sharing the document's family bindings. Native resources are freed
+when their last document releases them. Font selection caches include the document
+identity; measurement and painting reuse Qt's resolved font and glyph caches.
+
+Regression coverage: `font_face_test`, `qt_font_documents`, `qt_font_face_isolation`,
+`qt_font_resources`, `qt_font_weight` and `qt_font_fallback`. The resource test also
+accepts a font file followed by `--benchmark` to measure repeated document bindings
+and their first measurement/paint, checking identical pixels. These are component
+timings, not full-page or network benchmarks. The Windows frontend now scopes CSS
+aliases and releases downloaded-font handles with the document; its existing GDI
+native-name collision handling still needs separate work and native validation.
+
 For an optimized Linux build, select Release explicitly (the Ninja generator
 does not select a build type):
 

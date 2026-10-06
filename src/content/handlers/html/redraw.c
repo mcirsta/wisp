@@ -608,13 +608,13 @@ static bool html_redraw_radio(int x, int y, int width, int height, bool selected
  * \param  box	     box of input
  * \param  scale     scale for redraw
  * \param  background_colour  current background colour
- * \param  unit_len_ctx   Length conversion context
+ * \param  html           Document supplying font and length context
  * \param  ctx	     current redraw context
  * \return true if successful, false otherwise
  */
 
 static bool html_redraw_file(int x, int y, int width, int height, struct box *box, float scale,
-    colour background_colour, const css_unit_ctx *unit_len_ctx, const struct redraw_context *ctx)
+    colour background_colour, const html_content *html, const struct redraw_context *ctx)
 {
     int text_width;
     const char *text;
@@ -622,7 +622,7 @@ static bool html_redraw_file(int x, int y, int width, int height, struct box *bo
     plot_font_style_t fstyle;
     nserror res;
 
-    font_plot_style_from_css(unit_len_ctx, box->style, &fstyle);
+    font_plot_style_from_css(html, box->style, &fstyle);
     fstyle.background = background_colour;
 
     if (box->gadget->value) {
@@ -1638,7 +1638,7 @@ static bool html_redraw_text_box(const html_content *html, struct box *box, int 
     bool excluded = (box->object != NULL);
     plot_font_style_t fstyle;
 
-    font_plot_style_from_css(&html->unit_len_ctx, box->style, &fstyle);
+    font_plot_style_from_css(html, box->style, &fstyle);
     fstyle.background = current_background_color;
 
     if (!text_redraw(box->text, box->length, box->byte_offset, box->space, &fstyle, x, y, clip, box->height, scale,
@@ -2926,8 +2926,8 @@ static bool html_redraw_box(const html_content *html, struct box *box, int x_par
         }
 
     } else if (box->gadget && box->gadget->type == GADGET_FILE) {
-        if (!html_redraw_file(x + padding_left, y + padding_top, width, height, box, scale, current_background_color,
-                &html->unit_len_ctx, ctx)) {
+        if (!html_redraw_file(
+                x + padding_left, y + padding_top, width, height, box, scale, current_background_color, html, ctx)) {
             {
                 result = false;
                 goto cleanup;

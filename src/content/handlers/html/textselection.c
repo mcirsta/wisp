@@ -216,7 +216,7 @@ coords_from_range(struct box *box, unsigned start_idx, unsigned end_idx, struct 
  * \param text         pointer to text being added, or NULL for newline
  * \param length       length of text to be appended (bytes)
  * \param box          pointer to text box, or NULL if from textplain
- * \param unit_len_ctx      Length conversion context
+ * \param html         Document supplying font and length context
  * \param handle       selection string to append to
  * \param whitespace_text    whitespace to place before text for formatting
  *                            may be NULL
@@ -224,7 +224,7 @@ coords_from_range(struct box *box, unsigned start_idx, unsigned end_idx, struct 
  * \return NSERROR_OK iff successful and traversal should continue else error
  * code
  */
-static nserror selection_copy_box(const char *text, size_t length, struct box *box, const css_unit_ctx *unit_len_ctx,
+static nserror selection_copy_box(const char *text, size_t length, struct box *box, const html_content *html,
     struct selection_string *handle, const char *whitespace_text, size_t whitespace_length)
 {
     bool add_space = false;
@@ -244,7 +244,7 @@ static nserror selection_copy_box(const char *text, size_t length, struct box *b
 
         if (box->style != NULL) {
             /* Override default font style */
-            font_plot_style_from_css(unit_len_ctx, box->style, &style);
+            font_plot_style_from_css(html, box->style, &style);
             pstyle = &style;
         } else {
             /* If there's no style, there must be no text */
@@ -266,7 +266,7 @@ static nserror selection_copy_box(const char *text, size_t length, struct box *b
  * boxes that lie (partially) within the given range
  *
  * \param box        box subtree
- * \param unit_len_ctx    Length conversion context.
+ * \param html       Document supplying font and length context.
  * \param start_idx  start of range within textual representation (bytes)
  * \param end_idx    end of range
  * \param handler    handler function to call
@@ -276,7 +276,7 @@ static nserror selection_copy_box(const char *text, size_t length, struct box *b
  * \param do_marker  whether deal enter any marker box
  * \return NSERROR_OK on sucess else error code
  */
-static nserror selection_copy(struct box *box, const css_unit_ctx *unit_len_ctx, unsigned start_idx, unsigned end_idx,
+static nserror selection_copy(struct box *box, const html_content *html, unsigned start_idx, unsigned end_idx,
     struct selection_string *selstr, save_text_whitespace *before, bool *first, bool do_marker)
 {
     nserror res;
@@ -296,7 +296,7 @@ static nserror selection_copy(struct box *box, const css_unit_ctx *unit_len_ctx,
     if (box_has_outside_marker(box)) {
         /* do the marker box before continuing with the rest of the
          * list element */
-        res = selection_copy(box->list_marker, unit_len_ctx, start_idx, end_idx, selstr, before, first, true);
+        res = selection_copy(box->list_marker, html, start_idx, end_idx, selstr, before, first, true);
         if (res != NSERROR_OK) {
             return res;
         }
@@ -323,8 +323,8 @@ static nserror selection_copy(struct box *box, const css_unit_ctx *unit_len_ctx,
         unsigned end_off;
 
         if (selected_part(box, start_idx, end_idx, &start_off, &end_off)) {
-            res = selection_copy_box(box->text + start_off, min(box->length, end_off) - start_off, box, unit_len_ctx,
-                selstr, whitespace_text, whitespace_length);
+            res = selection_copy_box(box->text + start_off, min(box->length, end_off) - start_off, box, html, selstr,
+                whitespace_text, whitespace_length);
             if (res != NSERROR_OK) {
                 return res;
             }
@@ -352,7 +352,7 @@ static nserror selection_copy(struct box *box, const css_unit_ctx *unit_len_ctx,
              * the tree */
             struct box *next = child->next;
 
-            res = selection_copy(child, unit_len_ctx, start_idx, end_idx, selstr, before, first, false);
+            res = selection_copy(child, html, start_idx, end_idx, selstr, before, first, false);
             if (res != NSERROR_OK) {
                 return res;
             }
@@ -438,7 +438,7 @@ html_textselection_copy(struct content *c, unsigned start_idx, unsigned end_idx,
         return NSERROR_INVALID;
     }
 
-    return selection_copy(html->layout, &html->unit_len_ctx, start_idx, end_idx, selstr, &before, &first, false);
+    return selection_copy(html->layout, html, start_idx, end_idx, selstr, &before, &first, false);
 }
 
 

@@ -69,7 +69,7 @@ static void check_spaces(struct paragraph *p)
     const struct gui_layout_table *fonts = p->content.font_func;
     plot_font_style_t font;
     int width, space;
-    font_plot_style_from_css(&p->content.unit_len_ctx, p->root.style, &font);
+    font_plot_style_from_css(&p->content, p->root.style, &font);
     assert(fonts->width(&font, " ", 1, &space) == NSERROR_OK);
     for (struct box *b = p->lines->children; b; b = b->next) {
         if (b->type != BOX_TEXT)
@@ -109,12 +109,12 @@ static void test_folded_space_reflow(const struct gui_layout_table *fonts)
     p.lines->last = &peer;
     plot_font_style_t font;
     int full_width, first_width, last_width, inner_space, outer_space;
-    font_plot_style_from_css(&p.content.unit_len_ctx, p.text.style, &font);
+    font_plot_style_from_css(&p.content, p.text.style, &font);
     assert(fonts->width(&font, p.text.text, p.text.length, &full_width) == NSERROR_OK);
     assert(fonts->width(&font, "AAAAAAAA", 8, &first_width) == NSERROR_OK);
     assert(fonts->width(&font, "BBBBBBBB", 8, &last_width) == NSERROR_OK);
     assert(fonts->width(&font, " ", 1, &inner_space) == NSERROR_OK);
-    font_plot_style_from_css(&p.content.unit_len_ctx, space_style, &font);
+    font_plot_style_from_css(&p.content, space_style, &font);
     assert(fonts->width(&font, " ", 1, &outer_space) == NSERROR_OK);
     assert(inner_space != outer_space);
     int narrow = (first_width > last_width ? first_width : last_width) + outer_space + 10;
@@ -342,7 +342,7 @@ void test_inline_spacing_reflow(const struct gui_layout_table *fonts)
 
     plot_font_style_t font;
     int word, space;
-    font_plot_style_from_css(&p.content.unit_len_ctx, p.root.style, &font);
+    font_plot_style_from_css(&p.content, p.root.style, &font);
     assert(fonts->width(&font, "AA", 2, &word) == NSERROR_OK);
     assert(fonts->width(&font, " ", 1, &space) == NSERROR_OK);
     int fit = word * 2 + space;

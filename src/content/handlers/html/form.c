@@ -1394,7 +1394,7 @@ nserror form_open_select_menu(
         menu->width = box->width + box->border[RIGHT].width + box->padding[RIGHT] + box->border[LEFT].width +
             box->padding[LEFT];
 
-        font_plot_style_from_css(&html->unit_len_ctx, control->box->style, &fstyle);
+        font_plot_style_from_css(html, control->box->style, &fstyle);
         menu->f_size = fstyle.size;
 
         menu->line_height = FIXTOINT(

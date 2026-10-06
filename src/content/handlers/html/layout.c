@@ -700,7 +700,7 @@ static int layout_inline_space(struct box *box, bool *has_content, bool *after_s
     *after_space = true;
     if (box->space == UNKNOWN_WIDTH) {
         plot_font_style_t style;
-        font_plot_style_from_css(&content->unit_len_ctx, box->space_style ? box->space_style : box->style, &style);
+        font_plot_style_from_css(content, box->space_style ? box->space_style : box->style, &style);
         font_func->width(&style, " ", 1, &box->space);
     }
     return box->space;
@@ -916,7 +916,7 @@ static bool layout_minmax_line(struct box *first, int *line_min, int *line_max, 
         }
 
         assert(b->style);
-        font_plot_style_from_css(&content->unit_len_ctx, b->style, &fstyle);
+        font_plot_style_from_css(content, b->style, &fstyle);
 
         if (b->type == BOX_INLINE && !b->object && !(b->flags & REPLACE_DIM) && !(b->flags & IFRAME)) {
             fixed = frac = 0;
@@ -3540,7 +3540,7 @@ static int layout_text_baseline(const html_content *content, const css_computed_
             return baselines->entries[i].baseline;
     }
     plot_font_style_t fstyle;
-    font_plot_style_from_css(&content->unit_len_ctx, style, &fstyle);
+    font_plot_style_from_css(content, style, &fstyle);
     int baseline = font_baseline(content->font_func, &fstyle, height);
     unsigned int slot = baselines->next;
     baselines->entries[slot].style = style;
@@ -3856,7 +3856,7 @@ static bool layout_line(struct box *first, int *width, int *y, int cx, int cy, s
 
         assert(b->style != NULL);
         needs_line_metrics |= box_needs_line_metrics(&content->unit_len_ctx, b, first->parent->parent->style);
-        font_plot_style_from_css(&content->unit_len_ctx, b->style, &fstyle);
+        font_plot_style_from_css(content, b->style, &fstyle);
 
         x += space_after;
         space_after = layout_inline_space(b, &has_content, &after_space, font_func, content);
@@ -4089,7 +4089,7 @@ static bool layout_line(struct box *first, int *width, int *y, int cx, int cy, s
                 size_t split = 0;
                 int w = 0;
                 if (text_wrap) {
-                    font_plot_style_from_css(&content->unit_len_ctx, b->style, &fstyle);
+                    font_plot_style_from_css(content, b->style, &fstyle);
                     font_func->split(&fstyle, b->text, b->length, x1 - x0 - b->x, &split, &w);
                     if (split == b->length) {
                         x += w - b->width;
@@ -4110,7 +4110,7 @@ static bool layout_line(struct box *first, int *width, int *y, int cx, int cy, s
                     b = last_break.box;
                     x = last_break.x;
                     if (last_break.offset) {
-                        font_plot_style_from_css(&content->unit_len_ctx, b->style, &fstyle);
+                        font_plot_style_from_css(content, b->style, &fstyle);
                         font_func->width(&fstyle, b->text, last_break.offset, &w);
                         if (!layout_text_box_split(content, &fstyle, b, last_break.offset, w))
                             return false;
@@ -6114,7 +6114,7 @@ static bool layout_lists(const html_content *content, struct box *box)
             } else if (marker->text) {
                 if (marker->width == UNKNOWN_WIDTH) {
                     plot_font_style_t fstyle;
-                    font_plot_style_from_css(&content->unit_len_ctx, marker->style, &fstyle);
+                    font_plot_style_from_css(content, marker->style, &fstyle);
                     content->font_func->width(&fstyle, marker->text, marker->length, &marker->width);
                     marker->flags |= MEASURED;
                 }
@@ -6752,13 +6752,12 @@ static void layout_text_control(struct box *box, html_content *content)
         plot_font_style_t fstyle;
         int ta_width = box->padding[LEFT] + box->width + box->padding[RIGHT];
         int ta_height = box->padding[TOP] + box->height + box->padding[BOTTOM];
-        font_plot_style_from_css(&content->unit_len_ctx, box->style, &fstyle);
+        font_plot_style_from_css(content, box->style, &fstyle);
         fstyle.background = NS_TRANSPARENT;
         textarea_set_layout(box->gadget->data.text.ta, &fstyle, ta_width, ta_height, box->padding[TOP],
             box->padding[RIGHT], box->padding[BOTTOM], box->padding[LEFT]);
         if (box->styles != NULL && box->styles->styles[CSS_PSEUDO_ELEMENT_PLACEHOLDER] != NULL) {
-            font_plot_style_from_css(&content->unit_len_ctx,
-                box->styles->styles[CSS_PSEUDO_ELEMENT_PLACEHOLDER], &fstyle);
+            font_plot_style_from_css(content, box->styles->styles[CSS_PSEUDO_ELEMENT_PLACEHOLDER], &fstyle);
             fstyle.background = NS_TRANSPARENT;
             textarea_set_placeholder_style(box->gadget->data.text.ta, &fstyle);
         }

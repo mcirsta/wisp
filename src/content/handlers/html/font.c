@@ -24,6 +24,7 @@
 
 #include <wisp/content/handlers/css/utils.h>
 #include <wisp/plot_style.h>
+#include <wisp/content/handlers/html/private.h>
 #include <wisp/layout.h>
 #include <wisp/utils/nsoption.h>
 
@@ -149,9 +150,10 @@ static plot_font_flags_t plot_font_flags(enum css_font_style_e style, enum css_f
 
 
 /* exported function documented in html/font.h */
-void font_plot_style_from_css(
-    const css_unit_ctx *unit_len_ctx, const css_computed_style *css, plot_font_style_t *fstyle)
+void font_plot_style_from_css(const struct html_content *html, const css_computed_style *css, plot_font_style_t *fstyle)
 {
+    const css_unit_ctx *unit_len_ctx = &html->unit_len_ctx;
+    fstyle->font_set = html->font_set_id;
     lwc_string **families;
     css_fixed_or_calc length = (css_fixed_or_calc)0;
     css_unit unit = CSS_UNIT_PX;

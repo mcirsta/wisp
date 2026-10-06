@@ -22,7 +22,6 @@
  */
 
 #include <stdlib.h>
-#include <string.h>
 
 #include <libcss/font_face.h>
 #include <libcss/libcss.h>
@@ -30,35 +29,29 @@
 
 #include <wisp/content/handlers/html/private.h>
 #include <wisp/content/llcache.h>
-#include <wisp/desktop/gui_internal.h>
 #include <wisp/layout.h>
-#include <wisp/wisp.h>
 #include <wisp/utils/errors.h>
-#include <wisp/utils/log.h>
 #include <wisp/utils/nsurl.h>
 
 #include "content/handlers/html/font_face.h"
 
-/** Maximum number of concurrent font downloads */
-#define MAX_FONT_DOWNLOADS 32
-
-/** Structure to track a font download */
+/* CSS Fonts 3 §4.1: downloaded faces are available only to documents which
+ * reference them. The URL cache may share bytes, never CSS family bindings. */
 struct font_download {
+    struct html_content *owner;
+    const css_font_face *face; /* Owned by the document's selection context. */
     struct font_variant_id variant;
-    llcache_handle *handle; /**< Fetch handle */
-    bool in_use; /**< Whether this slot is in use */
+    llcache_handle *handle;
+    uint32_t next_src;
 };
 
-/** Global array of font downloads */
-static struct font_download font_downloads[MAX_FONT_DOWNLOADS];
-
-/** Set of loaded font variants (simple linked list) */
-struct loaded_font {
-    struct font_variant_id variant;
-    struct loaded_font *next;
+struct html_font_face_set {
+    uint32_t count;
+    unsigned pending;
+    struct font_download faces[];
 };
 
-static struct loaded_font *loaded_fonts = NULL;
+static uint64_t next_font_set_id;
 static uint64_t font_generation;
 
 uint64_t html_font_face_generation(void)
@@ -71,370 +64,147 @@ void html_font_face_notify_changed(void)
     font_generation++;
 }
 
-/** Count of pending font downloads */
-static int pending_font_count = 0;
+static nserror font_fetch_callback(llcache_handle *handle, const llcache_event *event, void *pw);
 
-/** Callback to invoke when all fonts finish downloading */
-static html_font_face_done_cb font_done_callback = NULL;
-
-/** Current HTML content waiting for fonts (for proceed_to_done callback) */
-static struct html_content *font_waiting_content = NULL;
-
-/* Forward declaration */
-extern void html_finish_conversion(struct html_content *htmlc);
-
-/**
- * Check if all fonts have finished and invoke callback if set.
- */
-static void check_fonts_done(void)
+/* libcss has already resolved src URLs against the sheet containing the rule,
+ * including imported sheets. Keep src order when a fetch or decoder fails. */
+static bool fetch_next_source(struct font_download *dl)
 {
-    if (pending_font_count == 0 && font_done_callback != NULL) {
-        NSLOG(wisp, INFO, "All font downloads complete, invoking callback");
-        font_done_callback();
-    }
-    /* Notify content that fonts are done so it can continue box conversion */
-    if (pending_font_count == 0 && font_waiting_content != NULL) {
-        struct html_content *c = font_waiting_content;
-        NSLOG(wisp, INFO, "All fonts loaded, resuming box conversion for %p", c);
-        html_finish_conversion(c);
-    }
-}
-
-/**
- * Check if two font variant identities match.
- */
-static inline bool font_variant_match(const struct font_variant_id *a, const struct font_variant_id *b)
-{
-    return a->weight == b->weight && a->style == b->style && strcasecmp(a->family_name, b->family_name) == 0;
-}
-
-/**
- * Check if a specific font variant is already loaded.
- */
-static bool is_variant_loaded(const struct font_variant_id *id)
-{
-    struct loaded_font *entry;
-
-    for (entry = loaded_fonts; entry != NULL; entry = entry->next) {
-        if (font_variant_match(&entry->variant, id)) {
+    uint32_t count = 0;
+    css_font_face_count_srcs(dl->face, &count);
+    while (dl->next_src < count) {
+        const css_font_face_src *src;
+        lwc_string *location;
+        nsurl *url;
+        if (css_font_face_get_src(dl->face, dl->next_src++, &src) != CSS_OK ||
+            css_font_face_src_location_type(src) != CSS_FONT_FACE_LOCATION_TYPE_URI)
+            continue;
+        css_font_face_format format = css_font_face_src_format(src);
+        if (format != CSS_FONT_FACE_FORMAT_UNSPECIFIED && format != CSS_FONT_FACE_FORMAT_WOFF &&
+            format != CSS_FONT_FACE_FORMAT_OPENTYPE)
+            continue;
+        if (css_font_face_src_get_location(src, &location) != CSS_OK || location == NULL ||
+            nsurl_create(lwc_string_data(location), &url) != NSERROR_OK)
+            continue;
+        nserror err = llcache_handle_retrieve(url, 0, dl->owner->base_url, NULL, font_fetch_callback, dl, &dl->handle);
+        nsurl_unref(url);
+        if (err == NSERROR_OK)
             return true;
-        }
     }
     return false;
 }
 
-/**
- * Check if a specific font variant is already being downloaded.
- */
-static bool is_variant_pending(const struct font_variant_id *id)
-{
-    for (int i = 0; i < MAX_FONT_DOWNLOADS; i++) {
-        if (font_downloads[i].in_use && font_downloads[i].variant.family_name != NULL &&
-            font_variant_match(&font_downloads[i].variant, id)) {
-            return true;
-        }
-    }
-    return false;
-}
-
-/**
- * Mark a font variant as loaded.
- */
-static void mark_font_loaded(const struct font_variant_id *id)
-{
-    struct loaded_font *entry;
-
-    /* Check if already in list */
-    if (is_variant_loaded(id)) {
-        return;
-    }
-
-    /* Add to list */
-    entry = malloc(sizeof(struct loaded_font));
-    if (entry != NULL) {
-        entry->variant.family_name = strdup(id->family_name);
-        entry->variant.weight = id->weight;
-        entry->variant.style = id->style;
-        entry->next = loaded_fonts;
-        loaded_fonts = entry;
-        NSLOG(wisp, INFO, "Marked font '%s' (weight=%d style=%d) as loaded", id->family_name, id->weight, id->style);
-    }
-}
-
-/**
- * Find a free download slot
- */
-static struct font_download *find_free_slot(void)
-{
-    for (int i = 0; i < MAX_FONT_DOWNLOADS; i++) {
-        if (!font_downloads[i].in_use) {
-            return &font_downloads[i];
-        }
-    }
-    return NULL;
-}
-
-/**
- * Callback for font file fetch (llcache)
- */
 static nserror font_fetch_callback(llcache_handle *handle, const llcache_event *event, void *pw)
 {
     struct font_download *dl = pw;
+    html_content *owner = dl->owner;
+    nserror error = NSERROR_INVALID;
 
-    switch (event->type) {
-    case LLCACHE_EVENT_DONE: {
-        /* Font download complete */
-        const uint8_t *data;
+    if (event->type != LLCACHE_EVENT_DONE && event->type != LLCACHE_EVENT_ERROR)
+        return NSERROR_OK;
+    if (event->type == LLCACHE_EVENT_DONE) {
         size_t size;
-
-        data = llcache_handle_get_source_data(handle, &size);
-        if (data != NULL && size > 0) {
-            NSLOG(wisp, INFO, "Font '%s' downloaded (%zu bytes)", dl->variant.family_name, size);
-
-            /* Load the font into the system via frontend table */
-            nserror err = NSERROR_NOT_IMPLEMENTED;
-            if (guit != NULL && guit->layout != NULL && guit->layout->load_font_data != NULL) {
-                err = guit->layout->load_font_data(&dl->variant, data, size);
-            }
-            if (err == NSERROR_OK) {
-                html_font_face_notify_changed();
-                mark_font_loaded(&dl->variant);
-            }
-        }
-
-        /* Clean up */
-        llcache_handle_release(handle);
-        free(dl->variant.family_name);
-        dl->variant.family_name = NULL;
-        dl->handle = NULL;
-        dl->in_use = false;
-
-        /* Decrement pending count and check if all done */
-        pending_font_count--;
-        check_fonts_done();
-        break;
+        const uint8_t *data = llcache_handle_get_source_data(handle, &size);
+        if (data != NULL && size != 0)
+            error = owner->font_func->load_font_data(&dl->variant, data, size);
+        if (error == NSERROR_OK)
+            html_font_face_notify_changed();
     }
+    llcache_handle_release(handle);
+    dl->handle = NULL;
+    if (error != NSERROR_OK && fetch_next_source(dl))
+        return NSERROR_OK;
 
-    case LLCACHE_EVENT_ERROR:
-        NSLOG(wisp, WARNING, "Failed to download font '%s': %s", dl->variant.family_name, event->data.error.msg);
-        llcache_handle_release(handle);
-        free(dl->variant.family_name);
-        dl->variant.family_name = NULL;
-        dl->handle = NULL;
-        dl->in_use = false;
-
-        /* Decrement pending count and check if all done */
-        pending_font_count--;
-        check_fonts_done();
-        break;
-
-    default:
-        break;
-    }
-
+    owner->font_faces->pending--;
+    /* Clear the download before resuming: conversion can destroy its owner. */
+    if (owner->font_faces->pending == 0 && owner->font_wait_start_ms != 0)
+        html_finish_conversion(owner);
     return NSERROR_OK;
 }
 
-/**
- * Start downloading a font from a URL (using llcache for raw bytes)
- *
- * \param id        Font variant identity (family name, weight, style)
- * \param font_url  Absolute URL of font file
- * \param base_url  Base URL for referer header (may be NULL)
- */
-static nserror fetch_font_url(const struct font_variant_id *id, nsurl *font_url, nsurl *base_url)
+nserror html_font_face_init(html_content *c, css_select_ctx *select_ctx)
 {
-    struct font_download *dl;
-    nserror err;
+    css_select_font_faces_results *selected = NULL;
+    if (c->font_set_id != 0)
+        return NSERROR_OK;
+    c->font_set_id = ++next_font_set_id;
+    if (c->font_func == NULL || c->font_func->load_font_data == NULL)
+        return NSERROR_OK;
+    css_error error = css_select_font_faces(select_ctx, &c->media, &c->unit_len_ctx, NULL, &selected);
+    if (error != CSS_OK)
+        return error == CSS_NOMEM ? NSERROR_NOMEM : NSERROR_CSS;
+    if (selected == NULL)
+        return NSERROR_OK;
 
-    /* Find a free slot */
-    dl = find_free_slot();
-    if (dl == NULL) {
-        NSLOG(wisp, WARNING, "No free font download slots");
+    c->font_faces = calloc(1, sizeof(*c->font_faces) + selected->n_font_faces * sizeof(struct font_download));
+    if (c->font_faces == NULL) {
+        css_select_font_faces_results_destroy(selected);
         return NSERROR_NOMEM;
     }
-
-    /* Set up the download */
-    dl->variant.family_name = strdup(id->family_name);
-    if (dl->variant.family_name == NULL) {
-        return NSERROR_NOMEM;
+    c->font_faces->count = selected->n_font_faces;
+    for (uint32_t i = 0; i < selected->n_font_faces; i++) {
+        struct font_download *dl = &c->font_faces->faces[i];
+        lwc_string *family = NULL;
+        dl->owner = c;
+        dl->face = selected->font_faces[i];
+        css_font_face_get_font_family(dl->face, &family);
+        /* Family storage, like the face itself, outlives the pending fetch. */
+        dl->variant.family_name = lwc_string_data(family);
+        dl->variant.font_set = c->font_set_id;
+        dl->variant.order = i;
+        dl->variant.weight = css_font_face_font_weight(dl->face);
+        dl->variant.style = css_font_face_font_style(dl->face);
+        if (fetch_next_source(dl))
+            c->font_faces->pending++;
     }
-    dl->in_use = true;
-    dl->variant.weight = id->weight;
-    dl->variant.style = id->style;
-
-    NSLOG(wisp, INFO, "Fetching font '%s' (weight=%d style=%d) from %s", id->family_name, id->weight, id->style,
-        nsurl_access(font_url));
-
-    /* Start the fetch using llcache (raw bytes, no content handler needed) */
-    err = llcache_handle_retrieve(font_url, 0, base_url, NULL, font_fetch_callback, dl, &dl->handle);
-    if (err != NSERROR_OK) {
-        free(dl->variant.family_name);
-        dl->variant.family_name = NULL;
-        dl->in_use = false;
-        return err;
-    }
-
-    /* Increment pending download count */
-    pending_font_count++;
-
+    css_select_font_faces_results_destroy(selected);
     return NSERROR_OK;
 }
 
-/* Exported function documented in font_face.h */
-nserror html_font_face_process(const css_font_face *font_face, const char *base_url)
+/* llcache requires a callable callback even during abort: curl can emit a
+ * final progress notification synchronously while removing its transfer. */
+static nserror font_fetch_discard(llcache_handle *handle, const llcache_event *event, void *pw)
 {
-    lwc_string *family = NULL;
-    css_error css_err;
-    uint32_t src_count;
-    uint32_t i;
-    nsurl *base = NULL;
-    nserror err;
-
-    if (font_face == NULL || base_url == NULL) {
-        return NSERROR_BAD_PARAMETER;
-    }
-
-    /* Get font family name */
-    css_err = css_font_face_get_font_family(font_face, &family);
-    if (css_err != CSS_OK || family == NULL) {
-        return NSERROR_OK; /* Skip this font */
-    }
-
-    const char *family_name = lwc_string_data(family);
-
-    /* Build variant identity from libcss descriptors */
-    struct font_variant_id vid = {
-        .family_name = (char *)family_name,
-        .weight = css_font_face_font_weight(font_face),
-        .style = css_font_face_font_style(font_face),
-    };
-
-    /* Check if this specific variant is already loaded or being downloaded */
-    if (is_variant_loaded(&vid)) {
-        NSLOG(wisp, DEBUG, "Font '%s' variant (weight=%d style=%d) already loaded", vid.family_name, vid.weight,
-            vid.style);
-        return NSERROR_OK;
-    }
-    if (is_variant_pending(&vid)) {
-        NSLOG(wisp, DEBUG, "Font '%s' variant (weight=%d style=%d) already downloading", vid.family_name, vid.weight,
-            vid.style);
-        return NSERROR_OK;
-    }
-
-    NSLOG(wisp, INFO, "Processing @font-face '%s' (weight=%d style=%d)", vid.family_name, vid.weight, vid.style);
-
-    /* Get number of sources */
-    css_err = css_font_face_count_srcs(font_face, &src_count);
-    if (css_err != CSS_OK || src_count == 0) {
-        return NSERROR_OK;
-    }
-
-    /* Parse base URL */
-    err = nsurl_create(base_url, &base);
-    if (err != NSERROR_OK) {
-        return err;
-    }
-
-    /* Try each source until one works */
-    for (i = 0; i < src_count; i++) {
-        const css_font_face_src *src;
-        lwc_string *location;
-        css_font_face_location_type loc_type;
-        css_font_face_format format;
-
-        css_err = css_font_face_get_src(font_face, i, &src);
-        if (css_err != CSS_OK) {
-            continue;
-        }
-
-        loc_type = css_font_face_src_location_type(src);
-        if (loc_type != CSS_FONT_FACE_LOCATION_TYPE_URI) {
-            continue; /* Skip local fonts */
-        }
-
-        /* Check format - we support WOFF and OpenType/TrueType */
-        format = css_font_face_src_format(src);
-        if (format != CSS_FONT_FACE_FORMAT_UNSPECIFIED && format != CSS_FONT_FACE_FORMAT_WOFF &&
-            format != CSS_FONT_FACE_FORMAT_OPENTYPE) {
-            continue;
-        }
-
-        css_err = css_font_face_src_get_location(src, &location);
-        if (css_err != CSS_OK || location == NULL) {
-            continue;
-        }
-
-        /* Create absolute URL */
-        nsurl *font_url;
-        err = nsurl_join(base, lwc_string_data(location), &font_url);
-        if (err != NSERROR_OK) {
-            continue;
-        }
-
-        /* Fetch the font */
-        err = fetch_font_url(&vid, font_url, base);
-        nsurl_unref(font_url);
-
-        if (err == NSERROR_OK) {
-            break; /* Successfully started fetch for this source */
-        }
-    }
-
-    nsurl_unref(base);
+    (void)handle;
+    (void)event;
+    (void)pw;
     return NSERROR_OK;
 }
 
-/* Exported function documented in font_face.h */
-nserror html_font_face_init(struct html_content *c, css_select_ctx *select_ctx)
+void html_font_face_stop(html_content *c)
 {
-    /* Store the content so we can notify it when fonts complete */
-    font_waiting_content = c;
-    (void)select_ctx;
-
-    NSLOG(wisp, INFO, "Font-face system initialized for content %p", c);
-    return NSERROR_OK;
-}
-
-/* Exported function documented in font_face.h */
-nserror html_font_face_fini(struct html_content *c)
-{
-    /* Clear the waiting content if it matches */
-    if (font_waiting_content == c) {
-        font_waiting_content = NULL;
-    }
-    return NSERROR_OK;
-}
-
-/* Exported function documented in font_face.h */
-bool html_font_face_is_available(const char *family_name)
-{
-    struct loaded_font *entry;
-
-    for (entry = loaded_fonts; entry != NULL; entry = entry->next) {
-        if (strcasecmp(entry->variant.family_name, family_name) == 0) {
-            return true;
+    if (c->font_faces == NULL)
+        return;
+    for (uint32_t i = 0; i < c->font_faces->count; i++) {
+        struct font_download *dl = &c->font_faces->faces[i];
+        if (dl->handle != NULL) {
+            /* Detach first. An abort must never call back into the departing
+             * document; llcache preserves other users of a shared URL. */
+            llcache_handle_change_callback(dl->handle, font_fetch_discard, NULL);
+            llcache_handle_abort(dl->handle);
+            llcache_handle_release(dl->handle);
+            dl->handle = NULL;
         }
     }
-
-    return false;
+    c->font_faces->pending = 0;
 }
 
-
-/* Exported function documented in font_face.h */
-void html_font_face_set_done_callback(html_font_face_done_cb cb)
+void html_font_face_fini(html_content *c)
 {
-    font_done_callback = cb;
+    html_font_face_stop(c);
+    if (c->font_set_id != 0 && c->font_func != NULL && c->font_func->release_font_set != NULL)
+        c->font_func->release_font_set(c->font_set_id);
+    free(c->font_faces);
+    c->font_faces = NULL;
+    c->font_set_id = 0;
 }
 
-/* Exported function documented in font_face.h */
-bool html_font_face_has_pending(void)
+unsigned html_font_face_pending_count(const html_content *c)
 {
-    return pending_font_count > 0;
+    return c->font_faces != NULL ? c->font_faces->pending : 0;
 }
 
-/* Get pending font count for logging */
-int html_font_face_pending_count(void)
+bool html_font_face_has_pending(const html_content *c)
 {
-    return pending_font_count;
+    return html_font_face_pending_count(c) != 0;
 }

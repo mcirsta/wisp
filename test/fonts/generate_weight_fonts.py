@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Regenerate the tiny Qt weight-test fonts (requires FontTools, not at build time).
+"""Regenerate the tiny Qt font tests (requires FontTools[woff], not at build time).
 
 Original rectangular glyphs, licensed under GPL-2.0-only like the tests. All
 printable ASCII maps to one glyph; advances identify the selected weight.
@@ -8,6 +8,7 @@ from pathlib import Path
 
 from fontTools.fontBuilder import FontBuilder
 from fontTools.pens.ttGlyphPen import TTGlyphPen
+from fontTools.pens.t2CharStringPen import T2CharStringPen
 from fontTools.ttLib.tables.TupleVariation import TupleVariation
 
 DESTINATION = Path(__file__).resolve().parent
@@ -67,9 +68,48 @@ for italic, vendor in [(False, "UKWN"), (True, "URW ")]:
 
 variable = make_font("Wisp Variable Test", "Regular", 400)
 variable.setupFvar([("wght", 100, 400, 900, "Weight")],
-                   [{"location": {"wght": weight}, "stylename": name}
+                   [{"location": {"wght": weight}, "stylename": name,
+                     "postscriptfontname": "WispVariableTest-" + name}
                     for weight, name in [(400, "Regular"), (700, "Bold")]])
 delta = TupleVariation({"wght": (0, 1, 1)}, [(0, 0), (0, 0), (100, 0), (100, 0),
                                           (0, 0), (100, 0), (0, 0), (0, 0)])
 variable.setupGvar({".notdef": [delta], "box": [delta], "space": []})
 variable.save(DESTINATION / "variable.ttf")
+
+# These files intentionally have identical internal family/style/PostScript
+# names but different glyph advances. CSS family identity must isolate them.
+for name, advance in [("isolation-a", 500), ("isolation-b", 900)]:
+    isolated = make_font("Wisp Collision Test", "Regular", 400)
+    isolated.setupHorizontalMetrics({glyph: (advance, 50) for glyph in [".notdef", "space", "box"]})
+    isolated.save(DESTINATION / f"{name}.ttf")
+    if name == "isolation-a":
+        for flavor in ["woff", "woff2"]:
+            isolated.font.flavor = flavor
+            isolated.save(DESTINATION / f"{name}.{flavor}")
+
+# Also exercise an OpenType/CFF container; the outlines do not use glyf/loca.
+cff = FontBuilder(1000, isTTF=False)
+cff.setupGlyphOrder([".notdef", "space", "box"])
+cff.setupCharacterMap({code: "space" if code == 32 else "box" for code in range(32, 127)})
+cff.setupHorizontalMetrics({glyph: (500, 50) for glyph in [".notdef", "space", "box"]})
+cff.setupHorizontalHeader(ascent=800, descent=-200)
+chars = {}
+for glyph in [".notdef", "space", "box"]:
+    pen = T2CharStringPen(500, None)
+    if glyph != "space":
+        pen.moveTo((50, 0))
+        pen.lineTo((50, 700))
+        pen.lineTo((300, 700))
+        pen.lineTo((300, 0))
+        pen.closePath()
+    chars[glyph] = pen.getCharString()
+cff.setupCFF("WispCollisionTest-Regular", {"FamilyName": "Wisp Collision Test",
+             "FullName": "Wisp Collision Test Regular", "Weight": "Regular"}, chars, {})
+cff.setupNameTable({"familyName": "Wisp Collision Test", "styleName": "Regular",
+                   "fullName": "Wisp Collision Test Regular", "psName": "WispCollisionTest-Regular"})
+cff.setupOS2(usWeightClass=400, usWidthClass=5, fsSelection=64,
+             sTypoAscender=800, sTypoDescender=-200, usWinAscent=800, usWinDescent=200)
+cff.setupPost()
+cff.font["head"].created = cff.font["head"].modified = 3406620153
+cff.font.recalcTimestamp = False
+cff.save(DESTINATION / "isolation-cff.otf")

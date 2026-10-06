@@ -254,8 +254,9 @@ void html_restyle_begin(html_content *html)
         reason = "scripting";
     else if (reason == NULL && !current.valid)
         reason = "selector_scope";
-    else if (reason == NULL && (!html->had_initial_layout || html->base.status != CONTENT_STATUS_DONE ||
-                                 html->base.active != 0 || html_font_face_has_pending()))
+    else if (reason == NULL &&
+        (!html->had_initial_layout || html->base.status != CONTENT_STATUS_DONE || html->base.active != 0 ||
+            html_font_face_has_pending(html)))
         reason = "loading";
     else if (reason == NULL && !state->styled_inputs.valid)
         reason = "no_style_snapshot";

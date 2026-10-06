@@ -3,6 +3,7 @@
 #include <QFile>
 #include <QFontDatabase>
 #include <QFontInfo>
+#include <QFontMetricsF>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -22,11 +23,7 @@ extern "C" {
 }
 #include "qt/capture_inspect.h"
 #include "qt/layout.h"
-#include "qt/misc.h"
 
-static int repaints;
-nserror nsqt_schedule(int, void (*)(void *), void *) { ++repaints; return NSERROR_OK; }
-extern bool font_miss_occurred;
 
 #define REQUIRE(expr) do { if (!(expr)) { \
     std::fprintf(stderr, "line %d: %s\n", __LINE__, #expr); std::exit(EXIT_FAILURE); \
@@ -109,9 +106,7 @@ int main(int argc, char **argv)
     REQUIRE(nsqt_layout_table->width(&direct.style, "abcd", 4, &repeated_width) == NSERROR_OK);
     REQUIRE(repeated_width == normal_width);
     FontList missing({"Wisp Absent Font 927", "Wisp Normal Test"});
-    font_miss_occurred = false;
     missing.check("skip missing first family", "Wisp Normal Test");
-    REQUIRE(font_miss_occurred);
     FontList lowercase({"wisp normal test"});
     lowercase.check("case-insensitive family", "Wisp Normal Test");
     FontList serif({"Wisp Absent Font 927"}, PLOT_FONT_FAMILY_SERIF);
@@ -152,9 +147,8 @@ int main(int argc, char **argv)
 #endif
 
     FontList late({"Wisp Arriving Web Font", "Wisp Weight Test"});
-    font_miss_occurred = false;
+    late.style.font_set = 1;
     late.check("before web font arrives", "Wisp Weight Test");
-    REQUIRE(font_miss_occurred);
     QFile file(directory + "/normal-400.ttf");
     // Prime both result caches with the fallback before registering its alias.
     int fallback_width, split_width;
@@ -165,14 +159,20 @@ int main(int argc, char **argv)
     REQUIRE(file.open(QIODevice::ReadOnly));
     QByteArray data = file.readAll();
     char css_name[] = "Wisp Arriving Web Font";
-    font_variant_id id = {css_name, CSS_FONT_WEIGHT_400, CSS_FONT_STYLE_NORMAL};
+    font_variant_id id = {1, 0, css_name, CSS_FONT_WEIGHT_400, CSS_FONT_STYLE_NORMAL};
     generation = html_font_face_generation();
     REQUIRE(nsqt_layout_table->load_font_data(&id,
         reinterpret_cast<const uint8_t *>(data.constData()), data.size()) == NSERROR_OK);
     REQUIRE(html_font_face_generation() != generation);
-    REQUIRE(repaints == 1);
     REQUIRE(nsqt_capture_text_cache_stats()["entries"].toInteger() == 0);
-    late.check("web font alias and cached fallback invalidation", "Wisp Normal Test");
+    // The downloaded resource has a private native identity, not a substitution
+    // into the installed family. It still supplies the original glyph metrics.
+    QFont loaded = nsqt_capture_font(&late.style);
+    REQUIRE(QFontInfo(loaded).family().startsWith("WispWeb"));
+    REQUIRE(QFont::substitutes("Wisp Arriving Web Font").isEmpty());
+    QFont original("Wisp Normal Test");
+    original.setPixelSize(16);
+    REQUIRE(QFontMetricsF(loaded).horizontalAdvance("a b c") == QFontMetricsF(original).horizontalAdvance("a b c"));
     int loaded_width;
     REQUIRE(nsqt_layout_table->width(&late.style, "a b c", 5, &loaded_width) == NSERROR_OK);
     REQUIRE(loaded_width != fallback_width);

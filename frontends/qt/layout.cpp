@@ -24,14 +24,17 @@
 #include <QApplication>
 #include <QByteArray>
 #include <QCache>
+#include <QCryptographicHash>
 #include <QFontDatabase>
 #include <QPainter>
 #include <QRawFont>
+#include <QUuid>
 #include <QTextBoundaryFinder>
 #include <QWidget>
 #include <QtEndian>
 #include <QtMath>
 #include <cstring>
+#include <memory>
 #include <stddef.h>
 #include <utility>
 
@@ -41,6 +44,7 @@
 
 extern "C" {
 
+#include <libcss/properties.h>
 #include "utils/errors.h"
 #include "utils/log.h"
 #include "utils/nsoption.h"
@@ -52,7 +56,7 @@ extern "C" {
 }
 
 #include "qt/layout.h"
-#include "qt/misc.h"
+#include "qt/webfont.h"
 
 #ifdef WISP_QT_CAPTURE
 #include "qt/capture_inspect.h"
@@ -128,6 +132,60 @@ static std::pair<int, int> font_weight_rank(int requested, int available)
     return {2, available - 500};
 }
 
+/* Immutable native resources can be shared; the CSS bindings below cannot.
+ * The weak index retains neither downloaded bytes nor unused native fonts. */
+struct WebFontResource {
+    QString family;
+    int font_id;
+    ~WebFontResource()
+    {
+        QFontDatabase::removeApplicationFont(font_id);
+    }
+};
+static QHash<QByteArray, std::weak_ptr<const WebFontResource>> web_font_resources;
+
+struct WebFontFace {
+    std::shared_ptr<const WebFontResource> resource;
+    int weight; // CSS descriptor, independent of the file's weight/style.
+    uint8_t style;
+    uint32_t order;
+};
+
+using WebFontFamilies = QHash<QString, QList<WebFontFace>>;
+static QHash<uint64_t, WebFontFamilies> web_fonts;
+
+static int font_style_rank(uint8_t requested, uint8_t available)
+{
+    if (requested == available)
+        return 0;
+    if (requested == CSS_FONT_STYLE_NORMAL)
+        return available == CSS_FONT_STYLE_OBLIQUE ? 1 : 2;
+    return available == CSS_FONT_STYLE_NORMAL ? 2 : 1;
+}
+
+/* CSS Fonts 3 4.2/4.4/5.2: match only the faces assigned to this CSS family,
+ * using their descriptors, not the naming/style metadata in the downloaded file.
+ * This runs on a QFont cache miss, not on each measurement or paint operation. */
+static const WebFontFace *web_font_face(uint64_t font_set, const QString &family, int weight, uint8_t style)
+{
+    auto set = web_fonts.constFind(font_set);
+    if (set == web_fonts.cend())
+        return nullptr;
+    auto found = set->constFind(family.toCaseFolded());
+    if (found == set->cend())
+        return nullptr;
+    const WebFontFace *best = nullptr;
+    std::pair<int, std::pair<int, int>> best_rank;
+    for (const WebFontFace &face : *found) {
+        const auto rank = std::make_pair(font_style_rank(style, face.style), font_weight_rank(weight, face.weight));
+        if (best == nullptr || rank < best_rank || (rank == best_rank && face.order >= best->order)) {
+            best = &face;
+            best_rank = rank;
+        }
+    }
+    return best;
+}
+
 /* Called only on a QFont cache miss, after pixel sizing. Keep Qt's family,
  * style and width choice; correct missing weights within that set of faces. */
 static void match_font_weight(QFont &font)
@@ -174,8 +232,8 @@ static void match_font_weight(QFont &font)
         font.setWeight(QFont::Weight(chosen));
 }
 
-/* Resolve one CSS family without accepting Qt's fallback for an unknown name.
- * Registered web fonts take priority over installed families of the same name. */
+/* Resolve a platform family without accepting Qt's fallback for an unknown
+ * name. The caller checks the CSS web-face registry before taking this path. */
 static QString resolve_font_family(const QString &family, bool italic)
 {
 #if QT_CONFIG(fontconfig)
@@ -274,18 +332,23 @@ static QString available_font_family(const QString &family, bool italic)
 }
 
 /* Try CSS families in order, then the configured generic family. */
-static QFont *new_qfont_fstyle(const struct plot_font_style *fstyle)
+static QFont new_qfont_fstyle(const struct plot_font_style *fstyle)
 {
-    QFont *nfont;
     QString family;
-    bool italic = (fstyle->flags & FONTF_ITALIC) != 0;
+    const uint8_t style = fstyle->flags & FONTF_ITALIC ? CSS_FONT_STYLE_ITALIC
+        : fstyle->flags & FONTF_OBLIQUE                ? CSS_FONT_STYLE_OBLIQUE
+                                                       : CSS_FONT_STYLE_NORMAL;
+    bool italic = style != CSS_FONT_STYLE_NORMAL;
+    const WebFontFace *face = nullptr;
 
     /* First, try to find a matching font from the CSS font-family list */
     if (fstyle->families != NULL) {
         lwc_string *const *families = fstyle->families;
         while (*families != NULL) {
             const char *family_name = lwc_string_data(*families);
-            family = available_font_family(QString::fromUtf8(family_name), italic);
+            const QString css_family = QString::fromUtf8(family_name);
+            face = web_font_face(fstyle->font_set, css_family, fstyle->weight, style);
+            family = face ? face->resource->family : available_font_family(css_family, italic);
             if (!family.isEmpty()) {
                 NSLOG(wisp, DEBUG, "Using CSS font-family: '%s' -> '%s'", family_name, qPrintable(family));
                 break;
@@ -294,10 +357,6 @@ static QFont *new_qfont_fstyle(const struct plot_font_style *fstyle)
             /* Font not found - log at INFO for web font debugging
              */
             NSLOG(wisp, INFO, "Rendering text: font '%s' NOT FOUND, trying next", family_name);
-            /* Mark that we had a font miss - repaint needed when
-             * font loads */
-            extern bool font_miss_occurred;
-            font_miss_occurred = true;
             families++;
         }
     }
@@ -328,18 +387,20 @@ static QFont *new_qfont_fstyle(const struct plot_font_style *fstyle)
         }
     }
 
-    nfont = new QFont(family, -1, fstyle->weight, italic);
+    QFont nfont(family, -1, fstyle->weight, italic);
 
-    nfont->setPixelSize(qMax(1, int(font_pixel_size(fstyle))));
-    match_font_weight(*nfont);
+    nfont.setPixelSize(qMax(1, int(font_pixel_size(fstyle))));
+    if (face == nullptr) {
+        match_font_weight(nfont);
+    }
 
     if (fstyle->flags & FONTF_SMALLCAPS) {
-        nfont->setCapitalization(QFont::SmallCaps);
+        nfont.setCapitalization(QFont::SmallCaps);
     }
 
     /* The painter scales glyphs, but absolute CSS letter spacing stays in pixels. */
     if (fstyle->letter_spacing != 0 && fstyle->size != 0) {
-        nfont->setLetterSpacing(QFont::AbsoluteSpacing, qreal(fstyle->letter_spacing) / font_scale(fstyle));
+        nfont.setLetterSpacing(QFont::AbsoluteSpacing, qreal(fstyle->letter_spacing) / font_scale(fstyle));
     }
 
     return nfont;
@@ -444,12 +505,7 @@ private:
     bool eligible;
 };
 
-/**
- * get a qt font object for a given netsurf font style
- *
- * This implents a trivial LRU cache for font entries
- */
-static QFont *nsfont_style_to_font(const struct plot_font_style *fstyle)
+static void nsqt_font_cache_init()
 {
     // Generic-only pages must also invalidate when installed fonts change.
     if (!font_database_connection) {
@@ -459,11 +515,22 @@ static QFont *nsfont_style_to_font(const struct plot_font_style *fstyle)
         font_database_connection =
             QObject::connect(qApp, &QGuiApplication::fontDatabaseChanged, qApp, nsqt_font_cache_clear);
     }
+}
+
+/**
+ * get a qt font object for a given netsurf font style
+ *
+ * This implents a trivial LRU cache for font entries
+ */
+static QFont nsfont_style_to_font(const struct plot_font_style *fstyle)
+{
+    nsqt_font_cache_init();
     int idx;
     int oldest_idx = 0;
 
     for (idx = 0; idx < PFCACHE_ENTRIES; idx++) {
         if ((pfcache.entries[idx].qfont != NULL) && (pfcache.entries[idx].style.families == fstyle->families) &&
+            (pfcache.entries[idx].style.font_set == fstyle->font_set) &&
             (pfcache.entries[idx].style.family == fstyle->family) &&
             (pfcache.entries[idx].style.size == fstyle->size) &&
             (pfcache.entries[idx].style.weight == fstyle->weight) &&
@@ -473,9 +540,9 @@ static QFont *nsfont_style_to_font(const struct plot_font_style *fstyle)
             pfcache.entries[idx].hit++;
             pfcache.entries[idx].age = ++pfcache.age;
 
-            QFont *cached_font = new QFont(*pfcache.entries[idx].qfont);
+            QFont cached_font = *pfcache.entries[idx].qfont;
             NSLOG(wisp, DEEPDEBUG, "CACHE HIT - generic_family=%d (Resolved by Qt to: '%s')", fstyle->family,
-                QFontInfo(*cached_font).family().toUtf8().constData());
+                QFontInfo(cached_font).family().toUtf8().constData());
             return cached_font;
         }
         if (pfcache.entries[idx].age < pfcache.entries[oldest_idx].age) {
@@ -494,9 +561,10 @@ static QFont *nsfont_style_to_font(const struct plot_font_style *fstyle)
         pfcache.entries[oldest_idx].qfont = NULL;
     }
 
-    pfcache.entries[oldest_idx].qfont = new_qfont_fstyle(fstyle);
+    pfcache.entries[oldest_idx].qfont = new QFont(new_qfont_fstyle(fstyle));
 
     pfcache.entries[oldest_idx].style.families = fstyle->families;
+    pfcache.entries[oldest_idx].style.font_set = fstyle->font_set;
     pfcache.entries[oldest_idx].style.family = fstyle->family;
     pfcache.entries[oldest_idx].style.size = fstyle->size;
     pfcache.entries[oldest_idx].style.weight = fstyle->weight;
@@ -506,9 +574,9 @@ static QFont *nsfont_style_to_font(const struct plot_font_style *fstyle)
     pfcache.entries[oldest_idx].hit = 0;
     pfcache.entries[oldest_idx].age = ++pfcache.age;
 
-    QFont *created_font = new QFont(*pfcache.entries[oldest_idx].qfont);
+    QFont created_font = *pfcache.entries[oldest_idx].qfont;
     NSLOG(wisp, DEEPDEBUG, "CACHE MISS - Created fresh QFont, generic_family=%d (Resolved by Qt to: '%s')",
-        fstyle->family, QFontInfo(*created_font).family().toUtf8().constData());
+        fstyle->family, QFontInfo(created_font).family().toUtf8().constData());
     return created_font;
 }
 
@@ -521,8 +589,7 @@ qreal nsqt_capture_font_scale(const struct plot_font_style *style)
 QFont nsqt_capture_font(const struct plot_font_style *style)
 {
     // Use the same selection, substitutions and pixel sizing as text painting.
-    std::unique_ptr<QFont> font(nsfont_style_to_font(style));
-    return *font;
+    return nsfont_style_to_font(style);
 }
 
 QJsonObject nsqt_capture_text_cache_stats()
@@ -575,6 +642,23 @@ static void nsqt_font_cache_fini(void)
     QObject::disconnect(font_database_connection);
     font_database_connection = {};
     nsqt_font_cache_release();
+    web_fonts.clear();
+    web_font_resources.clear();
+}
+
+/* A new CSS binding to an existing native resource changes only this document's
+ * selection. Measurement keys already include the resolved QFont, so reusable
+ * metrics/glyph engines and other documents' selections remain valid. */
+static void nsqt_font_cache_clear_set(uint64_t font_set)
+{
+    for (auto &entry : pfcache.entries) {
+        if (entry.qfont != nullptr && entry.style.font_set == font_set) {
+            delete entry.qfont;
+            entry.qfont = nullptr;
+            entry.age = 0;
+        }
+    }
+    html_font_face_notify_changed();
 }
 
 /* All requests are prefixes of the same string with unchanged font metrics,
@@ -723,13 +807,12 @@ layout_position(PrefixWidths &widths, const QString &qstr, size_t length, int x,
 static nserror nsqt_layout_width(const struct plot_font_style *fstyle, const char *string, size_t length, int *width)
 {
     quint64 generation = text_cache_generation;
-    QFont *font = nsfont_style_to_font(fstyle);
+    QFont font = nsfont_style_to_font(fstyle);
     /* Use top-level widget as device for accurate metrics matching rendering */
     QPaintDevice *device = get_metrics_device();
-    QFontMetricsF metrics(*font, device);
-    TextMeasurement cached(*font, metrics, fstyle, string, length, TextOperation::Width, 0, generation);
+    QFontMetricsF metrics(font, device);
+    TextMeasurement cached(font, metrics, fstyle, string, length, TextOperation::Width, 0, generation);
     if (cached.find(width)) {
-        delete font;
         return NSERROR_OK;
     }
     /* IMPORTANT: Use QString::fromUtf8 to correctly interpret byte length as UTF-8.
@@ -744,7 +827,6 @@ static nserror nsqt_layout_width(const struct plot_font_style *fstyle, const cha
     *width = positioning ? qRound(advance) : qCeil(advance);
     cached.insert(*width);
 
-    delete font;
     NSLOG(wisp, DEEPDEBUG, "fstyle: %p string:\"%.*s\", length: %" PRIsizet ", width: %dpx", fstyle, (int)length,
         string, length, *width);
     return NSERROR_OK;
@@ -766,17 +848,16 @@ static nserror nsqt_layout_width(const struct plot_font_style *fstyle, const cha
 static nserror nsqt_layout_position(
     const struct plot_font_style *fstyle, const char *string, size_t length, int x, size_t *string_idx, int *actual_x)
 {
-    QFont *font = nsfont_style_to_font(fstyle);
+    QFont font = nsfont_style_to_font(fstyle);
     /* Use top-level widget as device for accurate metrics matching rendering */
     QPaintDevice *device = get_metrics_device();
-    QFontMetricsF metrics(*font, device);
+    QFontMetricsF metrics(font, device);
     nserror res;
 
     QString qstr = QString::fromUtf8(string, length);
     PrefixWidths widths{metrics, font_scale(fstyle), fstyle->letter_spacing, qstr.size()};
     res = layout_position(widths, qstr, length, x, string_idx, actual_x);
 
-    delete font;
 
     NSLOG(wisp, DEEPDEBUG,
         "fstyle: %p string:\"%.*s\", length: %" PRIsizet ", "
@@ -971,13 +1052,12 @@ static nserror nsqt_layout_split(const struct plot_font_style *fstyle, const cha
 {
     nserror res = NSERROR_OK;
     quint64 generation = text_cache_generation;
-    QFont *font = nsfont_style_to_font(fstyle);
+    QFont font = nsfont_style_to_font(fstyle);
     /* Use top-level widget as device for accurate metrics matching rendering */
     QPaintDevice *device = get_metrics_device();
-    QFontMetricsF metrics(*font, device);
-    TextMeasurement cached(*font, metrics, fstyle, string, length, TextOperation::Split, split, generation);
+    QFontMetricsF metrics(font, device);
+    TextMeasurement cached(font, metrics, fstyle, string, length, TextOperation::Split, split, generation);
     if (cached.find(actual_x, string_idx)) {
-        delete font;
         return NSERROR_OK;
     }
     qreal scale = font_scale(fstyle);
@@ -988,11 +1068,9 @@ static nserror nsqt_layout_split(const struct plot_font_style *fstyle, const cha
             metrics, scale, fstyle->letter_spacing, string, length, split, string_idx, actual_x);
     }
     if (res != NSERROR_OK) {
-        delete font;
         return res;
     }
     cached.insert(*actual_x, *string_idx);
-    delete font;
     NSLOG(wisp, DEEPDEBUG,
         "fstyle: %p string:\"%.*s\", length: %" PRIsizet ", "
         "split: %dpx, offset: %" PRIsizet ", actual_x: %dpx",
@@ -1012,13 +1090,13 @@ nsqt_layout_plot(QPainter *painter, const struct plot_font_style *fstyle, int x,
     QColor strokecolour(
         fstyle->foreground & 0xFF, (fstyle->foreground & 0xFF00) >> 8, (fstyle->foreground & 0xFF0000) >> 16);
     QPen pen(strokecolour);
-    QFont *font = nsfont_style_to_font(fstyle);
+    QFont font = nsfont_style_to_font(fstyle);
 
     NSLOG(wisp, DEEPDEBUG, "fstyle: %p string:\"%.*s\", length: %" PRIsizet ", width: %dpx", fstyle, (int)length, text,
-        length, QFontMetrics(*font, painter->device()).horizontalAdvance(text, length));
+        length, QFontMetrics(font, painter->device()).horizontalAdvance(text, length));
 
     painter->setPen(pen);
-    painter->setFont(*font);
+    painter->setFont(font);
 
     qreal scale = font_scale(fstyle);
     if (scale != 1.0) {
@@ -1031,36 +1109,9 @@ nsqt_layout_plot(QPainter *painter, const struct plot_font_style *fstyle, int x,
         painter->drawText(x, y, QString::fromUtf8(text, length));
     }
 
-    delete font;
     return NSERROR_OK;
 }
 
-
-/**
- * Flag to track if a font repaint is already scheduled.
- * This coalesces multiple font loads into a single repaint.
- */
-static bool font_repaint_pending = false;
-
-/**
- * Flag to track if any font lookup failed (text rendered with fallback).
- * Repaint is only needed if this is true.
- */
-bool font_miss_occurred = false;
-
-/**
- * Callback triggered after font loads to repaint all windows (FOUT strategy).
- */
-static void font_repaint_callback(void *p)
-{
-    (void)p;
-    font_repaint_pending = false;
-    font_miss_occurred = false;
-    NSLOG(wisp, INFO, "Font loaded, triggering global repaint");
-    for (QWidget *w : QApplication::topLevelWidgets()) {
-        w->update();
-    }
-}
 
 /**
  * Load font data into Qt's font database.
@@ -1070,45 +1121,44 @@ static void font_repaint_callback(void *p)
  */
 static nserror nsqt_load_font_data(const struct font_variant_id *id, const uint8_t *data, size_t size)
 {
-    QByteArray fontData(reinterpret_cast<const char *>(data), size);
-
-    int fontId = QFontDatabase::addApplicationFontFromData(fontData);
-    if (fontId == -1) {
-        NSLOG(wisp, WARNING, "Qt rejected font '%s' (weight=%d style=%d, %zu bytes) - invalid font data?",
-            id->family_name, id->weight, id->style, size);
+    if (data == nullptr || size == 0 || size > 64 * 1024 * 1024 || id == nullptr || id->family_name == nullptr ||
+        id->font_set == 0)
         return NSERROR_INVALID;
-    }
-
-    QStringList families = QFontDatabase::applicationFontFamilies(fontId);
-    NSLOG(wisp, INFO, "Loaded font '%s' (weight=%d style=%d) into Qt as font ID %d (families: %s)", id->family_name,
-        id->weight, id->style, fontId, families.join(", ").toUtf8().constData());
-
-    /* Register CSS→Qt font name substitution using Qt's built-in system */
-    if (!families.isEmpty()) {
-        QString cssName = QString::fromUtf8(id->family_name);
-        QString qtName = families.first();
-
-        /* Tell Qt: when asked for CSS name, use Qt name instead */
-        QFont::insertSubstitution(cssName, qtName);
-        NSLOG(wisp, INFO, "Registered font substitution: '%s' -> '%s'", id->family_name, qtName.toUtf8().constData());
-
-        /* Purge the qt font cache so that subsequent layout passes are forced
-         * to re-evaluate the fonts and pick up this new substitution. */
-        nsqt_font_cache_clear();
-
-        /* FOUT: Schedule a global repaint so text re-renders with new
-         * font. Only schedule if:
-         * 1. A font miss occurred (text was rendered with fallback)
-         * 2. Not already pending (to coalesce multiple font loads)
-         */
-        if (font_miss_occurred && !font_repaint_pending) {
-            font_repaint_pending = true;
-            nsqt_schedule(100, font_repaint_callback, NULL);
-            NSLOG(wisp, INFO, "Font miss detected, scheduling repaint");
-        } else if (!font_miss_occurred) {
-            NSLOG(wisp, INFO, "No font miss - skipping repaint");
+    int weight = 400;
+    if (id->weight == CSS_FONT_WEIGHT_BOLD)
+        weight = 700;
+    else if (id->weight >= CSS_FONT_WEIGHT_100 && id->weight <= CSS_FONT_WEIGHT_900)
+        weight = (id->weight - CSS_FONT_WEIGHT_100 + 1) * 100;
+    const QFont::Style style = id->style == CSS_FONT_STYLE_ITALIC ? QFont::StyleItalic
+        : id->style == CSS_FONT_STYLE_OBLIQUE                     ? QFont::StyleOblique
+                                                                  : QFont::StyleNormal;
+    nsqt_font_cache_init();
+    QCryptographicHash hash(QCryptographicHash::Sha256);
+    hash.addData(QByteArrayView(reinterpret_cast<const char *>(data), qsizetype(size)));
+    const char descriptors[] = {char(weight / 100), char(style)};
+    hash.addData(QByteArrayView(descriptors, sizeof(descriptors)));
+    const QByteArray key = hash.result();
+    auto resource = web_font_resources.value(key).lock();
+    if (!resource) {
+        const QByteArray private_name = "WispWeb" + QUuid::createUuid().toByteArray(QUuid::Id128);
+        QByteArray fontData = nsqt_webfont_data(
+            QByteArray::fromRawData(reinterpret_cast<const char *>(data), size), private_name, weight, style);
+        if (fontData.isEmpty())
+            return NSERROR_INVALID;
+        const int fontId = QFontDatabase::addApplicationFontFromData(fontData);
+        if (fontId == -1)
+            return NSERROR_INVALID;
+        const QString family = QString::fromLatin1(private_name);
+        if (!QFontDatabase::applicationFontFamilies(fontId).contains(family)) {
+            QFontDatabase::removeApplicationFont(fontId);
+            return NSERROR_INVALID;
         }
+        resource = std::shared_ptr<const WebFontResource>(new WebFontResource{family, fontId});
+        web_font_resources.insert(key, resource);
     }
+    web_fonts[id->font_set][QString::fromUtf8(id->family_name).toCaseFolded()].append(
+        {std::move(resource), weight, id->style, id->order});
+    nsqt_font_cache_clear_set(id->font_set);
 
     return NSERROR_OK;
 }
@@ -1116,13 +1166,31 @@ static nserror nsqt_load_font_data(const struct font_variant_id *id, const uint8
 
 static nserror nsqt_font_metrics(const struct plot_font_style *fstyle, int *ascent, int *descent)
 {
-    QFont *font = nsfont_style_to_font(fstyle);
-    QFontMetricsF metrics(*font, get_metrics_device());
+    QFont font = nsfont_style_to_font(fstyle);
+    QFontMetricsF metrics(font, get_metrics_device());
     qreal scale = font_scale(fstyle);
     *ascent = qRound(metrics.ascent() * scale);
     *descent = qRound(metrics.descent() * scale);
-    delete font;
     return NSERROR_OK;
+}
+
+static void nsqt_release_font_set(uint64_t font_set)
+{
+    auto found = web_fonts.find(font_set);
+    if (found == web_fonts.end())
+        return;
+    // Remove the selection namespace before the last resource owner causes a
+    // font-database notification. Other documents keep shared resources alive.
+    WebFontFamilies families = std::move(*found);
+    web_fonts.erase(found);
+    nsqt_font_cache_clear_set(font_set);
+    families.clear();
+    for (auto resource = web_font_resources.begin(); resource != web_font_resources.end();) {
+        if (resource->expired())
+            resource = web_font_resources.erase(resource);
+        else
+            ++resource;
+    }
 }
 
 static struct gui_layout_table layout_table = {
@@ -1130,6 +1198,7 @@ static struct gui_layout_table layout_table = {
     .position = nsqt_layout_position,
     .split = nsqt_layout_split,
     .load_font_data = nsqt_load_font_data,
+    .release_font_set = nsqt_release_font_set,
     .font_metrics = nsqt_font_metrics,
 };
 

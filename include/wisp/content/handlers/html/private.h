@@ -265,6 +265,8 @@ typedef struct html_content {
 
     /** Timestamp when we first delayed box conversion for fonts (ms), 0 if not waiting */
     uint64_t font_wait_start_ms;
+    uint64_t font_set_id; /**< Stable identity, never reused by another document. */
+    struct html_font_face_set *font_faces;
 
     /** Font callback table */
     const struct gui_layout_table *font_func;

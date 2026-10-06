@@ -18,12 +18,7 @@ extern "C" {
 }
 #include "qt/capture_inspect.h"
 #include "qt/layout.h"
-#include "qt/misc.h"
 
-nserror nsqt_schedule(int, void (*)(void *), void *)
-{
-    return NSERROR_OK;
-}
 
 #define REQUIRE(expr)                                                                                                  \
     do {                                                                                                               \

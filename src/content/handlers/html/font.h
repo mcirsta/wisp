@@ -27,6 +27,7 @@
 #ifndef WISP_HTML_FONT_H
 #define WISP_HTML_FONT_H
 
+struct html_content;
 struct plot_font_style;
 struct gui_layout_table;
 
@@ -36,11 +37,11 @@ int font_baseline(const struct gui_layout_table *font_func, const struct plot_fo
 /**
  * Populate a font style using data from a computed CSS style
  *
- * \param unit_len_ctx  Length conversion context
+ * \param html     Document supplying length units and web-font ownership
  * \param css      Computed style to consider
  * \param fstyle   Font style to populate
  */
 void font_plot_style_from_css(
-    const css_unit_ctx *unit_len_ctx, const css_computed_style *css, struct plot_font_style *fstyle);
+    const struct html_content *html, const css_computed_style *css, struct plot_font_style *fstyle);
 
 #endif

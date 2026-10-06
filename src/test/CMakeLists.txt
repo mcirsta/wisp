@@ -367,7 +367,7 @@ target_include_directories(test_quickjs PRIVATE
 target_link_libraries(test_quickjs PRIVATE qjs nsutils wisp)
 
 # ============================================================================
-# Font-face Tests (simple test linked to neosurf lib)
+# Document-owned font download lifecycle tests
 # ============================================================================
 
 add_executable(font_face_test font_face_test.c)

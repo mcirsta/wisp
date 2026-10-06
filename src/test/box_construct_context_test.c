@@ -126,6 +126,13 @@ static nserror schedule(int delay, void (*callback)(void *), void *pw)
     return NSERROR_OK;
 }
 
+/* The fixture has no llcache handle. Layout diagnostics still need its URL. */
+nsurl *content_get_url(struct content *content)
+{
+    ck_assert_ptr_eq(content, &html.base);
+    return html.base_url;
+}
+
 static void run_slice(void)
 {
     ck_assert_ptr_nonnull(scheduled);

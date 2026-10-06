@@ -47,6 +47,20 @@ content_type content_get_type(hlcache_handle *content)
     return CONTENT_IMAGE;
 }
 
+/* The cache boundary uses an identity token rather than a real content object.
+ * Supply dimensions too: DONE diagnostics inspect them even without reflow. */
+int content_get_width(hlcache_handle *content)
+{
+    ck_assert_ptr_eq(content, handle());
+    return 32;
+}
+
+int content_get_height(hlcache_handle *content)
+{
+    ck_assert_ptr_eq(content, handle());
+    return 24;
+}
+
 content_status content_get_status(hlcache_handle *content)
 {
     ck_assert_ptr_eq(content, handle());

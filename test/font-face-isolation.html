@@ -1,0 +1,27 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>CSS font-face family and descriptor isolation</title>
+<style>
+/* CSS Fonts 3 4.2 and 4.4: CSS descriptors define face membership, even when
+   resources share internal names or their physical weight differs. */
+@font-face { font-family: Reading; src: url(fonts/normal-400.ttf); font-weight: normal; }
+@font-face { font-family: Heavy; src: url(fonts/normal-700.ttf); font-weight: normal; }
+@font-face { font-family: CollisionA; src: url(fonts/isolation-a.woff2); }
+@font-face { font-family: CollisionB; src: url(fonts/isolation-b.ttf); }
+@font-face { font-family: Remapped; src: url(fonts/weight-300.ttf); font-weight: bold; }
+@font-face { font-family: Remapped; src: url(fonts/weight-900.ttf); font-weight: normal; }
+body { margin: 20px; font: 20px/30px sans-serif; color: black; background: white; }
+span { display: inline-block; }
+#reading { font-family: Reading; }
+#heavy { font-family: Heavy; }
+#a { font-family: CollisionA; }
+#b { font-family: CollisionB; }
+#regular { font-family: Remapped; }
+#bold { font-family: Remapped; font-weight: bold; }
+</style>
+<p><span id="reading">MMMM</span></p>
+<p><span id="heavy">MMMM</span></p>
+<p><span id="a">MMMM</span></p>
+<p><span id="b">MMMM</span></p>
+<p><span id="regular">MMMM</span></p>
+<p><span id="bold">MMMM</span></p>

@@ -28,79 +28,20 @@
 #include <wisp/utils/errors.h>
 
 struct html_content;
-struct nsurl;
-
-/**
- * Process font-face rules from the selection context and start fetching fonts.
- *
- * \param c          HTML content with loaded stylesheets
- * \param select_ctx CSS selection context with all stylesheets
- * \return NSERROR_OK on success, or error code
- */
+/** Start the document's applicable faces once its stylesheets are ready. */
 nserror html_font_face_init(struct html_content *c, css_select_ctx *select_ctx);
 
-/**
- * Free font-face resources for an HTML content.
- *
- * \param c HTML content
- * \return NSERROR_OK on success
- */
-nserror html_font_face_fini(struct html_content *c);
+/** Cancel only this document's pending downloads; retain already loaded faces. */
+void html_font_face_stop(struct html_content *c);
 
-/**
- * Check if a font family is available (either system or loaded web font).
- *
- * \param family_name Font family name to check
- * \return true if available, false otherwise
- */
-bool html_font_face_is_available(const char *family_name);
+/** Cancel downloads and release the document's native font registrations. */
+void html_font_face_fini(struct html_content *c);
 
-/**
- * Process a font-face rule and start downloading the font.
- *
- * This is called from the CSS module when a font-face rule is parsed.
- *
- * \param font_face   Parsed font-face rule from libcss
- * \param base_url    Base URL for resolving relative font URLs
- * \return NSERROR_OK on success, or error code
- */
-nserror html_font_face_process(const css_font_face *font_face, const char *base_url);
+bool html_font_face_has_pending(const struct html_content *c);
+unsigned html_font_face_pending_count(const struct html_content *c);
 
-/*
- * NOTE: Font data loading is handled via gui_layout_table.load_font_data
- * in include/neosurf/layout.h. Frontends MUST implement this table entry.
- * Do NOT define a function named html_font_face_load_data - it will not be called.
- */
-/**
- * Callback invoked when all pending font downloads have completed.
- * This can be used to trigger a page redraw (FOUT strategy).
- */
-typedef void (*html_font_face_done_cb)(void);
-
-/**
- * Set the callback to invoke when all pending font downloads complete.
- *
- * \param cb Callback function (or NULL to unset)
- */
-void html_font_face_set_done_callback(html_font_face_done_cb cb);
-
-/**
- * Check if there are any pending font downloads.
- *
- * \return true if fonts are still downloading, false otherwise
- */
-bool html_font_face_has_pending(void);
-
-/**
- * Get the count of pending font downloads (for logging).
- *
- * \return number of fonts still downloading
- */
-int html_font_face_pending_count(void);
-
-/* Font availability is shared by documents. Frontends must notify changes to
- * their font database/aliases so retained measurements cannot outlive them. */
+/* Native font database changes still invalidate retained font measurements. */
 uint64_t html_font_face_generation(void);
 void html_font_face_notify_changed(void);
 
-#endif /* NETSURF_HTML_FONT_FACE_H */
+#endif

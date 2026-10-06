@@ -39,9 +39,11 @@
 
 struct plot_font_style;
 
-/** Font variant identity: family name + weight + style from @font-face */
+/** A document-owned CSS face, with descriptors from @font-face */
 struct font_variant_id {
-    char *family_name; /**< CSS font-family name */
+    uint64_t font_set; /**< Owning document identity; zero is reserved for system fonts. */
+    uint32_t order; /**< Face order within that document, independent of download completion. */
+    const char *family_name; /**< CSS font-family name */
     uint8_t weight; /**< css_font_weight_e */
     uint8_t style; /**< css_font_style_e */
 };
@@ -111,14 +113,18 @@ struct gui_layout_table {
      * Load font data into the system font database.
      *
      * This is called when a web font (@font-face) has been downloaded.
-     * The frontend should load the font into its platform's font system.
+     * The frontend binds it only inside id->font_set; font selection must use
+     * plot_font_style.font_set, and release_font_set releases that ownership.
      *
-     * \param[in] id   Font variant identity (family name, weight, style)
+     * \param[in] id   Document, rule order and CSS family/weight/style descriptors
      * \param[in] data Raw font file data (TrueType/OpenType/WOFF)
      * \param[in] size Size of font data in bytes
      * \return NSERROR_OK on success, or appropriate error code
      */
     nserror (*load_font_data)(const struct font_variant_id *id, const uint8_t *data, size_t size);
+
+    /** Release native faces and cached selections belonging to a destroyed document. */
+    void (*release_font_set)(uint64_t font_set);
 
     /**
      * Optional font ascent and descent, in unscaled layout pixels.
