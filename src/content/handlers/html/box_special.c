@@ -62,6 +62,23 @@
 
 static const content_type image_types = CONTENT_IMAGE;
 
+enum box_special_content box_special_content_type(dom_html_element_type tag, bool scripting)
+{
+    switch (tag) {
+    case DOM_HTML_ELEMENT_TYPE_IFRAME:
+    case DOM_HTML_ELEMENT_TYPE_EMBED:
+        /* HTML rendering 15.4.1: these remain replaced without a resource.
+         * In particular, iframe descendants never represent fallback. */
+        return BOX_SPECIAL_CONTENT_REPLACED;
+    case DOM_HTML_ELEMENT_TYPE_CANVAS:
+        return scripting ? BOX_SPECIAL_CONTENT_REPLACED : BOX_SPECIAL_CONTENT_NORMAL;
+    case DOM_HTML_ELEMENT_TYPE_NOSCRIPT:
+        return scripting ? BOX_SPECIAL_CONTENT_NONE : BOX_SPECIAL_CONTENT_NORMAL;
+    default:
+        return BOX_SPECIAL_CONTENT_NORMAL;
+    }
+}
+
 
 /**
  * determine if a box is the root node
@@ -787,31 +804,9 @@ static bool box_button(dom_node *n, html_content *content, struct box *box, bool
 
 
 /**
- * Canvas element
+ * Embedded external content (HTML's embed element).
  */
-static bool box_canvas(dom_node *n, html_content *content, struct box *box, bool *convert_children)
-{
-    /* If scripting is not enabled display the contents of canvas */
-    if (!content->enable_scripting) {
-        return true;
-    }
-    *convert_children = false;
-
-    if (box->style && ns_computed_display(box->style, box_is_root(n)) == CSS_DISPLAY_NONE)
-        return true;
-
-    /* This is replaced content */
-    box->flags |= IS_REPLACED | REPLACE_DIM;
-
-    return true;
-}
-
-
-/**
- * Embedded object (not in any HTML specification:
- * see http://wp.netscape.com/assist/net_sites/new_html3_prop.html )
- */
-static bool box_embed(dom_node *n, html_content *content, struct box *box, bool *convert_children,
+static bool box_embed(dom_node *n, html_content *content, struct box *box,
     void *box_context, struct box_construct_region *region)
 {
     struct object_params *params;
@@ -931,7 +926,6 @@ static bool box_embed(dom_node *n, html_content *content, struct box *box, bool 
     box->object_params = params;
 
     /* start fetch */
-    box->flags |= IS_REPLACED;
     return box_construct_request_object(content, region, params->data, box, CONTENT_ANY, false, 0);
 }
 
@@ -973,7 +967,7 @@ static bool box_frameset(dom_node *n, html_content *content, struct box *box, bo
 /**
  * Inline subwindow [16.5].
  */
-static bool box_iframe(dom_node *n, html_content *content, struct box *box, bool *convert_children,
+static bool box_iframe(dom_node *n, html_content *content, struct box *box,
     void *box_context, struct box_construct_region *region)
 {
     nsurl *url;
@@ -981,6 +975,9 @@ static bool box_iframe(dom_node *n, html_content *content, struct box *box, bool
     dom_exception err;
     struct content_html_iframe *iframe;
     int i;
+
+    /* Replaced sizing also applies before a child browsing context exists. */
+    box->flags |= IFRAME;
 
     if (box->style && ns_computed_display(box->style, box_is_root(n)) == CSS_DISPLAY_NONE)
         return true;
@@ -1079,14 +1076,6 @@ static bool box_iframe(dom_node *n, html_content *content, struct box *box, bool
         dom_string_unref(s);
     }
 
-    /* box */
-    assert(box->style);
-    box->flags |= IFRAME;
-    box->flags |= IS_REPLACED;
-
-    /* Showing iframe, so don't show alternate content */
-    if (convert_children)
-        *convert_children = false;
     return true;
 }
 
@@ -1570,20 +1559,6 @@ no_memory:
 }
 
 
-/**
- * Noscript element
- */
-static bool box_noscript(dom_node *n, html_content *content, struct box *box, bool *convert_children)
-{
-    /* If scripting is enabled, do not display the contents of noscript */
-    if (content->enable_scripting) {
-        *convert_children = false;
-    }
-
-    return true;
-}
-
-
 /* Shared, side-effect-free preflight for construction and search in skipped
  * subtrees. NULL means the existing loader will use ordinary fallback contents;
  * non-NULL is a request candidate, not proof that a later fetch will succeed. */
@@ -2033,6 +2008,22 @@ nserror convert_special_elements(dom_node *node, html_content *content, struct b
         tag_type = DOM_HTML_ELEMENT_TYPE__UNKNOWN;
     }
 
+    /* Apply representation before a handler can return for an absent source,
+     * invisible owner or failed request. The same decision also lets search
+     * exclude inaccessible descendants before any boxes have been created. */
+    switch (box_special_content_type(tag_type, content->enable_scripting)) {
+    case BOX_SPECIAL_CONTENT_NONE:
+        box->type = BOX_NONE;
+        *convert_children = false;
+        return NSERROR_OK;
+    case BOX_SPECIAL_CONTENT_REPLACED:
+        box->flags |= IS_REPLACED;
+        *convert_children = false;
+        break;
+    case BOX_SPECIAL_CONTENT_NORMAL:
+        break;
+    }
+
     if (region != NULL && (tag_type == DOM_HTML_ELEMENT_TYPE_INPUT || tag_type == DOM_HTML_ELEMENT_TYPE_BUTTON)) {
         nserror err = html_forms_create_detached_control(node, &box->gadget);
         if (err != NSERROR_OK)
@@ -2061,11 +2052,13 @@ nserror convert_special_elements(dom_node *node, html_content *content, struct b
     case DOM_HTML_ELEMENT_TYPE_CANVAS:
         if (region != NULL)
             return NSERROR_NOT_IMPLEMENTED;
-        res = box_canvas(node, content, box, convert_children);
+        if (box->flags & IS_REPLACED)
+            box->flags |= REPLACE_DIM;
+        res = true;
         break;
 
     case DOM_HTML_ELEMENT_TYPE_EMBED:
-        res = box_embed(node, content, box, convert_children, box_context, region);
+        res = box_embed(node, content, box, box_context, region);
         break;
 
     case DOM_HTML_ELEMENT_TYPE_FRAMESET:
@@ -2075,7 +2068,7 @@ nserror convert_special_elements(dom_node *node, html_content *content, struct b
         break;
 
     case DOM_HTML_ELEMENT_TYPE_IFRAME:
-        res = box_iframe(node, content, box, convert_children, box_context, region);
+        res = box_iframe(node, content, box, box_context, region);
         break;
 
     case DOM_HTML_ELEMENT_TYPE_IMG:
@@ -2087,7 +2080,7 @@ nserror convert_special_elements(dom_node *node, html_content *content, struct b
         break;
 
     case DOM_HTML_ELEMENT_TYPE_NOSCRIPT:
-        res = box_noscript(node, content, box, convert_children);
+        res = true;
         break;
 
     case DOM_HTML_ELEMENT_TYPE_OBJECT:

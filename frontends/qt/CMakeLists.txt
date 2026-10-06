@@ -286,6 +286,10 @@ if(WISP_QT_CAPTURE)
         add_test(NAME qt_image_fallback
             COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_image_fallback.py $<TARGET_FILE:wisp-qt>)
         set_tests_properties(qt_image_fallback PROPERTIES TIMEOUT 90)
+
+        add_test(NAME qt_special_content_search
+            COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_special_content_search.py $<TARGET_FILE:wisp-qt>)
+        set_tests_properties(qt_special_content_search PROPERTIES TIMEOUT 90)
         add_test(NAME qt_object_fallback
             COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_object_fallback.py $<TARGET_FILE:wisp-qt>)
         set_tests_properties(qt_object_fallback PROPERTIES TIMEOUT 60)

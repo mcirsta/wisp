@@ -108,6 +108,23 @@ reconstruction machinery, including errors from late pixel decoding. Empty sourc
 do not issue a layout request for the document itself. The existing responsive
 source-selection policy is unchanged.
 
+Construction and discovery also share the resource-independent representation
+rules for iframe, embed, canvas and noscript. HTML specifies that
+[iframe descendants represent nothing](https://html.spec.whatwg.org/multipage/iframe-embed-object.html#the-iframe-element);
+an absent, empty or unusable source does not turn them into fallback. Iframes and
+embeds remain replaced, so their generated children are suppressed as well.
+Iframe replaced sizing applies before a child browsing context is created.
+[Canvas](https://html.spec.whatwg.org/multipage/canvas.html#the-canvas-element) uses
+ordinary fallback when scripting is disabled and its bitmap representation when
+scripting is enabled. [Noscript](https://html.spec.whatwg.org/multipage/scripting.html#the-noscript-element)
+has ordinary contents with scripting disabled and no rendered box with scripting
+enabled, consistent with HTML's suggested `display:none !important` default.
+Search excludes suppressed descendants before style selection, including inside
+unopened details or until-found ancestors. Finding such text must not reveal a
+section which cannot display it. Ordinary object fallback and button contents
+remain searchable. This does not add search within child browsing contexts or
+native widget/SVG text selection.
+
 Query replacement, clearing, failure, navigation and teardown release references
 and cancel pending work. Highlights are destroyed before the frontend window,
 because selection cleanup can request a redraw.
@@ -134,12 +151,19 @@ outside this feature; unsupported values are not silently accepted.
   search; generated text; self/ancestor reveal and closed details; immediate and
   late decode failures; stable resource counts; disabled images, srcset and quirks
   mode exclusions. Expectations come from HTML/CSS, not another browser's pixels.
+- `qt_special_content_search`: iframe children and iframe/embed pseudos are
+  excluded before construction and after hiding; missing-source inline iframe
+  dimensions follow CSS; canvas/noscript switch representation with scripting;
+  real fallback still renders, matches and reveals ancestors. Button contents and
+  object fallback remain positive controls.
 - `box_construct_context_test`: shared object preflight agrees with construction,
   makes no requests or mappings, releases temporary parameters, and preserves
   generated UTF-8 attribute text. Existing detached-resource tests cover both
   normal and retained construction.
   Image preflight also covers missing/empty/srcset sources, foreground-image
   preferences, quirks sizing, ignored DOM children and side-effect-free discovery.
+  Embedded/script-dependent representation tests cover absent/empty/self/usable
+  sources, visibility, DOM children and pseudos in ordinary and detached builds.
 - `object_fallback_test`: synchronous retrieval failure, asynchronous failure
   while visible/hidden/rebuilding, retained URL/node identity, changed URLs,
   memory exhaustion, completion gating and non-object exclusions. Pending-to-ready
@@ -203,4 +227,7 @@ and highlighted-fragment counts (total and separately before/after). These
 diagnostics use the optional Qt capture build.
 
 Reference artifacts: `out/render-captures/until-found-2026-10-03/`.
-Unresolved findings are tracked only in [the correctness backlog](layout-correctness.md).
+The fallback batch is closed with the behavior and regression coverage described
+above. Unresolved findings remain in [the correctness backlog](layout-correctness.md)
+for later batches. Acid2 remains exploratory and is not a completion requirement
+for this batch.

@@ -3,22 +3,42 @@
 Only unresolved work belongs here. Completed changes and validation history are
 in Git; the regression fixtures remain in the test suite.
 
+## Continuing discovery in later batches
+
+Keep the existing workflow: investigate a page or test, isolate a reproducer,
+check the relevant specification, fix the root cause and add regression coverage.
+At the start of each batch, define the behavior to fix and its completion checks.
+Record adjacent discoveries here for later without automatically extending that
+batch. Include dependencies necessary to make its fix correct, and explain any
+resulting scope increase.
+
+For new findings, distinguish a confirmed defect from missing feature coverage or
+an investigation. Record the reproducer and standards basis when established;
+otherwise retain the uncertainty. Label an issue as a regression only when there
+is evidence linking it to our changes. Browser comparisons can supply evidence,
+but do not replace the standards basis for a fix. Resuming discovery does not
+require exhausting every item in this document.
+
 ## Find in Page coverage
 
 Cross-node phrases remain unimplemented.
 
-Remaining resource-dependent fallback coverage:
-
-- Object `error`/`load` events need the specified task lifecycle.
-- Other fallback-capable elements still need a discovery/rendering review.
-  Image alternatives that remain replaced (while pending or sized in quirks
-  mode) are not included by DOM-based discovery yet.
-
-Object expectations follow the [HTML object representation algorithm](https://html.spec.whatwg.org/multipage/iframe-embed-object.html#the-object-element),
-including its resource-availability, failed-load and image-handler steps.
+Remaining DOM-based search coverage includes widget-owned text (input, textarea
+and select), text rendered through inline SVG, and image alternatives that remain
+replaced (while pending or sized in quirks mode). These need matches bound to
+their actual painting/selection paths; traversing DOM children alone cannot
+provide that correspondence. These are future coverage items, not an assertion
+that HTML mandates a particular matching algorithm for every text source.
 
 The supported behavior and repeatable checks are in
 [hidden-until-found.md](hidden-until-found.md).
+
+## Resource lifecycle follow-up
+
+Object `error`/`load` events need the specified task lifecycle.
+
+Object expectations follow the [HTML object representation algorithm](https://html.spec.whatwg.org/multipage/iframe-embed-object.html#the-object-element),
+including its resource-availability, failed-load and image-handler steps.
 
 ## Details compatibility beyond native reading/search
 

@@ -1,0 +1,47 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Embedded and scripting-dependent content in Find in Page</title>
+<style>
+body { margin:0; font:16px/20px sans-serif; }
+iframe, embed, canvas, noscript { display:block; }
+iframe, embed { width:100px; height:30px; }
+canvas { width:180px; height:40px; }
+canvas span, #normal-object-text { display:block; }
+iframe::before, embed::before { content:'forbidden-pseudo'; }
+canvas::before { content:'canvas-before'; }
+canvas::after { content:'canvas-after'; }
+noscript::before { content:'noscript-before'; }
+noscript::after { content:'noscript-after'; }
+#frame-invisible { visibility:hidden; }
+#frame-inline { display:inline; border:0; }
+</style>
+<!-- HTML iframe descendants represent nothing, even without a usable src. -->
+<iframe id="frame-visible">forbidden-frame</iframe>
+<p><iframe id="frame-inline">forbidden-inline</iframe></p>
+<iframe id="frame-empty" src="">forbidden-empty</iframe>
+<iframe id="frame-invisible">forbidden-invisible</iframe>
+<embed id="embed-visible">
+<div id="frame-hidden" hidden="until-found"><iframe id="frame-hidden-owner">forbidden-hidden</iframe></div>
+<details id="frame-closed"><summary id="frame-summary">Frame details</summary>
+  <iframe id="frame-closed-owner">forbidden-closed</iframe>
+</details>
+<details id="frame-loaded" open><summary id="loaded-summary">Construct then hide</summary>
+  <iframe id="frame-loaded-owner">forbidden-loaded</iframe>
+</details>
+<div id="embed-hidden" hidden="until-found"><embed id="embed-hidden-owner"></div>
+<canvas id="canvas-visible"><span id="canvas-visible-text">canvas-visible</span></canvas>
+<div id="canvas-hidden" hidden="until-found">
+  <canvas id="canvas-hidden-owner"><span id="canvas-hidden-text">canvas-hidden</span></canvas>
+</div>
+<details id="canvas-closed"><summary id="canvas-summary">Canvas details</summary>
+  <canvas id="canvas-closed-owner"><span id="canvas-closed-text">canvas-closed</span></canvas>
+</details>
+<noscript id="noscript-visible">noscript-visible</noscript>
+<div id="noscript-hidden" hidden="until-found"><noscript id="noscript-hidden-owner">noscript-hidden</noscript></div>
+<details id="noscript-closed"><summary id="noscript-summary">Noscript details</summary>
+  <noscript id="noscript-closed-owner">noscript-closed</noscript>
+</details>
+<!-- Ordinary fallback and button children remain searchable. -->
+<div id="normal-hidden" hidden="until-found"><button id="normal-button">button-token</button>
+  <object id="normal-object"><span id="normal-object-text">object-token</span></object>
+</div>

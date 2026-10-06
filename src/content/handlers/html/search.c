@@ -137,7 +137,7 @@ static nserror search_generated(struct html_search_walk *walk, dom_node *node,
  * subtree has no boxes yet; exclude special elements whose contents use a
  * replacement renderer, instead of inventing text which cannot be highlighted.
  * Image/object fallback is resolved with the converter's preflight in search_node. */
-static bool search_generated_owner(const html_content *html, dom_node *node, const struct box *box)
+static bool search_generated_owner(dom_node *node, const struct box *box)
 {
     if (box != NULL)
         return !(box->flags & IS_REPLACED);
@@ -149,13 +149,7 @@ static bool search_generated_owner(const html_content *html, dom_node *node, con
         case DOM_HTML_ELEMENT_TYPE_BUTTON:
         case DOM_HTML_ELEMENT_TYPE_TEXTAREA:
         case DOM_HTML_ELEMENT_TYPE_SELECT:
-        case DOM_HTML_ELEMENT_TYPE_IFRAME:
-        case DOM_HTML_ELEMENT_TYPE_EMBED:
             return false;
-        case DOM_HTML_ELEMENT_TYPE_CANVAS:
-            if (html->enable_scripting)
-                return false;
-            break;
         default:
             break;
         }
@@ -189,6 +183,11 @@ static nserror search_node(
     if (type != DOM_ELEMENT_NODE)
         return NSERROR_OK;
 
+    dom_html_element_type tag = DOM_HTML_ELEMENT_TYPE__UNKNOWN;
+    dom_html_element_get_tag_type(node, &tag);
+    if (box_special_content_type(tag, walk->html->enable_scripting) != BOX_SPECIAL_CONTENT_NORMAL)
+        return NSERROR_OK;
+
     struct box *box = box_for_node(node);
     css_select_results *selected = NULL;
     const css_select_results *styles;
@@ -209,8 +208,6 @@ static nserror search_node(
     dom_node *child = NULL, *summary = NULL;
     if (css_computed_display(style, false) == CSS_DISPLAY_NONE || (skipped && !html_until_found(node)))
         goto done;
-    dom_html_element_type tag = DOM_HTML_ELEMENT_TYPE__UNKNOWN;
-    dom_html_element_get_tag_type(node, &tag);
     bool image = tag == DOM_HTML_ELEMENT_TYPE_IMG;
     bool image_replaced = image && box != NULL && (box->flags & IS_REPLACED);
     if (image && box == NULL) {
@@ -249,7 +246,7 @@ static nserror search_node(
     }
     box_type type_for_children = box != NULL ? box->type : box_construct_type(style, parent_type, parent == NULL);
     bool generated = styles != NULL && !image_replaced && box_type_generates_content(type_for_children) &&
-        search_generated_owner(walk->html, node, box);
+        search_generated_owner(node, box);
     if (generated) {
         error = search_generated(walk, node, styles->styles[CSS_PSEUDO_ELEMENT_BEFORE], TEXT_BEFORE);
         if (error != NSERROR_OK)

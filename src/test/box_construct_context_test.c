@@ -2688,6 +2688,77 @@ START_TEST(test_staged_request_allocation_failure)
 END_TEST
 #endif
 
+/* HTML iframe descendants are never fallback, embed stays replaced without
+ * a resource, and canvas/noscript depend on scripting. Exercise early returns
+ * as well as ordinary and detached construction, with real DOM children. */
+static const struct {
+    const char *tag, *src, *style;
+    enum box_special_content mode[2];
+} special_content_cases[] = {
+    {"iframe", NULL, NULL, {BOX_SPECIAL_CONTENT_REPLACED, BOX_SPECIAL_CONTENT_REPLACED}},
+    {"iframe", "", NULL, {BOX_SPECIAL_CONTENT_REPLACED, BOX_SPECIAL_CONTENT_REPLACED}},
+    {"iframe", "context.html", NULL, {BOX_SPECIAL_CONTENT_REPLACED, BOX_SPECIAL_CONTENT_REPLACED}},
+    {"iframe", "frame.html", "display:block;visibility:hidden",
+        {BOX_SPECIAL_CONTENT_REPLACED, BOX_SPECIAL_CONTENT_REPLACED}},
+    {"iframe", "frame.html", NULL, {BOX_SPECIAL_CONTENT_REPLACED, BOX_SPECIAL_CONTENT_REPLACED}},
+    {"embed", NULL, NULL, {BOX_SPECIAL_CONTENT_REPLACED, BOX_SPECIAL_CONTENT_REPLACED}},
+    {"embed", "", NULL, {BOX_SPECIAL_CONTENT_REPLACED, BOX_SPECIAL_CONTENT_REPLACED}},
+    {"embed", "context.html", NULL, {BOX_SPECIAL_CONTENT_REPLACED, BOX_SPECIAL_CONTENT_REPLACED}},
+    {"embed", "plot.svg", NULL, {BOX_SPECIAL_CONTENT_REPLACED, BOX_SPECIAL_CONTENT_REPLACED}},
+    {"canvas", NULL, NULL, {BOX_SPECIAL_CONTENT_NORMAL, BOX_SPECIAL_CONTENT_REPLACED}},
+    {"noscript", NULL, NULL, {BOX_SPECIAL_CONTENT_NORMAL, BOX_SPECIAL_CONTENT_NONE}},
+};
+
+START_TEST(test_special_content_representation)
+{
+    unsigned variant = _i / 2;
+    html.enable_scripting = _i % 2;
+    enum box_special_content expected = special_content_cases[variant].mode[_i % 2];
+    dom_node *outer = by_id("outer");
+    dom_node *owner = element(outer, special_content_cases[variant].tag, "special-owner", "owned-boundary");
+    attribute(owner, "style", special_content_cases[variant].style != NULL ? special_content_cases[variant].style
+                                                                         : "display:block");
+    if (special_content_cases[variant].src != NULL)
+        attribute(owner, "src", special_content_cases[variant].src);
+    dom_node *child = element(owner, "span", "special-child", NULL);
+    text(child, "special child");
+    record_fetches = true;
+    build_document();
+    record_fetches = false;
+    struct box *box = box_for_node(owner);
+    if (expected == BOX_SPECIAL_CONTENT_NONE) {
+        ck_assert_msg(box == NULL, "Hidden %s has a box with scripting=%d",
+            special_content_cases[variant].tag, html.enable_scripting);
+    } else {
+        ck_assert_ptr_nonnull(box);
+        ck_assert_msg(!!(box->flags & IS_REPLACED) == (expected == BOX_SPECIAL_CONTENT_REPLACED),
+            "Incorrect representation: variant=%u scripting=%d", variant, html.enable_scripting);
+        char *description = snapshot_box(box);
+        ck_assert_msg((strstr(description, "scope before") != NULL) == (expected == BOX_SPECIAL_CONTENT_NORMAL),
+            "Incorrect generated content: variant=%u scripting=%d", variant, html.enable_scripting);
+        free(description);
+    }
+    ck_assert_msg((box_for_node(child) != NULL) == (expected == BOX_SPECIAL_CONTENT_NORMAL),
+        "Incorrect DOM children: variant=%u scripting=%d", variant, html.enable_scripting);
+
+    /* Canvas is deliberately unsupported in detached reconstruction. */
+    if (strcmp(special_content_cases[variant].tag, "canvas") != 0 && !html.enable_scripting) {
+        char *before = snapshot_box(box_for_node(outer));
+        ck_assert_int_eq(begin_region(outer), NSERROR_OK);
+        while (scheduled != NULL)
+            run_slice();
+        ck_assert_int_eq(region_error, NSERROR_OK);
+        char *candidate = snapshot_box(region->root);
+        ck_assert_str_eq(candidate, before);
+        free(candidate);
+        free(before);
+        box_construct_region_destroy(region);
+        assert_live_mappings(html.layout);
+    }
+    dom_node_unref(outer);
+}
+END_TEST
+
 START_TEST(test_detached_iframes)
 {
     dom_node *outer = by_id("outer");
@@ -2895,6 +2966,8 @@ int main(void)
         sizeof(image_preflight_cases) / sizeof(image_preflight_cases[0]));
     tcase_add_test(tc, test_generated_attribute_utf8);
     tcase_add_loop_test(tc, test_detached_resource_identity, 0, 2);
+    tcase_add_loop_test(tc, test_special_content_representation, 0,
+        2 * sizeof(special_content_cases) / sizeof(special_content_cases[0]));
     tcase_add_test(tc, test_detached_iframes);
     tcase_add_loop_test(tc, test_detached_controls, 0, 3);
     tcase_add_loop_test(tc, test_detached_reject_input_widgets, 0, 6);

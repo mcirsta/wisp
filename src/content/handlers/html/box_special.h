@@ -35,6 +35,16 @@ struct box_construct_region;
 struct object_params;
 struct nsurl;
 
+enum box_special_content {
+    BOX_SPECIAL_CONTENT_NORMAL,
+    BOX_SPECIAL_CONTENT_REPLACED,
+    BOX_SPECIAL_CONTENT_NONE
+};
+
+/* Resource-independent HTML representation rules for construction and search.
+ * IMG/OBJECT still need their resource-dependent preflight below. */
+enum box_special_content box_special_content_type(dom_html_element_type tag, bool scripting);
+
 /* Read-only image source/representation preflight, shared with search. The
  * caller owns a URL reference (possibly NULL); no resource is fetched here. */
 bool box_image_prepare(dom_node *node, struct html_content *content, const css_computed_style *style,
