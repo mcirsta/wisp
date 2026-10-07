@@ -28,6 +28,8 @@ struct listener_entry {
     dom_string *type; /**< Event type */
     dom_event_listener *listener; /**< The EventListener */
     bool capture; /**< Whether this listener is in capture phase */
+    bool removed; /**< Removed entries can still be held by an invocation snapshot */
+    size_t refcnt; /**< Registration plus active invocation snapshots */
 };
 
 /**
@@ -70,7 +72,7 @@ dom_exception _dom_event_target_add_event_listener_ns(dom_event_target_internal 
 dom_exception _dom_event_target_remove_event_listener_ns(dom_event_target_internal *eti, dom_string *namespace,
     dom_string *type, struct dom_event_listener *listener, bool capture);
 
-dom_exception _dom_event_target_dispatch(dom_event_target *et, dom_event_target_internal *eti, struct dom_event *evt,
-    dom_event_flow_phase phase, bool *success);
+dom_exception _dom_event_target_dispatch(
+    dom_event_target *et, dom_event_target_internal *eti, struct dom_event *evt, dom_event_flow_phase phase);
 
 #endif

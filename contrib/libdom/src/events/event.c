@@ -66,6 +66,9 @@ void _dom_event_finalise(dom_event *evt)
     if (evt->namespace != NULL)
         dom_string_unref(evt->namespace);
 
+    dom_node_unref(evt->target);
+    evt->target = NULL;
+
     evt->stop = false;
     evt->stop_now = false;
     evt->prevent_default = false;
@@ -229,7 +232,35 @@ dom_exception _dom_event_stop_propagation(dom_event *evt)
  */
 dom_exception _dom_event_prevent_default(dom_event *evt)
 {
-    evt->prevent_default = true;
+    if (evt->cancelable)
+        evt->prevent_default = true;
+    return DOM_NO_ERR;
+}
+
+/* Shared initialization also handles the legacy namespace entry point. */
+static dom_exception event_init(dom_event *evt, dom_string *namespace, dom_string *type, bool bubble, bool cancelable)
+{
+    if (evt->in_dispatch)
+        return DOM_NO_ERR;
+
+    /* Ref first: callers may pass the event's existing strings. */
+    dom_string_ref(type);
+    dom_string_ref(namespace);
+    dom_string_unref(evt->type);
+    dom_string_unref(evt->namespace);
+    dom_node_unref(evt->target);
+    evt->target = NULL;
+    evt->current = NULL;
+    evt->phase = DOM_NONE;
+    evt->stop = false;
+    evt->stop_now = false;
+    evt->prevent_default = false;
+    evt->type = type;
+    evt->namespace = namespace;
+    evt->bubble = bubble;
+    evt->cancelable = cancelable;
+    evt->is_initialised = true;
+    evt->timestamp = time(NULL);
     return DOM_NO_ERR;
 }
 
@@ -244,14 +275,7 @@ dom_exception _dom_event_prevent_default(dom_event *evt)
  */
 dom_exception _dom_event_init(dom_event *evt, dom_string *type, bool bubble, bool cancelable)
 {
-    evt->type = dom_string_ref(type);
-    evt->bubble = bubble;
-    evt->cancelable = cancelable;
-    evt->is_initialised = true;
-
-    evt->timestamp = time(NULL);
-
-    return DOM_NO_ERR;
+    return event_init(evt, NULL, type, bubble, cancelable);
 }
 
 /**
@@ -290,6 +314,7 @@ dom_exception _dom_event_is_custom(dom_event *evt, bool *custom)
  */
 dom_exception _dom_event_stop_immediate_propagation(dom_event *evt)
 {
+    evt->stop = true;
     evt->stop_now = true;
 
     return DOM_NO_ERR;
@@ -321,15 +346,7 @@ dom_exception _dom_event_is_default_prevented(dom_event *evt, bool *prevented)
  */
 dom_exception _dom_event_init_ns(dom_event *evt, dom_string *namespace, dom_string *type, bool bubble, bool cancelable)
 {
-    evt->type = dom_string_ref(type);
-
-    evt->namespace = dom_string_ref(namespace);
-
-    evt->bubble = bubble;
-    evt->cancelable = cancelable;
-    evt->is_initialised = true;
-
-    return DOM_NO_ERR;
+    return event_init(evt, namespace, type, bubble, cancelable);
 }
 
 /**

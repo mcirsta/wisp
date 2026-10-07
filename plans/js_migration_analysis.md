@@ -523,6 +523,60 @@ unexposed; later query APIs can build on the ownership/property rules here.
 Next is batch 4's EventTarget/Event and lifecycle work, not a claim of full DOM
 or dynamic resource/script support.
 
+### Batch 4 prerequisite: native event dispatch
+
+Reviewing the old Duktape `EventTarget.bnd`, `Event.bnd` and `dukky.c` bridge
+confirmed that JS listeners should use libdom's propagation. Before connecting
+callbacks, however, the shared native dispatcher needed repair. New regression
+tests reproduced wrong target phases, duplicate invocation and use-after-free
+when listeners removed registrations or released objects during callbacks.
+
+The dispatcher now implements the ordinary node-tree part of
+[DOM event dispatch](https://dom.spec.whatwg.org/#concept-event-dispatch):
+
+- Build and retain the complete ancestor path before callbacks. Reparenting does
+  not change that dispatch's path; adding a listener to a later ancestor works.
+- Invoke capture and bubbling separately, with both target invocations reporting
+  `AT_TARGET`. Non-bubbling events still invoke target listeners.
+- Snapshot registrations for each invocation, retain removed entries until
+  snapshots finish, suppress duplicate type/listener/capture registrations, and
+  preserve registration order on removal. A listener removed and re-added during
+  an invocation waits for a later invocation.
+- Honor cancellation only for cancelable events. Stopping propagation does not
+  suppress native default actions. Clear dispatch/propagation state, current
+  target and phase afterwards; retain cancellation until reinitialization.
+- Keep the event, document, path and saved target alive. Reinitialization releases
+  the previous target and strings and is ignored during dispatch. An initialized
+  event may have an empty type; recursive dispatch of the same event is rejected.
+
+The implementation uses stack storage for ordinary paths and listener snapshots,
+with heap fallback for deep trees or many matching listeners. It remains on the
+main thread. Existing native default-action hooks and internal mutation-event
+bookkeeping are preserved; this does not expose legacy mutation events to JS.
+
+`dom_event_test` covers 21 cases, including mutation during dispatch, saved-event
+ownership, released caller references, reentrancy and both heap fallbacks. The
+native cases pass ASan/UBSan and leak checking. Existing QuickJS, DOM tree,
+class/details, user-data, construction, form and Qt JS/interaction regressions are
+also checked. GTK is not tested.
+
+**JS EventTarget/Event remain stubs at this point.** The next increment still
+needs callback identity and GC tracing, Web IDL conversion, once/passive behavior,
+bounded execution and the existing JS action trace. Native trust/timestamp APIs
+retain their previous semantics; JS-created/dispatched events must supply the
+standard untrusted state and timestamp behavior when bindings are implemented.
+Window propagation, specialized event initialization and shadow trees are not
+implemented by this node-tree repair.
+
+Two integration issues identified for the next increment must be handled before
+enabling click listeners: native checkbox/details activation already consults
+dispatch cancellation, but navigation/form actions need the same cancellation
+gate; callback-triggered mutations/navigation must not leave interaction code
+using stale boxes, links or form pointers. DOMContentLoaded/load and readyState
+also need a separate lifecycle pass: the current `js_fire_event("load")` call is
+before the initial box build. Do not simply attach callbacks to these existing
+hooks and assume the complete behavior is correct.
+
 ### Reading the JS trace
 
 Enable verbose logging and `js_trace` when investigating a JS/rendering difference:
@@ -654,7 +708,8 @@ These are separate reviewable batches, not a commitment to full web-app support.
    and mutation traces pass identity/GC and rendered-page tests. Extend the same
    ownership/conversion/invalidation layer for further APIs. Reuse
    partial updates only with sound mutation/dependency tracking.
-4. **Events and practical document interaction.** EventTarget/Event, click
+4. **Events and practical document interaction — native dispatch prerequisite
+   implemented; JS bindings/lifecycle still pending.** EventTarget/Event, click
    listeners and supported handler attributes, DOMContentLoaded/load and accurate
    readyState; then further element lifecycle integration. Validate propagation,
    preventDefault, capture, once, callback identity and navigation cleanup.

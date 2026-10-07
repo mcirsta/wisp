@@ -478,6 +478,11 @@ target_include_directories(dom_tree_test PRIVATE ${TEST_COMMON_INCLUDES})
 target_link_libraries(dom_tree_test dom ${CHECK_LIBRARIES})
 add_test(NAME dom_tree_test COMMAND dom_tree_test)
 
+add_executable(dom_event_test dom_event_test.c)
+target_include_directories(dom_event_test PRIVATE ${TEST_COMMON_INCLUDES})
+target_link_libraries(dom_event_test dom ${CHECK_LIBRARIES})
+add_test(NAME dom_event_test COMMAND dom_event_test)
+
 add_executable(dom_userdata_test dom_userdata_test.c)
 target_include_directories(dom_userdata_test PRIVATE ${TEST_COMMON_INCLUDES})
 target_link_libraries(dom_userdata_test dom ${CHECK_LIBRARIES})

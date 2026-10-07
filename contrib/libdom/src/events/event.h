@@ -26,8 +26,8 @@ struct dom_event_private_vtable {
  */
 struct dom_event {
     dom_string *type; /**< The type of the event */
-    dom_event_target *target; /**< The event target */
-    dom_event_target *current; /**< The current event target */
+    dom_event_target *target; /**< The event target (owned reference) */
+    dom_event_target *current; /**< The current event target (borrowed from dispatch path) */
     dom_event_flow_phase phase; /**< The event phase */
     bool bubble; /**< Whether this event is a bubbling event */
     bool cancelable; /**< Whether this event is cancelable */

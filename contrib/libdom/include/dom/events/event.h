@@ -13,7 +13,7 @@
 #include <dom/events/event_target.h>
 #include <stdbool.h>
 
-typedef enum { DOM_CAPTURING_PHASE = 1, DOM_AT_TARGET = 2, DOM_BUBBLING_PHASE = 3 } dom_event_flow_phase;
+typedef enum { DOM_NONE = 0, DOM_CAPTURING_PHASE = 1, DOM_AT_TARGET = 2, DOM_BUBBLING_PHASE = 3 } dom_event_flow_phase;
 
 typedef struct dom_event dom_event;
 
