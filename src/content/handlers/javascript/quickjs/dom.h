@@ -16,6 +16,7 @@ enum qjs_dom_prototype {
     QJS_TEXT,
     QJS_COMMENT,
     QJS_DOCUMENT_TYPE,
+    QJS_DOCUMENT_FRAGMENT,
     QJS_DOM_PROTOTYPES
 };
 
@@ -47,5 +48,6 @@ int qjs_init_tokenlist(JSContext *ctx);
 JSValue qjs_class_list_get(JSContext *ctx, JSValueConst object);
 JSValue qjs_class_list_set(JSContext *ctx, JSValueConst object, JSValueConst value);
 int qjs_dom_install_properties(JSContext *ctx, JSValue *prototypes);
+int qjs_dom_install_tree(JSContext *ctx, JSValue *prototypes);
 
 #endif

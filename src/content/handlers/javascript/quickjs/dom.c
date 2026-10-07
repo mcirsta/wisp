@@ -208,6 +208,9 @@ JSValue qjs_dom_wrap(JSContext *ctx, JSValueConst owner, dom_node *native)
     case DOM_DOCUMENT_TYPE_NODE:
         kind = QJS_DOCUMENT_TYPE;
         break;
+    case DOM_DOCUMENT_FRAGMENT_NODE:
+        kind = QJS_DOCUMENT_FRAGMENT;
+        break;
     default:
         break;
     }
@@ -350,7 +353,7 @@ int qjs_init_document(JSContext *ctx)
         int parent;
     } interfaces[] = {{"Node", -1}, {"Element", QJS_NODE}, {"HTMLElement", QJS_ELEMENT}, {"Document", QJS_NODE},
         {"HTMLDocument", QJS_DOCUMENT}, {"CharacterData", QJS_NODE}, {"Text", QJS_CHARACTER_DATA},
-        {"Comment", QJS_CHARACTER_DATA}, {"DocumentType", QJS_NODE}};
+        {"Comment", QJS_CHARACTER_DATA}, {"DocumentType", QJS_NODE}, {"DocumentFragment", QJS_NODE}};
     for (unsigned i = 0; i < QJS_DOM_PROTOTYPES; i++) {
         JSValue parent = interfaces[i].parent < 0 ? JS_UNDEFINED : doc->prototypes[interfaces[i].parent];
         JSValue proto = interfaces[i].parent < 0 ? JS_NewObject(ctx) : JS_NewObjectProto(ctx, parent);
@@ -373,6 +376,7 @@ int qjs_init_document(JSContext *ctx)
             goto out;
     }
     if (qjs_init_tokenlist(ctx) < 0 || qjs_dom_install_properties(ctx, doc->prototypes) < 0 ||
+        qjs_dom_install_tree(ctx, doc->prototypes) < 0 ||
         JS_SetPrototype(ctx, object, doc->prototypes[QJS_HTML_DOCUMENT]) < 0)
         goto out;
     ret = JS_DefinePropertyValueStr(ctx, global, "document", JS_DupValue(ctx, object), JS_PROP_ENUMERABLE);

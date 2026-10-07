@@ -1279,8 +1279,10 @@ START_TEST(test_quickjs_document)
     ck_assert(exec_script(dom_thread, "document.body.expando = { owner: document.body };", "expando"));
     JS_RunGC(dom_heap->rt);
     assert_predicate(dom_thread, "document.body.expando.owner === document.body", "GC preserves node identity/properties");
-    assert_predicate(dom_thread, "document.querySelector === undefined && document.createElement === undefined && "
-        "document.body.style === undefined", "unsupported APIs do not fabricate success");
+    assert_predicate(dom_thread,
+        "document.querySelector === undefined && document.createElementNS === undefined && "
+        "document.body.style === undefined",
+        "unsupported APIs do not fabricate success");
 }
 END_TEST
 
@@ -1595,6 +1597,192 @@ START_TEST(test_quickjs_classlist_conversion_retirement)
 }
 END_TEST
 
+START_TEST(test_quickjs_node_creation)
+{
+    ck_assert(exec_script(dom_thread,
+        "var el = document.createElement('DiV', {}), text = document.createTextNode('ș😀\\0'), "
+        "comment = document.createComment('<!-- anything -->'), fragment = document.createDocumentFragment();"
+        "if (!(el instanceof HTMLElement) || el.tagName !== 'DIV' || el.ownerDocument !== document || "
+        "el.parentNode !== null || el.isConnected || el.classList.length !== 0) throw Error('element creation');"
+        "if (!(text instanceof Text) || !(text instanceof CharacterData) || text.nodeType !== 3 || "
+        "text.nodeName !== '#text' || text.data !== 'ș😀\\0') throw Error('text creation');"
+        "if (!(comment instanceof Comment) || comment.data !== '<!-- anything -->') throw Error('comment creation');"
+        "if (!(fragment instanceof DocumentFragment) || !(fragment instanceof Node) || "
+        "fragment.nodeType !== 11 || fragment.nodeName !== '#document-fragment' || fragment.ownerDocument !== document || "
+        "fragment.isConnected || fragment.textContent !== '') throw Error('fragment creation');"
+        "fragment.textContent = 'fragment text'; if (fragment.firstChild.data !== 'fragment text') throw Error('fragment text');"
+        "fragment.textContent = ''; if (fragment.hasChildNodes()) throw Error('clear fragment');"
+        "if (document.createTextNode(null).data !== 'null' || document.createComment(undefined).data !== 'undefined') "
+        "throw Error('DOMString conversion');"
+        "el.id = 'created'; document.body.appendChild(el);"
+        "if (document.getElementById('created') !== el || !el.isConnected) throw Error('connected identity');",
+        "node creation and prototypes"));
+    /* The native HTML factory must use the HTML namespace too, so selection and
+     * HTML element specialization do not depend on a binding-only workaround. */
+    dom_node *body = NULL, *element = NULL;
+    dom_string *namespace = NULL;
+    ck_assert_int_eq(dom_html_document_get_body(dom_html.document, &body), DOM_NO_ERR);
+    ck_assert_int_eq(dom_node_get_last_child(body, &element), DOM_NO_ERR);
+    ck_assert_int_eq(dom_node_get_namespace(element, &namespace), DOM_NO_ERR);
+    ck_assert_ptr_nonnull(namespace);
+    ck_assert_str_eq(dom_string_data(namespace), "http://www.w3.org/1999/xhtml");
+    dom_string_unref(namespace);
+    dom_node_unref(element);
+    dom_node_unref(body);
+}
+END_TEST
+
+START_TEST(test_quickjs_node_creation_errors)
+{
+    ck_assert(exec_script(dom_thread,
+        "function expect(name, fn) { try { fn(); } catch(e) { if (e.name === name) return; throw e; } "
+        "throw Error('missing ' + name); }"
+        "for (const name of ['', '1name', 'bad name', 'bad\\tname', 'bad\\nname', 'bad\\rname', 'bad\\fname', "
+        "'bad/name', 'bad>name', 'bad\\0name', '_bad<name']) "
+        "expect('InvalidCharacterError', () => document.createElement(name));"
+        "for (const name of ['span', 'x:part', 'a<b=c', '_valid-name', 'ș😀', 'a\\u00a0b']) "
+        "if (!(document.createElement(name) instanceof HTMLElement)) throw Error('valid local name');"
+        "for (const method of ['createElement', 'createTextNode', 'createComment']) {"
+        "expect('TypeError', () => document[method]());"
+        "expect('TypeError', () => document[method].call({}, 'x'));"
+        "expect('TypeError', () => document[method](Symbol()));"
+        "let sentinel = {}; try { document[method]({toString() { throw sentinel; }}); throw Error('converted'); }"
+        "catch(e) { if (e !== sentinel) throw e; }}"
+        "expect('NotSupportedError', () => document.createElement('button', {is: 'custom-button'}));"
+        "let order = ''; document.createElement({toString() { order += 'n'; return 'div'; }}, {"
+        "get customElementRegistry() { order += 'r'; return null; }, get is() { order += 'i'; return undefined; }});"
+        "if (order !== 'nri') throw Error('dictionary conversion order');"
+        "let sentinel = {}; try { document.createElement('div', {get is() { throw sentinel; }}); "
+        "throw Error('option getter'); } catch(e) { if (e !== sentinel) throw e; }",
+        "creation validation and coercion"));
+}
+END_TEST
+
+START_TEST(test_quickjs_tree_moves)
+{
+    ck_assert(exec_script(dom_thread,
+        "var parent = document.createElement('div'), a = document.createTextNode('a'), "
+        "b = document.createTextNode('b'), c = document.createTextNode('c');"
+        "if (parent.appendChild(a) !== a || parent.appendChild(c) !== c || parent.insertBefore(b, c) !== b) "
+        "throw Error('insert returns');"
+        "if (parent.textContent !== 'abc' || a.nextSibling !== b || c.previousSibling !== b) throw Error('links');"
+        "parent.insertBefore(c, a); if (parent.textContent !== 'cab' || parent.firstChild !== c) throw Error('move before');"
+        "parent.appendChild(c); if (parent.textContent !== 'abc' || parent.lastChild !== c) throw Error('move after');"
+        "if (parent.replaceChild(c, a) !== a || a.parentNode !== null || parent.textContent !== 'cb' || "
+        "c.nextSibling !== b || b.previousSibling !== c) throw Error('replace sibling');"
+        "if (parent.replaceChild(c, c) !== c || parent.insertBefore(c, c) !== c) throw Error('self replacement');"
+        "if (parent.removeChild(b) !== b || b.isConnected || b.parentNode !== null || b.previousSibling !== null || "
+        "b.nextSibling !== null || parent.lastChild !== c) throw Error('removal');"
+        "parent.insertBefore(a, null); parent.insertBefore(b, undefined);"
+        "if (parent.textContent !== 'cab') throw Error('nullable reference');"
+        "parent.id = 'made'; document.body.appendChild(parent); parent.expando = {child: a};"
+        "var holder = document.createDocumentFragment(); holder.appendChild(parent);"
+        "if (parent.isConnected || document.getElementById('made') !== null || parent.parentNode !== holder) "
+        "throw Error('move into detached tree');",
+        "tree edits preserve identities and links"));
+    JS_RunGC(dom_heap->rt);
+    assert_predicate(dom_thread,
+        "parent.expando.child === a && a.parentNode === parent && holder.firstChild === parent",
+        "detached subtrees survive GC");
+}
+END_TEST
+
+START_TEST(test_quickjs_tree_fragments)
+{
+    ck_assert(exec_script(dom_thread,
+        "var p = document.createElement('div'), f = document.createDocumentFragment(), "
+        "a = document.createTextNode('a'), b = document.createTextNode('b'), c = document.createTextNode('c');"
+        "p.appendChild(a); p.appendChild(b); p.appendChild(c);"
+        "if (p.replaceChild(f, b) !== b || p.textContent !== 'ac' || a.nextSibling !== c || "
+        "c.previousSibling !== a || b.parentNode !== null) throw Error('empty fragment replaces middle');"
+        "p.replaceChild(f, a); p.replaceChild(f, c);"
+        "if (p.firstChild !== null || p.lastChild !== null) throw Error('empty fragment replaces edges');"
+        "f.appendChild(a); f.appendChild(b); f.appendChild(c);"
+        "if (p.appendChild(f) !== f || f.hasChildNodes() || f.parentNode !== null || p.textContent !== 'abc' || "
+        "a.parentNode !== p || c.parentNode !== p) throw Error('fragment transfer');"
+        "for (let i = 0; i < 30; i++) { f.appendChild(a); f.appendChild(b); f.appendChild(c); p.appendChild(f); }"
+        "var replacement = document.createDocumentFragment(); replacement.textContent = 'X';"
+        "var x = replacement.firstChild; p.replaceChild(replacement, b);"
+        "if (p.textContent !== 'aXc' || x.parentNode !== p || x.previousSibling !== a || x.nextSibling !== c || "
+        "replacement.hasChildNodes()) throw Error('nonempty fragment replacement');",
+        "fragment insertion replacement and repeated reuse"));
+    JS_RunGC(dom_heap->rt);
+    assert_predicate(dom_thread, "f.textContent === '' && p.textContent === 'aXc' && b.parentNode === null",
+        "fragment ownership after transfers");
+}
+END_TEST
+
+START_TEST(test_quickjs_tree_validation)
+{
+    ck_assert(exec_script(dom_thread,
+        "function expect(name, fn) { try { fn(); } catch(e) { if (e.name === name) return; throw e; } "
+        "throw Error('missing ' + name); }"
+        "var parent = document.createElement('div'), child = document.createElement('span'), "
+        "foreign = document.createElement('i'), fragment = document.createDocumentFragment(); parent.appendChild(child);"
+        "expect('HierarchyRequestError', () => child.appendChild(parent));"
+        "expect('HierarchyRequestError', () => parent.appendChild(parent));"
+        "expect('HierarchyRequestError', () => child.appendChild(document));"
+        "expect('HierarchyRequestError', () => document.createTextNode('').appendChild(fragment));"
+        "expect('HierarchyRequestError', () => document.createComment('').appendChild(child));"
+        "expect('NotFoundError', () => parent.insertBefore(child, foreign));"
+        "expect('NotFoundError', () => parent.replaceChild(child, foreign));"
+        "expect('NotFoundError', () => parent.removeChild(foreign));"
+        "expect('TypeError', () => parent.appendChild({__proto__: Node.prototype}));"
+        "expect('TypeError', () => parent.insertBefore(child));"
+        "expect('TypeError', () => parent.replaceChild(child, null));"
+        "expect('TypeError', () => parent.removeChild());"
+        "expect('TypeError', () => parent.appendChild.call({}, child));"
+        "expect('TypeError', () => parent.appendChild(null));"
+        "if (parent.firstChild !== child || parent.lastChild !== child || child.parentNode !== parent || "
+        "foreign.parentNode !== null || fragment.hasChildNodes()) throw Error('failure changed tree');",
+        "tree validation is atomic and brand checked"));
+}
+END_TEST
+
+START_TEST(test_quickjs_document_tree_validation)
+{
+    ck_assert(exec_script(dom_thread,
+        "function hierarchy(fn) { try { fn(); } catch(e) { if (e.name === 'HierarchyRequestError') return; throw e; } "
+        "throw Error('missing hierarchy error'); }"
+        "var root = document.documentElement, dt = document.firstChild, f = document.createDocumentFragment(), "
+        "a = document.createElement('html'), b = document.createElement('html'), text = document.createTextNode('');"
+        "hierarchy(() => document.appendChild(a)); hierarchy(() => document.appendChild(text));"
+        "hierarchy(() => document.body.appendChild(dt));"
+        "hierarchy(() => document.insertBefore(a, dt));"
+        "if (document.removeChild(root) !== root || document.documentElement !== null || document.body !== null) "
+        "throw Error('remove root');"
+        "f.appendChild(a); f.appendChild(b); hierarchy(() => document.appendChild(f));"
+        "if (f.firstChild !== a || f.lastChild !== b || a.parentNode !== f || document.documentElement !== null) "
+        "throw Error('invalid fragment changed trees');"
+        "f.removeChild(b); f.appendChild(text); hierarchy(() => document.appendChild(f)); f.removeChild(text);"
+        "document.appendChild(f); if (document.documentElement !== a || f.hasChildNodes()) throw Error('fragment root');"
+        "if (document.replaceChild(root, a) !== a || document.documentElement !== root || a.parentNode !== null) "
+        "throw Error('replace root');"
+        "if (document.replaceChild(root, root) !== root) throw Error('replace root itself');"
+        "hierarchy(() => document.appendChild(root));"
+        "document.removeChild(dt); hierarchy(() => document.appendChild(dt)); document.insertBefore(dt, root);"
+        "hierarchy(() => document.replaceChild(a, dt));"
+        "document.replaceChild(f, root); if (document.documentElement !== null) throw Error('clear root');"
+        "hierarchy(() => document.insertBefore(root, dt)); document.appendChild(root);",
+        "document root doctype order and fragment constraints"));
+}
+END_TEST
+
+START_TEST(test_quickjs_creation_retirement)
+{
+    JSValue global = JS_GetGlobalObject(dom_thread->ctx);
+    ck_assert_int_eq(JS_SetPropertyStr(dom_thread->ctx, global, "retire",
+                         JS_NewCFunction(dom_thread->ctx, close_dom_during_conversion, "retire", 0)),
+        1);
+    JS_FreeValue(dom_thread->ctx, global);
+    ck_assert(exec_script(dom_thread,
+        "var p = document.createElement('div'), f = document.createDocumentFragment(); f.appendChild(p);"
+        "var caught; try { document.createElement('div', {get is() { retire(); return undefined; }}); } "
+        "catch(e) { caught = e; } if (!caught || caught.name !== 'InvalidStateError') throw Error('retired creation');",
+        "retirement during element options conversion"));
+    ck_assert_uint_eq(dom_thread->dom_changes, 0);
+}
+END_TEST
 
 
 /**
@@ -2017,6 +2205,13 @@ Suite *quickjs_suite(void)
     tcase_add_test(tc_dom, test_quickjs_classlist_iteration);
     tcase_add_test(tc_dom, test_quickjs_classlist_retirement);
     tcase_add_test(tc_dom, test_quickjs_classlist_conversion_retirement);
+    tcase_add_test(tc_dom, test_quickjs_node_creation);
+    tcase_add_test(tc_dom, test_quickjs_node_creation_errors);
+    tcase_add_test(tc_dom, test_quickjs_tree_moves);
+    tcase_add_test(tc_dom, test_quickjs_tree_fragments);
+    tcase_add_test(tc_dom, test_quickjs_tree_validation);
+    tcase_add_test(tc_dom, test_quickjs_document_tree_validation);
+    tcase_add_test(tc_dom, test_quickjs_creation_retirement);
     suite_add_tcase(s, tc_dom);
     tcase_add_test(tc_surface, test_quickjs_storage);
     tcase_add_test(tc_surface, test_quickjs_event_target);

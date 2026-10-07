@@ -3052,14 +3052,14 @@ bool html_redraw(
     struct box *box;
     bool result = true;
     bool select, select_only;
-    /* The layout can be NULL if we are in the process of rebuilding it */
-    if (html->layout == NULL)
-        return true;
-
     plot_style_t pstyle_fill_bg = {
         .fill_type = PLOT_OP_TYPE_SOLID,
         .fill_colour = data->background_colour,
     };
+    /* A script can leave a completed document without a root. Clear its old
+     * pixels; a temporary gap during box construction retains the old paint. */
+    if (html->layout == NULL)
+        return html->box_conversion_context != NULL || ctx->plot->rectangle(ctx, &pstyle_fill_bg, clip) == NSERROR_OK;
 
     NSLOG(wisp, DEBUG, "PROFILER: START HTML redraw %p", c);
     HTML_PROFILE_START(paint_start);

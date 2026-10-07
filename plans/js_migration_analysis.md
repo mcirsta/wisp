@@ -3,10 +3,10 @@
 Reviewed 2026-10-07 against Wisp `206b8a03`, plus the QuickJS-ng update and
 XHR conversion fix described below. This replaces the earlier migration analysis.
 It is a browser-integration review, not an exhaustive security or ECMAScript
-conformance audit. Batches 1–2 and the first two increments of batch 3 are implemented
-within the scope described below. Real DOM lookups, class lists and attribute/text mutations
-now reach rendering and carry JS action traces. Collections, node creation/tree
-editing, events and the other capabilities below remain future work.
+conformance audit. Batches 1–2 and the first three increments of batch 3 are implemented
+within the scope described below. Real DOM lookups, class lists, attribute/text
+mutations and basic node creation/tree edits now reach rendering and carry JS action
+traces. JS node collections, events and the other capabilities below remain future work.
 
 ## Assessment
 
@@ -68,8 +68,8 @@ unless stated otherwise.
 | Promise/async continuations | The outer script or timer entry drains FIFO jobs under the same deadline; aborted entries discard their pending jobs | Promise, `await` and engine `queueMicrotask` callbacks progress; this is not yet a complete browser event loop |
 | Timers | `timers.c`: per-document ordered queue on the frontend scheduler, callback arguments/string handlers, shared cancellation IDs and nesting delays | Real `setTimeout`/`setInterval`; callbacks and their checkpoints share execution limits; document retirement cancels them |
 | JS diagnostics | Optional `js_trace` records document/entry IDs, script sources, timer causality, navigation, exposed node IDs, actual DOM operations and coalesced render requests | Separates supported JS host effects from static processing; this is not complete paint attribution |
-| Document/nodes | `dom.c`/`document.c`: real libdom wrappers with stable identity, roots, ID lookup and basic node traversal | Document-lifetime wrapper ownership and native reference cleanup are tested; selectors, collections and node creation are not exposed |
-| Mutation/CSSOM | Real attributes, `id`/`className`, live `classList`, `textContent`/`nodeValue` and CharacterData `data`; connected edits request an existing full restyle after the entry/checkpoint | These changes affect boxes and pixels; `style`, `innerHTML` and tree-editing methods are omitted pending implementation |
+| Document/nodes | `dom.c`/`document.c`/`tree.c`: real libdom wrappers with stable identity, roots, ID lookup, traversal and element/text/comment/fragment factories | Document-lifetime wrapper ownership and native reference cleanup are tested; selectors, JS collections, namespace-aware creation and cross-document operations are not exposed |
+| Mutation/CSSOM | Real attributes, `id`/`className`, live `classList`, text/data and append/insert/replace/remove; connected edits request a full restyle after the entry/checkpoint | Changes affect boxes and pixels, including moves into detached trees; `style` and `innerHTML` remain omitted |
 | Events | `event_target.c` and `js_fire_event`/`js_handle_new_element` are stubs | No real JS listeners, inline event handlers or load-event delivery |
 | Lifecycle information | `document.readyState` is omitted | Correct loading state and lifecycle events belong to batch 4 |
 | Networking/storage | XHR fabricates DONE/200 without a request; storage discards writes; no `document.cookie` accessor or browser fetch binding | XHR/storage still advertise unsupported behavior. Native HTTP cookie handling is a separate subsystem |
@@ -103,7 +103,7 @@ unless stated otherwise.
    imply every Node/Element/Document member is implemented.
 
 4. **Supported mutations now reach rendering.** All implemented attribute/text
-   setters share one invalidation interface. Connected edits advance the DOM
+   setters and tree edits share one invalidation interface. Connected edits advance the DOM
    generation immediately, then coalesce a full renderer refresh after the outer
    entry and its microtasks. Before box construction, the initial build covers
    the changes. Existing partial updates are deliberately not reused without
@@ -395,7 +395,70 @@ navigation and retained-restyle captures, plus DOM/form/restyle tests, are also
 checked. Engine API, regexp and local JS suites pass in sanitizer and Release
 builds; the local suites report **116 tests, 0 errors, 9 excluded**.
 
-Remaining batch 3 work: node creation/tree editing and live node collections.
+The following increment adds basic node creation/tree editing. Live JS node
+collections remain separate work.
+
+### Batch 3, third increment: node creation and tree editing
+
+Implemented 2026-10-07. `tree.c` adds `document.createElement`, `createTextNode`,
+`createComment`, `createDocumentFragment`, and Node's `appendChild`, `insertBefore`,
+`replaceChild` and `removeChild`. DocumentFragment has its own prototype and real
+`textContent`. All methods use the existing identity cache and retirement boundary.
+String conversions and creation-option getters preserve exceptions and recheck the
+document before native access. Normal element creation uses libdom's HTML factory,
+now with an HTML namespace and the current DOM local-name validation rules.
+
+The old Duktape `Document.bnd` and `Node.bnd` informed native calls and reference
+ownership. Their suppressed errors, prototype-based argument checks and incomplete
+nullable-reference handling were not carried over. Semantics were checked against
+the [DOM creation and mutation algorithms](https://dom.spec.whatwg.org/#mutation-algorithms).
+
+Native fixes accompany the bindings:
+
+- Insertion/replacement share pre-mutation validation. Invalid fragments leave
+  both trees intact; document root uniqueness and doctype ordering are checked
+  for the whole operation. Valid document-root removal/replacement is supported.
+- Empty-fragment replacement reconnects neighboring siblings. Inserting a
+  fragment keeps the emptied fragment on libdom's detached-node list; it must
+  continue to keep its native owner document alive. Insertion-hook failures
+  cannot leave both the fragment and destination claiming the same child list.
+- Native document collections are anchored to the document, following root
+  changes and remaining usable when there is no root. This also fixes the forms
+  collection assertion reached when conversion starts after JS removes the root.
+  These native collections are not yet exposed through JS wrappers.
+- Conversion/restyling accepts a document without a root, paints it blank and
+  clears its extents. A later insertion can rebuild it. Full rebuilds discard
+  the old propagated body background along with the old boxes. Debug captures
+  can dump an empty document without treating it as an output error.
+
+Tree operations report parent/child/reference/former-parent IDs through
+`dom.tree`. Existing `dom.mutation` records identify each affected parent; a move
+between parents can produce a destination record plus `moveFrom`. Both use the
+same coalesced update boundary. A move into a detached fragment therefore still
+invalidates the connected source parent. Detached-only edits do not rebuild the
+page. Native validation errors do not request rendering; allocation failures
+conservatively do because an insertion hook can fail after linking.
+Empty-fragment insertion and self-insertion/replacement are traced as calls but
+do not produce mutation notifications or page rebuilds.
+
+Validation: **67 Check tests** in `test_quickjs`, plus **5 native tree tests**, pass
+under Debug ASan/UBSan. Added checks cover creation, conversions and retirement,
+invalid names/arguments/trees, sibling moves, empty and populated fragments,
+document constraints, wrapper identity/GC and native document lifetime without
+JS ownership. `qt_js_dom` compares inline/timer-created content with static pixels
+and geometry, tests removal into a detached fragment, and tests root removal and
+restoration before/after initial rendering. Native DOM, forms, construction and
+restyle regressions and the Qt loading/script/timer/navigation/retained-update
+tests are checked. No engine patch or generated-file edits are needed here.
+
+Scope remains deliberate: cross-document adoption/import, `createElementNS`,
+cloning, live JS collections, selectors, convenience methods such as `append`,
+custom elements and public node constructors remain unimplemented. Customized
+built-in creation options throw an explicit NotSupportedError; ordinary/default
+options and the legacy string argument are accepted. This does not implement
+dynamic script execution or complete stylesheet/resource/element lifecycle
+reactions. DOM allocations remain outside QuickJS's heap budget. Next: live node
+collections, then the event/lifecycle work in batch 4.
 
 ### Reading the JS trace
 
@@ -431,12 +494,16 @@ does not call page getters or string conversions.
 
 `dom.node` maps each newly exposed wrapper ID to its initial native node name and
 HTML ID (bounded strings); it is not updated when the ID attribute changes.
-`dom.mutation` names the actual attribute/text operation, node and native result:
+`dom.tree` records the tree operation and its parent, child, reference and former
+parent IDs (zero means absent); the IDs refer to `dom.node` entries.
+`dom.mutation` names the affected node, attribute/text/tree operation and native result:
 zero means success. Failed native calls may have partially changed a subtree, so
 they conservatively invalidate it where needed. `render.request` records the
 coalesced operation count and initiating entry. `initial-build` means the initial
 box build will cover the edits; `full-restyle` requests the existing full update.
-Detached-node edits are traced but produce no page update.
+Detached-node edits are traced but produce no page update, unless moving a node
+also changes a connected source parent (reported as `moveFrom`). The count is
+affected-node notifications, not necessarily JS method calls.
 
 This is an action trace, not a DOM snapshot or complete paint attribution. It
 records no arbitrary text/attribute values and never calls page getters or
@@ -518,15 +585,15 @@ These are separate reviewable batches, not a commitment to full web-app support.
    parser ordering, microtasks, main-thread timers and navigation-safe context
    ownership share bounded entry/checkpoint handling. Teardown runs no page
    callbacks. This is not a complete HTML event loop or script-element algorithm.
-3. **Minimal real DOM plus visible mutations — first two increments implemented.**
+3. **Minimal real DOM plus visible mutations — first three increments implemented.**
    Real wrappers, roots, ID lookup, traversal, attributes/text, live `classList`,
-   coalesced full refresh and mutation traces pass identity/GC and rendered-page
-   tests. Remaining: node creation/tree editing and live node collections. Extend the same
+   basic node creation/tree edits, coalesced full refresh and mutation traces pass
+   identity/GC and rendered-page tests. Remaining: live node collections. Extend the same
    ownership/conversion/invalidation layer rather than adding fake APIs. Reuse
    partial updates only with sound mutation/dependency tracking.
 4. **Events and practical document interaction.** EventTarget/Event, click
    listeners and supported handler attributes, DOMContentLoaded/load and accurate
-   readyState; then selected tree/fragment operations. Validate propagation,
+   readyState; then further element lifecycle integration. Validate propagation,
    preventDefault, capture, once, callback identity and navigation cleanup.
 5. **Choose the next capability from measured page needs.** Selector queries,
    inline style/CSSOM and media queries are plausible next steps. Implement

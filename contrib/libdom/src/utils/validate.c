@@ -18,6 +18,32 @@
 
 #include <parserutils/charset/utf8.h>
 
+/* DOM's element local-name rules also accept names produced by the HTML
+ * parser. Non-ASCII UTF-8 bytes cannot coincide with the excluded ASCII bytes.
+ * https://dom.spec.whatwg.org/#valid-element-local-name */
+bool _dom_validate_element_local_name(dom_string *name)
+{
+    size_t length = dom_string_byte_length(name);
+    const uint8_t *text = (const uint8_t *)dom_string_data(name);
+    if (length == 0)
+        return false;
+    bool alpha = (text[0] >= 'a' && text[0] <= 'z') || (text[0] >= 'A' && text[0] <= 'Z');
+    if (!alpha && text[0] != ':' && text[0] != '_' && text[0] < 0x80)
+        return false;
+    for (size_t i = 1; i < length; i++) {
+        uint8_t c = text[i];
+        if (alpha) {
+            if (c == 0 || c == '\t' || c == '\n' || c == '\f' || c == '\r' || c == ' ' || c == '/' || c == '>')
+                return false;
+        } else if (c < 0x80 &&
+            !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-' || c == '.' ||
+                c == ':' || c == '_')) {
+            return false;
+        }
+    }
+    return true;
+}
+
 /* An combination of various tests */
 static bool is_first_char(uint32_t ch);
 static bool is_name_char(uint32_t ch);

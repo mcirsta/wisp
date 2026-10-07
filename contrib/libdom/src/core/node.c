@@ -40,6 +40,8 @@
 #include "html/html_details_element.h"
 
 static bool _dom_node_permitted_child(const dom_node_internal *parent, const dom_node_internal *child);
+static dom_exception _dom_node_check_insertion(const dom_node_internal *parent, const dom_node_internal *child,
+    const dom_node_internal *reference, const dom_node_internal *replaced);
 static inline dom_exception _dom_node_attach(
     dom_node_internal *node, dom_node_internal *parent, dom_node_internal *previous, dom_node_internal *next);
 static inline void _dom_node_detach(dom_node_internal *node);
@@ -756,33 +758,11 @@ dom_exception _dom_node_get_owner_document(dom_node_internal *node, struct dom_d
 dom_exception _dom_node_insert_before(
     dom_node_internal *node, dom_node_internal *new_child, dom_node_internal *ref_child, dom_node_internal **result)
 {
-    dom_exception err;
-    dom_node_internal *n;
-
     assert(node != NULL);
-
-    /* Ensure that new_child and node are owned by the same document */
-    if ((new_child->type == DOM_DOCUMENT_TYPE_NODE && new_child->owner != NULL && new_child->owner != node->owner) ||
-        (new_child->type != DOM_DOCUMENT_TYPE_NODE && new_child->owner != node->owner))
-        return DOM_WRONG_DOCUMENT_ERR;
-
-    /* Ensure node isn't read only */
-    if (_dom_node_readonly(node))
-        return DOM_NO_MODIFICATION_ALLOWED_ERR;
-
-    /* Ensure that ref_child (if any) is a child of node */
-    if (ref_child != NULL && ref_child->parent != node)
-        return DOM_NOT_FOUND_ERR;
-
-    /* Ensure that new_child is not an ancestor of node, nor node itself */
-    for (n = node; n != NULL; n = n->parent) {
-        if (n == new_child)
-            return DOM_HIERARCHY_REQUEST_ERR;
-    }
-
-    /* Ensure that new_child is permitted as a child of node */
-    if (new_child->type != DOM_DOCUMENT_FRAGMENT_NODE && !_dom_node_permitted_child(node, new_child))
-        return DOM_HIERARCHY_REQUEST_ERR;
+    *result = NULL;
+    dom_exception err = _dom_node_check_insertion(node, new_child, ref_child, NULL);
+    if (err != DOM_NO_ERR)
+        return err;
 
     /* Attempting to insert a node before itself is a NOP */
     if (new_child == ref_child) {
@@ -792,55 +772,34 @@ dom_exception _dom_node_insert_before(
         return DOM_NO_ERR;
     }
 
-    /* If new_child is already in the tree and
-     * its parent isn't read only, remove it */
-    if (new_child->parent != NULL) {
-        if (_dom_node_readonly(new_child->parent))
-            return DOM_NO_MODIFICATION_ALLOWED_ERR;
-
+    /* Validation has already checked the old parent's writability. */
+    if (new_child->parent != NULL)
         _dom_node_detach(new_child);
-    }
-
-    /* When a Node is attached, it should be removed from the pending
-     * list */
-    dom_node_remove_pending(new_child);
 
     /* If new_child is a DocumentFragment, insert its children.
      * Otherwise, insert new_child */
     if (new_child->type == DOM_DOCUMENT_FRAGMENT_NODE) {
-        /* Test the children of the docment fragment can be appended */
-        dom_node_internal *c = new_child->first_child;
-        for (; c != NULL; c = c->next)
-            if (!_dom_node_permitted_child(node, c))
-                return DOM_HIERARCHY_REQUEST_ERR;
-
         if (new_child->first_child != NULL) {
-            err = _dom_node_attach_range(new_child->first_child, new_child->last_child, node,
-                ref_child == NULL ? node->last_child : ref_child->previous, ref_child == NULL ? NULL : ref_child);
+            dom_node_internal *first = new_child->first_child, *last = new_child->last_child;
+            /* The fragment remains detached and pending. Empty it before
+             * attaching: insertion hooks can fail after the links change. */
+            new_child->first_child = new_child->last_child = NULL;
+            err = _dom_node_attach_range(first, last, node, ref_child == NULL ? node->last_child : ref_child->previous,
+                ref_child == NULL ? NULL : ref_child);
             if (err != DOM_NO_ERR)
                 return err;
-
-            new_child->first_child = NULL;
-            new_child->last_child = NULL;
         }
     } else {
+        dom_node_remove_pending(new_child);
+        if (new_child->owner == NULL && new_child->type == DOM_DOCUMENT_TYPE_NODE)
+            new_child->owner = (struct dom_document *)node;
         err = _dom_node_attach(new_child, node, ref_child == NULL ? node->last_child : ref_child->previous,
             ref_child == NULL ? NULL : ref_child);
         if (err != DOM_NO_ERR)
             return err;
     }
 
-    /* DocumentType nodes are created outside the Document so,
-     * if we're trying to attach a DocumentType node, then we
-     * also need to set its owner. */
-    if (node->type == DOM_DOCUMENT_NODE && new_child->type == DOM_DOCUMENT_TYPE_NODE) {
-        /* See long comment in _dom_node_initialise as to why
-         * we don't ref the document here */
-        new_child->owner = (struct dom_document *)node;
-    }
-
-    /** \todo Is it correct to return DocumentFragments? */
-
+    /* The DOM insertion methods return the fragment itself, now empty. */
     dom_node_ref(new_child);
     *result = new_child;
 
@@ -867,10 +826,7 @@ dom_exception _dom_node_insert_before(
  *         DOM_NO_MODIFICATION_ALLOWED_ERR if ::node is readonly, or
  *                                         ::new_child's parent is readonly,
  *         DOM_NOT_FOUND_ERR               if ::old_child is not a child of
- *                                         ::node,
- *         DOM_NOT_SUPPORTED_ERR           if ::node is of type Document and
- *                                         ::new_child is of type
- *                                         DocumentType or Element.
+ *                                         ::node.
  *
  * If ::new_child is a DocumentFragment, ::old_child is replaced by all of
  * ::new_child's children.
@@ -883,47 +839,10 @@ dom_exception _dom_node_insert_before(
 dom_exception _dom_node_replace_child(
     dom_node_internal *node, dom_node_internal *new_child, dom_node_internal *old_child, dom_node_internal **result)
 {
-    dom_node_internal *n;
-
-    /* We don't support replacement of DocumentType or root Elements */
-    if (node->type == DOM_DOCUMENT_NODE &&
-        (new_child->type == DOM_DOCUMENT_TYPE_NODE || new_child->type == DOM_ELEMENT_NODE))
-        return DOM_NOT_SUPPORTED_ERR;
-
-    /* Ensure that new_child and node are owned by the same document */
-    if (new_child->owner != node->owner)
-        return DOM_WRONG_DOCUMENT_ERR;
-
-    /* Ensure node isn't read only */
-    if (_dom_node_readonly(node))
-        return DOM_NO_MODIFICATION_ALLOWED_ERR;
-
-    /* Ensure that old_child is a child of node */
-    if (old_child->parent != node)
-        return DOM_NOT_FOUND_ERR;
-
-    /* Ensure that new_child is not an ancestor of node, nor node itself */
-    for (n = node; n != NULL; n = n->parent) {
-        if (n == new_child)
-            return DOM_HIERARCHY_REQUEST_ERR;
-    }
-
-    /* Ensure that new_child is permitted as a child of node */
-    if (new_child->type == DOM_DOCUMENT_FRAGMENT_NODE) {
-        /* If this node is a doc fragment, we should test all its
-         * children nodes */
-        dom_node_internal *c;
-        c = new_child->first_child;
-        while (c != NULL) {
-            if (!_dom_node_permitted_child(node, c))
-                return DOM_HIERARCHY_REQUEST_ERR;
-
-            c = c->next;
-        }
-    } else {
-        if (!_dom_node_permitted_child(node, new_child))
-            return DOM_HIERARCHY_REQUEST_ERR;
-    }
+    *result = NULL;
+    dom_exception err = _dom_node_check_insertion(node, new_child, old_child, old_child);
+    if (err != DOM_NO_ERR)
+        return err;
 
     /* Attempting to replace a node with itself is a NOP */
     if (new_child == old_child) {
@@ -933,25 +852,20 @@ dom_exception _dom_node_replace_child(
         return DOM_NO_ERR;
     }
 
-    /* If new_child is already in the tree and
-     * its parent isn't read only, remove it */
-    if (new_child->parent != NULL) {
-        if (_dom_node_readonly(new_child->parent))
-            return DOM_NO_MODIFICATION_ALLOWED_ERR;
-
+    if (new_child->parent != NULL)
         _dom_node_detach(new_child);
-    }
 
-    /* When a Node is attached, it should be removed from the pending
-     * list */
-    dom_node_remove_pending(new_child);
+    if (new_child->type != DOM_DOCUMENT_FRAGMENT_NODE)
+        dom_node_remove_pending(new_child);
+    if (new_child->owner == NULL && new_child->type == DOM_DOCUMENT_TYPE_NODE)
+        new_child->owner = (struct dom_document *)node;
 
     /* Perform the replacement */
-    dom_exception err = _dom_node_replace(old_child, new_child);
+    err = _dom_node_replace(old_child, new_child);
 
     /* Sort out the return value */
     dom_node_ref(old_child);
-    /* The replaced node should be marded pending */
+    /* The replaced node is detached and must remain on the pending list. */
     dom_node_mark_pending(old_child);
     *result = old_child;
 
@@ -967,10 +881,7 @@ dom_exception _dom_node_replace_child(
  * \return DOM_NO_ERR                      on success,
  *         DOM_NO_MODIFICATION_ALLOWED_ERR if ::node is readonly
  *         DOM_NOT_FOUND_ERR               if ::old_child is not a child of
- *                                         ::node,
- *         DOM_NOT_SUPPORTED_ERR           if ::node is of type Document and
- *                                         ::new_child is of type
- *                                         DocumentType or Element.
+ *                                         ::node.
  *
  * The returned node will have its reference count increased. It is
  * the responsibility of the caller to unref the node once it has
@@ -981,10 +892,7 @@ dom_exception _dom_node_remove_child(dom_node_internal *node, dom_node_internal 
     dom_exception err;
     bool success = true;
 
-    /* We don't support removal of DocumentType or root Element nodes */
-    if (node->type == DOM_DOCUMENT_NODE &&
-        (old_child->type == DOM_DOCUMENT_TYPE_NODE || old_child->type == DOM_ELEMENT_NODE))
-        return DOM_NOT_SUPPORTED_ERR;
+    *result = NULL;
 
     /* Ensure old_child is a child of node */
     if (old_child->parent != node)
@@ -1974,6 +1882,65 @@ dom_exception _dom_node_copy_internal(dom_node_internal *old, dom_node_internal 
 
 /*  The helper functions */
 
+/* Validate the whole operation before detaching anything. In particular a
+ * fragment is a batch, and replacement excludes the old child from document
+ * uniqueness checks. https://dom.spec.whatwg.org/#concept-node-ensure-pre-insertion-validity
+ * Legacy Attr/Entity trees remain supported internally by libdom. */
+static dom_exception _dom_node_check_insertion(const dom_node_internal *parent, const dom_node_internal *child,
+    const dom_node_internal *reference, const dom_node_internal *replaced)
+{
+    switch (parent->type) {
+    case DOM_DOCUMENT_NODE:
+    case DOM_DOCUMENT_FRAGMENT_NODE:
+    case DOM_ELEMENT_NODE:
+    case DOM_ATTRIBUTE_NODE:
+    case DOM_ENTITY_NODE:
+    case DOM_ENTITY_REFERENCE_NODE:
+        break;
+    default:
+        return DOM_HIERARCHY_REQUEST_ERR;
+    }
+    for (const dom_node_internal *n = parent; n != NULL; n = n->parent) {
+        if (n == child)
+            return DOM_HIERARCHY_REQUEST_ERR;
+    }
+    if (reference != NULL && reference->parent != parent)
+        return DOM_NOT_FOUND_ERR;
+
+    bool fragment = child->type == DOM_DOCUMENT_FRAGMENT_NODE;
+    unsigned elements = 0;
+    for (const dom_node_internal *n = fragment ? child->first_child : child; n != NULL; n = fragment ? n->next : NULL) {
+        if (!_dom_node_permitted_child(parent, n))
+            return DOM_HIERARCHY_REQUEST_ERR;
+        if (n->type == DOM_ELEMENT_NODE)
+            elements++;
+    }
+    if (parent->type == DOM_DOCUMENT_NODE) {
+        if (elements > 1)
+            return DOM_HIERARCHY_REQUEST_ERR;
+        bool following = false;
+        for (const dom_node_internal *n = parent->first_child; n != NULL; n = n->next) {
+            if (n == reference)
+                following = true;
+            if (elements != 0 &&
+                ((n->type == DOM_ELEMENT_NODE && n != replaced) ||
+                    (n->type == DOM_DOCUMENT_TYPE_NODE && following && n != replaced)))
+                return DOM_HIERARCHY_REQUEST_ERR;
+            if (child->type == DOM_DOCUMENT_TYPE_NODE &&
+                ((n->type == DOM_DOCUMENT_TYPE_NODE && n != replaced) ||
+                    (n->type == DOM_ELEMENT_NODE && !following && n != replaced)))
+                return DOM_HIERARCHY_REQUEST_ERR;
+        }
+    }
+    /* Cross-document adoption is a separate native API; no foreign wrappers
+     * are currently exposed by the browser's JavaScript bindings. */
+    if (child->owner != parent->owner && !(child->type == DOM_DOCUMENT_TYPE_NODE && child->owner == NULL))
+        return DOM_WRONG_DOCUMENT_ERR;
+    if (_dom_node_readonly(parent) || (child->parent != NULL && _dom_node_readonly(child->parent)))
+        return DOM_NO_MODIFICATION_ALLOWED_ERR;
+    return DOM_NO_ERR;
+}
+
 /**
  * Determine if a node is permitted as a child of another node
  *
@@ -2014,27 +1981,6 @@ bool _dom_node_permitted_child(const dom_node_internal *parent, const dom_node_i
     case DOM_DOCUMENT_NODE:
         valid = (child->type == DOM_ELEMENT_NODE || child->type == DOM_PROCESSING_INSTRUCTION_NODE ||
             child->type == DOM_COMMENT_NODE || child->type == DOM_DOCUMENT_TYPE_NODE);
-
-        /* Ensure that the document doesn't already
-         * have a root element */
-        if (child->type == DOM_ELEMENT_NODE) {
-            dom_node_internal *n;
-            for (n = parent->first_child; n != NULL; n = n->next) {
-                if (n->type == DOM_ELEMENT_NODE)
-                    valid = false;
-            }
-        }
-
-        /* Ensure that the document doesn't already
-         * have a document type */
-        if (child->type == DOM_DOCUMENT_TYPE_NODE) {
-            dom_node_internal *n;
-            for (n = parent->first_child; n != NULL; n = n->next) {
-                if (n->type == DOM_DOCUMENT_TYPE_NODE)
-                    valid = false;
-            }
-        }
-
         break;
     }
 
@@ -2248,14 +2194,7 @@ dom_exception _dom_node_replace(dom_node_internal *old, dom_node_internal *repla
 
     if (first == NULL) {
         /* All we're doing is removing old */
-        if (old->previous == NULL) {
-            old->parent->first_child = old->next;
-        }
-        if (old->next == NULL) {
-            old->parent->last_child = old->previous;
-        }
-        old->previous = old->next = old->parent = NULL;
-        return DOM_NO_ERR;
+        return _dom_node_detach_range(old, old);
     }
 
     /* We're replacing old with first-to-last */

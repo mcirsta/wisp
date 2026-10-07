@@ -352,6 +352,7 @@ add_wisp_test(test_quickjs
   ${CMAKE_SOURCE_DIR}/src/content/handlers/javascript/quickjs/location.c
   ${CMAKE_SOURCE_DIR}/src/content/handlers/javascript/quickjs/document.c
   ${CMAKE_SOURCE_DIR}/src/content/handlers/javascript/quickjs/dom.c
+  ${CMAKE_SOURCE_DIR}/src/content/handlers/javascript/quickjs/tree.c
   ${CMAKE_SOURCE_DIR}/src/content/handlers/javascript/quickjs/tokenlist.c
   ${CMAKE_SOURCE_DIR}/src/content/handlers/javascript/quickjs/storage.c
   ${CMAKE_SOURCE_DIR}/src/content/handlers/javascript/quickjs/event_target.c
@@ -469,6 +470,11 @@ add_executable(dom_details_test dom_details_test.c)
 target_include_directories(dom_details_test PRIVATE ${TEST_COMMON_INCLUDES})
 target_link_libraries(dom_details_test dom ${CHECK_LIBRARIES})
 add_test(NAME dom_details_test COMMAND dom_details_test)
+
+add_executable(dom_tree_test dom_tree_test.c)
+target_include_directories(dom_tree_test PRIVATE ${TEST_COMMON_INCLUDES})
+target_link_libraries(dom_tree_test dom ${CHECK_LIBRARIES})
+add_test(NAME dom_tree_test COMMAND dom_tree_test)
 
 add_executable(dom_userdata_test dom_userdata_test.c)
 target_include_directories(dom_userdata_test PRIVATE ${TEST_COMMON_INCLUDES})

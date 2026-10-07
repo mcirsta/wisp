@@ -229,7 +229,8 @@ static JSValue node_set(JSContext *ctx, JSValueConst object, JSValueConst value,
         self->type == DOM_PROCESSING_INSTRUCTION_NODE) {
         operation = property == TEXT_CONTENT ? "textContent" : property == DATA ? "data" : "nodeValue";
         err = dom_node_set_node_value(self->node, text);
-    } else if (property == TEXT_CONTENT && self->type == DOM_ELEMENT_NODE) {
+    } else if (property == TEXT_CONTENT &&
+        (self->type == DOM_ELEMENT_NODE || self->type == DOM_DOCUMENT_FRAGMENT_NODE)) {
         operation = "textContent";
         err = dom_node_set_text_content(self->node, text);
     }

@@ -68,6 +68,13 @@ static dom_exception _dom_namespace_initialise(void)
     return DOM_NO_ERR;
 }
 
+dom_string *_dom_namespace_get_html_namespace(void)
+{
+    if (xml == NULL && _dom_namespace_initialise() != DOM_NO_ERR)
+        return NULL;
+    return dom_namespaces[DOM_NAMESPACE_HTML];
+}
+
 /**
  * Finalise the namespace component
  *

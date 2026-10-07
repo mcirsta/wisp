@@ -26,4 +26,7 @@ dom_string *_dom_namespace_get_xml_prefix(void);
 /* Get the XMLNS prefix dom_string */
 dom_string *_dom_namespace_get_xmlns_prefix(void);
 
+/* Borrow the HTML namespace, initializing the namespace table if needed. */
+dom_string *_dom_namespace_get_html_namespace(void);
+
 #endif

@@ -29,7 +29,7 @@ Promise.resolve().then(() => {
 });'''
 
 
-def run(root, name, body, js=True):
+def run(root, name, body, js=True, missing=False):
     page = root / (name + '.html')
     page.write_text(prefix + body)
     dest = root / name
@@ -43,8 +43,12 @@ def run(root, name, body, js=True):
     assert result.returncode == 0 and 'runtime error:' not in log, (name, diagnostic, log[-8000:])
     meta = json.loads((dest / 'capture.json').read_text())
     assert meta['result'] == 'complete' and meta['load_complete'], (name, meta, diagnostic)
-    elements = json.loads((dest / 'inspection.json').read_text())['elements']
-    assert all(e['status'] in ('ok', 'no_box') for e in elements), (name, elements)
+    inspection = json.loads((dest / 'inspection.json').read_text())
+    if inspection['status'] == 'layout_unavailable':
+        assert missing and meta['document_extent'] == {'width': 0, 'height': 0}, (name, meta, diagnostic)
+        return dest, [], diagnostic
+    elements = inspection['elements']
+    assert all(e['status'] in (('not_found',) if missing else ('ok', 'no_box')) for e in elements), (name, elements)
     return dest, elements, diagnostic
 
 
@@ -87,4 +91,83 @@ with tempfile.TemporaryDirectory(prefix='wisp-js-dom-') as tmp:
         if name == 'interrupted':
             assert 'JavaScript execution limit reached' in log and 'end result=interrupted' in log, log
 
-print('JS DOM edits, coalesced rendering, interruption recovery, geometry, pixels and trace attribution pass.')
+    tree_edit = '''
+        const old = document.getElementById('target');
+        const target = document.createElement('div');
+        target.id = 'target'; target.className = 'new';
+        const fragment = document.createDocumentFragment();
+        fragment.appendChild(document.createTextNode('Changed ș😀'));
+        target.appendChild(fragment);
+        if (fragment.firstChild !== null) throw Error('fragment not emptied');
+        document.body.replaceChild(target, old);
+        const temporary = document.createElement('span'); temporary.textContent = 'temporary';
+        target.insertBefore(temporary, target.firstChild);
+        target.removeChild(temporary);
+        document.getElementById('reveal').removeAttribute('hidden');
+        console.log('TREE_CHANGED');
+    '''
+    for name, script in (('tree-inline', tree_edit), ('tree-timer', 'setTimeout(() => {' + tree_edit + '}, 150);')):
+        dest, elements, log = run(root, name, initial + '<script>' + script + '</script>')
+        assert 'Console: TREE_CHANGED' in log, (name, log)
+        assert (dest / 'page.png').read_bytes() == (reference / 'page.png').read_bytes(), (name, elements, log)
+        assert len(re.findall(r'\] render.request ', log)) == 1, (name, log)
+        for operation in ('appendChild', 'insertBefore', 'replaceChild', 'removeChild'):
+            assert f'dom.tree operation={operation}' in log, (name, log)
+        assert 'mode=' + ('initial-build' if name == 'tree-inline' else 'full-restyle') in log, log
+
+    # Only the source parent is connected. Invalidating just the destination
+    # would leave the removed text painted until some unrelated page update.
+    moved_reference, _, _ = run(root, 'move-reference', initial.replace('<span>child</span>', ''), False)
+    dest, elements, log = run(root, 'move-to-detached', initial + '''<script>
+        setTimeout(() => {
+            const fragment = document.createDocumentFragment();
+            fragment.appendChild(document.getElementById('target').firstChild.nextSibling);
+        }, 150);
+    </script>''')
+    assert (dest / 'page.png').read_bytes() == (moved_reference / 'page.png').read_bytes(), (elements, log)
+    assert 'operation=moveFrom' in log and 'changes=1 mode=full-restyle' in log, log
+    assert re.search(r'dom.tree operation=appendChild .* former_parent=[1-9]\d* result=0', log), log
+
+    dest, _, log = run(root, 'detached-only', initial + '''<script>
+        setTimeout(() => {
+            const fragment = document.createDocumentFragment(), child = document.createElement('div');
+            child.textContent = 'Detached'; fragment.appendChild(child);
+            fragment.replaceChild(document.createTextNode('replacement'), child);
+        }, 150);
+    </script>''')
+    assert (dest / 'page.png').read_bytes() == (initial_capture / 'page.png').read_bytes(), log
+    assert 'dom.tree' in log and 'render.request' not in log, log
+
+    dest, _, log = run(root, 'tree-noop', initial + '''<script>
+        setTimeout(() => {
+            const parent = document.getElementById('target'), child = parent.firstChild;
+            parent.appendChild(document.createDocumentFragment());
+            parent.insertBefore(child, child); parent.replaceChild(child, child);
+            try { parent.insertBefore(parent, child); throw Error('cycle allowed'); }
+            catch(e) { if (e.name !== 'HierarchyRequestError') throw e; }
+        }, 150);
+    </script>''')
+    assert (dest / 'page.png').read_bytes() == (initial_capture / 'page.png').read_bytes(), log
+    assert 'dom.tree' in log and 'render.request' not in log, log
+
+    # A missing document element is legal after script changes. It must clear
+    # the old presentation and still allow a later timer to restore the root.
+    blank, _, _ = run(root, 'blank-reference', '', False, missing=True)
+    remove_root = 'var savedRoot = document.removeChild(document.documentElement);'
+    for name, script in (('root-inline', remove_root),
+                         ('root-timer', 'setTimeout(() => {' + remove_root + '}, 150);')):
+        dest, _, log = run(root, name, initial + '<script>' + script + '</script>', missing=True)
+        assert (dest / 'page.png').read_bytes() == (blank / 'page.png').read_bytes(), (name, log)
+    dest, _, log = run(root, 'body-remove', '<style>body { background: #20a060; }</style>' + initial + '''<script>
+        setTimeout(() => document.documentElement.removeChild(document.body), 150);
+    </script>''', missing=True)
+    assert (dest / 'page.png').read_bytes() == (blank / 'page.png').read_bytes(), log
+    for name, script in (
+            ('root-restore-inline', remove_root + 'setTimeout(() => document.appendChild(savedRoot), 150);'),
+            ('root-restore-timer', 'setTimeout(() => {' + remove_root +
+             'setTimeout(() => document.appendChild(savedRoot), 150); }, 150);')):
+        dest, _, log = run(root, name, initial + '<script>' + script + '</script>')
+        assert (dest / 'page.png').read_bytes() == (initial_capture / 'page.png').read_bytes(), (name, log)
+        assert 'mode=full-restyle' in log, (name, log)
+
+print('JS DOM and tree edits, detached moves, coalesced rendering, geometry, pixels and trace attribution pass.')

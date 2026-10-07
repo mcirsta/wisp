@@ -257,7 +257,7 @@ static void html_box_convert_done(html_content *c, bool success)
 #endif
 
     exc = dom_document_get_document_element(c->document, (void *)&html);
-    if ((exc != DOM_NO_ERR) || (html == NULL)) {
+    if (exc != DOM_NO_ERR) {
         /** @todo should this call html_object_free_objects(c);
          * like the other error paths
          */
@@ -441,7 +441,7 @@ void html_finish_conversion(html_content *htmlc)
     content_broadcast(&htmlc->base, CONTENT_MSG_STATUS, &msg_data);
 
     exc = dom_document_get_document_element(htmlc->document, (void *)&html);
-    if ((exc != DOM_NO_ERR) || (html == NULL)) {
+    if (exc != DOM_NO_ERR) {
         NSLOG(wisp, INFO, "error retrieving html element from dom");
         content_broadcast_error(&htmlc->base, NSERROR_DOM, NULL);
         content_set_error(&htmlc->base);
@@ -454,7 +454,7 @@ void html_finish_conversion(html_content *htmlc)
      * to replace it when SVG is supported.  Since Wisp always has
      * native SVG rendering, we do this natively before CSS selection.
      */
-    {
+    if (html != NULL) {
         dom_string *class_attr = NULL;
         exc = dom_element_get_attribute(html, corestring_dom_class, &class_attr);
         if (exc == DOM_NO_ERR && class_attr != NULL) {
@@ -547,6 +547,12 @@ void html_finish_conversion(html_content *htmlc)
     }
 
     PERF("DOM to box START");
+    if (html == NULL) {
+        /* Script can remove the document element. An empty document is a
+         * completed, blank presentation and can acquire a root again later. */
+        html_box_convert_done(htmlc, true);
+        return;
+    }
     error = dom_to_box(html, htmlc, html_box_convert_done, &htmlc->box_conversion_context);
     if (error != NSERROR_OK) {
         NSLOG(wisp, INFO, "box conversion failed");
@@ -1012,7 +1018,6 @@ bool html_begin_conversion(html_content *htmlc)
     nserror ns_error;
     struct form *f;
     dom_exception exc; /* returned by libdom functions */
-    dom_string *node_name = NULL;
     dom_hubbub_error error;
 
     /* The act of completing the parse can result in additional data
@@ -1101,23 +1106,13 @@ bool html_begin_conversion(html_content *htmlc)
         }
     }
 
-    /* locate root element and ensure it is html */
+    /* The parser creates an HTML root, but script may remove or replace it. */
     exc = dom_document_get_document_element(htmlc->document, (void *)&html);
-    if ((exc != DOM_NO_ERR) || (html == NULL)) {
+    if (exc != DOM_NO_ERR) {
         NSLOG(wisp, INFO, "error retrieving html element from dom");
         content_broadcast_error(&htmlc->base, NSERROR_DOM, NULL);
         return false;
     }
-
-    exc = dom_node_get_node_name(html, &node_name);
-    if ((exc != DOM_NO_ERR) || (node_name == NULL) ||
-        (!dom_string_caseless_lwc_isequal(node_name, corestring_lwc_html))) {
-        NSLOG(wisp, INFO, "root element not html");
-        content_broadcast_error(&htmlc->base, NSERROR_DOM, NULL);
-        dom_node_unref(html);
-        return false;
-    }
-    dom_string_unref(node_name);
 
     /* If box conversion is already in progress, we have a late CSS
      * callback trying to restart conversion. We should NOT cancel
@@ -1273,10 +1268,14 @@ static bool html_layout(struct content *c, int width, int height)
     uint64_t ms_after;
     uint64_t ms_interval;
 
-    /* If the layout is NULL (e.g. during conversion restart), we cannot
-     * reflow. Just return OK and wait for the conversion to complete.
-     */
+    /* A missing layout can mean either a conversion in progress or a completed
+     * empty document. Only the latter publishes empty extents. */
     if (htmlc->layout == NULL) {
+        if (htmlc->box_conversion_context == NULL && c->status != CONTENT_STATUS_LOADING) {
+            c->width = c->height = 0;
+            htmlc->had_initial_layout = true;
+            selection_reinit(htmlc->sel);
+        }
         NSLOG(wisp, INFO, "Reflow skipped: layout is NULL");
         return true;
     }
@@ -1453,6 +1452,7 @@ static void html_free_layout(html_content *htmlc)
         htmlc->bctx = NULL;
     }
     htmlc->layout = NULL;
+    htmlc->background_colour = NS_TRANSPARENT;
 
     /* Clear the CSS selection context when freeing the layout.
      * The select_ctx is semantically tied to the layout - it was used
@@ -1604,7 +1604,7 @@ static void html_restyle_start_full(html_content *html)
 {
     dom_node *root = NULL;
     HTML_PROFILE_START(detach_start);
-    if (dom_document_get_document_element(html->document, &root) != DOM_NO_ERR || root == NULL) {
+    if (dom_document_get_document_element(html->document, &root) != DOM_NO_ERR) {
         dom_node_unref(root);
         html_restyle_done(html, false);
         return;
@@ -1620,7 +1620,7 @@ static void html_restyle_start_full(html_content *html)
         content_textsearch_destroy(html->base.textsearch.context);
         html->base.textsearch.context = NULL;
     }
-    nserror err = libdom_iterate_elements(root, html_restyle_detach_element, NULL);
+    nserror err = libdom_iterate_elements((dom_node *)html->document, html_restyle_detach_element, NULL);
     if (err != NSERROR_OK) {
         html->restyling = false;
         html_restyle_end(html, false);
@@ -1640,11 +1640,16 @@ static void html_restyle_start_full(html_content *html)
     html->iframe = NULL;
     html->frameset = NULL;
     html->layout = NULL;
+    html->background_colour = NS_TRANSPARENT;
     html->unit_len_ctx.root_style = NULL;
     HTML_PROFILE(uint64_t now = html_profile_now();
         if (html->restyle_profile.construction_start_ns == 0) html->restyle_profile.construction_start_ns = now;
         html->restyle_profile.detach_ns += now - detach_start);
     err = html_restyle_capture_inputs(html);
+    if (err == NSERROR_OK && root == NULL) {
+        html_restyle_done(html, true);
+        return;
+    }
     if (err == NSERROR_OK)
         err = dom_to_box(root, html, html_restyle_done, &html->box_conversion_context);
     dom_node_unref(root);
@@ -1691,7 +1696,7 @@ static void html_restyle(void *pw)
 {
     html_content *html = pw;
 
-    if (!html->restyle_pending || html->restyling || html->layout == NULL || html->box_conversion_context != NULL)
+    if (!html->restyle_pending || html->restyling || !html->had_initial_layout || html->box_conversion_context != NULL)
         return;
     HTML_PROFILE(html->restyle_profile = (struct html_restyle_profile){.start_ns = html_profile_now()});
     html_restyle_begin(html);
@@ -1756,8 +1761,9 @@ void html_restyle_restart(html_content *html)
     talloc_free(html->bctx);
     html->bctx = NULL;
     html->layout = NULL;
+    html->background_colour = NS_TRANSPARENT;
     html->unit_len_ctx.root_style = NULL;
-    if (dom_document_get_document_element(html->document, &root) != DOM_NO_ERR || root == NULL) {
+    if (dom_document_get_document_element(html->document, &root) != DOM_NO_ERR) {
         dom_node_unref(root);
         html_restyle_done(html, false);
         return;
@@ -1765,6 +1771,10 @@ void html_restyle_restart(html_content *html)
     err = html_restyle_invalidate(html);
     if (err == NSERROR_OK)
         err = html_restyle_capture_inputs(html);
+    if (err == NSERROR_OK && root == NULL) {
+        html_restyle_done(html, true);
+        return;
+    }
     if (err == NSERROR_OK)
         err = dom_to_box(root, html, html_restyle_done, &html->box_conversion_context);
     dom_node_unref(root);
@@ -2478,8 +2488,8 @@ static nserror html_debug_dump(struct content *c, FILE *f, enum content_debug op
     assert(htmlc != NULL);
 
     if (op == CONTENT_DEBUG_RENDER) {
-        assert(htmlc->layout != NULL);
-        box_dump(f, htmlc->layout, 0, true);
+        if (htmlc->layout != NULL)
+            box_dump(f, htmlc->layout, 0, true);
         ret = NSERROR_OK;
     } else {
         if (htmlc->document == NULL) {
@@ -2488,12 +2498,12 @@ static nserror html_debug_dump(struct content *c, FILE *f, enum content_debug op
         }
 
         exc = dom_document_get_document_element(htmlc->document, (void *)&html);
-        if ((exc != DOM_NO_ERR) || (html == NULL)) {
+        if (exc != DOM_NO_ERR) {
             NSLOG(wisp, INFO, "Unable to obtain root node");
             return NSERROR_DOM;
         }
 
-        ret = libdom_dump_structure(html, f, 0);
+        ret = libdom_dump_structure(html != NULL ? html : (dom_node *)htmlc->document, f, 0);
 
         NSLOG(wisp, INFO, "DOM structure dump returning %d", ret);
 

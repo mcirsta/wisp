@@ -69,6 +69,7 @@
 #include "html/html_ulist_element.h"
 
 #include "utils/namespace.h"
+#include "utils/validate.h"
 #include "utils/utils.h"
 #include "core/attr.h"
 #include "core/string.h"
@@ -673,8 +674,14 @@ static dom_exception _dom_html_document_create_element_internal(dom_html_documen
 dom_exception _dom_html_document_create_element(dom_document *doc, dom_string *tag_name, dom_element **result)
 {
     dom_html_document *html = (dom_html_document *)doc;
-
-    return _dom_html_document_create_element_internal(html, tag_name, NULL, NULL, (dom_html_element **)result);
+    if (!_dom_validate_element_local_name(tag_name))
+        return DOM_INVALID_CHARACTER_ERR;
+    dom_string *namespace = _dom_namespace_get_html_namespace();
+    if (namespace == NULL)
+        return DOM_NO_MEM_ERR;
+    /* createElement in an HTML document creates an HTML-namespace element,
+     * without splitting a colon in the local name into a namespace prefix. */
+    return _dom_html_document_create_element_internal(html, tag_name, namespace, NULL, (dom_html_element **)result);
 }
 
 dom_exception
@@ -977,15 +984,8 @@ bool images_callback(struct dom_node_internal *node, void *ctx)
 
 dom_exception _dom_html_document_get_images(dom_html_document *doc, struct dom_html_collection **col)
 {
-    dom_element *root;
-    dom_exception err;
-    err = dom_document_get_document_element(doc, &root);
-    if (err != DOM_NO_ERR)
-        return err;
-
-    err = _dom_html_collection_create(doc, (dom_node_internal *)root, images_callback, doc, col);
-    dom_node_unref(root);
-    return err;
+    /* Keep the live collection anchored to the document across root changes. */
+    return _dom_html_collection_create(doc, (dom_node_internal *)doc, images_callback, doc, col);
 }
 
 bool applet_callback(struct dom_node_internal *node, void *ctx)
@@ -1023,15 +1023,8 @@ bool applets_callback(struct dom_node_internal *node, void *ctx)
 
 dom_exception _dom_html_document_get_applets(dom_html_document *doc, struct dom_html_collection **col)
 {
-    dom_element *root;
-    dom_exception err;
-    err = dom_document_get_document_element(doc, &root);
-    if (err != DOM_NO_ERR)
-        return err;
-
-    err = _dom_html_collection_create(doc, (dom_node_internal *)root, applets_callback, doc, col);
-    dom_node_unref(root);
-    return err;
+    /* Keep the live collection anchored to the document across root changes. */
+    return _dom_html_collection_create(doc, (dom_node_internal *)doc, applets_callback, doc, col);
 }
 
 /**
@@ -1062,15 +1055,8 @@ bool links_callback(struct dom_node_internal *node, void *ctx)
 
 dom_exception _dom_html_document_get_links(dom_html_document *doc, struct dom_html_collection **col)
 {
-    dom_element *root;
-    dom_exception err;
-    err = dom_document_get_document_element(doc, &root);
-    if (err != DOM_NO_ERR)
-        return err;
-
-    err = _dom_html_collection_create(doc, (dom_node_internal *)root, links_callback, doc, col);
-    dom_node_unref(root);
-    return err;
+    /* Keep the live collection anchored to the document across root changes. */
+    return _dom_html_collection_create(doc, (dom_node_internal *)doc, links_callback, doc, col);
 }
 
 static bool __dom_html_document_node_is_form(dom_node_internal *node, void *ctx)
@@ -1084,25 +1070,8 @@ static bool __dom_html_document_node_is_form(dom_node_internal *node, void *ctx)
 
 dom_exception _dom_html_document_get_forms(dom_html_document *doc, struct dom_html_collection **col)
 {
-    dom_html_collection *result;
-    dom_element *root;
-    dom_exception err;
-
-    err = dom_document_get_document_element(doc, &root);
-    if (err != DOM_NO_ERR)
-        return err;
-
-    err = _dom_html_collection_create(doc, (dom_node_internal *)root, __dom_html_document_node_is_form, NULL, &result);
-    if (err != DOM_NO_ERR) {
-        dom_node_unref(root);
-        return err;
-    }
-
-    dom_node_unref(root);
-
-    *col = result;
-
-    return DOM_NO_ERR;
+    /* Keep the live collection anchored to the document across root changes. */
+    return _dom_html_collection_create(doc, (dom_node_internal *)doc, __dom_html_document_node_is_form, NULL, col);
 }
 
 /**
@@ -1132,15 +1101,8 @@ bool anchors_callback(struct dom_node_internal *node, void *ctx)
 
 dom_exception _dom_html_document_get_anchors(dom_html_document *doc, struct dom_html_collection **col)
 {
-    dom_element *root;
-    dom_exception err;
-    err = dom_document_get_document_element(doc, &root);
-    if (err != DOM_NO_ERR)
-        return err;
-
-    err = _dom_html_collection_create(doc, (dom_node_internal *)root, anchors_callback, doc, col);
-    dom_node_unref(root);
-    return err;
+    /* Keep the live collection anchored to the document across root changes. */
+    return _dom_html_collection_create(doc, (dom_node_internal *)doc, anchors_callback, doc, col);
 }
 
 dom_exception _dom_html_document_get_cookie(dom_html_document *doc, dom_string **cookie)
