@@ -40,15 +40,13 @@ static JSValue js_dispatchEvent(JSContext *ctx, JSValueConst this_val, int argc,
 
 int qjs_init_event_target(JSContext *ctx)
 {
-    JSValue global_obj = JS_GetGlobalObject(ctx);
-
-    /* Add EventTarget methods to global (window) object */
-    JS_SetPropertyStr(
-        ctx, global_obj, "addEventListener", JS_NewCFunction(ctx, js_addEventListener, "addEventListener", 2));
-    JS_SetPropertyStr(
-        ctx, global_obj, "removeEventListener", JS_NewCFunction(ctx, js_removeEventListener, "removeEventListener", 2));
-    JS_SetPropertyStr(ctx, global_obj, "dispatchEvent", JS_NewCFunction(ctx, js_dispatchEvent, "dispatchEvent", 1));
-
-    JS_FreeValue(ctx, global_obj);
-    return 0;
+    static const JSCFunctionListEntry properties[] = {
+        JS_CFUNC_DEF2("addEventListener", 2, js_addEventListener, JS_PROP_C_W_E),
+        JS_CFUNC_DEF2("removeEventListener", 2, js_removeEventListener, JS_PROP_C_W_E),
+        JS_CFUNC_DEF2("dispatchEvent", 1, js_dispatchEvent, JS_PROP_C_W_E),
+    };
+    JSValue global = JS_GetGlobalObject(ctx);
+    int ret = JS_SetPropertyFunctionList(ctx, global, properties, sizeof(properties) / sizeof(properties[0]));
+    JS_FreeValue(ctx, global);
+    return ret < 0 ? -1 : 0;
 }

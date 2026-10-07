@@ -109,7 +109,7 @@ static JSClassID js_console_class_id;
 /**
  * Helper to write a log entry to the browser console.
  */
-static void
+static JSValue
 write_log_entry(JSContext *ctx, unsigned int group_level, 
                 browser_window_console_flags flags, 
                 int argc, JSValueConst *argv)
@@ -120,40 +120,57 @@ write_log_entry(JSContext *ctx, unsigned int group_level,
     
     for (int i = 0; i < argc; i++) {{
         const char *str = JS_ToCString(ctx, argv[i]);
-        if (str) {{
-            size_t str_len = strlen(str);
-            char *new_msg = realloc(msg, msg_len + str_len + 2);
-            if (new_msg) {{
-                msg = new_msg;
-                if (msg_len > 0) {{
-                    msg[msg_len++] = ' ';
-                }}
-                memcpy(msg + msg_len, str, str_len);
-                msg_len += str_len;
-                msg[msg_len] = '\\0';
-            }}
-            JS_FreeCString(ctx, str);
+        if (str == NULL) {{
+            free(msg);
+            return JS_EXCEPTION;
         }}
+        size_t str_len = strlen(str);
+        if (str_len > SIZE_MAX - msg_len - 2) {{
+            JS_FreeCString(ctx, str);
+            free(msg);
+            return JS_ThrowOutOfMemory(ctx);
+        }}
+        char *new_msg = realloc(msg, msg_len + str_len + 2);
+        if (new_msg == NULL) {{
+            JS_FreeCString(ctx, str);
+            free(msg);
+            return JS_ThrowOutOfMemory(ctx);
+        }}
+        msg = new_msg;
+        if (msg_len > 0) {{
+            msg[msg_len++] = ' ';
+        }}
+        memcpy(msg + msg_len, str, str_len);
+        msg_len += str_len;
+        msg[msg_len] = '\\0';
+        JS_FreeCString(ctx, str);
     }}
-    
+
     if (msg == NULL) {{
         msg = strdup("");
-        msg_len = 0;
-    }}
-    
-    /* Add indentation for groups */
-    if (group_level > 0) {{
-        size_t indent_len = group_level * 2;
-        char *indented = malloc(indent_len + msg_len + 1);
-        if (indented) {{
-            memset(indented, ' ', indent_len);
-            memcpy(indented + indent_len, msg, msg_len + 1);
-            free(msg);
-            msg = indented;
-            msg_len += indent_len;
+        if (msg == NULL) {{
+            return JS_ThrowOutOfMemory(ctx);
         }}
     }}
-    
+
+    /* Add indentation for groups. */
+    if (group_level > 0) {{
+        if (group_level > (SIZE_MAX - msg_len - 1) / 2) {{
+            free(msg);
+            return JS_ThrowOutOfMemory(ctx);
+        }}
+        size_t indent_len = (size_t)group_level * 2;
+        char *indented = malloc(indent_len + msg_len + 1);
+        if (indented == NULL) {{
+            free(msg);
+            return JS_ThrowOutOfMemory(ctx);
+        }}
+        memset(indented, ' ', indent_len);
+        memcpy(indented + indent_len, msg, msg_len + 1);
+        free(msg);
+        msg = indented;
+    }}
+
     /* Log to NSLOG for now - browser_window_console_log requires window context */
     switch (flags) {{
     case BW_CS_FLAG_LEVEL_ERROR:
@@ -168,6 +185,7 @@ write_log_entry(JSContext *ctx, unsigned int group_level,
     }}
     
     free(msg);
+    return JS_UNDEFINED;
 }}
 
 /**
@@ -185,8 +203,7 @@ js_console_log(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *ar
 {{
     ConsolePrivate *priv = js_console_get_private(ctx, this_val);
     unsigned int group = priv ? priv->group_level : 0;
-    write_log_entry(ctx, group, BW_CS_FLAG_LEVEL_LOG, argc, argv);
-    return JS_UNDEFINED;
+    return write_log_entry(ctx, group, BW_CS_FLAG_LEVEL_LOG, argc, argv);
 }}
 
 /* Console.error() */
@@ -195,8 +212,7 @@ js_console_error(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *
 {{
     ConsolePrivate *priv = js_console_get_private(ctx, this_val);
     unsigned int group = priv ? priv->group_level : 0;
-    write_log_entry(ctx, group, BW_CS_FLAG_LEVEL_ERROR, argc, argv);
-    return JS_UNDEFINED;
+    return write_log_entry(ctx, group, BW_CS_FLAG_LEVEL_ERROR, argc, argv);
 }}
 
 /* Console.warn() */
@@ -205,8 +221,7 @@ js_console_warn(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *a
 {{
     ConsolePrivate *priv = js_console_get_private(ctx, this_val);
     unsigned int group = priv ? priv->group_level : 0;
-    write_log_entry(ctx, group, BW_CS_FLAG_LEVEL_WARN, argc, argv);
-    return JS_UNDEFINED;
+    return write_log_entry(ctx, group, BW_CS_FLAG_LEVEL_WARN, argc, argv);
 }}
 
 /* Console.info() */
@@ -215,8 +230,7 @@ js_console_info(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *a
 {{
     ConsolePrivate *priv = js_console_get_private(ctx, this_val);
     unsigned int group = priv ? priv->group_level : 0;
-    write_log_entry(ctx, group, BW_CS_FLAG_LEVEL_INFO, argc, argv);
-    return JS_UNDEFINED;
+    return write_log_entry(ctx, group, BW_CS_FLAG_LEVEL_INFO, argc, argv);
 }}
 
 /* Console.debug() */
@@ -225,8 +239,7 @@ js_console_debug(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *
 {{
     ConsolePrivate *priv = js_console_get_private(ctx, this_val);
     unsigned int group = priv ? priv->group_level : 0;
-    write_log_entry(ctx, group, BW_CS_FLAG_LEVEL_DEBUG, argc, argv);
-    return JS_UNDEFINED;
+    return write_log_entry(ctx, group, BW_CS_FLAG_LEVEL_DEBUG, argc, argv);
 }}
 
 /* Console.dir() */
@@ -235,8 +248,7 @@ js_console_dir(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *ar
 {{
     ConsolePrivate *priv = js_console_get_private(ctx, this_val);
     unsigned int group = priv ? priv->group_level : 0;
-    write_log_entry(ctx, group, BW_CS_FLAG_LEVEL_INFO, argc, argv);
-    return JS_UNDEFINED;
+    return write_log_entry(ctx, group, BW_CS_FLAG_LEVEL_INFO, argc, argv);
 }}
 
 /* Console.group() */
@@ -425,13 +437,21 @@ qjs_init_console(JSContext *ctx)
     
     /* Create prototype */
     console_proto = JS_NewObject(ctx);
-    JS_SetPropertyFunctionList(ctx, console_proto, 
-                               js_console_proto_funcs, 
-                               sizeof(js_console_proto_funcs) / sizeof(js_console_proto_funcs[0]));
+    if (JS_IsException(console_proto)) {{
+        return -1;
+    }}
+    if (JS_SetPropertyFunctionList(ctx, console_proto, js_console_proto_funcs,
+            sizeof(js_console_proto_funcs) / sizeof(js_console_proto_funcs[0])) < 0) {{
+        JS_FreeValue(ctx, console_proto);
+        return -1;
+    }}
     JS_SetClassProto(ctx, js_console_class_id, console_proto);
     
     /* Create console object */
     console_obj = JS_NewObjectClass(ctx, js_console_class_id);
+    if (JS_IsException(console_obj)) {{
+        return -1;
+    }}
     
     /* Allocate and attach private data */
     priv = calloc(1, sizeof(ConsolePrivate));
@@ -443,14 +463,17 @@ qjs_init_console(JSContext *ctx)
     JS_SetOpaque(console_obj, priv);
     
     /* Store timers as a property of the console object (GC handles it) */
-    JS_SetPropertyStr(ctx, console_obj, CONSOLE_TIMERS_PROP, JS_NewObject(ctx));
+    JSValue timers = JS_NewObject(ctx);
+    if (JS_IsException(timers) || JS_SetPropertyStr(ctx, console_obj, CONSOLE_TIMERS_PROP, timers) < 0) {{
+        JS_FreeValue(ctx, console_obj);
+        return -1;
+    }}
     
     /* Set as global.console */
     global_obj = JS_GetGlobalObject(ctx);
-    JS_SetPropertyStr(ctx, global_obj, "console", console_obj);
+    int ret = JS_SetPropertyStr(ctx, global_obj, "console", console_obj);
     JS_FreeValue(ctx, global_obj);
-    
-    return 0;
+    return ret < 0 ? -1 : 0;
 }}
 '''
         return code
@@ -559,23 +582,29 @@ qjs_init_{lower_name}(JSContext *ctx)
     }}
     
     JSValue proto = JS_NewObject(ctx);
-    JS_SetPropertyFunctionList(ctx, proto, 
-                               js_{lower_name}_proto_funcs, 
-                               sizeof(js_{lower_name}_proto_funcs) / sizeof(js_{lower_name}_proto_funcs[0]));
+    if (JS_IsException(proto)) {{
+        return -1;
+    }}
+    if (JS_SetPropertyFunctionList(ctx, proto, js_{lower_name}_proto_funcs,
+            sizeof(js_{lower_name}_proto_funcs) / sizeof(js_{lower_name}_proto_funcs[0])) < 0) {{
+        JS_FreeValue(ctx, proto);
+        return -1;
+    }}
     JS_SetClassProto(ctx, js_{lower_name}_class_id, proto);
     
     /* Window: attach methods to global and set self-references */
     if (strcmp("{interface_name}", "Window") == 0) {{
         JSValue global_obj = JS_GetGlobalObject(ctx);
-        JS_SetPropertyFunctionList(ctx, global_obj, 
-                                   js_{lower_name}_proto_funcs, 
-                                   sizeof(js_{lower_name}_proto_funcs) / sizeof(js_{lower_name}_proto_funcs[0]));
-        JS_SetPropertyStr(ctx, global_obj, "window", JS_DupValue(ctx, global_obj));
-        JS_SetPropertyStr(ctx, global_obj, "self", JS_DupValue(ctx, global_obj));
-        JS_SetPropertyStr(ctx, global_obj, "parent", JS_DupValue(ctx, global_obj));
-        JS_SetPropertyStr(ctx, global_obj, "top", JS_DupValue(ctx, global_obj));
-        JS_SetPropertyStr(ctx, global_obj, "frames", JS_DupValue(ctx, global_obj));
+        int ret = JS_SetPropertyFunctionList(ctx, global_obj, js_{lower_name}_proto_funcs,
+            sizeof(js_{lower_name}_proto_funcs) / sizeof(js_{lower_name}_proto_funcs[0]));
+        const char *aliases[] = {{"window", "self", "parent", "top", "frames"}};
+        for (size_t i = 0; ret >= 0 && i < sizeof(aliases) / sizeof(aliases[0]); i++) {{
+            ret = JS_SetPropertyStr(ctx, global_obj, aliases[i], JS_DupValue(ctx, global_obj));
+        }}
         JS_FreeValue(ctx, global_obj);
+        if (ret < 0) {{
+            return -1;
+        }}
     }}
     
     return 0;

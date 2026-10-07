@@ -29,7 +29,7 @@ static nsurl *get_current_url(JSContext *ctx)
     return browser_window_access_url(bw);
 }
 
-static JSValue js_location_href_getter(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+static JSValue js_location_href_getter(JSContext *ctx, JSValueConst this_val)
 {
     nsurl *url = get_current_url(ctx);
     if (url == NULL) {
@@ -41,7 +41,7 @@ static JSValue js_location_href_getter(JSContext *ctx, JSValueConst this_val, in
     return JS_NewString(ctx, href);
 }
 
-static JSValue js_location_protocol_getter(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+static JSValue js_location_protocol_getter(JSContext *ctx, JSValueConst this_val)
 {
     nsurl *url = get_current_url(ctx);
     if (url == NULL) {
@@ -70,7 +70,7 @@ static JSValue js_location_protocol_getter(JSContext *ctx, JSValueConst this_val
     return ret;
 }
 
-static JSValue js_location_host_getter(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+static JSValue js_location_host_getter(JSContext *ctx, JSValueConst this_val)
 {
     nsurl *url = get_current_url(ctx);
     if (url == NULL) {
@@ -113,7 +113,7 @@ static JSValue js_location_host_getter(JSContext *ctx, JSValueConst this_val, in
     return result;
 }
 
-static JSValue js_location_hostname_getter(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+static JSValue js_location_hostname_getter(JSContext *ctx, JSValueConst this_val)
 {
     nsurl *url = get_current_url(ctx);
     if (url == NULL) {
@@ -131,7 +131,7 @@ static JSValue js_location_hostname_getter(JSContext *ctx, JSValueConst this_val
     return result;
 }
 
-static JSValue js_location_port_getter(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+static JSValue js_location_port_getter(JSContext *ctx, JSValueConst this_val)
 {
     nsurl *url = get_current_url(ctx);
     if (url == NULL) {
@@ -149,7 +149,7 @@ static JSValue js_location_port_getter(JSContext *ctx, JSValueConst this_val, in
     return result;
 }
 
-static JSValue js_location_pathname_getter(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+static JSValue js_location_pathname_getter(JSContext *ctx, JSValueConst this_val)
 {
     nsurl *url = get_current_url(ctx);
     if (url == NULL) {
@@ -167,7 +167,7 @@ static JSValue js_location_pathname_getter(JSContext *ctx, JSValueConst this_val
     return result;
 }
 
-static JSValue js_location_search_getter(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+static JSValue js_location_search_getter(JSContext *ctx, JSValueConst this_val)
 {
     nsurl *url = get_current_url(ctx);
     if (url == NULL) {
@@ -196,7 +196,7 @@ static JSValue js_location_search_getter(JSContext *ctx, JSValueConst this_val, 
     return ret;
 }
 
-static JSValue js_location_hash_getter(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+static JSValue js_location_hash_getter(JSContext *ctx, JSValueConst this_val)
 {
     nsurl *url = get_current_url(ctx);
     if (url == NULL) {
@@ -225,7 +225,7 @@ static JSValue js_location_hash_getter(JSContext *ctx, JSValueConst this_val, in
     return ret;
 }
 
-static JSValue js_location_origin_getter(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+static JSValue js_location_origin_getter(JSContext *ctx, JSValueConst this_val)
 {
     nsurl *url = get_current_url(ctx);
     if (url == NULL) {
@@ -394,42 +394,32 @@ static JSValue js_location_reload(JSContext *ctx, JSValueConst this_val, int arg
     return JS_UNDEFINED;
 }
 
-static void define_getter(JSContext *ctx, JSValue obj, const char *name, JSCFunction *func)
-{
-    JSAtom atom = JS_NewAtom(ctx, name);
-    JS_DefinePropertyGetSet(
-        ctx, obj, atom, JS_NewCFunction(ctx, func, name, 0), JS_UNDEFINED, JS_PROP_ENUMERABLE | JS_PROP_CONFIGURABLE);
-    JS_FreeAtom(ctx, atom);
-}
-
 int qjs_init_location(JSContext *ctx)
 {
-    NSLOG(wisp, DEBUG, "Initializing location binding");
-
-    JSValue global_obj = JS_GetGlobalObject(ctx);
-    JSValue location = JS_NewObject(ctx);
-
-    /* URL properties (implements URLUtils) */
-    define_getter(ctx, location, "href", js_location_href_getter);
-    define_getter(ctx, location, "protocol", js_location_protocol_getter);
-    define_getter(ctx, location, "host", js_location_host_getter);
-    define_getter(ctx, location, "hostname", js_location_hostname_getter);
-    define_getter(ctx, location, "port", js_location_port_getter);
-    define_getter(ctx, location, "pathname", js_location_pathname_getter);
-    define_getter(ctx, location, "search", js_location_search_getter);
-    define_getter(ctx, location, "hash", js_location_hash_getter);
-    define_getter(ctx, location, "origin", js_location_origin_getter);
-
-    /* Methods */
-    JS_SetPropertyStr(ctx, location, "assign", JS_NewCFunction(ctx, js_location_assign, "assign", 1));
-    JS_SetPropertyStr(ctx, location, "replace", JS_NewCFunction(ctx, js_location_replace, "replace", 1));
-    JS_SetPropertyStr(ctx, location, "reload", JS_NewCFunction(ctx, js_location_reload, "reload", 0));
-
-    /* Attach location to global object */
-    JS_SetPropertyStr(ctx, global_obj, "location", location);
-
-    JS_FreeValue(ctx, global_obj);
-
-    NSLOG(wisp, DEBUG, "Location binding initialized with all URL properties");
-    return 0;
+    static const JSCFunctionListEntry properties[] = {
+        JS_CFUNC_DEF2("assign", 1, js_location_assign, JS_PROP_C_W_E),
+        JS_CFUNC_DEF2("replace", 1, js_location_replace, JS_PROP_C_W_E),
+        JS_CFUNC_DEF2("reload", 0, js_location_reload, JS_PROP_C_W_E),
+        JS_CGETSET_DEF2("href", js_location_href_getter, NULL, JS_PROP_ENUMERABLE | JS_PROP_CONFIGURABLE),
+        JS_CGETSET_DEF2("protocol", js_location_protocol_getter, NULL, JS_PROP_ENUMERABLE | JS_PROP_CONFIGURABLE),
+        JS_CGETSET_DEF2("host", js_location_host_getter, NULL, JS_PROP_ENUMERABLE | JS_PROP_CONFIGURABLE),
+        JS_CGETSET_DEF2("hostname", js_location_hostname_getter, NULL, JS_PROP_ENUMERABLE | JS_PROP_CONFIGURABLE),
+        JS_CGETSET_DEF2("port", js_location_port_getter, NULL, JS_PROP_ENUMERABLE | JS_PROP_CONFIGURABLE),
+        JS_CGETSET_DEF2("pathname", js_location_pathname_getter, NULL, JS_PROP_ENUMERABLE | JS_PROP_CONFIGURABLE),
+        JS_CGETSET_DEF2("search", js_location_search_getter, NULL, JS_PROP_ENUMERABLE | JS_PROP_CONFIGURABLE),
+        JS_CGETSET_DEF2("hash", js_location_hash_getter, NULL, JS_PROP_ENUMERABLE | JS_PROP_CONFIGURABLE),
+        JS_CGETSET_DEF2("origin", js_location_origin_getter, NULL, JS_PROP_ENUMERABLE | JS_PROP_CONFIGURABLE),
+    };
+    JSValue object = JS_NewObject(ctx);
+    if (JS_IsException(object)) {
+        return -1;
+    }
+    if (JS_SetPropertyFunctionList(ctx, object, properties, sizeof(properties) / sizeof(properties[0])) < 0) {
+        JS_FreeValue(ctx, object);
+        return -1;
+    }
+    JSValue global = JS_GetGlobalObject(ctx);
+    int ret = JS_SetPropertyStr(ctx, global, "location", object);
+    JS_FreeValue(ctx, global);
+    return ret < 0 ? -1 : 0;
 }

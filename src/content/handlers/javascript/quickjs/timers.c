@@ -43,13 +43,14 @@ static JSValue js_clearInterval(JSContext *ctx, JSValueConst this_val, int argc,
 
 int qjs_init_timers(JSContext *ctx)
 {
-    JSValue global_obj = JS_GetGlobalObject(ctx);
-
-    JS_SetPropertyStr(ctx, global_obj, "setTimeout", JS_NewCFunction(ctx, js_setTimeout, "setTimeout", 2));
-    JS_SetPropertyStr(ctx, global_obj, "clearTimeout", JS_NewCFunction(ctx, js_clearTimeout, "clearTimeout", 1));
-    JS_SetPropertyStr(ctx, global_obj, "setInterval", JS_NewCFunction(ctx, js_setInterval, "setInterval", 2));
-    JS_SetPropertyStr(ctx, global_obj, "clearInterval", JS_NewCFunction(ctx, js_clearInterval, "clearInterval", 1));
-
-    JS_FreeValue(ctx, global_obj);
-    return 0;
+    static const JSCFunctionListEntry properties[] = {
+        JS_CFUNC_DEF2("setTimeout", 2, js_setTimeout, JS_PROP_C_W_E),
+        JS_CFUNC_DEF2("clearTimeout", 1, js_clearTimeout, JS_PROP_C_W_E),
+        JS_CFUNC_DEF2("setInterval", 2, js_setInterval, JS_PROP_C_W_E),
+        JS_CFUNC_DEF2("clearInterval", 1, js_clearInterval, JS_PROP_C_W_E),
+    };
+    JSValue global = JS_GetGlobalObject(ctx);
+    int ret = JS_SetPropertyFunctionList(ctx, global, properties, sizeof(properties) / sizeof(properties[0]));
+    JS_FreeValue(ctx, global);
+    return ret < 0 ? -1 : 0;
 }

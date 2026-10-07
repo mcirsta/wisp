@@ -365,6 +365,7 @@ target_include_directories(test_quickjs PRIVATE
   ${CMAKE_BINARY_DIR}/quickjs
 )
 target_link_libraries(test_quickjs PRIVATE qjs nsutils wisp)
+set_tests_properties(test_quickjs PROPERTIES TIMEOUT 60)
 
 # ============================================================================
 # Document-owned font download lifecycle tests

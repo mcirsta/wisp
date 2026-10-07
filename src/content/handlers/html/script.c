@@ -601,8 +601,8 @@ static dom_hubbub_error exec_inline_script(html_content *c, dom_node *node, dom_
     if (script_handler != NULL) {
         NSLOG(
             wisp, INFO, "exec_inline_script: calling script_handler with %zu bytes", dom_string_byte_length(script));
-        script_handler(
-            c->jsthread, (const uint8_t *)dom_string_data(script), dom_string_byte_length(script), "?inline script?");
+        script_handler(c->jsthread, (const uint8_t *)dom_string_data(script), dom_string_byte_length(script),
+            nsurl_access(content_get_url(&c->base)));
     } else {
         NSLOG(wisp, WARNING, "exec_inline_script: script_handler is NULL, skipping execution");
     }

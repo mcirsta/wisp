@@ -21,7 +21,8 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  * THE SOFTWARE.
  */
-#include "../quickjs.h"
+
+#include <quickjs.h>
 
 #define countof(x) (sizeof(x) / sizeof((x)[0]))
 
@@ -35,7 +36,8 @@ static int fib(int n)
         return fib(n - 1) + fib(n - 2);
 }
 
-static JSValue js_fib(JSContext *ctx, JSValue this_val, int argc, JSValue *argv)
+static JSValue js_fib(JSContext *ctx, JSValue this_val,
+                      int argc, JSValue *argv)
 {
     int n, res;
     if (JS_ToInt32(ctx, &n, argv[0]))
@@ -45,29 +47,16 @@ static JSValue js_fib(JSContext *ctx, JSValue this_val, int argc, JSValue *argv)
 }
 
 static const JSCFunctionListEntry js_fib_funcs[] = {
-    JS_CFUNC_DEF("fib", 1, js_fib),
+    JS_CFUNC_DEF("fib", 1, js_fib ),
 };
 
 static int js_fib_init(JSContext *ctx, JSModuleDef *m)
 {
-    return JS_SetModuleExportList(ctx, m, js_fib_funcs, countof(js_fib_funcs));
+    return JS_SetModuleExportList(ctx, m, js_fib_funcs,
+                                  countof(js_fib_funcs));
 }
 
-#ifdef JS_SHARED_LIBRARY
-#define JS_INIT_MODULE js_init_module
-#else
-#define JS_INIT_MODULE js_init_module_fib
-#endif
-
-#ifndef JS_EXTERN
-#ifdef _WIN32
-#define JS_EXTERN __declspec(dllexport)
-#else
-#define JS_EXTERN
-#endif
-#endif
-
-JS_EXTERN JSModuleDef *JS_INIT_MODULE(JSContext *ctx, const char *module_name)
+JS_MODULE_EXTERN JSModuleDef *js_init_module(JSContext *ctx, const char *module_name)
 {
     JSModuleDef *m;
     m = JS_NewCModule(ctx, module_name, js_fib_init);

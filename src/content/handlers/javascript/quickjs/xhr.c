@@ -55,21 +55,36 @@ static JSValue xhr_open(JSContext *ctx, JSValueConst this_val, int argc, JSValue
 
     if (argc >= 2) {
         const char *method = JS_ToCString(ctx, argv[0]);
+        if (method == NULL)
+            return JS_EXCEPTION;
         const char *url = JS_ToCString(ctx, argv[1]);
+        if (url == NULL) {
+            JS_FreeCString(ctx, method);
+            return JS_EXCEPTION;
+        }
 
         NSLOG(wisp, INFO, "XHR.open('%s', '%s')", method, url);
+
+        /* Convert and allocate before replacing the current request. A
+         * throwing conversion or allocation failure leaves it untouched. */
+        char *new_method = js_strdup(ctx, method);
+        char *new_url = new_method != NULL ? js_strdup(ctx, url) : NULL;
+        JS_FreeCString(ctx, method);
+        JS_FreeCString(ctx, url);
+        if (new_method == NULL || new_url == NULL) {
+            js_free(ctx, new_method);
+            js_free(ctx, new_url);
+            return JS_EXCEPTION;
+        }
 
         if (data->method)
             js_free(ctx, data->method);
         if (data->url)
             js_free(ctx, data->url);
 
-        data->method = js_strdup(ctx, method);
-        data->url = js_strdup(ctx, url);
+        data->method = new_method;
+        data->url = new_url;
         data->ready_state = XHR_OPENED;
-
-        JS_FreeCString(ctx, method);
-        JS_FreeCString(ctx, url);
     }
     return JS_UNDEFINED;
 }
@@ -211,32 +226,36 @@ static const JSCFunctionListEntry xhr_class_props[] = {
 
 int qjs_init_xhr(JSContext *ctx)
 {
-    JSValue global_obj, proto, ctor;
+    JSRuntime *rt = JS_GetRuntime(ctx);
+    JS_NewClassID(rt, &xhr_class_id);
+    if (!JS_IsRegisteredClass(rt, xhr_class_id) && JS_NewClass(rt, xhr_class_id, &xhr_class) < 0) {
+        return -1;
+    }
 
-    /* Register class */
-    JS_NewClassID(JS_GetRuntime(ctx), &xhr_class_id);
-    JS_NewClass(JS_GetRuntime(ctx), xhr_class_id, &xhr_class);
-
-    /* Create prototype */
-    proto = JS_NewObject(ctx);
-    JS_SetPropertyFunctionList(ctx, proto, xhr_proto_funcs, sizeof(xhr_proto_funcs) / sizeof(xhr_proto_funcs[0]));
-
-    /* Add constants to prototype for instance access BEFORE setting proto
-     */
-    JS_SetPropertyFunctionList(ctx, proto, xhr_class_props, sizeof(xhr_class_props) / sizeof(xhr_class_props[0]));
-
+    JSValue proto = JS_NewObject(ctx);
+    if (JS_IsException(proto)) {
+        return -1;
+    }
+    if (JS_SetPropertyFunctionList(ctx, proto, xhr_proto_funcs, sizeof(xhr_proto_funcs) / sizeof(xhr_proto_funcs[0])) <
+            0 ||
+        JS_SetPropertyFunctionList(ctx, proto, xhr_class_props, sizeof(xhr_class_props) / sizeof(xhr_class_props[0])) <
+            0) {
+        JS_FreeValue(ctx, proto);
+        return -1;
+    }
     JS_SetClassProto(ctx, xhr_class_id, proto);
 
-    /* Create constructor */
-    ctor = JS_NewCFunction2(ctx, xhr_constructor, "XMLHttpRequest", 0, JS_CFUNC_constructor, 0);
-
-    /* Add class constants to constructor */
-    JS_SetPropertyFunctionList(ctx, ctor, xhr_class_props, sizeof(xhr_class_props) / sizeof(xhr_class_props[0]));
-
-    /* Attach to global */
-    global_obj = JS_GetGlobalObject(ctx);
-    JS_SetPropertyStr(ctx, global_obj, "XMLHttpRequest", ctor);
-    JS_FreeValue(ctx, global_obj);
-
-    return 0;
+    JSValue ctor = JS_NewCFunction2(ctx, xhr_constructor, "XMLHttpRequest", 0, JS_CFUNC_constructor, 0);
+    if (JS_IsException(ctor)) {
+        return -1;
+    }
+    if (JS_SetPropertyFunctionList(ctx, ctor, xhr_class_props, sizeof(xhr_class_props) / sizeof(xhr_class_props[0])) <
+        0) {
+        JS_FreeValue(ctx, ctor);
+        return -1;
+    }
+    JSValue global = JS_GetGlobalObject(ctx);
+    int ret = JS_SetPropertyStr(ctx, global, "XMLHttpRequest", ctor);
+    JS_FreeValue(ctx, global);
+    return ret < 0 ? -1 : 0;
 }

@@ -133,7 +133,7 @@ NSOPTION_BOOL(enable_javascript, true)
 /** Whether to allow Author level CSS. */
 NSOPTION_BOOL(author_level_css, true)
 
-/** Maximum time (in seconds) to wait for a script to run */
+/** Script execution limit in seconds; nonpositive disables the time limit. */
 NSOPTION_INTEGER(script_timeout, 10)
 
 /** How many days to retain URL data for */

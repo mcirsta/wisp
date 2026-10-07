@@ -21,8 +21,10 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  * THE SOFTWARE.
  */
-#include "../quickjs.h"
+
 #include <math.h>
+
+#include <quickjs.h>
 
 #define countof(x) (sizeof(x) / sizeof((x)[0]))
 
@@ -42,7 +44,9 @@ static void js_point_finalizer(JSRuntime *rt, JSValue val)
     js_free_rt(rt, s);
 }
 
-static JSValue js_point_ctor(JSContext *ctx, JSValue new_target, int argc, JSValue *argv)
+static JSValue js_point_ctor(JSContext *ctx,
+                             JSValue new_target,
+                             int argc, JSValue *argv)
 {
     JSPointData *s;
     JSValue obj = JS_UNDEFINED;
@@ -66,7 +70,7 @@ static JSValue js_point_ctor(JSContext *ctx, JSValue new_target, int argc, JSVal
         goto fail;
     JS_SetOpaque(obj, s);
     return obj;
-fail:
+ fail:
     js_free(ctx, s);
     JS_FreeValue(ctx, obj);
     return JS_EXCEPTION;
@@ -98,7 +102,8 @@ static JSValue js_point_set_xy(JSContext *ctx, JSValue this_val, JSValue val, in
     return JS_UNDEFINED;
 }
 
-static JSValue js_point_norm(JSContext *ctx, JSValue this_val, int argc, JSValue *argv)
+static JSValue js_point_norm(JSContext *ctx, JSValue this_val,
+                             int argc, JSValue *argv)
 {
     JSPointData *s = JS_GetOpaque2(ctx, this_val, js_point_class_id);
     if (!s)
@@ -138,15 +143,7 @@ static int js_point_init(JSContext *ctx, JSModuleDef *m)
     return 0;
 }
 
-#ifndef JS_EXTERN
-#ifdef _WIN32
-#define JS_EXTERN __declspec(dllexport)
-#else
-#define JS_EXTERN
-#endif
-#endif
-
-JS_EXTERN JSModuleDef *js_init_module(JSContext *ctx, const char *module_name)
+JS_MODULE_EXTERN JSModuleDef *js_init_module(JSContext *ctx, const char *module_name)
 {
     JSModuleDef *m;
     m = JS_NewCModule(ctx, module_name, js_point_init);

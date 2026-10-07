@@ -22,19 +22,19 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  * THE SOFTWARE.
  */
+#include <stdlib.h>
+#include <stdio.h>
+#include <stdarg.h>
+#include <inttypes.h>
+#include <string.h>
 #include <assert.h>
 #include <errno.h>
 #include <fcntl.h>
-#include <inttypes.h>
-#include <stdarg.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 #include <time.h>
 
 #include "cutils.h"
-#include "quickjs-libc.h"
 #include "quickjs.h"
+#include "quickjs-libc.h"
 
 #ifdef QJS_USE_MIMALLOC
 #include <mimalloc.h>
@@ -45,15 +45,22 @@ extern const uint32_t qjsc_repl_size;
 extern const uint8_t qjsc_standalone[];
 extern const uint32_t qjsc_standalone_size;
 
+#if defined(EMSCRIPTEN) || defined(__wasi__)
+// Standalone executables (the --compile option and detecting/running an
+// executable with appended bytecode) can't work in these environments.
+#define emscripten_or_wasi 1
+#else
+#define emscripten_or_wasi 0
+#endif
+
+static int qjs__argc;
+static char **qjs__argv;
+
 // Must match standalone.js
 #define TRAILER_SIZE 12
 static const char trailer_magic[] = "quickjs2";
 static const int trailer_magic_size = sizeof(trailer_magic) - 1;
 static const int trailer_size = TRAILER_SIZE;
-
-static int qjs__argc;
-static char **qjs__argv;
-
 
 static bool is_standalone(const char *exe)
 {
@@ -104,7 +111,8 @@ static JSValue load_standalone_module(JSContext *ctx)
     return JS_GetModuleNamespace(ctx, m);
 }
 
-static int eval_buf(JSContext *ctx, const void *buf, int buf_len, const char *filename, int eval_flags)
+static int eval_buf(JSContext *ctx, const void *buf, int buf_len,
+                    const char *filename, int eval_flags)
 {
     bool use_realpath;
     JSValue val;
@@ -113,10 +121,12 @@ static int eval_buf(JSContext *ctx, const void *buf, int buf_len, const char *fi
     if ((eval_flags & JS_EVAL_TYPE_MASK) == JS_EVAL_TYPE_MODULE) {
         /* for the modules, we compile then run to be able to set
            import.meta */
-        val = JS_Eval(ctx, buf, buf_len, filename, eval_flags | JS_EVAL_FLAG_COMPILE_ONLY);
+        val = JS_Eval(ctx, buf, buf_len, filename,
+                      eval_flags | JS_EVAL_FLAG_COMPILE_ONLY);
         if (!JS_IsException(val)) {
             // ex. "<cmdline>" pr "/dev/stdin"
-            use_realpath = !(*filename == '<' || !strncmp(filename, "/dev/", 5));
+            use_realpath =
+                !(*filename == '<' || !strncmp(filename, "/dev/", 5));
             if (js_module_set_import_meta(ctx, val, use_realpath, true) < 0) {
                 js_std_dump_error(ctx);
                 ret = -1;
@@ -152,7 +162,8 @@ static int eval_file(JSContext *ctx, const char *filename, int module)
     }
 
     if (module < 0) {
-        module = (js__has_suffix(filename, ".mjs") || JS_DetectModule((const char *)buf, buf_len));
+        module = (js__has_suffix(filename, ".mjs") ||
+                  JS_DetectModule((const char *)buf, buf_len));
     }
     if (module)
         eval_flags = JS_EVAL_TYPE_MODULE;
@@ -163,8 +174,7 @@ static int eval_file(JSContext *ctx, const char *filename, int module)
     return ret;
 }
 
-static int64_t parse_limit(const char *arg)
-{
+static int64_t parse_limit(const char *arg) {
     char *p;
     unsigned long unit = 1024; /* default to traditional KB */
     double d = strtod(arg, &p);
@@ -176,22 +186,10 @@ static int64_t parse_limit(const char *arg)
 
     if (*p) {
         switch (*p++) {
-        case 'b':
-        case 'B':
-            unit = 1UL << 0;
-            break;
-        case 'k':
-        case 'K':
-            unit = 1UL << 10;
-            break; /* IEC kibibytes */
-        case 'm':
-        case 'M':
-            unit = 1UL << 20;
-            break; /* IEC mebibytes */
-        case 'g':
-        case 'G':
-            unit = 1UL << 30;
-            break; /* IEC gigibytes */
+        case 'b': case 'B': unit = 1UL <<  0; break;
+        case 'k': case 'K': unit = 1UL << 10; break; /* IEC kibibytes */
+        case 'm': case 'M': unit = 1UL << 20; break; /* IEC mebibytes */
+        case 'g': case 'G': unit = 1UL << 30; break; /* IEC gigibytes */
         default:
             fprintf(stderr, "Invalid limit: %s, unrecognized suffix, only k,m,g are allowed\n", arg);
             return -1;
@@ -205,7 +203,8 @@ static int64_t parse_limit(const char *arg)
     return (int64_t)(d * unit);
 }
 
-static JSValue js_gc(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+static JSValue js_gc(JSContext *ctx, JSValueConst this_val,
+                     int argc, JSValueConst *argv)
 {
     JS_RunGC(JS_GetRuntime(ctx));
     return JS_UNDEFINED;
@@ -243,7 +242,7 @@ static JSContext *JS_NewCustomContext(JSRuntime *rt)
     JS_SetPropertyFunctionList(ctx, global, global_obj, countof(global_obj));
     JSValue args = JS_NewArray(ctx);
     int i;
-    for (i = 0; i < qjs__argc; i++) {
+    for(i = 0; i < qjs__argc; i++) {
         JS_SetPropertyUint32(ctx, args, i, JS_NewString(ctx, qjs__argv[i]));
     }
     JS_SetPropertyStr(ctx, global, "execArgv", args);
@@ -262,7 +261,8 @@ struct trace_malloc_data {
     uint8_t *base;
 };
 
-static inline unsigned long long js_trace_malloc_ptr_offset(uint8_t *ptr, struct trace_malloc_data *dp)
+static inline unsigned long long js_trace_malloc_ptr_offset(uint8_t *ptr,
+                                                struct trace_malloc_data *dp)
 {
     return ptr - dp->base;
 }
@@ -281,7 +281,9 @@ static void JS_PRINTF_FORMAT_ATTR(2, 3) js_trace_malloc_printf(void *opaque, JS_
                 if (ptr == NULL) {
                     printf("NULL");
                 } else {
-                    printf("H%+06lld.%zd", js_trace_malloc_ptr_offset(ptr, opaque), js__malloc_usable_size(ptr));
+                    printf("H%+06lld.%zd",
+                           js_trace_malloc_ptr_offset(ptr, opaque),
+                           js__malloc_usable_size(ptr));
                 }
                 fmt++;
                 continue;
@@ -336,7 +338,12 @@ static void *js_trace_realloc(void *opaque, void *ptr, size_t size)
 }
 
 static const JSMallocFunctions trace_mf = {
-    js_trace_calloc, js_trace_malloc, js_trace_free, js_trace_realloc, js__malloc_usable_size};
+    js_trace_calloc,
+    js_trace_malloc,
+    js_trace_free,
+    js_trace_realloc,
+    js__malloc_usable_size
+};
 
 #ifdef QJS_USE_MIMALLOC
 static void *js_mi_calloc(void *opaque, size_t count, size_t size)
@@ -361,16 +368,23 @@ static void *js_mi_realloc(void *opaque, void *ptr, size_t size)
     return mi_realloc(ptr, size);
 }
 
-static const JSMallocFunctions mi_mf = {js_mi_calloc, js_mi_malloc, js_mi_free, js_mi_realloc, mi_malloc_usable_size};
+static const JSMallocFunctions mi_mf = {
+    js_mi_calloc,
+    js_mi_malloc,
+    js_mi_free,
+    js_mi_realloc,
+    mi_malloc_usable_size
+};
 #endif
 
 #define PROG_NAME "qjs"
 
-void help(void)
+void help(int exit_status)
 {
     printf("QuickJS-ng version %s\n"
            "usage: " PROG_NAME " [options] [file [args]]\n"
            "-h  --help         list options\n"
+           "-v  --version      print version string and then exit\n"
            "-e  --eval EXPR    evaluate EXPR\n"
            "-i  --interactive  go to interactive mode\n"
            "-C  --script       load as JS classic script (default=autodetect)\n"
@@ -379,33 +393,34 @@ void help(void)
            "    --std          make 'std', 'os' and 'bjson' available to script\n"
            "-T  --trace        trace memory allocation\n"
            "-d  --dump         dump the memory usage stats\n"
-           "-D  --dump-flags   flags for dumping debug data (see DUMP_* defines)\n"
-           "-c  --compile FILE compile the given JS file as a standalone executable\n"
-           "-o  --out FILE     output file for standalone executables\n"
-           "    --exe          select the executable to use as the base, defaults to the current one\n"
-           "    --memory-limit n       limit the memory usage to 'n' Kbytes\n"
+           "-D  --dump-flags   flags for dumping debug data (see DUMP_* defines)\n",
+           JS_GetVersion());
+    if (!emscripten_or_wasi)
+        printf("-c  --compile FILE compile the given JS file as a standalone executable\n"
+               "-o  --out FILE     output file for standalone executables\n"
+               "    --exe          select the executable to use as the base, defaults to the current one\n");
+    printf("    --memory-limit n       limit the memory usage to 'n' Kbytes\n"
            "    --stack-size n         limit the stack size to 'n' Kbytes\n"
-           "-q  --quit         just instantiate the interpreter and quit\n",
-        JS_GetVersion());
-    exit(1);
+           "-q  --quit         just instantiate the interpreter and quit\n");
+    exit(exit_status);
 }
 
 int main(int argc, char **argv)
 {
     JSRuntime *rt;
     JSContext *ctx;
-    JSValue ret = JS_UNDEFINED;
-    struct trace_malloc_data trace_data = {NULL};
+    struct trace_malloc_data trace_data = { NULL };
     int r = 0;
     int optind = 1;
+    JSValue ret = JS_UNDEFINED;
     char exebuf[JS__PATH_MAX];
     size_t exebuf_size = sizeof(exebuf);
     char *compile_file = NULL;
     char *exe = NULL;
-    char *expr = NULL;
-    char *dump_flags_str = NULL;
     char *out = NULL;
     int standalone = 0;
+    char *expr = NULL;
+    char *dump_flags_str = NULL;
     int interactive = 0;
     int dump_memory = 0;
     int dump_flags = 0;
@@ -423,8 +438,8 @@ int main(int argc, char **argv)
     qjs__argv = argv;
 
     /* check if this is a standalone executable */
-
-    if (!js_exepath(exebuf, &exebuf_size) && is_standalone(exebuf)) {
+    if (!emscripten_or_wasi &&
+            !js_exepath(exebuf, &exebuf_size) && is_standalone(exebuf)) {
         standalone = 1;
         goto start;
     }
@@ -436,7 +451,7 @@ int main(int argc, char **argv)
        the script */
     while (optind < argc && *argv[optind] == '-') {
         char *arg = argv[optind] + 1;
-        const char *longopt = "";
+        char *longopt = "";
         char *optarg = NULL;
         /* a single - is not an option, it also stops argument scanning */
         if (!*arg)
@@ -460,8 +475,11 @@ int main(int argc, char **argv)
                     optarg = arg;
             }
             if (opt == 'h' || opt == '?' || !strcmp(longopt, "help")) {
-                help();
-                continue;
+                help(0);
+            }
+            if (opt == 'v' || !strcmp(longopt, "version")) {
+                printf("%s\n",JS_GetVersion());
+                return 0;
             }
             if (opt == 'e' || !strcmp(longopt, "eval")) {
                 if (!optarg) {
@@ -540,7 +558,8 @@ int main(int argc, char **argv)
                 stack_size = parse_limit(optarg);
                 break;
             }
-            if (opt == 'c' || !strcmp(longopt, "compile")) {
+            if (!emscripten_or_wasi &&
+                    (opt == 'c' || !strcmp(longopt, "compile"))) {
                 if (!optarg) {
                     if (optind >= argc) {
                         fprintf(stderr, "qjs: missing file for -c\n");
@@ -551,7 +570,7 @@ int main(int argc, char **argv)
                 compile_file = optarg;
                 break;
             }
-            if (opt == 'o' || !strcmp(longopt, "out")) {
+            if (!emscripten_or_wasi && (opt == 'o' || !strcmp(longopt, "out"))) {
                 if (!optarg) {
                     if (optind >= argc) {
                         fprintf(stderr, "qjs: missing file for -o\n");
@@ -562,7 +581,7 @@ int main(int argc, char **argv)
                 out = optarg;
                 break;
             }
-            if (!strcmp(longopt, "exe")) {
+            if (!emscripten_or_wasi && !strcmp(longopt, "exe")) {
                 if (!optarg) {
                     if (optind >= argc) {
                         fprintf(stderr, "qjs: missing file for --exe\n");
@@ -578,12 +597,12 @@ int main(int argc, char **argv)
             } else {
                 fprintf(stderr, "qjs: unknown option '--%s'\n", longopt);
             }
-            help();
+            help(1);
         }
     }
 
-    if (compile_file && !out)
-        help();
+    if (!emscripten_or_wasi && compile_file && !out)
+        help(1);
 
 start:
 
@@ -616,7 +635,7 @@ start:
     }
 
     /* loader for ES6 modules */
-    JS_SetModuleLoaderFunc(rt, NULL, js_module_loader, NULL);
+    JS_SetModuleLoaderFunc2(rt, NULL, js_module_loader, js_module_check_attributes, NULL);
 
     /* exit on unhandled promise rejections */
     JS_SetHostPromiseRejectionTracker(rt, js_std_promise_rejection_tracker, NULL);
@@ -626,16 +645,17 @@ start:
 
         /* make 'std' and 'os' visible to non module code */
         if (load_std) {
-            const char *str = "import * as bjson from 'qjs:bjson';\n"
-                              "import * as std from 'qjs:std';\n"
-                              "import * as os from 'qjs:os';\n"
-                              "globalThis.bjson = bjson;\n"
-                              "globalThis.std = std;\n"
-                              "globalThis.os = os;\n";
+            const char *str =
+                "import * as bjson from 'qjs:bjson';\n"
+                "import * as std from 'qjs:std';\n"
+                "import * as os from 'qjs:os';\n"
+                "globalThis.bjson = bjson;\n"
+                "globalThis.std = std;\n"
+                "globalThis.os = os;\n";
             eval_buf(ctx, str, strlen(str), "<input>", JS_EVAL_TYPE_MODULE);
         }
 
-        for (i = 0; i < include_count; i++) {
+        for(i = 0; i < include_count; i++) {
             if (eval_file(ctx, include_list[i], 0))
                 goto fail;
         }
@@ -729,11 +749,12 @@ start:
                     best[j] = ms;
             }
         }
-        printf("\nInstantiation times (ms): %.3f = %.3f+%.3f+%.3f+%.3f\n", best[1] + best[2] + best[3] + best[4],
-            best[1], best[2], best[3], best[4]);
+        printf("\nInstantiation times (ms): %.3f = %.3f+%.3f+%.3f+%.3f\n",
+               best[1] + best[2] + best[3] + best[4],
+               best[1], best[2], best[3], best[4]);
     }
     return 0;
-fail:
+ fail:
     js_std_free_handlers(rt);
     JS_FreeContext(ctx);
     JS_FreeRuntime(rt);

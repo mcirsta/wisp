@@ -46,9 +46,9 @@ typedef struct jsheap jsheap;
  * When we create a browsing context itself (window+content) we have
  * to create a JS thread to attach to the browsing context.
  *
- * JS threads are associated with heaps and will be destroyed when
- * the heap is destroyed.  They can be shut down manually though
- * and should be for object lifetime safety reasons.
+ * Each thread retains its heap until explicitly destroyed. Closing disconnects
+ * document access and cancels jobs; destroying releases the context and heap
+ * reference. A JavaScript thread is not an operating-system thread.
  */
 typedef struct jsthread jsthread;
 
@@ -67,8 +67,8 @@ void js_finalise(void);
  *
  * There is usually one heap per browser window.
  *
- * \param timeout elapsed wallclock time (in seconds) before \a callback is
- * called
+ * \param timeout Monotonic elapsed-time limit in seconds per outer execution;
+ * nonpositive values disable the time limit. Nested entries share the budget.
  * \param heap Updated to the created JS heap
  * \return NSERROR_OK on success, appropriate error otherwise.
  */
@@ -125,7 +125,12 @@ nserror js_closethread(jsthread *thread);
 void js_destroythread(jsthread *thread);
 
 /**
- * execute some javascript in a context
+ * Execute JavaScript within the heap's resource limits.
+ *
+ * Returns true for normal completion (including a false/undefined JS result),
+ * false for exceptions, interruption or invalid input/context. Does not run
+ * pending jobs. Time limits are cooperative QuickJS interrupts, not preemption
+ * of arbitrary native binding code.
  */
 bool js_exec(jsthread *thread, const uint8_t *txt, size_t txtlen, const char *name);
 

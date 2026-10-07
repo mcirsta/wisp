@@ -27,6 +27,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
+#include <nsutils/time.h>
 
 #include <wisp/utils/errors.h>
 #include <wisp/utils/log.h>
@@ -57,6 +58,9 @@ struct jsheap {
     JSRuntime *rt;
     int timeout;
     int refcount;
+    unsigned execution_depth;
+    uint64_t deadline_ms;
+    bool interrupted;
 };
 
 /**
@@ -67,6 +71,7 @@ struct jsheap {
 struct jsthread {
     jsheap *heap;
     JSContext *ctx;
+    JSValue error_stack_getter;
     bool closed;
     void *win_priv;
     void *doc_priv;
@@ -95,6 +100,130 @@ void *qjs_get_window_priv(JSContext *ctx)
 
 /** Global count of live jsheaps, for leak detection at shutdown. */
 static int jsheap_live_count = 0;
+
+/* QuickJS calls this periodically during execution. Never pump the event loop
+ * here: rendering and document destruction must not reenter through a timeout. */
+static int qjs_interrupt(JSRuntime *rt, void *opaque)
+{
+    jsheap *heap = opaque;
+    uint64_t now;
+
+    (void)rt;
+    if (heap->execution_depth == 0 || heap->timeout <= 0) {
+        return 0;
+    }
+    if (heap->interrupted || nsu_getmonotonic_ms(&now) != NSUERROR_OK || now >= heap->deadline_ms) {
+        heap->interrupted = true;
+        return 1;
+    }
+    return 0;
+}
+
+static bool qjs_execution_begin(jsheap *heap)
+{
+    /* Nested host entries share the outer budget. Future callback/microtask
+     * checkpoints must likewise remain inside a single execution scope. */
+    if (heap->execution_depth++ == 0) {
+        heap->interrupted = false;
+        if (heap->timeout > 0) {
+            uint64_t now;
+            if (nsu_getmonotonic_ms(&now) != NSUERROR_OK) {
+                heap->interrupted = true;
+            } else {
+                heap->deadline_ms = now + (uint64_t)heap->timeout * 1000;
+            }
+        }
+    }
+    return !heap->interrupted;
+}
+
+/* Inspect only string-valued own data properties of actual Error objects.
+ * Coercing arbitrary thrown objects or invoking a stack getter can execute page
+ * code, including another infinite loop, while reporting the original failure. */
+static void qjs_log_error_property(JSContext *ctx, JSValueConst error, const char *property)
+{
+    JSPropertyDescriptor desc;
+    JSAtom atom = JS_NewAtom(ctx, property);
+    if (atom == JS_ATOM_NULL) {
+        return;
+    }
+    if (JS_GetOwnProperty(ctx, &desc, error, atom) > 0) {
+        if (JS_IsString(desc.value)) {
+            const char *text = JS_ToCString(ctx, desc.value);
+            if (text != NULL) {
+                NSLOG(wisp, WARNING, "JavaScript %s: %s", property, text);
+                JS_FreeCString(ctx, text);
+            }
+        }
+        JS_FreeValue(ctx, desc.value);
+        JS_FreeValue(ctx, desc.getter);
+        JS_FreeValue(ctx, desc.setter);
+    }
+    JS_FreeAtom(ctx, atom);
+}
+
+/* QuickJS-ng 0.17 stores its backtrace internally and exposes it through this
+ * native accessor. Retain the pristine function before any page code runs;
+ * calling it directly bypasses user getters, proxies and prototype changes. */
+static bool qjs_capture_stack_getter(jsthread *thread)
+{
+    JSContext *ctx = thread->ctx;
+    JSValue error = JS_NewError(ctx);
+    if (JS_IsException(error)) {
+        return false;
+    }
+    JSValue proto = JS_GetPrototype(ctx, error);
+    JSAtom atom = JS_NewAtom(ctx, "stack");
+    JSPropertyDescriptor desc;
+    bool ok = false;
+    if (!JS_IsException(proto) && atom != JS_ATOM_NULL && JS_GetOwnProperty(ctx, &desc, proto, atom) > 0) {
+        if (JS_IsFunction(ctx, desc.getter)) {
+            thread->error_stack_getter = JS_DupValue(ctx, desc.getter);
+            ok = true;
+        }
+        JS_FreeValue(ctx, desc.value);
+        JS_FreeValue(ctx, desc.getter);
+        JS_FreeValue(ctx, desc.setter);
+    }
+    JS_FreeAtom(ctx, atom);
+    JS_FreeValue(ctx, proto);
+    JS_FreeValue(ctx, error);
+    return ok && !JS_HasException(ctx);
+}
+
+static void qjs_report_exception(jsthread *thread, const char *name, bool interrupted)
+{
+    JSContext *ctx = thread->ctx;
+    JSValue exc = JS_GetException(ctx);
+
+    NSLOG(wisp, WARNING, "JavaScript %s in %s", interrupted ? "execution limit reached" : "exception", name);
+    if (JS_IsError(exc)) {
+        qjs_log_error_property(ctx, exc, "message");
+        if (!JS_IsUndefined(thread->error_stack_getter)) {
+            JSValue stack = JS_Call(ctx, thread->error_stack_getter, exc, 0, NULL);
+            if (JS_IsString(stack)) {
+                const char *text = JS_ToCString(ctx, stack);
+                if (text != NULL) {
+                    NSLOG(wisp, WARNING, "JavaScript stack: %s", text);
+                    JS_FreeCString(ctx, text);
+                }
+            }
+            JS_FreeValue(ctx, stack);
+        }
+    } else if (JS_IsString(exc)) {
+        const char *text = JS_ToCString(ctx, exc);
+        if (text != NULL) {
+            NSLOG(wisp, WARNING, "JavaScript thrown string: %s", text);
+            JS_FreeCString(ctx, text);
+        }
+    }
+    JS_FreeValue(ctx, exc);
+    /* Diagnostic allocation failure must not leave an exception for the next
+     * script. Arbitrary thrown objects are deliberately left unformatted. */
+    if (JS_HasException(ctx)) {
+        JS_FreeValue(ctx, JS_GetException(ctx));
+    }
+}
 
 /**
  * Drop one reference to a jsheap. When the refcount reaches zero,
@@ -147,6 +276,10 @@ nserror js_newheap(int timeout, jsheap **heap)
 {
     jsheap *h;
 
+    if (heap == NULL) {
+        return NSERROR_BAD_PARAMETER;
+    }
+    *heap = NULL;
     h = calloc(1, sizeof(*h));
     if (h == NULL) {
         return NSERROR_NOMEM;
@@ -166,6 +299,7 @@ nserror js_newheap(int timeout, jsheap **heap)
 
     /* Set max stack size (1MB) */
     JS_SetMaxStackSize(h->rt, 1024 * 1024);
+    JS_SetInterruptHandler(h->rt, qjs_interrupt, h);
 
     jsheap_live_count++;
     NSLOG(wisp, DEBUG, "Created QuickJS heap %p (refcount=%d, live_heaps=%d)", h, h->refcount, jsheap_live_count);
@@ -194,11 +328,52 @@ void js_destroyheap(jsheap *heap)
 }
 
 
+/* These are still API-shape stubs, not libdom constructors. */
+static int qjs_init_dom_stubs(JSContext *ctx)
+{
+    static const char *names[] = {
+        "HTMLElement", "Element", "Node", "Text", "DocumentFragment", "HTMLDocument", "Event", "CustomEvent"};
+    static const JSCFunctionListEntry node_constants[] = {
+        JS_PROP_INT32_DEF("ELEMENT_NODE", 1, JS_PROP_C_W_E),
+        JS_PROP_INT32_DEF("TEXT_NODE", 3, JS_PROP_C_W_E),
+        JS_PROP_INT32_DEF("DOCUMENT_NODE", 9, JS_PROP_C_W_E),
+    };
+    JSValue global = JS_GetGlobalObject(ctx);
+    int ret = -1;
+
+    for (size_t i = 0; i < sizeof(names) / sizeof(names[0]); i++) {
+        JSValue object = JS_NewObject(ctx);
+        if (JS_IsException(object)) {
+            goto out;
+        }
+        JSValue proto = JS_NewObject(ctx);
+        if (JS_IsException(proto) || JS_SetPropertyStr(ctx, object, "prototype", proto) < 0 ||
+            (strcmp(names[i], "Node") == 0 &&
+                JS_SetPropertyFunctionList(
+                    ctx, object, node_constants, sizeof(node_constants) / sizeof(node_constants[0])) < 0)) {
+            JS_FreeValue(ctx, object);
+            goto out;
+        }
+        if (JS_SetPropertyStr(ctx, global, names[i], object) < 0) {
+            goto out;
+        }
+    }
+    ret = 0;
+out:
+    JS_FreeValue(ctx, global);
+    return ret;
+}
+
+
 /* exported interface documented in js.h */
 nserror js_newthread(jsheap *heap, void *win_priv, void *doc_priv, jsthread **thread)
 {
     jsthread *t;
 
+    if (thread == NULL) {
+        return NSERROR_BAD_PARAMETER;
+    }
+    *thread = NULL;
     if (heap == NULL) {
         return NSERROR_BAD_PARAMETER;
     }
@@ -216,6 +391,7 @@ nserror js_newthread(jsheap *heap, void *win_priv, void *doc_priv, jsthread **th
     }
 
     t->heap = heap;
+    t->error_stack_getter = JS_UNDEFINED;
     t->win_priv = win_priv;
     t->doc_priv = doc_priv;
     t->closed = false;
@@ -227,110 +403,36 @@ nserror js_newthread(jsheap *heap, void *win_priv, void *doc_priv, jsthread **th
     /* Store thread pointer in context for later retrieval */
     JS_SetContextOpaque(t->ctx, t);
 
-    /* Initialize Console binding */
-    if (qjs_init_console(t->ctx) < 0) {
-        NSLOG(wisp, ERROR, "Failed to initialize QuickJS console binding");
+    if (!qjs_capture_stack_getter(t)) {
+        qjs_report_exception(t, "error stack initialization", false);
+        js_destroythread(t);
+        return NSERROR_INIT_FAILED;
     }
 
-    /* Initialize Window binding */
-    if (qjs_init_window(t->ctx) < 0) {
-        NSLOG(wisp, ERROR, "Failed to initialize QuickJS window binding");
-    }
-
-    /* Initialize Timers */
-    if (qjs_init_timers(t->ctx) < 0) {
-        NSLOG(wisp, ERROR, "Failed to initialize QuickJS timers");
-    }
-
-    /* Initialize Navigator */
-    if (qjs_init_navigator(t->ctx) < 0) {
-        NSLOG(wisp, ERROR, "Failed to initialize QuickJS navigator");
-    }
-
-    /* Initialize Location */
-    if (qjs_init_location(t->ctx) < 0) {
-        NSLOG(wisp, ERROR, "Failed to initialize QuickJS location");
-    }
-
-    /* Initialize Document */
-    if (qjs_init_document(t->ctx) < 0) {
-        NSLOG(wisp, ERROR, "Failed to initialize QuickJS document");
-    }
-
-    /* Initialize Storage (localStorage, sessionStorage) */
-    if (qjs_init_storage(t->ctx) < 0) {
-        NSLOG(wisp, ERROR, "Failed to initialize QuickJS storage");
-    }
-
-    /* Initialize EventTarget (addEventListener, etc.) */
-    if (qjs_init_event_target(t->ctx) < 0) {
-        NSLOG(wisp, ERROR, "Failed to initialize QuickJS event target");
-    }
-
-    /* Initialize XMLHttpRequest */
-    if (qjs_init_xhr(t->ctx) < 0) {
-        NSLOG(wisp, ERROR, "Failed to initialize QuickJS XMLHttpRequest");
-    }
-
-    /* Add DOM constructor stubs that third-party JS commonly checks */
-    {
-        JSValue global_obj = JS_GetGlobalObject(t->ctx);
-        JSValue proto;
-
-        /* HTMLElement constructor with prototype */
-        JSValue html_element = JS_NewObject(t->ctx);
-        proto = JS_NewObject(t->ctx);
-        JS_SetPropertyStr(t->ctx, html_element, "prototype", proto);
-        JS_SetPropertyStr(t->ctx, global_obj, "HTMLElement", html_element);
-
-        /* Element constructor */
-        JSValue element = JS_NewObject(t->ctx);
-        proto = JS_NewObject(t->ctx);
-        JS_SetPropertyStr(t->ctx, element, "prototype", proto);
-        JS_SetPropertyStr(t->ctx, global_obj, "Element", element);
-
-        /* Node constructor */
-        JSValue node = JS_NewObject(t->ctx);
-        proto = JS_NewObject(t->ctx);
-        JS_SetPropertyStr(t->ctx, node, "prototype", proto);
-        /* Node type constants */
-        JS_SetPropertyStr(t->ctx, node, "ELEMENT_NODE", JS_NewInt32(t->ctx, 1));
-        JS_SetPropertyStr(t->ctx, node, "TEXT_NODE", JS_NewInt32(t->ctx, 3));
-        JS_SetPropertyStr(t->ctx, node, "DOCUMENT_NODE", JS_NewInt32(t->ctx, 9));
-        JS_SetPropertyStr(t->ctx, global_obj, "Node", node);
-
-        /* Text constructor */
-        JSValue text = JS_NewObject(t->ctx);
-        proto = JS_NewObject(t->ctx);
-        JS_SetPropertyStr(t->ctx, text, "prototype", proto);
-        JS_SetPropertyStr(t->ctx, global_obj, "Text", text);
-
-        /* DocumentFragment constructor */
-        JSValue doc_frag = JS_NewObject(t->ctx);
-        proto = JS_NewObject(t->ctx);
-        JS_SetPropertyStr(t->ctx, doc_frag, "prototype", proto);
-        JS_SetPropertyStr(t->ctx, global_obj, "DocumentFragment", doc_frag);
-
-        /* HTMLDocument constructor */
-        JSValue html_doc = JS_NewObject(t->ctx);
-        proto = JS_NewObject(t->ctx);
-        JS_SetPropertyStr(t->ctx, html_doc, "prototype", proto);
-        JS_SetPropertyStr(t->ctx, global_obj, "HTMLDocument", html_doc);
-
-        /* Event constructor */
-        JSValue event_ctor = JS_NewObject(t->ctx);
-        proto = JS_NewObject(t->ctx);
-        JS_SetPropertyStr(t->ctx, event_ctor, "prototype", proto);
-        JS_SetPropertyStr(t->ctx, global_obj, "Event", event_ctor);
-
-        /* CustomEvent constructor */
-        JSValue custom_event = JS_NewObject(t->ctx);
-        proto = JS_NewObject(t->ctx);
-        JS_SetPropertyStr(t->ctx, custom_event, "prototype", proto);
-        JS_SetPropertyStr(t->ctx, global_obj, "CustomEvent", custom_event);
-
-        JS_FreeValue(t->ctx, global_obj);
-        NSLOG(wisp, DEBUG, "DOM constructor stubs initialized");
+    static const struct {
+        const char *name;
+        int (*init)(JSContext *ctx);
+    } bindings[] = {
+        {"console", qjs_init_console},
+        {"window", qjs_init_window},
+        {"timers", qjs_init_timers},
+        {"navigator", qjs_init_navigator},
+        {"location", qjs_init_location},
+        {"document", qjs_init_document},
+        {"storage", qjs_init_storage},
+        {"event target", qjs_init_event_target},
+        {"XMLHttpRequest", qjs_init_xhr},
+        {"DOM constructor stubs", qjs_init_dom_stubs},
+    };
+    for (size_t i = 0; i < sizeof(bindings) / sizeof(bindings[0]); i++) {
+        if (bindings[i].init(t->ctx) < 0 || JS_HasException(t->ctx)) {
+            NSLOG(wisp, ERROR, "Failed to initialize QuickJS %s", bindings[i].name);
+            if (JS_HasException(t->ctx)) {
+                qjs_report_exception(t, bindings[i].name, false);
+            }
+            js_destroythread(t);
+            return NSERROR_INIT_FAILED;
+        }
     }
 
     NSLOG(wisp, DEBUG, "Created QuickJS thread %p in heap %p", t, heap);
@@ -378,6 +480,7 @@ void js_destroythread(jsthread *thread)
     if (thread->ctx != NULL) {
         js_closethread(thread);
         JS_SetContextOpaque(thread->ctx, NULL);
+        JS_FreeValue(thread->ctx, thread->error_stack_getter);
         JS_FreeContext(thread->ctx);
         thread->ctx = NULL;
     }
@@ -397,14 +500,18 @@ bool js_exec(jsthread *thread, const uint8_t *txt, size_t txtlen, const char *na
     bool success = true;
     char stack_buf[1024];
     char *term_txt = NULL;
+    const char *source = name ? name : "<script>";
 
     if (thread == NULL || thread->ctx == NULL || thread->closed) {
         NSLOG(wisp, WARNING, "Attempted to execute JS on invalid/closed thread");
         return false;
     }
 
-    if (txt == NULL || txtlen == 0) {
+    if (txtlen == 0) {
         return true; /* Nothing to execute */
+    }
+    if (txt == NULL || txtlen == SIZE_MAX) {
+        return false;
     }
 
     NSLOG(wisp, INFO, "Executing JS: %s (length %zu)", name ? name : "<anonymous>", txtlen);
@@ -424,22 +531,18 @@ bool js_exec(jsthread *thread, const uint8_t *txt, size_t txtlen, const char *na
         term_txt[txtlen] = '\0';
     }
 
-    result = JS_Eval(thread->ctx, term_txt, txtlen, name ? name : "<script>", JS_EVAL_TYPE_GLOBAL);
-
-    if (JS_IsException(result)) {
-        JSValue exc = JS_GetException(thread->ctx);
-        const char *exc_str = JS_ToCString(thread->ctx, exc);
-
-        NSLOG(wisp, WARNING, "JavaScript error: %s", exc_str ? exc_str : "<unknown error>");
-
-        if (exc_str) {
-            JS_FreeCString(thread->ctx, exc_str);
+    if (qjs_execution_begin(thread->heap)) {
+        result = JS_Eval(thread->ctx, term_txt, txtlen, source, JS_EVAL_TYPE_GLOBAL);
+        if (JS_IsException(result) || JS_HasException(thread->ctx) || thread->heap->interrupted) {
+            qjs_report_exception(thread, source, thread->heap->interrupted);
+            success = false;
         }
-        JS_FreeValue(thread->ctx, exc);
+        JS_FreeValue(thread->ctx, result);
+    } else {
+        NSLOG(wisp, WARNING, "Unable to begin bounded JavaScript execution in %s", source);
         success = false;
     }
-
-    JS_FreeValue(thread->ctx, result);
+    thread->heap->execution_depth--;
 
     if (term_txt != stack_buf) {
         free(term_txt);

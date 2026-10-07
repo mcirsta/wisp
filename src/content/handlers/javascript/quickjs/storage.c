@@ -57,40 +57,44 @@ static JSValue js_storage_key(JSContext *ctx, JSValueConst this_val, int argc, J
     return JS_NULL;
 }
 
-static JSValue js_storage_length_getter(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+static JSValue js_storage_length_getter(JSContext *ctx, JSValueConst this_val)
 {
     return JS_NewInt32(ctx, 0); /* Empty storage */
 }
 
 static JSValue create_storage_object(JSContext *ctx)
 {
-    JSValue storage = JS_NewObject(ctx);
-
-    JS_SetPropertyStr(ctx, storage, "getItem", JS_NewCFunction(ctx, js_storage_getItem, "getItem", 1));
-    JS_SetPropertyStr(ctx, storage, "setItem", JS_NewCFunction(ctx, js_storage_setItem, "setItem", 2));
-    JS_SetPropertyStr(ctx, storage, "removeItem", JS_NewCFunction(ctx, js_storage_removeItem, "removeItem", 1));
-    JS_SetPropertyStr(ctx, storage, "clear", JS_NewCFunction(ctx, js_storage_clear, "clear", 0));
-    JS_SetPropertyStr(ctx, storage, "key", JS_NewCFunction(ctx, js_storage_key, "key", 1));
-
-    /* length property as getter */
-    JSAtom atom = JS_NewAtom(ctx, "length");
-    JS_DefinePropertyGetSet(ctx, storage, atom, JS_NewCFunction(ctx, js_storage_length_getter, "length", 0),
-        JS_UNDEFINED, JS_PROP_ENUMERABLE | JS_PROP_CONFIGURABLE);
-    JS_FreeAtom(ctx, atom);
-
-    return storage;
+    static const JSCFunctionListEntry properties[] = {
+        JS_CFUNC_DEF2("getItem", 1, js_storage_getItem, JS_PROP_C_W_E),
+        JS_CFUNC_DEF2("setItem", 2, js_storage_setItem, JS_PROP_C_W_E),
+        JS_CFUNC_DEF2("removeItem", 1, js_storage_removeItem, JS_PROP_C_W_E),
+        JS_CFUNC_DEF2("clear", 0, js_storage_clear, JS_PROP_C_W_E),
+        JS_CFUNC_DEF2("key", 1, js_storage_key, JS_PROP_C_W_E),
+        JS_CGETSET_DEF2("length", js_storage_length_getter, NULL, JS_PROP_ENUMERABLE | JS_PROP_CONFIGURABLE),
+    };
+    JSValue object = JS_NewObject(ctx);
+    if (JS_IsException(object)) {
+        return object;
+    }
+    if (JS_SetPropertyFunctionList(ctx, object, properties, sizeof(properties) / sizeof(properties[0])) < 0) {
+        JS_FreeValue(ctx, object);
+        return JS_EXCEPTION;
+    }
+    return object;
 }
 
 int qjs_init_storage(JSContext *ctx)
 {
-    JSValue global_obj = JS_GetGlobalObject(ctx);
-
-    /* Create localStorage */
-    JS_SetPropertyStr(ctx, global_obj, "localStorage", create_storage_object(ctx));
-
-    /* Create sessionStorage */
-    JS_SetPropertyStr(ctx, global_obj, "sessionStorage", create_storage_object(ctx));
-
-    JS_FreeValue(ctx, global_obj);
-    return 0;
+    const char *names[] = {"localStorage", "sessionStorage"};
+    JSValue global = JS_GetGlobalObject(ctx);
+    int ret = 0;
+    for (size_t i = 0; i < sizeof(names) / sizeof(names[0]); i++) {
+        JSValue object = create_storage_object(ctx);
+        if (JS_IsException(object) || JS_SetPropertyStr(ctx, global, names[i], object) < 0) {
+            ret = -1;
+            break;
+        }
+    }
+    JS_FreeValue(ctx, global);
+    return ret;
 }

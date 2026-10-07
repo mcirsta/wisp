@@ -173,8 +173,7 @@ static JSValue js_element_setAttribute(JSContext *ctx, JSValueConst this_val, in
     if (argc >= 2) {
         const char *name = JS_ToCString(ctx, argv[0]);
         const char *value = JS_ToCString(ctx, argv[1]);
-        NSLOG(wisp, DEBUG, "element.setAttribute('%s', '%s') (stub)", name ? name : "(null)",
-            value ? value : "(null)");
+        NSLOG(wisp, DEBUG, "element.setAttribute('%s', '%s') (stub)", name ? name : "(null)", value ? value : "(null)");
         if (name)
             JS_FreeCString(ctx, name);
         if (value)
@@ -245,8 +244,7 @@ static JSValue js_document_getElementsByTagName(JSContext *ctx, JSValueConst thi
 {
     if (argc > 0) {
         const char *tag = JS_ToCString(ctx, argv[0]);
-        NSLOG(wisp, DEBUG, "document.getElementsByTagName('%s') -> returning empty array (stub)",
-            tag ? tag : "(null)");
+        NSLOG(wisp, DEBUG, "document.getElementsByTagName('%s') -> returning empty array (stub)", tag ? tag : "(null)");
         if (tag)
             JS_FreeCString(ctx, tag);
     }
@@ -258,8 +256,8 @@ static JSValue js_document_getElementsByClassName(JSContext *ctx, JSValueConst t
 {
     if (argc > 0) {
         const char *cls = JS_ToCString(ctx, argv[0]);
-        NSLOG(wisp, DEBUG, "document.getElementsByClassName('%s') -> returning empty array (stub)",
-            cls ? cls : "(null)");
+        NSLOG(
+            wisp, DEBUG, "document.getElementsByClassName('%s') -> returning empty array (stub)", cls ? cls : "(null)");
         if (cls)
             JS_FreeCString(ctx, cls);
     }
@@ -333,101 +331,77 @@ static JSValue js_document_write(JSContext *ctx, JSValueConst this_val, int argc
     return JS_UNDEFINED;
 }
 
-static JSValue js_document_body_getter(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+static JSValue js_document_body_getter(JSContext *ctx, JSValueConst this_val)
 {
     NSLOG(wisp, DEBUG, "document.body getter -> returning stub element");
     /* Return an element with style property */
     return create_element_object(ctx, "BODY");
 }
 
-static JSValue js_document_documentElement_getter(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+static JSValue js_document_documentElement_getter(JSContext *ctx, JSValueConst this_val)
 {
     NSLOG(wisp, DEBUG, "document.documentElement getter -> returning stub element");
     return create_element_object(ctx, "HTML");
 }
 
-static JSValue js_document_head_getter(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+static JSValue js_document_head_getter(JSContext *ctx, JSValueConst this_val)
 {
     NSLOG(wisp, DEBUG, "document.head getter -> returning stub element");
     return create_element_object(ctx, "HEAD");
 }
 
-static JSValue js_document_readyState_getter(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+static JSValue js_document_readyState_getter(JSContext *ctx, JSValueConst this_val)
 {
     NSLOG(wisp, DEBUG, "document.readyState getter -> 'complete'");
     return JS_NewString(ctx, "complete");
 }
 
-static JSValue js_document_cookie_getter(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+static JSValue js_document_cookie_getter(JSContext *ctx, JSValueConst this_val)
 {
     NSLOG(wisp, DEBUG, "document.cookie getter -> ''");
     return JS_NewString(ctx, "");
 }
 
-static JSValue js_document_cookie_setter(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+static JSValue js_document_cookie_setter(JSContext *ctx, JSValueConst this_val, JSValueConst value)
 {
-    if (argc > 0) {
-        const char *cookie = JS_ToCString(ctx, argv[0]);
-        NSLOG(wisp, DEBUG, "document.cookie setter: '%s' (ignored)", cookie ? cookie : "(null)");
-        if (cookie)
-            JS_FreeCString(ctx, cookie);
+    const char *cookie = JS_ToCString(ctx, value);
+    if (cookie == NULL) {
+        return JS_EXCEPTION;
     }
+    NSLOG(wisp, DEBUG, "document.cookie setter: '%s' (ignored)", cookie);
+    JS_FreeCString(ctx, cookie);
     return JS_UNDEFINED;
-}
-
-static void define_getter(JSContext *ctx, JSValue obj, const char *name, JSCFunction *func)
-{
-    JSAtom atom = JS_NewAtom(ctx, name);
-    JS_DefinePropertyGetSet(
-        ctx, obj, atom, JS_NewCFunction(ctx, func, name, 0), JS_UNDEFINED, JS_PROP_ENUMERABLE | JS_PROP_CONFIGURABLE);
-    JS_FreeAtom(ctx, atom);
-}
-
-static void
-define_getter_setter(JSContext *ctx, JSValue obj, const char *name, JSCFunction *getter, JSCFunction *setter)
-{
-    JSAtom atom = JS_NewAtom(ctx, name);
-    JS_DefinePropertyGetSet(ctx, obj, atom, JS_NewCFunction(ctx, getter, name, 0),
-        JS_NewCFunction(ctx, setter, name, 1), JS_PROP_ENUMERABLE | JS_PROP_CONFIGURABLE);
-    JS_FreeAtom(ctx, atom);
 }
 
 int qjs_init_document(JSContext *ctx)
 {
-    NSLOG(wisp, DEBUG, "Initializing document binding");
-
-    JSValue global_obj = JS_GetGlobalObject(ctx);
-    JSValue document = JS_NewObject(ctx);
-
-    /* Methods */
-    JS_SetPropertyStr(
-        ctx, document, "getElementById", JS_NewCFunction(ctx, js_document_getElementById, "getElementById", 1));
-    JS_SetPropertyStr(ctx, document, "getElementsByTagName",
-        JS_NewCFunction(ctx, js_document_getElementsByTagName, "getElementsByTagName", 1));
-    JS_SetPropertyStr(ctx, document, "getElementsByClassName",
-        JS_NewCFunction(ctx, js_document_getElementsByClassName, "getElementsByClassName", 1));
-    JS_SetPropertyStr(
-        ctx, document, "querySelector", JS_NewCFunction(ctx, js_document_querySelector, "querySelector", 1));
-    JS_SetPropertyStr(
-        ctx, document, "querySelectorAll", JS_NewCFunction(ctx, js_document_querySelectorAll, "querySelectorAll", 1));
-    JS_SetPropertyStr(
-        ctx, document, "createElement", JS_NewCFunction(ctx, js_document_createElement, "createElement", 1));
-    JS_SetPropertyStr(
-        ctx, document, "createTextNode", JS_NewCFunction(ctx, js_document_createTextNode, "createTextNode", 1));
-    JS_SetPropertyStr(ctx, document, "write", JS_NewCFunction(ctx, js_document_write, "write", 1));
-
-    /* Properties */
-    define_getter(ctx, document, "body", js_document_body_getter);
-    define_getter(ctx, document, "documentElement", js_document_documentElement_getter);
-    define_getter(ctx, document, "head", js_document_head_getter);
-    define_getter(ctx, document, "readyState", js_document_readyState_getter);
-    define_getter_setter(ctx, document, "cookie", js_document_cookie_getter, js_document_cookie_setter);
-
-    /* Attach document to global object and window.document */
-    JS_SetPropertyStr(ctx, global_obj, "document", document);
-
-    JS_FreeValue(ctx, global_obj);
-
-    NSLOG(wisp, DEBUG, "Document binding initialized with element stubs");
-    return 0;
+    static const JSCFunctionListEntry properties[] = {
+        JS_CFUNC_DEF2("getElementById", 1, js_document_getElementById, JS_PROP_C_W_E),
+        JS_CFUNC_DEF2("getElementsByTagName", 1, js_document_getElementsByTagName, JS_PROP_C_W_E),
+        JS_CFUNC_DEF2("getElementsByClassName", 1, js_document_getElementsByClassName, JS_PROP_C_W_E),
+        JS_CFUNC_DEF2("querySelector", 1, js_document_querySelector, JS_PROP_C_W_E),
+        JS_CFUNC_DEF2("querySelectorAll", 1, js_document_querySelectorAll, JS_PROP_C_W_E),
+        JS_CFUNC_DEF2("createElement", 1, js_document_createElement, JS_PROP_C_W_E),
+        JS_CFUNC_DEF2("createTextNode", 1, js_document_createTextNode, JS_PROP_C_W_E),
+        JS_CFUNC_DEF2("write", 1, js_document_write, JS_PROP_C_W_E),
+        JS_CGETSET_DEF2("body", js_document_body_getter, NULL, JS_PROP_ENUMERABLE | JS_PROP_CONFIGURABLE),
+        JS_CGETSET_DEF2(
+            "documentElement", js_document_documentElement_getter, NULL, JS_PROP_ENUMERABLE | JS_PROP_CONFIGURABLE),
+        JS_CGETSET_DEF2("head", js_document_head_getter, NULL, JS_PROP_ENUMERABLE | JS_PROP_CONFIGURABLE),
+        JS_CGETSET_DEF2("readyState", js_document_readyState_getter, NULL, JS_PROP_ENUMERABLE | JS_PROP_CONFIGURABLE),
+        JS_CGETSET_DEF2(
+            "cookie", js_document_cookie_getter, js_document_cookie_setter, JS_PROP_ENUMERABLE | JS_PROP_CONFIGURABLE),
+    };
+    JSValue object = JS_NewObject(ctx);
+    if (JS_IsException(object)) {
+        return -1;
+    }
+    if (JS_SetPropertyFunctionList(ctx, object, properties, sizeof(properties) / sizeof(properties[0])) < 0) {
+        JS_FreeValue(ctx, object);
+        return -1;
+    }
+    JSValue global = JS_GetGlobalObject(ctx);
+    int ret = JS_SetPropertyStr(ctx, global, "document", object);
+    JS_FreeValue(ctx, global);
+    return ret < 0 ? -1 : 0;
 }
