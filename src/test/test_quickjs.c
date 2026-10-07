@@ -1280,7 +1280,7 @@ START_TEST(test_quickjs_document)
     JS_RunGC(dom_heap->rt);
     assert_predicate(dom_thread, "document.body.expando.owner === document.body", "GC preserves node identity/properties");
     assert_predicate(dom_thread, "document.querySelector === undefined && document.createElement === undefined && "
-        "document.body.style === undefined && document.body.classList === undefined", "unsupported APIs do not fabricate success");
+        "document.body.style === undefined", "unsupported APIs do not fabricate success");
 }
 END_TEST
 
@@ -1411,6 +1411,191 @@ START_TEST(test_quickjs_dom_conversion_retirement)
     ck_assert_uint_eq(dom_thread->dom_changes, 0);
 }
 END_TEST
+
+START_TEST(test_quickjs_classlist_live)
+{
+    ck_assert(exec_script(dom_thread,
+        "var el = document.getElementById('target'), list = el.classList;"
+        "if (list !== el.classList || !(list instanceof DOMTokenList) || Array.isArray(list)) throw Error('identity');"
+        "if (Object.prototype.toString.call(list) !== '[object DOMTokenList]') throw Error('brand');"
+        "el.className = '  alpha\\tbeta\\nș😀\\ralpha\\fgamma\\u00a0delta  ';"
+        "if (list.length !== 4 || list.item(2) !== 'ș😀' || list[3] !== 'gamma\\u00a0delta') throw Error('tokens');"
+        "if (String(list) !== el.className || list.value !== el.className) throw Error('raw value');"
+        "list.add('ș😀', 'nul\\0token');"
+        "if (el.className !== 'alpha beta ș😀 gamma\\u00a0delta nul\\0token') throw Error('byte lengths');"
+        "el.setAttribute('class', 'x x y');"
+        "if (list.length !== 2 || list[0] !== 'x' || list[1] !== 'y') throw Error('attribute update');"
+        "el.removeAttribute('class');"
+        "if (list.length !== 0 || list.value !== '' || list.item(0) !== null || list[0] !== undefined) throw Error('removal');"
+        "var svg = document.getElementById('svg'); svg.classList.add('one', 'two');"
+        "if (svg.getAttribute('class') !== 'one two' || svg.classList.length !== 2) throw Error('SVG classes');",
+        "classList identity, live attributes and Unicode"));
+    JS_RunGC(dom_heap->rt);
+    assert_predicate(dom_thread, "list === el.classList", "classList identity survives GC");
+}
+END_TEST
+
+START_TEST(test_quickjs_classlist_mutation)
+{
+    ck_assert(exec_script(dom_thread,
+        "var el = document.getElementById('target'), l = el.classList;"
+        "el.removeAttribute('class'); l.add(); l.remove(); l.remove('absent');"
+        "if (el.hasAttribute('class')) throw Error('absent attribute created');"
+        "l.value = ' a  a b '; l.add(); if (l.value !== 'a b') throw Error('zero argument normalization');"
+        "l.value = ' a  a b '; l.add('a'); if (l.value !== 'a b') throw Error('existing add normalization');"
+        "l.value = ' a  a b '; l.remove('missing'); if (l.value !== 'a b') throw Error('absent remove normalization');"
+        "l.value = ' a  a b '; if (!l.toggle('a', true) || l.value !== ' a  a b ') throw Error('forced no-op');"
+        "if (l.toggle('missing', false) || l.value !== ' a  a b ') throw Error('forced absent no-op');"
+        "if (l.toggle('a') || l.value !== 'b' || !l.toggle('a') || l.value !== 'b a') throw Error('toggle');"
+        "if (l.toggle('a', undefined) || l.value !== 'b') throw Error('undefined force is missing');"
+        "if (!l.toggle('a', {}) || l.toggle('a', null)) throw Error('boolean force conversion');"
+        "l.value = 'a b c d'; if (!l.replace('b', 'd') || l.value !== 'a d c') throw Error('replace later duplicate');"
+        "l.value = 'a b c d'; if (!l.replace('d', 'b') || l.value !== 'a b c') throw Error('replace earlier duplicate');"
+        "l.value = ' a  a '; if (!l.replace('a', 'a') || l.value !== 'a') throw Error('same replacement');"
+        "l.value = ' a  a '; if (l.replace('absent', 'b') || l.value !== ' a  a ') throw Error('absent replacement');"
+        "l.value = 'a b c'; if (l.remove('b', 'c', 'b') !== undefined || l.value !== 'a') throw Error('remove');"
+        "el.classList = ' x  y '; if (l.value !== ' x  y ' || el.classList !== l) throw Error('PutForwards');"
+        "l.value = null; if (l.value !== 'null') throw Error('null DOMString');"
+        "l.value = undefined; if (l.value !== 'undefined') throw Error('undefined DOMString');"
+        "var forwarded; Object.defineProperty(l, 'value', {set(v) { forwarded = v; }});"
+        "var marker = {}; el.classList = marker; if (forwarded !== marker) throw Error('forward without coercion');"
+        "const nativeSetter = Object.getOwnPropertyDescriptor(Element.prototype, 'classList').set;"
+        "const readonly = {}; Object.defineProperty(readonly, 'value', {value:42});"
+        "Object.defineProperty(el, 'classList', {value:readonly, configurable:true});"
+        "nativeSetter.call(el, 'ignored'); if (readonly.value !== 42) throw Error('forward rejected write');"
+        "Object.defineProperty(el, 'classList', {value:17}); let rejected = false;"
+        "try { nativeSetter.call(el, 'x'); } catch(e) { rejected = e instanceof TypeError; }"
+        "if (!rejected) throw Error('forward primitive');",
+        "classList mutation algorithms"));
+}
+END_TEST
+
+START_TEST(test_quickjs_classlist_errors)
+{
+    ck_assert(exec_script(dom_thread,
+        "var el = document.getElementById('target'), l = el.classList;"
+        "function raises(name, fn) { let e; try { fn(); } catch(x) { e = x; }"
+        "if (!e || e.name !== name) throw Error('expected ' + name); }"
+        "for (const op of ['add', 'remove']) {"
+        "raises('SyntaxError', () => l[op]('good', ''));"
+        "raises('InvalidCharacterError', () => l[op]('good', 'bad\\tvalue'));"
+        "if (el.className !== 'old') throw Error('partial mutation'); }"
+        "raises('SyntaxError', () => l.toggle(''));"
+        "raises('SyntaxError', () => l.replace('bad value', ''));"
+        "raises('InvalidCharacterError', () => l.replace('old', 'bad\\nvalue'));"
+        "for (const op of ['contains', 'toggle', 'replace', 'item', 'supports']) raises('TypeError', () => l[op]());"
+        "raises('TypeError', () => l.replace('old'));"
+        "raises('TypeError', () => l.supports('old'));"
+        "raises('TypeError', () => new DOMTokenList());"
+        "raises('TypeError', () => l.add.call(el, 'x'));"
+        "raises('TypeError', () => Object.getOwnPropertyDescriptor(DOMTokenList.prototype, 'length').get.call({}));"
+        "if (l.contains('') || l.contains('bad value')) throw Error('contains validates unnecessarily');"
+        "if (l.item(-1) !== null || l.item(4294967296) !== 'old' || l.item(NaN) !== 'old') throw Error('index conversion');"
+        "raises('TypeError', () => l.item(Symbol())); raises('TypeError', () => l.item(0n));",
+        "classList validation, required arguments and receiver checks"));
+}
+END_TEST
+
+START_TEST(test_quickjs_classlist_coercion)
+{
+    ck_assert(exec_script(dom_thread,
+        "var el = document.getElementById('target'), l = el.classList, sentinel = {}, order = [];"
+        "var caught; try { l.add('', {toString() { throw sentinel; }}); } catch(e) { caught = e; }"
+        "if (caught !== sentinel || el.className !== 'old') throw Error('conversion before validation');"
+        "try { l.add('valid', 'bad value', {toString() { order.push('last'); return 'last'; }}); } catch(e) {}"
+        "if (order.join() !== 'last' || el.className !== 'old') throw Error('convert all before mutation');"
+        "l.add({toString() { el.className = 'from-coercion'; return 'added'; }});"
+        "if (el.className !== 'from-coercion added') throw Error('stale parsed cache');"
+        "try { l.remove('added', Symbol()); } catch(e) { caught = e; }"
+        "if (!(caught instanceof TypeError) || el.className !== 'from-coercion added') throw Error('conversion exception');"
+        "try { l.supports({toString() { throw sentinel; }}); } catch(e) { caught = e; }"
+        "if (caught !== sentinel) throw Error('supports conversion order');",
+        "classList coercion and exception order"));
+}
+END_TEST
+
+START_TEST(test_quickjs_classlist_indexed)
+{
+    ck_assert(exec_script(dom_thread,
+        "var l = document.getElementById('target').classList; l.value = 'a b';"
+        "l.note = 42; const sym = Symbol('extra'); l[sym] = 'symbol';"
+        "const keys = Reflect.ownKeys(l); if (keys.length !== 4 || keys[0] !== '0' || keys[1] !== '1' ||"
+        "keys[2] !== 'note' || keys[3] !== sym) throw Error('key order');"
+        "const d = Object.getOwnPropertyDescriptor(l, '0');"
+        "if (!d.enumerable || !d.configurable || d.writable || d.value !== 'a' || !('0' in l) || '2' in l) throw Error('descriptor');"
+        "l[0] = 'wrong'; l[99] = 'wrong'; if (l[0] !== 'a' || l[99] !== undefined) throw Error('indexed write');"
+        "if (Reflect.defineProperty(l, '0', {value:'wrong'}) || Reflect.defineProperty(l, '99', {value:'wrong'})) throw Error('define index');"
+        "for (const key of ['0','99']) { let threw = false;"
+        "try { (function() {'use strict'; l[key] = 'wrong'; })(); } catch(e) { threw = e instanceof TypeError; }"
+        "if (!threw) throw Error('strict index write ' + key);"
+        "threw = false; try { Object.defineProperty(l, key, {value:'wrong'}); } catch(e) { threw = e instanceof TypeError; }"
+        "if (!threw) throw Error('throwing define ' + key); }"
+        "if (Reflect.deleteProperty(l, '0') || !Reflect.deleteProperty(l, '99')) throw Error('delete index');"
+        "l['01'] = 'leading'; l['4294967295'] = 'not-index';"
+        "if (l['01'] !== 'leading' || l['4294967295'] !== 'not-index') throw Error('ordinary keys');"
+        "Object.defineProperty(l, 'ordinary', {value:1, configurable:false});"
+        "if (Object.getOwnPropertyDescriptor(l, 'ordinary').configurable || Reflect.deleteProperty(l, 'ordinary')) throw Error('expando descriptor');"
+        "if (Reflect.preventExtensions(l) || !Object.isExtensible(l)) throw Error('must remain extensible');"
+        "let threw = false; try { Object.freeze(l); } catch(e) { threw = e instanceof TypeError; }"
+        "if (!threw || !Object.isExtensible(l)) throw Error('freeze live object');"
+        "l.value = 'c'; if (l[0] !== 'c' || l[1] !== undefined || '1' in l) throw Error('live indices');",
+        "classList indexed platform properties"));
+}
+END_TEST
+
+START_TEST(test_quickjs_classlist_iteration)
+{
+    ck_assert(exec_script(dom_thread,
+        "var l = document.getElementById('target').classList; l.value = 'a b';"
+        "if (l.values !== Array.prototype.values || l[Symbol.iterator] !== l.values ||"
+        "l.forEach !== Array.prototype.forEach) throw Error('Web IDL iteration methods');"
+        "if ([...l].join() !== 'a,b' || [...l.keys()].join() !== '0,1' || [...l.entries()][1].join() !== '1,b') throw Error('iteration');"
+        "var iterator = l.values(); if (iterator.next().value !== 'a') throw Error('first');"
+        "l.add('c'); if (iterator.next().value !== 'b' || iterator.next().value !== 'c' || !iterator.next().done) throw Error('live iterator');"
+        "l.add('d'); if (!iterator.next().done) throw Error('finished iterator');"
+        "l.value = 'a b'; const marker = {}, seen = [];"
+        "l.forEach(function(value, index, object) { if (this !== marker || object !== l) throw Error('callback args');"
+        "seen.push(index + value); if (index === 0) l.add('c'); }, marker);"
+        "if (seen.join() !== '0a,1b') throw Error('forEach initial length');",
+        "classList standard array iterators and callbacks"));
+}
+END_TEST
+
+START_TEST(test_quickjs_classlist_retirement)
+{
+    ck_assert(exec_script(dom_thread,
+        "var child = document.getElementById('target').firstChild.nextSibling, l = child.classList;"
+        "l.cycle = {owner: child, list: l}; document.getElementById('target').textContent = '';"
+        "l.add('detached'); if (child.isConnected || l.value !== 'detached') throw Error('detached list');",
+        "detached classList"));
+    JS_RunGC(dom_heap->rt);
+    JSValue global = JS_GetGlobalObject(dom_thread->ctx);
+    JSValue list = JS_GetPropertyStr(dom_thread->ctx, global, "l");
+    js_closethread(dom_thread);
+    JSValue length = JS_GetPropertyStr(dom_thread->ctx, list, "length");
+    ck_assert(JS_IsException(length));
+    JS_FreeValue(dom_thread->ctx, JS_GetException(dom_thread->ctx));
+    JS_FreeValue(dom_thread->ctx, list);
+    JS_FreeValue(dom_thread->ctx, global);
+}
+END_TEST
+
+START_TEST(test_quickjs_classlist_conversion_retirement)
+{
+    JSValue global = JS_GetGlobalObject(dom_thread->ctx);
+    ck_assert_int_eq(JS_SetPropertyStr(dom_thread->ctx, global, "retire",
+        JS_NewCFunction(dom_thread->ctx, close_dom_during_conversion, "retire", 0)), 1);
+    JS_FreeValue(dom_thread->ctx, global);
+    ck_assert(exec_script(dom_thread,
+        "var l = document.getElementById('target').classList, caught;"
+        "try { l.add({toString() { retire(); return 'x'; }}); } catch(e) { caught = e; }"
+        "if (!caught || caught.name !== 'InvalidStateError') throw Error('retired classList mutation');",
+        "classList retirement during coercion"));
+    ck_assert_uint_eq(dom_thread->dom_changes, 0);
+}
+END_TEST
+
+
 
 /**
  * Test Storage (localStorage, sessionStorage).
@@ -1824,6 +2009,14 @@ Suite *quickjs_suite(void)
     tcase_add_test(tc_dom, test_quickjs_dom_retirement);
     tcase_add_test(tc_dom, test_quickjs_dom_runtime_isolation);
     tcase_add_test(tc_dom, test_quickjs_dom_conversion_retirement);
+    tcase_add_test(tc_dom, test_quickjs_classlist_live);
+    tcase_add_test(tc_dom, test_quickjs_classlist_mutation);
+    tcase_add_test(tc_dom, test_quickjs_classlist_errors);
+    tcase_add_test(tc_dom, test_quickjs_classlist_coercion);
+    tcase_add_test(tc_dom, test_quickjs_classlist_indexed);
+    tcase_add_test(tc_dom, test_quickjs_classlist_iteration);
+    tcase_add_test(tc_dom, test_quickjs_classlist_retirement);
+    tcase_add_test(tc_dom, test_quickjs_classlist_conversion_retirement);
     suite_add_tcase(s, tc_dom);
     tcase_add_test(tc_surface, test_quickjs_storage);
     tcase_add_test(tc_surface, test_quickjs_event_target);

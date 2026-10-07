@@ -56,6 +56,13 @@ with tempfile.TemporaryDirectory(prefix='wisp-js-dom-') as tmp:
     for name, script in (
             ('inline', mutation),
             ('timer', 'setTimeout(() => {' + mutation + '}, 150);'),
+            ('classlist', 'setTimeout(() => {' + mutation.replace("target.className = 'new';", """
+                target.classList.add('new', 'temporary');
+                target.classList.remove('old', 'temporary');
+                target.classList.toggle('unused', false);
+                target.classList.toggle('new', true);
+                target.classList.replace('missing', 'also-missing');
+            """) + '}, 150);'),
             ('exception', mutation + "throw Error('Expected after mutation');"),
             ('interrupted', "setTimeout(() => {" + mutation.replace('Promise.resolve().then(() => {', '{').replace('});', '}') +
              'while (true) {} }, 150);')):
@@ -67,9 +74,13 @@ with tempfile.TemporaryDirectory(prefix='wisp-js-dom-') as tmp:
             assert actual['boxes'][0]['border_box'] == expected_element['boxes'][0]['border_box'], (name, actual)
         changes = re.findall(r'\[JS doc=(\d+) entry=(\d+)\] dom.mutation (.*)', log)
         requests = re.findall(r'\[JS doc=(\d+) entry=(\d+)\] render.request (.*)', log)
-        assert len(changes) == 3 and len(requests) == 1, (name, log)
+        count = 4 if name == 'classlist' else 3
+        assert len(changes) == count and len(requests) == 1, (name, log)
         assert all(doc == requests[0][0] and entry == requests[0][1] for doc, entry, _ in changes), (name, log)
-        assert 'changes=3' in requests[0][2], (name, log)
+        assert f'changes={count}' in requests[0][2], (name, log)
+        if name == 'classlist':
+            assert 'operation=classList.add' in log and 'operation=classList.remove' in log, log
+            assert 'operation=classList.toggle' not in log and 'operation=classList.replace' not in log, log
         assert re.search(r'dom.node node=\d+ type=1 name=DIV id=target', log), (name, log)
         assert 'operation=removeAttribute attribute=hidden result=0' in log, (name, log)
         assert ('mode=initial-build' if name in ('inline', 'exception') else 'mode=full-restyle') in requests[0][2], (name, log)

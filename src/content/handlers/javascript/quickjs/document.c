@@ -374,6 +374,7 @@ int qjs_dom_install_properties(JSContext *ctx, JSValue *prototypes)
         GET("tagName", TAG_NAME),
         ACCESS("id", ID),
         ACCESS("className", CLASS_NAME),
+        JS_CGETSET_DEF2("classList", qjs_class_list_get, qjs_class_list_set, JS_PROP_CONFIGURABLE | JS_PROP_ENUMERABLE),
         METHOD("getAttribute", 1, GET_ATTRIBUTE),
         METHOD("hasAttribute", 1, HAS_ATTRIBUTE),
         METHOD("setAttribute", 2, SET_ATTRIBUTE),

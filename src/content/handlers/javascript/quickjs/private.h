@@ -24,7 +24,7 @@ struct jsheap {
     uint64_t deadline_ms;
     bool interrupted;
     struct jsthread *threads;
-    JSClassID node_class, xhr_class, console_class;
+    JSClassID node_class, tokenlist_class, xhr_class, console_class;
 };
 
 /* One context per document; queued timers belong to this owner. Active host

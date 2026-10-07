@@ -3,6 +3,7 @@
 #define WISP_QUICKJS_DOM_H
 
 #include <dom/dom.h>
+#include <dom/core/tokenlist.h>
 #include "private.h"
 
 enum qjs_dom_prototype {
@@ -22,6 +23,8 @@ struct qjs_dom_node {
     dom_node *node;
     dom_node_type type;
     uint64_t id;
+    dom_tokenlist *class_tokens;
+    JSValue class_list;
     JSValue owner; /* Document wrapper; undefined on the document itself. */
     struct qjs_dom_document *document;
     struct qjs_dom_node *next, **previous;
@@ -40,6 +43,9 @@ void qjs_dom_changed(
     JSContext *ctx, struct qjs_dom_node *node, const char *operation, dom_string *attribute, dom_exception error);
 void qjs_dom_flush(jsthread *thread);
 void qjs_dom_close(jsthread *thread);
+int qjs_init_tokenlist(JSContext *ctx);
+JSValue qjs_class_list_get(JSContext *ctx, JSValueConst object);
+JSValue qjs_class_list_set(JSContext *ctx, JSValueConst object, JSValueConst value);
 int qjs_dom_install_properties(JSContext *ctx, JSValue *prototypes);
 
 #endif

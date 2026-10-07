@@ -50,6 +50,28 @@ Propose these independently of document-job cancellation. They need no new API,
 and the browser uses the existing DOMException intrinsic rather than maintaining
 its own exception class. No upstream submission has been made.
 
+## Newly found candidates: host object property hooks
+
+The class-list binding needs Web IDL's live indexed-property behavior. Two small
+local changes support it, with standalone `host_object_property_hooks()` tests:
+
+- Honor throwing flags when `define_own_property` returns false. The engine
+  already handles these flags for ordinary definitions; the exotic callback
+  path must do so too, including a strict assignment to an unsupported index.
+  This is a separate error-propagation fix with no new public API.
+- Add an optional `prevent_extensions` callback to `JSClassExoticMethods`.
+  False rejects the operation; negative propagates an exception; true permits
+  the ordinary extensibility flag to change. Existing classes without a hook
+  retain their behavior. This is a proposed embedding API, not an upstream API.
+  [Web IDL legacy platform objects](https://webidl.spec.whatwg.org/#legacy-platform-objects)
+  must reject `preventExtensions` because supported properties can change with
+  the native collection. This keeps that policy in the binding, with no DOM
+  knowledge in the engine.
+
+Recheck upstream alternatives and API shape before proposing the hook. Unlike
+the error-propagation fixes, it changes a public struct and requires consumers to
+rebuild; keep it separate in any submission. Wisp builds all consumers together.
+
 ## Context job cancellation
 
 `JS_CloseContextJobs(ctx)` permanently closes a context's job queue and releases
@@ -115,8 +137,9 @@ or Wisp-specific installation rules. Those belong in the parent integration.
 
 ## Expected benefit and order
 
-Pursue the property-list and host-object cleanup fixes first, cancellation next,
-then generic build controls if still useful. Acceptance of those engine changes
+Pursue the property-list, host-object cleanup and exotic-definition error fixes
+first; discuss the extensibility hook and cancellation separately, then generic
+build controls if still useful. Acceptance of those engine changes
 would remove Wisp's remaining engine-source patches; build options could further
 reduce the CMake patch. These
 proposals do not replace the browser work

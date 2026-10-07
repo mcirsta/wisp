@@ -668,6 +668,9 @@ typedef struct JSClassExoticMethods {
     /* return < 0 if exception or true/false */
     int (*set_property)(JSContext *ctx, JSValueConst obj, JSAtom atom,
                         JSValueConst value, JSValueConst receiver, int flags);
+    /* Return < 0 on exception, false to reject, true to allow the engine to
+       prevent extensions. If absent, ordinary object behavior applies. */
+    int (*prevent_extensions)(JSContext *ctx, JSValueConst obj);
 } JSClassExoticMethods;
 
 typedef void JSClassFinalizer(JSRuntime *rt, JSValueConst val);

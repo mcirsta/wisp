@@ -35,16 +35,24 @@ JSValue qjs_dom_exception(JSContext *ctx, dom_exception error)
     return JS_ThrowDOMException(ctx, name, "%s", name);
 }
 
+static void release_native(struct qjs_dom_node *node)
+{
+    if (node->class_tokens != NULL) {
+        dom_tokenlist_unref(node->class_tokens);
+        node->class_tokens = NULL;
+    }
+    dom_node_unref(node->node);
+    node->node = NULL;
+}
+
 static void release_nodes(struct qjs_dom_document *document)
 {
     /* Release native DOM references while the HTML owner is still alive. JS
      * wrappers can survive until GC, but closed-document operations are rejected. */
     for (struct qjs_dom_node *node = document->nodes; node != NULL; node = node->next) {
-        dom_node_unref(node->node);
-        node->node = NULL;
+        release_native(node);
     }
-    dom_node_unref(document->base.node);
-    document->base.node = NULL;
+    release_native(&document->base);
 }
 
 void qjs_dom_close(jsthread *thread)
@@ -77,7 +85,8 @@ static void node_finalizer(JSRuntime *rt, JSValue object)
         for (unsigned i = 0; i < QJS_DOM_PROTOTYPES; i++)
             JS_FreeValueRT(rt, doc->prototypes[i]);
     }
-    dom_node_unref(node->node);
+    release_native(node);
+    JS_FreeValueRT(rt, node->class_list);
     JS_FreeValueRT(rt, node->owner);
     js_free_rt(rt, node);
 }
@@ -88,6 +97,7 @@ static void node_mark(JSRuntime *rt, JSValueConst object, JS_MarkFunc *mark)
     if (node == NULL)
         return;
     JS_MarkValue(rt, node->owner, mark);
+    JS_MarkValue(rt, node->class_list, mark);
     if (node->type == DOM_DOCUMENT_NODE) {
         struct qjs_dom_document *doc = (struct qjs_dom_document *)node;
         JS_MarkValue(rt, doc->cache, mark);
@@ -214,6 +224,7 @@ JSValue qjs_dom_wrap(JSContext *ctx, JSValueConst owner, dom_node *native)
     node->type = type;
     node->id = ++doc->next_id;
     node->owner = JS_DupValue(ctx, owner);
+    node->class_list = JS_UNDEFINED;
     node->document = doc;
     JS_SetOpaque(object, node);
     if (JS_SetPropertyStr(ctx, doc->cache, key, JS_DupValue(ctx, object)) < 0) {
@@ -325,6 +336,7 @@ int qjs_init_document(JSContext *ctx)
     }
     doc->base.type = DOM_DOCUMENT_NODE;
     doc->base.owner = JS_UNDEFINED;
+    doc->base.class_list = JS_UNDEFINED;
     doc->base.id = doc->next_id = 1;
     doc->base.document = doc;
     JS_SetOpaque(object, doc);
@@ -360,7 +372,7 @@ int qjs_init_document(JSContext *ctx)
         if (JS_SetPropertyStr(ctx, global, interfaces[i].name, ctor) < 0)
             goto out;
     }
-    if (qjs_dom_install_properties(ctx, doc->prototypes) < 0 ||
+    if (qjs_init_tokenlist(ctx) < 0 || qjs_dom_install_properties(ctx, doc->prototypes) < 0 ||
         JS_SetPrototype(ctx, object, doc->prototypes[QJS_HTML_DOCUMENT]) < 0)
         goto out;
     ret = JS_DefinePropertyValueStr(ctx, global, "document", JS_DupValue(ctx, object), JS_PROP_ENUMERABLE);

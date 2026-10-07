@@ -36,6 +36,12 @@ across this directory.
   `JS_SetPrototype` cannot copy a shared shape. Check and unwind failures in
   `JS_AddIntrinsicDOMException` instead of publishing incomplete initialization.
   Both have allocation-budget regressions, also exercised by Wisp's DOM setup.
+- `quickjs.c`, `quickjs.h`, `api-test.c`: add an optional `prevent_extensions`
+  host-class hook. Returning false rejects the operation; true lets the engine
+  prevent extensions normally. Wisp uses it for live DOMTokenList objects, whose
+  Web IDL contract rejects freezing. Also honor throwing flags when an exotic
+  property-definition hook returns false, including strict-mode assignment.
+  Standalone C API/JavaScript regressions cover both behaviors.
 - `CMakeLists.txt`: use `WISP_LIB_TYPE`; leave CLI/compiler off by default; gate
   upstream test executables on `WISP_ENABLE_TESTS`; keep the CLI support library
   out of the default build unless required; respect Wisp's `_WIN32_WINNT`; and

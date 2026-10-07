@@ -2296,8 +2296,64 @@ static void host_object_allocation_errors(void)
     }
 }
 
+/* Hosts can reject extensions for live indexed objects, and failed exotic
+   definitions must honor both C API throwing flags and strict JS assignment. */
+static int host_prevent_extensions(JSContext *ctx, JSValueConst obj)
+{
+    return *(bool *)JS_GetOpaque(obj, JS_GetClassID(obj));
+}
+
+static int host_reject_definition(JSContext *ctx, JSValueConst obj, JSAtom prop,
+                                  JSValueConst val, JSValueConst getter,
+                                  JSValueConst setter, int flags)
+{
+    return false;
+}
+
+static void host_object_property_hooks(void)
+{
+    JSRuntime *rt = new_runtime();
+    JSContext *ctx = JS_NewContext(rt);
+    JSClassID id = 0;
+    JSClassExoticMethods methods = {
+        .define_own_property = host_reject_definition,
+        .prevent_extensions = host_prevent_extensions,
+    };
+    JSClassDef def = { .class_name = "HostObject", .exotic = &methods };
+    JS_NewClassID(rt, &id);
+    assert(JS_NewClass(rt, id, &def) == 0);
+    JSValue object = JS_NewObjectClass(ctx, id);
+    bool allow_extensions_change = false;
+    JS_SetOpaque(object, &allow_extensions_change);
+    assert(JS_PreventExtensions(ctx, object) == 0);
+    assert(JS_IsExtensible(ctx, object) == 1);
+    assert(JS_DefinePropertyValueStr(ctx, object, "x", JS_NewInt32(ctx, 1), 0) == 0);
+    assert(!JS_HasException(ctx));
+    assert(JS_DefinePropertyValueStr(ctx, object, "x", JS_NewInt32(ctx, 1), JS_PROP_THROW) == -1);
+    JS_FreeValue(ctx, JS_GetException(ctx));
+    JSValue global = JS_GetGlobalObject(ctx);
+    assert(JS_SetPropertyStr(ctx, global, "host", JS_DupValue(ctx, object)) >= 0);
+    const char *source = "host.x = 1; if (Reflect.defineProperty(host, 'x', {value:1})) throw Error('define');"
+        "let caught = false; try { (function() {'use strict'; host.x = 1; })(); }"
+        "catch (e) { caught = e instanceof TypeError; } if (!caught) throw Error('strict');"
+        "if (Reflect.preventExtensions(host)) throw Error('prevent');"
+        "caught = false; try { Object.preventExtensions(host); } catch(e) { caught = e instanceof TypeError; }"
+        "if (!caught || !Object.isExtensible(host)) throw Error('extensible');";
+    JSValue result = JS_Eval(ctx, source, strlen(source), "host hooks", JS_EVAL_TYPE_GLOBAL);
+    assert(!JS_IsException(result));
+    JS_FreeValue(ctx, result);
+    allow_extensions_change = true;
+    assert(JS_PreventExtensions(ctx, object) == 1);
+    assert(JS_IsExtensible(ctx, object) == 0);
+    JS_FreeValue(ctx, global);
+    JS_FreeValue(ctx, object);
+    JS_FreeContext(ctx);
+    JS_FreeRuntime(rt);
+}
+
 int main(void)
 {
+    host_object_property_hooks();
     host_object_allocation_errors();
     property_list_errors();
     cfunctions();

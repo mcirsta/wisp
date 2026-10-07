@@ -3,8 +3,8 @@
 Reviewed 2026-10-07 against Wisp `206b8a03`, plus the QuickJS-ng update and
 XHR conversion fix described below. This replaces the earlier migration analysis.
 It is a browser-integration review, not an exhaustive security or ECMAScript
-conformance audit. Batches 1–2 and the first increment of batch 3 are implemented
-within the scope described below. Real DOM lookups and attribute/text mutations
+conformance audit. Batches 1–2 and the first two increments of batch 3 are implemented
+within the scope described below. Real DOM lookups, class lists and attribute/text mutations
 now reach rendering and carry JS action traces. Collections, node creation/tree
 editing, events and the other capabilities below remain future work.
 
@@ -69,7 +69,7 @@ unless stated otherwise.
 | Timers | `timers.c`: per-document ordered queue on the frontend scheduler, callback arguments/string handlers, shared cancellation IDs and nesting delays | Real `setTimeout`/`setInterval`; callbacks and their checkpoints share execution limits; document retirement cancels them |
 | JS diagnostics | Optional `js_trace` records document/entry IDs, script sources, timer causality, navigation, exposed node IDs, actual DOM operations and coalesced render requests | Separates supported JS host effects from static processing; this is not complete paint attribution |
 | Document/nodes | `dom.c`/`document.c`: real libdom wrappers with stable identity, roots, ID lookup and basic node traversal | Document-lifetime wrapper ownership and native reference cleanup are tested; selectors, collections and node creation are not exposed |
-| Mutation/CSSOM | Real attributes, `id`/`className`, `textContent`/`nodeValue` and CharacterData `data`; connected edits request an existing full restyle after the entry/checkpoint | These changes affect boxes and pixels; `style`, `classList`, `innerHTML` and tree-editing methods are omitted pending implementation |
+| Mutation/CSSOM | Real attributes, `id`/`className`, live `classList`, `textContent`/`nodeValue` and CharacterData `data`; connected edits request an existing full restyle after the entry/checkpoint | These changes affect boxes and pixels; `style`, `innerHTML` and tree-editing methods are omitted pending implementation |
 | Events | `event_target.c` and `js_fire_event`/`js_handle_new_element` are stubs | No real JS listeners, inline event handlers or load-event delivery |
 | Lifecycle information | `document.readyState` is omitted | Correct loading state and lifecycle events belong to batch 4 |
 | Networking/storage | XHR fabricates DONE/200 without a request; storage discards writes; no `document.cookie` accessor or browser fetch binding | XHR/storage still advertise unsupported behavior. Native HTTP cookie handling is a separate subsystem |
@@ -339,10 +339,63 @@ the retained-restyle tests caught the empty-textarea regression before completio
 Vendored API and local JS suites pass in sanitizer and Release builds; the local
 JS suites report **116 tests, 0 errors, 9 excluded**, not full test262.
 
-Next: `classList`, node creation/tree editing and live collections, with the same
-ownership, error and invalidation rules. Events and accurate loading state remain
-the following batch. Renderer reuse should wait for measured full-refresh costs
-and sound dependency tracking.
+The next increment implements `classList` below. Node creation/tree editing and
+live node collections remain, with the same ownership, error and invalidation
+rules. Events and accurate loading state remain the following batch. Renderer
+reuse should wait for measured full-refresh costs and sound dependency tracking.
+
+### Batch 3, second increment: live class lists
+
+Implemented 2026-10-07. `Element.classList` now returns a stable, live
+`DOMTokenList`, including for SVG elements. It provides `length`, indexed access,
+`item`, `contains`, variadic `add`/`remove`, `toggle`, `replace`, `value`, string
+conversion and standard iteration/`forEach`. `supports` throws TypeError for
+`class`, which has no specification-defined supported-token vocabulary.
+Assignment to `element.classList` forwards to the list's `value` property using
+Web IDL's ordinary property semantics.
+
+- The shared libdom token implementation handles all five ASCII whitespace
+  characters, byte lengths, ordered deduplication and replacement. All supplied
+  arguments are converted before token validation, and all tokens are validated
+  before a variadic mutation. Each edit writes the attribute once. Empty versus
+  absent attributes, normalization, optional `toggle` force and no-op operations
+  follow the DOM algorithms, not browser-specific expectations.
+- Reads validate a cached parse against the real immutable attribute string.
+  Direct class/attribute changes and removal are immediately visible without
+  relying on deprecated mutation-event listeners. Failed writes invalidate the
+  parse, so a later read cannot expose an uncommitted token set.
+- The element owns its list wrapper and native token list; the wrapper traces its
+  element and JS properties. Native token references are released on document
+  retirement alongside native nodes. Detached lists, wrapper cycles and coercion
+  that retires the document are covered.
+- Actual writes use the existing JS mutation trace and coalesced renderer update.
+  A forced no-op toggle or unsuccessful replacement logs no mutation and requests
+  no refresh. Rendering still runs on the main thread.
+- Indexed properties obey Web IDL's live property descriptors and enumeration
+  order. Array iterator methods are the actual engine intrinsics, as Web IDL
+  specifies. Arbitrary JS properties retain their ordinary descriptors. QuickJS
+  has a small host-class extension to reject `preventExtensions`, needed for
+  live platform objects, plus a fix for throwing flags on rejected exotic
+  property definitions. Both have standalone engine API tests and are documented
+  as separate [upstreaming candidates](../src/docs/quickjs-upstreaming.md).
+
+The old Duktape `Element.bnd` and `DOMTokenList.bnd` informed ownership and native
+calls. Their reversed unforced-toggle branches, suppressed exceptions,
+argument-by-argument updates and old DOMSettableTokenList model were not copied.
+The native libdom parser's ASCII-space-only splitting and character/byte-length
+confusion were corrected at their source.
+
+Validation: **60 Check tests** pass with Debug ASan/UBSan. Eight new cases cover
+live state, Unicode/embedded NUL, atomic validation, coercion, forced/no-op edits,
+replacement ordering, indexed-property behavior, iteration, GC and retirement.
+The existing allocation-budget sweep includes the new class initialization.
+`qt_js_dom` verifies class-list edits against static boxes/pixels and checks that
+only actual mutations appear in the trace. JavaScript timer, ordering, loading,
+navigation and retained-restyle captures, plus DOM/form/restyle tests, are also
+checked. Engine API, regexp and local JS suites pass in sanitizer and Release
+builds; the local suites report **116 tests, 0 errors, 9 excluded**.
+
+Remaining batch 3 work: node creation/tree editing and live node collections.
 
 ### Reading the JS trace
 
@@ -465,10 +518,10 @@ These are separate reviewable batches, not a commitment to full web-app support.
    parser ordering, microtasks, main-thread timers and navigation-safe context
    ownership share bounded entry/checkpoint handling. Teardown runs no page
    callbacks. This is not a complete HTML event loop or script-element algorithm.
-3. **Minimal real DOM plus visible mutations — first increment implemented.**
-   Real wrappers, roots, ID lookup, traversal, attributes/text, coalesced full
-   refresh and mutation traces pass identity/GC and rendered-page tests. Remaining:
-   `classList`, node creation/tree editing and live collections. Extend the same
+3. **Minimal real DOM plus visible mutations — first two increments implemented.**
+   Real wrappers, roots, ID lookup, traversal, attributes/text, live `classList`,
+   coalesced full refresh and mutation traces pass identity/GC and rendered-page
+   tests. Remaining: node creation/tree editing and live node collections. Extend the same
    ownership/conversion/invalidation layer rather than adding fake APIs. Reuse
    partial updates only with sound mutation/dependency tracking.
 4. **Events and practical document interaction.** EventTarget/Event, click
@@ -500,9 +553,11 @@ scattered binding-specific exceptions.
   and [resource limits](https://html.spec.whatwg.org/multipage/webappapis.html#killing-scripts)
 - [HTML timers](https://html.spec.whatwg.org/multipage/timers-and-user-prompts.html#timers)
 - [DOM nodes and mutation](https://dom.spec.whatwg.org/#interface-node),
+  [DOMTokenList](https://dom.spec.whatwg.org/#interface-domtokenlist),
   [EventTarget](https://dom.spec.whatwg.org/#interface-eventtarget) and
   [selector queries](https://dom.spec.whatwg.org/#dom-parentnode-queryselector)
 - [Web IDL object bindings](https://webidl.spec.whatwg.org/#idl-objects)
+  and [legacy platform objects](https://webidl.spec.whatwg.org/#legacy-platform-objects)
 
 Use reduced fixtures with specification-derived expectations. Chromium/Firefox
 comparisons remain useful diagnostics, not the authority for the behavior.

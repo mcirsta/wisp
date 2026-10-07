@@ -9902,6 +9902,14 @@ int JS_PreventExtensions(JSContext *ctx, JSValueConst obj)
     p = JS_VALUE_GET_OBJ(obj);
     if (unlikely(p->class_id == JS_CLASS_PROXY))
         return js_proxy_preventExtensions(ctx, obj);
+    if (p->is_exotic) {
+        const JSClassExoticMethods *em = ctx->rt->class_array[p->class_id].exotic;
+        if (em && em->prevent_extensions) {
+            int ret = em->prevent_extensions(ctx, obj);
+            if (ret <= 0)
+                return ret;
+        }
+    }
     if (is_typed_array(p->class_id)) {
         JSTypedArray *ta = p->u.typed_array;
         JSArrayBuffer *abuf = ta->buffer->u.array_buffer;
@@ -11123,8 +11131,11 @@ static int JS_CreateProperty(JSContext *ctx, JSObject *p,
             const JSClassExoticMethods *em = ctx->rt->class_array[p->class_id].exotic;
             if (em) {
                 if (em->define_own_property) {
-                    return em->define_own_property(ctx, JS_MKPTR(JS_TAG_OBJECT, p),
-                                                   prop, val, getter, setter, flags);
+                    ret = em->define_own_property(ctx, JS_MKPTR(JS_TAG_OBJECT, p),
+                                                  prop, val, getter, setter, flags);
+                    if (ret == 0)
+                        return JS_ThrowTypeErrorOrFalse(ctx, flags, "cannot define property");
+                    return ret;
                 }
                 ret = JS_IsExtensible(ctx, JS_MKPTR(JS_TAG_OBJECT, p));
                 if (ret < 0)

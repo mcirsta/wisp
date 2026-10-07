@@ -10,511 +10,334 @@
 #include <string.h>
 
 #include <dom/core/element.h>
-#include <dom/core/nodelist.h>
 #include <dom/core/string.h>
 #include <dom/core/tokenlist.h>
-#include <dom/events/event.h>
-#include <dom/events/event_listener.h>
-#include <dom/events/event_target.h>
-#include <dom/events/mutation_event.h>
 
-#include "core/document.h"
-#include "core/element.h"
-
-#include "utils/utils.h"
-
-#define DOM_TOKENLIST_GROW_INCREMENT 4
-
+/* DOM ordered sets: https://dom.spec.whatwg.org/#interface-domtokenlist */
 struct dom_tokenlist {
     uint32_t refcnt;
     dom_element *ele;
-    dom_string *attr;
-    dom_event_listener *listener;
-    dom_string *last_set;
-    bool needs_parse;
-    /* Parsed content, for optimal access */
+    dom_string *attr, *parsed_value;
+    bool parsed;
     dom_string **entries;
-    uint32_t len;
-    uint32_t alloc;
+    uint32_t len, alloc;
 };
 
-/* Handle a DOMAttrModified event which might be to do with our attribute */
-
-static void _dom_tokenlist_handle_attrmodified(dom_event *evt, void *pw)
+static bool token_space(unsigned char c)
 {
-    dom_mutation_event *mutevt = (dom_mutation_event *)evt;
-    dom_tokenlist *list = (dom_tokenlist *)pw;
-    dom_exception exc;
-    dom_string *value;
-
-    {
-        dom_event_target *target;
-        exc = dom_event_get_target(evt, &target);
-        if (exc != DOM_NO_ERR)
-            return;
-        dom_node_unref(target);
-        if (target != (dom_event_target *)list->ele)
-            return;
-    }
-
-    {
-        dom_string *attr;
-        exc = dom_mutation_event_get_attr_name(mutevt, &attr);
-        if (exc != DOM_NO_ERR)
-            return;
-        if (!dom_string_isequal(attr, list->attr)) {
-            dom_string_unref(attr);
-            return;
-        }
-        dom_string_unref(attr);
-    }
-
-    /* At this point we know that this is a mutation of our attribute on our
-     * node */
-
-    exc = dom_mutation_event_get_new_value(mutevt, &value);
-    if (exc != DOM_NO_ERR)
-        return;
-
-    if (list->last_set != NULL && dom_string_isequal(list->last_set, value)) {
-        /* We've just seen the mutation event for one of our own set
-         * operations */
-        dom_string_unref(value);
-        return;
-    }
-
-    /* Mark that we need to re-parse the tokenlist on the next request */
-    list->needs_parse = true;
-
-    dom_string_unref(value);
+    return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f';
 }
 
-static dom_exception _dom_tokenlist_make_room(dom_tokenlist *list)
+static dom_exception validate_token(dom_string *token)
 {
-    if (list->len == list->alloc) {
-        uint32_t new_alloc = list->alloc + DOM_TOKENLIST_GROW_INCREMENT;
-        dom_string **new_entries = realloc(list->entries, new_alloc * sizeof(dom_string *));
-        if (new_entries == NULL)
-            return DOM_NO_MEM_ERR;
-        list->alloc = new_alloc;
-        list->entries = new_entries;
+    size_t length = dom_string_byte_length(token);
+    if (length == 0)
+        return DOM_SYNTAX_ERR;
+    const char *text = dom_string_data(token);
+    for (size_t i = 0; i < length; i++) {
+        if (token_space(text[i]))
+            return DOM_INVALID_CHARACTER_ERR;
     }
-
     return DOM_NO_ERR;
 }
 
-static dom_exception _dom_tokenlist_reparse(dom_tokenlist *list)
+static void clear_entries(dom_tokenlist *list)
 {
-    dom_exception exc;
-    dom_string *value;
-    const char *pos;
-    uint32_t remaining, check;
-    uint32_t n_entries = 0;
-    dom_string *temp;
-    bool found;
+    while (list->len != 0)
+        dom_string_unref(list->entries[--list->len]);
+}
 
-    if (!list->needs_parse)
+static uint32_t find_token(dom_tokenlist *list, dom_string *token)
+{
+    for (uint32_t i = 0; i < list->len; i++) {
+        if (dom_string_isequal(list->entries[i], token))
+            return i;
+    }
+    return list->len;
+}
+
+static dom_exception reserve(dom_tokenlist *list, uint32_t count)
+{
+    if (count <= list->alloc)
         return DOM_NO_ERR;
-
-    /* Clean down the current entries */
-    while (list->len-- > 0)
-        dom_string_unref(list->entries[list->len]);
-    list->len = 0;
-
-    /* Get the "new" attribute value */
-    exc = dom_element_get_attribute(list->ele, list->attr, &value);
-    if (exc != DOM_NO_ERR)
-        return exc;
-
-    /* If there is no value, we're an empty list and we're done */
-    if (value == NULL) {
-        list->needs_parse = false;
-        return DOM_NO_ERR;
-    }
-
-    /* OK, there's something here to do, so let's do it... */
-
-    /* Count number of entries */
-    for (pos = dom_string_data(value), remaining = dom_string_length(value); remaining > 0;) {
-        if (*pos != ' ') {
-            while (*pos != ' ' && remaining > 0) {
-                remaining--;
-                pos++;
-            }
-            n_entries++;
-        } else {
-            while (*pos == ' ' && remaining > 0) {
-                remaining--;
-                pos++;
-            }
-        }
-    }
-
-    /* If there are no entries (all whitespace) just bail here */
-    if (n_entries == 0) {
-        list->needs_parse = false;
-        dom_string_unref(value);
-        return DOM_NO_ERR;
-    }
-
-    /* If we need more room, reallocate the buffer */
-    if (list->alloc < n_entries) {
-        dom_string **new_alloc = realloc(list->entries, n_entries * sizeof(dom_string *));
-        if (new_alloc == NULL) {
-            dom_string_unref(value);
-            return DOM_NO_MEM_ERR;
-        }
-        list->entries = new_alloc;
-        list->alloc = n_entries;
-    }
-
-    /* And now parse those entries into the buffer */
-    for (pos = dom_string_data(value), remaining = dom_string_length(value), n_entries = 0; remaining > 0;) {
-        if (*pos != ' ') {
-            const char *s = pos;
-            while (*pos != ' ' && remaining > 0) {
-                pos++;
-                remaining--;
-            }
-            exc = dom_string_create_interned((const uint8_t *)s, pos - s, &temp);
-            if (exc != DOM_NO_ERR) {
-                dom_string_unref(value);
-                return exc;
-            }
-            found = false;
-            for (check = 0; check < list->len; check++) {
-                if (dom_string_isequal(temp, list->entries[check])) {
-                    found = true;
-                    break;
-                }
-            }
-            if (found == true) {
-                dom_string_unref(temp);
-            } else {
-                list->entries[list->len] = temp;
-                list->len++;
-            }
-        } else {
-            while (*pos == ' ' && remaining > 0) {
-                pos++;
-                remaining--;
-            }
-        }
-    }
-
-    dom_string_unref(value);
-    list->needs_parse = false;
-
+    size_t capacity = count;
+    if (capacity < 4)
+        capacity = 4;
+    if (list->alloc <= UINT32_MAX / 2 && capacity < (size_t)list->alloc * 2)
+        capacity = (size_t)list->alloc * 2;
+    if (capacity > SIZE_MAX / sizeof(*list->entries))
+        return DOM_NO_MEM_ERR;
+    dom_string **entries = realloc(list->entries, capacity * sizeof(*entries));
+    if (entries == NULL)
+        return DOM_NO_MEM_ERR;
+    list->entries = entries;
+    list->alloc = capacity;
     return DOM_NO_ERR;
 }
 
-static dom_exception _dom_tokenlist_reify(dom_tokenlist *list)
+static dom_exception reparse(dom_tokenlist *list)
 {
-    dom_exception exc;
-    uint32_t nchars = 0, n;
-    char *buffer, *next;
-    dom_string *output;
-
-    if (list->len == 0) {
-        if (list->last_set != NULL) {
-            dom_string_unref(list->last_set);
-        }
-        list->last_set = dom_string_ref(list->ele->base.owner->_memo_empty);
-        return dom_element_set_attribute(list->ele, list->attr, list->last_set);
+    dom_string *value = NULL;
+    dom_exception err = dom_element_get_attribute(list->ele, list->attr, &value);
+    if (err != DOM_NO_ERR)
+        return err;
+    /* Read the actual attribute, including removal, rather than relying on
+     * deprecated mutation events and their allocation/failure paths. Strings
+     * are immutable, so a retained identical value needs no parsing. */
+    if (list->parsed &&
+        (value == list->parsed_value ||
+            (value != NULL && list->parsed_value != NULL && dom_string_isequal(value, list->parsed_value)))) {
+        dom_string_unref(value);
+        return DOM_NO_ERR;
     }
+    list->parsed = false;
+    clear_entries(list);
+    size_t length = value == NULL ? 0 : dom_string_byte_length(value);
+    const char *text = value == NULL ? "" : dom_string_data(value);
+    for (size_t pos = 0; pos < length;) {
+        if (token_space(text[pos])) {
+            pos++;
+            continue;
+        }
+        size_t start = pos;
+        while (pos < length && !token_space(text[pos]))
+            pos++;
+        dom_string *token = NULL;
+        err = dom_string_create((const uint8_t *)text + start, pos - start, &token);
+        if (err != DOM_NO_ERR)
+            break;
+        if (find_token(list, token) == list->len) {
+            err = list->len == UINT32_MAX ? DOM_NO_MEM_ERR : reserve(list, list->len + 1);
+            if (err == DOM_NO_ERR)
+                list->entries[list->len++] = dom_string_ref(token);
+        }
+        dom_string_unref(token);
+        if (err != DOM_NO_ERR)
+            break;
+    }
+    if (err == DOM_NO_ERR) {
+        dom_string_unref(list->parsed_value);
+        list->parsed_value = value;
+        list->parsed = true;
+    } else {
+        dom_string_unref(value);
+        clear_entries(list);
+    }
+    return err;
+}
 
-    for (n = 0; n < list->len; ++n)
-        nchars += dom_string_length(list->entries[n]);
-
-    buffer = calloc(1, nchars + list->len);
+static dom_exception update(dom_tokenlist *list, bool *updated)
+{
+    /* The token set was edited: even a serialization/write failure must force
+     * the next read to reparse the real attribute, not expose an uncommitted set. */
+    list->parsed = false;
+    if (list->len == 0 && list->parsed_value == NULL)
+        return DOM_NO_ERR;
+    size_t bytes = list->len == 0 ? 0 : list->len - 1;
+    for (uint32_t i = 0; i < list->len; i++) {
+        size_t length = dom_string_byte_length(list->entries[i]);
+        if (length > SIZE_MAX - bytes)
+            return DOM_NO_MEM_ERR;
+        bytes += length;
+    }
+    char *buffer = malloc(bytes == 0 ? 1 : bytes);
     if (buffer == NULL)
         return DOM_NO_MEM_ERR;
-
-    for (next = buffer, n = 0; n < list->len; ++n) {
-        uint32_t slen = dom_string_length(list->entries[n]);
-        memcpy(next, dom_string_data(list->entries[n]), slen);
-        next[slen] = ' ';
-        next += slen + 1;
+    size_t pos = 0;
+    for (uint32_t i = 0; i < list->len; i++) {
+        size_t length = dom_string_byte_length(list->entries[i]);
+        if (i != 0)
+            buffer[pos++] = ' ';
+        memcpy(buffer + pos, dom_string_data(list->entries[i]), length);
+        pos += length;
     }
-
-    exc = dom_string_create_interned((const uint8_t *)buffer, nchars + list->len - 1, &output);
+    dom_string *value = NULL;
+    dom_exception err = dom_string_create((const uint8_t *)buffer, bytes, &value);
     free(buffer);
-    if (exc != DOM_NO_ERR)
-        return exc;
-
-    if (list->last_set != NULL) {
-        dom_string_unref(list->last_set);
+    if (err == DOM_NO_ERR) {
+        *updated = true; /* The native setter can fail after a partial change. */
+        err = dom_element_set_attribute(list->ele, list->attr, value);
     }
-    list->last_set = output;
-
-    return dom_element_set_attribute(list->ele, list->attr, list->last_set);
+    dom_string_unref(value);
+    return err;
 }
 
-/**********************************************************************************/
-
-/**
- * Create a tokenlist
- *
- * \param ele  The element which owns the tokenlist attribute
- * \param attr The name of the attribute we are treating as a tokenlist
- * \param list The tokenlist output which is set on success
- * \return DOM_NO_ERR on success, DOM_NO_MEM_ERR on memory exhaustion
- *
- * The returned list will already be referenced, so the client need not
- * do so explicitly. The client must unref the list once finished with it.
- *
- * This list will take its own references to ::ele and ::attr
- */
-dom_exception dom_tokenlist_create(dom_element *ele, dom_string *attr, dom_tokenlist **list)
+static void remove_at(dom_tokenlist *list, uint32_t index)
 {
-    dom_tokenlist *l;
-    dom_exception exc;
-
-    l = calloc(1, sizeof(dom_tokenlist));
-    if (l == NULL)
-        return DOM_NO_MEM_ERR;
-
-    l->refcnt = 1;
-    l->ele = (dom_element *)dom_node_ref(ele);
-    l->attr = dom_string_ref(attr);
-    l->needs_parse = true;
-
-    exc = dom_event_listener_create(_dom_tokenlist_handle_attrmodified, l, &l->listener);
-    if (exc != DOM_NO_ERR)
-        goto fail;
-
-    exc = dom_event_target_add_event_listener(ele, ele->base.owner->_memo_domattrmodified, l->listener, false);
-
-    if (exc != DOM_NO_ERR)
-        goto fail;
-
-    *list = l;
-
-    return DOM_NO_ERR;
-
-fail:
-    if (l->listener != NULL)
-        dom_event_listener_unref(l->listener);
-    dom_node_unref(l->ele);
-    dom_string_unref(l->attr);
-    free(l);
-    return exc;
+    dom_string_unref(list->entries[index]);
+    list->len--;
+    memmove(list->entries + index, list->entries + index + 1, (list->len - index) * sizeof(*list->entries));
 }
 
-/**
- * Claim a ref on a tokenlist
- *
- * \param list The tokenlist to claim a ref on
- */
+dom_exception dom_tokenlist_create(dom_element *ele, dom_string *attr, dom_tokenlist **result)
+{
+    dom_tokenlist *list = calloc(1, sizeof(*list));
+    if (list == NULL)
+        return DOM_NO_MEM_ERR;
+    list->refcnt = 1;
+    list->ele = (dom_element *)dom_node_ref(ele);
+    list->attr = dom_string_ref(attr);
+    *result = list;
+    return DOM_NO_ERR;
+}
+
 void dom_tokenlist_ref(dom_tokenlist *list)
 {
     assert(list != NULL);
     list->refcnt++;
 }
 
-/**
- * Release a ref on a tokenlist
- *
- * \param list The list to release the reference of
- *
- * If you release the last ref, this cleans up the tokenlist
- */
 void dom_tokenlist_unref(dom_tokenlist *list)
 {
     assert(list != NULL);
-
-    if (--list->refcnt > 0)
+    if (--list->refcnt != 0)
         return;
-
-    if (list->alloc > 0) {
-        while (list->len-- > 0)
-            dom_string_unref(list->entries[list->len]);
-        free(list->entries);
-    }
-
-    dom_event_target_remove_event_listener(
-        list->ele, list->ele->base.owner->_memo_domattrmodified, list->listener, false);
-
-    dom_event_listener_unref(list->listener);
-
-    if (list->last_set != NULL)
-        dom_string_unref(list->last_set);
-
+    clear_entries(list);
+    free(list->entries);
+    dom_string_unref(list->parsed_value);
     dom_string_unref(list->attr);
     dom_node_unref(list->ele);
-
     free(list);
 }
 
-/**
- * Get the length of the tokenlist
- *
- * \param list The list to get the length of
- * \param length Length of the list outputs here
- * \return DOM_NO_ERR on success, otherwise the failure code
- */
 dom_exception dom_tokenlist_get_length(dom_tokenlist *list, uint32_t *length)
 {
-    dom_exception exc;
-    assert(list != NULL);
-
-    exc = _dom_tokenlist_reparse(list);
-    if (exc != DOM_NO_ERR)
-        return exc;
-
-    *length = list->len;
-
-    return DOM_NO_ERR;
+    dom_exception err = reparse(list);
+    if (err == DOM_NO_ERR)
+        *length = list->len;
+    return err;
 }
 
-/**
- * Get a particular item from the tokenlist
- *
- * \param list The list to retrieve the item from
- * \param index The index of the item to retrieve
- * \param value The value of the item returns here
- * \return DOM_NO_ERR on success, otherwise the failure code
- */
 dom_exception _dom_tokenlist_item(dom_tokenlist *list, uint32_t index, dom_string **value)
 {
-    dom_exception exc;
-    assert(list != NULL);
-
-    exc = _dom_tokenlist_reparse(list);
-    if (exc != DOM_NO_ERR)
-        return exc;
-
-    if (index >= list->len) {
-        *value = NULL;
-        return DOM_NO_ERR;
-    }
-
-    *value = dom_string_ref(list->entries[index]);
-    return DOM_NO_ERR;
+    dom_exception err = reparse(list);
+    if (err == DOM_NO_ERR)
+        *value = index < list->len ? dom_string_ref(list->entries[index]) : NULL;
+    return err;
 }
 
-/**
- * Retrieve the value of the tokenlist as a string
- *
- * \param list The list to retrieve the value of
- * \param value The value of the list returns here
- * \return DOM_NO_ERR on success, otherwise the failure code
- */
 dom_exception dom_tokenlist_get_value(dom_tokenlist *list, dom_string **value)
 {
-    assert(list != NULL);
-
     return dom_element_get_attribute(list->ele, list->attr, value);
 }
 
-/**
- * Set the value of the tokenlist as a string
- *
- * \param list The list to set the value of
- * \param value The value to set
- * \return DOM_NO_ERR on success, otherwise the failure code
- *
- */
 dom_exception dom_tokenlist_set_value(dom_tokenlist *list, dom_string *value)
 {
-    assert(list != NULL);
-
+    list->parsed = false;
     return dom_element_set_attribute(list->ele, list->attr, value);
 }
 
-/**
- * Check if the given value is in the tokenlist
- *
- * \param list The list to scan for the given value
- * \param value The value to look for in the token list
- * \param contains This will be set based on whether or not the value is present
- * \return DOM_NO_ERR on success, otherwise the failure code
- */
 dom_exception dom_tokenlist_contains(dom_tokenlist *list, dom_string *value, bool *contains)
 {
-    dom_exception exc;
-    uint32_t n;
-
-    assert(list != NULL);
-
-    exc = _dom_tokenlist_reparse(list);
-    if (exc != DOM_NO_ERR)
-        return exc;
-
-    *contains = false;
-
-    for (n = 0; n < list->len; n++) {
-        if (dom_string_isequal(value, list->entries[n])) {
-            *contains = true;
-            break;
-        }
-    }
-
-    return DOM_NO_ERR;
+    dom_exception err = reparse(list);
+    if (err == DOM_NO_ERR)
+        *contains = find_token(list, value) != list->len;
+    return err;
 }
 
-/**
- * Add the given value to the tokenlist
- *
- * \param list The list to add to
- * \param value The value to add
- * \return DOM_NO_ERR on success, otherwise the failure code
- */
+/* Validate every token before modifying the set; perform one attribute update
+ * even for an empty argument list or an already-present/absent token. */
+static dom_exception
+change_tokens(dom_tokenlist *list, dom_string *const *tokens, uint32_t count, bool add, bool *updated)
+{
+    *updated = false;
+    for (uint32_t i = 0; i < count; i++) {
+        dom_exception err = validate_token(tokens[i]);
+        if (err != DOM_NO_ERR)
+            return err;
+    }
+    dom_exception err = reparse(list);
+    if (err != DOM_NO_ERR)
+        return err;
+    if (add) {
+        if (count > UINT32_MAX - list->len)
+            return DOM_NO_MEM_ERR;
+        err = reserve(list, list->len + count);
+        if (err != DOM_NO_ERR)
+            return err;
+    }
+    for (uint32_t i = 0; i < count; i++) {
+        uint32_t index = find_token(list, tokens[i]);
+        if (add && index == list->len)
+            list->entries[list->len++] = dom_string_ref(tokens[i]);
+        else if (!add && index != list->len)
+            remove_at(list, index);
+    }
+    return update(list, updated);
+}
+
+dom_exception dom_tokenlist_add_tokens(dom_tokenlist *list, dom_string *const *tokens, uint32_t count, bool *updated)
+{
+    return change_tokens(list, tokens, count, true, updated);
+}
+
+dom_exception dom_tokenlist_remove_tokens(dom_tokenlist *list, dom_string *const *tokens, uint32_t count, bool *updated)
+{
+    return change_tokens(list, tokens, count, false, updated);
+}
+
 dom_exception dom_tokenlist_add(dom_tokenlist *list, dom_string *value)
 {
-    dom_exception exc;
-    bool present = false;
-
-    assert(list != NULL);
-
-    exc = dom_tokenlist_contains(list, value, &present);
-    if (exc != DOM_NO_ERR)
-        return exc;
-
-    if (present == true)
-        return DOM_NO_ERR;
-
-    exc = _dom_tokenlist_make_room(list);
-    if (exc != DOM_NO_ERR)
-        return exc;
-
-    list->entries[list->len++] = dom_string_ref(value);
-
-    exc = _dom_tokenlist_reify(list);
-
-    return exc;
+    bool updated;
+    return dom_tokenlist_add_tokens(list, &value, 1, &updated);
 }
 
-/**
- * Remove the given value from the tokenlist
- *
- * \param list The list to remove from
- * \param value The value to remove
- * \return DOM_NO_ERR on success, otherwise the failure code
- */
 dom_exception dom_tokenlist_remove(dom_tokenlist *list, dom_string *value)
 {
-    dom_exception exc;
-    uint32_t n, m;
+    bool updated;
+    return dom_tokenlist_remove_tokens(list, &value, 1, &updated);
+}
 
-    assert(list != NULL);
-
-    exc = _dom_tokenlist_reparse(list);
-    if (exc != DOM_NO_ERR)
-        return false;
-
-    for (n = 0; n < list->len; ++n) {
-        if (dom_string_isequal(value, list->entries[n])) {
-            dom_string_unref(list->entries[n]);
-            for (m = n + 1; m < list->len; ++m) {
-                list->entries[m - 1] = list->entries[m];
-            }
-            list->len--;
-            break;
-        }
+dom_exception dom_tokenlist_toggle(dom_tokenlist *list, dom_string *token, int force, bool *result, bool *updated)
+{
+    *updated = false;
+    dom_exception err = validate_token(token);
+    if (err == DOM_NO_ERR)
+        err = reparse(list);
+    if (err != DOM_NO_ERR)
+        return err;
+    uint32_t index = find_token(list, token);
+    bool present = index != list->len;
+    *result = force < 0 ? !present : force != 0;
+    if (*result == present)
+        return DOM_NO_ERR;
+    if (present) {
+        remove_at(list, index);
+    } else {
+        err = list->len == UINT32_MAX ? DOM_NO_MEM_ERR : reserve(list, list->len + 1);
+        if (err != DOM_NO_ERR)
+            return err;
+        list->entries[list->len++] = dom_string_ref(token);
     }
+    return update(list, updated);
+}
 
-    exc = _dom_tokenlist_reify(list);
-
-    return exc;
+dom_exception
+dom_tokenlist_replace(dom_tokenlist *list, dom_string *token, dom_string *replacement, bool *result, bool *updated)
+{
+    *result = *updated = false;
+    /* replace checks both empty strings before checking either for whitespace. */
+    if (dom_string_byte_length(token) == 0 || dom_string_byte_length(replacement) == 0)
+        return DOM_SYNTAX_ERR;
+    dom_exception err = validate_token(token);
+    if (err == DOM_NO_ERR)
+        err = validate_token(replacement);
+    if (err == DOM_NO_ERR)
+        err = reparse(list);
+    if (err != DOM_NO_ERR)
+        return err;
+    uint32_t index = find_token(list, token);
+    if (index == list->len)
+        return DOM_NO_ERR;
+    uint32_t other = find_token(list, replacement);
+    if (other < index) {
+        remove_at(list, index);
+    } else {
+        dom_string_unref(list->entries[index]);
+        list->entries[index] = dom_string_ref(replacement);
+        if (other != index && other < list->len)
+            remove_at(list, other);
+    }
+    *result = true;
+    return update(list, updated);
 }
