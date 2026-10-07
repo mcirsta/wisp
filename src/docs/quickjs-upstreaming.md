@@ -32,6 +32,24 @@ fix, without a new public API. Verify it against current upstream, run its suite
 and submit independently of cancellation. The regression is already in upstream
 API-test style, but has not been submitted.
 
+## Newly found candidates: host object allocation failures
+
+The DOM-wrapper work found two further small allocation-failure candidates in
+v0.17.0, also fixed locally and covered by `host_object_allocation_errors()` in
+`api-test.c`:
+
+- `JS_SetPrototypeInternal` increments the proposed prototype's reference count
+  before an operation that can fail while copying a shared shape. Move that
+  increment after the fallible operation; otherwise runtime cleanup detects a
+  leaked object. This also affects the public JavaScript prototype-setting path.
+- `JS_AddIntrinsicDOMException` ignores failures while creating its prototype,
+  accessors, constructor and legacy constants. Propagate those failures, release
+  temporary values and publish the intrinsic only after setup succeeds.
+
+Propose these independently of document-job cancellation. They need no new API,
+and the browser uses the existing DOMException intrinsic rather than maintaining
+its own exception class. No upstream submission has been made.
+
 ## Context job cancellation
 
 `JS_CloseContextJobs(ctx)` permanently closes a context's job queue and releases
@@ -97,9 +115,10 @@ or Wisp-specific installation rules. Those belong in the parent integration.
 
 ## Expected benefit and order
 
-Pursue the property-list fix first, cancellation next, then generic build controls
-if still useful. Acceptance of both engine changes would remove Wisp's remaining
-engine-source patches; build options could further reduce the CMake patch. These
+Pursue the property-list and host-object cleanup fixes first, cancellation next,
+then generic build controls if still useful. Acceptance of those engine changes
+would remove Wisp's remaining engine-source patches; build options could further
+reduce the CMake patch. These
 proposals do not replace the browser work
 in the integration review. Continue testing the vendored version in Wisp after
 each upstream update, even when a local patch is no longer needed.

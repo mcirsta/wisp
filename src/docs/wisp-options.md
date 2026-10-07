@@ -50,8 +50,9 @@ General Options
  foreground_images    | bool   | true      | Whether to fetch foreground images 
  background_images    | bool   | true      | Whether to fetch background images 
  animate_images       | bool   | true      | Whether to animate images        
- enable_javascript    | bool   | false     | Whether to execute javascript    
- script_timeout       | int    | 10        | Elapsed execution limit per outer script entry in seconds; nonpositive disables it (QuickJS cooperative interrupts)
+ enable_javascript    | bool   | true      | Whether to execute JavaScript
+ script_timeout       | int    | 10        | Elapsed execution limit per outer script/timer callback and its microtasks in seconds; nonpositive disables it (QuickJS cooperative interrupts)
+ js_trace             | bool   | false     | Log JS entries, timers, navigation, DOM mutations and render requests with document/entry IDs; use with verbose logging (`-v` first). Includes URLs and node names/IDs. See [JS trace details](../../plans/js_migration_analysis.md#reading-the-js-trace).
  expire_url           | int    | 28        | How many days to retain URL data for. 
  font_default         | int    | 0         | Default font family              
  ca_bundle            | string | NULL      | ca-bundle location               

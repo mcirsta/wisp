@@ -5,6 +5,7 @@
  */
 
 #include "location.h"
+#include "private.h"
 #include <wisp/browser_window.h>
 #include <wisp/utils/log.h>
 #include <wisp/utils/nsurl.h>
@@ -302,7 +303,7 @@ static JSValue js_location_assign(JSContext *ctx, JSValueConst this_val, int arg
     url_str = JS_ToCString(ctx, argv[0]);
     if (url_str == NULL) {
         NSLOG(wisp, DEBUG, "location.assign: failed to get URL string");
-        return JS_UNDEFINED;
+        return JS_EXCEPTION;
     }
 
     NSLOG(wisp, DEBUG, "location.assign called with: '%s'", url_str);
@@ -322,12 +323,15 @@ static JSValue js_location_assign(JSContext *ctx, JSValueConst this_val, int arg
         return JS_UNDEFINED;
     }
 
+    qjs_trace(ctx, "navigation.request", "method=assign target=%s", nsurl_access(url));
+
     /* Navigate to the new URL, adding to history */
     err = browser_window_navigate(bw, url, NULL, /* referrer */
         BW_NAVIGATE_HISTORY | BW_NAVIGATE_UNVERIFIABLE, NULL, /* post_urlenc */
         NULL, /* post_multipart */
         NULL); /* parent */
 
+    qjs_trace(ctx, "navigation.result", "method=assign error=%d", err);
     nsurl_unref(url);
 
     if (err != NSERROR_OK) {
@@ -352,7 +356,7 @@ static JSValue js_location_replace(JSContext *ctx, JSValueConst this_val, int ar
     url_str = JS_ToCString(ctx, argv[0]);
     if (url_str == NULL) {
         NSLOG(wisp, DEBUG, "location.replace: failed to get URL string");
-        return JS_UNDEFINED;
+        return JS_EXCEPTION;
     }
 
     NSLOG(wisp, DEBUG, "location.replace called with: '%s'", url_str);
@@ -372,12 +376,15 @@ static JSValue js_location_replace(JSContext *ctx, JSValueConst this_val, int ar
         return JS_UNDEFINED;
     }
 
+    qjs_trace(ctx, "navigation.request", "method=replace target=%s", nsurl_access(url));
+
     /* Navigate to the new URL, replacing history */
     err = browser_window_navigate(bw, url, NULL, /* referrer */
         BW_NAVIGATE_HISTORY | BW_NAVIGATE_UNVERIFIABLE, NULL, /* post_urlenc */
         NULL, /* post_multipart */
         NULL); /* parent */
 
+    qjs_trace(ctx, "navigation.result", "method=replace error=%d", err);
     nsurl_unref(url);
 
     if (err != NSERROR_OK) {

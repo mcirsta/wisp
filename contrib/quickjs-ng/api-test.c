@@ -2258,8 +2258,47 @@ static void property_list_errors(void)
     JS_FreeRuntime(rt);
 }
 
+/* Host object setup must unwind both allocation failures and prototype refs. */
+static void host_object_allocation_errors(void)
+{
+    int kind;
+    for (kind = 0; kind < 2; kind++) {
+        bool failed = false, succeeded = false;
+        size_t extra;
+        for (extra = 0; extra <= 16384; extra += 64) {
+            JSRuntime *rt = new_runtime();
+            JSContext *ctx = JS_NewContext(rt);
+            JSValue obj = JS_NewObject(ctx);
+            JSValue proto = JS_NewObject(ctx);
+            JSMemoryUsage usage;
+            JS_ComputeMemoryUsage(rt, &usage);
+            JS_SetMemoryLimit(rt, usage.malloc_size + extra);
+            int ret = kind == 0 ? JS_SetPrototype(ctx, obj, proto) : JS_AddIntrinsicDOMException(ctx);
+            assert(ret < 0 || !JS_HasException(ctx));
+            failed |= ret < 0;
+            JS_FreeValue(ctx, JS_GetException(ctx));
+            JS_SetMemoryLimit(rt, 0);
+            if (ret >= 0 && kind == 0) {
+                JSValue actual = JS_GetPrototype(ctx, obj);
+                assert(JS_IsSameValue(ctx, actual, proto));
+                JS_FreeValue(ctx, actual);
+            }
+            JS_FreeValue(ctx, obj);
+            JS_FreeValue(ctx, proto);
+            JS_FreeContext(ctx);
+            JS_FreeRuntime(rt); /* Debug builds assert no leaked prototype ref. */
+            if (ret >= 0) {
+                succeeded = true;
+                break;
+            }
+        }
+        assert(failed && succeeded);
+    }
+}
+
 int main(void)
 {
+    host_object_allocation_errors();
     property_list_errors();
     cfunctions();
     sync_call();

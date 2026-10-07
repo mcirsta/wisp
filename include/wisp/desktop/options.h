@@ -136,6 +136,9 @@ NSOPTION_BOOL(author_level_css, true)
 /** Script execution limit in seconds; nonpositive disables the time limit. */
 NSOPTION_INTEGER(script_timeout, 10)
 
+/* Trace JavaScript entries and host actions; disabled during normal browsing. */
+NSOPTION_BOOL(js_trace, false)
+
 /** How many days to retain URL data for */
 NSOPTION_INTEGER(expire_url, 28)
 

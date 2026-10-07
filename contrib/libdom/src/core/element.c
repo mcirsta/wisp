@@ -1538,6 +1538,31 @@ _dom_element_get_attr(struct dom_element *element, dom_string *namespace, dom_st
     return err;
 }
 
+/* DOM's attribute local-name validation is distinct from XML QName validation.
+ * https://dom.spec.whatwg.org/#valid-attribute-local-name */
+static bool valid_attribute_local_name(dom_string *name)
+{
+    size_t length = dom_string_byte_length(name);
+    const char *text = dom_string_data(name);
+    if (length == 0)
+        return false;
+    for (size_t i = 0; i < length; i++) {
+        switch (text[i]) {
+        case '\0':
+        case '\t':
+        case '\n':
+        case '\f':
+        case '\r':
+        case ' ':
+        case '/':
+        case '=':
+        case '>':
+            return false;
+        }
+    }
+    return true;
+}
+
 /**
  * The internal helper function for setAttribute and setAttributeNS.
  *
@@ -1554,7 +1579,7 @@ _dom_element_set_attr(struct dom_element *element, dom_string *namespace, dom_st
     dom_node_internal *e = (dom_node_internal *)element;
     dom_exception err;
 
-    if (_dom_validate_name(name) == false)
+    if (!(namespace == NULL ? valid_attribute_local_name(name) : _dom_validate_name(name)))
         return DOM_INVALID_CHARACTER_ERR;
 
     /* Ensure element can be written */

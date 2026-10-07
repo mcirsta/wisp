@@ -1817,11 +1817,14 @@ static dom_exception form_set_dom_value(struct form_control *control, dom_string
     if (!changed && control->type == GADGET_TEXTAREA) {
         dom_node *child = NULL, *next = NULL;
         dom_node_type type;
-        /* set_text_content replaces children with one text node. Even identical
-         * empty text can change :empty when that node did not previously exist. */
-        changed = dom_node_get_first_child(control->node, &child) != DOM_NO_ERR || child == NULL ||
-            dom_node_get_node_type(child, &type) != DOM_NO_ERR || type != DOM_TEXT_NODE ||
-            dom_node_get_next_sibling(child, &next) != DOM_NO_ERR || next != NULL;
+        /* String replace all leaves no children for empty text and exactly one
+         * Text node otherwise. Match that structure when checking for changes. */
+        changed = dom_node_get_first_child(control->node, &child) != DOM_NO_ERR;
+        if (!changed && (value == NULL || dom_string_byte_length(value) == 0))
+            changed = child != NULL;
+        else if (!changed)
+            changed = child == NULL || dom_node_get_node_type(child, &type) != DOM_NO_ERR || type != DOM_TEXT_NODE ||
+                dom_node_get_next_sibling(child, &next) != DOM_NO_ERR || next != NULL;
         dom_node_unref(next);
         dom_node_unref(child);
     }

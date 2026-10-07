@@ -80,20 +80,21 @@ class QuickJSBindingGenerator:
 #include <nsutils/time.h>
 
 #include "quickjs.h"
+#include "content/handlers/javascript/quickjs/private.h"
 
 /* Forward declarations */
-static JSValue js_console_log(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv);
-static JSValue js_console_error(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv);
-static JSValue js_console_warn(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv);
-static JSValue js_console_info(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv);
-static JSValue js_console_debug(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv);
-static JSValue js_console_dir(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv);
-static JSValue js_console_group(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv);
-static JSValue js_console_groupCollapsed(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv);
-static JSValue js_console_groupEnd(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv);
-static JSValue js_console_time(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv);
-static JSValue js_console_timeEnd(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv);
-static JSValue js_console_trace(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv);
+static JSValue js_console_log(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv, int magic);
+static JSValue js_console_error(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv, int magic);
+static JSValue js_console_warn(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv, int magic);
+static JSValue js_console_info(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv, int magic);
+static JSValue js_console_debug(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv, int magic);
+static JSValue js_console_dir(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv, int magic);
+static JSValue js_console_group(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv, int magic);
+static JSValue js_console_groupCollapsed(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv, int magic);
+static JSValue js_console_groupEnd(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv, int magic);
+static JSValue js_console_time(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv, int magic);
+static JSValue js_console_timeEnd(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv, int magic);
+static JSValue js_console_trace(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv, int magic);
 
 /* Console private data - only simple types, no JSValue */
 typedef struct {{
@@ -103,8 +104,6 @@ typedef struct {{
 /* Hidden property name for timers */
 #define CONSOLE_TIMERS_PROP "_timers"
 
-/* Class ID for Console */
-static JSClassID js_console_class_id;
 
 /**
  * Helper to write a log entry to the browser console.
@@ -192,70 +191,70 @@ write_log_entry(JSContext *ctx, unsigned int group_level,
  * Get Console private data from this value.
  */
 static ConsolePrivate *
-js_console_get_private(JSContext *ctx, JSValueConst this_val)
+js_console_get_private(JSContext *ctx, JSValueConst this_val, int magic)
 {{
-    return JS_GetOpaque(this_val, js_console_class_id);
+    return JS_GetOpaque(this_val, magic);
 }}
 
 /* Console.log() */
 static JSValue
-js_console_log(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+js_console_log(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv, int magic)
 {{
-    ConsolePrivate *priv = js_console_get_private(ctx, this_val);
+    ConsolePrivate *priv = js_console_get_private(ctx, this_val, magic);
     unsigned int group = priv ? priv->group_level : 0;
     return write_log_entry(ctx, group, BW_CS_FLAG_LEVEL_LOG, argc, argv);
 }}
 
 /* Console.error() */
 static JSValue
-js_console_error(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+js_console_error(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv, int magic)
 {{
-    ConsolePrivate *priv = js_console_get_private(ctx, this_val);
+    ConsolePrivate *priv = js_console_get_private(ctx, this_val, magic);
     unsigned int group = priv ? priv->group_level : 0;
     return write_log_entry(ctx, group, BW_CS_FLAG_LEVEL_ERROR, argc, argv);
 }}
 
 /* Console.warn() */
 static JSValue
-js_console_warn(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+js_console_warn(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv, int magic)
 {{
-    ConsolePrivate *priv = js_console_get_private(ctx, this_val);
+    ConsolePrivate *priv = js_console_get_private(ctx, this_val, magic);
     unsigned int group = priv ? priv->group_level : 0;
     return write_log_entry(ctx, group, BW_CS_FLAG_LEVEL_WARN, argc, argv);
 }}
 
 /* Console.info() */
 static JSValue
-js_console_info(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+js_console_info(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv, int magic)
 {{
-    ConsolePrivate *priv = js_console_get_private(ctx, this_val);
+    ConsolePrivate *priv = js_console_get_private(ctx, this_val, magic);
     unsigned int group = priv ? priv->group_level : 0;
     return write_log_entry(ctx, group, BW_CS_FLAG_LEVEL_INFO, argc, argv);
 }}
 
 /* Console.debug() */
 static JSValue
-js_console_debug(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+js_console_debug(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv, int magic)
 {{
-    ConsolePrivate *priv = js_console_get_private(ctx, this_val);
+    ConsolePrivate *priv = js_console_get_private(ctx, this_val, magic);
     unsigned int group = priv ? priv->group_level : 0;
     return write_log_entry(ctx, group, BW_CS_FLAG_LEVEL_DEBUG, argc, argv);
 }}
 
 /* Console.dir() */
 static JSValue
-js_console_dir(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+js_console_dir(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv, int magic)
 {{
-    ConsolePrivate *priv = js_console_get_private(ctx, this_val);
+    ConsolePrivate *priv = js_console_get_private(ctx, this_val, magic);
     unsigned int group = priv ? priv->group_level : 0;
     return write_log_entry(ctx, group, BW_CS_FLAG_LEVEL_INFO, argc, argv);
 }}
 
 /* Console.group() */
 static JSValue
-js_console_group(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+js_console_group(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv, int magic)
 {{
-    ConsolePrivate *priv = js_console_get_private(ctx, this_val);
+    ConsolePrivate *priv = js_console_get_private(ctx, this_val, magic);
     if (priv) {{
         priv->group_level++;
     }}
@@ -264,9 +263,9 @@ js_console_group(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *
 
 /* Console.groupCollapsed() */
 static JSValue
-js_console_groupCollapsed(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+js_console_groupCollapsed(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv, int magic)
 {{
-    ConsolePrivate *priv = js_console_get_private(ctx, this_val);
+    ConsolePrivate *priv = js_console_get_private(ctx, this_val, magic);
     if (priv) {{
         priv->group_level++;
     }}
@@ -275,9 +274,9 @@ js_console_groupCollapsed(JSContext *ctx, JSValueConst this_val, int argc, JSVal
 
 /* Console.groupEnd() */
 static JSValue
-js_console_groupEnd(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+js_console_groupEnd(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv, int magic)
 {{
-    ConsolePrivate *priv = js_console_get_private(ctx, this_val);
+    ConsolePrivate *priv = js_console_get_private(ctx, this_val, magic);
     if (priv && priv->group_level > 0) {{
         priv->group_level--;
     }}
@@ -286,7 +285,7 @@ js_console_groupEnd(JSContext *ctx, JSValueConst this_val, int argc, JSValueCons
 
 /* Console.time() */
 static JSValue
-js_console_time(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+js_console_time(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv, int magic)
 {{
     if (argc < 1 || !JS_IsString(argv[0])) {{
         return JS_ThrowTypeError(ctx, "Console.time() requires a string argument");
@@ -313,7 +312,7 @@ js_console_time(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *a
 
 /* Console.timeEnd() */
 static JSValue
-js_console_timeEnd(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+js_console_timeEnd(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv, int magic)
 {{
     if (argc < 1 || !JS_IsString(argv[0])) {{
         return JS_ThrowTypeError(ctx, "Console.timeEnd() requires a string argument");
@@ -353,9 +352,9 @@ js_console_timeEnd(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst
 
 /* Console.trace() */
 static JSValue
-js_console_trace(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+js_console_trace(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv, int magic)
 {{
-    ConsolePrivate *priv = js_console_get_private(ctx, this_val);
+    ConsolePrivate *priv = js_console_get_private(ctx, this_val, magic);
     unsigned int group = priv ? priv->group_level : 0;
     
     /* Get stack trace by creating an Error and getting its stack */
@@ -378,7 +377,7 @@ js_console_trace(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *
 static void
 js_console_finalizer(JSRuntime *rt, JSValue val)
 {{
-    ConsolePrivate *priv = JS_GetOpaque(val, js_console_class_id);
+    ConsolePrivate *priv = JS_GetOpaque(val, JS_GetClassID(val));
     if (priv) {{
         /* timers is freed by GC */
         free(priv);
@@ -389,22 +388,6 @@ js_console_finalizer(JSRuntime *rt, JSValue val)
 static JSClassDef js_console_class = {{
     "Console",
     .finalizer = js_console_finalizer,
-}};
-
-/* Console method list */
-static const JSCFunctionListEntry js_console_proto_funcs[] = {{
-    JS_CFUNC_DEF("log", 0, js_console_log),
-    JS_CFUNC_DEF("error", 0, js_console_error),
-    JS_CFUNC_DEF("warn", 0, js_console_warn),
-    JS_CFUNC_DEF("info", 0, js_console_info),
-    JS_CFUNC_DEF("debug", 0, js_console_debug),
-    JS_CFUNC_DEF("dir", 1, js_console_dir),
-    JS_CFUNC_DEF("group", 0, js_console_group),
-    JS_CFUNC_DEF("groupCollapsed", 0, js_console_groupCollapsed),
-    JS_CFUNC_DEF("groupEnd", 0, js_console_groupEnd),
-    JS_CFUNC_DEF("time", 1, js_console_time),
-    JS_CFUNC_DEF("timeEnd", 1, js_console_timeEnd),
-    JS_CFUNC_DEF("trace", 0, js_console_trace),
 }};
 
 /**
@@ -423,32 +406,46 @@ qjs_init_console(JSContext *ctx)
     /* Get runtime */
     JSRuntime *rt = JS_GetRuntime(ctx);
     
-    /* Create class ID if not already done */
-    if (js_console_class_id == 0) {{
-        JS_NewClassID(rt, &js_console_class_id);
-    }}
-    
-    /* Register the class (only if not already registered in this runtime) */
-    if (!JS_IsRegisteredClass(rt, js_console_class_id)) {{
-        if (JS_NewClass(rt, js_console_class_id, &js_console_class) < 0) {{
+    jsthread *thread = JS_GetContextOpaque(ctx);
+    JSClassID local_id = 0;
+    JSClassID *id = thread != NULL ? &thread->heap->console_class : &local_id;
+    if (*id == 0) {{
+        JS_NewClassID(rt, id);
+        if (JS_NewClass(rt, *id, &js_console_class) < 0) {{
+            *id = 0;
             return -1;
         }}
     }}
-    
+    /* Console method list */
+    const JSCFunctionListEntry js_console_proto_funcs[] = {{
+        JS_CFUNC_MAGIC_DEF("log", 0, js_console_log, *id),
+        JS_CFUNC_MAGIC_DEF("error", 0, js_console_error, *id),
+        JS_CFUNC_MAGIC_DEF("warn", 0, js_console_warn, *id),
+        JS_CFUNC_MAGIC_DEF("info", 0, js_console_info, *id),
+        JS_CFUNC_MAGIC_DEF("debug", 0, js_console_debug, *id),
+        JS_CFUNC_MAGIC_DEF("dir", 1, js_console_dir, *id),
+        JS_CFUNC_MAGIC_DEF("group", 0, js_console_group, *id),
+        JS_CFUNC_MAGIC_DEF("groupCollapsed", 0, js_console_groupCollapsed, *id),
+        JS_CFUNC_MAGIC_DEF("groupEnd", 0, js_console_groupEnd, *id),
+        JS_CFUNC_MAGIC_DEF("time", 1, js_console_time, *id),
+        JS_CFUNC_MAGIC_DEF("timeEnd", 1, js_console_timeEnd, *id),
+        JS_CFUNC_MAGIC_DEF("trace", 0, js_console_trace, *id),
+    }};
+
     /* Create prototype */
     console_proto = JS_NewObject(ctx);
     if (JS_IsException(console_proto)) {{
         return -1;
     }}
-    if (JS_SetPropertyFunctionList(ctx, console_proto, js_console_proto_funcs,
+    if (qjs_define_properties(ctx, console_proto, js_console_proto_funcs,
             sizeof(js_console_proto_funcs) / sizeof(js_console_proto_funcs[0])) < 0) {{
         JS_FreeValue(ctx, console_proto);
         return -1;
     }}
-    JS_SetClassProto(ctx, js_console_class_id, console_proto);
+    JS_SetClassProto(ctx, *id, console_proto);
     
     /* Create console object */
-    console_obj = JS_NewObjectClass(ctx, js_console_class_id);
+    console_obj = JS_NewObjectClass(ctx, *id);
     if (JS_IsException(console_obj)) {{
         return -1;
     }}
@@ -525,13 +522,6 @@ qjs_init_console(JSContext *ctx)
 
 #include "quickjs.h"
 
-/* {interface_name} private data */
-typedef struct {{
-    void *private_ptr;
-}} {interface_name}Private;
-
-static JSClassID js_{lower_name}_class_id;
-
 '''
         # Method stubs
         for method in methods:
@@ -544,22 +534,7 @@ js_{lower_name}_{method}(JSContext *ctx, JSValueConst this_val, int argc, JSValu
 
 '''
 
-        # Finalizer
-        code += f'''static void
-js_{lower_name}_finalizer(JSRuntime *rt, JSValue val)
-{{
-    {interface_name}Private *priv = JS_GetOpaque(val, js_{lower_name}_class_id);
-    if (priv) {{
-        free(priv);
-    }}
-}}
-
-static JSClassDef js_{lower_name}_class = {{
-    "{interface_name}",
-    .finalizer = js_{lower_name}_finalizer,
-}};
-
-static const JSCFunctionListEntry js_{lower_name}_proto_funcs[] = {{
+        code += f'''static const JSCFunctionListEntry js_{lower_name}_proto_funcs[] = {{
 '''
         for method in methods:
             code += f'    JS_CFUNC_DEF("{method}", 0, js_{lower_name}_{method}),\n'
@@ -569,29 +544,6 @@ static const JSCFunctionListEntry js_{lower_name}_proto_funcs[] = {{
 int
 qjs_init_{lower_name}(JSContext *ctx)
 {{
-    JSRuntime *rt = JS_GetRuntime(ctx);
-    
-    if (js_{lower_name}_class_id == 0) {{
-        JS_NewClassID(rt, &js_{lower_name}_class_id);
-    }}
-    
-    if (!JS_IsRegisteredClass(rt, js_{lower_name}_class_id)) {{
-        if (JS_NewClass(rt, js_{lower_name}_class_id, &js_{lower_name}_class) < 0) {{
-            return -1;
-        }}
-    }}
-    
-    JSValue proto = JS_NewObject(ctx);
-    if (JS_IsException(proto)) {{
-        return -1;
-    }}
-    if (JS_SetPropertyFunctionList(ctx, proto, js_{lower_name}_proto_funcs,
-            sizeof(js_{lower_name}_proto_funcs) / sizeof(js_{lower_name}_proto_funcs[0])) < 0) {{
-        JS_FreeValue(ctx, proto);
-        return -1;
-    }}
-    JS_SetClassProto(ctx, js_{lower_name}_class_id, proto);
-    
     /* Window: attach methods to global and set self-references */
     if (strcmp("{interface_name}", "Window") == 0) {{
         JSValue global_obj = JS_GetGlobalObject(ctx);

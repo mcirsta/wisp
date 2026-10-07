@@ -27,12 +27,18 @@
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
+#include <inttypes.h>
+#include <stdarg.h>
+#include <stdio.h>
 #include <nsutils/time.h>
 
 #include <wisp/utils/errors.h>
 #include <wisp/utils/log.h>
+#include <wisp/utils/nsoption.h>
 
 #include "quickjs.h"
+#include "private.h"
+#include "dom.h"
 
 #include "content/handlers/javascript/js.h"
 #include "content/handlers/javascript/quickjs/console.h"
@@ -45,48 +51,59 @@
 #include "content/handlers/javascript/quickjs/window.h"
 #include "content/handlers/javascript/quickjs/xhr.h"
 
-/**
- * JavaScript heap structure.
- *
- * Maps to QuickJS's JSRuntime - one per browser window.
- * Reference counted: the browser_window holds one reference (the owner),
- * and each jsthread (JSContext) holds one reference. JS_FreeRuntime is
- * only called when the last reference is dropped, ensuring all contexts
- * are freed before the runtime.
- */
-struct jsheap {
-    JSRuntime *rt;
-    int timeout;
-    int refcount;
-    unsigned execution_depth;
-    uint64_t deadline_ms;
-    bool interrupted;
-    struct jsthread *threads;
-};
-
 struct qjs_rejection {
     struct qjs_rejection *next;
     JSValue promise;
     JSValue reason;
 };
 
-/**
- * JavaScript thread structure.
- *
- * Maps to QuickJS's JSContext - one per document.
- */
-struct jsthread {
-    jsheap *heap;
-    JSContext *ctx;
-    JSValue error_stack_getter;
-    unsigned refcount;
-    struct jsthread *next;
-    struct qjs_rejection *rejections;
-    bool closed;
-    void *win_priv;
-    void *doc_priv;
-};
+static uint64_t next_trace_document;
 
+int qjs_define_properties(JSContext *ctx, JSValueConst object, const JSCFunctionListEntry *entries, int count)
+{
+    if (JS_SetPropertyFunctionList(ctx, object, entries, count) < 0)
+        return -1;
+    for (int i = 0; i < count; i++) {
+        JSAtom name = JS_NewAtom(ctx, entries[i].name);
+        if (name == JS_ATOM_NULL)
+            return -1;
+        JSPropertyDescriptor property;
+        int ret = JS_GetOwnProperty(ctx, &property, object, name);
+        JS_FreeAtom(ctx, name);
+        if (ret < 0)
+            return -1;
+        if (ret > 0) {
+            JS_FreeValue(ctx, property.value);
+            JS_FreeValue(ctx, property.getter);
+            JS_FreeValue(ctx, property.setter);
+        }
+    }
+    return 0;
+}
+
+void qjs_trace(JSContext *ctx, const char *operation, const char *format, ...)
+{
+    if (nsoptions == NULL || !nsoption_bool(js_trace))
+        return;
+    jsthread *thread = JS_GetContextOpaque(ctx);
+    if (thread == NULL)
+        return;
+    char detail[512];
+    va_list args;
+    va_start(args, format);
+    int size = vsnprintf(detail, sizeof(detail), format, args);
+    va_end(args);
+    if (size < 0)
+        return;
+    if ((size_t)size >= sizeof(detail))
+        memcpy(detail + sizeof(detail) - 4, "...", 4);
+    for (char *p = detail; *p != '\0'; p++) {
+        if ((unsigned char)*p < 0x20 || *p == 0x7f)
+            *p = ' ';
+    }
+    NSLOG(wisp, INFO, "[JS doc=%" PRIu64 " entry=%" PRIu64 "] %s %s", thread->trace_document, thread->trace_entry,
+        operation, detail);
+}
 
 /**
  * Get the window private data from a JS context.
@@ -395,13 +412,7 @@ void js_destroyheap(jsheap *heap)
 /* These are still API-shape stubs, not libdom constructors. */
 static int qjs_init_dom_stubs(JSContext *ctx)
 {
-    static const char *names[] = {
-        "HTMLElement", "Element", "Node", "Text", "DocumentFragment", "HTMLDocument", "Event", "CustomEvent"};
-    static const JSCFunctionListEntry node_constants[] = {
-        JS_PROP_INT32_DEF("ELEMENT_NODE", 1, JS_PROP_C_W_E),
-        JS_PROP_INT32_DEF("TEXT_NODE", 3, JS_PROP_C_W_E),
-        JS_PROP_INT32_DEF("DOCUMENT_NODE", 9, JS_PROP_C_W_E),
-    };
+    static const char *names[] = {"Event", "CustomEvent"};
     JSValue global = JS_GetGlobalObject(ctx);
     int ret = -1;
 
@@ -411,10 +422,7 @@ static int qjs_init_dom_stubs(JSContext *ctx)
             goto out;
         }
         JSValue proto = JS_NewObject(ctx);
-        if (JS_IsException(proto) || JS_SetPropertyStr(ctx, object, "prototype", proto) < 0 ||
-            (strcmp(names[i], "Node") == 0 &&
-                JS_SetPropertyFunctionList(
-                    ctx, object, node_constants, sizeof(node_constants) / sizeof(node_constants[0])) < 0)) {
+        if (JS_IsException(proto) || JS_SetPropertyStr(ctx, object, "prototype", proto) < 0) {
             JS_FreeValue(ctx, object);
             goto out;
         }
@@ -456,6 +464,8 @@ nserror js_newthread(jsheap *heap, void *win_priv, void *doc_priv, jsthread **th
 
     t->heap = heap;
     t->refcount = 1;
+    t->trace_document = ++next_trace_document;
+    t->next_timer_id = 1;
     t->next = heap->threads;
     heap->threads = t;
     t->error_stack_getter = JS_UNDEFINED;
@@ -518,7 +528,11 @@ nserror js_closethread(jsthread *thread)
 
     NSLOG(wisp, DEBUG, "Closing QuickJS thread %p", thread);
 
+    if (!thread->closed)
+        qjs_trace(thread->ctx, "document.close", "cancel pending timers and jobs");
     thread->closed = true;
+    qjs_timers_close(thread);
+    qjs_dom_close(thread);
     thread->win_priv = NULL;
     thread->doc_priv = NULL;
     if (thread->ctx != NULL) {
@@ -535,7 +549,13 @@ nserror js_closethread(jsthread *thread)
 
 /* The document and each active entry/job hold a reference. Navigation may
  * retire the document inside a callback; release its context only on return. */
-static void qjs_thread_unref(jsthread *thread)
+void qjs_thread_ref(jsthread *thread)
+{
+    assert(thread->refcount > 0);
+    thread->refcount++;
+}
+
+void qjs_thread_unref(jsthread *thread)
 {
     assert(thread->refcount > 0);
     if (--thread->refcount != 0) {
@@ -593,7 +613,13 @@ static bool qjs_microtask_checkpoint(jsheap *heap)
         }
         thread->refcount++;
         JSContext *executed;
+        unsigned nesting = heap->timer_nesting;
+        heap->timer_nesting = 0;
+        qjs_trace(ctx, "microtask.begin", "");
         int ret = JS_ExecutePendingJob(heap->rt, &executed);
+        heap->timer_nesting = nesting;
+        qjs_trace(ctx, "microtask.end", "result=%s",
+            heap->interrupted ? "interrupted" : (ret < 0 || JS_HasException(ctx) ? "exception" : "ok"));
         assert(executed == ctx);
         if (ret < 0 || JS_HasException(ctx)) {
             qjs_report_exception(thread, "microtask", heap->interrupted);
@@ -617,6 +643,77 @@ static bool qjs_microtask_checkpoint(jsheap *heap)
     return true;
 }
 
+
+/* A single bounded scope for scripts and callbacks, including their checkpoint.
+ * Nested native-to-JS entries retain the outer deadline and restore trace context. */
+struct qjs_entry {
+    uint64_t previous_entry;
+    const char *previous_source;
+};
+
+static bool qjs_entry_begin(jsthread *thread, struct qjs_entry *entry, const char *source, const char *kind)
+{
+    qjs_thread_ref(thread);
+    entry->previous_entry = thread->trace_entry;
+    entry->previous_source = thread->entry_source;
+    thread->trace_entry = ++thread->trace_next_entry;
+    thread->entry_source = source;
+    qjs_trace(thread->ctx, "begin", "kind=%s source=%s", kind, source);
+    return qjs_execution_begin(thread->heap);
+}
+
+static enum qjs_result qjs_entry_end(jsthread *thread, struct qjs_entry *entry, bool success)
+{
+    if (thread->heap->interrupted) {
+        JS_DiscardContextJobs(thread->ctx);
+        qjs_clear_rejections(thread, false);
+    } else if (thread->heap->execution_depth == 1) {
+        if (!qjs_microtask_checkpoint(thread->heap))
+            success = false;
+    }
+    /* Completed DOM effects survive exceptions/timeouts. Coalesce updates after
+     * the checkpoint, while the outer entry still provides its trace identity. */
+    if (thread->heap->execution_depth == 1) {
+        for (jsthread *document = thread->heap->threads; document != NULL; document = document->next)
+            qjs_dom_flush(document);
+    }
+    enum qjs_result result = thread->heap->interrupted ? QJS_INTERRUPTED : (success ? QJS_OK : QJS_EXCEPTION);
+    thread->heap->execution_depth--;
+    qjs_trace(thread->ctx, "end", "result=%s",
+        result == QJS_OK ? "ok" : (result == QJS_INTERRUPTED ? "interrupted" : "exception"));
+    thread->trace_entry = entry->previous_entry;
+    thread->entry_source = entry->previous_source;
+    qjs_thread_unref(thread);
+    return result;
+}
+
+enum qjs_result qjs_run_callback(jsthread *thread, const struct qjs_callback *callback, int32_t timer_id)
+{
+    struct qjs_entry entry;
+    bool success = false;
+    if (qjs_entry_begin(thread, &entry, callback->source, "timer")) {
+        qjs_trace(thread->ctx, "timer.fire", "id=%d scheduled_by=%" PRIu64, timer_id, callback->initiating_entry);
+        JSValue result;
+        if (JS_IsString(callback->handler)) {
+            size_t length;
+            const char *source = JS_ToCStringLen(thread->ctx, &length, callback->handler);
+            result = source == NULL ? JS_EXCEPTION
+                                    : JS_Eval(thread->ctx, source, length, callback->source, JS_EVAL_TYPE_GLOBAL);
+            JS_FreeCString(thread->ctx, source);
+        } else {
+            JSValue global = JS_GetGlobalObject(thread->ctx);
+            result = JS_Call(thread->ctx, callback->handler, global, callback->argc, callback->argv);
+            JS_FreeValue(thread->ctx, global);
+        }
+        success = !JS_IsException(result) && !JS_HasException(thread->ctx) && !thread->heap->interrupted;
+        if (!success)
+            qjs_report_exception(thread, callback->source, thread->heap->interrupted);
+        JS_FreeValue(thread->ctx, result);
+    } else {
+        NSLOG(wisp, WARNING, "Unable to begin bounded JavaScript callback in %s", callback->source);
+    }
+    return qjs_entry_end(thread, &entry, success);
+}
 
 /* exported interface documented in js.h */
 bool js_exec(jsthread *thread, const uint8_t *txt, size_t txtlen, const char *name)
@@ -656,8 +753,8 @@ bool js_exec(jsthread *thread, const uint8_t *txt, size_t txtlen, const char *na
         term_txt[txtlen] = '\0';
     }
 
-    thread->refcount++;
-    if (qjs_execution_begin(thread->heap)) {
+    struct qjs_entry entry;
+    if (qjs_entry_begin(thread, &entry, source, "script")) {
         result = JS_Eval(thread->ctx, term_txt, txtlen, source, JS_EVAL_TYPE_GLOBAL);
         if (JS_IsException(result) || JS_HasException(thread->ctx) || thread->heap->interrupted) {
             qjs_report_exception(thread, source, thread->heap->interrupted);
@@ -668,24 +765,12 @@ bool js_exec(jsthread *thread, const uint8_t *txt, size_t txtlen, const char *na
         NSLOG(wisp, WARNING, "Unable to begin bounded JavaScript execution in %s", source);
         success = false;
     }
-    if (thread->heap->interrupted) {
-        JS_DiscardContextJobs(thread->ctx);
-        qjs_clear_rejections(thread, false);
-    } else if (thread->heap->execution_depth == 1) {
-        /* Ordinary exceptions do not suppress the checkpoint. Closed contexts
-         * have already discarded their jobs without invoking page callbacks. */
-        if (!qjs_microtask_checkpoint(thread->heap)) {
-            success = false;
-        }
-    }
-    thread->heap->execution_depth--;
+    enum qjs_result completion = qjs_entry_end(thread, &entry, success);
 
     if (term_txt != stack_buf) {
         free(term_txt);
     }
-    qjs_thread_unref(thread);
-
-    return success;
+    return completion == QJS_OK;
 }
 
 

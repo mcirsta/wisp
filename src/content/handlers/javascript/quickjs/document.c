@@ -1,407 +1,418 @@
-/*
- * Copyright 2025 Neosurf Contributors
- *
- * This file is part of NeoSurf, http://www.netsurf-browser.org/
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * The supported Node/Element/Document operations use libdom directly. Missing
+ * APIs are omitted instead of returning dummy nodes, collections or success.
  */
+#include "dom.h"
+#include <string.h>
 
-#include "document.h"
-#include <wisp/utils/log.h>
-#include "quickjs.h"
-#include <stdlib.h>
+/* Accessors shared by Node and its derived interfaces. */
+enum node_property {
+    NODE_TYPE,
+    NODE_NAME,
+    NODE_VALUE,
+    TEXT_CONTENT,
+    PARENT,
+    PARENT_ELEMENT,
+    FIRST_CHILD,
+    LAST_CHILD,
+    NEXT_SIBLING,
+    PREVIOUS_SIBLING,
+    OWNER_DOCUMENT,
+    CONNECTED,
+    TAG_NAME,
+    ID,
+    CLASS_NAME,
+    DATA,
+    DOCUMENT_ELEMENT,
+    HEAD,
+    BODY
+};
 
-/* Forward declarations for element methods */
-static JSValue js_element_appendChild(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv);
-static JSValue js_element_removeChild(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv);
-static JSValue js_element_insertBefore(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv);
-static JSValue js_element_cloneNode(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv);
-static JSValue js_element_getAttribute(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv);
-static JSValue js_element_setAttribute(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv);
-static JSValue js_element_hasAttribute(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv);
-static JSValue js_element_removeAttribute(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv);
-static JSValue js_element_addEventListener(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv);
-static JSValue js_element_removeEventListener(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv);
-
-/**
- * Create a dummy style object that accepts any property without error.
- */
-static JSValue create_style_object(JSContext *ctx)
+static JSValue wrap_result(JSContext *ctx, JSValueConst object, struct qjs_dom_node *self, dom_node *node)
 {
-    NSLOG(wisp, DEBUG, "Creating dummy style object for element");
-    return JS_NewObject(ctx);
+    JSValue owner = qjs_dom_owner(ctx, object, self);
+    JSValue value = qjs_dom_wrap(ctx, owner, node);
+    JS_FreeValue(ctx, owner);
+    dom_node_unref(node);
+    return value;
 }
 
-/**
- * Create a dummy classList object with add/remove/contains/toggle methods.
- */
-static JSValue create_classlist_object(JSContext *ctx)
+static dom_node_type required_type(int property)
 {
-    JSValue classList = JS_NewObject(ctx);
-    /* Stubs that do nothing but don't crash */
-    JS_SetPropertyStr(ctx, classList, "add", JS_NewCFunction(ctx, (JSCFunction *)js_element_setAttribute, "add", 1));
-    JS_SetPropertyStr(
-        ctx, classList, "remove", JS_NewCFunction(ctx, (JSCFunction *)js_element_removeAttribute, "remove", 1));
-    JS_SetPropertyStr(
-        ctx, classList, "contains", JS_NewCFunction(ctx, (JSCFunction *)js_element_hasAttribute, "contains", 1));
-    JS_SetPropertyStr(
-        ctx, classList, "toggle", JS_NewCFunction(ctx, (JSCFunction *)js_element_hasAttribute, "toggle", 1));
-    return classList;
+    if (property >= DOCUMENT_ELEMENT)
+        return DOM_DOCUMENT_NODE;
+    if (property >= TAG_NAME && property <= CLASS_NAME)
+        return DOM_ELEMENT_NODE;
+    return 0;
 }
 
-/**
- * Create a dummy element object with common properties.
- * Elements need: style, classList, tagName, parentNode, childNodes, and
- * methods.
- */
-static JSValue create_element_object(JSContext *ctx, const char *tag)
+static struct qjs_dom_node *property_receiver(JSContext *ctx, JSValueConst object, int property)
 {
-    JSValue element = JS_NewObject(ctx);
-
-    /* Add style property */
-    JS_SetPropertyStr(ctx, element, "style", create_style_object(ctx));
-
-    /* Add classList */
-    JS_SetPropertyStr(ctx, element, "classList", create_classlist_object(ctx));
-
-    /* Add tagName and nodeName */
-    if (tag) {
-        JS_SetPropertyStr(ctx, element, "tagName", JS_NewString(ctx, tag));
-        JS_SetPropertyStr(ctx, element, "nodeName", JS_NewString(ctx, tag));
+    struct qjs_dom_node *node = qjs_dom_get(ctx, object, required_type(property));
+    if (node != NULL && property == DATA && node->type != DOM_TEXT_NODE && node->type != DOM_COMMENT_NODE &&
+        node->type != DOM_CDATA_SECTION_NODE && node->type != DOM_PROCESSING_INSTRUCTION_NODE) {
+        JS_ThrowTypeError(ctx, "CharacterData receiver required");
+        return NULL;
     }
-
-    /* Node properties */
-    JS_SetPropertyStr(ctx, element, "nodeType", JS_NewInt32(ctx, 1)); /* ELEMENT_NODE */
-    JS_SetPropertyStr(ctx, element, "parentNode", JS_NULL);
-    JS_SetPropertyStr(ctx, element, "parentElement", JS_NULL);
-    JS_SetPropertyStr(ctx, element, "firstChild", JS_NULL);
-    JS_SetPropertyStr(ctx, element, "lastChild", JS_NULL);
-    JS_SetPropertyStr(ctx, element, "nextSibling", JS_NULL);
-    JS_SetPropertyStr(ctx, element, "previousSibling", JS_NULL);
-    JS_SetPropertyStr(ctx, element, "ownerDocument", JS_NULL);
-
-    /* Empty child arrays */
-    JS_SetPropertyStr(ctx, element, "childNodes", JS_NewArray(ctx));
-    JS_SetPropertyStr(ctx, element, "children", JS_NewArray(ctx));
-
-    /* Content properties */
-    JS_SetPropertyStr(ctx, element, "innerHTML", JS_NewString(ctx, ""));
-    JS_SetPropertyStr(ctx, element, "outerHTML", JS_NewString(ctx, ""));
-    JS_SetPropertyStr(ctx, element, "textContent", JS_NewString(ctx, ""));
-    JS_SetPropertyStr(ctx, element, "innerText", JS_NewString(ctx, ""));
-    JS_SetPropertyStr(ctx, element, "id", JS_NewString(ctx, ""));
-    JS_SetPropertyStr(ctx, element, "className", JS_NewString(ctx, ""));
-
-    /* Dimension stubs */
-    JS_SetPropertyStr(ctx, element, "offsetWidth", JS_NewInt32(ctx, 0));
-    JS_SetPropertyStr(ctx, element, "offsetHeight", JS_NewInt32(ctx, 0));
-    JS_SetPropertyStr(ctx, element, "offsetTop", JS_NewInt32(ctx, 0));
-    JS_SetPropertyStr(ctx, element, "offsetLeft", JS_NewInt32(ctx, 0));
-    JS_SetPropertyStr(ctx, element, "clientWidth", JS_NewInt32(ctx, 0));
-    JS_SetPropertyStr(ctx, element, "clientHeight", JS_NewInt32(ctx, 0));
-    JS_SetPropertyStr(ctx, element, "scrollWidth", JS_NewInt32(ctx, 0));
-    JS_SetPropertyStr(ctx, element, "scrollHeight", JS_NewInt32(ctx, 0));
-    JS_SetPropertyStr(ctx, element, "scrollTop", JS_NewInt32(ctx, 0));
-    JS_SetPropertyStr(ctx, element, "scrollLeft", JS_NewInt32(ctx, 0));
-
-    /* Element methods */
-    JS_SetPropertyStr(ctx, element, "appendChild", JS_NewCFunction(ctx, js_element_appendChild, "appendChild", 1));
-    JS_SetPropertyStr(ctx, element, "removeChild", JS_NewCFunction(ctx, js_element_removeChild, "removeChild", 1));
-    JS_SetPropertyStr(ctx, element, "insertBefore", JS_NewCFunction(ctx, js_element_insertBefore, "insertBefore", 2));
-    JS_SetPropertyStr(ctx, element, "cloneNode", JS_NewCFunction(ctx, js_element_cloneNode, "cloneNode", 1));
-    JS_SetPropertyStr(ctx, element, "getAttribute", JS_NewCFunction(ctx, js_element_getAttribute, "getAttribute", 1));
-    JS_SetPropertyStr(ctx, element, "setAttribute", JS_NewCFunction(ctx, js_element_setAttribute, "setAttribute", 2));
-    JS_SetPropertyStr(ctx, element, "hasAttribute", JS_NewCFunction(ctx, js_element_hasAttribute, "hasAttribute", 1));
-    JS_SetPropertyStr(
-        ctx, element, "removeAttribute", JS_NewCFunction(ctx, js_element_removeAttribute, "removeAttribute", 1));
-    JS_SetPropertyStr(
-        ctx, element, "addEventListener", JS_NewCFunction(ctx, js_element_addEventListener, "addEventListener", 2));
-    JS_SetPropertyStr(ctx, element, "removeEventListener",
-        JS_NewCFunction(ctx, js_element_removeEventListener, "removeEventListener", 2));
-
-    NSLOG(wisp, DEBUG, "Created element stub with DOM properties, tagName='%s'", tag ? tag : "(null)");
-
-    return element;
-}
-
-/* Element method stubs */
-static JSValue js_element_appendChild(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
-{
-    NSLOG(wisp, DEBUG, "element.appendChild() called (stub)");
-    if (argc > 0) {
-        return JS_DupValue(ctx, argv[0]); /* Return the appended child */
-    }
-    return JS_UNDEFINED;
-}
-
-static JSValue js_element_removeChild(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
-{
-    NSLOG(wisp, DEBUG, "element.removeChild() called (stub)");
-    if (argc > 0) {
-        return JS_DupValue(ctx, argv[0]); /* Return the removed child */
-    }
-    return JS_UNDEFINED;
-}
-
-static JSValue js_element_insertBefore(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
-{
-    NSLOG(wisp, DEBUG, "element.insertBefore() called (stub)");
-    if (argc > 0) {
-        return JS_DupValue(ctx, argv[0]); /* Return the inserted node */
-    }
-    return JS_UNDEFINED;
-}
-
-static JSValue js_element_cloneNode(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
-{
-    NSLOG(wisp, DEBUG, "element.cloneNode() called (stub)");
-    /* Return a new empty element as a "clone" */
-    return create_element_object(ctx, NULL);
-}
-
-static JSValue js_element_getAttribute(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
-{
-    if (argc > 0) {
-        const char *name = JS_ToCString(ctx, argv[0]);
-        NSLOG(wisp, DEBUG, "element.getAttribute('%s') -> null (stub)", name ? name : "(null)");
-        if (name)
-            JS_FreeCString(ctx, name);
-    }
-    return JS_NULL;
-}
-
-static JSValue js_element_setAttribute(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
-{
-    if (argc >= 2) {
-        const char *name = JS_ToCString(ctx, argv[0]);
-        const char *value = JS_ToCString(ctx, argv[1]);
-        NSLOG(wisp, DEBUG, "element.setAttribute('%s', '%s') (stub)", name ? name : "(null)", value ? value : "(null)");
-        if (name)
-            JS_FreeCString(ctx, name);
-        if (value)
-            JS_FreeCString(ctx, value);
-    }
-    return JS_UNDEFINED;
-}
-
-static JSValue js_element_hasAttribute(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
-{
-    if (argc > 0) {
-        const char *name = JS_ToCString(ctx, argv[0]);
-        NSLOG(wisp, DEBUG, "element.hasAttribute('%s') -> false (stub)", name ? name : "(null)");
-        if (name)
-            JS_FreeCString(ctx, name);
-    }
-    return JS_FALSE;
-}
-
-static JSValue js_element_removeAttribute(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
-{
-    if (argc > 0) {
-        const char *name = JS_ToCString(ctx, argv[0]);
-        NSLOG(wisp, DEBUG, "element.removeAttribute('%s') (stub)", name ? name : "(null)");
-        if (name)
-            JS_FreeCString(ctx, name);
-    }
-    return JS_UNDEFINED;
-}
-
-static JSValue js_element_addEventListener(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
-{
-    if (argc >= 2) {
-        const char *type = JS_ToCString(ctx, argv[0]);
-        NSLOG(wisp, DEBUG, "element.addEventListener('%s', fn) (stub)", type ? type : "(null)");
-        if (type)
-            JS_FreeCString(ctx, type);
-    }
-    return JS_UNDEFINED;
-}
-
-static JSValue js_element_removeEventListener(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
-{
-    if (argc >= 2) {
-        const char *type = JS_ToCString(ctx, argv[0]);
-        NSLOG(wisp, DEBUG, "element.removeEventListener('%s', fn) (stub)", type ? type : "(null)");
-        if (type)
-            JS_FreeCString(ctx, type);
-    }
-    return JS_UNDEFINED;
-}
-
-
-static JSValue js_document_getElementById(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
-{
-    if (argc > 0) {
-        const char *id = JS_ToCString(ctx, argv[0]);
-        NSLOG(wisp, DEBUG, "document.getElementById called with: '%s' -> returning null (stub)", id ? id : "(null)");
-        if (id)
-            JS_FreeCString(ctx, id);
-    } else {
-        NSLOG(wisp, DEBUG, "document.getElementById called with no args -> null");
-    }
-    return JS_NULL;
-}
-
-static JSValue js_document_getElementsByTagName(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
-{
-    if (argc > 0) {
-        const char *tag = JS_ToCString(ctx, argv[0]);
-        NSLOG(wisp, DEBUG, "document.getElementsByTagName('%s') -> returning empty array (stub)", tag ? tag : "(null)");
-        if (tag)
-            JS_FreeCString(ctx, tag);
-    }
-    /* Return empty array */
-    return JS_NewArray(ctx);
-}
-
-static JSValue js_document_getElementsByClassName(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
-{
-    if (argc > 0) {
-        const char *cls = JS_ToCString(ctx, argv[0]);
-        NSLOG(
-            wisp, DEBUG, "document.getElementsByClassName('%s') -> returning empty array (stub)", cls ? cls : "(null)");
-        if (cls)
-            JS_FreeCString(ctx, cls);
-    }
-    /* Return empty array */
-    return JS_NewArray(ctx);
-}
-
-static JSValue js_document_querySelector(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
-{
-    if (argc > 0) {
-        const char *sel = JS_ToCString(ctx, argv[0]);
-        NSLOG(wisp, DEBUG, "document.querySelector('%s') -> returning null (stub)", sel ? sel : "(null)");
-        if (sel)
-            JS_FreeCString(ctx, sel);
-    }
-    return JS_NULL;
-}
-
-static JSValue js_document_querySelectorAll(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
-{
-    if (argc > 0) {
-        const char *sel = JS_ToCString(ctx, argv[0]);
-        NSLOG(wisp, DEBUG, "document.querySelectorAll('%s') -> returning empty array (stub)", sel ? sel : "(null)");
-        if (sel)
-            JS_FreeCString(ctx, sel);
-    }
-    /* Return empty array-like object */
-    return JS_NewArray(ctx);
-}
-
-static JSValue js_document_createElement(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
-{
-    const char *tag = NULL;
-    if (argc > 0) {
-        tag = JS_ToCString(ctx, argv[0]);
-        NSLOG(wisp, DEBUG, "document.createElement('%s') -> creating element stub", tag ? tag : "(null)");
-    } else {
-        NSLOG(wisp, DEBUG, "document.createElement() with no args");
-    }
-
-    /* Create element with style property and common attributes */
-    JSValue element = create_element_object(ctx, tag);
-
-    if (tag)
-        JS_FreeCString(ctx, tag);
-    return element;
-}
-
-static JSValue js_document_createTextNode(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
-{
-    if (argc > 0) {
-        const char *text = JS_ToCString(ctx, argv[0]);
-        NSLOG(wisp, DEBUG, "document.createTextNode('%s')", text ? text : "(null)");
-        if (text)
-            JS_FreeCString(ctx, text);
-    }
-    /* Return a simple text node object */
-    JSValue node = JS_NewObject(ctx);
-    JS_SetPropertyStr(ctx, node, "nodeType", JS_NewInt32(ctx, 3)); /* TEXT_NODE */
     return node;
 }
 
-static JSValue js_document_write(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+/* HTML's head/body are direct children of the document element, not the first
+ * matching descendant. body additionally accepts a frameset element. */
+static dom_exception document_child(dom_node *document, int property, dom_node **result)
 {
-    if (argc > 0) {
-        const char *str = JS_ToCString(ctx, argv[0]);
-        NSLOG(wisp, DEBUG, "document.write('%s') (ignored)", str ? str : "(null)");
-        if (str)
-            JS_FreeCString(ctx, str);
+    dom_node *root = NULL, *child = NULL;
+    *result = NULL;
+    dom_exception err = dom_document_get_document_element(document, &root);
+    if (err != DOM_NO_ERR || root == NULL)
+        return err;
+    if (property == DOCUMENT_ELEMENT) {
+        *result = root;
+        return DOM_NO_ERR;
     }
-    return JS_UNDEFINED;
+    dom_html_element_type tag = DOM_HTML_ELEMENT_TYPE__UNKNOWN;
+    if (qjs_dom_is_html(root))
+        err = dom_html_element_get_tag_type(root, &tag);
+    bool html_root = tag == DOM_HTML_ELEMENT_TYPE_HTML;
+    if (err == DOM_NO_ERR && html_root)
+        err = dom_node_get_first_child(root, &child);
+    dom_node_unref(root);
+    while (err == DOM_NO_ERR && child != NULL) {
+        dom_node_type type;
+        err = dom_node_get_node_type(child, &type);
+        if (err == DOM_NO_ERR && type == DOM_ELEMENT_NODE && qjs_dom_is_html(child)) {
+            err = dom_html_element_get_tag_type(child, &tag);
+            if (err == DOM_NO_ERR) {
+                bool match = property == HEAD
+                    ? tag == DOM_HTML_ELEMENT_TYPE_HEAD
+                    : tag == DOM_HTML_ELEMENT_TYPE_BODY || tag == DOM_HTML_ELEMENT_TYPE_FRAMESET;
+                if (match) {
+                    *result = child;
+                    return DOM_NO_ERR;
+                }
+            }
+        }
+        dom_node *next = NULL;
+        if (err == DOM_NO_ERR)
+            err = dom_node_get_next_sibling(child, &next);
+        dom_node_unref(child);
+        child = next;
+    }
+    dom_node_unref(child);
+    return err;
 }
 
-static JSValue js_document_body_getter(JSContext *ctx, JSValueConst this_val)
+static JSValue node_get(JSContext *ctx, JSValueConst object, int property)
 {
-    NSLOG(wisp, DEBUG, "document.body getter -> returning stub element");
-    /* Return an element with style property */
-    return create_element_object(ctx, "BODY");
+    struct qjs_dom_node *self = property_receiver(ctx, object, property);
+    if (self == NULL)
+        return JS_EXCEPTION;
+    dom_exception err = DOM_NO_ERR;
+    dom_string *text = NULL;
+    dom_node *node = NULL;
+    bool nullable = true;
+    switch (property) {
+    case NODE_TYPE:
+        return JS_NewInt32(ctx, self->type);
+    case OWNER_DOCUMENT:
+        return self->type == DOM_DOCUMENT_NODE ? JS_NULL : JS_DupValue(ctx, self->owner);
+    case CONNECTED: {
+        JSValue owner = qjs_dom_owner(ctx, object, self);
+        struct qjs_dom_node *doc = qjs_dom_get(ctx, owner, DOM_DOCUMENT_NODE);
+        bool connected = false;
+        err = doc == NULL ? DOM_INVALID_STATE_ERR : dom_node_contains(doc->node, self->node, &connected);
+        JS_FreeValue(ctx, owner);
+        return err == DOM_NO_ERR ? JS_NewBool(ctx, connected) : qjs_dom_exception(ctx, err);
+    }
+    case PARENT:
+    case PARENT_ELEMENT:
+        err = dom_node_get_parent_node(self->node, &node);
+        break;
+    case FIRST_CHILD:
+        err = dom_node_get_first_child(self->node, &node);
+        break;
+    case LAST_CHILD:
+        err = dom_node_get_last_child(self->node, &node);
+        break;
+    case NEXT_SIBLING:
+        err = dom_node_get_next_sibling(self->node, &node);
+        break;
+    case PREVIOUS_SIBLING:
+        err = dom_node_get_previous_sibling(self->node, &node);
+        break;
+    case DOCUMENT_ELEMENT:
+    case HEAD:
+    case BODY:
+        err = document_child(self->node, property, &node);
+        break;
+    case NODE_NAME:
+    case TAG_NAME:
+        err = dom_node_get_node_name(self->node, &text);
+        if (err == DOM_NO_ERR && self->type == DOM_ELEMENT_NODE && qjs_dom_is_html(self->node)) {
+            dom_string *upper = NULL;
+            err = dom_string_toupper(text, true, &upper);
+            dom_string_unref(text);
+            text = upper;
+        }
+        nullable = false;
+        break;
+    case NODE_VALUE:
+    case DATA:
+        err = dom_node_get_node_value(self->node, &text);
+        nullable = property != DATA;
+        break;
+    case TEXT_CONTENT:
+        err = dom_node_get_text_content(self->node, &text);
+        nullable = self->type == DOM_DOCUMENT_NODE || self->type == DOM_DOCUMENT_TYPE_NODE;
+        break;
+    case ID:
+    case CLASS_NAME: {
+        dom_string *name = NULL;
+        const char *key = property == ID ? "id" : "class";
+        err = dom_string_create((const uint8_t *)key, strlen(key), &name);
+        if (err == DOM_NO_ERR)
+            err = dom_element_get_attribute(self->node, name, &text);
+        dom_string_unref(name);
+        nullable = false;
+        break;
+    }
+    }
+    if (err != DOM_NO_ERR) {
+        dom_node_unref(node);
+        dom_string_unref(text);
+        return qjs_dom_exception(ctx, err);
+    }
+    if ((property >= PARENT && property <= PREVIOUS_SIBLING) || property >= DOCUMENT_ELEMENT) {
+        if (property == PARENT_ELEMENT && node != NULL) {
+            dom_node_type type;
+            err = dom_node_get_node_type(node, &type);
+            if (err != DOM_NO_ERR || type != DOM_ELEMENT_NODE) {
+                dom_node_unref(node);
+                node = NULL;
+            }
+        }
+        return err == DOM_NO_ERR ? wrap_result(ctx, object, self, node) : qjs_dom_exception(ctx, err);
+    }
+    JSValue value = qjs_dom_from_string(ctx, text, nullable);
+    dom_string_unref(text);
+    return value;
 }
 
-static JSValue js_document_documentElement_getter(JSContext *ctx, JSValueConst this_val)
+static JSValue node_set(JSContext *ctx, JSValueConst object, JSValueConst value, int property)
 {
-    NSLOG(wisp, DEBUG, "document.documentElement getter -> returning stub element");
-    return create_element_object(ctx, "HTML");
-}
-
-static JSValue js_document_head_getter(JSContext *ctx, JSValueConst this_val)
-{
-    NSLOG(wisp, DEBUG, "document.head getter -> returning stub element");
-    return create_element_object(ctx, "HEAD");
-}
-
-static JSValue js_document_readyState_getter(JSContext *ctx, JSValueConst this_val)
-{
-    NSLOG(wisp, DEBUG, "document.readyState getter -> 'complete'");
-    return JS_NewString(ctx, "complete");
-}
-
-static JSValue js_document_cookie_getter(JSContext *ctx, JSValueConst this_val)
-{
-    NSLOG(wisp, DEBUG, "document.cookie getter -> ''");
-    return JS_NewString(ctx, "");
-}
-
-static JSValue js_document_cookie_setter(JSContext *ctx, JSValueConst this_val, JSValueConst value)
-{
-    const char *cookie = JS_ToCString(ctx, value);
-    if (cookie == NULL) {
+    struct qjs_dom_node *self = property_receiver(ctx, object, property);
+    if (self == NULL)
+        return JS_EXCEPTION;
+    /* CharacterData.data has LegacyNullToEmptyString: unlike the nullable Node
+     * attributes, undefined still becomes the literal string "undefined". */
+    dom_string *text = qjs_dom_string(
+        ctx, value, property == NODE_VALUE || property == TEXT_CONTENT || (property == DATA && JS_IsNull(value)));
+    if (text == NULL)
+        return JS_EXCEPTION;
+    /* Conversion can run JS and retire the document. */
+    self = property_receiver(ctx, object, property);
+    if (self == NULL) {
+        dom_string_unref(text);
         return JS_EXCEPTION;
     }
-    NSLOG(wisp, DEBUG, "document.cookie setter: '%s' (ignored)", cookie);
-    JS_FreeCString(ctx, cookie);
-    return JS_UNDEFINED;
+    dom_exception err = DOM_NO_ERR;
+    const char *operation = NULL;
+    if (property == ID || property == CLASS_NAME) {
+        dom_string *name = NULL;
+        operation = property == ID ? "id" : "className";
+        const char *key = property == ID ? "id" : "class";
+        err = dom_string_create((const uint8_t *)key, strlen(key), &name);
+        if (err == DOM_NO_ERR)
+            err = dom_element_set_attribute(self->node, name, text);
+        dom_string_unref(name);
+    } else if (self->type == DOM_TEXT_NODE || self->type == DOM_COMMENT_NODE || self->type == DOM_CDATA_SECTION_NODE ||
+        self->type == DOM_PROCESSING_INSTRUCTION_NODE) {
+        operation = property == TEXT_CONTENT ? "textContent" : property == DATA ? "data" : "nodeValue";
+        err = dom_node_set_node_value(self->node, text);
+    } else if (property == TEXT_CONTENT && self->type == DOM_ELEMENT_NODE) {
+        operation = "textContent";
+        err = dom_node_set_text_content(self->node, text);
+    }
+    dom_string_unref(text);
+    if (operation != NULL)
+        qjs_dom_changed(ctx, self, operation, NULL, err);
+    return err == DOM_NO_ERR ? JS_UNDEFINED : qjs_dom_exception(ctx, err);
 }
 
-int qjs_init_document(JSContext *ctx)
+static JSValue document_id(JSContext *ctx, JSValueConst object, int argc, JSValueConst *argv)
 {
-    static const JSCFunctionListEntry properties[] = {
-        JS_CFUNC_DEF2("getElementById", 1, js_document_getElementById, JS_PROP_C_W_E),
-        JS_CFUNC_DEF2("getElementsByTagName", 1, js_document_getElementsByTagName, JS_PROP_C_W_E),
-        JS_CFUNC_DEF2("getElementsByClassName", 1, js_document_getElementsByClassName, JS_PROP_C_W_E),
-        JS_CFUNC_DEF2("querySelector", 1, js_document_querySelector, JS_PROP_C_W_E),
-        JS_CFUNC_DEF2("querySelectorAll", 1, js_document_querySelectorAll, JS_PROP_C_W_E),
-        JS_CFUNC_DEF2("createElement", 1, js_document_createElement, JS_PROP_C_W_E),
-        JS_CFUNC_DEF2("createTextNode", 1, js_document_createTextNode, JS_PROP_C_W_E),
-        JS_CFUNC_DEF2("write", 1, js_document_write, JS_PROP_C_W_E),
-        JS_CGETSET_DEF2("body", js_document_body_getter, NULL, JS_PROP_ENUMERABLE | JS_PROP_CONFIGURABLE),
-        JS_CGETSET_DEF2(
-            "documentElement", js_document_documentElement_getter, NULL, JS_PROP_ENUMERABLE | JS_PROP_CONFIGURABLE),
-        JS_CGETSET_DEF2("head", js_document_head_getter, NULL, JS_PROP_ENUMERABLE | JS_PROP_CONFIGURABLE),
-        JS_CGETSET_DEF2("readyState", js_document_readyState_getter, NULL, JS_PROP_ENUMERABLE | JS_PROP_CONFIGURABLE),
-        JS_CGETSET_DEF2(
-            "cookie", js_document_cookie_getter, js_document_cookie_setter, JS_PROP_ENUMERABLE | JS_PROP_CONFIGURABLE),
+    if (qjs_dom_get(ctx, object, DOM_DOCUMENT_NODE) == NULL)
+        return JS_EXCEPTION;
+    if (argc == 0)
+        return JS_ThrowTypeError(ctx, "getElementById requires an ID");
+    dom_string *id = qjs_dom_string(ctx, argv[0], false);
+    if (id == NULL)
+        return JS_EXCEPTION;
+    struct qjs_dom_node *self = qjs_dom_get(ctx, object, DOM_DOCUMENT_NODE);
+    if (self == NULL) {
+        dom_string_unref(id);
+        return JS_EXCEPTION;
+    }
+    dom_node *node = NULL;
+    dom_exception err = DOM_NO_ERR;
+    if (dom_string_byte_length(id) != 0)
+        err = dom_document_get_element_by_id(self->node, id, &node);
+    dom_string_unref(id);
+    if (err != DOM_NO_ERR)
+        return qjs_dom_exception(ctx, err);
+    return wrap_result(ctx, object, self, node);
+}
+
+enum attribute_method { GET_ATTRIBUTE, HAS_ATTRIBUTE, SET_ATTRIBUTE, REMOVE_ATTRIBUTE };
+
+static JSValue attribute(JSContext *ctx, JSValueConst object, int argc, JSValueConst *argv, int method)
+{
+    if (qjs_dom_get(ctx, object, DOM_ELEMENT_NODE) == NULL)
+        return JS_EXCEPTION;
+    if (argc < (method == SET_ATTRIBUTE ? 2 : 1))
+        return JS_ThrowTypeError(ctx, "Attribute method is missing required arguments");
+    dom_string *name = qjs_dom_string(ctx, argv[0], false), *value = NULL;
+    if (name == NULL)
+        return JS_EXCEPTION;
+    if (method == SET_ATTRIBUTE) {
+        value = qjs_dom_string(ctx, argv[1], false);
+        if (value == NULL) {
+            dom_string_unref(name);
+            return JS_EXCEPTION;
+        }
+    }
+    struct qjs_dom_node *self = qjs_dom_get(ctx, object, DOM_ELEMENT_NODE);
+    if (self == NULL) {
+        dom_string_unref(name);
+        dom_string_unref(value);
+        return JS_EXCEPTION;
+    }
+    dom_exception err = DOM_NO_ERR;
+    if (qjs_dom_is_html(self->node)) {
+        dom_string *lower = NULL;
+        err = dom_string_tolower(name, true, &lower);
+        dom_string_unref(name);
+        name = lower;
+    }
+    bool present = false;
+    dom_string *result = NULL;
+    JSValue ret = JS_UNDEFINED;
+    if (err == DOM_NO_ERR) {
+        switch (method) {
+        case GET_ATTRIBUTE:
+            err = dom_element_get_attribute(self->node, name, &result);
+            break;
+        case HAS_ATTRIBUTE:
+            err = dom_element_has_attribute(self->node, name, &present);
+            break;
+        case SET_ATTRIBUTE:
+            err = dom_element_set_attribute(self->node, name, value);
+            if (err == DOM_NO_ERR || err == DOM_NO_MEM_ERR)
+                qjs_dom_changed(ctx, self, "setAttribute", name, err);
+            break;
+        case REMOVE_ATTRIBUTE:
+            err = dom_element_has_attribute(self->node, name, &present);
+            if (err == DOM_NO_ERR && present) {
+                err = dom_element_remove_attribute(self->node, name);
+                qjs_dom_changed(ctx, self, "removeAttribute", name, err);
+            }
+            break;
+        }
+    }
+    if (err != DOM_NO_ERR)
+        ret = qjs_dom_exception(ctx, err);
+    else if (method == GET_ATTRIBUTE)
+        ret = qjs_dom_from_string(ctx, result, true);
+    else if (method == HAS_ATTRIBUTE)
+        ret = JS_NewBool(ctx, present);
+    dom_string_unref(name);
+    dom_string_unref(value);
+    dom_string_unref(result);
+    return ret;
+}
+
+static JSValue node_has_children(JSContext *ctx, JSValueConst object, int argc, JSValueConst *argv)
+{
+    struct qjs_dom_node *self = qjs_dom_get(ctx, object, 0);
+    if (self == NULL)
+        return JS_EXCEPTION;
+    bool result;
+    dom_exception err = dom_node_has_child_nodes(self->node, &result);
+    return err == DOM_NO_ERR ? JS_NewBool(ctx, result) : qjs_dom_exception(ctx, err);
+}
+
+#define GET(name, property)                                                                                            \
+    JS_CGETSET_MAGIC_DEF2(name, node_get, NULL, property, JS_PROP_CONFIGURABLE | JS_PROP_ENUMERABLE)
+#define ACCESS(name, property)                                                                                         \
+    JS_CGETSET_MAGIC_DEF2(name, node_get, node_set, property, JS_PROP_CONFIGURABLE | JS_PROP_ENUMERABLE)
+#define METHOD(name, count, method)                                                                                    \
+    {                                                                                                                  \
+        name, JS_PROP_C_W_E, JS_DEF_CFUNC, method,                                                                     \
+        {                                                                                                              \
+            .func = {count, JS_CFUNC_generic_magic, {.generic_magic = attribute}}                                      \
+        }                                                                                                              \
+    }
+
+int qjs_dom_install_properties(JSContext *ctx, JSValue *prototypes)
+{
+    static const JSCFunctionListEntry node[] = {
+        GET("nodeType", NODE_TYPE),
+        GET("nodeName", NODE_NAME),
+        ACCESS("nodeValue", NODE_VALUE),
+        ACCESS("textContent", TEXT_CONTENT),
+        GET("parentNode", PARENT),
+        GET("parentElement", PARENT_ELEMENT),
+        GET("firstChild", FIRST_CHILD),
+        GET("lastChild", LAST_CHILD),
+        GET("nextSibling", NEXT_SIBLING),
+        GET("previousSibling", PREVIOUS_SIBLING),
+        GET("ownerDocument", OWNER_DOCUMENT),
+        GET("isConnected", CONNECTED),
+        JS_CFUNC_DEF2("hasChildNodes", 0, node_has_children, JS_PROP_C_W_E),
     };
-    JSValue object = JS_NewObject(ctx);
-    if (JS_IsException(object)) {
+    static const JSCFunctionListEntry element[] = {
+        GET("tagName", TAG_NAME),
+        ACCESS("id", ID),
+        ACCESS("className", CLASS_NAME),
+        METHOD("getAttribute", 1, GET_ATTRIBUTE),
+        METHOD("hasAttribute", 1, HAS_ATTRIBUTE),
+        METHOD("setAttribute", 2, SET_ATTRIBUTE),
+        METHOD("removeAttribute", 1, REMOVE_ATTRIBUTE),
+    };
+    static const JSCFunctionListEntry document[] = {
+        GET("documentElement", DOCUMENT_ELEMENT),
+        GET("head", HEAD),
+        GET("body", BODY),
+        JS_CFUNC_DEF2("getElementById", 1, document_id, JS_PROP_C_W_E),
+    };
+    static const JSCFunctionListEntry data[] = {ACCESS("data", DATA)};
+    static const JSCFunctionListEntry constants[] = {
+        JS_PROP_INT32_DEF("ELEMENT_NODE", 1, JS_PROP_ENUMERABLE),
+        JS_PROP_INT32_DEF("ATTRIBUTE_NODE", 2, JS_PROP_ENUMERABLE),
+        JS_PROP_INT32_DEF("TEXT_NODE", 3, JS_PROP_ENUMERABLE),
+        JS_PROP_INT32_DEF("CDATA_SECTION_NODE", 4, JS_PROP_ENUMERABLE),
+        JS_PROP_INT32_DEF("ENTITY_REFERENCE_NODE", 5, JS_PROP_ENUMERABLE),
+        JS_PROP_INT32_DEF("ENTITY_NODE", 6, JS_PROP_ENUMERABLE),
+        JS_PROP_INT32_DEF("PROCESSING_INSTRUCTION_NODE", 7, JS_PROP_ENUMERABLE),
+        JS_PROP_INT32_DEF("COMMENT_NODE", 8, JS_PROP_ENUMERABLE),
+        JS_PROP_INT32_DEF("DOCUMENT_NODE", 9, JS_PROP_ENUMERABLE),
+        JS_PROP_INT32_DEF("DOCUMENT_TYPE_NODE", 10, JS_PROP_ENUMERABLE),
+        JS_PROP_INT32_DEF("DOCUMENT_FRAGMENT_NODE", 11, JS_PROP_ENUMERABLE),
+        JS_PROP_INT32_DEF("NOTATION_NODE", 12, JS_PROP_ENUMERABLE),
+    };
+    JSValue ctor = JS_GetPropertyStr(ctx, prototypes[QJS_NODE], "constructor");
+    int err = JS_IsException(ctor)
+        ? -1
+        : JS_SetPropertyFunctionList(ctx, ctor, constants, sizeof(constants) / sizeof(*constants));
+    JS_FreeValue(ctx, ctor);
+    if (err < 0 ||
+        JS_SetPropertyFunctionList(ctx, prototypes[QJS_NODE], constants, sizeof(constants) / sizeof(*constants)) < 0)
         return -1;
-    }
-    if (JS_SetPropertyFunctionList(ctx, object, properties, sizeof(properties) / sizeof(properties[0])) < 0) {
-        JS_FreeValue(ctx, object);
-        return -1;
-    }
-    JSValue global = JS_GetGlobalObject(ctx);
-    int ret = JS_SetPropertyStr(ctx, global, "document", object);
-    JS_FreeValue(ctx, global);
-    return ret < 0 ? -1 : 0;
+    return JS_SetPropertyFunctionList(ctx, prototypes[QJS_NODE], node, sizeof(node) / sizeof(*node)) < 0 ||
+            JS_SetPropertyFunctionList(ctx, prototypes[QJS_ELEMENT], element, sizeof(element) / sizeof(*element)) < 0 ||
+            JS_SetPropertyFunctionList(ctx, prototypes[QJS_DOCUMENT], document, sizeof(document) / sizeof(*document)) <
+                0 ||
+            JS_SetPropertyFunctionList(ctx, prototypes[QJS_CHARACTER_DATA], data, sizeof(data) / sizeof(*data)) < 0
+        ? -1
+        : 0;
 }

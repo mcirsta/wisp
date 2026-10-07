@@ -32,6 +32,10 @@ across this directory.
   and propagate lazy-property/value/alias failures. The API regression sweeps
   allocation budgets and checks rejection of a conflicting non-configurable
   property. Wisp also tests each binding's initialization under allocation limits.
+- `quickjs.c`, `api-test.c`: avoid leaking the proposed prototype reference if
+  `JS_SetPrototype` cannot copy a shared shape. Check and unwind failures in
+  `JS_AddIntrinsicDOMException` instead of publishing incomplete initialization.
+  Both have allocation-budget regressions, also exercised by Wisp's DOM setup.
 - `CMakeLists.txt`: use `WISP_LIB_TYPE`; leave CLI/compiler off by default; gate
   upstream test executables on `WISP_ENABLE_TESTS`; keep the CLI support library
   out of the default build unless required; respect Wisp's `_WIN32_WINNT`; and
@@ -52,9 +56,9 @@ review whether upstream has replaced them. Keep Wisp's generated Window/Console
 bindings separate: their source is `utils/qjs_binding_generator.py` and WebIDL,
 with output generated in the build directory.
 
-Build and run `test_quickjs`, `qt_js_script_order` and
-`qt_js_navigation_cleanup` in a Wisp Qt debug build. Also run the vendored C API, regexp and local JS tests. A standalone build
-can use:
+Build and run `test_quickjs`, `qt_js_script_order`, `qt_js_timers`, `qt_js_dom` and
+`qt_js_navigation_cleanup` in a Wisp Qt debug build. Also run the vendored C API,
+regexp and local JS tests. A standalone build can use:
 
 ```sh
 cmake -S contrib/quickjs-ng -B /tmp/wisp-qjs-tests -GNinja \

@@ -47,9 +47,9 @@ typedef struct jsheap jsheap;
  * to create a JS thread to attach to the browsing context.
  *
  * Each thread retains its heap until explicitly destroyed. Closing disconnects
- * document access and cancels jobs; destroying releases the owner reference.
- * Active entries/jobs retain the context until they return. A JavaScript thread
- * is not an operating-system thread.
+ * document access and cancels jobs/timers; destroying releases the owner
+ * reference. Active entries/jobs/timer callbacks retain the context until they
+ * return. A JavaScript thread is not an operating-system thread.
  */
 typedef struct jsthread jsthread;
 

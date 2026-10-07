@@ -8771,11 +8771,12 @@ static int JS_SetPrototypeInternal(JSContext *ctx, JSValueConst obj,
             /* Note: for Proxy objects, proto is NULL */
             p1 = p1->shape->proto;
         } while (p1 != NULL);
-        js_dup(proto_val);
     }
 
     if (js_shape_prepare_update(ctx, p, NULL))
         return -1;
+    if (proto)
+        js_dup(proto_val);
     sh = p->shape;
     if (sh->proto)
         JS_FreeValue(ctx, JS_MKPTR(JS_TAG_OBJECT, sh->proto));
@@ -63871,7 +63872,7 @@ int JS_AddIntrinsicDOMException(JSContext *ctx)
     JSRuntime *rt = ctx->rt;
     int i;
     JSAtom name;
-    JSValue ctor, proto;
+    JSValue ctor = JS_UNDEFINED, proto;
 
     if (!JS_IsRegisteredClass(rt, JS_CLASS_DOM_EXCEPTION)) {
         if (init_class_range(rt, js_domexception_class_def, JS_CLASS_DOM_EXCEPTION,
@@ -63879,24 +63880,39 @@ int JS_AddIntrinsicDOMException(JSContext *ctx)
             return -1;
     }
     proto = JS_NewObjectClass(ctx, JS_CLASS_ERROR);
-    JS_SetPropertyFunctionList(ctx, proto,
-                               js_domexception_proto_funcs,
-                               countof(js_domexception_proto_funcs));
+    if (JS_IsException(proto))
+        return -1;
+    if (JS_SetPropertyFunctionList(ctx, proto,
+                                  js_domexception_proto_funcs,
+                                  countof(js_domexception_proto_funcs)) < 0)
+        goto fail;
     ctor = JS_NewCFunction2(ctx, js_domexception_constructor, "DOMException", 0,
                             JS_CFUNC_constructor_or_func, 0);
-    JS_SetConstructor(ctx, ctor, proto);
+    if (JS_IsException(ctor) || JS_SetConstructor(ctx, ctor, proto) < 0)
+        goto fail;
     for (i = 0; i < countof(js_dom_exception_names_table); i++) {
         name = JS_NewAtom(ctx, js_dom_exception_names_table[i].code_name);
-        JS_DefinePropertyValue(ctx, proto, name, js_int32(i + 1),
-                               JS_PROP_ENUMERABLE);
-        JS_DefinePropertyValue(ctx, ctor, name, js_int32(i + 1),
-                               JS_PROP_ENUMERABLE);
+        if (name == JS_ATOM_NULL)
+            goto fail;
+        if (JS_DefinePropertyValue(ctx, proto, name, js_int32(i + 1),
+                                   JS_PROP_ENUMERABLE) < 0 ||
+            JS_DefinePropertyValue(ctx, ctor, name, js_int32(i + 1),
+                                   JS_PROP_ENUMERABLE) < 0) {
+            JS_FreeAtom(ctx, name);
+            goto fail;
+        }
         JS_FreeAtom(ctx, name);
     }
-    JS_DefinePropertyValue(ctx, ctx->global_obj, JS_ATOM_DOMException, ctor,
-                           JS_PROP_WRITABLE | JS_PROP_CONFIGURABLE);
+    if (JS_DefinePropertyValue(ctx, ctx->global_obj, JS_ATOM_DOMException,
+                              js_dup(ctor), JS_PROP_WRITABLE | JS_PROP_CONFIGURABLE) < 0)
+        goto fail;
+    JS_FreeValue(ctx, ctor);
     set_value(ctx, &ctx->class_proto[JS_CLASS_DOM_EXCEPTION], proto);
     return 0;
+fail:
+    JS_FreeValue(ctx, ctor);
+    JS_FreeValue(ctx, proto);
+    return -1;
 }
 /* base64 */
 

@@ -20,6 +20,11 @@
 #include <stddef.h>
 #include <nsutils/time.h>
 #include <string.h>
+#include <time.h>
+#include <wisp/desktop/gui_internal.h>
+#include <wisp/misc.h>
+#include "content/handlers/javascript/quickjs/private.h"
+#include <wisp/content/handlers/html/private.h>
 
 #include "content/handlers/javascript/js.h"
 
@@ -836,35 +841,296 @@ START_TEST(test_quickjs_unsupported_dialogs)
 }
 END_TEST
 
-/**
- * Test Timers (stubs).
- */
+/* A deterministic scheduler harness: real monotonic deadlines, manually run
+ * callbacks. Browser integration tests separately use the actual Qt scheduler. */
+static struct {
+    void (*callback)(void *);
+    void *pw;
+    uint64_t due;
+} timer_schedules[16];
+static struct wisp_table *saved_guit;
+static bool fail_schedule, preserve_failed_schedule;
+static unsigned timer_callbacks;
+
+static nserror test_timer_schedule(int delay, void (*callback)(void *), void *pw)
+{
+    if (delay >= 0 && fail_schedule && preserve_failed_schedule)
+        return NSERROR_NOMEM;
+    unsigned slot = 16;
+    for (unsigned i = 0; i < 16; i++) {
+        if (timer_schedules[i].callback == callback && timer_schedules[i].pw == pw)
+            timer_schedules[i].callback = NULL;
+        if (timer_schedules[i].callback == NULL)
+            slot = i;
+    }
+    if (delay < 0)
+        return NSERROR_OK;
+    if (fail_schedule)
+        return NSERROR_NOMEM;
+    ck_assert_msg(slot < 16, "Too many document wakeups");
+    uint64_t now;
+    ck_assert_int_eq(nsu_getmonotonic_ms(&now), NSUERROR_OK);
+    timer_schedules[slot].callback = callback;
+    timer_schedules[slot].pw = pw;
+    timer_schedules[slot].due = now + (unsigned)delay;
+    return NSERROR_OK;
+}
+
+static void setup_timers(void)
+{
+    static struct gui_misc_table misc = {.schedule = test_timer_schedule};
+    static struct wisp_table table = {.misc = &misc};
+    memset(timer_schedules, 0, sizeof(timer_schedules));
+    saved_guit = guit;
+    guit = &table;
+    fail_schedule = false;
+    preserve_failed_schedule = false;
+    timer_callbacks = 0;
+}
+
+static void teardown_timers(void)
+{
+    for (unsigned i = 0; i < 16; i++)
+        ck_assert_msg(timer_schedules[i].callback == NULL, "Document left a scheduled callback behind");
+    guit = saved_guit;
+}
+
+static bool run_next_timer(void)
+{
+    unsigned slot = 16;
+    for (unsigned i = 0; i < 16; i++) {
+        if (timer_schedules[i].callback != NULL && (slot == 16 || timer_schedules[i].due < timer_schedules[slot].due))
+            slot = i;
+    }
+    if (slot == 16)
+        return false;
+    uint64_t now;
+    do {
+        ck_assert_int_eq(nsu_getmonotonic_ms(&now), NSUERROR_OK);
+        ck_assert_msg(timer_schedules[slot].due <= now + 100, "Unexpected long timer in test");
+        if (now < timer_schedules[slot].due) {
+            struct timespec pause = {.tv_nsec = 1000000};
+            nanosleep(&pause, NULL);
+        }
+    } while (now < timer_schedules[slot].due);
+    void (*callback)(void *) = timer_schedules[slot].callback;
+    void *pw = timer_schedules[slot].pw;
+    timer_schedules[slot].callback = NULL;
+    timer_callbacks++;
+    callback(pw);
+    return true;
+}
+
+static void drain_timers(unsigned limit)
+{
+    while (limit-- > 0 && run_next_timer()) {
+    }
+    for (unsigned i = 0; i < 16; i++)
+        ck_assert_msg(timer_schedules[i].callback == NULL, "Timer queue did not settle within test limit");
+}
+
 START_TEST(test_quickjs_timers)
 {
-    jsheap *heap = NULL;
-    jsthread *thread = NULL;
-    nserror err;
-
-    js_initialise();
-
-    err = js_newheap(5, &heap);
-    ck_assert_int_eq(err, NSERROR_OK);
-
-    err = js_newthread(heap, NULL, NULL, &thread);
-    ck_assert_int_eq(err, NSERROR_OK);
-
-    /* Test setTimeout exists and returns a number */
-    const char *code1 = "typeof setTimeout === 'function'";
-    assert_predicate(thread, code1, "test_setTimeout");
-
-    /* Test clearTimeout exists */
-    const char *code2 = "typeof clearTimeout === 'function'";
-    assert_predicate(thread, code2, "test_clearTimeout");
-
-    js_closethread(thread);
+    jsheap *heap;
+    jsthread *thread;
+    ck_assert_int_eq(js_newheap(1, &heap), NSERROR_OK);
+    ck_assert_int_eq(js_newthread(heap, NULL, NULL, &thread), NSERROR_OK);
+    ck_assert(exec_script(thread,
+        "var order = [], argument = {};"
+        "var a = setTimeout(function(x, y) { 'use strict';"
+        "if (this !== globalThis || x !== argument || y !== 42) throw Error('arguments/receiver');"
+        "order.push('a'); queueMicrotask(() => order.push('job')); }, 0, argument, 42);"
+        "var b = setTimeout(() => order.push('b'), 0);"
+        "var cancelled = setTimeout(() => order.push('cancelled'), 0); clearInterval(cancelled);"
+        "clearTimeout(); clearInterval(-1); clearTimeout(1234567);"
+        "order.push('script');",
+        "timers.js"));
+    assert_predicate(thread, "order.join(',') === 'script' && a > 0 && b > 0 && a !== b", "no synchronous callback");
+    drain_timers(4);
+    assert_predicate(thread, "order.join(',') === 'script,a,job,b'", "FIFO, arguments and checkpoint");
     js_destroythread(thread);
     js_destroyheap(heap);
+}
+END_TEST
+
+START_TEST(test_quickjs_timer_conversion)
+{
+    jsheap *heap;
+    jsthread *thread;
+    ck_assert_int_eq(js_newheap(1, &heap), NSERROR_OK);
+    ck_assert_int_eq(js_newthread(heap, NULL, NULL, &thread), NSERROR_OK);
+    ck_assert(exec_script(thread,
+        "var conversion = [], ran = []; var sentinel = {};"
+        "setTimeout({toString() { conversion.push('handler'); return \"ran.push('string');\"; }},"
+        "{valueOf() { conversion.push('delay'); return -5; }});"
+        "try { setTimeout({toString() { throw sentinel; }}, {valueOf() { conversion.push('wrong'); }});"
+        "throw Error('missing throw'); } catch(e) { if (e !== sentinel) throw e; }"
+        "try { setTimeout(() => {}, {valueOf() { throw sentinel; }}); throw Error('missing delay throw'); }"
+        "catch(e) { if (e !== sentinel) throw e; }"
+        "for (var invalid of [() => setTimeout(), () => setInterval(), () => setTimeout(Symbol()),"
+        "() => setTimeout(() => {}, 1n), () => setTimeout.call({}, () => {}), () => clearTimeout.call({}, 1)]) {"
+        "var failed = false; try { invalid(); } catch(e) { failed = e instanceof TypeError; }"
+        "if (!failed) throw Error('bad Web IDL conversion'); }"
+        "setTimeout(() => ran.push('wrapped'), 2147483648);"
+        "setTimeout(() => ran.push('nan'), NaN); setTimeout(() => ran.push('infinity'), Infinity);",
+        "conversion.js"));
+    assert_predicate(thread, "conversion.join(',') === 'handler,delay'", "conversion order");
+    drain_timers(6);
+    assert_predicate(thread, "ran.join(',') === 'string,wrapped,nan,infinity'", "global strings and long conversion");
+    js_destroythread(thread);
+    js_destroyheap(heap);
+}
+END_TEST
+
+START_TEST(test_quickjs_timer_intervals)
+{
+    jsheap *heap;
+    jsthread *thread;
+    ck_assert_int_eq(js_newheap(1, &heap), NSERROR_OK);
+    ck_assert_int_eq(js_newthread(heap, NULL, NULL, &thread), NSERROR_OK);
+    ck_assert(exec_script(thread,
+        "var calls = 0, jobs = 0; var interval = setInterval(() => {"
+        "calls++; Promise.resolve().then(() => { jobs++; if (calls === 8) clearTimeout(interval); });"
+        "if (calls === 2) throw Error('expected interval exception'); }, 0);",
+        "interval.js"));
+    drain_timers(10);
+    assert_predicate(thread, "calls === 8 && jobs === 8", "zero-delay interval, throw and self-cancellation");
+    ck_assert_uint_eq(timer_callbacks, 8);
+    js_destroythread(thread);
+    js_destroyheap(heap);
+}
+END_TEST
+
+static unsigned observed_nesting[10];
+static uint64_t observed_timer_times[10];
+static unsigned nesting_count;
+static JSValue record_timer_nesting(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    jsthread *thread = JS_GetContextOpaque(ctx);
+    ck_assert_uint_lt(nesting_count, 10);
+    ck_assert_int_eq(nsu_getmonotonic_ms(&observed_timer_times[nesting_count]), NSUERROR_OK);
+    observed_nesting[nesting_count++] = thread->heap->timer_nesting;
+    return JS_UNDEFINED;
+}
+
+START_TEST(test_quickjs_timer_nesting)
+{
+    jsheap *heap;
+    jsthread *thread;
+    ck_assert_int_eq(js_newheap(1, &heap), NSERROR_OK);
+    ck_assert_int_eq(js_newthread(heap, NULL, NULL, &thread), NSERROR_OK);
+    JSValue global = JS_GetGlobalObject(thread->ctx);
+    ck_assert_int_eq(JS_SetPropertyStr(thread->ctx, global, "recordNesting",
+                         JS_NewCFunction(thread->ctx, record_timer_nesting, "recordNesting", 0)),
+        1);
+    JS_FreeValue(thread->ctx, global);
+    nesting_count = 0;
+    ck_assert(exec_script(thread,
+        "var n = 0; function nested() { recordNesting(); if (++n < 7) setTimeout(nested, 0);"
+        "else queueMicrotask(() => { recordNesting(); setTimeout(recordNesting, 0); }); }"
+        "setTimeout(nested, 0);",
+        "nested.js"));
+    drain_timers(10);
+    const unsigned expected[] = {1, 2, 3, 4, 5, 6, 6, 0, 1};
+    ck_assert_uint_eq(nesting_count, sizeof(expected) / sizeof(expected[0]));
+    ck_assert_msg(observed_timer_times[6] - observed_timer_times[5] >= 4, "Seventh nested timer ran before 4 ms");
+    for (unsigned i = 0; i < nesting_count; i++)
+        ck_assert_msg(observed_nesting[i] == expected[i], "Callback %u nesting=%u expected=%u", i, observed_nesting[i],
+            expected[i]);
+    js_destroythread(thread);
+    js_destroyheap(heap);
+}
+END_TEST
+
+static JSValue retire_timer_document(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    jsthread *thread = JS_GetContextOpaque(ctx);
+    js_destroyheap(thread->heap);
+    js_destroythread(thread);
+    return JS_UNDEFINED;
+}
+
+START_TEST(test_quickjs_timer_retirement)
+{
+    jsheap *heap;
+    jsthread *thread, *other;
+    ck_assert_int_eq(js_newheap(1, &heap), NSERROR_OK);
+    ck_assert_int_eq(js_newthread(heap, NULL, NULL, &thread), NSERROR_OK);
+    ck_assert_int_eq(js_newthread(heap, NULL, NULL, &other), NSERROR_OK);
+    JSValue global = JS_GetGlobalObject(thread->ctx);
+    ck_assert_int_eq(JS_SetPropertyStr(thread->ctx, global, "retire",
+                         JS_NewCFunction(thread->ctx, retire_timer_document, "retire", 0)),
+        1);
+    JS_FreeValue(thread->ctx, global);
+    ck_assert(exec_script(thread,
+        "setTimeout(() => { retire(); queueMicrotask(() => { throw Error('retired job ran'); }); }, 0);"
+        "setInterval(() => { throw Error('retired timer ran'); }, 0);",
+        "retire.js"));
+    ck_assert(exec_script(other, "var alive = false; setTimeout(() => alive = true, 0);", "other.js"));
+    drain_timers(4); /* The first callback releases the owner, including the heap owner reference. */
+    ck_assert_uint_eq(timer_callbacks, 2);
+    assert_predicate(other, "alive", "other document survives retirement");
+    js_destroythread(other); /* Last heap reference. */
     js_finalise();
+}
+END_TEST
+
+START_TEST(test_quickjs_timer_failures)
+{
+    jsheap *heap;
+    jsthread *thread;
+    ck_assert_int_eq(js_newheap(1, &heap), NSERROR_OK);
+    ck_assert_int_eq(js_newthread(heap, NULL, NULL, &thread), NSERROR_OK);
+    fail_schedule = true;
+    ck_assert(!exec_script(thread, "setTimeout(() => {}, 0);", "scheduler OOM"));
+    fail_schedule = false;
+    ck_assert(exec_script(thread, "var ran = false; setTimeout(() => ran = true, 0);", "scheduler recovery"));
+    drain_timers(2);
+    assert_predicate(thread, "ran", "queue recovers after scheduler failure");
+    /* Backends may either preserve or remove an old wakeup on failed rearm.
+     * Neither may leave callbacks referring to the cancelled document queue. */
+    for (int preserve = 0; preserve < 2; preserve++) {
+        ck_assert(exec_script(thread, "setTimeout(() => { throw Error('stranded timer ran'); }, 10000);", "old wakeup"));
+        preserve_failed_schedule = preserve;
+        fail_schedule = true;
+        ck_assert(!exec_script(thread, "setTimeout(() => {}, 0);", "failed rearm"));
+        fail_schedule = false;
+        ck_assert(!run_next_timer());
+    }
+    /* Force ID wrap and ensure a live ID is not reused. */
+    ck_assert(exec_script(thread, "var first = setTimeout(() => {}, 50);", "first ID"));
+    thread->next_timer_id = INT32_MAX;
+    ck_assert(
+        exec_script(thread, "var last = setTimeout(() => {}, 50), wrapped = setTimeout(() => {}, 50);", "wrapped IDs"));
+    assert_predicate(thread, "first !== last && first !== wrapped && last !== wrapped && wrapped > 0", "unique IDs");
+    js_closethread(thread);
+    ck_assert(!run_next_timer());
+    js_destroythread(thread);
+    js_destroyheap(heap);
+}
+END_TEST
+
+START_TEST(test_quickjs_timer_execution_limits)
+{
+    jsheap *heap;
+    jsthread *thread;
+    ck_assert_int_eq(js_newheap(1, &heap), NSERROR_OK);
+    ck_assert_int_eq(js_newthread(heap, NULL, NULL, &thread), NSERROR_OK);
+    ck_assert(exec_script(thread,
+        "var calls = 0, recovered = false; setInterval(() => { calls++; while (true) {} }, 0);"
+        "setTimeout(() => { recovered = true; }, 0);",
+        "runaway-timer.js"));
+    drain_timers(4);
+    assert_predicate(thread, "calls === 1 && recovered", "interrupted interval stops, sibling timer runs");
+    ck_assert(exec_script(thread,
+        "var afterJob = false; setInterval(() => {"
+        "function spin() { queueMicrotask(spin); } queueMicrotask(spin); }, 0);"
+        "setTimeout(() => afterJob = true, 0);",
+        "runaway-timer-checkpoint.js"));
+    drain_timers(4);
+    assert_predicate(thread, "afterJob", "timer checkpoint shares interrupt protection");
+    js_destroythread(thread);
+    js_destroyheap(heap);
 }
 END_TEST
 
@@ -943,6 +1209,12 @@ START_TEST(test_quickjs_location)
     assert_predicate(thread, code4, "test_location_url_props");
 
 
+    assert_predicate(thread,
+        "(() => { let sentinel = {}; for (let method of ['assign', 'replace']) {"
+        "let caught = false; try { location[method]({toString() { throw sentinel; }}); }"
+        "catch(e) { caught = e === sentinel; } if (!caught) return false; } return true; })()",
+        "navigation URL conversion preserves exceptions");
+
     js_closethread(thread);
     js_destroythread(thread);
     js_destroyheap(heap);
@@ -953,52 +1225,190 @@ END_TEST
 /**
  * Test Document.
  */
+static html_content dom_html;
+static jsheap *dom_heap;
+static jsthread *dom_thread;
+
+static void setup_dom(void)
+{
+    memset(&dom_html, 0, sizeof(dom_html));
+    const char *source = "<!doctype html><html><head><title>Example</title></head><body>"
+        "<div id='target' class='old'>A<span>B</span><!--ignored--><i></i>C</div>"
+        "<p id='duplicate'>first</p><p id='duplicate'>second</p><p id=''></p>"
+        "<svg xmlns='http://www.w3.org/2000/svg' id='svg'><text id='svgText'>svg</text></svg></body></html>";
+    dom_hubbub_parser *parser;
+    dom_hubbub_parser_params params = {.enc = "UTF-8", .fix_enc = true};
+    ck_assert_int_eq(dom_hubbub_parser_create(&params, &parser, &dom_html.document), DOM_HUBBUB_OK);
+    ck_assert_int_eq(dom_hubbub_parser_parse_chunk(parser, (const uint8_t *)source, strlen(source)), DOM_HUBBUB_OK);
+    ck_assert_int_eq(dom_hubbub_parser_completed(parser), DOM_HUBBUB_OK);
+    dom_hubbub_parser_destroy(parser);
+    ck_assert_int_eq(js_newheap(1, &dom_heap), NSERROR_OK);
+    ck_assert_int_eq(js_newthread(dom_heap, NULL, &dom_html, &dom_thread), NSERROR_OK);
+}
+
+static void teardown_dom(void)
+{
+    js_destroythread(dom_thread);
+    JS_RunGC(dom_heap->rt); /* Exercise cycles while the shared runtime survives. */
+    js_destroyheap(dom_heap);
+    dom_node_unref(dom_html.document);
+    js_finalise();
+}
+
 START_TEST(test_quickjs_document)
 {
-    jsheap *heap = NULL;
-    jsthread *thread = NULL;
-    nserror err;
+    assert_predicate(dom_thread,
+        "document === window.document && document instanceof HTMLDocument && "
+        "document instanceof Document && document instanceof Node && "
+        "document.nodeType === Node.DOCUMENT_NODE && document.nodeName === '#document' && document.ownerDocument === null && "
+        "Object.getPrototypeOf(HTMLElement) === Element && Object.getPrototypeOf(Element) === Node",
+        "document identity and prototypes");
+    assert_predicate(dom_thread,
+        "document.documentElement === document.documentElement && document.documentElement.tagName === 'HTML' && "
+        "document.head.tagName === 'HEAD' && document.body.tagName === 'BODY' && "
+        "document.head.nextSibling === document.body && document.body.previousSibling === document.head && "
+        "document.documentElement.parentNode === document && document.documentElement.parentElement === null && "
+        "document.body.ownerDocument === document && document.body instanceof HTMLElement && "
+        "document.body instanceof Element && document.body instanceof Node",
+        "root traversal and inheritance");
+    assert_predicate(dom_thread,
+        "document.getElementById('target') === document.body.firstChild && document.getElementById('absent') === null && "
+        "document.getElementById('') === null && document.getElementById('duplicate').textContent === 'first' && "
+        "document.getElementById('svgText').tagName === 'text' && "
+        "!(document.getElementById('svgText') instanceof HTMLElement)", "actual ID lookup and foreign elements");
+    ck_assert(exec_script(dom_thread, "document.body.expando = { owner: document.body };", "expando"));
+    JS_RunGC(dom_heap->rt);
+    assert_predicate(dom_thread, "document.body.expando.owner === document.body", "GC preserves node identity/properties");
+    assert_predicate(dom_thread, "document.querySelector === undefined && document.createElement === undefined && "
+        "document.body.style === undefined && document.body.classList === undefined", "unsupported APIs do not fabricate success");
+}
+END_TEST
 
-    js_initialise();
+START_TEST(test_quickjs_dom_attributes)
+{
+    ck_assert(exec_script(dom_thread,
+        "var element = document.getElementById('target');"
+        "element.setAttribute('DATA-X', 'ș😀\\0');"
+        "element.setAttribute('1:valid<name', 'allowed');"
+        "if (element.getAttribute('1:valid<name') !== 'allowed') throw Error('attribute local name');"
+        "if (element.getAttribute('data-x') !== 'ș😀\\0' || !element.hasAttribute('DATA-X')) throw Error('attribute');"
+        "element.id = 'renamed'; element.className = 'a b';"
+        "if (document.getElementById('target') !== null || document.getElementById('renamed') !== element || "
+        "element.getAttribute('class') !== 'a b') throw Error('reflection');"
+        "element.removeAttribute('DATA-X'); element.removeAttribute('absent');"
+        "if (element.getAttribute('data-x') !== null || element.hasAttribute('DATA-X')) throw Error('remove');"
+        "element.removeAttribute('class'); if (element.className !== '') throw Error('missing class');",
+        "attributes.js"));
+    ck_assert(exec_script(dom_thread,
+        "var invalid; try { element.setAttribute('has space', 'x'); } catch (e) { invalid = e; }"
+        "if (!(invalid instanceof DOMException) || !(invalid instanceof Error) || "
+        "invalid.name !== 'InvalidCharacterError' || invalid.code !== 5) throw Error('DOM exception');"
+        "try { Element.prototype.getAttribute.call(document, 'id'); throw Error('no brand check'); }"
+        "catch (e) { if (!(e instanceof TypeError)) throw e; }",
+        "attribute-errors.js"));
+}
+END_TEST
 
-    err = js_newheap(5, &heap);
-    ck_assert_int_eq(err, NSERROR_OK);
+START_TEST(test_quickjs_dom_text)
+{
+    ck_assert(exec_script(dom_thread,
+        "var target = document.getElementById('target'), oldText = target.firstChild;"
+        "if (target.textContent !== 'ABC' || !(oldText instanceof Text) || "
+        "!(oldText instanceof CharacterData) || oldText.data !== 'A') throw Error('initial text');"
+        "target.textContent = 'ș😀';"
+        "if (target.firstChild !== target.lastChild || target.firstChild.nodeValue !== 'ș😀' || "
+        "oldText.parentNode !== null || oldText.isConnected || !target.isConnected) throw Error('replace all');"
+        "oldText.data = 'detached'; if (oldText.textContent !== 'detached') throw Error('detached text');"
+        "oldText.data = null; if (oldText.data !== '') throw Error('legacy null');"
+        "oldText.data = undefined; if (oldText.data !== 'undefined') throw Error('undefined data');"
+        "oldText.data = 'detached';"
+        "target.textContent = null;"
+        "if (target.firstChild !== null || target.hasChildNodes() || target.textContent !== '') throw Error('empty');"
+        "target.nodeValue = 'ignored'; document.textContent = 'ignored';"
+        "if (target.nodeValue !== null || target.textContent !== '' || document.textContent !== null) throw Error('no-op');",
+        "text.js"));
+    JS_RunGC(dom_heap->rt);
+    assert_predicate(dom_thread, "oldText.data === 'detached' && oldText.ownerDocument === document", "detached node survives GC");
+}
+END_TEST
 
-    err = js_newthread(heap, NULL, NULL, &thread);
-    ck_assert_int_eq(err, NSERROR_OK);
+START_TEST(test_quickjs_dom_conversion)
+{
+    ck_assert(exec_script(dom_thread,
+        "var target = document.getElementById('target'), sentinel = {}, converted = false;"
+        "try { target.setAttribute({toString() { throw sentinel; }}, {toString() { converted = true; }}); }"
+        "catch (e) { if (e !== sentinel) throw Error('lost exception'); }"
+        "if (converted) throw Error('conversion order');"
+        "try { target.textContent = {toString() { throw sentinel; }}; } catch (e) { if (e !== sentinel) throw e; }"
+        "if (target.textContent !== 'ABC') throw Error('failed conversion changed DOM');"
+        "for (var operation of [() => target.getAttribute(), () => document.getElementById(), "
+        "() => target.setAttribute('id'), () => target.setAttribute(Symbol(), 'x')]) {"
+        " var caught; try { operation(); } catch (e) { caught = e; }"
+        " if (!(caught instanceof TypeError)) throw Error('required arguments/conversions'); }",
+        "conversion.js"));
+}
+END_TEST
 
-    /* Test document exists */
-    const char *code1 = "typeof document === 'object' && typeof window.document === 'object'";
-    assert_predicate(thread, code1, "test_document1");
+START_TEST(test_quickjs_dom_retirement)
+{
+    ck_assert(exec_script(dom_thread, "var old = document.body; old.cycle = {node: old};", "retain.js"));
+    JSValue global = JS_GetGlobalObject(dom_thread->ctx);
+    JSValue old = JS_GetPropertyStr(dom_thread->ctx, global, "old");
+    js_closethread(dom_thread);
+    /* Directly exercise a surviving wrapper: the public entry correctly refuses
+     * a retired document, so it cannot be used for this native lifetime check. */
+    JSValue value = JS_GetPropertyStr(dom_thread->ctx, old, "nodeType");
+    ck_assert(JS_IsException(value));
+    JS_FreeValue(dom_thread->ctx, JS_GetException(dom_thread->ctx));
+    JS_FreeValue(dom_thread->ctx, old);
+    JS_FreeValue(dom_thread->ctx, global);
+}
+END_TEST
 
-    /* Test getElementById stub */
-    const char *code2 = "document.getElementById('foo') === null";
-    assert_predicate(thread, code2, "test_getElementById");
+START_TEST(test_quickjs_dom_runtime_isolation)
+{
+    jsheap *second_heap;
+    jsthread *second;
+    ck_assert_int_eq(js_newheap(1, &second_heap), NSERROR_OK);
+    JSClassID foreign = 0;
+    JS_NewClassID(second_heap->rt, &foreign);
+    JSClassDef definition = {.class_name = "UnrelatedHostClass"};
+    ck_assert_int_eq(JS_NewClass(second_heap->rt, foreign, &definition), 0);
+    ck_assert_int_eq(js_newthread(second_heap, NULL, &dom_html, &second), NSERROR_OK);
+    ck_assert(dom_heap->node_class != second_heap->node_class);
+    for (unsigned i = 0; i < 2; i++) {
+        jsthread *thread = i == 0 ? dom_thread : second;
+        assert_predicate(thread, "document.body instanceof HTMLElement && new XMLHttpRequest().readyState === 0",
+            "runtime-local host classes");
+        ck_assert(exec_script(thread, "console.group('group'); console.log('class identity'); console.groupEnd();",
+            "generated console class"));
+        assert_predicate(thread, "(() => { try { new XMLHttpRequest().open.call(document, 'GET', '/'); } "
+            "catch (e) { return e instanceof TypeError; } return false; })()", "XHR cannot read a DOM wrapper payload");
+    }
+    js_destroythread(second);
+    js_destroyheap(second_heap);
+}
+END_TEST
 
-    /* Test createElement stub */
-    const char *code3 = "typeof document.createElement('div') === 'object'";
-    assert_predicate(thread, code3, "test_createElement");
+static JSValue close_dom_during_conversion(JSContext *ctx, JSValueConst object, int argc, JSValueConst *argv)
+{
+    js_closethread(JS_GetContextOpaque(ctx));
+    return JS_UNDEFINED;
+}
 
-    /* Test write stub */
-    const char *code4 = "typeof document.write === 'function'";
-    assert_predicate(thread, code4, "test_write");
-
-    /* Test body and documentElement properties */
-    const char *code5 = "typeof document.body === 'object' && typeof document.documentElement === 'object'";
-    assert_predicate(thread, code5, "test_doc_props");
-
-    /* Test cookie */
-    const char *code6 = "document.cookie === ''";
-    assert_predicate(thread, code6, "test_cookie");
-
-    /* Test element.style property exists */
-    const char *code7 = "typeof document.createElement('div').style === 'object'";
-    assert_predicate(thread, code7, "test_element_style");
-
-    js_closethread(thread);
-    js_destroythread(thread);
-    js_destroyheap(heap);
-    js_finalise();
+START_TEST(test_quickjs_dom_conversion_retirement)
+{
+    JSValue global = JS_GetGlobalObject(dom_thread->ctx);
+    ck_assert_int_eq(JS_SetPropertyStr(dom_thread->ctx, global, "retire",
+        JS_NewCFunction(dom_thread->ctx, close_dom_during_conversion, "retire", 0)), 1);
+    JS_FreeValue(dom_thread->ctx, global);
+    ck_assert(exec_script(dom_thread,
+        "var element = document.getElementById('target');"
+        "var caught; try { element.textContent = {toString() { retire(); return 'after retirement'; }}; }"
+        "catch (e) { caught = e; }"
+        "if (!(caught instanceof DOMException) || caught.name !== 'InvalidStateError') throw Error('retired mutation');",
+        "retiring-conversion.js"));
+    ck_assert_uint_eq(dom_thread->dom_changes, 0);
 }
 END_TEST
 
@@ -1386,14 +1796,35 @@ Suite *quickjs_suite(void)
     tcase_add_test(tc_window, test_quickjs_window_global);
     suite_add_tcase(s, tc_window);
 
+    TCase *tc_timers = tcase_create("Timers");
+    tcase_set_timeout(tc_timers, 10);
+    tcase_add_checked_fixture(tc_timers, setup_timers, teardown_timers);
+    tcase_add_test(tc_timers, test_quickjs_timers);
+    tcase_add_test(tc_timers, test_quickjs_timer_conversion);
+    tcase_add_test(tc_timers, test_quickjs_timer_intervals);
+    tcase_add_test(tc_timers, test_quickjs_timer_nesting);
+    tcase_add_test(tc_timers, test_quickjs_timer_retirement);
+    tcase_add_test(tc_timers, test_quickjs_timer_failures);
+    tcase_add_test(tc_timers, test_quickjs_timer_execution_limits);
+    suite_add_tcase(s, tc_timers);
+
     /* These assert the current stub surface, not Web API conformance. Replace
      * them with behavioral tests as real implementations replace the stubs. */
     tc_surface = tcase_create("Stub API surface (not conformance)");
     tcase_add_test(tc_surface, test_quickjs_unsupported_dialogs);
-    tcase_add_test(tc_surface, test_quickjs_timers);
+
     tcase_add_test(tc_surface, test_quickjs_navigator);
     tcase_add_test(tc_surface, test_quickjs_location);
-    tcase_add_test(tc_surface, test_quickjs_document);
+    TCase *tc_dom = tcase_create("Real DOM");
+    tcase_add_checked_fixture(tc_dom, setup_dom, teardown_dom);
+    tcase_add_test(tc_dom, test_quickjs_document);
+    tcase_add_test(tc_dom, test_quickjs_dom_attributes);
+    tcase_add_test(tc_dom, test_quickjs_dom_text);
+    tcase_add_test(tc_dom, test_quickjs_dom_conversion);
+    tcase_add_test(tc_dom, test_quickjs_dom_retirement);
+    tcase_add_test(tc_dom, test_quickjs_dom_runtime_isolation);
+    tcase_add_test(tc_dom, test_quickjs_dom_conversion_retirement);
+    suite_add_tcase(s, tc_dom);
     tcase_add_test(tc_surface, test_quickjs_storage);
     tcase_add_test(tc_surface, test_quickjs_event_target);
     tcase_add_test(tc_surface, test_quickjs_xhr);

@@ -8,6 +8,10 @@
 #define WISP_QUICKJS_TIMERS_H
 
 #include "quickjs.h"
+#include "content/handlers/javascript/js.h"
+
+/** Cancel all timers without calling page code, including the active timer. */
+void qjs_timers_close(jsthread *thread);
 
 /**
  * Initialize timer functions (setTimeout, setInterval, etc.) on the global object.
@@ -17,4 +21,4 @@
  */
 int qjs_init_timers(JSContext *ctx);
 
-#endif /* NEOSURF_QUICKJS_TIMERS_H */
+#endif /* WISP_QUICKJS_TIMERS_H */

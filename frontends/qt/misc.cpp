@@ -41,6 +41,7 @@ extern "C" {
 
 /* linked list of scheduled callbacks */
 static struct nscallback *schedule_list = NULL;
+static uint64_t schedule_sequence;
 
 /**
  * scheduled callback.
@@ -49,6 +50,7 @@ static struct nscallback *schedule_list = NULL;
 struct nscallback {
     struct nscallback *next;
     uint64_t due_ms; /**< Monotonic time when callback is due */
+    uint64_t sequence; /**< Callbacks added during a pass wait for the next pass. */
     void (*callback)(void *p);
     void *p;
 };
@@ -65,6 +67,7 @@ int nsqt_schedule_run(void)
     if (schedule_list == NULL)
         return -1;
 
+    const uint64_t last_sequence = schedule_sequence;
     nsu_getmonotonic_ms(&now_ms);
 
     /* reset enumeration to the start of the list */
@@ -74,7 +77,7 @@ int nsqt_schedule_run(void)
 
     while (cur_nscb != NULL) {
         /* Use >= to ensure callbacks are invoked even when time matches exactly */
-        if (now_ms >= cur_nscb->due_ms) {
+        if (now_ms >= cur_nscb->due_ms && cur_nscb->sequence <= last_sequence) {
             /* scheduled time has arrived or passed */
             NSLOG(schedule, DEBUG, "Invoking callback %p(%p) now=%llu due=%llu", cur_nscb->callback, cur_nscb->p,
                 (unsigned long long)now_ms, (unsigned long long)cur_nscb->due_ms);
@@ -98,7 +101,8 @@ int nsqt_schedule_run(void)
                 NS_Capture::active()->afterScheduledCallback();
 #endif
 
-            /* need to deal with callback modifying the list. */
+            /* Callbacks may remove or replace other entries. Rescan safely,
+             * but leave newly queued work for the next Qt event-loop turn. */
             if (schedule_list == NULL)
                 return -1; /* no more callbacks scheduled */
 
@@ -125,9 +129,9 @@ int nsqt_schedule_run(void)
     /* Calculate time until next event in milliseconds */
     int64_t delay_ms;
     if (next_due_ms <= now_ms) {
-        /* Event is already due - should have been processed above, but handle edge case */
+        /* Newly queued work may already be due; run it in the next Qt turn. */
         delay_ms = 0;
-        NSLOG(schedule, DEBUG, "WARNING: Event due but not processed now=%llu next_due=%llu",
+        NSLOG(schedule, DEBUG, "Event due next turn now=%llu next_due=%llu",
             (unsigned long long)now_ms, (unsigned long long)next_due_ms);
     } else {
         delay_ms = (int64_t)(next_due_ms - now_ms);
@@ -238,6 +242,7 @@ nserror nsqt_schedule(int tival, void (*callback)(void *p), void *p)
     }
 
     nscb->due_ms = now_ms + (uint64_t)tival;
+    nscb->sequence = ++schedule_sequence;
     nscb->callback = callback;
     nscb->p = p;
 

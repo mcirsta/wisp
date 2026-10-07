@@ -1455,12 +1455,17 @@ dom_exception _dom_node_get_text_content(dom_node_internal *node, dom_string **r
     for (n = node->first_child; n != NULL; n = n->next) {
         if (n->type == DOM_COMMENT_NODE || n->type == DOM_PROCESSING_INSTRUCTION_NODE)
             continue;
-        dom_node_get_text_content(n, (str == NULL) ? &str : &ret);
+        err = dom_node_get_text_content(n, (str == NULL) ? &str : &ret);
+        if (err != DOM_NO_ERR) {
+            dom_string_unref(str);
+            return err;
+        }
         if (ret != NULL) {
             dom_string *new_str;
             err = dom_string_concat(str, ret, &new_str);
             dom_string_unref(str);
             dom_string_unref(ret);
+            ret = NULL;
             if (err != DOM_NO_ERR) {
                 return err;
             }
@@ -1513,6 +1518,10 @@ dom_exception _dom_node_set_text_content(dom_node_internal *node, dom_string *co
 
     doc = node->owner;
     assert(doc != NULL);
+
+    /* DOM's string replace all creates a Text node only for nonempty text. */
+    if (content == NULL || dom_string_byte_length(content) == 0)
+        return DOM_NO_ERR;
 
     err = dom_document_create_text_node(doc, content, &text);
     if (err != DOM_NO_ERR)

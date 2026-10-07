@@ -179,6 +179,7 @@ add_library(wisp ${WISP_LIB_TYPE}
 	content/handlers/javascript/quickjs/navigator.c
 	content/handlers/javascript/quickjs/location.c
 	content/handlers/javascript/quickjs/document.c
+	content/handlers/javascript/quickjs/dom.c
 	content/handlers/javascript/quickjs/storage.c
 	content/handlers/javascript/quickjs/event_target.c
 	content/handlers/javascript/quickjs/xhr.c
