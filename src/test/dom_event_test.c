@@ -490,6 +490,51 @@ START_TEST(test_large_path_and_listener_snapshot)
 }
 END_TEST
 
+static unsigned owned_listener_freed;
+static void owned_cleanup(void *pw)
+{
+    owned_listener_freed++;
+}
+
+static void standalone_listener(dom_event *evt, void *pw)
+{
+    dom_event_target *current;
+    dom_event_get_current_target(evt, &current);
+    ck_assert_ptr_eq(current, pw);
+    dom_event_target_unref(current);
+    dom_event_set_passive_listener(evt, true);
+    dom_event_prevent_default(evt);
+    bool canceled;
+    dom_event_is_default_prevented(evt, &canceled);
+    ck_assert(!canceled);
+    dom_event_set_passive_listener(evt, false);
+    dom_event_prevent_default(evt);
+}
+
+START_TEST(test_standalone_target_ownership)
+{
+    dom_event_target *standalone, *saved;
+    dom_event_listener *listener;
+    dom_event *evt = event(false, true);
+    owned_listener_freed = 0;
+    ck_assert_int_eq(dom_event_target_create(&standalone), DOM_NO_ERR);
+    ck_assert_int_eq(
+        dom_event_listener_create_owned(standalone_listener, standalone, owned_cleanup, &listener), DOM_NO_ERR);
+    ck_assert_int_eq(dom_event_target_add_event_listener(standalone, type, listener, false), DOM_NO_ERR);
+    dom_event_listener_unref(listener);
+    bool success;
+    ck_assert_int_eq(dom_event_target_dispatch_event(standalone, evt, &success), DOM_NO_ERR);
+    ck_assert(!success);
+    dom_event_target_unref(standalone);
+    ck_assert_uint_eq(owned_listener_freed, 0);
+    ck_assert_int_eq(dom_event_get_target(evt, &saved), DOM_NO_ERR);
+    ck_assert_ptr_eq(saved, standalone);
+    dom_event_target_unref(saved);
+    dom_event_unref(evt);
+    ck_assert_uint_eq(owned_listener_freed, 1);
+}
+END_TEST
+
 int main(void)
 {
     Suite *suite = suite_create("DOM event dispatch");
@@ -510,6 +555,7 @@ int main(void)
     tcase_add_test(tc, test_saved_event_owns_target);
     tcase_add_loop_test(tc, test_dispatch_owns_objects, 0, 2);
     tcase_add_test(tc, test_large_path_and_listener_snapshot);
+    tcase_add_test(tc, test_standalone_target_ownership);
     suite_add_tcase(suite, tc);
     SRunner *runner = srunner_create(suite);
     srunner_run_all(runner, CK_NORMAL);

@@ -19,6 +19,10 @@ typedef struct dom_event_listener dom_event_listener;
 
 dom_exception dom_event_listener_create(handle_event handler, void *pw, dom_event_listener **listener);
 
+/* The cleanup runs only after registrations and active invocation snapshots release the listener. */
+dom_exception
+dom_event_listener_create_owned(handle_event handler, void *pw, void (*cleanup)(void *), dom_event_listener **listener);
+
 void dom_event_listener_ref(dom_event_listener *listener);
 void dom_event_listener_unref(dom_event_listener *listener);
 

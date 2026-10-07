@@ -2095,6 +2095,296 @@ START_TEST(test_quickjs_event_target)
 }
 END_TEST
 
+START_TEST(test_quickjs_event_values)
+{
+    ck_assert(exec_script(dom_thread,
+        "var detail = {}, e = new CustomEvent('ș\\0event', {bubbles:1,cancelable:true,composed:true,detail});"
+        "if (!(e instanceof Event && e instanceof CustomEvent) || e.type !== 'ș\\0event' ||"
+        "!e.bubbles || !e.cancelable || !e.composed || e.detail !== detail || e.isTrusted ||"
+        "e.target !== null || e.currentTarget !== null || e.eventPhase !== Event.NONE ||"
+        "e.composedPath().length || e.timeStamp < 0) throw Error('initial state');"
+        "if (Object.prototype.toString.call(e) !== '[object CustomEvent]' || Event.AT_TARGET !== 2 ||"
+        "CustomEvent.CAPTURING_PHASE !== 1 || e.BUBBLING_PHASE !== 3) throw Error('interface');"
+        "var descriptor = Object.getOwnPropertyDescriptor(e,'isTrusted');"
+        "if (descriptor.configurable || !descriptor.enumerable || descriptor.set ||"
+        "Reflect.deleteProperty(e, 'isTrusted') || Reflect.set(e,'isTrusted',true)) throw Error('trusted descriptor');"
+        "e.preventDefault(); if (!e.defaultPrevented || e.returnValue) throw Error('cancel');"
+        "e.returnValue = true; if (!e.defaultPrevented) throw Error('uncancel');"
+        "var stamp=e.timeStamp; e.initEvent('reset');"
+        "if (e.defaultPrevented || e.bubbles || e.cancelable || e.type!=='reset' || e.timeStamp!==stamp ||"
+        "e.detail!==detail || !e.composed) throw Error('initEvent');"
+        "e.initCustomEvent('custom',true,true,42); if(e.detail!==42) throw Error('custom init');"
+        "e.cancelBubble=true; e.cancelBubble=false; if(!e.cancelBubble) throw Error('unstoppable');"
+        "e.initCustomEvent('again'); if(e.detail!==null || e.cancelBubble) throw Error('reset flags');"
+        "class Mine extends CustomEvent {} var sub=new Mine('sub');"
+        "if(!(sub instanceof Mine) || sub.detail!==null) throw Error('subclass');"
+        "var plain=new Event('x'); plain.preventDefault(); if(plain.defaultPrevented) throw Error('uncancelable');",
+        "event-values.js"));
+}
+END_TEST
+
+START_TEST(test_quickjs_event_conversion)
+{
+    ck_assert(exec_script(dom_thread,
+        "var order=[]; new CustomEvent({toString(){order.push('type');return 'x';}}, {"
+        "get bubbles(){order.push('b');return 1;}, get cancelable(){order.push('c');return 1;},"
+        "get composed(){order.push('o');return 1;}, get detail(){order.push('d');return undefined;}});"
+        "if(order.join()!=='type,b,c,o,d') throw Error('dictionary order');"
+        "var sentinel={}; try { new Event('x',{get bubbles(){throw sentinel;},"
+        "get cancelable(){throw Error('late getter');}}); throw Error('missing throw');}"
+        "catch(e){if(e!==sentinel) throw e;}"
+        "for(var action of [()=>Event('x'),()=>new Event(),()=>new Event(Symbol()),()=>new Event('x',3),"
+        "()=>Event.prototype.preventDefault.call({}),()=>Event.prototype.initEvent.call(new Event('x'))]) {"
+        "try{action();throw Error('accepted');}catch(e){if(!(e instanceof TypeError))throw e;}}"
+        "var ev=new Event('x'); try {Object.getOwnPropertyDescriptor(CustomEvent.prototype,'detail').get.call(ev);"
+        "throw Error('accepted');}catch(e){if(!(e instanceof TypeError))throw e;}",
+        "event-conversion.js"));
+}
+END_TEST
+
+START_TEST(test_quickjs_event_dispatch)
+{
+    ck_assert(exec_script(dom_thread,
+        "var t=new EventTarget(), e=new Event('x',{cancelable:true}), order=[];"
+        "t.addEventListener('x',function(ev){if(this!==t || ev!==e || ev.target!==t ||"
+        "ev.currentTarget!==t || ev.eventPhase!==2 || ev.composedPath()[0]!==t) throw Error('target');"
+        "order.push('b'); ev.preventDefault();});"
+        "t.addEventListener('x',()=>order.push('c'),true);"
+        "if(t.dispatchEvent(e) || order.join()!=='c,b' || !e.defaultPrevented || e.target!==t ||"
+        "e.currentTarget!==null || e.eventPhase!==0 || e.composedPath().length) throw Error('dispatch');"
+        "e.initEvent('empty'); if(e.target!==null || !t.dispatchEvent(e))throw Error('reuse');"
+        "var a=new Event(''); if(!t.dispatchEvent(a))throw Error('empty type');"
+        "class Target extends EventTarget {} if(!(new Target() instanceof EventTarget))throw Error('subclass');"
+        "if(Object.prototype.toString.call(t)!=='[object EventTarget]')throw Error('tag');",
+        "event-dispatch.js"));
+}
+END_TEST
+
+START_TEST(test_quickjs_event_listener_identity)
+{
+    ck_assert(exec_script(dom_thread,
+        "var t=new EventTarget(), calls=[]; function f(){calls.push('f');}"
+        "t.addEventListener('x',f,{once:true});t.addEventListener('x',f,{once:false,passive:true});"
+        "t.addEventListener('x',f,true);t.addEventListener('x',()=>calls.push('z'));"
+        "t.dispatchEvent(new Event('x'));t.dispatchEvent(new Event('x'));"
+        "if(calls.join()!=='f,f,z,f,z')throw Error('duplicate/once');"
+        "t.removeEventListener('x',f,{capture:true, get once(){throw Error('remove once');},"
+        "get passive(){throw Error('remove passive');},get signal(){throw Error('remove signal');}});"
+        "t.dispatchEvent(new Event('x'));if(calls.join()!=='f,f,z,f,z,z')throw Error('remove');"
+        "var options=[]; t.addEventListener('none',null,{get capture(){options.push('c');},"
+        "get once(){options.push('o');},get passive(){options.push('p');},get signal(){options.push('s');}});"
+        "if(options.join()!=='c,o,p,s')throw Error('null callback dictionary conversion');"
+        "for(var action of [()=>t.addEventListener('x',1),()=>t.addEventListener('x',f,{signal:{}}),"
+        "()=>t.addEventListener('x'),()=>t.dispatchEvent({}),()=>EventTarget.prototype.dispatchEvent.call({},new Event('x'))]) {"
+        "try{action();throw Error('accepted');}catch(e){if(!(e instanceof TypeError))throw e;}}",
+        "event-listeners.js"));
+}
+END_TEST
+
+START_TEST(test_quickjs_event_listener_edits)
+{
+    ck_assert(exec_script(dom_thread,
+        "var t=new EventTarget(), calls=[];function next(){calls.push('next');}"
+        "function edit(){calls.push('edit');t.removeEventListener('x',edit);"
+        "t.removeEventListener('x',next);t.addEventListener('x',next);t.addEventListener('x',()=>calls.push('new'));}"
+        "t.addEventListener('x',edit);t.addEventListener('x',next);t.addEventListener('x',()=>calls.push('last'));"
+        "t.dispatchEvent(new Event('x'));if(calls.join()!=='edit,last')throw Error('snapshot');"
+        "calls=[];t.dispatchEvent(new Event('x'));if(calls.join()!=='last,next,new')throw Error('next invocation');"
+        "var t2=new EventTarget(), hits=0;t2.addEventListener('x',function(){hits++;t2.dispatchEvent(new Event('x'));},{once:true});"
+        "t2.dispatchEvent(new Event('x'));if(hits!==1)throw Error('once removed too late');"
+        "var t3=new EventTarget(), added=0;t3.addEventListener('x',()=>t3.addEventListener('x',()=>added++),true);"
+        "t3.dispatchEvent(new Event('x'));if(added!==1)throw Error('snapshot per invocation');",
+        "event-edits.js"));
+}
+END_TEST
+
+START_TEST(test_quickjs_event_stop_and_passive)
+{
+    ck_assert(exec_script(dom_thread,
+        "for(var immediate of [false,true]){var t=new EventTarget(),calls=[];"
+        "t.addEventListener('x',e=>{calls.push(1);if(immediate)e.stopImmediatePropagation();else e.stopPropagation();},true);"
+        "t.addEventListener('x',()=>calls.push(2),true);t.addEventListener('x',()=>calls.push(3));"
+        "t.dispatchEvent(new Event('x'));if(calls.join()!==(immediate?'1':'1,2'))throw Error('stop');}"
+        "var t=new EventTarget(), e=new Event('x',{cancelable:true});"
+        "function passive(e){e.preventDefault();e.returnValue=false;}"
+        "t.addEventListener('x',passive,{passive:true});"
+        "if(!t.dispatchEvent(e)||e.defaultPrevented)throw Error('passive');"
+        "t.removeEventListener('x',passive);t.addEventListener('x',passive);"
+        "if(t.dispatchEvent(e)||!e.defaultPrevented)throw Error('active');"
+        "var fresh=new Event('y');fresh.stopImmediatePropagation();"
+        "var hits=0;t.addEventListener('y',()=>hits++);t.dispatchEvent(fresh);t.dispatchEvent(fresh);"
+        "if(hits!==1 || fresh.cancelBubble)throw Error('reset stop');",
+        "event-stop.js"));
+}
+END_TEST
+
+START_TEST(test_quickjs_window_events)
+{
+    ck_assert(exec_script(dom_thread,
+        "var called=0;function f(e){if(this!==window || e.target!==window || e.currentTarget!==window)"
+        "throw Error('window receiver');called++;e.preventDefault();}"
+        "addEventListener('wheel',f); if(!dispatchEvent(new Event('wheel',{cancelable:true})))throw Error('default passive');"
+        "removeEventListener('wheel',f);addEventListener('wheel',f,{passive:false});"
+        "if(dispatchEvent(new Event('wheel',{cancelable:true}))||called!==2)throw Error('explicit active');"
+        "removeEventListener('wheel',f);if(!dispatchEvent(new Event('wheel')))throw Error('removed');"
+        "if(!(window instanceof EventTarget))throw Error('window prototype');",
+        "window-events.js"));
+}
+END_TEST
+
+START_TEST(test_quickjs_event_callback_errors)
+{
+    ck_assert(exec_script(dom_thread,
+        "var t=new EventTarget(),seen=[],obj={handleEvent(e){if(this!==obj)throw Error('object this');seen.push('object');}};"
+        "t.addEventListener('x',()=>{throw new Error('Expected listener error');});"
+        "t.addEventListener('x',{});t.addEventListener('x',{get handleEvent(){throw Error('Expected getter error');}});"
+        "t.addEventListener('x',obj);t.dispatchEvent(new Event('x'));"
+        "obj.handleEvent=function(){seen.push('changed');};t.dispatchEvent(new Event('x'));"
+        "if(seen.join()!=='object,changed')throw Error('exception isolation/object invocation');"
+        "var nested=new Event('nested');t.addEventListener('nested',e=>{try{t.dispatchEvent(e);throw Error('redispatch');}"
+        "catch(error){if(error.name!=='InvalidStateError')throw error;}e.initEvent('wrong');"
+        "if(e.type!=='nested')throw Error('in-flight init');seen.push('nested');});"
+        "t.dispatchEvent(nested);if(seen[2]!=='nested')throw Error('recursive rejection');",
+        "event-callback-errors.js"));
+}
+END_TEST
+
+START_TEST(test_quickjs_event_microtasks)
+{
+    ck_assert(exec_script(dom_thread,
+        "var t=new EventTarget(),order=[];t.addEventListener('x',()=>{order.push(1);queueMicrotask(()=>order.push(4));});"
+        "t.addEventListener('x',()=>order.push(2));t.dispatchEvent(new Event('x'));order.push(3);",
+        "event-microtasks.js"));
+    assert_predicate(dom_thread, "order.join()==='1,2,3,4'", "script-dispatched callback checkpoint");
+}
+END_TEST
+
+START_TEST(test_quickjs_event_timeout)
+{
+    ck_assert(!exec_script(dom_thread,
+        "var t=new EventTarget(),late=false,caught=false,after=false,job=false,ev=new Event('x');"
+        "t.addEventListener('x',()=>{queueMicrotask(()=>job=true);while(true){};});"
+        "t.addEventListener('x',()=>late=true);try{t.dispatchEvent(ev);}catch(e){caught=true;}after=true;",
+        "event-timeout.js"));
+    assert_predicate(dom_thread, "!late&&!caught&&!after&&!job&&ev.currentTarget===null&&ev.eventPhase===0",
+        "event interrupt cleanup");
+    assert_predicate(dom_thread, "new EventTarget().dispatchEvent(new Event('ok'))", "recovery after event interrupt");
+}
+END_TEST
+
+START_TEST(test_quickjs_event_gc)
+{
+    JSMemoryUsage before, after;
+    ck_assert(exec_script(dom_thread,
+        "var savedEvent=new Event('saved'); {let target=new EventTarget();target.addEventListener('saved',()=>target);"
+        "target.dispatchEvent(savedEvent);}"
+        "function cycles(){for(let i=0;i<100;i++){let t=new EventTarget(),event=new CustomEvent('x',{detail:t});"
+        "t.addEventListener('x',()=>event);t.dispatchEvent(event);}} cycles();",
+        "event-cycles.js"));
+    JS_RunGC(dom_heap->rt);
+    JS_ComputeMemoryUsage(dom_heap->rt, &before);
+    ck_assert(exec_script(dom_thread, "cycles();", "more event cycles"));
+    JS_RunGC(dom_heap->rt);
+    JS_ComputeMemoryUsage(dom_heap->rt, &after);
+    ck_assert_msg(after.obj_count <= before.obj_count + 2, "Event/listener cycles leaked %lld objects",
+        (long long)(after.obj_count - before.obj_count));
+    assert_predicate(dom_thread, "savedEvent.target.dispatchEvent(savedEvent)", "saved Event retains JS/native target");
+}
+END_TEST
+
+static JSValue close_from_listener(JSContext *ctx, JSValueConst object, int argc, JSValueConst *argv)
+{
+    js_closethread(dom_thread);
+    return JS_UNDEFINED;
+}
+
+START_TEST(test_quickjs_event_retirement)
+{
+    JSValue global = JS_GetGlobalObject(dom_thread->ctx);
+    JS_SetPropertyStr(dom_thread->ctx, global, "retireEvents",
+        JS_NewCFunction(dom_thread->ctx, close_from_listener, "retireEvents", 0));
+    JS_FreeValue(dom_thread->ctx, global);
+    ck_assert(exec_script(dom_thread,
+        "var calls=0;addEventListener('x',()=>{calls++;retireEvents();});addEventListener('x',()=>calls++);"
+        "dispatchEvent(new Event('x'));if(calls!==1)throw Error('retired listener ran');",
+        "event-retirement.js"));
+    JS_RunGC(dom_heap->rt);
+}
+END_TEST
+
+START_TEST(test_quickjs_event_conversion_retirement)
+{
+    JSValue global = JS_GetGlobalObject(dom_thread->ctx);
+    JS_SetPropertyStr(dom_thread->ctx, global, "retireEvents",
+        JS_NewCFunction(dom_thread->ctx, close_from_listener, "retireEvents", 0));
+    JS_FreeValue(dom_thread->ctx, global);
+    const char *code[] = {
+        "try{addEventListener({toString(){retireEvents();return 'x';}},()=>{});throw Error('accepted');}"
+        "catch(e){if(e.name!=='InvalidStateError')throw e;}",
+        "try{addEventListener('x',()=>{},{get capture(){retireEvents();return true;}});throw Error('accepted');}"
+        "catch(e){if(e.name!=='InvalidStateError')throw e;}"};
+    ck_assert(exec_script(dom_thread, code[_i], "event-conversion-retirement.js"));
+}
+END_TEST
+
+START_TEST(test_quickjs_event_allocation_failure)
+{
+    ck_assert(exec_script(dom_thread,
+        "function eventAllocation(){let t=new EventTarget();let e=new CustomEvent('x',{detail:t});"
+        "t.addEventListener('x',()=>e,{once:true});t.dispatchEvent(e);return true;}eventAllocation();",
+        "event allocation warmup"));
+    JSValue global = JS_GetGlobalObject(dom_thread->ctx);
+    JSValue callback = JS_GetPropertyStr(dom_thread->ctx, global, "eventAllocation");
+    JS_FreeValue(dom_thread->ctx, global);
+    bool failed = false, succeeded = false;
+    for (size_t extra = 0; extra <= 32768; extra += 128) {
+        JS_RunGC(dom_heap->rt);
+        JSMemoryUsage usage;
+        JS_ComputeMemoryUsage(dom_heap->rt, &usage);
+        JS_SetMemoryLimit(dom_heap->rt, usage.malloc_size + extra);
+        JSValue result = JS_Call(dom_thread->ctx, callback, JS_UNDEFINED, 0, NULL);
+        JS_SetMemoryLimit(dom_heap->rt, 0);
+        if (JS_IsException(result)) {
+            failed = true;
+            JS_FreeValue(dom_thread->ctx, JS_GetException(dom_thread->ctx));
+        } else {
+            succeeded = true;
+            ck_assert(JS_ToBool(dom_thread->ctx, result));
+        }
+        JS_FreeValue(dom_thread->ctx, result);
+        if (succeeded)
+            break;
+    }
+    ck_assert(failed && succeeded);
+    JS_FreeValue(dom_thread->ctx, callback);
+    JS_RunGC(dom_heap->rt);
+    assert_predicate(dom_thread, "eventAllocation()", "event recovery after allocation failures");
+}
+END_TEST
+
+START_TEST(test_quickjs_event_foreign_retirement)
+{
+    jsthread *source;
+    ck_assert_int_eq(js_newthread(dom_heap, NULL, NULL, &source), NSERROR_OK);
+    ck_assert(exec_script(source,
+        "var t=new EventTarget();t.addEventListener('x',()=>{throw Error('retired listener');});",
+        "retained-event-target.js"));
+    JSValue global = JS_GetGlobalObject(source->ctx);
+    JSValue retained = JS_GetPropertyStr(source->ctx, global, "t");
+    JS_FreeValue(source->ctx, global);
+    js_destroythread(source);
+    JS_RunGC(dom_heap->rt);
+    global = JS_GetGlobalObject(dom_thread->ctx);
+    JS_SetPropertyStr(dom_thread->ctx, global, "retiredTarget", retained);
+    JS_FreeValue(dom_thread->ctx, global);
+    ck_assert(exec_script(dom_thread,
+        "try {EventTarget.prototype.dispatchEvent.call(retiredTarget,new Event('x'));throw Error('accepted');}"
+        "catch(e){if(e.name!=='InvalidStateError')throw e;}delete globalThis.retiredTarget;",
+        "retired-event-target.js"));
+    JS_RunGC(dom_heap->rt);
+}
+END_TEST
+
 /**
  * Test XMLHttpRequest.
  */
@@ -2460,6 +2750,21 @@ Suite *quickjs_suite(void)
     tcase_add_test(tc_dom, test_quickjs_collection_retirement);
     tcase_add_test(tc_dom, test_quickjs_collection_allocation_failure);
     tcase_add_loop_test(tc_dom, test_quickjs_collection_conversion_retirement, 0, 3);
+    tcase_add_test(tc_dom, test_quickjs_event_values);
+    tcase_add_test(tc_dom, test_quickjs_event_conversion);
+    tcase_add_test(tc_dom, test_quickjs_event_dispatch);
+    tcase_add_test(tc_dom, test_quickjs_event_listener_identity);
+    tcase_add_test(tc_dom, test_quickjs_event_listener_edits);
+    tcase_add_test(tc_dom, test_quickjs_event_stop_and_passive);
+    tcase_add_test(tc_dom, test_quickjs_event_callback_errors);
+    tcase_add_test(tc_dom, test_quickjs_event_microtasks);
+    tcase_add_test(tc_dom, test_quickjs_event_timeout);
+    tcase_add_test(tc_dom, test_quickjs_event_gc);
+    tcase_add_test(tc_dom, test_quickjs_event_retirement);
+    tcase_add_loop_test(tc_dom, test_quickjs_event_conversion_retirement, 0, 2);
+    tcase_add_test(tc_dom, test_quickjs_event_allocation_failure);
+    tcase_add_test(tc_dom, test_quickjs_event_foreign_retirement);
+    tcase_add_test(tc_dom, test_quickjs_window_events);
     suite_add_tcase(s, tc_dom);
     tcase_add_test(tc_surface, test_quickjs_storage);
     tcase_add_test(tc_surface, test_quickjs_event_target);

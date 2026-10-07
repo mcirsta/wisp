@@ -36,6 +36,7 @@ struct dom_event {
 
     dom_string *namespace; /**< The namespace of this event */
 
+    bool passive; /**< Currently invoking a passive listener */
     bool stop; /**< Whether stopPropagation is called */
     bool stop_now; /**< Whether stopImmediatePropagation is called */
     bool prevent_default;
@@ -51,6 +52,15 @@ struct dom_event {
     bool is_initialised; /**< Whether this event is initialised */
     bool is_trusted; /**< Whether this event is trusted */
 };
+
+struct dom_event_path {
+    dom_event_target **targets;
+    size_t count;
+};
+
+/* Callers retain the complete path; this owns the event and document while invoking. */
+dom_exception
+_dom_dispatch_event_path(dom_event *evt, const struct dom_event_path *path, dom_document *doc, bool *success);
 
 /* Destructor */
 void _dom_event_destroy(dom_event *evt);

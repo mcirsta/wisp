@@ -20,8 +20,7 @@ struct dom_event_listener {
     void *pw; /**< The private data of this listener */
 
     unsigned int refcnt; /**< The reference count of this listener */
-    struct dom_document *doc;
-    /**< The document which create this listener */
+    void (*cleanup)(void *); /**< Optional owner cleanup for pw */
 };
 
 #endif

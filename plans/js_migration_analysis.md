@@ -6,7 +6,8 @@ It is a browser-integration review, not an exhaustive security or ECMAScript
 conformance audit. Batches 1–2 and four increments of batch 3 are implemented
 within the scope described below. Real DOM lookups, class lists, attribute/text
 mutations and basic node creation/tree edits now reach rendering and carry JS action
-traces. Live child-node/element collections are implemented. Events and the other
+traces. Live child-node/element collections and script-dispatched standalone/Window events
+are implemented. DOM interaction/lifecycle and the other
 capabilities below remain future work.
 
 ## Assessment
@@ -71,7 +72,7 @@ unless stated otherwise.
 | JS diagnostics | Optional `js_trace` records document/entry IDs, script sources, timer causality, navigation, exposed node IDs, actual DOM operations and coalesced render requests | Separates supported JS host effects from static processing; this is not complete paint attribution |
 | Document/nodes | `dom.c`/`document.c`/`tree.c`/`collections.c`: real libdom wrappers with stable identity, roots, ID lookup, traversal, live `childNodes`/`children` and element/text/comment/fragment factories | Document-lifetime wrapper ownership and native reference cleanup are tested; selectors, document-wide collections, namespace-aware creation and cross-document operations are not exposed |
 | Mutation/CSSOM | Real attributes, `id`/`className`, live `classList`, text/data and append/insert/replace/remove; connected edits request a full restyle after the entry/checkpoint | Changes affect boxes and pixels, including moves into detached trees; `style` and `innerHTML` remain omitted |
-| Events | `event_target.c` and `js_fire_event`/`js_handle_new_element` are stubs | No real JS listeners, inline event handlers or load-event delivery |
+| Events | `event.c`/`event_target.c`: real Event/CustomEvent values and script-dispatched listeners on standalone EventTarget and Window | DOM-node listeners, browser-generated input, handler attributes and lifecycle delivery remain pending; `js_fire_event`/`js_handle_new_element` are still stubs |
 | Lifecycle information | `document.readyState` is omitted | Correct loading state and lifecycle events belong to batch 4 |
 | Networking/storage | XHR fabricates DONE/200 without a request; storage discards writes; no `document.cookie` accessor or browser fetch binding | XHR/storage still advertise unsupported behavior. Native HTTP cookie handling is a separate subsystem |
 | Navigation | `location.c`: real URL getters and calls to navigation for assign/replace | Partial support: href has no setter, reload is a stub, relative URL resolution/history replacement need review; assign and replace currently use the same flags |
@@ -560,13 +561,10 @@ native cases pass ASan/UBSan and leak checking. Existing QuickJS, DOM tree,
 class/details, user-data, construction, form and Qt JS/interaction regressions are
 also checked. GTK is not tested.
 
-**JS EventTarget/Event remain stubs at this point.** The next increment still
-needs callback identity and GC tracing, Web IDL conversion, once/passive behavior,
-bounded execution and the existing JS action trace. Native trust/timestamp APIs
-retain their previous semantics; JS-created/dispatched events must supply the
-standard untrusted state and timestamp behavior when bindings are implemented.
-Window propagation, specialized event initialization and shadow trees are not
-implemented by this node-tree repair.
+This prerequisite initially left the JS APIs as stubs; the following increment
+implements script-dispatched standalone/Window events. DOM-to-Window propagation,
+specialized native event initialization and shadow trees are not implemented by
+the node-tree repair.
 
 Two integration issues identified for the next increment must be handled before
 enabling click listeners: native checkbox/details activation already consults
@@ -576,6 +574,60 @@ using stale boxes, links or form pointers. DOMContentLoaded/load and readyState
 also need a separate lifecycle pass: the current `js_fire_event("load")` call is
 before the initial box build. Do not simply attach callbacks to these existing
 hooks and assume the complete behavior is correct.
+
+### Batch 4 increment: script-dispatched events
+
+`Event`, `CustomEvent` and `EventTarget` are real constructors. Scripts can register
+and remove listeners on `new EventTarget()` and `window`, and synchronously dispatch
+events to them. Supported semantics include:
+
+- Type and option conversion, constructor inheritance, interface constants,
+  CustomEvent detail identity, unforgeable `isTrusted`, a monotonic millisecond
+  timestamp relative to context creation, and legacy initialization/accessors.
+- Function listeners and callback objects with `handleEvent` resolved at invocation
+  time. Duplicates/removal match type, callback identity and capture only. `once`
+  removes before invocation, including before reading `handleEvent`.
+- Per-invocation snapshots, cancellation, stop flags and passive listeners. Window
+  uses DOM's passive default for wheel/mousewheel/touchstart/touchmove; explicit
+  options override it. AbortSignal is not implemented, so supplied non-undefined
+  signals fail the required interface conversion rather than being silently ignored.
+- Listener exceptions are reported while later listeners continue. Execution
+  interruption escapes the surrounding script, stops dispatch and discards jobs.
+  Nested callbacks share the existing deadline and outer microtask checkpoint.
+- GC-visible callback/target/detail ownership. A saved event retains its target;
+  callback cycles collect. All targets release registrations at document closure;
+  retained targets reject calls from retired or foreign document contexts.
+
+libdom now has a standalone target implementation and virtual target ref/unref/
+invocation operations. Nodes and standalone targets use one dispatcher. This avoids
+representing Window/custom targets as fake DOM nodes or copying propagation into
+the JS layer. Optional listener-owned cleanup waits until native invocation
+snapshots release the listener, so self-removal and closure cannot free callback
+data still in use. The JS side stores registration metadata and delegates dispatch
+and cancellation to libdom.
+
+The generator still owns Window's generated properties; event constructors and
+semantics are hand-written, registered separately and included in both production
+and test source lists. No generated output is edited. The old Duktape bindings were
+consulted for integration patterns, not copied as the semantic implementation.
+
+There are 16 new JS event cases (95 total QuickJS cases) and 22 native event cases.
+They cover conversion/error behavior, dispatch, listener edits, passive/once,
+microtask ordering, timeouts, document retirement and collection of callback cycles.
+`qt_js_dom` additionally compares event-driven DOM mutations against static pixels
+and verifies coalescing and event-entry trace attribution. Native DOM/form and Qt
+loading, navigation, scripts, timers, interaction and retained-rendering regressions
+are checked. GTK is not tested.
+
+**This increment does not deliver native clicks or lifecycle events.** Nodes do not
+yet inherit the JS EventTarget interface. The next adapter must connect node
+wrappers to these registrations, provide the full node-to-Window path and event
+identity during native dispatch, and complete the cancellation/lifetime work above.
+Event.currentTarget and composedPath currently cover the supported single-target
+path; expand them with that adapter. Do not enable native callbacks by merely
+removing the dispatch-stack check. Inline handlers, readyState and HTML lifecycle
+timing remain separate work. Cross-realm callback/settings handling is also not
+implemented; cross-document JS objects are not exposed by the current DOM bindings.
 
 ### Reading the JS trace
 
@@ -621,6 +673,13 @@ box build will cover the edits; `full-restyle` requests the existing full update
 Detached-node edits are traced but produce no page update, unless moving a node
 also changes a connected source parent (reported as `moveFrom`). The count is
 affected-node notifications, not necessarily JS method calls.
+
+`event.add` records a listener ID, event type and capture/once/passive settings;
+`event.remove` records explicit removals. `event.dispatch`/`event.complete` bracket
+script dispatch. `event.listener` identifies the invoked registration and its
+creating entry; the following `begin kind=event` opens the bounded callback entry.
+DOM mutations inside that callback use its entry ID. As with timers, the recorded
+source is the registration source, not necessarily the function's definition site.
 
 This is an action trace, not a DOM snapshot or complete paint attribution. It
 records no arbitrary text/attribute values and never calls page getters or
@@ -708,8 +767,8 @@ These are separate reviewable batches, not a commitment to full web-app support.
    and mutation traces pass identity/GC and rendered-page tests. Extend the same
    ownership/conversion/invalidation layer for further APIs. Reuse
    partial updates only with sound mutation/dependency tracking.
-4. **Events and practical document interaction — native dispatch prerequisite
-   implemented; JS bindings/lifecycle still pending.** EventTarget/Event, click
+4. **Events and practical document interaction — native dispatch and explicit
+   standalone/Window JS events implemented; DOM interaction/lifecycle pending.** Click
    listeners and supported handler attributes, DOMContentLoaded/load and accurate
    readyState; then further element lifecycle integration. Validate propagation,
    preventDefault, capture, once, callback identity and navigation cleanup.

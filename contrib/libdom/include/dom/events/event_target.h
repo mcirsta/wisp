@@ -15,8 +15,7 @@
 struct dom_event_listener;
 struct dom_event;
 
-/* Event target is a mixin interface, thus has no concrete implementation.
- * Subclasses must provide implementations of the event target methods. */
+/* Nodes and standalone targets provide the same event and ownership interface. */
 typedef struct dom_event_target {
     void *vtable;
 } dom_event_target;
@@ -31,7 +30,24 @@ typedef struct dom_event_target_vtable {
         struct dom_event_listener *listener, bool capture);
     dom_exception (*remove_event_listener_ns)(dom_event_target *et, dom_string *namespace, dom_string *type,
         struct dom_event_listener *listener, bool capture);
+    void (*ref)(dom_event_target *et);
+    void (*unref)(dom_event_target *et);
+    dom_exception (*invoke)(dom_event_target *et, struct dom_event *evt, bool capture);
 } dom_event_target_vtable;
+
+/* Create a target with no parent (DOM EventTarget constructor semantics). */
+dom_exception dom_event_target_create(dom_event_target **target);
+static inline dom_event_target *dom_event_target_ref(dom_event_target *target)
+{
+    if (target != NULL)
+        ((dom_event_target_vtable *)target->vtable)->ref(target);
+    return target;
+}
+static inline void dom_event_target_unref(dom_event_target *target)
+{
+    if (target != NULL)
+        ((dom_event_target_vtable *)target->vtable)->unref(target);
+}
 
 static inline dom_exception dom_event_target_add_event_listener(
     dom_event_target *et, dom_string *type, struct dom_event_listener *listener, bool capture)

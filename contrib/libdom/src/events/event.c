@@ -66,7 +66,7 @@ void _dom_event_finalise(dom_event *evt)
     if (evt->namespace != NULL)
         dom_string_unref(evt->namespace);
 
-    dom_node_unref(evt->target);
+    dom_event_target_unref(evt->target);
     evt->target = NULL;
 
     evt->stop = false;
@@ -139,7 +139,7 @@ dom_exception _dom_event_get_type(dom_event *evt, dom_string **type)
 dom_exception _dom_event_get_target(dom_event *evt, dom_event_target **target)
 {
     *target = evt->target;
-    dom_node_ref(*target);
+    dom_event_target_ref(*target);
 
     return DOM_NO_ERR;
 }
@@ -154,7 +154,7 @@ dom_exception _dom_event_get_target(dom_event *evt, dom_event_target **target)
 dom_exception _dom_event_get_current_target(dom_event *evt, dom_event_target **current)
 {
     *current = evt->current;
-    dom_node_ref(*current);
+    dom_event_target_ref(*current);
 
     return DOM_NO_ERR;
 }
@@ -232,7 +232,7 @@ dom_exception _dom_event_stop_propagation(dom_event *evt)
  */
 dom_exception _dom_event_prevent_default(dom_event *evt)
 {
-    if (evt->cancelable)
+    if (evt->cancelable && !evt->passive)
         evt->prevent_default = true;
     return DOM_NO_ERR;
 }
@@ -248,7 +248,7 @@ static dom_exception event_init(dom_event *evt, dom_string *namespace, dom_strin
     dom_string_ref(namespace);
     dom_string_unref(evt->type);
     dom_string_unref(evt->namespace);
-    dom_node_unref(evt->target);
+    dom_event_target_unref(evt->target);
     evt->target = NULL;
     evt->current = NULL;
     evt->phase = DOM_NONE;
@@ -403,4 +403,15 @@ dom_exception _dom_event_set_is_trusted(dom_event *evt, bool trusted)
     evt->is_trusted = trusted;
 
     return DOM_NO_ERR;
+}
+
+/* Binding support for legacy cancelBubble and passive listener invocation. */
+dom_exception dom_event_get_cancel_bubble(dom_event *evt, bool *value)
+{
+    *value = evt->stop;
+    return DOM_NO_ERR;
+}
+void dom_event_set_passive_listener(dom_event *evt, bool passive)
+{
+    evt->passive = passive;
 }

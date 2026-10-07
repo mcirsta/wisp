@@ -246,3 +246,165 @@ dom_exception _dom_event_target_dispatch(
         free(snapshot);
     return DOM_NO_ERR;
 }
+
+static void event_default_action(dom_document *doc, dom_event *evt, dom_string *type, dom_default_action_phase phase)
+{
+    if (doc != NULL && doc->dei.actions != NULL) {
+        void *pw = doc->dei.actions_ctx;
+        dom_default_action_callback cb = doc->dei.actions(type, phase, &pw);
+        if (cb != NULL)
+            cb(evt, pw);
+    }
+}
+
+/* Helper to determine if an event is a mutation event */
+static bool _event_is_mutation(dom_document *doc, struct dom_event *evt)
+{
+    return dom_string_isequal(evt->type, doc->_memo_domnodeinserted) ||
+        dom_string_isequal(evt->type, doc->_memo_domnoderemoved) ||
+        dom_string_isequal(evt->type, doc->_memo_domnodeinsertedintodocument) ||
+        dom_string_isequal(evt->type, doc->_memo_domnoderemovedfromdocument) ||
+        dom_string_isequal(evt->type, doc->_memo_domattrmodified) ||
+        dom_string_isequal(evt->type, doc->_memo_domcharacterdatamodified) ||
+        dom_string_isequal(evt->type, doc->_memo_domsubtreemodified);
+}
+
+dom_exception
+_dom_dispatch_event_path(dom_event *evt, const struct dom_event_path *path, dom_document *doc, bool *success)
+{
+    dom_exception ret = DOM_NO_ERR;
+    dom_string *type;
+    bool mutation;
+    dom_event_target *et = path->targets[0];
+
+    assert(et != NULL);
+    assert(evt != NULL);
+
+    if (evt->in_dispatch)
+        return DOM_DISPATCH_REQUEST_ERR;
+    if (!evt->is_initialised || evt->type == NULL)
+        return DOM_UNSPECIFIED_EVENT_TYPE_ERR;
+
+    dom_event_ref(evt);
+    dom_node_ref(doc);
+    type = dom_string_ref(evt->type);
+    mutation = doc != NULL && _event_is_mutation(doc, evt);
+    evt->in_dispatch = true;
+    *success = !evt->prevent_default;
+
+    dom_event_target_ref(et);
+    dom_event_target_unref(evt->target);
+    evt->target = et;
+    if (mutation)
+        doc->dispatching_mutation++;
+    event_default_action(doc, evt, type, DOM_DEFAULT_ACTION_STARTED);
+
+    for (size_t i = path->count; i != 0 && !evt->stop; i--) {
+        dom_event_target *target = path->targets[i - 1];
+        evt->phase = i == 1 ? DOM_AT_TARGET : DOM_CAPTURING_PHASE;
+        ret = ((dom_event_target_vtable *)target->vtable)->invoke(target, evt, true);
+        if (ret != DOM_NO_ERR)
+            goto cleanup;
+    }
+    for (size_t i = 0; i < path->count && !evt->stop; i++) {
+        if (i != 0 && !evt->bubble)
+            break;
+        dom_event_target *target = path->targets[i];
+        evt->phase = i == 0 ? DOM_AT_TARGET : DOM_BUBBLING_PHASE;
+        ret = ((dom_event_target_vtable *)target->vtable)->invoke(target, evt, false);
+        if (ret != DOM_NO_ERR)
+            goto cleanup;
+    }
+
+cleanup:
+    evt->phase = DOM_NONE;
+    evt->current = NULL;
+    evt->in_dispatch = false;
+    evt->stop = false;
+    evt->stop_now = false;
+    evt->passive = false;
+
+    /* Stopping propagation does not cancel default actions. Use the saved
+     * type: a native action may initialize or redispatch the event. */
+    if (ret == DOM_NO_ERR)
+        event_default_action(
+            doc, evt, type, evt->prevent_default ? DOM_DEFAULT_ACTION_PREVENTED : DOM_DEFAULT_ACTION_END);
+    if (mutation)
+        doc->dispatching_mutation--;
+    event_default_action(doc, evt, type, DOM_DEFAULT_ACTION_FINISHED);
+    *success = !evt->prevent_default;
+    dom_string_unref(type);
+    dom_event_unref(evt);
+    dom_node_unref(doc);
+    return ret;
+}
+
+struct standalone_target {
+    dom_event_target base;
+    unsigned refcnt;
+    dom_event_target_internal listeners;
+};
+
+static void standalone_ref(dom_event_target *target)
+{
+    ((struct standalone_target *)target)->refcnt++;
+}
+
+static void standalone_unref(dom_event_target *target)
+{
+    struct standalone_target *t = (struct standalone_target *)target;
+    if (--t->refcnt != 0)
+        return;
+    _dom_event_target_internal_finalise(&t->listeners);
+    free(t);
+}
+
+static dom_exception
+standalone_add(dom_event_target *target, dom_string *type, dom_event_listener *listener, bool capture)
+{
+    return _dom_event_target_add_event_listener(
+        &((struct standalone_target *)target)->listeners, type, listener, capture);
+}
+
+static dom_exception
+standalone_remove(dom_event_target *target, dom_string *type, dom_event_listener *listener, bool capture)
+{
+    return _dom_event_target_remove_event_listener(
+        &((struct standalone_target *)target)->listeners, type, listener, capture);
+}
+
+static dom_exception standalone_invoke(dom_event_target *target, dom_event *evt, bool capture)
+{
+    return _dom_event_target_dispatch(target, &((struct standalone_target *)target)->listeners, evt,
+        capture ? DOM_CAPTURING_PHASE : DOM_BUBBLING_PHASE);
+}
+
+static dom_exception standalone_dispatch(dom_event_target *target, dom_event *evt, bool *success)
+{
+    dom_event_target_ref(target);
+    struct dom_event_path path = {&target, 1};
+    dom_exception ret = _dom_dispatch_event_path(evt, &path, NULL, success);
+    dom_event_target_unref(target);
+    return ret;
+}
+
+static dom_exception standalone_namespace(
+    dom_event_target *target, dom_string *ns, dom_string *type, dom_event_listener *listener, bool capture)
+{
+    return DOM_NOT_SUPPORTED_ERR;
+}
+
+static const dom_event_target_vtable standalone_vtable = {standalone_add, standalone_remove, standalone_dispatch,
+    standalone_namespace, standalone_namespace, standalone_ref, standalone_unref, standalone_invoke};
+
+dom_exception dom_event_target_create(dom_event_target **result)
+{
+    *result = NULL;
+    struct standalone_target *target = calloc(1, sizeof(*target));
+    if (target == NULL)
+        return DOM_NO_MEM_ERR;
+    target->base.vtable = (void *)&standalone_vtable;
+    target->refcnt = 1;
+    *result = &target->base;
+    return DOM_NO_ERR;
+}

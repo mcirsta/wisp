@@ -2360,8 +2360,8 @@ dom_exception _dom_node_remove_event_listener_ns(
 /* Retain the complete path before calling listeners, including ancestors that
  * have no listeners yet. Most page paths need no heap allocation. */
 struct event_path {
-    dom_node_internal *local[32];
-    dom_node_internal **nodes;
+    dom_event_target *local[32];
+    dom_event_target **nodes;
     size_t count;
     size_t capacity;
 };
@@ -2377,7 +2377,7 @@ static dom_exception event_path_build(struct event_path *path, dom_node_internal
             if (path->capacity > SIZE_MAX / 2 / sizeof(*path->nodes))
                 return DOM_NO_MEM_ERR;
             size_t capacity = path->capacity * 2;
-            dom_node_internal **nodes;
+            dom_event_target **nodes;
             if (path->nodes == path->local) {
                 nodes = malloc(capacity * sizeof(*nodes));
                 if (nodes != NULL)
@@ -2390,7 +2390,7 @@ static dom_exception event_path_build(struct event_path *path, dom_node_internal
             path->nodes = nodes;
             path->capacity = capacity;
         }
-        path->nodes[path->count++] = (dom_node_internal *)dom_node_ref(target);
+        path->nodes[path->count++] = (dom_event_target *)dom_node_ref(target);
     }
     return DOM_NO_ERR;
 }
@@ -2398,115 +2398,42 @@ static dom_exception event_path_build(struct event_path *path, dom_node_internal
 static void event_path_fini(struct event_path *path)
 {
     while (path->count != 0)
-        dom_node_unref(path->nodes[--path->count]);
+        dom_event_target_unref(path->nodes[--path->count]);
     if (path->nodes != path->local)
         free(path->nodes);
 }
 
-static void event_default_action(dom_document *doc, dom_event *evt, dom_string *type, dom_default_action_phase phase)
+void _dom_node_event_ref(dom_event_target *target)
 {
-    if (doc != NULL && doc->dei.actions != NULL) {
-        void *pw = doc->dei.actions_ctx;
-        dom_default_action_callback cb = doc->dei.actions(type, phase, &pw);
-        if (cb != NULL)
-            cb(evt, pw);
-    }
+    dom_node_ref(target);
 }
 
-/* Helper to determine if an event is a mutation event */
-static bool _event_is_mutation(dom_document *doc, struct dom_event *evt)
+void _dom_node_event_unref(dom_event_target *target)
 {
-    return dom_string_isequal(evt->type, doc->_memo_domnodeinserted) ||
-        dom_string_isequal(evt->type, doc->_memo_domnoderemoved) ||
-        dom_string_isequal(evt->type, doc->_memo_domnodeinsertedintodocument) ||
-        dom_string_isequal(evt->type, doc->_memo_domnoderemovedfromdocument) ||
-        dom_string_isequal(evt->type, doc->_memo_domattrmodified) ||
-        dom_string_isequal(evt->type, doc->_memo_domcharacterdatamodified) ||
-        dom_string_isequal(evt->type, doc->_memo_domsubtreemodified);
+    dom_node_unref(target);
 }
 
-/**
- * Dispatch through the ordinary DOM node tree. Capture and bubble each invoke
- * the target separately, both with observable phase AT_TARGET. This is DOM's
- * dispatch algorithm without Window/shadow-tree paths (not provided by libdom).
- *
- * Legacy native error codes are retained for uninitialized/reentrant events;
- * initialized events with an empty type are valid.
- */
+dom_exception _dom_node_event_invoke(dom_event_target *target, dom_event *evt, bool capture)
+{
+    return _dom_event_target_dispatch(
+        target, &((dom_node_internal *)target)->eti, evt, capture ? DOM_CAPTURING_PHASE : DOM_BUBBLING_PHASE);
+}
+
+/* Retain the ordinary node path, then use the common EventTarget dispatcher. */
 dom_exception _dom_node_dispatch_event(dom_event_target *et, struct dom_event *evt, bool *success)
 {
-    struct event_path path;
-    dom_exception ret;
-    dom_document *doc;
-    dom_string *type;
-    bool mutation, started = false;
-
-    assert(et != NULL);
-    assert(evt != NULL);
-
     if (evt->in_dispatch)
         return DOM_DISPATCH_REQUEST_ERR;
     if (!evt->is_initialised || evt->type == NULL)
         return DOM_UNSPECIFIED_EVENT_TYPE_ERR;
-
-    dom_event_ref(evt);
-    doc = (dom_document *)dom_node_ref(dom_node_get_owner(et));
-    type = dom_string_ref(evt->type);
-    mutation = doc != NULL && _event_is_mutation(doc, evt);
-    evt->in_dispatch = true;
     *success = !evt->prevent_default;
-
-    ret = event_path_build(&path, (dom_node_internal *)et);
-    if (ret != DOM_NO_ERR)
-        goto cleanup;
-
-    dom_node_ref(et);
-    dom_node_unref(evt->target);
-    evt->target = et;
-    if (mutation)
-        doc->dispatching_mutation++;
-    started = true;
-    event_default_action(doc, evt, type, DOM_DEFAULT_ACTION_STARTED);
-
-    for (size_t i = path.count; i != 0 && !evt->stop; i--) {
-        dom_node_internal *node = path.nodes[i - 1];
-        evt->phase = i == 1 ? DOM_AT_TARGET : DOM_CAPTURING_PHASE;
-        ret = _dom_event_target_dispatch((dom_event_target *)node, &node->eti, evt, DOM_CAPTURING_PHASE);
-        if (ret != DOM_NO_ERR)
-            goto cleanup;
+    struct event_path nodes;
+    dom_exception ret = event_path_build(&nodes, (dom_node_internal *)et);
+    if (ret == DOM_NO_ERR) {
+        struct dom_event_path path = {nodes.nodes, nodes.count};
+        ret = _dom_dispatch_event_path(evt, &path, dom_node_get_owner(et), success);
     }
-    for (size_t i = 0; i < path.count && !evt->stop; i++) {
-        if (i != 0 && !evt->bubble)
-            break;
-        dom_node_internal *node = path.nodes[i];
-        evt->phase = i == 0 ? DOM_AT_TARGET : DOM_BUBBLING_PHASE;
-        ret = _dom_event_target_dispatch((dom_event_target *)node, &node->eti, evt, DOM_BUBBLING_PHASE);
-        if (ret != DOM_NO_ERR)
-            goto cleanup;
-    }
-
-cleanup:
-    evt->phase = DOM_NONE;
-    evt->current = NULL;
-    evt->in_dispatch = false;
-    evt->stop = false;
-    evt->stop_now = false;
-
-    if (started) {
-        /* Stopping propagation does not cancel default actions. Use the saved
-         * type: a native action may initialize or redispatch the event. */
-        if (ret == DOM_NO_ERR)
-            event_default_action(
-                doc, evt, type, evt->prevent_default ? DOM_DEFAULT_ACTION_PREVENTED : DOM_DEFAULT_ACTION_END);
-        if (mutation)
-            doc->dispatching_mutation--;
-        event_default_action(doc, evt, type, DOM_DEFAULT_ACTION_FINISHED);
-    }
-    *success = !evt->prevent_default;
-    event_path_fini(&path);
-    dom_string_unref(type);
-    dom_event_unref(evt);
-    dom_node_unref(doc);
+    event_path_fini(&nodes);
     return ret;
 }
 

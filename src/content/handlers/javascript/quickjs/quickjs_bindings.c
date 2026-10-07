@@ -409,34 +409,6 @@ void js_destroyheap(jsheap *heap)
 }
 
 
-/* These are still API-shape stubs, not libdom constructors. */
-static int qjs_init_dom_stubs(JSContext *ctx)
-{
-    static const char *names[] = {"Event", "CustomEvent"};
-    JSValue global = JS_GetGlobalObject(ctx);
-    int ret = -1;
-
-    for (size_t i = 0; i < sizeof(names) / sizeof(names[0]); i++) {
-        JSValue object = JS_NewObject(ctx);
-        if (JS_IsException(object)) {
-            goto out;
-        }
-        JSValue proto = JS_NewObject(ctx);
-        if (JS_IsException(proto) || JS_SetPropertyStr(ctx, object, "prototype", proto) < 0) {
-            JS_FreeValue(ctx, object);
-            goto out;
-        }
-        if (JS_SetPropertyStr(ctx, global, names[i], object) < 0) {
-            goto out;
-        }
-    }
-    ret = 0;
-out:
-    JS_FreeValue(ctx, global);
-    return ret;
-}
-
-
 /* exported interface documented in js.h */
 nserror js_newthread(jsheap *heap, void *win_priv, void *doc_priv, jsthread **thread)
 {
@@ -469,6 +441,8 @@ nserror js_newthread(jsheap *heap, void *win_priv, void *doc_priv, jsthread **th
     t->next = heap->threads;
     heap->threads = t;
     t->error_stack_getter = JS_UNDEFINED;
+    t->window_event_target = JS_UNDEFINED;
+    nsu_getmonotonic_ms(&t->time_origin_ms);
     t->win_priv = win_priv;
     t->doc_priv = doc_priv;
     t->closed = false;
@@ -499,7 +473,6 @@ nserror js_newthread(jsheap *heap, void *win_priv, void *doc_priv, jsthread **th
         {"storage", qjs_init_storage},
         {"event target", qjs_init_event_target},
         {"XMLHttpRequest", qjs_init_xhr},
-        {"DOM constructor stubs", qjs_init_dom_stubs},
     };
     for (size_t i = 0; i < sizeof(bindings) / sizeof(bindings[0]); i++) {
         if (bindings[i].init(t->ctx) < 0 || JS_HasException(t->ctx)) {
@@ -532,6 +505,7 @@ nserror js_closethread(jsthread *thread)
         qjs_trace(thread->ctx, "document.close", "cancel pending timers and jobs");
     thread->closed = true;
     qjs_timers_close(thread);
+    qjs_events_close(thread);
     qjs_dom_close(thread);
     thread->win_priv = NULL;
     thread->doc_priv = NULL;
@@ -711,6 +685,38 @@ enum qjs_result qjs_run_callback(jsthread *thread, const struct qjs_callback *ca
         JS_FreeValue(thread->ctx, result);
     } else {
         NSLOG(wisp, WARNING, "Unable to begin bounded JavaScript callback in %s", callback->source);
+    }
+    return qjs_entry_end(thread, &entry, success);
+}
+
+/* EventListener is a callback interface: functions receive currentTarget as this;
+ * objects resolve handleEvent at invocation time and receive the object as this.
+ * Script-dispatched callbacks nest inside their caller's budget/checkpoint. */
+enum qjs_result qjs_run_event_listener(jsthread *thread, JSValueConst callback, JSValueConst target,
+    JSValueConst event, const char *source)
+{
+    struct qjs_entry entry;
+    bool success = false;
+    if (qjs_entry_begin(thread, &entry, source, "event")) {
+        JSContext *ctx = thread->ctx;
+        bool function = JS_IsFunction(ctx, callback);
+        JSValue handler = function ? JS_DupValue(ctx, callback) : JS_GetPropertyStr(ctx, callback, "handleEvent");
+        JSValue result = JS_EXCEPTION;
+        if (!JS_IsException(handler)) {
+            if (!JS_IsFunction(ctx, handler))
+                JS_ThrowTypeError(ctx, "EventListener.handleEvent must be callable");
+            else if (!thread->closed)
+                result = JS_Call(ctx, handler, function ? target : callback, 1, &event);
+            else
+                result = JS_UNDEFINED;
+        }
+        success = !JS_IsException(result) && !JS_HasException(ctx) && !thread->heap->interrupted;
+        /* An ordinary exception is reported, not rethrown through dispatchEvent.
+         * Interrupt exceptions must escape the nested native dispatch unchanged. */
+        if (!success && !thread->heap->interrupted)
+            qjs_report_exception(thread, source, false);
+        JS_FreeValue(ctx, result);
+        JS_FreeValue(ctx, handler);
     }
     return qjs_entry_end(thread, &entry, success);
 }

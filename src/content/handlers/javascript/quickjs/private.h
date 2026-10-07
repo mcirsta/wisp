@@ -12,6 +12,8 @@
 struct qjs_timer;
 struct qjs_rejection;
 struct qjs_dom_document;
+struct qjs_event_dispatch;
+struct qjs_event_target;
 
 /* One runtime per browser window. The window and every document context hold
  * references, so retirement during a callback cannot free the runtime early. */
@@ -24,6 +26,7 @@ struct jsheap {
     uint64_t deadline_ms;
     bool interrupted;
     struct jsthread *threads;
+    JSClassID event_class[2], event_target_class;
     JSClassID node_class, tokenlist_class, collection_class[2], xhr_class, console_class;
 };
 
@@ -33,6 +36,10 @@ struct jsthread {
     jsheap *heap;
     JSContext *ctx;
     JSValue error_stack_getter;
+    JSValue window_event_target; /* Explicit Window root, released on document close. */
+    struct qjs_event_dispatch *event_dispatch;
+    struct qjs_event_target *event_targets; /* Borrowed registry for document retirement. */
+    uint64_t time_origin_ms, trace_next_listener;
     unsigned refcount;
     struct jsthread *next;
     struct qjs_rejection *rejections;
@@ -66,6 +73,9 @@ enum qjs_result { QJS_OK, QJS_EXCEPTION, QJS_INTERRUPTED };
 void qjs_thread_ref(jsthread *thread);
 void qjs_thread_unref(jsthread *thread);
 enum qjs_result qjs_run_callback(jsthread *thread, const struct qjs_callback *callback, int32_t timer_id);
+
+enum qjs_result qjs_run_event_listener(
+    jsthread *thread, JSValueConst callback, JSValueConst target, JSValueConst event, const char *source);
 
 /* No JS coercion or getters. Details are bounded and kept on one log line.
  * Call from actual host operations, including DOM mutations and invalidation. */

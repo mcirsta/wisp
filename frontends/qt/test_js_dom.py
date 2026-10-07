@@ -91,6 +91,34 @@ with tempfile.TemporaryDirectory(prefix='wisp-js-dom-') as tmp:
         if name == 'interrupted':
             assert 'JavaScript execution limit reached' in log and 'end result=interrupted' in log, log
 
+    # Explicit script dispatch nests listener entries inside the timer. The DOM
+    # effects and queued job must coalesce into the same static reference pixels.
+    dest, _, log = run(root, 'event-mutation', initial + '''<script>
+        const source = new EventTarget();
+        source.addEventListener('change', function(e) {
+            if (e.target !== source || e.detail !== 42) throw Error('event identity');
+            document.getElementById('target').className = 'new';
+            queueMicrotask(() => {
+                document.getElementById('target').textContent = 'Changed ș😀';
+                document.getElementById('reveal').removeAttribute('hidden');
+                console.log('EVENT_CHANGED');
+            });
+        }, {once: true});
+        setTimeout(() => {
+            source.dispatchEvent(new CustomEvent('change', {detail: 42}));
+            source.dispatchEvent(new CustomEvent('change', {detail: 'must not run'}));
+        }, 150);
+    </script>''')
+    assert 'Console: EVENT_CHANGED' in log and 'JavaScript exception' not in log, log
+    assert (dest / 'page.png').read_bytes() == (reference / 'page.png').read_bytes(), log
+    assert len(re.findall(r'\] render.request ', log)) == 1, log
+    assert len(re.findall(r'\] event.listener ', log)) == 1, log
+    event_entry = re.search(r'\[JS doc=(\d+) entry=(\d+)\] begin kind=event ', log)
+    assert event_entry, log
+    doc, entry = event_entry.groups()
+    assert f'[JS doc={doc} entry={entry}] dom.mutation ' in log, log
+    assert f'render.request first_entry={entry} changes=3 mode=full-restyle' in log, log
+
     tree_edit = '''
         const old = document.getElementById('target');
         const target = document.createElement('div');

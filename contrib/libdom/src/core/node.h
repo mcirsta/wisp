@@ -141,9 +141,14 @@ dom_exception _dom_node_set_user_data(
     dom_node_internal *node, dom_string *key, void *data, dom_user_data_handler handler, void **result);
 dom_exception _dom_node_get_user_data(const dom_node_internal *node, const dom_string *key, void **result);
 
+void _dom_node_event_ref(dom_event_target *target);
+void _dom_node_event_unref(dom_event_target *target);
+dom_exception _dom_node_event_invoke(dom_event_target *target, struct dom_event *evt, bool capture);
+
 #define DOM_NODE_EVENT_TARGET_VTABLE                                                                                   \
     _dom_node_add_event_listener, _dom_node_remove_event_listener, _dom_node_dispatch_event,                           \
-        _dom_node_add_event_listener_ns, _dom_node_remove_event_listener_ns
+        _dom_node_add_event_listener_ns, _dom_node_remove_event_listener_ns, _dom_node_event_ref,                      \
+        _dom_node_event_unref, _dom_node_event_invoke
 
 #define DOM_NODE_VTABLE                                                                                                \
     _dom_node_try_destroy, _dom_node_get_node_name, _dom_node_get_node_value, _dom_node_set_node_value,                \

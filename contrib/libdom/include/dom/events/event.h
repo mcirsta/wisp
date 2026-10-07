@@ -84,4 +84,8 @@ dom_exception _dom_event_get_is_trusted(dom_event *evt, bool *result);
 dom_exception _dom_event_set_is_trusted(dom_event *evt, bool trusted);
 #define dom_event_set_is_trusted(e, t) _dom_event_set_is_trusted((dom_event *)(e), (bool)(t))
 
+/* Host binding helpers; not additional Web APIs. */
+dom_exception dom_event_get_cancel_bubble(dom_event *evt, bool *value);
+void dom_event_set_passive_listener(dom_event *evt, bool passive);
+
 #endif

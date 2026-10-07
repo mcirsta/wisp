@@ -21,6 +21,12 @@
  */
 dom_exception dom_event_listener_create(handle_event handler, void *pw, dom_event_listener **listener)
 {
+    return dom_event_listener_create_owned(handler, pw, NULL, listener);
+}
+
+dom_exception
+dom_event_listener_create_owned(handle_event handler, void *pw, void (*cleanup)(void *), dom_event_listener **listener)
+{
     dom_event_listener *ret = malloc(sizeof(dom_event_listener));
     if (ret == NULL)
         return DOM_NO_MEM_ERR;
@@ -28,6 +34,7 @@ dom_exception dom_event_listener_create(handle_event handler, void *pw, dom_even
     ret->handler = handler;
     ret->pw = pw;
     ret->refcnt = 1;
+    ret->cleanup = cleanup;
 
     *listener = ret;
 
@@ -54,6 +61,9 @@ void dom_event_listener_unref(dom_event_listener *listener)
     if (listener->refcnt > 0)
         listener->refcnt--;
 
-    if (listener->refcnt == 0)
+    if (listener->refcnt == 0) {
+        if (listener->cleanup != NULL)
+            listener->cleanup(listener->pw);
         free(listener);
+    }
 }
