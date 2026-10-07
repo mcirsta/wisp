@@ -69,6 +69,7 @@
 #include <wisp/content/handlers/html/html.h>
 #include <wisp/content/handlers/html/html_save.h>
 #include <wisp/content/handlers/html/private.h>
+#include "content/handlers/html/box_manipulate.h"
 #include "content/handlers/html/font.h"
 #include "content/handlers/html/layout.h"
 #include "content/handlers/html/layout_grid.h"
@@ -4483,37 +4484,6 @@ static bool layout_line(struct box *first, int *width, int *y, int cx, int cy, s
 }
 
 
-/* Restore a text run split by earlier wrapping. Adding separately rounded
- * fragment/space widths can disagree with measuring the original text, so
- * retained breaks must not become new shaping boundaries on reflow. Only
- * layout-generated clones are joined; DOM/style boundaries stay intact. */
-static void layout_rejoin_text(struct box *box)
-{
-    if (box->type != BOX_TEXT || !box->text)
-        return;
-
-    while (box->next && (box->next->flags & CLONE) && box->next->type == BOX_TEXT &&
-        box->next->style == box->style) {
-        struct box *next = box->next;
-        size_t gap = box->text[box->length] == ' ' ? 1 : 0;
-        if (next->text != box->text + box->length + gap)
-            break;
-
-        box->length += gap + next->length;
-        box->space = next->space;
-        box->space_style = next->space_style;
-        box->width = UNKNOWN_WIDTH;
-        box->flags &= ~MEASURED;
-        box->next = next->next;
-        if (box->next)
-            box->next->prev = box;
-        else
-            box->parent->last = box;
-        /* These shallow clones own no styles, DOM references or text. */
-        talloc_free(next);
-    }
-}
-
 static bool layout_can_reuse_inline_layout(const struct box *box)
 {
     if (!layout_can_reuse_inline_intrinsics(box))
@@ -4606,7 +4576,7 @@ static bool layout_inline_container(
     for (c = inline_container->children; c; c = c->next) {
         bool is_pre = false;
 
-        layout_rejoin_text(c);
+        box_rejoin_text(c);
 
         if (c->style) {
             enum css_white_space_e whitespace;
@@ -7552,7 +7522,7 @@ static void layout_reset_box(struct box *box)
 {
     /* Rejoin before intrinsic measurement, not just before line layout: old
      * wrapping must not change a retained sibling's min/max contributions. */
-    layout_rejoin_text(box);
+    box_rejoin_text(box);
     box->flags &= ~(NEW_LINE | MEASURED | HAS_HEIGHT | MAKE_HEIGHT | NEED_MIN | INLINE_LAYOUT_CURRENT |
         HEIGHT_STRETCHED | ASPECT_RATIO_HEIGHT | HAS_FIXED_DESCENDANT | HAS_STICKY_DESCENDANT | HAS_STICKY_ANCESTOR |
         HAS_IFRAME_DESCENDANT);

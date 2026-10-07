@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""HTML object fallback on failed HTTP responses, including shared cache hits.
+"""HTTP object fallback and image completion, including shared cache hits.
 
 Expectations follow the object representation algorithm's failed-load step:
 https://html.spec.whatwg.org/multipage/iframe-embed-object.html#the-object-element
@@ -10,16 +10,36 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 import os
 from pathlib import Path
+import struct
 import subprocess
 import sys
 import tempfile
 from threading import Event, Thread
 import time
+import zlib
 
 binary = Path(sys.argv[1]).resolve()
 env = dict(os.environ, QT_QPA_PLATFORM="offscreen", QT_SCALE_FACTOR="1",
            QT_SCREEN_SCALE_FACTORS="1", QT_FONT_DPI="96")
 gif = base64.b64decode("R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7")
+
+
+def png_chunk(kind, data):
+    return struct.pack('!I', len(data)) + kind + data + struct.pack('!I', zlib.crc32(kind + data))
+
+
+thumbnail = (b'\x89PNG\r\n\x1a\n' + png_chunk(b'IHDR', struct.pack('!2I5B', 93, 66, 8, 2, 0, 0, 0))
+             + png_chunk(b'IDAT', zlib.compress((b'\0' + bytes((34, 85, 204)) * 93) * 66))
+             + png_chunk(b'IEND', b''))
+thumbnail_page = '''<!doctype html><style>
+body { font:14px/20px sans-serif }
+#row { width:284px }
+#thumb { float:left; margin-right:13px }
+#title { float:left; width:175px }
+</style><div id="row"><span id="thumb">
+<a href="#"><img id="image" src="/thumbnail.png" alt="A long alternative description that wraps into several temporary text fragments before this thumbnail finishes downloading">
+</a>
+</span><span id="title">Sidebar article title</span><div style="clear:both"></div></div>'''
 requests = Counter()
 pending_kinds = ("image", "document", "failure")
 probes = {key: Event() for key in pending_kinds}
@@ -80,6 +100,13 @@ class Handler(BaseHTTPRequestHandler):
         headers = {}
         if self.path == "/":
             mime, body = "text/html", page.encode()
+        elif self.path == "/thumbnail":
+            mime, body = "text/html", thumbnail_page.encode()
+        elif self.path == "/thumbnail.png":
+            # Exercise initial layout with wrapped alt text, then image sizing.
+            # The core callback test covers this transition without a timer.
+            time.sleep(0.5)
+            mime, body = "image/png", thumbnail
         elif self.path == "/pending":
             mime, body = "text/html", pending_page.encode()
         elif self.path.startswith("/search/"):
@@ -158,6 +185,19 @@ try:
     origin = f"http://127.0.0.1:{server.server_port}"
     with tempfile.TemporaryDirectory(prefix="wisp-object-http-") as tmp:
         root = Path(tmp)
+        steps = capture(root / "thumbnail", origin + "/thumbnail", ("thumb", "title", "image"),
+                        [("resize", "600x500"), ("resize", "700x600")])
+        for index, step in enumerate(steps):
+            elements = {e['id']: e for e in step['elements']}
+            assert all(e['status'] == 'ok' and e['boxes'] for e in elements.values()), elements
+            thumb, title, image = (elements[key]['boxes'][0]['content'] for key in ('thumb', 'title', 'image'))
+            # CSS 2.2 10.3.5 / 16.6.1: the shrink-to-fit wrapper excludes
+            # collapsible trailing whitespace, so the floats fit side by side.
+            assert thumb['width'] == image['width'] == 93, (index, thumb, image)
+            assert title['x'] == thumb['x'] + 93 + 13 and title['y'] == thumb['y'], (index, thumb, title)
+        dump = (root / 'thumbnail/boxes.txt').read_text()
+        assert 'warning: box->prev' not in dump and 'warning: box->last' not in dump, dump
+
         ids = (*failures, *successes, "warm", "late", "warm-image", "shared-image-first", "shared-object-first")
         actions = [("click-id", "summary"), ("click-id", "summary"),
                    ("find", "Cached failure fallback"), ("resize", "600x500")]

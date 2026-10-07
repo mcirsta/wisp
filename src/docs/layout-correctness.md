@@ -112,25 +112,3 @@ and `data-hn2-latest-hydrated="1"`. That explains why the saved version can show
 the widget without executing its loading script; it does not establish that the
 live widget previously worked. Evidence, fetched source and response are in
 `out/render-captures/hotnews-sidebar-2026-10-06/`.
-
-## eBihoreanul sidebar placement investigation
-
-The second CAO sidebar item's text appeared below its image in the initial
-homepage and article captures, but beside it on a repeat homepage capture with
-unchanged source. The homepage/article captures after fixing Qt web-font family
-isolation also place it beside the image. Establish a repeatable loading/layout
-sequence before proposing any float change; the cause is not yet established.
-
-The final document-owned font captures (`font-documents-home` and
-`font-documents-article`) retain the prior document extents, 33px navigation row
-and second sidebar image/text positions. A repeated homepage capture is pixel
-identical. Small differences from the earlier captures remain lower in the right
-sidebar around the last CAO item and comments; this does not establish a font
-regression or resolve the existing sidebar investigation.
-
-Saved resources: `sites/ebihoreanul-2026-10-06/`. Evidence:
-`out/render-captures/ebihoreanul-2026-10-06/`, including the initial
-`home-desktop`/`article-desktop-retry`, repeat `sidebar`, and
-`fonts-final-home`/`fonts-final-article`. Empty script-driven widgets in both
-JS-disabled browsers and the desktop document's fixed 1000px width are not
-recorded as rendering defects.

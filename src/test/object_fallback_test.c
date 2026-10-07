@@ -14,6 +14,7 @@
 #include <wisp/utils/corestrings.h>
 #include <wisp/utils/nsurl.h>
 #include "content/handlers/html/box_special.h"
+#include "content/handlers/html/box_manipulate.h"
 #include "content/handlers/html/object.h"
 #include "utils/talloc.h"
 
@@ -341,6 +342,59 @@ START_TEST(test_ready_resource_rebinds_before_done)
 }
 END_TEST
 
+/* Image completion must discard wrapped alt fragments without leaving stale
+ * backward links or an internal word separator after the replaced image. */
+START_TEST(test_image_completion_rejoins_alt_fragments)
+{
+    const bool with_closing = (_i & 1) != 0;
+    const bool with_space = (_i & 2) != 0;
+    struct box *parent = talloc_zero(NULL, struct box);
+    ck_assert_ptr_nonnull(parent);
+    parent->type = BOX_INLINE_CONTAINER;
+    box.type = BOX_INLINE;
+    box.flags |= IS_REPLACED;
+    box.text = "alpha beta gamma";
+    box.length = 5;
+    box.space = 8; /* Separator introduced by wrapping the alternative text. */
+    box_add_child(parent, &box);
+    struct box *middle = talloc_memdup(parent, &box, sizeof(box));
+    struct box *last = talloc_memdup(parent, &box, sizeof(box));
+    ck_assert_ptr_nonnull(middle);
+    ck_assert_ptr_nonnull(last);
+    middle->flags |= CLONE;
+    middle->text += 6;
+    middle->length = 4;
+    last->flags |= CLONE;
+    last->text += 11;
+    last->length = 5;
+    last->space = with_space ? UNKNOWN_WIDTH : 0;
+    /* An identity only; restoring the borrowed source style must not inspect it. */
+    last->space_style = with_space ? (const css_computed_style *)&cache_identity : NULL;
+    const css_computed_style *space_style = last->space_style;
+    box_insert_sibling(&box, middle);
+    box_insert_sibling(middle, last);
+    struct box closing = {.type = BOX_INLINE_END};
+    if (with_closing)
+        box_insert_sibling(last, &closing);
+
+    ck_assert(html_fetch_object(&html, url, &box, CONTENT_IMAGE, false));
+    resource_status = CONTENT_STATUS_DONE;
+    hlcache_event event = {.type = CONTENT_MSG_DONE};
+    ck_assert_int_eq(cache_callback(handle(), &event, cache_pw), NSERROR_OK);
+    ck_assert_ptr_eq(box.object, handle());
+    ck_assert_ptr_eq(box.next, with_closing ? &closing : NULL);
+    ck_assert_ptr_eq(parent->last, with_closing ? &closing : &box);
+    if (with_closing)
+        ck_assert_msg(closing.prev == &box, "variant %d: closing inline still points to an alt fragment", _i);
+    ck_assert_uint_eq(box.length, strlen(box.text));
+    ck_assert_int_eq(box.space, with_space ? UNKNOWN_WIDTH : 0);
+    ck_assert_ptr_eq(box.space_style, space_style);
+    ck_assert_msg(talloc_total_blocks(parent) == 1, "variant %d: detached alt fragments were not freed", _i);
+    talloc_free(parent);
+    box.parent = box.next = NULL;
+}
+END_TEST
+
 START_TEST(test_decode_failure_after_done)
 {
     box.flags |= IS_REPLACED;
@@ -447,6 +501,7 @@ int main(void)
     tcase_add_test(tc, test_pending_failure_keeps_fallback);
     tcase_add_loop_test(tc, test_pending_becomes_available, VISIBLE, REBUILDING_HIDDEN + 1);
     tcase_add_test(tc, test_ready_resource_rebinds_before_done);
+    tcase_add_loop_test(tc, test_image_completion_rejoins_alt_fragments, 0, 4);
     tcase_add_loop_test(tc, test_decode_failure_after_done, VISIBLE, REBUILDING_HIDDEN + 1);
     tcase_add_loop_test(tc, test_non_object_failures, 0, 5);
     tcase_add_test(tc, test_memory_failure_is_not_fallback);

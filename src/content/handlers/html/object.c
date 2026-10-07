@@ -49,6 +49,7 @@
 #include <wisp/content/handlers/html/private.h>
 #include "content/handlers/html/object.h"
 #include "content/handlers/html/box_construct.h"
+#include "content/handlers/html/box_manipulate.h"
 #include "utils/talloc.h"
 
 /* Performance tracing - enable via CMake: -DNEOSURF_ENABLE_PERF_TRACE=ON */
@@ -217,11 +218,10 @@ static void html_object_done(struct box *box, hlcache_handle *object, bool backg
         for (b = box; b; b = b->parent)
             b->max_width = UNKNOWN_MAX_WIDTH;
 
-        /* delete any clones of this box */
-        while (box->next && (box->next->flags & CLONE)) {
-            /* box_free_box(box->next); */
-            box->next = box->next->next;
-        }
+        /* Discard wrapped alternative text with the same link/space repair as
+         * ordinary text reflow. Backward scans must see the loaded image, not
+         * detached fragments, and internal word spaces must not survive it. */
+        box_rejoin_text(box);
     }
 }
 

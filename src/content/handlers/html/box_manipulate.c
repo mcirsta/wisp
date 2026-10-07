@@ -252,6 +252,37 @@ void box_insert_sibling(struct box *box, struct box *new_box)
 }
 
 
+/* Restore a text run split by earlier wrapping. Adding separately rounded
+ * fragment/space widths can disagree with measuring the original text, so
+ * retained breaks must not become new shaping boundaries on reflow. Only
+ * layout-generated clones are joined; DOM/style boundaries stay intact.
+ * Pending images can wrap their alternative text in BOX_INLINE clones too. */
+void box_rejoin_text(struct box *box)
+{
+    if ((box->type != BOX_TEXT && box->type != BOX_INLINE) || !box->text)
+        return;
+
+    while (box->next && (box->next->flags & CLONE) && box->next->type == box->type && box->next->style == box->style) {
+        struct box *next = box->next;
+        size_t gap = box->text[box->length] == ' ' ? 1 : 0;
+        if (next->text != box->text + box->length + gap)
+            break;
+
+        box->length += gap + next->length;
+        box->space = next->space;
+        box->space_style = next->space_style;
+        box->width = UNKNOWN_WIDTH;
+        box->flags &= ~MEASURED;
+        box->next = next->next;
+        if (box->next)
+            box->next->prev = box;
+        else
+            box->parent->last = box;
+        /* These shallow clones own no styles, DOM references or text. */
+        talloc_free(next);
+    }
+}
+
 /* Exported function documented in html/box.h */
 void box_unlink_and_free(struct box *box)
 {

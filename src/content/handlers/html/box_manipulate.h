@@ -65,6 +65,15 @@ void box_insert_sibling(struct box *box, struct box *new_box);
 
 
 /**
+ * Rejoin layout-generated text fragments, including pending image alternatives.
+ * Restores the original text and trailing space, unlinks and frees the clones.
+ *
+ * \param box first fragment of a text run
+ */
+void box_rejoin_text(struct box *box);
+
+
+/**
  * Unlink a box from the box tree and then free it recursively.
  *
  * \param box box to unlink and free recursively.
