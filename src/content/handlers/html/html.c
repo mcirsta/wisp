@@ -316,10 +316,13 @@ nserror html_proceed_to_done(html_content *html)
     case CONTENT_STATUS_READY:
         if (html->restyle_pending || html->restyling)
             return NSERROR_OK;
-        if (html->base.active != html->scripts_active) {
-            NSLOG(wisp, DEBUG, "proceed_to_done: waiting for scripts (active=%d scripts=%d)", html->base.active,
-                html->scripts_active);
-            break;
+        /* Rendering can start while async/defer downloads are pending, but
+         * completion must also wait for their queued execution. */
+        if (html->base.active != 0)
+            return NSERROR_OK;
+        for (unsigned i = 0; i < html->scripts_count; i++) {
+            if (!html->scripts[i].already_started)
+                return NSERROR_OK;
         }
         NSLOG(wisp, INFO, "proceed_to_done: all resources ready, setting content DONE");
         content_set_done(&html->base);
@@ -966,7 +969,7 @@ bool html_can_begin_conversion(html_content *htmlc)
     unsigned int i;
 
     /* If conversion has already begun, don't start again */
-    if (htmlc->conversion_begun)
+    if (htmlc->conversion_begun || htmlc->aborted || htmlc->parser_blocking_script != 0)
         return false;
 
     /* We can begin conversion when:
@@ -1037,12 +1040,6 @@ bool html_begin_conversion(html_content *htmlc)
              */
             NSLOG(wisp, INFO, "Completing parse brought synchronous JS to light, cannot complete yet (active: %d)",
                 htmlc->base.active);
-
-            if (htmlc->base.active == 0) {
-                dom_hubbub_parser_pause(htmlc->parser, false);
-                guit->misc->schedule(0, html_resume_conversion_cb, htmlc);
-                return true;
-            }
 
             return true;
         }
@@ -1224,18 +1221,19 @@ static void html_stop(struct content *c)
 
     switch (c->status) {
     case CONTENT_STATUS_LOADING:
-        /* Still loading; simply flag that we've been aborted
-         * html_convert/html_finish_conversion will do the rest */
+        /* Disconnect script callbacks immediately. An active box converter
+         * observes aborted when it finishes; parser/font waits are handled below. */
         htmlc->aborted = true;
         html_font_face_stop(htmlc);
         if (htmlc->jsthread != NULL) {
             /* Close the JS thread to cancel out any callbacks */
             js_closethread(htmlc->jsthread);
         }
-        if (htmlc->font_wait_start_ms != 0) {
-            /* Cancelling fonts removes the callback which would unlock this
-             * conversion. Stop without broadcasting: the browser may already
-             * have destroyed its frontend window during close. */
+        if (!htmlc->conversion_begun || htmlc->font_wait_start_ms != 0) {
+            /* A retired parser must not resume to reach a terminal state;
+             * similarly, cancelling fonts removes the conversion callback.
+             * No box converter is running in either case. Unlock without
+             * broadcasting: the frontend may already have been destroyed. */
             htmlc->font_wait_start_ms = 0;
             content_set_error(c);
         }
@@ -1982,6 +1980,7 @@ static nserror html_close(struct content *c)
 
     selection_clear(htmlc->sel, false);
 
+    guit->misc->schedule(-1, script_resume_conversion_cb, htmlc);
     guit->misc->schedule(-1, html_restyle, htmlc);
     htmlc->restyle_pending = false;
     html_restyle_close(htmlc);

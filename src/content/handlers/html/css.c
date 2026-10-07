@@ -145,6 +145,9 @@ static nserror html_convert_css_callback(hlcache_handle *css, const hlcache_even
         break;
     }
 
+    if (event->type == CONTENT_MSG_DONE || event->type == CONTENT_MSG_ERROR)
+        html_script_schedule(parent);
+
     if (html_can_begin_conversion(parent)) {
         html_begin_conversion(parent);
     }
@@ -309,6 +312,7 @@ static void html_css_process_modified_styles(void *pw)
     if (all_done == false) {
         guit->misc->schedule(1000, html_css_process_modified_styles, c);
     }
+    html_script_schedule(c);
 }
 
 

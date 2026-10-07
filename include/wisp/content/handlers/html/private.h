@@ -194,6 +194,9 @@ typedef struct html_content {
     bool conversion_begun; /**< Whether or not the conversion has begun */
     bool conversion_restart_pending; /**< Whether a restart is pending */
     unsigned int scripts_active; /**< Number of script fetches currently active */
+    unsigned int parser_blocking_script; /**< Script array index + 1, or zero. */
+    unsigned int async_script_head, async_script_tail; /**< Ready queue, indices + 1. */
+    bool scripts_running; /**< Prevent reentrant script processing. */
     bool data_complete; /**< Whether HTML data download is complete */
 
     /** Document tree */
@@ -440,16 +443,19 @@ bool html_exec(struct content *c, const char *src, size_t srclen);
 
 
 /**
- * Attempt script execution for defer and async scripts
+ * Run ready classic scripts and resume a blocked parser.
  *
  * execute scripts using algorithm found in:
- * http://www.whatwg.org/specs/web-apps/current-work/multipage/scripting-1.html#the-script-element
+ * https://html.spec.whatwg.org/multipage/scripting.html#prepare-the-script-element
  *
  * \param htmlc html content.
- * \param allow_defer allow deferred execution, if not, only async scripts.
+ * \param allow_defer Also run deferred scripts if parsing is complete.
  * \return NSERROR_OK error code.
  */
 nserror html_script_exec(html_content *htmlc, bool allow_defer);
+
+/** Resume ready scripts outside parser/resource callbacks, then conversion. */
+void html_script_schedule(html_content *htmlc);
 
 
 /**

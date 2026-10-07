@@ -2519,14 +2519,15 @@ bool JS_IsJobPending(JSRuntime *rt)
     return !list_empty(&rt->job_list);
 }
 
-/* Wisp extension for retiring a document without running its callbacks. */
-void JS_CloseContextJobs(JSContext *ctx)
+/* Wisp extension: discard queued work without calling into the document. */
+void JS_DiscardContextJobs(JSContext *ctx)
 {
     JSRuntime *rt = ctx->rt;
     struct list_head *el, *next;
     int i;
 
     /* Releasing arguments can itself enqueue FinalizationRegistry jobs. */
+    bool was_closed = ctx->job_queue_closed;
     ctx->job_queue_closed = true;
     list_for_each_safe(el, next, &rt->job_list) {
         JSJobEntry *e = list_entry(el, JSJobEntry, link);
@@ -2537,6 +2538,13 @@ void JS_CloseContextJobs(JSContext *ctx)
             JS_FreeValueRT(rt, e->argv[i]);
         js_free_rt(rt, e);
     }
+    ctx->job_queue_closed = was_closed;
+}
+
+void JS_CloseContextJobs(JSContext *ctx)
+{
+    ctx->job_queue_closed = true;
+    JS_DiscardContextJobs(ctx);
 }
 
 JSContext *JS_GetPendingJobContext(JSRuntime *rt)

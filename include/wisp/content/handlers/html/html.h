@@ -82,13 +82,9 @@ struct html_script {
         struct dom_string *string;
     } data; /**< Script data */
     struct dom_string *mimetype;
-    struct dom_string *encoding;
     bool already_started;
-    bool parser_inserted;
-    bool force_async;
     bool ready_exec;
-    bool async;
-    bool defer;
+    unsigned int next_ready; /**< Next ready async script index + 1, or zero. */
 };
 
 

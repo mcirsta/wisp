@@ -1254,6 +1254,9 @@ JS_EXTERN JSContext *JS_GetPendingJobContext(JSRuntime *rt);
    pending jobs without executing them. Future JS_EnqueueJob calls for this
    context return 0 without retaining arguments. Other contexts are unaffected. */
 JS_EXTERN void JS_CloseContextJobs(JSContext *ctx);
+/* Discard this context's pending jobs, keeping an open queue usable for later
+ * execution. Jobs enqueued by finalizers during disposal are also discarded. */
+JS_EXTERN void JS_DiscardContextJobs(JSContext *ctx);
 JS_EXTERN int JS_ExecutePendingJob(JSRuntime *rt, JSContext **pctx);
 
 /* Structure to retrieve (de)serialized SharedArrayBuffer objects. */

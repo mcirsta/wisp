@@ -254,9 +254,120 @@ START_TEST(test_quickjs_cancel_finalization_jobs)
 }
 END_TEST
 
-/**
- * Test creating and destroying a heap.
- */
+START_TEST(test_quickjs_discard_jobs)
+{
+    JSRuntime *rt = JS_NewRuntime();
+    JSContext *ctx = JS_NewContext(rt), *other = JS_NewContext(rt), *executed;
+    const char *code = "var registry = new FinalizationRegistry(() => { throw 'discarded finalizer'; });"
+                       "var target = {}; registry.register(target, 1);"
+                       "Promise.resolve(target).then(() => { throw 'discarded job'; }); target = null;";
+    JSValue result = JS_Eval(ctx, code, strlen(code), "discard", JS_EVAL_TYPE_GLOBAL);
+    ck_assert(!JS_IsException(result));
+    JS_FreeValue(ctx, result);
+    JSValue one = JS_NewInt32(other, 1), two = JS_NewInt32(ctx, 2);
+    executed_job_order = 0;
+    ck_assert_int_eq(JS_EnqueueJob(other, record_job, 1, &one), 0);
+    JS_DiscardContextJobs(ctx);
+    ck_assert_int_eq(executed_job_order, 0);
+    /* Discard suppresses finalization while releasing arguments, but permits
+     * a later independent entry to enqueue jobs on this same context. */
+    ck_assert_int_eq(JS_EnqueueJob(ctx, record_job, 1, &two), 0);
+    ck_assert_int_eq(JS_ExecutePendingJob(rt, &executed), 1);
+    ck_assert_ptr_eq(executed, other);
+    ck_assert_int_eq(JS_ExecutePendingJob(rt, &executed), 1);
+    ck_assert_ptr_eq(executed, ctx);
+    ck_assert_int_eq(executed_job_order, 12);
+    ck_assert(!JS_IsJobPending(rt));
+    JS_CloseContextJobs(ctx);
+    JS_DiscardContextJobs(ctx); /* Must not reopen a retired document. */
+    ck_assert_int_eq(JS_EnqueueJob(ctx, record_job, 1, &two), 0);
+    ck_assert(!JS_IsJobPending(rt));
+    JS_FreeContext(ctx);
+    JS_FreeContext(other);
+    JS_FreeRuntime(rt);
+}
+END_TEST
+
+START_TEST(test_quickjs_microtask_checkpoint)
+{
+    jsheap *heap;
+    jsthread *thread;
+    ck_assert_int_eq(js_newheap(1, &heap), NSERROR_OK);
+    ck_assert_int_eq(js_newthread(heap, NULL, NULL, &thread), NSERROR_OK);
+    ck_assert(exec_script(thread,
+        "var order = ['script'];"
+        "Promise.resolve().then(() => { order.push('promise'); queueMicrotask(() => order.push('nested')); });"
+        "queueMicrotask(() => order.push('microtask'));"
+        "(async function() { await 0; order.push('await'); })();"
+        "order.push('end');",
+        "checkpoint"));
+    assert_predicate(thread, "order.join(',') === 'script,end,promise,microtask,await,nested'", "FIFO checkpoint");
+    ck_assert(!exec_script(thread,
+        "queueMicrotask(() => order.push('after throw')); throw new Error('expected synchronous error');",
+        "throwing script"));
+    assert_predicate(thread, "order.at(-1) === 'after throw'", "exception still checkpoints");
+    ck_assert(exec_script(thread,
+        "queueMicrotask(() => { throw new Error('expected job error'); });"
+        "queueMicrotask(() => order.push('after job error'));"
+        "var rejected = Promise.reject(new Error('handled in same checkpoint'));"
+        "queueMicrotask(() => rejected.catch(() => order.push('handled')));",
+        "job exceptions"));
+    assert_predicate(
+        thread, "order.slice(-2).join(',') === 'after job error,handled'", "jobs continue after exception");
+    js_destroythread(thread);
+    js_destroyheap(heap);
+}
+END_TEST
+
+START_TEST(test_quickjs_microtask_timeout)
+{
+    static const char *loops[] = {
+        "var spins = 0; function spin() { spins++; queueMicrotask(spin); } queueMicrotask(spin);",
+        "var spins = 0; function spin() { spins++; Promise.resolve().then(spin); } spin();",
+        "var spins = 0; Promise.resolve().then(() => { spins++; while (true) {} });",
+    };
+    jsheap *heap;
+    jsthread *thread;
+    ck_assert_int_eq(js_newheap(1, &heap), NSERROR_OK);
+    ck_assert_int_eq(js_newthread(heap, NULL, NULL, &thread), NSERROR_OK);
+    for (unsigned i = 0; i < sizeof(loops) / sizeof(loops[0]); i++) {
+        uint64_t start, end;
+        ck_assert_int_eq(nsu_getmonotonic_ms(&start), NSUERROR_OK);
+        ck_assert_msg(!exec_script(thread, loops[i], "runaway checkpoint"), "Loop %u completed", i);
+        ck_assert_int_eq(nsu_getmonotonic_ms(&end), NSUERROR_OK);
+        ck_assert_msg(end - start >= 900 && end - start < 5000, "Loop %u: one-second checkpoint took %llu ms", i,
+            (unsigned long long)(end - start));
+        ck_assert(exec_script(thread,
+            "var stoppedAt = spins; var recovered = false; Promise.resolve().then(() => { recovered = true; });",
+            "new checkpoint after timeout"));
+        assert_predicate(thread, "recovered && spins === stoppedAt && spins > 0", "discarded loop and fresh jobs");
+    }
+    js_destroythread(thread);
+    js_destroyheap(heap);
+}
+END_TEST
+
+START_TEST(test_quickjs_microtask_shared_budget)
+{
+    jsheap *heap;
+    jsthread *thread;
+    ck_assert_int_eq(js_newheap(1, &heap), NSERROR_OK);
+    ck_assert_int_eq(js_newthread(heap, NULL, NULL, &thread), NSERROR_OK);
+    /* Each part fits the budget alone; together they exceed it. This tests
+     * budget sharing without a tight assertion on the host's elapsed time. */
+    ck_assert(!exec_script(thread,
+        "var jobStarted = false, jobFinished = false;"
+        "var scriptStart = Date.now(); while (Date.now() - scriptStart < 600) {}"
+        "queueMicrotask(() => { jobStarted = true; var start = Date.now();"
+        "while (Date.now() - start < 600) {} jobFinished = true; });",
+        "shared deadline"));
+    assert_predicate(thread, "jobStarted && !jobFinished", "checkpoint did not renew deadline");
+    js_destroythread(thread);
+    js_destroyheap(heap);
+}
+END_TEST
+
+/** Test creating and destroying a heap. */
 START_TEST(test_quickjs_heap_create_destroy)
 {
     jsheap *heap = NULL;
@@ -1243,6 +1354,7 @@ Suite *quickjs_suite(void)
     tcase_add_test(tc_core, test_quickjs_thread_create_destroy);
     tcase_add_test(tc_core, test_quickjs_multiple_threads);
     tcase_add_test(tc_core, test_quickjs_cancel_jobs);
+    tcase_add_test(tc_core, test_quickjs_discard_jobs);
     tcase_add_test(tc_core, test_quickjs_cancel_promise_jobs);
     tcase_add_test(tc_core, test_quickjs_cancel_microtasks);
     tcase_add_test(tc_core, test_quickjs_cancel_finalization_jobs);
@@ -1251,6 +1363,7 @@ Suite *quickjs_suite(void)
     /* Execution test case */
     tc_exec = tcase_create("Execution");
     tcase_add_test(tc_exec, test_quickjs_exec_simple);
+    tcase_add_test(tc_exec, test_quickjs_microtask_checkpoint);
     tcase_add_test(tc_exec, test_quickjs_exec_syntax_error);
     tcase_add_test(tc_exec, test_quickjs_exec_objects);
     tcase_add_test(tc_exec, test_quickjs_exec_console_log);
@@ -1292,6 +1405,8 @@ Suite *quickjs_suite(void)
     tcase_add_test(tc_limits, test_quickjs_binding_allocation_failure);
     tcase_add_test(tc_limits, test_quickjs_predicate_helper);
     tcase_add_test(tc_limits, test_quickjs_timeout_recovery);
+    tcase_add_test(tc_limits, test_quickjs_microtask_timeout);
+    tcase_add_test(tc_limits, test_quickjs_microtask_shared_budget);
     tcase_add_test(tc_limits, test_quickjs_exception_diagnostics);
     tcase_add_test(tc_limits, test_quickjs_memory_stack_limits);
     tcase_add_test(tc_limits, test_quickjs_disabled_timeout);

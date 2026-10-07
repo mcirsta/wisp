@@ -61,6 +61,13 @@ struct jsheap {
     unsigned execution_depth;
     uint64_t deadline_ms;
     bool interrupted;
+    struct jsthread *threads;
+};
+
+struct qjs_rejection {
+    struct qjs_rejection *next;
+    JSValue promise;
+    JSValue reason;
 };
 
 /**
@@ -72,6 +79,9 @@ struct jsthread {
     jsheap *heap;
     JSContext *ctx;
     JSValue error_stack_getter;
+    unsigned refcount;
+    struct jsthread *next;
+    struct qjs_rejection *rejections;
     bool closed;
     void *win_priv;
     void *doc_priv;
@@ -191,12 +201,9 @@ static bool qjs_capture_stack_getter(jsthread *thread)
     return ok && !JS_HasException(ctx);
 }
 
-static void qjs_report_exception(jsthread *thread, const char *name, bool interrupted)
+static void qjs_log_exception_value(jsthread *thread, JSValueConst exc)
 {
     JSContext *ctx = thread->ctx;
-    JSValue exc = JS_GetException(ctx);
-
-    NSLOG(wisp, WARNING, "JavaScript %s in %s", interrupted ? "execution limit reached" : "exception", name);
     if (JS_IsError(exc)) {
         qjs_log_error_property(ctx, exc, "message");
         if (!JS_IsUndefined(thread->error_stack_getter)) {
@@ -217,11 +224,67 @@ static void qjs_report_exception(jsthread *thread, const char *name, bool interr
             JS_FreeCString(ctx, text);
         }
     }
-    JS_FreeValue(ctx, exc);
     /* Diagnostic allocation failure must not leave an exception for the next
      * script. Arbitrary thrown objects are deliberately left unformatted. */
     if (JS_HasException(ctx)) {
         JS_FreeValue(ctx, JS_GetException(ctx));
+    }
+}
+
+static void qjs_report_exception(jsthread *thread, const char *name, bool interrupted)
+{
+    JSValue exc = JS_GetException(thread->ctx);
+    NSLOG(wisp, WARNING, "JavaScript %s in %s", interrupted ? "execution limit reached" : "exception", name);
+    qjs_log_exception_value(thread, exc);
+    JS_FreeValue(thread->ctx, exc);
+}
+
+static void qjs_free_rejection(jsthread *thread, struct qjs_rejection *rejection)
+{
+    JS_FreeValue(thread->ctx, rejection->promise);
+    JS_FreeValue(thread->ctx, rejection->reason);
+    free(rejection);
+}
+
+static void qjs_clear_rejections(jsthread *thread, bool report)
+{
+    while (thread->rejections != NULL) {
+        struct qjs_rejection *rejection = thread->rejections;
+        thread->rejections = rejection->next;
+        if (report) {
+            NSLOG(wisp, WARNING, "JavaScript unhandled Promise rejection");
+            qjs_log_exception_value(thread, rejection->reason);
+        }
+        qjs_free_rejection(thread, rejection);
+    }
+}
+
+static void
+qjs_promise_rejection(JSContext *ctx, JSValueConst promise, JSValueConst reason, bool is_handled, void *opaque)
+{
+    jsthread *thread = JS_GetContextOpaque(ctx);
+    (void)opaque;
+    if (thread == NULL || thread->closed) {
+        return;
+    }
+    if (is_handled) {
+        struct qjs_rejection **slot = &thread->rejections;
+        while (*slot != NULL && !JS_IsSameValue(ctx, (*slot)->promise, promise)) {
+            slot = &(*slot)->next;
+        }
+        if (*slot != NULL) {
+            struct qjs_rejection *rejection = *slot;
+            *slot = rejection->next;
+            qjs_free_rejection(thread, rejection);
+        }
+    } else {
+        struct qjs_rejection *rejection = malloc(sizeof(*rejection));
+        if (rejection == NULL) {
+            NSLOG(wisp, WARNING, "Unable to retain Promise rejection diagnostic");
+            return;
+        }
+        *rejection = (struct qjs_rejection){thread->rejections, JS_DupValue(ctx, promise), JS_DupValue(ctx, reason)};
+        thread->rejections = rejection;
     }
 }
 
@@ -300,6 +363,7 @@ nserror js_newheap(int timeout, jsheap **heap)
     /* Set max stack size (1MB) */
     JS_SetMaxStackSize(h->rt, 1024 * 1024);
     JS_SetInterruptHandler(h->rt, qjs_interrupt, h);
+    JS_SetHostPromiseRejectionTracker(h->rt, qjs_promise_rejection, h);
 
     jsheap_live_count++;
     NSLOG(wisp, DEBUG, "Created QuickJS heap %p (refcount=%d, live_heaps=%d)", h, h->refcount, jsheap_live_count);
@@ -391,6 +455,9 @@ nserror js_newthread(jsheap *heap, void *win_priv, void *doc_priv, jsthread **th
     }
 
     t->heap = heap;
+    t->refcount = 1;
+    t->next = heap->threads;
+    heap->threads = t;
     t->error_stack_getter = JS_UNDEFINED;
     t->win_priv = win_priv;
     t->doc_priv = doc_priv;
@@ -459,22 +526,27 @@ nserror js_closethread(jsthread *thread)
          * navigate while the browser is still replacing its content. Old
          * and new documents share a runtime, so close only our own queue. */
         JS_CloseContextJobs(thread->ctx);
+        qjs_clear_rejections(thread, false);
     }
 
     return NSERROR_OK;
 }
 
 
-/* exported interface documented in js.h */
-void js_destroythread(jsthread *thread)
+/* The document and each active entry/job hold a reference. Navigation may
+ * retire the document inside a callback; release its context only on return. */
+static void qjs_thread_unref(jsthread *thread)
 {
-    jsheap *heap;
-
-    if (thread == NULL) {
+    assert(thread->refcount > 0);
+    if (--thread->refcount != 0) {
         return;
     }
-
-    heap = thread->heap;
+    jsheap *heap = thread->heap;
+    jsthread **slot = &heap->threads;
+    while (*slot != thread) {
+        slot = &(*slot)->next;
+    }
+    *slot = thread->next;
     NSLOG(wisp, DEBUG, "Destroying QuickJS thread %p (heap %p)", thread, heap);
 
     if (thread->ctx != NULL) {
@@ -490,6 +562,59 @@ void js_destroythread(jsthread *thread)
     /* Drop our reference on the heap. If the owner (browser_window)
      * already released its reference, this will free the runtime. */
     jsheap_unref(heap);
+}
+
+/* exported interface documented in js.h */
+void js_destroythread(jsthread *thread)
+{
+    if (thread != NULL) {
+        js_closethread(thread);
+        qjs_thread_unref(thread);
+    }
+}
+
+/* HTML's checkpoint drains FIFO after the outer script, including jobs added
+ * by jobs. The same deadline covers the script and the entire checkpoint. */
+static bool qjs_microtask_checkpoint(jsheap *heap)
+{
+    JSContext *ctx;
+    while ((ctx = JS_GetPendingJobContext(heap->rt)) != NULL) {
+        jsthread *thread = JS_GetContextOpaque(ctx);
+        assert(thread != NULL && thread->heap == heap);
+        if (thread->closed) {
+            JS_CloseContextJobs(ctx);
+            continue;
+        }
+        if (qjs_interrupt(heap->rt, heap)) {
+            NSLOG(wisp, WARNING, "JavaScript execution limit reached in microtask checkpoint");
+            JS_DiscardContextJobs(ctx);
+            qjs_clear_rejections(thread, false);
+            return false;
+        }
+        thread->refcount++;
+        JSContext *executed;
+        int ret = JS_ExecutePendingJob(heap->rt, &executed);
+        assert(executed == ctx);
+        if (ret < 0 || JS_HasException(ctx)) {
+            qjs_report_exception(thread, "microtask", heap->interrupted);
+        } else if (heap->interrupted) {
+            NSLOG(wisp, WARNING, "JavaScript execution limit reached in microtask checkpoint");
+        }
+        if (heap->interrupted) {
+            JS_DiscardContextJobs(ctx);
+            qjs_clear_rejections(thread, false);
+        }
+        qjs_thread_unref(thread);
+        if (heap->interrupted) {
+            return false;
+        }
+    }
+    /* A handler added anywhere in this checkpoint suppresses the diagnostic.
+     * PromiseRejectionEvent delivery awaits the real event binding. */
+    for (jsthread *thread = heap->threads; thread != NULL; thread = thread->next) {
+        qjs_clear_rejections(thread, true);
+    }
+    return true;
 }
 
 
@@ -531,6 +656,7 @@ bool js_exec(jsthread *thread, const uint8_t *txt, size_t txtlen, const char *na
         term_txt[txtlen] = '\0';
     }
 
+    thread->refcount++;
     if (qjs_execution_begin(thread->heap)) {
         result = JS_Eval(thread->ctx, term_txt, txtlen, source, JS_EVAL_TYPE_GLOBAL);
         if (JS_IsException(result) || JS_HasException(thread->ctx) || thread->heap->interrupted) {
@@ -542,11 +668,22 @@ bool js_exec(jsthread *thread, const uint8_t *txt, size_t txtlen, const char *na
         NSLOG(wisp, WARNING, "Unable to begin bounded JavaScript execution in %s", source);
         success = false;
     }
+    if (thread->heap->interrupted) {
+        JS_DiscardContextJobs(thread->ctx);
+        qjs_clear_rejections(thread, false);
+    } else if (thread->heap->execution_depth == 1) {
+        /* Ordinary exceptions do not suppress the checkpoint. Closed contexts
+         * have already discarded their jobs without invoking page callbacks. */
+        if (!qjs_microtask_checkpoint(thread->heap)) {
+            success = false;
+        }
+    }
     thread->heap->execution_depth--;
 
     if (term_txt != stack_buf) {
         free(term_txt);
     }
+    qjs_thread_unref(thread);
 
     return success;
 }

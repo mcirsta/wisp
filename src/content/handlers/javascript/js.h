@@ -47,8 +47,9 @@ typedef struct jsheap jsheap;
  * to create a JS thread to attach to the browsing context.
  *
  * Each thread retains its heap until explicitly destroyed. Closing disconnects
- * document access and cancels jobs; destroying releases the context and heap
- * reference. A JavaScript thread is not an operating-system thread.
+ * document access and cancels jobs; destroying releases the owner reference.
+ * Active entries/jobs retain the context until they return. A JavaScript thread
+ * is not an operating-system thread.
  */
 typedef struct jsthread jsthread;
 
@@ -128,9 +129,10 @@ void js_destroythread(jsthread *thread);
  * Execute JavaScript within the heap's resource limits.
  *
  * Returns true for normal completion (including a false/undefined JS result),
- * false for exceptions, interruption or invalid input/context. Does not run
- * pending jobs. Time limits are cooperative QuickJS interrupts, not preemption
- * of arbitrary native binding code.
+ * false for exceptions, interruption or invalid input/context. The outer entry
+ * drains microtasks using the same time budget. Ordinary job exceptions are
+ * reported without aborting the checkpoint. Time limits are cooperative QuickJS
+ * interrupts, not preemption of arbitrary native binding code.
  */
 bool js_exec(jsthread *thread, const uint8_t *txt, size_t txtlen, const char *name);
 

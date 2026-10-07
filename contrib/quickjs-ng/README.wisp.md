@@ -21,7 +21,10 @@ across this directory.
   context closed **before** releasing arguments also blocks FinalizationRegistry
   jobs created by that release or a later GC. Upstream's
   `JS_GetPendingJobContext()` only inspects the queue and does not replace this
-  extension. Tests are in `src/test/test_quickjs.c` and the Qt navigation cleanup
+  extension. `JS_DiscardContextJobs(ctx)` performs one-time removal after an
+  execution timeout, suppressing new jobs while freeing arguments, then restoring
+  the prior queue state. It allows later scripts to enqueue normally and never
+  reopens a permanently closed queue. Tests are in `src/test/test_quickjs.c` and the Qt navigation cleanup
   regression.
 - `quickjs.c`, `api-test.c`: propagate allocation/property-definition failures
   from `JS_SetPropertyFunctionList` instead of reporting success with a pending
@@ -49,8 +52,8 @@ review whether upstream has replaced them. Keep Wisp's generated Window/Console
 bindings separate: their source is `utils/qjs_binding_generator.py` and WebIDL,
 with output generated in the build directory.
 
-Build and run `test_quickjs` and `qt_js_navigation_cleanup` in a Wisp Qt debug
-build. Also run the vendored C API, regexp and local JS tests. A standalone build
+Build and run `test_quickjs`, `qt_js_script_order` and
+`qt_js_navigation_cleanup` in a Wisp Qt debug build. Also run the vendored C API, regexp and local JS tests. A standalone build
 can use:
 
 ```sh

@@ -39,7 +39,15 @@ its pending jobs without executing callbacks. Other contexts sharing the runtime
 retain their jobs and their relative order. Subsequent enqueues for the closed
 context are discarded. Closing twice is harmless.
 
-A browser needs this when retiring a document: draining jobs during teardown can
+The checkpoint work also adds `JS_DiscardContextJobs(ctx)`: one-time queue
+removal after an execution timeout. It suppresses enqueues while arguments are
+released, then restores the previous open/closed state. Later independent entries
+can enqueue jobs again; an already-closed context stays closed. Include this
+separate use case when discussing the upstream API shape, rather than conflating
+aborting one entry with permanently retiring a context. Wisp tests finalizers
+during discard, sibling jobs, new enqueues and discard after permanent closure.
+
+A browser needs permanent closure when retiring a document: draining jobs during teardown can
 run page callbacks that navigate or touch objects being destroyed. Destroying the
 whole runtime is inappropriate when another document still uses it. The API also
 has potential value to other embedders that dispose of individual contexts.

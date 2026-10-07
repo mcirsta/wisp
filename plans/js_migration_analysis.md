@@ -3,7 +3,8 @@
 Reviewed 2026-10-07 against Wisp `206b8a03`, plus the QuickJS-ng update and
 XHR conversion fix described below. This replaces the earlier migration analysis.
 It is a browser-integration review, not an exhaustive security or ECMAScript
-conformance audit. Batch 1 is implemented below; batches 2–5 remain future work.
+conformance audit. Batch 1 and the script-ordering/microtask part of batch 2 are
+implemented below. Timers and batches 3–5 remain future work.
 
 ## Assessment
 
@@ -62,7 +63,7 @@ unless stated otherwise.
 | JavaScript language | Real QuickJS execution via `JS_Eval`, modern syntax and engine builtins | Useful base; host services are separate |
 | Runtime/document lifetime | `quickjs_bindings.c`: runtime per browser window, context per document, reference-counted runtime lifetime and closed-document guards | Keep this basic ownership structure; `jsthread` is not an OS thread |
 | Resource limits | 64 MiB runtime allocation limit, 1 MiB JS stack limit and monotonic execution deadline using `script_timeout` (default 10 seconds) | Cooperative interruption and recovery are tested. Native DOM allocations are outside the JS heap limit, and arbitrary native work is not preempted |
-| Promise/async continuations | Jobs can be enqueued, but production code never calls `JS_ExecutePendingJob` | Promise callbacks, `await` continuations and engine `queueMicrotask` callbacks do not progress |
+| Promise/async continuations | The outer script entry drains FIFO jobs under the same deadline; aborted entries discard their pending jobs | Promise, `await` and engine `queueMicrotask` callbacks progress; this is not yet a complete browser event loop |
 | Timers | `timers.c`: returns constant IDs, schedules nothing | `setTimeout`/`setInterval` callbacks never run |
 | Document/nodes | `document.c`: selectors return null/empty arrays; roots and created nodes are new plain objects | No JS-to-libdom wrapper layer or stable node identity |
 | Mutation/CSSOM | Dummy `style`, `classList`, text and tree operations | JS cannot change the rendered DOM through these bindings |
@@ -72,7 +73,7 @@ unless stated otherwise.
 | Navigation | `location.c`: real URL getters and calls to navigation for assign/replace | Partial support: href has no setter, reload is a stub, relative URL resolution/history replacement need review; assign and replace currently use the same flags |
 | Navigator | Hard-coded Windows Chrome 91 UA, English language and cookies-enabled value | JS identity differs from Wisp's actual HTTP UA and capabilities |
 | Generated bindings | `utils/qjs_binding_generator.py` generates Console and a generic Window stub | Not a complete WebIDL binding generator; see below |
-| Script loading | `html/script.c` fetches classic scripts and has async/defer bookkeeping | Ordinary external scripts do not block the parser; ordering is wrong. Browser module loading is not implemented |
+| Script loading | Parser-blocking classic scripts wait for fetches and preceding blocking stylesheets; async scripts run in readiness order, defer scripts in document order after parsing | Cached and failed fetches are covered; modules, dynamic script insertion and complete script-element processing remain unsupported/incomplete |
 | `javascript:` URLs | `javascript/fetcher.c` returns 204 | Does not execute the URL's code |
 
 ### Confirmed host problems, in priority order
@@ -84,14 +85,13 @@ unless stated otherwise.
    scope: renewing it for every job would let infinite Promise chains evade the
    limit. There is no nested GUI event pumping or new execution thread.
 
-2. **Classic script ordering is broken.** A local page containing an external
-   script followed by an inline script logs the inline script first; the external
-   variable is still undefined. `exec_src_script` deliberately skips parser
-   pausing, calling this speculative parsing. Allowing the actual DOM parser and
-   later scripts to continue is not a speculative preload scanner. Restore the
-   required parser-blocking behavior; a separate preload optimization can wait.
-   Async/defer ordering, parser completion and reentrant navigation need explicit
-   fixtures before claiming those paths are conformant.
+2. **Classic script ordering and checkpoints are connected.** The earlier local
+   probe ran inline code before the preceding external script because
+   `exec_src_script` deliberately skipped parser pausing. This is corrected,
+   together with stylesheet blocking, async/defer order and load completion.
+   A real speculative preload scanner is still a separate optimization: stopping
+   the actual parser can delay discovery of later resources, but preserves script
+   semantics. See the implemented scope and regressions in batch 2 below.
 
 3. **There is no real document binding.** A local page confirms both
    `document.documentElement === document.documentElement` and lookup of an
@@ -150,7 +150,9 @@ script URL (the document URL for inline scripts, with script-relative line numbe
 and report messages and the engine backtrace. The pristine native stack getter is
 retained at context creation so reporting never invokes a page's replacement
 getter, proxy trap or `toString`. Non-Error thrown objects are left unformatted.
-Promise rejection reporting remains part of the future checkpoint work.
+Unhandled Promise rejections are now logged after the checkpoint; handlers added
+during that checkpoint suppress the diagnostic. Real PromiseRejectionEvent
+dispatch remains part of the event-binding work.
 
 ### Batch 1: execution controls and test results
 
@@ -177,6 +179,58 @@ No full external test262, GTK or native non-Linux run is claimed.
   checkpoints must share the outer scope, and new native bindings must propagate
   exceptions and avoid unbounded native work. This is not a complete hostile-code
   sandbox or browser-wide resource audit.
+
+### Batch 2, first part: classic scripts and microtasks
+
+Implemented 2026-10-07. Timers remain the next step in this batch.
+
+- Ordinary external classic scripts pause the DOM parser until ready, execute,
+  drain their microtasks, then resume parsing. Ready async scripts use a FIFO
+  queue populated by fetch completion; `async` takes precedence over `defer`.
+  Deferred scripts run in document order after parsing, waiting for an earlier
+  unfinished deferred fetch. Cached callbacks only schedule processing; they
+  never reenter the parser directly.
+- Parser-blocking scripts wait for preceding applicable author sheets, and
+  deferred scripts wait for pending applicable sheets, including inline sheets and imports. A cache handle with no
+  content yet is still pending, even though `content_get_status()` returns
+  ERROR for it. Real stylesheet failures clear the handle and unblock execution.
+  Existing stylesheet media/alternate selection limitations are not redesigned.
+- Script fetch failure releases the parser/order slot. Non-success HTTP status
+  responses do not execute as JavaScript. An empty `type` is classic; modules
+  and data blocks cannot accidentally enter the classic external-script path.
+  This does not implement modules, all legacy MIME aliases, dynamic insertion,
+  CSP/CORS/SRI or the whole script-element preparation algorithm.
+- Rendering may begin with pending async/defer resources, but content DONE waits
+  for their downloads and queued execution. Load/DOMContentLoaded JS events and
+  `document.readyState` remain stubs and must be implemented in batch 4.
+- The outer `js_exec` drains Promise, `await` and `queueMicrotask` jobs in FIFO
+  order, including jobs enqueued by jobs. It retains the original deadline and
+  checks between jobs, so chains of tiny jobs cannot evade the interrupt budget.
+  Ordinary exceptions are reported without suppressing subsequent jobs.
+- A timeout discards that context's pending jobs with `JS_DiscardContextJobs`,
+  allowing a later entry to enqueue normally. Permanent document retirement still
+  uses `JS_CloseContextJobs`; teardown never drains page callbacks. Active entries
+  and jobs retain their document context until return, even if navigation releases
+  the document's owner reference. An abandoned parser reaches an error state
+  without resuming JS, so cache cleanup can release it before forced shutdown.
+  Runtime ownership remains reference-counted.
+- Unhandled rejections use the same safe error diagnostics as synchronous errors.
+  A handler installed during the checkpoint suppresses the diagnostic. There is
+  no PromiseRejectionEvent delivery yet, and callbacks outside the implemented
+  script entry points are not a complete HTML task/checkpoint implementation.
+
+Regression coverage: **40 Check tests** in `test_quickjs`, plus Qt
+`qt_js_script_order`, `qt_js_navigation_cleanup`, `qt_browser_loading` and
+`qt_fetch_events`, using Debug ASan/UBSan. Ordering fixtures exercise real HTTP
+fetches, repeated cached scripts, HTTP failures, reversed defer/async readiness,
+CSS imports, Promise diagnostics and navigation from a Promise. Unit tests also
+check infinite short-job chains, a single runaway job, a shared script/checkpoint
+deadline, recovery, queue discard and finalizer suppression. Vendored C API,
+regexp and local JS suites are also checked; the latter is not full test262.
+
+The old Duktape `in_use`/deferred-destruction mechanism informed the ownership
+review. Its code and timeout behavior were not copied. The implementation uses
+QuickJS values/contexts and current HTML ordering rules.
 
 ## What survives from Duktape
 
@@ -249,13 +303,12 @@ These are separate reviewable batches, not a commitment to full web-app support.
 
 1. **Execution controls and trustworthy tests — implemented.** See the batch 1
    scope and regression coverage above. No added Web APIs.
-2. **Script/task correctness.** Restore classic script ordering and define
-   microtask checkpoints, then implement real timers through the existing main
-   event-loop scheduler. Cover ordering, cancellation, self-cancelling timers,
-   navigation during execution, exceptions and runaway job chains. Update the
-   navigation regression: it currently intentionally depends on Promise jobs
-   remaining unexecuted during normal operation, which must change when normal
-   checkpoints work. Teardown itself must continue to run no page callbacks.
+2. **Script/task correctness — partially implemented.** Classic parser ordering,
+   microtasks and navigation-safe context ownership are implemented above.
+   Next: replace timer stubs through the existing main event-loop scheduler.
+   Share bounded entry/checkpoint handling with scripts; test callback arguments,
+   cancellation, self-cancelling timers, nesting delays, navigation, exceptions
+   and runaway callbacks. Teardown must continue to run no page callbacks.
 3. **Minimal real DOM plus visible mutations.** Node/Element/Document wrappers;
    document roots, ID lookup, traversal, attributes/classList and text changes;
    coalesced renderer invalidation. A small page should change a class and text
