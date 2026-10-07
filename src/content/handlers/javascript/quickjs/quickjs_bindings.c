@@ -442,6 +442,7 @@ nserror js_newthread(jsheap *heap, void *win_priv, void *doc_priv, jsthread **th
     heap->threads = t;
     t->error_stack_getter = JS_UNDEFINED;
     t->window_event_target = JS_UNDEFINED;
+    t->abort_error_constructor = JS_UNDEFINED;
     nsu_getmonotonic_ms(&t->time_origin_ms);
     t->win_priv = win_priv;
     t->doc_priv = doc_priv;

@@ -7,8 +7,9 @@ conformance audit. Batches 1–2 and four increments of batch 3 are implemented
 within the scope described below. Real DOM lookups, class lists, attribute/text
 mutations and basic node creation/tree edits now reach rendering and carry JS action
 traces. Live child-node/element collections and script-dispatched events on DOM nodes,
-Document, Window and standalone EventTarget are implemented. Native input/lifecycle
-delivery and the other capabilities below remain future work.
+Document, Window and standalone EventTarget are implemented, along with the core
+AbortController/AbortSignal API and signal-bound listener removal. Native
+input/lifecycle delivery and the other capabilities below remain future work.
 
 ## Assessment
 
@@ -73,6 +74,7 @@ unless stated otherwise.
 | Document/nodes | `dom.c`/`document.c`/`tree.c`/`collections.c`: real libdom wrappers with stable identity, roots, ID lookup, traversal, live `childNodes`/`children` and element/text/comment/fragment factories | Document-lifetime wrapper ownership and native reference cleanup are tested; selectors, document-wide collections, namespace-aware creation and cross-document operations are not exposed |
 | Mutation/CSSOM | Real attributes, `id`/`className`, live `classList`, text/data and append/insert/replace/remove; connected edits request a full restyle after the entry/checkpoint | Changes affect boxes and pixels, including moves into detached trees; `style` and `innerHTML` remain omitted |
 | Events | `event.c`/`event_target.c`: real Event/CustomEvent values and script-dispatched listeners on DOM nodes, Document, Window and standalone EventTarget | Browser-generated input, handler attributes and lifecycle delivery remain pending; `js_fire_event`/`js_handle_new_element` are still stubs |
+| Cancellation | `abort.c`: AbortController, AbortSignal state/reason, throwIfAborted, static abort, onabort and the listener signal option | Listener cancellation uses private abort steps before the public event; timeout, any and network integration remain absent |
 | Lifecycle information | `document.readyState` is omitted | Correct loading state and lifecycle events belong to batch 4 |
 | Networking/storage | XHR fabricates DONE/200 without a request; storage discards writes; no `document.cookie` accessor or browser fetch binding | XHR/storage still advertise unsupported behavior. Native HTTP cookie handling is a separate subsystem |
 | Navigation | `location.c`: real URL getters and calls to navigation for assign/replace | Partial support: href has no setter, reload is a stub, relative URL resolution/history replacement need review; assign and replace currently use the same flags |
@@ -589,8 +591,9 @@ events to them. Supported semantics include:
   removes before invocation, including before reading `handleEvent`.
 - Per-invocation snapshots, cancellation, stop flags and passive listeners. Window
   uses DOM's passive default for wheel/mousewheel/touchstart/touchmove; explicit
-  options override it. AbortSignal is not implemented, so supplied non-undefined
-  signals fail the required interface conversion rather than being silently ignored.
+  options override it. Signal-bound listener removal is implemented in the later
+  AbortController/AbortSignal increment below; invalid signals fail interface
+  conversion rather than being silently ignored.
 - Listener exceptions are reported while later listeners continue. Execution
   interruption escapes the surrounding script, stops dispatch and discards jobs.
   Nested callbacks share the existing deadline and outer microtask checkpoint.
@@ -668,13 +671,81 @@ a detached stylesheet link must not cause a download. Existing loading, script,
 timer, native interaction and retained-rendering regressions are checked. GTK is
 not tested.
 
-**Next: native input delivery and its default actions/lifetime checks.** Do not
-remove the script-dispatch-stack guard until native event wrapping and interaction
-cancellation/ownership are ready. Navigation/form actions still need to honor
-cancellation, and callback mutation/navigation must not leave stale interaction
-pointers. Inline handlers, readyState and HTML lifecycle timing remain separate
-work. Cross-realm callback/settings handling is also not implemented; cross-document
-JS objects are not exposed by the current DOM bindings.
+### Batch 4 increment: abort signals and listener cancellation
+
+`new AbortController()` exposes a stable `signal`. `abort(reason)` preserves the
+first reason, defaults undefined to an AbortError DOMException, and fires one
+trusted, non-bubbling, non-cancelable `abort` event. AbortSignal inherits EventTarget
+and exposes `aborted`, `reason`, `throwIfAborted()`, static `abort(reason)` and
+`onabort`. Direct AbortSignal construction is illegal. These follow the
+[DOM abort algorithms](https://dom.spec.whatwg.org/#interface-abortcontroller).
+
+The `addEventListener` signal option now accepts a real AbortSignal. An already
+aborted signal prevents registration; subsequent abortion removes registrations
+before public abort listeners run. A stopped public event cannot prevent removal.
+Duplicate registrations retain their original signal because identity still
+depends only on type, callback and capture. Explicit removal and `once` also
+detach the abort step, including during an active native invocation snapshot.
+
+AbortSignal uses private EventTarget storage and the existing libdom dispatcher.
+The public signal keeps its own identity in `this`, target/currentTarget and the
+composed path. Host-created events use an intrinsic Event factory; page overrides
+of Event or DOMException do not intercept their construction. Signals and
+registrations trace both directions of their ownership through QuickJS GC.
+Collection and document closure detach host registrations without invoking page
+code. Retired or foreign-context signals reject further operations under the
+existing document boundary.
+
+`onabort` uses one listener slot, so replacing a handler preserves its order;
+clearing and re-adding moves it to the end. Its conversion follows HTML's
+[EventHandler](https://html.spec.whatwg.org/multipage/webappapis.html#eventhandler)
+and Web IDL's [LegacyTreatNonObjectAsNull](https://webidl.spec.whatwg.org/#LegacyTreatNonObjectAsNull):
+non-objects clear the handler, whereas non-callable objects retain their identity
+but do nothing on invocation. A literal false return cancels a synthetic cancelable
+event. Exceptions and deadlines use the existing bounded callback handling.
+This does not introduce general element/Window handler attributes.
+
+Validation: 116 QuickJS cases pass with Debug ASan/UBSan and leak checks. The 11 new
+cases cover reasons/identity, interfaces, abort event order, duplicate and active
+listener edits, handler replacement/conversion, GC cycles, document retirement,
+execution interruption and allocation-failure recovery. Qt's DOM fixture compares
+abort-driven mutations with static reference pixels and checks cancellation,
+microtask processing, trace attribution and one coalesced render request. Qt
+loading, navigation cleanup, script ordering and timer tests also pass. GTK is not
+tested.
+
+Scope remains deliberately bounded: `AbortSignal.any`, `AbortSignal.timeout`,
+fetch/XHR cancellation and cross-realm callback/settings handling are absent.
+Aborting a signal does not interrupt arbitrary JavaScript or cancel unrelated
+timers; Wisp's execution deadline remains a separate resource limit. The old
+Duktape event bridge was reviewed for native identity and protected callbacks;
+abort semantics come from the current standards.
+
+### Next: native input delivery and default actions
+
+Keep the script-dispatch-stack guard until wrapping, default actions and content
+lifetime are handled together. The focused click review found these prerequisites:
+
+1. Replace interaction pointers saved before callbacks with owned state or
+   validated DOM identities. Link URLs/targets and form controls currently survive
+   only because page listeners cannot run there. A callback can remove them or
+   navigate. `hlcache_handle_clone()` is an unimplemented stub, so it cannot serve
+   as a content-lifetime guard.
+2. Honor cancellation for deferred navigation and submission as well as existing
+   checkable/details actions. Review early link-download actions that currently
+   precede click dispatch. Preserve native behavior for pages without listeners.
+3. Implement the HTML input [activation rules](https://html.spec.whatwg.org/multipage/input.html#the-input-element):
+   checkbox/radio pre-activation before click listeners, cancellation rollback,
+   checked/indeterminate state and radio-group revalidation. Current checkbox
+   toggling happens after dispatch, and the old Duktape generated accessors are
+   insufficient for these semantics.
+4. Deliver correctly initialized input events through the shared dispatcher, with
+   explicit callback/checkpoint boundaries and safe teardown. Test cancellation,
+   callback mutation, navigation, labels and radio groups before enabling delivery.
+
+Inline handlers, readyState and HTML lifecycle timing remain subsequent work. The
+current `load` call precedes the initial box build and cannot simply be exposed to
+JS. Cross-document JS objects remain outside the current DOM binding scope.
 
 ### Reading the JS trace
 
@@ -723,10 +794,13 @@ affected-node notifications, not necessarily JS method calls.
 
 `event.add` records a listener ID, event type and capture/once/passive settings;
 `event.remove` records explicit removals. `event.dispatch`/`event.complete` bracket
-script dispatch. `event.listener` identifies the invoked registration and its
+script and host abort dispatch. `event.listener` identifies the invoked registration and its
 creating entry; the following `begin kind=event` opens the bounded callback entry.
 DOM mutations inside that callback use its entry ID. As with timers, the recorded
 source is the registration source, not necessarily the function's definition site.
+`signal.abort` records the first controller abortion before its removal steps and
+public event; `signal.handler` records activation/clearing of `onabort`. Neither
+records arbitrary reason or handler values.
 
 This is an action trace, not a DOM snapshot or complete paint attribution. It
 records no arbitrary text/attribute values and never calls page getters or
@@ -815,7 +889,8 @@ These are separate reviewable batches, not a commitment to full web-app support.
    ownership/conversion/invalidation layer for further APIs. Reuse
    partial updates only with sound mutation/dependency tracking.
 4. **Events and practical document interaction — native dispatch and explicit
-   DOM/Window/standalone JS events implemented; native input/lifecycle pending.** Click
+   DOM/Window/standalone JS events and abort signals implemented; native
+   input/lifecycle pending.** Click
    listeners and supported handler attributes, DOMContentLoaded/load and accurate
    readyState; then further element lifecycle integration. Validate propagation,
    preventDefault, capture, once, callback identity and navigation cleanup.

@@ -187,6 +187,7 @@ add_library(wisp ${WISP_LIB_TYPE}
 	content/handlers/javascript/quickjs/storage.c
 	content/handlers/javascript/quickjs/event_target.c
 	content/handlers/javascript/quickjs/event.c
+	content/handlers/javascript/quickjs/abort.c
 	content/handlers/javascript/quickjs/xhr.c
 	content/handlers/text/textplain.c
 	desktop/cookie_manager.c

@@ -4,6 +4,7 @@
  */
 #include "event.h"
 #include <nsutils/time.h>
+#include <string.h>
 
 struct qjs_event *qjs_event_get(JSContext *ctx, JSValueConst value)
 {
@@ -165,6 +166,64 @@ static JSValue event_set(JSContext *ctx, JSValueConst object, JSValueConst value
     return JS_UNDEFINED;
 }
 
+static JSValue event_allocate(JSContext *ctx, JSValue object, bool custom, bool composed, JSValueConst detail)
+{
+    if (JS_IsException(object))
+        return object;
+    jsthread *thread = JS_GetContextOpaque(ctx);
+    struct qjs_event *event = js_mallocz(ctx, sizeof(*event));
+    if (event == NULL)
+        goto fail_object;
+    event->target = JS_NULL;
+    event->path = JS_UNDEFINED;
+    event->detail = JS_DupValue(ctx, detail);
+    event->custom = custom;
+    event->composed = composed;
+    uint64_t now;
+    if (nsu_getmonotonic_ms(&now) != NSUERROR_OK)
+        now = thread->time_origin_ms;
+    event->timestamp = now >= thread->time_origin_ms ? (double)(now - thread->time_origin_ms) : 0;
+    JS_SetOpaque(object, event);
+    dom_exception err = dom_event_create(&event->native);
+    if (err != DOM_NO_ERR) {
+        qjs_dom_exception(ctx, err);
+        goto fail_object;
+    }
+    /* isTrusted is a legacy unforgeable own accessor. */
+    JSAtom key = JS_NewAtom(ctx, "isTrusted");
+    JSValue getter = JS_NewCFunctionMagic(
+        ctx, (JSCFunctionMagic *)event_get, "get isTrusted", 0, JS_CFUNC_getter_magic, TRUSTED);
+    if (key == JS_ATOM_NULL || JS_IsException(getter)) {
+        JS_FreeValue(ctx, getter);
+        JS_FreeAtom(ctx, key);
+        goto fail_object;
+    }
+    int ret = JS_DefinePropertyGetSet(ctx, object, key, getter, JS_UNDEFINED, JS_PROP_ENUMERABLE);
+    JS_FreeAtom(ctx, key);
+    if (ret < 0)
+        goto fail_object;
+    return object;
+fail_object:
+    JS_FreeValue(ctx, object);
+    return JS_EXCEPTION;
+}
+
+JSValue qjs_event_create(JSContext *ctx, const char *type)
+{
+    jsthread *thread = JS_GetContextOpaque(ctx);
+    if (thread == NULL || thread->closed)
+        return qjs_dom_exception(ctx, DOM_INVALID_STATE_ERR);
+    dom_string *name;
+    dom_exception err = dom_string_create((const uint8_t *)type, strlen(type), &name);
+    if (err != DOM_NO_ERR)
+        return qjs_dom_exception(ctx, err);
+    JSValue object = event_allocate(ctx, JS_NewObjectClass(ctx, thread->heap->event_class[0]), false, false, JS_NULL);
+    if (!JS_IsException(object))
+        dom_event_init(qjs_event_get(ctx, object)->native, name, false, false);
+    dom_string_unref(name);
+    return object;
+}
+
 static JSValue event_constructor(JSContext *ctx, JSValueConst new_target, int argc, JSValueConst *argv, int custom)
 {
     jsthread *thread = JS_GetContextOpaque(ctx);
@@ -193,46 +252,13 @@ static JSValue event_constructor(JSContext *ctx, JSValueConst new_target, int ar
                 detail = JS_NULL;
         }
     }
-    object = qjs_event_new_object(ctx, new_target, thread->heap->event_class[custom]);
-    if (JS_IsException(object))
-        goto out;
-    struct qjs_event *event = js_mallocz(ctx, sizeof(*event));
-    if (event == NULL)
-        goto fail_object;
-    event->target = JS_NULL;
-    event->path = JS_UNDEFINED;
-    event->detail = JS_DupValue(ctx, detail);
-    event->custom = custom;
-    event->composed = composed;
-    uint64_t now;
-    if (nsu_getmonotonic_ms(&now) != NSUERROR_OK)
-        now = thread->time_origin_ms;
-    event->timestamp = now >= thread->time_origin_ms ? (double)(now - thread->time_origin_ms) : 0;
-    JS_SetOpaque(object, event);
-    dom_exception err = dom_event_create(&event->native);
-    if (err != DOM_NO_ERR) {
-        qjs_dom_exception(ctx, err);
-        goto fail_object;
+    object = event_allocate(
+        ctx, qjs_event_new_object(ctx, new_target, thread->heap->event_class[custom]), custom, composed, detail);
+    if (!JS_IsException(object)) {
+        struct qjs_event *event = qjs_event_get(ctx, object);
+        dom_event_init(event->native, type, bubbles, cancelable);
+        dom_event_set_is_trusted(event->native, false);
     }
-    dom_event_init(event->native, type, bubbles, cancelable);
-    dom_event_set_is_trusted(event->native, false);
-    /* isTrusted is a legacy unforgeable own accessor. */
-    JSAtom key = JS_NewAtom(ctx, "isTrusted");
-    JSValue getter = JS_NewCFunctionMagic(
-        ctx, (JSCFunctionMagic *)event_get, "get isTrusted", 0, JS_CFUNC_getter_magic, TRUSTED);
-    if (key == JS_ATOM_NULL || JS_IsException(getter)) {
-        JS_FreeValue(ctx, getter);
-        JS_FreeAtom(ctx, key);
-        goto fail_object;
-    }
-    int ret = JS_DefinePropertyGetSet(ctx, object, key, getter, JS_UNDEFINED, JS_PROP_ENUMERABLE);
-    JS_FreeAtom(ctx, key);
-    if (ret < 0)
-        goto fail_object;
-    goto out;
-fail_object:
-    JS_FreeValue(ctx, object);
-    object = JS_EXCEPTION;
 out:
     dom_string_unref(type);
     JS_FreeValue(ctx, detail);

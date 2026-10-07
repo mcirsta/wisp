@@ -2474,6 +2474,241 @@ START_TEST(test_quickjs_node_event_long_path)
 }
 END_TEST
 
+START_TEST(test_quickjs_abort_values)
+{
+    ck_assert(exec_script(dom_thread,
+        "var c=new AbortController(), s=c.signal;"
+        "if(c.signal!==s||!(c instanceof AbortController)||!(s instanceof AbortSignal)||!(s instanceof EventTarget)||"
+        "Object.getPrototypeOf(AbortSignal)!==EventTarget||Object.getPrototypeOf(AbortSignal.prototype)!==EventTarget.prototype||"
+        "Object.prototype.toString.call(s)!=='[object AbortSignal]'||s.aborted||s.reason!==undefined||s.throwIfAborted()!==undefined)"
+        "throw Error('initial state');"
+        "class Controller extends AbortController{};if(!(new Controller() instanceof Controller))throw Error('subclass');"
+        "for(let f of [()=>AbortController(),()=>new AbortSignal(),()=>AbortSignal(),()=>AbortController.prototype.abort.call({}),"
+        "()=>Object.getOwnPropertyDescriptor(AbortSignal.prototype,'reason').get.call({}),"
+        "()=>AbortSignal.prototype.throwIfAborted.call({})]){try{f();throw Error('accepted');}catch(e){if(!(e instanceof TypeError))throw e;}}"
+        "var intrinsic=DOMException;globalThis.DOMException=function(){throw Error('replaced constructor');};c.abort();"
+        "if(!s.aborted||!(s.reason instanceof intrinsic)||s.reason.name!=='AbortError'||s.reason.code!==20)throw Error('default reason');"
+        "var reason=s.reason;c.abort('replacement');if(s.reason!==reason)throw Error('repeated abort');"
+        "try{s.throwIfAborted();throw Error('not thrown');}catch(e){if(e!==reason)throw e;}"
+        "globalThis.DOMException=intrinsic;"
+        "for(let reason of [null,false,0,'stop',{toString(){throw Error('coerced');}}]){let a=new AbortController();a.abort(reason);"
+        "if(a.signal.reason!==reason)throw Error('reason identity');try{a.signal.throwIfAborted();throw Error('not thrown');}"
+        "catch(e){if(e!==reason)throw Error('wrong thrown value');}}",
+        "abort-values.js"));
+}
+END_TEST
+
+START_TEST(test_quickjs_abort_event)
+{
+    ck_assert(exec_script(dom_thread,
+        "var c=new AbortController(), s=c.signal, seen=[], saved;"
+        "s.addEventListener('abort',function(e){if(this!==s||e.target!==s||e.currentTarget!==s||e.eventPhase!==2||"
+        "e.bubbles||e.cancelable||e.composed||!e.isTrusted||!s.aborted||s.reason!==42)throw Error('abort event');"
+        "if(e.composedPath().length!==1||e.composedPath()[0]!==s)throw Error('abort path');"
+        "saved=e;seen.push('abort');e.preventDefault();c.abort(99);queueMicrotask(()=>seen.push('job'));});"
+        "c.abort(42);seen.push('after');"
+        "if(seen.join()!=='abort,after'||!saved||saved.currentTarget!==null||saved.defaultPrevented||saved.composedPath().length)"
+        "throw Error('abort dispatch '+seen);"
+        "var fake=new AbortController();fake.signal.dispatchEvent(new Event('abort'));if(fake.signal.aborted)throw Error('fake abort');",
+        "abort-event.js"));
+    assert_predicate(dom_thread, "seen.join()==='abort,after,job'", "abort microtask checkpoint");
+}
+END_TEST
+
+START_TEST(test_quickjs_abort_static)
+{
+    ck_assert(exec_script(dom_thread,
+        "var reason={id:1}, s=AbortSignal.abort(reason), other=AbortSignal.abort();"
+        "if(!s.aborted||s.reason!==reason||!other.aborted||other.reason.name!=='AbortError'||s===other)throw Error('static');"
+        "if(AbortSignal.abort.call({},null).reason!==null)throw Error('static receiver');"
+        "var t=new EventTarget(), hit=0;t.addEventListener('x',()=>hit++,{signal:s});t.dispatchEvent(new Event('x'));"
+        "if(hit)throw Error('already aborted registration');"
+        "var gets=[];t.addEventListener('x',null,{get capture(){gets.push('capture');},get once(){gets.push('once');},"
+        "get passive(){gets.push('passive');},get signal(){gets.push('signal');return s;}});"
+        "if(gets.join()!=='capture,once,passive,signal')throw Error('conversion order');"
+        "for(let signal of [null,{},Object.create(AbortSignal.prototype),new EventTarget()]){"
+        "try{t.addEventListener('x',null,{signal});throw Error('accepted');}catch(e){if(!(e instanceof TypeError))throw e;}}"
+        "t.removeEventListener('x',()=>{},{get signal(){throw Error('remove reads signal');}});",
+        "abort-static.js"));
+}
+END_TEST
+
+START_TEST(test_quickjs_abort_listeners)
+{
+    ck_assert(exec_script(dom_thread,
+        "var c=new AbortController(), count=0, targets=[new EventTarget(),window,document,document.body];"
+        "for(let t of targets)t.addEventListener('owned',()=>count++,{signal:c.signal});"
+        "c.signal.addEventListener('abort',e=>e.stopImmediatePropagation());"
+        "c.signal.addEventListener('abort',()=>count+=100);"
+        "for(let t of targets)t.dispatchEvent(new Event('owned'));if(count!==4)throw Error('initial listeners');"
+        "c.abort();for(let t of targets)t.dispatchEvent(new Event('owned'));if(count!==4)throw Error('cancellation');"
+        "var d=new AbortController(), t=new EventTarget(), n=0;function f(){n++;}"
+        "t.addEventListener('dup',f,{signal:d.signal});t.addEventListener('dup',f,{signal:c.signal});"
+        "t.dispatchEvent(new Event('dup'));if(n!==1)throw Error('aborted duplicate');"
+        "var second=new AbortController();t.addEventListener('dup',f,{signal:second.signal});second.abort();"
+        "t.dispatchEvent(new Event('dup'));if(n!==2)throw Error('duplicate changed owner');d.abort();"
+        "t.dispatchEvent(new Event('dup'));if(n!==2)throw Error('original owner lost');",
+        "abort-listeners.js"));
+}
+END_TEST
+
+START_TEST(test_quickjs_abort_edits)
+{
+    ck_assert(exec_script(dom_thread,
+        "var c=new AbortController(), t=new EventTarget(), seen=[];"
+        "t.addEventListener('x',()=>{seen.push('first');c.abort();});"
+        "t.addEventListener('x',()=>seen.push('removed'),{signal:c.signal});t.addEventListener('x',()=>seen.push('last'));"
+        "t.dispatchEvent(new Event('x'));if(seen.join()!=='first,last')throw Error('active snapshot '+seen);"
+        "var old=new AbortController(), current=new AbortController(), n=0;function f(){n++;}"
+        "t.addEventListener('y',f,{signal:old.signal});t.removeEventListener('y',f);t.addEventListener('y',f,{signal:current.signal});"
+        "old.abort();t.dispatchEvent(new Event('y'));if(n!==1)throw Error('stale abort algorithm');current.abort();"
+        "t.dispatchEvent(new Event('y'));if(n!==1)throw Error('new abort algorithm');"
+        "var once=new AbortController();t.addEventListener('once',()=>{once.abort();n++;},{once:true,signal:once.signal});"
+        "t.dispatchEvent(new Event('once'));t.dispatchEvent(new Event('once'));if(n!==2)throw Error('once removal');"
+        "var self=new AbortController(), hit=false;self.signal.addEventListener('abort',()=>hit=true,{signal:self.signal});"
+        "self.abort();if(hit)throw Error('self-signaled listener');"
+        "var late=new AbortController();t.addEventListener('late',()=>n++,{get signal(){late.abort();return late.signal;}});"
+        "t.dispatchEvent(new Event('late'));if(n!==2)throw Error('abort during conversion');",
+        "abort-listener-edits.js"));
+}
+END_TEST
+
+START_TEST(test_quickjs_abort_gc)
+{
+    JSMemoryUsage before, after;
+    ck_assert(exec_script(dom_thread,
+        "function abortCycles(){for(let i=0;i<100;i++){let c=new AbortController(), t=new EventTarget();"
+        "t.addEventListener('x',()=>{c;t;},{signal:c.signal});c.signal.onabort=()=>{c;t;};"
+        "if(i%2)c.abort(c);}}abortCycles();",
+        "abort-cycles.js"));
+    JS_RunGC(dom_heap->rt);
+    JS_ComputeMemoryUsage(dom_heap->rt, &before);
+    ck_assert(exec_script(dom_thread, "abortCycles();", "more abort cycles"));
+    JS_RunGC(dom_heap->rt);
+    JS_ComputeMemoryUsage(dom_heap->rt, &after);
+    ck_assert_msg(after.obj_count <= before.obj_count + 2, "Signal/listener cycles leaked %lld objects",
+        (long long)(after.obj_count - before.obj_count));
+    ck_assert(exec_script(dom_thread,
+        "var retained=new AbortController(), hits=0;{let t=new EventTarget();"
+        "t.addEventListener('x',()=>hits++,{signal:retained.signal});retained.signal.addEventListener('check',()=>t.dispatchEvent(new Event('x')));}",
+        "retained abort target"));
+    JS_RunGC(dom_heap->rt);
+    assert_predicate(dom_thread, "(retained.signal.dispatchEvent(new Event('check')),hits===1)", "live abort target retained");
+    ck_assert(exec_script(dom_thread, "retained.abort();retained=null;", "release abort target"));
+    JS_RunGC(dom_heap->rt);
+}
+END_TEST
+
+START_TEST(test_quickjs_abort_retirement)
+{
+    JSValue global = JS_GetGlobalObject(dom_thread->ctx);
+    JS_SetPropertyStr(dom_thread->ctx, global, "retireEvents",
+        JS_NewCFunction(dom_thread->ctx, close_from_listener, "retireEvents", 0));
+    JS_FreeValue(dom_thread->ctx, global);
+    ck_assert(exec_script(dom_thread,
+        "var c=new AbortController(), calls=0;c.signal.addEventListener('abort',()=>{calls++;retireEvents();});"
+        "c.signal.addEventListener('abort',()=>calls++);document.body.addEventListener('x',()=>calls++,{signal:c.signal});"
+        "c.abort();if(calls!==1)throw Error('retired callback ran');",
+        "abort-retirement.js"));
+    JS_RunGC(dom_heap->rt);
+}
+END_TEST
+
+START_TEST(test_quickjs_abort_timeout)
+{
+    ck_assert(!exec_script(dom_thread,
+        "var c=new AbortController(), t=new EventTarget(), late=false, after=false, e;"
+        "t.addEventListener('x',()=>late=true,{signal:c.signal});"
+        "c.signal.addEventListener('abort',event=>{e=event;while(true){}});"
+        "c.signal.addEventListener('abort',()=>late=true);c.abort();after=true;",
+        "abort-timeout.js"));
+    assert_predicate(dom_thread,
+        "c.signal.aborted&&!late&&!after&&e.currentTarget===null&&e.composedPath().length===0&&"
+        "(t.dispatchEvent(new Event('x')),!late)", "abort timeout leaves operations canceled and dispatch cleaned up");
+}
+END_TEST
+
+START_TEST(test_quickjs_abort_handler)
+{
+    ck_assert(exec_script(dom_thread,
+        "var c=new AbortController(), s=c.signal, seen=[];if(s.onabort!==null)throw Error('initial handler');"
+        "s.addEventListener('abort',()=>seen.push('first'));s.onabort=()=>seen.push('old');"
+        "s.addEventListener('abort',()=>seen.push('last'));"
+        "s.onabort=function(e){if(this!==s||e.currentTarget!==s)throw Error('handler receiver');seen.push('new');return false;};"
+        "if(s.dispatchEvent(new Event('abort',{cancelable:true}))||seen.join()!=='first,new,last')throw Error('handler update '+seen);"
+        "seen=[];s.onabort=null;s.onabort=()=>{seen.push('readded');return 0;};"
+        "if(!s.dispatchEvent(new Event('abort',{cancelable:true}))||seen.join()!=='first,last,readded')throw Error('handler reorder '+seen);"
+        "var obj={};s.onabort=obj;if(s.onabort!==obj)throw Error('object handler');"
+        "s.dispatchEvent(new Event('abort'));if(seen.length!==5)throw Error('object handler called');"
+        "for(let value of [null,undefined,42,'code',true]){s.onabort=value;if(s.onabort!==null)throw Error('primitive handler');}"
+        "s.onabort=function(){s.onabort=null;seen.push('self-remove');};c.abort();"
+        "if(seen[seen.length-1]!=='self-remove'||s.onabort!==null)throw Error('handler self removal');",
+        "abort-handler.js"));
+}
+END_TEST
+
+START_TEST(test_quickjs_abort_foreign_retirement)
+{
+    jsthread *source;
+    ck_assert_int_eq(js_newthread(dom_heap, NULL, NULL, &source), NSERROR_OK);
+    ck_assert(exec_script(source,
+        "var c=new AbortController(), t=new EventTarget();t.addEventListener('x',()=>c,{signal:c.signal});"
+        "c.signal.onabort=()=>{throw Error('retired handler');};", "foreign-abort-source.js"));
+    JSValue global = JS_GetGlobalObject(source->ctx);
+    JSValue controller = JS_GetPropertyStr(source->ctx, global, "c");
+    JS_FreeValue(source->ctx, global);
+    js_destroythread(source);
+    JS_RunGC(dom_heap->rt);
+    global = JS_GetGlobalObject(dom_thread->ctx);
+    JS_SetPropertyStr(dom_thread->ctx, global, "retiredController", controller);
+    JS_FreeValue(dom_thread->ctx, global);
+    ck_assert(exec_script(dom_thread,
+        "try{AbortController.prototype.abort.call(retiredController);throw Error('accepted');}"
+        "catch(e){if(e.name!=='InvalidStateError')throw e;}"
+        "var signal=Object.getOwnPropertyDescriptor(AbortController.prototype,'signal').get.call(retiredController);"
+        "try{document.addEventListener('x',()=>{},{signal});throw Error('accepted');}"
+        "catch(e){if(e.name!=='InvalidStateError')throw e;}"
+        "delete globalThis.retiredController;signal=null;", "foreign-abort-retired.js"));
+    JS_RunGC(dom_heap->rt);
+}
+END_TEST
+
+START_TEST(test_quickjs_abort_allocation_failure)
+{
+    ck_assert(exec_script(dom_thread,
+        "function allocateAbort(){let c=new AbortController(), t=new EventTarget(), hit=false;"
+        "t.addEventListener('x',()=>hit=true,{signal:c.signal});"
+        "c.signal.onabort=()=>t;c.abort();t.dispatchEvent(new Event('x'));"
+        "return !hit&&c.signal.aborted&&AbortSignal.abort().aborted;}allocateAbort();", "abort allocation warmup"));
+    JSValue global = JS_GetGlobalObject(dom_thread->ctx);
+    JSValue callback = JS_GetPropertyStr(dom_thread->ctx, global, "allocateAbort");
+    JS_FreeValue(dom_thread->ctx, global);
+    bool failed = false, succeeded = false;
+    for (size_t extra = 0; extra <= 65536; extra += 128) {
+        JS_RunGC(dom_heap->rt);
+        JSMemoryUsage usage;
+        JS_ComputeMemoryUsage(dom_heap->rt, &usage);
+        JS_SetMemoryLimit(dom_heap->rt, usage.malloc_size + extra);
+        JSValue result = JS_Call(dom_thread->ctx, callback, JS_UNDEFINED, 0, NULL);
+        JS_SetMemoryLimit(dom_heap->rt, 0);
+        if (JS_IsException(result)) {
+            failed = true;
+            JS_FreeValue(dom_thread->ctx, JS_GetException(dom_thread->ctx));
+        } else {
+            succeeded = true;
+            ck_assert(JS_ToBool(dom_thread->ctx, result));
+        }
+        JS_FreeValue(dom_thread->ctx, result);
+        if (succeeded)
+            break;
+    }
+    ck_assert(failed && succeeded);
+    JS_FreeValue(dom_thread->ctx, callback);
+    JS_RunGC(dom_heap->rt);
+    assert_predicate(dom_thread, "allocateAbort()", "abort recovery after allocation failures");
+}
+END_TEST
+
 START_TEST(test_quickjs_event_allocation_failure)
 {
     const char *setup[] = {"function makeTarget(){return new EventTarget();}",
@@ -2924,6 +3159,17 @@ Suite *quickjs_suite(void)
     tcase_add_test(tc_dom, test_quickjs_node_event_retirement);
     tcase_add_test(tc_dom, test_quickjs_node_event_conversion_retirement);
     tcase_add_test(tc_dom, test_quickjs_node_event_long_path);
+    tcase_add_test(tc_dom, test_quickjs_abort_values);
+    tcase_add_test(tc_dom, test_quickjs_abort_foreign_retirement);
+    tcase_add_test(tc_dom, test_quickjs_abort_handler);
+    tcase_add_test(tc_dom, test_quickjs_abort_event);
+    tcase_add_test(tc_dom, test_quickjs_abort_static);
+    tcase_add_test(tc_dom, test_quickjs_abort_listeners);
+    tcase_add_test(tc_dom, test_quickjs_abort_edits);
+    tcase_add_test(tc_dom, test_quickjs_abort_gc);
+    tcase_add_test(tc_dom, test_quickjs_abort_retirement);
+    tcase_add_test(tc_dom, test_quickjs_abort_timeout);
+    tcase_add_test(tc_dom, test_quickjs_abort_allocation_failure);
     tcase_add_test(tc_dom, test_quickjs_window_events);
     suite_add_tcase(s, tc_dom);
     tcase_add_test(tc_surface, test_quickjs_storage);

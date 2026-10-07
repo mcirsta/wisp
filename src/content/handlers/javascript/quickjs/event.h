@@ -22,6 +22,8 @@ struct qjs_event {
 
 struct qjs_event *qjs_event_get(JSContext *ctx, JSValueConst value);
 int qjs_init_events(JSContext *ctx);
+/* Host-created trusted base Event, with false bubbles/cancelable/composed. */
+JSValue qjs_event_create(JSContext *ctx, const char *type);
 JSValue qjs_event_current_target(JSContext *ctx, struct qjs_event *event);
 JSValue qjs_event_new_object(JSContext *ctx, JSValueConst new_target, JSClassID id);
 int qjs_event_define_interface(

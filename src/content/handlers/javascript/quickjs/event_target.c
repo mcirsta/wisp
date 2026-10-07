@@ -4,6 +4,7 @@
  */
 #include "event_target.h"
 #include "event.h"
+#include "abort.h"
 #include <inttypes.h>
 #include <string.h>
 
@@ -25,7 +26,8 @@ struct listener {
     dom_string *type;
     JSRuntime *rt;
     jsthread *thread; /* Borrowed: callbacks are entered only from an active JS dispatch. */
-    JSValue callback;
+    JSValue callback, signal;
+    struct qjs_abort_algorithm *abort_algorithm;
     char *source;
     uint64_t id, entry;
     bool capture, once, passive;
@@ -44,17 +46,25 @@ static void listener_cleanup(void *pw)
     struct listener *listener = pw;
     dom_string_unref(listener->type);
     JS_FreeValueRT(listener->rt, listener->callback);
+    JS_FreeValueRT(listener->rt, listener->signal);
     js_free_rt(listener->rt, listener->source);
     js_free_rt(listener->rt, listener);
 }
 
-static void listener_remove(struct listener *listener)
+static void listener_remove(void *pw)
 {
+    struct listener *listener = pw;
     *listener->previous = listener->next;
     if (listener->next != NULL)
         listener->next->previous = listener->previous;
     dom_event_target_remove_event_listener(
         listener->target->native, listener->type, listener->native, listener->capture);
+    struct qjs_abort_algorithm *algorithm = listener->abort_algorithm;
+    JSValue signal = listener->signal;
+    listener->abort_algorithm = NULL;
+    listener->signal = JS_UNDEFINED;
+    qjs_abort_remove(listener->rt, algorithm);
+    JS_FreeValueRT(listener->rt, signal);
     dom_event_listener_unref(listener->native);
     /* listener can now be freed, or retained by a native invocation snapshot. */
 }
@@ -91,8 +101,10 @@ static void target_mark(JSRuntime *rt, JSValueConst object, JS_MarkFunc *mark)
 {
     struct qjs_event_target *target = JS_GetOpaque(object, JS_GetClassID(object));
     if (target != NULL)
-        for (struct listener *l = target->listeners; l != NULL; l = l->next)
+        for (struct listener *l = target->listeners; l != NULL; l = l->next) {
             JS_MarkValue(rt, l->callback, mark);
+            JS_MarkValue(rt, l->signal, mark);
+        }
 }
 
 void qjs_events_close(jsthread *thread)
@@ -106,6 +118,7 @@ void qjs_events_close(jsthread *thread)
         target->native = NULL;
         JS_FreeValue(thread->ctx, owner);
     }
+    qjs_abort_close(thread);
     JS_FreeValue(thread->ctx, thread->window_event_target);
     thread->window_event_target = JS_UNDEFINED;
 }
@@ -131,6 +144,9 @@ static JSValue target_owner(JSContext *ctx, JSValueConst object, bool *window)
     JS_FreeValue(ctx, global);
     if (*window)
         return JS_DupValue(ctx, thread->window_event_target);
+    JSValue signal_target = qjs_abort_target(ctx, object);
+    if (!JS_IsUndefined(signal_target))
+        return signal_target;
     if (JS_GetOpaque(object, thread->heap->node_class) != NULL) {
         struct qjs_dom_node *node = qjs_dom_get(ctx, object, 0);
         if (node == NULL)
@@ -184,6 +200,19 @@ static int target_initialize(JSContext *ctx, JSValueConst object, struct qjs_dom
     return 0;
 }
 
+JSValue qjs_event_target_create(JSContext *ctx)
+{
+    jsthread *thread = JS_GetContextOpaque(ctx);
+    JSValue object = JS_NewObjectClass(ctx, thread->heap->event_target_class);
+    if (JS_IsException(object))
+        return object;
+    if (target_initialize(ctx, object, NULL) < 0) {
+        JS_FreeValue(ctx, object);
+        return JS_EXCEPTION;
+    }
+    return object;
+}
+
 static JSValue target_constructor(JSContext *ctx, JSValueConst new_target, int argc, JSValueConst *argv)
 {
     jsthread *thread = JS_GetContextOpaque(ctx);
@@ -201,6 +230,7 @@ static JSValue target_constructor(JSContext *ctx, JSValueConst new_target, int a
 
 struct options {
     bool capture, once, passive, passive_present;
+    JSValue signal;
 };
 static int listener_options(JSContext *ctx, JSValueConst object, bool adding, struct options *options)
 {
@@ -228,11 +258,12 @@ static int listener_options(JSContext *ctx, JSValueConst object, bool adding, st
             options->passive_present = !JS_IsUndefined(value);
             break;
         case 3:
-            /* AbortSignal is not exposed yet. No arbitrary object is a valid signal. */
             if (!JS_IsUndefined(value)) {
-                JS_FreeValue(ctx, value);
-                JS_ThrowTypeError(ctx, "signal requires an AbortSignal");
-                return -1;
+                if (!qjs_abort_validate(ctx, value)) {
+                    JS_FreeValue(ctx, value);
+                    return -1;
+                }
+                options->signal = JS_DupValue(ctx, value);
             }
             break;
         }
@@ -333,6 +364,7 @@ static JSValue listener_method(JSContext *ctx, JSValueConst object, int argc, JS
     if (JS_IsException(owner))
         return owner;
     dom_string *type = NULL;
+    struct options options = {.signal = JS_UNDEFINED};
     if (argc < 2) {
         JS_ThrowTypeError(ctx, "Event listener requires a type and callback");
         goto out;
@@ -345,7 +377,6 @@ static JSValue listener_method(JSContext *ctx, JSValueConst object, int argc, JS
         JS_ThrowTypeError(ctx, "Event listener must be a callback object or null");
         goto out;
     }
-    struct options options = {0};
     if (argc > 2 && listener_options(ctx, argv[2], adding, &options) < 0)
         goto out;
     jsthread *thread = JS_GetContextOpaque(ctx);
@@ -354,7 +385,7 @@ static JSValue listener_method(JSContext *ctx, JSValueConst object, int argc, JS
         goto out;
     }
     result = JS_UNDEFINED;
-    if (empty)
+    if (empty || (!JS_IsUndefined(options.signal) && qjs_abort_aborted(ctx, options.signal)))
         goto out;
     struct qjs_event_target *target = JS_GetOpaque(owner, thread->heap->event_target_class);
     struct listener **slot = &target->listeners;
@@ -381,6 +412,7 @@ static JSValue listener_method(JSContext *ctx, JSValueConst object, int argc, JS
     listener->target = target;
     listener->type = dom_string_ref(type);
     listener->callback = JS_DupValue(ctx, argv[1]);
+    listener->signal = JS_DupValue(ctx, options.signal);
     listener->capture = options.capture;
     listener->once = options.once;
     listener->passive = options.passive_present ? options.passive
@@ -407,24 +439,44 @@ static JSValue listener_method(JSContext *ctx, JSValueConst object, int argc, JS
     }
     listener->previous = slot;
     *slot = listener;
+    if (!JS_IsUndefined(options.signal)) {
+        JSValue identity = window ? JS_GetGlobalObject(ctx) : JS_DupValue(ctx, object);
+        listener->abort_algorithm = qjs_abort_add(ctx, options.signal, identity, listener_remove, listener);
+        JS_FreeValue(ctx, identity);
+        if (listener->abort_algorithm == NULL) {
+            listener_remove(listener);
+            result = JS_EXCEPTION;
+            goto out;
+        }
+    }
     qjs_trace(ctx, "event.add", "id=%" PRIu64 " type=%.*s capture=%d once=%d passive=%d", listener->id,
         (int)(dom_string_byte_length(type) > 128 ? 128 : dom_string_byte_length(type)), dom_string_data(type),
         listener->capture, listener->once, listener->passive);
 out:
+    JS_FreeValue(ctx, options.signal);
     dom_string_unref(type);
     JS_FreeValue(ctx, owner);
     return result;
 }
 
-static JSValue target_dispatch(JSContext *ctx, JSValueConst object, int argc, JSValueConst *argv)
+int qjs_event_target_listen(JSContext *ctx, JSValueConst target, const char *type, JSValueConst callback, bool add)
+{
+    JSValue args[] = {JS_NewString(ctx, type), callback};
+    if (JS_IsException(args[0]))
+        return -1;
+    JSValue result = listener_method(ctx, target, 2, args, add);
+    JS_FreeValue(ctx, args[0]);
+    JS_FreeValue(ctx, result);
+    return JS_IsException(result) ? -1 : 0;
+}
+
+JSValue qjs_event_target_dispatch(JSContext *ctx, JSValueConst object, JSValueConst value, bool script)
 {
     bool window;
     JSValue owner = target_owner(ctx, object, &window);
     if (JS_IsException(owner))
         return owner;
-    struct qjs_event *event = argc > 0 ? qjs_event_get(ctx, argv[0]) : NULL;
-    if (argc == 0)
-        JS_ThrowTypeError(ctx, "dispatchEvent requires an Event");
+    struct qjs_event *event = qjs_event_get(ctx, value);
     JSValue result = JS_EXCEPTION;
     if (event == NULL)
         goto out;
@@ -438,7 +490,8 @@ static JSValue target_dispatch(JSContext *ctx, JSValueConst object, int argc, JS
     struct qjs_event_target *target = JS_GetOpaque(owner, thread->heap->event_target_class);
     JS_FreeValue(ctx, event->target);
     event->target = window ? JS_GetGlobalObject(ctx) : JS_DupValue(ctx, object);
-    dom_event_set_is_trusted(event->native, false);
+    if (script)
+        dom_event_set_is_trusted(event->native, false);
     JSValue document = JS_UNDEFINED;
     if (target->node) {
         struct qjs_dom_node *node = qjs_dom_get(ctx, object, 0);
@@ -447,7 +500,7 @@ static JSValue target_dispatch(JSContext *ctx, JSValueConst object, int argc, JS
         document = qjs_dom_owner(ctx, object, node);
     }
     struct qjs_event_dispatch dispatch = {
-        .previous = thread->event_dispatch, .native = event->native, .object = argv[0], .document = document};
+        .previous = thread->event_dispatch, .native = event->native, .object = value, .document = document};
     thread->event_dispatch = &dispatch;
     qjs_thread_ref(thread);
     qjs_trace(ctx, "event.dispatch", "target=%s node=%" PRIu64,
@@ -472,6 +525,13 @@ static JSValue target_dispatch(JSContext *ctx, JSValueConst object, int argc, JS
 out:
     JS_FreeValue(ctx, owner);
     return result;
+}
+
+static JSValue target_dispatch(JSContext *ctx, JSValueConst object, int argc, JSValueConst *argv)
+{
+    if (argc == 0)
+        return JS_ThrowTypeError(ctx, "dispatchEvent requires an Event");
+    return qjs_event_target_dispatch(ctx, object, argv[0], true);
 }
 
 static const JSCFunctionListEntry target_properties[] = {QJS_EVENT_METHOD("addEventListener", 2, listener_method, 1),
@@ -512,7 +572,7 @@ int qjs_init_event_target(JSContext *ctx)
         }
         thread->window_event_target = window;
     }
-    ret = 0;
+    ret = qjs_init_abort(ctx, proto);
 out:
     JS_FreeValue(ctx, ctor);
     JS_FreeValue(ctx, proto);

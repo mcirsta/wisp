@@ -161,6 +161,34 @@ with tempfile.TemporaryDirectory(prefix='wisp-js-dom-') as tmp:
     assert f'render.request first_entry={changes[0][1]} changes=3 mode=full-restyle' in log, log
     assert re.search(r'event.dispatch target=Node node=\d+', log), log
 
+    dest, _, log = run(root, 'abort-listener-mutation', initial + '''<script>
+        const controller = new AbortController(), source = document.getElementById('target');
+        source.addEventListener('update', () => {
+            source.textContent = 'Canceled listener ran';
+            console.log('ABORT_FAILURE');
+        }, {signal: controller.signal});
+        controller.signal.onabort = function(e) {
+            if (this !== controller.signal || !e.isTrusted || this.reason !== 'done') throw Error('abort event');
+            queueMicrotask(() => document.getElementById('reveal').removeAttribute('hidden'));
+        };
+        document.addEventListener('update', () => {
+            source.className = 'new';
+            source.textContent = 'Changed ș😀';
+            console.log('ABORT_CHANGED');
+        }, {once: true});
+        setTimeout(() => {
+            controller.abort('done');
+            source.dispatchEvent(new Event('update', {bubbles: true}));
+            controller.abort('ignored');
+        }, 150);
+    </script>''')
+    assert 'Console: ABORT_CHANGED' in log and 'ABORT_FAILURE' not in log and 'JavaScript exception' not in log, log
+    assert (dest / 'page.png').read_bytes() == (reference / 'page.png').read_bytes(), log
+    assert len(re.findall(r'\] signal.abort ', log)) == 1, log
+    assert len(re.findall(r'\] event.listener ', log)) == 2, log
+    assert len(re.findall(r'\] render.request ', log)) == 1, log
+    assert 'changes=3 mode=full-restyle' in log, log
+
     tree_edit = '''
         const old = document.getElementById('target');
         const target = document.createElement('div');

@@ -27,6 +27,7 @@ struct jsheap {
     bool interrupted;
     struct jsthread *threads;
     JSClassID event_class[2], event_target_class;
+    JSClassID abort_controller_class, abort_signal_class;
     JSClassID node_class, tokenlist_class, collection_class[2], xhr_class, console_class;
 };
 
@@ -36,6 +37,7 @@ struct jsthread {
     jsheap *heap;
     JSContext *ctx;
     JSValue error_stack_getter;
+    JSValue abort_error_constructor; /* Captured intrinsic; page globals may be replaced. */
     JSValue window_event_target; /* Explicit Window root, released on document close. */
     struct qjs_event_dispatch *event_dispatch;
     struct qjs_event_target *event_targets; /* Borrowed registry for document retirement. */
