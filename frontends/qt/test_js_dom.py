@@ -119,6 +119,48 @@ with tempfile.TemporaryDirectory(prefix='wisp-js-dom-') as tmp:
     assert f'[JS doc={doc} entry={entry}] dom.mutation ' in log, log
     assert f'render.request first_entry={entry} changes=3 mode=full-restyle' in log, log
 
+    # Delegated listeners use the same native path and cause the same rendered
+    # result as static markup, with mutations attributed to the listener entry.
+    dest, _, log = run(root, 'node-event-mutation', initial + '''<script>
+        const source = document.getElementById('target');
+        let steps = [];
+        window.addEventListener('update', function(e) {
+            if (this !== window || e.currentTarget !== window || e.composedPath()[0] !== source)
+                throw Error('window path');
+            steps.push('window');
+        }, {capture: true, once: true});
+        document.addEventListener('update', function(e) {
+            if (this !== document || e.target !== source || e.currentTarget !== document || e.detail !== 42)
+                throw Error('delegated identity');
+            steps.push('document');
+            e.preventDefault();
+            source.className = 'new';
+            queueMicrotask(() => {
+                source.textContent = 'Changed ș😀';
+                document.getElementById('reveal').removeAttribute('hidden');
+                console.log('NODE_EVENT_CHANGED');
+            });
+        }, {once: true});
+        document.addEventListener('DOMSubtreeModified', () => { throw Error('native mutation exposed'); });
+        setTimeout(() => {
+            const event = new CustomEvent('update', {bubbles: true, cancelable: true, detail: 42});
+            if (source.dispatchEvent(event) || steps.join() !== 'window,document' || event.currentTarget !== null ||
+                event.composedPath().length) throw Error('dispatch result');
+        }, 150);
+    </script>''')
+    assert 'Console: NODE_EVENT_CHANGED' in log and 'JavaScript exception' not in log, log
+    assert (dest / 'page.png').read_bytes() == (reference / 'page.png').read_bytes(), log
+    assert len(re.findall(r'\] render.request ', log)) == 1, log
+    assert len(re.findall(r'\] event.listener ', log)) == 2, log
+    changes = re.findall(r'\[JS doc=(\d+) entry=(\d+)\] dom.mutation ', log)
+    listener_entries = re.findall(r'\[JS doc=(\d+) entry=(\d+)\] begin kind=event ', log)
+    timer_entry = re.search(r'\[JS doc=(\d+) entry=(\d+)\] begin kind=timer ', log)
+    assert len(listener_entries) == 2 and timer_entry, log
+    # Listener edits occur synchronously; its jobs run at the outer timer checkpoint.
+    assert changes == [listener_entries[-1], timer_entry.groups(), timer_entry.groups()], log
+    assert f'render.request first_entry={changes[0][1]} changes=3 mode=full-restyle' in log, log
+    assert re.search(r'event.dispatch target=Node node=\d+', log), log
+
     tree_edit = '''
         const old = document.getElementById('target');
         const target = document.createElement('div');

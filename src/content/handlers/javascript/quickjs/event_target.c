@@ -13,6 +13,8 @@ struct qjs_event_target {
     struct listener *listeners;
     jsthread *thread;
     struct qjs_event_target *next, **previous;
+    bool node;
+    uint64_t node_id;
     JSValue object; /* Borrowed identity; temporarily rooted while closing. */
 };
 
@@ -33,6 +35,8 @@ struct qjs_event_dispatch {
     struct qjs_event_dispatch *previous;
     dom_event *native;
     JSValue object; /* Borrowed from dispatchEvent's rooted argument. */
+    JSValue document; /* Owned for DOM dispatch, undefined for parentless targets. */
+    bool failed;
 };
 
 static void listener_cleanup(void *pw)
@@ -98,11 +102,22 @@ void qjs_events_close(jsthread *thread)
         JSValue owner = JS_DupValue(thread->ctx, target->object);
         target_detach(target);
         target_clear(target);
+        dom_event_target_unref(target->native);
+        target->native = NULL;
         JS_FreeValue(thread->ctx, owner);
     }
     JS_FreeValue(thread->ctx, thread->window_event_target);
     thread->window_event_target = JS_UNDEFINED;
 }
+
+void qjs_events_connect_document(JSContext *ctx, dom_document *document)
+{
+    jsthread *thread = JS_GetContextOpaque(ctx);
+    struct qjs_event_target *window = JS_GetOpaque(thread->window_event_target, thread->heap->event_target_class);
+    dom_document_set_event_parent(document, window->native);
+}
+
+static int target_initialize(JSContext *ctx, JSValueConst object, struct qjs_dom_node *node);
 
 /* Return a rooted owner: closing the document during argument coercion or a
  * callback may drop the thread's Window listener storage. */
@@ -116,6 +131,22 @@ static JSValue target_owner(JSContext *ctx, JSValueConst object, bool *window)
     JS_FreeValue(ctx, global);
     if (*window)
         return JS_DupValue(ctx, thread->window_event_target);
+    if (JS_GetOpaque(object, thread->heap->node_class) != NULL) {
+        struct qjs_dom_node *node = qjs_dom_get(ctx, object, 0);
+        if (node == NULL)
+            return JS_EXCEPTION;
+        if (JS_IsUndefined(node->event_target)) {
+            JSValue storage = JS_NewObjectClass(ctx, thread->heap->event_target_class);
+            if (JS_IsException(storage))
+                return storage;
+            if (target_initialize(ctx, storage, node) < 0) {
+                JS_FreeValue(ctx, storage);
+                return JS_EXCEPTION;
+            }
+            node->event_target = storage;
+        }
+        return JS_DupValue(ctx, node->event_target);
+    }
     struct qjs_event_target *target = JS_GetOpaque2(ctx, object, thread->heap->event_target_class);
     if (target == NULL)
         return JS_EXCEPTION;
@@ -124,13 +155,21 @@ static JSValue target_owner(JSContext *ctx, JSValueConst object, bool *window)
     return JS_DupValue(ctx, object);
 }
 
-static int target_initialize(JSContext *ctx, JSValueConst object)
+static int target_initialize(JSContext *ctx, JSValueConst object, struct qjs_dom_node *node)
 {
     struct qjs_event_target *target = js_mallocz(ctx, sizeof(*target));
     if (target == NULL)
         return -1;
     JS_SetOpaque(object, target);
-    dom_exception err = dom_event_target_create(&target->native);
+    dom_exception err = DOM_NO_ERR;
+    if (node != NULL) {
+        target->native = (dom_event_target *)node->node;
+        dom_event_target_ref(target->native);
+        target->node = true;
+        target->node_id = node->id;
+    } else {
+        err = dom_event_target_create(&target->native);
+    }
     if (err != DOM_NO_ERR) {
         qjs_dom_exception(ctx, err);
         return -1;
@@ -153,7 +192,7 @@ static JSValue target_constructor(JSContext *ctx, JSValueConst new_target, int a
     JSValue object = qjs_event_new_object(ctx, new_target, thread->heap->event_target_class);
     if (JS_IsException(object))
         return object;
-    if (thread->closed || target_initialize(ctx, object) < 0) {
+    if (thread->closed || target_initialize(ctx, object, NULL) < 0) {
         JS_FreeValue(ctx, object);
         return thread->closed ? qjs_dom_exception(ctx, DOM_INVALID_STATE_ERR) : JS_EXCEPTION;
     }
@@ -202,6 +241,31 @@ static int listener_options(JSContext *ctx, JSValueConst object, bool adding, st
     return 0;
 }
 
+static int prepare_path(JSContext *ctx, struct qjs_event_dispatch *dispatch, struct qjs_event *event)
+{
+    if (!JS_IsUndefined(event->path))
+        return 0;
+    jsthread *thread = JS_GetContextOpaque(ctx);
+    struct qjs_event_target *window = JS_GetOpaque(thread->window_event_target, thread->heap->event_target_class);
+    JSValue path = JS_NewArray(ctx);
+    if (JS_IsException(path))
+        return -1;
+    /* This array is private. Use own data properties so page changes to
+     * Array.prototype cannot intercept host path construction or reads. */
+    for (size_t i = 0; i < dom_event_get_path_length(event->native); i++) {
+        dom_event_target *native = dom_event_get_path_target(event->native, i);
+        JSValue value = native == window->native ? JS_GetGlobalObject(ctx)
+            : JS_IsUndefined(dispatch->document) ? JS_DupValue(ctx, event->target)
+                                                 : qjs_dom_wrap(ctx, dispatch->document, (dom_node *)native);
+        if (JS_IsException(value) || JS_DefinePropertyValueUint32(ctx, path, i, value, JS_PROP_C_W_E) < 0) {
+            JS_FreeValue(ctx, path);
+            return -1;
+        }
+    }
+    event->path = path;
+    return 0;
+}
+
 static void listener_invoke(dom_event *event, void *pw)
 {
     struct listener *listener = pw;
@@ -212,12 +276,19 @@ static void listener_invoke(dom_event *event, void *pw)
     if (dispatch == NULL || thread->closed || thread->heap->interrupted)
         return;
     struct qjs_event *value = qjs_event_get(thread->ctx, dispatch->object);
+    if (prepare_path(thread->ctx, dispatch, value) < 0) {
+        dispatch->failed = true;
+        dom_event_stop_immediate_propagation(event);
+        return;
+    }
     if (listener->once)
         listener_remove(listener); /* Native snapshot still owns the callback record. */
     dom_event_set_passive_listener(event, listener->passive);
     qjs_trace(thread->ctx, "event.listener", "id=%" PRIu64 " registered_by=%" PRIu64, listener->id, listener->entry);
+    JSValue current = qjs_event_current_target(thread->ctx, value);
     enum qjs_result result = qjs_run_event_listener(
-        thread, listener->callback, value->target, dispatch->object, listener->source);
+        thread, listener->callback, current, dispatch->object, listener->source);
+    JS_FreeValue(thread->ctx, current);
     dom_event_set_passive_listener(event, false);
     if (thread->closed || result == QJS_INTERRUPTED)
         dom_event_stop_immediate_propagation(event);
@@ -231,6 +302,28 @@ static bool default_passive(dom_string *type)
             memcmp(dom_string_data(type), names[i], strlen(names[i])) == 0)
             return true;
     return false;
+}
+
+static bool passive_root(JSContext *ctx, JSValueConst object, bool window)
+{
+    if (window)
+        return true;
+    jsthread *thread = JS_GetContextOpaque(ctx);
+    struct qjs_dom_node *node = JS_GetOpaque(object, thread->heap->node_class);
+    if (node == NULL)
+        return false;
+    if (node->type == DOM_DOCUMENT_NODE)
+        return true;
+    dom_document *doc = NULL;
+    dom_node *element = NULL, *body = NULL;
+    dom_node_get_owner_document(node->node, &doc);
+    dom_document_get_document_element(doc, &element);
+    dom_html_document_get_body(doc, &body);
+    bool result = node->node == element || node->node == body;
+    dom_node_unref(element);
+    dom_node_unref(body);
+    dom_node_unref(doc);
+    return result;
 }
 
 static JSValue listener_method(JSContext *ctx, JSValueConst object, int argc, JSValueConst *argv, int adding)
@@ -290,7 +383,8 @@ static JSValue listener_method(JSContext *ctx, JSValueConst object, int argc, JS
     listener->callback = JS_DupValue(ctx, argv[1]);
     listener->capture = options.capture;
     listener->once = options.once;
-    listener->passive = options.passive_present ? options.passive : window && default_passive(type);
+    listener->passive = options.passive_present ? options.passive
+                                                : default_passive(type) && passive_root(ctx, object, window);
     listener->entry = thread->trace_entry;
     listener->id = ++thread->trace_next_listener;
     listener->source = js_strdup(ctx, thread->entry_source != NULL ? thread->entry_source : "<event listener>");
@@ -345,15 +439,30 @@ static JSValue target_dispatch(JSContext *ctx, JSValueConst object, int argc, JS
     JS_FreeValue(ctx, event->target);
     event->target = window ? JS_GetGlobalObject(ctx) : JS_DupValue(ctx, object);
     dom_event_set_is_trusted(event->native, false);
-    struct qjs_event_dispatch dispatch = {thread->event_dispatch, event->native, argv[0]};
+    JSValue document = JS_UNDEFINED;
+    if (target->node) {
+        struct qjs_dom_node *node = qjs_dom_get(ctx, object, 0);
+        if (node == NULL)
+            goto out;
+        document = qjs_dom_owner(ctx, object, node);
+    }
+    struct qjs_event_dispatch dispatch = {
+        .previous = thread->event_dispatch, .native = event->native, .object = argv[0], .document = document};
     thread->event_dispatch = &dispatch;
     qjs_thread_ref(thread);
-    qjs_trace(ctx, "event.dispatch", "target=%s", window ? "window" : "EventTarget");
+    qjs_trace(ctx, "event.dispatch", "target=%s node=%" PRIu64,
+        window             ? "window"
+            : target->node ? "Node"
+                           : "EventTarget",
+        target->node_id);
     bool success;
     dom_exception err = dom_event_target_dispatch_event(target->native, event->native, &success);
     thread->event_dispatch = dispatch.previous;
+    JS_FreeValue(ctx, event->path);
+    event->path = JS_UNDEFINED;
+    JS_FreeValue(ctx, dispatch.document);
     qjs_trace(ctx, "event.complete", "canceled=%d result=%u", !success, err);
-    if (thread->heap->interrupted) {
+    if (thread->heap->interrupted || dispatch.failed) {
         /* Preserve the original uncatchable interrupt from the listener. */
         result = JS_EXCEPTION;
     } else {
@@ -397,7 +506,7 @@ int qjs_init_event_target(JSContext *ctx)
         JSValue window = JS_NewObjectClass(ctx, *id);
         if (JS_IsException(window))
             goto out;
-        if (target_initialize(ctx, window) < 0) {
+        if (target_initialize(ctx, window, NULL) < 0) {
             JS_FreeValue(ctx, window);
             goto out;
         }

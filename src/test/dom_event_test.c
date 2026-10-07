@@ -96,8 +96,8 @@ static void record(dom_event *event, void *pw)
     ck_assert_uint_lt(ncalls + 2, sizeof(calls));
     calls[ncalls++] = *(const char *)pw;
     calls[ncalls++] = '0' + phase;
-    dom_node_unref(current);
-    dom_node_unref(origin);
+    dom_event_target_unref(current);
+    dom_event_target_unref(origin);
 }
 
 static dom_event_listener *listen(dom_node *node, handle_event callback, void *pw, bool capture)
@@ -535,6 +535,65 @@ START_TEST(test_standalone_target_ownership)
 }
 END_TEST
 
+static void check_window_path(dom_event *evt, void *pw)
+{
+    dom_event_target *window = pw;
+    ck_assert_uint_eq(dom_event_get_path_length(evt), 4);
+    ck_assert_ptr_eq(dom_event_get_path_target(evt, 0), target);
+    ck_assert_ptr_eq(dom_event_get_path_target(evt, 1), parent);
+    ck_assert_ptr_eq(dom_event_get_path_target(evt, 2), doc);
+    ck_assert_ptr_eq(dom_event_get_path_target(evt, 3), window);
+    ck_assert_ptr_null(dom_event_get_path_target(evt, 4));
+    dom_event_flow_phase phase;
+    dom_event_get_event_phase(evt, &phase);
+    calls[ncalls++] = phase == DOM_CAPTURING_PHASE ? 'c' : 'b';
+    /* Retirement drops the document's reference; the frozen path retains it. */
+    dom_document_set_event_parent(doc, NULL);
+}
+
+START_TEST(test_document_window_path)
+{
+    dom_event_target *window;
+    dom_event_listener *listener;
+    ck_assert_int_eq(dom_event_target_create(&window), DOM_NO_ERR);
+    dom_document_set_event_parent(doc, window);
+    ck_assert_int_eq(dom_event_listener_create(check_window_path, window, &listener), DOM_NO_ERR);
+    ck_assert_int_eq(dom_event_target_add_event_listener(window, type, listener, true), DOM_NO_ERR);
+    ck_assert_int_eq(dom_event_target_add_event_listener(window, type, listener, false), DOM_NO_ERR);
+    dom_event_listener_unref(listener);
+    dom_event_target_unref(window); /* Document and then dispatch path own it. */
+    dom_event *evt = event(true, false);
+    bool success;
+    ck_assert_int_eq(dom_event_target_dispatch_event(target, evt, &success), DOM_NO_ERR);
+    ck_assert_str_eq(calls, "cb");
+    ck_assert_uint_eq(dom_event_get_path_length(evt), 0);
+    ck_assert_ptr_null(dom_event_get_path_target(evt, 0));
+    dom_event_unref(evt);
+}
+END_TEST
+
+START_TEST(test_document_window_load_exception)
+{
+    dom_event_target *window;
+    dom_event_listener *listener;
+    dom_string *load = string(_i == 0 ? "load" : "Load");
+    ck_assert_int_eq(dom_event_target_create(&window), DOM_NO_ERR);
+    dom_document_set_event_parent(doc, window);
+    ck_assert_int_eq(dom_event_listener_create(record, "w", &listener), DOM_NO_ERR);
+    ck_assert_int_eq(dom_event_target_add_event_listener(window, load, listener, true), DOM_NO_ERR);
+    dom_event_listener_unref(listener);
+    dom_event_target_unref(window);
+    dom_event *evt = event(false, false);
+    ck_assert_int_eq(dom_event_init(evt, load, false, false), DOM_NO_ERR);
+    bool success;
+    ck_assert_int_eq(dom_event_target_dispatch_event(target, evt, &success), DOM_NO_ERR);
+    ck_assert_str_eq(calls, _i == 0 ? "" : "w1");
+    dom_event_unref(evt);
+    dom_string_unref(load);
+    /* teardown exercises document ownership without explicit disassociation. */
+}
+END_TEST
+
 int main(void)
 {
     Suite *suite = suite_create("DOM event dispatch");
@@ -556,6 +615,8 @@ int main(void)
     tcase_add_loop_test(tc, test_dispatch_owns_objects, 0, 2);
     tcase_add_test(tc, test_large_path_and_listener_snapshot);
     tcase_add_test(tc, test_standalone_target_ownership);
+    tcase_add_test(tc, test_document_window_path);
+    tcase_add_loop_test(tc, test_document_window_load_exception, 0, 2);
     suite_add_tcase(suite, tc);
     SRunner *runner = srunner_create(suite);
     srunner_run_all(runner, CK_NORMAL);

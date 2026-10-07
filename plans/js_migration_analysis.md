@@ -6,9 +6,9 @@ It is a browser-integration review, not an exhaustive security or ECMAScript
 conformance audit. Batches 1–2 and four increments of batch 3 are implemented
 within the scope described below. Real DOM lookups, class lists, attribute/text
 mutations and basic node creation/tree edits now reach rendering and carry JS action
-traces. Live child-node/element collections and script-dispatched standalone/Window events
-are implemented. DOM interaction/lifecycle and the other
-capabilities below remain future work.
+traces. Live child-node/element collections and script-dispatched events on DOM nodes,
+Document, Window and standalone EventTarget are implemented. Native input/lifecycle
+delivery and the other capabilities below remain future work.
 
 ## Assessment
 
@@ -72,7 +72,7 @@ unless stated otherwise.
 | JS diagnostics | Optional `js_trace` records document/entry IDs, script sources, timer causality, navigation, exposed node IDs, actual DOM operations and coalesced render requests | Separates supported JS host effects from static processing; this is not complete paint attribution |
 | Document/nodes | `dom.c`/`document.c`/`tree.c`/`collections.c`: real libdom wrappers with stable identity, roots, ID lookup, traversal, live `childNodes`/`children` and element/text/comment/fragment factories | Document-lifetime wrapper ownership and native reference cleanup are tested; selectors, document-wide collections, namespace-aware creation and cross-document operations are not exposed |
 | Mutation/CSSOM | Real attributes, `id`/`className`, live `classList`, text/data and append/insert/replace/remove; connected edits request a full restyle after the entry/checkpoint | Changes affect boxes and pixels, including moves into detached trees; `style` and `innerHTML` remain omitted |
-| Events | `event.c`/`event_target.c`: real Event/CustomEvent values and script-dispatched listeners on standalone EventTarget and Window | DOM-node listeners, browser-generated input, handler attributes and lifecycle delivery remain pending; `js_fire_event`/`js_handle_new_element` are still stubs |
+| Events | `event.c`/`event_target.c`: real Event/CustomEvent values and script-dispatched listeners on DOM nodes, Document, Window and standalone EventTarget | Browser-generated input, handler attributes and lifecycle delivery remain pending; `js_fire_event`/`js_handle_new_element` are still stubs |
 | Lifecycle information | `document.readyState` is omitted | Correct loading state and lifecycle events belong to batch 4 |
 | Networking/storage | XHR fabricates DONE/200 without a request; storage discards writes; no `document.cookie` accessor or browser fetch binding | XHR/storage still advertise unsupported behavior. Native HTTP cookie handling is a separate subsystem |
 | Navigation | `location.c`: real URL getters and calls to navigation for assign/replace | Partial support: href has no setter, reload is a stub, relative URL resolution/history replacement need review; assign and replace currently use the same flags |
@@ -619,15 +619,62 @@ and verifies coalescing and event-entry trace attribution. Native DOM/form and Q
 loading, navigation, scripts, timers, interaction and retained-rendering regressions
 are checked. GTK is not tested.
 
-**This increment does not deliver native clicks or lifecycle events.** Nodes do not
-yet inherit the JS EventTarget interface. The next adapter must connect node
-wrappers to these registrations, provide the full node-to-Window path and event
-identity during native dispatch, and complete the cancellation/lifetime work above.
-Event.currentTarget and composedPath currently cover the supported single-target
-path; expand them with that adapter. Do not enable native callbacks by merely
-removing the dispatch-stack check. Inline handlers, readyState and HTML lifecycle
-timing remain separate work. Cross-realm callback/settings handling is also not
-implemented; cross-document JS objects are not exposed by the current DOM bindings.
+The following increment extends script dispatch to DOM nodes. Neither increment
+turns on native clicks or lifecycle events.
+
+### Batch 4 increment: DOM-node script dispatch
+
+Node and its derived interfaces inherit EventTarget. The same add/remove/dispatch
+methods now work on elements, Document, Text, Comment and DocumentFragment. Node
+wrappers allocate listener storage lazily; it owns a native node reference and
+participates in QuickJS GC through the wrapper. Document closure clears all native
+registrations and storage references before retiring the DOM wrappers.
+
+The native document retains an optional host event parent, connected lazily to the
+page's Window and removed on closure. The native dispatcher appends it only when
+an ancestor path reaches Document, and excludes that edge for the exact event name
+`load`, following [Document's get-the-parent rule](https://dom.spec.whatwg.org/#document).
+Detached subtrees and fragments stop at their own root. Retained paths survive
+reparenting, removal and clearing the Window association during a callback.
+
+Event exposes the dispatcher's frozen path through `currentTarget` and
+`composedPath()`. Before the first JS listener, wrappers for that path are retained
+in a private GC-visible array. Each composedPath call returns a fresh array;
+callback receivers and path entries keep their existing JS identities, including
+if a callback closes the document. Dispatch clears the temporary array afterwards.
+The JS adapter does not walk a second ancestor tree or implement propagation.
+There is still no shadow DOM or retargeting support.
+
+Default passive handling now includes Document and its actual document/body
+elements. Same-named detached elements do not acquire that default. Native internal
+mutation events remain private: only an explicit script dispatch enters JS here.
+Scripts may dispatch an arbitrary event name, but cannot use a legacy mutation
+name to trigger internal insertion/resource processing. The HTML default-action
+hooks require a trusted native notification. Script events own their wrappers and
+do not enter the old native cleanup callback, which could refer to a retired page.
+
+The old Duktape node/event identity maps and native-listener bridge were reviewed
+again. This implementation reuses the existing QuickJS node cache and libdom
+snapshots, rather than introducing another identity map or copying Duktape's
+callback exception/return-value behavior. No generated files are edited.
+
+Validation: 105 QuickJS cases and 25 native event cases, with ASan/UBSan and leak
+checks. Added cases cover inheritance, full phase/identity/path behavior, load and
+detached roots, reparenting, late ancestor listeners, nested events, passive root
+identity, deep paths, retirement and allocation failures. Qt tests compare delegated
+listener mutations with static reference pixels, check coalesced render requests
+and trace attribution, and navigate from a DOM listener. A synthetic insertion of
+a detached stylesheet link must not cause a download. Existing loading, script,
+timer, native interaction and retained-rendering regressions are checked. GTK is
+not tested.
+
+**Next: native input delivery and its default actions/lifetime checks.** Do not
+remove the script-dispatch-stack guard until native event wrapping and interaction
+cancellation/ownership are ready. Navigation/form actions still need to honor
+cancellation, and callback mutation/navigation must not leave stale interaction
+pointers. Inline handlers, readyState and HTML lifecycle timing remain separate
+work. Cross-realm callback/settings handling is also not implemented; cross-document
+JS objects are not exposed by the current DOM bindings.
 
 ### Reading the JS trace
 
@@ -768,7 +815,7 @@ These are separate reviewable batches, not a commitment to full web-app support.
    ownership/conversion/invalidation layer for further APIs. Reuse
    partial updates only with sound mutation/dependency tracking.
 4. **Events and practical document interaction — native dispatch and explicit
-   standalone/Window JS events implemented; DOM interaction/lifecycle pending.** Click
+   DOM/Window/standalone JS events implemented; native input/lifecycle pending.** Click
    listeners and supported handler attributes, DOMContentLoaded/load and accurate
    readyState; then further element lifecycle integration. Validate propagation,
    preventDefault, capture, once, callback identity and navigation cleanup.

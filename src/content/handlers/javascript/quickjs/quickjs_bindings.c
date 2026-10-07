@@ -471,7 +471,6 @@ nserror js_newthread(jsheap *heap, void *win_priv, void *doc_priv, jsthread **th
         {"location", qjs_init_location},
         {"document", qjs_init_document},
         {"storage", qjs_init_storage},
-        {"event target", qjs_init_event_target},
         {"XMLHttpRequest", qjs_init_xhr},
     };
     for (size_t i = 0; i < sizeof(bindings) / sizeof(bindings[0]); i++) {

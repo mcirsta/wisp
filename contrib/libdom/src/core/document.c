@@ -121,6 +121,7 @@ dom_exception _dom_document_initialise(dom_document *doc, dom_events_default_act
     }
 
     doc->nodelists = NULL;
+    doc->event_parent = NULL;
 
     err = _dom_node_initialise(&doc->base, doc, DOM_DOCUMENT_NODE, name, NULL, NULL, NULL);
     dom_string_unref(name);
@@ -329,6 +330,7 @@ bool _dom_document_finalise(dom_document *doc)
     dom_string_unref(doc->_memo_domcharacterdatamodified);
     dom_string_unref(doc->_memo_domsubtreemodified);
 
+    dom_document_set_event_parent(doc, NULL);
     _dom_document_event_internal_finalise(&doc->dei);
 
     return true;
@@ -1488,4 +1490,12 @@ dom_exception _dom_document_set_quirks_mode(dom_document *doc, dom_document_quir
 {
     doc->quirks = quirks;
     return DOM_NO_ERR;
+}
+
+void dom_document_set_event_parent(dom_document *doc, dom_event_target *parent)
+{
+    dom_event_target_ref(parent);
+    dom_event_target *old = doc->event_parent;
+    doc->event_parent = parent;
+    dom_event_target_unref(old);
 }

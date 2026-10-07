@@ -25,6 +25,7 @@ struct qjs_dom_node {
     dom_node_type type;
     uint64_t id;
     dom_tokenlist *class_tokens;
+    JSValue event_target; /* Lazy listener storage; Node inherits EventTarget. */
     JSValue class_list;
     JSValue child_lists[2]; /* SameObject childNodes and children, allocated lazily. */
     JSValue owner; /* Document wrapper; undefined on the document itself. */

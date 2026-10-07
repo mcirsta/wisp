@@ -15,13 +15,14 @@
 
 struct qjs_event {
     dom_event *native;
-    JSValue target, detail;
+    JSValue target, detail, path; /* Private frozen JS path, cleared after dispatch. */
     double timestamp;
     bool custom, composed;
 };
 
 struct qjs_event *qjs_event_get(JSContext *ctx, JSValueConst value);
 int qjs_init_events(JSContext *ctx);
+JSValue qjs_event_current_target(JSContext *ctx, struct qjs_event *event);
 JSValue qjs_event_new_object(JSContext *ctx, JSValueConst new_target, JSClassID id);
 int qjs_event_define_interface(
     JSContext *ctx, JSValueConst global, const char *name, JSValueConst ctor, JSValueConst proto);

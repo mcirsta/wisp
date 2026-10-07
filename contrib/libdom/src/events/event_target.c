@@ -290,6 +290,7 @@ _dom_dispatch_event_path(dom_event *evt, const struct dom_event_path *path, dom_
     type = dom_string_ref(evt->type);
     mutation = doc != NULL && _event_is_mutation(doc, evt);
     evt->in_dispatch = true;
+    evt->path = path;
     *success = !evt->prevent_default;
 
     dom_event_target_ref(et);
@@ -317,6 +318,7 @@ _dom_dispatch_event_path(dom_event *evt, const struct dom_event_path *path, dom_
     }
 
 cleanup:
+    evt->path = NULL;
     evt->phase = DOM_NONE;
     evt->current = NULL;
     evt->in_dispatch = false;

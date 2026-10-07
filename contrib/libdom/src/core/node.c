@@ -1691,8 +1691,8 @@ static void remove_user_data(dom_node_internal *node, dom_user_data *ud)
     dom_node_discard_prepared_user_data(ud);
 }
 
-dom_exception dom_node_prepare_user_data(
-    dom_string *key, void *data, dom_user_data_handler handler, dom_user_data **entry)
+dom_exception
+dom_node_prepare_user_data(dom_string *key, void *data, dom_user_data_handler handler, dom_user_data **entry)
 {
     *entry = malloc(sizeof(**entry));
     if (*entry == NULL)
@@ -2366,31 +2366,48 @@ struct event_path {
     size_t capacity;
 };
 
-static dom_exception event_path_build(struct event_path *path, dom_node_internal *target)
+static dom_exception event_path_append(struct event_path *path, dom_event_target *target)
+{
+    if (path->count == path->capacity) {
+        if (path->capacity > SIZE_MAX / 2 / sizeof(*path->nodes))
+            return DOM_NO_MEM_ERR;
+        size_t capacity = path->capacity * 2;
+        dom_event_target **nodes;
+        if (path->nodes == path->local) {
+            nodes = malloc(capacity * sizeof(*nodes));
+            if (nodes != NULL)
+                memcpy(nodes, path->local, path->count * sizeof(*nodes));
+        } else {
+            nodes = realloc(path->nodes, capacity * sizeof(*nodes));
+        }
+        if (nodes == NULL)
+            return DOM_NO_MEM_ERR;
+        path->nodes = nodes;
+        path->capacity = capacity;
+    }
+    dom_event_target_ref(target);
+    path->nodes[path->count++] = target;
+    return DOM_NO_ERR;
+}
+
+static dom_exception event_path_build(struct event_path *path, dom_node_internal *target, dom_event *evt)
 {
     path->nodes = path->local;
     path->count = 0;
     path->capacity = sizeof(path->local) / sizeof(path->local[0]);
 
     for (; target != NULL; target = target->parent) {
-        if (path->count == path->capacity) {
-            if (path->capacity > SIZE_MAX / 2 / sizeof(*path->nodes))
-                return DOM_NO_MEM_ERR;
-            size_t capacity = path->capacity * 2;
-            dom_event_target **nodes;
-            if (path->nodes == path->local) {
-                nodes = malloc(capacity * sizeof(*nodes));
-                if (nodes != NULL)
-                    memcpy(nodes, path->local, path->count * sizeof(*nodes));
-            } else {
-                nodes = realloc(path->nodes, capacity * sizeof(*nodes));
-            }
-            if (nodes == NULL)
-                return DOM_NO_MEM_ERR;
-            path->nodes = nodes;
-            path->capacity = capacity;
+        dom_exception err = event_path_append(path, (dom_event_target *)target);
+        if (err != DOM_NO_ERR)
+            return err;
+        if (target->type == DOM_DOCUMENT_NODE) {
+            /* DOM's Document get-the-parent algorithm: only a connected node
+             * path reaches Window, and "load" never crosses this edge. */
+            dom_document *doc = (dom_document *)target;
+            if (doc->event_parent != NULL &&
+                !(dom_string_byte_length(evt->type) == 4 && memcmp(dom_string_data(evt->type), "load", 4) == 0))
+                return event_path_append(path, doc->event_parent);
         }
-        path->nodes[path->count++] = (dom_event_target *)dom_node_ref(target);
     }
     return DOM_NO_ERR;
 }
@@ -2428,7 +2445,7 @@ dom_exception _dom_node_dispatch_event(dom_event_target *et, struct dom_event *e
         return DOM_UNSPECIFIED_EVENT_TYPE_ERR;
     *success = !evt->prevent_default;
     struct event_path nodes;
-    dom_exception ret = event_path_build(&nodes, (dom_node_internal *)et);
+    dom_exception ret = event_path_build(&nodes, (dom_node_internal *)et, evt);
     if (ret == DOM_NO_ERR) {
         struct dom_event_path path = {nodes.nodes, nodes.count};
         ret = _dom_dispatch_event_path(evt, &path, dom_node_get_owner(et), success);

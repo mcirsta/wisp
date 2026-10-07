@@ -2327,10 +2327,161 @@ START_TEST(test_quickjs_event_conversion_retirement)
 }
 END_TEST
 
-START_TEST(test_quickjs_event_allocation_failure)
+/* DOM dispatch/get-parent rules; assertions stay outside callbacks so the
+ * browser's required listener-exception isolation cannot hide test failures. */
+START_TEST(test_quickjs_node_event_path)
 {
     ck_assert(exec_script(dom_thread,
-        "function eventAllocation(){let t=new EventTarget();let e=new CustomEvent('x',{detail:t});"
+        "var t=document.getElementById('target'), chain=[t,document.body,document.documentElement,document,window];"
+        "if(!(t instanceof EventTarget)||!(document instanceof EventTarget)||Object.getPrototypeOf(Node)!==EventTarget||"
+        "Object.getPrototypeOf(Node.prototype)!==EventTarget.prototype)throw Error('inheritance');"
+        "var ev=new CustomEvent('tree',{bubbles:true,cancelable:true,detail:t}), calls=[];"
+        "chain.forEach((node,i)=>[true,false].forEach(capture=>node.addEventListener('tree',function(e){"
+        "if(this!==node||e!==ev||e.target!==t||e.currentTarget!==node||e.detail!==t||e.isTrusted)throw Error('identity');"
+        "var p=e.composedPath();if(p.length!==chain.length||p.some((n,j)=>n!==chain[j]))throw Error('path');"
+        "p.length=0;calls.push(i+':'+e.eventPhase+':'+capture);if(i===3&&!capture)e.preventDefault();},capture)));"
+        "if(t.dispatchEvent(ev)||calls.join()!=='4:1:true,3:1:true,2:1:true,1:1:true,0:2:true,0:2:false,1:3:false,2:3:false,3:3:false,4:3:false')"
+        "throw Error('propagation '+calls);"
+        "if(ev.target!==t||ev.currentTarget!==null||ev.eventPhase!==0||ev.composedPath().length)throw Error('cleanup');"
+        "ev.initCustomEvent('tree',false,false,t);calls=[];t.dispatchEvent(ev);"
+        "if(calls.join()!=='4:1:true,3:1:true,2:1:true,1:1:true,0:2:true,0:2:false')throw Error('non-bubbling '+calls);",
+        "node-event-path.js"));
+}
+END_TEST
+
+START_TEST(test_quickjs_node_event_frozen_path)
+{
+    ck_assert(exec_script(dom_thread,
+        "var t=document.getElementById('target'), old=t.parentNode, chain=[t,old,document.documentElement,document,window];"
+        "var seen=[], phase='first';"
+        "function collect(e){var p=e.composedPath();if(p.length!==chain.length||p.some((n,i)=>n!==chain[i]))throw Error('moved path');"
+        "seen.push(phase+':'+(this===window?'window':this===document?'document':this===old?'old':'target'));}"
+        "window.addEventListener('move',function(e){old.removeChild(t);document.head.appendChild(t);"
+        "old.addEventListener('move',collect);document.addEventListener('move',collect);collect.call(this,e);},{capture:true,once:true});"
+        "t.addEventListener('move',collect);t.dispatchEvent(new Event('move',{bubbles:true}));"
+        "if(seen.join()!=='first:window,first:target,first:old,first:document')throw Error('frozen '+seen);"
+        "phase='second';chain=[t,document.head,document.documentElement,document,window];"
+        "t.dispatchEvent(new Event('move',{bubbles:true}));"
+        "if(seen.join()!=='first:window,first:target,first:old,first:document,second:target,second:document')throw Error('new path '+seen);",
+        "node-event-frozen-path.js"));
+}
+END_TEST
+
+START_TEST(test_quickjs_node_event_roots)
+{
+    ck_assert(exec_script(dom_thread,
+        "var seen=[], t=document.getElementById('target');"
+        "window.addEventListener('load',()=>seen.push('window'),true);"
+        "document.addEventListener('load',e=>seen.push(e.composedPath().length),true);"
+        "t.dispatchEvent(new Event('load',{bubbles:true}));document.dispatchEvent(new Event('load',{bubbles:true}));"
+        "if(seen.join()!=='4,1')throw Error('load parent '+seen);"
+        "var fragment=document.createDocumentFragment(), text=document.createTextNode('x');fragment.appendChild(text);"
+        "var got=0;window.addEventListener('detached',()=>got+=100,true);document.addEventListener('detached',()=>got+=100,true);"
+        "fragment.addEventListener('detached',function(e){var p=e.composedPath();"
+        "if(this!==fragment||e.target!==text||p.length!==2||p[0]!==text||p[1]!==fragment)throw Error('fragment');got++;});"
+        "text.dispatchEvent(new Event('detached',{bubbles:true}));"
+        "var el=document.createElement('div');el.addEventListener('detached',e=>{if(e.composedPath().length!==1)throw Error('root');got++;});"
+        "el.dispatchEvent(new Event('detached',{bubbles:true}));if(got!==2)throw Error('detached leaked '+got);"
+        "var docPath=false;window.addEventListener('doc',e=>{docPath=e.target===document&&e.currentTarget===window&&"
+        "e.composedPath().length===2;},true);document.dispatchEvent(new Event('doc'));if(!docPath)throw Error('document parent');",
+        "node-event-roots.js"));
+}
+END_TEST
+
+START_TEST(test_quickjs_node_event_passive)
+{
+    ck_assert(exec_script(dom_thread,
+        "var roots=[window,document,document.documentElement,document.body];"
+        "var other=[document.getElementById('target'),document.createElement('body'),document.getElementById('svg')];"
+        "function cancel(e){e.preventDefault();}"
+        "for(let type of ['wheel','mousewheel','touchstart','touchmove'])for(let node of roots.concat(other)){"
+        "node.addEventListener(type,cancel);let result=node.dispatchEvent(new Event(type,{cancelable:true}));"
+        "node.removeEventListener(type,cancel);if(result!==roots.includes(node))throw Error('default passive');"
+        "node.addEventListener(type,cancel,{passive:false});result=node.dispatchEvent(new Event(type,{cancelable:true}));"
+        "node.removeEventListener(type,cancel);if(result)throw Error('explicit active');}"
+        "var old=document.body, body=document.createElement('body');document.documentElement.replaceChild(body,old);"
+        "old.addEventListener('wheel',cancel);body.addEventListener('wheel',cancel);"
+        "if(old.dispatchEvent(new Event('wheel',{cancelable:true}))||!body.dispatchEvent(new Event('wheel',{cancelable:true})))"
+        "throw Error('body identity');",
+        "node-event-passive.js"));
+}
+END_TEST
+
+START_TEST(test_quickjs_node_event_nested)
+{
+    ck_assert(exec_script(dom_thread,
+        "var t=document.getElementById('target'), order=[], outer=new Event('outer',{bubbles:true}), inner=new Event('inner');"
+        "document.addEventListener('inner',function(e){if(e!==inner||e.target!==document||e.currentTarget!==document)throw Error('inner');"
+        "if(outer.currentTarget!==t||outer.composedPath().length!==5)throw Error('outer lost');order.push('inner');});"
+        "t.addEventListener('outer',function(e){order.push('target');document.dispatchEvent(inner);"
+        "if(e.currentTarget!==t||e.composedPath().length!==5||inner.currentTarget!==null)throw Error('restore');order.push('restored');},{once:true});"
+        "document.addEventListener('outer',function(e){if(e.currentTarget!==document)throw Error('bubble');order.push('document');});"
+        "t.dispatchEvent(outer);t.dispatchEvent(outer);"
+        "if(order.join()!=='target,inner,restored,document,document')throw Error('nested '+order);",
+        "node-event-nested.js"));
+}
+END_TEST
+
+START_TEST(test_quickjs_node_event_native_guard)
+{
+    ck_assert(exec_script(dom_thread,
+        "var target=document.getElementById('target'), hits=0;"
+        "document.addEventListener('DOMSubtreeModified',()=>hits++,true);target.textContent='changed';"
+        "if(hits)throw Error('exposed obsolete mutation events');"
+        "target.dispatchEvent(new Event('DOMSubtreeModified',{bubbles:true}));if(hits!==1)throw Error('explicit custom type');",
+        "node-event-native-guard.js"));
+}
+END_TEST
+
+START_TEST(test_quickjs_node_event_retirement)
+{
+    JSValue global = JS_GetGlobalObject(dom_thread->ctx);
+    JS_SetPropertyStr(dom_thread->ctx, global, "retireEvents",
+        JS_NewCFunction(dom_thread->ctx, close_from_listener, "retireEvents", 0));
+    JS_FreeValue(dom_thread->ctx, global);
+    ck_assert(exec_script(dom_thread,
+        "var t=document.getElementById('target'), calls=[], e=new Event('retire',{bubbles:true});"
+        "window.addEventListener('retire',function(e){retireEvents();"
+        "if(e.currentTarget!==window||e.composedPath()[0]!==t)throw Error('retired identity');calls.push('window');},true);"
+        "t.addEventListener('retire',()=>calls.push('target'));t.dispatchEvent(e);"
+        "if(calls.join()!=='window'||e.currentTarget!==null||e.composedPath().length)throw Error('retirement');",
+        "node-event-retirement.js"));
+    JS_RunGC(dom_heap->rt);
+}
+END_TEST
+
+START_TEST(test_quickjs_node_event_conversion_retirement)
+{
+    JSValue global = JS_GetGlobalObject(dom_thread->ctx);
+    JS_SetPropertyStr(dom_thread->ctx, global, "retireEvents",
+        JS_NewCFunction(dom_thread->ctx, close_from_listener, "retireEvents", 0));
+    JS_FreeValue(dom_thread->ctx, global);
+    ck_assert(exec_script(dom_thread,
+        "try{document.body.addEventListener('x',()=>{}, {get capture(){retireEvents();return false;}});throw Error('accepted');}"
+        "catch(e){if(e.name!=='InvalidStateError')throw e;}",
+        "node-event-conversion-retirement.js"));
+}
+END_TEST
+
+START_TEST(test_quickjs_node_event_long_path)
+{
+    ck_assert(exec_script(dom_thread,
+        "var root=document.createElement('div'), t=root;for(let i=0;i<80;i++){let n=document.createElement('i');t.appendChild(n);t=n;}"
+        "document.body.appendChild(root);var seen=0;window.addEventListener('deep',e=>{"
+        "if(e.target!==t||e.composedPath().length!==85)throw Error('deep path');seen++;},true);"
+        "t.dispatchEvent(new Event('deep'));if(seen!==1)throw Error('deep delivery');",
+        "node-event-long-path.js"));
+}
+END_TEST
+
+START_TEST(test_quickjs_event_allocation_failure)
+{
+    const char *setup[] = {"function makeTarget(){return new EventTarget();}",
+        "function makeTarget(){let root=document.createDocumentFragment(), t=document.createElement('i');"
+        "root.appendChild(t);return t;}"};
+    ck_assert(exec_script(dom_thread, setup[_i], "event target allocation setup"));
+    ck_assert(exec_script(dom_thread,
+        "function eventAllocation(){let t=makeTarget();let e=new CustomEvent('x',{detail:t});"
         "t.addEventListener('x',()=>e,{once:true});t.dispatchEvent(e);return true;}eventAllocation();",
         "event allocation warmup"));
     JSValue global = JS_GetGlobalObject(dom_thread->ctx);
@@ -2366,9 +2517,9 @@ START_TEST(test_quickjs_event_foreign_retirement)
 {
     jsthread *source;
     ck_assert_int_eq(js_newthread(dom_heap, NULL, NULL, &source), NSERROR_OK);
-    ck_assert(exec_script(source,
-        "var t=new EventTarget();t.addEventListener('x',()=>{throw Error('retired listener');});",
-        "retained-event-target.js"));
+    ck_assert(
+        exec_script(source, "var t=new EventTarget();t.addEventListener('x',()=>{throw Error('retired listener');});",
+            "retained-event-target.js"));
     JSValue global = JS_GetGlobalObject(source->ctx);
     JSValue retained = JS_GetPropertyStr(source->ctx, global, "t");
     JS_FreeValue(source->ctx, global);
@@ -2762,8 +2913,17 @@ Suite *quickjs_suite(void)
     tcase_add_test(tc_dom, test_quickjs_event_gc);
     tcase_add_test(tc_dom, test_quickjs_event_retirement);
     tcase_add_loop_test(tc_dom, test_quickjs_event_conversion_retirement, 0, 2);
-    tcase_add_test(tc_dom, test_quickjs_event_allocation_failure);
+    tcase_add_loop_test(tc_dom, test_quickjs_event_allocation_failure, 0, 2);
     tcase_add_test(tc_dom, test_quickjs_event_foreign_retirement);
+    tcase_add_test(tc_dom, test_quickjs_node_event_path);
+    tcase_add_test(tc_dom, test_quickjs_node_event_frozen_path);
+    tcase_add_test(tc_dom, test_quickjs_node_event_roots);
+    tcase_add_test(tc_dom, test_quickjs_node_event_passive);
+    tcase_add_test(tc_dom, test_quickjs_node_event_nested);
+    tcase_add_test(tc_dom, test_quickjs_node_event_native_guard);
+    tcase_add_test(tc_dom, test_quickjs_node_event_retirement);
+    tcase_add_test(tc_dom, test_quickjs_node_event_conversion_retirement);
+    tcase_add_test(tc_dom, test_quickjs_node_event_long_path);
     tcase_add_test(tc_dom, test_quickjs_window_events);
     suite_add_tcase(s, tc_dom);
     tcase_add_test(tc_surface, test_quickjs_storage);

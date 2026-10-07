@@ -339,4 +339,9 @@ static inline dom_exception dom_document_set_quirks_mode(dom_document *doc, dom_
 }
 #define dom_document_set_quirks_mode(d, q) dom_document_set_quirks_mode((dom_document *)(d), (q))
 
+/* Host association for documents with a browsing context. The document retains
+ * parent; pass NULL when retiring that context. Ordinary node parents are not
+ * changed. Event dispatch excludes this edge for events named "load". */
+void dom_document_set_event_parent(dom_document *doc, dom_event_target *parent);
+
 #endif

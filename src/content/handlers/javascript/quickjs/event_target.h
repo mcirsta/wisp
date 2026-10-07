@@ -2,8 +2,10 @@
 #ifndef WISP_QUICKJS_EVENT_TARGET_H
 #define WISP_QUICKJS_EVENT_TARGET_H
 #include "private.h"
+#include <dom/core/document.h>
 
-/* Script-dispatched standalone/Window events. Native DOM interaction is a later adapter. */
+/* Script-dispatched events. Native input/lifecycle delivery is a later adapter. */
 int qjs_init_event_target(JSContext *ctx);
 void qjs_events_close(jsthread *thread);
+void qjs_events_connect_document(JSContext *ctx, dom_document *document);
 #endif

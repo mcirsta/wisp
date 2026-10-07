@@ -4,6 +4,7 @@
  */
 #include "dom.h"
 #include "document.h"
+#include "event_target.h"
 #include <inttypes.h>
 #include <stdio.h>
 #include <string.h>
@@ -47,6 +48,8 @@ static void release_native(struct qjs_dom_node *node)
 
 static void release_nodes(struct qjs_dom_document *document)
 {
+    if (document->base.node != NULL)
+        dom_document_set_event_parent((dom_document *)document->base.node, NULL);
     /* Release native DOM references while the HTML owner is still alive. JS
      * wrappers can survive until GC, but closed-document operations are rejected. */
     for (struct qjs_dom_node *node = document->nodes; node != NULL; node = node->next) {
@@ -86,6 +89,7 @@ static void node_finalizer(JSRuntime *rt, JSValue object)
             JS_FreeValueRT(rt, doc->prototypes[i]);
     }
     release_native(node);
+    JS_FreeValueRT(rt, node->event_target);
     JS_FreeValueRT(rt, node->class_list);
     for (unsigned i = 0; i < 2; i++)
         JS_FreeValueRT(rt, node->child_lists[i]);
@@ -99,6 +103,7 @@ static void node_mark(JSRuntime *rt, JSValueConst object, JS_MarkFunc *mark)
     if (node == NULL)
         return;
     JS_MarkValue(rt, node->owner, mark);
+    JS_MarkValue(rt, node->event_target, mark);
     JS_MarkValue(rt, node->class_list, mark);
     for (unsigned i = 0; i < 2; i++)
         JS_MarkValue(rt, node->child_lists[i], mark);
@@ -137,6 +142,8 @@ struct qjs_dom_node *qjs_dom_get(JSContext *ctx, JSValueConst object, dom_node_t
     if (node->type == DOM_DOCUMENT_NODE && node->node == NULL) {
         html_content *html = thread->doc_priv;
         node->node = dom_node_ref(html->document);
+        if (node->node != NULL)
+            qjs_events_connect_document(ctx, (dom_document *)node->node);
     }
     if (node->node == NULL) {
         qjs_dom_exception(ctx, DOM_INVALID_STATE_ERR);
@@ -231,6 +238,7 @@ JSValue qjs_dom_wrap(JSContext *ctx, JSValueConst owner, dom_node *native)
     node->type = type;
     node->id = ++doc->next_id;
     node->owner = JS_DupValue(ctx, owner);
+    node->event_target = JS_UNDEFINED;
     node->class_list = JS_UNDEFINED;
     node->child_lists[0] = node->child_lists[1] = JS_UNDEFINED;
     node->document = doc;
@@ -324,7 +332,8 @@ int qjs_init_document(JSContext *ctx)
     jsthread *thread = JS_GetContextOpaque(ctx);
     JSClassID local_node = 0;
     JSClassID *id = thread != NULL ? &thread->heap->node_class : &local_node;
-    if (JS_AddIntrinsicDOMException(ctx) < 0)
+    /* Node inherits EventTarget, including in isolated binding initialization. */
+    if (qjs_init_event_target(ctx) < 0)
         return -1;
     if (*id == 0) {
         JS_NewClassID(JS_GetRuntime(ctx), id);
@@ -344,6 +353,7 @@ int qjs_init_document(JSContext *ctx)
     }
     doc->base.type = DOM_DOCUMENT_NODE;
     doc->base.owner = JS_UNDEFINED;
+    doc->base.event_target = JS_UNDEFINED;
     doc->base.class_list = JS_UNDEFINED;
     doc->base.child_lists[0] = doc->base.child_lists[1] = JS_UNDEFINED;
     doc->base.id = doc->next_id = 1;
@@ -362,15 +372,27 @@ int qjs_init_document(JSContext *ctx)
         {"Comment", QJS_CHARACTER_DATA}, {"DocumentType", QJS_NODE}, {"DocumentFragment", QJS_NODE}};
     for (unsigned i = 0; i < QJS_DOM_PROTOTYPES; i++) {
         JSValue parent = interfaces[i].parent < 0 ? JS_UNDEFINED : doc->prototypes[interfaces[i].parent];
-        JSValue proto = interfaces[i].parent < 0 ? JS_NewObject(ctx) : JS_NewObjectProto(ctx, parent);
+        if (interfaces[i].parent < 0) {
+            JSValue ctor = JS_GetPropertyStr(ctx, global, "EventTarget");
+            if (JS_IsException(ctor))
+                goto out;
+            parent = JS_GetPropertyStr(ctx, ctor, "prototype");
+            JS_FreeValue(ctx, ctor);
+            if (JS_IsException(parent))
+                goto out;
+        }
+        JSValue proto = JS_NewObjectProto(ctx, parent);
+        if (interfaces[i].parent < 0)
+            JS_FreeValue(ctx, parent);
         doc->prototypes[i] = proto;
         JSValue ctor = JS_NewCFunction2(ctx, illegal_constructor, interfaces[i].name, 0, JS_CFUNC_constructor, 0);
         if (JS_IsException(proto) || JS_IsException(ctor) || JS_SetConstructor(ctx, ctor, proto) < 0) {
             JS_FreeValue(ctx, ctor);
             goto out;
         }
-        if (interfaces[i].parent >= 0) {
-            JSValue parent_ctor = JS_GetPropertyStr(ctx, parent, "constructor");
+        {
+            JSValue parent_ctor = interfaces[i].parent < 0 ? JS_GetPropertyStr(ctx, global, "EventTarget")
+                                                           : JS_GetPropertyStr(ctx, parent, "constructor");
             int inherited = JS_IsException(parent_ctor) ? -1 : JS_SetPrototype(ctx, ctor, parent_ctor);
             JS_FreeValue(ctx, parent_ctor);
             if (inherited < 0) {

@@ -56,6 +56,7 @@ struct dom_document {
 
     dom_string *script_string; /**< The string "script". */
 
+    dom_event_target *event_parent; /**< Retained host Window, or NULL. */
     dom_document_event_internal dei;
     /**< The DocumentEvent interface */
     dom_document_quirks_mode quirks;

@@ -40,6 +40,14 @@ class HTTP(http.server.BaseHTTPRequestHandler):
                          '<script>if (caught || finished) throw new Error("interruption was caught"); '
                          'Promise.resolve().then(() => console.log("JS_TIMEOUT_RECOVERY"));</script>')
             body += '<form action="/next" method="post"><button id="accept">Accept</button></form>'
+        elif self.path == "/event-navigation":
+            body += ('<div id="source">Event navigation</div><script>'
+                     'var source=document.getElementById("source");'
+                     'var link=document.createElement("link");link.setAttribute("rel","stylesheet");'
+                     f'link.setAttribute("href","{origin}/unexpected");'
+                     'link.dispatchEvent(new Event("DOMNodeInserted"));'
+                     f'document.addEventListener("leave",()=>location.replace("{origin}/next"));'
+                     'setTimeout(()=>source.dispatchEvent(new Event("leave",{bubbles:true})),50);</script>')
         elif self.path == "/microtask-navigation":
             body += (f'<script>Promise.resolve().then(() => location.assign("{origin}/next"));</script>'
                      '<p>Navigation from a Promise</p>')
@@ -62,7 +70,7 @@ env = dict(os.environ, QT_QPA_PLATFORM="offscreen", QT_SCALE_FACTOR="1",
            QT_SCREEN_SCALE_FACTORS="1", QT_FONT_DPI="96", NO_PROXY="127.0.0.1")
 try:
     with tempfile.TemporaryDirectory(prefix="wisp-js-cleanup-") as tmp:
-        for mode in ("navigate", "close", "timeout", "microtask-navigation"):
+        for mode in ("navigate", "close", "timeout", "microtask-navigation", "event-navigation"):
             requests.clear()
             dest = Path(tmp) / mode
             args = [str(binary), "-v", "--capture-dir", str(dest), "--capture-size", "640x480",
@@ -70,12 +78,13 @@ try:
             navigate = mode != "close"
             if mode in ("navigate", "timeout"):
                 args += ["--capture-click-id", "accept", "--capture-id", "destination"]
-            path = "/runaway" if mode == "timeout" else ("/microtask-navigation" if mode == "microtask-navigation" else "/old")
+            path = "/runaway" if mode == "timeout" else (
+                "/" + mode if mode in ("microtask-navigation", "event-navigation") else "/old")
             if mode == "timeout":
                 args[2:2] = ["--script_timeout=1", "--verbose_filter=level:INFO"]
             result = subprocess.run([*args, origin + path], env=env, capture_output=True, text=True, timeout=12)
             assert result.returncode == 0 and "runtime error:" not in result.stderr, (mode, result.stdout, result.stderr)
-            if mode == "microtask-navigation":
+            if mode in ("microtask-navigation", "event-navigation"):
                 assert "Forcing content cleanup during shutdown" not in result.stdout + result.stderr, result.stderr
             meta = json.loads((dest / "capture.json").read_text())
             assert meta["result"] == "complete" and meta["load_complete"], (mode, meta)
@@ -83,7 +92,7 @@ try:
             assert not any(path == "/unexpected" for _, path in requests), (mode, requests)
             log = "\n".join(line for line in (result.stdout + result.stderr).splitlines()
                             if "JavaScript " in line or "Console: " in line)
-            if mode != "microtask-navigation":
+            if mode not in ("microtask-navigation", "event-navigation"):
                 assert "Console: JS_PROMISE_RAN" in log, log
             if mode == "timeout":
                 assert "JavaScript execution limit reached in " + origin + path in log, log
@@ -101,4 +110,4 @@ finally:
     server.server_close()
     thread.join()
 
-print("Promise navigation, timeout recovery, form navigation and shutdown pass.")
+print("Promise/event navigation, timeout recovery, form navigation and shutdown pass.")

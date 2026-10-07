@@ -48,6 +48,7 @@ struct dom_event {
 
     const struct dom_event_private_vtable *vtable;
     /**< The private virtual function table of Event */
+    const struct dom_event_path *path; /**< Borrowed, only during dispatch. */
     bool in_dispatch; /**< Whether this event is in dispatch */
     bool is_initialised; /**< Whether this event is initialised */
     bool is_trusted; /**< Whether this event is trusted */

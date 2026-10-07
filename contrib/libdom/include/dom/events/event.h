@@ -88,4 +88,9 @@ dom_exception _dom_event_set_is_trusted(dom_event *evt, bool trusted);
 dom_exception dom_event_get_cancel_bubble(dom_event *evt, bool *value);
 void dom_event_set_passive_listener(dom_event *evt, bool passive);
 
+/* Frozen dispatch path, target first. Entries are borrowed and valid only
+ * during dispatch. This DOM has no shadow trees/retargeting. */
+size_t dom_event_get_path_length(const dom_event *evt);
+dom_event_target *dom_event_get_path_target(const dom_event *evt, size_t index);
+
 #endif

@@ -28,6 +28,7 @@ static void event_finalizer(JSRuntime *rt, JSValue value)
         dom_event_unref(event->native);
     JS_FreeValueRT(rt, event->target);
     JS_FreeValueRT(rt, event->detail);
+    JS_FreeValueRT(rt, event->path);
     js_free_rt(rt, event);
 }
 
@@ -37,6 +38,7 @@ static void event_mark(JSRuntime *rt, JSValueConst value, JS_MarkFunc *mark)
     if (event != NULL) {
         JS_MarkValue(rt, event->target, mark);
         JS_MarkValue(rt, event->detail, mark);
+        JS_MarkValue(rt, event->path, mark);
     }
 }
 
@@ -98,11 +100,10 @@ static JSValue event_get(JSContext *ctx, JSValueConst object, int property)
     case TARGET:
         return JS_DupValue(ctx, event->target);
     case CURRENT:
+        return qjs_event_current_target(ctx, event);
     case PHASE:
         dom_event_get_event_phase(event->native, &phase);
-        return property == PHASE ? JS_NewInt32(ctx, phase)
-            : phase == DOM_NONE  ? JS_NULL
-                                 : JS_DupValue(ctx, event->target);
+        return JS_NewInt32(ctx, phase);
     case BUBBLES:
         dom_event_get_bubbles(event->native, &value);
         break;
@@ -134,6 +135,21 @@ static JSValue event_get(JSContext *ctx, JSValueConst object, int property)
         return JS_UNDEFINED;
     }
     return JS_NewBool(ctx, value);
+}
+
+JSValue qjs_event_current_target(JSContext *ctx, struct qjs_event *event)
+{
+    dom_event_target *current;
+    dom_event_get_current_target(event->native, &current);
+    JSValue result = JS_NULL;
+    for (size_t i = 0; current != NULL && i < dom_event_get_path_length(event->native); i++) {
+        if (dom_event_get_path_target(event->native, i) == current) {
+            result = JS_GetPropertyUint32(ctx, event->path, i);
+            break;
+        }
+    }
+    dom_event_target_unref(current);
+    return result;
 }
 
 static JSValue event_set(JSContext *ctx, JSValueConst object, JSValueConst value, int property)
@@ -184,6 +200,7 @@ static JSValue event_constructor(JSContext *ctx, JSValueConst new_target, int ar
     if (event == NULL)
         goto fail_object;
     event->target = JS_NULL;
+    event->path = JS_UNDEFINED;
     event->detail = JS_DupValue(ctx, detail);
     event->custom = custom;
     event->composed = composed;
@@ -239,13 +256,15 @@ static JSValue event_method(JSContext *ctx, JSValueConst object, int argc, JSVal
         dom_event_prevent_default(event->native);
         break;
     case PATH: {
-        bool active;
-        dom_event_in_dispatch(event->native, &active);
         JSValue result = JS_NewArray(ctx);
-        if (!JS_IsException(result) && active &&
-            JS_SetPropertyUint32(ctx, result, 0, JS_DupValue(ctx, event->target)) < 0) {
-            JS_FreeValue(ctx, result);
-            return JS_EXCEPTION;
+        if (JS_IsException(result))
+            return result;
+        for (size_t i = 0; i < dom_event_get_path_length(event->native); i++) {
+            JSValue target = JS_GetPropertyUint32(ctx, event->path, i);
+            if (JS_IsException(target) || JS_DefinePropertyValueUint32(ctx, result, i, target, JS_PROP_C_W_E) < 0) {
+                JS_FreeValue(ctx, result);
+                return JS_EXCEPTION;
+            }
         }
         return result;
     }

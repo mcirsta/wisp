@@ -575,6 +575,13 @@ static void html_texty_element_update(html_content *htmlc, dom_node *node)
  */
 static void dom_default_action_DOMNodeInserted_cb(struct dom_event *evt, void *pw)
 {
+    /* These legacy events carry internal DOM-change notifications. A script
+     * dispatching the same name must not simulate insertion or reprocess resources. */
+    bool trusted;
+    dom_event_get_is_trusted(evt, &trusted);
+    if (!trusted)
+        return;
+
     dom_event_target *node;
     dom_node_type type;
     dom_exception exc;
@@ -654,6 +661,13 @@ static void dom_default_action_DOMNodeInserted_cb(struct dom_event *evt, void *p
  */
 static void dom_default_action_DOMNodeInsertedIntoDocument_cb(struct dom_event *evt, void *pw)
 {
+    /* These legacy events carry internal DOM-change notifications. A script
+     * dispatching the same name must not simulate insertion or reprocess resources. */
+    bool trusted;
+    dom_event_get_is_trusted(evt, &trusted);
+    if (!trusted)
+        return;
+
     html_content *htmlc = pw;
     dom_event_target *node;
     dom_node_type type;
@@ -689,6 +703,13 @@ static void dom_default_action_DOMNodeInsertedIntoDocument_cb(struct dom_event *
  */
 static void dom_default_action_DOMSubtreeModified_cb(struct dom_event *evt, void *pw)
 {
+    /* These legacy events carry internal DOM-change notifications. A script
+     * dispatching the same name must not simulate insertion or reprocess resources. */
+    bool trusted;
+    dom_event_get_is_trusted(evt, &trusted);
+    if (!trusted)
+        return;
+
     dom_event_target *node;
     dom_node_type type;
     dom_exception exc;
@@ -737,6 +758,12 @@ static void dom_default_action_DOMSubtreeModified_cb(struct dom_event *evt, void
  */
 static void dom_default_action_finished_cb(struct dom_event *evt, void *pw)
 {
+    /* Script dispatch owns its wrapper and may already have retired the page. */
+    bool trusted;
+    dom_event_get_is_trusted(evt, &trusted);
+    if (!trusted)
+        return;
+
     html_content *htmlc = pw;
 
     if (htmlc->jsthread != NULL)

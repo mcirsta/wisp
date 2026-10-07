@@ -71,6 +71,7 @@ void _dom_event_finalise(dom_event *evt)
 
     evt->stop = false;
     evt->stop_now = false;
+    evt->path = NULL;
     evt->prevent_default = false;
     evt->custom = false;
 
@@ -414,4 +415,14 @@ dom_exception dom_event_get_cancel_bubble(dom_event *evt, bool *value)
 void dom_event_set_passive_listener(dom_event *evt, bool passive)
 {
     evt->passive = passive;
+}
+
+size_t dom_event_get_path_length(const dom_event *evt)
+{
+    return evt->path != NULL ? evt->path->count : 0;
+}
+
+dom_event_target *dom_event_get_path_target(const dom_event *evt, size_t index)
+{
+    return index < dom_event_get_path_length(evt) ? evt->path->targets[index] : NULL;
 }
