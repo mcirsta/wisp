@@ -383,6 +383,7 @@ add_test(NAME font_face_test COMMAND font_face_test)
 
 # Style factory: only sees libcss internal headers
 add_library(margin_collapse_style OBJECT layout_margin_collapse_style.c)
+add_dependencies(margin_collapse_style libcss_propreg_gen libcss_select_gen)
 target_include_directories(margin_collapse_style PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libcss/include
   ${CMAKE_SOURCE_DIR}/contrib/libcss/src

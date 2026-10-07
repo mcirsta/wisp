@@ -347,8 +347,11 @@ if(WISP_QT_CAPTURE)
             set_tests_properties(qt_object_decode_failure PROPERTIES TIMEOUT 60)
         endif()
         add_test(NAME qt_object_document_sizing
-            COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_object_document_sizing.py $<TARGET_FILE:wisp-qt>)
+            COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_embedded_document_sizing.py $<TARGET_FILE:wisp-qt>)
         set_tests_properties(qt_object_document_sizing PROPERTIES TIMEOUT 60)
+        add_test(NAME qt_iframe_document_sizing
+            COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_embedded_document_sizing.py $<TARGET_FILE:wisp-qt> iframe)
+        set_tests_properties(qt_iframe_document_sizing PROPERTIES TIMEOUT 60)
         add_test(NAME qt_disclosure_markers
             COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_disclosure_markers.py $<TARGET_FILE:wisp-qt>)
         set_tests_properties(qt_disclosure_markers PROPERTIES TIMEOUT 90)

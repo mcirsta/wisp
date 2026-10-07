@@ -135,16 +135,16 @@ struct layout_size_limits {
  * containing_block_width is negative during the intrinsic-width pass.
  * See CSS 2.1 sections 10.3 and 10.6.
  */
-static void layout_get_object_dimensions(
+static void layout_get_replaced_dimensions(
     struct box *box, int *width, int *height, const struct layout_size_limits *limits, int containing_block_width)
 {
-    assert(box->object != NULL);
+    assert(box->object != NULL || (box->flags & IFRAME));
     assert(width != NULL && height != NULL);
 
     /* A nested document has no natural dimensions: its laid-out extent depends
      * on the viewport we give it. Only image content supplies a natural size.
      * Keep the default 300x150 size separate from an intrinsic aspect ratio. */
-    bool document = content_get_type(box->object) == CONTENT_HTML;
+    bool document = (box->flags & IFRAME) || content_get_type(box->object) == CONTENT_HTML;
     int intrinsic_width = document ? 0 : content_get_width(box->object);
     int intrinsic_height = document ? 0 : content_get_height(box->object);
     bool contents_skipped = (box->flags & CONTENTS_SKIPPED) != 0;
@@ -606,18 +606,18 @@ static int layout_minmax_definite_height(const struct box *box, const css_unit_c
  * for the min/max width pass.
  *
  * Reads CSS min/max width/height constraints from the element's style and
- * calls layout_get_object_dimensions() so that e.g. max-height on an image
+ * calls layout_get_replaced_dimensions() so that e.g. max-height on an image
  * correctly limits the intrinsic width contribution via aspect-ratio scaling.
  * Percentage heights use a definite ancestor height where one is available;
  * percentage width constraints still have no containing width in this pass.
  *
- * \param box      The box with an object (box->object must be non-NULL).
+ * \param box      The box with loaded replaced content or an iframe.
  * \param content  The HTML content being laid out.
  * \param css_width   CSS-computed width for the element (AUTO or set).
  * \param css_height  CSS-computed height for the element (AUTO or set).
  * \return  The constrained intrinsic width in device pixels.
  */
-static int layout_minmax_object_width(struct box *box, const html_content *content, int css_width, int css_height)
+static int layout_minmax_replaced_width(struct box *box, const html_content *content, int css_width, int css_height)
 {
     int width = css_width;
     int height = css_height;
@@ -626,7 +626,7 @@ static int layout_minmax_object_width(struct box *box, const html_content *conte
     int obj_max_w = INT_MAX;
     int obj_max_h = INT_MAX;
 
-    assert(box->object != NULL);
+    assert(box->object != NULL || (box->flags & IFRAME));
 
     if (width == AUTO) {
         int definite_height = layout_minmax_definite_height(box, &content->unit_len_ctx);
@@ -664,7 +664,7 @@ static int layout_minmax_object_width(struct box *box, const html_content *conte
         }
     }
 
-    layout_get_object_dimensions(box, &width, &height,
+    layout_get_replaced_dimensions(box, &width, &height,
         &(struct layout_size_limits){
             .min_width = obj_min_w,
             .max_width = obj_max_w,
@@ -1033,9 +1033,9 @@ static bool layout_minmax_line(struct box *first, int *line_min, int *line_max, 
             height = AUTO;
         }
 
-        if (b->object || (b->flags & REPLACE_DIM)) {
-            if (b->object) {
-                width = layout_minmax_object_width(b, content, width, height);
+        if (lh__box_is_object(b)) {
+            if (b->object || (b->flags & IFRAME)) {
+                width = layout_minmax_replaced_width(b, content, width, height);
             }
 
             fixed = frac = 0;
@@ -1048,23 +1048,6 @@ static bool layout_minmax_line(struct box *first, int *line_min, int *line_max, 
             }
             if (0 < width + fixed)
                 width += fixed;
-        } else if (b->flags & IFRAME) {
-            /* TODO: handle percentage widths properly */
-            if (width == AUTO)
-                width = 400;
-
-            fixed = frac = 0;
-            if (bs == CSS_BOX_SIZING_BORDER_BOX) {
-                calculate_mbp_width(&content->unit_len_ctx, b->style, LEFT, true, false, false, &fixed, &frac);
-                calculate_mbp_width(&content->unit_len_ctx, b->style, RIGHT, true, false, false, &fixed, &frac);
-            } else {
-                calculate_mbp_width(&content->unit_len_ctx, b->style, LEFT, true, true, true, &fixed, &frac);
-                calculate_mbp_width(&content->unit_len_ctx, b->style, RIGHT, true, true, true, &fixed, &frac);
-            }
-
-            if (0 < width + fixed)
-                width += fixed;
-
         } else {
             /* form control with no object */
             if (width == AUTO)
@@ -1334,7 +1317,7 @@ layout_minmax_block(struct box *block, const struct gui_layout_table *font_func,
         block->flags |= HAS_HEIGHT;
     }
 
-    if (block->object) {
+    if (block->object || (block->flags & IFRAME)) {
         /* Use constrained intrinsic width, respecting
          * max-height/max-width via aspect-ratio scaling */
         int obj_w = AUTO, obj_h = AUTO;
@@ -1360,13 +1343,9 @@ layout_minmax_block(struct box *block, const struct gui_layout_table *font_func,
             }
         }
 
-        min = max = layout_minmax_object_width(block, content, obj_w, obj_h);
+        min = max = layout_minmax_replaced_width(block, content, obj_w, obj_h);
         NSLOG(layout, DEBUG, "MINMAX_BLOCK object %p: after helper min=%d max=%d", block, min, max);
 
-        block->flags |= HAS_HEIGHT;
-    } else if (block->flags & IFRAME) {
-        /** \todo do we need to know the min/max width of the iframe's
-         * content? */
         block->flags |= HAS_HEIGHT;
     } else if (block->type == BOX_GRID || block->type == BOX_INLINE_GRID) {
         /* Tracks determine content sizes; the common block path below applies
@@ -2363,9 +2342,9 @@ static void layout_block_find_dimensions(
             dom_string_unref(name);
     }
 
-    if (box->object && !(box->flags & REPLACE_DIM)) {
+    if (lh__box_is_object(box) && !(box->flags & REPLACE_DIM)) {
         /* block-level replaced element, see 10.3.4 and 10.6.2 */
-        layout_get_object_dimensions(box, &width, &height,
+        layout_get_replaced_dimensions(box, &width, &height,
             &(struct layout_size_limits){
                 .min_width = min_width,
                 .max_width = max_width,
@@ -3286,10 +3265,10 @@ static void layout_float_find_dimensions(const css_unit_ctx *unit_len_ctx, int a
         padding[BOTTOM] += scrollbar_width_x;
     }
 
-    if (box->object && !(box->flags & REPLACE_DIM)) {
+    if (lh__box_is_object(box) && !(box->flags & REPLACE_DIM)) {
         /* Floating replaced element, with intrinsic width or height.
          * See 10.3.6 and 10.6.2 */
-        layout_get_object_dimensions(box, &width, &height,
+        layout_get_replaced_dimensions(box, &width, &height,
             &(struct layout_size_limits){
                 .min_width = min_width,
                 .max_width = max_width,
@@ -3967,8 +3946,8 @@ static bool layout_line(struct box *first, int *width, int *y, int cx, int cy, s
                 .min_height = &min_height,
             });
 
-        if (b->object && !(b->flags & REPLACE_DIM)) {
-            layout_get_object_dimensions(b, &b->width, &b->height,
+        if (lh__box_is_object(b) && !(b->flags & REPLACE_DIM)) {
+            layout_get_replaced_dimensions(b, &b->width, &b->height,
                 &(struct layout_size_limits){
                     .min_width = min_width,
                     .max_width = max_width,
@@ -3976,15 +3955,6 @@ static bool layout_line(struct box *first, int *width, int *y, int cx, int cy, s
                     .max_height = max_height,
                 },
                 *width /* containing block / available line width */);
-        } else if (b->flags & IFRAME) {
-            /* TODO: should we look at the content dimensions? */
-            if (b->width == AUTO)
-                b->width = 400;
-            if (b->height == AUTO)
-                b->height = 300;
-
-            /* We reformat the iframe browser window to new
-             * dimensions in pass 2 */
         } else {
             /* form control with no object */
             if (b->width == AUTO)
@@ -5485,13 +5455,13 @@ bool layout_block_context(struct box *block, int viewport_height, html_content *
     block->clear_level = 0;
     block->flags &= ~HAS_BASELINE;
 
-    /* special case if the block contains an object */
-    if (block->object) {
+    /* Replaced content does not lay out ordinary block children. */
+    if (block->object || (block->flags & IFRAME)) {
         int temp_width = block->width;
         /* Width is already solved; resolve the remaining auto height before
          * applying its CSS constraints below. */
         struct css_size no_min = {.type = CSS_SIZE_AUTO, .value = 0};
-        layout_get_object_dimensions(block, &temp_width, &block->height,
+        layout_get_replaced_dimensions(block, &temp_width, &block->height,
             &(struct layout_size_limits){
                 .min_width = no_min,
                 .max_width = INT_MAX,
@@ -5507,7 +5477,8 @@ bool layout_block_context(struct box *block, int viewport_height, html_content *
             fprintf(stderr, "LAYOUT_ERROR: block %p has INVALID width %d after layout_block_object\n", (void *)block,
                 block->width);
         }
-        return layout_block_object(block);
+        /* Iframe viewports are updated by layout_calculate_descendant_bboxes. */
+        return block->object ? layout_block_object(block) : true;
     } else if (block->flags & REPLACE_DIM) {
         return true;
     }
@@ -6584,7 +6555,7 @@ static bool layout_absolute(struct box *box, struct box *containing_block, int c
     struct absolute_layout layout;
     int max_height;
     struct css_size min_height;
-    bool replaced_object = box->object != NULL;
+    bool replaced_object = box->object != NULL || (box->flags & IFRAME);
     int *margin = box->margin;
     int *padding = box->padding;
     struct box_border *border = box->border;
@@ -6640,7 +6611,7 @@ static bool layout_absolute(struct box *box, struct box *containing_block, int c
          * solving the inset equations. Opposing insets position an image;
          * they do not stretch its auto dimensions like a non-replaced box.
          * Resolve limits against the containing block's padding box too. */
-        layout_get_object_dimensions(box, &layout.width, &layout.height,
+        layout_get_replaced_dimensions(box, &layout.width, &layout.height,
             &(struct layout_size_limits){
                 .min_width = layout.min_width,
                 .max_width = layout.max_width,

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""HTML objects are replaced boxes without natural dimensions or aspect ratio.
+"""Embedded HTML documents have no natural dimensions or aspect ratio.
 
 Expectations come from HTML's embedded-content rendering rules and CSS 2.2
 10.3.2/4/6/8 and 10.6.2/5, not a reference browser's output:
@@ -46,30 +46,49 @@ SIZES = {
 }
 
 
-def fixture():
+def fixture(tag):
     parts = ['<!doctype html><style>html,body{margin:0}body{font:16px/20px sans-serif}'
-             '.case{position:relative;width:600px;height:350px;margin-bottom:10px}</style>'
+             'iframe{border:0}.case{position:relative;width:600px;height:350px;margin-bottom:10px}</style>'
              '<details open><summary id="summary">Embedded documents</summary>']
-    for mode, (parent_style, object_style) in MODES.items():
+    for mode, (parent_style, element_style) in MODES.items():
         for name, (size_style, _) in SIZES.items():
             child = '<!doctype html><style>body{margin:0}</style><p>Embedded document</p>'
             if name.startswith("overflow"):
                 child = '<!doctype html><style>body{margin:0}</style><div style="width:900px;height:500px">Overflow</div>'
             url = 'data:text/html,' + quote(child)
             key = mode + '-' + name
-            parts.append(f'<div class="case" style="{parent_style}"><object id="{key}" data="{url}"'
-                         f' style="{object_style};{size_style}">Fallback</object></div>')
+            resource = f'{"data" if tag == "object" else "src"}="{url}"'
+            attrs = ''
+            if name == "no-src":
+                resource = ''
+            elif name in ("attributes", "attributes-overridden"):
+                attrs = 'width="180" height="70"'
+            parts.append(f'<div class="case" style="{parent_style}"><{tag} id="{key}" {resource} {attrs}'
+                         f' style="{element_style};{size_style}">Fallback</{tag}></div>')
     parts.append('</details>')
     return '\n'.join(parts)
 
 
+tag = sys.argv[2] if len(sys.argv) > 2 else 'object'
+assert tag in ('object', 'iframe'), tag
+if tag == 'iframe':
+    MODES['flex-column'] = ('display:flex;flex-direction:column;align-items:flex-start', 'flex:none')
+    SIZES.update({
+        'explicit-auto': ('width:auto;height:auto', (300, 150)),
+        'no-src': ('', (300, 150)),
+        'invisible': ('visibility:hidden', (300, 150)),
+        'attributes': ('', (180, 70)),
+        'attributes-overridden': ('width:240px;height:80px', (240, 80)),
+        'height-ratio': ('height:70px;aspect-ratio:2', (140, 70)),
+        'percentage': ('width:50%;height:20%', (300, 70)),
+    })
 binary = Path(sys.argv[1]).resolve()
 env = dict(os.environ, QT_QPA_PLATFORM="offscreen", QT_SCALE_FACTOR="1",
            QT_SCREEN_SCALE_FACTORS="1", QT_FONT_DPI="96")
-with tempfile.TemporaryDirectory(prefix="wisp-object-sizing-") as tmp:
+with tempfile.TemporaryDirectory(prefix=f"wisp-{tag}-sizing-") as tmp:
     root = Path(tmp)
-    page = root / 'objects.html'
-    page.write_text(fixture())
+    page = root / f'{tag}.html'
+    page.write_text(fixture(tag))
     out = root / 'capture'
     args = [str(binary), '--capture-dir', str(out), '--capture-size', '800x600',
             '--capture-settle', '50', '--capture-timeout', '30000', '--enable_javascript=0',
@@ -102,4 +121,4 @@ with tempfile.TemporaryDirectory(prefix="wisp-object-sizing-") as tmp:
                 if actual != expected:
                     failures.append(f'step {index}, {key}: expected {expected}, got {actual}')
     assert not failures, '\n'.join(failures)
-print(f'Embedded documents: {len(MODES) * len(SIZES)} sizing cases passed across resize and disclosure changes.')
+print(f'Embedded {tag} documents: {len(MODES) * len(SIZES)} sizing cases passed across resize and disclosure changes.')

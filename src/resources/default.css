@@ -392,11 +392,6 @@ noframes {
 	display: none;
 }
 
-iframe {
-	width: 19em;
-	height: 10em;
-}
-
 form {
 	display: block;
 }
