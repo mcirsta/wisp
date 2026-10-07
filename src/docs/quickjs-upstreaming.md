@@ -72,6 +72,30 @@ Recheck upstream alternatives and API shape before proposing the hook. Unlike
 the error-propagation fixes, it changes a public struct and requires consumers to
 rebuild; keep it separate in any submission. Wisp builds all consumers together.
 
+The child-collection work adds another optional hook,
+`get_own_property_for_set`, with `host_assignment_descriptors()` tests. Web IDL's
+ordinary assignment algorithm ignores virtual named properties for its initial
+lookup, but must still consult the receiver's actual descriptor. A host currently
+has to implement its entire `set_property` callback to express this. The new hook
+changes only that first lookup, preserving the engine's handling of prototype
+setters, Proxy prototypes, different receivers and strict-mode failures. It is
+unused by ordinary classes. Review this API separately from error-propagation
+fixes before upstream submission; like prevent_extensions, it extends a public
+struct and requires a rebuild.
+
+## Newly found candidate: lazy property initialization recovery
+
+The collection allocation sweep found that `JS_AutoInitProperty` frees its
+initializer and changes the property to undefined before checking whether the
+initializer returned an exception. Under memory pressure, a first access to
+`Reflect` can therefore fail once and leave `Reflect` permanently undefined even
+after the memory limit is lifted.
+
+The fix checks for failure before consuming the initializer. The standalone
+`lazy_property_allocation_recovery()` budget sweep covers the lazy Reflect object
+and its lazy ownKeys function, and retries each failed access in the same context.
+This is a separate root-cause engine correction with no new API or browser policy.
+
 ## Context job cancellation
 
 `JS_CloseContextJobs(ctx)` permanently closes a context's job queue and releases
@@ -137,8 +161,9 @@ or Wisp-specific installation rules. Those belong in the parent integration.
 
 ## Expected benefit and order
 
-Pursue the property-list, host-object cleanup and exotic-definition error fixes
-first; discuss the extensibility hook and cancellation separately, then generic
+Pursue the property-list, host-object cleanup, lazy-initialization recovery and
+exotic-definition error fixes first; discuss the extensibility/assignment hooks
+and cancellation separately, then generic
 build controls if still useful. Acceptance of those engine changes
 would remove Wisp's remaining engine-source patches; build options could further
 reduce the CMake patch. These

@@ -26,6 +26,7 @@ struct qjs_dom_node {
     uint64_t id;
     dom_tokenlist *class_tokens;
     JSValue class_list;
+    JSValue child_lists[2]; /* SameObject childNodes and children, allocated lazily. */
     JSValue owner; /* Document wrapper; undefined on the document itself. */
     struct qjs_dom_document *document;
     struct qjs_dom_node *next, **previous;
@@ -44,6 +45,9 @@ void qjs_dom_changed(
     JSContext *ctx, struct qjs_dom_node *node, const char *operation, dom_string *attribute, dom_exception error);
 void qjs_dom_flush(jsthread *thread);
 void qjs_dom_close(jsthread *thread);
+int qjs_dom_install_collections(JSContext *ctx, JSValue *prototypes);
+int qjs_dom_property_index(JSContext *ctx, JSAtom key, uint32_t *index);
+int qjs_dom_install_iteration(JSContext *ctx, JSValueConst proto, JSValueConst global, const char *name, bool iterable);
 int qjs_init_tokenlist(JSContext *ctx);
 JSValue qjs_class_list_get(JSContext *ctx, JSValueConst object);
 JSValue qjs_class_list_set(JSContext *ctx, JSValueConst object, JSValueConst value);

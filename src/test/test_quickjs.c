@@ -1380,7 +1380,9 @@ START_TEST(test_quickjs_dom_runtime_isolation)
     ck_assert(dom_heap->node_class != second_heap->node_class);
     for (unsigned i = 0; i < 2; i++) {
         jsthread *thread = i == 0 ? dom_thread : second;
-        assert_predicate(thread, "document.body instanceof HTMLElement && new XMLHttpRequest().readyState === 0",
+        assert_predicate(thread, "document.body instanceof HTMLElement && new XMLHttpRequest().readyState === 0 && "
+            "document.body.childNodes instanceof NodeList && document.body.children instanceof HTMLCollection && "
+            "document.body.childNodes[0] === document.body.children[0]",
             "runtime-local host classes");
         ck_assert(exec_script(thread, "console.group('group'); console.log('class identity'); console.groupEnd();",
             "generated console class"));
@@ -1594,6 +1596,242 @@ START_TEST(test_quickjs_classlist_conversion_retirement)
         "if (!caught || caught.name !== 'InvalidStateError') throw Error('retired classList mutation');",
         "classList retirement during coercion"));
     ck_assert_uint_eq(dom_thread->dom_changes, 0);
+}
+END_TEST
+
+START_TEST(test_quickjs_child_collections)
+{
+    ck_assert(exec_script(dom_thread,
+        "var el = document.getElementById('target'), nodes = el.childNodes, elements = el.children;"
+        "if (!(nodes instanceof NodeList) || !(elements instanceof HTMLCollection) || Array.isArray(nodes) || "
+        "nodes !== el.childNodes || elements !== el.children) throw Error('collection identity');"
+        "if (nodes.length !== 5 || elements.length !== 2 || nodes[0] !== el.firstChild || "
+        "nodes[1] !== elements[0] || nodes[2].nodeType !== 8 || nodes[3] !== elements[1]) throw Error('node filtering');"
+        "if (nodes.item(5) !== null || nodes[5] !== undefined || elements.item(2) !== null || elements[2] !== undefined) "
+        "throw Error('missing entries');"
+        "if (document.childNodes.length !== 2 || document.childNodes[0].nodeType !== 10 || "
+        "document.children.length !== 1 || document.children[0] !== document.documentElement) throw Error('document children');"
+        "if (nodes[0].childNodes.length !== 0 || 'children' in nodes[0] || 'children' in nodes[2]) throw Error('leaf interfaces');"
+        "var fragment = document.createDocumentFragment(), f = fragment.children;"
+        "fragment.appendChild(document.createTextNode('text')); fragment.appendChild(document.createElement('b'));"
+        "if (f !== fragment.children || f.length !== 1 || fragment.childNodes.length !== 2) throw Error('fragment children');"
+        "if (Object.prototype.toString.call(nodes) !== '[object NodeList]' || "
+        "Object.prototype.toString.call(elements) !== '[object HTMLCollection]') throw Error('tags');",
+        "childNodes and children interfaces and filtering"));
+}
+END_TEST
+
+START_TEST(test_quickjs_collections_live)
+{
+    ck_assert(exec_script(dom_thread,
+        "var el = document.getElementById('target'), n = el.childNodes, c = el.children, first = c[0];"
+        "el.insertBefore(document.createComment('before'), n[0]);"
+        "if (n.length !== 6 || c.length !== 2 || c[0] !== first) throw Error('live insert');"
+        "var f = document.createDocumentFragment(), fc = f.children; f.appendChild(first);"
+        "if (c.length !== 1 || fc[0] !== first || first.isConnected) throw Error('move to detached');"
+        "el.appendChild(f); if (fc.length !== 0 || c[1] !== first) throw Error('fragment insertion');"
+        "el.textContent = 'replacement'; if (n.length !== 1 || n[0].data !== 'replacement' || c.length !== 0) "
+        "throw Error('textContent replacement');"
+        "var dc = document.children, dn = document.childNodes, root = document.documentElement; document.removeChild(root);"
+        "if (dc.length !== 0 || dn.length !== 1 || n.length !== 1) throw Error('root removal');"
+        "document.appendChild(root); if (dc[0] !== root || dn.length !== 2) throw Error('root restore');"
+        "var detached = document.createElement('div'), live = detached.childNodes;"
+        "for (var i = 0; i < 30; i++) detached.appendChild(document.createElement('i'));"
+        "while (live.length) detached.removeChild(live[0]);"
+        "if (detached.hasChildNodes()) throw Error('live removal loop');",
+        "collections reflect tree edits, detached nodes, fragments and root replacement"));
+}
+END_TEST
+
+START_TEST(test_quickjs_collection_names)
+{
+    ck_assert(exec_script(dom_thread,
+        "var p = document.createElement('div'), a = document.createElement('span'), b = document.createElement('b');"
+        "a.id = 'alpha'; a.setAttribute('name', 'shared'); b.id = 'shared'; p.appendChild(a); p.appendChild(b); var c = p.children;"
+        "if (c.alpha !== a || c.shared !== a || c.namedItem('shared') !== a || c.namedItem('') !== null || "
+        "c.namedItem('absent') !== null || c.absent !== undefined) throw Error('first id-or-name in tree order');"
+        "a.removeAttribute('name'); if (c.shared !== b) throw Error('attribute removal');"
+        "b.id = 'beta'; if (c.shared !== undefined || 'shared' in c || c.beta !== b) throw Error('live ID');"
+        "a.id = 'item'; if (typeof c.item !== 'function' || c.namedItem('item') !== a || "
+        "Object.hasOwn(c, 'item')) throw Error('method shadowing');"
+        "a.id = '01'; b.id = '99'; if (c['01'] !== a || c[99] !== undefined || c.namedItem('99') !== b) "
+        "throw Error('numeric names and indices');"
+        "var svg = document.getElementById('svg'), sc = svg.children; sc[0].setAttribute('name', 'foreign');"
+        "if (sc.foreign !== undefined || sc.namedItem('foreign') !== null || sc.svgText !== sc[0]) throw Error('SVG names');"
+        "a.id = 'ș😀\\0'; if (c.namedItem('ș😀\\0') !== a || c['ș😀\\0'] !== a) throw Error('length-aware names');",
+        "HTMLCollection ID/name lookup and namespace rules"));
+}
+END_TEST
+
+START_TEST(test_quickjs_collection_properties)
+{
+    ck_assert(exec_script(dom_thread,
+        "var p = document.createElement('div'), a = document.createElement('span'), b = document.createElement('b');"
+        "a.id = 'alpha'; a.setAttribute('name', 'alias'); b.id = 'beta'; b.setAttribute('name', 'alpha');"
+        "p.appendChild(a); p.appendChild(b); var c = p.children, n = p.childNodes, sym = Symbol('note');"
+        "c.note = 7; c[sym] = 8;"
+        "var k = Reflect.ownKeys(c); if (k.length !== 7 || k.slice(0,6).join() !== '0,1,alpha,alias,beta,note' || k[6] !== sym) "
+        "throw Error('index/name/string/symbol ordering');"
+        "if (Object.keys(c).join() !== '0,1,note') throw Error('named properties must be unenumerable');"
+        "for (const list of [n,c]) { const d = Object.getOwnPropertyDescriptor(list,'0');"
+        "if (!d.enumerable || !d.configurable || d.writable || d.value !== a) throw Error('index descriptor');"
+        "if (Reflect.set(list,'0',9) || Reflect.set(list,'99',9) || Reflect.defineProperty(list,'99',{value:9}) || "
+        "Reflect.deleteProperty(list,'0') || !Reflect.deleteProperty(list,'99')) throw Error('readonly indices');"
+        "let caught; try { (function(){'use strict';list[99]=9;})(); } catch(e){caught=e;}"
+        "if (!(caught instanceof TypeError)) throw Error('strict indexed assignment');"
+        "list['01']=6; list['4294967295']=7; if (list['01']!==6 || list['4294967295']!==7) throw Error('non-indices');"
+        "if (Reflect.preventExtensions(list) || !Object.isExtensible(list)) throw Error('extensibility'); }"
+        "const d = Object.getOwnPropertyDescriptor(c,'alpha');"
+        "if (d.enumerable || d.writable || !d.configurable || d.value !== a) throw Error('named descriptor');"
+        "if (Reflect.set(c,'alpha',4) || Reflect.defineProperty(c,'alpha',{value:4}) || Reflect.deleteProperty(c,'alpha')) "
+        "throw Error('readonly names');"
+        "c.future = 10; b.id = 'future'; if (c.future !== 10 || c.namedItem('future') !== b) throw Error('own expando priority');"
+        "if (Reflect.ownKeys(c).filter(x => x === 'future').length !== 1) throw Error('duplicate name');"
+        "delete c.future; if (c.future !== b) throw Error('unhide name');"
+        "Object.defineProperty(c,'locked',{value:42});"
+        "if (Reflect.deleteProperty(c,'locked') || Reflect.set(c,'locked',43)) throw Error('expando descriptors');",
+        "collection descriptors, own keys and writes"));
+}
+END_TEST
+
+START_TEST(test_quickjs_collection_prototypes)
+{
+    ck_assert(exec_script(dom_thread,
+        "var p = document.createElement('div'), a = document.createElement('span'); a.id='named'; p.appendChild(a); var c=p.children;"
+        "var proto = Object.create(HTMLCollection.prototype), receiver, assigned;"
+        "Object.defineProperty(proto,'named',{get(){throw Error('getter must not run');},set(v){receiver=this;assigned=v;},configurable:true});"
+        "Object.setPrototypeOf(c,proto);"
+        "if (!Reflect.set(c,'named',8) || receiver!==c || assigned!==8 || Object.hasOwn(c,'named')) throw Error('prototype setter');"
+        "delete proto.named; var derived=Object.create(c);"
+        "if (!Reflect.set(c,'named',9,derived) || derived.named!==9 || c.named!==a) throw Error('different receiver');"
+        "if (Reflect.set(c,'0',9,derived) || Object.hasOwn(derived,'0')) throw Error('indexed different receiver');"
+        "var called=false; Object.setPrototypeOf(c,new Proxy(HTMLCollection.prototype,{"
+        "getOwnPropertyDescriptor(t,k){return Reflect.getOwnPropertyDescriptor(t,k);},"
+        "set(t,k,v,r){called = k==='named' && v===10 && r===c;return true;}}));"
+        "if (!Reflect.set(c,'named',10) || !called) throw Error('prototype Proxy set');",
+        "named lookup and assignment respect ordinary prototype/receiver semantics"));
+}
+END_TEST
+
+START_TEST(test_quickjs_collection_iteration)
+{
+    ck_assert(exec_script(dom_thread,
+        "var p=document.createElement('div'), a=document.createElement('a'), b=document.createElement('b');"
+        "p.appendChild(a);p.appendChild(b);var n=p.childNodes,c=p.children;"
+        "if (n.values!==Array.prototype.values || n[Symbol.iterator]!==n.values || n.forEach!==Array.prototype.forEach || "
+        "c[Symbol.iterator]!==Array.prototype.values || 'values' in c || 'forEach' in c) throw Error('iterator interfaces');"
+        "if ([...n][0]!==a || [...c][1]!==b || [...n.keys()].join()!=='0,1' || [...n.entries()][1][1]!==b) throw Error('iteration');"
+        "var iterator=n.values(); if (iterator.next().value!==a) throw Error('iterator first');"
+        "p.removeChild(b); var text=document.createTextNode('next');p.appendChild(text);"
+        "if (iterator.next().value!==text || !iterator.next().done) throw Error('live iterator');"
+        "p.appendChild(b);if (!iterator.next().done) throw Error('finished iterator');"
+        "var seen=[], marker={};n.forEach(function(value,index,list){if(this!==marker||list!==n)throw Error('callback');"
+        "seen.push(value);if(index===0){p.removeChild(text);p.appendChild(document.createTextNode('last'));}},marker);"
+        "if (seen.length!==3 || seen[0]!==a || seen[1]!==b || seen[2].data!=='last') throw Error('live forEach contents');",
+        "standard live array iterators and forEach"));
+}
+END_TEST
+
+START_TEST(test_quickjs_collection_errors)
+{
+    ck_assert(exec_script(dom_thread,
+        "var p=document.getElementById('target'),n=p.childNodes,c=p.children;"
+        "function raises(fn){try{fn();}catch(e){if(e instanceof TypeError)return;throw e;}throw Error('missing TypeError');}"
+        "raises(()=>new NodeList());raises(()=>new HTMLCollection());raises(()=>n.item());raises(()=>c.namedItem());"
+        "raises(()=>n.item(Symbol()));raises(()=>n.item(0n));raises(()=>c.namedItem(Symbol()));"
+        "raises(()=>NodeList.prototype.item.call(c,0));raises(()=>HTMLCollection.prototype.item.call(n,0));"
+        "raises(()=>Object.getOwnPropertyDescriptor(HTMLCollection.prototype,'length').get.call(n));"
+        "raises(()=>Object.getOwnPropertyDescriptor(Element.prototype,'children').get.call(p.firstChild));"
+        "raises(()=>Object.getOwnPropertyDescriptor(Element.prototype,'children').get.call(document));"
+        "if(n.item(4294967296)!==n[0]||n.item(-1)!==null||n.item(NaN)!==n[0])throw Error('index conversion');"
+        "var sentinel={},caught;try{c.namedItem({toString(){throw sentinel;}});}catch(e){caught=e;}"
+        "if(caught!==sentinel)throw Error('original coercion exception');"
+        "var found=n.item({valueOf(){p.textContent='converted';return 0;}});"
+        "if(found.data!=='converted'||n.length!==1)throw Error('reentrant index conversion');"
+        "p.appendChild(document.createElement('i'));"
+        "if(c.namedItem({toString(){c[0].id='converted';return 'converted';}})!==c[0])throw Error('reentrant name conversion');",
+        "collection Web IDL conversion, arity and receiver validation"));
+}
+END_TEST
+
+START_TEST(test_quickjs_collection_retirement)
+{
+    ck_assert(exec_script(dom_thread,
+        "var p=document.createElement('div');p.appendChild(document.createElement('b'));"
+        "var n=p.childNodes,c=p.children; n.cycle={list:c,root:p};c.cycle=n;p=null;",
+        "collection cycles and detached lifetime"));
+    JS_RunGC(dom_heap->rt);
+    assert_predicate(dom_thread, "n.length===1 && n[0]===c[0]", "GC retains detached collection root");
+    js_closethread(dom_thread);
+    JSValue global = JS_GetGlobalObject(dom_thread->ctx);
+    JSValue list = JS_GetPropertyStr(dom_thread->ctx, global, "n");
+    JSValue length = JS_GetPropertyStr(dom_thread->ctx, list, "length");
+    ck_assert(JS_IsException(length));
+    JS_FreeValue(dom_thread->ctx, JS_GetException(dom_thread->ctx));
+    JS_FreeValue(dom_thread->ctx, list);
+    JS_FreeValue(dom_thread->ctx, global);
+}
+END_TEST
+
+START_TEST(test_quickjs_collection_allocation_failure)
+{
+    /* Sweep property enumeration after successful setup; its atom table and
+     * expando/named-key merging must unwind without poisoning the live list. */
+    ck_assert(exec_script(dom_thread,
+        "var p=document.createElement('div');"
+        "for(var i=0;i<20;i++){var c=document.createElement('b');c.id='id'+i;c.setAttribute('name','name'+i);p.appendChild(c);}"
+        "var list=p.children;list.note=42;list[Symbol('s')]=7;"
+        "var enumerate=()=>Reflect.ownKeys(list);",
+        "collection allocation fixture"));
+    JSContext *ctx = dom_thread->ctx;
+    JSValue global = JS_GetGlobalObject(ctx), fn = JS_GetPropertyStr(ctx, global, "enumerate");
+    bool failed = false, succeeded = false;
+    JS_RunGC(dom_heap->rt);
+    for (size_t extra = 0; extra <= 65536; extra += 256) {
+        JSMemoryUsage usage;
+        JS_ComputeMemoryUsage(dom_heap->rt, &usage);
+        JS_SetMemoryLimit(dom_heap->rt, extra == 0 ? 1 : usage.malloc_size + extra);
+        JSValue result = JS_Call(ctx, fn, JS_UNDEFINED, 0, NULL);
+        JS_SetMemoryLimit(dom_heap->rt, 0);
+        if (JS_IsException(result)) {
+            failed = true;
+            JS_FreeValue(ctx, JS_GetException(ctx));
+        } else {
+            succeeded = true;
+            ck_assert(!JS_HasException(ctx));
+        }
+        JS_FreeValue(ctx, result);
+        if (succeeded)
+            break;
+    }
+    ck_assert_msg(failed && succeeded, "Collection allocation sweep: failed=%d succeeded=%d", failed, succeeded);
+    JS_FreeValue(ctx, fn);
+    JS_FreeValue(ctx, global);
+    assert_predicate(
+        dom_thread, "Reflect.ownKeys(list).length === 62 && list.id19 === list[19]", "enumeration OOM recovery");
+}
+END_TEST
+
+START_TEST(test_quickjs_collection_conversion_retirement)
+{
+    JSValue global = JS_GetGlobalObject(dom_thread->ctx);
+    ck_assert_int_eq(JS_SetPropertyStr(dom_thread->ctx, global, "retire",
+                         JS_NewCFunction(dom_thread->ctx, close_dom_during_conversion, "retire", 0)),
+        1);
+    JS_FreeValue(dom_thread->ctx, global);
+    const char *sources[] = {
+        "var n=document.body.childNodes;try{n.item({valueOf(){retire();return 0;}});}catch(e){var caught=e;}",
+        "var n=document.body.children;try{n.namedItem({toString(){retire();return 'target';}});}catch(e){var caught=e;}",
+        "var n=document.body.children;Object.setPrototypeOf(n,new Proxy({}, {getOwnPropertyDescriptor(){retire();}}));"
+        "try{n.target;}catch(e){var caught=e;}",
+    };
+    char script[1024];
+    snprintf(script, sizeof(script),
+        "%s if (!(caught instanceof DOMException) || caught.name !== 'InvalidStateError') "
+        "throw Error('retired collection guard');",
+        sources[_i]);
+    ck_assert_msg(exec_script(dom_thread, script, "collection retirement during conversion/prototype lookup"),
+        "Retirement variant %d failed", _i);
 }
 END_TEST
 
@@ -2212,6 +2450,16 @@ Suite *quickjs_suite(void)
     tcase_add_test(tc_dom, test_quickjs_tree_validation);
     tcase_add_test(tc_dom, test_quickjs_document_tree_validation);
     tcase_add_test(tc_dom, test_quickjs_creation_retirement);
+    tcase_add_test(tc_dom, test_quickjs_child_collections);
+    tcase_add_test(tc_dom, test_quickjs_collections_live);
+    tcase_add_test(tc_dom, test_quickjs_collection_names);
+    tcase_add_test(tc_dom, test_quickjs_collection_properties);
+    tcase_add_test(tc_dom, test_quickjs_collection_prototypes);
+    tcase_add_test(tc_dom, test_quickjs_collection_iteration);
+    tcase_add_test(tc_dom, test_quickjs_collection_errors);
+    tcase_add_test(tc_dom, test_quickjs_collection_retirement);
+    tcase_add_test(tc_dom, test_quickjs_collection_allocation_failure);
+    tcase_add_loop_test(tc_dom, test_quickjs_collection_conversion_retirement, 0, 3);
     suite_add_tcase(s, tc_dom);
     tcase_add_test(tc_surface, test_quickjs_storage);
     tcase_add_test(tc_surface, test_quickjs_event_target);

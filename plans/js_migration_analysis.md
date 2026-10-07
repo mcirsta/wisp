@@ -3,10 +3,11 @@
 Reviewed 2026-10-07 against Wisp `206b8a03`, plus the QuickJS-ng update and
 XHR conversion fix described below. This replaces the earlier migration analysis.
 It is a browser-integration review, not an exhaustive security or ECMAScript
-conformance audit. Batches 1–2 and the first three increments of batch 3 are implemented
+conformance audit. Batches 1–2 and four increments of batch 3 are implemented
 within the scope described below. Real DOM lookups, class lists, attribute/text
 mutations and basic node creation/tree edits now reach rendering and carry JS action
-traces. JS node collections, events and the other capabilities below remain future work.
+traces. Live child-node/element collections are implemented. Events and the other
+capabilities below remain future work.
 
 ## Assessment
 
@@ -68,7 +69,7 @@ unless stated otherwise.
 | Promise/async continuations | The outer script or timer entry drains FIFO jobs under the same deadline; aborted entries discard their pending jobs | Promise, `await` and engine `queueMicrotask` callbacks progress; this is not yet a complete browser event loop |
 | Timers | `timers.c`: per-document ordered queue on the frontend scheduler, callback arguments/string handlers, shared cancellation IDs and nesting delays | Real `setTimeout`/`setInterval`; callbacks and their checkpoints share execution limits; document retirement cancels them |
 | JS diagnostics | Optional `js_trace` records document/entry IDs, script sources, timer causality, navigation, exposed node IDs, actual DOM operations and coalesced render requests | Separates supported JS host effects from static processing; this is not complete paint attribution |
-| Document/nodes | `dom.c`/`document.c`/`tree.c`: real libdom wrappers with stable identity, roots, ID lookup, traversal and element/text/comment/fragment factories | Document-lifetime wrapper ownership and native reference cleanup are tested; selectors, JS collections, namespace-aware creation and cross-document operations are not exposed |
+| Document/nodes | `dom.c`/`document.c`/`tree.c`/`collections.c`: real libdom wrappers with stable identity, roots, ID lookup, traversal, live `childNodes`/`children` and element/text/comment/fragment factories | Document-lifetime wrapper ownership and native reference cleanup are tested; selectors, document-wide collections, namespace-aware creation and cross-document operations are not exposed |
 | Mutation/CSSOM | Real attributes, `id`/`className`, live `classList`, text/data and append/insert/replace/remove; connected edits request a full restyle after the entry/checkpoint | Changes affect boxes and pixels, including moves into detached trees; `style` and `innerHTML` remain omitted |
 | Events | `event_target.c` and `js_fire_event`/`js_handle_new_element` are stubs | No real JS listeners, inline event handlers or load-event delivery |
 | Lifecycle information | `document.readyState` is omitted | Correct loading state and lifecycle events belong to batch 4 |
@@ -460,6 +461,68 @@ dynamic script execution or complete stylesheet/resource/element lifecycle
 reactions. DOM allocations remain outside QuickJS's heap budget. Next: live node
 collections, then the event/lifecycle work in batch 4.
 
+### Batch 3, fourth increment: live child collections
+
+Implemented 2026-10-07. `Node.childNodes` returns a stable live `NodeList`;
+`Element.children`, `Document.children` and `DocumentFragment.children` return
+stable live `HTMLCollection` objects. Collections support length, indexed access
+and `item`; HTMLCollection additionally supports ID/name lookup and `namedItem`.
+They follow the [DOM collection algorithms](https://dom.spec.whatwg.org/#old-style-collections)
+and [Web IDL legacy platform objects](https://webidl.spec.whatwg.org/#legacy-platform-objects).
+
+- Text/comments appear only in childNodes. Element collections include foreign
+  elements; IDs work there, while `name` matching requires the HTML namespace.
+  Named lookup uses the first ID-or-name match in tree order. Empty names do not
+  match. ID/attribute edits, parser writes, fragment moves, text replacement and
+  document-root removal/restoration are immediately visible through saved lists.
+- Each lazily created list traces its root wrapper and expando properties. The
+  root traces its cached lists. No extra native references survive individual
+  operations, so document retirement uses the existing release boundary. Detached
+  trees and GC cycles remain valid; coercion/prototype callbacks that retire the
+  document cannot access freed native nodes.
+- Indices are enumerable and read-only; named properties are non-enumerable and
+  yield to ordinary own/prototype properties. Definitions, deletion, assignment,
+  receiver checks and required-argument conversions follow Web IDL. Live objects
+  reject freezing. NodeList uses Array's entries/keys/values/forEach intrinsics;
+  HTMLCollection exposes the standard iterator without inventing those methods.
+- `platform.c` shares the existing class-list index parsing and iterator setup.
+  The renderer and binding generator are unchanged. Collection reads do not
+  produce mutation records or request rendering; edits performed through returned
+  nodes use the existing attributed JS mutation log and coalesced update.
+- Traversal reads direct siblings, with no stale snapshot or second invalidation
+  mechanism. Length/item/namedItem are linear scans, and repeated indexed loops
+  or full named-property enumeration can be quadratic. Access to ordinary
+  built-in members avoids unnecessary attribute scans. This is a correctness
+  baseline, not a collection-cache optimization; measure real use before adding
+  native mutation generations/cursors. No full-document scans are introduced.
+
+The old Duktape NodeList/HTMLCollection bindings informed the native-ownership
+review. Their suppressed errors and incomplete JS property surface were not
+copied. The new wrappers retain the existing JS root instead of retaining a
+second native collection whose teardown would need separate coordination.
+
+Two isolated engine changes support this work: an optional descriptor lookup for
+ordinary assignment lets Web IDL ignore virtual names without reimplementing
+ECMAScript setters/receivers in Wisp; an allocation regression found that failed
+lazy initialization could permanently replace a builtin such as Reflect with
+undefined. Initializers now survive failure and can be retried. Both have native
+API regressions and are recorded in the [upstreaming notes](../src/docs/quickjs-upstreaming.md).
+
+Validation: **79 Check tests** cover the integration, including twelve new cases
+for liveness, filtering, ID/name rules, descriptors/enumeration, prototype setters,
+Proxy prototypes, iteration, coercion, GC, allocation failure and retirement.
+`qt_js_dom` verifies saved lists across parser continuation and timer edits against
+static pixels, and checks that read-only collection access triggers no rebuild.
+Debug ASan/UBSan builds and the engine API/local JS suites are checked, along with
+Qt script ordering, timers, loading, navigation and retained rendering. The local
+engine suite is not full test262. GTK is not tested.
+
+This completes the planned minimal child-collection surface. Document-wide
+collections (`forms`, `images`, etc.), getElementsBy* queries and selectors remain
+unexposed; later query APIs can build on the ownership/property rules here.
+Next is batch 4's EventTarget/Event and lifecycle work, not a claim of full DOM
+or dynamic resource/script support.
+
 ### Reading the JS trace
 
 Enable verbose logging and `js_trace` when investigating a JS/rendering difference:
@@ -585,11 +648,11 @@ These are separate reviewable batches, not a commitment to full web-app support.
    parser ordering, microtasks, main-thread timers and navigation-safe context
    ownership share bounded entry/checkpoint handling. Teardown runs no page
    callbacks. This is not a complete HTML event loop or script-element algorithm.
-3. **Minimal real DOM plus visible mutations — first three increments implemented.**
+3. **Minimal real DOM plus visible mutations — four increments implemented.**
    Real wrappers, roots, ID lookup, traversal, attributes/text, live `classList`,
-   basic node creation/tree edits, coalesced full refresh and mutation traces pass
-   identity/GC and rendered-page tests. Remaining: live node collections. Extend the same
-   ownership/conversion/invalidation layer rather than adding fake APIs. Reuse
+   basic node creation/tree edits, live child collections, coalesced full refresh
+   and mutation traces pass identity/GC and rendered-page tests. Extend the same
+   ownership/conversion/invalidation layer for further APIs. Reuse
    partial updates only with sound mutation/dependency tracking.
 4. **Events and practical document interaction.** EventTarget/Event, click
    listeners and supported handler attributes, DOMContentLoaded/load and accurate

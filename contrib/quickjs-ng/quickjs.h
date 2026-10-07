@@ -671,6 +671,12 @@ typedef struct JSClassExoticMethods {
     /* Return < 0 on exception, false to reject, true to allow the engine to
        prevent extensions. If absent, ordinary object behavior applies. */
     int (*prevent_extensions)(JSContext *ctx, JSValueConst obj);
+    /* Optional descriptor lookup for the target of ordinary [[Set]]. The
+       receiver's descriptor is still read through get_own_property. This lets
+       host classes hide virtual named properties during assignment without
+       reimplementing ordinary setters, receivers and strict-mode errors. */
+    int (*get_own_property_for_set)(JSContext *ctx, JSPropertyDescriptor *desc,
+                                  JSValueConst obj, JSAtom prop);
 } JSClassExoticMethods;
 
 typedef void JSClassFinalizer(JSRuntime *rt, JSValueConst val);

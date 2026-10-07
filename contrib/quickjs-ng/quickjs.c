@@ -9129,11 +9129,12 @@ static int JS_AutoInitProperty(JSContext *ctx, JSObject *p, JSAtom prop,
     func = js_autoinit_func_table[js_autoinit_get_id(pr)];
     /* 'func' shall not modify the object properties 'pr' */
     val = func(realm, p, prop, pr->u.init.opaque);
-    js_autoinit_free(ctx->rt, pr);
-    prs->flags &= ~JS_PROP_TMASK;
-    pr->u.value = JS_UNDEFINED;
+    /* Keep the initializer on failure so an allocation error does not turn a
+       builtin (or lazily created prototype) permanently into undefined. */
     if (JS_IsException(val))
         return -1;
+    js_autoinit_free(ctx->rt, pr);
+    prs->flags &= ~JS_PROP_TMASK;
     pr->u.value = val;
     return 0;
 }
@@ -10708,11 +10709,13 @@ retry:
                         JS_FreeValue(ctx, val);
                         return ret;
                     }
-                    if (em->get_own_property) {
-                        /* get_own_property can free the prototype */
+                    if (em->get_own_property_for_set || em->get_own_property) {
+                        /* A descriptor hook can free the prototype. */
                         obj1 = js_dup(JS_MKPTR(JS_TAG_OBJECT, p1));
-                        ret = em->get_own_property(ctx, &desc,
-                                                   obj1, prop);
+                        if (em->get_own_property_for_set)
+                            ret = em->get_own_property_for_set(ctx, &desc, obj1, prop);
+                        else
+                            ret = em->get_own_property(ctx, &desc, obj1, prop);
                         JS_FreeValue(ctx, obj1);
                         if (ret < 0)
                             goto fail;

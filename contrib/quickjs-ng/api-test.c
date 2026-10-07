@@ -2310,6 +2310,105 @@ static int host_reject_definition(JSContext *ctx, JSValueConst obj, JSAtom prop,
     return false;
 }
 
+static void lazy_property_allocation_recovery(void)
+{
+    /* Test the object initializer (Reflect) and function initializer (ownKeys).
+       Each failed attempt must remain retryable without creating a new realm. */
+    for (int kind = 0; kind < 2; kind++) {
+        bool failed = false, succeeded = false;
+        for (size_t extra = 0; extra <= 8192; extra += 64) {
+            JSRuntime *rt = new_runtime();
+            JSContext *ctx = JS_NewContext(rt);
+            JSValue global = JS_GetGlobalObject(ctx);
+            JSValue target = kind == 0 ? JS_DupValue(ctx, global) : JS_GetPropertyStr(ctx, global, "Reflect");
+            const char *name = kind == 0 ? "Reflect" : "ownKeys";
+            JSMemoryUsage usage;
+            JS_ComputeMemoryUsage(rt, &usage);
+            JS_SetMemoryLimit(rt, extra == 0 ? 1 : usage.malloc_size + extra);
+            JSValue result = JS_GetPropertyStr(ctx, target, name);
+            JS_SetMemoryLimit(rt, 0);
+            if (JS_IsException(result)) {
+                failed = true;
+                JS_FreeValue(ctx, JS_GetException(ctx));
+            } else {
+                succeeded = true;
+                assert(JS_IsObject(result));
+                assert(!JS_HasException(ctx));
+            }
+            JS_FreeValue(ctx, result);
+            result = JS_GetPropertyStr(ctx, target, name);
+            assert(JS_IsObject(result));
+            if (kind == 1)
+                assert(JS_IsFunction(ctx, result));
+            JS_FreeValue(ctx, result);
+            JS_FreeValue(ctx, target);
+            JS_FreeValue(ctx, global);
+            JS_FreeContext(ctx);
+            JS_FreeRuntime(rt);
+            if (succeeded)
+                break;
+        }
+        assert(failed && succeeded);
+    }
+}
+
+/* A host can expose a virtual name for reads while ordinary [[Set]] ignores
+   it. Prototype setters and receiver descriptors must still follow ECMAScript. */
+static int host_virtual_property(JSContext *ctx, JSPropertyDescriptor *desc,
+                                 JSValueConst obj, JSAtom prop)
+{
+    JSAtom key = JS_NewAtom(ctx, "virtual");
+    bool present = key == prop;
+    JS_FreeAtom(ctx, key);
+    if (present && desc) {
+        desc->flags = JS_PROP_CONFIGURABLE;
+        desc->getter = desc->setter = JS_UNDEFINED;
+        desc->value = JS_NewInt32(ctx, 42);
+    }
+    return present;
+}
+
+static int host_assignment_property(JSContext *ctx, JSPropertyDescriptor *desc,
+                                    JSValueConst obj, JSAtom prop)
+{
+    return 0;
+}
+
+static void host_assignment_descriptors(void)
+{
+    JSRuntime *rt = new_runtime();
+    JSContext *ctx = JS_NewContext(rt);
+    JSClassID id = 0;
+    JSClassExoticMethods methods = {
+        .get_own_property = host_virtual_property,
+        .get_own_property_for_set = host_assignment_property,
+        .define_own_property = host_reject_definition,
+    };
+    JSClassDef def = { .class_name = "HostNames", .exotic = &methods };
+    JS_NewClassID(rt, &id);
+    assert(JS_NewClass(rt, id, &def) == 0);
+    JSValue global = JS_GetGlobalObject(ctx);
+    assert(JS_SetPropertyStr(ctx, global, "host", JS_NewObjectClass(ctx, id)) >= 0);
+    const char *source =
+        "var seen, receiver, proto = {set virtual(v) {seen=v; receiver=this;}};"
+        "Object.setPrototypeOf(host,proto);"
+        "if(host.virtual!==42 || !Reflect.set(host,'virtual',9) || seen!==9 || receiver!==host) throw Error('setter');"
+        "Object.setPrototypeOf(host,null);"
+        "if(Reflect.set(host,'virtual',1)) throw Error('receiver descriptor');"
+        "var other={}; if(!Reflect.set(host,'virtual',7,other)||other.virtual!==7) throw Error('other receiver');"
+        "var called=false; Object.setPrototypeOf(host,new Proxy({}, {set(t,k,v,r){called=k==='virtual'&&v===8&&r===host;return true;}}));"
+        "if(!Reflect.set(host,'virtual',8)||!called) throw Error('proxy setter');"
+        "Object.setPrototypeOf(host,null);var caught=false;"
+        "try{(function(){'use strict';host.virtual=1;})();}catch(e){caught=e instanceof TypeError;}"
+        "if(!caught)throw Error('strict write');";
+    JSValue result = JS_Eval(ctx, source, strlen(source), "host assignment descriptors", JS_EVAL_TYPE_GLOBAL);
+    assert(!JS_IsException(result));
+    JS_FreeValue(ctx, result);
+    JS_FreeValue(ctx, global);
+    JS_FreeContext(ctx);
+    JS_FreeRuntime(rt);
+}
+
 static void host_object_property_hooks(void)
 {
     JSRuntime *rt = new_runtime();
@@ -2353,6 +2452,8 @@ static void host_object_property_hooks(void)
 
 int main(void)
 {
+    lazy_property_allocation_recovery();
+    host_assignment_descriptors();
     host_object_property_hooks();
     host_object_allocation_errors();
     property_list_errors();

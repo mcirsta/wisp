@@ -233,42 +233,13 @@ out:
     return result;
 }
 
-/* Web IDL indexed properties use array indices (canonical decimal strings,
- * excluding 2^32-1); symbols and noncanonical strings remain ordinary keys. */
-static int property_index(JSContext *ctx, JSAtom key, uint32_t *index)
-{
-    JSValue value = JS_AtomToValue(ctx, key);
-    if (JS_IsException(value))
-        return -1;
-    if (!JS_IsString(value)) {
-        JS_FreeValue(ctx, value);
-        return 0;
-    }
-    size_t length;
-    const char *text = JS_ToCStringLen(ctx, &length, value);
-    JS_FreeValue(ctx, value);
-    if (text == NULL)
-        return -1;
-    bool valid = length > 0 && length <= 10 && !(length > 1 && text[0] == '0');
-    uint64_t number = 0;
-    for (size_t i = 0; valid && i < length; i++) {
-        if (text[i] < '0' || text[i] > '9')
-            valid = false;
-        else
-            number = number * 10 + text[i] - '0';
-    }
-    JS_FreeCString(ctx, text);
-    *index = (uint32_t)number;
-    return valid && number < UINT32_MAX;
-}
-
 static int list_get_own(JSContext *ctx, JSPropertyDescriptor *desc, JSValueConst object, JSAtom key)
 {
     struct tokenlist *list = list_receiver(ctx, object);
     if (list == NULL)
         return -1;
     uint32_t index;
-    int indexed = property_index(ctx, key, &index);
+    int indexed = qjs_dom_property_index(ctx, key, &index);
     if (indexed < 0)
         return -1;
     if (!indexed)
@@ -341,7 +312,7 @@ static int list_define(JSContext *ctx, JSValueConst object, JSAtom key, JSValueC
     JSValueConst setter, int flags)
 {
     uint32_t index;
-    int indexed = property_index(ctx, key, &index);
+    int indexed = qjs_dom_property_index(ctx, key, &index);
     if (indexed != 0)
         return indexed < 0 ? -1 : 0; /* No indexed setter, including absent indices. */
     struct tokenlist *list = list_receiver(ctx, object);
@@ -353,7 +324,7 @@ static int list_define(JSContext *ctx, JSValueConst object, JSAtom key, JSValueC
 static int list_delete(JSContext *ctx, JSValueConst object, JSAtom key)
 {
     uint32_t index;
-    int indexed = property_index(ctx, key, &index);
+    int indexed = qjs_dom_property_index(ctx, key, &index);
     if (indexed < 0)
         return -1;
     if (indexed) {
@@ -380,51 +351,6 @@ static JSClassExoticMethods list_exotic = {.get_own_property = list_get_own,
 static JSValue list_constructor(JSContext *ctx, JSValueConst target, int argc, JSValueConst *argv)
 {
     return JS_ThrowTypeError(ctx, "Illegal DOMTokenList constructor");
-}
-
-/* Only called during context initialization, before page code can replace the
- * intrinsics. Web IDL explicitly uses Array's methods for value iterables. */
-static int install_iteration(JSContext *ctx, JSValueConst proto, JSValueConst global)
-{
-    JSValue array = JS_GetPropertyStr(ctx, global, "Array");
-    JSValue array_proto = JS_IsException(array) ? JS_EXCEPTION : JS_GetPropertyStr(ctx, array, "prototype");
-    JS_FreeValue(ctx, array);
-    if (JS_IsException(array_proto))
-        return -1;
-    int ret = -1;
-    const char *methods[] = {"entries", "keys", "values", "forEach"};
-    for (unsigned i = 0; i < sizeof(methods) / sizeof(*methods); i++) {
-        JSValue method = JS_GetPropertyStr(ctx, array_proto, methods[i]);
-        if (JS_IsException(method) || JS_DefinePropertyValueStr(ctx, proto, methods[i], method, JS_PROP_C_W_E) < 0)
-            goto out;
-    }
-    JSValue symbol = JS_GetPropertyStr(ctx, global, "Symbol");
-    if (JS_IsException(symbol))
-        goto out;
-    const char *symbols[] = {"iterator", "toStringTag"};
-    for (unsigned i = 0; i < 2; i++) {
-        JSValue key = JS_GetPropertyStr(ctx, symbol, symbols[i]);
-        JSAtom atom = JS_IsException(key) ? JS_ATOM_NULL : JS_ValueToAtom(ctx, key);
-        JS_FreeValue(ctx, key);
-        if (atom == JS_ATOM_NULL) {
-            JS_FreeValue(ctx, symbol);
-            goto out;
-        }
-        JSValue value = i == 0 ? JS_GetPropertyStr(ctx, array_proto, "values") : JS_NewString(ctx, "DOMTokenList");
-        int defined = JS_IsException(value)
-            ? -1
-            : JS_DefinePropertyValue(ctx, proto, atom, value, JS_PROP_CONFIGURABLE | (i == 0 ? JS_PROP_WRITABLE : 0));
-        JS_FreeAtom(ctx, atom);
-        if (defined < 0) {
-            JS_FreeValue(ctx, symbol);
-            goto out;
-        }
-    }
-    JS_FreeValue(ctx, symbol);
-    ret = 0;
-out:
-    JS_FreeValue(ctx, array_proto);
-    return ret;
 }
 
 #define METHOD(name, count, operation)                                                                                 \
@@ -467,7 +393,8 @@ int qjs_init_tokenlist(JSContext *ctx)
     int ret = -1;
     if (JS_IsException(proto) || JS_IsException(ctor) ||
         JS_SetPropertyFunctionList(ctx, proto, methods, sizeof(methods) / sizeof(*methods)) < 0 ||
-        install_iteration(ctx, proto, global) < 0 || JS_SetConstructor(ctx, ctor, proto) < 0)
+        qjs_dom_install_iteration(ctx, proto, global, "DOMTokenList", true) < 0 ||
+        JS_SetConstructor(ctx, ctor, proto) < 0)
         goto out;
     ret = JS_SetPropertyStr(ctx, global, "DOMTokenList", JS_DupValue(ctx, ctor));
     if (ret >= 0)

@@ -42,6 +42,16 @@ across this directory.
   Web IDL contract rejects freezing. Also honor throwing flags when an exotic
   property-definition hook returns false, including strict-mode assignment.
   Standalone C API/JavaScript regressions cover both behaviors.
+- `quickjs.c`, `quickjs.h`, `api-test.c`: add an optional
+  `get_own_property_for_set` host-class hook. It substitutes only the target
+  descriptor lookup during ordinary assignment; receiver descriptor checks,
+  prototype setters and strict-mode handling stay in the engine. Wisp uses it
+  for Web IDL's `ignoreNamedProps` rule on HTMLCollection. Classes without the
+  hook keep their existing behavior.
+- `quickjs.c`, `api-test.c`: preserve a lazy property initializer when allocation
+  fails. Previously a failed first access could leave a builtin such as Reflect
+  permanently undefined. A budget sweep covers lazy objects and functions and
+  recovery in the same context.
 - `CMakeLists.txt`: use `WISP_LIB_TYPE`; leave CLI/compiler off by default; gate
   upstream test executables on `WISP_ENABLE_TESTS`; keep the CLI support library
   out of the default build unless required; respect Wisp's `_WIN32_WINNT`; and

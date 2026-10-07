@@ -87,6 +87,8 @@ static void node_finalizer(JSRuntime *rt, JSValue object)
     }
     release_native(node);
     JS_FreeValueRT(rt, node->class_list);
+    for (unsigned i = 0; i < 2; i++)
+        JS_FreeValueRT(rt, node->child_lists[i]);
     JS_FreeValueRT(rt, node->owner);
     js_free_rt(rt, node);
 }
@@ -98,6 +100,8 @@ static void node_mark(JSRuntime *rt, JSValueConst object, JS_MarkFunc *mark)
         return;
     JS_MarkValue(rt, node->owner, mark);
     JS_MarkValue(rt, node->class_list, mark);
+    for (unsigned i = 0; i < 2; i++)
+        JS_MarkValue(rt, node->child_lists[i], mark);
     if (node->type == DOM_DOCUMENT_NODE) {
         struct qjs_dom_document *doc = (struct qjs_dom_document *)node;
         JS_MarkValue(rt, doc->cache, mark);
@@ -228,6 +232,7 @@ JSValue qjs_dom_wrap(JSContext *ctx, JSValueConst owner, dom_node *native)
     node->id = ++doc->next_id;
     node->owner = JS_DupValue(ctx, owner);
     node->class_list = JS_UNDEFINED;
+    node->child_lists[0] = node->child_lists[1] = JS_UNDEFINED;
     node->document = doc;
     JS_SetOpaque(object, node);
     if (JS_SetPropertyStr(ctx, doc->cache, key, JS_DupValue(ctx, object)) < 0) {
@@ -340,6 +345,7 @@ int qjs_init_document(JSContext *ctx)
     doc->base.type = DOM_DOCUMENT_NODE;
     doc->base.owner = JS_UNDEFINED;
     doc->base.class_list = JS_UNDEFINED;
+    doc->base.child_lists[0] = doc->base.child_lists[1] = JS_UNDEFINED;
     doc->base.id = doc->next_id = 1;
     doc->base.document = doc;
     JS_SetOpaque(object, doc);
@@ -376,7 +382,7 @@ int qjs_init_document(JSContext *ctx)
             goto out;
     }
     if (qjs_init_tokenlist(ctx) < 0 || qjs_dom_install_properties(ctx, doc->prototypes) < 0 ||
-        qjs_dom_install_tree(ctx, doc->prototypes) < 0 ||
+        qjs_dom_install_tree(ctx, doc->prototypes) < 0 || qjs_dom_install_collections(ctx, doc->prototypes) < 0 ||
         JS_SetPrototype(ctx, object, doc->prototypes[QJS_HTML_DOCUMENT]) < 0)
         goto out;
     ret = JS_DefinePropertyValueStr(ctx, global, "document", JS_DupValue(ctx, object), JS_PROP_ENUMERABLE);

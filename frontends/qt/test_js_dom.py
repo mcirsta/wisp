@@ -150,6 +150,35 @@ with tempfile.TemporaryDirectory(prefix='wisp-js-dom-') as tmp:
     assert (dest / 'page.png').read_bytes() == (initial_capture / 'page.png').read_bytes(), log
     assert 'dom.tree' in log and 'render.request' not in log, log
 
+    # The same saved collections follow subsequent parser writes, then timer
+    # edits. Collection reads alone must not request a renderer refresh.
+    dest, elements, log = run(root, 'live-collections', initial + """<script>
+        var nodes = document.body.childNodes, children = document.body.children;
+        var oldLength = nodes.length;
+        setTimeout(() => {
+            if (nodes !== document.body.childNodes || children !== document.body.children ||
+                nodes.length <= oldLength || !children.later) throw Error('parser liveness');
+            document.body.removeChild(children.later);
+            const target = children.target, contents = target.childNodes;
+            while (contents.length) target.removeChild(contents[0]);
+            target.appendChild(document.createTextNode('Changed ș😀')); target.className = 'new';
+            children.reveal.removeAttribute('hidden'); console.log('COLLECTIONS_CHANGED');
+        }, 150);
+    </script><p id="later">Parser appended this after saving the collections</p>""")
+    assert 'Console: COLLECTIONS_CHANGED' in log, log
+    assert (dest / 'page.png').read_bytes() == (reference / 'page.png').read_bytes(), (elements, log)
+    assert len(re.findall(r'\] render.request ', log)) == 1, log
+    dest, _, log = run(root, 'collection-reads', initial + """<script>
+        setTimeout(() => {
+            const nodes = document.body.childNodes, children = document.body.children;
+            if ([...nodes].length !== nodes.length || !children.namedItem('target') ||
+                !Object.keys(children).length) throw Error('read collections');
+            console.log('COLLECTIONS_READ');
+        }, 150);
+    </script>""")
+    assert 'Console: COLLECTIONS_READ' in log and 'render.request' not in log, log
+    assert (dest / 'page.png').read_bytes() == (initial_capture / 'page.png').read_bytes(), log
+
     # A missing document element is legal after script changes. It must clear
     # the old presentation and still allow a later timer to restore the root.
     blank, _, _ = run(root, 'blank-reference', '', False, missing=True)
@@ -170,4 +199,4 @@ with tempfile.TemporaryDirectory(prefix='wisp-js-dom-') as tmp:
         assert (dest / 'page.png').read_bytes() == (initial_capture / 'page.png').read_bytes(), (name, log)
         assert 'mode=full-restyle' in log, (name, log)
 
-print('JS DOM and tree edits, detached moves, coalesced rendering, geometry, pixels and trace attribution pass.')
+print('JS DOM/tree edits, live collections, coalesced rendering, pixels and trace attribution pass.')

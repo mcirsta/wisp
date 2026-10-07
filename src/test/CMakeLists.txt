@@ -354,6 +354,8 @@ add_wisp_test(test_quickjs
   ${CMAKE_SOURCE_DIR}/src/content/handlers/javascript/quickjs/dom.c
   ${CMAKE_SOURCE_DIR}/src/content/handlers/javascript/quickjs/tree.c
   ${CMAKE_SOURCE_DIR}/src/content/handlers/javascript/quickjs/tokenlist.c
+  ${CMAKE_SOURCE_DIR}/src/content/handlers/javascript/quickjs/platform.c
+  ${CMAKE_SOURCE_DIR}/src/content/handlers/javascript/quickjs/collections.c
   ${CMAKE_SOURCE_DIR}/src/content/handlers/javascript/quickjs/storage.c
   ${CMAKE_SOURCE_DIR}/src/content/handlers/javascript/quickjs/event_target.c
   ${CMAKE_SOURCE_DIR}/src/content/handlers/javascript/quickjs/xhr.c
