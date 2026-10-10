@@ -8,8 +8,10 @@ within the scope described below. Real DOM lookups, class lists, attribute/text
 mutations and basic node creation/tree edits now reach rendering and carry JS action
 traces. Live child-node/element collections and script-dispatched events on DOM nodes,
 Document, Window and standalone EventTarget are implemented, along with the core
-AbortController/AbortSignal API and signal-bound listener removal. Native
-input/lifecycle delivery and the other capabilities below remain future work.
+AbortController/AbortSignal API and signal-bound listener removal. UIEvent and core
+MouseEvent values share that dispatcher. The 2026-10-11 increments prepare native
+checkbox/radio pre-activation, cancellation rollback and label forwarding. Native JS input/lifecycle
+delivery and the other capabilities below remain future work.
 
 ## Assessment
 
@@ -73,7 +75,7 @@ unless stated otherwise.
 | JS diagnostics | Optional `js_trace` records document/entry IDs, script sources, timer causality, navigation, exposed node IDs, actual DOM operations and coalesced render requests | Separates supported JS host effects from static processing; this is not complete paint attribution |
 | Document/nodes | `dom.c`/`document.c`/`tree.c`/`collections.c`: real libdom wrappers with stable identity, roots, ID lookup, traversal, live `childNodes`/`children` and element/text/comment/fragment factories | Document-lifetime wrapper ownership and native reference cleanup are tested; selectors, document-wide collections, namespace-aware creation and cross-document operations are not exposed |
 | Mutation/CSSOM | Real attributes, `id`/`className`, live `classList`, text/data and append/insert/replace/remove; connected edits request a full restyle after the entry/checkpoint | Changes affect boxes and pixels, including moves into detached trees; `style` and `innerHTML` remain omitted |
-| Events | `event.c`/`event_target.c`: real Event/CustomEvent values and script-dispatched listeners on DOM nodes, Document, Window and standalone EventTarget | Browser-generated input, handler attributes and lifecycle delivery remain pending; `js_fire_event`/`js_handle_new_element` are still stubs |
+| Events | `event.c`/`input_event.c`/`event_target.c`: Event/CustomEvent/UIEvent/core MouseEvent values and script-dispatched listeners on DOM nodes, Document, Window and standalone EventTarget | Browser-generated input, activation/default actions, handler attributes and lifecycle delivery remain pending; `js_fire_event`/`js_handle_new_element` are still stubs |
 | Cancellation | `abort.c`: AbortController, AbortSignal state/reason, throwIfAborted, static abort, onabort and the listener signal option | Listener cancellation uses private abort steps before the public event; timeout, any and network integration remain absent |
 | Lifecycle information | `document.readyState` is omitted | Correct loading state and lifecycle events belong to batch 4 |
 | Networking/storage | XHR fabricates DONE/200 without a request; storage discards writes; no `document.cookie` accessor or browser fetch binding | XHR/storage still advertise unsupported behavior. Native HTTP cookie handling is a separate subsystem |
@@ -721,27 +723,456 @@ timers; Wisp's execution deadline remains a separate resource limit. The old
 Duktape event bridge was reviewed for native identity and protected callbacks;
 abort semantics come from the current standards.
 
+### Batch 4 increment: UIEvent and MouseEvent values
+
+Added UIEvent and MouseEvent constructors with the Event → UIEvent → MouseEvent
+inheritance chain, including subclass construction. UIEvent supplies view/detail;
+MouseEvent adds client/screen coordinates, x/y aliases, button/buttons, the four
+primary modifiers, getModifierState and relatedTarget. The interface/conversion
+rules come from [UI Events](https://w3c.github.io/uievents/#interface-uievent) and
+[MouseEvent](https://w3c.github.io/pointerevents/#mouseevent-interface). Coordinates
+use the finite doubles required by [CSSOM View](https://drafts.csswg.org/cssom-view/#extensions-to-the-mouseevent-interface),
+including fractions and negative zero. Button fields use Web IDL's signed/unsigned
+16-bit conversion; detail uses signed 32-bit conversion.
+
+The new input data extends the existing event allocation. Base Event/CustomEvent
+values do not allocate the larger input payload. All types share native libdom
+propagation, cancellation, dispatch snapshots, deadlines and JS finalization/GC.
+Input data is kept in the JS adapter because libdom's old mouse representation uses
+integer coordinates and lacks a buttons mask; no second event dispatcher is added.
+View and relatedTarget are traced JS references, preserving identity and retaining
+their objects until the event is released. No generated files are edited.
+
+Dictionary conversion follows inherited/alphabetical member order and preserves
+conversion exceptions. The legacy initUIEvent/initMouseEvent methods convert
+arguments before checking whether dispatch is active; active dispatch prevents
+reinitialization. Their explicitly initialized fields update together after
+successful conversion. Script-created events remain untrusted. The old Duktape
+Event/KeyboardEvent bindings were consulted for native access and wrapper lifetime,
+not copied as modern constructor or modifier semantics.
+
+Validation: 127 QuickJS cases pass with Debug ASan/UBSan and leak checks. Nine new
+cases and two added allocation-sweep variants cover values, conversion order and
+errors, modifiers, legacy initialization, DOM propagation, GC cycles, saved
+related targets and retirement during callbacks/conversion. The Qt DOM fixture
+compares a delegated MouseEvent-driven update to static pixels and checks mutation
+coalescing and trace delivery. Loading, navigation, script ordering and timer
+integration tests also pass. GTK is not tested.
+
+This is input-event data support, not native input delivery. Native clicks and
+script-dispatched MouseEvent click activation/default actions still require the
+coordinated work below. PointerEvent/keyboard/wheel interfaces, geometry-dependent
+page/offset/layer coordinates, movement and legacy which are not exposed. Only the
+current Window identity is accepted as view; cross-document WindowProxy and shadow
+DOM retargeting remain outside the existing document model.
+
+### Batch 4 increment: native checkable activation
+
+Native checkbox/radio clicks now apply their provisional state before dispatching
+click, following HTML's [input activation rules](https://html.spec.whatwg.org/multipage/input.html#the-input-element).
+A canceled checkbox restores checkedness and indeterminateness; a canceled radio
+restores the saved selected peer only when it still belongs to the current group.
+The input and saved peer are retained across callbacks. Nested activations keep
+separate snapshots. Radio traversal stays within the current tree, including
+detached subtrees, rather than reaching into the owner document unconditionally.
+
+Libdom now stores indeterminateness separately from checkedness, initializes it to
+false and copies it during cloning. This supplies the native state needed for
+rollback; it does not yet expose HTMLInputElement JS accessors or indeterminate
+painting. An accepted, connected checkable activation dispatches input then change;
+changing the type or removing the control in the click listener is rechecked.
+Disabling the control during the listener does not suppress these activation
+steps. Existing native label forwarding uses the same transaction for its input.
+
+Validation: 23 native form cases and 127 QuickJS cases pass with Debug ASan/UBSan
+and leak checks. Added cases cover provisional state, event order/flags,
+cancellation, nested clicks, saved-peer lifetime, group edits, detached trees,
+disabled-state changes and cloning. Seven Qt integration tests cover native
+checked interaction/selectors, JS DOM rendering, timers, navigation cleanup,
+script ordering and loading. GTK is not tested.
+
+This is a prerequisite for JS input delivery, which remains guarded. Native
+events still need the typed JS wrapper and composed metadata. Broader form-owner
+reset on reparenting and radio synchronization on arbitrary DOM/IDL edits are
+also pending: the existing resolver honors explicit form attributes but otherwise
+uses libdom's parser association. The old Duktape accessors are not sufficient to
+implement those semantics. No generated files are edited.
+
+### Batch 4 increment: label forwarding and click cancellation
+
+Native form clicks now use one `html_form_click` transaction in both interaction
+code and C tests. The state-only activation entry point was removed. The original
+label/input activation element is retained before dispatch, following
+[DOM dispatch](https://dom.spec.whatwg.org/#concept-event-dispatch), while a label's
+control is resolved after listeners return. Changes to `for`, control type,
+disabledness, removal and tree membership therefore affect forwarding. Reparenting
+the clicked node does not substitute another label as the activation element.
+Canceling a forwarded input click restores that input without retroactively
+canceling the original label event.
+
+Association follows HTML's [label rules](https://html.spec.whatwg.org/multipage/forms.html#the-label-element):
+explicit IDs use the first match in the same tree, including detached trees;
+implicit labels use the first labelable descendant. Meter, output and progress
+now participate in that choice. Interactive descendants suppress label forwarding;
+media controls and image maps are included. Relevant attributes/ancestry are
+rechecked at activation. This remains checkbox/radio forwarding, not general
+label focus, custom elements or other control activation.
+
+The primary-click cancellation result now also gates deferred link navigation,
+form submission and JavaScript-URL actions. Forced downloads moved from before
+click dispatch into the same deferred-action phase. The link helper no longer
+takes unused window/coordinate arguments. File-picker and select-menu opening
+still happen earlier and need separate default-action integration.
+
+Validation: 60 native form cases pass ASan/UBSan and leak checks; 37 new cases
+cover callback edits, retained label identity, detached/duplicate IDs, labelable
+and interactive content, and cancellation versus propagation stopping. Existing
+form cases now use the production click transaction. The 127 QuickJS cases and
+nine Qt checks pass, including native checked interaction/selectors, details,
+form navigation, JS DOM rendering, timers, script ordering and loading. GTK is
+not tested. The shared controls/usemap strings were added to the core-string
+source list; no generated output was edited.
+
+Native JS delivery remains guarded. The old Duktape native-listener bridge was
+consulted again, but its callback handling does not solve content/window lifetime
+or modern activation semantics. The checks above do not yet exercise JS-canceled
+browser navigation end to end; that test belongs with the delivery bridge.
+
+### Batch 4 increment: input content lifetime and retirement
+
+Mouse clicks now retain the HTML content through the existing content-user list
+until dispatch and default actions return. The cache cannot evict a document
+whose last browser handle is released inside a callback. Nested dispatch gets
+independent temporary users, released on every return path. Both primary and
+secondary clicks are covered because either can execute a `javascript:` URL;
+ordinary pointer motion does not allocate a user. Failure to retain content
+returns `NSERROR_NOMEM` before dispatch. This uses neither a second reference-count
+system nor the unimplemented `hlcache_handle_clone()`.
+
+HTML closure advances an input generation. After callbacks, the handler checks
+both that generation and the original window association before continuing.
+Reopening the same content in the same window does not revive an older click.
+Retired clicks skip deferred navigation/submission and details activation;
+checkable rollback does not schedule restyling of the closed document. Status
+and pointer callbacks are also followed by retirement checks. Embedded HTML
+objects, like iframes, now return after child dispatch instead of additionally
+dispatching a click into the parent document.
+
+Validation: 19 `interaction_lifetime_test` cases use the real native mouse path,
+DOM listeners, content-user ownership and HTML close/open handlers. Tests free
+boxes during callbacks and cover cancellation, nested clicks, closure/reopening,
+secondary-click navigation, checkbox rollback, details, frontend retirement and
+embedded-document handoff. They pass ASan/UBSan and leak checks, along with the
+60 form-state and 127 QuickJS cases. All nine Qt interaction/JS/loading/details
+checks pass. GTK is not tested.
+
+This completes the content-retention/retirement part. The input generation does
+**not** detect ordinary DOM edits in an active document; action resolution needs
+its own ownership, implemented for links in the following increment. Submit
+controls still need that work. Keyboard/other input callback lifetimes remain
+part of their future delivery work.
+
+### Batch 4 increment: hyperlink identity and live action data
+
+Native link activation now retains the original anchor or image-map area before
+click dispatch. After listeners return, it reads that element's current `href`
+and target into owned storage. Replacing the element or moving the clicked child
+under another anchor does not transfer the original activation. Removing `href`
+suppresses navigation; adding it to an existing anchor can enable navigation;
+an empty `href` remains a URL reference. A detached anchor can still navigate,
+whereas a detached area cannot, following HTML's explicit distinction.
+
+The resolver observes the live element target, otherwise the first HTML `base`
+with a target, including removal of that base. Empty targets resolve to `_self`;
+targets containing both an ASCII tab/newline and `<` become `_blank`. It passes
+an explicit default so the window helper cannot substitute a stale cached base
+target. Target-window creation is followed by another input-retirement check.
+Image-map entries retain their DOM node and no longer duplicate target strings;
+destroying the map table or boxes during dispatch does not invalidate activation.
+
+URL normalization moved from box construction to a shared hyperlink helper,
+still used by image, object, frame and image-map construction. The old heuristic
+which guessed a navigation URL from the first quoted string inside a
+`javascript:` URL when scripting was disabled is removed. Disabled scripting now
+leaves such link activation inert. Enabled scripting still uses the existing
+`html_exec` path; this increment does not implement complete `javascript:` URL
+navigation, decoding, target-realm or string-result semantics.
+
+Ordinary content activation is distinguished from browser-handled actions, so
+save-link and scrollbar clicks cannot accidentally start link navigation. Forced
+downloads use the updated URL and honor click cancellation.
+
+Validation: the native input suite now has 43 cases, including listeners changing
+or removing href/target, replacing/detaching anchors, moving the clicked child,
+switching between network and script URLs, changing base targets, image-map
+activation, downloads and browser-handled clicks. Mutation cases deliberately
+destroy the presentation storage during dispatch. These tests use real libdom
+listeners; they do not claim end-to-end QuickJS native-input delivery. ASan/UBSan
+and leak checks pass. The 60 form-state and 127 QuickJS cases, box-construction
+context and object-fallback checks also pass, along with 12 Qt checks covering
+input, JS, loading, details, image/object fallback and iframe sizing. GTK is not
+tested.
+
+Remaining URL work: document `base_url` is still cached by legacy parser handling.
+Dynamic `<base href>` insertion, removal and attribute edits need HTML's frozen
+base-URL/document-base rules at the document mutation boundary, not a click-only
+rescan. URL preprocessing and image-map geometry remain legacy code, not a claim
+of full URL/image-map conformance; the coordinates parser currently tokenizes
+DOM string storage and should be corrected before mutable-map support.
+
+Standards: [DOM dispatch and activation targets](https://dom.spec.whatwg.org/#concept-event-dispatch),
+[HTML hyperlink activation](https://html.spec.whatwg.org/multipage/links.html#links-created-by-a-and-area-elements),
+[following hyperlinks](https://html.spec.whatwg.org/multipage/links.html#following-hyperlinks),
+[element targets](https://html.spec.whatwg.org/multipage/semantics.html#get-an-element's-target)
+and [base elements](https://html.spec.whatwg.org/multipage/semantics.html#the-base-element).
+
+### Implemented: live form ownership and document teardown
+
+The shared libdom form-owner resolver replaces raw parser-era owner pointers for
+input, button, select and textarea. Ordinary ownership is read from current
+ancestry or the connected control's explicit `form=` attribute. Explicit lookup
+uses the first matching ID in document order; a non-form match or unresolved ID
+leaves the control unassociated. Detached controls use their nearest ancestor
+form. Fieldset and object getters use the same ordinary resolution.
+
+Only parser-created identity is stored. Non-ancestor parser owners are retained;
+ancestor references are borrowed and checked against live ancestry before use,
+avoiding reference cycles. Moving the control separately or changing its `form`
+attribute resets that identity; moving a common subtree preserves it. Clones
+start without parser ownership. Attribute-node, namespace-aware and fragment
+mutation paths share these rules. This preserves HTML's historical parser
+associations instead of replacing them with an ancestor-only shortcut.
+
+Form collections retain the form that supplies their predicate context and
+follow its current tree after removal/reinsertion. Their membership and native
+radio-group owner lookup use the shared resolver. The duplicate `form=` lookup
+in Wisp's checkable-state code is removed. Empty-ID handling also moves from the
+QuickJS binding into libdom's ID lookup: an empty `id` attribute does not establish
+an ID, including when resolving `form=""`.
+
+The lifetime tests exposed two document-level defects. Releasing a retained form
+during document destruction could recursively destroy the same tree, and HTML
+metadata was freed while surviving nodes still needed it. The document finalizer
+now pins the document during tree teardown, retains HTML metadata until pending
+nodes are gone, and retries the dynamic document destructor for deferred cleanup.
+These repairs apply at the shared lifecycle boundary, not in individual getters.
+
+The focused native suite covers 64 cases: live ownership, duplicate/empty IDs,
+parser-created associations, cloning, fragment moves/replacement, attribute-node
+edits, live collections surviving caller reference release, and controls surviving
+document teardown. Tests use public libdom APIs and real Hubbub parsing.
+
+Validation: all 64 cases pass with Debug ASan/UBSan and leak detection, together
+with the 127 QuickJS, 60 form-state and 43 native interaction cases. All ten
+selected DOM/JS/form CTest suites pass. Nine Qt checks covering JS, interaction,
+loading and details also pass (Qt leak detection disabled); the QuickJS and Qt
+DOM checks were rerun after consolidating empty-ID lookup. GTK is not tested.
+
+Scope: native submission now uses the DOM-based transaction described below.
+Radio-group side effects on owner/name/type or checkedness edits remain pending.
+Submission now uses the separate candidate snapshot described below, and the
+public collection excludes image inputs. A complete HTMLFormControlsCollection
+still needs fieldset/output/object membership, the corresponding parser-owner
+coverage and RadioNodeList behavior. Fragment-parser exclusions and cross-document
+adoption are not claimed by this increment. Native JS input delivery remains gated.
+
+Standards: [HTML form-owner association and reset](https://html.spec.whatwg.org/multipage/form-control-infrastructure.html#association-of-controls-and-forms),
+[HTML insertion/removal steps](https://html.spec.whatwg.org/multipage/infrastructure.html#dom-trees),
+[parser-created elements](https://html.spec.whatwg.org/multipage/parsing.html#creating-and-inserting-nodes)
+and [DOM element IDs](https://dom.spec.whatwg.org/#concept-id).
+
+### Implemented: DOM-based native submission
+
+Native clicks retain the original input/button before listeners run. Submission
+then checks that node's current type, disabledness and form owner, and reads the
+current action, method, enctype and target with submitter overrides. Attribute
+presence matters: an empty override does not fall back to the form attribute.
+Missing/empty actions use the document URL; nonempty actions resolve against the
+existing document base URL. Links and forms share current element/base target
+resolution.
+
+The submission request owns its URL, referrer, target and serialized data before
+target selection can call the frontend. Content pins and retirement checks cover
+those callbacks. No rendered control or cached form record is read after click
+listeners run. The obsolete action/target/method/charset caches and initial
+conversion pass are removed. The remaining presentation registries retain their
+DOM form/control nodes until the records are freed, including after DOM removal.
+
+Enter-key submission uses the same path. It chooses the first submit button in
+DOM order, including externally associated controls, and dispatches its click.
+Cancellation, a disabled default button and document retirement stop submission.
+Without a default button, the HTML limit on text-like blocking inputs applies.
+Native keyboard event delivery to JS is still pending.
+
+Serialization now uses live DOM form/submitter identity, skips disabled-fieldset
+controls except the first-legend exemption, omits ordinary empty-name controls,
+and includes image-button coordinates with the required named/unnamed keys.
+An absent submitter no longer silently selects the first button. Keyboard image
+activation uses zero coordinates rather than retaining an earlier mouse click.
+GET, urlencoded POST and multipart POST remain supported. `method=dialog` does
+not navigate; dialog closing is not implemented. A `text/plain` POST reports
+unsupported instead of sending a differently encoded request.
+
+The old Duktape HTMLFormElement binding was inspected for inspiration. It provides
+generated accessors, not a submission transaction suitable for reuse here.
+
+Validation: all seven selected native/JS suites pass with Debug ASan/UBSan and
+leak detection: 90 native interaction cases (47 new), 64 DOM form-owner, 60
+form-state, 127 QuickJS, 256 box-construction context, 22 form-binding and 22
+restyle-tracking cases. Native tests deliberately discard all rendered controls
+and cached forms during listeners and cover owner/attribute changes, removal,
+disabling, cancellation, navigation retirement, Enter and retained-node lifetime.
+Five Qt checks also pass: loading, JS navigation cleanup, JS DOM updates,
+checkable interaction and checked selectors (Qt leak detection disabled).
+GTK is not tested.
+
+Scope: constraint validation, automatic SubmitEvent delivery and FormDataEvent payloads/sequencing,
+submission reentrancy guards and a separate complete entry-list implementation
+remain prerequisites for native JS input delivery. Legacy charset selection,
+other serialization details and URL-scheme-specific submission behavior are not
+claimed as fully conforming. Full form collections, dialog/text/plain support,
+document base-URL updates and label activation beyond checkables remain pending.
+The native JS input gate stays in place.
+
+Standards: [HTML form submission](https://html.spec.whatwg.org/multipage/form-control-infrastructure.html#form-submission-algorithm),
+[implicit submission](https://html.spec.whatwg.org/multipage/form-control-infrastructure.html#implicit-submission),
+[constructing the entry list](https://html.spec.whatwg.org/multipage/form-control-infrastructure.html#constructing-the-entry-list)
+and [button states](https://html.spec.whatwg.org/multipage/form-elements.html#the-button-element).
+
+### Implemented: SubmitEvent values and shared constructor retirement checks
+
+QuickJS now exposes `SubmitEvent` as an `Event` subclass, with a readonly nullable
+`submitter` reference. Its initializer accepts any HTMLElement, including a
+detached or disabled element; eligibility to initiate a real submission belongs
+to the submission algorithm, not this constructor. Native wrapper identity checks
+reject non-HTML elements, unrelated nodes, proxies and forged prototypes without
+consulting page-controlled `instanceof` behavior. Dictionary conversion preserves
+exceptions and follows inherited/member order before new-target prototype lookup.
+
+The event retains its original submitter wrapper through removal, replacement,
+redispatch, base `initEvent`, garbage collection and document retirement. The
+reference participates in GC marking and finalization. Synthetic SubmitEvents
+use the existing dispatcher and cancellation rules; dispatch alone does not
+submit a form or navigate. Cross-document wrapper exposure remains unsupported.
+The old Duktape bindings have no SubmitEvent implementation to reuse.
+
+The event adapter no longer infers UIEvent inheritance from enum ordering. This
+keeps the new event's allocation, getters and cleanup separate from mouse/UI
+payloads without enlarging every base event. Constructor retirement checks now
+live at the shared allocation boundary. This also fixes Event/CustomEvent
+construction after page retirement from a dictionary getter or new-target
+prototype getter, a boundary previously checked only by input-event constructors.
+
+Validation: all 150 QuickJS cases pass with Debug ASan/UBSan and leak detection
+(23 added cases). Coverage includes conversion errors/order, interface brands,
+subclasses, propagation with DOM removal/replacement, cancellation, reference
+cycles after context retirement, allocation-failure recovery and retirement at
+three conversion stages across all five event constructors. Two Qt checks pass:
+JS navigation cleanup and JS DOM rendering. The latter verifies pixels and
+listener-attributed mutation logs for SubmitEvent edits (Qt leak detection
+disabled). GTK is not tested.
+
+Scope: this completes SubmitEvent's script-visible data layer. Native form
+submission does not yet fire it; constraint validation, submission reentrancy
+guards, FormData/FormDataEvent and correct entry-list sequencing still need to
+be implemented together before enabling native JS input delivery.
+
+Standards: [HTML SubmitEvent interface](https://html.spec.whatwg.org/multipage/form-control-infrastructure.html#the-submitevent-interface)
+and [submission sequencing](https://html.spec.whatwg.org/multipage/form-control-infrastructure.html#form-submission-algorithm).
+
+### Implemented: submission candidates and successful-control filtering
+
+Native submission and Enter-key default-button lookup now use a libdom-owned
+snapshot of the form's submittable built-in elements: input, button, select and
+textarea, including externally associated controls and image inputs, in tree
+order. Each candidate retains its native node until the snapshot is released.
+Later moves, removal or document teardown cannot turn those references into
+dangling pointers. A subsequent snapshot observes the current DOM and owners.
+Allocation or owner-resolution errors release the partial result and propagate
+to the caller instead of silently submitting fewer controls.
+
+This list is distinct from public `form.elements`, which must exclude image
+inputs and also list non-submittable elements. The image exclusion is implemented
+without affecting submission or the choice of an image as the default button.
+Other listed-element membership and RadioNodeList are still pending; the public
+collection is not claimed as complete or newly exposed to QuickJS.
+
+Serialization applies disabled-control and datalist-ancestor filtering once at
+the shared dispatch boundary. Selected disabled options are omitted, including
+options beneath a disabled optgroup through a wrapper. Option disabledness follows
+the current HTML ancestor boundaries; the reflected `option.disabled` getter
+still reports only its own attribute. Foreign elements with HTML-like names do
+not participate. The shared safe node classifier also serves form ownership.
+
+The old Duktape HTMLFormElement and HTMLCollection bindings were reviewed again.
+The former contains generated accessor declarations, without a submission
+transaction; the latter retains/releases its libdom collection. Native ownership
+remains at that boundary here, with current HTML algorithms determining behavior.
+No Duktape stack machinery or obsolete submission behavior is copied.
+
+Efficiency: collection now walks the tree once rather than restarting it for
+every indexed control. It allocates one growable pointer array per snapshot and
+keeps no persistent cache. Owner resolution still has its own ancestor/ID-lookup
+cost, so this is not a claim that all form processing is linear. An isolated
+Release build (GCC 16.2.1, LTO off), comparing enumeration of the current live
+collection with the snapshot for flat forms of unnamed text inputs, measured:
+
+| Controls | Live collection enumeration | Candidate snapshot |
+| --- | ---: | ---: |
+| 10 | 9.91 µs | 1.04 µs |
+| 100 | 621 µs | 8.38 µs |
+| 1,000 | 59.91 ms | 84.66 µs |
+
+These are medians of seven alternating measurements (1,000/100/10 repetitions
+respectively), including collection creation and cleanup but excluding fixture
+construction, serialization and navigation. They demonstrate the removed repeated
+scan, not a whole-page speedup or a timing comparison against an older commit.
+The temporary benchmark is not part of the browser build.
+
+Validation: 85 DOM form-owner cases and 101 native interaction cases pass with
+Debug ASan/UBSan and leak detection (21 and 11 added). The 150 QuickJS, 60 form-state
+and 22 form-binding cases also pass. Release passes 86 form-owner cases, including
+failure of successive snapshot allocations after retaining earlier entries.
+Two Qt checks pass: JS navigation cleanup and JS DOM rendering (toolkit leak
+detection disabled). Tests cover tree order, live owner/type changes, detached
+forms, retained nodes after teardown, foreign namespaces, option boundaries,
+GET/POST filtering, and image-button Enter activation/cancellation by disabledness.
+GTK is not tested.
+
+Scope: this implements candidate enumeration and these filtering rules, not the
+complete Unicode/string-and-file entry list needed by FormData. The existing
+encoded transport serializer, option selectedness/list membership, charset rules
+and remaining control-specific details still need their focused review before
+exposing FormData or delivering native submission events to JS. Constraint
+validation, submission reentrancy and callback sequencing remain pending.
+
+Standards: [constructing the entry list](https://html.spec.whatwg.org/multipage/form-control-infrastructure.html#constructing-the-entry-list),
+[form.elements](https://html.spec.whatwg.org/multipage/forms.html#dom-form-elements)
+and [option disabledness](https://html.spec.whatwg.org/multipage/form-elements.html#concept-option-disabled).
+
 ### Next: native input delivery and default actions
 
 Keep the script-dispatch-stack guard until wrapping, default actions and content
 lifetime are handled together. The focused click review found these prerequisites:
 
-1. Replace interaction pointers saved before callbacks with owned state or
-   validated DOM identities. Link URLs/targets and form controls currently survive
-   only because page listeners cannot run there. A callback can remove them or
-   navigate. `hlcache_handle_clone()` is an unimplemented stub, so it cannot serve
-   as a content-lifetime guard.
-2. Honor cancellation for deferred navigation and submission as well as existing
-   checkable/details actions. Review early link-download actions that currently
-   precede click dispatch. Preserve native behavior for pages without listeners.
-3. Implement the HTML input [activation rules](https://html.spec.whatwg.org/multipage/input.html#the-input-element):
-   checkbox/radio pre-activation before click listeners, cancellation rollback,
-   checked/indeterminate state and radio-group revalidation. Current checkbox
-   toggling happens after dispatch, and the old Duktape generated accessors are
-   insufficient for these semantics.
-4. Deliver correctly initialized input events through the shared dispatcher, with
-   explicit callback/checkpoint boundaries and safe teardown. Test cancellation,
-   callback mutation, navigation, labels and radio groups before enabling delivery.
+1. Build on the implemented content pin, retirement checks, owned link/submission
+   data, SubmitEvent values and shared live form ownership. Implement constraint
+   validation, automatic SubmitEvent delivery, FormData/FormDataEvent data and
+   sequencing, reentrancy guards and the complete entry-list representation,
+   building on the implemented candidate snapshot, before native JS input delivery. Complete
+   document base-URL updates at their mutation boundary as described above.
+2. Deferred navigation/submission/download now consult click cancellation. Finish
+   default-action timing for select menus/file pickers, then test JS cancellation
+   of navigation/submission end to end when delivery is connected.
+3. Build on the implemented checkable pre-activation/rollback and live label
+   association. Complete radio synchronization on live owner/name/type/checkedness
+   changes before exposing form-control IDL. Integrate activation for script-dispatched
+   MouseEvent clicks as well as native input.
+4. Build on the implemented UIEvent/MouseEvent data layer to deliver correctly
+   initialized input events through the shared dispatcher, including PointerEvent
+   data where required for click. Use explicit callback/checkpoint boundaries and
+   safe teardown. Test cancellation, callback mutation, navigation, labels and
+   radio groups before enabling delivery.
 
 Inline handlers, readyState and HTML lifecycle timing remain subsequent work. The
 current `load` call precedes the initial box build and cannot simply be exposed to
@@ -889,8 +1320,8 @@ These are separate reviewable batches, not a commitment to full web-app support.
    ownership/conversion/invalidation layer for further APIs. Reuse
    partial updates only with sound mutation/dependency tracking.
 4. **Events and practical document interaction — native dispatch and explicit
-   DOM/Window/standalone JS events and abort signals implemented; native
-   input/lifecycle pending.** Click
+   DOM/Window/standalone JS events, abort signals, UI/mouse event data and native
+   checkable pre-activation implemented; native JS input/lifecycle pending.** Click
    listeners and supported handler attributes, DOMContentLoaded/load and accurate
    readyState; then further element lifecycle integration. Validate propagation,
    preventDefault, capture, once, callback identity and navigation cleanup.

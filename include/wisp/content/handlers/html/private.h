@@ -306,6 +306,9 @@ typedef struct html_content {
     /** Browser window containing this document, or NULL if not open. */
     struct browser_window *bw;
 
+    /** Invalidates input already in progress, even if reopened in the same window. */
+    uint64_t input_generation;
+
     /** Frameset information */
     struct content_html_frames *frameset;
 
@@ -504,7 +507,7 @@ dom_hubbub_error html_process_svg(void *ctx, dom_node *node);
 
 
 /* in html/forms.c */
-struct form *html_forms_get_forms(const char *docenc, dom_html_document *doc);
+struct form *html_forms_get_forms(dom_html_document *doc);
 struct form_control *html_forms_get_control_for_node(struct form *forms, dom_node *node);
 
 /* Fresh, unlinked native control for unpublished box construction. The caller

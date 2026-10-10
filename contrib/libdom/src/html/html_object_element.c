@@ -12,6 +12,7 @@
 #include <dom/html/html_object_element.h>
 
 #include "html/html_document.h"
+#include "html/form_owner.h"
 #include "html/html_object_element.h"
 
 #include "html/html_form_element.h"
@@ -225,25 +226,7 @@ dom_exception dom_html_object_element_set_declare(dom_html_object_element *ele, 
 
 dom_exception dom_html_object_element_get_form(dom_html_object_element *object, dom_html_form_element **form)
 {
-    dom_html_document *doc = (dom_html_document *)((dom_node_internal *)object)->owner;
-    dom_node_internal *form_tmp = ((dom_node_internal *)object)->parent;
-
-    while (form_tmp != NULL) {
-        if (form_tmp->type == DOM_ELEMENT_NODE &&
-            dom_string_caseless_isequal(form_tmp->name, doc->elements[DOM_HTML_ELEMENT_TYPE_FORM]))
-            break;
-
-        form_tmp = form_tmp->parent;
-    }
-
-    if (form_tmp != NULL) {
-        *form = (dom_html_form_element *)dom_node_ref(form_tmp);
-        return DOM_NO_ERR;
-    }
-
-    *form = NULL;
-
-    return DOM_NO_ERR;
+    return _dom_html_form_owner((dom_node_internal *)object, form);
 }
 
 dom_exception

@@ -23,6 +23,7 @@
 #include "core/entity_ref.h"
 #include "core/node.h"
 #include "html/html_details_element.h"
+#include "html/form_owner.h"
 
 struct dom_element;
 
@@ -586,6 +587,9 @@ dom_exception _dom_attr_set_value(struct dom_attr *attr, dom_string *value)
 
     /* Now the attribute node is specified */
     attr->specified = true;
+
+    /* Cover Attr.value as well as Element.setAttribute. */
+    _dom_html_form_attribute_value_changed(attr);
 
     if (_dom_html_is_details(a->parent)) {
         /* Attribute construction sets parent before attaching to the list.

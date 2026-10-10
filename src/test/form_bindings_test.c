@@ -88,7 +88,7 @@ static void setup(void)
     ck_assert_int_eq(dom_hubbub_parser_parse_chunk(parser, (const uint8_t *)markup, strlen(markup)), DOM_HUBBUB_OK);
     ck_assert_int_eq(dom_hubbub_parser_completed(parser), DOM_HUBBUB_OK);
     dom_hubbub_parser_destroy(parser);
-    html.forms = html_forms_get_forms("UTF-8", (dom_html_document *)html.document);
+    html.forms = html_forms_get_forms((dom_html_document *)html.document);
     ck_assert_ptr_nonnull(html.forms);
     arena = talloc_new(NULL);
     ck_assert_ptr_nonnull(arena);

@@ -47,6 +47,10 @@ dom_exception dom_html_input_element_get_checked(dom_html_input_element *input, 
 
 dom_exception dom_html_input_element_set_checked(dom_html_input_element *input, bool checked);
 
+/* Live visual state, independent of checkedness and the checked attribute. */
+dom_exception dom_html_input_element_get_indeterminate(dom_html_input_element *input, bool *indeterminate);
+dom_exception dom_html_input_element_set_indeterminate(dom_html_input_element *input, bool indeterminate);
+
 dom_exception dom_html_input_element_get_disabled(dom_html_input_element *input, bool *disabled);
 
 dom_exception dom_html_input_element_set_disabled(dom_html_input_element *input, bool disabled);

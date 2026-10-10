@@ -183,6 +183,11 @@ bool _dom_html_document_finalise(dom_html_document *doc)
 {
     int sidx;
 
+    /* Pending nodes still use these strings and element names. Release them
+     * only when the base document confirms that all its nodes are gone. */
+    if (!_dom_document_finalise(&doc->base))
+        return false;
+
     if (doc->cookie != NULL)
         dom_string_unref(doc->cookie);
     if (doc->url != NULL)
@@ -214,7 +219,7 @@ bool _dom_html_document_finalise(dom_html_document *doc)
         doc->elements = NULL;
     }
 
-    return _dom_document_finalise(&doc->base);
+    return true;
 }
 
 /* Destroy a HTMLDocument */

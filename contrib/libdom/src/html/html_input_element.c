@@ -54,13 +54,14 @@ _dom_html_input_element_create(struct dom_html_element_create_params *params, st
 dom_exception
 _dom_html_input_element_initialise(struct dom_html_element_create_params *params, struct dom_html_input_element *ele)
 {
-    ele->form = NULL;
+    ele->association = (struct dom_html_form_association){0};
     ele->default_checked = false;
     ele->default_checked_set = false;
     ele->default_value = NULL;
     ele->default_value_set = false;
     ele->checked = false;
     ele->checked_set = false;
+    ele->indeterminate = false;
 
     return _dom_html_element_initialise(params, &ele->base);
 }
@@ -72,6 +73,8 @@ _dom_html_input_element_initialise(struct dom_html_element_create_params *params
  */
 void _dom_html_input_element_finalise(struct dom_html_input_element *ele)
 {
+    _dom_html_form_association_clear(&ele->association);
+
     if (ele->default_value != NULL) {
         dom_string_unref(ele->default_value);
         ele->default_value = NULL;
@@ -171,6 +174,18 @@ dom_exception dom_html_input_element_set_checked(dom_html_input_element *ele, bo
     /* Live checkedness is independent of the default checked attribute. */
     ele->checked = checked;
     ele->checked_set = true;
+    return DOM_NO_ERR;
+}
+
+dom_exception dom_html_input_element_get_indeterminate(dom_html_input_element *ele, bool *indeterminate)
+{
+    *indeterminate = ele->indeterminate;
+    return DOM_NO_ERR;
+}
+
+dom_exception dom_html_input_element_set_indeterminate(dom_html_input_element *ele, bool indeterminate)
+{
+    ele->indeterminate = indeterminate;
     return DOM_NO_ERR;
 }
 
@@ -312,9 +327,8 @@ dom_exception _dom_html_input_element_copy_internal(dom_html_input_element *old,
         return err;
     }
 
-    /* TODO: We don't seem to keep a ref to form element, so just
-     *       copy the pointer for now. */
-    new->form = old->form;
+    /* Cloning does not copy parser-created form ownership. */
+    new->association = (struct dom_html_form_association){0};
 
     new->default_checked = old->default_checked;
     new->default_checked_set = old->default_checked_set;
@@ -322,6 +336,7 @@ dom_exception _dom_html_input_element_copy_internal(dom_html_input_element *old,
     new->default_value_set = old->default_value_set;
     new->checked = old->checked;
     new->checked_set = old->checked_set;
+    new->indeterminate = old->indeterminate;
 
     return DOM_NO_ERR;
 }
@@ -399,19 +414,12 @@ dom_exception dom_html_input_element_set_max_length(dom_html_input_element *inpu
 
 dom_exception dom_html_input_element_get_form(dom_html_input_element *input, dom_html_form_element **form)
 {
-    *form = input->form;
-
-    if (*form != NULL)
-        dom_node_ref(*form);
-
-    return DOM_NO_ERR;
+    return _dom_html_form_owner((dom_node_internal *)input, form);
 }
 
 dom_exception _dom_html_input_element_set_form(dom_html_input_element *input, dom_html_form_element *form)
 {
-    input->form = form;
-
-    return DOM_NO_ERR;
+    return _dom_html_form_associate((dom_node_internal *)input, form);
 }
 
 /**

@@ -274,8 +274,12 @@ dom_exception _dom_document_initialise(dom_document *doc, dom_events_default_act
 /* Finalise the document */
 bool _dom_document_finalise(dom_document *doc)
 {
-    /* Finalise base class, delete the tree in force */
+    /* Releasing descendants can release another retained node, which in turn
+     * retries document destruction through the pending list. Hold the document
+     * until this traversal finishes; never re-enter a half-finalised tree. */
+    dom_node_ref(doc);
     _dom_node_finalise(&doc->base);
+    doc->base.base.refcnt--;
 
     /* Now, the first_child and last_child should be null */
     doc->base.first_child = NULL;
@@ -824,6 +828,11 @@ dom_exception _dom_document_get_element_by_id(dom_document *doc, dom_string *id,
     dom_exception err;
 
     *result = NULL;
+
+    /* An empty id attribute unsets the element's ID (DOM's concept-id).
+     * Apply this in the shared lookup, including native form= resolution. */
+    if (dom_string_byte_length(id) == 0)
+        return DOM_NO_ERR;
 
     err = dom_document_get_document_element(doc, (void *)&root);
     if (err != DOM_NO_ERR)
@@ -1461,7 +1470,8 @@ void _dom_document_try_destroy(dom_document *doc)
     if (doc->base.base.refcnt != 0 || doc->base.parent != NULL)
         return;
 
-    _dom_document_destroy((dom_node_internal *)doc);
+    /* Retry the dynamic document type's destructor, including HTML metadata. */
+    dom_node_destroy((dom_node_internal *)doc);
 }
 
 /**

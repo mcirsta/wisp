@@ -52,6 +52,7 @@
 #include <wisp/content/handlers/html/private.h>
 #include "content/handlers/html/restyle.h"
 #include "content/handlers/html/box_construct.h"
+#include "content/handlers/html/hyperlink.h"
 #include "content/handlers/html/box_manipulate.h"
 #include "content/handlers/html/box_special.h"
 #include "content/handlers/html/box_textarea.h"
@@ -396,7 +397,7 @@ static bool box_create_frameset(struct content_html_frames *f, dom_node *n, html
             url = NULL;
             err = dom_element_get_attribute(c, corestring_dom_src, &s);
             if (err == DOM_NO_ERR && s != NULL) {
-                box_extract_link(content, s, content->base_url, &url);
+                html_link_url(s, content->base_url, &url);
                 dom_string_unref(s);
             }
 
@@ -691,7 +692,7 @@ static bool box_a(dom_node *n, html_content *content, struct box *box, bool *con
 
     err = dom_element_get_attribute(n, corestring_dom_href, &s);
     if (err == DOM_NO_ERR && s != NULL) {
-        ok = box_extract_link(content, s, content->base_url, &url);
+        ok = html_link_url(s, content->base_url, &url) == NSERROR_OK;
         dom_string_unref(s);
         if (!ok)
             return false;
@@ -837,7 +838,7 @@ static bool box_embed(dom_node *n, html_content *content, struct box *box,
     err = dom_element_get_attribute(n, corestring_dom_src, &src);
     if (err != DOM_NO_ERR || src == NULL)
         return true;
-    if (box_extract_link(content, src, content->base_url, &params->data) == false) {
+    if (html_link_url(src, content->base_url, &params->data) != NSERROR_OK) {
         dom_string_unref(src);
         return false;
     }
@@ -993,7 +994,7 @@ static bool box_iframe(dom_node *n, html_content *content, struct box *box,
     err = dom_element_get_attribute(n, corestring_dom_src, &s);
     if (err != DOM_NO_ERR || s == NULL)
         return true;
-    if (box_extract_link(content, s, content->base_url, &url) == false) {
+    if (html_link_url(s, content->base_url, &url) != NSERROR_OK) {
         dom_string_unref(s);
         return false;
     }
@@ -1295,7 +1296,7 @@ static bool box_image_source(dom_node *n, html_content *content, nsurl **url)
             dom_string_unref(s);
             return true;
         }
-        if (box_extract_link(content, s, content->base_url, url) == false) {
+        if (html_link_url(s, content->base_url, url) != NSERROR_OK) {
             dom_string_unref(s);
             return false;
         }
@@ -1579,7 +1580,7 @@ bool box_object_prepare(dom_node *n, html_content *content, void *owner, struct 
      * (codebase is the base for the other two) */
     err = dom_element_get_attribute(n, corestring_dom_codebase, &codebase);
     if (err == DOM_NO_ERR && codebase != NULL) {
-        if (box_extract_link(content, codebase, content->base_url, &params->codebase) == false) {
+        if (html_link_url(codebase, content->base_url, &params->codebase) != NSERROR_OK) {
             dom_string_unref(codebase);
             goto error;
         }
@@ -1590,7 +1591,7 @@ bool box_object_prepare(dom_node *n, html_content *content, void *owner, struct 
 
     err = dom_element_get_attribute(n, corestring_dom_classid, &classid);
     if (err == DOM_NO_ERR && classid != NULL) {
-        if (box_extract_link(content, classid, params->codebase, &params->classid) == false) {
+        if (html_link_url(classid, params->codebase, &params->classid) != NSERROR_OK) {
             dom_string_unref(classid);
             goto error;
         }
@@ -1599,7 +1600,7 @@ bool box_object_prepare(dom_node *n, html_content *content, void *owner, struct 
 
     err = dom_element_get_attribute(n, corestring_dom_data, &data);
     if (err == DOM_NO_ERR && data != NULL) {
-        if (box_extract_link(content, data, params->codebase, &params->data) == false) {
+        if (html_link_url(data, params->codebase, &params->data) != NSERROR_OK) {
             dom_string_unref(data);
             goto error;
         }

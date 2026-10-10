@@ -11,12 +11,12 @@
 #include <dom/html/html_text_area_element.h>
 
 #include "html/html_element.h"
+#include "html/form_owner.h"
 
 struct dom_html_text_area_element {
     struct dom_html_element base;
     /**< The base class */
-    struct dom_html_form_element *form;
-    /**< The form associated with the text_area */
+    struct dom_html_form_association association;
     dom_string *default_value; /**< Initial value */
     bool default_value_set; /**< Whether default_value has been set */
     dom_string *value; /**< Current value */

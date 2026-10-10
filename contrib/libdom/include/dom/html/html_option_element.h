@@ -27,6 +27,10 @@ dom_exception dom_html_option_element_get_index(dom_html_option_element *option,
 
 dom_exception dom_html_option_element_get_disabled(dom_html_option_element *option, bool *disabled);
 
+/* Effective HTML disabledness, including optgroup ancestry. The reflected
+ * disabled getter above intentionally reads only the option's own attribute. */
+dom_exception dom_html_option_element_is_disabled(dom_html_option_element *option, bool *disabled);
+
 dom_exception dom_html_option_element_set_disabled(dom_html_option_element *option, bool disabled);
 
 dom_exception dom_html_option_element_get_label(dom_html_option_element *option, dom_string **label);

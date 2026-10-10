@@ -30,89 +30,8 @@
 #include <wisp/content/handlers/html/form_internal.h>
 #include <wisp/content/handlers/html/private.h>
 
-/**
- * process form element from dom
- */
-static struct form *parse_form_element(const char *docenc, dom_node *node)
-{
-    dom_string *ds_action = NULL;
-    dom_string *ds_charset = NULL;
-    dom_string *ds_target = NULL;
-    dom_string *ds_method = NULL;
-    dom_string *ds_enctype = NULL;
-    char *action = NULL, *charset = NULL, *target = NULL;
-    form_method method;
-    dom_html_form_element *formele = (dom_html_form_element *)(node);
-    struct form *ret = NULL;
-
-    /* Retrieve the attributes from the node */
-    if (dom_html_form_element_get_action(formele, &ds_action) != DOM_NO_ERR)
-        goto out;
-
-    if (dom_html_form_element_get_accept_charset(formele, &ds_charset) != DOM_NO_ERR)
-        goto out;
-
-    if (dom_html_form_element_get_target(formele, &ds_target) != DOM_NO_ERR)
-        goto out;
-
-    if (dom_html_form_element_get_method(formele, &ds_method) != DOM_NO_ERR)
-        goto out;
-
-    if (dom_html_form_element_get_enctype(formele, &ds_enctype) != DOM_NO_ERR)
-        goto out;
-
-    /* Extract the plain attributes ready for use.  We have to do this
-     * because we cannot guarantee that the dom_strings are NULL terminated
-     * and thus we copy them.
-     */
-    if (ds_action != NULL)
-        action = strndup(dom_string_data(ds_action), dom_string_byte_length(ds_action));
-
-    if (ds_charset != NULL)
-        charset = strndup(dom_string_data(ds_charset), dom_string_byte_length(ds_charset));
-
-    if (ds_target != NULL)
-        target = strndup(dom_string_data(ds_target), dom_string_byte_length(ds_target));
-
-    /* Determine the method */
-    method = method_GET;
-    if (ds_method != NULL) {
-        if (dom_string_caseless_lwc_isequal(ds_method, corestring_lwc_post)) {
-            method = method_POST_URLENC;
-            if (ds_enctype != NULL) {
-                if (dom_string_caseless_lwc_isequal(ds_enctype, corestring_lwc_multipart_form_data)) {
-
-                    method = method_POST_MULTIPART;
-                }
-            }
-        }
-    }
-
-    /* Construct the form object */
-    ret = form_new(node, action, target, method, charset, docenc);
-
-out:
-    if (ds_action != NULL)
-        dom_string_unref(ds_action);
-    if (ds_charset != NULL)
-        dom_string_unref(ds_charset);
-    if (ds_target != NULL)
-        dom_string_unref(ds_target);
-    if (ds_method != NULL)
-        dom_string_unref(ds_method);
-    if (ds_enctype != NULL)
-        dom_string_unref(ds_enctype);
-    if (action != NULL)
-        free(action);
-    if (charset != NULL)
-        free(charset);
-    if (target != NULL)
-        free(target);
-    return ret;
-}
-
 /* documented in html_internal.h */
-struct form *html_forms_get_forms(const char *docenc, dom_html_document *doc)
+struct form *html_forms_get_forms(dom_html_document *doc)
 {
     dom_html_collection *forms;
     struct form *ret = NULL, *newf;
@@ -136,7 +55,7 @@ struct form *html_forms_get_forms(const char *docenc, dom_html_document *doc)
         if (dom_html_collection_item(forms, n, &node) != DOM_NO_ERR) {
             goto out;
         }
-        newf = parse_form_element(docenc, node);
+        newf = form_new(node);
         dom_node_unref(node);
         if (newf == NULL) {
             goto err;
@@ -151,7 +70,7 @@ err:
     while (ret != NULL) {
         struct form *prev = ret->prev;
         /* Destroy ret */
-        free(ret);
+        form_free(ret);
         ret = prev;
     }
 out:

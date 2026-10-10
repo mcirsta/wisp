@@ -171,6 +171,15 @@ static JSValue target_owner(JSContext *ctx, JSValueConst object, bool *window)
     return JS_DupValue(ctx, object);
 }
 
+bool qjs_event_target_validate(JSContext *ctx, JSValueConst object)
+{
+    bool window;
+    JSValue owner = target_owner(ctx, object, &window);
+    bool valid = !JS_IsException(owner);
+    JS_FreeValue(ctx, owner);
+    return valid;
+}
+
 static int target_initialize(JSContext *ctx, JSValueConst object, struct qjs_dom_node *node)
 {
     struct qjs_event_target *target = js_mallocz(ctx, sizeof(*target));

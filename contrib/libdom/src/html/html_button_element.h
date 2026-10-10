@@ -11,12 +11,12 @@
 #include <dom/html/html_button_element.h>
 
 #include "html/html_element.h"
+#include "html/form_owner.h"
 
 struct dom_html_button_element {
     struct dom_html_element base;
     /**< The base class */
-    struct dom_html_form_element *form;
-    /**< The form associated with the button */
+    struct dom_html_form_association association;
 };
 
 /* Create a dom_html_button_element object */

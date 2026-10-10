@@ -140,6 +140,7 @@ add_library(wisp ${WISP_LIB_TYPE}
 	content/handlers/html/box_boundary.c
 	content/handlers/html/box_publish.c
 	content/handlers/html/form_state.c
+	content/handlers/html/hyperlink.c
 	content/handlers/html/direction.c
 	content/handlers/html/restyle.c
 	content/handlers/html/forms.c
@@ -187,6 +188,7 @@ add_library(wisp ${WISP_LIB_TYPE}
 	content/handlers/javascript/quickjs/storage.c
 	content/handlers/javascript/quickjs/event_target.c
 	content/handlers/javascript/quickjs/event.c
+	content/handlers/javascript/quickjs/input_event.c
 	content/handlers/javascript/quickjs/abort.c
 	content/handlers/javascript/quickjs/xhr.c
 	content/handlers/text/textplain.c

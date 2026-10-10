@@ -45,8 +45,6 @@ nserror box_textarea_keypress(html_content *html, struct box *box, uint32_t key)
 {
     struct form_control *gadget = box->gadget;
     struct textarea *ta = gadget->data.text.ta;
-    struct form *form = box->gadget->form;
-    struct content *c = (struct content *)html;
     nserror res = NSERROR_OK;
 
     assert(ta != NULL);
@@ -63,9 +61,7 @@ nserror box_textarea_keypress(html_content *html, struct box *box, uint32_t key)
     switch (key) {
     case NS_KEY_NL:
     case NS_KEY_CR:
-        if (form) {
-            res = form_submit(content_get_url(c), html->bw, form, NULL);
-        }
+        res = form_submit_implicit(html, gadget->node);
         break;
 
     case NS_KEY_TAB: {

@@ -161,6 +161,71 @@ with tempfile.TemporaryDirectory(prefix='wisp-js-dom-') as tmp:
     assert f'render.request first_entry={changes[0][1]} changes=3 mode=full-restyle' in log, log
     assert re.search(r'event.dispatch target=Node node=\d+', log), log
 
+    # MouseEvent data survives delegation, including fractional coordinates.
+    # This is script dispatch, not native mouse delivery or default activation.
+    dest, _, log = run(root, 'mouse-event-mutation', initial + '''<script>
+        const source = document.getElementById('target');
+        document.addEventListener('probe', function(e) {
+            if (!(e instanceof MouseEvent) || !(e instanceof UIEvent) || e.target !== source ||
+                e.relatedTarget !== source || e.view !== window || e.clientX !== 12.25 ||
+                e.screenY !== -3.5 || e.buttons !== 3 || !e.getModifierState('Control') || e.isTrusted)
+                throw Error('mouse data');
+            e.preventDefault();
+            source.className = 'new';
+            source.textContent = 'Changed ș😀';
+            queueMicrotask(() => document.getElementById('reveal').removeAttribute('hidden'));
+            console.log('MOUSE_EVENT_CHANGED');
+        }, {once: true});
+        setTimeout(() => {
+            const e = new MouseEvent('probe', {bubbles: true, cancelable: true, view: window,
+                relatedTarget: source, clientX: 12.25, screenY: -3.5, buttons: 3, ctrlKey: true});
+            if (source.dispatchEvent(e) || e.currentTarget !== null || e.composedPath().length)
+                throw Error('mouse dispatch');
+        }, 150);
+    </script>''')
+    assert 'Console: MOUSE_EVENT_CHANGED' in log and 'JavaScript exception' not in log, log
+    assert (dest / 'page.png').read_bytes() == (reference / 'page.png').read_bytes(), log
+    assert len(re.findall(r'\] event.listener ', log)) == 1, log
+    assert len(re.findall(r'\] render.request ', log)) == 1, log
+    assert 'changes=3 mode=full-restyle' in log, log
+
+    # Script-created SubmitEvent retains its original submitter after removal.
+    # This checks delegation, cancellation, rendered edits and their JS trace;
+    # synthetic dispatch must not itself submit the form or navigate.
+    dest, _, log = run(root, 'submit-event-mutation', initial + '''
+        <form id="submission" hidden action="missing-submission-target.html">
+            <button id="sender">Send</button>
+        </form><script>
+        const form = document.getElementById('submission'), button = document.getElementById('sender');
+        document.addEventListener('submit', function(e) {
+            if (!(e instanceof SubmitEvent) || e instanceof UIEvent || e.target !== form ||
+                e.submitter !== button || e.isTrusted) throw Error('submit identity');
+            form.removeChild(button);
+            if (e.submitter !== button || button.parentNode !== null) throw Error('removed submitter');
+            e.preventDefault();
+            document.getElementById('target').className = 'new';
+            document.getElementById('target').textContent = 'Changed ș😀';
+            queueMicrotask(() => document.getElementById('reveal').removeAttribute('hidden'));
+            console.log('SUBMIT_EVENT_CHANGED');
+        }, {once: true});
+        setTimeout(() => {
+            const e = new SubmitEvent('submit', {bubbles: true, cancelable: true, submitter: button});
+            if (form.dispatchEvent(e) || e.submitter !== button || e.currentTarget !== null ||
+                e.composedPath().length) throw Error('submit dispatch');
+            if (!form.dispatchEvent(new SubmitEvent('submit', {submitter: null})))
+                throw Error('second synthetic dispatch');
+        }, 150);
+    </script>''')
+    assert 'Console: SUBMIT_EVENT_CHANGED' in log and 'JavaScript exception' not in log, log
+    assert (dest / 'page.png').read_bytes() == (reference / 'page.png').read_bytes(), log
+    assert len(re.findall(r'\] event.listener ', log)) == 1, log
+    assert len(re.findall(r'\] render.request ', log)) == 1, log
+    listener = re.search(r'\[JS doc=(\d+) entry=(\d+)\] begin kind=event ', log)
+    assert listener, log
+    doc, entry = listener.groups()
+    assert f'[JS doc={doc} entry={entry}] dom.tree operation=removeChild ' in log, log
+    assert f'render.request first_entry={entry} changes=4 mode=full-restyle' in log, log
+
     dest, _, log = run(root, 'abort-listener-mutation', initial + '''<script>
         const controller = new AbortController(), source = document.getElementById('target');
         source.addEventListener('update', () => {

@@ -3,17 +3,27 @@
  * accessors; conversion, ownership and prototypes follow current DOM/Web IDL.
  */
 #include "event.h"
+#include "input_event.h"
 #include <nsutils/time.h>
 #include <string.h>
+
+struct qjs_submit_event {
+    struct qjs_event base;
+    JSValue submitter; /* Original HTMLElement wrapper; null without a submitter. */
+};
 
 struct qjs_event *qjs_event_get(JSContext *ctx, JSValueConst value)
 {
     jsthread *thread = JS_GetContextOpaque(ctx);
     struct qjs_event *event = NULL;
     if (thread != NULL) {
-        event = JS_GetOpaque(value, thread->heap->event_class[0]);
-        if (event == NULL)
-            event = JS_GetOpaque(value, thread->heap->event_class[1]);
+        JSClassID id = JS_GetClassID(value);
+        for (unsigned i = 0; i < QJS_EVENT_CLASSES; i++) {
+            if (id == thread->heap->event_class[i]) {
+                event = JS_GetOpaque(value, id);
+                break;
+            }
+        }
     }
     if (event == NULL)
         JS_ThrowTypeError(ctx, "Event receiver required");
@@ -30,6 +40,13 @@ static void event_finalizer(JSRuntime *rt, JSValue value)
     JS_FreeValueRT(rt, event->target);
     JS_FreeValueRT(rt, event->detail);
     JS_FreeValueRT(rt, event->path);
+    if (qjs_event_is_ui(event->kind)) {
+        struct qjs_input_event *input = (struct qjs_input_event *)event;
+        JS_FreeValueRT(rt, input->data.view);
+        JS_FreeValueRT(rt, input->data.related);
+    } else if (event->kind == QJS_SUBMIT_EVENT) {
+        JS_FreeValueRT(rt, ((struct qjs_submit_event *)event)->submitter);
+    }
     js_free_rt(rt, event);
 }
 
@@ -40,6 +57,13 @@ static void event_mark(JSRuntime *rt, JSValueConst value, JS_MarkFunc *mark)
         JS_MarkValue(rt, event->target, mark);
         JS_MarkValue(rt, event->detail, mark);
         JS_MarkValue(rt, event->path, mark);
+        if (qjs_event_is_ui(event->kind)) {
+            struct qjs_input_event *input = (struct qjs_input_event *)event;
+            JS_MarkValue(rt, input->data.view, mark);
+            JS_MarkValue(rt, input->data.related, mark);
+        } else if (event->kind == QJS_SUBMIT_EVENT) {
+            JS_MarkValue(rt, ((struct qjs_submit_event *)event)->submitter, mark);
+        }
     }
 }
 
@@ -79,6 +103,7 @@ enum event_property {
     TIMESTAMP,
     COMPOSED,
     DETAIL,
+    SUBMITTER,
     CANCEL_BUBBLE,
     RETURN_VALUE
 };
@@ -129,9 +154,13 @@ static JSValue event_get(JSContext *ctx, JSValueConst object, int property)
     case COMPOSED:
         return JS_NewBool(ctx, event->composed);
     case DETAIL:
-        if (!event->custom)
+        if (event->kind != QJS_CUSTOM_EVENT)
             return JS_ThrowTypeError(ctx, "CustomEvent receiver required");
         return JS_DupValue(ctx, event->detail);
+    case SUBMITTER:
+        if (event->kind != QJS_SUBMIT_EVENT)
+            return JS_ThrowTypeError(ctx, "SubmitEvent receiver required");
+        return JS_DupValue(ctx, ((struct qjs_submit_event *)event)->submitter);
     default:
         return JS_UNDEFINED;
     }
@@ -166,18 +195,34 @@ static JSValue event_set(JSContext *ctx, JSValueConst object, JSValueConst value
     return JS_UNDEFINED;
 }
 
-static JSValue event_allocate(JSContext *ctx, JSValue object, bool custom, bool composed, JSValueConst detail)
+JSValue qjs_event_allocate(JSContext *ctx, JSValue object, enum qjs_event_kind kind, bool composed)
 {
     if (JS_IsException(object))
         return object;
     jsthread *thread = JS_GetContextOpaque(ctx);
-    struct qjs_event *event = js_mallocz(ctx, sizeof(*event));
+    /* All event constructors reach this boundary after dictionary conversion
+     * and new_target.prototype, either of which can retire the document. */
+    if (thread == NULL || thread->closed) {
+        qjs_dom_exception(ctx, DOM_INVALID_STATE_ERR);
+        goto fail_object;
+    }
+    size_t size = qjs_event_is_ui(kind) ? sizeof(struct qjs_input_event)
+        : kind == QJS_SUBMIT_EVENT     ? sizeof(struct qjs_submit_event)
+                                      : sizeof(struct qjs_event);
+    struct qjs_event *event = js_mallocz(ctx, size);
     if (event == NULL)
         goto fail_object;
     event->target = JS_NULL;
     event->path = JS_UNDEFINED;
-    event->detail = JS_DupValue(ctx, detail);
-    event->custom = custom;
+    event->detail = JS_NULL;
+    event->kind = kind;
+    if (qjs_event_is_ui(kind)) {
+        struct qjs_input_event *input = (struct qjs_input_event *)event;
+        input->data.view = JS_NULL;
+        input->data.related = JS_NULL;
+    } else if (kind == QJS_SUBMIT_EVENT) {
+        ((struct qjs_submit_event *)event)->submitter = JS_NULL;
+    }
     event->composed = composed;
     uint64_t now;
     if (nsu_getmonotonic_ms(&now) != NSUERROR_OK)
@@ -217,14 +262,31 @@ JSValue qjs_event_create(JSContext *ctx, const char *type)
     dom_exception err = dom_string_create((const uint8_t *)type, strlen(type), &name);
     if (err != DOM_NO_ERR)
         return qjs_dom_exception(ctx, err);
-    JSValue object = event_allocate(ctx, JS_NewObjectClass(ctx, thread->heap->event_class[0]), false, false, JS_NULL);
+    JSValue object = qjs_event_allocate(
+        ctx, JS_NewObjectClass(ctx, thread->heap->event_class[QJS_EVENT]), QJS_EVENT, false);
     if (!JS_IsException(object))
         dom_event_init(qjs_event_get(ctx, object)->native, name, false, false);
     dom_string_unref(name);
     return object;
 }
 
-static JSValue event_constructor(JSContext *ctx, JSValueConst new_target, int argc, JSValueConst *argv, int custom)
+int qjs_event_read_options(JSContext *ctx, JSValueConst dict, struct qjs_event_options *options)
+{
+    if (JS_IsNull(dict) || JS_IsUndefined(dict))
+        return 0;
+    if (!JS_IsObject(dict)) {
+        JS_ThrowTypeError(ctx, "Event options must be a dictionary");
+        return -1;
+    }
+    /* Web IDL dictionary members are converted in inheritance/alphabetical order. */
+    return boolean_member(ctx, dict, "bubbles", &options->bubbles) < 0 ||
+            boolean_member(ctx, dict, "cancelable", &options->cancelable) < 0 ||
+            boolean_member(ctx, dict, "composed", &options->composed) < 0
+        ? -1
+        : 0;
+}
+
+static JSValue event_constructor(JSContext *ctx, JSValueConst new_target, int argc, JSValueConst *argv, int kind)
 {
     jsthread *thread = JS_GetContextOpaque(ctx);
     if (thread == NULL || argc == 0)
@@ -232,36 +294,44 @@ static JSValue event_constructor(JSContext *ctx, JSValueConst new_target, int ar
     dom_string *type = qjs_dom_string(ctx, argv[0], false);
     if (type == NULL)
         return JS_EXCEPTION;
-    JSValue detail = JS_NULL, object = JS_EXCEPTION;
-    bool bubbles = false, cancelable = false, composed = false;
-    if (argc > 1 && !JS_IsNull(argv[1]) && !JS_IsUndefined(argv[1])) {
-        if (!JS_IsObject(argv[1])) {
-            JS_ThrowTypeError(ctx, "Event options must be a dictionary");
+    JSValue payload = JS_NULL, object = JS_EXCEPTION;
+    JSValueConst dict = argc > 1 ? argv[1] : JS_UNDEFINED;
+    struct qjs_event_options options = {0};
+    if (qjs_event_read_options(ctx, dict, &options) < 0)
+        goto out;
+    if ((kind == QJS_CUSTOM_EVENT || kind == QJS_SUBMIT_EVENT) && JS_IsObject(dict)) {
+        payload = JS_GetPropertyStr(ctx, dict, kind == QJS_CUSTOM_EVENT ? "detail" : "submitter");
+        if (JS_IsException(payload))
             goto out;
-        }
-        /* Web IDL dictionary members are converted in inheritance/alphabetical order. */
-        if (boolean_member(ctx, argv[1], "bubbles", &bubbles) < 0 ||
-            boolean_member(ctx, argv[1], "cancelable", &cancelable) < 0 ||
-            boolean_member(ctx, argv[1], "composed", &composed) < 0)
-            goto out;
-        if (custom) {
-            detail = JS_GetPropertyStr(ctx, argv[1], "detail");
-            if (JS_IsException(detail))
+        if (JS_IsUndefined(payload))
+            payload = JS_NULL;
+        if (kind == QJS_SUBMIT_EVENT && !JS_IsNull(payload)) {
+            /* SubmitEventInit accepts any HTMLElement, not just a submit
+             * button. Check native identity, never page-controlled prototypes. */
+            struct qjs_dom_node *node = qjs_dom_get(ctx, payload, DOM_ELEMENT_NODE);
+            if (node == NULL)
                 goto out;
-            if (JS_IsUndefined(detail))
-                detail = JS_NULL;
+            if (!qjs_dom_is_html(node->node)) {
+                JS_ThrowTypeError(ctx, "submitter requires an HTMLElement or null");
+                goto out;
+            }
         }
     }
-    object = event_allocate(
-        ctx, qjs_event_new_object(ctx, new_target, thread->heap->event_class[custom]), custom, composed, detail);
+    object = qjs_event_allocate(
+        ctx, qjs_event_new_object(ctx, new_target, thread->heap->event_class[kind]), kind, options.composed);
     if (!JS_IsException(object)) {
         struct qjs_event *event = qjs_event_get(ctx, object);
-        dom_event_init(event->native, type, bubbles, cancelable);
+        if (kind == QJS_SUBMIT_EVENT)
+            ((struct qjs_submit_event *)event)->submitter = payload;
+        else
+            event->detail = payload;
+        payload = JS_NULL;
+        dom_event_init(event->native, type, options.bubbles, options.cancelable);
         dom_event_set_is_trusted(event->native, false);
     }
 out:
     dom_string_unref(type);
-    JS_FreeValue(ctx, detail);
+    JS_FreeValue(ctx, payload);
     return object;
 }
 
@@ -296,7 +366,7 @@ static JSValue event_method(JSContext *ctx, JSValueConst object, int argc, JSVal
     }
     case INIT:
     case INIT_CUSTOM: {
-        if (method == INIT_CUSTOM && !event->custom)
+        if (method == INIT_CUSTOM && event->kind != QJS_CUSTOM_EVENT)
             return JS_ThrowTypeError(ctx, "CustomEvent receiver required");
         if (argc == 0)
             return JS_ThrowTypeError(ctx, "Event initialization requires a type");
@@ -368,56 +438,65 @@ static const JSCFunctionListEntry event_properties[] = {
 };
 static const JSCFunctionListEntry custom_properties[] = {
     EVENT_GET("detail", DETAIL), EVENT_METHOD("initCustomEvent", 1, INIT_CUSTOM)};
+static const JSCFunctionListEntry submit_properties[] = {EVENT_GET("submitter", SUBMITTER)};
 
 int qjs_init_events(JSContext *ctx)
 {
+    static const char *names[] = {"Event", "CustomEvent", "UIEvent", "MouseEvent", "SubmitEvent"};
+    static const unsigned parents[] = {QJS_EVENT, QJS_EVENT, QJS_EVENT, QJS_UI_EVENT, QJS_EVENT};
     jsthread *thread = JS_GetContextOpaque(ctx);
-    JSClassID local[2] = {0};
+    JSClassID local[QJS_EVENT_CLASSES] = {0};
     JSClassID *ids = thread != NULL ? thread->heap->event_class : local;
-    JSValue global = JS_GetGlobalObject(ctx), parent = JS_UNDEFINED, parent_ctor = JS_UNDEFINED;
+    JSValue global = JS_GetGlobalObject(ctx), protos[QJS_EVENT_CLASSES], ctors[QJS_EVENT_CLASSES];
+    for (unsigned i = 0; i < QJS_EVENT_CLASSES; i++)
+        protos[i] = ctors[i] = JS_UNDEFINED;
     int ret = -1;
-    for (unsigned i = 0; i < 2; i++) {
-        const char *name = i ? "CustomEvent" : "Event";
+    for (unsigned i = 0; i < QJS_EVENT_CLASSES; i++) {
         if (ids[i] == 0) {
             JS_NewClassID(JS_GetRuntime(ctx), &ids[i]);
-            JSClassDef def = {.class_name = name, .finalizer = event_finalizer, .gc_mark = event_mark};
+            JSClassDef def = {.class_name = names[i], .finalizer = event_finalizer, .gc_mark = event_mark};
             if (JS_NewClass(JS_GetRuntime(ctx), ids[i], &def) < 0) {
                 ids[i] = 0;
                 goto out;
             }
         }
-        JSValue proto = i ? JS_NewObjectProto(ctx, parent) : JS_NewObject(ctx);
-        JSValue ctor = JS_NewCFunctionMagic(ctx, event_constructor, name, 1, JS_CFUNC_constructor_magic, i);
-        const JSCFunctionListEntry *properties = i ? custom_properties : event_properties;
-        int count = i ? sizeof(custom_properties) / sizeof(custom_properties[0])
-                      : sizeof(event_properties) / sizeof(event_properties[0]);
-        bool failed = JS_IsException(proto) || JS_IsException(ctor) ||
-            JS_SetPropertyFunctionList(ctx, proto, properties, count) < 0 ||
-            (i && JS_SetPrototype(ctx, ctor, parent_ctor) < 0) ||
-            qjs_event_define_interface(ctx, global, name, ctor, proto) < 0;
-        if (!failed && !i) {
+        protos[i] = i ? JS_NewObjectProto(ctx, protos[parents[i]]) : JS_NewObject(ctx);
+        ctors[i] = JS_NewCFunctionMagic(ctx, qjs_event_is_ui(i) ? qjs_input_event_constructor : event_constructor,
+            names[i], 1, JS_CFUNC_constructor_magic, i);
+        if (JS_IsException(protos[i]) || JS_IsException(ctors[i]))
+            goto out;
+        int result;
+        if (qjs_event_is_ui(i)) {
+            result = qjs_input_event_properties(ctx, protos[i], i);
+        } else if (i == QJS_SUBMIT_EVENT) {
+            result = JS_SetPropertyFunctionList(ctx, protos[i], submit_properties,
+                sizeof(submit_properties) / sizeof(*submit_properties));
+        } else {
+            const JSCFunctionListEntry *properties = i ? custom_properties : event_properties;
+            int count = i ? sizeof(custom_properties) / sizeof(custom_properties[0])
+                          : sizeof(event_properties) / sizeof(event_properties[0]);
+            result = JS_SetPropertyFunctionList(ctx, protos[i], properties, count);
+        }
+        if (result < 0 || (i && JS_SetPrototype(ctx, ctors[i], ctors[parents[i]]) < 0) ||
+            qjs_event_define_interface(ctx, global, names[i], ctors[i], protos[i]) < 0)
+            goto out;
+        if (i == QJS_EVENT) {
             const char *constants[] = {"NONE", "CAPTURING_PHASE", "AT_TARGET", "BUBBLING_PHASE"};
             for (unsigned n = 0; n < 4; n++) {
-                if (JS_DefinePropertyValueStr(ctx, proto, constants[n], JS_NewInt32(ctx, n), JS_PROP_ENUMERABLE) < 0 ||
-                    JS_DefinePropertyValueStr(ctx, ctor, constants[n], JS_NewInt32(ctx, n), JS_PROP_ENUMERABLE) < 0) {
-                    failed = true;
-                    break;
-                }
+                if (JS_DefinePropertyValueStr(ctx, protos[i], constants[n], JS_NewInt32(ctx, n), JS_PROP_ENUMERABLE) <
+                        0 ||
+                    JS_DefinePropertyValueStr(ctx, ctors[i], constants[n], JS_NewInt32(ctx, n), JS_PROP_ENUMERABLE) < 0)
+                    goto out;
             }
         }
-        if (!failed)
-            JS_SetClassProto(ctx, ids[i], JS_DupValue(ctx, proto));
-        JS_FreeValue(ctx, parent);
-        JS_FreeValue(ctx, parent_ctor);
-        parent = proto;
-        parent_ctor = ctor;
-        if (failed)
-            goto out;
+        JS_SetClassProto(ctx, ids[i], JS_DupValue(ctx, protos[i]));
     }
     ret = 0;
 out:
     JS_FreeValue(ctx, global);
-    JS_FreeValue(ctx, parent);
-    JS_FreeValue(ctx, parent_ctor);
+    for (unsigned i = 0; i < QJS_EVENT_CLASSES; i++) {
+        JS_FreeValue(ctx, protos[i]);
+        JS_FreeValue(ctx, ctors[i]);
+    }
     return ret;
 }

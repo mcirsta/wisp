@@ -1147,46 +1147,7 @@ bool html_begin_conversion(html_content *htmlc)
         htmlc->forms = NULL;
     }
 
-    htmlc->forms = html_forms_get_forms(htmlc->encoding, (dom_html_document *)htmlc->document);
-    for (f = htmlc->forms; f != NULL; f = f->prev) {
-        nsurl *action;
-
-        /* Make all actions absolute */
-        if (f->action == NULL || f->action[0] == '\0') {
-            /* HTML5 4.10.22.3 step 9 */
-            nsurl *doc_addr = content_get_url(&htmlc->base);
-            ns_error = nsurl_join(htmlc->base_url, nsurl_access(doc_addr), &action);
-        } else {
-            ns_error = nsurl_join(htmlc->base_url, f->action, &action);
-        }
-
-        if (ns_error != NSERROR_OK) {
-            content_broadcast_error(&htmlc->base, ns_error, NULL);
-
-            dom_node_unref(html);
-            return false;
-        }
-
-        free(f->action);
-        f->action = strdup(nsurl_access(action));
-        nsurl_unref(action);
-        if (f->action == NULL) {
-            content_broadcast_error(&htmlc->base, NSERROR_NOMEM, NULL);
-
-            dom_node_unref(html);
-            return false;
-        }
-
-        /* Ensure each form has a document encoding */
-        if (f->document_charset == NULL) {
-            f->document_charset = strdup(htmlc->encoding);
-            if (f->document_charset == NULL) {
-                content_broadcast_error(&htmlc->base, NSERROR_NOMEM, NULL);
-                dom_node_unref(html);
-                return false;
-            }
-        }
-    }
+    htmlc->forms = html_forms_get_forms((dom_html_document *)htmlc->document);
 
     dom_node_unref(html);
 
@@ -1988,6 +1949,7 @@ static nserror html_close(struct content *c)
     html_content *htmlc = (html_content *)c;
     nserror ret = NSERROR_OK;
 
+    htmlc->input_generation++;
     selection_clear(htmlc->sel, false);
 
     guit->misc->schedule(-1, script_resume_conversion_cb, htmlc);
@@ -2147,12 +2109,11 @@ static nserror html_get_contextual_content(struct content *c, int x, int y, stru
         }
 
         if (box->usemap) {
-            const char *target = NULL;
-            nsurl *url = imagemap_get(html, box->usemap, box_x, box_y, x, y, &target);
+            struct imagemap_hit hit;
             /* Box might have imagemap, but no actual link area
              * at point */
-            if (url != NULL)
-                data->link = url;
+            if (imagemap_get(html, box->usemap, box_x, box_y, x, y, &hit))
+                data->link = hit.url;
         }
         if (box->gadget) {
             switch (box->gadget->type) {

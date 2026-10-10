@@ -32,6 +32,7 @@
 #include "core/node.h"
 #include "events/mutation_event.h"
 #include "html/html_details_element.h"
+#include "html/form_owner.h"
 
 const struct dom_element_vtable _dom_element_vtable = {
     {{DOM_NODE_EVENT_TARGET_VTABLE}, DOM_NODE_VTABLE_ELEMENT}, DOM_ELEMENT_VTABLE};
@@ -1681,6 +1682,7 @@ _dom_element_set_attr(struct dom_element *element, dom_string *namespace, dom_st
         dom_node_unref(attr);
         dom_node_remove_pending(attr);
 
+        _dom_html_form_attribute_changed(e, namespace, name);
         err = _dom_html_details_attribute_changed(element, namespace, name, true);
         if (err != DOM_NO_ERR)
             return err;
@@ -1741,6 +1743,7 @@ dom_exception _dom_element_remove_attr(struct dom_element *element, dom_string *
         _dom_element_attr_list_node_unlink(match);
         _dom_element_attr_list_node_destroy(match);
 
+        _dom_html_form_attribute_changed(e, namespace, name);
         /* Dispatch a DOMAttrModified event */
         success = true;
         err = dom_attr_get_value(a, &old);
@@ -1876,6 +1879,7 @@ dom_exception _dom_element_set_attr_node(
         _dom_element_attr_list_node_unlink(match);
         _dom_element_attr_list_node_destroy(match);
 
+        _dom_html_form_attribute_changed(e, namespace, name);
         /* Dispatch a DOMAttrModified event */
         success = true;
         err = dom_attr_get_value(old_attr, &old);
@@ -1950,6 +1954,7 @@ dom_exception _dom_element_set_attr_node(
     else
         _dom_element_attr_list_insert(element->attributes, match);
 
+    _dom_html_form_attribute_changed(e, namespace, attr_node->name);
     err = _dom_html_details_attribute_changed(element, namespace, attr_node->name, !replaced);
     if (err != DOM_NO_ERR)
         return err;
@@ -2024,6 +2029,7 @@ dom_exception _dom_element_remove_attr_node(
     _dom_element_attr_list_node_unlink(match);
     _dom_element_attr_list_node_destroy(match);
 
+    _dom_html_form_attribute_changed(e, namespace, name);
     /* Now, cleaup the dom_string */
     dom_string_unref(name);
 

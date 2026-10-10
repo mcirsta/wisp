@@ -30,7 +30,6 @@
 
 #include <wisp/desktop/gui_internal.h>
 #include <wisp/misc.h>
-#include <wisp/utils/ascii.h>
 #include <wisp/utils/corestrings.h>
 #include <wisp/utils/errors.h>
 #include <wisp/utils/log.h>
@@ -2022,66 +2021,4 @@ struct box *box_for_node(dom_node *n)
         return NULL;
 
     return box;
-}
-
-/* exported function documented in html/box_construct.h */
-bool box_extract_link(const html_content *content, const dom_string *dsrel, nsurl *base, nsurl **result)
-{
-    char *s, *s1, *apos0 = 0, *apos1 = 0, *quot0 = 0, *quot1 = 0;
-    unsigned int i, j, end;
-    nserror error;
-    const char *rel;
-
-    rel = dom_string_data(dsrel);
-
-    s1 = s = malloc(3 * strlen(rel) + 1);
-    if (!s)
-        return false;
-
-    /* copy to s, removing white space and control characters */
-    for (i = 0; rel[i] && ascii_is_space(rel[i]); i++)
-        ;
-    for (end = strlen(rel); (end != i) && ascii_is_space(rel[end - 1]); end--)
-        ;
-    for (j = 0; i != end; i++) {
-        if ((unsigned char)rel[i] < 0x20) {
-            ; /* skip control characters */
-        } else if (rel[i] == ' ') {
-            s[j++] = '%';
-            s[j++] = '2';
-            s[j++] = '0';
-        } else {
-            s[j++] = rel[i];
-        }
-    }
-    s[j] = 0;
-
-    if (content->enable_scripting == false) {
-        /* extract first quoted string out of "javascript:" link */
-        if (strncmp(s, "javascript:", 11) == 0) {
-            apos0 = strchr(s, '\'');
-            if (apos0)
-                apos1 = strchr(apos0 + 1, '\'');
-            quot0 = strchr(s, '"');
-            if (quot0)
-                quot1 = strchr(quot0 + 1, '"');
-            if (apos0 && apos1 && (!quot0 || !quot1 || apos0 < quot0)) {
-                *apos1 = 0;
-                s1 = apos0 + 1;
-            } else if (quot0 && quot1) {
-                *quot1 = 0;
-                s1 = quot0 + 1;
-            }
-        }
-    }
-
-    /* construct absolute URL */
-    error = nsurl_join(base, s1, result);
-    free(s);
-    if (error != NSERROR_OK) {
-        *result = NULL;
-        return false;
-    }
-
-    return true;
 }

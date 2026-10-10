@@ -255,9 +255,7 @@ static JSValue document_id(JSContext *ctx, JSValueConst object, int argc, JSValu
         return JS_EXCEPTION;
     }
     dom_node *node = NULL;
-    dom_exception err = DOM_NO_ERR;
-    if (dom_string_byte_length(id) != 0)
-        err = dom_document_get_element_by_id(self->node, id, &node);
+    dom_exception err = dom_document_get_element_by_id(self->node, id, &node);
     dom_string_unref(id);
     if (err != DOM_NO_ERR)
         return qjs_dom_exception(ctx, err);

@@ -61,6 +61,8 @@
 #include "content/handlers/html/font.h"
 #include "content/handlers/html/layout.h"
 #include "content/handlers/html/restyle.h"
+#include "content/handlers/html/form_state.h"
+#include "content/handlers/html/hyperlink.h"
 
 #define MAX_SELECT_HEIGHT 210
 #define SELECT_LINE_SPACING 0.2
@@ -286,22 +288,9 @@ static nserror form_dom_to_data_textarea(dom_html_text_area_element *text_area_e
     const char *doc_charset, struct fetch_multipart_data ***fetch_data_next_ptr)
 {
     dom_exception exp; /* the result from DOM operations */
-    bool element_disabled;
     dom_string *inputname;
     dom_string *inputvalue;
     nserror res;
-
-    /* check if element is disabled */
-    exp = dom_html_text_area_element_get_disabled(text_area_element, &element_disabled);
-    if (exp != DOM_NO_ERR) {
-        NSLOG(wisp, INFO, "Could not get text area disabled property. exp %d", exp);
-        return NSERROR_DOM;
-    }
-
-    if (element_disabled) {
-        /* allow enumeration to continue after disabled element */
-        return NSERROR_OK;
-    }
 
     /* obtain name property */
     exp = dom_html_text_area_element_get_name(text_area_element, &inputname);
@@ -310,7 +299,8 @@ static nserror form_dom_to_data_textarea(dom_html_text_area_element *text_area_e
         return NSERROR_DOM;
     }
 
-    if (inputname == NULL) {
+    if (inputname == NULL || dom_string_byte_length(inputname) == 0) {
+        dom_string_unref(inputname);
         /* allow enumeration to continue after element with no name */
         return NSERROR_OK;
     }
@@ -352,6 +342,13 @@ static nserror form_dom_to_data_select_option(dom_html_option_element *option_el
         return NSERROR_OK;
     }
 
+    bool disabled;
+    exp = dom_html_option_element_is_disabled(option_element, &disabled);
+    if (exp != DOM_NO_ERR)
+        return NSERROR_DOM;
+    if (disabled)
+        return NSERROR_OK;
+
     exp = dom_html_option_element_get_value(option_element, &value);
     if (exp != DOM_NO_ERR) {
         NSLOG(wisp, INFO, "Could not get option value");
@@ -381,24 +378,11 @@ static nserror form_dom_to_data_select(dom_html_select_element *select_element, 
 {
     nserror res = NSERROR_OK;
     dom_exception exp; /* the result from DOM operations */
-    bool element_disabled;
     dom_string *inputname;
     dom_html_options_collection *options = NULL;
     uint32_t options_count;
     uint32_t option_index;
     dom_node *option_element = NULL;
-
-    /* check if element is disabled */
-    exp = dom_html_select_element_get_disabled(select_element, &element_disabled);
-    if (exp != DOM_NO_ERR) {
-        NSLOG(wisp, INFO, "Could not get select disabled property. exp %d", exp);
-        return NSERROR_DOM;
-    }
-
-    if (element_disabled) {
-        /* allow enumeration to continue after disabled element */
-        return NSERROR_OK;
-    }
 
     /* obtain name property */
     exp = dom_html_select_element_get_name(select_element, &inputname);
@@ -407,7 +391,8 @@ static nserror form_dom_to_data_select(dom_html_select_element *select_element, 
         return NSERROR_DOM;
     }
 
-    if (inputname == NULL) {
+    if (inputname == NULL || dom_string_byte_length(inputname) == 0) {
+        dom_string_unref(inputname);
         /* allow enumeration to continue after element with no name */
         return NSERROR_OK;
     }
@@ -455,17 +440,14 @@ static nserror form_dom_to_data_select(dom_html_select_element *select_element, 
 
 
 static nserror form_dom_to_data_input_submit(dom_html_input_element *input_element, dom_string *inputname,
-    const char *charset, const char *document_charset, dom_html_element **submit_button,
+    const char *charset, const char *document_charset, dom_node *submit_button,
     struct fetch_multipart_data ***fetch_data_next_ptr)
 {
     dom_exception exp; /* the result from DOM operations */
     dom_string *inputvalue;
     nserror res;
 
-    if (*submit_button == NULL) {
-        /* caller specified no button so use this one */
-        *submit_button = (dom_html_element *)input_element;
-    } else if (*submit_button != (dom_html_element *)input_element) {
+    if (submit_button != (dom_node *)input_element) {
         return NSERROR_OK;
     }
 
@@ -486,7 +468,7 @@ static nserror form_dom_to_data_input_submit(dom_html_input_element *input_eleme
 
 
 static nserror form_dom_to_data_input_image(dom_html_input_element *input_element, dom_string *inputname,
-    const char *charset, const char *document_charset, dom_html_element **submit_button,
+    const char *charset, const char *document_charset, dom_node *submit_button,
     struct fetch_multipart_data ***fetch_data_next_ptr)
 {
     nserror res;
@@ -495,7 +477,7 @@ static nserror form_dom_to_data_input_image(dom_html_input_element *input_elemen
     char *basename;
 
     /* Only use an image input if it was the thing which activated us */
-    if (*submit_button != (dom_html_element *)input_element) {
+    if (submit_button != (dom_node *)input_element) {
         return NSERROR_OK;
     }
 
@@ -505,23 +487,24 @@ static nserror form_dom_to_data_input_image(dom_html_input_element *input_elemen
         return NSERROR_DOM;
     }
 
-    if (coords == NULL) {
-        NSLOG(wisp, INFO, "No XY data on the image input");
-        return NSERROR_DOM;
-    }
+    /* Keyboard activation has no pointing-device coordinate. */
+    struct image_input_coords origin = {0};
+    if (coords == NULL)
+        coords = &origin;
 
     /* encode input name once */
-    basename = form_encode_item(
-        dom_string_data(inputname), dom_string_byte_length(inputname), charset, document_charset);
+    bool named = inputname != NULL && dom_string_byte_length(inputname) != 0;
+    basename = named ? form_encode_item(
+        dom_string_data(inputname), dom_string_byte_length(inputname), charset, document_charset) : strdup("");
     if (basename == NULL) {
         NSLOG(wisp, INFO, "Could not encode basename");
         return NSERROR_NOMEM;
     }
 
-    res = fetch_data_list_add_sname(basename, ".x", coords->x, fetch_data_next_ptr);
+    res = fetch_data_list_add_sname(basename, named ? ".x" : "x", coords->x, fetch_data_next_ptr);
 
     if (res == NSERROR_OK) {
-        res = fetch_data_list_add_sname(basename, ".y", coords->y, fetch_data_next_ptr);
+        res = fetch_data_list_add_sname(basename, named ? ".y" : "y", coords->y, fetch_data_next_ptr);
     }
 
     free(basename);
@@ -586,6 +569,7 @@ static nserror form_dom_to_data_input_file(dom_html_input_element *input_element
     exp = dom_node_get_user_data((dom_node *)input_element, corestring_dom___ns_key_file_name_node_data, &rawfile);
     if (exp != DOM_NO_ERR) {
         NSLOG(wisp, INFO, "Could not get file rawname");
+        dom_string_unref(inputvalue);
         return NSERROR_DOM;
     }
 
@@ -631,42 +615,22 @@ static nserror form_dom_to_data_input_text(dom_html_input_element *input_element
  * \param charset The form character set
  * \param document_charset The document character set for fallback
  * \param submit_button The DOM element of the button submitting the form
- * \param had_submit A boolean value indicating if the submit button
- *                   has already been processed in the form element enumeration.
  * \param fetch_data_next_ptr The multipart data list being constructed.
  * \return NSERROR_OK on success or appropriate error code.
  */
 static nserror form_dom_to_data_input(dom_html_input_element *input_element, const char *charset,
-    const char *document_charset, dom_html_element **submit_button, struct fetch_multipart_data ***fetch_data_next_ptr)
+    const char *document_charset, dom_node *submit_button, struct fetch_multipart_data ***fetch_data_next_ptr)
 {
     dom_exception exp; /* the result from DOM operations */
-    bool element_disabled;
     dom_string *inputname;
     dom_string *inputtype;
     nserror res;
-
-    /* check if element is disabled */
-    exp = dom_html_input_element_get_disabled(input_element, &element_disabled);
-    if (exp != DOM_NO_ERR) {
-        NSLOG(wisp, INFO, "Could not get input disabled property. exp %d", exp);
-        return NSERROR_DOM;
-    }
-
-    if (element_disabled) {
-        /* disabled element requires no more processing */
-        return NSERROR_OK;
-    }
 
     /* obtain name property */
     exp = dom_html_input_element_get_name(input_element, &inputname);
     if (exp != DOM_NO_ERR) {
         NSLOG(wisp, INFO, "Could not get input name property. exp %d", exp);
         return NSERROR_DOM;
-    }
-
-    if (inputname == NULL) {
-        /* element with no name is not converted */
-        return NSERROR_OK;
     }
 
     /* get input type */
@@ -678,14 +642,16 @@ static nserror form_dom_to_data_input(dom_html_input_element *input_element, con
     }
 
     /* process according to input element type */
-    if (dom_string_caseless_isequal(inputtype, corestring_dom_submit)) {
-
-        res = form_dom_to_data_input_submit(
-            input_element, inputname, charset, document_charset, submit_button, fetch_data_next_ptr);
-
-    } else if (dom_string_caseless_isequal(inputtype, corestring_dom_image)) {
+    if (dom_string_caseless_isequal(inputtype, corestring_dom_image)) {
 
         res = form_dom_to_data_input_image(
+            input_element, inputname, charset, document_charset, submit_button, fetch_data_next_ptr);
+
+    } else if (inputname == NULL || dom_string_byte_length(inputname) == 0) {
+        res = NSERROR_OK;
+
+    } else if (dom_string_caseless_isequal(inputtype, corestring_dom_submit)) {
+        res = form_dom_to_data_input_submit(
             input_element, inputname, charset, document_charset, submit_button, fetch_data_next_ptr);
 
     } else if (dom_string_caseless_isequal(inputtype, corestring_dom_radio) ||
@@ -728,59 +694,16 @@ static nserror form_dom_to_data_input(dom_html_input_element *input_element, con
  * \return NSERROR_OK on success or appropriate error code.
  */
 static nserror form_dom_to_data_button(dom_html_button_element *button_element, const char *form_charset,
-    const char *doc_charset, dom_html_element **submit_button, struct fetch_multipart_data ***fetch_data_next_ptr)
+    const char *doc_charset, dom_node *submit_button, struct fetch_multipart_data ***fetch_data_next_ptr)
 {
     dom_exception exp; /* the result from DOM operations */
-    bool element_disabled;
     dom_string *inputname;
     dom_string *inputvalue;
-    dom_string *inputtype;
     nserror res = NSERROR_OK;
 
-    /* check if element is disabled */
-    exp = dom_html_button_element_get_disabled(button_element, &element_disabled);
-    if (exp != DOM_NO_ERR) {
-        NSLOG(wisp, INFO, "Unable to get disabled property. exp %d", exp);
-        return NSERROR_DOM;
-    }
-
-    if (element_disabled) {
-        /* allow enumeration to continue after disabled element */
+    /* Only the original submitter contributes a button entry. */
+    if (submit_button != (dom_node *)button_element || !html_form_is_submit_button(submit_button))
         return NSERROR_OK;
-    }
-
-    /* get the type attribute */
-    exp = dom_html_button_element_get_type(button_element, &inputtype);
-    if (exp != DOM_NO_ERR) {
-        NSLOG(wisp, INFO, "Could not get button element type");
-        return NSERROR_DOM;
-    }
-
-    /* If the type attribute is "reset" or "button" the element is
-     *  barred from constraint validation. Specification says
-     *  default and invalid values result in submit which will
-     *  be considered.
-     */
-    if (dom_string_caseless_isequal(inputtype, corestring_dom_reset)) {
-        /* multipart data entry not required for reset type */
-        dom_string_unref(inputtype);
-        return NSERROR_OK;
-    }
-    if (dom_string_caseless_isequal(inputtype, corestring_dom_button)) {
-        /* multipart data entry not required for button type */
-        dom_string_unref(inputtype);
-        return NSERROR_OK;
-    }
-    dom_string_unref(inputtype);
-
-    /* only submision button generates an element */
-    if (*submit_button == NULL) {
-        /* no submission button selected yet so use this one */
-        *submit_button = (dom_html_element *)button_element;
-    }
-    if (*submit_button != (dom_html_element *)button_element) {
-        return NSERROR_OK;
-    }
 
     /* obtain name property */
     exp = dom_html_button_element_get_name(button_element, &inputname);
@@ -789,7 +712,8 @@ static nserror form_dom_to_data_button(dom_html_button_element *button_element, 
         return NSERROR_DOM;
     }
 
-    if (inputname == NULL) {
+    if (inputname == NULL || dom_string_byte_length(inputname) == 0) {
+        dom_string_unref(inputname);
         /* allow enumeration to continue after element with no name */
         return NSERROR_OK;
     }
@@ -814,26 +738,28 @@ static nserror form_dom_to_data_button(dom_html_button_element *button_element, 
 /**
  * Find an acceptable character set encoding with which to submit the form
  *
- * \param form  The form
+ * \param accept_charsets Current accept-charset attribute, or NULL
+ * \param document_charset Document encoding, or NULL
  * \return Pointer to charset name (on heap, caller should free) or NULL
  */
-static char *form_acceptable_charset(struct form *form)
+static char *form_acceptable_charset(const char *accept_charsets, const char *document_charset)
 {
     char *temp, *c;
+    const char *end;
 
-    if (!form->accept_charsets) {
+    if (!accept_charsets) {
         /* no accept-charsets attribute for this form */
-        if (form->document_charset) {
+        if (document_charset) {
             /* document charset present, so use it */
-            return strdup(form->document_charset);
+            return strdup(document_charset);
         } else {
-            /* no document charset, so default to 8859-1 */
-            return strdup("ISO-8859-1");
+            /* no document charset, so default to UTF-8 */
+            return strdup("UTF-8");
         }
     }
 
     /* make temporary copy of accept-charsets attribute */
-    temp = strdup(form->accept_charsets);
+    temp = strdup(accept_charsets);
     if (!temp)
         return NULL;
 
@@ -854,7 +780,7 @@ static char *form_acceptable_charset(struct form *form)
 
     /* according to RFC2070, the accept-charsets attribute of the
      * form element contains a space and/or comma separated list */
-    c = form->accept_charsets;
+    end = accept_charsets;
 
     /** \todo an improvement would be to choose an encoding
      * acceptable to the server which covers as much of the input
@@ -863,13 +789,13 @@ static char *form_acceptable_charset(struct form *form)
      * textual input values.  For now, we just extract the first
      * element of the charset list
      */
-    while (*c && !ascii_is_space(*c)) {
-        if (*c == ',')
+    while (*end && !ascii_is_space(*end)) {
+        if (*end == ',')
             break;
-        c++;
+        end++;
     }
 
-    return strndup(form->accept_charsets, c - form->accept_charsets);
+    return strndup(accept_charsets, end - accept_charsets);
 }
 
 
@@ -895,112 +821,83 @@ static char *form_acceptable_charset(struct form *form)
  * \return NSERROR_OK on success or appropriate error code
  */
 static nserror
-form_dom_to_data(struct form *form, struct form_control *submit_control, struct fetch_multipart_data **fetch_data_out)
+form_dom_to_data(dom_html_form_element *form, dom_node *submit_button, const char *document_charset,
+    struct fetch_multipart_data **fetch_data_out)
 {
     nserror res = NSERROR_OK;
     char *charset; /* form characterset */
     dom_exception exp; /* the result from DOM operations */
-    dom_html_collection *elements = NULL; /* the dom form elements */
-    uint32_t element_count; /* the number of elements in the DOM form */
-    uint32_t element_idx; /* the index of thr enumerated element */
-    dom_node *element = NULL; /* the DOM form element */
-    dom_string *nodename = NULL; /* the DOM node name of the element */
+    dom_html_form_control_list controls = {0};
     struct fetch_multipart_data *fetch_data = NULL; /* fetch data list */
     struct fetch_multipart_data **fetch_data_next = &fetch_data;
-    dom_html_element *submit_button;
-
-    /* obtain the submit_button DOM node from the control */
-    if (submit_control != NULL) {
-        submit_button = submit_control->node;
-    } else {
-        submit_button = NULL;
+    dom_string *accept = NULL;
+    exp = dom_html_form_element_get_accept_charset(form, &accept);
+    if (exp != DOM_NO_ERR)
+        return NSERROR_DOM;
+    char *labels = accept == NULL ? NULL : strndup(dom_string_data(accept), dom_string_byte_length(accept));
+    if (accept != NULL && labels == NULL) {
+        dom_string_unref(accept);
+        return NSERROR_NOMEM;
     }
-
-    /** \todo Replace this call with something DOMish */
-    charset = form_acceptable_charset(form);
+    charset = form_acceptable_charset(labels, document_charset);
+    free(labels);
+    dom_string_unref(accept);
     if (charset == NULL) {
         NSLOG(wisp, INFO, "failed to find charset");
         return NSERROR_NOMEM;
     }
 
-    /* obtain the form elements and count */
-    exp = dom_html_form_element_get_elements(form->node, &elements);
+    /* Submission uses a fixed list of candidates. HTML's public form.elements
+     * instead excludes image buttons and also lists non-submittable elements. */
+    exp = dom_html_form_element_get_submittable_elements(form, &controls);
     if (exp != DOM_NO_ERR) {
-        NSLOG(wisp, INFO, "Could not get form elements");
-        free(charset);
-        return NSERROR_DOM;
-    }
-
-    exp = dom_html_collection_get_length(elements, &element_count);
-    if (exp != DOM_NO_ERR) {
-        NSLOG(wisp, INFO, "Could not get form element count");
-        res = NSERROR_DOM;
+        res = exp == DOM_NO_MEM_ERR ? NSERROR_NOMEM : NSERROR_DOM;
         goto form_dom_to_data_error;
     }
 
-    for (element_idx = 0; element_idx < element_count; element_idx++) {
-        /* obtain a form element */
-        exp = dom_html_collection_item(elements, element_idx, &element);
-        if (exp != DOM_NO_ERR) {
-            NSLOG(wisp, INFO, "retrieving form element %d failed with %d", element_idx, exp);
+    for (size_t i = 0; i < controls.length; i++) {
+        dom_node *element = controls.items[i];
+        if (html_form_control_disabled(element) || dom_html_form_control_has_datalist_ancestor(element))
+            continue;
+        dom_html_element_type tag;
+        if (dom_html_element_get_tag_type(element, &tag) != DOM_NO_ERR) {
             res = NSERROR_DOM;
             goto form_dom_to_data_error;
         }
-
-        /* node name from element */
-        exp = dom_node_get_node_name(element, &nodename);
-        if (exp != DOM_NO_ERR) {
-            NSLOG(wisp, INFO, "getting element node name %d failed with %d", element_idx, exp);
-            dom_node_unref(element);
-            res = NSERROR_DOM;
-            goto form_dom_to_data_error;
-        }
-
-        if (dom_string_isequal(nodename, corestring_dom_TEXTAREA)) {
-            /* Form element is HTMLTextAreaElement */
+        switch (tag) {
+        case DOM_HTML_ELEMENT_TYPE_TEXTAREA:
             res = form_dom_to_data_textarea(
-                (dom_html_text_area_element *)element, charset, form->document_charset, &fetch_data_next);
-
-        } else if (dom_string_isequal(nodename, corestring_dom_SELECT)) {
-            /* Form element is HTMLSelectElement */
+                (dom_html_text_area_element *)element, charset, document_charset, &fetch_data_next);
+            break;
+        case DOM_HTML_ELEMENT_TYPE_SELECT:
             res = form_dom_to_data_select(
-                (dom_html_select_element *)element, charset, form->document_charset, &fetch_data_next);
-
-        } else if (dom_string_isequal(nodename, corestring_dom_INPUT)) {
-            /* Form element is HTMLInputElement */
+                (dom_html_select_element *)element, charset, document_charset, &fetch_data_next);
+            break;
+        case DOM_HTML_ELEMENT_TYPE_INPUT:
             res = form_dom_to_data_input(
-                (dom_html_input_element *)element, charset, form->document_charset, &submit_button, &fetch_data_next);
-
-        } else if (dom_string_isequal(nodename, corestring_dom_BUTTON)) {
-            /* Form element is HTMLButtonElement */
+                (dom_html_input_element *)element, charset, document_charset, submit_button, &fetch_data_next);
+            break;
+        case DOM_HTML_ELEMENT_TYPE_BUTTON:
             res = form_dom_to_data_button(
-                (dom_html_button_element *)element, charset, form->document_charset, &submit_button, &fetch_data_next);
-
-        } else {
-            /* Form element is not handled */
-            NSLOG(wisp, INFO, "Unhandled element type: %*s", (int)dom_string_byte_length(nodename),
-                dom_string_data(nodename));
+                (dom_html_button_element *)element, charset, document_charset, submit_button, &fetch_data_next);
+            break;
+        default:
             res = NSERROR_DOM;
+            break;
         }
-
-        dom_string_unref(nodename);
-        dom_node_unref(element);
-
-        /* abort form element enumeration on error */
-        if (res != NSERROR_OK) {
+        if (res != NSERROR_OK)
             goto form_dom_to_data_error;
-        }
     }
 
     *fetch_data_out = fetch_data;
-    dom_html_collection_unref(elements);
+    dom_html_form_control_list_fini(&controls);
     free(charset);
 
     return NSERROR_OK;
 
 form_dom_to_data_error:
     fetch_multipart_data_destroy(fetch_data);
-    dom_html_collection_unref(elements);
+    dom_html_form_control_list_fini(&controls);
     free(charset);
 
     return res;
@@ -1009,13 +906,12 @@ form_dom_to_data_error:
 /**
  * Encode controls using application/x-www-form-urlencoded.
  *
- * \param[in] form form to which successful controls relate
  * \param[in] control linked list of fetch_multipart_data
  * \param[out] encoded_out URL-encoded form data
  * \return NSERROR_OK on success and \a encoded_out updated else appropriate
  * error code
  */
-static nserror form_url_encode(struct form *form, struct fetch_multipart_data *control, char **encoded_out)
+static nserror form_url_encode(struct fetch_multipart_data *control, char **encoded_out)
 {
     char *name, *value;
     char *s, *s2;
@@ -1326,6 +1222,7 @@ void form_free_control(struct form_control *control)
         control->box->gadget = NULL;
     }
 
+    dom_node_unref(control->node);
     free(control);
 }
 
@@ -1744,65 +1641,257 @@ void form_select_menu_callback(void *client_data, int x, int y, int width, int h
 }
 
 
-/* private interface described in html/form_internal.h */
-nserror
-form_submit(nsurl *page_url, struct browser_window *target, struct form *form, struct form_control *submit_button)
+/* A request owns all data used after choosing a target, which may call the
+ * frontend and retire the source page. No rendered form/control is consulted. */
+struct form_submission {
+    nsurl *url;
+    nsurl *referrer;
+    char *target;
+    char *encoded;
+    struct fetch_multipart_data *entries;
+    form_method method;
+};
+
+static void form_submission_fini(struct form_submission *request)
 {
-    nserror res;
-    char *data = NULL; /* encoded form data */
-    struct fetch_multipart_data *success = NULL; /* gcc is incapable of correctly reasoning about use and
-                                                generates "maybe used uninitialised" warnings */
-    nsurl *action_url;
-    nsurl *query_url;
+    if (request->url != NULL)
+        nsurl_unref(request->url);
+    if (request->referrer != NULL)
+        nsurl_unref(request->referrer);
+    free(request->target);
+    free(request->encoded);
+    fetch_multipart_data_destroy(request->entries);
+}
 
-    assert(form != NULL);
+static bool form_string_is(dom_string *value, const char *keyword)
+{
+    return value != NULL && dom_string_byte_length(value) == strlen(keyword) &&
+        ascii_strings_equal_caseless(dom_string_data(value), keyword);
+}
 
-    /* obtain list of controls from DOM */
-    res = form_dom_to_data(form, submit_button, &success);
-    if (res != NSERROR_OK) {
-        return res;
+static dom_exception form_submission_attribute(dom_node *form, dom_node *submitter,
+    dom_string *attribute, dom_string *override, dom_string **value)
+{
+    *value = NULL;
+    dom_exception err = submitter == NULL ? DOM_NO_ERR : dom_element_get_attribute(submitter, override, value);
+    if (err == DOM_NO_ERR && *value == NULL)
+        err = dom_element_get_attribute(form, attribute, value);
+    return err;
+}
+
+static nserror form_action_url(html_content *html, dom_node *form, dom_node *submitter, nsurl **url)
+{
+    dom_string *action = NULL;
+    *url = NULL;
+    if (form_submission_attribute(form, submitter,
+            corestring_dom_action, corestring_dom_formaction, &action) != DOM_NO_ERR)
+        return NSERROR_DOM;
+    nserror error = NSERROR_OK;
+    if (action == NULL || dom_string_byte_length(action) == 0)
+        *url = nsurl_ref(content_get_url(&html->base));
+    else
+        error = html_link_url(action, html->base_url, url);
+    dom_string_unref(action);
+    return error == NSERROR_NOMEM ? error : NSERROR_OK; /* Invalid URL: no navigation. */
+}
+
+static dom_exception form_submitter_owner(dom_node *submitter, dom_html_form_element **form)
+{
+    dom_html_element_type tag;
+    *form = NULL;
+    dom_exception err = dom_html_element_get_tag_type(submitter, &tag);
+    if (err != DOM_NO_ERR)
+        return err;
+    if (tag == DOM_HTML_ELEMENT_TYPE_INPUT)
+        return dom_html_input_element_get_form((dom_html_input_element *)submitter, form);
+    if (tag == DOM_HTML_ELEMENT_TYPE_BUTTON)
+        return dom_html_button_element_get_form((dom_html_button_element *)submitter, form);
+    return DOM_NO_ERR;
+}
+
+nserror form_submit_url(html_content *html, dom_node *submitter, nsurl **url)
+{
+    *url = NULL;
+    dom_html_form_element *form = NULL;
+    if (form_submitter_owner(submitter, &form) != DOM_NO_ERR)
+        return NSERROR_DOM;
+    nserror error = form == NULL ? NSERROR_OK : form_action_url(html, (dom_node *)form, submitter, url);
+    dom_node_unref(form);
+    return error;
+}
+
+static nserror form_submission_prepare(html_content *html, dom_node *form, dom_node *submitter,
+    struct form_submission *request)
+{
+    dom_string *method = NULL, *enctype = NULL, *target = NULL;
+    nserror error = NSERROR_DOM;
+    if (form_submission_attribute(form, submitter,
+            corestring_dom_method, corestring_dom_formmethod, &method) != DOM_NO_ERR ||
+        form_submission_attribute(form, submitter,
+            corestring_dom_enctype, corestring_dom_formenctype, &enctype) != DOM_NO_ERR ||
+        (submitter != NULL && dom_element_get_attribute(submitter, corestring_dom_formtarget, &target) != DOM_NO_ERR))
+        goto out;
+    /* Dialog closing and text/plain transport need their own implementations;
+     * neither may silently turn into a GET or a differently encoded POST. */
+    if (form_string_is(method, "dialog")) {
+        error = NSERROR_OK;
+        goto out;
     }
-
-    /* Decompose action */
-    res = nsurl_create(form->action, &action_url);
-    if (res != NSERROR_OK) {
-        fetch_multipart_data_destroy(success);
-        return res;
-    }
-
-    switch (form->method) {
-    case method_GET:
-        res = form_url_encode(form, success, &data);
-        if (res == NSERROR_OK) {
-            /* Replace query segment */
-            res = nsurl_replace_query(action_url, data, &query_url);
-            if (res == NSERROR_OK) {
-                res = browser_window_navigate(target, query_url, page_url, BW_NAVIGATE_HISTORY, NULL, NULL, NULL);
-
-                nsurl_unref(query_url);
-            }
-            free(data);
+    request->method = method_GET;
+    if (form_string_is(method, "post")) {
+        if (form_string_is(enctype, "text/plain")) {
+            error = NSERROR_NOT_IMPLEMENTED;
+            goto out;
         }
-        break;
-
-    case method_POST_URLENC:
-        res = form_url_encode(form, success, &data);
-        if (res == NSERROR_OK) {
-            res = browser_window_navigate(target, action_url, page_url, BW_NAVIGATE_HISTORY, data, NULL, NULL);
-            free(data);
-        }
-        break;
-
-    case method_POST_MULTIPART:
-        res = browser_window_navigate(target, action_url, page_url, BW_NAVIGATE_HISTORY, NULL, success, NULL);
-
-        break;
+        request->method = form_string_is(enctype, "multipart/form-data") ? method_POST_MULTIPART : method_POST_URLENC;
     }
+    request->referrer = nsurl_ref(content_get_url(&html->base));
+    error = form_action_url(html, form, submitter, &request->url);
+    if (error != NSERROR_OK || request->url == NULL)
+        goto out;
+    error = html_element_target(html->document, form, target, &request->target);
+    if (error != NSERROR_OK)
+        goto out;
+    error = form_dom_to_data((dom_html_form_element *)form, submitter, html->encoding, &request->entries);
+    if (error != NSERROR_OK || request->method == method_POST_MULTIPART)
+        goto out;
+    error = form_url_encode(request->entries, &request->encoded);
+    if (error == NSERROR_OK && request->method == method_GET) {
+        nsurl *url = NULL;
+        error = nsurl_replace_query(request->url, request->encoded, &url);
+        if (error == NSERROR_OK) {
+            nsurl_unref(request->url);
+            request->url = url;
+        }
+    }
+out:
+    dom_string_unref(method);
+    dom_string_unref(enctype);
+    dom_string_unref(target);
+    return error;
+}
 
-    nsurl_unref(action_url);
-    fetch_multipart_data_destroy(success);
+static bool form_in_document(dom_node *form, dom_document *document)
+{
+    dom_node *root = dom_node_ref(form), *parent = NULL;
+    while (dom_node_get_parent_node(root, &parent) == DOM_NO_ERR && parent != NULL) {
+        dom_node_unref(root);
+        root = parent;
+    }
+    bool connected = root == (dom_node *)document;
+    dom_node_unref(root);
+    return connected;
+}
 
-    return res;
+/* The caller pins the content and retains DOM identity across click dispatch.
+ * This stage has no page callbacks until target selection/navigation. Validation
+ * and SubmitEvent/FormDataEvent sequencing will be added before JS input delivery. */
+static nserror form_submit_dom(html_content *html, dom_node *form, dom_node *submitter, browser_mouse_state mouse)
+{
+    struct browser_window *bw = html->bw;
+    uint64_t generation = html->input_generation;
+    if (bw == NULL || !form_in_document(form, html->document))
+        return NSERROR_OK;
+    struct form_submission request = {0};
+    nserror error = form_submission_prepare(html, form, submitter, &request);
+    if (error == NSERROR_OK && request.url != NULL) {
+        struct browser_window *target = browser_window_find_target(bw, request.target, mouse);
+        if (target != NULL && html->bw == bw && html->input_generation == generation) {
+            error = browser_window_navigate(target, request.url, request.referrer, BW_NAVIGATE_HISTORY,
+                request.method == method_POST_URLENC ? request.encoded : NULL,
+                request.method == method_POST_MULTIPART ? request.entries : NULL, NULL);
+        }
+    }
+    form_submission_fini(&request);
+    return error;
+}
+
+/* private interface described in html/form_internal.h */
+nserror form_submit(html_content *html, dom_node *submitter, browser_mouse_state mouse)
+{
+    if (!html_form_is_submit_button(submitter) || html_form_control_disabled(submitter))
+        return NSERROR_OK;
+    dom_html_form_element *form = NULL;
+    dom_exception err = form_submitter_owner(submitter, &form);
+    nserror result = err == DOM_NO_ERR ? NSERROR_OK : NSERROR_DOM;
+    if (err == DOM_NO_ERR && form != NULL)
+        result = form_submit_dom(html, (dom_node *)form, submitter, mouse);
+    dom_node_unref(form);
+    return result;
+}
+
+/* HTML implicit submission chooses the first submit button before dispatch.
+ * A disabled first button still blocks later buttons. Without a submit button,
+ * only forms with at most one blocking text-like input may submit. */
+static nserror form_implicit_button(dom_html_form_element *form, dom_node **button, unsigned *blockers)
+{
+    dom_html_form_control_list controls = {0};
+    *button = NULL;
+    *blockers = 0;
+    dom_exception err = dom_html_form_element_get_submittable_elements(form, &controls);
+    for (size_t i = 0; err == DOM_NO_ERR && i < controls.length; i++) {
+        dom_node *element = controls.items[i];
+        if (html_form_is_submit_button(element)) {
+            *button = dom_node_ref(element);
+            break;
+        }
+        dom_html_element_type tag;
+        err = dom_html_element_get_tag_type(element, &tag);
+        if (err != DOM_NO_ERR)
+            break;
+        if (tag == DOM_HTML_ELEMENT_TYPE_INPUT) {
+            dom_string *type = NULL;
+            err = dom_html_input_element_get_type((dom_html_input_element *)element, &type);
+            /* Unknown and missing input types are Text. These are the states
+             * that do NOT block; every other implemented/unknown state does. */
+            const char *nonblocking[] = {"hidden", "checkbox", "radio", "file", "submit", "image", "reset",
+                "button", "range", "color"};
+            bool blocks = true;
+            for (size_t j = 0; j < sizeof(nonblocking) / sizeof(nonblocking[0]); j++)
+                if (form_string_is(type, nonblocking[j]))
+                    blocks = false;
+            *blockers += blocks;
+            dom_string_unref(type);
+        }
+    }
+    dom_html_form_control_list_fini(&controls);
+    return err == DOM_NO_ERR ? NSERROR_OK : err == DOM_NO_MEM_ERR ? NSERROR_NOMEM : NSERROR_DOM;
+}
+
+nserror form_submit_implicit(html_content *html, dom_node *input)
+{
+    struct browser_window *bw = html->bw;
+    uint64_t generation = html->input_generation;
+    if (bw == NULL || html_form_control_disabled(input))
+        return NSERROR_OK;
+    dom_html_form_element *form = NULL;
+    dom_node *button = NULL;
+    unsigned blockers = 0;
+    nserror result = NSERROR_OK;
+    if (dom_html_input_element_get_form((dom_html_input_element *)input, &form) != DOM_NO_ERR)
+        return NSERROR_DOM;
+    if (form == NULL)
+        return NSERROR_OK;
+    if (!content_add_user(&html->base, NULL, &generation)) {
+        dom_node_unref(form);
+        return NSERROR_NOMEM;
+    }
+    result = form_implicit_button(form, &button, &blockers);
+    if (result == NSERROR_OK && button != NULL && !html_form_control_disabled(button)) {
+        struct image_input_coords *coords = NULL;
+        dom_node_get_user_data(button, corestring_dom___ns_key_image_coords_node_data, &coords);
+        if (coords != NULL)
+            *coords = (struct image_input_coords){0};
+        struct html_form_click_result click = html_form_click(button, NULL, NULL);
+        if (click.accepted && html->bw == bw && html->input_generation == generation)
+            result = form_submit(html, button, BROWSER_MOUSE_CLICK_1);
+    } else if (result == NSERROR_OK && button == NULL && blockers <= 1) {
+        result = form_submit_dom(html, (dom_node *)form, NULL, BROWSER_MOUSE_CLICK_1);
+    }
+    dom_node_unref(button);
+    dom_node_unref(form);
+    content_remove_user(&html->base, NULL, &generation);
+    return result;
 }
 
 
@@ -1963,8 +2052,8 @@ out:
 
 static void *map_key_clone(void *key)
 {
-    /* Keys are borrowed DOM-node identities, just like control->node. Keep
-     * stored and lookup keys in the same representation. */
+    /* The control retains its node; the index borrows that stable identity.
+     * Keep stored and lookup keys in the same representation. */
     return key;
 }
 static void map_key_destroy(void *key)
@@ -2002,51 +2091,13 @@ hashmap_t *form_control_index_create(void)
 }
 
 /* exported interface documented in html/form_internal.h */
-struct form *form_new(void *node, const char *action, const char *target, form_method method, const char *charset,
-    const char *doc_charset)
+struct form *form_new(void *node)
 {
-    struct form *form;
-
-    form = calloc(1, sizeof *form);
-    if (!form)
+    struct form *form = calloc(1, sizeof(*form));
+    if (form == NULL)
         return NULL;
-
-    form->action = strdup(action != NULL ? action : "");
-    if (form->action == NULL) {
-        free(form);
-        return NULL;
-    }
-
-    form->target = target != NULL ? strdup(target) : NULL;
-    if (target != NULL && form->target == NULL) {
-        free(form->action);
-        free(form);
-        return NULL;
-    }
-
-    form->method = method;
-
-    form->accept_charsets = charset != NULL ? strdup(charset) : NULL;
-    if (charset != NULL && form->accept_charsets == NULL) {
-        free(form->target);
-        free(form->action);
-        free(form);
-        return NULL;
-    }
-
-    form->document_charset = doc_charset != NULL ? strdup(doc_charset) : NULL;
-    if (doc_charset && form->document_charset == NULL) {
-        free(form->accept_charsets);
-        free(form->target);
-        free(form->action);
-        free(form);
-        return NULL;
-    }
-
-    form->node = node;
-
+    form->node = dom_node_ref(node);
     form->control_index = form_control_index_create();
-
     return form;
 }
 
@@ -2062,10 +2113,7 @@ void form_free(struct form *form)
         form_free_control(c);
     }
 
-    free(form->action);
-    free(form->target);
-    free(form->accept_charsets);
-    free(form->document_charset);
+    dom_node_unref(form->node);
 
     if (form->control_index != NULL) {
         hashmap_destroy(form->control_index);
@@ -2085,7 +2133,7 @@ struct form_control *form_new_control(void *node, form_control_type type)
     if (control == NULL)
         return NULL;
 
-    control->node = node;
+    control->node = dom_node_ref(node);
     control->type = type;
 
     return control;

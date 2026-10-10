@@ -56,7 +56,7 @@ _dom_html_select_element_create(struct dom_html_element_create_params *params, s
 dom_exception
 _dom_html_select_element_initialise(struct dom_html_element_create_params *params, struct dom_html_select_element *ele)
 {
-    ele->form = NULL;
+    ele->association = (struct dom_html_form_association){0};
 
     return _dom_html_element_initialise(params, &ele->base);
 }
@@ -68,6 +68,8 @@ _dom_html_select_element_initialise(struct dom_html_element_create_params *param
  */
 void _dom_html_select_element_finalise(struct dom_html_select_element *ele)
 {
+    _dom_html_form_association_clear(&ele->association);
+
     _dom_html_element_finalise(&ele->base);
 }
 
@@ -135,9 +137,8 @@ dom_exception _dom_html_select_element_copy_internal(dom_html_select_element *ol
         return err;
     }
 
-    /* TODO: We don't seem to keep a ref to form element, so just
-     *       copy the pointer for now. */
-    new->form = old->form;
+    /* Cloning does not copy parser-created form ownership. */
+    new->association = (struct dom_html_form_association){0};
 
     new->selected = old->selected;
 
@@ -431,12 +432,7 @@ dom_exception dom_html_select_element_set_length(dom_html_select_element *ele, u
  */
 dom_exception dom_html_select_element_get_form(dom_html_select_element *select, dom_html_form_element **form)
 {
-    *form = select->form;
-
-    if (*form != NULL)
-        dom_node_ref(*form);
-
-    return DOM_NO_ERR;
+    return _dom_html_form_owner((dom_node_internal *)select, form);
 }
 
 /**
@@ -678,7 +674,5 @@ bool is_option(struct dom_node_internal *node, void *ctx)
 
 dom_exception _dom_html_select_element_set_form(dom_html_select_element *select, dom_html_form_element *form)
 {
-    select->form = form;
-
-    return DOM_NO_ERR;
+    return _dom_html_form_associate((dom_node_internal *)select, form);
 }

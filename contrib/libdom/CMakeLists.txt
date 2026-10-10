@@ -35,6 +35,7 @@ add_library(dom ${WISP_LIB_TYPE}
 	src/events/dispatch.c
 	src/events/event_target.c
 	src/html/html_element.c
+	src/html/form_owner.c
 	src/html/html_details_element.c
 	src/html/html_ulist_element.c
 	src/html/html_script_element.c

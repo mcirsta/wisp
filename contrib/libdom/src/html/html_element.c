@@ -13,6 +13,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <dom/dom.h>
 
 #include "html/html_document.h"
 #include "html/html_element.h"
@@ -30,6 +31,14 @@ const struct dom_html_element_vtable _dom_html_element_vtable = {{
                                                                      DOM_ELEMENT_VTABLE_HTML_ELEMENT,
                                                                  },
     DOM_HTML_ELEMENT_VTABLE};
+
+dom_html_element_type _dom_html_node_type(const dom_node_internal *node)
+{
+    if (node == NULL || node->type != DOM_ELEMENT_NODE || node->base.vtable != &_dom_html_element_vtable ||
+        (node->namespace != NULL && !dom_string_isequal(node->namespace, dom_namespaces[DOM_NAMESPACE_HTML])))
+        return DOM_HTML_ELEMENT_TYPE__UNKNOWN;
+    return ((const dom_html_element *)node)->type;
+}
 
 static const struct dom_element_protected_vtable _dom_html_element_protect_vtable = {
     {DOM_HTML_ELEMENT_PROTECT_VTABLE}, DOM_ELEMENT_PROTECT_VTABLE};

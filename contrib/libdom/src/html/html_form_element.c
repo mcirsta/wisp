@@ -7,11 +7,13 @@
 
 #include <assert.h>
 #include <stdlib.h>
+#include <dom/dom.h>
 
 #include <dom/html/html_form_element.h>
 
 #include "html/html_button_element.h"
 #include "html/html_form_element.h"
+#include "html/form_owner.h"
 #include "html/html_input_element.h"
 #include "html/html_select_element.h"
 #include "html/html_text_area_element.h"
@@ -26,6 +28,7 @@ static const struct dom_element_protected_vtable _protect_vtable = {
     {DOM_NODE_PROTECT_VTABLE_HTML_FORM_ELEMENT}, DOM_HTML_FORM_ELEMENT_PROTECT_VTABLE};
 
 static bool _dom_is_form_control(struct dom_node_internal *node, void *ctx);
+static bool is_submittable(struct dom_node_internal *node);
 
 /**
  * Create a dom_html_form_element object
@@ -149,6 +152,73 @@ dom_exception _dom_html_form_element_copy_internal(dom_html_form_element *old, d
 /*-----------------------------------------------------------------------*/
 /* Public APIs */
 
+void dom_html_form_control_list_fini(dom_html_form_control_list *controls)
+{
+    for (size_t i = 0; i < controls->length; i++)
+        dom_node_unref(controls->items[i]);
+    free(controls->items);
+    *controls = (dom_html_form_control_list){0};
+}
+
+dom_exception dom_html_form_element_get_submittable_elements(
+    dom_html_form_element *form, dom_html_form_control_list *controls)
+{
+    *controls = (dom_html_form_control_list){0};
+    size_t capacity = 0;
+    dom_exception err = DOM_NO_ERR;
+    dom_node_internal *root = (dom_node_internal *)form;
+    while (root->parent != NULL)
+        root = root->parent;
+    /* One tree walk, with owner resolution only once per candidate. A retained
+     * snapshot remains valid if later validation callbacks remove/reorder nodes. */
+    for (dom_node_internal *node = root; node != NULL;) {
+        if (is_submittable(node)) {
+            dom_html_form_element *owner = NULL;
+            err = _dom_html_form_owner(node, &owner);
+            bool match = owner == form;
+            dom_node_unref(owner);
+            if (err != DOM_NO_ERR)
+                goto fail;
+            if (match) {
+                if (controls->length == capacity) {
+                    if (capacity > SIZE_MAX / sizeof(*controls->items) / 2) {
+                        err = DOM_NO_MEM_ERR;
+                        goto fail;
+                    }
+                    size_t next = capacity == 0 ? 16 : capacity * 2;
+                    struct dom_node **items = realloc(controls->items, next * sizeof(*items));
+                    if (items == NULL) {
+                        err = DOM_NO_MEM_ERR;
+                        goto fail;
+                    }
+                    controls->items = items;
+                    capacity = next;
+                }
+                controls->items[controls->length++] = (struct dom_node *)dom_node_ref(node);
+            }
+        }
+        if (node->first_child != NULL) {
+            node = node->first_child;
+        } else {
+            while (node != root && node->next == NULL)
+                node = node->parent;
+            node = node == root ? NULL : node->next;
+        }
+    }
+    return DOM_NO_ERR;
+fail:
+    dom_html_form_control_list_fini(controls);
+    return err;
+}
+
+bool dom_html_form_control_has_datalist_ancestor(struct dom_node *control)
+{
+    for (dom_node_internal *node = ((dom_node_internal *)control)->parent; node != NULL; node = node->parent)
+        if (_dom_html_node_type(node) == DOM_HTML_ELEMENT_TYPE_DATALIST)
+            return true;
+    return false;
+}
+
 /**
  * Get the form controls under this form element
  *
@@ -162,7 +232,9 @@ dom_exception dom_html_form_element_get_elements(dom_html_form_element *ele, str
     dom_html_document *doc = (dom_html_document *)dom_node_get_owner(ele);
 
     assert(doc != NULL);
-    err = _dom_html_collection_create(doc, (dom_node_internal *)doc, _dom_is_form_control, ele, col);
+    err = _dom_html_collection_create(doc, (dom_node_internal *)ele, _dom_is_form_control, ele, col);
+    if (err == DOM_NO_ERR)
+        (*col)->whole_tree = true;
     return err;
 }
 
@@ -176,11 +248,8 @@ dom_exception dom_html_form_element_get_elements(dom_html_form_element *ele, str
 dom_exception dom_html_form_element_get_length(dom_html_form_element *ele, uint32_t *len)
 {
     dom_exception err;
-    dom_html_document *doc = (dom_html_document *)dom_node_get_owner(ele);
     dom_html_collection *col;
-
-    assert(doc != NULL);
-    err = _dom_html_collection_create(doc, (dom_node_internal *)doc, _dom_is_form_control, ele, &col);
+    err = dom_html_form_element_get_elements(ele, &col);
     if (err != DOM_NO_ERR)
         return err;
 
@@ -269,24 +338,37 @@ dom_exception dom_html_form_element_reset(dom_html_form_element *ele)
 
 /* Callback function to test whether certain node is a form control, see
  * src/html/html_collection.h for detail. */
+static bool is_submittable(struct dom_node_internal *node)
+{
+    switch (_dom_html_node_type(node)) {
+    case DOM_HTML_ELEMENT_TYPE_INPUT:
+    case DOM_HTML_ELEMENT_TYPE_TEXTAREA:
+    case DOM_HTML_ELEMENT_TYPE_SELECT:
+    case DOM_HTML_ELEMENT_TYPE_BUTTON:
+        return true;
+    default:
+        return false;
+    }
+}
+
 static bool _dom_is_form_control(struct dom_node_internal *node, void *ctx)
 {
-    struct dom_html_document *doc = (struct dom_html_document *)(node->owner);
-    struct dom_html_form_element *form = ctx;
-
-
-    assert(node->type == DOM_ELEMENT_NODE);
-
-    /* Form controls are INPUT TEXTAREA SELECT and BUTTON*/
-    if (dom_string_caseless_isequal(node->name, doc->elements[DOM_HTML_ELEMENT_TYPE_INPUT]))
-        return ((dom_html_input_element *)node)->form == form;
-    if (dom_string_caseless_isequal(node->name, doc->elements[DOM_HTML_ELEMENT_TYPE_TEXTAREA]))
-        return ((dom_html_text_area_element *)node)->form == form;
-    if (dom_string_caseless_isequal(node->name, doc->elements[DOM_HTML_ELEMENT_TYPE_SELECT]))
-        return ((dom_html_select_element *)node)->form == form;
-    if (dom_string_caseless_isequal(node->name, doc->elements[DOM_HTML_ELEMENT_TYPE_BUTTON])) {
-        return ((dom_html_button_element *)node)->form == form;
+    /* Public collection membership is separate from submission. The remaining
+     * listed-element types and RadioNodeList behavior still need implementation. */
+    if (!is_submittable(node))
+        return false;
+    if (_dom_html_node_type(node) == DOM_HTML_ELEMENT_TYPE_INPUT) {
+        dom_string *type = NULL;
+        dom_exception err = dom_html_input_element_get_type((dom_html_input_element *)node, &type);
+        dom_html_document *doc = (dom_html_document *)node->owner;
+        bool image = dom_string_caseless_isequal(type, doc->memoised[hds_image]);
+        dom_string_unref(type);
+        if (err != DOM_NO_ERR || image)
+            return false;
     }
-
-    return false;
+    dom_html_form_element *owner = NULL;
+    dom_exception err = _dom_html_form_owner(node, &owner);
+    bool match = err == DOM_NO_ERR && owner == ctx;
+    dom_node_unref(owner);
+    return match;
 }

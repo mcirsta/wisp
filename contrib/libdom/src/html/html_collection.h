@@ -29,6 +29,7 @@ struct dom_html_collection {
                                     */
     struct dom_node_internal *root;
     /**< The root node of this collection */
+    bool whole_tree; /**< Resolve root's current tree for form ownership. */
     uint32_t refcnt;
     /**< Reference counting */
 };

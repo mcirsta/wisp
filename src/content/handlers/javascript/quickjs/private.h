@@ -15,6 +15,8 @@ struct qjs_dom_document;
 struct qjs_event_dispatch;
 struct qjs_event_target;
 
+enum qjs_event_kind { QJS_EVENT, QJS_CUSTOM_EVENT, QJS_UI_EVENT, QJS_MOUSE_EVENT, QJS_SUBMIT_EVENT, QJS_EVENT_CLASSES };
+
 /* One runtime per browser window. The window and every document context hold
  * references, so retirement during a callback cannot free the runtime early. */
 struct jsheap {
@@ -26,7 +28,7 @@ struct jsheap {
     uint64_t deadline_ms;
     bool interrupted;
     struct jsthread *threads;
-    JSClassID event_class[2], event_target_class;
+    JSClassID event_class[QJS_EVENT_CLASSES], event_target_class;
     JSClassID abort_controller_class, abort_signal_class;
     JSClassID node_class, tokenlist_class, collection_class[2], xhr_class, console_class;
 };

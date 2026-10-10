@@ -60,6 +60,7 @@ dom_exception _dom_html_collection_initialise(struct dom_html_document *doc, str
     col->doc = doc;
     dom_node_ref(doc);
 
+    col->whole_tree = false;
     col->root = root;
     dom_node_ref(root);
 
@@ -101,6 +102,28 @@ void _dom_html_collection_destroy(struct dom_html_collection *col)
 /*-----------------------------------------------------------------------*/
 /* Public API */
 
+/* Form collections retain the form, and follow its current tree even after it
+ * is detached/reinserted. Other collections retain their fixed subtree root. */
+static dom_node_internal *collection_root(dom_html_collection *col)
+{
+    dom_node_internal *root = col->root;
+    if (col->whole_tree) {
+        while (root->parent != NULL)
+            root = root->parent;
+    }
+    return root;
+}
+
+static dom_node_internal *collection_next(dom_node_internal *node, dom_node_internal *root)
+{
+    if (node->first_child != NULL)
+        return node->first_child;
+    while (node != root && node->next == NULL)
+        node = node->parent;
+    return node == root ? NULL : node->next;
+}
+
+
 /**
  * Get the length of this dom_html_collection
  *
@@ -110,32 +133,14 @@ void _dom_html_collection_destroy(struct dom_html_collection *col)
  */
 dom_exception dom_html_collection_get_length(dom_html_collection *col, uint32_t *len)
 {
-    struct dom_node_internal *node = col->root;
+    struct dom_node_internal *root = collection_root(col), *node = root;
     *len = 0;
 
     while (node != NULL) {
         if (node->type == DOM_ELEMENT_NODE && col->ic(node, col->ctx) == true)
             (*len)++;
 
-        /* Depth first iterating */
-        if (node->first_child != NULL) {
-            node = node->first_child;
-        } else if (node->next != NULL) {
-            node = node->next;
-        } else {
-            /* No children and siblings */
-            struct dom_node_internal *parent = node->parent;
-
-            while (node != col->root && node == parent->last_child) {
-                node = parent;
-                parent = parent->parent;
-            }
-
-            if (node == col->root)
-                node = NULL;
-            else
-                node = node->next;
-        }
+        node = collection_next(node, root);
     }
 
     return DOM_NO_ERR;
@@ -151,7 +156,7 @@ dom_exception dom_html_collection_get_length(dom_html_collection *col, uint32_t 
  */
 dom_exception dom_html_collection_item(dom_html_collection *col, uint32_t index, struct dom_node **node)
 {
-    struct dom_node_internal *n = col->root;
+    struct dom_node_internal *root = collection_root(col), *n = root;
     uint32_t len = 0;
 
     while (n != NULL) {
@@ -164,25 +169,7 @@ dom_exception dom_html_collection_item(dom_html_collection *col, uint32_t index,
             return DOM_NO_ERR;
         }
 
-        /* Depth first iterating */
-        if (n->first_child != NULL) {
-            n = n->first_child;
-        } else if (n->next != NULL) {
-            n = n->next;
-        } else {
-            /* No children and siblings */
-            struct dom_node_internal *parent = n->parent;
-
-            while (n != col->root && n == parent->last_child) {
-                n = parent;
-                parent = parent->parent;
-            }
-
-            if (n == col->root)
-                n = NULL;
-            else
-                n = n->next;
-        }
+        n = collection_next(n, root);
     }
 
     /* Not find the node */
@@ -200,7 +187,7 @@ dom_exception dom_html_collection_item(dom_html_collection *col, uint32_t index,
  */
 dom_exception dom_html_collection_named_item(dom_html_collection *col, dom_string *name, struct dom_node **node)
 {
-    struct dom_node_internal *n = col->root;
+    struct dom_node_internal *root = collection_root(col), *n = root;
     dom_html_document *doc = (dom_html_document *)dom_node_get_owner(n);
     dom_exception err;
 
@@ -241,25 +228,7 @@ dom_exception dom_html_collection_named_item(dom_html_collection *col, dom_strin
             }
         }
 
-        /* Depth first iterating */
-        if (n->first_child != NULL) {
-            n = n->first_child;
-        } else if (n->next != NULL) {
-            n = n->next;
-        } else {
-            /* No children and siblings */
-            struct dom_node_internal *parent = n->parent;
-
-            while (n != col->root && n == parent->last_child) {
-                n = parent;
-                parent = parent->parent;
-            }
-
-            if (n == col->root)
-                n = NULL;
-            else
-                n = n->next;
-        }
+        n = collection_next(n, root);
     }
 
     /* Not found the target node */

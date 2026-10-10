@@ -11,6 +11,7 @@
 #include <dom/html/html_select_element.h>
 
 #include "html/html_element.h"
+#include "html/form_owner.h"
 #include "html/html_options_collection.h"
 
 struct dom_html_select_element {
@@ -18,8 +19,7 @@ struct dom_html_select_element {
     /**< The base class */
     int32_t selected;
     /**< The selected element's index */
-    dom_html_form_element *form;
-    /**< The form associated with select */
+    struct dom_html_form_association association;
 };
 
 /* Create a dom_html_select_element object */

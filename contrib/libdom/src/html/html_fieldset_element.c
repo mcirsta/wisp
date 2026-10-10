@@ -12,6 +12,7 @@
 #include <dom/html/html_fieldset_element.h>
 
 #include "html/html_document.h"
+#include "html/form_owner.h"
 #include "html/html_fieldset_element.h"
 
 #include "utils/utils.h"
@@ -145,24 +146,5 @@ _dom_html_field_set_element_copy_internal(dom_html_field_set_element *old, dom_h
 
 dom_exception dom_html_field_set_element_get_form(dom_html_field_set_element *field_set, dom_html_form_element **form)
 {
-    dom_html_document *doc = (dom_html_document *)((dom_node_internal *)field_set)->owner;
-    dom_node_internal *form_tmp = ((dom_node_internal *)field_set)->parent;
-
-    /* Search ancestor chain for FIELDSET element */
-    while (form_tmp != NULL) {
-        if (form_tmp->type == DOM_ELEMENT_NODE &&
-            dom_string_caseless_isequal(form_tmp->name, doc->elements[DOM_HTML_ELEMENT_TYPE_FORM]))
-            break;
-
-        form_tmp = form_tmp->parent;
-    }
-
-    if (form_tmp != NULL) {
-        *form = (dom_html_form_element *)dom_node_ref(form_tmp);
-        return DOM_NO_ERR;
-    }
-
-    *form = NULL;
-
-    return DOM_NO_ERR;
+    return _dom_html_form_owner((dom_node_internal *)field_set, form);
 }

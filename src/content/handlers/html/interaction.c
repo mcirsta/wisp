@@ -62,6 +62,7 @@
 #include "content/handlers/html/box_textarea.h"
 #include "content/handlers/html/font.h"
 #include "content/handlers/html/imagemap.h"
+#include "content/handlers/html/hyperlink.h"
 
 /* Event targets remain elements, while text boxes retain their source node
  * for stable search ranges. The live document owns the returned parent. */
@@ -516,11 +517,11 @@ struct mouse_action_state {
         browser_pointer_shape pointer; /**< pointer shape */
         enum {
             ACTION_NONE, /**< default of no action */
+            ACTION_DOM, /**< ordinary content activation; may acquire a link in a listener */
             ACTION_NOSEND, /**< do not send status and pointer
                       message */
-            ACTION_SUBMIT, /**< submit form */
-            ACTION_NAVIGATE, /**< navigate to link url */
-            ACTION_JS, /**< execute link as script */
+            ACTION_LINK, /**< activate the original link after click dispatch */
+            ACTION_DOWNLOAD, /**< force download of link after click dispatch */
             ACTION_BACK, /**< navigate back in history */
             ACTION_FORWARD, /**< navigate forward in history */
         } action;
@@ -548,7 +549,7 @@ struct mouse_action_state {
     struct {
         struct box *box;
         nsurl *url;
-        const char *target;
+        dom_node *map_node;
         bool is_imagemap;
     } link;
 
@@ -558,7 +559,6 @@ struct mouse_action_state {
         struct box *box;
         int box_x;
         int box_y;
-        const char *target;
     } gadget;
 
     /** title */
@@ -680,13 +680,16 @@ static nserror get_mouse_action_node(html_content *html, int x, int y, bool chec
 
         if (box->href) {
             man->link.url = box->href;
-            man->link.target = box->target;
             man->link.box = box;
             man->link.is_imagemap = false;
+            man->link.map_node = NULL;
         }
 
         if (box->usemap) {
-            man->link.url = imagemap_get(html, box->usemap, box_x, box_y, x, y, &man->link.target);
+            struct imagemap_hit hit;
+            imagemap_get(html, box->usemap, box_x, box_y, x, y, &hit);
+            man->link.url = hit.url;
+            man->link.map_node = hit.node;
             man->link.box = box;
             man->link.is_imagemap = true;
         }
@@ -696,9 +699,6 @@ static nserror get_mouse_action_node(html_content *html, int x, int y, bool chec
             man->gadget.box = box;
             man->gadget.box_x = box_x;
             man->gadget.box_y = box_y;
-            if (box->gadget->form) {
-                man->gadget.target = box->gadget->form->target;
-            }
         }
 
         if (box->title) {
@@ -825,27 +825,30 @@ gadget_mouse_action(html_content *html, browser_mouse_state mouse, int x, int y,
             coords->y = y - mas->gadget.box_y;
             if (dom_node_set_user_data(mas->gadget.control->node, corestring_dom___ns_key_image_coords_node_data,
                     coords, html__image_coords_dom_user_data_handler, &oldcoords) != DOM_NO_ERR) {
+                free(coords);
                 return NSERROR_OK;
             }
             free(oldcoords);
         }
         /* Fall through */
 
-    case GADGET_SUBMIT:
-        if (mas->gadget.control->form) {
+    case GADGET_SUBMIT: {
+        nsurl *url = NULL;
+        res = form_submit_url(html, mas->gadget.control->node, &url);
+        if (res != NSERROR_OK)
+            return res;
+        if (url != NULL) {
             static char status_buffer[200];
-
-            snprintf(
-                status_buffer, sizeof status_buffer, messages_get("FormSubmit"), mas->gadget.control->form->action);
+            snprintf(status_buffer, sizeof status_buffer, messages_get("FormSubmit"), nsurl_access(url));
             mas->result.status = status_buffer;
+            nsurl_unref(url);
             mas->result.pointer = get_pointer_shape(mas->gadget.box, false);
-            if (mouse & (BROWSER_MOUSE_CLICK_1 | BROWSER_MOUSE_CLICK_2)) {
-                mas->result.action = ACTION_SUBMIT;
-            }
         } else {
             mas->result.status = messages_get("FormBadSubmit");
         }
+        mas->result.action = ACTION_DOM;
         break;
+    }
 
     case GADGET_TEXTBOX:
     case GADGET_PASSWORD:
@@ -980,8 +983,7 @@ static bool is_javascript_navigate_url(nsurl *url)
 /**
  * process mouse activity on a link
  */
-static nserror link_mouse_action(html_content *html, struct browser_window *bw, browser_mouse_state mouse, int x, int y,
-    struct mouse_action_state *mas)
+static nserror link_mouse_action(html_content *html, browser_mouse_state mouse, struct mouse_action_state *mas)
 {
     nserror res;
     char *url_s = NULL;
@@ -1016,9 +1018,7 @@ static nserror link_mouse_action(html_content *html, struct browser_window *bw, 
     mas->result.pointer = get_pointer_shape(mas->link.box, mas->link.is_imagemap);
 
     if (mouse & BROWSER_MOUSE_CLICK_1 && mouse & BROWSER_MOUSE_MOD_1) {
-        /* force download of link */
-        browser_window_navigate(
-            bw, mas->link.url, content_get_url((struct content *)html), BW_NAVIGATE_DOWNLOAD, NULL, NULL, NULL);
+        mas->result.action = ACTION_DOWNLOAD;
 
     } else if (mouse & BROWSER_MOUSE_CLICK_2 && mouse & BROWSER_MOUSE_MOD_1) {
         msg_data.savelink.url = mas->link.url;
@@ -1026,11 +1026,7 @@ static nserror link_mouse_action(html_content *html, struct browser_window *bw, 
         content_broadcast((struct content *)html, CONTENT_MSG_SAVELINK, &msg_data);
 
     } else if (mouse & (BROWSER_MOUSE_CLICK_1 | BROWSER_MOUSE_CLICK_2)) {
-        if (is_javascript_navigate_url(mas->link.url)) {
-            mas->result.action = ACTION_JS;
-        } else {
-            mas->result.action = ACTION_NAVIGATE;
-        }
+        mas->result.action = ACTION_LINK;
     }
 
     return NSERROR_OK;
@@ -1171,21 +1167,110 @@ static nserror default_mouse_action(html_content *html, struct browser_window *b
 }
 
 
+/* Content users protect storage; the generation separately protects actions.
+ * Keeping a document alive must not keep its retired window/action usable. */
+struct html_input_context {
+    html_content *html;
+    struct browser_window *bw;
+    uint64_t generation;
+};
+
+static bool html_input_active(const struct html_input_context *input)
+{
+    return input->bw != NULL && input->html->bw == input->bw &&
+        input->html->input_generation == input->generation;
+}
+
 static void checked_state_changed(dom_node *node, void *pw)
 {
-    html_request_checked_restyle(pw, node);
+    const struct html_input_context *input = pw;
+    /* Rollback can report changes after a listener navigated away. */
+    if (html_input_active(input))
+        html_request_checked_restyle(input->html, node);
+}
+
+static nserror mouse_action_follow_link(
+    const struct html_input_context *input, dom_node *link, browser_mouse_state mouse, bool download)
+{
+    nsurl *url = NULL;
+    char *target = NULL;
+    nserror result = html_hyperlink_resolve(input->html, link, &url, &target);
+    if (result != NSERROR_OK || url == NULL)
+        return result;
+
+    struct content *content = &input->html->base;
+    if (!download && is_javascript_navigate_url(url)) {
+        if (input->html->enable_scripting) {
+            lwc_string *path = nsurl_get_component(url, NSURL_PATH);
+            if (path != NULL) {
+                html_exec(content, lwc_string_data(path), lwc_string_length(path));
+                lwc_string_unref(path);
+            }
+        }
+    } else {
+        struct browser_window *bw = download ? input->bw : browser_window_find_target(input->bw, target, mouse);
+        /* Opening a target can itself call the frontend. All URL/target data
+         * above is owned, and a retired source cannot continue navigation. */
+        if (html_input_active(input) && bw != NULL)
+            result = browser_window_navigate(bw, url, content_get_url(content),
+                download ? BW_NAVIGATE_DOWNLOAD : BW_NAVIGATE_HISTORY, NULL, NULL, NULL);
+    }
+    free(target);
+    nsurl_unref(url);
+    return result;
+}
+
+static nserror mouse_action_activate(
+    const struct html_input_context *input, browser_mouse_state mouse, const struct mouse_action_state *mas)
+{
+    bool gadget = mas->gadget.control != NULL;
+    dom_node *clicked = mas->node;
+    if (gadget) {
+        clicked = mas->gadget.control->node;
+    } else if (mas->link.map_node != NULL) {
+        clicked = mas->link.map_node;
+    } else if (mas->result.action == ACTION_DOM && mas->checkable_box != NULL) {
+        clicked = html_box_event_node(mas->checkable_box);
+    }
+    dom_node_ref(clicked);
+    bool link_action = !gadget && (mas->result.action == ACTION_DOM || mas->result.action == ACTION_LINK ||
+        mas->result.action == ACTION_DOWNLOAD);
+    /* Freeze identity, never href/target strings. Box construction copies href
+     * into descendants, whose node need not be the activating anchor. */
+    dom_node *link = link_action ? html_hyperlink_target(clicked) : NULL;
+    dom_node *submitter = (gadget || mas->result.action == ACTION_DOM) ? html_form_submit_target(clicked) : NULL;
+    struct html_form_click_result click = {.accepted = true};
+    nserror result = NSERROR_OK;
+    if (mouse & BROWSER_MOUSE_CLICK_1)
+        click = html_form_click(clicked, checked_state_changed, (void *)input);
+    if (!html_input_active(input) || !click.accepted)
+        goto out;
+
+    if (!click.handled && link != NULL) {
+        result = mouse_action_follow_link(input, link, mouse, mas->result.action == ACTION_DOWNLOAD);
+    } else if (!click.handled && submitter != NULL) {
+        result = form_submit(input->html, submitter, mouse);
+    } else if ((mouse & BROWSER_MOUSE_CLICK_1) && !click.handled && link == NULL && !gadget &&
+        mas->result.action == ACTION_DOM) {
+        result = html_details_activate(input->html, clicked);
+    }
+out:
+    dom_node_unref(submitter);
+    dom_node_unref(link);
+    dom_node_unref(clicked);
+    return result;
 }
 
 /**
  * handle non dragging mouse actions
  */
-static nserror
-mouse_action_drag_none(html_content *html, struct browser_window *bw, browser_mouse_state mouse, int x, int y)
+static nserror mouse_action_drag_none(const struct html_input_context *input, browser_mouse_state mouse, int x, int y)
 {
+    html_content *html = input->html;
+    struct browser_window *bw = input->bw;
     nserror res;
     struct content *c = (struct content *)html;
     union content_msg_data msg_data;
-    lwc_string *path;
 
     /* Frame dispatch re-enters this function, so state belongs to this call. */
     struct mouse_action_state mas;
@@ -1233,74 +1318,42 @@ mouse_action_drag_none(html_content *html, struct browser_window *bw, browser_mo
         return iframe_mouse_action(bw, mouse, x, y, &mas);
 
     } else if (mas.html_object.box != NULL) {
-        res = html_object_mouse_action(html, bw, mouse, x, y, &mas);
+        /* Like an iframe, the embedded document owns dispatch. Its listener can
+         * retire this parent too; do not send a second click to the parent. */
+        return html_object_mouse_action(html, bw, mouse, x, y, &mas);
 
     } else if (mas.link.url != NULL) {
-        res = link_mouse_action(html, bw, mouse, x, y, &mas);
+        res = link_mouse_action(html, mouse, &mas);
 
     } else {
+        mas.result.action = ACTION_DOM;
         res = default_mouse_action(html, bw, mouse, x, y, &mas);
     }
     if (res != NSERROR_OK) {
         return res;
     }
 
+    if (!html_input_active(input))
+        return NSERROR_OK;
+
     /* send status and pointer message */
     if (mas.result.action != ACTION_NOSEND) {
         msg_data.explicit_status_text = mas.result.status;
         content_broadcast(c, CONTENT_MSG_STATUS, &msg_data);
+        if (!html_input_active(input))
+            return NSERROR_OK;
 
         msg_data.pointer = mas.result.pointer;
         content_broadcast(c, CONTENT_MSG_POINTER, &msg_data);
+        if (!html_input_active(input))
+            return NSERROR_OK;
     }
 
-    /* fire dom click event */
-    if (mouse & BROWSER_MOUSE_CLICK_1) {
-        dom_node *clicked = mas.node;
-        if (mas.gadget.control != NULL) {
-            clicked = mas.gadget.control->node;
-        } else if (mas.result.action == ACTION_NONE && mas.link.url == NULL && mas.checkable_box != NULL) {
-            /* Floats are visited before normal-flow boxes by box_at_point.
-             * Keep the interactive candidate, as we already do for links. */
-            clicked = html_box_event_node(mas.checkable_box);
-        }
-        dom_node *target = html_checkable_target(clicked);
-        bool activate = fire_generic_dom_event(corestring_dom_click, clicked, true, true);
-        if (activate && target != NULL && target != clicked)
-            activate = fire_generic_dom_event(corestring_dom_click, target, true, true);
-        if (activate && target != NULL && html_checkable_activate(target, checked_state_changed, html)) {
-            fire_generic_dom_event(corestring_dom_input, target, true, false);
-            fire_generic_dom_event(corestring_dom_change, target, true, false);
-        }
-        if (activate && target == NULL && mas.result.action == ACTION_NONE && mas.gadget.control == NULL)
-            res = html_details_activate(html, clicked);
-        dom_node_unref(target);
-        if (res != NSERROR_OK)
-            return res;
-    }
+    if (mouse & (BROWSER_MOUSE_CLICK_1 | BROWSER_MOUSE_CLICK_2))
+        return mouse_action_activate(input, mouse, &mas);
 
-    /* deferred actions that can cause this browser_window to be destroyed
-     * and must therefore be done after set_status/pointer
-     */
+    /* History actions also run after status/pointer callbacks. */
     switch (mas.result.action) {
-    case ACTION_SUBMIT:
-        res = form_submit(content_get_url(c), browser_window_find_target(bw, mas.gadget.target, mouse),
-            mas.gadget.control->form, mas.gadget.control);
-        break;
-
-    case ACTION_NAVIGATE:
-        res = browser_window_navigate(browser_window_find_target(bw, mas.link.target, mouse), mas.link.url,
-            content_get_url(c), BW_NAVIGATE_HISTORY, NULL, NULL, NULL);
-        break;
-
-    case ACTION_JS:
-        path = nsurl_get_component(mas.link.url, NSURL_PATH);
-        if (path != NULL) {
-            html_exec(c, lwc_string_data(path), lwc_string_length(path));
-            lwc_string_unref(path);
-        }
-        break;
-
     case ACTION_BACK:
         res = browser_window_history_back(bw, false);
         break;
@@ -1309,6 +1362,9 @@ mouse_action_drag_none(html_content *html, struct browser_window *bw, browser_mo
         res = browser_window_history_forward(bw, false);
         break;
 
+    case ACTION_LINK:
+    case ACTION_DOWNLOAD:
+    case ACTION_DOM:
     case ACTION_NOSEND:
     case ACTION_NONE:
         res = NSERROR_OK;
@@ -1326,10 +1382,11 @@ nserror html_mouse_track(struct content *c, struct browser_window *bw, browser_m
 }
 
 
-/* exported interface documented in html/interaction.h */
-nserror html_mouse_action(struct content *c, struct browser_window *bw, browser_mouse_state mouse, int x, int y)
+static nserror html_mouse_action_dispatch(
+    const struct html_input_context *input, browser_mouse_state mouse, int x, int y)
 {
-    html_content *html = (html_content *)c;
+    html_content *html = input->html;
+    struct browser_window *bw = input->bw;
     nserror res = NSERROR_OK;
 
     if (html->layout == NULL)
@@ -1361,7 +1418,7 @@ nserror html_mouse_action(struct content *c, struct browser_window *bw, browser_
         break;
 
     case HTML_DRAG_NONE:
-        res = mouse_action_drag_none(html, bw, mouse, x, y);
+        res = mouse_action_drag_none(input, mouse, x, y);
         break;
 
     default:
@@ -1374,6 +1431,31 @@ nserror html_mouse_action(struct content *c, struct browser_window *bw, browser_
     }
 
     return res;
+}
+
+
+/* exported interface documented in html/interaction.h */
+nserror html_mouse_action(struct content *c, struct browser_window *bw, browser_mouse_state mouse, int x, int y)
+{
+    html_content *html = (html_content *)c;
+    struct html_input_context input = {.html = html, .bw = bw, .generation = html->input_generation};
+    if (!html_input_active(&input))
+        return NSERROR_OK;
+
+    /* A primary click can dispatch DOM callbacks in this document or a child;
+     * either click button can execute a javascript: URL.
+     * Those callbacks may release the last cache handle. Use the existing user
+     * list to pin content across the entire dispatch, including default actions.
+     * Each nested call has its own identity. Pointer motion needs no allocation.
+     * Native JS delivery stays guarded pending submission validation/events
+     * and callback-safe handling of the remaining control defaults. */
+    bool pin = (mouse & (BROWSER_MOUSE_CLICK_1 | BROWSER_MOUSE_CLICK_2)) != 0;
+    if (pin && !content_add_user(c, NULL, &input))
+        return NSERROR_NOMEM;
+    nserror result = html_mouse_action_dispatch(&input, mouse, x, y);
+    if (pin)
+        content_remove_user(c, NULL, &input);
+    return result;
 }
 
 

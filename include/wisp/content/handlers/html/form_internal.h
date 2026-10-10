@@ -36,6 +36,7 @@ struct form_select_menu;
 struct form;
 struct html_content;
 struct dom_string;
+struct dom_node;
 struct content;
 struct nsurl;
 struct fetch_multipart_data;
@@ -72,7 +73,7 @@ struct image_input_coords {
 
 /** Form control. */
 struct form_control {
-    void *node; /**< Corresponding DOM node */
+    void *node; /**< Retained corresponding DOM node */
     struct dom_string *node_value; /**< The last value sync'd with the DOM */
     bool syncing; /**< Set if a DOM sync is in-progress */
     struct html_content *html; /**< HTML content containing control */
@@ -127,13 +128,8 @@ typedef enum {
 
 /** HTML form. */
 struct form {
-    void *node; /**< Corresponding DOM node */
+    void *node; /**< Retained corresponding DOM node */
 
-    char *action; /**< Absolute URL to submit to. */
-    char *target; /**< Target to submit to. */
-    form_method method; /**< Method and enctype. */
-    char *accept_charsets; /**< Charset to submit form in */
-    char *document_charset; /**< Charset of document containing form */
     struct form_control *controls; /**< Linked list of controls. */
     struct form_control *last_control; /**< Last control in list. */
 
@@ -158,19 +154,10 @@ hashmap_t *form_control_index_create(void);
  */
 typedef void (*select_menu_redraw_callback)(void *client_data, int x, int y, int width, int height);
 
-/**
- * Create a struct form.
- *
- * \param node         DOM node associated with form
- * \param action       URL to submit form to, or NULL for default
- * \param target       Target frame of form, or NULL for default
- * \param method       method and enctype
- * \param charset      acceptable encodings for form submission, or NULL
- * \param doc_charset  encoding of containing document, or NULL
- * \return A new form or NULL on memory exhaustion
- */
-struct form *form_new(void *node, const char *action, const char *target, form_method method, const char *charset,
-    const char *doc_charset);
+/** Create a form's presentation-control registry, retaining its DOM node.
+ * Submission attributes are read from the live DOM when needed. */
+struct form *form_new(void *node);
+
 
 /**
  * Free a form and any controls it owns.
@@ -314,16 +301,18 @@ void form_select_get_dimensions(struct form_control *control, int *width, int *h
 void form_select_menu_callback(void *client_data, int x, int y, int width, int height);
 
 
-/**
- * navigate browser window based on form submission.
- *
- * \param page_url content url
- * \param target The browsing context in which the navigation will occour.
- * \param form The form to submit.
- * \param submit_button The control used to submit the form.
- */
-nserror form_submit(
-    struct nsurl *page_url, struct browser_window *target, struct form *form, struct form_control *submit_button);
+/** Submit from a retained DOM input/button after an uncanceled click. The caller
+ * must pin content across this call. Reads current owner and attributes; never
+ * accesses rendered gadgets. Validation/submission events are still pending. */
+nserror form_submit(struct html_content *html, struct dom_node *submitter, enum browser_mouse_state mouse);
+
+/** Current submit action for status text. NULL URL means no associated form.
+ * On success a non-NULL URL is owned by the caller. */
+nserror form_submit_url(struct html_content *html, struct dom_node *submitter, struct nsurl **url);
+
+/** Enter-key submission from a live input. Pins content across default-button
+ * click dispatch and navigation, and respects cancellation/document retirement. */
+nserror form_submit_implicit(struct html_content *html, struct dom_node *input);
 
 
 /**

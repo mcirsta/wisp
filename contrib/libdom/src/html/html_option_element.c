@@ -259,6 +259,31 @@ dom_exception dom_html_option_element_get_disabled(dom_html_option_element *ele,
     return dom_html_element_get_bool_property(&ele->base, "disabled", SLEN("disabled"), disabled);
 }
 
+dom_exception dom_html_option_element_is_disabled(dom_html_option_element *option, bool *disabled)
+{
+    dom_node_internal *node = (dom_node_internal *)option;
+    dom_html_document *doc = (dom_html_document *)node->owner;
+    dom_exception err = dom_element_has_attribute(option, doc->memoised[hds_disabled], disabled);
+    if (err != DOM_NO_ERR || *disabled)
+        return err;
+    /* HTML's option disabledness algorithm stops at the nearest optgroup or
+     * option/select/hr/datalist boundary, including DOM-created wrappers. */
+    for (node = node->parent; node != NULL; node = node->parent) {
+        switch (_dom_html_node_type(node)) {
+        case DOM_HTML_ELEMENT_TYPE_SELECT:
+        case DOM_HTML_ELEMENT_TYPE_HR:
+        case DOM_HTML_ELEMENT_TYPE_DATALIST:
+        case DOM_HTML_ELEMENT_TYPE_OPTION:
+            return DOM_NO_ERR;
+        case DOM_HTML_ELEMENT_TYPE_OPTGROUP:
+            return dom_element_has_attribute(node, doc->memoised[hds_disabled], disabled);
+        default:
+            break;
+        }
+    }
+    return DOM_NO_ERR;
+}
+
 /**
  * Set the disabled property
  *

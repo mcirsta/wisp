@@ -189,17 +189,4 @@ nserror cancel_dom_to_box(void *box_conversion_context);
  */
 struct box *box_for_node(struct dom_node *node);
 
-/**
- * Extract a URL from a relative link, handling junk like whitespace and
- * attempting to read a real URL from "javascript:" links.
- *
- * \param content html content
- * \param dsrel relative URL text taken from page
- * \param base base for relative URLs
- * \param result updated to target URL on heap, unchanged if extract failed
- * \return true on success, false on memory exhaustion
- */
-bool box_extract_link(
-    const struct html_content *content, const struct dom_string *dsrel, struct nsurl *base, struct nsurl **result);
-
 #endif

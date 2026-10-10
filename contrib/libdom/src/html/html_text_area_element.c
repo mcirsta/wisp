@@ -54,7 +54,7 @@ dom_exception _dom_html_text_area_element_create(
 dom_exception _dom_html_text_area_element_initialise(
     struct dom_html_element_create_params *params, struct dom_html_text_area_element *ele)
 {
-    ele->form = NULL;
+    ele->association = (struct dom_html_form_association){0};
     ele->default_value = NULL;
     ele->default_value_set = false;
     ele->value = NULL;
@@ -70,6 +70,8 @@ dom_exception _dom_html_text_area_element_initialise(
  */
 void _dom_html_text_area_element_finalise(struct dom_html_text_area_element *ele)
 {
+    _dom_html_form_association_clear(&ele->association);
+
     if (ele->default_value != NULL) {
         dom_string_unref(ele->default_value);
         ele->default_value = NULL;
@@ -301,9 +303,8 @@ _dom_html_text_area_element_copy_internal(dom_html_text_area_element *old, dom_h
         return err;
     }
 
-    /* TODO: We don't seem to keep a ref to form element, so just
-     *       copy the pointer for now. */
-    new->form = old->form;
+    /* Cloning does not copy parser-created form ownership. */
+    new->association = (struct dom_html_form_association){0};
 
     new->default_value = dom_string_ref(old->default_value);
     new->default_value_set = old->default_value_set;
@@ -390,19 +391,12 @@ dom_exception dom_html_text_area_element_set_rows(dom_html_text_area_element *te
 
 dom_exception dom_html_text_area_element_get_form(dom_html_text_area_element *text_area, dom_html_form_element **form)
 {
-    *form = text_area->form;
-
-    if (*form != NULL)
-        dom_node_ref(*form);
-
-    return DOM_NO_ERR;
+    return _dom_html_form_owner((dom_node_internal *)text_area, form);
 }
 
 dom_exception _dom_html_text_area_element_set_form(dom_html_text_area_element *text_area, dom_html_form_element *form)
 {
-    text_area->form = form;
-
-    return DOM_NO_ERR;
+    return _dom_html_form_associate((dom_node_internal *)text_area, form);
 }
 
 /**

@@ -38,6 +38,7 @@
 #include "core/text.h"
 #include "events/mutation_event.h"
 #include "html/html_details_element.h"
+#include "html/form_owner.h"
 
 static bool _dom_node_permitted_child(const dom_node_internal *parent, const dom_node_internal *child);
 static dom_exception _dom_node_check_insertion(const dom_node_internal *parent, const dom_node_internal *child,
@@ -2106,6 +2107,7 @@ dom_exception _dom_node_attach_range(dom_node_internal *first, dom_node_internal
         n->parent = parent;
     }
     for (n = first; n != last->next; n = n->next) {
+        _dom_html_form_subtree_changed(n);
         err = _dom_html_details_inserted(n);
         if (err != DOM_NO_ERR)
             return err;
@@ -2155,6 +2157,9 @@ dom_exception _dom_node_detach_range(dom_node_internal *first, dom_node_internal
 
         n->parent = NULL;
     }
+
+    for (n = first; n != last->next; n = n->next)
+        _dom_html_form_subtree_changed(n);
 
     success = true;
     _dom_dispatch_subtree_modified_event(parent->owner, parent, &success);
@@ -2216,7 +2221,9 @@ dom_exception _dom_node_replace(dom_node_internal *old, dom_node_internal *repla
     }
 
     old->previous = old->next = old->parent = NULL;
+    _dom_html_form_subtree_changed(old);
     for (n = first; n != last->next; n = n->next) {
+        _dom_html_form_subtree_changed(n);
         dom_exception err = _dom_html_details_inserted(n);
         if (err != DOM_NO_ERR)
             return err;

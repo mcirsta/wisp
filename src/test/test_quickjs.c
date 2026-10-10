@@ -2474,6 +2474,357 @@ START_TEST(test_quickjs_node_event_long_path)
 }
 END_TEST
 
+START_TEST(test_quickjs_ui_event_values)
+{
+    ck_assert(exec_script(dom_thread,
+        "var e=new UIEvent('resize');"
+        "if(!(e instanceof UIEvent)||!(e instanceof Event)||e instanceof CustomEvent||e.view!==null||e.detail!==0||"
+        "e.isTrusted||e.bubbles||e.cancelable||e.composed||e.target!==null)throw Error('UI defaults');"
+        "if(Object.getPrototypeOf(UIEvent)!==Event||Object.getPrototypeOf(UIEvent.prototype)!==Event.prototype||"
+        "Object.prototype.toString.call(e)!=='[object UIEvent]')throw Error('UI interface');"
+        "var u=new UIEvent('x',{view:window,detail:4294967295.8,bubbles:true,cancelable:true,composed:true});"
+        "if(u.view!==window||u.detail!==-1||!u.bubbles||!u.cancelable||!u.composed)throw Error('UI values');"
+        "class Mine extends UIEvent{};if(!(new Mine('x') instanceof Mine))throw Error('UI subclass');"
+        "for(let f of [()=>UIEvent('x'),()=>new UIEvent(),()=>new UIEvent('x',1),()=>new UIEvent('x',{view:{}}),"
+        "()=>new UIEvent('x',{view:document}),()=>Object.getOwnPropertyDescriptor(UIEvent.prototype,'detail').get.call(new CustomEvent('x'))])"
+        "{try{f();throw Error('accepted');}catch(e){if(!(e instanceof TypeError))throw e;}}",
+        "ui-event-values.js"));
+}
+END_TEST
+
+START_TEST(test_quickjs_mouse_event_values)
+{
+    ck_assert(exec_script(dom_thread,
+        "var e=new MouseEvent('move');"
+        "if(!(e instanceof MouseEvent)||!(e instanceof UIEvent)||!(e instanceof Event)||e instanceof CustomEvent||"
+        "e.view!==null||e.detail!==0||e.relatedTarget!==null||e.clientX!==0||e.clientY!==0||e.screenX!==0||e.screenY!==0||"
+        "e.button!==0||e.buttons!==0||e.ctrlKey||e.altKey||e.shiftKey||e.metaKey||e.isTrusted)throw Error('mouse defaults');"
+        "if(Object.getPrototypeOf(MouseEvent)!==UIEvent||Object.getPrototypeOf(MouseEvent.prototype)!==UIEvent.prototype||"
+        "Object.prototype.toString.call(e)!=='[object MouseEvent]'||MouseEvent.AT_TARGET!==2)throw Error('mouse interface');"
+        "var m=new MouseEvent('x',{view:window,relatedTarget:document.body,clientX:12.25,clientY:-3.75,screenX:1e20,screenY:-0,"
+        "detail:2147483648,button:65535.9,buttons:-1,ctrlKey:true,shiftKey:1});"
+        "if(m.view!==window||m.relatedTarget!==document.body||m.clientX!==12.25||m.x!==m.clientX||m.clientY!==-3.75||m.y!==m.clientY||"
+        "m.screenX!==1e20||!Object.is(m.screenY,-0)||m.detail!==-2147483648||m.button!==-1||m.buttons!==65535||!m.ctrlKey||!m.shiftKey)"
+        "throw Error('mouse values');"
+        "class Mine extends MouseEvent{};if(!(new Mine('x') instanceof Mine))throw Error('mouse subclass');"
+        "for(let target of [window,document,document.body,document.createTextNode(''),document.createDocumentFragment(),"
+        "new EventTarget(),new AbortController().signal])if(new MouseEvent('x',{relatedTarget:target}).relatedTarget!==target)throw Error('related identity');"
+        "for(let f of [()=>MouseEvent('x'),()=>new MouseEvent(),()=>new MouseEvent('x',{relatedTarget:{}}),"
+        "()=>new MouseEvent('x',{relatedTarget:new Proxy(document.body,{})}),"
+        "()=>Object.getOwnPropertyDescriptor(MouseEvent.prototype,'clientX').get.call(new UIEvent('x'))])"
+        "{try{f();throw Error('accepted');}catch(e){if(!(e instanceof TypeError))throw e;}}"
+        "for(let key of ['clientX','clientY','screenX','screenY'])for(let value of [NaN,Infinity,-Infinity,Symbol(),1n]){"
+        "try{new MouseEvent('x',{[key]:value});throw Error('accepted coordinate');}catch(e){if(!(e instanceof TypeError))throw e;}}",
+        "mouse-event-values.js"));
+}
+END_TEST
+
+START_TEST(test_quickjs_input_event_conversion)
+{
+    ck_assert(exec_script(dom_thread,
+        "var order=[], dict=new Proxy({}, {get(o,key){order.push(key);return undefined;}});"
+        "var type={toString(){order.push('type');return 'x';}}, ctor=new Proxy(function(){},{get(o,key){"
+        "if(key==='prototype'){order.push(key);return MouseEvent.prototype;}return o[key];}});"
+        "Reflect.construct(MouseEvent,[type,dict],ctor);"
+        "if(order.join()!=='type,bubbles,cancelable,composed,detail,view,altKey,ctrlKey,metaKey,modifierAltGraph,modifierCapsLock,"
+        "modifierFn,modifierFnLock,modifierHyper,modifierNumLock,modifierScrollLock,modifierSuper,modifierSymbol,modifierSymbolLock,"
+        "shiftKey,button,buttons,clientX,clientY,relatedTarget,screenX,screenY,prototype')throw Error('conversion order '+order);"
+        "var marker={}, later=false;try{new MouseEvent('x',{get clientX(){throw marker;},get clientY(){later=true;}});throw Error('accepted');}"
+        "catch(e){if(e!==marker||later)throw Error('conversion exception');}"
+        "var reentrant=new MouseEvent('x',{clientX:{valueOf(){new MouseEvent('nested');return 4.5;}}});"
+        "if(reentrant.clientX!==4.5)throw Error('reentrant construction');"
+        "Object.defineProperty(Event,Symbol.hasInstance,{value(){throw Error('instance trap');},configurable:true});"
+        "var e=new MouseEvent('x');Event.prototype.preventDefault.call(e);delete Event[Symbol.hasInstance];",
+        "input-event-conversion.js"));
+}
+END_TEST
+
+START_TEST(test_quickjs_mouse_event_modifiers)
+{
+    ck_assert(exec_script(dom_thread,
+        "var fields=['altKey','ctrlKey','metaKey','modifierAltGraph','modifierCapsLock','modifierFn','modifierFnLock','modifierHyper',"
+        "'modifierNumLock','modifierScrollLock','modifierSuper','modifierSymbol','modifierSymbolLock','shiftKey'];"
+        "var keys=['Alt','Control','Meta','AltGraph','CapsLock','Fn','FnLock','Hyper','NumLock','ScrollLock','Super','Symbol','SymbolLock','Shift'];"
+        "for(let i=0;i<fields.length;i++){let e=new MouseEvent('x',{[fields[i]]:true});"
+        "for(let j=0;j<keys.length;j++)if(e.getModifierState(keys[j])!==(i===j))throw Error(fields[i]+' / '+keys[j]);}"
+        "var e=new MouseEvent('x',{ctrlKey:true});if(e.getModifierState('control')||e.getModifierState('Control\\0x')||e.getModifierState('unknown'))"
+        "throw Error('unknown modifier');"
+        "if(!e.getModifierState({toString(){return 'Control';}}))throw Error('key conversion');"
+        "for(let f of [()=>e.getModifierState(),()=>e.getModifierState(Symbol()),()=>e.getModifierState.call(new Event('x'),'Control')])"
+        "{try{f();throw Error('accepted');}catch(e){if(!(e instanceof TypeError))throw e;}}",
+        "mouse-event-modifiers.js"));
+}
+END_TEST
+
+START_TEST(test_quickjs_input_event_initializers)
+{
+    ck_assert(exec_script(dom_thread,
+        "var t=new EventTarget(), e=new MouseEvent('old',{clientX:3.5,view:window,relatedTarget:t,cancelable:true,composed:true});"
+        "t.dispatchEvent(e);e.preventDefault();e.initUIEvent('ui',true,true,null,4.9);"
+        "if(e.type!=='ui'||e.target!==null||e.view!==null||e.detail!==4||e.defaultPrevented||e.clientX!==3.5||e.relatedTarget!==t)throw Error('UI init');"
+        "e.initMouseEvent('mouse',false,true,window,2,12.8,-13.5,14.25,-15.75,true,false,true,false,65535,t);"
+        "if(e.type!=='mouse'||e.view!==window||e.detail!==2||e.screenX!==12||e.screenY!==-13||e.clientX!==14||e.clientY!==-15||"
+        "!e.ctrlKey||e.altKey||!e.shiftKey||e.metaKey||e.button!==-1||e.relatedTarget!==t||e.isTrusted)throw Error('mouse init');"
+        "var before=e.type, marker={};try{e.initMouseEvent('bad',false,false,null,{valueOf(){throw marker;}});}"
+        "catch(x){if(x!==marker)throw x;}if(e.type!==before)throw Error('partial initialization');"
+        "var converted=false, ran=false;t.addEventListener('mouse',()=>{"
+        "e.initMouseEvent({toString(){converted=true;return 'ignored';}},true,false,null,99);"
+        "if(e.type!=='mouse'||e.detail!==2||e.view!==window)throw Error('active init');ran=true;});"
+        "t.dispatchEvent(e);if(!converted||!ran||e.type!=='mouse')throw Error('active conversion');"
+        "e.initMouseEvent('reset');if(e.clientX||e.ctrlKey||e.shiftKey||e.button||e.relatedTarget!==null||e.view!==null||e.detail)throw Error('init defaults');"
+        "for(let f of [()=>e.initMouseEvent(),()=>e.initUIEvent(),()=>e.initMouseEvent('x',false,false,{}),"
+        "()=>MouseEvent.prototype.initMouseEvent.call(new UIEvent('x'),'x')])"
+        "{try{f();throw Error('accepted');}catch(e){if(!(e instanceof TypeError))throw e;}}",
+        "input-event-initializers.js"));
+}
+END_TEST
+
+START_TEST(test_quickjs_input_event_dispatch)
+{
+    ck_assert(exec_script(dom_thread,
+        "var t=document.getElementById('target'), e=new MouseEvent('probe',{bubbles:true,cancelable:true,view:window,relatedTarget:t,"
+        "clientX:12.25,buttons:3,ctrlKey:true}), calls=[];"
+        "window.addEventListener('probe',ev=>{if(ev!==e||ev.view!==window||ev.relatedTarget!==t||ev.clientX!==12.25)throw Error('input data');"
+        "calls.push('capture');},true);"
+        "t.addEventListener('probe',function(ev){if(this!==t||!(ev instanceof MouseEvent)||ev.target!==t)throw Error('receiver');"
+        "ev.preventDefault();calls.push('target');});"
+        "document.addEventListener('probe',ev=>{if(ev.currentTarget!==document||!ev.ctrlKey||ev.buttons!==3)throw Error('bubbled input');"
+        "calls.push('document');});"
+        "if(t.dispatchEvent(e)||calls.join()!=='capture,target,document'||e.currentTarget!==null||e.composedPath().length)throw Error('dispatch '+calls);"
+        "if(e.relatedTarget!==t||e.view!==window||e.clientX!==12.25)throw Error('saved input');",
+        "input-event-dispatch.js"));
+}
+END_TEST
+
+START_TEST(test_quickjs_input_event_gc)
+{
+    ck_assert(exec_script(dom_thread,
+        "function inputCycles(){for(let i=0;i<100;i++){let t=new EventTarget(), e=new MouseEvent('x',{relatedTarget:t,view:window});"
+        "t.addEventListener('x',()=>e);t.dispatchEvent(e);}}inputCycles();", "input event cycles"));
+    JS_RunGC(dom_heap->rt);
+    JSMemoryUsage before, after;
+    JS_ComputeMemoryUsage(dom_heap->rt, &before);
+    ck_assert(exec_script(dom_thread, "inputCycles();", "more input event cycles"));
+    JS_RunGC(dom_heap->rt);
+    JS_ComputeMemoryUsage(dom_heap->rt, &after);
+    ck_assert_msg(after.obj_count <= before.obj_count + 2, "Input event cycles leaked %lld objects",
+        (long long)(after.obj_count - before.obj_count));
+    ck_assert(exec_script(dom_thread,
+        "var saved, hits=0;{let t=new EventTarget();t.addEventListener('x',()=>hits++);saved=new MouseEvent('x',{relatedTarget:t});}",
+        "saved related target"));
+    JS_RunGC(dom_heap->rt);
+    assert_predicate(dom_thread, "(saved.relatedTarget.dispatchEvent(new Event('x')),hits===1)", "related target kept alive");
+    ck_assert(exec_script(dom_thread, "saved=null;", "release related target"));
+    JS_RunGC(dom_heap->rt);
+}
+END_TEST
+
+START_TEST(test_quickjs_input_event_retirement)
+{
+    JSValue global = JS_GetGlobalObject(dom_thread->ctx);
+    JS_SetPropertyStr(dom_thread->ctx, global, "retireEvents",
+        JS_NewCFunction(dom_thread->ctx, close_from_listener, "retireEvents", 0));
+    JS_FreeValue(dom_thread->ctx, global);
+    ck_assert(exec_script(dom_thread,
+        "var t=new EventTarget(), related=document.body, e=new MouseEvent('x',{view:window,relatedTarget:related}), called=false;"
+        "t.addEventListener('x',()=>{retireEvents();if(e.view!==window||e.relatedTarget!==related)throw Error('retired input');called=true;});"
+        "t.dispatchEvent(e);if(!called||e.currentTarget!==null||e.composedPath().length)throw Error('retired dispatch');",
+        "input-event-retirement.js"));
+    JS_RunGC(dom_heap->rt);
+}
+END_TEST
+
+START_TEST(test_quickjs_input_event_conversion_retirement)
+{
+    JSValue global = JS_GetGlobalObject(dom_thread->ctx);
+    JS_SetPropertyStr(dom_thread->ctx, global, "retireEvents",
+        JS_NewCFunction(dom_thread->ctx, close_from_listener, "retireEvents", 0));
+    JS_FreeValue(dom_thread->ctx, global);
+    ck_assert(exec_script(dom_thread,
+        "try{new MouseEvent('x',{get clientX(){retireEvents();return 3;}});throw Error('accepted');}"
+        "catch(e){if(e.name!=='InvalidStateError')throw e;}", "input-conversion-retirement.js"));
+}
+END_TEST
+
+START_TEST(test_quickjs_submit_event_values)
+{
+    ck_assert(exec_script(dom_thread,
+        "var e=new SubmitEvent('submit');"
+        "if(!(e instanceof SubmitEvent)||!(e instanceof Event)||e instanceof UIEvent||e instanceof CustomEvent||"
+        "e.submitter!==null||e.isTrusted||e.bubbles||e.cancelable||e.composed||e.target!==null)throw Error('defaults');"
+        "if(Object.getPrototypeOf(SubmitEvent)!==Event||Object.getPrototypeOf(SubmitEvent.prototype)!==Event.prototype||"
+        "Object.prototype.toString.call(e)!=='[object SubmitEvent]'||SubmitEvent.AT_TARGET!==2)throw Error('interface');"
+        "for(let dict of [undefined,null,{}, {submitter:undefined},{submitter:null}])"
+        "if(new SubmitEvent('submit',dict).submitter!==null)throw Error('null default');"
+        "for(let tag of ['button','input','div','form','unknown']){let node=document.createElement(tag);"
+        "node.setAttribute('disabled','');let e=new SubmitEvent('ș\\0submit',"
+        "{submitter:node,bubbles:true,cancelable:true,composed:true});"
+        "if(e.submitter!==node||e.type!=='ș\\0submit'||!e.bubbles||!e.cancelable||!e.composed)throw Error('values');"
+        "if(Reflect.set(e,'submitter',null)||e.submitter!==node)throw Error('readonly');}"
+        "var d=Object.getOwnPropertyDescriptor(SubmitEvent.prototype,'submitter');"
+        "if(!d.enumerable||!d.configurable||d.set||typeof d.get!=='function')throw Error('descriptor');"
+        "class Mine extends SubmitEvent{};if(!(new Mine('submit') instanceof Mine))throw Error('subclass');"
+        "function Alternate(){};Alternate.prototype=42;"
+        "if(Object.getPrototypeOf(Reflect.construct(SubmitEvent,['submit'],Alternate))!==SubmitEvent.prototype)"
+        "throw Error('default prototype');",
+        "submit-event-values.js"));
+}
+END_TEST
+
+START_TEST(test_quickjs_submit_event_brands)
+{
+    ck_assert(exec_script(dom_thread,
+        "function typeError(f){try{f();throw Error('accepted');}catch(e){if(!(e instanceof TypeError))throw e;}}"
+        "for(let value of [window,document,document.createTextNode(''),document.createComment(''),"
+        "document.createDocumentFragment(),document.getElementById('svg'),{},1,false,Symbol(),"
+        "Object.create(HTMLElement.prototype),new Proxy(document.body,{})])"
+        "typeError(()=>new SubmitEvent('submit',{submitter:value}));"
+        "for(let f of [()=>SubmitEvent('submit'),()=>new SubmitEvent(),()=>new SubmitEvent(Symbol()),"
+        "()=>new SubmitEvent('submit',1)])typeError(f);"
+        "var get=Object.getOwnPropertyDescriptor(SubmitEvent.prototype,'submitter').get;"
+        "for(let value of [{},Object.create(SubmitEvent.prototype),new Event('x'),new CustomEvent('x'),"
+        "new UIEvent('x'),new MouseEvent('x'),new Proxy(new SubmitEvent('x'),{})])typeError(()=>get.call(value));"
+        "var e=new SubmitEvent('submit');"
+        "for(let [proto,key] of [[UIEvent.prototype,'detail'],[UIEvent.prototype,'view'],"
+        "[MouseEvent.prototype,'clientX'],[CustomEvent.prototype,'detail']])"
+        "typeError(()=>Object.getOwnPropertyDescriptor(proto,key).get.call(e));"
+        "typeError(()=>MouseEvent.prototype.getModifierState.call(e,'Control'));"
+        "typeError(()=>UIEvent.prototype.initUIEvent.call(e,'x'));"
+        "typeError(()=>MouseEvent.prototype.initMouseEvent.call(e,'x'));"
+        "var node=document.createElement('button');Object.setPrototypeOf(node,null);"
+        "Object.defineProperty(HTMLElement,Symbol.hasInstance,{value(){throw Error('page brand check');}});"
+        "if(new SubmitEvent('submit',{submitter:node}).submitter!==node)throw Error('native identity');"
+        "Object.setPrototypeOf(e,MouseEvent.prototype);typeError(()=>e.clientX);"
+        "if(get.call(e)!==null)throw Error('changed event prototype');",
+        "submit-event-brands.js"));
+}
+END_TEST
+
+START_TEST(test_quickjs_submit_event_conversion)
+{
+    ck_assert(exec_script(dom_thread,
+        "var order=[], node=document.createElement('button');"
+        "var dict=new Proxy({}, {get(o,key){order.push(key);return key==='submitter'?node:undefined;}});"
+        "var type={toString(){order.push('type');return 'submit';}};"
+        "var ctor=new Proxy(function(){},{get(o,key){if(key==='prototype'){order.push(key);return SubmitEvent.prototype;}}});"
+        "var e=Reflect.construct(SubmitEvent,[type,dict],ctor);"
+        "if(order.join()!=='type,bubbles,cancelable,composed,submitter,prototype'||e.submitter!==node)"
+        "throw Error('conversion order '+order);"
+        "var marker={}, called=false;ctor=new Proxy(function(){},{get(){called=true;throw marker;}});"
+        "try{Reflect.construct(SubmitEvent,['submit',{get submitter(){throw marker;}}],ctor);throw Error('accepted');}"
+        "catch(e){if(e!==marker||called)throw Error('getter exception');}"
+        "try{Reflect.construct(SubmitEvent,['submit',{submitter:node}],ctor);throw Error('accepted');}"
+        "catch(e){if(e!==marker||!called)throw Error('prototype exception');}"
+        "var nested=new SubmitEvent('submit',{get submitter(){new SubmitEvent('nested',{submitter:node});return node;}});"
+        "if(nested.submitter!==node)throw Error('reentrant construction');",
+        "submit-event-conversion.js"));
+}
+END_TEST
+
+START_TEST(test_quickjs_submit_event_dispatch)
+{
+    ck_assert(exec_script(dom_thread,
+        "var form=document.createElement('form'), button=document.createElement('button'), seen=[];"
+        "button.id='submitter';form.appendChild(button);document.body.appendChild(form);"
+        "var e=new SubmitEvent('submit',{submitter:button,bubbles:true,cancelable:true});"
+        "window.addEventListener('submit',function(ev){"
+        "seen.push(ev===e&&ev.submitter===button&&ev.target===form&&ev.currentTarget===window);"
+        "form.removeChild(button);let replacement=document.createElement('button');replacement.id='submitter';"
+        "form.appendChild(replacement);document.body.removeChild(form);},{capture:true,once:true});"
+        "form.addEventListener('submit',function(ev){"
+        "seen.push(ev.submitter===button&&ev.target===form&&ev.currentTarget===form&&!ev.isTrusted);ev.preventDefault();"
+        "let inner=new SubmitEvent('nested');form.dispatchEvent(inner);seen.push(inner.submitter===null);});"
+        "document.addEventListener('submit',function(ev){"
+        "seen.push(ev.submitter===button&&ev.currentTarget===document&&ev.composedPath()[0]===form);});"
+        "if(form.dispatchEvent(e)||seen.length!==4||seen.some(x=>x!==true)||!e.defaultPrevented||e.submitter!==button||"
+        "e.target!==form||e.currentTarget!==null||e.composedPath().length)throw Error('dispatch '+seen);"
+        "e.initEvent('again',true,true);"
+        "if(e.submitter!==button||e.target!==null||e.defaultPrevented||e.type!=='again')throw Error('base initializer');"
+        "if(!button.dispatchEvent(e)||e.target!==button||e.submitter!==button)throw Error('redispatch');",
+        "submit-event-dispatch.js"));
+}
+END_TEST
+
+START_TEST(test_quickjs_submit_event_gc)
+{
+    /* The document caches wrappers. Retire each context to ensure these cycles
+     * really become unreachable rather than being kept alive by that cache. */
+    JSMemoryUsage before, after;
+    for (unsigned i = 0; i < 4; i++) {
+        jsthread *thread;
+        ck_assert_int_eq(js_newthread(dom_heap, NULL, &dom_html, &thread), NSERROR_OK);
+        ck_assert(exec_script(thread,
+            "var button=document.createElement('button'), e=new SubmitEvent('submit',{submitter:button});"
+            "button.saved=e;button.expando={owner:button,event:e};", "submit event reference cycle"));
+        js_destroythread(thread);
+        JS_RunGC(dom_heap->rt);
+        JS_ComputeMemoryUsage(dom_heap->rt, &after);
+        if (i == 0)
+            before = after;
+        else
+            ck_assert_msg(after.obj_count <= before.obj_count + 2, "Submit event cycles leaked %lld objects",
+                (long long)(after.obj_count - before.obj_count));
+    }
+    ck_assert(exec_script(dom_thread,
+        "var saved=new SubmitEvent('submit',{submitter:document.createElement('button')});"
+        "saved.submitter.marker={event:saved};", "retain original submitter"));
+    JS_RunGC(dom_heap->rt);
+    assert_predicate(dom_thread, "saved.submitter.marker.event===saved", "submitter survives GC");
+}
+END_TEST
+
+START_TEST(test_quickjs_submit_event_retirement)
+{
+    JSValue global = JS_GetGlobalObject(dom_thread->ctx);
+    JS_SetPropertyStr(dom_thread->ctx, global, "retireEvents",
+        JS_NewCFunction(dom_thread->ctx, close_from_listener, "retireEvents", 0));
+    JS_FreeValue(dom_thread->ctx, global);
+    ck_assert(exec_script(dom_thread,
+        "var t=document.createElement('form'), button=document.createElement('button'), seen=[];"
+        "var e=new SubmitEvent('submit',{submitter:button,cancelable:true});"
+        "t.addEventListener('submit',ev=>{retireEvents();seen.push(ev.submitter===button);ev.preventDefault();});"
+        "t.addEventListener('submit',()=>seen.push(false));"
+        "if(t.dispatchEvent(e)||seen.length!==1||seen[0]!==true||e.currentTarget!==null||e.composedPath().length)"
+        "throw Error('retired dispatch');", "submit-event-retirement.js"));
+    JS_RunGC(dom_heap->rt);
+    /* Use C-held values: new execution is barred after retirement, but event
+     * data can still be read by the callback already on the stack. */
+    global = JS_GetGlobalObject(dom_thread->ctx);
+    JSValue event = JS_GetPropertyStr(dom_thread->ctx, global, "e");
+    JSValue button = JS_GetPropertyStr(dom_thread->ctx, global, "button");
+    JSValue submitter = JS_GetPropertyStr(dom_thread->ctx, event, "submitter");
+    ck_assert(JS_IsStrictEqual(dom_thread->ctx, button, submitter));
+    JS_FreeValue(dom_thread->ctx, submitter);
+    JS_FreeValue(dom_thread->ctx, button);
+    JS_FreeValue(dom_thread->ctx, event);
+    JS_FreeValue(dom_thread->ctx, global);
+}
+END_TEST
+
+/* Every constructor must check retirement after both IDL conversion and the
+ * new-target prototype lookup, including base Event and CustomEvent. */
+enum { EVENT_CONVERSION_STAGES = 3, EVENT_CONSTRUCTOR_KINDS = 5 };
+START_TEST(test_quickjs_event_constructor_retirement)
+{
+    static const char *names[] = {"Event", "CustomEvent", "UIEvent", "MouseEvent", "SubmitEvent"};
+    static const char *calls[] = {
+        "new C({toString(){retireEvents();return 'x';}})",
+        "new C('x',{get bubbles(){retireEvents();return true;}})",
+        "Reflect.construct(C,['x'],new Proxy(function(){},{get(){retireEvents();return C.prototype;}}))"};
+    JSValue global = JS_GetGlobalObject(dom_thread->ctx);
+    JS_SetPropertyStr(dom_thread->ctx, global, "retireEvents",
+        JS_NewCFunction(dom_thread->ctx, close_from_listener, "retireEvents", 0));
+    JS_FreeValue(dom_thread->ctx, global);
+    char script[512];
+    unsigned kind = _i / EVENT_CONVERSION_STAGES, stage = _i % EVENT_CONVERSION_STAGES;
+    snprintf(script, sizeof(script),
+        "var C=%s;try{%s;throw Error('accepted');}catch(e){if(e.name!=='InvalidStateError')throw e;}",
+        names[kind], calls[stage]);
+    ck_assert_msg(exec_script(dom_thread, script, "event-constructor-retirement.js"),
+        "%s constructor retirement failed at conversion stage %u", names[kind], stage);
+}
+END_TEST
+
 START_TEST(test_quickjs_abort_values)
 {
     ck_assert(exec_script(dom_thread,
@@ -2714,10 +3065,16 @@ START_TEST(test_quickjs_event_allocation_failure)
     const char *setup[] = {"function makeTarget(){return new EventTarget();}",
         "function makeTarget(){let root=document.createDocumentFragment(), t=document.createElement('i');"
         "root.appendChild(t);return t;}"};
-    ck_assert(exec_script(dom_thread, setup[_i], "event target allocation setup"));
+    ck_assert(exec_script(dom_thread, setup[_i % 2], "event target allocation setup"));
+    const char *constructors[] = {
+        "function makeEvent(t){return new CustomEvent('x',{detail:t});}",
+        "function makeEvent(t){return new MouseEvent('x',{relatedTarget:t,view:window,clientX:1.25});}",
+        "function makeEvent(t){return new SubmitEvent('x',{submitter:document.getElementById('target')});}"};
+    ck_assert(exec_script(dom_thread, constructors[_i / 2],
+        "event allocation constructor"));
     ck_assert(exec_script(dom_thread,
-        "function eventAllocation(){let t=makeTarget();let e=new CustomEvent('x',{detail:t});"
-        "t.addEventListener('x',()=>e,{once:true});t.dispatchEvent(e);return true;}eventAllocation();",
+        "function eventAllocation(){let t=makeTarget();let e=makeEvent(t), hit=false;"
+        "t.addEventListener('x',()=>{hit=true;},{once:true});t.dispatchEvent(e);return hit;}eventAllocation();",
         "event allocation warmup"));
     JSValue global = JS_GetGlobalObject(dom_thread->ctx);
     JSValue callback = JS_GetPropertyStr(dom_thread->ctx, global, "eventAllocation");
@@ -3148,7 +3505,7 @@ Suite *quickjs_suite(void)
     tcase_add_test(tc_dom, test_quickjs_event_gc);
     tcase_add_test(tc_dom, test_quickjs_event_retirement);
     tcase_add_loop_test(tc_dom, test_quickjs_event_conversion_retirement, 0, 2);
-    tcase_add_loop_test(tc_dom, test_quickjs_event_allocation_failure, 0, 2);
+    tcase_add_loop_test(tc_dom, test_quickjs_event_allocation_failure, 0, 6);
     tcase_add_test(tc_dom, test_quickjs_event_foreign_retirement);
     tcase_add_test(tc_dom, test_quickjs_node_event_path);
     tcase_add_test(tc_dom, test_quickjs_node_event_frozen_path);
@@ -3159,6 +3516,23 @@ Suite *quickjs_suite(void)
     tcase_add_test(tc_dom, test_quickjs_node_event_retirement);
     tcase_add_test(tc_dom, test_quickjs_node_event_conversion_retirement);
     tcase_add_test(tc_dom, test_quickjs_node_event_long_path);
+    tcase_add_test(tc_dom, test_quickjs_ui_event_values);
+    tcase_add_test(tc_dom, test_quickjs_mouse_event_values);
+    tcase_add_test(tc_dom, test_quickjs_input_event_conversion);
+    tcase_add_test(tc_dom, test_quickjs_mouse_event_modifiers);
+    tcase_add_test(tc_dom, test_quickjs_input_event_initializers);
+    tcase_add_test(tc_dom, test_quickjs_input_event_dispatch);
+    tcase_add_test(tc_dom, test_quickjs_input_event_gc);
+    tcase_add_test(tc_dom, test_quickjs_input_event_retirement);
+    tcase_add_test(tc_dom, test_quickjs_input_event_conversion_retirement);
+    tcase_add_test(tc_dom, test_quickjs_submit_event_values);
+    tcase_add_test(tc_dom, test_quickjs_submit_event_brands);
+    tcase_add_test(tc_dom, test_quickjs_submit_event_conversion);
+    tcase_add_test(tc_dom, test_quickjs_submit_event_dispatch);
+    tcase_add_test(tc_dom, test_quickjs_submit_event_gc);
+    tcase_add_test(tc_dom, test_quickjs_submit_event_retirement);
+    tcase_add_loop_test(tc_dom, test_quickjs_event_constructor_retirement, 0,
+        EVENT_CONSTRUCTOR_KINDS * EVENT_CONVERSION_STAGES);
     tcase_add_test(tc_dom, test_quickjs_abort_values);
     tcase_add_test(tc_dom, test_quickjs_abort_foreign_retirement);
     tcase_add_test(tc_dom, test_quickjs_abort_handler);

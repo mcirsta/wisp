@@ -17,11 +17,25 @@ struct qjs_event {
     dom_event *native;
     JSValue target, detail, path; /* Private frozen JS path, cleared after dispatch. */
     double timestamp;
-    bool custom, composed;
+    enum qjs_event_kind kind;
+    bool composed;
 };
+
+/* Inheritance is explicit: adding an Event subtype must not make it a UIEvent
+ * merely because its enum value follows the input event kinds. */
+static inline bool qjs_event_is_ui(enum qjs_event_kind kind)
+{
+    return kind == QJS_UI_EVENT || kind == QJS_MOUSE_EVENT;
+}
 
 struct qjs_event *qjs_event_get(JSContext *ctx, JSValueConst value);
 int qjs_init_events(JSContext *ctx);
+struct qjs_event_options {
+    bool bubbles, cancelable, composed;
+};
+int qjs_event_read_options(JSContext *ctx, JSValueConst dict, struct qjs_event_options *options);
+/* Consumes object; allocates the appropriate native-backed event value. */
+JSValue qjs_event_allocate(JSContext *ctx, JSValue object, enum qjs_event_kind kind, bool composed);
 /* Host-created trusted base Event, with false bubbles/cancelable/composed. */
 JSValue qjs_event_create(JSContext *ctx, const char *type);
 JSValue qjs_event_current_target(JSContext *ctx, struct qjs_event *event);

@@ -359,6 +359,7 @@ add_wisp_test(test_quickjs
   ${CMAKE_SOURCE_DIR}/src/content/handlers/javascript/quickjs/storage.c
   ${CMAKE_SOURCE_DIR}/src/content/handlers/javascript/quickjs/event_target.c
   ${CMAKE_SOURCE_DIR}/src/content/handlers/javascript/quickjs/event.c
+  ${CMAKE_SOURCE_DIR}/src/content/handlers/javascript/quickjs/input_event.c
   ${CMAKE_SOURCE_DIR}/src/content/handlers/javascript/quickjs/abort.c
   ${CMAKE_SOURCE_DIR}/src/content/handlers/javascript/quickjs/xhr.c
   ${CMAKE_BINARY_DIR}/quickjs/console.c
@@ -475,6 +476,11 @@ target_include_directories(dom_details_test PRIVATE ${TEST_COMMON_INCLUDES})
 target_link_libraries(dom_details_test dom ${CHECK_LIBRARIES})
 add_test(NAME dom_details_test COMMAND dom_details_test)
 
+add_executable(dom_form_owner_test dom_form_owner_test.c)
+target_include_directories(dom_form_owner_test PRIVATE ${TEST_COMMON_INCLUDES})
+target_link_libraries(dom_form_owner_test dom ${CHECK_LIBRARIES})
+add_test(NAME dom_form_owner_test COMMAND dom_form_owner_test)
+
 add_executable(dom_tree_test dom_tree_test.c)
 target_include_directories(dom_tree_test PRIVATE ${TEST_COMMON_INCLUDES})
 target_link_libraries(dom_tree_test dom ${CHECK_LIBRARIES})
@@ -532,6 +538,11 @@ target_include_directories(form_state_test PRIVATE ${TEST_COMMON_INCLUDES} ${CMA
 target_link_libraries(form_state_test wisp ${CHECK_LIBRARIES})
 add_test(NAME form_state_test COMMAND form_state_test)
 
+add_executable(interaction_lifetime_test interaction_lifetime_test.c)
+target_include_directories(interaction_lifetime_test PRIVATE ${TEST_COMMON_INCLUDES} ${CMAKE_SOURCE_DIR}/include)
+target_link_libraries(interaction_lifetime_test wisp ${CHECK_LIBRARIES})
+add_test(NAME interaction_lifetime_test COMMAND interaction_lifetime_test)
+
 add_executable(form_bindings_test form_bindings_test.c)
 target_include_directories(form_bindings_test PRIVATE ${TEST_COMMON_INCLUDES} ${CMAKE_SOURCE_DIR}/include)
 target_link_libraries(form_bindings_test wisp ${CHECK_LIBRARIES})
@@ -561,6 +572,8 @@ target_include_directories(restyle_tracking_test PRIVATE ${TEST_COMMON_INCLUDES}
 target_link_libraries(restyle_tracking_test wisp ${CHECK_LIBRARIES})
 # ASan interposes malloc itself; exercise real allocator failures in Release.
 if(TARGET malloc_fig AND CMAKE_BUILD_TYPE STREQUAL "Release")
+  target_link_libraries(dom_form_owner_test malloc_fig)
+  target_compile_definitions(dom_form_owner_test PRIVATE WISP_TEST_ALLOC_FAILURE)
   target_link_libraries(restyle_tracking_test malloc_fig)
   target_compile_definitions(restyle_tracking_test PRIVATE WISP_TEST_ALLOC_FAILURE)
   target_link_libraries(box_construct_context_test malloc_fig)

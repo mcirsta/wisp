@@ -11,18 +11,19 @@
 #include <dom/html/html_input_element.h>
 
 #include "html/html_element.h"
+#include "html/form_owner.h"
 
 struct dom_html_input_element {
     struct dom_html_element base;
     /**< The base class */
-    struct dom_html_form_element *form;
-    /**< The form associated with the input */
+    struct dom_html_form_association association;
     bool default_checked; /**< Initial checked value */
     bool default_checked_set; /**< Whether default_checked has been set */
     dom_string *default_value; /**< Initial value */
     bool default_value_set; /**< Whether default_value has been set */
     bool checked; /**< Whether the element has been checked by a click */
     bool checked_set;
+    bool indeterminate;
 };
 
 /* Create a dom_html_input_element object */

@@ -33,6 +33,9 @@ struct dom_html_element_create_params {
     dom_string *prefix;
 };
 
+/* Safe classification of an arbitrary node, excluding foreign namespaces. */
+dom_html_element_type _dom_html_node_type(const dom_node_internal *node);
+
 dom_exception _dom_html_element_create(struct dom_html_element_create_params *params, dom_html_element **result);
 
 dom_exception _dom_html_element_initialise(struct dom_html_element_create_params *params, struct dom_html_element *el);

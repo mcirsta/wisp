@@ -37,7 +37,7 @@
 
 #include <wisp/content/handlers/html/box.h>
 #include <wisp/content/handlers/html/private.h>
-#include "content/handlers/html/box_construct.h"
+#include "content/handlers/html/hyperlink.h"
 #include "content/handlers/html/imagemap.h"
 
 #define HASH_SIZE 31 /* fixed size hash table */
@@ -46,8 +46,8 @@ typedef enum { IMAGEMAP_DEFAULT, IMAGEMAP_RECT, IMAGEMAP_CIRCLE, IMAGEMAP_POLY }
 
 struct mapentry {
     imagemap_entry_type type; /**< type of shape */
+    dom_node *node; /**< owned activation element */
     nsurl *url; /**< absolute url to go to */
-    char *target; /**< target frame (if any) */
     union {
         struct {
             int x; /**< x coordinate of centre */
@@ -173,9 +173,7 @@ static void imagemap_freelist(struct mapentry *list)
         prev = entry;
 
         nsurl_unref(entry->url);
-
-        if (entry->target)
-            free(entry->target);
+        dom_node_unref(entry->node);
 
         if (entry->type == IMAGEMAP_POLY) {
             free(entry->bounds.poly.xcoords);
@@ -216,6 +214,7 @@ void imagemap_destroy(html_content *c)
     }
 
     free(c->imagemaps);
+    c->imagemaps = NULL;
 }
 
 /**
@@ -273,18 +272,16 @@ void imagemap_dump(html_content *c)
 /**
  * Adds an imagemap entry to the list
  *
- * \param c  The html content that the imagemap belongs to
  * \param n  The xmlNode representing the entry to add
  * \param base_url  Base URL for resolving relative URLs
  * \param entry  Pointer to list of entries
  * \param tagtype  The type of tag
  * \return false on memory exhaustion, true otherwise
  */
-static bool imagemap_addtolist(
-    const struct html_content *c, dom_node *n, nsurl *base_url, struct mapentry **entry, dom_string *tagtype)
+static bool imagemap_addtolist(dom_node *n, nsurl *base_url, struct mapentry **entry, dom_string *tagtype)
 {
     dom_exception exc;
-    dom_string *href = NULL, *target = NULL, *shape = NULL;
+    dom_string *href = NULL, *shape = NULL;
     dom_string *coords = NULL;
     struct mapentry *new_map, *temp;
     bool ret = true;
@@ -300,11 +297,6 @@ static bool imagemap_addtolist(
     exc = dom_element_get_attribute(n, corestring_dom_href, &href);
     if (exc != DOM_NO_ERR || href == NULL) {
         /* No href="" attribute, skip this element */
-        goto ok_out;
-    }
-
-    exc = dom_element_get_attribute(n, corestring_dom_target, &target);
-    if (exc != DOM_NO_ERR) {
         goto ok_out;
     }
 
@@ -343,23 +335,12 @@ static bool imagemap_addtolist(
     else
         goto bad_out;
 
-    if (box_extract_link(c, href, base_url, &new_map->url) == false)
+    if (html_link_url(href, base_url, &new_map->url) != NSERROR_OK)
         goto bad_out;
 
     if (new_map->url == NULL) {
         /* non-fatal error -> ignore this */
         goto ok_free_map_out;
-    }
-
-    if (target != NULL) {
-        /* Copy target dom string into the map data */
-        new_map->target = malloc(dom_string_byte_length(target) + 1);
-        if (new_map->target == NULL)
-            goto bad_out;
-
-        memcpy(new_map->target, dom_string_data(target), dom_string_byte_length(target));
-
-        new_map->target[dom_string_byte_length(target)] = 0;
     }
 
     if (new_map->type != IMAGEMAP_DEFAULT) {
@@ -451,6 +432,7 @@ static bool imagemap_addtolist(
         }
     }
 
+    new_map->node = dom_node_ref(n);
     new_map->next = NULL;
 
     if (*entry) {
@@ -475,16 +457,11 @@ ok_free_map_out:
             free(new_map->bounds.poly.ycoords);
         if (new_map->type == IMAGEMAP_POLY && new_map->bounds.poly.xcoords != NULL)
             free(new_map->bounds.poly.xcoords);
-        if (new_map->target != NULL)
-            free(new_map->target);
-
         free(new_map);
     }
 ok_out:
     if (href != NULL)
         dom_string_unref(href);
-    if (target != NULL)
-        dom_string_unref(target);
     if (shape != NULL)
         dom_string_unref(shape);
     if (coords != NULL)
@@ -528,7 +505,7 @@ static bool imagemap_extract_map_entries(dom_node *node, html_content *c, struct
             dom_nodelist_unref(nlist);
             return false;
         }
-        if (imagemap_addtolist(c, subnode, c->base_url, entry, tname) == false) {
+        if (imagemap_addtolist(subnode, c->base_url, entry, tname) == false) {
             dom_node_unref(subnode);
             dom_nodelist_unref(nlist);
             return false;
@@ -687,11 +664,11 @@ static int imagemap_point_in_poly(
  * \param y        The top edge of the containing box
  * \param click_x  The horizontal location of the click
  * \param click_y  The vertical location of the click
- * \param target   Pointer to location to receive target pointer (if any)
- * \return The url associated with this area, or NULL if not found
+ * \param hit      Borrowed action data; cleared if no area matches
+ * \return Whether a link area matches
  */
-nsurl *imagemap_get(struct html_content *c, const char *key, unsigned long x, unsigned long y, unsigned long click_x,
-    unsigned long click_y, const char **target)
+bool imagemap_get(struct html_content *c, const char *key, unsigned long x, unsigned long y, unsigned long click_x,
+    unsigned long click_y, struct imagemap_hit *hit)
 {
     unsigned int slot = 0;
     struct imagemap *map;
@@ -699,12 +676,13 @@ nsurl *imagemap_get(struct html_content *c, const char *key, unsigned long x, un
     unsigned long cx, cy;
 
     assert(c != NULL);
+    *hit = (struct imagemap_hit){0};
 
     if (key == NULL)
-        return NULL;
+        return false;
 
     if (c->imagemaps == NULL)
-        return NULL;
+        return false;
 
     slot = imagemap_hash(key);
 
@@ -714,46 +692,36 @@ nsurl *imagemap_get(struct html_content *c, const char *key, unsigned long x, un
     }
 
     if (map == NULL || map->list == NULL)
-        return NULL;
+        return false;
 
     for (entry = map->list; entry; entry = entry->next) {
         switch (entry->type) {
         case IMAGEMAP_DEFAULT:
-            /* just return the URL. no checks required */
-            if (target)
-                *target = entry->target;
-            return entry->url;
-            break;
+            goto found;
         case IMAGEMAP_RECT:
             if (click_x >= x + entry->bounds.rect.x0 && click_x <= x + entry->bounds.rect.x1 &&
                 click_y >= y + entry->bounds.rect.y0 && click_y <= y + entry->bounds.rect.y1) {
-                if (target)
-                    *target = entry->target;
-                return entry->url;
+                goto found;
             }
             break;
         case IMAGEMAP_CIRCLE:
             cx = x + entry->bounds.circle.x - click_x;
             cy = y + entry->bounds.circle.y - click_y;
             if ((cx * cx + cy * cy) <= (unsigned long)(entry->bounds.circle.r * entry->bounds.circle.r)) {
-                if (target)
-                    *target = entry->target;
-                return entry->url;
+                goto found;
             }
             break;
         case IMAGEMAP_POLY:
             if (imagemap_point_in_poly(entry->bounds.poly.num, entry->bounds.poly.xcoords, entry->bounds.poly.ycoords,
                     x, y, click_x, click_y)) {
-                if (target)
-                    *target = entry->target;
-                return entry->url;
+                goto found;
             }
             break;
         }
     }
 
-    if (target)
-        *target = NULL;
-
-    return NULL;
+    return false;
+found:
+    *hit = (struct imagemap_hit){.url = entry->url, .node = entry->node};
+    return true;
 }
