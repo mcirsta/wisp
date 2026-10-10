@@ -24,6 +24,7 @@
 #define _WISP_DESKTOP_FETCH_H_
 
 #include <stdbool.h>
+#include <stddef.h>
 
 #include <wisp/ssl_certs.h>
 #include <wisp/utils/config.h>
@@ -109,7 +110,8 @@ struct fetch_multipart_data {
     struct fetch_multipart_data *next; /**< Next in linked list */
 
     char *name; /**< Name of item */
-    char *value; /**< Item value */
+    char *value; /**< Item value, followed by a convenience NUL */
+    size_t value_length; /**< Byte length; values may contain embedded NULs */
 
     char *rawfile; /**< Raw filename if file is true */
     bool file; /**< Item is a file */

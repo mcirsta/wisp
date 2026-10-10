@@ -288,8 +288,14 @@ static struct form_control *parse_input_element(struct form *forms, dom_html_inp
                 control = NULL;
                 goto out;
             }
+        }
 
-            control->last_synced_value = strdup(control->value);
+        /* Every bidirectionally synchronized input starts with a DOM-sourced
+         * baseline. Building presentation is not a user edit: in particular,
+         * a hidden input's C-string display copy must never overwrite its
+         * length-bearing DOM value or make that value dirty. */
+        if (control->type == GADGET_TEXTBOX || control->type == GADGET_PASSWORD || control->type == GADGET_HIDDEN) {
+            control->last_synced_value = strdup(control->value == NULL ? "" : control->value);
             if (control->last_synced_value == NULL) {
                 form_free_control(control);
                 control = NULL;

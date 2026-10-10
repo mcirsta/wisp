@@ -515,7 +515,8 @@ struct fetch_multipart_data *fetch_multipart_data_clone(const struct fetch_multi
             return NULL;
         }
 
-        clone->value = strdup(list->value);
+        clone->value_length = list->value_length;
+        clone->value = malloc(clone->value_length + 1);
         if (clone->value == NULL) {
             free(clone->name);
             free(clone);
@@ -524,6 +525,9 @@ struct fetch_multipart_data *fetch_multipart_data_clone(const struct fetch_multi
 
             return NULL;
         }
+
+        memcpy(clone->value, list->value, clone->value_length);
+        clone->value[clone->value_length] = 0;
 
         if (clone->file) {
             clone->rawfile = strdup(list->rawfile);
@@ -605,6 +609,7 @@ nserror fetch_multipart_data_new_kv(struct fetch_multipart_data **list, const ch
         return NSERROR_NOMEM;
     }
 
+    newdata->value_length = strlen(value);
     newdata->value = strdup(value);
     if (newdata->value == NULL) {
         free(newdata->name);

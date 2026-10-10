@@ -125,6 +125,9 @@ if(BUILD_TESTING AND WISP_ENABLE_TESTS)
         add_test(NAME qt_js_navigation_cleanup COMMAND Python3::Interpreter
             ${CMAKE_CURRENT_SOURCE_DIR}/test_js_navigation_cleanup.py $<TARGET_FILE:wisp-qt>)
         set_tests_properties(qt_js_navigation_cleanup PROPERTIES TIMEOUT 30)
+        add_test(NAME qt_form_data COMMAND Python3::Interpreter
+            ${CMAKE_CURRENT_SOURCE_DIR}/test_form_data.py $<TARGET_FILE:wisp-qt>)
+        set_tests_properties(qt_form_data PROPERTIES TIMEOUT 40)
         add_test(NAME qt_js_script_order COMMAND Python3::Interpreter
             ${CMAKE_CURRENT_SOURCE_DIR}/test_js_script_order.py $<TARGET_FILE:wisp-qt>)
         set_tests_properties(qt_js_script_order PROPERTIES TIMEOUT 30)

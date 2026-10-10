@@ -1139,16 +1139,84 @@ forms, retained nodes after teardown, foreign namespaces, option boundaries,
 GET/POST filtering, and image-button Enter activation/cancellation by disabledness.
 GTK is not tested.
 
-Scope: this implements candidate enumeration and these filtering rules, not the
-complete Unicode/string-and-file entry list needed by FormData. The existing
-encoded transport serializer, option selectedness/list membership, charset rules
-and remaining control-specific details still need their focused review before
-exposing FormData or delivering native submission events to JS. Constraint
-validation, submission reentrancy and callback sequencing remain pending.
+Scope: this implements candidate enumeration and these filtering rules. The
+Unicode entry/transport separation described below builds on it; option
+selectedness/list membership, charset rules and remaining control-specific
+details still need review before exposing FormData or delivering native
+submission events to JS. Constraint validation, submission reentrancy and
+callback sequencing remain pending.
 
 Standards: [constructing the entry list](https://html.spec.whatwg.org/multipage/form-control-infrastructure.html#constructing-the-entry-list),
 [form.elements](https://html.spec.whatwg.org/multipage/forms.html#dom-form-elements)
 and [option disabledness](https://html.spec.whatwg.org/multipage/form-elements.html#concept-option-disabled).
+
+### Implemented: Unicode form entries and transport encoding
+
+Native submission now constructs an owned array of Unicode entries before
+choosing URL-encoded or multipart transport. `form_data.c` owns extraction and
+entry lifetime; `form_encode.c` owns byte conversion. The old combined serializer
+has been removed from `form.c`. Names and values retain length-bearing libdom
+strings, preserving embedded NULs, duplicate names and original newlines. Lone
+surrogates from JS DOMStrings become U+FFFD at the entry boundary without changing
+the DOM. Already-scalar strings are retained without copying, and the entry array
+grows geometrically. No persistent cache or extra threads are introduced.
+
+File entries currently copy the existing native picker path and retain a separate
+display filename. URL-encoded requests send that filename rather than the local
+path. An unselected file remains an empty file entry even if its HTML value
+attribute contains a filename. This representation supports the existing native
+picker; it does not yet provide immutable File/Blob payload storage or multiple
+selected files required by the public APIs.
+
+Both transport adapters preserve explicit lengths. They normalize newlines at
+serialization, apply scalar replacement before encoding, and leave the stored
+entries reusable. URL encoding now uses its specified safe-character set,
+including unescaped `*`. Legacy output conversion uses decimal character
+references for unencodable scalars rather than transliteration; each component
+has isolated conversion state. UTF-8 bypasses iconv. Multipart lengths survive
+request cloning and reach libcurl, so NULs inside text values are sent intact.
+Libcurl's C-string field-name/filename API still cannot send NULs in those
+headers: the adapter rejects the whole result with `NSERROR_NOT_IMPLEMENTED`
+instead of truncating or sending a partial form. A byte-oriented multipart
+header implementation is needed before claiming support for those names.
+
+An on-wire test exposed a separate initialization bug: constructing a hidden
+input treated its truncated presentation copy as a user edit and wrote it back
+to the DOM. Hidden inputs now establish the same DOM-sourced synchronization
+baseline as text/password inputs. The sync path also releases its old retained
+DOM value and handles removal of the value attribute. These fixes preserve
+script edits before and after gadget creation instead of repairing submission
+values after corruption.
+
+Historical Duktape HTMLInputElement, HTMLSelectElement and HTMLTextAreaElement
+bindings were reviewed for their shared libdom value model. They mainly contain
+generated accessor declarations; no FormData/File/Blob bindings were found in
+that snapshot. They informed the ownership boundary, while current HTML, URL
+and Encoding specifications determine the new conversions.
+
+Validation: Debug ASan/UBSan with leak detection passes 12 form-data checks,
+60 form-state checks, 22 form-binding checks, 101 interaction-lifetime checks and
+256 box-construction checks. Release passes 20 form-data checks, including
+allocation-failure cleanup and unchanged inputs after failure. Qt checks cover
+JS DOM rendering, navigation cleanup and actual GET/URL-encoded POST/multipart
+requests to a local server, including Unicode, NULs, lone surrogates, newline
+normalization, empty files and absent/empty/whitespace-only `accept-charset`
+(nine request cases; toolkit leak detection disabled). GTK is not tested.
+
+Remaining before the public FormData layer: complete option membership and
+selectedness, textarea value/wrapping rules, `_charset_`, `dirname`, File/Blob
+storage, and encoding-label selection. Empty or ASCII-whitespace-only
+`accept-charset` now selects UTF-8. Otherwise the inherited label-selection
+routine still needs replacement with HTML's ordered Encoding Standard label
+lookup and output-encoding rules; iconv's mapping tables also remain unaudited
+against the Encoding Standard. Unsupported converter labels now report an error
+rather than silently changing the encoding. Complete those rules before
+exposing FormData/FormDataEvent and connecting submission callbacks. The native
+JS input gate remains in place.
+
+Standards: [HTML entry construction and submission encoding](https://html.spec.whatwg.org/multipage/form-control-infrastructure.html#constructing-the-entry-list),
+[URL form serialization](https://url.spec.whatwg.org/#application/x-www-form-urlencoded-serializer)
+and [Encoding's HTML error mode](https://encoding.spec.whatwg.org/#encode).
 
 ### Next: native input delivery and default actions
 
@@ -1159,7 +1227,8 @@ lifetime are handled together. The focused click review found these prerequisite
    data, SubmitEvent values and shared live form ownership. Implement constraint
    validation, automatic SubmitEvent delivery, FormData/FormDataEvent data and
    sequencing, reentrancy guards and the complete entry-list representation,
-   building on the implemented candidate snapshot, before native JS input delivery. Complete
+   building on the implemented candidate snapshot and Unicode entry storage,
+   before native JS input delivery. Complete
    document base-URL updates at their mutation boundary as described above.
 2. Deferred navigation/submission/download now consult click cancellation. Finish
    default-action timing for select menus/file pickers, then test JS cancellation

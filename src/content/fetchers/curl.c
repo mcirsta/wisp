@@ -991,7 +991,7 @@ static curl_mime *fetch_curl_postdata_convert(CURL *chandle, const struct fetch_
             goto convert_failed;
         }
 
-        value_len = strlen(multipart->value);
+        value_len = multipart->value_length;
 
         if (multipart->file && value_len == 0) {
             /* file entries with no filename require special
@@ -1013,8 +1013,6 @@ static curl_mime *fetch_curl_postdata_convert(CURL *chandle, const struct fetch_
 
         } else if (multipart->file) {
             /* file entry */
-            nserror ret;
-            char *leafname = NULL;
             char *mimetype = NULL;
 
             code = curl_mime_filedata(part, multipart->rawfile);
@@ -1022,17 +1020,12 @@ static curl_mime *fetch_curl_postdata_convert(CURL *chandle, const struct fetch_
                 goto convert_failed;
             }
 
-            ret = guit->file->basename(multipart->value, &leafname, NULL);
-            if (ret != NSERROR_OK) {
-                goto convert_failed;
-            }
-            code = curl_mime_filename(part, leafname);
-            free(leafname);
+            code = curl_mime_filename(part, multipart->value);
             if (code != CURLE_OK) {
                 goto convert_failed;
             }
 
-            mimetype = guit->fetch->mimetype(multipart->value);
+            mimetype = guit->fetch->mimetype(multipart->rawfile);
             if (mimetype == NULL) {
                 mimetype = strdup("text/plain");
             }
@@ -1084,16 +1077,9 @@ static struct curl_httppost *fetch_curl_postdata_convert(CURL *chandle, const st
 {
     struct curl_httppost *post = NULL, *last = NULL;
     CURLFORMcode code;
-    nserror ret;
 
     for (; control; control = control->next) {
         if (control->file) {
-            char *leafname = NULL;
-            ret = guit->file->basename(control->value, &leafname, NULL);
-            if (ret != NSERROR_OK) {
-                continue;
-            }
-
             /* We have to special case filenames of "", so curl
              * a) actually attempts the fetch and
              * b) doesn't attempt to open the file ""
@@ -1113,18 +1099,22 @@ static struct curl_httppost *fetch_curl_postdata_convert(CURL *chandle, const st
                 if (code != CURL_FORMADD_OK)
                     NSLOG(wisp, INFO, "curl_formadd: %d (%s)", code, control->name);
             } else {
-                char *mimetype = guit->fetch->mimetype(control->value);
+                char *mimetype = guit->fetch->mimetype(control->rawfile);
                 code = curl_formadd(&post, &last, CURLFORM_COPYNAME, control->name, CURLFORM_FILE, control->rawfile,
-                    CURLFORM_FILENAME, leafname, CURLFORM_CONTENTTYPE, (mimetype != 0 ? mimetype : "text/plain"),
+                    CURLFORM_FILENAME, control->value, CURLFORM_CONTENTTYPE, (mimetype != 0 ? mimetype : "text/plain"),
                     CURLFORM_END);
                 if (code != CURL_FORMADD_OK)
                     NSLOG(wisp, INFO, "curl_formadd: %d (%s=%s)", code, control->name, control->value);
                 free(mimetype);
             }
-            free(leafname);
         } else {
-            code = curl_formadd(
-                &post, &last, CURLFORM_COPYNAME, control->name, CURLFORM_COPYCONTENTS, control->value, CURLFORM_END);
+            if (control->value_length > LONG_MAX) {
+                curl_formfree(post);
+                return NULL;
+            }
+            code = curl_formadd(&post, &last, CURLFORM_COPYNAME, control->name,
+                CURLFORM_COPYCONTENTS, control->value, CURLFORM_CONTENTSLENGTH,
+                (long)control->value_length, CURLFORM_END);
             if (code != CURL_FORMADD_OK)
                 NSLOG(wisp, INFO, "curl_formadd: %d (%s=%s)", code, control->name, control->value);
         }
