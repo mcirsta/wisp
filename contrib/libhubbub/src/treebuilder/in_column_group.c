@@ -55,7 +55,6 @@ hubbub_error handle_in_column_group(hubbub_treebuilder *treebuilder, const hubbu
         element_type type = element_type_from_name(treebuilder, &token->data.tag.name);
 
         if (type == COLGROUP) {
-            /** \todo fragment case */
             handled = true;
         } else if (type == COL) {
             /** \todo parse error */
@@ -64,12 +63,14 @@ hubbub_error handle_in_column_group(hubbub_treebuilder *treebuilder, const hubbu
         }
     } break;
     case HUBBUB_TOKEN_EOF:
-        /** \todo fragment case */
         err = HUBBUB_REPROCESS;
         break;
     }
 
     if (handled || err == HUBBUB_REPROCESS) {
+        /* Ignore tokens which would pop the fragment's synthetic HTML root. */
+        if (current_node(treebuilder) != COLGROUP)
+            return HUBBUB_OK;
         hubbub_ns ns;
         element_type otype;
         void *node;

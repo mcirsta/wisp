@@ -80,9 +80,8 @@ hubbub_error handle_after_body(hubbub_treebuilder *treebuilder, const hubbub_tok
         element_type type = element_type_from_name(treebuilder, &token->data.tag.name);
 
         if (type == HTML) {
-            /** \todo fragment case */
-            /** \todo parse error */
-            treebuilder->context.mode = AFTER_AFTER_BODY;
+            if (!treebuilder->context.fragment)
+                treebuilder->context.mode = AFTER_AFTER_BODY;
         } else {
             /** \todo parse error */
             treebuilder->context.mode = IN_BODY;

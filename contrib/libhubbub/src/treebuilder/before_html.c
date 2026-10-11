@@ -93,8 +93,8 @@ hubbub_error handle_before_html(hubbub_treebuilder *treebuilder, const hubbub_to
          * before the one to insert at. For the first entry in
          * the stack, this does not hold so we must insert
          * manually. */
-        treebuilder->context.element_stack[0].type = HTML;
-        treebuilder->context.element_stack[0].node = appended;
+        treebuilder->context.element_stack[0] =
+            (element_context){.ns = HUBBUB_NS_HTML, .type = HTML, .node = appended};
         treebuilder->context.current_node = 0;
 
         /** \todo cache selection algorithm */

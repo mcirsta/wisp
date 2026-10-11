@@ -51,7 +51,9 @@ static hubbub_error act_as_if_end_tag_tr(hubbub_treebuilder *treebuilder)
     element_type otype;
     void *node;
 
-    /** \todo fragment case */
+    /* A tr fragment starts with only the synthetic HTML root on the stack. */
+    if (!element_in_scope(treebuilder, TR, true))
+        return HUBBUB_OK;
 
     table_clear_stack(treebuilder);
 

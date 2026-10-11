@@ -70,6 +70,9 @@ typedef struct hubbub_treebuilder_context {
 
     bool enable_scripting; /**< Whether scripting is enabled */
 
+    bool fragment; /**< A context element supplies fragment parsing state */
+    element_type fragment_type; /**< Context type, not on the element stack */
+
     struct {
         insertion_mode mode; /**< Insertion mode to return to */
         element_type type; /**< Type of node */

@@ -136,6 +136,74 @@ Both static baseline and changed-library captures also report an existing UBSan
 diagnostic in `llcache.c`: a zero-length `memcpy` receives a null data pointer.
 The native regression suites above report no sanitizer diagnostics.
 
+### HTML fragment parser foundation (2026-10-11)
+
+The next `innerHTML` step requires a real context-aware parser. Inspection of
+the old Duktape `Element.bnd` found a whole-document parse followed by extraction
+of the synthetic body's children. The old libdom function named
+`dom_hubbub_fragment_parser_create` did not configure fragment parsing at all.
+There are no remaining callers of that old contract in the current browser.
+
+The native API now takes a context element and implements the supported parts of
+the [HTML fragment algorithm](https://html.spec.whatwg.org/multipage/parsing.html#parsing-html-fragments):
+
+- Keep the context separate from the stack's synthetic HTML root. Choose the
+  initial insertion mode from the context, and consult it again when resetting
+  the insertion mode. Table/tbody/tr/colgroup/caption, head/html/frameset and
+  ordinary HTML contexts receive the appropriate trees.
+- Select RCDATA for title/textarea and literal text for raw-text/script/plaintext
+  contexts. Literal parsing for raw-text and script contexts is explicitly
+  permitted by the fragment algorithm, since no preceding start tag can make an
+  end tag appropriate. Preserve the initial newline and decode entities only
+  where the context requires it. Scripting controls noscript syntax separately
+  from execution. Feed the parser already-decoded UTF-8 character data, preserving
+  a leading U+FEFF instead of treating it as a byte-stream encoding signature.
+- Carry the inclusive form-ancestor pointer to suppress nested form start tags;
+  do not apply parser-specific form associations to detached fragment controls.
+  Normal DOM form ownership applies when the result is later inserted.
+- Never execute fragment scripts or invoke the caller's SVG completion callback.
+  Mark created script elements already started, including scripts without a
+  closing tag, so later insertion cannot activate them.
+- Build in a detached root and publish its children into the result fragment on
+  completion. The original context subtree is untouched on success, failure or
+  abandoned parsing. The parser owns its temporary nodes and borrowed form/root
+  references until destruction. Repeated completion does not duplicate output.
+
+The parser's previously unfinished table-fragment guards could pop the synthetic
+root. Table, row, caption and colgroup processing now ignore the relevant tokens
+when their required element is not in scope. Fragment end tags also preserve the
+correct after-body/frameset state. Initialize the full-document stack root's
+namespace too, since reset now examines that entry. The generated tag lookup is case-insensitive;
+context classification explicitly preserves the DOM local name's case without
+altering the generator or generated files.
+
+**This is a parser prerequisite, not an enabled `innerHTML` binding.** The API
+explicitly rejects foreign-namespace, XML-document, select and template contexts
+for now. Hubbub still uses the old IN_SELECT modes; the current HTML Standard
+has moved select parsing into the ordinary modes. Complete that shared parser
+change, foreign context/integration-point handling, and template handling before
+treating fragment parsing as general-purpose. Existing full-document parser
+limitations (including those constructs nested in otherwise supported fragments)
+are not claimed fixed by this batch.
+
+Then implement HTML fragment serialization and QuickJS getter/setter registration,
+with conversion/retirement checks, safe replacement, live-collection updates,
+coalesced rendering and JS-attributed mutation logs. Preserve the original subtree
+until parsing has succeeded. Verify connected edits against static reference
+pixels and return to the saved eBihoreanul bundle. Inline style remains separate.
+
+Validation: 81 native fragment cases pass, including whole-input and byte-by-byte
+parsing, table-fragment scope guards, context name case/prefixes, raw text and
+entities, BOM/UTF-8/newline handling, form ownership, inert scripts, foreign
+descendants, rejected contexts and abandoned-parser cleanup. The final Debug
+ASan/UBSan build passes all 576 checks across 13 native suites with LeakSanitizer
+enabled and no sanitizer diagnostics. All 117 Qt suites pass across the full run
+and rerun: one paint test encountered a shared library being relinked during the
+first run; it passed after rebuilding. Nine focused Qt suites pass after the final
+root-initialization and decoded-input changes. The normalized saved eBihoreanul
+snapshot still has identical PNG bytes and a 1280 x 11382 document extent. No GTK
+build or tests were run.
+
 ## Assessment
 
 Keep QuickJS-ng and libdom. The missing part is the browser binding and execution
@@ -1690,8 +1758,9 @@ Verified limitations and defects include:
 - Event registration/removal compares the wrong stack operands and matches all
   option flags. The DOM matching key is type, callback and capture, not passive
   or once. Do not port that code verbatim.
-- `innerHTML` getter is empty; its setter uses a real fragment parser but still
-  needs context/cleanup/spec review. CSSStyleDeclaration was incomplete.
+- `innerHTML` getter is empty; its setter uses a parser labeled as a fragment
+  parser, but actually parses a whole document and extracts the body's children.
+  It lacks context-sensitive parsing. CSSStyleDeclaration was incomplete.
 - No implemented querySelector family was found in these bindings, and the
   present libdom does not supply the previously claimed
   `dom_element_query_selector` API. Selector querying needs its own design.

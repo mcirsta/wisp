@@ -22,6 +22,17 @@ extern "C" {
 
 typedef struct hubbub_parser hubbub_parser;
 
+/** HTML fragment context. Nodes are borrowed during configuration; the parser
+ * retains root and form until destroyed. root is a synthetic HTML element,
+ * distinct from the real context element, whose children receive the result.
+ * Configure before feeding input, after the tree handler and document node.
+ * This API currently supports HTML-namespace contexts, excluding select and template. */
+typedef struct hubbub_fragment_context {
+    hubbub_string name; /**< Context element's case-sensitive local name */
+    void *root; /**< Empty synthetic HTML root */
+    void *form; /**< Nearest inclusive HTML form ancestor, or NULL */
+} hubbub_fragment_context;
+
 /**
  * Hubbub parser option types
  */
@@ -32,7 +43,8 @@ typedef enum hubbub_parser_opttype {
     HUBBUB_PARSER_TREE_HANDLER,
     HUBBUB_PARSER_DOCUMENT_NODE,
     HUBBUB_PARSER_ENABLE_SCRIPTING,
-    HUBBUB_PARSER_PAUSE
+    HUBBUB_PARSER_PAUSE,
+    HUBBUB_PARSER_FRAGMENT_CONTEXT
 } hubbub_parser_opttype;
 
 /**
@@ -60,6 +72,8 @@ typedef union hubbub_parser_optparams {
     bool enable_scripting; /**< Whether to enable scripting */
 
     bool pause_parse; /**< Pause parsing */
+
+    hubbub_fragment_context fragment;
 } hubbub_parser_optparams;
 
 /* Create a hubbub parser */

@@ -168,6 +168,9 @@ hubbub_error handle_in_table(hubbub_treebuilder *treebuilder, const hubbub_token
         } else if (type == TABLE) {
             /** \todo parse error */
 
+            if (!element_in_scope(treebuilder, TABLE, true))
+                break;
+
             /* This should match "</table>" handling */
             element_stack_pop_until(treebuilder, TABLE);
 
@@ -187,7 +190,8 @@ hubbub_error handle_in_table(hubbub_treebuilder *treebuilder, const hubbub_token
         element_type type = element_type_from_name(treebuilder, &token->data.tag.name);
 
         if (type == TABLE) {
-            /** \todo fragment case */
+            if (!element_in_scope(treebuilder, TABLE, true))
+                break;
 
             element_stack_pop_until(treebuilder, TABLE);
 

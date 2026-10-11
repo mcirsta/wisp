@@ -74,7 +74,7 @@ hubbub_error handle_in_frameset(hubbub_treebuilder *treebuilder, const hubbub_to
 
             treebuilder->tree_handler->unref_node(treebuilder->tree_handler->ctx, node);
 
-            if (current_node(treebuilder) != FRAMESET) {
+            if (!treebuilder->context.fragment && current_node(treebuilder) != FRAMESET) {
                 treebuilder->context.mode = AFTER_FRAMESET;
             }
         } else {

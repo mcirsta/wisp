@@ -182,6 +182,13 @@ hubbub_error hubbub_parser_setopt(hubbub_parser *parser, hubbub_parser_opttype t
         }
         break;
 
+    case HUBBUB_PARSER_FRAGMENT_CONTEXT:
+        result = parser->tb == NULL ? HUBBUB_INVALID : hubbub_treebuilder_setopt(
+            parser->tb, HUBBUB_TREEBUILDER_FRAGMENT_CONTEXT, (hubbub_treebuilder_optparams *)params);
+        if (result == HUBBUB_OK)
+            result = hubbub_error_from_parserutils_error(parserutils_inputstream_use_decoded_utf8(parser->stream));
+        break;
+
     default:
         result = HUBBUB_INVALID;
     }

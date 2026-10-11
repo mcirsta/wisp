@@ -329,6 +329,21 @@ parserutils_inputstream_change_charset(parserutils_inputstream *stream, const ch
 /******************************************************************************
  ******************************************************************************/
 
+/* A fragment's Unicode string has already been decoded by its caller. It must
+ * not undergo byte-stream BOM detection, even when the first character is FEFF. */
+parserutils_error parserutils_inputstream_use_decoded_utf8(parserutils_inputstream *stream)
+{
+    parserutils_inputstream_private *s = (parserutils_inputstream_private *)stream;
+    if (s == NULL)
+        return PARSERUTILS_BADPARM;
+    if (s->done_first_chunk || s->raw->length != 0 || s->public.utf8->length != 0 || s->public.had_eof)
+        return PARSERUTILS_INVALID;
+    parserutils_error err = parserutils_inputstream_change_charset(stream, "UTF-8", s->encsrc);
+    if (err == PARSERUTILS_OK)
+        s->done_first_chunk = true;
+    return err;
+}
+
 /**
  * Refill the UTF-8 buffer from the raw buffer
  *

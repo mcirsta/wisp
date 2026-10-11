@@ -166,6 +166,8 @@ add_wisp_test(libdom_iteration_test
 )
 
 add_wisp_test(libdom_query_test ${CMAKE_SOURCE_DIR}/src/test/libdom_query_test.c)
+add_wisp_test(libdom_fragment_test ${CMAKE_SOURCE_DIR}/src/test/libdom_fragment_test.c)
+target_include_directories(libdom_fragment_test PRIVATE ${CMAKE_SOURCE_DIR}/contrib)
 
 add_wisp_test(messages
   ${CMAKE_SOURCE_DIR}/src/utils/messages.c

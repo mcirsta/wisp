@@ -19,6 +19,55 @@
 
 static bool is_form_associated(element_type type);
 
+/* The context element is not an open element. The stack starts with a separate
+ * HTML root; reset_insertion_mode substitutes the context only at that root.
+ * https://html.spec.whatwg.org/multipage/parsing.html#parsing-html-fragments */
+static hubbub_error initialise_fragment(hubbub_treebuilder *tb, const hubbub_fragment_context *fragment)
+{
+    if (tb->tree_handler == NULL || tb->context.document == NULL || fragment->root == NULL ||
+        fragment->name.ptr == NULL || fragment->name.len == 0 || tb->context.mode != INITIAL)
+        return HUBBUB_BADPARM;
+    if (hubbub_string_match(fragment->name.ptr, fragment->name.len, (const uint8_t *)"template", SLEN("template")))
+        return HUBBUB_INVALID; /* Template contents/insertion modes are not implemented. */
+
+    element_type type = element_type_from_name(tb, &fragment->name);
+    /* The generated token lookup ignores case. A DOM context local name is
+     * already resolved and is case-sensitive, unlike a tag from HTML input. */
+    for (size_t i = 0; i < fragment->name.len; i++) {
+        if (fragment->name.ptr[i] >= 'A' && fragment->name.ptr[i] <= 'Z') {
+            type = UNKNOWN;
+            break;
+        }
+    }
+    /* Current HTML parses select contents in the normal insertion modes. The
+     * legacy IN_SELECT machinery must be migrated before accepting this context. */
+    if (type == SELECT)
+        return HUBBUB_INVALID;
+    hubbub_tokeniser_optparams params;
+    params.content_model.model = HUBBUB_CONTENT_MODEL_PCDATA;
+    if (type == TITLE || type == TEXTAREA)
+        params.content_model.model = HUBBUB_CONTENT_MODEL_RCDATA;
+    else if (type == STYLE || type == XMP || type == IFRAME || type == NOEMBED || type == NOFRAMES ||
+        type == SCRIPT || type == PLAINTEXT || (type == NOSCRIPT && tb->context.enable_scripting))
+        /* With no preceding start tag, RAWTEXT/script data have no appropriate
+         * end tag. The fragment algorithm explicitly permits PLAINTEXT here. */
+        params.content_model.model = HUBBUB_CONTENT_MODEL_PLAINTEXT;
+    hubbub_error err = hubbub_tokeniser_setopt(tb->tokeniser, HUBBUB_TOKENISER_CONTENT_MODEL, &params);
+    if (err != HUBBUB_OK)
+        return err;
+
+    tb->context.fragment = true;
+    tb->context.fragment_type = type;
+    tb->context.element_stack[0] = (element_context){.ns = HUBBUB_NS_HTML, .type = HTML, .node = fragment->root};
+    tb->tree_handler->ref_node(tb->tree_handler->ctx, fragment->root);
+    if (fragment->form != NULL) {
+        tb->tree_handler->ref_node(tb->tree_handler->ctx, fragment->form);
+        tb->context.form_element = fragment->form;
+    }
+    reset_insertion_mode(tb);
+    return HUBBUB_OK;
+}
+
 /**
  * Create a hubbub treebuilder
  *
@@ -170,6 +219,8 @@ hubbub_error hubbub_treebuilder_setopt(
     case HUBBUB_TREEBUILDER_ENABLE_SCRIPTING:
         treebuilder->context.enable_scripting = params->enable_scripting;
         break;
+    case HUBBUB_TREEBUILDER_FRAGMENT_CONTEXT:
+        return initialise_fragment(treebuilder, &params->fragment);
     }
 
     return HUBBUB_OK;
@@ -614,7 +665,7 @@ hubbub_error insert_element(hubbub_treebuilder *treebuilder, const hubbub_tag *t
         return error;
 
     type = element_type_from_name(treebuilder, &tag->name);
-    if (treebuilder->context.form_element != NULL && is_form_associated(type)) {
+    if (!treebuilder->context.fragment && treebuilder->context.form_element != NULL && is_form_associated(type)) {
         /* Consideration of @form is left to the client */
         error = treebuilder->tree_handler->form_associate(
             treebuilder->tree_handler->ctx, treebuilder->context.form_element, appended);
@@ -679,24 +730,26 @@ void close_implied_end_tags(hubbub_treebuilder *treebuilder, element_type except
  */
 void reset_insertion_mode(hubbub_treebuilder *treebuilder)
 {
-    uint32_t node;
     element_context *stack = treebuilder->context.element_stack;
 
-    /** \todo fragment parsing algorithm */
-
-    for (node = treebuilder->context.current_node; node > 0; node--) {
+    for (uint32_t node = treebuilder->context.current_node;; node--) {
         if (stack[node].ns != HUBBUB_NS_HTML) {
             treebuilder->context.mode = IN_FOREIGN_CONTENT;
             treebuilder->context.second_mode = IN_BODY;
-            break;
+            return;
         }
 
-        switch (stack[node].type) {
+        bool last = node == 0;
+        element_type type =
+            last && treebuilder->context.fragment ? treebuilder->context.fragment_type : stack[node].type;
+        switch (type) {
         case SELECT:
-            /* fragment case */
+            /* Legacy document parsing still uses IN_SELECT / IN_SELECT_IN_TABLE. */
             break;
         case TD:
         case TH:
+            if (last)
+                break;
             treebuilder->context.mode = IN_CELL;
             return;
         case TR:
@@ -711,25 +764,32 @@ void reset_insertion_mode(hubbub_treebuilder *treebuilder)
             treebuilder->context.mode = IN_CAPTION;
             return;
         case COLGROUP:
-            /* fragment case */
-            break;
+            treebuilder->context.mode = IN_COLUMN_GROUP;
+            return;
         case TABLE:
             treebuilder->context.mode = IN_TABLE;
             return;
         case HEAD:
-            /* fragment case */
+            if (!last) {
+                treebuilder->context.mode = IN_HEAD;
+                return;
+            }
             break;
         case BODY:
             treebuilder->context.mode = IN_BODY;
             return;
         case FRAMESET:
-            /* fragment case */
-            break;
+            treebuilder->context.mode = IN_FRAMESET;
+            return;
         case HTML:
-            /* fragment case */
-            break;
+            treebuilder->context.mode = treebuilder->context.head_element == NULL ? BEFORE_HEAD : AFTER_HEAD;
+            return;
         default:
             break;
+        }
+        if (last) {
+            treebuilder->context.mode = IN_BODY;
+            return;
         }
     }
 }
@@ -742,6 +802,8 @@ void reset_insertion_mode(hubbub_treebuilder *treebuilder)
  */
 hubbub_error complete_script(hubbub_treebuilder *treebuilder)
 {
+    if (treebuilder->context.fragment)
+        return HUBBUB_OK;
     hubbub_error error = HUBBUB_OK;
     error = treebuilder->tree_handler->complete_script(
         treebuilder->tree_handler->ctx, treebuilder->context.element_stack[treebuilder->context.current_node].node);

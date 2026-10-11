@@ -46,6 +46,8 @@ struct dom_hubbub_parser {
     const char *encoding; /**< The document's encoding */
 
     bool complete; /**< Indicate stream completion */
+    dom_node *fragment_root; /**< Detached synthetic HTML root, or NULL */
+    dom_document_fragment *fragment; /**< Caller-visible result after completion */
 
     dom_msg msg; /**< Informational messaging function */
 
@@ -227,6 +229,8 @@ static hubbub_error create_element(void *parser, const hubbub_tag *tag, void **r
             goto clean1;
         }
         flags |= DOM_HTML_SCRIPT_ELEMENT_FLAG_PARSER_INSERTED;
+        if (dom_parser->fragment != NULL)
+            flags |= DOM_HTML_SCRIPT_ELEMENT_FLAG_ALREADY_STARTED;
         err = dom_html_script_element_set_flags(script, flags);
         if (err != DOM_NO_ERR) {
             dom_parser->msg(DOM_MSG_CRITICAL, dom_parser->mctx, "Can't set flags into script element");
@@ -692,7 +696,7 @@ dom_hubbub_parser_create(dom_hubbub_parser_params *params, dom_hubbub_parser **p
     }
 
     /* setup binding parser context */
-    binding = malloc(sizeof(dom_hubbub_parser));
+    binding = calloc(1, sizeof(dom_hubbub_parser));
     if (binding == NULL) {
         return DOM_HUBBUB_NOMEM;
     }
@@ -782,104 +786,89 @@ dom_hubbub_parser_create(dom_hubbub_parser_params *params, dom_hubbub_parser **p
 }
 
 
-/**
- * Create a Hubbub parser instance
- *
- * \param params The binding creation parameters
- * \param parser Pointer to location to recive instance.
- * \param document Pointer to location to receive document.
- * \return Error code
- */
-dom_hubbub_error dom_hubbub_fragment_parser_create(dom_hubbub_parser_params *params, dom_document *document,
+/** Create an inert HTML fragment parser using the destination element's context.
+ * The synthetic root is detached: neither parsing nor failure changes context.
+ * The returned fragment is populated only by successful completed(). */
+dom_hubbub_error dom_hubbub_fragment_parser_create(dom_hubbub_parser_params *params, dom_element *context,
     dom_hubbub_parser **parser, dom_document_fragment **fragment)
 {
-    dom_hubbub_parser *binding;
-    hubbub_parser_optparams optparams;
-    hubbub_error error;
-    dom_exception err;
-
-    if (document == NULL) {
+    if (parser != NULL)
+        *parser = NULL;
+    if (fragment != NULL)
+        *fragment = NULL;
+    if (params == NULL || context == NULL || parser == NULL || fragment == NULL)
         return DOM_HUBBUB_BADPARM;
-    }
-
-    /* check result parameters */
-    if (fragment == NULL) {
+    dom_node_internal *node = (dom_node_internal *)context;
+    if (node->type != DOM_ELEMENT_NODE || node->owner == NULL)
         return DOM_HUBBUB_BADPARM;
-    }
+    /* Do not silently parse unsupported contexts as an HTML body. */
+    if (!node->owner->html || node->namespace == NULL ||
+        !dom_string_isequal(node->namespace, dom_namespaces[DOM_NAMESPACE_HTML]))
+        return DOM_HUBBUB_HUBBUB_ERR_INVALID;
 
-    if (parser == NULL) {
-        return DOM_HUBBUB_BADPARM;
-    }
-
-    /* setup binding parser context */
-    binding = malloc(sizeof(dom_hubbub_parser));
-    if (binding == NULL) {
+    dom_hubbub_parser *binding = calloc(1, sizeof(*binding));
+    if (binding == NULL)
         return DOM_HUBBUB_NOMEM;
-    }
-
-    binding->parser = NULL;
-    binding->doc = (struct dom_document *)dom_node_ref(document);
-    binding->encoding = params->enc;
-
-    if (params->enc != NULL) {
-        binding->encoding_source = DOM_HUBBUB_ENCODING_SOURCE_HEADER;
-    } else {
-        binding->encoding_source = DOM_HUBBUB_ENCODING_SOURCE_DETECTED;
-    }
-
-    binding->complete = false;
-
-    if (params->msg == NULL) {
-        binding->msg = dom_hubbub_parser_default_msg;
-    } else {
-        binding->msg = params->msg;
-    }
+    binding->doc = (dom_document *)dom_node_ref(node->owner);
+    binding->encoding = "UTF-8";
+    binding->encoding_source = DOM_HUBBUB_ENCODING_SOURCE_HEADER;
+    binding->msg = params->msg == NULL ? dom_hubbub_parser_default_msg : params->msg;
     binding->mctx = params->ctx;
-
-    /* ensure script function is valid or use the default */
-    if (params->script == NULL) {
-        binding->script = dom_hubbub_parser_default_script;
-    } else {
-        binding->script = params->script;
-    }
-
-    /* create hubbub parser */
-    error = hubbub_parser_create(binding->encoding, params->fix_enc, &binding->parser);
-    if (error != HUBBUB_OK) {
-        dom_node_unref(binding->doc);
-        free(binding);
-        return (DOM_HUBBUB_HUBBUB_ERR | error);
-    }
-
-    /* create DOM document fragment */
-    err = dom_document_create_document_fragment(binding->doc, fragment);
-    if (err != DOM_NO_ERR) {
-        hubbub_parser_destroy(binding->parser);
-        dom_node_unref(binding->doc);
-        free(binding);
-        return DOM_HUBBUB_DOM;
-    }
-
+    binding->script = dom_hubbub_parser_default_script;
     binding->tree_handler = tree_handler;
-    binding->tree_handler.ctx = (void *)binding;
+    binding->tree_handler.ctx = binding;
 
-    /* set tree handler on parser */
-    optparams.tree_handler = &binding->tree_handler;
-    hubbub_parser_setopt(binding->parser, HUBBUB_PARSER_TREE_HANDLER, &optparams);
+    hubbub_error error = hubbub_parser_create("UTF-8", true, &binding->parser);
+    dom_hubbub_error result = DOM_HUBBUB_HUBBUB_ERR | error;
+    if (error != HUBBUB_OK)
+        goto fail;
+    result = DOM_HUBBUB_DOM;
+    if (dom_document_create_document_fragment(binding->doc, &binding->fragment) != DOM_NO_ERR)
+        goto fail;
+    hubbub_tag root = {.ns = HUBBUB_NS_HTML, .name = {(const uint8_t *)"html", 4}};
+    error = create_element(binding, &root, (void **)&binding->fragment_root);
+    if (error != HUBBUB_OK)
+        goto hubbub_fail;
 
-    /* set document node*/
-    optparams.document_node = dom_node_ref((struct dom_node *)*fragment);
-    hubbub_parser_setopt(binding->parser, HUBBUB_PARSER_DOCUMENT_NODE, &optparams);
+    hubbub_parser_optparams opt = {.tree_handler = &binding->tree_handler};
+    error = hubbub_parser_setopt(binding->parser, HUBBUB_PARSER_TREE_HANDLER, &opt);
+    if (error != HUBBUB_OK)
+        goto hubbub_fail;
+    /* Hubbub takes ownership of this reference. */
+    opt.document_node = dom_node_ref(binding->fragment);
+    error = hubbub_parser_setopt(binding->parser, HUBBUB_PARSER_DOCUMENT_NODE, &opt);
+    if (error != HUBBUB_OK) {
+        dom_node_unref(opt.document_node);
+        goto hubbub_fail;
+    }
+    opt.enable_scripting = params->enable_script;
+    error = hubbub_parser_setopt(binding->parser, HUBBUB_PARSER_ENABLE_SCRIPTING, &opt);
+    if (error != HUBBUB_OK)
+        goto hubbub_fail;
 
-    /* set scripting state */
-    optparams.enable_scripting = params->enable_script;
-    hubbub_parser_setopt(binding->parser, HUBBUB_PARSER_ENABLE_SCRIPTING, &optparams);
+    opt.fragment = (hubbub_fragment_context){
+        .name = {(const uint8_t *)dom_string_data(node->name), dom_string_byte_length(node->name)},
+        .root = binding->fragment_root,
+    };
+    for (dom_node_internal *ancestor = node; ancestor != NULL; ancestor = ancestor->parent) {
+        if (_dom_html_node_type(ancestor) == DOM_HTML_ELEMENT_TYPE_FORM) {
+            opt.fragment.form = ancestor;
+            break;
+        }
+    }
+    error = hubbub_parser_setopt(binding->parser, HUBBUB_PARSER_FRAGMENT_CONTEXT, &opt);
+    if (error != HUBBUB_OK)
+        goto hubbub_fail;
 
-    /* set return parameters */
+    *fragment = (dom_document_fragment *)dom_node_ref(binding->fragment);
     *parser = binding;
-    /* fragment is already set up */
-
     return DOM_HUBBUB_OK;
+
+hubbub_fail:
+    result = DOM_HUBBUB_HUBBUB_ERR | error;
+fail:
+    dom_hubbub_parser_destroy(binding);
+    return result;
 }
 
 
@@ -900,6 +889,9 @@ void dom_hubbub_parser_destroy(dom_hubbub_parser *parser)
 {
     hubbub_parser_destroy(parser->parser);
     parser->parser = NULL;
+
+    dom_node_unref(parser->fragment_root);
+    dom_node_unref(parser->fragment);
 
     if (parser->doc != NULL) {
         dom_node_unref((struct dom_node *)parser->doc);
@@ -941,10 +933,19 @@ dom_hubbub_error dom_hubbub_parser_completed(dom_hubbub_parser *parser)
 {
     hubbub_error err;
 
+    if (parser->complete)
+        return DOM_HUBBUB_OK;
+
     err = hubbub_parser_completed(parser->parser);
     if (err != HUBBUB_OK) {
         parser->msg(DOM_MSG_ERROR, parser->mctx, "hubbub_parser_completed failed: %d", err);
         return DOM_HUBBUB_HUBBUB_ERR | err;
+    }
+
+    if (parser->fragment != NULL) {
+        err = reparent_children(parser, parser->fragment_root, parser->fragment);
+        if (err != HUBBUB_OK)
+            return DOM_HUBBUB_HUBBUB_ERR | err;
     }
 
     parser->complete = true;

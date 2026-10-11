@@ -159,6 +159,10 @@ const char *parserutils_inputstream_read_charset(parserutils_inputstream *stream
 parserutils_error
 parserutils_inputstream_change_charset(parserutils_inputstream *stream, const char *enc, uint32_t source);
 
+/* Use already-decoded character data encoded as UTF-8. Call before adding input.
+ * Bypass encoding detection and preserve a leading U+FEFF as a character. */
+parserutils_error parserutils_inputstream_use_decoded_utf8(parserutils_inputstream *stream);
+
 #ifdef __cplusplus
 }
 #endif
