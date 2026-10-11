@@ -904,7 +904,7 @@
 #errors
 #expected
 | 1 *
-|   0x02000018 0xffbbbbcd
+|   0x02000018 0xffbcbccd
 #reset
 
 ##

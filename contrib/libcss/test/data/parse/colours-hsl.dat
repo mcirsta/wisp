@@ -30,7 +30,7 @@
 #errors
 #expected
 | 1 *
-|   0x02000018 0x7fff0000
+|   0x02000018 0x80ff0000
 #reset
 
 #data
@@ -38,7 +38,7 @@
 #errors
 #expected
 | 1 *
-|   0x02000018 0x7fff0000
+|   0x02000018 0x80ff0000
 #reset
 
 #data
@@ -46,7 +46,7 @@
 #errors
 #expected
 | 1 *
-|   0x02000018 0x7fff0000
+|   0x02000018 0x80ff0000
 #reset
 
 #data
@@ -54,7 +54,7 @@
 #errors
 #expected
 | 1 *
-|   0x02000018 0x7fff0000
+|   0x02000018 0x80ff0000
 #reset
 
 #data
@@ -62,7 +62,7 @@
 #errors
 #expected
 | 1 *
-|   0x02000018 0x7fff0000
+|   0x02000018 0x80ff0000
 #reset
 
 #data
@@ -232,7 +232,7 @@
 #errors
 #expected
 | 1 *
-|   0x02000018 0xff202215
+|   0x02000018 0xff202216
 #reset
 
 
@@ -241,7 +241,7 @@
 #errors
 #expected
 | 1 *
-|   0x02000018 0xff476641
+|   0x02000018 0xff476742
 #reset
 
 #data
@@ -249,7 +249,7 @@
 #errors
 #expected
 | 1 *
-|   0x02000018 0xff9FD6DF
+|   0x02000018 0xff9FD7DF
 #reset
 
 #data
@@ -257,7 +257,7 @@
 #errors
 #expected
 | 1 *
-|   0x02000018 0xff2b3344
+|   0x02000018 0xff2c3344
 #reset
 
 #data
@@ -265,5 +265,5 @@
 #errors
 #expected
 | 1 *
-|   0x02000018 0xff633563
+|   0x02000018 0xff633663
 #reset

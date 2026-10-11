@@ -4,10 +4,12 @@
  *                http://www.opensource.org/licenses/mit-license.php
  */
 
+#include <float.h>
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
 
+#include "bytecode/bytecode.h"
 #include "parse/colour.h"
 #include "parse/property.h"
 #include "parse/properties/utils.h"
@@ -20,7 +22,9 @@ struct colour_token {
 };
 
 struct rgb_colour {
-    double channels[4]; /* RGB 0..255, alpha 0..1, before rendering quantization */
+    /* RGB 0..255 reference range, alpha 0..1; polar parsing converts in place.
+     * Out-of-gamut RGB components can exceed the reference range. */
+    double channels[4];
     unsigned missing;
 };
 
@@ -30,11 +34,10 @@ static bool character(const struct colour_token *token, char ch)
         lwc_string_data(token->text)[0] == ch;
 }
 
-/* Colour components are clamped at parse time. Read decimal tokens without
- * locale-sensitive strtod or fixed-point overflow/rounding before scaling.
- * Capping the integral part above the permitted range is safe even for huge
- * tokens; continue scanning to validate the entire spelling. */
-static bool component_number(lwc_string *text, double maximum, double *out)
+/* Locale-independent decimal tokens. Saturate before scaling rather than
+ * overflowing the old fixed-point representation. Return the numeric prefix
+ * length so angle dimensions use the same reader as numbers/percentages. */
+static size_t decimal_number(lwc_string *text, double maximum, double *out)
 {
     const char *data = lwc_string_data(text);
     size_t length = lwc_string_length(text), pos = 0;
@@ -45,7 +48,7 @@ static bool component_number(lwc_string *text, double maximum, double *out)
     double value = 0;
     while (pos < length && data[pos] >= '0' && data[pos] <= '9') {
         digits = true;
-        value = fmin(maximum + 1, value * 10 + data[pos++] - '0');
+        value = fmin(maximum, value * 10 + data[pos++] - '0');
     }
     if (pos < length && data[pos] == '.') {
         pos++;
@@ -56,9 +59,47 @@ static bool component_number(lwc_string *text, double maximum, double *out)
             place *= 0.1;
         }
     }
-    if (!digits || pos != length)
+    *out = negative ? -value : value;
+    return digits ? pos : 0;
+}
+
+static bool component_number(lwc_string *text, double maximum, double *out)
+{
+    size_t consumed = decimal_number(text, maximum, out);
+    if (consumed == 0 || consumed != lwc_string_length(text))
         return false;
-    *out = negative ? 0 : fmin(value, maximum);
+    *out = fmax(0, fmin(*out, maximum));
+    return true;
+}
+
+/* CSS Color 4 §4.3: normalize in the authored angle unit before converting to
+ * degrees. This avoids overflow when a large number of turns is multiplied. */
+static bool hue_number(const struct colour_token *token, double *out)
+{
+    if (token->type != CSS_TOKEN_NUMBER && token->type != CSS_TOKEN_DIMENSION)
+        return false;
+    size_t consumed = decimal_number(token->text, DBL_MAX, out);
+    if (consumed == 0)
+        return false;
+    double period = 360;
+    size_t length = lwc_string_length(token->text);
+    if (token->type == CSS_TOKEN_DIMENSION) {
+        uint32_t unit;
+        if (css__parse_unit_keyword(lwc_string_data(token->text) + consumed, length - consumed, &unit) != CSS_OK)
+            return false;
+        switch (unit) {
+        case UNIT_DEG: break;
+        case UNIT_GRAD: period = 400; break;
+        case UNIT_TURN: period = 1; break;
+        case UNIT_RAD: period = 6.28318530717958647693; break;
+        default: return false;
+        }
+    } else if (consumed != length) {
+        return false;
+    }
+    *out = fmod(*out, period) / period * 360;
+    if (*out < 0)
+        *out += 360;
     return true;
 }
 
@@ -106,7 +147,137 @@ static bool rgb_value(const struct colour_token *tokens, size_t count, struct rg
     return false;
 }
 
-bool css__parse_rgb_colour(const parserutils_vector *vector, int32_t *ctx, uint32_t *result)
+enum colour_function {
+    COLOUR_RGB,
+    COLOUR_HSL,
+    COLOUR_HWB,
+    COLOUR_UNSUPPORTED
+};
+
+static enum colour_function colour_function(lwc_string *name)
+{
+    if (css__keyword_equal(name, "rgb") || css__keyword_equal(name, "rgba"))
+        return COLOUR_RGB;
+    if (css__keyword_equal(name, "hsl") || css__keyword_equal(name, "hsla"))
+        return COLOUR_HSL;
+    if (css__keyword_equal(name, "hwb"))
+        return COLOUR_HWB;
+    return COLOUR_UNSUPPORTED;
+}
+
+/* CSS Color 4 §7.1 and §8.1. Keep fractional components until the rendering
+ * boundary. In particular HWB white/black normalize together, not individually. */
+static void polar_to_rgb(enum colour_function function, struct rgb_colour *colour)
+{
+    double hue = colour->channels[0];
+    double first = colour->channels[1] / 100;
+    double second = colour->channels[2] / 100;
+    if (function == COLOUR_HWB && first + second >= 1) {
+        double gray = first / (first + second) * 255;
+        colour->channels[0] = colour->channels[1] = colour->channels[2] = gray;
+        return;
+    }
+    double light = function == COLOUR_HSL ? second : 0.5;
+    double amplitude = function == COLOUR_HSL ? first * fmin(light, 1 - light) : 0.5;
+    /* Express the hue as a sector and its fractional offset. Unlike adding
+     * large channel offsets to hue/30, this preserves precision near the
+     * channel's half-byte rounding boundaries. */
+    double sector = hue / 60;
+    unsigned sextant = (unsigned)sector % 6;
+    double fraction = sector - floor(sector);
+    double levels[] = {0, sextant & 1 ? 1 - fraction : fraction, 1};
+    static const unsigned order[6][3] = {{2, 1, 0}, {1, 2, 0}, {0, 2, 1},
+        {0, 1, 2}, {1, 0, 2}, {2, 0, 1}};
+    for (size_t i = 0; i < 3; i++) {
+        double pure = levels[order[sextant][i]];
+        double channel;
+        if (function == COLOUR_HWB) {
+            channel = pure * (1 - first - second) + first;
+        } else {
+            double slope = 2 * pure - 1;
+            /* A huge amplitude can overflow; zero slope still means lightness. */
+            channel = slope == 0 ? light : light + amplitude * slope;
+        }
+        colour->channels[i] = channel * 255;
+    }
+}
+
+static bool polar_value(enum colour_function function, const struct colour_token *tokens, size_t count,
+    struct rgb_colour *out)
+{
+    if (count < 4)
+        return false;
+    bool legacy = character(&tokens[1], ',');
+    if (legacy && function == COLOUR_HWB)
+        return false;
+    *out = (struct rgb_colour){{0, 0, 0, 1}, 0};
+    size_t pos = 0;
+    for (size_t i = 0; i < 4; i++) {
+        if (pos >= count)
+            return false;
+        const struct colour_token *token = &tokens[pos++];
+        if (!legacy && token->type == CSS_TOKEN_IDENT && css__keyword_equal(token->text, "none")) {
+            out->missing |= 1u << i;
+            out->channels[i] = 0;
+        } else if (i == 0) {
+            if (!hue_number(token, &out->channels[i]))
+                return false;
+        } else {
+            if (token->type != CSS_TOKEN_NUMBER && token->type != CSS_TOKEN_PERCENTAGE)
+                return false;
+            if (legacy && i < 3 && token->type != CSS_TOKEN_PERCENTAGE)
+                return false;
+            if (i == 3) {
+                bool percentage = token->type == CSS_TOKEN_PERCENTAGE;
+                if (!component_number(token->text, percentage ? 100 : 1, &out->channels[i]))
+                    return false;
+                if (percentage)
+                    out->channels[i] /= 100;
+            } else {
+                size_t consumed = decimal_number(token->text, DBL_MAX, &out->channels[i]);
+                if (consumed == 0 || consumed != lwc_string_length(token->text))
+                    return false;
+                /* Only negative HSL saturation is clamped at parse time. */
+                if (function == COLOUR_HSL && i == 1)
+                    out->channels[i] = fmax(0, out->channels[i]);
+            }
+        }
+        if (pos >= count)
+            return false;
+        if (i >= 2 && character(&tokens[pos], ')')) {
+            if (pos + 1 != count)
+                return false;
+            polar_to_rgb(function, out);
+            return true;
+        }
+        if (i == 3)
+            return false;
+        if (legacy || i == 2) {
+            if (!character(&tokens[pos++], legacy ? ',' : '/'))
+                return false;
+        }
+    }
+    return false;
+}
+
+static bool function_value(enum colour_function function, const struct colour_token *tokens, size_t count,
+    struct rgb_colour *out)
+{
+    if (function == COLOUR_RGB)
+        return rgb_value(tokens, count, out);
+    if (function == COLOUR_HSL || function == COLOUR_HWB)
+        return polar_value(function, tokens, count, out);
+    return false;
+}
+
+static uint32_t channel_byte(double value)
+{
+    /* The existing painter/bytecode is ARGB8. Wider gamut mapping needs a
+     * separate representation; CSSOM must never read back this clipped value. */
+    return (uint32_t)floor(fmax(0, fmin(value, 255)) + 0.5);
+}
+
+bool css__parse_colour_function(lwc_string *name, const parserutils_vector *vector, int32_t *ctx, uint32_t *result)
 {
     /* Four components, three separators, closing parenthesis. */
     struct colour_token tokens[8];
@@ -121,12 +292,12 @@ bool css__parse_rgb_colour(const parserutils_vector *vector, int32_t *ctx, uint3
             break;
     }
     struct rgb_colour colour;
-    if (!rgb_value(tokens, count, &colour))
+    if (!function_value(colour_function(name), tokens, count, &colour))
         return false;
-    uint32_t red = (uint32_t)floor(colour.channels[0] + 0.5);
-    uint32_t green = (uint32_t)floor(colour.channels[1] + 0.5);
-    uint32_t blue = (uint32_t)floor(colour.channels[2] + 0.5);
-    uint32_t alpha = (uint32_t)floor(colour.channels[3] * 255 + 0.5);
+    uint32_t red = channel_byte(colour.channels[0]);
+    uint32_t green = channel_byte(colour.channels[1]);
+    uint32_t blue = channel_byte(colour.channels[2]);
+    uint32_t alpha = channel_byte(colour.channels[3] * 255);
     *result = alpha << 24 | red << 16 | green << 8 | blue;
     return true;
 }
@@ -147,10 +318,14 @@ static size_t number(char *out, double value)
 
 static css_error serialize_rgb(const struct rgb_colour *colour, lwc_string **out)
 {
-    /* Missing components must retain their identity in CSSOM. Their color(srgb)
-     * serialization needs proper color() support, not a conversion to zero. */
+    /* Missing components must retain their original colour-space identity in
+     * CSSOM. Their modern serialization is separate work, not conversion to zero. */
     if (colour->missing != 0)
         return CSS_INVALID;
+    for (size_t i = 0; i < 3; i++) {
+        if (!isfinite(colour->channels[i]) || colour->channels[i] < 0 || colour->channels[i] > 255)
+            return CSS_INVALID; /* Do not freeze the painter's out-of-gamut clipping into CSSOM. */
+    }
     bool opaque = floor(colour->channels[3] * 1000000 + 0.5) == 1000000;
     char buffer[80]; /* Four bounded numbers, separators and function delimiters. */
     size_t used = (size_t)sprintf(buffer, "%s(", opaque ? "rgb" : "rgba");
@@ -233,8 +408,8 @@ css_error css__declaration_colour_serialize(const css_declaration_contribution *
         unsigned percent = (alpha * 100 + 127) / 255;
         colour.channels[3] = (percent * 255 + 50) / 100 == alpha ? percent / 100.0
                                                                  : ((alpha * 1000 + 127) / 255) / 1000.0;
-    } else if (token->type == CSS_TOKEN_FUNCTION &&
-        (css__keyword_equal(token->text, "rgb") || css__keyword_equal(token->text, "rgba"))) {
+    } else if (token->type == CSS_TOKEN_FUNCTION) {
+        enum colour_function function = colour_function(token->text);
         struct colour_token tokens[8];
         size_t count = 0;
         for (token++; token < value->source->tokens + end; token++) {
@@ -244,7 +419,7 @@ css_error css__declaration_colour_serialize(const css_declaration_contribution *
                 return CSS_INVALID;
             tokens[count++] = (struct colour_token){token->type, token->text};
         }
-        if (!rgb_value(tokens, count, &colour))
+        if (!function_value(function, tokens, count, &colour))
             return CSS_INVALID;
     } else {
         return CSS_INVALID;

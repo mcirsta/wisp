@@ -1110,8 +1110,40 @@ static const struct {
     {"color:rgb(-999999999999999999% 999999999999999999% 0%)", "color", "rgb(0, 255, 0)"},
     {"color:rgb(none 0 0)", "color", NULL},
     {"color:rgb(1 2 3 / none)", "color", NULL},
-    {"color:hsl(0,100%,50%)", "color", NULL},
-    {"color:hwb(0 0% 0%)", "color", NULL},
+    {"color:hsl(0,100%,50%)", "color", "rgb(255, 0, 0)"},
+    {"color:hwb(0 0% 0%)", "color", "rgb(255, 0, 0)"},
+    {"color:HSL(120,30%,50%)", "color", "rgb(89.25, 165.75, 89.25)"},
+    {"color:HSLA(120 30 50 / .1234567)", "color", "rgba(89.25, 165.75, 89.25, 0.123457)"},
+    {"color:hsl(120 30% 50)", "color", "rgb(89.25, 165.75, 89.25)"},
+    {"color:hsl(120 30 50%)", "color", "rgb(89.25, 165.75, 89.25)"},
+    {"color:hsl(-.5TuRn,100%,50%,50%)", "color", "rgba(0, 255, 255, 0.5)"},
+    {"color:hsl(100GRAD 100% 50%)", "color", "rgb(127.5, 255, 0)"},
+    {"color:hsl(3.141592653589793rad 100% 50%)", "color", "rgb(0, 255, 255)"},
+    {"color:hsl(1000000080deg 100% 50%)", "color", "rgb(255, 0, 0)"},
+    {"color:hsl(1000000000.25turn 100% 50%)", "color", "rgb(127.5, 255, 0)"},
+    {"color:hsl(30 -50% 60)", "color", "rgb(153, 153, 153)"},
+    {"color:hsl(0 100% 50% / 10000000)", "color", "rgb(255, 0, 0)"},
+    {"color:hsl(0 100% 50% / -1)", "color", "rgba(255, 0, 0, 0)"},
+    {"color:hsl(0/**/100%/**/50%)", "color", "rgb(255, 0, 0)"},
+    {"color:hsl(30 200% 50%)", "color", NULL},
+    {"color:hsl(0 0% 110%)", "color", NULL},
+    {"color:hsl(0 0% -10%)", "color", NULL},
+    {"color:hsl(none 100% 50%)", "color", NULL},
+    {"color:hsla(120 none 50% / none)", "color", NULL},
+    {"color:hwb(none none none)", "color", NULL},
+    {"color:hwb(0 20% 10% / none)", "color", NULL},
+    {"color:HWB(740deg 20% 30% / 50%)", "color", "rgba(178.5, 93.5, 51, 0.5)"},
+    {"color:hwb(150 20% 10%)", "color", "rgb(51, 229.5, 140.25)"},
+    {"color:hwb(267 19% 60%)", "color", "rgb(72.5475, 48.45, 102)"},
+    {"color:hwb(0 40 80%)", "color", "rgb(85, 85, 85)"},
+    {"color:hwb(0 400% 200%)", "color", "rgb(170, 170, 170)"},
+    {"color:hwb(0 100000000 50000000)", "color", "rgb(170, 170, 170)"},
+    {"color:hwb(0 0% 0% / 100000000%)", "color", "rgb(255, 0, 0)"},
+    {"color:hwb(0 0% 0% / -100%)", "color", "rgba(255, 0, 0, 0)"},
+    {"color:hwb(0 -10% 10%)", "color", NULL},
+    {"border-color:hsl(0,100%,50%) hwb(120 0 0)", "border-color", "rgb(255, 0, 0) rgb(0, 255, 0)"},
+    {"border-color:hsl(0,100%,50%);border-left-color:rgb(255 0 0)", "border-color", "rgb(255, 0, 0)"},
+    {"border-color:hwb(0 0 0)!important;border-right-color:blue", "border-color", "rgb(255, 0, 0)"},
     {"color:lab(50% 0 0)", "color", NULL},
     {"color:oklab(50% 0 0)", "color", NULL},
     {"color:lch(50% 10 0)", "color", NULL},
@@ -1139,9 +1171,9 @@ static const struct {
     {"border-color:var(--border)", "border-color", "var(--border)"},
     {"border-color:var(--border)", "border-top-color", ""},
     {"border-color:var(--border);border-left-color:red", "border-color", ""},
-    {"border-color:red hsl(0,100%,50%)", "border-left-color", NULL},
+    {"border-color:red hsl(0,100%,50%)", "border-left-color", "rgb(255, 0, 0)"},
     {"border-color:red hsl(0,100%,50%) blue", "border-bottom-color", "blue"},
-    {"border-color:red hsl(0,100%,50%) blue", "border-color", NULL},
+    {"border-color:red hsl(0,100%,50%) blue", "border-color", "red rgb(255, 0, 0) blue"},
 
 };
 enum { VALUE_CASE_COUNT = sizeof(value_cases) / sizeof(value_cases[0]) };
@@ -1472,7 +1504,7 @@ START_TEST(test_colour_alpha_roundtrip)
 }
 END_TEST
 
-START_TEST(test_rgb_rendering_values)
+START_TEST(test_colour_rendering_values)
 {
     static const struct { const char *value; uint32_t packed; } cases[] = {
         {"rgb(50%,0%,100%)", 0xff8000ff},
@@ -1486,6 +1518,26 @@ START_TEST(test_rgb_rendering_values)
         {"rgba(none none none)", 0xff000000},
         {"rgb(0 0 0 / .000001)", 0x00000000},
         {"rgb(0 0 0 / .999999)", 0xff000000},
+        {"hsl(120,30%,50%)", 0xff59a659},
+        {"hsl(-90deg 100% 50%)", 0xff8000ff},
+        {"hsl(1000000080 100% 50%)", 0xffff0000},
+        {"hsl(1000000000.25turn 100% 50%)", 0xff80ff00},
+        {"hsl(100grad 100% 50%)", 0xff80ff00},
+        {"hsl(3.141592653589793rad 100% 50%)", 0xff00ffff},
+        {"hsla(0,100%,50%,.5)", 0x80ff0000},
+        {"hsla(0 100% 50% / .1)", 0x1aff0000},
+        {"hsl(30 -50 60)", 0xff999999},
+        {"hsl(none 100% 50%)", 0xffff0000},
+        {"hsl(120 none 50% / none)", 0x00808080},
+        {"hwb(none none none)", 0xffff0000},
+        {"hwb(120 none 50% / none)", 0x00008000},
+        {"hwb(740deg 20% 30% / 50%)", 0x80b35e33},
+        {"hwb(150 20% 10%)", 0xff33e68c},
+        {"hwb(267 19% 60%)", 0xff493066},
+        {"hwb(0 400% 200%)", 0xffaaaaaa},
+        {"hwb(0 100000000 50000000)", 0xffaaaaaa},
+        {"hsl(0 100% 50% / 10000000)", 0xffff0000},
+
     };
     for (size_t i = 0; i < N_ELEMENTS(cases); i++) {
         char css[128];
@@ -1500,6 +1552,59 @@ START_TEST(test_rgb_rendering_values)
 }
 END_TEST
 
+/* Unsupported colours must discard the entire declaration, including partial
+ * shorthand/gradient output, and must not consume the following declaration.
+ * Compare rendering bytecode directly, including SVG paint properties whose
+ * CSSOM readback is not implemented yet. */
+START_TEST(test_unsupported_colour_fallbacks)
+{
+    static const struct { const char *fallback; const char *unsupported; } cases[] = {
+        {"color:red", "color:color(srgb 0 0 1)"},
+        {"background-color:#123", "background-color:color(display-p3 1 0 0)"},
+        {"border-top-color:red", "border-top-color:color(srgb 0 0 1)"},
+        {"border-right-color:red", "border-right-color:color(srgb 0 0 1)"},
+        {"border-bottom-color:red", "border-bottom-color:color(srgb 0 0 1)"},
+        {"border-left-color:red", "border-left-color:color(srgb 0 0 1)"},
+        {"outline-color:red", "outline-color:color(srgb 0 0 1)"},
+        {"column-rule-color:red", "column-rule-color:color(srgb 0 0 1)"},
+        {"fill:red", "fill:color(srgb 0 0 1)"},
+        {"stroke:red", "stroke:color(srgb 0 0 1)"},
+        {"border-color:red green blue", "border-color:red color(srgb 0 0 1) blue"},
+        {"border:4px solid red", "border:8px dashed color(srgb 0 0 1)"},
+        {"border-top:4px solid red", "border-top:8px dashed color(srgb 0 0 1)"},
+        {"outline:4px solid red", "outline:8px dashed color(srgb 0 0 1)"},
+        {"column-rule:4px solid red", "column-rule:8px dashed color(srgb 0 0 1)"},
+        {"background:blue", "background:fixed color(srgb 0 0 1)"},
+        {"background:red", "background:linear-gradient(blue,white) color(srgb 0 0 1)"},
+        {"background-image:linear-gradient(red,blue)",
+            "background-image:linear-gradient(color(srgb 0 0 1),white)"},
+        {"background-image:linear-gradient(red,blue)",
+            "background-image:linear-gradient(white,color(display-p3 1 0 0))"},
+        {"background-image:linear-gradient(red,blue)",
+            "background-image:radial-gradient(white,color(srgb 0 0 1))"},
+        {"background-image:linear-gradient(red,blue)",
+            "background-image:linear-gradient(white,black),linear-gradient(white,color(srgb 0 0 1))"},
+    };
+    for (size_t i = 0; i < N_ELEMENTS(cases); i++) {
+        char baseline[256], attempted[512];
+        snprintf(baseline, sizeof(baseline), "%s;opacity:.25", cases[i].fallback);
+        snprintf(attempted, sizeof(attempted), "%s;%s!important;opacity:.25",
+            cases[i].fallback, cases[i].unsupported);
+        css_declaration_list *expected = parse(baseline, _i != 0);
+        css_declaration_list *actual = parse(attempted, _i != 0);
+        ck_assert_msg(css__declaration_list_count(expected) == 2, "invalid test fallback: %s", baseline);
+        ck_assert_msg(css__declaration_list_count(actual) == 2, "incorrect fallback/recovery: %s", attempted);
+        const css_style *want = inline_style(css__declaration_list_sheet(expected));
+        const css_style *got = inline_style(css__declaration_list_sheet(actual));
+        ck_assert_msg(want->used == got->used &&
+                memcmp(want->bytecode, got->bytecode, want->used * sizeof(css_code_t)) == 0,
+            "unsupported colour changed rendering bytecode: %s", attempted);
+        css__declaration_list_destroy(actual);
+        css__declaration_list_destroy(expected);
+    }
+}
+END_TEST
+
 START_TEST(test_colour_invalid)
 {
     static const char *const values[] = {
@@ -1507,6 +1612,14 @@ START_TEST(test_colour_invalid)
         "rgb(1 2 3 4)", "rgb(1 2)", "rgba(1,2,3,4,)", "rgb(1 2 3 / .5 /)", "rgb(1 2 3 /)",
         "rgb(1 2 3 / .5 extra)", "rgb(1,2,3,)", "rgb(1,2,3,.5,)", "rgb(1,2,3,.5,.6)",
         "rgb(1,2,3,.5 /)", "rgb(1,2,3,.5 / junk)", "rgb(1px 2 3)", "rgb(1 2 3 / 1px)",
+        "hsl(0,50,50%)", "hsl(0,50%,50)", "hsl(0 50%,50%)", "hsl(0,50% 50%)",
+        "hsl(0,50%,50% / .5)", "hsl(0 50% 50%,.5)", "hsl(0,50%,50%,)", "hsla(0,50%,50%,.5,)",
+        "hsl(0 50% 50% .5)", "hsl(0 50% 50% /)", "hsl(0 50%)", "hsl(0,50%,50%,.5,.6)",
+        "hsl(none,50%,50%)", "hsl(0,none,50%)", "hsl(0,50%,50%,none)", "hsl(0% 50% 50%)",
+        "hsl(0px 50% 50%)", "hsl(0 50px 50%)", "hsl(0 50% 50% / 1px)",
+        "hwb(0,50%,50%)", "hwb(0 50% 50%,.5)", "hwb(0 50% 50% / .5,)", "hwb(0 50% 50% / .5 /)",
+        "hwb(0 50% 50% / .5 extra)", "hwb(0 50% 50% /)", "hwb(0 50%)", "hwb(0 50% 50% .5)",
+        "hwba(0 50% 50% / .5)", "hwb(0px 50% 50%)", "hwb(0 50px 50%)", "hwb(0 50% 50% / 1px)",
         "color(srgb 0 0 1)", "color(display-p3 1 0 0)", "color(unknown 1 0 0)", "color(srgb)",
         "color(srgb 1 2)", "unknown(srgb 0 0 1)", "unknown(srgb 0 0 1 / .5)", "#12", "#12345",
     };
@@ -1819,7 +1932,7 @@ START_TEST(test_value_allocation_failure)
                       "quotes:'«' '»'; counter-reset:Chapter 0 Section -0002;"
                       "aspect-ratio:auto .1234567; border-spacing:.3456789em .5678912px;"
                       "flex:.1234567 .3456789 1.2345678px;flex-flow:wrap-reverse column;"
-                      "color:rgb(1.2 3.4 5.6 / .234567);border-color:#1234 rgb(4,5,6) REd;"
+                      "color:rgb(1.2 3.4 5.6 / .234567);border-color:#1234 hsl(12 34% 56%) hwb(78 9% 10%);"
                       "clip:rect(.1234567px, auto, -1.2345678em, 1px);"
                       "font-family:One/**/Two\\20 , 'a\\22 b\\a c',SERIF;";
     css_declaration_list *list = parse(css, false);
@@ -1885,8 +1998,9 @@ int main(void)
     tcase_add_loop_test(tc, test_flex_bytecode, 0, 2);
     tcase_add_loop_test(tc, test_colour_alpha_roundtrip, 0, 2);
     tcase_add_test(tc, test_quirky_colour_values);
-    tcase_add_loop_test(tc, test_rgb_rendering_values, 0, 2);
+    tcase_add_loop_test(tc, test_colour_rendering_values, 0, 2);
     tcase_add_loop_test(tc, test_colour_invalid, 0, 2);
+    tcase_add_loop_test(tc, test_unsupported_colour_fallbacks, 0, 2);
     tcase_add_loop_test(tc, test_flex_invalid, 0, 2);
     tcase_add_loop_test(tc, test_long_url, 0, 2);
     tcase_add_loop_test(tc, test_overflow_axes, 0, 2);

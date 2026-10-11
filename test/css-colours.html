@@ -16,6 +16,30 @@ html, body { margin: 0; background: white; }
 #gradient { left: 410px; top: 70px; background: linear-gradient(rgb(50% 0 0),rgb(50% 0 0)); }
 #border { left: 10px; top: 130px; box-sizing: border-box; border: 10px solid;
           border-color: #f00 rgb(0 100% 0) #00f rgb(50% 0 50%); }
+#hsl { left: 110px; top: 130px; background: hsl(120 30% 50%); }
+#hsl-alpha { left: 210px; top: 130px; background: hsla(0,100%,50%,.5); }
+#hwb { left: 310px; top: 130px; background: hwb(150 20% 10%); }
+#hwb-gray { left: 410px; top: 130px; background: hwb(0 400% 200%); }
+#hue { left: 10px; top: 190px; background: hsl(1000000000.25turn 100% 50%); }
+#polar-gradient { left: 110px; top: 190px; background: linear-gradient(hwb(0 400% 200%),hwb(0 400% 200%)); }
+#polar-invalid { left: 210px; top: 190px; background: #024; background: hwb(0,0%,0%); }
+#polar-missing { left: 310px; top: 190px; background: hsl(120 none 50% / none); }
+#polar-border { left: 410px; top: 190px; box-sizing: border-box; border: 10px solid;
+                border-color: hsl(120 30% 50%) hwb(150 20% 10%); }
+#gradient-fallback { left: 10px; top: 250px; background: linear-gradient(#024,#024);
+    background-image: linear-gradient(color(display-p3 1 0 0),#f00); }
+#layers-fallback { left: 110px; top: 250px; background: linear-gradient(#024,#024);
+    background-image: linear-gradient(#000,#000),linear-gradient(#fff,color(srgb 1 0 0)); }
+#border-fallback { left: 210px; top: 250px; box-sizing: border-box; background: #abc;
+    border: 10px solid #024; border: 30px dashed color(srgb 1 0 0); }
+#svg-fallback { left: 310px; top: 250px; fill: #024; fill: color(srgb 1 0 0);
+    stroke: #c0ffee; stroke: color(srgb 1 0 0); stroke-width: 4px; }
+#transparent-control { left: 410px; top: 250px; background: #024; background: rgba(0,0,0,0); }
+/* A present custom property containing an unsupported colour becomes invalid
+ * at computed-value time: color inherits, rather than reviving the earlier red. */
+#variable-fallback { left: 10px; top: 310px; color: #024; --unsupported: color(srgb 1 0 0); }
+#variable-fallback > div { width: 80px; height: 40px; color: red; color: var(--unsupported);
+    background: currentColor; }
 </style>
 <div id="hex" class="case"></div><div id="fraction" class="case"></div>
 <div id="mixed" class="case"></div><div id="alpha" class="case"></div>
@@ -23,3 +47,15 @@ html, body { margin: 0; background: white; }
 <div id="color-function" class="case"></div><div id="unknown" class="case"></div>
 <div id="invalid" class="case"></div><div id="gradient" class="case"></div>
 <div id="border" class="case"></div>
+<div id="hsl" class="case"></div><div id="hsl-alpha" class="case"></div>
+<div id="hwb" class="case"></div><div id="hwb-gray" class="case"></div>
+<div id="hue" class="case"></div><div id="polar-gradient" class="case"></div>
+<div id="polar-invalid" class="case"></div><div id="polar-missing" class="case"></div>
+<div id="polar-border" class="case"></div>
+<div id="gradient-fallback" class="case"></div><div id="layers-fallback" class="case"></div>
+<div id="border-fallback" class="case"></div>
+<svg id="svg-fallback" class="case" xmlns="http://www.w3.org/2000/svg" width="80" height="40">
+    <rect x="5" y="5" width="70" height="30"/>
+</svg>
+<div id="transparent-control" class="case"></div>
+<div id="variable-fallback" class="case"><div></div></div>
