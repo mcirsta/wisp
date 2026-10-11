@@ -314,6 +314,55 @@ static const css_declaration_token *scalar_component(const css_declaration_contr
     return tokens[component];
 }
 
+/* Expand validated flex shorthands into their specified scalar components.
+ * Numeric spellings retain CSSOM precision, independently of layout bytecode.
+ * Math functions need a typed value serializer and remain explicitly unsupported. */
+static css_error serialize_flex_component(const css_declaration_contribution *value, lwc_string **out)
+{
+    const css_declaration *source = value->source;
+    bool flow = source->property->value_kind == CSS_DECL_VALUE_FLEX_FLOW;
+    const css_declaration_token *parts[3] = {0};
+    const char *defaults[3] = {"1", "1", "0px"};
+    if (flow) {
+        defaults[0] = "row";
+        defaults[1] = "nowrap";
+    }
+    size_t factors = 0;
+    for (size_t i = 0; i < source->token_count; i++) {
+        const css_declaration_token *token = &source->tokens[i];
+        if (token->type == CSS_TOKEN_S)
+            continue;
+        size_t component;
+        if (flow) {
+            if (token->type != CSS_TOKEN_IDENT)
+                return CSS_INVALID;
+            component = css__keyword_equal(token->text, "row") || css__keyword_equal(token->text, "row-reverse") ||
+                css__keyword_equal(token->text, "column") || css__keyword_equal(token->text, "column-reverse") ? 0 : 1;
+        } else if (token->type == CSS_TOKEN_IDENT && css__keyword_equal(token->text, "none")) {
+            defaults[0] = defaults[1] = "0";
+            defaults[2] = "auto";
+            continue;
+        } else if (token->type == CSS_TOKEN_NUMBER && factors < 2) {
+            component = factors++;
+        } else if (token->type == CSS_TOKEN_NUMBER || token->type == CSS_TOKEN_DIMENSION ||
+            token->type == CSS_TOKEN_PERCENTAGE || token->type == CSS_TOKEN_IDENT) {
+            component = 2;
+        } else {
+            return CSS_INVALID;
+        }
+        if (parts[component] != NULL)
+            return CSS_INVALID;
+        parts[component] = token;
+    }
+    size_t component = value->component;
+    const css_declaration_token *token = parts[component];
+    if (token == NULL)
+        return intern(defaults[component], strlen(defaults[component]), out);
+    if (token->type == CSS_TOKEN_IDENT)
+        return lwc_string_tolower(token->text, out) == lwc_error_ok ? CSS_OK : CSS_NOMEM;
+    return serialize_numeric(token, component == 2, out);
+}
+
 css_error css__declaration_value_serialize(const css_declaration_contribution *value, lwc_string **out)
 {
     if (out == NULL)
@@ -342,6 +391,8 @@ css_error css__declaration_value_serialize(const css_declaration_contribution *v
         return css__declaration_text_serialize(source, out);
     if (kind == CSS_DECL_VALUE_ASPECT_RATIO || kind == CSS_DECL_VALUE_BORDER_SPACING || kind == CSS_DECL_VALUE_CLIP)
         return serialize_geometry(source, out);
+    if (kind == CSS_DECL_VALUE_FLEX || kind == CSS_DECL_VALUE_FLEX_FLOW)
+        return serialize_flex_component(value, out);
     size_t arity = scalar_arity(kind);
     const css_declaration_token *token = scalar_component(value, arity);
     if (token == NULL)
@@ -353,7 +404,8 @@ css_error css__declaration_value_serialize(const css_declaration_contribution *v
     return serialize_numeric(token, kind != CSS_DECL_VALUE_NUMBER && kind != CSS_DECL_VALUE_NUMBER_LENGTH, out);
 }
 
-static css_error serialize_scalars(const css_declaration_contribution *const *members, size_t count, lwc_string **out)
+static css_error serialize_components(enum css_declaration_value_kind kind,
+    const css_declaration_contribution *const *members, size_t count, lwc_string **out)
 {
     lwc_string *values[4] = {0};
     css_error error = CSS_OK;
@@ -362,16 +414,27 @@ static css_error serialize_scalars(const css_declaration_contribution *const *me
         if (error != CSS_OK)
             goto done;
     }
-    /* Interned equality permits the shortest equivalent pair/quad spelling. */
-    size_t used = count;
-    if (used == 4 && values[3] == values[1])
-        used--;
-    if (used == 3 && values[2] == values[0])
-        used--;
-    if (used == 2 && values[1] == values[0])
-        used--;
+    size_t first = 0, used = count;
+    if (kind == CSS_DECL_VALUE_FLEX_FLOW) {
+        if (css__keyword_equal(values[1], "nowrap"))
+            used = 1;
+        else if (css__keyword_equal(values[0], "row")) {
+            first = 1;
+            used = 1;
+        }
+    } else if (kind != CSS_DECL_VALUE_FLEX) {
+        /* Interned equality permits the shortest equivalent pair/quad spelling. */
+        if (used == 4 && values[3] == values[1])
+            used--;
+        if (used == 3 && values[2] == values[0])
+            used--;
+        if (used == 2 && values[1] == values[0])
+            used--;
+    }
+    /* flex uses the established explicit grow/shrink/basis serialization. In
+     * particular, a 0px basis must not become 0% (different for indefinite sizes). */
     const struct value_format format = {"", " ", ""};
-    error = join_values(values, used, &format, out);
+    error = join_values(values + first, used, &format, out);
 done:
     for (size_t i = 0; i < count; i++) {
         if (values[i] != NULL)
@@ -418,7 +481,8 @@ css_error css__declaration_shorthand_serialize(const struct css_prop_entry *prop
     }
     if (any_wide)
         return same_wide ? intern(wide, strlen(wide), out) : intern("", 0, out);
-    if (scalar_arity(property->value_kind) == 1)
+    enum css_declaration_value_kind kind = property->value_kind;
+    if (scalar_arity(kind) == 1 && kind != CSS_DECL_VALUE_FLEX && kind != CSS_DECL_VALUE_FLEX_FLOW)
         return CSS_INVALID;
-    return serialize_scalars(members, count, out);
+    return serialize_components(kind, members, count, out);
 }

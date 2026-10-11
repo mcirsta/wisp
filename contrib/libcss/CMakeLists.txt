@@ -4,6 +4,9 @@ option(LIBCSS_ENABLE_LOGGING "Enable libcss local logging to libcss-log.txt" OFF
 
 set(LIBCSS_CMAKE_HELPERS ${CMAKE_SOURCE_DIR}/contrib/libcss/build-aux/cmake_helpers.py)
 set(LIBCSS_PROPERTIES_TOML ${CMAKE_SOURCE_DIR}/contrib/libcss/properties.toml)
+# These inputs determine generated source lists as well as source contents.
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+    ${LIBCSS_PROPERTIES_TOML} ${LIBCSS_CMAKE_HELPERS})
 
 # Check for TOML parsing support (required for properties.toml)
 execute_process(

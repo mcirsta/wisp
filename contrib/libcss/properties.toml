@@ -1632,7 +1632,7 @@ initial = "AUTO"
 initial_data = ['(css_fixed_or_calc)0', 'CSS_UNIT_PX']
 values = [["length", "", "calc"]]
 condition = "CSS_FLEX_BASIS_SET"
-parse = '''IDENT:( INHERIT: INITIAL: REVERT: UNSET: AUTO:0,FLEX_BASIS_AUTO CONTENT:0,FLEX_BASIS_CONTENT IDENT:) LENGTH_UNIT:( UNIT_PX:FLEX_BASIS_SET MASK:UNIT_MASK_FLEX_BASIS RANGE:<0 LENGTH_UNIT:) CALC:( UNIT_PX:FLEX_BASIS_CALC CALC:)'''
+parse = '''IDENT:( INHERIT: INITIAL: REVERT: UNSET: AUTO:0,FLEX_BASIS_AUTO CONTENT:0,FLEX_BASIS_CONTENT IDENT:) LENGTH_UNIT:( UNIT_PX:FLEX_BASIS_SET MASK:UNIT_MASK_FLEX_BASIS DISALLOW:unit==UNIT_FR||css__number_sign(token->idata)<0 LENGTH_UNIT:) CALC:( UNIT_PX:FLEX_BASIS_CALC CALC:)'''
 
 [flex_direction]
 declaration_value = "keyword"
@@ -1655,7 +1655,7 @@ initial = "SET"
 initial_data = ['INTTOFIX(0)']
 values = "fixed"
 condition = "CSS_FLEX_GROW_SET"
-parse = '''IDENT:( INHERIT: INITIAL: REVERT: UNSET: IDENT:) NUMBER:( false:FLEX_GROW_SET RANGE:num<0 NUMBER:) CALC:( NUMBER:FLEX_GROW_CALC CALC:)'''
+parse = '''IDENT:( INHERIT: INITIAL: REVERT: UNSET: IDENT:) NUMBER:( false:FLEX_GROW_SET RANGE:css__number_sign(token->idata)<0 NUMBER:) CALC:( NUMBER:FLEX_GROW_CALC CALC:)'''
 
 [flex_shrink]
 declaration_value = "number"
@@ -1668,7 +1668,7 @@ initial = "SET"
 initial_data = ['INTTOFIX(1)']
 values = "fixed"
 condition = "CSS_FLEX_SHRINK_SET"
-parse = '''IDENT:( INHERIT: INITIAL: REVERT: UNSET: IDENT:) NUMBER:( false:FLEX_SHRINK_SET RANGE:num<0 NUMBER:) CALC:( NUMBER:FLEX_SHRINK_CALC CALC:)'''
+parse = '''IDENT:( INHERIT: INITIAL: REVERT: UNSET: IDENT:) NUMBER:( false:FLEX_SHRINK_SET RANGE:css__number_sign(token->idata)<0 NUMBER:) CALC:( NUMBER:FLEX_SHRINK_CALC CALC:)'''
 
 [flex_wrap]
 declaration_value = "keyword"
@@ -2024,6 +2024,8 @@ cascade = "none"
 computed = "none"
 
 [flex]
+declaration_value = "flex"
+helper_longhands = ["flex_grow", "flex_shrink", "flex_basis"]
 declaration_longhands = ["flex_grow", "flex_shrink", "flex_basis"]
 enum = "CSS_PROP_FLEX"
 inherited = false
@@ -2032,6 +2034,8 @@ cascade = "none"
 computed = "none"
 
 [flex_flow]
+declaration_value = "flex_flow"
+helper_longhands = ["flex_direction", "flex_wrap"]
 declaration_longhands = ["flex_direction", "flex_wrap"]
 enum = "CSS_PROP_FLEX_FLOW"
 inherited = false

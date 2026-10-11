@@ -11,7 +11,7 @@ import tempfile
 binary = Path(sys.argv[1]).resolve()
 fixture = Path(__file__).resolve().parents[2] / "test/flex-alignment.html"
 # Main-axis position and border-box size, relative to the parent's content box.
-# Independently checked against Chromium; there are no network assets or scripts.
+# Expectations follow Flexbox sizing/alignment rules; no network assets or scripts.
 expected = {
     "end": ("y", "height", 232, 168),
     "center": ("y", "height", 116, 168),
@@ -24,6 +24,12 @@ expected = {
     "row": ("x", "width", 232, 168),
     "row-center": ("x", "width", 116, 168),
     "row-reverse": ("x", "width", 0, 168),
+    "basis-only": ("x", "width", 0, 400),
+    "basis-first": ("x", "width", 0, 400),
+    "auto-first": ("x", "width", 0, 400),
+    "interleaved": ("x", "width", 300, 100),
+    "mixed-wide": ("x", "width", 300, 100),
+    "flow-order": ("y", "height", 32, 168),
 }
 ids = [item for name in expected for item in (name, name + "-panel")]
 ids += [name + "-image" for name in ("background", "auto", "grow")]

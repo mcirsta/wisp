@@ -1240,7 +1240,7 @@
 #errors
 #expected
 | *
-|  flex-grow: 0
+|  flex-grow: 1
 |  flex-shrink: 1
 |  flex-basis: 3em
 #reset
@@ -1351,7 +1351,7 @@
 #errors
 #expected
 | *
-|  flex-grow: 0 !important
+|  flex-grow: 1 !important
 |  flex-shrink: 1 !important
 |  flex-basis: 3em !important
 #reset

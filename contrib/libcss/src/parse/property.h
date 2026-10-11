@@ -32,6 +32,8 @@ enum css_declaration_value_kind {
     CSS_DECL_VALUE_BORDER_SPACING,
     CSS_DECL_VALUE_CLIP,
     CSS_DECL_VALUE_FONT_FAMILY,
+    CSS_DECL_VALUE_FLEX,
+    CSS_DECL_VALUE_FLEX_FLOW,
 };
 
 /* Immutable registration shared by the parser, variable resolver and specified

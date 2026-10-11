@@ -625,6 +625,7 @@ START_TEST(test_allocation_failure)
     void (*limit)(unsigned int) = _i == 0 ? malloc_limit : _i == 1 ? calloc_limit : realloc_limit;
     const char *declarations = "color:red; width:2px!important; --Tone:green; margin:var(--space, 1px 2px);"
                                "padding:1em; display:flex; height:3px; opacity:.5; color:blue; --extra:;"
+                               "flex:auto 2 3;flex-flow:wrap column;flex:initial;flex-flow:inherit;"
                                /* Force the parser's token vector to grow too. */
                                "--large:red red red red red red red red red red red red red red red red "
                                "red red red red red red red red red red red red red red red red red red;"
@@ -638,7 +639,7 @@ START_TEST(test_allocation_failure)
     memset(css + pos, 'c', 8192);
     pos += 8192;
     snprintf(css + pos, sizeof(css) - pos, "*/%s", declarations);
-    const size_t expected = 19;
+    const size_t expected = 23;
     /* Keep shared property strings alive, so each iteration tests the same
      * allocation sequence instead of global string-cache initialization. */
     css_stylesheet *keeper;
@@ -1029,6 +1030,55 @@ static const struct {
     {"font-family:emoji", "font-family", NULL},
     {"font-family:fangsong", "font-family", NULL},
 
+    {"flex:100px", "flex", "1 1 100px"},
+    {"flex:100px", "flex-grow", "1"},
+    {"flex:100px", "flex-shrink", "1"},
+    {"flex:100px", "flex-basis", "100px"},
+    {"flex:2", "flex", "2 1 0px"},
+    {"flex:2", "flex-basis", "0px"},
+    {"flex:0", "flex", "0 1 0px"},
+    {"flex:0 0", "flex", "0 0 0px"},
+    {"flex:0 0 0", "flex", "0 0 0px"},
+    {"flex:0px", "flex", "1 1 0px"},
+    {"flex:20%", "flex", "1 1 20%"},
+    {"flex:none", "flex", "0 0 auto"},
+    {"flex:AUTO", "flex", "1 1 auto"},
+    {"flex:CONTENT", "flex", "1 1 content"},
+    {"flex:auto 2", "flex", "2 1 auto"},
+    {"flex:auto 2 3", "flex", "2 3 auto"},
+    {"flex:2 auto", "flex", "2 1 auto"},
+    {"flex:10px 2 3", "flex", "2 3 10px"},
+    {"flex:2 3 10px", "flex", "2 3 10px"},
+    {"flex:+02.1250000 +03.000 .1234567EM", "flex", "2.125 3 0.123457em"},
+    {"flex:-0 -0 -0px", "flex", "0 0 0px"},
+    {"flex:2/**/3/**/AUTO", "flex", "2 3 auto"},
+    {"flex:2 3 10px;flex-basis:20%", "flex", "2 3 20%"},
+    {"flex-grow:2;flex-basis:10px;flex-shrink:3", "flex", "2 3 10px"},
+    {"flex-grow:2", "flex", ""},
+    {"flex:2;flex-grow:3!important", "flex", ""},
+    {"flex:2!important;flex-grow:3", "flex", "2 1 0px"},
+    {"flex:INITIAL", "flex", "initial"},
+    {"flex:inherit;flex-grow:inherit", "flex", "inherit"},
+    {"flex:inherit;flex-shrink:2", "flex", ""},
+    {"flex:var(--f, 2 3 auto)", "flex", "var(--f, 2 3 auto)"},
+    {"flex:var(--f)", "flex-grow", ""},
+    {"flex:var(--f);flex-grow:2", "flex", ""},
+    {"flex:2 calc(1 + 1) auto", "flex", NULL},
+    {"flex:2 1 calc(10px + 2px)", "flex", NULL},
+    {"flex-flow:ROW NOWRAP", "flex-flow", "row"},
+    {"flex-flow:wrap", "flex-flow", "wrap"},
+    {"flex-flow:wrap", "flex-direction", "row"},
+    {"flex-flow:column", "flex-wrap", "nowrap"},
+    {"flex-flow:WRAP-REVERSE COLUMN", "flex-flow", "column wrap-reverse"},
+    {"flex-flow:column nowrap", "flex-flow", "column"},
+    {"flex-flow:wrap;flex-direction:column", "flex-flow", "column wrap"},
+    {"flex-flow:wrap;flex-wrap:nowrap", "flex-flow", "row"},
+    {"flex-flow:unset", "flex-flow", "unset"},
+    {"flex-flow:row!important;flex-wrap:wrap", "flex-flow", "row"},
+    {"flex-flow:row;flex-wrap:wrap!important", "flex-flow", ""},
+    {"flex-flow:var(--flow)", "flex-flow", "var(--flow)"},
+    {"flex-flow:var(--flow)", "flex-wrap", ""},
+
 };
 enum { VALUE_CASE_COUNT = sizeof(value_cases) / sizeof(value_cases[0]) };
 
@@ -1306,6 +1356,72 @@ START_TEST(test_geometry_invalid_units)
 }
 END_TEST
 
+/* Flexbox §7.1: shorthand defaults are 1 1 0px, and the grow/shrink
+ * pair is indivisible. These comparisons check actual rendering bytecode too. */
+START_TEST(test_flex_bytecode)
+{
+    static const char *const forms[][2] = {
+        {"flex:100px", "flex-grow:1;flex-shrink:1;flex-basis:100px"},
+        {"flex:0px", "flex-grow:1;flex-shrink:1;flex-basis:0px"},
+        {"flex:0", "flex-grow:0;flex-shrink:1;flex-basis:0px"},
+        {"flex:2 3", "flex-grow:2;flex-shrink:3;flex-basis:0px"},
+        {"flex:auto", "flex-grow:1;flex-shrink:1;flex-basis:auto"},
+        {"flex:auto 2", "flex-grow:2;flex-shrink:1;flex-basis:auto"},
+        {"flex:auto 2 3", "flex-grow:2;flex-shrink:3;flex-basis:auto"},
+        {"flex:10px 2 3", "flex-grow:2;flex-shrink:3;flex-basis:10px"},
+        {"flex:none", "flex-grow:0;flex-shrink:0;flex-basis:auto"},
+        {"flex:content", "flex-grow:1;flex-shrink:1;flex-basis:content"},
+        {"flex:-0 -0 -0", "flex-grow:0;flex-shrink:0;flex-basis:0px"},
+        {"flex:inherit", "flex-grow:inherit;flex-shrink:inherit;flex-basis:inherit"},
+        {"flex-flow:wrap column", "flex-direction:column;flex-wrap:wrap"},
+        {"flex-flow:wrap", "flex-direction:row;flex-wrap:wrap"},
+        {"flex-flow:column", "flex-direction:column;flex-wrap:nowrap"},
+        {"flex-flow:initial", "flex-direction:initial;flex-wrap:initial"},
+    };
+    for (size_t i = 0; i < N_ELEMENTS(forms); i++) {
+        css_declaration_list *a = parse(forms[i][0], _i != 0);
+        css_declaration_list *b = parse(forms[i][1], _i != 0);
+        ck_assert_msg(css__declaration_list_count(a) == 1, "rejected %s", forms[i][0]);
+        compare_sheets(css__declaration_list_sheet(a), css__declaration_list_sheet(b));
+        css__declaration_list_destroy(a);
+        css__declaration_list_destroy(b);
+    }
+}
+END_TEST
+
+START_TEST(test_flex_invalid)
+{
+    static const char *const invalid[] = {
+        "flex:1 10px 2", "flex:0 10px 0", "flex:auto auto", "flex:none 1", "flex:1 none",
+        "flex:1 2 3", "flex:0 0 0 0", "flex:10px 1 2 0", "flex:1 initial", "flex:initial 1",
+        "flex:1 1 revert", "flex:1 unset", "flex:auto inherit", "flex:auto 1 initial",
+        "flex:auto 1 1 unset", "flex:1 1 1fr", "flex:1 1 1deg", "flex:1 1 1s",
+        "flex:-.00000001", "flex:1 -.00000001", "flex:1 1 -.00000001px",
+        "flex:1 1 -.00000001%", "flex-grow:-.00000001", "flex-shrink:-.00000001",
+        "flex-basis:-.00000001px", "flex-basis:1fr", "flex:invalid",
+        "flex-flow:row row", "flex-flow:wrap wrap", "flex-flow:row wrap column",
+        "flex-flow:row initial", "flex-flow:wrap unset", "flex-flow:revert wrap", "flex-flow:invalid",
+    };
+    for (size_t i = 0; i < N_ELEMENTS(invalid); i++) {
+        char css[160];
+        snprintf(css, sizeof(css), "flex:2 3 20px;flex-flow:column wrap;%s;color:red", invalid[i]);
+        css_declaration_list *list = parse(css, _i != 0);
+        ck_assert_msg(css__declaration_list_count(list) == 3, "accepted invalid value: %s", invalid[i]);
+        css_declaration_order *order;
+        ck_assert_int_eq(css__declaration_order_create(list, &order), CSS_OK);
+        lwc_string *value;
+        ck_assert_int_eq(serialize_property(order, "flex", &value), CSS_OK);
+        ck_assert_str_eq(lwc_string_data(value), "2 3 20px");
+        lwc_string_unref(value);
+        ck_assert_int_eq(serialize_property(order, "flex-flow", &value), CSS_OK);
+        ck_assert_str_eq(lwc_string_data(value), "column wrap");
+        lwc_string_unref(value);
+        css__declaration_order_destroy(order);
+        css__declaration_list_destroy(list);
+    }
+}
+END_TEST
+
 START_TEST(test_geometry_bytecode)
 {
     static const char *const forms[][2] = {
@@ -1527,13 +1643,14 @@ START_TEST(test_value_allocation_failure)
                       "content:attr(\\31 2) counters(Chapter, 'a\\a b', upper-roman) url(Other.png);"
                       "quotes:'«' '»'; counter-reset:Chapter 0 Section -0002;"
                       "aspect-ratio:auto .1234567; border-spacing:.3456789em .5678912px;"
+                      "flex:.1234567 .3456789 1.2345678px;flex-flow:wrap-reverse column;"
                       "clip:rect(.1234567px, auto, -1.2345678em, 1px);"
                       "font-family:One/**/Two\\20 , 'a\\22 b\\a c',SERIF;";
     css_declaration_list *list = parse(css, false);
     css_declaration_order *order;
     ck_assert_int_eq(css__declaration_order_create(list, &order), CSS_OK);
     static const char *const names[] = {"margin", "--x", "background-image", "background-attachment", "border-style",
-        "content", "quotes", "counter-reset", "aspect-ratio", "border-spacing", "clip", "font-family"};
+        "content", "quotes", "counter-reset", "aspect-ratio", "border-spacing", "clip", "font-family", "flex", "flex-flow"};
     const char *name = names[_i];
     bool succeeded = false;
     unsigned failures = 0;
@@ -1588,11 +1705,13 @@ int main(void)
     tcase_add_loop_test(tc, test_clip_separators, 0, 2);
     tcase_add_loop_test(tc, test_geometry_invalid_units, 0, 2);
     tcase_add_loop_test(tc, test_geometry_bytecode, 0, 2);
+    tcase_add_loop_test(tc, test_flex_bytecode, 0, 2);
+    tcase_add_loop_test(tc, test_flex_invalid, 0, 2);
     tcase_add_loop_test(tc, test_long_url, 0, 2);
     tcase_add_loop_test(tc, test_overflow_axes, 0, 2);
     tcase_add_test(tc, test_value_arguments);
 #ifdef WISP_TEST_ALLOC_FAILURE
-    tcase_add_loop_test(tc, test_value_allocation_failure, 0, 12);
+    tcase_add_loop_test(tc, test_value_allocation_failure, 0, 14);
     tcase_add_loop_test(tc, test_font_face_allocation_failure, 0, 3);
     tcase_add_test(tc, test_content_terminator_allocation_failure);
 #endif

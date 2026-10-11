@@ -25,3 +25,12 @@ section { margin: 10px; }
 <section>Row end<div class="card row" id="row"><div class="panel" id="row-panel"><div class="content"></div></div></div></section>
 <section>Row center<div class="card row" id="row-center" style="justify-content:center"><div class="panel" id="row-center-panel"><div class="content"></div></div></div></section>
 <section>Row reverse end<div class="card row" id="row-reverse" style="flex-direction:row-reverse"><div class="panel" id="row-reverse-panel"><div class="content"></div></div></div></section>
+
+<!-- Flexbox §7.1: basis-only defaults to grow/shrink 1, and basis can precede
+     the complete factor pair. Each 100px item fills its 400px row. -->
+<section>Basis-only growth<div class="card row" id="basis-only"><div class="panel" id="basis-only-panel" style="padding:0;flex:100px"></div></div></section>
+<section>Basis before factors<div class="card row" id="basis-first"><div class="panel" id="basis-first-panel" style="padding:0;flex:100px 2 3"></div></div></section>
+<section>Auto before factors<div class="card row" id="auto-first"><div class="panel" id="auto-first-panel" style="padding:0;flex:auto 2 3"></div></div></section>
+<section>Rejected interleaved factors<div class="card row" id="interleaved"><div class="panel" id="interleaved-panel" style="padding:0;flex:none;flex:2 100px 3"></div></div></section>
+<section>Rejected mixed CSS-wide keyword<div class="card row" id="mixed-wide"><div class="panel" id="mixed-wide-panel" style="padding:0;flex:none;flex:2 initial"></div></div></section>
+<section>Wrap before direction<div class="card row" id="flow-order" style="flex-flow:wrap column"><div class="panel" id="flow-order-panel"><div class="content"></div></div></div></section>

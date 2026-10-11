@@ -270,12 +270,17 @@ class TomlPropertyReader:
             if value_kind not in ('none', 'number', 'length', 'number_length', 'keyword', 'pair_length',
                                   'quad_length', 'pair_keyword', 'quad_keyword', 'uri', 'image_list', 'keyword_list',
                                   'content', 'string_list', 'counter_list', 'aspect_ratio', 'border_spacing', 'clip',
-                                  'font_family'):
+                                  'font_family', 'flex', 'flex_flow'):
                 raise ValueError(f"{name}: unknown declaration_value {value_kind}")
             if value_kind != 'none':
-                expected = {'pair_length': 2, 'quad_length': 4, 'pair_keyword': 2, 'quad_keyword': 4}.get(value_kind, 0)
+                expected = {'pair_length': 2, 'quad_length': 4, 'pair_keyword': 2, 'quad_keyword': 4,
+                            'flex': 3, 'flex_flow': 2}.get(value_kind, 0)
                 if len(members) != expected:
                     raise ValueError(f"{name}: declaration_value requires {expected} longhands")
+                ordered = {'flex': ['flex_grow', 'flex_shrink', 'flex_basis'],
+                           'flex_flow': ['flex_direction', 'flex_wrap']}.get(value_kind)
+                if ordered is not None and members != ordered:
+                    raise ValueError(f"{name}: declaration_value requires ordered members {ordered}")
 
     def get_dispatch_order(self):
         """Get property dispatch order from TOML (replaces DispatchParser).
@@ -1159,6 +1164,15 @@ class MultiFileGenerator:
             lines.append(f"css_error css__parse_{prop_name}(css_language *c, "
                          f"const parserutils_vector *vector, int32_t *ctx, css_style *result);")
         
+        # Helper declarations follow the same TOML input as helper bodies and
+        # build outputs, including the extra opcode argument of generic parsers.
+        if self.toml_reader:
+            helpers = {helper for prop in self.toml_reader.toml_data.values()
+                       for helper in prop.get('helper_longhands', [])}
+            for name in sorted(helpers):
+                extra = ", enum css_properties_e op" if name in self.toml_reader.generics else ""
+                lines.append(f"css_error css__parse_{name}_value(css_language *c, "
+                             f"const parserutils_vector *vector, int32_t *ctx, css_style *result{extra});")
         return '\n'.join(lines)
     
     def generate_unit_masks(self):

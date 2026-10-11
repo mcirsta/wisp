@@ -1095,6 +1095,61 @@ color/math values, font shorthand/modern generics, alias/aggregate handling and
 declaration-block writes before connecting the live `element.style` wrapper.
 The saved eBihoreanul `style.opacity` blocker remains pending.
 
+
+### Flex shorthand values and parser grammar (2026-10-11)
+
+The preceding font-family batch is committed as `579a902f`. The native specified-
+value layer now expands and reconstructs `flex` and `flex-flow`, using generated
+property metadata and the existing declaration-order/importance handling.
+Numeric values retain their source precision before CSSOM decimal normalization.
+Missing members, mixed priorities, CSS-wide keywords and pending variable
+substitutions use the common shorthand rules. Math-function serialization remains
+explicitly unsupported until the typed math-value work is complete.
+
+The parser fixes follow [Flexbox §7.1](https://drafts.csswg.org/css-flexbox-1/#flex-property)
+and [§5.3](https://drafts.csswg.org/css-flexbox-1/#flex-flow-property):
+
+- A basis-only declaration such as `flex:100px` now supplies grow/shrink factors
+  of **1**, so the item can fill available space. Previously grow was zero.
+- The basis may precede or follow the complete grow/shrink group. `auto 2 3` is
+  accepted; an interleaved value such as `2 100px 3` is rejected.
+- `none` remains `0 0 auto`; omitted basis remains the specification's **0px**,
+  not 0%. Bare zero is assigned to a factor until both factors are present.
+- CSS-wide keywords cannot appear as individual shorthand components. Negative
+  scalar factors/bases are rejected before fixed-point rounding, and `fr` is not
+  accepted as a scalar basis unit. These validations also apply to the longhands.
+- Allocation failures propagate instead of being mistaken for a failed grammar
+  alternative. Failed parses restore the destination bytecode length and token
+  position. The rewritten parsers retain the established bytecode order and use
+  fewer lines than their predecessors.
+
+`flex` readback uses explicit grow/shrink/basis values, an established form also
+allowed by the [CSSOM flex serialization test](https://github.com/web-platform-tests/wpt/blob/master/css/cssom/flex-serialization.html).
+`flex-flow` uses canonical direction/wrap order and omits redundant defaults.
+This is native CSSOM groundwork; it does not yet expose `element.style` to JS.
+
+Value-only parser bodies and their declarations now share `helper_longhands`
+metadata. The previous handwritten helper prototypes were removed. CMake also
+tracks the configure-time inputs that determine generated source lists, so adding
+a helper no longer requires a manual reconfigure.
+
+Validation: all 79 selected native CSS/flex/QuickJS/font suites pass with Debug
+ASan/UBSan/LeakSanitizer, all 19 selected Release suites pass, and all 27 selected
+Qt integration suites pass. The declaration suite has 492 Debug / 514 Release
+checks, including whole/chunked input, specified-value round trips, bytecode
+comparisons to explicit longhands, invalid-declaration recovery, allocation
+failure/retry and final interned-string cleanup. The generator suite has 14
+checks. Six added Qt geometry cases cover basis-only growth, reordered components
+and rejection of invalid shorthand values. Three old expected grow values in two
+libcss suites were corrected from zero to one; those suites pass on rerun.
+Both builds are warning-free, and `git diff --check` is clean. No GTK tests ran.
+
+Remaining CSSOM work still includes colors, math values, the font shorthand and
+modern generics, alias/aggregate handling, declaration-block serialization and
+writes, then the live DOM wrapper. The saved eBihoreanul `style.opacity` blocker
+remains pending. The old Duktape empty-object style getter remains unsuitable
+for reuse; the new path continues to use the actual native CSS parser.
+
 ## Assessment
 
 Keep QuickJS-ng and libdom. The missing part is the browser binding and execution
