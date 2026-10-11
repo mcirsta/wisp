@@ -40,7 +40,9 @@ hubbub_error handle_in_column_group(hubbub_treebuilder *treebuilder, const hubbu
     case HUBBUB_TOKEN_START_TAG: {
         element_type type = element_type_from_name(treebuilder, &token->data.tag.name);
 
-        if (type == HTML) {
+        if (type == TEMPLATE) {
+            return start_template(treebuilder, token);
+        } else if (type == HTML) {
             /* Process as if "in body" */
             err = handle_in_body(treebuilder, token);
         } else if (type == COL) {
@@ -54,7 +56,9 @@ hubbub_error handle_in_column_group(hubbub_treebuilder *treebuilder, const hubbu
     case HUBBUB_TOKEN_END_TAG: {
         element_type type = element_type_from_name(treebuilder, &token->data.tag.name);
 
-        if (type == COLGROUP) {
+        if (type == TEMPLATE) {
+            return end_template(treebuilder);
+        } else if (type == COLGROUP) {
             handled = true;
         } else if (type == COL) {
             /** \todo parse error */
@@ -63,8 +67,7 @@ hubbub_error handle_in_column_group(hubbub_treebuilder *treebuilder, const hubbu
         }
     } break;
     case HUBBUB_TOKEN_EOF:
-        err = HUBBUB_REPROCESS;
-        break;
+        return handle_in_body(treebuilder, token);
     }
 
     if (handled || err == HUBBUB_REPROCESS) {

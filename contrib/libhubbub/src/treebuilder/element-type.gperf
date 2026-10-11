@@ -117,6 +117,7 @@ style,               STYLE
 summary,             SUMMARY
 svg,                 SVG
 table,               TABLE
+template,            TEMPLATE
 tbody,               TBODY
 td,                  TD
 textarea,            TEXTAREA

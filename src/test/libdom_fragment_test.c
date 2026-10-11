@@ -90,6 +90,18 @@ static void describe(dom_node *node)
             emit("-->", 3);
         dom_string_unref(text);
     }
+    if (type == DOM_ELEMENT_NODE) {
+        dom_document_fragment *content = NULL;
+        if (dom_html_template_element_get_content((dom_html_template_element *)node, &content) == DOM_NO_ERR) {
+            dom_node *ordinary = NULL;
+            ck_assert_int_eq(dom_node_get_first_child(node, &ordinary), DOM_NO_ERR);
+            ck_assert_ptr_null(ordinary);
+            emit("{", 1);
+            describe((dom_node *)content);
+            emit("}", 1);
+            dom_node_unref(content);
+        }
+    }
     dom_node *child = NULL;
     ck_assert_int_eq(dom_node_get_first_child(node, &child), DOM_NO_ERR);
     while (child != NULL) {
@@ -182,6 +194,21 @@ static const struct {
         "<table><input></input><tbody><tr><td>A</td></tr></tbody></table>"},
     {"optgroup", "<option>A<option>B", "<option>A</option><option>B</option>"},
     {"option", "<span>A</span><option>B", "<span>A</span><option>B</option>"},
+    {"template", "", ""},
+    {"template", "text<!--c--><span>X</span>", "text<!--c--><span>X</span>"},
+    {"template", "<tr><td>A<td>B", "<tr><td>A</td><td>B</td></tr>"},
+    {"template", "<td>A<th>B", "<td>A</td><th>B</th>"},
+    {"template", "<col><col>", "<col></col><col></col>"},
+    {"template", "<tbody><tr><td>A", "<tbody><tr><td>A</td></tr></tbody>"},
+    {"template", "<caption>A</caption>", "<caption>A</caption>"},
+    {"template", "</template><tr><td>A", "<tr><td>A</td></tr>"},
+    {"template", "<template><tr><td>A</template><tr><td>B",
+        "<template>{<tr><td>A</td></tr>}</template><tr><td>B</td></tr>"},
+    {"template", "<template><b>A", "<template>{<b>A</b>}</template>"},
+    {"template", "<html id=x><body id=y><span>A</span>", "<span>A</span>"},
+    {"template", "<colgroup><col></colgroup><template>X</template>",
+        "<colgroup><col></col></colgroup><template>{X}</template>"},
+
 };
 
 START_TEST(test_context)
@@ -444,6 +471,70 @@ static dom_node *parse_body(const char *input, unsigned mode, dom_document **par
     ck_assert_int_eq(dom_html_document_get_body(*parsed, &body), DOM_NO_ERR);
     return body;
 }
+
+static const struct {
+    const char *label, *input, *expected;
+} template_cases[] = {
+    {"empty", "<template></template>X", "<template>{}</template>X"},
+    {"comments and text", "<template>A<!--c--><b>B</b></template>X", "<template>{A<!--c--><b>B</b>}</template>X"},
+    {"nested", "<template>A<template><p>B</template>C</template>X", "<template>{A<template>{<p>B</p>}</template>C}</template>X"},
+    {"EOF in template", "<template>", "<template>{}</template>"},
+    {"EOF in body", "<template><b>X", "<template>{<b>X</b>}</template>"},
+    {"EOF in column group", "<template><col>", "<template>{<col></col>}</template>"},
+    {"EOF in table body", "<template><tr><td>X", "<template>{<tr><td>X</td></tr>}</template>"},
+    {"EOF nested", "<template><template><table> X ", "<template>{<template>{ X <table></table>}</template>}</template>"},
+    {"scope shields paragraph", "<p>A<template><div>B</div></template>C", "<p>A<template>{<div>B</div>}</template>C</p>"},
+    {"formatting isolation", "<b>A<template><i>B</template>C", "<b>A<template>{<i>B</i>}</template>C</b>"},
+    {"formatting repair", "<template><b><p>A</b>B</p></template>C", "<template>{<b></b><p><b>A</b>B</p>}</template>C"},
+    {"stray closing template", "</template><p>X", "<p>X</p>"},
+    {"template rows", "<template><tr><td>A<td>B</template>X", "<template>{<tr><td>A</td><td>B</td></tr>}</template>X"},
+    {"template cells", "<template><td>A<th>B</template>X", "<template>{<td>A</td><th>B</th>}</template>X"},
+    {"template columns", "<template><col><col></template>X", "<template>{<col></col><col></col>}</template>X"},
+    {"template table sections", "<template><tbody><tr><td>A</template>X", "<template>{<tbody><tr><td>A</td></tr></tbody>}</template>X"},
+    {"template caption", "<template><caption>A</caption></template>X", "<template>{<caption>A</caption>}</template>X"},
+    {"nested table restores template mode", "<template><table><tr><td>A</table><p>B</template>X", "<template>{<table><tbody><tr><td>A</td></tr></tbody></table><p>B</p>}</template>X"},
+    {"table template", "<table><template><tr><td>A</template><tr><td>B</table>", "<table><template>{<tr><td>A</td></tr>}</template><tbody><tr><td>B</td></tr></tbody></table>"},
+    {"row template", "<table><tr><template><td>A</template><td>B</table>", "<table><tbody><tr><template>{<td>A</td>}</template><td>B</td></tr></tbody></table>"},
+    {"colgroup template", "<table><colgroup><template>X</template><col></table>", "<table><colgroup><template>{X}</template><col></col></colgroup></table>"},
+    {"foster template instead of outer table", "<table><template><tbody> X <tr><td>A</template></table>", "<table><template>{<tbody><tr><td>A</td></tr></tbody> X }</template></table>"},
+    {"foster before a table inside contents", "<template><table> X <tr><td>A</table></template>", "<template>{ X <table><tbody><tr><td>A</td></tr></tbody></table>}</template>"},
+    {"table text entire mixed run", "<table> \nX <tr><td>A</table>", " \nX <table><tbody><tr><td>A</td></tr></tbody></table>"},
+    {"table whitespace after a fostered run", "<table>X<div>Y</div> \n<tr><td>A</table>", "X<div>Y</div><table> \n<tbody><tr><td>A</td></tr></tbody></table>"},
+    {"whitespace inside fostered div", "<table><div> X </div></table>", "<div> X </div><table></table>"},
+    {"table form ignored inside template", "<template><table><form><tr><td>A</table></template>", "<template>{<table><tbody><tr><td>A</td></tr></tbody></table>}</template>"},
+    {"template form independent", "<form><template><form><input></form></template><input></form>", "<form><template>{<form><input></input></form>}</template><input></input></form>"},
+    {"template close form preserves outer pointer", "<form><template></form><input></template><input></form>", "<form><template>{<input></input>}</template><input></input></form>"},
+    {"body and html tags ignored", "<template><body><html><p>A</body></html></template>B", "<template>{<p>A</p>}</template>B"},
+    {"SVG namespace template is ordinary", "<svg><template><g/></template></svg>", "<svg><template><g></g></template></svg>"},
+    {"SVG integration template", "<svg><foreignObject><template><p>A</template>B</foreignObject></svg>", "<svg><foreignObject><template>{<p>A</p>}</template>B</foreignObject></svg>"},
+    {"MathML integration template", "<math><mtext><template><p>A</template>B</mtext></math>", "<math><mtext><template>{<p>A</p>}</template>B</mtext></math>"},
+    {"foreign EOF", "<template><svg><g>", "<template>{<svg><g></g></svg>}</template>"},
+    {"literal closing tag in script", "<template><script>'</template>'</script></template>X", "<template>{<script>'</template>'</script>}</template>X"},
+};
+
+START_TEST(test_template_document_and_fragment)
+{
+    size_t count = sizeof(template_cases) / sizeof(template_cases[0]);
+    size_t variant = _i % count, mode = _i / count;
+    dom_document *parsed = NULL;
+    dom_node *root = parse_body(template_cases[variant].input, mode, &parsed);
+    used = 0;
+    tree[0] = 0;
+    dom_node *child = NULL;
+    ck_assert_int_eq(dom_node_get_first_child(root, &child), DOM_NO_ERR);
+    while (child != NULL) {
+        describe(child);
+        dom_node *next = NULL;
+        ck_assert_int_eq(dom_node_get_next_sibling(child, &next), DOM_NO_ERR);
+        dom_node_unref(child);
+        child = next;
+    }
+    ck_assert_msg(strcmp(tree, template_cases[variant].expected) == 0, "%s, mode %zu: expected %s, got %s",
+        template_cases[variant].label, mode, template_cases[variant].expected, tree);
+    dom_node_unref(root);
+    dom_node_unref(parsed);
+}
+END_TEST
 
 static const struct {
     const char *label, *input, *expected;
@@ -710,6 +801,252 @@ static dom_hubbub_error count_svg(void *ctx, dom_node *node)
     return DOM_HUBBUB_OK;
 }
 
+static dom_node *first_child(dom_node *parent)
+{
+    dom_node *child = NULL;
+    ck_assert_int_eq(dom_node_get_first_child(parent, &child), DOM_NO_ERR);
+    ck_assert_ptr_nonnull(child);
+    return child;
+}
+
+static dom_node *next_sibling(dom_node *node)
+{
+    dom_node *next = NULL;
+    ck_assert_int_eq(dom_node_get_next_sibling(node, &next), DOM_NO_ERR);
+    ck_assert_ptr_nonnull(next);
+    return next;
+}
+
+static dom_node *template_content(dom_node *node)
+{
+    dom_document_fragment *content = NULL;
+    ck_assert_int_eq(dom_html_template_element_get_content((dom_html_template_element *)node, &content), DOM_NO_ERR);
+    ck_assert_ptr_nonnull(content);
+    return (dom_node *)content;
+}
+
+/* Check text, elements, attributes and nested template contents, including after
+ * the parser and outer document have been released. */
+static void subtree_owned_by(dom_node *node, dom_document *expected)
+{
+    dom_document *owner = NULL;
+    ck_assert_int_eq(dom_node_get_owner_document(node, &owner), DOM_NO_ERR);
+    ck_assert_ptr_eq(owner, expected);
+    dom_node_unref(owner);
+    dom_node_type type;
+    ck_assert_int_eq(dom_node_get_node_type(node, &type), DOM_NO_ERR);
+    if (type == DOM_ELEMENT_NODE) {
+        dom_namednodemap *attrs = NULL;
+        uint32_t count;
+        ck_assert_int_eq(dom_node_get_attributes(node, &attrs), DOM_NO_ERR);
+        ck_assert_int_eq(dom_namednodemap_get_length(attrs, &count), DOM_NO_ERR);
+        for (uint32_t i = 0; i < count; i++) {
+            dom_node *attr = NULL;
+            ck_assert_int_eq(dom_namednodemap_item(attrs, i, &attr), DOM_NO_ERR);
+            subtree_owned_by(attr, expected);
+            dom_node_unref(attr);
+        }
+        dom_namednodemap_unref(attrs);
+        dom_document_fragment *content = NULL;
+        if (dom_html_template_element_get_content((dom_html_template_element *)node, &content) == DOM_NO_ERR) {
+            subtree_owned_by((dom_node *)content, expected);
+            dom_node_unref(content);
+        }
+    }
+    dom_node *child = NULL;
+    ck_assert_int_eq(dom_node_get_first_child(node, &child), DOM_NO_ERR);
+    while (child != NULL) {
+        subtree_owned_by(child, expected);
+        dom_node *next = NULL;
+        ck_assert_int_eq(dom_node_get_next_sibling(child, &next), DOM_NO_ERR);
+        dom_node_unref(child);
+        child = next;
+    }
+}
+
+START_TEST(test_template_owner_and_lifetime)
+{
+    const char *input = "<template><form id=f><input name=n><template><b class=c>Text</b></template>"
+        "</form><table> X <tr><td>Y</table></template>";
+    dom_document *parsed = NULL;
+    dom_node *root;
+    if (_i < 2) {
+        dom_node *context = element("template");
+        root = parse(context, input, _i ? 1 : 4096, true);
+        dom_node_unref(context);
+    } else {
+        root = parse_body(input, _i, &parsed);
+    }
+    dom_node *host = first_child(root), *content = template_content(host);
+    dom_document *inert = NULL;
+    ck_assert_int_eq(dom_node_get_owner_document(content, &inert), DOM_NO_ERR);
+    ck_assert_ptr_ne(inert, _i < 2 ? document : parsed);
+    if (_i < 2)
+        subtree_owned_by(root, inert);
+    else
+        subtree_owned_by(content, inert);
+    dom_node_unref(host);
+    dom_node_unref(root);
+    dom_node_unref(parsed);
+    subtree_owned_by(content, inert);
+    dom_node_unref(content);
+    dom_node_unref(inert);
+}
+END_TEST
+
+static void form_owner_is(dom_node *input, dom_node *expected)
+{
+    dom_html_form_element *form = NULL;
+    ck_assert_int_eq(dom_html_input_element_get_form((dom_html_input_element *)input, &form), DOM_NO_ERR);
+    ck_assert_ptr_eq(form, expected);
+    dom_node_unref(form);
+}
+
+START_TEST(test_template_adopted_context)
+{
+    dom_node *context = element("template"), *content = template_content(context);
+    dom_document *destination = NULL;
+    ck_assert_int_eq(dom_implementation_create_document(
+                         DOM_IMPLEMENTATION_HTML, NULL, NULL, NULL, NULL, NULL, &destination), DOM_NO_ERR);
+    dom_node *adopted = NULL;
+    ck_assert_int_eq(dom_document_adopt_node(destination, content, &adopted), DOM_NO_ERR);
+    ck_assert_ptr_eq(adopted, content);
+    dom_node_unref(adopted);
+    dom_node *fragment = parse(context, "<span id=s>text</span>", _i ? 1 : 4096, true);
+    subtree_owned_by(fragment, destination);
+    /* Completing the parse must not change the destination until requested. */
+    dom_node *child = NULL;
+    ck_assert_int_eq(dom_node_get_first_child(content, &child), DOM_NO_ERR);
+    ck_assert_ptr_null(child);
+    append(content, fragment);
+    subtree_owned_by(content, destination);
+    dom_node_unref(context);
+    dom_node_unref(destination);
+    dom_node_unref(content);
+    dom_node_unref(fragment);
+}
+END_TEST
+
+START_TEST(test_template_form_isolation)
+{
+    dom_document *parsed = NULL;
+    dom_node *root = parse_body("<form><template><input><form><input></form></template><input></form>", _i, &parsed);
+    dom_node *outer = first_child(root), *host = first_child(outer), *outside = next_sibling(host);
+    dom_node *content = template_content(host), *unowned = first_child(content), *inner = next_sibling(unowned);
+    dom_node *inside = first_child(inner);
+    form_owner_is(outside, outer);
+    form_owner_is(unowned, NULL);
+    form_owner_is(inside, inner);
+    dom_node_unref(inside);
+    dom_node_unref(inner);
+    dom_node_unref(unowned);
+    dom_node_unref(content);
+    dom_node_unref(outside);
+    dom_node_unref(host);
+    dom_node_unref(outer);
+    dom_node_unref(root);
+    dom_node_unref(parsed);
+}
+END_TEST
+
+START_TEST(test_template_root_attributes)
+{
+    dom_document *parsed = NULL;
+    dom_node *body = parse_body("<template><html lang=xx><body id=leaked></template>", 2 + _i, &parsed);
+    dom_node *html = NULL;
+    ck_assert_int_eq(dom_node_get_parent_node(body, &html), DOM_NO_ERR);
+    dom_string *lang = string("lang"), *id = string("id");
+    bool present = true;
+    ck_assert_int_eq(dom_element_has_attribute(html, lang, &present), DOM_NO_ERR);
+    ck_assert(!present);
+    ck_assert_int_eq(dom_element_has_attribute(body, id, &present), DOM_NO_ERR);
+    ck_assert(!present);
+    dom_string_unref(lang);
+    dom_string_unref(id);
+    dom_node_unref(html);
+    dom_node_unref(body);
+    dom_node_unref(parsed);
+}
+END_TEST
+
+START_TEST(test_template_callbacks_and_abandoned)
+{
+    bool fragment_mode = _i < 2, complete = (_i & 1) == 0;
+    dom_hubbub_parser_params params = {
+        .enc = "UTF-8", .fix_enc = true, .enable_script = true, .script = count_html_script, .svg = count_svg};
+    dom_hubbub_parser *parser = NULL;
+    dom_document *parsed = NULL;
+    dom_document_fragment *fragment = NULL;
+    html_script_count = svg_count = 0;
+    if (fragment_mode) {
+        dom_node *context = element("template");
+        ck_assert_int_eq(dom_hubbub_fragment_parser_create(&params, (dom_element *)context, &parser, &fragment),
+            DOM_HUBBUB_OK);
+        dom_node_unref(context);
+    } else {
+        ck_assert_int_eq(dom_hubbub_parser_create(&params, &parser, &parsed), DOM_HUBBUB_OK);
+    }
+    const char *input = "<!doctype html><head><template><script>inert()</script><svg></svg></template>"
+        "<script>head()</script></head><template><script>inert()</script></template>"
+        "<body><script>body()</script><svg></svg><template><script>inert()</script><svg></svg>";
+    for (size_t i = 0; input[i]; i++)
+        ck_assert_int_eq(dom_hubbub_parser_parse_chunk(parser, (const uint8_t *)input + i, 1), DOM_HUBBUB_OK);
+    /* Grow the independent template-mode stack; leave table text pending on
+     * parser abandonment, and exercise repeated template EOF recovery otherwise. */
+    const char *nested = "<template>";
+    for (unsigned i = 0; i < 25; i++)
+        ck_assert_int_eq(dom_hubbub_parser_parse_chunk(parser, (const uint8_t *)nested, strlen(nested)), DOM_HUBBUB_OK);
+    const char *table = "<table> X";
+    ck_assert_int_eq(dom_hubbub_parser_parse_chunk(parser, (const uint8_t *)table, strlen(table)), DOM_HUBBUB_OK);
+    if (complete)
+        ck_assert_int_eq(dom_hubbub_parser_completed(parser), DOM_HUBBUB_OK);
+    ck_assert_uint_eq(html_script_count, fragment_mode ? 0 : 2);
+    ck_assert_uint_eq(svg_count, fragment_mode ? 0 : 1);
+    dom_node_unref(fragment);
+    dom_node_unref(parsed);
+    dom_hubbub_parser_destroy(parser);
+}
+END_TEST
+
+static const struct {
+    const char *input, *expected;
+} template_head_cases[] = {
+    {"<!doctype html><template><p>A</template><title>T</title><p>B",
+        "<html><head><template>{<p>A</p>}</template><title>T</title></head><body><p>B</p></body></html>"},
+    {"<!doctype html><head></head><template><p>A</template><p>B",
+        "<html><head><template>{<p>A</p>}</template></head><body><p>B</p></body></html>"},
+    {"<!doctype html><head><template><table><tr><td>A</template><title>T</title><body>B",
+        "<html><head><template>{<table><tbody><tr><td>A</td></tr></tbody></table>}</template>"
+        "<title>T</title></head><body>B</body></html>"},
+    {"<!doctype html><template><b>A",
+        "<html><head><template>{<b>A</b>}</template></head><body></body></html>"},
+};
+
+START_TEST(test_template_head)
+{
+    size_t count = sizeof(template_head_cases) / sizeof(template_head_cases[0]);
+    const char *input = template_head_cases[_i % count].input;
+    size_t chunk = _i < count ? 4096 : 1;
+    dom_hubbub_parser_params params = {.enc = "UTF-8", .fix_enc = true};
+    dom_hubbub_parser *parser = NULL;
+    dom_document *parsed = NULL;
+    ck_assert_int_eq(dom_hubbub_parser_create(&params, &parser, &parsed), DOM_HUBBUB_OK);
+    for (size_t offset = 0, len = strlen(input); offset < len;) {
+        size_t take = len - offset < chunk ? len - offset : chunk;
+        ck_assert_int_eq(dom_hubbub_parser_parse_chunk(parser, (const uint8_t *)input + offset, take), DOM_HUBBUB_OK);
+        offset += take;
+    }
+    ck_assert_int_eq(dom_hubbub_parser_completed(parser), DOM_HUBBUB_OK);
+    dom_hubbub_parser_destroy(parser);
+    used = 0;
+    tree[0] = 0;
+    describe((dom_node *)parsed);
+    ck_assert_msg(strcmp(tree, template_head_cases[_i % count].expected) == 0,
+        "Head template case %zu (chunk %zu): %s", _i % count, chunk, tree);
+    dom_node_unref(parsed);
+}
+END_TEST
+
 START_TEST(test_foreign_callbacks_and_lifetime)
 {
     bool fragment_mode = _i < 2, complete = (_i & 1) == 0;
@@ -810,10 +1147,7 @@ START_TEST(test_unsupported_context)
 {
     dom_string *ns = string("urn:unsupported"), *name = string("svg");
     dom_element *context = NULL;
-    if (_i == 0)
-        ck_assert_int_eq(dom_document_create_element_ns(document, ns, name, &context), DOM_NO_ERR);
-    else
-        context = (dom_element *)element("template");
+    ck_assert_int_eq(dom_document_create_element_ns(document, ns, name, &context), DOM_NO_ERR);
     dom_hubbub_parser_params params = {0};
     dom_hubbub_parser *parser = NULL;
     dom_document_fragment *fragment = NULL;
@@ -844,8 +1178,15 @@ int main(void)
     tcase_add_loop_test(tc, test_foreign_names_and_attributes, 0, 4);
     tcase_add_test(tc, test_public_namespace_validation);
     tcase_add_loop_test(tc, test_foreign_contexts, 0, 2 * (sizeof(foreign_cases) / sizeof(foreign_cases[0])));
-    tcase_add_loop_test(tc, test_unsupported_context, 0, 2);
+    tcase_add_test(tc, test_unsupported_context);
     tcase_add_loop_test(tc, test_select_document_and_fragment, 0, 4 * (sizeof(select_cases) / sizeof(select_cases[0])));
+    tcase_add_loop_test(tc, test_template_document_and_fragment, 0, 4 * (sizeof(template_cases) / sizeof(template_cases[0])));
+    tcase_add_loop_test(tc, test_template_owner_and_lifetime, 0, 4);
+    tcase_add_loop_test(tc, test_template_form_isolation, 0, 4);
+    tcase_add_loop_test(tc, test_template_callbacks_and_abandoned, 0, 4);
+    tcase_add_loop_test(tc, test_template_head, 0, 2 * (sizeof(template_head_cases) / sizeof(template_head_cases[0])));
+    tcase_add_loop_test(tc, test_template_root_attributes, 0, 2);
+    tcase_add_loop_test(tc, test_template_adopted_context, 0, 2);
     suite_add_tcase(suite, tc);
     SRunner *runner = srunner_create(suite);
     srunner_run_all(runner, CK_NORMAL);

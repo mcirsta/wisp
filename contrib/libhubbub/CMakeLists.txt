@@ -24,6 +24,7 @@ add_library(hubbub ${WISP_LIB_TYPE}
 	src/treebuilder/in_head_noscript.c
 	src/treebuilder/after_head.c
 	src/treebuilder/in_body.c
+	src/treebuilder/in_template.c
 	src/treebuilder/in_table.c
 	src/treebuilder/in_caption.c
 	src/treebuilder/in_column_group.c

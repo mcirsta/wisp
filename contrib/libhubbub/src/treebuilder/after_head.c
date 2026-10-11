@@ -50,7 +50,7 @@ hubbub_error handle_after_head(hubbub_treebuilder *treebuilder, const hubbub_tok
             if (err == HUBBUB_OK)
                 treebuilder->context.mode = IN_FRAMESET;
         } else if (type == BASE || type == LINK || type == META || type == NOFRAMES || type == SCRIPT ||
-            type == STYLE || type == TITLE) {
+            type == STYLE || type == TITLE || type == TEMPLATE) {
             hubbub_ns ns;
             element_type otype;
             void *node;
@@ -80,7 +80,9 @@ hubbub_error handle_after_head(hubbub_treebuilder *treebuilder, const hubbub_tok
     case HUBBUB_TOKEN_END_TAG: {
         element_type type = element_type_from_name(treebuilder, &token->data.tag.name);
 
-        if (type == HTML || type == BODY || type == BR) {
+        if (type == TEMPLATE) {
+            return end_template(treebuilder);
+        } else if (type == HTML || type == BODY || type == BR) {
             err = HUBBUB_REPROCESS;
         } else {
             /** \todo parse error */

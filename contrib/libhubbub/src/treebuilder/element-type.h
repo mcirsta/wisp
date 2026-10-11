@@ -94,6 +94,7 @@ typedef enum {
     MARQUEE,
     OBJECT,
     TABLE,
+    TEMPLATE,
     TD,
     TH,
     /* Formatting */

@@ -245,6 +245,10 @@ typedef hubbub_error (*hubbub_tree_complete_svg)(void *ctx, void *svg);
  * Required for end-tag matching, including names absent from the tag enum. */
 typedef hubbub_error (*hubbub_tree_get_name)(void *ctx, void *node, hubbub_string *name);
 
+/** Return referenced template contents, or NULL if node is not an HTML template.
+ * Required for adjusted insertion locations, including foster parents moved by script. */
+typedef hubbub_error (*hubbub_tree_get_template_contents)(void *ctx, void *node, void **result);
+
 /**
  * Hubbub tree handler
  */
@@ -270,6 +274,7 @@ typedef struct hubbub_tree_handler {
     hubbub_tree_complete_svg complete_svg; /**< SVG Complete */
     void *ctx; /**< Context pointer */
     hubbub_tree_get_name get_name; /**< Borrow element local name */
+    hubbub_tree_get_template_contents get_template_contents;
 } hubbub_tree_handler;
 
 #ifdef __cplusplus

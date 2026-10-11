@@ -179,10 +179,10 @@ altering the generator or generated files.
 
 **This is a parser prerequisite, not an enabled `innerHTML` binding.** The API
 initially rejected foreign-namespace, XML-document and template contexts.
-The increments below complete select and SVG/MathML context handling. Template
-contents/insertion modes remain necessary before treating fragment parsing as
-general-purpose; XML documents and null/arbitrary namespace contexts remain rejected. Existing full-document parser limitations (including
-those constructs nested in otherwise supported fragments) are not claimed fixed
+The increments below complete select, SVG/MathML and template context handling.
+XML documents and null/arbitrary namespace contexts remain rejected. Existing
+full-document parser limitations (including those constructs nested in otherwise
+supported fragments) are not claimed fixed
 by this foundation batch.
 
 Then implement HTML fragment serialization and QuickJS getter/setter registration,
@@ -221,8 +221,8 @@ Correct the shared helpers this requires, rather than adding fragment exceptions
 - Replace the table-scope boolean with normal, table, button and list-item scope
   kinds. Select is a normal-scope boundary; button is only a button-scope boundary.
   Namespace-aware matching avoids treating foreign elements as HTML targets and
-  observes MathML/SVG scope boundaries. Template scope remains part of the pending
-  template implementation.
+  observes MathML/SVG scope boundaries. The template parsing increment below adds
+  the remaining template scope boundary.
 - Treat option/optgroup as ordinary elements for generic end tags. Exclude the
   requested end tag from implied closure, so closing an option does not also close
   its optgroup.
@@ -239,8 +239,8 @@ The native tree fixtures are derived from the standard, not Chromium output.
 They exercise whole documents and ordinary/select/option/optgroup fragments,
 whole and byte-by-byte input, omitted/malformed end tags, nesting, rich content,
 inputs, textarea, separators, scopes, formatting reconstruction, forms and tables.
-The next increment below completes foreign contexts/integration points. Template
-contents and HTML serialization remain prerequisites for the general `innerHTML`
+The increments below complete foreign contexts/integration points and template
+contents. HTML serialization remains a prerequisite for the general `innerHTML`
 binding; no JS setter is exposed yet. Other historical parser gaps remain outside this increment's claim.
 
 Validation: 258 native parser cases and all 753 checks across the 13 DOM, JS, form
@@ -288,11 +288,11 @@ Root-cause corrections required by this path:
   SVG `input` is not treated as an HTML block. Initialize all fields when creating
   formatting entries and reconstructed stack entries.
 
-The native fragment API accepts HTML (except template), SVG and MathML contexts
+This increment enabled HTML (except template), SVG and MathML fragment contexts
 in HTML documents. This does not implement SVG script execution, XML parsing or
-`innerHTML` registration. Template contents/insertion modes and serialization are
-next; other historical HTML insertion-mode and adoption-agency limitations are
-outside this batch's conformance claim.
+`innerHTML` registration. Template contents/insertion modes are completed below;
+serialization follows. Other historical HTML insertion-mode and adoption-agency
+limitations are outside this batch's conformance claim.
 
 Validation: 421 parser cases and all 916 checks across the 13 DOM, JS, form and
 interaction suites pass under Debug ASan/UBSan with LeakSanitizer enabled and no
@@ -352,9 +352,9 @@ contains no implemented adoption/import methods to reuse.
 
 This is native infrastructure only. QuickJS does not yet expose `adoptNode`,
 `importNode`, `cloneNode` or `innerHTML`. Cross-document JS wrapper/realm handling,
-automatic adoption in native insertion APIs, cloning whole Documents, templates
-and serialization are not claimed complete. Next: add template content ownership
-and parser insertion modes, then serialization and the logged `innerHTML` binding.
+automatic adoption in native insertion APIs and cloning whole Documents are not
+claimed complete. The increments below add template ownership and parsing;
+serialization and the logged `innerHTML` binding follow.
 
 Validation: all 949 checks across 14 native DOM, JS, form and interaction
 suites pass on the final Debug build under ASan/UBSan with LeakSanitizer enabled,
@@ -397,15 +397,9 @@ the HTML Standard's [template creation, adoption and cloning steps](https://html
   `Element.innerHTML` getter returned an empty string, and their setter treated
   every target as ordinary children; neither supplies this missing boundary.
 
-This is **native template ownership**, not completed template parsing or a new
-JS API. Hubbub still needs the template insertion-mode stack, scope boundaries,
-adjusted insertion locations/foster parenting and EOF handling. Its element-name
-generator input and all tree-handler clients must be updated together. The
-binding must insert into the real content fragment with correct document
-ownership, and suppress script callbacks inside templates for full-page parsing
-as well as fragments. Add whole-input/chunked parser cases before enabling
-template fragment contexts. Serialization and the logged `innerHTML` binding
-follow; declarative shadow DOM is outside this sequence.
+The parser integration is completed in the next section. Serialization and the
+logged `innerHTML` binding remain separate work; declarative shadow DOM is outside
+this sequence.
 
 Validation: all 985 checks across the 15 native DOM, JS, form and interaction
 suites pass under Debug ASan/UBSan and LeakSanitizer without diagnostics. The 36
@@ -419,6 +413,68 @@ after failure. The normalized saved eBihoreanul capture completes with the same
 Qt suites pass on the final build (paint-order alone, then the remaining 116);
 the existing 28-check Release adoption suite also passes. Builds are warning-free,
 `git diff --check` is clean, and no GTK build or tests were run.
+
+### Shared template parsing (2026-10-11)
+
+Native template ownership is committed as `98e8939a`. Hubbub now uses it during
+both full-document and fragment parsing, following the HTML Standard's
+[template insertion mode](https://html.spec.whatwg.org/multipage/parsing.html#parsing-main-intemplate)
+and [adjusted insertion location](https://html.spec.whatwg.org/multipage/parsing.html#appropriate-place-for-inserting-a-node).
+
+- Add an independent stack of template insertion modes, including the virtual
+  mode for a template fragment context. Handle head/after-head/table dispatch,
+  formatting markers, scope boundaries, nested closing tags and EOF recovery.
+  Template-contained `html`/`body` tags cannot alter the outer document's attributes.
+- Consolidate ordinary insertion, formatting reconstruction and formatting repair
+  around one adjusted-location helper. Foster parenting chooses the last HTML
+  template or table and accepts a fragment as the table's parent. A required
+  tree-handler callback resolves real template contents, including a parent
+  moved by script. Update the generated tag lookup's **input**, CMake and every
+  bundled tree-handler client together.
+- Insert template children into their inert owner document through native adoption.
+  Ordinary insertion only adds a document-pointer comparison. Nested template
+  contents reuse the same inert document. A template fragment context uses its
+  actual content owner, including after that fragment was independently adopted.
+  Retained fragments, attributes and descendants remain valid after the parser
+  and outer document are destroyed. Full-page parsing suppresses script and SVG
+  processing callbacks while inside templates;
+  fragment parsing remains inert throughout. Templates isolate the form pointer
+  and parser form association while normal ancestry still associates inner forms.
+- Replace the old persistent "tainted table" flag with the specified
+  [table-text buffer](https://html.spec.whatwg.org/multipage/parsing.html#parsing-main-intabletext).
+  Each consecutive character run is classified as a whole: whitespace stays in
+  the table, while a run containing non-whitespace is fostered together. Decisions
+  no longer depend on input chunk boundaries or an earlier fostered run. Storage
+  grows only when needed and is released on normal or abandoned parser teardown.
+- Browser coverage verifies that template content does not paint, affect document
+  queries, execute scripts, apply styles or fetch images/stylesheets/scripts/frames,
+  with JavaScript enabled and disabled. Even author CSS setting the template
+  element itself to `display:block` does not expose its separate contents.
+
+The historical Duktape `Element.bnd` was reviewed again. Its getter returned an
+empty string and its setter parsed a generic document/body before replacing
+ordinary children; it provides no template or context-aware parsing solution.
+This increment changes the shared native parser by default, without a feature
+switch or parallel legacy path. It does **not** expose `innerHTML`, template
+`content` or cross-document JS wrappers yet. Next: HTML serialization, then the
+logged `innerHTML` getter/setter with correct template targets and atomic parsing
+before mutation. XML parsing, declarative shadow DOM and template content-patching
+attributes remain outside this increment; no claim is made that every historical
+parser edge case is fixed.
+
+Validation: 608 parser checks pass, 187 more than the previous 421, covering
+whole-input and byte-at-a-time full documents/fragments, templates in head/table/
+foreign contexts, forms, attribute isolation, ownership and abandoned deep nesting.
+All 1,172 checks across the 15 native DOM/JS/form/interaction suites pass under
+Debug ASan/UBSan with LeakSanitizer and no diagnostics. All three bundled Hubbub
+tree clients compile; the two DOM-backed clients pass template-tree/streaming
+smoke fixtures. The saved eBihoreanul capture completes with unchanged 1280 x 11382
+extent and a byte-identical viewport PNG. Its previously documented `llcache.c`
+null-source/zero-length memcpy UBSan diagnostic remains. No GTK build/tests were run.
+All 118 Qt suites pass (template/paint-order first, then the remaining 116).
+After the final independently adopted-content adjustment, the full native group
+and Qt template, DOM-mutation and script-order suites were rerun and passed.
+Builds are warning-free and `git diff --check` is clean.
 
 ## Assessment
 

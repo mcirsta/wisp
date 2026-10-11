@@ -113,6 +113,8 @@ hubbub_error handle_in_body(hubbub_treebuilder *treebuilder, const hubbub_token 
         err = process_end_tag(treebuilder, token);
         break;
     case HUBBUB_TOKEN_EOF:
+        if (treebuilder->context.template_count != 0)
+            return handle_in_template(treebuilder, token);
         for (i = treebuilder->context.current_node; i > 0; i--) {
             element_type type = treebuilder->context.element_stack[i].type;
 
@@ -201,7 +203,7 @@ hubbub_error process_start_tag(hubbub_treebuilder *treebuilder, const hubbub_tok
     if (type == HTML) {
         err = process_html_in_body(treebuilder, token);
     } else if (type == BASE || type == COMMAND || type == LINK || type == META || type == NOFRAMES || type == SCRIPT ||
-        type == STYLE || type == TITLE) {
+        type == STYLE || type == TITLE || type == TEMPLATE) {
         /* Process as "in head" */
         err = handle_in_head(treebuilder, token);
     } else if (type == BODY) {
@@ -252,7 +254,6 @@ hubbub_error process_start_tag(hubbub_treebuilder *treebuilder, const hubbub_tok
         if (err == HUBBUB_OK) {
             treebuilder->context.frameset_ok = false;
 
-            treebuilder->context.element_stack[current_table(treebuilder)].tainted = false;
             treebuilder->context.mode = IN_TABLE;
         }
     } else if (type == AREA || type == BASEFONT || type == BGSOUND || type == BR || type == EMBED || type == IMG ||
@@ -335,7 +336,9 @@ hubbub_error process_end_tag(hubbub_treebuilder *treebuilder, const hubbub_token
     hubbub_error err = HUBBUB_OK;
     element_type type = element_type_from_name(treebuilder, &token->data.tag.name);
 
-    if (type == BODY) {
+    if (type == TEMPLATE) {
+        return end_template(treebuilder);
+    } else if (type == BODY) {
         err = process_0body_in_body(treebuilder);
         /* Never reprocess */
         if (err == HUBBUB_REPROCESS)
@@ -385,6 +388,9 @@ hubbub_error process_end_tag(hubbub_treebuilder *treebuilder, const hubbub_token
  */
 hubbub_error process_html_in_body(hubbub_treebuilder *treebuilder, const hubbub_token *token)
 {
+    if (treebuilder->context.template_count != 0)
+        return HUBBUB_OK;
+
     /** \todo parse error */
 
     return treebuilder->tree_handler->add_attributes(treebuilder->tree_handler->ctx,
@@ -399,6 +405,9 @@ hubbub_error process_html_in_body(hubbub_treebuilder *treebuilder, const hubbub_
  */
 hubbub_error process_body_in_body(hubbub_treebuilder *treebuilder, const hubbub_token *token)
 {
+    if (treebuilder->context.template_count != 0)
+        return HUBBUB_OK;
+
     /** \todo parse error */
 
     if (treebuilder->context.current_node < 1 || treebuilder->context.element_stack[1].type != BODY)
@@ -504,7 +513,7 @@ hubbub_error process_form_in_body(hubbub_treebuilder *treebuilder, const hubbub_
 {
     hubbub_error err;
 
-    if (treebuilder->context.form_element != NULL) {
+    if (treebuilder->context.form_element != NULL && treebuilder->context.template_count == 0) {
         /** \todo parse error */
     } else {
         if (element_in_scope(treebuilder, P, SCOPE_BUTTON)) {
@@ -516,6 +525,9 @@ hubbub_error process_form_in_body(hubbub_treebuilder *treebuilder, const hubbub_
         err = insert_element(treebuilder, &token->data.tag, true);
         if (err != HUBBUB_OK)
             return err;
+
+        if (treebuilder->context.template_count != 0)
+            return HUBBUB_OK;
 
         /* Claim a reference on the node and
          * use it as the current form element */
@@ -1263,6 +1275,8 @@ hubbub_error process_0container_in_body(hubbub_treebuilder *treebuilder, element
  */
 hubbub_error process_0form_in_body(hubbub_treebuilder *treebuilder)
 {
+    if (treebuilder->context.template_count != 0)
+        return process_0container_in_body(treebuilder, FORM);
     void *node = treebuilder->context.form_element;
     uint32_t idx = 0;
 
@@ -1480,14 +1494,10 @@ hubbub_error process_0presentational_in_body(hubbub_treebuilder *treebuilder, el
         if (err != HUBBUB_OK)
             return err;
 
-        /* 7 */
-        if (stack[common_ancestor].type == TABLE || stack[common_ancestor].type == TBODY ||
-            stack[common_ancestor].type == TFOOT || stack[common_ancestor].type == THEAD ||
-            stack[common_ancestor].type == TR) {
-            err = aa_insert_into_foster_parent(treebuilder, stack[last_node].node, &reparented);
-        } else {
-            err = aa_reparent_node(treebuilder, stack[last_node].node, stack[common_ancestor].node, &reparented);
-        }
+        /* 7: use the same adjusted insertion location as token insertion. */
+        err = remove_node_from_dom(treebuilder, stack[last_node].node);
+        if (err == HUBBUB_OK)
+            err = insert_node(treebuilder, stack[last_node].node, common_ancestor, true, &reparented);
         if (err != HUBBUB_OK)
             return err;
 
@@ -1895,66 +1905,6 @@ hubbub_error aa_clone_and_replace_entries(hubbub_treebuilder *treebuilder, forma
 
     return HUBBUB_OK;
 }
-
-/**
- * Adoption agency: locate foster parent and insert node into it
- *
- * \param treebuilder  The treebuilder instance
- * \param node         The node to insert
- * \param inserted     Pointer to location to receive inserted node
- * \return HUBBUB_OK on success, appropriate error otherwise
- */
-hubbub_error aa_insert_into_foster_parent(hubbub_treebuilder *treebuilder, void *node, void **inserted)
-{
-    hubbub_error err;
-    element_context *stack = treebuilder->context.element_stack;
-    void *foster_parent = NULL;
-    bool insert = false;
-
-    uint32_t cur_table = current_table(treebuilder);
-
-    stack[cur_table].tainted = true;
-
-    if (cur_table == 0) {
-        treebuilder->tree_handler->ref_node(treebuilder->tree_handler->ctx, stack[0].node);
-
-        foster_parent = stack[0].node;
-    } else {
-        void *t_parent = NULL;
-
-        treebuilder->tree_handler->get_parent(treebuilder->tree_handler->ctx, stack[cur_table].node, true, &t_parent);
-
-        if (t_parent != NULL) {
-            foster_parent = t_parent;
-            insert = true;
-        } else {
-            treebuilder->tree_handler->ref_node(treebuilder->tree_handler->ctx, stack[cur_table - 1].node);
-            foster_parent = stack[cur_table - 1].node;
-        }
-    }
-
-    err = remove_node_from_dom(treebuilder, node);
-    if (err != HUBBUB_OK) {
-        treebuilder->tree_handler->unref_node(treebuilder->tree_handler->ctx, foster_parent);
-        return err;
-    }
-
-    if (insert) {
-        err = treebuilder->tree_handler->insert_before(
-            treebuilder->tree_handler->ctx, foster_parent, node, stack[cur_table].node, inserted);
-    } else {
-        err = treebuilder->tree_handler->append_child(treebuilder->tree_handler->ctx, foster_parent, node, inserted);
-    }
-    if (err != HUBBUB_OK) {
-        treebuilder->tree_handler->unref_node(treebuilder->tree_handler->ctx, foster_parent);
-        return err;
-    }
-
-    treebuilder->tree_handler->unref_node(treebuilder->tree_handler->ctx, foster_parent);
-
-    return HUBBUB_OK;
-}
-
 
 /**
  * Process an applet, marquee, or object end tag as if in "in body"

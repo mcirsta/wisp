@@ -74,9 +74,18 @@ static hubbub_error get_name(void *ctx, void *node, hubbub_string *name)
     return HUBBUB_OK;
 }
 
+/* This callback tracer has opaque node IDs, not a DOM tree. */
+static hubbub_error get_template_contents(void *ctx, void *node, void **result)
+{
+    UNUSED(ctx);
+    UNUSED(node);
+    *result = NULL;
+    return HUBBUB_OK;
+}
+
 static hubbub_tree_handler tree_handler = {create_comment, create_doctype, create_element, create_text, ref_node,
     unref_node, append_child, insert_before, remove_child, clone_node, reparent_children, get_parent, has_children,
-    form_associate, add_attributes, set_quirks_mode, NULL, complete_script, NULL, NULL, get_name};
+    form_associate, add_attributes, set_quirks_mode, NULL, complete_script, NULL, NULL, get_name, get_template_contents};
 
 static int run_test(int argc, char **argv, unsigned int CHUNK_SIZE)
 {

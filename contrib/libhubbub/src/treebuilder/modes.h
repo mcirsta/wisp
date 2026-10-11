@@ -19,7 +19,9 @@ typedef enum {
     IN_HEAD_NOSCRIPT,
     AFTER_HEAD,
     IN_BODY,
+    IN_TEMPLATE,
     IN_TABLE,
+    IN_TABLE_TEXT,
     IN_CAPTION,
     IN_COLUMN_GROUP,
     IN_TABLE_BODY,
@@ -41,7 +43,12 @@ hubbub_error handle_before_head(hubbub_treebuilder *treebuilder, const hubbub_to
 hubbub_error handle_in_head(hubbub_treebuilder *treebuilder, const hubbub_token *token);
 hubbub_error handle_in_head_noscript(hubbub_treebuilder *treebuilder, const hubbub_token *token);
 hubbub_error handle_after_head(hubbub_treebuilder *treebuilder, const hubbub_token *token);
+hubbub_error handle_in_template(hubbub_treebuilder *treebuilder, const hubbub_token *token);
+hubbub_error start_template(hubbub_treebuilder *treebuilder, const hubbub_token *token);
+hubbub_error end_template(hubbub_treebuilder *treebuilder);
+hubbub_error push_template_mode(hubbub_treebuilder *treebuilder);
 hubbub_error handle_in_body(hubbub_treebuilder *treebuilder, const hubbub_token *token);
+hubbub_error handle_in_table_text(hubbub_treebuilder *treebuilder, const hubbub_token *token);
 hubbub_error handle_in_table(hubbub_treebuilder *treebuilder, const hubbub_token *token);
 hubbub_error handle_in_caption(hubbub_treebuilder *treebuilder, const hubbub_token *token);
 hubbub_error handle_in_column_group(hubbub_treebuilder *treebuilder, const hubbub_token *token);

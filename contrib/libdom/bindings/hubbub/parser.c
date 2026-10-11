@@ -29,6 +29,7 @@
 #include "html/html_input_element.h"
 #include "html/html_select_element.h"
 #include "html/html_text_area_element.h"
+#include "html/html_template_element.h"
 
 #include <libwapcaplet/libwapcaplet.h>
 
@@ -308,12 +309,28 @@ static hubbub_error unref_node(void *parser, void *node)
     return HUBBUB_OK;
 }
 
+/* The adjusted insertion location can belong to a template's inert document.
+ * Fresh parser nodes and nodes moved by formatting repair use the same native
+ * ownership transfer. Ordinary insertions need only the pointer comparison. */
+static dom_exception prepare_insertion(dom_node_internal *parent, dom_node_internal *child)
+{
+    if (child->owner == parent->owner || child->type == DOM_DOCUMENT_TYPE_NODE)
+        return DOM_NO_ERR;
+    dom_node *adopted = NULL;
+    dom_exception err = dom_document_adopt_node(parent->owner, child, &adopted);
+    dom_node_unref(adopted);
+    return err;
+}
+
 static hubbub_error append_child(void *parser, void *parent, void *child, void **result)
 {
     dom_hubbub_parser *dom_parser = (dom_hubbub_parser *)parser;
     dom_exception err;
 
-    err = dom_node_append_child((struct dom_node *)parent, (struct dom_node *)child, (struct dom_node **)result);
+    *result = NULL;
+    err = prepare_insertion(parent, child);
+    if (err == DOM_NO_ERR)
+        err = dom_node_append_child((struct dom_node *)parent, (struct dom_node *)child, (struct dom_node **)result);
     if (err != DOM_NO_ERR) {
         dom_parser->msg(DOM_MSG_CRITICAL, dom_parser->mctx, "Can't append child '%p' for parent '%p'", child, parent);
         return HUBBUB_UNKNOWN;
@@ -327,8 +344,11 @@ static hubbub_error insert_before(void *parser, void *parent, void *child, void 
     dom_hubbub_parser *dom_parser = (dom_hubbub_parser *)parser;
     dom_exception err;
 
-    err = dom_node_insert_before(
-        (struct dom_node *)parent, (struct dom_node *)child, (struct dom_node *)ref_child, (struct dom_node **)result);
+    *result = NULL;
+    err = prepare_insertion(parent, child);
+    if (err == DOM_NO_ERR)
+        err = dom_node_insert_before(
+            (struct dom_node *)parent, (struct dom_node *)child, (struct dom_node *)ref_child, (struct dom_node **)result);
     if (err != DOM_NO_ERR) {
         dom_parser->msg(
             DOM_MSG_CRITICAL, dom_parser->mctx, "Can't insert node '%p' before node '%p'", child, ref_child);
@@ -388,7 +408,9 @@ static hubbub_error reparent_children(void *parser, void *node, void *new_parent
         }
         dom_node_unref(result);
 
-        err = dom_node_append_child((struct dom_node *)new_parent, (struct dom_node *)child, &result);
+        err = prepare_insertion(new_parent, (dom_node_internal *)child);
+        if (err == DOM_NO_ERR)
+            err = dom_node_append_child((struct dom_node *)new_parent, (struct dom_node *)child, &result);
         if (err != DOM_NO_ERR) {
             dom_parser->msg(DOM_MSG_CRITICAL, dom_parser->mctx, "Error in dom_node_append_child");
             goto fail;
@@ -648,9 +670,19 @@ static hubbub_error get_name(void *ctx, void *node, hubbub_string *name)
     return HUBBUB_OK;
 }
 
+static hubbub_error get_template_contents(void *ctx, void *node, void **result)
+{
+    UNUSED(ctx);
+    *result = NULL;
+    if (_dom_html_is_template(node))
+        *result = dom_node_ref(((dom_html_template_element *)node)->content);
+    return HUBBUB_OK;
+}
+
 static hubbub_tree_handler tree_handler = {create_comment, create_doctype, create_element, create_text, ref_node,
     unref_node, append_child, insert_before, remove_child, clone_node, reparent_children, get_parent, has_children,
-    form_associate, add_attributes, set_quirks_mode, change_encoding, complete_script, complete_svg, NULL, get_name};
+    form_associate, add_attributes, set_quirks_mode, change_encoding, complete_script, complete_svg, NULL, get_name,
+    get_template_contents};
 
 /**
  * Default message callback
@@ -830,7 +862,13 @@ dom_hubbub_error dom_hubbub_fragment_parser_create(dom_hubbub_parser_params *par
     dom_hubbub_parser *binding = calloc(1, sizeof(*binding));
     if (binding == NULL)
         return DOM_HUBBUB_NOMEM;
-    binding->doc = (dom_document *)dom_node_ref(node->owner);
+    dom_document *owner = node->owner;
+    if (_dom_html_is_template(node)) {
+        /* Parse for the actual destination fragment, whose ownership can have
+         * changed independently of its template through native adoption. */
+        owner = ((dom_node_internal *)((dom_html_template_element *)node)->content)->owner;
+    }
+    binding->doc = (dom_document *)dom_node_ref(owner);
     binding->encoding = "UTF-8";
     binding->encoding_source = DOM_HUBBUB_ENCODING_SOURCE_HEADER;
     binding->msg = params->msg == NULL ? dom_hubbub_parser_default_msg : params->msg;

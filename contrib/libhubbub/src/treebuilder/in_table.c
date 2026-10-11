@@ -17,7 +17,7 @@
 
 /**
  * Clear the stack back to a table context: "the UA must, while the current
- * node is not a table element or an html element, pop elements from the stack
+ * node is not a table, template or html element, pop elements from the stack
  * of open elements."
  */
 static inline void clear_stack_table_context(hubbub_treebuilder *treebuilder)
@@ -26,7 +26,7 @@ static inline void clear_stack_table_context(hubbub_treebuilder *treebuilder)
     element_type type = current_node(treebuilder);
     void *node;
 
-    while (type != TABLE && type != HTML) {
+    while (type != TABLE && type != TEMPLATE && type != HTML) {
         element_stack_pop(treebuilder, &ns, &type, &node);
 
         treebuilder->tree_handler->unref_node(treebuilder->tree_handler->ctx, node);
@@ -70,14 +70,17 @@ hubbub_error handle_in_table(hubbub_treebuilder *treebuilder, const hubbub_token
     bool handled = true;
 
     switch (token->type) {
-    case HUBBUB_TOKEN_CHARACTER:
-        if (treebuilder->context.element_stack[current_table(treebuilder)].tainted) {
-            handled = false;
-        } else {
-            err = process_characters_expect_whitespace(treebuilder, token, true);
-            handled = (err == HUBBUB_OK);
+    case HUBBUB_TOKEN_CHARACTER: {
+        element_context *current = &treebuilder->context.element_stack[treebuilder->context.current_node];
+        if (current->ns == HUBBUB_NS_HTML && (current->type == TABLE || current->type == TBODY ||
+            current->type == TFOOT || current->type == THEAD || current->type == TR)) {
+            treebuilder->context.table_text_mode = treebuilder->context.mode;
+            treebuilder->context.mode = IN_TABLE_TEXT;
+            return handle_in_table_text(treebuilder, token);
         }
+        handled = false;
         break;
+    }
     case HUBBUB_TOKEN_COMMENT:
         err = process_comment_append(
             treebuilder, token, treebuilder->context.element_stack[treebuilder->context.current_node].node);
@@ -174,8 +177,19 @@ hubbub_error handle_in_table(hubbub_treebuilder *treebuilder, const hubbub_token
             reset_insertion_mode(treebuilder);
 
             err = HUBBUB_REPROCESS;
-        } else if (type == STYLE || type == SCRIPT) {
+        } else if (type == STYLE || type == SCRIPT || type == TEMPLATE) {
             err = handle_in_head(treebuilder, token);
+        } else if (type == FORM) {
+            if (treebuilder->context.template_count != 0 || treebuilder->context.form_element != NULL)
+                return HUBBUB_OK;
+            err = insert_element(treebuilder, &token->data.tag, true);
+            if (err == HUBBUB_OK) {
+                hubbub_ns ns;
+                element_type popped_type;
+                void *node;
+                element_stack_pop(treebuilder, &ns, &popped_type, &node);
+                treebuilder->context.form_element = node; /* Transfer stack reference. */
+            }
         } else if (type == INPUT) {
             err = process_input_in_table(treebuilder, token);
             handled = (err != HUBBUB_REPROCESS);
@@ -186,7 +200,9 @@ hubbub_error handle_in_table(hubbub_treebuilder *treebuilder, const hubbub_token
     case HUBBUB_TOKEN_END_TAG: {
         element_type type = element_type_from_name(treebuilder, &token->data.tag.name);
 
-        if (type == TABLE) {
+        if (type == TEMPLATE) {
+            return end_template(treebuilder);
+        } else if (type == TABLE) {
             if (!element_in_scope(treebuilder, TABLE, SCOPE_TABLE))
                 break;
 
@@ -201,7 +217,7 @@ hubbub_error handle_in_table(hubbub_treebuilder *treebuilder, const hubbub_token
         }
     } break;
     case HUBBUB_TOKEN_EOF:
-        break;
+        return handle_in_body(treebuilder, token);
     }
 
     if (!handled) {
@@ -215,4 +231,59 @@ hubbub_error handle_in_table(hubbub_treebuilder *treebuilder, const hubbub_token
 
 
     return err;
+}
+
+/* Character-token boundaries depend on input chunking. Buffer the whole run
+ * before deciding whether all of it is whitespace or all of it is fostered.
+ * https://html.spec.whatwg.org/#parsing-main-intabletext */
+hubbub_error handle_in_table_text(hubbub_treebuilder *tb, const hubbub_token *token)
+{
+    hubbub_treebuilder_context *ctx = &tb->context;
+    if (token->type == HUBBUB_TOKEN_CHARACTER) {
+        const hubbub_string *text = &token->data.character;
+        if (text->len > SIZE_MAX - ctx->table_text_length)
+            return HUBBUB_NOMEM;
+        size_t need = ctx->table_text_length + text->len;
+        if (need > ctx->table_text_alloc) {
+            size_t capacity = ctx->table_text_alloc ? ctx->table_text_alloc : 128;
+            while (capacity < need) {
+                if (capacity > SIZE_MAX / 2) {
+                    capacity = need;
+                    break;
+                }
+                capacity *= 2;
+            }
+            uint8_t *buffer = realloc(ctx->table_text, capacity);
+            if (buffer == NULL)
+                return HUBBUB_NOMEM;
+            ctx->table_text = buffer;
+            ctx->table_text_alloc = capacity;
+        }
+        for (size_t i = 0; i < text->len; i++) {
+            uint8_t ch = text->ptr[i];
+            if (ch == 0)
+                continue; /* Null character: parse error, ignore it. */
+            ctx->table_text[ctx->table_text_length++] = ch;
+            if (ch != ' ' && ch != '\t' && ch != '\n' && ch != '\r' && ch != '\f')
+                ctx->table_text_nonspace = true;
+        }
+        return HUBBUB_OK;
+    }
+    hubbub_error err = HUBBUB_OK;
+    if (ctx->table_text_length != 0) {
+        hubbub_token pending = {.type = HUBBUB_TOKEN_CHARACTER,
+            .data.character = {ctx->table_text, ctx->table_text_length}};
+        if (ctx->table_text_nonspace) {
+            bool saved_foster = ctx->in_table_foster;
+            ctx->in_table_foster = true;
+            err = handle_in_body(tb, &pending);
+            ctx->in_table_foster = saved_foster;
+        } else {
+            err = append_text(tb, &pending.data.character);
+        }
+    }
+    ctx->table_text_length = 0;
+    ctx->table_text_nonspace = false;
+    ctx->mode = ctx->table_text_mode;
+    return err == HUBBUB_OK ? HUBBUB_REPROCESS : err;
 }

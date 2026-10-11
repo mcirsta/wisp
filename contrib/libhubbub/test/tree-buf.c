@@ -28,7 +28,7 @@ struct attr_t {
 };
 
 struct node_t {
-    enum { DOCTYPE, COMMENT, ELEMENT, CHARACTER } type;
+    enum { DOCTYPE, COMMENT, ELEMENT, CHARACTER, FRAGMENT } type;
 
     union {
         struct {
@@ -47,6 +47,7 @@ struct node_t {
         char *content; /**< For comments, characters **/
     } data;
 
+    node_t *contents;
     node_t *next;
     node_t *prev;
 
@@ -101,9 +102,29 @@ static hubbub_error get_name(void *ctx, void *node, hubbub_string *name)
     return HUBBUB_OK;
 }
 
+/* This test DOM owns template fragments separately from ordinary children. */
+static hubbub_error get_template_contents(void *ctx, void *vnode, void **result)
+{
+    node_t *node = vnode;
+    *result = NULL;
+    if (node == (void *)1 || node->type != ELEMENT || node->data.element.ns != HUBBUB_NS_HTML ||
+        strcmp(node->data.element.name, "template") != 0)
+        return HUBBUB_OK;
+    if (node->contents == NULL) {
+        node->contents = calloc(1, sizeof(*node));
+        if (node->contents == NULL)
+            return HUBBUB_NOMEM;
+        node->contents->type = FRAGMENT;
+        node->contents->refcnt = 1; /* Owned by the template. */
+    }
+    ref_node(ctx, node->contents);
+    *result = node->contents;
+    return HUBBUB_OK;
+}
+
 static hubbub_tree_handler tree_handler = {create_comment, create_doctype, create_element, create_text, ref_node,
     unref_node, append_child, insert_before, remove_child, clone_node, reparent_children, get_parent, has_children,
-    form_associate, add_attributes, set_quirks_mode, NULL, complete_script, NULL, NULL, get_name};
+    form_associate, add_attributes, set_quirks_mode, NULL, complete_script, NULL, NULL, get_name, get_template_contents};
 
 
 /*
@@ -307,6 +328,11 @@ hubbub_error create_element(void *ctx, const hubbub_tag *tag, void **result)
     }
     node->refcnt = 1;
 
+    void *contents = NULL;
+    assert(get_template_contents(ctx, node, &contents) == HUBBUB_OK);
+    if (contents != NULL)
+        unref_node(ctx, contents);
+
     *result = node;
 
     return HUBBUB_OK;
@@ -504,6 +530,8 @@ hubbub_error clone_node(void *ctx, void *node, bool deep, void **result)
     new_node->type = old_node->type;
 
     switch (old_node->type) {
+    case FRAGMENT:
+        break;
     case DOCTYPE:
         new_node->data.doctype.name = strdup(old_node->data.doctype.name);
         if (old_node->data.doctype.public_id)
@@ -536,8 +564,11 @@ hubbub_error clone_node(void *ctx, void *node, bool deep, void **result)
 
     new_node->refcnt = 1;
 
+    if (old_node->contents != NULL)
+        clone_node(ctx, old_node->contents, deep, (void **)&new_node->contents);
+
     if (deep == false)
-        return 0;
+        return HUBBUB_OK;
 
     last = NULL;
 
@@ -715,6 +746,9 @@ static void node_print(buf_t *buf, node_t *node, unsigned depth)
     indent(buf, depth);
 
     switch (node->type) {
+    case FRAGMENT:
+        buf_add(buf, "content\n");
+        break;
     case DOCTYPE:
         buf_add(buf, "<!DOCTYPE ");
         buf_add(buf, node->data.doctype.name);
@@ -773,6 +807,9 @@ static void node_print(buf_t *buf, node_t *node, unsigned depth)
         assert(0);
     }
 
+    if (node->contents)
+        node_print(buf, node->contents, depth + 1);
+
     if (node->child) {
         node_print(buf, node->child, depth + 1);
     }
@@ -795,7 +832,12 @@ static void delete_node(node_t *node)
         assert(0);
     }
 
+    if (node->contents != NULL)
+        unref_node(NULL, node->contents);
+
     switch (node->type) {
+    case FRAGMENT:
+        break;
     case DOCTYPE:
         free(node->data.doctype.name);
         free(node->data.doctype.public_id);

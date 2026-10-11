@@ -23,12 +23,6 @@ typedef struct element_context {
     element_type type; /**< Element type */
     bool html_integration_point; /**< Determined from the creating token */
 
-    bool tainted; /**< Only for tables.  "Once the
-                   * current table has been tainted,
-                   * whitespace characters are inserted
-                   * into the foster parent element
-                   * instead of the current node." */
-
     void *node; /**< Node pointer */
 } element_context;
 
@@ -49,6 +43,12 @@ typedef struct formatting_list_entry {
  */
 typedef struct hubbub_treebuilder_context {
     insertion_mode mode; /**< The current insertion mode */
+    insertion_mode *template_modes;
+    size_t template_count, template_alloc;
+    uint8_t *table_text;
+    size_t table_text_length, table_text_alloc;
+    bool table_text_nonspace;
+    insertion_mode table_text_mode;
 
 #define ELEMENT_STACK_CHUNK 128
     element_context *element_stack; /**< Stack of open elements */
@@ -129,6 +129,8 @@ uint32_t element_in_scope(hubbub_treebuilder *treebuilder, element_type type, el
 hubbub_error reconstruct_active_formatting_list(hubbub_treebuilder *treebuilder);
 void clear_active_formatting_list_to_marker(hubbub_treebuilder *treebuilder);
 hubbub_error remove_node_from_dom(hubbub_treebuilder *treebuilder, void *node);
+/* Insert a detached node at the adjusted location of a stack entry. */
+hubbub_error insert_node(hubbub_treebuilder *treebuilder, void *node, uint32_t target, bool foster, void **inserted);
 hubbub_error insert_element(hubbub_treebuilder *treebuilder, const hubbub_tag *tag_name, bool push);
 void close_implied_end_tags(hubbub_treebuilder *treebuilder, element_type except);
 void reset_insertion_mode(hubbub_treebuilder *treebuilder);
@@ -146,7 +148,6 @@ hubbub_error element_stack_pop(hubbub_treebuilder *treebuilder, hubbub_ns *ns, e
 hubbub_error element_stack_pop_until(hubbub_treebuilder *treebuilder, element_type type);
 hubbub_error element_stack_remove(
     hubbub_treebuilder *treebuilder, uint32_t index, hubbub_ns *ns, element_type *type, void **removed);
-uint32_t current_table(hubbub_treebuilder *treebuilder);
 element_type current_node(hubbub_treebuilder *treebuilder);
 element_type prev_node(hubbub_treebuilder *treebuilder);
 
@@ -165,9 +166,6 @@ void adjust_mathml_attributes(hubbub_treebuilder *treebuilder, hubbub_tag *tag);
 void adjust_svg_attributes(hubbub_treebuilder *treebuilder, hubbub_tag *tag);
 void adjust_svg_tagname(hubbub_treebuilder *treebuilder, hubbub_tag *tag);
 void adjust_foreign_attributes(hubbub_treebuilder *treebuilder, hubbub_tag *tag);
-
-/* in_body.c */
-hubbub_error aa_insert_into_foster_parent(hubbub_treebuilder *treebuilder, void *node, void **inserted);
 
 #ifndef NDEBUG
 #include <stdio.h>

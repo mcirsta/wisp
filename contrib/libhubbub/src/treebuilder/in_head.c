@@ -112,10 +112,12 @@ hubbub_error handle_in_head(hubbub_treebuilder *treebuilder, const hubbub_token 
     case HUBBUB_TOKEN_START_TAG: {
         element_type type = element_type_from_name(treebuilder, &token->data.tag.name);
 
-        if (type == HTML) {
+        if (type == TEMPLATE) {
+            return start_template(treebuilder, token);
+        } else if (type == HTML) {
             /* Process as if "in body" */
             err = handle_in_body(treebuilder, token);
-        } else if (type == BASE || type == COMMAND || type == LINK) {
+        } else if (type == BASE || type == BASEFONT || type == BGSOUND || type == COMMAND || type == LINK) {
             err = insert_element(treebuilder, &token->data.tag, false);
 
             /** \todo ack sc flag */
@@ -149,7 +151,9 @@ hubbub_error handle_in_head(hubbub_treebuilder *treebuilder, const hubbub_token 
     case HUBBUB_TOKEN_END_TAG: {
         element_type type = element_type_from_name(treebuilder, &token->data.tag.name);
 
-        if (type == HEAD) {
+        if (type == TEMPLATE) {
+            return end_template(treebuilder);
+        } else if (type == HEAD) {
             handled = true;
         } else if (type == HTML || type == BODY || type == BR) {
             err = HUBBUB_REPROCESS;
