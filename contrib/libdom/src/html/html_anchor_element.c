@@ -144,8 +144,7 @@ dom_exception _dom_html_anchor_element_copy_internal(dom_html_anchor_element *ol
         dom_exception ret;                                                                                             \
         dom_string *_memo_##attr;                                                                                      \
                                                                                                                        \
-        _memo_##attr =                                                                                                 \
-            ((struct dom_html_document *)((struct dom_node_internal *)element)->owner)->memoised[hds_##attr];          \
+        _memo_##attr = ((struct dom_document *)((struct dom_node_internal *)element)->owner)->memoised[hds_##attr];    \
                                                                                                                        \
         ret = dom_element_get_attribute(element, _memo_##attr, attr);                                                  \
                                                                                                                        \
@@ -157,8 +156,7 @@ dom_exception _dom_html_anchor_element_copy_internal(dom_html_anchor_element *ol
         dom_exception ret;                                                                                             \
         dom_string *_memo_##attr;                                                                                      \
                                                                                                                        \
-        _memo_##attr =                                                                                                 \
-            ((struct dom_html_document *)((struct dom_node_internal *)element)->owner)->memoised[hds_##attr];          \
+        _memo_##attr = ((struct dom_document *)((struct dom_node_internal *)element)->owner)->memoised[hds_##attr];    \
                                                                                                                        \
         ret = dom_element_set_attribute(element, _memo_##attr, attr);                                                  \
                                                                                                                        \
@@ -198,7 +196,7 @@ dom_exception dom_html_anchor_element_set_tab_index(dom_html_anchor_element *anc
  */
 dom_exception dom_html_anchor_element_blur(dom_html_anchor_element *ele)
 {
-    struct dom_html_document *doc = (dom_html_document *)dom_node_get_owner(ele);
+    struct dom_document *doc = (dom_document *)dom_node_get_owner(ele);
     bool success = false;
     assert(doc != NULL);
 
@@ -216,7 +214,7 @@ dom_exception dom_html_anchor_element_blur(dom_html_anchor_element *ele)
  */
 dom_exception dom_html_anchor_element_focus(dom_html_anchor_element *ele)
 {
-    struct dom_html_document *doc = (dom_html_document *)dom_node_get_owner(ele);
+    struct dom_document *doc = (dom_document *)dom_node_get_owner(ele);
     bool success = false;
     assert(doc != NULL);
 

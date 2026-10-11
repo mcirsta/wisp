@@ -162,6 +162,8 @@ dom_exception _dom_element_copy(dom_node_internal *old, dom_node_internal **copy
 #define DOM_NODE_PROTECT_VTABLE_ELEMENT __dom_element_destroy, _dom_element_copy
 
 /* Helper functions*/
+void _dom_element_set_document(dom_element *element, struct dom_document *doc);
+dom_exception _dom_element_copy_attributes(dom_element *old, dom_element *copy, dom_node_operation operation);
 dom_exception _dom_element_copy_internal(dom_element *old, dom_element *new);
 #define dom_element_copy_internal(o, n) _dom_element_copy_internal((dom_element *)(o), (dom_element *)(n))
 

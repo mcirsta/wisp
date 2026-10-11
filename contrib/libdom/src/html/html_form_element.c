@@ -245,7 +245,7 @@ bool dom_html_form_control_has_datalist_ancestor(struct dom_node *control)
 dom_exception dom_html_form_element_get_elements(dom_html_form_element *ele, struct dom_html_collection **col)
 {
     dom_exception err;
-    dom_html_document *doc = (dom_html_document *)dom_node_get_owner(ele);
+    dom_document *doc = (dom_document *)dom_node_get_owner(ele);
 
     assert(doc != NULL);
     err = _dom_html_collection_create(doc, (dom_node_internal *)ele, _dom_is_form_control, ele, col);
@@ -283,8 +283,7 @@ dom_exception dom_html_form_element_get_length(dom_html_form_element *ele, uint3
         dom_exception ret;                                                                                             \
         dom_string *_memo_##attr;                                                                                      \
                                                                                                                        \
-        _memo_##attr =                                                                                                 \
-            ((struct dom_html_document *)((struct dom_node_internal *)element)->owner)->memoised[hds_##attr];          \
+        _memo_##attr = ((struct dom_document *)((struct dom_node_internal *)element)->owner)->memoised[hds_##attr];    \
                                                                                                                        \
         ret = dom_element_get_attribute(element, _memo_##attr, attr);                                                  \
                                                                                                                        \
@@ -296,8 +295,7 @@ dom_exception dom_html_form_element_get_length(dom_html_form_element *ele, uint3
         dom_exception ret;                                                                                             \
         dom_string *_memo_##attr;                                                                                      \
                                                                                                                        \
-        _memo_##attr =                                                                                                 \
-            ((struct dom_html_document *)((struct dom_node_internal *)element)->owner)->memoised[hds_##attr];          \
+        _memo_##attr = ((struct dom_document *)((struct dom_node_internal *)element)->owner)->memoised[hds_##attr];    \
                                                                                                                        \
         ret = dom_element_set_attribute(element, _memo_##attr, attr);                                                  \
                                                                                                                        \
@@ -319,7 +317,7 @@ SIMPLE_GET_SET(target)
  */
 dom_exception dom_html_form_element_submit(dom_html_form_element *ele)
 {
-    struct dom_html_document *doc = (dom_html_document *)dom_node_get_owner(ele);
+    struct dom_document *doc = (dom_document *)dom_node_get_owner(ele);
     bool success = false;
     assert(doc != NULL);
 
@@ -338,7 +336,7 @@ dom_exception dom_html_form_element_submit(dom_html_form_element *ele)
  */
 dom_exception dom_html_form_element_reset(dom_html_form_element *ele)
 {
-    struct dom_html_document *doc = (dom_html_document *)dom_node_get_owner(ele);
+    struct dom_document *doc = (dom_document *)dom_node_get_owner(ele);
     bool success = false;
     assert(doc != NULL);
 
@@ -376,7 +374,7 @@ static bool _dom_is_form_control(struct dom_node_internal *node, void *ctx)
     if (_dom_html_node_type(node) == DOM_HTML_ELEMENT_TYPE_INPUT) {
         dom_string *type = NULL;
         dom_exception err = dom_html_input_element_get_type((dom_html_input_element *)node, &type);
-        dom_html_document *doc = (dom_html_document *)node->owner;
+        dom_document *doc = (dom_document *)node->owner;
         bool image = dom_string_caseless_isequal(type, doc->memoised[hds_image]);
         dom_string_unref(type);
         if (err != DOM_NO_ERR || image)

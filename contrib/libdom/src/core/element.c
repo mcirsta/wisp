@@ -366,89 +366,6 @@ static void _dom_element_attr_list_destroy(dom_attr_list *list)
     return;
 }
 
-/**
- * Clone an attribute list node, and its attribute
- *
- * \param n     The attribute list node to clone
- * \param newe  Element to clone attribute for
- * \return the new attribute list node, or NULL on failure
- */
-static dom_attr_list *_dom_element_attr_list_node_clone(dom_attr_list *n, dom_element *newe)
-{
-    dom_attr *clone = NULL;
-    dom_attr_list *new_list_node;
-    dom_exception err;
-
-    assert(n != NULL);
-    assert(n->attr != NULL);
-    assert(n->name != NULL);
-
-    new_list_node = malloc(sizeof(*new_list_node));
-    if (new_list_node == NULL)
-        return NULL;
-
-    list_init(&new_list_node->list);
-
-    new_list_node->name = NULL;
-    new_list_node->namespace = NULL;
-
-    err = dom_node_clone_node(n->attr, true, (void *)&clone);
-    if (err != DOM_NO_ERR) {
-        free(new_list_node);
-        return NULL;
-    }
-
-    dom_node_set_parent(clone, newe);
-    dom_node_remove_pending(clone);
-    dom_node_unref(clone);
-    new_list_node->attr = clone;
-
-    if (n->name != NULL)
-        new_list_node->name = dom_string_ref(n->name);
-
-    if (n->namespace != NULL)
-        new_list_node->namespace = dom_string_ref(n->namespace);
-
-    return new_list_node;
-}
-
-/**
- * Clone an entire attribute list, and its attributes
- *
- * \param list  The attribute list to clone
- * \param newe  Element to clone list for
- * \return the new attribute list, or NULL on failure
- */
-static dom_attr_list *_dom_element_attr_list_clone(dom_attr_list *list, dom_element *newe)
-{
-    dom_attr_list *attr = list;
-
-    dom_attr_list *new_list = NULL;
-    dom_attr_list *new_list_node = NULL;
-
-    if (list == NULL)
-        return NULL;
-
-    do {
-        new_list_node = _dom_element_attr_list_node_clone(attr, newe);
-        if (new_list_node == NULL) {
-            if (new_list != NULL)
-                _dom_element_attr_list_destroy(new_list);
-            return NULL;
-        }
-
-        if (new_list == NULL) {
-            new_list = new_list_node;
-        } else {
-            _dom_element_attr_list_insert(new_list, new_list_node);
-        }
-
-        attr = _dom_element_attr_list_next(attr);
-    } while (attr != list);
-
-    return new_list;
-}
-
 static dom_exception
 _dom_element_get_attr(struct dom_element *element, dom_string *namespace, dom_string *name, dom_string **value);
 static bool valid_attribute_local_name(dom_string *name);
@@ -1470,46 +1387,76 @@ dom_exception _dom_element_copy(dom_node_internal *old, dom_node_internal **copy
 
 dom_exception _dom_element_copy_internal(dom_element *old, dom_element *new)
 {
-    dom_exception err;
-    uint32_t classnr;
-
-    if (old->attributes != NULL) {
-        /* Copy the attribute list */
-        new->attributes = _dom_element_attr_list_clone(old->attributes, new);
-    } else {
-        new->attributes = NULL;
-    }
-
-    if (old->n_classes > 0) {
-        new->n_classes = old->n_classes;
-        new->classes = malloc(sizeof(lwc_string *) * new->n_classes);
-        if (new->classes == NULL) {
-            err = DOM_NO_MEM_ERR;
-            goto error;
-        }
-        for (classnr = 0; classnr < new->n_classes; ++classnr)
-            new->classes[classnr] = lwc_string_ref(old->classes[classnr]);
-    } else {
-        new->n_classes = 0;
-        new->classes = NULL;
-    }
-
-    err = dom_node_copy_internal(old, new);
-    if (err != DOM_NO_ERR) {
-        goto error;
-    }
-
-    new->id_ns = NULL;
-    new->id_name = NULL;
+    dom_exception err = dom_node_copy_internal(old, new);
+    if (err != DOM_NO_ERR)
+        return err;
+    new->attributes = NULL;
+    new->n_classes = 0;
+    new->classes = NULL;
+    new->id_ns = dom_string_ref(old->id_ns);
+    new->id_name = dom_string_ref(old->id_name);
     new->tag_name = NULL;
-
-    /* TODO: deal with dom_type_info, it get no definition ! */
-
+    new->schema_type_info = NULL;
+    if (old->n_classes != 0) {
+        new->classes = malloc(sizeof(lwc_string *) * old->n_classes);
+        if (new->classes == NULL) {
+            _dom_element_finalise(new);
+            return DOM_NO_MEM_ERR;
+        }
+        new->n_classes = old->n_classes;
+        for (uint32_t i = 0; i < new->n_classes; i++)
+            new->classes[i] = lwc_string_ref(old->classes[i]);
+    }
     return DOM_NO_ERR;
+}
 
-error:
-    free(new->classes);
-    return err;
+/* Attribute copies use the destination document from the start, including
+ * their legacy value children and native user-data notifications. Any partial
+ * list already belongs to copy, so the caller's normal destructor unwinds it. */
+dom_exception _dom_element_copy_attributes(dom_element *old, dom_element *copy, dom_node_operation operation)
+{
+    dom_attr_list *entry = old->attributes;
+    if (entry == NULL)
+        return DOM_NO_ERR;
+    do {
+        dom_attr_list *item = malloc(sizeof(*item));
+        if (item == NULL)
+            return DOM_NO_MEM_ERR;
+        dom_attr *attr = NULL;
+        dom_exception err = _dom_node_clone_for_document(
+            (dom_node_internal *)entry->attr, copy->base.owner, true, operation, (dom_node_internal **)&attr);
+        if (err != DOM_NO_ERR) {
+            free(item);
+            return err;
+        }
+        list_init(&item->list);
+        item->attr = attr;
+        item->name = dom_string_ref(entry->name);
+        item->namespace = dom_string_ref(entry->namespace);
+        if (copy->attributes == NULL)
+            copy->attributes = item;
+        else
+            _dom_element_attr_list_insert(copy->attributes, item);
+        dom_node_set_parent(attr, copy);
+        dom_node_remove_pending(attr);
+        dom_node_unref(attr);
+        entry = _dom_element_attr_list_next(entry);
+    } while (entry != old->attributes);
+    return DOM_NO_ERR;
+}
+
+void _dom_element_set_document(dom_element *element, dom_document *doc)
+{
+    /* tagName's HTML case folding depends on the new node document. */
+    dom_string_unref(element->tag_name);
+    element->tag_name = NULL;
+    dom_attr_list *attr = element->attributes;
+    if (attr != NULL) {
+        do {
+            _dom_node_set_document((dom_node_internal *)attr->attr, doc);
+            attr = _dom_element_attr_list_next(attr);
+        } while (attr != element->attributes);
+    }
 }
 
 

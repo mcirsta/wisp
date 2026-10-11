@@ -1031,58 +1031,91 @@ dom_exception _dom_node_has_child_nodes(dom_node_internal *node, bool *result)
  */
 dom_exception _dom_node_clone_node(dom_node_internal *node, bool deep, dom_node_internal **result)
 {
-    dom_node_internal *n, *child;
+    return _dom_node_clone_for_document(node, node->owner, deep, DOM_NODE_CLONED, result);
+}
+
+/* One clone path for cloneNode and importNode. Protected copy constructors
+ * preserve element-specific state; ownership and recursion are shared here. */
+dom_exception _dom_node_clone_for_document(
+    dom_node_internal *node, dom_document *doc, bool deep, dom_node_operation operation, dom_node_internal **result)
+{
+    dom_node_internal *copy = NULL;
     dom_exception err;
-    dom_user_data *ud;
-
-    assert(node->owner != NULL);
-
-    /* Ensure node's owner is not readonly */
-    if (_dom_node_readonly_owner(node)) {
+    *result = NULL;
+    if (_dom_node_readonly_owner(node) || (doc != NULL && _dom_node_readonly_owner(&doc->base)))
         return DOM_NO_MODIFICATION_ALLOWED_ERR;
+    if (doc != node->owner && doc != NULL && node->owner != NULL && node->owner->memoised != NULL) {
+        err = _dom_document_ensure_html_strings(doc);
+        if (err != DOM_NO_ERR)
+            return err;
     }
-
-    err = dom_node_copy(node, &n);
-    if (err != DOM_NO_ERR) {
+    err = dom_node_copy(node, &copy);
+    if (err != DOM_NO_ERR)
         return err;
+    if (copy->owner != doc)
+        _dom_node_set_document(copy, doc);
+    if (node->type == DOM_ELEMENT_NODE) {
+        err = _dom_element_copy_attributes((dom_element *)node, (dom_element *)copy, operation);
+        if (err != DOM_NO_ERR)
+            goto failed;
+    } else if (node->type == DOM_ATTRIBUTE_NODE) {
+        _dom_attr_set_specified((dom_attr *)copy, true);
+        deep = true; /* libdom stores attribute values in legacy text children. */
     }
-
     if (deep) {
-        child = node->first_child;
-        while (child != NULL) {
-            dom_node_internal *cc, *r;
-            err = dom_node_clone_node(child, deep, (void *)&cc);
-            if (err != DOM_NO_ERR) {
-                dom_node_unref(n);
-                return err;
-            }
-
-            err = dom_node_append_child(n, cc, (void *)&r);
-            if (err != DOM_NO_ERR) {
-                dom_node_unref(cc);
-                dom_node_unref(n);
-                return err;
-            }
-
-            /* Clean up the new node, we have reference it two
-             * times */
-            dom_node_unref(r);
+        for (dom_node_internal *child = node->first_child; child != NULL; child = child->next) {
+            dom_node_internal *cc = NULL;
+            err = _dom_node_clone_for_document(child, doc, true, operation, &cc);
+            if (err != DOM_NO_ERR)
+                goto failed;
+            /* Clone appends to the fresh tree without running insertion
+             * steps or observable mutation notifications. */
+            cc->parent = copy;
+            cc->previous = copy->last_child;
+            if (copy->last_child != NULL)
+                copy->last_child->next = cc;
+            else
+                copy->first_child = cc;
+            copy->last_child = cc;
+            dom_node_remove_pending(cc);
             dom_node_unref(cc);
-            child = child->next;
         }
     }
-
-    *result = n;
-
-    /* Call the dom_user_data_handlers */
-    ud = node->user_data;
-    while (ud != NULL) {
+    for (dom_user_data *ud = node->user_data; ud != NULL; ud = ud->next) {
         if (ud->handler != NULL)
-            ud->handler(DOM_NODE_CLONED, ud->key, ud->data, (dom_node *)node, (dom_node *)n);
-        ud = ud->next;
+            ud->handler(operation, ud->key, ud->data, (dom_node *)node, (dom_node *)copy);
     }
-
+    *result = copy;
     return DOM_NO_ERR;
+failed:
+    dom_node_unref(copy);
+    return err;
+}
+
+/* Transfer pending-list ownership as well as ownerDocument. Attribute owners
+ * can differ from their elements after adoptNode(attr); keep those attributes
+ * pending in their own document until their owner catches up or releases them.
+ * The ordinary subtree walk is iterative rather than using the C call stack. */
+void _dom_node_set_document(dom_node_internal *root, dom_document *doc)
+{
+    dom_document *old = (dom_document *)dom_node_ref(root->owner);
+    for (dom_node_internal *node = root; node != NULL;) {
+        if (node->pending_list.prev != &node->pending_list)
+            list_del(&node->pending_list);
+        node->owner = doc;
+        if (node->parent == NULL || node->parent->owner != doc)
+            dom_node_mark_pending(node);
+        if (node->type == DOM_ELEMENT_NODE)
+            _dom_element_set_document((dom_element *)node, doc);
+        if (node->first_child != NULL) {
+            node = node->first_child;
+        } else {
+            while (node != root && node->next == NULL)
+                node = node->parent;
+            node = node == root ? NULL : node->next;
+        }
+    }
+    dom_node_unref(old);
 }
 
 /**
@@ -1864,7 +1897,7 @@ dom_exception _dom_node_copy_internal(dom_node_internal *old, dom_node_internal 
     new->previous = NULL;
     new->next = NULL;
 
-    assert(old->owner != NULL);
+    assert(old->owner != NULL || old->type == DOM_DOCUMENT_TYPE_NODE);
 
     new->owner = old->owner;
 

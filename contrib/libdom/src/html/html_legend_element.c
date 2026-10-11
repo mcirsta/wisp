@@ -89,7 +89,7 @@ void _dom_html_legend_element_destroy(struct dom_html_legend_element *ele)
  */
 dom_exception dom_html_legend_element_get_form(dom_html_legend_element *legend, dom_html_form_element **form)
 {
-    dom_html_document *doc = (dom_html_document *)((dom_node_internal *)legend)->owner;
+    dom_document *doc = (dom_document *)((dom_node_internal *)legend)->owner;
     dom_node_internal *field_set = ((dom_node_internal *)legend)->parent;
 
     /* Search ancestor chain for FIELDSET element */
@@ -174,8 +174,7 @@ dom_exception _dom_html_legend_element_copy_internal(dom_html_legend_element *ol
         dom_exception ret;                                                                                             \
         dom_string *_memo_##attr;                                                                                      \
                                                                                                                        \
-        _memo_##attr =                                                                                                 \
-            ((struct dom_html_document *)((struct dom_node_internal *)element)->owner)->memoised[hds_##attr];          \
+        _memo_##attr = ((struct dom_document *)((struct dom_node_internal *)element)->owner)->memoised[hds_##attr];    \
                                                                                                                        \
         ret = dom_element_get_attribute(element, _memo_##attr, attr);                                                  \
                                                                                                                        \
@@ -187,8 +186,7 @@ dom_exception _dom_html_legend_element_copy_internal(dom_html_legend_element *ol
         dom_exception ret;                                                                                             \
         dom_string *_memo_##attr;                                                                                      \
                                                                                                                        \
-        _memo_##attr =                                                                                                 \
-            ((struct dom_html_document *)((struct dom_node_internal *)element)->owner)->memoised[hds_##attr];          \
+        _memo_##attr = ((struct dom_document *)((struct dom_node_internal *)element)->owner)->memoised[hds_##attr];    \
                                                                                                                        \
         ret = dom_element_set_attribute(element, _memo_##attr, attr);                                                  \
                                                                                                                        \
@@ -203,7 +201,7 @@ SIMPLE_SET(align);
 dom_exception dom_html_legend_element_get_align(dom_html_legend_element *legend, dom_string **align)
 {
     dom_exception err;
-    dom_html_document *doc = (dom_html_document *)((dom_node_internal *)legend)->owner;
+    dom_document *doc = (dom_document *)((dom_node_internal *)legend)->owner;
     err = dom_element_get_attribute(legend, doc->memoised[hds_align], align);
     if (err != DOM_NO_ERR)
         return err;

@@ -147,8 +147,7 @@ dom_exception _dom_html_table_element_copy_internal(dom_html_table_element *old,
         dom_exception ret;                                                                                             \
         dom_string *_memo_##attr;                                                                                      \
                                                                                                                        \
-        _memo_##attr =                                                                                                 \
-            ((struct dom_html_document *)((struct dom_node_internal *)element)->owner)->memoised[hds_##attr];          \
+        _memo_##attr = ((struct dom_document *)((struct dom_node_internal *)element)->owner)->memoised[hds_##attr];    \
                                                                                                                        \
         ret = dom_element_get_attribute(element, _memo_##attr, attr);                                                  \
                                                                                                                        \
@@ -160,8 +159,7 @@ dom_exception _dom_html_table_element_copy_internal(dom_html_table_element *old,
         dom_exception ret;                                                                                             \
         dom_string *_memo_##attr;                                                                                      \
                                                                                                                        \
-        _memo_##attr =                                                                                                 \
-            ((struct dom_html_document *)((struct dom_node_internal *)element)->owner)->memoised[hds_##attr];          \
+        _memo_##attr = ((struct dom_document *)((struct dom_node_internal *)element)->owner)->memoised[hds_##attr];    \
                                                                                                                        \
         ret = dom_element_set_attribute(element, _memo_##attr, attr);                                                  \
                                                                                                                        \
@@ -188,7 +186,7 @@ dom_exception
 dom_html_table_element_get_caption(dom_html_table_element *table, dom_html_table_caption_element **caption)
 {
     dom_node_internal *node_tmp = ((dom_node_internal *)table);
-    dom_html_document *doc = (dom_html_document *)(node_tmp->owner);
+    dom_document *doc = (dom_document *)(node_tmp->owner);
 
     for (node_tmp = node_tmp->first_child; node_tmp != NULL; node_tmp = node_tmp->next) {
         if ((node_tmp->type == DOM_ELEMENT_NODE) &&
@@ -213,7 +211,7 @@ dom_html_table_element_get_caption(dom_html_table_element *table, dom_html_table
 dom_exception dom_html_table_element_set_caption(dom_html_table_element *table, dom_html_table_caption_element *caption)
 {
     dom_node_internal *check_node = ((dom_node_internal *)caption);
-    dom_html_document *doc = (dom_html_document *)(((dom_node_internal *)table)->owner);
+    dom_document *doc = (dom_document *)(((dom_node_internal *)table)->owner);
     dom_exception exp;
     dom_node *new_caption;
 
@@ -240,7 +238,7 @@ dom_exception dom_html_table_element_set_caption(dom_html_table_element *table, 
 dom_exception dom_html_table_element_get_t_head(dom_html_table_element *table, dom_html_table_section_element **t_head)
 {
     dom_node_internal *node_tmp = ((dom_node_internal *)table);
-    dom_html_document *doc = (dom_html_document *)(node_tmp->owner);
+    dom_document *doc = (dom_document *)(node_tmp->owner);
 
     for (node_tmp = node_tmp->first_child; node_tmp != NULL; node_tmp = node_tmp->next) {
         if ((node_tmp->type == DOM_ELEMENT_NODE) &&
@@ -264,7 +262,7 @@ dom_exception dom_html_table_element_get_t_head(dom_html_table_element *table, d
 dom_exception dom_html_table_element_set_t_head(dom_html_table_element *table, dom_html_table_section_element *t_head)
 {
     dom_node_internal *check_node = ((dom_node_internal *)t_head);
-    dom_html_document *doc = (dom_html_document *)(((dom_node_internal *)table)->owner);
+    dom_document *doc = (dom_document *)(((dom_node_internal *)table)->owner);
     dom_exception exp;
     dom_node *new_t_head;
 
@@ -290,7 +288,7 @@ dom_exception dom_html_table_element_set_t_head(dom_html_table_element *table, d
 dom_exception dom_html_table_element_get_t_foot(dom_html_table_element *table, dom_html_table_section_element **t_foot)
 {
     dom_node_internal *node_tmp = ((dom_node_internal *)table);
-    dom_html_document *doc = (dom_html_document *)(node_tmp->owner);
+    dom_document *doc = (dom_document *)(node_tmp->owner);
 
     for (node_tmp = node_tmp->first_child; node_tmp != NULL; node_tmp = node_tmp->next) {
         if ((node_tmp->type == DOM_ELEMENT_NODE) &&
@@ -315,7 +313,7 @@ dom_exception dom_html_table_element_set_t_foot(dom_html_table_element *table, d
 {
     dom_node_internal *check_node = ((dom_node_internal *)t_foot); /*< temporary node to check for
                                                       raised exceptions */
-    dom_html_document *doc = (dom_html_document *)(((dom_node_internal *)table)->owner);
+    dom_document *doc = (dom_document *)(((dom_node_internal *)table)->owner);
     dom_exception exp;
     dom_node *new_t_foot;
 
@@ -343,7 +341,7 @@ dom_exception dom_html_table_element_set_t_foot(dom_html_table_element *table, d
  */
 static bool table_rows_callback(struct dom_node_internal *node, void *ctx)
 {
-    dom_html_document *doc = ctx;
+    dom_document *doc = ctx;
     if (node->type == DOM_ELEMENT_NODE &&
         dom_string_caseless_isequal(node->name, doc->elements[DOM_HTML_ELEMENT_TYPE_TR])) {
         return true;
@@ -360,7 +358,7 @@ static bool table_rows_callback(struct dom_node_internal *node, void *ctx)
  */
 dom_exception dom_html_table_element_get_rows(dom_html_table_element *element, dom_html_collection **rows)
 {
-    dom_html_document *doc = (dom_html_document *)((dom_node_internal *)element)->owner;
+    dom_document *doc = (dom_document *)((dom_node_internal *)element)->owner;
     return _dom_html_collection_create(doc, (dom_node_internal *)element, table_rows_callback, (void *)doc, rows);
 }
 
@@ -373,7 +371,7 @@ dom_exception dom_html_table_element_get_rows(dom_html_table_element *element, d
  */
 static bool table_t_bodies_callback(struct dom_node_internal *node, void *ctx)
 {
-    dom_html_document *doc = ctx;
+    dom_document *doc = ctx;
     if (node->type == DOM_ELEMENT_NODE &&
         dom_string_caseless_isequal(node->name, doc->elements[DOM_HTML_ELEMENT_TYPE_TBODY])) {
         return true;
@@ -391,7 +389,7 @@ static bool table_t_bodies_callback(struct dom_node_internal *node, void *ctx)
 
 dom_exception dom_html_table_element_get_t_bodies(dom_html_table_element *element, dom_html_collection **t_bodies)
 {
-    dom_html_document *doc = (dom_html_document *)((dom_node_internal *)element)->owner;
+    dom_document *doc = (dom_document *)((dom_node_internal *)element)->owner;
     return _dom_html_collection_create(
         doc, (dom_node_internal *)element, table_t_bodies_callback, (void *)doc, t_bodies);
 }
@@ -412,9 +410,10 @@ dom_exception dom_html_table_element_create_caption(dom_html_table_element *elem
     }
     if ((*caption) == NULL) {
         dom_node *new_caption;
-        dom_html_document *doc = (dom_html_document *)((dom_node_internal *)element)->owner;
+        dom_document *doc = (dom_document *)((dom_node_internal *)element)->owner;
 
-        exp = dom_document_create_element(doc, doc->elements[DOM_HTML_ELEMENT_TYPE_CAPTION], (dom_element **)caption);
+        exp = _dom_html_document_create_element(
+            doc, doc->elements[DOM_HTML_ELEMENT_TYPE_CAPTION], (dom_element **)caption);
         if (exp != DOM_NO_ERR) {
             dom_node_unref(*caption);
             return exp;
@@ -470,9 +469,10 @@ dom_exception dom_html_table_element_create_t_foot(dom_html_table_element *eleme
 
     if ((*t_foot) == NULL) {
         dom_node *new_t_foot;
-        dom_html_document *doc = (dom_html_document *)((dom_node_internal *)element)->owner;
+        dom_document *doc = (dom_document *)((dom_node_internal *)element)->owner;
 
-        exp = dom_document_create_element(doc, doc->elements[DOM_HTML_ELEMENT_TYPE_TFOOT], (dom_element **)t_foot);
+        exp = _dom_html_document_create_element(
+            doc, doc->elements[DOM_HTML_ELEMENT_TYPE_TFOOT], (dom_element **)t_foot);
         if (exp != DOM_NO_ERR) {
             dom_node_unref(*t_foot);
             return exp;
@@ -532,9 +532,10 @@ dom_exception dom_html_table_element_create_t_head(dom_html_table_element *eleme
     if ((*t_head) == NULL) {
         dom_exception exp;
         dom_node *new_t_head;
-        dom_html_document *doc = (dom_html_document *)((dom_node_internal *)element)->owner;
+        dom_document *doc = (dom_document *)((dom_node_internal *)element)->owner;
 
-        exp = dom_document_create_element(doc, doc->elements[DOM_HTML_ELEMENT_TYPE_THEAD], (dom_element **)t_head);
+        exp = _dom_html_document_create_element(
+            doc, doc->elements[DOM_HTML_ELEMENT_TYPE_THEAD], (dom_element **)t_head);
         if (exp != DOM_NO_ERR) {
             dom_node_unref(*t_head);
             return exp;
@@ -600,9 +601,10 @@ dom_html_table_element_create_t_body(dom_html_table_element *element, dom_html_t
     }
     if (len == 0) {
         dom_node *new_t_body;
-        dom_html_document *doc = (dom_html_document *)((dom_node_internal *)element)->owner;
+        dom_document *doc = (dom_document *)((dom_node_internal *)element)->owner;
 
-        exp = dom_document_create_element(doc, doc->elements[DOM_HTML_ELEMENT_TYPE_TBODY], (dom_element **)t_body);
+        exp = _dom_html_document_create_element(
+            doc, doc->elements[DOM_HTML_ELEMENT_TYPE_TBODY], (dom_element **)t_body);
         if (exp != DOM_NO_ERR) {
             dom_node_unref(*t_body);
             dom_html_collection_unref(t_bodies);
@@ -634,7 +636,7 @@ dom_html_table_element_insert_row(dom_html_table_element *element, int32_t index
     dom_exception exp;
     dom_html_collection *rows;
     uint32_t len;
-    dom_html_document *doc = (dom_html_document *)((dom_node_internal *)element)->owner;
+    dom_document *doc = (dom_document *)((dom_node_internal *)element)->owner;
 
     exp = dom_html_table_element_get_rows(element, &rows);
     if (exp != DOM_NO_ERR) {
@@ -653,7 +655,7 @@ dom_html_table_element_insert_row(dom_html_table_element *element, int32_t index
         dom_html_table_row_element *row;
         dom_node *new_row;
 
-        exp = dom_document_create_element(doc, doc->elements[DOM_HTML_ELEMENT_TYPE_TR], (dom_element **)&row);
+        exp = _dom_html_document_create_element(doc, doc->elements[DOM_HTML_ELEMENT_TYPE_TR], (dom_element **)&row);
         if (exp != DOM_NO_ERR) {
             return exp;
         }
@@ -783,7 +785,7 @@ dom_exception dom_html_table_element_delete_row(dom_html_table_element *element,
     dom_exception exp;
     dom_html_collection *rows;
     uint32_t len;
-    dom_html_document *doc = (dom_html_document *)((dom_node_internal *)element)->owner;
+    dom_document *doc = (dom_document *)((dom_node_internal *)element)->owner;
 
     exp = dom_html_table_element_get_rows(element, &rows);
     if (exp != DOM_NO_ERR) {

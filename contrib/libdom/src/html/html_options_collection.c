@@ -30,7 +30,7 @@
  * \param col   The result collection object
  * \return DOM_NO_ERR on success, appropriate dom_exception on failure.
  */
-dom_exception _dom_html_options_collection_create(struct dom_html_document *doc, struct dom_node_internal *root,
+dom_exception _dom_html_options_collection_create(struct dom_document *doc, struct dom_node_internal *root,
     dom_callback_is_in_collection ic, void *ctx, struct dom_html_options_collection **col)
 {
     *col = malloc(sizeof(dom_html_options_collection));
@@ -50,9 +50,8 @@ dom_exception _dom_html_options_collection_create(struct dom_html_document *doc,
  *              beint32_ts to the collection
  * \return DOM_NO_ERR on success.
  */
-dom_exception _dom_html_options_collection_initialise(struct dom_html_document *doc,
-    struct dom_html_options_collection *col, struct dom_node_internal *root, dom_callback_is_in_collection ic,
-    void *ctx)
+dom_exception _dom_html_options_collection_initialise(struct dom_document *doc, struct dom_html_options_collection *col,
+    struct dom_node_internal *root, dom_callback_is_in_collection ic, void *ctx)
 {
     return _dom_html_collection_initialise(doc, &col->base, root, ic, ctx);
 }

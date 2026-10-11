@@ -25,11 +25,6 @@ struct dom_html_document {
     dom_string *url; /**< HTML document URL */
     dom_string *cookie; /**< HTML document cookie */
     dom_html_element *body; /**< HTML BodyElement */
-
-    /** Cached strings for html objects to use */
-    dom_string **memoised;
-    /** Cached strings for HTML element names */
-    dom_string **elements;
 };
 
 #include "html_document_strings.h"
@@ -80,8 +75,8 @@ _dom_html_document_get_elements_by_name(dom_html_document *doc, dom_string *name
         _dom_html_document_get_elements_by_name
 
 /* Internal construction from resolved names; no XML QName validation. */
-dom_exception _dom_html_document_create_element_internal(dom_html_document *html, dom_string *name,
-    dom_string *namespace, dom_string *prefix, struct dom_html_element **result);
+dom_exception _dom_html_document_create_element_internal(
+    dom_document *html, dom_string *name, dom_string *namespace, dom_string *prefix, struct dom_html_element **result);
 
 dom_exception _dom_html_document_create_element(dom_document *doc, dom_string *tag_name, dom_element **result);
 dom_exception

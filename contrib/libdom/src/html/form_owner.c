@@ -56,7 +56,7 @@ dom_exception _dom_html_form_associate(dom_node_internal *control, dom_html_form
     if (state == NULL)
         return DOM_NO_ERR;
     bool explicit_form = false;
-    dom_html_document *doc = (dom_html_document *)control->owner;
+    dom_document *doc = (dom_document *)control->owner;
     dom_exception err = dom_element_has_attribute(control, doc->memoised[hds_form], &explicit_form);
     if (err != DOM_NO_ERR)
         return err;
@@ -76,7 +76,7 @@ dom_exception _dom_html_form_associate(dom_node_internal *control, dom_html_form
  * https://html.spec.whatwg.org/multipage/form-control-infrastructure.html#reset-the-form-owner */
 dom_exception _dom_html_form_owner(dom_node_internal *control, dom_html_form_element **form)
 {
-    dom_html_document *doc = (dom_html_document *)control->owner;
+    dom_document *doc = (dom_document *)control->owner;
     dom_string *id = NULL;
     *form = NULL;
     dom_exception err = dom_element_get_attribute(control, doc->memoised[hds_form], &id);
@@ -118,7 +118,7 @@ void _dom_html_form_attribute_changed(dom_node_internal *node, dom_string *names
     struct dom_html_form_association *state = association(node);
     if (state == NULL || namespace != NULL)
         return;
-    dom_html_document *doc = (dom_html_document *)node->owner;
+    dom_document *doc = (dom_document *)node->owner;
     if (dom_string_isequal(name, doc->memoised[hds_form]))
         _dom_html_form_association_clear(state);
 }
@@ -129,7 +129,7 @@ void _dom_html_form_attribute_value_changed(dom_attr *attribute)
     struct dom_html_form_association *state = association(attr->parent);
     if (state == NULL || state->parser_form == NULL || attr->namespace != NULL)
         return;
-    dom_html_document *doc = (dom_html_document *)attr->owner;
+    dom_document *doc = (dom_document *)attr->owner;
     if (!dom_string_isequal(attr->name, doc->memoised[hds_form]))
         return;
     /* Attribute construction sets parent before installing it in the list. A

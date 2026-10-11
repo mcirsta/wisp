@@ -185,6 +185,11 @@ static inline dom_exception dom_node_copy(struct dom_node_internal *old, struct 
 #define dom_node_copy(o, c) dom_node_copy((dom_node_internal *)(o), (dom_node_internal **)(c))
 
 /* Following are some helper functions */
+/* Caller holds the source/destination documents through ownership transfer. */
+void _dom_node_set_document(dom_node_internal *node, struct dom_document *doc);
+dom_exception _dom_node_clone_for_document(dom_node_internal *node, struct dom_document *doc, bool deep,
+    dom_node_operation operation, dom_node_internal **result);
+
 dom_exception _dom_node_copy_internal(dom_node_internal *old, dom_node_internal *new);
 #define dom_node_copy_internal(o, n) _dom_node_copy_internal((dom_node_internal *)(o), (dom_node_internal *)(n))
 

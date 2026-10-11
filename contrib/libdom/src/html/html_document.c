@@ -106,25 +106,14 @@ dom_exception _dom_html_document_create(dom_events_default_action_fetcher daf, v
     return DOM_NO_ERR;
 }
 
-/* Initialise a HTMLDocument */
-dom_exception
-_dom_html_document_initialise(dom_html_document *doc, dom_events_default_action_fetcher daf, void *daf_ctx)
+/* HTML elements keep their interfaces when adopted into an XML document.
+ * Their immutable name tables belong to the common Document, not HTMLDocument.
+ * XML documents allocate them only when they first create or receive HTML nodes. */
+dom_exception _dom_document_ensure_html_strings(dom_document *doc)
 {
     dom_exception error;
-    int sidx;
-
-    error = _dom_document_initialise(&doc->base, daf, daf_ctx);
-    if (error != DOM_NO_ERR)
-        return error;
-
-    doc->base.html = true;
-
-    doc->title = NULL;
-    doc->referrer = NULL;
-    doc->domain = NULL;
-    doc->url = NULL;
-    doc->cookie = NULL;
-    doc->body = NULL;
+    if (doc->memoised != NULL)
+        return DOM_NO_ERR;
 
     doc->memoised = calloc(hds_COUNT, sizeof(dom_string *));
     if (doc->memoised == NULL) {
@@ -157,50 +146,14 @@ _dom_html_document_initialise(dom_html_document *doc, dom_events_default_action_
 #undef DOM_HTML_ELEMENT_STRINGS_ENTRY
 
 out:
-    if (error != DOM_NO_ERR) {
-        if (doc->memoised != NULL) {
-            for (sidx = 0; sidx < hds_COUNT; ++sidx) {
-                if (doc->memoised[sidx] != NULL) {
-                    dom_string_unref(doc->memoised[sidx]);
-                }
-            }
-            free(doc->memoised);
-            doc->memoised = NULL;
-        }
-        if (doc->elements != NULL) {
-            for (sidx = 0; sidx < DOM_HTML_ELEMENT_TYPE__COUNT; ++sidx) {
-                if (doc->elements[sidx] != NULL) {
-                    dom_string_unref(doc->elements[sidx]);
-                }
-            }
-            free(doc->elements);
-            doc->elements = NULL;
-        }
-    }
+    if (error != DOM_NO_ERR)
+        _dom_document_finalise_html_strings(doc);
     return error;
 }
 
-/* Finalise a HTMLDocument */
-bool _dom_html_document_finalise(dom_html_document *doc)
+void _dom_document_finalise_html_strings(dom_document *doc)
 {
     int sidx;
-
-    /* Pending nodes still use these strings and element names. Release them
-     * only when the base document confirms that all its nodes are gone. */
-    if (!_dom_document_finalise(&doc->base))
-        return false;
-
-    if (doc->cookie != NULL)
-        dom_string_unref(doc->cookie);
-    if (doc->url != NULL)
-        dom_string_unref(doc->url);
-    if (doc->domain != NULL)
-        dom_string_unref(doc->domain);
-    if (doc->referrer != NULL)
-        dom_string_unref(doc->referrer);
-    if (doc->title != NULL)
-        dom_string_unref(doc->title);
-
     if (doc->memoised != NULL) {
         for (sidx = 0; sidx < hds_COUNT; ++sidx) {
             if (doc->memoised[sidx] != NULL) {
@@ -220,6 +173,51 @@ bool _dom_html_document_finalise(dom_html_document *doc)
         free(doc->elements);
         doc->elements = NULL;
     }
+}
+
+/* Initialise a HTMLDocument */
+dom_exception
+_dom_html_document_initialise(dom_html_document *doc, dom_events_default_action_fetcher daf, void *daf_ctx)
+{
+    dom_exception error;
+
+    error = _dom_document_initialise(&doc->base, daf, daf_ctx);
+    if (error != DOM_NO_ERR)
+        return error;
+
+    doc->base.html = true;
+
+    doc->title = NULL;
+    doc->referrer = NULL;
+    doc->domain = NULL;
+    doc->url = NULL;
+    doc->cookie = NULL;
+    doc->body = NULL;
+
+    error = _dom_document_ensure_html_strings(&doc->base);
+    if (error != DOM_NO_ERR)
+        _dom_document_finalise(&doc->base);
+    return error;
+}
+
+/* Finalise a HTMLDocument */
+bool _dom_html_document_finalise(dom_html_document *doc)
+{
+    /* Pending nodes still use these strings and element names. Release them
+     * only when the base document confirms that all its nodes are gone. */
+    if (!_dom_document_finalise(&doc->base))
+        return false;
+
+    if (doc->cookie != NULL)
+        dom_string_unref(doc->cookie);
+    if (doc->url != NULL)
+        dom_string_unref(doc->url);
+    if (doc->domain != NULL)
+        dom_string_unref(doc->domain);
+    if (doc->referrer != NULL)
+        dom_string_unref(doc->referrer);
+    if (doc->title != NULL)
+        dom_string_unref(doc->title);
 
     return true;
 }
@@ -252,7 +250,7 @@ dom_exception _dom_html_document_copy(dom_node_internal *old, dom_node_internal 
  * \param html            The html document that the html element belongs to
  * \param upper  Upper cased string containing tag name
  */
-static inline dom_html_element_type _dom_html_document_get_element_type(dom_html_document *html, dom_string *upper)
+static inline dom_html_element_type _dom_html_document_get_element_type(dom_document *html, dom_string *upper)
 {
     size_t len = dom_string_byte_length(upper);
 
@@ -390,8 +388,8 @@ static inline dom_html_element_type _dom_html_document_get_element_type(dom_html
 
 /* Construct from a resolved local name, namespace and prefix. The public DOM
  * methods validate their input first; the HTML parser supplies tokenized names. */
-dom_exception _dom_html_document_create_element_internal(dom_html_document *html, dom_string *in_tag_name,
-    dom_string *namespace, dom_string *prefix, dom_html_element **result)
+dom_exception _dom_html_document_create_element_internal(
+    dom_document *html, dom_string *in_tag_name, dom_string *namespace, dom_string *prefix, dom_html_element **result)
 {
     dom_exception exc;
     struct dom_html_element_create_params params;
@@ -400,6 +398,12 @@ dom_exception _dom_html_document_create_element_internal(dom_html_document *html
      */
     if (dom_string_length(in_tag_name) == 0)
         return DOM_INVALID_CHARACTER_ERR;
+
+    if (html->memoised == NULL) {
+        exc = _dom_document_ensure_html_strings(html);
+        if (exc != DOM_NO_ERR)
+            return exc;
+    }
 
     /* Store the local name without losing its case. Only createElement (not
      * createElementNS) lowercases the input; nodeName/tagName uppercase HTML
@@ -683,7 +687,7 @@ dom_exception _dom_html_document_create_element_internal(dom_html_document *html
     /* Common HTML names are already interned by type on the document. Reuse
      * them for nodeName instead of allocating an uppercase string per element
      * or converting it repeatedly during style selection. */
-    if (exc == DOM_NO_ERR && prefix == NULL && params.type != DOM_HTML_ELEMENT_TYPE__UNKNOWN)
+    if (exc == DOM_NO_ERR && html->html && prefix == NULL && params.type != DOM_HTML_ELEMENT_TYPE__UNKNOWN)
         ((dom_element *)*result)->tag_name = dom_string_ref(html->elements[params.type]);
     dom_string_unref(params.name);
 
@@ -692,7 +696,6 @@ dom_exception _dom_html_document_create_element_internal(dom_html_document *html
 
 dom_exception _dom_html_document_create_element(dom_document *doc, dom_string *tag_name, dom_element **result)
 {
-    dom_html_document *html = (dom_html_document *)doc;
     if (!_dom_validate_element_local_name(tag_name))
         return DOM_INVALID_CHARACTER_ERR;
     dom_string *namespace = _dom_namespace_get_html_namespace();
@@ -703,7 +706,7 @@ dom_exception _dom_html_document_create_element(dom_document *doc, dom_string *t
     dom_string *lower = NULL;
     dom_exception err = dom_string_tolower(tag_name, true, &lower);
     if (err == DOM_NO_ERR)
-        err = _dom_html_document_create_element_internal(html, lower, namespace, NULL, (dom_html_element **)result);
+        err = _dom_html_document_create_element_internal(doc, lower, namespace, NULL, (dom_html_element **)result);
     dom_string_unref(lower);
     return err;
 }
@@ -711,7 +714,6 @@ dom_exception _dom_html_document_create_element(dom_document *doc, dom_string *t
 dom_exception
 _dom_html_document_create_element_ns(dom_document *doc, dom_string *namespace, dom_string *qname, dom_element **result)
 {
-    dom_html_document *html = (dom_html_document *)doc;
     dom_string *prefix, *localname;
     dom_exception err;
 
@@ -730,7 +732,7 @@ _dom_html_document_create_element_ns(dom_document *doc, dom_string *namespace, d
     }
 
     /* Attempt to create element */
-    err = _dom_html_document_create_element_internal(html, localname, namespace, prefix, (dom_html_element **)result);
+    err = _dom_html_document_create_element_internal(doc, localname, namespace, prefix, (dom_html_element **)result);
 
     /* Tidy up */
     dom_string_unref(localname);
@@ -824,7 +826,7 @@ _dom_html_document_create_attribute_ns(dom_document *doc, dom_string *namespace,
 static dom_exception html_elements_by_type(dom_html_document *doc, dom_html_element_type type, dom_nodelist **list)
 {
     dom_string *local = NULL;
-    dom_exception err = dom_string_tolower(doc->elements[type], true, &local);
+    dom_exception err = dom_string_tolower(doc->base.elements[type], true, &local);
     if (err == DOM_NO_ERR)
         err = dom_document_get_elements_by_tag_name_ns(doc, dom_namespaces[DOM_NAMESPACE_HTML], local, list);
     dom_string_unref(local);
@@ -983,7 +985,7 @@ bool images_callback(struct dom_node_internal *node, void *ctx)
 {
     dom_html_document *doc = ctx;
     if (node->type == DOM_ELEMENT_NODE &&
-        dom_string_caseless_isequal(node->name, doc->elements[DOM_HTML_ELEMENT_TYPE_IMG])) {
+        dom_string_caseless_isequal(node->name, doc->base.elements[DOM_HTML_ELEMENT_TYPE_IMG])) {
         return true;
     }
     return false;
@@ -992,14 +994,14 @@ bool images_callback(struct dom_node_internal *node, void *ctx)
 dom_exception _dom_html_document_get_images(dom_html_document *doc, struct dom_html_collection **col)
 {
     /* Keep the live collection anchored to the document across root changes. */
-    return _dom_html_collection_create(doc, (dom_node_internal *)doc, images_callback, doc, col);
+    return _dom_html_collection_create(&doc->base, (dom_node_internal *)doc, images_callback, doc, col);
 }
 
 bool applet_callback(struct dom_node_internal *node, void *ctx)
 {
     dom_html_document *doc = ctx;
     if (node->type == DOM_ELEMENT_NODE &&
-        dom_string_caseless_isequal(node->name, doc->elements[DOM_HTML_ELEMENT_TYPE_APPLET])) {
+        dom_string_caseless_isequal(node->name, doc->base.elements[DOM_HTML_ELEMENT_TYPE_APPLET])) {
         return true;
     }
     return false;
@@ -1015,7 +1017,7 @@ bool applets_callback(struct dom_node_internal *node, void *ctx)
 {
     dom_html_document *doc = ctx;
     if (node->type == DOM_ELEMENT_NODE &&
-        dom_string_caseless_isequal(node->name, doc->elements[DOM_HTML_ELEMENT_TYPE_OBJECT])) {
+        dom_string_caseless_isequal(node->name, doc->base.elements[DOM_HTML_ELEMENT_TYPE_OBJECT])) {
         uint32_t len = 0;
         dom_html_collection *applets;
         if (_dom_html_collection_create(ctx, node, applet_callback, ctx, &applets) != DOM_NO_ERR)
@@ -1031,7 +1033,7 @@ bool applets_callback(struct dom_node_internal *node, void *ctx)
 dom_exception _dom_html_document_get_applets(dom_html_document *doc, struct dom_html_collection **col)
 {
     /* Keep the live collection anchored to the document across root changes. */
-    return _dom_html_collection_create(doc, (dom_node_internal *)doc, applets_callback, doc, col);
+    return _dom_html_collection_create(&doc->base, (dom_node_internal *)doc, applets_callback, doc, col);
 }
 
 /**
@@ -1045,12 +1047,12 @@ bool links_callback(struct dom_node_internal *node, void *ctx)
 {
     dom_html_document *doc = ctx;
     if (node->type == DOM_ELEMENT_NODE &&
-        (dom_string_caseless_isequal(node->name, doc->elements[DOM_HTML_ELEMENT_TYPE_A]) ||
-            dom_string_caseless_isequal(node->name, doc->elements[DOM_HTML_ELEMENT_TYPE_AREA]))) {
+        (dom_string_caseless_isequal(node->name, doc->base.elements[DOM_HTML_ELEMENT_TYPE_A]) ||
+            dom_string_caseless_isequal(node->name, doc->base.elements[DOM_HTML_ELEMENT_TYPE_AREA]))) {
         bool has_value = false;
         dom_exception err;
 
-        err = dom_element_has_attribute(node, doc->memoised[hds_href], &has_value);
+        err = dom_element_has_attribute(node, doc->base.memoised[hds_href], &has_value);
         if (err != DOM_NO_ERR)
             return err;
 
@@ -1063,12 +1065,12 @@ bool links_callback(struct dom_node_internal *node, void *ctx)
 dom_exception _dom_html_document_get_links(dom_html_document *doc, struct dom_html_collection **col)
 {
     /* Keep the live collection anchored to the document across root changes. */
-    return _dom_html_collection_create(doc, (dom_node_internal *)doc, links_callback, doc, col);
+    return _dom_html_collection_create(&doc->base, (dom_node_internal *)doc, links_callback, doc, col);
 }
 
 static bool __dom_html_document_node_is_form(dom_node_internal *node, void *ctx)
 {
-    dom_html_document *doc = (dom_html_document *)node->owner;
+    dom_document *doc = node->owner;
 
     UNUSED(ctx);
 
@@ -1078,7 +1080,8 @@ static bool __dom_html_document_node_is_form(dom_node_internal *node, void *ctx)
 dom_exception _dom_html_document_get_forms(dom_html_document *doc, struct dom_html_collection **col)
 {
     /* Keep the live collection anchored to the document across root changes. */
-    return _dom_html_collection_create(doc, (dom_node_internal *)doc, __dom_html_document_node_is_form, NULL, col);
+    return _dom_html_collection_create(
+        &doc->base, (dom_node_internal *)doc, __dom_html_document_node_is_form, NULL, col);
 }
 
 /**
@@ -1092,11 +1095,11 @@ bool anchors_callback(struct dom_node_internal *node, void *ctx)
 {
     dom_html_document *doc = ctx;
     if (node->type == DOM_ELEMENT_NODE &&
-        dom_string_caseless_isequal(node->name, doc->elements[DOM_HTML_ELEMENT_TYPE_A])) {
+        dom_string_caseless_isequal(node->name, doc->base.elements[DOM_HTML_ELEMENT_TYPE_A])) {
         bool has_value = false;
         dom_exception err;
 
-        err = dom_element_has_attribute(node, doc->memoised[hds_name], &has_value);
+        err = dom_element_has_attribute(node, doc->base.memoised[hds_name], &has_value);
         if (err != DOM_NO_ERR)
             return err;
 
@@ -1109,7 +1112,7 @@ bool anchors_callback(struct dom_node_internal *node, void *ctx)
 dom_exception _dom_html_document_get_anchors(dom_html_document *doc, struct dom_html_collection **col)
 {
     /* Keep the live collection anchored to the document across root changes. */
-    return _dom_html_collection_create(doc, (dom_node_internal *)doc, anchors_callback, doc, col);
+    return _dom_html_collection_create(&doc->base, (dom_node_internal *)doc, anchors_callback, doc, col);
 }
 
 dom_exception _dom_html_document_get_cookie(dom_html_document *doc, dom_string **cookie)

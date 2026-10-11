@@ -146,8 +146,7 @@ dom_exception _dom_html_map_element_copy_internal(dom_html_map_element *old, dom
         dom_exception ret;                                                                                             \
         dom_string *_memo_##attr;                                                                                      \
                                                                                                                        \
-        _memo_##attr =                                                                                                 \
-            ((struct dom_html_document *)((struct dom_node_internal *)element)->owner)->memoised[hds_##attr];          \
+        _memo_##attr = ((struct dom_document *)((struct dom_node_internal *)element)->owner)->memoised[hds_##attr];    \
                                                                                                                        \
         ret = dom_element_get_attribute(element, _memo_##attr, attr);                                                  \
                                                                                                                        \
@@ -159,8 +158,7 @@ dom_exception _dom_html_map_element_copy_internal(dom_html_map_element *old, dom
         dom_exception ret;                                                                                             \
         dom_string *_memo_##attr;                                                                                      \
                                                                                                                        \
-        _memo_##attr =                                                                                                 \
-            ((struct dom_html_document *)((struct dom_node_internal *)element)->owner)->memoised[hds_##attr];          \
+        _memo_##attr = ((struct dom_document *)((struct dom_node_internal *)element)->owner)->memoised[hds_##attr];    \
                                                                                                                        \
         ret = dom_element_set_attribute(element, _memo_##attr, attr);                                                  \
                                                                                                                        \
@@ -175,7 +173,7 @@ SIMPLE_GET_SET(name);
 static bool callback(struct dom_node_internal *node, void *ctx)
 {
     if (node->type == DOM_ELEMENT_NODE &&
-        dom_string_caseless_isequal(node->name, ((dom_html_document *)ctx)->elements[DOM_HTML_ELEMENT_TYPE_AREA])) {
+        dom_string_caseless_isequal(node->name, ((dom_document *)ctx)->elements[DOM_HTML_ELEMENT_TYPE_AREA])) {
         return true;
     }
 
@@ -192,7 +190,7 @@ static bool callback(struct dom_node_internal *node, void *ctx)
 
 dom_exception dom_html_map_element_get_areas(dom_html_map_element *ele, dom_html_collection **areas)
 {
-    dom_html_document *doc = (dom_html_document *)((dom_node_internal *)ele)->owner;
+    dom_document *doc = (dom_document *)((dom_node_internal *)ele)->owner;
 
     /*doc is passed as a parameter to callback to avoid repeated
      * calculations */

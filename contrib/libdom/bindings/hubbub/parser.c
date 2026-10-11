@@ -189,7 +189,7 @@ static hubbub_error create_element(void *parser, const hubbub_tag *tag, void **r
     /* HTML token names are local names, even when they contain a colon. Do
      * not run the DOM createElementNS QName validator/splitter on them. */
     err = _dom_html_document_create_element_internal(
-        (dom_html_document *)dom_parser->doc, name, dom_namespaces[tag->ns], NULL, (dom_html_element **)&element);
+        dom_parser->doc, name, dom_namespaces[tag->ns], NULL, (dom_html_element **)&element);
     if (err != DOM_NO_ERR) {
         dom_parser->msg(DOM_MSG_CRITICAL, dom_parser->mctx, "Can't create the DOM element");
         goto clean1;
@@ -458,7 +458,7 @@ static hubbub_error form_associate(void *parser, void *form, void *node)
     dom_hubbub_parser *dom_parser = (dom_hubbub_parser *)parser;
     dom_html_form_element *form_ele = form;
     dom_node_internal *ele = node;
-    dom_html_document *doc = (dom_html_document *)ele->owner;
+    dom_document *doc = ele->owner;
     dom_exception err = DOM_NO_ERR;
 
     /* Determine the kind of the node we have here. */

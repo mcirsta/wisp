@@ -30,7 +30,7 @@
  * \param col   The result collection object
  * \return DOM_NO_ERR on success, appropriate dom_exception on failure.
  */
-dom_exception _dom_html_collection_create(struct dom_html_document *doc, struct dom_node_internal *root,
+dom_exception _dom_html_collection_create(struct dom_document *doc, struct dom_node_internal *root,
     dom_callback_is_in_collection ic, void *ctx, struct dom_html_collection **col)
 {
     *col = malloc(sizeof(dom_html_collection));
@@ -50,7 +50,7 @@ dom_exception _dom_html_collection_create(struct dom_html_document *doc, struct 
  *              beint32_ts to the collection
  * \return DOM_NO_ERR on success.
  */
-dom_exception _dom_html_collection_initialise(struct dom_html_document *doc, struct dom_html_collection *col,
+dom_exception _dom_html_collection_initialise(struct dom_document *doc, struct dom_html_collection *col,
     struct dom_node_internal *root, dom_callback_is_in_collection ic, void *ctx)
 {
     assert(doc != NULL);
@@ -188,7 +188,7 @@ dom_exception dom_html_collection_item(dom_html_collection *col, uint32_t index,
 dom_exception dom_html_collection_named_item(dom_html_collection *col, dom_string *name, struct dom_node **node)
 {
     struct dom_node_internal *root = collection_root(col), *n = root;
-    dom_html_document *doc = (dom_html_document *)dom_node_get_owner(n);
+    dom_document *doc = (dom_document *)dom_node_get_owner(n);
     dom_exception err;
 
     while (n != NULL) {

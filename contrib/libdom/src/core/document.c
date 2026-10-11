@@ -19,6 +19,7 @@
 #include <dom/core/element.h>
 #include <dom/core/implementation.h>
 #include <dom/functypes.h>
+#include <dom/dom.h>
 
 #include "utils/namespace.h"
 #include "utils/utils.h"
@@ -35,6 +36,7 @@
 #include "core/pi.h"
 #include "core/string.h"
 #include "core/text.h"
+#include "html/html_document.h"
 
 /**
  * Item in list of active nodelists
@@ -51,13 +53,6 @@ static const struct dom_document_vtable document_vtable = {
     {{DOM_NODE_EVENT_TARGET_VTABLE}, DOM_NODE_VTABLE_DOCUMENT}, DOM_DOCUMENT_VTABLE};
 
 static const struct dom_node_protect_vtable document_protect_vtable = {DOM_DOCUMENT_PROTECT_VTABLE};
-
-
-/*----------------------------------------------------------------------*/
-
-/* Internally used helper functions */
-static dom_exception
-dom_document_dup_node(dom_document *doc, dom_node *node, bool deep, dom_node **result, dom_node_operation opt);
 
 
 /*----------------------------------------------------------------------*/
@@ -123,6 +118,8 @@ dom_exception _dom_document_initialise(dom_document *doc, dom_events_default_act
     doc->nodelists = NULL;
     doc->event_parent = NULL;
     doc->html = false;
+    doc->memoised = NULL;
+    doc->elements = NULL;
 
     err = _dom_node_initialise(&doc->base, doc, DOM_DOCUMENT_NODE, name, NULL, NULL, NULL);
     dom_string_unref(name);
@@ -319,6 +316,7 @@ bool _dom_document_finalise(dom_document *doc)
      * non-zero as these data structures reference the document because
      * they are held by the client. */
     doc->nodelists = NULL;
+    _dom_document_finalise_html_strings(doc);
 
     if (doc->id_name != NULL)
         dom_string_unref(doc->id_name);
@@ -658,9 +656,11 @@ dom_exception _dom_document_get_elements_by_tag_name(dom_document *doc, dom_stri
  */
 dom_exception _dom_document_import_node(dom_document *doc, dom_node *node, bool deep, dom_node **result)
 {
-    /* TODO: The DOM_INVALID_CHARACTER_ERR exception */
-
-    return dom_document_dup_node(doc, node, deep, result, DOM_NODE_IMPORTED);
+    *result = NULL;
+    if (((dom_node_internal *)node)->type == DOM_DOCUMENT_NODE)
+        return DOM_NOT_SUPPORTED_ERR;
+    return _dom_node_clone_for_document(
+        (dom_node_internal *)node, doc, deep, DOM_NODE_IMPORTED, (dom_node_internal **)result);
 }
 
 /**
@@ -715,8 +715,12 @@ _dom_document_create_element_ns(dom_document *doc, dom_string *namespace, dom_st
         return err;
     }
 
-    /* Attempt to create element */
-    err = _dom_element_create(doc, localname, namespace, prefix, result);
+    /* Element interfaces follow the namespace, including HTML in XML docs. */
+    if (namespace != NULL && dom_string_isequal(namespace, dom_namespaces[DOM_NAMESPACE_HTML]))
+        err = _dom_html_document_create_element_internal(
+            doc, localname, namespace, prefix, (dom_html_element **)result);
+    else
+        err = _dom_element_create(doc, localname, namespace, prefix, result);
 
     /* Tidy up */
     if (localname != NULL) {
@@ -1034,70 +1038,50 @@ dom_exception _dom_document_set_uri(dom_document *doc, dom_string *uri)
     return DOM_NO_ERR;
 }
 
-/**
- * Attempt to adopt a node from another document into this document
- *
- * \param doc     The document to adopt into
- * \param node    The node to adopt
- * \param result  Pointer to location to receive adopted node
- * \return DOM_NO_ERR                      on success,
- *         DOM_NO_MODIFICATION_ALLOWED_ERR if \p node or \p doc is readonly,
- *         DOM_NOT_SUPPORTED_ERR           if \p node is of type Document or
- *                                         DocumentType
- *
- * The returned node will have its reference count increased. It is
- * the responsibility of the caller to unref the node once it has
- * finished with it.
- *
- * @note: The spec said adoptNode may be light weight than the importNode
- *	  because the former need no Node creation. But in our implementation
- *	  this can't be ensured. Both adoptNode and importNode create new
- *	  nodes using the importing/adopting document's resource manager. So,
- *	  generally, the adoptNode and importNode call the same function
- *	  dom_document_dup_node.
- */
+/** Adopt in place: identity, listeners and user data belong to the node.
+ * https://dom.spec.whatwg.org/#concept-node-adopt
+ * Attr's internal parent is its owner element, not a DOM tree parent. */
 dom_exception _dom_document_adopt_node(dom_document *doc, dom_node *node, dom_node **result)
 {
     dom_node_internal *n = (dom_node_internal *)node;
     dom_exception err;
-    dom_node_internal *parent;
-    dom_node_internal *tmp;
-
     *result = NULL;
-
-    if (n->type == DOM_DOCUMENT_NODE || n->type == DOM_DOCUMENT_TYPE_NODE) {
+    if (n->type == DOM_DOCUMENT_NODE || n->type == DOM_ENTITY_NODE || n->type == DOM_ENTITY_REFERENCE_NODE ||
+        n->type == DOM_NOTATION_NODE)
         return DOM_NOT_SUPPORTED_ERR;
-    }
+    if (_dom_node_readonly_owner(n) || _dom_node_readonly_owner(&doc->base))
+        return DOM_NO_MODIFICATION_ALLOWED_ERR;
 
-    if (n->type == DOM_ENTITY_NODE || n->type == DOM_NOTATION_NODE || n->type == DOM_PROCESSING_INSTRUCTION_NODE ||
-        n->type == DOM_TEXT_NODE || n->type == DOM_CDATA_SECTION_NODE || n->type == DOM_COMMENT_NODE) {
-        *result = NULL;
-        return DOM_NO_ERR;
-    }
-
-    /* Support XML when necessary */
-    if (n->type == DOM_ENTITY_REFERENCE_NODE) {
-        return DOM_NOT_SUPPORTED_ERR;
-    }
-
-    err = dom_document_dup_node(doc, node, true, result, DOM_NODE_ADOPTED);
-    if (err != DOM_NO_ERR) {
-        *result = NULL;
-        return err;
-    }
-
-    parent = n->parent;
-    if (parent != NULL) {
-        err = dom_node_remove_child(parent, node, (void *)&tmp);
-        if (err != DOM_NO_ERR) {
-            dom_node_unref(*result);
-            *result = NULL;
+    /* Do the only fallible ownership preparation before removing anything. */
+    if (n->owner != doc && n->owner != NULL && n->owner->memoised != NULL) {
+        err = _dom_document_ensure_html_strings(doc);
+        if (err != DOM_NO_ERR)
             return err;
-        }
-        dom_node_unref(tmp);
     }
-
-    return DOM_NO_ERR;
+    dom_node_ref(n);
+    dom_node_ref(doc);
+    dom_document *old = (dom_document *)dom_node_ref(n->owner);
+    if (n->parent != NULL && n->type != DOM_ATTRIBUTE_NODE) {
+        dom_node *removed = NULL;
+        err = dom_node_remove_child(n->parent, n, &removed);
+        dom_node_unref(removed);
+        if (err != DOM_NO_ERR)
+            goto out;
+    }
+    if (n->owner != doc)
+        _dom_node_set_document(n, doc);
+    /* Legacy native user-data handlers are notifications, not copied data. */
+    for (dom_user_data *ud = n->user_data; ud != NULL; ud = ud->next) {
+        if (ud->handler != NULL)
+            ud->handler(DOM_NODE_ADOPTED, ud->key, ud->data, node, NULL);
+    }
+    *result = dom_node_ref(node);
+    err = DOM_NO_ERR;
+out:
+    dom_node_unref(old);
+    dom_node_unref(doc);
+    dom_node_unref(n);
+    return err;
 }
 
 /**
@@ -1372,90 +1356,6 @@ dom_exception _dom_find_element_by_id(dom_node_internal *root, dom_string *id, d
             }
         }
     }
-
-    return DOM_NO_ERR;
-}
-
-/**
- * Duplicate a Node
- *
- * \param doc     The documen
- * \param node    The node to duplicate
- * \param deep    Whether to make a deep copy
- * \param result  The returned node
- * \param opt     Whether this is adopt or import operation
- * \return DOM_NO_ERR on success, appropriate dom_exception on failure.
- */
-dom_exception
-dom_document_dup_node(dom_document *doc, dom_node *node, bool deep, dom_node **result, dom_node_operation opt)
-{
-    dom_node_internal *n = (dom_node_internal *)node;
-    dom_node_internal *ret;
-    dom_exception err;
-    dom_node_internal *child, *r;
-    dom_user_data *ud;
-
-    if (_dom_node_readonly_owner(&doc->base) || _dom_node_readonly(n))
-        return DOM_NO_MODIFICATION_ALLOWED_ERR;
-
-    if (n->type == DOM_DOCUMENT_NODE || n->type == DOM_DOCUMENT_TYPE_NODE)
-        return DOM_NOT_SUPPORTED_ERR;
-
-    err = dom_node_copy(node, &ret);
-    if (err != DOM_NO_ERR)
-        return err;
-
-    if (n->type == DOM_ATTRIBUTE_NODE) {
-        _dom_attr_set_specified((dom_attr *)node, true);
-        deep = true;
-    }
-
-    if (n->type == DOM_ENTITY_REFERENCE_NODE) {
-        deep = false;
-    }
-
-    if (n->type == DOM_ELEMENT_NODE) {
-        /* Specified attributes are copyied but not default attributes,
-         * if the document object hold all the default attributes, we
-         * have nothing to do here */
-    }
-
-    if (opt == DOM_NODE_ADOPTED && (n->type == DOM_ENTITY_NODE || n->type == DOM_NOTATION_NODE)) {
-        /* We did not support XML now */
-        return DOM_NOT_SUPPORTED_ERR;
-    }
-
-    if (deep == true) {
-        child = ((dom_node_internal *)node)->first_child;
-        while (child != NULL) {
-            err = dom_document_import_node(doc, child, deep, (void *)&r);
-            if (err != DOM_NO_ERR) {
-                dom_node_unref(ret);
-                return err;
-            }
-
-            err = dom_node_append_child(ret, r, (void *)&r);
-            if (err != DOM_NO_ERR) {
-                dom_node_unref(ret);
-                dom_node_unref(r);
-                return err;
-            }
-            dom_node_unref(r);
-
-            child = child->next;
-        }
-    }
-
-    /* Call the dom_user_data_handlers */
-    ud = n->user_data;
-    while (ud != NULL) {
-        if (ud->handler != NULL) {
-            ud->handler(opt, ud->key, ud->data, node, (dom_node *)ret);
-        }
-        ud = ud->next;
-    }
-
-    *result = (dom_node *)ret;
 
     return DOM_NO_ERR;
 }

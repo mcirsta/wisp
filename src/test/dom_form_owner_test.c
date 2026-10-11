@@ -258,6 +258,27 @@ START_TEST(test_parser_clone)
 }
 END_TEST
 
+START_TEST(test_parser_adoption)
+{
+    parse_control(_i % PARSER_TYPES);
+    dom_node *control = by_id("control"), *form = by_id("parser"), *group = by_id("group"), *result = NULL;
+    dom_document *destination = NULL;
+    ck_assert_int_eq(
+        dom_implementation_create_document(DOM_IMPLEMENTATION_HTML, NULL, NULL, NULL, NULL, NULL, &destination),
+        DOM_NO_ERR);
+    dom_node *moving = _i < PARSER_TYPES ? group : control;
+    ck_assert_int_eq(dom_document_adopt_node(destination, moving, &result), DOM_NO_ERR);
+    ck_assert_ptr_eq(result, moving);
+    dom_node_unref(result);
+    expect(control, moving == group ? form : NULL, "adoption preserves only form owners in the moved subtree");
+    dom_document *owner = NULL;
+    ck_assert_int_eq(dom_node_get_owner_document(control, &owner), DOM_NO_ERR);
+    ck_assert_ptr_eq(owner, destination);
+    dom_node_unref(owner);
+    dom_node_unref(destination);
+}
+END_TEST
+
 START_TEST(test_parser_owner_becomes_ancestor)
 {
     parse_control(_i);
@@ -738,6 +759,7 @@ int main(void)
     tcase_add_loop_test(tc, test_first_matching_id, 0, CONTROL_TYPES);
     tcase_add_loop_test(tc, test_parser_association_and_reset, 0, PARSER_TYPES);
     tcase_add_loop_test(tc, test_parser_clone, 0, PARSER_TYPES);
+    tcase_add_loop_test(tc, test_parser_adoption, 0, 2 * PARSER_TYPES);
     tcase_add_loop_test(tc, test_parser_owner_becomes_ancestor, 0, PARSER_TYPES);
     tcase_add_loop_test(tc, test_fragment_reparenting, 0, 2 * PARSER_TYPES);
     tcase_add_loop_test(tc, test_form_attribute_discards_parser_identity, 0, 2 * PARSER_TYPES);

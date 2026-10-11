@@ -307,6 +307,68 @@ and byte-identical viewport PNG as the pre-change capture. Its already documente
 `llcache.c` null-source/zero-length memcpy UBSan diagnostic remains; the native
 suites are clean. No GTK build or tests were run.
 
+### Native document adoption and cloning prerequisite (2026-10-11)
+
+Template contents require a separate inert owner document. Inspection of that
+boundary found that libdom's `adoptNode` copied instead of moving, returned no
+node for text/comments, and rejected doctypes. `importNode` left the copy owned
+by the source document and leaked a child reference during deep import. These
+native defects are fixed before adding templates or exposing further JS APIs.
+
+The implementation follows the DOM Standard's
+[adoption](https://dom.spec.whatwg.org/#concept-node-adopt) and
+[cloning](https://dom.spec.whatwg.org/#concept-node-clone) algorithms for the node
+types supported here:
+
+- Adoption preserves identity, listeners, user data and element state. An
+  iterative subtree walk transfers document ownership and libdom's pending-node
+  lifetime bookkeeping, including attributes and their legacy value children.
+  Same-document adoption still detaches ordinary nodes. Adopting an attribute
+  preserves its `ownerElement`; it is not a DOM child of that element. Attributes
+  whose document differs from their element keep their own document alive.
+- Import and clone share one copy path. Attribute values are copied even for a
+  shallow element/attribute copy; source nodes stay untouched. Copies retain
+  element-specific state and namespaces but not listeners or user data. Partial
+  copies unwind through the normal destructor and preserve allocation errors.
+  Copying a processing instruction also fixes an old incorrect return pointer;
+  doctype copies preserve public/system IDs.
+- HTML element methods no longer cast every owner to `HTMLDocument`. Their name
+  tables live on the common document, and XML documents allocate them lazily.
+  Existing HTML documents retain the same tables and direct lookup cost. HTML
+  namespace elements created in an XML document use the shared typed factory;
+  document type still controls name casing and query behavior. Table helpers
+  explicitly create HTML-namespace rows/cells/sections after adoption, following
+  the [HTML table construction algorithms](https://html.spec.whatwg.org/multipage/tables.html).
+  Adoption clears the document-dependent `tagName` cache.
+- Existing form-owner rules and live collections remain in force. Moving a
+  control separately clears its old parser association; moving the common form
+  subtree preserves it. Tag-query filters keep the semantics chosen when each
+  collection was created, as specified by the
+  [qualified-name query algorithm](https://dom.spec.whatwg.org/#concept-getelementsbytagname).
+
+The old Duktape `Node.bnd` was checked again: its `cloneNode` was a thin wrapper
+around the same native API and provided no ownership fix. Its `Document.bnd`
+contains no implemented adoption/import methods to reuse.
+
+This is native infrastructure only. QuickJS does not yet expose `adoptNode`,
+`importNode`, `cloneNode` or `innerHTML`. Cross-document JS wrapper/realm handling,
+automatic adoption in native insertion APIs, cloning whole Documents, templates
+and serialization are not claimed complete. Next: add template content ownership
+and parser insertion modes, then serialization and the logged `innerHTML` binding.
+
+Validation: all 949 checks across 14 native DOM, JS, form and interaction
+suites pass on the final Debug build under ASan/UBSan with LeakSanitizer enabled,
+with no sanitizer diagnostics. This includes 421 parser cases and 25 new native
+ownership cases. The Release ownership suite passes 28 checks, including the
+allocation-failure sweep and failed-preparation/retry cases. All 117 Qt suites
+passed for the ownership change; after the final table-construction follow-up,
+the full native group and all four Qt table suites were rerun and passed.
+The final normalized saved eBihoreanul capture completes at 1280 x 11382 with a
+byte-identical viewport PNG. The previously documented `llcache.c` null-source /
+zero-length memcpy UBSan diagnostic remains in that capture, not in the native
+suites. Builds are warning-free, `git diff --check` is clean, and no GTK build or
+tests were run.
+
 ## Assessment
 
 Keep QuickJS-ng and libdom. The missing part is the browser binding and execution

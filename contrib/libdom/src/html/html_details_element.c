@@ -18,7 +18,7 @@ static dom_node_internal *details_next(dom_node_internal *node, dom_node_interna
  * this element. Group names are exact nonempty strings within the same tree. */
 static dom_exception details_ensure_exclusive(dom_node_internal *element, bool close_other)
 {
-    dom_html_document *doc = (dom_html_document *)element->owner;
+    dom_document *doc = (dom_document *)element->owner;
     dom_string *open_name = doc->memoised[hds_open];
     dom_string *name_name = doc->memoised[hds_name];
     dom_string *name = NULL;
@@ -66,7 +66,7 @@ _dom_html_details_attribute_changed(dom_element *element, dom_string *namespace,
     dom_node_internal *node = (dom_node_internal *)element;
     if (namespace != NULL || !_dom_html_is_details(node))
         return DOM_NO_ERR;
-    dom_html_document *doc = (dom_html_document *)node->owner;
+    dom_document *doc = (dom_document *)node->owner;
     if (dom_string_isequal(name, doc->memoised[hds_name]))
         return details_ensure_exclusive(node, false);
     if (added && dom_string_isequal(name, doc->memoised[hds_open]))

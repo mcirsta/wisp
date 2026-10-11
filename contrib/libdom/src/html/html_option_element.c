@@ -88,10 +88,10 @@ void _dom_html_option_element_destroy(struct dom_html_option_element *ele)
 
 dom_exception dom_html_option_element_get_form(dom_html_option_element *option, dom_html_form_element **form)
 {
-    dom_html_document *doc;
+    dom_document *doc;
     dom_node_internal *select = ((dom_node_internal *)option)->parent;
 
-    doc = (dom_html_document *)((dom_node_internal *)option)->owner;
+    doc = (dom_document *)((dom_node_internal *)option)->owner;
 
     /* Search ancestor chain for SELECT element */
     while (select != NULL) {
@@ -231,7 +231,7 @@ dom_exception dom_html_option_element_get_text(dom_html_option_element *option, 
  */
 dom_exception dom_html_option_element_get_index(dom_html_option_element *option, int32_t *index)
 {
-    dom_html_document *doc = (dom_html_document *)dom_node_get_owner(option);
+    dom_document *doc = (dom_document *)dom_node_get_owner(option);
     int32_t idx = 0;
     dom_node_internal *n = ((dom_node_internal *)option)->parent;
 
@@ -262,7 +262,7 @@ dom_exception dom_html_option_element_get_disabled(dom_html_option_element *ele,
 dom_exception dom_html_option_element_is_disabled(dom_html_option_element *option, bool *disabled)
 {
     dom_node_internal *node = (dom_node_internal *)option;
-    dom_html_document *doc = (dom_html_document *)node->owner;
+    dom_document *doc = (dom_document *)node->owner;
     dom_exception err = dom_element_has_attribute(option, doc->memoised[hds_disabled], disabled);
     if (err != DOM_NO_ERR || *disabled)
         return err;
@@ -305,9 +305,9 @@ dom_exception dom_html_option_element_set_disabled(dom_html_option_element *ele,
  */
 dom_exception dom_html_option_element_get_label(dom_html_option_element *option, dom_string **label)
 {
-    dom_html_document *doc;
+    dom_document *doc;
 
-    doc = (dom_html_document *)((dom_node_internal *)option)->owner;
+    doc = (dom_document *)((dom_node_internal *)option)->owner;
 
     return dom_element_get_attribute(option, doc->memoised[hds_label], label);
 }
@@ -321,9 +321,9 @@ dom_exception dom_html_option_element_get_label(dom_html_option_element *option,
  */
 dom_exception dom_html_option_element_set_label(dom_html_option_element *option, dom_string *label)
 {
-    dom_html_document *doc;
+    dom_document *doc;
 
-    doc = (dom_html_document *)((dom_node_internal *)option)->owner;
+    doc = (dom_document *)((dom_node_internal *)option)->owner;
 
     return dom_element_set_attribute(option, doc->memoised[hds_label], label);
 }
@@ -361,11 +361,11 @@ dom_exception dom_html_option_element_set_selected(dom_html_option_element *ele,
  */
 dom_exception dom_html_option_element_get_value(dom_html_option_element *option, dom_string **value)
 {
-    dom_html_document *doc;
+    dom_document *doc;
     bool has_value = false;
     dom_exception err;
 
-    doc = (dom_html_document *)((dom_node_internal *)option)->owner;
+    doc = (dom_document *)((dom_node_internal *)option)->owner;
 
     err = dom_element_has_attribute(option, doc->memoised[hds_value], &has_value);
     if (err != DOM_NO_ERR)
@@ -387,9 +387,9 @@ dom_exception dom_html_option_element_get_value(dom_html_option_element *option,
  */
 dom_exception dom_html_option_element_set_value(dom_html_option_element *option, dom_string *value)
 {
-    dom_html_document *doc;
+    dom_document *doc;
 
-    doc = (dom_html_document *)((dom_node_internal *)option)->owner;
+    doc = (dom_document *)((dom_node_internal *)option)->owner;
 
     return dom_element_set_attribute(option, doc->memoised[hds_value], value);
 }
@@ -403,7 +403,7 @@ dom_exception
 _dom_html_option_element_parse_attribute(dom_element *ele, dom_string *name, dom_string *value, dom_string **parsed)
 {
     dom_html_option_element *option = (dom_html_option_element *)ele;
-    dom_html_document *html = (dom_html_document *)(ele->base.owner);
+    dom_document *html = (dom_document *)(ele->base.owner);
 
     /** \todo Find some way to do the equiv for default_selected to be
      * false instead of true.  Some end-tag hook in the binding perhaps?

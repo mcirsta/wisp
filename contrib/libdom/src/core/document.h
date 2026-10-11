@@ -61,6 +61,9 @@ struct dom_document {
     /**< The DocumentEvent interface */
     dom_document_quirks_mode quirks;
     /**< Document is in quirks mode */
+    /* Lazy HTML name tables, also used by adopted HTML elements in XML. */
+    dom_string **memoised;
+    dom_string **elements;
     bool html; /**< HTML document type; distinct from an element's namespace. */
     dom_string *_memo_empty; /**< The string ''. */
 
@@ -168,6 +171,9 @@ dom_exception _dom_document_copy(dom_node_internal *old, dom_node_internal **cop
 
 
 /*---------------------------- Helper functions ---------------------------*/
+
+dom_exception _dom_document_ensure_html_strings(dom_document *doc);
+void _dom_document_finalise_html_strings(dom_document *doc);
 
 /* Try to destroy the document:
  * When the refcnt is zero and the pending list is empty, we can destroy this

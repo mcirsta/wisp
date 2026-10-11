@@ -24,9 +24,9 @@ struct dom_html_collection {
      * this collection
      */
     void *ctx; /**< Context for the callback */
-    struct dom_html_document *doc; /**< The document created this
-                                    * collection
-                                    */
+    struct dom_document *doc; /**< The document created this
+                               * collection
+                               */
     struct dom_node_internal *root;
     /**< The root node of this collection */
     bool whole_tree; /**< Resolve root's current tree for form ownership. */
@@ -34,10 +34,10 @@ struct dom_html_collection {
     /**< Reference counting */
 };
 
-dom_exception _dom_html_collection_create(struct dom_html_document *doc, struct dom_node_internal *root,
+dom_exception _dom_html_collection_create(struct dom_document *doc, struct dom_node_internal *root,
     dom_callback_is_in_collection ic, void *ctx, struct dom_html_collection **col);
 
-dom_exception _dom_html_collection_initialise(struct dom_html_document *doc, struct dom_html_collection *col,
+dom_exception _dom_html_collection_initialise(struct dom_document *doc, struct dom_html_collection *col,
     struct dom_node_internal *root, dom_callback_is_in_collection ic, void *ctx);
 
 void _dom_html_collection_finalise(struct dom_html_collection *col);

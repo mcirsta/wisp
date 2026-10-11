@@ -145,8 +145,7 @@ _dom_html_table_cell_element_copy_internal(dom_html_table_cell_element *old, dom
         dom_exception ret;                                                                                             \
         dom_string *_memo_##attr;                                                                                      \
                                                                                                                        \
-        _memo_##attr =                                                                                                 \
-            ((struct dom_html_document *)((struct dom_node_internal *)element)->owner)->memoised[hds_##attr];          \
+        _memo_##attr = ((struct dom_document *)((struct dom_node_internal *)element)->owner)->memoised[hds_##attr];    \
                                                                                                                        \
         ret = dom_element_get_attribute(element, _memo_##attr, attr);                                                  \
                                                                                                                        \
@@ -158,8 +157,7 @@ _dom_html_table_cell_element_copy_internal(dom_html_table_cell_element *old, dom
         dom_exception ret;                                                                                             \
         dom_string *_memo_##attr;                                                                                      \
                                                                                                                        \
-        _memo_##attr =                                                                                                 \
-            ((struct dom_html_document *)((struct dom_node_internal *)element)->owner)->memoised[hds_##attr];          \
+        _memo_##attr = ((struct dom_document *)((struct dom_node_internal *)element)->owner)->memoised[hds_##attr];    \
                                                                                                                        \
         ret = dom_element_set_attribute(element, _memo_##attr, attr);                                                  \
                                                                                                                        \
@@ -190,7 +188,7 @@ SIMPLE_GET_SET(width);
 dom_exception dom_html_table_cell_element_get_cell_index(dom_html_table_cell_element *table_cell, dom_long *cell_index)
 {
     dom_node_internal *n = ((dom_node_internal *)table_cell)->parent;
-    dom_html_document *doc = (dom_html_document *)(n->owner);
+    dom_document *doc = (dom_document *)(n->owner);
     int32_t cnt = 0;
     dom_node_internal *root;
     while (n != NULL) {

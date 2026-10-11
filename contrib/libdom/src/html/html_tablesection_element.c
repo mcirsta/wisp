@@ -149,8 +149,7 @@ _dom_html_table_section_element_copy_internal(dom_html_table_section_element *ol
         dom_exception ret;                                                                                             \
         dom_string *_memo_##attr;                                                                                      \
                                                                                                                        \
-        _memo_##attr =                                                                                                 \
-            ((struct dom_html_document *)((struct dom_node_internal *)element)->owner)->memoised[hds_##attr];          \
+        _memo_##attr = ((struct dom_document *)((struct dom_node_internal *)element)->owner)->memoised[hds_##attr];    \
                                                                                                                        \
         ret = dom_element_get_attribute(element, _memo_##attr, attr);                                                  \
                                                                                                                        \
@@ -162,8 +161,7 @@ _dom_html_table_section_element_copy_internal(dom_html_table_section_element *ol
         dom_exception ret;                                                                                             \
         dom_string *_memo_##attr;                                                                                      \
                                                                                                                        \
-        _memo_##attr =                                                                                                 \
-            ((struct dom_html_document *)((struct dom_node_internal *)element)->owner)->memoised[hds_##attr];          \
+        _memo_##attr = ((struct dom_document *)((struct dom_node_internal *)element)->owner)->memoised[hds_##attr];    \
                                                                                                                        \
         ret = dom_element_set_attribute(element, _memo_##attr, attr);                                                  \
                                                                                                                        \
@@ -179,7 +177,7 @@ SIMPLE_GET_SET(v_align);
 /* The callback function for  _dom_html_collection_create*/
 static bool table_section_callback(struct dom_node_internal *node, void *ctx)
 {
-    dom_html_document *doc = ctx;
+    dom_document *doc = ctx;
     if (node->type == DOM_ELEMENT_NODE &&
         dom_string_caseless_isequal(node->name, doc->elements[DOM_HTML_ELEMENT_TYPE_TR])) {
         return true;
@@ -197,7 +195,7 @@ static bool table_section_callback(struct dom_node_internal *node, void *ctx)
 dom_exception
 dom_html_table_section_element_get_rows(dom_html_table_section_element *element, dom_html_collection **rows)
 {
-    dom_html_document *doc = (dom_html_document *)((dom_node_internal *)element)->owner;
+    dom_document *doc = (dom_document *)((dom_node_internal *)element)->owner;
     return _dom_html_collection_create(doc, (dom_node_internal *)element, table_section_callback, (void *)doc, rows);
 }
 
@@ -211,14 +209,14 @@ dom_html_table_section_element_get_rows(dom_html_table_section_element *element,
 dom_exception dom_html_table_section_element_insert_row(
     dom_html_table_section_element *element, int32_t index, dom_html_element **new_row)
 {
-    dom_html_document *doc = (dom_html_document *)((dom_node_internal *)element)->owner;
+    dom_document *doc = (dom_document *)((dom_node_internal *)element)->owner;
     dom_html_collection *rows; /*< The collection of rows in input
                       table_section_element*/
     uint32_t len; /*< The size of the row collection */
     dom_exception exp; /*< Variable for getting the exceptions*/
     dom_node *new_node;
 
-    exp = dom_document_create_element(doc, doc->elements[DOM_HTML_ELEMENT_TYPE_TR], (dom_element **)&new_node);
+    exp = _dom_html_document_create_element(doc, doc->elements[DOM_HTML_ELEMENT_TYPE_TR], (dom_element **)&new_node);
     if (exp != DOM_NO_ERR)
         return exp;
 

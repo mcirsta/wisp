@@ -72,7 +72,7 @@ dom_exception _dom_html_element_initialise(struct dom_html_element_create_params
 
     el->type = params->type;
 
-    err = _dom_element_initialise(&params->doc->base, &el->base, params->name, params->namespace, params->prefix);
+    err = _dom_element_initialise(params->doc, &el->base, params->name, params->namespace, params->prefix);
     if (err != DOM_NO_ERR)
         return err;
 
@@ -141,8 +141,7 @@ dom_exception _dom_html_element_copy_internal(dom_html_element *old, dom_html_el
         dom_exception ret;                                                                                             \
         dom_string *_memo_##attr;                                                                                      \
                                                                                                                        \
-        _memo_##attr =                                                                                                 \
-            ((struct dom_html_document *)((struct dom_node_internal *)element)->owner)->memoised[hds_##attr];          \
+        _memo_##attr = ((struct dom_document *)((struct dom_node_internal *)element)->owner)->memoised[hds_##attr];    \
                                                                                                                        \
         ret = dom_element_get_attribute(element, _memo_##attr, fattr);                                                 \
                                                                                                                        \
@@ -154,8 +153,7 @@ dom_exception _dom_html_element_copy_internal(dom_html_element *old, dom_html_el
         dom_exception ret;                                                                                             \
         dom_string *_memo_##attr;                                                                                      \
                                                                                                                        \
-        _memo_##attr =                                                                                                 \
-            ((struct dom_html_document *)((struct dom_node_internal *)element)->owner)->memoised[hds_##attr];          \
+        _memo_##attr = ((struct dom_document *)((struct dom_node_internal *)element)->owner)->memoised[hds_##attr];    \
                                                                                                                        \
         ret = dom_element_set_attribute(element, _memo_##attr, fattr);                                                 \
                                                                                                                        \

@@ -138,7 +138,7 @@ dom_exception dom_html_head_element_get_profile(dom_html_head_element *element, 
     dom_exception ret;
     dom_string *_memo_profile;
 
-    _memo_profile = ((struct dom_html_document *)((struct dom_node_internal *)element)->owner)->memoised[hds_profile];
+    _memo_profile = ((struct dom_document *)((struct dom_node_internal *)element)->owner)->memoised[hds_profile];
 
     ret = dom_element_get_attribute(element, _memo_profile, profile);
 
@@ -150,7 +150,7 @@ dom_exception dom_html_head_element_set_profile(dom_html_head_element *element, 
     dom_exception ret;
     dom_string *_memo_profile;
 
-    _memo_profile = ((struct dom_html_document *)((struct dom_node_internal *)element)->owner)->memoised[hds_profile];
+    _memo_profile = ((struct dom_document *)((struct dom_node_internal *)element)->owner)->memoised[hds_profile];
 
     ret = dom_element_set_attribute(element, _memo_profile, profile);
 

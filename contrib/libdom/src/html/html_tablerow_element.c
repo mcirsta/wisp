@@ -147,8 +147,7 @@ _dom_html_table_row_element_copy_internal(dom_html_table_row_element *old, dom_h
         dom_exception ret;                                                                                             \
         dom_string *_memo_##attr;                                                                                      \
                                                                                                                        \
-        _memo_##attr =                                                                                                 \
-            ((struct dom_html_document *)((struct dom_node_internal *)element)->owner)->memoised[hds_##attr];          \
+        _memo_##attr = ((struct dom_document *)((struct dom_node_internal *)element)->owner)->memoised[hds_##attr];    \
                                                                                                                        \
         ret = dom_element_get_attribute(element, _memo_##attr, attr);                                                  \
                                                                                                                        \
@@ -160,8 +159,7 @@ _dom_html_table_row_element_copy_internal(dom_html_table_row_element *old, dom_h
         dom_exception ret;                                                                                             \
         dom_string *_memo_##attr;                                                                                      \
                                                                                                                        \
-        _memo_##attr =                                                                                                 \
-            ((struct dom_html_document *)((struct dom_node_internal *)element)->owner)->memoised[hds_##attr];          \
+        _memo_##attr = ((struct dom_document *)((struct dom_node_internal *)element)->owner)->memoised[hds_##attr];    \
                                                                                                                        \
         ret = dom_element_set_attribute(element, _memo_##attr, attr);                                                  \
                                                                                                                        \
@@ -188,7 +186,7 @@ dom_exception dom_html_table_row_element_get_row_index(dom_html_table_row_elemen
     dom_exception exp;
     dom_node_internal *n = ((dom_node_internal *)table_row)->parent;
     dom_node_internal *parent = n;
-    dom_html_document *doc = (dom_html_document *)((dom_node_internal *)table_row)->owner;
+    dom_document *doc = (dom_document *)((dom_node_internal *)table_row)->owner;
 
     uint32_t count = 0;
 
@@ -268,7 +266,7 @@ dom_exception
 dom_html_table_row_element_get_section_row_index(dom_html_table_row_element *table_row, int32_t *section_row_index)
 {
     dom_node_internal *n = ((dom_node_internal *)table_row)->parent;
-    dom_html_document *doc = (dom_html_document *)((dom_node_internal *)table_row)->owner;
+    dom_document *doc = (dom_document *)((dom_node_internal *)table_row)->owner;
     int32_t count = 0;
 
     if (n == NULL) {
@@ -296,7 +294,7 @@ dom_html_table_row_element_get_section_row_index(dom_html_table_row_element *tab
  */
 static bool table_cells_callback(struct dom_node_internal *node, void *ctx)
 {
-    dom_html_document *doc = ctx;
+    dom_document *doc = ctx;
     if (node->type == DOM_ELEMENT_NODE &&
         dom_string_caseless_isequal(node->name, doc->elements[DOM_HTML_ELEMENT_TYPE_TD])) {
         return true;
@@ -313,7 +311,7 @@ static bool table_cells_callback(struct dom_node_internal *node, void *ctx)
  */
 dom_exception dom_html_table_row_element_get_cells(dom_html_table_row_element *element, dom_html_collection **cells)
 {
-    dom_html_document *doc = (dom_html_document *)((dom_node_internal *)element)->owner;
+    dom_document *doc = (dom_document *)((dom_node_internal *)element)->owner;
     return _dom_html_collection_create(doc, (dom_node_internal *)element, table_cells_callback, (void *)doc, cells);
 }
 
@@ -327,7 +325,7 @@ dom_exception dom_html_table_row_element_get_cells(dom_html_table_row_element *e
 dom_exception
 dom_html_table_row_element_insert_cell(dom_html_table_row_element *element, int32_t index, dom_html_element **cell)
 {
-    dom_html_document *doc = (dom_html_document *)((dom_node_internal *)element)->owner;
+    dom_document *doc = (dom_document *)((dom_node_internal *)element)->owner;
 
     dom_html_element *new_cell;
 
@@ -335,7 +333,7 @@ dom_html_table_row_element_insert_cell(dom_html_table_row_element *element, int3
     uint32_t len; /*< The size of the cell collection */
     dom_exception exp; /*< Variable for getting the exceptions*/
 
-    exp = dom_document_create_element(doc, doc->elements[DOM_HTML_ELEMENT_TYPE_TD], (dom_element **)&new_cell);
+    exp = _dom_html_document_create_element(doc, doc->elements[DOM_HTML_ELEMENT_TYPE_TD], (dom_element **)&new_cell);
     if (exp != DOM_NO_ERR)
         return exp;
 

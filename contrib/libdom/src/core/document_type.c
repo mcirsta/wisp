@@ -309,8 +309,17 @@ void _dom_dt_destroy(dom_node_internal *node)
 /* The copy constructor of this class */
 dom_exception _dom_dt_copy(dom_node_internal *old, dom_node_internal **copy)
 {
-    UNUSED(old);
-    UNUSED(copy);
-
-    return DOM_NOT_SUPPORTED_ERR;
+    dom_document_type *source = (dom_document_type *)old;
+    dom_document_type *result = malloc(sizeof(*result));
+    if (result == NULL)
+        return DOM_NO_MEM_ERR;
+    dom_exception err = _dom_node_copy_internal(old, &result->base);
+    if (err != DOM_NO_ERR) {
+        free(result);
+        return err;
+    }
+    result->public_id = dom_string_ref(source->public_id);
+    result->system_id = dom_string_ref(source->system_id);
+    *copy = &result->base;
+    return DOM_NO_ERR;
 }

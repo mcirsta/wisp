@@ -323,8 +323,7 @@ _dom_html_text_area_element_copy_internal(dom_html_text_area_element *old, dom_h
         dom_exception ret;                                                                                             \
         dom_string *_memo_##attr;                                                                                      \
                                                                                                                        \
-        _memo_##attr =                                                                                                 \
-            ((struct dom_html_document *)((struct dom_node_internal *)element)->owner)->memoised[hds_##attr];          \
+        _memo_##attr = ((struct dom_document *)((struct dom_node_internal *)element)->owner)->memoised[hds_##attr];    \
                                                                                                                        \
         ret = dom_element_get_attribute(element, _memo_##attr, attr);                                                  \
                                                                                                                        \
@@ -336,8 +335,7 @@ _dom_html_text_area_element_copy_internal(dom_html_text_area_element *old, dom_h
         dom_exception ret;                                                                                             \
         dom_string *_memo_##attr;                                                                                      \
                                                                                                                        \
-        _memo_##attr =                                                                                                 \
-            ((struct dom_html_document *)((struct dom_node_internal *)element)->owner)->memoised[hds_##attr];          \
+        _memo_##attr = ((struct dom_document *)((struct dom_node_internal *)element)->owner)->memoised[hds_##attr];    \
                                                                                                                        \
         ret = dom_element_set_attribute(element, _memo_##attr, attr);                                                  \
                                                                                                                        \
@@ -351,7 +349,7 @@ SIMPLE_GET_SET(name);
 
 dom_exception dom_html_text_area_element_get_type(dom_html_text_area_element *text_area, dom_string **type)
 {
-    dom_html_document *html = (dom_html_document *)((dom_node_internal *)text_area)->owner;
+    dom_document *html = (dom_document *)((dom_node_internal *)text_area)->owner;
 
     *type = html->memoised[hds_textarea];
     dom_string_ref(*type);
@@ -407,7 +405,7 @@ dom_exception _dom_html_text_area_element_set_form(dom_html_text_area_element *t
  */
 dom_exception dom_html_text_area_element_blur(dom_html_text_area_element *ele)
 {
-    struct dom_html_document *doc = (dom_html_document *)dom_node_get_owner(ele);
+    struct dom_document *doc = (dom_document *)dom_node_get_owner(ele);
     bool success = false;
     assert(doc != NULL);
 
@@ -425,7 +423,7 @@ dom_exception dom_html_text_area_element_blur(dom_html_text_area_element *ele)
  */
 dom_exception dom_html_text_area_element_focus(dom_html_text_area_element *ele)
 {
-    struct dom_html_document *doc = (dom_html_document *)dom_node_get_owner(ele);
+    struct dom_document *doc = (dom_document *)dom_node_get_owner(ele);
     bool success = false;
     assert(doc != NULL);
 
@@ -443,7 +441,7 @@ dom_exception dom_html_text_area_element_focus(dom_html_text_area_element *ele)
  */
 dom_exception dom_html_text_area_element_select(dom_html_text_area_element *ele)
 {
-    struct dom_html_document *doc = (dom_html_document *)dom_node_get_owner(ele);
+    struct dom_document *doc = (dom_document *)dom_node_get_owner(ele);
     bool success = false;
     assert(doc != NULL);
 

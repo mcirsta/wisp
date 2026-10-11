@@ -265,7 +265,7 @@ dom_exception
 _dom_html_input_element_parse_attribute(dom_element *ele, dom_string *name, dom_string *value, dom_string **parsed)
 {
     dom_html_input_element *input = (dom_html_input_element *)ele;
-    dom_html_document *html = (dom_html_document *)(ele->base.owner);
+    dom_document *html = (dom_document *)(ele->base.owner);
 
     /** \todo Find some way to do the equiv for default_checked to be
      * false instead of true.  Some end-tag hook in the binding perhaps?
@@ -350,8 +350,7 @@ dom_exception _dom_html_input_element_copy_internal(dom_html_input_element *old,
         dom_exception ret;                                                                                             \
         dom_string *_memo_##attr;                                                                                      \
                                                                                                                        \
-        _memo_##attr =                                                                                                 \
-            ((struct dom_html_document *)((struct dom_node_internal *)element)->owner)->memoised[hds_##attr];          \
+        _memo_##attr = ((struct dom_document *)((struct dom_node_internal *)element)->owner)->memoised[hds_##attr];    \
                                                                                                                        \
         ret = dom_element_get_attribute(element, _memo_##attr, attr);                                                  \
                                                                                                                        \
@@ -363,8 +362,7 @@ dom_exception _dom_html_input_element_copy_internal(dom_html_input_element *old,
         dom_exception ret;                                                                                             \
         dom_string *_memo_##attr;                                                                                      \
                                                                                                                        \
-        _memo_##attr =                                                                                                 \
-            ((struct dom_html_document *)((struct dom_node_internal *)element)->owner)->memoised[hds_##attr];          \
+        _memo_##attr = ((struct dom_document *)((struct dom_node_internal *)element)->owner)->memoised[hds_##attr];    \
                                                                                                                        \
         ret = dom_element_set_attribute(element, _memo_##attr, attr);                                                  \
                                                                                                                        \
@@ -430,7 +428,7 @@ dom_exception _dom_html_input_element_set_form(dom_html_input_element *input, do
  */
 dom_exception dom_html_input_element_blur(dom_html_input_element *ele)
 {
-    struct dom_html_document *doc = (dom_html_document *)dom_node_get_owner(ele);
+    struct dom_document *doc = (dom_document *)dom_node_get_owner(ele);
     bool success = false;
     assert(doc != NULL);
 
@@ -447,7 +445,7 @@ dom_exception dom_html_input_element_blur(dom_html_input_element *ele)
  */
 dom_exception dom_html_input_element_focus(dom_html_input_element *ele)
 {
-    struct dom_html_document *doc = (dom_html_document *)dom_node_get_owner(ele);
+    struct dom_document *doc = (dom_document *)dom_node_get_owner(ele);
     bool success = false;
     assert(doc != NULL);
 
@@ -464,7 +462,7 @@ dom_exception dom_html_input_element_focus(dom_html_input_element *ele)
  */
 dom_exception dom_html_input_element_select(dom_html_input_element *ele)
 {
-    struct dom_html_document *doc = (dom_html_document *)dom_node_get_owner(ele);
+    struct dom_document *doc = (dom_document *)dom_node_get_owner(ele);
     bool success = false;
     assert(doc != NULL);
 
@@ -481,7 +479,7 @@ dom_exception dom_html_input_element_select(dom_html_input_element *ele)
  */
 dom_exception dom_html_input_element_click(dom_html_input_element *ele)
 {
-    struct dom_html_document *doc = (dom_html_document *)dom_node_get_owner(ele);
+    struct dom_document *doc = (dom_document *)dom_node_get_owner(ele);
     bool success = false;
     dom_exception err;
     assert(doc != NULL);

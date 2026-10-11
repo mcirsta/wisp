@@ -151,7 +151,7 @@ dom_exception _dom_html_select_element_copy_internal(dom_html_select_element *ol
 static dom_exception
 _dom_html_select_element_make_collection(dom_html_select_element *ele, dom_html_options_collection **col)
 {
-    dom_html_document *doc = (dom_html_document *)dom_node_get_owner(ele);
+    dom_document *doc = (dom_document *)dom_node_get_owner(ele);
 
     assert(doc != NULL);
 
@@ -167,7 +167,7 @@ _dom_html_select_element_make_collection(dom_html_select_element *ele, dom_html_
  */
 dom_exception dom_html_select_element_get_type(dom_html_select_element *ele, dom_string **type)
 {
-    dom_html_document *doc = (dom_html_document *)dom_node_get_owner(ele);
+    dom_document *doc = (dom_document *)dom_node_get_owner(ele);
     dom_exception err;
     bool multiple;
 
@@ -505,7 +505,7 @@ dom_exception dom_html_select_element_set_multiple(dom_html_select_element *ele,
  */
 dom_exception dom_html_select_element_get_name(dom_html_select_element *ele, dom_string **name)
 {
-    dom_html_document *doc = (dom_html_document *)dom_node_get_owner(ele);
+    dom_document *doc = (dom_document *)dom_node_get_owner(ele);
 
     return dom_element_get_attribute(ele, doc->memoised[hds_name], name);
 }
@@ -519,7 +519,7 @@ dom_exception dom_html_select_element_get_name(dom_html_select_element *ele, dom
  */
 dom_exception dom_html_select_element_set_name(dom_html_select_element *ele, dom_string *name)
 {
-    dom_html_document *doc = (dom_html_document *)dom_node_get_owner(ele);
+    dom_document *doc = (dom_document *)dom_node_get_owner(ele);
 
     return dom_element_set_attribute(ele, doc->memoised[hds_name], name);
 }
@@ -630,7 +630,7 @@ dom_exception dom_html_select_element_remove(dom_html_select_element *ele, int32
  */
 dom_exception dom_html_select_element_blur(struct dom_html_select_element *ele)
 {
-    struct dom_html_document *doc = (dom_html_document *)dom_node_get_owner(ele);
+    struct dom_document *doc = (dom_document *)dom_node_get_owner(ele);
     bool success = false;
     assert(doc != NULL);
 
@@ -647,7 +647,7 @@ dom_exception dom_html_select_element_blur(struct dom_html_select_element *ele)
  */
 dom_exception dom_html_select_element_focus(struct dom_html_select_element *ele)
 {
-    struct dom_html_document *doc = (dom_html_document *)dom_node_get_owner(ele);
+    struct dom_document *doc = (dom_document *)dom_node_get_owner(ele);
     bool success = false;
     assert(doc != NULL);
 

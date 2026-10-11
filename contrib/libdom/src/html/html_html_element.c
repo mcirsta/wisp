@@ -139,7 +139,7 @@ dom_exception dom_html_html_element_get_version(dom_html_html_element *element, 
     dom_exception ret;
     dom_string *_memo_version;
 
-    _memo_version = ((struct dom_html_document *)((struct dom_node_internal *)element)->owner)->memoised[hds_version];
+    _memo_version = ((struct dom_document *)((struct dom_node_internal *)element)->owner)->memoised[hds_version];
 
     ret = dom_element_get_attribute(element, _memo_version, version);
 
@@ -151,7 +151,7 @@ dom_exception dom_html_html_element_set_version(dom_html_html_element *element, 
     dom_exception ret;
     dom_string *_memo_version;
 
-    _memo_version = ((struct dom_html_document *)((struct dom_node_internal *)element)->owner)->memoised[hds_version];
+    _memo_version = ((struct dom_document *)((struct dom_node_internal *)element)->owner)->memoised[hds_version];
 
     ret = dom_element_set_attribute(element, _memo_version, version);
 

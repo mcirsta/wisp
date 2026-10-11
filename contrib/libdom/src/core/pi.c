@@ -106,7 +106,7 @@ dom_exception _dom_pi_copy(dom_node_internal *old, dom_node_internal **copy)
         return err;
     }
 
-    *copy = (dom_node_internal *)copy;
+    *copy = (dom_node_internal *)new_pi;
 
     return DOM_NO_ERR;
 }
