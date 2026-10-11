@@ -117,7 +117,7 @@ hubbub_error handle_in_head(hubbub_treebuilder *treebuilder, const hubbub_token 
         } else if (type == HTML) {
             /* Process as if "in body" */
             err = handle_in_body(treebuilder, token);
-        } else if (type == BASE || type == BASEFONT || type == BGSOUND || type == COMMAND || type == LINK) {
+        } else if (type == BASE || type == BASEFONT || type == BGSOUND || type == LINK) {
             err = insert_element(treebuilder, &token->data.tag, false);
 
             /** \todo ack sc flag */

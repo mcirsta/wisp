@@ -1459,6 +1459,21 @@ void _dom_element_set_document(dom_element *element, dom_document *doc)
     }
 }
 
+dom_exception _dom_element_foreach_attribute(
+    const dom_element *element, dom_element_attribute_cb callback, void *pw)
+{
+    dom_attr_list *entry = element->attributes;
+    if (entry == NULL)
+        return DOM_NO_ERR;
+    do {
+        dom_exception err = callback(entry->attr, pw);
+        if (err != DOM_NO_ERR)
+            return err;
+        entry = _dom_element_attr_list_next(entry);
+    } while (entry != element->attributes);
+    return DOM_NO_ERR;
+}
+
 
 /*--------------------------------------------------------------------------*/
 

@@ -43,6 +43,13 @@ struct dom_element {
     uint32_t n_classes;
 };
 
+/* Read attributes in stable list order, without allocating a NamedNodeMap or
+ * repeatedly walking its linked list by index. The callback must not mutate
+ * the element's attributes; each attr is borrowed for the duration of the call. */
+typedef dom_exception (*dom_element_attribute_cb)(struct dom_attr *attr, void *pw);
+dom_exception _dom_element_foreach_attribute(
+    const struct dom_element *element, dom_element_attribute_cb callback, void *pw);
+
 dom_exception _dom_element_create(
     struct dom_document *doc, dom_string *name, dom_string *namespace, dom_string *prefix, struct dom_element **result);
 

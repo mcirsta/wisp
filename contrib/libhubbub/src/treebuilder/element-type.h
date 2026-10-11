@@ -26,7 +26,6 @@ typedef enum {
     CENTER,
     COL,
     COLGROUP,
-    COMMAND,
     DATAGRID,
     DD,
     DETAILS,

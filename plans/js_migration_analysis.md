@@ -476,6 +476,57 @@ After the final independently adopted-content adjustment, the full native group
 and Qt template, DOM-mutation and script-order suites were rerun and passed.
 Builds are warning-free and `git diff --check` is clean.
 
+### Native HTML serialization (2026-10-11)
+
+Shared template parsing is committed as `638aa9bb`. The next prerequisite for
+`innerHTML` is now implemented in libdom as `dom_html_serialize_fragment`, following
+the [HTML fragment serialization algorithm](https://html.spec.whatwg.org/multipage/parsing.html#serialising-html-fragments).
+It returns the children of an element, document or fragment without changing the
+tree; this is explicitly HTML serialization even for XML-owned nodes, not an XML
+serializer or a sanitizer.
+
+- Serialize template contents instead of ordinary children, and suppress children
+  and closing tags for HTML void elements. Direct serialization of a retained
+  contents fragment stops at that fragment, even while it still has a host.
+- Preserve namespace-sensitive element and attribute names, case and stable
+  attribute order. Escape text and attributes separately, including the current
+  standard's escaping of angle brackets in attributes. Preserve literal text for
+  the specified HTML raw-text parents; `noscript` respects the caller's scripting
+  setting and the actual owner's inert-template status. Include comments,
+  processing instructions, doctypes and CDATA-as-text.
+- Walk parent links iteratively, including nested template contents, without a
+  recursive call stack or a traversal allocation per node. One geometrically
+  growing output buffer handles escaping. A small internal attribute iterator
+  walks the existing list once, avoiding NamedNodeMap allocation and repeated
+  indexed list scans. Errors discard partial output and leave the tree retryable.
+- A serialization fixture exposed Hubbub's obsolete treatment of `command` as
+  head metadata, void and special. Remove that classification from the generated
+  lookup's input and insertion modes so the shared parser uses the current
+  [ordinary-element rules](https://html.spec.whatwg.org/multipage/parsing.html#parsing-main-inbody).
+  Tests cover full documents/fragments, head transitions, templates and generic
+  end tags, with whole-input and byte-at-a-time parsing.
+
+The historical Duktape getter was empty; its generic-document setter is still
+unsuitable. No partial `innerHTML` property is exposed: a getter without a working
+setter would mislead page feature detection. Next is the QuickJS getter/setter
+using the shared parser and serializer, parsing before mutation, targeting actual
+template contents, preserving wrapper/document ownership and recording changes
+through the existing JS mutation trace. XML parsing/serialization, declarative
+shadow DOM and custom-element registries remain separate work.
+
+Validation: all 1,276 checks across 16 native DOM/JS/form/interaction suites pass
+under Debug ASan/UBSan with LeakSanitizer and no diagnostics. The serializer has
+94 checks, including 2,048-level ordinary/template nesting, 256 attributes,
+namespace lookalikes, retained/adopted contents and exact escaping. Its Release
+suite passes 96 checks, adding malloc/realloc failure sweeps and successful retry.
+The parser suite passes all 618 checks in Debug and Release. All 118 Qt suites
+pass: paint-order alone, then 116 of the remaining 117 in parallel; calculated
+inline margins hit a capture timeout in that run and passed on an isolated retry.
+The saved eBihoreanul capture completes with unchanged 1280 x 11382 extent and a
+byte-identical viewport PNG. Its previously documented `llcache.c` null-source /
+zero-length memcpy UBSan diagnostic remains. Builds are warning-free,
+`git diff --check` is clean, and no GTK build or tests were run.
+
 ## Assessment
 
 Keep QuickJS-ng and libdom. The missing part is the browser binding and execution

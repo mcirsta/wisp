@@ -202,7 +202,7 @@ hubbub_error process_start_tag(hubbub_treebuilder *treebuilder, const hubbub_tok
 
     if (type == HTML) {
         err = process_html_in_body(treebuilder, token);
-    } else if (type == BASE || type == COMMAND || type == LINK || type == META || type == NOFRAMES || type == SCRIPT ||
+    } else if (type == BASE || type == LINK || type == META || type == NOFRAMES || type == SCRIPT ||
         type == STYLE || type == TITLE || type == TEMPLATE) {
         /* Process as "in head" */
         err = handle_in_head(treebuilder, token);

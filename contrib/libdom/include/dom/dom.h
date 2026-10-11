@@ -55,6 +55,7 @@
 #include <dom/html/html_dlist_element.h>
 #include <dom/html/html_document.h>
 #include <dom/html/html_element.h>
+#include <dom/html/html_serialize.h>
 #include <dom/html/html_fieldset_element.h>
 #include <dom/html/html_font_element.h>
 #include <dom/html/html_form_element.h>

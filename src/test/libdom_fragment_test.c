@@ -472,6 +472,30 @@ static dom_node *parse_body(const char *input, unsigned mode, dom_document **par
     return body;
 }
 
+START_TEST(test_command_is_ordinary_element)
+{
+    /* COMMAND is neither head metadata, void nor special in the current HTML
+     * rules. The generic span end tag must be able to pop through it. */
+    dom_document *parsed = NULL;
+    dom_node *root = parse_body("<command>A</command><span><command>B</span>C", _i, &parsed);
+    used = 0;
+    tree[0] = 0;
+    dom_node *child = NULL;
+    ck_assert_int_eq(dom_node_get_first_child(root, &child), DOM_NO_ERR);
+    while (child != NULL) {
+        describe(child);
+        dom_node *next = NULL;
+        ck_assert_int_eq(dom_node_get_next_sibling(child, &next), DOM_NO_ERR);
+        dom_node_unref(child);
+        child = next;
+    }
+    ck_assert_msg(strcmp(tree, "<command>A</command><span><command>B</command></span>C") == 0,
+        "Ordinary command element, mode %d: %s", _i, tree);
+    dom_node_unref(root);
+    dom_node_unref(parsed);
+}
+END_TEST
+
 static const struct {
     const char *label, *input, *expected;
 } template_cases[] = {
@@ -1010,7 +1034,7 @@ END_TEST
 
 static const struct {
     const char *input, *expected;
-} template_head_cases[] = {
+} head_cases[] = {
     {"<!doctype html><template><p>A</template><title>T</title><p>B",
         "<html><head><template>{<p>A</p>}</template><title>T</title></head><body><p>B</p></body></html>"},
     {"<!doctype html><head></head><template><p>A</template><p>B",
@@ -1020,12 +1044,16 @@ static const struct {
         "<title>T</title></head><body>B</body></html>"},
     {"<!doctype html><template><b>A",
         "<html><head><template>{<b>A</b>}</template></head><body></body></html>"},
+    {"<!doctype html><head><command>A</command>", "<html><head></head><body><command>A</command></body></html>"},
+    {"<!doctype html><head></head><command>A</command>", "<html><head></head><body><command>A</command></body></html>"},
+    {"<!doctype html><head><template><command>A</command></template><title>T</title>",
+        "<html><head><template>{<command>A</command>}</template><title>T</title></head><body></body></html>"},
 };
 
-START_TEST(test_template_head)
+START_TEST(test_head_parsing)
 {
-    size_t count = sizeof(template_head_cases) / sizeof(template_head_cases[0]);
-    const char *input = template_head_cases[_i % count].input;
+    size_t count = sizeof(head_cases) / sizeof(head_cases[0]);
+    const char *input = head_cases[_i % count].input;
     size_t chunk = _i < count ? 4096 : 1;
     dom_hubbub_parser_params params = {.enc = "UTF-8", .fix_enc = true};
     dom_hubbub_parser *parser = NULL;
@@ -1041,8 +1069,8 @@ START_TEST(test_template_head)
     used = 0;
     tree[0] = 0;
     describe((dom_node *)parsed);
-    ck_assert_msg(strcmp(tree, template_head_cases[_i % count].expected) == 0,
-        "Head template case %zu (chunk %zu): %s", _i % count, chunk, tree);
+    ck_assert_msg(strcmp(tree, head_cases[_i % count].expected) == 0, "Head parsing case %zu (chunk %zu): %s",
+        _i % count, chunk, tree);
     dom_node_unref(parsed);
 }
 END_TEST
@@ -1184,7 +1212,8 @@ int main(void)
     tcase_add_loop_test(tc, test_template_owner_and_lifetime, 0, 4);
     tcase_add_loop_test(tc, test_template_form_isolation, 0, 4);
     tcase_add_loop_test(tc, test_template_callbacks_and_abandoned, 0, 4);
-    tcase_add_loop_test(tc, test_template_head, 0, 2 * (sizeof(template_head_cases) / sizeof(template_head_cases[0])));
+    tcase_add_loop_test(tc, test_head_parsing, 0, 2 * (sizeof(head_cases) / sizeof(head_cases[0])));
+    tcase_add_loop_test(tc, test_command_is_ordinary_element, 0, 4);
     tcase_add_loop_test(tc, test_template_root_attributes, 0, 2);
     tcase_add_loop_test(tc, test_template_adopted_context, 0, 2);
     suite_add_tcase(suite, tc);
