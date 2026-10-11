@@ -266,6 +266,13 @@ class TomlPropertyReader:
                         raise ValueError(f"{name}: unknown longhand {member}")
                 elif target.get('declaration_longhands'):
                     raise ValueError(f"{name}: nested shorthand {member}; list its components")
+            value_kind = prop.get('declaration_value', 'none')
+            if value_kind not in ('none', 'number', 'length', 'number_length', 'pair_length', 'quad_length'):
+                raise ValueError(f"{name}: unknown declaration_value {value_kind}")
+            if value_kind != 'none':
+                expected = {'pair_length': 2, 'quad_length': 4}.get(value_kind, 0)
+                if len(members) != expected:
+                    raise ValueError(f"{name}: declaration_value requires {expected} longhands")
 
     def get_dispatch_order(self):
         """Get property dispatch order from TOML (replaces DispatchParser).
@@ -664,7 +671,7 @@ class GperfInputGenerator:
         lines.append("#include <stddef.h>")
         lines.append("")
         lines.append('#include "parse/property.h"')
-        for css_name, handler, opcode, metadata, members in self.keys:
+        for css_name, handler, opcode, metadata, members, value_kind in self.keys:
             if members:
                 array = "css_decl_members_" + css_name.replace('-', '_')
                 names = ', '.join('"' + name.replace('_', '-') + '"' for name in members)
@@ -677,9 +684,10 @@ class GperfInputGenerator:
         lines.append("struct css_prop_entry;")
         lines.append("")
         lines.append("%%")
-        for css_name, handler_name, opcode, metadata, members in self.keys:
+        for css_name, handler_name, opcode, metadata, members, value_kind in self.keys:
             array = "css_decl_members_" + css_name.replace('-', '_') if members else "NULL"
-            lines.append(f"{css_name}, {handler_name}, {opcode}, {metadata}, {array}, {len(members)}")
+            lines.append(f"{css_name}, {handler_name}, {opcode}, {metadata}, "
+                         f"{array}, {len(members)}, CSS_DECL_VALUE_{value_kind}")
         lines.append("%%")
         lines.append("")
         lines.append("/* Property names are ASCII case-insensitive, not high-bit masked.")
@@ -1091,7 +1099,8 @@ class MultiFileGenerator:
             logical = data.get('logical', False)
             metadata = (f"CSS_DECL_{prop_name.upper()}, CSS_LOGICAL_GROUP_{group}, "
                         f"{str(shorthand).lower()}, {str(logical).lower()}")
-            keys.append((css_name, handler_name, opcode, metadata, data.get('declaration_longhands', [])))
+            keys.append((css_name, handler_name, opcode, metadata, data.get('declaration_longhands', []),
+                         data.get('declaration_value', 'none').upper()))
         
         # Generate gperf input
         gen = GperfInputGenerator(keys)

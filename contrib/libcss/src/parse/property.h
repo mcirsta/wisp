@@ -10,6 +10,17 @@
 #include "parse/properties/properties.h"
 #include "declaration_ids.inc"
 
+/* Specified-value serializers, independent of the renderer's fixed-point
+ * bytecode. NONE deliberately has no generic source-text fallback. */
+enum css_declaration_value_kind {
+    CSS_DECL_VALUE_NONE,
+    CSS_DECL_VALUE_NUMBER,
+    CSS_DECL_VALUE_LENGTH,
+    CSS_DECL_VALUE_NUMBER_LENGTH,
+    CSS_DECL_VALUE_PAIR_LENGTH,
+    CSS_DECL_VALUE_QUAD_LENGTH,
+};
+
 /* Immutable registration shared by the parser, variable resolver and specified
  * declarations. IDs identify CSS names, not bytecode slots. In particular, a
  * logical property retains its identity even when layout maps it physically.
@@ -28,6 +39,7 @@ struct css_prop_entry {
      * This does not expand their values or expose additional parse handlers. */
     const char *const *longhands;
     size_t longhand_count;
+    enum css_declaration_value_kind value_kind;
 };
 
 /* Name must already be CSS-unescaped. Unknown/non-ASCII names return NULL.

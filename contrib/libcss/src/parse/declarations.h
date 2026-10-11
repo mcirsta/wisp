@@ -29,6 +29,10 @@ typedef struct css_declaration {
     /* Original value between ':' and the priority/delimiter, including outer
      * whitespace and comments. This is source text, not CSSOM serialization. */
     lwc_string *source_value;
+    /* Bounds after trimming only outer whitespace, without cutting escapes,
+     * strings or comments. Relative to source_value; no extra string copy. */
+    size_t value_start, value_end;
+    bool deferred; /**< Accepted through the renderer's variable-deferred path */
     bool important;
     const css_declaration_token *tokens; /**< Value without surrounding whitespace or priority */
     size_t token_count;
@@ -58,6 +62,7 @@ const css_stylesheet *css__declaration_list_sheet(const css_declaration_list *li
 
 /* Language parser hook, called only after a declaration has been accepted. */
 css_error css__declaration_list_record(css_declaration_list *list, const css_token *name,
-    const parserutils_vector *tokens, int32_t value_start, uint32_t bytecode_offset, uint32_t bytecode_length);
+    const parserutils_vector *tokens, int32_t value_start, uint32_t bytecode_offset, uint32_t bytecode_length,
+    bool deferred);
 
 #endif

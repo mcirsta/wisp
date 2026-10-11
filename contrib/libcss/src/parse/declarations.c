@@ -137,10 +137,45 @@ static int32_t trim_whitespace(const parserutils_vector *tokens, int32_t start, 
     return end;
 }
 
-css_error css__declaration_list_record(css_declaration_list *list, const css_token *name,
-    const parserutils_vector *tokens, int32_t value_start, uint32_t bytecode_offset, uint32_t bytecode_length)
+static bool source_whitespace(char ch)
 {
-    css_declaration entry = {.bytecode_offset = bytecode_offset, .bytecode_length = bytecode_length};
+    return ch == ' ' || ch == '\t' || ch == '\r' || ch == '\n' || ch == '\f';
+}
+
+/* Everything after the last non-whitespace token is whitespace or a skipped
+ * comment. Inspect only that gap: trimming bytes inside the token would corrupt
+ * escaped spaces, hex-escape terminators and strings recovered at EOF. Comments
+ * also retain their spelling, including an unterminated comment's final spaces. */
+static void value_bounds(css_declaration *entry, size_t protected_end)
+{
+    const char *text = lwc_string_data(entry->source_value);
+    size_t length = lwc_string_length(entry->source_value);
+    size_t end = protected_end;
+    for (size_t i = protected_end; i < length;) {
+        if (source_whitespace(text[i])) {
+            i++;
+        } else {
+            assert(i + 1 < length && text[i] == '/' && text[i + 1] == '*');
+            i += 2;
+            while (i + 1 < length && (text[i] != '*' || text[i + 1] != '/'))
+                i++;
+            i = i + 1 < length ? i + 2 : length;
+            end = i;
+        }
+    }
+    size_t start = 0;
+    while (start < end && source_whitespace(text[start]))
+        start++;
+    entry->value_start = start;
+    entry->value_end = end;
+}
+
+css_error css__declaration_list_record(css_declaration_list *list, const css_token *name,
+    const parserutils_vector *tokens, int32_t value_start, uint32_t bytecode_offset, uint32_t bytecode_length,
+    bool deferred)
+{
+    css_declaration entry = {
+        .bytecode_offset = bytecode_offset, .bytecode_length = bytecode_length, .deferred = deferred};
     const css_token *colon = parserutils_vector_peek(tokens, value_start - 1);
     size_t source_start = colon->source_end;
     size_t source_end = css__parser_source_position(list->sheet->parser);
@@ -172,6 +207,9 @@ css_error css__declaration_list_record(css_declaration_list *list, const css_tok
     if (lwc_intern_string((const char *)list->source->data + source_start, source_end - source_start,
             &entry.source_value) != lwc_error_ok)
         return CSS_NOMEM;
+
+    const css_token *value_last = end > value_start ? parserutils_vector_peek(tokens, end - 1) : NULL;
+    value_bounds(&entry, value_last != NULL ? value_last->source_end - source_start : 0);
 
     if (name->type == CSS_TOKEN_CUSTOM_PROPERTY) {
         entry.name = lwc_string_ref(name->idata);

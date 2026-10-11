@@ -113,6 +113,10 @@
 #                  need modern CSSOM decomposition before exposing element.style.
 #                  Logical start/end names retain their identity even where the
 #                  current renderer only implements their parent shorthand.
+#   declaration_value  Specified-value serialization family: number, length,
+#                  number_length, pair_length or quad_length. This is not a
+#                  parser grammar and does not enable additional CSS values.
+#                  Math functions still require a separate specified serializer.
 #   logical_group  CSS logical-property group, independent of bytecode storage.
 #   logical        true for logical names; omitted/false for physical names.
 #                  Logical names are not aliases even when they share opcodes.
@@ -369,6 +373,7 @@ initial = "NONE"
 parse = "WRAP:css__parse_border_side_style"
 
 [border_top_width]
+declaration_value = "length"
 enum = "CSS_PROP_BORDER_TOP_WIDTH"
 inherited = false
 enum_prefix = "CSS_BORDER_WIDTH"
@@ -383,6 +388,7 @@ condition = "CSS_BORDER_WIDTH_WIDTH"
 parse = "WRAP:css__parse_border_side_width"
 
 [border_right_width]
+declaration_value = "length"
 enum = "CSS_PROP_BORDER_RIGHT_WIDTH"
 inherited = false
 enum_prefix = "CSS_BORDER_WIDTH"
@@ -397,6 +403,7 @@ condition = "CSS_BORDER_WIDTH_WIDTH"
 parse = "WRAP:css__parse_border_side_width"
 
 [border_bottom_width]
+declaration_value = "length"
 enum = "CSS_PROP_BORDER_BOTTOM_WIDTH"
 inherited = false
 enum_prefix = "CSS_BORDER_WIDTH"
@@ -411,6 +418,7 @@ condition = "CSS_BORDER_WIDTH_WIDTH"
 parse = "WRAP:css__parse_border_side_width"
 
 [border_left_width]
+declaration_value = "length"
 enum = "CSS_PROP_BORDER_LEFT_WIDTH"
 inherited = false
 enum_prefix = "CSS_BORDER_WIDTH"
@@ -425,6 +433,7 @@ condition = "CSS_BORDER_WIDTH_WIDTH"
 parse = "WRAP:css__parse_border_side_width"
 
 [bottom]
+declaration_value = "length"
 logical_group = "inset"
 enum = "CSS_PROP_BOTTOM"
 inherited = false
@@ -440,6 +449,7 @@ override = "get"
 parse = "WRAP:css__parse_side"
 
 [inset]
+declaration_value = "quad_length"
 logical_group = "inset"
 declaration_longhands = ["top", "right", "bottom", "left"]
 enum = "CSS_PROP_INSET"
@@ -450,6 +460,7 @@ computed = "none"
 helper_longhands = ["side"]
 
 [inset_block]
+declaration_value = "pair_length"
 declaration_longhands = ["inset_block_start", "inset_block_end"]
 logical_group = "inset"
 logical = true
@@ -461,6 +472,7 @@ computed = "none"
 helper_longhands = ["side"]
 
 [inset_inline]
+declaration_value = "pair_length"
 declaration_longhands = ["inset_inline_start", "inset_inline_end"]
 logical_group = "inset"
 logical = true
@@ -640,6 +652,7 @@ outer_struct = true
 select_comments = "Encode font family as an array of string objects, terminated with a blank entry."
 
 [font_size]
+declaration_value = "length"
 enum = "CSS_PROP_FONT_SIZE"
 cascade = "manual"
 computed = "auto"
@@ -680,6 +693,7 @@ initial = "NORMAL"
 
 
 [height]
+declaration_value = "length"
 logical_group = "size"
 enum = "CSS_PROP_HEIGHT"
 inherited = false
@@ -693,6 +707,7 @@ condition = "CSS_HEIGHT_SET"
 parse = '''IDENT:( INHERIT: INITIAL: REVERT: UNSET: AUTO:0,HEIGHT_AUTO IDENT:) SIZING:( FIT_CONTENT:HEIGHT_SET MIN_CONTENT:HEIGHT_SET MAX_CONTENT:HEIGHT_SET SIZING:) LENGTH_UNIT:( UNIT_PX:HEIGHT_SET MASK:UNIT_MASK_HEIGHT RANGE:<0 LENGTH_UNIT:) CALC:( UNIT_PX:HEIGHT_CALC CALC:)'''
 
 [left]
+declaration_value = "length"
 logical_group = "inset"
 enum = "CSS_PROP_LEFT"
 inherited = false
@@ -708,6 +723,7 @@ override = "get"
 parse = "WRAP:css__parse_side"
 
 [letter_spacing]
+declaration_value = "length"
 enum = "CSS_PROP_LETTER_SPACING"
 cascade = "length_normal_calc"
 computed = "auto"
@@ -721,6 +737,7 @@ defaults = "CSS_LETTER_SPACING_NORMAL"
 parse = '''IDENT:( INHERIT: INITIAL: REVERT: UNSET: NORMAL:0,LETTER_SPACING_NORMAL IDENT:) LENGTH_UNIT:( UNIT_PX:LETTER_SPACING_SET MASK:UNIT_MASK_LETTER_SPACING LENGTH_UNIT:) CALC:( UNIT_PX:LETTER_SPACING_CALC CALC:)'''
 
 [line_height]
+declaration_value = "number_length"
 enum = "CSS_PROP_LINE_HEIGHT"
 cascade = "manual"
 computed = "auto"
@@ -762,6 +779,7 @@ bits = 6
 initial = "DISC"
 
 [margin_top]
+declaration_value = "length"
 logical_group = "margin"
 enum = "CSS_PROP_MARGIN_TOP"
 inherited = false
@@ -777,6 +795,7 @@ condition = "CSS_MARGIN_SET"
 parse = "WRAP:css__parse_margin_side"
 
 [margin_right]
+declaration_value = "length"
 logical_group = "margin"
 enum = "CSS_PROP_MARGIN_RIGHT"
 inherited = false
@@ -792,6 +811,7 @@ condition = "CSS_MARGIN_SET"
 parse = "WRAP:css__parse_margin_side"
 
 [margin_bottom]
+declaration_value = "length"
 logical_group = "margin"
 enum = "CSS_PROP_MARGIN_BOTTOM"
 inherited = false
@@ -807,6 +827,7 @@ condition = "CSS_MARGIN_SET"
 parse = "WRAP:css__parse_margin_side"
 
 [margin_left]
+declaration_value = "length"
 logical_group = "margin"
 enum = "CSS_PROP_MARGIN_LEFT"
 inherited = false
@@ -822,6 +843,7 @@ condition = "CSS_MARGIN_SET"
 parse = "WRAP:css__parse_margin_side"
 
 [max_height]
+declaration_value = "length"
 logical_group = "max_size"
 enum = "CSS_PROP_MAX_HEIGHT"
 inherited = false
@@ -835,6 +857,7 @@ condition = "CSS_MAX_HEIGHT_SET"
 parse = '''IDENT:( INHERIT: INITIAL: REVERT: UNSET: NONE:0,MAX_HEIGHT_NONE IDENT:) SIZING:( FIT_CONTENT:MAX_HEIGHT_SET MIN_CONTENT:MAX_HEIGHT_SET MAX_CONTENT:MAX_HEIGHT_SET SIZING:) LENGTH_UNIT:( UNIT_PX:MAX_HEIGHT_SET MASK:UNIT_MASK_MAX_HEIGHT RANGE:<0 LENGTH_UNIT:) CALC:( UNIT_PX:MAX_HEIGHT_CALC CALC:)'''
 
 [max_width]
+declaration_value = "length"
 logical_group = "max_size"
 enum = "CSS_PROP_MAX_WIDTH"
 inherited = false
@@ -848,6 +871,7 @@ condition = "CSS_MAX_WIDTH_SET"
 parse = '''IDENT:( INHERIT: INITIAL: REVERT: UNSET: NONE:0,MAX_WIDTH_NONE IDENT:) SIZING:( FIT_CONTENT:MAX_WIDTH_SET MIN_CONTENT:MAX_WIDTH_SET MAX_CONTENT:MAX_WIDTH_SET SIZING:) LENGTH_UNIT:( UNIT_PX:MAX_WIDTH_SET MASK:UNIT_MASK_MAX_WIDTH RANGE:<0 LENGTH_UNIT:) CALC:( UNIT_PX:MAX_WIDTH_CALC CALC:)'''
 
 [min_height]
+declaration_value = "length"
 logical_group = "min_size"
 enum = "CSS_PROP_MIN_HEIGHT"
 inherited = false
@@ -861,6 +885,7 @@ condition = "CSS_MIN_HEIGHT_SET"
 parse = '''IDENT:( INHERIT: INITIAL: REVERT: UNSET: AUTO:0,MIN_HEIGHT_AUTO IDENT:) SIZING:( FIT_CONTENT:MIN_HEIGHT_SET MIN_CONTENT:MIN_HEIGHT_SET MAX_CONTENT:MIN_HEIGHT_SET SIZING:) LENGTH_UNIT:( UNIT_PX:MIN_HEIGHT_SET MASK:UNIT_MASK_MIN_HEIGHT RANGE:<0 LENGTH_UNIT:) CALC:( UNIT_PX:MIN_HEIGHT_CALC CALC:)'''
 
 [min_width]
+declaration_value = "length"
 logical_group = "min_size"
 enum = "CSS_PROP_MIN_WIDTH"
 inherited = false
@@ -874,6 +899,7 @@ condition = "CSS_MIN_WIDTH_SET"
 parse = '''IDENT:( INHERIT: INITIAL: REVERT: UNSET: AUTO:0,MIN_WIDTH_AUTO IDENT:) SIZING:( FIT_CONTENT:MIN_WIDTH_SET MIN_CONTENT:MIN_WIDTH_SET MAX_CONTENT:MIN_WIDTH_SET SIZING:) LENGTH_UNIT:( UNIT_PX:MIN_WIDTH_SET MASK:UNIT_MASK_MIN_WIDTH RANGE:<0 LENGTH_UNIT:) CALC:( UNIT_PX:MIN_WIDTH_CALC CALC:)'''
 
 [orphans]
+declaration_value = "number"
 enum = "CSS_PROP_ORPHANS"
 cascade = "integer"
 computed = "auto"
@@ -910,6 +936,7 @@ initial = "NONE"
 parse = '''IDENT:( INHERIT: INITIAL: REVERT: UNSET: NONE:0,BORDER_STYLE_NONE DOTTED:0,BORDER_STYLE_DOTTED DASHED:0,BORDER_STYLE_DASHED SOLID:0,BORDER_STYLE_SOLID LIBCSS_DOUBLE:0,BORDER_STYLE_DOUBLE GROOVE:0,BORDER_STYLE_GROOVE RIDGE:0,BORDER_STYLE_RIDGE INSET:0,BORDER_STYLE_INSET OUTSET:0,BORDER_STYLE_OUTSET IDENT:)'''
 
 [outline_width]
+declaration_value = "length"
 enum = "CSS_PROP_OUTLINE_WIDTH"
 inherited = false
 cascade = "border_width_calc"
@@ -934,6 +961,7 @@ initial = "VISIBLE"
 parse = '''IDENT:( INHERIT: INITIAL: REVERT: UNSET: VISIBLE:0,OVERFLOW_VISIBLE HIDDEN:0,OVERFLOW_HIDDEN SCROLL:0,OVERFLOW_SCROLL AUTO:0,OVERFLOW_AUTO IDENT:)'''
 
 [padding_top]
+declaration_value = "length"
 logical_group = "padding"
 enum = "CSS_PROP_PADDING_TOP"
 inherited = false
@@ -949,6 +977,7 @@ condition = "CSS_PADDING_SET"
 parse = "WRAP:css__parse_padding_side"
 
 [padding_right]
+declaration_value = "length"
 logical_group = "padding"
 enum = "CSS_PROP_PADDING_RIGHT"
 inherited = false
@@ -964,6 +993,7 @@ condition = "CSS_PADDING_SET"
 parse = "WRAP:css__parse_padding_side"
 
 [padding_bottom]
+declaration_value = "length"
 logical_group = "padding"
 enum = "CSS_PROP_PADDING_BOTTOM"
 inherited = false
@@ -979,6 +1009,7 @@ condition = "CSS_PADDING_SET"
 parse = "WRAP:css__parse_padding_side"
 
 [padding_left]
+declaration_value = "length"
 logical_group = "padding"
 enum = "CSS_PROP_PADDING_LEFT"
 inherited = false
@@ -1086,6 +1117,7 @@ computed = "none"
 parse = '''IDENT:( INHERIT: INITIAL: REVERT: UNSET: IDENT:) NUMBER:( false:RICHNESS_SET RANGE:num<0||num>F_100 NUMBER:) CALC:( NUMBER:RICHNESS_CALC CALC:)'''
 
 [right]
+declaration_value = "length"
 logical_group = "inset"
 enum = "CSS_PROP_RIGHT"
 inherited = false
@@ -1171,6 +1203,7 @@ bits = 5
 initial = "NONE"
 
 [text_indent]
+declaration_value = "length"
 enum = "CSS_PROP_TEXT_INDENT"
 cascade = "length_calc"
 computed = "auto"
@@ -1192,6 +1225,7 @@ initial = "NONE"
 parse = '''IDENT:( INHERIT: INITIAL: REVERT: UNSET: CAPITALIZE:0,TEXT_TRANSFORM_CAPITALIZE UPPERCASE:0,TEXT_TRANSFORM_UPPERCASE LOWERCASE:0,TEXT_TRANSFORM_LOWERCASE NONE:0,TEXT_TRANSFORM_NONE IDENT:)'''
 
 [top]
+declaration_value = "length"
 logical_group = "inset"
 enum = "CSS_PROP_TOP"
 inherited = false
@@ -1260,6 +1294,7 @@ initial = "NORMAL"
 parse = '''IDENT:( INHERIT: INITIAL: REVERT: UNSET: NORMAL:0,WHITE_SPACE_NORMAL PRE:0,WHITE_SPACE_PRE NOWRAP:0,WHITE_SPACE_NOWRAP PRE_WRAP:0,WHITE_SPACE_PRE_WRAP PRE_LINE:0,WHITE_SPACE_PRE_LINE IDENT:)'''
 
 [widows]
+declaration_value = "number"
 enum = "CSS_PROP_WIDOWS"
 cascade = "integer"
 computed = "auto"
@@ -1272,6 +1307,7 @@ defaults = "CSS_WIDOWS_SET"
 parse = '''IDENT:( INHERIT: INITIAL: REVERT: UNSET: IDENT:) NUMBER:( true:WIDOWS_SET RANGE:num<0 NUMBER:) CALC:( NUMBER:WIDOWS_CALC CALC:)'''
 
 [width]
+declaration_value = "length"
 logical_group = "size"
 enum = "CSS_PROP_WIDTH"
 inherited = false
@@ -1285,6 +1321,7 @@ condition = "CSS_WIDTH_SET"
 parse = '''IDENT:( INHERIT: INITIAL: REVERT: UNSET: AUTO:0,WIDTH_AUTO IDENT:) SIZING:( FIT_CONTENT:WIDTH_SET MIN_CONTENT:WIDTH_SET MAX_CONTENT:WIDTH_SET SIZING:) LENGTH_UNIT:( UNIT_PX:WIDTH_SET MASK:UNIT_MASK_WIDTH RANGE:<0 LENGTH_UNIT:) CALC:( UNIT_PX:WIDTH_CALC CALC:)'''
 
 [word_spacing]
+declaration_value = "length"
 enum = "CSS_PROP_WORD_SPACING"
 cascade = "length_normal_calc"
 computed = "auto"
@@ -1298,6 +1335,7 @@ defaults = "CSS_WORD_SPACING_NORMAL"
 parse = '''IDENT:( INHERIT: INITIAL: REVERT: UNSET: NORMAL:0,WORD_SPACING_NORMAL IDENT:) LENGTH_UNIT:( UNIT_PX:WORD_SPACING_SET MASK:UNIT_MASK_WORD_SPACING LENGTH_UNIT:) CALC:( UNIT_PX:WORD_SPACING_CALC CALC:)'''
 
 [z_index]
+declaration_value = "number"
 enum = "CSS_PROP_Z_INDEX"
 inherited = false
 cascade = "manual"
@@ -1309,6 +1347,7 @@ values = "integer"
 parse = '''IDENT:( INHERIT: INITIAL: REVERT: UNSET: AUTO:0,Z_INDEX_AUTO IDENT:) NUMBER:( true:Z_INDEX_SET NUMBER:) CALC:( NUMBER:Z_INDEX_CALC CALC:)'''
 
 [opacity]
+declaration_value = "number"
 enum = "CSS_PROP_OPACITY"
 inherited = false
 cascade = "manual"
@@ -1351,6 +1390,7 @@ defaults = "CSS_BREAK_INSIDE_AUTO"
 parse = '''IDENT:( INHERIT: INITIAL: REVERT: UNSET: AUTO:0,BREAK_INSIDE_AUTO AVOID:0,BREAK_INSIDE_AVOID AVOID_PAGE:0,BREAK_INSIDE_AVOID_PAGE AVOID_COLUMN:0,BREAK_INSIDE_AVOID_COLUMN IDENT:)'''
 
 [column_count]
+declaration_value = "number"
 enum = "CSS_PROP_COLUMN_COUNT"
 inherited = false
 cascade = "manual"
@@ -1373,6 +1413,7 @@ defaults = "CSS_COLUMN_FILL_BALANCE"
 parse = '''IDENT:( INHERIT: INITIAL: REVERT: UNSET: BALANCE:0,COLUMN_FILL_BALANCE AUTO:0,COLUMN_FILL_AUTO IDENT:)'''
 
 [column_gap]
+declaration_value = "length"
 enum = "CSS_PROP_COLUMN_GAP"
 inherited = false
 # cascade: manual — initial_data differs from TYPE_INFO defaults (arena memcmp risk)
@@ -1436,6 +1477,7 @@ defaults = "CSS_COLUMN_SPAN_NONE"
 parse = "IDENT:( INHERIT: INITIAL: REVERT: UNSET: NONE:0,COLUMN_SPAN_NONE ALL:0,COLUMN_SPAN_ALL IDENT:)"
 
 [column_width]
+declaration_value = "length"
 enum = "CSS_PROP_COLUMN_WIDTH"
 inherited = false
 # cascade: manual — initial_data differs from TYPE_INFO defaults (arena memcmp risk)
@@ -1480,6 +1522,7 @@ initial = "CONTENT_BOX"
 parse = '''IDENT:( INHERIT: INITIAL: REVERT: UNSET: CONTENT_BOX:0,BOX_SIZING_CONTENT_BOX BORDER_BOX:0,BOX_SIZING_BORDER_BOX IDENT:)'''
 
 [margin_inline]
+declaration_value = "pair_length"
 declaration_longhands = ["margin_inline_start", "margin_inline_end"]
 logical_group = "margin"
 logical = true
@@ -1491,6 +1534,7 @@ computed = "none"
 helper_longhands = ["margin_side"]
 
 [padding_inline]
+declaration_value = "pair_length"
 declaration_longhands = ["padding_inline_start", "padding_inline_end"]
 logical_group = "padding"
 logical = true
@@ -1529,6 +1573,7 @@ initial = "AUTO"
 parse = '''IDENT:( INHERIT: INITIAL: REVERT: UNSET: STRETCH:0,ALIGN_SELF_STRETCH FLEX_START:0,ALIGN_SELF_FLEX_START FLEX_END:0,ALIGN_SELF_FLEX_END CENTER:0,ALIGN_SELF_CENTER BASELINE:0,ALIGN_SELF_BASELINE AUTO:0,ALIGN_SELF_AUTO NORMAL:0,ALIGN_SELF_NORMAL START:0,ALIGN_SELF_START END:0,ALIGN_SELF_END IDENT:)'''
 
 [flex_basis]
+declaration_value = "length"
 enum = "CSS_PROP_FLEX_BASIS"
 inherited = false
 cascade = "manual"
@@ -1550,6 +1595,7 @@ initial = "ROW"
 parse = '''IDENT:( INHERIT: INITIAL: REVERT: UNSET: ROW:0,FLEX_DIRECTION_ROW ROW_REVERSE:0,FLEX_DIRECTION_ROW_REVERSE COLUMN:0,FLEX_DIRECTION_COLUMN COLUMN_REVERSE:0,FLEX_DIRECTION_COLUMN_REVERSE IDENT:)'''
 
 [flex_grow]
+declaration_value = "number"
 enum = "CSS_PROP_FLEX_GROW"
 inherited = false
 cascade = "manual"
@@ -1562,6 +1608,7 @@ condition = "CSS_FLEX_GROW_SET"
 parse = '''IDENT:( INHERIT: INITIAL: REVERT: UNSET: IDENT:) NUMBER:( false:FLEX_GROW_SET RANGE:num<0 NUMBER:) CALC:( NUMBER:FLEX_GROW_CALC CALC:)'''
 
 [flex_shrink]
+declaration_value = "number"
 enum = "CSS_PROP_FLEX_SHRINK"
 inherited = false
 cascade = "manual"
@@ -1592,6 +1639,7 @@ initial = "NORMAL"
 parse = '''IDENT:( INHERIT: INITIAL: REVERT: UNSET: FLEX_START:0,JUSTIFY_CONTENT_FLEX_START FLEX_END:0,JUSTIFY_CONTENT_FLEX_END CENTER:0,JUSTIFY_CONTENT_CENTER SPACE_BETWEEN:0,JUSTIFY_CONTENT_SPACE_BETWEEN SPACE_AROUND:0,JUSTIFY_CONTENT_SPACE_AROUND SPACE_EVENLY:0,JUSTIFY_CONTENT_SPACE_EVENLY NORMAL:0,JUSTIFY_CONTENT_NORMAL STRETCH:0,JUSTIFY_CONTENT_STRETCH IDENT:)'''
 
 [order]
+declaration_value = "number"
 enum = "CSS_PROP_ORDER"
 inherited = false
 cascade = "manual"
@@ -1706,6 +1754,7 @@ parse = '''IDENT:( INHERIT: INITIAL: REVERT: UNSET: ROW:0,GRID_AUTO_FLOW_ROW COL
 
 
 [row_gap]
+declaration_value = "length"
 enum = "CSS_PROP_ROW_GAP"
 inherited = false
 # cascade: manual — initial_data differs from TYPE_INFO defaults (arena memcmp risk)
@@ -1817,6 +1866,7 @@ cascade = "none"
 computed = "none"
 
 [block_size]
+declaration_value = "length"
 logical_group = "size"
 logical = true
 enum = "CSS_PROP_HEIGHT"
@@ -1886,6 +1936,7 @@ wrap = "css__parse_border_side"
 parse = "WRAP:css__parse_border_side"
 
 [border_width]
+declaration_value = "quad_length"
 declaration_longhands = ["border_top_width", "border_right_width", "border_bottom_width", "border_left_width"]
 enum = "CSS_PROP_BORDER_WIDTH"
 inherited = false
@@ -1943,6 +1994,7 @@ cascade = "none"
 computed = "none"
 
 [gap]
+declaration_value = "pair_length"
 declaration_longhands = ["row_gap", "column_gap"]
 enum = "CSS_PROP_GAP"
 inherited = false
@@ -1976,6 +2028,7 @@ cascade = "none"
 computed = "none"
 
 [inline_size]
+declaration_value = "length"
 logical_group = "size"
 logical = true
 enum = "CSS_PROP_WIDTH"
@@ -1993,6 +2046,7 @@ cascade = "none"
 computed = "none"
 
 [margin]
+declaration_value = "quad_length"
 logical_group = "margin"
 declaration_longhands = ["margin_top", "margin_right", "margin_bottom", "margin_left"]
 enum = "CSS_PROP_MARGIN"
@@ -2003,6 +2057,7 @@ computed = "none"
 helper_longhands = ["margin_side"]
 
 [max_block_size]
+declaration_value = "length"
 logical_group = "max_size"
 logical = true
 enum = "CSS_PROP_MAX_HEIGHT"
@@ -2012,6 +2067,7 @@ computed = "none"
 parse = '''IDENT:( INHERIT: INITIAL: REVERT: UNSET: NONE:0,MAX_HEIGHT_NONE IDENT:) SIZING:( FIT_CONTENT:MAX_HEIGHT_SET MIN_CONTENT:MAX_HEIGHT_SET MAX_CONTENT:MAX_HEIGHT_SET SIZING:) LENGTH_UNIT:( UNIT_PX:MAX_HEIGHT_SET MASK:UNIT_MASK_MAX_HEIGHT RANGE:<0 LENGTH_UNIT:) CALC:( UNIT_PX:MAX_HEIGHT_CALC CALC:)'''
 
 [max_inline_size]
+declaration_value = "length"
 logical_group = "max_size"
 logical = true
 enum = "CSS_PROP_MAX_WIDTH"
@@ -2021,6 +2077,7 @@ computed = "none"
 parse = '''IDENT:( INHERIT: INITIAL: REVERT: UNSET: NONE:0,MAX_WIDTH_NONE IDENT:) SIZING:( FIT_CONTENT:MAX_WIDTH_SET MIN_CONTENT:MAX_WIDTH_SET MAX_CONTENT:MAX_WIDTH_SET SIZING:) LENGTH_UNIT:( UNIT_PX:MAX_WIDTH_SET MASK:UNIT_MASK_MAX_WIDTH RANGE:<0 LENGTH_UNIT:) CALC:( UNIT_PX:MAX_WIDTH_CALC CALC:)'''
 
 [min_block_size]
+declaration_value = "length"
 logical_group = "min_size"
 logical = true
 enum = "CSS_PROP_MIN_HEIGHT"
@@ -2030,6 +2087,7 @@ computed = "none"
 parse = '''IDENT:( INHERIT: INITIAL: REVERT: UNSET: AUTO:0,MIN_HEIGHT_AUTO IDENT:) SIZING:( FIT_CONTENT:MIN_HEIGHT_SET MIN_CONTENT:MIN_HEIGHT_SET MAX_CONTENT:MIN_HEIGHT_SET SIZING:) LENGTH_UNIT:( UNIT_PX:MIN_HEIGHT_SET MASK:UNIT_MASK_MIN_HEIGHT RANGE:<0 LENGTH_UNIT:) CALC:( UNIT_PX:MIN_HEIGHT_CALC CALC:)'''
 
 [min_inline_size]
+declaration_value = "length"
 logical_group = "min_size"
 logical = true
 enum = "CSS_PROP_MIN_WIDTH"
@@ -2055,6 +2113,7 @@ cascade = "none"
 computed = "none"
 
 [padding]
+declaration_value = "quad_length"
 logical_group = "padding"
 declaration_longhands = ["padding_top", "padding_right", "padding_bottom", "padding_left"]
 enum = "CSS_PROP_PADDING"
@@ -2095,6 +2154,7 @@ condition = ["CSS_ASPECT_RATIO_RATIO", "CSS_ASPECT_RATIO_AUTO_RATIO"]
 # Logical spacing uses the existing horizontal-tb physical-side mapping.
 
 [margin_block]
+declaration_value = "pair_length"
 declaration_longhands = ["margin_block_start", "margin_block_end"]
 logical_group = "margin"
 logical = true
@@ -2105,6 +2165,7 @@ cascade = "none"
 computed = "none"
 
 [margin_block_start]
+declaration_value = "length"
 logical_group = "margin"
 logical = true
 enum = "CSS_PROP_MARGIN_TOP"
@@ -2114,6 +2175,7 @@ computed = "none"
 parse = "WRAP:css__parse_margin_side"
 
 [margin_block_end]
+declaration_value = "length"
 logical_group = "margin"
 logical = true
 enum = "CSS_PROP_MARGIN_BOTTOM"
@@ -2123,6 +2185,7 @@ computed = "none"
 parse = "WRAP:css__parse_margin_side"
 
 [padding_block]
+declaration_value = "pair_length"
 declaration_longhands = ["padding_block_start", "padding_block_end"]
 logical_group = "padding"
 logical = true
@@ -2133,6 +2196,7 @@ cascade = "none"
 computed = "none"
 
 [padding_block_start]
+declaration_value = "length"
 logical_group = "padding"
 logical = true
 enum = "CSS_PROP_PADDING_TOP"
@@ -2142,6 +2206,7 @@ computed = "none"
 parse = "WRAP:css__parse_padding_side"
 
 [padding_block_end]
+declaration_value = "length"
 logical_group = "padding"
 logical = true
 enum = "CSS_PROP_PADDING_BOTTOM"

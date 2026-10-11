@@ -871,7 +871,8 @@ css_error handleDeclaration(css_language *c, const parserutils_vector *vector)
     if (c->declarations != NULL) {
         const css_style *style = ((css_rule_selector *)rule)->style;
         return css__declaration_list_record(c->declarations, ident, vector, value_start,
-            bytecode_offset, style->used - bytecode_offset);
+            bytecode_offset, style->used - bytecode_offset,
+            style->used > bytecode_offset && getOpcode(style->bytecode[bytecode_offset]) == CSS_PROP_VAR_DEFERRED);
     }
 
     return CSS_OK;

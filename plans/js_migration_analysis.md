@@ -620,22 +620,23 @@ the collector pointer confined to the temporary language-parser context.
 
 This is **parser output, not an exposed CSSStyleDeclaration**. The separate
 component-order view described below now selects winning contributions, but
-specified-value expansion and serialization are still pending. Decoded
+specified-value expansion and serialization are being implemented below. Decoded
 tokens must not be mistaken for source text; the source-capture increment below
 now preserves that separately. There is no new JS feature-detection placeholder
 and the saved eBihoreanul `style.opacity` blocker remains. Implementation sequence:
 
-1. **Source capture implemented; CSSOM serialization still pending.** Preserve
-   source spelling where required, particularly custom-property values.
+1. **Source capture and custom-property value serialization implemented.**
+   Preserve source spelling where required, particularly custom-property values.
    The [custom-property serialization rules](https://drafts.csswg.org/css-variables-1/#serializing-custom-properties)
    require original text; computed-style output or reconstructed tokens are not a
    substitute. Extend the shared lexer/parser rather than split CSS with a second
    ad hoc parser in the JS binding.
 2. Build the specified declaration block: shorthand value expansion, alias handling
    and specified-value serialization. Generated property metadata and an immutable
-   component-order view now cover name-level shorthand expansion and duplicate/
-   priority resolution; they do not yet implement CSSOM writes. Derive metadata from
-   `properties.toml` and the existing generator. Follow the
+   component-order view cover name-level shorthand expansion and duplicate/
+   priority resolution. The value layer below adds scalar/box expansion and
+   serialization; other value families, aliases and CSSOM writes remain. Derive
+   metadata from `properties.toml` and the existing generator. Follow the
    [CSSOM declaration-block algorithms](https://drafts.csswg.org/cssom/#the-cssstyledeclaration-interface),
    and keep specified values separate from inherited/computed values.
 3. Expose a lazy, stable style wrapper with native method/receiver checks,
@@ -758,6 +759,68 @@ Next: expand and normalize specified values and aliases, implement their CSSOM
 serialization, then add the stable style wrapper and route writes through existing
 DOM mutation attribution/restyling. The saved eBihoreanul `style.opacity` blocker
 remains until that wrapper is available.
+
+### Specified values and box shorthand serialization (2026-10-11)
+
+Declaration metadata and ordering are committed as `e2e52529`. The private
+`parse/declaration_value.{c,h}` layer now serializes winning specified values and
+reconstructs supported shorthands from their actual winning components. It uses
+accepted parser tokens, source text and generated `properties.toml` metadata,
+not computed-style getters or a bytecode-to-text conversion.
+
+Implemented in this increment:
+
+- Custom properties preserve comments, escapes, case and numeric spelling, with
+  only outer whitespace removed. Empty values serialize as one space, following
+  [CSS Variables §4.1](https://drafts.csswg.org/css-variables-1/#serializing-custom-properties).
+  Source bounds protect spaces inside escaped identifiers, EOF strings and
+  unterminated comments. The only extra source scan covers whitespace/comments
+  after the last retained token; it does not retokenize declaration values.
+- CSS-wide keywords apply to every shorthand component. Deferred `var()` longhands
+  retain their source; pending shorthand members serialize as empty strings.
+  A shorthand recovers its original text only when all members still come from
+  that same shorthand declaration, following
+  [CSS Values substitution rules](https://drafts.csswg.org/css-values-5/#pending-substitution-value).
+- Numeric/length values normalize keyword/unit case and decimal spelling following
+  [CSSOM value serialization](https://drafts.csswg.org/cssom/#serialize-a-css-value).
+  Decimal rounding preserves up to six fractional digits without using locale-
+  dependent conversion or the renderer's lower-precision fixed-point values.
+  Unitless lengths acquire `px`; number-valued line heights remain unitless.
+  Specified opacity retains its value before the renderer's computed-value clamp.
+- Margin, padding, inset, their logical pairs, border-width and gap expand scalar
+  components and reconstruct the shortest equivalent shorthand. Missing members,
+  mixed priorities, incompatible CSS-wide values and mixed pending substitution
+  correctly prevent shorthand serialization. Logical names retain their identity.
+  Reconstruction does not yet implement cssText's separate ordering/intermixing
+  checks.
+
+The generator validates the serialization family and component count. Ordinary
+rendering still does not collect declarations or run these serializers. Returned
+strings own their references independently of the borrowed declaration/order views;
+failed serialization leaves those views reusable.
+
+This remains an internal increment, **not exposed element.style**. `CSS_INVALID`
+from this private serializer explicitly means the value family is not implemented;
+callers must not silently use raw source or an empty string as a fallback. Math
+functions, colors, URLs, fonts and the other structured value families, legacy
+alias normalization and modern decomposition of older aggregate properties remain.
+A box shorthand containing a math function is currently unsupported as a whole
+by this layer. The existing parser's accepted grammar is unchanged; this does not add
+exponent syntax or additional CSS input preprocessing. Block-wide serialization
+also needs safe handling of recovered EOF tokens before joining declarations.
+After completing those pieces, implement CSSOM writes and the live DOM wrapper.
+The saved eBihoreanul `style.opacity` blocker therefore remains.
+
+Validation: all 75 native CSS/QuickJS suites pass under Debug ASan/UBSan with
+LeakSanitizer, all 17 selected Release suites have passing results, and all 13
+targeted Qt capture suites pass. The declaration suite passes 185 Debug / 191
+Release checks, including whole/chunked input, specified-value round trips,
+shorthand overrides, malformed/EOF source preservation and allocation failure/
+retry. Eleven generator checks cover registry generation and invalid metadata.
+The Release failure sweep initially exposed an assertion inside the test helper
+that allocated while malloc failures were enabled; moving assertions outside that
+interval fixed the harness, and the final serializer suites pass in both builds.
+Builds are warning-free and `git diff --check` is clean. No GTK tests were run.
 
 ## Assessment
 

@@ -8,6 +8,7 @@
 
 #include "parse/declarations.h"
 #include "parse/declaration_order.h"
+#include "parse/declaration_value.h"
 #include "parse/language.h"
 #include "parse/property.h"
 #include "stylesheet.h"
@@ -158,6 +159,9 @@ START_TEST(test_declarations)
         compare_strings(a->name, b->name);
         compare_strings(a->source_value, b->source_value);
         ck_assert_ptr_eq(a->property, b->property);
+        ck_assert_int_eq(a->deferred, b->deferred);
+        ck_assert_uint_eq(a->value_start, b->value_start);
+        ck_assert_uint_eq(a->value_end, b->value_end);
         if (strncmp(lwc_string_data(a->name), "--", 2) == 0) {
             ck_assert_ptr_null(a->property);
         } else {
@@ -646,6 +650,240 @@ START_TEST(test_allocation_failure)
 END_TEST
 #endif
 
+
+static const css_declaration_contribution *find_value(const css_declaration_order *order, const char *name)
+{
+    for (size_t i = 0; i < css__declaration_order_count(order); i++) {
+        const css_declaration_contribution *value = css__declaration_order_get(order, i);
+        if (strcmp(value->name, name) == 0)
+            return value;
+    }
+    return NULL;
+}
+
+static css_error serialize_property(const css_declaration_order *order, const char *name, lwc_string **out)
+{
+    const struct css_prop_entry *property = css_prop_lookup(name, strlen(name));
+    if (property == NULL || !property->shorthand)
+        return css__declaration_value_serialize(find_value(order, name), out);
+    const css_declaration_contribution *members[16];
+    /* This helper also runs with allocation failures enabled. Check's assert
+     * bookkeeping allocates, so assertions belong after restoring the limit. */
+    if (property->longhand_count > sizeof(members) / sizeof(members[0]))
+        return CSS_BADPARM;
+    for (size_t i = 0; i < property->longhand_count; i++)
+        members[i] = find_value(order, property->longhands[i]);
+    return css__declaration_shorthand_serialize(property, members, property->longhand_count, out);
+}
+
+static const struct {
+    const char *css, *property, *expected;
+} value_cases[] = {
+    {"--x:  001.2300PX  /**/ 'MiXeD'  ;", "--x", "001.2300PX  /**/ 'MiXeD'"},
+    {"--x: \t /* leading */ a /* trailing */ \r\n", "--x", "/* leading */ a /* trailing */"},
+    {"--x: \t /* one */ \t /* two */ \t;", "--x", "/* one */ \t /* two */"},
+    {"--x:12345678-12e3-8d9b-a456-426614174000;", "--x", "12345678-12e3-8d9b-a456-426614174000"},
+    {"--x:;", "--x", " "},
+    {"--x: \t\r\n !important;", "--x", " "},
+    {"--x: /**/ ;", "--x", "/**/"},
+    {"--x: foo\\ ;", "--x", "foo\\ "},
+    {"--x: foo\\  ;", "--x", "foo\\ "},
+    {"--x: \\61 ;", "--x", "\\61 "},
+    {"--x: \\61  ;", "--x", "\\61 "},
+    {"--x: \\61 /**/ ;", "--x", "\\61 /**/"},
+    {"--x: 'ends in spaces  ", "--x", "'ends in spaces  "},
+    {"--x: 'escaped\\'  ", "--x", "'escaped\\'  "},
+    {"--x: /* unterminated  ", "--x", "/* unterminated  "},
+    {"--x: x /* unterminated  ", "--x", "x /* unterminated  "},
+    {"--x: x \t/**/ \t/* unterminated  ", "--x", "x \t/**/ \t/* unterminated  "},
+    {"--x: UnSeT;", "--x", "UnSeT"},
+    {"--é: 'Știri 💡' /* comment */ !IMPORTANT", "--é", "'Știri 💡' /* comment */"},
+    {"width: VaR(--x, 0002PX) /**/ !important", "width", "VaR(--x, 0002PX) /**/"},
+    {"color:var(--x, rgb(1, 2, 3))", "color", "var(--x, rgb(1, 2, 3))"},
+    {"margin:var(--x)", "margin-left", ""},
+    {"border:var(--x)", "border-left-color", ""},
+    {"margin: InHeRiT", "margin-left", "inherit"},
+    {"border: INITIAL", "border-left-color", "initial"},
+    {"width: UnSeT", "width", "unset"},
+    {"width: \\72 evert", "width", "revert"},
+    {"margin:1PX", "margin-left", "1px"},
+    {"margin:1px 2EM", "margin-bottom", "1px"},
+    {"margin:1px 2EM 3%", "margin-left", "2em"},
+    {"margin:1px 2em 3% -0", "margin-left", "0px"},
+    {"margin:1px 2em 3% -4px", "margin-bottom", "3%"},
+    {"padding:1px 2px 3px 4px", "padding-right", "2px"},
+    {"inset: AuTo -0 2em", "left", "0px"},
+    {"margin-inline:1px 2em", "margin-inline-end", "2em"},
+    {"padding-block:3%", "padding-block-end", "3%"},
+    {"inset-block: AuTo -1px", "inset-block-start", "auto"},
+    {"border-width: tHiN medium 0 1em", "border-bottom-width", "0px"},
+    {"gap: NoRmAl 2px", "row-gap", "normal"},
+    {"width: 0001.2300000PX", "width", "1.23px"},
+    {"width: 0.0000004em", "width", "0em"},
+    {"width: .9999995px", "width", "1px"},
+    {"width: 9999999999999999999.9999999px", "width", "10000000000000000000px"},
+    {"width: .0000005PX", "width", "0.000001px"},
+    {"margin-top: -.0000004px", "margin-top", "0px"},
+    {"margin-top: -.0000005px", "margin-top", "-0.000001px"},
+    {"margin-top: -999.9999999px", "margin-top", "-1000px"},
+    {"width: +0002.5000p\\78 ", "width", "2.5px"},
+    {"height: 0", "height", "0px"},
+    {"height: 0em", "height", "0em"},
+    {"width: 01.250000%", "width", "1.25%"},
+    {"font-size: LaRgEr", "font-size", "larger"},
+    {"min-width: MiN-CoNtEnT", "min-width", "min-content"},
+    {"opacity: .123456789", "opacity", "0.123457"},
+    /* Specified opacity is not the renderer's clamped computed value. */
+    {"opacity: 2", "opacity", "2"},
+    {"opacity: -0.25", "opacity", "-0.25"},
+    {"line-height: 0001.2500", "line-height", "1.25"},
+    {"line-height: 0001.2500EM", "line-height", "1.25em"},
+    {"line-height: 0", "line-height", "0"},
+    {"z-index: +002", "z-index", "2"},
+    {"z-index: AUTO", "z-index", "auto"},
+    {"order:-0002", "order", "-2"},
+    {"margin: 0px 1em 0px 1em", "margin", "0px 1em"},
+    {"margin: 0 1px 1px 1px", "margin", "0px 1px 1px"},
+    {"margin: 1px 2px 3px 4px", "margin", "1px 2px 3px 4px"},
+    {"padding: 0 0px 0PX -0", "padding", "0px"},
+    {"inset: auto 1em auto 1em", "inset", "auto 1em"},
+    {"margin:1px; margin-left:2px", "margin", "1px 1px 1px 2px"},
+    {"margin:1px!important; margin-left:2px", "margin", "1px"},
+    {"margin:1px; margin-left:2px!important", "margin", ""},
+    {"margin-top:1px; margin-left:2px", "margin", ""},
+    {"margin-inline: 2px 2px", "margin-inline", "2px"},
+    {"padding-block: 2px 3px", "padding-block", "2px 3px"},
+    {"gap: 1em; column-gap:2em", "gap", "1em 2em"},
+    {"margin:INITIAL", "margin", "initial"},
+    {"border:UNSET", "border-top", "unset"},
+    {"margin:inherit; margin-left:initial", "margin", ""},
+    {"margin:inherit; margin-left:1px", "margin", ""},
+    {"margin:1px; margin-left:inherit", "margin", ""},
+    {"margin:var(--x, 1px  2px) /**/ ", "margin", "var(--x, 1px  2px) /**/"},
+    {"margin:var(--x); margin-left:1px", "margin", ""},
+    {"margin:var(--x); margin-left:var(--x)", "margin", ""},
+    {"margin-top:var(--x); margin-right:var(--x); margin-bottom:var(--x); margin-left:var(--x)", "margin", ""},
+    {"border:var(--x)", "border-top", ""},
+    {"border:var(--x)", "border", "var(--x)"},
+    {"margin:var(--x)!important; margin-left:1px", "margin", "var(--x)"},
+    {"width:calc(1px + 2em)", "width", NULL},
+    {"margin:1px calc(2px + 1em)", "margin", NULL},
+    {"margin:1px calc(2px + 1em)", "margin-top", NULL},
+    {"color:rgb(1, 2, 3)", "color", NULL},
+    {"font-family:'Example'", "font-family", NULL},
+};
+enum { VALUE_CASE_COUNT = sizeof(value_cases) / sizeof(value_cases[0]) };
+
+START_TEST(test_specified_values)
+{
+    for (unsigned chunks = 0; chunks < 2; chunks++) {
+        css_declaration_list *list = parse(value_cases[_i].css, chunks != 0);
+        css_declaration_order *order;
+        ck_assert_int_eq(css__declaration_order_create(list, &order), CSS_OK);
+        lwc_string *value = NULL;
+        css_error error = serialize_property(order, value_cases[_i].property, &value);
+        ck_assert_msg(error == (value_cases[_i].expected == NULL ? CSS_INVALID : CSS_OK),
+            "case %d chunks %u: %s / %s: error %d", _i, chunks, value_cases[_i].css,
+            value_cases[_i].property, error);
+        if (value_cases[_i].expected == NULL) {
+            ck_assert_ptr_null(value);
+        } else {
+            ck_assert_msg(strcmp(lwc_string_data(value), value_cases[_i].expected) == 0,
+                "case %d chunks %u: %s / %s: expected <%s>, got <%s>", _i, chunks, value_cases[_i].css,
+                value_cases[_i].property, value_cases[_i].expected, lwc_string_data(value));
+        }
+        /* Specified values must survive serialize/reparse, including values
+         * more precise or larger than the renderer's fixed-point storage.
+         * Some logical members currently only have shorthand parse handlers. */
+        const char *name = value_cases[_i].property;
+        if (value != NULL && lwc_string_length(value) != 0 &&
+            (strncmp(name, "--", 2) == 0 || css_prop_lookup(name, strlen(name)) != NULL)) {
+            size_t length = strlen(name) + 1 + lwc_string_length(value);
+            char *css = malloc(length + 1);
+            ck_assert_ptr_nonnull(css);
+            snprintf(css, length + 1, "%s:%s", name, lwc_string_data(value));
+            css_declaration_list *roundtrip = parse(css, chunks != 0);
+            free(css);
+            css_declaration_order *roundtrip_order;
+            ck_assert_int_eq(css__declaration_order_create(roundtrip, &roundtrip_order), CSS_OK);
+            lwc_string *roundtrip_value;
+            ck_assert_int_eq(serialize_property(roundtrip_order, name, &roundtrip_value), CSS_OK);
+            compare_strings(value, roundtrip_value);
+            lwc_string_unref(roundtrip_value);
+            css__declaration_order_destroy(roundtrip_order);
+            css__declaration_list_destroy(roundtrip);
+        }
+        css__declaration_order_destroy(order);
+        css__declaration_list_destroy(list);
+        /* The returned string is owned, independent of both borrowed views. */
+        if (value != NULL)
+            lwc_string_unref(value);
+    }
+}
+END_TEST
+
+START_TEST(test_value_arguments)
+{
+    lwc_string *value = (void *)1;
+    ck_assert_int_eq(css__declaration_value_serialize(NULL, &value), CSS_BADPARM);
+    ck_assert_ptr_null(value);
+    ck_assert_int_eq(css__declaration_value_serialize(NULL, NULL), CSS_BADPARM);
+    ck_assert_int_eq(css__declaration_shorthand_serialize(NULL, NULL, 0, &value), CSS_BADPARM);
+    ck_assert_ptr_null(value);
+    css_declaration_list *list = parse("margin:1px; width:1px", false);
+    css_declaration_order *order;
+    ck_assert_int_eq(css__declaration_order_create(list, &order), CSS_OK);
+    css_declaration_contribution bad = *find_value(order, "margin-top");
+    bad.component = 4;
+    ck_assert_int_eq(css__declaration_value_serialize(&bad, &value), CSS_BADPARM);
+    ck_assert_ptr_null(value);
+    const struct css_prop_entry *property = css_prop_lookup("margin", 6);
+    const css_declaration_contribution *members[4] = {find_value(order, "width")};
+    ck_assert_int_eq(css__declaration_shorthand_serialize(property, members, 4, &value), CSS_BADPARM);
+    ck_assert_ptr_null(value);
+    ck_assert_int_eq(css__declaration_shorthand_serialize(property, members, 3, &value), CSS_BADPARM);
+    ck_assert_ptr_null(value);
+    css__declaration_order_destroy(order);
+    css__declaration_list_destroy(list);
+}
+END_TEST
+
+#ifdef WISP_TEST_ALLOC_FAILURE
+START_TEST(test_value_allocation_failure)
+{
+    const char *css = "margin:.1234567px .3456789em .5678912% -.6789123px; --x:  original value  ;";
+    css_declaration_list *list = parse(css, false);
+    css_declaration_order *order;
+    ck_assert_int_eq(css__declaration_order_create(list, &order), CSS_OK);
+    const char *name = _i == 0 ? "margin" : "--x";
+    bool succeeded = false;
+    unsigned failures = 0;
+    for (unsigned attempt = 0; attempt < 100; attempt++) {
+        lwc_string *value = (void *)1;
+        malloc_limit(attempt);
+        css_error error = serialize_property(order, name, &value);
+        malloc_limit(UINT_MAX);
+        if (error == CSS_OK) {
+            ck_assert_ptr_nonnull(value);
+            lwc_string_unref(value);
+            succeeded = true;
+            break;
+        }
+        ck_assert_int_eq(error, CSS_NOMEM);
+        ck_assert_ptr_null(value);
+        failures++;
+    }
+    ck_assert_msg(succeeded && failures > 0, "serializer %s did not test failure and recovery", name);
+    /* The borrowed declarations remain usable after every failed serialization. */
+    lwc_string *value;
+    ck_assert_int_eq(serialize_property(order, name, &value), CSS_OK);
+    lwc_string_unref(value);
+    css__declaration_order_destroy(order);
+    css__declaration_list_destroy(list);
+}
+END_TEST
+#endif
+
 static void unexpected_string(lwc_string *string, void *pw)
 {
     unsigned *count = pw;
@@ -661,6 +899,11 @@ int main(void)
     tcase_add_loop_test(tc, test_lexer_resume, 0, LEXER_CASE_COUNT);
     tcase_add_loop_test(tc, test_source_value, 0, SOURCE_CASE_COUNT);
     tcase_add_test(tc, test_source_growth);
+    tcase_add_loop_test(tc, test_specified_values, 0, VALUE_CASE_COUNT);
+    tcase_add_test(tc, test_value_arguments);
+#ifdef WISP_TEST_ALLOC_FAILURE
+    tcase_add_loop_test(tc, test_value_allocation_failure, 0, 2);
+#endif
     tcase_add_loop_test(tc, test_declaration_order, 0, ORDER_CASE_COUNT);
     tcase_add_test(tc, test_property_metadata);
     tcase_add_test(tc, test_order_many_custom_properties);

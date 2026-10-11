@@ -29,6 +29,25 @@ class DeclarationMetadataTest(unittest.TestCase):
         side = next(e for e in entries if e.startswith("border-top,"))
         self.assertIn("false, false, NULL, 0", color)
         self.assertIn("true, false, css_decl_members_border_top, 3", side)
+        for name, prop in self.reader.toml_data.items():
+            entry = next(e for e in entries if e.startswith(name.replace("_", "-") + ","))
+            kind = prop.get("declaration_value", "none").upper()
+            self.assertTrue(entry.endswith("CSS_DECL_VALUE_" + kind), name)
+
+    def test_unknown_value_family(self):
+        self.reader.toml_data["width"]["declaration_value"] = "typo"
+        with self.assertRaisesRegex(ValueError, "width: unknown declaration_value"):
+            self.reader.validate_declarations()
+
+    def test_value_family_arity(self):
+        self.reader.toml_data["margin"]["declaration_value"] = "pair_length"
+        with self.assertRaisesRegex(ValueError, "margin: declaration_value requires 2"):
+            self.reader.validate_declarations()
+
+    def test_longhand_value_family(self):
+        self.reader.toml_data["width"]["declaration_value"] = "quad_length"
+        with self.assertRaisesRegex(ValueError, "width: declaration_value requires 4"):
+            self.reader.validate_declarations()
 
     def test_missing_shorthand_members(self):
         del self.reader.toml_data["margin"]["declaration_longhands"]
