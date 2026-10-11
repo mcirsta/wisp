@@ -28,6 +28,9 @@ enum css_declaration_value_kind {
     CSS_DECL_VALUE_CONTENT,
     CSS_DECL_VALUE_STRING_LIST,
     CSS_DECL_VALUE_COUNTER_LIST,
+    CSS_DECL_VALUE_ASPECT_RATIO,
+    CSS_DECL_VALUE_BORDER_SPACING,
+    CSS_DECL_VALUE_CLIP,
 };
 
 /* Immutable registration shared by the parser, variable resolver and specified

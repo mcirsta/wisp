@@ -990,6 +990,61 @@ block serialization work, then implement CSSOM writes and the live DOM wrapper.
 The saved eBihoreanul `style.opacity` blocker remains pending until that wrapper
 is connected.
 
+### Structured geometry values and length validation (2026-10-11)
+
+Generated-content serialization and identifier parsing are committed as
+`8101e159`. The next native specified-value increment covers `aspect-ratio`,
+`border-spacing` and `clip`, selected through generated property metadata.
+These are structured longhand values, not shorthands with invented component
+properties. Ordinary stylesheet parsing still does not collect or serialize
+declarations.
+
+Serialization follows
+[CSSOM value serialization](https://drafts.csswg.org/cssom/#serialize-a-css-value):
+
+- Ratios retain both components, with an omitted denominator serialized as `1`.
+  `auto` precedes the ratio. Fractions are not reduced, and degenerate ratios such
+  as `0 / 0` retain their specified form even though their layout behavior is auto.
+- Border spacing retains its declared units and omits an identical second value.
+- Rectangles serialize all four edges with comma separators, retaining `auto`
+  and negative lengths.
+
+The existing decimal serializer preserves specified magnitude and precision
+without reading fixed-point layout storage. A shared bounded component formatter
+handles these values and the existing box shorthands, with allocation/error
+handling in one place. Unsupported functions remain explicit unsupported results.
+
+Related parser corrections are included at their source:
+
+- [CSS 2.2 clipping](https://www.w3.org/TR/CSS22/visufx.html#clipping) permits comma
+  syntax and optional legacy space syntax, but explicitly forbids mixing them.
+  The parser now enforces that distinction.
+- [Border spacing](https://drafts.csswg.org/css-tables-3/#border-spacing-property)
+  and clipping require lengths. A shared length check rejects percentages,
+  angles, times, frequencies, resolutions and grid fractions. Border spacing
+  also rejects negative values; clipping continues to allow them.
+- Nonnegative ratio/spacing checks examine the numeric token before fixed-point
+  rounding can turn a tiny negative into zero. The shared unit parser likewise
+  permits only actual unitless zero in standards mode, following
+  [CSS length syntax](https://drafts.csswg.org/css-values-4/#length-value).
+  Existing quirks-mode allowances remain. These checks scan decimal tokens
+  without allocation or floating-point conversion.
+
+Validation: all 77 targeted native CSS/QuickJS suites pass under Debug
+ASan/UBSan/LeakSanitizer, all 18 selected Release suites pass, and all 18 targeted
+Qt integration suites pass, including aspect-ratio rendering. The declaration
+suite passes 390 Debug / 406 Release checks. Coverage includes whole and
+byte-at-a-time input, canonical round trips, compiled-bytecode equivalence,
+every comma/space separator combination, invalid units in each component,
+tiny-value range checks, allocation failure/retry and interned-string cleanup.
+The 12 generator checks pass. Both builds are warning-free and
+`git diff --check` is clean. No GTK tests were run.
+
+This remains native CSSOM groundwork. The live `element.style` wrapper and the
+saved eBihoreanul `style.opacity` blocker are still pending. Remaining work
+includes color/font/math value coverage, alias/aggregate handling, declaration
+block serialization, CSSOM writes and DOM integration.
+
 ## Assessment
 
 Keep QuickJS-ng and libdom. The missing part is the browser binding and execution

@@ -42,6 +42,10 @@
 /* Allocation-free ASCII comparison with a lowercase keyword. */
 bool css__keyword_equal(lwc_string *text, const char *keyword);
 
+/* Sign of an already-tokenized decimal number, before fixed-point rounding.
+ * Dimensions may follow the numeric prefix. This does not validate syntax. */
+int css__number_sign(lwc_string *text);
+
 css_fixed css__number_from_lwc_string(lwc_string *string, bool int_only, size_t *consumed);
 css_fixed css__number_from_string(const uint8_t *data, size_t len, bool int_only, size_t *consumed);
 

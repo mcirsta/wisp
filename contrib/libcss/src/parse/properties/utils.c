@@ -1785,7 +1785,7 @@ css_error css__parse_unit_specifier(css_language *c, const parserutils_vector *v
         *unit = temp_unit;
     } else if (token->type == CSS_TOKEN_NUMBER) {
         /* Non-zero values are permitted in quirks mode */
-        if (num != 0) {
+        if (css__number_sign(token->idata) != 0) {
             if (c->sheet->quirks_allowed) {
                 c->sheet->quirks_used = true;
             } else {
@@ -1830,6 +1830,21 @@ css_error css__parse_unit_specifier(css_language *c, const parserutils_vector *v
     *length = num;
 
     return CSS_OK;
+}
+
+css_error css__parse_length(css_language *c, const parserutils_vector *vector, int32_t *ctx,
+    bool non_negative, css_fixed *length, uint32_t *unit)
+{
+    int32_t orig_ctx = *ctx;
+    consumeWhitespace(vector, ctx);
+    const css_token *token = parserutils_vector_peek(vector, *ctx);
+    css_error error = css__parse_unit_specifier(c, vector, ctx, UNIT_PX, length, unit);
+    if (error == CSS_OK && (!(*unit & UNIT_LENGTH) || *unit == UNIT_FR ||
+            (non_negative && css__number_sign(token->idata) < 0)))
+        error = CSS_INVALID;
+    if (error != CSS_OK)
+        *ctx = orig_ctx;
+    return error;
 }
 
 /**

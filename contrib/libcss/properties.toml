@@ -268,6 +268,7 @@ initial = "SEPARATE"
 parse = '''IDENT:( INHERIT: INITIAL: REVERT: UNSET: COLLAPSE:0,BORDER_COLLAPSE_COLLAPSE SEPARATE:0,BORDER_COLLAPSE_SEPARATE IDENT:)'''
 
 [border_spacing]
+declaration_value = "border_spacing"
 enum = "CSS_PROP_BORDER_SPACING"
 cascade = "manual"
 computed = "auto"
@@ -512,6 +513,7 @@ initial = "NONE"
 parse = '''IDENT:( INHERIT: INITIAL: REVERT: UNSET: RIGHT:0,CLEAR_RIGHT LEFT:0,CLEAR_LEFT BOTH:0,CLEAR_BOTH NONE:0,CLEAR_NONE IDENT:)'''
 
 [clip]
+declaration_value = "clip"
 enum = "CSS_PROP_CLIP"
 inherited = false
 cascade = "manual"
@@ -2193,6 +2195,7 @@ cascade = "none"
 computed = "none"
 
 [aspect_ratio]
+declaration_value = "aspect_ratio"
 enum = "CSS_PROP_ASPECT_RATIO"
 inherited = false
 manual = true

@@ -25,6 +25,21 @@ bool css__keyword_equal(lwc_string *text, const char *keyword)
     return true;
 }
 
+int css__number_sign(lwc_string *text)
+{
+    const char *data = lwc_string_data(text);
+    size_t length = lwc_string_length(text);
+    int sign = length != 0 && data[0] == '-' ? -1 : 1;
+    size_t i = length != 0 && (data[0] == '-' || data[0] == '+') ? 1 : 0;
+    for (; i < length; i++) {
+        if (data[i] >= '1' && data[i] <= '9')
+            return sign;
+        if (data[i] != '0' && data[i] != '.')
+            break;
+    }
+    return 0;
+}
+
 css_fixed css__number_from_lwc_string(lwc_string *string, bool int_only, size_t *consumed)
 {
     if (string == NULL || lwc_string_length(string) == 0 || consumed == NULL)

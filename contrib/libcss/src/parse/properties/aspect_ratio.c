@@ -11,7 +11,7 @@ static bool ratio_number(const css_token *token, css_fixed *value)
         return false;
     }
     *value = css__number_from_lwc_string(token->idata, false, &consumed);
-    return consumed == lwc_string_length(token->idata) && *value >= 0;
+    return consumed == lwc_string_length(token->idata) && css__number_sign(token->idata) >= 0;
 }
 
 css_error css__parse_aspect_ratio(css_language *c, const parserutils_vector *vector, int32_t *ctx, css_style *result)

@@ -203,6 +203,11 @@ css_error css__parse_named_colour(css_language *c, lwc_string *data, uint32_t *r
 
 css_error css__parse_hash_colour(lwc_string *data, uint32_t *result);
 
+/* Parse a CSS length, excluding percentages, resolutions and grid fractions.
+ * Range checks use the numeric spelling before rounding into rendering storage. */
+css_error css__parse_length(css_language *c, const parserutils_vector *vector, int32_t *ctx,
+    bool non_negative, css_fixed *length, uint32_t *unit);
+
 css_error css__parse_unit_specifier(css_language *c, const parserutils_vector *vector, int32_t *ctx,
     uint32_t default_unit, css_fixed *length, uint32_t *unit);
 

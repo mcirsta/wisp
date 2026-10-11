@@ -925,6 +925,61 @@ static const struct {
     {"counter-reset:\\2d -Chapter +0 --9 2", "counter-reset", "--Chapter --9 2"},
     {"\\2d -Tone:ReD", "--Tone", "ReD"},
 
+    {"aspect-ratio:AuTo", "aspect-ratio", "auto"},
+    {"aspect-ratio:INITIAL", "aspect-ratio", "initial"},
+    {"aspect-ratio:var(--Ratio, 16/9)", "aspect-ratio", "var(--Ratio, 16/9)"},
+    {"aspect-ratio:16/9", "aspect-ratio", "16 / 9"},
+    {"aspect-ratio:4/2", "aspect-ratio", "4 / 2"},
+    {"aspect-ratio:3", "aspect-ratio", "3 / 1"},
+    {"aspect-ratio:003.00/+01.000", "aspect-ratio", "3 / 1"},
+    {"aspect-ratio:003.00 AuTo", "aspect-ratio", "auto 3 / 1"},
+    {"aspect-ratio:4/3 AuTo", "aspect-ratio", "auto 4 / 3"},
+    {"aspect-ratio:AuTo 4/3", "aspect-ratio", "auto 4 / 3"},
+    {"aspect-ratio:0", "aspect-ratio", "0 / 1"},
+    {"aspect-ratio:-0.0000/-0", "aspect-ratio", "0 / 0"},
+    {"aspect-ratio:auto 0/0", "aspect-ratio", "auto 0 / 0"},
+    {"aspect-ratio:1/0", "aspect-ratio", "1 / 0"},
+    {"aspect-ratio:.1234567/.9999995", "aspect-ratio", "0.123457 / 1"},
+    {"aspect-ratio:12345678/98765432", "aspect-ratio", "12345678 / 98765432"},
+    {"aspect-ratio:3;aspect-ratio:-.00000001", "aspect-ratio", "3 / 1"},
+    {"aspect-ratio:3;aspect-ratio:1/-.00000001", "aspect-ratio", "3 / 1"},
+    {"aspect-ratio:3;aspect-ratio:auto auto", "aspect-ratio", "3 / 1"},
+    {"aspect-ratio:3;aspect-ratio:auto 1 2", "aspect-ratio", "3 / 1"},
+    {"aspect-ratio:3;aspect-ratio:1/", "aspect-ratio", "3 / 1"},
+    {"aspect-ratio:3;aspect-ratio:1px/2", "aspect-ratio", "3 / 1"},
+    {"border-spacing:INHERIT", "border-spacing", "inherit"},
+    {"border-spacing:var(--Spacing)", "border-spacing", "var(--Spacing)"},
+    {"border-spacing:0", "border-spacing", "0px"},
+    {"border-spacing:-0.0 00PX", "border-spacing", "0px"},
+    {"border-spacing:2EM", "border-spacing", "2em"},
+    {"border-spacing:2EM 2em", "border-spacing", "2em"},
+    {"border-spacing:.1234567EM .9999995PX", "border-spacing", "0.123457em 1px"},
+    {"border-spacing:12345678px 23456789em", "border-spacing", "12345678px 23456789em"},
+    {"border-spacing:0px 0em", "border-spacing", "0px 0em"},
+    {"border-spacing:3px;border-spacing:-.00000001px", "border-spacing", "3px"},
+    {"border-spacing:3px;border-spacing:0 -.00000001em", "border-spacing", "3px"},
+    {"border-spacing:3px;border-spacing:.00000001", "border-spacing", "3px"},
+    {"border-spacing:3px;border-spacing:1px .00000001", "border-spacing", "3px"},
+    {"border-spacing:3px;border-spacing:1px 2px 3px", "border-spacing", "3px"},
+    {"clip:AuTo", "clip", "auto"},
+    {"clip:INITIAL", "clip", "initial"},
+    {"clip:var(--Clip)", "clip", "var(--Clip)"},
+    {"clip:RECT(AUTO,AUTO,AUTO,AUTO)", "clip", "rect(auto, auto, auto, auto)"},
+    {"clip:rect(0 00PX -0 AuTo)", "clip", "rect(0px, 0px, 0px, auto)"},
+    {"clip:rect(1px,2em,-3vw,auto)", "clip", "rect(1px, 2em, -3vw, auto)"},
+    {"clip:rect(-.000001em .1234567px -.9999995px auto)", "clip",
+        "rect(-0.000001em, 0.123457px, -1px, auto)"},
+    {"clip:rect(12345678px,23456789px,0,0)", "clip", "rect(12345678px, 23456789px, 0px, 0px)"},
+    {"clip:auto; clip:rect(.00000001,0,0,0)", "clip", "auto"},
+    {"clip:auto; clip:rect(0,0,0,-.00000001)", "clip", "auto"},
+    {"clip:auto; clip:rect(0,0,0)", "clip", "auto"},
+    {"clip:auto; clip:rect(0,0,0,0,0)", "clip", "auto"},
+    {"clip:auto; clip:rect(0,0,0,0,)", "clip", "auto"},
+    {"clip:auto; clip:rect(0,initial,0,0)", "clip", "auto"},
+    {"margin-left:2px;margin-left:.00000001", "margin-left", "2px"},
+    {"margin-left:2px;margin-left:-.00000001", "margin-left", "2px"},
+    {"margin-left:-.00000001px", "margin-left", "0px"},
+
 };
 enum { VALUE_CASE_COUNT = sizeof(value_cases) / sizeof(value_cases[0]) };
 
@@ -1010,6 +1065,69 @@ START_TEST(test_reserved_counter_names)
             css__declaration_order_destroy(order);
             css__declaration_list_destroy(list);
         }
+    }
+}
+END_TEST
+
+START_TEST(test_clip_separators)
+{
+    for (unsigned mask = 0; mask < 8; mask++) {
+        char css[100];
+        snprintf(css, sizeof(css), "clip:auto;clip:rect(1px%s2px%s3px%s4px)",
+            mask & 1 ? "," : " ", mask & 2 ? "," : " ", mask & 4 ? "," : " ");
+        css_declaration_list *list = parse(css, _i != 0);
+        bool accepted = mask == 0 || mask == 7;
+        ck_assert_msg(css__declaration_list_count(list) == (accepted ? 2u : 1u),
+            "clip separator mask %u: %s", mask, css);
+        css_declaration_order *order;
+        ck_assert_int_eq(css__declaration_order_create(list, &order), CSS_OK);
+        lwc_string *value;
+        ck_assert_int_eq(serialize_property(order, "clip", &value), CSS_OK);
+        ck_assert_str_eq(lwc_string_data(value), accepted ? "rect(1px, 2px, 3px, 4px)" : "auto");
+        lwc_string_unref(value);
+        css__declaration_order_destroy(order);
+        css__declaration_list_destroy(list);
+    }
+}
+END_TEST
+
+START_TEST(test_geometry_invalid_units)
+{
+    static const char *const units[] = {"%", "fr", "dpi", "dpcm", "dppx", "deg", "rad", "grad", "turn", "s", "ms",
+        "Hz", "kHz"};
+    static const char *const formats[] = {"border-spacing:1%s", "border-spacing:2px 1%s",
+        "clip:rect(1%s,auto,auto,auto)", "clip:rect(auto,1%s,auto,auto)",
+        "clip:rect(auto,auto,1%s,auto)", "clip:rect(auto,auto,auto,1%s)"};
+    for (size_t u = 0; u < sizeof(units) / sizeof(units[0]); u++) {
+        for (size_t f = 0; f < sizeof(formats) / sizeof(formats[0]); f++) {
+            char css[100];
+            snprintf(css, sizeof(css), formats[f], units[u]);
+            css_declaration_list *list = parse(css, _i != 0);
+            ck_assert_msg(css__declaration_list_count(list) == 0, "accepted invalid length: %s", css);
+            css__declaration_list_destroy(list);
+        }
+    }
+}
+END_TEST
+
+START_TEST(test_geometry_bytecode)
+{
+    static const char *const forms[][2] = {
+        {"aspect-ratio:3", "aspect-ratio:3 / 1"},
+        {"aspect-ratio:4/3 auto", "aspect-ratio:auto 4 / 3"},
+        {"aspect-ratio:-0 / -0", "aspect-ratio:0 / 0"},
+        {"border-spacing:2em", "border-spacing:2em 2em"},
+        {"border-spacing:0 -0", "border-spacing:0px 0px"},
+        {"clip:RECT(0 2em -3px AUTO)", "clip:rect(0px, 2em, -3px, auto)"},
+    };
+    for (size_t i = 0; i < sizeof(forms) / sizeof(forms[0]); i++) {
+        css_declaration_list *a = parse(forms[i][0], _i != 0);
+        css_declaration_list *b = parse(forms[i][1], _i != 0);
+        ck_assert_uint_eq(css__declaration_list_count(a), 1);
+        ck_assert_uint_eq(css__declaration_list_count(b), 1);
+        compare_sheets(css__declaration_list_sheet(a), css__declaration_list_sheet(b));
+        css__declaration_list_destroy(a);
+        css__declaration_list_destroy(b);
     }
 }
 END_TEST
@@ -1169,12 +1287,14 @@ START_TEST(test_value_allocation_failure)
                       "background-image:url('a\\\"b\\\\c\\1 d'), none, url(Other.png);"
                       "background-attachment:FIXED, SCROLL; border-style:SOLID DASHED DOTTED DOUBLE;"
                       "content:attr(\\31 2) counters(Chapter, 'a\\a b', upper-roman) url(Other.png);"
-                      "quotes:'«' '»'; counter-reset:Chapter 0 Section -0002;";
+                      "quotes:'«' '»'; counter-reset:Chapter 0 Section -0002;"
+                      "aspect-ratio:auto .1234567; border-spacing:.3456789em .5678912px;"
+                      "clip:rect(.1234567px, auto, -1.2345678em, 1px);";
     css_declaration_list *list = parse(css, false);
     css_declaration_order *order;
     ck_assert_int_eq(css__declaration_order_create(list, &order), CSS_OK);
     static const char *const names[] = {"margin", "--x", "background-image", "background-attachment", "border-style",
-        "content", "quotes", "counter-reset"};
+        "content", "quotes", "counter-reset", "aspect-ratio", "border-spacing", "clip"};
     const char *name = names[_i];
     bool succeeded = false;
     unsigned failures = 0;
@@ -1222,11 +1342,14 @@ int main(void)
     tcase_add_loop_test(tc, test_specified_values, 0, VALUE_CASE_COUNT);
     tcase_add_test(tc, test_specified_url_resolution);
     tcase_add_loop_test(tc, test_reserved_counter_names, 0, 2);
+    tcase_add_loop_test(tc, test_clip_separators, 0, 2);
+    tcase_add_loop_test(tc, test_geometry_invalid_units, 0, 2);
+    tcase_add_loop_test(tc, test_geometry_bytecode, 0, 2);
     tcase_add_loop_test(tc, test_long_url, 0, 2);
     tcase_add_loop_test(tc, test_overflow_axes, 0, 2);
     tcase_add_test(tc, test_value_arguments);
 #ifdef WISP_TEST_ALLOC_FAILURE
-    tcase_add_loop_test(tc, test_value_allocation_failure, 0, 8);
+    tcase_add_loop_test(tc, test_value_allocation_failure, 0, 11);
     tcase_add_test(tc, test_content_terminator_allocation_failure);
 #endif
     tcase_add_loop_test(tc, test_declaration_order, 0, ORDER_CASE_COUNT);

@@ -66,16 +66,11 @@ css_error css__parse_border_spacing(css_language *c, const parserutils_vector *v
     } else {
         int num_lengths = 0;
 
-        error = css__parse_unit_specifier(c, vector, ctx, UNIT_PX, &length[0], &unit[0]);
+        error = css__parse_length(c, vector, ctx, true, &length[0], &unit[0]);
         if (error != CSS_OK) {
             TRACE_UNSUPPORTED_CALC(c, token, "border-spacing");
             *ctx = orig_ctx;
             return error;
-        }
-
-        if (unit[0] & UNIT_ANGLE || unit[0] & UNIT_TIME || unit[0] & UNIT_FREQ || unit[0] & UNIT_PCT) {
-            *ctx = orig_ctx;
-            return CSS_INVALID;
         }
 
         num_lengths = 1;
@@ -89,13 +84,8 @@ css_error css__parse_border_spacing(css_language *c, const parserutils_vector *v
              * any remaining junk is thrown out.
              * Ctx will be preserved on error, as usual
              */
-            error = css__parse_unit_specifier(c, vector, ctx, UNIT_PX, &length[1], &unit[1]);
+            error = css__parse_length(c, vector, ctx, true, &length[1], &unit[1]);
             if (error == CSS_OK) {
-                if (unit[1] & UNIT_ANGLE || unit[1] & UNIT_TIME || unit[1] & UNIT_FREQ || unit[1] & UNIT_PCT) {
-                    *ctx = orig_ctx;
-                    return CSS_INVALID;
-                }
-
                 num_lengths = 2;
             } else {
                 TRACE_UNSUPPORTED_CALC(c, token, "border-spacing");
@@ -106,12 +96,6 @@ css_error css__parse_border_spacing(css_language *c, const parserutils_vector *v
             /* Only one length specified. Use for both axes. */
             length[1] = length[0];
             unit[1] = unit[0];
-        }
-
-        /* Lengths must not be negative */
-        if (length[0] < 0 || length[1] < 0) {
-            *ctx = orig_ctx;
-            return CSS_INVALID;
         }
 
         error = css__stylesheet_style_appendOPV(result, CSS_PROP_BORDER_SPACING, 0, BORDER_SPACING_SET);

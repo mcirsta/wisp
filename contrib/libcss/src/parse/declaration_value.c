@@ -143,6 +143,137 @@ static css_error serialize_numeric(const css_declaration_token *token, bool leng
     return error;
 }
 
+struct value_format {
+    const char *prefix, *separator, *suffix;
+};
+
+/* Combine a bounded list of already serialized components. Both shorthand and
+ * structured longhand values use the same overflow-checked output path. */
+static css_error join_values(lwc_string *const *values, size_t count, const struct value_format *format,
+    lwc_string **out)
+{
+    size_t prefix = strlen(format->prefix), separator = strlen(format->separator), suffix = strlen(format->suffix);
+    if (count == 1 && prefix == 0 && suffix == 0) {
+        *out = lwc_string_ref(values[0]);
+        return CSS_OK;
+    }
+    /* Formats are static and callers supply at most four components. */
+    size_t length = prefix + (count - 1) * separator + suffix;
+    for (size_t i = 0; i < count; i++) {
+        size_t n = lwc_string_length(values[i]);
+        if (n > SIZE_MAX - length)
+            return CSS_NOMEM;
+        length += n;
+    }
+    char *buffer = malloc(length);
+    if (buffer == NULL)
+        return CSS_NOMEM;
+    memcpy(buffer, format->prefix, prefix);
+    size_t pos = prefix;
+    for (size_t i = 0; i < count; i++) {
+        if (i != 0) {
+            memcpy(buffer + pos, format->separator, separator);
+            pos += separator;
+        }
+        size_t n = lwc_string_length(values[i]);
+        memcpy(buffer + pos, lwc_string_data(values[i]), n);
+        pos += n;
+    }
+    memcpy(buffer + pos, format->suffix, suffix);
+    css_error error = intern(buffer, length, out);
+    free(buffer);
+    return error;
+}
+
+/* These declarations have already passed their property grammar. Extract the
+ * scalar components only; unsupported functions must remain explicit errors,
+ * not be serialized from a rounded rendering value. */
+static css_error geometry_components(const css_declaration *source, const css_declaration_token **parts,
+    size_t *count, bool *automatic)
+{
+    enum css_declaration_value_kind kind = source->property->value_kind;
+    *count = 0;
+    *automatic = false;
+    for (size_t i = 0; i < source->token_count; i++) {
+        const css_declaration_token *token = &source->tokens[i];
+        if (token->type == CSS_TOKEN_S)
+            continue;
+        if (kind == CSS_DECL_VALUE_ASPECT_RATIO && token->type == CSS_TOKEN_IDENT &&
+            css__keyword_equal(token->text, "auto")) {
+            *automatic = true;
+            continue;
+        }
+        if (kind == CSS_DECL_VALUE_CLIP && i == 0 && token->type == CSS_TOKEN_FUNCTION &&
+            css__keyword_equal(token->text, "rect"))
+            continue;
+        if (token->type == CSS_TOKEN_CHAR && lwc_string_length(token->text) == 1) {
+            char ch = lwc_string_data(token->text)[0];
+            if ((kind == CSS_DECL_VALUE_ASPECT_RATIO && ch == '/') ||
+                (kind == CSS_DECL_VALUE_CLIP && (ch == ',' || ch == ')')))
+                continue;
+        }
+        if (*count == (kind == CSS_DECL_VALUE_CLIP ? 4u : 2u))
+            return CSS_INVALID;
+        if (token->type != CSS_TOKEN_NUMBER &&
+            !(kind != CSS_DECL_VALUE_ASPECT_RATIO && token->type == CSS_TOKEN_DIMENSION) &&
+            !(kind == CSS_DECL_VALUE_CLIP && token->type == CSS_TOKEN_IDENT &&
+                css__keyword_equal(token->text, "auto")))
+            return CSS_INVALID;
+        parts[(*count)++] = token;
+    }
+    return CSS_OK;
+}
+
+static css_error serialize_geometry(const css_declaration *source, lwc_string **out)
+{
+    const css_declaration_token *parts[4] = {0};
+    size_t count;
+    bool automatic;
+    css_error error = geometry_components(source, parts, &count, &automatic);
+    if (error != CSS_OK)
+        return error;
+    enum css_declaration_value_kind kind = source->property->value_kind;
+    bool ratio = kind == CSS_DECL_VALUE_ASPECT_RATIO;
+    if (ratio && count == 0)
+        return automatic ? intern("auto", 4, out) : CSS_INVALID;
+    if (kind == CSS_DECL_VALUE_CLIP && count == 1 && parts[0]->type == CSS_TOKEN_IDENT)
+        return intern("auto", 4, out);
+    if (count == 0 || (kind == CSS_DECL_VALUE_CLIP && count != 4))
+        return CSS_INVALID;
+    /* CSS Values gives an omitted ratio denominator the value 1. CSSOM always
+     * writes both components; it does not reduce ratios or replace 0/0 by auto. */
+    if (ratio && count == 1)
+        count = 2;
+    lwc_string *values[4] = {0};
+    for (size_t i = 0; i < count; i++) {
+        if (parts[i] == NULL)
+            error = intern("1", 1, &values[i]);
+        else if (parts[i]->type == CSS_TOKEN_IDENT)
+            error = intern("auto", 4, &values[i]);
+        else
+            error = serialize_numeric(parts[i], !ratio, &values[i]);
+        if (error != CSS_OK)
+            goto done;
+    }
+    size_t used = count;
+    struct value_format format = {"", " ", ""};
+    if (ratio) {
+        format.prefix = automatic ? "auto " : "";
+        format.separator = " / ";
+    } else if (kind == CSS_DECL_VALUE_CLIP) {
+        format = (struct value_format){"rect(", ", ", ")"};
+    } else if (count == 2 && values[0] == values[1]) {
+        used = 1;
+    }
+    error = join_values(values, used, &format, out);
+done:
+    for (size_t i = 0; i < count; i++) {
+        if (values[i] != NULL)
+            lwc_string_unref(values[i]);
+    }
+    return error;
+}
+
 static size_t scalar_arity(enum css_declaration_value_kind kind)
 {
     switch (kind) {
@@ -208,6 +339,8 @@ css_error css__declaration_value_serialize(const css_declaration_contribution *v
     if (kind == CSS_DECL_VALUE_URI || kind == CSS_DECL_VALUE_IMAGE_LIST || kind == CSS_DECL_VALUE_KEYWORD_LIST ||
         kind == CSS_DECL_VALUE_CONTENT || kind == CSS_DECL_VALUE_STRING_LIST || kind == CSS_DECL_VALUE_COUNTER_LIST)
         return css__declaration_text_serialize(source, out);
+    if (kind == CSS_DECL_VALUE_ASPECT_RATIO || kind == CSS_DECL_VALUE_BORDER_SPACING || kind == CSS_DECL_VALUE_CLIP)
+        return serialize_geometry(source, out);
     size_t arity = scalar_arity(kind);
     const css_declaration_token *token = scalar_component(value, arity);
     if (token == NULL)
@@ -236,34 +369,8 @@ static css_error serialize_scalars(const css_declaration_contribution *const *me
         used--;
     if (used == 2 && values[1] == values[0])
         used--;
-    if (used == 1) {
-        *out = lwc_string_ref(values[0]);
-        goto done;
-    }
-    size_t length = used - 1;
-    for (size_t i = 0; i < used; i++) {
-        size_t n = lwc_string_length(values[i]);
-        if (n > SIZE_MAX - length) {
-            error = CSS_NOMEM;
-            goto done;
-        }
-        length += n;
-    }
-    char *buffer = malloc(length);
-    if (buffer == NULL) {
-        error = CSS_NOMEM;
-        goto done;
-    }
-    size_t pos = 0;
-    for (size_t i = 0; i < used; i++) {
-        if (i != 0)
-            buffer[pos++] = ' ';
-        size_t n = lwc_string_length(values[i]);
-        memcpy(buffer + pos, lwc_string_data(values[i]), n);
-        pos += n;
-    }
-    error = intern(buffer, length, out);
-    free(buffer);
+    const struct value_format format = {"", " ", ""};
+    error = join_values(values, used, &format, out);
 done:
     for (size_t i = 0; i < count; i++) {
         if (values[i] != NULL)

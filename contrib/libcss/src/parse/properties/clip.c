@@ -37,6 +37,7 @@ css_error css__parse_clip(css_language *c, const parserutils_vector *vector, int
     uint32_t unit[4] = {0};
     enum flag_value flag_value;
     bool match;
+    bool commas = false;
 
     /* FUNCTION(rect) [ [ IDENT(auto) | length ] CHAR(,)? ]{3}
      *                [ IDENT(auto) | length ] CHAR{)} |
@@ -81,16 +82,10 @@ css_error css__parse_clip(css_language *c, const parserutils_vector *vector, int
 
                 parserutils_vector_iterate(vector, ctx);
             } else {
-                error = css__parse_unit_specifier(c, vector, ctx, UNIT_PX, &length[num_lengths], &unit[num_lengths]);
+                error = css__parse_length(c, vector, ctx, false, &length[num_lengths], &unit[num_lengths]);
                 if (error != CSS_OK) {
                     *ctx = orig_ctx;
                     return error;
-                }
-
-                if (unit[num_lengths] & UNIT_ANGLE || unit[num_lengths] & UNIT_TIME || unit[num_lengths] & UNIT_FREQ ||
-                    unit[num_lengths] & UNIT_PCT) {
-                    *ctx = orig_ctx;
-                    return CSS_INVALID;
                 }
 
                 num_lengths++;
@@ -98,7 +93,8 @@ css_error css__parse_clip(css_language *c, const parserutils_vector *vector, int
 
             consumeWhitespace(vector, ctx);
 
-            /* Consume optional comma after first 3 parameters */
+            /* CSS 2.2 §11.1.2 allows commas or the legacy space-separated
+             * syntax, but explicitly forbids mixing the two. */
             if (i < 3) {
                 token = parserutils_vector_peek(vector, *ctx);
                 if (token == NULL) {
@@ -106,7 +102,14 @@ css_error css__parse_clip(css_language *c, const parserutils_vector *vector, int
                     return CSS_INVALID;
                 }
 
-                if (tokenIsChar(token, ','))
+                bool comma = tokenIsChar(token, ',');
+                if (i == 0) {
+                    commas = comma;
+                } else if (comma != commas) {
+                    *ctx = orig_ctx;
+                    return CSS_INVALID;
+                }
+                if (comma)
                     parserutils_vector_iterate(vector, ctx);
             }
         }
