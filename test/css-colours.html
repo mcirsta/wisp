@@ -40,6 +40,15 @@ html, body { margin: 0; background: white; }
 #variable-fallback { left: 10px; top: 310px; color: #024; --unsupported: color(srgb 1 0 0); }
 #variable-fallback > div { width: 80px; height: 40px; color: red; color: var(--unsupported);
     background: currentColor; }
+/* Invalid shorthand components must leave the earlier border intact. */
+#border-wide-fallback { left:110px; top:310px; box-sizing:border-box; color:red;
+    border:10px solid #024; border:20px solid initial; }
+#border-negative-fallback { left:210px; top:310px; box-sizing:border-box;
+    border:10px solid #024; border:-.00000001px solid red; }
+#border-fr-fallback { left:310px; top:310px; box-sizing:border-box;
+    border:10px solid #024; border:1fr solid red; }
+#border-current { left:410px; top:310px; box-sizing:border-box; color:#024;
+    border:10px solid; }
 </style>
 <div id="hex" class="case"></div><div id="fraction" class="case"></div>
 <div id="mixed" class="case"></div><div id="alpha" class="case"></div>
@@ -59,3 +68,7 @@ html, body { margin: 0; background: white; }
 </svg>
 <div id="transparent-control" class="case"></div>
 <div id="variable-fallback" class="case"><div></div></div>
+<div id="border-wide-fallback" class="case"></div>
+<div id="border-negative-fallback" class="case"></div>
+<div id="border-fr-fallback" class="case"></div>
+<div id="border-current" class="case"></div>

@@ -628,6 +628,9 @@ START_TEST(test_allocation_failure)
                                "flex:auto 2 3;flex-flow:wrap column;flex:initial;flex-flow:inherit;"
                                "list-style:none inside url(Marker.png);columns:auto 12em;"
                                "list-style:initial;columns:inherit;"
+                               "border:.1234567px solid hsl(12 34% 56%);border:initial;"
+                               "outline:invert dashed 1em;outline:unset;"
+                               "column-rule:thin solid;column-rule:revert;"
                                "color:rgb(1.2 3.4 5.6 / 50%);border-color:#1234 red rgb(3,2,1) currentcolor;"
                                /* Force the parser's token vector to grow too. */
                                "--large:red red red red red red red red red red red red red red red red "
@@ -642,7 +645,7 @@ START_TEST(test_allocation_failure)
     memset(css + pos, 'c', 8192);
     pos += 8192;
     snprintf(css + pos, sizeof(css) - pos, "*/%s", declarations);
-    const size_t expected = 29;
+    const size_t expected = 35;
     /* Keep shared property strings alive, so each iteration tests the same
      * allocation sequence instead of global string-cache initialization. */
     css_stylesheet *keeper;
@@ -1238,6 +1241,207 @@ static const struct {
     {"columns:var(--Columns)", "column-count", ""},
     {"columns:var(--Columns);column-width:auto", "columns", ""},
     {"columns:calc(12px + 2px) 2", "columns", NULL},
+
+    /* Border/outline/rule specified components, including resets and side overrides. */
+    {"border:none", "border", "none"},
+    {"border:solid", "border", "solid"},
+    {"border:THICK", "border", "thick"},
+    {"border:RED", "border", "red"},
+    {"border:dashed red 2PX", "border", "2px dashed red"},
+    {"border:0", "border", "0px"},
+    {"border:none", "border-left-width", "medium"},
+    {"border:none", "border-left-color", "currentcolor"},
+    {"border:2px", "border-left-style", "none"},
+    {"border:solid", "border-left-width", "medium"},
+    {"border:solid rgb(1.2 3.4 5.6 / .25) .1234567EM", "border-left-color", "rgba(1.2, 3.4, 5.6, 0.25)"},
+    {"border:solid rgb(1.2 3.4 5.6 / .25) .1234567EM", "border-left-width", "0.123457em"},
+    {"border:initial", "border", "initial"},
+    {"border:unset", "border-left-style", "unset"},
+    {"border:revert", "border-left-width", "revert"},
+    {"border:inherit", "border-left-color", "inherit"},
+    {"border:var(--Edge, thin solid)", "border", "var(--Edge, thin solid)"},
+    {"border:var(--Edge)", "border-left-color", ""},
+    {"border:var(--Edge);border-left-width:1px", "border", ""},
+    {"border:solid!important;border-left-width:3px", "border", "solid"},
+    {"border:solid;border-left-width:3px!important", "border", ""},
+    {"border:solid;border-left-color:inherit", "border", ""},
+    {"border:calc(1px + 2px) solid red", "border", NULL},
+    {"border:calc(1px + 2px) solid red", "border-left-color", "red"},
+    {"border:solid oklch(50% .1 0)", "border-left-width", "medium"},
+    {"border:solid oklch(50% .1 0)", "border-left-color", NULL},
+    {"border-top:none", "border-top", "none"},
+    {"border-top:solid", "border-top", "solid"},
+    {"border-top:THICK", "border-top", "thick"},
+    {"border-top:RED", "border-top", "red"},
+    {"border-top:dashed red 2PX", "border-top", "2px dashed red"},
+    {"border-top:0", "border-top", "0px"},
+    {"border-top:none", "border-top-width", "medium"},
+    {"border-top:none", "border-top-color", "currentcolor"},
+    {"border-top:2px", "border-top-style", "none"},
+    {"border-top:solid", "border-top-width", "medium"},
+    {"border-top:solid rgb(1.2 3.4 5.6 / .25) .1234567EM", "border-top-color", "rgba(1.2, 3.4, 5.6, 0.25)"},
+    {"border-top:solid rgb(1.2 3.4 5.6 / .25) .1234567EM", "border-top-width", "0.123457em"},
+    {"border-top:initial", "border-top", "initial"},
+    {"border-top:unset", "border-top-style", "unset"},
+    {"border-top:revert", "border-top-width", "revert"},
+    {"border-top:inherit", "border-top-color", "inherit"},
+    {"border-top:var(--Edge, thin solid)", "border-top", "var(--Edge, thin solid)"},
+    {"border-top:var(--Edge)", "border-top-color", ""},
+    {"border-top:var(--Edge);border-top-width:1px", "border-top", ""},
+    {"border-top:solid!important;border-top-width:3px", "border-top", "solid"},
+    {"border-top:solid;border-top-width:3px!important", "border-top", ""},
+    {"border-top:solid;border-top-color:inherit", "border-top", ""},
+    {"border-top:calc(1px + 2px) solid red", "border-top", NULL},
+    {"border-top:calc(1px + 2px) solid red", "border-top-color", "red"},
+    {"border-top:solid oklch(50% .1 0)", "border-top-width", "medium"},
+    {"border-top:solid oklch(50% .1 0)", "border-top-color", NULL},
+    {"border-right:none", "border-right", "none"},
+    {"border-right:solid", "border-right", "solid"},
+    {"border-right:THICK", "border-right", "thick"},
+    {"border-right:RED", "border-right", "red"},
+    {"border-right:dashed red 2PX", "border-right", "2px dashed red"},
+    {"border-right:0", "border-right", "0px"},
+    {"border-right:none", "border-right-width", "medium"},
+    {"border-right:none", "border-right-color", "currentcolor"},
+    {"border-right:2px", "border-right-style", "none"},
+    {"border-right:solid", "border-right-width", "medium"},
+    {"border-right:solid rgb(1.2 3.4 5.6 / .25) .1234567EM", "border-right-color", "rgba(1.2, 3.4, 5.6, 0.25)"},
+    {"border-right:solid rgb(1.2 3.4 5.6 / .25) .1234567EM", "border-right-width", "0.123457em"},
+    {"border-right:initial", "border-right", "initial"},
+    {"border-right:unset", "border-right-style", "unset"},
+    {"border-right:revert", "border-right-width", "revert"},
+    {"border-right:inherit", "border-right-color", "inherit"},
+    {"border-right:var(--Edge, thin solid)", "border-right", "var(--Edge, thin solid)"},
+    {"border-right:var(--Edge)", "border-right-color", ""},
+    {"border-right:var(--Edge);border-right-width:1px", "border-right", ""},
+    {"border-right:solid!important;border-right-width:3px", "border-right", "solid"},
+    {"border-right:solid;border-right-width:3px!important", "border-right", ""},
+    {"border-right:solid;border-right-color:inherit", "border-right", ""},
+    {"border-right:calc(1px + 2px) solid red", "border-right", NULL},
+    {"border-right:calc(1px + 2px) solid red", "border-right-color", "red"},
+    {"border-right:solid oklch(50% .1 0)", "border-right-width", "medium"},
+    {"border-right:solid oklch(50% .1 0)", "border-right-color", NULL},
+    {"border-bottom:none", "border-bottom", "none"},
+    {"border-bottom:solid", "border-bottom", "solid"},
+    {"border-bottom:THICK", "border-bottom", "thick"},
+    {"border-bottom:RED", "border-bottom", "red"},
+    {"border-bottom:dashed red 2PX", "border-bottom", "2px dashed red"},
+    {"border-bottom:0", "border-bottom", "0px"},
+    {"border-bottom:none", "border-bottom-width", "medium"},
+    {"border-bottom:none", "border-bottom-color", "currentcolor"},
+    {"border-bottom:2px", "border-bottom-style", "none"},
+    {"border-bottom:solid", "border-bottom-width", "medium"},
+    {"border-bottom:solid rgb(1.2 3.4 5.6 / .25) .1234567EM", "border-bottom-color", "rgba(1.2, 3.4, 5.6, 0.25)"},
+    {"border-bottom:solid rgb(1.2 3.4 5.6 / .25) .1234567EM", "border-bottom-width", "0.123457em"},
+    {"border-bottom:initial", "border-bottom", "initial"},
+    {"border-bottom:unset", "border-bottom-style", "unset"},
+    {"border-bottom:revert", "border-bottom-width", "revert"},
+    {"border-bottom:inherit", "border-bottom-color", "inherit"},
+    {"border-bottom:var(--Edge, thin solid)", "border-bottom", "var(--Edge, thin solid)"},
+    {"border-bottom:var(--Edge)", "border-bottom-color", ""},
+    {"border-bottom:var(--Edge);border-bottom-width:1px", "border-bottom", ""},
+    {"border-bottom:solid!important;border-bottom-width:3px", "border-bottom", "solid"},
+    {"border-bottom:solid;border-bottom-width:3px!important", "border-bottom", ""},
+    {"border-bottom:solid;border-bottom-color:inherit", "border-bottom", ""},
+    {"border-bottom:calc(1px + 2px) solid red", "border-bottom", NULL},
+    {"border-bottom:calc(1px + 2px) solid red", "border-bottom-color", "red"},
+    {"border-bottom:solid oklch(50% .1 0)", "border-bottom-width", "medium"},
+    {"border-bottom:solid oklch(50% .1 0)", "border-bottom-color", NULL},
+    {"border-left:none", "border-left", "none"},
+    {"border-left:solid", "border-left", "solid"},
+    {"border-left:THICK", "border-left", "thick"},
+    {"border-left:RED", "border-left", "red"},
+    {"border-left:dashed red 2PX", "border-left", "2px dashed red"},
+    {"border-left:0", "border-left", "0px"},
+    {"border-left:none", "border-left-width", "medium"},
+    {"border-left:none", "border-left-color", "currentcolor"},
+    {"border-left:2px", "border-left-style", "none"},
+    {"border-left:solid", "border-left-width", "medium"},
+    {"border-left:solid rgb(1.2 3.4 5.6 / .25) .1234567EM", "border-left-color", "rgba(1.2, 3.4, 5.6, 0.25)"},
+    {"border-left:solid rgb(1.2 3.4 5.6 / .25) .1234567EM", "border-left-width", "0.123457em"},
+    {"border-left:initial", "border-left", "initial"},
+    {"border-left:unset", "border-left-style", "unset"},
+    {"border-left:revert", "border-left-width", "revert"},
+    {"border-left:inherit", "border-left-color", "inherit"},
+    {"border-left:var(--Edge, thin solid)", "border-left", "var(--Edge, thin solid)"},
+    {"border-left:var(--Edge)", "border-left-color", ""},
+    {"border-left:var(--Edge);border-left-width:1px", "border-left", ""},
+    {"border-left:solid!important;border-left-width:3px", "border-left", "solid"},
+    {"border-left:solid;border-left-width:3px!important", "border-left", ""},
+    {"border-left:solid;border-left-color:inherit", "border-left", ""},
+    {"border-left:calc(1px + 2px) solid red", "border-left", NULL},
+    {"border-left:calc(1px + 2px) solid red", "border-left-color", "red"},
+    {"border-left:solid oklch(50% .1 0)", "border-left-width", "medium"},
+    {"border-left:solid oklch(50% .1 0)", "border-left-color", NULL},
+    {"outline:none", "outline", "none"},
+    {"outline:solid", "outline", "solid"},
+    {"outline:THICK", "outline", "thick"},
+    {"outline:RED", "outline", "red"},
+    {"outline:dashed red 2PX", "outline", "red dashed 2px"},
+    {"outline:0", "outline", "0px"},
+    {"outline:none", "outline-width", "medium"},
+    {"outline:none", "outline-color", "invert"},
+    {"outline:2px", "outline-style", "none"},
+    {"outline:solid", "outline-width", "medium"},
+    {"outline:solid rgb(1.2 3.4 5.6 / .25) .1234567EM", "outline-color", "rgba(1.2, 3.4, 5.6, 0.25)"},
+    {"outline:solid rgb(1.2 3.4 5.6 / .25) .1234567EM", "outline-width", "0.123457em"},
+    {"outline:initial", "outline", "initial"},
+    {"outline:unset", "outline-style", "unset"},
+    {"outline:revert", "outline-width", "revert"},
+    {"outline:inherit", "outline-color", "inherit"},
+    {"outline:var(--Edge, thin solid)", "outline", "var(--Edge, thin solid)"},
+    {"outline:var(--Edge)", "outline-color", ""},
+    {"outline:var(--Edge);outline-width:1px", "outline", ""},
+    {"outline:solid!important;outline-width:3px", "outline", "solid"},
+    {"outline:solid;outline-width:3px!important", "outline", ""},
+    {"outline:solid;outline-color:inherit", "outline", ""},
+    {"outline:calc(1px + 2px) solid red", "outline", NULL},
+    {"outline:calc(1px + 2px) solid red", "outline-color", "red"},
+    {"outline:solid oklch(50% .1 0)", "outline-width", "medium"},
+    {"outline:solid oklch(50% .1 0)", "outline-color", NULL},
+    {"column-rule:none", "column-rule", "none"},
+    {"column-rule:solid", "column-rule", "solid"},
+    {"column-rule:THICK", "column-rule", "thick"},
+    {"column-rule:RED", "column-rule", "red"},
+    {"column-rule:dashed red 2PX", "column-rule", "2px dashed red"},
+    {"column-rule:0", "column-rule", "0px"},
+    {"column-rule:none", "column-rule-width", "medium"},
+    {"column-rule:none", "column-rule-color", "currentcolor"},
+    {"column-rule:2px", "column-rule-style", "none"},
+    {"column-rule:solid", "column-rule-width", "medium"},
+    {"column-rule:solid rgb(1.2 3.4 5.6 / .25) .1234567EM", "column-rule-color", "rgba(1.2, 3.4, 5.6, 0.25)"},
+    {"column-rule:solid rgb(1.2 3.4 5.6 / .25) .1234567EM", "column-rule-width", "0.123457em"},
+    {"column-rule:initial", "column-rule", "initial"},
+    {"column-rule:unset", "column-rule-style", "unset"},
+    {"column-rule:revert", "column-rule-width", "revert"},
+    {"column-rule:inherit", "column-rule-color", "inherit"},
+    {"column-rule:var(--Edge, thin solid)", "column-rule", "var(--Edge, thin solid)"},
+    {"column-rule:var(--Edge)", "column-rule-color", ""},
+    {"column-rule:var(--Edge);column-rule-width:1px", "column-rule", ""},
+    {"column-rule:solid!important;column-rule-width:3px", "column-rule", "solid"},
+    {"column-rule:solid;column-rule-width:3px!important", "column-rule", ""},
+    {"column-rule:solid;column-rule-color:inherit", "column-rule", ""},
+    {"column-rule:calc(1px + 2px) solid red", "column-rule", NULL},
+    {"column-rule:calc(1px + 2px) solid red", "column-rule-color", "red"},
+    {"column-rule:solid oklch(50% .1 0)", "column-rule-width", "medium"},
+    {"column-rule:solid oklch(50% .1 0)", "column-rule-color", NULL},
+    {"border:2px solid red;border-left-color:blue", "border", ""},
+    {"border:2px solid red;border-left-color:blue", "border-left", "2px solid blue"},
+    {"border:2px solid red;border-left-width:3px", "border-width", "2px 2px 2px 3px"},
+    {"border:2px solid red;border-bottom-style:dashed", "border-style", "solid solid dashed"},
+    {"border:2px solid red;border-left-color:blue", "border-color", "red red red blue"},
+    {"border:2px solid red", "border-right-width", "2px"},
+    {"border:2px solid red;border-width:3px", "border", "3px solid red"},
+    {"border:2px solid red;border-color:blue", "border", "2px solid blue"},
+    {"border:2px solid red;border-style:dashed", "border", "2px dashed red"},
+    {"border-width:2px;border-style:solid;border-color:red", "border", "2px solid red"},
+    {"border-top:solid;border-right:solid;border-bottom:solid;border-left:solid", "border", "solid"},
+    {"border:0 red;border-color:currentcolor", "border", "0px"},
+    {"border:000 solid", "border", "0px solid"},
+    {"border:2px solid red;border-left-color:#ff0000", "border", ""},
+    {"outline:currentcolor", "outline", "currentcolor"},
+    {"outline:invert", "outline", "none"},
+    {"border-top-width:2px;border-top-style:solid", "border-top", ""},
 
 };
 enum { VALUE_CASE_COUNT = sizeof(value_cases) / sizeof(value_cases[0]) };
@@ -1851,6 +2055,111 @@ START_TEST(test_list_columns_invalid)
 }
 END_TEST
 
+START_TEST(test_border_shorthand_bytecode)
+{
+    static const char *const properties[] = {
+        "border", "border-top", "border-right", "border-bottom", "border-left", "outline", "column-rule"};
+    static const char *const forms[][4] = {
+        {"solid red 2px", "red", "solid", "2px"},
+        {"solid 2px red", "red", "solid", "2px"},
+        {"red solid 2px", "red", "solid", "2px"},
+        {"red 2px solid", "red", "solid", "2px"},
+        {"2px red solid", "red", "solid", "2px"},
+        {"2px solid red", "red", "solid", "2px"},
+        {"none", NULL, "none", "medium"},
+        {"thin", NULL, "none", "thin"},
+        {"solid", NULL, "solid", "medium"},
+        {"rgb(1,2,3)", "rgb(1,2,3)", "none", "medium"},
+        {"solid calc(1px + 2px)", NULL, "solid", "calc(1px + 2px)"},
+        {"inherit", "inherit", "inherit", "inherit"},
+        {"initial", "initial", "initial", "initial"},
+        {"unset", "unset", "unset", "unset"},
+        {"revert", "revert", "revert", "revert"},
+    };
+    static const char *const sides[] = {"border-top", "border-right", "border-bottom", "border-left"};
+    for (size_t p = 0; p < N_ELEMENTS(properties); p++) {
+        for (size_t f = 0; f < N_ELEMENTS(forms); f++) {
+            char shorthand[128], longhands[1024];
+            snprintf(shorthand, sizeof(shorthand), "%s:%s", properties[p], forms[f][0]);
+            size_t pos = 0;
+            unsigned count = p == 0 ? 4 : 1;
+            for (unsigned side = 0; side < count; side++) {
+                const char *name = p == 0 ? sides[side] : properties[p];
+                const char *colour = forms[f][1] != NULL ? forms[f][1] :
+                    strcmp(name, "outline") == 0 ? "invert" : "currentcolor";
+                pos += snprintf(longhands + pos, sizeof(longhands) - pos, "%s-color:%s;%s-style:%s;%s-width:%s;",
+                    name, colour, name, forms[f][2], name, forms[f][3]);
+            }
+            css_declaration_list *a = parse(shorthand, _i != 0);
+            css_declaration_list *b = parse(longhands, _i != 0);
+            ck_assert_msg(css__declaration_list_count(a) == 1, "rejected %s", shorthand);
+            compare_sheets(css__declaration_list_sheet(a), css__declaration_list_sheet(b));
+            css__declaration_list_destroy(a);
+            css__declaration_list_destroy(b);
+        }
+    }
+}
+END_TEST
+
+START_TEST(test_border_shorthand_invalid)
+{
+    static const char *const properties[] = {"border", "border-top", "border-left", "outline", "column-rule"};
+    static const char *const invalid[] = {
+        "solid dashed", "red blue", "1px 2px", "solid 1px red blue", "initial solid", "solid initial",
+        "red unset", "1px revert", "solid red inherit", "solid,red", "solid unknown", "solid color(srgb 1 0 0)",
+        "solid rgb(1 2)", "-1px solid", "-.00000001px solid", "1fr solid", "1% solid", "1deg solid",
+        "1s solid", "1dpi solid", "solid 1", "'solid'", "url(edge.png)",
+    };
+    for (size_t p = 0; p < N_ELEMENTS(properties); p++) {
+        char baseline[64];
+        snprintf(baseline, sizeof(baseline), "%s:3px dotted green", properties[p]);
+        css_declaration_list *base = parse(baseline, false);
+        const css_style *base_style = inline_style(css__declaration_list_sheet(base));
+        for (size_t i = 0; i < N_ELEMENTS(invalid); i++) {
+            char css[192];
+            snprintf(css, sizeof(css), "%s;%s:%s", baseline, properties[p], invalid[i]);
+            css_declaration_list *list = parse(css, _i != 0);
+            ck_assert_msg(css__declaration_list_count(list) == 1, "accepted invalid declaration: %s", css);
+            const css_style *style = inline_style(css__declaration_list_sheet(list));
+            ck_assert_uint_eq(style->used, base_style->used);
+            ck_assert_int_eq(memcmp(style->bytecode, base_style->bytecode, style->used * sizeof(css_code_t)), 0);
+            css__declaration_list_destroy(list);
+        }
+        css__declaration_list_destroy(base);
+    }
+}
+END_TEST
+
+START_TEST(test_quirky_border_values)
+{
+    static const char *const forms[][3] = {
+        {"border:000 solid", "border-left-color", "rgb(0, 0, 0)"},
+        {"border:000 solid", "border-left-width", "medium"},
+        {"border:123456 solid", "border", "solid rgb(18, 52, 86)"},
+        {"border:12ab56 solid", "border-left-color", "rgb(18, 171, 86)"},
+        {"border:f00 solid", "border-left-color", "rgb(255, 0, 0)"},
+        {"border:red solid 000", "border-left-width", "0px"},
+        {"border:123456 solid 2", "border", "2px solid rgb(18, 52, 86)"},
+    };
+    for (size_t i = 0; i < N_ELEMENTS(forms); i++) {
+        css_stylesheet_params quirky = params;
+        quirky.allow_quirks = true;
+        css_declaration_list *list;
+        ck_assert_int_eq(css__declaration_list_create(&quirky, &list), CSS_OK);
+        check_append(css__declaration_list_append(list, (const uint8_t *)forms[i][0], strlen(forms[i][0])));
+        ck_assert_int_eq(css__declaration_list_complete(list), CSS_OK);
+        css_declaration_order *order;
+        ck_assert_int_eq(css__declaration_order_create(list, &order), CSS_OK);
+        lwc_string *value;
+        ck_assert_int_eq(serialize_property(order, forms[i][1], &value), CSS_OK);
+        ck_assert_str_eq(lwc_string_data(value), forms[i][2]);
+        lwc_string_unref(value);
+        css__declaration_order_destroy(order);
+        css__declaration_list_destroy(list);
+    }
+}
+END_TEST
+
 START_TEST(test_geometry_bytecode)
 {
     static const char *const forms[][2] = {
@@ -2077,13 +2386,20 @@ START_TEST(test_value_allocation_failure)
                       "clip:rect(.1234567px, auto, -1.2345678em, 1px);"
                       "list-style:none inside url(Marker.png);columns:.1234567em 3;"
                       "font-family:One/**/Two\\20 , 'a\\22 b\\a c',SERIF;";
+    static const char *const names[] = {"margin", "--x", "background-image", "background-attachment", "border-style",
+        "content", "quotes", "counter-reset", "aspect-ratio", "border-spacing", "clip", "font-family", "flex",
+        "flex-flow", "color", "border-color", "list-style", "columns", "border", "border-left", "outline", "column-rule"};
+    const char *name = names[_i];
+    /* Keep full-border inputs separate: they reset the quad style/colour cases. */
+    if (strcmp(name, "border") == 0 || strcmp(name, "border-left") == 0)
+        css = "border:.1234567px solid rgb(1.2 3.4 5.6)";
+    else if (strcmp(name, "outline") == 0)
+        css = "outline:1.2345678em dotted #1234";
+    else if (strcmp(name, "column-rule") == 0)
+        css = "column-rule:.1234567px dashed hsl(12 34% 56%)";
     css_declaration_list *list = parse(css, false);
     css_declaration_order *order;
     ck_assert_int_eq(css__declaration_order_create(list, &order), CSS_OK);
-    static const char *const names[] = {"margin", "--x", "background-image", "background-attachment", "border-style",
-        "content", "quotes", "counter-reset", "aspect-ratio", "border-spacing", "clip", "font-family", "flex",
-        "flex-flow", "color", "border-color", "list-style", "columns"};
-    const char *name = names[_i];
     bool succeeded = false;
     unsigned failures = 0;
     for (unsigned attempt = 0; attempt < 100; attempt++) {
@@ -2140,6 +2456,9 @@ int main(void)
     tcase_add_loop_test(tc, test_flex_bytecode, 0, 2);
     tcase_add_loop_test(tc, test_list_columns_bytecode, 0, 2);
     tcase_add_loop_test(tc, test_list_columns_invalid, 0, 2);
+    tcase_add_loop_test(tc, test_border_shorthand_bytecode, 0, 2);
+    tcase_add_loop_test(tc, test_border_shorthand_invalid, 0, 2);
+    tcase_add_test(tc, test_quirky_border_values);
     tcase_add_loop_test(tc, test_colour_alpha_roundtrip, 0, 2);
     tcase_add_test(tc, test_quirky_colour_values);
     tcase_add_loop_test(tc, test_colour_rendering_values, 0, 2);
@@ -2150,7 +2469,7 @@ int main(void)
     tcase_add_loop_test(tc, test_overflow_axes, 0, 2);
     tcase_add_test(tc, test_value_arguments);
 #ifdef WISP_TEST_ALLOC_FAILURE
-    tcase_add_loop_test(tc, test_value_allocation_failure, 0, 18);
+    tcase_add_loop_test(tc, test_value_allocation_failure, 0, 22);
     tcase_add_loop_test(tc, test_font_face_allocation_failure, 0, 3);
     tcase_add_test(tc, test_content_terminator_allocation_failure);
 #endif

@@ -11,6 +11,7 @@
 #include "parse/colour.h"
 #include "parse/declaration_text.h"
 #include "parse/property.h"
+#include "parse/properties/utils.h"
 #include "utils/css_utils.h"
 
 static css_error intern(const char *text, size_t length, lwc_string **out)
@@ -420,6 +421,63 @@ static css_error serialize_list_or_columns_component(const css_declaration_contr
     return serialize_numeric(token, component == 0, out);
 }
 
+/* The native border parser tries colour, style, width, in that order. The
+ * grammars are otherwise disjoint; preserve its hashless-colour precedence in
+ * quirks mode without reading specified values from rounded bytecode. */
+static css_error serialize_border_component(const css_declaration_contribution *value, lwc_string **out)
+{
+    const css_declaration *source = value->source;
+    enum css_declaration_value_kind kind = source->property->value_kind;
+    size_t starts[3] = {0}, lengths[3] = {0};
+    for (size_t pos = 0; pos < source->token_count;) {
+        const css_declaration_token *token = &source->tokens[pos];
+        if (token->type == CSS_TOKEN_S) {
+            pos++;
+            continue;
+        }
+        size_t end = css__declaration_component_end(source, pos);
+        if (end == 0)
+            return CSS_INVALID;
+        size_t component = 2; /* Colour, unless identified as width or style. */
+        if (token->type == CSS_TOKEN_NUMBER || token->type == CSS_TOKEN_DIMENSION) {
+            uint32_t ignored;
+            bool quirky_colour = source->quirks_allowed && lengths[2] == 0 &&
+                css__parse_hash_colour(token->text, &ignored) == CSS_OK;
+            component = quirky_colour ? 2 : 0;
+        } else if (token->type == CSS_TOKEN_FUNCTION && css__keyword_equal(token->text, "calc")) {
+            component = 0;
+        } else if (token->type == CSS_TOKEN_IDENT) {
+            static const char *const widths[] = {"thin", "medium", "thick"};
+            static const char *const styles[] = {
+                "none", "hidden", "dotted", "dashed", "solid", "double", "groove", "ridge", "inset", "outset"};
+            for (size_t i = 0; i < sizeof(widths) / sizeof(widths[0]); i++) {
+                if (css__keyword_equal(token->text, widths[i]))
+                    component = 0;
+            }
+            for (size_t i = 0; i < sizeof(styles) / sizeof(styles[0]); i++) {
+                if (css__keyword_equal(token->text, styles[i]))
+                    component = 1;
+            }
+        }
+        if (lengths[component] != 0)
+            return CSS_INVALID;
+        starts[component] = pos;
+        lengths[component] = end - pos;
+        pos = end;
+    }
+    size_t component = kind == CSS_DECL_VALUE_BORDER ? value->component / 4 : value->component;
+    const char *defaults[] = {"medium", "none", kind == CSS_DECL_VALUE_OUTLINE ? "invert" : "currentcolor"};
+    if (lengths[component] == 0)
+        return intern(defaults[component], strlen(defaults[component]), out);
+    const char *name = source->property->longhands[value->component];
+    css_declaration part = *source;
+    part.property = css_prop_lookup(name, strlen(name));
+    part.tokens = source->tokens + starts[component];
+    part.token_count = lengths[component];
+    const css_declaration_contribution member = {.source = &part};
+    return css__declaration_value_serialize(&member, out);
+}
+
 css_error css__declaration_value_serialize(const css_declaration_contribution *value, lwc_string **out)
 {
     if (out == NULL)
@@ -452,6 +510,8 @@ css_error css__declaration_value_serialize(const css_declaration_contribution *v
         return serialize_flex_component(value, out);
     if (kind == CSS_DECL_VALUE_LIST_STYLE || kind == CSS_DECL_VALUE_COLUMNS)
         return serialize_list_or_columns_component(value, out);
+    if (kind == CSS_DECL_VALUE_BORDER || kind == CSS_DECL_VALUE_BORDER_SIDE || kind == CSS_DECL_VALUE_OUTLINE)
+        return serialize_border_component(value, out);
     if (kind == CSS_DECL_VALUE_COLOUR || kind == CSS_DECL_VALUE_QUAD_COLOUR)
         return css__declaration_colour_serialize(value, out);
     size_t arity = scalar_arity(kind);
@@ -463,6 +523,52 @@ css_error css__declaration_value_serialize(const css_declaration_contribution *v
     if (kind == CSS_DECL_VALUE_KEYWORD || kind == CSS_DECL_VALUE_PAIR_KEYWORD || kind == CSS_DECL_VALUE_QUAD_KEYWORD)
         return CSS_INVALID;
     return serialize_numeric(token, kind != CSS_DECL_VALUE_NUMBER && kind != CSS_DECL_VALUE_NUMBER_LENGTH, out);
+}
+
+static css_error serialize_border_shorthand(enum css_declaration_value_kind kind,
+    const css_declaration_contribution *const *members, lwc_string **out)
+{
+    size_t sides = kind == CSS_DECL_VALUE_BORDER ? 4 : 1;
+    lwc_string *values[3] = {0};
+    css_error error = CSS_OK;
+    for (size_t component = 0; component < 3; component++) {
+        for (size_t side = 0; side < sides; side++) {
+            lwc_string *value = NULL;
+            error = css__declaration_value_serialize(members[component * sides + side], &value);
+            if (error != CSS_OK)
+                goto done;
+            if (side == 0) {
+                values[component] = value;
+            } else {
+                bool equal = values[component] == value;
+                lwc_string_unref(value);
+                if (!equal) {
+                    error = intern("", 0, out); /* Unequal sides cannot be expressed by border. */
+                    goto done;
+                }
+            }
+        }
+    }
+    const char *defaults[] = {"medium", "none", kind == CSS_DECL_VALUE_OUTLINE ? "invert" : "currentcolor"};
+    lwc_string *parts[3];
+    size_t count = 0;
+    for (size_t i = 0; i < 3; i++) {
+        /* UI 3 outline order is colour/style/width; border and column-rule
+         * order is width/style/colour. Omit only true specified defaults. */
+        size_t component = kind == CSS_DECL_VALUE_OUTLINE ? 2 - i : i;
+        if (!css__keyword_equal(values[component], defaults[component]))
+            parts[count++] = values[component];
+    }
+    if (count == 0)
+        parts[count++] = values[1]; /* none is the shortest spelling of the defaults. */
+    const struct value_format format = {"", " ", ""};
+    error = join_values(parts, count, &format, out);
+done:
+    for (size_t i = 0; i < 3; i++) {
+        if (values[i] != NULL)
+            lwc_string_unref(values[i]);
+    }
+    return error;
 }
 
 static css_error serialize_components(enum css_declaration_value_kind kind,
@@ -564,6 +670,8 @@ css_error css__declaration_shorthand_serialize(const struct css_prop_entry *prop
     if (any_wide)
         return same_wide ? intern(wide, strlen(wide), out) : intern("", 0, out);
     enum css_declaration_value_kind kind = property->value_kind;
+    if (kind == CSS_DECL_VALUE_BORDER || kind == CSS_DECL_VALUE_BORDER_SIDE || kind == CSS_DECL_VALUE_OUTLINE)
+        return serialize_border_shorthand(kind, members, out);
     if (scalar_arity(kind) == 1 && kind != CSS_DECL_VALUE_FLEX && kind != CSS_DECL_VALUE_FLEX_FLOW &&
         kind != CSS_DECL_VALUE_LIST_STYLE && kind != CSS_DECL_VALUE_COLUMNS)
         return CSS_INVALID;

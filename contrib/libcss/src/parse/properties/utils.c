@@ -95,151 +95,94 @@ css_error css__parse_list_style_type_value(css_language *c, const css_token *ide
 }
 
 
-/**
- * Parse border-{top,right,bottom,left} shorthand
- *
- * \param c	  Parsing context
- * \param vector  Vector of tokens to process
- * \param ctx	  Pointer to vector iteration context
- * \param side	  The side we're parsing for
- * \param result  Pointer to location to receive resulting style
- * \return CSS_OK on success,
- *	   CSS_NOMEM on memory exhaustion,
- *	   CSS_INVALID if the input is not valid
- *
- * Post condition: \a *ctx is updated with the next token to process
- *		   If the input is invalid, then \a *ctx remains unchanged.
- */
+/* All three values are optional, but at least one must be supplied. Keep
+ * CSS-wide keywords at the shorthand boundary, and do not swallow fatal errors
+ * while trying alternative components. The caller validates any trailing input. */
+css_error css__parse_border_shorthand(css_language *c, const parserutils_vector *vector, int32_t *ctx,
+    css_style *result, const struct css_border_shorthand *syntax)
+{
+    int32_t orig_ctx = *ctx;
+    uint32_t orig_used = result->used;
+    const css_token *token = parserutils_vector_peek(vector, *ctx);
+    if (token == NULL)
+        return CSS_INVALID;
+    css_style *parts[3] = {0};
+    css_error error = CSS_OK;
+    enum flag_value flag = get_css_flag_value(c, token);
+    if (flag != FLAG_VALUE__NONE) {
+        for (size_t i = 0; i < 3; i++) {
+            error = css_stylesheet_style_flag_value(result, flag, syntax->properties[i]);
+            if (error != CSS_OK)
+                goto done;
+        }
+        parserutils_vector_iterate(vector, ctx);
+        goto done;
+    }
+    for (size_t i = 0; i < 3; i++) {
+        error = css__stylesheet_style_create(c->sheet, &parts[i]);
+        if (error != CSS_OK)
+            goto done;
+    }
+    unsigned supplied = 0;
+    while (supplied < 3 && (token = parserutils_vector_peek(vector, *ctx)) != NULL) {
+        if (get_css_flag_value(c, token) != FLAG_VALUE__NONE) {
+            error = CSS_INVALID;
+            goto done;
+        }
+        error = CSS_INVALID;
+        for (size_t i = 0; i < 3 && error == CSS_INVALID; i++) {
+            if (parts[i]->used == 0)
+                error = syntax->handlers[i](c, vector, ctx, parts[i]);
+        }
+        if (error == CSS_INVALID)
+            break;
+        if (error != CSS_OK)
+            goto done;
+        supplied++;
+        consumeWhitespace(vector, ctx);
+    }
+    if (supplied == 0) {
+        error = CSS_INVALID;
+        goto done;
+    }
+    for (size_t i = 0; i < 3; i++) {
+        if (parts[i]->used == 0) {
+            error = css__stylesheet_style_appendOPV(parts[i], syntax->properties[i], 0, syntax->defaults[i]);
+            if (error != CSS_OK)
+                goto done;
+        }
+        error = css__stylesheet_merge_style(result, parts[i]);
+        if (error != CSS_OK)
+            goto done;
+    }
+done:
+    for (size_t i = 0; i < 3; i++)
+        css__stylesheet_style_destroy(parts[i]);
+    if (error != CSS_OK) {
+        *ctx = orig_ctx;
+        result->used = orig_used;
+    }
+    return error;
+}
+
 css_error css__parse_border_side(
     css_language *c, const parserutils_vector *vector, int32_t *ctx, css_style *result, enum border_side_e side)
 {
-    int32_t orig_ctx = *ctx;
-    int prev_ctx;
-    const css_token *token;
-    css_error error = CSS_OK;
-    bool color = true;
-    bool style = true;
-    bool width = true;
-    css_style *color_style;
-    css_style *style_style;
-    css_style *width_style;
-
-    /* Firstly, handle inherit */
-    token = parserutils_vector_peek(vector, *ctx);
-    if (token == NULL)
-        return CSS_INVALID;
-
-    if (is_css_inherit(c, token)) {
-        error = css_stylesheet_style_inherit(result, CSS_PROP_BORDER_TOP_COLOR + side);
-        if (error != CSS_OK)
-            return error;
-
-        error = css_stylesheet_style_inherit(result, CSS_PROP_BORDER_TOP_STYLE + side);
-        if (error != CSS_OK)
-            return error;
-
-        error = css_stylesheet_style_inherit(result, CSS_PROP_BORDER_TOP_WIDTH + side);
-        if (error == CSS_OK)
-            parserutils_vector_iterate(vector, ctx);
-
-        return error;
-    }
-
-    /* allocate styles */
-    error = css__stylesheet_style_create(c->sheet, &color_style);
-    if (error != CSS_OK)
-        return error;
-
-    error = css__stylesheet_style_create(c->sheet, &style_style);
-    if (error != CSS_OK) {
-        css__stylesheet_style_destroy(color_style);
-        return error;
-    }
-
-    error = css__stylesheet_style_create(c->sheet, &width_style);
-    if (error != CSS_OK) {
-        css__stylesheet_style_destroy(color_style);
-        css__stylesheet_style_destroy(style_style);
-        return error;
-    }
-
-    /* Attempt to parse the various longhand properties */
-    do {
-        prev_ctx = *ctx;
-        error = CSS_OK;
-
-        /* Ensure that we're not about to parse another inherit */
-        token = parserutils_vector_peek(vector, *ctx);
-        if (token != NULL && is_css_inherit(c, token)) {
-            error = CSS_INVALID;
-            goto css__parse_border_side_cleanup;
-        }
-
-        /* Try each property parser in turn, but only if we
-         * haven't already got a value for this property.
-         */
-        if ((color) &&
-            (error = css__parse_border_side_color(c, vector, ctx, color_style, CSS_PROP_BORDER_TOP_COLOR + side)) ==
-                CSS_OK) {
-            color = false;
-        } else if ((style) &&
-            (error = css__parse_border_side_style(c, vector, ctx, style_style, CSS_PROP_BORDER_TOP_STYLE + side)) ==
-                CSS_OK) {
-            style = false;
-        } else if ((width) &&
-            (error = css__parse_border_side_width(c, vector, ctx, width_style, CSS_PROP_BORDER_TOP_WIDTH + side)) ==
-                CSS_OK) {
-            width = false;
-        }
-
-        if (error == CSS_OK) {
-            consumeWhitespace(vector, ctx);
-
-            token = parserutils_vector_peek(vector, *ctx);
-        } else {
-            /* Forcibly cause loop to exit */
-            token = NULL;
-        }
-    } while (*ctx != prev_ctx && token != NULL);
-
-    if (style) {
-        error = css__stylesheet_style_appendOPV(style_style, CSS_PROP_BORDER_TOP_STYLE + side, 0, BORDER_STYLE_NONE);
-        if (error != CSS_OK)
-            goto css__parse_border_side_cleanup;
-    }
-
-    if (width) {
-        error = css__stylesheet_style_appendOPV(width_style, CSS_PROP_BORDER_TOP_WIDTH + side, 0, BORDER_WIDTH_MEDIUM);
-        if (error != CSS_OK)
-            goto css__parse_border_side_cleanup;
-    }
-
-    if (color) {
-        error = css__stylesheet_style_appendOPV(
-            color_style, CSS_PROP_BORDER_TOP_COLOR + side, 0, BORDER_COLOR_CURRENT_COLOR);
-        if (error != CSS_OK)
-            goto css__parse_border_side_cleanup;
-    }
-
-    error = css__stylesheet_merge_style(result, color_style);
-    if (error != CSS_OK)
-        goto css__parse_border_side_cleanup;
-
-    error = css__stylesheet_merge_style(result, style_style);
-    if (error != CSS_OK)
-        goto css__parse_border_side_cleanup;
-
-    error = css__stylesheet_merge_style(result, width_style);
-
-css__parse_border_side_cleanup:
-    css__stylesheet_style_destroy(color_style);
-    css__stylesheet_style_destroy(style_style);
-    css__stylesheet_style_destroy(width_style);
-
-    if (error != CSS_OK)
-        *ctx = orig_ctx;
-
-    return error;
+    static const struct css_border_shorthand syntax[] = {
+        {{CSS_PROP_BORDER_TOP_COLOR, CSS_PROP_BORDER_TOP_STYLE, CSS_PROP_BORDER_TOP_WIDTH},
+            {css__parse_border_top_color, css__parse_border_top_style, css__parse_border_top_width},
+            {BORDER_COLOR_CURRENT_COLOR, BORDER_STYLE_NONE, BORDER_WIDTH_MEDIUM}},
+        {{CSS_PROP_BORDER_RIGHT_COLOR, CSS_PROP_BORDER_RIGHT_STYLE, CSS_PROP_BORDER_RIGHT_WIDTH},
+            {css__parse_border_right_color, css__parse_border_right_style, css__parse_border_right_width},
+            {BORDER_COLOR_CURRENT_COLOR, BORDER_STYLE_NONE, BORDER_WIDTH_MEDIUM}},
+        {{CSS_PROP_BORDER_BOTTOM_COLOR, CSS_PROP_BORDER_BOTTOM_STYLE, CSS_PROP_BORDER_BOTTOM_WIDTH},
+            {css__parse_border_bottom_color, css__parse_border_bottom_style, css__parse_border_bottom_width},
+            {BORDER_COLOR_CURRENT_COLOR, BORDER_STYLE_NONE, BORDER_WIDTH_MEDIUM}},
+        {{CSS_PROP_BORDER_LEFT_COLOR, CSS_PROP_BORDER_LEFT_STYLE, CSS_PROP_BORDER_LEFT_WIDTH},
+            {css__parse_border_left_color, css__parse_border_left_style, css__parse_border_left_width},
+            {BORDER_COLOR_CURRENT_COLOR, BORDER_STYLE_NONE, BORDER_WIDTH_MEDIUM}},
+    };
+    return css__parse_border_shorthand(c, vector, ctx, result, &syntax[side]);
 }
 
 static inline uint8_t linear_srgb_to_srgb8(double linear) {

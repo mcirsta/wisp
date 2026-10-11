@@ -43,6 +43,10 @@ SAMPLES = [
     ("SVG CSS stroke fallback", 315, 270, (192, 255, 238)),
     ("transparent black still works", 450, 270, (255, 255, 255)),
     ("unsupported substituted colour inherits", 50, 330, (0, 34, 68)),
+    ("embedded CSS-wide shorthand fallback", 115, 330, (0, 34, 68)),
+    ("tiny negative width fallback", 215, 330, (0, 34, 68)),
+    ("grid unit width fallback", 315, 330, (0, 34, 68)),
+    ("omitted border colour", 415, 330, (0, 34, 68)),
 ]
 
 binary = Path(sys.argv[1]).resolve()

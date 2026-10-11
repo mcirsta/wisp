@@ -891,7 +891,7 @@
 #errors
 #expected
 | *
-|  column-rule-color: #00000000
+|  column-rule-color: currentColor
 |  column-rule-style: solid
 |  column-rule-width: medium
 #reset
@@ -901,7 +901,7 @@
 #errors
 #expected
 | *
-|  column-rule-color: #00000000
+|  column-rule-color: currentColor
 |  column-rule-style: none
 |  column-rule-width: thin
 #reset
@@ -951,7 +951,7 @@
 #errors
 #expected
 | *
-|  column-rule-color: #00000000
+|  column-rule-color: currentColor
 |  column-rule-style: solid
 |  column-rule-width: thin
 #reset
@@ -961,7 +961,7 @@
 #errors
 #expected
 | *
-|  column-rule-color: #00000000
+|  column-rule-color: currentColor
 |  column-rule-style: solid
 |  column-rule-width: thin
 #reset
@@ -1052,7 +1052,7 @@
 #errors
 #expected
 | *
-|  column-rule-color: #00000000 !important
+|  column-rule-color: currentColor !important
 |  column-rule-style: solid !important
 |  column-rule-width: medium !important
 #reset
@@ -1062,7 +1062,7 @@
 #errors
 #expected
 | *
-|  column-rule-color: #00000000 !important
+|  column-rule-color: currentColor !important
 |  column-rule-style: none !important
 |  column-rule-width: thin !important
 #reset
@@ -1112,7 +1112,7 @@
 #errors
 #expected
 | *
-|  column-rule-color: #00000000 !important
+|  column-rule-color: currentColor !important
 |  column-rule-style: solid !important
 |  column-rule-width: thin !important
 #reset
@@ -1122,7 +1122,7 @@
 #errors
 #expected
 | *
-|  column-rule-color: #00000000 !important
+|  column-rule-color: currentColor !important
 |  column-rule-style: solid !important
 |  column-rule-width: thin !important
 #reset

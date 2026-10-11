@@ -1326,6 +1326,62 @@ blocker, the remaining aggregate serializers, alias handling, declaration-block
 writes and DOM integration remain the next work. No additional JS APIs or
 Duktape-style placeholder objects were introduced.
 
+### Border, outline and column-rule specified values (2026-10-12)
+
+Committed the preceding list-style/columns work as `73708f14`. Added specified
+readback for `border`, its four physical side shorthands, `outline` and
+`column-rule`. Accepted tokens expand into longhand values; shorthand readback
+uses the winning longhands, including overrides, importance, CSS-wide values
+and pending variables. Full border readback returns an empty string when its
+sides cannot be represented by one shorthand. It preserves authored precision
+and reuses the existing longhand serializers instead of reading rounded rendering
+bytecode. A shared token-component walker handles colour functions without
+splitting their arguments.
+
+Replaced the duplicated border-side, outline and column-rule native parsers with
+one colour/style/width parser configured with each property's existing generated
+handlers and defaults. It rejects embedded CSS-wide keywords, propagates fatal
+allocation errors and restores the token cursor and bytecode span on failure.
+Full `border` parsing also rolls back all four sides on failure. The existing
+three temporary component styles and native bytecode ordering are preserved.
+The optional declaration collector retains the sheet's quirks-mode flag so
+hashless colours such as `000` are not misread as widths during readback.
+
+Two native value corrections accompany the shared parsing:
+
+- Omitted `column-rule-color` now defaults to `currentcolor`, matching the
+  longhand, instead of literal transparent black.
+- Generated border/outline/column-rule width handlers reject `fr` and negative
+  lengths too small to survive fixed-point conversion. Invalid shorthands leave
+  an earlier valid declaration intact.
+
+Grammar and defaults follow [CSS Backgrounds 3 border shorthands](https://drafts.csswg.org/css-backgrounds-3/#border-shorthands),
+[CSS UI 3 outlines](https://drafts.csswg.org/css-ui-3/#outline) and
+[CSS Multicol 1 column rules](https://drafts.csswg.org/css-multicol-1/#column-rule).
+Serialization follows [CSSOM](https://drafts.csswg.org/cssom/#serializing-css-values),
+including canonical order and omission of actual specified defaults. Outline
+retains the engine's UI 3 `invert` initial colour and colour/style/width order;
+this is not an implementation of UI 4's `auto` outline model. Border and
+column-rule use width/style/colour order. Nondefault widths remain represented
+even when style `none` makes their used width zero.
+
+Validation: all 78 selected native CSS/QuickJS suites pass with Debug
+ASan/UBSan/LeakSanitizer, and all 19 selected Release suites pass. Declaration
+coverage is 863 Debug / 893 Release checks, including allocation failure/retry,
+whole/chunked input, serialize/reparse, native-bytecode comparisons for every
+component permutation, malformed-declaration fallback and quirks-mode ambiguity.
+The generator's 14 tests and all 22 selected Qt integration suites also pass.
+The Qt colour fixture checks 36 exact pixels, including invalid shorthand
+fallback, tiny negative and `fr` width rejection, and omitted border colour.
+Both full builds are warning-free; no GTK tests ran.
+
+This remains internal CSSOM groundwork. Math and unsupported colour readback
+still report unsupported explicitly. Border-image support, multicolumn layout,
+remaining aggregate serializers, alias handling, declaration-block writes and
+the live `element.style` wrapper remain separate work. The saved eBihoreanul
+`style.opacity` blocker is not yet resolved. No additional JS APIs or old
+Duktape placeholder bindings were introduced.
+
 ## Assessment
 
 Keep QuickJS-ng and libdom. The missing part is the browser binding and execution

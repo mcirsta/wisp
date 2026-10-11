@@ -34,11 +34,16 @@ typedef struct css_declaration {
     size_t value_start, value_end;
     bool deferred; /**< Accepted through the renderer's variable-deferred path */
     bool important;
+    bool quirks_allowed; /**< Preserve grammar context for ambiguous hashless colours. */
     const css_declaration_token *tokens; /**< Value without surrounding whitespace or priority */
     size_t token_count;
     uint32_t bytecode_offset; /**< Span in the list's inline rule */
     uint32_t bytecode_length;
 } css_declaration;
+
+/* End of one scalar/function component in validated tokens, or zero for an
+ * unbalanced function. Does not split whitespace inside function arguments. */
+size_t css__declaration_component_end(const css_declaration *source, size_t start);
 
 /* Internal parser output for a future specified-style layer. Entries preserve
  * duplicates, shorthands and source order. They are NOT a CSSOM declaration

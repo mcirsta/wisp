@@ -9,6 +9,7 @@
 #define css_css__parse_properties_utils_h_
 
 #include "parse/language.h"
+#include "parse/properties/properties.h"
 #include "stylesheet.h"
 
 static inline bool is_css_inherit(css_language *c, const css_token *token)
@@ -39,6 +40,16 @@ static inline enum flag_value get_css_flag_value(css_language *c, const css_toke
 
 /* CSS Lists <counter-name>: a custom identifier other than none. */
 bool css__is_counter_name(const css_token *token);
+
+/* Shared unordered colour/style/width grammar. Entries use bytecode order,
+ * which need not match the CSSOM shorthand's canonical serialization order. */
+struct css_border_shorthand {
+    enum css_properties_e properties[3];
+    css_prop_handler handlers[3];
+    uint16_t defaults[3];
+};
+css_error css__parse_border_shorthand(css_language *c, const parserutils_vector *vector, int32_t *ctx,
+    css_style *result, const struct css_border_shorthand *syntax);
 
 enum border_side_e { BORDER_SIDE_TOP = 0, BORDER_SIDE_RIGHT = 1, BORDER_SIDE_BOTTOM = 2, BORDER_SIDE_LEFT = 3 };
 

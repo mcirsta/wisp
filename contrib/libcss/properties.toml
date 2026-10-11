@@ -181,7 +181,7 @@ parse = "IDENT:( INHERIT: INITIAL: REVERT: UNSET: NONE:0,BORDER_STYLE_NONE HIDDE
 
 [generic.border_side_width]
 enum = "op"
-parse = "IDENT:( INHERIT: INITIAL: REVERT: UNSET: THIN:0,BORDER_WIDTH_THIN MEDIUM:0,BORDER_WIDTH_MEDIUM THICK:0,BORDER_WIDTH_THICK IDENT:) LENGTH_UNIT:( UNIT_PX:BORDER_WIDTH_SET MASK:UNIT_MASK_BORDER_SIDE_WIDTH RANGE:<0 LENGTH_UNIT:) CALC:( UNIT_PX:BORDER_WIDTH_CALC CALC:)"
+parse = "IDENT:( INHERIT: INITIAL: REVERT: UNSET: THIN:0,BORDER_WIDTH_THIN MEDIUM:0,BORDER_WIDTH_MEDIUM THICK:0,BORDER_WIDTH_THICK IDENT:) LENGTH_UNIT:( UNIT_PX:BORDER_WIDTH_SET MASK:UNIT_MASK_BORDER_SIDE_WIDTH DISALLOW:unit==UNIT_FR||css__number_sign(token->idata)<0 LENGTH_UNIT:) CALC:( UNIT_PX:BORDER_WIDTH_CALC CALC:)"
 
 [generic.margin_side]
 enum = "op"
@@ -1937,6 +1937,7 @@ computed = "none"
 parse = '''IDENT:( INHERIT: INITIAL: REVERT: UNSET: AUTO:0,HEIGHT_AUTO IDENT:) SIZING:( FIT_CONTENT:HEIGHT_SET MIN_CONTENT:HEIGHT_SET MAX_CONTENT:HEIGHT_SET SIZING:) LENGTH_UNIT:( UNIT_PX:HEIGHT_SET MASK:UNIT_MASK_HEIGHT RANGE:<0 LENGTH_UNIT:) CALC:( UNIT_PX:HEIGHT_CALC CALC:)'''
 
 [border]
+declaration_value = "border"
 declaration_longhands = ["border_top_width", "border_right_width", "border_bottom_width", "border_left_width", "border_top_style", "border_right_style", "border_bottom_style", "border_left_style", "border_top_color", "border_right_color", "border_bottom_color", "border_left_color"]
 enum = "CSS_PROP_BORDER"
 inherited = false
@@ -1945,6 +1946,7 @@ cascade = "none"
 computed = "none"
 
 [border_bottom]
+declaration_value = "border_side"
 declaration_longhands = ["border_bottom_width", "border_bottom_style", "border_bottom_color"]
 enum = "BORDER_SIDE_BOTTOM"
 inherited = false
@@ -1963,6 +1965,7 @@ cascade = "none"
 computed = "none"
 
 [border_left]
+declaration_value = "border_side"
 declaration_longhands = ["border_left_width", "border_left_style", "border_left_color"]
 enum = "BORDER_SIDE_LEFT"
 inherited = false
@@ -1972,6 +1975,7 @@ wrap = "css__parse_border_side"
 parse = "WRAP:css__parse_border_side"
 
 [border_right]
+declaration_value = "border_side"
 declaration_longhands = ["border_right_width", "border_right_style", "border_right_color"]
 enum = "BORDER_SIDE_RIGHT"
 inherited = false
@@ -1990,6 +1994,7 @@ cascade = "none"
 computed = "none"
 
 [border_top]
+declaration_value = "border_side"
 declaration_longhands = ["border_top_width", "border_top_style", "border_top_color"]
 enum = "BORDER_SIDE_TOP"
 inherited = false
@@ -2009,6 +2014,7 @@ computed = "none"
 helper_longhands = ["border_side_width"]
 
 [column_rule]
+declaration_value = "border_side"
 declaration_longhands = ["column_rule_width", "column_rule_style", "column_rule_color"]
 enum = "CSS_PROP_COLUMN_RULE"
 inherited = false
@@ -2168,6 +2174,7 @@ computed = "none"
 parse = '''IDENT:( INHERIT: INITIAL: REVERT: UNSET: AUTO:0,MIN_WIDTH_AUTO IDENT:) SIZING:( FIT_CONTENT:MIN_WIDTH_SET MIN_CONTENT:MIN_WIDTH_SET MAX_CONTENT:MIN_WIDTH_SET SIZING:) LENGTH_UNIT:( UNIT_PX:MIN_WIDTH_SET MASK:UNIT_MASK_MIN_WIDTH RANGE:<0 LENGTH_UNIT:) CALC:( UNIT_PX:MIN_WIDTH_CALC CALC:)'''
 
 [outline]
+declaration_value = "outline"
 declaration_longhands = ["outline_width", "outline_style", "outline_color"]
 enum = "CSS_PROP_OUTLINE"
 inherited = false

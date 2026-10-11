@@ -22,7 +22,7 @@ css_error css__declaration_value_serialize(const css_declaration_contribution *v
  * NULL members, mixed priorities, mixed CSS-wide keywords or incompatible
  * pending-substitution values give the CSSOM empty string. Reconstruction of
  * ordinary values covers the registered pair/quad length, keyword and colour
- * families, plus flex shorthands.
+ * families and the structured shorthand families registered in properties.toml.
  * This does not decide whether a shorthand may be used in cssText: that also
  * needs the declaration block's ordering/logical-property intermixing checks. */
 css_error css__declaration_shorthand_serialize(const struct css_prop_entry *property,

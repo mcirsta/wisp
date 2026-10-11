@@ -30,32 +30,15 @@
 css_error css__parse_border(css_language *c, const parserutils_vector *vector, int32_t *ctx, css_style *result)
 {
     int32_t orig_ctx = *ctx;
-    css_error error;
-
-    error = css__parse_border_side(c, vector, ctx, result, BORDER_SIDE_TOP);
-    if (error != CSS_OK) {
+    uint32_t orig_used = result->used;
+    for (enum border_side_e side = BORDER_SIDE_TOP; side <= BORDER_SIDE_LEFT; side++) {
         *ctx = orig_ctx;
-        return error;
+        css_error error = css__parse_border_side(c, vector, ctx, result, side);
+        if (error != CSS_OK) {
+            *ctx = orig_ctx;
+            result->used = orig_used;
+            return error;
+        }
     }
-
-    *ctx = orig_ctx;
-    error = css__parse_border_side(c, vector, ctx, result, BORDER_SIDE_RIGHT);
-    if (error != CSS_OK) {
-        *ctx = orig_ctx;
-        return error;
-    }
-
-    *ctx = orig_ctx;
-    error = css__parse_border_side(c, vector, ctx, result, BORDER_SIDE_BOTTOM);
-    if (error != CSS_OK) {
-        *ctx = orig_ctx;
-        return error;
-    }
-
-    *ctx = orig_ctx;
-    error = css__parse_border_side(c, vector, ctx, result, BORDER_SIDE_LEFT);
-    if (error != CSS_OK)
-        *ctx = orig_ctx;
-
-    return error;
+    return CSS_OK;
 }

@@ -175,7 +175,8 @@ css_error css__declaration_list_record(css_declaration_list *list, const css_tok
     bool deferred)
 {
     css_declaration entry = {
-        .bytecode_offset = bytecode_offset, .bytecode_length = bytecode_length, .deferred = deferred};
+        .bytecode_offset = bytecode_offset, .bytecode_length = bytecode_length, .deferred = deferred,
+        .quirks_allowed = list->sheet->quirks_allowed};
     const css_token *colon = parserutils_vector_peek(tokens, value_start - 1);
     size_t source_start = colon->source_end;
     size_t source_end = css__parser_source_position(list->sheet->parser);
@@ -258,4 +259,24 @@ css_error css__declaration_list_record(css_declaration_list *list, const css_tok
     }
     list->entries[list->count++] = entry;
     return CSS_OK;
+}
+
+size_t css__declaration_component_end(const css_declaration *source, size_t start)
+{
+    if (start >= source->token_count)
+        return 0;
+    size_t pos = start;
+    size_t depth = source->tokens[pos++].type == CSS_TOKEN_FUNCTION ? 1 : 0;
+    while (pos < source->token_count && depth != 0) {
+        const css_declaration_token *token = &source->tokens[pos++];
+        if (token->type == CSS_TOKEN_FUNCTION)
+            depth++;
+        else if (token->type == CSS_TOKEN_CHAR && lwc_string_length(token->text) == 1) {
+            if (lwc_string_data(token->text)[0] == '(')
+                depth++;
+            else if (lwc_string_data(token->text)[0] == ')')
+                depth--;
+        }
+    }
+    return depth == 0 ? pos : 0;
 }

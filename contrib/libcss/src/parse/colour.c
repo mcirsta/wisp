@@ -355,19 +355,8 @@ static const css_declaration_token *colour_component(const css_declaration_contr
         if (count == N_ELEMENTS(starts))
             return NULL;
         starts[count] = pos;
-        unsigned depth = source->tokens[pos++].type == CSS_TOKEN_FUNCTION ? 1 : 0;
-        while (pos < source->token_count && depth != 0) {
-            const css_declaration_token *token = &source->tokens[pos++];
-            if (token->type == CSS_TOKEN_FUNCTION)
-                depth++;
-            else if (token->type == CSS_TOKEN_CHAR && lwc_string_length(token->text) == 1) {
-                if (lwc_string_data(token->text)[0] == '(')
-                    depth++;
-                else if (lwc_string_data(token->text)[0] == ')')
-                    depth--;
-            }
-        }
-        if (depth != 0)
+        pos = css__declaration_component_end(source, pos);
+        if (pos == 0)
             return NULL;
         ends[count++] = pos;
     }
