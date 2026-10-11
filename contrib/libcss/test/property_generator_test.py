@@ -1,0 +1,70 @@
+"""Keep generated declaration identities and shorthand membership coherent."""
+import importlib.util
+from pathlib import Path
+import unittest
+
+
+ROOT = Path(__file__).resolve().parents[1]
+SPEC = importlib.util.spec_from_file_location("property_generator", ROOT / "build-aux/property_generator.py")
+GEN = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(GEN)
+
+
+class DeclarationMetadataTest(unittest.TestCase):
+    def setUp(self):
+        self.reader = GEN.TomlPropertyReader(ROOT / "properties.toml")
+        self.reader.parse()
+
+    def test_generated_identity_coverage(self):
+        generator = GEN.MultiFileGenerator(self.reader.get_dispatch_order(), self.reader.prop_map)
+        generator.toml_reader = self.reader
+        ids = generator.generate_declaration_ids()
+        entries = generator.generate_gperf_input().split("%%")[1].strip().splitlines()
+        names = {entry.split(",")[0] for entry in entries}
+        self.assertEqual(names, {name.replace("_", "-") for name in self.reader.toml_data})
+        for name in self.reader.toml_data:
+            self.assertEqual(ids.count(f"    CSS_DECL_{name.upper()},"), 1)
+        # A wrapped longhand must not be classified as a shorthand.
+        color = next(e for e in entries if e.startswith("border-top-color,"))
+        side = next(e for e in entries if e.startswith("border-top,"))
+        self.assertIn("false, false, NULL, 0", color)
+        self.assertIn("true, false, css_decl_members_border_top, 3", side)
+
+    def test_missing_shorthand_members(self):
+        del self.reader.toml_data["margin"]["declaration_longhands"]
+        with self.assertRaisesRegex(ValueError, "margin: declaration_longhands"):
+            self.reader.validate_declarations()
+
+    def test_longhand_cannot_have_members(self):
+        self.reader.toml_data["width"]["declaration_longhands"] = ["height"]
+        with self.assertRaisesRegex(ValueError, "width: declaration_longhands"):
+            self.reader.validate_declarations()
+
+    def test_duplicate_member(self):
+        self.reader.toml_data["margin"]["declaration_longhands"] = ["margin_top", "margin_top"]
+        with self.assertRaisesRegex(ValueError, "margin: duplicate"):
+            self.reader.validate_declarations()
+
+    def test_unknown_member(self):
+        self.reader.toml_data["margin"]["declaration_longhands"] = ["margin_typo"]
+        with self.assertRaisesRegex(ValueError, "margin: unknown longhand"):
+            self.reader.validate_declarations()
+
+    def test_nested_shorthand(self):
+        self.reader.toml_data["border"]["declaration_longhands"] = ["border_top"]
+        with self.assertRaisesRegex(ValueError, "border: nested shorthand"):
+            self.reader.validate_declarations()
+
+    def test_logical_pair_order(self):
+        self.reader.toml_data["margin_inline"]["declaration_longhands"].reverse()
+        with self.assertRaisesRegex(ValueError, "margin_inline: logical shorthand"):
+            self.reader.validate_declarations()
+
+    def test_logical_pair_cannot_be_physical(self):
+        self.reader.toml_data["margin_inline"]["declaration_longhands"] = ["margin_left", "margin_right"]
+        with self.assertRaisesRegex(ValueError, "margin_inline: logical shorthand"):
+            self.reader.validate_declarations()
+
+
+if __name__ == "__main__":
+    unittest.main()

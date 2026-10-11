@@ -471,6 +471,8 @@ target_include_directories(css_declarations_test PRIVATE ${TEST_COMMON_INCLUDES}
   ${CMAKE_SOURCE_DIR}/contrib/libcss/src)
 target_link_libraries(css_declarations_test css ${CHECK_LIBRARIES})
 add_test(NAME css_declarations_test COMMAND css_declarations_test)
+add_test(NAME css_property_generator_test COMMAND ${PYTHON3}
+  ${CMAKE_SOURCE_DIR}/contrib/libcss/test/property_generator_test.py)
 
 add_executable(box_construct_context_test box_construct_context_test.c)
 target_include_directories(box_construct_context_test PRIVATE ${TEST_COMMON_INCLUDES} ${CMAKE_SOURCE_DIR}/include)

@@ -116,6 +116,7 @@ set(LIBCSS_PROPREG_PYTHON_FILES
     ${LIBCSS_PROPREG_OUT_DIR}/propstrings_enum.inc
     ${LIBCSS_PROPREG_OUT_DIR}/propstrings_strings.inc
     ${LIBCSS_PROPREG_OUT_DIR}/prop_hash_table.gperf
+    ${LIBCSS_PROPREG_OUT_DIR}/declaration_ids.inc
     ${LIBCSS_PROPREG_OUT_DIR}/cascade_declarations.inc
     ${LIBCSS_PROPREG_OUT_DIR}/parse_declarations.inc
     ${LIBCSS_PROPREG_OUT_DIR}/unit_masks.inc
@@ -176,6 +177,7 @@ add_library(css ${WISP_LIB_TYPE}
 	src/parse/parse.c
 	src/parse/language.c
 	src/parse/declarations.c
+	src/parse/declaration_order.c
 	src/parse/important.c
 	src/parse/propstrings.c
 	src/parse/font_face.c

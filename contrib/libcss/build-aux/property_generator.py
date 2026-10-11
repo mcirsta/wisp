@@ -2,10 +2,9 @@
 """
 Property Registration Generator for LibCSS
 
-Generates property enums, dispatch tables, and string indices from properties.gen
-to eliminate manual alignment errors.
-
-Strategy: Parse dispatch.c for canonical property order, then match properties.gen
+Generate parser registration, declaration identities and cascade tables from
+properties.toml. The legacy dispatch.c/properties.gen input remains available
+for the older generated outputs.
 """
 
 import sys
@@ -193,6 +192,13 @@ class TomlPropertyReader:
                 print(f"WARNING: Property '{prop_name}' missing 'enum' field", file=sys.stderr)
                 continue
             
+            if 'logical' in prop_data and not isinstance(prop_data['logical'], bool):
+                raise ValueError(f"{prop_name}: logical must be boolean")
+            if prop_data.get('logical') and not prop_data.get('logical_group'):
+                raise ValueError(f"{prop_name}: logical requires a logical_group")
+            if 'logical_group' in prop_data and not re.fullmatch(r'[a-z][a-z_]*', prop_data['logical_group']):
+                raise ValueError(f"{prop_name}: invalid logical_group")
+
             # Build the spec string from TOML data
             spec = prop_data.get('parse', '')
             
@@ -228,6 +234,8 @@ class TomlPropertyReader:
             # Store full TOML data for cascade generation etc.
             self.toml_data[prop_name] = prop_data
         
+        self.validate_declarations()
+
         # Validate
         if len(self.prop_map) < 50:
             print(f"FATAL ERROR: Only {len(self.prop_map)} properties in properties.toml", file=sys.stderr)
@@ -235,6 +243,30 @@ class TomlPropertyReader:
         
         return self.prop_map
     
+    def validate_declarations(self):
+        """Keep parser shorthand membership explicit and fail on stale metadata."""
+        for name, prop in self.toml_data.items():
+            shorthand = prop.get('shorthand', False) or prop['enum'].startswith('BORDER_SIDE_')
+            members = prop.get('declaration_longhands', [])
+            if shorthand != bool(members):
+                raise ValueError(f"{name}: declaration_longhands must describe each parser shorthand")
+            if not isinstance(members, list) or len(members) != len(set(members)):
+                raise ValueError(f"{name}: duplicate or invalid declaration_longhands")
+            if shorthand and prop.get('logical') and members != [name + '_start', name + '_end']:
+                raise ValueError(f"{name}: logical shorthand must retain start/end order")
+            for member in members:
+                if member == name or not re.fullmatch(r'[a-z][a-z_]*', member):
+                    raise ValueError(f"{name}: invalid longhand {member}")
+                target = self.toml_data.get(member)
+                if target is None:
+                    # The current horizontal renderer implements some logical
+                    # pairs only as shorthands. Metadata must keep the standard
+                    # start/end identities rather than call them left/right.
+                    if not prop.get('logical') or member not in (name + '_start', name + '_end'):
+                        raise ValueError(f"{name}: unknown longhand {member}")
+                elif target.get('declaration_longhands'):
+                    raise ValueError(f"{name}: nested shorthand {member}; list its components")
+
     def get_dispatch_order(self):
         """Get property dispatch order from TOML (replaces DispatchParser).
         
@@ -576,19 +608,18 @@ class GperfInputGenerator:
     """
     
     def __init__(self, keys):
-        """Initialize with list of (css_name, handler_name, opcode) tuples."""
+        """Initialize with (name, handler, opcode, metadata, members) tuples."""
         self.keys = keys
     
     def generate_gperf_input(self):
         """Generate gperf input file content.
         
         The gperf file defines:
-        - struct css_prop_entry { name, handler }
+        - The shared css_prop_entry registration from parse/property.h
         - A lookup function css_prop_lookup_generated() returning const struct *
         
         A wrapper function css_prop_lookup() is appended after the gperf
-        output (via the %% section) to extract the handler field, preserving
-        the existing API: css_prop_handler css_prop_lookup(name, len).
+        output (via the %% section), preserving css_prop_lookup(name, len).
         """
         lines = []
         
@@ -632,41 +663,40 @@ class GperfInputGenerator:
         lines.append("#include <string.h>")
         lines.append("#include <stddef.h>")
         lines.append("")
-        lines.append('#include "parse/properties/properties.h"')
+        lines.append('#include "parse/property.h"')
+        for css_name, handler, opcode, metadata, members in self.keys:
+            if members:
+                array = "css_decl_members_" + css_name.replace('-', '_')
+                names = ', '.join('"' + name.replace('_', '-') + '"' for name in members)
+                lines.append(f"static const char *const {array}[] = {{{names}}};")
         lines.append("%}")
         lines.append("")
         
-        # Full struct definition - gperf needs this to generate the wordlist array.
-        # The 'name' field is the keyword (filled by gperf automatically).
-        # The 'handler' field is the css_prop_handler function pointer.
-        # The 'opcode' field is the CSS_PROP_* enum value (-1 for shorthands).
-        lines.append("struct css_prop_entry {")
-        lines.append("    const char *name;")
-        lines.append("    css_prop_handler handler;")
-        lines.append("    int opcode;")
-        lines.append("};")
+        # The structure is shared by parsing, variable resolution and the
+        # declaration collector. Do not duplicate its layout in consumers.
+        lines.append("struct css_prop_entry;")
         lines.append("")
-        
-        # Keyword section
         lines.append("%%")
-        
-        # Each line: keyword, field_value, opcode
-        for css_name, handler_name, opcode in self.keys:
-            lines.append(f"{css_name}, {handler_name}, {opcode}")
-        
+        for css_name, handler_name, opcode, metadata, members in self.keys:
+            array = "css_decl_members_" + css_name.replace('-', '_') if members else "NULL"
+            lines.append(f"{css_name}, {handler_name}, {opcode}, {metadata}, {array}, {len(members)}")
         lines.append("%%")
         lines.append("")
-        lines.append("/* Wrapper: safely parse CSS property names (mask non-ASCII to prevent gperf OOB) */")
-        lines.append("const struct css_prop_entry *css_prop_lookup(const char *name, size_t len) {")
-        lines.append("    char masked_str[256];")
-        lines.append("    if (len >= sizeof(masked_str)) len = sizeof(masked_str) - 1;")
-        lines.append("    for (size_t i = 0; i < len; ++i) {")
-        lines.append("        masked_str[i] = name[i] & 0x7F;")
+        lines.append("/* Property names are ASCII case-insensitive, not high-bit masked.")
+        lines.append(" * Reject non-ASCII before entering gperf's 7-bit hash. */")
+        lines.append("const struct css_prop_entry *css_prop_lookup(const char *name, size_t len)")
+        lines.append("{")
+        longest = max(len(key[0]) for key in self.keys)
+        lines.append(f"    if (name == NULL || len == 0 || len > {longest})")
+        lines.append("        return NULL;")
+        lines.append("    for (size_t i = 0; i < len; i++) {")
+        lines.append("        if ((unsigned char)name[i] >= 0x80)")
+        lines.append("            return NULL;")
         lines.append("    }")
-        lines.append("    return css_prop_lookup_generated(masked_str, len);")
+        lines.append("    return css_prop_lookup_generated(name, len);")
         lines.append("}")
         lines.append("")
-        
+
         return "\n".join(lines)
 
 
@@ -1053,12 +1083,35 @@ class MultiFileGenerator:
             css_name = prop_name.replace('_', '-')
             handler_name = f"css__parse_{prop_name}"
             opcode = opcode_map.get(prop_name, -1)  # -1 for shorthands/aliases
-            keys.append((css_name, handler_name, opcode))
+            data = self.toml_reader.toml_data[prop_name] if self.toml_reader else {}
+            # WRAP is a parser implementation detail: border-top-color is a
+            # longhand, whereas border-top is a shorthand using the same device.
+            shorthand = (self.metadata[prop_name]['is_shorthand'] and prop_name not in opcode_map)
+            group = data.get('logical_group', 'none').upper()
+            logical = data.get('logical', False)
+            metadata = (f"CSS_DECL_{prop_name.upper()}, CSS_LOGICAL_GROUP_{group}, "
+                        f"{str(shorthand).lower()}, {str(logical).lower()}")
+            keys.append((css_name, handler_name, opcode, metadata, data.get('declaration_longhands', [])))
         
         # Generate gperf input
         gen = GperfInputGenerator(keys)
         return gen.generate_gperf_input()
     
+    def generate_declaration_ids(self):
+        """Property identities are independent of shared bytecode opcodes."""
+        data = self.toml_reader.toml_data if self.toml_reader else self.metadata
+        groups = sorted({p['logical_group'] for p in data.values() if 'logical_group' in p})
+        lines = ["/* Generated from properties.toml. Do not edit. */",
+                 "enum css_declaration_property_id {"]
+        for name in sorted(data):
+            lines.append(f"    CSS_DECL_{name.upper()},")
+        lines.extend(["    CSS_DECL_PROPERTY_COUNT", "};", "",
+                      "enum css_logical_property_group {", "    CSS_LOGICAL_GROUP_NONE,"])
+        for group in groups:
+            lines.append(f"    CSS_LOGICAL_GROUP_{group.upper()},")
+        lines.extend(["};", ""])
+        return "\n".join(lines)
+
     def generate_cascade_declarations(self):
         """Generate PROPERTY_FUNCS declarations for select/properties/properties.h."""
         lines = self._header("CASCADE_DECL",
@@ -1435,6 +1488,7 @@ def main():
     opcodes_out = os.path.join(output_dir, 'opcodes.inc')
     dispatch_c_out = os.path.join(output_dir, 'autogenerated_dispatch.c')
     keywords_strings_out = os.path.join(output_dir, 'keywords_strings.inc')
+    declaration_ids_out = os.path.join(output_dir, 'declaration_ids.inc')
 
     
     # Parse input files
@@ -1483,6 +1537,7 @@ def main():
         (dispatch_out, generator.generate_dispatch),
         (propstrings_out, generator.generate_propstrings),
         (propstrings_strings_out, generator.generate_propstrings_strings),
+        (declaration_ids_out, generator.generate_declaration_ids),
         (gperf_out, generator.generate_gperf_input),
         (cascade_decl_out, generator.generate_cascade_declarations),
         (parse_decl_out, generator.generate_parse_declarations),

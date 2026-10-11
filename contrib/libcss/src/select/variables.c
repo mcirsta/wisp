@@ -13,18 +13,12 @@
 #include "select/dispatch.h"
 #include "bytecode/bytecode.h"
 #include "parse/properties/properties.h"
+#include "parse/property.h"
 #include "lex/lex.h"
 #include "utils/parserutilserror.h"
 #include "utils/css_utils.h"
 #include <libcss/properties.h>
 #include <libcss/stylesheet.h>
-
-struct css_prop_entry {
-    const char *name;
-    css_prop_handler handler;
-    int opcode;
-};
-const struct css_prop_entry *css_prop_lookup(const char *str, size_t len);
 
 enum css_var_keyword { VAR_VALUE, VAR_INITIAL, VAR_INHERIT, VAR_REVERT };
 

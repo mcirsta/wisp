@@ -618,8 +618,9 @@ read a partially completed result. Only callers requesting collection allocate
 these records. Ordinary stylesheets retain their existing bytecode storage, with
 the collector pointer confined to the temporary language-parser context.
 
-This is **parser output, not an exposed CSSStyleDeclaration**. In particular, it
-does not yet select winning longhands or serialize specified values. Decoded
+This is **parser output, not an exposed CSSStyleDeclaration**. The separate
+component-order view described below now selects winning contributions, but
+specified-value expansion and serialization are still pending. Decoded
 tokens must not be mistaken for source text; the source-capture increment below
 now preserves that separately. There is no new JS feature-detection placeholder
 and the saved eBihoreanul `style.opacity` blocker remains. Implementation sequence:
@@ -630,9 +631,10 @@ and the saved eBihoreanul `style.opacity` blocker remains. Implementation sequen
    require original text; computed-style output or reconstructed tokens are not a
    substitute. Extend the shared lexer/parser rather than split CSS with a second
    ad hoc parser in the JS binding.
-2. Build the specified declaration block: shorthand expansion, alias handling,
-   duplicate/priority resolution and logical/physical ordering, followed by
-   specified-value serialization. Derive property/shorthand metadata from
+2. Build the specified declaration block: shorthand value expansion, alias handling
+   and specified-value serialization. Generated property metadata and an immutable
+   component-order view now cover name-level shorthand expansion and duplicate/
+   priority resolution; they do not yet implement CSSOM writes. Derive metadata from
    `properties.toml` and the existing generator. Follow the
    [CSSOM declaration-block algorithms](https://drafts.csswg.org/cssom/#the-cssstyledeclaration-interface),
    and keep specified values separate from inherited/computed values.
@@ -704,9 +706,58 @@ input, every split point for lexer regressions, long comment/string buffer growt
 three allocator-failure sweeps and final interned-string cleanup. All 13 targeted
 Qt capture suites pass. No GTK build or tests were run.
 
-Next: build the specified declaration block using generated property/shorthand
-metadata, priority resolution and standards-based value serialization. Only then
-expose the stable, live `element.style` wrapper and its DOM mutation integration.
+The following increment adds generated property/shorthand metadata and priority
+resolution. Value expansion and serialization must precede the stable, live
+`element.style` wrapper and its DOM mutation integration.
+
+### Declaration identity and contribution ordering (2026-10-11)
+
+Source capture is committed as `ca57e84f`. Property registration is now shared
+between ordinary parsing, variable resolution and declaration capture, with one
+native structure instead of a separately copied layout in the variable resolver.
+The existing generator supplies distinct declaration IDs, logical-property groups
+and ordered shorthand component names from `properties.toml`. Sharing a rendering
+opcode no longer implies sharing a declaration identity: `width` and `inline-size`
+remain separate. Generated WRAP handlers are classified correctly: `border-top`
+is a shorthand, while `border-top-color` is a longhand.
+
+`parse/declaration_order.{c,h}` builds an optional immutable contribution view over
+a completed declaration list. It expands component names, resolves duplicates by
+importance and source order, then restores the winners' original relative order,
+following [CSSOM specified order](https://drafts.csswg.org/cssom/#css-declaration-block).
+It keeps logical names separate from physical names and custom names case-sensitive.
+Each contribution borrows its source declaration and component index; this retains
+the original value of a pending `var()` shorthand without pretending to resolve it.
+The view uses one allocation and sorting rather than quadratic duplicate-name
+searches. Its borrowed list must outlive it. Ordinary rendering does not create it.
+
+This is **a parser-component view, not a finished CSSOM declaration block**.
+Metadata describes the implemented parser components; older aggregate representations
+such as `font-variant` and `background-position`/`background-repeat` still need modern
+value decomposition. Legacy alias/value mappings also need normalization before
+publishing CSSOM results. Logical start/end names used by some shorthands are retained
+in metadata without claiming that their direct property handlers already exist.
+No additional property handlers or JS feature-detection placeholders are exposed.
+CSSOM `setProperty` replacement ordering is separate from this initial parsing view.
+
+The shared property lookup also had a real matching error: masking non-ASCII bytes
+could turn `griĭrow` into `grid-row` or `margiέleft` into `margin-left`. It now rejects
+unknown non-ASCII ordinary names without rewriting them; CSS escapes are still
+decoded before lookup, and custom properties retain their independent Unicode path.
+
+Validation: all 75 native CSS/QuickJS suites pass under Debug ASan/UBSan with
+LeakSanitizer, all 17 selected Release suites pass, and all 13 targeted Qt capture
+suites pass. Declaration checks increase to 93 Debug / 97 Release, including
+shorthand/longhand overlap, importance, logical/physical identity, pending variables,
+512 custom-property winners, allocation failure/retry and final string cleanup.
+Eight generator checks cover catalogue coverage and reject stale, duplicate, nested
+or physically substituted logical shorthand metadata. Builds are warning-free and
+`git diff --check` is clean. No GTK build or tests were run.
+
+Next: expand and normalize specified values and aliases, implement their CSSOM
+serialization, then add the stable style wrapper and route writes through existing
+DOM mutation attribution/restyling. The saved eBihoreanul `style.opacity` blocker
+remains until that wrapper is available.
 
 ## Assessment
 

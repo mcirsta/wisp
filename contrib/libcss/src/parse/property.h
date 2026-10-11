@@ -1,0 +1,38 @@
+/*
+ * This file is part of LibCSS.
+ * Licensed under the MIT License,
+ *                http://www.opensource.org/licenses/mit-license.php
+ */
+
+#ifndef css_parse_property_h_
+#define css_parse_property_h_
+
+#include "parse/properties/properties.h"
+#include "declaration_ids.inc"
+
+/* Immutable registration shared by the parser, variable resolver and specified
+ * declarations. IDs identify CSS names, not bytecode slots. In particular, a
+ * logical property retains its identity even when layout maps it physically.
+ * `shorthand` describes registered parser shorthands, not whether a handler is
+ * generated via WRAP. This is not yet a CSSOM value-expansion catalogue. */
+struct css_prop_entry {
+    const char *name;
+    css_prop_handler handler;
+    int opcode; /**< Existing bytecode dispatch index, or -1 for delegated parsing */
+    enum css_declaration_property_id id;
+    enum css_logical_property_group logical_group;
+    bool shorthand;
+    bool logical;
+    /* Supported parser components in declaration order, not bytecode order.
+     * Some logical start/end names are only implemented through a shorthand.
+     * This does not expand their values or expose additional parse handlers. */
+    const char *const *longhands;
+    size_t longhand_count;
+};
+
+/* Name must already be CSS-unescaped. Unknown/non-ASCII names return NULL.
+ * The returned registration has static lifetime. Custom properties use their
+ * case-sensitive name and do not have an entry in this registry. */
+const struct css_prop_entry *css_prop_lookup(const char *name, size_t len);
+
+#endif

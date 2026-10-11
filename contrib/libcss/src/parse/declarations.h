@@ -13,6 +13,7 @@
 #include "lex/lex.h"
 
 typedef struct css_declaration_list css_declaration_list;
+struct css_prop_entry;
 
 /* Parsed tokens, not source text: escapes are decoded, comments discarded and
  * whitespace represented by CSS_TOKEN_S. These must not be used to reconstruct
@@ -24,6 +25,7 @@ typedef struct css_declaration_token {
 
 typedef struct css_declaration {
     lwc_string *name; /**< Lowercase ordinary name; case-sensitive custom name */
+    const struct css_prop_entry *property; /**< Static registration; NULL for custom properties */
     /* Original value between ':' and the priority/delimiter, including outer
      * whitespace and comments. This is source text, not CSSOM serialization. */
     lwc_string *source_value;

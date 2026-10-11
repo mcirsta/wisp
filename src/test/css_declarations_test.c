@@ -7,7 +7,9 @@
 #include <string.h>
 
 #include "parse/declarations.h"
+#include "parse/declaration_order.h"
 #include "parse/language.h"
+#include "parse/property.h"
 #include "stylesheet.h"
 
 #ifdef WISP_TEST_ALLOC_FAILURE
@@ -55,6 +57,9 @@ static const struct {
     {"color:var(--bad, red) !important; margin:var(--space, 1px 2px)", {"color", "margin"}, 1},
     {"opacity:.5; @import 'no.css'; height:2px", {"opacity", "height"}, 0},
     {"font-family:ubuntu,urban; --u:U+400-4FF; --fn:u(red)", {"font-family", "--u", "--fn"}, 0},
+    /* High-bit masking used to turn these valid Unicode identifiers into
+     * grid-row and margin-left. Neither is a supported CSS property name. */
+    {"griĭrow:2; margiέleft:1px; margiέleft:var(--x); color:red", {"color"}, 0},
 };
 enum { CASE_COUNT = sizeof(cases) / sizeof(cases[0]) };
 
@@ -152,6 +157,13 @@ START_TEST(test_declarations)
             a->important == !!(cases[index].important & (1u << i)), "case %zu declaration %zu priority", index, i);
         compare_strings(a->name, b->name);
         compare_strings(a->source_value, b->source_value);
+        ck_assert_ptr_eq(a->property, b->property);
+        if (strncmp(lwc_string_data(a->name), "--", 2) == 0) {
+            ck_assert_ptr_null(a->property);
+        } else {
+            ck_assert_ptr_nonnull(a->property);
+            ck_assert_str_eq(a->property->name, lwc_string_data(a->name));
+        }
         ck_assert_int_eq(a->important, b->important);
         ck_assert_uint_eq(a->token_count, b->token_count);
         ck_assert_uint_eq(a->bytecode_offset, end);
@@ -403,6 +415,178 @@ START_TEST(test_growth)
 }
 END_TEST
 
+
+static const struct {
+    const char *css;
+    const char *names[16];
+    size_t sources[16];
+    size_t components[16];
+} order_cases[] = {
+    {"", {NULL}, {0}, {0}},
+    {"width:1px; height:2px; width:3px", {"height", "width"}, {1, 2}, {0, 0}},
+    {"width:1px!important; height:2px; width:3px", {"width", "height"}, {0, 1}, {0, 0}},
+    {"width:1px!important; height:2px; width:3px!important", {"height", "width"}, {1, 2}, {0, 0}},
+    {"margin:1px 2px; color:red; margin-left:9px!important",
+        {"margin-top", "margin-right", "margin-bottom", "color", "margin-left"}, {0, 0, 0, 1, 2}, {0, 1, 2, 0, 0}},
+    {"margin-left:9px!important; margin:1px 2px", {"margin-left", "margin-top", "margin-right", "margin-bottom"},
+        {0, 1, 1, 1}, {0, 0, 1, 2}},
+    {"margin-left:9px; margin:1px 2px!important", {"margin-top", "margin-right", "margin-bottom", "margin-left"},
+        {1, 1, 1, 1}, {0, 1, 2, 3}},
+    {"margin:var(--space); margin-left:9px", {"margin-top", "margin-right", "margin-bottom", "margin-left"},
+        {0, 0, 0, 1}, {0, 1, 2, 0}},
+    {"--Tone:red!important; --tone:blue; --Tone:green; color:var(--Tone)", {"--Tone", "--tone", "color"}, {0, 1, 3},
+        {0, 0, 0}},
+    {"--Tone:red; --tone:blue; --Tone:green!important", {"--tone", "--Tone"}, {1, 2}, {0, 0}},
+    {"width:1px; inline-size:2px; height:3px; block-size:4px; width:5px",
+        {"inline-size", "height", "block-size", "width"}, {1, 2, 3, 4}, {0, 0, 0, 0}},
+    {"margin-inline:1px 2px; margin-left:3px; margin-right:4px",
+        {"margin-inline-start", "margin-inline-end", "margin-left", "margin-right"}, {0, 0, 1, 2}, {0, 1, 0, 0}},
+    {"margin-block:1px 2px; margin-block-start:3px; margin-top:4px",
+        {"margin-block-end", "margin-block-start", "margin-top"}, {0, 1, 2}, {1, 0, 0}},
+    {"padding:initial; padding-inline:2px; padding-block-end:3px",
+        {"padding-top", "padding-right", "padding-bottom", "padding-left", "padding-inline-start", "padding-inline-end",
+            "padding-block-end"},
+        {0, 0, 0, 0, 1, 1, 2}, {0, 1, 2, 3, 0, 1, 0}},
+    {"gap:3px 4px; row-gap:5px; overflow:hidden", {"column-gap", "row-gap", "overflow-x", "overflow-y"}, {0, 1, 2, 2},
+        {1, 0, 0, 1}},
+    {"border-top:1px solid red; border-top-color:blue", {"border-top-width", "border-top-style", "border-top-color"},
+        {0, 0, 1}, {0, 1, 0}},
+    {"border:inherit; border-left-color:red",
+        {"border-top-width", "border-right-width", "border-bottom-width", "border-left-width", "border-top-style",
+            "border-right-style", "border-bottom-style", "border-left-style", "border-top-color", "border-right-color",
+            "border-bottom-color", "border-left-color"},
+        {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1}, {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 0}},
+    {"grid-area:1/2/3/4; grid-row:5/6", {"grid-column-start", "grid-column-end", "grid-row-start", "grid-row-end"},
+        {0, 0, 1, 1}, {1, 3, 0, 1}},
+};
+enum { ORDER_CASE_COUNT = sizeof(order_cases) / sizeof(order_cases[0]) };
+
+START_TEST(test_declaration_order)
+{
+    css_declaration_list *list = parse(order_cases[_i].css, true);
+    css_declaration_order *order;
+    ck_assert_int_eq(css__declaration_order_create(list, &order), CSS_OK);
+    size_t expected = 0;
+    while (expected < 16 && order_cases[_i].names[expected] != NULL)
+        expected++;
+    ck_assert_msg(css__declaration_order_count(order) == expected, "order case %d: expected %zu, got %zu", _i, expected,
+        css__declaration_order_count(order));
+    for (size_t i = 0; i < expected; i++) {
+        const css_declaration_contribution *entry = css__declaration_order_get(order, i);
+        ck_assert_msg(strcmp(entry->name, order_cases[_i].names[i]) == 0,
+            "order case %d, position %zu: expected %s, got %s", _i, i, order_cases[_i].names[i], entry->name);
+        ck_assert_ptr_eq(entry->source, css__declaration_list_get(list, order_cases[_i].sources[i]));
+        ck_assert_uint_eq(entry->component, order_cases[_i].components[i]);
+    }
+    ck_assert_ptr_null(css__declaration_order_get(order, expected));
+    css__declaration_order_destroy(order);
+    css__declaration_list_destroy(list);
+}
+END_TEST
+
+START_TEST(test_order_many_custom_properties)
+{
+    enum { COUNT = 512 };
+    char *css = malloc(COUNT * 100);
+    ck_assert_ptr_nonnull(css);
+    size_t used = 0;
+    for (size_t i = 0; i < COUNT; i++)
+        used += (size_t)sprintf(css + used, "--v%zu:old%s;", i, i % 2 == 0 ? "!important" : "");
+    for (size_t i = COUNT; i-- > 0;)
+        used += (size_t)sprintf(css + used, "--v%zu:new;", i);
+    css_declaration_list *list = parse(css, false);
+    free(css);
+    css_declaration_order *order;
+    ck_assert_int_eq(css__declaration_order_create(list, &order), CSS_OK);
+    ck_assert_uint_eq(css__declaration_order_count(order), COUNT);
+    for (size_t i = 0; i < COUNT; i++) {
+        const css_declaration_contribution *entry = css__declaration_order_get(order, i);
+        char name[32];
+        size_t id = i < COUNT / 2 ? 2 * i : COUNT - 1 - 2 * (i - COUNT / 2);
+        snprintf(name, sizeof(name), "--v%zu", id);
+        ck_assert_str_eq(entry->name, name);
+        ck_assert_str_eq(lwc_string_data(entry->source->source_value), i < COUNT / 2 ? "old" : "new");
+        ck_assert_int_eq(entry->source->important, i < COUNT / 2);
+    }
+    css__declaration_order_destroy(order);
+    css__declaration_list_destroy(list);
+}
+END_TEST
+
+START_TEST(test_property_metadata)
+{
+    const struct css_prop_entry *width = css_prop_lookup("width", 5);
+    const struct css_prop_entry *logical = css_prop_lookup("INLINE-SIZE", 11);
+    ck_assert_ptr_nonnull(width);
+    ck_assert_ptr_nonnull(logical);
+    ck_assert_int_eq(width->id, CSS_DECL_WIDTH);
+    ck_assert_int_eq(logical->id, CSS_DECL_INLINE_SIZE);
+    ck_assert_int_eq(width->logical_group, CSS_LOGICAL_GROUP_SIZE);
+    ck_assert_int_eq(width->logical_group, logical->logical_group);
+    ck_assert(!width->logical && logical->logical);
+    ck_assert(!width->shorthand && !logical->shorthand);
+    const struct css_prop_entry *side = css_prop_lookup("border-top", 10);
+    const struct css_prop_entry *color = css_prop_lookup("border-top-color", 16);
+    ck_assert(side->shorthand && !color->shorthand); /* Both use generated WRAP parsers. */
+    ck_assert_uint_eq(side->longhand_count, 3);
+    ck_assert_str_eq(side->longhands[0], "border-top-width");
+    ck_assert_str_eq(side->longhands[1], "border-top-style");
+    ck_assert_str_eq(side->longhands[2], "border-top-color");
+    ck_assert_ptr_null(color->longhands);
+    ck_assert_uint_eq(color->longhand_count, 0);
+    ck_assert_ptr_null(css_prop_lookup(NULL, 0));
+    ck_assert_ptr_null(css_prop_lookup("", 0));
+    ck_assert_ptr_null(css_prop_lookup("width-junk", 10));
+    ck_assert_ptr_null(css_prop_lookup("width", SIZE_MAX));
+    ck_assert_ptr_null(css_prop_lookup("griĭrow", strlen("griĭrow")));
+    ck_assert_ptr_null(css_prop_lookup("margiέleft", strlen("margiέleft")));
+    ck_assert_ptr_null(css_prop_lookup("--width", 7));
+    /* The length API accepts a slice, without requiring a terminator. */
+    const char slice[] = {'w', 'i', 'd', 't', 'h'};
+    ck_assert_ptr_eq(css_prop_lookup(slice, sizeof(slice)), width);
+}
+END_TEST
+
+START_TEST(test_order_lifecycle)
+{
+    css_declaration_order *order = (void *)1;
+    ck_assert_int_eq(css__declaration_order_create(NULL, &order), CSS_BADPARM);
+    ck_assert_ptr_null(order);
+    ck_assert_int_eq(css__declaration_order_create(NULL, NULL), CSS_BADPARM);
+    ck_assert_uint_eq(css__declaration_order_count(NULL), 0);
+    ck_assert_ptr_null(css__declaration_order_get(NULL, 0));
+    css__declaration_order_destroy(NULL);
+    css_declaration_list *list;
+    ck_assert_int_eq(css__declaration_list_create(&params, &list), CSS_OK);
+    ck_assert_int_eq(css__declaration_order_create(list, &order), CSS_INVALID);
+    ck_assert_ptr_null(order);
+    ck_assert_int_eq(css__declaration_list_complete(list), CSS_OK);
+    ck_assert_int_eq(css__declaration_order_create(list, &order), CSS_OK);
+    ck_assert_uint_eq(css__declaration_order_count(order), 0);
+    css__declaration_order_destroy(order);
+    css__declaration_list_destroy(list);
+}
+END_TEST
+
+#ifdef WISP_TEST_ALLOC_FAILURE
+START_TEST(test_order_allocation_failure)
+{
+    css_declaration_list *list = parse("margin:1px; margin-left:2px; --a:red", true);
+    css_declaration_order *order = (void *)1;
+    malloc_limit(0);
+    css_error error = css__declaration_order_create(list, &order);
+    malloc_limit(UINT_MAX);
+    ck_assert_int_eq(error, CSS_NOMEM);
+    ck_assert_ptr_null(order);
+    ck_assert_uint_eq(css__declaration_list_count(list), 3);
+    ck_assert_int_eq(css__declaration_order_create(list, &order), CSS_OK);
+    ck_assert_uint_eq(css__declaration_order_count(order), 5);
+    css__declaration_order_destroy(order);
+    css__declaration_list_destroy(list);
+}
+END_TEST
+#endif
+
 #ifdef WISP_TEST_ALLOC_FAILURE
 START_TEST(test_allocation_failure)
 {
@@ -477,11 +661,16 @@ int main(void)
     tcase_add_loop_test(tc, test_lexer_resume, 0, LEXER_CASE_COUNT);
     tcase_add_loop_test(tc, test_source_value, 0, SOURCE_CASE_COUNT);
     tcase_add_test(tc, test_source_growth);
+    tcase_add_loop_test(tc, test_declaration_order, 0, ORDER_CASE_COUNT);
+    tcase_add_test(tc, test_property_metadata);
+    tcase_add_test(tc, test_order_many_custom_properties);
+    tcase_add_test(tc, test_order_lifecycle);
     tcase_add_test(tc, test_owned_tokens);
     tcase_add_test(tc, test_lifecycle);
     tcase_add_test(tc, test_growth);
 #ifdef WISP_TEST_ALLOC_FAILURE
     tcase_add_loop_test(tc, test_allocation_failure, 0, 3);
+    tcase_add_test(tc, test_order_allocation_failure);
 #endif
     suite_add_tcase(suite, tc);
     SRunner *runner = srunner_create(suite);
