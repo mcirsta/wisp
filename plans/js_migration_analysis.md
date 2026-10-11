@@ -527,6 +527,80 @@ byte-identical viewport PNG. Its previously documented `llcache.c` null-source /
 zero-length memcpy UBSan diagnostic remains. Builds are warning-free,
 `git diff --check` is clean, and no GTK build or tests were run.
 
+### QuickJS HTML markup replacement (2026-10-11)
+
+Native serialization is committed as `4f82ace1`. `Element.innerHTML` now has a
+real getter and setter, using the shared libdom serializer and context-aware
+fragment parser. The [HTML innerHTML algorithms](https://html.spec.whatwg.org/multipage/dynamic-markup-insertion.html#the-innerhtml-property)
+and [DOM replace-all rules](https://dom.spec.whatwg.org/#concept-node-replace-all)
+are the reference. This is enabled with ordinary JavaScript support; there is no
+experimental switch or duplicate legacy implementation.
+
+- Convert the input before mutation (including null-to-empty and conversion
+  exceptions), then parse before replacing children. Revalidate document lifetime
+  after conversion, which can execute script. Poll the existing shared execution
+  deadline between 16 KiB parsing chunks and before replacement. Native parsing
+  and serialization remain cooperative operations, not a hard per-call time bound;
+  their libdom allocations are outside QuickJS's heap accounting.
+- Respect table/select/raw-text/foreign contexts and replace a template's actual
+  contents rather than its ordinary children. Preserve retained node/listener
+  identity and live collections. Parsed scripts remain already-started and do not
+  execute or fetch their source when inserted. This is not sanitization.
+- Trace `operation=innerHTML` with the existing document/entry/node identifiers.
+  Determine rendering impact from the actual replacement target, so editing a
+  connected template's inert contents does not schedule a page rebuild.
+- Share native child replacement with `textContent`. Prepare replacement text
+  before removing the old subtree, fixing loss of old children when text allocation
+  fails. Validation and parsing failures precede removal; later native notification
+  or insertion allocation failures are still not an all-or-nothing transaction.
+- Fix shared tokenizer/tree-builder NUL handling: ignore literal NUL in ordinary
+  HTML/table text, replace it in foreign/raw-text contexts as specified. Exercise
+  whole-input and byte-at-a-time full-document/fragment parsing.
+- Correct native insertion notifications so detached styles and metadata do not
+  affect the active page, and attached descendants pass through the same processing
+  as directly inserted elements. Detached images in an active document may still
+  load; template-owned resources remain inert. Remove the obsolete separate style
+  processing helper. SVG box construction now serializes the current DOM when no
+  page-parser cache entry exists, including during partial box construction.
+
+The historical Duktape binding was reviewed again: its empty getter and generic
+whole-document/body setter are not reused. XML markup, declarative shadow DOM,
+custom elements and cross-document JS wrappers remain separate capabilities.
+
+**Next site blocker:** the saved eBihoreanul main bundle gets through its fragment
+probe and now stops at missing `element.style.opacity` (line 32, column 1120 of
+`scripts.min_v202610062.js`). The saved page completes loading, but this does not
+mean its full script bundle initializes. A real inline `CSSStyleDeclaration` is
+next; do not add a plain JS object that only satisfies feature detection.
+
+**Shared follow-up: dynamic stylesheet lifecycle.** A timer inserting
+`<section><style>#article{background:green}</style>…</section>` after first layout
+registers the new sheet, but the selection context still contains the original
+sheet set. If the new CSS finishes after images, their final layout can also be
+missed. A trial extra restyle on CSS completion did not fix rule selection and was
+removed. Fix sheet ownership and replacement/removal, ordering, selection-context
+publication and cache invalidation together, including callbacks during sliced
+construction and failed loads. Test attached/detached/reinserted style/link nodes,
+replacement of existing sheets, and completion after initial layout. Do not bolt
+an innerHTML-specific refresh onto this. Dynamic SVG symbol/use registry refresh
+also remains distinct from the direct-SVG painting fix above.
+
+Validation: all 1,562 checks across 17 native DOM/JS/form/interaction/construction
+suites pass under Debug ASan/UBSan with LeakSanitizer and no diagnostics. This
+includes 199 QuickJS checks, 622 parser checks and 257 box-construction checks.
+Release parser (622), serializer (96) and tree (11) checks pass, including native
+text-allocation failure/retry. The new Qt fixture compares parser-time and timed
+DOM edits with static pixels, covers style insertion before initial layout,
+images/SVG, detached stylesheet isolation, template/script inertness, disabled JS
+and mutation/render attribution. Late stylesheet activation is explicitly excluded
+from the timer variant until the shared lifecycle work above is done. All 119 Qt
+suites pass: the new fixture and two timing-sensitive captures first, then the
+remaining 116 in parallel. Final builds are warning-free and `git diff --check`
+is clean.
+The static saved eBihoreanul viewport is byte-identical, with unchanged
+1280 x 11382 extent. Its already documented `llcache.c:2422` null-source/zero-length
+memcpy UBSan diagnostic remains. No GTK build or tests were run.
+
 ## Assessment
 
 Keep QuickJS-ng and libdom. The missing part is the browser binding and execution
@@ -588,7 +662,7 @@ unless stated otherwise.
 | Timers | `timers.c`: per-document ordered queue on the frontend scheduler, callback arguments/string handlers, shared cancellation IDs and nesting delays | Real `setTimeout`/`setInterval`; callbacks and their checkpoints share execution limits; document retirement cancels them |
 | JS diagnostics | Optional `js_trace` records document/entry IDs, script sources, timer causality, navigation, exposed node IDs, actual DOM operations and coalesced render requests | Separates supported JS host effects from static processing; this is not complete paint attribution |
 | Document/nodes | `dom.c`/`document.c`/`tree.c`/`collections.c`: real libdom wrappers with stable identity, roots, ID lookup, traversal, live `childNodes`/`children`, tag/namespace queries and element/text/comment/fragment factories | Document-lifetime wrapper ownership and native reference cleanup are tested; selectors, class-name queries, document convenience collections, namespace-aware creation and cross-document operations are not exposed |
-| Mutation/CSSOM | Real attributes, `id`/`className`, live `classList`, text/data and append/insert/replace/remove; connected edits request a full restyle after the entry/checkpoint | Changes affect boxes and pixels, including moves into detached trees; `style` and `innerHTML` remain omitted |
+| Mutation/CSSOM | Real attributes, `id`/`className`, live `classList`, text/data, `innerHTML` and append/insert/replace/remove; connected edits request a full restyle after the entry/checkpoint | Changes affect boxes and pixels, including moves into detached trees; `style` remains omitted; dynamic stylesheet lifecycle remains incomplete |
 | Events | Event/CustomEvent/UIEvent/core MouseEvent/PointerEvent/SubmitEvent values; shared script/native primary-click and SubmitEvent dispatch; checkable input/change delivery | Keyboard, other pointer/mouse events, full form submission callbacks and handler attributes remain pending |
 | Cancellation | `abort.c`: AbortController, AbortSignal state/reason, throwIfAborted, static abort, onabort and the listener signal option | Listener cancellation uses private abort steps before the public event; timeout, any and network integration remain absent |
 | Lifecycle information | `readyState`, trusted `readystatechange`, `DOMContentLoaded` and Window `load`; frame/resource waits and DOM update integration | Handler properties/attributes, pageshow/pagehide, navigation timing and a complete document-abort lifecycle remain pending |

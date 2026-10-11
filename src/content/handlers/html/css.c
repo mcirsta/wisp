@@ -344,37 +344,6 @@ bool html_css_update_style(html_content *c, dom_node *style)
 
 
 /* exported function documented in html/css.h */
-bool html_css_process_style(html_content *c, dom_node *node)
-{
-    unsigned int i;
-    dom_string *val;
-    dom_exception exc;
-    struct html_stylesheet *s;
-
-    /* Find sheet */
-    for (i = 0, s = c->stylesheets; i != c->stylesheet_count; i++, s++) {
-        if (s->node == node)
-            break;
-    }
-
-    /* Should already exist */
-    if (i == c->stylesheet_count) {
-        return false;
-    }
-
-    exc = dom_element_get_attribute(node, corestring_dom_media, &val);
-    if (exc == DOM_NO_ERR && val != NULL) {
-        if (strcasestr(dom_string_data(val), "screen") == NULL && strcasestr(dom_string_data(val), "all") == NULL) {
-            s->unused = true;
-        }
-        dom_string_unref(val);
-    }
-
-    return true;
-}
-
-
-/* exported function documented in html/css.h */
 bool html_css_process_link(html_content *htmlc, dom_node *node)
 {
     dom_string *rel, *type_attr, *media, *href;

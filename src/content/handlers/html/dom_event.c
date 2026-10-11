@@ -602,9 +602,9 @@ static void html_texty_element_update(html_content *htmlc, dom_node *node)
 
 
 /**
- * callback for DOMNodeInserted end type
+ * Process both a directly inserted node and descendants of an inserted subtree.
  */
-static void dom_default_action_DOMNodeInserted_cb(struct dom_event *evt, void *pw)
+static void dom_default_action_inserted_cb(struct dom_event *evt, void *pw)
 {
     /* These legacy events carry internal DOM-change notifications. A script
      * dispatching the same name must not simulate insertion or reprocess resources. */
@@ -634,13 +634,23 @@ static void dom_default_action_DOMNodeInserted_cb(struct dom_event *evt, void *p
             tag_type = DOM_HTML_ELEMENT_TYPE__UNKNOWN;
         }
 
+        /* An active document's detached images may load. Document metadata,
+         * styles and scripts, however, take effect only after connection. The
+         * descendant notification uses this same path when a prepared subtree
+         * is attached (including an innerHTML fragment).
+         * https://html.spec.whatwg.org/multipage/semantics.html#update-a-style-block */
+        bool connected = false;
+        if (tag_type == DOM_HTML_ELEMENT_TYPE_IMG) {
+            html_process_inserted_img(htmlc, (dom_node *)node);
+        }
+        if (dom_node_contains(htmlc->document, node, &connected) != DOM_NO_ERR || !connected) {
+            dom_node_unref(node);
+            return;
+        }
+
         switch (tag_type) {
         case DOM_HTML_ELEMENT_TYPE_BASE:
             html_process_inserted_base(htmlc, (dom_node *)node);
-            break;
-
-        case DOM_HTML_ELEMENT_TYPE_IMG:
-            html_process_inserted_img(htmlc, (dom_node *)node);
             break;
 
         case DOM_HTML_ELEMENT_TYPE_LINK:
@@ -653,7 +663,7 @@ static void dom_default_action_DOMNodeInserted_cb(struct dom_event *evt, void *p
 
         case DOM_HTML_ELEMENT_TYPE_STYLE:
             if (nsoption_bool(author_level_css)) {
-                html_css_process_style(htmlc, (dom_node *)node);
+                html_css_update_style(htmlc, (dom_node *)node);
             }
             break;
 
@@ -684,48 +694,6 @@ static void dom_default_action_DOMNodeInserted_cb(struct dom_event *evt, void *p
         }
     }
     dom_node_unref(node);
-}
-
-
-/**
- * callback for DOMNodeInsertedIntoDocument end type
- */
-static void dom_default_action_DOMNodeInsertedIntoDocument_cb(struct dom_event *evt, void *pw)
-{
-    /* These legacy events carry internal DOM-change notifications. A script
-     * dispatching the same name must not simulate insertion or reprocess resources. */
-    bool trusted;
-    dom_event_get_is_trusted(evt, &trusted);
-    if (!trusted)
-        return;
-
-    html_content *htmlc = pw;
-    dom_event_target *node;
-    dom_node_type type;
-    dom_exception exc;
-
-    exc = dom_event_get_target(evt, &node);
-    if ((exc == DOM_NO_ERR) && (node != NULL)) {
-        exc = dom_node_get_node_type(node, &type);
-        if ((exc == DOM_NO_ERR) && (type == DOM_ELEMENT_NODE)) {
-            /* an element node has been modified */
-            dom_html_element_type tag_type;
-
-            exc = dom_html_element_get_tag_type(node, &tag_type);
-            if (exc != DOM_NO_ERR) {
-                tag_type = DOM_HTML_ELEMENT_TYPE__UNKNOWN;
-            }
-
-            switch (tag_type) {
-            case DOM_HTML_ELEMENT_TYPE_SCRIPT:
-                dom_SCRIPT_showed_up(htmlc, (dom_html_script_element *)node);
-                [[fallthrough]];
-            default:
-                break;
-            }
-        }
-        dom_node_unref(node);
-    }
 }
 
 
@@ -766,11 +734,14 @@ static void dom_default_action_DOMSubtreeModified_cb(struct dom_event *evt, void
             }
 
             switch (tag_type) {
-            case DOM_HTML_ELEMENT_TYPE_STYLE:
-                if (nsoption_bool(author_level_css)) {
+            case DOM_HTML_ELEMENT_TYPE_STYLE: {
+                bool connected = false;
+                if (nsoption_bool(author_level_css) &&
+                    dom_node_contains(htmlc->document, node, &connected) == DOM_NO_ERR && connected) {
                     html_css_update_style(htmlc, (dom_node *)node);
                 }
                 break;
+            }
             case DOM_HTML_ELEMENT_TYPE_TEXTAREA:
             case DOM_HTML_ELEMENT_TYPE_INPUT:
                 html_texty_element_update(htmlc, (dom_node *)node);
@@ -808,10 +779,9 @@ dom_default_action_callback html_dom_event_fetcher(dom_string *type, dom_default
     NSLOG(wisp, DEEPDEBUG, "phase:%d type:%s", phase, dom_string_data(type));
 
     if (phase == DOM_DEFAULT_ACTION_END) {
-        if (dom_string_isequal(type, corestring_dom_DOMNodeInserted)) {
-            return dom_default_action_DOMNodeInserted_cb;
-        } else if (dom_string_isequal(type, corestring_dom_DOMNodeInsertedIntoDocument)) {
-            return dom_default_action_DOMNodeInsertedIntoDocument_cb;
+        if (dom_string_isequal(type, corestring_dom_DOMNodeInserted) ||
+            dom_string_isequal(type, corestring_dom_DOMNodeInsertedIntoDocument)) {
+            return dom_default_action_inserted_cb;
         } else if (dom_string_isequal(type, corestring_dom_DOMSubtreeModified)) {
             return dom_default_action_DOMSubtreeModified_cb;
         }

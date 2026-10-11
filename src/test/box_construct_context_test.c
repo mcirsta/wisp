@@ -2317,6 +2317,8 @@ START_TEST(test_detached_svg_buffers)
     dom_node *outer = by_id("outer");
     struct html_inline_svg *entry = add_inline_svg(outer, _i == 1);
     struct html_inline_svg saved = *entry;
+    if (_i == 2)
+        html.inline_svgs = NULL; /* DOM-created SVG: no page-parser registration. */
     record_fetches = true;
     build_document();
     record_fetches = false;
@@ -2358,6 +2360,8 @@ START_TEST(test_detached_svg_buffers)
         assert_live_mappings(html.layout);
     }
     free(expected);
+    if (_i == 2)
+        html.inline_svgs = entry;
     dom_node_unref(outer);
 }
 END_TEST
@@ -2978,7 +2982,7 @@ int main(void)
     tcase_add_test(tc, test_detached_iframes);
     tcase_add_loop_test(tc, test_detached_controls, 0, 3);
     tcase_add_loop_test(tc, test_detached_reject_input_widgets, 0, 6);
-    tcase_add_loop_test(tc, test_detached_svg_buffers, 0, 2);
+    tcase_add_loop_test(tc, test_detached_svg_buffers, 0, 3);
 #ifdef WISP_TEST_ALLOC_FAILURE
     tcase_add_test(tc, test_staged_request_allocation_failure);
     tcase_add_loop_test(tc, test_detached_control_allocation_failure, 0, 2);

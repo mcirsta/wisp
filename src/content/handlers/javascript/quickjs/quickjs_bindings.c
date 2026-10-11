@@ -149,6 +149,18 @@ static int qjs_interrupt(JSRuntime *rt, void *opaque)
     return 0;
 }
 
+bool qjs_execution_check(JSContext *ctx)
+{
+    jsthread *thread = JS_GetContextOpaque(ctx);
+    if (thread == NULL || !qjs_interrupt(JS_GetRuntime(ctx), thread->heap))
+        return true;
+    JS_ThrowInternalError(ctx, "interrupted");
+    JSValue error = JS_GetException(ctx);
+    JS_SetUncatchableError(ctx, error);
+    JS_Throw(ctx, error);
+    return false;
+}
+
 static bool qjs_execution_begin(jsheap *heap)
 {
     /* Nested host entries share the outer budget. Future callback/microtask

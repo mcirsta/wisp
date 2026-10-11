@@ -155,6 +155,9 @@ if(BUILD_TESTING AND WISP_ENABLE_TESTS)
         add_test(NAME qt_html_templates COMMAND Python3::Interpreter
             ${CMAKE_CURRENT_SOURCE_DIR}/test_html_templates.py $<TARGET_FILE:wisp-qt>)
         set_tests_properties(qt_html_templates PROPERTIES TIMEOUT 35)
+        add_test(NAME qt_js_inner_html COMMAND Python3::Interpreter
+            ${CMAKE_CURRENT_SOURCE_DIR}/test_js_inner_html.py $<TARGET_FILE:wisp-qt>)
+        set_tests_properties(qt_js_inner_html PROPERTIES TIMEOUT 60)
         add_test(NAME qt_font_documents COMMAND Python3::Interpreter
             ${CMAKE_CURRENT_SOURCE_DIR}/test_font_documents.py $<TARGET_FILE:wisp-qt>)
         set_tests_properties(qt_font_documents PROPERTIES TIMEOUT 35)

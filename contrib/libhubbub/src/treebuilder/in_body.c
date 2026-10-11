@@ -144,6 +144,11 @@ hubbub_error handle_in_body(hubbub_treebuilder *treebuilder, const hubbub_token 
  */
 hubbub_error process_character(hubbub_treebuilder *treebuilder, const hubbub_token *token)
 {
+    /* Tokenization emits a NUL separately in data/CDATA states. */
+    if (token->data.character.len == 1 && token->data.character.ptr[0] == 0) {
+        treebuilder->context.strip_leading_lr = false;
+        return HUBBUB_OK;
+    }
     hubbub_error err = HUBBUB_OK;
     hubbub_string dummy = token->data.character;
     bool lr_flag = treebuilder->context.strip_leading_lr;

@@ -1111,6 +1111,48 @@ START_TEST(test_foreign_callbacks_and_lifetime)
 }
 END_TEST
 
+START_TEST(test_null_character_modes)
+{
+    const char input[] = "<pre>\0\nP</pre><p>A\0B</p><table> \0 <tr><td>C\0D</table><textarea>E\0F</textarea>"
+        "<script>G\0H</script><svg><text>I\0J</text><foreignObject>K\0L<![CDATA[M\0N]]></foreignObject></svg>";
+    dom_hubbub_parser_params params = {.enc = "UTF-8", .fix_enc = true, .enable_script = true};
+    dom_hubbub_parser *parser = NULL;
+    dom_document *parsed = NULL;
+    dom_document_fragment *fragment = NULL;
+    dom_node *context = element("div"), *root = NULL;
+    if (_i < 2) {
+        ck_assert_int_eq(dom_hubbub_fragment_parser_create(&params, (dom_element *)context, &parser, &fragment), DOM_HUBBUB_OK);
+    } else {
+        ck_assert_int_eq(dom_hubbub_parser_create(&params, &parser, &parsed), DOM_HUBBUB_OK);
+        const char *prefix = "<!doctype html><body>";
+        ck_assert_int_eq(dom_hubbub_parser_parse_chunk(parser, (const uint8_t *)prefix, strlen(prefix)), DOM_HUBBUB_OK);
+    }
+    size_t chunk = _i & 1 ? 1 : sizeof(input) - 1;
+    for (size_t offset = 0; offset < sizeof(input) - 1;) {
+        size_t take = sizeof(input) - 1 - offset < chunk ? sizeof(input) - 1 - offset : chunk;
+        ck_assert_int_eq(dom_hubbub_parser_parse_chunk(parser, (const uint8_t *)input + offset, take), DOM_HUBBUB_OK);
+        offset += take;
+    }
+    ck_assert_int_eq(dom_hubbub_parser_completed(parser), DOM_HUBBUB_OK);
+    dom_hubbub_parser_destroy(parser);
+    if (parsed != NULL)
+        ck_assert_int_eq(dom_html_document_get_body(parsed, &root), DOM_NO_ERR);
+    else
+        root = dom_node_ref(fragment);
+    dom_string *result = NULL;
+    ck_assert_int_eq(dom_html_serialize_fragment(root, true, &result), DOM_NO_ERR);
+    ck_assert_msg(strcmp(dom_string_data(result),
+        "<pre>\nP</pre><p>AB</p><table>  <tbody><tr><td>CD</td></tr></tbody></table><textarea>E�F</textarea>"
+        "<script>G�H</script><svg><text>I�J</text><foreignObject>KLMN</foreignObject></svg>") == 0,
+        "NUL handling, mode %d: %s", _i, dom_string_data(result));
+    dom_string_unref(result);
+    dom_node_unref(root);
+    dom_node_unref(context);
+    dom_node_unref(fragment);
+    dom_node_unref(parsed);
+}
+END_TEST
+
 START_TEST(test_foreign_cdata_null)
 {
     dom_string *ns = string(namespace_uri("svg")), *name = string("svg");
@@ -1201,6 +1243,7 @@ int main(void)
     tcase_add_test(tc, test_foreign_descendant);
     tcase_add_loop_test(tc, test_foreign_callbacks_and_lifetime, 0, 4);
     tcase_add_loop_test(tc, test_foreign_cdata_null, 0, 2);
+    tcase_add_loop_test(tc, test_null_character_modes, 0, 4);
     tcase_add_loop_test(tc, test_foreign_document_and_fragment, 0,
         4 * (sizeof(foreign_document_cases) / sizeof(foreign_document_cases[0])));
     tcase_add_loop_test(tc, test_foreign_names_and_attributes, 0, 4);

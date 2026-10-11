@@ -1491,64 +1491,55 @@ dom_exception _dom_node_get_text_content(dom_node_internal *node, dom_string **r
     return DOM_NO_ERR;
 }
 
-/**
- * Set the text content of a DOM node
- *
- * \param node     The node to set the text content of
- * \param content  New text content for node
- * \return DOM_NO_ERR                      on success,
- *         DOM_NO_MODIFICATION_ALLOWED_ERR if ::node is readonly.
- *
- * Any child nodes ::node may have are removed and replaced with a single
- * Text node containing the new content.
- */
-dom_exception _dom_node_set_text_content(dom_node_internal *node, dom_string *content)
+/* Shared replacement for HTML markup and string replace all. Validation and
+ * node creation belong before the first removal. Native mutation notifications
+ * and form/details insertion hooks remain in the existing tree operations. */
+dom_exception dom_node_replace_all(dom_node *parent, dom_node *replacement)
 {
-    dom_node_internal *n, *p, *r;
-    dom_document *doc;
-    dom_text *text;
-    dom_exception err;
-
-    /* Ensure node is writable */
-    if (_dom_node_readonly(node)) {
+    dom_node_internal *node = (dom_node_internal *)parent;
+    if (node == NULL)
+        return DOM_INVALID_ACCESS_ERR;
+    if (node->type != DOM_ELEMENT_NODE && node->type != DOM_DOCUMENT_FRAGMENT_NODE && node->type != DOM_ATTRIBUTE_NODE)
+        return DOM_HIERARCHY_REQUEST_ERR;
+    if (_dom_node_readonly(node))
         return DOM_NO_MODIFICATION_ALLOWED_ERR;
-    }
-
-    n = node->first_child;
-
-    while (n != NULL) {
-        p = n;
-        n = n->next;
-        /* Add the (void *) casting to avoid gcc warning:
-         * dereferencing type-punned pointer will break
-         * strict-aliasing rules */
-        err = dom_node_remove_child(node, p, (void *)&r);
+    dom_exception err = DOM_NO_ERR;
+    if (replacement != NULL) {
+        err = _dom_node_check_insertion(node, (dom_node_internal *)replacement, NULL, NULL);
         if (err != DOM_NO_ERR)
             return err;
-        /* The returned node was reffed, so unref it */
-        dom_node_unref(r);
     }
-
-    doc = node->owner;
-    assert(doc != NULL);
-
-    /* DOM's string replace all creates a Text node only for nonempty text. */
-    if (content == NULL || dom_string_byte_length(content) == 0)
-        return DOM_NO_ERR;
-
-    err = dom_document_create_text_node(doc, content, &text);
-    if (err != DOM_NO_ERR)
-        return err;
-
-    err = dom_node_append_child(node, text, (void *)&r);
-    if (err == DOM_NO_ERR) {
-        /* Discard ref from append_child */
-        dom_node_unref(r);
+    /* The replacement may currently descend from a child being removed. */
+    dom_node_ref(replacement);
+    while (node->first_child != NULL) {
+        dom_node *removed = NULL;
+        err = dom_node_remove_child(node, node->first_child, &removed);
+        dom_node_unref(removed);
+        if (err != DOM_NO_ERR)
+            break;
     }
+    if (err == DOM_NO_ERR && replacement != NULL) {
+        dom_node *inserted = NULL;
+        err = dom_node_append_child(parent, replacement, &inserted);
+        dom_node_unref(inserted);
+    }
+    dom_node_unref(replacement);
+    return err;
+}
 
-    /* The node is held alive as a child here, so unref it */
+dom_exception _dom_node_set_text_content(dom_node_internal *node, dom_string *content)
+{
+    if (_dom_node_readonly(node))
+        return DOM_NO_MODIFICATION_ALLOWED_ERR;
+    /* String replace all prepares the new Text before removing the old tree.
+     * Empty strings create no child: https://dom.spec.whatwg.org/#string-replace-all */
+    dom_text *text = NULL;
+    dom_exception err = DOM_NO_ERR;
+    if (content != NULL && dom_string_byte_length(content) != 0)
+        err = dom_document_create_text_node(node->owner, content, &text);
+    if (err == DOM_NO_ERR)
+        err = dom_node_replace_all((dom_node *)node, (dom_node *)text);
     dom_node_unref(text);
-
     return err;
 }
 

@@ -87,15 +87,6 @@ bool html_css_saw_insecure_stylesheets(struct html_content *htmlc);
 bool html_css_process_link(struct html_content *htmlc, dom_node *node);
 
 /**
- * process a css style dom node
- *
- * \param htmlc The HTML content.
- * \param node the DOM node to process.
- * \return true on success else false.
- */
-bool html_css_process_style(struct html_content *htmlc, dom_node *node);
-
-/**
  * process a css style dom node update
  *
  * \param htmlc The HTML content.

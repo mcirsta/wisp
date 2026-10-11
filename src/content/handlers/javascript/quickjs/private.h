@@ -93,6 +93,9 @@ enum qjs_result qjs_run_event_listener(
 /* No JS coercion or getters. Details are bounded and kept on one log line.
  * Call from actual host operations, including DOM mutations and invalidation. */
 void qjs_trace(JSContext *ctx, const char *operation, const char *format, ...) __attribute__((format(printf, 3, 4)));
+/* Cooperative check for native work inside a JS entry. Shares its deadline,
+ * never pumps the event loop, and leaves an uncatchable exception on expiry. */
+bool qjs_execution_check(JSContext *ctx);
 
 /* QuickJS keeps static function tables for lazy initialization. Runtime class
  * IDs require dynamic tables: eagerly materialize their string-named members

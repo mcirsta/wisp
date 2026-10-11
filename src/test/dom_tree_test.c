@@ -2,6 +2,10 @@
 #include <check.h>
 #include <stdlib.h>
 #include <dom/dom.h>
+#include <limits.h>
+#ifdef WISP_TEST_ALLOC_FAILURE
+#include "test/malloc_fig.h"
+#endif
 
 START_TEST(test_fragment_keeps_owner_alive)
 {
@@ -98,12 +102,144 @@ START_TEST(test_document_collection_tracks_root)
 }
 END_TEST
 
+static dom_node *make_element(dom_document *doc, const char *tag)
+{
+    dom_string *name = NULL;
+    dom_node *node = NULL;
+    ck_assert_int_eq(dom_string_create((const uint8_t *)tag, strlen(tag), &name), DOM_NO_ERR);
+    ck_assert_int_eq(dom_document_create_element(doc, name, &node), DOM_NO_ERR);
+    dom_string_unref(name);
+    return node;
+}
+
+static void append_node(dom_node *parent, dom_node *child)
+{
+    dom_node *result = NULL;
+    ck_assert_int_eq(dom_node_append_child(parent, child, &result), DOM_NO_ERR);
+    dom_node_unref(result);
+}
+
+START_TEST(test_replace_all)
+{
+    dom_document *doc = NULL;
+    ck_assert_int_eq(
+        dom_implementation_create_document(DOM_IMPLEMENTATION_HTML, NULL, NULL, NULL, NULL, NULL, &doc), DOM_NO_ERR);
+    dom_node *root = make_element(doc, "div"), *old = make_element(doc, "p"), *child = make_element(doc, "b");
+    dom_document_fragment *fragment = NULL;
+    ck_assert_int_eq(dom_document_create_document_fragment(doc, &fragment), DOM_NO_ERR);
+    dom_node *parent = _i & 1 ? (dom_node *)fragment : root;
+    append_node(parent, old);
+    append_node(old, child);
+    dom_node *replacement = child;
+    dom_document_fragment *incoming = NULL;
+    if (_i & 2) {
+        ck_assert_int_eq(dom_document_create_document_fragment(doc, &incoming), DOM_NO_ERR);
+        append_node((dom_node *)incoming, child);
+        replacement = (dom_node *)incoming;
+    }
+    ck_assert_int_eq(dom_node_replace_all(parent, replacement), DOM_NO_ERR);
+    dom_node *first = NULL, *last = NULL, *owner = NULL;
+    ck_assert_int_eq(dom_node_get_first_child(parent, &first), DOM_NO_ERR);
+    ck_assert_int_eq(dom_node_get_last_child(parent, &last), DOM_NO_ERR);
+    ck_assert_ptr_eq(first, child);
+    ck_assert_ptr_eq(last, child);
+    dom_node_unref(first);
+    dom_node_unref(last);
+    ck_assert_int_eq(dom_node_get_parent_node(old, &owner), DOM_NO_ERR);
+    ck_assert_ptr_null(owner);
+    if (incoming != NULL) {
+        ck_assert_int_eq(dom_node_get_first_child(incoming, &first), DOM_NO_ERR);
+        ck_assert_ptr_null(first);
+    }
+    ck_assert_int_eq(dom_node_replace_all(parent, NULL), DOM_NO_ERR);
+    ck_assert_int_eq(dom_node_get_parent_node(child, &owner), DOM_NO_ERR);
+    ck_assert_ptr_null(owner);
+    ck_assert_int_eq(dom_node_get_first_child(parent, &first), DOM_NO_ERR);
+    ck_assert_ptr_null(first);
+    dom_node_unref(root);
+    dom_node_unref(fragment);
+    dom_node_unref(old);
+    dom_node_unref(child);
+    dom_node_unref(incoming);
+    dom_node_unref(doc);
+}
+END_TEST
+
+START_TEST(test_replace_all_validation)
+{
+    dom_document *doc = NULL, *foreign = NULL;
+    ck_assert_int_eq(
+        dom_implementation_create_document(DOM_IMPLEMENTATION_HTML, NULL, NULL, NULL, NULL, NULL, &doc), DOM_NO_ERR);
+    ck_assert_int_eq(
+        dom_implementation_create_document(DOM_IMPLEMENTATION_HTML, NULL, NULL, NULL, NULL, NULL, &foreign),
+        DOM_NO_ERR);
+    dom_node *root = make_element(doc, "div"), *old = make_element(doc, "p"), *other = make_element(foreign, "b");
+    append_node(root, old);
+    ck_assert_int_eq(dom_node_replace_all(root, root), DOM_HIERARCHY_REQUEST_ERR);
+    ck_assert_int_eq(dom_node_replace_all(old, root), DOM_HIERARCHY_REQUEST_ERR);
+    ck_assert_int_eq(dom_node_replace_all(root, (dom_node *)doc), DOM_HIERARCHY_REQUEST_ERR);
+    ck_assert_int_eq(dom_node_replace_all(root, other), DOM_WRONG_DOCUMENT_ERR);
+    ck_assert_int_eq(dom_node_replace_all(NULL, NULL), DOM_INVALID_ACCESS_ERR);
+    dom_node *first = NULL;
+    ck_assert_int_eq(dom_node_get_first_child(root, &first), DOM_NO_ERR);
+    ck_assert_ptr_eq(first, old);
+    dom_node_unref(first);
+    dom_node *host = make_element(doc, "template");
+    dom_document_fragment *content = NULL;
+    ck_assert_int_eq(dom_html_template_element_get_content((dom_html_template_element *)host, &content), DOM_NO_ERR);
+    ck_assert_int_eq(dom_node_replace_all((dom_node *)content, host), DOM_HIERARCHY_REQUEST_ERR);
+    dom_node_unref(content);
+    dom_node_unref(host);
+    dom_node_unref(root);
+    dom_node_unref(old);
+    dom_node_unref(other);
+    dom_node_unref(doc);
+    dom_node_unref(foreign);
+}
+END_TEST
+
+#ifdef WISP_TEST_ALLOC_FAILURE
+START_TEST(test_text_replacement_allocation_failure)
+{
+    dom_document *doc = NULL;
+    ck_assert_int_eq(
+        dom_implementation_create_document(DOM_IMPLEMENTATION_HTML, NULL, NULL, NULL, NULL, NULL, &doc), DOM_NO_ERR);
+    dom_node *root = make_element(doc, "div"), *old = make_element(doc, "b");
+    append_node(root, old);
+    dom_string *value = NULL;
+    ck_assert_int_eq(dom_string_create((const uint8_t *)"replacement", 11, &value), DOM_NO_ERR);
+    malloc_limit(0);
+    dom_exception err = dom_node_set_text_content(root, value);
+    malloc_limit(UINT_MAX);
+    ck_assert_int_eq(err, DOM_NO_MEM_ERR);
+    dom_node *first = NULL;
+    ck_assert_int_eq(dom_node_get_first_child(root, &first), DOM_NO_ERR);
+    ck_assert_ptr_eq(first, old);
+    dom_node_unref(first);
+    ck_assert_int_eq(dom_node_set_text_content(root, value), DOM_NO_ERR);
+    dom_string *result = NULL;
+    ck_assert_int_eq(dom_node_get_text_content(root, &result), DOM_NO_ERR);
+    ck_assert(dom_string_isequal(value, result));
+    dom_string_unref(result);
+    dom_string_unref(value);
+    dom_node_unref(root);
+    dom_node_unref(old);
+    dom_node_unref(doc);
+}
+END_TEST
+#endif
+
 int main(void)
 {
     Suite *suite = suite_create("DOM tree editing");
     TCase *tc = tcase_create("Fragment lifetime");
     tcase_add_loop_test(tc, test_fragment_keeps_owner_alive, 0, 4);
     tcase_add_test(tc, test_document_collection_tracks_root);
+    tcase_add_loop_test(tc, test_replace_all, 0, 4);
+    tcase_add_test(tc, test_replace_all_validation);
+#ifdef WISP_TEST_ALLOC_FAILURE
+    tcase_add_test(tc, test_text_replacement_allocation_failure);
+#endif
     suite_add_tcase(suite, tc);
     SRunner *runner = srunner_create(suite);
     srunner_run_all(runner, CK_NORMAL);

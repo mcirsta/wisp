@@ -240,6 +240,8 @@ hubbub_error handle_in_table_text(hubbub_treebuilder *tb, const hubbub_token *to
 {
     hubbub_treebuilder_context *ctx = &tb->context;
     if (token->type == HUBBUB_TOKEN_CHARACTER) {
+        if (token->data.character.len == 1 && token->data.character.ptr[0] == 0)
+            return HUBBUB_OK;
         const hubbub_string *text = &token->data.character;
         if (text->len > SIZE_MAX - ctx->table_text_length)
             return HUBBUB_NOMEM;

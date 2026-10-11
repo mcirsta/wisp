@@ -284,6 +284,12 @@ JSValue qjs_dom_from_string(JSContext *ctx, dom_string *value, bool nullable)
 void qjs_dom_changed(
     JSContext *ctx, struct qjs_dom_node *node, const char *operation, dom_string *attribute, dom_exception error)
 {
+    qjs_dom_changed_target(ctx, node, node->node, operation, attribute, error);
+}
+
+void qjs_dom_changed_target(JSContext *ctx, struct qjs_dom_node *node, dom_node *target,
+    const char *operation, dom_string *attribute, dom_exception error)
+{
     jsthread *thread = JS_GetContextOpaque(ctx);
     size_t length = attribute != NULL ? dom_string_byte_length(attribute) : 0;
     qjs_trace(ctx, "dom.mutation", "node=%" PRIu64 " type=%d operation=%s attribute=%.*s result=%u", node->id,
@@ -295,7 +301,7 @@ void qjs_dom_changed(
     bool connected = false;
     /* Fail conservatively: an allocation failure may have changed part of the
      * subtree. Detached-node edits do not affect the rendered document. */
-    if (dom_node_contains(html->document, node->node, &connected) != DOM_NO_ERR)
+    if (dom_node_contains(html->document, target, &connected) != DOM_NO_ERR)
         connected = true;
     if (!connected)
         return;
@@ -404,7 +410,8 @@ int qjs_init_document(JSContext *ctx)
             goto out;
     }
     if (qjs_init_tokenlist(ctx) < 0 || qjs_dom_install_properties(ctx, doc->prototypes) < 0 ||
-        qjs_dom_install_tree(ctx, doc->prototypes) < 0 || qjs_dom_install_collections(ctx, doc->prototypes) < 0 ||
+        qjs_dom_install_tree(ctx, doc->prototypes) < 0 || qjs_dom_install_markup(ctx, doc->prototypes) < 0 ||
+        qjs_dom_install_collections(ctx, doc->prototypes) < 0 ||
         JS_SetPrototype(ctx, object, doc->prototypes[QJS_HTML_DOCUMENT]) < 0)
         goto out;
     ret = JS_DefinePropertyValueStr(ctx, global, "document", JS_DupValue(ctx, object), JS_PROP_ENUMERABLE);

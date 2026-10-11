@@ -1355,6 +1355,173 @@ START_TEST(test_quickjs_dom_conversion)
 }
 END_TEST
 
+static const struct {
+    const char *context, *markup, *expected;
+} inner_html_cases[] = {
+    {"div", "<B id=X>A&amp;&lt;</B>ș😀", "<b id=\"X\">A&amp;&lt;</b>ș😀"},
+    {"table", "<tr><td>A<td>B", "<tbody><tr><td>A</td><td>B</td></tr></tbody>"},
+    {"tbody", "<tr><td>A", "<tr><td>A</td></tr>"},
+    {"tr", "<td>A", "<td>A</td>"},
+    {"select", "<option>A<option>B", "<option>A</option><option>B</option>"},
+    {"textarea", "<b>&amp;</b>", "&lt;b&gt;&amp;&lt;/b&gt;"},
+    {"script", "if (x < y && z > 0) alert('&')", "if (x < y && z > 0) alert('&')"},
+    {"noscript", "<b>&amp;</b>", "<b>&amp;</b>"},
+    {"div", "<p>A<p>B<!--C--><br>", "<p>A</p><p>B<!--C--><br></p>"},
+    {"div", "<svg><linearGradient/><text>SVG</text></svg>",
+        "<svg><linearGradient></linearGradient><text>SVG</text></svg>"},
+    {"template", "<tr><td>A", "<tr><td>A</td></tr>"},
+    {"template", "<template><b>A</b></template>", "<template><b>A</b></template>"},
+    {"template", "<noscript><b>A</b></noscript>", "<noscript>&lt;b&gt;A&lt;/b&gt;</noscript>"},
+};
+
+START_TEST(test_quickjs_inner_html_contexts)
+{
+    JSValue global = JS_GetGlobalObject(dom_thread->ctx);
+    JS_SetPropertyStr(dom_thread->ctx, global, "context", JS_NewString(dom_thread->ctx, inner_html_cases[_i].context));
+    JS_SetPropertyStr(dom_thread->ctx, global, "markup", JS_NewString(dom_thread->ctx, inner_html_cases[_i].markup));
+    JS_SetPropertyStr(dom_thread->ctx, global, "expected", JS_NewString(dom_thread->ctx, inner_html_cases[_i].expected));
+    JS_FreeValue(dom_thread->ctx, global);
+    ck_assert_msg(exec_script(dom_thread,
+        "var el=document.createElement(context);el.innerHTML=markup;"
+        "if(el.innerHTML!==expected)throw Error('got '+el.innerHTML+' expected '+expected);"
+        "if(el.parentNode!==null)throw Error('attached context');"
+        "if(context==='template'&&(el.firstChild!==null||el.textContent!==''))throw Error('template boundary');"
+        "if(context!=='template'&&el.firstChild.ownerDocument!==document)throw Error('wrong owner');",
+        "innerHTML contexts"), "context case %d (%s)", _i, inner_html_cases[_i].context);
+}
+END_TEST
+
+START_TEST(test_quickjs_inner_html_identity)
+{
+    ck_assert(exec_script(dom_thread,
+        "var el=document.getElementById('target'), old=el.children[0], live=el.childNodes, tags=el.getElementsByTagName('*');"
+        "old.expando=42;old.addEventListener('kept',()=>{old.expando++;});"
+        "el.innerHTML='<b id=new-child>New</b><i>Tail</i>';"
+        "if(el.childNodes!==live||live.length!==2||tags.length!==2||live[0]!==document.getElementById('new-child'))"
+        "throw Error('live identity');"
+        "if(old.parentNode!==null||old.isConnected||old.ownerDocument!==document||old.textContent!=='B')throw Error('old subtree');"
+        "old.dispatchEvent(new Event('kept'));if(old.expando!==43)throw Error('old listeners');"
+        "var fresh=el.firstChild;el.innerHTML=el.innerHTML;"
+        "if(el.firstChild===fresh||fresh.parentNode!==null)throw Error('replacement by value');"
+        "var svg=document.getElementById('svg');svg.innerHTML='<linearGradient/><text>New</text>';"
+        "if(svg.children[0].tagName!=='linearGradient'||svg.children[0] instanceof HTMLElement||"
+        "svg.innerHTML!=='<linearGradient></linearGradient><text>New</text>')throw Error('SVG context');"
+        "var f=document.createElement('form'), holder=document.createElement('div');f.appendChild(holder);"
+        "holder.innerHTML='<form><input name=x></form>';if(holder.children.length!==1||holder.firstChild.tagName!=='INPUT')"
+        "throw Error('form context');"
+        "var input=document.createElement('input');input.innerHTML='hidden DOM child';"
+        "if(input.textContent!=='hidden DOM child'||input.innerHTML!=='')throw Error('void serialization');"
+        "el.innerHTML=null;if(live.length!==0||tags.length!==0)throw Error('empty live lists');",
+        "innerHTML replacement and identity"));
+    JS_RunGC(dom_heap->rt);
+    assert_predicate(dom_thread, "old.expando===43&&old.textContent==='B'&&fresh.textContent==='New'", "retained nodes after GC");
+}
+END_TEST
+
+START_TEST(test_quickjs_inner_html_conversion)
+{
+    ck_assert(exec_script(dom_thread,
+        "var el=document.getElementById('target'), desc=Object.getOwnPropertyDescriptor(Element.prototype,'innerHTML');"
+        "if(!desc.enumerable||!desc.configurable||typeof desc.get!=='function'||typeof desc.set!=='function')throw Error('descriptor');"
+        "var original=el.innerHTML, first=el.firstChild, marker={}, converted=false;"
+        "for(var value of [Symbol(),{toString(){throw marker;}}]){"
+        "let caught=false;try{el.innerHTML=value;}catch(e){caught=e===marker||e instanceof TypeError;}"
+        "if(!caught||el.innerHTML!==original||el.firstChild!==first)throw Error('failed conversion mutated');}"
+        "for(var receiver of [document, document.createTextNode('x'), document.createDocumentFragment(),{}]){"
+        "for(var action of [()=>desc.get.call(receiver),()=>desc.set.call(receiver,{toString(){converted=true;return '';}})]){"
+        "let caught=false;try{action();}catch(e){caught=e instanceof TypeError;}if(!caught)throw Error('brand');}}"
+        "if(converted)throw Error('converted wrong receiver');"
+        "el.innerHTML=undefined;if(el.innerHTML!=='undefined')throw Error('undefined');"
+        "el.innerHTML=null;if(el.firstChild!==null||el.innerHTML!=='')throw Error('null');"
+        "el.innerHTML={toString(){el.innerHTML='<i>intermediate</i>';return '<b>final</b>';}};"
+        "if(el.innerHTML!=='<b>final</b>')throw Error('reentrant conversion');"
+        "el.innerHTML='A\\0B';if(el.textContent!=='AB')throw Error('HTML null handling');",
+        "innerHTML Web IDL conversion"));
+}
+END_TEST
+
+START_TEST(test_quickjs_inner_html_template)
+{
+    ck_assert(exec_script(dom_thread,
+        "var t=document.createElement('template');document.body.appendChild(t);"
+        "t.textContent='ordinary child';t.innerHTML='<b id=inert>A</b><template><i>B</i></template>';"
+        "if(t.textContent!=='ordinary child'||t.childNodes.length!==1||t.getElementsByTagName('*').length!==0||"
+        "document.getElementById('inert')!==null)throw Error('template contents leaked');"
+        "if(t.innerHTML!=='<b id=\"inert\">A</b><template><i>B</i></template>')throw Error('template serialization');",
+        "innerHTML template boundaries"));
+    JS_RunGC(dom_heap->rt);
+    /* Direct evaluation leaves pending invalidation observable. Only contents
+     * change; the connected template's ordinary rendered children do not. */
+    dom_thread->dom_changes = 0;
+    const char *source = "t.innerHTML='<p>C</p>'; t.innerHTML";
+    JSValue result = JS_Eval(dom_thread->ctx, source, strlen(source), "inert replacement", JS_EVAL_TYPE_GLOBAL);
+    ck_assert(!JS_IsException(result));
+    JS_FreeValue(dom_thread->ctx, result);
+    ck_assert_uint_eq(dom_thread->dom_changes, 0);
+    assert_predicate(dom_thread, "t.innerHTML==='<p>C</p>'&&t.textContent==='ordinary child'", "template replacement survives GC");
+}
+END_TEST
+
+START_TEST(test_quickjs_inner_html_large)
+{
+    ck_assert(exec_script(dom_thread,
+        "var el=document.createElement('div'), unit='<span title=\"&lt;&amp;&gt;\">ș😀</span>';"
+        "el.innerHTML=unit.repeat(1200);if(el.children.length!==1200||el.innerHTML!==unit.repeat(1200))throw Error('chunking');"
+        "el.innerHTML='';if(el.childNodes.length!==0)throw Error('large clear');",
+        "innerHTML multi-chunk parsing"));
+}
+END_TEST
+
+START_TEST(test_quickjs_inner_html_allocation_failure)
+{
+    ck_assert(exec_script(dom_thread,
+        "var el=document.createElement('div');el.innerHTML='<b title=\"x\">text</b>';"
+        "var readMarkup=()=>el.innerHTML;", "innerHTML allocation fixture"));
+    JSContext *ctx = dom_thread->ctx;
+    JSValue global = JS_GetGlobalObject(ctx), fn = JS_GetPropertyStr(ctx, global, "readMarkup");
+    bool failed = false, succeeded = false;
+    for (size_t extra = 0; extra <= 8192; extra += 128) {
+        JSMemoryUsage usage;
+        JS_ComputeMemoryUsage(dom_heap->rt, &usage);
+        JS_SetMemoryLimit(dom_heap->rt, extra == 0 ? 1 : usage.malloc_size + extra);
+        JSValue result = JS_Call(ctx, fn, JS_UNDEFINED, 0, NULL);
+        JS_SetMemoryLimit(dom_heap->rt, 0);
+        if (JS_IsException(result)) {
+            failed = true;
+            JS_FreeValue(ctx, JS_GetException(ctx));
+        } else {
+            succeeded = true;
+        }
+        JS_FreeValue(ctx, result);
+        if (succeeded)
+            break;
+    }
+    ck_assert(failed && succeeded);
+    JS_FreeValue(ctx, fn);
+    JS_FreeValue(ctx, global);
+    assert_predicate(dom_thread, "el.innerHTML==='<b title=\"x\">text</b>'", "serialization OOM recovery");
+}
+END_TEST
+
+static JSValue expire_markup_execution(JSContext *ctx, JSValueConst object, int argc, JSValueConst *argv)
+{
+    jsthread *thread = JS_GetContextOpaque(ctx);
+    thread->heap->deadline_ms = 0;
+    return JS_UNDEFINED;
+}
+
+START_TEST(test_quickjs_inner_html_execution_limit)
+{
+    JSValue global = JS_GetGlobalObject(dom_thread->ctx);
+    JS_SetPropertyStr(dom_thread->ctx, global, "expire", JS_NewCFunction(dom_thread->ctx, expire_markup_execution, "expire", 0));
+    JS_FreeValue(dom_thread->ctx, global);
+    ck_assert(!exec_script(dom_thread,
+        "var el=document.getElementById('target');try{el.innerHTML={toString(){expire();return '<b>wrong</b>';}};}"
+        "catch(e){globalThis.caughtInterrupt=true;}", "innerHTML shared deadline"));
+    assert_predicate(dom_thread, "el.textContent==='ABC'&&typeof caughtInterrupt==='undefined'", "interruption preserves tree and recovers");
+}
+END_TEST
+
 START_TEST(test_quickjs_dom_retirement)
 {
     ck_assert(exec_script(dom_thread, "var old = document.body; old.cycle = {node: old};", "retain.js"));
@@ -1416,6 +1583,21 @@ START_TEST(test_quickjs_dom_conversion_retirement)
         "catch (e) { caught = e; }"
         "if (!(caught instanceof DOMException) || caught.name !== 'InvalidStateError') throw Error('retired mutation');",
         "retiring-conversion.js"));
+    ck_assert_uint_eq(dom_thread->dom_changes, 0);
+}
+END_TEST
+
+START_TEST(test_quickjs_inner_html_retirement)
+{
+    JSValue global = JS_GetGlobalObject(dom_thread->ctx);
+    JS_SetPropertyStr(dom_thread->ctx, global, "retire", JS_NewCFunction(dom_thread->ctx, close_dom_during_conversion, "retire", 0));
+    JS_FreeValue(dom_thread->ctx, global);
+    ck_assert(exec_script(dom_thread,
+        "var el=document.getElementById('target');var caught=false;"
+        "try{el.innerHTML={toString(){retire();return '<b>wrong</b>';}};}catch(e){caught=e.name==='InvalidStateError';}"
+        "if(!caught)throw Error('retired setter');"
+        "caught=false;try{el.innerHTML;}catch(e){caught=e.name==='InvalidStateError';}if(!caught)throw Error('retired getter');",
+        "innerHTML retirement"));
     ck_assert_uint_eq(dom_thread->dom_changes, 0);
 }
 END_TEST
@@ -3919,6 +4101,14 @@ Suite *quickjs_suite(void)
     tcase_add_test(tc_dom, test_quickjs_dom_attributes);
     tcase_add_test(tc_dom, test_quickjs_dom_text);
     tcase_add_test(tc_dom, test_quickjs_dom_conversion);
+    tcase_add_loop_test(tc_dom, test_quickjs_inner_html_contexts, 0, sizeof(inner_html_cases) / sizeof(*inner_html_cases));
+    tcase_add_test(tc_dom, test_quickjs_inner_html_identity);
+    tcase_add_test(tc_dom, test_quickjs_inner_html_conversion);
+    tcase_add_test(tc_dom, test_quickjs_inner_html_template);
+    tcase_add_test(tc_dom, test_quickjs_inner_html_large);
+    tcase_add_test(tc_dom, test_quickjs_inner_html_allocation_failure);
+    tcase_add_test(tc_dom, test_quickjs_inner_html_execution_limit);
+    tcase_add_test(tc_dom, test_quickjs_inner_html_retirement);
     tcase_add_test(tc_dom, test_quickjs_dom_retirement);
     tcase_add_test(tc_dom, test_quickjs_dom_runtime_isolation);
     tcase_add_test(tc_dom, test_quickjs_dom_conversion_retirement);

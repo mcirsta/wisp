@@ -399,7 +399,10 @@ hubbub_error handle_in_foreign_content(hubbub_treebuilder *treebuilder, const hu
 {
     switch (token->type) {
     case HUBBUB_TOKEN_CHARACTER:
-        /* The tokenizer replaces NUL with U+FFFD before emitting it. */
+        if (token->data.character.len == 1 && token->data.character.ptr[0] == 0) {
+            const hubbub_string replacement = {(const uint8_t *)"\xef\xbf\xbd", 3};
+            return append_text(treebuilder, &replacement);
+        }
         for (size_t i = 0; i < token->data.character.len; i++) {
             uint8_t c = token->data.character.ptr[i];
             if (c != '\t' && c != '\n' && c != '\f' && c != '\r' && c != ' ') {

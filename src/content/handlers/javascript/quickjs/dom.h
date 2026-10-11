@@ -44,6 +44,10 @@ JSValue qjs_dom_from_string(JSContext *ctx, dom_string *value, bool nullable);
 bool qjs_dom_is_html(dom_node *node);
 void qjs_dom_changed(
     JSContext *ctx, struct qjs_dom_node *node, const char *operation, dom_string *attribute, dom_exception error);
+/* Attribute edits to the wrapper, and child edits to separate template contents,
+ * share attribution while invalidating only the tree actually changed. */
+void qjs_dom_changed_target(JSContext *ctx, struct qjs_dom_node *node, dom_node *target,
+    const char *operation, dom_string *attribute, dom_exception error);
 void qjs_dom_flush(jsthread *thread);
 void qjs_dom_close(jsthread *thread);
 int qjs_dom_install_collections(JSContext *ctx, JSValue *prototypes);
@@ -54,5 +58,6 @@ JSValue qjs_class_list_get(JSContext *ctx, JSValueConst object);
 JSValue qjs_class_list_set(JSContext *ctx, JSValueConst object, JSValueConst value);
 int qjs_dom_install_properties(JSContext *ctx, JSValue *prototypes);
 int qjs_dom_install_tree(JSContext *ctx, JSValue *prototypes);
+int qjs_dom_install_markup(JSContext *ctx, JSValue *prototypes);
 
 #endif

@@ -357,6 +357,7 @@ add_wisp_test(test_quickjs
   ${CMAKE_SOURCE_DIR}/src/content/handlers/javascript/quickjs/document.c
   ${CMAKE_SOURCE_DIR}/src/content/handlers/javascript/quickjs/dom.c
   ${CMAKE_SOURCE_DIR}/src/content/handlers/javascript/quickjs/tree.c
+  ${CMAKE_SOURCE_DIR}/src/content/handlers/javascript/quickjs/markup.c
   ${CMAKE_SOURCE_DIR}/src/content/handlers/javascript/quickjs/tokenlist.c
   ${CMAKE_SOURCE_DIR}/src/content/handlers/javascript/quickjs/platform.c
   ${CMAKE_SOURCE_DIR}/src/content/handlers/javascript/quickjs/collections.c
@@ -524,6 +525,8 @@ if(NOT WIN32)
   target_include_directories(malloc_fig PRIVATE ${CMAKE_SOURCE_DIR}/src)
   target_link_libraries(malloc_fig PUBLIC dl)
   if(CMAKE_BUILD_TYPE STREQUAL "Release")
+    target_link_libraries(dom_tree_test malloc_fig)
+    target_compile_definitions(dom_tree_test PRIVATE WISP_TEST_ALLOC_FAILURE)
     target_link_libraries(dom_html_serialize_test malloc_fig)
     target_compile_definitions(dom_html_serialize_test PRIVATE WISP_TEST_ALLOC_FAILURE)
     target_link_libraries(dom_template_test malloc_fig)

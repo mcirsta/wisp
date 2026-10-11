@@ -32,6 +32,7 @@ static const uint32_t cp1252Table[32] = {0x20AC, 0xFFFD, 0x201A, 0x0192, 0x201E,
  */
 static const uint8_t u_fffd[3] = {'\xEF', '\xBF', '\xBD'};
 static const hubbub_string u_fffd_str = {u_fffd, sizeof(u_fffd)};
+static const hubbub_string nul_str = {(const uint8_t *)"", 1};
 
 
 /**
@@ -608,11 +609,17 @@ hubbub_error hubbub_tokeniser_handle_data(hubbub_tokeniser *tokeniser)
         } else if (c == '\0') {
             if (tokeniser->context.pending > 0) {
                 /* Emit any pending characters */
-                emit_current_chars(tokeniser);
+                hubbub_error err = emit_current_chars(tokeniser);
+                if (err != HUBBUB_OK)
+                    return err;
             }
 
-            /* Emit a replacement character */
-            emit_character_token(tokeniser, &u_fffd_str);
+            /* Data emits NUL for the tree builder to ignore or replace in
+             * foreign content. RCDATA/RAWTEXT/plaintext replace it here. */
+            hubbub_error err = emit_character_token(tokeniser,
+                tokeniser->content_model == HUBBUB_CONTENT_MODEL_PCDATA ? &nul_str : &u_fffd_str);
+            if (err != HUBBUB_OK)
+                return err;
 
             /* Advance past NUL */
             parserutils_inputstream_advance(tokeniser->input, 1);
@@ -2512,8 +2519,9 @@ hubbub_error hubbub_tokeniser_handle_cdata_block(hubbub_tokeniser *tokeniser)
                 return err;
         }
 
-        /* Perform NUL-byte replacement */
-        err = emit_character_token(tokeniser, &u_fffd_str);
+        /* CDATA emits the character; the adjusted current node decides whether
+         * HTML integration rules ignore it or foreign rules replace it. */
+        err = emit_character_token(tokeniser, &nul_str);
         if (err != HUBBUB_OK)
             return err;
 

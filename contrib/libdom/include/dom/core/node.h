@@ -444,4 +444,12 @@ dom_exception dom_node_prepare_user_data(
 void dom_node_set_prepared_user_data(dom_node *node, struct dom_user_data *entry, void **previous);
 void dom_node_discard_prepared_user_data(struct dom_user_data *entry);
 
+/** Replace all children of an Element or DocumentFragment with node (or NULL).
+ * A replacement fragment contributes its children and is emptied. The legacy
+ * Attr child representation is also supported. Replacement must have the same
+ * owner document; validation happens before removing any existing children.
+ * Native insertion/removal notifications are preserved. A notification failure
+ * can occur after mutation; this is not a transactional DOM API. */
+dom_exception dom_node_replace_all(dom_node *parent, dom_node *replacement);
+
 #endif

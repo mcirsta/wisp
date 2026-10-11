@@ -76,13 +76,16 @@ typedef struct dom_hubbub_parser_params {
 dom_hubbub_error
 dom_hubbub_parser_create(dom_hubbub_parser_params *params, dom_hubbub_parser **parser, dom_document **document);
 
-/* Parse an inert HTML fragment in the given element's context. Does not alter
- * the context or its document. The caller owns the returned parser and fragment;
+/* Parse a script-inert HTML fragment without replacing the context's children.
+ * Nodes belong to the target document: its ordinary detached-node hooks still
+ * run (for example, an active document's images may load before connection).
+ * The caller owns the returned parser and fragment;
  * After successful completed(), the fragment contains the context-appropriate
  * children without the synthetic root. Discard it on failure.
  * Input is UTF-8 regardless of params.enc; enable_script selects noscript syntax
  * but script and SVG callbacks are not run. Currently accepts HTML document /
- * HTML, SVG and MathML namespace contexts except HTML template; unsupported contexts return INVALID.
+ * HTML, SVG and MathML namespace contexts, including HTML templates. Unsupported
+ * contexts return INVALID. Template results belong to the actual contents owner.
  * On creation failure both outputs are NULL. */
 dom_hubbub_error dom_hubbub_fragment_parser_create(dom_hubbub_parser_params *params, dom_element *context,
     dom_hubbub_parser **parser, dom_document_fragment **fragment);

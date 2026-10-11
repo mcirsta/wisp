@@ -2237,9 +2237,11 @@ nserror convert_special_elements(dom_node *node, html_content *content, struct b
                             }
                         }
 
-                        if (cached != NULL) {
-                            char *svg_xml = cached->svg_xml;
-                            size_t svg_len = cached->svg_xml_len;
+                        {
+                            /* DOM-created SVGs have no page-parser entry. The
+                             * current subtree is sufficient for serialization. */
+                            char *svg_xml = cached != NULL ? cached->svg_xml : NULL;
+                            size_t svg_len = cached != NULL ? cached->svg_xml_len : 0;
                             bool free_xml = false;
 
                             /* Lazy Serialization: If XML is missing (not pre-serialized or invalidated),
@@ -2274,8 +2276,6 @@ nserror convert_special_elements(dom_node *node, html_content *content, struct b
 
                                 if (free_xml)
                                     free(svg_xml);
-                            } else {
-                                NSLOG(wisp, WARNING, "SVG: Inline SVG node not found in cache list");
                             }
                         }
                     }

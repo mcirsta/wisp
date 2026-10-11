@@ -26,7 +26,7 @@ typedef struct hubbub_parser hubbub_parser;
  * retains root and form until destroyed. root is a synthetic HTML element,
  * distinct from the real context element, whose children receive the result.
  * Configure before feeding input, after the tree handler and document node.
- * Supports HTML (except template), SVG and MathML contexts. */
+ * Supports HTML (including template), SVG and MathML contexts. */
 typedef struct hubbub_fragment_context {
     hubbub_string name; /**< Context element's case-sensitive local name */
     hubbub_ns ns; /**< Context namespace */

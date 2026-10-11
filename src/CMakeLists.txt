@@ -194,6 +194,7 @@ add_library(wisp ${WISP_LIB_TYPE}
 	content/handlers/javascript/quickjs/document.c
 	content/handlers/javascript/quickjs/dom.c
 	content/handlers/javascript/quickjs/tree.c
+	content/handlers/javascript/quickjs/markup.c
 	content/handlers/javascript/quickjs/tokenlist.c
 	content/handlers/javascript/quickjs/platform.c
 	content/handlers/javascript/quickjs/collections.c
