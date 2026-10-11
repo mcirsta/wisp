@@ -30,6 +30,13 @@ struct html_form_click_result {
 /* Dispatch a native click and perform checkable input/label activation. Retains
  * the clicked node and activation element across callbacks. Label association is
  * read after dispatch; input pre-activation and cancellation are one transaction. */
-struct html_form_click_result html_form_click(dom_node *clicked, html_checkable_changed_cb changed, void *pw);
+struct html_form_click_context {
+    html_checkable_changed_cb changed;
+    /* Delivers click, input and change through the host's native event adapter.
+     * NULL uses libdom alone, including when scripting is unavailable. */
+    bool (*dispatch)(dom_node *target, dom_string *type, void *pw);
+    void *pw;
+};
+struct html_form_click_result html_form_click(dom_node *clicked, const struct html_form_click_context *context);
 
 #endif

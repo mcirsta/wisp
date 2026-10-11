@@ -40,4 +40,8 @@
  */
 dom_default_action_callback html_dom_event_fetcher(dom_string *type, dom_default_action_phase phase, void **pw);
 
+struct js_mouse_event;
+bool html_dispatch_input_event(
+    struct html_content *html, dom_node *target, dom_string *type, const struct js_mouse_event *mouse);
+
 #endif

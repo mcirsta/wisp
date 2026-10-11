@@ -38,6 +38,7 @@
 
 #include "quickjs.h"
 #include "private.h"
+#include "input_event.h"
 #include "dom.h"
 
 #include "content/handlers/javascript/js.h"
@@ -150,7 +151,7 @@ static bool qjs_execution_begin(jsheap *heap)
 {
     /* Nested host entries share the outer budget. Future callback/microtask
      * checkpoints must likewise remain inside a single execution scope. */
-    if (heap->execution_depth++ == 0) {
+    if (heap->execution_depth++ == 0 && heap->native_dispatch_depth == 0) {
         heap->interrupted = false;
         if (heap->timeout > 0) {
             uint64_t now;
@@ -781,6 +782,42 @@ bool js_exec(jsthread *thread, const uint8_t *txt, size_t txtlen, const char *na
 
 
 /* exported interface documented in js.h */
+bool js_fire_input_event(jsthread *thread, dom_string *type, dom_node *target, const struct js_mouse_event *mouse)
+{
+    if (thread == NULL || thread->closed || target == NULL)
+        return false;
+    qjs_thread_ref(thread);
+    /* Reserve one deadline without leaving a JS execution frame on the stack:
+     * each native listener must run its own microtask checkpoint. Nested script
+     * dispatch still sees its caller's execution_depth and shares that frame. */
+    bool started = qjs_execution_begin(thread->heap);
+    thread->heap->execution_depth--;
+    thread->heap->native_dispatch_depth++;
+    JSContext *ctx = thread->ctx;
+    bool accepted = false;
+    if (started) {
+        qjs_trace(ctx, "input.dispatch", "type=%.*s origin=browser", (int)dom_string_byte_length(type),
+            dom_string_data(type));
+        JSValue global = JS_GetGlobalObject(ctx);
+        /* document is an unforgeable, readonly own property of Window. */
+        JSValue document = JS_GetPropertyStr(ctx, global, "document");
+        JS_FreeValue(ctx, global);
+        JSValue object = JS_IsException(document) ? JS_EXCEPTION : qjs_dom_wrap(ctx, document, target);
+        JSValue event = JS_IsException(object) ? JS_EXCEPTION : qjs_native_input_event(ctx, type, mouse);
+        JSValue result = JS_IsException(event) ? JS_EXCEPTION : qjs_event_target_dispatch(ctx, object, event, false);
+        accepted = !JS_IsException(result) && JS_ToBool(ctx, result);
+        if (JS_IsException(result))
+            qjs_report_exception(thread, "native-input", thread->heap->interrupted);
+        JS_FreeValue(ctx, result);
+        JS_FreeValue(ctx, event);
+        JS_FreeValue(ctx, object);
+        JS_FreeValue(ctx, document);
+    }
+    thread->heap->native_dispatch_depth--;
+    qjs_thread_unref(thread);
+    return accepted;
+}
+
 bool js_fire_event(jsthread *thread, const char *type, struct dom_document *doc, struct dom_node *target)
 {
     /* TODO: Implement event firing */

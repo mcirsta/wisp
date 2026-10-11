@@ -60,6 +60,7 @@
 #include "content/handlers/html/layout.h"
 #include "content/handlers/html/restyle.h"
 #include "content/handlers/html/form_state.h"
+#include "content/handlers/html/dom_event.h"
 #include "content/handlers/html/form_data.h"
 #include "content/handlers/html/hyperlink.h"
 
@@ -91,76 +92,6 @@ static plot_font_style_t plot_fstyle_entry = {
     .background = 0xffffff,
     .foreground = 0x000000,
 };
-
-
-/**
- * Find an acceptable character set encoding with which to submit the form
- *
- * \param accept_charsets Current accept-charset attribute, or NULL
- * \param document_charset Document encoding, or NULL
- * \return Pointer to charset name (on heap, caller should free) or NULL
- */
-static char *form_acceptable_charset(const char *accept_charsets, const char *document_charset)
-{
-    char *temp, *c;
-    const char *end;
-
-    if (!accept_charsets) {
-        /* no accept-charsets attribute for this form */
-        if (document_charset) {
-            /* document charset present, so use it */
-            return strdup(document_charset);
-        } else {
-            /* no document charset, so default to UTF-8 */
-            return strdup("UTF-8");
-        }
-    }
-
-    /* HTML splits accept-charset on ASCII whitespace. An explicitly empty
-     * candidate list selects UTF-8, independently of the document encoding. */
-    accept_charsets += strspn(accept_charsets, " \t\n\f\r");
-    if (*accept_charsets == '\0')
-        return strdup("UTF-8");
-
-    /* make temporary copy of accept-charsets attribute */
-    temp = strdup(accept_charsets);
-    if (!temp)
-        return NULL;
-
-    /* make it upper case */
-    for (c = temp; *c; c++) {
-        *c = ascii_to_upper(*c);
-    }
-
-    /* is UTF-8 specified? */
-    c = strstr(temp, "UTF-8");
-    if (c) {
-        free(temp);
-        return strdup("UTF-8");
-    }
-
-    /* dispense with temporary copy */
-    free(temp);
-
-    /* according to RFC2070, the accept-charsets attribute of the
-     * form element contains a space and/or comma separated list */
-    end = accept_charsets;
-
-    /** \todo an improvement would be to choose an encoding
-     * acceptable to the server which covers as much of the input
-     * values as possible. Additionally, we need to handle the
-     * case where none of the acceptable encodings cover all the
-     * textual input values.  For now, we just extract the first
-     * element of the charset list
-     */
-    while (*end && !ascii_is_space(*end)) {
-        if (*end == ',')
-            break;
-        end++;
-    }
-
-    return strndup(accept_charsets, end - accept_charsets);
-}
 
 
 /**
@@ -949,22 +880,16 @@ static nserror form_submission_prepare(html_content *html, dom_node *form, dom_n
         error = NSERROR_DOM;
         goto out;
     }
-    /* Legacy encoding-label selection remains isolated from Unicode entries. */
-    char *charset = form_acceptable_charset(accept == NULL ? NULL : dom_string_data(accept), html->encoding);
+    const char *charset = html_form_submission_encoding(accept, html->encoding);
     dom_string_unref(accept);
-    if (charset == NULL) {
-        error = NSERROR_NOMEM;
-        goto out;
-    }
     struct html_form_data data = {0};
-    error = html_form_data_construct((dom_html_form_element *)form, submitter, &data);
+    error = html_form_data_construct((dom_html_form_element *)form, submitter, charset, &data);
     if (error == NSERROR_OK) {
         error = request->method == method_POST_MULTIPART ?
             html_form_data_multipart(&data, charset, &request->entries) :
             html_form_data_urlencode(&data, charset, &request->encoded);
     }
     html_form_data_fini(&data);
-    free(charset);
     if (error == NSERROR_OK && request->method == method_GET) {
         nsurl *url = NULL;
         error = nsurl_replace_query(request->url, request->encoded, &url);
@@ -994,7 +919,7 @@ static bool form_in_document(dom_node *form, dom_document *document)
 
 /* The caller pins the content and retains DOM identity across click dispatch.
  * This stage has no page callbacks until target selection/navigation. Validation
- * and SubmitEvent/FormDataEvent sequencing will be added before JS input delivery. */
+ * and SubmitEvent/FormDataEvent sequencing remain a separate submission milestone. */
 static nserror form_submit_dom(html_content *html, dom_node *form, dom_node *submitter, browser_mouse_state mouse)
 {
     struct browser_window *bw = html->bw;
@@ -1067,6 +992,12 @@ static nserror form_implicit_button(dom_html_form_element *form, dom_node **butt
     return err == DOM_NO_ERR ? NSERROR_OK : err == DOM_NO_MEM_ERR ? NSERROR_NOMEM : NSERROR_DOM;
 }
 
+static bool implicit_click_dispatch(dom_node *target, dom_string *type, void *pw)
+{
+    html_content *html = pw;
+    return html->bw != NULL && html_dispatch_input_event(html, target, type, NULL);
+}
+
 nserror form_submit_implicit(html_content *html, dom_node *input)
 {
     struct browser_window *bw = html->bw;
@@ -1091,7 +1022,8 @@ nserror form_submit_implicit(html_content *html, dom_node *input)
         dom_node_get_user_data(button, corestring_dom___ns_key_image_coords_node_data, &coords);
         if (coords != NULL)
             *coords = (struct image_input_coords){0};
-        struct html_form_click_result click = html_form_click(button, NULL, NULL);
+        struct html_form_click_result click = html_form_click(
+            button, &(struct html_form_click_context){.dispatch = implicit_click_dispatch, .pw = html});
         if (click.accepted && html->bw == bw && html->input_generation == generation)
             result = form_submit(html, button, BROWSER_MOUSE_CLICK_1);
     } else if (result == NSERROR_OK && button == NULL && blockers <= 1) {

@@ -144,6 +144,17 @@ bool js_fire_event(jsthread *thread, const char *type, struct dom_document *doc,
 bool js_dom_event_add_listener(jsthread *thread, struct dom_document *document, struct dom_node *node,
     struct dom_string *event_type_dom, void *js_funcval);
 
+/* Native click payload in CSS pixels. NULL denotes a non-pointing activation
+ * (for example Enter on a form's default button). This API delivers only click
+ * and checkable input/change; it does not expose legacy DOM mutation events. */
+struct js_mouse_event {
+    double client_x, client_y, screen_x, screen_y;
+    unsigned buttons, detail;
+    bool ctrl, alt, shift, meta;
+};
+bool js_fire_input_event(
+    jsthread *thread, struct dom_string *type, struct dom_node *target, const struct js_mouse_event *mouse);
+
 /*** New Events ***/
 
 /**

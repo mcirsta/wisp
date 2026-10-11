@@ -10,7 +10,31 @@
 #include <strings.h>
 #include <utf8proc.h>
 #include <wisp/content/fetch.h>
+#include "utils/encoding.h"
 #include "content/handlers/html/form_data.h"
+
+const char *html_form_submission_encoding(dom_string *accept, const char *document_encoding)
+{
+    if (accept == NULL) {
+        const char *encoding = document_encoding == NULL
+            ? NULL
+            : wisp_encoding_from_label(document_encoding, strlen(document_encoding));
+        return wisp_encoding_for_output(encoding);
+    }
+    const char *bytes = dom_string_data(accept);
+    size_t length = dom_string_byte_length(accept), offset = 0;
+    while (offset < length) {
+        while (offset < length && memchr(" \t\n\r\f", bytes[offset], 5) != NULL)
+            offset++;
+        size_t start = offset;
+        while (offset < length && memchr(" \t\n\r\f", bytes[offset], 5) == NULL)
+            offset++;
+        const char *encoding = wisp_encoding_from_label(bytes + start, offset - start);
+        if (encoding != NULL)
+            return wisp_encoding_for_output(encoding);
+    }
+    return "UTF-8";
+}
 
 struct buffer {
     char *bytes;
@@ -94,6 +118,45 @@ static nserror convert_chunk(iconv_t converter, const char **input, size_t *rema
     }
 }
 
+/* Web names and iconv names are different namespaces. In particular, the web's
+ * Japanese/Korean encodings include the Windows extensions. Keep the canonical
+ * name for _charset_; translating the backend name must not narrow coverage. */
+static const char *iconv_encoding(const char *encoding)
+{
+    if (strcasecmp(encoding, "Shift_JIS") == 0)
+        return "CP932";
+    if (strcasecmp(encoding, "EUC-KR") == 0)
+        return "CP949";
+    if (strcasecmp(encoding, "ISO-8859-8-I") == 0)
+        return "ISO-8859-8";
+    return encoding;
+}
+
+static nserror encode_single_byte(const struct buffer *input, wisp_single_byte_encoder encoder, struct buffer *output)
+{
+    nserror result = reserve(output, input->length);
+    for (size_t offset = 0; result == NSERROR_OK && offset < input->length;) {
+        utf8proc_int32_t codepoint;
+        utf8proc_ssize_t consumed = utf8proc_iterate(
+            (const uint8_t *)input->bytes + offset, input->length - offset, &codepoint);
+        if (consumed <= 0)
+            return NSERROR_BAD_ENCODING;
+        int encoded = encoder(codepoint);
+        if (encoded >= 0) {
+            char byte = encoded;
+            result = append(output, &byte, 1);
+        } else {
+            char reference[16];
+            size_t length = snprintf(reference, sizeof(reference), "&#%u;", (unsigned)codepoint);
+            result = append(output, reference, length);
+        }
+        offset += consumed;
+    }
+    if (result == NSERROR_OK)
+        output->bytes[output->length] = 0;
+    return result;
+}
+
 static nserror encode(dom_string *string, bool newlines, const char *encoding, struct buffer *output)
 {
     struct buffer normalized = {0};
@@ -104,11 +167,16 @@ static nserror encode(dom_string *string, bool newlines, const char *encoding, s
         *output = normalized;
         return NSERROR_OK;
     }
+    wisp_single_byte_encoder single_byte = wisp_encoding_get_single_byte_encoder(encoding);
+    if (single_byte != NULL) {
+        result = encode_single_byte(&normalized, single_byte, output);
+        goto out;
+    }
     /* A descriptor per component avoids carrying shift state between names and
      * values. UTF-8, the common case, needs no converter. Encoding labels are
      * selected by the caller; unsupported labels fail rather than changing the
      * encoding silently or transliterating user input. */
-    iconv_t converter = strchr(encoding, '/') == NULL ? iconv_open(encoding, "UTF-8") : (iconv_t)-1;
+    iconv_t converter = strchr(encoding, '/') == NULL ? iconv_open(iconv_encoding(encoding), "UTF-8") : (iconv_t)-1;
     if (converter == (iconv_t)-1) {
         result = NSERROR_BAD_ENCODING;
         goto out;

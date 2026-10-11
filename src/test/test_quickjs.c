@@ -2646,6 +2646,178 @@ START_TEST(test_quickjs_input_event_conversion_retirement)
 }
 END_TEST
 
+static bool native_input(const char *type, const struct js_mouse_event *mouse)
+{
+    dom_string *name, *id;
+    dom_node *target;
+    ck_assert_int_eq(dom_string_create((const uint8_t *)type, strlen(type), &name), DOM_NO_ERR);
+    ck_assert_int_eq(dom_string_create((const uint8_t *)"target", 6, &id), DOM_NO_ERR);
+    ck_assert_int_eq(dom_document_get_element_by_id(dom_html.document, id, &target), DOM_NO_ERR);
+    ck_assert_ptr_nonnull(target);
+    bool accepted = js_fire_input_event(dom_thread, name, target, mouse);
+    dom_node_unref(target);
+    dom_string_unref(id);
+    dom_string_unref(name);
+    return accepted;
+}
+
+START_TEST(test_quickjs_native_click)
+{
+    ck_assert(exec_script(dom_thread,
+        "var target=document.getElementById('target'),seen=[],saved;"
+        "window.addEventListener('click',e=>{seen.push('window');},true);"
+        "document.addEventListener('click',e=>{seen.push('document');},true);"
+        "target.addEventListener('click',e=>{saved=e;seen.push('target');"
+        "if(!(e instanceof PointerEvent)||!(e instanceof MouseEvent)||!e.isTrusted||!e.composed||"
+        "!e.bubbles||!e.cancelable||e.target!==target||e.currentTarget!==target||e.view!==window||"
+        "e.pointerId!==1||e.pointerType!=='mouse'||!e.isPrimary||e.button!==0||e.buttons!==0||"
+        "e.pressure!==0||e.width!==1||e.height!==1||e.detail!==2||e.clientX!==12.25||e.clientY!==34.5||"
+        "e.screenX!==56.75||e.screenY!==78.5||!e.shiftKey||!e.ctrlKey||e.altKey||e.metaKey)throw Error('payload');"
+        "queueMicrotask(()=>{seen.push('microtask');e.preventDefault();});});"
+        "document.addEventListener('click',e=>{seen.push('bubble');if(!e.defaultPrevented)throw Error('checkpoint');});",
+        "native-click.js"));
+    struct js_mouse_event mouse = {.client_x = 12.25,
+        .client_y = 34.5,
+        .screen_x = 56.75,
+        .screen_y = 78.5,
+        .detail = 2,
+        .shift = true,
+        .ctrl = true};
+    ck_assert(!native_input("click", &mouse));
+    assert_predicate(dom_thread,
+        "seen.join()==='window,document,target,microtask,bubble'&&saved.currentTarget===null&&"
+        "saved.composedPath().length===0&&saved.target===target&&saved.defaultPrevented",
+        "native path and cleanup");
+}
+END_TEST
+
+START_TEST(test_quickjs_native_click_defaults)
+{
+    ck_assert(exec_script(dom_thread,
+        "var seen=[];document.getElementById('target').addEventListener('click',e=>{"
+        "seen.push(e instanceof PointerEvent&&e.pointerId===-1&&e.pointerType===''&&!e.isPrimary&&"
+        "e.detail===0&&e.clientX===0&&e.screenY===0&&e.isTrusted);});"
+        "for(let type of ['input','change'])document.addEventListener(type,e=>{"
+        "seen.push(e.constructor===Event&&e.isTrusted&&!e.cancelable&&e.bubbles&&e.composed===(type==='input'));"
+        "e.preventDefault();});",
+        "native-defaults.js"));
+    ck_assert(native_input("click", NULL));
+    ck_assert(native_input("input", NULL));
+    ck_assert(native_input("change", NULL));
+    assert_predicate(dom_thread, "seen.length===3&&seen.every(Boolean)", "native interface defaults");
+}
+END_TEST
+
+START_TEST(test_quickjs_native_click_mutation)
+{
+    ck_assert(exec_script(dom_thread,
+        "var target=document.getElementById('target'), seen=[];"
+        "target.addEventListener('click',e=>{target.parentNode.removeChild(target);"
+        "target.id='detached';seen.push('removed');target.dispatchEvent(new Event('nested'));});"
+        "target.addEventListener('nested',()=>seen.push('nested'));"
+        "document.addEventListener('click',e=>{seen.push('bubble');if(e.target!==target)throw Error('identity');});",
+        "native-mutation.js"));
+    ck_assert(native_input("click", NULL));
+    assert_predicate(dom_thread, "seen.join()==='removed,nested,bubble'&&!target.isConnected", "native frozen path");
+}
+END_TEST
+
+START_TEST(test_quickjs_native_click_exception)
+{
+    ck_assert(exec_script(dom_thread,
+        "var seen=0,t=document.getElementById('target');t.addEventListener('click',()=>{throw Error('ordinary');});"
+        "t.addEventListener('click',()=>seen++);",
+        "native-exception.js"));
+    ck_assert(native_input("click", NULL));
+    assert_predicate(dom_thread, "seen===1", "native exception continues propagation");
+}
+END_TEST
+
+START_TEST(test_quickjs_native_click_retirement)
+{
+    JSValue global = JS_GetGlobalObject(dom_thread->ctx);
+    JS_SetPropertyStr(dom_thread->ctx, global, "retireEvents",
+        JS_NewCFunction(dom_thread->ctx, close_from_listener, "retireEvents", 0));
+    JS_FreeValue(dom_thread->ctx, global);
+    ck_assert(exec_script(dom_thread,
+        "var saved;document.getElementById('target').addEventListener('click',e=>{saved=e;retireEvents();e.preventDefault();});"
+        "document.addEventListener('click',()=>{throw Error('retired listener ran');});",
+        "native-retire.js"));
+    ck_assert(!native_input("click", NULL));
+    ck_assert_uint_eq(dom_heap->execution_depth, 0);
+    ck_assert_uint_eq(dom_heap->native_dispatch_depth, 0);
+    JS_RunGC(dom_heap->rt);
+}
+END_TEST
+
+START_TEST(test_quickjs_native_click_timeout)
+{
+    ck_assert(exec_script(dom_thread,
+        "var t=document.getElementById('target');t.addEventListener('click',()=>{while(true){}},{once:true});",
+        "native-timeout.js"));
+    ck_assert(!native_input("click", NULL));
+    ck_assert_uint_eq(dom_heap->execution_depth, 0);
+    ck_assert_uint_eq(dom_heap->native_dispatch_depth, 0);
+    ck_assert(native_input("click", NULL));
+    assert_predicate(dom_thread, "1+1===2", "native timeout recovery");
+}
+END_TEST
+
+START_TEST(test_quickjs_native_click_allocation_failure)
+{
+    ck_assert(
+        exec_script(dom_thread, "var calls=0;document.addEventListener('click',()=>calls++);", "native-allocation.js"));
+    bool failed = false, succeeded = false;
+    for (size_t extra = 0; extra <= 32768; extra += 128) {
+        JS_RunGC(dom_heap->rt);
+        JSMemoryUsage usage;
+        JS_ComputeMemoryUsage(dom_heap->rt, &usage);
+        JS_SetMemoryLimit(dom_heap->rt, usage.malloc_size + extra);
+        bool result = native_input("click", NULL);
+        JS_SetMemoryLimit(dom_heap->rt, 0);
+        ck_assert_uint_eq(dom_heap->execution_depth, 0);
+        ck_assert_uint_eq(dom_heap->native_dispatch_depth, 0);
+        failed |= !result;
+        if (result) {
+            succeeded = true;
+            break;
+        }
+    }
+    ck_assert(failed && succeeded);
+    ck_assert(native_input("click", NULL));
+    assert_predicate(dom_thread, "calls>=2", "native dispatch allocation recovery");
+}
+END_TEST
+
+START_TEST(test_quickjs_native_click_shared_budget)
+{
+    ck_assert(exec_script(dom_thread,
+        "var elapsed=0, done=false, t=document.getElementById('target');"
+        "t.addEventListener('click',()=>{let start=Date.now();while(Date.now()-start<600){}},{once:true});"
+        "t.addEventListener('click',()=>{let start=Date.now();while(Date.now()-start<600){};done=true;},{once:true});",
+        "native-shared-budget.js"));
+    ck_assert(!native_input("click", NULL));
+    assert_predicate(dom_thread, "!done", "listeners share the native dispatch deadline");
+    ck_assert(native_input("click", NULL));
+}
+END_TEST
+
+START_TEST(test_quickjs_pointer_event)
+{
+    assert_predicate(dom_thread,
+        "(()=>{const e=new PointerEvent('click',{pointerId:17,pointerType:'pen',isPrimary:true,width:3,height:4,"
+        "pressure:.25,tangentialPressure:.5,tiltX:-10,tiltY:20,twist:40,clientX:1.5,ctrlKey:true});"
+        "return e instanceof MouseEvent&&e instanceof UIEvent&&e instanceof Event&&!e.isTrusted&&"
+        "e.pointerId===17&&e.pointerType==='pen'&&e.isPrimary&&e.width===3&&e.height===4&&e.pressure===.25&&"
+        "e.tangentialPressure===.5&&e.tiltX===-10&&e.tiltY===20&&e.twist===40&&e.clientX===1.5&&e.ctrlKey;})()",
+        "PointerEvent constructor and inheritance");
+    assert_predicate(dom_thread,
+        "(()=>{let e=new PointerEvent('x');return e.pointerId===0&&e.pointerType===''&&!e.isPrimary&&"
+        "e.width===1&&e.height===1&&e.pressure===0;})()",
+        "PointerEvent defaults");
+}
+END_TEST
+
 START_TEST(test_quickjs_submit_event_values)
 {
     ck_assert(exec_script(dom_thread,
@@ -2803,10 +2975,10 @@ END_TEST
 
 /* Every constructor must check retirement after both IDL conversion and the
  * new-target prototype lookup, including base Event and CustomEvent. */
-enum { EVENT_CONVERSION_STAGES = 3, EVENT_CONSTRUCTOR_KINDS = 5 };
+enum { EVENT_CONVERSION_STAGES = 3, EVENT_CONSTRUCTOR_KINDS = 6 };
 START_TEST(test_quickjs_event_constructor_retirement)
 {
-    static const char *names[] = {"Event", "CustomEvent", "UIEvent", "MouseEvent", "SubmitEvent"};
+    static const char *names[] = {"Event", "CustomEvent", "UIEvent", "MouseEvent", "SubmitEvent", "PointerEvent"};
     static const char *calls[] = {
         "new C({toString(){retireEvents();return 'x';}})",
         "new C('x',{get bubbles(){retireEvents();return true;}})",
@@ -3066,10 +3238,10 @@ START_TEST(test_quickjs_event_allocation_failure)
         "function makeTarget(){let root=document.createDocumentFragment(), t=document.createElement('i');"
         "root.appendChild(t);return t;}"};
     ck_assert(exec_script(dom_thread, setup[_i % 2], "event target allocation setup"));
-    const char *constructors[] = {
-        "function makeEvent(t){return new CustomEvent('x',{detail:t});}",
+    const char *constructors[] = {"function makeEvent(t){return new CustomEvent('x',{detail:t});}",
         "function makeEvent(t){return new MouseEvent('x',{relatedTarget:t,view:window,clientX:1.25});}",
-        "function makeEvent(t){return new SubmitEvent('x',{submitter:document.getElementById('target')});}"};
+        "function makeEvent(t){return new SubmitEvent('x',{submitter:document.getElementById('target')});}",
+        "function makeEvent(t){return new PointerEvent('x',{pointerType:'pen',relatedTarget:t});}"};
     ck_assert(exec_script(dom_thread, constructors[_i / 2],
         "event allocation constructor"));
     ck_assert(exec_script(dom_thread,
@@ -3505,7 +3677,7 @@ Suite *quickjs_suite(void)
     tcase_add_test(tc_dom, test_quickjs_event_gc);
     tcase_add_test(tc_dom, test_quickjs_event_retirement);
     tcase_add_loop_test(tc_dom, test_quickjs_event_conversion_retirement, 0, 2);
-    tcase_add_loop_test(tc_dom, test_quickjs_event_allocation_failure, 0, 6);
+    tcase_add_loop_test(tc_dom, test_quickjs_event_allocation_failure, 0, 8);
     tcase_add_test(tc_dom, test_quickjs_event_foreign_retirement);
     tcase_add_test(tc_dom, test_quickjs_node_event_path);
     tcase_add_test(tc_dom, test_quickjs_node_event_frozen_path);
@@ -3525,6 +3697,15 @@ Suite *quickjs_suite(void)
     tcase_add_test(tc_dom, test_quickjs_input_event_gc);
     tcase_add_test(tc_dom, test_quickjs_input_event_retirement);
     tcase_add_test(tc_dom, test_quickjs_input_event_conversion_retirement);
+    tcase_add_test(tc_dom, test_quickjs_native_click);
+    tcase_add_test(tc_dom, test_quickjs_native_click_defaults);
+    tcase_add_test(tc_dom, test_quickjs_native_click_mutation);
+    tcase_add_test(tc_dom, test_quickjs_native_click_exception);
+    tcase_add_test(tc_dom, test_quickjs_native_click_retirement);
+    tcase_add_test(tc_dom, test_quickjs_native_click_timeout);
+    tcase_add_test(tc_dom, test_quickjs_pointer_event);
+    tcase_add_test(tc_dom, test_quickjs_native_click_allocation_failure);
+    tcase_add_test(tc_dom, test_quickjs_native_click_shared_budget);
     tcase_add_test(tc_dom, test_quickjs_submit_event_values);
     tcase_add_test(tc_dom, test_quickjs_submit_event_brands);
     tcase_add_test(tc_dom, test_quickjs_submit_event_conversion);

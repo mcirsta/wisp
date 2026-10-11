@@ -386,8 +386,17 @@ static bool same_radio_group(dom_node *input, dom_node *previous)
     return same;
 }
 
-static bool input_click(dom_node *input, dom_node *clicked, html_checkable_changed_cb changed, void *pw)
+static bool click_dispatch(const struct html_form_click_context *context, dom_node *target, dom_string *type)
 {
+    if (context != NULL && context->dispatch != NULL)
+        return context->dispatch(target, type, context->pw);
+    return fire_generic_dom_event(type, target, true, dom_string_isequal(type, corestring_dom_click));
+}
+
+static bool input_click(dom_node *input, dom_node *clicked, const struct html_form_click_context *context)
+{
+    html_checkable_changed_cb changed = context != NULL ? context->changed : NULL;
+    void *pw = context != NULL ? context->pw : NULL;
     bool was_checked, was_indeterminate;
     if (!checkable(input) || html_form_control_disabled(input) ||
         dom_html_input_element_get_checked((dom_html_input_element *)input, &was_checked) != DOM_NO_ERR ||
@@ -403,7 +412,7 @@ static bool input_click(dom_node *input, dom_node *clicked, html_checkable_chang
             previous = dom_node_ref(input);
         select_radio(input, &previous, changed, pw);
     }
-    bool accepted = fire_generic_dom_event(corestring_dom_click, clicked, true, true);
+    bool accepted = click_dispatch(context, clicked, corestring_dom_click);
     /* Re-read the type and group: listeners can edit, detach or move controls. */
     if (!accepted) {
         if (input_type(input, corestring_lwc_checkbox)) {
@@ -430,8 +439,8 @@ static bool input_click(dom_node *input, dom_node *clicked, html_checkable_chang
         bool connected = dom_node_get_node_type(root, &type) == DOM_NO_ERR && type == DOM_DOCUMENT_NODE;
         dom_node_unref(root);
         if (connected) {
-            fire_generic_dom_event(corestring_dom_input, input, true, false);
-            fire_generic_dom_event(corestring_dom_change, input, true, false);
+            click_dispatch(context, input, corestring_dom_input);
+            click_dispatch(context, input, corestring_dom_change);
         }
     }
     dom_node_unref(previous);
@@ -457,7 +466,7 @@ static bool label_ignores_click(dom_node *label, dom_node *clicked)
     return ignore;
 }
 
-struct html_form_click_result html_form_click(dom_node *clicked, html_checkable_changed_cb changed, void *pw)
+struct html_form_click_result html_form_click(dom_node *clicked, const struct html_form_click_context *context)
 {
     struct html_form_click_result result = {0};
     if (clicked == NULL)
@@ -466,15 +475,15 @@ struct html_form_click_result html_form_click(dom_node *clicked, html_checkable_
     dom_node *activation = checkable_activation_target(clicked);
     result.handled = activation != NULL;
     if (activation != NULL && checkable(activation)) {
-        result.accepted = input_click(activation, clicked, changed, pw);
+        result.accepted = input_click(activation, clicked, context);
     } else {
-        result.accepted = fire_generic_dom_event(corestring_dom_click, clicked, true, true);
+        result.accepted = click_dispatch(context, clicked, corestring_dom_click);
         if (result.accepted && activation != NULL && !label_ignores_click(activation, clicked)) {
             dom_node *control = label_control(activation);
             if (control != NULL) {
                 /* Canceling this forwarded click rolls back the input only;
                  * it does not cancel the already dispatched label click. */
-                input_click(control, control, changed, pw);
+                input_click(control, control, context);
                 dom_node_unref(control);
             }
         }

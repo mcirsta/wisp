@@ -1983,8 +1983,10 @@ static void browser_window_mouse_drag_end(struct browser_window *bw, browser_mou
  * \param x The scaled x co-ordinate of the event
  * \param y The scaled y co-ordinate of the event
  */
-static void browser_window_mouse_click_internal(struct browser_window *bw, browser_mouse_state mouse, int x, int y)
+static void browser_window_mouse_click_internal(struct browser_window *bw, const struct browser_mouse_event *event)
 {
+    browser_mouse_state mouse = event->state;
+    int x = event->x, y = event->y;
     hlcache_handle *c = bw->current_content;
     const char *status = NULL;
     browser_pointer_shape pointer = BROWSER_POINTER_DEFAULT;
@@ -2006,8 +2008,10 @@ static void browser_window_mouse_click_internal(struct browser_window *bw, brows
 
             /* It's this child that contains the click; pass it
              * on to child. */
-            browser_window_mouse_click_internal(child, mouse, x - child->x + scrollbar_get_offset(child->scroll_x),
-                y - child->y + scrollbar_get_offset(child->scroll_y));
+            struct browser_mouse_event nested = *event;
+            nested.x -= child->x - scrollbar_get_offset(child->scroll_x);
+            nested.y -= child->y - scrollbar_get_offset(child->scroll_y);
+            browser_window_mouse_click_internal(child, &nested);
 
             /* Mouse action was for this child, we're done */
             return;
@@ -2068,7 +2072,7 @@ static void browser_window_mouse_click_internal(struct browser_window *bw, brows
         }
 
         /* Pass mouse action to content */
-        content_mouse_action(c, bw, mouse, x, y);
+        content_mouse_action(c, bw, event);
     } break;
     default:
         if (mouse & BROWSER_MOUSE_MOD_2) {
@@ -4242,7 +4246,17 @@ void browser_window_mouse_track(struct browser_window *bw, browser_mouse_state m
 /* exported interface documented in neosurf/browser_window.h */
 void browser_window_mouse_click(struct browser_window *bw, browser_mouse_state mouse, int x, int y)
 {
-    browser_window_mouse_click_internal(bw, mouse, x / bw->scale, y / bw->scale);
+    struct browser_mouse_event event = {
+        .state = mouse, .x = x, .y = y, .detail = (mouse & BROWSER_MOUSE_DOUBLE_CLICK) ? 2 : 1};
+    browser_window_mouse_click_event(bw, &event);
+}
+
+void browser_window_mouse_click_event(struct browser_window *bw, const struct browser_mouse_event *event)
+{
+    struct browser_mouse_event local = *event;
+    local.x /= bw->scale;
+    local.y /= bw->scale;
+    browser_window_mouse_click_internal(bw, &local);
 }
 
 

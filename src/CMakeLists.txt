@@ -82,8 +82,18 @@ endif()
 # QuickJS-ng bindings
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/quickjs_bindings.cmake)
 
+add_custom_command(
+    OUTPUT ${CMAKE_BINARY_DIR}/encoding/tables.inc
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/utils/encoding/generate.py
+        ${CMAKE_SOURCE_DIR}/utils/encoding/encodings.json ${CMAKE_BINARY_DIR}/encoding/tables.inc
+    DEPENDS ${CMAKE_SOURCE_DIR}/utils/encoding/generate.py ${CMAKE_SOURCE_DIR}/utils/encoding/encodings.json
+        ${CMAKE_SOURCE_DIR}/utils/encoding/index-x-mac-cyrillic.txt
+    COMMENT "Generating Encoding Standard lookup tables"
+    VERBATIM
+)
 
 add_library(wisp ${WISP_LIB_TYPE}
+	${CMAKE_BINARY_DIR}/encoding/tables.inc
 	content/content.c
 	content/content_factory.c
 	content/fetch.c
@@ -225,6 +235,7 @@ add_library(wisp ${WISP_LIB_TYPE}
 	desktop/bitmap.c
 	utils/bloom.c
 	utils/corestrings.c
+	utils/encoding.c
 	utils/file.c
 	utils/filepath.c
 	utils/hashmap.c

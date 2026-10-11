@@ -789,3 +789,11 @@ dom_default_action_callback html_dom_event_fetcher(dom_string *type, dom_default
     }
     return NULL;
 }
+
+bool html_dispatch_input_event(
+    html_content *html, dom_node *target, dom_string *type, const struct js_mouse_event *mouse)
+{
+    if (html->enable_scripting && html->jsthread != NULL)
+        return js_fire_input_event(html->jsthread, type, target, mouse);
+    return fire_generic_dom_event(type, target, true, dom_string_isequal(type, corestring_dom_click));
+}

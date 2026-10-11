@@ -668,8 +668,10 @@ static size_t textplain_offset_from_coords(struct content *c, int x, int y, int 
  * \param y	  coordinate of mouse
  */
 static nserror
-textplain_mouse_action(struct content *c, struct browser_window *bw, browser_mouse_state mouse, int x, int y)
+textplain_mouse_action(struct content *c, struct browser_window *bw, const struct browser_mouse_event *event)
 {
+    browser_mouse_state mouse = event->state;
+    int x = event->x, y = event->y;
     textplain_content *text = (textplain_content *)c;
     browser_pointer_shape pointer = BROWSER_POINTER_DEFAULT;
     union content_msg_data msg_data;
@@ -745,7 +747,7 @@ textplain_mouse_track(struct content *c, struct browser_window *bw, browser_mous
     } break;
 
     default:
-        textplain_mouse_action(c, bw, mouse, x, y);
+        textplain_mouse_action(c, bw, &(struct browser_mouse_event){.state = mouse, .x = x, .y = y});
         break;
     }
 

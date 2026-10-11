@@ -317,9 +317,7 @@ void content_mouse_track(struct hlcache_handle *h, struct browser_window *bw, br
  *
  * \param  h	  Content handle
  * \param  bw	  browser window
- * \param  mouse  state of mouse buttons and modifier keys
- * \param  x	  coordinate of mouse
- * \param  y	  coordinate of mouse
+ * \param event mouse state and coordinates; x/y are document CSS pixels
  *
  * This function handles both hovering and clicking. It is important that the
  * code path is identical (except that hovering doesn't carry out the action),
@@ -327,7 +325,7 @@ void content_mouse_track(struct hlcache_handle *h, struct browser_window *bw, br
  * code paths opens the possibility that an attacker will make the status bar
  * show some harmless action where clicking will be harmful.
  */
-void content_mouse_action(struct hlcache_handle *h, struct browser_window *bw, browser_mouse_state mouse, int x, int y);
+void content_mouse_action(struct hlcache_handle *h, struct browser_window *bw, const struct browser_mouse_event *event);
 
 /**
  * Handle keypresses.

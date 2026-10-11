@@ -10,6 +10,11 @@
 
 static dom_document *document;
 
+static struct html_form_click_result test_click(dom_node *node, html_checkable_changed_cb changed, void *pw)
+{
+    return html_form_click(node, &(struct html_form_click_context){.changed = changed, .pw = pw});
+}
+
 static dom_string *string(const char *value)
 {
     dom_string *s;
@@ -47,7 +52,7 @@ static bool activate(const char *id)
 {
     dom_node *clicked = node(id);
     bool changed = false;
-    html_form_click(clicked, note_change, &changed);
+    test_click(clicked, note_change, &changed);
     dom_node_unref(clicked);
     return changed;
 }
@@ -198,7 +203,7 @@ START_TEST(test_changed_peers)
           "<input id=box type=checkbox><input id=disabled type=checkbox disabled>");
     struct change_log log = {0};
     dom_node *outside = node("outside"), *inside = node("inside"), *box = node("box");
-    ck_assert(html_form_click(outside, record_change, &log).accepted);
+    ck_assert(test_click(outside, record_change, &log).accepted);
     ck_assert_int_eq(log.count, 2);
     expect_change(&log, 0, "inside", false);
     expect_change(&log, 1, "outside", true);
@@ -210,19 +215,19 @@ START_TEST(test_changed_peers)
     checked("idle", false); /* Group activation established live state, separate from the default. */
     dom_node_unref(idle);
     clear_changes(&log);
-    ck_assert(html_form_click(outside, record_change, &log).accepted);
+    ck_assert(test_click(outside, record_change, &log).accepted);
     ck_assert_int_eq(log.count, 0);
-    ck_assert(html_form_click(inside, record_change, &log).accepted);
+    ck_assert(test_click(inside, record_change, &log).accepted);
     ck_assert_int_eq(log.count, 2);
     expect_change(&log, 0, "outside", false);
     expect_change(&log, 1, "inside", true);
     clear_changes(&log);
-    ck_assert(html_form_click(box, record_change, &log).accepted);
+    ck_assert(test_click(box, record_change, &log).accepted);
     ck_assert_int_eq(log.count, 1);
     expect_change(&log, 0, "box", true);
     clear_changes(&log);
     dom_node *disabled = node("disabled");
-    ck_assert(!html_form_click(disabled, record_change, &log).accepted);
+    ck_assert(!test_click(disabled, record_change, &log).accepted);
     ck_assert_int_eq(log.count, 0);
     dom_node_unref(disabled);
     dom_node_unref(box);
@@ -237,7 +242,7 @@ START_TEST(test_multiple_checked_peers)
           "<div><input id=b type=radio name=t checked></div><input id=c type=radio name=t>");
     struct change_log log = {0};
     dom_node *target = node("c");
-    ck_assert(html_form_click(target, record_change, &log).accepted);
+    ck_assert(test_click(target, record_change, &log).accepted);
     ck_assert_int_eq(log.count, 3);
     expect_change(&log, 0, "a", false);
     expect_change(&log, 1, "b", false);
@@ -302,7 +307,7 @@ static bool click_with_probe(struct click_test *test, struct change_log *changes
     dom_string *types[] = {corestring_dom_click, corestring_dom_input, corestring_dom_change};
     for (unsigned i = 0; i < 3; i++)
         ck_assert_int_eq(dom_event_target_add_event_listener(test->input, types[i], listener, false), DOM_NO_ERR);
-    bool accepted = html_form_click(test->input, changes != NULL ? record_change : NULL, changes).accepted;
+    bool accepted = test_click(test->input, changes != NULL ? record_change : NULL, changes).accepted;
     for (unsigned i = 0; i < 3; i++)
         ck_assert_int_eq(dom_event_target_remove_event_listener(test->input, types[i], listener, false), DOM_NO_ERR);
     dom_event_listener_unref(listener);
@@ -347,7 +352,7 @@ END_TEST
 static void nested_checkbox_click(struct click_test *test)
 {
     if (test->clicks == 1) {
-        ck_assert(html_form_click(test->input, NULL, NULL).accepted == false);
+        ck_assert(test_click(test->input, NULL, NULL).accepted == false);
         /* Inner canceled click restores the outer provisional checked state. */
         bool checked;
         dom_html_input_element_get_checked((dom_html_input_element *)test->input, &checked);
@@ -441,7 +446,7 @@ static void rename_input(struct click_test *test)
 }
 static void select_third(struct click_test *test)
 {
-    ck_assert(html_form_click(test->third, NULL, NULL).accepted);
+    ck_assert(test_click(test->third, NULL, NULL).accepted);
 }
 
 static void detach(dom_node *node)
@@ -660,7 +665,7 @@ START_TEST(test_plain_click_cancellation)
     dom_event_listener *listener;
     ck_assert_int_eq(dom_event_listener_create(label_click_listener, &probe, &listener), DOM_NO_ERR);
     dom_event_target_add_event_listener(probe.hit, corestring_dom_click, listener, false);
-    struct html_form_click_result result = html_form_click(probe.hit, NULL, NULL);
+    struct html_form_click_result result = test_click(probe.hit, NULL, NULL);
     ck_assert(!result.handled);
     ck_assert(result.accepted == !probe.cancel);
     ck_assert_uint_eq(probe.calls, 1);
@@ -716,7 +721,7 @@ START_TEST(test_label_callback_activation)
             ck_assert_int_eq(dom_event_target_add_event_listener(controls[i].input, types[j], listeners[i], false),
                 DOM_NO_ERR);
     }
-    struct html_form_click_result result = html_form_click(probe.hit, NULL, NULL);
+    struct html_form_click_result result = test_click(probe.hit, NULL, NULL);
     ck_assert_msg(result.handled && result.accepted == !probe.cancel,
         "%s: wrong original click result", label_cases[_i].name);
     ck_assert_uint_eq(probe.calls, 1);
@@ -788,7 +793,7 @@ START_TEST(test_detached_label_duplicate_ids)
     if (_i != 0)
         set_attribute(first, "id", "a");
     bool changed = false;
-    struct html_form_click_result result = html_form_click(hit, note_change, &changed);
+    struct html_form_click_result result = test_click(hit, note_change, &changed);
     ck_assert(result.accepted && result.handled);
     ck_assert_msg(changed == (_i == 0), "Only the first matching ID in the label's tree may be used");
     checked("a", false);

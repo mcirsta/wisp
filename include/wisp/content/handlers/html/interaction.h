@@ -66,12 +66,10 @@ nserror html_mouse_track(struct content *c, struct browser_window *bw, browser_m
  *
  * \param c content of type html
  * \param bw browser window
- * \param mouse state of mouse buttons and modifier keys
- * \param x x coordinate of mouse
- * \param y y coordinate of mouse
+ * \param event mouse state and coordinates; x/y are document CSS pixels
  * \return NSERROR_OK or appropriate error code.
  */
-nserror html_mouse_action(struct content *c, struct browser_window *bw, browser_mouse_state mouse, int x, int y);
+nserror html_mouse_action(struct content *c, struct browser_window *bw, const struct browser_mouse_event *event);
 
 
 bool html_keypress(struct content *c, uint32_t key);

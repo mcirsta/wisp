@@ -400,13 +400,13 @@ void content_mouse_track(hlcache_handle *h, struct browser_window *bw, browser_m
 
 
 /* exported interface documented in content/content.h */
-void content_mouse_action(hlcache_handle *h, struct browser_window *bw, browser_mouse_state mouse, int x, int y)
+void content_mouse_action(hlcache_handle *h, struct browser_window *bw, const struct browser_mouse_event *event)
 {
     struct content *c = hlcache_handle_get_content(h);
     assert(c != NULL);
 
     if (c->handler->mouse_action != NULL)
-        c->handler->mouse_action(c, bw, mouse, x, y);
+        c->handler->mouse_action(c, bw, event);
 
     return;
 }

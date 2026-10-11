@@ -19,7 +19,9 @@
 #define HTML_DOCUMENT_STRINGS_ACTION(tag, str) hds_##tag,
 #endif
 
-#define HTML_DOCUMENT_STRINGS_ACTION1(x) HTML_DOCUMENT_STRINGS_ACTION(x, x)
+/* Explicit spellings are string literals: stringifying punctuation tokens
+ * would make whitespace inserted by a formatter part of the DOM name. */
+#define HTML_DOCUMENT_STRINGS_ACTION1(x) HTML_DOCUMENT_STRINGS_ACTION(x, #x)
 
 #ifdef HTML_DOCUMENT_STRINGS_PREFIX
 HTML_DOCUMENT_STRINGS_PREFIX
@@ -50,24 +52,24 @@ HTML_DOCUMENT_STRINGS_ACTION1(target)
 HTML_DOCUMENT_STRINGS_ACTION1(type)
 /* Useful attributes used by HTMLMetaElement */
 HTML_DOCUMENT_STRINGS_ACTION1(content)
-HTML_DOCUMENT_STRINGS_ACTION(http_equiv, http - equiv)
+HTML_DOCUMENT_STRINGS_ACTION(http_equiv, "http-equiv")
 HTML_DOCUMENT_STRINGS_ACTION1(name)
 HTML_DOCUMENT_STRINGS_ACTION1(scheme)
 /* HTMLBodyElement attributes */
-HTML_DOCUMENT_STRINGS_ACTION(a_link, alink)
-HTML_DOCUMENT_STRINGS_ACTION(v_link, vlink)
-HTML_DOCUMENT_STRINGS_ACTION(bg_color, bgcolor)
+HTML_DOCUMENT_STRINGS_ACTION(a_link, "alink")
+HTML_DOCUMENT_STRINGS_ACTION(v_link, "vlink")
+HTML_DOCUMENT_STRINGS_ACTION(bg_color, "bgcolor")
 HTML_DOCUMENT_STRINGS_ACTION1(background)
 HTML_DOCUMENT_STRINGS_ACTION1(link)
 HTML_DOCUMENT_STRINGS_ACTION1(text)
 /* Useful attributes used by HTMLFormElement */
-HTML_DOCUMENT_STRINGS_ACTION(accept_charset, accept - charset)
+HTML_DOCUMENT_STRINGS_ACTION(accept_charset, "accept-charset")
 HTML_DOCUMENT_STRINGS_ACTION1(action)
 HTML_DOCUMENT_STRINGS_ACTION1(enctype)
 HTML_DOCUMENT_STRINGS_ACTION1(method)
 /* HTML_DOCUMENT_STRINGS_ACTION1(target) */
 /* Useful attributes used by HTMLButtonElement */
-HTML_DOCUMENT_STRINGS_ACTION(access_key, accesskey)
+HTML_DOCUMENT_STRINGS_ACTION(access_key, "accesskey")
 /* Useful attributes used by HTMLBrElement */
 HTML_DOCUMENT_STRINGS_ACTION1(clear)
 /* HTML_DOCUMENT_STRINGS_ACTION1(name) */
@@ -75,15 +77,15 @@ HTML_DOCUMENT_STRINGS_ACTION1(clear)
 HTML_DOCUMENT_STRINGS_ACTION1(value)
 /* Useful attributes used by HTMLInputElement */
 HTML_DOCUMENT_STRINGS_ACTION1(accept)
-/* HTML_DOCUMENT_STRINGS_ACTION(access_key,accesskey) */
+/* HTML_DOCUMENT_STRINGS_ACTION(access_key, "accesskey") */
 HTML_DOCUMENT_STRINGS_ACTION1(align)
 HTML_DOCUMENT_STRINGS_ACTION1(alt)
 HTML_DOCUMENT_STRINGS_ACTION1(checked)
 HTML_DOCUMENT_STRINGS_ACTION1(disabled)
 HTML_DOCUMENT_STRINGS_ACTION1(image)
-HTML_DOCUMENT_STRINGS_ACTION(max_length, maxlength)
+HTML_DOCUMENT_STRINGS_ACTION(max_length, "maxlength")
 /* HTML_DOCUMENT_STRINGS_ACTION1(name) */
-HTML_DOCUMENT_STRINGS_ACTION(read_only, readonly)
+HTML_DOCUMENT_STRINGS_ACTION(read_only, "readonly")
 HTML_DOCUMENT_STRINGS_ACTION1(size)
 HTML_DOCUMENT_STRINGS_ACTION1(src)
 HTML_DOCUMENT_STRINGS_ACTION1(width)
@@ -113,23 +115,23 @@ HTML_DOCUMENT_STRINGS_ACTION1(prompt)
 HTML_DOCUMENT_STRINGS_ACTION1(rows)
 HTML_DOCUMENT_STRINGS_ACTION1(cols)
 HTML_DOCUMENT_STRINGS_ACTION1(scrolling)
-HTML_DOCUMENT_STRINGS_ACTION(tab_index, tabindex)
-HTML_DOCUMENT_STRINGS_ACTION(html_for,for)
-HTML_DOCUMENT_STRINGS_ACTION(date_time, datetime)
-HTML_DOCUMENT_STRINGS_ACTION(long_desc, longdesc)
-HTML_DOCUMENT_STRINGS_ACTION(code_base, codebase)
-HTML_DOCUMENT_STRINGS_ACTION(code_type, codetype)
-HTML_DOCUMENT_STRINGS_ACTION(value_type, valuetype)
-HTML_DOCUMENT_STRINGS_ACTION(v_align, valign)
-HTML_DOCUMENT_STRINGS_ACTION(ch, char)
-HTML_DOCUMENT_STRINGS_ACTION(ch_off, charoff)
-HTML_DOCUMENT_STRINGS_ACTION(cell_padding, cellpadding)
-HTML_DOCUMENT_STRINGS_ACTION(cell_spacing, cellspacing)
-HTML_DOCUMENT_STRINGS_ACTION(frame_border, frameborder)
-HTML_DOCUMENT_STRINGS_ACTION(margin_height, marginheight)
-HTML_DOCUMENT_STRINGS_ACTION(margin_width, marginwidth)
+HTML_DOCUMENT_STRINGS_ACTION(tab_index, "tabindex")
+HTML_DOCUMENT_STRINGS_ACTION(html_for, "for")
+HTML_DOCUMENT_STRINGS_ACTION(date_time, "datetime")
+HTML_DOCUMENT_STRINGS_ACTION(long_desc, "longdesc")
+HTML_DOCUMENT_STRINGS_ACTION(code_base, "codebase")
+HTML_DOCUMENT_STRINGS_ACTION(code_type, "codetype")
+HTML_DOCUMENT_STRINGS_ACTION(value_type, "valuetype")
+HTML_DOCUMENT_STRINGS_ACTION(v_align, "valign")
+HTML_DOCUMENT_STRINGS_ACTION(ch, "char")
+HTML_DOCUMENT_STRINGS_ACTION(ch_off, "charoff")
+HTML_DOCUMENT_STRINGS_ACTION(cell_padding, "cellpadding")
+HTML_DOCUMENT_STRINGS_ACTION(cell_spacing, "cellspacing")
+HTML_DOCUMENT_STRINGS_ACTION(frame_border, "frameborder")
+HTML_DOCUMENT_STRINGS_ACTION(margin_height, "marginheight")
+HTML_DOCUMENT_STRINGS_ACTION(margin_width, "marginwidth")
 /* HTML_DOCUMENT_STRINGS_ACTION1(type) */
-HTML_DOCUMENT_STRINGS_ACTION(use_map, usemap)
+HTML_DOCUMENT_STRINGS_ACTION(use_map, "usemap")
 /* HTML_DOCUMENT_STRINGS_ACTION1(value) */
 /* HTMLTextAreaElement type */
 HTML_DOCUMENT_STRINGS_ACTION1(textarea)
@@ -140,8 +142,8 @@ HTML_DOCUMENT_STRINGS_ACTION1(label)
 HTML_DOCUMENT_STRINGS_ACTION1(selected)
 /* HTML_DOCUMENT_STRINGS_ACTION1(value) */
 /* HTMLSelectElement strings */
-HTML_DOCUMENT_STRINGS_ACTION(select_multiple, select - multiple)
-HTML_DOCUMENT_STRINGS_ACTION(select_one, select - one)
+HTML_DOCUMENT_STRINGS_ACTION(select_multiple, "select-multiple")
+HTML_DOCUMENT_STRINGS_ACTION(select_one, "select-one")
 /* Some event strings for later */
 HTML_DOCUMENT_STRINGS_ACTION1(blur)
 HTML_DOCUMENT_STRINGS_ACTION1(focus)

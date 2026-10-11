@@ -212,6 +212,7 @@ void NS_Widget::paintEvent(QPaintEvent *event)
 
 void NS_Widget::mousePressEvent(QMouseEvent *event)
 {
+    m_click_detail = 1;
     if (m_bw == nullptr) {
         return;
     }
@@ -248,6 +249,12 @@ void NS_Widget::mousePressEvent(QMouseEvent *event)
     browser_window_mouse_click(m_bw, (browser_mouse_state)bms, pos.x() + m_xoffset, pos.y() + m_yoffset);
 }
 
+
+void NS_Widget::mouseDoubleClickEvent(QMouseEvent *event)
+{
+    mousePressEvent(event);
+    m_click_detail = 2;
+}
 
 void NS_Widget::mouseMoveEvent(QMouseEvent *event)
 {
@@ -343,7 +350,17 @@ void NS_Widget::mouseReleaseEvent(QMouseEvent *event)
     /* keyboard modifiers */
     event_to_bms_modifiers(event, bms);
 
-    browser_window_mouse_click(m_bw, (browser_mouse_state)bms, pos.x() + m_xoffset, pos.y() + m_yoffset);
+    const QPointF screen = event->globalPosition();
+    struct browser_mouse_event input = {};
+    input.state = (browser_mouse_state)bms;
+    input.x = pos.x() + m_xoffset;
+    input.y = pos.y() + m_yoffset;
+    input.screen_x = screen.x();
+    input.screen_y = screen.y();
+    input.buttons = ((event->buttons() & Qt::LeftButton) ? 1 : 0) | ((event->buttons() & Qt::RightButton) ? 2 : 0) |
+        ((event->buttons() & Qt::MiddleButton) ? 4 : 0);
+    input.detail = m_click_detail;
+    browser_window_mouse_click_event(m_bw, &input);
 }
 
 

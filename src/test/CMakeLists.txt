@@ -543,6 +543,12 @@ target_include_directories(form_data_test PRIVATE ${TEST_COMMON_INCLUDES} ${CMAK
 target_link_libraries(form_data_test wisp ${CHECK_LIBRARIES})
 add_test(NAME form_data_test COMMAND form_data_test)
 
+add_executable(encoding_test encoding_test.c)
+target_include_directories(encoding_test PRIVATE ${TEST_COMMON_INCLUDES})
+target_compile_definitions(encoding_test PRIVATE WISP_ENCODING_DATA_DIR="${CMAKE_SOURCE_DIR}/utils/encoding")
+target_link_libraries(encoding_test wisp ${CHECK_LIBRARIES})
+add_test(NAME encoding_test COMMAND encoding_test)
+
 add_executable(interaction_lifetime_test interaction_lifetime_test.c)
 target_include_directories(interaction_lifetime_test PRIVATE ${TEST_COMMON_INCLUDES} ${CMAKE_SOURCE_DIR}/include)
 target_link_libraries(interaction_lifetime_test wisp ${CHECK_LIBRARIES})

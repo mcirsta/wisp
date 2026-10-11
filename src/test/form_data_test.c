@@ -39,6 +39,44 @@ static void expect_encoded(struct html_form_data *data, const char *encoding, co
     free(encoded);
 }
 
+START_TEST(test_submission_encoding)
+{
+    const struct {
+        const char *accept, *document, *expected;
+    } cases[] = {
+        {NULL, "iso-8859-1", "windows-1252"},
+        {NULL, "UTF-16BE", "UTF-8"},
+        {NULL, "replacement", "UTF-8"},
+        {NULL, NULL, "UTF-8"},
+        {NULL, "unknown", "UTF-8"},
+        {"", "windows-1252", "UTF-8"},
+        {" \t\r\n\f", "windows-1252", "UTF-8"},
+        {"\twindows-1251 UTF-8", "UTF-8", "windows-1251"},
+        {"not-utf-8 latin1", "UTF-8", "windows-1252"},
+        {"unknown cp1251", NULL, "windows-1251"},
+        {"windows-1251,utf-8 windows-1252", NULL, "windows-1252"},
+        {"unknown utf-7 utf-32", "windows-1252", "UTF-8"},
+        {"UTF-16 windows-1251", NULL, "UTF-8"},
+        {"iso-2022-kr windows-1251", NULL, "UTF-8"},
+        {"\vwindows-1252", NULL, "UTF-8"},
+        {"\xc2\xa0windows-1252", NULL, "UTF-8"},
+        {"ascii", NULL, "windows-1252"},
+        {"UTF8", "windows-1252", "UTF-8"},
+    };
+    for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
+        dom_string *accept = cases[i].accept == NULL ? NULL : string(cases[i].accept);
+        const char *actual = html_form_submission_encoding(accept, cases[i].document);
+        ck_assert_msg(strcmp(actual, cases[i].expected) == 0, "encoding case %zu: expected %s, got %s", i,
+            cases[i].expected, actual);
+        dom_string_unref(accept);
+    }
+    const char label[] = "utf-8\0suffix windows-1252";
+    dom_string *accept = bytes(label, sizeof(label) - 1);
+    ck_assert_str_eq(html_form_submission_encoding(accept, "UTF-8"), "windows-1252");
+    dom_string_unref(accept);
+}
+END_TEST
+
 START_TEST(test_scalar_entries)
 {
     const char value[] = "a\0b\r\n\xed\xa0\x80\xf0\x9f\x98\x80\xed\xbf\xbf";
@@ -105,6 +143,56 @@ START_TEST(test_stateful_encoding_boundaries)
         "%1B%24B%24%22%1B%28B%26%23128512%3B%1B%24B%24%22%1B%28B");
     dom_string_unref(value);
     html_form_data_fini(&data);
+}
+END_TEST
+
+START_TEST(test_web_encoding_backends)
+{
+    /* Bytes from the Encoding Standard's indexes, including characters absent
+     * from the older platform SHIFT_JIS/EUC-KR repertoires. */
+    const struct {
+        const char *label, *canonical, *value, *encoded;
+    } cases[] = {
+        {"windows-31j", "Shift_JIS", "髙", "q=%FB%FC"},
+        {"windows-949", "EUC-KR", "뷁", "q=%94%EE"},
+        {"logical", "ISO-8859-8-I", "אב", "q=%E0%E1"},
+    };
+    dom_string *accept = string(cases[_i].label), *name = string("q"), *value = string(cases[_i].value);
+    const char *encoding = html_form_submission_encoding(accept, "UTF-8");
+    ck_assert_str_eq(encoding, cases[_i].canonical);
+    struct html_form_data data = {0};
+    ck_assert_int_eq(html_form_data_append(&data, name, value), NSERROR_OK);
+    expect_encoded(&data, encoding, cases[_i].encoded);
+    html_form_data_fini(&data);
+    dom_string_unref(accept);
+    dom_string_unref(name);
+    dom_string_unref(value);
+}
+END_TEST
+
+START_TEST(test_native_encoding_transport)
+{
+    const char *encoding = _i == 0 ? "x-mac-cyrillic" : "x-user-defined";
+    const char input[] = "€\0А\n\xef\x9e\x80\xef\x9f\xbf";
+    dom_string *name = string("q"), *value = bytes(input, sizeof(input) - 1);
+    struct html_form_data data = {0};
+    ck_assert_int_eq(html_form_data_append(&data, name, value), NSERROR_OK);
+    expect_encoded(&data, encoding,
+        _i == 0 ? "q=%FF%00%80%0D%0A%26%2363360%3B%26%2363487%3B" : "q=%26%238364%3B%00%26%231040%3B%0D%0A%80%FF");
+    struct fetch_multipart_data *parts = NULL;
+    ck_assert_int_eq(html_form_data_multipart(&data, encoding, &parts), NSERROR_OK);
+    const char *expected = _i == 0 ? "\xff\0\x80\r\n&#63360;&#63487;" : "&#8364;\0&#1040;\r\n\x80\xff";
+    size_t length = _i == 0 ? sizeof("\xff\0\x80\r\n&#63360;&#63487;") - 1 : sizeof("&#8364;\0&#1040;\r\n\x80\xff") - 1;
+    ck_assert_uint_eq(parts->value_length, length);
+    ck_assert_int_eq(memcmp(parts->value, expected, length), 0);
+    fetch_multipart_data_destroy(parts);
+    html_form_data_fini(&data);
+    expect_encoded(&data, encoding, "");
+    ck_assert_int_eq(html_form_data_append(&data, NULL, NULL), NSERROR_OK);
+    expect_encoded(&data, encoding, "=");
+    html_form_data_fini(&data);
+    dom_string_unref(name);
+    dom_string_unref(value);
 }
 END_TEST
 
@@ -181,6 +269,76 @@ static dom_node *find(dom_document *document, const char *id)
     return node;
 }
 
+START_TEST(test_hyphenated_dom_strings)
+{
+    dom_document *document = parse("<!doctype html><meta id=m http-equiv=refresh content='0'>"
+                                   "<form id=f accept-charset=windows-1252><select id=s></select></form>");
+    dom_node *form = find(document, "f"), *meta = find(document, "m"), *select = find(document, "s");
+    dom_string *value = NULL, *name = string("accept-charset"), *utf8 = string("UTF-8");
+    ck_assert_int_eq(dom_html_form_element_get_accept_charset((dom_html_form_element *)form, &value), DOM_NO_ERR);
+    ck_assert_ptr_nonnull(value);
+    expect_string(value, "windows-1252", 12);
+    dom_string_unref(value);
+    ck_assert_int_eq(dom_html_form_element_set_accept_charset((dom_html_form_element *)form, utf8), DOM_NO_ERR);
+    ck_assert_int_eq(dom_element_get_attribute(form, name, &value), DOM_NO_ERR);
+    expect_string(value, "UTF-8", 5);
+    dom_string_unref(value);
+    dom_string_unref(name);
+    name = string("http-equiv");
+    ck_assert_int_eq(dom_html_meta_element_get_http_equiv((dom_html_meta_element *)meta, &value), DOM_NO_ERR);
+    ck_assert_ptr_nonnull(value);
+    expect_string(value, "refresh", 7);
+    dom_string_unref(value);
+    ck_assert_int_eq(dom_html_meta_element_set_http_equiv((dom_html_meta_element *)meta, utf8), DOM_NO_ERR);
+    ck_assert_int_eq(dom_element_get_attribute(meta, name, &value), DOM_NO_ERR);
+    expect_string(value, "UTF-8", 5);
+    dom_string_unref(value);
+    for (unsigned i = 0; i < 2; i++) {
+        ck_assert_int_eq(dom_html_select_element_set_multiple((dom_html_select_element *)select, i != 0), DOM_NO_ERR);
+        ck_assert_int_eq(dom_html_select_element_get_type((dom_html_select_element *)select, &value), DOM_NO_ERR);
+        const char *expected = i == 0 ? "select-one" : "select-multiple";
+        expect_string(value, expected, strlen(expected));
+        dom_string_unref(value);
+    }
+    dom_string_unref(name);
+    dom_string_unref(utf8);
+    dom_node_unref(select);
+    dom_node_unref(meta);
+    dom_node_unref(form);
+    dom_node_unref(document);
+}
+END_TEST
+
+START_TEST(test_charset_entry)
+{
+    dom_document *document = parse("<!doctype html><form id=f>"
+                                   "<input id=hidden type=hidden name=_ChArSeT_ value=original>"
+                                   "<input type=hidden name=_charset_suffix value=ordinary>"
+                                   "<input type=text name=_charset_ value=text>"
+                                   "<input type=hidden name=_charset_ value=disabled disabled>"
+                                   "<input type=hidden name=_charset_ value=duplicate></form>");
+    dom_node *form = find(document, "f"), *hidden = find(document, "hidden");
+    const char *encoding = _i == 0 ? NULL : "windows-1252";
+    const char *expected = encoding == NULL ? "UTF-8" : encoding;
+    struct html_form_data data = {0};
+    ck_assert_int_eq(html_form_data_construct((dom_html_form_element *)form, NULL, encoding, &data), NSERROR_OK);
+    ck_assert_uint_eq(data.length, 4);
+    expect_string(data.entries[0].name, "_ChArSeT_", 9);
+    expect_string(data.entries[0].value, expected, strlen(expected));
+    expect_string(data.entries[1].value, "ordinary", 8);
+    expect_string(data.entries[2].value, "text", 4);
+    expect_string(data.entries[3].value, expected, strlen(expected));
+    dom_string *value = NULL;
+    ck_assert_int_eq(dom_html_input_element_get_value((dom_html_input_element *)hidden, &value), DOM_NO_ERR);
+    expect_string(value, "original", 8);
+    dom_string_unref(value);
+    html_form_data_fini(&data);
+    dom_node_unref(hidden);
+    dom_node_unref(form);
+    dom_node_unref(document);
+}
+END_TEST
+
 START_TEST(test_construct_retains_unicode_and_files)
 {
     dom_document *document = parse(
@@ -201,7 +359,7 @@ START_TEST(test_construct_retains_unicode_and_files)
     ck_assert_int_eq(
         dom_node_set_user_data(file, corestring_dom___ns_key_file_name_node_data, path, NULL, &old), DOM_NO_ERR);
     struct html_form_data data = {0};
-    ck_assert_int_eq(html_form_data_construct((dom_html_form_element *)form, button, &data), NSERROR_OK);
+    ck_assert_int_eq(html_form_data_construct((dom_html_form_element *)form, button, NULL, &data), NSERROR_OK);
     ck_assert_uint_eq(data.length, 8);
     ck_assert_int_eq(
         dom_node_set_user_data(file, corestring_dom___ns_key_file_name_node_data, NULL, NULL, &old), DOM_NO_ERR);
@@ -309,8 +467,9 @@ START_TEST(test_allocation_failure)
             malloc_limit(count);
         else
             calloc_limit(count);
-        nserror result = _i < 3 ? html_form_data_urlencode(&data, "UTF-8", &encoded)
-                                : html_form_data_multipart(&data, "UTF-8", &parts);
+        const char *encoding = _i < 6 ? "UTF-8" : "x-mac-cyrillic";
+        nserror result = _i % 6 < 3 ? html_form_data_urlencode(&data, encoding, &encoded)
+                                    : html_form_data_multipart(&data, encoding, &parts);
         malloc_limit(UINT_MAX);
         realloc_limit(UINT_MAX);
         calloc_limit(UINT_MAX);
@@ -328,7 +487,7 @@ START_TEST(test_allocation_failure)
     }
     ck_assert(succeeded);
     /* URL encoding uses realloc for its buffers, not malloc. */
-    if (_i != 0 && _i != 2)
+    if (_i % 6 != 0 && _i % 6 != 2)
         ck_assert(failed);
     dom_string_unref(name);
     dom_string_unref(value);
@@ -344,16 +503,21 @@ int main(void)
     Suite *suite = suite_create("Unicode form entries");
     TCase *tc = tcase_create("Entries and encoding");
     tcase_add_test(tc, test_scalar_entries);
+    tcase_add_test(tc, test_submission_encoding);
+    tcase_add_test(tc, test_hyphenated_dom_strings);
+    tcase_add_loop_test(tc, test_charset_entry, 0, 2);
     tcase_add_test(tc, test_transport_newlines_and_duplicates);
     tcase_add_test(tc, test_legacy_output_encoding);
     tcase_add_test(tc, test_stateful_encoding_boundaries);
+    tcase_add_loop_test(tc, test_web_encoding_backends, 0, 3);
+    tcase_add_loop_test(tc, test_native_encoding_transport, 0, 2);
     tcase_add_test(tc, test_multipart_lengths_and_files);
     tcase_add_loop_test(tc, test_multipart_header_nul_is_not_truncated, 0, 2);
     tcase_add_loop_test(tc, test_construct_retains_unicode_and_files, 0, 2);
     tcase_add_loop_test(tc, test_gadget_initialization_preserves_dom_values, 0, 3);
 #ifdef WISP_TEST_ALLOC_FAILURE
     tcase_add_loop_test(tc, test_append_allocation_failure, 0, 2);
-    tcase_add_loop_test(tc, test_allocation_failure, 0, 6);
+    tcase_add_loop_test(tc, test_allocation_failure, 0, 12);
 #endif
     suite_add_tcase(suite, tc);
     SRunner *runner = srunner_create(suite);

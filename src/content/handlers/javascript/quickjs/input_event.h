@@ -16,6 +16,14 @@ struct qjs_input_event {
     struct qjs_event base;
     struct qjs_input_data data;
 };
+struct qjs_pointer_event {
+    struct qjs_input_event input;
+    int32_t pointer_id, tilt_x, tilt_y, twist;
+    double width, height, pressure, tangential_pressure;
+    JSValue pointer_type;
+    bool primary;
+};
+JSValue qjs_native_input_event(JSContext *ctx, dom_string *type, const struct js_mouse_event *mouse);
 JSValue qjs_input_event_constructor(JSContext *ctx, JSValueConst new_target, int argc, JSValueConst *argv, int kind);
 int qjs_input_event_properties(JSContext *ctx, JSValueConst proto, enum qjs_event_kind kind);
 #endif

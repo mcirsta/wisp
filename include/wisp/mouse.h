@@ -108,6 +108,16 @@ typedef enum browser_mouse_state {
     BROWSER_MOUSE_LEAVE = (1 << 21),
 } browser_mouse_state;
 
+/* Snapshot of one frontend mouse action. x/y use the same scaled document
+ * coordinates as browser_window_mouse_click; screen coordinates are CSS pixels.
+ * browser_window_mouse_click_event converts x/y to document CSS pixels before
+ * passing the snapshot to content handlers. */
+struct browser_mouse_event {
+    browser_mouse_state state;
+    double x, y, screen_x, screen_y;
+    unsigned buttons, detail;
+};
+
 
 typedef enum gui_pointer_shape {
     GUI_POINTER_DEFAULT,

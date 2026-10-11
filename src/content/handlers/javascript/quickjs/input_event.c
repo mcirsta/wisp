@@ -24,7 +24,7 @@ static struct qjs_input_data *input_get(JSContext *ctx, JSValueConst object, boo
     struct qjs_event *event = qjs_event_get(ctx, object);
     if (event == NULL)
         return NULL;
-    if (mouse ? event->kind != QJS_MOUSE_EVENT : !qjs_event_is_ui(event->kind)) {
+    if (mouse ? (event->kind != QJS_MOUSE_EVENT && event->kind != QJS_POINTER_EVENT) : !qjs_event_is_ui(event->kind)) {
         JS_ThrowTypeError(ctx, mouse ? "MouseEvent receiver required" : "UIEvent receiver required");
         return NULL;
     }
@@ -178,6 +178,112 @@ static int input_options(JSContext *ctx, JSValueConst dict, struct qjs_input_dat
     return 0;
 }
 
+enum pointer_property {
+    POINTER_ID,
+    WIDTH,
+    HEIGHT,
+    PRESSURE,
+    TANGENTIAL_PRESSURE,
+    TILT_X,
+    TILT_Y,
+    TWIST,
+    POINTER_TYPE,
+    IS_PRIMARY
+};
+
+static JSValue pointer_getter(JSContext *ctx, JSValueConst object, int property)
+{
+    struct qjs_event *base = qjs_event_get(ctx, object);
+    if (base == NULL)
+        return JS_EXCEPTION;
+    if (base->kind != QJS_POINTER_EVENT)
+        return JS_ThrowTypeError(ctx, "PointerEvent receiver required");
+    struct qjs_pointer_event *event = (struct qjs_pointer_event *)base;
+    switch (property) {
+    case POINTER_ID:
+        return JS_NewInt32(ctx, event->pointer_id);
+    case WIDTH:
+        return JS_NewFloat64(ctx, event->width);
+    case HEIGHT:
+        return JS_NewFloat64(ctx, event->height);
+    case PRESSURE:
+        return JS_NewFloat64(ctx, event->pressure);
+    case TANGENTIAL_PRESSURE:
+        return JS_NewFloat64(ctx, event->tangential_pressure);
+    case TILT_X:
+        return JS_NewInt32(ctx, event->tilt_x);
+    case TILT_Y:
+        return JS_NewInt32(ctx, event->tilt_y);
+    case TWIST:
+        return JS_NewInt32(ctx, event->twist);
+    case POINTER_TYPE:
+        return JS_DupValue(ctx, event->pointer_type);
+    case IS_PRIMARY:
+        return JS_NewBool(ctx, event->primary);
+    }
+    return JS_UNDEFINED;
+}
+
+static int pointer_options(JSContext *ctx, JSValueConst dict, struct qjs_pointer_event *data)
+{
+    data->width = data->height = 1;
+    data->pointer_type = JS_NewString(ctx, "");
+    if (JS_IsException(data->pointer_type))
+        return -1;
+    if (JS_IsUndefined(dict) || JS_IsNull(dict))
+        return 0;
+    const char *names[] = {"height", "isPrimary", "pointerId", "pointerType", "pressure", "tangentialPressure", "tiltX",
+        "tiltY", "twist", "width"};
+    for (unsigned i = 0; i < sizeof(names) / sizeof(*names); i++) {
+        JSValue value = JS_GetPropertyStr(ctx, dict, names[i]);
+        if (JS_IsException(value))
+            return -1;
+        int result = 0;
+        if (!JS_IsUndefined(value)) {
+            switch (i) {
+            case 1:
+                data->primary = JS_ToBool(ctx, value);
+                break;
+            case 2:
+                result = JS_ToInt32(ctx, &data->pointer_id, value);
+                break;
+            case 3:
+                JS_FreeValue(ctx, data->pointer_type);
+                data->pointer_type = JS_ToString(ctx, value);
+                result = JS_IsException(data->pointer_type) ? -1 : 0;
+                break;
+            case 6:
+                result = JS_ToInt32(ctx, &data->tilt_x, value);
+                break;
+            case 7:
+                result = JS_ToInt32(ctx, &data->tilt_y, value);
+                break;
+            case 8:
+                result = JS_ToInt32(ctx, &data->twist, value);
+                break;
+            default: {
+                double *number = i == 0 ? &data->height
+                    : i == 4            ? &data->pressure
+                    : i == 5            ? &data->tangential_pressure
+                                        : &data->width;
+                result = JS_ToFloat64(ctx, number, value);
+                if (result == 0 && (i == 4 || i == 5))
+                    *number = (float)*number; /* Web IDL float, unlike double width/height. */
+                if (result == 0 && !isfinite(*number)) {
+                    JS_ThrowTypeError(ctx, "PointerEvent numbers must be finite");
+                    result = -1;
+                }
+                break;
+            }
+            }
+        }
+        JS_FreeValue(ctx, value);
+        if (result < 0)
+            return -1;
+    }
+    return 0;
+}
+
 JSValue qjs_input_event_constructor(JSContext *ctx, JSValueConst new_target, int argc, JSValueConst *argv, int kind)
 {
     jsthread *thread = JS_GetContextOpaque(ctx);
@@ -188,9 +294,12 @@ JSValue qjs_input_event_constructor(JSContext *ctx, JSValueConst new_target, int
         return JS_EXCEPTION;
     struct qjs_event_options options = {0};
     struct qjs_input_data data = {.view = JS_NULL, .related = JS_NULL};
+    struct qjs_pointer_event pointer = {.pointer_type = JS_NULL};
     JSValue result = JS_EXCEPTION;
     JSValueConst dict = argc > 1 ? argv[1] : JS_UNDEFINED;
-    if (qjs_event_read_options(ctx, dict, &options) < 0 || input_options(ctx, dict, &data, kind == QJS_MOUSE_EVENT) < 0)
+    if (qjs_event_read_options(ctx, dict, &options) < 0 || input_options(ctx, dict, &data, kind != QJS_UI_EVENT) < 0)
+        goto out;
+    if (kind == QJS_POINTER_EVENT && pointer_options(ctx, dict, &pointer) < 0)
         goto out;
     JSValue object = qjs_event_new_object(ctx, new_target, thread->heap->event_class[kind]);
     if (JS_IsException(object))
@@ -198,12 +307,19 @@ JSValue qjs_input_event_constructor(JSContext *ctx, JSValueConst new_target, int
     result = qjs_event_allocate(ctx, object, kind, options.composed);
     if (!JS_IsException(result)) {
         struct qjs_input_event *event = (struct qjs_input_event *)qjs_event_get(ctx, result);
+        if (kind == QJS_POINTER_EVENT) {
+            struct qjs_input_event base = *event;
+            *(struct qjs_pointer_event *)event = pointer;
+            *event = base;
+            pointer.pointer_type = JS_NULL;
+        }
         event->data = data;
         data.view = data.related = JS_NULL; /* Ownership transferred. */
         dom_event_init(event->base.native, type, options.bubbles, options.cancelable);
         dom_event_set_is_trusted(event->base.native, false);
     }
 out:
+    JS_FreeValue(ctx, pointer.pointer_type);
     JS_FreeValue(ctx, data.view);
     JS_FreeValue(ctx, data.related);
     dom_string_unref(type);
@@ -293,6 +409,55 @@ int qjs_input_event_properties(JSContext *ctx, JSValueConst proto, enum qjs_even
         MODIFIER_GET("shiftKey", SHIFT), MODIFIER_GET("metaKey", META),
         JS_CFUNC_DEF2("getModifierState", 1, modifier_state, JS_PROP_C_W_E),
         QJS_EVENT_METHOD("initMouseEvent", 1, input_init, true)};
+    if (kind == QJS_POINTER_EVENT) {
+#define POINTER_GET(name, key) JS_CGETSET_MAGIC_DEF2(name, pointer_getter, NULL, key, JS_PROP_C_W_E)
+        static const JSCFunctionListEntry pointer[] = {POINTER_GET("pointerId", POINTER_ID),
+            POINTER_GET("width", WIDTH), POINTER_GET("height", HEIGHT), POINTER_GET("pressure", PRESSURE),
+            POINTER_GET("tangentialPressure", TANGENTIAL_PRESSURE), POINTER_GET("tiltX", TILT_X),
+            POINTER_GET("tiltY", TILT_Y), POINTER_GET("twist", TWIST), POINTER_GET("pointerType", POINTER_TYPE),
+            POINTER_GET("isPrimary", IS_PRIMARY)};
+        return JS_SetPropertyFunctionList(ctx, proto, pointer, sizeof(pointer) / sizeof(*pointer));
+    }
     return kind == QJS_UI_EVENT ? JS_SetPropertyFunctionList(ctx, proto, ui, sizeof(ui) / sizeof(*ui))
                                 : JS_SetPropertyFunctionList(ctx, proto, mouse, sizeof(mouse) / sizeof(*mouse));
+}
+
+/* Construct host values without invoking constructors or page-controlled getters. */
+JSValue qjs_native_input_event(JSContext *ctx, dom_string *type, const struct js_mouse_event *mouse)
+{
+    jsthread *thread = JS_GetContextOpaque(ctx);
+    bool click = dom_string_byte_length(type) == 5 && memcmp(dom_string_data(type), "click", 5) == 0;
+    bool composed = click || (dom_string_byte_length(type) == 5 && memcmp(dom_string_data(type), "input", 5) == 0);
+    enum qjs_event_kind kind = click ? QJS_POINTER_EVENT : QJS_EVENT;
+    JSValue object = qjs_event_allocate(ctx, JS_NewObjectClass(ctx, thread->heap->event_class[kind]), kind, composed);
+    if (JS_IsException(object))
+        return object;
+    struct qjs_event *event = qjs_event_get(ctx, object);
+    dom_event_init(event->native, type, true, click);
+    dom_event_set_is_trusted(event->native, true);
+    if (click) {
+        struct qjs_pointer_event *pointer = (struct qjs_pointer_event *)event;
+        pointer->pointer_id = mouse != NULL ? 1 : -1;
+        pointer->width = pointer->height = 1;
+        pointer->primary = mouse != NULL;
+        pointer->pointer_type = JS_NewString(ctx, mouse != NULL ? "mouse" : "");
+        pointer->input.data.view = JS_GetGlobalObject(ctx);
+        if (JS_IsException(pointer->pointer_type)) {
+            JS_FreeValue(ctx, object);
+            return JS_EXCEPTION;
+        }
+        if (mouse != NULL) {
+            struct qjs_input_data *data = &pointer->input.data;
+            data->client_x = mouse->client_x;
+            data->client_y = mouse->client_y;
+            data->screen_x = mouse->screen_x;
+            data->screen_y = mouse->screen_y;
+            data->buttons = mouse->buttons;
+            data->detail = mouse->detail;
+            data->modifiers = (mouse->ctrl << CTRL) | (mouse->alt << ALT) | (mouse->shift << SHIFT) |
+                (mouse->meta << META);
+            pointer->pressure = mouse->buttons != 0 ? 0.5 : 0;
+        }
+    }
+    return object;
 }

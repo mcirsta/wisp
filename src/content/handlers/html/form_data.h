@@ -31,10 +31,18 @@ void html_form_data_fini(struct html_form_data *data);
 
 /* Built-in control extraction; no callbacks or encoding. Starts a new output;
  * callers must finish a previous result before reuse. Empty result on failure.
+ * encoding is the canonical submission encoding; NULL means UTF-8 (FormData).
  * FormDataEvent, reentrancy and full File/Blob storage are separate prerequisites. */
-nserror html_form_data_construct(dom_html_form_element *form, dom_node *submitter, struct html_form_data *data);
+nserror html_form_data_construct(
+    dom_html_form_element *form, dom_node *submitter, const char *encoding, struct html_form_data *data);
 
-/* Does not mutate the original Unicode entries. Output is owned by the caller. */
+/* HTML's ordered accept-charset lookup, then output-encoding conversion.
+ * NULL accept uses the document encoding; empty/unknown labels use UTF-8.
+ * Returns a static canonical name without allocating or accessing the DOM. */
+const char *html_form_submission_encoding(dom_string *accept, const char *document_encoding);
+
+/* Does not mutate the original Unicode entries. Output is owned by the caller.
+ * encoding is a canonical output name from html_form_submission_encoding(). */
 nserror html_form_data_urlencode(const struct html_form_data *data, const char *encoding, char **output);
 nserror
 html_form_data_multipart(const struct html_form_data *data, const char *encoding, struct fetch_multipart_data **output);

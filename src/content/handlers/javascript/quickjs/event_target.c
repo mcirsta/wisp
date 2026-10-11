@@ -36,7 +36,7 @@ struct listener {
 struct qjs_event_dispatch {
     struct qjs_event_dispatch *previous;
     dom_event *native;
-    JSValue object; /* Borrowed from dispatchEvent's rooted argument. */
+    JSValue object; /* Borrowed from the caller's rooted event (script or native). */
     JSValue document; /* Owned for DOM dispatch, undefined for parentless targets. */
     bool failed;
 };

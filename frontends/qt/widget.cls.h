@@ -62,12 +62,14 @@ protected:
     void keyPressEvent(QKeyEvent *event);
     void mouseMoveEvent(QMouseEvent *event);
     void mousePressEvent(QMouseEvent *event);
+    void mouseDoubleClickEvent(QMouseEvent *event);
     void mouseReleaseEvent(QMouseEvent *event);
     void paintEvent(QPaintEvent *event);
     void resizeEvent(QResizeEvent *event);
 
 private:
     void scrollTo(int x, int y);
+    unsigned m_click_detail = 1;
     bool m_scroll_blit_ready = false;
     qreal m_painted_dpr = 0;
 #ifdef WISP_QT_CAPTURE

@@ -47,6 +47,8 @@ static void event_finalizer(JSRuntime *rt, JSValue value)
     } else if (event->kind == QJS_SUBMIT_EVENT) {
         JS_FreeValueRT(rt, ((struct qjs_submit_event *)event)->submitter);
     }
+    if (event->kind == QJS_POINTER_EVENT)
+        JS_FreeValueRT(rt, ((struct qjs_pointer_event *)event)->pointer_type);
     js_free_rt(rt, event);
 }
 
@@ -54,6 +56,8 @@ static void event_mark(JSRuntime *rt, JSValueConst value, JS_MarkFunc *mark)
 {
     struct qjs_event *event = JS_GetOpaque(value, JS_GetClassID(value));
     if (event != NULL) {
+        if (event->kind == QJS_POINTER_EVENT)
+            JS_MarkValue(rt, ((struct qjs_pointer_event *)event)->pointer_type, mark);
         JS_MarkValue(rt, event->target, mark);
         JS_MarkValue(rt, event->detail, mark);
         JS_MarkValue(rt, event->path, mark);
@@ -206,9 +210,10 @@ JSValue qjs_event_allocate(JSContext *ctx, JSValue object, enum qjs_event_kind k
         qjs_dom_exception(ctx, DOM_INVALID_STATE_ERR);
         goto fail_object;
     }
-    size_t size = qjs_event_is_ui(kind) ? sizeof(struct qjs_input_event)
-        : kind == QJS_SUBMIT_EVENT     ? sizeof(struct qjs_submit_event)
-                                      : sizeof(struct qjs_event);
+    size_t size = kind == QJS_POINTER_EVENT ? sizeof(struct qjs_pointer_event)
+        : qjs_event_is_ui(kind)             ? sizeof(struct qjs_input_event)
+        : kind == QJS_SUBMIT_EVENT          ? sizeof(struct qjs_submit_event)
+                                            : sizeof(struct qjs_event);
     struct qjs_event *event = js_mallocz(ctx, size);
     if (event == NULL)
         goto fail_object;
@@ -223,6 +228,8 @@ JSValue qjs_event_allocate(JSContext *ctx, JSValue object, enum qjs_event_kind k
     } else if (kind == QJS_SUBMIT_EVENT) {
         ((struct qjs_submit_event *)event)->submitter = JS_NULL;
     }
+    if (kind == QJS_POINTER_EVENT)
+        ((struct qjs_pointer_event *)event)->pointer_type = JS_NULL;
     event->composed = composed;
     uint64_t now;
     if (nsu_getmonotonic_ms(&now) != NSUERROR_OK)
@@ -442,8 +449,8 @@ static const JSCFunctionListEntry submit_properties[] = {EVENT_GET("submitter", 
 
 int qjs_init_events(JSContext *ctx)
 {
-    static const char *names[] = {"Event", "CustomEvent", "UIEvent", "MouseEvent", "SubmitEvent"};
-    static const unsigned parents[] = {QJS_EVENT, QJS_EVENT, QJS_EVENT, QJS_UI_EVENT, QJS_EVENT};
+    static const char *names[] = {"Event", "CustomEvent", "UIEvent", "MouseEvent", "SubmitEvent", "PointerEvent"};
+    static const unsigned parents[] = {QJS_EVENT, QJS_EVENT, QJS_EVENT, QJS_UI_EVENT, QJS_EVENT, QJS_MOUSE_EVENT};
     jsthread *thread = JS_GetContextOpaque(ctx);
     JSClassID local[QJS_EVENT_CLASSES] = {0};
     JSClassID *ids = thread != NULL ? thread->heap->event_class : local;

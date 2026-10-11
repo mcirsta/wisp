@@ -26,6 +26,11 @@
 #include "desktop/scrollbar.h"
 #include "utils/talloc.h"
 
+static nserror test_mouse_action(struct content *c, struct browser_window *bw, browser_mouse_state state, int x, int y)
+{
+    return html_mouse_action(c, bw, &(struct browser_mouse_event){.state = state, .x = x, .y = y, .detail = 1});
+}
+
 static const content_handler *handler;
 static html_content *html;
 static dom_node *node;
@@ -122,7 +127,7 @@ struct content *hlcache_handle_get_content(const hlcache_handle *handle)
     return &child;
 }
 
-static nserror child_mouse_action(struct content *c, struct browser_window *bw, browser_mouse_state mouse, int x, int y)
+static nserror child_mouse_action(struct content *c, struct browser_window *bw, const struct browser_mouse_event *event)
 {
     ck_assert_ptr_eq(c, &child);
     ck_assert_uint_eq(content_count_users(&html->base), expected_users);
@@ -195,7 +200,7 @@ static void click(dom_event *event, void *pw)
     if (nest && !nested) {
         nested = true;
         expected_users++;
-        ck_assert_int_eq(html_mouse_action(&html->base, window(), BROWSER_MOUSE_CLICK_1, 5, 5), NSERROR_OK);
+        ck_assert_int_eq(test_mouse_action(&html->base, window(), BROWSER_MOUSE_CLICK_1, 5, 5), NSERROR_OK);
         expected_users--;
         /* Inner dispatch has released just its own pin, even after closure. */
         ck_assert_uint_eq(content_count_users(&html->base), browser_user ? 2 : 1);
@@ -341,7 +346,7 @@ START_TEST(test_navigation_and_cancellation)
     cancel_click = (_i & 1) != 0;
     close_in_navigation = (_i & 2) != 0;
     target("link", false);
-    ck_assert_int_eq(html_mouse_action(&html->base, window(), BROWSER_MOUSE_CLICK_1, 5, 5), NSERROR_OK);
+    ck_assert_int_eq(test_mouse_action(&html->base, window(), BROWSER_MOUSE_CLICK_1, 5, 5), NSERROR_OK);
     ck_assert_uint_eq(clicks, 1);
     ck_assert_uint_eq(navigations, cancel_click ? 0 : 1);
     ck_assert_uint_eq(content_count_users(&html->base), browser_user ? 1 : 0);
@@ -354,7 +359,7 @@ START_TEST(test_retired_click)
     nest = (_i & 2) != 0;
     cancel_click = (_i & 4) != 0;
     target("link", true);
-    ck_assert_int_eq(html_mouse_action(&html->base, window(), BROWSER_MOUSE_CLICK_1, 5, 5), NSERROR_OK);
+    ck_assert_int_eq(test_mouse_action(&html->base, window(), BROWSER_MOUSE_CLICK_1, 5, 5), NSERROR_OK);
     ck_assert_uint_eq(clicks, nest ? 2 : 1);
     ck_assert_uint_eq(navigations, 0);
     ck_assert_uint_eq(content_count_users(&html->base), reopen ? 1 : 0);
@@ -366,7 +371,7 @@ START_TEST(test_retired_activation)
     const bool checkbox = _i == 0;
     cancel_click = checkbox;
     target(checkbox ? "check" : "summary", true);
-    ck_assert_int_eq(html_mouse_action(&html->base, window(), BROWSER_MOUSE_CLICK_1, 5, 5), NSERROR_OK);
+    ck_assert_int_eq(test_mouse_action(&html->base, window(), BROWSER_MOUSE_CLICK_1, 5, 5), NSERROR_OK);
     ck_assert_uint_eq(clicks, 1);
     if (checkbox) {
         bool checked = true;
@@ -389,7 +394,7 @@ START_TEST(test_frontend_retires_before_dispatch)
 {
     target("link", false);
     close_on_status = true;
-    ck_assert_int_eq(html_mouse_action(&html->base, window(), BROWSER_MOUSE_CLICK_1, 5, 5), NSERROR_OK);
+    ck_assert_int_eq(test_mouse_action(&html->base, window(), BROWSER_MOUSE_CLICK_1, 5, 5), NSERROR_OK);
     ck_assert_uint_eq(clicks, 0);
     ck_assert_uint_eq(pointer_messages, 0);
     ck_assert_uint_eq(navigations, 0);
@@ -411,7 +416,7 @@ START_TEST(test_secondary_click_lifetime)
 {
     target("link", false);
     close_in_navigation = true;
-    ck_assert_int_eq(html_mouse_action(&html->base, window(), BROWSER_MOUSE_CLICK_2, 5, 5), NSERROR_OK);
+    ck_assert_int_eq(test_mouse_action(&html->base, window(), BROWSER_MOUSE_CLICK_2, 5, 5), NSERROR_OK);
     ck_assert_uint_eq(clicks, 0); /* No primary click dispatched for this button. */
     ck_assert_uint_eq(navigations, 1);
     ck_assert_uint_eq(content_count_users(&html->base), 0);
@@ -425,7 +430,7 @@ START_TEST(test_embedded_document_owns_click)
     target("object", false);
     html->layout->object = (hlcache_handle *)&child;
     close_in_child = _i != 0;
-    ck_assert_int_eq(html_mouse_action(&html->base, window(), BROWSER_MOUSE_CLICK_1, 5, 5), NSERROR_OK);
+    ck_assert_int_eq(test_mouse_action(&html->base, window(), BROWSER_MOUSE_CLICK_1, 5, 5), NSERROR_OK);
     ck_assert_uint_eq(child_clicks, 1);
     ck_assert_uint_eq(clicks, 0); /* A child-document click does not bubble into its host. */
     ck_assert_uint_eq(content_count_users(&html->base), close_in_child ? 0 : 1);
@@ -624,7 +629,7 @@ START_TEST(test_link_uses_original_identity_and_live_attributes)
     /* The live resolver must not fall back to this obsolete cached value. */
     html->base_target = strdup("stale-frame");
     edit_on_click = edit_link;
-    ck_assert_int_eq(html_mouse_action(&html->base, window(), BROWSER_MOUSE_CLICK_1, 5, 5), NSERROR_OK);
+    ck_assert_int_eq(test_mouse_action(&html->base, window(), BROWSER_MOUSE_CLICK_1, 5, 5), NSERROR_OK);
     ck_assert_msg(navigations == want_navigation, "link edit %d: expected %u navigations, got %u", link_edit,
         want_navigation, navigations);
     ck_assert_uint_eq(scripts, link_edit == LINK_TO_SCRIPT ? 1 : 0);
@@ -655,7 +660,7 @@ START_TEST(test_image_map_keeps_area_identity)
     edit_on_click = edit_area;
     expected_url = "https://example.test/changed-map";
     expected_target = "map-frame";
-    ck_assert_int_eq(html_mouse_action(&html->base, window(), BROWSER_MOUSE_CLICK_1, 5, 5), NSERROR_OK);
+    ck_assert_int_eq(test_mouse_action(&html->base, window(), BROWSER_MOUSE_CLICK_1, 5, 5), NSERROR_OK);
     ck_assert_uint_eq(clicks, 1);
     ck_assert_uint_eq(navigations, _i == 0 ? 1 : 0);
 }
@@ -665,7 +670,7 @@ START_TEST(test_target_lookup_can_retire_document)
 {
     target("link", false);
     close_in_target = true;
-    ck_assert_int_eq(html_mouse_action(&html->base, window(), BROWSER_MOUSE_CLICK_1, 5, 5), NSERROR_OK);
+    ck_assert_int_eq(test_mouse_action(&html->base, window(), BROWSER_MOUSE_CLICK_1, 5, 5), NSERROR_OK);
     ck_assert_uint_eq(clicks, 1);
     ck_assert_uint_eq(navigations, 0);
     ck_assert_uint_eq(content_count_users(&html->base), 0);
@@ -680,7 +685,7 @@ START_TEST(test_download_uses_updated_link)
     expected_url = "https://example.test/changed";
     expected_flags = BW_NAVIGATE_DOWNLOAD;
     ck_assert_int_eq(
-        html_mouse_action(&html->base, window(), BROWSER_MOUSE_CLICK_1 | BROWSER_MOUSE_MOD_1, 5, 5), NSERROR_OK);
+        test_mouse_action(&html->base, window(), BROWSER_MOUSE_CLICK_1 | BROWSER_MOUSE_MOD_1, 5, 5), NSERROR_OK);
     ck_assert_uint_eq(navigations, 1);
 }
 END_TEST
@@ -689,7 +694,7 @@ START_TEST(test_save_link_does_not_navigate)
 {
     target("link", false);
     ck_assert_int_eq(
-        html_mouse_action(&html->base, window(), BROWSER_MOUSE_CLICK_2 | BROWSER_MOUSE_MOD_1, 5, 5), NSERROR_OK);
+        test_mouse_action(&html->base, window(), BROWSER_MOUSE_CLICK_2 | BROWSER_MOUSE_MOD_1, 5, 5), NSERROR_OK);
     ck_assert_uint_eq(saved_links, 1);
     ck_assert_uint_eq(clicks, 0);
     ck_assert_uint_eq(navigations, 0);
@@ -700,7 +705,7 @@ START_TEST(test_scrollbar_does_not_activate_link)
 {
     target("link", false);
     ck_assert_int_eq(scrollbar_create(false, 50, 100, 50, NULL, NULL, &html->layout->scroll_y), NSERROR_OK);
-    ck_assert_int_eq(html_mouse_action(&html->base, window(), BROWSER_MOUSE_CLICK_1, 45, 5), NSERROR_OK);
+    ck_assert_int_eq(test_mouse_action(&html->base, window(), BROWSER_MOUSE_CLICK_1, 45, 5), NSERROR_OK);
     ck_assert_uint_eq(navigations, 0);
 }
 END_TEST
@@ -855,7 +860,7 @@ START_TEST(test_submit_reads_live_dom_after_click)
         submit_edit != SUBMIT_FIELDSET_DISABLED && submit_edit != SUBMIT_CANCEL && submit_edit != SUBMIT_CLOSE &&
         submit_edit != SUBMIT_CLOSE_TARGET && submit_edit != SUBMIT_COMMAND && submit_edit != SUBMIT_DIALOG &&
         submit_edit != SUBMIT_PLAIN;
-    nserror result = html_mouse_action(&html->base, window(), BROWSER_MOUSE_CLICK_1, 5, 5);
+    nserror result = test_mouse_action(&html->base, window(), BROWSER_MOUSE_CLICK_1, 5, 5);
     ck_assert_msg(result == (submit_edit == SUBMIT_PLAIN ? NSERROR_NOT_IMPLEMENTED : NSERROR_OK),
         "submit variant %d returned %d", _i, result);
     ck_assert_uint_eq(clicks, 1);
@@ -870,7 +875,7 @@ START_TEST(test_submit_original_button_ancestor)
     submit_edit = SUBMIT_VALUE;
     edit_on_click = edit_submit;
     expected_url = "https://example.test/send?q=fresh&chosen=new";
-    ck_assert_int_eq(html_mouse_action(&html->base, window(), BROWSER_MOUSE_CLICK_1, 5, 5), NSERROR_OK);
+    ck_assert_int_eq(test_mouse_action(&html->base, window(), BROWSER_MOUSE_CLICK_1, 5, 5), NSERROR_OK);
     ck_assert_uint_eq(navigations, 1);
 }
 END_TEST
@@ -883,7 +888,7 @@ START_TEST(test_submit_image_coordinates)
     expected_url = _i == 0 ? "https://example.test/send?q=old&pic.x=5&pic.y=5" :
         "https://example.test/send?q=old&x=5&y=5";
     edit_on_click = discard_presentation;
-    ck_assert_int_eq(html_mouse_action(&html->base, window(), BROWSER_MOUSE_CLICK_1, 5, 5), NSERROR_OK);
+    ck_assert_int_eq(test_mouse_action(&html->base, window(), BROWSER_MOUSE_CLICK_1, 5, 5), NSERROR_OK);
     ck_assert_uint_eq(navigations, 1);
 }
 END_TEST
@@ -989,7 +994,7 @@ START_TEST(test_submission_omits_datalist_descendants)
             "https://example.test/send?go=yes&keep=yes";
     }
     edit_on_click = discard_presentation;
-    ck_assert_int_eq(html_mouse_action(&html->base, window(), BROWSER_MOUSE_CLICK_1, 5, 5), NSERROR_OK);
+    ck_assert_int_eq(test_mouse_action(&html->base, window(), BROWSER_MOUSE_CLICK_1, 5, 5), NSERROR_OK);
     ck_assert_uint_eq(navigations, 1);
     dom_node_unref(kept);
     dom_node_unref(textarea);
@@ -1032,7 +1037,7 @@ START_TEST(test_submission_omits_disabled_options)
         expected_url = "https://example.test/send?q=old&go=yes";
     }
     edit_on_click = discard_presentation;
-    ck_assert_int_eq(html_mouse_action(&html->base, window(), BROWSER_MOUSE_CLICK_1, 5, 5), NSERROR_OK);
+    ck_assert_int_eq(test_mouse_action(&html->base, window(), BROWSER_MOUSE_CLICK_1, 5, 5), NSERROR_OK);
     ck_assert_uint_eq(navigations, 1);
     dom_node_unref(enabled);
     dom_node_unref(grouped);

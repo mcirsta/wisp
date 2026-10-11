@@ -25,6 +25,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <stdbool.h>
+#include <wisp/utils/ascii.h>
 #include <wisp/utils/corestrings.h>
 #include <wisp/utils/log.h>
 #include <wisp/content/handlers/html/form_internal.h>
@@ -442,8 +444,8 @@ form_dom_to_data_input_text(dom_html_input_element *input_element, dom_string *i
 }
 
 
-static nserror
-form_dom_to_data_input(dom_html_input_element *input_element, dom_node *submit_button, struct html_form_data *data)
+static nserror form_dom_to_data_input(
+    dom_html_input_element *input_element, dom_node *submit_button, const char *encoding, struct html_form_data *data)
 {
     dom_exception exp; /* the result from DOM operations */
     dom_string *inputname;
@@ -491,6 +493,15 @@ form_dom_to_data_input(dom_html_input_element *input_element, dom_node *submit_b
         NSLOG(wisp, INFO, "Skipping RESET and BUTTON");
         res = NSERROR_OK;
 
+    } else if (dom_string_caseless_isequal(inputtype, corestring_dom_hidden) &&
+        dom_string_byte_length(inputname) == sizeof("_charset_") - 1 &&
+        ascii_strings_equal_caseless(dom_string_data(inputname), "_charset_")) {
+        /* Entry construction uses the selected encoding's canonical name;
+         * neither the control's DOM value nor its presentation is changed. */
+        dom_string *value = NULL;
+        exp = dom_string_create((const uint8_t *)encoding, strlen(encoding), &value);
+        res = exp == DOM_NO_ERR ? html_form_data_append(data, inputname, value) : NSERROR_NOMEM;
+        dom_string_unref(value);
     } else {
         /* Everything else is treated as text values */
         res = form_dom_to_data_input_text(input_element, inputname, data);
@@ -545,9 +556,12 @@ form_dom_to_data_button(dom_html_button_element *button_element, dom_node *submi
 }
 
 
-nserror html_form_data_construct(dom_html_form_element *form, dom_node *submitter, struct html_form_data *data)
+nserror html_form_data_construct(
+    dom_html_form_element *form, dom_node *submitter, const char *encoding, struct html_form_data *data)
 {
     *data = (struct html_form_data){0};
+    if (encoding == NULL)
+        encoding = "UTF-8";
     dom_html_form_control_list controls = {0};
     dom_exception err = dom_html_form_element_get_submittable_elements(form, &controls);
     nserror result = err == DOM_NO_ERR ? NSERROR_OK : err == DOM_NO_MEM_ERR ? NSERROR_NOMEM : NSERROR_DOM;
@@ -562,7 +576,7 @@ nserror html_form_data_construct(dom_html_form_element *form, dom_node *submitte
         }
         switch (tag) {
         case DOM_HTML_ELEMENT_TYPE_INPUT:
-            result = form_dom_to_data_input((dom_html_input_element *)node, submitter, data);
+            result = form_dom_to_data_input((dom_html_input_element *)node, submitter, encoding, data);
             break;
         case DOM_HTML_ELEMENT_TYPE_BUTTON:
             result = form_dom_to_data_button((dom_html_button_element *)node, submitter, data);

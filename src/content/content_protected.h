@@ -99,7 +99,7 @@ struct content_handler {
     void (*destroy)(struct content *c);
     void (*stop)(struct content *c);
     nserror (*mouse_track)(struct content *c, struct browser_window *bw, browser_mouse_state mouse, int x, int y);
-    nserror (*mouse_action)(struct content *c, struct browser_window *bw, browser_mouse_state mouse, int x, int y);
+    nserror (*mouse_action)(struct content *c, struct browser_window *bw, const struct browser_mouse_event *event);
     bool (*keypress)(struct content *c, uint32_t key);
     bool (*redraw)(
         struct content *c, struct content_redraw_data *data, const struct rect *clip, const struct redraw_context *ctx);

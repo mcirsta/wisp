@@ -25,7 +25,7 @@ struct qjs_event {
  * merely because its enum value follows the input event kinds. */
 static inline bool qjs_event_is_ui(enum qjs_event_kind kind)
 {
-    return kind == QJS_UI_EVENT || kind == QJS_MOUSE_EVENT;
+    return kind == QJS_UI_EVENT || kind == QJS_MOUSE_EVENT || kind == QJS_POINTER_EVENT;
 }
 
 struct qjs_event *qjs_event_get(JSContext *ctx, JSValueConst value);

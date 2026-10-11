@@ -57,9 +57,11 @@
 #include <wisp/content/handlers/html/interaction.h>
 #include <wisp/content/handlers/html/private.h>
 #include "content/handlers/html/form_state.h"
+#include "content/handlers/html/dom_event.h"
 #include "content/handlers/html/details.h"
 #include "content/handlers/html/stacking.h"
 #include "content/handlers/html/box_textarea.h"
+#include "content/handlers/html/box_construct.h"
 #include "content/handlers/html/font.h"
 #include "content/handlers/html/imagemap.h"
 #include "content/handlers/html/hyperlink.h"
@@ -777,9 +779,7 @@ static nserror get_mouse_action_node(html_content *html, int x, int y, bool chec
 static nserror
 gadget_mouse_action(html_content *html, browser_mouse_state mouse, int x, int y, struct mouse_action_state *mas)
 {
-    struct content *c = (struct content *)html;
     textarea_mouse_status ta_status;
-    union content_msg_data msg_data;
     nserror res;
     bool click;
     click = mouse &
@@ -790,18 +790,6 @@ gadget_mouse_action(html_content *html, browser_mouse_state mouse, int x, int y,
     case GADGET_SELECT:
         mas->result.status = messages_get("FormSelect");
         mas->result.pointer = BROWSER_POINTER_MENU;
-        if (mouse & BROWSER_MOUSE_CLICK_1 && nsoption_bool(core_select_menu)) {
-            html->visible_select_menu = mas->gadget.control;
-            res = form_open_select_menu(c, mas->gadget.control, form_select_menu_callback, c);
-            if (res != NSERROR_OK) {
-                NSLOG(wisp, ERROR, "%s", messages_get_errorcode(res));
-                html->visible_select_menu = NULL;
-            }
-            mas->result.pointer = BROWSER_POINTER_DEFAULT;
-        } else if (mouse & BROWSER_MOUSE_CLICK_1) {
-            msg_data.select_menu.gadget = mas->gadget.control;
-            content_broadcast(c, CONTENT_MSG_SELECTMENU, &msg_data);
-        }
         break;
 
     case GADGET_CHECKBOX:
@@ -887,10 +875,6 @@ gadget_mouse_action(html_content *html, browser_mouse_state mouse, int x, int y,
 
     case GADGET_FILE:
         mas->result.status = messages_get("FormFile");
-        if (mouse & BROWSER_MOUSE_CLICK_1) {
-            msg_data.gadget_click.gadget = mas->gadget.control;
-            content_broadcast(c, CONTENT_MSG_GADGETCLICK, &msg_data);
-        }
         break;
 
     case GADGET_BUTTON:
@@ -907,8 +891,10 @@ gadget_mouse_action(html_content *html, browser_mouse_state mouse, int x, int y,
  * process mouse activity on an iframe
  */
 static nserror
-iframe_mouse_action(struct browser_window *bw, browser_mouse_state mouse, int x, int y, struct mouse_action_state *mas)
+iframe_mouse_action(struct browser_window *bw, const struct browser_mouse_event *event, struct mouse_action_state *mas)
 {
+    browser_mouse_state mouse = event->state;
+    int x = event->x, y = event->y;
     int pos_x, pos_y;
     float scale;
 
@@ -917,7 +903,10 @@ iframe_mouse_action(struct browser_window *bw, browser_mouse_state mouse, int x,
     browser_window_get_position(mas->iframe, false, &pos_x, &pos_y);
 
     if (mouse & BROWSER_MOUSE_CLICK_1 || mouse & BROWSER_MOUSE_CLICK_2) {
-        browser_window_mouse_click(mas->iframe, mouse, (x * scale) - pos_x, (y * scale) - pos_y);
+        struct browser_mouse_event nested = *event;
+        nested.x = event->x * scale - pos_x;
+        nested.y = event->y * scale - pos_y;
+        browser_window_mouse_click_event(mas->iframe, &nested);
     } else {
         browser_window_mouse_track(mas->iframe, mouse, (x * scale) - pos_x, (y * scale) - pos_y);
     }
@@ -930,9 +919,11 @@ iframe_mouse_action(struct browser_window *bw, browser_mouse_state mouse, int x,
 /**
  * process mouse activity on an html object
  */
-static nserror html_object_mouse_action(html_content *html, struct browser_window *bw, browser_mouse_state mouse, int x,
-    int y, struct mouse_action_state *mas)
+static nserror html_object_mouse_action(html_content *html, struct browser_window *bw,
+    const struct browser_mouse_event *event, struct mouse_action_state *mas)
 {
+    browser_mouse_state mouse = event->state;
+    int x = event->x, y = event->y;
     bool click;
     click = mouse &
         (BROWSER_MOUSE_PRESS_1 | BROWSER_MOUSE_PRESS_2 | BROWSER_MOUSE_CLICK_1 | BROWSER_MOUSE_CLICK_2 |
@@ -946,8 +937,10 @@ static nserror html_object_mouse_action(html_content *html, struct browser_windo
     }
 
     if (mouse & BROWSER_MOUSE_CLICK_1 || mouse & BROWSER_MOUSE_CLICK_2) {
-        content_mouse_action(
-            mas->html_object.box->object, bw, mouse, x - mas->html_object.pos_x, y - mas->html_object.pos_y);
+        struct browser_mouse_event nested = *event;
+        nested.x -= mas->html_object.pos_x;
+        nested.y -= mas->html_object.pos_y;
+        content_mouse_action(mas->html_object.box->object, bw, &nested);
     } else {
         content_mouse_track(
             mas->html_object.box->object, bw, mouse, x - mas->html_object.pos_x, y - mas->html_object.pos_y);
@@ -1173,12 +1166,67 @@ struct html_input_context {
     html_content *html;
     struct browser_window *bw;
     uint64_t generation;
+    const struct browser_mouse_event *event;
+    struct js_mouse_event click;
 };
 
 static bool html_input_active(const struct html_input_context *input)
 {
     return input->bw != NULL && input->html->bw == input->bw &&
         input->html->input_generation == input->generation;
+}
+
+static bool mouse_click_dispatch(dom_node *target, dom_string *type, void *pw)
+{
+    const struct html_input_context *input = pw;
+    return html_input_active(input) && html_dispatch_input_event(input->html, target, type, &input->click);
+}
+
+/* Resolve presentation again after listeners. Never use the pre-dispatch gadget:
+ * callbacks may have removed it, changed its type or rebuilt the box tree. */
+static nserror mouse_action_picker(const struct html_input_context *input, dom_node *node)
+{
+    html_content *html = input->html;
+    if (html->layout == NULL || html_form_control_disabled(node))
+        return NSERROR_OK;
+    dom_node *root = dom_node_ref(node), *parent;
+    while (dom_node_get_parent_node(root, &parent) == DOM_NO_ERR && parent != NULL) {
+        dom_node_unref(root);
+        root = parent;
+    }
+    bool connected = root == (dom_node *)html->document;
+    dom_node_unref(root);
+    if (!connected)
+        return NSERROR_OK;
+    struct box *box = box_for_node(node);
+    if (box == NULL || box->gadget == NULL)
+        return NSERROR_OK;
+    struct form_control *control = box->gadget;
+    dom_html_element_type tag;
+    if (dom_html_element_get_tag_type(node, &tag) != DOM_NO_ERR)
+        return NSERROR_OK;
+    union content_msg_data message;
+    if (tag == DOM_HTML_ELEMENT_TYPE_SELECT && control->type == GADGET_SELECT) {
+        if (nsoption_bool(core_select_menu)) {
+            html->visible_select_menu = control;
+            nserror result = form_open_select_menu(&html->base, control, form_select_menu_callback, &html->base);
+            if (result != NSERROR_OK)
+                html->visible_select_menu = NULL;
+            return result;
+        }
+        message.select_menu.gadget = control;
+        content_broadcast(&html->base, CONTENT_MSG_SELECTMENU, &message);
+    } else if (tag == DOM_HTML_ELEMENT_TYPE_INPUT && control->type == GADGET_FILE) {
+        dom_string *type = NULL;
+        dom_html_input_element_get_type((dom_html_input_element *)node, &type);
+        bool file = dom_string_caseless_isequal(type, corestring_dom_file);
+        dom_string_unref(type);
+        if (file) {
+            message.gadget_click.gadget = control;
+            content_broadcast(&html->base, CONTENT_MSG_GADGETCLICK, &message);
+        }
+    }
+    return NSERROR_OK;
 }
 
 static void checked_state_changed(dom_node *node, void *pw)
@@ -1232,6 +1280,8 @@ static nserror mouse_action_activate(
     } else if (mas->result.action == ACTION_DOM && mas->checkable_box != NULL) {
         clicked = html_box_event_node(mas->checkable_box);
     }
+    if (gadget && html_form_control_disabled(clicked))
+        return NSERROR_OK;
     dom_node_ref(clicked);
     bool link_action = !gadget && (mas->result.action == ACTION_DOM || mas->result.action == ACTION_LINK ||
         mas->result.action == ACTION_DOWNLOAD);
@@ -1242,7 +1292,9 @@ static nserror mouse_action_activate(
     struct html_form_click_result click = {.accepted = true};
     nserror result = NSERROR_OK;
     if (mouse & BROWSER_MOUSE_CLICK_1)
-        click = html_form_click(clicked, checked_state_changed, (void *)input);
+        click = html_form_click(clicked,
+            &(struct html_form_click_context){
+                .changed = checked_state_changed, .dispatch = mouse_click_dispatch, .pw = (void *)input});
     if (!html_input_active(input) || !click.accepted)
         goto out;
 
@@ -1250,6 +1302,8 @@ static nserror mouse_action_activate(
         result = mouse_action_follow_link(input, link, mouse, mas->result.action == ACTION_DOWNLOAD);
     } else if (!click.handled && submitter != NULL) {
         result = form_submit(input->html, submitter, mouse);
+    } else if ((mouse & BROWSER_MOUSE_CLICK_1) && !click.handled && gadget) {
+        result = mouse_action_picker(input, clicked);
     } else if ((mouse & BROWSER_MOUSE_CLICK_1) && !click.handled && link == NULL && !gadget &&
         mas->result.action == ACTION_DOM) {
         result = html_details_activate(input->html, clicked);
@@ -1315,12 +1369,12 @@ static nserror mouse_action_drag_none(const struct html_input_context *input, br
     } else if (mas.iframe != NULL) {
         /* The child document owns this input. Do not activate its control a
          * second time in the parent after returning from recursive dispatch. */
-        return iframe_mouse_action(bw, mouse, x, y, &mas);
+        return iframe_mouse_action(bw, input->event, &mas);
 
     } else if (mas.html_object.box != NULL) {
         /* Like an iframe, the embedded document owns dispatch. Its listener can
          * retire this parent too; do not send a second click to the parent. */
-        return html_object_mouse_action(html, bw, mouse, x, y, &mas);
+        return html_object_mouse_action(html, bw, input->event, &mas);
 
     } else if (mas.link.url != NULL) {
         res = link_mouse_action(html, mouse, &mas);
@@ -1378,7 +1432,7 @@ static nserror mouse_action_drag_none(const struct html_input_context *input, br
 /* exported interface documented in html/interaction.h */
 nserror html_mouse_track(struct content *c, struct browser_window *bw, browser_mouse_state mouse, int x, int y)
 {
-    return html_mouse_action(c, bw, mouse, x, y);
+    return html_mouse_action(c, bw, &(struct browser_mouse_event){.state = mouse, .x = x, .y = y});
 }
 
 
@@ -1435,20 +1489,35 @@ static nserror html_mouse_action_dispatch(
 
 
 /* exported interface documented in html/interaction.h */
-nserror html_mouse_action(struct content *c, struct browser_window *bw, browser_mouse_state mouse, int x, int y)
+nserror html_mouse_action(struct content *c, struct browser_window *bw, const struct browser_mouse_event *event)
 {
+    browser_mouse_state mouse = event->state;
+    int x = event->x, y = event->y;
     html_content *html = (html_content *)c;
-    struct html_input_context input = {.html = html, .bw = bw, .generation = html->input_generation};
+    struct html_input_context input = {.html = html, .bw = bw, .generation = html->input_generation, .event = event};
     if (!html_input_active(&input))
         return NSERROR_OK;
+    if (mouse & BROWSER_MOUSE_CLICK_1) {
+        int sx = 0, sy = 0;
+        browser_window_get_scroll(bw, &sx, &sy);
+        input.click = (struct js_mouse_event){.client_x = event->x - sx,
+            .client_y = event->y - sy,
+            .screen_x = event->screen_x,
+            .screen_y = event->screen_y,
+            .buttons = event->buttons,
+            .detail = event->detail,
+            .ctrl = !!(mouse & BROWSER_MOUSE_MOD_2),
+            .shift = !!(mouse & BROWSER_MOUSE_MOD_1),
+            .alt = !!(mouse & BROWSER_MOUSE_MOD_3),
+            .meta = !!(mouse & BROWSER_MOUSE_MOD_4)};
+    }
 
     /* A primary click can dispatch DOM callbacks in this document or a child;
      * either click button can execute a javascript: URL.
      * Those callbacks may release the last cache handle. Use the existing user
      * list to pin content across the entire dispatch, including default actions.
      * Each nested call has its own identity. Pointer motion needs no allocation.
-     * Native JS delivery stays guarded pending submission validation/events
-     * and callback-safe handling of the remaining control defaults. */
+     * Native click listeners run through the same bounded JS dispatcher. */
     bool pin = (mouse & (BROWSER_MOUSE_CLICK_1 | BROWSER_MOUSE_CLICK_2)) != 0;
     if (pin && !content_add_user(c, NULL, &input))
         return NSERROR_NOMEM;

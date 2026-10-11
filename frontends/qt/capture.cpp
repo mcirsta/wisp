@@ -472,7 +472,7 @@ void NS_Capture::poll()
                     ok = nsqt_capture_scroll_element(content, parts[0], parts[1].toInt(), parts[2].toInt());
                 } else if (action.first == "--capture-click-point") {
                     const auto xy = action.second.split(',');
-                    nsqt_capture_click_point(m_bw, xy[0].toInt(), xy[1].toInt());
+                    nsqt_capture_click_point(m_widget, m_bw, xy[0].toInt(), xy[1].toInt());
                 } else if (action.first == "--capture-scroll-point") {
                     const auto parts = action.second.split(',');
                     ok = nsqt_capture_scroll_point(
@@ -481,7 +481,7 @@ void NS_Capture::poll()
                     const auto parts = action.second.split(',');
                     nsqt_capture_drag(m_bw, parts[0].toInt(), parts[1].toInt(), parts[2].toInt(), parts[3].toInt());
                 } else {
-                    ok = nsqt_capture_click(m_bw, action.second, action.first == "--capture-click-label");
+                    ok = nsqt_capture_click(m_widget, m_bw, action.second, action.first == "--capture-click-label");
                 }
             }
             m_last_action_ms = action_timer.nsecsElapsed() / 1e6;

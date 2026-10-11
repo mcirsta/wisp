@@ -15,7 +15,15 @@ struct qjs_dom_document;
 struct qjs_event_dispatch;
 struct qjs_event_target;
 
-enum qjs_event_kind { QJS_EVENT, QJS_CUSTOM_EVENT, QJS_UI_EVENT, QJS_MOUSE_EVENT, QJS_SUBMIT_EVENT, QJS_EVENT_CLASSES };
+enum qjs_event_kind {
+    QJS_EVENT,
+    QJS_CUSTOM_EVENT,
+    QJS_UI_EVENT,
+    QJS_MOUSE_EVENT,
+    QJS_SUBMIT_EVENT,
+    QJS_POINTER_EVENT,
+    QJS_EVENT_CLASSES
+};
 
 /* One runtime per browser window. The window and every document context hold
  * references, so retirement during a callback cannot free the runtime early. */
@@ -24,6 +32,7 @@ struct jsheap {
     int timeout;
     int refcount;
     unsigned execution_depth;
+    unsigned native_dispatch_depth; /* Share a budget while keeping per-listener microtask checkpoints. */
     unsigned timer_nesting;
     uint64_t deadline_ms;
     bool interrupted;

@@ -451,6 +451,9 @@ nserror browser_window_refresh_url_bar(struct browser_window *bw);
  */
 void browser_window_mouse_click(struct browser_window *bw, browser_mouse_state mouse, int x, int y);
 
+/** Deliver a frontend event without discarding screen coordinates or buttons. */
+void browser_window_mouse_click_event(struct browser_window *bw, const struct browser_mouse_event *event);
+
 
 /**
  * Handle non-click mouse action in a browser window. (drag ends, movements)
