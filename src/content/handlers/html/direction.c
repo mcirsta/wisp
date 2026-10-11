@@ -24,7 +24,7 @@ static bool keyword(dom_string *value, const char *word)
 }
 
 /* Foreign elements inherit direction; their literal dir attributes have no
- * HTML semantics. Null namespaces are also used by libdom's HTML documents. */
+ * HTML semantics. This includes elements created in the null namespace. */
 static dom_exception direction_attributes(dom_node *node, dom_html_element_type *tag, enum direction *state)
 {
     dom_string *ns = NULL, *value = NULL;
@@ -33,7 +33,7 @@ static dom_exception direction_attributes(dom_node *node, dom_html_element_type 
     dom_exception err = dom_node_get_namespace(node, &ns);
     if (err != DOM_NO_ERR)
         return err;
-    bool html = ns == NULL || dom_string_isequal(ns, corestring_dom_html_namespace);
+    bool html = ns != NULL && dom_string_isequal(ns, corestring_dom_html_namespace);
     dom_string_unref(ns);
     if (!html)
         return DOM_NO_ERR;

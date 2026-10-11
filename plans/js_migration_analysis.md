@@ -601,6 +601,74 @@ The static saved eBihoreanul viewport is byte-identical, with unchanged
 1280 x 11382 extent. Its already documented `llcache.c:2422` null-source/zero-length
 memcpy UBSan diagnostic remains. No GTK build or tests were run.
 
+### Inline CSS declaration parsing foundation (2026-10-11)
+
+HTML markup replacement is committed as `0d49e392`. The next capability remains
+real inline `element.style`. The old Duktape `HTMLElement::style` getter only
+created an empty CSSStyleDeclaration object for a Modernizr probe; it provides no
+usable property parsing, ownership or mutation implementation to port.
+
+LibCSS now has a private, optional declaration collector in
+`src/parse/declarations.{c,h}`. It runs the existing generated/manual property
+handlers and retains accepted declaration names, priorities, owned value tokens
+and spans in the compiled inline stylesheet. Duplicates and shorthands remain in
+source order. Invalid declarations use the ordinary parser's recovery. Streaming,
+abandoned parses and allocation failures have explicit ownership; callers cannot
+read a partially completed result. Only callers requesting collection allocate
+these records. Ordinary stylesheets retain their existing bytecode storage, with
+the collector pointer confined to the temporary language-parser context.
+
+This is **parser output, not an exposed CSSStyleDeclaration**. In particular, it
+does not yet select winning longhands or serialize specified values. Decoded
+tokens do not preserve original escapes/comments/whitespace, and must not be
+mistaken for source text. There is no new JS feature-detection placeholder and the
+saved eBihoreanul `style.opacity` blocker remains until the following work lands:
+
+1. Preserve source spelling where required, particularly custom-property values.
+   The [custom-property serialization rules](https://drafts.csswg.org/css-variables-1/#serializing-custom-properties)
+   require original text; computed-style output or reconstructed tokens are not a
+   substitute. Extend the shared lexer/parser rather than split CSS with a second
+   ad hoc parser in the JS binding.
+2. Build the specified declaration block: shorthand expansion, alias handling,
+   duplicate/priority resolution and logical/physical ordering, followed by
+   specified-value serialization. Derive property/shorthand metadata from
+   `properties.toml` and the existing generator. Follow the
+   [CSSOM declaration-block algorithms](https://drafts.csswg.org/cssom/#the-cssstyledeclaration-interface),
+   and keep specified values separate from inherited/computed values.
+3. Expose a lazy, stable style wrapper with native method/receiver checks,
+   `cssText`, property access, `getPropertyValue`, `getPropertyPriority`,
+   `setProperty`, `removeProperty`, `length` and `item`. Keep it synchronized with
+   direct style-attribute edits and route writes through the existing DOM change,
+   JS attribution and restyle machinery. Revalidate lifetime after JS conversions
+   and use the shared execution budget.
+4. Test round trips, shorthand/longhand interactions, custom properties, direct
+   attribute edits, adoption/teardown, exceptions and rendered pixels before
+   revisiting the saved site's next script failure.
+
+The new tests also exposed and fixed shared issues: resuming the lexer immediately
+after `u` entered the wrong state; an escape immediately after `--` bypassed
+unescaping; abandoning a parse leaked pending/pushed-back interned tokens; token
+vector allocation failure did not release the untransferred token. Failure tests
+now assert that the interned-string table is empty after teardown. Their allocator
+shim also sets `errno=ENOMEM`, as real failed allocations do, so iconv failures are
+not misreported as unsupported encodings.
+
+Broader validation found two stale HTML test fixtures using
+`createElementNS(null, ...)` for ordinary HTML controls, plus a synthetic-parent
+cache leak in the calc harness. The fixtures now use ordinary HTML creation and
+retain explicit foreign/null-namespace negative cases. One of those cases also
+exposed an old null-namespace fallback in text-direction handling: only the HTML
+namespace now gives `dir` its HTML semantics, matching
+[HTML directionality](https://html.spec.whatwg.org/multipage/dom.html#the-dir-attribute).
+
+Validation: all 74 native CSS/QuickJS suites pass under Debug ASan/UBSan with
+LeakSanitizer, and all 13 targeted Qt capture suites pass. The declaration suite
+passes 33 Debug checks and 36 Release checks, including separate malloc/calloc/
+realloc failure sweeps, retry, token-vector growth and final interned-string
+cleanup. All 16 selected Release suites pass, covering the existing consumers of
+the allocation-failure shim as well. Final builds are warning-free and
+`git diff --check` is clean. No GTK build or tests were run.
+
 ## Assessment
 
 Keep QuickJS-ng and libdom. The missing part is the browser binding and execution

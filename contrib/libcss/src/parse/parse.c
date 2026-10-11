@@ -241,6 +241,11 @@ css_error css__parser_destroy(css_parser *parser)
 
     parserutils_stack_destroy(parser->open_items);
 
+    /* An interrupted parse can still own both pending tokens and a token
+     * removed from the vector for pushback. Normal EOF discards these earlier. */
+    if (parser->pushback != NULL && parser->pushback->idata != NULL)
+        lwc_string_unref(parser->pushback->idata);
+    discard_tokens(parser);
     parserutils_vector_destroy(parser->tokens);
 
     parserutils_stack_destroy(parser->states);
@@ -640,8 +645,12 @@ css_error getToken(css_parser *parser, const css_token **token)
 
     /* Append token to vector */
     perror = parserutils_vector_append(parser->tokens, (css_token *)(*token));
-    if (perror != PARSERUTILS_OK)
+    if (perror != PARSERUTILS_OK) {
+        /* Ownership transfers to the vector only on a successful append. */
+        if ((*token)->idata != NULL)
+            lwc_string_unref((*token)->idata);
         return css_error_from_parserutils_error(perror);
+    }
 
     parser->last_was_ws = ((*token)->type == CSS_TOKEN_S);
 

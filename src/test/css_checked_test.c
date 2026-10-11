@@ -39,7 +39,10 @@ static dom_node *element_under(dom_node *parent, const char *tag, const char *ty
     dom_element *node;
     dom_node *inserted;
     dom_string *name = string(tag), *namespace = ns ? string(ns) : NULL;
-    ck_assert_int_eq(dom_document_create_element_ns(document, namespace, name, &node), DOM_NO_ERR);
+    /* Ordinary HTML creation supplies the HTML namespace. createElementNS with
+     * a null/empty namespace deliberately creates a non-HTML element. */
+    ck_assert_int_eq(ns == NULL ? dom_document_create_element(document, name, &node) :
+        dom_document_create_element_ns(document, namespace, name, &node), DOM_NO_ERR);
     dom_string_unref(namespace);
     dom_string_unref(name);
     ck_assert_int_eq(dom_node_append_child(parent, node, &inserted), DOM_NO_ERR);
@@ -158,7 +161,8 @@ END_TEST
 
 START_TEST(test_foreign_element)
 {
-    dom_node *node = element("input", "checkbox", "http://www.w3.org/2000/svg");
+    const char *ns = _i == 0 ? "http://www.w3.org/2000/svg" : "";
+    dom_node *node = element("input", "checkbox", ns);
     attribute(node, "checked", "");
     expect_checked(node, false, "foreign element is not an HTML control");
     dom_node_unref(node);
@@ -204,7 +208,7 @@ int main(void)
     tcase_add_loop_test(tc, test_checked_controls, 0, sizeof(cases) / sizeof(cases[0]));
     tcase_add_test(tc, test_current_dom_state);
     tcase_add_loop_test(tc, test_selected_option_state, 0, 2);
-    tcase_add_test(tc, test_foreign_element);
+    tcase_add_loop_test(tc, test_foreign_element, 0, 2);
     tcase_add_test(tc, test_subtree_invalidation);
     suite_add_tcase(suite, tc);
     SRunner *runner = srunner_create(suite);

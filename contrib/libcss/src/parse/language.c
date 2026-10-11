@@ -11,6 +11,7 @@
 #include <parserutils/utils/stack.h>
 
 #include "lex/lex.h"
+#include "parse/declarations.h"
 #include "parse/font_face.h"
 #include "parse/important.h"
 #include "select/variables.h"
@@ -121,6 +122,7 @@ css_error css__language_create(css_stylesheet *sheet, css_parser *parser, void *
     }
 
     c->sheet = sheet;
+    c->declarations = NULL;
     c->state = CHARSET_PERMITTED;
     c->default_namespace = NULL;
     c->namespaces = NULL;
@@ -841,6 +843,17 @@ css_error handleDeclaration(css_language *c, const parserutils_vector *vector)
 
     consumeWhitespace(vector, &ctx);
 
+    int32_t value_start = ctx;
+    uint32_t bytecode_offset = 0;
+    if (c->declarations != NULL) {
+        /* Declaration collection is requested only for inline styles. Keep
+         * offsets, not pointers: appending a style can reallocate bytecode. */
+        assert(rule->type == CSS_RULE_SELECTOR);
+        const css_style *style = ((css_rule_selector *)rule)->style;
+        if (style != NULL)
+            bytecode_offset = style->used;
+    }
+
     if (ident->type == CSS_TOKEN_CUSTOM_PROPERTY) {
         /* Custom properties are not valid in @font-face */
         if (rule->type == CSS_RULE_FONT_FACE)
@@ -854,6 +867,12 @@ css_error handleDeclaration(css_language *c, const parserutils_vector *vector)
     }
     if (error != CSS_OK)
         return error;
+
+    if (c->declarations != NULL) {
+        const css_style *style = ((css_rule_selector *)rule)->style;
+        return css__declaration_list_record(c->declarations, ident, vector, value_start,
+            bytecode_offset, style->used - bytecode_offset);
+    }
 
     return CSS_OK;
 }

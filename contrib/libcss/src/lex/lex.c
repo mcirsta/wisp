@@ -282,7 +282,7 @@ css_error css__lexer_get_token(css_lexer *lexer, css_token **token)
     case sMATCH:
         return Match(lexer, token);
     case sURI:
-        return URI(lexer, token);
+        return URIOrUnicodeRangeOrIdentOrFunction(lexer, token);
     case sIDENT:
         return IdentOrFunction(lexer, token);
     case sESCAPEDIDENT:
@@ -619,8 +619,8 @@ css_error CDCOrIdentOrFunctionOrNPD(css_lexer *lexer, css_token **token)
 
             t->type = CSS_TOKEN_CDC;
         } else if (startNMStart(c)) {
-            /* Custom property: --nmstart nmchar* */
-            APPEND(lexer, cptr, clen);
+            /* Let consumeNMChars consume the first name character too: it
+             * may be an escape and must go through the unescaping path. */
             goto customprop;
         } else {
             /* Remove the '-' we read above */

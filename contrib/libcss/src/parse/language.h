@@ -31,6 +31,7 @@ typedef struct css_namespace {
  */
 typedef struct css_language {
     css_stylesheet *sheet; /**< The stylesheet to parse for */
+    struct css_declaration_list *declarations; /**< Optional specified-declaration collector */
 
 #define STACK_CHUNK 32
     parserutils_stack *context; /**< Context stack */

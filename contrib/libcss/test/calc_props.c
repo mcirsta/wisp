@@ -471,6 +471,11 @@ static css_computed_style *select_style_from_css_for_node(const char *css, style
                    &select_handler, CSS_NODE_DELETED, NULL, &node, NULL, node.libcss_node_data) == CSS_OK);
         node.libcss_node_data = NULL;
     }
+    /* Selection may create a bloom filter on the synthetic parent too. */
+    if (parent.libcss_node_data != NULL) {
+        assert(css_libcss_node_data_handler(
+                   &select_handler, CSS_NODE_DELETED, NULL, &parent, NULL, parent.libcss_node_data) == CSS_OK);
+    }
     assert(ctx->results != NULL);
     assert(ctx->results->styles[CSS_PSEUDO_ELEMENT_NONE] != NULL);
 

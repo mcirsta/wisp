@@ -466,6 +466,12 @@ target_include_directories(css_style_reuse_test PRIVATE ${TEST_COMMON_INCLUDES} 
 target_link_libraries(css_style_reuse_test wisp ${CHECK_LIBRARIES})
 add_test(NAME css_style_reuse_test COMMAND css_style_reuse_test)
 
+add_executable(css_declarations_test css_declarations_test.c)
+target_include_directories(css_declarations_test PRIVATE ${TEST_COMMON_INCLUDES}
+  ${CMAKE_SOURCE_DIR}/contrib/libcss/src)
+target_link_libraries(css_declarations_test css ${CHECK_LIBRARIES})
+add_test(NAME css_declarations_test COMMAND css_declarations_test)
+
 add_executable(box_construct_context_test box_construct_context_test.c)
 target_include_directories(box_construct_context_test PRIVATE ${TEST_COMMON_INCLUDES} ${CMAKE_SOURCE_DIR}/include)
 target_link_libraries(box_construct_context_test wisp ${CHECK_LIBRARIES})
@@ -525,6 +531,8 @@ if(NOT WIN32)
   target_include_directories(malloc_fig PRIVATE ${CMAKE_SOURCE_DIR}/src)
   target_link_libraries(malloc_fig PUBLIC dl)
   if(CMAKE_BUILD_TYPE STREQUAL "Release")
+    target_link_libraries(css_declarations_test malloc_fig)
+    target_compile_definitions(css_declarations_test PRIVATE WISP_TEST_ALLOC_FAILURE)
     target_link_libraries(dom_tree_test malloc_fig)
     target_compile_definitions(dom_tree_test PRIVATE WISP_TEST_ALLOC_FAILURE)
     target_link_libraries(dom_html_serialize_test malloc_fig)

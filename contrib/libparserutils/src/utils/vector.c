@@ -167,7 +167,7 @@ parserutils_error parserutils_vector_remove_last(parserutils_vector *vector)
  * \param length  Pointer to location to receive length information.
  * \return PARSERUTILS_OK on success, appropriate error otherwise
  */
-parserutils_error parserutils_vector_get_length(parserutils_vector *vector, size_t *length)
+parserutils_error parserutils_vector_get_length(const parserutils_vector *vector, size_t *length)
 {
     if (vector == NULL)
         return PARSERUTILS_BADPARM;

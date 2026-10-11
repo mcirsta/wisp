@@ -47,7 +47,9 @@ static dom_node *element(dom_node *parent, const char *tag, const char *dir, con
     dom_element *node;
     dom_node *inserted;
     dom_string *name = string(tag), *namespace = ns ? string(ns) : NULL;
-    ck_assert_int_eq(dom_document_create_element_ns(document, namespace, name, &node), DOM_NO_ERR);
+    /* A null namespace passed to createElementNS is not ordinary HTML. */
+    ck_assert_int_eq(ns == NULL ? dom_document_create_element(document, name, &node) :
+        dom_document_create_element_ns(document, namespace, name, &node), DOM_NO_ERR);
     dom_string_unref(namespace);
     dom_string_unref(name);
     if (parent != NULL) {
@@ -156,6 +158,8 @@ START_TEST(test_inheritance_and_foreign_nodes)
     dom_node *child = element(foreign, "span", "invalid", "http://www.w3.org/1999/xhtml");
     expect(foreign, true, "foreign dir attribute is ignored");
     expect(child, true, "inherit through foreign ancestor");
+    dom_node *no_namespace = element(root, "div", "ltr", "");
+    expect(no_namespace, true, "null-namespace dir attribute is ignored");
     dom_node *neutral = element(child, "bdi", NULL, NULL);
     text(neutral, "123");
     expect(neutral, false, "neutral bdi does not inherit RTL");
@@ -167,6 +171,7 @@ START_TEST(test_inheritance_and_foreign_nodes)
     dom_node_unref(automatic);
     dom_node_unref(neutral);
     dom_node_unref(child);
+    dom_node_unref(no_namespace);
     dom_node_unref(foreign);
     dom_node_unref(root);
 }
@@ -187,6 +192,7 @@ static const struct {
     {"span", "", NULL, false},
     {"span", NULL, NULL, false},
     {"g", "rtl", "http://www.w3.org/2000/svg", false},
+    {"bdi", "rtl", "", false}, /* Null-namespace names do not gain HTML semantics. */
 };
 
 START_TEST(test_contained_text_exclusions)

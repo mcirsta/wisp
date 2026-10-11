@@ -175,6 +175,7 @@ add_library(css ${WISP_LIB_TYPE}
 	src/lex/lex.c
 	src/parse/parse.c
 	src/parse/language.c
+	src/parse/declarations.c
 	src/parse/important.c
 	src/parse/propstrings.c
 	src/parse/font_face.c

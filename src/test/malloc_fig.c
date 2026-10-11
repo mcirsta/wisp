@@ -26,6 +26,7 @@
 
 #define _GNU_SOURCE
 #include <dlfcn.h>
+#include <errno.h>
 #include <limits.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -47,8 +48,10 @@ void *calloc(size_t nmemb, size_t size)
     static void *(*real_calloc)(size_t, size_t) = NULL;
     if (real_calloc == NULL)
         real_calloc = dlsym(RTLD_NEXT, "calloc");
-    if (calloc_count == 0)
+    if (calloc_count == 0) {
+        errno = ENOMEM;
         return NULL;
+    }
     if (calloc_count != UINT_MAX)
         calloc_count--;
     return real_calloc(nmemb, size);
@@ -64,8 +67,10 @@ void *realloc(void *ptr, size_t size)
     static void *(*real_realloc)(void *, size_t) = NULL;
     if (real_realloc == NULL)
         real_realloc = dlsym(RTLD_NEXT, "realloc");
-    if (realloc_count == 0)
+    if (realloc_count == 0) {
+        errno = ENOMEM;
         return NULL;
+    }
     if (realloc_count != UINT_MAX)
         realloc_count--;
     return real_realloc(ptr, size);
@@ -89,6 +94,8 @@ void *malloc(size_t size)
     if (count > 0) {
         p = real_malloc(size);
         count--;
+    } else {
+        errno = ENOMEM;
     }
     // fprintf(stderr, "malloc(%d) = %p remian:%d\n", size, p, count);
     return p;
