@@ -93,5 +93,30 @@
 |  overflow-x: inherit
 #reset
 
+#data
+* { overflow: auto visible; }
+#errors
+#expected
+| *
+|  overflow-x: auto
+|  overflow-y: visible
+#reset
+
+#data
+* { overflow: hidden scroll!important; }
+#errors
+#expected
+| *
+|  overflow-x: hidden !important
+|  overflow-y: scroll !important
+#reset
+
+#data
+* { overflow: hidden inherit; overflow:initial auto; overflow:auto hidden scroll; }
+#errors
+#expected
+| *
+#reset
+
 
 

@@ -205,6 +205,22 @@ static const struct {
 } lexer_cases[] = {
     {"url('tile;a:b.png')", CSS_TOKEN_URI, "tile;a:b.png"},
     {"URL(tile.png)", CSS_TOKEN_URI, "tile.png"},
+    {"url()", CSS_TOKEN_URI, ""},
+    {"url(  )", CSS_TOKEN_URI, ""},
+    {"url( '' )", CSS_TOKEN_URI, ""},
+    {"url(' foo ')", CSS_TOKEN_URI, " foo "},
+    {"url(\\ foo)", CSS_TOKEN_URI, " foo"},
+    {"url(foo\\ )", CSS_TOKEN_URI, "foo "},
+    {"url(foo\\' )", CSS_TOKEN_URI, "foo'"},
+    {"url(\\\"foo)", CSS_TOKEN_URI, "\"foo"},
+    {"url(\\22 foo\\22 )", CSS_TOKEN_URI, "\"foo\""},
+    {"url(\\20 foo\\20 )", CSS_TOKEN_URI, " foo "},
+    {"url('a\\\"b\\\\c')", CSS_TOKEN_URI, "a\"b\\c"},
+    {"url(Știri💡.png)", CSS_TOKEN_URI, "Știri💡.png"},
+    {"'\\0 \\d800 \\110000 '", CSS_TOKEN_STRING, "\xef\xbf\xbd\xef\xbf\xbd\xef\xbf\xbd"},
+    {"'\\1 \\b \\d \\1f \\7f '", CSS_TOKEN_STRING, "\x01\x0b\x0d\x1f\x7f"},
+    {"'\\80 \\9f \\fdd0 \\fffe \\1ffff '", CSS_TOKEN_STRING,
+        "\xc2\x80\xc2\x9f\xef\xb7\x90\xef\xbf\xbe\xf0\x9f\xbf\xbf"},
     {"u", CSS_TOKEN_IDENT, "u"},
     {"ubuntu", CSS_TOKEN_IDENT, "ubuntu"},
     {"urban", CSS_TOKEN_IDENT, "urban"},
@@ -600,14 +616,15 @@ START_TEST(test_allocation_failure)
                                /* Force the parser's token vector to grow too. */
                                "--large:red red red red red red red red red red red red red red red red "
                                "red red red red red red red red red red red red red red red red red red;"
-                               "content:'a\\\r\nb';";
+                               "content:'a\\\r\nb'; overflow:hidden auto!important;"
+                               "background-image:url(\\20 file\\22 ),url('other\\1 image');";
     /* Grow the captured-source buffer after a retained declaration exists. */
     char css[16384];
     size_t pos = (size_t)sprintf(css, "opacity:1; /*");
     memset(css + pos, 'c', 8192);
     pos += 8192;
     snprintf(css + pos, sizeof(css) - pos, "*/%s", declarations);
-    const size_t expected = 13;
+    const size_t expected = 15;
     /* Keep shared property strings alive, so each iteration tests the same
      * allocation sequence instead of global string-cache initialization. */
     css_stylesheet *keeper;
@@ -771,6 +788,66 @@ static const struct {
     {"margin:1px calc(2px + 1em)", "margin-top", NULL},
     {"color:rgb(1, 2, 3)", "color", NULL},
     {"font-family:'Example'", "font-family", NULL},
+    {"display: InLiNe-BlOcK", "display", "inline-block"},
+    {"display: \\66 lex", "display", "flex"},
+    {"visibility: HiDdEn !important; visibility:visible", "visibility", "hidden"},
+    {"position: ReLaTiVe", "position", "relative"},
+    {"float: LeFt", "float", "left"},
+    {"clear: BoTh", "clear", "both"},
+    {"box-sizing: BORDER-BOX", "box-sizing", "border-box"},
+    {"flex-direction: COLUMN-REVERSE", "flex-direction", "column-reverse"},
+    {"align-items: FLEX-START", "align-items", "flex-start"},
+    {"justify-content: SPACE-BETWEEN", "justify-content", "space-between"},
+    {"object-fit: CoVeR", "object-fit", "cover"},
+    {"font-weight: 700", "font-weight", "700"},
+    {"font-weight: BOLDER", "font-weight", "bolder"},
+    {"column-rule-width: 0002.5PX", "column-rule-width", "2.5px"},
+    {"border-style: SOLID dashed", "border-bottom-style", "solid"},
+    {"border-style: SOLID dashed dotted", "border-left-style", "dashed"},
+    {"border-style: SOLID dashed dotted double", "border-left-style", "double"},
+    {"border-style: SOLID dashed solid dashed", "border-style", "solid dashed"},
+    {"border-style: solid; border-left-style:dotted", "border-style", "solid solid solid dotted"},
+    {"border-style: solid!important; border-left-style:dotted", "border-style", "solid"},
+    {"border-style: solid; border-left-style:dotted!important", "border-style", ""},
+    {"border-style: INITIAL", "border-style", "initial"},
+    {"overflow: HIDDEN", "overflow", "hidden"},
+    {"overflow: HIDDEN AUTO", "overflow", "hidden auto"},
+    {"overflow: hidden auto !important", "overflow-y", "auto"},
+    {"overflow: hidden auto; overflow-x:SCROLL", "overflow", "scroll auto"},
+    {"overflow: hidden auto; overflow-y:HIDDEN", "overflow", "hidden"},
+    {"overflow: hidden; overflow-y:visible!important", "overflow", ""},
+    {"overflow: INITIAL", "overflow", "initial"},
+    {"overflow:var(--o, hidden auto)", "overflow", "var(--o, hidden auto)"},
+    {"overflow:var(--o)", "overflow-x", ""},
+    {"overflow: hidden; overflow:hidden initial", "overflow", "hidden"},
+    {"overflow: hidden; overflow:initial hidden", "overflow", "hidden"},
+    {"overflow: hidden; overflow:scroll auto visible", "overflow", "hidden"},
+    {"overflow: hidden; overflow:scroll bogus", "overflow", "hidden"},
+    {"list-style-image: NoNe", "list-style-image", "none"},
+    {"list-style-image: URL(../Icons/Mark.png)", "list-style-image", "url(\"../Icons/Mark.png\")"},
+    {"list-style-image:url(  '#marker'  )", "list-style-image", "url(\"#marker\")"},
+    {"list-style-image:url('')", "list-style-image", "url(\"\")"},
+    {"list-style-image:url()", "list-style-image", "url(\"\")"},
+    {"list-style-image:url('foo bar')", "list-style-image", "url(\"foo bar\")"},
+    {"list-style-image:url(\\ foo\\ )", "list-style-image", "url(\" foo \")"},
+    {"list-style-image:url(\\22 foo\\22 )", "list-style-image", "url(\"\\\"foo\\\"\")"},
+    {"list-style-image:url(foo\\')", "list-style-image", "url(\"foo'\")"},
+    {"list-style-image:url('a\\\\b\\\"c')", "list-style-image", "url(\"a\\\\b\\\"c\")"},
+    {"list-style-image:url(Știri💡.png)", "list-style-image", "url(\"Știri💡.png\")"},
+    {"list-style-image:url('a\\a b\\9 c')", "list-style-image", "url(\"a\\a b\\9 c\")"},
+    {"list-style-image:url('a\\01 b\\0b c\\0d d\\1f e\\7f f')", "list-style-image",
+        "url(\"a\\1 b\\b c\\d d\\1f e\\7f f\")"},
+    {"list-style-image:url('\\80 \\fdd0 ')", "list-style-image", "url(\"\xc2\x80\xef\xb7\x90\")"},
+    {"cue-before:URL(sound.ogg)", "cue-before", "url(\"sound.ogg\")"},
+    {"cue-after:NoNe", "cue-after", "none"},
+    {"background-image:URL(a.png) , NoNe, url('B,C.png')", "background-image",
+        "url(\"a.png\"), none, url(\"B,C.png\")"},
+    {"background-image: url('data:image/svg+xml;a,b;c')", "background-image",
+        "url(\"data:image/svg+xml;a,b;c\")"},
+    {"background-image: url(a.png)!important; background-image:none", "background-image", "url(\"a.png\")"},
+    {"background-attachment: FiXeD , SCROLL , FiXeD", "background-attachment", "fixed, scroll, fixed"},
+    {"background-image:linear-gradient(red, blue)", "background-image", NULL},
+    {"background-image:url(a.png), linear-gradient(red, blue)", "background-image", NULL},
 };
 enum { VALUE_CASE_COUNT = sizeof(value_cases) / sizeof(value_cases[0]) };
 
@@ -822,6 +899,98 @@ START_TEST(test_specified_values)
 }
 END_TEST
 
+/* The renderer resolves URLs while parsing; specified CSSOM values must retain
+ * their declared spelling. Use a distinct result to detect accidental reads
+ * from the compiled stylesheet's resolved string table. */
+static css_error resolve_absolute_url(void *pw, const char *base, lwc_string *rel, lwc_string **abs)
+{
+    unsigned *calls = pw;
+    (*calls)++;
+    ck_assert_str_eq(base, params.url);
+    ck_assert_str_eq(lwc_string_data(rel), "../Icons/Mark.png");
+    const char *url = "https://example.org/Icons/Mark.png";
+    return lwc_intern_string(url, strlen(url), abs) == lwc_error_ok ? CSS_OK : CSS_NOMEM;
+}
+
+START_TEST(test_specified_url_resolution)
+{
+    css_stylesheet_params resolving = params;
+    unsigned calls = 0;
+    resolving.resolve = resolve_absolute_url;
+    resolving.resolve_pw = &calls;
+    css_declaration_list *list;
+    const char *css = "background-image:url(../Icons/Mark.png)";
+    ck_assert_int_eq(css__declaration_list_create(&resolving, &list), CSS_OK);
+    check_append(css__declaration_list_append(list, (const uint8_t *)css, strlen(css)));
+    ck_assert_int_eq(css__declaration_list_complete(list), CSS_OK);
+    ck_assert_uint_eq(calls, 1);
+    const css_stylesheet *sheet = css__declaration_list_sheet(list);
+    ck_assert_uint_eq(sheet->string_vector_c, 1);
+    ck_assert_str_eq(lwc_string_data(sheet->string_vector[0]), "https://example.org/Icons/Mark.png");
+    css_declaration_order *order;
+    ck_assert_int_eq(css__declaration_order_create(list, &order), CSS_OK);
+    lwc_string *value;
+    ck_assert_int_eq(serialize_property(order, "background-image", &value), CSS_OK);
+    ck_assert_str_eq(lwc_string_data(value), "url(\"../Icons/Mark.png\")");
+    lwc_string_unref(value);
+    css__declaration_order_destroy(order);
+    css__declaration_list_destroy(list);
+}
+END_TEST
+
+START_TEST(test_long_url)
+{
+    const char *prefix = "background-image:url('";
+    const char *chunk = "a\\\"b\\\\c\\1 d";
+    const char *canonical = "a\\\"b\\\\c\\1 d";
+    enum { REPEATS = 2048 };
+    size_t length = strlen(prefix) + REPEATS * strlen(chunk) + 3;
+    char *css = malloc(length);
+    ck_assert_ptr_nonnull(css);
+    char *p = stpcpy(css, prefix);
+    for (size_t i = 0; i < REPEATS; i++)
+        p = stpcpy(p, chunk);
+    strcpy(p, "')");
+    css_declaration_list *list = parse(css, _i != 0);
+    free(css);
+    css_declaration_order *order;
+    ck_assert_int_eq(css__declaration_order_create(list, &order), CSS_OK);
+    lwc_string *value;
+    ck_assert_int_eq(serialize_property(order, "background-image", &value), CSS_OK);
+    ck_assert_uint_eq(lwc_string_length(value), 7 + REPEATS * strlen(canonical));
+    const char *result = lwc_string_data(value);
+    ck_assert_int_eq(memcmp(result, "url(\"", 5), 0);
+    for (size_t i = 0; i < REPEATS; i++) {
+        ck_assert_int_eq(memcmp(result + 5 + i * strlen(canonical), canonical, strlen(canonical)), 0);
+    }
+    ck_assert_str_eq(result + lwc_string_length(value) - 2, "\")");
+    lwc_string_unref(value);
+    css__declaration_order_destroy(order);
+    css__declaration_list_destroy(list);
+}
+END_TEST
+
+START_TEST(test_overflow_axes)
+{
+    static const char *const keywords[] = {"visible", "hidden", "scroll", "auto"};
+    /* Compare actual parser bytecode for every implemented two-axis pair,
+     * independently of serialization (including priority handling). */
+    for (size_t x = 0; x < 4; x++) {
+        for (size_t y = 0; y < 4; y++) {
+            char shorthand[80], longhands[100];
+            snprintf(shorthand, sizeof(shorthand), "overflow:%s %s!important", keywords[x], keywords[y]);
+            snprintf(longhands, sizeof(longhands), "overflow-x:%s!important;overflow-y:%s!important",
+                keywords[x], keywords[y]);
+            css_declaration_list *a = parse(shorthand, _i != 0);
+            css_declaration_list *b = parse(longhands, _i != 0);
+            compare_sheets(css__declaration_list_sheet(a), css__declaration_list_sheet(b));
+            css__declaration_list_destroy(a);
+            css__declaration_list_destroy(b);
+        }
+    }
+}
+END_TEST
+
 START_TEST(test_value_arguments)
 {
     lwc_string *value = (void *)1;
@@ -851,11 +1020,14 @@ END_TEST
 #ifdef WISP_TEST_ALLOC_FAILURE
 START_TEST(test_value_allocation_failure)
 {
-    const char *css = "margin:.1234567px .3456789em .5678912% -.6789123px; --x:  original value  ;";
+    const char *css = "margin:.1234567px .3456789em .5678912% -.6789123px; --x:  original value  ;"
+                      "background-image:url('a\\\"b\\\\c\\1 d'), none, url(Other.png);"
+                      "background-attachment:FIXED, SCROLL; border-style:SOLID DASHED DOTTED DOUBLE;";
     css_declaration_list *list = parse(css, false);
     css_declaration_order *order;
     ck_assert_int_eq(css__declaration_order_create(list, &order), CSS_OK);
-    const char *name = _i == 0 ? "margin" : "--x";
+    static const char *const names[] = {"margin", "--x", "background-image", "background-attachment", "border-style"};
+    const char *name = names[_i];
     bool succeeded = false;
     unsigned failures = 0;
     for (unsigned attempt = 0; attempt < 100; attempt++) {
@@ -900,9 +1072,12 @@ int main(void)
     tcase_add_loop_test(tc, test_source_value, 0, SOURCE_CASE_COUNT);
     tcase_add_test(tc, test_source_growth);
     tcase_add_loop_test(tc, test_specified_values, 0, VALUE_CASE_COUNT);
+    tcase_add_test(tc, test_specified_url_resolution);
+    tcase_add_loop_test(tc, test_long_url, 0, 2);
+    tcase_add_loop_test(tc, test_overflow_axes, 0, 2);
     tcase_add_test(tc, test_value_arguments);
 #ifdef WISP_TEST_ALLOC_FAILURE
-    tcase_add_loop_test(tc, test_value_allocation_failure, 0, 2);
+    tcase_add_loop_test(tc, test_value_allocation_failure, 0, 5);
 #endif
     tcase_add_loop_test(tc, test_declaration_order, 0, ORDER_CASE_COUNT);
     tcase_add_test(tc, test_property_metadata);

@@ -14,11 +14,17 @@
  * bytecode. NONE deliberately has no generic source-text fallback. */
 enum css_declaration_value_kind {
     CSS_DECL_VALUE_NONE,
+    CSS_DECL_VALUE_KEYWORD,
     CSS_DECL_VALUE_NUMBER,
     CSS_DECL_VALUE_LENGTH,
     CSS_DECL_VALUE_NUMBER_LENGTH,
     CSS_DECL_VALUE_PAIR_LENGTH,
     CSS_DECL_VALUE_QUAD_LENGTH,
+    CSS_DECL_VALUE_PAIR_KEYWORD,
+    CSS_DECL_VALUE_QUAD_KEYWORD,
+    CSS_DECL_VALUE_URI,
+    CSS_DECL_VALUE_IMAGE_LIST,
+    CSS_DECL_VALUE_KEYWORD_LIST,
 };
 
 /* Immutable registration shared by the parser, variable resolver and specified

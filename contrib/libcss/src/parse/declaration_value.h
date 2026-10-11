@@ -11,7 +11,7 @@
 
 /* Serialize one winning component's specified value, not its computed value.
  * Supports custom properties, CSS-wide keywords, pending variable substitution
- * and the scalar/box families registered in properties.toml. CSS_INVALID means
+ * and the scalar, box and URL/list families registered in properties.toml. CSS_INVALID means
  * that a property/value serializer is not implemented yet (e.g. math functions),
  * NOT that the already-accepted declaration is invalid. Callers must propagate
  * this limitation, never substitute raw text or an empty value as a fallback.
@@ -21,7 +21,7 @@ css_error css__declaration_value_serialize(const css_declaration_contribution *v
 /* Members must be in the requested shorthand's registered component order.
  * NULL members, mixed priorities, mixed CSS-wide keywords or incompatible
  * pending-substitution values give the CSSOM empty string. Reconstruction of
- * ordinary values currently covers the pair/quad length families only.
+ * ordinary values currently covers the pair/quad length and keyword families.
  * This does not decide whether a shorthand may be used in cssText: that also
  * needs the declaration block's ordering/logical-property intermixing checks. */
 css_error css__declaration_shorthand_serialize(const struct css_prop_entry *property,

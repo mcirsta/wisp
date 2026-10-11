@@ -635,7 +635,8 @@ and the saved eBihoreanul `style.opacity` blocker remains. Implementation sequen
    and specified-value serialization. Generated property metadata and an immutable
    component-order view cover name-level shorthand expansion and duplicate/
    priority resolution. The value layer below adds scalar/box expansion and
-   serialization; other value families, aliases and CSSOM writes remain. Derive
+   serialization, extended below to keywords and URL/list values; other value
+   families, aliases and CSSOM writes remain. Derive
    metadata from `properties.toml` and the existing generator. Follow the
    [CSSOM declaration-block algorithms](https://drafts.csswg.org/cssom/#the-cssstyledeclaration-interface),
    and keep specified values separate from inherited/computed values.
@@ -802,8 +803,9 @@ failed serialization leaves those views reusable.
 This remains an internal increment, **not exposed element.style**. `CSS_INVALID`
 from this private serializer explicitly means the value family is not implemented;
 callers must not silently use raw source or an empty string as a fallback. Math
-functions, colors, URLs, fonts and the other structured value families, legacy
+functions, colors, fonts and the other structured value families, legacy
 alias normalization and modern decomposition of older aggregate properties remain.
+URL/list values and keyword families are extended in the following increment.
 A box shorthand containing a math function is currently unsupported as a whole
 by this layer. The existing parser's accepted grammar is unchanged; this does not add
 exponent syntax or additional CSS input preprocessing. Block-wide serialization
@@ -821,6 +823,72 @@ The Release failure sweep initially exposed an assertion inside the test helper
 that allocated while malloc failures were enabled; moving assertions outside that
 interval fixed the harness, and the final serializer suites pass in both builds.
 Builds are warning-free and `git diff --check` is clean. No GTK tests were run.
+
+### Keyword, URL and list values (2026-10-11)
+
+Scalar/box serialization is committed as `abdaa47f`. Generated serialization
+metadata now covers common keyword properties (including display, visibility,
+positioning and flex alignment), border-style quads and overflow pairs. The same
+component selection and shortest-shorthand logic handles both lengths and
+keywords, including mixed priority, overrides and pending variable substitution.
+Font-weight's implemented number/keyword grammar and column-rule-width use the
+existing scalar families.
+
+The private `parse/declaration_text.{c,h}` serializer handles URL values and
+comma-separated image/attachment lists using the
+[CSSOM string, URL and list rules](https://drafts.csswg.org/cssom/#common-serializing-idioms).
+It measures output first and allocates once, retaining Unicode and URL case,
+quoting URLs, escaping quotes/backslashes/control characters, and normalizing
+list separators. Relative URLs remain specified values: the resolved URL in
+the renderer's string table is not used. A dedicated test supplies a resolver
+returning a different absolute URL to verify that separation. Gradients and
+other unsupported structured values still return `CSS_INVALID`; there is no
+raw-text fallback or newly exposed JS property.
+
+Round-trip tests exposed two shared lexer problems, corrected at their source:
+
+- URI extraction now records decoded payload boundaries while consuming syntax.
+  It no longer removes escaped leading/trailing spaces or quotes by inspecting
+  already-decoded content.
+- Hex escapes now follow
+  [CSS Syntax §4.3.7](https://drafts.csswg.org/css-syntax-3/#consume-escaped-code-point):
+  only zero, surrogates and out-of-range values become U+FFFD. Escaped controls,
+  carriage returns and Unicode noncharacters retain their values. Three legacy
+  lexer expectations were corrected accordingly.
+
+The ordinary overflow parser now accepts one or two values as required by
+[CSS Overflow §3.1](https://drafts.csswg.org/css-overflow-3/#overflow-properties),
+using generated value-only longhand helpers. This is necessary for a shorthand
+reconstructed from distinct axes to parse back correctly. CSS-wide keywords must
+still stand alone. Parsing failures restore the original token position and
+bytecode length. All 16 implemented axis combinations are compared against
+separate longhand bytecode, with whole and chunked input. This does not add
+`overflow:clip`, logical overflow longhands or additional attachment keywords.
+
+Validation: all 75 native CSS/QuickJS suites have passing Debug ASan/UBSan/LSan
+results, all 17 selected Release suites pass, and all 15 targeted Qt suites pass
+(including scrolling bounds and visible overflow). The declaration suite passes
+262 Debug / 271 Release checks. Coverage includes every input split for the URL
+regressions, long escaped URLs, specified-value round trips, invalid shorthand
+recovery, allocation failure/retry and final interned-string cleanup. Twelve
+generator checks cover metadata and family arity. Builds are warning-free and
+`git diff --check` is clean. No GTK build or tests were run.
+
+One old illegal-value fixture classified `overflow:auto visible` as invalid. It
+was moved to the valid overflow fixtures and both affected suites pass on rerun.
+That mismatch also exposed a separate **test-infrastructure issue**:
+`test/parse2-auto.c` allocates output from the expected text length, while
+`test/dump.h` and `test/dump_bytecode.h` write without bounds. Unexpectedly larger
+valid output can overrun the diagnostic buffer; `test/css21.c` also uses this
+unbounded dumper. Follow up by changing the shared dumper to a bounded/growing
+output sink and testing oversized mismatches. Increasing the guessed allocation
+would not fix the cause. This test-only work is deferred from the value batch.
+
+The live `element.style` wrapper and the saved eBihoreanul `style.opacity` blocker
+remain pending. Continue specified-value coverage, alias/aggregate handling and
+block serialization before adding CSSOM writes and DOM integration. General URL
+error/EOF recovery and CSS input preprocessing are not completed by these focused
+lexer fixes.
 
 ## Assessment
 

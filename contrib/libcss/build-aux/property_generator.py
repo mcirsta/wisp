@@ -267,10 +267,11 @@ class TomlPropertyReader:
                 elif target.get('declaration_longhands'):
                     raise ValueError(f"{name}: nested shorthand {member}; list its components")
             value_kind = prop.get('declaration_value', 'none')
-            if value_kind not in ('none', 'number', 'length', 'number_length', 'pair_length', 'quad_length'):
+            if value_kind not in ('none', 'number', 'length', 'number_length', 'keyword', 'pair_length',
+                                  'quad_length', 'pair_keyword', 'quad_keyword', 'uri', 'image_list', 'keyword_list'):
                 raise ValueError(f"{name}: unknown declaration_value {value_kind}")
             if value_kind != 'none':
-                expected = {'pair_length': 2, 'quad_length': 4}.get(value_kind, 0)
+                expected = {'pair_length': 2, 'quad_length': 4, 'pair_keyword': 2, 'quad_keyword': 4}.get(value_kind, 0)
                 if len(members) != expected:
                     raise ValueError(f"{name}: declaration_value requires {expected} longhands")
 

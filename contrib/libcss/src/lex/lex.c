@@ -102,6 +102,7 @@ struct css_lexer {
                              * rewinding */
         size_t dataLenForURL; /**< Output length for "url(", for
                                * rewinding */
+        size_t urlDataStart, urlDataEnd; /**< Decoded URL payload, excluding syntax */
         int hexCount; /**< Counter for reading hex digits */
     } context; /**< Context for the current state */
 
@@ -434,34 +435,10 @@ css_error emitToken(css_lexer *lexer, css_token_type type, css_token **token)
     case CSS_TOKEN_DIMENSION:
         break;
     case CSS_TOKEN_URI:
-        /* Strip the "url(" from the start */
-        t->data.data += SLEN("url(");
-        t->data.len -= SLEN("url(");
-
-        /* Strip any leading whitespace */
-        while (isSpace(t->data.data[0])) {
-            t->data.data++;
-            t->data.len--;
-        }
-
-        /* Strip any leading quote */
-        if (t->data.data[0] == '"' || t->data.data[0] == '\'') {
-            t->data.data += 1;
-            t->data.len -= 1;
-        }
-
-        /* Strip the trailing ')' */
-        t->data.len -= 1;
-
-        /* Strip any trailing whitespace */
-        while (t->data.len > 0 && isSpace(t->data.data[t->data.len - 1])) {
-            t->data.len--;
-        }
-
-        /* Strip any trailing quote */
-        if (t->data.len > 0 && (t->data.data[t->data.len - 1] == '"' || t->data.data[t->data.len - 1] == '\'')) {
-            t->data.len -= 1;
-        }
+        /* The URI state records decoded payload boundaries before consuming
+         * quotes/outer whitespace. Escaped spaces or quotes are URL data. */
+        t->data.data += lexer->context.urlDataStart;
+        t->data.len = lexer->context.urlDataEnd - lexer->context.urlDataStart;
         break;
     case CSS_TOKEN_UNICODE_RANGE:
         /* Remove "U+" from the start */
@@ -1523,11 +1500,13 @@ css_error URI(css_lexer *lexer, css_token **token)
         }
 
         c = *cptr;
+        lexer->context.urlDataStart = lexer->token.data.len;
 
         if (c == '"' || c == '\'') {
             APPEND(lexer, cptr, clen);
 
             lexer->context.first = c;
+            lexer->context.urlDataStart = lexer->token.data.len;
 
             goto string;
         }
@@ -1545,6 +1524,7 @@ css_error URI(css_lexer *lexer, css_token **token)
         if (error != CSS_OK)
             return error;
 
+        lexer->context.urlDataEnd = lexer->token.data.len;
         lexer->context.lastWasCR = false;
 
         /* Fall through */
@@ -1596,6 +1576,7 @@ css_error URI(css_lexer *lexer, css_token **token)
             return error;
         }
 
+        lexer->context.urlDataEnd = lexer->token.data.len - (lexer->context.stringClosed ? 1 : 0);
         /* EOF gets handled in RParen */
 
         lexer->context.lastWasCR = false;
@@ -2027,13 +2008,11 @@ css_error consumeUnicode(css_lexer *lexer, uint32_t ucs)
         }
     }
 
-    /* Sanitise UCS4 character */
-    if (ucs > 0x10FFFF || ucs <= 0x0008 || ucs == 0x000B || (0x000E <= ucs && ucs <= 0x001F) ||
-        (0x007F <= ucs && ucs <= 0x009F) || (0xD800 <= ucs && ucs <= 0xDFFF) || (0xFDD0 <= ucs && ucs <= 0xFDEF) ||
-        (ucs & 0xFFFE) == 0xFFFE) {
+    /* CSS Syntax §4.3.7: escape decoding replaces only zero, surrogates and
+     * out-of-range values. Escaped controls (including CR) and noncharacters
+     * are data; input newline preprocessing does not apply to decoded escapes. */
+    if (ucs == 0 || ucs > 0x10FFFF || (0xD800 <= ucs && ucs <= 0xDFFF)) {
         ucs = 0xFFFD;
-    } else if (ucs == 0x000D) {
-        ucs = 0x000A;
     }
 
     /* Convert our UCS4 character to UTF-8 */

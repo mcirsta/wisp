@@ -114,7 +114,8 @@
 #                  Logical start/end names retain their identity even where the
 #                  current renderer only implements their parent shorthand.
 #   declaration_value  Specified-value serialization family: number, length,
-#                  number_length, pair_length or quad_length. This is not a
+#                  number_length, keyword, pair_length/keyword, quad_length/keyword,
+#                  uri, image_list or keyword_list. This is not a
 #                  parser grammar and does not enable additional CSS values.
 #                  Math functions still require a separate specified serializer.
 #   logical_group  CSS logical-property group, independent of bytecode storage.
@@ -205,6 +206,7 @@ manual = true
 # initial: stub (unimplemented)
 
 [background_attachment]
+declaration_value = "keyword_list"
 enum = "CSS_PROP_BACKGROUND_ATTACHMENT"
 inherited = false
 cascade = "manual"
@@ -225,6 +227,7 @@ values = "color"
 parse = "IDENT:( INHERIT: INITIAL: REVERT: UNSET: IDENT:) COLOR:BACKGROUND_COLOR_SET"
 
 [background_image]
+declaration_value = "image_list"
 enum = "CSS_PROP_BACKGROUND_IMAGE"
 inherited = false
 cascade = "manual"
@@ -255,6 +258,7 @@ bits = 3
 initial = "REPEAT"
 
 [border_collapse]
+declaration_value = "keyword"
 enum = "CSS_PROP_BORDER_COLLAPSE"
 cascade = "ident"
 computed = "auto"
@@ -329,6 +333,7 @@ values = "color"
 parse = "WRAP:css__parse_border_side_color"
 
 [border_top_style]
+declaration_value = "keyword"
 enum = "CSS_PROP_BORDER_TOP_STYLE"
 inherited = false
 enum_prefix = "CSS_BORDER_STYLE"
@@ -340,6 +345,7 @@ initial = "NONE"
 parse = "WRAP:css__parse_border_side_style"
 
 [border_right_style]
+declaration_value = "keyword"
 enum = "CSS_PROP_BORDER_RIGHT_STYLE"
 inherited = false
 enum_prefix = "CSS_BORDER_STYLE"
@@ -351,6 +357,7 @@ initial = "NONE"
 parse = "WRAP:css__parse_border_side_style"
 
 [border_bottom_style]
+declaration_value = "keyword"
 enum = "CSS_PROP_BORDER_BOTTOM_STYLE"
 inherited = false
 enum_prefix = "CSS_BORDER_STYLE"
@@ -362,6 +369,7 @@ initial = "NONE"
 parse = "WRAP:css__parse_border_side_style"
 
 [border_left_style]
+declaration_value = "keyword"
 enum = "CSS_PROP_BORDER_LEFT_STYLE"
 inherited = false
 enum_prefix = "CSS_BORDER_STYLE"
@@ -484,6 +492,7 @@ computed = "none"
 helper_longhands = ["side"]
 
 [caption_side]
+declaration_value = "keyword"
 enum = "CSS_PROP_CAPTION_SIDE"
 cascade = "ident"
 computed = "auto"
@@ -493,6 +502,7 @@ initial = "TOP"
 parse = "IDENT:( INHERIT: INITIAL: REVERT: UNSET: TOP:0,CAPTION_SIDE_TOP BOTTOM:0,CAPTION_SIDE_BOTTOM IDENT:)"
 
 [clear]
+declaration_value = "keyword"
 enum = "CSS_PROP_CLEAR"
 inherited = false
 cascade = "ident"
@@ -567,6 +577,7 @@ select_comments = "Encode counter_reset as an array of name, value pairs, termin
 parse = '''IDENT:( INHERIT: INITIAL: REVERT: UNSET: NONE:0,COUNTER_RESET_NONE IDENT:) IDENT_LIST:( STRING_OPTNUM:COUNTER_RESET_NAMED 0:COUNTER_RESET_NONE IDENT_LIST:)'''
 
 [cue_after]
+declaration_value = "uri"
 enum = "CSS_PROP_CUE_AFTER"
 inherited = false
 cascade = "manual"
@@ -575,6 +586,7 @@ computed = "none"
 parse = "IDENT:( INHERIT: INITIAL: REVERT: UNSET: NONE:0,CUE_AFTER_NONE IDENT:) URI:CUE_AFTER_URI"
 
 [cue_before]
+declaration_value = "uri"
 enum = "CSS_PROP_CUE_BEFORE"
 inherited = false
 cascade = "manual"
@@ -597,6 +609,7 @@ outer_struct = true
 select_comments = "Encode cursor uri(s) as an array of string objects, terminated with a blank entry."
 
 [direction]
+declaration_value = "keyword"
 enum = "CSS_PROP_DIRECTION"
 cascade = "ident"
 computed = "auto"
@@ -606,6 +619,7 @@ initial = "LTR"
 parse = "IDENT:( INHERIT: INITIAL: REVERT: UNSET: LTR:0,DIRECTION_LTR RTL:0,DIRECTION_RTL IDENT:)"
 
 [display]
+declaration_value = "keyword"
 enum = "CSS_PROP_DISPLAY"
 inherited = false
 cascade = "ident"
@@ -623,6 +637,7 @@ manual = true
 # initial: stub (unimplemented)
 
 [empty_cells]
+declaration_value = "keyword"
 enum = "CSS_PROP_EMPTY_CELLS"
 cascade = "ident"
 computed = "auto"
@@ -632,6 +647,7 @@ initial = "SHOW"
 parse = "IDENT:( INHERIT: INITIAL: REVERT: UNSET: SHOW:0,EMPTY_CELLS_SHOW HIDE:0,EMPTY_CELLS_HIDE IDENT:)"
 
 [float]
+declaration_value = "keyword"
 enum = "CSS_PROP_FLOAT"
 inherited = false
 cascade = "ident"
@@ -665,6 +681,7 @@ condition = "CSS_FONT_SIZE_DIMENSION"
 parse = '''IDENT:( INHERIT: INITIAL: REVERT: UNSET: XX_SMALL:0,FONT_SIZE_XX_SMALL X_SMALL:0,FONT_SIZE_X_SMALL SMALL:0,FONT_SIZE_SMALL MEDIUM:0,FONT_SIZE_MEDIUM LARGE:0,FONT_SIZE_LARGE X_LARGE:0,FONT_SIZE_X_LARGE XX_LARGE:0,FONT_SIZE_XX_LARGE LARGER:0,FONT_SIZE_LARGER SMALLER:0,FONT_SIZE_SMALLER IDENT:) LENGTH_UNIT:( UNIT_PX:FONT_SIZE_DIMENSION MASK:UNIT_MASK_FONT_SIZE RANGE:<0 LENGTH_UNIT:) CALC:( UNIT_PX:FONT_SIZE_CALC CALC:)'''
 
 [font_style]
+declaration_value = "keyword"
 enum = "CSS_PROP_FONT_STYLE"
 cascade = "ident"
 computed = "auto"
@@ -683,6 +700,7 @@ initial = "NORMAL"
 parse = '''IDENT:( INHERIT: INITIAL: REVERT: UNSET: NORMAL:0,FONT_VARIANT_NORMAL SMALL_CAPS:0,FONT_VARIANT_SMALL_CAPS IDENT:)'''
 
 [font_weight]
+declaration_value = "number"
 enum = "CSS_PROP_FONT_WEIGHT"
 cascade = "manual"
 computed = "auto"
@@ -750,6 +768,7 @@ override = "get"
 parse = '''IDENT:( INHERIT: INITIAL: REVERT: UNSET: NORMAL:0,LINE_HEIGHT_NORMAL IDENT:) NUMBER:( false:LINE_HEIGHT_NUMBER RANGE:num<0 NUMBER:) LENGTH_UNIT:( UNIT_PX:LINE_HEIGHT_DIMENSION MASK:UNIT_MASK_LINE_HEIGHT RANGE:<0 LENGTH_UNIT:) CALC:( ANY:LINE_HEIGHT_CALC CALC:)'''
 
 [list_style_image]
+declaration_value = "uri"
 enum = "CSS_PROP_LIST_STYLE_IMAGE"
 cascade = "uri_none"
 computed = "auto"
@@ -761,6 +780,7 @@ values = "string"
 parse = '''IDENT:( INHERIT: INITIAL: REVERT: UNSET: NONE:0,LIST_STYLE_IMAGE_NONE IDENT:) URI:LIST_STYLE_IMAGE_URI'''
 
 [list_style_position]
+declaration_value = "keyword"
 enum = "CSS_PROP_LIST_STYLE_POSITION"
 cascade = "ident"
 computed = "auto"
@@ -770,6 +790,7 @@ initial = "OUTSIDE"
 parse = '''IDENT:( INHERIT: INITIAL: REVERT: UNSET: INSIDE:0,LIST_STYLE_POSITION_INSIDE OUTSIDE:0,LIST_STYLE_POSITION_OUTSIDE IDENT:)'''
 
 [list_style_type]
+declaration_value = "keyword"
 enum = "CSS_PROP_LIST_STYLE_TYPE"
 cascade = "manual"
 computed = "auto"
@@ -926,6 +947,7 @@ defaults = "CSS_OUTLINE_COLOR_INVERT"
 parse = '''IDENT:( INHERIT: INITIAL: REVERT: UNSET: INVERT:0,OUTLINE_COLOR_INVERT IDENT:) COLOR:OUTLINE_COLOR_SET'''
 
 [outline_style]
+declaration_value = "keyword"
 enum = "CSS_PROP_OUTLINE_STYLE"
 inherited = false
 cascade = "border_style"
@@ -951,6 +973,7 @@ defaults = "CSS_OUTLINE_WIDTH_MEDIUM"
 parse = "WRAP:css__parse_border_side_width"
 
 [overflow_x]
+declaration_value = "keyword"
 enum = "CSS_PROP_OVERFLOW_X"
 inherited = false
 enum_prefix = "CSS_OVERFLOW"
@@ -1090,6 +1113,7 @@ cascade = "manual"
 computed = "none"
 
 [position]
+declaration_value = "keyword"
 enum = "CSS_PROP_POSITION"
 inherited = false
 cascade = "ident"
@@ -1175,6 +1199,7 @@ computed = "none"
 parse = '''IDENT:( INHERIT: INITIAL: REVERT: UNSET: IDENT:) NUMBER:( false:STRESS_SET RANGE:num<0||num>INTTOFIX(100) NUMBER:) CALC:( NUMBER:STRESS_CALC CALC:)'''
 
 [table_layout]
+declaration_value = "keyword"
 enum = "CSS_PROP_TABLE_LAYOUT"
 inherited = false
 cascade = "ident"
@@ -1184,6 +1209,7 @@ initial = "AUTO"
 parse = "IDENT:( INHERIT: INITIAL: REVERT: UNSET: AUTO:0,TABLE_LAYOUT_AUTO FIXED:0,TABLE_LAYOUT_FIXED IDENT:)"
 
 [text_align]
+declaration_value = "keyword"
 enum = "CSS_PROP_TEXT_ALIGN"
 cascade = "manual"
 computed = "auto"
@@ -1216,6 +1242,7 @@ condition = "CSS_TEXT_INDENT_SET"
 parse = '''IDENT:( INHERIT: INITIAL: REVERT: UNSET: IDENT:) LENGTH_UNIT:( UNIT_PX:TEXT_INDENT_SET MASK:UNIT_MASK_TEXT_INDENT LENGTH_UNIT:) CALC:( UNIT_PX:TEXT_INDENT_CALC CALC:)'''
 
 [text_transform]
+declaration_value = "keyword"
 enum = "CSS_PROP_TEXT_TRANSFORM"
 cascade = "ident"
 computed = "auto"
@@ -1241,6 +1268,7 @@ override = "get"
 parse = "WRAP:css__parse_side"
 
 [unicode_bidi]
+declaration_value = "keyword"
 enum = "CSS_PROP_UNICODE_BIDI"
 inherited = false
 cascade = "ident"
@@ -1262,6 +1290,7 @@ condition = "CSS_VERTICAL_ALIGN_SET"
 parse = '''IDENT:( INHERIT: INITIAL: REVERT: UNSET: BASELINE:0,VERTICAL_ALIGN_BASELINE SUB:0,VERTICAL_ALIGN_SUB SUPER:0,VERTICAL_ALIGN_SUPER TOP:0,VERTICAL_ALIGN_TOP TEXT_TOP:0,VERTICAL_ALIGN_TEXT_TOP MIDDLE:0,VERTICAL_ALIGN_MIDDLE BOTTOM:0,VERTICAL_ALIGN_BOTTOM TEXT_BOTTOM:0,VERTICAL_ALIGN_TEXT_BOTTOM IDENT:) LENGTH_UNIT:( UNIT_PX:VERTICAL_ALIGN_SET MASK:UNIT_MASK_VERTICAL_ALIGN LENGTH_UNIT:) CALC:( UNIT_PX:VERTICAL_ALIGN_CALC CALC:)'''
 
 [visibility]
+declaration_value = "keyword"
 enum = "CSS_PROP_VISIBILITY"
 cascade = "ident"
 computed = "auto"
@@ -1360,6 +1389,7 @@ values = "fixed"
 condition = "CSS_OPACITY_SET"
 
 [break_after]
+declaration_value = "keyword"
 enum = "CSS_PROP_BREAK_AFTER"
 inherited = false
 cascade = "break"
@@ -1370,6 +1400,7 @@ defaults = "CSS_BREAK_AFTER_AUTO"
 parse = '''IDENT:( INHERIT: INITIAL: REVERT: UNSET: AUTO:0,BREAK_AFTER_AUTO ALWAYS:0,BREAK_AFTER_ALWAYS AVOID:0,BREAK_AFTER_AVOID LEFT:0,BREAK_AFTER_LEFT RIGHT:0,BREAK_AFTER_RIGHT PAGE:0,BREAK_AFTER_PAGE COLUMN:0,BREAK_AFTER_COLUMN AVOID_PAGE:0,BREAK_AFTER_AVOID_PAGE AVOID_COLUMN:0,BREAK_AFTER_AVOID_COLUMN IDENT:)'''
 
 [break_before]
+declaration_value = "keyword"
 enum = "CSS_PROP_BREAK_BEFORE"
 inherited = false
 cascade = "break"
@@ -1380,6 +1411,7 @@ defaults = "CSS_BREAK_BEFORE_AUTO"
 parse = '''IDENT:( INHERIT: INITIAL: REVERT: UNSET: AUTO:0,BREAK_BEFORE_AUTO ALWAYS:0,BREAK_BEFORE_ALWAYS AVOID:0,BREAK_BEFORE_AVOID LEFT:0,BREAK_BEFORE_LEFT RIGHT:0,BREAK_BEFORE_RIGHT PAGE:0,BREAK_BEFORE_PAGE COLUMN:0,BREAK_BEFORE_COLUMN AVOID_PAGE:0,BREAK_BEFORE_AVOID_PAGE AVOID_COLUMN:0,BREAK_BEFORE_AVOID_COLUMN IDENT:)'''
 
 [break_inside]
+declaration_value = "keyword"
 enum = "CSS_PROP_BREAK_INSIDE"
 inherited = false
 cascade = "ident"
@@ -1403,6 +1435,7 @@ defaults = "CSS_COLUMN_COUNT_AUTO"
 parse = '''IDENT:( INHERIT: INITIAL: REVERT: UNSET: AUTO:0,COLUMN_COUNT_AUTO IDENT:) NUMBER:( true:COLUMN_COUNT_SET RANGE:num<0 NUMBER:) CALC:( NUMBER:COLUMN_COUNT_CALC CALC:)'''
 
 [column_fill]
+declaration_value = "keyword"
 enum = "CSS_PROP_COLUMN_FILL"
 inherited = false
 cascade = "ident"
@@ -1440,6 +1473,7 @@ defaults = "CSS_COLUMN_RULE_COLOR_CURRENT_COLOR"
 parse = "IDENT:( INHERIT: INITIAL: REVERT: UNSET: IDENT:) COLOR:COLUMN_RULE_COLOR_SET"
 
 [column_rule_style]
+declaration_value = "keyword"
 enum = "CSS_PROP_COLUMN_RULE_STYLE"
 inherited = false
 enum_prefix = "CSS_COLUMN_RULE_STYLE"
@@ -1452,6 +1486,7 @@ defaults = "CSS_COLUMN_RULE_STYLE_NONE"
 parse = '''IDENT:( INHERIT: INITIAL: REVERT: UNSET: NONE:0,BORDER_STYLE_NONE HIDDEN:0,BORDER_STYLE_HIDDEN DOTTED:0,BORDER_STYLE_DOTTED DASHED:0,BORDER_STYLE_DASHED SOLID:0,BORDER_STYLE_SOLID LIBCSS_DOUBLE:0,BORDER_STYLE_DOUBLE GROOVE:0,BORDER_STYLE_GROOVE RIDGE:0,BORDER_STYLE_RIDGE INSET:0,BORDER_STYLE_INSET OUTSET:0,BORDER_STYLE_OUTSET IDENT:)'''
 
 [column_rule_width]
+declaration_value = "length"
 enum = "CSS_PROP_COLUMN_RULE_WIDTH"
 inherited = false
 enum_prefix = "CSS_COLUMN_RULE_WIDTH"
@@ -1467,6 +1502,7 @@ defaults = "CSS_COLUMN_RULE_WIDTH_MEDIUM"
 parse = "WRAP:css__parse_border_side_width"
 
 [column_span]
+declaration_value = "keyword"
 enum = "CSS_PROP_COLUMN_SPAN"
 inherited = false
 cascade = "ident"
@@ -1492,6 +1528,7 @@ defaults = "CSS_COLUMN_WIDTH_AUTO"
 parse = '''IDENT:( INHERIT: INITIAL: REVERT: UNSET: AUTO:0,COLUMN_WIDTH_AUTO IDENT:) LENGTH_UNIT:( UNIT_PX:COLUMN_WIDTH_SET MASK:UNIT_MASK_COLUMN_WIDTH LENGTH_UNIT:) CALC:( UNIT_PX:COLUMN_WIDTH_CALC CALC:)'''
 
 [writing_mode]
+declaration_value = "keyword"
 enum = "CSS_PROP_WRITING_MODE"
 inherited = false
 cascade = "ident"
@@ -1502,6 +1539,7 @@ defaults = "CSS_WRITING_MODE_HORIZONTAL_TB"
 parse = '''IDENT:( INHERIT: INITIAL: REVERT: UNSET: HORIZONTAL_TB:0,WRITING_MODE_HORIZONTAL_TB VERTICAL_RL:0,WRITING_MODE_VERTICAL_RL VERTICAL_LR:0,WRITING_MODE_VERTICAL_LR IDENT:)'''
 
 [overflow_y]
+declaration_value = "keyword"
 enum = "CSS_PROP_OVERFLOW_Y"
 inherited = false
 enum_prefix = "CSS_OVERFLOW"
@@ -1513,6 +1551,7 @@ initial = "VISIBLE"
 parse = '''IDENT:( INHERIT: INITIAL: REVERT: UNSET: VISIBLE:0,OVERFLOW_VISIBLE HIDDEN:0,OVERFLOW_HIDDEN SCROLL:0,OVERFLOW_SCROLL AUTO:0,OVERFLOW_AUTO IDENT:)'''
 
 [box_sizing]
+declaration_value = "keyword"
 enum = "CSS_PROP_BOX_SIZING"
 inherited = false
 cascade = "ident"
@@ -1546,6 +1585,7 @@ computed = "none"
 helper_longhands = ["padding_side"]
 
 [align_content]
+declaration_value = "keyword"
 enum = "CSS_PROP_ALIGN_CONTENT"
 inherited = false
 cascade = "ident"
@@ -1555,6 +1595,7 @@ initial = "STRETCH"
 parse = '''IDENT:( INHERIT: INITIAL: REVERT: UNSET: NORMAL:0,ALIGN_CONTENT_STRETCH STRETCH:0,ALIGN_CONTENT_STRETCH START:0,ALIGN_CONTENT_FLEX_START END:0,ALIGN_CONTENT_FLEX_END FLEX_START:0,ALIGN_CONTENT_FLEX_START FLEX_END:0,ALIGN_CONTENT_FLEX_END CENTER:0,ALIGN_CONTENT_CENTER SPACE_BETWEEN:0,ALIGN_CONTENT_SPACE_BETWEEN SPACE_AROUND:0,ALIGN_CONTENT_SPACE_AROUND SPACE_EVENLY:0,ALIGN_CONTENT_SPACE_EVENLY IDENT:)'''
 
 [align_items]
+declaration_value = "keyword"
 enum = "CSS_PROP_ALIGN_ITEMS"
 inherited = false
 cascade = "ident"
@@ -1564,6 +1605,7 @@ initial = "NORMAL"
 parse = '''IDENT:( INHERIT: INITIAL: REVERT: UNSET: STRETCH:0,ALIGN_ITEMS_STRETCH FLEX_START:0,ALIGN_ITEMS_FLEX_START FLEX_END:0,ALIGN_ITEMS_FLEX_END CENTER:0,ALIGN_ITEMS_CENTER BASELINE:0,ALIGN_ITEMS_BASELINE NORMAL:0,ALIGN_ITEMS_NORMAL START:0,ALIGN_ITEMS_START END:0,ALIGN_ITEMS_END IDENT:)'''
 
 [align_self]
+declaration_value = "keyword"
 enum = "CSS_PROP_ALIGN_SELF"
 inherited = false
 cascade = "ident"
@@ -1586,6 +1628,7 @@ condition = "CSS_FLEX_BASIS_SET"
 parse = '''IDENT:( INHERIT: INITIAL: REVERT: UNSET: AUTO:0,FLEX_BASIS_AUTO CONTENT:0,FLEX_BASIS_CONTENT IDENT:) LENGTH_UNIT:( UNIT_PX:FLEX_BASIS_SET MASK:UNIT_MASK_FLEX_BASIS RANGE:<0 LENGTH_UNIT:) CALC:( UNIT_PX:FLEX_BASIS_CALC CALC:)'''
 
 [flex_direction]
+declaration_value = "keyword"
 enum = "CSS_PROP_FLEX_DIRECTION"
 inherited = false
 cascade = "ident"
@@ -1621,6 +1664,7 @@ condition = "CSS_FLEX_SHRINK_SET"
 parse = '''IDENT:( INHERIT: INITIAL: REVERT: UNSET: IDENT:) NUMBER:( false:FLEX_SHRINK_SET RANGE:num<0 NUMBER:) CALC:( NUMBER:FLEX_SHRINK_CALC CALC:)'''
 
 [flex_wrap]
+declaration_value = "keyword"
 enum = "CSS_PROP_FLEX_WRAP"
 inherited = false
 cascade = "ident"
@@ -1630,6 +1674,7 @@ initial = "NOWRAP"
 parse = '''IDENT:( INHERIT: INITIAL: REVERT: UNSET: NOWRAP:0,FLEX_WRAP_NOWRAP WRAP_STRING:0,FLEX_WRAP_WRAP WRAP_REVERSE:0,FLEX_WRAP_WRAP_REVERSE IDENT:)'''
 
 [justify_content]
+declaration_value = "keyword"
 enum = "CSS_PROP_JUSTIFY_CONTENT"
 inherited = false
 cascade = "ident"
@@ -1825,6 +1870,7 @@ defaults = "CSS_GRID_LINE_AUTO"
 parse = '''IDENT:( INHERIT: INITIAL: REVERT: UNSET: AUTO:0,CSS_GRID_LINE_AUTO IDENT:) NUMBER:( true:CSS_GRID_LINE_SET NUMBER:)'''
 
 [object_fit]
+declaration_value = "keyword"
 enum = "CSS_PROP_OBJECT_FIT"
 inherited = false
 cascade = "ident"
@@ -1919,6 +1965,7 @@ wrap = "css__parse_border_side"
 parse = "WRAP:css__parse_border_side"
 
 [border_style]
+declaration_value = "quad_keyword"
 declaration_longhands = ["border_top_style", "border_right_style", "border_bottom_style", "border_left_style"]
 enum = "CSS_PROP_BORDER_STYLE"
 inherited = false
@@ -2105,6 +2152,8 @@ cascade = "none"
 computed = "none"
 
 [overflow]
+helper_longhands = ["overflow_x", "overflow_y"]
+declaration_value = "pair_keyword"
 declaration_longhands = ["overflow_x", "overflow_y"]
 enum = "CSS_PROP_OVERFLOW"
 inherited = false
@@ -2216,6 +2265,7 @@ computed = "none"
 parse = "WRAP:css__parse_padding_side"
 
 [content_visibility]
+declaration_value = "keyword"
 enum = "CSS_PROP_CONTENT_VISIBILITY"
 inherited = false
 cascade = "ident"

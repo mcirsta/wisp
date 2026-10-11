@@ -40,14 +40,25 @@ class DeclarationMetadataTest(unittest.TestCase):
             self.reader.validate_declarations()
 
     def test_value_family_arity(self):
-        self.reader.toml_data["margin"]["declaration_value"] = "pair_length"
-        with self.assertRaisesRegex(ValueError, "margin: declaration_value requires 2"):
-            self.reader.validate_declarations()
+        for kind in ("pair_length", "pair_keyword"):
+            with self.subTest(kind=kind):
+                self.reader.toml_data["margin"]["declaration_value"] = kind
+                with self.assertRaisesRegex(ValueError, "margin: declaration_value requires 2"):
+                    self.reader.validate_declarations()
 
     def test_longhand_value_family(self):
-        self.reader.toml_data["width"]["declaration_value"] = "quad_length"
-        with self.assertRaisesRegex(ValueError, "width: declaration_value requires 4"):
-            self.reader.validate_declarations()
+        for kind in ("quad_length", "quad_keyword"):
+            with self.subTest(kind=kind):
+                self.reader.toml_data["width"]["declaration_value"] = kind
+                with self.assertRaisesRegex(ValueError, "width: declaration_value requires 4"):
+                    self.reader.validate_declarations()
+
+    def test_scalar_family_cannot_describe_shorthand(self):
+        for kind in ("keyword", "uri", "image_list", "keyword_list"):
+            with self.subTest(kind=kind):
+                self.reader.toml_data["overflow"]["declaration_value"] = kind
+                with self.assertRaisesRegex(ValueError, "overflow: declaration_value requires 0"):
+                    self.reader.validate_declarations()
 
     def test_missing_shorthand_members(self):
         del self.reader.toml_data["margin"]["declaration_longhands"]

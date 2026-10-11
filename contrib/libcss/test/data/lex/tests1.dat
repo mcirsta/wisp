@@ -625,7 +625,7 @@ EOF
 #data
 \000d
 #expected
-IDENT:\n
+IDENT:\r
 EOF
 #reset
 
@@ -646,14 +646,14 @@ EOF
 #data
 \fffe
 #expected
-IDENT:�
+IDENT:￾
 EOF
 #reset
 #
 #data
 \1ffff
 #expected
-IDENT:�
+IDENT:🿿
 EOF
 #reset
 

@@ -179,6 +179,7 @@ add_library(css ${WISP_LIB_TYPE}
 	src/parse/declarations.c
 	src/parse/declaration_order.c
 	src/parse/declaration_value.c
+	src/parse/declaration_text.c
 	src/parse/important.c
 	src/parse/propstrings.c
 	src/parse/font_face.c

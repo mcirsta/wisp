@@ -2370,13 +2370,6 @@
 #reset
 
 #data
-* { overflow: auto visible; }
-#errors
-#expected
-| *
-#reset
-
-#data
 * { overflow: 6; }
 #errors
 #expected

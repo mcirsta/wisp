@@ -8,6 +8,7 @@
 #include <string.h>
 
 #include "parse/declaration_value.h"
+#include "parse/declaration_text.h"
 #include "parse/property.h"
 
 static css_error intern(const char *text, size_t length, lwc_string **out)
@@ -157,6 +158,20 @@ static css_error serialize_numeric(const css_declaration_token *token, bool leng
     return error;
 }
 
+static size_t scalar_arity(enum css_declaration_value_kind kind)
+{
+    switch (kind) {
+    case CSS_DECL_VALUE_PAIR_LENGTH:
+    case CSS_DECL_VALUE_PAIR_KEYWORD:
+        return 2;
+    case CSS_DECL_VALUE_QUAD_LENGTH:
+    case CSS_DECL_VALUE_QUAD_KEYWORD:
+        return 4;
+    default:
+        return 1;
+    }
+}
+
 /* These grammars have one scalar token per supplied component. Functions need
  * their own specified-value tree/serializer; do not split them at whitespace
  * or serialize their evaluated fixed-point result. */
@@ -205,16 +220,20 @@ css_error css__declaration_value_serialize(const css_declaration_contribution *v
     enum css_declaration_value_kind kind = property->value_kind;
     if (kind == CSS_DECL_VALUE_NONE)
         return CSS_INVALID;
-    size_t arity = kind == CSS_DECL_VALUE_QUAD_LENGTH ? 4 : kind == CSS_DECL_VALUE_PAIR_LENGTH ? 2 : 1;
+    if (kind == CSS_DECL_VALUE_URI || kind == CSS_DECL_VALUE_IMAGE_LIST || kind == CSS_DECL_VALUE_KEYWORD_LIST)
+        return css__declaration_text_serialize(source, out);
+    size_t arity = scalar_arity(kind);
     const css_declaration_token *token = scalar_component(value, arity);
     if (token == NULL)
         return CSS_INVALID;
     if (token->type == CSS_TOKEN_IDENT)
         return lwc_string_tolower(token->text, out) == lwc_error_ok ? CSS_OK : CSS_NOMEM;
+    if (kind == CSS_DECL_VALUE_KEYWORD || kind == CSS_DECL_VALUE_PAIR_KEYWORD || kind == CSS_DECL_VALUE_QUAD_KEYWORD)
+        return CSS_INVALID;
     return serialize_numeric(token, kind != CSS_DECL_VALUE_NUMBER && kind != CSS_DECL_VALUE_NUMBER_LENGTH, out);
 }
 
-static css_error serialize_lengths(const css_declaration_contribution *const *members, size_t count, lwc_string **out)
+static css_error serialize_scalars(const css_declaration_contribution *const *members, size_t count, lwc_string **out)
 {
     lwc_string *values[4] = {0};
     css_error error = CSS_OK;
@@ -305,7 +324,7 @@ css_error css__declaration_shorthand_serialize(const struct css_prop_entry *prop
     }
     if (any_wide)
         return same_wide ? intern(wide, strlen(wide), out) : intern("", 0, out);
-    if (property->value_kind != CSS_DECL_VALUE_PAIR_LENGTH && property->value_kind != CSS_DECL_VALUE_QUAD_LENGTH)
+    if (scalar_arity(property->value_kind) == 1)
         return CSS_INVALID;
-    return serialize_lengths(members, count, out);
+    return serialize_scalars(members, count, out);
 }

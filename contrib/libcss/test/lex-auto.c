@@ -184,6 +184,9 @@ void css__parse_expected(line_ctx *ctx, const char *data, size_t len)
                 case 'n':
                     c = 0xa;
                     break;
+                case 'r':
+                    c = 0xd;
+                    break;
                 case 't':
                     c = 0x9;
                     break;
