@@ -131,6 +131,9 @@ if(BUILD_TESTING AND WISP_ENABLE_TESTS)
         add_test(NAME qt_js_script_order COMMAND Python3::Interpreter
             ${CMAKE_CURRENT_SOURCE_DIR}/test_js_script_order.py $<TARGET_FILE:wisp-qt>)
         set_tests_properties(qt_js_script_order PROPERTIES TIMEOUT 30)
+        add_test(NAME qt_js_lifecycle COMMAND Python3::Interpreter
+            ${CMAKE_CURRENT_SOURCE_DIR}/test_js_lifecycle.py $<TARGET_FILE:wisp-qt>)
+        set_tests_properties(qt_js_lifecycle PROPERTIES TIMEOUT 45)
         add_test(NAME qt_js_timers COMMAND Python3::Interpreter
             ${CMAKE_CURRENT_SOURCE_DIR}/test_js_timers.py $<TARGET_FILE:wisp-qt>)
         set_tests_properties(qt_js_timers PROPERTIES TIMEOUT 45)

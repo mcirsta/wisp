@@ -13,7 +13,8 @@ MouseEvent values share that dispatcher. The 2026-10-11 increments implement nat
 checkbox/radio pre-activation, cancellation rollback, label forwarding and trusted
 primary-click delivery to JS. This click adapter is enabled whenever JavaScript is
 enabled; it needs no experimental option. Keyboard events, the wider pointer/mouse
-stream and lifecycle delivery remain separate work. Native SubmitEvent delivery
+stream remain separate work. Document readiness, DOMContentLoaded and Window load
+delivery are implemented for the existing parser/resource model. Native SubmitEvent delivery
 is implemented; validation and FormDataEvent remain incomplete. Earlier increment
 notes describe their historical scope; the current status is recorded below.
 
@@ -26,9 +27,8 @@ requires them. Do not make those features prerequisites for useful page renderin
 Fix shared underlying defects found along the way when a focused root-cause fix
 is possible; an incomplete surrounding API is not a reason to leave such bugs.
 
-Next, establish document readiness and correctly timed DOMContentLoaded/load
-callbacks, then use saved/live reading sites to identify their first unsupported
-DOM operation. Prioritize real element queries, common DOM mutations and small
+Document readiness and DOMContentLoaded/load callbacks are now connected.
+Next, use saved/live reading sites to identify their first unsupported DOM operation. Prioritize real element queries, common DOM mutations and small
 style/HTML operations according to those failures. Confirm the needed behavior
 against standards and use focused fixtures plus visible full-page checks.
 Content-fetching APIs become a priority when a page needs them to populate the
@@ -100,9 +100,9 @@ unless stated otherwise.
 | JS diagnostics | Optional `js_trace` records document/entry IDs, script sources, timer causality, navigation, exposed node IDs, actual DOM operations and coalesced render requests | Separates supported JS host effects from static processing; this is not complete paint attribution |
 | Document/nodes | `dom.c`/`document.c`/`tree.c`/`collections.c`: real libdom wrappers with stable identity, roots, ID lookup, traversal, live `childNodes`/`children` and element/text/comment/fragment factories | Document-lifetime wrapper ownership and native reference cleanup are tested; selectors, document-wide collections, namespace-aware creation and cross-document operations are not exposed |
 | Mutation/CSSOM | Real attributes, `id`/`className`, live `classList`, text/data and append/insert/replace/remove; connected edits request a full restyle after the entry/checkpoint | Changes affect boxes and pixels, including moves into detached trees; `style` and `innerHTML` remain omitted |
-| Events | Event/CustomEvent/UIEvent/core MouseEvent/PointerEvent/SubmitEvent values; shared script/native primary-click and SubmitEvent dispatch; checkable input/change delivery | Keyboard, other pointer/mouse events, full form submission callbacks, handler attributes and lifecycle remain pending |
+| Events | Event/CustomEvent/UIEvent/core MouseEvent/PointerEvent/SubmitEvent values; shared script/native primary-click and SubmitEvent dispatch; checkable input/change delivery | Keyboard, other pointer/mouse events, full form submission callbacks and handler attributes remain pending |
 | Cancellation | `abort.c`: AbortController, AbortSignal state/reason, throwIfAborted, static abort, onabort and the listener signal option | Listener cancellation uses private abort steps before the public event; timeout, any and network integration remain absent |
-| Lifecycle information | `document.readyState` is omitted | Correct loading state and lifecycle events belong to batch 4 |
+| Lifecycle information | `readyState`, trusted `readystatechange`, `DOMContentLoaded` and Window `load`; frame/resource waits and DOM update integration | Handler properties/attributes, pageshow/pagehide, navigation timing and a complete document-abort lifecycle remain pending |
 | Networking/storage | XHR fabricates DONE/200 without a request; storage discards writes; no `document.cookie` accessor or browser fetch binding | XHR/storage still advertise unsupported behavior. Native HTTP cookie handling is a separate subsystem |
 | Navigation | `location.c`: real URL getters and relative/absolute navigation for assign/replace | Partial support: href has no setter, reload is a stub, history replacement needs review; assign and replace currently use the same flags |
 | Navigator | Hard-coded Windows Chrome 91 UA, English language and cookies-enabled value | JS identity differs from Wisp's actual HTTP UA and capabilities |
@@ -600,9 +600,9 @@ enabling click listeners: native checkbox/details activation already consults
 dispatch cancellation, but navigation/form actions need the same cancellation
 gate; callback-triggered mutations/navigation must not leave interaction code
 using stale boxes, links or form pointers. DOMContentLoaded/load and readyState
-also need a separate lifecycle pass: the current `js_fire_event("load")` call is
-before the initial box build. Do not simply attach callbacks to these existing
-hooks and assume the complete behavior is correct.
+also needed a separate lifecycle pass: the old `js_fire_event("load")` call was
+before the initial box build. The document-lifecycle increment below replaces
+that stub with explicit parsing, script and resource completion boundaries.
 
 ### Batch 4 increment: script-dispatched events
 
@@ -1449,9 +1449,8 @@ and [Location URL resolution](https://html.spec.whatwg.org/multipage/nav-history
 - Live radio owner/name/type changes, further label focus/activation, dynamic
   document base URLs and cross-document JS objects remain independent work.
 
-Document readiness and lifecycle now take priority over this deferred list. The
-current load call precedes the initial box build and cannot simply be exposed to
-JS. Inline handler support should be driven by concrete site initialization or
+Document readiness and lifecycle are implemented in the next increment below.
+Further handler support should be driven by concrete site initialization or
 reading interactions, rather than completing the whole event API first.
 
 ### Reading the JS trace
@@ -1513,6 +1512,56 @@ This is an action trace, not a DOM snapshot or complete paint attribution. It
 records no arbitrary text/attribute values and never calls page getters or
 coercion to format diagnostics. New mutation APIs must use this same boundary.
 Compare JS-enabled and disabled captures when isolating a discrepancy.
+
+### Document readiness and lifecycle delivery (2026-10-11)
+
+The HTML owner tracks `loading`, `interactive` and `complete`; the readonly,
+branded `Document.readyState` getter exposes that state. Readiness changes send
+trusted `readystatechange` events. Parser EOF sets `interactive` before deferred
+scripts. Completing parsing no longer waits for unrelated stylesheet downloads;
+stylesheets still gate rendering and scripts that depend on them.
+
+One coalesced scheduled task delivers `DOMContentLoaded` after parsing and all
+classic deferred scripts, including failed fetches, have been consumed. It bubbles
+from Document to Window and does not wait for asynchronous scripts or images.
+A later task sets `complete` and delivers Window `load` after scripts, discovered
+resources, DOM refreshes and descendant frames have settled. The load event uses
+DOM's legacy target override: `target` is Document, while `currentTarget`, `this`
+and the propagation path refer to Window. Document's own load listeners do not
+receive it. Restyles do not repeat lifecycle events, and load-listener mutations
+must finish rendering before content is marked DONE.
+
+These rules follow [HTML parsing's end algorithm](https://html.spec.whatwg.org/multipage/parsing.html#the-end),
+[document readiness](https://html.spec.whatwg.org/multipage/dom.html#current-document-readiness)
+and [DOM dispatch](https://dom.spec.whatwg.org/#concept-event-dispatch).
+The old Duktape `Document.bnd`/`Window.bnd` were inspected; their declarations do
+not supply the readiness scheduling, ownership or dispatch implementation needed
+here. The new delivery uses the existing QuickJS native-event scope: captured
+interfaces, one bounded deadline per dispatch, a microtask checkpoint per listener,
+ordinary exception reporting, interruption and safe retirement. `document.dispatch`
+logs browser-origin event types; listener entries attribute subsequent DOM edits.
+
+A regression exposed by navigation in DOMContentLoaded was repaired in the shared
+content/cache layer. NULL-callback content users retain lifetime but do not
+represent additional viewers. Cache abort now distinguishes actual shared consumers
+from those pins, avoiding an unsupported HTML clone during a native callback.
+Pins still prevent eviction, and two actual consumers still require cloning.
+
+Scope limits remain explicit: handler properties/HTML attributes such as `onload`,
+pageshow/pagehide, Navigation Timing and the complete abort/readiness sequence are
+not implemented by this increment. Resource discovery still follows Wisp's existing
+box construction; this does not add eager fetching for hidden images, dynamic
+script preparation, module execution or a complete HTML event-loop task-source
+model. Frame completion is queued, not polled or executed inside child callbacks.
+
+Validation includes branded getters, event flags/targets/paths and microtask order,
+constructor replacement, retained-event GC and allocation-failure recovery. The
+Qt HTTP fixture covers visible DOM changes with static-reference pixels, deferred
+order/failure, CSS-independent DOMContentLoaded, CSS-blocked scripts, slow async
+scripts/images/frames, failed frames, exceptions, timeouts, scripting disabled and
+navigation at each lifecycle stage. Existing script-order, browser loading,
+navigation cleanup, DOM, native click/submit, checked-state and base-URL tests are
+also run. GTK remains untested.
 
 ## What survives from Duktape
 
@@ -1597,9 +1646,10 @@ These are separate reviewable batches, not a commitment to full web-app support.
    partial updates only with sound mutation/dependency tracking.
 4. **Events and practical document interaction — native dispatch and explicit
    DOM/Window/standalone JS events, abort signals, UI/mouse event data and native
-   checkable pre-activation, primary-click and SubmitEvent delivery implemented.**
-   Per the current reading-site priority, DOMContentLoaded/load and accurate
-   readyState come next, followed by concrete page initialization blockers.
+   checkable pre-activation, primary-click, SubmitEvent and document lifecycle
+   delivery implemented.**
+   Per the current reading-site priority, concrete page initialization blockers
+   come next, using the supported readiness/events to run initialization.
    Further form and input completeness is deferred. Preserve propagation,
    cancellation, callback identity and navigation cleanup in each increment.
 5. **Choose the next capability from measured page needs.** Selector queries,

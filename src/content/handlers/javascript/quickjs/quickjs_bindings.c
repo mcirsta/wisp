@@ -32,6 +32,7 @@
 #include <stdio.h>
 #include <nsutils/time.h>
 
+#include <wisp/content/handlers/html/private.h>
 #include <wisp/utils/errors.h>
 #include <wisp/utils/corestrings.h>
 #include <wisp/utils/log.h>
@@ -782,7 +783,7 @@ bool js_exec(jsthread *thread, const uint8_t *txt, size_t txtlen, const char *na
 }
 
 
-/* Shared host dispatch scope for input and submission callbacks. Event creation
+/* Shared host dispatch scope for input, submission and lifecycle callbacks. Event creation
  * uses captured interfaces and native values, never page constructors/getters. */
 static bool js_fire_native_event(
     jsthread *thread, dom_node *target, dom_string *type, const struct js_mouse_event *mouse, dom_node *submitter)
@@ -800,20 +801,41 @@ static bool js_fire_native_event(
     bool accepted = false;
     if (started) {
         bool submit = dom_string_isequal(type, corestring_dom_submit);
-        qjs_trace(ctx, submit ? "form.dispatch" : "input.dispatch", "type=%.*s origin=browser",
-            (int)dom_string_byte_length(type), dom_string_data(type));
+        bool load = dom_string_isequal(type, corestring_dom_load);
+        bool dom_ready = dom_string_isequal(type, corestring_dom_DOMContentLoaded);
+        bool lifecycle = load || dom_ready || dom_string_isequal(type, corestring_dom_readystatechange);
+        qjs_trace(ctx,
+            lifecycle    ? "document.dispatch"
+                : submit ? "form.dispatch"
+                         : "input.dispatch",
+            "type=%.*s origin=browser", (int)dom_string_byte_length(type), dom_string_data(type));
         JSValue global = JS_GetGlobalObject(ctx);
         /* document is an unforgeable, readonly own property of Window. */
         JSValue document = JS_GetPropertyStr(ctx, global, "document");
         JS_FreeValue(ctx, global);
         JSValue object = JS_IsException(document) ? JS_EXCEPTION : qjs_dom_wrap(ctx, document, target);
-        JSValue event = JS_IsException(object) ? JS_EXCEPTION
-            : submit                           ? qjs_native_submit_event(ctx, type, document, submitter)
-                                               : qjs_native_input_event(ctx, type, mouse);
-        JSValue result = JS_IsException(event) ? JS_EXCEPTION : qjs_event_target_dispatch(ctx, object, event, false);
+        JSValue event = JS_EXCEPTION;
+        if (!JS_IsException(object)) {
+            if (lifecycle) {
+                event = qjs_event_allocate(
+                    ctx, JS_NewObjectClass(ctx, thread->heap->event_class[QJS_EVENT]), QJS_EVENT, false);
+                if (!JS_IsException(event))
+                    dom_event_init(qjs_event_get(ctx, event)->native, type, dom_ready, false);
+            } else {
+                event = submit ? qjs_native_submit_event(ctx, type, document, submitter)
+                               : qjs_native_input_event(ctx, type, mouse);
+            }
+        }
+        JSValue result = JS_IsException(event) ? JS_EXCEPTION
+            : load                             ? qjs_event_target_dispatch_load(ctx, document, event)
+                                               : qjs_event_target_dispatch(ctx, object, event, false);
         accepted = !JS_IsException(result) && JS_ToBool(ctx, result);
         if (JS_IsException(result))
-            qjs_report_exception(thread, submit ? "native-submit" : "native-input", thread->heap->interrupted);
+            qjs_report_exception(thread,
+                lifecycle    ? "document-lifecycle"
+                    : submit ? "native-submit"
+                             : "native-input",
+                thread->heap->interrupted);
         JS_FreeValue(ctx, result);
         JS_FreeValue(ctx, event);
         JS_FreeValue(ctx, object);
@@ -835,11 +857,15 @@ bool js_fire_submit_event(jsthread *thread, dom_node *form, dom_node *submitter)
     return js_fire_native_event(thread, form, corestring_dom_submit, NULL, submitter);
 }
 
-bool js_fire_event(jsthread *thread, const char *type, struct dom_document *doc, struct dom_node *target)
+bool js_fire_document_event(jsthread *thread, enum js_document_event event)
 {
-    /* TODO: Implement event firing */
-    NSLOG(wisp, DEBUG, "js_fire_event called (not yet implemented)");
-    return true;
+    if (thread == NULL || thread->closed || thread->doc_priv == NULL)
+        return false;
+    html_content *html = thread->doc_priv;
+    dom_string *type = event == JS_DOCUMENT_LOAD  ? corestring_dom_load
+        : event == JS_DOCUMENT_DOM_CONTENT_LOADED ? corestring_dom_DOMContentLoaded
+                                                  : corestring_dom_readystatechange;
+    return js_fire_native_event(thread, (dom_node *)html->document, type, NULL, NULL);
 }
 
 

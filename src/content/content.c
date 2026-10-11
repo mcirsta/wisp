@@ -676,6 +676,16 @@ uint32_t content_count_users(struct content *c)
     return counter - 1; /* Subtract 1 for the sentinel */
 }
 
+bool content_is_shared(const struct content *c)
+{
+    unsigned consumers = 0;
+    for (const struct content_user *user = c->user_list->next; user != NULL; user = user->next) {
+        if (user->callback != NULL && ++consumers > 1)
+            return true;
+    }
+    return false;
+}
+
 
 /* exported interface documented in content/content.h */
 bool content_matches_quirks(struct content *c, bool quirks)

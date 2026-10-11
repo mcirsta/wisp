@@ -183,6 +183,8 @@ union html_focus_owner {
 };
 
 
+enum html_document_readiness { HTML_DOCUMENT_LOADING, HTML_DOCUMENT_INTERACTIVE, HTML_DOCUMENT_COMPLETE };
+
 /**
  * Data specific to CONTENT_HTML.
  */
@@ -191,6 +193,9 @@ typedef struct html_content {
 
     dom_hubbub_parser *parser; /**< Parser object handle */
     bool parse_completed; /**< Whether the parse has been completed */
+    enum html_document_readiness readiness;
+    bool dom_content_loaded; /**< DOMContentLoaded has been dispatched. */
+    bool lifecycle_pending, lifecycle_running; /**< Queued/running document lifecycle task. */
     bool conversion_begun; /**< Whether or not the conversion has begun */
     bool conversion_restart_pending; /**< Whether a restart is pending */
     unsigned int scripts_active; /**< Number of script fetches currently active */
@@ -456,6 +461,8 @@ bool html_exec(struct content *c, const char *src, size_t srclen);
  * \return NSERROR_OK error code.
  */
 nserror html_script_exec(html_content *htmlc, bool allow_defer);
+/* Queue DOMContentLoaded once parsing and deferred script execution finish. */
+void html_document_scripts_ready(html_content *html);
 
 /** Resume ready scripts outside parser/resource callbacks, then conversion. */
 void html_script_schedule(html_content *htmlc);

@@ -341,12 +341,14 @@ static nserror browser_window_download(struct browser_window *bw, nsurl *url, ns
  *
  * \param bw browser window to start checking from.
  */
-static bool browser_window_check_throbber(struct browser_window *bw)
+static bool browser_window_check_throbber(struct browser_window *bw);
+
+bool browser_window_children_loading(struct browser_window *bw)
 {
     int children, index;
 
-    if (bw->throbbing)
-        return true;
+    if (bw == NULL)
+        return false;
 
     if (bw->children) {
         children = bw->rows * bw->cols;
@@ -364,6 +366,12 @@ static bool browser_window_check_throbber(struct browser_window *bw)
     }
 
     return false;
+}
+
+
+static bool browser_window_check_throbber(struct browser_window *bw)
+{
+    return bw->throbbing || browser_window_children_loading(bw);
 }
 
 
@@ -403,6 +411,10 @@ static nserror browser_window_stop_throbber(struct browser_window *bw)
 
     while (bw->parent) {
         bw = bw->parent;
+        /* Parent load events wait for descendant documents. Queue the check:
+         * running parent script here could retire this child callback's owner. */
+        if (bw->current_content != NULL && content_get_type(bw->current_content) == CONTENT_HTML)
+            html_child_load_finished(bw->current_content);
     }
 
     if (bw->load.active && !browser_window_check_throbber(bw)) {

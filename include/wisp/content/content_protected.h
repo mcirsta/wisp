@@ -571,7 +571,8 @@ void content_destroy(struct content *c);
  * \return true on success, false otherwise on memory exhaustion
  *
  * The callback will be called when content_broadcast() is
- * called with the content.
+ * called with the content. A NULL callback retains lifetime only; it does not
+ * represent another viewer when deciding whether an abort needs a clone.
  */
 bool content_add_user(struct content *h,
     void (*callback)(struct content *c, content_msg msg, const union content_msg_data *data, void *pw), void *pw);
@@ -596,6 +597,10 @@ void content_remove_user(struct content *c,
  * \param c Content to consider
  */
 uint32_t content_count_users(struct content *c);
+
+/* Whether multiple callback consumers share the content. Lifetime-only users
+ * still prevent eviction but must not force cloning on abort. */
+bool content_is_shared(const struct content *c);
 
 
 /**

@@ -3,6 +3,7 @@
  * APIs are omitted instead of returning dummy nodes, collections or success.
  */
 #include "dom.h"
+#include <wisp/content/handlers/html/private.h>
 #include <string.h>
 
 /* Accessors shared by Node and its derived interfaces. */
@@ -25,7 +26,8 @@ enum node_property {
     DATA,
     DOCUMENT_ELEMENT,
     HEAD,
-    BODY
+    BODY,
+    READY_STATE
 };
 
 static JSValue wrap_result(JSContext *ctx, JSValueConst object, struct qjs_dom_node *self, dom_node *node)
@@ -112,6 +114,14 @@ static JSValue node_get(JSContext *ctx, JSValueConst object, int property)
     dom_node *node = NULL;
     bool nullable = true;
     switch (property) {
+    case READY_STATE: {
+        jsthread *thread = JS_GetContextOpaque(ctx);
+        html_content *html = thread->doc_priv;
+        const char *state = html->readiness == HTML_DOCUMENT_COMPLETE ? "complete"
+            : html->readiness == HTML_DOCUMENT_INTERACTIVE            ? "interactive"
+                                                                      : "loading";
+        return JS_NewString(ctx, state);
+    }
     case NODE_TYPE:
         return JS_NewInt32(ctx, self->type);
     case OWNER_DOCUMENT:
@@ -380,6 +390,7 @@ int qjs_dom_install_properties(JSContext *ctx, JSValue *prototypes)
         METHOD("removeAttribute", 1, REMOVE_ATTRIBUTE),
     };
     static const JSCFunctionListEntry document[] = {
+        GET("readyState", READY_STATE),
         GET("documentElement", DOCUMENT_ELEMENT),
         GET("head", HEAD),
         GET("body", BODY),

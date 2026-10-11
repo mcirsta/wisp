@@ -53,6 +53,9 @@ struct selection;
 struct nsurl;
 struct plot_font_style;
 
+/** Reconsider document load completion after a descendant frame settles. */
+void html_child_load_finished(struct hlcache_handle *h);
+
 /** HTML implementation of browser_window_get_scroll_damage(). */
 bool html_get_scroll_damage(struct hlcache_handle *h, const struct rect *old_viewport, const struct rect *new_viewport,
     browser_window_scroll_damage_cb add, void *pw);

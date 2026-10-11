@@ -309,33 +309,113 @@ static void html_box_convert_done(html_content *c, bool success)
         html_schedule_restyle(c);
 }
 
+/* Completion can render early, but must not overtake script execution or DOM
+ * changes made by those scripts. Images are discovered by box construction, so
+ * READY is also the earliest point at which the resource count is complete. */
+static bool html_load_ready(const html_content *html)
+{
+    if (html->base.status != CONTENT_STATUS_READY || html->aborted || html->restyle_pending || html->restyling ||
+        html->base.active != 0 || html->scripts_running || browser_window_children_loading(html->bw))
+        return false;
+    for (unsigned i = 0; i < html->scripts_count; i++) {
+        if (!html->scripts[i].already_started)
+            return false;
+    }
+    return true;
+}
+
+static void html_lifecycle_task(void *pw);
+
+static void html_schedule_lifecycle(html_content *html)
+{
+    if (!html->lifecycle_pending && !html->aborted &&
+        (html->base.status == CONTENT_STATUS_LOADING || html->base.status == CONTENT_STATUS_READY)) {
+        nserror err = guit->misc->schedule(0, html_lifecycle_task, html);
+        if (err == NSERROR_OK) {
+            html->lifecycle_pending = true;
+        } else {
+            content_broadcast_error(&html->base, err, NULL);
+            content_set_error(&html->base);
+        }
+    }
+}
+
+void html_child_load_finished(struct hlcache_handle *handle)
+{
+    html_content *html = (html_content *)hlcache_handle_get_content(handle);
+    if (html->dom_content_loaded && html_load_ready(html))
+        html_schedule_lifecycle(html);
+}
+
+/* Called after parser completion and each deferred-script execution batch.
+ * A slow async script must not delay DOMContentLoaded. */
+void html_document_scripts_ready(html_content *html)
+{
+    if (!html->parse_completed || html->dom_content_loaded || html->scripts_running)
+        return;
+    for (unsigned i = 0; i < html->scripts_count; i++) {
+        if (html->scripts[i].type == HTML_SCRIPT_DEFER && !html->scripts[i].already_started)
+            return;
+    }
+    html_schedule_lifecycle(html);
+}
+
+static void html_set_readiness(html_content *html, enum html_document_readiness readiness)
+{
+    if (html->readiness == readiness)
+        return;
+    html->readiness = readiness;
+    if (html->jsthread != NULL)
+        js_fire_document_event(html->jsthread, JS_DOCUMENT_READYSTATE);
+    else
+        fire_generic_dom_event(corestring_dom_readystatechange, (dom_node *)html->document, false, false);
+}
+
 /* Documented in html_internal.h */
 nserror html_proceed_to_done(html_content *html)
 {
-    switch (content__get_status(&html->base)) {
-    case CONTENT_STATUS_READY:
-        if (html->restyle_pending || html->restyling)
-            return NSERROR_OK;
-        /* Rendering can start while async/defer downloads are pending, but
-         * completion must also wait for their queued execution. */
-        if (html->base.active != 0)
-            return NSERROR_OK;
-        for (unsigned i = 0; i < html->scripts_count; i++) {
-            if (!html->scripts[i].already_started)
-                return NSERROR_OK;
-        }
-        NSLOG(wisp, INFO, "proceed_to_done: all resources ready, setting content DONE");
-        content_set_done(&html->base);
-        return NSERROR_OK;
-    case CONTENT_STATUS_DONE:
-        /* fallthrough */
-    case CONTENT_STATUS_LOADING:
-        return NSERROR_OK;
-    default:
-        NSLOG(wisp, ERROR, "Content status unexpectedly not LOADING/READY/DONE");
-        break;
+    if (html_load_ready(html) && !html->lifecycle_running) {
+        if (!html->dom_content_loaded)
+            html_document_scripts_ready(html);
+        else if (html->readiness != HTML_DOCUMENT_COMPLETE)
+            html_schedule_lifecycle(html);
+        else
+            content_set_done(&html->base);
     }
-    return NSERROR_UNKNOWN;
+    return NSERROR_OK;
+}
+
+static void html_lifecycle_task(void *pw)
+{
+    html_content *html = pw;
+    html->lifecycle_pending = false;
+    if (html->aborted ||
+        (html->base.status != CONTENT_STATUS_LOADING && html->base.status != CONTENT_STATUS_READY))
+        return;
+    /* Listeners can navigate or close the window. Pin the HTML owner as well
+     * as the JS context, and never complete a retired presentation. */
+    uint64_t generation = html->input_generation;
+    if (!content_add_user(&html->base, NULL, &generation)) {
+        content_broadcast_error(&html->base, NSERROR_NOMEM, NULL);
+        content_set_error(&html->base);
+        return;
+    }
+    html->lifecycle_running = true;
+    if (!html->dom_content_loaded) {
+        html->dom_content_loaded = true;
+        if (html->jsthread != NULL)
+            js_fire_document_event(html->jsthread, JS_DOCUMENT_DOM_CONTENT_LOADED);
+        else
+            fire_generic_dom_event(corestring_dom_DOMContentLoaded, (dom_node *)html->document, true, false);
+    } else if (html_load_ready(html) && html->readiness != HTML_DOCUMENT_COMPLETE) {
+        html_set_readiness(html, HTML_DOCUMENT_COMPLETE);
+        if (!html->aborted && generation == html->input_generation && html->jsthread != NULL)
+            js_fire_document_event(html->jsthread, JS_DOCUMENT_LOAD);
+    }
+    html->lifecycle_running = false;
+    if (!html->aborted && generation == html->input_generation)
+        html_proceed_to_done(html);
+    content_remove_user(&html->base, NULL, &generation);
 }
 
 
@@ -422,15 +502,6 @@ void html_finish_conversion(html_content *htmlc)
             content_broadcast_error(&htmlc->base, error, NULL);
             content_set_error(&htmlc->base);
             return;
-        }
-
-
-        /* fire a simple event named load at the Document's Window
-         * object, but with its target set to the Document object (and
-         * the currentTarget set to the Window object)
-         */
-        if (htmlc->jsthread != NULL) {
-            js_fire_event(htmlc->jsthread, "load", htmlc->document, NULL);
         }
     }
 
@@ -612,6 +683,9 @@ static nserror html_create_html_data(html_content *c, const http_parameter *para
 
     c->parser = NULL;
     c->parse_completed = false;
+    c->readiness = HTML_DOCUMENT_LOADING;
+    c->dom_content_loaded = false;
+    c->lifecycle_pending = c->lifecycle_running = false;
     c->conversion_begun = false;
     c->document = NULL;
     c->quirks = DOM_DOCUMENT_QUIRKS_MODE_NONE;
@@ -987,6 +1061,11 @@ bool html_can_begin_conversion(html_content *htmlc)
     if (!htmlc->data_complete)
         return false; /* HTML data not yet received */
 
+    /* End parsing independently of rendering's stylesheet wait. In particular,
+     * a stylesheet without a blocked script must not delay DOMContentLoaded. */
+    if (!htmlc->parse_completed)
+        return true;
+
     if (htmlc->base.active != htmlc->scripts_active)
         return false; /* Still waiting for CSS or HTML fetch */
 
@@ -1056,7 +1135,22 @@ bool html_begin_conversion(html_content *htmlc)
             return false;
         }
         htmlc->parse_completed = true;
+        /* HTML parsing's end algorithm sets interactive before deferred scripts.
+         * This content is still locked for initial conversion. */
+        uint64_t generation = htmlc->input_generation;
+        html_set_readiness(htmlc, HTML_DOCUMENT_INTERACTIVE);
+        if (htmlc->aborted || generation != htmlc->input_generation)
+            return true;
     }
+
+    /* complete script execution, including deferred scripts */
+    PERF("html_begin_conversion: calling html_script_exec");
+    html_script_exec(htmlc, true);
+    PERF("html_begin_conversion: html_script_exec returned");
+
+    if (htmlc->aborted)
+        return true;
+    html_document_scripts_ready(htmlc);
 
     PERF(
         "html_begin_conversion: checking can_begin (active=%d, scripts_active=%d, data_complete=%d, conversion_begun=%d)",
@@ -1079,15 +1173,6 @@ bool html_begin_conversion(html_content *htmlc)
     /* Conversion begins proper at this point */
     PERF("html_begin_conversion: setting conversion_begun = true");
     htmlc->conversion_begun = true;
-
-    /* complete script execution, including deferred scripts */
-    PERF("html_begin_conversion: calling html_script_exec");
-    html_script_exec(htmlc, true);
-    PERF("html_begin_conversion: html_script_exec returned");
-
-    /* fire a simple event that bubbles named DOMContentLoaded at
-     * the Document.
-     */
 
     /* get encoding */
     if (htmlc->encoding == NULL) {
@@ -1174,6 +1259,9 @@ bool html_begin_conversion(html_content *htmlc)
 static void html_stop(struct content *c)
 {
     html_content *htmlc = (html_content *)c;
+
+    guit->misc->schedule(-1, html_lifecycle_task, htmlc);
+    htmlc->lifecycle_pending = false;
 
     switch (c->status) {
     case CONTENT_STATUS_LOADING:
@@ -1777,6 +1865,7 @@ static void html_destroy(struct content *c)
     /* Cancel any pending conversion resumes immediately */
     guit->misc->schedule(-1, html_resume_conversion_cb, html);
     guit->misc->schedule(-1, script_resume_conversion_cb, html);
+    guit->misc->schedule(-1, html_lifecycle_task, html);
     guit->misc->schedule(-1, html_deferred_reformat, html);
     guit->misc->schedule(-1, html_restyle, html);
 
@@ -1953,6 +2042,8 @@ static nserror html_close(struct content *c)
     selection_clear(htmlc->sel, false);
 
     guit->misc->schedule(-1, script_resume_conversion_cb, htmlc);
+    guit->misc->schedule(-1, html_lifecycle_task, htmlc);
+    htmlc->lifecycle_pending = false;
     guit->misc->schedule(-1, html_restyle, htmlc);
     htmlc->restyle_pending = false;
     html_restyle_close(htmlc);

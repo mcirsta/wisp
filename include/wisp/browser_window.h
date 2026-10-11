@@ -556,6 +556,9 @@ bool browser_window_reload_available(struct browser_window *bw);
  */
 bool browser_window_stop_available(struct browser_window *bw);
 
+/** Whether any descendant frame is still loading (excluding bw itself). */
+bool browser_window_children_loading(struct browser_window *bw);
+
 
 /**
  * Redraw an area of a window.

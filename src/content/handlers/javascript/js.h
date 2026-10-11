@@ -136,10 +136,11 @@ void js_destroythread(jsthread *thread);
  */
 bool js_exec(jsthread *thread, const uint8_t *txt, size_t txtlen, const char *name);
 
-/**
- * fire an event at a dom node
- */
-bool js_fire_event(jsthread *thread, const char *type, struct dom_document *doc, struct dom_node *target);
+/* Trusted document lifecycle notifications. The caller updates readiness before
+ * notifying, and retains the HTML content across callbacks. Window load uses the
+ * DOM legacy target override (Document target, Window currentTarget/path). */
+enum js_document_event { JS_DOCUMENT_READYSTATE, JS_DOCUMENT_DOM_CONTENT_LOADED, JS_DOCUMENT_LOAD };
+bool js_fire_document_event(jsthread *thread, enum js_document_event event);
 
 bool js_dom_event_add_listener(jsthread *thread, struct dom_document *document, struct dom_node *node,
     struct dom_string *event_type_dom, void *js_funcval);

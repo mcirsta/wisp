@@ -2692,6 +2692,80 @@ static void native_form_setup(void)
         "native-form.js"));
 }
 
+START_TEST(test_quickjs_document_readiness)
+{
+    assert_predicate(dom_thread, "document.readyState==='loading'", "initial readiness");
+    dom_html.readiness = HTML_DOCUMENT_INTERACTIVE;
+    assert_predicate(dom_thread, "document.readyState==='interactive'", "parser readiness");
+    dom_html.readiness = HTML_DOCUMENT_COMPLETE;
+    assert_predicate(dom_thread,
+        "(()=>{const d=Object.getOwnPropertyDescriptor(Document.prototype,'readyState');"
+        "let rejected=false;try{d.get.call({});}catch(e){rejected=e instanceof TypeError;}"
+        "document.readyState='loading';return d.enumerable&&d.configurable&&!d.set&&rejected&&"
+        "document.readyState==='complete';})()",
+        "readonly branded readiness accessor");
+}
+END_TEST
+
+START_TEST(test_quickjs_document_lifecycle)
+{
+    ck_assert(exec_script(dom_thread,
+        "var calls=[],events=[],valid=true,OriginalEvent=Event;"
+        "function listen(target,type,label,capture=false){target.addEventListener(type,function(e){"
+        "calls.push(label);events.push(e);valid=valid&&e instanceof OriginalEvent&&e.isTrusted&&"
+        "!e.cancelable&&!e.composed&&e.target===document&&e.currentTarget===target&&this===target;"
+        "e.preventDefault();valid=valid&&!e.defaultPrevented;"
+        "if(type==='DOMContentLoaded')valid=valid&&e.bubbles&&e.composedPath()[0]===document&&"
+        "e.composedPath()[1]===window;"
+        "if(type==='load')valid=valid&&!e.bubbles&&e.eventPhase===Event.AT_TARGET&&"
+        "e.composedPath().length===1&&e.composedPath()[0]===window;"
+        "queueMicrotask(()=>calls.push(label+'-job'));},capture);}"
+        "listen(window,'readystatechange','capture',true);listen(document,'readystatechange','state');"
+        "listen(window,'readystatechange','should-not-bubble');"
+        "listen(document,'DOMContentLoaded','dom');listen(window,'DOMContentLoaded','window-dom');"
+        "listen(window,'load','load');listen(document,'load','should-not-load',true);",
+        "lifecycle-listeners.js"));
+    ck_assert(js_fire_document_event(dom_thread, JS_DOCUMENT_READYSTATE));
+    ck_assert(js_fire_document_event(dom_thread, JS_DOCUMENT_DOM_CONTENT_LOADED));
+    ck_assert(js_fire_document_event(dom_thread, JS_DOCUMENT_LOAD));
+    JS_RunGC(dom_heap->rt);
+    assert_predicate(dom_thread,
+        "valid&&calls.join(',')==='capture,capture-job,state,state-job,dom,dom-job,window-dom,window-dom-job,load,load-job'&&"
+        "events.every(e=>e.target===document&&e.currentTarget===null&&e.eventPhase===0&&e.composedPath().length===0)",
+        "trusted document events, Window load override and listener checkpoints");
+    ck_assert(exec_script(dom_thread, "window.Event=function(){throw new Error('page constructor called');};",
+        "replace-event-constructor.js"));
+    ck_assert(js_fire_document_event(dom_thread, JS_DOCUMENT_DOM_CONTENT_LOADED));
+    assert_predicate(dom_thread, "valid&&calls.length===14", "host event creation ignores page constructor");
+}
+END_TEST
+
+START_TEST(test_quickjs_document_lifecycle_allocation_failure)
+{
+    ck_assert(
+        exec_script(dom_thread, "var calls=0;window.addEventListener('load',()=>calls++);", "lifecycle-allocation.js"));
+    bool failed = false, succeeded = false;
+    for (size_t extra = 0; extra <= 32768; extra += 128) {
+        JS_RunGC(dom_heap->rt);
+        JSMemoryUsage usage;
+        JS_ComputeMemoryUsage(dom_heap->rt, &usage);
+        JS_SetMemoryLimit(dom_heap->rt, usage.malloc_size + extra);
+        bool result = js_fire_document_event(dom_thread, JS_DOCUMENT_LOAD);
+        JS_SetMemoryLimit(dom_heap->rt, 0);
+        ck_assert_uint_eq(dom_heap->execution_depth, 0);
+        ck_assert_uint_eq(dom_heap->native_dispatch_depth, 0);
+        failed |= !result;
+        if (result) {
+            succeeded = true;
+            break;
+        }
+    }
+    ck_assert(failed && succeeded);
+    ck_assert(js_fire_document_event(dom_thread, JS_DOCUMENT_LOAD));
+    assert_predicate(dom_thread, "calls>=2", "lifecycle allocation recovery");
+}
+END_TEST
+
 START_TEST(test_quickjs_native_submit)
 {
     native_form_setup();
@@ -3789,6 +3863,9 @@ Suite *quickjs_suite(void)
     tcase_add_test(tc_dom, test_quickjs_input_event_gc);
     tcase_add_test(tc_dom, test_quickjs_input_event_retirement);
     tcase_add_test(tc_dom, test_quickjs_input_event_conversion_retirement);
+    tcase_add_test(tc_dom, test_quickjs_document_readiness);
+    tcase_add_test(tc_dom, test_quickjs_document_lifecycle);
+    tcase_add_test(tc_dom, test_quickjs_document_lifecycle_allocation_failure);
     tcase_add_test(tc_dom, test_quickjs_native_submit);
     tcase_add_test(tc_dom, test_quickjs_native_submit_without_button);
     tcase_add_test(tc_dom, test_quickjs_native_submit_allocation_failure);

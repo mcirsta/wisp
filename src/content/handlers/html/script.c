@@ -163,6 +163,7 @@ nserror html_script_exec(html_content *html, bool allow_defer)
         }
     }
     html->scripts_running = false;
+    html_document_scripts_ready(html);
     return !html->aborted && html->conversion_begun ? html_proceed_to_done(html) : NSERROR_OK;
 }
 

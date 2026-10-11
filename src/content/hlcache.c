@@ -934,8 +934,9 @@ nserror hlcache_handle_abort(hlcache_handle *handle)
 
     c = entry->content;
 
-    if (content_count_users(c) > 1) {
-        /* We are not the only user of 'c' so clone it. */
+    if (content_is_shared(c)) {
+        /* Other viewers need the live fetch. Lifetime pins used by callbacks
+         * are not viewers and must not force a clone of non-shareable HTML. */
         struct content *clone = content_clone(c);
 
         if (clone == NULL)

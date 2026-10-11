@@ -1265,6 +1265,21 @@ START_TEST(test_form_records_retain_dom_nodes)
 }
 END_TEST
 
+START_TEST(test_content_lifetime_pins_do_not_share)
+{
+    int pin, consumer;
+    ck_assert(!content_is_shared(&html->base));
+    ck_assert(content_add_user(&html->base, NULL, &pin));
+    ck_assert_uint_eq(content_count_users(&html->base), 2);
+    ck_assert(!content_is_shared(&html->base));
+    ck_assert(content_add_user(&html->base, browser_message, &consumer));
+    ck_assert(content_is_shared(&html->base));
+    content_remove_user(&html->base, browser_message, &consumer);
+    ck_assert(!content_is_shared(&html->base));
+    content_remove_user(&html->base, NULL, &pin);
+}
+END_TEST
+
 int main(void)
 {
     static struct gui_misc_table misc = {.schedule = schedule};
@@ -1280,6 +1295,7 @@ int main(void)
     tcase_add_loop_test(tc, test_retired_activation, 0, 2);
     tcase_add_test(tc, test_frontend_retires_before_dispatch);
     tcase_add_test(tc, test_pointer_motion_does_not_pin);
+    tcase_add_test(tc, test_content_lifetime_pins_do_not_share);
     tcase_add_test(tc, test_secondary_click_lifetime);
     tcase_add_loop_test(tc, test_embedded_document_owns_click, 0, 2);
     tcase_add_loop_test(tc, test_link_uses_original_identity_and_live_attributes, 0, LINK_EDITS);

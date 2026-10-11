@@ -479,7 +479,8 @@ int qjs_event_target_listen(JSContext *ctx, JSValueConst target, const char *typ
     return JS_IsException(result) ? -1 : 0;
 }
 
-JSValue qjs_event_target_dispatch(JSContext *ctx, JSValueConst object, JSValueConst value, bool script)
+static JSValue
+dispatch_event(JSContext *ctx, JSValueConst object, JSValueConst value, bool script, JSValueConst target_override)
 {
     bool window;
     JSValue owner = target_owner(ctx, object, &window);
@@ -498,7 +499,9 @@ JSValue qjs_event_target_dispatch(JSContext *ctx, JSValueConst object, JSValueCo
     jsthread *thread = JS_GetContextOpaque(ctx);
     struct qjs_event_target *target = JS_GetOpaque(owner, thread->heap->event_target_class);
     JS_FreeValue(ctx, event->target);
-    event->target = window ? JS_GetGlobalObject(ctx) : JS_DupValue(ctx, object);
+    event->target = !JS_IsUndefined(target_override) ? JS_DupValue(ctx, target_override)
+        : window                                     ? JS_GetGlobalObject(ctx)
+                                                     : JS_DupValue(ctx, object);
     if (script)
         dom_event_set_is_trusted(event->native, false);
     JSValue document = JS_UNDEFINED;
@@ -534,6 +537,18 @@ JSValue qjs_event_target_dispatch(JSContext *ctx, JSValueConst object, JSValueCo
 out:
     JS_FreeValue(ctx, owner);
     return result;
+}
+
+JSValue qjs_event_target_dispatch(JSContext *ctx, JSValueConst object, JSValueConst value, bool script)
+{
+    return dispatch_event(ctx, object, value, script, JS_UNDEFINED);
+}
+
+JSValue qjs_event_target_dispatch_load(JSContext *ctx, JSValueConst document, JSValueConst value)
+{
+    /* HTML's Window load is dispatched at Window with the legacy target override.
+     * The override changes event.target, not the native propagation path. */
+    return dispatch_event(ctx, JS_UNDEFINED, value, false, document);
 }
 
 static JSValue target_dispatch(JSContext *ctx, JSValueConst object, int argc, JSValueConst *argv)
