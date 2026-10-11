@@ -232,65 +232,6 @@ dom_exception _dom_html_element_has_attribute(struct dom_element *element, dom_s
     return exc;
 }
 
-
-/**
- * Retrieve a list of descendant elements of an element which match a given
- * tag name (caselessly)
- *
- * \param element  The root of the subtree to search
- * \param name     The tag name to match (or "*" for all tags)
- * \param result   Pointer to location to receive result
- * \return DOM_NO_ERR.
- *
- * The returned nodelist will have its reference count increased. It is
- * the responsibility of the caller to unref the nodelist once it has
- * finished with it.
- */
-dom_exception
-_dom_html_element_get_elements_by_tag_name(struct dom_element *element, dom_string *name, struct dom_nodelist **result)
-{
-    dom_exception err;
-    dom_node_internal *base = (dom_node_internal *)element;
-
-    assert(base->owner != NULL);
-
-    err = _dom_document_get_nodelist(
-        base->owner, DOM_NODELIST_BY_NAME_CASELESS, (struct dom_node_internal *)element, name, NULL, NULL, result);
-
-    return err;
-}
-
-/**
- * Retrieve a list of descendant elements of an element which match a given
- * namespace/localname pair, caselessly.
- *
- * \param element  The root of the subtree to search
- * \param namespace  The namespace URI to match (or "*" for all)
- * \param localname  The local name to match (or "*" for all)
- * \param result   Pointer to location to receive result
- * \return DOM_NO_ERR            on success,
- *         DOM_NOT_SUPPORTED_ERR if the implementation does not support
- *                               the feature "XML" and the language exposed
- *                               through the Document does not support
- *                               Namespaces.
- *
- * The returned nodelist will have its reference count increased. It is
- * the responsibility of the caller to unref the nodelist once it has
- * finished with it.
- */
-dom_exception _dom_html_element_get_elements_by_tag_name_ns(
-    struct dom_element *element, dom_string *namespace, dom_string *localname, struct dom_nodelist **result)
-{
-    dom_exception err;
-
-    /** \todo ensure XML feature is supported */
-
-    err = _dom_document_get_nodelist(element->base.owner, DOM_NODELIST_BY_NAMESPACE_CASELESS,
-        (struct dom_node_internal *)element, NULL, namespace, localname, result);
-
-    return err;
-}
-
 /**
  * Retrieve an HTML element's tag type.
  *

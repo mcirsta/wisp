@@ -1235,9 +1235,10 @@ static void setup_dom(void)
     ck_assert_int_eq(corestrings_init(), NSERROR_OK);
     memset(&dom_html, 0, sizeof(dom_html));
     const char *source = "<!doctype html><html><head><title>Example</title></head><body>"
-        "<div id='target' class='old'>A<span>B</span><!--ignored--><i></i>C</div>"
-        "<p id='duplicate'>first</p><p id='duplicate'>second</p><p id=''></p>"
-        "<svg xmlns='http://www.w3.org/2000/svg' id='svg'><text id='svgText'>svg</text></svg></body></html>";
+                         "<div id='target' class='old'>A<span>B</span><!--ignored--><i></i>C</div>"
+                         "<p id='duplicate'>first</p><p id='duplicate'>second</p><p id=''></p>"
+                         "<svg xmlns='http://www.w3.org/2000/svg' id='svg'><text id='svgText'>svg</text>"
+                         "<linearGradient id='gradient'></linearGradient></svg></body></html>";
     dom_hubbub_parser *parser;
     dom_hubbub_parser_params params = {.enc = "UTF-8", .fix_enc = true};
     ck_assert_int_eq(dom_hubbub_parser_create(&params, &parser, &dom_html.document), DOM_HUBBUB_OK);
@@ -1786,6 +1787,9 @@ START_TEST(test_quickjs_collection_allocation_failure)
         "var list=p.children;list.note=42;list[Symbol('s')]=7;"
         "var enumerate=()=>Reflect.ownKeys(list);",
         "collection allocation fixture"));
+    if (_i != 0)
+        ck_assert(exec_script(dom_thread, "list=p.getElementsByTagName('*');list.note=42;list[Symbol('s')]=7;",
+            "query allocation fixture"));
     JSContext *ctx = dom_thread->ctx;
     JSValue global = JS_GetGlobalObject(ctx), fn = JS_GetPropertyStr(ctx, global, "enumerate");
     bool failed = false, succeeded = false;
@@ -1835,6 +1839,118 @@ START_TEST(test_quickjs_collection_conversion_retirement)
         sources[_i]);
     ck_assert_msg(exec_script(dom_thread, script, "collection retirement during conversion/prototype lookup"),
         "Retirement variant %d failed", _i);
+}
+END_TEST
+
+START_TEST(test_quickjs_tag_queries)
+{
+    ck_assert(exec_script(dom_thread,
+        "var p=document.getElementById('target'), all=p.getElementsByTagName('*'), spans=document.getElementsByTagName('SPAN');"
+        "if(!(all instanceof HTMLCollection)||all instanceof NodeList||all.length!==2||all[0]!==spans[0]||"
+        "all.item(2)!==null||all[2]!==undefined||all.item(-1)!==null)throw Error('query collection');"
+        "if(document.getElementsByTagName('html')[0]!==document.documentElement||p.getElementsByTagName('div').length)"
+        "throw Error('descendants exclude receiver');"
+        "if(document.getElementsByTagName('text')[0]!==document.getElementById('svgText')||"
+        "document.getElementsByTagName('TEXT').length)throw Error('SVG tag case');"
+        "var ns='http://www.w3.org/1999/xhtml', svg='http://www.w3.org/2000/svg';"
+        "if(document.getElementsByTagNameNS(ns,'SPAN').length||document.getElementsByTagNameNS(ns,'span')[0]!==spans[0]||"
+        "document.getElementsByTagNameNS(ns.toUpperCase(),'*').length||document.getElementsByTagNameNS(null,'*').length||"
+        "document.getElementsByTagNameNS('','*').length||document.getElementsByTagNameNS(undefined,'*').length||"
+        "document.getElementsByTagNameNS(svg,'text')[0]!==document.getElementById('svgText')||"
+        "document.getElementsByTagNameNS('*','*').length!==document.getElementsByTagName('*').length)"
+        "throw Error('namespace query');"
+        "if('getElementsByTagName' in document.createDocumentFragment()||'getElementsByTagName' in p.firstChild)"
+        "throw Error('query interfaces');",
+        "tag queries return live HTMLCollection with HTML/foreign namespace matching"));
+    ck_assert_uint_eq(dom_thread->dom_changes, 0);
+}
+END_TEST
+
+START_TEST(test_quickjs_tag_queries_live)
+{
+    ck_assert(exec_script(dom_thread,
+        "var root=document.createElement('main'), branch=document.createElement('div'), a=document.createElement('span');"
+        "var c=root.getElementsByTagName('span'), n=root.getElementsByTagNameNS('*','span');"
+        "root.appendChild(branch);branch.appendChild(a);a.id='alpha';a.setAttribute('name','alias');"
+        "if(c.length!==1||c[0]!==a||n[0]!==a||c.alpha!==a||c.namedItem('alias')!==a)throw Error('deep live insert');"
+        "var b=document.createElement('span');b.id='beta';root.insertBefore(b,branch);"
+        "if([...c][0]!==b||[...n][1]!==a||Reflect.ownKeys(c).join()!=='0,1,beta,alpha,alias'||"
+        "Object.keys(c).join()!=='0,1')throw Error('tree order and names');"
+        "var iterator=c[Symbol.iterator]();if(iterator.next().value!==b)throw Error('iterator first');"
+        "branch.removeChild(a);if(c.length!==1||!iterator.next().done||c.alpha!==undefined)throw Error('live remove');"
+        "root.appendChild(a);a.id='item';a.removeAttribute('name');"
+        "if(typeof c.item!=='function'||c.namedItem('item')!==a||Reflect.ownKeys(c).includes('item'))throw Error('method shadow');"
+        "var d=Object.getOwnPropertyDescriptor(c,'0');if(d.writable||!d.enumerable||!d.configurable||d.value!==b)"
+        "throw Error('query index descriptor');"
+        "if(Reflect.set(c,'0',3)||Reflect.deleteProperty(c,'0')||Reflect.defineProperty(c,'99',{value:2}))"
+        "throw Error('readonly indices');c.note=42;if(c.note!==42)throw Error('query expando');"
+        "document.body.appendChild(root);document.body.removeChild(root);if(c.length!==2)throw Error('detached query');"
+        "root.textContent='gone';if(c.length||n.length||c.namedItem('beta')!==null)throw Error('replacement');",
+        "query collections follow deep edits, detached roots, names and live iteration"));
+}
+END_TEST
+
+START_TEST(test_quickjs_tag_queries_conversion)
+{
+    ck_assert(exec_script(dom_thread,
+        "function raises(fn){try{fn();}catch(e){if(e instanceof TypeError)return;throw e;}throw Error('missing TypeError');}"
+        "raises(()=>document.getElementsByTagName());raises(()=>document.getElementsByTagNameNS('*'));"
+        "raises(()=>document.getElementsByTagName(Symbol()));raises(()=>document.getElementsByTagNameNS(Symbol(),'a'));"
+        "raises(()=>document.getElementsByTagNameNS(null,Symbol()));"
+        "raises(()=>Document.prototype.getElementsByTagName.call(document.body,'div'));"
+        "raises(()=>Element.prototype.getElementsByTagName.call(document,'div'));"
+        "raises(()=>Element.prototype.getElementsByTagName.call(document.createTextNode(''),'div'));"
+        "var root=document.createElement('div'), order=[], sentinel={},caught;"
+        "var c=root.getElementsByTagNameNS({toString(){order.push('namespace');return '*';}},"
+        "{toString(){order.push('name');root.appendChild(document.createElement('b'));return 'b';}});"
+        "if(order.join()!=='namespace,name'||c.length!==1)throw Error('ordered conversion');"
+        "try{root.getElementsByTagNameNS({toString(){throw sentinel;}},{toString(){throw Error('unexpected conversion');}});}"
+        "catch(e){caught=e;}if(caught!==sentinel)throw Error('coercion exception');"
+        "if(root.getElementsByTagName(null).length||root.getElementsByTagName(undefined).length||"
+        "root.getElementsByTagName(42n).length||root.getElementsByTagName('b\\0').length)throw Error('DOMString conversion');",
+        "query receiver checks, arity, DOMString conversion and namespace conversion order"));
+}
+END_TEST
+
+START_TEST(test_quickjs_tag_queries_retirement)
+{
+    JSContext *ctx = dom_thread->ctx;
+    JSValue global = JS_GetGlobalObject(ctx);
+    ck_assert_int_eq(
+        JS_SetPropertyStr(ctx, global, "retire", JS_NewCFunction(ctx, close_dom_during_conversion, "retire", 0)), 1);
+    JS_FreeValue(ctx, global);
+    const char *sources[] = {
+        "try{document.getElementsByTagName({toString(){retire();return '*';}});}catch(e){var caught=e;}",
+        "try{document.getElementsByTagNameNS('*',{toString(){retire();return '*';}});}catch(e){var caught=e;}",
+        "var list=document.getElementsByTagName('*');try{list.item({valueOf(){retire();return 0;}});}catch(e){var caught=e;}",
+        "var list=document.getElementsByTagName('*');Object.setPrototypeOf(list,new Proxy({},"
+        "{getOwnPropertyDescriptor(){retire();}}));try{list.target;}catch(e){var caught=e;}",
+    };
+    char script[1024];
+    snprintf(script, sizeof(script),
+        "%s if(!(caught instanceof DOMException)||caught.name!=='InvalidStateError')"
+        "throw Error('retired query guard');",
+        sources[_i]);
+    ck_assert_msg(exec_script(dom_thread, script, "query retirement during coercion/prototype lookup"),
+        "Query retirement variant %d failed", _i);
+}
+END_TEST
+
+START_TEST(test_quickjs_tag_queries_gc)
+{
+    ck_assert(exec_script(dom_thread,
+        "var root=document.createElement('div');root.appendChild(document.createElement('b'));"
+        "var list=root.getElementsByTagName('*');list.cycle={root,list};root=null;",
+        "query retains a detached root and traces cycles"));
+    JS_RunGC(dom_heap->rt);
+    assert_predicate(dom_thread, "list.length===1 && list[0].tagName==='B'", "query survives GC");
+    js_closethread(dom_thread);
+    JSValue global = JS_GetGlobalObject(dom_thread->ctx), list = JS_GetPropertyStr(dom_thread->ctx, global, "list");
+    JSValue length = JS_GetPropertyStr(dom_thread->ctx, list, "length");
+    ck_assert(JS_IsException(length));
+    JS_FreeValue(dom_thread->ctx, JS_GetException(dom_thread->ctx));
+    JS_FreeValue(dom_thread->ctx, list);
+    JS_FreeValue(dom_thread->ctx, global);
 }
 END_TEST
 
@@ -3814,6 +3930,11 @@ Suite *quickjs_suite(void)
     tcase_add_test(tc_dom, test_quickjs_classlist_iteration);
     tcase_add_test(tc_dom, test_quickjs_classlist_retirement);
     tcase_add_test(tc_dom, test_quickjs_classlist_conversion_retirement);
+    tcase_add_test(tc_dom, test_quickjs_tag_queries);
+    tcase_add_test(tc_dom, test_quickjs_tag_queries_live);
+    tcase_add_test(tc_dom, test_quickjs_tag_queries_conversion);
+    tcase_add_loop_test(tc_dom, test_quickjs_tag_queries_retirement, 0, 4);
+    tcase_add_test(tc_dom, test_quickjs_tag_queries_gc);
     tcase_add_test(tc_dom, test_quickjs_node_creation);
     tcase_add_test(tc_dom, test_quickjs_node_creation_errors);
     tcase_add_test(tc_dom, test_quickjs_tree_moves);
@@ -3829,7 +3950,7 @@ Suite *quickjs_suite(void)
     tcase_add_test(tc_dom, test_quickjs_collection_iteration);
     tcase_add_test(tc_dom, test_quickjs_collection_errors);
     tcase_add_test(tc_dom, test_quickjs_collection_retirement);
-    tcase_add_test(tc_dom, test_quickjs_collection_allocation_failure);
+    tcase_add_loop_test(tc_dom, test_quickjs_collection_allocation_failure, 0, 2);
     tcase_add_loop_test(tc_dom, test_quickjs_collection_conversion_retirement, 0, 3);
     tcase_add_test(tc_dom, test_quickjs_event_values);
     tcase_add_test(tc_dom, test_quickjs_event_conversion);

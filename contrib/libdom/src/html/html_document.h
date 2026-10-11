@@ -82,10 +82,6 @@ _dom_html_document_get_elements_by_name(dom_html_document *doc, dom_string *name
 dom_exception _dom_html_document_create_element(dom_document *doc, dom_string *tag_name, dom_element **result);
 dom_exception
 _dom_html_document_create_element_ns(dom_document *doc, dom_string *namespace, dom_string *qname, dom_element **result);
-dom_exception
-_dom_html_document_get_elements_by_tag_name(dom_document *doc, dom_string *tagname, dom_nodelist **result);
-dom_exception _dom_html_document_get_elements_by_tag_name_ns(
-    dom_document *doc, dom_string *namespace, dom_string *localname, dom_nodelist **result);
 dom_exception _dom_html_document_create_attribute(dom_document *doc, dom_string *name, dom_attr **result);
 dom_exception
 _dom_html_document_create_attribute_ns(dom_document *doc, dom_string *namespace, dom_string *qname, dom_attr **result);
@@ -100,8 +96,8 @@ bool anchors_callback(struct dom_node_internal *node, void *ctx);
         _dom_html_document_create_element, _dom_document_create_document_fragment, _dom_document_create_text_node,     \
         _dom_document_create_comment, _dom_document_create_cdata_section, _dom_document_create_processing_instruction, \
         _dom_html_document_create_attribute, _dom_document_create_entity_reference,                                    \
-        _dom_html_document_get_elements_by_tag_name, _dom_document_import_node, _dom_html_document_create_element_ns,  \
-        _dom_html_document_create_attribute_ns, _dom_html_document_get_elements_by_tag_name_ns,                        \
+        _dom_document_get_elements_by_tag_name, _dom_document_import_node, _dom_html_document_create_element_ns,       \
+        _dom_html_document_create_attribute_ns, _dom_document_get_elements_by_tag_name_ns,                             \
         _dom_document_get_element_by_id, _dom_document_get_input_encoding, _dom_document_get_xml_encoding,             \
         _dom_document_get_xml_standalone, _dom_document_set_xml_standalone, _dom_document_get_xml_version,             \
         _dom_document_set_xml_version, _dom_document_get_strict_error_checking,                                        \

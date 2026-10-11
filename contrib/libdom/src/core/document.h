@@ -61,6 +61,7 @@ struct dom_document {
     /**< The DocumentEvent interface */
     dom_document_quirks_mode quirks;
     /**< Document is in quirks mode */
+    bool html; /**< HTML document type; distinct from an element's namespace. */
     dom_string *_memo_empty; /**< The string ''. */
 
     /* Memoised event strings */

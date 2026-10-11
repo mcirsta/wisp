@@ -8,11 +8,17 @@
 #ifndef dom_core_nodelist_h_
 #define dom_core_nodelist_h_
 
+#include <stdbool.h>
 #include <dom/core/exceptions.h>
 
 struct dom_node;
 
 typedef struct dom_nodelist dom_nodelist;
+
+/** Visit matching nodes in tree order without repeated indexed scans. The node
+ * is borrowed. Return false to stop; do not mutate the DOM or release the list. */
+typedef bool (*dom_nodelist_callback)(struct dom_node *node, void *ctx);
+void dom_nodelist_foreach(dom_nodelist *list, dom_nodelist_callback callback, void *ctx);
 
 void dom_nodelist_ref(struct dom_nodelist *list);
 void dom_nodelist_unref(struct dom_nodelist *list);

@@ -414,13 +414,7 @@ dom_exception dom_html_table_element_create_caption(dom_html_table_element *elem
         dom_node *new_caption;
         dom_html_document *doc = (dom_html_document *)((dom_node_internal *)element)->owner;
 
-        struct dom_html_element_create_params params = {.type = DOM_HTML_ELEMENT_TYPE_CAPTION,
-            .doc = doc,
-            .name = doc->elements[DOM_HTML_ELEMENT_TYPE_CAPTION],
-            .namespace = ((dom_node_internal *)element)->namespace,
-            .prefix = ((dom_node_internal *)element)->prefix};
-
-        exp = _dom_html_table_caption_element_create(&params, (dom_html_table_caption_element **)caption);
+        exp = dom_document_create_element(doc, doc->elements[DOM_HTML_ELEMENT_TYPE_CAPTION], (dom_element **)caption);
         if (exp != DOM_NO_ERR) {
             dom_node_unref(*caption);
             return exp;
@@ -478,13 +472,7 @@ dom_exception dom_html_table_element_create_t_foot(dom_html_table_element *eleme
         dom_node *new_t_foot;
         dom_html_document *doc = (dom_html_document *)((dom_node_internal *)element)->owner;
 
-        struct dom_html_element_create_params params = {.type = DOM_HTML_ELEMENT_TYPE_TFOOT,
-            .doc = doc,
-            .name = doc->elements[DOM_HTML_ELEMENT_TYPE_TFOOT],
-            .namespace = ((dom_node_internal *)element)->namespace,
-            .prefix = ((dom_node_internal *)element)->prefix};
-
-        exp = _dom_html_table_section_element_create(&params, (dom_html_table_section_element **)t_foot);
+        exp = dom_document_create_element(doc, doc->elements[DOM_HTML_ELEMENT_TYPE_TFOOT], (dom_element **)t_foot);
         if (exp != DOM_NO_ERR) {
             dom_node_unref(*t_foot);
             return exp;
@@ -546,13 +534,7 @@ dom_exception dom_html_table_element_create_t_head(dom_html_table_element *eleme
         dom_node *new_t_head;
         dom_html_document *doc = (dom_html_document *)((dom_node_internal *)element)->owner;
 
-        struct dom_html_element_create_params params = {.type = DOM_HTML_ELEMENT_TYPE_THEAD,
-            .doc = doc,
-            .name = doc->elements[DOM_HTML_ELEMENT_TYPE_THEAD],
-            .namespace = ((dom_node_internal *)element)->namespace,
-            .prefix = ((dom_node_internal *)element)->prefix};
-
-        exp = _dom_html_table_section_element_create(&params, (dom_html_table_section_element **)t_head);
+        exp = dom_document_create_element(doc, doc->elements[DOM_HTML_ELEMENT_TYPE_THEAD], (dom_element **)t_head);
         if (exp != DOM_NO_ERR) {
             dom_node_unref(*t_head);
             return exp;
@@ -620,13 +602,7 @@ dom_html_table_element_create_t_body(dom_html_table_element *element, dom_html_t
         dom_node *new_t_body;
         dom_html_document *doc = (dom_html_document *)((dom_node_internal *)element)->owner;
 
-        struct dom_html_element_create_params params = {.type = DOM_HTML_ELEMENT_TYPE_TBODY,
-            .doc = doc,
-            .name = doc->elements[DOM_HTML_ELEMENT_TYPE_TBODY],
-            .namespace = ((dom_node_internal *)element)->namespace,
-            .prefix = ((dom_node_internal *)element)->prefix};
-
-        exp = _dom_html_table_section_element_create(&params, t_body);
+        exp = dom_document_create_element(doc, doc->elements[DOM_HTML_ELEMENT_TYPE_TBODY], (dom_element **)t_body);
         if (exp != DOM_NO_ERR) {
             dom_node_unref(*t_body);
             dom_html_collection_unref(t_bodies);
@@ -677,13 +653,7 @@ dom_html_table_element_insert_row(dom_html_table_element *element, int32_t index
         dom_html_table_row_element *row;
         dom_node *new_row;
 
-        struct dom_html_element_create_params params = {.type = DOM_HTML_ELEMENT_TYPE_TR,
-            .doc = doc,
-            .name = doc->elements[DOM_HTML_ELEMENT_TYPE_TR],
-            .namespace = ((dom_node_internal *)element)->namespace,
-            .prefix = ((dom_node_internal *)element)->prefix};
-
-        exp = _dom_html_table_row_element_create(&params, &row);
+        exp = dom_document_create_element(doc, doc->elements[DOM_HTML_ELEMENT_TYPE_TR], (dom_element **)&row);
         if (exp != DOM_NO_ERR) {
             return exp;
         }

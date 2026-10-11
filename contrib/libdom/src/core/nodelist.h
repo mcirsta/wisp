@@ -19,13 +19,7 @@ struct dom_nodelist;
 /**
  * The NodeList type
  */
-typedef enum {
-    DOM_NODELIST_CHILDREN,
-    DOM_NODELIST_BY_NAME,
-    DOM_NODELIST_BY_NAMESPACE,
-    DOM_NODELIST_BY_NAME_CASELESS,
-    DOM_NODELIST_BY_NAMESPACE_CASELESS
-} nodelist_type;
+typedef enum { DOM_NODELIST_CHILDREN, DOM_NODELIST_BY_NAME, DOM_NODELIST_BY_NAMESPACE } nodelist_type;
 
 /* Create a nodelist */
 dom_exception _dom_nodelist_create(struct dom_document *doc, nodelist_type type, struct dom_node_internal *root,

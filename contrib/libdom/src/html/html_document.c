@@ -117,6 +117,8 @@ _dom_html_document_initialise(dom_html_document *doc, dom_events_default_action_
     if (error != DOM_NO_ERR)
         return error;
 
+    doc->base.html = true;
+
     doc->title = NULL;
     doc->referrer = NULL;
     doc->domain = NULL;
@@ -398,19 +400,25 @@ static dom_exception _dom_html_document_create_element_internal(dom_html_documen
     if (dom_string_length(in_tag_name) == 0)
         return DOM_INVALID_CHARACTER_ERR;
 
-    /* For SVG and MathML namespace elements, preserve original case.
-     * HTML elements are uppercased per HTML5 spec. */
-    if (namespace != NULL &&
-        (dom_string_isequal(namespace, dom_namespaces[DOM_NAMESPACE_SVG]) ||
-            dom_string_isequal(namespace, dom_namespaces[DOM_NAMESPACE_MATHML]))) {
-        params.name = dom_string_ref(in_tag_name);
-        params.type = DOM_HTML_ELEMENT_TYPE__UNKNOWN;
-    } else {
-        exc = dom_string_toupper(in_tag_name, true, &params.name);
+    /* Store the local name without losing its case. Only createElement (not
+     * createElementNS) lowercases the input; nodeName/tagName uppercase HTML
+     * names when read. Foreign namespaces never acquire HTML specializations. */
+    params.type = DOM_HTML_ELEMENT_TYPE__UNKNOWN;
+    bool html_name = namespace != NULL && dom_string_isequal(namespace, dom_namespaces[DOM_NAMESPACE_HTML]);
+    const char *bytes = dom_string_data(in_tag_name);
+    for (size_t i = 0; html_name && i < dom_string_byte_length(in_tag_name); i++) {
+        if (bytes[i] >= 'A' && bytes[i] <= 'Z')
+            html_name = false;
+    }
+    if (html_name) {
+        dom_string *upper = NULL;
+        exc = dom_string_toupper(in_tag_name, true, &upper);
         if (exc != DOM_NO_ERR)
             return exc;
-        params.type = _dom_html_document_get_element_type(html, params.name);
+        params.type = _dom_html_document_get_element_type(html, upper);
+        dom_string_unref(upper);
     }
+    params.name = dom_string_ref(in_tag_name);
 
     params.doc = html;
     params.namespace = namespace;
@@ -671,6 +679,11 @@ static dom_exception _dom_html_document_create_element_internal(dom_html_documen
         break;
     }
 
+    /* Common HTML names are already interned by type on the document. Reuse
+     * them for nodeName instead of allocating an uppercase string per element
+     * or converting it repeatedly during style selection. */
+    if (exc == DOM_NO_ERR && prefix == NULL && params.type != DOM_HTML_ELEMENT_TYPE__UNKNOWN)
+        ((dom_element *)*result)->tag_name = dom_string_ref(html->elements[params.type]);
     dom_string_unref(params.name);
 
     return exc;
@@ -686,7 +699,12 @@ dom_exception _dom_html_document_create_element(dom_document *doc, dom_string *t
         return DOM_NO_MEM_ERR;
     /* createElement in an HTML document creates an HTML-namespace element,
      * without splitting a colon in the local name into a namespace prefix. */
-    return _dom_html_document_create_element_internal(html, tag_name, namespace, NULL, (dom_html_element **)result);
+    dom_string *lower = NULL;
+    dom_exception err = dom_string_tolower(tag_name, true, &lower);
+    if (err == DOM_NO_ERR)
+        err = _dom_html_document_create_element_internal(html, lower, namespace, NULL, (dom_html_element **)result);
+    dom_string_unref(lower);
+    return err;
 }
 
 dom_exception
@@ -695,6 +713,14 @@ _dom_html_document_create_element_ns(dom_document *doc, dom_string *namespace, d
     dom_html_document *html = (dom_html_document *)doc;
     dom_string *prefix, *localname;
     dom_exception err;
+
+    if (!_dom_validate_name(qname))
+        return DOM_INVALID_CHARACTER_ERR;
+    if (namespace != NULL && dom_string_byte_length(namespace) == 0)
+        namespace = NULL;
+    err = _dom_namespace_validate_qname(qname, namespace);
+    if (err != DOM_NO_ERR)
+        return err;
 
     /* Divide QName into prefix/localname pair */
     err = _dom_namespace_split_qname(qname, &prefix, &localname);
@@ -788,46 +814,21 @@ _dom_html_document_create_attribute_ns(dom_document *doc, dom_string *namespace,
     return err;
 }
 
-/**
- * Retrieve a list of all elements with a given tag name
- *
- * \param doc      The document to search in
- * \param tagname  The tag name to search for ("*" for all)
- * \param result   Pointer to location to receive result
- * \return DOM_NO_ERR.
- *
- * The returned list will have its reference count increased. It is
- * the responsibility of the caller to unref the list once it has
- * finished with it.
- */
-dom_exception _dom_html_document_get_elements_by_tag_name(dom_document *doc, dom_string *tagname, dom_nodelist **result)
-{
-    return _dom_document_get_nodelist(
-        doc, DOM_NODELIST_BY_NAME_CASELESS, (dom_node_internal *)doc, tagname, NULL, NULL, result);
-}
-
-/**
- * Retrieve a list of all elements with a given local name and namespace URI
- *
- * \param doc        The document to search in
- * \param namespace  The namespace URI
- * \param localname  The local name
- * \param result     Pointer to location to receive result
- * \return DOM_NO_ERR on success, appropriate dom_exception on failure.
- *
- * The returned list will have its reference count increased. It is
- * the responsibility of the caller to unref the list once it has
- * finished with it.
- */
-dom_exception _dom_html_document_get_elements_by_tag_name_ns(
-    dom_document *doc, dom_string *namespace, dom_string *localname, dom_nodelist **result)
-{
-    return _dom_document_get_nodelist(
-        doc, DOM_NODELIST_BY_NAMESPACE_CASELESS, (dom_node_internal *)doc, NULL, namespace, localname, result);
-}
-
 /*-----------------------------------------------------------------------*/
 /* The DOM spec public API */
+
+/* Internal HTML lookups mean a namespace/local-name pair, not a public
+ * qualified-name query. They must include prefixed HTML elements and exclude
+ * foreign elements with the same local name. */
+static dom_exception html_elements_by_type(dom_html_document *doc, dom_html_element_type type, dom_nodelist **list)
+{
+    dom_string *local = NULL;
+    dom_exception err = dom_string_tolower(doc->elements[type], true, &local);
+    if (err == DOM_NO_ERR)
+        err = dom_document_get_elements_by_tag_name_ns(doc, dom_namespaces[DOM_NAMESPACE_HTML], local, list);
+    dom_string_unref(local);
+    return err;
+}
 
 /**
  * Get the title of this HTMLDocument
@@ -853,7 +854,7 @@ dom_exception _dom_html_document_get_title(dom_html_document *doc, dom_string **
         dom_nodelist *nodes;
         uint32_t len;
 
-        exc = dom_document_get_elements_by_tag_name(doc, doc->elements[DOM_HTML_ELEMENT_TYPE_TITLE], &nodes);
+        exc = html_elements_by_type(doc, DOM_HTML_ELEMENT_TYPE_TITLE, &nodes);
         if (exc != DOM_NO_ERR) {
             return exc;
         }
@@ -924,7 +925,7 @@ dom_exception _dom_html_document_get_body(dom_html_document *doc, struct dom_htm
         dom_nodelist *nodes;
         uint32_t len;
 
-        exc = dom_document_get_elements_by_tag_name(doc, doc->elements[DOM_HTML_ELEMENT_TYPE_BODY], &nodes);
+        exc = html_elements_by_type(doc, DOM_HTML_ELEMENT_TYPE_BODY, &nodes);
         if (exc != DOM_NO_ERR) {
             return exc;
         }
@@ -937,7 +938,7 @@ dom_exception _dom_html_document_get_body(dom_html_document *doc, struct dom_htm
 
         if (len == 0) {
             dom_nodelist_unref(nodes);
-            exc = dom_document_get_elements_by_tag_name(doc, doc->elements[DOM_HTML_ELEMENT_TYPE_FRAMESET], &nodes);
+            exc = html_elements_by_type(doc, DOM_HTML_ELEMENT_TYPE_FRAMESET, &nodes);
             if (exc != DOM_NO_ERR) {
                 return exc;
             }

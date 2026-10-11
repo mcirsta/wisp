@@ -548,6 +548,7 @@ dom_exception _dom_element_initialise(
     assert(doc != NULL);
 
     el->attributes = NULL;
+    el->tag_name = NULL;
 
     /* Initialise the base class */
     err = _dom_node_initialise(&el->base, doc, DOM_ELEMENT_NODE, name, NULL, namespace, prefix);
@@ -574,6 +575,8 @@ dom_exception _dom_element_initialise(
  */
 void _dom_element_finalise(struct dom_element *ele)
 {
+    dom_string_unref(ele->tag_name);
+    ele->tag_name = NULL;
     /* Destroy attributes attached to this node */
     if (ele->attributes != NULL) {
         _dom_element_attr_list_destroy(ele->attributes);
@@ -1497,6 +1500,7 @@ dom_exception _dom_element_copy_internal(dom_element *old, dom_element *new)
 
     new->id_ns = NULL;
     new->id_name = NULL;
+    new->tag_name = NULL;
 
     /* TODO: deal with dom_type_info, it get no definition ! */
 

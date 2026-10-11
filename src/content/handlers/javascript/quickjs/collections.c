@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later
- * Live Node.childNodes and ParentNode.children. Native references are borrowed
+ * Live child and descendant collections. Native references are borrowed
  * only for an operation; the traced root wrapper owns the collection's lifetime.
  * DOM 4.2.10 and Web IDL 3.9 define the indexed/named property behavior.
  */
@@ -7,10 +7,14 @@
 #include <string.h>
 
 enum collection_kind { CHILD_NODES, CHILD_ELEMENTS };
+enum collection_query { DIRECT_CHILDREN, TAG_NAME, TAG_NAMESPACE };
+enum { QUERY_NAMESPACE = 0x100 };
 
 struct collection {
     JSValue root, properties;
     enum collection_kind kind;
+    enum collection_query query;
+    dom_string *name, *namespace;
 };
 
 static struct collection *collection_get(JSContext *ctx, JSValueConst object, int kind)
@@ -34,6 +38,8 @@ static void collection_finalizer(JSRuntime *rt, JSValue object)
 {
     struct collection *list = JS_GetOpaque(object, JS_GetClassID(object));
     if (list != NULL) {
+        dom_string_unref(list->name);
+        dom_string_unref(list->namespace);
         JS_FreeValueRT(rt, list->root);
         JS_FreeValueRT(rt, list->properties);
         js_free_rt(rt, list);
@@ -49,14 +55,8 @@ static void collection_mark(JSRuntime *rt, JSValueConst object, JS_MarkFunc *mar
     }
 }
 
-static JSValue children_get(JSContext *ctx, JSValueConst object, int type)
+static JSValue collection_create(JSContext *ctx, JSValueConst object, enum collection_kind kind)
 {
-    int kind = type == 0 ? CHILD_NODES : CHILD_ELEMENTS;
-    struct qjs_dom_node *root = qjs_dom_get(ctx, object, type);
-    if (root == NULL)
-        return JS_EXCEPTION;
-    if (!JS_IsUndefined(root->child_lists[kind]))
-        return JS_DupValue(ctx, root->child_lists[kind]);
     jsthread *thread = JS_GetContextOpaque(ctx);
     JSValue value = JS_NewObjectClass(ctx, thread->heap->collection_class[kind]);
     if (JS_IsException(value))
@@ -74,7 +74,52 @@ static JSValue children_get(JSContext *ctx, JSValueConst object, int type)
         JS_FreeValue(ctx, value);
         return JS_EXCEPTION;
     }
-    root->child_lists[kind] = JS_DupValue(ctx, value);
+    return value;
+}
+
+static JSValue children_get(JSContext *ctx, JSValueConst object, int type)
+{
+    int kind = type == 0 ? CHILD_NODES : CHILD_ELEMENTS;
+    struct qjs_dom_node *root = qjs_dom_get(ctx, object, type);
+    if (root == NULL)
+        return JS_EXCEPTION;
+    if (!JS_IsUndefined(root->child_lists[kind]))
+        return JS_DupValue(ctx, root->child_lists[kind]);
+    JSValue value = collection_create(ctx, object, kind);
+    if (!JS_IsException(value))
+        root->child_lists[kind] = JS_DupValue(ctx, value);
+    return value;
+}
+
+static JSValue elements_by_tag(JSContext *ctx, JSValueConst object, int argc, JSValueConst *argv, int magic)
+{
+    dom_node_type type = magic & ~QUERY_NAMESPACE;
+    bool namespace_query = (magic & QUERY_NAMESPACE) != 0;
+    if (qjs_dom_get(ctx, object, type) == NULL)
+        return JS_EXCEPTION;
+    if (argc < (namespace_query ? 2 : 1))
+        return JS_ThrowTypeError(ctx, "Element query requires %d argument(s)", namespace_query ? 2 : 1);
+    dom_string *namespace = NULL;
+    if (namespace_query) {
+        namespace = qjs_dom_string(ctx, argv[0], true);
+        if (JS_HasException(ctx))
+            return JS_EXCEPTION;
+    }
+    dom_string *name = qjs_dom_string(ctx, argv[namespace_query ? 1 : 0], false);
+    JSValue value = JS_EXCEPTION;
+    /* Conversion can run page code, including navigation. Retain only strings
+     * across it, then recheck the document before constructing the collection. */
+    if (name != NULL && qjs_dom_get(ctx, object, type) != NULL) {
+        value = collection_create(ctx, object, CHILD_ELEMENTS);
+        if (!JS_IsException(value)) {
+            struct collection *list = JS_GetOpaque(value, JS_GetClassID(value));
+            list->query = namespace_query ? TAG_NAMESPACE : TAG_NAME;
+            list->name = dom_string_ref(name);
+            list->namespace = dom_string_ref(namespace);
+        }
+    }
+    dom_string_unref(name);
+    dom_string_unref(namespace);
     return value;
 }
 
@@ -111,6 +156,77 @@ static dom_exception attribute_name(dom_node *node, bool is_name, dom_string **v
     return err;
 }
 
+/* Native query objects exist only during a read. Keeping a native NodeList on
+ * a JS collection would pin the DOM past HTML teardown; the traced root wrapper
+ * instead provides ownership and the existing closed-document guard. The visitor
+ * never calls page code or mutates the tree and avoids repeated indexed scans. */
+static int collection_visit(JSContext *ctx, struct collection *list, dom_nodelist_callback callback, void *data)
+{
+    struct qjs_dom_node *root = qjs_dom_get(ctx, list->root, 0);
+    if (root == NULL)
+        return -1;
+    dom_exception err;
+    if (list->query != DIRECT_CHILDREN) {
+        dom_nodelist *native = NULL;
+        if (root->type == DOM_DOCUMENT_NODE) {
+            err = list->query == TAG_NAME
+                ? dom_document_get_elements_by_tag_name(root->node, list->name, &native)
+                : dom_document_get_elements_by_tag_name_ns(root->node, list->namespace, list->name, &native);
+        } else {
+            err = list->query == TAG_NAME
+                ? dom_element_get_elements_by_tag_name(root->node, list->name, &native)
+                : dom_element_get_elements_by_tag_name_ns(root->node, list->namespace, list->name, &native);
+        }
+        if (err == DOM_NO_ERR)
+            dom_nodelist_foreach(native, callback, data);
+        dom_nodelist_unref(native);
+    } else {
+        dom_node *child = NULL;
+        err = next_child(root->node, true, list->kind, &child);
+        while (err == DOM_NO_ERR && child != NULL) {
+            if (!callback(child, data))
+                break;
+            dom_node *next = NULL;
+            err = next_child(child, false, list->kind, &next);
+            dom_node_unref(child);
+            child = next;
+        }
+        dom_node_unref(child);
+    }
+    if (err != DOM_NO_ERR) {
+        qjs_dom_exception(ctx, err);
+        return -1;
+    }
+    return 0;
+}
+
+struct collection_scan {
+    uint32_t index, count;
+    dom_string *name;
+    dom_node **result;
+    dom_exception error;
+};
+
+static bool scan_node(dom_node *node, void *data)
+{
+    struct collection_scan *scan = data;
+    bool matches = scan->result != NULL && scan->name == NULL && scan->count == scan->index;
+    if (scan->name != NULL && dom_string_byte_length(scan->name) != 0) {
+        for (unsigned i = 0; i < 2 && !matches && scan->error == DOM_NO_ERR; i++) {
+            dom_string *value = NULL;
+            scan->error = attribute_name(node, i != 0, &value);
+            matches = value != NULL && dom_string_isequal(value, scan->name);
+            dom_string_unref(value);
+        }
+    }
+    if (matches && scan->error == DOM_NO_ERR) {
+        *scan->result = dom_node_ref(node);
+        return false;
+    }
+    scan->count++;
+    return scan->error == DOM_NO_ERR;
+}
+
 /* A null result requests length; name selects namedItem instead of an index. */
 static int collection_scan(
     JSContext *ctx, struct collection *list, uint32_t index, dom_string *name, dom_node **result, uint32_t *length)
@@ -119,42 +235,15 @@ static int collection_scan(
         *result = NULL;
     if (length != NULL)
         *length = 0;
-    struct qjs_dom_node *root = qjs_dom_get(ctx, list->root, 0);
-    if (root == NULL)
+    struct collection_scan scan = {.index = index, .name = name, .result = result};
+    if (collection_visit(ctx, list, scan_node, &scan) < 0)
         return -1;
-    if (name != NULL && dom_string_byte_length(name) == 0)
-        return 0;
-    dom_node *child = NULL;
-    dom_exception err = next_child(root->node, true, list->kind, &child);
-    uint32_t count = 0;
-    while (err == DOM_NO_ERR && child != NULL) {
-        bool matches = result != NULL && name == NULL && count == index;
-        if (name != NULL) {
-            for (unsigned i = 0; i < 2 && !matches && err == DOM_NO_ERR; i++) {
-                dom_string *value = NULL;
-                err = attribute_name(child, i != 0, &value);
-                matches = value != NULL && dom_string_isequal(value, name);
-                dom_string_unref(value);
-            }
-        }
-        if (matches && err == DOM_NO_ERR) {
-            *result = child;
-            return 0;
-        }
-        count++;
-        dom_node *next = NULL;
-        if (err == DOM_NO_ERR)
-            err = next_child(child, false, list->kind, &next);
-        dom_node_unref(child);
-        child = next;
-    }
-    dom_node_unref(child);
-    if (err != DOM_NO_ERR) {
-        qjs_dom_exception(ctx, err);
+    if (scan.error != DOM_NO_ERR) {
+        qjs_dom_exception(ctx, scan.error);
         return -1;
     }
     if (length != NULL)
-        *length = count;
+        *length = scan.count;
     return 0;
 }
 
@@ -390,37 +479,39 @@ static int add_key(JSContext *ctx, struct collection_keys *keys, JSAtom key)
     return 0;
 }
 
+struct collect_names {
+    JSContext *ctx;
+    struct collection_keys *keys;
+    dom_exception error;
+    int result;
+};
+
+static bool collect_node_names(dom_node *node, void *data)
+{
+    struct collect_names *names = data;
+    for (unsigned i = 0; i < 2 && names->result == 0 && names->error == DOM_NO_ERR; i++) {
+        dom_string *name = NULL;
+        names->error = attribute_name(node, i != 0, &name);
+        if (names->error == DOM_NO_ERR && name != NULL && dom_string_byte_length(name) != 0) {
+            JSAtom key = JS_NewAtomLen(names->ctx, dom_string_data(name), dom_string_byte_length(name));
+            names->result = key == JS_ATOM_NULL ? -1 : add_key(names->ctx, names->keys, key);
+            JS_FreeAtom(names->ctx, key);
+        }
+        dom_string_unref(name);
+    }
+    return names->error == DOM_NO_ERR && names->result == 0;
+}
+
 static int collect_names(JSContext *ctx, struct collection *list, struct collection_keys *keys)
 {
-    struct qjs_dom_node *root = qjs_dom_get(ctx, list->root, 0);
-    if (root == NULL)
+    struct collect_names names = {.ctx = ctx, .keys = keys};
+    if (collection_visit(ctx, list, collect_node_names, &names) < 0)
         return -1;
-    dom_node *child = NULL;
-    dom_exception err = next_child(root->node, true, list->kind, &child);
-    int ret = 0;
-    while (err == DOM_NO_ERR && ret == 0 && child != NULL) {
-        for (unsigned i = 0; i < 2 && ret == 0 && err == DOM_NO_ERR; i++) {
-            dom_string *name = NULL;
-            err = attribute_name(child, i != 0, &name);
-            if (err == DOM_NO_ERR && name != NULL && dom_string_byte_length(name) != 0) {
-                JSAtom key = JS_NewAtomLen(ctx, dom_string_data(name), dom_string_byte_length(name));
-                ret = key == JS_ATOM_NULL ? -1 : add_key(ctx, keys, key);
-                JS_FreeAtom(ctx, key);
-            }
-            dom_string_unref(name);
-        }
-        dom_node *next = NULL;
-        if (err == DOM_NO_ERR && ret == 0)
-            err = next_child(child, false, list->kind, &next);
-        dom_node_unref(child);
-        child = next;
-    }
-    dom_node_unref(child);
-    if (err != DOM_NO_ERR) {
-        qjs_dom_exception(ctx, err);
+    if (names.error != DOM_NO_ERR) {
+        qjs_dom_exception(ctx, names.error);
         return -1;
     }
-    return ret;
+    return names.result;
 }
 
 static int collection_own_keys(JSContext *ctx, JSPropertyEnum **result, uint32_t *count, JSValueConst object)
@@ -553,6 +644,17 @@ int qjs_dom_install_collections(JSContext *ctx, JSValue *prototypes)
                 "children", children_get, NULL, parents[i].type, JS_PROP_CONFIGURABLE | JS_PROP_ENUMERABLE),
         };
         if (qjs_define_properties(ctx, prototypes[parents[i].prototype], entry, 1) < 0)
+            goto out;
+    }
+    for (unsigned i = 0; i < 2; i++) {
+        int type = parents[i].type;
+        const JSCFunctionListEntry queries[] = {
+            {"getElementsByTagName", JS_PROP_C_W_E, JS_DEF_CFUNC, type,
+                {.func = {1, JS_CFUNC_generic_magic, {.generic_magic = elements_by_tag}}}},
+            {"getElementsByTagNameNS", JS_PROP_C_W_E, JS_DEF_CFUNC, type | QUERY_NAMESPACE,
+                {.func = {2, JS_CFUNC_generic_magic, {.generic_magic = elements_by_tag}}}},
+        };
+        if (qjs_define_properties(ctx, prototypes[parents[i].prototype], queries, 2) < 0)
             goto out;
     }
     ret = 0;

@@ -20,6 +20,7 @@
 #include <dom/core/nodelist.h>
 #include <dom/core/text.h>
 #include <dom/events/events.h>
+#include <dom/dom.h>
 
 #include "utils/utils.h"
 #include "utils/validate.h"
@@ -403,6 +404,11 @@ dom_exception _dom_node_get_node_name(dom_node_internal *node, dom_string **resu
 
     assert(node->name != NULL);
 
+    if (node->type == DOM_ELEMENT_NODE && ((dom_element *)node)->tag_name != NULL) {
+        *result = dom_string_ref(((dom_element *)node)->tag_name);
+        return DOM_NO_ERR;
+    }
+
     /* If this node was created using a namespace-aware method and
      * has a defined prefix, then nodeName is a QName comprised
      * of prefix:name. */
@@ -437,6 +443,18 @@ dom_exception _dom_node_get_node_name(dom_node_internal *node, dom_string **resu
         node_name = dom_string_ref(node->name);
     }
 
+    if (node->type == DOM_ELEMENT_NODE) {
+        if (node->owner->html && node->namespace != NULL &&
+            dom_string_isequal(node->namespace, dom_namespaces[DOM_NAMESPACE_HTML])) {
+            dom_string *upper = NULL;
+            err = dom_string_toupper(node_name, true, &upper);
+            dom_string_unref(node_name);
+            if (err != DOM_NO_ERR)
+                return err;
+            node_name = upper;
+        }
+        ((dom_element *)node)->tag_name = dom_string_ref(node_name);
+    }
     *result = node_name;
 
     return DOM_NO_ERR;
@@ -1226,6 +1244,10 @@ dom_exception _dom_node_set_prefix(dom_node_internal *node, dom_string *prefix)
     }
 
     /* No longer want existing prefix */
+    if (node->type == DOM_ELEMENT_NODE) {
+        dom_string_unref(((dom_element *)node)->tag_name);
+        ((dom_element *)node)->tag_name = NULL;
+    }
     if (node->prefix != NULL) {
         dom_string_unref(node->prefix);
     }

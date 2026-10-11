@@ -51,11 +51,6 @@ dom_exception _dom_html_element_remove_attribute(struct dom_element *element, do
 
 dom_exception _dom_html_element_has_attribute(struct dom_element *element, dom_string *name, bool *result);
 
-dom_exception
-_dom_html_element_get_elements_by_tag_name(struct dom_element *element, dom_string *name, struct dom_nodelist **result);
-
-dom_exception _dom_html_element_get_elements_by_tag_name_ns(
-    struct dom_element *element, dom_string *namespace, dom_string *localname, struct dom_nodelist **result);
 
 
 /* The protected virtual functions */
@@ -65,12 +60,12 @@ dom_exception _dom_html_element_copy(dom_node_internal *old, dom_node_internal *
 #define DOM_ELEMENT_VTABLE_HTML_ELEMENT                                                                                \
     _dom_element_get_tag_name, _dom_html_element_get_attribute, _dom_html_element_set_attribute,                       \
         _dom_html_element_remove_attribute, _dom_element_get_attribute_node, _dom_element_set_attribute_node,          \
-        _dom_element_remove_attribute_node, _dom_html_element_get_elements_by_tag_name, _dom_element_get_attribute_ns, \
+        _dom_element_remove_attribute_node, _dom_element_get_elements_by_tag_name, _dom_element_get_attribute_ns,      \
         _dom_element_set_attribute_ns, _dom_element_remove_attribute_ns, _dom_element_get_attribute_node_ns,           \
-        _dom_element_set_attribute_node_ns, _dom_html_element_get_elements_by_tag_name_ns,                             \
-        _dom_html_element_has_attribute, _dom_element_has_attribute_ns, _dom_element_get_schema_type_info,             \
-        _dom_element_set_id_attribute, _dom_element_set_id_attribute_ns, _dom_element_set_id_attribute_node,           \
-        _dom_element_get_classes, _dom_element_has_class
+        _dom_element_set_attribute_node_ns, _dom_element_get_elements_by_tag_name_ns, _dom_html_element_has_attribute, \
+        _dom_element_has_attribute_ns, _dom_element_get_schema_type_info, _dom_element_set_id_attribute,               \
+        _dom_element_set_id_attribute_ns, _dom_element_set_id_attribute_node, _dom_element_get_classes,                \
+        _dom_element_has_class
 
 #define DOM_HTML_ELEMENT_PROTECT_VTABLE _dom_html_element_destroy, _dom_html_element_copy
 

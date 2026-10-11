@@ -158,12 +158,6 @@ static JSValue node_get(JSContext *ctx, JSValueConst object, int property)
     case NODE_NAME:
     case TAG_NAME:
         err = dom_node_get_node_name(self->node, &text);
-        if (err == DOM_NO_ERR && self->type == DOM_ELEMENT_NODE && qjs_dom_is_html(self->node)) {
-            dom_string *upper = NULL;
-            err = dom_string_toupper(text, true, &upper);
-            dom_string_unref(text);
-            text = upper;
-        }
         nullable = false;
         break;
     case NODE_VALUE:

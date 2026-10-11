@@ -3,7 +3,7 @@
 Reviewed 2026-10-07 against Wisp `206b8a03`, plus the QuickJS-ng update and
 XHR conversion fix described below. This replaces the earlier migration analysis.
 It is a browser-integration review, not an exhaustive security or ECMAScript
-conformance audit. Batches 1–2 and four increments of batch 3 are implemented
+conformance audit. Batches 1–2 and five increments of batch 3 are implemented
 within the scope described below. Real DOM lookups, class lists, attribute/text
 mutations and basic node creation/tree edits now reach rendering and carry JS action
 traces. Live child-node/element collections and script-dispatched events on DOM nodes,
@@ -54,20 +54,18 @@ DOMContentLoaded/load, visible DOM edits against static reference pixels, disabl
 JS, missing/rejected scripts, stylesheets and extensionless HTML. An `.mjs` suffix
 does not enable `type="module"`; module scripts remain unsupported.
 
-After the fix, the saved eBihoreanul main bundle (`scripts.min_v202610062.js`) executes
+After the MIME fix, the saved eBihoreanul main bundle (`scripts.min_v202610062.js`) executes
 and stops at `Element.getElementsByTagName` in its jQuery feature detection. That
 probe also needs real `innerHTML` parsing, so element queries alone will not make
 the bundle work. Earlier failures in analytics/advertising bootstrap code are not
 the priority. The saved HotNews application (`app2.js`) uses `type="module"`, a
 larger separate capability. WordPress classic helper scripts now execute.
 
-Recommended next bounded increment: live, standards-correct element query
-collections on Document/Element, reusing the current collection ownership and
-property machinery. The old Duktape Document binding called libdom's tag-name
-query, but returned a legacy NodeList; modern tag queries return HTMLCollection.
-Audit native matching, namespace/case handling and length/item agreement before
-exposing it. Fragment parsing/`innerHTML` is a following increment, not an expando
-property masquerading as DOM support.
+The next increment below implements those tag and namespace queries. The saved
+bundle now gets past that failure and reaches its HTML-fragment `clean()` routine:
+assigning `innerHTML` has not created children, so it encounters a null child.
+A later ready callback also reaches missing inline `style` support. Fragment
+parsing/`innerHTML` is the next bounded capability; CSSOM remains a separate step.
 
 These were local saved-page checks, not proof that the live sites fully initialize.
 eBihoreanul reached load completion; HotNews still reached the capture timeout
@@ -75,6 +73,68 @@ with external resources outstanding. Saved extensionless CSS/scripts also lack
 their original HTTP MIME headers: content detection cannot reliably recover every
 type. Keep that archive limitation separate from binding failures when selecting
 the next work.
+
+### Element queries and libdom name semantics (2026-10-11)
+
+`Document` and `Element` now expose `getElementsByTagName` and
+`getElementsByTagNameNS` as live `HTMLCollection`s. The old Duktape binding informed
+the libdom integration, but its NodeList return type and swallowed errors were not
+copied. Matching follows the [DOM query algorithms](https://dom.spec.whatwg.org/#concept-getelementsbytagname).
+
+This required fixing libdom itself, not filtering incorrect native results in JS:
+
+- Store the actual local name. HTML `createElement` ASCII-lowercases its input;
+  namespace-aware creation preserves case, including custom and null namespaces.
+  `nodeName`/`tagName` provide the HTML-uppercase qualified name only for elements
+  in the HTML namespace in an HTML document. Cache that derived value, invalidate
+  it on prefix changes and share the document's existing common HTML names.
+- One matcher handles native length, indexed items and one-pass visits. Tag queries
+  compare a lowercased query only against HTML-namespace elements in an HTML
+  document; foreign names and namespace/local-name queries remain exact. Match
+  full qualified names, normalize an empty namespace to null, avoid index overflow
+  and keep differently cased query-cache entries distinct. Removed the obsolete
+  caseless query modes and redundant HTML overrides.
+- Table-generated elements use the document factory, and select-option matching
+  uses the native HTML type. Native title/body lookups use HTML namespace and
+  local names, including prefixed HTML elements. These preserve behavior without
+  requiring uppercased stored local names. The JS-only nodeName uppercase
+  adjustment is removed.
+- JS collections reuse the existing indexed/named properties, live iteration,
+  exception conversion and traced-root lifetime. Native query lists exist only
+  during each read, so they cannot retain a DOM past HTML teardown. A native visitor
+  avoids repeatedly restarting indexed scans during each collection operation.
+  Reads do not request rendering; edits through results retain JS mutation traces.
+  Repeated indexed JS loops and named-property enumeration can still be quadratic;
+  this does not introduce a mutation-generation cache.
+
+Native regressions cover HTML/XML documents, HTML/SVG/custom/null namespaces,
+qualified names and prefix changes, live detached trees, query-cache distinctions,
+namespace length/item agreement, UINT32_MAX, and table/select creation. JS tests
+cover live collections, coercion, named/indexed properties, GC, allocation failure,
+retirement during conversion/prototype inspection and parsed SVG case preservation.
+The Qt DOM fixture compares query-driven edits with static reference pixels.
+
+Validation: the Debug ASan/UBSan build passes 495 native checks across 12 suites,
+with LeakSanitizer enabled, and all 117 Qt suites. After the final name-cache and
+internal-lookup refinements, the 12 native suites and six focused Qt suites
+(DOM mutations, lifecycle, local scripts, tables, SVG text and forms) pass again.
+The final build has no compiler warnings. GTK was not built or tested.
+
+The normalized saved eBihoreanul home snapshot has identical static pixels and
+extent with the committed and new libdom. The existing 4,096-level traversal test
+needs a longer Check timeout under sanitizers: the baseline and changed library
+both pass at about 13 seconds (12.8/12.9 seconds in the comparison), beyond its
+four-second default. Its explicit timeout is now 30 seconds. This is not a new
+traversal slowdown.
+
+Separate observed issue for a later focused fix: the raw eBihoreanul archive with
+JS disabled hits `browser_window_refresh`'s current-content assertion. It reproduces
+with the committed libdom too. The normalized snapshot was used for the static
+comparison; the JS-enabled raw archive reaches load completion with the missing
+fragment/style APIs described above. This batch does not change refresh scheduling.
+Both static baseline and changed-library captures also report an existing UBSan
+diagnostic in `llcache.c`: a zero-length `memcpy` receives a null data pointer.
+The native regression suites above report no sanitizer diagnostics.
 
 ## Assessment
 
@@ -136,7 +196,7 @@ unless stated otherwise.
 | Promise/async continuations | The outer script or timer entry drains FIFO jobs under the same deadline; aborted entries discard their pending jobs | Promise, `await` and engine `queueMicrotask` callbacks progress; this is not yet a complete browser event loop |
 | Timers | `timers.c`: per-document ordered queue on the frontend scheduler, callback arguments/string handlers, shared cancellation IDs and nesting delays | Real `setTimeout`/`setInterval`; callbacks and their checkpoints share execution limits; document retirement cancels them |
 | JS diagnostics | Optional `js_trace` records document/entry IDs, script sources, timer causality, navigation, exposed node IDs, actual DOM operations and coalesced render requests | Separates supported JS host effects from static processing; this is not complete paint attribution |
-| Document/nodes | `dom.c`/`document.c`/`tree.c`/`collections.c`: real libdom wrappers with stable identity, roots, ID lookup, traversal, live `childNodes`/`children` and element/text/comment/fragment factories | Document-lifetime wrapper ownership and native reference cleanup are tested; selectors, document-wide collections, namespace-aware creation and cross-document operations are not exposed |
+| Document/nodes | `dom.c`/`document.c`/`tree.c`/`collections.c`: real libdom wrappers with stable identity, roots, ID lookup, traversal, live `childNodes`/`children`, tag/namespace queries and element/text/comment/fragment factories | Document-lifetime wrapper ownership and native reference cleanup are tested; selectors, class-name queries, document convenience collections, namespace-aware creation and cross-document operations are not exposed |
 | Mutation/CSSOM | Real attributes, `id`/`className`, live `classList`, text/data and append/insert/replace/remove; connected edits request a full restyle after the entry/checkpoint | Changes affect boxes and pixels, including moves into detached trees; `style` and `innerHTML` remain omitted |
 | Events | Event/CustomEvent/UIEvent/core MouseEvent/PointerEvent/SubmitEvent values; shared script/native primary-click and SubmitEvent dispatch; checkable input/change delivery | Keyboard, other pointer/mouse events, full form submission callbacks and handler attributes remain pending |
 | Cancellation | `abort.c`: AbortController, AbortSignal state/reason, throwIfAborted, static abort, onabort and the listener signal option | Listener cancellation uses private abort steps before the public event; timeout, any and network integration remain absent |
@@ -585,11 +645,12 @@ Debug ASan/UBSan builds and the engine API/local JS suites are checked, along wi
 Qt script ordering, timers, loading, navigation and retained rendering. The local
 engine suite is not full test262. GTK is not tested.
 
-This completes the planned minimal child-collection surface. Document-wide
-collections (`forms`, `images`, etc.), getElementsBy* queries and selectors remain
-unexposed; later query APIs can build on the ownership/property rules here.
-Next is batch 4's EventTarget/Event and lifecycle work, not a claim of full DOM
-or dynamic resource/script support.
+This completed the planned minimal child-collection surface. Tag/namespace
+queries now reuse these ownership/property rules (see the 2026-10-11 increment
+above). Document convenience collections (`forms`, `images`, etc.), class-name
+queries and selectors remain unexposed. Work then proceeded through batch 4's
+EventTarget/Event and lifecycle increments; this is not full DOM or dynamic
+resource/script support.
 
 ### Batch 4 prerequisite: native event dispatch
 
@@ -1676,9 +1737,9 @@ These are separate reviewable batches, not a commitment to full web-app support.
    parser ordering, microtasks, main-thread timers and navigation-safe context
    ownership share bounded entry/checkpoint handling. Teardown runs no page
    callbacks. This is not a complete HTML event loop or script-element algorithm.
-3. **Minimal real DOM plus visible mutations — four increments implemented.**
+3. **Minimal real DOM plus visible mutations — five increments implemented.**
    Real wrappers, roots, ID lookup, traversal, attributes/text, live `classList`,
-   basic node creation/tree edits, live child collections, coalesced full refresh
+   basic node creation/tree edits, live child and tag-query collections, coalesced full refresh
    and mutation traces pass identity/GC and rendered-page tests. Extend the same
    ownership/conversion/invalidation layer for further APIs. Reuse
    partial updates only with sound mutation/dependency tracking.

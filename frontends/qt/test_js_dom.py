@@ -59,6 +59,16 @@ with tempfile.TemporaryDirectory(prefix='wisp-js-dom-') as tmp:
     assert (initial_capture / 'page.png').read_bytes() != (reference / 'page.png').read_bytes()
     for name, script in (
             ('inline', mutation),
+            ('tag-queries', """
+                const live = document.getElementsByTagName('DIV');
+                if (!(live instanceof HTMLCollection) || live.namedItem('target') !== live[0] ||
+                    live.length !== 2 || document.body.getElementsByTagName('span').length !== 1)
+                    throw Error('initial live query');
+            """ + mutation.replace("document.getElementById('target')", "live[0]")
+                .replace("document.getElementById('reveal')",
+                         "document.getElementsByTagNameNS('http://www.w3.org/1999/xhtml', 'div')[1]")
+                + "queueMicrotask(() => { if (document.body.getElementsByTagName('SPAN').length) "
+                  "throw Error('live replacement'); console.log('QUERY_LIVE_OK'); });"),
             ('timer', 'setTimeout(() => {' + mutation + '}, 150);'),
             ('classlist', 'setTimeout(() => {' + mutation.replace("target.className = 'new';", """
                 target.classList.add('new', 'temporary');
@@ -72,6 +82,8 @@ with tempfile.TemporaryDirectory(prefix='wisp-js-dom-') as tmp:
              'while (true) {} }, 150);')):
         dest, elements, log = run(root, name, initial + '<script>' + script + '</script>')
         assert 'Console: DOM_CHANGED' in log, (name, log)
+        if name == 'tag-queries':
+            assert 'Console: QUERY_LIVE_OK' in log and 'JavaScript exception' not in log, log
         assert (dest / 'page.png').read_bytes() == (reference / 'page.png').read_bytes(), (name, elements, log)
         for actual, expected_element in zip(elements, reference_elements):
             assert actual['boxes'] and expected_element['boxes'], (name, actual, expected_element)
@@ -87,7 +99,7 @@ with tempfile.TemporaryDirectory(prefix='wisp-js-dom-') as tmp:
             assert 'operation=classList.toggle' not in log and 'operation=classList.replace' not in log, log
         assert re.search(r'dom.node node=\d+ type=1 name=DIV id=target', log), (name, log)
         assert 'operation=removeAttribute attribute=hidden result=0' in log, (name, log)
-        assert ('mode=initial-build' if name in ('inline', 'exception') else 'mode=full-restyle') in requests[0][2], (name, log)
+        assert ('mode=initial-build' if name in ('inline', 'tag-queries', 'exception') else 'mode=full-restyle') in requests[0][2], (name, log)
         if name == 'interrupted':
             assert 'JavaScript execution limit reached' in log and 'end result=interrupted' in log, log
 

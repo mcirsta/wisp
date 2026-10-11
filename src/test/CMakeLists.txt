@@ -165,6 +165,8 @@ add_wisp_test(libdom_iteration_test
   ${CMAKE_SOURCE_DIR}/src/test/libdom_iteration_test.c
 )
 
+add_wisp_test(libdom_query_test ${CMAKE_SOURCE_DIR}/src/test/libdom_query_test.c)
+
 add_wisp_test(messages
   ${CMAKE_SOURCE_DIR}/src/utils/messages.c
   ${CMAKE_SOURCE_DIR}/src/utils/hashtable.c

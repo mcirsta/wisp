@@ -663,10 +663,9 @@ dom_exception dom_html_select_element_focus(struct dom_html_select_element *ele)
 /* Test whether certain node is an option node */
 bool is_option(struct dom_node_internal *node, void *ctx)
 {
-    dom_html_select_element *ele = ctx;
-    dom_html_document *doc = (dom_html_document *)dom_node_get_owner(ele);
+    UNUSED(ctx);
 
-    if (dom_string_isequal(node->name, doc->elements[DOM_HTML_ELEMENT_TYPE_OPTION]))
+    if (_dom_html_node_type(node) == DOM_HTML_ELEMENT_TYPE_OPTION)
         return true;
 
     return false;

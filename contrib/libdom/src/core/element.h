@@ -29,6 +29,8 @@ struct dom_hash_table;
 struct dom_element {
     struct dom_node_internal base; /**< Base node */
 
+    dom_string *tag_name; /**< Cached qualified (HTML-uppercased) nodeName. */
+
     struct dom_attr_list *attributes; /**< Element attributes */
 
     dom_string *id_ns; /**< The id attribute's namespace */

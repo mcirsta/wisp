@@ -169,6 +169,9 @@ int main(void)
 {
     Suite *suite = suite_create("DOM element traversal");
     TCase *tc = tcase_create("Traversal");
+    /* Constructing the 4096-level fixture includes native ancestor/mutation
+     * walks and exceeds Check's four-second default in sanitizer builds. */
+    tcase_set_timeout(tc, 30);
     tcase_add_checked_fixture(tc, setup, teardown);
     tcase_add_test(tc, test_order_and_subtree_boundary);
     tcase_add_test(tc, test_children_read_after_callback);

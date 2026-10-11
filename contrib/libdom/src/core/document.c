@@ -122,6 +122,7 @@ dom_exception _dom_document_initialise(dom_document *doc, dom_events_default_act
 
     doc->nodelists = NULL;
     doc->event_parent = NULL;
+    doc->html = false;
 
     err = _dom_node_initialise(&doc->base, doc, DOM_DOCUMENT_NODE, name, NULL, NULL, NULL);
     dom_string_unref(name);
@@ -699,6 +700,9 @@ _dom_document_create_element_ns(dom_document *doc, dom_string *namespace, dom_st
     if (_dom_validate_name(qname) == false)
         return DOM_INVALID_CHARACTER_ERR;
 
+    if (namespace != NULL && dom_string_byte_length(namespace) == 0)
+        namespace = NULL;
+
     /* Validate qname */
     err = _dom_namespace_validate_qname(qname, namespace);
     if (err != DOM_NO_ERR) {
@@ -1241,6 +1245,8 @@ dom_exception _dom_document_get_nodelist(dom_document *doc, nodelist_type type, 
     struct dom_doc_nl *l;
     dom_exception err;
 
+    if (namespace != NULL && dom_string_byte_length(namespace) == 0)
+        namespace = NULL;
     for (l = doc->nodelists; l; l = l->next) {
         if (_dom_nodelist_match(l->list, type, root, tagname, namespace, localname))
             break;
