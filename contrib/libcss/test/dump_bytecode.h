@@ -20,11 +20,11 @@ static uint32_t dump_bytecode_read(struct dump_bytecode_cursor *cursor)
     return *cursor->next++;
 }
 
-static void dump_bytecode_length(struct dump_bytecode_cursor *cursor, char **ptr)
+static void dump_bytecode_length(struct dump_bytecode_cursor *cursor, struct dump_output *out)
 {
     css_fixed value = (css_fixed)dump_bytecode_read(cursor);
     uint32_t unit = dump_bytecode_read(cursor);
-    dump_unit(value, unit, ptr);
+    dump_unit(value, unit, out);
 }
 
 /* Keyword values carry no operand words. */
@@ -322,51 +322,51 @@ static const char *const dump_keywords_writing_mode[] = {
 };
 
 /* Readers for properties with operands or property-specific flags. */
-static void dump_bytecode_azimuth(struct dump_bytecode_cursor *cursor, uint32_t value, char **ptr)
+static void dump_bytecode_azimuth(struct dump_bytecode_cursor *cursor, uint32_t value, struct dump_output *out)
 {
     switch (value & ~AZIMUTH_BEHIND) {
     case AZIMUTH_ANGLE:
-        dump_bytecode_length(cursor, ptr);
+        dump_bytecode_length(cursor, out);
         break;
     case AZIMUTH_LEFTWARDS:
-        *ptr += sprintf(*ptr, "leftwards");
+        dump_printf(out, "leftwards");
         break;
     case AZIMUTH_RIGHTWARDS:
-        *ptr += sprintf(*ptr, "rightwards");
+        dump_printf(out, "rightwards");
         break;
     case AZIMUTH_LEFT_SIDE:
-        *ptr += sprintf(*ptr, "left-side");
+        dump_printf(out, "left-side");
         break;
     case AZIMUTH_FAR_LEFT:
-        *ptr += sprintf(*ptr, "far-left");
+        dump_printf(out, "far-left");
         break;
     case AZIMUTH_LEFT:
-        *ptr += sprintf(*ptr, "left");
+        dump_printf(out, "left");
         break;
     case AZIMUTH_CENTER_LEFT:
-        *ptr += sprintf(*ptr, "center-left");
+        dump_printf(out, "center-left");
         break;
     case AZIMUTH_CENTER:
-        *ptr += sprintf(*ptr, "center");
+        dump_printf(out, "center");
         break;
     case AZIMUTH_CENTER_RIGHT:
-        *ptr += sprintf(*ptr, "center-right");
+        dump_printf(out, "center-right");
         break;
     case AZIMUTH_RIGHT:
-        *ptr += sprintf(*ptr, "right");
+        dump_printf(out, "right");
         break;
     case AZIMUTH_FAR_RIGHT:
-        *ptr += sprintf(*ptr, "far-right");
+        dump_printf(out, "far-right");
         break;
     case AZIMUTH_RIGHT_SIDE:
-        *ptr += sprintf(*ptr, "right-side");
+        dump_printf(out, "right-side");
         break;
     }
     if (value & AZIMUTH_BEHIND)
-        *ptr += sprintf(*ptr, " behind");
+        dump_printf(out, " behind");
 }
 
-static void dump_bytecode_border_color(struct dump_bytecode_cursor *cursor, uint32_t value, char **ptr)
+static void dump_bytecode_border_color(struct dump_bytecode_cursor *cursor, uint32_t value, struct dump_output *out)
 {
     assert(BACKGROUND_COLOR_TRANSPARENT == (enum op_background_color)BORDER_COLOR_TRANSPARENT);
     assert(BACKGROUND_COLOR_CURRENT_COLOR == (enum op_background_color)BORDER_COLOR_CURRENT_COLOR);
@@ -374,19 +374,19 @@ static void dump_bytecode_border_color(struct dump_bytecode_cursor *cursor, uint
 
     switch (value) {
     case BACKGROUND_COLOR_TRANSPARENT:
-        *ptr += sprintf(*ptr, "transparent");
+        dump_printf(out, "transparent");
         break;
     case BACKGROUND_COLOR_CURRENT_COLOR:
-        *ptr += sprintf(*ptr, "currentColor");
+        dump_printf(out, "currentColor");
         break;
     case BACKGROUND_COLOR_SET: {
         uint32_t colour = dump_bytecode_read(cursor);
-        *ptr += sprintf(*ptr, "#%08x", colour);
+        dump_printf(out, "#%08x", colour);
     } break;
     }
 }
 
-static void dump_bytecode_background_image(struct dump_bytecode_cursor *cursor, uint32_t value, char **ptr)
+static void dump_bytecode_background_image(struct dump_bytecode_cursor *cursor, uint32_t value, struct dump_output *out)
 {
     assert(BACKGROUND_IMAGE_NONE == (enum op_background_image)CUE_AFTER_NONE);
     assert(BACKGROUND_IMAGE_URI == (enum op_background_image)CUE_AFTER_URI);
@@ -397,80 +397,80 @@ static void dump_bytecode_background_image(struct dump_bytecode_cursor *cursor, 
 
     switch (value) {
     case BACKGROUND_IMAGE_NONE:
-        *ptr += sprintf(*ptr, "none");
+        dump_printf(out, "none");
         break;
     case BACKGROUND_IMAGE_URI: {
         uint32_t snum = dump_bytecode_read(cursor);
         lwc_string *he;
         css__stylesheet_string_get(cursor->sheet, snum, &he);
-        *ptr += sprintf(*ptr, "url('%.*s')", (int)lwc_string_length(he), lwc_string_data(he));
+        dump_printf(out, "url('%.*s')", (int)lwc_string_length(he), lwc_string_data(he));
     } break;
     case BACKGROUND_IMAGE_LINEAR_GRADIENT:
     case BACKGROUND_IMAGE_RADIAL_GRADIENT: {
         uint32_t header = dump_bytecode_read(cursor);
         uint32_t count = dump_bytecode_read(cursor);
-        *ptr += sprintf(
-            *ptr, "%s-gradient(%u", value == BACKGROUND_IMAGE_LINEAR_GRADIENT ? "linear" : "radial", header);
+        dump_printf(out, "%s-gradient(%u", value == BACKGROUND_IMAGE_LINEAR_GRADIENT ? "linear" : "radial", header);
         for (uint32_t i = 0; i < count; i++) {
             uint32_t color = dump_bytecode_read(cursor);
             css_fixed position = (css_fixed)dump_bytecode_read(cursor);
             uint32_t unit = dump_bytecode_read(cursor);
-            *ptr += sprintf(*ptr, ", #%08x", color);
+            dump_printf(out, ", #%08x", color);
             if (unit != 0) {
-                *ptr += sprintf(*ptr, " ");
-                dump_unit(position, unit, ptr);
+                dump_printf(out, " ");
+                dump_unit(position, unit, out);
             }
         }
-        *ptr += sprintf(*ptr, ")");
+        dump_printf(out, ")");
     } break;
     }
 }
 
-static void dump_bytecode_background_position(struct dump_bytecode_cursor *cursor, uint32_t value, char **ptr)
+static void
+dump_bytecode_background_position(struct dump_bytecode_cursor *cursor, uint32_t value, struct dump_output *out)
 {
     switch (value & 0xf0) {
     case BACKGROUND_POSITION_HORZ_SET:
-        dump_bytecode_length(cursor, ptr);
+        dump_bytecode_length(cursor, out);
         break;
     case BACKGROUND_POSITION_HORZ_CENTER:
-        *ptr += sprintf(*ptr, "center");
+        dump_printf(out, "center");
         break;
     case BACKGROUND_POSITION_HORZ_RIGHT:
-        *ptr += sprintf(*ptr, "right");
+        dump_printf(out, "right");
         break;
     case BACKGROUND_POSITION_HORZ_LEFT:
-        *ptr += sprintf(*ptr, "left");
+        dump_printf(out, "left");
         break;
     }
-    *ptr += sprintf(*ptr, " ");
+    dump_printf(out, " ");
     switch (value & 0x0f) {
     case BACKGROUND_POSITION_VERT_SET:
-        dump_bytecode_length(cursor, ptr);
+        dump_bytecode_length(cursor, out);
         break;
     case BACKGROUND_POSITION_VERT_CENTER:
-        *ptr += sprintf(*ptr, "center");
+        dump_printf(out, "center");
         break;
     case BACKGROUND_POSITION_VERT_BOTTOM:
-        *ptr += sprintf(*ptr, "bottom");
+        dump_printf(out, "bottom");
         break;
     case BACKGROUND_POSITION_VERT_TOP:
-        *ptr += sprintf(*ptr, "top");
+        dump_printf(out, "top");
         break;
     }
 }
 
-static void dump_bytecode_border_spacing(struct dump_bytecode_cursor *cursor, uint32_t value, char **ptr)
+static void dump_bytecode_border_spacing(struct dump_bytecode_cursor *cursor, uint32_t value, struct dump_output *out)
 {
     switch (value) {
     case BORDER_SPACING_SET: {
-        dump_bytecode_length(cursor, ptr);
+        dump_bytecode_length(cursor, out);
 
-        dump_bytecode_length(cursor, ptr);
+        dump_bytecode_length(cursor, out);
     } break;
     }
 }
 
-static void dump_bytecode_border_style(struct dump_bytecode_cursor *cursor, uint32_t value, char **ptr)
+static void dump_bytecode_border_style(struct dump_bytecode_cursor *cursor, uint32_t value, struct dump_output *out)
 {
     (void)cursor;
     assert(BORDER_STYLE_NONE == (enum op_border_style)OUTLINE_STYLE_NONE);
@@ -496,39 +496,39 @@ static void dump_bytecode_border_style(struct dump_bytecode_cursor *cursor, uint
 
     switch (value) {
     case BORDER_STYLE_NONE:
-        *ptr += sprintf(*ptr, "none");
+        dump_printf(out, "none");
         break;
     case BORDER_STYLE_HIDDEN:
-        *ptr += sprintf(*ptr, "hidden");
+        dump_printf(out, "hidden");
         break;
     case BORDER_STYLE_DOTTED:
-        *ptr += sprintf(*ptr, "dotted");
+        dump_printf(out, "dotted");
         break;
     case BORDER_STYLE_DASHED:
-        *ptr += sprintf(*ptr, "dashed");
+        dump_printf(out, "dashed");
         break;
     case BORDER_STYLE_SOLID:
-        *ptr += sprintf(*ptr, "solid");
+        dump_printf(out, "solid");
         break;
     case BORDER_STYLE_DOUBLE:
-        *ptr += sprintf(*ptr, "double");
+        dump_printf(out, "double");
         break;
     case BORDER_STYLE_GROOVE:
-        *ptr += sprintf(*ptr, "groove");
+        dump_printf(out, "groove");
         break;
     case BORDER_STYLE_RIDGE:
-        *ptr += sprintf(*ptr, "ridge");
+        dump_printf(out, "ridge");
         break;
     case BORDER_STYLE_INSET:
-        *ptr += sprintf(*ptr, "inset");
+        dump_printf(out, "inset");
         break;
     case BORDER_STYLE_OUTSET:
-        *ptr += sprintf(*ptr, "outset");
+        dump_printf(out, "outset");
         break;
     }
 }
 
-static void dump_bytecode_border_width(struct dump_bytecode_cursor *cursor, uint32_t value, char **ptr)
+static void dump_bytecode_border_width(struct dump_bytecode_cursor *cursor, uint32_t value, struct dump_output *out)
 {
     assert(BORDER_WIDTH_SET == (enum op_border_width)OUTLINE_WIDTH_SET);
     assert(BORDER_WIDTH_THIN == (enum op_border_width)OUTLINE_WIDTH_THIN);
@@ -537,21 +537,21 @@ static void dump_bytecode_border_width(struct dump_bytecode_cursor *cursor, uint
 
     switch (value) {
     case BORDER_WIDTH_SET:
-        dump_bytecode_length(cursor, ptr);
+        dump_bytecode_length(cursor, out);
         break;
     case BORDER_WIDTH_THIN:
-        *ptr += sprintf(*ptr, "thin");
+        dump_printf(out, "thin");
         break;
     case BORDER_WIDTH_MEDIUM:
-        *ptr += sprintf(*ptr, "medium");
+        dump_printf(out, "medium");
         break;
     case BORDER_WIDTH_THICK:
-        *ptr += sprintf(*ptr, "thick");
+        dump_printf(out, "thick");
         break;
     }
 }
 
-static void dump_bytecode_length_auto(struct dump_bytecode_cursor *cursor, uint32_t value, char **ptr)
+static void dump_bytecode_length_auto(struct dump_bytecode_cursor *cursor, uint32_t value, struct dump_output *out)
 {
     assert(BOTTOM_SET == (enum op_bottom)LEFT_SET);
     assert(BOTTOM_AUTO == (enum op_bottom)LEFT_AUTO);
@@ -570,15 +570,15 @@ static void dump_bytecode_length_auto(struct dump_bytecode_cursor *cursor, uint3
 
     switch (value) {
     case BOTTOM_SET:
-        dump_bytecode_length(cursor, ptr);
+        dump_bytecode_length(cursor, out);
         break;
     case BOTTOM_AUTO:
-        *ptr += sprintf(*ptr, "auto");
+        dump_printf(out, "auto");
         break;
     }
 }
 
-static void dump_bytecode_break_after(struct dump_bytecode_cursor *cursor, uint32_t value, char **ptr)
+static void dump_bytecode_break_after(struct dump_bytecode_cursor *cursor, uint32_t value, struct dump_output *out)
 {
     (void)cursor;
     assert(BREAK_AFTER_AUTO == (enum op_break_after)BREAK_BEFORE_AUTO);
@@ -593,117 +593,117 @@ static void dump_bytecode_break_after(struct dump_bytecode_cursor *cursor, uint3
 
     switch (value) {
     case BREAK_AFTER_AUTO:
-        *ptr += sprintf(*ptr, "auto");
+        dump_printf(out, "auto");
         break;
     case BREAK_AFTER_ALWAYS:
-        *ptr += sprintf(*ptr, "always");
+        dump_printf(out, "always");
         break;
     case BREAK_AFTER_AVOID:
-        *ptr += sprintf(*ptr, "avoid");
+        dump_printf(out, "avoid");
         break;
     case BREAK_AFTER_LEFT:
-        *ptr += sprintf(*ptr, "left");
+        dump_printf(out, "left");
         break;
     case BREAK_AFTER_RIGHT:
-        *ptr += sprintf(*ptr, "right");
+        dump_printf(out, "right");
         break;
     case BREAK_AFTER_PAGE:
-        *ptr += sprintf(*ptr, "page");
+        dump_printf(out, "page");
         break;
     case BREAK_AFTER_COLUMN:
-        *ptr += sprintf(*ptr, "column");
+        dump_printf(out, "column");
         break;
     case BREAK_AFTER_AVOID_PAGE:
-        *ptr += sprintf(*ptr, "avoid-page");
+        dump_printf(out, "avoid-page");
         break;
     case BREAK_AFTER_AVOID_COLUMN:
-        *ptr += sprintf(*ptr, "avoid-column");
+        dump_printf(out, "avoid-column");
         break;
     }
 }
 
-static void dump_bytecode_clip(struct dump_bytecode_cursor *cursor, uint32_t value, char **ptr)
+static void dump_bytecode_clip(struct dump_bytecode_cursor *cursor, uint32_t value, struct dump_output *out)
 {
     if ((value & CLIP_SHAPE_MASK) == CLIP_SHAPE_RECT) {
-        *ptr += sprintf(*ptr, "rect(");
+        dump_printf(out, "rect(");
         if (value & CLIP_RECT_TOP_AUTO) {
-            *ptr += sprintf(*ptr, "auto");
+            dump_printf(out, "auto");
         } else {
-            dump_bytecode_length(cursor, ptr);
+            dump_bytecode_length(cursor, out);
         }
-        *ptr += sprintf(*ptr, ", ");
+        dump_printf(out, ", ");
         if (value & CLIP_RECT_RIGHT_AUTO) {
-            *ptr += sprintf(*ptr, "auto");
+            dump_printf(out, "auto");
         } else {
-            dump_bytecode_length(cursor, ptr);
+            dump_bytecode_length(cursor, out);
         }
-        *ptr += sprintf(*ptr, ", ");
+        dump_printf(out, ", ");
         if (value & CLIP_RECT_BOTTOM_AUTO) {
-            *ptr += sprintf(*ptr, "auto");
+            dump_printf(out, "auto");
         } else {
-            dump_bytecode_length(cursor, ptr);
+            dump_bytecode_length(cursor, out);
         }
-        *ptr += sprintf(*ptr, ", ");
+        dump_printf(out, ", ");
         if (value & CLIP_RECT_LEFT_AUTO) {
-            *ptr += sprintf(*ptr, "auto");
+            dump_printf(out, "auto");
         } else {
-            dump_bytecode_length(cursor, ptr);
+            dump_bytecode_length(cursor, out);
         }
-        *ptr += sprintf(*ptr, ")");
+        dump_printf(out, ")");
     } else
-        *ptr += sprintf(*ptr, "auto");
+        dump_printf(out, "auto");
 }
 
-static void dump_bytecode_color(struct dump_bytecode_cursor *cursor, uint32_t value, char **ptr)
+static void dump_bytecode_color(struct dump_bytecode_cursor *cursor, uint32_t value, struct dump_output *out)
 {
     switch (value) {
     case COLOR_TRANSPARENT:
-        *ptr += sprintf(*ptr, "transparent");
+        dump_printf(out, "transparent");
         break;
     case COLOR_CURRENT_COLOR:
-        *ptr += sprintf(*ptr, "currentColor");
+        dump_printf(out, "currentColor");
         break;
     case COLOR_SET: {
         uint32_t colour = dump_bytecode_read(cursor);
-        *ptr += sprintf(*ptr, "#%08x", colour);
+        dump_printf(out, "#%08x", colour);
     } break;
     }
 }
 
-static void dump_bytecode_column_count(struct dump_bytecode_cursor *cursor, uint32_t value, char **ptr)
+static void dump_bytecode_column_count(struct dump_bytecode_cursor *cursor, uint32_t value, struct dump_output *out)
 {
     switch (value) {
     case COLUMN_COUNT_SET: {
         css_fixed val = (css_fixed)dump_bytecode_read(cursor);
-        dump_number(val, ptr);
+        dump_number(val, out);
     } break;
     case COLUMN_COUNT_AUTO:
-        *ptr += sprintf(*ptr, "auto");
+        dump_printf(out, "auto");
         break;
     }
 }
 
-static void dump_bytecode_gap(struct dump_bytecode_cursor *cursor, uint32_t value, char **ptr)
+static void dump_bytecode_gap(struct dump_bytecode_cursor *cursor, uint32_t value, struct dump_output *out)
 {
     assert(COLUMN_GAP_SET == (enum op_column_gap)ROW_GAP_SET);
     assert(COLUMN_GAP_NORMAL == (enum op_column_gap)ROW_GAP_NORMAL);
     switch (value) {
     case COLUMN_GAP_SET:
-        dump_bytecode_length(cursor, ptr);
+        dump_bytecode_length(cursor, out);
         break;
     case COLUMN_GAP_NORMAL:
-        *ptr += sprintf(*ptr, "normal");
+        dump_printf(out, "normal");
         break;
     }
 }
 
-static void dump_bytecode_content(struct dump_bytecode_cursor *cursor, uint32_t value, char **ptr)
+static void dump_bytecode_content(struct dump_bytecode_cursor *cursor, uint32_t value, struct dump_output *out)
 {
     if (value == CONTENT_NORMAL) {
-        *ptr += sprintf(*ptr, "normal");
+        dump_printf(out, "normal");
         return;
     } else if (value == CONTENT_NONE) {
-        *ptr += sprintf(*ptr, "none");
+        dump_printf(out, "none");
         return;
     }
 
@@ -716,7 +716,7 @@ static void dump_bytecode_content(struct dump_bytecode_cursor *cursor, uint32_t 
         case CONTENT_COUNTER:
             snum = dump_bytecode_read(cursor);
             css__stylesheet_string_get(cursor->sheet, snum, &he);
-            dump_counter(he, value, ptr);
+            dump_counter(he, value, out);
             break;
 
         case CONTENT_COUNTERS: {
@@ -727,7 +727,7 @@ static void dump_bytecode_content(struct dump_bytecode_cursor *cursor, uint32_t 
             uint32_t separator = dump_bytecode_read(cursor);
             css__stylesheet_string_get(cursor->sheet, separator, &sep);
 
-            dump_counters(he, sep, value, ptr);
+            dump_counters(he, sep, value, out);
         } break;
 
         case CONTENT_URI:
@@ -736,40 +736,40 @@ static void dump_bytecode_content(struct dump_bytecode_cursor *cursor, uint32_t 
             snum = dump_bytecode_read(cursor);
             css__stylesheet_string_get(cursor->sheet, snum, &he);
             if (value == CONTENT_URI)
-                *ptr += sprintf(*ptr, "url(");
+                dump_printf(out, "url(");
             if (value == CONTENT_ATTR)
-                *ptr += sprintf(*ptr, "attr(");
+                dump_printf(out, "attr(");
             if (value != CONTENT_STRING)
                 end = ")";
 
-            *ptr += sprintf(*ptr, "'%.*s'%s", (int)lwc_string_length(he), lwc_string_data(he), end);
+            dump_printf(out, "'%.*s'%s", (int)lwc_string_length(he), lwc_string_data(he), end);
             break;
 
         case CONTENT_OPEN_QUOTE:
-            *ptr += sprintf(*ptr, "open-quote");
+            dump_printf(out, "open-quote");
             break;
 
         case CONTENT_CLOSE_QUOTE:
-            *ptr += sprintf(*ptr, "close-quote");
+            dump_printf(out, "close-quote");
             break;
 
         case CONTENT_NO_OPEN_QUOTE:
-            *ptr += sprintf(*ptr, "no-open-quote");
+            dump_printf(out, "no-open-quote");
             break;
 
         case CONTENT_NO_CLOSE_QUOTE:
-            *ptr += sprintf(*ptr, "no-close-quote");
+            dump_printf(out, "no-close-quote");
             break;
         }
 
         value = dump_bytecode_read(cursor);
 
         if (value != CONTENT_NORMAL)
-            *ptr += sprintf(*ptr, " ");
+            dump_printf(out, " ");
     }
 }
 
-static void dump_bytecode_counter(struct dump_bytecode_cursor *cursor, uint32_t value, char **ptr)
+static void dump_bytecode_counter(struct dump_bytecode_cursor *cursor, uint32_t value, struct dump_output *out)
 {
     assert(COUNTER_INCREMENT_NONE == (enum op_counter_increment)COUNTER_RESET_NONE);
     assert(COUNTER_INCREMENT_NAMED == (enum op_counter_increment)COUNTER_RESET_NAMED);
@@ -781,168 +781,168 @@ static void dump_bytecode_counter(struct dump_bytecode_cursor *cursor, uint32_t 
             uint32_t snum = dump_bytecode_read(cursor);
             lwc_string *he;
             css__stylesheet_string_get(cursor->sheet, snum, &he);
-            *ptr += sprintf(*ptr, "%.*s ", (int)lwc_string_length(he), lwc_string_data(he));
+            dump_printf(out, "%.*s ", (int)lwc_string_length(he), lwc_string_data(he));
             val = (css_fixed)dump_bytecode_read(cursor);
-            dump_number(val, ptr);
+            dump_number(val, out);
 
             value = dump_bytecode_read(cursor);
 
             if (value != COUNTER_INCREMENT_NONE)
-                *ptr += sprintf(*ptr, " ");
+                dump_printf(out, " ");
         }
         break;
     case COUNTER_INCREMENT_NONE:
-        *ptr += sprintf(*ptr, "none");
+        dump_printf(out, "none");
         break;
     }
 }
 
-static void dump_bytecode_cursor(struct dump_bytecode_cursor *cursor, uint32_t value, char **ptr)
+static void dump_bytecode_cursor(struct dump_bytecode_cursor *cursor, uint32_t value, struct dump_output *out)
 {
     while (value == CURSOR_URI) {
         uint32_t snum = dump_bytecode_read(cursor);
         lwc_string *he;
         css__stylesheet_string_get(cursor->sheet, snum, &he);
-        *ptr += sprintf(*ptr, "url('%.*s'), ", (int)lwc_string_length(he), lwc_string_data(he));
+        dump_printf(out, "url('%.*s'), ", (int)lwc_string_length(he), lwc_string_data(he));
 
         value = dump_bytecode_read(cursor);
     }
 
     switch (value) {
     case CURSOR_AUTO:
-        *ptr += sprintf(*ptr, "auto");
+        dump_printf(out, "auto");
         break;
     case CURSOR_CROSSHAIR:
-        *ptr += sprintf(*ptr, "crosshair");
+        dump_printf(out, "crosshair");
         break;
     case CURSOR_DEFAULT:
-        *ptr += sprintf(*ptr, "default");
+        dump_printf(out, "default");
         break;
     case CURSOR_POINTER:
-        *ptr += sprintf(*ptr, "pointer");
+        dump_printf(out, "pointer");
         break;
     case CURSOR_MOVE:
-        *ptr += sprintf(*ptr, "move");
+        dump_printf(out, "move");
         break;
     case CURSOR_E_RESIZE:
-        *ptr += sprintf(*ptr, "e-resize");
+        dump_printf(out, "e-resize");
         break;
     case CURSOR_NE_RESIZE:
-        *ptr += sprintf(*ptr, "ne-resize");
+        dump_printf(out, "ne-resize");
         break;
     case CURSOR_NW_RESIZE:
-        *ptr += sprintf(*ptr, "nw-resize");
+        dump_printf(out, "nw-resize");
         break;
     case CURSOR_N_RESIZE:
-        *ptr += sprintf(*ptr, "n-resize");
+        dump_printf(out, "n-resize");
         break;
     case CURSOR_SE_RESIZE:
-        *ptr += sprintf(*ptr, "se-resize");
+        dump_printf(out, "se-resize");
         break;
     case CURSOR_SW_RESIZE:
-        *ptr += sprintf(*ptr, "sw-resize");
+        dump_printf(out, "sw-resize");
         break;
     case CURSOR_S_RESIZE:
-        *ptr += sprintf(*ptr, "s-resize");
+        dump_printf(out, "s-resize");
         break;
     case CURSOR_W_RESIZE:
-        *ptr += sprintf(*ptr, "w-resize");
+        dump_printf(out, "w-resize");
         break;
     case CURSOR_TEXT:
-        *ptr += sprintf(*ptr, "text");
+        dump_printf(out, "text");
         break;
     case CURSOR_WAIT:
-        *ptr += sprintf(*ptr, "wait");
+        dump_printf(out, "wait");
         break;
     case CURSOR_HELP:
-        *ptr += sprintf(*ptr, "help");
+        dump_printf(out, "help");
         break;
     case CURSOR_PROGRESS:
-        *ptr += sprintf(*ptr, "progress");
+        dump_printf(out, "progress");
         break;
     }
 }
 
-static void dump_bytecode_elevation(struct dump_bytecode_cursor *cursor, uint32_t value, char **ptr)
+static void dump_bytecode_elevation(struct dump_bytecode_cursor *cursor, uint32_t value, struct dump_output *out)
 {
     switch (value) {
     case ELEVATION_ANGLE:
-        dump_bytecode_length(cursor, ptr);
+        dump_bytecode_length(cursor, out);
         break;
     case ELEVATION_BELOW:
-        *ptr += sprintf(*ptr, "below");
+        dump_printf(out, "below");
         break;
     case ELEVATION_LEVEL:
-        *ptr += sprintf(*ptr, "level");
+        dump_printf(out, "level");
         break;
     case ELEVATION_ABOVE:
-        *ptr += sprintf(*ptr, "above");
+        dump_printf(out, "above");
         break;
     case ELEVATION_HIGHER:
-        *ptr += sprintf(*ptr, "higher");
+        dump_printf(out, "higher");
         break;
     case ELEVATION_LOWER:
-        *ptr += sprintf(*ptr, "lower");
+        dump_printf(out, "lower");
         break;
     }
 }
 
-static void dump_bytecode_fill_opacity(struct dump_bytecode_cursor *cursor, uint32_t value, char **ptr)
+static void dump_bytecode_fill_opacity(struct dump_bytecode_cursor *cursor, uint32_t value, struct dump_output *out)
 {
     switch (value) {
     case FILL_OPACITY_SET: {
         css_fixed val = (css_fixed)dump_bytecode_read(cursor);
-        dump_number(val, ptr);
+        dump_number(val, out);
     } break;
     }
 }
 
-static void dump_bytecode_stroke_opacity(struct dump_bytecode_cursor *cursor, uint32_t value, char **ptr)
+static void dump_bytecode_stroke_opacity(struct dump_bytecode_cursor *cursor, uint32_t value, struct dump_output *out)
 {
     switch (value) {
     case STROKE_OPACITY_SET: {
         css_fixed val = (css_fixed)dump_bytecode_read(cursor);
-        dump_number(val, ptr);
+        dump_number(val, out);
     } break;
     }
 }
 
-static void dump_bytecode_flex_basis(struct dump_bytecode_cursor *cursor, uint32_t value, char **ptr)
+static void dump_bytecode_flex_basis(struct dump_bytecode_cursor *cursor, uint32_t value, struct dump_output *out)
 {
     switch (value) {
     case FLEX_BASIS_AUTO:
-        *ptr += sprintf(*ptr, "auto");
+        dump_printf(out, "auto");
         break;
     case FLEX_BASIS_CONTENT:
-        *ptr += sprintf(*ptr, "content");
+        dump_printf(out, "content");
         break;
     case FLEX_BASIS_SET:
-        dump_bytecode_length(cursor, ptr);
+        dump_bytecode_length(cursor, out);
         break;
     }
 }
 
-static void dump_bytecode_flex_grow(struct dump_bytecode_cursor *cursor, uint32_t value, char **ptr)
+static void dump_bytecode_flex_grow(struct dump_bytecode_cursor *cursor, uint32_t value, struct dump_output *out)
 {
     switch (value) {
     case FLEX_GROW_SET: {
         css_fixed val = (css_fixed)dump_bytecode_read(cursor);
-        dump_number(val, ptr);
+        dump_number(val, out);
     } break;
     }
 }
 
-static void dump_bytecode_flex_shrink(struct dump_bytecode_cursor *cursor, uint32_t value, char **ptr)
+static void dump_bytecode_flex_shrink(struct dump_bytecode_cursor *cursor, uint32_t value, struct dump_output *out)
 {
     switch (value) {
     case FLEX_SHRINK_SET: {
         css_fixed val = (css_fixed)dump_bytecode_read(cursor);
-        dump_number(val, ptr);
+        dump_number(val, out);
     } break;
     }
 }
 
-static void dump_bytecode_font_family(struct dump_bytecode_cursor *cursor, uint32_t value, char **ptr)
+static void dump_bytecode_font_family(struct dump_bytecode_cursor *cursor, uint32_t value, struct dump_output *out)
 {
     while (value != FONT_FAMILY_END) {
         switch (value) {
@@ -951,165 +951,165 @@ static void dump_bytecode_font_family(struct dump_bytecode_cursor *cursor, uint3
             uint32_t snum = dump_bytecode_read(cursor);
             lwc_string *he;
             css__stylesheet_string_get(cursor->sheet, snum, &he);
-            *ptr += sprintf(*ptr, "'%.*s'", (int)lwc_string_length(he), lwc_string_data(he));
+            dump_printf(out, "'%.*s'", (int)lwc_string_length(he), lwc_string_data(he));
         } break;
         case FONT_FAMILY_SERIF:
-            *ptr += sprintf(*ptr, "serif");
+            dump_printf(out, "serif");
             break;
         case FONT_FAMILY_SANS_SERIF:
-            *ptr += sprintf(*ptr, "sans-serif");
+            dump_printf(out, "sans-serif");
             break;
         case FONT_FAMILY_CURSIVE:
-            *ptr += sprintf(*ptr, "cursive");
+            dump_printf(out, "cursive");
             break;
         case FONT_FAMILY_FANTASY:
-            *ptr += sprintf(*ptr, "fantasy");
+            dump_printf(out, "fantasy");
             break;
         case FONT_FAMILY_MONOSPACE:
-            *ptr += sprintf(*ptr, "monospace");
+            dump_printf(out, "monospace");
             break;
         }
 
         value = dump_bytecode_read(cursor);
 
         if (value != FONT_FAMILY_END)
-            *ptr += sprintf(*ptr, ", ");
+            dump_printf(out, ", ");
     }
 }
 
-static void dump_bytecode_font_size(struct dump_bytecode_cursor *cursor, uint32_t value, char **ptr)
+static void dump_bytecode_font_size(struct dump_bytecode_cursor *cursor, uint32_t value, struct dump_output *out)
 {
     switch (value) {
     case FONT_SIZE_DIMENSION:
-        dump_bytecode_length(cursor, ptr);
+        dump_bytecode_length(cursor, out);
         break;
     case FONT_SIZE_XX_SMALL:
-        *ptr += sprintf(*ptr, "xx-small");
+        dump_printf(out, "xx-small");
         break;
     case FONT_SIZE_X_SMALL:
-        *ptr += sprintf(*ptr, "x-small");
+        dump_printf(out, "x-small");
         break;
     case FONT_SIZE_SMALL:
-        *ptr += sprintf(*ptr, "small");
+        dump_printf(out, "small");
         break;
     case FONT_SIZE_MEDIUM:
-        *ptr += sprintf(*ptr, "medium");
+        dump_printf(out, "medium");
         break;
     case FONT_SIZE_LARGE:
-        *ptr += sprintf(*ptr, "large");
+        dump_printf(out, "large");
         break;
     case FONT_SIZE_X_LARGE:
-        *ptr += sprintf(*ptr, "x-large");
+        dump_printf(out, "x-large");
         break;
     case FONT_SIZE_XX_LARGE:
-        *ptr += sprintf(*ptr, "xx-large");
+        dump_printf(out, "xx-large");
         break;
     case FONT_SIZE_LARGER:
-        *ptr += sprintf(*ptr, "larger");
+        dump_printf(out, "larger");
         break;
     case FONT_SIZE_SMALLER:
-        *ptr += sprintf(*ptr, "smaller");
+        dump_printf(out, "smaller");
         break;
     }
 }
 
-static void dump_bytecode_letter_spacing(struct dump_bytecode_cursor *cursor, uint32_t value, char **ptr)
+static void dump_bytecode_letter_spacing(struct dump_bytecode_cursor *cursor, uint32_t value, struct dump_output *out)
 {
     assert(LETTER_SPACING_SET == (enum op_letter_spacing)WORD_SPACING_SET);
     assert(LETTER_SPACING_NORMAL == (enum op_letter_spacing)WORD_SPACING_NORMAL);
 
     switch (value) {
     case LETTER_SPACING_SET:
-        dump_bytecode_length(cursor, ptr);
+        dump_bytecode_length(cursor, out);
         break;
     case LETTER_SPACING_NORMAL:
-        *ptr += sprintf(*ptr, "normal");
+        dump_printf(out, "normal");
         break;
     }
 }
 
-static void dump_bytecode_line_height(struct dump_bytecode_cursor *cursor, uint32_t value, char **ptr)
+static void dump_bytecode_line_height(struct dump_bytecode_cursor *cursor, uint32_t value, struct dump_output *out)
 {
     switch (value) {
     case LINE_HEIGHT_NUMBER: {
         css_fixed val = (css_fixed)dump_bytecode_read(cursor);
-        dump_number(val, ptr);
+        dump_number(val, out);
     } break;
     case LINE_HEIGHT_DIMENSION:
-        dump_bytecode_length(cursor, ptr);
+        dump_bytecode_length(cursor, out);
         break;
     case LINE_HEIGHT_NORMAL:
-        *ptr += sprintf(*ptr, "normal");
+        dump_printf(out, "normal");
         break;
     }
 }
 
-static void dump_bytecode_max_height(struct dump_bytecode_cursor *cursor, uint32_t value, char **ptr)
+static void dump_bytecode_max_height(struct dump_bytecode_cursor *cursor, uint32_t value, struct dump_output *out)
 {
     assert(MAX_HEIGHT_SET == (enum op_max_height)MAX_WIDTH_SET);
     assert(MAX_HEIGHT_NONE == (enum op_max_height)MAX_WIDTH_NONE);
 
     switch (value) {
     case MAX_HEIGHT_SET:
-        dump_bytecode_length(cursor, ptr);
+        dump_bytecode_length(cursor, out);
         break;
     case MAX_HEIGHT_NONE:
-        *ptr += sprintf(*ptr, "none");
+        dump_printf(out, "none");
         break;
     }
 }
 
-static void dump_bytecode_min_height(struct dump_bytecode_cursor *cursor, uint32_t value, char **ptr)
+static void dump_bytecode_min_height(struct dump_bytecode_cursor *cursor, uint32_t value, struct dump_output *out)
 {
     assert(MIN_HEIGHT_SET == (enum op_min_height)MIN_WIDTH_SET);
     assert(MIN_HEIGHT_AUTO == (enum op_min_height)MIN_WIDTH_AUTO);
 
     switch (value) {
     case MIN_HEIGHT_SET:
-        dump_bytecode_length(cursor, ptr);
+        dump_bytecode_length(cursor, out);
         break;
     case MIN_HEIGHT_AUTO:
-        *ptr += sprintf(*ptr, "auto");
+        dump_printf(out, "auto");
         break;
     }
 }
 
-static void dump_bytecode_aspect_ratio(struct dump_bytecode_cursor *cursor, uint32_t value, char **ptr)
+static void dump_bytecode_aspect_ratio(struct dump_bytecode_cursor *cursor, uint32_t value, struct dump_output *out)
 {
     if (value == ASPECT_RATIO_AUTO || value == ASPECT_RATIO_AUTO_RATIO)
-        *ptr += sprintf(*ptr, "auto");
+        dump_printf(out, "auto");
     if (value == ASPECT_RATIO_RATIO || value == ASPECT_RATIO_AUTO_RATIO) {
         css_fixed numerator = (css_fixed)dump_bytecode_read(cursor);
         css_fixed denominator = (css_fixed)dump_bytecode_read(cursor);
         if (value == ASPECT_RATIO_AUTO_RATIO)
-            *ptr += sprintf(*ptr, " ");
-        dump_number(numerator, ptr);
-        *ptr += sprintf(*ptr, " / ");
-        dump_number(denominator, ptr);
+            dump_printf(out, " ");
+        dump_number(numerator, out);
+        dump_printf(out, " / ");
+        dump_number(denominator, out);
     }
 }
 
-static void dump_bytecode_opacity(struct dump_bytecode_cursor *cursor, uint32_t value, char **ptr)
+static void dump_bytecode_opacity(struct dump_bytecode_cursor *cursor, uint32_t value, struct dump_output *out)
 {
     switch (value) {
     case OPACITY_SET: {
         css_fixed val = (css_fixed)dump_bytecode_read(cursor);
-        dump_number(val, ptr);
+        dump_number(val, out);
     } break;
     }
 }
 
-static void dump_bytecode_order(struct dump_bytecode_cursor *cursor, uint32_t value, char **ptr)
+static void dump_bytecode_order(struct dump_bytecode_cursor *cursor, uint32_t value, struct dump_output *out)
 {
     switch (value) {
     case ORDER_SET: {
         css_fixed val = (css_fixed)dump_bytecode_read(cursor);
-        dump_number(val, ptr);
+        dump_number(val, out);
     } break;
     }
 }
 
-static void dump_bytecode_length_value(struct dump_bytecode_cursor *cursor, uint32_t value, char **ptr)
+static void dump_bytecode_length_value(struct dump_bytecode_cursor *cursor, uint32_t value, struct dump_output *out)
 {
     assert(TEXT_INDENT_SET == (enum op_text_indent)PADDING_SET);
     assert(TEXT_INDENT_SET == (enum op_text_indent)PAUSE_AFTER_SET);
@@ -1117,12 +1117,12 @@ static void dump_bytecode_length_value(struct dump_bytecode_cursor *cursor, uint
 
     switch (value) {
     case TEXT_INDENT_SET:
-        dump_bytecode_length(cursor, ptr);
+        dump_bytecode_length(cursor, out);
         break;
     }
 }
 
-static void dump_bytecode_number(struct dump_bytecode_cursor *cursor, uint32_t value, char **ptr)
+static void dump_bytecode_number(struct dump_bytecode_cursor *cursor, uint32_t value, struct dump_output *out)
 {
     assert(ORPHANS_SET == (enum op_orphans)PITCH_RANGE_SET);
     assert(ORPHANS_SET == (enum op_orphans)RICHNESS_SET);
@@ -1132,31 +1132,31 @@ static void dump_bytecode_number(struct dump_bytecode_cursor *cursor, uint32_t v
     switch (value) {
     case ORPHANS_SET: {
         css_fixed val = (css_fixed)dump_bytecode_read(cursor);
-        dump_number(val, ptr);
+        dump_number(val, out);
     } break;
     }
 }
 
-static void dump_bytecode_outline_color(struct dump_bytecode_cursor *cursor, uint32_t value, char **ptr)
+static void dump_bytecode_outline_color(struct dump_bytecode_cursor *cursor, uint32_t value, struct dump_output *out)
 {
     switch (value) {
     case OUTLINE_COLOR_TRANSPARENT:
-        *ptr += sprintf(*ptr, "transparent");
+        dump_printf(out, "transparent");
         break;
     case OUTLINE_COLOR_CURRENT_COLOR:
-        *ptr += sprintf(*ptr, "currentColor");
+        dump_printf(out, "currentColor");
         break;
     case OUTLINE_COLOR_SET: {
         uint32_t colour = dump_bytecode_read(cursor);
-        *ptr += sprintf(*ptr, "#%08x", colour);
+        dump_printf(out, "#%08x", colour);
     } break;
     case OUTLINE_COLOR_INVERT:
-        *ptr += sprintf(*ptr, "invert");
+        dump_printf(out, "invert");
         break;
     }
 }
 
-static void dump_bytecode_page_break_after(struct dump_bytecode_cursor *cursor, uint32_t value, char **ptr)
+static void dump_bytecode_page_break_after(struct dump_bytecode_cursor *cursor, uint32_t value, struct dump_output *out)
 {
     (void)cursor;
     assert(PAGE_BREAK_AFTER_AUTO == (enum op_page_break_after)PAGE_BREAK_BEFORE_AUTO);
@@ -1167,71 +1167,71 @@ static void dump_bytecode_page_break_after(struct dump_bytecode_cursor *cursor, 
 
     switch (value) {
     case PAGE_BREAK_AFTER_AUTO:
-        *ptr += sprintf(*ptr, "auto");
+        dump_printf(out, "auto");
         break;
     case PAGE_BREAK_AFTER_ALWAYS:
-        *ptr += sprintf(*ptr, "always");
+        dump_printf(out, "always");
         break;
     case PAGE_BREAK_AFTER_AVOID:
-        *ptr += sprintf(*ptr, "avoid");
+        dump_printf(out, "avoid");
         break;
     case PAGE_BREAK_AFTER_LEFT:
-        *ptr += sprintf(*ptr, "left");
+        dump_printf(out, "left");
         break;
     case PAGE_BREAK_AFTER_RIGHT:
-        *ptr += sprintf(*ptr, "right");
+        dump_printf(out, "right");
         break;
     }
 }
 
-static void dump_bytecode_pitch(struct dump_bytecode_cursor *cursor, uint32_t value, char **ptr)
+static void dump_bytecode_pitch(struct dump_bytecode_cursor *cursor, uint32_t value, struct dump_output *out)
 {
     switch (value) {
     case PITCH_FREQUENCY:
-        dump_bytecode_length(cursor, ptr);
+        dump_bytecode_length(cursor, out);
         break;
     case PITCH_X_LOW:
-        *ptr += sprintf(*ptr, "x-low");
+        dump_printf(out, "x-low");
         break;
     case PITCH_LOW:
-        *ptr += sprintf(*ptr, "low");
+        dump_printf(out, "low");
         break;
     case PITCH_MEDIUM:
-        *ptr += sprintf(*ptr, "medium");
+        dump_printf(out, "medium");
         break;
     case PITCH_HIGH:
-        *ptr += sprintf(*ptr, "high");
+        dump_printf(out, "high");
         break;
     case PITCH_X_HIGH:
-        *ptr += sprintf(*ptr, "x-high");
+        dump_printf(out, "x-high");
         break;
     }
 }
 
-static void dump_bytecode_play_during(struct dump_bytecode_cursor *cursor, uint32_t value, char **ptr)
+static void dump_bytecode_play_during(struct dump_bytecode_cursor *cursor, uint32_t value, struct dump_output *out)
 {
     switch (value) {
     case PLAY_DURING_URI: {
         uint32_t snum = dump_bytecode_read(cursor);
         lwc_string *he;
         css__stylesheet_string_get(cursor->sheet, snum, &he);
-        *ptr += sprintf(*ptr, "'%.*s'", (int)lwc_string_length(he), lwc_string_data(he));
+        dump_printf(out, "'%.*s'", (int)lwc_string_length(he), lwc_string_data(he));
     } break;
     case PLAY_DURING_AUTO:
-        *ptr += sprintf(*ptr, "auto");
+        dump_printf(out, "auto");
         break;
     case PLAY_DURING_NONE:
-        *ptr += sprintf(*ptr, "none");
+        dump_printf(out, "none");
         break;
     }
 
     if (value & PLAY_DURING_MIX)
-        *ptr += sprintf(*ptr, " mix");
+        dump_printf(out, " mix");
     if (value & PLAY_DURING_REPEAT)
-        *ptr += sprintf(*ptr, " repeat");
+        dump_printf(out, " repeat");
 }
 
-static void dump_bytecode_quotes(struct dump_bytecode_cursor *cursor, uint32_t value, char **ptr)
+static void dump_bytecode_quotes(struct dump_bytecode_cursor *cursor, uint32_t value, struct dump_output *out)
 {
     switch (value) {
     case QUOTES_STRING:
@@ -1239,102 +1239,102 @@ static void dump_bytecode_quotes(struct dump_bytecode_cursor *cursor, uint32_t v
             uint32_t snum = dump_bytecode_read(cursor);
             lwc_string *he;
             css__stylesheet_string_get(cursor->sheet, snum, &he);
-            *ptr += sprintf(*ptr, " '%.*s' ", (int)lwc_string_length(he), lwc_string_data(he));
+            dump_printf(out, " '%.*s' ", (int)lwc_string_length(he), lwc_string_data(he));
 
             snum = dump_bytecode_read(cursor);
             css__stylesheet_string_get(cursor->sheet, snum, &he);
-            *ptr += sprintf(*ptr, " '%.*s' ", (int)lwc_string_length(he), lwc_string_data(he));
+            dump_printf(out, " '%.*s' ", (int)lwc_string_length(he), lwc_string_data(he));
 
             value = dump_bytecode_read(cursor);
         }
         break;
     case QUOTES_NONE:
-        *ptr += sprintf(*ptr, "none");
+        dump_printf(out, "none");
         break;
     }
 }
 
-static void dump_bytecode_speech_rate(struct dump_bytecode_cursor *cursor, uint32_t value, char **ptr)
+static void dump_bytecode_speech_rate(struct dump_bytecode_cursor *cursor, uint32_t value, struct dump_output *out)
 {
     switch (value) {
     case SPEECH_RATE_SET: {
         css_fixed val = (css_fixed)dump_bytecode_read(cursor);
-        dump_number(val, ptr);
+        dump_number(val, out);
     } break;
     case SPEECH_RATE_X_SLOW:
-        *ptr += sprintf(*ptr, "x-slow");
+        dump_printf(out, "x-slow");
         break;
     case SPEECH_RATE_SLOW:
-        *ptr += sprintf(*ptr, "slow");
+        dump_printf(out, "slow");
         break;
     case SPEECH_RATE_MEDIUM:
-        *ptr += sprintf(*ptr, "medium");
+        dump_printf(out, "medium");
         break;
     case SPEECH_RATE_FAST:
-        *ptr += sprintf(*ptr, "fast");
+        dump_printf(out, "fast");
         break;
     case SPEECH_RATE_X_FAST:
-        *ptr += sprintf(*ptr, "x-fast");
+        dump_printf(out, "x-fast");
         break;
     case SPEECH_RATE_FASTER:
-        *ptr += sprintf(*ptr, "faster");
+        dump_printf(out, "faster");
         break;
     case SPEECH_RATE_SLOWER:
-        *ptr += sprintf(*ptr, "slower");
+        dump_printf(out, "slower");
         break;
     }
 }
 
-static void dump_bytecode_text_decoration(struct dump_bytecode_cursor *cursor, uint32_t value, char **ptr)
+static void dump_bytecode_text_decoration(struct dump_bytecode_cursor *cursor, uint32_t value, struct dump_output *out)
 {
     (void)cursor;
     if (value == TEXT_DECORATION_NONE)
-        *ptr += sprintf(*ptr, "none");
+        dump_printf(out, "none");
 
     if (value & TEXT_DECORATION_UNDERLINE)
-        *ptr += sprintf(*ptr, " underline");
+        dump_printf(out, " underline");
     if (value & TEXT_DECORATION_OVERLINE)
-        *ptr += sprintf(*ptr, " overline");
+        dump_printf(out, " overline");
     if (value & TEXT_DECORATION_LINE_THROUGH)
-        *ptr += sprintf(*ptr, " line-through");
+        dump_printf(out, " line-through");
     if (value & TEXT_DECORATION_BLINK)
-        *ptr += sprintf(*ptr, " blink");
+        dump_printf(out, " blink");
 }
 
-static void dump_bytecode_vertical_align(struct dump_bytecode_cursor *cursor, uint32_t value, char **ptr)
+static void dump_bytecode_vertical_align(struct dump_bytecode_cursor *cursor, uint32_t value, struct dump_output *out)
 {
     switch (value) {
     case VERTICAL_ALIGN_SET:
-        dump_bytecode_length(cursor, ptr);
+        dump_bytecode_length(cursor, out);
         break;
     case VERTICAL_ALIGN_BASELINE:
-        *ptr += sprintf(*ptr, "baseline");
+        dump_printf(out, "baseline");
         break;
     case VERTICAL_ALIGN_SUB:
-        *ptr += sprintf(*ptr, "sub");
+        dump_printf(out, "sub");
         break;
     case VERTICAL_ALIGN_SUPER:
-        *ptr += sprintf(*ptr, "super");
+        dump_printf(out, "super");
         break;
     case VERTICAL_ALIGN_TOP:
-        *ptr += sprintf(*ptr, "top");
+        dump_printf(out, "top");
         break;
     case VERTICAL_ALIGN_TEXT_TOP:
-        *ptr += sprintf(*ptr, "text-top");
+        dump_printf(out, "text-top");
         break;
     case VERTICAL_ALIGN_MIDDLE:
-        *ptr += sprintf(*ptr, "middle");
+        dump_printf(out, "middle");
         break;
     case VERTICAL_ALIGN_BOTTOM:
-        *ptr += sprintf(*ptr, "bottom");
+        dump_printf(out, "bottom");
         break;
     case VERTICAL_ALIGN_TEXT_BOTTOM:
-        *ptr += sprintf(*ptr, "text-bottom");
+        dump_printf(out, "text-bottom");
         break;
     }
 }
 
-static void dump_bytecode_voice_family(struct dump_bytecode_cursor *cursor, uint32_t value, char **ptr)
+static void dump_bytecode_voice_family(struct dump_bytecode_cursor *cursor, uint32_t value, struct dump_output *out)
 {
     while (value != VOICE_FAMILY_END) {
         switch (value) {
@@ -1343,72 +1343,72 @@ static void dump_bytecode_voice_family(struct dump_bytecode_cursor *cursor, uint
             uint32_t snum = dump_bytecode_read(cursor);
             lwc_string *he;
             css__stylesheet_string_get(cursor->sheet, snum, &he);
-            *ptr += sprintf(*ptr, "'%.*s'", (int)lwc_string_length(he), lwc_string_data(he));
+            dump_printf(out, "'%.*s'", (int)lwc_string_length(he), lwc_string_data(he));
         } break;
         case VOICE_FAMILY_MALE:
-            *ptr += sprintf(*ptr, "male");
+            dump_printf(out, "male");
             break;
         case VOICE_FAMILY_FEMALE:
-            *ptr += sprintf(*ptr, "female");
+            dump_printf(out, "female");
             break;
         case VOICE_FAMILY_CHILD:
-            *ptr += sprintf(*ptr, "child");
+            dump_printf(out, "child");
             break;
         }
 
         value = dump_bytecode_read(cursor);
 
         if (value != VOICE_FAMILY_END)
-            *ptr += sprintf(*ptr, ", ");
+            dump_printf(out, ", ");
     }
 }
 
-static void dump_bytecode_volume(struct dump_bytecode_cursor *cursor, uint32_t value, char **ptr)
+static void dump_bytecode_volume(struct dump_bytecode_cursor *cursor, uint32_t value, struct dump_output *out)
 {
     switch (value) {
     case VOLUME_NUMBER: {
         css_fixed val = (css_fixed)dump_bytecode_read(cursor);
-        dump_number(val, ptr);
+        dump_number(val, out);
     } break;
     case VOLUME_DIMENSION:
-        dump_bytecode_length(cursor, ptr);
+        dump_bytecode_length(cursor, out);
         break;
     case VOLUME_SILENT:
-        *ptr += sprintf(*ptr, "silent");
+        dump_printf(out, "silent");
         break;
     case VOLUME_X_SOFT:
-        *ptr += sprintf(*ptr, "x-soft");
+        dump_printf(out, "x-soft");
         break;
     case VOLUME_SOFT:
-        *ptr += sprintf(*ptr, "soft");
+        dump_printf(out, "soft");
         break;
     case VOLUME_MEDIUM:
-        *ptr += sprintf(*ptr, "medium");
+        dump_printf(out, "medium");
         break;
     case VOLUME_LOUD:
-        *ptr += sprintf(*ptr, "loud");
+        dump_printf(out, "loud");
         break;
     case VOLUME_X_LOUD:
-        *ptr += sprintf(*ptr, "x-loud");
+        dump_printf(out, "x-loud");
         break;
     }
 }
 
-static void dump_bytecode_z_index(struct dump_bytecode_cursor *cursor, uint32_t value, char **ptr)
+static void dump_bytecode_z_index(struct dump_bytecode_cursor *cursor, uint32_t value, struct dump_output *out)
 {
     switch (value) {
     case Z_INDEX_SET: {
         css_fixed val = (css_fixed)dump_bytecode_read(cursor);
-        dump_number(val, ptr);
+        dump_number(val, out);
     } break;
     case Z_INDEX_AUTO:
-        *ptr += sprintf(*ptr, "auto");
+        dump_printf(out, "auto");
         break;
     }
 }
 
 struct dump_bytecode_property {
-    void (*read)(struct dump_bytecode_cursor *, uint32_t value, char **ptr);
+    void (*read)(struct dump_bytecode_cursor *, uint32_t value, struct dump_output *out);
     const char *const *keywords;
     size_t keyword_count;
 };
@@ -1551,7 +1551,7 @@ static const struct dump_bytecode_property dump_bytecode_properties[CSS_N_PROPER
 #undef READER
 #undef KEYWORDS
 
-static void dump_bytecode_calc(struct dump_bytecode_cursor *cursor, char **ptr)
+static void dump_bytecode_calc(struct dump_bytecode_cursor *cursor, struct dump_output *out)
 {
     uint32_t unit = dump_bytecode_read(cursor);
     uint32_t snum = dump_bytecode_read(cursor);
@@ -1560,106 +1560,106 @@ static void dump_bytecode_calc(struct dump_bytecode_cursor *cursor, char **ptr)
     const css_code_t *code = (const css_code_t *)(const void *)lwc_string_data(expression);
     struct dump_bytecode_cursor calc = {code, code + lwc_string_length(expression) / sizeof(*code), cursor->sheet};
 
-    *ptr += sprintf(*ptr, "/* -> ");
-    dump_unit(0, unit, ptr);
-    *ptr += sprintf(*ptr, " */ calc(");
+    dump_printf(out, "/* -> ");
+    dump_unit(0, unit, out);
+    dump_printf(out, " */ calc(");
     for (;;) {
         uint32_t op = dump_bytecode_read(&calc);
         switch (op) {
         case CALC_FINISH:
-            *ptr += sprintf(*ptr, "=)");
+            dump_printf(out, "=)");
             return;
         case CALC_ADD:
-            *ptr += sprintf(*ptr, "+ ");
+            dump_printf(out, "+ ");
             break;
         case CALC_SUBTRACT:
-            *ptr += sprintf(*ptr, "- ");
+            dump_printf(out, "- ");
             break;
         case CALC_MULTIPLY:
-            *ptr += sprintf(*ptr, "* ");
+            dump_printf(out, "* ");
             break;
         case CALC_DIVIDE:
-            *ptr += sprintf(*ptr, "/ ");
+            dump_printf(out, "/ ");
             break;
         case CALC_PUSH_VALUE:
-            dump_bytecode_length(&calc, ptr);
-            *ptr += sprintf(*ptr, " ");
+            dump_bytecode_length(&calc, out);
+            dump_printf(out, " ");
             break;
         case CALC_PUSH_NUMBER:
-            dump_number((css_fixed)dump_bytecode_read(&calc), ptr);
-            *ptr += sprintf(*ptr, " ");
+            dump_number((css_fixed)dump_bytecode_read(&calc), out);
+            dump_printf(out, " ");
             break;
         default:
-            *ptr += sprintf(*ptr, "??%d ", op);
+            dump_printf(out, "??%d ", op);
             break;
         }
     }
 }
 
-static bool dump_bytecode_value(struct dump_bytecode_cursor *cursor, uint32_t opv, char **ptr)
+static bool dump_bytecode_value(struct dump_bytecode_cursor *cursor, uint32_t opv, struct dump_output *out)
 {
     switch (getFlagValue(opv)) {
     case FLAG_VALUE_INHERIT:
-        *ptr += sprintf(*ptr, "inherit");
+        dump_printf(out, "inherit");
         return true;
     case FLAG_VALUE_INITIAL:
-        *ptr += sprintf(*ptr, "initial");
+        dump_printf(out, "initial");
         return true;
     case FLAG_VALUE_REVERT:
-        *ptr += sprintf(*ptr, "revert");
+        dump_printf(out, "revert");
         return true;
     case FLAG_VALUE_UNSET:
-        *ptr += sprintf(*ptr, "unset");
+        dump_printf(out, "unset");
         return true;
     default:
         break;
     }
     if (isCalc(opv)) {
-        dump_bytecode_calc(cursor, ptr);
+        dump_bytecode_calc(cursor, out);
         return true;
     }
     opcode_t op = getOpcode(opv);
     uint32_t value = getValue(opv);
     const struct dump_bytecode_property *property = op < CSS_N_PROPERTIES ? &dump_bytecode_properties[op] : NULL;
     if (property != NULL && property->read != NULL) {
-        property->read(cursor, value, ptr);
+        property->read(cursor, value, out);
         return true;
     }
     if (property != NULL && property->keywords != NULL) {
         if (value < property->keyword_count && property->keywords[value] != NULL)
-            *ptr += sprintf(*ptr, "%s", property->keywords[value]);
+            dump_printf(out, "%s", property->keywords[value]);
         return true;
     }
-    *ptr += sprintf(*ptr, "Unknown opcode %x", op);
+    dump_printf(out, "Unknown opcode %x", op);
     return false;
 }
 
-static void dump_bytecode(css_style *style, char **ptr, uint32_t depth)
+static void dump_bytecode(css_style *style, struct dump_output *out, uint32_t depth)
 {
     if (style->used == 0)
         return;
     struct dump_bytecode_cursor cursor = {style->bytecode, style->bytecode + style->used, style->sheet};
-    while (cursor.next < cursor.end) {
+    while (cursor.next < cursor.end && !out->failed) {
         uint32_t opv = dump_bytecode_read(&cursor);
         opcode_t op = getOpcode(opv);
-        *(*ptr)++ = '|';
+        dump_char(out, '|');
         for (uint32_t i = 0; i < depth; i++)
-            *(*ptr)++ = ' ';
+            dump_char(out, ' ');
         const char *name = op < sizeof(opcode_names) / sizeof(opcode_names[0]) ? opcode_names[op] : NULL;
-        *ptr += sprintf(*ptr, "%s: ", name != NULL ? name : "unknown");
+        dump_printf(out, "%s: ", name != NULL ? name : "unknown");
 
         if (css__is_background_list(opv)) {
             dump_bytecode_read(&cursor); /* payload word count */
             uint32_t count = dump_bytecode_read(&cursor);
-            *ptr += sprintf(*ptr, "/* %u layers%s */\n", count, isImportant(opv) ? " !important" : "");
+            dump_printf(out, "/* %u layers%s */\n", count, isImportant(opv) ? " !important" : "");
             /* Inner OPVs use the same scalar readers on subsequent iterations. */
             continue;
         }
-        if (!dump_bytecode_value(&cursor, opv, ptr))
+        if (!dump_bytecode_value(&cursor, opv, out))
             return;
         if (isImportant(opv))
-            *ptr += sprintf(*ptr, " !important");
-        *ptr += sprintf(*ptr, "\n");
+            dump_printf(out, " !important");
+        dump_printf(out, "\n");
     }
 }
 

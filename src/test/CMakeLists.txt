@@ -474,6 +474,12 @@ add_test(NAME css_declarations_test COMMAND css_declarations_test)
 add_test(NAME css_property_generator_test COMMAND ${PYTHON3}
   ${CMAKE_SOURCE_DIR}/contrib/libcss/test/property_generator_test.py)
 
+add_executable(css_dump_test css_dump_test.c)
+target_include_directories(css_dump_test PRIVATE ${TEST_COMMON_INCLUDES}
+  ${CMAKE_SOURCE_DIR}/contrib/libcss/src ${CMAKE_SOURCE_DIR}/contrib/libcss/test)
+target_link_libraries(css_dump_test css ${CHECK_LIBRARIES})
+add_test(NAME css_dump_test COMMAND css_dump_test)
+
 add_executable(box_construct_context_test box_construct_context_test.c)
 target_include_directories(box_construct_context_test PRIVATE ${TEST_COMMON_INCLUDES} ${CMAKE_SOURCE_DIR}/include)
 target_link_libraries(box_construct_context_test wisp ${CHECK_LIBRARIES})
@@ -535,6 +541,8 @@ if(NOT WIN32)
   if(CMAKE_BUILD_TYPE STREQUAL "Release")
     target_link_libraries(css_declarations_test malloc_fig)
     target_compile_definitions(css_declarations_test PRIVATE WISP_TEST_ALLOC_FAILURE)
+    target_link_libraries(css_dump_test malloc_fig)
+    target_compile_definitions(css_dump_test PRIVATE WISP_TEST_ALLOC_FAILURE)
     target_link_libraries(dom_tree_test malloc_fig)
     target_compile_definitions(dom_tree_test PRIVATE WISP_TEST_ALLOC_FAILURE)
     target_link_libraries(dom_html_serialize_test malloc_fig)

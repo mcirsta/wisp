@@ -370,6 +370,8 @@ if(WISP_ENABLE_LIBCSS_TESTS)
   endforeach()
 
   add_libcss_test_exe(libcss_parse2_auto ${LIBCSSL_TEST_DIR}/parse2-auto.c)
+  add_test(NAME libcss_dump_mismatch COMMAND ${PYTHON3}
+    ${LIBCSSL_TEST_DIR}/dump_mismatch.py $<TARGET_FILE:libcss_parse2_auto>)
   file(GLOB LIBCSS_PARSE2_DAT "${LIBCSSL_DATA_DIR}/parse2/*.dat")
   foreach(f ${LIBCSS_PARSE2_DAT})
     get_filename_component(n "${f}" NAME)

@@ -876,19 +876,48 @@ generator checks cover metadata and family arity. Builds are warning-free and
 
 One old illegal-value fixture classified `overflow:auto visible` as invalid. It
 was moved to the valid overflow fixtures and both affected suites pass on rerun.
-That mismatch also exposed a separate **test-infrastructure issue**:
+That mismatch also exposed a separate **test-infrastructure issue, resolved in
+the following increment**:
 `test/parse2-auto.c` allocates output from the expected text length, while
 `test/dump.h` and `test/dump_bytecode.h` write without bounds. Unexpectedly larger
 valid output can overrun the diagnostic buffer; `test/css21.c` also uses this
-unbounded dumper. Follow up by changing the shared dumper to a bounded/growing
-output sink and testing oversized mismatches. Increasing the guessed allocation
-would not fix the cause. This test-only work is deferred from the value batch.
+unbounded dumper. The following increment replaces those guessed allocations with
+a growing output sink and tests oversized mismatches.
 
 The live `element.style` wrapper and the saved eBihoreanul `style.opacity` blocker
 remain pending. Continue specified-value coverage, alias/aggregate handling and
 block serialization before adding CSSOM writes and DOM integration. General URL
 error/EOF recovery and CSS input preprocessing are not completed by these focused
 lexer fixes.
+
+### Safe CSS test diagnostics (2026-10-11)
+
+Keyword/URL serialization and its shared parser fixes are committed as `056edd24`.
+The deferred test-dumper problem is now fixed. `test/dump_output.h` owns a growing
+buffer, checks capacity arithmetic, terminates successful output and retains a
+failure flag after allocation or formatting failure. All selector, font-face,
+number and bytecode diagnostics in the shared dumper use this output object.
+Neither `parse2-auto.c` nor `css21.c` guesses output size from expected results or
+input size. The change is confined to test tools and their build registration.
+
+Fixture mismatches now print expected and actual output, release the stylesheet
+and buffer, and return a failing exit status. A subsequent passing fixture cannot
+hide an earlier failure. The fixed-point diagnostic helper also avoids signed
+negation overflow at INT32_MIN while preserving existing output spelling.
+
+Validation: all 73 targeted native CSS suites pass under Debug ASan/UBSan with
+LeakSanitizer, including every existing bytecode fixture. All three selected
+Release suites pass. New coverage includes exact-capacity growth, large formatted
+and raw output, size overflow, retained prefixes after allocation failure, a
+whole-stylesheet allocation-failure sweep and cleanup/reuse. The dump unit suite
+passes four Debug / seven Release checks. A subprocess regression verifies the
+original overflow case, empty expected output and a 16 KiB URL: all report clean
+mismatches without sanitizer errors. Builds are warning-free and `git diff --check`
+is clean. No Qt/GTK rebuild or capture tests were needed for this test-only change.
+
+This closes the diagnostic-buffer follow-up. The next implementation work remains
+specified-value coverage, alias/aggregate handling and declaration-block
+serialization, followed by CSSOM writes and the live `element.style` wrapper.
 
 ## Assessment
 

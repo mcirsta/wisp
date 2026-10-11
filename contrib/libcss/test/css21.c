@@ -30,7 +30,7 @@ int main(int argc, char **argv)
     css_stylesheet_params params = {0};
     css_stylesheet *sheet;
     FILE *fp;
-    size_t len, origlen;
+    size_t len;
 #define CHUNK_SIZE (4096)
     uint8_t buf[CHUNK_SIZE];
     css_error error;
@@ -68,7 +68,7 @@ int main(int argc, char **argv)
         }
 
         fseek(fp, 0, SEEK_END);
-        origlen = len = ftell(fp);
+        len = ftell(fp);
         fseek(fp, 0, SEEK_SET);
 
         while (len >= CHUNK_SIZE) {
@@ -127,19 +127,17 @@ int main(int argc, char **argv)
 
 #if DUMP_CSS
         {
-#ifndef max
-#define max(a, b) ((a) > (b) ? (a) : (b))
-#endif
-            char *out;
-            size_t outsize = max(16384, origlen * 8);
-            size_t outlen = outsize;
-            size_t written;
-            out = malloc(outsize);
-            assert(out != NULL);
-            dump_sheet(sheet, out, &outlen);
-            written = fwrite(out, 1, outsize - outlen, stdout);
-            assert(written == outsize - outlen);
-            free(out);
+            struct dump_output out = {0};
+            dump_sheet(sheet, &out);
+            bool failed = out.failed;
+            if (!failed && out.length != 0)
+                failed = fwrite(out.data, 1, out.length, stdout) != out.length;
+            dump_output_fini(&out);
+            if (failed) {
+                fprintf(stderr, "Failed to write stylesheet dump\n");
+                css_stylesheet_destroy(sheet);
+                return EXIT_FAILURE;
+            }
         }
 #endif
 
