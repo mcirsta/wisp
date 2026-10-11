@@ -25,8 +25,6 @@ typedef enum {
     IN_TABLE_BODY,
     IN_ROW,
     IN_CELL,
-    IN_SELECT,
-    IN_SELECT_IN_TABLE,
     IN_FOREIGN_CONTENT,
     AFTER_BODY,
     IN_FRAMESET,
@@ -51,8 +49,6 @@ hubbub_error handle_in_column_group(hubbub_treebuilder *treebuilder, const hubbu
 hubbub_error handle_in_table_body(hubbub_treebuilder *treebuilder, const hubbub_token *token);
 hubbub_error handle_in_row(hubbub_treebuilder *treebuilder, const hubbub_token *token);
 hubbub_error handle_in_cell(hubbub_treebuilder *treebuilder, const hubbub_token *token);
-hubbub_error handle_in_select(hubbub_treebuilder *treebuilder, const hubbub_token *token);
-hubbub_error handle_in_select_in_table(hubbub_treebuilder *treebuilder, const hubbub_token *token);
 hubbub_error handle_generic_rcdata(hubbub_treebuilder *treebuilder, const hubbub_token *token);
 hubbub_error handle_script_collect_characters(hubbub_treebuilder *treebuilder, const hubbub_token *token);
 hubbub_error handle_in_foreign_content(hubbub_treebuilder *treebuilder, const hubbub_token *token);

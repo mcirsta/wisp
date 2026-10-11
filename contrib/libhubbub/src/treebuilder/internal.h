@@ -110,7 +110,14 @@ hubbub_error process_characters_expect_whitespace(
 hubbub_error process_comment_append(hubbub_treebuilder *treebuilder, const hubbub_token *token, void *parent);
 hubbub_error parse_generic_rcdata(hubbub_treebuilder *treebuilder, const hubbub_token *token, bool rcdata);
 
-uint32_t element_in_scope(hubbub_treebuilder *treebuilder, element_type type, bool in_table);
+typedef enum {
+    SCOPE_NORMAL,
+    SCOPE_TABLE,
+    SCOPE_BUTTON,
+    SCOPE_LIST_ITEM
+} element_scope;
+
+uint32_t element_in_scope(hubbub_treebuilder *treebuilder, element_type type, element_scope scope);
 hubbub_error reconstruct_active_formatting_list(hubbub_treebuilder *treebuilder);
 void clear_active_formatting_list_to_marker(hubbub_treebuilder *treebuilder);
 hubbub_error remove_node_from_dom(hubbub_treebuilder *treebuilder, void *node);

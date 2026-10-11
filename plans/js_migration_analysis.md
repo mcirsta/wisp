@@ -178,13 +178,12 @@ context classification explicitly preserves the DOM local name's case without
 altering the generator or generated files.
 
 **This is a parser prerequisite, not an enabled `innerHTML` binding.** The API
-explicitly rejects foreign-namespace, XML-document, select and template contexts
-for now. Hubbub still uses the old IN_SELECT modes; the current HTML Standard
-has moved select parsing into the ordinary modes. Complete that shared parser
-change, foreign context/integration-point handling, and template handling before
-treating fragment parsing as general-purpose. Existing full-document parser
-limitations (including those constructs nested in otherwise supported fragments)
-are not claimed fixed by this batch.
+explicitly rejects foreign-namespace, XML-document and template contexts for now.
+Select parsing is completed by the increment below. Complete foreign
+context/integration-point handling and template handling before treating fragment
+parsing as general-purpose. Existing full-document parser limitations (including
+those constructs nested in otherwise supported fragments) are not claimed fixed
+by this foundation batch.
 
 Then implement HTML fragment serialization and QuickJS getter/setter registration,
 with conversion/retirement checks, safe replacement, live-collection updates,
@@ -203,6 +202,58 @@ first run; it passed after rebuilding. Nine focused Qt suites pass after the fin
 root-initialization and decoded-input changes. The normalized saved eBihoreanul
 snapshot still has identical PNG bytes and a 1280 x 11382 document extent. No GTK
 build or tests were run.
+
+### Modern select parsing (2026-10-11)
+
+The shared Hubbub parser now follows the current HTML Standard's
+[in-body select, input, option, optgroup and hr rules](https://html.spec.whatwg.org/multipage/parsing.html#parsing-main-inbody).
+Full documents and fragments use the ordinary insertion modes; the obsolete
+IN_SELECT/IN_SELECT_IN_TABLE handlers and build entries are removed. Select
+fragment contexts are now accepted. The context stays separate from the stack:
+for example, in-body processing ignores input/select start tags in a select
+fragment, while the in-scope-select option/group rules apply only to an actual
+open select element.
+Rich descendants are preserved, and table modes retain control across selects.
+This updates tree construction; it does not implement customizable select UI.
+
+Correct the shared helpers this requires, rather than adding fragment exceptions:
+
+- Replace the table-scope boolean with normal, table, button and list-item scope
+  kinds. Select is a normal-scope boundary; button is only a button-scope boundary.
+  Namespace-aware matching avoids treating foreign elements as HTML targets and
+  observes MathML/SVG scope boundaries. Template scope remains part of the pending
+  template implementation.
+- Treat option/optgroup as ordinary elements for generic end tags. Exclude the
+  requested end tag from implied closure, so closing an option does not also close
+  its optgroup.
+- Remove obsolete button formatting-list markers and use ordinary container
+  closure for buttons. Regression cases reproduced missing formatting after a
+  select/button closed; preserving the active formatting list fixes their cause.
+- Keep the [in-table hidden-input rule](https://html.spec.whatwg.org/multipage/parsing.html#parsing-main-intable)
+  active even after foster parenting. Match `type=hidden`, insert once without
+  keeping the void input on the stack, and propagate insertion failures. The old
+  helper accepted any attribute valued `hidden`, could insert duplicates and
+  incorrectly switched to ordinary input handling after fostered select content.
+
+The native tree fixtures are derived from the standard, not Chromium output.
+They exercise whole documents and ordinary/select/option/optgroup fragments,
+whole and byte-by-byte input, omitted/malformed end tags, nesting, rich content,
+inputs, textarea, separators, scopes, formatting reconstruction, forms and tables.
+Foreign contexts/integration points, template contents and HTML serialization
+remain prerequisites for the general `innerHTML` binding; no JS setter is exposed
+yet. Other historical parser gaps remain outside this increment's claim.
+
+Validation: 258 native parser cases and all 753 checks across the 13 DOM, JS, form
+and interaction suites pass in the Debug ASan/UBSan build, with LeakSanitizer
+enabled and no sanitizer diagnostics.
+All 117 Qt suites pass on the final build: the paint-order suite passed alone,
+followed by the remaining 116 suites. An earlier parallel run timed out one
+paint capture, without a pixel assertion failure. The final normalized saved
+eBihoreanul capture completes with the same 1280 x 11382 extent and byte-identical
+PNG as the pre-select baseline. That saved-page run still reports the previously
+known `llcache.c` null-source/zero-length memcpy UBSan diagnostic; the native
+suites are clean. The build has no compiler warnings, `git diff --check` is clean,
+and no GTK build or tests were run.
 
 ## Assessment
 

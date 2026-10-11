@@ -52,7 +52,7 @@ static hubbub_error act_as_if_end_tag_tr(hubbub_treebuilder *treebuilder)
     void *node;
 
     /* A tr fragment starts with only the synthetic HTML root on the stack. */
-    if (!element_in_scope(treebuilder, TR, true))
+    if (!element_in_scope(treebuilder, TR, SCOPE_TABLE))
         return HUBBUB_OK;
 
     table_clear_stack(treebuilder);

@@ -35,8 +35,9 @@ static void append(dom_node *parent, dom_node *child)
 
 static void setup(void)
 {
-    ck_assert_int_eq(dom_implementation_create_document(
-        DOM_IMPLEMENTATION_HTML, NULL, NULL, NULL, NULL, NULL, &document), DOM_NO_ERR);
+    ck_assert_int_eq(
+        dom_implementation_create_document(DOM_IMPLEMENTATION_HTML, NULL, NULL, NULL, NULL, NULL, &document),
+        DOM_NO_ERR);
 }
 
 static void teardown(void)
@@ -99,8 +100,8 @@ static dom_node *parse(dom_node *context, const char *input, size_t chunk, bool 
     dom_hubbub_parser_params params = {.enable_script = scripting};
     dom_hubbub_parser *parser = NULL;
     dom_document_fragment *fragment = NULL;
-    ck_assert_int_eq(dom_hubbub_fragment_parser_create(&params, (dom_element *)context, &parser, &fragment),
-        DOM_HUBBUB_OK);
+    ck_assert_int_eq(
+        dom_hubbub_fragment_parser_create(&params, (dom_element *)context, &parser, &fragment), DOM_HUBBUB_OK);
     for (size_t offset = 0, len = strlen(input); offset < len;) {
         size_t take = len - offset < chunk ? len - offset : chunk;
         ck_assert_int_eq(dom_hubbub_parser_parse_chunk(parser, (const uint8_t *)input + offset, take), DOM_HUBBUB_OK);
@@ -152,6 +153,23 @@ static const struct {
     {"html", "<title>A</title><p>B", "<head><title>A</title></head><body><p>B</p></body>"},
     {"html", "<body>x</body></html><!--end-->", "<head></head><body>x</body><!--end-->"},
     {"frameset", "<frameset><frame></frameset><frame>", "<frameset><frame></frame></frameset><frame></frame>"},
+    {"select", "<option>A<option>B", "<option>A</option><option>B</option>"},
+    {"select", "<button><span>Pick</span></button><div><option>A</option></div>",
+        "<button><span>Pick</span></button><div><option>A</option></div>"},
+    /* The context is not on the stack: only the current option is implicitly
+     * closed, and optgroups don't receive the in-scope-select behavior. */
+    {"select", "<optgroup><option>A<optgroup><option>B",
+        "<optgroup><option>A</option><optgroup><option>B</option></optgroup></optgroup>"},
+    {"select", "<select><input><option>A</select><option>B", "<option>A</option><option>B</option>"},
+    {"select", "<div><input><select><option>A</div><option>B", "<div><option>A</option></div><option>B</option>"},
+    {"select", "<textarea>text</textarea><hr><option>A", "<textarea>text</textarea><hr></hr><option>A</option>"},
+    {"select", "<option>A<hr><option>B", "<option>A<hr></hr></option><option>B</option>"},
+    {"select", "<table><tr><td>A</td></tr></table><option>B",
+        "<table><tbody><tr><td>A</td></tr></tbody></table><option>B</option>"},
+    {"select", "<table><input type=hidden><tr><td>A</table>",
+        "<table><input></input><tbody><tr><td>A</td></tr></tbody></table>"},
+    {"optgroup", "<option>A<option>B", "<option>A</option><option>B</option>"},
+    {"option", "<span>A</span><option>B", "<span>A</span><option>B</option>"},
 };
 
 START_TEST(test_context)
@@ -166,8 +184,8 @@ START_TEST(test_context)
     used = 0;
     tree[0] = 0;
     describe(fragment);
-    ck_assert_msg(strcmp(tree, cases[variant].expected) == 0, "case %zu <%s>, chunk %zu: expected %s, got %s",
-        variant, cases[variant].context, chunk, cases[variant].expected, tree);
+    ck_assert_msg(strcmp(tree, cases[variant].expected) == 0, "case %zu <%s>, chunk %zu: expected %s, got %s", variant,
+        cases[variant].context, chunk, cases[variant].expected, tree);
     dom_node *child = NULL;
     ck_assert_int_eq(dom_node_get_first_child(context, &child), DOM_NO_ERR);
     ck_assert_ptr_eq(child, original);
@@ -175,6 +193,135 @@ START_TEST(test_context)
     dom_node_unref(original);
     dom_node_unref(fragment);
     dom_node_unref(context);
+}
+END_TEST
+
+/* Current HTML "in body" select rules also apply to whole documents. Each
+ * fixture runs both there and in a div fragment, whole and byte-by-byte. */
+static const struct {
+    const char *label, *input, *expected;
+} select_cases[] = {
+    {"implicit options", "<select><option>A<option>B</select><p>end",
+        "<select><option>A</option><option>B</option></select><p>end</p>"},
+    {"implicit groups", "<select><optgroup><option>A<optgroup><option>B</select>",
+        "<select><optgroup><option>A</option></optgroup><optgroup><option>B</option></optgroup></select>"},
+    {"explicit options keep group", "<select><optgroup><option>A</option><option>B</option></optgroup></select>",
+        "<select><optgroup><option>A</option><option>B</option></optgroup></select>"},
+    {"explicit group closes option", "<select><optgroup><option>A</optgroup><option>B</select>",
+        "<select><optgroup><option>A</option></optgroup><option>B</option></select>"},
+    {"rich contents", "<select><button><span>Pick</span></button><div><option><span>A</span></option></div></select>",
+        "<select><button><span>Pick</span></button><div><option><span>A</span></option></div></select>"},
+    {"nested select closes outer", "<select><optgroup><option>A<select><option>B</select><p>end",
+        "<select><optgroup><option>A</option></optgroup></select><option>B<p>end</p></option>"},
+    {"input closes select", "<select><optgroup><option>A<input><p>end",
+        "<select><optgroup><option>A</option></optgroup></select><input></input><p>end</p>"},
+    {"textarea stays inside select", "<select><textarea>text</textarea><option>A</select>",
+        "<select><textarea>text</textarea><option>A</option></select>"},
+    {"separator closes group", "<select><optgroup><option>A<hr><option>B</select>",
+        "<select><optgroup><option>A</option></optgroup><hr></hr><option>B</option></select>"},
+    {"separator closes paragraph and option", "<select><option><p>A<hr><option>B</select>",
+        "<select><option><p>A</p></option><hr></hr><option>B</option></select>"},
+    {"option closes implied paragraph", "<select><option><p>A<option>B</select>",
+        "<select><option><p>A</p></option><option>B</option></select>"},
+    {"option does not close span", "<select><option><span>A<option>B</select>",
+        "<select><option><span>A<option>B</option></span></option></select>"},
+    {"option end closes span", "<select><optgroup><option><span>A</option><option>B</select>",
+        "<select><optgroup><option><span>A</span></option><option>B</option></optgroup></select>"},
+    {"group end stops at special element", "<select><optgroup><div></optgroup><option>A</select>",
+        "<select><optgroup><div><option>A</option></div></optgroup></select>"},
+    {"select is a scope boundary", "<div><select></div><option>A</select><span>B</span></div>",
+        "<div><select><option>A</option></select><span>B</span></div>"},
+    {"paragraph outside select stays open", "<p><select><option><div>A</div></select>B",
+        "<p><select><option><div>A</div></option></select>B</p>"},
+    {"button is not a normal scope boundary", "<select><button><span>A<select>B",
+        "<select><button><span>A</span></button></select>B"},
+    {"select end crosses button", "<select><button>A</select>B", "<select><button>A</button></select>B"},
+    {"input crosses button", "<select><button>A<input>B", "<select><button>A</button></select><input></input>B"},
+    {"button scope still protects paragraph", "<p>A<button><div>B</div></button>C",
+        "<p>A<button><div>B</div></button>C</p>"},
+    {"list item scope", "<ul><li>A<ul></li><li>B</ul>C</ul>", "<ul><li>A<ul><li>B</li></ul>C</li></ul>"},
+    {"cell select", "<table><tr><td><select><option>A</select>B</td></tr></table>",
+        "<table><tbody><tr><td><select><option>A</option></select>B</td></tr></tbody></table>"},
+    {"cell close with open select", "<table><tr><td><select><option>A<td>B</table>",
+        "<table><tbody><tr><td><select><option>A</option></select></td><td>B</td></tr></tbody></table>"},
+    {"foster select before table", "<table><select><option>A</select><tr><td>B</table>",
+        "<select><option>A</option></select><table><tbody><tr><td>B</td></tr></tbody></table>"},
+    {"row clears fostered select", "<table><select><option>A<tr><td>B</table>",
+        "<select><option>A</option></select><table><tbody><tr><td>B</td></tr></tbody></table>"},
+    {"table within select", "<select><table><tr><td>A</td></tr></table><option>B</select>",
+        "<select><table><tbody><tr><td>A</td></tr></tbody></table><option>B</option></select>"},
+    {"table scope shields outer select", "<select><table><tr><td><select><option>A</select></table>B</select>",
+        "<select><table><tbody><tr><td><select><option>A</option></select></td></tr></tbody></table>B</select>"},
+    {"hidden input in table retains select", "<table><select><option>A<input type=hidden><option>B</select></table>",
+        "<select><option>A<input></input></option><option>B</option></select><table></table>"},
+    {"table hidden inputs are void", "<table><input type=hidden><input type=HIDDEN name=hidden><tr><td>A</table>",
+        "<table><input></input><input></input><tbody><tr><td>A</td></tr></tbody></table>"},
+    {"unrelated hidden value is not a hidden input", "<table><input name=hidden type=text><tr><td>A</table>",
+        "<input></input><table><tbody><tr><td>A</td></tr></tbody></table>"},
+    {"tainted table still accepts hidden input", "<table><div>A</div><input type=hidden><tr><td>B</table>",
+        "<div>A</div><table><input></input><tbody><tr><td>B</td></tr></tbody></table>"},
+    {"caption select", "<table><caption><select><option>A</select>B</caption></table>",
+        "<table><caption><select><option>A</option></select>B</caption></table>"},
+    {"form end outside select scope", "<form><select></form><option>A</select><input></form>",
+        "<form><select><option>A</option></select><input></input></form>"},
+    {"form inside select", "<select><form><option>A</form><option>B</select>",
+        "<select><form><option>A</option></form><option>B</option></select>"},
+    {"option outside select only closes current", "<datalist><option><span>A<option>B</datalist>",
+        "<datalist><option><span>A<option>B</option></span></option></datalist>"},
+    {"formatting reconstruction", "<select><option><b>A</option><option>B</select>C",
+        "<select><option><b>A</b></option><b><option>B</option></b></select><b>C</b>"},
+    {"button does not add formatting marker", "<select><b><button>A</select>B",
+        "<select><b><button>A</button></b></select><b>B</b>"},
+    {"button end preserves active formatting", "<select><button><b>A</button>B</select>C",
+        "<select><button><b>A</b></button><b>B</b></select><b>C</b>"},
+    {"ignored unmatched closing tags", "</select></option></optgroup><select></optgroup><option>A</select>",
+        "<select><option>A</option></select>"},
+};
+
+START_TEST(test_select_document_and_fragment)
+{
+    const size_t count = sizeof(select_cases) / sizeof(select_cases[0]);
+    size_t variant = _i % count, mode = _i / count;
+    size_t chunk = (mode & 1) ? 1 : 4096;
+    dom_node *root = NULL, *context = NULL;
+    dom_document *parsed = NULL;
+    if (mode < 2) {
+        context = element("div");
+        root = parse(context, select_cases[variant].input, chunk, false);
+    } else {
+        dom_hubbub_parser_params params = {.enc = "UTF-8", .fix_enc = true};
+        dom_hubbub_parser *parser = NULL;
+        ck_assert_int_eq(dom_hubbub_parser_create(&params, &parser, &parsed), DOM_HUBBUB_OK);
+        const char *prefix = "<!doctype html><body>";
+        ck_assert_int_eq(dom_hubbub_parser_parse_chunk(parser, (const uint8_t *)prefix, strlen(prefix)), DOM_HUBBUB_OK);
+        const char *input = select_cases[variant].input;
+        for (size_t offset = 0, len = strlen(input); offset < len;) {
+            size_t take = len - offset < chunk ? len - offset : chunk;
+            ck_assert_int_eq(
+                dom_hubbub_parser_parse_chunk(parser, (const uint8_t *)input + offset, take), DOM_HUBBUB_OK);
+            offset += take;
+        }
+        ck_assert_int_eq(dom_hubbub_parser_completed(parser), DOM_HUBBUB_OK);
+        dom_hubbub_parser_destroy(parser);
+        ck_assert_int_eq(dom_html_document_get_body(parsed, &root), DOM_NO_ERR);
+    }
+    used = 0;
+    tree[0] = 0;
+    /* Compare the children, omitting either the body or fragment root. */
+    dom_node *child = NULL;
+    ck_assert_int_eq(dom_node_get_first_child(root, &child), DOM_NO_ERR);
+    while (child != NULL) {
+        describe(child);
+        dom_node *next = NULL;
+        ck_assert_int_eq(dom_node_get_next_sibling(child, &next), DOM_NO_ERR);
+        dom_node_unref(child);
+        child = next;
+    }
+    ck_assert_msg(strcmp(tree, select_cases[variant].expected) == 0, "%s, %s, chunk %zu: expected %s, got %s",
+        select_cases[variant].label, mode < 2 ? "fragment" : "document", chunk, select_cases[variant].expected, tree);
+    dom_node_unref(root);
+    dom_node_unref(context);
+    dom_node_unref(parsed);
 }
 END_TEST
 
@@ -238,8 +385,8 @@ START_TEST(test_inert_and_abandoned)
     dom_hubbub_parser_params params = {.enable_script = true, .script = unexpected_script};
     dom_hubbub_parser *parser = NULL;
     dom_document_fragment *fragment = NULL;
-    ck_assert_int_eq(dom_hubbub_fragment_parser_create(&params, (dom_element *)context, &parser, &fragment),
-        DOM_HUBBUB_OK);
+    ck_assert_int_eq(
+        dom_hubbub_fragment_parser_create(&params, (dom_element *)context, &parser, &fragment), DOM_HUBBUB_OK);
     const char *html = _i == 2 ? "<script>run()" : "<script src=x>run()</script><p>open";
     ck_assert_int_eq(dom_hubbub_parser_parse_chunk(parser, (const uint8_t *)html, strlen(html)), DOM_HUBBUB_OK);
     if (_i != 1) {
@@ -261,8 +408,8 @@ END_TEST
 START_TEST(test_foreign_descendant)
 {
     dom_node *context = element("div");
-    dom_node *fragment =
-        parse(context, "<svg><linearGradient viewBox='0 0 1 1'></linearGradient></svg><p>end", 1, true);
+    dom_node *fragment = parse(
+        context, "<svg><linearGradient viewBox='0 0 1 1'></linearGradient></svg><p>end", 1, true);
     dom_node *svg = NULL, *gradient = NULL, *after = NULL;
     ck_assert_int_eq(dom_node_get_first_child(fragment, &svg), DOM_NO_ERR);
     ck_assert_int_eq(dom_node_get_first_child(svg, &gradient), DOM_NO_ERR);
@@ -292,12 +439,12 @@ START_TEST(test_unsupported_context)
     if (_i == 0)
         ck_assert_int_eq(dom_document_create_element_ns(document, ns, name, &context), DOM_NO_ERR);
     else
-        context = (dom_element *)element(_i == 1 ? "template" : "select");
+        context = (dom_element *)element("template");
     dom_hubbub_parser_params params = {0};
     dom_hubbub_parser *parser = NULL;
     dom_document_fragment *fragment = NULL;
-    ck_assert_int_eq(dom_hubbub_fragment_parser_create(&params, context, &parser, &fragment),
-        DOM_HUBBUB_HUBBUB_ERR_INVALID);
+    ck_assert_int_eq(
+        dom_hubbub_fragment_parser_create(&params, context, &parser, &fragment), DOM_HUBBUB_HUBBUB_ERR_INVALID);
     ck_assert_ptr_null(parser);
     ck_assert_ptr_null(fragment);
     dom_node_unref(context);
@@ -316,7 +463,8 @@ int main(void)
     tcase_add_loop_test(tc, test_form_context, 0, 2);
     tcase_add_loop_test(tc, test_inert_and_abandoned, 0, 3);
     tcase_add_test(tc, test_foreign_descendant);
-    tcase_add_loop_test(tc, test_unsupported_context, 0, 3);
+    tcase_add_loop_test(tc, test_unsupported_context, 0, 2);
+    tcase_add_loop_test(tc, test_select_document_and_fragment, 0, 4 * (sizeof(select_cases) / sizeof(select_cases[0])));
     suite_add_tcase(suite, tc);
     SRunner *runner = srunner_create(suite);
     srunner_run_all(runner, CK_NORMAL);

@@ -56,7 +56,7 @@ static hubbub_error process_0p_in_body(hubbub_treebuilder *treebuilder);
 static hubbub_error process_0dd_dt_li_in_body(hubbub_treebuilder *treebuilder, element_type type);
 static hubbub_error process_0h_in_body(hubbub_treebuilder *treebuilder, element_type type);
 static hubbub_error process_0presentational_in_body(hubbub_treebuilder *treebuilder, element_type type);
-static hubbub_error process_0applet_button_marquee_object_in_body(hubbub_treebuilder *treebuilder, element_type type);
+static hubbub_error process_0applet_marquee_object_in_body(hubbub_treebuilder *treebuilder, element_type type);
 static hubbub_error process_0br_in_body(hubbub_treebuilder *treebuilder);
 static hubbub_error process_0generic_in_body(hubbub_treebuilder *treebuilder, element_type type);
 
@@ -257,6 +257,12 @@ hubbub_error process_start_tag(hubbub_treebuilder *treebuilder, const hubbub_tok
         }
     } else if (type == AREA || type == BASEFONT || type == BGSOUND || type == BR || type == EMBED || type == IMG ||
         type == INPUT || type == PARAM || type == SPACER || type == WBR) {
+        if (type == INPUT) {
+            if (treebuilder->context.fragment && treebuilder->context.fragment_type == SELECT)
+                return HUBBUB_OK;
+            if (element_in_scope(treebuilder, SELECT, SCOPE_NORMAL))
+                element_stack_pop_until(treebuilder, SELECT);
+        }
         err = reconstruct_active_formatting_list(treebuilder);
         if (err != HUBBUB_OK)
             return err;
@@ -279,16 +285,6 @@ hubbub_error process_start_tag(hubbub_treebuilder *treebuilder, const hubbub_tok
         err = parse_generic_rcdata(treebuilder, token, false);
     } else if (type == SELECT) {
         err = process_select_in_body(treebuilder, token);
-        if (err != HUBBUB_OK)
-            return err;
-
-        if (treebuilder->context.mode == IN_BODY) {
-            treebuilder->context.mode = IN_SELECT;
-        } else if (treebuilder->context.mode == IN_TABLE || treebuilder->context.mode == IN_CAPTION ||
-            treebuilder->context.mode == IN_COLUMN_GROUP || treebuilder->context.mode == IN_TABLE_BODY ||
-            treebuilder->context.mode == IN_ROW || treebuilder->context.mode == IN_CELL) {
-            treebuilder->context.mode = IN_SELECT_IN_TABLE;
-        }
     } else if (type == OPTGROUP || type == OPTION) {
         err = process_opt_in_body(treebuilder, token);
     } else if (type == RP || type == RT) {
@@ -355,7 +351,7 @@ hubbub_error process_end_tag(hubbub_treebuilder *treebuilder, const hubbub_token
         type == DETAILS || type == DIALOG || type == DIR || type == DATAGRID || type == DIV || type == DL ||
         type == FIELDSET || type == FIGCAPTION || type == FIGURE || type == FOOTER || type == HEADER ||
         type == LISTING || type == MAIN || type == MENU || type == NAV || type == OL || type == PRE ||
-        type == SECTION || type == SUMMARY || type == UL) {
+        type == SECTION || type == SELECT || type == BUTTON || type == SUMMARY || type == UL) {
         err = process_0container_in_body(treebuilder, type);
     } else if (type == FORM) {
         err = process_0form_in_body(treebuilder);
@@ -368,13 +364,13 @@ hubbub_error process_end_tag(hubbub_treebuilder *treebuilder, const hubbub_token
     } else if (type == A || type == B || type == BIG || type == CODE || type == EM || type == FONT || type == I ||
         type == NOBR || type == S || type == SMALL || type == STRIKE || type == STRONG || type == TT || type == U) {
         err = process_0presentational_in_body(treebuilder, type);
-    } else if (type == APPLET || type == BUTTON || type == MARQUEE || type == OBJECT) {
-        err = process_0applet_button_marquee_object_in_body(treebuilder, type);
+    } else if (type == APPLET || type == MARQUEE || type == OBJECT) {
+        err = process_0applet_marquee_object_in_body(treebuilder, type);
     } else if (type == BR) {
         err = process_0br_in_body(treebuilder);
     } else if (type == AREA || type == BASEFONT || type == BGSOUND || type == EMBED || type == HR || type == IFRAME ||
         type == IMAGE || type == IMG || type == INPUT || type == ISINDEX || type == NOEMBED || type == NOFRAMES ||
-        type == PARAM || type == SELECT || type == SPACER || type == TABLE || type == TEXTAREA || type == WBR ||
+        type == PARAM || type == SPACER || type == TABLE || type == TEXTAREA || type == WBR ||
         (treebuilder->context.enable_scripting && type == NOSCRIPT)) {
         /** \todo parse error */
     } else {
@@ -457,7 +453,7 @@ hubbub_error process_container_in_body(hubbub_treebuilder *treebuilder, const hu
 {
     hubbub_error err;
 
-    if (element_in_scope(treebuilder, P, false)) {
+    if (element_in_scope(treebuilder, P, SCOPE_BUTTON)) {
         err = process_0p_in_body(treebuilder);
         if (err != HUBBUB_OK)
             return err;
@@ -477,7 +473,7 @@ hubbub_error process_hN_in_body(hubbub_treebuilder *treebuilder, const hubbub_to
     hubbub_error err;
     element_type type;
 
-    if (element_in_scope(treebuilder, P, false)) {
+    if (element_in_scope(treebuilder, P, SCOPE_BUTTON)) {
         err = process_0p_in_body(treebuilder);
         if (err != HUBBUB_OK)
             return err;
@@ -514,7 +510,7 @@ hubbub_error process_form_in_body(hubbub_treebuilder *treebuilder, const hubbub_
     if (treebuilder->context.form_element != NULL) {
         /** \todo parse error */
     } else {
-        if (element_in_scope(treebuilder, P, false)) {
+        if (element_in_scope(treebuilder, P, SCOPE_BUTTON)) {
             err = process_0p_in_body(treebuilder);
             if (err != HUBBUB_OK)
                 return err;
@@ -550,7 +546,7 @@ hubbub_error process_dd_dt_li_in_body(hubbub_treebuilder *treebuilder, const hub
 
     treebuilder->context.frameset_ok = false;
 
-    if (element_in_scope(treebuilder, P, false)) {
+    if (element_in_scope(treebuilder, P, SCOPE_BUTTON)) {
         err = process_0p_in_body(treebuilder);
         if (err != HUBBUB_OK)
             return err;
@@ -604,7 +600,7 @@ hubbub_error process_plaintext_in_body(hubbub_treebuilder *treebuilder, const hu
     hubbub_error err;
     hubbub_tokeniser_optparams params;
 
-    if (element_in_scope(treebuilder, P, false)) {
+    if (element_in_scope(treebuilder, P, SCOPE_BUTTON)) {
         err = process_0p_in_body(treebuilder);
         if (err != HUBBUB_OK)
             return err;
@@ -766,7 +762,7 @@ hubbub_error process_nobr_in_body(hubbub_treebuilder *treebuilder, const hubbub_
     if (err != HUBBUB_OK)
         return err;
 
-    if (element_in_scope(treebuilder, NOBR, false)) {
+    if (element_in_scope(treebuilder, NOBR, SCOPE_NORMAL)) {
         /** \todo parse error */
 
         /* Act as if </nobr> were seen */
@@ -819,11 +815,11 @@ hubbub_error process_button_in_body(hubbub_treebuilder *treebuilder, const hubbu
 {
     hubbub_error err;
 
-    if (element_in_scope(treebuilder, BUTTON, false)) {
+    if (element_in_scope(treebuilder, BUTTON, SCOPE_NORMAL)) {
         /** \todo parse error */
 
         /* Act as if </button> has been seen */
-        err = process_0applet_button_marquee_object_in_body(treebuilder, BUTTON);
+        err = process_0container_in_body(treebuilder, BUTTON);
         assert(err == HUBBUB_OK);
     }
 
@@ -834,28 +830,6 @@ hubbub_error process_button_in_body(hubbub_treebuilder *treebuilder, const hubbu
     err = insert_element(treebuilder, &token->data.tag, true);
     if (err != HUBBUB_OK)
         return err;
-
-    treebuilder->tree_handler->ref_node(
-        treebuilder->tree_handler->ctx, treebuilder->context.element_stack[treebuilder->context.current_node].node);
-
-    err = formatting_list_append(treebuilder, token->data.tag.ns, BUTTON,
-        treebuilder->context.element_stack[treebuilder->context.current_node].node, treebuilder->context.current_node);
-    if (err != HUBBUB_OK) {
-        hubbub_ns ns;
-        element_type type;
-        void *node;
-
-        remove_node_from_dom(treebuilder, treebuilder->context.element_stack[treebuilder->context.current_node].node);
-
-        element_stack_pop(treebuilder, &ns, &type, &node);
-
-        /* Unref twice (once for stack, once for formatting list) */
-        treebuilder->tree_handler->unref_node(treebuilder->tree_handler->ctx, node);
-
-        treebuilder->tree_handler->unref_node(treebuilder->tree_handler->ctx, node);
-
-        return err;
-    }
 
     treebuilder->context.frameset_ok = false;
 
@@ -919,11 +893,14 @@ hubbub_error process_hr_in_body(hubbub_treebuilder *treebuilder, const hubbub_to
 {
     hubbub_error err;
 
-    if (element_in_scope(treebuilder, P, false)) {
+    if (element_in_scope(treebuilder, P, SCOPE_BUTTON)) {
         err = process_0p_in_body(treebuilder);
         if (err != HUBBUB_OK)
             return err;
     }
+
+    if (element_in_scope(treebuilder, SELECT, SCOPE_NORMAL))
+        close_implied_end_tags(treebuilder, UNKNOWN);
 
     err = insert_element(treebuilder, &token->data.tag, false);
     if (err == HUBBUB_OK)
@@ -1151,6 +1128,13 @@ hubbub_error process_select_in_body(hubbub_treebuilder *treebuilder, const hubbu
 {
     hubbub_error err;
 
+    if (treebuilder->context.fragment && treebuilder->context.fragment_type == SELECT)
+        return HUBBUB_OK;
+    if (element_in_scope(treebuilder, SELECT, SCOPE_NORMAL)) {
+        element_stack_pop_until(treebuilder, SELECT);
+        return HUBBUB_OK;
+    }
+
     err = reconstruct_active_formatting_list(treebuilder);
     if (err != HUBBUB_OK)
         return err;
@@ -1172,10 +1156,11 @@ hubbub_error process_opt_in_body(hubbub_treebuilder *treebuilder, const hubbub_t
 {
     hubbub_error err;
 
-    if (element_in_scope(treebuilder, OPTION, false)) {
-        err = process_0generic_in_body(treebuilder, OPTION);
-        /* Cannot fail */
-        assert(err == HUBBUB_OK);
+    if (element_in_scope(treebuilder, SELECT, SCOPE_NORMAL)) {
+        element_type type = element_type_from_name(treebuilder, &token->data.tag.name);
+        close_implied_end_tags(treebuilder, type == OPTION ? OPTGROUP : UNKNOWN);
+    } else if (current_node(treebuilder) == OPTION) {
+        element_stack_pop_until(treebuilder, OPTION);
     }
 
     err = reconstruct_active_formatting_list(treebuilder);
@@ -1212,7 +1197,7 @@ hubbub_error process_0body_in_body(hubbub_treebuilder *treebuilder)
 {
     hubbub_error err = HUBBUB_OK;
 
-    if (!element_in_scope(treebuilder, BODY, false)) {
+    if (!element_in_scope(treebuilder, BODY, SCOPE_NORMAL)) {
         /** \todo parse error */
     } else {
         element_context *stack = treebuilder->context.element_stack;
@@ -1245,7 +1230,7 @@ hubbub_error process_0body_in_body(hubbub_treebuilder *treebuilder)
  */
 hubbub_error process_0container_in_body(hubbub_treebuilder *treebuilder, element_type type)
 {
-    if (!element_in_scope(treebuilder, type, false)) {
+    if (!element_in_scope(treebuilder, type, SCOPE_NORMAL)) {
         /** \todo parse error */
     } else {
         uint32_t popped = 0;
@@ -1286,7 +1271,7 @@ hubbub_error process_0form_in_body(hubbub_treebuilder *treebuilder)
         treebuilder->tree_handler->unref_node(treebuilder->tree_handler->ctx, treebuilder->context.form_element);
     treebuilder->context.form_element = NULL;
 
-    idx = element_in_scope(treebuilder, FORM, false);
+    idx = element_in_scope(treebuilder, FORM, SCOPE_NORMAL);
 
     if (idx == 0 || node == NULL || treebuilder->context.element_stack[idx].node != node) {
         /** \todo parse error */
@@ -1324,7 +1309,7 @@ hubbub_error process_0p_in_body(hubbub_treebuilder *treebuilder)
         /** \todo parse error */
     }
 
-    while (element_in_scope(treebuilder, P, false)) {
+    while (element_in_scope(treebuilder, P, SCOPE_BUTTON)) {
         hubbub_ns ns;
         element_type type;
         void *node;
@@ -1369,7 +1354,7 @@ hubbub_error process_0p_in_body(hubbub_treebuilder *treebuilder)
  */
 hubbub_error process_0dd_dt_li_in_body(hubbub_treebuilder *treebuilder, element_type type)
 {
-    if (!element_in_scope(treebuilder, type, false)) {
+    if (!element_in_scope(treebuilder, type, type == LI ? SCOPE_LIST_ITEM : SCOPE_NORMAL)) {
         /** \todo parse error */
     } else {
         uint32_t popped = 0;
@@ -1407,9 +1392,9 @@ hubbub_error process_0h_in_body(hubbub_treebuilder *treebuilder, element_type ty
     UNUSED(type);
 
     /** \todo optimise this */
-    if (element_in_scope(treebuilder, H1, false) || element_in_scope(treebuilder, H2, false) ||
-        element_in_scope(treebuilder, H3, false) || element_in_scope(treebuilder, H4, false) ||
-        element_in_scope(treebuilder, H5, false) || element_in_scope(treebuilder, H6, false)) {
+    if (element_in_scope(treebuilder, H1, SCOPE_NORMAL) || element_in_scope(treebuilder, H2, SCOPE_NORMAL) ||
+        element_in_scope(treebuilder, H3, SCOPE_NORMAL) || element_in_scope(treebuilder, H4, SCOPE_NORMAL) ||
+        element_in_scope(treebuilder, H5, SCOPE_NORMAL) || element_in_scope(treebuilder, H6, SCOPE_NORMAL)) {
         uint32_t popped = 0;
         element_type otype;
 
@@ -1607,7 +1592,8 @@ hubbub_error aa_find_and_validate_formatting_element(
     entry = aa_find_formatting_element(treebuilder, type);
 
     if (entry == NULL ||
-        (entry->stack_index != 0 && element_in_scope(treebuilder, entry->details.type, false) != entry->stack_index)) {
+        (entry->stack_index != 0 &&
+            element_in_scope(treebuilder, entry->details.type, SCOPE_NORMAL) != entry->stack_index)) {
         /** \todo parse error */
         return HUBBUB_OK;
     }
@@ -1974,14 +1960,14 @@ hubbub_error aa_insert_into_foster_parent(hubbub_treebuilder *treebuilder, void 
 
 
 /**
- * Process an applet, button, marquee, or object end tag as if in "in body"
+ * Process an applet, marquee, or object end tag as if in "in body"
  *
  * \param treebuilder  The treebuilder instance
  * \param type         The element type
  */
-hubbub_error process_0applet_button_marquee_object_in_body(hubbub_treebuilder *treebuilder, element_type type)
+hubbub_error process_0applet_marquee_object_in_body(hubbub_treebuilder *treebuilder, element_type type)
 {
-    if (!element_in_scope(treebuilder, type, false)) {
+    if (!element_in_scope(treebuilder, type, SCOPE_NORMAL)) {
         /** \todo parse error */
     } else {
         uint32_t popped = 0;
@@ -2054,7 +2040,7 @@ hubbub_error process_0generic_in_body(hubbub_treebuilder *treebuilder, element_t
             uint32_t popped = 0;
             element_type otype;
 
-            close_implied_end_tags(treebuilder, UNKNOWN);
+            close_implied_end_tags(treebuilder, type);
 
             while (treebuilder->context.current_node >= node) {
                 hubbub_ns ns;

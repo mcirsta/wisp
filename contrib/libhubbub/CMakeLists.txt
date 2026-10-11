@@ -30,8 +30,6 @@ add_library(hubbub ${WISP_LIB_TYPE}
 	src/treebuilder/in_table_body.c
 	src/treebuilder/in_row.c
 	src/treebuilder/in_cell.c
-	src/treebuilder/in_select.c
-	src/treebuilder/in_select_in_table.c
 	src/treebuilder/in_foreign_content.c
 	src/treebuilder/after_body.c
 	src/treebuilder/in_frameset.c

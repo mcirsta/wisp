@@ -41,21 +41,19 @@ static inline void clear_stack_table_context(hubbub_treebuilder *treebuilder)
  */
 static inline hubbub_error process_input_in_table(hubbub_treebuilder *treebuilder, const hubbub_token *token)
 {
-    hubbub_error err = HUBBUB_REPROCESS;
-    size_t i;
-
-    for (i = 0; i < token->data.tag.n_attributes; i++) {
-        hubbub_attribute *attr = &token->data.tag.attributes[i];
-
-        if (!hubbub_string_match_ci(attr->value.ptr, attr->value.len, (uint8_t *)"hidden", SLEN("hidden"))) {
+    for (size_t i = 0; i < token->data.tag.n_attributes; i++) {
+        const hubbub_attribute *attr = &token->data.tag.attributes[i];
+        if (!hubbub_string_match(attr->name.ptr, attr->name.len, (const uint8_t *)"type", SLEN("type")))
             continue;
-        }
+        if (!hubbub_string_match_ci(attr->value.ptr, attr->value.len, (const uint8_t *)"hidden", SLEN("hidden")))
+            return HUBBUB_REPROCESS;
 
-        /** \todo parse error */
-        err = insert_element(treebuilder, &token->data.tag, true);
+        /* "In table" handles hidden inputs even with an open select. They are
+         * void elements, and must neither remain on the stack nor be inserted
+         * again because another attribute happens to have the value hidden. */
+        return insert_element(treebuilder, &token->data.tag, false);
     }
-
-    return err;
+    return HUBBUB_REPROCESS;
 }
 
 
@@ -89,7 +87,6 @@ hubbub_error handle_in_table(hubbub_treebuilder *treebuilder, const hubbub_token
         break;
     case HUBBUB_TOKEN_START_TAG: {
         element_type type = element_type_from_name(treebuilder, &token->data.tag.name);
-        bool tainted = treebuilder->context.element_stack[current_table(treebuilder)].tainted;
 
         if (type == CAPTION) {
             clear_stack_table_context(treebuilder);
@@ -168,7 +165,7 @@ hubbub_error handle_in_table(hubbub_treebuilder *treebuilder, const hubbub_token
         } else if (type == TABLE) {
             /** \todo parse error */
 
-            if (!element_in_scope(treebuilder, TABLE, true))
+            if (!element_in_scope(treebuilder, TABLE, SCOPE_TABLE))
                 break;
 
             /* This should match "</table>" handling */
@@ -177,11 +174,11 @@ hubbub_error handle_in_table(hubbub_treebuilder *treebuilder, const hubbub_token
             reset_insertion_mode(treebuilder);
 
             err = HUBBUB_REPROCESS;
-        } else if (!tainted && (type == STYLE || type == SCRIPT)) {
+        } else if (type == STYLE || type == SCRIPT) {
             err = handle_in_head(treebuilder, token);
-        } else if (!tainted && type == INPUT) {
+        } else if (type == INPUT) {
             err = process_input_in_table(treebuilder, token);
-            handled = (err == HUBBUB_OK);
+            handled = (err != HUBBUB_REPROCESS);
         } else {
             handled = false;
         }
@@ -190,7 +187,7 @@ hubbub_error handle_in_table(hubbub_treebuilder *treebuilder, const hubbub_token
         element_type type = element_type_from_name(treebuilder, &token->data.tag.name);
 
         if (type == TABLE) {
-            if (!element_in_scope(treebuilder, TABLE, true))
+            if (!element_in_scope(treebuilder, TABLE, SCOPE_TABLE))
                 break;
 
             element_stack_pop_until(treebuilder, TABLE);

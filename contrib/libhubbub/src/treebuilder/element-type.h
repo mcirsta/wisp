@@ -68,8 +68,6 @@ typedef enum {
     NOFRAMES,
     NOSCRIPT,
     OL,
-    OPTGROUP,
-    OPTION,
     P,
     PARAM,
     PLAINTEXT,
@@ -117,6 +115,8 @@ typedef enum {
     /**< \todo Enumerate phrasing elements */
     LABEL,
     OUTPUT,
+    OPTGROUP,
+    OPTION,
     RP,
     RT,
     RUBY,

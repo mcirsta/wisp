@@ -39,16 +39,12 @@ static hubbub_error initialise_fragment(hubbub_treebuilder *tb, const hubbub_fra
             break;
         }
     }
-    /* Current HTML parses select contents in the normal insertion modes. The
-     * legacy IN_SELECT machinery must be migrated before accepting this context. */
-    if (type == SELECT)
-        return HUBBUB_INVALID;
     hubbub_tokeniser_optparams params;
     params.content_model.model = HUBBUB_CONTENT_MODEL_PCDATA;
     if (type == TITLE || type == TEXTAREA)
         params.content_model.model = HUBBUB_CONTENT_MODEL_RCDATA;
-    else if (type == STYLE || type == XMP || type == IFRAME || type == NOEMBED || type == NOFRAMES ||
-        type == SCRIPT || type == PLAINTEXT || (type == NOSCRIPT && tb->context.enable_scripting))
+    else if (type == STYLE || type == XMP || type == IFRAME || type == NOEMBED || type == NOFRAMES || type == SCRIPT ||
+        type == PLAINTEXT || (type == NOSCRIPT && tb->context.enable_scripting))
         /* With no preceding start tag, RAWTEXT/script data have no appropriate
          * end tag. The fragment algorithm explicitly permits PLAINTEXT here. */
         params.content_model.model = HUBBUB_CONTENT_MODEL_PLAINTEXT;
@@ -280,10 +276,6 @@ hubbub_error hubbub_treebuilder_token_handler(const hubbub_token *token, void *p
             break;
             mode(IN_CELL) err = handle_in_cell(treebuilder, token);
             break;
-            mode(IN_SELECT) err = handle_in_select(treebuilder, token);
-            break;
-            mode(IN_SELECT_IN_TABLE) err = handle_in_select_in_table(treebuilder, token);
-            break;
             mode(IN_FOREIGN_CONTENT) err = handle_in_foreign_content(treebuilder, token);
             break;
             mode(AFTER_BODY) err = handle_after_body(treebuilder, token);
@@ -421,42 +413,41 @@ hubbub_error parse_generic_rcdata(hubbub_treebuilder *treebuilder, const hubbub_
 }
 
 /**
- * Determine if an element is in (table) scope
+ * Find an HTML element in the requested scope (HTML, "stack of open elements").
+ * The root is never returned: zero denotes no match.
  *
- * \param treebuilder  Treebuilder to look in
- * \param type         Element type to find
- * \param in_table     Whether we're looking in table scope
- * \return Element stack index, or 0 if not in scope
+ * Keep this separate from the old element-type categories, which also serve
+ * formatting-list bookkeeping and include BUTTON among the scoping elements.
  */
-uint32_t element_in_scope(hubbub_treebuilder *treebuilder, element_type type, bool in_table)
+uint32_t element_in_scope(hubbub_treebuilder *treebuilder, element_type type, element_scope scope)
 {
-    uint32_t node;
-
-    if (treebuilder->context.element_stack == NULL)
+    const element_context *stack = treebuilder->context.element_stack;
+    if (stack == NULL)
         return 0;
 
-    assert((signed)treebuilder->context.current_node >= 0);
+    for (uint32_t node = treebuilder->context.current_node; node > 0; node--) {
+        hubbub_ns ns = stack[node].ns;
+        element_type current = stack[node].type;
 
-    for (node = treebuilder->context.current_node; node > 0; node--) {
-        hubbub_ns node_ns = treebuilder->context.element_stack[node].ns;
-        element_type node_type = treebuilder->context.element_stack[node].type;
-
-        if (node_type == type)
-            return node;
-
-        if (node_type == TABLE)
-            break;
-
-        /* The list of element types given in the spec here are the
-         * scoping elements excluding TABLE and HTML. TABLE is handled
-         * in the previous conditional and HTML should only occur
-         * as the first node in the stack, which is never processed
-         * in this loop. */
-        if (!in_table && (is_scoping_element(node_type) || (node_type == FOREIGNOBJECT && node_ns == HUBBUB_NS_SVG))) {
+        if (ns == HUBBUB_NS_HTML) {
+            if (current == type)
+                return node;
+            if (current == TABLE || current == HTML)
+                break;
+            /* TEMPLATE belongs here once template parsing is implemented. */
+            if (scope != SCOPE_TABLE &&
+                (current == APPLET || current == CAPTION || current == TD || current == TH || current == MARQUEE ||
+                    current == OBJECT || current == SELECT || (scope == SCOPE_BUTTON && current == BUTTON) ||
+                    (scope == SCOPE_LIST_ITEM && (current == OL || current == UL))))
+                break;
+        } else if (scope != SCOPE_TABLE &&
+            ((ns == HUBBUB_NS_MATHML &&
+                 (current == MI || current == MO || current == MN || current == MS || current == MTEXT ||
+                     current == ANNOTATION_XML)) ||
+                (ns == HUBBUB_NS_SVG && (current == FOREIGNOBJECT || current == DESC || current == TITLE)))) {
             break;
         }
     }
-
     return 0;
 }
 
@@ -740,12 +731,9 @@ void reset_insertion_mode(hubbub_treebuilder *treebuilder)
         }
 
         bool last = node == 0;
-        element_type type =
-            last && treebuilder->context.fragment ? treebuilder->context.fragment_type : stack[node].type;
+        element_type type = last && treebuilder->context.fragment ? treebuilder->context.fragment_type
+                                                                  : stack[node].type;
         switch (type) {
-        case SELECT:
-            /* Legacy document parsing still uses IN_SELECT / IN_SELECT_IN_TABLE. */
-            break;
         case TD:
         case TH:
             if (last)

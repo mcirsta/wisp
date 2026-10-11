@@ -27,7 +27,7 @@ static inline void close_cell(hubbub_treebuilder *treebuilder)
 
     element_type type;
 
-    if (element_in_scope(treebuilder, TD, true)) {
+    if (element_in_scope(treebuilder, TD, SCOPE_TABLE)) {
         type = TD;
     } else {
         type = TH;
@@ -79,7 +79,7 @@ hubbub_error handle_in_cell(hubbub_treebuilder *treebuilder, const hubbub_token 
         element_type type = element_type_from_name(treebuilder, &token->data.tag.name);
 
         if (type == TH || type == TD) {
-            if (element_in_scope(treebuilder, type, true)) {
+            if (element_in_scope(treebuilder, type, SCOPE_TABLE)) {
                 hubbub_ns ns;
                 element_type otype = UNKNOWN;
                 void *node;
@@ -102,7 +102,7 @@ hubbub_error handle_in_cell(hubbub_treebuilder *treebuilder, const hubbub_token 
         } else if (type == BODY || type == CAPTION || type == COL || type == COLGROUP || type == HTML) {
             /** \todo parse error */
         } else if (type == TABLE || type == TBODY || type == TFOOT || type == THEAD || type == TR) {
-            if (element_in_scope(treebuilder, type, true)) {
+            if (element_in_scope(treebuilder, type, SCOPE_TABLE)) {
                 close_cell(treebuilder);
                 err = HUBBUB_REPROCESS;
             } else {

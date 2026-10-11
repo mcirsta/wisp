@@ -70,7 +70,7 @@ hubbub_error handle_in_caption(hubbub_treebuilder *treebuilder, const hubbub_tok
         element_type otype = UNKNOWN;
         void *node;
 
-        if (!element_in_scope(treebuilder, CAPTION, true))
+        if (!element_in_scope(treebuilder, CAPTION, SCOPE_TABLE))
             return HUBBUB_OK;
 
         close_implied_end_tags(treebuilder, UNKNOWN);
