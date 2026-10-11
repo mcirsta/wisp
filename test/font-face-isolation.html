@@ -10,6 +10,11 @@
 @font-face { font-family: CollisionB; src: url(fonts/isolation-b.ttf); }
 @font-face { font-family: Remapped; src: url(fonts/weight-300.ttf); font-weight: bold; }
 @font-face { font-family: Remapped; src: url(fonts/weight-900.ttf); font-weight: normal; }
+/* CSS Fonts: identifiers are joined by a space, including across comments;
+   escaped spaces inside an identifier remain part of the family name. Use
+   opposite quoted/unquoted forms so both sides cannot hide the same bug. */
+@font-face { font-family: "Joined Name "; src: url(fonts/isolation-a.woff2); }
+@font-face { font-family: Joined/**/Descriptor\20 ; src: url(fonts/isolation-b.ttf); }
 body { margin: 20px; font: 20px/30px sans-serif; color: black; background: white; }
 span { display: inline-block; }
 #reading { font-family: Reading; }
@@ -18,6 +23,8 @@ span { display: inline-block; }
 #b { font-family: CollisionB; }
 #regular { font-family: Remapped; }
 #bold { font-family: Remapped; font-weight: bold; }
+#joined-name { font-family: Joined/**/Name\20 ; }
+#joined-descriptor { font-family: "Joined Descriptor "; }
 </style>
 <p><span id="reading">MMMM</span></p>
 <p><span id="heavy">MMMM</span></p>
@@ -25,3 +32,5 @@ span { display: inline-block; }
 <p><span id="b">MMMM</span></p>
 <p><span id="regular">MMMM</span></p>
 <p><span id="bold">MMMM</span></p>
+<p><span id="joined-name">MMMM</span></p>
+<p><span id="joined-descriptor">MMMM</span></p>

@@ -31,6 +31,7 @@ enum css_declaration_value_kind {
     CSS_DECL_VALUE_ASPECT_RATIO,
     CSS_DECL_VALUE_BORDER_SPACING,
     CSS_DECL_VALUE_CLIP,
+    CSS_DECL_VALUE_FONT_FAMILY,
 };
 
 /* Immutable registration shared by the parser, variable resolver and specified

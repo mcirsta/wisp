@@ -12,21 +12,14 @@
 #include <string.h>
 
 #include "parse/properties/utils.h"
+#include "utils/css_utils.h"
 #include "parse/propstrings.h"
 #include "select/font_face.h"
 
 static bool font_rule_font_family_reserved(css_language *c, const css_token *ident)
 {
-    bool match;
-
-    return (lwc_string_caseless_isequal(ident->idata, c->strings[SERIF], &match) == lwc_error_ok && match) ||
-        (lwc_string_caseless_isequal(ident->idata, c->strings[SANS_SERIF], &match) == lwc_error_ok && match) ||
-        (lwc_string_caseless_isequal(ident->idata, c->strings[CURSIVE], &match) == lwc_error_ok && match) ||
-        (lwc_string_caseless_isequal(ident->idata, c->strings[FANTASY], &match) == lwc_error_ok && match) ||
-        (lwc_string_caseless_isequal(ident->idata, c->strings[MONOSPACE], &match) == lwc_error_ok && match) ||
-        (lwc_string_caseless_isequal(ident->idata, c->strings[INHERIT], &match) == lwc_error_ok && match) ||
-        (lwc_string_caseless_isequal(ident->idata, c->strings[INITIAL], &match) == lwc_error_ok && match) ||
-        (lwc_string_caseless_isequal(ident->idata, c->strings[DEFAULT], &match) == lwc_error_ok && match);
+    (void)c;
+    return css__is_font_family_generic(ident->idata);
 }
 
 static css_error
@@ -148,7 +141,7 @@ static css_error font_face_src_parse_spec_or_name(css_language *c, const parseru
         lwc_string_caseless_isequal(token->idata, c->strings[LOCAL], &match) == lwc_error_ok && match) {
         consumeWhitespace(vector, ctx);
 
-        error = css__ident_list_or_string_to_string(c, vector, ctx, NULL, location);
+        error = css__ident_list_or_string_to_string(c, vector, ctx, font_rule_font_family_reserved, location);
         if (error != CSS_OK)
             return error;
 
@@ -201,6 +194,7 @@ font_face_parse_src(css_language *c, const parserutils_vector *vector, int32_t *
          */
         new_srcs = realloc(srcs, (n_srcs + 1) * sizeof(css_font_face_src));
         if (new_srcs == NULL) {
+            lwc_string_unref(location);
             error = CSS_NOMEM;
             goto cleanup;
         }
@@ -220,8 +214,9 @@ font_face_parse_src(css_language *c, const parserutils_vector *vector, int32_t *
 cleanup:
     if (error != CSS_OK) {
         *ctx = orig_ctx;
-        if (srcs != NULL)
-            free(srcs);
+        for (uint32_t i = 0; i < n_srcs; i++)
+            lwc_string_unref(srcs[i].location);
+        free(srcs);
     }
 
     return error;

@@ -1045,6 +1045,56 @@ saved eBihoreanul `style.opacity` blocker are still pending. Remaining work
 includes color/font/math value coverage, alias/aggregate handling, declaration
 block serialization, CSSOM writes and DOM integration.
 
+### Font-family values and shared name parsing (2026-10-11)
+
+Structured geometry serialization and length validation are committed as
+`c80a8340`. Native CSSOM value serialization now handles named font families and
+the five generic families supported by the renderer. Generated metadata selects
+the serializer. Named families retain case and serialize as escaped strings;
+generics remain lowercase keywords. List order, duplicates and quoted keyword
+names are preserved, following
+[CSSOM value serialization](https://drafts.csswg.org/cssom/#serialize-a-css-value).
+The output reuses the existing measured string writer, with no temporary joined
+name or allocation per family during serialization.
+
+The shared parser now joins identifier **tokens** with one space rather than
+joining only where a whitespace token occurred and trimming the resulting string.
+This fixes `Open/**/Sans` becoming `OpenSans` and escaped trailing spaces being
+discarded. It applies to `font-family`, the family inside `font`, `@font-face`
+family descriptors and `local()` names, following
+[CSS Fonts family-name processing](https://drafts.csswg.org/css-fonts-4/#family-name-syntax)
+and [local font names](https://drafts.csswg.org/css-fonts-4/#local-font-fallback).
+Single identifiers reuse their interned string; longer names use one measured
+temporary allocation. Failures leave the parser position unchanged.
+
+Custom-identifier exclusions are shared with counter parsing: CSS-wide keywords
+and `default` cannot be unquoted name components. Quoted names remain valid.
+`local()` now also rejects the existing generic-family keywords, consistently
+with the family descriptor. Font-source parsing releases both an untransferred
+location and earlier collected locations when allocation or a later source fails.
+
+Validation: 78 targeted native CSS/QuickJS/font suites pass under Debug
+ASan/UBSan/LeakSanitizer, all 19 selected Release suites pass, and all 20 targeted
+Qt integration suites pass. The declaration suite runs 440 Debug / 460 Release
+checks, including whole/chunked parsing, canonical round trips, native font-name
+storage, invalid names, long names, allocation failure/retry and final interned
+string cleanup. The font-face capture fixture uses opposite quoted/unquoted
+spellings and verifies known glyph widths, so matching mistakes cannot silently
+pass through font fallback. Both builds are warning-free. No GTK tests were run.
+
+Scope remains explicit: the `font` shorthand's value expansion, modern generic
+families and functional font-family forms are not completed here. The renderer
+currently treats newer generic keywords such as `system-ui` as named families;
+the private serializer returns unsupported for these unquoted names rather than
+incorrectly quoting them. Their native representation and selection need a later
+increment. Quoted names such as `"system-ui"` serialize normally.
+
+The historical Duktape style getter was checked again and remains only an empty
+object for a Modernizr probe. No placeholder is copied. Continue the remaining
+color/math values, font shorthand/modern generics, alias/aggregate handling and
+declaration-block writes before connecting the live `element.style` wrapper.
+The saved eBihoreanul `style.opacity` blocker remains pending.
+
 ## Assessment
 
 Keep QuickJS-ng and libdom. The missing part is the browser binding and execution

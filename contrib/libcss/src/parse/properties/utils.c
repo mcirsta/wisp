@@ -26,19 +26,11 @@
 #endif
 
 
-/* CSS Values <custom-ident> excludes CSS-wide keywords and default; CSS Lists
- * additionally excludes none. Check decoded identifiers without allocating or
- * locale folding, including keywords whose cascade support is still pending. */
+/* CSS Lists <counter-name> adds none to the custom-identifier exclusions. */
 bool css__is_counter_name(const css_token *token)
 {
-    if (token == NULL || token->type != CSS_TOKEN_IDENT)
-        return false;
-    static const char *const reserved[] = {"inherit", "initial", "unset", "revert", "revert-layer", "default", "none"};
-    for (size_t i = 0; i < sizeof(reserved) / sizeof(reserved[0]); i++) {
-        if (css__keyword_equal(token->idata, reserved[i]))
-            return false;
-    }
-    return true;
+    return token != NULL && token->type == CSS_TOKEN_IDENT && css__is_custom_ident(token->idata) &&
+        !css__keyword_equal(token->idata, "none");
 }
 
 
@@ -2000,74 +1992,56 @@ css_error css__ident_list_or_string_to_string(css_language *c, const parserutils
 css_error css__ident_list_to_string(css_language *c, const parserutils_vector *vector, int32_t *ctx,
     bool (*reserved)(css_language *c, const css_token *ident), lwc_string **result)
 {
-    int32_t orig_ctx = *ctx;
+    int32_t start = *ctx, end = start;
+    size_t length = 0, count = 0;
     const css_token *token;
-    css_error error = CSS_OK;
-    parserutils_buffer *buffer;
-    parserutils_error perror;
-    lwc_string *interned;
-    lwc_error lerror;
-
-    perror = parserutils_buffer_create(&buffer);
-    if (perror != PARSERUTILS_OK)
-        return css_error_from_parserutils_error(perror);
-
-    /* We know this token exists, and is an IDENT */
-    token = parserutils_vector_iterate(vector, ctx);
-
-    /* Consume all subsequent IDENT or S tokens */
-    bool last_space = false;
-    while (token != NULL && (token->type == CSS_TOKEN_IDENT || token->type == CSS_TOKEN_S)) {
-        if (token->type == CSS_TOKEN_IDENT) {
-            /* IDENT -- if reserved, reject style */
-            if (reserved != NULL && reserved(c, token)) {
-                error = CSS_INVALID;
-                goto cleanup;
-            }
-
-            perror = parserutils_buffer_append(
-                buffer, (const uint8_t *)lwc_string_data(token->idata), lwc_string_length(token->idata));
-            last_space = false;
-        } else {
-            /* S */
-            if (last_space == false) {
-                perror = parserutils_buffer_append(buffer, (const uint8_t *)" ", 1);
-                last_space = true;
-            }
+    /* Join identifier tokens, not whitespace tokens: comments may separate
+     * identifiers without producing S, and spaces inside an escape are data.
+     * Measure without changing ctx so invalid input/allocation failure is atomic. */
+    while ((token = parserutils_vector_peek(vector, end)) != NULL) {
+        if (token->type == CSS_TOKEN_S && count != 0) {
+            end++;
+            continue;
         }
-
-        if (perror != PARSERUTILS_OK) {
-            error = css_error_from_parserutils_error(perror);
-            goto cleanup;
-        }
-
-        token = parserutils_vector_iterate(vector, ctx);
+        if (token->type != CSS_TOKEN_IDENT)
+            break;
+        if (!css__is_custom_ident(token->idata) || (reserved != NULL && reserved(c, token)))
+            return CSS_INVALID;
+        size_t part = lwc_string_length(token->idata);
+        if (length > SIZE_MAX - (count != 0) || part > SIZE_MAX - length - (count != 0))
+            return CSS_NOMEM;
+        length += part + (count != 0);
+        count++;
+        end++;
     }
-
-    /* Rewind context by one step if we consumed an unacceptable token */
-    if (token != NULL)
-        *ctx = *ctx - 1;
-
-    /* Strip trailing whitespace */
-    while (buffer->length > 0 && buffer->data[buffer->length - 1] == ' ')
-        buffer->length--;
-
-    /* Intern the buffer contents */
-    lerror = lwc_intern_string((char *)buffer->data, buffer->length, &interned);
-    if (lerror != lwc_error_ok) {
-        error = css_error_from_lwc_error(lerror);
-        goto cleanup;
+    if (count == 0)
+        return CSS_INVALID;
+    if (count == 1) {
+        token = parserutils_vector_peek(vector, start);
+        *result = lwc_string_ref(token->idata);
+        *ctx = end;
+        return CSS_OK;
     }
-
-    *result = interned;
-
-cleanup:
-    parserutils_buffer_destroy(buffer);
-
-    if (error != CSS_OK)
-        *ctx = orig_ctx;
-
-    return error;
+    char *buffer = malloc(length);
+    if (buffer == NULL)
+        return CSS_NOMEM;
+    size_t position = 0;
+    for (int32_t i = start; i < end; i++) {
+        token = parserutils_vector_peek(vector, i);
+        if (token->type != CSS_TOKEN_IDENT)
+            continue;
+        if (position != 0)
+            buffer[position++] = ' ';
+        size_t part = lwc_string_length(token->idata);
+        memcpy(buffer + position, lwc_string_data(token->idata), part);
+        position += part;
+    }
+    lwc_error error = lwc_intern_string(buffer, length, result);
+    free(buffer);
+    if (error != lwc_error_ok)
+        return css_error_from_lwc_error(error);
+    *ctx = end;
+    return CSS_OK;
 }
 
 /**

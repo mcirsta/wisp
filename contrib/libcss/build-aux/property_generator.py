@@ -269,7 +269,8 @@ class TomlPropertyReader:
             value_kind = prop.get('declaration_value', 'none')
             if value_kind not in ('none', 'number', 'length', 'number_length', 'keyword', 'pair_length',
                                   'quad_length', 'pair_keyword', 'quad_keyword', 'uri', 'image_list', 'keyword_list',
-                                  'content', 'string_list', 'counter_list', 'aspect_ratio', 'border_spacing', 'clip'):
+                                  'content', 'string_list', 'counter_list', 'aspect_ratio', 'border_spacing', 'clip',
+                                  'font_family'):
                 raise ValueError(f"{name}: unknown declaration_value {value_kind}")
             if value_kind != 'none':
                 expected = {'pair_length': 2, 'quad_length': 4, 'pair_keyword': 2, 'quad_keyword': 4}.get(value_kind, 0)

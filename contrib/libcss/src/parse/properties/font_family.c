@@ -12,6 +12,7 @@
 #include "bytecode/opcodes.h"
 #include "parse/properties/properties.h"
 #include "parse/properties/utils.h"
+#include "utils/css_utils.h"
 
 /**
  * Determine if a given font-family ident is reserved
@@ -22,13 +23,8 @@
  */
 static bool font_family_reserved(css_language *c, const css_token *ident)
 {
-    bool match;
-
-    return (lwc_string_caseless_isequal(ident->idata, c->strings[SERIF], &match) == lwc_error_ok && match) ||
-        (lwc_string_caseless_isequal(ident->idata, c->strings[SANS_SERIF], &match) == lwc_error_ok && match) ||
-        (lwc_string_caseless_isequal(ident->idata, c->strings[CURSIVE], &match) == lwc_error_ok && match) ||
-        (lwc_string_caseless_isequal(ident->idata, c->strings[FANTASY], &match) == lwc_error_ok && match) ||
-        (lwc_string_caseless_isequal(ident->idata, c->strings[MONOSPACE], &match) == lwc_error_ok && match);
+    (void)c;
+    return css__is_font_family_generic(ident->idata);
 }
 
 /**
@@ -83,16 +79,10 @@ css_error css__parse_font_family(css_language *c, const parserutils_vector *vect
     int32_t orig_ctx = *ctx;
     css_error error;
     const css_token *token;
-    bool match;
+    enum flag_value flag_value;
 
-    /* [ IDENT+ | STRING ] [ ',' [ IDENT+ | STRING ] ]* | IDENT(inherit)
-     *
-     * In the case of IDENT+, any whitespace between tokens is collapsed to
-     * a single space
-     *
-     * \todo Mozilla makes the comma optional.
-     * Perhaps this is a quirk we should inherit?
-     */
+    /* [ <custom-ident>+ | STRING | <generic-family> ]# | <CSS-wide-keyword>.
+     * Identifier sequences are joined with one space between each token. */
 
     token = parserutils_vector_iterate(vector, ctx);
     if (token == NULL || (token->type != CSS_TOKEN_IDENT && token->type != CSS_TOKEN_STRING)) {
@@ -100,22 +90,9 @@ css_error css__parse_font_family(css_language *c, const parserutils_vector *vect
         return CSS_INVALID;
     }
 
-    if (token->type == CSS_TOKEN_IDENT &&
-        (lwc_string_caseless_isequal(token->idata, c->strings[INHERIT], &match) == lwc_error_ok && match)) {
-        error = css_stylesheet_style_inherit(result, CSS_PROP_FONT_FAMILY);
-
-    } else if ((token->type == CSS_TOKEN_IDENT) &&
-        (lwc_string_caseless_isequal(token->idata, c->strings[INITIAL], &match) == lwc_error_ok && match)) {
-        error = css_stylesheet_style_initial(result, CSS_PROP_FONT_FAMILY);
-
-    } else if ((token->type == CSS_TOKEN_IDENT) &&
-        (lwc_string_caseless_isequal(token->idata, c->strings[REVERT], &match) == lwc_error_ok && match)) {
-        error = css_stylesheet_style_revert(result, CSS_PROP_FONT_FAMILY);
-
-    } else if ((token->type == CSS_TOKEN_IDENT) &&
-        (lwc_string_caseless_isequal(token->idata, c->strings[UNSET], &match) == lwc_error_ok && match)) {
-        error = css_stylesheet_style_unset(result, CSS_PROP_FONT_FAMILY);
-
+    flag_value = get_css_flag_value(c, token);
+    if (flag_value != FLAG_VALUE__NONE) {
+        error = css_stylesheet_style_flag_value(result, flag_value, CSS_PROP_FONT_FAMILY);
     } else {
         *ctx = orig_ctx;
 

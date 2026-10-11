@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <libcss/font_face.h>
 
 #include "parse/declarations.h"
 #include "parse/declaration_order.h"
@@ -13,6 +14,7 @@
 #include "parse/property.h"
 #include "stylesheet.h"
 #include "bytecode/opcodes.h"
+#include "utils/css_utils.h"
 
 #ifdef WISP_TEST_ALLOC_FAILURE
 #include "test/malloc_fig.h"
@@ -628,7 +630,7 @@ START_TEST(test_allocation_failure)
                                "red red red red red red red red red red red red red red red red red red;"
                                "content:'a\\\r\nb' attr(Title) counters(Chapter, '.', UPPER-ROMAN);"
                                "counter-reset:Chapter 2 Section; counter-increment:Chapter; quotes:'«' '»';"
-                               "overflow:hidden auto!important;"
+                               "overflow:hidden auto!important; font-family:One,Two/**/Words,Three\\20 ;"
                                "background-image:url(\\20 file\\22 ),url('other\\1 image');";
     /* Grow the captured-source buffer after a retained declaration exists. */
     char css[16384];
@@ -636,7 +638,7 @@ START_TEST(test_allocation_failure)
     memset(css + pos, 'c', 8192);
     pos += 8192;
     snprintf(css + pos, sizeof(css) - pos, "*/%s", declarations);
-    const size_t expected = 18;
+    const size_t expected = 19;
     /* Keep shared property strings alive, so each iteration tests the same
      * allocation sequence instead of global string-cache initialization. */
     css_stylesheet *keeper;
@@ -799,7 +801,7 @@ static const struct {
     {"margin:1px calc(2px + 1em)", "margin", NULL},
     {"margin:1px calc(2px + 1em)", "margin-top", NULL},
     {"color:rgb(1, 2, 3)", "color", NULL},
-    {"font-family:'Example'", "font-family", NULL},
+    {"font-family:'Example'", "font-family", "\"Example\""},
     {"display: InLiNe-BlOcK", "display", "inline-block"},
     {"display: \\66 lex", "display", "flex"},
     {"visibility: HiDdEn !important; visibility:visible", "visibility", "hidden"},
@@ -980,6 +982,53 @@ static const struct {
     {"margin-left:2px;margin-left:-.00000001", "margin-left", "2px"},
     {"margin-left:-.00000001px", "margin-left", "0px"},
 
+    /* CSSOM named-family strings retain case and decoded spaces. */
+    {"font-family:Arial", "font-family", "\"Arial\""},
+    {"font-family:Open Sans", "font-family", "\"Open Sans\""},
+    {"font-family:Open/**/Sans", "font-family", "\"Open Sans\""},
+    {"font-family:Open\t/**/\nSans", "font-family", "\"Open Sans\""},
+    {"font-family:Open\\ Sans", "font-family", "\"Open Sans\""},
+    {"font-family:Open\\20 ", "font-family", "\"Open \""},
+    {"font-family:Open\\20 /**/Sans\\20 ", "font-family", "\"Open  Sans \""},
+    {"font-family:\\20 Open\\20 ", "font-family", "\" Open \""},
+    {"font-family:\"A  B\"", "font-family", "\"A  B\""},
+    {"font-family:''", "font-family", "\"\""},
+    {"font-family:a\\22 b\\5c c\\a d", "font-family", "\"a\\\"b\\\\c\\a d\""},
+    {"font-family:Știri 字体", "font-family", "\"Știri 字体\""},
+    {"font-family:\\31 2 \\2d -Name", "font-family", "\"12 --Name\""},
+    {"font-family:none", "font-family", "\"none\""},
+    {"font-family:normal", "font-family", "\"normal\""},
+    {"font-family:SERIF,SaNs-SeRiF,CURSIVE,Fantasy,MONOSPACE", "font-family",
+        "serif, sans-serif, cursive, fantasy, monospace"},
+    {"font-family:\"serif\",serif,Example,\"Arial\",Example", "font-family",
+        "\"serif\", serif, \"Example\", \"Arial\", \"Example\""},
+    {"font-family:\"default\", \"inherit\", \"initial\", \"unset\", \"revert-layer\"", "font-family",
+        "\"default\", \"inherit\", \"initial\", \"unset\", \"revert-layer\""},
+    {"font-family:\\73 erif, \\41 rial", "font-family", "serif, \"Arial\""},
+    {"font-family:InHeRiT", "font-family", "inherit"},
+    {"font-family:INITIAL", "font-family", "initial"},
+    {"font-family:UnSeT", "font-family", "unset"},
+    {"font-family:ReVeRt", "font-family", "revert"},
+    {"font-family:var(--Fonts, Open Sans)", "font-family", "var(--Fonts, Open Sans)"},
+    {"font-family:\"system-ui\"", "font-family", "\"system-ui\""},
+    {"font-family:Kept; font-family:A B C,", "font-family", "\"Kept\""},
+    {"font-family:Kept; font-family:A, ,B", "font-family", "\"Kept\""},
+    {"font-family:Kept; font-family:\"A\" B", "font-family", "\"Kept\""},
+    {"font-family:Kept; font-family:A \"B\"", "font-family", "\"Kept\""},
+    {"font-family:Kept; font-family:A 2", "font-family", "\"Kept\""},
+    {"font-family:Kept; font-family:A,inherit", "font-family", "\"Kept\""},
+    {"font-family:Kept; font-family:default", "font-family", "\"Kept\""},
+    {"font-family:Kept; font-family:Foo default", "font-family", "\"Kept\""},
+    {"font-family:Kept; font-family:Foo serif", "font-family", "\"Kept\""},
+    {"font-family:system-ui", "font-family", NULL},
+    {"font-family:ui-serif", "font-family", NULL},
+    {"font-family:ui-sans-serif", "font-family", NULL},
+    {"font-family:ui-monospace", "font-family", NULL},
+    {"font-family:ui-rounded", "font-family", NULL},
+    {"font-family:math", "font-family", NULL},
+    {"font-family:emoji", "font-family", NULL},
+    {"font-family:fangsong", "font-family", NULL},
+
 };
 enum { VALUE_CASE_COUNT = sizeof(value_cases) / sizeof(value_cases[0]) };
 
@@ -1066,6 +1115,153 @@ START_TEST(test_reserved_counter_names)
             css__declaration_list_destroy(list);
         }
     }
+}
+END_TEST
+
+
+/* Inspect rendering strings too: a successful serializer alone must not hide a
+ * disagreement between the native font name and the CSSOM name. */
+START_TEST(test_font_name_storage)
+{
+    static const struct { const char *value, *name; } forms[] = {
+        {"Open/**/Sans", "Open Sans"}, {"Open\tSans", "Open Sans"},
+        {"Open\\20 ", "Open "}, {"Open\\20 /**/Sans\\20 ", "Open  Sans "},
+        {"\\20 Open\\20 ", " Open "}, {"''", ""}, {"'A  B'", "A  B"},
+        {"\\31 2 \\2d -Name", "12 --Name"}, {"Știri 字体", "Știri 字体"},
+    };
+    static const char *const prefixes[] = {"font-family:", "font:italic 16px/1.2 "};
+    for (size_t f = 0; f < N_ELEMENTS(forms); f++) {
+        for (size_t p = 0; p < N_ELEMENTS(prefixes); p++) {
+            char css[160];
+            snprintf(css, sizeof(css), "%s%s", prefixes[p], forms[f].value);
+            css_declaration_list *list = parse(css, _i != 0);
+            const css_stylesheet *sheet = css__declaration_list_sheet(list);
+            ck_assert_msg(css__declaration_list_count(list) == 1 && sheet->string_vector_c == 1,
+                "font-name storage: %s", css);
+            ck_assert_str_eq(lwc_string_data(sheet->string_vector[0]), forms[f].name);
+            css__declaration_list_destroy(list);
+        }
+    }
+}
+END_TEST
+
+static css_stylesheet *font_sheet(const char *css, bool chunks)
+{
+    css_stylesheet_params full = params;
+    full.inline_style = false;
+    css_stylesheet *sheet;
+    ck_assert_int_eq(css_stylesheet_create(&full, &sheet), CSS_OK);
+    size_t length = strlen(css);
+    if (chunks) {
+        for (size_t i = 0; i < length; i++)
+            check_append(css_stylesheet_append_data(sheet, (const uint8_t *)css + i, 1));
+    } else {
+        check_append(css_stylesheet_append_data(sheet, (const uint8_t *)css, length));
+    }
+    ck_assert_int_eq(css_stylesheet_data_done(sheet), CSS_OK);
+    return sheet;
+}
+
+static const css_font_face *only_font_face(const css_stylesheet *sheet)
+{
+    ck_assert_ptr_nonnull(sheet->rule_list);
+    ck_assert_int_eq(sheet->rule_list->type, CSS_RULE_FONT_FACE);
+    ck_assert_ptr_null(sheet->rule_list->next);
+    return ((const css_rule_font_face *)sheet->rule_list)->font_face;
+}
+
+static void check_font_face_names(const css_font_face *face, const char *family, const char *local)
+{
+    lwc_string *name;
+    ck_assert_int_eq(css_font_face_get_font_family(face, &name), CSS_OK);
+    ck_assert_ptr_nonnull(name);
+    ck_assert_str_eq(lwc_string_data(name), family);
+    uint32_t count;
+    ck_assert_int_eq(css_font_face_count_srcs(face, &count), CSS_OK);
+    ck_assert_uint_eq(count, 1);
+    const css_font_face_src *src;
+    ck_assert_int_eq(css_font_face_get_src(face, 0, &src), CSS_OK);
+    ck_assert_int_eq(css_font_face_src_location_type(src), CSS_FONT_FACE_LOCATION_TYPE_LOCAL);
+    ck_assert_int_eq(css_font_face_src_get_location(src, &name), CSS_OK);
+    ck_assert_str_eq(lwc_string_data(name), local);
+}
+
+START_TEST(test_font_face_names)
+{
+    css_stylesheet *sheet = font_sheet(
+        "@font-face{font-family:Open/**/Sans\\20 ;src:local(\\20 Open/**/Sans\\20 )}", _i != 0);
+    check_font_face_names(only_font_face(sheet), "Open Sans ", " Open Sans ");
+    css_stylesheet_destroy(sheet);
+    /* Quoting distinguishes a named font from a keyword. */
+    sheet = font_sheet("@font-face{font-family:'serif';src:local('inherit')}", _i != 0);
+    check_font_face_names(only_font_face(sheet), "serif", "inherit");
+    css_stylesheet_destroy(sheet);
+    /* A later invalid source must release already collected source strings. */
+    sheet = font_sheet("@font-face{font-family:Kept;src:local(Kept);"
+        "src:local(Temporary),url(temporary.woff),local(inherit)}", _i != 0);
+    css_stylesheet_destroy(sheet);
+}
+END_TEST
+
+START_TEST(test_reserved_font_names)
+{
+    static const char *const names[] = {"inherit", "INITIAL", "unset", "revert", "revert-layer", "DEFAULT",
+        "\\69 nherit", "de\\66 ault"};
+    static const char *const forms[] = {"A %s", "%s A", "A,%s", "%s,A"};
+    for (size_t n = 0; n < N_ELEMENTS(names); n++) {
+        for (size_t f = 0; f < N_ELEMENTS(forms); f++) {
+            char value[80], css[240];
+            snprintf(value, sizeof(value), forms[f], names[n]);
+            snprintf(css, sizeof(css), "font-family:Kept; font-family:%s; font:16px %s", value, value);
+            css_declaration_list *list = parse(css, _i != 0);
+            ck_assert_msg(css__declaration_list_count(list) == 1, "accepted invalid family: %s", css);
+            css__declaration_list_destroy(list);
+        }
+        /* An invalid descriptor must not replace the previous valid value. */
+        char css[240];
+        snprintf(css, sizeof(css), "@font-face{font-family:Kept;src:local(Kept);"
+            "font-family:%s;src:local(%s)}", names[n], names[n]);
+        css_stylesheet *sheet = font_sheet(css, _i != 0);
+        check_font_face_names(only_font_face(sheet), "Kept", "Kept");
+        css_stylesheet_destroy(sheet);
+    }
+    static const char *const generics[] = {"serif", "sans-serif", "cursive", "fantasy", "monospace"};
+    for (size_t g = 0; g < N_ELEMENTS(generics); g++) {
+        char css[240];
+        snprintf(css, sizeof(css), "@font-face{font-family:Kept;src:local(Kept);"
+            "font-family:%s;src:local(%s)}", generics[g], generics[g]);
+        css_stylesheet *sheet = font_sheet(css, _i != 0);
+        check_font_face_names(only_font_face(sheet), "Kept", "Kept");
+        css_stylesheet_destroy(sheet);
+    }
+}
+END_TEST
+
+START_TEST(test_long_font_name)
+{
+    enum { WORDS = 2048 };
+    const char *prefix = "font-family:";
+    char *css = malloc(strlen(prefix) + WORDS * 7 + 1);
+    ck_assert_ptr_nonnull(css);
+    char *p = stpcpy(css, prefix);
+    for (size_t i = 0; i < WORDS; i++)
+        p = stpcpy(p, "Abc/**/");
+    css_declaration_list *list = parse(css, _i != 0);
+    free(css);
+    css_declaration_order *order;
+    ck_assert_int_eq(css__declaration_order_create(list, &order), CSS_OK);
+    lwc_string *value;
+    ck_assert_int_eq(serialize_property(order, "font-family", &value), CSS_OK);
+    ck_assert_uint_eq(lwc_string_length(value), 4 * WORDS + 1);
+    const char *text = lwc_string_data(value);
+    ck_assert_int_eq(text[0], '"');
+    for (size_t i = 0; i < WORDS; i++) {
+        ck_assert_int_eq(memcmp(text + 1 + 4 * i, "Abc", 3), 0);
+        ck_assert_int_eq(text[4 + 4 * i], i + 1 == WORDS ? '"' : ' ');
+    }
+    lwc_string_unref(value);
+    css__declaration_order_destroy(order);
+    css__declaration_list_destroy(list);
 }
 END_TEST
 
@@ -1281,6 +1477,48 @@ START_TEST(test_content_terminator_allocation_failure)
 }
 END_TEST
 
+START_TEST(test_font_face_allocation_failure)
+{
+    void (*limit)(unsigned int) = _i == 0 ? malloc_limit : _i == 1 ? calloc_limit : realloc_limit;
+    const char *css = "@font-face{font-family:Open/**/Sans\\20 ;"
+        "src:local(First\\20 ),local(Second/**/Face),url(font.woff)}";
+    css_stylesheet_params full = params;
+    full.inline_style = false;
+    css_stylesheet *keeper;
+    ck_assert_int_eq(css_stylesheet_create(&full, &keeper), CSS_OK);
+    bool succeeded = false;
+    unsigned failures = 0;
+    for (unsigned attempt = 0; attempt < 500; attempt++) {
+        css_stylesheet *sheet = NULL;
+        limit(attempt);
+        css_error error = css_stylesheet_create(&full, &sheet);
+        if (error == CSS_OK) {
+            error = css_stylesheet_append_data(sheet, (const uint8_t *)css, strlen(css));
+            if (error == CSS_OK || error == CSS_NEEDDATA)
+                error = css_stylesheet_data_done(sheet);
+        }
+        limit(UINT_MAX);
+        if (error == CSS_OK) {
+            uint32_t count;
+            ck_assert_int_eq(css_font_face_count_srcs(only_font_face(sheet), &count), CSS_OK);
+            ck_assert_uint_eq(count, 3);
+            succeeded = true;
+        } else {
+            ck_assert_msg(error == CSS_NOMEM, "font-face allocator %d attempt %u: %d", _i, attempt, error);
+            failures++;
+        }
+        if (sheet != NULL)
+            css_stylesheet_destroy(sheet);
+        if (succeeded)
+            break;
+    }
+    ck_assert_msg(succeeded && failures > 0, "font-face allocator %d did not reach success", _i);
+    css_stylesheet *retry = font_sheet(css, true);
+    css_stylesheet_destroy(retry);
+    css_stylesheet_destroy(keeper);
+}
+END_TEST
+
 START_TEST(test_value_allocation_failure)
 {
     const char *css = "margin:.1234567px .3456789em .5678912% -.6789123px; --x:  original value  ;"
@@ -1289,12 +1527,13 @@ START_TEST(test_value_allocation_failure)
                       "content:attr(\\31 2) counters(Chapter, 'a\\a b', upper-roman) url(Other.png);"
                       "quotes:'«' '»'; counter-reset:Chapter 0 Section -0002;"
                       "aspect-ratio:auto .1234567; border-spacing:.3456789em .5678912px;"
-                      "clip:rect(.1234567px, auto, -1.2345678em, 1px);";
+                      "clip:rect(.1234567px, auto, -1.2345678em, 1px);"
+                      "font-family:One/**/Two\\20 , 'a\\22 b\\a c',SERIF;";
     css_declaration_list *list = parse(css, false);
     css_declaration_order *order;
     ck_assert_int_eq(css__declaration_order_create(list, &order), CSS_OK);
     static const char *const names[] = {"margin", "--x", "background-image", "background-attachment", "border-style",
-        "content", "quotes", "counter-reset", "aspect-ratio", "border-spacing", "clip"};
+        "content", "quotes", "counter-reset", "aspect-ratio", "border-spacing", "clip", "font-family"};
     const char *name = names[_i];
     bool succeeded = false;
     unsigned failures = 0;
@@ -1342,6 +1581,10 @@ int main(void)
     tcase_add_loop_test(tc, test_specified_values, 0, VALUE_CASE_COUNT);
     tcase_add_test(tc, test_specified_url_resolution);
     tcase_add_loop_test(tc, test_reserved_counter_names, 0, 2);
+    tcase_add_loop_test(tc, test_font_name_storage, 0, 2);
+    tcase_add_loop_test(tc, test_font_face_names, 0, 2);
+    tcase_add_loop_test(tc, test_reserved_font_names, 0, 2);
+    tcase_add_loop_test(tc, test_long_font_name, 0, 2);
     tcase_add_loop_test(tc, test_clip_separators, 0, 2);
     tcase_add_loop_test(tc, test_geometry_invalid_units, 0, 2);
     tcase_add_loop_test(tc, test_geometry_bytecode, 0, 2);
@@ -1349,7 +1592,8 @@ int main(void)
     tcase_add_loop_test(tc, test_overflow_axes, 0, 2);
     tcase_add_test(tc, test_value_arguments);
 #ifdef WISP_TEST_ALLOC_FAILURE
-    tcase_add_loop_test(tc, test_value_allocation_failure, 0, 11);
+    tcase_add_loop_test(tc, test_value_allocation_failure, 0, 12);
+    tcase_add_loop_test(tc, test_font_face_allocation_failure, 0, 3);
     tcase_add_test(tc, test_content_terminator_allocation_failure);
 #endif
     tcase_add_loop_test(tc, test_declaration_order, 0, ORDER_CASE_COUNT);

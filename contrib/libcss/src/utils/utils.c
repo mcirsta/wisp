@@ -25,6 +25,26 @@ bool css__keyword_equal(lwc_string *text, const char *keyword)
     return true;
 }
 
+bool css__is_custom_ident(lwc_string *text)
+{
+    static const char *const reserved[] = {"inherit", "initial", "unset", "revert", "revert-layer", "default"};
+    for (size_t i = 0; i < N_ELEMENTS(reserved); i++) {
+        if (css__keyword_equal(text, reserved[i]))
+            return false;
+    }
+    return true;
+}
+
+bool css__is_font_family_generic(lwc_string *text)
+{
+    static const char *const names[] = {"serif", "sans-serif", "cursive", "fantasy", "monospace"};
+    for (size_t i = 0; i < N_ELEMENTS(names); i++) {
+        if (css__keyword_equal(text, names[i]))
+            return true;
+    }
+    return false;
+}
+
 int css__number_sign(lwc_string *text)
 {
     const char *data = lwc_string_data(text);

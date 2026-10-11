@@ -38,11 +38,11 @@ static css_error append(struct text_output *out, const char *text, size_t length
 
 /* CSSOM §2.1 string/identifier serialization. Only ASCII bytes need escaping; copying
  * the intervening UTF-8 spans preserves non-ASCII code points unchanged. */
-static css_error escaped(struct text_output *out, lwc_string *string, bool identifier)
+static css_error escaped_contents(struct text_output *out, lwc_string *string, bool identifier)
 {
     const char *text = lwc_string_data(string);
     size_t length = lwc_string_length(string);
-    css_error error = identifier ? CSS_OK : append(out, "\"", 1, false);
+    css_error error = CSS_OK;
     size_t start = 0;
     for (size_t i = 0; error == CSS_OK && i < length; i++) {
         unsigned char ch = text[i];
@@ -78,6 +78,14 @@ static css_error escaped(struct text_output *out, lwc_string *string, bool ident
     }
     if (error == CSS_OK)
         error = append(out, text + start, length - start, false);
+    return error;
+}
+
+static css_error escaped(struct text_output *out, lwc_string *string, bool identifier)
+{
+    css_error error = identifier ? CSS_OK : append(out, "\"", 1, false);
+    if (error == CSS_OK)
+        error = escaped_contents(out, string, identifier);
     if (error == CSS_OK && !identifier)
         error = append(out, "\"", 1, false);
     return error;
@@ -243,6 +251,77 @@ static css_error serialize_counters(const css_declaration *source, struct text_o
     return first ? CSS_INVALID : CSS_OK;
 }
 
+/* The existing renderer only distinguishes the five CSS Fonts 3 generics.
+ * Do not turn newer generic keywords into quoted, named fonts in CSSOM. Their
+ * native representation/selection needs extending before exposing readback. */
+static bool unsupported_font_generic(lwc_string *name)
+{
+    static const char *const names[] = {"system-ui", "ui-serif", "ui-sans-serif", "ui-monospace", "ui-rounded",
+        "math", "emoji", "fangsong"};
+    for (size_t i = 0; i < N_ELEMENTS(names); i++) {
+        if (css__keyword_equal(name, names[i]))
+            return true;
+    }
+    return false;
+}
+
+/* CSSOM serializes named families as strings. Join decoded identifiers with
+ * single spaces, preserving whitespace inside each identifier. Writing their
+ * escaped contents directly avoids allocating a temporary joined name. */
+static css_error font_family_name(const css_declaration *source, size_t *position,
+    const css_declaration_token **token, struct text_output *out)
+{
+    css_error error;
+    if ((*token)->type == CSS_TOKEN_STRING) {
+        error = escaped(out, (*token)->text, false);
+        *token = next_token(source, position);
+        return error;
+    }
+    if ((*token)->type != CSS_TOKEN_IDENT)
+        return CSS_INVALID;
+    if (css__is_font_family_generic((*token)->text)) {
+        error = append(out, lwc_string_data((*token)->text), lwc_string_length((*token)->text), true);
+        *token = next_token(source, position);
+        return error;
+    }
+    error = append(out, "\"", 1, false);
+    bool first = true;
+    while (*token != NULL && (*token)->type == CSS_TOKEN_IDENT) {
+        if (unsupported_font_generic((*token)->text))
+            return CSS_INVALID;
+        if (error == CSS_OK && !first)
+            error = append(out, " ", 1, false);
+        if (error == CSS_OK)
+            error = escaped_contents(out, (*token)->text, false);
+        if (error != CSS_OK)
+            return error;
+        first = false;
+        *token = next_token(source, position);
+    }
+    return append(out, "\"", 1, false);
+}
+
+static css_error serialize_font_family(const css_declaration *source, struct text_output *out)
+{
+    size_t position = 0;
+    const css_declaration_token *token = next_token(source, &position);
+    if (token == NULL)
+        return CSS_INVALID;
+    for (;;) {
+        css_error error = font_family_name(source, &position, &token, out);
+        if (error != CSS_OK || token == NULL)
+            return error;
+        if (!character(token, ','))
+            return CSS_INVALID;
+        error = append(out, ", ", 2, false);
+        if (error != CSS_OK)
+            return error;
+        token = next_token(source, &position);
+        if (token == NULL)
+            return CSS_INVALID;
+    }
+}
+
 static css_error serialize_list(const css_declaration *source, struct text_output *out)
 {
     enum css_declaration_value_kind kind = source->property->value_kind;
@@ -279,6 +358,8 @@ static css_error serialize(const css_declaration *source, struct text_output *ou
         return serialize_sequence(source, out);
     case CSS_DECL_VALUE_COUNTER_LIST:
         return serialize_counters(source, out);
+    case CSS_DECL_VALUE_FONT_FAMILY:
+        return serialize_font_family(source, out);
     default:
         return serialize_list(source, out);
     }

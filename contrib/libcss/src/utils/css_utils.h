@@ -42,6 +42,13 @@
 /* Allocation-free ASCII comparison with a lowercase keyword. */
 bool css__keyword_equal(lwc_string *text, const char *keyword);
 
+/* CSS Values <custom-ident>, after tokenization: excludes CSS-wide keywords
+ * and default. Property-specific exclusions are checked by the caller. */
+bool css__is_custom_ident(lwc_string *text);
+
+/* The five generic families supported by the current font selection model. */
+bool css__is_font_family_generic(lwc_string *text);
+
 /* Sign of an already-tokenized decimal number, before fixed-point rounding.
  * Dimensions may follow the numeric prefix. This does not validate syntax. */
 int css__number_sign(lwc_string *text);
