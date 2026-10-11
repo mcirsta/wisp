@@ -2,7 +2,7 @@
 """HTML classic-script ordering and CSS blocking, with real fetches and checkpoints.
 
 Expectations follow HTML's parser-blocking/async/defer algorithms. Console markers
-observe execution because Wisp's Document and event bindings are still stubs.
+observe execution order independently of rendering and DOM mutation.
 """
 import http.server
 import json

@@ -26,6 +26,7 @@
 #include <stdint.h>
 #include <string.h>
 
+#include <QMimeDatabase>
 #include <QResource>
 #include <QString>
 
@@ -53,33 +54,17 @@ extern "C" {
  */
 static const char *nsqt_fetch_filetype(const char *unix_path)
 {
-    int l;
-    char *res = (char *)"text/html";
-    l = strlen(unix_path);
-    NSLOG(wisp, INFO, "unix path: %s", unix_path);
-
-
-    if (l > 3 && strcasecmp(unix_path + l - 4, ".f79") == 0)
-        res = (char *)"text/css";
-    else if (l > 3 && strcasecmp(unix_path + l - 4, ".css") == 0)
-        res = (char *)"text/css";
-    else if (l > 3 && strcasecmp(unix_path + l - 4, ".jpg") == 0)
-        res = (char *)"image/jpeg";
-    else if (l > 4 && strcasecmp(unix_path + l - 5, ".jpeg") == 0)
-        res = (char *)"image/jpeg";
-    else if (l > 3 && strcasecmp(unix_path + l - 4, ".gif") == 0)
-        res = (char *)"image/gif";
-    else if (l > 3 && strcasecmp(unix_path + l - 4, ".png") == 0)
-        res = (char *)"image/png";
-    else if (l > 3 && strcasecmp(unix_path + l - 4, ".jng") == 0)
-        res = (char *)"image/jng";
-    else if (l > 3 && strcasecmp(unix_path + l - 4, ".svg") == 0)
-        res = (char *)"image/svg+xml";
-    else if (l > 3 && strcasecmp(unix_path + l - 4, ".txt") == 0)
-        res = (char *)"text/plain";
-
-    NSLOG(wisp, INFO, "mime type: %s", res);
-    return res;
+    const QString path = QString::fromUtf8(unix_path);
+    /* Keep the legacy RISC OS stylesheet suffix used by saved resources.
+     * All ordinary types come from Qt's platform MIME database, which also
+     * supplies its own database when the OS has none. Unknown files must not
+     * all become HTML: that prevented local .js scripts from loading. */
+    if (path.endsWith(QLatin1String(".f79"), Qt::CaseInsensitive))
+        return "text/css";
+    static QByteArray type;
+    type = QMimeDatabase().mimeTypeForFile(path).name().toUtf8();
+    NSLOG(wisp, INFO, "unix path: %s, mime type: %s", unix_path, type.constData());
+    return type.constData();
 }
 
 /**

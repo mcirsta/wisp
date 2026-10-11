@@ -38,6 +38,44 @@ Keep execution limits, callback lifetime safety and JS-attributed mutation logs.
 This priority overrides the earlier batch ordering below. It does not imply all
 scripts or application APIs need to be supported before a page can be useful.
 
+### Saved-page loading and next blockers (2026-10-11)
+
+The first captures exposed a prerequisite bug in Qt's local-file fetch callback:
+its short extension list reported every `.js` file as `text/html`, so external
+scripts in the saved HotNews and eBihoreanul pages were rejected. Inline scripts
+still ran, making their missing APIs an incomplete picture of site initialization.
+Qt now uses [QMimeDatabase](https://doc.qt.io/qt-6/qmimedatabase.html) for local
+file types, retaining the legacy `.f79` stylesheet suffix. There is no new build
+flag or library dependency. HTTP response handling is unchanged.
+
+The local-file regression covers `.js`, uppercase `.JS`, `.mjs` used as a classic
+script, Unicode paths, parser/defer ordering and microtasks, async completion,
+DOMContentLoaded/load, visible DOM edits against static reference pixels, disabled
+JS, missing/rejected scripts, stylesheets and extensionless HTML. An `.mjs` suffix
+does not enable `type="module"`; module scripts remain unsupported.
+
+After the fix, the saved eBihoreanul main bundle (`scripts.min_v202610062.js`) executes
+and stops at `Element.getElementsByTagName` in its jQuery feature detection. That
+probe also needs real `innerHTML` parsing, so element queries alone will not make
+the bundle work. Earlier failures in analytics/advertising bootstrap code are not
+the priority. The saved HotNews application (`app2.js`) uses `type="module"`, a
+larger separate capability. WordPress classic helper scripts now execute.
+
+Recommended next bounded increment: live, standards-correct element query
+collections on Document/Element, reusing the current collection ownership and
+property machinery. The old Duktape Document binding called libdom's tag-name
+query, but returned a legacy NodeList; modern tag queries return HTMLCollection.
+Audit native matching, namespace/case handling and length/item agreement before
+exposing it. Fragment parsing/`innerHTML` is a following increment, not an expando
+property masquerading as DOM support.
+
+These were local saved-page checks, not proof that the live sites fully initialize.
+eBihoreanul reached load completion; HotNews still reached the capture timeout
+with external resources outstanding. Saved extensionless CSS/scripts also lack
+their original HTTP MIME headers: content detection cannot reliably recover every
+type. Keep that archive limitation separate from binding failures when selecting
+the next work.
+
 ## Assessment
 
 Keep QuickJS-ng and libdom. The missing part is the browser binding and execution
