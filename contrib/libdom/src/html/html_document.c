@@ -388,8 +388,9 @@ static inline dom_html_element_type _dom_html_document_get_element_type(dom_html
 
 /* Overloaded methods inherited from super class */
 
-/** Internal method to support both kinds of create method */
-static dom_exception _dom_html_document_create_element_internal(dom_html_document *html, dom_string *in_tag_name,
+/* Construct from a resolved local name, namespace and prefix. The public DOM
+ * methods validate their input first; the HTML parser supplies tokenized names. */
+dom_exception _dom_html_document_create_element_internal(dom_html_document *html, dom_string *in_tag_name,
     dom_string *namespace, dom_string *prefix, dom_html_element **result)
 {
     dom_exception exc;

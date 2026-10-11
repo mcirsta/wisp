@@ -82,7 +82,7 @@ dom_hubbub_parser_create(dom_hubbub_parser_params *params, dom_hubbub_parser **p
  * children without the synthetic root. Discard it on failure.
  * Input is UTF-8 regardless of params.enc; enable_script selects noscript syntax
  * but script and SVG callbacks are not run. Currently accepts HTML document /
- * HTML namespace contexts except template; unsupported contexts return INVALID.
+ * HTML, SVG and MathML namespace contexts except HTML template; unsupported contexts return INVALID.
  * On creation failure both outputs are NULL. */
 dom_hubbub_error dom_hubbub_fragment_parser_create(dom_hubbub_parser_params *params, dom_element *context,
     dom_hubbub_parser **parser, dom_document_fragment **fragment);

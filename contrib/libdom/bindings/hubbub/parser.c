@@ -20,6 +20,7 @@
 #include "utils.h"
 
 #include "core/document.h"
+#include "core/element.h"
 #include "core/node.h"
 #include "core/string.h"
 
@@ -185,18 +186,13 @@ static hubbub_error create_element(void *parser, const hubbub_tag *tag, void **r
         goto fail;
     }
 
-    if (tag->ns == HUBBUB_NS_NULL) {
-        err = dom_document_create_element(dom_parser->doc, name, &element);
-        if (err != DOM_NO_ERR) {
-            dom_parser->msg(DOM_MSG_CRITICAL, dom_parser->mctx, "Can't create the DOM element");
-            goto clean1;
-        }
-    } else {
-        err = dom_document_create_element_ns(dom_parser->doc, dom_namespaces[tag->ns], name, &element);
-        if (err != DOM_NO_ERR) {
-            dom_parser->msg(DOM_MSG_CRITICAL, dom_parser->mctx, "Can't create the DOM element");
-            goto clean1;
-        }
+    /* HTML token names are local names, even when they contain a colon. Do
+     * not run the DOM createElementNS QName validator/splitter on them. */
+    err = _dom_html_document_create_element_internal(
+        (dom_html_document *)dom_parser->doc, name, dom_namespaces[tag->ns], NULL, (dom_html_element **)&element);
+    if (err != DOM_NO_ERR) {
+        dom_parser->msg(DOM_MSG_CRITICAL, dom_parser->mctx, "Can't create the DOM element");
+        goto clean1;
     }
 
     /* By now, we MUST have constructed an element */
@@ -247,6 +243,8 @@ static hubbub_error create_element(void *parser, const hubbub_tag *tag, void **r
     *result = element;
 
 clean1:
+    if (*result == NULL)
+        dom_node_unref(element);
     dom_string_unref(name);
 
 fail:
@@ -515,21 +513,27 @@ static hubbub_error add_attributes(void *parser, void *node, const hubbub_attrib
             goto fail;
         }
 
-        if (attributes[i].ns == HUBBUB_NS_NULL) {
-            err = dom_element_set_attribute((struct dom_element *)node, name, value);
-            dom_string_unref(name);
-            dom_string_unref(value);
-            if (err != DOM_NO_ERR) {
-                dom_parser->msg(DOM_MSG_CRITICAL, dom_parser->mctx, "Can't add attribute");
-            }
-        } else {
-            err = dom_element_set_attribute_ns(
-                (struct dom_element *)node, dom_namespaces[attributes[i].ns], name, value);
-            dom_string_unref(name);
-            dom_string_unref(value);
-            if (err != DOM_NO_ERR) {
-                dom_parser->msg(DOM_MSG_CRITICAL, dom_parser->mctx, "Can't add attribute ns");
-            }
+        /* Foreign attribute adjustment supplies a local name and namespace.
+         * Preserve the corresponding prefix without reparsing an XML QName. */
+        const char *prefix_text = NULL;
+        if (attributes[i].ns == HUBBUB_NS_XLINK)
+            prefix_text = "xlink";
+        else if (attributes[i].ns == HUBBUB_NS_XML)
+            prefix_text = "xml";
+        else if (attributes[i].ns == HUBBUB_NS_XMLNS &&
+            !(attributes[i].name.len == 5 && memcmp(attributes[i].name.ptr, "xmlns", 5) == 0))
+            prefix_text = "xmlns";
+        dom_string *prefix = NULL;
+        if (prefix_text != NULL)
+            err = dom_string_create_interned((const uint8_t *)prefix_text, strlen(prefix_text), &prefix);
+        if (err == DOM_NO_ERR)
+            err = _dom_element_set_attribute_internal(node, dom_namespaces[attributes[i].ns], name, prefix, value);
+        dom_string_unref(prefix);
+        dom_string_unref(name);
+        dom_string_unref(value);
+        if (err != DOM_NO_ERR) {
+            dom_parser->msg(DOM_MSG_CRITICAL, dom_parser->mctx, "Can't add attribute");
+            goto fail;
         }
     }
 
@@ -635,9 +639,18 @@ static hubbub_error complete_svg(void *parser, void *svg)
     return HUBBUB_UNKNOWN;
 }
 
+static hubbub_error get_name(void *ctx, void *node, hubbub_string *name)
+{
+    UNUSED(ctx);
+    const dom_node_internal *element = node;
+    name->ptr = (const uint8_t *)dom_string_data(element->name);
+    name->len = dom_string_byte_length(element->name);
+    return HUBBUB_OK;
+}
+
 static hubbub_tree_handler tree_handler = {create_comment, create_doctype, create_element, create_text, ref_node,
     unref_node, append_child, insert_before, remove_child, clone_node, reparent_children, get_parent, has_children,
-    form_associate, add_attributes, set_quirks_mode, change_encoding, complete_script, complete_svg, NULL};
+    form_associate, add_attributes, set_quirks_mode, change_encoding, complete_script, complete_svg, NULL, get_name};
 
 /**
  * Default message callback
@@ -801,9 +814,17 @@ dom_hubbub_error dom_hubbub_fragment_parser_create(dom_hubbub_parser_params *par
     dom_node_internal *node = (dom_node_internal *)context;
     if (node->type != DOM_ELEMENT_NODE || node->owner == NULL)
         return DOM_HUBBUB_BADPARM;
-    /* Do not silently parse unsupported contexts as an HTML body. */
-    if (!node->owner->html || node->namespace == NULL ||
-        !dom_string_isequal(node->namespace, dom_namespaces[DOM_NAMESPACE_HTML]))
+    /* Keep XML parsing and arbitrary/null namespace contexts explicit. */
+    hubbub_ns context_ns;
+    if (!node->owner->html || node->namespace == NULL)
+        return DOM_HUBBUB_HUBBUB_ERR_INVALID;
+    if (dom_string_isequal(node->namespace, dom_namespaces[DOM_NAMESPACE_HTML]))
+        context_ns = HUBBUB_NS_HTML;
+    else if (dom_string_isequal(node->namespace, dom_namespaces[DOM_NAMESPACE_SVG]))
+        context_ns = HUBBUB_NS_SVG;
+    else if (dom_string_isequal(node->namespace, dom_namespaces[DOM_NAMESPACE_MATHML]))
+        context_ns = HUBBUB_NS_MATHML;
+    else
         return DOM_HUBBUB_HUBBUB_ERR_INVALID;
 
     dom_hubbub_parser *binding = calloc(1, sizeof(*binding));
@@ -848,6 +869,7 @@ dom_hubbub_error dom_hubbub_fragment_parser_create(dom_hubbub_parser_params *par
 
     opt.fragment = (hubbub_fragment_context){
         .name = {(const uint8_t *)dom_string_data(node->name), dom_string_byte_length(node->name)},
+        .ns = context_ns,
         .root = binding->fragment_root,
     };
     for (dom_node_internal *ancestor = node; ancestor != NULL; ancestor = ancestor->parent) {
@@ -856,7 +878,21 @@ dom_hubbub_error dom_hubbub_fragment_parser_create(dom_hubbub_parser_params *par
             break;
         }
     }
+    dom_string *encoding_name = NULL, *encoding = NULL;
+    if (context_ns == HUBBUB_NS_MATHML &&
+        dom_string_create_interned((const uint8_t *)"encoding", 8, &encoding_name) != DOM_NO_ERR)
+        goto fail;
+    if (encoding_name != NULL) {
+        dom_exception exc = dom_element_get_attribute(context, encoding_name, &encoding);
+        dom_string_unref(encoding_name);
+        if (exc != DOM_NO_ERR)
+            goto fail;
+        if (encoding != NULL)
+            opt.fragment.encoding = (hubbub_string){
+                (const uint8_t *)dom_string_data(encoding), dom_string_byte_length(encoding)};
+    }
     error = hubbub_parser_setopt(binding->parser, HUBBUB_PARSER_FRAGMENT_CONTEXT, &opt);
+    dom_string_unref(encoding);
     if (error != HUBBUB_OK)
         goto hubbub_fail;
 

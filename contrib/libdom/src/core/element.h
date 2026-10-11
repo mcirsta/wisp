@@ -54,6 +54,10 @@ void _dom_element_finalise(struct dom_element *ele);
 void _dom_element_destroy(struct dom_element *element);
 
 
+/* Internal setter for resolved parser/DOM names, without name validation. */
+dom_exception _dom_element_set_attribute_internal(
+    struct dom_element *element, dom_string *namespace, dom_string *name, dom_string *prefix, dom_string *value);
+
 /* The virtual functions of dom_element */
 dom_exception _dom_element_get_tag_name(struct dom_element *element, dom_string **name);
 dom_exception _dom_element_get_attribute(struct dom_element *element, dom_string *name, dom_string **value);

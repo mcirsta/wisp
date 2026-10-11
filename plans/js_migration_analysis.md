@@ -178,10 +178,10 @@ context classification explicitly preserves the DOM local name's case without
 altering the generator or generated files.
 
 **This is a parser prerequisite, not an enabled `innerHTML` binding.** The API
-explicitly rejects foreign-namespace, XML-document and template contexts for now.
-Select parsing is completed by the increment below. Complete foreign
-context/integration-point handling and template handling before treating fragment
-parsing as general-purpose. Existing full-document parser limitations (including
+initially rejected foreign-namespace, XML-document and template contexts.
+The increments below complete select and SVG/MathML context handling. Template
+contents/insertion modes remain necessary before treating fragment parsing as
+general-purpose; XML documents and null/arbitrary namespace contexts remain rejected. Existing full-document parser limitations (including
 those constructs nested in otherwise supported fragments) are not claimed fixed
 by this foundation batch.
 
@@ -239,9 +239,9 @@ The native tree fixtures are derived from the standard, not Chromium output.
 They exercise whole documents and ordinary/select/option/optgroup fragments,
 whole and byte-by-byte input, omitted/malformed end tags, nesting, rich content,
 inputs, textarea, separators, scopes, formatting reconstruction, forms and tables.
-Foreign contexts/integration points, template contents and HTML serialization
-remain prerequisites for the general `innerHTML` binding; no JS setter is exposed
-yet. Other historical parser gaps remain outside this increment's claim.
+The next increment below completes foreign contexts/integration points. Template
+contents and HTML serialization remain prerequisites for the general `innerHTML`
+binding; no JS setter is exposed yet. Other historical parser gaps remain outside this increment's claim.
 
 Validation: 258 native parser cases and all 753 checks across the 13 DOM, JS, form
 and interaction suites pass in the Debug ASan/UBSan build, with LeakSanitizer
@@ -254,6 +254,58 @@ PNG as the pre-select baseline. That saved-page run still reports the previously
 known `llcache.c` null-source/zero-length memcpy UBSan diagnostic; the native
 suites are clean. The build has no compiler warnings, `git diff --check` is clean,
 and no GTK build or tests were run.
+
+### SVG/MathML parsing and fragment contexts (2026-10-11)
+
+Foreign-content parsing now follows the HTML Standard's
+[per-token dispatcher](https://html.spec.whatwg.org/multipage/parsing.html#tree-construction),
+shared by whole documents and fragments. The old foreign insertion mode and its
+secondary-mode recursion are removed. The HTML insertion mode is preserved while selecting
+foreign rules from the adjusted current node, including the separate fragment
+context. SVG `foreignObject`/`desc`/`title`, MathML text integration points and
+`annotation-xml` encodings now control transitions correctly. Breakout tags and
+end tags process the existing HTML mode directly, avoiding fragment-context loops.
+
+Root-cause corrections required by this path:
+
+- Match unknown end tags by their actual local names, rather than treating `g`,
+  `path` and all custom HTML tags as the same `UNKNOWN` enum. Hubbub borrows the
+  existing DOM string through a required tree-handler callback; known enum names
+  retain the cheap comparison. Pop through the matched stack position, not the
+  first unknown enum. Update all bundled handler implementations.
+- Construct parser elements from resolved local names without running public DOM
+  XML QName validation/splitting. Preserve literal colons and adjusted SVG case.
+  Share the existing libdom constructors and attribute setter; public DOM APIs
+  still validate their inputs. Preserve XLink/XML/XMLNS prefixes and declarations,
+  propagate attribute failures and release partially created elements on failure.
+- Enable CDATA according to the adjusted namespace. Correct case-sensitive keyword
+  matching, repeated closing brackets, empty-section/empty-EOF assertions and
+  error propagation. Tests also cover NUL replacement and newline normalization.
+- Only associate HTML-namespace controls with parser forms. Foreign nodes named
+  `input` or `select` must not be cast to HTML control implementations. Fragment
+  callbacks remain inert; SVG scripts never enter the HTML script callback.
+- Use namespace-aware special-element checks during formatting repair too, so an
+  SVG `input` is not treated as an HTML block. Initialize all fields when creating
+  formatting entries and reconstructed stack entries.
+
+The native fragment API accepts HTML (except template), SVG and MathML contexts
+in HTML documents. This does not implement SVG script execution, XML parsing or
+`innerHTML` registration. Template contents/insertion modes and serialization are
+next; other historical HTML insertion-mode and adoption-agency limitations are
+outside this batch's conformance claim.
+
+Validation: 421 parser cases and all 916 checks across the 13 DOM, JS, form and
+interaction suites pass under Debug ASan/UBSan with LeakSanitizer enabled and no
+sanitizer diagnostics. Cases cover full pages and fragment contexts, whole and
+byte-by-byte input, namespace transitions, names/attributes, malformed end tags,
+table-mode restoration, scripts, abandoned parsing and context lifetime. The full
+Debug Qt build is warning-free; all three standalone Hubbub tree-handler test
+clients also pass a compiler syntax check. All 117 Qt suites pass on the final
+build: paint-order alone, followed by the remaining 116 suites.
+The normalized saved eBihoreanul page completes with the same 1280 x 11382 extent
+and byte-identical viewport PNG as the pre-change capture. Its already documented
+`llcache.c` null-source/zero-length memcpy UBSan diagnostic remains; the native
+suites are clean. No GTK build or tests were run.
 
 ## Assessment
 

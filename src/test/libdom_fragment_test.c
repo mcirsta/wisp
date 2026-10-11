@@ -49,6 +49,7 @@ static void teardown(void)
 /* Small test-only tree notation: names and text, no attributes or escaping. */
 static char tree[8192];
 static size_t used;
+static bool describe_namespaces;
 
 static void emit(const char *text, size_t len)
 {
@@ -66,6 +67,17 @@ static void describe(dom_node *node)
     if (type == DOM_ELEMENT_NODE) {
         ck_assert_int_eq(dom_node_get_local_name(node, &name), DOM_NO_ERR);
         emit("<", 1);
+        if (describe_namespaces) {
+            dom_string *ns = NULL;
+            ck_assert_int_eq(dom_node_get_namespace(node, &ns), DOM_NO_ERR);
+            if (strcmp(dom_string_data(ns), "http://www.w3.org/2000/svg") == 0)
+                emit("svg:", 4);
+            else if (strcmp(dom_string_data(ns), "http://www.w3.org/1998/Math/MathML") == 0)
+                emit("math:", 5);
+            else
+                ck_assert_str_eq(dom_string_data(ns), "http://www.w3.org/1999/xhtml");
+            dom_string_unref(ns);
+        }
         emit(dom_string_data(name), dom_string_byte_length(name));
         emit(">", 1);
     } else if (type == DOM_TEXT_NODE || type == DOM_COMMENT_NODE) {
@@ -325,6 +337,281 @@ START_TEST(test_select_document_and_fragment)
 }
 END_TEST
 
+static const struct {
+    const char *space, *context, *encoding, *input, *expected;
+} foreign_cases[] = {
+    {"svg", "svg", NULL, "<g><path></path><circle/></g><rect/>",
+        "<svg:g><svg:path></path><svg:circle></circle></g><svg:rect></rect>"},
+    {"svg", "g", NULL, "<g><path></g><circle/>", "<svg:g><svg:path></path></g><svg:circle></circle>"},
+    {"svg", "svg", NULL, "<g></unknown><path/></g><rect/>", "<svg:g><svg:path></path></g><svg:rect></rect>"},
+    {"svg", "svg", NULL, "</svg><circle/>", "<svg:circle></circle>"},
+    {"svg", "svg", NULL, "<g><div>X</div><circle/>", "<svg:g></g><div>X</div><svg:circle></circle>"},
+    {"svg", "svg", NULL, "<foreignObject><p>X</p></foreignObject><circle/>",
+        "<svg:foreignObject><p>X</p></foreignObject><svg:circle></circle>"},
+    {"svg", "foreignObject", NULL, "<p>X</p><svg><path/></svg><span>Y</span>",
+        "<p>X</p><svg:svg><svg:path></path></svg><span>Y</span>"},
+    {"svg", "foreignobject", NULL, "<a>X</a>", "<svg:a>X</a>"},
+    {"svg", "title", NULL, "<b>X</b>&amp;<a>Y</a>", "<b>X</b>&<a>Y</a>"},
+    {"svg", "desc", NULL, "<span>X</span>", "<span>X</span>"},
+    {"svg", "s:foreignObject", NULL, "<a>X</a>", "<a>X</a>"},
+    {"svg", "svg", NULL, "<![CDATA[", ""},
+    {"svg", "svg", NULL, "<![CDATA[]]>", ""},
+    {"svg", "script", NULL, "<g/>&amp;", "<svg:g></g>&"},
+    {"svg", "svg", NULL, "<font><g/></font><font color=red>X</font>", "<svg:font><svg:g></g></font><font>X</font>"},
+    {"svg", "svg", NULL, "<g></p><circle/>", "<svg:g></g><p></p><svg:circle></circle>"},
+    {"svg", "svg", NULL, "<g></br><circle/>", "<svg:g></g><br></br><svg:circle></circle>"},
+    {"svg", "svg", NULL, "<lineargradient><fefuncg/></LINEARGRADIENT><fedropshadow/>",
+        "<svg:linearGradient><svg:feFuncG></feFuncG></linearGradient><svg:feDropShadow></feDropShadow>"},
+    {"svg", "svg", NULL, "<![CDATA[<x>&amp;]]><g/>", "<x>&amp;<svg:g></g>"},
+    {"svg", "foreignObject", NULL, "<![CDATA[<x>]]><b>Y</b>", "<x><b>Y</b>"},
+    {"svg", "svg", NULL, "<![CDATA[A]]]>B", "A]B"},
+    {"svg", "svg", NULL, "<![CDATA[A]]]]>B", "A]]B"},
+    {"svg", "svg", NULL, "<![CDATA[A]]", "A]]"},
+    {"svg", "svg", NULL, "<![cdata[A]]><g/>", "<!--[cdata[A]]--><svg:g></g>"},
+    {"svg", "svg", NULL, "<foreignObject><![CDATA[x]]><div><![CDATA[y]]></div><![CDATA[z]]></foreignObject>",
+        "<svg:foreignObject>x<div><!--[CDATA[y]]--></div>z</foreignObject>"},
+    {"math", "math", NULL, "<mrow><mn>1</mn><mi>x</mi></mrow>", "<math:mrow><math:mn>1</mn><math:mi>x</mi></mrow>"},
+    {"math", "mi", NULL, "<b>X</b><mglyph/><malignmark/><span>Y</span>",
+        "<b>X</b><math:mglyph></mglyph><math:malignmark></malignmark><span>Y</span>"},
+    {"math", "mtext", NULL, "<svg><g/></svg>", "<svg:svg><svg:g></g></svg>"},
+    {"math", "annotation-xml", "TeXt/HtMl", "<a>X</a><math><mi>x</mi></math>",
+        "<a>X</a><math:math><math:mi>x</mi></math>"},
+    {"math", "annotation-xml", "application/xhtml+xml", "<div>X</div>", "<div>X</div>"},
+    {"math", "annotation-xml", "application/xml", "<a>X</a><svg><g/></svg>", "<math:a>X</a><svg:svg><svg:g></g></svg>"},
+    {"math", "annotation-xml", NULL, "<svg><g/></svg><a>X</a>", "<svg:svg><svg:g></g></svg><math:a>X</a>"},
+    {"math", "math", NULL, "<mrow><p>X</p><mi>Y</mi>", "<math:mrow></mrow><p>X</p><math:mi>Y</mi>"},
+    {"math", "MATH", NULL, "<mi>X</mi>", "<math:mi>X</mi>"},
+};
+
+static const char *namespace_uri(const char *space)
+{
+    return strcmp(space, "svg") == 0 ? "http://www.w3.org/2000/svg" : "http://www.w3.org/1998/Math/MathML";
+}
+
+START_TEST(test_foreign_contexts)
+{
+    size_t count = sizeof(foreign_cases) / sizeof(foreign_cases[0]);
+    size_t v = _i % count, chunk = _i < (int)count ? 4096 : 1;
+    dom_string *ns = string(namespace_uri(foreign_cases[v].space));
+    dom_string *name = string(foreign_cases[v].context);
+    dom_element *context = NULL;
+    ck_assert_int_eq(dom_document_create_element_ns(document, ns, name, &context), DOM_NO_ERR);
+    if (foreign_cases[v].encoding != NULL) {
+        dom_string *attr = string("encoding"), *value = string(foreign_cases[v].encoding);
+        ck_assert_int_eq(dom_element_set_attribute(context, attr, value), DOM_NO_ERR);
+        dom_string_unref(attr);
+        dom_string_unref(value);
+    }
+    dom_node *fragment = parse((dom_node *)context, foreign_cases[v].input, chunk, true);
+    used = 0;
+    tree[0] = 0;
+    describe_namespaces = true;
+    describe(fragment);
+    ck_assert_msg(strcmp(tree, foreign_cases[v].expected) == 0, "%s:%s case %zu, chunk %zu: expected %s, got %s",
+        foreign_cases[v].space, foreign_cases[v].context, v, chunk, foreign_cases[v].expected, tree);
+    describe_namespaces = false;
+    dom_node_unref(fragment);
+    dom_node_unref(context);
+    dom_string_unref(ns);
+    dom_string_unref(name);
+}
+END_TEST
+
+/* Exercise the same token rules through normal documents and HTML fragments,
+ * with both whole input and input split at every byte boundary. */
+static dom_node *parse_body(const char *input, unsigned mode, dom_document **parsed)
+{
+    size_t chunk = mode & 1 ? 1 : 4096;
+    if (mode < 2) {
+        dom_node *context = element("div");
+        dom_node *root = parse(context, input, chunk, true);
+        dom_node_unref(context);
+        return root;
+    }
+    dom_hubbub_parser_params params = {.enc = "UTF-8", .fix_enc = true, .enable_script = true};
+    dom_hubbub_parser *parser = NULL;
+    ck_assert_int_eq(dom_hubbub_parser_create(&params, &parser, parsed), DOM_HUBBUB_OK);
+    const char *prefix = "<!doctype html><body>";
+    ck_assert_int_eq(dom_hubbub_parser_parse_chunk(parser, (const uint8_t *)prefix, strlen(prefix)), DOM_HUBBUB_OK);
+    for (size_t offset = 0, len = strlen(input); offset < len;) {
+        size_t take = len - offset < chunk ? len - offset : chunk;
+        ck_assert_int_eq(dom_hubbub_parser_parse_chunk(parser, (const uint8_t *)input + offset, take), DOM_HUBBUB_OK);
+        offset += take;
+    }
+    ck_assert_int_eq(dom_hubbub_parser_completed(parser), DOM_HUBBUB_OK);
+    dom_hubbub_parser_destroy(parser);
+    dom_node *body = NULL;
+    ck_assert_int_eq(dom_html_document_get_body(*parsed, &body), DOM_NO_ERR);
+    return body;
+}
+
+static const struct {
+    const char *label, *input, *expected;
+} foreign_document_cases[] = {
+    {"different unknown SVG names", "<svg><g><path></g><rect/></svg><p>end",
+        "<svg:svg><svg:g><svg:path></path></g><svg:rect></rect></svg><p>end</p>"},
+    {"different unknown HTML names", "<one><two></one><three>X</three>", "<one><two></two></one><three>X</three>"},
+    {"literal colons in parser names", "<svg><foo:bar><foo:baz/></foo:bar><path/></svg><a:b:c>X</a:b:c>",
+        "<svg:svg><svg:foo:bar><svg:foo:baz></foo:baz></foo:bar><svg:path></path></svg><a:b:c>X</a:b:c>"},
+    {"HTML breakout", "<svg><g><p>X</p><span>Y</span>", "<svg:svg><svg:g></g></svg><p>X</p><span>Y</span>"},
+    {"end br breakout", "<svg><g></br><p>X", "<svg:svg><svg:g></g></svg><br></br><p>X</p>"},
+    {"end p breakout", "<svg><g></p><p>X", "<svg:svg><svg:g></g></svg><p></p><p>X</p>"},
+    {"SVG integration points",
+        "<svg><foreignObject><a>X</a></foreignObject><title><b>T</b></title><desc><span>D</span></desc></svg>",
+        "<svg:svg><svg:foreignObject><a>X</a></foreignObject><svg:title><b>T</b></title><svg:desc><span>D</span></desc></svg>"},
+    {"HTML ancestor end tag", "<div><svg><g></div><p>X", "<div><svg:svg><svg:g></g></svg></div><p>X</p>"},
+    {"unknown HTML ancestor end tag", "<foo><svg><g></foo><p>X", "<foo><svg:svg><svg:g></g></svg></foo><p>X</p>"},
+    {"foreignObject special boundary", "<foo><svg><foreignObject></foo><p>X</p></foreignObject></svg>Y",
+        "<foo><svg:svg><svg:foreignObject><p>X</p></foreignObject></svg>Y</foo>"},
+    {"foreign form-named elements", "<form><svg><input/><select/><button/><textarea/></svg></form>",
+        "<form><svg:svg><svg:input></input><svg:select></select><svg:button></button><svg:textarea></textarea></svg></form>"},
+    {"foreign font", "<svg><font><path/></font><font face=x>X</font>",
+        "<svg:svg><svg:font><svg:path></path></font></svg><font>X</font>"},
+    {"CDATA transitions",
+        "<svg><![CDATA[A]]><foreignObject><![CDATA[B]]><div><![CDATA[C]]></div><![CDATA[D]]></foreignObject></svg><![CDATA[E]]>",
+        "<svg:svg>A<svg:foreignObject>B<div><!--[CDATA[C]]--></div>D</foreignObject></svg><!--[CDATA[E]]-->"},
+    {"CDATA brackets and empty text", "<svg><![CDATA[]]><![CDATA[A]]]>B<![CDATA[C]]]]>D</svg>",
+        "<svg:svg>A]BC]]D</svg>"},
+    {"CDATA newlines", "<svg><![CDATA[A\r\nB\rC]]></svg>", "<svg:svg>A\nB\nC</svg>"},
+    {"MathML text integration", "<math><mrow><mi><b>X</b><mglyph/><malignmark/></mi><mn>1</mn></mrow></math>",
+        "<math:math><math:mrow><math:mi><b>X</b><math:mglyph></mglyph><math:malignmark></malignmark></mi><math:mn>1</mn></mrow></math>"},
+    {"annotation-xml HTML encoding",
+        "<math><annotation-xml encoding='TEXT/HTML'><a>X</a></annotation-xml><mi>Y</mi></math>",
+        "<math:math><math:annotation-xml><a>X</a></annotation-xml><math:mi>Y</mi></math>"},
+    {"annotation-xml SVG transition", "<math><annotation-xml><svg><path/></svg><a>X</a></annotation-xml></math>",
+        "<math:math><math:annotation-xml><svg:svg><svg:path></path></svg><math:a>X</a></annotation-xml></math>"},
+    {"foreign names are not HTML special elements", "<b><svg><input></b><p>X",
+        "<b><svg:svg><svg:input></input></svg></b><p>X</p>"},
+    {"formatting inside an integration point", "<svg><foreignObject><b><p>A</b>B</p></foreignObject><path/></svg>",
+        "<svg:svg><svg:foreignObject><b></b><p><b>A</b>B</p></foreignObject><svg:path></path></svg>"},
+    {"restore table mode",
+        "<table><tr><td><svg><foreignObject><table><tr><td>X</table></foreignObject></svg><td>Y</table>",
+        "<table><tbody><tr><td><svg:svg><svg:foreignObject><table><tbody><tr><td>X</td></tr></tbody></table></foreignObject></svg></td><td>Y</td></tr></tbody></table>"},
+};
+
+START_TEST(test_foreign_document_and_fragment)
+{
+    const size_t count = sizeof(foreign_document_cases) / sizeof(foreign_document_cases[0]);
+    size_t v = _i % count, mode = _i / count;
+    dom_document *parsed = NULL;
+    dom_node *root = parse_body(foreign_document_cases[v].input, mode, &parsed);
+    used = 0;
+    tree[0] = 0;
+    describe_namespaces = true;
+    dom_node *child = NULL;
+    ck_assert_int_eq(dom_node_get_first_child(root, &child), DOM_NO_ERR);
+    while (child != NULL) {
+        describe(child);
+        dom_node *next = NULL;
+        ck_assert_int_eq(dom_node_get_next_sibling(child, &next), DOM_NO_ERR);
+        dom_node_unref(child);
+        child = next;
+    }
+    ck_assert_msg(strcmp(tree, foreign_document_cases[v].expected) == 0, "%s, %s, chunk %u: expected %s, got %s",
+        foreign_document_cases[v].label, mode < 2 ? "fragment" : "document", mode & 1 ? 1 : 4096,
+        foreign_document_cases[v].expected, tree);
+    describe_namespaces = false;
+    dom_node_unref(root);
+    dom_node_unref(parsed);
+}
+END_TEST
+
+static void check_attribute(dom_node *node, const char *uri, const char *local, const char *prefix, const char *value)
+{
+    dom_string *ns = uri == NULL ? NULL : string(uri), *name = string(local);
+    dom_attr *attr = NULL;
+    ck_assert_int_eq(dom_element_get_attribute_node_ns(node, ns, name, &attr), DOM_NO_ERR);
+    ck_assert_msg(attr != NULL, "Missing attribute {%s}%s", uri == NULL ? "" : uri, local);
+    dom_string *actual = NULL;
+    ck_assert_int_eq(dom_node_get_local_name(attr, &actual), DOM_NO_ERR);
+    ck_assert_str_eq(dom_string_data(actual), local);
+    dom_string_unref(actual);
+    ck_assert_int_eq(dom_node_get_prefix(attr, &actual), DOM_NO_ERR);
+    if (prefix == NULL)
+        ck_assert_ptr_null(actual);
+    else
+        ck_assert_str_eq(dom_string_data(actual), prefix);
+    dom_string_unref(actual);
+    ck_assert_int_eq(dom_attr_get_value(attr, &actual), DOM_NO_ERR);
+    ck_assert_str_eq(dom_string_data(actual), value);
+    dom_string_unref(actual);
+    dom_node_unref(attr);
+    dom_string_unref(ns);
+    dom_string_unref(name);
+}
+
+START_TEST(test_foreign_names_and_attributes)
+{
+    dom_document *parsed = NULL;
+    dom_node *root = parse_body(
+        "<svg viewbox='0 0 1 1' xmlns='http://www.w3.org/2000/svg' "
+        "xmlns:xlink='http://www.w3.org/1999/xlink' xlink:href='#x' xml:space='preserve' custom:x='v' =odd='x'>"
+        "<foo:bar/></svg><math definitionurl='url'></math><div xlink:href='plain'></div>",
+        _i, &parsed);
+    dom_node *svg = NULL, *child = NULL, *math = NULL, *div = NULL;
+    ck_assert_int_eq(dom_node_get_first_child(root, &svg), DOM_NO_ERR);
+    check_attribute(svg, NULL, "viewBox", NULL, "0 0 1 1");
+    check_attribute(svg, "http://www.w3.org/2000/xmlns/", "xmlns", NULL, "http://www.w3.org/2000/svg");
+    check_attribute(svg, "http://www.w3.org/2000/xmlns/", "xlink", "xmlns", "http://www.w3.org/1999/xlink");
+    check_attribute(svg, "http://www.w3.org/1999/xlink", "href", "xlink", "#x");
+    check_attribute(svg, "http://www.w3.org/XML/1998/namespace", "space", "xml", "preserve");
+    check_attribute(svg, NULL, "custom:x", NULL, "v");
+    check_attribute(svg, NULL, "=odd", NULL, "x");
+    ck_assert_int_eq(dom_node_get_first_child(svg, &child), DOM_NO_ERR);
+    dom_string *name = NULL;
+    ck_assert_int_eq(dom_node_get_local_name(child, &name), DOM_NO_ERR);
+    ck_assert_str_eq(dom_string_data(name), "foo:bar");
+    dom_string_unref(name);
+    ck_assert_int_eq(dom_node_get_prefix(child, &name), DOM_NO_ERR);
+    ck_assert_ptr_null(name);
+    ck_assert_int_eq(dom_node_get_next_sibling(svg, &math), DOM_NO_ERR);
+    check_attribute(math, NULL, "definitionURL", NULL, "url");
+    ck_assert_int_eq(dom_node_get_next_sibling(math, &div), DOM_NO_ERR);
+    check_attribute(div, NULL, "xlink:href", NULL, "plain");
+    dom_node_unref(child);
+    dom_node_unref(svg);
+    dom_node_unref(math);
+    dom_node_unref(div);
+    dom_node_unref(root);
+    dom_node_unref(parsed);
+}
+END_TEST
+
+/* The parser's resolved-name constructors must not relax the public DOM APIs. */
+START_TEST(test_public_namespace_validation)
+{
+    dom_string *ns = string("http://www.w3.org/2000/svg"), *qname = string("a:b:c");
+    dom_element *node = NULL;
+    ck_assert_int_eq(dom_document_create_element_ns(document, ns, qname, &node), DOM_NAMESPACE_ERR);
+    dom_string_unref(qname);
+    qname = string("s:svg");
+    ck_assert_int_eq(dom_document_create_element_ns(document, ns, qname, &node), DOM_NO_ERR);
+    dom_string *prefix = NULL;
+    ck_assert_int_eq(dom_node_get_prefix(node, &prefix), DOM_NO_ERR);
+    ck_assert_str_eq(dom_string_data(prefix), "s");
+    dom_string_unref(prefix);
+    dom_string_unref(qname);
+    qname = string("=odd");
+    dom_string *value = string("v");
+    ck_assert_int_eq(dom_element_set_attribute(node, qname, value), DOM_INVALID_CHARACTER_ERR);
+    dom_string_unref(qname);
+    dom_string_unref(ns);
+    ns = string("http://www.w3.org/1999/xlink");
+    qname = string("xlink:href");
+    ck_assert_int_eq(dom_element_set_attribute_ns(node, ns, qname, value), DOM_NO_ERR);
+    check_attribute((dom_node *)node, dom_string_data(ns), "href", "xlink", "v");
+    dom_string_unref(qname);
+    qname = string("other:href");
+    ck_assert_int_eq(dom_element_set_attribute_ns(node, ns, qname, value), DOM_NO_ERR);
+    /* Setting an existing attribute value preserves its original prefix. */
+    check_attribute((dom_node *)node, dom_string_data(ns), "href", "xlink", "v");
+    dom_string_unref(qname);
+    dom_string_unref(value);
+    dom_string_unref(ns);
+    dom_node_unref(node);
+}
+END_TEST
+
 START_TEST(test_context_local_name)
 {
     dom_string *ns = string("http://www.w3.org/1999/xhtml");
@@ -405,6 +692,93 @@ START_TEST(test_inert_and_abandoned)
 }
 END_TEST
 
+static unsigned html_script_count, svg_count;
+
+static dom_hubbub_error count_html_script(void *ctx, dom_node *node)
+{
+    dom_string *ns = NULL;
+    ck_assert_int_eq(dom_node_get_namespace(node, &ns), DOM_NO_ERR);
+    ck_assert_str_eq(dom_string_data(ns), "http://www.w3.org/1999/xhtml");
+    dom_string_unref(ns);
+    html_script_count++;
+    return DOM_HUBBUB_OK;
+}
+
+static dom_hubbub_error count_svg(void *ctx, dom_node *node)
+{
+    svg_count++;
+    return DOM_HUBBUB_OK;
+}
+
+START_TEST(test_foreign_callbacks_and_lifetime)
+{
+    bool fragment_mode = _i < 2, complete = (_i & 1) == 0;
+    dom_hubbub_parser_params params = {
+        .enc = "UTF-8", .fix_enc = true, .enable_script = true, .script = count_html_script, .svg = count_svg};
+    dom_hubbub_parser *parser = NULL;
+    dom_document *parsed = NULL;
+    dom_document_fragment *fragment = NULL;
+    dom_element *context = NULL;
+    html_script_count = svg_count = 0;
+    if (fragment_mode) {
+        dom_string *ns = string(namespace_uri("svg")), *name = string("svg");
+        ck_assert_int_eq(dom_document_create_element_ns(document, ns, name, &context), DOM_NO_ERR);
+        dom_string_unref(ns);
+        dom_string_unref(name);
+        ck_assert_int_eq(dom_hubbub_fragment_parser_create(&params, context, &parser, &fragment), DOM_HUBBUB_OK);
+        /* No later token processing may rely on this context node remaining alive. */
+        dom_node_unref(context);
+    } else {
+        ck_assert_int_eq(dom_hubbub_parser_create(&params, &parser, &parsed), DOM_HUBBUB_OK);
+    }
+    const char *input = fragment_mode
+        ? "<svg><script>x</script><script/><foreignObject><script>y</script></foreignObject></svg><g>open"
+        : "<!doctype html><svg><script>x</script><script/></svg><script>y</script><svg><g>open";
+    for (size_t i = 0; input[i]; i++)
+        ck_assert_int_eq(dom_hubbub_parser_parse_chunk(parser, (const uint8_t *)input + i, 1), DOM_HUBBUB_OK);
+    if (complete)
+        ck_assert_int_eq(dom_hubbub_parser_completed(parser), DOM_HUBBUB_OK);
+    ck_assert_uint_eq(html_script_count, fragment_mode ? 0 : 1);
+    ck_assert_uint_eq(svg_count, fragment_mode ? 0 : 1);
+    dom_node_unref(fragment);
+    dom_node_unref(parsed);
+    dom_hubbub_parser_destroy(parser);
+}
+END_TEST
+
+START_TEST(test_foreign_cdata_null)
+{
+    dom_string *ns = string(namespace_uri("svg")), *name = string("svg");
+    dom_element *context = NULL;
+    ck_assert_int_eq(dom_document_create_element_ns(document, ns, name, &context), DOM_NO_ERR);
+    dom_hubbub_parser *parser = NULL;
+    dom_document_fragment *fragment = NULL;
+    dom_hubbub_parser_params params = {0};
+    ck_assert_int_eq(dom_hubbub_fragment_parser_create(&params, context, &parser, &fragment), DOM_HUBBUB_OK);
+    const char input[] = "<![CDATA[A\0B]]><g/>";
+    size_t chunk = _i ? 1 : sizeof(input) - 1;
+    for (size_t offset = 0; offset < sizeof(input) - 1;) {
+        size_t take = sizeof(input) - 1 - offset < chunk ? sizeof(input) - 1 - offset : chunk;
+        ck_assert_int_eq(dom_hubbub_parser_parse_chunk(parser, (const uint8_t *)input + offset, take), DOM_HUBBUB_OK);
+        offset += take;
+    }
+    ck_assert_int_eq(dom_hubbub_parser_completed(parser), DOM_HUBBUB_OK);
+    used = 0;
+    tree[0] = 0;
+    describe_namespaces = true;
+    describe((dom_node *)fragment);
+    ck_assert_str_eq(tree,
+        "A\xEF\xBF\xBD"
+        "B<svg:g></g>");
+    describe_namespaces = false;
+    dom_hubbub_parser_destroy(parser);
+    dom_node_unref(fragment);
+    dom_node_unref(context);
+    dom_string_unref(ns);
+    dom_string_unref(name);
+}
+END_TEST
+
 START_TEST(test_foreign_descendant)
 {
     dom_node *context = element("div");
@@ -434,7 +808,7 @@ END_TEST
 
 START_TEST(test_unsupported_context)
 {
-    dom_string *ns = string("http://www.w3.org/2000/svg"), *name = string("svg");
+    dom_string *ns = string("urn:unsupported"), *name = string("svg");
     dom_element *context = NULL;
     if (_i == 0)
         ck_assert_int_eq(dom_document_create_element_ns(document, ns, name, &context), DOM_NO_ERR);
@@ -463,6 +837,13 @@ int main(void)
     tcase_add_loop_test(tc, test_form_context, 0, 2);
     tcase_add_loop_test(tc, test_inert_and_abandoned, 0, 3);
     tcase_add_test(tc, test_foreign_descendant);
+    tcase_add_loop_test(tc, test_foreign_callbacks_and_lifetime, 0, 4);
+    tcase_add_loop_test(tc, test_foreign_cdata_null, 0, 2);
+    tcase_add_loop_test(tc, test_foreign_document_and_fragment, 0,
+        4 * (sizeof(foreign_document_cases) / sizeof(foreign_document_cases[0])));
+    tcase_add_loop_test(tc, test_foreign_names_and_attributes, 0, 4);
+    tcase_add_test(tc, test_public_namespace_validation);
+    tcase_add_loop_test(tc, test_foreign_contexts, 0, 2 * (sizeof(foreign_cases) / sizeof(foreign_cases[0])));
     tcase_add_loop_test(tc, test_unsupported_context, 0, 2);
     tcase_add_loop_test(tc, test_select_document_and_fragment, 0, 4 * (sizeof(select_cases) / sizeof(select_cases[0])));
     suite_add_tcase(suite, tc);

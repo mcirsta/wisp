@@ -58,7 +58,7 @@ static hubbub_error process_0h_in_body(hubbub_treebuilder *treebuilder, element_
 static hubbub_error process_0presentational_in_body(hubbub_treebuilder *treebuilder, element_type type);
 static hubbub_error process_0applet_marquee_object_in_body(hubbub_treebuilder *treebuilder, element_type type);
 static hubbub_error process_0br_in_body(hubbub_treebuilder *treebuilder);
-static hubbub_error process_0generic_in_body(hubbub_treebuilder *treebuilder, element_type type);
+static hubbub_error process_0generic_in_body(hubbub_treebuilder *treebuilder, const hubbub_token *token);
 
 static hubbub_error aa_find_and_validate_formatting_element(
     hubbub_treebuilder *treebuilder, element_type type, formatting_list_entry **element);
@@ -258,7 +258,8 @@ hubbub_error process_start_tag(hubbub_treebuilder *treebuilder, const hubbub_tok
     } else if (type == AREA || type == BASEFONT || type == BGSOUND || type == BR || type == EMBED || type == IMG ||
         type == INPUT || type == PARAM || type == SPACER || type == WBR) {
         if (type == INPUT) {
-            if (treebuilder->context.fragment && treebuilder->context.fragment_type == SELECT)
+            if (treebuilder->context.fragment && treebuilder->context.fragment_context.ns == HUBBUB_NS_HTML &&
+                treebuilder->context.fragment_context.type == SELECT)
                 return HUBBUB_OK;
             if (element_in_scope(treebuilder, SELECT, SCOPE_NORMAL))
                 element_stack_pop_until(treebuilder, SELECT);
@@ -311,10 +312,6 @@ hubbub_error process_start_tag(hubbub_treebuilder *treebuilder, const hubbub_tok
             /** \todo ack sc flag */
         } else {
             err = insert_element(treebuilder, &tag, true);
-            if (err == HUBBUB_OK) {
-                treebuilder->context.second_mode = treebuilder->context.mode;
-                treebuilder->context.mode = IN_FOREIGN_CONTENT;
-            }
         }
     } else if (type == CAPTION || type == COL || type == COLGROUP || type == FRAME || type == HEAD || type == TBODY ||
         type == TD || type == TFOOT || type == TH || type == THEAD || type == TR) {
@@ -374,7 +371,7 @@ hubbub_error process_end_tag(hubbub_treebuilder *treebuilder, const hubbub_token
         (treebuilder->context.enable_scripting && type == NOSCRIPT)) {
         /** \todo parse error */
     } else {
-        err = process_0generic_in_body(treebuilder, type);
+        err = process_0generic_in_body(treebuilder, token);
     }
 
     return err;
@@ -1083,7 +1080,8 @@ hubbub_error process_isindex_in_body(hubbub_treebuilder *treebuilder, const hubb
     treebuilder->context.frameset_ok = false;
 
     /* Act as if </label> was seen */
-    err = process_0generic_in_body(treebuilder, LABEL);
+    dummy.data.tag.name = (hubbub_string){(const uint8_t *)"label", SLEN("label")};
+    err = process_0generic_in_body(treebuilder, &dummy);
     assert(err == HUBBUB_OK);
 
     /* Act as if </p> was seen */
@@ -1128,7 +1126,8 @@ hubbub_error process_select_in_body(hubbub_treebuilder *treebuilder, const hubbu
 {
     hubbub_error err;
 
-    if (treebuilder->context.fragment && treebuilder->context.fragment_type == SELECT)
+    if (treebuilder->context.fragment && treebuilder->context.fragment_context.ns == HUBBUB_NS_HTML &&
+        treebuilder->context.fragment_context.type == SELECT)
         return HUBBUB_OK;
     if (element_in_scope(treebuilder, SELECT, SCOPE_NORMAL)) {
         element_stack_pop_until(treebuilder, SELECT);
@@ -1555,8 +1554,8 @@ hubbub_error process_0presentational_in_body(hubbub_treebuilder *treebuilder, el
 
         /* Now, in the gap after furthest block,
          * we insert an entry for clone */
-        stack[furthest_block + 1].type = entry->details.type;
-        stack[furthest_block + 1].node = clone_appended;
+        stack[furthest_block + 1] = (element_context){
+            .ns = entry->details.ns, .type = entry->details.type, .node = clone_appended};
 
         /* 11 */
         err = formatting_list_remove(treebuilder, entry, &ons, &otype, &onode, &oindex);
@@ -1664,9 +1663,7 @@ hubbub_error aa_find_furthest_block(
     uint32_t fb;
 
     for (fb = fe_index + 1; fb <= treebuilder->context.current_node; fb++) {
-        element_type type = treebuilder->context.element_stack[fb].type;
-
-        if (!(is_phrasing_element(type) || is_formatting_element(type)))
+        if (is_special_node(&treebuilder->context.element_stack[fb]))
             break;
     }
 
@@ -2028,15 +2025,22 @@ hubbub_error process_0br_in_body(hubbub_treebuilder *treebuilder)
  * Process a generic end tag as if in "in body"
  *
  * \param treebuilder  The treebuilder instance
- * \param type         The element type
+ * \param token        The end tag token
  */
-hubbub_error process_0generic_in_body(hubbub_treebuilder *treebuilder, element_type type)
+hubbub_error process_0generic_in_body(hubbub_treebuilder *treebuilder, const hubbub_token *token)
 {
+    element_type type = element_type_from_name(treebuilder, &token->data.tag.name);
     element_context *stack = treebuilder->context.element_stack;
     uint32_t node = treebuilder->context.current_node;
 
     do {
-        if (stack[node].type == type) {
+        bool match = false;
+        if (stack[node].ns == HUBBUB_NS_HTML) {
+            hubbub_error err = element_name_matches(treebuilder, &stack[node], &token->data.tag.name, type, &match);
+            if (err != HUBBUB_OK)
+                return err;
+        }
+        if (match) {
             uint32_t popped = 0;
             element_type otype;
 
@@ -2052,8 +2056,6 @@ hubbub_error process_0generic_in_body(hubbub_treebuilder *treebuilder, element_t
 
                 popped++;
 
-                if (otype == type)
-                    break;
             }
 
             if (popped > 1) {
@@ -2061,7 +2063,7 @@ hubbub_error process_0generic_in_body(hubbub_treebuilder *treebuilder, element_t
             }
 
             break;
-        } else if (!is_formatting_element(stack[node].type) && !is_phrasing_element(stack[node].type)) {
+        } else if (is_special_node(&stack[node])) {
             /** \todo parse error */
             break;
         }

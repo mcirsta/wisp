@@ -21,7 +21,7 @@
 typedef struct element_context {
     hubbub_ns ns; /**< Element namespace */
     element_type type; /**< Element type */
-    uint8_t *name; /**< Element name (interned) */
+    bool html_integration_point; /**< Determined from the creating token */
 
     bool tainted; /**< Only for tables.  "Once the
                    * current table has been tainted,
@@ -49,7 +49,6 @@ typedef struct formatting_list_entry {
  */
 typedef struct hubbub_treebuilder_context {
     insertion_mode mode; /**< The current insertion mode */
-    insertion_mode second_mode; /**< The secondary insertion mode */
 
 #define ELEMENT_STACK_CHUNK 128
     element_context *element_stack; /**< Stack of open elements */
@@ -71,7 +70,7 @@ typedef struct hubbub_treebuilder_context {
     bool enable_scripting; /**< Whether scripting is enabled */
 
     bool fragment; /**< A context element supplies fragment parsing state */
-    element_type fragment_type; /**< Context type, not on the element stack */
+    element_context fragment_context; /**< Adjusted current node at the synthetic root */
 
     struct {
         insertion_mode mode; /**< Insertion mode to return to */
@@ -104,6 +103,15 @@ struct hubbub_treebuilder {
 };
 
 hubbub_error hubbub_treebuilder_token_handler(const hubbub_token *token, void *pw);
+
+hubbub_error process_html_token(hubbub_treebuilder *treebuilder, const hubbub_token *token);
+const element_context *adjusted_current_node(const hubbub_treebuilder *treebuilder);
+bool is_mathml_text_integration_point(const element_context *node);
+bool is_html_integration_point(const hubbub_tag *tag, element_type type);
+bool token_uses_foreign_rules(hubbub_treebuilder *treebuilder, const hubbub_token *token);
+hubbub_error element_name_matches(hubbub_treebuilder *treebuilder, const element_context *node,
+    const hubbub_string *name, element_type type, bool *match);
+bool is_special_node(const element_context *node);
 
 hubbub_error process_characters_expect_whitespace(
     hubbub_treebuilder *treebuilder, const hubbub_token *token, bool insert_into_current_node);

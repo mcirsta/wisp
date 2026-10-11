@@ -15,6 +15,8 @@
 static uint16_t *node_ref;
 static uintptr_t node_ref_alloc;
 static uintptr_t node_counter;
+static char **node_names;
+static size_t node_names_alloc;
 
 #define GROW_REF                                                                                                       \
     if (node_counter >= node_ref_alloc) {                                                                              \
@@ -45,9 +47,36 @@ static hubbub_error add_attributes(void *ctx, void *node, const hubbub_attribute
 static hubbub_error set_quirks_mode(void *ctx, hubbub_quirks_mode mode);
 static hubbub_error complete_script(void *ctx, void *script);
 
+static hubbub_error save_name(uintptr_t node, const uint8_t *name, size_t length)
+{
+    if (node >= node_names_alloc) {
+        size_t count = node + NODE_REF_CHUNK;
+        char **names = realloc(node_names, count * sizeof(*names));
+        if (names == NULL)
+            return HUBBUB_NOMEM;
+        memset(names + node_names_alloc, 0, (count - node_names_alloc) * sizeof(*names));
+        node_names = names;
+        node_names_alloc = count;
+    }
+    node_names[node] = malloc(length + 1);
+    if (node_names[node] == NULL)
+        return HUBBUB_NOMEM;
+    memcpy(node_names[node], name, length);
+    node_names[node][length] = 0;
+    return HUBBUB_OK;
+}
+
+static hubbub_error get_name(void *ctx, void *node, hubbub_string *name)
+{
+    UNUSED(ctx);
+    const char *local = node_names[(uintptr_t)node];
+    *name = (hubbub_string){(const uint8_t *)local, strlen(local)};
+    return HUBBUB_OK;
+}
+
 static hubbub_tree_handler tree_handler = {create_comment, create_doctype, create_element, create_text, ref_node,
     unref_node, append_child, insert_before, remove_child, clone_node, reparent_children, get_parent, has_children,
-    form_associate, add_attributes, set_quirks_mode, NULL, complete_script, NULL};
+    form_associate, add_attributes, set_quirks_mode, NULL, complete_script, NULL, NULL, get_name};
 
 static int run_test(int argc, char **argv, unsigned int CHUNK_SIZE)
 {
@@ -121,6 +150,11 @@ static int run_test(int argc, char **argv, unsigned int CHUNK_SIZE)
     }
 
     free(node_ref);
+    for (size_t i = 0; i < node_names_alloc; i++)
+        free(node_names[i]);
+    free(node_names);
+    node_names = NULL;
+    node_names_alloc = 0;
     node_counter = 0;
 
     printf("%s\n", passed ? "PASS" : "FAIL");
@@ -208,7 +242,7 @@ hubbub_error create_element(void *ctx, const hubbub_tag *tag, void **result)
 
     *result = (void *)node_counter;
 
-    return HUBBUB_OK;
+    return save_name(node_counter, tag->name.ptr, tag->name.len);
 }
 
 hubbub_error create_text(void *ctx, const hubbub_string *data, void **result)
@@ -287,7 +321,8 @@ hubbub_error clone_node(void *ctx, void *node, bool deep, void **result)
 
     *result = (void *)node_counter;
 
-    return HUBBUB_OK;
+    const char *name = node_names[(uintptr_t)node];
+    return save_name(node_counter, (const uint8_t *)name, strlen(name));
 }
 
 hubbub_error reparent_children(void *ctx, void *node, void *new_parent)

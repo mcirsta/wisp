@@ -109,6 +109,7 @@ static const case_changes svg_tagnames[] = {
     {S("fediffuselighting"), "feDiffuseLighting"},
     {S("fedisplacementmap"), "feDisplacementMap"},
     {S("fedistantlight"), "feDistantLight"},
+    {S("fedropshadow"), "feDropShadow"},
     {S("feflood"), "feFlood"},
     {S("fefunca"), "feFuncA"},
     {S("fefuncb"), "feFuncB"},
@@ -258,181 +259,183 @@ void adjust_foreign_attributes(hubbub_treebuilder *treebuilder, hubbub_tag *tag)
 #undef S
 
 
-/*** Foreign content insertion mode ***/
-
-
-/**
- * Returns true iff there is an element in scope that has a namespace other
- * than the HTML namespace.
- */
-static bool element_in_scope_in_non_html_ns(hubbub_treebuilder *treebuilder)
+/* Foreign content is dispatched per token; it is not an insertion mode.
+ * https://html.spec.whatwg.org/multipage/parsing.html#tree-construction */
+bool is_mathml_text_integration_point(const element_context *node)
 {
-    element_context *stack = treebuilder->context.element_stack;
-    uint32_t node;
+    return node->ns == HUBBUB_NS_MATHML &&
+        (node->type == MI || node->type == MO || node->type == MN || node->type == MS || node->type == MTEXT);
+}
 
-    assert((signed)treebuilder->context.current_node >= 0);
-
-    for (node = treebuilder->context.current_node; node > 0; node--) {
-        element_type node_type = stack[node].type;
-
-        /* The list of element types given in the spec here are the
-         * scoping elements excluding TABLE and HTML. TABLE is handled
-         * in the previous conditional and HTML should only occur
-         * as the first node in the stack, which is never processed
-         * in this loop. */
-        if (node_type == TABLE || is_scoping_element(node_type))
-            break;
-
-        if (stack[node].ns != HUBBUB_NS_HTML)
-            return true;
+bool is_html_integration_point(const hubbub_tag *tag, element_type type)
+{
+    if (tag->ns == HUBBUB_NS_SVG)
+        return type == FOREIGNOBJECT || type == DESC || type == TITLE;
+    if (tag->ns == HUBBUB_NS_MATHML && type == ANNOTATION_XML) {
+        for (uint32_t i = 0; i < tag->n_attributes; i++) {
+            const hubbub_attribute *attr = &tag->attributes[i];
+            if (attr->ns == HUBBUB_NS_NULL &&
+                hubbub_string_match(attr->name.ptr, attr->name.len, (const uint8_t *)"encoding", SLEN("encoding"))) {
+                return hubbub_string_match_ci(
+                           attr->value.ptr, attr->value.len, (const uint8_t *)"text/html", SLEN("text/html")) ||
+                    hubbub_string_match_ci(attr->value.ptr, attr->value.len, (const uint8_t *)"application/xhtml+xml",
+                        SLEN("application/xhtml+xml"));
+            }
+        }
     }
-
     return false;
 }
 
-/**
- * Process a token as if in the secondary insertion mode.
- */
-static hubbub_error process_as_in_secondary(hubbub_treebuilder *treebuilder, const hubbub_token *token)
+bool token_uses_foreign_rules(hubbub_treebuilder *treebuilder, const hubbub_token *token)
 {
-    hubbub_error err;
-
-    /* Because we don't support calling insertion modes directly,
-     * instead we set the current mode to the secondary mode,
-     * call the token handler, and then reset the mode afterward
-     * as long as it's unchanged, as this has the same effect */
-
-    treebuilder->context.mode = treebuilder->context.second_mode;
-
-    err = hubbub_treebuilder_token_handler(token, treebuilder);
-    if (err != HUBBUB_OK) {
-        treebuilder->context.mode = IN_FOREIGN_CONTENT;
-        return err;
+    if (treebuilder->context.element_stack[0].type != HTML || token->type == HUBBUB_TOKEN_EOF)
+        return false;
+    const element_context *node = adjusted_current_node(treebuilder);
+    if (node->ns == HUBBUB_NS_HTML)
+        return false;
+    if (token->type == HUBBUB_TOKEN_START_TAG) {
+        element_type type = element_type_from_name(treebuilder, &token->data.tag.name);
+        if ((is_mathml_text_integration_point(node) && type != MGLYPH && type != MALIGNMARK) ||
+            (node->ns == HUBBUB_NS_MATHML && node->type == ANNOTATION_XML && type == SVG) ||
+            node->html_integration_point)
+            return false;
+    } else if (token->type == HUBBUB_TOKEN_CHARACTER &&
+        (is_mathml_text_integration_point(node) || node->html_integration_point)) {
+        return false;
     }
+    return true;
+}
 
-    if (treebuilder->context.mode == treebuilder->context.second_mode)
-        treebuilder->context.mode = IN_FOREIGN_CONTENT;
+/* Known token types are a cheap identity check. Unknown names must be compared
+ * by local name: <g>, <path> and custom HTML tags must not all match UNKNOWN.
+ * Borrow the DOM's name only on that slow path, with no copying or allocation. */
+hubbub_error element_name_matches(hubbub_treebuilder *treebuilder, const element_context *node,
+    const hubbub_string *name, element_type type, bool *match)
+{
+    *match = node->type == type;
+    if (!*match || type != UNKNOWN)
+        return HUBBUB_OK;
+    hubbub_string local;
+    hubbub_error err = treebuilder->tree_handler->get_name(treebuilder->tree_handler->ctx, node->node, &local);
+    if (err == HUBBUB_OK)
+        *match = hubbub_string_match_ci(local.ptr, local.len, name->ptr, name->len);
+    return err;
+}
 
-    if (treebuilder->context.mode == IN_FOREIGN_CONTENT && !element_in_scope_in_non_html_ns(treebuilder)) {
-        treebuilder->context.mode = treebuilder->context.second_mode;
+bool is_special_node(const element_context *node)
+{
+    if (node->ns == HUBBUB_NS_HTML)
+        return !is_formatting_element(node->type) && !is_phrasing_element(node->type);
+    return is_mathml_text_integration_point(node) || (node->ns == HUBBUB_NS_MATHML && node->type == ANNOTATION_XML) ||
+        (node->ns == HUBBUB_NS_SVG && (node->type == FOREIGNOBJECT || node->type == DESC || node->type == TITLE));
+}
+
+static void pop_foreign_node(hubbub_treebuilder *treebuilder)
+{
+    hubbub_ns ns;
+    element_type type;
+    void *node;
+    element_stack_pop(treebuilder, &ns, &type, &node);
+    treebuilder->tree_handler->unref_node(treebuilder->tree_handler->ctx, node);
+}
+
+static bool foreign_start_breaks_out(hubbub_treebuilder *treebuilder, const hubbub_tag *tag)
+{
+    element_type type = element_type_from_name(treebuilder, &tag->name);
+    if (type == FONT) {
+        for (uint32_t i = 0; i < tag->n_attributes; i++) {
+            const hubbub_string *name = &tag->attributes[i].name;
+            if (hubbub_string_match(name->ptr, name->len, (const uint8_t *)"color", SLEN("color")) ||
+                hubbub_string_match(name->ptr, name->len, (const uint8_t *)"face", SLEN("face")) ||
+                hubbub_string_match(name->ptr, name->len, (const uint8_t *)"size", SLEN("size")))
+                return true;
+        }
+        return false;
     }
+    return type == B || type == BIG || type == BLOCKQUOTE || type == BODY || type == BR || type == CENTER ||
+        type == CODE || type == DD || type == DIV || type == DL || type == DT || type == EM || type == EMBED ||
+        type == H1 || type == H2 || type == H3 || type == H4 || type == H5 || type == H6 || type == HEAD ||
+        type == HR || type == I || type == IMG || type == LI || type == LISTING || type == MENU || type == META ||
+        type == NOBR || type == OL || type == P || type == PRE || type == RUBY || type == S || type == SMALL ||
+        type == SPAN || type == STRONG || type == STRIKE || type == SUB || type == SUP || type == TABLE || type == TT ||
+        type == U || type == UL || type == VAR;
+}
 
+static hubbub_error foreign_break_out(hubbub_treebuilder *treebuilder, const hubbub_token *token)
+{
+    /* Use the real current node, not the adjusted fragment context. Never pop
+     * the synthetic HTML root, nor cross an integration point. */
+    const element_context *node = &treebuilder->context.element_stack[treebuilder->context.current_node];
+    while (node->ns != HUBBUB_NS_HTML && !node->html_integration_point && !is_mathml_text_integration_point(node)) {
+        pop_foreign_node(treebuilder);
+        node = &treebuilder->context.element_stack[treebuilder->context.current_node];
+    }
+    return process_html_token(treebuilder, token);
+}
+
+static hubbub_error foreign_end_tag(hubbub_treebuilder *treebuilder, const hubbub_token *token)
+{
+    element_type type = element_type_from_name(treebuilder, &token->data.tag.name);
+    if (type == BR || type == P)
+        return foreign_break_out(treebuilder, token);
+    const element_context *stack = treebuilder->context.element_stack;
+    for (uint32_t i = treebuilder->context.current_node; i > 0; i--) {
+        bool match;
+        hubbub_error err = element_name_matches(treebuilder, &stack[i], &token->data.tag.name, type, &match);
+        if (err != HUBBUB_OK)
+            return err;
+        if (match) {
+            while (treebuilder->context.current_node >= i)
+                pop_foreign_node(treebuilder);
+            return HUBBUB_OK;
+        }
+        if (stack[i - 1].ns == HUBBUB_NS_HTML)
+            return process_html_token(treebuilder, token);
+    }
     return HUBBUB_OK;
 }
 
-/**
- * Break out of foreign content as a result of certain start tags or EOF.
- */
-static void foreign_break_out(hubbub_treebuilder *treebuilder)
-{
-    element_context *stack = treebuilder->context.element_stack;
-
-    /** \todo parse error */
-
-    while (stack[treebuilder->context.current_node].ns != HUBBUB_NS_HTML) {
-        hubbub_ns ns;
-        element_type type;
-        void *node;
-
-        element_stack_pop(treebuilder, &ns, &type, &node);
-
-        treebuilder->tree_handler->unref_node(treebuilder->tree_handler->ctx, node);
-    }
-
-    treebuilder->context.mode = treebuilder->context.second_mode;
-}
-
-/**
- * Handle tokens in "in foreign content" insertion mode
- *
- * \param treebuilder  The treebuilder instance
- * \param token        The token to process
- * \return True to reprocess the token, false otherwise
- */
 hubbub_error handle_in_foreign_content(hubbub_treebuilder *treebuilder, const hubbub_token *token)
 {
-    hubbub_error err = HUBBUB_OK;
-
     switch (token->type) {
     case HUBBUB_TOKEN_CHARACTER:
-        err = append_text(treebuilder, &token->data.character);
-        break;
-    case HUBBUB_TOKEN_COMMENT:
-        err = process_comment_append(
-            treebuilder, token, treebuilder->context.element_stack[treebuilder->context.current_node].node);
-        break;
-    case HUBBUB_TOKEN_DOCTYPE:
-        /** \todo parse error */
-        break;
-    case HUBBUB_TOKEN_START_TAG: {
-        hubbub_ns cur_node_ns = treebuilder->context.element_stack[treebuilder->context.current_node].ns;
-
-        element_type cur_node = current_node(treebuilder);
-        element_type type = element_type_from_name(treebuilder, &token->data.tag.name);
-
-        if (cur_node_ns == HUBBUB_NS_HTML ||
-            (cur_node_ns == HUBBUB_NS_MATHML && (type != MGLYPH && type != MALIGNMARK) &&
-                (cur_node == MI || cur_node == MO || cur_node == MN || cur_node == MS || cur_node == MTEXT)) ||
-            (type == SVG && (cur_node_ns == HUBBUB_NS_MATHML && cur_node == ANNOTATION_XML)) ||
-            (cur_node_ns == HUBBUB_NS_SVG && (cur_node == FOREIGNOBJECT || cur_node == DESC || cur_node == TITLE))) {
-            err = process_as_in_secondary(treebuilder, token);
-        } else if (type == B || type == BIG || type == BLOCKQUOTE || type == BODY || type == BR || type == CENTER ||
-            type == CODE || type == DD || type == DIV || type == DL || type == DT || type == EM || type == EMBED ||
-            type == H1 || type == H2 || type == H3 || type == H4 || type == H5 || type == H6 || type == HEAD ||
-            type == HR || type == I || type == IMG || type == LI || type == LISTING || type == MENU || type == META ||
-            type == NOBR || type == OL || type == P || type == PRE || type == RUBY || type == S || type == SMALL ||
-            type == SPAN || type == STRONG || type == STRIKE || type == SUB || type == SUP || type == TABLE ||
-            type == TT || type == U || type == UL || type == VAR) {
-            foreign_break_out(treebuilder);
-            err = HUBBUB_REPROCESS;
-        } else if (type == FONT) {
-            const hubbub_tag *tag = &token->data.tag;
-            size_t i;
-
-            for (i = 0; i < tag->n_attributes; i++) {
-                hubbub_attribute *attr = &tag->attributes[i];
-                const uint8_t *name = attr->name.ptr;
-                size_t len = attr->name.len;
-
-                if (hubbub_string_match(name, len, (const uint8_t *)"color", SLEN("color")) ||
-                    hubbub_string_match(name, len, (const uint8_t *)"face", SLEN("face")) ||
-                    hubbub_string_match(name, len, (const uint8_t *)"size", SLEN("size")))
-                    break;
-            }
-
-            if (i != tag->n_attributes) {
-                foreign_break_out(treebuilder);
-                err = HUBBUB_REPROCESS;
-            }
-        } else {
-            hubbub_tag tag = token->data.tag;
-
-            adjust_foreign_attributes(treebuilder, &tag);
-
-            if (cur_node_ns == HUBBUB_NS_SVG) {
-                adjust_svg_tagname(treebuilder, &tag);
-                adjust_svg_attributes(treebuilder, &tag);
-            }
-
-            /* Set to the right namespace and insert */
-            tag.ns = cur_node_ns;
-
-            if (token->data.tag.self_closing) {
-                err = insert_element(treebuilder, &tag, false);
-                /** \todo ack sc flag */
-            } else {
-                err = insert_element(treebuilder, &tag, true);
+        /* The tokenizer replaces NUL with U+FFFD before emitting it. */
+        for (size_t i = 0; i < token->data.character.len; i++) {
+            uint8_t c = token->data.character.ptr[i];
+            if (c != '\t' && c != '\n' && c != '\f' && c != '\r' && c != ' ') {
+                treebuilder->context.frameset_ok = false;
+                break;
             }
         }
-    } break;
-    case HUBBUB_TOKEN_END_TAG:
-        err = process_as_in_secondary(treebuilder, token);
-        break;
-    case HUBBUB_TOKEN_EOF:
-        foreign_break_out(treebuilder);
-        err = HUBBUB_REPROCESS;
-        break;
+        return append_text(treebuilder, &token->data.character);
+    case HUBBUB_TOKEN_COMMENT:
+        return process_comment_append(
+            treebuilder, token, treebuilder->context.element_stack[treebuilder->context.current_node].node);
+    case HUBBUB_TOKEN_DOCTYPE:
+        return HUBBUB_OK;
+    case HUBBUB_TOKEN_START_TAG: {
+        if (foreign_start_breaks_out(treebuilder, &token->data.tag))
+            return foreign_break_out(treebuilder, token);
+        hubbub_tag tag = token->data.tag;
+        tag.ns = adjusted_current_node(treebuilder)->ns;
+        if (tag.ns == HUBBUB_NS_SVG) {
+            adjust_svg_tagname(treebuilder, &tag);
+            adjust_svg_attributes(treebuilder, &tag);
+        } else if (tag.ns == HUBBUB_NS_MATHML) {
+            adjust_mathml_attributes(treebuilder, &tag);
+        }
+        adjust_foreign_attributes(treebuilder, &tag);
+        hubbub_error err = insert_element(treebuilder, &tag, true);
+        if (err == HUBBUB_OK && tag.self_closing)
+            pop_foreign_node(treebuilder);
+        /* SVG script execution is not exposed by the browser. SVG scripts
+         * stay foreign elements; never pass them to the HTML script callback. */
+        return err;
     }
-
-    return err;
+    case HUBBUB_TOKEN_END_TAG:
+        return foreign_end_tag(treebuilder, token);
+    case HUBBUB_TOKEN_EOF:
+        return process_html_token(treebuilder, token);
+    }
+    return HUBBUB_OK;
 }

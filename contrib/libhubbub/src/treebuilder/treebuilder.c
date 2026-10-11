@@ -25,9 +25,11 @@ static bool is_form_associated(element_type type);
 static hubbub_error initialise_fragment(hubbub_treebuilder *tb, const hubbub_fragment_context *fragment)
 {
     if (tb->tree_handler == NULL || tb->context.document == NULL || fragment->root == NULL ||
-        fragment->name.ptr == NULL || fragment->name.len == 0 || tb->context.mode != INITIAL)
+        fragment->name.ptr == NULL || fragment->name.len == 0 || tb->context.mode != INITIAL ||
+        (fragment->ns != HUBBUB_NS_HTML && fragment->ns != HUBBUB_NS_SVG && fragment->ns != HUBBUB_NS_MATHML))
         return HUBBUB_BADPARM;
-    if (hubbub_string_match(fragment->name.ptr, fragment->name.len, (const uint8_t *)"template", SLEN("template")))
+    if (fragment->ns == HUBBUB_NS_HTML &&
+        hubbub_string_match(fragment->name.ptr, fragment->name.len, (const uint8_t *)"template", SLEN("template")))
         return HUBBUB_INVALID; /* Template contents/insertion modes are not implemented. */
 
     element_type type = element_type_from_name(tb, &fragment->name);
@@ -39,12 +41,19 @@ static hubbub_error initialise_fragment(hubbub_treebuilder *tb, const hubbub_fra
             break;
         }
     }
+    if (fragment->ns == HUBBUB_NS_SVG && type == FOREIGNOBJECT)
+        type = UNKNOWN;
+    if (fragment->ns == HUBBUB_NS_SVG &&
+        hubbub_string_match(
+            fragment->name.ptr, fragment->name.len, (const uint8_t *)"foreignObject", SLEN("foreignObject")))
+        type = FOREIGNOBJECT;
     hubbub_tokeniser_optparams params;
     params.content_model.model = HUBBUB_CONTENT_MODEL_PCDATA;
-    if (type == TITLE || type == TEXTAREA)
+    if (fragment->ns == HUBBUB_NS_HTML && (type == TITLE || type == TEXTAREA))
         params.content_model.model = HUBBUB_CONTENT_MODEL_RCDATA;
-    else if (type == STYLE || type == XMP || type == IFRAME || type == NOEMBED || type == NOFRAMES || type == SCRIPT ||
-        type == PLAINTEXT || (type == NOSCRIPT && tb->context.enable_scripting))
+    else if (fragment->ns == HUBBUB_NS_HTML &&
+        (type == STYLE || type == XMP || type == IFRAME || type == NOEMBED || type == NOFRAMES || type == SCRIPT ||
+            type == PLAINTEXT || (type == NOSCRIPT && tb->context.enable_scripting)))
         /* With no preceding start tag, RAWTEXT/script data have no appropriate
          * end tag. The fragment algorithm explicitly permits PLAINTEXT here. */
         params.content_model.model = HUBBUB_CONTENT_MODEL_PLAINTEXT;
@@ -53,7 +62,15 @@ static hubbub_error initialise_fragment(hubbub_treebuilder *tb, const hubbub_fra
         return err;
 
     tb->context.fragment = true;
-    tb->context.fragment_type = type;
+    hubbub_attribute encoding = {.name = {(const uint8_t *)"encoding", 8}, .value = fragment->encoding};
+    hubbub_tag context_tag = {.ns = fragment->ns,
+        .name = fragment->name,
+        .n_attributes = fragment->encoding.ptr == NULL ? 0 : 1,
+        .attributes = &encoding};
+    tb->context.fragment_context = (element_context){
+        .ns = fragment->ns, .type = type, .html_integration_point = is_html_integration_point(&context_tag, type)};
+    params.process_cdata = fragment->ns != HUBBUB_NS_HTML;
+    hubbub_tokeniser_setopt(tb->tokeniser, HUBBUB_TOKENISER_PROCESS_CDATA, &params);
     tb->context.element_stack[0] = (element_context){.ns = HUBBUB_NS_HTML, .type = HTML, .node = fragment->root};
     tb->tree_handler->ref_node(tb->tree_handler->ctx, fragment->root);
     if (fragment->form != NULL) {
@@ -102,7 +119,7 @@ hubbub_error hubbub_treebuilder_create(hubbub_tokeniser *tokeniser, hubbub_treeb
     /* We rely on HTML not being equal to zero to determine
      * if the first item in the stack is in use. Assert this here. */
     assert(HTML != 0);
-    tb->context.element_stack[0].type = (element_type)0;
+    tb->context.element_stack[0] = (element_context){0};
 
     tb->context.strip_leading_lr = false;
     tb->context.frameset_ok = true;
@@ -207,6 +224,8 @@ hubbub_error hubbub_treebuilder_setopt(
         treebuilder->error_pw = params->error_handler.pw;
         break;
     case HUBBUB_TREEBUILDER_TREE_HANDLER:
+        if (params->tree_handler == NULL || params->tree_handler->get_name == NULL)
+            return HUBBUB_BADPARM;
         treebuilder->tree_handler = params->tree_handler;
         break;
     case HUBBUB_TREEBUILDER_DOCUMENT_NODE:
@@ -222,6 +241,14 @@ hubbub_error hubbub_treebuilder_setopt(
     return HUBBUB_OK;
 }
 
+/* Fragment contexts substitute only for the synthetic root, never its children. */
+const element_context *adjusted_current_node(const hubbub_treebuilder *treebuilder)
+{
+    return treebuilder->context.fragment && treebuilder->context.current_node == 0
+        ? &treebuilder->context.fragment_context
+        : &treebuilder->context.element_stack[treebuilder->context.current_node];
+}
+
 /**
  * Handle tokeniser emitting a token
  *
@@ -230,14 +257,25 @@ hubbub_error hubbub_treebuilder_setopt(
  */
 hubbub_error hubbub_treebuilder_token_handler(const hubbub_token *token, void *pw)
 {
-    hubbub_treebuilder *treebuilder = (hubbub_treebuilder *)pw;
-    hubbub_error err = HUBBUB_REPROCESS;
-
-    /* Do nothing if we have no document node or there's no tree handler */
+    hubbub_treebuilder *treebuilder = pw;
     if (treebuilder->context.document == NULL || treebuilder->tree_handler == NULL)
         return HUBBUB_OK;
 
-    assert((signed)treebuilder->context.current_node >= 0);
+    /* Foreign rules are selected per token, independently of the HTML insertion
+     * mode. HTML integration points can return here without losing table/text state. */
+    hubbub_error err = token_uses_foreign_rules(treebuilder, token) ? handle_in_foreign_content(treebuilder, token)
+                                                                    : process_html_token(treebuilder, token);
+    hubbub_tokeniser_optparams params = {.process_cdata = treebuilder->context.element_stack[0].type == HTML &&
+            adjusted_current_node(treebuilder)->ns != HUBBUB_NS_HTML};
+    hubbub_tokeniser_setopt(treebuilder->tokeniser, HUBBUB_TOKENISER_PROCESS_CDATA, &params);
+    return err;
+}
+
+/* Direct processing is also used by foreign breakout/end-tag rules. Re-entering
+ * the dispatcher there would loop on a foreign fragment context at the root. */
+hubbub_error process_html_token(hubbub_treebuilder *treebuilder, const hubbub_token *token)
+{
+    hubbub_error err = HUBBUB_REPROCESS;
 
 /* A slightly nasty debugging hook, but very useful */
 #ifdef DEBUG_CSS_EXTRA
@@ -275,8 +313,6 @@ hubbub_error hubbub_treebuilder_token_handler(const hubbub_token *token, void *p
             mode(IN_ROW) err = handle_in_row(treebuilder, token);
             break;
             mode(IN_CELL) err = handle_in_cell(treebuilder, token);
-            break;
-            mode(IN_FOREIGN_CONTENT) err = handle_in_foreign_content(treebuilder, token);
             break;
             mode(AFTER_BODY) err = handle_after_body(treebuilder, token);
             break;
@@ -656,7 +692,8 @@ hubbub_error insert_element(hubbub_treebuilder *treebuilder, const hubbub_tag *t
         return error;
 
     type = element_type_from_name(treebuilder, &tag->name);
-    if (!treebuilder->context.fragment && treebuilder->context.form_element != NULL && is_form_associated(type)) {
+    if (!treebuilder->context.fragment && tag->ns == HUBBUB_NS_HTML && treebuilder->context.form_element != NULL &&
+        is_form_associated(type)) {
         /* Consideration of @form is left to the client */
         error = treebuilder->tree_handler->form_associate(
             treebuilder->tree_handler->ctx, treebuilder->context.form_element, appended);
@@ -671,6 +708,9 @@ hubbub_error insert_element(hubbub_treebuilder *treebuilder, const hubbub_tag *t
 
     if (push) {
         error = element_stack_push(treebuilder, tag->ns, type, appended);
+        if (error == HUBBUB_OK)
+            treebuilder->context.element_stack[treebuilder->context.current_node].html_integration_point =
+                is_html_integration_point(tag, type);
         if (error != HUBBUB_OK) {
             remove_node_from_dom(treebuilder, appended);
 
@@ -697,8 +737,9 @@ void close_implied_end_tags(hubbub_treebuilder *treebuilder, element_type except
 
     type = treebuilder->context.element_stack[treebuilder->context.current_node].type;
 
-    while (type == DD || type == DT || type == LI || type == OPTION || type == OPTGROUP || type == P || type == RP ||
-        type == RT) {
+    while (treebuilder->context.element_stack[treebuilder->context.current_node].ns == HUBBUB_NS_HTML &&
+        (type == DD || type == DT || type == LI || type == OPTION || type == OPTGROUP || type == P || type == RP ||
+            type == RT)) {
         hubbub_ns ns;
         element_type otype;
         void *node;
@@ -724,15 +765,10 @@ void reset_insertion_mode(hubbub_treebuilder *treebuilder)
     element_context *stack = treebuilder->context.element_stack;
 
     for (uint32_t node = treebuilder->context.current_node;; node--) {
-        if (stack[node].ns != HUBBUB_NS_HTML) {
-            treebuilder->context.mode = IN_FOREIGN_CONTENT;
-            treebuilder->context.second_mode = IN_BODY;
-            return;
-        }
-
         bool last = node == 0;
-        element_type type = last && treebuilder->context.fragment ? treebuilder->context.fragment_type
-                                                                  : stack[node].type;
+        const element_context *entry = last && treebuilder->context.fragment ? &treebuilder->context.fragment_context
+                                                                             : &stack[node];
+        element_type type = entry->ns == HUBBUB_NS_HTML ? entry->type : UNKNOWN;
         switch (type) {
         case TD:
         case TH:
@@ -929,9 +965,7 @@ hubbub_error element_stack_push(hubbub_treebuilder *treebuilder, hubbub_ns ns, e
         treebuilder->context.stack_alloc += ELEMENT_STACK_CHUNK;
     }
 
-    treebuilder->context.element_stack[slot].ns = ns;
-    treebuilder->context.element_stack[slot].type = type;
-    treebuilder->context.element_stack[slot].node = node;
+    treebuilder->context.element_stack[slot] = (element_context){.ns = ns, .type = type, .node = node};
 
     treebuilder->context.current_node = slot;
 
@@ -1126,9 +1160,7 @@ hubbub_error formatting_list_append(
     if (entry == NULL)
         return HUBBUB_NOMEM;
 
-    entry->details.ns = ns;
-    entry->details.type = type;
-    entry->details.node = node;
+    entry->details = (element_context){.ns = ns, .type = type, .node = node};
     entry->stack_index = stack_index;
 
     entry->prev = treebuilder->context.formatting_list_end;
@@ -1173,9 +1205,7 @@ hubbub_error formatting_list_insert(hubbub_treebuilder *treebuilder, formatting_
     if (entry == NULL)
         return HUBBUB_NOMEM;
 
-    entry->details.ns = ns;
-    entry->details.type = type;
-    entry->details.node = node;
+    entry->details = (element_context){.ns = ns, .type = type, .node = node};
     entry->stack_index = stack_index;
 
     entry->prev = prev;
@@ -1261,9 +1291,7 @@ hubbub_error formatting_list_replace(hubbub_treebuilder *treebuilder, formatting
     *onode = entry->details.node;
     *ostack_index = entry->stack_index;
 
-    entry->details.ns = ns;
-    entry->details.type = type;
-    entry->details.node = node;
+    entry->details = (element_context){.ns = ns, .type = type, .node = node};
     entry->stack_index = stack_index;
 
     return HUBBUB_OK;

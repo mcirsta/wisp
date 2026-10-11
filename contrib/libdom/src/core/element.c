@@ -451,8 +451,7 @@ static dom_attr_list *_dom_element_attr_list_clone(dom_attr_list *list, dom_elem
 
 static dom_exception
 _dom_element_get_attr(struct dom_element *element, dom_string *namespace, dom_string *name, dom_string **value);
-static dom_exception
-_dom_element_set_attr(struct dom_element *element, dom_string *namespace, dom_string *name, dom_string *value);
+static bool valid_attribute_local_name(dom_string *name);
 static dom_exception _dom_element_remove_attr(struct dom_element *element, dom_string *namespace, dom_string *name);
 
 static dom_exception _dom_element_get_attr_node(
@@ -660,7 +659,9 @@ dom_exception _dom_element_get_attribute(struct dom_element *element, dom_string
  */
 dom_exception _dom_element_set_attribute(struct dom_element *element, dom_string *name, dom_string *value)
 {
-    return _dom_element_set_attr(element, NULL, name, value);
+    if (!valid_attribute_local_name(name))
+        return DOM_INVALID_CHARACTER_ERR;
+    return _dom_element_set_attribute_internal(element, NULL, name, NULL, value);
 }
 
 /**
@@ -841,7 +842,7 @@ _dom_element_set_attribute_ns(struct dom_element *element, dom_string *namespace
         return DOM_NAMESPACE_ERR;
     }
 
-    err = _dom_element_set_attr(element, namespace, localname, value);
+    err = _dom_element_set_attribute_internal(element, namespace, localname, prefix, value);
 
     dom_string_unref(prefix);
     dom_string_unref(localname);
@@ -1569,23 +1570,22 @@ static bool valid_attribute_local_name(dom_string *name)
 }
 
 /**
- * The internal helper function for setAttribute and setAttributeNS.
+ * Set an attribute with an already resolved name. Public DOM methods validate
+ * their arguments first; HTML parser token names do not use XML validation.
  *
  * \param element    The element
  * \param namespace  The namespace to set attribute for.  May be NULL.
- * \param name       The name of the new attribute
+ * \param name       The local name of the new attribute
+ * \param prefix     The resolved prefix, or NULL
  * \param value      The value of the new attribute
  * \return DOM_NO_ERR on success, appropriate dom_exception on failure.
  */
-dom_exception
-_dom_element_set_attr(struct dom_element *element, dom_string *namespace, dom_string *name, dom_string *value)
+dom_exception _dom_element_set_attribute_internal(
+    struct dom_element *element, dom_string *namespace, dom_string *name, dom_string *prefix, dom_string *value)
 {
     dom_attr_list *match;
     dom_node_internal *e = (dom_node_internal *)element;
     dom_exception err;
-
-    if (!(namespace == NULL ? valid_attribute_local_name(name) : _dom_validate_name(name)))
-        return DOM_INVALID_CHARACTER_ERR;
 
     /* Ensure element can be written */
     if (_dom_node_readonly(e))
@@ -1634,7 +1634,7 @@ _dom_element_set_attr(struct dom_element *element, dom_string *namespace, dom_st
         struct dom_document *doc;
         bool success = true;
 
-        err = _dom_attr_create(e->owner, name, namespace, NULL, true, &attr);
+        err = _dom_attr_create(e->owner, name, namespace, prefix, true, &attr);
         if (err != DOM_NO_ERR)
             return err;
 

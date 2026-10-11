@@ -25,7 +25,6 @@ typedef enum {
     IN_TABLE_BODY,
     IN_ROW,
     IN_CELL,
-    IN_FOREIGN_CONTENT,
     AFTER_BODY,
     IN_FRAMESET,
     AFTER_FRAMESET,

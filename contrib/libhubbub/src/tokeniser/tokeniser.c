@@ -2440,7 +2440,7 @@ hubbub_error hubbub_tokeniser_handle_match_cdata(hubbub_tokeniser *tokeniser)
 
     assert(tokeniser->context.match_cdata.count <= CDATA_LEN);
 
-    if (CDATA[tokeniser->context.match_cdata.count] != (c & ~0x20)) {
+    if (CDATA[tokeniser->context.match_cdata.count] != c) {
         tokeniser->context.current_comment.len = tokeniser->context.pending = 0;
         tokeniser->state = STATE_BOGUS_COMMENT;
         return HUBBUB_OK;
@@ -2469,6 +2469,7 @@ hubbub_error hubbub_tokeniser_handle_cdata_block(hubbub_tokeniser *tokeniser)
     size_t len;
     const uint8_t *cptr;
     parserutils_error error;
+    hubbub_error err;
     uint8_t c;
 
     error = parserutils_inputstream_peek(tokeniser->input, tokeniser->context.pending, &cptr, &len);
@@ -2476,7 +2477,7 @@ hubbub_error hubbub_tokeniser_handle_cdata_block(hubbub_tokeniser *tokeniser)
     if (error != PARSERUTILS_OK) {
         if (error == PARSERUTILS_EOF) {
             tokeniser->state = STATE_DATA;
-            return emit_current_chars(tokeniser);
+            return tokeniser->context.pending > 0 ? emit_current_chars(tokeniser) : HUBBUB_OK;
         } else {
             return hubbub_error_from_parserutils_error(error);
         }
@@ -2484,15 +2485,20 @@ hubbub_error hubbub_tokeniser_handle_cdata_block(hubbub_tokeniser *tokeniser)
 
     c = *cptr;
 
-    if (c == ']' && (tokeniser->context.match_cdata.end == 0 || tokeniser->context.match_cdata.end == 1)) {
+    if (c == ']') {
         tokeniser->context.pending += len;
-        tokeniser->context.match_cdata.end += len;
+        if (tokeniser->context.match_cdata.end < 2)
+            tokeniser->context.match_cdata.end++;
     } else if (c == '>' && tokeniser->context.match_cdata.end == 2) {
         /* Remove the previous two "]]" */
         tokeniser->context.pending -= 2;
 
-        /* Emit any pending characters */
-        emit_current_chars(tokeniser);
+        /* Empty CDATA emits no character token. */
+        if (tokeniser->context.pending > 0) {
+            err = emit_current_chars(tokeniser);
+            if (err != HUBBUB_OK)
+                return err;
+        }
 
         /* Now move past the "]]>" bit */
         parserutils_inputstream_advance(tokeniser->input, SLEN("]]>"));
@@ -2501,11 +2507,15 @@ hubbub_error hubbub_tokeniser_handle_cdata_block(hubbub_tokeniser *tokeniser)
     } else if (c == '\0') {
         if (tokeniser->context.pending > 0) {
             /* Emit any pending characters */
-            emit_current_chars(tokeniser);
+            err = emit_current_chars(tokeniser);
+            if (err != HUBBUB_OK)
+                return err;
         }
 
         /* Perform NUL-byte replacement */
-        emit_character_token(tokeniser, &u_fffd_str);
+        err = emit_character_token(tokeniser, &u_fffd_str);
+        if (err != HUBBUB_OK)
+            return err;
 
         parserutils_inputstream_advance(tokeniser->input, len);
         tokeniser->context.match_cdata.end = 0;
@@ -2518,12 +2528,16 @@ hubbub_error hubbub_tokeniser_handle_cdata_block(hubbub_tokeniser *tokeniser)
 
         if (tokeniser->context.pending > 0) {
             /* Emit any pending characters */
-            emit_current_chars(tokeniser);
+            err = emit_current_chars(tokeniser);
+            if (err != HUBBUB_OK)
+                return err;
         }
 
         if (error == PARSERUTILS_EOF || *cptr != '\n') {
             /* Emit newline */
-            emit_character_token(tokeniser, &lf_str);
+            err = emit_character_token(tokeniser, &lf_str);
+            if (err != HUBBUB_OK)
+                return err;
         }
 
         /* Advance over \r */

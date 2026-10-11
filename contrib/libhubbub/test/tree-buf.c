@@ -93,9 +93,17 @@ static hubbub_error complete_script(void *ctx, void *script);
 static void delete_node(node_t *node);
 static void delete_attr(attr_t *attr);
 
+static hubbub_error get_name(void *ctx, void *node, hubbub_string *name)
+{
+    UNUSED(ctx);
+    const char *local = ((node_t *)node)->data.element.name;
+    *name = (hubbub_string){(const uint8_t *)local, strlen(local)};
+    return HUBBUB_OK;
+}
+
 static hubbub_tree_handler tree_handler = {create_comment, create_doctype, create_element, create_text, ref_node,
     unref_node, append_child, insert_before, remove_child, clone_node, reparent_children, get_parent, has_children,
-    form_associate, add_attributes, set_quirks_mode, NULL, complete_script, NULL};
+    form_associate, add_attributes, set_quirks_mode, NULL, complete_script, NULL, NULL, get_name};
 
 
 /*

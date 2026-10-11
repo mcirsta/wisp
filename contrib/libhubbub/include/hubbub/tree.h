@@ -241,6 +241,10 @@ typedef hubbub_error (*hubbub_tree_complete_script)(void *ctx, void *script);
  */
 typedef hubbub_error (*hubbub_tree_complete_svg)(void *ctx, void *svg);
 
+/** Return the element's immutable local name, borrowed while node is referenced.
+ * Required for end-tag matching, including names absent from the tag enum. */
+typedef hubbub_error (*hubbub_tree_get_name)(void *ctx, void *node, hubbub_string *name);
+
 /**
  * Hubbub tree handler
  */
@@ -265,6 +269,7 @@ typedef struct hubbub_tree_handler {
     hubbub_tree_complete_script complete_script; /**< Script Complete */
     hubbub_tree_complete_svg complete_svg; /**< SVG Complete */
     void *ctx; /**< Context pointer */
+    hubbub_tree_get_name get_name; /**< Borrow element local name */
 } hubbub_tree_handler;
 
 #ifdef __cplusplus
