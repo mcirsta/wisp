@@ -155,6 +155,11 @@ struct js_mouse_event {
 bool js_fire_input_event(
     jsthread *thread, struct dom_string *type, struct dom_node *target, const struct js_mouse_event *mouse);
 
+/* Trusted, bubbling/cancelable SubmitEvent. NULL submitter denotes implicit
+ * submission without a button. False suppresses navigation (canceled/failed).
+ * Caller owns content/DOM lifetime and guards recursive submission. */
+bool js_fire_submit_event(jsthread *thread, struct dom_node *form, struct dom_node *submitter);
+
 /*** New Events ***/
 
 /**

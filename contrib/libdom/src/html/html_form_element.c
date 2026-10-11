@@ -66,6 +66,7 @@ _dom_html_form_element_initialise(struct dom_html_element_create_params *params,
 {
     dom_exception err;
 
+    ele->firing_submission_events = false;
     err = _dom_html_element_initialise(params, &ele->base);
 
     return err;
@@ -141,6 +142,8 @@ dom_exception _dom_html_form_element_copy_internal(dom_html_form_element *old, d
 {
     dom_exception err;
 
+    /* Transient submission state belongs to the original element only. */
+    new->firing_submission_events = false;
     err = dom_html_element_copy_internal(old, new);
     if (err != DOM_NO_ERR) {
         return err;
@@ -151,6 +154,19 @@ dom_exception _dom_html_form_element_copy_internal(dom_html_form_element *old, d
 
 /*-----------------------------------------------------------------------*/
 /* Public APIs */
+
+bool dom_html_form_element_begin_submission_events(dom_html_form_element *form)
+{
+    if (form->firing_submission_events)
+        return false;
+    form->firing_submission_events = true;
+    return true;
+}
+
+void dom_html_form_element_end_submission_events(dom_html_form_element *form)
+{
+    form->firing_submission_events = false;
+}
 
 void dom_html_form_control_list_fini(dom_html_form_control_list *controls)
 {

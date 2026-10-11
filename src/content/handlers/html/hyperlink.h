@@ -15,7 +15,8 @@ nserror html_link_url(const dom_string *value, struct nsurl *base, struct nsurl 
 dom_node *html_hyperlink_target(dom_node *clicked);
 
 /** HTML target resolution shared by links/forms. A non-NULL override includes
- * the empty string; the returned target is owned. */
+ * the empty string; the returned target is owned. NULL element (a removed
+ * submitter has no form owner) uses the document base target/default. */
 nserror html_element_target(dom_document *document, dom_node *element, dom_string *override, char **target);
 
 /** Read action data after callbacks. NULL URL means no navigation. Successful

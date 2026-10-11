@@ -17,6 +17,7 @@ struct dom_html_collection;
 struct dom_html_form_element {
     struct dom_html_element base;
     /**< The base class */
+    bool firing_submission_events;
 };
 
 /* Create a dom_html_form_element object */

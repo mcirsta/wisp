@@ -7,6 +7,7 @@
 #include "location.h"
 #include "private.h"
 #include <wisp/browser_window.h>
+#include <wisp/content/handlers/html/private.h>
 #include <wisp/utils/log.h>
 #include <wisp/utils/nsurl.h>
 #include "quickjs.h"
@@ -288,6 +289,16 @@ static JSValue js_location_origin_getter(JSContext *ctx, JSValueConst this_val)
     return ret;
 }
 
+/* Called after argument conversion and the live-window check, with no page
+ * callbacks. Location and HTML resources use the same document base URL. */
+static nserror location_resolve_url(JSContext *ctx, const char *text, nsurl **url)
+{
+    jsthread *thread = JS_GetContextOpaque(ctx);
+    html_content *html = thread->doc_priv;
+    nsurl *base = html != NULL && html->base_url != NULL ? html->base_url : get_current_url(ctx);
+    return base != NULL ? nsurl_join(base, text, url) : nsurl_create(text, url);
+}
+
 static JSValue js_location_assign(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
     struct browser_window *bw;
@@ -315,7 +326,7 @@ static JSValue js_location_assign(JSContext *ctx, JSValueConst this_val, int arg
         return JS_UNDEFINED;
     }
 
-    err = nsurl_create(url_str, &url);
+    err = location_resolve_url(ctx, url_str, &url);
     JS_FreeCString(ctx, url_str);
 
     if (err != NSERROR_OK) {
@@ -368,7 +379,7 @@ static JSValue js_location_replace(JSContext *ctx, JSValueConst this_val, int ar
         return JS_UNDEFINED;
     }
 
-    err = nsurl_create(url_str, &url);
+    err = location_resolve_url(ctx, url_str, &url);
     JS_FreeCString(ctx, url_str);
 
     if (err != NSERROR_OK) {

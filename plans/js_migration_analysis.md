@@ -13,9 +13,30 @@ MouseEvent values share that dispatcher. The 2026-10-11 increments implement nat
 checkbox/radio pre-activation, cancellation rollback, label forwarding and trusted
 primary-click delivery to JS. This click adapter is enabled whenever JavaScript is
 enabled; it needs no experimental option. Keyboard events, the wider pointer/mouse
-stream, form submission callbacks and lifecycle delivery remain separate work.
-Earlier increment notes describe their historical scope; the current input status
-and next steps are recorded under "Implemented: native primary clicks" below.
+stream and lifecycle delivery remain separate work. Native SubmitEvent delivery
+is implemented; validation and FormDataEvent remain incomplete. Earlier increment
+notes describe their historical scope; the current status is recorded below.
+
+## Current priority: basic JS that makes sites readable (2026-10-11)
+
+The user's priority is scripts that initialize pages and populate visible content.
+After the native click/SubmitEvent batch, defer further form-API completeness,
+keyboard/pointer coverage and Location APIs unless a concrete reading-site blocker
+requires them. Do not make those features prerequisites for useful page rendering.
+Fix shared underlying defects found along the way when a focused root-cause fix
+is possible; an incomplete surrounding API is not a reason to leave such bugs.
+
+Next, establish document readiness and correctly timed DOMContentLoaded/load
+callbacks, then use saved/live reading sites to identify their first unsupported
+DOM operation. Prioritize real element queries, common DOM mutations and small
+style/HTML operations according to those failures. Confirm the needed behavior
+against standards and use focused fixtures plus visible full-page checks.
+Content-fetching APIs become a priority when a page needs them to populate the
+article or navigation; avoid fabricated success from the existing XHR stub.
+Keep execution limits, callback lifetime safety and JS-attributed mutation logs.
+
+This priority overrides the earlier batch ordering below. It does not imply all
+scripts or application APIs need to be supported before a page can be useful.
 
 ## Assessment
 
@@ -79,11 +100,11 @@ unless stated otherwise.
 | JS diagnostics | Optional `js_trace` records document/entry IDs, script sources, timer causality, navigation, exposed node IDs, actual DOM operations and coalesced render requests | Separates supported JS host effects from static processing; this is not complete paint attribution |
 | Document/nodes | `dom.c`/`document.c`/`tree.c`/`collections.c`: real libdom wrappers with stable identity, roots, ID lookup, traversal, live `childNodes`/`children` and element/text/comment/fragment factories | Document-lifetime wrapper ownership and native reference cleanup are tested; selectors, document-wide collections, namespace-aware creation and cross-document operations are not exposed |
 | Mutation/CSSOM | Real attributes, `id`/`className`, live `classList`, text/data and append/insert/replace/remove; connected edits request a full restyle after the entry/checkpoint | Changes affect boxes and pixels, including moves into detached trees; `style` and `innerHTML` remain omitted |
-| Events | Event/CustomEvent/UIEvent/core MouseEvent/PointerEvent/SubmitEvent values; shared script/native primary-click dispatch; checkable input/change delivery | Keyboard, other pointer/mouse events, full form submission callbacks, handler attributes and lifecycle remain pending |
+| Events | Event/CustomEvent/UIEvent/core MouseEvent/PointerEvent/SubmitEvent values; shared script/native primary-click and SubmitEvent dispatch; checkable input/change delivery | Keyboard, other pointer/mouse events, full form submission callbacks, handler attributes and lifecycle remain pending |
 | Cancellation | `abort.c`: AbortController, AbortSignal state/reason, throwIfAborted, static abort, onabort and the listener signal option | Listener cancellation uses private abort steps before the public event; timeout, any and network integration remain absent |
 | Lifecycle information | `document.readyState` is omitted | Correct loading state and lifecycle events belong to batch 4 |
 | Networking/storage | XHR fabricates DONE/200 without a request; storage discards writes; no `document.cookie` accessor or browser fetch binding | XHR/storage still advertise unsupported behavior. Native HTTP cookie handling is a separate subsystem |
-| Navigation | `location.c`: real URL getters and calls to navigation for assign/replace | Partial support: href has no setter, reload is a stub, relative URL resolution/history replacement need review; assign and replace currently use the same flags |
+| Navigation | `location.c`: real URL getters and relative/absolute navigation for assign/replace | Partial support: href has no setter, reload is a stub, history replacement needs review; assign and replace currently use the same flags |
 | Navigator | Hard-coded Windows Chrome 91 UA, English language and cookies-enabled value | JS identity differs from Wisp's actual HTTP UA and capabilities |
 | Generated bindings | `utils/qjs_binding_generator.py` generates Console and a generic Window stub | Not a complete WebIDL binding generator; see below |
 | Script loading | Parser-blocking classic scripts wait for fetches and preceding blocking stylesheets; async scripts run in readiness order, defer scripts in document order after parsing | Cached and failed fetches are covered; modules, dynamic script insertion and complete script-element processing remain unsupported/incomplete |
@@ -1030,9 +1051,9 @@ Five Qt checks also pass: loading, JS navigation cleanup, JS DOM updates,
 checkable interaction and checked selectors (Qt leak detection disabled).
 GTK is not tested.
 
-Scope: constraint validation, automatic SubmitEvent delivery and FormDataEvent payloads/sequencing,
-submission reentrancy guards and a separate complete entry-list implementation
-remain requirements for complete form submission callbacks. Legacy charset selection,
+Scope at this stage: validation, callback delivery/guards and entry-list
+construction were pending. The later increments below implement Unicode entries
+and native SubmitEvent delivery; validation and FormDataEvent remain pending. Legacy charset selection,
 other serialization details and URL-scheme-specific submission behavior are not
 claimed as fully conforming. Full form collections, dialog/text/plain support,
 document base-URL updates and label activation beyond checkables remain pending.
@@ -1076,10 +1097,9 @@ JS navigation cleanup and JS DOM rendering. The latter verifies pixels and
 listener-attributed mutation logs for SubmitEvent edits (Qt leak detection
 disabled). GTK is not tested.
 
-Scope: this completes SubmitEvent's script-visible data layer. Native form
-submission does not yet fire it; constraint validation, submission reentrancy
-guards, FormData/FormDataEvent and correct entry-list sequencing still need to
-be implemented together for complete form submission callbacks.
+Scope: this completes SubmitEvent's script-visible data layer. Native delivery
+and its reentrancy guard are implemented in the later increment below. Constraint
+validation and FormData/FormDataEvent sequencing remain pending.
 
 Standards: [HTML SubmitEvent interface](https://html.spec.whatwg.org/multipage/form-control-infrastructure.html#the-submitevent-interface)
 and [submission sequencing](https://html.spec.whatwg.org/multipage/form-control-infrastructure.html#form-submission-algorithm).
@@ -1146,9 +1166,9 @@ GTK is not tested.
 Scope: this implements candidate enumeration and these filtering rules. The
 Unicode entry/transport separation described below builds on it; option
 selectedness/list membership, charset rules and remaining control-specific
-details still need review before exposing FormData or delivering native
-submission events to JS. Constraint validation, submission reentrancy and
-callback sequencing remain pending.
+details still need review before exposing complete FormData construction. Native
+SubmitEvent delivery and its guard are implemented below; constraint validation
+and FormDataEvent sequencing remain pending.
 
 Standards: [constructing the entry list](https://html.spec.whatwg.org/multipage/form-control-infrastructure.html#constructing-the-entry-list),
 [form.elements](https://html.spec.whatwg.org/multipage/forms.html#dom-form-elements)
@@ -1339,27 +1359,100 @@ Standards: [DOM event dispatch](https://dom.spec.whatwg.org/#concept-event-dispa
 [Pointer Events click requirements](https://w3c.github.io/pointerevents/#click-auxclick-and-contextmenu),
 [HTML checkable activation](https://html.spec.whatwg.org/multipage/input.html#the-input-element).
 
-### Next: form callbacks, then keyboard delivery
+### Implemented: native SubmitEvent delivery (2026-10-11)
 
-1. Complete the form submission callback sequence: validation, automatic
-   SubmitEvent delivery, FormData/FormDataEvent entry mutation and reentrancy
-   guards. Continue the existing Unicode entry representation and File/Blob work.
-   Full form collections and an exhaustive legacy-encoding audit are independent
-   completeness work, not prerequisites for the enabled native click bridge.
-2. Extend the frontend/core keyboard boundary to preserve press/release, key/code,
-   modifiers, repeat and composition information. Deliver KeyboardEvent at the
-   focused element and honor cancellation before editing/default actions.
-3. Extend the native mouse/pointer stream beyond primary click: down/up/motion,
-   boundary events, auxiliary/context-menu/double-click delivery, capture and
-   press/release target reconciliation. The present adapter uses the existing
-   native click hit-testing and drag decision; full pointer-stream conformance
-   is not claimed. Complete synthetic MouseEvent activation/default actions too.
-4. Complete radio synchronization on live owner/name/type/checkedness changes,
-   additional label activation/focus and live document base-URL updates.
+Native submit-button activation and implicit Enter submission now dispatch a
+trusted, bubbling, cancelable SubmitEvent on the form before collecting entries.
+The event retains the original submitter wrapper (null for implicit submission
+without a button). Capture/bubbling, cancellation, exceptions and per-listener
+microtask checkpoints share the bounded native dispatch scope used by clicks.
+Page constructors are not consulted. `form.dispatch type=submit origin=browser`
+identifies the source in the JS trace; mutations retain their listener entry IDs.
 
-Inline handlers, readyState and HTML lifecycle timing remain subsequent work. The
-current `load` call precedes the initial box build and cannot simply be exposed to
-JS. Cross-document JS objects remain outside the current DOM binding scope.
+HTML's firing-submission-events flag lives on the libdom form element, survives
+box rebuilding, starts clear on clones and blocks recursive submissions of the
+same form. Other forms can still submit from a callback. The flag is cleared on
+cancellation, interruption and document closure. Content/generation checks and a
+fresh connectivity check suppress deferred work on a retired or removed form.
+
+Listeners can change controls, action, method, target and encoding before the
+owned request is constructed. Moving/removing/changing the submitter does not
+change which form supplies entries: submission attributes are resolved using
+its current submit-button state and current form owner. A missing owner uses the
+attribute defaults and document base target. Disabled JS retains native behavior.
+
+This increment adds the submit stage to existing native submissions. Constraint
+validation is still absent, so invalid controls are not yet blocked from firing
+submit or navigating. Add validation immediately before SubmitEvent within the
+same per-form guard. FormData/FormDataEvent, direct form.submit()/requestSubmit()
+IDL methods, and the separate constructing-entry-list guard remain pending.
+The legacy libdom form_submit function is not a modern submission transaction
+and must not be exposed directly as the JS submit() method.
+
+The historical Duktape HTMLFormElement binding was reviewed: it contains
+attribute declarations but no submission transaction to reuse. The event order,
+flags and guard follow the [HTML form submission algorithm](https://html.spec.whatwg.org/multipage/form-control-infrastructure.html#form-submission-algorithm)
+and [SubmitEvent interface](https://html.spec.whatwg.org/multipage/form-control-infrastructure.html#the-submitevent-interface).
+
+Validation: Debug ASan/UBSan and LeakSanitizer pass 167 QuickJS, 86 form-owner and
+115 interaction-lifetime cases. Native coverage includes retained submitter
+identity, native factory isolation, allocation recovery, per-form reentrancy,
+clone state, removal/reparenting, presentation rebuilding and close/reopen.
+The 30 HTTP encoding submissions now edit fields and encoding inside submit
+listeners and pass with the final request bytes checked. The Qt submission suite
+passes 18 additional cases, including cancellation/checkpoints, repeated canceled
+submissions, exceptions, timeout, relative navigation and implicit submission.
+
+### Implemented: shared parser-time base-URL correction (2026-10-11)
+
+The submit callback probe exposed two underlying bugs: Location parsed relative
+references as standalone URLs, and the HTML base-element handler did the same
+for relative href. HTML also let later base elements overwrite the first one.
+Base href now resolves against the document URL, with only the first connected
+HTML base carrying href taking effect. Empty href uses the document URL; data:
+and javascript: bases use the fallback, without allowing a later base to win.
+This corrects shared CSS, script, image and form resolution with JS disabled too.
+Location assign/replace now use the same document base after argument conversion
+and the existing live-context check. The work adds no new Location API.
+
+Scope: parser-time base selection and reference resolution. Dynamic base href
+changes/removal/reordering, srcdoc/about:blank fallback inheritance, CSP base-uri,
+URL encoding and a complete WHATWG URL parser are not completed by this fix.
+The malformed-host probe `http://[::1` also exposed a separate existing parser
+inconsistency: nsurl_create rejects it, but nsurl_join accepts it and curl later
+rejects the request. Record this under URL-parser validation work; do not add a
+base-only host validator. This invalid-host probe is not a passing base test.
+
+Validation: Qt passes 12 resource/submission cases covering relative/absolute
+bases, first-href selection, empty href, forbidden schemes and CSS/image/script
+requests, with scripting disabled and enabled. Existing browser-loading and script
+ordering regressions pass. Across the completed callback/base batch, nine Qt
+suites pass (the preceding cases plus native clicks, DOM rendering, checkables,
+navigation cleanup and form encodings). Toolkit leak detection is disabled; native
+sanitizer results are recorded above. No GTK build was run.
+
+Standards: [HTML base element](https://html.spec.whatwg.org/multipage/semantics.html#the-base-element),
+[document base URLs](https://html.spec.whatwg.org/multipage/urls-and-fetching.html#document-base-urls)
+and [Location URL resolution](https://html.spec.whatwg.org/multipage/nav-history-apis.html#dom-location-assign).
+
+### Deferred interaction completeness
+
+- Constraint validation belongs before SubmitEvent in the same per-form guard.
+  FormData/FormDataEvent entry mutation needs its separate constructing-entry-list
+  guard and the remaining Unicode-entry/File/Blob work. Do not gate basic page
+  rendering on complete form collections or an exhaustive encoding audit.
+- Keyboard delivery needs a frontend/core boundary preserving key/code,
+  press/release, modifiers, repeat and composition, with cancellation before edits.
+- The pointer stream still needs down/up/motion, boundary/auxiliary/context-menu/
+  double-click events, capture and press/release target reconciliation. Complete
+  synthetic MouseEvent activation/default actions when this work is resumed.
+- Live radio owner/name/type changes, further label focus/activation, dynamic
+  document base URLs and cross-document JS objects remain independent work.
+
+Document readiness and lifecycle now take priority over this deferred list. The
+current load call precedes the initial box build and cannot simply be exposed to
+JS. Inline handler support should be driven by concrete site initialization or
+reading interactions, rather than completing the whole event API first.
 
 ### Reading the JS trace
 
@@ -1504,10 +1597,11 @@ These are separate reviewable batches, not a commitment to full web-app support.
    partial updates only with sound mutation/dependency tracking.
 4. **Events and practical document interaction — native dispatch and explicit
    DOM/Window/standalone JS events, abort signals, UI/mouse event data and native
-   checkable pre-activation and native primary-click delivery implemented.** Form
-   callbacks, keyboard input, handler attributes, DOMContentLoaded/load and accurate
-   readyState; then further element lifecycle integration. Validate propagation,
-   preventDefault, capture, once, callback identity and navigation cleanup.
+   checkable pre-activation, primary-click and SubmitEvent delivery implemented.**
+   Per the current reading-site priority, DOMContentLoaded/load and accurate
+   readyState come next, followed by concrete page initialization blockers.
+   Further form and input completeness is deferred. Preserve propagation,
+   cancellation, callback identity and navigation cleanup in each increment.
 5. **Choose the next capability from measured page needs.** Selector queries,
    inline style/CSSOM and media queries are plausible next steps. Implement
    standard semantics and selector errors, not ID/class shortcuts disguised as

@@ -38,6 +38,8 @@ int qjs_event_read_options(JSContext *ctx, JSValueConst dict, struct qjs_event_o
 JSValue qjs_event_allocate(JSContext *ctx, JSValue object, enum qjs_event_kind kind, bool composed);
 /* Host-created trusted base Event, with false bubbles/cancelable/composed. */
 JSValue qjs_event_create(JSContext *ctx, const char *type);
+/* Host-created trusted submit event; retains the submitter wrapper. */
+JSValue qjs_native_submit_event(JSContext *ctx, dom_string *type, JSValueConst document, dom_node *submitter);
 JSValue qjs_event_current_target(JSContext *ctx, struct qjs_event *event);
 JSValue qjs_event_new_object(JSContext *ctx, JSValueConst new_target, JSClassID id);
 int qjs_event_define_interface(

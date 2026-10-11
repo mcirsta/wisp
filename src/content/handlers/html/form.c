@@ -797,7 +797,7 @@ static dom_exception form_submission_attribute(dom_node *form, dom_node *submitt
 {
     *value = NULL;
     dom_exception err = submitter == NULL ? DOM_NO_ERR : dom_element_get_attribute(submitter, override, value);
-    if (err == DOM_NO_ERR && *value == NULL)
+    if (err == DOM_NO_ERR && *value == NULL && form != NULL)
         err = dom_element_get_attribute(form, attribute, value);
     return err;
 }
@@ -847,12 +847,19 @@ static nserror form_submission_prepare(html_content *html, dom_node *form, dom_n
     struct form_submission *request)
 {
     dom_string *method = NULL, *enctype = NULL, *target = NULL;
+    dom_html_form_element *owner = NULL;
     nserror error = NSERROR_DOM;
-    if (form_submission_attribute(form, submitter,
-            corestring_dom_method, corestring_dom_formmethod, &method) != DOM_NO_ERR ||
-        form_submission_attribute(form, submitter,
-            corestring_dom_enctype, corestring_dom_formenctype, &enctype) != DOM_NO_ERR ||
-        (submitter != NULL && dom_element_get_attribute(submitter, corestring_dom_formtarget, &target) != DOM_NO_ERR))
+    if (submitter != NULL && form_submitter_owner(submitter, &owner) != DOM_NO_ERR)
+        return error;
+    /* The original form supplies entries and encoding. Submission attributes
+     * inherit from the submitter's CURRENT owner after submit listeners run. */
+    dom_node *attribute_form = submitter == NULL ? form : (dom_node *)owner;
+    dom_node *button = html_form_is_submit_button(submitter) ? submitter : NULL;
+    if (form_submission_attribute(attribute_form, button, corestring_dom_method, corestring_dom_formmethod, &method) !=
+            DOM_NO_ERR ||
+        form_submission_attribute(
+            attribute_form, button, corestring_dom_enctype, corestring_dom_formenctype, &enctype) != DOM_NO_ERR ||
+        (button != NULL && dom_element_get_attribute(button, corestring_dom_formtarget, &target) != DOM_NO_ERR))
         goto out;
     /* Dialog closing and text/plain transport need their own implementations;
      * neither may silently turn into a GET or a differently encoded POST. */
@@ -869,10 +876,10 @@ static nserror form_submission_prepare(html_content *html, dom_node *form, dom_n
         request->method = form_string_is(enctype, "multipart/form-data") ? method_POST_MULTIPART : method_POST_URLENC;
     }
     request->referrer = nsurl_ref(content_get_url(&html->base));
-    error = form_action_url(html, form, submitter, &request->url);
+    error = form_action_url(html, attribute_form, button, &request->url);
     if (error != NSERROR_OK || request->url == NULL)
         goto out;
-    error = html_element_target(html->document, form, target, &request->target);
+    error = html_element_target(html->document, attribute_form, target, &request->target);
     if (error != NSERROR_OK)
         goto out;
     dom_string *accept = NULL;
@@ -899,6 +906,7 @@ static nserror form_submission_prepare(html_content *html, dom_node *form, dom_n
         }
     }
 out:
+    dom_node_unref(owner);
     dom_string_unref(method);
     dom_string_unref(enctype);
     dom_string_unref(target);
@@ -917,14 +925,24 @@ static bool form_in_document(dom_node *form, dom_document *document)
     return connected;
 }
 
-/* The caller pins the content and retains DOM identity across click dispatch.
- * This stage has no page callbacks until target selection/navigation. Validation
- * and SubmitEvent/FormDataEvent sequencing remain a separate submission milestone. */
+/* The caller pins the content and retains DOM identity across callbacks. The
+ * guard is attached to the DOM form, so rebuilding boxes cannot reset it.
+ * https://html.spec.whatwg.org/multipage/form-control-infrastructure.html#form-submission-algorithm */
 static nserror form_submit_dom(html_content *html, dom_node *form, dom_node *submitter, browser_mouse_state mouse)
 {
     struct browser_window *bw = html->bw;
     uint64_t generation = html->input_generation;
     if (bw == NULL || !form_in_document(form, html->document))
+        return NSERROR_OK;
+    dom_html_form_element *element = (dom_html_form_element *)form;
+    if (!dom_html_form_element_begin_submission_events(element))
+        return NSERROR_OK;
+    /* Constraint validation will precede this dispatch in the same guarded
+     * scope. It is not implemented yet; this stage adds the submit callback to
+     * existing native submissions, not the complete validation/FormData API. */
+    bool accepted = html_dispatch_submit_event(html, form, submitter);
+    dom_html_form_element_end_submission_events(element);
+    if (!accepted || html->bw != bw || html->input_generation != generation || !form_in_document(form, html->document))
         return NSERROR_OK;
     struct form_submission request = {0};
     nserror error = form_submission_prepare(html, form, submitter, &request);

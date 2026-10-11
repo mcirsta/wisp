@@ -32,6 +32,13 @@ dom_exception dom_html_form_element_get_submittable_elements(
     dom_html_form_element *form, dom_html_form_control_list *controls);
 void dom_html_form_control_list_fini(dom_html_form_control_list *controls);
 
+/* HTML's per-element "firing submission events" flag. The browser calls begin
+ * before validation/submit callbacks and end on every exit after a successful
+ * begin. A rejected nested begin must not end the outer transaction. This is
+ * native engine state, not the HTMLFormElement.submit() IDL method. */
+bool dom_html_form_element_begin_submission_events(dom_html_form_element *form);
+void dom_html_form_element_end_submission_events(dom_html_form_element *form);
+
 /* Shared exclusion for constraint validation and entry-list construction. */
 bool dom_html_form_control_has_datalist_ancestor(struct dom_node *control);
 

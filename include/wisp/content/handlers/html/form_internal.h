@@ -303,7 +303,8 @@ void form_select_menu_callback(void *client_data, int x, int y, int width, int h
 
 /** Submit from a retained DOM input/button after an uncanceled click. The caller
  * must pin content across this call. Reads current owner and attributes; never
- * accesses rendered gadgets. Validation/submission events are still pending. */
+ * accesses rendered gadgets. Fires a cancelable SubmitEvent and rechecks the
+ * document afterward. Constraint validation and FormDataEvent remain pending. */
 nserror form_submit(struct html_content *html, struct dom_node *submitter, enum browser_mouse_state mouse);
 
 /** Current submit action for status text. NULL URL means no associated form.

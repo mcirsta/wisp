@@ -23,6 +23,7 @@
 #include <time.h>
 #include <wisp/desktop/gui_internal.h>
 #include <wisp/misc.h>
+#include <wisp/utils/corestrings.h>
 #include "content/handlers/javascript/quickjs/private.h"
 #include <wisp/content/handlers/html/private.h>
 
@@ -1231,6 +1232,7 @@ static jsthread *dom_thread;
 
 static void setup_dom(void)
 {
+    ck_assert_int_eq(corestrings_init(), NSERROR_OK);
     memset(&dom_html, 0, sizeof(dom_html));
     const char *source = "<!doctype html><html><head><title>Example</title></head><body>"
         "<div id='target' class='old'>A<span>B</span><!--ignored--><i></i>C</div>"
@@ -1253,6 +1255,7 @@ static void teardown_dom(void)
     js_destroyheap(dom_heap);
     dom_node_unref(dom_html.document);
     js_finalise();
+    ck_assert_int_eq(corestrings_fini(), NSERROR_OK);
 }
 
 START_TEST(test_quickjs_document)
@@ -2661,6 +2664,95 @@ static bool native_input(const char *type, const struct js_mouse_event *mouse)
     return accepted;
 }
 
+static bool native_submit(bool with_button)
+{
+    dom_string *id;
+    dom_node *form = NULL, *button = NULL;
+    ck_assert_int_eq(dom_string_create((const uint8_t *)"native-form", 11, &id), DOM_NO_ERR);
+    ck_assert_int_eq(dom_document_get_element_by_id(dom_html.document, id, &form), DOM_NO_ERR);
+    dom_string_unref(id);
+    ck_assert_ptr_nonnull(form);
+    if (with_button) {
+        ck_assert_int_eq(dom_string_create((const uint8_t *)"native-button", 13, &id), DOM_NO_ERR);
+        ck_assert_int_eq(dom_document_get_element_by_id(dom_html.document, id, &button), DOM_NO_ERR);
+        dom_string_unref(id);
+        ck_assert_ptr_nonnull(button);
+    }
+    bool accepted = js_fire_submit_event(dom_thread, form, button);
+    dom_node_unref(button);
+    dom_node_unref(form);
+    return accepted;
+}
+
+static void native_form_setup(void)
+{
+    ck_assert(exec_script(dom_thread,
+        "var form=document.createElement('form'),button=document.createElement('button'),saved,seen=[],NativeSubmit=SubmitEvent;"
+        "form.id='native-form';button.id='native-button';form.appendChild(button);document.body.appendChild(form);",
+        "native-form.js"));
+}
+
+START_TEST(test_quickjs_native_submit)
+{
+    native_form_setup();
+    ck_assert(exec_script(dom_thread,
+        "window.addEventListener('submit',e=>seen.push('capture'),true);"
+        "form.addEventListener('submit',e=>{saved=e;seen.push('target');"
+        "if(!(e instanceof NativeSubmit)||!e.isTrusted||e.composed||!e.bubbles||!e.cancelable||"
+        "e.target!==form||e.currentTarget!==form||e.submitter!==button)throw Error('submit payload');"
+        "button.parentNode.removeChild(button);queueMicrotask(()=>{seen.push('microtask');e.preventDefault();});});"
+        "document.addEventListener('submit',e=>{if(!e.defaultPrevented)throw Error('checkpoint');seen.push('bubble');});"
+        /* Native factories must not call page constructors. */
+        "SubmitEvent=function(){throw Error('page constructor');};",
+        "native-submit.js"));
+    ck_assert(!native_submit(true));
+    JS_RunGC(dom_heap->rt);
+    assert_predicate(dom_thread,
+        "seen.join()==='capture,target,microtask,bubble'&&saved.submitter===button&&!button.isConnected&&"
+        "saved.target===form&&saved.currentTarget===null&&saved.composedPath().length===0",
+        "retained native submitter and path cleanup");
+}
+END_TEST
+
+START_TEST(test_quickjs_native_submit_without_button)
+{
+    native_form_setup();
+    ck_assert(exec_script(dom_thread,
+        "form.addEventListener('submit',e=>{saved=e;seen.push(e.submitter===null&&e.isTrusted);});",
+        "implicit-submit.js"));
+    ck_assert(native_submit(false));
+    assert_predicate(dom_thread, "seen.length===1&&seen[0]&&!saved.defaultPrevented", "implicit null submitter");
+}
+END_TEST
+
+START_TEST(test_quickjs_native_submit_allocation_failure)
+{
+    native_form_setup();
+    ck_assert(exec_script(dom_thread,
+        "var calls=0,valid=true;form.addEventListener('submit',e=>{calls++;valid=valid&&e.submitter===button;});",
+        "submit-allocation.js"));
+    bool failed = false, succeeded = false;
+    for (size_t extra = 0; extra <= 32768; extra += 128) {
+        JS_RunGC(dom_heap->rt);
+        JSMemoryUsage usage;
+        JS_ComputeMemoryUsage(dom_heap->rt, &usage);
+        JS_SetMemoryLimit(dom_heap->rt, usage.malloc_size + extra);
+        bool result = native_submit(true);
+        JS_SetMemoryLimit(dom_heap->rt, 0);
+        ck_assert_uint_eq(dom_heap->execution_depth, 0);
+        ck_assert_uint_eq(dom_heap->native_dispatch_depth, 0);
+        failed |= !result;
+        if (result) {
+            succeeded = true;
+            break;
+        }
+    }
+    ck_assert(failed && succeeded);
+    ck_assert(native_submit(true));
+    assert_predicate(dom_thread, "calls>=2&&valid", "submit allocation recovery");
+}
+END_TEST
+
 START_TEST(test_quickjs_native_click)
 {
     ck_assert(exec_script(dom_thread,
@@ -3697,6 +3789,9 @@ Suite *quickjs_suite(void)
     tcase_add_test(tc_dom, test_quickjs_input_event_gc);
     tcase_add_test(tc_dom, test_quickjs_input_event_retirement);
     tcase_add_test(tc_dom, test_quickjs_input_event_conversion_retirement);
+    tcase_add_test(tc_dom, test_quickjs_native_submit);
+    tcase_add_test(tc_dom, test_quickjs_native_submit_without_button);
+    tcase_add_test(tc_dom, test_quickjs_native_submit_allocation_failure);
     tcase_add_test(tc_dom, test_quickjs_native_click);
     tcase_add_test(tc_dom, test_quickjs_native_click_defaults);
     tcase_add_test(tc_dom, test_quickjs_native_click_mutation);

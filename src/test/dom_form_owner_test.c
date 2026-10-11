@@ -709,6 +709,26 @@ START_TEST(test_parser_ancestor_teardown)
 }
 END_TEST
 
+START_TEST(test_submission_events_guard)
+{
+    dom_html_form_element *form = (dom_html_form_element *)create("form");
+    dom_html_form_element *other = (dom_html_form_element *)create("form");
+    ck_assert(dom_html_form_element_begin_submission_events(form));
+    ck_assert(!dom_html_form_element_begin_submission_events(form));
+    ck_assert(dom_html_form_element_begin_submission_events(other));
+    dom_node *clone = NULL;
+    ck_assert_int_eq(dom_node_clone_node(form, true, &clone), DOM_NO_ERR);
+    hold(clone);
+    ck_assert(dom_html_form_element_begin_submission_events((dom_html_form_element *)clone));
+    ck_assert(!dom_html_form_element_begin_submission_events(form));
+    dom_html_form_element_end_submission_events(form);
+    ck_assert(dom_html_form_element_begin_submission_events(form));
+    dom_html_form_element_end_submission_events(form);
+    dom_html_form_element_end_submission_events(other);
+    dom_html_form_element_end_submission_events((dom_html_form_element *)clone);
+}
+END_TEST
+
 int main(void)
 {
     Suite *suite = suite_create("HTML form ownership");
@@ -726,6 +746,7 @@ int main(void)
     tcase_add_loop_test(tc, test_surviving_control_and_form_lifetimes, 0, PARSER_TYPES);
     tcase_add_loop_test(tc, test_ancestor_teardown, 0, CONTROL_TYPES);
     tcase_add_loop_test(tc, test_parser_ancestor_teardown, 0, PARSER_TYPES);
+    tcase_add_test(tc, test_submission_events_guard);
     tcase_add_test(tc, test_submission_snapshot_inventory);
     tcase_add_loop_test(tc, test_submission_snapshot_mutation, 0, PARSER_TYPES);
     tcase_add_loop_test(tc, test_submission_snapshot_parser_owner, 0, PARSER_TYPES);

@@ -84,10 +84,14 @@ class HTTP(http.server.BaseHTTPRequestHandler):
               <input name="empty" type="file"><input type="hidden" name="_charset_" value="wrong">
               <button id="send">Send</button>
             </form><script>
-              {charset_script}
-              var field = document.getElementById("field");
-              field.setAttribute("name", "a\\nname");
-              field.setAttribute("value", {json.dumps(value)});
+              document.getElementById("form").addEventListener("submit", event => {{
+                if (!(event instanceof SubmitEvent) || !event.isTrusted ||
+                    event.submitter !== document.getElementById("send")) throw Error("submit event");
+                {charset_script}
+                var field = document.getElementById("field");
+                field.setAttribute("name", "a\\nname");
+                field.setAttribute("value", {json.dumps(value)});
+              }});
             </script>''', document_encoding)
 
 

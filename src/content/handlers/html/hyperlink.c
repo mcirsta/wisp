@@ -113,8 +113,9 @@ static bool link_in_document(dom_node *link, dom_document *document)
 nserror html_element_target(dom_document *document, dom_node *element, dom_string *override, char **target)
 {
     dom_string *value = dom_string_ref(override);
-    dom_exception error = value != NULL ? DOM_NO_ERR :
-        dom_element_get_attribute(element, corestring_dom_target, &value);
+    dom_exception error = value != NULL || element == NULL
+        ? DOM_NO_ERR
+        : dom_element_get_attribute(element, corestring_dom_target, &value);
     if (error != DOM_NO_ERR)
         return NSERROR_DOM;
     if (value == NULL) {

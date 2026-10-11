@@ -33,6 +33,7 @@
 #include <nsutils/time.h>
 
 #include <wisp/utils/errors.h>
+#include <wisp/utils/corestrings.h>
 #include <wisp/utils/log.h>
 #include <wisp/utils/nsoption.h>
 
@@ -781,8 +782,10 @@ bool js_exec(jsthread *thread, const uint8_t *txt, size_t txtlen, const char *na
 }
 
 
-/* exported interface documented in js.h */
-bool js_fire_input_event(jsthread *thread, dom_string *type, dom_node *target, const struct js_mouse_event *mouse)
+/* Shared host dispatch scope for input and submission callbacks. Event creation
+ * uses captured interfaces and native values, never page constructors/getters. */
+static bool js_fire_native_event(
+    jsthread *thread, dom_node *target, dom_string *type, const struct js_mouse_event *mouse, dom_node *submitter)
 {
     if (thread == NULL || thread->closed || target == NULL)
         return false;
@@ -796,18 +799,21 @@ bool js_fire_input_event(jsthread *thread, dom_string *type, dom_node *target, c
     JSContext *ctx = thread->ctx;
     bool accepted = false;
     if (started) {
-        qjs_trace(ctx, "input.dispatch", "type=%.*s origin=browser", (int)dom_string_byte_length(type),
-            dom_string_data(type));
+        bool submit = dom_string_isequal(type, corestring_dom_submit);
+        qjs_trace(ctx, submit ? "form.dispatch" : "input.dispatch", "type=%.*s origin=browser",
+            (int)dom_string_byte_length(type), dom_string_data(type));
         JSValue global = JS_GetGlobalObject(ctx);
         /* document is an unforgeable, readonly own property of Window. */
         JSValue document = JS_GetPropertyStr(ctx, global, "document");
         JS_FreeValue(ctx, global);
         JSValue object = JS_IsException(document) ? JS_EXCEPTION : qjs_dom_wrap(ctx, document, target);
-        JSValue event = JS_IsException(object) ? JS_EXCEPTION : qjs_native_input_event(ctx, type, mouse);
+        JSValue event = JS_IsException(object) ? JS_EXCEPTION
+            : submit                           ? qjs_native_submit_event(ctx, type, document, submitter)
+                                               : qjs_native_input_event(ctx, type, mouse);
         JSValue result = JS_IsException(event) ? JS_EXCEPTION : qjs_event_target_dispatch(ctx, object, event, false);
         accepted = !JS_IsException(result) && JS_ToBool(ctx, result);
         if (JS_IsException(result))
-            qjs_report_exception(thread, "native-input", thread->heap->interrupted);
+            qjs_report_exception(thread, submit ? "native-submit" : "native-input", thread->heap->interrupted);
         JS_FreeValue(ctx, result);
         JS_FreeValue(ctx, event);
         JS_FreeValue(ctx, object);
@@ -816,6 +822,17 @@ bool js_fire_input_event(jsthread *thread, dom_string *type, dom_node *target, c
     thread->heap->native_dispatch_depth--;
     qjs_thread_unref(thread);
     return accepted;
+}
+
+/* exported interfaces documented in js.h */
+bool js_fire_input_event(jsthread *thread, dom_string *type, dom_node *target, const struct js_mouse_event *mouse)
+{
+    return js_fire_native_event(thread, target, type, mouse, NULL);
+}
+
+bool js_fire_submit_event(jsthread *thread, dom_node *form, dom_node *submitter)
+{
+    return js_fire_native_event(thread, form, corestring_dom_submit, NULL, submitter);
 }
 
 bool js_fire_event(jsthread *thread, const char *type, struct dom_document *doc, struct dom_node *target)

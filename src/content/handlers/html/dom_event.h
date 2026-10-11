@@ -44,4 +44,6 @@ struct js_mouse_event;
 bool html_dispatch_input_event(
     struct html_content *html, dom_node *target, dom_string *type, const struct js_mouse_event *mouse);
 
+bool html_dispatch_submit_event(struct html_content *html, dom_node *form, dom_node *submitter);
+
 #endif

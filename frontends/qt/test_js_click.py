@@ -115,10 +115,10 @@ with tempfile.TemporaryDirectory(prefix='wisp-js-click-') as tmp:
         assert 'Console: ' + name.split('-')[0].upper() + '_PASS' in log, log
         assert 'Console: WRONG_DESTINATION' not in log, log
 
-    # The form callback APIs are a later milestone, but canceling the click must
-    # already suppress its ordinary native submission.
+    # Canceling the click suppresses both submit dispatch and navigation.
     _, log, _ = run(root, 'cancel-submit', f'<form action="{wrong.as_uri()}"><button id="target">Send</button></form>' + '''
-        <script>document.getElementById('target').addEventListener('click',e=>{
+        <script>document.addEventListener('submit',()=>{throw Error('canceled click submitted');});
+        document.getElementById('target').addEventListener('click',e=>{
             e.preventDefault();console.log('SUBMIT_CANCEL_PASS');});</script>''', ['target'])
     assert 'Console: SUBMIT_CANCEL_PASS' in log and 'Console: WRONG_DESTINATION' not in log, log
 

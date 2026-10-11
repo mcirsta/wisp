@@ -42,6 +42,7 @@
 #include "content/handlers/html/box_construct.h"
 #include "content/handlers/html/css.h"
 #include "content/handlers/html/dom_event.h"
+#include "content/handlers/html/hyperlink.h"
 #include "content/handlers/html/object.h"
 
 
@@ -57,23 +58,53 @@ static bool html_process_inserted_base(html_content *htmlc, dom_node *node)
     dom_exception exc; /* returned by libdom functions */
     dom_string *atr_string;
 
-    /* get href attribute if present */
-    exc = dom_element_get_attribute(node, corestring_dom_href, &atr_string);
-    if ((exc == DOM_NO_ERR) && (atr_string != NULL)) {
-        nsurl *url;
-        nserror error;
-
-        /* get url from string */
-        error = nsurl_create(dom_string_data(atr_string), &url);
-        dom_string_unref(atr_string);
-        if (error == NSERROR_OK) {
-            if (htmlc->base_url != NULL) {
-                nsurl_unref(htmlc->base_url);
+    /* Only the first connected HTML base with href controls URL resolution.
+     * A relative href is resolved against the document URL, never against an
+     * earlier base element. This path also runs with JavaScript disabled.
+     * https://html.spec.whatwg.org/multipage/semantics.html#the-base-element */
+    dom_nodelist *bases = NULL;
+    dom_node *first = NULL;
+    dom_string *href = NULL;
+    if (dom_document_get_elements_by_tag_name(htmlc->document, corestring_dom_base, &bases) == DOM_NO_ERR) {
+        uint32_t count = 0;
+        dom_nodelist_get_length(bases, &count);
+        for (uint32_t i = 0; i < count && first == NULL; i++) {
+            dom_node *candidate = NULL;
+            dom_string *ns = NULL;
+            if (dom_nodelist_item(bases, i, &candidate) == DOM_NO_ERR && candidate != NULL &&
+                dom_node_get_namespace(candidate, &ns) == DOM_NO_ERR &&
+                (ns == NULL || dom_string_isequal(ns, corestring_dom_html_namespace))) {
+                if (dom_element_get_attribute(candidate, corestring_dom_href, &href) == DOM_NO_ERR && href != NULL)
+                    first = dom_node_ref(candidate);
             }
+            dom_string_unref(ns);
+            dom_node_unref(candidate);
+        }
+    }
+    dom_nodelist_unref(bases);
+    if (first == node) {
+        nsurl *url = NULL;
+        nsurl *fallback = content_get_url(&htmlc->base);
+        nserror error = html_link_url(href, fallback, &url);
+        if (url != NULL) {
+            lwc_string *scheme = nsurl_get_component(url, NSURL_SCHEME);
+            if (scheme != NULL &&
+                (strcmp(lwc_string_data(scheme), "data") == 0 || strcmp(lwc_string_data(scheme), "javascript") == 0)) {
+                nsurl_unref(url);
+                url = NULL;
+            }
+            if (scheme != NULL)
+                lwc_string_unref(scheme);
+        }
+        if (error != NSERROR_NOMEM) {
+            if (url == NULL)
+                url = nsurl_ref(fallback);
+            nsurl_unref(htmlc->base_url);
             htmlc->base_url = url;
         }
     }
-
+    dom_node_unref(first);
+    dom_string_unref(href);
 
     /* get target attribute if present and not already set */
     if (htmlc->base_target != NULL) {
@@ -796,4 +827,12 @@ bool html_dispatch_input_event(
     if (html->enable_scripting && html->jsthread != NULL)
         return js_fire_input_event(html->jsthread, type, target, mouse);
     return fire_generic_dom_event(type, target, true, dom_string_isequal(type, corestring_dom_click));
+}
+
+/* Keep native DOM listeners working when scripting is disabled. */
+bool html_dispatch_submit_event(html_content *html, dom_node *form, dom_node *submitter)
+{
+    if (html->enable_scripting && html->jsthread != NULL)
+        return js_fire_submit_event(html->jsthread, form, submitter);
+    return fire_generic_dom_event(corestring_dom_submit, form, true, true);
 }

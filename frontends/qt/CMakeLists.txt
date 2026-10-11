@@ -137,6 +137,12 @@ if(BUILD_TESTING AND WISP_ENABLE_TESTS)
         add_test(NAME qt_js_click COMMAND Python3::Interpreter
             ${CMAKE_CURRENT_SOURCE_DIR}/test_js_click.py $<TARGET_FILE:wisp-qt>)
         set_tests_properties(qt_js_click PROPERTIES TIMEOUT 45)
+        add_test(NAME qt_js_submit COMMAND Python3::Interpreter
+            ${CMAKE_CURRENT_SOURCE_DIR}/test_js_submit.py $<TARGET_FILE:wisp-qt>)
+        set_tests_properties(qt_js_submit PROPERTIES TIMEOUT 45)
+        add_test(NAME qt_base_url COMMAND Python3::Interpreter
+            ${CMAKE_CURRENT_SOURCE_DIR}/test_base_url.py $<TARGET_FILE:wisp-qt>)
+        set_tests_properties(qt_base_url PROPERTIES TIMEOUT 30)
         add_test(NAME qt_js_dom COMMAND Python3::Interpreter
             ${CMAKE_CURRENT_SOURCE_DIR}/test_js_dom.py $<TARGET_FILE:wisp-qt>)
         set_tests_properties(qt_js_dom PROPERTIES TIMEOUT 45)

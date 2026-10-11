@@ -277,6 +277,26 @@ JSValue qjs_event_create(JSContext *ctx, const char *type)
     return object;
 }
 
+JSValue qjs_native_submit_event(JSContext *ctx, dom_string *type, JSValueConst document, dom_node *submitter)
+{
+    jsthread *thread = JS_GetContextOpaque(ctx);
+    JSValue object = qjs_event_allocate(
+        ctx, JS_NewObjectClass(ctx, thread->heap->event_class[QJS_SUBMIT_EVENT]), QJS_SUBMIT_EVENT, false);
+    if (JS_IsException(object))
+        return object;
+    struct qjs_submit_event *event = (struct qjs_submit_event *)qjs_event_get(ctx, object);
+    if (submitter != NULL) {
+        event->submitter = qjs_dom_wrap(ctx, document, submitter);
+        if (JS_IsException(event->submitter)) {
+            JS_FreeValue(ctx, object);
+            return JS_EXCEPTION;
+        }
+    }
+    dom_event_init(event->base.native, type, true, true);
+    dom_event_set_is_trusted(event->base.native, true);
+    return object;
+}
+
 int qjs_event_read_options(JSContext *ctx, JSValueConst dict, struct qjs_event_options *options)
 {
     if (JS_IsNull(dict) || JS_IsUndefined(dict))

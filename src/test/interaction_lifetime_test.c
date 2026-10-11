@@ -869,6 +869,151 @@ START_TEST(test_submit_reads_live_dom_after_click)
 }
 END_TEST
 
+enum submit_callback_edit {
+    CALLBACK_UNCHANGED,
+    CALLBACK_CANCEL,
+    CALLBACK_VALUES,
+    CALLBACK_REMOVE_FORM,
+    CALLBACK_REINSERT_FORM,
+    CALLBACK_REMOVE_BUTTON,
+    CALLBACK_MOVE_BUTTON,
+    CALLBACK_TYPE_BUTTON,
+    CALLBACK_DISABLE_BUTTON,
+    CALLBACK_CLOSE,
+    CALLBACK_REOPEN,
+    CALLBACK_REBUILD,
+    CALLBACK_NEST_SAME,
+    CALLBACK_NEST_OTHER,
+    CALLBACK_EDITS
+};
+static enum submit_callback_edit submit_callback_edit;
+static unsigned submissions;
+
+static void submitting(dom_event *event, void *pw)
+{
+    submissions++;
+    ck_assert_msg(submissions == 1, "variant %d recursively dispatched submit", submit_callback_edit);
+    dom_node *form = pw, *button = by_id("submit"), *field = by_id("field");
+    bool bubbles = false, cancelable = false;
+    ck_assert_int_eq(dom_event_get_bubbles(event, &bubbles), DOM_NO_ERR);
+    ck_assert_int_eq(dom_event_get_cancelable(event, &cancelable), DOM_NO_ERR);
+    ck_assert(bubbles && cancelable);
+    switch (submit_callback_edit) {
+    case CALLBACK_CANCEL:
+        dom_event_prevent_default(event);
+        break;
+    case CALLBACK_VALUES:
+        attribute(field, corestring_dom_value, "new");
+        attribute(button, corestring_dom_value, "edited");
+        attribute(button, corestring_dom_formaction, "/edited");
+        attribute(button, corestring_dom_formmethod, "post");
+        attribute(form, corestring_dom_target, "result");
+        break;
+    case CALLBACK_REMOVE_FORM:
+        remove_node(form);
+        break;
+    case CALLBACK_REINSERT_FORM: {
+        dom_node *parent = NULL;
+        ck_assert_int_eq(dom_node_get_parent_node(form, &parent), DOM_NO_ERR);
+        remove_node(form);
+        append_node(parent, form);
+        dom_node_unref(parent);
+        break;
+    }
+    case CALLBACK_REMOVE_BUTTON:
+        remove_node(button);
+        break;
+    case CALLBACK_MOVE_BUTTON: {
+        dom_node *other = by_id("otherform");
+        append_node(other, button);
+        dom_node_unref(other);
+        break;
+    }
+    case CALLBACK_TYPE_BUTTON:
+        attribute(button, corestring_dom_type, "button");
+        attribute(button, corestring_dom_formaction, "/ignored");
+        attribute(button, corestring_dom_formmethod, "post");
+        break;
+    case CALLBACK_DISABLE_BUTTON:
+        attribute(button, corestring_dom_disabled, "");
+        break;
+    case CALLBACK_CLOSE:
+        retire_document();
+        break;
+    case CALLBACK_REOPEN:
+        reopen = true;
+        retire_document();
+        break;
+    case CALLBACK_REBUILD:
+        discard_presentation();
+        break;
+    case CALLBACK_NEST_SAME:
+        discard_presentation();
+        ck_assert_int_eq(form_submit(html, button, 0), NSERROR_OK);
+        ck_assert_int_eq(form_submit(html, button, 0), NSERROR_OK);
+        ck_assert_uint_eq(navigations, 0);
+        dom_event_prevent_default(event);
+        break;
+    case CALLBACK_NEST_OTHER:
+        attribute(button, corestring_dom_form, "otherform");
+        ck_assert_int_eq(form_submit(html, button, 0), NSERROR_OK);
+        dom_event_prevent_default(event);
+        break;
+    default:
+        break;
+    }
+    dom_node_unref(field);
+    dom_node_unref(button);
+}
+
+START_TEST(test_submission_callbacks)
+{
+    submit_callback_edit = _i;
+    submissions = 0;
+    target("submit", false);
+    dom_node *form = by_id("form");
+    dom_event_listener *submit_listener = NULL;
+    ck_assert_int_eq(dom_event_listener_create(submitting, form, &submit_listener), DOM_NO_ERR);
+    ck_assert_int_eq(
+        dom_event_target_add_event_listener(form, corestring_dom_submit, submit_listener, false), DOM_NO_ERR);
+    expected_url = "https://example.test/send?q=old&go=yes";
+    switch (submit_callback_edit) {
+    case CALLBACK_VALUES:
+        expected_url = "https://example.test/edited";
+        expected_post = "q=new&go=edited";
+        expected_target = "result";
+        break;
+    case CALLBACK_REMOVE_BUTTON:
+        expected_url = "https://example.test/?q=old";
+        break;
+    case CALLBACK_MOVE_BUTTON:
+        expected_url = "https://example.test/other-send?q=old";
+        break;
+    case CALLBACK_TYPE_BUTTON:
+    case CALLBACK_DISABLE_BUTTON:
+        expected_url = "https://example.test/send?q=old";
+        break;
+    case CALLBACK_NEST_OTHER:
+        expected_url = "https://example.test/other-send?go=yes&z=two";
+        break;
+    default:
+        break;
+    }
+    bool navigates = submit_callback_edit != CALLBACK_CANCEL && submit_callback_edit != CALLBACK_REMOVE_FORM &&
+        submit_callback_edit != CALLBACK_CLOSE && submit_callback_edit != CALLBACK_REOPEN &&
+        submit_callback_edit != CALLBACK_NEST_SAME;
+    ck_assert_int_eq(test_mouse_action(&html->base, window(), BROWSER_MOUSE_CLICK_1, 5, 5), NSERROR_OK);
+    ck_assert_msg(submissions == 1 && navigations == navigates,
+        "variant %d: %u submissions, %u navigations (expected %d)", _i, submissions, navigations, navigates);
+    ck_assert(dom_html_form_element_begin_submission_events((dom_html_form_element *)form));
+    dom_html_form_element_end_submission_events((dom_html_form_element *)form);
+    ck_assert_int_eq(
+        dom_event_target_remove_event_listener(form, corestring_dom_submit, submit_listener, false), DOM_NO_ERR);
+    dom_event_listener_unref(submit_listener);
+    dom_node_unref(form);
+}
+END_TEST
+
 START_TEST(test_submit_original_button_ancestor)
 {
     target("submit-text", false);
@@ -1144,6 +1289,7 @@ int main(void)
     tcase_add_test(tc, test_save_link_does_not_navigate);
     tcase_add_test(tc, test_scrollbar_does_not_activate_link);
     tcase_add_loop_test(tc, test_submit_reads_live_dom_after_click, 0, SUBMIT_EDITS);
+    tcase_add_loop_test(tc, test_submission_callbacks, 0, CALLBACK_EDITS);
     tcase_add_test(tc, test_submit_original_button_ancestor);
     tcase_add_loop_test(tc, test_submit_image_coordinates, 0, 3);
     tcase_add_loop_test(tc, test_implicit_submission, 0, 5);
