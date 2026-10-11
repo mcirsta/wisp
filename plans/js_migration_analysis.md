@@ -919,6 +919,77 @@ This closes the diagnostic-buffer follow-up. The next implementation work remain
 specified-value coverage, alias/aggregate handling and declaration-block
 serialization, followed by CSSOM writes and the live `element.style` wrapper.
 
+### Generated-content values and identifier parsing (2026-10-11)
+
+Safe CSS test diagnostics are committed as `8b606e39`. The next native
+specified-value increment covers `content`, `quotes`, `counter-reset` and
+`counter-increment`. The generated registry selects the relevant serializer;
+ordinary stylesheet parsing still does not collect declarations or serialize
+values. The live JS `element.style` wrapper is not exposed by this increment.
+
+Serialization uses the captured, validated tokens and follows
+[CSSOM value serialization](https://drafts.csswg.org/cssom/#serialize-a-css-value)
+and [string/identifier escaping](https://drafts.csswg.org/cssom/#common-serializing-idioms):
+
+- Quote pairs and content strings use escaped double-quoted strings; URLs share
+  the existing serializer and retain their specified relative spelling.
+- `attr()`, `counter()` and `counters()` preserve identifier case. Function names,
+  supported counter-style keywords and quote keywords are canonical lowercase.
+  Default `decimal` counter styles are omitted.
+- Counter reset/increment lists retain name order and duplicate names. Integer
+  spelling is normalized without fixed-point conversion; default reset zero and
+  increment one are omitted under CSSOM's shortest-equivalent rule. This is
+  specified-value serialization, not serialization of computed counter values.
+- All text families share the measured, exact-sized output allocation. There is
+  no allocation per counter, identifier or string component.
+
+Three directly related parser issues are fixed at their source:
+
+1. [Counter names](https://www.w3.org/TR/css-lists-3/#counter-name) are
+   [custom identifiers](https://www.w3.org/TR/css-values-4/#custom-idents), excluding
+   CSS-wide keywords, `default` and `none`. A shared allocation-free check is used
+   by the manual content parser and generated counter-property parsers. The
+   parser DSL now calls this list type `COUNTER_OPTNUM`; both the C parser
+   generator and Python opcode generator were updated, rather than editing
+   generated files.
+2. The lexer no longer emits a special custom-property token for `--name`.
+   [CSS Syntax](https://drafts.csswg.org/css-syntax-3/#would-start-an-ident-sequence)
+   defines it as an ordinary identifier, including names such as `--9` and the
+   bare `--`. Declaration parsing and variable references now classify decoded
+   identifiers where appropriate, preserving case and escaped leading hyphens.
+   The bare `--` remains reserved as a custom-property name. This fixes legitimate
+   identifiers in `attr()` and counter values and makes their serialization
+   round trips work without inventing noncanonical escapes.
+3. The content parser propagates failure when appending its bytecode list
+   terminator. Previously that final allocation failure could report success
+   with an incomplete instruction stream. A targeted failure/retry test fills
+   the temporary style exactly before forcing this allocation to fail.
+
+This covers the grammars Wisp already implements, plus the identifier/name
+corrections above. Modern typed/fallback `attr()`, alternate content text,
+`quotes:auto`, custom counter styles, reversed counters and `counter-set` are
+not added here. Unsupported value families still return an explicit unsupported
+result; no raw-text or empty-object fallback has been introduced. The old Duktape
+style placeholder remains unsuitable as an implementation model, as documented
+in the native-foundation section.
+
+Validation: all 77 targeted native CSS/QuickJS suites have passing Debug
+ASan/UBSan/LeakSanitizer results, all 18 selected Release suites pass, and all 17
+targeted Qt integration suites pass. The Release declaration suite now runs 344
+checks, including allocation-failure sweeps and the targeted bytecode-terminator
+failure. Whole and byte-at-a-time input, every lexer split boundary, canonical
+round trips, invalid-name recovery and final interned-string cleanup are covered.
+Variable selection also verifies numeric dashed names, escaped names and case.
+The old lexer fixture for bare `--` was corrected to CSS Syntax's IDENT token and
+rerun successfully. Four Qt subprocess starts overlapped a library relink; all
+four passed when rerun after the Debug build completed. Final builds are
+warning-free and `git diff --check` is clean. No GTK tests were run.
+
+Next: continue the remaining specified-value families and alias/aggregate and
+block serialization work, then implement CSSOM writes and the live DOM wrapper.
+The saved eBihoreanul `style.opacity` blocker remains pending until that wrapper
+is connected.
+
 ## Assessment
 
 Keep QuickJS-ng and libdom. The missing part is the browser binding and execution

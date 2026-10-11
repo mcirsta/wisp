@@ -11,7 +11,7 @@
 
 /* Serialize one winning component's specified value, not its computed value.
  * Supports custom properties, CSS-wide keywords, pending variable substitution
- * and the scalar, box and URL/list families registered in properties.toml. CSS_INVALID means
+ * and the value families registered in properties.toml. CSS_INVALID means
  * that a property/value serializer is not implemented yet (e.g. math functions),
  * NOT that the already-accepted declaration is invalid. Callers must propagate
  * this limitation, never substitute raw text or an empty value as a fallback.

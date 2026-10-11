@@ -47,7 +47,6 @@ typedef enum css_token_type {
     CSS_TOKEN_NUMBER,
     CSS_TOKEN_PERCENTAGE,
     CSS_TOKEN_DIMENSION,
-    CSS_TOKEN_CUSTOM_PROPERTY,
 
     /* Those tokens that want strings interned appear above */
     CSS_TOKEN_LAST_INTERN,
@@ -85,6 +84,19 @@ typedef struct css_token {
     size_t source_start;
     size_t source_end;
 } css_token;
+
+/* After the parser interns an identifier, classify custom-property names by
+ * their decoded spelling. Escaped leading hyphens have the same meaning, and
+ * the bare "--" name is reserved by CSS Variables. Other identifier contexts
+ * (counter names, attr(), selectors, etc.) do not need special token types. */
+static inline bool css__token_is_custom_property(const css_token *token)
+{
+    if (token == NULL || token->type != CSS_TOKEN_IDENT || token->idata == NULL ||
+        lwc_string_length(token->idata) <= 2)
+        return false;
+    const char *text = lwc_string_data(token->idata);
+    return text[0] == '-' && text[1] == '-';
+}
 
 css_error css__lexer_create(parserutils_inputstream *input, css_lexer **lexer);
 css_error css__lexer_destroy(css_lexer *lexer);

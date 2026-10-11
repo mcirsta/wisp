@@ -54,7 +54,7 @@ class DeclarationMetadataTest(unittest.TestCase):
                     self.reader.validate_declarations()
 
     def test_scalar_family_cannot_describe_shorthand(self):
-        for kind in ("keyword", "uri", "image_list", "keyword_list"):
+        for kind in ("keyword", "uri", "image_list", "keyword_list", "content", "string_list", "counter_list"):
             with self.subTest(kind=kind):
                 self.reader.toml_data["overflow"]["declaration_value"] = kind
                 with self.assertRaisesRegex(ValueError, "overflow: declaration_value requires 0"):

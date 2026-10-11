@@ -8,8 +8,8 @@
 
 #include "parse/declarations.h"
 
-/* Private specified-value serializer for the registered URI/image/keyword-list
- * families. Ownership and unsupported-value rules match declaration_value.h. */
+/* Private specified-value serializer for the registered URI/image/keyword lists
+ * and generated-content values. Ownership and unsupported-value rules match declaration_value.h. */
 css_error css__declaration_text_serialize(const css_declaration *source, lwc_string **out);
 
 #endif

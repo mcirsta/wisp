@@ -178,7 +178,7 @@ css_error css__parse_content(css_language *c, const parserutils_vector *vector, 
 
                 /* Expect IDENT */
                 token = parserutils_vector_iterate(vector, ctx);
-                if (token == NULL || token->type != CSS_TOKEN_IDENT) {
+                if (!css__is_counter_name(token)) {
                     *ctx = orig_ctx;
                     return CSS_INVALID;
                 }
@@ -258,7 +258,7 @@ css_error css__parse_content(css_language *c, const parserutils_vector *vector, 
 
                 /* Expect IDENT */
                 token = parserutils_vector_iterate(vector, ctx);
-                if (token == NULL || token->type != CSS_TOKEN_IDENT) {
+                if (!css__is_counter_name(token)) {
                     *ctx = orig_ctx;
                     return CSS_INVALID;
                 }
@@ -382,7 +382,7 @@ css_error css__parse_content(css_language *c, const parserutils_vector *vector, 
         } /* while */
 
         /* Write list terminator */
-        css__stylesheet_style_append(result, CONTENT_NORMAL);
+        error = css__stylesheet_style_append(result, CONTENT_NORMAL);
     }
 
     if (error != CSS_OK)

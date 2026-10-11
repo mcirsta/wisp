@@ -39,6 +39,9 @@
 #define N_ELEMENTS(x) (sizeof((x)) / sizeof((x)[0]))
 #endif
 
+/* Allocation-free ASCII comparison with a lowercase keyword. */
+bool css__keyword_equal(lwc_string *text, const char *keyword);
+
 css_fixed css__number_from_lwc_string(lwc_string *string, bool int_only, size_t *consumed);
 css_fixed css__number_from_string(const uint8_t *data, size_t len, bool int_only, size_t *consumed);
 

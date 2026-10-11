@@ -10,26 +10,11 @@
 #include "parse/declaration_value.h"
 #include "parse/declaration_text.h"
 #include "parse/property.h"
+#include "utils/css_utils.h"
 
 static css_error intern(const char *text, size_t length, lwc_string **out)
 {
     return lwc_intern_string(text, length, out) == lwc_error_ok ? CSS_OK : CSS_NOMEM;
-}
-
-static bool equal_keyword(lwc_string *text, const char *keyword)
-{
-    size_t length = strlen(keyword);
-    if (text == NULL || lwc_string_length(text) != length)
-        return false;
-    const char *data = lwc_string_data(text);
-    for (size_t i = 0; i < length; i++) {
-        char ch = data[i];
-        if (ch >= 'A' && ch <= 'Z')
-            ch += 'a' - 'A';
-        if (ch != keyword[i])
-            return false;
-    }
-    return true;
 }
 
 static const char *wide_keyword(const css_declaration *source)
@@ -38,7 +23,7 @@ static const char *wide_keyword(const css_declaration *source)
         return NULL;
     static const char *const keywords[] = {"inherit", "initial", "unset", "revert", "revert-layer"};
     for (size_t i = 0; i < sizeof(keywords) / sizeof(keywords[0]); i++) {
-        if (equal_keyword(source->tokens[0].text, keywords[i]))
+        if (css__keyword_equal(source->tokens[0].text, keywords[i]))
             return keywords[i];
     }
     return NULL;
@@ -220,7 +205,8 @@ css_error css__declaration_value_serialize(const css_declaration_contribution *v
     enum css_declaration_value_kind kind = property->value_kind;
     if (kind == CSS_DECL_VALUE_NONE)
         return CSS_INVALID;
-    if (kind == CSS_DECL_VALUE_URI || kind == CSS_DECL_VALUE_IMAGE_LIST || kind == CSS_DECL_VALUE_KEYWORD_LIST)
+    if (kind == CSS_DECL_VALUE_URI || kind == CSS_DECL_VALUE_IMAGE_LIST || kind == CSS_DECL_VALUE_KEYWORD_LIST ||
+        kind == CSS_DECL_VALUE_CONTENT || kind == CSS_DECL_VALUE_STRING_LIST || kind == CSS_DECL_VALUE_COUNTER_LIST)
         return css__declaration_text_serialize(source, out);
     size_t arity = scalar_arity(kind);
     const css_declaration_token *token = scalar_component(value, arity);

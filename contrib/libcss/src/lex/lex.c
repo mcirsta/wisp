@@ -547,19 +547,18 @@ css_error CDCOrIdentOrFunctionOrNPD(css_lexer *lexer, css_token **token)
     size_t clen;
     css_error error;
     parserutils_error perror;
-    enum { Initial = 0, Escape = 1, Gt = 2, CustomProp = 3 };
+    enum { Initial = 0, Escape = 1, Gt = 2 };
 
     /* CDC = "-->"
-     * IDENT = [-]? nmstart nmchar*
-     * FUNCTION = [-]? nmstart nmchar* '('
+     * IDENT = ([-]? nmstart | '--') nmchar*
+     * FUNCTION = IDENT '('
      * NUMBER = num = [-+]? ([0-9]+ | [0-9]* '.' [0-9]+)
      * PERCENTAGE = num '%'
      * DIMENSION = num ident
-     * CUSTOM_PROPERTY = '--' nmstart nmchar*
      *
      * The first dash has been consumed. Thus, we must consume the next
      * character in the stream. If it's a dash, then we're dealing with
-     * CDC or CUSTOM_PROPERTY. If it's a digit or dot, then we're
+     * CDC or IDENT/FUNCTION. If it's a digit or dot, then we're
      * dealing with NPD. Otherwise, we're dealing with IDENT/FUNCTION.
      */
 
@@ -611,47 +610,21 @@ css_error CDCOrIdentOrFunctionOrNPD(css_lexer *lexer, css_token **token)
     case Gt:
         lexer->substate = Gt;
 
-        /* Ok, so we've consumed '--'. Check what follows:
-         * '>' means CDC, nmstart means CUSTOM_PROPERTY,
-         * anything else means CHAR (just the first '-'). */
+        /* CSS Syntax §4.3.9: two leading hyphens start an identifier,
+         * regardless of the following character (except the CDC token).
+         * Whether it names a custom property is a parser decision. */
         perror = parserutils_inputstream_peek(lexer->input, lexer->bytesReadForToken, &cptr, &clen);
         if (perror != PARSERUTILS_OK && perror != PARSERUTILS_EOF)
             return css_error_from_parserutils_error(perror);
 
-        if (perror == PARSERUTILS_EOF) {
-            /* CHAR is the only match here */
-            /* Remove the '-' we read above */
-            lexer->bytesReadForToken -= 1;
-            t->data.len -= 1;
-            return emitToken(lexer, CSS_TOKEN_CHAR, token);
-        }
-
-        c = *cptr;
-
-        if (c == '>') {
+        if (perror == PARSERUTILS_OK && *cptr == '>') {
             APPEND(lexer, cptr, clen);
-
             t->type = CSS_TOKEN_CDC;
-        } else if (startNMStart(c)) {
-            /* Let consumeNMChars consume the first name character too: it
-             * may be an escape and must go through the unescaping path. */
-            goto customprop;
-        } else {
-            /* Remove the '-' we read above */
-            lexer->bytesReadForToken -= 1;
-            t->data.len -= 1;
-            t->type = CSS_TOKEN_CHAR;
+            break;
         }
-        break;
-
-    case CustomProp:
-    customprop:
-        lexer->substate = CustomProp;
-        error = consumeNMChars(lexer);
-        if (error != CSS_OK)
-            return error;
-
-        return emitToken(lexer, CSS_TOKEN_CUSTOM_PROPERTY, token);
+        lexer->state = sIDENT;
+        lexer->substate = 0;
+        return IdentOrFunction(lexer, token);
 
     case Escape:
     escape:

@@ -533,6 +533,7 @@ values = "color"
 parse = "IDENT:( INHERIT: INITIAL: REVERT: UNSET: IDENT:) COLOR:COLOR_SET"
 
 [content]
+declaration_value = "content"
 enum = "CSS_PROP_CONTENT"
 inherited = false
 cascade = "manual"
@@ -549,6 +550,7 @@ outer_struct = true
 select_comments = "Encode content as an array of content items, terminated with a blank entry."
 
 [counter_increment]
+declaration_value = "counter_list"
 enum = "CSS_PROP_COUNTER_INCREMENT"
 inherited = false
 cascade = "counter"
@@ -560,9 +562,10 @@ values = "counter_arr"
 defaults = "CSS_COUNTER_INCREMENT_NONE"
 outer_struct = true
 select_comments = "Encode counter_increment as an array of name, value pairs, terminated with a blank entry."
-parse = '''IDENT:( INHERIT: INITIAL: REVERT: UNSET: NONE:0,COUNTER_INCREMENT_NONE IDENT:) IDENT_LIST:( STRING_OPTNUM:COUNTER_INCREMENT_NAMED 1:COUNTER_INCREMENT_NONE IDENT_LIST:)'''
+parse = '''IDENT:( INHERIT: INITIAL: REVERT: UNSET: NONE:0,COUNTER_INCREMENT_NONE IDENT:) IDENT_LIST:( COUNTER_OPTNUM:COUNTER_INCREMENT_NAMED 1:COUNTER_INCREMENT_NONE IDENT_LIST:)'''
 
 [counter_reset]
+declaration_value = "counter_list"
 enum = "CSS_PROP_COUNTER_RESET"
 inherited = false
 cascade = "counter"
@@ -574,7 +577,7 @@ values = "counter_arr"
 defaults = "CSS_COUNTER_RESET_NONE"
 outer_struct = true
 select_comments = "Encode counter_reset as an array of name, value pairs, terminated with a blank entry."
-parse = '''IDENT:( INHERIT: INITIAL: REVERT: UNSET: NONE:0,COUNTER_RESET_NONE IDENT:) IDENT_LIST:( STRING_OPTNUM:COUNTER_RESET_NAMED 0:COUNTER_RESET_NONE IDENT_LIST:)'''
+parse = '''IDENT:( INHERIT: INITIAL: REVERT: UNSET: NONE:0,COUNTER_RESET_NONE IDENT:) IDENT_LIST:( COUNTER_OPTNUM:COUNTER_RESET_NAMED 0:COUNTER_RESET_NONE IDENT_LIST:)'''
 
 [cue_after]
 declaration_value = "uri"
@@ -1123,6 +1126,7 @@ initial = "STATIC"
 parse = '''IDENT:( INHERIT: INITIAL: REVERT: UNSET: LIBCSS_STATIC:0,POSITION_STATIC RELATIVE:0,POSITION_RELATIVE ABSOLUTE:0,POSITION_ABSOLUTE FIXED:0,POSITION_FIXED STICKY:0,POSITION_STICKY IDENT:)'''
 
 [quotes]
+declaration_value = "string_list"
 enum = "CSS_PROP_QUOTES"
 cascade = "manual"
 computed = "auto"

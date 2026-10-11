@@ -37,6 +37,9 @@ static inline enum flag_value get_css_flag_value(css_language *c, const css_toke
     return FLAG_VALUE__NONE;
 }
 
+/* CSS Lists <counter-name>: a custom identifier other than none. */
+bool css__is_counter_name(const css_token *token);
+
 enum border_side_e { BORDER_SIDE_TOP = 0, BORDER_SIDE_RIGHT = 1, BORDER_SIDE_BOTTOM = 2, BORDER_SIDE_LEFT = 3 };
 
 /**

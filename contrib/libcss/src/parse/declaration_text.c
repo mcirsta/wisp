@@ -9,6 +9,7 @@
 
 #include "parse/declaration_text.h"
 #include "parse/property.h"
+#include "utils/css_utils.h"
 
 /* Measure first, then write into one exact-sized allocation. Long data URLs do
  * not need a pessimistic escape-sized buffer or one allocation per list item. */
@@ -35,17 +36,23 @@ static css_error append(struct text_output *out, const char *text, size_t length
     return CSS_OK;
 }
 
-/* CSSOM §2.1 string serialization. Only ASCII bytes need escaping, so copying
+/* CSSOM §2.1 string/identifier serialization. Only ASCII bytes need escaping; copying
  * the intervening UTF-8 spans preserves non-ASCII code points unchanged. */
-static css_error quoted(struct text_output *out, lwc_string *string)
+static css_error escaped(struct text_output *out, lwc_string *string, bool identifier)
 {
     const char *text = lwc_string_data(string);
     size_t length = lwc_string_length(string);
-    css_error error = append(out, "\"", 1, false);
+    css_error error = identifier ? CSS_OK : append(out, "\"", 1, false);
     size_t start = 0;
     for (size_t i = 0; error == CSS_OK && i < length; i++) {
         unsigned char ch = text[i];
-        if (ch >= 0x20 && ch != 0x7f && ch != '"' && ch != '\\')
+        bool hex_escape = (ch > 0 && ch < 0x20) || ch == 0x7f ||
+            (identifier && ch >= '0' && ch <= '9' && (i == 0 || (i == 1 && text[0] == '-')));
+        bool literal = identifier ?
+            (ch >= 0x80 || ch == '_' || (ch == '-' && length != 1) ||
+                (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9')) :
+            (ch >= 0x20 && ch != '"' && ch != '\\');
+        if (literal && !hex_escape)
             continue;
         error = append(out, text + start, i - start, false);
         if (error != CSS_OK)
@@ -56,7 +63,7 @@ static css_error quoted(struct text_output *out, lwc_string *string)
             error = append(out, "\xef\xbf\xbd", 3, false);
         } else {
             escape[size++] = '\\';
-            if (ch == '"' || ch == '\\') {
+            if (!hex_escape) {
                 escape[size++] = (char)ch;
             } else {
                 static const char hex[] = "0123456789abcdef";
@@ -71,15 +78,169 @@ static css_error quoted(struct text_output *out, lwc_string *string)
     }
     if (error == CSS_OK)
         error = append(out, text + start, length - start, false);
-    if (error == CSS_OK)
+    if (error == CSS_OK && !identifier)
         error = append(out, "\"", 1, false);
     return error;
 }
 
-static bool comma(const css_declaration_token *token)
+static bool character(const css_declaration_token *token, char ch)
 {
-    return token->type == CSS_TOKEN_CHAR && token->text != NULL && lwc_string_length(token->text) == 1 &&
-        lwc_string_data(token->text)[0] == ',';
+    return token != NULL && token->type == CSS_TOKEN_CHAR && token->text != NULL &&
+        lwc_string_length(token->text) == 1 && lwc_string_data(token->text)[0] == ch;
+}
+
+static css_error url(struct text_output *out, lwc_string *text)
+{
+    css_error error = append(out, "url(", 4, false);
+    if (error == CSS_OK)
+        error = escaped(out, text, false);
+    if (error == CSS_OK)
+        error = append(out, ")", 1, false);
+    return error;
+}
+
+/* Walk the captured, validated tokens, never the rendering bytecode's resolved
+ * URLs or fixed-point integers. No allocation is needed per token/list item. */
+static const css_declaration_token *next_token(const css_declaration *source, size_t *position)
+{
+    while (*position < source->token_count) {
+        const css_declaration_token *token = &source->tokens[(*position)++];
+        if (token->type != CSS_TOKEN_S)
+            return token;
+    }
+    return NULL;
+}
+
+static css_error content_function(const css_declaration *source, size_t *position,
+    const css_declaration_token *function, struct text_output *out)
+{
+    bool attr = css__keyword_equal(function->text, "attr");
+    bool counters = css__keyword_equal(function->text, "counters");
+    if (!attr && !counters && !css__keyword_equal(function->text, "counter"))
+        return CSS_INVALID;
+    const css_declaration_token *name = next_token(source, position);
+    if (name == NULL || name->type != CSS_TOKEN_IDENT)
+        return CSS_INVALID;
+    const char *prefix = attr ? "attr(" : counters ? "counters(" : "counter(";
+    css_error error = append(out, prefix, strlen(prefix), false);
+    if (error == CSS_OK)
+        error = escaped(out, name->text, true);
+    if (error != CSS_OK)
+        return error;
+    const css_declaration_token *token = next_token(source, position);
+    if (counters) {
+        if (!character(token, ','))
+            return CSS_INVALID;
+        token = next_token(source, position);
+        if (token == NULL || token->type != CSS_TOKEN_STRING)
+            return CSS_INVALID;
+        error = append(out, ", ", 2, false);
+        if (error == CSS_OK)
+            error = escaped(out, token->text, false);
+        token = next_token(source, position);
+    }
+    if (!attr && character(token, ',')) {
+        token = next_token(source, position);
+        if (token == NULL || token->type != CSS_TOKEN_IDENT)
+            return CSS_INVALID;
+        /* CSSOM's <counter> serialization omits the default decimal style. */
+        if (error == CSS_OK && !css__keyword_equal(token->text, "decimal")) {
+            error = append(out, ", ", 2, false);
+            if (error == CSS_OK)
+                error = append(out, lwc_string_data(token->text), lwc_string_length(token->text), true);
+        }
+        token = next_token(source, position);
+    }
+    if (!character(token, ')'))
+        return CSS_INVALID;
+    if (error == CSS_OK)
+        error = append(out, ")", 1, false);
+    return error;
+}
+
+static css_error serialize_sequence(const css_declaration *source, struct text_output *out)
+{
+    bool content = source->property->value_kind == CSS_DECL_VALUE_CONTENT;
+    size_t position = 0;
+    const css_declaration_token *token;
+    bool first = true;
+    while ((token = next_token(source, &position)) != NULL) {
+        css_error error = first ? CSS_OK : append(out, " ", 1, false);
+        if (error != CSS_OK)
+            return error;
+        first = false;
+        switch (token->type) {
+        case CSS_TOKEN_IDENT:
+            error = append(out, lwc_string_data(token->text), lwc_string_length(token->text), true);
+            break;
+        case CSS_TOKEN_STRING:
+            error = escaped(out, token->text, false);
+            break;
+        case CSS_TOKEN_URI:
+            error = content ? url(out, token->text) : CSS_INVALID;
+            break;
+        case CSS_TOKEN_FUNCTION:
+            error = content ? content_function(source, &position, token, out) : CSS_INVALID;
+            break;
+        default:
+            return CSS_INVALID;
+        }
+        if (error != CSS_OK)
+            return error;
+    }
+    return first ? CSS_INVALID : CSS_OK;
+}
+
+/* An accepted counter integer is [+-]?[0-9]+. Keep the specified magnitude,
+ * including values beyond rendering storage; omit the property's default per
+ * CSSOM's shortest-equivalent rule. Duplicate names retain their order. */
+static css_error counter_integer(struct text_output *out, lwc_string *string, char default_value)
+{
+    const char *text = lwc_string_data(string);
+    size_t length = lwc_string_length(string);
+    bool negative = text[0] == '-';
+    size_t start = negative || text[0] == '+' ? 1 : 0;
+    while (start < length && text[start] == '0')
+        start++;
+    if (start == length) {
+        negative = false;
+        start--;
+    }
+    if (!negative && length - start == 1 && text[start] == default_value)
+        return CSS_OK;
+    css_error error = append(out, negative ? " -" : " ", negative ? 2 : 1, false);
+    if (error == CSS_OK)
+        error = append(out, text + start, length - start, false);
+    return error;
+}
+
+static css_error serialize_counters(const css_declaration *source, struct text_output *out)
+{
+    if (source->token_count == 1 && source->tokens[0].type == CSS_TOKEN_IDENT &&
+        css__keyword_equal(source->tokens[0].text, "none"))
+        return append(out, "none", 4, false);
+    size_t position = 0;
+    const css_declaration_token *token = next_token(source, &position);
+    bool first = true;
+    char default_value = source->property->opcode == CSS_PROP_COUNTER_INCREMENT ? '1' : '0';
+    while (token != NULL) {
+        if (token->type != CSS_TOKEN_IDENT)
+            return CSS_INVALID;
+        css_error error = first ? CSS_OK : append(out, " ", 1, false);
+        if (error == CSS_OK)
+            error = escaped(out, token->text, true);
+        if (error != CSS_OK)
+            return error;
+        first = false;
+        token = next_token(source, &position);
+        if (token != NULL && token->type == CSS_TOKEN_NUMBER) {
+            error = counter_integer(out, token->text, default_value);
+            if (error != CSS_OK)
+                return error;
+            token = next_token(source, &position);
+        }
+    }
+    return first ? CSS_INVALID : CSS_OK;
 }
 
 static css_error serialize_list(const css_declaration *source, struct text_output *out)
@@ -92,17 +253,13 @@ static css_error serialize_list(const css_declaration *source, struct text_outpu
             continue;
         css_error error;
         if (!need_value) {
-            if (kind == CSS_DECL_VALUE_URI || !comma(token))
+            if (kind == CSS_DECL_VALUE_URI || !character(token, ','))
                 return CSS_INVALID;
             error = append(out, ", ", 2, false);
         } else if (token->type == CSS_TOKEN_IDENT) {
             error = append(out, lwc_string_data(token->text), lwc_string_length(token->text), true);
         } else if (token->type == CSS_TOKEN_URI && kind != CSS_DECL_VALUE_KEYWORD_LIST) {
-            error = append(out, "url(", 4, false);
-            if (error == CSS_OK)
-                error = quoted(out, token->text);
-            if (error == CSS_OK)
-                error = append(out, ")", 1, false);
+            error = url(out, token->text);
         } else {
             /* Gradients need their own specified-value representation. */
             return CSS_INVALID;
@@ -114,10 +271,23 @@ static css_error serialize_list(const css_declaration *source, struct text_outpu
     return need_value ? CSS_INVALID : CSS_OK;
 }
 
+static css_error serialize(const css_declaration *source, struct text_output *out)
+{
+    switch (source->property->value_kind) {
+    case CSS_DECL_VALUE_CONTENT:
+    case CSS_DECL_VALUE_STRING_LIST:
+        return serialize_sequence(source, out);
+    case CSS_DECL_VALUE_COUNTER_LIST:
+        return serialize_counters(source, out);
+    default:
+        return serialize_list(source, out);
+    }
+}
+
 css_error css__declaration_text_serialize(const css_declaration *source, lwc_string **out)
 {
     struct text_output text = {.capacity = SIZE_MAX};
-    css_error error = serialize_list(source, &text);
+    css_error error = serialize(source, &text);
     if (error != CSS_OK)
         return error;
     text.capacity = text.length;
@@ -125,7 +295,7 @@ css_error css__declaration_text_serialize(const css_declaration *source, lwc_str
     text.data = malloc(text.capacity);
     if (text.data == NULL)
         return CSS_NOMEM;
-    error = serialize_list(source, &text);
+    error = serialize(source, &text);
     if (error == CSS_OK && lwc_intern_string(text.data, text.length, out) != lwc_error_ok)
         error = CSS_NOMEM;
     free(text.data);

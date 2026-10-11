@@ -438,7 +438,7 @@ void output_ident_list(FILE *outputf, struct keyval *parseid, struct keyval_list
     struct keyval *ckv = kvlist->item[0]; /* list type : opv value */
     struct keyval *ikv;
 
-    if (strcmp(ckv->key, "STRING_OPTNUM") != 0) {
+    if (strcmp(ckv->key, "COUNTER_OPTNUM") != 0) {
         fprintf(stderr, "unknown IDENT list type %s\n", ckv->key);
         exit(4);
     }
@@ -448,7 +448,7 @@ void output_ident_list(FILE *outputf, struct keyval *parseid, struct keyval_list
         exit(4);
     }
 
-    /* list of IDENT and optional numbers */
+    /* List of counter names and optional integers. */
     ikv = kvlist->item[1]; /* numeric default : end condition */
 
     fprintf(outputf,
@@ -462,6 +462,10 @@ void output_ident_list(FILE *outputf, struct keyval *parseid, struct keyval_list
         "\t\t\tuint32_t snumber;\n"
         "\t\t\tcss_fixed num;\n"
         "\t\t\tint pctx;\n\n"
+        "\t\t\tif (!css__is_counter_name(token)) {\n"
+        "\t\t\t\t*ctx = orig_ctx;\n"
+        "\t\t\t\treturn CSS_INVALID;\n"
+        "\t\t\t}\n\n"
         "\t\t\terror = css__stylesheet_string_add(c->sheet, lwc_string_ref(token->idata), &snumber);\n"
         "\t\t\tif (error != CSS_OK) {\n"
         "\t\t\t\t*ctx = orig_ctx;\n"

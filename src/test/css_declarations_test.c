@@ -12,6 +12,7 @@
 #include "parse/language.h"
 #include "parse/property.h"
 #include "stylesheet.h"
+#include "bytecode/opcodes.h"
 
 #ifdef WISP_TEST_ALLOC_FAILURE
 #include "test/malloc_fig.h"
@@ -56,6 +57,8 @@ static const struct {
     {"\\63 olor: red; --\\54 one: blue; --é: 2px", {"color", "--Tone", "--é"}, 0},
     {"color: inherit; width: initial; display: unset", {"color", "width", "display"}, 0},
     {"color:var(--bad, red) !important; margin:var(--space, 1px 2px)", {"color", "margin"}, 1},
+    {"\\2d -Tone:Red; -\\2d tone:Blue; --9:7px; ---:; --:bad; color:var(--9)",
+        {"--Tone", "--tone", "--9", "---", "color"}, 0},
     {"opacity:.5; @import 'no.css'; height:2px", {"opacity", "height"}, 0},
     {"font-family:ubuntu,urban; --u:U+400-4FF; --fn:u(red)", {"font-family", "--u", "--fn"}, 0},
     /* High-bit masking used to turn these valid Unicode identifiers into
@@ -226,8 +229,15 @@ static const struct {
     {"urban", CSS_TOKEN_IDENT, "urban"},
     {"u(", CSS_TOKEN_FUNCTION, "u"},
     {"U+400-4FF", CSS_TOKEN_UNICODE_RANGE, "400-4FF"},
-    {"--\\54 one", CSS_TOKEN_CUSTOM_PROPERTY, "--Tone"},
-    {"--\\Theme", CSS_TOKEN_CUSTOM_PROPERTY, "--Theme"},
+    {"--", CSS_TOKEN_IDENT, "--"},
+    {"--9", CSS_TOKEN_IDENT, "--9"},
+    {"---", CSS_TOKEN_IDENT, "---"},
+    {"\\2d -Tone", CSS_TOKEN_IDENT, "--Tone"},
+    {"-\\2d Tone", CSS_TOKEN_IDENT, "--Tone"},
+    {"--fn(", CSS_TOKEN_FUNCTION, "--fn"},
+    {"-->", CSS_TOKEN_CDC, "-->"},
+    {"--\\54 one", CSS_TOKEN_IDENT, "--Tone"},
+    {"--\\Theme", CSS_TOKEN_IDENT, "--Theme"},
     {"'", CSS_TOKEN_STRING, ""},
     {"'unfinished", CSS_TOKEN_STRING, "unfinished"},
     {"'literal\"", CSS_TOKEN_STRING, "literal\""},
@@ -616,7 +626,9 @@ START_TEST(test_allocation_failure)
                                /* Force the parser's token vector to grow too. */
                                "--large:red red red red red red red red red red red red red red red red "
                                "red red red red red red red red red red red red red red red red red red;"
-                               "content:'a\\\r\nb'; overflow:hidden auto!important;"
+                               "content:'a\\\r\nb' attr(Title) counters(Chapter, '.', UPPER-ROMAN);"
+                               "counter-reset:Chapter 2 Section; counter-increment:Chapter; quotes:'«' '»';"
+                               "overflow:hidden auto!important;"
                                "background-image:url(\\20 file\\22 ),url('other\\1 image');";
     /* Grow the captured-source buffer after a retained declaration exists. */
     char css[16384];
@@ -624,7 +636,7 @@ START_TEST(test_allocation_failure)
     memset(css + pos, 'c', 8192);
     pos += 8192;
     snprintf(css + pos, sizeof(css) - pos, "*/%s", declarations);
-    const size_t expected = 15;
+    const size_t expected = 18;
     /* Keep shared property strings alive, so each iteration tests the same
      * allocation sequence instead of global string-cache initialization. */
     css_stylesheet *keeper;
@@ -848,6 +860,71 @@ static const struct {
     {"background-attachment: FiXeD , SCROLL , FiXeD", "background-attachment", "fixed, scroll, fixed"},
     {"background-image:linear-gradient(red, blue)", "background-image", NULL},
     {"background-image:url(a.png), linear-gradient(red, blue)", "background-image", NULL},
+    {"content:NoRmAl", "content", "normal"},
+    {"content:NoNe", "content", "none"},
+    {"content:InHeRiT", "content", "inherit"},
+    {"content:var(--Caption, 'Text')", "content", "var(--Caption, 'Text')"},
+    {"content:'Hello'\"World\"", "content", "\"Hello\" \"World\""},
+    {"content:''", "content", "\"\""},
+    {"content:'Știri 💡'", "content", "\"Știri 💡\""},
+    {"content:'a\\a b\\9 c\\01 d\\7f e'", "content", "\"a\\a b\\9 c\\1 d\\7f e\""},
+    {"content:'a\\\"b\\\\c'", "content", "\"a\\\"b\\\\c\""},
+    {"content:'ends in spaces  ", "content", "\"ends in spaces  \""},
+    {"content:'escaped\\'  ", "content", "\"escaped'  \""},
+    {"content:OpEn-QuOtE 'Hello' CLOSE-QUOTE NO-OPEN-QUOTE No-Close-Quote", "content",
+        "open-quote \"Hello\" close-quote no-open-quote no-close-quote"},
+    {"content:URL(../Icons/Mark.png) 'Caption'", "content", "url(\"../Icons/Mark.png\") \"Caption\""},
+    {"content:ATTR( Title )", "content", "attr(Title)"},
+    {"content:\\61 ttr( \\54 itle )", "content", "attr(Title)"},
+    {"content:attr(inherit) attr(none)", "content", "attr(inherit) attr(none)"},
+    {"content:attr(data\\:Title) attr(a\\ b)", "content", "attr(data\\:Title) attr(a\\ b)"},
+    {"content:attr(\\31 2) attr(-\\32 x)", "content", "attr(\\31 2) attr(-\\32 x)"},
+    {"content:attr(\\-) attr(--x)", "content", "attr(\\-) attr(--x)"},
+    {"content:attr(a\\1 b\\7f c) attr(Știri)", "content", "attr(a\\1 b\\7f c) attr(Știri)"},
+    {"content:attr(a\\\\b) attr(\\22 )", "content", "attr(a\\\\b) attr(\\\")"},
+    {"content:COUNTER( Chapter )", "content", "counter(Chapter)"},
+    {"content:counter( Chapter , DECIMAL )", "content", "counter(Chapter)"},
+    {"content:counter( Chapter , UPPER-ROMAN )", "content", "counter(Chapter, upper-roman)"},
+    {"content:COUNTERS( Chapter , '.' )", "content", "counters(Chapter, \".\")"},
+    {"content:counters( Chapter , '.' , DeCiMaL )", "content", "counters(Chapter, \".\")"},
+    {"content:counters( Chapter , 'a\\a \\22 \\\\' , LOWER-ALPHA )", "content",
+        "counters(Chapter, \"a\\a \\\"\\\\\", lower-alpha)"},
+    {"content:counter(\\31 2) counters(-\\32 x,'')", "content", "counter(\\31 2) counters(-\\32 x, \"\")"},
+    {"content:attr(Title) counter(Chapter) '.' counters(Section,'.',lower-roman)", "content",
+        "attr(Title) counter(Chapter) \".\" counters(Section, \".\", lower-roman)"},
+    {"content:'kept'; content:'rejected' bogus", "content", "\"kept\""},
+    {"content:'kept'; content:attr()", "content", "\"kept\""},
+    {"content:'kept'; content:counter(A,bogus)", "content", "\"kept\""},
+    {"content:'kept'; content:counters(A)", "content", "\"kept\""},
+    {"quotes:NoNe", "quotes", "none"},
+    {"quotes:UnSeT", "quotes", "unset"},
+    {"quotes:'«' '»' '‹' '›'", "quotes", "\"«\" \"»\" \"‹\" \"›\""},
+    {"quotes:'' ''", "quotes", "\"\" \"\""},
+    {"quotes:'\\22 ''\\22 '\"'\"\"'\"", "quotes", "\"\\\"\" \"\\\"\" \"'\" \"'\""},
+    {"quotes:'a\\a ' 'b\\9 '", "quotes", "\"a\\a \" \"b\\9 \""},
+    {"quotes:'left' 'right  ", "quotes", "\"left\" \"right  \""},
+    {"quotes:none; quotes:'odd'", "quotes", "none"},
+    {"counter-reset:NoNe", "counter-reset", "none"},
+    {"counter-increment:INITIAL", "counter-increment", "initial"},
+    {"counter-reset:Chapter Section", "counter-reset", "Chapter Section"},
+    {"counter-increment:Chapter Section", "counter-increment", "Chapter Section"},
+    {"counter-reset:A +001 B 0 C -0000 D -0002", "counter-reset", "A 1 B C D -2"},
+    {"counter-increment:A +001 B 0 C -0000 D -0002", "counter-increment", "A B 0 C 0 D -2"},
+    {"counter-reset:A 12345678 B -12345678", "counter-reset", "A 12345678 B -12345678"},
+    {"counter-increment:A 12345678 B -12345678", "counter-increment", "A 12345678 B -12345678"},
+    {"counter-reset:A 1 A 2 a -1", "counter-reset", "A 1 A 2 a -1"},
+    {"counter-increment:A 1 A 2 a -1", "counter-increment", "A A 2 a -1"},
+    {"counter-reset:\\31 2 0 -\\32 x 1 \\- -1 Știri 2", "counter-reset", "\\31 2 -\\32 x 1 \\- -1 Știri 2"},
+    {"counter-increment:keep; counter-increment:A 1.5", "counter-increment", "keep"},
+    {"counter-reset:keep; counter-reset:A 1px", "counter-reset", "keep"},
+    {"counter-reset:var(--Counters)", "counter-reset", "var(--Counters)"},
+
+    {"content:attr(--9) counter(--Chapter) counters(--, '.')", "content",
+        "attr(--9) counter(--Chapter) counters(--, \".\")"},
+    {"counter-increment:--Chapter 1 --9 -2", "counter-increment", "--Chapter --9 -2"},
+    {"counter-reset:\\2d -Chapter +0 --9 2", "counter-reset", "--Chapter --9 2"},
+    {"\\2d -Tone:ReD", "--Tone", "ReD"},
+
 };
 enum { VALUE_CASE_COUNT = sizeof(value_cases) / sizeof(value_cases[0]) };
 
@@ -895,6 +972,44 @@ START_TEST(test_specified_values)
         /* The returned string is owned, independent of both borrowed views. */
         if (value != NULL)
             lwc_string_unref(value);
+    }
+}
+END_TEST
+
+/* CSS Lists <counter-name> excludes CSS-wide keywords, default and none.
+ * Exercise both counter functions and every position in the generated parsers.
+ * A rejected declaration must leave the earlier valid declaration in place. */
+START_TEST(test_reserved_counter_names)
+{
+    static const char *const names[] = {
+        "none", "INHERIT", "Initial", "uNsEt", "REVERT", "revert-layer", "Default", "\\6e one", "\\64 efault"};
+    static const struct {
+        const char *property, *format, *expected;
+    } forms[] = {
+        {"content", "counter(%s)", "\"kept\""},
+        {"content", "counters(%s, '.')", "\"kept\""},
+        {"counter-reset", "%s 2", "kept 2"},
+        {"counter-reset", "A 1 %s", "kept 2"},
+        {"counter-increment", "%s 2", "kept 2"},
+        {"counter-increment", "A 1 %s", "kept 2"},
+    };
+    for (size_t n = 0; n < sizeof(names) / sizeof(names[0]); n++) {
+        for (size_t f = 0; f < sizeof(forms) / sizeof(forms[0]); f++) {
+            char invalid[100], css[256];
+            snprintf(invalid, sizeof(invalid), forms[f].format, names[n]);
+            snprintf(css, sizeof(css), "%s:%s; %s:%s", forms[f].property, forms[f].expected,
+                forms[f].property, invalid);
+            css_declaration_list *list = parse(css, _i != 0);
+            ck_assert_msg(css__declaration_list_count(list) == 1, "accepted reserved counter name: %s", css);
+            css_declaration_order *order;
+            ck_assert_int_eq(css__declaration_order_create(list, &order), CSS_OK);
+            lwc_string *value;
+            ck_assert_int_eq(serialize_property(order, forms[f].property, &value), CSS_OK);
+            ck_assert_str_eq(lwc_string_data(value), forms[f].expected);
+            lwc_string_unref(value);
+            css__declaration_order_destroy(order);
+            css__declaration_list_destroy(list);
+        }
     }
 }
 END_TEST
@@ -1018,15 +1133,48 @@ START_TEST(test_value_arguments)
 END_TEST
 
 #ifdef WISP_TEST_ALLOC_FAILURE
+/* Fill the style exactly so the final CONTENT_NORMAL terminator is the only
+ * append that needs allocation. Losing that failure used to publish truncated
+ * bytecode as a successfully parsed declaration. */
+START_TEST(test_content_terminator_allocation_failure)
+{
+    css_stylesheet *sheet;
+    css_style *style;
+    parserutils_vector *tokens;
+    ck_assert_int_eq(css_stylesheet_create(&params, &sheet), CSS_OK);
+    ck_assert_int_eq(css__stylesheet_style_create(sheet, &style), CSS_OK);
+    css_language *language = sheet->parser_frontend;
+    ck_assert_int_eq(parserutils_vector_create(sizeof(css_token), 16, &tokens), PARSERUTILS_OK);
+    css_token quote = {.type = CSS_TOKEN_IDENT, .idata = language->strings[OPEN_QUOTE]};
+    for (unsigned i = 0; i < style->allocated; i++)
+        ck_assert_int_eq(parserutils_vector_append(tokens, &quote), PARSERUTILS_OK);
+    int32_t ctx = 0;
+    realloc_limit(0);
+    css_error error = css__parse_content(language, tokens, &ctx, style);
+    realloc_limit(UINT_MAX);
+    ck_assert_int_eq(error, CSS_NOMEM);
+    ck_assert_int_eq(ctx, 0);
+    style->used = 0; /* The caller discards a failed parse's temporary bytecode. */
+    ck_assert_int_eq(css__parse_content(language, tokens, &ctx, style), CSS_OK);
+    ck_assert_int_eq(style->bytecode[style->used - 1], CONTENT_NORMAL);
+    parserutils_vector_destroy(tokens);
+    css__stylesheet_style_destroy(style);
+    css_stylesheet_destroy(sheet);
+}
+END_TEST
+
 START_TEST(test_value_allocation_failure)
 {
     const char *css = "margin:.1234567px .3456789em .5678912% -.6789123px; --x:  original value  ;"
                       "background-image:url('a\\\"b\\\\c\\1 d'), none, url(Other.png);"
-                      "background-attachment:FIXED, SCROLL; border-style:SOLID DASHED DOTTED DOUBLE;";
+                      "background-attachment:FIXED, SCROLL; border-style:SOLID DASHED DOTTED DOUBLE;"
+                      "content:attr(\\31 2) counters(Chapter, 'a\\a b', upper-roman) url(Other.png);"
+                      "quotes:'«' '»'; counter-reset:Chapter 0 Section -0002;";
     css_declaration_list *list = parse(css, false);
     css_declaration_order *order;
     ck_assert_int_eq(css__declaration_order_create(list, &order), CSS_OK);
-    static const char *const names[] = {"margin", "--x", "background-image", "background-attachment", "border-style"};
+    static const char *const names[] = {"margin", "--x", "background-image", "background-attachment", "border-style",
+        "content", "quotes", "counter-reset"};
     const char *name = names[_i];
     bool succeeded = false;
     unsigned failures = 0;
@@ -1073,11 +1221,13 @@ int main(void)
     tcase_add_test(tc, test_source_growth);
     tcase_add_loop_test(tc, test_specified_values, 0, VALUE_CASE_COUNT);
     tcase_add_test(tc, test_specified_url_resolution);
+    tcase_add_loop_test(tc, test_reserved_counter_names, 0, 2);
     tcase_add_loop_test(tc, test_long_url, 0, 2);
     tcase_add_loop_test(tc, test_overflow_axes, 0, 2);
     tcase_add_test(tc, test_value_arguments);
 #ifdef WISP_TEST_ALLOC_FAILURE
-    tcase_add_loop_test(tc, test_value_allocation_failure, 0, 5);
+    tcase_add_loop_test(tc, test_value_allocation_failure, 0, 8);
+    tcase_add_test(tc, test_content_terminator_allocation_failure);
 #endif
     tcase_add_loop_test(tc, test_declaration_order, 0, ORDER_CASE_COUNT);
     tcase_add_test(tc, test_property_metadata);

@@ -211,13 +211,13 @@ css_error css__declaration_list_record(css_declaration_list *list, const css_tok
     const css_token *value_last = end > value_start ? parserutils_vector_peek(tokens, end - 1) : NULL;
     value_bounds(&entry, value_last != NULL ? value_last->source_end - source_start : 0);
 
-    if (name->type == CSS_TOKEN_CUSTOM_PROPERTY) {
+    if (css__token_is_custom_property(name)) {
         entry.name = lwc_string_ref(name->idata);
     } else if (lwc_string_tolower(name->idata, &entry.name) != lwc_error_ok) {
         declaration_destroy(&entry);
         return CSS_NOMEM;
     }
-    if (name->type != CSS_TOKEN_CUSTOM_PROPERTY) {
+    if (!css__token_is_custom_property(name)) {
         entry.property = css_prop_lookup(lwc_string_data(entry.name), lwc_string_length(entry.name));
         assert(entry.property != NULL);
     }

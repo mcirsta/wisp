@@ -5,7 +5,25 @@
  * Copyright 2007-9 John-Mark Bell <jmb@netsurf-browser.org>
  */
 
+#include <string.h>
+
 #include "utils/css_utils.h"
+
+bool css__keyword_equal(lwc_string *text, const char *keyword)
+{
+    size_t length = strlen(keyword);
+    if (text == NULL || lwc_string_length(text) != length)
+        return false;
+    const char *data = lwc_string_data(text);
+    for (size_t i = 0; i < length; i++) {
+        char ch = data[i];
+        if (ch >= 'A' && ch <= 'Z')
+            ch += 'a' - 'A';
+        if (ch != keyword[i])
+            return false;
+    }
+    return true;
+}
 
 css_fixed css__number_from_lwc_string(lwc_string *string, bool int_only, size_t *consumed)
 {

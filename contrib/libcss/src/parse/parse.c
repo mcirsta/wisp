@@ -1532,7 +1532,7 @@ css_error parseDeclaration(css_parser *parser)
 
         /* A custom property's declaration-value may be empty. Ordinary
          * declarations still require at least one value token. */
-        if (property != NULL && property->type == CSS_TOKEN_CUSTOM_PROPERTY)
+        if (css__token_is_custom_property(property))
             to.state = sValue0;
 
         error = eatWS(parser);
@@ -1684,8 +1684,7 @@ css_error parseProperty(css_parser *parser)
             return done(parser);
         }
 
-        if (token->type != CSS_TOKEN_IDENT &&
-            token->type != CSS_TOKEN_CUSTOM_PROPERTY) {
+        if (token->type != CSS_TOKEN_IDENT) {
             /* parse error */
             parser->parseError = true;
 
@@ -1999,8 +1998,7 @@ css_error parseAny(css_parser *parser)
             token->type != CSS_TOKEN_URI && token->type != CSS_TOKEN_HASH && token->type != CSS_TOKEN_UNICODE_RANGE &&
             token->type != CSS_TOKEN_INCLUDES && token->type != CSS_TOKEN_DASHMATCH &&
             token->type != CSS_TOKEN_PREFIXMATCH && token->type != CSS_TOKEN_SUFFIXMATCH &&
-            token->type != CSS_TOKEN_SUBSTRINGMATCH && token->type != CSS_TOKEN_FUNCTION &&
-            token->type != CSS_TOKEN_CUSTOM_PROPERTY) {
+            token->type != CSS_TOKEN_SUBSTRINGMATCH && token->type != CSS_TOKEN_FUNCTION) {
             /* parse error */
             parser->parseError = true;
 

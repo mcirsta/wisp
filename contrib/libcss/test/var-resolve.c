@@ -724,6 +724,20 @@ static void test_same_rule_custom_property_after_use(void)
     destroy_style_case(&ctx);
 }
 
+static void test_identifier_custom_property_names(void)
+{
+    style_case ctx;
+    const css_computed_style *style = select_style_from_css(
+        "div { --9:12px; \\2d -Tone:13px; --tone:14px; --:99px;"
+        "width:var(--9); height:var(--Tone); margin-left:var(--tone);"
+        "padding-left:var(\\2d -missing, 15px); }", &ctx);
+    expect_length_px("numeric dashed name", style, css_computed_width, CSS_WIDTH_SET, 12);
+    expect_length_px("escaped declaration name", style, css_computed_height, CSS_HEIGHT_SET, 13);
+    expect_length_px("case-sensitive name", style, css_computed_margin_left, CSS_MARGIN_SET, 14);
+    expect_length_px("escaped fallback reference", style, css_computed_padding_left, CSS_PADDING_SET, 15);
+    destroy_style_case(&ctx);
+}
+
 static void test_later_rule_custom_property_after_use(void)
 {
     style_case ctx;
@@ -1712,6 +1726,7 @@ int main(int argc, char **argv)
     }
     assert(argc == 1);
     test_same_rule_custom_property_after_use();
+    test_identifier_custom_property_names();
     test_later_rule_custom_property_after_use();
     test_nested_fallback_uses_final_context();
     test_var_shorthand_keeps_declaration_order();

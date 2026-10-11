@@ -181,9 +181,7 @@ static css_error value_index(css_var_value *value)
         do {
             t = parserutils_vector_iterate(value->tokens, &j);
         } while (t != NULL && t->type == CSS_TOKEN_S);
-        if (t == NULL || (t->type != CSS_TOKEN_IDENT && t->type != CSS_TOKEN_CUSTOM_PROPERTY) ||
-            t->idata == NULL || lwc_string_length(t->idata) <= 2 ||
-            strncmp(lwc_string_data(t->idata), "--", 2) != 0)
+        if (!css__token_is_custom_property(t))
             return CSS_INVALID;
         ref->name = t->idata;
         do {

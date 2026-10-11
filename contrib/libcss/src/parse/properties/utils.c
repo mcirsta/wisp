@@ -26,6 +26,22 @@
 #endif
 
 
+/* CSS Values <custom-ident> excludes CSS-wide keywords and default; CSS Lists
+ * additionally excludes none. Check decoded identifiers without allocating or
+ * locale folding, including keywords whose cascade support is still pending. */
+bool css__is_counter_name(const css_token *token)
+{
+    if (token == NULL || token->type != CSS_TOKEN_IDENT)
+        return false;
+    static const char *const reserved[] = {"inherit", "initial", "unset", "revert", "revert-layer", "default", "none"};
+    for (size_t i = 0; i < sizeof(reserved) / sizeof(reserved[0]); i++) {
+        if (css__keyword_equal(token->idata, reserved[i]))
+            return false;
+    }
+    return true;
+}
+
+
 /**
  * Parse list-style-type value
  *

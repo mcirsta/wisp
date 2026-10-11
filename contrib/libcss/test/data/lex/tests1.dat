@@ -224,8 +224,7 @@ EOF
 #data
 --
 #expected
-CHAR:-
-CHAR:-
+IDENT:--
 S
 EOF
 #reset
@@ -403,7 +402,7 @@ EOF
 #data
 --x
 #expected
-CUSTOM_PROPERTY:--x
+IDENT:--x
 S
 EOF
 #reset
@@ -411,7 +410,7 @@ EOF
 #data
 --primary-color
 #expected
-CUSTOM_PROPERTY:--primary-color
+IDENT:--primary-color
 S
 EOF
 #reset
@@ -419,7 +418,7 @@ EOF
 #data
 --a
 #expected
-CUSTOM_PROPERTY:--a
+IDENT:--a
 S
 EOF
 #reset

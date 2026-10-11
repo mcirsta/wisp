@@ -825,14 +825,11 @@ css_error handleDeclaration(css_language *c, const parserutils_vector *vector)
     consumeWhitespace(vector, &ctx);
 
     /* IDENT ws ':' ws value
-     * or
-     * CUSTOM_PROPERTY ws ':' ws value
      *
      * In CSS 2.1, value is any1, so '{' or ATKEYWORD => parse error
      */
     ident = parserutils_vector_iterate(vector, &ctx);
-    if (ident == NULL ||
-        (ident->type != CSS_TOKEN_IDENT && ident->type != CSS_TOKEN_CUSTOM_PROPERTY))
+    if (ident == NULL || ident->type != CSS_TOKEN_IDENT)
         return CSS_INVALID;
 
     consumeWhitespace(vector, &ctx);
@@ -854,7 +851,7 @@ css_error handleDeclaration(css_language *c, const parserutils_vector *vector)
             bytecode_offset = style->used;
     }
 
-    if (ident->type == CSS_TOKEN_CUSTOM_PROPERTY) {
+    if (css__token_is_custom_property(ident)) {
         /* Custom properties are not valid in @font-face */
         if (rule->type == CSS_RULE_FONT_FACE)
             return CSS_INVALID;
