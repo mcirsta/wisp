@@ -352,7 +352,7 @@ EOF
 'blah \
 	xyz'
 #expected
-STRING:blah \n\txyz
+STRING:blah \txyz
 S
 EOF
 #reset
@@ -680,7 +680,7 @@ EOF
 "tes\
 t"
 #expected
-STRING:tes\nt
+STRING:test
 S
 EOF
 #reset

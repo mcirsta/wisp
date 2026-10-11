@@ -15,6 +15,7 @@
 #include <libcss/types.h>
 
 #include <parserutils/input/inputstream.h>
+#include <parserutils/utils/buffer.h>
 
 typedef struct css_lexer css_lexer;
 
@@ -78,6 +79,11 @@ typedef struct css_token {
 
     uint32_t col;
     uint32_t line;
+
+    /* Byte offsets in an optional captured, decoded source buffer. Keeping
+     * offsets rather than pointers allows that buffer to grow while parsing. */
+    size_t source_start;
+    size_t source_end;
 } css_token;
 
 css_error css__lexer_create(parserutils_inputstream *input, css_lexer **lexer);
@@ -86,5 +92,9 @@ css_error css__lexer_destroy(css_lexer *lexer);
 css_error css__lexer_setopt(css_lexer *lexer, css_lexer_opttype type, css_lexer_optparams *params);
 
 css_error css__lexer_get_token(css_lexer *lexer, css_token **token);
+
+/* Enable before reading tokens. The caller owns the initially empty buffer and
+ * keeps it alive until lexer destruction. Ordinary parsing does not capture. */
+css_error css__lexer_capture_source(css_lexer *lexer, parserutils_buffer *source);
 
 #endif

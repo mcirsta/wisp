@@ -71,6 +71,7 @@ enum {
  */
 struct css_lexer {
     parserutils_inputstream *input; /**< Inputstream containing CSS */
+    parserutils_buffer *source; /**< Optional borrowed decoded-source buffer */
 
     size_t bytesReadForToken; /**< Total bytes read from the
                                * inputstream for the current token */
@@ -96,6 +97,7 @@ struct css_lexer {
                            * was an asterisk */
         bool lastWasCR; /**< Whether the previous character
                          * was CR */
+        bool stringClosed; /**< Whether a string consumed its closing quote */
         size_t bytesForURL; /**< Input bytes read for "url(", for
                              * rewinding */
         size_t dataLenForURL; /**< Output length for "url(", for
@@ -174,6 +176,7 @@ css_error css__lexer_create(parserutils_inputstream *input, css_lexer **lexer)
         return CSS_NOMEM;
 
     lex->input = input;
+    lex->source = NULL;
     lex->bytesReadForToken = 0;
     lex->token.type = CSS_TOKEN_EOF;
     lex->token.data.data = NULL;
@@ -188,6 +191,16 @@ css_error css__lexer_create(parserutils_inputstream *input, css_lexer **lexer)
 
     *lexer = lex;
 
+    return CSS_OK;
+}
+
+css_error css__lexer_capture_source(css_lexer *lexer, parserutils_buffer *source)
+{
+    if (lexer == NULL || source == NULL)
+        return CSS_BADPARM;
+    if (lexer->source != NULL || source->length != 0 || lexer->bytesReadForToken != 0 || lexer->state != sSTART)
+        return CSS_INVALID;
+    lexer->source = source;
     return CSS_OK;
 }
 
@@ -342,6 +355,30 @@ css_error emitToken(css_lexer *lexer, css_token_type type, css_token **token)
 {
     css_token *t = &lexer->token;
 
+    if (lexer->source != NULL) {
+        /* Capture before stripping quotes/prefixes or exposing unescaped text.
+         * Skipped comments still pass here. Reacquire the input pointer because
+         * reading a streamed token may have moved the input buffer. */
+        t->source_start = lexer->source->length;
+        if (lexer->bytesReadForToken != 0) {
+            const uint8_t *raw;
+            size_t clen;
+            parserutils_error error = parserutils_inputstream_peek(lexer->input, 0, &raw, &clen);
+            if (error != PARSERUTILS_OK)
+                return css_error_from_parserutils_error(error);
+            if (lexer->bytesReadForToken >= SIZE_MAX - lexer->source->length)
+                return CSS_NOMEM;
+            error = parserutils_buffer_append(lexer->source, raw, lexer->bytesReadForToken);
+            if (error != PARSERUTILS_OK)
+                return css_error_from_parserutils_error(error);
+        }
+        t->source_end = lexer->source->length;
+        /* An unterminated comment is consumed by the lexer before EOF. Its
+         * source belongs to the preceding value, not to the EOF delimiter. */
+        if (type == CSS_TOKEN_EOF)
+            t->source_start = t->source_end;
+    }
+
     t->type = type;
 
     /* Calculate token data start pointer. We have to do this here as
@@ -375,8 +412,8 @@ css_error emitToken(css_lexer *lexer, css_token_type type, css_token **token)
         t->data.data += 1;
         t->data.len -= 1;
 
-        /* Strip the trailing quote, iff it exists (may have hit EOF) */
-        if (t->data.len > 0 && (t->data.data[t->data.len - 1] == '"' || t->data.data[t->data.len - 1] == '\'')) {
+        /* At EOF, a literal or escaped quote may be part of the value. */
+        if (lexer->context.stringClosed) {
             t->data.len -= 1;
         }
         break;
@@ -1155,7 +1192,9 @@ start:
     t->idata = NULL;
     t->col = lexer->currentCol;
     t->line = lexer->currentLine;
+    t->source_start = t->source_end = 0;
     lexer->escapeSeen = false;
+    lexer->context.stringClosed = false;
     if (lexer->unescapedTokenData != NULL)
         lexer->unescapedTokenData->length = 0;
 
@@ -1345,8 +1384,9 @@ css_error String(css_lexer *lexer, css_token **token)
     if (error != CSS_OK && error != CSS_EOF && error != CSS_INVALID)
         return error;
 
-    /* EOF will be reprocessed in Start() */
-    return emitToken(lexer, error == CSS_OK ? CSS_TOKEN_STRING : CSS_TOKEN_INVALID_STRING, token);
+    /* CSS Syntax 3, consume a string token: EOF returns the string so far;
+     * only an unescaped newline produces a bad-string token. */
+    return emitToken(lexer, error == CSS_INVALID ? CSS_TOKEN_INVALID_STRING : CSS_TOKEN_STRING, token);
 }
 
 css_error URIOrUnicodeRangeOrIdentOrFunction(css_lexer *lexer, css_token **token)
@@ -1777,14 +1817,14 @@ css_error consumeEscape(css_lexer *lexer, bool nl)
         return error;
     }
 
-    /* If we're handling escaped newlines, convert CR(LF)? to LF */
+    /* A string line continuation consumes the newline without adding it to
+     * the value. Treat CRLF as one newline even across input chunks. */
     if (nl && c == '\r') {
         perror = parserutils_inputstream_peek(lexer->input, lexer->bytesReadForToken + clen, &cptr, &clen);
         if (perror != PARSERUTILS_OK && perror != PARSERUTILS_EOF)
             return css_error_from_parserutils_error(perror);
 
-        c = '\n';
-        APPEND(lexer, &c, 1);
+        lexer->bytesReadForToken++;
         lexer->currentCol = 1;
         lexer->currentLine++;
 
@@ -1795,9 +1835,10 @@ css_error consumeEscape(css_lexer *lexer, bool nl)
 
         return CSS_OK;
     } else if (nl && (c == '\n' || c == '\f')) {
-        /* APPEND will increment this appropriately */
-        lexer->currentCol = 0;
+        lexer->bytesReadForToken += clen;
+        lexer->currentCol = 1;
         lexer->currentLine++;
+        return CSS_OK;
     } else if (c != '\n' && c != '\r' && c != '\f') {
         lexer->currentCol++;
     }
@@ -1897,6 +1938,7 @@ css_error consumeString(css_lexer *lexer)
 
     /* Append closing quote to token data */
     APPEND(lexer, cptr, clen);
+    lexer->context.stringClosed = true;
 
     return CSS_OK;
 }

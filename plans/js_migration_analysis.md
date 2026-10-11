@@ -620,11 +620,12 @@ the collector pointer confined to the temporary language-parser context.
 
 This is **parser output, not an exposed CSSStyleDeclaration**. In particular, it
 does not yet select winning longhands or serialize specified values. Decoded
-tokens do not preserve original escapes/comments/whitespace, and must not be
-mistaken for source text. There is no new JS feature-detection placeholder and the
-saved eBihoreanul `style.opacity` blocker remains until the following work lands:
+tokens must not be mistaken for source text; the source-capture increment below
+now preserves that separately. There is no new JS feature-detection placeholder
+and the saved eBihoreanul `style.opacity` blocker remains. Implementation sequence:
 
-1. Preserve source spelling where required, particularly custom-property values.
+1. **Source capture implemented; CSSOM serialization still pending.** Preserve
+   source spelling where required, particularly custom-property values.
    The [custom-property serialization rules](https://drafts.csswg.org/css-variables-1/#serializing-custom-properties)
    require original text; computed-style output or reconstructed tokens are not a
    substitute. Extend the shared lexer/parser rather than split CSS with a second
@@ -668,6 +669,44 @@ realloc failure sweeps, retry, token-vector growth and final interned-string
 cleanup. All 16 selected Release suites pass, covering the existing consumers of
 the allocation-failure shim as well. Final builds are warning-free and
 `git diff --check` is clean. No GTK build or tests were run.
+
+### Inline CSS source capture (2026-10-11)
+
+The declaration-parser foundation is committed as `432b6a81`. Its collector now
+also retains the original value text, including comments, escapes, numeric
+spelling and whitespace, separately from decoded tokens and compiled bytecode.
+The shared lexer records offsets into an optional source buffer, including skipped
+comments. No second CSS tokenizer is introduced. The collector copies accepted
+value spans into owned strings and releases the temporary source buffer when
+parsing completes. Ordinary stylesheet parsing does not allocate or retain this
+buffer; its temporary token structure does gain two source-offset fields.
+
+`source_value` deliberately contains the full span after the colon and before
+the priority or declaration delimiter, including outer whitespace/comments. It
+is **not yet a serialized CSSOM value**: declaration-value trimming, empty custom
+value serialization and ordinary-property serialization belong to the next layer.
+The collector accepts already-decoded Unicode supplied as UTF-8, using the shared
+input-stream mode that preserves a leading literal U+FEFF rather than stripping
+it as a byte-order mark. It does not introduce general CSS input preprocessing.
+
+The tests exposed two related lexer errors, fixed at their shared source following
+[CSS Syntax's string-token algorithm](https://drafts.csswg.org/css-syntax-3/#consume-string-token):
+EOF now returns the string accumulated so far, while an unescaped newline remains
+a bad string; escaped line breaks are consumed without adding them to the value.
+Closing quotes are tracked explicitly, so an opposite or escaped quote at EOF is
+not accidentally removed. Legacy test expectations that included escaped line
+breaks or rejected EOF strings were corrected to match those rules.
+
+Validation: all 74 native CSS/QuickJS suites pass under Debug ASan/UBSan with
+LeakSanitizer; all 16 selected Release suites pass. The declaration suite now
+passes 71 Debug checks and 74 Release checks, including whole input, byte-at-a-time
+input, every split point for lexer regressions, long comment/string buffer growth,
+three allocator-failure sweeps and final interned-string cleanup. All 13 targeted
+Qt capture suites pass. No GTK build or tests were run.
+
+Next: build the specified declaration block using generated property/shorthand
+metadata, priority resolution and standards-based value serialization. Only then
+expose the stable, live `element.style` wrapper and its DOM mutation integration.
 
 ## Assessment
 

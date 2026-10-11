@@ -385,6 +385,23 @@ bool css__parser_quirks_permitted(css_parser *parser)
     return parser->quirks;
 }
 
+css_error css__parser_capture_string_source(css_parser *parser, parserutils_buffer *source)
+{
+    if (parser == NULL || source == NULL)
+        return CSS_BADPARM;
+    parserutils_error error = parserutils_inputstream_use_decoded_utf8(parser->stream);
+    if (error != PARSERUTILS_OK)
+        return css_error_from_parserutils_error(error);
+    return css__lexer_capture_source(parser->lexer, source);
+}
+
+size_t css__parser_source_position(const css_parser *parser)
+{
+    /* Declaration events have already looked ahead to ';', '}' or EOF. */
+    assert(parser->pushback != NULL);
+    return parser->pushback->source_start;
+}
+
 /******************************************************************************
  * Parser creation helper                                                     *
  ******************************************************************************/

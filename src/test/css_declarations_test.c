@@ -151,6 +151,7 @@ START_TEST(test_declarations)
         ck_assert_msg(
             a->important == !!(cases[index].important & (1u << i)), "case %zu declaration %zu priority", index, i);
         compare_strings(a->name, b->name);
+        compare_strings(a->source_value, b->source_value);
         ck_assert_int_eq(a->important, b->important);
         ck_assert_uint_eq(a->token_count, b->token_count);
         ck_assert_uint_eq(a->bytecode_offset, end);
@@ -195,6 +196,21 @@ static const struct {
     {"U+400-4FF", CSS_TOKEN_UNICODE_RANGE, "400-4FF"},
     {"--\\54 one", CSS_TOKEN_CUSTOM_PROPERTY, "--Tone"},
     {"--\\Theme", CSS_TOKEN_CUSTOM_PROPERTY, "--Theme"},
+    {"'", CSS_TOKEN_STRING, ""},
+    {"'unfinished", CSS_TOKEN_STRING, "unfinished"},
+    {"'literal\"", CSS_TOKEN_STRING, "literal\""},
+    {"\"literal'", CSS_TOKEN_STRING, "literal'"},
+    {"'escaped\\'", CSS_TOKEN_STRING, "escaped'"},
+    {"'escaped\\27", CSS_TOKEN_STRING, "escaped'"},
+    {"'trailing\\", CSS_TOKEN_STRING, "trailing"},
+    {"'\\", CSS_TOKEN_STRING, ""},
+    {"'a\\\nb'", CSS_TOKEN_STRING, "ab"},
+    {"'a\\\r\nb'", CSS_TOKEN_STRING, "ab"},
+    {"'a\\\rb'", CSS_TOKEN_STRING, "ab"},
+    {"'a\\\fb'", CSS_TOKEN_STRING, "ab"},
+    {"'a\\\r", CSS_TOKEN_STRING, "a"},
+    {"'a\\\r\n", CSS_TOKEN_STRING, "a"},
+    {"'a\\\n\\\rb'", CSS_TOKEN_STRING, "ab"},
 };
 enum { LEXER_CASE_COUNT = sizeof(lexer_cases) / sizeof(lexer_cases[0]) };
 
@@ -224,6 +240,85 @@ START_TEST(test_lexer_resume)
         ck_assert_int_eq(token->type, CSS_TOKEN_EOF);
         css__lexer_destroy(lexer);
         parserutils_inputstream_destroy(stream);
+    }
+}
+END_TEST
+
+static const struct {
+    const char *css;
+    const char *name;
+    const char *value;
+    bool important;
+} source_cases[] = {
+    {"--x:  a\t b  ;", "--x", "  a\t b  ", false},
+    {"--x: /* leading */ a/**/b /* trailing */ ;", "--x", " /* leading */ a/**/b /* trailing */ ", false},
+    {"--x:\\41  \\000042 \\; \\!important;", "--x", "\\41  \\000042 \\; \\!important", false},
+    {"--x: 'a;:b\\\"c' \"!important\";", "--x", " 'a;:b\\\"c' \"!important\"", false},
+    {"--x: red /* value */ !/**/IMPORTANT /* priority */;", "--x", " red /* value */ ", true},
+    {"--x: /* !important; */;", "--x", " /* !important; */", false},
+    {"--x:;", "--x", "", false},
+    {"--x: \t ! important;", "--x", " \t ", true},
+    {"--x:fn(!important);", "--x", "fn(!important)", false},
+    {"--x: url( 'data:a;b:c' ) ;", "--x", " url( 'data:a;b:c' ) ", false},
+    {"--x: 12345678-12e3-8d9b-a456-426614174000;", "--x", " 12345678-12e3-8d9b-a456-426614174000", false},
+    {"--é: 'Știri 💡' /**/ ;", "--é", " 'Știri 💡' /**/ ", false},
+    {"--\\54 one: BLUE !important;", "--Tone", " BLUE ", true},
+    {"--x: red /* unfinished  ", "--x", " red /* unfinished  ", false},
+    {"--x: /*", "--x", " /*", false},
+    {"--x: 'unfinished", "--x", " 'unfinished", false},
+    {"content: 'a\\\r\nb'", "content", " 'a\\\r\nb'", false},
+    {"--x: 'escaped\\'", "--x", " 'escaped\\'", false},
+    {"content: 'unfinished", "content", " 'unfinished", false},
+    {"unknown:a; color:invalid; color: RGB(1, 2, 3) !important; color:wrong;", "color", " RGB(1, 2, 3) ", true},
+    {"margin: var(--space, 1px  2px) /* end */;", "margin", " var(--space, 1px  2px) /* end */", false},
+    {"\xef\xbb\xbf" "color:red; --x:blue", "--x", "blue", false},
+};
+enum { SOURCE_CASE_COUNT = sizeof(source_cases) / sizeof(source_cases[0]) };
+
+START_TEST(test_source_value)
+{
+    for (int chunks = 0; chunks < 2; chunks++) {
+        css_declaration_list *list = parse(source_cases[_i].css, chunks);
+        ck_assert_msg(css__declaration_list_count(list) == 1, "source case %d, chunks %d: got %zu declarations",
+            _i, chunks, css__declaration_list_count(list));
+        const css_declaration *entry = css__declaration_list_get(list, 0);
+        ck_assert_str_eq(lwc_string_data(entry->name), source_cases[_i].name);
+        ck_assert_ptr_nonnull(entry->source_value);
+        ck_assert_uint_eq(lwc_string_length(entry->source_value), strlen(source_cases[_i].value));
+        ck_assert_str_eq(lwc_string_data(entry->source_value), source_cases[_i].value);
+        ck_assert_int_eq(entry->important, source_cases[_i].important);
+        css__declaration_list_destroy(list);
+    }
+}
+END_TEST
+
+START_TEST(test_source_growth)
+{
+    /* Force both the input stream and captured-source buffers to move within
+     * a single comment and a single string, then check following offsets. */
+    enum { RUN = 8192 };
+    char css[2 * RUN + 128];
+    size_t pos = 0;
+    pos += (size_t)sprintf(css + pos, "--long: /*");
+    memset(css + pos, 'c', RUN);
+    pos += RUN;
+    pos += (size_t)sprintf(css + pos, "*/ '\\41 ");
+    memset(css + pos, 's', RUN);
+    pos += RUN;
+    pos += (size_t)sprintf(css + pos, "'; color:blue");
+    for (int chunks = 0; chunks < 2; chunks++) {
+        css_declaration_list *list = parse(css, chunks);
+        ck_assert_uint_eq(css__declaration_list_count(list), 2);
+        const css_declaration *long_value = css__declaration_list_get(list, 0);
+        const size_t start = strlen("--long:");
+        const size_t end = pos - strlen("; color:blue");
+        ck_assert_uint_eq(lwc_string_length(long_value->source_value), end - start);
+        ck_assert_int_eq(memcmp(lwc_string_data(long_value->source_value), css + start, end - start), 0);
+        ck_assert_uint_eq(long_value->token_count, 1);
+        ck_assert_uint_eq(lwc_string_length(long_value->tokens[0].text), RUN + 1);
+        ck_assert_int_eq(lwc_string_data(long_value->tokens[0].text)[0], 'A');
+        ck_assert_str_eq(lwc_string_data(css__declaration_list_get(list, 1)->source_value), "blue");
+        css__declaration_list_destroy(list);
     }
 }
 END_TEST
@@ -300,6 +395,7 @@ START_TEST(test_growth)
     for (size_t i = 0; i < 80; i++) {
         const css_declaration *entry = css__declaration_list_get(list, i);
         ck_assert_str_eq(lwc_string_data(entry->name), "margin");
+        ck_assert_str_eq(lwc_string_data(entry->source_value), "1px 2px");
         ck_assert(entry->important);
         ck_assert_uint_eq(entry->token_count, 3);
     }
@@ -311,12 +407,19 @@ END_TEST
 START_TEST(test_allocation_failure)
 {
     void (*limit)(unsigned int) = _i == 0 ? malloc_limit : _i == 1 ? calloc_limit : realloc_limit;
-    const char *css = "color:red; width:2px!important; --Tone:green; margin:var(--space, 1px 2px);"
-                      "padding:1em; display:flex; height:3px; opacity:.5; color:blue; --extra:;"
-                      /* Force the parser's token vector to grow too. */
-                      "--large:red red red red red red red red red red red red red red red red "
-                      "red red red red red red red red red red red red red red red red red red;";
-    const size_t expected = 11;
+    const char *declarations = "color:red; width:2px!important; --Tone:green; margin:var(--space, 1px 2px);"
+                               "padding:1em; display:flex; height:3px; opacity:.5; color:blue; --extra:;"
+                               /* Force the parser's token vector to grow too. */
+                               "--large:red red red red red red red red red red red red red red red red "
+                               "red red red red red red red red red red red red red red red red red red;"
+                               "content:'a\\\r\nb';";
+    /* Grow the captured-source buffer after a retained declaration exists. */
+    char css[16384];
+    size_t pos = (size_t)sprintf(css, "opacity:1; /*");
+    memset(css + pos, 'c', 8192);
+    pos += 8192;
+    snprintf(css + pos, sizeof(css) - pos, "*/%s", declarations);
+    const size_t expected = 13;
     /* Keep shared property strings alive, so each iteration tests the same
      * allocation sequence instead of global string-cache initialization. */
     css_stylesheet *keeper;
@@ -372,6 +475,8 @@ int main(void)
     TCase *tc = tcase_create("Parser output");
     tcase_add_loop_test(tc, test_declarations, 0, CASE_COUNT);
     tcase_add_loop_test(tc, test_lexer_resume, 0, LEXER_CASE_COUNT);
+    tcase_add_loop_test(tc, test_source_value, 0, SOURCE_CASE_COUNT);
+    tcase_add_test(tc, test_source_growth);
     tcase_add_test(tc, test_owned_tokens);
     tcase_add_test(tc, test_lifecycle);
     tcase_add_test(tc, test_growth);

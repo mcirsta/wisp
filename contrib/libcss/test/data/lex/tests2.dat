@@ -13,7 +13,7 @@ IDENT:p
 CHAR:[
 IDENT:example
 CHAR:=
-STRING:public class foo\n{\n    private int x;\n\n    foo(int x) {\n        this.x = x;\n    }\n\n}
+STRING:public class foo{    private int x;    foo(int x) {        this.x = x;    }}
 CHAR:]
 S
 CHAR:{

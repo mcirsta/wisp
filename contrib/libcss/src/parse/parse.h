@@ -11,6 +11,7 @@
 #include <libwapcaplet/libwapcaplet.h>
 
 #include <parserutils/utils/vector.h>
+#include <parserutils/utils/buffer.h>
 
 #include <libcss/errors.h>
 #include <libcss/functypes.h>
@@ -66,5 +67,11 @@ css_error css__parser_completed(css_parser *parser);
 
 const char *css__parser_read_charset(css_parser *parser, css_charset_source *source);
 bool css__parser_quirks_permitted(css_parser *parser);
+
+/* Declaration collection consumes a Unicode string supplied as UTF-8, rather
+ * than a stylesheet byte stream with BOM/charset sniffing. Call before append. */
+css_error css__parser_capture_string_source(css_parser *parser, parserutils_buffer *source);
+/* Position of the unconsumed delimiter during a declaration event. */
+size_t css__parser_source_position(const css_parser *parser);
 
 #endif

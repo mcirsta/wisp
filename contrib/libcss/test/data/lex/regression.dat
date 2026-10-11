@@ -49,7 +49,7 @@ EOF
 #data:trunc
 "\"}\
 #expected
-INVALID:"}
+STRING:"}
 EOF
 #reset
 
@@ -57,7 +57,7 @@ EOF
 url("\"}\
 #expected
 FUNCTION:url
-INVALID:"}
+STRING:"}
 EOF
 #reset
 
@@ -73,7 +73,7 @@ EOF
 #data:trunc
 "\"}\
 #expected
-INVALID:"}\n
+STRING:"}
 EOF
 #reset
 
@@ -81,7 +81,7 @@ EOF
 "\"}\
 x"
 #expected
-STRING:"}\nx
+STRING:"}x
 S
 EOF
 #reset
@@ -89,7 +89,7 @@ EOF
 #data
 "\"}\"
 #expected
-STRING:"}\n
+STRING:"}
 S
 EOF
 #reset
@@ -97,7 +97,7 @@ EOF
 #data
 "\"}\x"
 #expected
-STRING:"}\nx
+STRING:"}x
 S
 EOF
 #reset
@@ -106,7 +106,7 @@ EOF
 "\"}\
 x"
 #expected
-STRING:"}\nx
+STRING:"}x
 S
 EOF
 #reset
@@ -114,7 +114,7 @@ EOF
 #data
 "\"}\x"
 #expected
-STRING:"}\fx
+STRING:"}x
 S
 EOF
 #reset

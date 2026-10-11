@@ -24,6 +24,9 @@ typedef struct css_declaration_token {
 
 typedef struct css_declaration {
     lwc_string *name; /**< Lowercase ordinary name; case-sensitive custom name */
+    /* Original value between ':' and the priority/delimiter, including outer
+     * whitespace and comments. This is source text, not CSSOM serialization. */
+    lwc_string *source_value;
     bool important;
     const css_declaration_token *tokens; /**< Value without surrounding whitespace or priority */
     size_t token_count;
@@ -41,7 +44,8 @@ typedef struct css_declaration {
  * errors make the list unusable; destroy it and start a new parse. Results are
  * available only after successful completion, and are immutable afterwards.
  * The caller supplies normal stylesheet callbacks and URL context. The input
- * is UTF-8 and inline_style/charset in params are overridden accordingly. */
+ * is a decoded Unicode string supplied as UTF-8 (no BOM/charset sniffing).
+ * inline_style/charset in params are overridden accordingly. */
 css_error css__declaration_list_create(const css_stylesheet_params *params, css_declaration_list **out);
 css_error css__declaration_list_append(css_declaration_list *list, const uint8_t *data, size_t len);
 css_error css__declaration_list_complete(css_declaration_list *list);

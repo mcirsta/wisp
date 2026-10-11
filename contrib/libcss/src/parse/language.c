@@ -841,9 +841,9 @@ css_error handleDeclaration(css_language *c, const parserutils_vector *vector)
     if (token == NULL || tokenIsChar(token, ':') == false)
         return CSS_INVALID;
 
+    int32_t value_start = ctx;
     consumeWhitespace(vector, &ctx);
 
-    int32_t value_start = ctx;
     uint32_t bytecode_offset = 0;
     if (c->declarations != NULL) {
         /* Declaration collection is requested only for inline styles. Keep

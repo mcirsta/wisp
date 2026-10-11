@@ -4,14 +4,17 @@
  *                http://www.opensource.org/licenses/mit-license.php
  */
 
+#include <assert.h>
 #include <stdlib.h>
 
 #include "parse/declarations.h"
 #include "parse/language.h"
 #include "stylesheet.h"
+#include "utils/parserutilserror.h"
 
 struct css_declaration_list {
     css_stylesheet *sheet;
+    parserutils_buffer *source;
     css_declaration *entries;
     size_t count;
     size_t capacity;
@@ -23,6 +26,8 @@ static void declaration_destroy(css_declaration *entry)
 {
     if (entry->name != NULL)
         lwc_string_unref(entry->name);
+    if (entry->source_value != NULL)
+        lwc_string_unref(entry->source_value);
     for (size_t i = 0; i < entry->token_count; i++) {
         if (entry->tokens[i].text != NULL)
             lwc_string_unref(entry->tokens[i].text);
@@ -48,6 +53,13 @@ css_error css__declaration_list_create(const css_stylesheet_params *params, css_
     css_error error = css_stylesheet_create(&inline_params, &list->sheet);
     if (error != CSS_OK) {
         free(list);
+        return error;
+    }
+    error = css_error_from_parserutils_error(parserutils_buffer_create(&list->source));
+    if (error == CSS_OK)
+        error = css__parser_capture_string_source(list->sheet->parser, list->source);
+    if (error != CSS_OK) {
+        css__declaration_list_destroy(list);
         return error;
     }
     ((css_language *)list->sheet->parser_frontend)->declarations = list;
@@ -81,6 +93,10 @@ css_error css__declaration_list_complete(css_declaration_list *list)
 
     list->error = css_stylesheet_data_done(list->sheet);
     list->complete = (list->error == CSS_OK);
+    if (list->complete) {
+        parserutils_buffer_destroy(list->source);
+        list->source = NULL;
+    }
     return list->error;
 }
 
@@ -89,6 +105,8 @@ void css__declaration_list_destroy(css_declaration_list *list)
     if (list == NULL)
         return;
     css_stylesheet_destroy(list->sheet);
+    if (list->source != NULL)
+        parserutils_buffer_destroy(list->source);
     for (size_t i = 0; i < list->count; i++)
         declaration_destroy(&list->entries[i]);
     free(list->entries);
@@ -122,6 +140,10 @@ css_error css__declaration_list_record(css_declaration_list *list, const css_tok
     const parserutils_vector *tokens, int32_t value_start, uint32_t bytecode_offset, uint32_t bytecode_length)
 {
     css_declaration entry = {.bytecode_offset = bytecode_offset, .bytecode_length = bytecode_length};
+    const css_token *colon = parserutils_vector_peek(tokens, value_start - 1);
+    size_t source_start = colon->source_end;
+    size_t source_end = css__parser_source_position(list->sheet->parser);
+    consumeWhitespace(tokens, &value_start);
     size_t length;
     parserutils_vector_get_length(tokens, &length);
     if (length > INT32_MAX)
@@ -139,25 +161,34 @@ css_error css__declaration_list_record(css_declaration_list *list, const css_tok
     if (important) {
         int32_t bang = trim_whitespace(tokens, value_start, end - 1) - 1;
         if (bang >= value_start && tokenIsChar(parserutils_vector_peek(tokens, bang), '!')) {
+            const css_token *priority = parserutils_vector_peek(tokens, bang);
+            source_end = priority->source_start;
             entry.important = true;
             end = trim_whitespace(tokens, value_start, bang);
         }
     }
+    assert(source_start <= source_end && source_end <= list->source->length);
+    if (lwc_intern_string((const char *)list->source->data + source_start, source_end - source_start,
+            &entry.source_value) != lwc_error_ok)
+        return CSS_NOMEM;
 
     if (name->type == CSS_TOKEN_CUSTOM_PROPERTY) {
         entry.name = lwc_string_ref(name->idata);
     } else if (lwc_string_tolower(name->idata, &entry.name) != lwc_error_ok) {
+        declaration_destroy(&entry);
         return CSS_NOMEM;
     }
     entry.token_count = (size_t)(end - value_start);
     if (entry.token_count > SIZE_MAX / sizeof(css_declaration_token)) {
-        lwc_string_unref(entry.name);
+        entry.token_count = 0;
+        declaration_destroy(&entry);
         return CSS_NOMEM;
     }
     if (entry.token_count != 0) {
         css_declaration_token *value = malloc(entry.token_count * sizeof(*value));
         if (value == NULL) {
-            lwc_string_unref(entry.name);
+            entry.token_count = 0;
+            declaration_destroy(&entry);
             return CSS_NOMEM;
         }
         for (size_t i = 0; i < entry.token_count; i++) {
