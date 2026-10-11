@@ -18,6 +18,7 @@
 #include "bytecode/bytecode.h"
 #include "bytecode/opcodes.h"
 #include "parse/properties/properties.h"
+#include "parse/colour.h"
 #include "parse/properties/utils.h"
 #include "stylesheet.h"
 
@@ -390,126 +391,6 @@ static void HWB_to_RGB(css_fixed hue, css_fixed white, css_fixed black, uint8_t 
         *g = FIXTOINT(FDIV(FADD(FMUL(FDIV(gf, F_100), val), FMUL(white, F_255)), F_100));
         *b = FIXTOINT(FDIV(FADD(FMUL(FDIV(bf, F_100), val), FMUL(white, F_255)), F_100));
     }
-}
-
-/**
- * Parse a RGB(A) colour specifier
- *
- * It's up to the caller to reset the ctx if this fails.
- *
- * \param c       Parsing context
- * \param vector  Vector of tokens to process
- * \param ctx     Pointer to vector iteration context
- * \param result  Pointer to location to receive result (AARRGGBB)
- * \return true on success, false on error.
- */
-static bool parse_rgb(css_language *c, const parserutils_vector *vector, int32_t *ctx, uint32_t *result)
-{
-    const css_token *token;
-    css_token_type valid = CSS_TOKEN_NUMBER;
-    uint8_t r = 0, g = 0, b = 0, a = 0xff;
-    uint8_t *components[4] = {&r, &g, &b, &a};
-    bool legacy = false;
-    bool had_none = false;
-
-    for (int i = 0; i < 4; i++) {
-        uint8_t *component;
-        css_fixed num;
-        size_t consumed = 0;
-        int32_t intval;
-        bool int_only;
-        bool match;
-
-        component = components[i];
-
-        consumeWhitespace(vector, ctx);
-
-        token = parserutils_vector_peek(vector, *ctx);
-        if (token == NULL) {
-            return false;
-        } else if (!legacy && token->type == CSS_TOKEN_IDENT &&
-            lwc_string_caseless_isequal(token->idata, c->strings[NONE], &match) == lwc_error_ok && match) {
-            had_none = true;
-        } else {
-            if (token->type != CSS_TOKEN_NUMBER && token->type != CSS_TOKEN_PERCENTAGE) {
-                return false;
-            }
-
-            if (i == 0) {
-                valid = token->type;
-            } else if (legacy && i < 3 && token->type != valid) {
-                return false;
-            } else {
-                valid = token->type;
-            }
-
-            /* The alpha channel may be a float */
-            if (i < 3) {
-                int_only = (valid == CSS_TOKEN_NUMBER);
-            } else {
-                int_only = false;
-            }
-
-            num = css__number_from_lwc_string(token->idata, int_only, &consumed);
-            if (consumed != lwc_string_length(token->idata)) {
-                return false;
-            }
-
-            if (valid == CSS_TOKEN_NUMBER) {
-                if (i == 3) {
-                    /* alpha channel */
-                    intval = FIXTOINT(FMUL(num, F_255));
-                } else {
-                    /* colour channels */
-                    intval = FIXTOINT(num);
-                }
-            } else {
-                intval = FIXTOINT(FDIV(FMUL(num, F_255), F_100));
-            }
-
-            if (intval > 255) {
-                *component = 255;
-            } else if (intval < 0) {
-                *component = 0;
-            } else {
-                *component = intval;
-            }
-        }
-
-        parserutils_vector_iterate(vector, ctx);
-
-        consumeWhitespace(vector, ctx);
-
-        token = parserutils_vector_peek(vector, *ctx);
-        if (token == NULL) {
-            return false;
-        }
-
-        if (i == 0 && tokenIsChar(token, ',') && !had_none) {
-            legacy = true;
-        }
-
-        if (i >= 2 && tokenIsChar(token, ')')) {
-            parserutils_vector_iterate(vector, ctx);
-            break;
-
-        } else if (legacy) {
-            if (!tokenIsChar(token, ',')) {
-                return false;
-            }
-            parserutils_vector_iterate(vector, ctx);
-
-        } else if (i == 2) {
-            if (!tokenIsChar(token, '/')) {
-                return false;
-            }
-            parserutils_vector_iterate(vector, ctx);
-        }
-    }
-
-    *result = ((unsigned)a << 24) | (r << 16) | (g << 8) | b;
-
-    return true;
 }
 
 /**
@@ -1145,77 +1026,6 @@ static bool parse_lch(const parserutils_vector *vector, int32_t *ctx, uint32_t *
 }
 
 /**
- * Parse a color() function
- *
- * \param c       Parsing context
- * \param vector  Vector of tokens to process
- * \param ctx     Pointer to vector iteration context
- * \param result  Pointer to location to receive result (AARRGGBB)
- * \return true on success, false on error.
- */
-static bool parse_color_function(css_language *c, const parserutils_vector *vector, int32_t *ctx, uint32_t *result)
-{
-    const css_token *token;
-    size_t consumed = 0;
-
-    consumeWhitespace(vector, ctx);
-
-    /* Expect colorspace ident */
-    token = parserutils_vector_iterate(vector, ctx);
-    if (token == NULL || token->type != CSS_TOKEN_IDENT)
-        return false;
-
-    /* We can validate colorspace here if we want (srgb, display-p3, etc) */
-
-    consumeWhitespace(vector, ctx);
-
-    /* Parse components until '/' or ')' */
-    while (1) {
-        token = parserutils_vector_peek(vector, *ctx);
-        if (token == NULL)
-            return false;
-
-        if (tokenIsChar(token, ')') || tokenIsChar(token, '/'))
-            break;
-
-        token = parserutils_vector_iterate(vector, ctx);
-        if (token->type != CSS_TOKEN_NUMBER && token->type != CSS_TOKEN_PERCENTAGE)
-            return false;
-
-        css__number_from_lwc_string(token->idata, false, &consumed);
-        if (consumed != lwc_string_length(token->idata))
-            return false;
-
-        consumeWhitespace(vector, ctx);
-    }
-
-    /* Optional alpha */
-    token = parserutils_vector_peek(vector, *ctx);
-    if (tokenIsChar(token, '/')) {
-        parserutils_vector_iterate(vector, ctx);
-        consumeWhitespace(vector, ctx);
-
-        token = parserutils_vector_iterate(vector, ctx);
-        if (token == NULL || (token->type != CSS_TOKEN_NUMBER && token->type != CSS_TOKEN_PERCENTAGE))
-            return false;
-
-        css__number_from_lwc_string(token->idata, false, &consumed);
-        if (consumed != lwc_string_length(token->idata))
-            return false;
-
-        consumeWhitespace(vector, ctx);
-    }
-
-    token = parserutils_vector_iterate(vector, ctx);
-    if (!tokenIsChar(token, ')'))
-        return false;
-
-    CSS_UNIMPLEMENTED("color() function conversion");
-    *result = 0; /* TODO: Conversion */
-    return true;
-}
-
-/**
  * Parse a colour specifier
  *
  * \param c       Parsing context
@@ -1296,11 +1106,11 @@ css_error css__parse_colour_specifier(
             goto invalid;
     } else if (token->type == CSS_TOKEN_FUNCTION) {
         if ((lwc_string_caseless_isequal(token->idata, c->strings[RGB], &match) == lwc_error_ok && match)) {
-            if (!parse_rgb(c, vector, ctx, result)) {
+            if (!css__parse_rgb_colour(vector, ctx, result)) {
                 goto invalid;
             }
         } else if ((lwc_string_caseless_isequal(token->idata, c->strings[RGBA], &match) == lwc_error_ok && match)) {
-            if (!parse_rgb(c, vector, ctx, result)) {
+            if (!css__parse_rgb_colour(vector, ctx, result)) {
                 goto invalid;
             }
         } else if ((lwc_string_caseless_isequal(token->idata, c->strings[HSL], &match) == lwc_error_ok && match)) {
@@ -1331,95 +1141,11 @@ css_error css__parse_colour_specifier(
             if (!parse_lch(vector, ctx, result, true)) {
                 goto invalid;
             }
-        } else if ((lwc_string_caseless_isequal(token->idata, c->strings[COLOR], &match) == lwc_error_ok && match)) {
-            if (!parse_color_function(c, vector, ctx, result)) {
-                goto invalid;
-            }
         } else {
-            int32_t temp_ctx = *ctx;
-            consumeWhitespace(vector, &temp_ctx);
-            const css_token *t = parserutils_vector_peek(vector, temp_ctx);
-            if (t != NULL && t->type == CSS_TOKEN_IDENT) {
-                const char *idata = lwc_string_data(t->idata);
-                size_t ilen = lwc_string_length(t->idata);
-                if (ilen == 4 && strncasecmp(idata, "srgb", 4) == 0) {
-                    parserutils_vector_iterate(vector, &temp_ctx);
-                    consumeWhitespace(vector, &temp_ctx);
-                    uint8_t r = 0, g = 0, b = 0, a = 0xff;
-                    int comp = 0;
-                    while (comp < 3) {
-                        const css_token *ct = parserutils_vector_peek(vector, temp_ctx);
-                        if (ct == NULL)
-                            goto invalid;
-                        if (ct->type == CSS_TOKEN_PERCENTAGE || ct->type == CSS_TOKEN_NUMBER) {
-                            css_fixed num = css__number_from_lwc_string(ct->idata, false, NULL);
-                            if (ct->type == CSS_TOKEN_PERCENTAGE) {
-                                int v = FIXTOINT(FDIV(FMUL(num, INTTOFIX(255)), INTTOFIX(100)));
-                                if (v < 0)
-                                    v = 0;
-                                if (v > 255)
-                                    v = 255;
-                                if (comp == 0)
-                                    r = (uint8_t)v;
-                                else if (comp == 1)
-                                    g = (uint8_t)v;
-                                else
-                                    b = (uint8_t)v;
-                            } else {
-                                int v = FIXTOINT(num);
-                                if (v < 0)
-                                    v = 0;
-                                if (v > 255)
-                                    v = 255;
-                                if (comp == 0)
-                                    r = (uint8_t)v;
-                                else if (comp == 1)
-                                    g = (uint8_t)v;
-                                else
-                                    b = (uint8_t)v;
-                            }
-                            temp_ctx = temp_ctx + 1;
-                            consumeWhitespace(vector, &temp_ctx);
-                            comp++;
-                        } else {
-                            goto invalid;
-                        }
-                    }
-                    const css_token *slash = parserutils_vector_peek(vector, temp_ctx);
-                    if (slash != NULL && tokenIsChar(slash, '/')) {
-                        parserutils_vector_iterate(vector, &temp_ctx);
-                        consumeWhitespace(vector, &temp_ctx);
-                        const css_token *at = parserutils_vector_peek(vector, temp_ctx);
-                        if (at == NULL)
-                            goto invalid;
-                        if (at->type == CSS_TOKEN_PERCENTAGE || at->type == CSS_TOKEN_NUMBER) {
-                            css_fixed num = css__number_from_lwc_string(at->idata, false, NULL);
-                            if (at->type == CSS_TOKEN_PERCENTAGE) {
-                                int av = FIXTOINT(FDIV(FMUL(num, INTTOFIX(255)), INTTOFIX(100)));
-                                if (av < 0)
-                                    av = 0;
-                                if (av > 255)
-                                    av = 255;
-                                a = (uint8_t)av;
-                            } else {
-                                int av = FIXTOINT(num);
-                                if (av < 0)
-                                    av = 0;
-                                if (av > 255)
-                                    av = 255;
-                                a = (uint8_t)av;
-                            }
-                            temp_ctx = temp_ctx + 1;
-                        }
-                    }
-                    *ctx = temp_ctx;
-                    *result = ((uint32_t)a << 24) | ((uint32_t)r << 16) | ((uint32_t)g << 8) | b;
-                } else {
-                    goto invalid;
-                }
-            } else {
-                goto invalid;
-            }
+            /* Unsupported functions must reject the declaration so an earlier
+             * fallback can win. In particular, color() needs real colour-space
+             * handling; reporting success with transparent black is incorrect. */
+            goto invalid;
         }
     }
 

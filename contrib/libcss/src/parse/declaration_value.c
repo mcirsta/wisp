@@ -8,6 +8,7 @@
 #include <string.h>
 
 #include "parse/declaration_value.h"
+#include "parse/colour.h"
 #include "parse/declaration_text.h"
 #include "parse/property.h"
 #include "utils/css_utils.h"
@@ -282,6 +283,7 @@ static size_t scalar_arity(enum css_declaration_value_kind kind)
         return 2;
     case CSS_DECL_VALUE_QUAD_LENGTH:
     case CSS_DECL_VALUE_QUAD_KEYWORD:
+    case CSS_DECL_VALUE_QUAD_COLOUR:
         return 4;
     default:
         return 1;
@@ -393,6 +395,8 @@ css_error css__declaration_value_serialize(const css_declaration_contribution *v
         return serialize_geometry(source, out);
     if (kind == CSS_DECL_VALUE_FLEX || kind == CSS_DECL_VALUE_FLEX_FLOW)
         return serialize_flex_component(value, out);
+    if (kind == CSS_DECL_VALUE_COLOUR || kind == CSS_DECL_VALUE_QUAD_COLOUR)
+        return css__declaration_colour_serialize(value, out);
     size_t arity = scalar_arity(kind);
     const css_declaration_token *token = scalar_component(value, arity);
     if (token == NULL)

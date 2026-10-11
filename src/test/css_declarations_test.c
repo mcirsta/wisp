@@ -626,6 +626,7 @@ START_TEST(test_allocation_failure)
     const char *declarations = "color:red; width:2px!important; --Tone:green; margin:var(--space, 1px 2px);"
                                "padding:1em; display:flex; height:3px; opacity:.5; color:blue; --extra:;"
                                "flex:auto 2 3;flex-flow:wrap column;flex:initial;flex-flow:inherit;"
+                               "color:rgb(1.2 3.4 5.6 / 50%);border-color:#1234 red rgb(3,2,1) currentcolor;"
                                /* Force the parser's token vector to grow too. */
                                "--large:red red red red red red red red red red red red red red red red "
                                "red red red red red red red red red red red red red red red red red red;"
@@ -639,7 +640,7 @@ START_TEST(test_allocation_failure)
     memset(css + pos, 'c', 8192);
     pos += 8192;
     snprintf(css + pos, sizeof(css) - pos, "*/%s", declarations);
-    const size_t expected = 23;
+    const size_t expected = 25;
     /* Keep shared property strings alive, so each iteration tests the same
      * allocation sequence instead of global string-cache initialization. */
     css_stylesheet *keeper;
@@ -801,7 +802,7 @@ static const struct {
     {"width:calc(1px + 2em)", "width", NULL},
     {"margin:1px calc(2px + 1em)", "margin", NULL},
     {"margin:1px calc(2px + 1em)", "margin-top", NULL},
-    {"color:rgb(1, 2, 3)", "color", NULL},
+    {"color:rgb(1, 2, 3)", "color", "rgb(1, 2, 3)"},
     {"font-family:'Example'", "font-family", "\"Example\""},
     {"display: InLiNe-BlOcK", "display", "inline-block"},
     {"display: \\66 lex", "display", "flex"},
@@ -1079,6 +1080,69 @@ static const struct {
     {"flex-flow:var(--flow)", "flex-flow", "var(--flow)"},
     {"flex-flow:var(--flow)", "flex-wrap", ""},
 
+    {"color:ReD", "color", "red"},
+    {"color:ButtonText", "color", "buttontext"},
+    {"color:WindowText", "color", "windowtext"},
+    {"background-color:Canvas", "background-color", "canvas"},
+    {"color:ReBeCcApUrPlE", "color", "rebeccapurple"},
+    {"color:TRANSPARENT", "color", "transparent"},
+    {"color:CURRENTcolor", "color", "currentcolor"},
+    {"color:#123", "color", "rgb(17, 34, 51)"},
+    {"color:#1234", "color", "rgba(17, 34, 51, 0.267)"},
+    {"color:#c0FFee80", "color", "rgba(192, 255, 238, 0.5)"},
+    {"color:#ff00ffed", "color", "rgba(255, 0, 255, 0.93)"},
+    {"color:#ff00ffec", "color", "rgba(255, 0, 255, 0.925)"},
+    {"color:#0001", "color", "rgba(0, 0, 0, 0.067)"},
+    {"color:#0000", "color", "rgba(0, 0, 0, 0)"},
+    {"color:#123f", "color", "rgb(17, 34, 51)"},
+    {"color:#FF0000FF", "color", "rgb(255, 0, 0)"},
+    {"color:RGB(01, +2, 003)", "color", "rgb(1, 2, 3)"},
+    {"color:rgba(1, 2, 3)", "color", "rgb(1, 2, 3)"},
+    {"color:rgb(1,2,3,.5)", "color", "rgba(1, 2, 3, 0.5)"},
+    {"color:rgba(50%, 20%, 0%, 50%)", "color", "rgba(127.5, 51, 0, 0.5)"},
+    {"color:rgb(1.25 50% 2.5 / 20%)", "color", "rgba(1.25, 127.5, 2.5, 0.2)"},
+    {"color:rgb(1/**/2/**/3 / .1234567)", "color", "rgba(1, 2, 3, 0.123457)"},
+    {"color:rgb(-1 999 0 / 2)", "color", "rgb(0, 255, 0)"},
+    {"color:rgba(1, 2, 3, -1)", "color", "rgba(1, 2, 3, 0)"},
+    {"color:rgb(1 2 3 / 0.99999999)", "color", "rgb(1, 2, 3)"},
+    {"color:rgb(1 2 3 / 0.00000001)", "color", "rgba(1, 2, 3, 0)"},
+    {"color:rgb(999999999999999999 0 0 / 999999999999999999)", "color", "rgb(255, 0, 0)"},
+    {"color:rgb(-999999999999999999% 999999999999999999% 0%)", "color", "rgb(0, 255, 0)"},
+    {"color:rgb(none 0 0)", "color", NULL},
+    {"color:rgb(1 2 3 / none)", "color", NULL},
+    {"color:hsl(0,100%,50%)", "color", NULL},
+    {"color:hwb(0 0% 0%)", "color", NULL},
+    {"color:lab(50% 0 0)", "color", NULL},
+    {"color:oklab(50% 0 0)", "color", NULL},
+    {"color:lch(50% 10 0)", "color", NULL},
+    {"color:oklch(50% 0.1 0)", "color", NULL},
+    {"color:red; color:color(srgb 0 0 1)", "color", "red"},
+    {"background-color:#123", "background-color", "rgb(17, 34, 51)"},
+    {"outline-color:INVERT", "outline-color", "invert"},
+    {"column-rule-color:#abc", "column-rule-color", "rgb(170, 187, 204)"},
+    {"border-color:RED", "border-color", "red"},
+    {"border-color:RED #123", "border-color", "red rgb(17, 34, 51)"},
+    {"border-color:RED #123", "border-bottom-color", "red"},
+    {"border-color:RED #123", "border-left-color", "rgb(17, 34, 51)"},
+    {"border-color:RED rgb(1,2,3) TRANSPARENT", "border-color", "red rgb(1, 2, 3) transparent"},
+    {"border-color:red rgb(1,2,3) transparent", "border-left-color", "rgb(1, 2, 3)"},
+    {"border-color:red green blue black", "border-color", "red green blue black"},
+    {"border-color:red green blue black", "border-bottom-color", "blue"},
+    {"border-color:red green blue black", "border-left-color", "black"},
+    {"border-color:red green red green", "border-color", "red green"},
+    {"border-color:red green; border-left-color:#123", "border-color", "red green red rgb(17, 34, 51)"},
+    {"border-color:rgba(1,2,3,.5);border-right-color:rgba(1,2,3,50%)", "border-color", "rgba(1, 2, 3, 0.5)"},
+    {"border-color:red!important;border-left-color:blue", "border-color", "red"},
+    {"border-color:red;border-left-color:blue!important", "border-color", ""},
+    {"border-color:initial", "border-color", "initial"},
+    {"border-color:inherit;border-left-color:initial", "border-color", ""},
+    {"border-color:var(--border)", "border-color", "var(--border)"},
+    {"border-color:var(--border)", "border-top-color", ""},
+    {"border-color:var(--border);border-left-color:red", "border-color", ""},
+    {"border-color:red hsl(0,100%,50%)", "border-left-color", NULL},
+    {"border-color:red hsl(0,100%,50%) blue", "border-bottom-color", "blue"},
+    {"border-color:red hsl(0,100%,50%) blue", "border-color", NULL},
+
 };
 enum { VALUE_CASE_COUNT = sizeof(value_cases) / sizeof(value_cases[0]) };
 
@@ -1350,6 +1414,117 @@ START_TEST(test_geometry_invalid_units)
             snprintf(css, sizeof(css), formats[f], units[u]);
             css_declaration_list *list = parse(css, _i != 0);
             ck_assert_msg(css__declaration_list_count(list) == 0, "accepted invalid length: %s", css);
+            css__declaration_list_destroy(list);
+        }
+    }
+}
+END_TEST
+
+START_TEST(test_quirky_colour_values)
+{
+    static const char *const forms[] = {"f00", "123456", "12ab56"};
+    static const char *const expected[] = {"rgb(255, 0, 0)", "rgb(18, 52, 86)", "rgb(18, 171, 86)"};
+    for (size_t i = 0; i < N_ELEMENTS(forms); i++) {
+        char css[32];
+        snprintf(css, sizeof(css), "color:%s", forms[i]);
+        css_stylesheet_params quirky = params;
+        quirky.allow_quirks = true;
+        css_declaration_list *list;
+        ck_assert_int_eq(css__declaration_list_create(&quirky, &list), CSS_OK);
+        check_append(css__declaration_list_append(list, (const uint8_t *)css, strlen(css)));
+        ck_assert_int_eq(css__declaration_list_complete(list), CSS_OK);
+        ck_assert_uint_eq(css__declaration_list_count(list), 1);
+        css_declaration_order *order;
+        ck_assert_int_eq(css__declaration_order_create(list, &order), CSS_OK);
+        lwc_string *value;
+        ck_assert_int_eq(serialize_property(order, "color", &value), CSS_OK);
+        ck_assert_str_eq(lwc_string_data(value), expected[i]);
+        lwc_string_unref(value);
+        css__declaration_order_destroy(order);
+        css__declaration_list_destroy(list);
+    }
+}
+END_TEST
+
+/* The specified serializer must not quietly change the colour on reparse.
+ * Exhaust all hex alpha bytes, including ones without an integer-percent form. */
+START_TEST(test_colour_alpha_roundtrip)
+{
+    for (unsigned alpha = 0; alpha < 256; alpha++) {
+        char css[128];
+        snprintf(css, sizeof(css), "color:#123456%02x", alpha);
+        css_declaration_list *list = parse(css, _i != 0);
+        css_declaration_order *order;
+        ck_assert_int_eq(css__declaration_order_create(list, &order), CSS_OK);
+        lwc_string *value;
+        ck_assert_int_eq(serialize_property(order, "color", &value), CSS_OK);
+        snprintf(css, sizeof(css), "color:%s", lwc_string_data(value));
+        css_declaration_list *again = parse(css, _i != 0);
+        ck_assert_msg(css__declaration_list_count(again) == 1, "rejected alpha %u: %s", alpha, css);
+        const css_style *style = inline_style(css__declaration_list_sheet(again));
+        ck_assert_msg(style->used == 2 && style->bytecode[1] == (alpha << 24 | 0x123456),
+            "alpha %u changed after %s", alpha, css);
+        lwc_string_unref(value);
+        css__declaration_order_destroy(order);
+        css__declaration_list_destroy(list);
+        css__declaration_list_destroy(again);
+    }
+}
+END_TEST
+
+START_TEST(test_rgb_rendering_values)
+{
+    static const struct { const char *value; uint32_t packed; } cases[] = {
+        {"rgb(50%,0%,100%)", 0xff8000ff},
+        {"rgb(1.5,2.5,3.5)", 0xff020304},
+        {"rgb(1 50% 2.5 / .5)", 0x80018003},
+        {"rgb(1 2 3 / 50%)", 0x80010203},
+        {"rgba(1,2,3,.1)", 0x1a010203},
+        {"rgba(1,2,3,1000000)", 0xff010203},
+        {"rgb(999999999999999999% -999999999999999999% 50%)", 0xffff0080},
+        {"rgb(none 50% none / none)", 0x00008000},
+        {"rgba(none none none)", 0xff000000},
+        {"rgb(0 0 0 / .000001)", 0x00000000},
+        {"rgb(0 0 0 / .999999)", 0xff000000},
+    };
+    for (size_t i = 0; i < N_ELEMENTS(cases); i++) {
+        char css[128];
+        snprintf(css, sizeof(css), "color:%s", cases[i].value);
+        css_declaration_list *list = parse(css, _i != 0);
+        ck_assert_msg(css__declaration_list_count(list) == 1, "rejected %s", css);
+        const css_style *style = inline_style(css__declaration_list_sheet(list));
+        ck_assert_msg(style->used == 2 && style->bytecode[1] == cases[i].packed,
+            "%s: expected ARGB %08x, got %08x", css, cases[i].packed, style->bytecode[1]);
+        css__declaration_list_destroy(list);
+    }
+}
+END_TEST
+
+START_TEST(test_colour_invalid)
+{
+    static const char *const values[] = {
+        "rgb(1%,2,3)", "rgb(none,0,0)", "rgba(0,0,0,none)", "rgb(1 2 3,.5)", "rgb(1,2,3/.5)",
+        "rgb(1 2 3 4)", "rgb(1 2)", "rgba(1,2,3,4,)", "rgb(1 2 3 / .5 /)", "rgb(1 2 3 /)",
+        "rgb(1 2 3 / .5 extra)", "rgb(1,2,3,)", "rgb(1,2,3,.5,)", "rgb(1,2,3,.5,.6)",
+        "rgb(1,2,3,.5 /)", "rgb(1,2,3,.5 / junk)", "rgb(1px 2 3)", "rgb(1 2 3 / 1px)",
+        "color(srgb 0 0 1)", "color(display-p3 1 0 0)", "color(unknown 1 0 0)", "color(srgb)",
+        "color(srgb 1 2)", "unknown(srgb 0 0 1)", "unknown(srgb 0 0 1 / .5)", "#12", "#12345",
+    };
+    static const char *const properties[] = {"color", "background-color", "border-color", "border-top-color",
+        "outline-color", "column-rule-color"};
+    for (size_t p = 0; p < N_ELEMENTS(properties); p++) {
+        for (size_t i = 0; i < N_ELEMENTS(values); i++) {
+            char css[256];
+            snprintf(css, sizeof(css), "%s:red;%s:%s;opacity:.5", properties[p], properties[p], values[i]);
+            css_declaration_list *list = parse(css, _i != 0);
+            ck_assert_msg(css__declaration_list_count(list) == 2, "accepted invalid/unsupported colour: %s", css);
+            css_declaration_order *order;
+            ck_assert_int_eq(css__declaration_order_create(list, &order), CSS_OK);
+            lwc_string *value;
+            ck_assert_int_eq(serialize_property(order, properties[p], &value), CSS_OK);
+            ck_assert_str_eq(lwc_string_data(value), "red");
+            lwc_string_unref(value);
+            css__declaration_order_destroy(order);
             css__declaration_list_destroy(list);
         }
     }
@@ -1644,13 +1819,15 @@ START_TEST(test_value_allocation_failure)
                       "quotes:'«' '»'; counter-reset:Chapter 0 Section -0002;"
                       "aspect-ratio:auto .1234567; border-spacing:.3456789em .5678912px;"
                       "flex:.1234567 .3456789 1.2345678px;flex-flow:wrap-reverse column;"
+                      "color:rgb(1.2 3.4 5.6 / .234567);border-color:#1234 rgb(4,5,6) REd;"
                       "clip:rect(.1234567px, auto, -1.2345678em, 1px);"
                       "font-family:One/**/Two\\20 , 'a\\22 b\\a c',SERIF;";
     css_declaration_list *list = parse(css, false);
     css_declaration_order *order;
     ck_assert_int_eq(css__declaration_order_create(list, &order), CSS_OK);
     static const char *const names[] = {"margin", "--x", "background-image", "background-attachment", "border-style",
-        "content", "quotes", "counter-reset", "aspect-ratio", "border-spacing", "clip", "font-family", "flex", "flex-flow"};
+        "content", "quotes", "counter-reset", "aspect-ratio", "border-spacing", "clip", "font-family", "flex",
+        "flex-flow", "color", "border-color"};
     const char *name = names[_i];
     bool succeeded = false;
     unsigned failures = 0;
@@ -1706,12 +1883,16 @@ int main(void)
     tcase_add_loop_test(tc, test_geometry_invalid_units, 0, 2);
     tcase_add_loop_test(tc, test_geometry_bytecode, 0, 2);
     tcase_add_loop_test(tc, test_flex_bytecode, 0, 2);
+    tcase_add_loop_test(tc, test_colour_alpha_roundtrip, 0, 2);
+    tcase_add_test(tc, test_quirky_colour_values);
+    tcase_add_loop_test(tc, test_rgb_rendering_values, 0, 2);
+    tcase_add_loop_test(tc, test_colour_invalid, 0, 2);
     tcase_add_loop_test(tc, test_flex_invalid, 0, 2);
     tcase_add_loop_test(tc, test_long_url, 0, 2);
     tcase_add_loop_test(tc, test_overflow_axes, 0, 2);
     tcase_add_test(tc, test_value_arguments);
 #ifdef WISP_TEST_ALLOC_FAILURE
-    tcase_add_loop_test(tc, test_value_allocation_failure, 0, 14);
+    tcase_add_loop_test(tc, test_value_allocation_failure, 0, 16);
     tcase_add_loop_test(tc, test_font_face_allocation_failure, 0, 3);
     tcase_add_test(tc, test_content_terminator_allocation_failure);
 #endif

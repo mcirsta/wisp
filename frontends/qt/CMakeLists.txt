@@ -570,6 +570,10 @@ if(WISP_QT_CAPTURE)
                 COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_gradient_stops.py
                     $<TARGET_FILE:wisp-qt> ${WISP_TEST_MAGICK})
             set_tests_properties(qt_gradient_stops PROPERTIES TIMEOUT 30)
+            add_test(NAME qt_css_colours
+                COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_css_colours.py
+                    $<TARGET_FILE:wisp-qt> ${WISP_TEST_MAGICK})
+            set_tests_properties(qt_css_colours PROPERTIES TIMEOUT 30)
             add_test(NAME qt_background_layers
                 COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_background_layers.py
                     $<TARGET_FILE:wisp-qt> ${WISP_TEST_MAGICK})

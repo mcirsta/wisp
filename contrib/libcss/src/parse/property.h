@@ -34,6 +34,8 @@ enum css_declaration_value_kind {
     CSS_DECL_VALUE_FONT_FAMILY,
     CSS_DECL_VALUE_FLEX,
     CSS_DECL_VALUE_FLEX_FLOW,
+    CSS_DECL_VALUE_COLOUR,
+    CSS_DECL_VALUE_QUAD_COLOUR,
 };
 
 /* Immutable registration shared by the parser, variable resolver and specified

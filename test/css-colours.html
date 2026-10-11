@@ -1,0 +1,25 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>CSS colour parsing and fallback preservation</title>
+<style>
+html, body { margin: 0; background: white; }
+.case { position: absolute; width: 80px; height: 40px; }
+#hex { left: 10px; top: 10px; background: #c0ffee; }
+#fraction { left: 110px; top: 10px; background: rgb(100.5, 20.5, .5); }
+#mixed { left: 210px; top: 10px; background: rgb(50% 40 60%); }
+#alpha { left: 310px; top: 10px; background: rgba(255 0 0 / 50%); }
+#large { left: 410px; top: 10px; background: rgb(1000000 0 0); }
+#missing { left: 10px; top: 70px; background: rgb(255 none none / none); }
+#color-function { left: 110px; top: 70px; background: #024; background: color(srgb 1 0 0); }
+#unknown { left: 210px; top: 70px; background: #024; background: unknown(srgb 1 0 0); }
+#invalid { left: 310px; top: 70px; background: #024; background: rgba(255,0,0,.5,); }
+#gradient { left: 410px; top: 70px; background: linear-gradient(rgb(50% 0 0),rgb(50% 0 0)); }
+#border { left: 10px; top: 130px; box-sizing: border-box; border: 10px solid;
+          border-color: #f00 rgb(0 100% 0) #00f rgb(50% 0 50%); }
+</style>
+<div id="hex" class="case"></div><div id="fraction" class="case"></div>
+<div id="mixed" class="case"></div><div id="alpha" class="case"></div>
+<div id="large" class="case"></div><div id="missing" class="case"></div>
+<div id="color-function" class="case"></div><div id="unknown" class="case"></div>
+<div id="invalid" class="case"></div><div id="gradient" class="case"></div>
+<div id="border" class="case"></div>

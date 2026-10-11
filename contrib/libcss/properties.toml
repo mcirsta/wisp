@@ -216,6 +216,7 @@ bits = 2
 initial = "SCROLL"
 
 [background_color]
+declaration_value = "colour"
 enum = "CSS_PROP_BACKGROUND_COLOR"
 inherited = false
 cascade = "bg_border_color"
@@ -282,6 +283,7 @@ condition = "CSS_BORDER_SPACING_SET"
 defaults = "CSS_BORDER_SPACING_SET"
 
 [border_top_color]
+declaration_value = "colour"
 enum = "CSS_PROP_BORDER_TOP_COLOR"
 inherited = false
 enum_prefix = "CSS_BORDER_COLOR"
@@ -295,6 +297,7 @@ values = "color"
 parse = "WRAP:css__parse_border_side_color"
 
 [border_right_color]
+declaration_value = "colour"
 enum = "CSS_PROP_BORDER_RIGHT_COLOR"
 inherited = false
 enum_prefix = "CSS_BORDER_COLOR"
@@ -308,6 +311,7 @@ values = "color"
 parse = "WRAP:css__parse_border_side_color"
 
 [border_bottom_color]
+declaration_value = "colour"
 enum = "CSS_PROP_BORDER_BOTTOM_COLOR"
 inherited = false
 enum_prefix = "CSS_BORDER_COLOR"
@@ -321,6 +325,7 @@ values = "color"
 parse = "WRAP:css__parse_border_side_color"
 
 [border_left_color]
+declaration_value = "colour"
 enum = "CSS_PROP_BORDER_LEFT_COLOR"
 inherited = false
 enum_prefix = "CSS_BORDER_COLOR"
@@ -526,6 +531,7 @@ defaults = "CSS_CLIP_AUTO"
 override = ['get', 'set']
 
 [color]
+declaration_value = "colour"
 enum = "CSS_PROP_COLOR"
 cascade = "manual"
 computed = "auto"
@@ -939,6 +945,7 @@ defaults = "CSS_ORPHANS_SET"
 parse = '''IDENT:( INHERIT: INITIAL: REVERT: UNSET: IDENT:) NUMBER:( true:ORPHANS_SET RANGE:num<0 NUMBER:) CALC:( NUMBER:ORPHANS_CALC CALC:)'''
 
 [outline_color]
+declaration_value = "colour"
 enum = "CSS_PROP_OUTLINE_COLOR"
 inherited = false
 cascade = "manual"
@@ -1468,6 +1475,7 @@ defaults = "CSS_COLUMN_GAP_NORMAL"
 parse = '''IDENT:( INHERIT: INITIAL: REVERT: UNSET: NORMAL:0,COLUMN_GAP_NORMAL IDENT:) LENGTH_UNIT:( UNIT_PX:COLUMN_GAP_SET RANGE:<0 MASK:UNIT_MASK_COLUMN_GAP LENGTH_UNIT:) CALC:( UNIT_PX:COLUMN_GAP_CALC CALC:)'''
 
 [column_rule_color]
+declaration_value = "colour"
 enum = "CSS_PROP_COLUMN_RULE_COLOR"
 inherited = false
 cascade = "manual"
@@ -1946,6 +1954,7 @@ wrap = "css__parse_border_side"
 parse = "WRAP:css__parse_border_side"
 
 [border_color]
+declaration_value = "quad_colour"
 declaration_longhands = ["border_top_color", "border_right_color", "border_bottom_color", "border_left_color"]
 enum = "CSS_PROP_BORDER_COLOR"
 inherited = false

@@ -1150,6 +1150,58 @@ writes, then the live DOM wrapper. The saved eBihoreanul `style.opacity` blocker
 remains pending. The old Duktape empty-object style getter remains unsuitable
 for reuse; the new path continues to use the actual native CSS parser.
 
+
+### Named/hex/RGB values and truthful colour parsing (2026-10-12)
+
+The flex shorthand batch is committed as `49a0af5b`. Native CSSOM readback now
+covers named/system colours, `currentcolor`, `transparent`, hexadecimal colours,
+absolute `rgb()`/`rgba()` values without missing components, and `border-color`
+expansion/reconstruction. Generated metadata covers the eight existing colour
+longhands and the border-colour shorthand. Shorthand priority, CSS-wide and
+variable handling reuse the existing declaration machinery.
+
+Named values retain their lowercase keyword identity; hex/RGB values serialize
+as `rgb()` or `rgba()`. The shared hex decoder also handles accepted quirks-mode
+hashless values. System-colour names remain names instead of freezing the
+frontend's resolved colour. Hex alpha follows the eight-bit round-trip rule;
+RGB alpha keeps the supplied precision through CSSOM decimal normalization.
+See [CSS Color 4 serialization](https://drafts.csswg.org/css-color-4/#serializing-color-values).
+
+The renderer and readback use one allocation-free RGB parser over small borrowed
+token arrays. It clamps decimal values before channel scaling, avoiding the old
+fixed-point overflow, accepts fractional channels, checks the complete function
+terminator and reduces to ARGB8 only for rendering. Missing alpha renders as zero
+rather than the previous opaque value. Fractional channels and alpha use nearest
+rounding when reduced to eight bits. These follow
+[RGB syntax](https://drafts.csswg.org/css-color-4/#rgb-functions) and
+[missing components](https://drafts.csswg.org/css-color-4/#missing).
+
+Removed the `color()` stub that accepted values and always returned transparent
+black, and the colour-parser branch that guessed RGB semantics for unknown
+functions containing `srgb`. Unsupported functions now reject the declaration,
+allowing earlier supported declarations to win. Proper `color()` colour spaces
+remain future work; this batch does not claim to implement them.
+
+Validation: all 78 selected native CSS/QuickJS/font suites pass with Debug
+ASan/UBSan/LeakSanitizer after correcting four stale alpha expectations in the
+old colour fixture; its rerun passes. All 19 selected Release suites and all 22
+selected Qt integration suites pass. Declaration coverage is 561 Debug / 585
+Release checks, including whole/chunked input, every hex alpha byte round-tripped
+through RGB and checked against native bytecode, fractional/clamped values,
+malformed syntax, fallback retention, shorthand overrides and allocation
+failure/retry. The new Qt fixture checks 14 exact pixel samples through real
+painting, including backgrounds, borders, gradients and alpha compositing.
+Both builds are warning-free. No GTK tests ran.
+
+This is still native groundwork, not the live `element.style` wrapper. HSL/HWB
+and Lab/LCH serialization, `color()` implementation, math/relative colours and
+preserving missing components through colour interpolation remain outside this
+batch. Missing RGB components deliberately return unsupported from readback,
+since their specified-value serialization needs real `color(srgb ...)` support.
+The existing HSL/HWB/Lab/LCH rendering paths were not rewritten here. Continue
+remaining value families and declaration-block writes before DOM integration;
+the eBihoreanul `style.opacity` blocker remains pending.
+
 ## Assessment
 
 Keep QuickJS-ng and libdom. The missing part is the browser binding and execution
