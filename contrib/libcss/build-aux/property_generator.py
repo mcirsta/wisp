@@ -270,15 +270,17 @@ class TomlPropertyReader:
             if value_kind not in ('none', 'number', 'length', 'number_length', 'keyword', 'pair_length',
                                   'quad_length', 'pair_keyword', 'quad_keyword', 'uri', 'image_list', 'keyword_list',
                                   'content', 'string_list', 'counter_list', 'aspect_ratio', 'border_spacing', 'clip',
-                                  'font_family', 'flex', 'flex_flow', 'colour', 'quad_colour'):
+                                  'font_family', 'flex', 'flex_flow', 'list_style', 'columns', 'colour', 'quad_colour'):
                 raise ValueError(f"{name}: unknown declaration_value {value_kind}")
             if value_kind != 'none':
                 expected = {'pair_length': 2, 'quad_length': 4, 'pair_keyword': 2, 'quad_keyword': 4,
-                            'flex': 3, 'flex_flow': 2, 'quad_colour': 4}.get(value_kind, 0)
+                            'flex': 3, 'flex_flow': 2, 'list_style': 3, 'columns': 2, 'quad_colour': 4}.get(value_kind, 0)
                 if len(members) != expected:
                     raise ValueError(f"{name}: declaration_value requires {expected} longhands")
                 ordered = {'flex': ['flex_grow', 'flex_shrink', 'flex_basis'],
-                           'flex_flow': ['flex_direction', 'flex_wrap']}.get(value_kind)
+                           'flex_flow': ['flex_direction', 'flex_wrap'],
+                           'list_style': ['list_style_type', 'list_style_position', 'list_style_image'],
+                           'columns': ['column_width', 'column_count']}.get(value_kind)
                 if ordered is not None and members != ordered:
                     raise ValueError(f"{name}: declaration_value requires ordered members {ordered}")
 

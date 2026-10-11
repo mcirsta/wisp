@@ -7,17 +7,19 @@ details { margin-bottom:8px; }
 p, ul, ol { margin:0; }
 ul, ol { padding-left:40px; }
 #wrap { width:180px; }
-#none { list-style:none; }
+#none { list-style:none none; }
 #block { display:block; }
 #outside { list-style-position:outside; }
-#custom { list-style:square inside; }
+/* CSS Lists 3 §3.6: none sets the image; square still sets the type.
+   The decimal fallback makes a rejected shorthand observable in the capture. */
+#custom { list-style:decimal inside; list-style:none inside square; }
 #empty-none { list-style:none inside; }
 #rtl { direction:rtl; }
 #generated::before { content:'before '; }
 #inside-list, #reversed-list { list-style-position:inside; }
 #narrow-item, #spaced-marker { width:8px; }
 #decorated { padding:4px; border:2px solid; background:#eee; }
-#image-list { list-style:inside url('data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="12" height="12"%3E%3Crect width="12" height="12" fill="green"/%3E%3C/svg%3E'); }
+#image-list { list-style:none inside url('data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="12" height="12"%3E%3Crect width="12" height="12" fill="green"/%3E%3C/svg%3E'); }
 </style>
 <details id="closed-details"><summary id="closed"><span id="closed-text">Closed</span></summary><p>Body</p></details>
 <details id="open-details" open><summary id="open"><span id="open-text">Open</span></summary><p>Body</p></details>

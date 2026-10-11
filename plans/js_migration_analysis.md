@@ -1278,6 +1278,54 @@ this removal; see [the existing conditional/layer follow-up](css_layer_support.m
 Proper color-space support remains pending. A color()-only declaration now uses
 the applicable cascade/default behavior instead of fabricated transparent black.
 
+### List-style and columns specified values (2026-10-12)
+
+Committed the preceding shared HSL/HWB work and color() dependency audit as
+`ee93ae9b`. Continued the specified-style foundation with `list-style` and
+`columns`: expand accepted shorthand tokens into their longhand values and
+reconstruct the shorthand from the actual winning declarations. Readback retains
+URL spelling and numeric precision, honors importance and overrides, and uses
+the existing CSS-wide and pending-variable rules. It does not read back rounded
+rendering bytecode or allocate new persistent per-declaration state.
+
+Native parsing needed related grammar corrections:
+
+- Defer ambiguous `none` in `list-style` until the concrete image/type is known.
+  `none disc` sets image none and type disc; `none url(...)` sets type none;
+  bare `none` sets both. Reject extra/duplicate components.
+- Defer `auto` in `columns`, so `auto 12em` and `12em auto` have identical results.
+- Reject zero column counts, negative column widths (including values too small
+  for fixed-point storage), and grid `fr` units. Zero column widths remain valid.
+- Generate value-only longhand helpers, preventing embedded `initial`, `unset`,
+  `revert` or `inherit` from masquerading as shorthand components. Both parsers
+  propagate allocation failures and restore their bytecode span on failure.
+
+The grammar follows [CSS Lists 3 §3.6](https://drafts.csswg.org/css-lists-3/#list-style-property)
+and [CSS Multicol 1 §3](https://drafts.csswg.org/css-multicol-1/#columns).
+Serialization follows [CSSOM §6.7.2](https://drafts.csswg.org/cssom/#serializing-css-values):
+canonical component order and omission of defaults only when reparsing preserves
+meaning. In particular, list-style output uses position/image/type order and
+never drops the marker type `none` just because the image is also none.
+
+Validation covers whole/chunked parsing, serialize/reparse, all permutations of
+representative shorthand forms against explicit-longhand rendering bytecode,
+invalid-declaration fallback, URL handling, CSS-wide values, pending variables,
+and allocation failure/retry. Declaration checks pass in Debug with
+ASan/UBSan/LeakSanitizer (659 checks) and Release (685, including fault injection).
+The generator's 14 tests also pass. Broader validation covers the 78 selected
+native CSS/QuickJS suites, 19 Release suites and 10 Qt integrations. After the
+column-width boundary corrections, all eight affected Debug suites pass again,
+as do the Release declaration/generator suites. Both full builds are warning-free. The existing
+Qt disclosure-marker fixture now exercises `none inside square` with a decimal
+fallback, two `none` values, and `none` combined with an image.
+
+This remains internal CSSOM groundwork. Math-valued columns still report
+unsupported readback; this batch neither implements multicolumn layout nor
+exposes the live `element.style` wrapper. The saved eBihoreanul `style.opacity`
+blocker, the remaining aggregate serializers, alias handling, declaration-block
+writes and DOM integration remain the next work. No additional JS APIs or
+Duktape-style placeholder objects were introduced.
+
 ## Assessment
 
 Keep QuickJS-ng and libdom. The missing part is the browser binding and execution

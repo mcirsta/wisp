@@ -1446,7 +1446,7 @@ initial = "AUTO"
 initial_data = ['0']
 values = "integer"
 defaults = "CSS_COLUMN_COUNT_AUTO"
-parse = '''IDENT:( INHERIT: INITIAL: REVERT: UNSET: AUTO:0,COLUMN_COUNT_AUTO IDENT:) NUMBER:( true:COLUMN_COUNT_SET RANGE:num<0 NUMBER:) CALC:( NUMBER:COLUMN_COUNT_CALC CALC:)'''
+parse = '''IDENT:( INHERIT: INITIAL: REVERT: UNSET: AUTO:0,COLUMN_COUNT_AUTO IDENT:) NUMBER:( true:COLUMN_COUNT_SET RANGE:num<INTTOFIX(1) NUMBER:) CALC:( NUMBER:COLUMN_COUNT_CALC CALC:)'''
 
 [column_fill]
 declaration_value = "keyword"
@@ -1540,7 +1540,7 @@ initial_data = ['(css_fixed_or_calc)INTTOFIX(1)', 'CSS_UNIT_EM']
 values = [["length", "", "calc"]]
 condition = "CSS_COLUMN_WIDTH_SET"
 defaults = "CSS_COLUMN_WIDTH_AUTO"
-parse = '''IDENT:( INHERIT: INITIAL: REVERT: UNSET: AUTO:0,COLUMN_WIDTH_AUTO IDENT:) LENGTH_UNIT:( UNIT_PX:COLUMN_WIDTH_SET MASK:UNIT_MASK_COLUMN_WIDTH LENGTH_UNIT:) CALC:( UNIT_PX:COLUMN_WIDTH_CALC CALC:)'''
+parse = '''IDENT:( INHERIT: INITIAL: REVERT: UNSET: AUTO:0,COLUMN_WIDTH_AUTO IDENT:) LENGTH_UNIT:( UNIT_PX:COLUMN_WIDTH_SET MASK:UNIT_MASK_COLUMN_WIDTH DISALLOW:unit==UNIT_FR||css__number_sign(token->idata)<0 LENGTH_UNIT:) CALC:( UNIT_PX:COLUMN_WIDTH_CALC CALC:)'''
 
 [writing_mode]
 declaration_value = "keyword"
@@ -2017,6 +2017,8 @@ cascade = "none"
 computed = "none"
 
 [columns]
+declaration_value = "columns"
+helper_longhands = ["column_width", "column_count"]
 declaration_longhands = ["column_width", "column_count"]
 enum = "CSS_PROP_COLUMNS"
 inherited = false
@@ -2105,6 +2107,8 @@ computed = "none"
 parse = '''IDENT:( INHERIT: INITIAL: REVERT: UNSET: AUTO:0,WIDTH_AUTO IDENT:) SIZING:( FIT_CONTENT:WIDTH_SET MIN_CONTENT:WIDTH_SET MAX_CONTENT:WIDTH_SET SIZING:) LENGTH_UNIT:( UNIT_PX:WIDTH_SET MASK:UNIT_MASK_WIDTH RANGE:<0 LENGTH_UNIT:) CALC:( UNIT_PX:WIDTH_CALC CALC:)'''
 
 [list_style]
+declaration_value = "list_style"
+helper_longhands = ["list_style_position", "list_style_image"]
 declaration_longhands = ["list_style_type", "list_style_position", "list_style_image"]
 enum = "CSS_PROP_LIST_STYLE"
 inherited = false

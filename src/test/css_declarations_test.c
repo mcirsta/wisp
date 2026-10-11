@@ -626,6 +626,8 @@ START_TEST(test_allocation_failure)
     const char *declarations = "color:red; width:2px!important; --Tone:green; margin:var(--space, 1px 2px);"
                                "padding:1em; display:flex; height:3px; opacity:.5; color:blue; --extra:;"
                                "flex:auto 2 3;flex-flow:wrap column;flex:initial;flex-flow:inherit;"
+                               "list-style:none inside url(Marker.png);columns:auto 12em;"
+                               "list-style:initial;columns:inherit;"
                                "color:rgb(1.2 3.4 5.6 / 50%);border-color:#1234 red rgb(3,2,1) currentcolor;"
                                /* Force the parser's token vector to grow too. */
                                "--large:red red red red red red red red red red red red red red red red "
@@ -640,7 +642,7 @@ START_TEST(test_allocation_failure)
     memset(css + pos, 'c', 8192);
     pos += 8192;
     snprintf(css + pos, sizeof(css) - pos, "*/%s", declarations);
-    const size_t expected = 25;
+    const size_t expected = 29;
     /* Keep shared property strings alive, so each iteration tests the same
      * allocation sequence instead of global string-cache initialization. */
     css_stylesheet *keeper;
@@ -1174,6 +1176,68 @@ static const struct {
     {"border-color:red hsl(0,100%,50%)", "border-left-color", "rgb(255, 0, 0)"},
     {"border-color:red hsl(0,100%,50%) blue", "border-bottom-color", "blue"},
     {"border-color:red hsl(0,100%,50%) blue", "border-color", "red rgb(255, 0, 0) blue"},
+
+    /* CSS Lists 3 §3.6 and Multicol 1 §3.3: unordered shorthand components. */
+    {"list-style:none", "list-style", "none"},
+    {"list-style:none none", "list-style", "none"},
+    {"list-style:NONE DISC", "list-style", "disc"},
+    {"list-style:NONE DISC", "list-style-type", "disc"},
+    {"list-style:NONE DISC", "list-style-image", "none"},
+    {"list-style:DISC NONE", "list-style-position", "outside"},
+    {"list-style:NONE INSIDE", "list-style", "inside none"},
+    {"list-style:none url(Marker.png)", "list-style", "url(\"Marker.png\") none"},
+    {"list-style:url(Marker.png) none", "list-style-type", "none"},
+    {"list-style:url(Marker.png) none", "list-style-image", "url(\"Marker.png\")"},
+    {"list-style:circle url(Marker.png) inside", "list-style", "inside url(\"Marker.png\") circle"},
+    {"list-style:circle url(Marker.png) inside", "list-style-position", "inside"},
+    {"list-style:outside disc none", "list-style", "disc"},
+    {"list-style:inside", "list-style-type", "disc"},
+    {"list-style:inside", "list-style-image", "none"},
+    {"list-style:inside", "list-style", "inside"},
+    {"list-style:url(Marker.png)", "list-style", "url(\"Marker.png\")"},
+    {"list-style:outside", "list-style", "disc"},
+    {"list-style:circle inside;list-style-type:square", "list-style", "inside square"},
+    {"list-style:none;list-style-image:url(New.png)", "list-style", "url(\"New.png\") none"},
+    {"list-style:none!important;list-style-type:disc", "list-style", "none"},
+    {"list-style:none;list-style-type:disc!important", "list-style", ""},
+    {"list-style-type:disc;list-style-position:inside", "list-style", ""},
+    {"list-style:inherit", "list-style", "inherit"},
+    {"list-style:initial", "list-style-image", "initial"},
+    {"list-style:unset", "list-style", "unset"},
+    {"list-style:revert", "list-style-type", "revert"},
+    {"list-style:inherit;list-style-type:initial", "list-style", ""},
+    {"list-style:var(--Marker, none)", "list-style", "var(--Marker, none)"},
+    {"list-style:var(--Marker)", "list-style-image", ""},
+    {"list-style:var(--Marker);list-style-position:inside", "list-style", ""},
+    {"columns:auto 12EM", "columns", "12em"},
+    {"columns:12em auto", "column-width", "12em"},
+    {"columns:auto 12em", "column-count", "auto"},
+    {"columns:3 auto", "columns", "3"},
+    {"columns:auto 3", "column-width", "auto"},
+    {"columns:3 auto", "column-count", "3"},
+    {"columns:3 12em", "columns", "12em 3"},
+    {"columns:12em 3", "columns", "12em 3"},
+    {"columns:auto auto", "columns", "auto"},
+    {"columns:0", "columns", "0px"},
+    {"columns:-0 auto", "columns", "0px"},
+    {"columns:2 0", "columns", "0px 2"},
+    {"columns:0 2", "column-count", "2"},
+    {"columns:0 2", "column-width", "0px"},
+    {"column-width:0px", "column-width", "0px"},
+    {"columns:+0003 .1234567EM", "columns", "0.123457em 3"},
+    {"columns:12em 2;column-count:3", "columns", "12em 3"},
+    {"columns:12em 2!important;column-count:3", "columns", "12em 2"},
+    {"columns:12em 2;column-count:3!important", "columns", ""},
+    {"column-width:12em", "columns", ""},
+    {"columns:initial", "columns", "initial"},
+    {"columns:inherit", "column-count", "inherit"},
+    {"columns:revert", "columns", "revert"},
+    {"columns:unset", "column-width", "unset"},
+    {"columns:inherit;column-count:initial", "columns", ""},
+    {"columns:var(--Columns, 12em 2)", "columns", "var(--Columns, 12em 2)"},
+    {"columns:var(--Columns)", "column-count", ""},
+    {"columns:var(--Columns);column-width:auto", "columns", ""},
+    {"columns:calc(12px + 2px) 2", "columns", NULL},
 
 };
 enum { VALUE_CASE_COUNT = sizeof(value_cases) / sizeof(value_cases[0]) };
@@ -1710,6 +1774,83 @@ START_TEST(test_flex_invalid)
 }
 END_TEST
 
+START_TEST(test_list_columns_bytecode)
+{
+    static const char *const forms[][2] = {
+        {"list-style:circle inside url(Marker.png)", "list-style-image:url(Marker.png);list-style-position:inside;list-style-type:circle"},
+        {"list-style:circle url(Marker.png) inside", "list-style-image:url(Marker.png);list-style-position:inside;list-style-type:circle"},
+        {"list-style:inside circle url(Marker.png)", "list-style-image:url(Marker.png);list-style-position:inside;list-style-type:circle"},
+        {"list-style:inside url(Marker.png) circle", "list-style-image:url(Marker.png);list-style-position:inside;list-style-type:circle"},
+        {"list-style:url(Marker.png) circle inside", "list-style-image:url(Marker.png);list-style-position:inside;list-style-type:circle"},
+        {"list-style:url(Marker.png) inside circle", "list-style-image:url(Marker.png);list-style-position:inside;list-style-type:circle"},
+        {"list-style:disc none", "list-style-image:none;list-style-position:outside;list-style-type:disc"},
+        {"list-style:none disc", "list-style-image:none;list-style-position:outside;list-style-type:disc"},
+        {"list-style:none url(Marker.png)", "list-style-image:url(Marker.png);list-style-position:outside;list-style-type:none"},
+        {"list-style:url(Marker.png) none", "list-style-image:url(Marker.png);list-style-position:outside;list-style-type:none"},
+        {"list-style:inside none none", "list-style-image:none;list-style-position:inside;list-style-type:none"},
+        {"list-style:none inside none", "list-style-image:none;list-style-position:inside;list-style-type:none"},
+        {"list-style:none none inside", "list-style-image:none;list-style-position:inside;list-style-type:none"},
+        {"list-style:none", "list-style-image:none;list-style-position:outside;list-style-type:none"},
+        {"list-style:inside", "list-style-image:none;list-style-position:inside;list-style-type:disc"},
+        {"list-style:inherit", "list-style-image:inherit;list-style-position:inherit;list-style-type:inherit"},
+        {"columns:12em auto", "column-width:12em;column-count:auto"},
+        {"columns:auto 12em", "column-width:12em;column-count:auto"},
+        {"columns:3 auto", "column-width:auto;column-count:3"},
+        {"columns:auto 3", "column-width:auto;column-count:3"},
+        {"columns:0 3", "column-width:0px;column-count:3"},
+        {"columns:3 0", "column-width:0px;column-count:3"},
+        {"columns:12em 3", "column-width:12em;column-count:3"},
+        {"columns:3 12em", "column-width:12em;column-count:3"},
+        {"columns:auto auto", "column-width:auto;column-count:auto"},
+        {"columns:0", "column-width:0px;column-count:auto"},
+        {"columns:unset", "column-width:unset;column-count:unset"},
+    };
+    for (size_t i = 0; i < N_ELEMENTS(forms); i++) {
+        css_declaration_list *a = parse(forms[i][0], _i != 0);
+        css_declaration_list *b = parse(forms[i][1], _i != 0);
+        ck_assert_msg(css__declaration_list_count(a) == 1, "rejected %s", forms[i][0]);
+        compare_sheets(css__declaration_list_sheet(a), css__declaration_list_sheet(b));
+        css__declaration_list_destroy(a);
+        css__declaration_list_destroy(b);
+    }
+}
+END_TEST
+
+START_TEST(test_list_columns_invalid)
+{
+    static const char *const invalid[] = {
+        "list-style:none none none", "list-style:none none disc", "list-style:none disc url(Marker.png)",
+        "list-style:none url(Marker.png) disc", "list-style:disc url(Marker.png) none",
+        "list-style:inside outside", "list-style:disc circle", "list-style:url(A.png) url(B.png)",
+        "list-style:initial inside", "list-style:inside initial", "list-style:none unset",
+        "list-style:url(Marker.png) revert", "list-style:none inside inherit", "list-style:none,inside",
+        "list-style:1", "list-style:\"disc\"", "list-style:no-such-style",
+        "columns:auto auto auto", "columns:auto 12em 3", "columns:3 auto 12em", "columns:12em 3 auto",
+        "columns:12em 13em", "columns:2 3", "columns:0 0", "columns:12em 0", "columns:0 12em",
+        "columns:-1px", "columns:-.00000001px", "columns:1fr", "columns:2%", "columns:1deg",
+        "columns:-1", "columns:1.5", "columns:.00000001", "columns:12em initial",
+        "columns:auto unset", "columns:initial 3", "columns:revert auto", "columns:3 inherit",
+        "column-count:0", "column-count:-0", "column-count:1.5", "column-count:-1",
+        "column-width:-1px", "column-width:-.00000001px", "column-width:1%", "column-width:1fr",
+    };
+    const char *baseline = "list-style:inside square;columns:12em 3;color:red";
+    css_declaration_list *base = parse(baseline, false);
+    const css_style *base_style = inline_style(css__declaration_list_sheet(base));
+    for (size_t i = 0; i < N_ELEMENTS(invalid); i++) {
+        char css[256];
+        snprintf(css, sizeof(css), "%s;%s", baseline, invalid[i]);
+        css_declaration_list *list = parse(css, _i != 0);
+        ck_assert_msg(css__declaration_list_count(list) == 3, "accepted invalid value: %s", invalid[i]);
+        const css_style *style = inline_style(css__declaration_list_sheet(list));
+        ck_assert_uint_eq(style->used, base_style->used);
+        ck_assert_msg(memcmp(style->bytecode, base_style->bytecode, style->used * sizeof(css_code_t)) == 0,
+            "invalid value changed rendering bytecode: %s", invalid[i]);
+        css__declaration_list_destroy(list);
+    }
+    css__declaration_list_destroy(base);
+}
+END_TEST
+
 START_TEST(test_geometry_bytecode)
 {
     static const char *const forms[][2] = {
@@ -1934,13 +2075,14 @@ START_TEST(test_value_allocation_failure)
                       "flex:.1234567 .3456789 1.2345678px;flex-flow:wrap-reverse column;"
                       "color:rgb(1.2 3.4 5.6 / .234567);border-color:#1234 hsl(12 34% 56%) hwb(78 9% 10%);"
                       "clip:rect(.1234567px, auto, -1.2345678em, 1px);"
+                      "list-style:none inside url(Marker.png);columns:.1234567em 3;"
                       "font-family:One/**/Two\\20 , 'a\\22 b\\a c',SERIF;";
     css_declaration_list *list = parse(css, false);
     css_declaration_order *order;
     ck_assert_int_eq(css__declaration_order_create(list, &order), CSS_OK);
     static const char *const names[] = {"margin", "--x", "background-image", "background-attachment", "border-style",
         "content", "quotes", "counter-reset", "aspect-ratio", "border-spacing", "clip", "font-family", "flex",
-        "flex-flow", "color", "border-color"};
+        "flex-flow", "color", "border-color", "list-style", "columns"};
     const char *name = names[_i];
     bool succeeded = false;
     unsigned failures = 0;
@@ -1996,6 +2138,8 @@ int main(void)
     tcase_add_loop_test(tc, test_geometry_invalid_units, 0, 2);
     tcase_add_loop_test(tc, test_geometry_bytecode, 0, 2);
     tcase_add_loop_test(tc, test_flex_bytecode, 0, 2);
+    tcase_add_loop_test(tc, test_list_columns_bytecode, 0, 2);
+    tcase_add_loop_test(tc, test_list_columns_invalid, 0, 2);
     tcase_add_loop_test(tc, test_colour_alpha_roundtrip, 0, 2);
     tcase_add_test(tc, test_quirky_colour_values);
     tcase_add_loop_test(tc, test_colour_rendering_values, 0, 2);
@@ -2006,7 +2150,7 @@ int main(void)
     tcase_add_loop_test(tc, test_overflow_axes, 0, 2);
     tcase_add_test(tc, test_value_arguments);
 #ifdef WISP_TEST_ALLOC_FAILURE
-    tcase_add_loop_test(tc, test_value_allocation_failure, 0, 16);
+    tcase_add_loop_test(tc, test_value_allocation_failure, 0, 18);
     tcase_add_loop_test(tc, test_font_face_allocation_failure, 0, 3);
     tcase_add_test(tc, test_content_terminator_allocation_failure);
 #endif

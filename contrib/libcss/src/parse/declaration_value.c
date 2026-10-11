@@ -365,6 +365,61 @@ static css_error serialize_flex_component(const css_declaration_contribution *va
     return serialize_numeric(token, component == 2, out);
 }
 
+/* Expand already validated unordered list/column values. Ambiguous none and
+ * auto tokens supply defaults only after concrete components have been found. */
+static css_error serialize_list_or_columns_component(const css_declaration_contribution *value, lwc_string **out)
+{
+    const css_declaration *source = value->source;
+    bool columns = source->property->value_kind == CSS_DECL_VALUE_COLUMNS;
+    const css_declaration_token *parts[3] = {0};
+    const char *defaults[3] = {"disc", "outside", "none"};
+    if (columns)
+        defaults[0] = defaults[1] = "auto";
+    for (size_t i = 0; i < source->token_count; i++) {
+        const css_declaration_token *token = &source->tokens[i];
+        if (token->type == CSS_TOKEN_S)
+            continue;
+        size_t component;
+        if (columns) {
+            if (token->type == CSS_TOKEN_IDENT && css__keyword_equal(token->text, "auto"))
+                continue;
+            if (token->type == CSS_TOKEN_DIMENSION) {
+                component = 0;
+            } else if (token->type == CSS_TOKEN_NUMBER) {
+                /* Unitless zero is a width; a positive integer is a count.
+                 * Do not round a small nonzero token into a zero length. */
+                component = css__number_sign(token->text) == 0 ? 0 : 1;
+            } else {
+                return CSS_INVALID; /* Math values need a typed serializer. */
+            }
+        } else if (token->type == CSS_TOKEN_URI) {
+            component = 2;
+        } else if (token->type == CSS_TOKEN_IDENT) {
+            if (css__keyword_equal(token->text, "none")) {
+                defaults[0] = "none";
+                continue;
+            }
+            component = css__keyword_equal(token->text, "inside") || css__keyword_equal(token->text, "outside") ? 1 : 0;
+        } else {
+            return CSS_INVALID;
+        }
+        if (parts[component] != NULL)
+            return CSS_INVALID;
+        parts[component] = token;
+    }
+    size_t component = value->component;
+    const css_declaration_token *token = parts[component];
+    if (token == NULL)
+        return intern(defaults[component], strlen(defaults[component]), out);
+    if (token->type == CSS_TOKEN_IDENT)
+        return lwc_string_tolower(token->text, out) == lwc_error_ok ? CSS_OK : CSS_NOMEM;
+    if (token->type == CSS_TOKEN_URI) {
+        css_declaration image = {.property = css_prop_lookup("list-style-image", 16), .tokens = token, .token_count = 1};
+        return css__declaration_text_serialize(&image, out);
+    }
+    return serialize_numeric(token, component == 0, out);
+}
+
 css_error css__declaration_value_serialize(const css_declaration_contribution *value, lwc_string **out)
 {
     if (out == NULL)
@@ -395,6 +450,8 @@ css_error css__declaration_value_serialize(const css_declaration_contribution *v
         return serialize_geometry(source, out);
     if (kind == CSS_DECL_VALUE_FLEX || kind == CSS_DECL_VALUE_FLEX_FLOW)
         return serialize_flex_component(value, out);
+    if (kind == CSS_DECL_VALUE_LIST_STYLE || kind == CSS_DECL_VALUE_COLUMNS)
+        return serialize_list_or_columns_component(value, out);
     if (kind == CSS_DECL_VALUE_COLOUR || kind == CSS_DECL_VALUE_QUAD_COLOUR)
         return css__declaration_colour_serialize(value, out);
     size_t arity = scalar_arity(kind);
@@ -419,7 +476,28 @@ static css_error serialize_components(enum css_declaration_value_kind kind,
             goto done;
     }
     size_t first = 0, used = count;
-    if (kind == CSS_DECL_VALUE_FLEX_FLOW) {
+    lwc_string *ordered[3];
+    if (kind == CSS_DECL_VALUE_LIST_STYLE) {
+        /* CSS Lists 3 canonical order is position, image, type. Omit the
+         * default image only when doing so preserves none's dual meaning. */
+        used = 0;
+        if (!css__keyword_equal(values[1], "outside"))
+            ordered[used++] = values[1];
+        if (!css__keyword_equal(values[2], "none"))
+            ordered[used++] = values[2];
+        if (!css__keyword_equal(values[0], "disc") || used == 0)
+            ordered[used++] = values[0];
+        const struct value_format format = {"", " ", ""};
+        error = join_values(ordered, used, &format, out);
+        goto done;
+    } else if (kind == CSS_DECL_VALUE_COLUMNS) {
+        if (css__keyword_equal(values[1], "auto"))
+            used = 1;
+        else if (css__keyword_equal(values[0], "auto")) {
+            first = 1;
+            used = 1;
+        }
+    } else if (kind == CSS_DECL_VALUE_FLEX_FLOW) {
         if (css__keyword_equal(values[1], "nowrap"))
             used = 1;
         else if (css__keyword_equal(values[0], "row")) {
@@ -486,7 +564,8 @@ css_error css__declaration_shorthand_serialize(const struct css_prop_entry *prop
     if (any_wide)
         return same_wide ? intern(wide, strlen(wide), out) : intern("", 0, out);
     enum css_declaration_value_kind kind = property->value_kind;
-    if (scalar_arity(kind) == 1 && kind != CSS_DECL_VALUE_FLEX && kind != CSS_DECL_VALUE_FLEX_FLOW)
+    if (scalar_arity(kind) == 1 && kind != CSS_DECL_VALUE_FLEX && kind != CSS_DECL_VALUE_FLEX_FLOW &&
+        kind != CSS_DECL_VALUE_LIST_STYLE && kind != CSS_DECL_VALUE_COLUMNS)
         return CSS_INVALID;
     return serialize_components(kind, members, count, out);
 }

@@ -5,127 +5,79 @@
  * Copyright 2012 Michael Drake <tlsa@netsurf-browser.org>
  */
 
-#include <assert.h>
-#include <string.h>
-
 #include "bytecode/bytecode.h"
 #include "bytecode/opcodes.h"
 #include "parse/properties/properties.h"
 #include "parse/properties/utils.h"
+#include "utils/css_utils.h"
 
-/**
- * Parse columns shorthand
- *
- * \param c	  Parsing context
- * \param vector  Vector of tokens to process
- * \param ctx	  Pointer to vector iteration context
- * \param result  Pointer to location to receive resulting style
- * \return CSS_OK on success,
- *	   CSS_NOMEM on memory exhaustion,
- *	   CSS_INVALID if the input is not valid
- *
- * Post condition: \a *ctx is updated with the next token to process
- *		   If the input is invalid, then \a *ctx remains unchanged.
- */
+/* CSS Multicol 1 §3.3: auto may stand for either omitted component, regardless
+ * of token order. Validate concrete values through the generated longhands. */
 css_error css__parse_columns(css_language *c, const parserutils_vector *vector, int32_t *ctx, css_style *result)
 {
     int32_t orig_ctx = *ctx;
-    int prev_ctx;
-    const css_token *token;
-    css_error error = CSS_OK;
-    bool width = true;
-    bool count = true;
-    css_style *width_style;
-    css_style *count_style;
-    enum flag_value flag_value;
-
-    /* Firstly, handle inherit */
-    token = parserutils_vector_peek(vector, *ctx);
+    uint32_t orig_used = result->used;
+    const css_token *token = parserutils_vector_peek(vector, *ctx);
     if (token == NULL)
         return CSS_INVALID;
-
-    flag_value = get_css_flag_value(c, token);
-
-    if (flag_value != FLAG_VALUE__NONE) {
-        error = css_stylesheet_style_flag_value(result, flag_value, CSS_PROP_COLUMN_WIDTH);
+    css_style *parts[2] = {0};
+    const enum css_properties_e properties[] = {CSS_PROP_COLUMN_WIDTH, CSS_PROP_COLUMN_COUNT};
+    const css_prop_handler handlers[] = {css__parse_column_width_value, css__parse_column_count_value};
+    const uint16_t defaults[] = {COLUMN_WIDTH_AUTO, COLUMN_COUNT_AUTO};
+    css_error error = CSS_OK;
+    enum flag_value flag = get_css_flag_value(c, token);
+    if (flag != FLAG_VALUE__NONE) {
+        for (size_t i = 0; i < 2; i++) {
+            error = css_stylesheet_style_flag_value(result, flag, properties[i]);
+            if (error != CSS_OK)
+                goto done;
+        }
+        parserutils_vector_iterate(vector, ctx);
+        goto done;
+    }
+    for (size_t i = 0; i < 2; i++) {
+        error = css__stylesheet_style_create(c->sheet, &parts[i]);
         if (error != CSS_OK)
-            return error;
-
-        error = css_stylesheet_style_flag_value(result, flag_value, CSS_PROP_COLUMN_COUNT);
-        if (error == CSS_OK)
+            goto done;
+    }
+    unsigned supplied = 0;
+    while (supplied < 2 && (token = parserutils_vector_peek(vector, *ctx)) != NULL) {
+        if (token->type == CSS_TOKEN_IDENT && css__keyword_equal(token->idata, "auto")) {
             parserutils_vector_iterate(vector, ctx);
-
-        return error;
-    }
-
-    /* Allocate for styles */
-    error = css__stylesheet_style_create(c->sheet, &width_style);
-    if (error != CSS_OK)
-        return error;
-
-    error = css__stylesheet_style_create(c->sheet, &count_style);
-    if (error != CSS_OK) {
-        css__stylesheet_style_destroy(width_style);
-        return error;
-    }
-
-    /* Attempt to parse the various longhand properties */
-    do {
-        prev_ctx = *ctx;
-        error = CSS_OK;
-
-        if (is_css_inherit(c, token)) {
-            /* Can't have another inherit */
-            error = CSS_INVALID;
-            goto css__parse_columns_cleanup;
-        }
-
-        /* Try each property parser in turn, but only if we
-         * haven't already got a value for this property.
-         */
-        if ((width) && (error = css__parse_column_width(c, vector, ctx, width_style)) == CSS_OK) {
-            width = false;
-        } else if ((count) && (error = css__parse_column_count(c, vector, ctx, count_style)) == CSS_OK) {
-            count = false;
-        }
-
-        if (error == CSS_OK) {
-            consumeWhitespace(vector, ctx);
-
-            token = parserutils_vector_peek(vector, *ctx);
         } else {
-            /* Forcibly cause loop to exit */
-            token = NULL;
+            error = CSS_INVALID;
+            for (size_t i = 0; i < 2 && error == CSS_INVALID; i++) {
+                if (parts[i]->used == 0)
+                    error = handlers[i](c, vector, ctx, parts[i]);
+            }
+            if (error == CSS_INVALID)
+                break;
+            if (error != CSS_OK)
+                goto done;
         }
-    } while (*ctx != prev_ctx && token != NULL);
-
-    /* Set unset properties to initial values */
-    if (width) {
-        error = css__stylesheet_style_appendOPV(width_style, CSS_PROP_COLUMN_WIDTH, 0, COLUMN_WIDTH_AUTO);
-        if (error != CSS_OK)
-            goto css__parse_columns_cleanup;
+        supplied++;
+        consumeWhitespace(vector, ctx);
     }
-
-    if (count) {
-        error = css__stylesheet_style_appendOPV(count_style, CSS_PROP_COLUMN_COUNT, 0, COLUMN_COUNT_AUTO);
-        if (error != CSS_OK)
-            goto css__parse_columns_cleanup;
+    if (supplied == 0) {
+        error = CSS_INVALID;
+        goto done;
     }
-
-    /* Merge styles into the result */
-    error = css__stylesheet_merge_style(result, width_style);
-    if (error != CSS_OK)
-        goto css__parse_columns_cleanup;
-
-    error = css__stylesheet_merge_style(result, count_style);
-
-
-css__parse_columns_cleanup:
-    css__stylesheet_style_destroy(width_style);
-    css__stylesheet_style_destroy(count_style);
-
-    if (error != CSS_OK)
+    for (size_t i = 0; i < 2; i++) {
+        if (parts[i]->used == 0) {
+            error = css__stylesheet_style_appendOPV(parts[i], properties[i], 0, defaults[i]);
+            if (error != CSS_OK)
+                goto done;
+        }
+        error = css__stylesheet_merge_style(result, parts[i]);
+        if (error != CSS_OK)
+            goto done;
+    }
+done:
+    for (size_t i = 0; i < 2; i++)
+        css__stylesheet_style_destroy(parts[i]);
+    if (error != CSS_OK) {
         *ctx = orig_ctx;
-
+        result->used = orig_used;
+    }
     return error;
 }

@@ -46,8 +46,8 @@ class DeclarationMetadataTest(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "margin: declaration_value requires 2"):
                     self.reader.validate_declarations()
 
-    def test_flex_member_order(self):
-        for name in ("flex", "flex_flow"):
+    def test_ordered_shorthand_members(self):
+        for name in ("flex", "flex_flow", "list_style", "columns"):
             with self.subTest(name=name):
                 members = self.reader.toml_data[name]["declaration_longhands"]
                 members.reverse()
@@ -55,12 +55,13 @@ class DeclarationMetadataTest(unittest.TestCase):
                     self.reader.validate_declarations()
                 members.reverse()
 
-    def test_flex_value_helpers(self):
+    def test_shorthand_value_helpers(self):
         spec = self.reader.generate_properties_gen()
         generator = GEN.MultiFileGenerator(self.reader.get_dispatch_order(), self.reader.prop_map)
         generator.toml_reader = self.reader
         declarations = generator.generate_parse_declarations()
-        for name in ("flex_grow", "flex_shrink", "flex_basis", "flex_direction", "flex_wrap"):
+        for name in ("flex_grow", "flex_shrink", "flex_basis", "flex_direction", "flex_wrap",
+                     "list_style_position", "list_style_image", "column_width", "column_count"):
             self.assertIn(f"css__parse_{name}_value(", declarations)
             helper = next(line for line in spec.splitlines() if line.startswith(name + "_value:"))
             for keyword in ("INHERIT:", "INITIAL:", "REVERT:", "UNSET:"):
