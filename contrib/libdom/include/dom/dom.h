@@ -67,6 +67,7 @@
 #include <dom/html/html_iframe_element.h>
 #include <dom/html/html_image_element.h>
 #include <dom/html/html_input_element.h>
+#include <dom/html/html_template_element.h>
 #include <dom/html/html_isindex_element.h>
 #include <dom/html/html_label_element.h>
 #include <dom/html/html_legend_element.h>

@@ -369,6 +369,57 @@ zero-length memcpy UBSan diagnostic remains in that capture, not in the native
 suites. Builds are warning-free, `git diff --check` is clean, and no GTK build or
 tests were run.
 
+### Native template contents (2026-10-11)
+
+The native ownership prerequisite is committed as `fe46c8e0`. Libdom now has a
+specialized HTML template element and a referenced `content` getter, following
+the HTML Standard's [template creation, adoption and cloning steps](https://html.spec.whatwg.org/multipage/scripting.html#the-template-element).
+
+- Contents are a separate `DocumentFragment`, never ordinary element children.
+  Each document lazily creates one inert owner, preserving the HTML/XML document
+  type and inheriting neither a Window nor a default-action callback. Nested
+  templates reuse that owner. Documents without templates allocate no inert
+  document or extra HTML name tables.
+- The template owns its fragment. The fragment's host link is borrowed, like
+  libdom's parent links, and cleared before the template releases it. Retained
+  fragments and descendants continue to use the pending-node lifetime machinery;
+  there is no strong template/fragment reference cycle.
+- Insertion validates [host-including ancestry](https://dom.spec.whatwg.org/#concept-tree-host-including-inclusive-ancestor)
+  to reject cycles through nested contents. Normal parent traversal, element
+  queries and event propagation do not cross that boundary.
+- Adoption prepares the destination's inert owner before detaching anything,
+  then transfers existing contents and nested templates without changing their
+  identity. Same-document adoption leaves independently adopted contents alone.
+  Shallow clones have fresh empty contents; deep clones/imports copy contents
+  into the destination's inert owner. Ordinary children still use the shared
+  clone path. Cloning a contents fragment itself does not copy its host link.
+- The historical Duktape bindings contain no template implementation. Their
+  `Element.innerHTML` getter returned an empty string, and their setter treated
+  every target as ordinary children; neither supplies this missing boundary.
+
+This is **native template ownership**, not completed template parsing or a new
+JS API. Hubbub still needs the template insertion-mode stack, scope boundaries,
+adjusted insertion locations/foster parenting and EOF handling. Its element-name
+generator input and all tree-handler clients must be updated together. The
+binding must insert into the real content fragment with correct document
+ownership, and suppress script callbacks inside templates for full-page parsing
+as well as fragments. Add whole-input/chunked parser cases before enabling
+template fragment contexts. Serialization and the logged `innerHTML` binding
+follow; declarative shadow DOM is outside this sequence.
+
+Validation: all 985 checks across the 15 native DOM, JS, form and interaction
+suites pass under Debug ASan/UBSan and LeakSanitizer without diagnostics. The 36
+new native template checks cover HTML/XML owners, namespaces, nested templates,
+identity, cloning, host cycles, query/event isolation and teardown orders. The
+Release template suite passes 48 checks, adding allocation-failure sweeps for
+creation/import/adoption in fresh HTML and XML destinations and successful retry
+after failure. The normalized saved eBihoreanul capture completes with the same
+1280 x 11382 extent and a byte-identical viewport PNG. Its previously documented
+`llcache.c` null-source / zero-length memcpy UBSan diagnostic remains. All 117
+Qt suites pass on the final build (paint-order alone, then the remaining 116);
+the existing 28-check Release adoption suite also passes. Builds are warning-free,
+`git diff --check` is clean, and no GTK build or tests were run.
+
 ## Assessment
 
 Keep QuickJS-ng and libdom. The missing part is the browser binding and execution

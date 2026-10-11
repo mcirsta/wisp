@@ -12,6 +12,14 @@
 #include <dom/core/document.h>
 #include <dom/core/exceptions.h>
 #include <dom/core/string.h>
+#include "core/node.h"
+
+struct dom_document_fragment {
+    dom_node_internal base;
+    /* Borrowed, like parent: the template owns the fragment and clears this
+     * before releasing it. Never part of the ordinary tree or event path. */
+    dom_node_internal *host;
+};
 
 dom_exception
 _dom_document_fragment_create(dom_document *doc, dom_string *name, dom_string *value, dom_document_fragment **result);

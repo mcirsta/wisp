@@ -15,13 +15,6 @@
 #include "core/document.h"
 #include "core/node.h"
 
-/**
- * A DOM document fragment
- */
-struct dom_document_fragment {
-    dom_node_internal base; /**< Base node */
-};
-
 static const struct dom_node_vtable df_vtable = {{DOM_NODE_EVENT_TARGET_VTABLE}, DOM_NODE_VTABLE};
 
 static const struct dom_node_protect_vtable df_protect_vtable = {DOM_DF_PROTECT_VTABLE};
@@ -52,6 +45,7 @@ _dom_document_fragment_create(dom_document *doc, dom_string *name, dom_string *v
 
     f->base.base.vtable = &df_vtable;
     f->base.vtable = &df_protect_vtable;
+    f->host = NULL;
 
     /* And initialise the node */
     err = _dom_document_fragment_initialise(&f->base, doc, DOM_DOCUMENT_FRAGMENT_NODE, name, value, NULL, NULL);
@@ -106,6 +100,9 @@ dom_exception _dom_df_copy(dom_node_internal *old, dom_node_internal **copy)
         free(new_f);
         return err;
     }
+
+    /* A cloned fragment is independent of its source template. */
+    new_f->host = NULL;
 
     *copy = (dom_node_internal *)new_f;
 

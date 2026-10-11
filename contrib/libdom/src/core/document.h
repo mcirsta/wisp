@@ -65,6 +65,8 @@ struct dom_document {
     dom_string **memoised;
     dom_string **elements;
     bool html; /**< HTML document type; distinct from an element's namespace. */
+    struct dom_document *template_document; /**< Lazily retained inert owner. */
+    bool is_template_document; /**< Inert owners reuse themselves. */
     dom_string *_memo_empty; /**< The string ''. */
 
     /* Memoised event strings */
@@ -85,6 +87,9 @@ struct dom_document {
 
 /* Create a DOM document */
 dom_exception _dom_document_create(dom_events_default_action_fetcher daf, void *daf_ctx, dom_document **doc);
+
+/* Return a borrowed inert template owner, allocating it only on first use. */
+dom_exception _dom_document_template_owner(dom_document *doc, dom_document **owner);
 
 /* Initialise the document */
 dom_exception _dom_document_initialise(dom_document *doc, dom_events_default_action_fetcher daf, void *daf_ctx);

@@ -65,6 +65,7 @@
 #include "html/html_tablerow_element.h"
 #include "html/html_tablesection_element.h"
 #include "html/html_text_area_element.h"
+#include "html/html_template_element.h"
 #include "html/html_title_element.h"
 #include "html/html_ulist_element.h"
 
@@ -430,6 +431,9 @@ dom_exception _dom_html_document_create_element_internal(
     params.prefix = prefix;
 
     switch (params.type) {
+    case DOM_HTML_ELEMENT_TYPE_TEMPLATE:
+        exc = _dom_html_template_element_create(&params, (dom_html_template_element **)result);
+        break;
     case DOM_HTML_ELEMENT_TYPE__COUNT:
         assert(params.type != DOM_HTML_ELEMENT_TYPE__COUNT);
         break;
@@ -625,7 +629,6 @@ dom_exception _dom_html_document_create_element_internal(
     case DOM_HTML_ELEMENT_TYPE_DATALIST:
     case DOM_HTML_ELEMENT_TYPE_MENUITEM:
     case DOM_HTML_ELEMENT_TYPE_PROGRESS:
-    case DOM_HTML_ELEMENT_TYPE_TEMPLATE:
         /* TODO: LibDOM implementation of these specialisations */
         /* For now, fall through to HTMLElement */
     case DOM_HTML_ELEMENT_TYPE_B:

@@ -99,6 +99,36 @@ dom_exception _dom_document_create(dom_events_default_action_fetcher daf, void *
     return DOM_NO_ERR;
 }
 
+/* HTML's appropriate template contents owner. No Window/default-action
+ * callback is inherited, and nested templates reuse this same inert owner. */
+dom_exception _dom_document_template_owner(dom_document *doc, dom_document **owner)
+{
+    if (doc->is_template_document) {
+        *owner = doc;
+        return DOM_NO_ERR;
+    }
+    if (doc->template_document == NULL) {
+        dom_document *inert = NULL;
+        dom_exception err;
+        if (doc->html)
+            err = _dom_html_document_create(NULL, NULL, (dom_html_document **)&inert);
+        else
+            err = _dom_document_create(NULL, NULL, &inert);
+        if (err != DOM_NO_ERR)
+            return err;
+        /* XML documents can also own HTML templates and typed HTML children. */
+        err = _dom_document_ensure_html_strings(inert);
+        if (err != DOM_NO_ERR) {
+            dom_node_unref(inert);
+            return err;
+        }
+        inert->is_template_document = true;
+        doc->template_document = inert;
+    }
+    *owner = doc->template_document;
+    return DOM_NO_ERR;
+}
+
 /* Initialise the document */
 dom_exception _dom_document_initialise(dom_document *doc, dom_events_default_action_fetcher daf, void *daf_ctx)
 {
@@ -118,6 +148,8 @@ dom_exception _dom_document_initialise(dom_document *doc, dom_events_default_act
     doc->nodelists = NULL;
     doc->event_parent = NULL;
     doc->html = false;
+    doc->template_document = NULL;
+    doc->is_template_document = false;
     doc->memoised = NULL;
     doc->elements = NULL;
 
@@ -317,6 +349,8 @@ bool _dom_document_finalise(dom_document *doc)
      * they are held by the client. */
     doc->nodelists = NULL;
     _dom_document_finalise_html_strings(doc);
+    dom_node_unref(doc->template_document);
+    doc->template_document = NULL;
 
     if (doc->id_name != NULL)
         dom_string_unref(doc->id_name);
@@ -1052,9 +1086,10 @@ dom_exception _dom_document_adopt_node(dom_document *doc, dom_node *node, dom_no
     if (_dom_node_readonly_owner(n) || _dom_node_readonly_owner(&doc->base))
         return DOM_NO_MODIFICATION_ALLOWED_ERR;
 
-    /* Do the only fallible ownership preparation before removing anything. */
-    if (n->owner != doc && n->owner != NULL && n->owner->memoised != NULL) {
-        err = _dom_document_ensure_html_strings(doc);
+    /* Allocate destination name tables and any inert template owner before
+     * removing anything. Ownership transfer itself must not fail halfway. */
+    if (n->owner != doc) {
+        err = _dom_node_prepare_document(n, doc);
         if (err != DOM_NO_ERR)
             return err;
     }

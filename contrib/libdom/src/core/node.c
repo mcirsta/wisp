@@ -40,6 +40,7 @@
 #include "events/mutation_event.h"
 #include "html/html_details_element.h"
 #include "html/form_owner.h"
+#include "html/html_template_element.h"
 
 static bool _dom_node_permitted_child(const dom_node_internal *parent, const dom_node_internal *child);
 static dom_exception _dom_node_check_insertion(const dom_node_internal *parent, const dom_node_internal *child,
@@ -1062,24 +1063,16 @@ dom_exception _dom_node_clone_for_document(
         _dom_attr_set_specified((dom_attr *)copy, true);
         deep = true; /* libdom stores attribute values in legacy text children. */
     }
+    if (_dom_html_is_template(node)) {
+        err = _dom_html_template_clone_contents(
+            (dom_html_template_element *)node, (dom_html_template_element *)copy, deep, operation);
+        if (err != DOM_NO_ERR)
+            goto failed;
+    }
     if (deep) {
-        for (dom_node_internal *child = node->first_child; child != NULL; child = child->next) {
-            dom_node_internal *cc = NULL;
-            err = _dom_node_clone_for_document(child, doc, true, operation, &cc);
-            if (err != DOM_NO_ERR)
-                goto failed;
-            /* Clone appends to the fresh tree without running insertion
-             * steps or observable mutation notifications. */
-            cc->parent = copy;
-            cc->previous = copy->last_child;
-            if (copy->last_child != NULL)
-                copy->last_child->next = cc;
-            else
-                copy->first_child = cc;
-            copy->last_child = cc;
-            dom_node_remove_pending(cc);
-            dom_node_unref(cc);
-        }
+        err = _dom_node_clone_children(node, copy, operation);
+        if (err != DOM_NO_ERR)
+            goto failed;
     }
     for (dom_user_data *ud = node->user_data; ud != NULL; ud = ud->next) {
         if (ud->handler != NULL)
@@ -1092,6 +1085,58 @@ failed:
     return err;
 }
 
+/* Used for ordinary children and template contents. Clone appends to the fresh
+ * tree without insertion steps or observable mutation notifications. */
+dom_exception _dom_node_clone_children(dom_node_internal *node, dom_node_internal *copy, dom_node_operation operation)
+{
+    for (dom_node_internal *child = node->first_child; child != NULL; child = child->next) {
+        dom_node_internal *cc = NULL;
+        dom_exception err = _dom_node_clone_for_document(child, copy->owner, true, operation, &cc);
+        if (err != DOM_NO_ERR)
+            return err;
+        cc->parent = copy;
+        cc->previous = copy->last_child;
+        if (copy->last_child != NULL)
+            copy->last_child->next = cc;
+        else
+            copy->first_child = cc;
+        copy->last_child = cc;
+        dom_node_remove_pending(cc);
+        dom_node_unref(cc);
+    }
+    return DOM_NO_ERR;
+}
+
+static dom_node_internal *subtree_next(dom_node_internal *node, dom_node_internal *root)
+{
+    if (node->first_child != NULL)
+        return node->first_child;
+    while (node != root && node->next == NULL)
+        node = node->parent;
+    return node == root ? NULL : node->next;
+}
+
+dom_exception _dom_node_prepare_document(dom_node_internal *root, dom_document *doc)
+{
+    if (root->owner != NULL && root->owner->memoised != NULL) {
+        dom_exception err = _dom_document_ensure_html_strings(doc);
+        if (err != DOM_NO_ERR)
+            return err;
+    }
+    /* One inert owner suffices for every nested contents tree. Documents
+     * without templates and already-prepared destinations need no scan. */
+    if (root->owner == NULL || (root->owner->template_document == NULL && !root->owner->is_template_document) ||
+        doc->is_template_document || doc->template_document != NULL)
+        return DOM_NO_ERR;
+    for (dom_node_internal *node = root; node != NULL; node = subtree_next(node, root)) {
+        if (_dom_html_is_template(node)) {
+            dom_document *owner;
+            return _dom_document_template_owner(doc, &owner);
+        }
+    }
+    return DOM_NO_ERR;
+}
+
 /* Transfer pending-list ownership as well as ownerDocument. Attribute owners
  * can differ from their elements after adoptNode(attr); keep those attributes
  * pending in their own document until their owner catches up or releases them.
@@ -1099,7 +1144,7 @@ failed:
 void _dom_node_set_document(dom_node_internal *root, dom_document *doc)
 {
     dom_document *old = (dom_document *)dom_node_ref(root->owner);
-    for (dom_node_internal *node = root; node != NULL;) {
+    for (dom_node_internal *node = root; node != NULL; node = subtree_next(node, root)) {
         if (node->pending_list.prev != &node->pending_list)
             list_del(&node->pending_list);
         node->owner = doc;
@@ -1107,12 +1152,16 @@ void _dom_node_set_document(dom_node_internal *root, dom_document *doc)
             dom_node_mark_pending(node);
         if (node->type == DOM_ELEMENT_NODE)
             _dom_element_set_document((dom_element *)node, doc);
-        if (node->first_child != NULL) {
-            node = node->first_child;
-        } else {
-            while (node != root && node->next == NULL)
-                node = node->parent;
-            node = node == root ? NULL : node->next;
+        if (_dom_html_is_template(node)) {
+            dom_document_fragment *content = ((dom_html_template_element *)node)->content;
+            /* A shallow copy has not established its contents yet. Adoption
+             * prepared this destination before detaching the source subtree. */
+            if (content != NULL) {
+                dom_document *inert = doc->is_template_document ? doc : doc->template_document;
+                assert(inert != NULL);
+                if (content->base.owner != inert)
+                    _dom_node_set_document(&content->base, inert);
+            }
         }
     }
     dom_node_unref(old);
@@ -1956,9 +2005,15 @@ static dom_exception _dom_node_check_insertion(const dom_node_internal *parent, 
     default:
         return DOM_HIERARCHY_REQUEST_ERR;
     }
-    for (const dom_node_internal *n = parent; n != NULL; n = n->parent) {
+    /* Templates are not ordinary ancestors, but must participate in cycle
+     * prevention: https://dom.spec.whatwg.org/#concept-tree-host-including-inclusive-ancestor */
+    for (const dom_node_internal *n = parent; n != NULL;) {
         if (n == child)
             return DOM_HIERARCHY_REQUEST_ERR;
+        if (n->type == DOM_DOCUMENT_FRAGMENT_NODE)
+            n = ((const dom_document_fragment *)n)->host;
+        else
+            n = n->parent;
     }
     if (reference != NULL && reference->parent != parent)
         return DOM_NOT_FOUND_ERR;
