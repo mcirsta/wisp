@@ -631,6 +631,8 @@ START_TEST(test_allocation_failure)
                                "border:.1234567px solid hsl(12 34% 56%);border:initial;"
                                "outline:invert dashed 1em;outline:unset;"
                                "column-rule:thin solid;column-rule:revert;"
+                               "grid-area:2/3/span 2/2 span;grid-column:span 2/4;grid-row:initial;"
+                               "grid-column-start:3 span;grid-column-end:unset;grid-row-end:-3;"
                                "color:rgb(1.2 3.4 5.6 / 50%);border-color:#1234 red rgb(3,2,1) currentcolor;"
                                /* Force the parser's token vector to grow too. */
                                "--large:red red red red red red red red red red red red red red red red "
@@ -645,7 +647,7 @@ START_TEST(test_allocation_failure)
     memset(css + pos, 'c', 8192);
     pos += 8192;
     snprintf(css + pos, sizeof(css) - pos, "*/%s", declarations);
-    const size_t expected = 35;
+    const size_t expected = 41;
     /* Keep shared property strings alive, so each iteration tests the same
      * allocation sequence instead of global string-cache initialization. */
     css_stylesheet *keeper;
@@ -1443,6 +1445,111 @@ static const struct {
     {"outline:invert", "outline", "none"},
     {"border-top-width:2px;border-top-style:solid", "border-top", ""},
 
+    /* CSS Grid 2 numeric line placement and shorthand defaults. */
+    {"grid-row-start:AUTO", "grid-row-start", "auto"},
+    {"grid-row-start:+0002", "grid-row-start", "2"},
+    {"grid-row-start:-003", "grid-row-start", "-3"},
+    {"grid-row-start:SPAN +002", "grid-row-start", "span 2"},
+    {"grid-row-start:003 span", "grid-row-start", "span 3"},
+    {"grid-row-start:inherit", "grid-row-start", "inherit"},
+    {"grid-row-start:var(--line)", "grid-row-start", "var(--line)"},
+    {"grid-row-start:2;grid-row-start:0", "grid-row-start", "2"},
+    {"grid-row-start:2;grid-row-start:span", "grid-row-start", "2"},
+    {"grid-row-start:2;grid-row-start:span -1", "grid-row-start", "2"},
+    {"grid-row-start:2;grid-row-start:span 0", "grid-row-start", "2"},
+    {"grid-row-start:2;grid-row-start:1.0", "grid-row-start", "2"},
+    {"grid-row-start:2;grid-row-start:1px", "grid-row-start", "2"},
+    {"grid-row-start:2;grid-row-start:span initial", "grid-row-start", "2"},
+    {"grid-row-end:AUTO", "grid-row-end", "auto"},
+    {"grid-row-end:+0002", "grid-row-end", "2"},
+    {"grid-row-end:-003", "grid-row-end", "-3"},
+    {"grid-row-end:SPAN +002", "grid-row-end", "span 2"},
+    {"grid-row-end:003 span", "grid-row-end", "span 3"},
+    {"grid-row-end:inherit", "grid-row-end", "inherit"},
+    {"grid-row-end:var(--line)", "grid-row-end", "var(--line)"},
+    {"grid-row-end:2;grid-row-end:0", "grid-row-end", "2"},
+    {"grid-row-end:2;grid-row-end:span", "grid-row-end", "2"},
+    {"grid-row-end:2;grid-row-end:span -1", "grid-row-end", "2"},
+    {"grid-row-end:2;grid-row-end:span 0", "grid-row-end", "2"},
+    {"grid-row-end:2;grid-row-end:1.0", "grid-row-end", "2"},
+    {"grid-row-end:2;grid-row-end:1px", "grid-row-end", "2"},
+    {"grid-row-end:2;grid-row-end:span initial", "grid-row-end", "2"},
+    {"grid-column-start:AUTO", "grid-column-start", "auto"},
+    {"grid-column-start:+0002", "grid-column-start", "2"},
+    {"grid-column-start:-003", "grid-column-start", "-3"},
+    {"grid-column-start:SPAN +002", "grid-column-start", "span 2"},
+    {"grid-column-start:003 span", "grid-column-start", "span 3"},
+    {"grid-column-start:inherit", "grid-column-start", "inherit"},
+    {"grid-column-start:var(--line)", "grid-column-start", "var(--line)"},
+    {"grid-column-start:2;grid-column-start:0", "grid-column-start", "2"},
+    {"grid-column-start:2;grid-column-start:span", "grid-column-start", "2"},
+    {"grid-column-start:2;grid-column-start:span -1", "grid-column-start", "2"},
+    {"grid-column-start:2;grid-column-start:span 0", "grid-column-start", "2"},
+    {"grid-column-start:2;grid-column-start:1.0", "grid-column-start", "2"},
+    {"grid-column-start:2;grid-column-start:1px", "grid-column-start", "2"},
+    {"grid-column-start:2;grid-column-start:span initial", "grid-column-start", "2"},
+    {"grid-column-end:AUTO", "grid-column-end", "auto"},
+    {"grid-column-end:+0002", "grid-column-end", "2"},
+    {"grid-column-end:-003", "grid-column-end", "-3"},
+    {"grid-column-end:SPAN +002", "grid-column-end", "span 2"},
+    {"grid-column-end:003 span", "grid-column-end", "span 3"},
+    {"grid-column-end:inherit", "grid-column-end", "inherit"},
+    {"grid-column-end:var(--line)", "grid-column-end", "var(--line)"},
+    {"grid-column-end:2;grid-column-end:0", "grid-column-end", "2"},
+    {"grid-column-end:2;grid-column-end:span", "grid-column-end", "2"},
+    {"grid-column-end:2;grid-column-end:span -1", "grid-column-end", "2"},
+    {"grid-column-end:2;grid-column-end:span 0", "grid-column-end", "2"},
+    {"grid-column-end:2;grid-column-end:1.0", "grid-column-end", "2"},
+    {"grid-column-end:2;grid-column-end:1px", "grid-column-end", "2"},
+    {"grid-column-end:2;grid-column-end:span initial", "grid-column-end", "2"},
+    {"grid-row:AUTO", "grid-row", "auto"},
+    {"grid-row:2 / auto", "grid-row", "2"},
+    {"grid-row:auto / 3", "grid-row", "auto / 3"},
+    {"grid-row:2 / 2", "grid-row", "2 / 2"},
+    {"grid-row:SPAN +002 / -003", "grid-row", "span 2 / -3"},
+    {"grid-row:2 span / 3 span", "grid-row", "span 2 / span 3"},
+    {"grid-row:initial", "grid-row", "initial"},
+    {"grid-row:var(--line, 2 / 3)", "grid-row", "var(--line, 2 / 3)"},
+    {"grid-row:span 2", "grid-row-end", "auto"},
+    {"grid-row:2 / span 3", "grid-row-end", "span 3"},
+    {"grid-row:2 / 3;grid-row-end:4", "grid-row", "2 / 4"},
+    {"grid-row:2 / 3!important;grid-row-end:4", "grid-row", "2 / 3"},
+    {"grid-row:2 / 3;grid-row-end:4!important", "grid-row", ""},
+    {"grid-column:AUTO", "grid-column", "auto"},
+    {"grid-column:2 / auto", "grid-column", "2"},
+    {"grid-column:auto / 3", "grid-column", "auto / 3"},
+    {"grid-column:2 / 2", "grid-column", "2 / 2"},
+    {"grid-column:SPAN +002 / -003", "grid-column", "span 2 / -3"},
+    {"grid-column:2 span / 3 span", "grid-column", "span 2 / span 3"},
+    {"grid-column:initial", "grid-column", "initial"},
+    {"grid-column:var(--line, 2 / 3)", "grid-column", "var(--line, 2 / 3)"},
+    {"grid-column:span 2", "grid-column-end", "auto"},
+    {"grid-column:2 / span 3", "grid-column-end", "span 3"},
+    {"grid-column:2 / 3;grid-column-end:4", "grid-column", "2 / 4"},
+    {"grid-column:2 / 3!important;grid-column-end:4", "grid-column", "2 / 3"},
+    {"grid-column:2 / 3;grid-column-end:4!important", "grid-column", ""},
+    {"grid-area:auto / auto / auto / auto", "grid-area", "auto"},
+    {"grid-area:2 / auto / auto / auto", "grid-area", "2"},
+    {"grid-area:2 / 3 / auto / auto", "grid-area", "2 / 3"},
+    {"grid-area:2 / auto / 4 / auto", "grid-area", "2 / auto / 4"},
+    {"grid-area:2 / auto / auto / 5", "grid-area", "2 / auto / auto / 5"},
+    {"grid-area:2 / 3 / 2 / 3", "grid-area", "2 / 3 / 2 / 3"},
+    {"grid-area:2 / span 2 / 3 span / -1", "grid-area", "2 / span 2 / span 3 / -1"},
+    {"grid-area:initial", "grid-area", "initial"},
+    {"grid-area:var(--area)", "grid-area", "var(--area)"},
+    {"grid-area:2", "grid-column-start", "auto"},
+    {"grid-area:2", "grid-row-end", "auto"},
+    {"grid-area:2", "grid-column-end", "auto"},
+    {"grid-area:2 / 3 / span 4 / 5", "grid-row", "2 / span 4"},
+    {"grid-area:2 / 3 / 4 / span 5", "grid-column", "3 / span 5"},
+    {"grid-area:2 / 3 / 4 / 5;grid-row:6", "grid-area", "6 / 3 / auto / 5"},
+    {"grid-row:2 / 4;grid-column:3 / 5", "grid-area", "2 / 3 / 4 / 5"},
+    {"grid-area:var(--a)", "grid-row", ""},
+    {"grid-area:initial;grid-column-end:unset", "grid-area", ""},
+    {"grid-area:1;grid-row-end:2!important", "grid-area", ""},
+    {"grid-column-start:span 12345678", "grid-column-start", "span 12345678"},
+    {"grid-row:-12345678 / 23456789", "grid-row", "-12345678 / 23456789"},
+
 };
 enum { VALUE_CASE_COUNT = sizeof(value_cases) / sizeof(value_cases[0]) };
 
@@ -2130,6 +2237,83 @@ START_TEST(test_border_shorthand_invalid)
 }
 END_TEST
 
+START_TEST(test_grid_placement_bytecode)
+{
+    static const char *const properties[] = {
+        "grid-row-start", "grid-row-end", "grid-column-start", "grid-column-end"};
+    static const enum css_properties_e opcodes[] = {
+        CSS_PROP_GRID_ROW_START, CSS_PROP_GRID_ROW_END, CSS_PROP_GRID_COLUMN_START, CSS_PROP_GRID_COLUMN_END};
+    static const struct { const char *text; uint16_t kind; int number; } forms[] = {
+        {"auto", CSS_GRID_LINE_AUTO, 0}, {"2", CSS_GRID_LINE_SET, 2}, {"-3", CSS_GRID_LINE_SET, -3},
+        {"span 2", CSS_GRID_LINE_SPAN, 2}, {"3 SPAN", CSS_GRID_LINE_SPAN, 3},
+        {"32768", CSS_GRID_LINE_SET, 32768},
+    };
+    for (size_t p = 0; p < N_ELEMENTS(properties); p++) {
+        for (size_t f = 0; f < N_ELEMENTS(forms); f++) {
+            for (unsigned important = 0; important < 2; important++) {
+                char css[128];
+                snprintf(css, sizeof(css), "%s:%s%s", properties[p], forms[f].text, important ? "!important" : "");
+                css_declaration_list *list = parse(css, _i != 0);
+                ck_assert_msg(css__declaration_list_count(list) == 1, "rejected %s", css);
+                const css_style *style = inline_style(css__declaration_list_sheet(list));
+                ck_assert_uint_eq(style->used, forms[f].kind == CSS_GRID_LINE_AUTO ? 1 : 2);
+                uint8_t flags = important ? FLAG_IMPORTANT : 0;
+                ck_assert_msg(style->bytecode[0] == buildOPV(opcodes[p], flags, forms[f].kind), "wrong opcode: %s", css);
+                if (style->used == 2)
+                    ck_assert_msg((css_fixed)style->bytecode[1] == INTTOFIX(forms[f].number), "wrong integer: %s", css);
+                css__declaration_list_destroy(list);
+            }
+        }
+    }
+    static const char *const pairs[][2] = {
+        {"grid-row:2", "grid-row-start:2;grid-row-end:auto"},
+        {"grid-column:2 span / 4", "grid-column-start:span 2;grid-column-end:4"},
+        {"grid-area:2 / 3 / span 2 / 4 span",
+            "grid-row-start:2;grid-column-start:3;grid-row-end:span 2;grid-column-end:span 4"},
+        {"grid-area:2 / span 3", "grid-row-start:2;grid-column-start:span 3;grid-row-end:auto;grid-column-end:auto"},
+        {"grid-area:2", "grid-row-start:2;grid-column-start:auto;grid-row-end:auto;grid-column-end:auto"},
+        {"grid-row:inherit", "grid-row-start:inherit;grid-row-end:inherit"},
+        {"grid-column:initial", "grid-column-start:initial;grid-column-end:initial"},
+        {"grid-area:unset", "grid-row-start:unset;grid-column-start:unset;grid-row-end:unset;grid-column-end:unset"},
+        {"grid-area:revert", "grid-row-start:revert;grid-column-start:revert;grid-row-end:revert;grid-column-end:revert"},
+    };
+    for (size_t i = 0; i < N_ELEMENTS(pairs); i++) {
+        css_declaration_list *a = parse(pairs[i][0], _i != 0), *b = parse(pairs[i][1], _i != 0);
+        ck_assert_msg(css__declaration_list_count(a) == 1, "rejected %s", pairs[i][0]);
+        compare_sheets(css__declaration_list_sheet(a), css__declaration_list_sheet(b));
+        css__declaration_list_destroy(a);
+        css__declaration_list_destroy(b);
+    }
+}
+END_TEST
+
+START_TEST(test_grid_placement_invalid)
+{
+    static const char *const properties[] = {"grid-row", "grid-column", "grid-area",
+        "grid-row-start", "grid-row-end", "grid-column-start", "grid-column-end"};
+    static const char *const invalid[] = {"0", "-0", "span", "span 0", "span -1", "0 span", "-1 span",
+        "2.0", "1.5", "2px", "2%", "span auto", "auto span", "span 2 span", "2 3", "2 /", "2 / / 3",
+        "initial 2", "span initial", "2 unset", "inherit / 2", "2 / initial", "2 / 3 / 4 / 5 /",
+        "2 / 3 / 4 / 5 / 6", "2 / 0", "2 / 3 / 0", "2 / 3 / 4 / 0", "2 / 3 / span",
+        /* Named lines and math remain unsupported, rather than guessed. */
+        "Named", "2 Named", "span Named", "calc(1 + 1)"};
+    for (size_t p = 0; p < N_ELEMENTS(properties); p++) {
+        char baseline[64];
+        snprintf(baseline, sizeof(baseline), "%s:2", properties[p]);
+        css_declaration_list *base = parse(baseline, false);
+        for (size_t i = 0; i < N_ELEMENTS(invalid); i++) {
+            char css[192];
+            snprintf(css, sizeof(css), "%s;%s:%s", baseline, properties[p], invalid[i]);
+            css_declaration_list *list = parse(css, _i != 0);
+            ck_assert_msg(css__declaration_list_count(list) == 1, "accepted unsupported declaration: %s", css);
+            compare_sheets(css__declaration_list_sheet(base), css__declaration_list_sheet(list));
+            css__declaration_list_destroy(list);
+        }
+        css__declaration_list_destroy(base);
+    }
+}
+END_TEST
+
 START_TEST(test_quirky_border_values)
 {
     static const char *const forms[][3] = {
@@ -2301,6 +2485,57 @@ START_TEST(test_value_arguments)
 END_TEST
 
 #ifdef WISP_TEST_ALLOC_FAILURE
+/* Every grid parser must restore its complete output span if any append fails,
+ * including CSS-wide expansion and the later defaulted shorthand members. */
+START_TEST(test_grid_placement_rollback)
+{
+    static const char *const names[] = {"grid-area", "grid-row", "grid-column",
+        "grid-row-start", "grid-row-end", "grid-column-start", "grid-column-end"};
+    const struct css_prop_entry *property = css_prop_lookup(names[_i], strlen(names[_i]));
+    css_stylesheet *sheet;
+    ck_assert_int_eq(css_stylesheet_create(&params, &sheet), CSS_OK);
+    css_language *language = sheet->parser_frontend;
+    lwc_string *number;
+    ck_assert_int_eq(lwc_intern_string("2", 1, &number), lwc_error_ok);
+    for (unsigned wide = 0; wide < 2; wide++) {
+        parserutils_vector *tokens;
+        ck_assert_int_eq(parserutils_vector_create(sizeof(css_token), 4, &tokens), PARSERUTILS_OK);
+        css_token parts[] = {{.type = CSS_TOKEN_IDENT, .idata = language->strings[SPAN]},
+            {.type = CSS_TOKEN_S}, {.type = CSS_TOKEN_NUMBER, .idata = number}};
+        css_token initial = {.type = CSS_TOKEN_IDENT, .idata = language->strings[INITIAL]};
+        if (wide) {
+            ck_assert_int_eq(parserutils_vector_append(tokens, &initial), PARSERUTILS_OK);
+        } else {
+            for (size_t i = 0; i < N_ELEMENTS(parts); i++)
+                ck_assert_int_eq(parserutils_vector_append(tokens, &parts[i]), PARSERUTILS_OK);
+        }
+        size_t words = (property->shorthand ? property->longhand_count : 1) + (wide ? 0 : 1);
+        for (size_t spare = 0; spare < words; spare++) {
+            css_style *style;
+            ck_assert_int_eq(css__stylesheet_style_create(sheet, &style), CSS_OK);
+            uint32_t before = style->allocated - spare;
+            for (uint32_t i = 0; i < before; i++)
+                ck_assert_int_eq(css__stylesheet_style_append(style, 0x12345678), CSS_OK);
+            int32_t ctx = 0;
+            realloc_limit(0);
+            css_error error = property->handler(language, tokens, &ctx, style);
+            realloc_limit(UINT_MAX);
+            ck_assert_msg(error == CSS_NOMEM, "%s wide %u spare %zu: %d", names[_i], wide, spare, error);
+            ck_assert_int_eq(ctx, 0);
+            ck_assert_uint_eq(style->used, before);
+            for (uint32_t i = 0; i < before; i++)
+                ck_assert_uint_eq(style->bytecode[i], 0x12345678);
+            ck_assert_int_eq(property->handler(language, tokens, &ctx, style), CSS_OK);
+            ck_assert_uint_eq(style->used, before + words);
+            css__stylesheet_style_destroy(style);
+        }
+        parserutils_vector_destroy(tokens);
+    }
+    lwc_string_unref(number);
+    css_stylesheet_destroy(sheet);
+}
+END_TEST
+
 /* Fill the style exactly so the final CONTENT_NORMAL terminator is the only
  * append that needs allocation. Losing that failure used to publish truncated
  * bytecode as a successfully parsed declaration. */
@@ -2385,10 +2620,12 @@ START_TEST(test_value_allocation_failure)
                       "color:rgb(1.2 3.4 5.6 / .234567);border-color:#1234 hsl(12 34% 56%) hwb(78 9% 10%);"
                       "clip:rect(.1234567px, auto, -1.2345678em, 1px);"
                       "list-style:none inside url(Marker.png);columns:.1234567em 3;"
+                      "grid-area:2/3/span 4/5 span;grid-column:2 span/3;"
                       "font-family:One/**/Two\\20 , 'a\\22 b\\a c',SERIF;";
     static const char *const names[] = {"margin", "--x", "background-image", "background-attachment", "border-style",
         "content", "quotes", "counter-reset", "aspect-ratio", "border-spacing", "clip", "font-family", "flex",
-        "flex-flow", "color", "border-color", "list-style", "columns", "border", "border-left", "outline", "column-rule"};
+        "flex-flow", "color", "border-color", "list-style", "columns", "border", "border-left", "outline", "column-rule",
+        "grid-area", "grid-column", "grid-row", "grid-row-end"};
     const char *name = names[_i];
     /* Keep full-border inputs separate: they reset the quad style/colour cases. */
     if (strcmp(name, "border") == 0 || strcmp(name, "border-left") == 0)
@@ -2458,6 +2695,8 @@ int main(void)
     tcase_add_loop_test(tc, test_list_columns_invalid, 0, 2);
     tcase_add_loop_test(tc, test_border_shorthand_bytecode, 0, 2);
     tcase_add_loop_test(tc, test_border_shorthand_invalid, 0, 2);
+    tcase_add_loop_test(tc, test_grid_placement_bytecode, 0, 2);
+    tcase_add_loop_test(tc, test_grid_placement_invalid, 0, 2);
     tcase_add_test(tc, test_quirky_border_values);
     tcase_add_loop_test(tc, test_colour_alpha_roundtrip, 0, 2);
     tcase_add_test(tc, test_quirky_colour_values);
@@ -2469,7 +2708,8 @@ int main(void)
     tcase_add_loop_test(tc, test_overflow_axes, 0, 2);
     tcase_add_test(tc, test_value_arguments);
 #ifdef WISP_TEST_ALLOC_FAILURE
-    tcase_add_loop_test(tc, test_value_allocation_failure, 0, 22);
+    tcase_add_loop_test(tc, test_value_allocation_failure, 0, 26);
+    tcase_add_loop_test(tc, test_grid_placement_rollback, 0, 7);
     tcase_add_loop_test(tc, test_font_face_allocation_failure, 0, 3);
     tcase_add_test(tc, test_content_terminator_allocation_failure);
 #endif

@@ -1829,6 +1829,7 @@ defaults = "CSS_ROW_GAP_NORMAL"
 parse = '''IDENT:( INHERIT: INITIAL: REVERT: UNSET: NORMAL:0,ROW_GAP_NORMAL IDENT:) LENGTH_UNIT:( UNIT_PX:ROW_GAP_SET RANGE:<0 MASK:UNIT_MASK_ROW_GAP LENGTH_UNIT:) CALC:( UNIT_PX:ROW_GAP_CALC CALC:)'''
 
 [grid_column_start]
+declaration_value = "grid_line"
 enum = "CSS_PROP_GRID_COLUMN_START"
 inherited = false
 cascade = "manual"
@@ -1840,9 +1841,11 @@ initial_data = ['0']
 values = "integer"
 condition = ["CSS_GRID_LINE_SET", "CSS_GRID_LINE_SPAN"]
 defaults = "CSS_GRID_LINE_AUTO"
-parse = '''IDENT:( INHERIT: INITIAL: REVERT: UNSET: AUTO:0,CSS_GRID_LINE_AUTO IDENT:) NUMBER:( true:CSS_GRID_LINE_SET NUMBER:)'''
+wrap = "css__parse_grid_line_internal"
+parse = "WRAP:css__parse_grid_line_internal"
 
 [grid_column_end]
+declaration_value = "grid_line"
 enum = "CSS_PROP_GRID_COLUMN_END"
 inherited = false
 cascade = "manual"
@@ -1854,9 +1857,11 @@ initial_data = ['0']
 values = "integer"
 condition = ["CSS_GRID_LINE_SET", "CSS_GRID_LINE_SPAN"]
 defaults = "CSS_GRID_LINE_AUTO"
-parse = '''IDENT:( INHERIT: INITIAL: REVERT: UNSET: AUTO:0,CSS_GRID_LINE_AUTO IDENT:) NUMBER:( true:CSS_GRID_LINE_SET NUMBER:)'''
+wrap = "css__parse_grid_line_internal"
+parse = "WRAP:css__parse_grid_line_internal"
 
 [grid_row_start]
+declaration_value = "grid_line"
 enum = "CSS_PROP_GRID_ROW_START"
 inherited = false
 cascade = "manual"
@@ -1868,9 +1873,11 @@ initial_data = ['0']
 values = "integer"
 condition = ["CSS_GRID_LINE_SET", "CSS_GRID_LINE_SPAN"]
 defaults = "CSS_GRID_LINE_AUTO"
-parse = '''IDENT:( INHERIT: INITIAL: REVERT: UNSET: AUTO:0,CSS_GRID_LINE_AUTO IDENT:) NUMBER:( true:CSS_GRID_LINE_SET NUMBER:)'''
+wrap = "css__parse_grid_line_internal"
+parse = "WRAP:css__parse_grid_line_internal"
 
 [grid_row_end]
+declaration_value = "grid_line"
 enum = "CSS_PROP_GRID_ROW_END"
 inherited = false
 cascade = "manual"
@@ -1882,7 +1889,8 @@ initial_data = ['0']
 values = "integer"
 condition = ["CSS_GRID_LINE_SET", "CSS_GRID_LINE_SPAN"]
 defaults = "CSS_GRID_LINE_AUTO"
-parse = '''IDENT:( INHERIT: INITIAL: REVERT: UNSET: AUTO:0,CSS_GRID_LINE_AUTO IDENT:) NUMBER:( true:CSS_GRID_LINE_SET NUMBER:)'''
+wrap = "css__parse_grid_line_internal"
+parse = "WRAP:css__parse_grid_line_internal"
 
 [object_fit]
 declaration_value = "keyword"
@@ -2079,6 +2087,7 @@ computed = "none"
 helper_longhands = ["row_gap", "column_gap"]
 
 [grid_area]
+declaration_value = "grid_area"
 declaration_longhands = ["grid_row_start", "grid_column_start", "grid_row_end", "grid_column_end"]
 enum = "CSS_PROP_GRID_AREA"
 inherited = false
@@ -2087,6 +2096,7 @@ cascade = "none"
 computed = "none"
 
 [grid_column]
+declaration_value = "grid_pair"
 declaration_longhands = ["grid_column_start", "grid_column_end"]
 enum = "CSS_PROP_GRID_COLUMN"
 inherited = false
@@ -2095,6 +2105,7 @@ cascade = "none"
 computed = "none"
 
 [grid_row]
+declaration_value = "grid_pair"
 declaration_longhands = ["grid_row_start", "grid_row_end"]
 enum = "CSS_PROP_GRID_ROW"
 inherited = false

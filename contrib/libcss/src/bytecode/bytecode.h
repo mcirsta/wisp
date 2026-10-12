@@ -167,4 +167,14 @@ static inline bool css__is_background_list(uint32_t opv)
             op == CSS_PROP_BACKGROUND_ATTACHMENT);
 }
 
+/* Grid placement's existing encoding uses CSS_GRID_LINE_* values. Integer
+ * and span payloads must never be interpreted as another property's OPV. */
+static inline bool css__grid_line_has_integer(css_code_t opv)
+{
+    opcode_t op = getOpcode(opv);
+    return !hasFlagValue(opv) && (getValue(opv) == CSS_GRID_LINE_SET || getValue(opv) == CSS_GRID_LINE_SPAN) &&
+        (op == CSS_PROP_GRID_ROW_START || op == CSS_PROP_GRID_ROW_END ||
+            op == CSS_PROP_GRID_COLUMN_START || op == CSS_PROP_GRID_COLUMN_END);
+}
+
 #endif

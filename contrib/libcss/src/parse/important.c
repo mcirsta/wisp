@@ -86,6 +86,8 @@ void css__make_style_important(css_style *style)
         /* Advance past any property-specific data */
         if (css__is_background_list(opv)) {
             offset += 1 + bytecode[offset];
+        } else if (css__grid_line_has_integer(opv)) {
+            offset++;
         } else if (op == CSS_PROP_VAR_DEFERRED) {
             /* OPV + prop_name_idx + value_id */
             offset += 2;

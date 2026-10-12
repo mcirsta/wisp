@@ -271,18 +271,22 @@ class TomlPropertyReader:
                                   'quad_length', 'pair_keyword', 'quad_keyword', 'uri', 'image_list', 'keyword_list',
                                   'content', 'string_list', 'counter_list', 'aspect_ratio', 'border_spacing', 'clip',
                                   'font_family', 'flex', 'flex_flow', 'list_style', 'columns', 'border', 'border_side', 'outline',
-                                  'colour', 'quad_colour'):
+                                  'colour', 'quad_colour', 'grid_line', 'grid_pair', 'grid_area'):
                 raise ValueError(f"{name}: unknown declaration_value {value_kind}")
             if value_kind != 'none':
                 expected = {'pair_length': 2, 'quad_length': 4, 'pair_keyword': 2, 'quad_keyword': 4,
                             'flex': 3, 'flex_flow': 2, 'list_style': 3, 'columns': 2, 'border': 12, 'border_side': 3,
-                            'outline': 3, 'quad_colour': 4}.get(value_kind, 0)
+                            'outline': 3, 'quad_colour': 4, 'grid_pair': 2, 'grid_area': 4}.get(value_kind, 0)
                 if len(members) != expected:
                     raise ValueError(f"{name}: declaration_value requires {expected} longhands")
                 ordered = {'flex': ['flex_grow', 'flex_shrink', 'flex_basis'],
                            'flex_flow': ['flex_direction', 'flex_wrap'],
                            'list_style': ['list_style_type', 'list_style_position', 'list_style_image'],
-                           'columns': ['column_width', 'column_count']}.get(value_kind)
+                           'columns': ['column_width', 'column_count'],
+                           'grid_area': ['grid_row_start', 'grid_column_start', 'grid_row_end', 'grid_column_end']
+                           }.get(value_kind)
+                if value_kind == 'grid_pair':
+                    ordered = [f'{name}_{edge}' for edge in ('start', 'end')]
                 if value_kind == 'border':
                     ordered = [f'border_{side}_{part}' for part in ('width', 'style', 'color')
                                for side in ('top', 'right', 'bottom', 'left')]

@@ -58,9 +58,8 @@
 #include "content/handlers/html/layout_internal.h"
 
 /** Indicates grid placement is auto (not explicitly set) */
-#define GRID_PLACEMENT_AUTO (-1)
-/** Indicates grid end is a span value (value is the span count) */
-#define GRID_PLACEMENT_SPAN (-2)
+/* Numeric line coordinates may be negative before the explicit grid. */
+#define GRID_PLACEMENT_AUTO INT_MIN
 
 /** Placement phase for 3-phase algorithm (CSS Grid spec §8) */
 typedef enum {
@@ -93,8 +92,8 @@ struct grid_item_cache {
  */
 static grid_placement_phase_t get_placement_phase(int col_start, int row_start)
 {
-    bool col_definite = (col_start != GRID_PLACEMENT_AUTO && col_start != GRID_PLACEMENT_SPAN);
-    bool row_definite = (row_start != GRID_PLACEMENT_AUTO && row_start != GRID_PLACEMENT_SPAN);
+    bool col_definite = (col_start != GRID_PLACEMENT_AUTO);
+    bool row_definite = (row_start != GRID_PLACEMENT_AUTO);
 
     if (col_definite && row_definite) {
         return GRID_PHASE_DEFINITE_BOTH;
@@ -140,105 +139,7 @@ static int layout_grid_get_explicit_row_count(struct box *grid)
 }
 
 /**
- * Get grid item placement from CSS computed style.
- *
- * \param style     The computed style of the grid item
- * \param col_start Output: column start (0-indexed), or GRID_PLACEMENT_AUTO
- * \param col_end   Output: column end (0-indexed), GRID_PLACEMENT_AUTO, or GRID_PLACEMENT_SPAN
- * \param row_start Output: row start (0-indexed), or GRID_PLACEMENT_AUTO
- * \param row_end   Output: row end (0-indexed), GRID_PLACEMENT_AUTO, or GRID_PLACEMENT_SPAN
- * \param col_span  Output: explicit column span (when col_end is GRID_PLACEMENT_SPAN)
- * \param row_span  Output: explicit row span (when row_end is GRID_PLACEMENT_SPAN)
- */
-static void get_grid_item_placement(const css_computed_style *style, int *col_start, int *col_end, int *row_start,
-    int *row_end, int *col_span, int *row_span)
-{
-    int32_t val;
-    uint8_t type;
-
-    /* Initialize defaults */
-    *col_span = 1;
-    *row_span = 1;
-
-    /* grid-column-start */
-    if (style != NULL) {
-        type = css_computed_grid_column_start(style, &val);
-        if (type == CSS_GRID_LINE_SET) {
-            *col_start = FIXTOINT(val) - 1; /* CSS is 1-indexed */
-        } else if (type == CSS_GRID_LINE_SPAN) {
-            /* Start is span - means span from end position */
-            *col_start = GRID_PLACEMENT_SPAN;
-            *col_span = FIXTOINT(val);
-        } else {
-            *col_start = GRID_PLACEMENT_AUTO;
-        }
-    } else {
-        *col_start = GRID_PLACEMENT_AUTO;
-    }
-
-    /* grid-column-end */
-    if (style != NULL) {
-        type = css_computed_grid_column_end(style, &val);
-        if (type == CSS_GRID_LINE_SET) {
-            *col_end = FIXTOINT(val) - 1;
-        } else if (type == CSS_GRID_LINE_SPAN) {
-            *col_end = GRID_PLACEMENT_SPAN;
-            *col_span = FIXTOINT(val);
-        } else {
-            *col_end = GRID_PLACEMENT_AUTO;
-        }
-    } else {
-        *col_end = GRID_PLACEMENT_AUTO;
-    }
-
-    /* grid-row-start */
-    if (style != NULL) {
-        type = css_computed_grid_row_start(style, &val);
-        if (type == CSS_GRID_LINE_SET) {
-            *row_start = FIXTOINT(val) - 1;
-        } else if (type == CSS_GRID_LINE_SPAN) {
-            /* Start is span - means span from end position */
-            *row_start = GRID_PLACEMENT_SPAN;
-            *row_span = FIXTOINT(val);
-        } else {
-            *row_start = GRID_PLACEMENT_AUTO;
-        }
-    } else {
-        *row_start = GRID_PLACEMENT_AUTO;
-    }
-
-    /* grid-row-end */
-    if (style != NULL) {
-        type = css_computed_grid_row_end(style, &val);
-        if (type == CSS_GRID_LINE_SET) {
-            *row_end = FIXTOINT(val) - 1;
-        } else if (type == CSS_GRID_LINE_SPAN) {
-            *row_end = GRID_PLACEMENT_SPAN;
-            *row_span = FIXTOINT(val);
-        } else {
-            *row_end = GRID_PLACEMENT_AUTO;
-        }
-    } else {
-        *row_end = GRID_PLACEMENT_AUTO;
-    }
-
-    /* Validate: per CSS Grid spec, span values must be >= 1 */
-    if (*col_span < 1) {
-        NSLOG(layout, ERROR,
-            "Invalid grid col_span=%d (must be >= 1), "
-            "possible propset normalization bug",
-            *col_span);
-    }
-    if (*row_span < 1) {
-        NSLOG(layout, ERROR,
-            "Invalid grid row_span=%d (must be >= 1), "
-            "possible propset normalization bug",
-            *row_span);
-    }
-}
-
-/**
- * Determine logical column count from CSS grid-template-columns.
+ * Determine explicit column count from CSS grid-template-columns.
  *
  * Uses the CSS computed style to get the actual track list values.
  */
@@ -291,13 +192,13 @@ static int layout_grid_get_column_count(struct box *grid)
             return n_tracks;
         } else if (grid_template_type == CSS_GRID_TEMPLATE_NONE) {
             /* Explicit 'none' value means no explicit grid */
-            return 1;
+            return 0;
         }
         /* CSS_GRID_TEMPLATE_INHERIT or no tracks falls through to
          * default */
     }
 
-    return 1; /* Default to 1 column */
+    return 0; /* No explicit columns; layout still allocates one implicit column. */
 }
 
 /* Per-call scratch state. Helpers borrow these buffers; layout_grid owns
@@ -308,7 +209,7 @@ struct grid_layout_ctx {
     const css_unit_ctx *unit_len_ctx;
     struct css_size min_height;
     int max_height;
-    int num_cols, num_rows, column_gap, row_gap;
+    int num_cols, num_rows, explicit_cols, column_gap, row_gap;
     int available_width;
     struct grid_track *columns;
     struct grid_track *rows;
@@ -329,6 +230,68 @@ struct grid_placement {
     int col_start, col_end, row_start, row_end;
     int col, row, col_span, row_span;
 };
+
+struct grid_axis_placement {
+    int start, end, span;
+};
+
+/* Resolve numeric lines and conflicts before choosing the auto-placement phase.
+ * CSS Grid 2 8.3: negative numbers count from the explicit grid's end; an end
+ * line plus a start span is just as definite as a start line plus an end span.
+ * Keep automatic placement separate from signed line coordinates. */
+static struct grid_axis_placement get_grid_axis_placement(
+    const css_computed_style *style, bool column, int explicit_tracks)
+{
+    int32_t start_value = 0, end_value = 0;
+    uint8_t start_type = CSS_GRID_LINE_AUTO, end_type = CSS_GRID_LINE_AUTO;
+    if (style != NULL) {
+        start_type = column ? css_computed_grid_column_start(style, &start_value) :
+                              css_computed_grid_row_start(style, &start_value);
+        end_type = column ? css_computed_grid_column_end(style, &end_value) :
+                            css_computed_grid_row_end(style, &end_value);
+    }
+    int start = FIXTOINT(start_value), end = FIXTOINT(end_value);
+    struct grid_axis_placement axis = {.start = GRID_PLACEMENT_AUTO, .end = GRID_PLACEMENT_AUTO, .span = 1};
+    if (start_type == CSS_GRID_LINE_SET)
+        axis.start = start > 0 ? start - 1 : explicit_tracks + start + 1;
+    if (end_type == CSS_GRID_LINE_SET)
+        axis.end = end > 0 ? end - 1 : explicit_tracks + end + 1;
+    /* Section 8.3.1: when both edges specify spans, discard the end span. */
+    if (start_type == CSS_GRID_LINE_SPAN)
+        axis.span = max(1, start);
+    else if (end_type == CSS_GRID_LINE_SPAN)
+        axis.span = max(1, end);
+
+    if (axis.start != GRID_PLACEMENT_AUTO && axis.end != GRID_PLACEMENT_AUTO) {
+        if (axis.start > axis.end) {
+            int swap = axis.start;
+            axis.start = axis.end;
+            axis.end = swap;
+        }
+        if (axis.start == axis.end)
+            axis.end = GRID_PLACEMENT_AUTO;
+        else
+            axis.span = axis.end - axis.start;
+    }
+    if (axis.start == GRID_PLACEMENT_AUTO && axis.end != GRID_PLACEMENT_AUTO)
+        axis.start = axis.end - axis.span;
+    else if (axis.start != GRID_PLACEMENT_AUTO && axis.end == GRID_PLACEMENT_AUTO)
+        axis.end = axis.start + axis.span;
+    return axis;
+}
+
+static void get_grid_item_placement(const struct grid_layout_ctx *ctx, const css_computed_style *style,
+    struct grid_placement *placement)
+{
+    struct grid_axis_placement column = get_grid_axis_placement(style, true, ctx->explicit_cols);
+    struct grid_axis_placement row = get_grid_axis_placement(style, false, ctx->row_track_count);
+    placement->col_start = column.start;
+    placement->col_end = column.end;
+    placement->col_span = column.span;
+    placement->row_start = row.start;
+    placement->row_end = row.end;
+    placement->row_span = row.span;
+}
 
 static void layout_grid_cleanup(struct grid_layout_ctx *ctx)
 {
@@ -383,7 +346,8 @@ static void layout_grid_resolve_row_gap(struct grid_layout_ctx *ctx)
 static bool layout_grid_prepare(struct grid_layout_ctx *ctx, int available_width)
 {
     struct box *grid = ctx->grid;
-    ctx->num_cols = layout_grid_get_column_count(grid);
+    ctx->explicit_cols = layout_grid_get_column_count(grid);
+    ctx->num_cols = max(1, ctx->explicit_cols);
     NSLOG(layout, WARNING, "GRID LAYOUT: grid=%p avail_w=%d num_cols=%d children=%p", grid, available_width,
         ctx->num_cols, grid->children);
     ctx->available_width = available_width;
@@ -438,28 +402,7 @@ static bool layout_grid_prepare(struct grid_layout_ctx *ctx, int available_width
 /* Resolve the grid area without changing the placement cursor or occupancy. */
 static void layout_grid_resolve_placement(const struct grid_layout_ctx *ctx, struct grid_placement *placement)
 {
-    /* Determine span from explicit line numbers if not using span syntax */
-    if (placement->col_end == GRID_PLACEMENT_SPAN || placement->col_start == GRID_PLACEMENT_SPAN) {
-        /* col_span already set by get_grid_item_placement */
-    } else if (placement->col_end != GRID_PLACEMENT_AUTO && placement->col_end > placement->col_start &&
-        placement->col_start != GRID_PLACEMENT_AUTO) {
-        placement->col_span = placement->col_end - placement->col_start;
-    }
-    /* else col_span defaults to 1 from get_grid_item_placement */
-
-    if (placement->row_end == GRID_PLACEMENT_SPAN || placement->row_start == GRID_PLACEMENT_SPAN) {
-        /* row_span already set by get_grid_item_placement */
-    } else if (placement->row_end != GRID_PLACEMENT_AUTO && placement->row_end > placement->row_start &&
-        placement->row_start != GRID_PLACEMENT_AUTO) {
-        placement->row_span = placement->row_end - placement->row_start;
-    }
-    /* else row_span defaults to 1 from get_grid_item_placement */
-
-    /* Determine item position based on explicit placement or
-     * auto-flow */
-    /* Note: GRID_PLACEMENT_SPAN means auto-place but with a span,
-     * not an explicit column/row position. Only SET provides position. */
-    if (placement->col_start != GRID_PLACEMENT_AUTO && placement->col_start != GRID_PLACEMENT_SPAN) {
+    if (placement->col_start != GRID_PLACEMENT_AUTO) {
         placement->col = placement->col_start;
     } else if (ctx->is_dense) {
         /* CSS Grid spec §8.5: Dense mode - scan from start
@@ -525,7 +468,7 @@ static void layout_grid_resolve_placement(const struct grid_layout_ctx *ctx, str
         for (int scan_col = ctx->auto_col; scan_col < ctx->num_cols && placement->col < 0; scan_col++) {
             /* Check if cell is free */
             int idx = ctx->auto_row * ctx->num_cols + scan_col;
-            if (idx < ctx->occupied_max_rows * ctx->num_cols && !ctx->occupied[idx]) {
+            if (idx >= 0 && idx < ctx->occupied_max_rows * ctx->num_cols && !ctx->occupied[idx]) {
                 placement->col = scan_col;
                 break; /* Found first free cell */
             }
@@ -551,14 +494,14 @@ static void layout_grid_resolve_placement(const struct grid_layout_ctx *ctx, str
         }
     }
 
-    if (placement->row_start != GRID_PLACEMENT_AUTO && placement->row_start != GRID_PLACEMENT_SPAN) {
+    if (placement->row_start != GRID_PLACEMENT_AUTO) {
         placement->row = placement->row_start;
-    } else if (placement->col_start != GRID_PLACEMENT_AUTO && placement->col_start != GRID_PLACEMENT_SPAN) {
+    } else if (placement->col_start != GRID_PLACEMENT_AUTO) {
         /* Phase 2: definite column, auto row - find first free row in this column */
         placement->row = 0;
         for (int scan_row = 0; scan_row < ctx->occupied_max_rows; scan_row++) {
             int idx = scan_row * ctx->num_cols + placement->col;
-            if (idx < ctx->occupied_max_rows * ctx->num_cols && !ctx->occupied[idx]) {
+            if (idx >= 0 && idx < ctx->occupied_max_rows * ctx->num_cols && !ctx->occupied[idx]) {
                 placement->row = scan_row;
                 break;
             }
@@ -576,14 +519,6 @@ static void layout_grid_resolve_placement(const struct grid_layout_ctx *ctx, str
         placement->col = ctx->num_cols - 1;
     if (placement->row < 0)
         placement->row = 0;
-
-    /* Recalculate span after positioning (for auto end values) */
-    if (placement->col_end != GRID_PLACEMENT_AUTO && placement->col_end > placement->col) {
-        placement->col_span = placement->col_end - placement->col;
-    }
-    if (placement->row_end != GRID_PLACEMENT_AUTO && placement->row_end > placement->row) {
-        placement->row_span = placement->row_end - placement->row;
-    }
 
     /* Clamp span to grid bounds */
     if (placement->col + placement->col_span > ctx->num_cols) {
@@ -1608,13 +1543,13 @@ static void layout_grid_advance_placement(struct grid_layout_ctx *ctx, const str
     /* CSS Grid spec §8: Advance auto-placement cursor
      * - row mode: Advance column, wrap to next row at end
      * - column mode: Advance row, wrap to next column at end
-     * Note: SPAN also uses auto-placement, so advance cursor for SPAN too
+     * A span without either anchoring line also uses auto-placement.
      *
      * CSS Grid spec §8.5: For items with definite column position,
      * "increment the cursor's column position to be one past the item's column-end line"
      */
-    bool col_auto = (placement->col_start == GRID_PLACEMENT_AUTO || placement->col_start == GRID_PLACEMENT_SPAN);
-    bool row_auto = (placement->row_start == GRID_PLACEMENT_AUTO || placement->row_start == GRID_PLACEMENT_SPAN);
+    bool col_auto = (placement->col_start == GRID_PLACEMENT_AUTO);
+    bool row_auto = (placement->row_start == GRID_PLACEMENT_AUTO);
 
     /* Phase 2: definite column, auto row - advance cursor past item */
     if (!col_auto && row_auto) {
@@ -1716,8 +1651,7 @@ static void layout_grid_place_items(struct grid_layout_ctx *ctx)
             if (child->style && lh__box_is_absolute(child))
                 continue;
             struct grid_placement placement = {0};
-            get_grid_item_placement(child->style, &placement.col_start, &placement.col_end, &placement.row_start,
-                &placement.row_end, &placement.col_span, &placement.row_span);
+            get_grid_item_placement(ctx, child->style, &placement);
             int phase = get_placement_phase(placement.col_start, placement.row_start);
             if ((pass == 1 && phase != GRID_PHASE_DEFINITE_BOTH) || (pass == 2 && phase == GRID_PHASE_DEFINITE_BOTH))
                 continue;

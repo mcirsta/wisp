@@ -1382,6 +1382,55 @@ the live `element.style` wrapper remain separate work. The saved eBihoreanul
 `style.opacity` blocker is not yet resolved. No additional JS APIs or old
 Duktape placeholder bindings were introduced.
 
+### Numeric grid placement specified values (2026-10-12)
+
+Committed the preceding border/outline work as `970d7820`. Added specified
+readback for the four grid-placement longhands and `grid-row`, `grid-column`
+and `grid-area`. Accepted shorthand components expand into longhands, and
+readback reconstructs the winning values with canonical `span N` ordering and
+omission of trailing `auto` defaults. Authored integer precision, importance,
+overrides, CSS-wide values and pending variables use the existing CSSOM paths.
+
+One shared native parser replaces the three duplicated shorthand parsers and
+the inconsistent generated longhand grammar. Both `span 2` and `2 span` work;
+zero line numbers, nonpositive spans, bare `span`, embedded CSS-wide keywords
+and trailing slashes are rejected. Parsing uses bounded stack storage and
+restores its token cursor and bytecode span on allocation failure. Generator
+metadata remains the source for wrappers and declaration identities.
+
+The rendering fixture exposed two underlying bugs, also fixed here:
+
+- Normalize numeric placement per axis before choosing the auto-placement
+  phase. End-anchored spans, end-only placement, negative explicit-grid indices,
+  reversed/equal edges and competing spans now follow the Grid conflict rules.
+  The shared axis helper replaces duplicated edge handling and the eight-argument
+  placement helper. Automatic placement no longer aliases negative line indices.
+- Skip grid integer payloads in both the `!important` bytecode walk and the
+  custom-property collection walk. Previously importance could turn span 2 into
+  span 3, and a large line number could skip a following custom declaration.
+  Both walks use the same payload predicate and preserve the existing encoding.
+
+Grammar and numeric placement follow [CSS Grid 2 sections 8.3–8.4](https://drafts.csswg.org/css-grid-2/#line-placement);
+specified readback follows [CSSOM serialization](https://drafts.csswg.org/cssom/#serializing-css-values).
+The 22-case geometry fixture derives expectations directly from fixed track
+sizes and gaps, and exercises resizing plus checked-state restyling round trips.
+Native regressions cover whole/chunked input, serialize/reparse, exact bytecode
+and importance, malformed fallback, variable collection, and allocation rollback.
+
+Validation: 87 selected native suites pass with Debug ASan/UBSan/LeakSanitizer;
+29 selected Release suites and all 16 selected Debug Qt integration suites pass.
+Declaration coverage is 970 Debug / 1011 Release checks, including allocator
+fault injection. All 14 generator checks pass. The 13 geometry/restyle Qt suites
+also pass in Release; the three JS log-asserting suites require Debug logging
+and were verified there. Both full builds are warning-free; no GTK tests ran.
+
+Scope remains numeric placement within the engine's existing grid model. Named
+lines, math-valued placement, implicit-column growth and prepending implicit
+tracks before the explicit grid are still unsupported. These need dedicated
+grid work; this batch does not claim full Grid conformance. Remaining CSSOM
+aggregate serializers, declaration-block writes and the live `element.style`
+wrapper remain separate work, including the saved eBihoreanul opacity blocker.
+
 ## Assessment
 
 Keep QuickJS-ng and libdom. The missing part is the browser binding and execution

@@ -476,7 +476,7 @@ if(WISP_QT_CAPTURE)
         add_test(NAME qt_grid_height
             COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_grid_height.py $<TARGET_FILE:wisp-qt>)
         set_tests_properties(qt_grid_height PROPERTIES TIMEOUT 40)
-        foreach(grid_fixture IN ITEMS grid-rows grid-areas grid-row-constraints grid-column-sizing)
+        foreach(grid_fixture IN ITEMS grid-rows grid-areas grid-row-constraints grid-column-sizing grid-placement-grammar)
             string(REPLACE "-" "_" grid_test ${grid_fixture})
             add_test(NAME qt_${grid_test}
                 COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_layout_geometry.py

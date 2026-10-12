@@ -478,6 +478,48 @@ static css_error serialize_border_component(const css_declaration_contribution *
     return css__declaration_value_serialize(&member, out);
 }
 
+/* Numeric grid placement has one line value per slash-delimited component.
+ * The shared native parser has validated each value and its integer range. */
+static css_error serialize_grid_component(const css_declaration_contribution *value, lwc_string **out)
+{
+    const css_declaration *source = value->source;
+    size_t component = 0;
+    bool span = false, automatic = false;
+    const css_declaration_token *number = NULL;
+    for (size_t i = 0; i < source->token_count; i++) {
+        const css_declaration_token *token = &source->tokens[i];
+        if (token->type == CSS_TOKEN_S)
+            continue;
+        if (token->type == CSS_TOKEN_CHAR && lwc_string_length(token->text) == 1 &&
+            lwc_string_data(token->text)[0] == '/') {
+            if (component == value->component)
+                break;
+            component++;
+        } else if (component == value->component) {
+            if (token->type == CSS_TOKEN_NUMBER)
+                number = token;
+            else if (token->type == CSS_TOKEN_IDENT && css__keyword_equal(token->text, "span"))
+                span = true;
+            else if (token->type == CSS_TOKEN_IDENT && css__keyword_equal(token->text, "auto"))
+                automatic = true;
+            else
+                return CSS_INVALID;
+        }
+    }
+    if (component < value->component || automatic)
+        return intern("auto", 4, out);
+    if (number == NULL)
+        return CSS_INVALID;
+    lwc_string *integer;
+    css_error error = serialize_numeric(number, false, &integer);
+    if (error != CSS_OK)
+        return error;
+    const struct value_format format = {span ? "span " : "", "", ""};
+    error = join_values(&integer, 1, &format, out);
+    lwc_string_unref(integer);
+    return error;
+}
+
 css_error css__declaration_value_serialize(const css_declaration_contribution *value, lwc_string **out)
 {
     if (out == NULL)
@@ -512,6 +554,8 @@ css_error css__declaration_value_serialize(const css_declaration_contribution *v
         return serialize_list_or_columns_component(value, out);
     if (kind == CSS_DECL_VALUE_BORDER || kind == CSS_DECL_VALUE_BORDER_SIDE || kind == CSS_DECL_VALUE_OUTLINE)
         return serialize_border_component(value, out);
+    if (kind == CSS_DECL_VALUE_GRID_LINE || kind == CSS_DECL_VALUE_GRID_PAIR || kind == CSS_DECL_VALUE_GRID_AREA)
+        return serialize_grid_component(value, out);
     if (kind == CSS_DECL_VALUE_COLOUR || kind == CSS_DECL_VALUE_QUAD_COLOUR)
         return css__declaration_colour_serialize(value, out);
     size_t arity = scalar_arity(kind);
@@ -583,7 +627,15 @@ static css_error serialize_components(enum css_declaration_value_kind kind,
     }
     size_t first = 0, used = count;
     lwc_string *ordered[3];
-    if (kind == CSS_DECL_VALUE_LIST_STYLE) {
+    if (kind == CSS_DECL_VALUE_GRID_PAIR || kind == CSS_DECL_VALUE_GRID_AREA) {
+        /* Numeric placements default omitted members to auto. Named-line
+         * support will need the custom-ident copying rules from Grid 2 8.4. */
+        while (used > 1 && css__keyword_equal(values[used - 1], "auto"))
+            used--;
+        const struct value_format format = {"", " / ", ""};
+        error = join_values(values, used, &format, out);
+        goto done;
+    } else if (kind == CSS_DECL_VALUE_LIST_STYLE) {
         /* CSS Lists 3 canonical order is position, image, type. Omit the
          * default image only when doing so preserves none's dual meaning. */
         used = 0;
@@ -673,7 +725,8 @@ css_error css__declaration_shorthand_serialize(const struct css_prop_entry *prop
     if (kind == CSS_DECL_VALUE_BORDER || kind == CSS_DECL_VALUE_BORDER_SIDE || kind == CSS_DECL_VALUE_OUTLINE)
         return serialize_border_shorthand(kind, members, out);
     if (scalar_arity(kind) == 1 && kind != CSS_DECL_VALUE_FLEX && kind != CSS_DECL_VALUE_FLEX_FLOW &&
-        kind != CSS_DECL_VALUE_LIST_STYLE && kind != CSS_DECL_VALUE_COLUMNS)
+        kind != CSS_DECL_VALUE_LIST_STYLE && kind != CSS_DECL_VALUE_COLUMNS &&
+        kind != CSS_DECL_VALUE_GRID_PAIR && kind != CSS_DECL_VALUE_GRID_AREA)
         return CSS_INVALID;
     return serialize_components(kind, members, count, out);
 }

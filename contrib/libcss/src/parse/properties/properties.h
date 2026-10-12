@@ -29,6 +29,8 @@ css_error css__parse_grid_template_columns_internal(
     css_language *c, const parserutils_vector *vector, int32_t *ctx, css_style *result, enum css_properties_e id);
 css_error css__parse_grid_template_rows_internal(
     css_language *c, const parserutils_vector *vector, int32_t *ctx, css_style *result, enum css_properties_e id);
+css_error css__parse_grid_line_internal(
+    css_language *c, const parserutils_vector *vector, int32_t *ctx, css_style *result, enum css_properties_e id);
 
 /** Mapping from property bytecode index to bytecode unit class mask. */
 extern const uint32_t property_unit_mask[CSS_N_PROPERTIES];

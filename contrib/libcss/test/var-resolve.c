@@ -1621,6 +1621,47 @@ static void test_property_handler_integration(void)
     destroy_style_case(&ctx);
 }
 
+/* The variable collection pass walks ordinary bytecode too. Grid integers
+ * must not be decoded as OPVs: 32768's payload resembles an angle opcode,
+ * which used to skip the following custom-property declaration. */
+static void test_grid_placement_payloads(void)
+{
+    static const struct {
+        const char *name;
+        uint8_t (*get)(const css_computed_style *, int32_t *);
+    } properties[] = {
+        {"grid-row-start", css_computed_grid_row_start},
+        {"grid-row-end", css_computed_grid_row_end},
+        {"grid-column-start", css_computed_grid_column_start},
+        {"grid-column-end", css_computed_grid_column_end},
+    };
+    static const struct { const char *text; uint8_t type; int number; } forms[] = {
+        {"auto", CSS_GRID_LINE_AUTO, 0}, {"2", CSS_GRID_LINE_SET, 2},
+        {"-3", CSS_GRID_LINE_SET, -3}, {"span 2", CSS_GRID_LINE_SPAN, 2},
+        {"32768", CSS_GRID_LINE_SET, 32768}, {"span 32768", CSS_GRID_LINE_SPAN, 32768},
+        {"initial", CSS_GRID_LINE_AUTO, 0},
+    };
+    for (size_t p = 0; p < sizeof(properties) / sizeof(properties[0]); p++) {
+        for (size_t f = 0; f < sizeof(forms) / sizeof(forms[0]); f++) {
+            for (unsigned important = 0; important < 2; important++) {
+                style_case ctx;
+                char css[256];
+                snprintf(css, sizeof(css), "div { %s:%s%s; --size:37px; width:var(--size); }",
+                    properties[p].name, forms[f].text, important ? "!important" : "");
+                const css_computed_style *style = select_style_from_css(css, &ctx);
+                expect_length_px(css, style, css_computed_width, CSS_WIDTH_SET, 37);
+                int32_t number;
+                uint8_t type = properties[p].get(style, &number);
+                if (type != forms[f].type || (type != CSS_GRID_LINE_AUTO && number != INTTOFIX(forms[f].number))) {
+                    fprintf(stderr, "Grid payload changed: %s (type %u, number %d)\n", css, type, number);
+                    assert(false);
+                }
+                destroy_style_case(&ctx);
+            }
+        }
+    }
+}
+
 static void test_environment_outlives_stylesheet(void)
 {
     style_case ctx;
@@ -1768,6 +1809,7 @@ int main(int argc, char **argv)
     test_nested_important_and_case_sensitive_names();
     test_deferred_important();
     test_property_handler_integration();
+    test_grid_placement_payloads();
     test_environment_outlives_stylesheet();
 
     lwc_iterate_strings(assert_no_interned_strings, NULL);

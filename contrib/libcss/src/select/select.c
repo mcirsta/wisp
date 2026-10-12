@@ -2771,6 +2771,8 @@ static void cascade_skip_property(css_style *style, css_code_t opv)
 
     if (css__is_background_list(opv)) {
         advance_bytecode(style, (1 + *style->bytecode) * sizeof(css_code_t));
+    } else if (css__grid_line_has_integer(opv)) {
+        advance_bytecode(style, sizeof(css_code_t));
     } else if (op == CSS_PROP_VAR_DEFERRED || op == CSS_PROP_CUSTOM_PROPERTY) {
         advance_bytecode(style, 2 * sizeof(css_code_t));
     } else if (hasFlagValue(opv) == false && value == VALUE_IS_CALC) {

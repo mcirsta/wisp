@@ -1,0 +1,34 @@
+<!doctype html><meta charset="utf-8"><title>Grid placement grammar</title>
+<!-- CSS Grid 2 sections 8.3 and 8.4. Rectangles derive from explicit track
+sizes and 5px gaps; no browser reference or font measurement is needed.
+The checkbox changes placement through native restyling. -->
+<style>
+body{margin:20px}.case{display:flow-root;width:240px;margin-bottom:30px}
+.grid{display:grid;width:160px;height:100px;grid-template-columns:40px 50px 60px;
+ grid-template-rows:20px 30px 40px;gap:5px;align-content:start;justify-content:start;background:#eee}
+.item{background:#58a}#switch{position:absolute;left:300px;top:0}
+#switch:checked ~ .case .item{grid-area:1 / 1 / span 2 / 2 span!important}
+</style><input id="switch" type="checkbox" aria-label="Change grid placement">
+<div class="case" id="row-span-case"><div class="grid" id="row-span-grid"><div class="item" id="row-span-item" style="grid-row:2 / span 2;grid-column:2"></div></div></div>
+<div class="case" id="row-reverse-case"><div class="grid" id="row-reverse-grid"><div class="item" id="row-reverse-item" style="grid-row:2 / 2 span;grid-column:2"></div></div></div>
+<div class="case" id="column-span-case"><div class="grid" id="column-span-grid"><div class="item" id="column-span-item" style="grid-column:2 / span 2;grid-row:2"></div></div></div>
+<div class="case" id="column-reverse-case"><div class="grid" id="column-reverse-grid"><div class="item" id="column-reverse-item" style="grid-column:2 / 2 span;grid-row:2"></div></div></div>
+<div class="case" id="longhand-end-case"><div class="grid" id="longhand-end-grid"><div class="item" id="longhand-end-item" style="grid-row-start:2;grid-row-end:2 span;grid-column-start:2;grid-column-end:span 2"></div></div></div>
+<div class="case" id="longhand-start-case"><div class="grid" id="longhand-start-grid"><div class="item" id="longhand-start-item" style="grid-row-start:span 2;grid-row-end:4;grid-column-start:2 span;grid-column-end:4"></div></div></div>
+<div class="case" id="area-span-case"><div class="grid" id="area-span-grid"><div class="item" id="area-span-item" style="grid-area:2 / 2 / span 2 / 2 span"></div></div></div>
+<div class="case" id="area-defaults-case"><div class="grid" id="area-defaults-grid"><div class="item" id="area-defaults-item" style="grid-area:2 / 2"></div></div></div>
+<div class="case" id="trailing-one-case"><div class="grid" id="trailing-one-grid"><div class="item" id="trailing-one-item" style="grid-area:2 / 2 / 4 / 4;grid-area:1 /"></div></div></div>
+<div class="case" id="trailing-four-case"><div class="grid" id="trailing-four-grid"><div class="item" id="trailing-four-item" style="grid-area:2 / 2 / 4 / 4;grid-area:1 / 1 / 2 / 2 /"></div></div></div>
+<div class="case" id="bare-span-case"><div class="grid" id="bare-span-grid"><div class="item" id="bare-span-item" style="grid-row:2 / 4;grid-row:span;grid-column:2 / 4"></div></div></div>
+<div class="case" id="zero-line-case"><div class="grid" id="zero-line-grid"><div class="item" id="zero-line-item" style="grid-row:2 / 4;grid-row-start:0;grid-column:2 / 4"></div></div></div>
+<div class="case" id="embedded-wide-case"><div class="grid" id="embedded-wide-grid"><div class="item" id="embedded-wide-item" style="grid-row:2 / 4;grid-column:2 / 4;grid-area:1 / 1 / initial"></div></div></div>
+<div class="case" id="variable-case"><div class="grid" id="variable-grid"><div class="item" id="variable-item" style="--line:2 span;grid-column:2 / var(--line);grid-row:2 / 4"></div></div></div>
+<div class="case" id="end-only-case"><div class="grid" id="end-only-grid"><div class="item" id="end-only-item" style="grid-row:auto / 4;grid-column:auto / 4"></div></div></div>
+<div class="case" id="reversed-lines-case"><div class="grid" id="reversed-lines-grid"><div class="item" id="reversed-lines-item" style="grid-row:4 / 2;grid-column:4 / 2"></div></div></div>
+<div class="case" id="equal-lines-case"><div class="grid" id="equal-lines-grid"><div class="item" id="equal-lines-item" style="grid-row:2 / 2;grid-column:2 / 2"></div></div></div>
+<div class="case" id="negative-lines-case"><div class="grid" id="negative-lines-grid"><div class="item" id="negative-lines-item" style="grid-row:-3 / -1;grid-column:-3 / -1"></div></div></div>
+<div class="case" id="negative-end-span-case"><div class="grid" id="negative-end-span-grid"><div class="item" id="negative-end-span-item" style="grid-row:span 2 / -1;grid-column:span 2 / -1"></div></div></div>
+<div class="case" id="negative-first-case"><div class="grid" id="negative-first-grid"><div class="item" id="negative-first-item" style="grid-area:-4 / -4 / -2 / -2"></div></div></div>
+<div class="case" id="both-spans-case"><div class="grid" id="both-spans-grid"><div class="item" id="both-spans-item" style="grid-row:span 2 / span 3;grid-column:span 2 / span 3"></div></div></div>
+<!-- The end-anchored item must reserve its cell before the earlier automatic item. -->
+<div class="case" id="phase-case"><div class="grid" id="phase-grid"><div class="item" id="phase-auto"></div><div class="item" id="phase-anchored" style="grid-row:span 1 / 2;grid-column:span 1 / 2"></div></div></div>

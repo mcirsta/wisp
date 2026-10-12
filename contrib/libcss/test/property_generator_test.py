@@ -47,7 +47,8 @@ class DeclarationMetadataTest(unittest.TestCase):
                     self.reader.validate_declarations()
 
     def test_ordered_shorthand_members(self):
-        for name in ("flex", "flex_flow", "list_style", "columns", "border", "border_top", "outline", "column_rule"):
+        for name in ("flex", "flex_flow", "list_style", "columns", "border", "border_top", "outline", "column_rule",
+                     "grid_row", "grid_column", "grid_area"):
             with self.subTest(name=name):
                 members = self.reader.toml_data[name]["declaration_longhands"]
                 members.reverse()
@@ -76,7 +77,7 @@ class DeclarationMetadataTest(unittest.TestCase):
 
     def test_scalar_family_cannot_describe_shorthand(self):
         for kind in ("keyword", "uri", "image_list", "keyword_list", "content", "string_list", "counter_list",
-                     "aspect_ratio", "border_spacing", "clip", "font_family", "colour"):
+                     "aspect_ratio", "border_spacing", "clip", "font_family", "colour", "grid_line"):
             with self.subTest(kind=kind):
                 self.reader.toml_data["overflow"]["declaration_value"] = kind
                 with self.assertRaisesRegex(ValueError, "overflow: declaration_value requires 0"):
