@@ -49,6 +49,13 @@ html, body { margin: 0; background: white; }
     border:10px solid #024; border:1fr solid red; }
 #border-current { left:410px; top:310px; box-sizing:border-box; color:#024;
     border:10px solid; }
+/* CSS Color 4: none is zero for direct painting, without losing its identity
+ * in specified-value serialization. These are not interpolation tests. */
+#missing-hue { left:10px; top:370px; background:hsl(none 100% 50%); }
+#missing-saturation { left:110px; top:370px; background:hsl(120 none 50%); }
+#missing-lightness { left:210px; top:370px; background:hsl(120 100% none); }
+#missing-white { left:310px; top:370px; background:hwb(120 none 20%); }
+#missing-black { left:410px; top:370px; background:hwb(240 20% none); }
 </style>
 <div id="hex" class="case"></div><div id="fraction" class="case"></div>
 <div id="mixed" class="case"></div><div id="alpha" class="case"></div>
@@ -72,3 +79,6 @@ html, body { margin: 0; background: white; }
 <div id="border-negative-fallback" class="case"></div>
 <div id="border-fr-fallback" class="case"></div>
 <div id="border-current" class="case"></div>
+<div id="missing-hue" class="case"></div><div id="missing-saturation" class="case"></div>
+<div id="missing-lightness" class="case"></div><div id="missing-white" class="case"></div>
+<div id="missing-black" class="case"></div>

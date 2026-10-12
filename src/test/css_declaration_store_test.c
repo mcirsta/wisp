@@ -370,6 +370,12 @@ static const struct {
     const char *name, *value, *priority, *expected;
     bool important;
 } inputs[] = {
+    {"color", "HSLA(NONE 100 50 / 50%)", "important", "hsl(none 100% 50% / 0.5)", true},
+    {"background", "hwb(20 none 30% / none)", "", "hwb(20 none 30% / none)"},
+    {"border", "solid hsl(-.5turn none 50%)", "", "solid hsl(180 none 50%)"},
+    {"background-image", "radial-gradient(hsl(none 100 50),hwb(120 none 0))", "",
+        "radial-gradient(hsl(none 100% 50%), hwb(120 none 0%))"},
+
     {"background-image", "linear-gradient(TO bottom,red 0%,blue 100%)", "important", "linear-gradient(red, blue)", true},
     {"background", "radial-gradient(ellipse,red,blue) no-repeat fixed", "", "radial-gradient(red, blue) no-repeat fixed"},
     {"background-image", "linear-gradient(red,blue", "", "linear-gradient(red, blue)"},

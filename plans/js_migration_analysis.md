@@ -1959,6 +1959,41 @@ The Duktape style getter was rechecked; its empty-object placeholder provides no
 specified-value handling to reuse. Live object identity, DOM synchronization and
 JS mutation attribution remain to be connected.
 
+### Missing HSL/HWB component readback (2026-10-12)
+
+Committed specified gradient readback as `bdb66665`. Native declaration readback
+now preserves `none` in HSL/HSLA/HWB colors, including border/background
+shorthands, gradient stops, owned assignments and whole declaration blocks.
+[CSS Color 4 section 16.2.2](https://drafts.csswg.org/css-color-4/#serializing-sRGB-values)
+requires their original color space and missing components to survive specified
+serialization: for example, `hsla(120 none 50 / 50%)` becomes
+`hsl(120 none 50% / 0.5)`.
+
+The shared parser retains polar coordinates until painting or legacy RGB
+serialization needs conversion. Direct painting remains allocation-free and
+treats missing components as zero. Readback uses shared numeric-token formatting
+for unbounded percentages, normalizes hue and alpha, preserves missing alpha,
+and clamps negative HSL saturation according to its grammar. No property grammar,
+generated registrations or persistent per-page storage are added.
+
+Coverage includes every missing-component combination, aliases/escaped names,
+angle units, rounding boundaries, unbounded percentages, priorities, whole and
+byte-by-byte input, parse/serialize/parse equivalence and allocation-failure
+recovery. Five new Qt pixel samples check direct painting of missing hue,
+saturation, lightness, whiteness and blackness.
+
+Validation: all 80 selected native CSS/QuickJS/font suites and all six selected
+Qt rendering regressions pass in Debug and Release. Debug native tests include
+ASan/UBSan and LeakSanitizer. Both builds are warning-free, `git diff --check`
+is clean, and no GTK tests ran.
+
+This does not add color interpolation support. Missing RGB components still need
+real `color(srgb ...)` support before their required serialization can round-trip;
+out-of-gamut RGB conversion, other color families, math and remaining aggregate
+serializers are still separate work. Unsupported native readback continues to
+return an explicit error. The live `element.style` object, DOM synchronization
+and JS mutation attribution remain pending.
+
 ## Assessment
 
 Keep QuickJS-ng and libdom. The missing part is the browser binding and execution

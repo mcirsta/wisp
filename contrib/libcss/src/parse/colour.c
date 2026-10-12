@@ -7,10 +7,12 @@
 #include <float.h>
 #include <math.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "bytecode/bytecode.h"
 #include "parse/colour.h"
+#include "parse/declaration_value.h"
 #include "parse/property.h"
 #include "parse/properties/utils.h"
 
@@ -21,9 +23,9 @@ struct colour_token {
     lwc_string *text;
 };
 
-struct rgb_colour {
-    /* RGB 0..255 reference range, alpha 0..1; polar parsing converts in place.
-     * Out-of-gamut RGB components can exceed the reference range. */
+struct colour_value {
+    /* Parsed coordinates remain in their original RGB/HSL/HWB space, alpha
+     * 0..1. Convert only at the rendering or legacy RGB serialization boundary. */
     double channels[4];
     unsigned missing;
 };
@@ -107,12 +109,12 @@ static bool hue_number(const struct colour_token *token, double *out)
  * matching RGB component types and excludes none; modern syntax allows mixing
  * percentages/numbers and uses '/' before alpha. Math/relative forms need their
  * own typed representation and are not accepted here. */
-static bool rgb_value(const struct colour_token *tokens, size_t count, struct rgb_colour *out)
+static bool rgb_value(const struct colour_token *tokens, size_t count, struct colour_value *out)
 {
     if (count < 4)
         return false;
     bool legacy = character(&tokens[1], ',');
-    *out = (struct rgb_colour){{0, 0, 0, 1}, 0};
+    *out = (struct colour_value){{0, 0, 0, 1}, 0};
     size_t pos = 0;
     for (size_t i = 0; i < 4; i++) {
         if (pos >= count)
@@ -167,7 +169,7 @@ static enum colour_function colour_function(lwc_string *name)
 
 /* CSS Color 4 §7.1 and §8.1. Keep fractional components until the rendering
  * boundary. In particular HWB white/black normalize together, not individually. */
-static void polar_to_rgb(enum colour_function function, struct rgb_colour *colour)
+static void polar_to_rgb(enum colour_function function, struct colour_value *colour)
 {
     double hue = colour->channels[0];
     double first = colour->channels[1] / 100;
@@ -203,14 +205,14 @@ static void polar_to_rgb(enum colour_function function, struct rgb_colour *colou
 }
 
 static bool polar_value(enum colour_function function, const struct colour_token *tokens, size_t count,
-    struct rgb_colour *out)
+    struct colour_value *out)
 {
     if (count < 4)
         return false;
     bool legacy = character(&tokens[1], ',');
     if (legacy && function == COLOUR_HWB)
         return false;
-    *out = (struct rgb_colour){{0, 0, 0, 1}, 0};
+    *out = (struct colour_value){{0, 0, 0, 1}, 0};
     size_t pos = 0;
     for (size_t i = 0; i < 4; i++) {
         if (pos >= count)
@@ -247,7 +249,6 @@ static bool polar_value(enum colour_function function, const struct colour_token
         if (i >= 2 && character(&tokens[pos], ')')) {
             if (pos + 1 != count)
                 return false;
-            polar_to_rgb(function, out);
             return true;
         }
         if (i == 3)
@@ -261,7 +262,7 @@ static bool polar_value(enum colour_function function, const struct colour_token
 }
 
 static bool function_value(enum colour_function function, const struct colour_token *tokens, size_t count,
-    struct rgb_colour *out)
+    struct colour_value *out)
 {
     if (function == COLOUR_RGB)
         return rgb_value(tokens, count, out);
@@ -291,9 +292,12 @@ bool css__parse_colour_function(lwc_string *name, const parserutils_vector *vect
         if (tokenIsChar(token, ')'))
             break;
     }
-    struct rgb_colour colour;
-    if (!function_value(colour_function(name), tokens, count, &colour))
+    enum colour_function function = colour_function(name);
+    struct colour_value colour;
+    if (!function_value(function, tokens, count, &colour))
         return false;
+    if (function == COLOUR_HSL || function == COLOUR_HWB)
+        polar_to_rgb(function, &colour);
     uint32_t red = channel_byte(colour.channels[0]);
     uint32_t green = channel_byte(colour.channels[1]);
     uint32_t blue = channel_byte(colour.channels[2]);
@@ -302,7 +306,7 @@ bool css__parse_colour_function(lwc_string *name, const parserutils_vector *vect
     return true;
 }
 
-/* Values are bounded by 255. Integer formatting keeps the decimal separator
+/* Values are bounded by 360. Integer formatting keeps the decimal separator
  * independent of LC_NUMERIC; CSSOM permits at most six fractional digits. */
 static size_t number(char *out, double value)
 {
@@ -316,10 +320,84 @@ static size_t number(char *out, double value)
     return used;
 }
 
-static css_error serialize_rgb(const struct rgb_colour *colour, lwc_string **out)
+/* Assemble modern color syntax after serializing its individual components.
+ * A missing alpha is a real fourth component; an omitted alpha is NULL. */
+static css_error serialize_modern(const char *name, lwc_string *const parts[4], lwc_string **out)
 {
-    /* Missing components must retain their original colour-space identity in
-     * CSSOM. Their modern serialization is separate work, not conversion to zero. */
+    size_t count = parts[3] == NULL ? 3 : 4;
+    size_t length = strlen(name) + (count == 3 ? 4 : 7); /* Delimiters and separators. */
+    for (size_t i = 0; i < count; i++) {
+        size_t n = lwc_string_length(parts[i]);
+        if (n > SIZE_MAX - length)
+            return CSS_NOMEM;
+        length += n;
+    }
+    char *buffer = malloc(length);
+    if (buffer == NULL)
+        return CSS_NOMEM;
+    size_t used = strlen(name);
+    memcpy(buffer, name, used);
+    buffer[used++] = '(';
+    for (size_t i = 0; i < count; i++) {
+        if (i != 0)
+            buffer[used++] = ' ';
+        if (i == 3) {
+            buffer[used++] = '/';
+            buffer[used++] = ' ';
+        }
+        size_t n = lwc_string_length(parts[i]);
+        memcpy(buffer + used, lwc_string_data(parts[i]), n);
+        used += n;
+    }
+    buffer[used++] = ')';
+    css_error error = lwc_intern_string(buffer, used, out) == lwc_error_ok ? CSS_OK : CSS_NOMEM;
+    free(buffer);
+    return error;
+}
+
+/* CSS Color 4 section 16.2.2 preserves HSL/HWB none in the original space.
+ * The parser has validated modern syntax, so the first three tokens are the
+ * coordinates. Unbounded percentages use the shared decimal-token serializer,
+ * not a double or a rendering integer; only hue/alpha need normalized numbers. */
+static css_error serialize_missing_polar(enum colour_function function, const struct colour_token *tokens,
+    const struct colour_value *colour, lwc_string **out)
+{
+    lwc_string *parts[4] = {0};
+    css_error error = CSS_OK;
+    for (size_t i = 0; i < 4; i++) {
+        if (colour->missing & (1u << i)) {
+            error = lwc_intern_string("none", 4, &parts[i]) == lwc_error_ok ? CSS_OK : CSS_NOMEM;
+        } else if (i == 0 || i == 3) {
+            char buffer[16]; /* Bounded hue/alpha, at most six fractional digits. */
+            double value = colour->channels[i];
+            if (i == 0 && floor(value * 1000000 + 0.5) == 360000000)
+                value = 0; /* Rounding must not produce a noncanonical full turn. */
+            size_t length = number(buffer, value);
+            if (i == 3 && length == 1 && buffer[0] == '1')
+                continue;
+            error = lwc_intern_string(buffer, length, &parts[i]) == lwc_error_ok ? CSS_OK : CSS_NOMEM;
+        } else if (function == COLOUR_HSL && i == 1 && css__number_sign(tokens[i].text) < 0) {
+            error = lwc_intern_string("0%", 2, &parts[i]) == lwc_error_ok ? CSS_OK : CSS_NOMEM;
+        } else {
+            css_declaration_token percentage = {.type = CSS_TOKEN_PERCENTAGE, .text = tokens[i].text};
+            error = css__declaration_numeric_serialize(&percentage, false, &parts[i]);
+        }
+        if (error != CSS_OK)
+            break;
+    }
+    if (error == CSS_OK)
+        error = serialize_modern(function == COLOUR_HSL ? "hsl" : "hwb", parts, out);
+    for (size_t i = 0; i < N_ELEMENTS(parts); i++) {
+        if (parts[i] != NULL)
+            lwc_string_unref(parts[i]);
+    }
+    return error;
+}
+
+static css_error serialize_rgb(const struct colour_value *colour, lwc_string **out)
+{
+    /* Missing RGB components need color(srgb ...) support before readback can
+     * round-trip. HSL/HWB missing values take their own modern syntax path. */
     if (colour->missing != 0)
         return CSS_INVALID;
     for (size_t i = 0; i < 3; i++) {
@@ -376,7 +454,7 @@ css_error css__declaration_colour_serialize(const css_declaration_contribution *
     const css_declaration_token *token = colour_component(value, &end);
     if (token == NULL)
         return CSS_INVALID;
-    struct rgb_colour colour = {{0, 0, 0, 1}, 0};
+    struct colour_value colour = {{0, 0, 0, 1}, 0};
     if (token->type == CSS_TOKEN_HASH || token->type == CSS_TOKEN_IDENT || token->type == CSS_TOKEN_NUMBER ||
         token->type == CSS_TOKEN_DIMENSION) {
         uint32_t packed;
@@ -410,6 +488,11 @@ css_error css__declaration_colour_serialize(const css_declaration_contribution *
         }
         if (!function_value(function, tokens, count, &colour))
             return CSS_INVALID;
+        if (function == COLOUR_HSL || function == COLOUR_HWB) {
+            if (colour.missing != 0)
+                return serialize_missing_polar(function, tokens, &colour, out);
+            polar_to_rgb(function, &colour);
+        }
     } else {
         return CSS_INVALID;
     }

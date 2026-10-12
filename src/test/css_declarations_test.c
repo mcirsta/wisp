@@ -1293,10 +1293,46 @@ static const struct {
     {"color:hsl(30 200% 50%)", "color", NULL},
     {"color:hsl(0 0% 110%)", "color", NULL},
     {"color:hsl(0 0% -10%)", "color", NULL},
-    {"color:hsl(none 100% 50%)", "color", NULL},
-    {"color:hsla(120 none 50% / none)", "color", NULL},
-    {"color:hwb(none none none)", "color", NULL},
-    {"color:hwb(0 20% 10% / none)", "color", NULL},
+    {"color:hsl(none 100% 50%)", "color", "hsl(none 100% 50%)"},
+    {"color:hsla(120 none 50% / none)", "color", "hsl(120 none 50% / none)"},
+    {"color:hwb(none none none)", "color", "hwb(none none none)"},
+    {"color:hwb(0 20% 10% / none)", "color", "hwb(0 20% 10% / none)"},
+    /* CSS Color 4 section 16.2.2: missing polar components keep their space. */
+    {"color:HSLA(NONE +0100 050 / 100%)", "color", "hsl(none 100% 50%)"},
+    {"color:hsl(740deg none .1234567%)", "color", "hsl(20 none 0.123457%)"},
+    {"color:hwb(740deg 20% none / .5000000)", "color", "hwb(20 20% none / 0.5)"},
+    {"color:hwb(20 none 30% / none)", "color", "hwb(20 none 30% / none)"},
+    {"color:hsl(-.5turn none 50%)", "color", "hsl(180 none 50%)"},
+    {"color:hwb(100grad 30 none)", "color", "hwb(90 30% none)"},
+    {"color:hsl(3.141592653589793rad 100% none)", "color", "hsl(180 100% none)"},
+    {"color:hsl(1000000000.25turn none 50%)", "color", "hsl(90 none 50%)"},
+    {"color:hsl(-.00000001deg none 50%)", "color", "hsl(0 none 50%)"},
+    {"color:hwb(359.9999999 20% none)", "color", "hwb(0 20% none)"},
+    {"color:hsl(none -.00000001 50%)", "color", "hsl(none 0% 50%)"},
+    {"color:hsl(none -0 -0)", "color", "hsl(none 0% 0%)"},
+    {"color:hsl(none 200% 110%)", "color", "hsl(none 200% 110%)"},
+    {"color:hsl(none 20% -10%)", "color", "hsl(none 20% -10%)"},
+    {"color:hwb(none -10% 10%)", "color", "hwb(none -10% 10%)"},
+    {"color:hwb(none 400% 200%)", "color", "hwb(none 400% 200%)"},
+    {"color:hwb(none 100000000000000000000 50000000000000000000)", "color",
+        "hwb(none 100000000000000000000% 50000000000000000000%)"},
+    {"color:hsl(none 30.1234567% 123456789123456789.7654321%)", "color",
+        "hsl(none 30.123457% 123456789123456789.765432%)"},
+    {"color:hwb(none 0 0 / -1)", "color", "hwb(none 0% 0% / 0)"},
+    {"color:hsl(none 100 50 / 1000000)", "color", "hsl(none 100% 50%)"},
+    {"color:hwb(none 20 30 / .1234567)", "color", "hwb(none 20% 30% / 0.123457)"},
+    {"color:hsl(none 100 50 / .99999999)", "color", "hsl(none 100% 50%)"},
+    {"color:hsl(none 100 50 / .00000001)", "color", "hsl(none 100% 50% / 0)"},
+    {"color:h\\73la(n\\6fne/**/100/**/50/NoNe)", "color", "hsl(none 100% 50% / none)"},
+    {"color:hsl(none 100% 50%)!important;color:blue", "color", "hsl(none 100% 50%)"},
+    {"border-color:hsl(none 100 50) hwb(120 none 10)", "border-color",
+        "hsl(none 100% 50%) hwb(120 none 10%)"},
+    {"border:solid hsl(none 100 50)", "border", "solid hsl(none 100% 50%)"},
+    {"outline:1px hwb(none 0 0) dashed", "outline", "hwb(none 0% 0%) dashed 1px"},
+    {"background:linear-gradient(hsl(none 100 50),hwb(120 none 0)) fixed hsl(0 none 50)", "background",
+        "linear-gradient(hsl(none 100% 50%), hwb(120 none 0%)) fixed hsl(0 none 50%)"},
+    {"background-image:radial-gradient(circle,hwb(none none none),hsl(0 none 50 / none))", "background-image",
+        "radial-gradient(circle, hwb(none none none), hsl(0 none 50% / none))"},
     {"color:HWB(740deg 20% 30% / 50%)", "color", "rgba(178.5, 93.5, 51, 0.5)"},
     {"color:hwb(150 20% 10%)", "color", "rgb(51, 229.5, 140.25)"},
     {"color:hwb(267 19% 60%)", "color", "rgb(72.5475, 48.45, 102)"},
@@ -2364,6 +2400,44 @@ START_TEST(test_colour_alpha_roundtrip)
         css__declaration_order_destroy(order);
         css__declaration_list_destroy(list);
         css__declaration_list_destroy(again);
+    }
+}
+END_TEST
+
+/* Every missing-component combination must survive CSSOM without turning none
+ * into zero, inventing a missing component, or changing direct-rendering bytes. */
+START_TEST(test_missing_polar_roundtrip)
+{
+    static const char *const authored[] = {"-240deg", "025", "050%", "050%"};
+    static const char *const normalized[] = {"120", "25%", "50%", "0.5"};
+    for (unsigned hwb = 0; hwb < 2; hwb++) {
+        for (unsigned mask = 1; mask < 16; mask++) {
+            char input[160], expected[160];
+            const char *parts[4], *values[4];
+            for (unsigned i = 0; i < 4; i++) {
+                parts[i] = mask & (1u << i) ? "none" : authored[i];
+                values[i] = mask & (1u << i) ? "none" : normalized[i];
+            }
+            snprintf(input, sizeof(input), "color:%s(%s %s %s / %s)", hwb ? "HWB" : "HSLA",
+                parts[0], parts[1], parts[2], parts[3]);
+            snprintf(expected, sizeof(expected), "%s(%s %s %s / %s)", hwb ? "hwb" : "hsl",
+                values[0], values[1], values[2], values[3]);
+            css_declaration_list *list = parse(input, _i != 0);
+            ck_assert_uint_eq(css__declaration_list_count(list), 1);
+            css_declaration_order *order;
+            ck_assert_int_eq(css__declaration_order_create(list, &order), CSS_OK);
+            lwc_string *value;
+            ck_assert_int_eq(serialize_property(order, "color", &value), CSS_OK);
+            ck_assert_msg(strcmp(lwc_string_data(value), expected) == 0,
+                "%s expected %s, got %s", input, expected, lwc_string_data(value));
+            snprintf(input, sizeof(input), "color:%s", lwc_string_data(value));
+            css_declaration_list *again = parse(input, _i != 0);
+            compare_sheets(css__declaration_list_sheet(list), css__declaration_list_sheet(again));
+            lwc_string_unref(value);
+            css__declaration_order_destroy(order);
+            css__declaration_list_destroy(list);
+            css__declaration_list_destroy(again);
+        }
     }
 }
 END_TEST
@@ -3814,7 +3888,7 @@ START_TEST(test_value_allocation_failure)
                       "quotes:'«' '»'; counter-reset:Chapter 0 Section -0002;"
                       "aspect-ratio:auto .1234567; border-spacing:.3456789em .5678912px;"
                       "flex:.1234567 .3456789 1.2345678px;flex-flow:wrap-reverse column;"
-                      "color:rgb(1.2 3.4 5.6 / .234567);border-color:#1234 hsl(12 34% 56%) hwb(78 9% 10%);"
+                      "color:hsl(none 34.5678912% 56% / .234567);border-color:#1234 hsl(12 none 56%) hwb(78 9% none);"
                       "clip:rect(.1234567px, auto, -1.2345678em, 1px);"
                       "list-style:none inside url(Marker.png);columns:.1234567em 3;"
                       "grid-area:2/3/span 4/5 span;grid-column:2 span/3;"
@@ -3840,7 +3914,7 @@ START_TEST(test_value_allocation_failure)
      * the same longhand serializer already covered by the ordinary inputs. */
     if (strncmp(name, "background", 10) == 0)
         css = "background:url('a,b\\\"c\\\\d\\1 e.png') no-repeat .1234567em -2.3456789% fixed,"
-              "linear-gradient(45.1234567deg,rgb(1.2 3.4 5.6 / .4) .1234567em,blue) repeat no-repeat top "
+              "linear-gradient(45.1234567deg,hsl(none 34.5678912% 56% / .4) .1234567em,blue) repeat no-repeat top "
               "rgb(1.2 3.4 5.6 / .4)";
     if (strcmp(name, "font") == 0 || strcmp(name, "font-size") == 0 || strcmp(name, "line-height") == 0)
         css = "font:italic small-caps bold 1.2345678em / 1.3456789 One Two,serif";
@@ -3925,6 +3999,7 @@ int main(void)
     tcase_add_test(tc, test_quirky_border_values);
     tcase_add_loop_test(tc, test_colour_alpha_roundtrip, 0, 2);
     tcase_add_test(tc, test_quirky_colour_values);
+    tcase_add_loop_test(tc, test_missing_polar_roundtrip, 0, 2);
     tcase_add_loop_test(tc, test_colour_rendering_values, 0, 2);
     tcase_add_loop_test(tc, test_colour_invalid, 0, 2);
     tcase_add_loop_test(tc, test_unsupported_colour_fallbacks, 0, 2);

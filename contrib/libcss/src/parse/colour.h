@@ -12,9 +12,10 @@
  * restores ctx on failure. No allocation; rendering alone quantizes to ARGB8. */
 bool css__parse_colour_function(lwc_string *name, const parserutils_vector *vector, int32_t *ctx, uint32_t *result);
 
-/* Specified named/hex/RGB/HSL/HWB colours and border-color components. Missing
- * components, out-of-gamut conversions and other functions remain explicitly
- * unsupported, as in declaration_value.h. */
+/* Specified named/hex/RGB/HSL/HWB colours and border-color components, including
+ * HSL/HWB missing components in their original color space. Missing RGB values,
+ * out-of-gamut RGB conversions and other functions remain explicitly unsupported,
+ * as in declaration_value.h. */
 css_error css__declaration_colour_serialize(const css_declaration_contribution *value, lwc_string **out);
 
 #endif

@@ -7,7 +7,7 @@ import subprocess
 import sys
 import tempfile
 
-WIDTH, HEIGHT = 520, 370
+WIDTH, HEIGHT = 520, 430
 # CSS Color 4 clamping and nearest-integer rounding for the ARGB8 painter.
 # Sample flat interiors so text, antialiasing and edge coverage cannot affect them.
 SAMPLES = [
@@ -47,6 +47,11 @@ SAMPLES = [
     ("tiny negative width fallback", 215, 330, (0, 34, 68)),
     ("grid unit width fallback", 315, 330, (0, 34, 68)),
     ("omitted border colour", 415, 330, (0, 34, 68)),
+    ("missing HSL hue paints as zero", 50, 390, (255, 0, 0)),
+    ("missing HSL saturation paints as zero", 150, 390, (128, 128, 128)),
+    ("missing HSL lightness paints as zero", 250, 390, (0, 0, 0)),
+    ("missing HWB whiteness paints as zero", 350, 390, (0, 204, 0)),
+    ("missing HWB blackness paints as zero", 450, 390, (51, 51, 255)),
 ]
 
 binary = Path(sys.argv[1]).resolve()
