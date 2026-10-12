@@ -41,6 +41,12 @@ typedef struct css_declaration {
     uint32_t bytecode_length;
 } css_declaration;
 
+/* Own an independent copy of the specified value, without retaining its parsed
+ * stylesheet or bytecode. The destination must be uninitialized; on failure it
+ * is zeroed. Used only by native declaration editing, not ordinary styling. */
+css_error css__declaration_copy_value(const css_declaration *source, css_declaration *out);
+void css__declaration_fini(css_declaration *entry);
+
 /* End of one scalar/function component in validated tokens, or zero for an
  * unbalanced function. Does not split whitespace inside function arguments. */
 size_t css__declaration_component_end(const css_declaration *source, size_t start);

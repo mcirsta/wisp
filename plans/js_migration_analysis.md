@@ -1783,6 +1783,69 @@ implement native declaration mutations, then connect the stable live
 `element.style` wrapper to DOM changes and JS attribution. The saved eBihoreanul
 opacity blocker remains until that wrapper is available.
 
+### Owned native declaration editing (2026-10-12)
+
+Committed declaration-block serialization as `30665621`. Added the private
+`parse/declaration_store.{c,h}` layer: an owned collection of winning specified
+declarations with native assignment, removal, property value/priority lookup,
+ordered enumeration and block serialization. It accepts already-parsed
+declarations; it is not yet a string-based `setProperty()` API or a JS binding.
+
+Assignment follows [CSSOM section 6.6.1](https://drafts.csswg.org/cssom/#set-a-css-declaration):
+expand shorthands in registered order, replace the existing priority, and keep
+an existing property's position unless a later declaration in the same logical
+group has different mapping logic. In that case move the target to the end.
+Unrelated declarations retain their values and relative order. Removal handles
+all shorthand members, including incomplete or mixed-priority shorthands.
+Ordinary property lookups normalize ASCII case and legacy aliases; custom names
+remain case-sensitive. Names use explicit lengths and are already decoded:
+these APIs do not interpret CSS escapes in property-name arguments.
+
+The store copies only winning specified values, never retains a compiled
+stylesheet or reparses serialized cssText, and shares each source among its
+surviving shorthand members. This preserves pending `var()` values after a
+partial override and allows the original shorthand to be assigned again.
+Replacing/removing the last contribution immediately releases its source;
+repeated edits do not accumulate old source values. Growth of the ordered array
+is amortized, exact repeated assignments skip allocation/serialization, and
+removal allocates nothing. All fallible assignment work precedes mutation.
+Ordinary page styling does not create a store or incur this editing work.
+
+The store reuses the generated property registrations, shorthand membership,
+logical groups, aliases and maximum member count from `properties.toml`.
+Logical-group metadata lookup is shared with block serialization, which now
+also accepts an owned store's contribution array without copying it. Parsed
+declaration cleanup and specified-value copying share the same ownership code.
+The old Duktape `HTMLElement::style` getter was checked again: its empty-object
+placeholder has no editing or lifetime implementation to carry forward.
+
+Tests cover whole/chunked input, replacement versus initial priority resolution,
+physical/logical reorderings in both directions, unrelated groups, partial and
+complete shorthands, every generated shorthand, aliases, custom names, explicit
+name lengths, ownership after parser teardown, assignment from a store's own
+borrowed source, exact-repeat no-ops and unsupported readback without mutation.
+Repeated-edit and last-shorthand-member checks verify immediate source release.
+Release allocation-failure sweeps cover malloc/calloc/realloc during creation
+and assignment, preserve borrowed entries and prior values on failure, and
+retry successfully; removal and exact repeats also work with allocation denied.
+
+Validation: all 80 selected native CSS/QuickJS/font suites and all four selected
+Qt regressions pass in Debug and Release. The new store suite passes 82 Debug /
+88 Release checks, including the final source-lifetime test; Debug native tests
+run with ASan/UBSan and LeakSanitizer. Qt coverage includes line-height,
+background layers, gap aliases and deferred revert. Builds are warning-free,
+`git diff --check` is clean, and no GTK tests ran.
+
+Remaining work: a dedicated single-property input parser must validate the
+whole value and the separate priority argument. Taking the first accepted
+declaration from an arbitrary declaration-list string would incorrectly accept
+trailing declarations or embedded `!important`. Finish missing specified-value
+families (including math/gradients/other aggregates), then connect the stable
+live `element.style` object to DOM synchronization and JS mutation attribution.
+Unsupported readback still reports an explicit native error, never fabricated
+text. The saved eBihoreanul opacity blocker remains until that live binding is
+available.
+
 ## Assessment
 
 Keep QuickJS-ng and libdom. The missing part is the browser binding and execution

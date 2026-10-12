@@ -23,7 +23,7 @@ struct css_declaration_list {
     bool complete;
 };
 
-static void declaration_destroy(css_declaration *entry)
+void css__declaration_fini(css_declaration *entry)
 {
     if (entry->name != NULL)
         lwc_string_unref(entry->name);
@@ -34,6 +34,30 @@ static void declaration_destroy(css_declaration *entry)
             lwc_string_unref(entry->tokens[i].text);
     }
     free((void *)entry->tokens);
+}
+
+css_error css__declaration_copy_value(const css_declaration *source, css_declaration *out)
+{
+    *out = (css_declaration){0};
+    css_declaration_token *tokens = NULL;
+    if (source->token_count != 0) {
+        if (source->token_count > SIZE_MAX / sizeof(*tokens))
+            return CSS_NOMEM;
+        tokens = malloc(source->token_count * sizeof(*tokens));
+        if (tokens == NULL)
+            return CSS_NOMEM;
+        for (size_t i = 0; i < source->token_count; i++) {
+            tokens[i] = source->tokens[i];
+            if (tokens[i].text != NULL)
+                tokens[i].text = lwc_string_ref(tokens[i].text);
+        }
+    }
+    *out = *source;
+    out->name = lwc_string_ref(source->name);
+    out->source_value = lwc_string_ref(source->source_value);
+    out->tokens = tokens;
+    out->bytecode_offset = out->bytecode_length = 0;
+    return CSS_OK;
 }
 
 css_error css__declaration_list_create(const css_stylesheet_params *params, css_declaration_list **out)
@@ -109,7 +133,7 @@ void css__declaration_list_destroy(css_declaration_list *list)
     if (list->source != NULL)
         parserutils_buffer_destroy(list->source);
     for (size_t i = 0; i < list->count; i++)
-        declaration_destroy(&list->entries[i]);
+        css__declaration_fini(&list->entries[i]);
     free(list->entries);
     free(list);
 }
@@ -174,8 +198,9 @@ css_error css__declaration_list_record(css_declaration_list *list, const css_tok
     const parserutils_vector *tokens, int32_t value_start, uint32_t bytecode_offset, uint32_t bytecode_length,
     bool deferred)
 {
-    css_declaration entry = {
-        .bytecode_offset = bytecode_offset, .bytecode_length = bytecode_length, .deferred = deferred,
+    css_declaration entry = {.bytecode_offset = bytecode_offset,
+        .bytecode_length = bytecode_length,
+        .deferred = deferred,
         .quirks_allowed = list->sheet->quirks_allowed};
     const css_token *colon = parserutils_vector_peek(tokens, value_start - 1);
     size_t source_start = colon->source_end;
@@ -220,21 +245,21 @@ css_error css__declaration_list_record(css_declaration_list *list, const css_tok
         /* CSS Cascade name aliases are canonicalized at parse time, just like
          * ASCII case. Custom property names above retain their own identity. */
         if (lwc_intern_string(entry.property->name, strlen(entry.property->name), &entry.name) != lwc_error_ok) {
-            declaration_destroy(&entry);
+            css__declaration_fini(&entry);
             return CSS_NOMEM;
         }
     }
     entry.token_count = (size_t)(end - value_start);
     if (entry.token_count > SIZE_MAX / sizeof(css_declaration_token)) {
         entry.token_count = 0;
-        declaration_destroy(&entry);
+        css__declaration_fini(&entry);
         return CSS_NOMEM;
     }
     if (entry.token_count != 0) {
         css_declaration_token *value = malloc(entry.token_count * sizeof(*value));
         if (value == NULL) {
             entry.token_count = 0;
-            declaration_destroy(&entry);
+            css__declaration_fini(&entry);
             return CSS_NOMEM;
         }
         for (size_t i = 0; i < entry.token_count; i++) {
@@ -248,12 +273,12 @@ css_error css__declaration_list_record(css_declaration_list *list, const css_tok
     if (list->count == list->capacity) {
         size_t capacity = list->capacity != 0 ? list->capacity * 2 : 8;
         if (capacity < list->capacity || capacity > SIZE_MAX / sizeof(*list->entries)) {
-            declaration_destroy(&entry);
+            css__declaration_fini(&entry);
             return CSS_NOMEM;
         }
         css_declaration *entries = realloc(list->entries, capacity * sizeof(*entries));
         if (entries == NULL) {
-            declaration_destroy(&entry);
+            css__declaration_fini(&entry);
             return CSS_NOMEM;
         }
         list->entries = entries;

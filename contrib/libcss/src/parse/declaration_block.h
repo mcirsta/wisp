@@ -17,4 +17,9 @@
  * No state is added to ordinary styling or to the borrowed order/list. */
 css_error css__declaration_block_serialize(const css_declaration_order *order, lwc_string **out);
 
+/* Same serializer for an owned mutable block's ordered, unique contributions.
+ * Values and their sources are borrowed for the duration of the call. */
+css_error
+css__declaration_block_serialize_values(const css_declaration_contribution *values, size_t count, lwc_string **out);
+
 #endif

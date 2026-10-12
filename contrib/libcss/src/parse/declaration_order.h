@@ -33,4 +33,8 @@ void css__declaration_order_destroy(css_declaration_order *order);
 size_t css__declaration_order_count(const css_declaration_order *order);
 const css_declaration_contribution *css__declaration_order_get(const css_declaration_order *order, size_t index);
 
+/* Registration supplying this component's logical group/mapping metadata.
+ * Logical members without a direct parser use their source pair's metadata. */
+const struct css_prop_entry *css__declaration_contribution_property(const css_declaration_contribution *value);
+
 #endif

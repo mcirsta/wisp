@@ -101,3 +101,14 @@ const css_declaration_contribution *css__declaration_order_get(const css_declara
 {
     return index < css__declaration_order_count(order) ? &order->entries[index] : NULL;
 }
+
+const struct css_prop_entry *css__declaration_contribution_property(const css_declaration_contribution *value)
+{
+    const struct css_prop_entry *property = value->source->property;
+    if (property != NULL && property->shorthand) {
+        const struct css_prop_entry *longhand = css_prop_lookup(value->name, strlen(value->name));
+        if (longhand != NULL)
+            property = longhand;
+    }
+    return property;
+}

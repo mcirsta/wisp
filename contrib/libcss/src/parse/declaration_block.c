@@ -116,12 +116,24 @@ try_shorthand(struct block_serialization *block, struct block_entry *entry, css_
 
 css_error css__declaration_block_serialize(const css_declaration_order *order, lwc_string **out)
 {
+    if (order == NULL) {
+        if (out != NULL)
+            *out = NULL;
+        return CSS_BADPARM;
+    }
+    return css__declaration_block_serialize_values(
+        css__declaration_order_get(order, 0), css__declaration_order_count(order), out);
+}
+
+css_error
+css__declaration_block_serialize_values(const css_declaration_contribution *values, size_t count, lwc_string **out)
+{
     if (out == NULL)
         return CSS_BADPARM;
     *out = NULL;
-    if (order == NULL)
+    if (values == NULL && count != 0)
         return CSS_BADPARM;
-    struct block_serialization block = {.count = css__declaration_order_count(order)};
+    struct block_serialization block = {.count = count};
     if (block.count == 0)
         return css__declaration_text_block(NULL, 0, out);
     if (block.count > SIZE_MAX / sizeof(*block.entries) || block.count > SIZE_MAX / sizeof(*block.by_name) ||
@@ -136,16 +148,9 @@ css_error css__declaration_block_serialize(const css_declaration_order *order, l
         goto done;
     for (size_t i = 0; i < block.count; i++) {
         struct block_entry *entry = &block.entries[i];
-        entry->value = css__declaration_order_get(order, i);
-        const struct css_prop_entry *property = entry->value->source->property;
+        entry->value = &values[i];
+        const struct css_prop_entry *property = css__declaration_contribution_property(entry->value);
         if (property != NULL) {
-            if (property->shorthand) {
-                const struct css_prop_entry *longhand = css_prop_lookup(entry->value->name, strlen(entry->value->name));
-                /* A few logical pairs have no direct longhand parser yet.
-                 * Their group/mapping metadata belongs to the source pair. */
-                if (longhand != NULL)
-                    property = longhand;
-            }
             entry->group = property->logical_group;
             entry->logical = property->logical;
         }
