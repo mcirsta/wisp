@@ -875,6 +875,77 @@ static const struct {
     {"background-attachment: FiXeD , SCROLL , FiXeD", "background-attachment", "fixed, scroll, fixed"},
     {"background-image:linear-gradient(red, blue)", "background-image", NULL},
     {"background-image:url(a.png), linear-gradient(red, blue)", "background-image", NULL},
+    {"background:none", "background", "none"},
+    {"background:transparent", "background", "none"},
+    {"background:repeat scroll none 0% 0% transparent", "background", "none"},
+    {"background:red", "background", "red"},
+    {"background:CURRENTCOLOR", "background", "currentcolor"},
+    {"background:red", "background-image", "none"},
+    {"background:red", "background-position", "0% 0%"},
+    {"background:red", "background-repeat", "repeat"},
+    {"background:red", "background-attachment", "scroll"},
+    {"background:red", "background-color", "red"},
+    {"background:NONE, NONE, NONE", "background", "none, none, none"},
+    {"background:NONE, NONE, NONE", "background-image", "none, none, none"},
+    {"background:none,none", "background-position", "0% 0%, 0% 0%"},
+    {"background:none,none", "background-repeat", "repeat, repeat"},
+    {"background:none,none", "background-attachment", "scroll, scroll"},
+    {"background:none,none", "background-color", "transparent"},
+    {"background:fixed top left no-repeat url(A.png) #1234", "background",
+        "url(\"A.png\") left top no-repeat fixed rgba(17, 34, 51, 0.267)"},
+    {"background:repeat no-repeat url(A.png)", "background", "url(\"A.png\") repeat-x"},
+    {"background:url(A.png) no-repeat repeat", "background", "url(\"A.png\") repeat-y"},
+    {"background:TOP", "background", "center top"},
+    {"background:-.1234567em +00012.3456789%", "background-position", "-0.123457em 12.345679%"},
+    {"background:0px 0px", "background", "0px 0px"},
+    {"background:left top", "background", "left top"},
+    {"background:url('data:image/svg+xml;a,b;c') fixed", "background",
+        "url(\"data:image/svg+xml;a,b;c\") fixed"},
+    {"background:url('a\\\"b\\\\c')", "background", "url(\"a\\\"b\\\\c\")"},
+    {"background:url(Știri.png) top,none fixed rgb(1 2 3 / .4)", "background",
+        "url(\"Știri.png\") center top, fixed rgba(1, 2, 3, 0.4)"},
+    {"background:url(A.png) top,no-repeat url(B.png) bottom blue", "background-image",
+        "url(\"A.png\"), url(\"B.png\")"},
+    {"background:url(A.png) top,no-repeat url(B.png) bottom blue", "background-position", "center top, center bottom"},
+    {"background:url(A.png) top,no-repeat url(B.png) bottom blue", "background-repeat", "repeat, no-repeat"},
+    {"background:url(A.png) top,no-repeat url(B.png) bottom blue", "background-color", "blue"},
+    {"background:url(A.png),url(B.png);background-repeat:repeat no-repeat,no-repeat repeat", "background",
+        "url(\"A.png\") repeat-x, url(\"B.png\") repeat-y"},
+    {"background:url(A.png),url(B.png);background-position:right top,bottom left", "background",
+        "url(\"A.png\") right top, url(\"B.png\") left bottom"},
+    {"background:url(A.png),url(B.png);background-attachment:fixed,scroll", "background",
+        "url(\"A.png\") fixed, url(\"B.png\")"},
+    {"background:url(A.png),url(B.png);background-color:#fff", "background",
+        "url(\"A.png\"), url(\"B.png\") rgb(255, 255, 255)"},
+    {"background:url(A.png),url(B.png);background-image:none,none", "background", "none, none"},
+    {"background:url(A.png),url(B.png);background-repeat:no-repeat", "background", ""},
+    {"background:none;background-image:url(A.png),url(B.png)", "background", ""},
+    {"background:none;background-position:left,top", "background", ""},
+    {"background:none;background-attachment:fixed,scroll", "background", ""},
+    {"background:none;background-repeat:repeat,repeat", "background", ""},
+    {"background-image:none;background-position:top;background-repeat:no-repeat;background-attachment:fixed;"
+        "background-color:red", "background", "center top no-repeat fixed red"},
+    {"background:red!important;background-color:blue", "background", "red"},
+    {"background:red;background-color:blue!important", "background", ""},
+    {"background:red!important;background-color:blue!important", "background", "blue"},
+    {"background-image:none;background-color:red", "background", ""},
+    {"background:inherit", "background", "inherit"},
+    {"background:INITIAL", "background-position", "initial"},
+    {"background:unset", "background", "unset"},
+    {"background:REVERT", "background-color", "revert"},
+    {"background:inherit;background-image:initial", "background", ""},
+    {"background:var(--Layers, url(A.png),none)", "background", "var(--Layers, url(A.png),none)"},
+    {"background:var(--Layers)", "background-repeat", ""},
+    {"background:var(--Layers);background-color:red", "background", ""},
+    {"background:none;background-image:var(--Image)", "background", ""},
+    {"background:linear-gradient(red,blue) fixed", "background", NULL},
+    {"background:linear-gradient(red,blue),none fixed rgb(1,2,3)", "background-color", "rgb(1, 2, 3)"},
+    {"background:linear-gradient(red,blue),none fixed rgb(1,2,3)", "background-attachment", "scroll, fixed"},
+    {"background:radial-gradient(red,blue) no-repeat", "background-image", NULL},
+    {"background:red;background:red,none", "background", "red"},
+    {"background:blue;background:none,none,", "background", "blue"},
+    {"background:red;background:repeat-x repeat", "background", "red"},
+    {"background:blue;background:initial red", "background", "blue"},
     {"content:NoRmAl", "content", "normal"},
     {"content:NoNe", "content", "none"},
     {"content:InHeRiT", "content", "inherit"},
@@ -2577,6 +2648,110 @@ START_TEST(test_repeat_bytecode)
 }
 END_TEST
 
+START_TEST(test_background_readback)
+{
+    static const char *const tokens[] = {"url(A.png)", "top right", "repeat no-repeat", "fixed", "#123"};
+    static const char *const properties[] = {"background-image", "background-position", "background-repeat",
+        "background-attachment", "background-color"};
+    static const char *const expected[] = {"url(\"A.png\")", "right top", "repeat-x", "fixed", "rgb(17, 34, 51)"};
+    const char *canonical = "url(\"A.png\") right top repeat-x fixed rgb(17, 34, 51)";
+    /* Every ordering of the five disjoint groups must yield the same specified
+     * components and rendering bytecode, including after shorthand readback. */
+    for (unsigned permutation = 0; permutation < 3125; permutation++) {
+        char css[256] = "background:";
+        unsigned mask = 0, order = permutation;
+        for (size_t i = 0; i < N_ELEMENTS(tokens); i++, order /= 5) {
+            unsigned part = order % 5;
+            if (mask & (1u << part)) {
+                mask = 0;
+                break;
+            }
+            mask |= 1u << part;
+            strcat(css, tokens[part]);
+            strcat(css, " ");
+        }
+        if (mask == 0)
+            continue;
+        strcat(css, "!important");
+        css_declaration_list *list = parse(css, _i != 0);
+        ck_assert_msg(css__declaration_list_count(list) == 1, "rejected permutation: %s", css);
+        css_declaration_order *view;
+        ck_assert_int_eq(css__declaration_order_create(list, &view), CSS_OK);
+        for (size_t i = 0; i <= N_ELEMENTS(properties); i++) {
+            const char *name = i == N_ELEMENTS(properties) ? "background" : properties[i];
+            lwc_string *value;
+            ck_assert_msg(serialize_property(view, name, &value) == CSS_OK, "%s / %s", css, name);
+            ck_assert_msg(strcmp(lwc_string_data(value), i == N_ELEMENTS(properties) ? canonical : expected[i]) == 0,
+                "%s / %s -> %s", css, name, lwc_string_data(value));
+            lwc_string_unref(value);
+        }
+        snprintf(css, sizeof(css), "background:%s!important", canonical);
+        css_declaration_list *again = parse(css, _i != 0);
+        compare_sheets(css__declaration_list_sheet(list), css__declaration_list_sheet(again));
+        css__declaration_list_destroy(again);
+        css__declaration_order_destroy(view);
+        css__declaration_list_destroy(list);
+    }
+}
+END_TEST
+
+START_TEST(test_background_many_layers)
+{
+    enum { LAYERS = 128 };
+    char css[16384] = "background:", expected[16384] = "";
+    for (unsigned i = 0; i < LAYERS; i++) {
+        size_t used = strlen(css), written = strlen(expected);
+        snprintf(css + used, sizeof(css) - used, "%sno-repeat url('tile,%u.png') %upx %upx", i ? "," : "", i, i, i + 1);
+        snprintf(expected + written, sizeof(expected) - written, "%surl(\"tile,%u.png\") %upx %upx no-repeat",
+            i ? ", " : "", i, i, i + 1);
+    }
+    css_declaration_list *list = parse(css, _i != 0);
+    ck_assert_uint_eq(css__declaration_list_count(list), 1);
+    css_declaration_order *order;
+    ck_assert_int_eq(css__declaration_order_create(list, &order), CSS_OK);
+    lwc_string *value;
+    ck_assert_int_eq(serialize_property(order, "background", &value), CSS_OK);
+    ck_assert_str_eq(lwc_string_data(value), expected);
+    snprintf(css, sizeof(css), "background:%s", lwc_string_data(value));
+    css_declaration_list *again = parse(css, _i != 0);
+    compare_sheets(css__declaration_list_sheet(list), css__declaration_list_sheet(again));
+    css__declaration_list_destroy(again);
+    lwc_string_unref(value);
+    css__declaration_order_destroy(order);
+    css__declaration_list_destroy(list);
+}
+END_TEST
+
+START_TEST(test_background_quirks)
+{
+    static const struct { const char *input, *output; } forms[] = {
+        {"background:000", "rgb(0, 0, 0)"},
+        {"background:123456 fixed", "fixed rgb(18, 52, 86)"},
+        {"background:000 1 2", "1px 2px rgb(0, 0, 0)"},
+        {"background:top fixed 000", "center top fixed rgb(0, 0, 0)"},
+        {"background:0 000", "0px 0px"},
+    };
+    for (size_t i = 0; i < N_ELEMENTS(forms); i++) {
+        css_stylesheet_params quirky = params;
+        quirky.allow_quirks = true;
+        css_declaration_list *list;
+        ck_assert_int_eq(css__declaration_list_create(&quirky, &list), CSS_OK);
+        check_append(css__declaration_list_append(list, (const uint8_t *)forms[i].input, strlen(forms[i].input)));
+        ck_assert_int_eq(css__declaration_list_complete(list), CSS_OK);
+        ck_assert_msg(css__declaration_list_count(list) == 1, "quirks rejected %s", forms[i].input);
+        css_declaration_order *order;
+        ck_assert_int_eq(css__declaration_order_create(list, &order), CSS_OK);
+        lwc_string *value;
+        ck_assert_msg(serialize_property(order, "background", &value) == CSS_OK, "quirks %s", forms[i].input);
+        ck_assert_msg(strcmp(lwc_string_data(value), forms[i].output) == 0, "%s -> %s, expected %s",
+            forms[i].input, lwc_string_data(value), forms[i].output);
+        lwc_string_unref(value);
+        css__declaration_order_destroy(order);
+        css__declaration_list_destroy(list);
+    }
+}
+END_TEST
+
 START_TEST(test_decoration_bytecode)
 {
     static const char *const names[] = {"underline", "overline", "line-through", "blink"};
@@ -3140,7 +3315,7 @@ START_TEST(test_value_allocation_failure)
         "content", "quotes", "counter-reset", "aspect-ratio", "border-spacing", "clip", "font-family", "flex",
         "flex-flow", "color", "border-color", "list-style", "columns", "border", "border-left", "outline", "column-rule",
         "grid-area", "grid-column", "grid-row", "grid-row-end", "place-content", "background-position", "object-position",
-        "background-repeat", "text-decoration"};
+        "background-repeat", "text-decoration", "background", "background-color"};
     const char *name = names[_i];
     /* Keep full-border inputs separate: they reset the quad style/colour cases. */
     if (strcmp(name, "border") == 0 || strcmp(name, "border-left") == 0)
@@ -3149,6 +3324,11 @@ START_TEST(test_value_allocation_failure)
         css = "outline:1.2345678em dotted #1234";
     else if (strcmp(name, "column-rule") == 0)
         css = "column-rule:.1234567px dashed hsl(12 34% 56%)";
+    /* Exercise each background component through shorthand extraction, then
+     * the same longhand serializer already covered by the ordinary inputs. */
+    if (strncmp(name, "background", 10) == 0)
+        css = "background:url('a,b\\\"c\\\\d\\1 e.png') no-repeat .1234567em -2.3456789% fixed,"
+              "none repeat no-repeat top rgb(1.2 3.4 5.6 / .4)";
     css_declaration_list *list = parse(css, false);
     css_declaration_order *order;
     ck_assert_int_eq(css__declaration_order_create(list, &order), CSS_OK);
@@ -3214,6 +3394,9 @@ int main(void)
     tcase_add_loop_test(tc, test_grid_placement_invalid, 0, 2);
     tcase_add_loop_test(tc, test_position_bytecode, 0, 2);
     tcase_add_loop_test(tc, test_repeat_bytecode, 0, 2);
+    tcase_add_loop_test(tc, test_background_readback, 0, 2);
+    tcase_add_loop_test(tc, test_background_many_layers, 0, 2);
+    tcase_add_test(tc, test_background_quirks);
     tcase_add_loop_test(tc, test_decoration_bytecode, 0, 2);
     tcase_add_loop_test(tc, test_repeat_decoration_invalid, 0, 2);
     tcase_add_loop_test(tc, test_position_invalid, 0, 2);
@@ -3230,7 +3413,7 @@ int main(void)
     tcase_add_loop_test(tc, test_overflow_axes, 0, 2);
     tcase_add_test(tc, test_value_arguments);
 #ifdef WISP_TEST_ALLOC_FAILURE
-    tcase_add_loop_test(tc, test_value_allocation_failure, 0, 31);
+    tcase_add_loop_test(tc, test_value_allocation_failure, 0, 33);
     tcase_add_loop_test(tc, test_position_rollback, 0, 2);
     tcase_add_loop_test(tc, test_place_content_rollback, 0, 3);
     tcase_add_loop_test(tc, test_grid_placement_rollback, 0, 7);

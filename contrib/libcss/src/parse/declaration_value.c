@@ -8,6 +8,7 @@
 #include <string.h>
 
 #include "parse/declaration_value.h"
+#include "parse/declaration_background.h"
 #include "parse/colour.h"
 #include "parse/declaration_text.h"
 #include "parse/property.h"
@@ -150,7 +151,7 @@ struct value_format {
     const char *prefix, *separator, *suffix;
 };
 
-/* Combine a bounded list of already serialized components. Both shorthand and
+/* Combine a list of already serialized components. Both shorthand and
  * structured longhand values use the same overflow-checked output path. */
 static css_error join_values(lwc_string *const *values, size_t count, const struct value_format *format,
     lwc_string **out)
@@ -160,8 +161,11 @@ static css_error join_values(lwc_string *const *values, size_t count, const stru
         *out = lwc_string_ref(values[0]);
         return CSS_OK;
     }
-    /* Formats are static and callers supply at most four components. */
-    size_t length = prefix + (count - 1) * separator + suffix;
+    /* Formats are static; comma-separated values can have arbitrary length. */
+    size_t length = prefix + suffix;
+    if (separator != 0 && count - 1 > (SIZE_MAX - length) / separator)
+        return CSS_NOMEM;
+    length += (count - 1) * separator;
     for (size_t i = 0; i < count; i++) {
         size_t n = lwc_string_length(values[i]);
         if (n > SIZE_MAX - length)
@@ -186,6 +190,17 @@ static css_error join_values(lwc_string *const *values, size_t count, const stru
     css_error error = intern(buffer, length, out);
     free(buffer);
     return error;
+}
+
+css_error css__declaration_values_join(lwc_string *const *values, size_t count, const char *separator, lwc_string **out)
+{
+    if (out == NULL)
+        return CSS_BADPARM;
+    *out = NULL;
+    if (values == NULL || count == 0 || separator == NULL)
+        return CSS_BADPARM;
+    const struct value_format format = {"", separator, ""};
+    return join_values(values, count, &format, out);
 }
 
 /* These declarations have already passed their property grammar. Extract the
@@ -635,6 +650,8 @@ css_error css__declaration_value_serialize(const css_declaration_contribution *v
     enum css_declaration_value_kind kind = property->value_kind;
     if (kind == CSS_DECL_VALUE_NONE)
         return CSS_INVALID;
+    if (kind == CSS_DECL_VALUE_BACKGROUND)
+        return css__declaration_background_component(value, out);
     if (kind == CSS_DECL_VALUE_URI || kind == CSS_DECL_VALUE_IMAGE_LIST || kind == CSS_DECL_VALUE_KEYWORD_LIST ||
         kind == CSS_DECL_VALUE_CONTENT || kind == CSS_DECL_VALUE_STRING_LIST || kind == CSS_DECL_VALUE_COUNTER_LIST ||
         kind == CSS_DECL_VALUE_FONT_FAMILY || kind == CSS_DECL_VALUE_REPEAT_LIST || kind == CSS_DECL_VALUE_TEXT_DECORATION)
@@ -817,6 +834,8 @@ css_error css__declaration_shorthand_serialize(const struct css_prop_entry *prop
     if (any_wide)
         return same_wide ? intern(wide, strlen(wide), out) : intern("", 0, out);
     enum css_declaration_value_kind kind = property->value_kind;
+    if (kind == CSS_DECL_VALUE_BACKGROUND)
+        return css__declaration_background_shorthand(members, out);
     if (kind == CSS_DECL_VALUE_BORDER || kind == CSS_DECL_VALUE_BORDER_SIDE || kind == CSS_DECL_VALUE_OUTLINE)
         return serialize_border_shorthand(kind, members, out);
     if (scalar_arity(kind) == 1 && kind != CSS_DECL_VALUE_FLEX && kind != CSS_DECL_VALUE_FLEX_FLOW &&

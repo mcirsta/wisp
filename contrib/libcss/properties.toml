@@ -1937,6 +1937,7 @@ outer_struct = true
 select_comments = "Transform functions stored in css_computed_style.transform_*"
 
 [background]
+declaration_value = "background"
 declaration_longhands = ["background_image", "background_position", "background_repeat", "background_attachment", "background_color"]
 enum = "CSS_PROP_BACKGROUND"
 inherited = false

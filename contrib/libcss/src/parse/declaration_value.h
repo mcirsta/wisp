@@ -28,4 +28,8 @@ css_error css__declaration_value_serialize(const css_declaration_contribution *v
 css_error css__declaration_shorthand_serialize(const struct css_prop_entry *property,
     const css_declaration_contribution *const *members, size_t count, lwc_string **out);
 
+/* Join a nonempty list of serialized components with a literal separator.
+ * Input strings are borrowed; the returned string has its own reference. */
+css_error css__declaration_values_join(lwc_string *const *values, size_t count, const char *separator, lwc_string **out);
+
 #endif

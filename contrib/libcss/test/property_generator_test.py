@@ -48,7 +48,7 @@ class DeclarationMetadataTest(unittest.TestCase):
 
     def test_ordered_shorthand_members(self):
         for name in ("flex", "flex_flow", "list_style", "columns", "border", "border_top", "outline", "column_rule",
-                     "grid_row", "grid_column", "grid_area"):
+                     "grid_row", "grid_column", "grid_area", "background"):
             with self.subTest(name=name):
                 members = self.reader.toml_data[name]["declaration_longhands"]
                 members.reverse()

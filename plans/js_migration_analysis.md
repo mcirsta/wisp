@@ -1574,6 +1574,53 @@ aggregate values, declaration-block writes and live `element.style` are pending.
 The old Duktape style getter was an empty-object placeholder and provides no
 implementation to port. No new JS-facing placeholder is exposed.
 
+### Background shorthand specified values (2026-10-12)
+
+Committed the repeat/text and deferred-revert batch as `102bb60c`. Added
+specified readback for the native `background` shorthand and its five supported
+components: image, position, repeat, attachment and colour. Longhand overrides,
+priority, CSS-wide keywords and pending variables use the common declaration
+ordering rules. Layer boundaries come from parsed tokens, so commas in URLs,
+strings and colour/gradient functions cannot split layers accidentally.
+
+`declaration_background.c` keeps the layer handling separate from the scalar
+serializer. It reuses the existing longhand serializers, keyword grammar helpers
+and an overflow-checked string join. Single-layer lists use stack pointer storage;
+larger lists allocate according to their actual layer count. Specified numeric
+precision and authored URL text do not pass through rendering bytecode. No work
+or persistent state is added to ordinary page styling unless readback is requested.
+
+Shorthand reconstruction follows
+[CSS Backgrounds 3's grammar/defaults](https://drafts.csswg.org/css-backgrounds-3/#background)
+and [CSSOM's exact-representation requirement](https://drafts.csswg.org/cssom/#serializing-css-values).
+It omits initial components, retains a `none` value for an otherwise empty layer,
+and places colour only in the last layer. Different longhand list lengths produce
+the CSSOM empty string: repeating/truncating lists as painting does would change
+the specified longhands. Explicit keyword positions remain keywords, rather than
+being replaced with equivalent used offsets. Quirks-mode hashless colour/position
+ambiguity follows the already-validated native parse.
+
+Regression coverage includes all 120 orders of the five component groups,
+importance, bytecode equivalence after shorthand serialization/reparse, a
+128-layer round trip, whole/chunked parsing, list mismatches, defaults, overrides,
+escapes and function commas. Allocation failures cover each extracted component
+and full reconstruction, with cleanup and successful retries. The old Duktape
+style getter was rechecked: it only created an empty CSSStyleDeclaration object,
+so there is no working readback implementation to port.
+
+Validation: eight selected native suites pass in both Debug (ASan/UBSan with
+LeakSanitizer) and Release, followed by the final allocation-coverage reruns.
+Declaration coverage is 1221 Debug / 1274 Release checks; all 14 generator checks
+pass. Background-layer and position Qt pixel fixtures pass in both builds.
+Both builds are warning-free and `git diff --check` is clean. No GTK tests ran.
+
+Scope is the existing five-component background grammar. Gradient readback still
+returns unsupported explicitly; gradient painting remains available. This does
+not add background-size, clip/origin, local attachment, space/round repetition or
+new position syntax. Font shorthand, math/other remaining aggregate readback,
+alias handling, declaration-block writes and live `element.style` remain pending.
+The saved eBihoreanul opacity blocker is not fixed by this internal increment.
+
 ## Assessment
 
 Keep QuickJS-ng and libdom. The missing part is the browser binding and execution
