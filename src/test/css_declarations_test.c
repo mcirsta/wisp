@@ -644,14 +644,15 @@ START_TEST(test_allocation_failure)
                                "content:'a\\\r\nb' attr(Title) counters(Chapter, '.', UPPER-ROMAN);"
                                "counter-reset:Chapter 2 Section; counter-increment:Chapter; quotes:'«' '»';"
                                "overflow:hidden auto!important; font-family:One,Two/**/Words,Three\\20 ;"
-                               "background-image:url(\\20 file\\22 ),url('other\\1 image');";
+                               "background-image:url(\\20 file\\22 ),url('other\\1 image');"
+                               "font:normal italic 1.2345em/1.25 One Two,serif; font:initial;";
     /* Grow the captured-source buffer after a retained declaration exists. */
     char css[16384];
     size_t pos = (size_t)sprintf(css, "opacity:1; /*");
     memset(css + pos, 'c', 8192);
     pos += 8192;
     snprintf(css + pos, sizeof(css) - pos, "*/%s", declarations);
-    const size_t expected = 49;
+    const size_t expected = 51;
     /* Keep shared property strings alive, so each iteration tests the same
      * allocation sequence instead of global string-cache initialization. */
     css_stylesheet *keeper;
@@ -1721,6 +1722,56 @@ static const struct {
     {"page-break-inside:AUTO", "page-break-inside", "auto"},
     {"page-break-after:initial", "page-break-after", "initial"},
 
+    /* Font readback retains specified precision, units and family token boundaries. */
+    {"font:16px serif", "font", "16px serif"},
+    {"font:16px serif", "font-style", "normal"},
+    {"font:16px serif", "font-variant", "normal"},
+    {"font:16px serif", "font-weight", "normal"},
+    {"font:16px serif", "font-size", "16px"},
+    {"font:16px serif", "line-height", "normal"},
+    {"font:16px serif", "font-family", "serif"},
+    {"font:normal italic 16px serif", "font", "italic 16px serif"},
+    {"font:normal normal italic 16px serif", "font-style", "italic"},
+    {"font:normal bold normal 16px serif", "font", "bold 16px serif"},
+    {"font:normal normal normal 16px/normal serif", "font", "16px serif"},
+    {"font:700 small-caps oblique 1.2345678EM / 120% One/**/Two,SERIF", "font",
+        "oblique small-caps 700 1.234568em / 120% \"One Two\", serif"},
+    {"font:ITALIC SMALL-CAPS BOLDER MEDIUM/1.2345678 SANS-SERIF", "font",
+        "italic small-caps bolder medium / 1.234568 sans-serif"},
+    {"font:16px/120% serif", "line-height", "120%"},
+    {"font:16px/1.2345678em serif", "line-height", "1.234568em"},
+    {"font:italic 1.2345678rem/normal serif", "font-size", "1.234568rem"},
+    {"font:SMALLER/0 serif", "font", "smaller / 0 serif"},
+    {"font:0 serif", "font", "0px serif"},
+    {"font:0/0px serif", "font", "0px / 0px serif"},
+    {"font:+000400 16px serif", "font", "400 16px serif"},
+    {"font:italic 16px 'initial', One\\20 Two,SERIF", "font-family", "\"initial\", \"One Two\", serif"},
+    {"font:italic 16px 'initial', One\\20 Two,SERIF", "font",
+        "italic 16px \"initial\", \"One Two\", serif"},
+    {"font:16px 'A,B/C', normal, bold", "font", "16px \"A,B/C\", \"normal\", \"bold\""},
+    {"font:16px serif; font-weight:bold", "font", "bold 16px serif"},
+    {"font:italic 16px serif; font-style:normal", "font", "16px serif"},
+    {"font:16px serif; font-size:2em;line-height:1.5", "font", "2em / 1.5 serif"},
+    {"font-style:italic;font-variant:small-caps;font-weight:700;font-size:18px;"
+        "line-height:24px;font-family:One Two,serif", "font", "italic small-caps 700 18px / 24px \"One Two\", serif"},
+    {"font-size:16px;font-family:serif", "font", ""},
+    {"font:16px serif!important;font-weight:bold", "font", "16px serif"},
+    {"font:16px serif;font-weight:bold!important", "font", ""},
+    {"font:INHERIT", "font", "inherit"},
+    {"font:INITIAL", "font-size", "initial"},
+    {"font:UNSET", "font", "unset"},
+    {"font:REVERT", "font", "revert"},
+    {"font:initial;line-height:inherit", "font", ""},
+    {"font:var(--Font, 16px serif)", "font", "var(--Font, 16px serif)"},
+    {"font:var(--Font)", "font-size", ""},
+    {"font:var(--Font);font-size:16px", "font", ""},
+    {"font:16px serif; font-weight:var(--Weight)", "font", ""},
+    {"font:italic calc(1em + 2px)/calc(1 + .25) serif", "font", NULL},
+    {"font:italic calc(1em + 2px)/calc(1 + .25) serif", "font-size", NULL},
+    {"font:italic calc(1em + 2px)/calc(1 + .25) serif", "line-height", NULL},
+    {"font:italic calc(1em + 2px)/calc(1 + .25) serif", "font-style", "italic"},
+    {"font:italic calc(1em + 2px)/calc(1 + .25) serif", "font-family", "serif"},
+
     /* CSS Align 3 section 5.2: axis order and omitted second value. */
     {"place-content:CENTER", "place-content", "center"},
     {"place-content:center", "align-content", "center"},
@@ -1891,6 +1942,82 @@ END_TEST
 
 /* Inspect rendering strings too: a successful serializer alone must not hide a
  * disagreement between the native font name and the CSSOM name. */
+/* CSS2 Fonts §15.8: normal can fill any omitted prefix component. Compare
+ * native output with explicit longhands, independently of CSSOM readback. */
+START_TEST(test_font_prefix_bytecode)
+{
+    static const char *const styles[] = {"normal", "italic", "oblique"};
+    static const char *const variants[] = {"normal", "small-caps"};
+    static const char *const weights[] = {"normal", "bold", "700", "lighter"};
+    static const unsigned permutations[][3] = {{0, 1, 2}, {0, 2, 1}, {1, 0, 2}, {1, 2, 0}, {2, 0, 1}, {2, 1, 0}};
+    for (size_t st = 0; st < N_ELEMENTS(styles); st++) {
+        for (size_t va = 0; va < N_ELEMENTS(variants); va++) {
+            for (size_t we = 0; we < N_ELEMENTS(weights); we++) {
+                const char *parts[] = {styles[st], variants[va], weights[we]};
+                char longhands[256];
+                snprintf(longhands, sizeof(longhands),
+                    "font-style:%s;font-variant:%s;font-weight:%s;font-size:16px;line-height:1.25;"
+                    "font-family:'Example',serif", parts[0], parts[1], parts[2]);
+                css_declaration_list *reference = parse(longhands, _i != 0);
+                for (size_t p = 0; p < N_ELEMENTS(permutations); p++) {
+                    char input[256];
+                    snprintf(input, sizeof(input), "font:%s %s %s 16px/1.25 'Example',serif",
+                        parts[permutations[p][0]], parts[permutations[p][1]], parts[permutations[p][2]]);
+                    css_declaration_list *list = parse(input, _i != 0);
+                    ck_assert_msg(css__declaration_list_count(list) == 1, "rejected %s", input);
+                    compare_sheets(css__declaration_list_sheet(list), css__declaration_list_sheet(reference));
+                    css_declaration_order *order;
+                    ck_assert_int_eq(css__declaration_order_create(list, &order), CSS_OK);
+                    lwc_string *value;
+                    ck_assert_int_eq(serialize_property(order, "font", &value), CSS_OK);
+                    snprintf(input, sizeof(input), "font:%s", lwc_string_data(value));
+                    css_declaration_list *again = parse(input, _i != 0);
+                    compare_sheets(css__declaration_list_sheet(again), css__declaration_list_sheet(reference));
+                    css__declaration_list_destroy(again);
+                    lwc_string_unref(value);
+                    css__declaration_order_destroy(order);
+                    css__declaration_list_destroy(list);
+                }
+                css__declaration_list_destroy(reference);
+            }
+        }
+    }
+}
+END_TEST
+
+START_TEST(test_font_invalid_components)
+{
+    const char *baseline = "font:italic small-caps bold 16px/1.25 serif;";
+    css_declaration_list *base = parse(baseline, false);
+    static const char *const wide[] = {"inherit", "initial", "unset", "revert"};
+    static const char *const templates[] = {"%s 18px serif", "italic %s 18px serif",
+        "italic small-caps %s 18px serif", "italic small-caps bold %s serif",
+        "18px/%s serif", "18px %s", "18px serif, %s"};
+    for (size_t i = 0; i < N_ELEMENTS(wide); i++) {
+        for (size_t j = 0; j < N_ELEMENTS(templates); j++) {
+            char value[128], input[256];
+            snprintf(value, sizeof(value), templates[j], wide[i]);
+            snprintf(input, sizeof(input), "%sfont:%s", baseline, value);
+            css_declaration_list *list = parse(input, _i != 0);
+            ck_assert_msg(css__declaration_list_count(list) == 1, "accepted embedded CSS-wide keyword: %s", value);
+            compare_sheets(css__declaration_list_sheet(base), css__declaration_list_sheet(list));
+            css__declaration_list_destroy(list);
+        }
+    }
+    static const char *const invalid[] = {"italic oblique 18px serif", "bold 700 18px serif",
+        "small-caps small-caps 18px serif", "italic 18px", "18px/ serif", "18px/2", "18px serif/2"};
+    for (size_t i = 0; i < N_ELEMENTS(invalid); i++) {
+        char input[256];
+        snprintf(input, sizeof(input), "%sfont:%s", baseline, invalid[i]);
+        css_declaration_list *list = parse(input, _i != 0);
+        ck_assert_msg(css__declaration_list_count(list) == 1, "accepted %s", invalid[i]);
+        compare_sheets(css__declaration_list_sheet(base), css__declaration_list_sheet(list));
+        css__declaration_list_destroy(list);
+    }
+    css__declaration_list_destroy(base);
+}
+END_TEST
+
 START_TEST(test_font_name_storage)
 {
     static const struct { const char *value, *name; } forms[] = {
@@ -3089,6 +3216,151 @@ START_TEST(test_value_arguments)
 }
 END_TEST
 
+struct system_font_fixture {
+    css_error error;
+    lwc_string *family;
+};
+
+static css_error resolve_system_font(void *pw, lwc_string *name, css_system_font *font)
+{
+    struct system_font_fixture *fixture = pw;
+    if (fixture->error != CSS_OK)
+        return fixture->error;
+    if (!css__keyword_equal(name, "caption"))
+        return CSS_INVALID;
+    *font = (css_system_font){.style = CSS_FONT_STYLE_ITALIC, .variant = CSS_FONT_VARIANT_NORMAL,
+        .weight = CSS_FONT_WEIGHT_BOLD, .size = {INTTOFIX(16), CSS_UNIT_PX},
+        .line_height = {INTTOFIX(20), CSS_UNIT_PX}, .family = lwc_string_ref(fixture->family)};
+    return CSS_OK;
+}
+
+/* System fonts retain native support. Their CSSOM representation needs system
+ * font state; never pretend its OS-resolved metrics were authored longhands. */
+START_TEST(test_system_font_readback)
+{
+    struct system_font_fixture fixture = {0};
+    ck_assert_int_eq(lwc_intern_string("serif", 5, &fixture.family), lwc_error_ok);
+    css_stylesheet_params system_params = params;
+    system_params.font = resolve_system_font;
+    system_params.font_pw = &fixture;
+    css_declaration_list *list;
+    ck_assert_int_eq(css__declaration_list_create(&system_params, &list), CSS_OK);
+    const char *input = "font:caption";
+    check_append(css__declaration_list_append(list, (const uint8_t *)input, strlen(input)));
+    ck_assert_int_eq(css__declaration_list_complete(list), CSS_OK);
+    ck_assert_uint_eq(css__declaration_list_count(list), 1);
+    css_declaration_list *reference = parse("font:italic bold 16px/20px serif", false);
+    compare_sheets(css__declaration_list_sheet(list), css__declaration_list_sheet(reference));
+    css_declaration_order *order;
+    ck_assert_int_eq(css__declaration_order_create(list, &order), CSS_OK);
+    static const char *const names[] = {"font", "font-style", "font-variant", "font-weight", "font-size",
+        "line-height", "font-family"};
+    for (size_t i = 0; i < N_ELEMENTS(names); i++) {
+        lwc_string *value = (void *)1;
+        ck_assert_int_eq(serialize_property(order, names[i], &value), CSS_INVALID);
+        ck_assert_ptr_null(value);
+    }
+    css__declaration_order_destroy(order);
+    css__declaration_list_destroy(reference);
+    css__declaration_list_destroy(list);
+    lwc_string_unref(fixture.family);
+}
+END_TEST
+
+START_TEST(test_font_callback_failure)
+{
+    struct system_font_fixture fixture = {.error = _i == 0 ? CSS_NOMEM : CSS_BADPARM};
+    css_stylesheet_params system_params = params;
+    system_params.font = resolve_system_font;
+    system_params.font_pw = &fixture;
+    css_stylesheet *sheet;
+    ck_assert_int_eq(css_stylesheet_create(&system_params, &sheet), CSS_OK);
+    css_style *style;
+    ck_assert_int_eq(css__stylesheet_style_create(sheet, &style), CSS_OK);
+    ck_assert_int_eq(css__stylesheet_style_append(style, 0x12345678), CSS_OK);
+    css_language *language = sheet->parser_frontend;
+    /* italic would otherwise begin an ordinary font shorthand. A client
+     * failure cannot be silently treated as an unrecognized system font. */
+    css_token token = {.type = CSS_TOKEN_IDENT, .idata = language->strings[ITALIC]};
+    parserutils_vector *tokens;
+    ck_assert_int_eq(parserutils_vector_create(sizeof(css_token), 4, &tokens), PARSERUTILS_OK);
+    ck_assert_int_eq(parserutils_vector_append(tokens, &token), PARSERUTILS_OK);
+    int32_t ctx = 0;
+    ck_assert_int_eq(css__parse_font(language, tokens, &ctx, style), fixture.error);
+    ck_assert_int_eq(ctx, 0);
+    ck_assert_uint_eq(style->used, 1);
+    ck_assert_uint_eq(style->bytecode[0], 0x12345678);
+    parserutils_vector_destroy(tokens);
+    css__stylesheet_style_destroy(style);
+    css_stylesheet_destroy(sheet);
+}
+END_TEST
+
+#ifdef WISP_TEST_ALLOC_FAILURE
+/* Force growth at every emitted bytecode position, including size, defaults,
+ * line-height, family termination, CSS-wide expansion and resolved system fonts. */
+START_TEST(test_font_rollback)
+{
+    static const char *const forms[] = {"font:normal italic 16px/1.25 serif", "font:16px serif", "font:initial"};
+    bool system = _i >= (int)N_ELEMENTS(forms);
+    lwc_string *caption;
+    ck_assert_int_eq(lwc_intern_string("caption", 7, &caption), lwc_error_ok);
+    struct system_font_fixture fixture = {0};
+    const char *family = _i == 4 ? "System Family" : "serif";
+    ck_assert_int_eq(lwc_intern_string(family, strlen(family), &fixture.family), lwc_error_ok);
+    css_stylesheet_params system_params = params;
+    system_params.font = system ? resolve_system_font : NULL;
+    system_params.font_pw = &fixture;
+    css_stylesheet *sheet;
+    ck_assert_int_eq(css_stylesheet_create(&system_params, &sheet), CSS_OK);
+    css_language *language = sheet->parser_frontend;
+    css_declaration_list *list = parse(system ? "font:initial" : forms[_i], false);
+    const css_declaration *declaration = css__declaration_list_get(list, 0);
+    parserutils_vector *tokens;
+    ck_assert_int_eq(parserutils_vector_create(sizeof(css_token), 4, &tokens), PARSERUTILS_OK);
+    for (size_t i = 0; i < declaration->token_count; i++) {
+        css_token token = {.type = declaration->tokens[i].type, .idata = declaration->tokens[i].text};
+        if (system)
+            token.idata = caption;
+        ck_assert_int_eq(parserutils_vector_append(tokens, &token), PARSERUTILS_OK);
+    }
+    /* First obtain the valid result and populate the system family's string
+     * table. Later failures target style growth rather than string interning. */
+    css_style *reference;
+    int32_t ctx = 0;
+    ck_assert_int_eq(css__stylesheet_style_create(sheet, &reference), CSS_OK);
+    ck_assert_int_eq(css__parse_font(language, tokens, &ctx, reference), CSS_OK);
+    for (unsigned spare = 0; spare < reference->used; spare++) {
+        css_style *style;
+        ck_assert_int_eq(css__stylesheet_style_create(sheet, &style), CSS_OK);
+        uint32_t before = style->allocated - spare;
+        for (uint32_t i = 0; i < before; i++)
+            ck_assert_int_eq(css__stylesheet_style_append(style, 0x12345678), CSS_OK);
+        ctx = 0;
+        realloc_limit(0);
+        css_error error = css__parse_font(language, tokens, &ctx, style);
+        realloc_limit(UINT_MAX);
+        ck_assert_msg(error == CSS_NOMEM, "font form %d spare %u: %d", _i, spare, error);
+        ck_assert_int_eq(ctx, 0);
+        ck_assert_uint_eq(style->used, before);
+        for (uint32_t i = 0; i < before; i++)
+            ck_assert_uint_eq(style->bytecode[i], 0x12345678);
+        ck_assert_int_eq(css__parse_font(language, tokens, &ctx, style), CSS_OK);
+        ck_assert_uint_eq(style->used, before + reference->used);
+        ck_assert_int_eq(memcmp(style->bytecode + before, reference->bytecode,
+            reference->used * sizeof(css_code_t)), 0);
+        css__stylesheet_style_destroy(style);
+    }
+    css__stylesheet_style_destroy(reference);
+    parserutils_vector_destroy(tokens);
+    css__declaration_list_destroy(list);
+    css_stylesheet_destroy(sheet);
+    lwc_string_unref(fixture.family);
+    lwc_string_unref(caption);
+}
+END_TEST
+#endif
+
 #ifdef WISP_TEST_ALLOC_FAILURE
 START_TEST(test_position_rollback)
 {
@@ -3315,7 +3587,7 @@ START_TEST(test_value_allocation_failure)
         "content", "quotes", "counter-reset", "aspect-ratio", "border-spacing", "clip", "font-family", "flex",
         "flex-flow", "color", "border-color", "list-style", "columns", "border", "border-left", "outline", "column-rule",
         "grid-area", "grid-column", "grid-row", "grid-row-end", "place-content", "background-position", "object-position",
-        "background-repeat", "text-decoration", "background", "background-color"};
+        "background-repeat", "text-decoration", "background", "background-color", "font", "font-size", "line-height"};
     const char *name = names[_i];
     /* Keep full-border inputs separate: they reset the quad style/colour cases. */
     if (strcmp(name, "border") == 0 || strcmp(name, "border-left") == 0)
@@ -3329,6 +3601,8 @@ START_TEST(test_value_allocation_failure)
     if (strncmp(name, "background", 10) == 0)
         css = "background:url('a,b\\\"c\\\\d\\1 e.png') no-repeat .1234567em -2.3456789% fixed,"
               "none repeat no-repeat top rgb(1.2 3.4 5.6 / .4)";
+    if (strcmp(name, "font") == 0 || strcmp(name, "font-size") == 0 || strcmp(name, "line-height") == 0)
+        css = "font:italic small-caps bold 1.2345678em / 1.3456789 One Two,serif";
     css_declaration_list *list = parse(css, false);
     css_declaration_order *order;
     ck_assert_int_eq(css__declaration_order_create(list, &order), CSS_OK);
@@ -3379,6 +3653,10 @@ int main(void)
     tcase_add_test(tc, test_specified_url_resolution);
     tcase_add_loop_test(tc, test_reserved_counter_names, 0, 2);
     tcase_add_loop_test(tc, test_font_name_storage, 0, 2);
+    tcase_add_loop_test(tc, test_font_prefix_bytecode, 0, 2);
+    tcase_add_loop_test(tc, test_font_invalid_components, 0, 2);
+    tcase_add_test(tc, test_system_font_readback);
+    tcase_add_loop_test(tc, test_font_callback_failure, 0, 2);
     tcase_add_loop_test(tc, test_font_face_names, 0, 2);
     tcase_add_loop_test(tc, test_reserved_font_names, 0, 2);
     tcase_add_loop_test(tc, test_long_font_name, 0, 2);
@@ -3413,8 +3691,9 @@ int main(void)
     tcase_add_loop_test(tc, test_overflow_axes, 0, 2);
     tcase_add_test(tc, test_value_arguments);
 #ifdef WISP_TEST_ALLOC_FAILURE
-    tcase_add_loop_test(tc, test_value_allocation_failure, 0, 33);
+    tcase_add_loop_test(tc, test_value_allocation_failure, 0, 36);
     tcase_add_loop_test(tc, test_position_rollback, 0, 2);
+    tcase_add_loop_test(tc, test_font_rollback, 0, 5);
     tcase_add_loop_test(tc, test_place_content_rollback, 0, 3);
     tcase_add_loop_test(tc, test_grid_placement_rollback, 0, 7);
     tcase_add_loop_test(tc, test_font_face_allocation_failure, 0, 3);

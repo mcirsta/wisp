@@ -30,6 +30,15 @@
     #viewport-font { font-size: 10vw; line-height: 1em; }
     #viewport-font-percent { font-size: 5vw; line-height: 200%; }
     #viewport-font-calc { font-size: 10vw; line-height: calc(1em + 10px); }
+    /* CSS2 Fonts §15.8: normal fills an omitted prefix; CSS-wide keywords
+       must occupy the entire shorthand. Invalid declarations keep 25px leading. */
+    #font-prefix { font: normal italic 30px/40px sans-serif; }
+    #font-variable { --font: normal normal italic 30px/40px sans-serif; font: var(--font); }
+    .font-invalid { font: 30px/25px sans-serif; }
+    #font-invalid-prefix { font: italic initial 50px/60px sans-serif; }
+    #font-invalid-size { font: italic small-caps bold initial/60px sans-serif; }
+    #font-invalid-leading { font: 50px/initial sans-serif; }
+    #font-invalid-family { font: 50px/60px initial; }
 </style>
 <!-- CSS 2.2 10.8.1: lengths and percentages compute before inheritance.
      Numbers and normal use the child's font. Two explicit lines avoid any
@@ -55,3 +64,9 @@
 <div id="viewport-font" class="case"><div id="viewport-font-child" class="child">One<br>Two</div></div>
 <div id="viewport-font-percent" class="case"><div id="viewport-font-percent-child" class="child">One<br>Two</div></div>
 <div id="viewport-font-calc" class="case"><div id="viewport-font-calc-child" class="child">One<br>Two</div></div>
+<div id="font-prefix" class="case font-invalid"><div id="font-prefix-child" class="child">One<br>Two</div></div>
+<div id="font-variable" class="case font-invalid"><div id="font-variable-child" class="child">One<br>Two</div></div>
+<div id="font-invalid-prefix" class="case font-invalid"><div id="font-invalid-prefix-child" class="child">One<br>Two</div></div>
+<div id="font-invalid-size" class="case font-invalid"><div id="font-invalid-size-child" class="child">One<br>Two</div></div>
+<div id="font-invalid-leading" class="case font-invalid"><div id="font-invalid-leading-child" class="child">One<br>Two</div></div>
+<div id="font-invalid-family" class="case font-invalid"><div id="font-invalid-family-child" class="child">One<br>Two</div></div>

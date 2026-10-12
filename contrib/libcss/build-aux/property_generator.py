@@ -272,16 +272,17 @@ class TomlPropertyReader:
                                   'content', 'string_list', 'counter_list', 'aspect_ratio', 'border_spacing', 'clip',
                                   'font_family', 'flex', 'flex_flow', 'list_style', 'columns', 'border', 'border_side', 'outline',
                                   'colour', 'quad_colour', 'grid_line', 'grid_pair', 'grid_area', 'position', 'position_list',
-                                  'repeat_list', 'text_decoration', 'background'):
+                                  'repeat_list', 'text_decoration', 'background', 'font'):
                 raise ValueError(f"{name}: unknown declaration_value {value_kind}")
             if value_kind != 'none':
                 expected = {'pair_length': 2, 'quad_length': 4, 'pair_keyword': 2, 'quad_keyword': 4,
                             'flex': 3, 'flex_flow': 2, 'list_style': 3, 'columns': 2, 'border': 12, 'border_side': 3,
                             'outline': 3, 'quad_colour': 4, 'grid_pair': 2, 'grid_area': 4,
-                            'background': 5}.get(value_kind, 0)
+                            'background': 5, 'font': 6}.get(value_kind, 0)
                 if len(members) != expected:
                     raise ValueError(f"{name}: declaration_value requires {expected} longhands")
-                ordered = {'flex': ['flex_grow', 'flex_shrink', 'flex_basis'],
+                ordered = {'font': ['font_style', 'font_variant', 'font_weight', 'font_size', 'line_height', 'font_family'],
+                           'flex': ['flex_grow', 'flex_shrink', 'flex_basis'],
                            'background': ['background_image', 'background_position', 'background_repeat',
                                           'background_attachment', 'background_color'],
                            'flex_flow': ['flex_direction', 'flex_wrap'],

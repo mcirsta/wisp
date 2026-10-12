@@ -1621,6 +1621,68 @@ new position syntax. Font shorthand, math/other remaining aggregate readback,
 alias handling, declaration-block writes and live `element.style` remain pending.
 The saved eBihoreanul opacity blocker is not fixed by this internal increment.
 
+### Font shorthand specified values and parser correction (2026-10-12)
+
+Committed the background readback batch as `1dc9251c`. Added internal specified
+readback for `font` and its six currently supported components: style, variant,
+weight, size, line-height and family. The separate `declaration_font.c` serializer
+reuses the longhand serializers and shared font-prefix classification. It retains
+specified numeric precision, units and family strings; it does not reconstruct
+values from rounded rendering bytecode. Whole functions remain token groups, so
+math in size/line-height does not prevent reading an independent family or style.
+Full math readback still returns unsupported explicitly.
+
+Shorthand reconstruction uses the canonical component order and omits initial
+`normal` components, following [CSSOM serialization](https://drafts.csswg.org/cssom/#serializing-css-values)
+within the supported [CSS2 font grammar](https://www.w3.org/TR/CSS2/fonts.html#font-shorthand).
+Overrides, priority, CSS-wide values and pending variable substitution use the
+common declaration rules. The generator source now describes the serializer,
+validates all six ordered members and generates value-only size/line-height
+parsers; generated output is not hand-edited.
+
+Regression tests first reproduced two native parser bugs: `normal italic 16px
+serif` was rejected because `normal` prematurely occupied the style slot, while
+`italic initial 18px serif` was accepted. The parser now counts ambiguous normal
+values without assigning a component until concrete keywords are known. Embedded
+size and line-height use generated value-only handlers; family parsing also
+excludes CSS-wide keywords except as the entire shorthand. This follows the
+[CSS Values component-type rule](https://drafts.csswg.org/css-values-4/#component-types).
+Quoted family names such as `"initial"` remain valid.
+
+The native parser now emits directly into the destination, removing six temporary
+style objects and their merges. Every failure restores the original token cursor
+and bytecode span, including CSS-wide/system-font expansion and later default or
+family writes. System-font resolver errors other than an unknown name propagate
+instead of being silently retried as ordinary font syntax. The weight longhand
+and shorthand share the same existing discrete-weight validator. No persistent
+state or readback work is added to normal rendering.
+
+Coverage includes 144 prefix combinations/orderings, whole and chunked input,
+explicit-longhand bytecode comparisons and serialization/reparse comparisons;
+precision, zero values, escaped and quoted families, overrides, priorities,
+CSS-wide values, pending variables and unsupported math readback. Fault injection
+covers every output growth point for ordinary/default/CSS-wide/system fonts,
+serializer cleanup/retry and full declaration-parser allocation failures. Qt's
+line-height fixture now checks corrected font prefixes, a variable-supplied font
+and invalid declarations retaining the previous font, including resize round trips.
+
+Validation: all 78 selected native CSS/QuickJS/font suites pass in both Debug
+(ASan/UBSan plus LeakSanitizer) and Release. All four Qt font tests pass in both:
+line-height inheritance, font-family isolation, cross-document font resources and
+weight selection. Both builds are warning-free. No GTK tests ran. The historical
+Duktape style getter was checked again; it creates an empty CSSStyleDeclaration
+object and supplies no usable readback implementation.
+
+This implements readback for the existing CSS2 font component model, not modern
+font-width/stretch, additional variant/reset properties, arbitrary weight values
+or angled oblique syntax. Existing client-resolved system-font parsing is preserved
+and tested; system-font readback remains explicitly unsupported rather than
+misrepresenting OS-resolved values as authored declarations. Wisp currently does
+not install that optional resolver. Math/other remaining aggregate readback,
+alias handling, declaration-block writes and the live `element.style` wrapper
+remain pending. The saved eBihoreanul opacity blocker is still not resolved by
+this internal increment.
+
 ## Assessment
 
 Keep QuickJS-ng and libdom. The missing part is the browser binding and execution

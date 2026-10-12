@@ -9,6 +9,7 @@
 
 #include "parse/declaration_value.h"
 #include "parse/declaration_background.h"
+#include "parse/declaration_font.h"
 #include "parse/colour.h"
 #include "parse/declaration_text.h"
 #include "parse/property.h"
@@ -650,6 +651,8 @@ css_error css__declaration_value_serialize(const css_declaration_contribution *v
     enum css_declaration_value_kind kind = property->value_kind;
     if (kind == CSS_DECL_VALUE_NONE)
         return CSS_INVALID;
+    if (kind == CSS_DECL_VALUE_FONT)
+        return css__declaration_font_component(value, out);
     if (kind == CSS_DECL_VALUE_BACKGROUND)
         return css__declaration_background_component(value, out);
     if (kind == CSS_DECL_VALUE_URI || kind == CSS_DECL_VALUE_IMAGE_LIST || kind == CSS_DECL_VALUE_KEYWORD_LIST ||
@@ -834,6 +837,8 @@ css_error css__declaration_shorthand_serialize(const struct css_prop_entry *prop
     if (any_wide)
         return same_wide ? intern(wide, strlen(wide), out) : intern("", 0, out);
     enum css_declaration_value_kind kind = property->value_kind;
+    if (kind == CSS_DECL_VALUE_FONT)
+        return css__declaration_font_shorthand(members, out);
     if (kind == CSS_DECL_VALUE_BACKGROUND)
         return css__declaration_background_shorthand(members, out);
     if (kind == CSS_DECL_VALUE_BORDER || kind == CSS_DECL_VALUE_BORDER_SIDE || kind == CSS_DECL_VALUE_OUTLINE)

@@ -12,7 +12,9 @@ fixture = Path(__file__).resolve().parents[2] / "test/line-height-inheritance.ht
 heights = {"em-child": 80, "percent-child": 100, "number-child": 50,
            "pixels-child": 80, "rem-child": 80, "calc-child": 100,
            "calc-number-child": 50, "fraction-child": 62, "calc-fraction-child": 64,
-           "variable-child": 80, "shorthand-child": 80, "grandchild": 80, "override-child": 40}
+           "variable-child": 80, "shorthand-child": 80, "grandchild": 80, "override-child": 40,
+           "font-prefix-child": 80, "font-variable-child": 80, "font-invalid-prefix-child": 50,
+           "font-invalid-size-child": 50, "font-invalid-leading-child": 50, "font-invalid-family-child": 50}
 names = (*heights, "normal-child", "normal-control", "viewport-child", "calc-viewport-child",
          "calc-percent-viewport-child", "viewport-font-child", "viewport-font-percent-child",
          "viewport-font-calc-child")

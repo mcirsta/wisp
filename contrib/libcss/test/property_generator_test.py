@@ -48,7 +48,7 @@ class DeclarationMetadataTest(unittest.TestCase):
 
     def test_ordered_shorthand_members(self):
         for name in ("flex", "flex_flow", "list_style", "columns", "border", "border_top", "outline", "column_rule",
-                     "grid_row", "grid_column", "grid_area", "background"):
+                     "grid_row", "grid_column", "grid_area", "background", "font"):
             with self.subTest(name=name):
                 members = self.reader.toml_data[name]["declaration_longhands"]
                 members.reverse()
@@ -63,7 +63,7 @@ class DeclarationMetadataTest(unittest.TestCase):
         declarations = generator.generate_parse_declarations()
         for name in ("flex_grow", "flex_shrink", "flex_basis", "flex_direction", "flex_wrap",
                      "list_style_position", "list_style_image", "column_width", "column_count",
-                     "align_content", "justify_content"):
+                     "align_content", "justify_content", "font_size", "line_height"):
             self.assertIn(f"css__parse_{name}_value(", declarations)
             helper = next(line for line in spec.splitlines() if line.startswith(name + "_value:"))
             for keyword in ("INHERIT:", "INITIAL:", "REVERT:", "UNSET:"):

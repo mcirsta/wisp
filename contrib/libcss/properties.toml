@@ -2080,6 +2080,8 @@ cascade = "none"
 computed = "none"
 
 [font]
+declaration_value = "font"
+helper_longhands = ["font_size", "line_height"]
 declaration_longhands = ["font_style", "font_variant", "font_weight", "font_size", "line_height", "font_family"]
 enum = "CSS_PROP_FONT"
 inherited = false
