@@ -1683,6 +1683,54 @@ alias handling, declaration-block writes and the live `element.style` wrapper
 remain pending. The saved eBihoreanul opacity blocker is still not resolved by
 this internal increment.
 
+### Legacy gap name aliases (2026-10-12)
+
+Committed the font readback/parser batch as `269a5acd`. Added `grid-gap`,
+`grid-row-gap` and `grid-column-gap` as legacy name aliases of `gap`, `row-gap`
+and `column-gap`, following [CSS Gaps' legacy properties](https://drafts.csswg.org/css-gaps-1/#gap-legacy)
+and [CSS Cascade's aliasing rules](https://drafts.csswg.org/css-cascade-5/#aliasing).
+These spellings were previously ignored by the native parser. They now work in
+ordinary stylesheets, inline styles, variable substitution and internal specified
+readback, including when applied to flex containers.
+
+The aliases are explicit metadata in `properties.toml`. Generated hash entries
+point to one shared canonical registration per property; there is no extra
+parser, rendering opcode, declaration identity or second lookup for aliases.
+Declaration collection and deferred variable bytecode store the canonical name,
+so ordering, priority and pending shorthands work across either spelling. The
+generator rejects invalid/conflicting aliases. Logical properties remain distinct
+from physical properties, and custom names retain their case-sensitive identity.
+
+The new tests exposed existing gap parser/bytecode defects. The shorthand now
+restores both cursor and output length on failure and propagates allocation errors
+from the optional second value. Both the `!important` marker and the variable
+collection scanner omitted the row-gap length/unit payload: they could interpret
+its data as property instructions, corrupting values or losing the scan position.
+Both walkers now handle row-gap alongside column-gap. Native regressions cover
+the preferred names independently of aliases, including payloads that previously
+triggered a Debug unit assertion.
+
+Coverage includes whole/chunked parsing, canonical bytecode and registration
+identity, escaped/case-insensitive names, declaration ordering, priority, CSS-wide
+keywords, variable fallback/invalidity, shorthand readback, custom-name isolation
+and allocation failure with cleanup/retry. A six-case Qt fixture checks fixed
+grid/flex geometry, important values and variable-driven restyles, with viewport
+and checkbox round trips; its expectations follow the specs without a reference
+browser or font dependency.
+
+Validation: all 78 selected native CSS/QuickJS/font suites and all five selected
+Qt geometry suites pass in both Debug and Release. Debug native tests include
+ASan/UBSan and LeakSanitizer. Declaration tests cover 1311 Debug / 1376 Release
+checks; all 16 generator checks pass. Both builds are warning-free and
+`git diff --check` is clean. No GTK tests ran.
+
+This adds name aliases for the supported gap grammar, not legacy shorthands with
+value remapping or properties whose preferred name is not implemented. The old
+Duktape style getter supplies no native alias/readback implementation to reuse.
+Math/other remaining aggregate readback, declaration-block writes and live
+`element.style` remain pending; the saved eBihoreanul opacity blocker is still
+unresolved by this internal increment.
+
 ## Assessment
 
 Keep QuickJS-ng and libdom. The missing part is the browser binding and execution

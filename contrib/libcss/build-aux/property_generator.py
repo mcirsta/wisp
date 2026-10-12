@@ -245,6 +245,7 @@ class TomlPropertyReader:
     
     def validate_declarations(self):
         """Keep parser shorthand membership explicit and fail on stale metadata."""
+        self.get_legacy_aliases()
         for name, prop in self.toml_data.items():
             shorthand = prop.get('shorthand', False) or prop['enum'].startswith('BORDER_SIDE_')
             members = prop.get('declaration_longhands', [])
@@ -299,6 +300,22 @@ class TomlPropertyReader:
                     ordered = [f'{name}_{part}' for part in ('width', 'style', 'color')]
                 if ordered is not None and members != ordered:
                     raise ValueError(f"{name}: declaration_value requires ordered members {ordered}")
+
+    def get_legacy_aliases(self):
+        """Explicit CSS name aliases, independent of shared rendering opcodes."""
+        names = {name.replace('_', '-') for name in self.toml_data}
+        aliases = {}
+        for name, prop in self.toml_data.items():
+            values = prop.get('legacy_aliases', [])
+            if not isinstance(values, list):
+                raise ValueError(f"{name}: legacy_aliases must be a list")
+            for alias in values:
+                if not isinstance(alias, str) or not re.fullmatch(r'-?[a-z][a-z0-9-]*', alias):
+                    raise ValueError(f"{name}: invalid legacy alias {alias!r}")
+                if alias in names or alias in aliases:
+                    raise ValueError(f"{name}: duplicate or conflicting legacy alias {alias}")
+                aliases[alias] = name.replace('_', '-')
+        return aliases
 
     def get_dispatch_order(self):
         """Get property dispatch order from TOML (replaces DispatchParser).
@@ -640,16 +657,17 @@ class GperfInputGenerator:
     This follows the same pattern used by libhubbub's element-type.gperf.
     """
     
-    def __init__(self, keys):
-        """Initialize with (name, handler, opcode, metadata, members) tuples."""
+    def __init__(self, keys, aliases=None):
+        """Canonical registration tuples and optional alias-name -> name mapping."""
         self.keys = keys
+        self.aliases = aliases or {}
     
     def generate_gperf_input(self):
         """Generate gperf input file content.
         
         The gperf file defines:
-        - The shared css_prop_entry registration from parse/property.h
-        - A lookup function css_prop_lookup_generated() returning const struct *
+        - One css_prop_entry per canonical property, shared with all aliases
+        - A compact hash table mapping spellings to those registrations
         
         A wrapper function css_prop_lookup() is appended after the gperf
         output (via the %% section), preserving css_prop_lookup(name, len).
@@ -702,32 +720,40 @@ class GperfInputGenerator:
                 array = "css_decl_members_" + css_name.replace('-', '_')
                 names = ', '.join('"' + name.replace('_', '-') + '"' for name in members)
                 lines.append(f"static const char *const {array}[] = {{{names}}};")
-        lines.append("%}")
-        lines.append("")
-        
-        # The structure is shared by parsing, variable resolution and the
-        # declaration collector. Do not duplicate its layout in consumers.
-        lines.append("struct css_prop_entry;")
-        lines.append("")
-        lines.append("%%")
+        # Aliases and preferred names share one registration, including its
+        # address. Keep sparse gperf slots small rather than copying metadata
+        # into every slot or doing a second lookup for an alias.
+        lines.append("static const struct css_prop_entry css_prop_registry[] = {")
         for css_name, handler_name, opcode, metadata, members, value_kind in self.keys:
             array = "css_decl_members_" + css_name.replace('-', '_') if members else "NULL"
-            lines.append(f"{css_name}, {handler_name}, {opcode}, {metadata}, "
-                         f"{array}, {len(members)}, CSS_DECL_VALUE_{value_kind}")
+            lines.append(f'    {{"{css_name}", {handler_name}, {opcode}, {metadata}, '
+                         f"{array}, {len(members)}, CSS_DECL_VALUE_{value_kind}}},")
+        lines.append("};")
+        lines.append("%}")
+        lines.append("")
+        lines.append("struct css_prop_hash_entry { const char *name; const struct css_prop_entry *property; };")
+        lines.append("")
+        lines.append("%%")
+        indices = {key[0]: index for index, key in enumerate(self.keys)}
+        spellings = {name: index for name, index in indices.items()}
+        spellings.update({alias: indices[name] for alias, name in self.aliases.items()})
+        for name, index in sorted(spellings.items()):
+            lines.append(f"{name}, &css_prop_registry[{index}]")
         lines.append("%%")
         lines.append("")
         lines.append("/* Property names are ASCII case-insensitive, not high-bit masked.")
         lines.append(" * Reject non-ASCII before entering gperf's 7-bit hash. */")
         lines.append("const struct css_prop_entry *css_prop_lookup(const char *name, size_t len)")
         lines.append("{")
-        longest = max(len(key[0]) for key in self.keys)
+        longest = max(len(name) for name in spellings)
         lines.append(f"    if (name == NULL || len == 0 || len > {longest})")
         lines.append("        return NULL;")
         lines.append("    for (size_t i = 0; i < len; i++) {")
         lines.append("        if ((unsigned char)name[i] >= 0x80)")
         lines.append("            return NULL;")
         lines.append("    }")
-        lines.append("    return css_prop_lookup_generated(name, len);")
+        lines.append("    const struct css_prop_hash_entry *entry = css_prop_lookup_generated(name, len);")
+        lines.append("    return entry != NULL ? entry->property : NULL;")
         lines.append("}")
         lines.append("")
 
@@ -1129,7 +1155,8 @@ class MultiFileGenerator:
                          data.get('declaration_value', 'none').upper()))
         
         # Generate gperf input
-        gen = GperfInputGenerator(keys)
+        name_aliases = self.toml_reader.get_legacy_aliases() if self.toml_reader else {}
+        gen = GperfInputGenerator(keys, name_aliases)
         return gen.generate_gperf_input()
     
     def generate_declaration_ids(self):

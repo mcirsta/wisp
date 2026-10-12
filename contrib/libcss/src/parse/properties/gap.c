@@ -28,11 +28,12 @@
  *         CSS_INVALID if the input is not valid
  *
  * Post condition: \a *ctx is updated with the next token to process
- *                 If the input is invalid, then \a *ctx remains unchanged.
+ *                 On failure, both \a *ctx and result->used remain unchanged.
  */
 css_error css__parse_gap(css_language *c, const parserutils_vector *vector, int32_t *ctx, css_style *result)
 {
     int32_t orig_ctx = *ctx;
+    uint32_t orig_used = result->used;
     css_error error;
     const css_token *token;
     enum flag_value flag_value;
@@ -40,8 +41,8 @@ css_error css__parse_gap(css_language *c, const parserutils_vector *vector, int3
     /* gap: <length-percentage> <length-percentage>? | normal | inherit */
     token = parserutils_vector_peek(vector, *ctx);
     if (token == NULL) {
-        *ctx = orig_ctx;
-        return CSS_INVALID;
+        error = CSS_INVALID;
+        goto done;
     }
 
     flag_value = get_css_flag_value(c, token);
@@ -50,27 +51,22 @@ css_error css__parse_gap(css_language *c, const parserutils_vector *vector, int3
         /* inherit/initial/unset/revert */
         parserutils_vector_iterate(vector, ctx);
         error = css_stylesheet_style_flag_value(result, flag_value, CSS_PROP_ROW_GAP);
-        if (error != CSS_OK) {
-            *ctx = orig_ctx;
-            return error;
-        }
-        error = css_stylesheet_style_flag_value(result, flag_value, CSS_PROP_COLUMN_GAP);
         if (error != CSS_OK)
-            *ctx = orig_ctx;
-        return error;
+            goto done;
+        error = css_stylesheet_style_flag_value(result, flag_value, CSS_PROP_COLUMN_GAP);
+        goto done;
     }
 
     /* Parse first value (row-gap) via auto-generated value helper.
      * Handles: normal keyword, calc(), plain length/percentage. */
     int32_t saved_ctx = *ctx;
     error = css__parse_row_gap_value(c, vector, ctx, result);
-    if (error != CSS_OK) {
-        *ctx = orig_ctx;
-        return error;
-    }
+    if (error != CSS_OK)
+        goto done;
 
     /* Save position after first value */
     int32_t after_first = *ctx;
+    uint32_t after_first_used = result->used;
     consumeWhitespace(vector, ctx);
 
     /* Try to parse second value (column-gap) */
@@ -80,17 +76,24 @@ css_error css__parse_gap(css_language *c, const parserutils_vector *vector, int3
         error = css__parse_column_gap_value(c, vector, &temp_ctx, result);
         if (error == CSS_OK) {
             *ctx = temp_ctx;
-            return CSS_OK;
+            goto done;
         }
+        /* Only a syntax mismatch means the optional value was absent. Never
+         * hide allocation failure or retain bytecode from a failed probe. */
+        if (error != CSS_INVALID)
+            goto done;
+        result->used = after_first_used;
     }
 
     /* Only one value: replay the same tokens for column-gap */
     int32_t replay_ctx = saved_ctx;
     error = css__parse_column_gap_value(c, vector, &replay_ctx, result);
+    if (error == CSS_OK)
+        *ctx = after_first;
+done:
     if (error != CSS_OK) {
         *ctx = orig_ctx;
-        return error;
+        result->used = orig_used;
     }
-    *ctx = after_first;
-    return CSS_OK;
+    return error;
 }

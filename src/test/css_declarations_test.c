@@ -63,6 +63,12 @@ static const struct {
         {"--Tone", "--tone", "--9", "---", "color"}, 0},
     {"opacity:.5; @import 'no.css'; height:2px", {"opacity", "height"}, 0},
     {"font-family:ubuntu,urban; --u:U+400-4FF; --fn:u(red)", {"font-family", "--u", "--fn"}, 0},
+    {"grid-gap:3px 4px; GRID-ROW-GAP:5px; grid-column-gap:6px!important",
+        {"gap", "row-gap", "column-gap"}, 4},
+    {"grid-gap:var(--Gaps, 3px 4px);grid-row-gap:var(--Row);grid-column-gap:var(--Column)",
+        {"gap", "row-gap", "column-gap"}, 0},
+    {"\\67 rid-gap:3px; --grid-gap:9px;--Grid-gap:10px", {"gap", "--grid-gap", "--Grid-gap"}, 0},
+
     /* High-bit masking used to turn these valid Unicode identifiers into
      * grid-row and margin-left. Neither is a supported CSS property name. */
     {"griĭrow:2; margiέleft:1px; margiέleft:var(--x); color:red", {"color"}, 0},
@@ -479,6 +485,11 @@ static const struct {
         {"padding-top", "padding-right", "padding-bottom", "padding-left", "padding-inline-start", "padding-inline-end",
             "padding-block-end"},
         {0, 0, 0, 0, 1, 1, 2}, {0, 1, 2, 3, 0, 1, 0}},
+    {"grid-gap:3px 4px; row-gap:5px", {"column-gap", "row-gap"}, {0, 1}, {1, 0}},
+    {"row-gap:5px; grid-gap:3px 4px", {"row-gap", "column-gap"}, {1, 1}, {0, 1}},
+    {"grid-row-gap:5px!important; gap:3px 4px", {"row-gap", "column-gap"}, {0, 1}, {0, 1}},
+    {"grid-gap:3px 4px;gap:5px 6px;grid-column-gap:7px", {"row-gap", "column-gap"}, {1, 2}, {0, 0}},
+    {"grid-gap:var(--g);row-gap:3px", {"column-gap", "row-gap"}, {0, 1}, {1, 0}},
     {"gap:3px 4px; row-gap:5px; overflow:hidden", {"column-gap", "row-gap", "overflow-x", "overflow-y"}, {0, 1, 2, 2},
         {1, 0, 0, 1}},
     {"border-top:1px solid red; border-top-color:blue", {"border-top-width", "border-top-style", "border-top-color"},
@@ -545,10 +556,38 @@ START_TEST(test_order_many_custom_properties)
 }
 END_TEST
 
+START_TEST(test_alias_bytecode)
+{
+    static const char *const names[][2] = {{"grid-gap", "gap"}, {"grid-row-gap", "row-gap"},
+        {"grid-column-gap", "column-gap"}};
+    static const char *const values[] = {"3px", "normal", "1.2345678em", "12%", "calc(2px + 3%)",
+        "inherit", "initial", "unset", "revert", "var(--Gaps, 1px)", "var(--missing, initial)"};
+    for (size_t n = 0; n < N_ELEMENTS(names); n++) {
+        for (size_t v = 0; v < N_ELEMENTS(values); v++) {
+            for (unsigned important = 0; important < 2; important++) {
+                char alias[128], canonical[128];
+                snprintf(alias, sizeof(alias), "%s:%s%s", names[n][0], values[v], important ? "!important" : "");
+                snprintf(canonical, sizeof(canonical), "%s:%s%s", names[n][1], values[v], important ? "!important" : "");
+                css_declaration_list *a = parse(alias, _i != 0), *b = parse(canonical, _i != 0);
+                ck_assert_msg(css__declaration_list_count(a) == 1, "rejected %s", alias);
+                compare_sheets(css__declaration_list_sheet(a), css__declaration_list_sheet(b));
+                ck_assert_ptr_eq(css__declaration_list_get(a, 0)->property, css__declaration_list_get(b, 0)->property);
+                css__declaration_list_destroy(a);
+                css__declaration_list_destroy(b);
+            }
+        }
+    }
+}
+END_TEST
+
 START_TEST(test_property_metadata)
 {
     const struct css_prop_entry *width = css_prop_lookup("width", 5);
     const struct css_prop_entry *logical = css_prop_lookup("INLINE-SIZE", 11);
+    ck_assert_ptr_nonnull(css_prop_lookup("grid-gap", 8));
+    ck_assert_ptr_eq(css_prop_lookup("grid-gap", 8), css_prop_lookup("gap", 3));
+    ck_assert_ptr_eq(css_prop_lookup("GRID-ROW-GAP", 12), css_prop_lookup("row-gap", 7));
+    ck_assert_ptr_eq(css_prop_lookup("grid-column-gap", 15), css_prop_lookup("column-gap", 10));
     ck_assert_ptr_nonnull(width);
     ck_assert_ptr_nonnull(logical);
     ck_assert_int_eq(width->id, CSS_DECL_WIDTH);
@@ -573,6 +612,11 @@ START_TEST(test_property_metadata)
     ck_assert_ptr_null(css_prop_lookup("griĭrow", strlen("griĭrow")));
     ck_assert_ptr_null(css_prop_lookup("margiέleft", strlen("margiέleft")));
     ck_assert_ptr_null(css_prop_lookup("--width", 7));
+    ck_assert_ptr_null(css_prop_lookup("grid-gap-junk", 13));
+    ck_assert_ptr_null(css_prop_lookup("grid-ģap", strlen("grid-ģap")));
+    ck_assert_ptr_null(css_prop_lookup("--grid-gap", 10));
+    const char gap_slice[] = {'G', 'R', 'I', 'D', '-', 'G', 'A', 'P'};
+    ck_assert_ptr_eq(css_prop_lookup(gap_slice, sizeof(gap_slice)), css_prop_lookup("gap", 3));
     /* The length API accepts a slice, without requiring a terminator. */
     const char slice[] = {'w', 'i', 'd', 't', 'h'};
     ck_assert_ptr_eq(css_prop_lookup(slice, sizeof(slice)), width);
@@ -645,14 +689,16 @@ START_TEST(test_allocation_failure)
                                "counter-reset:Chapter 2 Section; counter-increment:Chapter; quotes:'«' '»';"
                                "overflow:hidden auto!important; font-family:One,Two/**/Words,Three\\20 ;"
                                "background-image:url(\\20 file\\22 ),url('other\\1 image');"
-                               "font:normal italic 1.2345em/1.25 One Two,serif; font:initial;";
+                               "font:normal italic 1.2345em/1.25 One Two,serif; font:initial;"
+                               "grid-gap:1px 2px;grid-row-gap:3px;grid-gap:var(--Gap);"
+                               "GRID-COLUMN-GAP:var(--Column, 4px);--grid-gap:5px;";
     /* Grow the captured-source buffer after a retained declaration exists. */
     char css[16384];
     size_t pos = (size_t)sprintf(css, "opacity:1; /*");
     memset(css + pos, 'c', 8192);
     pos += 8192;
     snprintf(css + pos, sizeof(css) - pos, "*/%s", declarations);
-    const size_t expected = 51;
+    const size_t expected = 56;
     /* Keep shared property strings alive, so each iteration tests the same
      * allocation sequence instead of global string-cache initialization. */
     css_stylesheet *keeper;
@@ -710,7 +756,7 @@ static css_error serialize_property(const css_declaration_order *order, const ch
 {
     const struct css_prop_entry *property = css_prop_lookup(name, strlen(name));
     if (property == NULL || !property->shorthand)
-        return css__declaration_value_serialize(find_value(order, name), out);
+        return css__declaration_value_serialize(find_value(order, property != NULL ? property->name : name), out);
     const css_declaration_contribution *members[16];
     /* This helper also runs with allocation failures enabled. Check's assert
      * bookkeeping allocates, so assertions belong after restoring the limit. */
@@ -1721,6 +1767,37 @@ static const struct {
     {"page-break-inside:AVOID", "page-break-inside", "avoid"},
     {"page-break-inside:AUTO", "page-break-inside", "auto"},
     {"page-break-after:initial", "page-break-after", "initial"},
+
+    /* CSS Cascade name aliases normalize before ordering and readback. */
+    {"grid-gap:1px 2px", "gap", "1px 2px"},
+    {"gap:1px 2px", "grid-gap", "1px 2px"},
+    {"GRID-GAP:1px", "grid-gap", "1px"},
+    {"grid-gap:1px 2px", "row-gap", "1px"},
+    {"grid-gap:1px 2px", "grid-row-gap", "1px"},
+    {"grid-gap:1px 2px", "grid-column-gap", "2px"},
+    {"grid-row-gap:3px;grid-column-gap:4px", "gap", "3px 4px"},
+    {"grid-column-gap:4px;row-gap:3px", "grid-gap", "3px 4px"},
+    {"grid-gap:1px 2px;gap:3px", "grid-gap", "3px"},
+    {"gap:3px;grid-gap:1px 2px", "gap", "1px 2px"},
+    {"grid-gap:1px 2px;row-gap:3px", "grid-gap", "3px 2px"},
+    {"gap:1px 2px;grid-column-gap:4px", "grid-gap", "1px 4px"},
+    {"grid-gap:1px 2px!important;gap:3px", "grid-gap", "1px 2px"},
+    {"gap:1px 2px!important;grid-gap:3px!important", "gap", "3px"},
+    {"gap:1px 2px;grid-column-gap:3px!important", "grid-gap", ""},
+    {"grid-gap:INHERIT", "gap", "inherit"},
+    {"grid-gap:INITIAL", "grid-row-gap", "initial"},
+    {"grid-row-gap:UNSET", "row-gap", "unset"},
+    {"grid-column-gap:REVERT", "column-gap", "revert"},
+    {"grid-gap:var(--Gap, 1px 2px)", "gap", "var(--Gap, 1px 2px)"},
+    {"gap:var(--Gap, 1px 2px)", "grid-gap", "var(--Gap, 1px 2px)"},
+    {"grid-gap:var(--Gap)", "grid-column-gap", ""},
+    {"grid-gap:var(--Gap);row-gap:2px", "grid-gap", ""},
+    {"grid-row-gap:var(--Row, 2px)", "row-gap", "var(--Row, 2px)"},
+    {"row-gap:var(--Row, 2px)", "grid-row-gap", "var(--Row, 2px)"},
+    {"\\67 rid-gap:1px", "gap", "1px"},
+    {"grid-gap:3px;grid-gap:1px garbage", "grid-gap", "3px"},
+    {"grid-gap:1px;--grid-gap:Authored;--Grid-gap:Other", "--grid-gap", "Authored"},
+    {"grid-gap:1px;--grid-gap:Authored;--Grid-gap:Other", "--Grid-gap", "Other"},
 
     /* Font readback retains specified precision, units and family token boundaries. */
     {"font:16px serif", "font", "16px serif"},
@@ -3362,6 +3439,48 @@ END_TEST
 #endif
 
 #ifdef WISP_TEST_ALLOC_FAILURE
+START_TEST(test_gap_rollback)
+{
+    static const char *const forms[] = {"grid-gap:3px", "grid-gap:3px 4px", "grid-gap:normal", "grid-gap:initial"};
+    css_declaration_list *list = parse(forms[_i], false);
+    const css_declaration *declaration = css__declaration_list_get(list, 0);
+    ck_assert_ptr_nonnull(declaration);
+    css_stylesheet *sheet;
+    ck_assert_int_eq(css_stylesheet_create(&params, &sheet), CSS_OK);
+    parserutils_vector *tokens;
+    ck_assert_int_eq(parserutils_vector_create(sizeof(css_token), 4, &tokens), PARSERUTILS_OK);
+    for (size_t i = 0; i < declaration->token_count; i++) {
+        css_token token = {.type = declaration->tokens[i].type, .idata = declaration->tokens[i].text};
+        ck_assert_int_eq(parserutils_vector_append(tokens, &token), PARSERUTILS_OK);
+    }
+    unsigned words = _i < 2 ? 6 : 2;
+    for (unsigned spare = 0; spare < words; spare++) {
+        css_style *style;
+        ck_assert_int_eq(css__stylesheet_style_create(sheet, &style), CSS_OK);
+        uint32_t before = style->allocated - spare;
+        for (uint32_t i = 0; i < before; i++)
+            ck_assert_int_eq(css__stylesheet_style_append(style, 0x12345678), CSS_OK);
+        int32_t ctx = 0;
+        realloc_limit(0);
+        css_error error = declaration->property->handler(sheet->parser_frontend, tokens, &ctx, style);
+        realloc_limit(UINT_MAX);
+        ck_assert_msg(error == CSS_NOMEM, "%s spare %u: %d", forms[_i], spare, error);
+        ck_assert_int_eq(ctx, 0);
+        ck_assert_uint_eq(style->used, before);
+        for (uint32_t i = 0; i < before; i++)
+            ck_assert_uint_eq(style->bytecode[i], 0x12345678);
+        ck_assert_int_eq(declaration->property->handler(sheet->parser_frontend, tokens, &ctx, style), CSS_OK);
+        ck_assert_uint_eq(style->used, before + words);
+        css__stylesheet_style_destroy(style);
+    }
+    parserutils_vector_destroy(tokens);
+    css_stylesheet_destroy(sheet);
+    css__declaration_list_destroy(list);
+}
+END_TEST
+#endif
+
+#ifdef WISP_TEST_ALLOC_FAILURE
 START_TEST(test_position_rollback)
 {
     css_stylesheet *sheet;
@@ -3694,6 +3813,7 @@ int main(void)
     tcase_add_loop_test(tc, test_value_allocation_failure, 0, 36);
     tcase_add_loop_test(tc, test_position_rollback, 0, 2);
     tcase_add_loop_test(tc, test_font_rollback, 0, 5);
+    tcase_add_loop_test(tc, test_gap_rollback, 0, 4);
     tcase_add_loop_test(tc, test_place_content_rollback, 0, 3);
     tcase_add_loop_test(tc, test_grid_placement_rollback, 0, 7);
     tcase_add_loop_test(tc, test_font_face_allocation_failure, 0, 3);
@@ -3701,6 +3821,7 @@ int main(void)
 #endif
     tcase_add_loop_test(tc, test_declaration_order, 0, ORDER_CASE_COUNT);
     tcase_add_test(tc, test_property_metadata);
+    tcase_add_loop_test(tc, test_alias_bytecode, 0, 2);
     tcase_add_test(tc, test_order_many_custom_properties);
     tcase_add_test(tc, test_order_lifecycle);
     tcase_add_test(tc, test_owned_tokens);

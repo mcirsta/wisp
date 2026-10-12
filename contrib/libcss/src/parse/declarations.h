@@ -24,7 +24,7 @@ typedef struct css_declaration_token {
 } css_declaration_token;
 
 typedef struct css_declaration {
-    lwc_string *name; /**< Lowercase ordinary name; case-sensitive custom name */
+    lwc_string *name; /**< Canonical ordinary name (case/aliases); case-sensitive custom name */
     const struct css_prop_entry *property; /**< Static registration; NULL for custom properties */
     /* Original value between ':' and the priority/delimiter, including outer
      * whitespace and comments. This is source text, not CSSOM serialization. */

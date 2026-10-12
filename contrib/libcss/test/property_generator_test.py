@@ -19,20 +19,46 @@ class DeclarationMetadataTest(unittest.TestCase):
         generator = GEN.MultiFileGenerator(self.reader.get_dispatch_order(), self.reader.prop_map)
         generator.toml_reader = self.reader
         ids = generator.generate_declaration_ids()
-        entries = generator.generate_gperf_input().split("%%")[1].strip().splitlines()
-        names = {entry.split(",")[0] for entry in entries}
-        self.assertEqual(names, {name.replace("_", "-") for name in self.reader.toml_data})
+        output = generator.generate_gperf_input()
+        keys = dict(line.split(", ", 1) for line in output.split("%%")[1].strip().splitlines())
+        aliases = self.reader.get_legacy_aliases()
+        self.assertEqual(set(keys), {name.replace("_", "-") for name in self.reader.toml_data} | set(aliases))
+        entries = output.split("static const struct css_prop_entry css_prop_registry[] = {\n")[1]
+        entries = entries.split("\n};")[0].splitlines()
+        self.assertEqual(len(entries), len(self.reader.toml_data))
         for name in self.reader.toml_data:
             self.assertEqual(ids.count(f"    CSS_DECL_{name.upper()},"), 1)
+        for alias, canonical in aliases.items():
+            self.assertEqual(keys[alias], keys[canonical])
+            self.assertNotIn("CSS_DECL_" + alias.replace("-", "_").upper() + ",", ids)
         # A wrapped longhand must not be classified as a shorthand.
-        color = next(e for e in entries if e.startswith("border-top-color,"))
-        side = next(e for e in entries if e.startswith("border-top,"))
+        color = next(e for e in entries if e.startswith('    {"border-top-color",'))
+        side = next(e for e in entries if e.startswith('    {"border-top",'))
         self.assertIn("false, false, NULL, 0", color)
         self.assertIn("true, false, css_decl_members_border_top, 3", side)
         for name, prop in self.reader.toml_data.items():
-            entry = next(e for e in entries if e.startswith(name.replace("_", "-") + ","))
+            entry = next(e for e in entries if e.startswith('    {"' + name.replace("_", "-") + '",'))
             kind = prop.get("declaration_value", "none").upper()
-            self.assertTrue(entry.endswith("CSS_DECL_VALUE_" + kind), name)
+            self.assertTrue(entry.endswith("CSS_DECL_VALUE_" + kind + "},"), name)
+
+    def test_legacy_alias_validation(self):
+        for aliases in ("grid-gap", [1], ["GRID-GAP"], ["grid_gap"], ["--gap"], ["gríd-gap"],
+                        ["gap"], ["row-gap"], ["grid-row-gap"], ["grid-gap", "grid-gap"]):
+            with self.subTest(aliases=aliases):
+                self.reader.toml_data["gap"]["legacy_aliases"] = aliases
+                with self.assertRaisesRegex(ValueError, "legacy.alias"):
+                    self.reader.validate_declarations()
+
+    def test_alias_does_not_add_dispatch_or_parser(self):
+        self.reader.toml_data["gap"]["legacy_aliases"].append("extra-legacy-gap")
+        self.reader.validate_declarations()
+        aliases = self.reader.get_legacy_aliases()
+        self.assertEqual(aliases["extra-legacy-gap"], "gap")
+        self.assertNotIn("inline-size", aliases)
+        self.assertNotIn("block-size", aliases)
+        self.assertNotIn("extra_legacy_gap", self.reader.prop_map)
+        self.assertNotIn("extra_legacy_gap:", self.reader.generate_properties_gen())
+        self.assertFalse(any(prop["name"] == "extra_legacy_gap" for prop in self.reader.get_dispatch_order()))
 
     def test_unknown_value_family(self):
         self.reader.toml_data["width"]["declaration_value"] = "typo"

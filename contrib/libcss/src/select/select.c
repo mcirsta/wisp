@@ -2859,6 +2859,7 @@ static void cascade_skip_property(css_style *style, css_code_t opv)
         case CSS_PROP_WIDTH:
         case CSS_PROP_COLUMN_WIDTH:
         case CSS_PROP_COLUMN_GAP:
+        case CSS_PROP_ROW_GAP:
             if (value == BOTTOM_SET)
                 advance_bytecode(style, 2 * sizeof(css_code_t));
             break;

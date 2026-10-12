@@ -74,6 +74,8 @@ struct css_prop_entry {
 };
 
 /* Name must already be CSS-unescaped. Unknown/non-ASCII names return NULL.
+ * Legacy name aliases return the identical canonical registration. Logical
+ * properties retain distinct registrations despite shared rendering opcodes.
  * The returned registration has static lifetime. Custom properties use their
  * case-sensitive name and do not have an entry in this registry. */
 const struct css_prop_entry *css_prop_lookup(const char *name, size_t len);

@@ -1,0 +1,23 @@
+<!doctype html><meta charset="utf-8"><title>Legacy gap names</title>
+<!-- CSS Gaps 1, Legacy Gap Properties (https://drafts.csswg.org/css-gaps-1/#gap-legacy),
+and CSS Cascade 5, Property Aliasing: grid-gap, grid-row-gap and grid-column-gap
+are name aliases, including outside grid layout. Fixed 40x20px items make the
+expected gaps independent of fonts. Checkbox restyles exercise deferred aliases;
+an invalid deferred value resets both components instead of revealing an earlier
+declaration under the preferred name. -->
+<style>
+body{margin:20px}.case{display:flow-root;width:120px;margin-bottom:30px}
+.grid{display:grid;grid-template-columns:40px 40px;grid-template-rows:20px 20px;width:120px}
+.item{width:40px;height:20px;background:#58a}
+.flex{display:flex;flex-wrap:wrap;align-content:flex-start;width:100px}
+.flex .item{flex:0 0 40px}
+#switch{position:absolute;left:300px;top:0}
+.variable{--g:10px 20px;grid-gap:var(--g)}
+#switch:checked ~ .case .variable{--g:6px 8px}
+</style><input id="switch" type="checkbox" aria-label="Change gaps">
+<div class="case" id="grid-case"><div class="grid" style="grid-gap:10px 20px"><div class="item" id="grid-first"></div><div class="item" id="grid-second"></div><div class="item" id="grid-third"></div></div></div>
+<div class="case" id="mixed-case"><div class="grid" style="gap:1px;GRID-GAP:10px 20px;row-gap:6px;grid-column-gap:8px!important;column-gap:24px"><div class="item" id="mixed-first"></div><div class="item" id="mixed-second"></div><div class="item" id="mixed-third"></div></div></div>
+<div class="case" id="priority-case"><div class="grid" style="grid-gap:2px 6px!important;gap:20px"><div class="item" id="priority-first"></div><div class="item" id="priority-second"></div><div class="item" id="priority-third"></div></div></div>
+<div class="case" id="deferred-case"><div class="grid variable"><div class="item" id="deferred-first"></div><div class="item" id="deferred-second"></div><div class="item" id="deferred-third"></div></div></div>
+<div class="case" id="flex-case"><div class="flex variable"><div class="item" id="flex-first"></div><div class="item" id="flex-second"></div><div class="item" id="flex-third"></div></div></div>
+<div class="case" id="invalid-case"><div class="grid" style="gap:10px 20px;grid-gap:var(--missing)"><div class="item" id="invalid-first"></div><div class="item" id="invalid-second"></div><div class="item" id="invalid-third"></div></div></div>

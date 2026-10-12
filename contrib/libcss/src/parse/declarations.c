@@ -214,13 +214,15 @@ css_error css__declaration_list_record(css_declaration_list *list, const css_tok
 
     if (css__token_is_custom_property(name)) {
         entry.name = lwc_string_ref(name->idata);
-    } else if (lwc_string_tolower(name->idata, &entry.name) != lwc_error_ok) {
-        declaration_destroy(&entry);
-        return CSS_NOMEM;
-    }
-    if (!css__token_is_custom_property(name)) {
-        entry.property = css_prop_lookup(lwc_string_data(entry.name), lwc_string_length(entry.name));
+    } else {
+        entry.property = css_prop_lookup(lwc_string_data(name->idata), lwc_string_length(name->idata));
         assert(entry.property != NULL);
+        /* CSS Cascade name aliases are canonicalized at parse time, just like
+         * ASCII case. Custom property names above retain their own identity. */
+        if (lwc_intern_string(entry.property->name, strlen(entry.property->name), &entry.name) != lwc_error_ok) {
+            declaration_destroy(&entry);
+            return CSS_NOMEM;
+        }
     }
     entry.token_count = (size_t)(end - value_start);
     if (entry.token_count > SIZE_MAX / sizeof(css_declaration_token)) {

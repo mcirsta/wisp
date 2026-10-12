@@ -1765,6 +1765,54 @@ static void test_deferred_revert(void)
     }
 }
 
+static void test_gap_aliases(void)
+{
+    static const struct { const char *declarations; int row, column; } cases[] = {
+        {"gap:2px 6px!important;gap:9px", 2, 6},
+        {"grid-gap:2px 6px!important;gap:9px", 2, 6},
+        {"row-gap:2px!important;grid-gap:9px", 2, 9},
+        {"grid-row-gap:2px!important;gap:9px", 2, 9},
+        {"--g:3px 4px;grid-gap:var(--g)", 3, 4},
+        {"--g:3px 4px;grid-gap:var(--g);row-gap:5px", 5, 4},
+        {"--g:3px 4px;gap:7px;grid-gap:var(--g)", 3, 4},
+        {"--g:3px 4px;grid-gap:var(--g)!important;gap:7px", 3, 4},
+        {"--g:3px 4px;gap:7px!important;grid-gap:var(--g)", 7, 7},
+        {"--r:8px;--c:9px;grid-row-gap:var(--r);grid-column-gap:var(--c)", 8, 9},
+        {"--g:3px;grid-row-gap:var(--g)!important;gap:7px", 3, 7},
+        {"--g:3px;row-gap:var(--g)!important;grid-gap:7px", 3, 7},
+        {"grid-gap:var(--missing, 8px 9px)", 8, 9},
+        {"--r:8px;grid-row-gap:var(--r);grid-column-gap:var(--r)", 8, 8},
+        {"--grid-gap:11px;--Grid-gap:12px;grid-row-gap:var(--grid-gap);column-gap:var(--Grid-gap)", 11, 12},
+        /* The custom-property scan must skip the whole row-gap payload before
+         * reading subsequent definitions, even when they follow a shorthand. */
+        {"row-gap:2px;--c:6px;column-gap:var(--c)", 2, 6},
+        {"grid-row-gap:2px;--c:6px;column-gap:var(--c)", 2, 6},
+        {"gap:2px 6px;--r:4px;row-gap:var(--r)", 4, 6},
+        {"grid-gap:2px 6px;--r:4px;grid-row-gap:var(--r)", 4, 6},
+        {"row-gap:32768px;--c:6px;column-gap:var(--c)", 32768, 6},
+        {"grid-gap:32768px 6px;--r:4px;grid-row-gap:var(--r)", 4, 6},
+    };
+    for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
+        style_case ctx;
+        char css[256];
+        snprintf(css, sizeof(css), "div {%s}", cases[i].declarations);
+        const css_computed_style *style = select_style_from_css(css, &ctx);
+        expect_length_px(css, style, css_computed_row_gap, CSS_ROW_GAP_SET, cases[i].row);
+        expect_length_px(css, style, css_computed_column_gap, CSS_COLUMN_GAP_SET, cases[i].column);
+        destroy_style_case(&ctx);
+    }
+    /* A deferred invalid value resets the winning property. It must not bring
+     * back an earlier declaration under the other spelling. */
+    style_case ctx;
+    const css_computed_style *style = select_style_from_css(
+        "div {gap:9px;grid-gap:var(--missing)}", &ctx);
+    css_fixed_or_calc value;
+    css_unit unit;
+    assert(css_computed_row_gap(style, &value, &unit) == CSS_ROW_GAP_NORMAL);
+    assert(css_computed_column_gap(style, &value, &unit) == CSS_COLUMN_GAP_NORMAL);
+    destroy_style_case(&ctx);
+}
+
 static void test_repeat_and_decoration_values(void)
 {
     style_case ctx;
@@ -1972,6 +2020,7 @@ int main(int argc, char **argv)
     test_grid_placement_payloads();
     test_position_payloads();
     test_repeat_and_decoration_values();
+    test_gap_aliases();
     test_deferred_revert();
     test_environment_outlives_stylesheet();
 

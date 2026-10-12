@@ -1844,7 +1844,7 @@ css_error parseSelectorList(css_language *c, const parserutils_vector *vector, c
 /* Preserve the original token sequence and strip only a top-level trailing
  * !important. Both custom properties and deferred ordinary declarations use
  * the same stylesheet-owned representation and bytecode shape. */
-static css_error parseVariableDeclaration(css_language *c, const css_token *property,
+static css_error parseVariableDeclaration(css_language *c, lwc_string *property,
     const parserutils_vector *vector, int32_t *ctx, css_rule *rule, opcode_t opcode)
 {
     int32_t start = *ctx, end = start, scan = start;
@@ -1882,7 +1882,7 @@ static css_error parseVariableDeclaration(css_language *c, const css_token *prop
     error = css__stylesheet_var_value_add(c->sheet, vector, start, end, &value_id);
     if (error != CSS_OK)
         return error;
-    error = css__stylesheet_string_add(c->sheet, lwc_string_ref(property->idata), &name_id);
+    error = css__stylesheet_string_add(c->sheet, lwc_string_ref(property), &name_id);
     if (error != CSS_OK)
         return error;
     error = css__stylesheet_style_create(c->sheet, &style);
@@ -1939,8 +1939,15 @@ css_error parseProperty(
         }
 
         if (has_var) {
-            return parseVariableDeclaration(c, property, vector, ctx, rule,
-                (opcode_t)CSS_PROP_VAR_DEFERRED);
+            /* Store the same canonical identity for ordinary and deferred
+             * declarations. Alias spelling must not survive into CSSOM or
+             * create another property during variable resolution. */
+            lwc_string *name;
+            if (lwc_intern_string(entry->name, strlen(entry->name), &name) != lwc_error_ok)
+                return CSS_NOMEM;
+            error = parseVariableDeclaration(c, name, vector, ctx, rule, (opcode_t)CSS_PROP_VAR_DEFERRED);
+            lwc_string_unref(name);
+            return error;
         }
     }
 
@@ -1996,6 +2003,6 @@ css_error parseProperty(
 css_error parseCustomProperty(css_language *c, const css_token *property,
     const parserutils_vector *vector, int32_t *ctx, css_rule *rule)
 {
-    return parseVariableDeclaration(c, property, vector, ctx, rule,
+    return parseVariableDeclaration(c, property->idata, vector, ctx, rule,
         (opcode_t)CSS_PROP_CUSTOM_PROPERTY);
 }
