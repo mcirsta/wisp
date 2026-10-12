@@ -633,6 +633,7 @@ START_TEST(test_allocation_failure)
                                "column-rule:thin solid;column-rule:revert;"
                                "grid-area:2/3/span 2/2 span;grid-column:span 2/4;grid-row:initial;"
                                "grid-column-start:3 span;grid-column-end:unset;grid-row-end:-3;"
+                               "place-content:center flex-end;place-content:normal!important;place-content:unset;"
                                "color:rgb(1.2 3.4 5.6 / 50%);border-color:#1234 red rgb(3,2,1) currentcolor;"
                                /* Force the parser's token vector to grow too. */
                                "--large:red red red red red red red red red red red red red red red red "
@@ -647,7 +648,7 @@ START_TEST(test_allocation_failure)
     memset(css + pos, 'c', 8192);
     pos += 8192;
     snprintf(css + pos, sizeof(css) - pos, "*/%s", declarations);
-    const size_t expected = 41;
+    const size_t expected = 44;
     /* Keep shared property strings alive, so each iteration tests the same
      * allocation sequence instead of global string-cache initialization. */
     css_stylesheet *keeper;
@@ -1502,6 +1503,36 @@ static const struct {
     {"grid-column-end:2;grid-column-end:1.0", "grid-column-end", "2"},
     {"grid-column-end:2;grid-column-end:1px", "grid-column-end", "2"},
     {"grid-column-end:2;grid-column-end:span initial", "grid-column-end", "2"},
+    /* CSS Align 3 section 5.2: axis order and omitted second value. */
+    {"place-content:CENTER", "place-content", "center"},
+    {"place-content:center", "align-content", "center"},
+    {"place-content:center", "justify-content", "center"},
+    {"place-content:CENTER center", "place-content", "center"},
+    {"place-content:NORMAL", "place-content", "normal"},
+    {"place-content:normal", "align-content", "normal"},
+    {"place-content:normal", "justify-content", "normal"},
+    {"place-content:stretch", "place-content", "stretch"},
+    {"place-content:flex-start flex-end", "place-content", "flex-start flex-end"},
+    {"place-content:space-around space-between", "align-content", "space-around"},
+    {"place-content:space-around space-between", "justify-content", "space-between"},
+    {"place-content:SPACE-EVENLY", "place-content", "space-evenly"},
+    {"place-content:\\63 enter", "place-content", "center"},
+    {"place-content:start center", "place-content", "start center"},
+    {"place-content:end flex-start", "place-content", "end flex-start"},
+    {"place-content:center;justify-content:flex-end", "place-content", "center flex-end"},
+    {"place-content:center;align-content:flex-end", "place-content", "flex-end center"},
+    {"align-content:center;justify-content:center", "place-content", "center"},
+    {"align-content:stretch", "place-content", ""},
+    {"place-content:center!important;justify-content:flex-end", "place-content", "center"},
+    {"place-content:center;justify-content:flex-end!important", "place-content", ""},
+    {"place-content:inherit", "place-content", "inherit"},
+    {"place-content:initial", "justify-content", "initial"},
+    {"place-content:unset", "align-content", "unset"},
+    {"place-content:revert", "place-content", "revert"},
+    {"place-content:initial;justify-content:inherit", "place-content", ""},
+    {"place-content:var(--Align, center flex-end)", "place-content", "var(--Align, center flex-end)"},
+    {"place-content:var(--Align)", "align-content", ""},
+    {"place-content:var(--Align);justify-content:center", "place-content", ""},
     {"grid-row:AUTO", "grid-row", "auto"},
     {"grid-row:2 / auto", "grid-row", "2"},
     {"grid-row:auto / 3", "grid-row", "auto / 3"},
@@ -2314,6 +2345,68 @@ START_TEST(test_grid_placement_invalid)
 }
 END_TEST
 
+START_TEST(test_place_content_bytecode)
+{
+    static const char *const keywords[] = {"normal", "stretch", "flex-start", "flex-end", "center",
+        "space-between", "space-around", "space-evenly", "start", "end"};
+    /* The final two keywords are currently supported only on align-content.
+     * Exercise every supported pair without conflating their enum encodings. */
+    for (size_t a = 0; a < N_ELEMENTS(keywords); a++) {
+        for (size_t b = 0; b < N_ELEMENTS(keywords) - 2; b++) {
+            for (unsigned important = 0; important < 2; important++) {
+                char shorthand[128], longhands[160];
+                const char *priority = important ? "!important" : "";
+                snprintf(shorthand, sizeof(shorthand), "place-content:%s %s%s", keywords[a], keywords[b], priority);
+                snprintf(longhands, sizeof(longhands), "align-content:%s%s;justify-content:%s%s",
+                    keywords[a], priority, keywords[b], priority);
+                css_declaration_list *list = parse(shorthand, _i != 0), *reference = parse(longhands, _i != 0);
+                ck_assert_msg(css__declaration_list_count(list) == 1, "rejected %s", shorthand);
+                compare_sheets(css__declaration_list_sheet(list), css__declaration_list_sheet(reference));
+                css__declaration_list_destroy(list);
+                if (a == b) {
+                    snprintf(shorthand, sizeof(shorthand), "place-content:%s%s", keywords[a], priority);
+                    list = parse(shorthand, _i != 0);
+                    ck_assert_msg(css__declaration_list_count(list) == 1, "rejected %s", shorthand);
+                    compare_sheets(css__declaration_list_sheet(list), css__declaration_list_sheet(reference));
+                    css__declaration_list_destroy(list);
+                }
+                css__declaration_list_destroy(reference);
+            }
+        }
+    }
+    static const char *const wide[] = {"inherit", "initial", "unset", "revert"};
+    for (size_t i = 0; i < N_ELEMENTS(wide); i++) {
+        char shorthand[64], longhands[96];
+        snprintf(shorthand, sizeof(shorthand), "place-content:%s!important", wide[i]);
+        snprintf(longhands, sizeof(longhands), "align-content:%s!important;justify-content:%s!important", wide[i], wide[i]);
+        css_declaration_list *a = parse(shorthand, _i != 0), *b = parse(longhands, _i != 0);
+        compare_sheets(css__declaration_list_sheet(a), css__declaration_list_sheet(b));
+        css__declaration_list_destroy(a);
+        css__declaration_list_destroy(b);
+    }
+}
+END_TEST
+
+START_TEST(test_place_content_invalid)
+{
+    static const char *const values[] = {"initial center", "center initial", "unset normal", "normal unset",
+        "revert stretch", "stretch revert", "inherit flex-end", "flex-end inherit", "initial initial",
+        "center center center", "center / center", "center,center", "auto", "center 2px",
+        /* Unsupported alignment forms must not partially replace the fallback. */
+        "baseline", "first baseline", "safe center", "center unsafe center", "center start"};
+    css_declaration_list *base = parse("place-content:space-between flex-end", false);
+    for (size_t i = 0; i < N_ELEMENTS(values); i++) {
+        char css[160];
+        snprintf(css, sizeof(css), "place-content:space-between flex-end;place-content:%s", values[i]);
+        css_declaration_list *list = parse(css, _i != 0);
+        ck_assert_msg(css__declaration_list_count(list) == 1, "accepted invalid/unsupported shorthand: %s", css);
+        compare_sheets(css__declaration_list_sheet(base), css__declaration_list_sheet(list));
+        css__declaration_list_destroy(list);
+    }
+    css__declaration_list_destroy(base);
+}
+END_TEST
+
 START_TEST(test_quirky_border_values)
 {
     static const char *const forms[][3] = {
@@ -2485,6 +2578,45 @@ START_TEST(test_value_arguments)
 END_TEST
 
 #ifdef WISP_TEST_ALLOC_FAILURE
+/* Force either emitted word to allocate, for explicit, defaulted and CSS-wide
+ * pairs. No failure may publish a partial shorthand or consume its tokens. */
+START_TEST(test_place_content_rollback)
+{
+    css_stylesheet *sheet;
+    ck_assert_int_eq(css_stylesheet_create(&params, &sheet), CSS_OK);
+    css_language *language = sheet->parser_frontend;
+    css_token parts[] = {{.type = CSS_TOKEN_IDENT, .idata = language->strings[CENTER]},
+        {.type = CSS_TOKEN_S}, {.type = CSS_TOKEN_IDENT, .idata = language->strings[FLEX_END]}};
+    if (_i == 2)
+        parts[0].idata = language->strings[INITIAL];
+    parserutils_vector *tokens;
+    ck_assert_int_eq(parserutils_vector_create(sizeof(css_token), 4, &tokens), PARSERUTILS_OK);
+    for (size_t i = 0; i < (_i == 0 ? N_ELEMENTS(parts) : 1); i++)
+        ck_assert_int_eq(parserutils_vector_append(tokens, &parts[i]), PARSERUTILS_OK);
+    for (unsigned spare = 0; spare < 2; spare++) {
+        css_style *style;
+        ck_assert_int_eq(css__stylesheet_style_create(sheet, &style), CSS_OK);
+        uint32_t before = style->allocated - spare;
+        for (uint32_t i = 0; i < before; i++)
+            ck_assert_int_eq(css__stylesheet_style_append(style, 0x12345678), CSS_OK);
+        int32_t ctx = 0;
+        realloc_limit(0);
+        css_error error = css__parse_place_content(language, tokens, &ctx, style);
+        realloc_limit(UINT_MAX);
+        ck_assert_msg(error == CSS_NOMEM, "place-content variant %d spare %u: %d", _i, spare, error);
+        ck_assert_int_eq(ctx, 0);
+        ck_assert_uint_eq(style->used, before);
+        for (uint32_t i = 0; i < before; i++)
+            ck_assert_uint_eq(style->bytecode[i], 0x12345678);
+        ck_assert_int_eq(css__parse_place_content(language, tokens, &ctx, style), CSS_OK);
+        ck_assert_uint_eq(style->used, before + 2);
+        css__stylesheet_style_destroy(style);
+    }
+    parserutils_vector_destroy(tokens);
+    css_stylesheet_destroy(sheet);
+}
+END_TEST
+
 /* Every grid parser must restore its complete output span if any append fails,
  * including CSS-wide expansion and the later defaulted shorthand members. */
 START_TEST(test_grid_placement_rollback)
@@ -2621,11 +2753,12 @@ START_TEST(test_value_allocation_failure)
                       "clip:rect(.1234567px, auto, -1.2345678em, 1px);"
                       "list-style:none inside url(Marker.png);columns:.1234567em 3;"
                       "grid-area:2/3/span 4/5 span;grid-column:2 span/3;"
+                      "place-content:center flex-end;"
                       "font-family:One/**/Two\\20 , 'a\\22 b\\a c',SERIF;";
     static const char *const names[] = {"margin", "--x", "background-image", "background-attachment", "border-style",
         "content", "quotes", "counter-reset", "aspect-ratio", "border-spacing", "clip", "font-family", "flex",
         "flex-flow", "color", "border-color", "list-style", "columns", "border", "border-left", "outline", "column-rule",
-        "grid-area", "grid-column", "grid-row", "grid-row-end"};
+        "grid-area", "grid-column", "grid-row", "grid-row-end", "place-content"};
     const char *name = names[_i];
     /* Keep full-border inputs separate: they reset the quad style/colour cases. */
     if (strcmp(name, "border") == 0 || strcmp(name, "border-left") == 0)
@@ -2697,6 +2830,8 @@ int main(void)
     tcase_add_loop_test(tc, test_border_shorthand_invalid, 0, 2);
     tcase_add_loop_test(tc, test_grid_placement_bytecode, 0, 2);
     tcase_add_loop_test(tc, test_grid_placement_invalid, 0, 2);
+    tcase_add_loop_test(tc, test_place_content_bytecode, 0, 2);
+    tcase_add_loop_test(tc, test_place_content_invalid, 0, 2);
     tcase_add_test(tc, test_quirky_border_values);
     tcase_add_loop_test(tc, test_colour_alpha_roundtrip, 0, 2);
     tcase_add_test(tc, test_quirky_colour_values);
@@ -2708,7 +2843,8 @@ int main(void)
     tcase_add_loop_test(tc, test_overflow_axes, 0, 2);
     tcase_add_test(tc, test_value_arguments);
 #ifdef WISP_TEST_ALLOC_FAILURE
-    tcase_add_loop_test(tc, test_value_allocation_failure, 0, 26);
+    tcase_add_loop_test(tc, test_value_allocation_failure, 0, 27);
+    tcase_add_loop_test(tc, test_place_content_rollback, 0, 3);
     tcase_add_loop_test(tc, test_grid_placement_rollback, 0, 7);
     tcase_add_loop_test(tc, test_font_face_allocation_failure, 0, 3);
     tcase_add_test(tc, test_content_terminator_allocation_failure);

@@ -2223,6 +2223,8 @@ cascade = "none"
 computed = "none"
 
 [place_content]
+helper_longhands = ["align_content", "justify_content"]
+declaration_value = "pair_keyword"
 declaration_longhands = ["align_content", "justify_content"]
 enum = "CSS_PROP_PLACE_CONTENT"
 inherited = false

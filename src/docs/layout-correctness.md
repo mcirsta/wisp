@@ -89,6 +89,31 @@ Supporting column styles needs retained column/column-group data from constructi
 then integration with the existing table grid (CSS 2.2
 [17.3](https://www.w3.org/TR/CSS22/tables.html#columns)).
 
+## Wrapped flex line content alignment
+
+Confirmed on 2026-10-12 while checking the `place-content` parser. The unchanged
+`layout_flex__place_lines()` always distributes positive cross-axis free space
+by stretching lines; it never reads `align-content`. Explicit longhands reproduce
+the failure too, so this is not a regression from the shorthand/CSSOM changes.
+
+Minimal reproducer:
+
+```html
+<div style="display:flex;flex-wrap:wrap;width:100px;height:100px;
+            align-items:flex-start;align-content:center;justify-content:center">
+  <div style="flex:0 0 60px;height:20px"></div>
+  <div style="flex:0 0 60px;height:20px"></div>
+</div>
+```
+
+Both items start at x=20. Their expected y positions are 30 and 50; Wisp places
+them at 0 and 50. The two lines occupy 40px, so `center` must split the remaining
+60px before/after them, per [Flexbox section 8.4](https://www.w3.org/TR/css-flexbox-1/#align-content-property).
+The fix needs actual content-distribution modes in line placement, preserving
+nowrap behavior, gaps, reverse axes, auto cross sizes and overflow fallbacks.
+Keep this as a separate layout batch; the CSSOM parser regression uses grid
+layout to test the shorthand independently of this missing flex behavior.
+
 ## JavaScript-driven HotNews sidebar (deferred)
 
 The live article sidebar headed "Ultima oră" stays on its loading placeholders.
@@ -99,13 +124,14 @@ The site's `app2.js` finds `[data-hn2-latest-articles="frontend"]`, fetches
 The public endpoint returned HTTP 200 with 12 headline items during the check.
 
 This is missing JavaScript/DOM integration, not evidence of blurred text or a
-recent layout regression. Wisp's QuickJS `document.querySelectorAll()` still
-unconditionally returns an empty array; its element objects, `innerHTML` and
-class operations are also stubs. The selector stub predates this correctness
-series. Real queries must follow the [DOM selector APIs](https://dom.spec.whatwg.org/#dom-parentnode-queryselectorall).
-Enabling scripting alone is insufficient. A later bounded JS investigation must
-establish the bundle's other prerequisites; the first runtime failure was not
-measured here. No site-specific replacement or JS expansion is part of this batch.
+recent layout regression. At the original check, element queries, `innerHTML`
+and class operations were stubs. Subsequent JS batches implemented those native
+DOM operations; their old absence is no longer the current blocker. The saved
+`app2.js` uses `type="module"`, which remains unsupported, and its content-fetching
+dependencies still need a site-driven follow-up. Track current capabilities in
+the [JS migration notes](../../plans/js_migration_analysis.md). Enabling scripting
+alone does not establish that the live sidebar works; no site-specific substitute
+has been added.
 
 The saved HotNews homepage under `sites/` already contains headline list items
 and `data-hn2-latest-hydrated="1"`. That explains why the saved version can show

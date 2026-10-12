@@ -1,0 +1,18 @@
+<!doctype html><meta charset="utf-8"><title>Place-content grammar</title>
+<!-- CSS Align 3 section 5.2 and Grid 2 section 11.8. A 60px column and two
+20px-high items in auto rows occupy a 100x100px grid. Align-content distributes
+60px of block-axis space (normal stretches the auto rows); justify-content
+positions the column in 40px of inline-axis space. No fonts or browser reference
+are needed. -->
+<style>
+body{margin:20px}.case{display:flow-root;width:240px;margin-bottom:30px}
+.grid{display:grid;grid-template-columns:60px;grid-template-rows:auto auto;width:100px;height:100px;background:#eee}
+.item{width:60px;height:20px;background:#58a}#switch{position:absolute;left:300px;top:0}
+#switch:checked ~ .case .grid{place-content:center flex-end!important}
+</style><input id="switch" type="checkbox" aria-label="Change content alignment">
+<div class="case" id="center-case"><div class="grid" id="center-grid" style="place-content:center"><div class="item" id="center-first"></div><div class="item" id="center-second"></div></div></div>
+<div class="case" id="different-case"><div class="grid" id="different-grid" style="place-content:flex-end center"><div class="item" id="different-first"></div><div class="item" id="different-second"></div></div></div>
+<div class="case" id="normal-case"><div class="grid" id="normal-grid" style="place-content:normal"><div class="item" id="normal-first"></div><div class="item" id="normal-second"></div></div></div>
+<div class="case" id="first-wide-case"><div class="grid" id="first-wide-grid" style="place-content:center flex-end;place-content:initial center"><div class="item" id="first-wide-first"></div><div class="item" id="first-wide-second"></div></div></div>
+<div class="case" id="second-wide-case"><div class="grid" id="second-wide-grid" style="place-content:center flex-end;place-content:center unset"><div class="item" id="second-wide-first"></div><div class="item" id="second-wide-second"></div></div></div>
+<div class="case" id="variable-case"><div class="grid" id="variable-grid" style="--alignment:flex-end center;place-content:var(--alignment)"><div class="item" id="variable-first"></div><div class="item" id="variable-second"></div></div></div>

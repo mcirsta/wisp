@@ -62,7 +62,8 @@ class DeclarationMetadataTest(unittest.TestCase):
         generator.toml_reader = self.reader
         declarations = generator.generate_parse_declarations()
         for name in ("flex_grow", "flex_shrink", "flex_basis", "flex_direction", "flex_wrap",
-                     "list_style_position", "list_style_image", "column_width", "column_count"):
+                     "list_style_position", "list_style_image", "column_width", "column_count",
+                     "align_content", "justify_content"):
             self.assertIn(f"css__parse_{name}_value(", declarations)
             helper = next(line for line in spec.splitlines() if line.startswith(name + "_value:"))
             for keyword in ("INHERIT:", "INITIAL:", "REVERT:", "UNSET:"):

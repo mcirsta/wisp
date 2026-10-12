@@ -1431,6 +1431,51 @@ grid work; this batch does not claim full Grid conformance. Remaining CSSOM
 aggregate serializers, declaration-block writes and the live `element.style`
 wrapper remain separate work, including the saved eBihoreanul opacity blocker.
 
+### Place-content specified values (2026-10-12)
+
+Committed the numeric grid placement batch as `e4187440`. Continued with
+`place-content` specified readback using the existing pair-keyword serializer:
+align-content first, justify-content second, with an equal second keyword
+omitted. Longhand overrides, importance, CSS-wide keywords and pending variables
+use the common declaration-order and serialization rules. Generator metadata
+enables readback without adding a new serializer or persistent state.
+
+Replaced the native shorthand's temporary styles and merge/reparse fallback
+with generated value-only longhand helpers writing directly to the output.
+The parser now rejects mixed CSS-wide values such as `initial center` and
+`center unset`; all append failures restore the token cursor and complete output
+span. A single ordinary value is parsed with each longhand's own grammar and
+encoding, avoiding assumptions that their enum values are interchangeable.
+This removes temporary component-style allocations and propagates allocation
+errors rather than treating them as an omitted second value.
+
+The grammar follows [CSS Align 3 section 5.2](https://drafts.csswg.org/css-align-3/#place-content).
+Baseline alignment and multi-keyword safe/unsafe alignment remain unsupported;
+the existing align-content start/end aliases and justify-content's lack of those
+keywords are unchanged. This is internal CSSOM groundwork, not a new live JS
+binding. The older Duktape style placeholder remains unsuitable to port.
+
+Regression coverage includes all 80 supported keyword pairs against native
+longhand bytecode, single values, importance, whole/chunked parsing,
+serialize/reparse, invalid fallback and forced failure at either emitted word.
+A six-case grid fixture checks both axes, variable substitution,
+malformed-declaration fallback and resize/native-restyle round trips using
+geometry derived from the specifications.
+
+The initial wrapped-flex fixture exposed pre-existing line packing that always
+stretches and never reads align-content. Explicit longhands reproduce the same
+failure. Its reproducer and standards basis are recorded in the
+[correctness backlog](../src/docs/layout-correctness.md#wrapped-flex-line-content-alignment).
+Fixing all distribution modes, overflow fallbacks and reversed axes is separate
+layout work; no flex expectations were changed to accept the incorrect geometry.
+
+Validation: all 79 selected native Debug suites pass with ASan/UBSan/LeakSanitizer,
+as do eight selected Release suites. Declaration coverage is 1003 Debug / 1048
+Release checks, including fault injection; all 14 generator checks pass. All 18
+selected Qt integrations pass across the run and the focused grid-fixture rerun.
+The six new cases include resize and native-restyle round trips. Both full builds
+are warning-free. The live element.style wrapper remains pending.
+
 ## Assessment
 
 Keep QuickJS-ng and libdom. The missing part is the browser binding and execution
