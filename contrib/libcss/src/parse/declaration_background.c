@@ -7,6 +7,8 @@
 #include <string.h>
 
 #include "parse/declaration_background.h"
+#include "parse/declaration_gradient.h"
+#include "parse/declaration_text.h"
 #include "parse/position.h"
 #include "parse/property.h"
 #include "parse/properties/utils.h"
@@ -140,6 +142,43 @@ static void destroy_values(struct layer_values *values)
     }
     if (values->items != &values->single)
         free(values->items);
+}
+
+/* URI-only lists keep the allocation-efficient text serializer. Gradients are
+ * serialized once per layer, sharing the background shorthand's boundaries. */
+css_error css__declaration_background_image(const css_declaration *source, lwc_string **out)
+{
+    bool functions = false;
+    for (size_t i = 0; i < source->token_count; i++)
+        functions |= source->tokens[i].type == CSS_TOKEN_FUNCTION;
+    if (!functions)
+        return css__declaration_text_serialize(source, out);
+
+    struct layer_values values = {0};
+    css_error error = layer_count(source, &values.count);
+    if (error != CSS_OK)
+        return error;
+    if (values.count > SIZE_MAX / sizeof(*values.items))
+        return CSS_NOMEM;
+    values.items = values.count == 1 ? &values.single : calloc(values.count, sizeof(*values.items));
+    if (values.items == NULL)
+        return CSS_NOMEM;
+    size_t cursor = 0;
+    for (size_t i = 0; i < values.count; i++) {
+        css_declaration layer;
+        error = next_layer(source, &cursor, &layer);
+        if (error != CSS_OK)
+            break;
+        error = layer.tokens[0].type == CSS_TOKEN_FUNCTION
+            ? css__declaration_gradient_serialize(&layer, &values.items[i])
+            : css__declaration_text_serialize(&layer, &values.items[i]);
+        if (error != CSS_OK)
+            break;
+    }
+    if (error == CSS_OK)
+        error = css__declaration_values_join(values.items, values.count, ", ", out);
+    destroy_values(&values);
+    return error;
 }
 
 static css_error collect_values(const css_declaration_contribution *value, size_t component, struct layer_values *values)

@@ -17,87 +17,26 @@
 
 #define MAX_GRADIENT_STOPS CSS_LINEAR_GRADIENT_MAX_STOPS
 
-/**
- * Parse linear gradient direction keywords
- *
- * \param c       Parsing context
- * \param vector  Vector of tokens
- * \param ctx     Token context
- * \param direction  Output: gradient direction
- * \return CSS_OK if direction parsed, CSS_INVALID otherwise
- */
-static css_error
-parse_gradient_direction(css_language *c, const parserutils_vector *vector, int32_t *ctx, uint32_t *direction)
+/* Use decoded keyword comparison without temporary interned strings. Failure
+ * cannot be mistaken for an omitted direction after an allocation error. */
+static css_error parse_gradient_direction(const parserutils_vector *vector, int32_t *ctx, uint32_t *direction)
 {
-    const css_token *token;
-    bool match;
-    lwc_string *keyword = NULL;
-
-    /* Expect "to" keyword */
-    token = parserutils_vector_peek(vector, *ctx);
+    int32_t cursor = *ctx;
+    const css_token *token = parserutils_vector_iterate(vector, &cursor);
+    if (token == NULL || token->type != CSS_TOKEN_IDENT || !css__keyword_equal(token->idata, "to"))
+        return CSS_INVALID;
+    consumeWhitespace(vector, &cursor);
+    token = parserutils_vector_iterate(vector, &cursor);
     if (token == NULL || token->type != CSS_TOKEN_IDENT)
         return CSS_INVALID;
-
-    if (lwc_intern_string("to", 2, &keyword) != lwc_error_ok)
-        return CSS_INVALID;
-
-    if (lwc_string_caseless_isequal(token->idata, keyword, &match) != lwc_error_ok) {
-        lwc_string_unref(keyword);
-        return CSS_INVALID;
-    }
-    lwc_string_unref(keyword);
-
-    if (!match)
-        return CSS_INVALID;
-
-    parserutils_vector_iterate(vector, ctx); /* Consume "to" */
-    consumeWhitespace(vector, ctx); /* Skip whitespace after "to" */
-
-    /* Get direction keyword */
-    token = parserutils_vector_iterate(vector, ctx);
-    if (token == NULL || token->type != CSS_TOKEN_IDENT)
-        return CSS_INVALID;
-
-    /* Check top */
-    if (lwc_intern_string("top", 3, &keyword) == lwc_error_ok) {
-        if (lwc_string_caseless_isequal(token->idata, keyword, &match) == lwc_error_ok && match) {
-            lwc_string_unref(keyword);
-            *direction = 1;
+    static const char *const names[] = {"bottom", "top", "left", "right"};
+    for (size_t i = 0; i < N_ELEMENTS(names); i++) {
+        if (css__keyword_equal(token->idata, names[i])) {
+            *direction = i;
+            *ctx = cursor;
             return CSS_OK;
         }
-        lwc_string_unref(keyword);
     }
-
-    /* Check bottom */
-    if (lwc_intern_string("bottom", 6, &keyword) == lwc_error_ok) {
-        if (lwc_string_caseless_isequal(token->idata, keyword, &match) == lwc_error_ok && match) {
-            lwc_string_unref(keyword);
-            *direction = 0;
-            return CSS_OK;
-        }
-        lwc_string_unref(keyword);
-    }
-
-    /* Check left */
-    if (lwc_intern_string("left", 4, &keyword) == lwc_error_ok) {
-        if (lwc_string_caseless_isequal(token->idata, keyword, &match) == lwc_error_ok && match) {
-            lwc_string_unref(keyword);
-            *direction = 2;
-            return CSS_OK;
-        }
-        lwc_string_unref(keyword);
-    }
-
-    /* Check right */
-    if (lwc_intern_string("right", 5, &keyword) == lwc_error_ok) {
-        if (lwc_string_caseless_isequal(token->idata, keyword, &match) == lwc_error_ok && match) {
-            lwc_string_unref(keyword);
-            *direction = 3;
-            return CSS_OK;
-        }
-        lwc_string_unref(keyword);
-    }
-
     return CSS_INVALID;
 }
 
@@ -121,7 +60,7 @@ static css_error parse_gradient_stops(
             return CSS_INVALID;
         consumeWhitespace(vector, ctx);
         uint16_t color_type;
-        error = css__parse_colour_specifier(c, vector, ctx, &color_type, &stops[count].color);
+        error = css__parse_colour_specifier_strict(c, vector, ctx, &color_type, &stops[count].color);
         if (error != CSS_OK)
             return error;
         if (color_type == COLOR_TRANSPARENT)
@@ -134,15 +73,22 @@ static css_error parse_gradient_stops(
         if (token != NULL &&
             (token->type == CSS_TOKEN_DIMENSION || token->type == CSS_TOKEN_NUMBER ||
                 token->type == CSS_TOKEN_PERCENTAGE)) {
-            error = css__parse_unit_specifier(c, vector, ctx, UNIT_PX, &stops[count].offset, &stops[count].unit);
-            if (error != CSS_OK)
-                return error;
-            if (stops[count].unit != UNIT_PCT && (!(stops[count].unit & UNIT_LENGTH) || stops[count].unit == UNIT_FR))
-                return CSS_INVALID;
-            /* Gradient functions do not accept unitless nonzero lengths, even
-             * in a quirks-mode sheet. */
-            if (token->type == CSS_TOKEN_NUMBER && stops[count].offset != 0)
-                return CSS_INVALID;
+            if (token->type == CSS_TOKEN_NUMBER) {
+                /* Check before fixed-point rounding, and do not consume a
+                 * separated unit via the legacy quirks-mode length grammar. */
+                if (css__number_sign(token->idata) != 0)
+                    return CSS_INVALID;
+                parserutils_vector_iterate(vector, ctx);
+                stops[count].offset = 0;
+                stops[count].unit = UNIT_PX;
+            } else {
+                error = css__parse_unit_specifier(c, vector, ctx, UNIT_PX, &stops[count].offset, &stops[count].unit);
+                if (error != CSS_OK)
+                    return error;
+                if (stops[count].unit != UNIT_PCT &&
+                    (!(stops[count].unit & UNIT_LENGTH) || stops[count].unit == UNIT_FR))
+                    return CSS_INVALID;
+            }
         }
         count++;
         consumeWhitespace(vector, ctx);
@@ -190,20 +136,17 @@ parse_linear_gradient(css_language *c, const parserutils_vector *vector, int32_t
     uint32_t direction = 0; /* Default: to bottom */
     bool has_direction = false;
 
+    consumeWhitespace(vector, ctx);
+
     /* Try to parse direction - first try angle, then try keyword */
     int32_t checkpoint = *ctx;
 
     /* Try angle first (e.g., 45deg) */
     token = parserutils_vector_peek(vector, *ctx);
     if (token && token->type == CSS_TOKEN_DIMENSION) {
-        size_t len = lwc_string_length(token->idata);
-        const char *data = lwc_string_data(token->idata);
-
-        /* Check if it ends with "deg" */
-        if (len > 3 && strncasecmp(data + len - 3, "deg", 3) == 0) {
-            /* Parse the angle value */
-            size_t consumed = 0;
-            css_fixed angle = css__number_from_string((const uint8_t *)data, len - 3, false, &consumed);
+        css_fixed angle;
+        uint32_t unit;
+        if (css__parse_unit_specifier(c, vector, ctx, UNIT_DEG, &angle, &unit) == CSS_OK && unit == UNIT_DEG) {
             int angle_deg = FIXTOINT(angle);
 
             /* Convert angle to direction enum - approximate to nearest cardinal */
@@ -221,7 +164,6 @@ parse_linear_gradient(css_language *c, const parserutils_vector *vector, int32_t
             }
 
             has_direction = true;
-            parserutils_vector_iterate(vector, ctx); /* Consume angle token */
             consumeWhitespace(vector, ctx);
 
             /* Expect comma after direction */
@@ -235,8 +177,11 @@ parse_linear_gradient(css_language *c, const parserutils_vector *vector, int32_t
         }
     }
 
+    if (!has_direction)
+        *ctx = checkpoint;
+
     /* If no angle, try keyword direction (to top, to bottom, etc.) */
-    if (!has_direction && parse_gradient_direction(c, vector, ctx, &direction) == CSS_OK) {
+    if (!has_direction && parse_gradient_direction(vector, ctx, &direction) == CSS_OK) {
         has_direction = true;
         consumeWhitespace(vector, ctx);
 
@@ -274,43 +219,19 @@ parse_radial_gradient(css_language *c, const parserutils_vector *vector, int32_t
     int32_t orig_ctx = *ctx;
     css_error error = CSS_OK;
     const css_token *token;
-    uint32_t shape = 0; /* Default: circle */
-    bool has_shape = false;
-    bool match;
-    lwc_string *keyword = NULL;
+    uint32_t shape = CSS_RADIAL_SHAPE_ELLIPSE; /* CSS Images 3 default. */
 
-    /* Try to parse shape keyword (circle or ellipse) */
+    consumeWhitespace(vector, ctx);
     token = parserutils_vector_peek(vector, *ctx);
-    if (token && token->type == CSS_TOKEN_IDENT) {
-        /* Check for "circle" */
-        if (lwc_intern_string("circle", 6, &keyword) == lwc_error_ok) {
-            if (lwc_string_caseless_isequal(token->idata, keyword, &match) == lwc_error_ok && match) {
-                shape = 0; /* circle */
-                has_shape = true;
-                parserutils_vector_iterate(vector, ctx);
-                consumeWhitespace(vector, ctx);
-            }
-            lwc_string_unref(keyword);
-        }
-
-        if (!has_shape && lwc_intern_string("ellipse", 7, &keyword) == lwc_error_ok) {
-            if (lwc_string_caseless_isequal(token->idata, keyword, &match) == lwc_error_ok && match) {
-                shape = 1; /* ellipse */
-                has_shape = true;
-                parserutils_vector_iterate(vector, ctx);
-                consumeWhitespace(vector, ctx);
-            }
-            lwc_string_unref(keyword);
-        }
-    }
-
-    /* If shape was specified, expect comma */
-    if (has_shape) {
-        token = parserutils_vector_peek(vector, *ctx);
-        if (token && token->type == CSS_TOKEN_CHAR && lwc_string_length(token->idata) == 1 &&
-            lwc_string_data(token->idata)[0] == ',') {
-            parserutils_vector_iterate(vector, ctx);
-            consumeWhitespace(vector, ctx);
+    if (token != NULL && token->type == CSS_TOKEN_IDENT &&
+        (css__keyword_equal(token->idata, "circle") || css__keyword_equal(token->idata, "ellipse"))) {
+        shape = css__keyword_equal(token->idata, "circle") ? CSS_RADIAL_SHAPE_CIRCLE : CSS_RADIAL_SHAPE_ELLIPSE;
+        parserutils_vector_iterate(vector, ctx);
+        consumeWhitespace(vector, ctx);
+        token = parserutils_vector_iterate(vector, ctx);
+        if (token == NULL || !tokenIsChar(token, ',')) {
+            *ctx = orig_ctx;
+            return CSS_INVALID;
         }
     }
 

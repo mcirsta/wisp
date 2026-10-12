@@ -114,6 +114,23 @@ nowrap behavior, gaps, reverse axes, auto cross sizes and overflow fallbacks.
 Keep this as a separate layout batch; the CSSOM parser regression uses grid
 layout to test the shorthand independently of this missing flex behavior.
 
+
+## Linear-gradient angle rendering
+
+Confirmed by source inspection on 2026-10-12 during CSSOM readback work. The
+existing `parse_linear_gradient()` accepts degree angles but quantizes them to
+one of four cardinal directions, and `css_linear_gradient` stores only that
+enum. Thus `background-image:linear-gradient(45deg,red,blue)` paints a horizontal
+gradient instead of the specified diagonal. This predates the readback changes;
+the new specified-value serializer retains the authored angle.
+
+[CSS Images 3 section 3.1](https://drafts.csswg.org/css-images-3/#linear-gradients)
+requires the actual angle to determine the gradient line and its endpoints.
+A proper fix needs an angle-capable parsed/computed representation and matching
+native/fallback painting geometry; preserving the angle only in CSSOM does not
+fix rendering. Keep this as a separate rendering batch, including corner
+keywords, negative/full-turn angles, non-square boxes and length-based stops.
+
 ## JavaScript-driven HotNews sidebar (deferred)
 
 The live article sidebar headed "Ultima oră" stays on its loading placeholders.

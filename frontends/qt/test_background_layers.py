@@ -7,7 +7,7 @@ import subprocess
 import sys
 import tempfile
 
-WIDTH, HEIGHT = 760, 830
+WIDTH, HEIGHT = 760, 960
 RED, BLUE, YELLOW, PURPLE = (255, 0, 0), (0, 0, 255), (255, 255, 0), (128, 0, 127)
 # Coordinates are deliberately away from edges and text. Expected colors follow
 # CSS compositing/order, independent of either browser implementation.
@@ -33,6 +33,9 @@ SAMPLES = [
     ("pair y top", 300, 700, RED), ("pair y bottom", 300, 780, RED),
     ("pair y left", 270, 730, YELLOW), ("pair y right", 430, 730, YELLOW),
     ("pair both", 500, 700, RED), ("pair both far", 680, 780, RED),
+    ("radial default center", 110, 880, RED), ("radial default edge", 110, 925, BLUE),
+    ("radial ellipse center", 350, 880, RED), ("radial ellipse edge", 350, 925, BLUE),
+    ("radial circle center", 590, 880, RED), ("radial circle edge", 590, 925, RED),
 ]
 
 

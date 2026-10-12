@@ -474,8 +474,8 @@ static bool parse_lch(const parserutils_vector *vector, int32_t *ctx, uint32_t *
  * Post condition: \a *ctx is updated with the next token to process
  *                 If the input is invalid, then \a *ctx remains unchanged.
  */
-css_error css__parse_colour_specifier(
-    css_language *c, const parserutils_vector *vector, int32_t *ctx, uint16_t *value, uint32_t *result)
+static css_error parse_colour_specifier(
+    css_language *c, const parserutils_vector *vector, int32_t *ctx, uint16_t *value, uint32_t *result, bool quirks)
 {
     int32_t orig_ctx = *ctx;
     const css_token *token;
@@ -497,7 +497,7 @@ css_error css__parse_colour_specifier(
     token = parserutils_vector_iterate(vector, ctx);
     if (token == NULL ||
         (token->type != CSS_TOKEN_IDENT && token->type != CSS_TOKEN_HASH && token->type != CSS_TOKEN_FUNCTION)) {
-        if (c->sheet->quirks_allowed == false || token == NULL ||
+        if (quirks == false || token == NULL ||
             (token->type != CSS_TOKEN_NUMBER && token->type != CSS_TOKEN_DIMENSION))
             goto invalid;
     }
@@ -515,7 +515,7 @@ css_error css__parse_colour_specifier(
         }
 
         error = css__parse_named_colour(c, token->idata, result);
-        if (error != CSS_OK && c->sheet->quirks_allowed) {
+        if (error != CSS_OK && quirks) {
             error = css__parse_hash_colour(token->idata, result);
             if (error == CSS_OK)
                 c->sheet->quirks_used = true;
@@ -527,13 +527,13 @@ css_error css__parse_colour_specifier(
         error = css__parse_hash_colour(token->idata, result);
         if (error != CSS_OK)
             goto invalid;
-    } else if (c->sheet->quirks_allowed && token->type == CSS_TOKEN_NUMBER) {
+    } else if (quirks && token->type == CSS_TOKEN_NUMBER) {
         error = css__parse_hash_colour(token->idata, result);
         if (error == CSS_OK)
             c->sheet->quirks_used = true;
         else
             goto invalid;
-    } else if (c->sheet->quirks_allowed && token->type == CSS_TOKEN_DIMENSION) {
+    } else if (quirks && token->type == CSS_TOKEN_DIMENSION) {
         error = css__parse_hash_colour(token->idata, result);
         if (error == CSS_OK)
             c->sheet->quirks_used = true;
@@ -576,6 +576,18 @@ css_error css__parse_colour_specifier(
 invalid:
     *ctx = orig_ctx;
     return CSS_INVALID;
+}
+
+css_error css__parse_colour_specifier(
+    css_language *c, const parserutils_vector *vector, int32_t *ctx, uint16_t *value, uint32_t *result)
+{
+    return parse_colour_specifier(c, vector, ctx, value, result, c->sheet->quirks_allowed);
+}
+
+css_error css__parse_colour_specifier_strict(
+    css_language *c, const parserutils_vector *vector, int32_t *ctx, uint16_t *value, uint32_t *result)
+{
+    return parse_colour_specifier(c, vector, ctx, value, result, false);
 }
 
 /**

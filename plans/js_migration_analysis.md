@@ -1903,6 +1903,62 @@ increment does not claim new rendering support for aggregate values or extend
 the renderer's variable-substitution model. The saved eBihoreanul opacity
 blocker remains until the live binding is connected.
 
+
+### Specified gradient readback (2026-10-12)
+
+Committed whole-value native assignment as `910eb0a4`. The declaration API now
+serializes the existing linear/radial gradient subset, including mixed image
+lists, background shorthand extraction/reconstruction and whole declaration
+blocks. It shares the existing component boundaries, numeric/colour serializers
+and generated property registrations. No new property grammar or generated
+metadata overrides were introduced.
+
+[CSS Images 3 section 7](https://drafts.csswg.org/css-images-3/#serialization)
+defines the expected formatting and default omission. Tests include its example,
+plus default directions/shapes, first-zero and final-100% positions, fractional
+and large lengths, escaped names, colours, priorities, deferred values and
+whole/chunked input. Author angles and stop positions come from captured tokens,
+never the renderer's fixed-point or cardinal-direction approximation. Normal
+URL-only lists retain their existing allocation-efficient serializer; gradients
+are serialized once per layer and do not add persistent state to page styling.
+
+The work exposed small defects in the shared native parser, corrected here:
+
+- Radial gradients now default to ellipse, as specified; an explicit circle is
+  preserved. Leading whitespace before a prelude is accepted, and a supplied
+  shape requires its separating comma.
+- Degree dimensions use shared unit validation; arbitrary units ending in
+  `deg` are no longer accepted. Numeric exponents remain unsupported by the
+  existing numeric grammar and are rejected rather than partly interpreted.
+- Nonzero unitless stop positions are rejected before fixed-point rounding.
+  A unit separated from zero by whitespace is also rejected inside gradients.
+- The [legacy hashless-colour quirk](https://quirks.spec.whatwg.org/#the-hashless-hex-color-quirk)
+  no longer enters gradient functions. A strict entry point shares the native
+  colour implementation; ordinary legacy-property parsing keeps its behavior.
+- Prelude keyword checks no longer allocate temporary interned strings or hide
+  allocation failures as an absent direction/shape.
+
+Validation: all 80 selected native CSS/QuickJS/font suites pass in Debug and
+Release, with ASan/UBSan and LeakSanitizer on Debug native tests. All six selected
+Qt regressions pass in both builds: background layers, gradient stops, CSS
+colours, line-height, gap aliases and deferred revert. Six added pixel samples
+on rectangular boxes distinguish the default ellipse from an explicit circle.
+Native tests cover invalid shorthand/longhand fallback in both parsing modes,
+the existing stop-count bound, serialize/reparse, owned-store lifetime and
+allocation failure/retry through gradient input and serialization. Both builds
+are warning-free; no GTK tests ran.
+
+This is still native CSSOM groundwork, not an exposed `element.style` binding.
+Remaining specified-value work includes math, unsupported colour families and
+other aggregates. Gradients with those unsupported colour components still
+return the explicit native readback error. The existing two-to-ten-stop bound,
+limited prelude grammar and unsupported gradient functions are not expanded by
+this increment. Arbitrary-angle rendering is a confirmed older limitation and
+is recorded in [the correctness backlog](../src/docs/layout-correctness.md#linear-gradient-angle-rendering).
+The Duktape style getter was rechecked; its empty-object placeholder provides no
+specified-value handling to reuse. Live object identity, DOM synchronization and
+JS mutation attribution remain to be connected.
+
 ## Assessment
 
 Keep QuickJS-ng and libdom. The missing part is the browser binding and execution

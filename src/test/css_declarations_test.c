@@ -920,8 +920,44 @@ static const struct {
         "url(\"data:image/svg+xml;a,b;c\")"},
     {"background-image: url(a.png)!important; background-image:none", "background-image", "url(\"a.png\")"},
     {"background-attachment: FiXeD , SCROLL , FiXeD", "background-attachment", "fixed, scroll, fixed"},
-    {"background-image:linear-gradient(red, blue)", "background-image", NULL},
-    {"background-image:url(a.png), linear-gradient(red, blue)", "background-image", NULL},
+    {"background-image:linear-gradient(red, blue)", "background-image", "linear-gradient(red, blue)"},
+    {"background-image:url(a.png), linear-gradient(red, blue)", "background-image",
+        "url(\"a.png\"), linear-gradient(red, blue)"},
+    /* CSS Images 3 section 7, including its normative serialization example. */
+    {"background-image:Linear-Gradient( to bottom, red 0%,yellow,black 100px)", "background-image",
+        "linear-gradient(red, yellow, black 100px)"},
+    {"background-image:linear-gradient(TO TOP, RED,BLUE)", "background-image", "linear-gradient(to top, red, blue)"},
+    {"background-image:linear-gradient(to LEFT, red,blue)", "background-image", "linear-gradient(to left, red, blue)"},
+    {"background-image:linear-gradient(to right, red,blue)", "background-image", "linear-gradient(to right, red, blue)"},
+    {"background-image:linear-gradient(0180.000DEG, red,blue)", "background-image", "linear-gradient(red, blue)"},
+    {"background-image:linear-gradient(-045.1234567deg,red -.1234567em, blue 12345678px)", "background-image",
+        "linear-gradient(-45.123457deg, red -0.123457em, blue 12345678px)"},
+    {"background-image:linear-gradient(+000deg,red -0em, blue 100.000%)", "background-image",
+        "linear-gradient(0deg, red, blue)"},
+    {"background-image:linear-gradient(450deg,red,blue)", "background-image", "linear-gradient(450deg, red, blue)"},
+    {"background-image:linear-gradient(red 10%,green 0%,blue 100px)", "background-image",
+        "linear-gradient(red 10%, green 0%, blue 100px)"},
+    {"background-image:linear-gradient(red 120%,blue 100%)", "background-image", "linear-gradient(red 120%, blue)"},
+    {"background-image:radial-gradient( ELLIPSE, red,blue)", "background-image", "radial-gradient(red, blue)"},
+    {"background-image:radial-gradient( CIRCLE, red 0%,blue 100%)", "background-image", "radial-gradient(circle, red, blue)"},
+    {"background-image:linear-gradient(/**/to/**/bottom,red/**/0%,blue/**/100%)", "background-image",
+        "linear-gradient(red, blue)"},
+    {"background-image:l\\69near-gradient(t\\6f  right,r\\65 d 0,BLUE)", "background-image",
+        "linear-gradient(to right, red, blue)"},
+    {"background-image:linear-gradient(RGB(255 0 0 / .5) 0%,#00f 100%)", "background-image",
+        "linear-gradient(rgba(255, 0, 0, 0.5), rgb(0, 0, 255))"},
+    {"background-image:radial-gradient(hsl(0 100% 50%),transparent)", "background-image",
+        "radial-gradient(rgb(255, 0, 0), transparent)"},
+    {"background-image:none,linear-gradient(red,blue),url('a,b.png'),radial-gradient(circle,white,black)",
+        "background-image", "none, linear-gradient(red, blue), url(\"a,b.png\"), radial-gradient(circle, white, black)"},
+    {"background:radial-gradient(ellipse,red 0%,blue 100%) no-repeat left fixed,linear-gradient(to bottom,white,black) red",
+        "background", "radial-gradient(red, blue) left center no-repeat fixed, linear-gradient(white, black) red"},
+    {"background-image:linear-gradient(red,blue)!important;background-image:none", "background-image",
+        "linear-gradient(red, blue)"},
+    {"background-image:linear-gradient(var(--Stop),BLUE)", "background-image", "linear-gradient(var(--Stop),BLUE)"},
+    /* These colour families still require specified-value serializers. */
+    {"background-image:linear-gradient(lab(50% 0 0),blue)", "background-image", NULL},
+    {"background-image:linear-gradient(rgb(none 0 0),blue)", "background-image", NULL},
     {"background:none", "background", "none"},
     {"background:transparent", "background", "none"},
     {"background:repeat scroll none 0% 0% transparent", "background", "none"},
@@ -985,10 +1021,10 @@ static const struct {
     {"background:var(--Layers)", "background-repeat", ""},
     {"background:var(--Layers);background-color:red", "background", ""},
     {"background:none;background-image:var(--Image)", "background", ""},
-    {"background:linear-gradient(red,blue) fixed", "background", NULL},
+    {"background:linear-gradient(red,blue) fixed", "background", "linear-gradient(red, blue) fixed"},
     {"background:linear-gradient(red,blue),none fixed rgb(1,2,3)", "background-color", "rgb(1, 2, 3)"},
     {"background:linear-gradient(red,blue),none fixed rgb(1,2,3)", "background-attachment", "scroll, fixed"},
-    {"background:radial-gradient(red,blue) no-repeat", "background-image", NULL},
+    {"background:radial-gradient(red,blue) no-repeat", "background-image", "radial-gradient(red, blue)"},
     {"background:red;background:red,none", "background", "red"},
     {"background:blue;background:none,none,", "background", "blue"},
     {"background:red;background:repeat-x repeat", "background", "red"},
@@ -3153,6 +3189,91 @@ START_TEST(test_quirky_border_values)
 }
 END_TEST
 
+/* CSS Images 3 defaults and grammar, for ordinary stylesheets as well as CSSOM.
+ * Invalid later images must leave the whole earlier declaration intact. */
+START_TEST(test_gradient_grammar)
+{
+    static const char *const invalid[] = {
+        "radial-gradient(circle red,blue)", "radial-gradient(ellipse red,blue)",
+        "linear-gradient(to right red,blue)", "linear-gradient(90deg red,blue)",
+        "linear-gradient(1foodeg,red,blue)",
+        "linear-gradient(1e3deg,red,blue)", /* Exponents are still unsupported; never read only the 1. */
+        "linear-gradient(red .00000001,blue)", "linear-gradient(red,blue -.00000001)",
+        "radial-gradient(red 1,blue)", "linear-gradient(red 0 px,blue)",
+        "linear-gradient(red 0 %,blue)", "linear-gradient(123456,blue)",
+        "radial-gradient(f00,blue)", "linear-gradient(12ab56,blue)",
+        "linear-gradient(red 1fr,blue)", "linear-gradient(red 1deg,blue)",
+        "linear-gradient(red,,blue)", "radial-gradient(circle,red,blue,)",
+    };
+    for (unsigned quirks = 0; quirks < 2; quirks++) {
+        css_stylesheet_params configured = params;
+        configured.allow_quirks = quirks != 0;
+        for (size_t i = 0; i < N_ELEMENTS(invalid); i++) {
+            for (unsigned shorthand = 0; shorthand < 2; shorthand++) {
+                const char *property = shorthand ? "background" : "background-image";
+                char css[320];
+                snprintf(css, sizeof(css), "%s:linear-gradient(red,blue);%s:%s;color:green", property, property, invalid[i]);
+                css_declaration_list *list;
+                ck_assert_int_eq(css__declaration_list_create(&configured, &list), CSS_OK);
+                size_t length = strlen(css);
+                for (size_t offset = 0; offset < length;) {
+                    size_t chunk = _i == 0 ? length : 1;
+                    check_append(css__declaration_list_append(list, (const uint8_t *)css + offset, chunk));
+                    offset += chunk;
+                }
+                ck_assert_int_eq(css__declaration_list_complete(list), CSS_OK);
+                ck_assert_msg(css__declaration_list_count(list) == 2,
+                    "accepted %s, quirks %u, chunks %d", css, quirks, _i);
+                css_declaration_order *order;
+                ck_assert_int_eq(css__declaration_order_create(list, &order), CSS_OK);
+                lwc_string *value;
+                ck_assert_int_eq(serialize_property(order, property, &value), CSS_OK);
+                ck_assert_str_eq(lwc_string_data(value), "linear-gradient(red, blue)");
+                lwc_string_unref(value);
+                css__declaration_order_destroy(order);
+                css__declaration_list_destroy(list);
+            }
+        }
+        /* Zero and named/hex colours stay valid in both parsing modes. */
+        const char *valid = "background-image:radial-gradient( ellipse, #f00 -0,blue 100%)";
+        css_declaration_list *list;
+        ck_assert_int_eq(css__declaration_list_create(&configured, &list), CSS_OK);
+        check_append(css__declaration_list_append(list, (const uint8_t *)valid, strlen(valid)));
+        ck_assert_int_eq(css__declaration_list_complete(list), CSS_OK);
+        ck_assert_uint_eq(css__declaration_list_count(list), 1);
+        css__declaration_list_destroy(list);
+    }
+    /* Exercise the parser's existing stop bound without adding a second bound. */
+    for (unsigned radial = 0; radial < 2; radial++) {
+        char css[240];
+        snprintf(css, sizeof(css), "background-image:%s-gradient(%s)", radial ? "radial" : "linear",
+            "red,blue,red,blue,red,blue,red,blue,red,blue");
+        css_declaration_list *list = parse(css, _i != 0);
+        ck_assert_uint_eq(css__declaration_list_count(list), 1);
+        css_declaration_order *order;
+        ck_assert_int_eq(css__declaration_order_create(list, &order), CSS_OK);
+        lwc_string *value;
+        ck_assert_int_eq(serialize_property(order, "background-image", &value), CSS_OK);
+        ck_assert(strstr(lwc_string_data(value), "red, blue, red, blue, red, blue, red, blue, red, blue)") != NULL);
+        lwc_string_unref(value);
+        css__declaration_order_destroy(order);
+        css__declaration_list_destroy(list);
+        css[strlen(css) - 1] = '\0';
+        strcat(css, ",red)");
+        list = parse(css, _i != 0);
+        ck_assert_uint_eq(css__declaration_list_count(list), 0);
+        css__declaration_list_destroy(list);
+    }
+    css_declaration_list *implicit = parse("background-image:radial-gradient(red,blue)", _i != 0);
+    css_declaration_list *explicit = parse("background-image:radial-gradient(ellipse,red,blue)", _i != 0);
+    compare_sheets(css__declaration_list_sheet(implicit), css__declaration_list_sheet(explicit));
+    const css_style *style = inline_style(css__declaration_list_sheet(implicit));
+    ck_assert_uint_eq(style->bytecode[1], 1); /* CSS_RADIAL_SHAPE_ELLIPSE */
+    css__declaration_list_destroy(implicit);
+    css__declaration_list_destroy(explicit);
+}
+END_TEST
+
 START_TEST(test_geometry_bytecode)
 {
     static const char *const forms[][2] = {
@@ -3719,7 +3840,8 @@ START_TEST(test_value_allocation_failure)
      * the same longhand serializer already covered by the ordinary inputs. */
     if (strncmp(name, "background", 10) == 0)
         css = "background:url('a,b\\\"c\\\\d\\1 e.png') no-repeat .1234567em -2.3456789% fixed,"
-              "none repeat no-repeat top rgb(1.2 3.4 5.6 / .4)";
+              "linear-gradient(45.1234567deg,rgb(1.2 3.4 5.6 / .4) .1234567em,blue) repeat no-repeat top "
+              "rgb(1.2 3.4 5.6 / .4)";
     if (strcmp(name, "font") == 0 || strcmp(name, "font-size") == 0 || strcmp(name, "line-height") == 0)
         css = "font:italic small-caps bold 1.2345678em / 1.3456789 One Two,serif";
     css_declaration_list *list = parse(css, false);
@@ -3727,7 +3849,7 @@ START_TEST(test_value_allocation_failure)
     ck_assert_int_eq(css__declaration_order_create(list, &order), CSS_OK);
     bool succeeded = false;
     unsigned failures = 0;
-    for (unsigned attempt = 0; attempt < 100; attempt++) {
+    for (unsigned attempt = 0; attempt < 200; attempt++) {
         lwc_string *value = (void *)1;
         malloc_limit(attempt);
         css_error error = serialize_property(order, name, &value);
@@ -3781,6 +3903,7 @@ int main(void)
     tcase_add_loop_test(tc, test_long_font_name, 0, 2);
     tcase_add_loop_test(tc, test_clip_separators, 0, 2);
     tcase_add_loop_test(tc, test_geometry_invalid_units, 0, 2);
+    tcase_add_loop_test(tc, test_gradient_grammar, 0, 2);
     tcase_add_loop_test(tc, test_geometry_bytecode, 0, 2);
     tcase_add_loop_test(tc, test_flex_bytecode, 0, 2);
     tcase_add_loop_test(tc, test_list_columns_bytecode, 0, 2);

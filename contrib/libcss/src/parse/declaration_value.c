@@ -54,7 +54,7 @@ static bool digit(char ch)
  * ten fractional bits, and strtod/snprintf would introduce locale and binary
  * rounding differences. The current property parser does not accept exponents.
  * This is serialization after validation, not another property parser. */
-static css_error serialize_numeric(const css_declaration_token *token, bool length_value, lwc_string **out)
+css_error css__declaration_numeric_serialize(const css_declaration_token *token, bool length_value, lwc_string **out)
 {
     const char *text = lwc_string_data(token->text);
     size_t length = lwc_string_length(token->text);
@@ -270,7 +270,7 @@ static css_error serialize_geometry(const css_declaration *source, lwc_string **
         else if (parts[i]->type == CSS_TOKEN_IDENT)
             error = intern("auto", 4, &values[i]);
         else
-            error = serialize_numeric(parts[i], !ratio, &values[i]);
+            error = css__declaration_numeric_serialize(parts[i], !ratio, &values[i]);
         if (error != CSS_OK)
             goto done;
     }
@@ -380,7 +380,7 @@ static css_error serialize_flex_component(const css_declaration_contribution *va
         return intern(defaults[component], strlen(defaults[component]), out);
     if (token->type == CSS_TOKEN_IDENT)
         return lwc_string_tolower(token->text, out) == lwc_error_ok ? CSS_OK : CSS_NOMEM;
-    return serialize_numeric(token, component == 2, out);
+    return css__declaration_numeric_serialize(token, component == 2, out);
 }
 
 /* Expand already validated unordered list/column values. Ambiguous none and
@@ -435,7 +435,7 @@ static css_error serialize_list_or_columns_component(const css_declaration_contr
         css_declaration image = {.property = css_prop_lookup("list-style-image", 16), .tokens = token, .token_count = 1};
         return css__declaration_text_serialize(&image, out);
     }
-    return serialize_numeric(token, component == 0, out);
+    return css__declaration_numeric_serialize(token, component == 0, out);
 }
 
 /* The native border parser tries colour, style, width, in that order. The
@@ -528,7 +528,7 @@ static css_error serialize_grid_component(const css_declaration_contribution *va
     if (number == NULL)
         return CSS_INVALID;
     lwc_string *integer;
-    css_error error = serialize_numeric(number, false, &integer);
+    css_error error = css__declaration_numeric_serialize(number, false, &integer);
     if (error != CSS_OK)
         return error;
     const struct value_format format = {span ? "span " : "", "", ""};
@@ -559,7 +559,7 @@ static css_error serialize_position_item(const css_declaration_token *const part
         if (index == 2)
             error = intern("center", 6, &values[axis]);
         else if (kinds[index] == CSS_POSITION_OFFSET)
-            error = serialize_numeric(parts[index], true, &values[axis]);
+            error = css__declaration_numeric_serialize(parts[index], true, &values[axis]);
         else
             error = lwc_string_tolower(parts[index]->text, &values[axis]) == lwc_error_ok ? CSS_OK : CSS_NOMEM;
         if (error != CSS_OK)
@@ -653,9 +653,11 @@ css_error css__declaration_value_serialize(const css_declaration_contribution *v
         return CSS_INVALID;
     if (kind == CSS_DECL_VALUE_FONT)
         return css__declaration_font_component(value, out);
+    if (kind == CSS_DECL_VALUE_IMAGE_LIST)
+        return css__declaration_background_image(source, out);
     if (kind == CSS_DECL_VALUE_BACKGROUND)
         return css__declaration_background_component(value, out);
-    if (kind == CSS_DECL_VALUE_URI || kind == CSS_DECL_VALUE_IMAGE_LIST || kind == CSS_DECL_VALUE_KEYWORD_LIST ||
+    if (kind == CSS_DECL_VALUE_URI || kind == CSS_DECL_VALUE_KEYWORD_LIST ||
         kind == CSS_DECL_VALUE_CONTENT || kind == CSS_DECL_VALUE_STRING_LIST || kind == CSS_DECL_VALUE_COUNTER_LIST ||
         kind == CSS_DECL_VALUE_FONT_FAMILY || kind == CSS_DECL_VALUE_REPEAT_LIST || kind == CSS_DECL_VALUE_TEXT_DECORATION)
         return css__declaration_text_serialize(source, out);
@@ -681,7 +683,8 @@ css_error css__declaration_value_serialize(const css_declaration_contribution *v
         return lwc_string_tolower(token->text, out) == lwc_error_ok ? CSS_OK : CSS_NOMEM;
     if (kind == CSS_DECL_VALUE_KEYWORD || kind == CSS_DECL_VALUE_PAIR_KEYWORD || kind == CSS_DECL_VALUE_QUAD_KEYWORD)
         return CSS_INVALID;
-    return serialize_numeric(token, kind != CSS_DECL_VALUE_NUMBER && kind != CSS_DECL_VALUE_NUMBER_LENGTH, out);
+    return css__declaration_numeric_serialize(
+        token, kind != CSS_DECL_VALUE_NUMBER && kind != CSS_DECL_VALUE_NUMBER_LENGTH, out);
 }
 
 static css_error serialize_border_shorthand(enum css_declaration_value_kind kind,

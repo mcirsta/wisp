@@ -108,7 +108,8 @@ static const struct {
         true},
     /* Unsupported values must fail atomically, even after serializable values. */
     {"color:red;width:calc(100% - 2px)", NULL},
-    {"margin:1px;background-image:linear-gradient(red,blue)", NULL},
+    {"margin:1px;background-image:linear-gradient(red,blue)",
+        "margin: 1px; background-image: linear-gradient(red, blue);"},
     {"color:red;grid-template-columns:20px 1fr", NULL},
 };
 enum { CASE_COUNT = sizeof(cases) / sizeof(cases[0]) };

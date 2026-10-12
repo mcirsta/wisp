@@ -2,7 +2,7 @@
 <meta charset="utf-8">
 <title>Multiple background layers</title>
 <style>
-html { height: 830px; background: none, linear-gradient(#eeeeee,#eeeeee); }
+html { height: 960px; background: none, linear-gradient(#eeeeee,#eeeeee); }
 body { margin: 0; font: 14px sans-serif; }
 .case { position: absolute; width: 200px; height: 100px; background-color: yellow; }
 .case::after { content: attr(id); position: absolute; top: -20px; left: 0; }
@@ -27,6 +27,11 @@ body { margin: 0; font: 14px sans-serif; }
 #pair-x { left: 10px; top: 690px; background-image: url(test_data/background_layers/red.png); background-position: 30px 40px; --repeat: repeat no-repeat; background-repeat: var(--repeat) !important; background-repeat: repeat; }
 #pair-y { left: 250px; top: 690px; background: url(test_data/background_layers/red.png) 40px 10px no-repeat repeat yellow; }
 #pair-both { left: 490px; top: 690px; background-image: none,url(test_data/background_layers/red.png); background-repeat: no-repeat no-repeat, repeat repeat; }
+/* On a 200x100 box, default farthest-corner ellipse radii are 100√2 x 50√2.
+ * At 50%, vertical offset 45 is blue; the explicit circle is still red there. */
+#radial-default { left: 10px; top: 830px; background-image: radial-gradient( red 50%,blue 50%); }
+#radial-ellipse { left: 250px; top: 830px; background-image: radial-gradient( ELLIPSE,red 50%,blue 50%); }
+#radial-circle { left: 490px; top: 830px; background-image: radial-gradient( CIRCLE,red 50%,blue 50%); }
 </style>
 <div id="order" class="case"></div><div id="images" class="case"></div><div id="none" class="case"></div>
 <div id="cycle" class="case"></div><div id="repeat" class="case"></div><div id="mixed" class="case"></div>
@@ -36,3 +41,5 @@ body { margin: 0; font: 14px sans-serif; }
 <div id="missing" class="case"></div><div id="reset" class="case"></div>
 <table id="table"><tr><td></td><td></td></tr></table>
 <div id="pair-x" class="case"></div><div id="pair-y" class="case"></div><div id="pair-both" class="case"></div>
+
+<div id="radial-default" class="case"></div><div id="radial-ellipse" class="case"></div><div id="radial-circle" class="case"></div>

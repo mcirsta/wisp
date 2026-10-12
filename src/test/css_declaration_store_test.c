@@ -370,6 +370,14 @@ static const struct {
     const char *name, *value, *priority, *expected;
     bool important;
 } inputs[] = {
+    {"background-image", "linear-gradient(TO bottom,red 0%,blue 100%)", "important", "linear-gradient(red, blue)", true},
+    {"background", "radial-gradient(ellipse,red,blue) no-repeat fixed", "", "radial-gradient(red, blue) no-repeat fixed"},
+    {"background-image", "linear-gradient(red,blue", "", "linear-gradient(red, blue)"},
+    {"background-image", "linear-gradient(45.1234567deg,red,blue)", "", "linear-gradient(45.123457deg, red, blue)"},
+    {"background-image", "radial-gradient(circle red,blue)", "", NULL},
+    {"background-image", "linear-gradient(1foodeg,red,blue)", "", NULL},
+    {"background-image", "linear-gradient(red -.00000001,blue)", "", NULL},
+
     {"color", "red", "", "red"},
     {"CoLoR", " RED /**/", "IMPORTANT", "red", true},
     {"width", "2px", "", "2px"},
@@ -590,19 +598,27 @@ START_TEST(test_input_allocation_failure)
     memset(value, '(', 80);
     strcpy(value + 80, "u\\72l(quoted\\)name.png) !important");
     css_declaration_assignment input = assignment("--x", value, "IMPORTANT");
+    const char *expected = value;
+    unsigned allocator = (unsigned)_i % 3;
+    if (_i >= 3) {
+        input = assignment("background", "linear-gradient(to right,red -.1234567em,blue),"
+            "radial-gradient(circle,rgb(1 2 3 / .4) 0%,white) no-repeat fixed", "IMPORTANT");
+        expected = "linear-gradient(to right, red -0.123457em, blue), "
+            "radial-gradient(circle, rgba(1, 2, 3, 0.4), white) no-repeat fixed";
+    }
     const css_declaration_contribution *old = css__declaration_store_get(store, 0);
     bool succeeded = false;
     size_t baseline = 0;
     lwc_iterate_strings(count_string, &baseline);
     for (unsigned n = 0; n < 1024; n++) {
         bool changed = true;
-        allocators[_i](n);
+        allocators[allocator](n);
         css_error error = css__declaration_store_set_property(store, &input_params, &input, &changed);
-        allocators[_i](UINT_MAX);
+        allocators[allocator](UINT_MAX);
         if (error == CSS_OK) {
             ck_assert(changed);
             ck_assert_uint_gt(n, 0);
-            check_value(store, "--x", value, true);
+            check_value(store, input.property, expected, true);
             succeeded = true;
             break;
         }
@@ -616,14 +632,14 @@ START_TEST(test_input_allocation_failure)
             n, retained, baseline);
     }
     ck_assert(succeeded);
-    input = assignment("--x", "", "not a priority");
+    input = assignment(input.property, "", "not a priority");
     bool changed;
-    allocators[_i](0);
+    allocators[allocator](0);
     css_error error = css__declaration_store_set_property(store, &input_params, &input, &changed);
-    allocators[_i](UINT_MAX);
+    allocators[allocator](UINT_MAX);
     ck_assert_int_eq(error, CSS_OK);
     ck_assert(changed);
-    check_value(store, "--x", "", false);
+    check_value(store, input.property, "", false);
     css__declaration_store_destroy(store);
 }
 END_TEST
@@ -723,7 +739,7 @@ int main(void)
 #ifdef WISP_TEST_ALLOC_FAILURE
     tcase_add_loop_test(tc, test_create_allocation_failure, 0, 3);
     tcase_add_loop_test(tc, test_set_allocation_failure, 0, 3);
-    tcase_add_loop_test(tc, test_input_allocation_failure, 0, 3);
+    tcase_add_loop_test(tc, test_input_allocation_failure, 0, 6);
 #endif
     suite_add_tcase(suite, tc);
     SRunner *runner = srunner_create(suite);

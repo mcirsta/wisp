@@ -18,6 +18,10 @@
  * On success the caller owns *out; on every failure *out is NULL. */
 css_error css__declaration_value_serialize(const css_declaration_contribution *value, lwc_string **out);
 
+/* Internal scalar formatter for already validated numeric component tokens.
+ * A unitless length becomes px; specified units/precision never come from bytecode. */
+css_error css__declaration_numeric_serialize(const css_declaration_token *token, bool length_value, lwc_string **out);
+
 /* Members must be in the requested shorthand's registered component order.
  * NULL members, mixed priorities, mixed CSS-wide keywords or incompatible
  * pending-substitution values give the CSSOM empty string. Reconstruction of
