@@ -195,7 +195,7 @@ add_library(css ${WISP_LIB_TYPE}
 	src/parse/properties/background_repeat.c
 	src/parse/properties/background_list.c
 	src/parse/properties/background_image.c
-	src/parse/properties/background_position.c
+	src/parse/properties/position_value.c
 	src/parse/properties/border.c
 	src/parse/properties/border_color.c
 	src/parse/properties/border_spacing.c
@@ -240,7 +240,6 @@ add_library(css ${WISP_LIB_TYPE}
 	src/parse/properties/grid_template_rows.c
 	src/parse/properties/grid_placement.c
 	src/parse/properties/grid_auto_flow.c
-	src/parse/properties/object_position.c
 	src/parse/properties/transform.c
 	${PROPSRC}
 	src/select/properties/helpers.c

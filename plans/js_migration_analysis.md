@@ -1476,6 +1476,49 @@ selected Qt integrations pass across the run and the focused grid-fixture rerun.
 The six new cases include resize and native-restyle round trips. Both full builds
 are warning-free. The live element.style wrapper remains pending.
 
+### Background/object position specified values (2026-10-12)
+
+Committed the place-content batch as `9ce49fcf`. Added specified readback for
+`background-position` and `object-position`, following
+[CSS Values position serialization](https://drafts.csswg.org/css-values-4/#position-serialization):
+horizontal component first, two components including an implicit center, and
+keywords retained as keywords. Numeric values use the existing decimal serializer
+instead of the renderer's rounded fixed-point offsets. Background layers retain
+their order and duplicates with comma-space separators. Common priority,
+CSS-wide and pending-variable rules still apply. Metadata changes are in
+`properties.toml` and the generator, not generated files.
+
+Replaced the two nearly identical native parsers with `position_value.c` and a
+small shared axis-grammar helper also used by serialization. The supported
+one/two-component grammar and bytecode encoding remain unchanged, except that
+invalid `fr` and resolution units are now rejected. The shared parser still
+composes with background's unordered shorthand grammar, emits without temporary
+component styles, and restores both cursor and output span on failure.
+
+Found and fixed missing object-position payload handling in the importance and
+custom-property cascade walkers. Numeric offsets and units were being interpreted
+as new property opcodes; importance could corrupt them and variable collection
+could skip later declarations. Object-position now shares the background-position
+encoding constants and skip rules. The bytecode diagnostic printer uses the same
+reader too. Tests cover both axes, both properties, importance, preserved units,
+large offsets resembling opcodes, and following variable-dependent declarations.
+
+Validation: all 78 selected native Debug suites pass under ASan/UBSan with
+LeakSanitizer; the subsequent diagnostic-printer addition passes its focused
+sanitizer rerun. All eight selected Release suites and 13 Qt integrations pass.
+Declaration coverage is 1073 Debug / 1122 Release checks, including failed-allocation
+rollback/retry and serialization failure cleanup; all 14 generator checks pass.
+The new pixel fixture checks 16 background/replaced images before a click, after
+native restyling, and after restoration. Both builds are warning-free and
+`git diff --check` is clean. No GTK tests ran.
+
+Scope remains the native parser's existing one/two-component positions.
+Three/four-component edge offsets, math and newer logical position keywords
+remain unsupported. Background shorthand expansion/serialization, other remaining
+aggregate values, declaration-block writes and the live `element.style` wrapper
+are still separate work. The old Duktape empty-object style getter provides no
+implementation to reuse here; the saved eBihoreanul opacity blocker remains.
+
 ## Assessment
 
 Keep QuickJS-ng and libdom. The missing part is the browser binding and execution

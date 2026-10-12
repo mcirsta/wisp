@@ -578,6 +578,10 @@ if(WISP_QT_CAPTURE)
                 COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_background_layers.py
                     $<TARGET_FILE:wisp-qt> ${WISP_TEST_MAGICK})
             set_tests_properties(qt_background_layers PROPERTIES TIMEOUT 30)
+            add_test(NAME qt_position_values
+                COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_position_values.py
+                    $<TARGET_FILE:wisp-qt> ${WISP_TEST_MAGICK})
+            set_tests_properties(qt_position_values PROPERTIES TIMEOUT 60)
         endif()
     endif()
 endif()

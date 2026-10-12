@@ -129,6 +129,7 @@ void css__make_style_important(css_style *style)
                     offset += 2 + 3 * bytecode[offset + 1]; /* header, count, color/offset/unit stops */
                 break;
 
+            case CSS_PROP_OBJECT_POSITION:
             case CSS_PROP_BACKGROUND_POSITION:
                 if ((value & 0xf0) == BACKGROUND_POSITION_HORZ_SET)
                     offset += 2; /* length + units */

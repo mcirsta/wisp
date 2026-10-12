@@ -1434,6 +1434,7 @@ static const struct dump_bytecode_property dump_bytecode_properties[CSS_N_PROPER
     [CSS_PROP_CUE_BEFORE] = READER(background_image),
     [CSS_PROP_LIST_STYLE_IMAGE] = READER(background_image),
     [CSS_PROP_BACKGROUND_POSITION] = READER(background_position),
+    [CSS_PROP_OBJECT_POSITION] = READER(background_position),
     [CSS_PROP_BACKGROUND_REPEAT] = KEYWORDS(background_repeat),
     [CSS_PROP_BORDER_COLLAPSE] = KEYWORDS(border_collapse),
     [CSS_PROP_BORDER_SPACING] = READER(border_spacing),

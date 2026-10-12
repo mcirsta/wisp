@@ -634,6 +634,7 @@ START_TEST(test_allocation_failure)
                                "grid-area:2/3/span 2/2 span;grid-column:span 2/4;grid-row:initial;"
                                "grid-column-start:3 span;grid-column-end:unset;grid-row-end:-3;"
                                "place-content:center flex-end;place-content:normal!important;place-content:unset;"
+                               "background-position:top left,2px 3%,center;object-position:center .5em!important;"
                                "color:rgb(1.2 3.4 5.6 / 50%);border-color:#1234 red rgb(3,2,1) currentcolor;"
                                /* Force the parser's token vector to grow too. */
                                "--large:red red red red red red red red red red red red red red red red "
@@ -648,7 +649,7 @@ START_TEST(test_allocation_failure)
     memset(css + pos, 'c', 8192);
     pos += 8192;
     snprintf(css + pos, sizeof(css) - pos, "*/%s", declarations);
-    const size_t expected = 44;
+    const size_t expected = 46;
     /* Keep shared property strings alive, so each iteration tests the same
      * allocation sequence instead of global string-cache initialization. */
     css_stylesheet *keeper;
@@ -1503,6 +1504,74 @@ static const struct {
     {"grid-column-end:2;grid-column-end:1.0", "grid-column-end", "2"},
     {"grid-column-end:2;grid-column-end:1px", "grid-column-end", "2"},
     {"grid-column-end:2;grid-column-end:span initial", "grid-column-end", "2"},
+    /* CSS Values 4 position serialization retains keywords and both axes. */
+    {"background-position:CENTER", "background-position", "center center"},
+    {"background-position:left", "background-position", "left center"},
+    {"background-position:RIGHT", "background-position", "right center"},
+    {"background-position:top", "background-position", "center top"},
+    {"background-position:bottom", "background-position", "center bottom"},
+    {"background-position:top left", "background-position", "left top"},
+    {"background-position:bottom right", "background-position", "right bottom"},
+    {"background-position:center left", "background-position", "left center"},
+    {"background-position:center right", "background-position", "right center"},
+    {"background-position:top center", "background-position", "center top"},
+    {"background-position:bottom center", "background-position", "center bottom"},
+    {"background-position:center top", "background-position", "center top"},
+    {"background-position:left bottom", "background-position", "left bottom"},
+    {"background-position:right top", "background-position", "right top"},
+    {"background-position:0", "background-position", "0px center"},
+    {"background-position:-0 .125%", "background-position", "0px 0.125%"},
+    {"background-position:.1234567EM", "background-position", "0.123457em center"},
+    {"background-position:-0002.50px +075.00%", "background-position", "-2.5px 75%"},
+    {"background-position:CENTER .1234567PX", "background-position", "center 0.123457px"},
+    {"background-position:12px bottom", "background-position", "12px bottom"},
+    {"background-position:right -2.5em", "background-position", "right -2.5em"},
+    {"background-position:\\74 op \\6c eft", "background-position", "left top"},
+    {"background-position:inherit", "background-position", "inherit"},
+    {"background-position:initial", "background-position", "initial"},
+    {"background-position:unset", "background-position", "unset"},
+    {"background-position:revert", "background-position", "revert"},
+    {"background-position:var(--Pos, top left)", "background-position", "var(--Pos, top left)"},
+    {"background-position:left!important;background-position:right", "background-position", "left center"},
+    {"background-position:left;background-position:right!important", "background-position", "right center"},
+    {"background-position:left;background-position:1fr", "background-position", "left center"},
+    {"background-position:left;background-position:1dppx", "background-position", "left center"},
+    {"object-position:CENTER", "object-position", "center center"},
+    {"object-position:left", "object-position", "left center"},
+    {"object-position:RIGHT", "object-position", "right center"},
+    {"object-position:top", "object-position", "center top"},
+    {"object-position:bottom", "object-position", "center bottom"},
+    {"object-position:top left", "object-position", "left top"},
+    {"object-position:bottom right", "object-position", "right bottom"},
+    {"object-position:center left", "object-position", "left center"},
+    {"object-position:center right", "object-position", "right center"},
+    {"object-position:top center", "object-position", "center top"},
+    {"object-position:bottom center", "object-position", "center bottom"},
+    {"object-position:center top", "object-position", "center top"},
+    {"object-position:left bottom", "object-position", "left bottom"},
+    {"object-position:right top", "object-position", "right top"},
+    {"object-position:0", "object-position", "0px center"},
+    {"object-position:-0 .125%", "object-position", "0px 0.125%"},
+    {"object-position:.1234567EM", "object-position", "0.123457em center"},
+    {"object-position:-0002.50px +075.00%", "object-position", "-2.5px 75%"},
+    {"object-position:CENTER .1234567PX", "object-position", "center 0.123457px"},
+    {"object-position:12px bottom", "object-position", "12px bottom"},
+    {"object-position:right -2.5em", "object-position", "right -2.5em"},
+    {"object-position:\\74 op \\6c eft", "object-position", "left top"},
+    {"object-position:inherit", "object-position", "inherit"},
+    {"object-position:initial", "object-position", "initial"},
+    {"object-position:unset", "object-position", "unset"},
+    {"object-position:revert", "object-position", "revert"},
+    {"object-position:var(--Pos, top left)", "object-position", "var(--Pos, top left)"},
+    {"object-position:left!important;object-position:right", "object-position", "left center"},
+    {"object-position:left;object-position:right!important", "object-position", "right center"},
+    {"object-position:left;object-position:1fr", "object-position", "left center"},
+    {"object-position:left;object-position:1dppx", "object-position", "left center"},
+    {"background-position:TOP LEFT, 0, center -2.5EM", "background-position", "left top, 0px center, center -2.5em"},
+    {"background-position:top,top,top", "background-position", "center top, center top, center top"},
+    {"background-position:var(--Pos, top, bottom)", "background-position", "var(--Pos, top, bottom)"},
+    {"object-position:top;object-position:top,bottom", "object-position", "center top"},
+
     /* CSS Align 3 section 5.2: axis order and omitted second value. */
     {"place-content:CENTER", "place-content", "center"},
     {"place-content:center", "align-content", "center"},
@@ -2345,6 +2414,77 @@ START_TEST(test_grid_placement_invalid)
 }
 END_TEST
 
+START_TEST(test_position_bytecode)
+{
+    const struct {
+        const char *value;
+        uint16_t code;
+        css_fixed offsets[2];
+        uint32_t units[2];
+    } forms[] = {
+        {"center", 0, {0}, {0}}, {"top", BACKGROUND_POSITION_VERT_TOP, {0}, {0}},
+        {"bottom right", BACKGROUND_POSITION_HORZ_RIGHT | BACKGROUND_POSITION_VERT_BOTTOM, {0}, {0}},
+        {"top left", BACKGROUND_POSITION_HORZ_LEFT | BACKGROUND_POSITION_VERT_TOP, {0}, {0}},
+        {"center left", BACKGROUND_POSITION_HORZ_LEFT, {0}, {0}},
+        {"17px", BACKGROUND_POSITION_HORZ_SET, {INTTOFIX(17), 0}, {UNIT_PX, 0}},
+        {"center 19%", BACKGROUND_POSITION_VERT_SET, {0, INTTOFIX(19)}, {0, UNIT_PCT}},
+        {"-2.5px 75%", BACKGROUND_POSITION_HORZ_SET | BACKGROUND_POSITION_VERT_SET,
+            {-2560, INTTOFIX(75)}, {UNIT_PX, UNIT_PCT}},
+        {"32768px 32768%", BACKGROUND_POSITION_HORZ_SET | BACKGROUND_POSITION_VERT_SET,
+            {INTTOFIX(32768), INTTOFIX(32768)}, {UNIT_PX, UNIT_PCT}},
+    };
+    static const char *const properties[] = {"background-position", "object-position"};
+    static const enum css_properties_e opcodes[] = {CSS_PROP_BACKGROUND_POSITION, CSS_PROP_OBJECT_POSITION};
+    for (size_t p = 0; p < N_ELEMENTS(properties); p++) {
+        for (size_t f = 0; f < N_ELEMENTS(forms); f++) {
+            for (unsigned important = 0; important < 2; important++) {
+                char css[128];
+                snprintf(css, sizeof(css), "%s:%s%s", properties[p], forms[f].value, important ? "!important" : "");
+                css_declaration_list *list = parse(css, _i != 0);
+                ck_assert_msg(css__declaration_list_count(list) == 1, "rejected %s", css);
+                const css_style *style = inline_style(css__declaration_list_sheet(list));
+                ck_assert_uint_eq(style->bytecode[0], buildOPV(opcodes[p], important ? FLAG_IMPORTANT : 0, forms[f].code));
+                size_t pos = 1;
+                for (size_t axis = 0; axis < 2; axis++) {
+                    if (forms[f].units[axis] == 0)
+                        continue;
+                    ck_assert_msg(pos + 2 <= style->used, "truncated %s", css);
+                    ck_assert_msg((css_fixed)style->bytecode[pos++] == forms[f].offsets[axis], "wrong offset: %s", css);
+                    ck_assert_msg(style->bytecode[pos++] == forms[f].units[axis], "wrong unit: %s", css);
+                }
+                ck_assert_uint_eq(style->used, pos);
+                css__declaration_list_destroy(list);
+            }
+        }
+    }
+}
+END_TEST
+
+START_TEST(test_position_invalid)
+{
+    static const char *const properties[] = {"background-position", "object-position", "background"};
+    static const char *const values[] = {"left left", "left right", "top bottom", "top top", "right right",
+        "2px left", "3% right", "top 4px", "bottom 5%", "left initial", "inherit top",
+        "1fr", "center 2fr", "2dppx", "3dpi center", "center 4dpcm", "1s", "2Hz", "3deg",
+        "1", "1px 2px 3px", "top left,", ",top left", "top,,bottom", "top,initial",
+        /* Edge offsets and math are still unsupported. */
+        "left 2px top 3px", "right 2px bottom", "calc(2px)"};
+    for (size_t p = 0; p < N_ELEMENTS(properties); p++) {
+        char css[160];
+        snprintf(css, sizeof(css), "%s:left top", properties[p]);
+        css_declaration_list *base = parse(css, false);
+        for (size_t i = 0; i < N_ELEMENTS(values); i++) {
+            snprintf(css, sizeof(css), "%s:left top;%s:%s", properties[p], properties[p], values[i]);
+            css_declaration_list *list = parse(css, _i != 0);
+            ck_assert_msg(css__declaration_list_count(list) == 1, "accepted invalid/unsupported position: %s", css);
+            compare_sheets(css__declaration_list_sheet(base), css__declaration_list_sheet(list));
+            css__declaration_list_destroy(list);
+        }
+        css__declaration_list_destroy(base);
+    }
+}
+END_TEST
+
 START_TEST(test_place_content_bytecode)
 {
     static const char *const keywords[] = {"normal", "stretch", "flex-start", "flex-end", "center",
@@ -2578,6 +2718,47 @@ START_TEST(test_value_arguments)
 END_TEST
 
 #ifdef WISP_TEST_ALLOC_FAILURE
+START_TEST(test_position_rollback)
+{
+    css_stylesheet *sheet;
+    ck_assert_int_eq(css_stylesheet_create(&params, &sheet), CSS_OK);
+    css_language *language = sheet->parser_frontend;
+    lwc_string *x, *y;
+    ck_assert_int_eq(lwc_intern_string("2px", 3, &x), lwc_error_ok);
+    ck_assert_int_eq(lwc_intern_string("3", 1, &y), lwc_error_ok);
+    parserutils_vector *tokens;
+    ck_assert_int_eq(parserutils_vector_create(sizeof(css_token), 4, &tokens), PARSERUTILS_OK);
+    css_token parts[] = {{.type = CSS_TOKEN_DIMENSION, .idata = x}, {.type = CSS_TOKEN_S},
+        {.type = CSS_TOKEN_PERCENTAGE, .idata = y}};
+    for (size_t i = 0; i < N_ELEMENTS(parts); i++)
+        ck_assert_int_eq(parserutils_vector_append(tokens, &parts[i]), PARSERUTILS_OK);
+    css_prop_handler handler = _i == 0 ? css__parse_background_position : css__parse_object_position;
+    for (unsigned spare = 0; spare < 5; spare++) {
+        css_style *style;
+        ck_assert_int_eq(css__stylesheet_style_create(sheet, &style), CSS_OK);
+        uint32_t before = style->allocated - spare;
+        for (uint32_t i = 0; i < before; i++)
+            ck_assert_int_eq(css__stylesheet_style_append(style, 0x12345678), CSS_OK);
+        int32_t ctx = 0;
+        realloc_limit(0);
+        css_error error = handler(language, tokens, &ctx, style);
+        realloc_limit(UINT_MAX);
+        ck_assert_msg(error == CSS_NOMEM, "position %d spare %u: %d", _i, spare, error);
+        ck_assert_int_eq(ctx, 0);
+        ck_assert_uint_eq(style->used, before);
+        for (uint32_t i = 0; i < before; i++)
+            ck_assert_uint_eq(style->bytecode[i], 0x12345678);
+        ck_assert_int_eq(handler(language, tokens, &ctx, style), CSS_OK);
+        ck_assert_uint_eq(style->used, before + 5);
+        css__stylesheet_style_destroy(style);
+    }
+    parserutils_vector_destroy(tokens);
+    lwc_string_unref(x);
+    lwc_string_unref(y);
+    css_stylesheet_destroy(sheet);
+}
+END_TEST
+
 /* Force either emitted word to allocate, for explicit, defaulted and CSS-wide
  * pairs. No failure may publish a partial shorthand or consume its tokens. */
 START_TEST(test_place_content_rollback)
@@ -2753,12 +2934,13 @@ START_TEST(test_value_allocation_failure)
                       "clip:rect(.1234567px, auto, -1.2345678em, 1px);"
                       "list-style:none inside url(Marker.png);columns:.1234567em 3;"
                       "grid-area:2/3/span 4/5 span;grid-column:2 span/3;"
-                      "place-content:center flex-end;"
+                      "place-content:center flex-end;background-position:top left,.1234567px -2.3456789%;"
+                      "object-position:center -.1234567em;"
                       "font-family:One/**/Two\\20 , 'a\\22 b\\a c',SERIF;";
     static const char *const names[] = {"margin", "--x", "background-image", "background-attachment", "border-style",
         "content", "quotes", "counter-reset", "aspect-ratio", "border-spacing", "clip", "font-family", "flex",
         "flex-flow", "color", "border-color", "list-style", "columns", "border", "border-left", "outline", "column-rule",
-        "grid-area", "grid-column", "grid-row", "grid-row-end", "place-content"};
+        "grid-area", "grid-column", "grid-row", "grid-row-end", "place-content", "background-position", "object-position"};
     const char *name = names[_i];
     /* Keep full-border inputs separate: they reset the quad style/colour cases. */
     if (strcmp(name, "border") == 0 || strcmp(name, "border-left") == 0)
@@ -2830,6 +3012,8 @@ int main(void)
     tcase_add_loop_test(tc, test_border_shorthand_invalid, 0, 2);
     tcase_add_loop_test(tc, test_grid_placement_bytecode, 0, 2);
     tcase_add_loop_test(tc, test_grid_placement_invalid, 0, 2);
+    tcase_add_loop_test(tc, test_position_bytecode, 0, 2);
+    tcase_add_loop_test(tc, test_position_invalid, 0, 2);
     tcase_add_loop_test(tc, test_place_content_bytecode, 0, 2);
     tcase_add_loop_test(tc, test_place_content_invalid, 0, 2);
     tcase_add_test(tc, test_quirky_border_values);
@@ -2843,7 +3027,8 @@ int main(void)
     tcase_add_loop_test(tc, test_overflow_axes, 0, 2);
     tcase_add_test(tc, test_value_arguments);
 #ifdef WISP_TEST_ALLOC_FAILURE
-    tcase_add_loop_test(tc, test_value_allocation_failure, 0, 27);
+    tcase_add_loop_test(tc, test_value_allocation_failure, 0, 29);
+    tcase_add_loop_test(tc, test_position_rollback, 0, 2);
     tcase_add_loop_test(tc, test_place_content_rollback, 0, 3);
     tcase_add_loop_test(tc, test_grid_placement_rollback, 0, 7);
     tcase_add_loop_test(tc, test_font_face_allocation_failure, 0, 3);

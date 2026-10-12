@@ -238,6 +238,7 @@ bits = 4
 values = "string"
 
 [background_position]
+declaration_value = "position_list"
 enum = "CSS_PROP_BACKGROUND_POSITION"
 inherited = false
 cascade = "manual"
@@ -1903,6 +1904,7 @@ initial = "FILL"
 parse = '''IDENT:( INHERIT: INITIAL: REVERT: UNSET: FILL:0,OBJECT_FIT_FILL CONTAIN:0,OBJECT_FIT_CONTAIN COVER:0,OBJECT_FIT_COVER NONE:0,OBJECT_FIT_NONE SCALE_DOWN:0,OBJECT_FIT_SCALE_DOWN IDENT:)'''
 
 [object_position]
+declaration_value = "position"
 enum = "CSS_PROP_OBJECT_POSITION"
 inherited = false
 cascade = "manual"

@@ -117,6 +117,19 @@ START_TEST(test_dump_numbers)
 }
 END_TEST
 
+START_TEST(test_dump_position_payloads)
+{
+    css_stylesheet *sheet = parse("* {object-position:32768px 2%!important; background-position:top right; width:37px}");
+    struct dump_output out = {0};
+    dump_sheet(sheet, &out);
+    ck_assert(!out.failed);
+    ck_assert_str_eq(out.data, "| *\n|  object-position: 32768px 2% !important\n"
+        "|  background-position: right top\n|  width: 37px\n");
+    dump_output_fini(&out);
+    css_stylesheet_destroy(sheet);
+}
+END_TEST
+
 #ifdef WISP_TEST_ALLOC_FAILURE
 START_TEST(test_allocation_failure)
 {
@@ -197,6 +210,7 @@ int main(void)
     tcase_add_test(tc, test_size_overflow);
     tcase_add_test(tc, test_dump_stylesheet);
     tcase_add_test(tc, test_dump_numbers);
+    tcase_add_test(tc, test_dump_position_payloads);
 #ifdef WISP_TEST_ALLOC_FAILURE
     tcase_add_loop_test(tc, test_allocation_failure, 0, 2);
     tcase_add_test(tc, test_stylesheet_allocation_failure);

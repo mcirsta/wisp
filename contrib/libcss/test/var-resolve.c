@@ -1662,6 +1662,33 @@ static void test_grid_placement_payloads(void)
     }
 }
 
+static void test_position_payloads(void)
+{
+    static const struct {
+        const char *name;
+        uint8_t (*get)(const css_computed_style *, css_fixed_or_calc *, css_unit *, css_fixed_or_calc *, css_unit *);
+    } properties[] = {{"object-position", css_computed_object_position},
+        {"background-position", css_computed_background_position}};
+    for (size_t p = 0; p < sizeof(properties) / sizeof(properties[0]); p++) {
+        for (unsigned important = 0; important < 2; important++) {
+            style_case ctx;
+            char css[256];
+            /* 32768px resembles a variable-length opcode if the payload is
+             * incorrectly decoded; !important must preserve both units too. */
+            snprintf(css, sizeof(css), "div { %s:32768px 2%%%s; --size:37px; width:var(--size); }",
+                properties[p].name, important ? "!important" : "");
+            const css_computed_style *style = select_style_from_css(css, &ctx);
+            expect_length_px(css, style, css_computed_width, CSS_WIDTH_SET, 37);
+            css_fixed_or_calc x, y;
+            css_unit xu, yu;
+            properties[p].get(style, &x, &xu, &y, &yu);
+            assert(x.value == INTTOFIX(32768) && xu == CSS_UNIT_PX);
+            assert(y.value == INTTOFIX(2) && yu == CSS_UNIT_PCT);
+            destroy_style_case(&ctx);
+        }
+    }
+}
+
 static void test_environment_outlives_stylesheet(void)
 {
     style_case ctx;
@@ -1810,6 +1837,7 @@ int main(int argc, char **argv)
     test_deferred_important();
     test_property_handler_integration();
     test_grid_placement_payloads();
+    test_position_payloads();
     test_environment_outlives_stylesheet();
 
     lwc_iterate_strings(assert_no_interned_strings, NULL);
