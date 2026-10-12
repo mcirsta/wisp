@@ -729,6 +729,19 @@ class GperfInputGenerator:
             lines.append(f'    {{"{css_name}", {handler_name}, {opcode}, {metadata}, '
                          f"{array}, {len(members)}, CSS_DECL_VALUE_{value_kind}}},")
         lines.append("};")
+        # CSSOM's preferred shorthand order: most components first, then name.
+        # Current canonical shorthands have no vendor prefixes or legacy value
+        # mappings. Name aliases deliberately do not create candidates here.
+        shorthands = sorted((i for i, key in enumerate(self.keys) if key[4]),
+                            key=lambda i: (-len(self.keys[i][4]),
+                                           2 if self.keys[i][0].startswith('-') and
+                                           not self.keys[i][0].startswith('-webkit-') else
+                                           1 if self.keys[i][0].startswith('-webkit-') else 0,
+                                           self.keys[i][0]))
+        lines.append("static const struct css_prop_entry *const css_shorthand_registry[] = {")
+        for index in shorthands:
+            lines.append(f"    &css_prop_registry[{index}],")
+        lines.append("};")
         lines.append("%}")
         lines.append("")
         lines.append("struct css_prop_hash_entry { const char *name; const struct css_prop_entry *property; };")
@@ -754,6 +767,11 @@ class GperfInputGenerator:
         lines.append("    }")
         lines.append("    const struct css_prop_hash_entry *entry = css_prop_lookup_generated(name, len);")
         lines.append("    return entry != NULL ? entry->property : NULL;")
+        lines.append("}")
+        lines.append("const struct css_prop_entry *const *css_prop_shorthands(size_t *count)")
+        lines.append("{")
+        lines.append("    *count = sizeof(css_shorthand_registry) / sizeof(css_shorthand_registry[0]);")
+        lines.append("    return css_shorthand_registry;")
         lines.append("}")
         lines.append("")
 
@@ -1167,7 +1185,9 @@ class MultiFileGenerator:
                  "enum css_declaration_property_id {"]
         for name in sorted(data):
             lines.append(f"    CSS_DECL_{name.upper()},")
+        maximum = max((len(p.get('declaration_longhands', [])) for p in data.values()), default=0)
         lines.extend(["    CSS_DECL_PROPERTY_COUNT", "};", "",
+                      f"enum {{ CSS_DECL_MAX_LONGHANDS = {maximum} }};", "",
                       "enum css_logical_property_group {", "    CSS_LOGICAL_GROUP_NONE,"])
         for group in groups:
             lines.append(f"    CSS_LOGICAL_GROUP_{group.upper()},")

@@ -39,10 +39,8 @@ static css_error append(struct text_output *out, const char *text, size_t length
 
 /* CSSOM §2.1 string/identifier serialization. Only ASCII bytes need escaping; copying
  * the intervening UTF-8 spans preserves non-ASCII code points unchanged. */
-static css_error escaped_contents(struct text_output *out, lwc_string *string, bool identifier)
+static css_error escaped_contents(struct text_output *out, const char *text, size_t length, bool identifier)
 {
-    const char *text = lwc_string_data(string);
-    size_t length = lwc_string_length(string);
     css_error error = CSS_OK;
     size_t start = 0;
     for (size_t i = 0; error == CSS_OK && i < length; i++) {
@@ -86,7 +84,7 @@ static css_error escaped(struct text_output *out, lwc_string *string, bool ident
 {
     css_error error = identifier ? CSS_OK : append(out, "\"", 1, false);
     if (error == CSS_OK)
-        error = escaped_contents(out, string, identifier);
+        error = escaped_contents(out, lwc_string_data(string), lwc_string_length(string), identifier);
     if (error == CSS_OK && !identifier)
         error = append(out, "\"", 1, false);
     return error;
@@ -293,7 +291,7 @@ static css_error font_family_name(const css_declaration *source, size_t *positio
         if (error == CSS_OK && !first)
             error = append(out, " ", 1, false);
         if (error == CSS_OK)
-            error = escaped_contents(out, (*token)->text, false);
+            error = escaped_contents(out, lwc_string_data((*token)->text), lwc_string_length((*token)->text), false);
         if (error != CSS_OK)
             return error;
         first = false;
@@ -454,6 +452,59 @@ css_error css__declaration_text_serialize(const css_declaration *source, lwc_str
     if (text.data == NULL)
         return CSS_NOMEM;
     error = serialize(source, &text);
+    if (error == CSS_OK && lwc_intern_string(text.data, text.length, out) != lwc_error_ok)
+        error = CSS_NOMEM;
+    free(text.data);
+    return error;
+}
+
+static css_error format_block(const css_declaration_text *declarations, size_t count, struct text_output *out)
+{
+    for (size_t i = 0; i < count; i++) {
+        const css_declaration_text *decl = &declarations[i];
+        css_error error = i == 0 ? CSS_OK : append(out, " ", 1, false);
+        if (error == CSS_OK)
+            error = escaped_contents(out, decl->name, strlen(decl->name), true);
+        if (error == CSS_OK)
+            error = append(out, ": ", 2, false);
+        /* CSSOM omits a value containing only CSS whitespace. Custom values
+         * containing comments or an escaped space still retain their text. */
+        const char *value = lwc_string_data(decl->value);
+        size_t length = lwc_string_length(decl->value), pos = 0;
+        while (pos < length && (value[pos] == ' ' || value[pos] == '\t' || value[pos] == '\n' ||
+            value[pos] == '\r' || value[pos] == '\f'))
+            pos++;
+        if (error == CSS_OK && pos != length)
+            error = append(out, value, length, false);
+        if (error == CSS_OK && decl->important)
+            error = append(out, " !important", 11, false);
+        if (error == CSS_OK)
+            error = append(out, ";", 1, false);
+        if (error != CSS_OK)
+            return error;
+    }
+    return CSS_OK;
+}
+
+css_error css__declaration_text_block(const css_declaration_text *declarations, size_t count, lwc_string **out)
+{
+    if (out == NULL)
+        return CSS_BADPARM;
+    *out = NULL;
+    if (count != 0 && declarations == NULL)
+        return CSS_BADPARM;
+    struct text_output text = {.capacity = SIZE_MAX};
+    css_error error = format_block(declarations, count, &text);
+    if (error != CSS_OK)
+        return error;
+    if (text.length == 0)
+        return lwc_intern_string("", 0, out) == lwc_error_ok ? CSS_OK : CSS_NOMEM;
+    text.capacity = text.length;
+    text.length = 0;
+    text.data = malloc(text.capacity);
+    if (text.data == NULL)
+        return CSS_NOMEM;
+    error = format_block(declarations, count, &text);
     if (error == CSS_OK && lwc_intern_string(text.data, text.length, out) != lwc_error_ok)
         error = CSS_NOMEM;
     free(text.data);

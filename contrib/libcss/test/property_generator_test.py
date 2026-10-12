@@ -49,6 +49,23 @@ class DeclarationMetadataTest(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "legacy.alias"):
                     self.reader.validate_declarations()
 
+    def test_block_shorthand_catalogue(self):
+        generator = GEN.MultiFileGenerator(self.reader.get_dispatch_order(), self.reader.prop_map)
+        generator.toml_reader = self.reader
+        output = generator.generate_gperf_input()
+        entries = output.split("static const struct css_prop_entry css_prop_registry[] = {\n")[1]
+        names = [line.split('"')[1] for line in entries.split("\n};")[0].splitlines()]
+        catalogue = output.split("static const struct css_prop_entry *const css_shorthand_registry[] = {\n")[1]
+        actual = [names[int(line.split('[')[1].split(']')[0])]
+                  for line in catalogue.split("\n};")[0].splitlines()]
+        expected = sorted((name for name, prop in self.reader.toml_data.items() if prop.get('declaration_longhands')),
+                          key=lambda name: (-len(self.reader.toml_data[name]['declaration_longhands']), name))
+        self.assertEqual(actual, [name.replace('_', '-') for name in expected])
+        self.assertEqual(actual[0], 'border')
+        self.assertNotIn('grid-gap', actual)
+        maximum = max(len(prop.get('declaration_longhands', [])) for prop in self.reader.toml_data.values())
+        self.assertIn(f'CSS_DECL_MAX_LONGHANDS = {maximum}', generator.generate_declaration_ids())
+
     def test_alias_does_not_add_dispatch_or_parser(self):
         self.reader.toml_data["gap"]["legacy_aliases"].append("extra-legacy-gap")
         self.reader.validate_declarations()

@@ -1731,6 +1731,58 @@ Math/other remaining aggregate readback, declaration-block writes and live
 `element.style` remain pending; the saved eBihoreanul opacity blocker is still
 unresolved by this internal increment.
 
+### Specified declaration-block serialization (2026-10-12)
+
+Committed the gap alias/parser fixes as `c9bba413`. Added the private
+`parse/declaration_block.{c,h}` layer over the immutable contribution-order view.
+It assembles whole specified declaration blocks for future `cssText` readback;
+it does not expose a JS object or mutate the source declarations.
+
+Shorthand selection follows [CSSOM section 6.6](https://drafts.csswg.org/cssom/#serialize-a-css-declaration-block):
+use the preferred shorthand order, require all members with matching priority,
+and reject combinations that cross an intervening property in the same logical
+group with different mapping logic. Otherwise serialize the longhand at its
+specified position. Missing/unrepresentable shorthands do not swallow longhands.
+Canonical aliases, CSS-wide values and variable-containing values reuse the
+existing value layer. Shared text formatting escapes property names and emits
+the required whitespace, priority markers and final semicolons.
+
+The generator derives the canonical shorthand catalogue and maximum member count
+from `properties.toml`; no parser names or array-size limits are copied into the
+block serializer. A temporary sorted name index provides binary member lookup,
+and custom properties bypass shorthand searches. Formatting measures the result
+before allocating its buffer and shares identifier escaping with the existing
+text serializer. There is no new per-page state or work in ordinary rendering.
+
+Pending shorthand members retain [CSS Values 5's empty-string serialization](https://drafts.csswg.org/css-values-5/#pending-substitution-value)
+when the original shorthand can no longer be reconstructed after an override.
+Those empty longhands cannot preserve the pending values through reparsing:
+future CSSOM writes must operate on native declaration state, not use a cssText
+round trip as their mutation model. Unsupported value families still return an
+explicit error with no partial output; math, gradients and remaining aggregate
+readback are not implemented by this block layer.
+
+The separate native block suite covers whole/chunked input, all registered
+shorthands, 120 physical/logical margin arrangements, mixed priorities, aliases,
+custom-name escaping, empty values, unsupported-value failures, ownership after
+source teardown and 512 custom-property winners. Serializable values undergo
+winner/value/priority round trips and idempotent block readback. Allocation
+failure sweeps verify cleanup and successful retry with the same borrowed input.
+The historical Duktape style getter was checked again; its empty-object
+placeholder provides no block serialization to reuse.
+
+Validation: all 79 selected native CSS/QuickJS/font suites and four Qt rendering
+regressions pass in both Debug and Release. Debug native tests include ASan/UBSan
+and LeakSanitizer; the new block suite passes 119 Debug / 121 Release checks,
+and all 17 generator checks pass. Qt coverage includes font line-height,
+background layers, gap aliases and deferred revert. Both builds are warning-free
+and `git diff --check` is clean. No GTK tests ran.
+
+Remaining work: complete missing specified-value families/aggregate modelling,
+implement native declaration mutations, then connect the stable live
+`element.style` wrapper to DOM changes and JS attribution. The saved eBihoreanul
+opacity blocker remains until that wrapper is available.
+
 ## Assessment
 
 Keep QuickJS-ng and libdom. The missing part is the browser binding and execution

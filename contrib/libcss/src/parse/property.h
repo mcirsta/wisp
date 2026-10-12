@@ -80,4 +80,8 @@ struct css_prop_entry {
  * case-sensitive name and do not have an entry in this registry. */
 const struct css_prop_entry *css_prop_lookup(const char *name, size_t len);
 
+/* Canonical parser shorthands in CSSOM preferred order. Static storage; aliases
+ * share their target's registration and do not occur separately. */
+const struct css_prop_entry *const *css_prop_shorthands(size_t *count);
+
 #endif
