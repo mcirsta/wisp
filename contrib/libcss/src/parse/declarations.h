@@ -64,6 +64,12 @@ size_t css__declaration_component_end(const css_declaration *source, size_t star
  * is a decoded Unicode string supplied as UTF-8 (no BOM/charset sniffing).
  * inline_style/charset in params are overridden accordingly. */
 css_error css__declaration_list_create(const css_stylesheet_params *params, css_declaration_list **out);
+/* Whole single-value input for a supported, already-decoded property name.
+ * Append/complete propagate CSS_INVALID for invalid values; no list recovery,
+ * declaration separators or top-level !important. No priority is supplied as
+ * text: callers apply their independently validated flag when assigning. */
+css_error css__declaration_list_create_for_value(
+    const css_stylesheet_params *params, lwc_string *property, css_declaration_list **out);
 css_error css__declaration_list_append(css_declaration_list *list, const uint8_t *data, size_t len);
 css_error css__declaration_list_complete(css_declaration_list *list);
 void css__declaration_list_destroy(css_declaration_list *list);

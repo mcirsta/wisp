@@ -21,6 +21,16 @@ static css_error resolve_url(void *pw, const char *base, lwc_string *rel, lwc_st
     return CSS_OK;
 }
 
+static const css_stylesheet_params input_params = {.params_version = CSS_STYLESHEET_PARAMS_VERSION_1,
+    .level = CSS_LEVEL_DEFAULT,
+    .url = "https://example.org/",
+    .resolve = resolve_url};
+
+static css_declaration_assignment assignment(const char *property, const char *value, const char *priority)
+{
+    return (css_declaration_assignment){property, value, priority, strlen(property), strlen(value), strlen(priority)};
+}
+
 static css_declaration_list *parse(const char *css, bool chunks)
 {
     css_stylesheet_params params = {.params_version = CSS_STYLESHEET_PARAMS_VERSION_1,
@@ -355,8 +365,268 @@ START_TEST(test_bad_arguments)
 }
 END_TEST
 
+/* A NULL expected value denotes a CSSOM no-op, not empty-string readback. */
+static const struct {
+    const char *name, *value, *priority, *expected;
+    bool important;
+} inputs[] = {
+    {"color", "red", "", "red"},
+    {"CoLoR", " RED /**/", "IMPORTANT", "red", true},
+    {"width", "2px", "", "2px"},
+    {"margin", "1px 2px", "important", "1px 2px", true},
+    {"GRID-GAP", "2px 3px", "", "2px 3px"},
+    {"margin", "var(--x, 1PX  2px)", "", "var(--x, 1PX  2px)"},
+    {"width", "var(--x, rgb(1, 2, 3))", "", "var(--x, rgb(1, 2, 3))"},
+    {"color", "rgb(1, 2, 3", "", "rgb(1, 2, 3)"},
+    {"content", "'hello", "", "\"hello\""},
+    {"content", "\"; !important }\"", "", "\"; !important }\""},
+    {"background-image", "url(a.png)", "", "url(\"a.png\")"},
+    {"background-image", "url(a.png", "", "url(\"a.png\")"},
+    {"background-image", "url(\"a.png", "", "url(\"a.png\")"},
+    {"background-image", "url(", "", "url(\"\")"},
+    {"background-image", "u\\72l(a.png)", "", "url(\"a.png\")"},
+    {"background-image", "url(a\\", "", "url(\"a�\")"},
+    {"--x", "  MiXeD/**/tokens  ", "", "MiXeD/**/tokens"},
+    {"--x", " ", "", " "},
+    {"--x", "/**/", "", "/**/"},
+    {"--x", "fn(!important; { x: y; })", "", "fn(!important; { x: y; })"},
+    {"--x", "[ { x: y; } ]", "important", "[ { x: y; } ]", true},
+    {"--x", "fn([x", "", "fn([x"},
+    {"--x", "url(\"x\" extra)", "", "url(\"x\" extra)"},
+    {"--x", "var(--a, fn(!important))", "", "var(--a, fn(!important))"},
+    {"--x", "escaped\\;separator", "", "escaped\\;separator"},
+    {"--x", "\\!important", "", "\\!important"},
+    {"--x", "x/* unfinished !important;  ", "", "x/* unfinished !important;  "},
+    {"--Case", "new", "", "new"},
+    {"--a:b; c", "value", "", "value"},
+    {"--a\\31", "value", "", "value"},
+    {"--știri", "Știri", "", "Știri"},
+    {"width", "", "wrong priority", ""},
+    {"--x", "", "!important", ""},
+    {"color", "red; width:500px", "", NULL},
+    {"color", "red;", "", NULL},
+    {"color", "red}", "", NULL},
+    {"color", "red !important", "", NULL},
+    {"color", "red !/**/IMPORTANT", "important", NULL},
+    {"color", "red !\\69mportant", "", NULL},
+    {"color", "red", " important", NULL},
+    {"color", "red", "important ", NULL},
+    {"color", "red", "!important", NULL},
+    {"color", "red", "\\69mportant", NULL},
+    {"color", "red", "IMPORTANT/**/", NULL},
+    {"color", "red junk", "", NULL},
+    {"color", " ", "", NULL},
+    {"color", "/**/", "", NULL},
+    {"width", "2px\ncolor:red", "", NULL},
+    {"width", "var(--x);junk", "", NULL},
+    {"width", "var(--x) !important", "", NULL},
+    {"content", "'broken\nstring'", "", NULL},
+    {"--x", "x;", "", NULL},
+    {"--x", "!important", "", NULL},
+    {"--x", "x !invalid", "", NULL},
+    {"--x", "x)", "", NULL},
+    {"--x", "fn([x)]", "", NULL},
+    {"--x", "{x: y; ]}", "", NULL},
+    {"--x", "url(a b)", "", NULL},
+    {"--x", "url(a\tb)", "", NULL},
+    {"--x", "url(a(b))", "", NULL},
+    {"--x", "url(a\"b)", "", NULL},
+    {"--x", "url(a\\\nb)", "", NULL},
+    {"--x", "url(a b\\); color:red)", "", NULL},
+    {"--x", "u\\72l(a b)", "", NULL},
+    {"--x", "fn(url(a b))", "", NULL},
+    {"--x", "url(a b", "", NULL},
+    {"--x", "var(--a, var(--b,))", "", "var(--a, var(--b,))"},
+    {"--x", "var(--a,)", "", "var(--a,)"},
+    {"--x", "var(/**/--a/**/,x)", "", "var(/**/--a/**/,x)"},
+    {"--x", "var(\\2d -a)", "", "var(\\2d -a)"},
+    {"background-image", "url(var(--x))", "", NULL},
+    {"unknown-property", "red", "", NULL},
+    {"color:red;width", "2px", "", NULL},
+    {" color", "red", "", NULL},
+    {"c\\6flor", "red", "", NULL},
+    {"--", "value", "", NULL},
+};
+enum { INPUT_COUNT = sizeof(inputs) / sizeof(inputs[0]) };
+
+START_TEST(test_set_property_input)
+{
+    css_declaration_store *store = create(
+        "color:blue;width:4px!important;--x:old;--Case:old;--case:other;height:17px", false);
+    lwc_string *before;
+    ck_assert_int_eq(css__declaration_store_serialize(store, &before), CSS_OK);
+    const css_declaration_contribution *borrowed = css__declaration_store_get(store, 0);
+    css_declaration_assignment input = assignment(inputs[_i].name, inputs[_i].value, inputs[_i].priority);
+    bool changed;
+    css_error error = css__declaration_store_set_property(store, &input_params, &input, &changed);
+    ck_assert_msg(
+        error == CSS_OK, "input %d (%s, %s, %s): error %d", _i, input.property, input.value, input.priority, error);
+    if (inputs[_i].expected == NULL) {
+        ck_assert_msg(!changed, "invalid input %d changed the store: %s = %s", _i, input.property, input.value);
+        ck_assert_ptr_eq(borrowed, css__declaration_store_get(store, 0));
+        check_text(store, lwc_string_data(before));
+    } else {
+        ck_assert_msg(changed, "input %d was not applied: %s = %s", _i, input.property, input.value);
+        check_value(store, input.property, inputs[_i].expected, inputs[_i].important);
+    }
+    check_value(store, "height", "17px", false);
+    check_value(store, "--case", "other", false);
+    lwc_string_unref(before);
+    css__declaration_store_destroy(store);
+}
+END_TEST
+
+START_TEST(test_whole_value_chunks)
+{
+    /* The low-level parser receives decoded names and no priority. Check both
+     * streaming boundaries and EOF recovery against the same native values. */
+    const struct css_prop_entry *property = css_prop_lookup(inputs[_i].name, strlen(inputs[_i].name));
+    if (inputs[_i].expected == NULL || inputs[_i].value[0] == '\0')
+        return;
+    const char *name = property != NULL ? property->name : inputs[_i].name;
+    lwc_string *interned;
+    ck_assert_int_eq(lwc_intern_string(name, strlen(name), &interned), lwc_error_ok);
+    css_declaration_list *list;
+    ck_assert_int_eq(css__declaration_list_create_for_value(&input_params, interned, &list), CSS_OK);
+    lwc_string_unref(interned);
+    for (size_t i = 0; i < strlen(inputs[_i].value); i++) {
+        css_error error = css__declaration_list_append(list, (const uint8_t *)inputs[_i].value + i, 1);
+        ck_assert_msg(
+            error == CSS_OK || error == CSS_NEEDDATA, "chunk %zu of %s: error %d", i, inputs[_i].value, error);
+    }
+    ck_assert_int_eq(css__declaration_list_complete(list), CSS_OK);
+    ck_assert_uint_eq(css__declaration_list_count(list), 1);
+    css_declaration_store *store;
+    ck_assert_int_eq(css__declaration_store_create(list, &store), CSS_OK);
+    css__declaration_list_destroy(list);
+    check_value(store, name, inputs[_i].expected, false);
+    css__declaration_store_destroy(store);
+}
+END_TEST
+
+START_TEST(test_input_lengths_and_arguments)
+{
+    css_declaration_store *store = create("color:blue;--x:old", false);
+    css_declaration_assignment input = assignment("color", "red", "important");
+    bool changed;
+    input.property = "color\0junk";
+    input.property_length = 10;
+    ck_assert_int_eq(css__declaration_store_set_property(store, &input_params, &input, &changed), CSS_OK);
+    ck_assert(!changed);
+    input.property_length = 5;
+    input.value = "red;";
+    input.value_length = 3;
+    ck_assert_int_eq(css__declaration_store_set_property(store, &input_params, &input, &changed), CSS_OK);
+    ck_assert(changed);
+    check_value(store, "color", "red", true);
+    input.property = "--x\0suffix";
+    input.property_length = 10;
+    ck_assert_int_eq(css__declaration_store_set_property(store, &input_params, &input, &changed), CSS_OK);
+    ck_assert(!changed);
+    input = assignment("--x", "new", "important");
+    input.priority = "important\0junk";
+    input.priority_length = 14;
+    ck_assert_int_eq(css__declaration_store_set_property(store, &input_params, &input, &changed), CSS_OK);
+    ck_assert(!changed);
+    input.value_length = 0;
+    ck_assert_int_eq(css__declaration_store_set_property(store, &input_params, &input, &changed), CSS_OK);
+    ck_assert(changed);
+    check_value(store, "--x", "", false);
+    ck_assert_int_eq(css__declaration_store_set_property(NULL, &input_params, &input, &changed), CSS_BADPARM);
+    ck_assert(!changed);
+    ck_assert_int_eq(css__declaration_store_set_property(store, NULL, &input, &changed), CSS_BADPARM);
+    ck_assert_int_eq(css__declaration_store_set_property(store, &input_params, NULL, &changed), CSS_BADPARM);
+    ck_assert_int_eq(css__declaration_store_set_property(store, &input_params, &input, NULL), CSS_BADPARM);
+    css__declaration_store_destroy(store);
+}
+END_TEST
+
+START_TEST(test_url_grammar_in_stylesheets)
+{
+    css_declaration_store *store = create("--x:url(a b);color:blue;--y:fn(url(a b));width:3px;"
+                                        "background-image:u\\72l(a\\)b.png);--z:url(a\tb)",
+        _i != 0);
+    check_value(store, "--x", "", false);
+    check_value(store, "--y", "", false);
+    check_value(store, "--z", "", false);
+    check_value(store, "color", "blue", false);
+    check_value(store, "width", "3px", false);
+    check_value(store, "background-image", "url(\"a)b.png\")", false);
+    css__declaration_store_destroy(store);
+}
+END_TEST
+
+START_TEST(test_invalid_value_chunks)
+{
+    const char *values[] = {"red; width:2px", "red !important", "{x: y; ]}", "fn(url(a b\\)c))", "url(a\\\nb)",
+        "u\\72l(a b)", "\"bad\nstring\"", "x)"};
+    lwc_string *name;
+    ck_assert_int_eq(lwc_intern_string("--x", 3, &name), lwc_error_ok);
+    for (size_t i = 0; i < sizeof(values) / sizeof(values[0]); i++) {
+        css_declaration_list *list;
+        ck_assert_int_eq(css__declaration_list_create_for_value(&input_params, name, &list), CSS_OK);
+        css_error error = CSS_OK;
+        for (size_t j = 0; j < strlen(values[i]) && (error == CSS_OK || error == CSS_NEEDDATA); j++)
+            error = css__declaration_list_append(list, (const uint8_t *)values[i] + j, 1);
+        if (error == CSS_OK || error == CSS_NEEDDATA)
+            error = css__declaration_list_complete(list);
+        ck_assert_msg(error == CSS_INVALID, "invalid chunked value %s: %d", values[i], error);
+        ck_assert_int_eq(css__declaration_list_complete(list), CSS_INVALID);
+        ck_assert_uint_eq(css__declaration_list_count(list), 0);
+        css__declaration_list_destroy(list);
+    }
+    lwc_string_unref(name);
+}
+END_TEST
+
 #ifdef WISP_TEST_ALLOC_FAILURE
 static void (*const allocators[])(unsigned) = {malloc_limit, calloc_limit, realloc_limit};
+
+START_TEST(test_input_allocation_failure)
+{
+    css_declaration_store *store = create("--x:old!important;color:red", false);
+    /* Force nested-component stack growth, lexer unescaping and EOF closure. */
+    char value[256];
+    memset(value, '(', 80);
+    strcpy(value + 80, "u\\72l(quoted\\)name.png) !important");
+    css_declaration_assignment input = assignment("--x", value, "IMPORTANT");
+    const css_declaration_contribution *old = css__declaration_store_get(store, 0);
+    bool succeeded = false;
+    size_t baseline = 0;
+    lwc_iterate_strings(count_string, &baseline);
+    for (unsigned n = 0; n < 1024; n++) {
+        bool changed = true;
+        allocators[_i](n);
+        css_error error = css__declaration_store_set_property(store, &input_params, &input, &changed);
+        allocators[_i](UINT_MAX);
+        if (error == CSS_OK) {
+            ck_assert(changed);
+            ck_assert_uint_gt(n, 0);
+            check_value(store, "--x", value, true);
+            succeeded = true;
+            break;
+        }
+        ck_assert_msg(error == CSS_NOMEM, "input allocator %d failure %u: %d", _i, n, error);
+        ck_assert(!changed);
+        ck_assert_ptr_eq(old, css__declaration_store_get(store, 0));
+        check_text(store, "--x: old !important; color: red;");
+        size_t retained = 0;
+        lwc_iterate_strings(count_string, &retained);
+        ck_assert_msg(retained == baseline, "input allocator %d failure %u retained %zu strings, originally %zu", _i,
+            n, retained, baseline);
+    }
+    ck_assert(succeeded);
+    input = assignment("--x", "", "not a priority");
+    bool changed;
+    allocators[_i](0);
+    css_error error = css__declaration_store_set_property(store, &input_params, &input, &changed);
+    allocators[_i](UINT_MAX);
+    ck_assert_int_eq(error, CSS_OK);
+    ck_assert(changed);
+    check_value(store, "--x", "", false);
+    css__declaration_store_destroy(store);
+}
+END_TEST
 
 START_TEST(test_create_allocation_failure)
 {
@@ -444,10 +714,16 @@ int main(void)
     tcase_add_test(tc, test_length_and_borrowed_names);
     tcase_add_test(tc, test_repeated_edits_release_sources);
     tcase_add_test(tc, test_shared_source_lifetime);
+    tcase_add_loop_test(tc, test_set_property_input, 0, INPUT_COUNT);
+    tcase_add_loop_test(tc, test_whole_value_chunks, 0, INPUT_COUNT);
+    tcase_add_test(tc, test_input_lengths_and_arguments);
+    tcase_add_loop_test(tc, test_url_grammar_in_stylesheets, 0, 2);
+    tcase_add_test(tc, test_invalid_value_chunks);
     tcase_add_test(tc, test_bad_arguments);
 #ifdef WISP_TEST_ALLOC_FAILURE
     tcase_add_loop_test(tc, test_create_allocation_failure, 0, 3);
     tcase_add_loop_test(tc, test_set_allocation_failure, 0, 3);
+    tcase_add_loop_test(tc, test_input_allocation_failure, 0, 3);
 #endif
     suite_add_tcase(suite, tc);
     SRunner *runner = srunner_create(suite);

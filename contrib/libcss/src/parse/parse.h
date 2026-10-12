@@ -71,6 +71,11 @@ bool css__parser_quirks_permitted(css_parser *parser);
 /* Declaration collection consumes a Unicode string supplied as UTF-8, rather
  * than a stylesheet byte stream with BOM/charset sniffing. Call before append. */
 css_error css__parser_capture_string_source(css_parser *parser, parserutils_buffer *source);
+/* Before appending input to a fresh inline parser, select whole-value parsing.
+ * property is an already-decoded name; it is never lexed as declaration text.
+ * Reuses the lexer and language/property handlers, but emits at most one
+ * declaration at EOF and propagates invalid values instead of recovering. */
+css_error css__parser_use_property_value(css_parser *parser, lwc_string *property);
 /* Position of the unconsumed delimiter during a declaration event. */
 size_t css__parser_source_position(const css_parser *parser);
 

@@ -290,6 +290,48 @@ static bool in_property(const struct property_key *key, const char *name)
     return false;
 }
 
+css_error css__declaration_store_set_property(css_declaration_store *store, const css_stylesheet_params *params,
+    const css_declaration_assignment *input, bool *changed)
+{
+    if (changed == NULL)
+        return CSS_BADPARM;
+    *changed = false;
+    if (store == NULL || params == NULL || input == NULL || input->property == NULL || input->value == NULL ||
+        input->priority == NULL)
+        return CSS_BADPARM;
+    struct property_key key = property_key(input->property, input->property_length);
+    if ((key.custom && (key.length == 2 || memchr(key.name, 0, key.length) != NULL)) ||
+        (!key.custom && key.property == NULL))
+        return CSS_OK;
+    if (input->value_length == 0)
+        return css__declaration_store_remove(store, key.name, key.length, changed);
+    bool important = input->priority_length != 0;
+    struct property_key priority = {.name = input->priority, .length = input->priority_length};
+    if (important && !matches(&priority, "important"))
+        return CSS_OK;
+    lwc_string *name;
+    if (lwc_intern_string(key.name, key.length, &name) != lwc_error_ok)
+        return CSS_NOMEM;
+    css_declaration_list *list = NULL;
+    css_error error = css__declaration_list_create_for_value(params, name, &list);
+    lwc_string_unref(name);
+    if (error == CSS_OK) {
+        error = css__declaration_list_append(list, (const uint8_t *)input->value, input->value_length);
+        if (error == CSS_OK || error == CSS_NEEDDATA)
+            error = css__declaration_list_complete(list);
+    }
+    if (error == CSS_OK) {
+        assert(css__declaration_list_count(list) == 1);
+        css_declaration value = *css__declaration_list_get(list, 0);
+        value.important = important;
+        error = css__declaration_store_set(store, &value, changed);
+    } else if (error == CSS_INVALID) {
+        error = CSS_OK;
+    }
+    css__declaration_list_destroy(list);
+    return error;
+}
+
 css_error css__declaration_store_remove(css_declaration_store *store, const char *name, size_t length, bool *changed)
 {
     if (changed == NULL)

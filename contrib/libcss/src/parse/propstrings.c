@@ -67,8 +67,16 @@ css_error css__propstrings_get(lwc_string ***strings)
         for (i = 0; i < LAST_KNOWN; i++) {
             lerror = lwc_intern_string(stringmap[i].data, stringmap[i].len, &css__propstrings.strings[i]);
 
-            if (lerror != lwc_error_ok)
+            if (lerror != lwc_error_ok) {
+                /* No stylesheet owns the table until initialization succeeds.
+                 * Release this attempt's prefix so a failed first parse (or
+                 * a retry after the last sheet was destroyed) leaks nothing. */
+                while (i > 0) {
+                    lwc_string_unref(css__propstrings.strings[--i]);
+                    css__propstrings.strings[i] = NULL;
+                }
                 return CSS_NOMEM;
+            }
         }
         css__propstrings.count++;
     }

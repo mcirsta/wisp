@@ -1846,6 +1846,63 @@ Unsupported readback still reports an explicit native error, never fabricated
 text. The saved eBihoreanul opacity blocker remains until that live binding is
 available.
 
+### Whole-value native assignments (2026-10-12)
+
+Committed owned declaration editing as `d62b596d`. Added a native
+`css__declaration_store_set_property()` entry point with separate decoded
+property, value and priority strings and explicit lengths. It implements the
+[CSSOM assignment ordering](https://drafts.csswg.org/cssom/#dom-cssstyledeclaration-setproperty):
+unsupported/invalid input leaves declarations untouched, an empty value removes
+the property before priority validation, and the priority is either empty or
+an ASCII-insensitive `important` with no extra whitespace or syntax. Successful
+assignments use the existing native editing layer and generated registrations.
+
+The parser has a dedicated whole-value entry point using the shared lexer and
+property handlers. It supplies the decoded property name as a token instead of
+embedding it in CSS text, consumes the entire value, and propagates invalid
+grammar without declaration-list recovery. Top-level separators and priority
+markers are rejected; nested components and strings retain their contents.
+EOF closes unfinished component blocks/functions according to
+[CSS Syntax](https://drafts.csswg.org/css-syntax-3/#consume-component-value).
+Original source spelling remains available for custom/deferred values.
+This adds no second property grammar or JS-side CSS parser.
+
+Testing exposed two shared-parser defects, fixed at their sources:
+
+- Unquoted malformed `url(...)` was rewound into ordinary function tokens,
+  allowing invalid URLs to survive in custom/deferred declarations. The lexer
+  now emits an invalid-URL token and consumes through an unescaped closing
+  parenthesis or EOF. Both ordinary parsing and the new input path reject it.
+  Decoded/escaped `url` spellings share the same path. URL EOF recovery and
+  escapes at EOF follow [CSS Syntax's tokenization rules](https://drafts.csswg.org/css-syntax-3/#consume-url-token).
+  Existing valid quoted URL tokens remain compatible with the property handlers.
+- First-use initialization of the generated property-string table leaked its
+  successfully interned prefix when allocation failed. Cleanup now releases
+  that prefix before returning failure. Fault tests check retained strings
+  after each failed attempt, not just eventual successful teardown.
+
+Coverage includes property-name injection, trailing declarations, embedded
+`!important`, priority normalization, empty-value removal, aliases and custom
+case/escaping, explicit lengths, nested components, malformed/escaped URLs,
+EOF recovery, byte-by-byte input, ordinary stylesheet recovery and allocation
+failures during parser creation, token/stack growth, EOF closure and assignment.
+All failures preserve the old store and borrowed entries. The Duktape style
+getter was inspected again; it has no native input parser to reuse.
+
+Validation: all 80 selected native CSS/QuickJS/font suites and four Qt rendering
+regressions pass in Debug and Release. The store suite now contains 238 Debug /
+247 Release checks; Debug native coverage includes ASan/UBSan and LeakSanitizer.
+The existing lexer fixtures were corrected where they required obsolete URL
+recovery; unrelated CR/CRLF fixtures are preserved. Builds are warning-free,
+`git diff --check` is clean, and no GTK tests ran.
+
+This remains native infrastructure. Missing specified-value serializers
+(math/gradients/remaining aggregates), the stable live `element.style` object,
+DOM synchronization and JS mutation attribution still need completion. This
+increment does not claim new rendering support for aggregate values or extend
+the renderer's variable-substitution model. The saved eBihoreanul opacity
+blocker remains until the live binding is connected.
+
 ## Assessment
 
 Keep QuickJS-ng and libdom. The missing part is the browser binding and execution

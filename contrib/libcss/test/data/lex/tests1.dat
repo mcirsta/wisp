@@ -533,20 +533,14 @@ EOF
 #data
 url(foo
 #expected
-FUNCTION:url
-IDENT:foo
-S
+URI:foo
 EOF
 #reset
 
 #data
 url(foo x
 #expected
-FUNCTION:url
-IDENT:foo
-S
-IDENT:x
-S
+BAD-URI
 EOF
 #reset
 

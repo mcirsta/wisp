@@ -182,22 +182,7 @@ HASH:dd
 CHAR:{
 IDENT:background
 CHAR::
-FUNCTION:url
-IDENT:xxx
-CHAR:}
-HASH:do
-CHAR:{
-IDENT:display
-CHAR::
-IDENT:none
-CHAR:}
-HASH:dx
-CHAR:{
-IDENT:display
-CHAR::
-IDENT:inline
-CHAR:}
-S
+URI:xxx}#do{display:none}#dx{display:inline}
 EOF
 #reset
 

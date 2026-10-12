@@ -55,6 +55,7 @@ typedef enum css_token_type {
     CSS_TOKEN_CDC,
     CSS_TOKEN_S,
     CSS_TOKEN_COMMENT,
+    CSS_TOKEN_INVALID_URI,
     CSS_TOKEN_INCLUDES,
     CSS_TOKEN_DASHMATCH,
     CSS_TOKEN_PREFIXMATCH,
@@ -91,8 +92,7 @@ typedef struct css_token {
  * (counter names, attr(), selectors, etc.) do not need special token types. */
 static inline bool css__token_is_custom_property(const css_token *token)
 {
-    if (token == NULL || token->type != CSS_TOKEN_IDENT || token->idata == NULL ||
-        lwc_string_length(token->idata) <= 2)
+    if (token == NULL || token->type != CSS_TOKEN_IDENT || token->idata == NULL || lwc_string_length(token->idata) <= 2)
         return false;
     const char *text = lwc_string_data(token->idata);
     return text[0] == '-' && text[1] == '-';

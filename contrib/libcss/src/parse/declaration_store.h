@@ -32,6 +32,18 @@ const css_declaration_contribution *css__declaration_store_get(const css_declara
  * accepting the first declaration from an arbitrary CSS string is incorrect. */
 css_error css__declaration_store_set(css_declaration_store *store, const css_declaration *value, bool *changed);
 
+typedef struct css_declaration_assignment {
+    const char *property, *value, *priority; /**< Decoded UTF-8 strings, never NULL. */
+    size_t property_length, value_length, priority_length;
+} css_declaration_assignment;
+
+/* Native setProperty semantics for decoded strings. Invalid/unsupported names,
+ * values or priorities are successful no-ops. Empty value removes before
+ * priority validation. Fatal errors preserve the previous declaration state.
+ * params supplies the document's URL callbacks and grammar/quirks context. */
+css_error css__declaration_store_set_property(css_declaration_store *store, const css_stylesheet_params *params,
+    const css_declaration_assignment *input, bool *changed);
+
 /* Names are decoded UTF-8 with explicit lengths (no CSS unescaping). Ordinary
  * names/aliases are ASCII-insensitive; custom names are case-sensitive.
  * remove is allocation-free and removes all members of a shorthand. A future

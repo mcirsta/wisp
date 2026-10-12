@@ -107,6 +107,27 @@ css_error css__declaration_list_append(css_declaration_list *list, const uint8_t
     return error;
 }
 
+css_error css__declaration_list_create_for_value(
+    const css_stylesheet_params *params, lwc_string *property, css_declaration_list **out)
+{
+    if (out == NULL)
+        return CSS_BADPARM;
+    *out = NULL;
+    if (property == NULL)
+        return CSS_BADPARM;
+    css_declaration_list *list;
+    css_error error = css__declaration_list_create(params, &list);
+    if (error != CSS_OK)
+        return error;
+    error = css__parser_use_property_value(list->sheet->parser, property);
+    if (error != CSS_OK) {
+        css__declaration_list_destroy(list);
+        return error;
+    }
+    *out = list;
+    return CSS_OK;
+}
+
 css_error css__declaration_list_complete(css_declaration_list *list)
 {
     if (list == NULL)

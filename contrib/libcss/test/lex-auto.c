@@ -212,7 +212,7 @@ const char *string_from_type(css_token_type type)
 {
     const char *names[] = {"IDENT", "ATKEYWORD", "HASH", "FUNCTION", "STRING", "INVALID", "URI", "UNICODE-RANGE",
         "CHAR", "NUMBER", "PERCENTAGE", "DIMENSION", "last_intern", "CDO", "CDC", "S",
-        "COMMENT", "INCLUDES", "DASHMATCH", "PREFIXMATCH", "SUFFIXMATCH", "SUBSTRINGMATCH", "EOF"};
+        "COMMENT", "BAD-URI", "INCLUDES", "DASHMATCH", "PREFIXMATCH", "SUFFIXMATCH", "SUBSTRINGMATCH", "EOF"};
 
     return names[type];
 }
@@ -237,6 +237,8 @@ css_token_type string_to_type(const char *data, size_t len)
         return CSS_TOKEN_DIMENSION;
     else if (len == 3 && strncasecmp(data, "URI", len) == 0)
         return CSS_TOKEN_URI;
+    else if (len == 7 && strncasecmp(data, "BAD-URI", len) == 0)
+        return CSS_TOKEN_INVALID_URI;
     else if (len == 13 && strncasecmp(data, "UNICODE-RANGE", len) == 0)
         return CSS_TOKEN_UNICODE_RANGE;
     else if (len == 3 && strncasecmp(data, "CDO", len) == 0)

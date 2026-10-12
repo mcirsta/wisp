@@ -98,6 +98,7 @@ struct css_lexer {
         bool lastWasCR; /**< Whether the previous character
                          * was CR */
         bool stringClosed; /**< Whether a string consumed its closing quote */
+        bool urlQuoted; /**< Quoted url() uses function grammar on malformed input. */
         size_t bytesForURL; /**< Input bytes read for "url(", for
                              * rewinding */
         size_t dataLenForURL; /**< Output length for "url(", for
@@ -903,7 +904,27 @@ css_error IdentOrFunction(css_lexer *lexer, css_token **token)
 
         if (c == '(') {
             APPEND(lexer, cptr, clen);
-
+            /* Recognize the decoded identifier, including escaped spellings.
+             * All url() tokens must use the same URL/error handling. */
+            if (t->data.len == 4) {
+                const uint8_t *name;
+                if (lexer->escapeSeen) {
+                    name = lexer->unescapedTokenData->data;
+                } else {
+                    perror = parserutils_inputstream_peek(lexer->input, 0, &name, &clen);
+                    if (perror != PARSERUTILS_OK)
+                        return css_error_from_parserutils_error(perror);
+                }
+                if ((name[0] == 'u' || name[0] == 'U') && (name[1] == 'r' || name[1] == 'R') &&
+                    (name[2] == 'l' || name[2] == 'L')) {
+                    lexer->context.bytesForURL = lexer->bytesReadForToken;
+                    lexer->context.dataLenForURL = t->data.len;
+                    lexer->context.lastWasCR = false;
+                    lexer->state = sURL;
+                    lexer->substate = 0;
+                    return URI(lexer, token);
+                }
+            }
             t->type = CSS_TOKEN_FUNCTION;
         } else {
             t->type = CSS_TOKEN_IDENT;
@@ -1365,13 +1386,7 @@ css_error URIOrUnicodeRangeOrIdentOrFunction(css_lexer *lexer, css_token **token
 
     c = *cptr;
 
-    if (c == 'r' || c == 'R') {
-        APPEND(lexer, cptr, clen);
-
-        lexer->state = sURL;
-        lexer->substate = 0;
-        return URI(lexer, token);
-    } else if (c == '+') {
+    if (c == '+') {
         APPEND(lexer, cptr, clen);
 
         lexer->state = sUCR;
@@ -1393,63 +1408,11 @@ css_error URI(css_lexer *lexer, css_token **token)
     size_t clen;
     css_error error;
     parserutils_error perror;
-    enum { Initial = 0, LParen = 1, W1 = 2, Quote = 3, URL = 4, W2 = 5, RParen = 6, String = 7 };
+    enum { W1 = 0, Quote, URL, W2, RParen, String, BadURL };
 
-    /* URI = "url(" w (string | urlchar*) w ')'
-     *
-     * 'u' and 'r' have been consumed.
-     */
-
+    /* The decoded url( identifier has already been consumed. Valid quoted
+     * URLs remain one URI token for the existing property handlers. */
     switch (lexer->substate) {
-    case Initial:
-        perror = parserutils_inputstream_peek(lexer->input, lexer->bytesReadForToken, &cptr, &clen);
-        if (perror != PARSERUTILS_OK && perror != PARSERUTILS_EOF)
-            return css_error_from_parserutils_error(perror);
-
-        if (perror == PARSERUTILS_EOF) {
-            /* IDENT */
-            return emitToken(lexer, CSS_TOKEN_IDENT, token);
-        }
-
-        c = *cptr;
-
-        if (c == 'l' || c == 'L') {
-            APPEND(lexer, cptr, clen);
-        } else {
-            lexer->state = sIDENT;
-            lexer->substate = 0;
-            return IdentOrFunction(lexer, token);
-        }
-
-        /* Fall through */
-    case LParen:
-        lexer->substate = LParen;
-
-        perror = parserutils_inputstream_peek(lexer->input, lexer->bytesReadForToken, &cptr, &clen);
-        if (perror != PARSERUTILS_OK && perror != PARSERUTILS_EOF)
-            return css_error_from_parserutils_error(perror);
-
-        if (perror == PARSERUTILS_EOF)
-            return emitToken(lexer, CSS_TOKEN_IDENT, token);
-
-        c = *cptr;
-
-        if (c == '(') {
-            APPEND(lexer, cptr, clen);
-        } else {
-            lexer->state = sIDENT;
-            lexer->substate = 0;
-            return IdentOrFunction(lexer, token);
-        }
-
-        /* Save the number of input bytes read for "url(" */
-        lexer->context.bytesForURL = lexer->bytesReadForToken;
-        /* And the length of the token data at the same point */
-        lexer->context.dataLenForURL = lexer->token.data.len;
-
-        lexer->context.lastWasCR = false;
-
-        /* Fall through */
     case W1:
         lexer->substate = W1;
 
@@ -1465,22 +1428,19 @@ css_error URI(css_lexer *lexer, css_token **token)
         if (perror != PARSERUTILS_OK && perror != PARSERUTILS_EOF)
             return css_error_from_parserutils_error(perror);
 
+        lexer->context.urlQuoted = false;
+        lexer->context.urlDataStart = lexer->token.data.len;
         if (perror == PARSERUTILS_EOF) {
-            /* Rewind to "url(" */
-            lexer->bytesReadForToken = lexer->context.bytesForURL;
-            lexer->token.data.len = lexer->context.dataLenForURL;
-            return emitToken(lexer, CSS_TOKEN_FUNCTION, token);
+            lexer->context.urlDataEnd = lexer->token.data.len;
+            return emitToken(lexer, CSS_TOKEN_URI, token);
         }
 
         c = *cptr;
-        lexer->context.urlDataStart = lexer->token.data.len;
-
         if (c == '"' || c == '\'') {
             APPEND(lexer, cptr, clen);
-
+            lexer->context.urlQuoted = true;
             lexer->context.first = c;
             lexer->context.urlDataStart = lexer->token.data.len;
-
             goto string;
         }
 
@@ -1517,17 +1477,16 @@ css_error URI(css_lexer *lexer, css_token **token)
         if (perror != PARSERUTILS_OK && perror != PARSERUTILS_EOF)
             return css_error_from_parserutils_error(perror);
 
-        if (perror == PARSERUTILS_EOF) {
-            /* Rewind to "url(" */
-            lexer->bytesReadForToken = lexer->context.bytesForURL;
-            lexer->token.data.len = lexer->context.dataLenForURL;
-            return emitToken(lexer, CSS_TOKEN_FUNCTION, token);
-        }
+        if (perror == PARSERUTILS_EOF)
+            return emitToken(lexer, CSS_TOKEN_URI, token);
 
         c = *cptr;
-
         if (c != ')') {
-            /* Rewind to "url(" */
+            if (!lexer->context.urlQuoted)
+                goto bad_url;
+            /* Quoted url() is a function in CSS Syntax. Let the grammar
+             * reject extra arguments for image values; custom values may
+             * contain arbitrary balanced function contents. */
             lexer->bytesReadForToken = lexer->context.bytesForURL;
             lexer->token.data.len = lexer->context.dataLenForURL;
             return emitToken(lexer, CSS_TOKEN_FUNCTION, token);
@@ -1555,6 +1514,31 @@ css_error URI(css_lexer *lexer, css_token **token)
         lexer->context.lastWasCR = false;
 
         goto w2;
+    case BadURL:
+    bad_url:
+        lexer->substate = BadURL;
+        /* Consume the remnants through an unescaped ')' or EOF. A malformed
+         * URL must not leak its contents back out as declaration tokens. */
+        for (;;) {
+            perror = parserutils_inputstream_peek(lexer->input, lexer->bytesReadForToken, &cptr, &clen);
+            if (perror == PARSERUTILS_EOF)
+                return emitToken(lexer, CSS_TOKEN_INVALID_URI, token);
+            if (perror != PARSERUTILS_OK)
+                return css_error_from_parserutils_error(perror);
+            c = *cptr;
+            if (c == '\\') {
+                lexer->bytesReadForToken += clen;
+                error = consumeEscape(lexer, false);
+                if (error == CSS_OK)
+                    continue;
+                lexer->bytesReadForToken -= clen;
+                if (error != CSS_INVALID)
+                    return error;
+            }
+            APPEND(lexer, cptr, clen);
+            if (c == ')')
+                return emitToken(lexer, CSS_TOKEN_INVALID_URI, token);
+        }
     }
 
     return emitToken(lexer, CSS_TOKEN_URI, token);
@@ -1724,10 +1708,11 @@ css_error consumeEscape(css_lexer *lexer, bool nl)
     if (perror != PARSERUTILS_OK && perror != PARSERUTILS_EOF)
         return css_error_from_parserutils_error(perror);
 
-    if (perror == PARSERUTILS_EOF)
+    bool eof = perror == PARSERUTILS_EOF;
+    if (eof && nl)
         return CSS_EOF;
 
-    c = *cptr;
+    c = eof ? 0 : *cptr;
 
     if (!nl && (c == '\n' || c == '\r' || c == '\f')) {
         /* These are not permitted */
@@ -1757,6 +1742,11 @@ css_error consumeEscape(css_lexer *lexer, bool nl)
 
         lexer->token.data.len = lexer->bytesReadForToken - 1;
         lexer->escapeSeen = true;
+    }
+
+    if (eof) {
+        static const uint8_t replacement[] = {0xef, 0xbf, 0xbd};
+        return appendToTokenData(lexer, replacement, sizeof(replacement));
     }
 
     if (isHex(c)) {
@@ -2073,7 +2063,7 @@ css_error consumeURLChars(css_lexer *lexer)
 
         c = *cptr;
 
-        if (startURLChar(c) && c != '\\') {
+        if (startURLChar(c) && c != '\\' && c != '(' && c != '\t') {
             APPEND(lexer, cptr, clen);
         }
 
@@ -2098,7 +2088,7 @@ css_error consumeURLChars(css_lexer *lexer)
                 return error;
             }
         }
-    } while (startURLChar(c));
+    } while (startURLChar(c) && c != '(' && c != '\t');
 
     return CSS_OK;
 }

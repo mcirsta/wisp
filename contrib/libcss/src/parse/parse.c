@@ -69,6 +69,7 @@ enum {
     sISBody0 = 24,
     sISBody = 25,
     sMediaQuery = 26,
+    sPropertyValue = 27,
 };
 
 /**
@@ -141,6 +142,7 @@ static css_error parseInlineStyle(css_parser *parser);
 static css_error parseISBody0(css_parser *parser);
 static css_error parseISBody(css_parser *parser);
 static css_error parseMediaQuery(css_parser *parser);
+static css_error parsePropertyValue(css_parser *parser);
 
 static void discard_tokens(css_parser *parser);
 
@@ -175,6 +177,7 @@ static css_error (*parseFuncs[])(css_parser *parser) = {
     parseISBody0,
     parseISBody,
     parseMediaQuery,
+    parsePropertyValue,
 };
 
 /**
@@ -400,6 +403,38 @@ size_t css__parser_source_position(const css_parser *parser)
     /* Declaration events have already looked ahead to ';', '}' or EOF. */
     assert(parser->pushback != NULL);
     return parser->pushback->source_start;
+}
+
+/* Transfer one synthetic token's string reference to the vector. */
+static css_error append_synthetic(css_parser *parser, css_token token)
+{
+    parserutils_error error = parserutils_vector_append(parser->tokens, &token);
+    if (error != PARSERUTILS_OK && token.idata != NULL)
+        lwc_string_unref(token.idata);
+    return css_error_from_parserutils_error(error);
+}
+
+css_error css__parser_use_property_value(css_parser *parser, lwc_string *property)
+{
+    if (parser == NULL || property == NULL)
+        return CSS_BADPARM;
+    parser_state *state = parserutils_stack_get_current(parser->states);
+    size_t count;
+    parserutils_vector_get_length(parser->tokens, &count);
+    if (state == NULL || state->state != sInlineStyle || state->substate != 0 || count != 0)
+        return CSS_INVALID;
+    css_error error = append_synthetic(parser, (css_token){.type = CSS_TOKEN_IDENT, .idata = lwc_string_ref(property)});
+    if (error != CSS_OK)
+        return error;
+    lwc_string *colon;
+    if (lwc_intern_string(":", 1, &colon) != lwc_error_ok)
+        return CSS_NOMEM;
+    /* Zero source offsets: the captured string starts at the value, not at an
+     * artificial "property:" prefix. This also prevents name injection. */
+    error = append_synthetic(parser, (css_token){.type = CSS_TOKEN_CHAR, .idata = colon});
+    if (error == CSS_OK)
+        state->state = sPropertyValue;
+    return error;
 }
 
 /******************************************************************************
@@ -2018,19 +2053,20 @@ css_error parseAny(css_parser *parser)
         /* Fall through */
     case WS:
     case WS2:
-    ws2: {
-        parser_state to = {sAny0, Initial};
-        parser_state subsequent = {sAny, AfterAny0};
+    ws2:
+        {
+            parser_state to = {sAny0, Initial};
+            parser_state subsequent = {sAny, AfterAny0};
 
-        error = eatWS(parser);
-        if (error != CSS_OK)
-            return error;
+            error = eatWS(parser);
+            if (error != CSS_OK)
+                return error;
 
-        if (state->substate == WS2)
-            break;
+            if (state->substate == WS2)
+                break;
 
-        return transition(parser, to, subsequent);
-    }
+            return transition(parser, to, subsequent);
+        }
     case AfterAny0: {
         parser_state to = {sAny0, Initial};
         parser_state subsequent = {sAny, AfterAny0};
@@ -2346,6 +2382,82 @@ css_error parseMalformedAtRule(css_parser *parser)
     discard_tokens(parser);
 
     return done(parser);
+}
+
+/* CSSOM 6.7.1 parses a complete component-value list, not a declaration list.
+ * Reject declaration delimiters/priority markers at the top level, but retain
+ * them inside strings and balanced components. No error recovery may salvage
+ * a prefix. EOF closes unfinished blocks/functions per CSS Syntax's component
+ * value consumption algorithms.
+ * The existing language layer then applies the property's entire grammar. */
+static css_error parsePropertyValue(css_parser *parser)
+{
+    enum { Initial, Values };
+    parser_state *state = parserutils_stack_get_current(parser->states);
+    css_error error;
+    if (state->substate == Initial) {
+        error = emit(parser, CSS_PARSER_START_STYLESHEET, NULL, false);
+        if (error == CSS_OK)
+            error = emit(parser, CSS_PARSER_START_RULESET, NULL, false);
+        if (error != CSS_OK)
+            return error;
+        state->substate = Values;
+    }
+    for (;;) {
+        const css_token *token;
+        error = getToken(parser, &token);
+        if (error != CSS_OK)
+            return error;
+        char *closing = parserutils_stack_get_current(parser->open_items);
+        if (token->type == CSS_TOKEN_EOF) {
+            error = pushBack(parser, token);
+            if (error != CSS_OK)
+                return error;
+            while (closing != NULL) {
+                lwc_string *text;
+                if (lwc_intern_string(closing, 1, &text) != lwc_error_ok)
+                    return CSS_NOMEM;
+                error = append_synthetic(parser,
+                    (css_token){.type = CSS_TOKEN_CHAR,
+                        .idata = text,
+                        .source_start = token->source_start,
+                        .source_end = token->source_start});
+                if (error != CSS_OK)
+                    return error;
+                parserutils_stack_pop(parser->open_items, NULL);
+                closing = parserutils_stack_get_current(parser->open_items);
+            }
+            error = emit(parser, CSS_PARSER_DECLARATION, parser->tokens, false);
+            if (error != CSS_OK)
+                return error;
+            discard_tokens(parser);
+            error = emit(parser, CSS_PARSER_END_RULESET, NULL, false);
+            if (error == CSS_OK)
+                error = emit(parser, CSS_PARSER_END_STYLESHEET, NULL, false);
+            return error == CSS_OK ? done(parser) : error;
+        }
+        if (token->type == CSS_TOKEN_INVALID_STRING || token->type == CSS_TOKEN_INVALID_URI)
+            return CSS_INVALID;
+        char open = token->type == CSS_TOKEN_FUNCTION ? '(' : 0;
+        if (token->type == CSS_TOKEN_CHAR && lwc_string_length(token->idata) == 1) {
+            char ch = lwc_string_data(token->idata)[0];
+            if ((ch == ';' || ch == '!') && closing == NULL)
+                return CSS_INVALID;
+            if (ch == ')' || ch == ']' || ch == '}') {
+                if (closing == NULL || ch != *closing)
+                    return CSS_INVALID;
+                parserutils_stack_pop(parser->open_items, NULL);
+            } else if (ch == '(' || ch == '[' || ch == '{') {
+                open = ch;
+            }
+        }
+        if (open != 0) {
+            char end = open == '(' ? ')' : open == '[' ? ']' : '}';
+            parserutils_error pe = parserutils_stack_push(parser->open_items, &end);
+            if (pe != PARSERUTILS_OK)
+                return css_error_from_parserutils_error(pe);
+        }
+    }
 }
 
 css_error parseInlineStyle(css_parser *parser)

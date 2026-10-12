@@ -51,6 +51,9 @@ static void printToken(const css_token *token)
     case CSS_TOKEN_URI:
         printf("URI(%.*s)", (int)token->data.len, token->data.data);
         break;
+    case CSS_TOKEN_INVALID_URI:
+        printf("BAD-URI");
+        break;
     case CSS_TOKEN_UNICODE_RANGE:
         printf("UNICODE-RANGE(%.*s)", (int)token->data.len, token->data.data);
         break;

@@ -556,6 +556,7 @@ static css_error mq_parse_consume_any_value(
 
         switch (token->type) {
         case CSS_TOKEN_INVALID_STRING:
+        case CSS_TOKEN_INVALID_URI:
             return CSS_INVALID;
 
         case CSS_TOKEN_CHAR:

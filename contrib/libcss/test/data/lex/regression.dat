@@ -56,17 +56,14 @@ EOF
 #data:trunc
 url("\"}\
 #expected
-FUNCTION:url
-STRING:"}
+URI:"}
 EOF
 #reset
 
 #data:trunc
 url(x\
 #expected
-FUNCTION:url
-IDENT:x
-CHAR:\\
+URI:x�
 EOF
 #reset
 

@@ -1856,6 +1856,8 @@ static css_error parseVariableDeclaration(css_language *c, lwc_string *property,
     css_error error;
 
     while ((token = parserutils_vector_iterate(vector, &scan)) != NULL) {
+        if (token->type == CSS_TOKEN_INVALID_STRING || token->type == CSS_TOKEN_INVALID_URI)
+            return CSS_INVALID;
         if (depth == 0 && tokenIsChar(token, '!')) {
             int32_t important = scan - 1;
             error = css__parse_important(c, vector, &important, &flags);
