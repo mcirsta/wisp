@@ -635,6 +635,8 @@ START_TEST(test_allocation_failure)
                                "grid-column-start:3 span;grid-column-end:unset;grid-row-end:-3;"
                                "place-content:center flex-end;place-content:normal!important;place-content:unset;"
                                "background-position:top left,2px 3%,center;object-position:center .5em!important;"
+                               "background-repeat:repeat no-repeat,no-repeat repeat!important;"
+                               "text-decoration:blink underline overline; text-decoration:initial;"
                                "color:rgb(1.2 3.4 5.6 / 50%);border-color:#1234 red rgb(3,2,1) currentcolor;"
                                /* Force the parser's token vector to grow too. */
                                "--large:red red red red red red red red red red red red red red red red "
@@ -649,7 +651,7 @@ START_TEST(test_allocation_failure)
     memset(css + pos, 'c', 8192);
     pos += 8192;
     snprintf(css + pos, sizeof(css) - pos, "*/%s", declarations);
-    const size_t expected = 46;
+    const size_t expected = 49;
     /* Keep shared property strings alive, so each iteration tests the same
      * allocation sequence instead of global string-cache initialization. */
     css_stylesheet *keeper;
@@ -1572,6 +1574,82 @@ static const struct {
     {"background-position:var(--Pos, top, bottom)", "background-position", "var(--Pos, top, bottom)"},
     {"object-position:top;object-position:top,bottom", "object-position", "center top"},
 
+    {"background-repeat:REPEAT", "background-repeat", "repeat"},
+    {"background-repeat:NO-REPEAT", "background-repeat", "no-repeat"},
+    {"background-repeat:REPEAT-X", "background-repeat", "repeat-x"},
+    {"background-repeat:REPEAT-Y", "background-repeat", "repeat-y"},
+    {"background-repeat:repeat repeat", "background-repeat", "repeat"},
+    {"background-repeat:no-repeat no-repeat", "background-repeat", "no-repeat"},
+    {"background-repeat:repeat no-repeat", "background-repeat", "repeat-x"},
+    {"background-repeat:no-repeat repeat", "background-repeat", "repeat-y"},
+    {"background-repeat:REPEAT/**/NO-REPEAT, no-repeat REPEAT, repeat repeat", "background-repeat", "repeat-x, repeat-y, repeat"},
+    {"background-repeat:repeat,repeat,repeat", "background-repeat", "repeat, repeat, repeat"},
+    {"background-repeat:r\\65 peat n\\6f-repeat", "background-repeat", "repeat-x"},
+    {"background-repeat:repeat no-repeat!important;background-repeat:repeat", "background-repeat", "repeat-x"},
+    {"background-repeat:no-repeat repeat;background-repeat:repeat", "background-repeat", "repeat"},
+    {"background-repeat:repeat; background-repeat:repeat-x repeat-y", "background-repeat", "repeat"},
+    {"background-repeat:repeat; background-repeat:repeat no-repeat repeat", "background-repeat", "repeat"},
+    {"background-repeat:inherit", "background-repeat", "inherit"},
+    {"background-repeat:INITIAL", "background-repeat", "initial"},
+    {"background-repeat:unset", "background-repeat", "unset"},
+    {"background-repeat:revert", "background-repeat", "revert"},
+    {"background-repeat:var(--Repeat, repeat no-repeat)", "background-repeat", "var(--Repeat, repeat no-repeat)"},
+    {"text-decoration:NONE", "text-decoration", "none"},
+    {"text-decoration:UNDERLINE", "text-decoration", "underline"},
+    {"text-decoration:OVERLINE", "text-decoration", "overline"},
+    {"text-decoration:LINE-THROUGH", "text-decoration", "line-through"},
+    {"text-decoration:BLINK", "text-decoration", "blink"},
+    {"text-decoration:blink line-through overline underline", "text-decoration", "underline overline line-through blink"},
+    {"text-decoration:line-through/**/underline", "text-decoration", "underline line-through"},
+    {"text-decoration:u\\6e derline", "text-decoration", "underline"},
+    {"text-decoration:underline!important;text-decoration:none", "text-decoration", "underline"},
+    {"text-decoration:underline;text-decoration:none", "text-decoration", "none"},
+    {"text-decoration:underline;text-decoration:underline underline", "text-decoration", "underline"},
+    {"text-decoration:underline;text-decoration:blink none", "text-decoration", "underline"},
+    {"text-decoration:INHERIT", "text-decoration", "inherit"},
+    {"text-decoration:underline;text-decoration:INITIAL", "text-decoration", "initial"},
+    {"text-decoration:underline;text-decoration:UNSET", "text-decoration", "unset"},
+    {"text-decoration:underline;text-decoration:REVERT", "text-decoration", "revert"},
+    {"text-decoration:var(--Lines, overline underline)", "text-decoration", "var(--Lines, overline underline)"},
+    {"font-variant:NORMAL", "font-variant", "normal"},
+    {"font-variant:SMALL-CAPS", "font-variant", "small-caps"},
+    {"font-variant:small-caps!important;font-variant:normal", "font-variant", "small-caps"},
+    {"font-variant:small-caps;font-variant:initial", "font-variant", "initial"},
+    {"font-variant:var(--Caps, small-caps)", "font-variant", "var(--Caps, small-caps)"},
+    {"white-space:NORMAL", "white-space", "normal"},
+    {"white-space:PRE", "white-space", "pre"},
+    {"white-space:NOWRAP", "white-space", "nowrap"},
+    {"white-space:PRE-WRAP", "white-space", "pre-wrap"},
+    {"white-space:PRE-LINE", "white-space", "pre-line"},
+    {"white-space:pre!important;white-space:nowrap", "white-space", "pre"},
+    {"white-space:pre;white-space:unset", "white-space", "unset"},
+    {"white-space:var(--Space, pre)", "white-space", "var(--Space, pre)"},
+    {"vertical-align:BASELINE", "vertical-align", "baseline"},
+    {"vertical-align:SUB", "vertical-align", "sub"},
+    {"vertical-align:SUPER", "vertical-align", "super"},
+    {"vertical-align:TOP", "vertical-align", "top"},
+    {"vertical-align:TEXT-TOP", "vertical-align", "text-top"},
+    {"vertical-align:MIDDLE", "vertical-align", "middle"},
+    {"vertical-align:BOTTOM", "vertical-align", "bottom"},
+    {"vertical-align:TEXT-BOTTOM", "vertical-align", "text-bottom"},
+    {"vertical-align:-0", "vertical-align", "0px"},
+    {"vertical-align:.1234567PX", "vertical-align", "0.123457px"},
+    {"vertical-align:-.2345678EM", "vertical-align", "-0.234568em"},
+    {"vertical-align:+00012.3456789%", "vertical-align", "12.345679%"},
+    {"vertical-align:5000000px", "vertical-align", "5000000px"},
+    {"vertical-align:2px!important;vertical-align:0", "vertical-align", "2px"},
+    {"vertical-align:2px;vertical-align:revert", "vertical-align", "revert"},
+    {"vertical-align:var(--Offset, 2px)", "vertical-align", "var(--Offset, 2px)"},
+    {"vertical-align:calc(2px + 3px)", "vertical-align", NULL},
+    {"page-break-before:ALWAYS", "page-break-before", "always"},
+    {"page-break-before:LEFT", "page-break-before", "left"},
+    {"page-break-before:RIGHT", "page-break-before", "right"},
+    {"page-break-after:AUTO", "page-break-after", "auto"},
+    {"page-break-after:AVOID", "page-break-after", "avoid"},
+    {"page-break-inside:AVOID", "page-break-inside", "avoid"},
+    {"page-break-inside:AUTO", "page-break-inside", "auto"},
+    {"page-break-after:initial", "page-break-after", "initial"},
+
     /* CSS Align 3 section 5.2: axis order and omitted second value. */
     {"place-content:CENTER", "place-content", "center"},
     {"place-content:center", "align-content", "center"},
@@ -2460,6 +2538,125 @@ START_TEST(test_position_bytecode)
 }
 END_TEST
 
+START_TEST(test_repeat_bytecode)
+{
+    static const char *const forms[] = {"no-repeat no-repeat", "repeat no-repeat", "no-repeat repeat", "repeat repeat"};
+    static const char *const aliases[] = {"no-repeat", "repeat-x", "repeat-y", "repeat"};
+    static const uint16_t codes[] = {BACKGROUND_REPEAT_NO_REPEAT, BACKGROUND_REPEAT_REPEAT_X,
+        BACKGROUND_REPEAT_REPEAT_Y, BACKGROUND_REPEAT_REPEAT};
+    for (size_t i = 0; i < N_ELEMENTS(forms); i++) {
+        for (unsigned important = 0; important < 2; important++) {
+            char css[256], equivalent[256];
+            const char *priority = important ? "!important" : "";
+            snprintf(css, sizeof(css), "background-repeat:%s%s", forms[i], priority);
+            css_declaration_list *list = parse(css, _i != 0);
+            const css_style *style = inline_style(css__declaration_list_sheet(list));
+            ck_assert_uint_eq(style->used, 1);
+            ck_assert_msg(style->bytecode[0] == buildOPV(CSS_PROP_BACKGROUND_REPEAT, important ? FLAG_IMPORTANT : 0, codes[i]),
+                "wrong repeat bytecode: %s", css);
+            css__declaration_list_destroy(list);
+            /* Try both sides of other unordered background components, and
+             * multiple layers, to catch an over-consuming component parser. */
+            snprintf(css, sizeof(css), "background:%s red url(A.png) 2px 3px%s", forms[i], priority);
+            snprintf(equivalent, sizeof(equivalent), "background:%s red url(A.png) 2px 3px%s", aliases[i], priority);
+            list = parse(css, _i != 0);
+            css_declaration_list *reference = parse(equivalent, false);
+            compare_sheets(css__declaration_list_sheet(reference), css__declaration_list_sheet(list));
+            css__declaration_list_destroy(list);
+            css__declaration_list_destroy(reference);
+            snprintf(css, sizeof(css), "background:left top %s,blue none fixed %s%s", forms[i], forms[3 - i], priority);
+            snprintf(equivalent, sizeof(equivalent), "background:left top %s,blue none fixed %s%s",
+                aliases[i], aliases[3 - i], priority);
+            list = parse(css, _i != 0);
+            reference = parse(equivalent, false);
+            compare_sheets(css__declaration_list_sheet(reference), css__declaration_list_sheet(list));
+            css__declaration_list_destroy(list);
+            css__declaration_list_destroy(reference);
+        }
+    }
+}
+END_TEST
+
+START_TEST(test_decoration_bytecode)
+{
+    static const char *const names[] = {"underline", "overline", "line-through", "blink"};
+    /* Every nonempty permutation of the four supported decorations. Bytecode
+     * is a set, while CSSOM orders its specified keywords per the grammar. */
+    for (size_t count = 1; count <= N_ELEMENTS(names); count++) {
+        for (unsigned sequence = 0; sequence < (1u << (count * 2)); sequence++) {
+            char css[128] = "text-decoration:";
+            unsigned mask = 0;
+            for (size_t i = 0; i < count; i++) {
+                unsigned part = (sequence >> (i * 2)) & 3;
+                if (mask & (1u << part)) {
+                    mask = 0;
+                    break;
+                }
+                mask |= 1u << part;
+                strcat(css, names[part]);
+                strcat(css, " ");
+            }
+            if (!mask)
+                continue;
+            strcat(css, "!important");
+            css_declaration_list *list = parse(css, _i != 0);
+            const css_style *style = inline_style(css__declaration_list_sheet(list));
+            ck_assert_uint_eq(style->used, 1);
+            ck_assert_msg(style->bytecode[0] == buildOPV(CSS_PROP_TEXT_DECORATION, FLAG_IMPORTANT, mask),
+                "wrong decoration bytecode: %s", css);
+            char expected[64] = "";
+            for (size_t i = 0; i < N_ELEMENTS(names); i++) {
+                if (mask & (1u << i)) {
+                    if (expected[0])
+                        strcat(expected, " ");
+                    strcat(expected, names[i]);
+                }
+            }
+            css_declaration_order *order;
+            ck_assert_int_eq(css__declaration_order_create(list, &order), CSS_OK);
+            lwc_string *value;
+            ck_assert_int_eq(serialize_property(order, "text-decoration", &value), CSS_OK);
+            ck_assert_msg(strcmp(lwc_string_data(value), expected) == 0, "%s -> %s, expected %s",
+                css, lwc_string_data(value), expected);
+            lwc_string_unref(value);
+            css__declaration_order_destroy(order);
+            css__declaration_list_destroy(list);
+        }
+    }
+}
+END_TEST
+
+START_TEST(test_repeat_decoration_invalid)
+{
+    static const struct { const char *property, *value; } cases[] = {
+        {"background-repeat", "repeat-x repeat"}, {"background-repeat", "repeat repeat-x"},
+        {"background-repeat", "no-repeat repeat-y"}, {"background-repeat", "repeat-y no-repeat"},
+        {"background-repeat", "repeat repeat repeat"}, {"background-repeat", "none"},
+        {"background-repeat", "initial repeat"}, {"background-repeat", "repeat initial"},
+        {"background-repeat", "repeat,initial"}, {"background-repeat", "initial,repeat"},
+        {"background-repeat", "repeat,"}, {"background-repeat", ",repeat"},
+        {"background-repeat", "repeat,,repeat"}, {"background-repeat", "space"}, {"background-repeat", "round"},
+        {"background", "repeat-x repeat"}, {"background", "repeat repeat-x"},
+        {"background", "repeat no-repeat repeat"}, {"background", "repeat initial"},
+        {"text-decoration", "underline underline"}, {"text-decoration", "none underline"},
+        {"text-decoration", "underline none"}, {"text-decoration", "initial underline"},
+        {"text-decoration", "underline unset"}, {"text-decoration", "underline,overline"},
+        {"text-decoration", "underline solid"}, {"text-decoration", "red"}, {"text-decoration", "2px"}
+    };
+    for (size_t i = 0; i < N_ELEMENTS(cases); i++) {
+        char css[192];
+        snprintf(css, sizeof(css), "%s:inherit", cases[i].property);
+        css_declaration_list *reference = parse(css, false);
+        snprintf(css, sizeof(css), "%s:inherit;%s:%s", cases[i].property, cases[i].property, cases[i].value);
+        css_declaration_list *list = parse(css, _i != 0);
+        ck_assert_msg(css__declaration_list_count(list) == 1, "accepted invalid/unsupported value: %s", css);
+        compare_sheets(css__declaration_list_sheet(reference), css__declaration_list_sheet(list));
+        css__declaration_list_destroy(list);
+        css__declaration_list_destroy(reference);
+    }
+}
+END_TEST
+
 START_TEST(test_position_invalid)
 {
     static const char *const properties[] = {"background-position", "object-position", "background"};
@@ -2936,11 +3133,14 @@ START_TEST(test_value_allocation_failure)
                       "grid-area:2/3/span 4/5 span;grid-column:2 span/3;"
                       "place-content:center flex-end;background-position:top left,.1234567px -2.3456789%;"
                       "object-position:center -.1234567em;"
+                      "background-repeat:repeat no-repeat, no-repeat repeat,repeat repeat;"
+                      "text-decoration:blink overline underline;"
                       "font-family:One/**/Two\\20 , 'a\\22 b\\a c',SERIF;";
     static const char *const names[] = {"margin", "--x", "background-image", "background-attachment", "border-style",
         "content", "quotes", "counter-reset", "aspect-ratio", "border-spacing", "clip", "font-family", "flex",
         "flex-flow", "color", "border-color", "list-style", "columns", "border", "border-left", "outline", "column-rule",
-        "grid-area", "grid-column", "grid-row", "grid-row-end", "place-content", "background-position", "object-position"};
+        "grid-area", "grid-column", "grid-row", "grid-row-end", "place-content", "background-position", "object-position",
+        "background-repeat", "text-decoration"};
     const char *name = names[_i];
     /* Keep full-border inputs separate: they reset the quad style/colour cases. */
     if (strcmp(name, "border") == 0 || strcmp(name, "border-left") == 0)
@@ -3013,6 +3213,9 @@ int main(void)
     tcase_add_loop_test(tc, test_grid_placement_bytecode, 0, 2);
     tcase_add_loop_test(tc, test_grid_placement_invalid, 0, 2);
     tcase_add_loop_test(tc, test_position_bytecode, 0, 2);
+    tcase_add_loop_test(tc, test_repeat_bytecode, 0, 2);
+    tcase_add_loop_test(tc, test_decoration_bytecode, 0, 2);
+    tcase_add_loop_test(tc, test_repeat_decoration_invalid, 0, 2);
     tcase_add_loop_test(tc, test_position_invalid, 0, 2);
     tcase_add_loop_test(tc, test_place_content_bytecode, 0, 2);
     tcase_add_loop_test(tc, test_place_content_invalid, 0, 2);
@@ -3027,7 +3230,7 @@ int main(void)
     tcase_add_loop_test(tc, test_overflow_axes, 0, 2);
     tcase_add_test(tc, test_value_arguments);
 #ifdef WISP_TEST_ALLOC_FAILURE
-    tcase_add_loop_test(tc, test_value_allocation_failure, 0, 29);
+    tcase_add_loop_test(tc, test_value_allocation_failure, 0, 31);
     tcase_add_loop_test(tc, test_position_rollback, 0, 2);
     tcase_add_loop_test(tc, test_place_content_rollback, 0, 3);
     tcase_add_loop_test(tc, test_grid_placement_rollback, 0, 7);

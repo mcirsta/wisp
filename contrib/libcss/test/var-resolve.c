@@ -1662,6 +1662,139 @@ static void test_grid_placement_payloads(void)
     }
 }
 
+struct selection_counts { unsigned attempts, publications, fail_on_attempt; };
+
+static css_error counted_hints(void *pw, void *node, uint32_t *nhints, css_hint **hints)
+{
+    struct selection_counts *counts = pw;
+    if (++counts->attempts == counts->fail_on_attempt)
+        return CSS_NOMEM;
+    return node_presentational_hint(NULL, node, nhints, hints);
+}
+
+static css_error counted_publication(void *pw, void *node, void *data)
+{
+    ((struct selection_counts *)pw)->publications++;
+    return set_libcss_node_data(NULL, node, data);
+}
+
+static void test_deferred_revert(void)
+{
+    static const struct {
+        const char *author, *user, *inline_css;
+        unsigned attempts;
+        int width;
+        bool pseudo;
+    } cases[] = {
+        {"div {--w:49px;width:var(--w)}", "div {width:37px}", NULL, 1, 49, false},
+        {"div {width:revert}", "div {width:37px}", NULL, 1, 37, false},
+        {"div {width:var(--missing,revert)}", "div {width:37px}", NULL, 2, 37, false},
+        {"div::before {width:var(--missing,revert)}", "div::before {width:41px}", NULL, 2, 41, true},
+        {NULL, "div {width:37px}", "width:var(--missing,revert)", 2, 37, false},
+        {NULL, "div {width:37px}", "width:revert", 1, 37, false},
+        {"div {width:99px}", "div {width:var(--missing,revert)!important}", NULL, 2, 23, false},
+        {"div {width:var(--missing,revert)!important}", "div {width:37px!important}", NULL, 1, 37, false},
+    };
+    const size_t n_cases = sizeof(cases) / sizeof(cases[0]);
+    for (size_t variant = 0; variant < 2 * n_cases; variant++) {
+        size_t i = variant % n_cases;
+        bool child = variant >= n_cases;
+        style_case ctx;
+        setup_style_case(&ctx, cases[i].author != NULL ? cases[i].author : "");
+        if (cases[i].author == NULL)
+            assert(css_select_ctx_remove_sheet(ctx.select_ctx, ctx.sheet) == CSS_OK);
+        css_stylesheet *ua = create_stylesheet_from_css("div {width:23px} div::before {width:29px}", false, false);
+        css_stylesheet *user = create_stylesheet_from_css(cases[i].user, false, false);
+        assert(css_select_ctx_insert_sheet(ctx.select_ctx, user, 0, CSS_ORIGIN_USER, NULL) == CSS_OK);
+        assert(css_select_ctx_insert_sheet(ctx.select_ctx, ua, 0, CSS_ORIGIN_UA, NULL) == CSS_OK);
+        css_bloom saved_bloom[CSS_BLOOM_SIZE];
+        struct css_node_data *parent_data = NULL;
+        if (child) {
+            attach_parent(&ctx);
+            parent_data = ctx.parent_node.libcss_node_data;
+            memcpy(saved_bloom, parent_data->bloom, sizeof(saved_bloom));
+        }
+        css_stylesheet *inline_sheet = cases[i].inline_css != NULL ?
+            create_stylesheet_from_css(cases[i].inline_css, true, false) : NULL;
+        css_select_handler handler = select_handler;
+        handler.node_presentational_hint = counted_hints;
+        handler.set_libcss_node_data = counted_publication;
+        struct selection_counts counts = {0};
+        css_media media = {.type = CSS_MEDIA_ALL};
+        if (i == 2) {
+            for (unsigned fail = 1; fail <= 2; fail++) {
+                counts.fail_on_attempt = fail;
+                assert(css_select_style(ctx.select_ctx, &ctx.node, &unit_ctx, &media, inline_sheet,
+                    &handler, &counts, &ctx.results) == CSS_NOMEM);
+                assert(ctx.results == NULL && ctx.node.libcss_node_data == NULL);
+                assert(counts.attempts == fail && counts.publications == 0);
+                if (child)
+                    assert(memcmp(saved_bloom, parent_data->bloom, sizeof(saved_bloom)) == 0);
+                counts = (struct selection_counts){0};
+            }
+        }
+        assert(css_select_style(ctx.select_ctx, &ctx.node, &unit_ctx, &media, inline_sheet,
+            &handler, &counts, &ctx.results) == CSS_OK);
+        char label[64];
+        snprintf(label, sizeof(label), "revert case %zu (%s)", i, child ? "child" : "root");
+        expect_length_px(label, ctx.results->styles[cases[i].pseudo ? CSS_PSEUDO_ELEMENT_BEFORE : CSS_PSEUDO_ELEMENT_NONE],
+            css_computed_width, CSS_WIDTH_SET, cases[i].width);
+        if (counts.attempts != cases[i].attempts || counts.publications != 1) {
+            fprintf(stderr, "%s: attempts=%u (expected %u), publications=%u (expected 1)\n",
+                label, counts.attempts, cases[i].attempts, counts.publications);
+            assert(false);
+        }
+        if (child) {
+            /* Failure and replay must leave the borrowed ancestor filter
+             * intact for subsequent selections and eventual parent cleanup. */
+            assert(ctx.parent_node.libcss_node_data == parent_data);
+            assert(memcmp(saved_bloom, parent_data->bloom, sizeof(saved_bloom)) == 0);
+            test_node sibling = {.name = ctx.node_name, .parent = &ctx.parent_node};
+            css_select_results *results = NULL;
+            select_style_for_node(&ctx, &sibling, inline_sheet, &results);
+            expect_length_px(label, results->styles[cases[i].pseudo ? CSS_PSEUDO_ELEMENT_BEFORE : CSS_PSEUDO_ELEMENT_NONE],
+                css_computed_width, CSS_WIDTH_SET, cases[i].width);
+            destroy_node_data(&sibling);
+            css_select_results_destroy(results);
+        }
+        destroy_style_case(&ctx);
+        css_stylesheet_destroy(ua);
+        css_stylesheet_destroy(user);
+        if (inline_sheet != NULL)
+            css_stylesheet_destroy(inline_sheet);
+    }
+}
+
+static void test_repeat_and_decoration_values(void)
+{
+    style_case ctx;
+    const css_computed_style *style = select_style_from_css(
+        "div { --repeat: repeat no-repeat,no-repeat repeat; --lines: overline underline;"
+        "background-image:url(a.png),url(b.png);background-repeat:var(--repeat)!important;"
+        "background-repeat:repeat; text-decoration:var(--lines)!important;text-decoration:none; }", &ctx);
+    assert(css_computed_background_repeat_layer(style, 0) == CSS_BACKGROUND_REPEAT_REPEAT_X);
+    assert(css_computed_background_repeat_layer(style, 1) == CSS_BACKGROUND_REPEAT_REPEAT_Y);
+    assert(css_computed_text_decoration(style) == (CSS_TEXT_DECORATION_UNDERLINE | CSS_TEXT_DECORATION_OVERLINE));
+    destroy_style_case(&ctx);
+
+    const char *const keywords[] = {"initial", "unset", "revert"};
+    for (size_t i = 0; i < sizeof(keywords) / sizeof(keywords[0]); i++) {
+        for (unsigned deferred = 0; deferred < 2; deferred++) {
+            char css[256];
+            snprintf(css, sizeof(css), "div {text-decoration:underline; text-decoration:%s%s%s}",
+                deferred ? "var(--missing, " : "", keywords[i], deferred ? ")" : "");
+            setup_style_case(&ctx, css);
+            css_stylesheet *user = create_stylesheet_from_css("div {text-decoration:overline}", false, false);
+            assert(css_select_ctx_insert_sheet(ctx.select_ctx, user, 0, CSS_ORIGIN_USER, NULL) == CSS_OK);
+            style = select_style_for_node(&ctx, &ctx.node, NULL, &ctx.results);
+            uint8_t expected = i == 2 ? CSS_TEXT_DECORATION_OVERLINE : CSS_TEXT_DECORATION_NONE;
+            assert(css_computed_text_decoration(style) == expected);
+            destroy_style_case(&ctx);
+            css_stylesheet_destroy(user);
+        }
+    }
+}
+
 static void test_position_payloads(void)
 {
     static const struct {
@@ -1838,6 +1971,8 @@ int main(int argc, char **argv)
     test_property_handler_integration();
     test_grid_placement_payloads();
     test_position_payloads();
+    test_repeat_and_decoration_values();
+    test_deferred_revert();
     test_environment_outlives_stylesheet();
 
     lwc_iterate_strings(assert_no_interned_strings, NULL);

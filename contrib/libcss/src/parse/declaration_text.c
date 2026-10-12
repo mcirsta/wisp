@@ -9,6 +9,7 @@
 
 #include "parse/declaration_text.h"
 #include "parse/property.h"
+#include "parse/repeat.h"
 #include "utils/css_utils.h"
 
 /* Measure first, then write into one exact-sized allocation. Long data URLs do
@@ -322,6 +323,78 @@ static css_error serialize_font_family(const css_declaration *source, struct tex
     }
 }
 
+static css_error serialize_repeats(const css_declaration *source, struct text_output *out)
+{
+    static const char *const names[] = {[BACKGROUND_REPEAT_NO_REPEAT] = "no-repeat",
+        [BACKGROUND_REPEAT_REPEAT_X] = "repeat-x", [BACKGROUND_REPEAT_REPEAT_Y] = "repeat-y",
+        [BACKGROUND_REPEAT_REPEAT] = "repeat"};
+    size_t position = 0;
+    const css_declaration_token *token = next_token(source, &position);
+    for (;;) {
+        if (token == NULL || token->type != CSS_TOKEN_IDENT)
+            return CSS_INVALID;
+        int value = css__repeat_keyword(token->text);
+        if (value < 0)
+            return CSS_INVALID;
+        token = next_token(source, &position);
+        if (token != NULL && token->type == CSS_TOKEN_IDENT) {
+            int second = css__repeat_keyword(token->text);
+            if (!css__repeat_axis(value) || !css__repeat_axis(second))
+                return CSS_INVALID;
+            value = css__repeat_pair(value, second);
+            token = next_token(source, &position);
+        }
+        /* CSSOM's shortest backwards-compatible spelling uses the CSS2
+         * aliases for unequal axes and one keyword for equal axes. */
+        css_error error = append(out, names[value], strlen(names[value]), false);
+        if (error != CSS_OK || token == NULL)
+            return error;
+        if (!character(token, ','))
+            return CSS_INVALID;
+        error = append(out, ", ", 2, false);
+        if (error != CSS_OK)
+            return error;
+        token = next_token(source, &position);
+    }
+}
+
+static css_error serialize_decoration(const css_declaration *source, struct text_output *out)
+{
+    if (source->token_count == 1 && source->tokens[0].type == CSS_TOKEN_IDENT &&
+        css__keyword_equal(source->tokens[0].text, "none"))
+        return append(out, "none", 4, false);
+    /* Canonical grammar order for the engine's CSS2 line-decoration set. */
+    static const char *const names[] = {"underline", "overline", "line-through", "blink"};
+    unsigned seen = 0;
+    for (size_t i = 0; i < source->token_count; i++) {
+        const css_declaration_token *token = &source->tokens[i];
+        if (token->type == CSS_TOKEN_S)
+            continue;
+        if (token->type != CSS_TOKEN_IDENT)
+            return CSS_INVALID;
+        size_t index;
+        for (index = 0; index < N_ELEMENTS(names); index++) {
+            if (css__keyword_equal(token->text, names[index]))
+                break;
+        }
+        if (index == N_ELEMENTS(names) || (seen & (1u << index)))
+            return CSS_INVALID;
+        seen |= 1u << index;
+    }
+    bool first = true;
+    for (size_t i = 0; i < N_ELEMENTS(names); i++) {
+        if (!(seen & (1u << i)))
+            continue;
+        css_error error = first ? CSS_OK : append(out, " ", 1, false);
+        if (error == CSS_OK)
+            error = append(out, names[i], strlen(names[i]), false);
+        if (error != CSS_OK)
+            return error;
+        first = false;
+    }
+    return first ? CSS_INVALID : CSS_OK;
+}
+
 static css_error serialize_list(const css_declaration *source, struct text_output *out)
 {
     enum css_declaration_value_kind kind = source->property->value_kind;
@@ -360,6 +433,10 @@ static css_error serialize(const css_declaration *source, struct text_output *ou
         return serialize_counters(source, out);
     case CSS_DECL_VALUE_FONT_FAMILY:
         return serialize_font_family(source, out);
+    case CSS_DECL_VALUE_REPEAT_LIST:
+        return serialize_repeats(source, out);
+    case CSS_DECL_VALUE_TEXT_DECORATION:
+        return serialize_decoration(source, out);
     default:
         return serialize_list(source, out);
     }

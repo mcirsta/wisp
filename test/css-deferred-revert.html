@@ -1,0 +1,19 @@
+<!doctype html><meta charset="utf-8"><title>CSS-wide keywords after variable substitution</title>
+<!-- CSS Cascade 5 section 7.3.4: author revert removes the author's 37px
+width too, leaving auto (the containing block's 240px). A later ordinary
+declaration and a winning important declaration still outrank earlier values. -->
+<style>
+body { margin: 20px; }
+.case { display: flow-root; width: 240px; margin-bottom: 30px; }
+.box { width: 37px; height: 20px; background: #58a; }
+#switch { position: absolute; left: 300px; top: 0; }
+#sheet-box { width: var(--missing, revert); }
+#variable-box { width: var(--size, 47px); }
+#overridden-box { width: var(--missing, revert); width: 57px; }
+#switch:checked ~ .case .box { width: 61px !important; }
+</style>
+<input id="switch" type="checkbox" aria-label="Change widths">
+<div class="case" id="sheet-case"><div class="box" id="sheet-box"></div></div>
+<div class="case" id="inline-case"><div class="box" id="inline-box" style="width:var(--missing,revert)"></div></div>
+<div class="case" id="variable-case"><div class="box" id="variable-box"></div></div>
+<div class="case" id="overridden-case"><div class="box" id="overridden-box"></div></div>

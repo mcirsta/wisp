@@ -251,6 +251,7 @@ values = [["length", "", "calc"], ["length", "", "calc"]]
 condition = "CSS_BACKGROUND_POSITION_SET"
 
 [background_repeat]
+declaration_value = "repeat_list"
 enum = "CSS_PROP_BACKGROUND_REPEAT"
 inherited = false
 cascade = "manual"
@@ -704,6 +705,7 @@ initial = "NORMAL"
 parse = '''IDENT:( INHERIT: INITIAL: REVERT: UNSET: NORMAL:0,FONT_STYLE_NORMAL ITALIC:0,FONT_STYLE_ITALIC OBLIQUE:0,FONT_STYLE_OBLIQUE IDENT:)'''
 
 [font_variant]
+declaration_value = "keyword"
 enum = "CSS_PROP_FONT_VARIANT"
 cascade = "ident"
 computed = "auto"
@@ -1062,6 +1064,7 @@ condition = "CSS_PADDING_SET"
 parse = "WRAP:css__parse_padding_side"
 
 [page_break_after]
+declaration_value = "keyword"
 enum = "CSS_PROP_PAGE_BREAK_AFTER"
 inherited = false
 cascade = "page_break"
@@ -1072,6 +1075,7 @@ defaults = "CSS_PAGE_BREAK_AFTER_AUTO"
 parse = '''IDENT:( INHERIT: INITIAL: REVERT: UNSET: AUTO:0,PAGE_BREAK_AFTER_AUTO ALWAYS:0,PAGE_BREAK_AFTER_ALWAYS AVOID:0,PAGE_BREAK_AFTER_AVOID LEFT:0,PAGE_BREAK_AFTER_LEFT RIGHT:0,PAGE_BREAK_AFTER_RIGHT IDENT:)'''
 
 [page_break_before]
+declaration_value = "keyword"
 enum = "CSS_PROP_PAGE_BREAK_BEFORE"
 inherited = false
 cascade = "page_break"
@@ -1082,6 +1086,7 @@ defaults = "CSS_PAGE_BREAK_BEFORE_AUTO"
 parse = '''IDENT:( INHERIT: INITIAL: REVERT: UNSET: AUTO:0,PAGE_BREAK_BEFORE_AUTO ALWAYS:0,PAGE_BREAK_BEFORE_ALWAYS AVOID:0,PAGE_BREAK_BEFORE_AVOID LEFT:0,PAGE_BREAK_BEFORE_LEFT RIGHT:0,PAGE_BREAK_BEFORE_RIGHT IDENT:)'''
 
 [page_break_inside]
+declaration_value = "keyword"
 enum = "CSS_PROP_PAGE_BREAK_INSIDE"
 cascade = "page_break"
 computed = "auto"
@@ -1235,6 +1240,7 @@ initial = "DEFAULT"
 parse = '''IDENT:( INHERIT: INITIAL: REVERT: UNSET: LEFT:0,TEXT_ALIGN_LEFT RIGHT:0,TEXT_ALIGN_RIGHT CENTER:0,TEXT_ALIGN_CENTER JUSTIFY:0,TEXT_ALIGN_JUSTIFY IDENT:)'''
 
 [text_decoration]
+declaration_value = "text_decoration"
 enum = "CSS_PROP_TEXT_DECORATION"
 inherited = false
 cascade = "manual"
@@ -1293,6 +1299,7 @@ initial = "NORMAL"
 parse = '''IDENT:( INHERIT: INITIAL: REVERT: UNSET: NORMAL:0,UNICODE_BIDI_NORMAL EMBED:0,UNICODE_BIDI_EMBED BIDI_OVERRIDE:0,UNICODE_BIDI_BIDI_OVERRIDE IDENT:)'''
 
 [vertical_align]
+declaration_value = "length"
 enum = "CSS_PROP_VERTICAL_ALIGN"
 inherited = false
 cascade = "manual"
@@ -1329,6 +1336,7 @@ computed = "none"
 parse = '''IDENT:( INHERIT: INITIAL: REVERT: UNSET: SILENT:0,VOLUME_SILENT X_SOFT:0,VOLUME_X_SOFT SOFT:0,VOLUME_SOFT MEDIUM:0,VOLUME_MEDIUM LOUD:0,VOLUME_LOUD X_LOUD:0,VOLUME_X_LOUD IDENT:) NUMBER:( false:VOLUME_NUMBER RANGE:num<0||num>F_100 NUMBER:) LENGTH_UNIT:( UNIT_PX:VOLUME_DIMENSION MASK:UNIT_MASK_VOLUME RANGE:<0 LENGTH_UNIT:) CALC:( ANY:VOLUME_CALC CALC:)'''
 
 [white_space]
+declaration_value = "keyword"
 enum = "CSS_PROP_WHITE_SPACE"
 cascade = "ident"
 computed = "auto"

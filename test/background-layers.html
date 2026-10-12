@@ -2,7 +2,7 @@
 <meta charset="utf-8">
 <title>Multiple background layers</title>
 <style>
-html { height: 700px; background: none, linear-gradient(#eeeeee,#eeeeee); }
+html { height: 830px; background: none, linear-gradient(#eeeeee,#eeeeee); }
 body { margin: 0; font: 14px sans-serif; }
 .case { position: absolute; width: 200px; height: 100px; background-color: yellow; }
 .case::after { content: attr(id); position: absolute; top: -20px; left: 0; }
@@ -24,6 +24,9 @@ body { margin: 0; font: 14px sans-serif; }
 #table tr { background: linear-gradient(rgba(255,0,0,.5),rgba(255,0,0,.5)),linear-gradient(blue,blue); }
 #table td { padding: 0; height: 80px; }
 #table td:first-child { background-color: rgba(0,255,0,.5); }
+#pair-x { left: 10px; top: 690px; background-image: url(test_data/background_layers/red.png); background-position: 30px 40px; --repeat: repeat no-repeat; background-repeat: var(--repeat) !important; background-repeat: repeat; }
+#pair-y { left: 250px; top: 690px; background: url(test_data/background_layers/red.png) 40px 10px no-repeat repeat yellow; }
+#pair-both { left: 490px; top: 690px; background-image: none,url(test_data/background_layers/red.png); background-repeat: no-repeat no-repeat, repeat repeat; }
 </style>
 <div id="order" class="case"></div><div id="images" class="case"></div><div id="none" class="case"></div>
 <div id="cycle" class="case"></div><div id="repeat" class="case"></div><div id="mixed" class="case"></div>
@@ -32,3 +35,4 @@ body { margin: 0; font: 14px sans-serif; }
 <div id="pseudo" class="case"></div><div id="shift" class="case"></div>
 <div id="missing" class="case"></div><div id="reset" class="case"></div>
 <table id="table"><tr><td></td><td></td></tr></table>
+<div id="pair-x" class="case"></div><div id="pair-y" class="case"></div><div id="pair-both" class="case"></div>

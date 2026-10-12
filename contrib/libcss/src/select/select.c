@@ -514,13 +514,11 @@ css_select_default_style(css_select_ctx *ctx, css_select_handler *handler, void 
  * \param parent        Parent node to get bloom filter for
  * \param handler       Dispatch table of handler functions
  * \param pw            Client-specific private data for handler functions
- * \param parent_bloom  Updated to parent bloom to use.
- *                      Note: if there's no parent, the caller must free
- *                      the returned parent bloom, since it has no node to
- *                      own it.
+ * \param parent_bloom  Updated to a borrowed parent bloom, or static empty
+ *                      bloom for a root. The caller must not free it.
  * \return CSS_OK on success, appropriate error otherwise.
  */
-static css_error css__get_parent_bloom(void *parent, css_select_handler *handler, void *pw, css_bloom **parent_bloom)
+static css_error css__get_parent_bloom(void *parent, css_select_handler *handler, void *pw, const css_bloom **parent_bloom)
 {
     struct css_node_data *node_data = NULL;
     css_bloom *bloom = NULL;
@@ -528,9 +526,6 @@ static css_error css__get_parent_bloom(void *parent, css_select_handler *handler
 
     /* Get parent node's bloom filter */
     if (parent != NULL) {
-        /* Get parent bloom filter */
-        struct css_node_data *node_data;
-
         /* Hideous casting to avoid warnings on all platforms
          * we build for. */
         error = handler->get_libcss_node_data(pw, parent, (void **)(void *)&node_data);
@@ -577,6 +572,8 @@ static css_error css__get_parent_bloom(void *parent, css_select_handler *handler
                     css__destroy_node_data(node_data);
                     return error;
                 }
+            } else {
+                node_data->bloom = bloom;
             }
         } else {
             /* No ancestors; empty bloom filter */
@@ -640,7 +637,7 @@ static css_error css__create_node_bloom(css_bloom **node_bloom, css_select_state
     }
 
     /* Merge parent bloom into node bloom */
-    css_bloom_merge(state->node_data->bloom, bloom);
+    css_bloom_merge(state->parent_bloom, bloom);
     *node_bloom = bloom;
 
     return CSS_OK;
@@ -1035,7 +1032,7 @@ static css_error css_select__initialise_selection_state(css_select_state *state,
         goto failed;
     }
 
-    error = css__get_parent_bloom(parent, handler, pw, &state->node_data->bloom);
+    error = css__get_parent_bloom(parent, handler, pw, &state->parent_bloom);
     if (error != CSS_OK) {
         goto failed;
     }
@@ -1123,6 +1120,19 @@ static css_error css_select__initialise_selection_state(css_select_state *state,
 failed:
     css_select__finalise_selection_state(state);
     return error;
+}
+
+static css_error css__select_save_revert_origin(css_select_state *state, css_origin origin)
+{
+    for (uint32_t i = 0; i < CSS_PSEUDO_ELEMENT_COUNT; i++) {
+        if (state->results->styles[i] == NULL)
+            continue;
+        css_error error = css__computed_style_clone(state->results->styles[i], &state->revert[origin].style[i]);
+        if (error != CSS_OK)
+            return error;
+    }
+    memcpy(state->revert[origin].props, state->props, sizeof(state->props));
+    return CSS_OK;
 }
 
 static css_error css__select_revert_property_to_origin(css_select_state *select_state, prop_state *prop_state,
@@ -1256,12 +1266,14 @@ css_error css_select_style(css_select_ctx *ctx, void *node, const css_unit_ctx *
     void *parent = NULL;
     struct css_node_data *share;
     bool uses_variables;
+    bool require_revert = false;
 
     if (ctx == NULL || node == NULL || result == NULL || handler == NULL ||
         (handler->handler_version != CSS_SELECT_HANDLER_VERSION_1 &&
             handler->handler_version != CSS_SELECT_HANDLER_VERSION_2))
         return CSS_BADPARM;
 
+select_again:
     error = handler->parent_node(pw, node, &parent);
     if (error != CSS_OK)
         return error;
@@ -1305,7 +1317,7 @@ css_error css_select_style(css_select_ctx *ctx, void *node, const css_unit_ctx *
 #endif
 
     /* Not sharing; need to select. */
-    if (ctx->uses_revert || (inline_style != NULL && inline_style->uses_revert)) {
+    if (require_revert || ctx->uses_revert || (inline_style != NULL && inline_style->uses_revert)) {
         /* Need to track UA and USER origin styles for revert. */
         state.revert = calloc(CSS_ORIGIN_AUTHOR, sizeof(*state.revert));
         if (state.revert == NULL) {
@@ -1389,16 +1401,9 @@ css_error css_select_style(css_select_ctx *ctx, void *node, const css_unit_ctx *
         const css_select_sheet s = ctx->sheets[i];
 
         if (state.revert != NULL && s.origin != origin) {
-            for (j = 0; j < CSS_PSEUDO_ELEMENT_COUNT; j++) {
-                if (state.results->styles[j] == NULL) {
-                    continue;
-                }
-                error = css__computed_style_clone(state.results->styles[j], &state.revert[origin].style[j]);
-                if (error != CSS_OK) {
-                    goto cleanup;
-                }
-                memcpy(state.revert[origin].props, state.props, sizeof(state.props));
-            }
+            error = css__select_save_revert_origin(&state, origin);
+            if (error != CSS_OK)
+                goto cleanup;
             origin = s.origin;
         }
 
@@ -1422,6 +1427,13 @@ css_error css_select_style(css_select_ctx *ctx, void *node, const css_unit_ctx *
 
         /* No bytecode if input was empty or wholly invalid */
         if (sel->style != NULL) {
+            /* Inline CSS can be the first author-origin style. Save the last
+             * lower origin just as a transition between stylesheet origins. */
+            if (state.revert != NULL && origin < CSS_ORIGIN_AUTHOR) {
+                error = css__select_save_revert_origin(&state, origin);
+                if (error != CSS_OK)
+                    goto cleanup;
+            }
             /* Inline style applies to base element only */
             state.current_origin = CSS_ORIGIN_AUTHOR;
             state.current_specificity = UINT32_MAX;
@@ -1443,6 +1455,8 @@ css_error css_select_style(css_select_ctx *ctx, void *node, const css_unit_ctx *
         prop_state *prop = &state.props[i][CSS_PSEUDO_ELEMENT_NONE];
 
         if (prop->explicit_default == FLAG_VALUE_REVERT) {
+            if (state.revert == NULL)
+                goto restart_with_revert;
             error = css__select_revert_property(&state, prop, CSS_PSEUDO_ELEMENT_NONE, i);
             if (error != CSS_OK) {
                 goto cleanup;
@@ -1481,6 +1495,8 @@ css_error css_select_style(css_select_ctx *ctx, void *node, const css_unit_ctx *
             prop_state *prop = &state.props[i][j];
 
             if (prop->explicit_default == FLAG_VALUE_REVERT) {
+                if (state.revert == NULL)
+                    goto restart_with_revert;
                 error = css__select_revert_property(&state, prop, j, i);
                 if (error != CSS_OK) {
                     goto cleanup;
@@ -1545,6 +1561,15 @@ cleanup:
     css_select__finalise_selection_state(&state);
 
     return error;
+
+restart_with_revert:
+    /* Substitution can reveal revert after parsing, including inherited
+     * variables and fallback tokens. Retry this unpublished selection once
+     * with origin snapshots; ordinary var() users need no extra snapshots.
+     * The second pass always has state.revert or fails allocation. */
+    css_select__finalise_selection_state(&state);
+    require_revert = true;
+    goto select_again;
 }
 
 /**
@@ -2056,7 +2081,7 @@ css_error match_selectors_in_sheet(css_select_ctx *ctx, const css_stylesheet *sh
     /* Set up general selector chain requirments */
     req.media = state->media;
     req.unit_ctx = state->unit_ctx;
-    req.node_bloom = state->node_data->bloom;
+    req.node_bloom = state->parent_bloom;
     req.str = &ctx->str;
 
     /* Find hash chain that applies to current node */

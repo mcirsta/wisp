@@ -45,7 +45,7 @@ css_error css__parse_text_decoration(css_language *c, const parserutils_vector *
 
     flag_value = get_css_flag_value(c, token);
 
-    if (lwc_string_caseless_isequal(token->idata, c->strings[INHERIT], &match) == lwc_error_ok && match) {
+    if (flag_value != FLAG_VALUE__NONE) {
         error = css_stylesheet_style_flag_value(result, flag_value, CSS_PROP_TEXT_DECORATION);
 
     } else if (lwc_string_caseless_isequal(token->idata, c->strings[NONE], &match) == lwc_error_ok && match) {

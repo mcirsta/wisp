@@ -105,6 +105,7 @@ typedef struct css_select_state {
     reject_item *next_reject; /* Next free slot in reject cache */
 
     struct css_node_data *node_data; /* Data we'll store on node */
+    const css_bloom *parent_bloom; /* Borrowed ancestor filter; never owned by node_data */
 
     css_var_context *var_ctx[CSS_PSEUDO_ELEMENT_COUNT];
     css_var_context *var_parent; /* Inherited snapshot before empty-overlay reuse */

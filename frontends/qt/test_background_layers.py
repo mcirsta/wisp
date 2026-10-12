@@ -7,7 +7,7 @@ import subprocess
 import sys
 import tempfile
 
-WIDTH, HEIGHT = 760, 700
+WIDTH, HEIGHT = 760, 830
 RED, BLUE, YELLOW, PURPLE = (255, 0, 0), (0, 0, 255), (255, 255, 0), (128, 0, 127)
 # Coordinates are deliberately away from edges and text. Expected colors follow
 # CSS compositing/order, independent of either browser implementation.
@@ -28,6 +28,11 @@ SAMPLES = [
     ("missing image", 110, 600, BLUE), ("reset", 350, 600, (0, 128, 0)),
     ("table first cell", 530, 600, (64, 128, 64)), ("table second cell", 650, 600, PURPLE),
     ("table spacing", 590, 600, (238, 238, 238)), ("root canvas", 740, 680, (238, 238, 238)),
+    ("pair x left", 20, 740, RED), ("pair x right", 200, 740, RED),
+    ("pair x above", 50, 710, YELLOW), ("pair x below", 50, 770, YELLOW),
+    ("pair y top", 300, 700, RED), ("pair y bottom", 300, 780, RED),
+    ("pair y left", 270, 730, YELLOW), ("pair y right", 430, 730, YELLOW),
+    ("pair both", 500, 700, RED), ("pair both far", 680, 780, RED),
 ]
 
 

@@ -1519,6 +1519,61 @@ aggregate values, declaration-block writes and the live `element.style` wrapper
 are still separate work. The old Duktape empty-object style getter provides no
 implementation to reuse here; the saved eBihoreanul opacity blocker remains.
 
+### Repeat and text values; deferred revert ownership (2026-10-12)
+
+Committed the position batch as `b00e12e7`. Added specified-value readback for
+`background-repeat`, `text-decoration`, `font-variant`, `white-space`,
+`vertical-align` and the three `page-break-*` properties. Shared keyword/decimal
+serialization handles the scalar properties. Two small text serializers handle
+repeat layers and the engine's CSS2 decoration set, using one measured allocation
+and canonical grammar order. Generator inputs remain the source of metadata.
+
+The native repeat parser now accepts two axis keywords, as required by
+[CSS Backgrounds 3](https://drafts.csswg.org/css-backgrounds-3/#background-repeat).
+`repeat no-repeat` and `no-repeat repeat` use the existing repeat-x/repeat-y
+bytecode and painting. Equal axes serialize to one keyword and unequal axes to
+the backwards-compatible aliases; layer order and duplicates remain intact.
+The background shorthand uses the same parser. `space`/`round` remain unsupported
+because they require different painting. Text-decoration's parser now accepts
+`initial`, `unset` and `revert` through its existing CSS-wide flag handling,
+instead of recognizing only `inherit`.
+
+Selection tests exposed a crash when variable substitution revealed `revert`
+after the stylesheet's parse-time snapshot decision. Selection now retries the
+unpublished result once with origin snapshots if a winning property needs them.
+Ordinary variables and overridden revert values retain the single-pass path;
+no extra snapshots are allocated for every variable-using page. Inline CSS also
+saves the lower origin when it is the first author style, preserving user-origin
+values during [revert](https://drafts.csswg.org/css-cascade-5/#revert).
+
+The real-page fixture then exposed a pre-existing ownership error: selection
+temporarily stored the borrowed parent selector Bloom filter in an owned child
+field. Failure cleanup (and the new retry) could free the parent's filter.
+Selection now keeps a separate const borrowed pointer and allocates the child's
+owned filter only for publication. Filling a missing parent filter also retains
+existing parent node data instead of replacing it due to a shadowed local.
+
+Regression coverage includes repeat shorthand bytecode equivalence, every
+nonempty permutation of the four supported decorations, chunked parsing,
+serialization/reparse, invalid fallback, and allocation-failure cleanup. Revert
+tests cover root and child nodes, pseudo-elements, inline styles, origin and
+importance, failure on either attempt, later sibling selection, and one final
+publication. The Qt fixture checks ordinary fallback, reverted auto width,
+overridden declarations, resize and native checkbox-restyle round trips; the
+background pixel fixture now covers both explicit repeat axes.
+
+Validation: all 78 selected native Debug suites pass with ASan/UBSan and
+LeakSanitizer, as do eight native Release suites, both affected Qt Release
+fixtures and all 14 selected Qt Debug integrations. Declaration coverage is
+1154 Debug / 1205 Release checks; all 14 generator checks pass. Both full builds
+are warning-free and `git diff --check` is clean. No GTK tests ran.
+
+This remains internal CSSOM groundwork. Modern font-variant, white-space and
+text-decoration component shorthands, vertical-align math serialization, remaining
+aggregate values, declaration-block writes and live `element.style` are pending.
+The old Duktape style getter was an empty-object placeholder and provides no
+implementation to port. No new JS-facing placeholder is exposed.
+
 ## Assessment
 
 Keep QuickJS-ng and libdom. The missing part is the browser binding and execution

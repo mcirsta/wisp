@@ -271,7 +271,8 @@ class TomlPropertyReader:
                                   'quad_length', 'pair_keyword', 'quad_keyword', 'uri', 'image_list', 'keyword_list',
                                   'content', 'string_list', 'counter_list', 'aspect_ratio', 'border_spacing', 'clip',
                                   'font_family', 'flex', 'flex_flow', 'list_style', 'columns', 'border', 'border_side', 'outline',
-                                  'colour', 'quad_colour', 'grid_line', 'grid_pair', 'grid_area', 'position', 'position_list'):
+                                  'colour', 'quad_colour', 'grid_line', 'grid_pair', 'grid_area', 'position', 'position_list',
+                                  'repeat_list', 'text_decoration'):
                 raise ValueError(f"{name}: unknown declaration_value {value_kind}")
             if value_kind != 'none':
                 expected = {'pair_length': 2, 'quad_length': 4, 'pair_keyword': 2, 'quad_keyword': 4,
