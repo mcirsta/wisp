@@ -1,5 +1,4 @@
 /* Background keyword lists. Licensed under the MIT License. */
-#include <assert.h>
 #include "bytecode/bytecode.h"
 #include "bytecode/opcodes.h"
 #include "parse/properties/background.h"
@@ -49,32 +48,7 @@ css__parse_background_repeat_item(css_language *c, const parserutils_vector *v, 
 css_error css__parse_background_repeat(css_language *c, const parserutils_vector *v, int32_t *ctx, css_style *result)
 {
     return css__parse_background_list(
-        c, v, ctx, result, css__parse_background_repeat_item, css__background_repeat_append);
-}
-
-/* Each parsed layer supplies X/Y scalars. Store independent lists, so a later
- * longhand can replace one axis without changing the other's list length. */
-css_error css__background_repeat_append(css_style *result, css_style *items, uint32_t count)
-{
-    assert(count > 0 && items->used == 2 * count);
-    if (count == 1)
-        return css__stylesheet_merge_style(result, items);
-    for (unsigned axis = 0; axis < 2; axis++) {
-        css_error error = css__stylesheet_style_appendOPV(result, getOpcode(items->bytecode[axis]), 0,
-            BACKGROUND_LAYER_LIST);
-        if (error == CSS_OK)
-            error = css__stylesheet_style_append(result, count + 1);
-        if (error == CSS_OK)
-            error = css__stylesheet_style_append(result, count);
-        if (error != CSS_OK)
-            return error;
-        for (uint32_t i = 0; i < count; i++) {
-            error = css__stylesheet_style_append(result, items->bytecode[2 * i + axis]);
-            if (error != CSS_OK)
-                return error;
-        }
-    }
-    return CSS_OK;
+        c, v, ctx, result, css__parse_background_repeat_item, css__background_pair_append);
 }
 
 static css_error parse_axis(css_language *c, const parserutils_vector *v, int32_t *ctx, css_style *result, opcode_t op)

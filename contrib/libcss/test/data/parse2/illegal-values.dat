@@ -170,7 +170,8 @@
 #errors
 #expected
 | *
-|  background-position: -20% 0px
+|  background-position-x: -20%
+|  background-position-y: 0px
 #reset
 
 #data
@@ -178,7 +179,8 @@
 #errors
 #expected
 | *
-|  background-position: left center
+|  background-position-x: left
+|  background-position-y: center
 #reset
 
 #data

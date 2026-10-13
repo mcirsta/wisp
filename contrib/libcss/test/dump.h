@@ -246,7 +246,7 @@ static const char *opcode_names[] = {
     "background-attachment",
     "background-color",
     "background-image",
-    "background-position",
+    "background-position-x",
     "background-repeat-x",
     "border-collapse",
     "border-spacing",
@@ -385,6 +385,7 @@ static const char *opcode_names[] = {
     [CSS_PROP_ASPECT_RATIO] = "aspect-ratio",
     [CSS_PROP_CONTENT_VISIBILITY] = "content-visibility",
     [CSS_PROP_BACKGROUND_REPEAT_Y] = "background-repeat-y",
+    [CSS_PROP_BACKGROUND_POSITION_Y] = "background-position-y",
 };
 
 static void dump_css_fixed(css_fixed f, struct dump_output *out)

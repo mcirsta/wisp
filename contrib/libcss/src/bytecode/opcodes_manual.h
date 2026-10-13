@@ -67,6 +67,14 @@ enum op_background_position {
     BACKGROUND_POSITION_VERT_TOP = 0x0002
 };
 
+/* Independent axis bytecode; object-position retains the paired encoding. */
+enum op_background_position_axis {
+    BACKGROUND_POSITION_AXIS_CENTER = 0x0000,
+    BACKGROUND_POSITION_AXIS_END = 0x0001,
+    BACKGROUND_POSITION_AXIS_START = 0x0002,
+    BACKGROUND_POSITION_AXIS_SET = 0x0080
+};
+
 enum op_border_spacing { BORDER_SPACING_SET = 0x0080 };
 
 enum op_border_color {

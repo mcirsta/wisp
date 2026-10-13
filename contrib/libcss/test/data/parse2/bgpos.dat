@@ -38,7 +38,8 @@
 #errors
 #expected
 | *
-|  background-position: left top
+|  background-position-x: left
+|  background-position-y: top
 #reset
 
 #data
@@ -46,7 +47,8 @@
 #errors
 #expected
 | *
-|  background-position: left center
+|  background-position-x: left
+|  background-position-y: center
 #reset
 
 #data
@@ -54,6 +56,7 @@
 #errors
 #expected
 | *
-|  background-position: 62% center
+|  background-position-x: 62%
+|  background-position-y: center
 #reset
 

@@ -2299,6 +2299,21 @@ static const struct {
     {"background-position:var(--Pos, top, bottom)", "background-position", "var(--Pos, top, bottom)"},
     {"object-position:top;object-position:top,bottom", "object-position", "center top"},
 
+    {"background-position:top left,2px,center -3em", "background-position-x", "left, 2px, center"},
+    {"background-position:top left,2px,center -3em", "background-position-y", "top, center, -3em"},
+    {"background:top url(a),url(b) blue", "background-position-x", "center, 0%"},
+    {"background:top url(a),url(b) blue", "background-position-y", "top, 0%"},
+    {"background-position-x:RIGHT, -.1234567EM, 150%", "background-position-x", "right, -0.123457em, 150%"},
+    {"background-position-y:TOP, +025.50%, -0", "background-position-y", "top, 25.5%, 0px"},
+    {"background-position:10px 20px,30px 40px;background-position-x:5px", "background-position", ""},
+    {"background-position:10px 20px,30px 40px;background-position-x:5px", "background-position-y", "20px, 40px"},
+    {"background-position-x:left,right;background-position-y:top,bottom", "background-position", "left top, right bottom"},
+    {"background-position-x:inherit;background-position-y:inherit", "background-position", "inherit"},
+    {"background-position-x:initial;background-position-y:inherit", "background-position", ""},
+    {"background-position-x:left!important;background-position-y:top", "background-position", ""},
+    {"background-position:var(--P)", "background-position-x", ""},
+    {"background-position:var(--P);background-position-x:left", "background-position", ""},
+    {"background-position-x:var(--P)", "background-position-x", "var(--P)"},
     {"background-repeat:repeat-x,repeat-y", "background-repeat-x", "repeat, no-repeat"},
     {"background-repeat:repeat-x,repeat-y", "background-repeat-y", "no-repeat, repeat"},
     {"background:repeat-y,repeat-x red", "background-repeat-x", "no-repeat, repeat"},
@@ -3589,7 +3604,6 @@ START_TEST(test_position_bytecode)
             {INTTOFIX(32768), INTTOFIX(32768)}, {UNIT_PX, UNIT_PCT}},
     };
     static const char *const properties[] = {"background-position", "object-position"};
-    static const enum css_properties_e opcodes[] = {CSS_PROP_BACKGROUND_POSITION, CSS_PROP_OBJECT_POSITION};
     for (size_t p = 0; p < N_ELEMENTS(properties); p++) {
         for (size_t f = 0; f < N_ELEMENTS(forms); f++) {
             for (unsigned important = 0; important < 2; important++) {
@@ -3598,9 +3612,20 @@ START_TEST(test_position_bytecode)
                 css_declaration_list *list = parse(css, _i != 0);
                 ck_assert_msg(css__declaration_list_count(list) == 1, "rejected %s", css);
                 const css_style *style = inline_style(css__declaration_list_sheet(list));
-                ck_assert_uint_eq(style->bytecode[0], buildOPV(opcodes[p], important ? FLAG_IMPORTANT : 0, forms[f].code));
-                size_t pos = 1;
+                size_t pos = 0;
+                if (p == 1) {
+                    ck_assert_uint_eq(style->bytecode[pos++],
+                        buildOPV(CSS_PROP_OBJECT_POSITION, important ? FLAG_IMPORTANT : 0, forms[f].code));
+                }
                 for (size_t axis = 0; axis < 2; axis++) {
+                    if (p == 0) {
+                        uint16_t code = axis == 0 ? forms[f].code >> 4 : forms[f].code & 0xf;
+                        if (code == 8)
+                            code = BACKGROUND_POSITION_AXIS_SET;
+                        ck_assert_uint_eq(style->bytecode[pos++], buildOPV(
+                            axis == 0 ? CSS_PROP_BACKGROUND_POSITION_X : CSS_PROP_BACKGROUND_POSITION_Y,
+                            important ? FLAG_IMPORTANT : 0, code));
+                    }
                     if (forms[f].units[axis] == 0)
                         continue;
                     ck_assert_msg(pos + 2 <= style->used, "truncated %s", css);
@@ -3849,6 +3874,28 @@ END_TEST
 
 START_TEST(test_position_invalid)
 {
+    static const struct { const char *property, *value; } axis_cases[] = {
+        {"background-position-x", "top"}, {"background-position-x", "bottom"},
+        {"background-position-y", "left"}, {"background-position-y", "right"},
+        {"background-position-x", "1px 2px"}, {"background-position-y", "top 2px"},
+        {"background-position-x", "right 2px"}, {"background-position-y", "calc(2px)"},
+        {"background-position-x", "center,initial"}, {"background-position-y", "initial,center"},
+        {"background-position-x", "left,"}, {"background-position-y", ",top"},
+        {"background-position-x", "left,,right"}, {"background-position-y", "2fr"},
+        {"background-position-x", "3dppx"}, {"background-position-y", "2"},
+    };
+    for (size_t i = 0; i < N_ELEMENTS(axis_cases); i++) {
+        char css[192];
+        snprintf(css, sizeof(css), "%s:inherit", axis_cases[i].property);
+        css_declaration_list *base = parse(css, false);
+        snprintf(css, sizeof(css), "%s:inherit;%s:%s", axis_cases[i].property,
+            axis_cases[i].property, axis_cases[i].value);
+        css_declaration_list *list = parse(css, _i != 0);
+        ck_assert_msg(css__declaration_list_count(list) == 1, "accepted invalid/unsupported axis: %s", css);
+        compare_sheets(css__declaration_list_sheet(base), css__declaration_list_sheet(list));
+        css__declaration_list_destroy(list);
+        css__declaration_list_destroy(base);
+    }
     static const char *const properties[] = {"background-position", "object-position", "background"};
     static const char *const values[] = {"left left", "left right", "top bottom", "top top", "right right",
         "2px left", "3% right", "top 4px", "bottom 5%", "left initial", "inherit top",
@@ -5296,7 +5343,8 @@ START_TEST(test_position_rollback)
     for (size_t i = 0; i < N_ELEMENTS(parts); i++)
         ck_assert_int_eq(parserutils_vector_append(tokens, &parts[i]), PARSERUTILS_OK);
     css_prop_handler handler = _i == 0 ? css__parse_background_position : css__parse_object_position;
-    for (unsigned spare = 0; spare < 5; spare++) {
+    unsigned emitted = _i == 0 ? 6 : 5;
+    for (unsigned spare = 0; spare < emitted; spare++) {
         css_style *style;
         ck_assert_int_eq(css__stylesheet_style_create(sheet, &style), CSS_OK);
         uint32_t before = style->allocated - spare;
@@ -5312,7 +5360,7 @@ START_TEST(test_position_rollback)
         for (uint32_t i = 0; i < before; i++)
             ck_assert_uint_eq(style->bytecode[i], 0x12345678);
         ck_assert_int_eq(handler(language, tokens, &ctx, style), CSS_OK);
-        ck_assert_uint_eq(style->used, before + 5);
+        ck_assert_uint_eq(style->used, before + emitted);
         css__stylesheet_style_destroy(style);
     }
     parserutils_vector_destroy(tokens);

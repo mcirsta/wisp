@@ -454,11 +454,17 @@ css__compute_absolute_values(const css_computed_style *parent, css_computed_styl
 
     /* Resolve font-relative background positions before inheritance. */
     css_background_position pos = {0};
-    uint8_t position_type = get_background_position(style, &pos.x, &pos.xunit, &pos.y, &pos.yunit);
+    uint8_t position_type = get_background_position_x(style, &pos.offset, &pos.unit);
     if (position_type == CSS_BACKGROUND_POSITION_SET) {
-        compute_background_length(&pos.x, &pos.xunit, style, unit_ctx);
-        compute_background_length(&pos.y, &pos.yunit, style, unit_ctx);
-        error = set_background_position(style, position_type, pos.x, pos.xunit, pos.y, pos.yunit);
+        compute_background_length(&pos.offset, &pos.unit, style, unit_ctx);
+        error = set_background_position_x(style, position_type, pos.offset, pos.unit);
+        if (error != CSS_OK)
+            return error;
+    }
+    position_type = get_background_position_y(style, &pos.offset, &pos.unit);
+    if (position_type == CSS_BACKGROUND_POSITION_SET) {
+        compute_background_length(&pos.offset, &pos.unit, style, unit_ctx);
+        error = set_background_position_y(style, position_type, pos.offset, pos.unit);
         if (error != CSS_OK)
             return error;
     }
@@ -592,12 +598,13 @@ css__compute_absolute_values(const css_computed_style *parent, css_computed_styl
     /* Compute relative units in every layer before styles can be inherited
      * or interned. Lists have independent lengths; even unused items matter. */
     if (style->background_layers != NULL) {
-        struct css_background_list *positions = style->background_layers->list[CSS_BG_POSITION];
-        if (positions != NULL) {
+        for (unsigned axis = CSS_BG_POSITION_X; axis <= CSS_BG_POSITION_Y; axis++) {
+            struct css_background_list *positions = style->background_layers->list[axis];
+            if (positions == NULL)
+                continue;
             for (uint32_t i = 0; i < positions->count; i++) {
                 css_background_position *p = &positions->values[i].position;
-                compute_background_length(&p->x, &p->xunit, style, unit_ctx);
-                compute_background_length(&p->y, &p->yunit, style, unit_ctx);
+                compute_background_length(&p->offset, &p->unit, style, unit_ctx);
             }
         }
         struct css_background_list *images = style->background_layers->list[CSS_BG_IMAGE];

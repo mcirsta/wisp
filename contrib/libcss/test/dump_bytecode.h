@@ -461,6 +461,29 @@ dump_bytecode_background_position(struct dump_bytecode_cursor *cursor, uint32_t 
     }
 }
 
+static void dump_bytecode_position_axis(
+    struct dump_bytecode_cursor *cursor, uint32_t value, struct dump_output *out, bool horizontal)
+{
+    if (value == BACKGROUND_POSITION_AXIS_SET)
+        dump_bytecode_length(cursor, out);
+    else if (value == BACKGROUND_POSITION_AXIS_CENTER)
+        dump_printf(out, "center");
+    else if (value == BACKGROUND_POSITION_AXIS_START)
+        dump_printf(out, "%s", horizontal ? "left" : "top");
+    else
+        dump_printf(out, "%s", horizontal ? "right" : "bottom");
+}
+
+static void dump_bytecode_position_x(struct dump_bytecode_cursor *cursor, uint32_t value, struct dump_output *out)
+{
+    dump_bytecode_position_axis(cursor, value, out, true);
+}
+
+static void dump_bytecode_position_y(struct dump_bytecode_cursor *cursor, uint32_t value, struct dump_output *out)
+{
+    dump_bytecode_position_axis(cursor, value, out, false);
+}
+
 static void dump_bytecode_border_spacing(struct dump_bytecode_cursor *cursor, uint32_t value, struct dump_output *out)
 {
     switch (value) {
@@ -1435,7 +1458,8 @@ static const struct dump_bytecode_property dump_bytecode_properties[CSS_N_PROPER
     [CSS_PROP_CUE_AFTER] = READER(background_image),
     [CSS_PROP_CUE_BEFORE] = READER(background_image),
     [CSS_PROP_LIST_STYLE_IMAGE] = READER(background_image),
-    [CSS_PROP_BACKGROUND_POSITION] = READER(background_position),
+    [CSS_PROP_BACKGROUND_POSITION_X] = READER(position_x),
+    [CSS_PROP_BACKGROUND_POSITION_Y] = READER(position_y),
     [CSS_PROP_OBJECT_POSITION] = READER(background_position),
     [CSS_PROP_BACKGROUND_REPEAT_X] = KEYWORDS(background_repeat),
     [CSS_PROP_BACKGROUND_REPEAT_Y] = KEYWORDS(background_repeat),

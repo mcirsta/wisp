@@ -2833,10 +2833,14 @@ static void cascade_skip_property(css_style *style, css_code_t opv)
                 advance_bytecode(style, (2 + 3 * style->bytecode[1]) * sizeof(css_code_t));
             break;
         case CSS_PROP_OBJECT_POSITION:
-        case CSS_PROP_BACKGROUND_POSITION:
             if ((value & 0xf0) == BACKGROUND_POSITION_HORZ_SET)
                 advance_bytecode(style, 2 * sizeof(css_code_t));
             if ((value & 0x0f) == BACKGROUND_POSITION_VERT_SET)
+                advance_bytecode(style, 2 * sizeof(css_code_t));
+            break;
+        case CSS_PROP_BACKGROUND_POSITION_X:
+        case CSS_PROP_BACKGROUND_POSITION_Y:
+            if (value == BACKGROUND_POSITION_AXIS_SET)
                 advance_bytecode(style, 2 * sizeof(css_code_t));
             break;
         case CSS_PROP_BORDER_SPACING:

@@ -2,7 +2,7 @@
 <meta charset="utf-8">
 <title>Multiple background layers</title>
 <style>
-html { height: 1100px; background: none, linear-gradient(#eeeeee,#eeeeee); }
+html { height: 1240px; background: none, linear-gradient(#eeeeee,#eeeeee); }
 body { margin: 0; font: 14px sans-serif; }
 .case { position: absolute; width: 200px; height: 100px; background-color: yellow; }
 .case::after { content: attr(id); position: absolute; top: -20px; left: 0; }
@@ -36,6 +36,11 @@ body { margin: 0; font: 14px sans-serif; }
 #axes-x { left: 10px; top: 970px; background-image: url(test_data/background_layers/red.png),url(test_data/background_layers/blue.png); background-position: 0 0,40px 40px; background-repeat: repeat-x,repeat; background-repeat-x: no-repeat; }
 #axes-y { left: 250px; top: 970px; background-image: url(test_data/background_layers/red.png),url(test_data/background_layers/blue.png); background-position: 0 0,40px 40px; background-repeat: repeat-y,repeat; background-repeat-y: no-repeat; }
 #axes-cycle { left: 490px; top: 970px; background-image: url(test_data/background_layers/red.png),none,url(test_data/background_layers/blue.png); background-position: 0 0,0 0,80px 40px; background-repeat-x: no-repeat,repeat; background-repeat-y: no-repeat,no-repeat,repeat; }
+/* Percentage positions use (positioning-area size - image size), hence
+ * 100% x = 180px and 50% y = 40px for these 20x20 images. */
+#position-x { left: 10px; top: 1110px; background-image: url(test_data/background_layers/red.png),url(test_data/background_layers/blue.png); background-repeat: no-repeat; background-position: 10px 10px,70px 50px; background-position-x: 100%; }
+#position-y { left: 250px; top: 1110px; background-image: url(test_data/background_layers/red.png),url(test_data/background_layers/blue.png); background-repeat: no-repeat; background-position: 10px 10px,70px 50px; background-position-y: 50%; }
+#position-cycle { left: 490px; top: 1110px; background-image: url(test_data/background_layers/red.png),none,url(test_data/background_layers/blue.png); background-repeat: no-repeat; background-position-x: 10px,100%; background-position-y: 0%,50%,100%; }
 </style>
 <div id="order" class="case"></div><div id="images" class="case"></div><div id="none" class="case"></div>
 <div id="cycle" class="case"></div><div id="repeat" class="case"></div><div id="mixed" class="case"></div>
@@ -49,3 +54,5 @@ body { margin: 0; font: 14px sans-serif; }
 <div id="radial-default" class="case"></div><div id="radial-ellipse" class="case"></div><div id="radial-circle" class="case"></div>
 
 <div id="axes-x" class="case"></div><div id="axes-y" class="case"></div><div id="axes-cycle" class="case"></div>
+
+<div id="position-x" class="case"></div><div id="position-y" class="case"></div><div id="position-cycle" class="case"></div>

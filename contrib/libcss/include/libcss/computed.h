@@ -374,6 +374,9 @@ uint8_t css_computed_text_indent(const css_computed_style *style, css_fixed_or_c
 
 uint8_t css_computed_white_space(const css_computed_style *style);
 
+uint8_t css_computed_background_position_x(const css_computed_style *style, css_fixed_or_calc *offset, css_unit *unit);
+uint8_t css_computed_background_position_y(const css_computed_style *style, css_fixed_or_calc *offset, css_unit *unit);
+
 uint8_t css_computed_background_position(
     const css_computed_style *style, css_fixed_or_calc *hlength, css_unit *hunit, css_fixed_or_calc *vlength, css_unit *vunit);
 

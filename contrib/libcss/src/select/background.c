@@ -23,11 +23,9 @@ static void value_destroy(css_background_value *v, enum css_background_property 
             free(v->image.data.linear);
         else if (v->image.type == CSS_BACKGROUND_IMAGE_RADIAL_GRADIENT)
             free(v->image.data.radial);
-    } else if (p == CSS_BG_POSITION) {
-        if (v->position.xunit == CSS_UNIT_CALC)
-            lwc_string_unref(v->position.x.calc);
-        if (v->position.yunit == CSS_UNIT_CALC)
-            lwc_string_unref(v->position.y.calc);
+    } else if (p == CSS_BG_POSITION_X || p == CSS_BG_POSITION_Y) {
+        if (v->position.unit == CSS_UNIT_CALC)
+            lwc_string_unref(v->position.offset.calc);
     }
 }
 
@@ -119,11 +117,9 @@ css_error css__background_copy(const css_computed_style *from, css_computed_styl
                         v->image.data.radial = copy;
                     }
                 }
-            } else if (p == CSS_BG_POSITION) {
-                if (v->position.xunit == CSS_UNIT_CALC)
-                    lwc_string_ref(v->position.x.calc);
-                if (v->position.yunit == CSS_UNIT_CALC)
-                    lwc_string_ref(v->position.y.calc);
+            } else if (p == CSS_BG_POSITION_X || p == CSS_BG_POSITION_Y) {
+                if (v->position.unit == CSS_UNIT_CALC)
+                    lwc_string_ref(v->position.offset.calc);
             }
         }
     }
@@ -181,35 +177,22 @@ static css_error read_value(uint32_t opv, css_style *style, enum css_background_
                 stops[i].unit = unit == 0 ? CSS_UNIT_PCT : css__to_css_unit(unit);
             }
         }
-    } else if (p == CSS_BG_POSITION) {
+    } else if (p == CSS_BG_POSITION_X || p == CSS_BG_POSITION_Y) {
         css_background_position *pos = &v->position;
-        pos->xunit = pos->yunit = CSS_UNIT_PCT;
-        switch (value & 0xf0) {
-        case BACKGROUND_POSITION_HORZ_SET:
-            pos->x.value = (css_fixed)read_word(style);
-            pos->xunit = css__to_css_unit(read_word(style));
+        pos->unit = CSS_UNIT_PCT;
+        switch (value) {
+        case BACKGROUND_POSITION_AXIS_SET:
+            pos->offset.value = (css_fixed)read_word(style);
+            pos->unit = css__to_css_unit(read_word(style));
             break;
-        case BACKGROUND_POSITION_HORZ_CENTER:
-            pos->x.value = INTTOFIX(50);
+        case BACKGROUND_POSITION_AXIS_CENTER:
+            pos->offset.value = INTTOFIX(50);
             break;
-        case BACKGROUND_POSITION_HORZ_RIGHT:
-            pos->x.value = INTTOFIX(100);
-            break;
-        default:
-            break;
-        }
-        switch (value & 0x0f) {
-        case BACKGROUND_POSITION_VERT_SET:
-            pos->y.value = (css_fixed)read_word(style);
-            pos->yunit = css__to_css_unit(read_word(style));
-            break;
-        case BACKGROUND_POSITION_VERT_CENTER:
-            pos->y.value = INTTOFIX(50);
-            break;
-        case BACKGROUND_POSITION_VERT_BOTTOM:
-            pos->y.value = INTTOFIX(100);
+        case BACKGROUND_POSITION_AXIS_END:
+            pos->offset.value = INTTOFIX(100);
             break;
         default:
+            assert(value == BACKGROUND_POSITION_AXIS_START);
             break;
         }
     } else if (p == CSS_BG_REPEAT_X || p == CSS_BG_REPEAT_Y) {
@@ -269,10 +252,15 @@ css__background_cascade(uint32_t opv, css_style *style, css_select_state *state,
         if (first.image.type != CSS_BACKGROUND_IMAGE_IMAGE)
             memset(&first, 0, sizeof(first)); /* gradient ownership transferred */
         break;
-    case CSS_BG_POSITION:
-        error = set_background_position(state->computed,
-            hasFlagValue(opv) ? CSS_BACKGROUND_POSITION_INHERIT : CSS_BACKGROUND_POSITION_SET, first.position.x,
-            first.position.xunit, first.position.y, first.position.yunit);
+    case CSS_BG_POSITION_X:
+        error = set_background_position_x(state->computed,
+            hasFlagValue(opv) ? CSS_BACKGROUND_POSITION_INHERIT : CSS_BACKGROUND_POSITION_SET,
+            first.position.offset, first.position.unit);
+        break;
+    case CSS_BG_POSITION_Y:
+        error = set_background_position_y(state->computed,
+            hasFlagValue(opv) ? CSS_BACKGROUND_POSITION_INHERIT : CSS_BACKGROUND_POSITION_SET,
+            first.position.offset, first.position.unit);
         break;
     case CSS_BG_REPEAT_X:
         error = set_background_repeat_x(state->computed, first.keyword);
@@ -334,20 +322,34 @@ const css_radial_gradient *css_computed_background_radial_gradient_layer(const c
         : NULL;
 }
 
-uint8_t css_computed_background_position_layer(
-    const css_computed_style *s, uint32_t layer, css_fixed_or_calc *x, css_unit *xu, css_fixed_or_calc *y, css_unit *yu)
+static uint8_t position_axis_layer(const css_computed_style *s, enum css_background_property axis, uint32_t layer,
+    css_fixed_or_calc *offset, css_unit *unit)
 {
-    struct css_background_list *list = get_list(s, CSS_BG_POSITION);
+    struct css_background_list *list = get_list(s, axis);
     if (list != NULL)
         layer %= list->count + 1;
     if (list == NULL || layer == 0)
-        return get_background_position(s, x, xu, y, yu);
+        return axis == CSS_BG_POSITION_X ? get_background_position_x(s, offset, unit)
+                                         : get_background_position_y(s, offset, unit);
     const css_background_position *pos = &list->values[layer - 1].position;
-    *x = pos->x;
-    *xu = pos->xunit;
-    *y = pos->y;
-    *yu = pos->yunit;
+    *offset = pos->offset;
+    *unit = pos->unit;
     return CSS_BACKGROUND_POSITION_SET;
+}
+
+uint8_t css_computed_background_position_layer(
+    const css_computed_style *s, uint32_t layer, css_fixed_or_calc *x, css_unit *xu, css_fixed_or_calc *y, css_unit *yu)
+{
+    uint8_t xt = position_axis_layer(s, CSS_BG_POSITION_X, layer, x, xu);
+    uint8_t yt = position_axis_layer(s, CSS_BG_POSITION_Y, layer, y, yu);
+    return xt == CSS_BACKGROUND_POSITION_SET && yt == CSS_BACKGROUND_POSITION_SET ?
+        CSS_BACKGROUND_POSITION_SET : CSS_BACKGROUND_POSITION_INHERIT;
+}
+
+uint8_t css_computed_background_position(
+    const css_computed_style *s, css_fixed_or_calc *x, css_unit *xu, css_fixed_or_calc *y, css_unit *yu)
+{
+    return css_computed_background_position_layer(s, 0, x, xu, y, yu);
 }
 
 static uint8_t repeat_axis_layer(const css_computed_style *s, enum css_background_property axis, uint32_t layer)
@@ -419,11 +421,10 @@ static bool value_equal(const css_background_value *a, const css_background_valu
             return true;
         }
     }
-    if (p == CSS_BG_POSITION) {
+    if (p == CSS_BG_POSITION_X || p == CSS_BG_POSITION_Y) {
         const css_background_position *x = &a->position, *y = &b->position;
-        return x->xunit == y->xunit && x->yunit == y->yunit &&
-            (x->xunit == CSS_UNIT_CALC ? x->x.calc == y->x.calc : x->x.value == y->x.value) &&
-            (x->yunit == CSS_UNIT_CALC ? x->y.calc == y->y.calc : x->y.value == y->y.value);
+        return x->unit == y->unit &&
+            (x->unit == CSS_UNIT_CALC ? x->offset.calc == y->offset.calc : x->offset.value == y->offset.value);
     }
     return a->keyword == b->keyword;
 }
@@ -484,13 +485,10 @@ uint32_t css__background_hash(const css_computed_style *s)
                 } else if (v->image.type == CSS_BACKGROUND_IMAGE_IMAGE && v->image.data.url != NULL)
                     hash ^= css__arena_hash(
                         (const uint8_t *)lwc_string_data(v->image.data.url), lwc_string_length(v->image.data.url));
-            } else if (p == CSS_BG_POSITION) {
-                hash = hash * 33 + v->position.xunit;
-                hash = hash * 33 + v->position.yunit;
-                if (v->position.xunit != CSS_UNIT_CALC)
-                    hash = hash * 33 + (uint32_t)v->position.x.value;
-                if (v->position.yunit != CSS_UNIT_CALC)
-                    hash = hash * 33 + (uint32_t)v->position.y.value;
+            } else if (p == CSS_BG_POSITION_X || p == CSS_BG_POSITION_Y) {
+                hash = hash * 33 + v->position.unit;
+                if (v->position.unit != CSS_UNIT_CALC)
+                    hash = hash * 33 + (uint32_t)v->position.offset.value;
             } else {
                 hash = hash * 33 + v->keyword;
             }

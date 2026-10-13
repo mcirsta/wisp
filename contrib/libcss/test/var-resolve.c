@@ -2020,6 +2020,100 @@ static void test_background_repeat_axes(void)
     }
 }
 
+/* Backgrounds 4: position axes cascade independently, and each list repeats
+ * against the image list. The expected offsets/units come from the CSS values. */
+struct position_expectation {
+    const char *css;
+    int x[3], y[3];
+    unsigned nx, ny;
+    css_unit xu, yu;
+};
+
+static void expect_background_positions(const css_computed_style *style, const struct position_expectation *want)
+{
+    for (unsigned layer = 0; layer < 6; layer++) {
+        css_fixed_or_calc x, y;
+        css_unit xu, yu;
+        uint8_t type = css_computed_background_position_layer(style, layer, &x, &xu, &y, &yu);
+        if (type != CSS_BACKGROUND_POSITION_SET || x.value != INTTOFIX(want->x[layer % want->nx]) ||
+            y.value != INTTOFIX(want->y[layer % want->ny]) || xu != want->xu || yu != want->yu) {
+            fprintf(stderr, "position layer %u: got %d/%u %d/%u: %s\n", layer, x.value, xu, y.value, yu, want->css);
+            assert(false);
+        }
+    }
+}
+
+static void test_background_position_axes(void)
+{
+    static const struct position_expectation cases[] = {
+        {"background-position:10px 20px,30px 40px;background-position-x:70px", {70}, {20,40}, 1,2,
+            CSS_UNIT_PX,CSS_UNIT_PX},
+        {"background-position-x:1px,2px;background-position-y:3px,4px,5px", {1,2}, {3,4,5}, 2,3,
+            CSS_UNIT_PX,CSS_UNIT_PX},
+        {"background-position-x:7px!important;background-position:1px 2px,3px 4px", {7}, {2,4}, 1,2,
+            CSS_UNIT_PX,CSS_UNIT_PX},
+        {"background-position:1px 2px!important;background-position-y:8px", {1}, {2}, 1,1,
+            CSS_UNIT_PX,CSS_UNIT_PX},
+        {"background-position-x:7px,8px;background-position:top,right bottom", {50,100}, {0,100}, 2,2,
+            CSS_UNIT_PCT,CSS_UNIT_PCT},
+        {"background-position-x:right,left,center;background-position-y:bottom,center", {100,0,50}, {100,50}, 3,2,
+            CSS_UNIT_PCT,CSS_UNIT_PCT},
+        {"background-position:1px 2px,3px 4px;background-position-x:initial", {0}, {2,4}, 1,2,
+            CSS_UNIT_PCT,CSS_UNIT_PX},
+        {"background-position:1px 2px,3px 4px;background-position-y:unset", {1,3}, {0}, 2,1,
+            CSS_UNIT_PX,CSS_UNIT_PCT},
+        {"background-position:1px 2px,3px 4px;background:blue", {0}, {0}, 1,1,
+            CSS_UNIT_PCT,CSS_UNIT_PCT},
+        {"--p:1px 2px,3px 4px;background-position:var(--p);background-position-x:7px", {7}, {2,4}, 1,2,
+            CSS_UNIT_PX,CSS_UNIT_PX},
+        {"--p:1px,2px;background-position-x:var(--p);background-position-y:7px", {1,2}, {7}, 2,1,
+            CSS_UNIT_PX,CSS_UNIT_PX},
+        {"--p:1px,2px;background-position-x:var(--p);background:blue", {0}, {0}, 1,1,
+            CSS_UNIT_PCT,CSS_UNIT_PCT},
+        {"--p:1px,2px;background-position-x:var(--p)!important;background-position:5px 7px", {1,2}, {7}, 2,1,
+            CSS_UNIT_PX,CSS_UNIT_PX},
+        {"background-position:1px 2px,3px 4px;background-position-x:var(--missing)", {0}, {2,4}, 1,2,
+            CSS_UNIT_PCT,CSS_UNIT_PX},
+        {"--p:left;background-position:1px 2px,3px 4px;background-position-y:var(--p)", {1,3}, {0}, 2,1,
+            CSS_UNIT_PX,CSS_UNIT_PCT},
+        {"background-position:var(--missing);background-position-y:7px", {0}, {7}, 1,1,
+            CSS_UNIT_PCT,CSS_UNIT_PX},
+        /* These fixed-point payloads resemble opcodes: the bytecode walkers
+         * must skip each axis's operands before reaching the width variable. */
+        {"background-position:32768px 32768px,32768px 32768px!important", {32768}, {32768}, 1,1,
+            CSS_UNIT_PX,CSS_UNIT_PX},
+    };
+    for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
+        for (unsigned inlined = 0; inlined < 2; inlined++) {
+            char declarations[512], css[520];
+            snprintf(declarations, sizeof(declarations), "%s;--w:37px;width:var(--w)", cases[i].css);
+            snprintf(css, sizeof(css), "div {%s}", declarations);
+            style_case ctx;
+            setup_style_case(&ctx, inlined ? "" : css);
+            if (inlined)
+                ctx.inline_style = create_stylesheet_from_css(declarations, true, false);
+            const css_computed_style *style = select_style_for_node(&ctx, &ctx.node, ctx.inline_style, &ctx.results);
+            expect_background_positions(style, &cases[i]);
+            expect_length_px(css, style, css_computed_width, CSS_WIDTH_SET, 37);
+            destroy_style_case(&ctx);
+        }
+    }
+    for (unsigned deferred = 0; deferred < 2; deferred++) {
+        style_case ctx;
+        setup_style_case(&ctx, deferred ?
+            "div {background-position:7px 8px;background-position-x:var(--missing,revert)}" :
+            "div {background-position:7px 8px;background-position-x:revert}");
+        css_stylesheet *user = create_stylesheet_from_css("div {background-position:1px 2px,3px 4px}", false, false);
+        assert(css_select_ctx_insert_sheet(ctx.select_ctx, user, 0, CSS_ORIGIN_USER, NULL) == CSS_OK);
+        const css_computed_style *style = select_style_for_node(&ctx, &ctx.node, NULL, &ctx.results);
+        const struct position_expectation want = {"axis revert to user origin", {1,3}, {8}, 2,1,
+            CSS_UNIT_PX,CSS_UNIT_PX};
+        expect_background_positions(style, &want);
+        destroy_style_case(&ctx);
+        css_stylesheet_destroy(user);
+    }
+}
+
 /* CSS Fonts 4 / Text Decoration 3 longhand identities share the supported
  * legacy rendering values, including substitution and cascade precedence. */
 static void test_aggregate_longhand_values(void)
@@ -2263,6 +2357,7 @@ int main(int argc, char **argv)
     test_position_payloads();
     test_repeat_and_decoration_values();
     test_background_repeat_axes();
+    test_background_position_axes();
     test_aggregate_longhand_values();
     test_gap_aliases();
     test_deferred_revert();

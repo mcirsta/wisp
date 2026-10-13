@@ -46,6 +46,16 @@ static const struct {
     const char *input, *expected;
     bool pending; /* Partial pending shorthands serialize empty longhands, not round-trippable values. */
 } cases[] = {
+    {"background-position:10px 20px,30px 40px;background-position-x:5px",
+        "background-position-y: 20px, 40px; background-position-x: 5px;"},
+    {"background-position-x:left,right;background-position-y:top,bottom",
+        "background-position: left top, right bottom;"},
+    {"background-position:top!important;background-position-y:bottom",
+        "background-position: center top !important;"},
+    {"background-position-x:inherit;background-position-y:initial",
+        "background-position-x: inherit; background-position-y: initial;"},
+    {"background-position:var(--P);background-position-x:right",
+        "background-position-y: ; background-position-x: right;", true},
     {"background-repeat:repeat-x,repeat-y;background-repeat-x:no-repeat",
         "background-repeat-y: no-repeat, repeat; background-repeat-x: no-repeat;"},
     {"background-repeat-x:repeat,no-repeat;background-repeat-y:no-repeat,repeat",

@@ -245,15 +245,26 @@ values = "string"
 
 [background_position]
 declaration_value = "position_list"
+declaration_longhands = ["background_position_x", "background_position_y"]
 enum = "CSS_PROP_BACKGROUND_POSITION"
 inherited = false
-cascade = "manual"
+shorthand = true
+cascade = "none"
+computed = "none"
+
+[background_position_x]
+declaration_value = "position_axis_list"
+enum = "CSS_PROP_BACKGROUND_POSITION_X"
+enum_prefix = "CSS_BACKGROUND_POSITION"
+inherited = false
+cascade = "background_length"
+background_list = "CSS_BG_POSITION_X"
 computed = "auto"
 manual = true
 bits = 1
 initial = "SET"
-initial_data = ['(css_fixed_or_calc)0', 'CSS_UNIT_PCT', '(css_fixed_or_calc)0', 'CSS_UNIT_PCT']
-values = [["length", "", "calc"], ["length", "", "calc"]]
+initial_data = ['(css_fixed_or_calc)0', 'CSS_UNIT_PCT']
+values = [["length", "", "calc"]]
 condition = "CSS_BACKGROUND_POSITION_SET"
 
 [background_repeat]
@@ -2000,7 +2011,7 @@ select_comments = "Transform functions stored in css_computed_style.transform_*"
 
 [background]
 declaration_value = "background"
-declaration_longhands = ["background_image", "background_position", "background_repeat_x", "background_repeat_y", "background_attachment", "background_color"]
+declaration_longhands = ["background_image", "background_position_x", "background_position_y", "background_repeat_x", "background_repeat_y", "background_attachment", "background_color"]
 enum = "CSS_PROP_BACKGROUND"
 inherited = false
 shorthand = true
@@ -2409,3 +2420,18 @@ manual = true
 computed = "auto"
 bits = 2
 initial = "REPEAT"
+
+[background_position_y]
+declaration_value = "position_axis_list"
+enum = "CSS_PROP_BACKGROUND_POSITION_Y"
+enum_prefix = "CSS_BACKGROUND_POSITION"
+inherited = false
+cascade = "background_length"
+background_list = "CSS_BG_POSITION_Y"
+computed = "auto"
+manual = true
+bits = 1
+initial = "SET"
+initial_data = ['(css_fixed_or_calc)0', 'CSS_UNIT_PCT']
+values = [["length", "", "calc"]]
+condition = "CSS_BACKGROUND_POSITION_SET"

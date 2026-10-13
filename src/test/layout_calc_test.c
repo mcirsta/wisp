@@ -1516,6 +1516,59 @@ START_TEST(test_background_list_inheritance)
 }
 END_TEST
 
+START_TEST(test_background_axis_inheritance)
+{
+    static const char *const children[] = {
+        "background-position-x:inherit;background-position-y:1em",
+        "background-position-x:1em;background-position-y:inherit",
+        "background-position-x:var(--missing,inherit);background-position-y:1em",
+    };
+    select_ctx parent_ctx, child_ctx;
+    const css_computed_style *parent = select_style_from_css(
+        "* {font-size:20px;background-position-x:1em,3em,5em;background-position-y:2em,4em}", &parent_ctx);
+    char css[256];
+    snprintf(css, sizeof(css), "* {font-size:40px;%s}", children[_i]);
+    const css_computed_style *child = select_style_from_css_node(css, &child_ctx, false);
+    css_computed_style *result = NULL;
+    ck_assert_int_eq(css_computed_style_compose(parent, child, &unit_ctx, &result), CSS_OK);
+    destroy_select_ctx(&parent_ctx);
+    destroy_select_ctx(&child_ctx);
+    /* The child owns both tails after its inputs die. Inherited em lengths
+     * use the parent's font; the explicitly specified axis uses the child's. */
+    for (unsigned i = 0; i < 6; i++) {
+        css_fixed_or_calc x, y;
+        css_unit xu, yu;
+        ck_assert_int_eq(css_computed_background_position_layer(result, i, &x, &xu, &y, &yu),
+            CSS_BACKGROUND_POSITION_SET);
+        ck_assert_int_eq(xu, CSS_UNIT_PX);
+        ck_assert_int_eq(yu, CSS_UNIT_PX);
+        ck_assert_msg(x.value == INTTOFIX(_i == 1 ? 40 : 20 + 40 * (i % 3)) &&
+                y.value == INTTOFIX(_i == 1 ? 40 + 40 * (i % 2) : 40),
+            "child %s layer %u: got %d,%d", children[_i], i, x.value, y.value);
+    }
+    css_computed_style_destroy(result);
+}
+END_TEST
+
+START_TEST(test_background_axis_style_sharing)
+{
+    select_ctx ctx[4];
+    const css_computed_style *a = select_style_from_css(
+        "* {background-position-x:0%,5px;background-position-y:0%,6px}", &ctx[0]);
+    const css_computed_style *b = select_style_from_css(
+        "* {background-position-x:0%,7px;background-position-y:0%,6px}", &ctx[1]);
+    const css_computed_style *c = select_style_from_css(
+        "* {background-position:0% 0%,5px 6px}", &ctx[2]);
+    const css_computed_style *d = select_style_from_css(
+        "* {background-position-x:0%,5px;background-position-y:0%,8px}", &ctx[3]);
+    ck_assert_ptr_ne(a, b);
+    ck_assert_ptr_eq(a, c);
+    ck_assert_ptr_ne(a, d);
+    for (unsigned i = 0; i < 4; i++)
+        destroy_select_ctx(&ctx[i]);
+}
+END_TEST
+
 START_TEST(test_background_list_reset)
 {
     const char *resets[] = {"background-position:initial;background-repeat:unset;background-attachment:initial",
@@ -1578,6 +1631,8 @@ Suite *layout_calc_suite(void)
     tcase_add_test(tc_core, test_background_list_inheritance);
     tcase_add_loop_test(tc_core, test_background_list_reset, 0, 3);
     tcase_add_test(tc_core, test_background_style_sharing);
+    tcase_add_test(tc_core, test_background_axis_style_sharing);
+    tcase_add_loop_test(tc_core, test_background_axis_inheritance, 0, 3);
     tcase_add_test(tc_core, test_background_many_layers);
 
 

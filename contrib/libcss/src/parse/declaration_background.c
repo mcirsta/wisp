@@ -14,10 +14,10 @@
 #include "parse/properties/utils.h"
 #include "parse/repeat.h"
 
-enum { BG_IMAGE, BG_POSITION, BG_REPEAT_X, BG_REPEAT_Y, BG_ATTACHMENT, BG_COLOUR, BG_COMPONENTS };
-static const char *const names[BG_COMPONENTS] = {"background-image", "background-position", "background-repeat-x",
-    "background-repeat-y", "background-attachment", "background-color"};
-static const char *const defaults[BG_COMPONENTS] = {"none", "0% 0%", "repeat", "repeat", "scroll", "transparent"};
+enum { BG_IMAGE, BG_POSITION_X, BG_POSITION_Y, BG_REPEAT_X, BG_REPEAT_Y, BG_ATTACHMENT, BG_COLOUR, BG_COMPONENTS };
+static const char *const names[BG_COMPONENTS] = {"background-image", "background-position-x", "background-position-y",
+    "background-repeat-x", "background-repeat-y", "background-attachment", "background-color"};
+static const char *const defaults[BG_COMPONENTS] = {"none", "0%", "0%", "repeat", "repeat", "scroll", "transparent"};
 
 struct layer_values {
     size_t count;
@@ -106,17 +106,17 @@ static css_error background_component(const css_declaration *layer, size_t wante
         } else if (token->type == CSS_TOKEN_IDENT && css__repeat_keyword(token->text) >= 0) {
             component = BG_REPEAT_X;
         } else if (!quirky_colour && position_token(token)) {
-            component = BG_POSITION;
+            component = BG_POSITION_X;
         }
         if (lengths[component] != 0)
             return CSS_INVALID;
-        if (component == BG_POSITION || component == BG_REPEAT_X) {
+        if (component == BG_POSITION_X || component == BG_REPEAT_X) {
             size_t second = end;
             while (second < layer->token_count && layer->tokens[second].type == CSS_TOKEN_S)
                 second++;
             if (second < layer->token_count) {
                 const css_declaration_token *next = &layer->tokens[second];
-                bool pair = component == BG_POSITION ? position_token(next) :
+                bool pair = component == BG_POSITION_X ? position_token(next) :
                     css__repeat_axis(css__repeat_keyword(token->text)) && next->type == CSS_TOKEN_IDENT &&
                         css__repeat_axis(css__repeat_keyword(next->text));
                 if (pair)
@@ -128,9 +128,12 @@ static css_error background_component(const css_declaration *layer, size_t wante
         pos = end;
     }
     bool repeat = wanted == BG_REPEAT_X || wanted == BG_REPEAT_Y;
-    const char *name = repeat ? "background-repeat" : names[wanted];
+    bool position = wanted == BG_POSITION_X || wanted == BG_POSITION_Y;
+    const char *name = repeat ? "background-repeat" : position ? "background-position" : names[wanted];
     if (repeat)
         wanted = BG_REPEAT_X; /* Both axes come from this syntax group. */
+    else if (position)
+        wanted = BG_POSITION_X;
     *part = *layer;
     part->property = css_prop_lookup(name, strlen(name));
     part->tokens += starts[wanted];
@@ -182,6 +185,54 @@ css_error css__declaration_background_image(const css_declaration *source, lwc_s
     if (error == CSS_OK)
         error = css__declaration_values_join(values.items, values.count, ", ", out);
     destroy_values(&values);
+    return error;
+}
+
+/* Shared specified-value grammar for background and object positions. Keep
+ * authored keywords/numeric precision, independent of computed percentages. */
+static css_error position_axis_value(const css_declaration *layer, size_t axis, lwc_string **out)
+{
+    const css_declaration_token *tokens[2];
+    enum css_position_part kinds[2];
+    size_t count = 0;
+    for (size_t i = 0; i < layer->token_count; i++) {
+        const css_declaration_token *token = &layer->tokens[i];
+        if (token->type == CSS_TOKEN_S)
+            continue;
+        if (count == 2 || !position_token(token))
+            return CSS_INVALID;
+        kinds[count] = token->type == CSS_TOKEN_IDENT ? css__position_keyword(token->text) : CSS_POSITION_OFFSET;
+        tokens[count++] = token;
+    }
+    size_t index = 0;
+    if (layer->property->value_kind == CSS_DECL_VALUE_POSITION_AXIS_LIST) {
+        if (count != 1)
+            return CSS_INVALID;
+    } else {
+        size_t axes[2];
+        if (!css__position_axes(kinds, count, axes))
+            return CSS_INVALID;
+        index = axes[axis];
+    }
+    if (index == 2)
+        return lwc_intern_string("center", 6, out) == lwc_error_ok ? CSS_OK : CSS_NOMEM;
+    if (kinds[index] == CSS_POSITION_OFFSET)
+        return css__declaration_numeric_serialize(tokens[index], true, out);
+    return lwc_string_tolower(tokens[index]->text, out) == lwc_error_ok ? CSS_OK : CSS_NOMEM;
+}
+
+css_error css__declaration_object_position(const css_declaration *source, lwc_string **out)
+{
+    lwc_string *parts[2] = {0};
+    css_error error = position_axis_value(source, 0, &parts[0]);
+    if (error == CSS_OK)
+        error = position_axis_value(source, 1, &parts[1]);
+    if (error == CSS_OK)
+        error = css__declaration_values_join(parts, 2, " ", out);
+    for (unsigned i = 0; i < 2; i++) {
+        if (parts[i] != NULL)
+            lwc_string_unref(parts[i]);
+    }
     return error;
 }
 
@@ -243,6 +294,9 @@ static css_error collect_values(const css_declaration_contribution *value, size_
         if (part.token_count == 0) {
             error = lwc_intern_string(defaults[component], strlen(defaults[component]), out) == lwc_error_ok ?
                 CSS_OK : CSS_NOMEM;
+        } else if (part.property->value_kind == CSS_DECL_VALUE_POSITION_LIST ||
+            part.property->value_kind == CSS_DECL_VALUE_POSITION_AXIS_LIST) {
+            error = position_axis_value(&part, component - BG_POSITION_X, out);
         } else if (part.property->value_kind == CSS_DECL_VALUE_REPEAT_LIST) {
             error = repeat_axis_value(&part, component, out);
         } else {
@@ -259,8 +313,13 @@ css_error css__declaration_background_component(const css_declaration_contributi
 {
     struct layer_values values = {0};
     size_t component = value->component;
-    if (value->source->property->value_kind == CSS_DECL_VALUE_REPEAT_LIST)
+    const struct css_prop_entry *property = value->source->property;
+    if (property->value_kind == CSS_DECL_VALUE_REPEAT_LIST)
         component += BG_REPEAT_X;
+    else if (property->value_kind == CSS_DECL_VALUE_POSITION_LIST)
+        component += BG_POSITION_X;
+    else if (property->value_kind == CSS_DECL_VALUE_POSITION_AXIS_LIST)
+        component = property->id == CSS_DECL_BACKGROUND_POSITION_X ? BG_POSITION_X : BG_POSITION_Y;
     css_error error = collect_values(value, component, &values);
     if (error == CSS_OK)
         error = css__declaration_values_join(values.items, values.count, ", ", out);
@@ -268,11 +327,52 @@ css_error css__declaration_background_component(const css_declaration_contributi
     return error;
 }
 
-static css_error
-serialize_layers(const css_declaration_contribution *const *members, bool repeat_only, lwc_string **out)
+static css_error serialize_layer(const struct layer_values *values, size_t layer, bool last,
+    size_t first, size_t end, lwc_string **out)
 {
-    size_t first = repeat_only ? BG_REPEAT_X : BG_IMAGE;
-    size_t end = repeat_only ? BG_REPEAT_Y + 1 : BG_COMPONENTS;
+    lwc_string *parts[BG_COMPONENTS], *owned[2] = {0};
+    size_t used = 0;
+    css_error error = CSS_OK;
+    for (size_t i = first; i < end; i++) {
+        if (i == BG_COLOUR && !last)
+            continue;
+        lwc_string *part = values[i].items[i == BG_COLOUR ? 0 : layer];
+        const char *initial = defaults[i];
+        if (i == BG_POSITION_X) {
+            lwc_string *pair[] = {part, values[BG_POSITION_Y].items[layer]};
+            error = css__declaration_values_join(pair, 2, " ", &owned[0]);
+            part = owned[0];
+            initial = "0% 0%";
+            i++; /* The pair supplies both longhands. */
+        } else if (i == BG_REPEAT_X) {
+            error = repeat_pair_value(part, values[BG_REPEAT_Y].items[layer], &owned[1]);
+            part = owned[1];
+            i++;
+        }
+        if (error != CSS_OK)
+            break;
+        bool omit = css__keyword_equal(part, initial) ||
+            (i == BG_COLOUR && css__keyword_equal(part, "rgba(0, 0, 0, 0)"));
+        if (!omit || first != BG_IMAGE)
+            parts[used++] = part;
+    }
+    if (error == CSS_OK) {
+        error = used == 0 ? (lwc_intern_string("none", 4, out) == lwc_error_ok ? CSS_OK : CSS_NOMEM)
+                          : css__declaration_values_join(parts, used, " ", out);
+    }
+    for (unsigned i = 0; i < 2; i++) {
+        if (owned[i] != NULL)
+            lwc_string_unref(owned[i]);
+    }
+    return error;
+}
+
+static css_error
+serialize_layers(const css_declaration_contribution *const *members, enum css_declaration_value_kind kind, lwc_string **out)
+{
+    size_t first = kind == CSS_DECL_VALUE_REPEAT_LIST ? BG_REPEAT_X :
+        kind == CSS_DECL_VALUE_POSITION_LIST ? BG_POSITION_X : BG_IMAGE;
+    size_t end = kind == CSS_DECL_VALUE_BACKGROUND ? BG_COMPONENTS : first + 2;
     /* CSSOM requires exact specified-value representation: repeating or
      * truncating lists as painting does would alter the independent longhands. */
     size_t count = 0;
@@ -299,29 +399,7 @@ serialize_layers(const css_declaration_contribution *const *members, bool repeat
             goto done;
     }
     for (size_t layer = 0; layer < count; layer++) {
-        lwc_string *parts[BG_COMPONENTS];
-        size_t used = 0;
-        lwc_string *repeat = NULL;
-        error = repeat_pair_value(values[BG_REPEAT_X].items[layer], values[BG_REPEAT_Y].items[layer], &repeat);
-        if (error != CSS_OK)
-            goto done;
-        for (size_t i = first; i < end; i++) {
-            if (i == BG_REPEAT_Y)
-                continue;
-            if (i == BG_COLOUR && layer + 1 != count)
-                continue;
-            lwc_string *part = i == BG_REPEAT_X ? repeat : values[i].items[i == BG_COLOUR ? 0 : layer];
-            bool initial = css__keyword_equal(part, defaults[i]) ||
-                (i == BG_COLOUR && css__keyword_equal(part, "rgba(0, 0, 0, 0)"));
-            if (!initial || repeat_only)
-                parts[used++] = part;
-        }
-        if (used == 0) {
-            error = lwc_intern_string("none", 4, &layers[layer]) == lwc_error_ok ? CSS_OK : CSS_NOMEM;
-        } else {
-            error = css__declaration_values_join(parts, used, " ", &layers[layer]);
-        }
-        lwc_string_unref(repeat);
+        error = serialize_layer(values, layer, layer + 1 == count, first, end, &layers[layer]);
         if (error != CSS_OK)
             goto done;
     }
@@ -340,11 +418,11 @@ done:
 
 css_error css__declaration_background_shorthand(const css_declaration_contribution *const *members, lwc_string **out)
 {
-    return serialize_layers(members, false, out);
+    return serialize_layers(members, CSS_DECL_VALUE_BACKGROUND, out);
 }
 
-css_error css__declaration_background_repeat_shorthand(
+css_error css__declaration_background_pair_shorthand(enum css_declaration_value_kind kind,
     const css_declaration_contribution *const *members, lwc_string **out)
 {
-    return serialize_layers(members, true, out);
+    return serialize_layers(members, kind, out);
 }

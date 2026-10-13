@@ -7,11 +7,17 @@ import subprocess
 import sys
 import tempfile
 
-WIDTH, HEIGHT = 760, 1100
+WIDTH, HEIGHT = 760, 1240
 RED, BLUE, YELLOW, PURPLE = (255, 0, 0), (0, 0, 255), (255, 255, 0), (128, 0, 127)
 # Coordinates are deliberately away from edges and text. Expected colors follow
 # CSS compositing/order, independent of either browser implementation.
 SAMPLES = [
+    ("position x first", 200, 1130, RED), ("position x second", 200, 1170, BLUE),
+    ("position x old location", 30, 1130, YELLOW),
+    ("position y first", 270, 1160, RED), ("position y second", 330, 1160, BLUE),
+    ("position y old first", 270, 1130, YELLOW), ("position y below", 330, 1190, YELLOW),
+    ("position cycle first", 510, 1120, RED), ("position cycle third", 510, 1200, BLUE),
+    ("position cycle right", 680, 1200, YELLOW), ("position cycle middle", 510, 1160, YELLOW),
     ("axis x red", 20, 980, RED), ("axis x stops red", 20, 1050, YELLOW),
     ("axis x blue top", 60, 980, BLUE), ("axis x blue bottom", 60, 1050, BLUE),
     ("axis x no horizontal tile", 160, 1020, YELLOW),

@@ -137,11 +137,16 @@ void css__make_style_important(css_style *style)
                 break;
 
             case CSS_PROP_OBJECT_POSITION:
-            case CSS_PROP_BACKGROUND_POSITION:
                 if ((value & 0xf0) == BACKGROUND_POSITION_HORZ_SET)
                     offset += 2; /* length + units */
 
                 if ((value & 0x0f) == BACKGROUND_POSITION_VERT_SET)
+                    offset += 2; /* length + units */
+                break;
+
+            case CSS_PROP_BACKGROUND_POSITION_X:
+            case CSS_PROP_BACKGROUND_POSITION_Y:
+                if (value == BACKGROUND_POSITION_AXIS_SET)
                     offset += 2; /* length + units */
                 break;
 

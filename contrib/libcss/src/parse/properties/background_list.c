@@ -1,4 +1,5 @@
 /* Background list bytecode. Licensed under the MIT License. */
+#include <assert.h>
 #include "bytecode/bytecode.h"
 #include "bytecode/opcodes.h"
 #include "parse/properties/background.h"
@@ -78,4 +79,57 @@ cleanup:
         result->used = used;
     }
     return error;
+}
+
+static uint32_t pair_item_words(css_code_t opv)
+{
+    opcode_t op = getOpcode(opv);
+    return !hasFlagValue(opv) && (op == CSS_PROP_BACKGROUND_POSITION_X || op == CSS_PROP_BACKGROUND_POSITION_Y) &&
+        getValue(opv) == BACKGROUND_POSITION_AXIS_SET ? 3 : 1;
+}
+
+/* Position/repeat parsers emit interleaved X/Y items. Separate them into
+ * independent lists, without temporary axis buffers. Numeric position items
+ * own two operand words; these must never be mistaken for opcodes. */
+css_error css__background_pair_append(css_style *result, css_style *items, uint32_t count)
+{
+    if (count == 1)
+        return css__stylesheet_merge_style(result, items);
+    uint32_t words[2] = {0}, offset = 0;
+    for (uint32_t i = 0; i < count; i++) {
+        for (unsigned axis = 0; axis < 2; axis++) {
+            assert(offset < items->used);
+            uint32_t size = pair_item_words(items->bytecode[offset]);
+            words[axis] += size;
+            offset += size;
+        }
+    }
+    assert(offset == items->used);
+    for (unsigned axis = 0; axis < 2; axis++) {
+        offset = axis == 0 ? 0 : pair_item_words(items->bytecode[0]);
+        css_error error = css__stylesheet_style_appendOPV(result, getOpcode(items->bytecode[offset]), 0,
+            BACKGROUND_LAYER_LIST);
+        if (error == CSS_OK)
+            error = css__stylesheet_style_append(result, words[axis] + 1);
+        if (error == CSS_OK)
+            error = css__stylesheet_style_append(result, count);
+        if (error != CSS_OK)
+            return error;
+        offset = 0;
+        for (uint32_t i = 0; i < count; i++) {
+            for (unsigned part = 0; part < 2; part++) {
+                uint32_t size = pair_item_words(items->bytecode[offset]);
+                if (part == axis) {
+                    css_style item = *items;
+                    item.bytecode += offset;
+                    item.used = size;
+                    error = css__stylesheet_merge_style(result, &item);
+                    if (error != CSS_OK)
+                        return error;
+                }
+                offset += size;
+            }
+        }
+    }
+    return CSS_OK;
 }

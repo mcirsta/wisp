@@ -34,6 +34,12 @@ HELPER_MAP = {
 
 # Map cascade type → value type for set_from_hint data access, getter params, etc.
 TYPE_INFO = {
+    'background_length': {
+        'hint_data': '(css_fixed_or_calc)(hint->data.length.value), hint->data.length.unit',
+        'get_vars': [('css_fixed_or_calc', 'length', '(css_fixed_or_calc)0'), ('css_unit', 'unit', 'CSS_UNIT_PX')],
+        'set_extra': ', length, unit',
+        'get_extra': ', &length, &unit',
+    },
     'background_keyword': {
         'hint_data': None,
         'get_vars': [],
@@ -213,10 +219,11 @@ def generate_cascade_file(name, prop_data):
     # Safety check (Option B): detect when initial_data would cause arena
     # memcmp mismatches. The setter unconditionally stores all values,
     # but the getter only reads them when type matches `condition`.
-    # If initial_data differs from TYPE_INFO defaults, the copy/compose
-    # var initializers won't match the initial function's stored values.
+    # When the initial type satisfies the condition, the getter reads its
+    # data. Otherwise copy/compose must use matching fallback values.
     info = TYPE_INFO[cascade_type]
-    if condition and info.get('get_vars') and initial_data:
+    conditions = condition if isinstance(condition, list) else [condition]
+    if condition and f'{enum_prefix}_{initial}' not in conditions and info.get('get_vars') and initial_data:
         defaults = [v[2] for v in info['get_vars'] if len(v) > 2 and v[2] is not None]
         if defaults and list(initial_data) != defaults:
             print(f'SKIP: {name} — initial_data {initial_data} differs from '
@@ -235,7 +242,7 @@ def generate_cascade_file(name, prop_data):
     lines.append('#include "bytecode/opcodes.h"')
     lines.append('#include "select/propget.h"')
     lines.append('#include "select/propset.h"')
-    if cascade_type == 'background_keyword':
+    if cascade_type in ('background_keyword', 'background_length'):
         lines.append('#include "select/background.h"')
     lines.append('')
     lines.append('#include "select/properties/helpers.h"')
@@ -247,7 +254,7 @@ def generate_cascade_file(name, prop_data):
         lines.extend(generate_cascade_ident(name, NAME, prop_data, enum_prefix, initial))
     elif cascade_type == 'paint_color':
         lines.extend(generate_cascade_paint_color(name, NAME, prop_data, enum_prefix))
-    elif cascade_type == 'background_keyword':
+    elif cascade_type in ('background_keyword', 'background_length'):
         lines.append(f'css_error css__cascade_{name}(uint32_t opv, css_style *style, css_select_state *state)')
         lines.append('{')
         lines.append(f'    return css__background_cascade(opv, style, state, {prop_data["background_list"]});')
@@ -265,7 +272,7 @@ def generate_cascade_file(name, prop_data):
     info = TYPE_INFO[cascade_type]
     lines.append(f'css_error css__set_{name}_from_hint(const css_hint *hint, css_computed_style *style)')
     lines.append('{')
-    if cascade_type == 'background_keyword':
+    if cascade_type in ('background_keyword', 'background_length'):
         lines.append(f'    css__background_clear(style, {prop_data["background_list"]});')
     
     if info.get('counter'):
@@ -307,7 +314,7 @@ def generate_cascade_file(name, prop_data):
     # 3. initial function
     lines.append(f'css_error css__initial_{name}(css_select_state *state)')
     lines.append('{')
-    if cascade_type == 'background_keyword':
+    if cascade_type in ('background_keyword', 'background_length'):
         lines.append(f'    css__background_clear(state->computed, {prop_data["background_list"]});')
     
     initial_val = f'{enum_prefix}_{initial}'
@@ -366,13 +373,17 @@ def generate_cascade_file(name, prop_data):
         lines.append(f'        return CSS_OK;')
         lines.append(f'    }}')
         lines.append(f'')
+        if cascade_type == 'background_length':
+            lines.append(f'    css_error error = css__background_copy(from, to, {prop_data["background_list"]});')
+            lines.append(f'    if (error != CSS_OK)')
+            lines.append(f'        return error;')
         lines.append(f'    return set_{name}(to, type{set_extra});')
     else:
         lines.append(f'    if (from == to) {{')
         lines.append(f'        return CSS_OK;')
         lines.append(f'    }}')
         lines.append(f'')
-        if cascade_type == 'background_keyword':
+        if cascade_type in ('background_keyword', 'background_length'):
             lines.append(f'    css_error error = css__background_copy(from, to, {prop_data["background_list"]});')
             lines.append(f'    if (error != CSS_OK)')
             lines.append(f'        return error;')

@@ -164,7 +164,7 @@ static const struct {
     {"margin:var(--x);margin-left:2px;color:red", "margin:var(--x)", "margin: var(--x); color: red;",
         "margin-top margin-right margin-bottom margin-left color"},
     {"background:red;color:blue", "background-image:url(a)", "background: url(\"a\") red; color: blue;",
-        "background-image background-position background-repeat-x background-repeat-y "
+        "background-image background-position-x background-position-y background-repeat-x background-repeat-y "
         "background-attachment background-color color"},
     {"color:red", "--empty: ", "color: red; --empty: ;", "color --empty"},
 };
@@ -449,7 +449,7 @@ END_TEST
 START_TEST(test_background_repeat_edits)
 {
     css_declaration_store *store = create("background:url(a) repeat-x,url(b) repeat-y blue", _i != 0);
-    check_order(store, "background-image background-position background-repeat-x background-repeat-y "
+    check_order(store, "background-image background-position-x background-position-y background-repeat-x background-repeat-y "
         "background-attachment background-color");
     ck_assert(set(store, "background-repeat-x:no-repeat", _i != 0));
     check_value(store, "background-repeat-x", "no-repeat", false);
@@ -495,6 +495,57 @@ START_TEST(test_background_repeat_edits)
     ck_assert_int_eq(css__declaration_store_remove(store, "background-repeat", 17, &changed), CSS_OK);
     ck_assert(changed);
     check_value(store, "background-repeat-y", "", false);
+    check_value(store, "background-color", "blue", false);
+    css__declaration_store_destroy(store);
+}
+END_TEST
+
+START_TEST(test_background_position_edits)
+{
+    css_declaration_store *store = create("background:url(a) 10px 20px,url(b) 30px 40px blue", _i != 0);
+    ck_assert(set(store, "background-position-x:5px", _i != 0));
+    check_value(store, "background-position-x", "5px", false);
+    check_value(store, "background-position-y", "20px, 40px", false);
+    check_value(store, "background-position", "", false);
+    check_value(store, "background", "", false);
+    lwc_string *text;
+    ck_assert_int_eq(css__declaration_store_serialize(store, &text), CSS_OK);
+    css_declaration_store *copy = create(lwc_string_data(text), _i != 0);
+    check_text(copy, lwc_string_data(text));
+    check_value(copy, "background-position-x", "5px", false);
+    check_value(copy, "background-position-y", "20px, 40px", false);
+    lwc_string_unref(text);
+    css__declaration_store_destroy(copy);
+    ck_assert(set(store, "background-position-x:right,left", _i != 0));
+    check_value(store, "background-position", "right 20px, left 40px", false);
+    check_text(store, "background: url(\"a\") right 20px, url(\"b\") left 40px blue;");
+    bool changed;
+    ck_assert_int_eq(css__declaration_store_remove(store, "background-position-y", 21, &changed), CSS_OK);
+    ck_assert(changed);
+    check_value(store, "background-position-y", "", false);
+    check_value(store, "background-position-x", "right, left", false);
+    ck_assert(set(store, "background-position:var(--P)!important", _i != 0));
+    const css_declaration *pending = NULL;
+    for (size_t i = 0; i < css__declaration_store_count(store); i++) {
+        const css_declaration_contribution *entry = css__declaration_store_get(store, i);
+        if (strcmp(entry->name, "background-position-y") == 0)
+            pending = entry->source;
+    }
+    ck_assert_ptr_nonnull(pending);
+    ck_assert(set(store, "background-position-x:7px", _i != 0));
+    check_value(store, "background-position-x", "7px", false);
+    check_value(store, "background-position-y", "", true);
+    for (size_t i = 0; i < css__declaration_store_count(store); i++) {
+        const css_declaration_contribution *entry = css__declaration_store_get(store, i);
+        if (strcmp(entry->name, "background-position-y") == 0) {
+            ck_assert_ptr_eq(entry->source, pending);
+            ck_assert(entry->source->deferred);
+        }
+    }
+    ck_assert_int_eq(css__declaration_store_remove(store, "background-position", 19, &changed), CSS_OK);
+    ck_assert(changed);
+    check_value(store, "background-position-x", "", false);
+    check_value(store, "background-position-y", "", false);
     check_value(store, "background-color", "blue", false);
     css__declaration_store_destroy(store);
 }
@@ -1092,6 +1143,7 @@ int main(void)
     tcase_add_loop_test(tc, test_extended_polar_values_survive_edits, 0, 2);
     tcase_add_loop_test(tc, test_calc_values_survive_edits, 0, 2);
     tcase_add_loop_test(tc, test_background_repeat_edits, 0, 2);
+    tcase_add_loop_test(tc, test_background_position_edits, 0, 2);
     tcase_add_test(tc, test_nonfinite_values_survive_edits);
     tcase_add_loop_test(tc, test_pending_sources_survive_edits, 0, 2);
     tcase_add_test(tc, test_length_and_borrowed_names);

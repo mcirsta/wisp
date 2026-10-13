@@ -14,7 +14,6 @@
 #include "parse/colour.h"
 #include "parse/declaration_text.h"
 #include "parse/property.h"
-#include "parse/position.h"
 #include "parse/transform.h"
 #include "parse/properties/utils.h"
 #include "utils/css_utils.h"
@@ -674,98 +673,6 @@ static css_error serialize_grid_component(const css_declaration_contribution *va
     return error;
 }
 
-static css_error serialize_position_item(const css_declaration_token *const parts[2], size_t count, lwc_string **out)
-{
-    enum css_position_part kinds[2];
-    for (size_t i = 0; i < count; i++) {
-        if (parts[i]->type == CSS_TOKEN_IDENT)
-            kinds[i] = css__position_keyword(parts[i]->text);
-        else if (parts[i]->type == CSS_TOKEN_NUMBER || parts[i]->type == CSS_TOKEN_DIMENSION ||
-            parts[i]->type == CSS_TOKEN_PERCENTAGE)
-            kinds[i] = CSS_POSITION_OFFSET;
-        else
-            return CSS_INVALID;
-    }
-    size_t axes[2];
-    if (!css__position_axes(kinds, count, axes))
-        return CSS_INVALID;
-    lwc_string *values[2] = {0};
-    css_error error = CSS_OK;
-    for (size_t axis = 0; axis < 2; axis++) {
-        size_t index = axes[axis];
-        if (index == 2)
-            error = intern("center", 6, &values[axis]);
-        else if (kinds[index] == CSS_POSITION_OFFSET)
-            error = css__declaration_numeric_serialize(parts[index], true, &values[axis]);
-        else
-            error = lwc_string_tolower(parts[index]->text, &values[axis]) == lwc_error_ok ? CSS_OK : CSS_NOMEM;
-        if (error != CSS_OK)
-            break;
-    }
-    /* CSS Values position serialization retains keywords, with two axes even
-     * when the second center was implicit. Never read rounded layout offsets. */
-    if (error == CSS_OK) {
-        const struct value_format format = {"", " ", ""};
-        error = join_values(values, 2, &format, out);
-    }
-    for (size_t i = 0; i < 2; i++) {
-        if (values[i] != NULL)
-            lwc_string_unref(values[i]);
-    }
-    return error;
-}
-
-static css_error serialize_position(const css_declaration *source, lwc_string **out)
-{
-    size_t count = 1;
-    for (size_t i = 0; i < source->token_count; i++) {
-        if (source->tokens[i].type == CSS_TOKEN_CHAR && css__keyword_equal(source->tokens[i].text, ","))
-            count++;
-    }
-    if (count > 1 && source->property->value_kind != CSS_DECL_VALUE_POSITION_LIST)
-        return CSS_INVALID;
-    if (count > SIZE_MAX / sizeof(lwc_string *))
-        return CSS_NOMEM;
-    lwc_string *single[1] = {0};
-    lwc_string **layers = count == 1 ? single : calloc(count, sizeof(*layers));
-    if (layers == NULL)
-        return CSS_NOMEM;
-    const css_declaration_token *parts[2];
-    size_t layer = 0, used = 0;
-    css_error error = CSS_OK;
-    for (size_t i = 0; i <= source->token_count; i++) {
-        const css_declaration_token *token = i < source->token_count ? &source->tokens[i] : NULL;
-        if (token != NULL && token->type == CSS_TOKEN_S)
-            continue;
-        if (token == NULL || (token->type == CSS_TOKEN_CHAR && css__keyword_equal(token->text, ","))) {
-            error = serialize_position_item(parts, used, &layers[layer++]);
-            if (error != CSS_OK)
-                break;
-            used = 0;
-        } else if (used == 2) {
-            error = CSS_INVALID;
-            break;
-        } else {
-            parts[used++] = token;
-        }
-    }
-    if (error == CSS_OK) {
-        if (count == 1) {
-            *out = lwc_string_ref(single[0]);
-        } else {
-            const struct value_format format = {"", ", ", ""};
-            error = join_values(layers, count, &format, out);
-        }
-    }
-    for (size_t i = 0; i < count; i++) {
-        if (layers[i] != NULL)
-            lwc_string_unref(layers[i]);
-    }
-    if (layers != single)
-        free(layers);
-    return error;
-}
-
 /* Legacy aural angles use deg for unitless zero. CSSOM's declared-value
  * azimuth example represents absolute directions as angles; leftwards and
  * rightwards must stay relative. Both properties passed their native grammar. */
@@ -850,7 +757,8 @@ css_error css__declaration_value_serialize(const css_declaration_contribution *v
         return css__declaration_font_component(value, out);
     if (kind == CSS_DECL_VALUE_IMAGE_LIST)
         return css__declaration_background_image(source, out);
-    if (kind == CSS_DECL_VALUE_BACKGROUND || kind == CSS_DECL_VALUE_REPEAT_LIST)
+    if (kind == CSS_DECL_VALUE_BACKGROUND || kind == CSS_DECL_VALUE_REPEAT_LIST ||
+        kind == CSS_DECL_VALUE_POSITION_LIST || kind == CSS_DECL_VALUE_POSITION_AXIS_LIST)
         return css__declaration_background_component(value, out);
     if (kind == CSS_DECL_VALUE_URI || kind == CSS_DECL_VALUE_CURSOR || kind == CSS_DECL_VALUE_KEYWORD_LIST ||
         kind == CSS_DECL_VALUE_GRID_TRACKS || kind == CSS_DECL_VALUE_GRID_FLOW ||
@@ -868,8 +776,8 @@ css_error css__declaration_value_serialize(const css_declaration_contribution *v
         return serialize_border_component(value, out);
     if (kind == CSS_DECL_VALUE_GRID_LINE || kind == CSS_DECL_VALUE_GRID_PAIR || kind == CSS_DECL_VALUE_GRID_AREA)
         return serialize_grid_component(value, out);
-    if (kind == CSS_DECL_VALUE_POSITION || kind == CSS_DECL_VALUE_POSITION_LIST)
-        return serialize_position(source, out);
+    if (kind == CSS_DECL_VALUE_POSITION)
+        return css__declaration_object_position(source, out);
     if (kind == CSS_DECL_VALUE_COLOUR || kind == CSS_DECL_VALUE_QUAD_COLOUR)
         return css__declaration_colour_serialize(value, out);
     size_t arity = scalar_arity(kind);
@@ -1058,8 +966,8 @@ css_error css__declaration_shorthand_serialize(const struct css_prop_entry *prop
         return css__declaration_font_shorthand(members, out);
     if (kind == CSS_DECL_VALUE_BACKGROUND)
         return css__declaration_background_shorthand(members, out);
-    if (kind == CSS_DECL_VALUE_REPEAT_LIST)
-        return css__declaration_background_repeat_shorthand(members, out);
+    if (kind == CSS_DECL_VALUE_REPEAT_LIST || kind == CSS_DECL_VALUE_POSITION_LIST)
+        return css__declaration_background_pair_shorthand(kind, members, out);
     if (kind == CSS_DECL_VALUE_BORDER || kind == CSS_DECL_VALUE_BORDER_SIDE || kind == CSS_DECL_VALUE_OUTLINE)
         return serialize_border_shorthand(kind, members, out);
     if (scalar_arity(kind) == 1 && kind != CSS_DECL_VALUE_FLEX && kind != CSS_DECL_VALUE_FLEX_FLOW &&

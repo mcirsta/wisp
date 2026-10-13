@@ -10,5 +10,5 @@ typedef css_error (*css_background_list_appender)(css_style *, css_style *, uint
 css_error css__parse_background_list(
     css_language *, const parserutils_vector *, int32_t *, css_style *, css_prop_handler, css_background_list_appender);
 css_error css__background_list_append(css_style *, css_style *, uint32_t);
-css_error css__background_repeat_append(css_style *, css_style *, uint32_t);
+css_error css__background_pair_append(css_style *, css_style *, uint32_t);
 #endif

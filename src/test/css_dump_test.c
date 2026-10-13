@@ -124,7 +124,7 @@ START_TEST(test_dump_position_payloads)
     dump_sheet(sheet, &out);
     ck_assert(!out.failed);
     ck_assert_str_eq(out.data, "| *\n|  object-position: 32768px 2% !important\n"
-        "|  background-position: right top\n|  width: 37px\n");
+        "|  background-position-x: right\n|  background-position-y: top\n|  width: 37px\n");
     dump_output_fini(&out);
     css_stylesheet_destroy(sheet);
 }

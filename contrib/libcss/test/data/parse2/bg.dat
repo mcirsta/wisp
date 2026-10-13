@@ -6,7 +6,8 @@
 |  background-attachment: scroll
 |  background-color: #ffff0000
 |  background-image: none
-|  background-position: left top
+|  background-position-x: left
+|  background-position-y: top
 |  background-repeat-x: repeat
 |  background-repeat-y: repeat
 #reset
@@ -19,7 +20,8 @@
 |  background-attachment: scroll
 |  background-color: transparent
 |  background-image: none
-|  background-position: left top
+|  background-position-x: left
+|  background-position-y: top
 |  background-repeat-x: repeat
 |  background-repeat-y: repeat
 #reset
@@ -32,7 +34,8 @@
 |  background-attachment: scroll
 |  background-color: currentColor
 |  background-image: none
-|  background-position: left top
+|  background-position-x: left
+|  background-position-y: top
 |  background-repeat-x: repeat
 |  background-repeat-y: repeat
 #reset
@@ -45,7 +48,8 @@
 |  background-attachment: fixed
 |  background-color: #ff808080
 |  background-image: url('chess.png')
-|  background-position: 40% center
+|  background-position-x: 40%
+|  background-position-y: center
 |  background-repeat-x: repeat
 |  background-repeat-y: repeat
 #reset
@@ -58,7 +62,8 @@
 |  background-attachment: inherit
 |  background-color: inherit
 |  background-image: inherit
-|  background-position: inherit
+|  background-position-x: inherit
+|  background-position-y: inherit
 |  background-repeat-x: inherit
 |  background-repeat-y: inherit
 #reset
@@ -71,7 +76,8 @@
 |  background-attachment: fixed
 |  background-color: #ffffffff
 |  background-image: url('bg.gif')
-|  background-position: left top
+|  background-position-x: left
+|  background-position-y: top
 |  background-repeat-x: no-repeat
 |  background-repeat-y: no-repeat
 #reset
@@ -133,7 +139,8 @@
 |  background-attachment: scroll !important
 |  background-color: #ffff0000 !important
 |  background-image: none !important
-|  background-position: left top !important
+|  background-position-x: left !important
+|  background-position-y: top !important
 |  background-repeat-x: repeat !important
 |  background-repeat-y: repeat !important
 #reset
@@ -146,7 +153,8 @@
 |  background-attachment: fixed !important
 |  background-color: #ff808080 !important
 |  background-image: url('chess.png') !important
-|  background-position: 50% center !important
+|  background-position-x: 50% !important
+|  background-position-y: center !important
 |  background-repeat-x: repeat !important
 |  background-repeat-y: repeat !important
 #reset
@@ -159,7 +167,8 @@
 |  background-attachment: inherit !important
 |  background-color: inherit !important
 |  background-image: inherit !important
-|  background-position: inherit !important
+|  background-position-x: inherit !important
+|  background-position-y: inherit !important
 |  background-repeat-x: inherit !important
 |  background-repeat-y: inherit !important
 #reset
@@ -172,7 +181,8 @@
 |  background-attachment: fixed !important
 |  background-color: #ffffffff !important
 |  background-image: url('bg.gif') !important
-|  background-position: left top !important
+|  background-position-x: left !important
+|  background-position-y: top !important
 |  background-repeat-x: no-repeat !important
 |  background-repeat-y: no-repeat !important
 #reset
@@ -265,7 +275,8 @@
 #errors
 #expected
 | *
-|  background-position: inherit
+|  background-position-x: inherit
+|  background-position-y: inherit
 #reset
 
 #data
@@ -300,9 +311,12 @@
 |  background-image: linear-gradient(3, #ffff0000 10%, #ff0000ff)
 |  background-image: radial-gradient(0, #ffffffff, #ff000000)
 |  background-image: none
-|  background-position: /* 2 layers !important */
-|  background-position: left top
-|  background-position: 25% 10px
+|  background-position-x: /* 2 layers !important */
+|  background-position-x: left
+|  background-position-x: 25%
+|  background-position-y: /* 2 layers !important */
+|  background-position-y: top
+|  background-position-y: 10px
 |  background-repeat-x: /* 2 layers !important */
 |  background-repeat-x: no-repeat
 |  background-repeat-x: repeat
