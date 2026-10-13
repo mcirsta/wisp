@@ -21,6 +21,13 @@
  */
 css_fixed css_unit_len2px_mq(const css_unit_ctx *ctx, const css_fixed length, const css_unit unit);
 
+/* Calculator-only conversion: do not quantize a unit factor or an operand
+ * before the rest of its arithmetic. Client font metrics remain css_fixed. */
+double css_unit_len2css_px_calc(const css_computed_style *style, const css_unit_ctx *ctx,
+    double length, css_unit unit);
+void css_unit_compute_line_height_calc(const css_computed_style *style, const css_unit_ctx *ctx,
+    double *value, css_unit *unit);
+
 /**
  * Convert relative font size units to absolute units.
  *
@@ -38,16 +45,5 @@ css_error css_unit_compute_absolute_font_size(const css_hint_length *ref_length,
  * that unit so layout can still update it on resize without reselecting CSS. */
 void css_unit_compute_line_height(
     const css_computed_style *style, const css_unit_ctx *ctx, css_hint_length *length);
-
-/**
- * Convert any angle to degrees.
- *
- * It is invalid to call this with a unit which isn't of \ref UNIT_ANGLE
- *
- * \param[in] unit The unit the angle is in
- * \param[in] angle The angle to convert
- * \return the angle in degrees
- */
-css_fixed css_unit_angle2deg(const css_unit unit, const css_fixed angle);
 
 #endif

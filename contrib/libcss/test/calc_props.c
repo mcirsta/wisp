@@ -8,6 +8,7 @@
 #include <libwapcaplet/libwapcaplet.h>
 
 #include "utils/css_utils.h"
+#include "parse/calc.h"
 #include "testutils.h"
 
 typedef struct test_node {
@@ -580,7 +581,10 @@ static void test_length_is_zero(void)
         /* Lost precision and saturation must not prove a coefficient zero. */
         {"calc(1% / 2048)", false}, {"calc((1 / 2048) * 1%)", false},
         {"calc(0.001% * 0.5)", false},
-        {"calc(1500000% + 1500000% - 1500000% - 1500000%)", false},
+        {"calc(1500000% + 1500000% - 1500000% - 1500000%)", true},
+        {"calc(.0000001px)", false},
+        {"calc(.0000001% + .0000001px)", false},
+        {"calc(10000000000000000% + 1% - 10000000000000000%)", false},
     };
     for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
         char css[128];
@@ -697,6 +701,64 @@ static void test_width_px_calc(void)
     assert(css_computed_length_to_px(style, &unit_ctx, -1, length, unit, &px) == CSS_INVALID);
 
     destroy_style_case(&ctx);
+}
+
+static lwc_string *calc_readback(const char *value)
+{
+    css_stylesheet_params params = {.params_version = CSS_STYLESHEET_PARAMS_VERSION_1,
+        .level = CSS_LEVEL_3, .url = "calc-precision", .resolve = resolve_url};
+    css_declaration_list *list;
+    char declaration[160];
+    snprintf(declaration, sizeof(declaration), "width:%s", value);
+    assert(css__declaration_list_create(&params, &list) == CSS_OK);
+    css_error error = css__declaration_list_append(list, (const uint8_t *)declaration, strlen(declaration));
+    assert(error == CSS_OK || error == CSS_NEEDDATA);
+    assert(css__declaration_list_complete(list) == CSS_OK);
+    assert(css__declaration_list_count(list) == 1);
+    const css_declaration *source = css__declaration_list_get(list, 0);
+    lwc_string *result;
+    assert(css__declaration_calc_serialize(source->tokens, source->token_count, &result) == CSS_OK);
+    css__declaration_list_destroy(list);
+    return result;
+}
+
+static void test_calc_precision(void)
+{
+    /* CSS Values 4 10.12: nested arithmetic is not a fixed-point rounding or
+     * range-clamping boundary. Exercise operands, intermediates and units. */
+    const struct { const char *value; int px; } cases[] = {
+        {"calc(.0005px * 100000)", 50},
+        {"calc(.0005 * 100000px)", 50},
+        {"calc(1px / 2000 * 100000)", 50},
+        {"calc(3000000px - 2999950px)", 50},
+        {"calc((1500000px + 1500000px) / 60000)", 50},
+        /* Readback and evaluation use the same finite arithmetic precision. */
+        {"calc(10000000000000000px + 1px - 10000000000000000px)", 0},
+        {"calc(.0005em * 100000)", 800},
+        {"calc(.0005% * 100000)", 100},
+        {"calc(.0005vw * 100000)", 100},
+        {"calc(.0005cqw * 100000)", 100},
+        {"calc(2.54cm)", 96}, {"calc(25.4mm)", 96},
+        {"calc(101.6Q)", 96}, {"calc(72pt)", 96},
+    };
+    for (int dpi = 96; dpi <= 192; dpi += 96) {
+        unit_ctx.device_dpi = INTTOFIX(dpi);
+        for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
+            lwc_string *readback = calc_readback(cases[i].value);
+            const char *values[] = {cases[i].value, lwc_string_data(readback)};
+            for (size_t pass = 0; pass < 2; pass++) {
+                char css[160];
+                snprintf(css, sizeof(css), "* { font-size:16px; width:%s; }", values[pass]);
+                style_case ctx;
+                const css_computed_style *style = select_style_from_css(css, &ctx);
+                expect_calc_px(values[pass], style, &unit_ctx, 200 * dpi / 96,
+                    css_computed_width, CSS_WIDTH_SET, cases[i].px * dpi / 96);
+                destroy_style_case(&ctx);
+            }
+            lwc_string_unref(readback);
+        }
+    }
+    unit_ctx.device_dpi = F_96;
 }
 
 static void test_flex_basis_px_calc(void)
@@ -912,6 +974,10 @@ static void test_line_height_inheritance(void)
         {"font-size:15.5px;line-height:calc(200% + 1px)", CSS_LINE_HEIGHT_DIMENSION, INTTOFIX(32)},
         {"line-height:calc(1 + .25)", CSS_LINE_HEIGHT_NUMBER, FLTTOFIX(1.25)},
         {"line-height:calc(1em - 50px)", CSS_LINE_HEIGHT_DIMENSION, 0},
+        {"line-height:calc(.0005px * 100000)", CSS_LINE_HEIGHT_DIMENSION, INTTOFIX(50)},
+        {"line-height:calc(.0005em * 100000)", CSS_LINE_HEIGHT_DIMENSION, INTTOFIX(2000)},
+        {"line-height:calc(.0005% * 100000)", CSS_LINE_HEIGHT_DIMENSION, INTTOFIX(20)},
+        {"line-height:calc(.0005 * 100000)", CSS_LINE_HEIGHT_NUMBER, INTTOFIX(50)},
     };
     style_case child_ctx, grandchild_ctx, override_ctx;
     const css_computed_style *child = select_style_from_css_for_node("* {font-size:20px}", &child_ctx, true);
@@ -961,6 +1027,7 @@ int main(void)
     test_calc_division_by_zero();
     test_relative_offsets_with_calc();
     test_width_px_calc();
+    test_calc_precision();
     test_calc_grammar_cascade();
     test_flex_basis_px_calc();
     test_font_size_calc_roundtrip();

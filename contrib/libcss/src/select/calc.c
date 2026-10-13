@@ -6,6 +6,9 @@
  */
 
 #include <string.h>
+#include <math.h>
+
+#include "bytecode/calc.h"
 
 #include "libcss/hint.h"
 
@@ -80,7 +83,7 @@ void css_calculator_unref(css_calculator *calc)
 
 /****************************** Helpers ************************************/
 
-static css_error css__calculator_push(css_calculator *calc, unit unit, css_fixed value, css_fixed percent)
+static css_error css__calculator_push(css_calculator *calc, unit unit, double value, double percent)
 {
     if (calc->stack_ptr == calc->stack_alloc) {
         css_calculator_stack_entry *newstack = realloc(
@@ -99,7 +102,7 @@ static css_error css__calculator_push(css_calculator *calc, unit unit, css_fixed
     return CSS_OK;
 }
 
-static css_error css__calculator_pop(css_calculator *calc, unit *unit, css_fixed *value, css_fixed *percent)
+static css_error css__calculator_pop(css_calculator *calc, unit *unit, double *value, double *percent)
 {
     if (calc->stack_ptr == 0) {
         return CSS_INVALID;
@@ -137,45 +140,46 @@ static css_error css__calculator_pop(css_calculator *calc, unit *unit, css_fixed
  *  - resolution to dpi
  */
 static css_error css__normalise_unit(
-    const css_unit_ctx *unit_ctx, const css_computed_style *style, int32_t available, unit *u, css_fixed *v)
+    const css_unit_ctx *unit_ctx, const css_computed_style *style, int32_t available, unit *u, double *v)
 {
     if (*u & UNIT_LENGTH) {
-        css_fixed px = css_unit_len2css_px(style, unit_ctx, *v, css__to_css_unit(*u));
-        *v = px;
+        *v = css_unit_len2css_px_calc(style, unit_ctx, *v, css__to_css_unit(*u));
         *u = UNIT_PX;
         return CSS_OK;
     } else if (*u & UNIT_ANGLE) {
-        css_fixed deg = css_unit_angle2deg(css__to_css_unit(*u), *v);
-        *v = deg;
+        if (*u == UNIT_GRAD)
+            *v *= .9;
+        else if (*u == UNIT_RAD)
+            *v *= 180 / acos(-1);
+        else if (*u == UNIT_TURN)
+            *v *= 360;
         *u = UNIT_DEG;
         return CSS_OK;
     } else if (*u & UNIT_TIME) {
         if (*u == UNIT_S) {
-            *v = css_multiply_fixed(*v, INTTOFIX(1000));
+            *v *= 1000;
         }
         *u = UNIT_MS;
         return CSS_OK;
     } else if (*u & UNIT_FREQ) {
         if (*u == UNIT_KHZ) {
-            *v = css_multiply_fixed(*v, INTTOFIX(1000));
+            *v *= 1000;
         }
         *u = UNIT_HZ;
         return CSS_OK;
     } else if (*u & UNIT_RESOLUTION) {
         if (*u == UNIT_DPCM) {
-            *v = css_multiply_fixed(*v, FLTTOFIX(2.54));
+            *v *= 2.54;
         } else if (*u == UNIT_DPPX) {
-            *v = css_multiply_fixed(*v, INTTOFIX(96));
+            *v *= 96;
         }
         *u = UNIT_DPI;
         return CSS_OK;
     } else if (*u == UNIT_PCT) {
-        css_fixed pct100 = css_unit_device2css_px(INTTOFIX(available), unit_ctx->device_dpi);
         if (available < 0) {
             return CSS_INVALID;
         }
-        *v = css_multiply_fixed(*v, pct100);
-        *v = css_divide_fixed(*v, F_100);
+        *v *= (double)available * 96 * F_1 / unit_ctx->device_dpi / 100;
         *u = UNIT_PX;
         return CSS_OK;
     } else if (*u == UNIT_CALC_NUMBER) {
@@ -187,36 +191,40 @@ static css_error css__normalise_unit(
 
 /****************************** Compute ************************************/
 
-/* Zero classification must not mistake a rounded or saturated coefficient
- * for cancellation. Decline expressions we cannot represent exactly. */
-static css_error css__calculator_exact_op(css_code_t op, css_fixed left, css_fixed right, css_fixed *out)
+/* Analysis must not infer cancellation from rounded arithmetic. TwoSum and
+ * fused residuals detect inexact operations without an arbitrary epsilon.
+ * A failed proof simply leaves the edge classified as potentially nonzero. */
+static css_error css__calculator_exact_op(css_code_t op, double left, double right, double *out)
 {
-    int64_t result;
+    double result, error;
     switch (op) {
-    case CALC_ADD:
-        result = (int64_t)left + right;
-        break;
     case CALC_SUBTRACT:
-        result = (int64_t)left - right;
+        right = -right;
+        /* fall through */
+    case CALC_ADD: {
+        result = left + right;
+        double part = result - left;
+        error = (left - (result - part)) + (right - part);
         break;
+    }
     case CALC_MULTIPLY:
-        result = (int64_t)left * right;
-        if (result % F_1 != 0)
+        result = left * right;
+        error = fma(left, right, -result);
+        if (result == 0 && left != 0 && right != 0)
             return CSS_INVALID;
-        result /= F_1;
         break;
     case CALC_DIVIDE:
         if (right == 0)
             return CSS_INVALID;
-        result = (int64_t)left * F_1;
-        if (result % right != 0)
+        result = left / right;
+        error = fma(result, right, -left);
+        if (result == 0 && left != 0)
             return CSS_INVALID;
-        result /= right;
         break;
     default:
         return CSS_INVALID;
     }
-    if (result < INT32_MIN || result > INT32_MAX)
+    if (!isfinite(result) || error != 0)
         return CSS_INVALID;
     *out = result;
     return CSS_OK;
@@ -225,12 +233,11 @@ static css_error css__calculator_exact_op(css_code_t op, css_fixed left, css_fix
 /* A non-NULL percent_out preserves the percentage coefficient for analysis.
  * Ordinary used-value evaluation still resolves each percentage as before. */
 static css_error css__calculator_calculate(css_calculator *calc, const css_unit_ctx *unit_ctx, int32_t available,
-    lwc_string *expr, const css_computed_style *style, css_unit *unit_out, css_fixed *value_out,
-    css_fixed *percent_out)
+    lwc_string *expr, const css_computed_style *style, css_unit *unit_out, double *value_out,
+    double *percent_out)
 {
     css_error ret = CSS_OK;
-    /* Alignment note: lwc string data is always very well aligned */
-    css_code_t *codeptr = (css_code_t *)(void *)lwc_string_data(expr);
+    const css_code_t *codeptr = (const css_code_t *)(const void *)lwc_string_data(expr);
 
     /* Reset the stack before we begin, just in case */
     calc->stack_ptr = 0;
@@ -240,9 +247,9 @@ static css_error css__calculator_calculate(css_calculator *calc, const css_unit_
         css_code_t op = *codeptr++;
         switch (op) {
         case CALC_PUSH_VALUE: {
-            css_fixed v = (css_fixed)(*codeptr++);
+            double v = css__calc_read_number(&codeptr);
             unit u = (unit)(*codeptr++);
-            css_fixed percent = 0;
+            double percent = 0;
             if (percent_out != NULL && u == UNIT_PCT) {
                 percent = v;
                 v = 0;
@@ -257,14 +264,14 @@ static css_error css__calculator_calculate(css_calculator *calc, const css_unit_
             break;
         }
         case CALC_PUSH_NUMBER: {
-            css_fixed v = (css_fixed)(*codeptr++);
+            double v = css__calc_read_number(&codeptr);
             CALC_PUSH(UNIT_CALC_NUMBER, v, 0);
             break;
         }
         case CALC_ADD: /* fallthrough */
         case CALC_SUBTRACT: {
             unit u_left, u_right;
-            css_fixed v_left, v_right, p_left, p_right;
+            double v_left, v_right, p_left, p_right;
             CALC_POP(u_right, v_right, p_right);
             CALC_POP(u_left, v_left, p_left);
             if (percent_out != NULL) {
@@ -273,9 +280,9 @@ static css_error css__calculator_calculate(css_calculator *calc, const css_unit_
                     css__calculator_exact_op(op, p_left, p_right, &p_left) != CSS_OK)
                     return CSS_INVALID;
             } else if (op == CALC_ADD) {
-                v_left = css_add_fixed(v_left, v_right);
+                v_left += v_right;
             } else {
-                v_left = css_subtract_fixed(v_left, v_right);
+                v_left -= v_right;
             }
             CALC_PUSH(u_left, v_left, p_left);
             break;
@@ -283,18 +290,18 @@ static css_error css__calculator_calculate(css_calculator *calc, const css_unit_
         case CALC_MULTIPLY: /* fallthrough */
         case CALC_DIVIDE: {
             unit u_left, u_right;
-            css_fixed v_left, v_right, p_left, p_right;
+            double v_left, v_right, p_left, p_right;
             CALC_POP(u_right, v_right, p_right);
             CALC_POP(u_left, v_left, p_left);
 
             if (op == CALC_MULTIPLY && u_left == UNIT_CALC_NUMBER) {
                 unit u_tmp = u_left;
-                css_fixed v_tmp = v_left;
+                double v_tmp = v_left;
                 u_left = u_right;
                 v_left = v_right;
                 u_right = u_tmp;
                 v_right = v_tmp;
-                css_fixed p_tmp = p_left;
+                double p_tmp = p_left;
                 p_left = p_right;
                 p_right = p_tmp;
             }
@@ -311,9 +318,9 @@ static css_error css__calculator_calculate(css_calculator *calc, const css_unit_
                     css__calculator_exact_op(op, p_left, v_right, &p_left) != CSS_OK)
                     return CSS_INVALID;
             } else if (op == CALC_MULTIPLY) {
-                v_left = css_multiply_fixed(v_left, v_right);
+                v_left *= v_right;
             } else {
-                v_left = css_divide_fixed(v_left, v_right);
+                v_left /= v_right;
             }
 
             CALC_PUSH(u_left, v_left, p_left);
@@ -341,7 +348,17 @@ static css_error css__calculator_calculate(css_calculator *calc, const css_unit_
 css_error css_calculator_calculate(css_calculator *calc, const css_unit_ctx *unit_ctx, int32_t available,
     lwc_string *expr, const css_computed_style *style, css_unit *unit_out, css_fixed *value_out)
 {
-    return css__calculator_calculate(calc, unit_ctx, available, expr, style, unit_out, value_out, NULL);
+    double value;
+    css_error error = css__calculator_calculate(calc, unit_ctx, available, expr, style, unit_out, &value, NULL);
+    if (error != CSS_OK)
+        return error;
+    /* Conversion to the existing computed-value API is the sole fixed-point
+     * boundary. Check range before conversion to avoid undefined casts. */
+    if (!isfinite(value))
+        return CSS_INVALID;
+    value = round(value * F_1);
+    *value_out = value >= INT32_MAX ? INT32_MAX : value <= INT32_MIN ? INT32_MIN : (css_fixed)value;
+    return CSS_OK;
 }
 
 static bool line_height_needs_layout(css_unit unit)
@@ -363,10 +380,12 @@ css_error css_calculator_resolve_line_height(lwc_string *expr, const css_compute
      * their original storage. Keep viewport/container operands for reflow. */
     for (size_t i = 0; code[i] != CALC_FINISH;) {
         if (code[i] == CALC_PUSH_NUMBER) {
-            i += 2;
+            i += 1 + CSS_CALC_NUMBER_WORDS;
         } else if (code[i] == CALC_PUSH_VALUE) {
-            css_unit unit = css__to_css_unit(code[i + 2]);
-            css_hint_length length = {.value = (css_fixed)code[i + 1], .unit = unit};
+            const css_code_t *operand = code + i + 1;
+            double value = css__calc_read_number(&operand);
+            size_t unit_index = i + 1 + CSS_CALC_NUMBER_WORDS;
+            css_unit unit = css__to_css_unit(code[unit_index]);
             switch (unit) {
             case CSS_UNIT_PCT:
             case CSS_UNIT_EM:
@@ -374,15 +393,15 @@ css_error css_calculator_resolve_line_height(lwc_string *expr, const css_compute
             case CSS_UNIT_CH:
             case CSS_UNIT_IC:
             case CSS_UNIT_REM:
-                css_unit_compute_line_height(style, unit_ctx, &length);
-                if (line_height_needs_layout(length.unit))
+                css_unit_compute_line_height_calc(style, unit_ctx, &value, &unit);
+                if (line_height_needs_layout(unit))
                     *needs_layout = true;
                 break;
             default:
                 /* Absolute lengths and numbers can be folded immediately. */
-                if ((code[i + 2] & UNIT_LENGTH) && line_height_needs_layout(unit))
+                if ((code[unit_index] & UNIT_LENGTH) && line_height_needs_layout(unit))
                     *needs_layout = true;
-                i += 3;
+                i += 2 + CSS_CALC_NUMBER_WORDS;
                 continue;
             }
             if (resolved == NULL) {
@@ -391,11 +410,11 @@ css_error css_calculator_resolve_line_height(lwc_string *expr, const css_compute
                     return CSS_NOMEM;
                 memcpy(resolved, code, bytes);
             }
-            resolved[i + 1] = (css_code_t)length.value;
+            css__calc_write_number(resolved + i + 1, value);
             /* Length units share their bytecode/public-enum offsets. */
-            resolved[i + 2] = UNIT_LENGTH + length.unit;
-            assert(css__to_css_unit(resolved[i + 2]) == length.unit);
-            i += 3;
+            resolved[unit_index] = UNIT_LENGTH + unit;
+            assert(css__to_css_unit(resolved[unit_index]) == unit);
+            i += 2 + CSS_CALC_NUMBER_WORDS;
         } else {
             i++;
         }
@@ -412,11 +431,11 @@ css_error css_calculator_resolve_line_height(lwc_string *expr, const css_compute
 bool css_calculator_length_is_zero(css_calculator *calc, const css_unit_ctx *unit_ctx,
     lwc_string *expr, const css_computed_style *style)
 {
-    css_fixed value, percent;
+    double value, percent;
     css_unit unit;
-    /* Preserve normal fixed-point evaluation when no percentage is needed.
-     * Only the unresolved case needs separate coefficient analysis. */
-    if (css_calculator_calculate(calc, unit_ctx, -1, expr, style, &unit, &value) == CSS_OK)
+    /* Test the unrounded result, never a value quantized to zero at the public
+     * fixed-point boundary. Percentages still need separate coefficient proof. */
+    if (css__calculator_calculate(calc, unit_ctx, -1, expr, style, &unit, &value, NULL) == CSS_OK)
         return value == 0;
     return css__calculator_calculate(calc, unit_ctx, -1, expr, style, &unit, &value, &percent) == CSS_OK &&
         unit == CSS_UNIT_PX && value == 0 && percent == 0;

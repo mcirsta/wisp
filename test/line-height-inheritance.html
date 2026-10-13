@@ -14,6 +14,9 @@
     #normal-control { font-size: 20px; }
     #rem { line-height: 1rem; }
     #calc { line-height: calc(1em + 10px); }
+    #tiny-calc { line-height: calc(.0005em * 2500); }
+    #tiny-calc-percent { line-height: calc(.0005% * 100000); }
+    #viewport-font-tiny { font-size: 10vw; line-height: calc(.0005em * 2000 + 10px); }
     #calc-number { line-height: calc(1 + .25); }
     #fraction { font-size: 15.5px; line-height: 200%; }
     #calc-fraction { font-size: 15.5px; line-height: calc(200% + 1px); }
@@ -70,3 +73,6 @@
 <div id="font-invalid-size" class="case font-invalid"><div id="font-invalid-size-child" class="child">One<br>Two</div></div>
 <div id="font-invalid-leading" class="case font-invalid"><div id="font-invalid-leading-child" class="child">One<br>Two</div></div>
 <div id="font-invalid-family" class="case font-invalid"><div id="font-invalid-family-child" class="child">One<br>Two</div></div>
+<div id="tiny-calc" class="case"><div id="tiny-calc-child" class="child">One<br>Two</div></div>
+<div id="tiny-calc-percent" class="case"><div id="tiny-calc-percent-child" class="child">One<br>Two</div></div>
+<div id="viewport-font-tiny" class="case"><div id="viewport-font-tiny-child" class="child">One<br>Two</div></div>

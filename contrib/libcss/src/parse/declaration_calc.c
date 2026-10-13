@@ -28,7 +28,9 @@ static const struct {
 
 struct calc_sum {
     uint32_t present;
-    long double values[N_ELEMENTS(units)];
+    /* Match the native calculator: wider readback arithmetic could change
+     * a large sum when its serialized value is reparsed. */
+    double values[N_ELEMENTS(units)];
 };
 
 struct calc_stack {
@@ -37,23 +39,23 @@ struct calc_stack {
 };
 
 /* Only context-independent conversions are possible at specified-value time. */
-static size_t canonical_unit(uint32_t unit, long double *factor)
+static size_t canonical_unit(uint32_t unit, double *factor)
 {
     *factor = 1;
     switch (unit) {
     case UNIT_IN: *factor = 96; unit = UNIT_PX; break;
-    case UNIT_CM: *factor = 96 / 2.54L; unit = UNIT_PX; break;
-    case UNIT_MM: *factor = 96 / 25.4L; unit = UNIT_PX; break;
-    case UNIT_Q: *factor = 96 / 101.6L; unit = UNIT_PX; break;
-    case UNIT_PT: *factor = 4 / 3.L; unit = UNIT_PX; break;
+    case UNIT_CM: *factor = 96 / 2.54; unit = UNIT_PX; break;
+    case UNIT_MM: *factor = 96 / 25.4; unit = UNIT_PX; break;
+    case UNIT_Q: *factor = 96 / 101.6; unit = UNIT_PX; break;
+    case UNIT_PT: *factor = 4.0 / 3; unit = UNIT_PX; break;
     case UNIT_PC: *factor = 16; unit = UNIT_PX; break;
-    case UNIT_MS: *factor = .001L; unit = UNIT_S; break;
+    case UNIT_MS: *factor = .001; unit = UNIT_S; break;
     case UNIT_KHZ: *factor = 1000; unit = UNIT_HZ; break;
-    case UNIT_GRAD: *factor = .9L; unit = UNIT_DEG; break;
-    case UNIT_RAD: *factor = 180 / acosl(-1); unit = UNIT_DEG; break;
+    case UNIT_GRAD: *factor = .9; unit = UNIT_DEG; break;
+    case UNIT_RAD: *factor = 180 / acos(-1); unit = UNIT_DEG; break;
     case UNIT_TURN: *factor = 360; unit = UNIT_DEG; break;
-    case UNIT_DPI: *factor = 1 / 96.L; unit = UNIT_DPPX; break;
-    case UNIT_DPCM: *factor = 2.54L / 96; unit = UNIT_DPPX; break;
+    case UNIT_DPI: *factor = 1.0 / 96; unit = UNIT_DPPX; break;
+    case UNIT_DPCM: *factor = 2.54 / 96; unit = UNIT_DPPX; break;
     }
     for (size_t i = 0; i < N_ELEMENTS(units); i++) {
         if (unit == units[i].unit)
@@ -62,38 +64,13 @@ static size_t canonical_unit(uint32_t unit, long double *factor)
     return N_ELEMENTS(units);
 }
 
-/* Locale-independent decimal input, retaining more precision than the output's
- * six decimal places. As in other CSS arithmetic, this uses finite floating
- * precision, not arbitrary-precision algebra. Overflow is an explicit readback
- * limitation until the native parser/evaluator can also preserve non-finites. */
-static long double number(lwc_string *text)
-{
-    const char *data = lwc_string_data(text);
-    size_t length = lwc_string_length(text), pos = 0;
-    bool negative = data[pos] == '-';
-    if (negative || data[pos] == '+')
-        pos++;
-    long double value = 0;
-    while (pos < length && data[pos] >= '0' && data[pos] <= '9')
-        value = value * 10 + (data[pos++] - '0');
-    if (pos < length && data[pos] == '.') {
-        pos++;
-        long double place = .1L;
-        while (pos < length && data[pos] >= '0' && data[pos] <= '9') {
-            value += (data[pos++] - '0') * place;
-            place /= 10;
-        }
-    }
-    return negative ? -value : value;
-}
-
 static css_error push(struct calc_stack *stack, lwc_string *text, uint32_t unit)
 {
-    long double factor;
+    double factor;
     size_t index = canonical_unit(unit, &factor);
     if (index == N_ELEMENTS(units))
         return CSS_INVALID;
-    long double value = number(text) * factor;
+    double value = css__calc_number(text, NULL) * factor;
     if (!isfinite(value))
         return CSS_INVALID;
     if (stack->used == stack->allocated) {
@@ -133,16 +110,20 @@ static css_error operation(void *pw, css_code_t op, lwc_string *text, uint32_t u
         if ((op != CALC_MULTIPLY && op != CALC_DIVIDE) ||
             (op == CALC_MULTIPLY ? !left_number && !right_number : !right_number || right->values[0] == 0))
             return CSS_INVALID;
-        long double factor;
+        double factor;
         if (op == CALC_MULTIPLY && left_number && !right_number) {
             factor = left->values[0];
             *left = *right;
         } else {
-            factor = op == CALC_MULTIPLY ? right->values[0] : 1 / right->values[0];
+            factor = right->values[0];
         }
         for (size_t i = 0; i < N_ELEMENTS(units); i++) {
-            if (left->present & (1u << i))
-                left->values[i] *= factor;
+            if (left->present & (1u << i)) {
+                if (op == CALC_MULTIPLY)
+                    left->values[i] *= factor;
+                else
+                    left->values[i] /= factor;
+            }
         }
     }
     for (size_t i = 0; i < N_ELEMENTS(units); i++) {

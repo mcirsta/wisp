@@ -5,6 +5,10 @@
 #include "parse/declarations.h"
 #include "bytecode/bytecode.h"
 
+/* Locale-independent numeric prefix of a lexer token. Keep its precision for
+ * calculation operands and specified-value serialization alike. */
+double css__calc_number(lwc_string *text, size_t *consumed);
+
 /* Walk an already accepted calc() component in postfix order. Operands carry
  * their original numeric spelling and parsed unit; operators have text == NULL.
  * This shares the native grammar without using rounded rendering operands.

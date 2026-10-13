@@ -451,10 +451,8 @@ static void dump_number(css_fixed val, struct dump_output *out)
         dump_css_fixed(val, out);
 }
 
-static void dump_unit(css_fixed val, uint32_t unit, struct dump_output *out)
+static void dump_unit_suffix(uint32_t unit, struct dump_output *out)
 {
-    dump_number(val, out);
-
     switch (unit) {
     case UNIT_PX:
         dump_printf(out, "px");
@@ -541,6 +539,12 @@ static void dump_unit(css_fixed val, uint32_t unit, struct dump_output *out)
         dump_printf(out, "number");
         break;
     }
+}
+
+static void dump_unit(css_fixed val, uint32_t unit, struct dump_output *out)
+{
+    dump_number(val, out);
+    dump_unit_suffix(unit, out);
 }
 
 static void dump_counter(lwc_string *name, uint32_t value, struct dump_output *out)

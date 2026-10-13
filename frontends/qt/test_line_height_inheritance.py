@@ -10,6 +10,7 @@ import tempfile
 binary = Path(sys.argv[1]).resolve()
 fixture = Path(__file__).resolve().parents[2] / "test/line-height-inheritance.html"
 heights = {"em-child": 80, "percent-child": 100, "number-child": 50,
+           "tiny-calc-child": 100, "tiny-calc-percent-child": 40,
            "pixels-child": 80, "rem-child": 80, "calc-child": 100,
            "calc-number-child": 50, "fraction-child": 62, "calc-fraction-child": 64,
            "variable-child": 80, "shorthand-child": 80, "grandchild": 80, "override-child": 40,
@@ -17,7 +18,7 @@ heights = {"em-child": 80, "percent-child": 100, "number-child": 50,
            "font-invalid-size-child": 50, "font-invalid-leading-child": 50, "font-invalid-family-child": 50}
 names = (*heights, "normal-child", "normal-control", "viewport-child", "calc-viewport-child",
          "calc-percent-viewport-child", "viewport-font-child", "viewport-font-percent-child",
-         "viewport-font-calc-child")
+         "viewport-font-calc-child", "viewport-font-tiny-child")
 env = dict(os.environ, QT_QPA_PLATFORM="offscreen", QT_SCALE_FACTOR="1",
            QT_SCREEN_SCALE_FACTORS="1", QT_FONT_DPI="96")
 with tempfile.TemporaryDirectory(prefix="wisp-line-height-") as tmp:
@@ -46,8 +47,8 @@ with tempfile.TemporaryDirectory(prefix="wisp-line-height-") as tmp:
             index, boxes["calc-percent-viewport-child"])
         for name in ("viewport-font-child", "viewport-font-percent-child"):
             assert boxes[name]["height"] == expected_viewport, (index, name, boxes[name])
-        assert boxes["viewport-font-calc-child"]["height"] == expected_viewport + 20, (
-            index, boxes["viewport-font-calc-child"])
+        for name in ("viewport-font-calc-child", "viewport-font-tiny-child"):
+            assert boxes[name]["height"] == expected_viewport + 20, (index, name, boxes[name])
     assert steps[0]["elements"] == steps[-1]["elements"], "Resize round trip changed geometry"
 
 print("Line-height inheritance: lengths, percentages, numbers, calc, variables, shorthand and resize passed.")

@@ -53,7 +53,8 @@ and Grid batches are committed as `285fee12` and `9fbddb34`; the SVG paint/curso
 batch is committed as `f7a238d0`, the legacy aural batch as `fdf7b373`, and the
 Lab-family batch as `24cde21d`, missing-RGB/sRGB support as `8f1aacf3`, and
 extended HSL/HWB readback as `ed777a47`, and resolved system-font readback as
-`2485deb1`. Shared native calc grammar validation is committed as `6f5ae059`.
+`2485deb1`. Shared native calc grammar validation is committed as `6f5ae059`, and finite
+math readback/edit preservation as `facb2b04`.
 Earlier dated sections are historical records, not additional unchecked requirements.
 
 The remaining work is grouped here so adjacent discoveries do not silently move
@@ -73,9 +74,9 @@ the target. Each group can require more than one tested batch:
 - [ ] Math values: validate and serialize accepted expressions through shared
   native handling, preserving specified-value semantics. Native `calc()` type
   and syntax validation, finite scalar-expression simplification/readback, and
-  shorthand edit-preservation checks are implemented (2026-10-13). Finish the
-  native evaluator's early operand rounding and non-finite round-trip behavior
-  before closing this group; see the concrete precision reproducer below.
+  shorthand edit-preservation checks and native calculation precision are
+  implemented (2026-10-13). Finish non-finite parse/evaluation/readback/reparse
+  behavior before closing this group; the early-rounding reproducer is fixed.
 - [ ] Modern aggregate property identities/decomposition and preservation:
   finish the older aggregate models (`font-variant`, background position/repeat
   axes, text decoration, white space and logical start/end identities), then
@@ -2500,6 +2501,56 @@ ASan/UBSan and native LeakSanitizer runs are clean. All 8 selected Release Qt
 suites and 11 Debug Qt suites pass. Both builds are warning-free. No GTK or
 Windows builds ran. The new readback remains native infrastructure; this batch
 does not enable the live `element.style` binding.
+
+### Native calculation precision (2026-10-13)
+
+Committed finite specified-value readback and edit preservation as `facb2b04`.
+The early-rounding gate above is now fixed: both the original
+`calc(.0005px * 100000)` and its readback `calc(50px)` render as **50px**.
+The new regression failed with **97px** before this change.
+
+[CSS Values 4 range checking](https://drafts.csswg.org/css-values-4/#calc-range)
+places rounding/clamping at the top-level calculation boundary. Calculator
+operands now use process-local 64-bit floating-point payloads, and arithmetic
+retains that precision until a checked conversion to the existing `css_fixed`
+computed-value API. Ordinary property bytecode, generated property parsers and
+frontend interfaces retain their existing representation. Each calc numeric
+operand costs four additional bytes; there is no new per-declaration allocation
+or parallel execution. The internal blob reader and diagnostic dumper use the
+same operand encoding, with `memcpy` for unaligned payloads.
+
+Rendering and readback share the locale-independent numeric parser and the
+same `double` arithmetic precision. A regression verifies that a large sum
+does not simplify differently on readback due to wider arithmetic. Absolute,
+viewport, container and percentage conversions no longer quantize each operand
+or conversion factor before arithmetic. Font-relative line-height operands are
+frozen at their declaring element without losing small fractions, preserving
+viewport/container font units for resize. The old, now-unused fixed-point angle
+conversion helper was removed.
+
+Zero-edge classification tests the unrounded value; unresolved percentages stay
+separate and never acquire a guessed containing-block size. Floating residual
+checks conservatively reject inexact coefficient cancellation. Large exact
+cancellation is now provable without the former fixed-point saturation, while a
+small term lost when added to a very large percentage cannot prove zero.
+
+Tests exercise original values and actual CSSOM readback reparsed through native
+selection at 96/192 DPI, tiny operands and intermediates, large intermediate
+sums, physical units, percentages, viewport/container units, zero classification
+and inherited line heights. The Qt inline-edge fixture covers 144 cases through
+three viewport steps; additional line-height captures test tiny inherited font
+and percentage operands and viewport-sized fonts.
+
+All 87 selected native CSS/layout/QuickJS suites pass in Release and Debug;
+Debug ASan/UBSan and native LeakSanitizer results are clean. All 8 selected
+Release Qt suites and 11 Debug Qt suites pass. Both complete builds are
+warning-free. No GTK or Windows builds ran.
+
+Non-finite arithmetic remains the next part of this same math checklist group.
+This batch does not enable live `element.style`, add dimensional products or
+expand the supported math-function grammar. [CSSOM's defined six-decimal output](https://drafts.csswg.org/cssom/#serialize-a-css-component-value)
+normalization remains unchanged; exact arbitrary-precision round trips are not
+claimed.
 
 ## Assessment
 

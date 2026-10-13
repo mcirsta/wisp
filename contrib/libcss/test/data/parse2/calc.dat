@@ -184,7 +184,7 @@
 #errors
 #expected
 | *
-|  word-spacing: /* -> 0px */ calc(0.400em 10px + =)
+|  word-spacing: /* -> 0px */ calc(0.4em 10px + =)
 #reset
 
 #data
@@ -203,4 +203,13 @@
 |  width: /* -> 0px */ calc(100% 2px - 2 / =) !important
 |  height: 10px
 |  display: flex
+#reset
+
+#data
+* { width: calc(.0005px * 100000); margin-left: calc(3000000px - 2999950px) }
+#errors
+#expected
+| *
+|  width: /* -> 0px */ calc(0.0005px 100000 * =)
+|  margin-left: /* -> 0px */ calc(3000000px 2999950px - =)
 #reset

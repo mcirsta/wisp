@@ -4,11 +4,12 @@
  *
  * Shared native calc() grammar. Emit the existing postfix calculator bytecode
  * while checking types, before a declaration can enter the cascade. Numeric
- * readback must use the specified tokens, not these fixed-point operands.
+ * operands retain floating-point precision until final computed-value conversion.
  */
 
 #include "parse/properties/utils.h"
 #include "parse/calc.h"
+#include "bytecode/calc.h"
 #include "utils/parserutilserror.h"
 
 /* CSS Values 4 10.8 requires at least 32 levels. Bound C recursion while
@@ -23,6 +24,33 @@ struct calc_parser {
     css_calc_emit emit;
     void *pw;
 };
+
+/* Locale-independent decimal input, retaining more precision than the output's
+ * six decimal places. As in other CSS arithmetic, this uses finite floating
+ * precision, not arbitrary-precision algebra. Overflow is an explicit readback
+ * limitation until the native parser/evaluator can also preserve non-finites. */
+double css__calc_number(lwc_string *text, size_t *consumed)
+{
+    const char *data = lwc_string_data(text);
+    size_t length = lwc_string_length(text), pos = 0;
+    bool negative = length > 0 && data[pos] == '-';
+    if (length > 0 && (negative || data[pos] == '+'))
+        pos++;
+    long double value = 0;
+    while (pos < length && data[pos] >= '0' && data[pos] <= '9')
+        value = value * 10 + (data[pos++] - '0');
+    if (pos < length && data[pos] == '.') {
+        pos++;
+        long double place = .1L;
+        while (pos < length && data[pos] >= '0' && data[pos] <= '9') {
+            value += (data[pos++] - '0') * place;
+            place /= 10;
+        }
+    }
+    if (consumed != NULL)
+        *consumed = pos;
+    return (double)(negative ? -value : value);
+}
 
 static css_error calc_sum(struct calc_parser *parser, int *ctx, uint32_t *type);
 
@@ -71,7 +99,7 @@ static css_error calc_value(struct calc_parser *parser, int *ctx, uint32_t *type
     }
     if (token->type == CSS_TOKEN_NUMBER) {
         size_t consumed;
-        css_fixed number = css__number_from_lwc_string(token->idata, false, &consumed);
+        double number = css__calc_number(token->idata, &consumed);
         if (consumed != lwc_string_length(token->idata))
             return CSS_INVALID;
         parserutils_vector_iterate(parser->tokens, ctx);
@@ -85,7 +113,7 @@ static css_error calc_value(struct calc_parser *parser, int *ctx, uint32_t *type
     if (token->type != CSS_TOKEN_DIMENSION && token->type != CSS_TOKEN_PERCENTAGE)
         return CSS_INVALID;
     size_t consumed;
-    css_fixed number = css__number_from_lwc_string(token->idata, false, &consumed);
+    double number = css__calc_number(token->idata, &consumed);
     uint32_t unit = UNIT_PCT;
     if (token->type == CSS_TOKEN_DIMENSION) {
         css_error error = css__parse_unit_keyword(lwc_string_data(token->idata) + consumed,

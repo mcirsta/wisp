@@ -326,6 +326,34 @@ css_fixed css_unit_len2css_px(
     return FMUL(length, px_per_unit);
 }
 
+/* Private calculator conversion. Keep the ordinary fixed-point property path
+ * and its client API unchanged; only arithmetic needs unquantized factors. */
+double css_unit_len2css_px_calc(const css_computed_style *style, const css_unit_ctx *ctx,
+    double length, css_unit unit)
+{
+    double factor;
+    unit = css_unit__map_viewport_units(style, ctx->viewport_height, ctx->viewport_width, unit);
+    switch (unit) {
+    case CSS_UNIT_PX: factor = 1; break;
+    case CSS_UNIT_IN: factor = 96; break;
+    case CSS_UNIT_CM: factor = 96 / 2.54; break;
+    case CSS_UNIT_MM: factor = 96 / 25.4; break;
+    case CSS_UNIT_Q: factor = 96 / 101.6; break;
+    case CSS_UNIT_PT: factor = 96.0 / 72; break;
+    case CSS_UNIT_PC: factor = 16; break;
+    case CSS_UNIT_VW: factor = (double)ctx->viewport_width / F_1 / 100; break;
+    case CSS_UNIT_VH: factor = (double)ctx->viewport_height / F_1 / 100; break;
+    case CSS_UNIT_CQW: factor = (double)css_unit__effective_container_width(ctx) / F_1 / 100; break;
+    case CSS_UNIT_CQH: factor = (double)css_unit__effective_container_height(ctx) / F_1 / 100; break;
+    default:
+        /* Font size and client font metrics already have computed precision.
+         * Multiplying an authored operand by that basis must not quantize it. */
+        factor = (double)css_unit_len2css_px(style, ctx, F_1, unit) / F_1;
+        break;
+    }
+    return length * factor;
+}
+
 /* Exported function, documented in libcss/unit.h. */
 css_fixed css_unit_len2device_px(
     const css_computed_style *style, const css_unit_ctx *ctx, const css_fixed length, const css_unit unit)
@@ -519,15 +547,30 @@ void css_unit_compute_line_height(
     }
 }
 
-/* Exported function, documented in select/unit.h. */
-css_fixed css_unit_angle2deg(const css_unit unit, const css_fixed angle)
+void css_unit_compute_line_height_calc(const css_computed_style *style, const css_unit_ctx *ctx,
+    double *value, css_unit *unit)
 {
-    if (unit == CSS_UNIT_GRAD) {
-        return FMUL(angle, FLTTOFIX(0.9));
-    } else if (unit == CSS_UNIT_RAD) {
-        return FDIV(FMUL(angle, F_180), F_PI);
+    const css_computed_style *reference = *unit == CSS_UNIT_REM ? ctx->root_style : style;
+    css_fixed_or_calc font = {.value = ctx->font_size_default};
+    css_unit font_unit = CSS_UNIT_PX;
+    if (reference != NULL)
+        get_font_size(reference, &font, &font_unit);
+    double factor;
+    if (font_unit != CSS_UNIT_CALC &&
+        (ctx->measure == NULL || *unit == CSS_UNIT_EM || *unit == CSS_UNIT_PCT || *unit == CSS_UNIT_REM)) {
+        /* Preserve viewport/container-sized fonts through inheritance, just as
+         * for ordinary line-height, without rounding the individual operand. */
+        factor = (double)font.value / F_1;
+        if (*unit == CSS_UNIT_EX)
+            factor *= .6;
+        else if (*unit == CSS_UNIT_CH)
+            factor *= .4;
     } else {
-        /* Must be degrees as DEG/RAD/GRAD are all angle kinds */
-        return angle;
+        factor = css_unit_len2css_px_calc(style, ctx, 1, *unit == CSS_UNIT_PCT ? CSS_UNIT_EM : *unit);
+        font_unit = CSS_UNIT_PX;
     }
+    if (*unit == CSS_UNIT_PCT)
+        factor /= 100;
+    *value *= factor;
+    *unit = font_unit;
 }

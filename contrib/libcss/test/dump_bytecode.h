@@ -8,6 +8,8 @@
 #ifndef test_dump_bytecode_h_
 #define test_dump_bytecode_h_
 
+#include "bytecode/calc.h"
+
 struct dump_bytecode_cursor {
     const css_code_t *next;
     const css_code_t *end;
@@ -1583,13 +1585,15 @@ static void dump_bytecode_calc(struct dump_bytecode_cursor *cursor, struct dump_
             dump_printf(out, "/ ");
             break;
         case CALC_PUSH_VALUE:
-            dump_bytecode_length(&calc, out);
+        case CALC_PUSH_NUMBER: {
+            assert(calc.end - calc.next >= CSS_CALC_NUMBER_WORDS);
+            double value = css__calc_read_number(&calc.next);
+            dump_printf(out, "%.15g", value);
+            if (op == CALC_PUSH_VALUE)
+                dump_unit_suffix(dump_bytecode_read(&calc), out);
             dump_printf(out, " ");
             break;
-        case CALC_PUSH_NUMBER:
-            dump_number((css_fixed)dump_bytecode_read(&calc), out);
-            dump_printf(out, " ");
-            break;
+        }
         default:
             dump_printf(out, "??%d ", op);
             break;

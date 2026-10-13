@@ -16,8 +16,8 @@
 
 typedef struct {
     unit unit;
-    css_fixed value;
-    css_fixed percent;
+    double value;
+    double percent;
 } css_calculator_stack_entry;
 
 typedef struct {

@@ -4533,7 +4533,7 @@ START_TEST(test_calc_readback_bounds)
 
     /* Fail without publishing a partial result when accepted operands exceed
      * the simplifier's finite arithmetic range. Native declarations survive. */
-    size_t digits = LDBL_MAX_10_EXP + 16;
+    size_t digits = DBL_MAX_10_EXP + 16;
     char *huge = malloc(digits + 64);
     ck_assert_ptr_nonnull(huge);
     strcpy(huge, "width:calc(");
