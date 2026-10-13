@@ -157,6 +157,7 @@ enum colour_function {
     COLOUR_LCH,
     COLOUR_OKLAB,
     COLOUR_OKLCH,
+    COLOUR_SRGB,
     COLOUR_UNSUPPORTED
 };
 
@@ -176,6 +177,8 @@ static enum colour_function colour_function(lwc_string *name)
         return COLOUR_OKLAB;
     if (css__keyword_equal(name, "oklch"))
         return COLOUR_OKLCH;
+    if (css__keyword_equal(name, "color"))
+        return COLOUR_SRGB;
     return COLOUR_UNSUPPORTED;
 }
 
@@ -283,9 +286,9 @@ static bool lab_ok(enum colour_function function)
     return function == COLOUR_OKLAB || function == COLOUR_OKLCH;
 }
 
-/* CSS Color 4 sections 9.3/9.4: modern syntax only. Readback and painting
+/* CSS Color 4 sections 9.3/9.4/10.1: modern syntax only. Readback and painting
  * validate the same coordinates; missing components stay distinct from zero. */
-static bool lab_value(enum colour_function function, const struct colour_token *tokens, size_t count,
+static bool modern_value(enum colour_function function, const struct colour_token *tokens, size_t count,
     struct colour_value *out)
 {
     if (count != 4 && count != 6)
@@ -305,18 +308,19 @@ static bool lab_value(enum colour_function function, const struct colour_token *
             if (token->type != CSS_TOKEN_NUMBER && token->type != CSS_TOKEN_PERCENTAGE)
                 return false;
             bool percentage = token->type == CSS_TOKEN_PERCENTAGE;
-            double reference = i == 3 ? 1 : i == 0 ? (lab_ok(function) ? 1 : 100) :
+            double reference = i == 3 || function == COLOUR_SRGB ? 1 : i == 0 ? (lab_ok(function) ? 1 : 100) :
                 lab_ok(function) ? 0.4 : lab_polar(function) ? 150 : 125;
+            bool bounded = i == 3 || (i == 0 && function != COLOUR_SRGB);
             /* Bound rendering math to keep cubic intermediates finite, far
              * beyond visible colors. CSSOM retains unbounded axes directly
              * from their source tokens. */
-            double maximum = i == 0 || i == 3 ? (percentage ? 100 : reference) : 1e100;
+            double maximum = bounded ? (percentage ? 100 : reference) : 1e100;
             size_t consumed = decimal_number(token->text, maximum, &out->channels[i]);
             if (consumed == 0 || consumed != lwc_string_length(token->text))
                 return false;
             if (percentage)
                 out->channels[i] = out->channels[i] / 100 * reference;
-            if (i == 0 || i == 3)
+            if (bounded)
                 out->channels[i] = fmax(0, fmin(reference, out->channels[i]));
             else if (i == 1 && lab_polar(function))
                 out->channels[i] = fmax(0, out->channels[i]);
@@ -389,7 +393,13 @@ static bool function_value(enum colour_function function, const struct colour_to
     if (function == COLOUR_HSL || function == COLOUR_HWB)
         return polar_value(function, tokens, count, out);
     if (function >= COLOUR_LAB && function <= COLOUR_OKLCH)
-        return lab_value(function, tokens, count, out);
+        return modern_value(function, tokens, count, out);
+    if (function == COLOUR_SRGB) {
+        /* Only the implemented space is accepted. Other spaces must preserve
+         * the preceding fallback, never masquerade as transparent black. */
+        return count > 0 && tokens[0].type == CSS_TOKEN_IDENT && css__keyword_equal(tokens[0].text, "srgb") &&
+            modern_value(function, tokens + 1, count - 1, out);
+    }
     return false;
 }
 
@@ -422,6 +432,10 @@ bool css__parse_colour_function(lwc_string *name, const parserutils_vector *vect
         polar_to_rgb(function, &colour);
     else if (function >= COLOUR_LAB && function <= COLOUR_OKLCH)
         lab_to_rgb(function, &colour);
+    else if (function == COLOUR_SRGB) {
+        for (size_t i = 0; i < 3; i++)
+            colour.channels[i] *= 255;
+    }
     uint32_t red = channel_byte(colour.channels[0]);
     uint32_t green = channel_byte(colour.channels[1]);
     uint32_t blue = channel_byte(colour.channels[2]);
@@ -445,11 +459,12 @@ static size_t number(char *out, double value)
 }
 
 /* Assemble modern color syntax after serializing its individual components.
+ * Prefix includes the opening parenthesis and any explicit color space.
  * A missing alpha is a real fourth component; an omitted alpha is NULL. */
-static css_error serialize_modern(const char *name, lwc_string *const parts[4], lwc_string **out)
+static css_error serialize_modern(const char *prefix, lwc_string *const parts[4], lwc_string **out)
 {
     size_t count = parts[3] == NULL ? 3 : 4;
-    size_t length = strlen(name) + (count == 3 ? 4 : 7); /* Delimiters and separators. */
+    size_t length = strlen(prefix) + (count == 3 ? 3 : 6); /* Delimiters and separators. */
     for (size_t i = 0; i < count; i++) {
         size_t n = lwc_string_length(parts[i]);
         if (n > SIZE_MAX - length)
@@ -459,9 +474,8 @@ static css_error serialize_modern(const char *name, lwc_string *const parts[4], 
     char *buffer = malloc(length);
     if (buffer == NULL)
         return CSS_NOMEM;
-    size_t used = strlen(name);
-    memcpy(buffer, name, used);
-    buffer[used++] = '(';
+    size_t used = strlen(prefix);
+    memcpy(buffer, prefix, used);
     for (size_t i = 0; i < count; i++) {
         if (i != 0)
             buffer[used++] = ' ';
@@ -510,7 +524,7 @@ static css_error serialize_missing_polar(enum colour_function function, const st
             break;
     }
     if (error == CSS_OK)
-        error = serialize_modern(function == COLOUR_HSL ? "hsl" : "hwb", parts, out);
+        error = serialize_modern(function == COLOUR_HSL ? "hsl(" : "hwb(", parts, out);
     for (size_t i = 0; i < N_ELEMENTS(parts); i++) {
         if (parts[i] != NULL)
             lwc_string_unref(parts[i]);
@@ -518,22 +532,26 @@ static css_error serialize_missing_polar(enum colour_function function, const st
     return error;
 }
 
-/* Lab/LCH readback stays in the original space. Percentage scaling uses exact
- * decimal arithmetic, including unbounded a/b/chroma values and tiny fractions. */
-static css_error serialize_lab(enum colour_function function, const struct colour_token *tokens,
+/* Modern coordinates stay in their original space; RGB with missing components
+ * uses color(srgb ...) per CSS Color 4 section 16.2.2. Percentage scaling uses
+ * exact decimal arithmetic for unbounded Lab axes and color(srgb) coordinates. */
+static css_error serialize_coordinates(enum colour_function function, const struct colour_token *tokens,
     const struct colour_value *colour, lwc_string **out)
 {
-    static const char *const names[] = {"lab", "lch", "oklab", "oklch"};
+    static const char *const prefixes[] = {"lab(", "lch(", "oklab(", "oklch(", "color(srgb "};
     lwc_string *parts[4] = {0};
     css_error error = CSS_OK;
     for (size_t i = 0; i < 4; i++) {
         const struct colour_token *token = &tokens[i == 3 ? 4 : i];
         if (colour->missing & (1u << i)) {
             error = lwc_intern_string("none", 4, &parts[i]) == lwc_error_ok ? CSS_OK : CSS_NOMEM;
-        } else if (i == 0 || i == 3 || (i == 2 && lab_polar(function))) {
+        } else if (function == COLOUR_RGB || i == 3 ||
+            (function != COLOUR_SRGB && (i == 0 || (i == 2 && lab_polar(function))))) {
             char buffer[16];
             double value = colour->channels[i];
-            if (i == 2 && floor(value * 1000000 + 0.5) == 360000000)
+            if (function == COLOUR_RGB && i < 3)
+                value /= 255;
+            if (i == 2 && lab_polar(function) && floor(value * 1000000 + 0.5) == 360000000)
                 value = 0;
             size_t length = number(buffer, value);
             if (i == 3 && length == 1 && buffer[0] == '1')
@@ -543,7 +561,8 @@ static css_error serialize_lab(enum colour_function function, const struct colou
             error = lwc_intern_string("0", 1, &parts[i]) == lwc_error_ok ? CSS_OK : CSS_NOMEM;
         } else {
             bool percentage = token->type == CSS_TOKEN_PERCENTAGE;
-            unsigned factor = !percentage ? 1 : lab_ok(function) ? 4 : lab_polar(function) ? 150 : 125;
+            unsigned factor = !percentage || function == COLOUR_SRGB ? 1 :
+                lab_ok(function) ? 4 : lab_polar(function) ? 150 : 125;
             unsigned places = !percentage ? 0 : lab_ok(function) ? 3 : 2;
             css_declaration_token component = {.type = CSS_TOKEN_NUMBER, .text = token->text};
             error = css__declaration_colour_number(&component, factor, places, &parts[i]);
@@ -552,7 +571,7 @@ static css_error serialize_lab(enum colour_function function, const struct colou
             break;
     }
     if (error == CSS_OK)
-        error = serialize_modern(names[function - COLOUR_LAB], parts, out);
+        error = serialize_modern(function == COLOUR_RGB ? "color(srgb " : prefixes[function - COLOUR_LAB], parts, out);
     for (size_t i = 0; i < N_ELEMENTS(parts); i++) {
         if (parts[i] != NULL)
             lwc_string_unref(parts[i]);
@@ -562,10 +581,6 @@ static css_error serialize_lab(enum colour_function function, const struct colou
 
 static css_error serialize_rgb(const struct colour_value *colour, lwc_string **out)
 {
-    /* Missing RGB components need color(srgb ...) support before readback can
-     * round-trip. HSL/HWB missing values take their own modern syntax path. */
-    if (colour->missing != 0)
-        return CSS_INVALID;
     for (size_t i = 0; i < 3; i++) {
         if (!isfinite(colour->channels[i]) || colour->channels[i] < 0 || colour->channels[i] > 255)
             return CSS_INVALID; /* Do not freeze the painter's out-of-gamut clipping into CSSOM. */
@@ -655,7 +670,11 @@ css_error css__declaration_colour_serialize(const css_declaration_contribution *
         if (!function_value(function, tokens, count, &colour))
             return CSS_INVALID;
         if (function >= COLOUR_LAB && function <= COLOUR_OKLCH)
-            return serialize_lab(function, tokens, &colour, out);
+            return serialize_coordinates(function, tokens, &colour, out);
+        if (function == COLOUR_SRGB)
+            return serialize_coordinates(function, tokens + 1, &colour, out);
+        if (function == COLOUR_RGB && colour.missing != 0)
+            return serialize_coordinates(function, tokens, &colour, out);
         if (function == COLOUR_HSL || function == COLOUR_HWB) {
             if (colour.missing != 0)
                 return serialize_missing_polar(function, tokens, &colour, out);

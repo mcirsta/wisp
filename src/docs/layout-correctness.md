@@ -195,6 +195,10 @@ cleanup corrects syntax, precision and white-point conversion; it does not
 implement general gamut mapping. Specified-value readback preserves the original
 coordinates and is independent of this display limitation. Treat gamut mapping
 as renderer work, not another prerequisite for live inline-style editing.
+The real `color(srgb ...)` parser added on 2026-10-13 uses the same painting
+boundary: out-of-range coordinates such as `color(srgb 1.2 .4 -.1)` are preserved
+in readback but still clipped for display. In-gamut sRGB painting is covered by
+the color capture regression.
 
 ## JavaScript-driven HotNews sidebar (deferred)
 

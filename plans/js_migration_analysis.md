@@ -50,8 +50,9 @@ Already complete: accepted-declaration capture, generated property/alias
 metadata, winning-declaration order, shorthand reconstruction, owned editing,
 whole-value assignments and broad specified-value serialization. The transform
 and Grid batches are committed as `285fee12` and `9fbddb34`; the SVG paint/cursor
-batch is committed as `f7a238d0`, and the legacy aural batch as `fdf7b373`. Earlier dated
-sections are historical records, not additional unchecked requirements.
+batch is committed as `f7a238d0`, the legacy aural batch as `fdf7b373`, and the
+Lab-family batch as `24cde21d`. Earlier dated sections are historical records,
+not additional unchecked requirements.
 
 The remaining work is grouped here so adjacent discoveries do not silently move
 the target. Each group can require more than one tested batch:
@@ -62,9 +63,9 @@ the target. Each group can require more than one tested batch:
 - [x] Remaining scalar/list families: specified-value readback for the
   already-registered legacy speech properties (2026-10-13). This preserves
   existing declarations without implementing new speech functionality.
-- [ ] Remaining color/font readback gaps: Lab/LCH/Oklab/OkLCh are complete
-  (2026-10-13); missing RGB components, out-of-gamut HSL/HWB readback and
-  client-resolved system-font cases remain.
+- [ ] Remaining color/font readback gaps: Lab/LCH/Oklab/OkLCh and missing RGB
+  components with real `color(srgb ...)` parsing/readback are complete (2026-10-13).
+  Out-of-gamut HSL/HWB readback and client-resolved system-font cases remain.
 - [ ] Math values: validate and serialize accepted expressions through shared
   native handling, preserving specified-value semantics. This is the largest
   remaining uncertainty in the native prerequisite work.
@@ -2283,6 +2284,38 @@ relative-color syntax stay outside this batch. General display gamut mapping
 remains an existing renderer limitation, recorded in the correctness backlog;
 readback does not turn clipped paint values into authored coordinates. The old
 Duktape style placeholder supplies no color serializer to reuse.
+
+### Missing RGB components and real sRGB function support (2026-10-13)
+
+RGB values containing `none` now serialize through `color(srgb ...)`, preserving
+missing components, normalized coordinates and alpha according to
+[CSS Color 4 serialization](https://drafts.csswg.org/css-color-4/#serializing-sRGB-values).
+The native parser accepts the real sRGB function, sharing modern component
+validation with Lab-family functions. The ordinary rendering parse adds no
+allocations. Native parsing and captured-token readback use the same validation.
+
+Explicit `color(srgb ...)` stays in that form on readback. Percentages normalize
+to numbers; unbounded coordinates retain decimal precision through the existing
+token formatter. Only alpha clamps at parse time. Unsupported spaces, malformed
+syntax and unimplemented math/relative forms still discard the declaration,
+preserving earlier fallbacks. This does not restore the removed transparent-black
+stub. In-gamut colors reach actual painting in ordinary declarations, variables,
+border shorthands, gradients and SVG paint.
+
+The new regressions failed before implementation and now pass. Coverage includes
+whole/chunked parsing, every missing-component combination, all 256 channel bytes
+through RGB-to-sRGB serialization and reparsing, shorthand edits, cssText round
+trips and allocation-failure cleanup. All 89 selected native suites pass in
+Debug and Release, including Debug ASan/UBSan and LeakSanitizer. The 15 selected
+Debug and 12 applicable Release Qt suites pass; the color capture checks 67 pixel
+samples. Builds are warning-free; no GTK builds ran.
+
+This completes missing-RGB readback within the existing color/font group.
+Out-of-gamut HSL/HWB readback and client-resolved system fonts remain in that
+group. The renderer's documented gamut-mapping limitation also applies to
+out-of-gamut `color(srgb ...)`; specified-value readback does not clip those
+coordinates. Display gamut mapping remains separate renderer work. The historical
+Duktape style placeholder has no serializer to reuse here.
 
 ## Assessment
 

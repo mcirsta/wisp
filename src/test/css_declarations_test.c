@@ -1301,9 +1301,10 @@ static const struct {
     {"background-image:linear-gradient(red,blue)!important;background-image:none", "background-image",
         "linear-gradient(red, blue)"},
     {"background-image:linear-gradient(var(--Stop),BLUE)", "background-image", "linear-gradient(var(--Stop),BLUE)"},
-    /* These colour families still require specified-value serializers. */
+    /* Missing and non-legacy color components survive gradient serialization. */
     {"background-image:linear-gradient(lab(50% 0 0),blue)", "background-image", "linear-gradient(lab(50 0 0), blue)"},
-    {"background-image:linear-gradient(rgb(none 0 0),blue)", "background-image", NULL},
+    {"background-image:linear-gradient(rgb(none 0 0),blue)", "background-image",
+        "linear-gradient(color(srgb none 0 0), blue)"},
     {"background:none", "background", "none"},
     {"background:transparent", "background", "none"},
     {"background:repeat scroll none 0% 0% transparent", "background", "none"},
@@ -1619,8 +1620,26 @@ static const struct {
     {"color:rgb(1 2 3 / 0.00000001)", "color", "rgba(1, 2, 3, 0)"},
     {"color:rgb(999999999999999999 0 0 / 999999999999999999)", "color", "rgb(255, 0, 0)"},
     {"color:rgb(-999999999999999999% 999999999999999999% 0%)", "color", "rgb(0, 255, 0)"},
-    {"color:rgb(none 0 0)", "color", NULL},
-    {"color:rgb(1 2 3 / none)", "color", NULL},
+    {"color:rgb(none 0 0)", "color", "color(srgb none 0 0)"},
+    {"color:rgb(1 2 3 / none)", "color", "color(srgb 0.003922 0.007843 0.011765 / none)"},
+    {"color:rgba(none none none)", "color", "color(srgb none none none)"},
+    {"color:rgb(255 none 50% / .1234567)", "color", "color(srgb 1 none 0.5 / 0.123457)"},
+    {"color:rgb(-10 none 999% / 2)", "color", "color(srgb 0 none 1)"},
+    {"color:rgb(none 0 0 / -2)", "color", "color(srgb none 0 0 / 0)"},
+    {"color:COLOR(SRGB .5 25% +0.0 / 50%)", "color", "color(srgb 0.5 0.25 0 / 0.5)"},
+    {"color:color(srgb 1 0 0)", "color", "color(srgb 1 0 0)"},
+    {"color:color(srgb -1 200% .4)", "color", "color(srgb -1 2 0.4)"},
+    {"color:color(srgb none none none / none)", "color", "color(srgb none none none / none)"},
+    {"color:color(srgb .3 .4 .5 / 999%)", "color", "color(srgb 0.3 0.4 0.5)"},
+    {"color:color(srgb .3 .4 .5 / -10)", "color", "color(srgb 0.3 0.4 0.5 / 0)"},
+    {"color:color(srgb -.0000005 .0000005 -.0000015 / .99999999)", "color", "color(srgb 0 0.000001 -0.000001)"},
+    {"color:color(srgb -.00005% .00005% -.00015%)", "color", "color(srgb 0 0.000001 -0.000001)"},
+    {"color:color(srgb 123456789012345678901234567890.1234567% -12345678901234567890.1234567 0)", "color",
+        "color(srgb 1234567890123456789012345678.901235 -12345678901234567890.123457 0)"},
+    {"border:solid color(srgb 0 50% 0 / none)", "border", "solid color(srgb 0 0.5 0 / none)"},
+    {"fill:color(srgb none .25 1)", "fill", "color(srgb none 0.25 1)"},
+    {"background:linear-gradient(color(srgb 1 0 0),rgb(none 255 0)) color(srgb 0 0 1)", "background",
+        "linear-gradient(color(srgb 1 0 0), color(srgb none 1 0)) color(srgb 0 0 1)"},
     {"color:hsl(0,100%,50%)", "color", "rgb(255, 0, 0)"},
     {"color:hwb(0 0% 0%)", "color", "rgb(255, 0, 0)"},
     {"color:HSL(120,30%,50%)", "color", "rgb(89.25, 165.75, 89.25)"},
@@ -1727,7 +1746,7 @@ static const struct {
     {"color:oklab(50% 0 0)", "color", "oklab(0.5 0 0)"},
     {"color:lch(50% 10 0)", "color", "lch(50 10 0)"},
     {"color:oklch(50% 0.1 0)", "color", "oklch(0.5 0.1 0)"},
-    {"color:red; color:color(srgb 0 0 1)", "color", "red"},
+    {"color:red; color:color(display-p3 0 0 1)", "color", "red"},
     {"background-color:#123", "background-color", "rgb(17, 34, 51)"},
     {"outline-color:INVERT", "outline-color", "invert"},
     {"column-rule-color:#abc", "column-rule-color", "rgb(170, 187, 204)"},
@@ -2784,21 +2803,27 @@ END_TEST
 
 /* Every missing-component combination must survive CSSOM without turning none
  * into zero, inventing a missing component, or changing direct-rendering bytes. */
-START_TEST(test_missing_polar_roundtrip)
+START_TEST(test_missing_colour_roundtrip)
 {
-    static const char *const authored[] = {"-240deg", "025", "050%", "050%"};
-    static const char *const normalized[] = {"120", "25%", "50%", "0.5"};
-    for (unsigned hwb = 0; hwb < 2; hwb++) {
+    static const struct {
+        const char *input, *output, *authored[4], *normalized[4];
+    } forms[] = {
+        {"HSLA(", "hsl(", {"-240deg", "025", "050%", "050%"}, {"120", "25%", "50%", "0.5"}},
+        {"HWB(", "hwb(", {"-240deg", "025", "050%", "050%"}, {"120", "25%", "50%", "0.5"}},
+        {"RGBA(", "color(srgb ", {"255", "050%", "0", "050%"}, {"1", "0.5", "0", "0.5"}},
+        {"COLOR(SRGB ", "color(srgb ", {"100%", ".500", "0%", "050%"}, {"1", "0.5", "0", "0.5"}},
+    };
+    for (size_t f = 0; f < N_ELEMENTS(forms); f++) {
         for (unsigned mask = 1; mask < 16; mask++) {
             char input[160], expected[160];
             const char *parts[4], *values[4];
             for (unsigned i = 0; i < 4; i++) {
-                parts[i] = mask & (1u << i) ? "none" : authored[i];
-                values[i] = mask & (1u << i) ? "none" : normalized[i];
+                parts[i] = mask & (1u << i) ? "none" : forms[f].authored[i];
+                values[i] = mask & (1u << i) ? "none" : forms[f].normalized[i];
             }
-            snprintf(input, sizeof(input), "color:%s(%s %s %s / %s)", hwb ? "HWB" : "HSLA",
+            snprintf(input, sizeof(input), "color:%s%s %s %s / %s)", forms[f].input,
                 parts[0], parts[1], parts[2], parts[3]);
-            snprintf(expected, sizeof(expected), "%s(%s %s %s / %s)", hwb ? "hwb" : "hsl",
+            snprintf(expected, sizeof(expected), "%s%s %s %s / %s)", forms[f].output,
                 values[0], values[1], values[2], values[3]);
             css_declaration_list *list = parse(input, _i != 0);
             ck_assert_uint_eq(css__declaration_list_count(list), 1);
@@ -2820,9 +2845,45 @@ START_TEST(test_missing_polar_roundtrip)
 }
 END_TEST
 
+/* CSS Color 4 requires normalized sRGB readback to retain at least eight-bit
+ * channel precision. Exercise every byte through RGB -> color(srgb) -> paint. */
+START_TEST(test_missing_rgb_precision)
+{
+    for (unsigned channel = 0; channel < 256; channel++) {
+        char css[160];
+        snprintf(css, sizeof(css), "color:rgb(%u none %u)", channel, 255 - channel);
+        css_declaration_list *list = parse(css, _i != 0);
+        css_declaration_order *order;
+        ck_assert_int_eq(css__declaration_order_create(list, &order), CSS_OK);
+        lwc_string *value;
+        ck_assert_int_eq(serialize_property(order, "color", &value), CSS_OK);
+        snprintf(css, sizeof(css), "color:%s", lwc_string_data(value));
+        css_declaration_list *again = parse(css, _i != 0);
+        ck_assert_msg(css__declaration_list_count(again) == 1, "rejected channel %u: %s", channel, css);
+        const css_style *style = inline_style(css__declaration_list_sheet(again));
+        uint32_t packed = 0xff000000 | channel << 16 | (255 - channel);
+        ck_assert_msg(style->used == 2 && style->bytecode[1] == packed,
+            "channel %u changed after %s", channel, css);
+        lwc_string_unref(value);
+        css__declaration_order_destroy(order);
+        css__declaration_list_destroy(list);
+        css__declaration_list_destroy(again);
+    }
+}
+END_TEST
+
 START_TEST(test_colour_rendering_values)
 {
     static const struct { const char *value; uint32_t packed; } cases[] = {
+        {"color(srgb 1 0 0)", 0xffff0000},
+        {"color(SRGB 0 100% 0)", 0xff00ff00},
+        {"color(srgb 0 0 1)", 0xff0000ff},
+        {"color(srgb .5 .25 0 / 50%)", 0x80804000},
+        {"color(srgb none .5 none)", 0xff008000},
+        {"color(srgb 1 none none / none)", 0x00ff0000},
+        {"color(srgb .2 .4 .6 / .1)", 0x1a336699},
+        {"color(srgb .2 .4 .6 / 10)", 0xff336699},
+        {"color(srgb .2 .4 .6 / -1)", 0x00336699},
         {"lab(50% 0 0)", 0xff777777},
         {"lch(50% 0 270deg)", 0xff777777},
         {"lab(100 0 0)", 0xffffffff},
@@ -2889,36 +2950,35 @@ END_TEST
 
 /* Unsupported colours must discard the entire declaration, including partial
  * shorthand/gradient output, and must not consume the following declaration.
- * Compare rendering bytecode directly, including SVG paint properties whose
- * CSSOM readback is not implemented yet. */
+ * Compare rendering bytecode directly, including SVG paint properties. */
 START_TEST(test_unsupported_colour_fallbacks)
 {
     static const struct { const char *fallback; const char *unsupported; } cases[] = {
-        {"color:red", "color:color(srgb 0 0 1)"},
+        {"color:red", "color:color(display-p3 0 0 1)"},
         {"background-color:#123", "background-color:color(display-p3 1 0 0)"},
-        {"border-top-color:red", "border-top-color:color(srgb 0 0 1)"},
-        {"border-right-color:red", "border-right-color:color(srgb 0 0 1)"},
-        {"border-bottom-color:red", "border-bottom-color:color(srgb 0 0 1)"},
-        {"border-left-color:red", "border-left-color:color(srgb 0 0 1)"},
-        {"outline-color:red", "outline-color:color(srgb 0 0 1)"},
-        {"column-rule-color:red", "column-rule-color:color(srgb 0 0 1)"},
-        {"fill:red", "fill:color(srgb 0 0 1)"},
-        {"stroke:red", "stroke:color(srgb 0 0 1)"},
-        {"border-color:red green blue", "border-color:red color(srgb 0 0 1) blue"},
-        {"border:4px solid red", "border:8px dashed color(srgb 0 0 1)"},
-        {"border-top:4px solid red", "border-top:8px dashed color(srgb 0 0 1)"},
-        {"outline:4px solid red", "outline:8px dashed color(srgb 0 0 1)"},
-        {"column-rule:4px solid red", "column-rule:8px dashed color(srgb 0 0 1)"},
-        {"background:blue", "background:fixed color(srgb 0 0 1)"},
-        {"background:red", "background:linear-gradient(blue,white) color(srgb 0 0 1)"},
+        {"border-top-color:red", "border-top-color:color(display-p3 0 0 1)"},
+        {"border-right-color:red", "border-right-color:color(display-p3 0 0 1)"},
+        {"border-bottom-color:red", "border-bottom-color:color(display-p3 0 0 1)"},
+        {"border-left-color:red", "border-left-color:color(display-p3 0 0 1)"},
+        {"outline-color:red", "outline-color:color(display-p3 0 0 1)"},
+        {"column-rule-color:red", "column-rule-color:color(display-p3 0 0 1)"},
+        {"fill:red", "fill:color(display-p3 0 0 1)"},
+        {"stroke:red", "stroke:color(display-p3 0 0 1)"},
+        {"border-color:red green blue", "border-color:red color(display-p3 0 0 1) blue"},
+        {"border:4px solid red", "border:8px dashed color(display-p3 0 0 1)"},
+        {"border-top:4px solid red", "border-top:8px dashed color(display-p3 0 0 1)"},
+        {"outline:4px solid red", "outline:8px dashed color(display-p3 0 0 1)"},
+        {"column-rule:4px solid red", "column-rule:8px dashed color(display-p3 0 0 1)"},
+        {"background:blue", "background:fixed color(display-p3 0 0 1)"},
+        {"background:red", "background:linear-gradient(blue,white) color(display-p3 0 0 1)"},
         {"background-image:linear-gradient(red,blue)",
-            "background-image:linear-gradient(color(srgb 0 0 1),white)"},
+            "background-image:linear-gradient(color(display-p3 0 0 1),white)"},
         {"background-image:linear-gradient(red,blue)",
             "background-image:linear-gradient(white,color(display-p3 1 0 0))"},
         {"background-image:linear-gradient(red,blue)",
-            "background-image:radial-gradient(white,color(srgb 0 0 1))"},
+            "background-image:radial-gradient(white,color(display-p3 0 0 1))"},
         {"background-image:linear-gradient(red,blue)",
-            "background-image:linear-gradient(white,black),linear-gradient(white,color(srgb 0 0 1))"},
+            "background-image:linear-gradient(white,black),linear-gradient(white,color(display-p3 0 0 1))"},
     };
     for (size_t i = 0; i < N_ELEMENTS(cases); i++) {
         char baseline[256], attempted[512];
@@ -2943,6 +3003,11 @@ END_TEST
 START_TEST(test_colour_invalid)
 {
     static const char *const values[] = {
+        "color()", "color(1 0 0)", "color(srgb,1,0,0)", "color(srgb 1,0,0)",
+        "color(srgb 1 0 0,.5)", "color(srgb 1 0 0 .5)", "color(srgb 1 0 0 /)",
+        "color(srgb 1 0 0 / .5 /)", "color(srgb 1 0 0 / .5 extra)", "color(srgb 1px 0 0)",
+        "color(srgb 1 0deg 0)", "color(srgb 1 0 0 / 1px)", "color(srgb none none)",
+        "color(from red srgb r g b)", "color(srgb calc(1) 0 0)", "color(srgb-linear 1 0 0)",
         "lab(1px 0 0)",
         "lab(50 1px 0)",
         "lab(50 0 10deg)",
@@ -2975,7 +3040,7 @@ START_TEST(test_colour_invalid)
         "hwb(0,50%,50%)", "hwb(0 50% 50%,.5)", "hwb(0 50% 50% / .5,)", "hwb(0 50% 50% / .5 /)",
         "hwb(0 50% 50% / .5 extra)", "hwb(0 50% 50% /)", "hwb(0 50%)", "hwb(0 50% 50% .5)",
         "hwba(0 50% 50% / .5)", "hwb(0px 50% 50%)", "hwb(0 50px 50%)", "hwb(0 50% 50% / 1px)",
-        "color(srgb 0 0 1)", "color(display-p3 1 0 0)", "color(unknown 1 0 0)", "color(srgb)",
+        "color(display-p3 0 0 1)", "color(display-p3 1 0 0)", "color(unknown 1 0 0)", "color(srgb)",
         "color(srgb 1 2)", "unknown(srgb 0 0 1)", "unknown(srgb 0 0 1 / .5)", "#12", "#12345",
     };
     static const char *const properties[] = {"color", "background-color", "border-color", "border-top-color",
@@ -3193,7 +3258,7 @@ START_TEST(test_border_shorthand_invalid)
     static const char *const properties[] = {"border", "border-top", "border-left", "outline", "column-rule"};
     static const char *const invalid[] = {
         "solid dashed", "red blue", "1px 2px", "solid 1px red blue", "initial solid", "solid initial",
-        "red unset", "1px revert", "solid red inherit", "solid,red", "solid unknown", "solid color(srgb 1 0 0)",
+        "red unset", "1px revert", "solid red inherit", "solid,red", "solid unknown", "solid color(display-p3 1 0 0)",
         "solid rgb(1 2)", "-1px solid", "-.00000001px solid", "1fr solid", "1% solid", "1deg solid",
         "1s solid", "1dpi solid", "solid 1", "'solid'", "url(edge.png)",
     };
@@ -4628,7 +4693,7 @@ START_TEST(test_value_allocation_failure)
         "fill", "stroke", "fill-opacity", "stroke-opacity", "stroke-width", "cursor",
         "azimuth", "elevation", "pause-before", "pause-after", "pitch-range", "pitch", "play-during", "richness",
         "speech-rate", "stress", "voice-family", "volume",
-        "cue", "pause", "color", "color", "color", "color"};
+        "cue", "pause", "color", "color", "color", "color", "color", "color"};
     const char *name = names[_i];
     void (*limit)(unsigned) = _i == 37 ? calloc_limit : malloc_limit;
     /* Keep full-border inputs separate: they reset the quad style/colour cases. */
@@ -4661,13 +4726,15 @@ START_TEST(test_value_allocation_failure)
               "speech-rate:123.4567891;stress:34.5678912;voice-family:One Two,MALE;volume:45.6789123%;"
               "cue:url('a b.ogg') none;pause:123.456789ms 12.3456789%;";
     if (_i >= 61) {
-        static const char *const lab_cases[] = {
+        static const char *const colour_cases[] = {
             "color:lab(56.7891234% -123.456789% 66.88% / .23456789)",
             "color:lch(56.7891234% 12345678901234567890.1234567% -90deg / .23456789)",
             "color:oklab(56.7891234% -.000125% 123456789.1234567% / .23456789)",
             "color:oklch(none -12.34% none / none)",
+            "color:color(srgb 1234567890123456789.123456789% -.00015% none / .123456789)",
+            "color:rgb(123.456789 none 34% / none)",
         };
-        css = lab_cases[_i - 61];
+        css = colour_cases[_i - 61];
     }
     css_declaration_list *list = parse(css, false);
     css_declaration_order *order;
@@ -4757,8 +4824,9 @@ int main(void)
     tcase_add_test(tc, test_quirky_border_values);
     tcase_add_loop_test(tc, test_colour_alpha_roundtrip, 0, 2);
     tcase_add_test(tc, test_quirky_colour_values);
-    tcase_add_loop_test(tc, test_missing_polar_roundtrip, 0, 2);
+    tcase_add_loop_test(tc, test_missing_colour_roundtrip, 0, 2);
     tcase_add_loop_test(tc, test_colour_rendering_values, 0, 2);
+    tcase_add_loop_test(tc, test_missing_rgb_precision, 0, 2);
     tcase_add_loop_test(tc, test_colour_invalid, 0, 2);
     tcase_add_loop_test(tc, test_unsupported_colour_fallbacks, 0, 2);
     tcase_add_loop_test(tc, test_flex_invalid, 0, 2);
@@ -4766,7 +4834,7 @@ int main(void)
     tcase_add_loop_test(tc, test_overflow_axes, 0, 2);
     tcase_add_test(tc, test_value_arguments);
 #ifdef WISP_TEST_ALLOC_FAILURE
-    tcase_add_loop_test(tc, test_value_allocation_failure, 0, 65);
+    tcase_add_loop_test(tc, test_value_allocation_failure, 0, 67);
     tcase_add_loop_test(tc, test_position_rollback, 0, 2);
     tcase_add_loop_test(tc, test_font_rollback, 0, 5);
     tcase_add_loop_test(tc, test_gap_rollback, 0, 4);

@@ -7,7 +7,7 @@ import subprocess
 import sys
 import tempfile
 
-WIDTH, HEIGHT = 520, 610
+WIDTH, HEIGHT = 520, 730
 # CSS Color 4 clamping and nearest-integer rounding for the ARGB8 painter.
 # Sample flat interiors so text, antialiasing and edge coverage cannot affect them.
 SAMPLES = [
@@ -17,7 +17,7 @@ SAMPLES = [
     ("half alpha on white", 350, 30, (255, 127, 127)),
     ("large clamped value", 450, 30, (255, 0, 0)),
     ("missing alpha", 50, 90, (255, 255, 255)),
-    ("unsupported color() fallback", 150, 90, (0, 34, 68)),
+    ("real color(srgb) replaces fallback", 150, 90, (255, 0, 0)),
     ("unknown function fallback", 250, 90, (0, 34, 68)),
     ("invalid RGB fallback", 350, 90, (0, 34, 68)),
     ("gradient colour", 450, 90, (128, 0, 0)),
@@ -67,6 +67,17 @@ SAMPLES = [
     ("lab-missing-alpha", 250, 570, (255, 255, 255)),
     ("lch-length-fallback", 350, 570, (0, 34, 68)),
     ("oklch-percent-fallback", 450, 570, (0, 34, 68)),
+    ("sRGB gray", 50, 630, (128, 128, 128)),
+    ("sRGB alpha", 150, 630, (255, 127, 127)),
+    ("sRGB missing components", 250, 630, (0, 128, 0)),
+    ("sRGB missing alpha", 350, 630, (255, 255, 255)),
+    ("sRGB percentages", 450, 630, (128, 64, 0)),
+    ("sRGB gradient", 50, 690, (0, 0, 255)),
+    ("sRGB border", 115, 690, (255, 0, 0)),
+    ("sRGB variable substitution", 250, 690, (51, 102, 153)),
+    ("sRGB SVG fill", 350, 690, (255, 0, 0)),
+    ("sRGB SVG stroke", 315, 690, (0, 0, 255)),
+    ("sRGB transparent black", 450, 690, (255, 255, 255)),
 ]
 
 binary = Path(sys.argv[1]).resolve()

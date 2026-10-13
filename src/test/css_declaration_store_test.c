@@ -290,6 +290,31 @@ START_TEST(test_lab_values_survive_edits)
 }
 END_TEST
 
+START_TEST(test_srgb_values_survive_edits)
+{
+    css_declaration_store *store = create("background:linear-gradient(rgb(none 255 0),color(srgb 0 0 1)) "
+        "color(srgb -10% .5 1);border:2px solid rgb(255 none 0)!important;opacity:1", _i != 0);
+    ck_assert(set(store, "opacity:.5", _i != 0));
+    check_value(store, "background",
+        "linear-gradient(color(srgb none 1 0), color(srgb 0 0 1)) color(srgb -0.1 0.5 1)", false);
+    check_value(store, "border-color", "color(srgb 1 none 0)", true);
+    ck_assert(set(store, "border-left-color:color(srgb .2 .4 .6 / none)", _i != 0));
+    check_value(store, "border-left-color", "color(srgb 0.2 0.4 0.6 / none)", false);
+    check_value(store, "border-right-color", "color(srgb 1 none 0)", true);
+    /* Reparse cssText after unrelated edits: missing and extended coordinates
+     * must survive the route that will synchronize element.style with the DOM. */
+    lwc_string *text;
+    ck_assert_int_eq(css__declaration_store_serialize(store, &text), CSS_OK);
+    css_declaration_store *copy = create(lwc_string_data(text), _i != 0);
+    check_text(copy, lwc_string_data(text));
+    check_value(copy, "background-color", "color(srgb -0.1 0.5 1)", false);
+    check_value(copy, "border-right-color", "color(srgb 1 none 0)", true);
+    lwc_string_unref(text);
+    css__declaration_store_destroy(copy);
+    css__declaration_store_destroy(store);
+}
+END_TEST
+
 START_TEST(test_native_state_survives_readback_limits)
 {
     css_declaration_store *store = create("margin:var(--m);width:calc(100% - 2px);color:red", false);
@@ -420,6 +445,10 @@ static const struct {
     const char *name, *value, *priority, *expected;
     bool important;
 } inputs[] = {
+    {"color", "rgb(none 50% 255 / none)", "", "color(srgb none 0.5 1 / none)"},
+    {"background-color", "COLOR(SRGB 25% +0 .5 / 50%)", "", "color(srgb 0.25 0 0.5 / 0.5)"},
+    {"border", "solid color(srgb 1 none 0)", "important", "solid color(srgb 1 none 0)", true},
+    {"color", "color(srgb 1,0,0)", "", NULL},
     {"color", "LAB(56.2% 0 66.88%)", "", "lab(56.2 0 83.6)"},
     {"background-color", "OKLAB(54% -25% -5%)", "", "oklab(0.54 -0.1 -0.02)"},
     {"border-color", "lch(50% 100% -90deg) oklch(none -1 none / none)", "",
@@ -854,6 +883,7 @@ int main(void)
     tcase_add_test(tc, test_shorthand_catalogue);
     tcase_add_loop_test(tc, test_aural_values_survive_edits, 0, 2);
     tcase_add_loop_test(tc, test_lab_values_survive_edits, 0, 2);
+    tcase_add_loop_test(tc, test_srgb_values_survive_edits, 0, 2);
     tcase_add_test(tc, test_native_state_survives_readback_limits);
     tcase_add_test(tc, test_length_and_borrowed_names);
     tcase_add_test(tc, test_repeated_edits_release_sources);

@@ -29,15 +29,15 @@ html, body { margin: 0; background: white; }
 #gradient-fallback { left: 10px; top: 250px; background: linear-gradient(#024,#024);
     background-image: linear-gradient(color(display-p3 1 0 0),#f00); }
 #layers-fallback { left: 110px; top: 250px; background: linear-gradient(#024,#024);
-    background-image: linear-gradient(#000,#000),linear-gradient(#fff,color(srgb 1 0 0)); }
+    background-image: linear-gradient(#000,#000),linear-gradient(#fff,color(display-p3 1 0 0)); }
 #border-fallback { left: 210px; top: 250px; box-sizing: border-box; background: #abc;
-    border: 10px solid #024; border: 30px dashed color(srgb 1 0 0); }
-#svg-fallback { left: 310px; top: 250px; fill: #024; fill: color(srgb 1 0 0);
-    stroke: #c0ffee; stroke: color(srgb 1 0 0); stroke-width: 4px; }
+    border: 10px solid #024; border: 30px dashed color(display-p3 1 0 0); }
+#svg-fallback { left: 310px; top: 250px; fill: #024; fill: color(display-p3 1 0 0);
+    stroke: #c0ffee; stroke: color(display-p3 1 0 0); stroke-width: 4px; }
 #transparent-control { left: 410px; top: 250px; background: #024; background: rgba(0,0,0,0); }
 /* A present custom property containing an unsupported colour becomes invalid
  * at computed-value time: color inherits, rather than reviving the earlier red. */
-#variable-fallback { left: 10px; top: 310px; color: #024; --unsupported: color(srgb 1 0 0); }
+#variable-fallback { left: 10px; top: 310px; color: #024; --unsupported: color(display-p3 1 0 0); }
 #variable-fallback > div { width: 80px; height: 40px; color: red; color: var(--unsupported);
     background: currentColor; }
 /* Invalid shorthand components must leave the earlier border intact. */
@@ -72,6 +72,18 @@ html, body { margin: 0; background: white; }
 #lab-missing-alpha { left:210px; top:550px; background:lab(50 none none / none); }
 #lch-length-fallback { left:310px; top:550px; background:#024; background:lch(50 20 30px); }
 #oklch-percent-fallback { left:410px; top:550px; background:#024; background:oklch(50% 20% 20%); }
+/* Real sRGB colors use the same parser in ordinary declarations, variables,
+ * border shorthands, gradients and SVG. All samples here are in gamut. */
+#srgb-gray { left:10px; top:610px; background:color(srgb .5 .5 .5); }
+#srgb-alpha { left:110px; top:610px; background:color(srgb 1 0 0 / .5); }
+#srgb-missing { left:210px; top:610px; background:color(srgb none .5 none); }
+#srgb-missing-alpha { left:310px; top:610px; background:color(srgb 1 0 0 / none); }
+#srgb-percent { left:410px; top:610px; background:color(SRGB 50% .25 0%); }
+#srgb-gradient { left:10px; top:670px; background:linear-gradient(color(srgb 0 0 1),color(srgb 0 0 100%)); }
+#srgb-border { left:110px; top:670px; box-sizing:border-box; border:10px solid color(srgb 1 0 0); }
+#srgb-variable { left:210px; top:670px; --tone:color(srgb .2 .4 .6); color:var(--tone); background:currentColor; }
+#srgb-svg { left:310px; top:670px; fill:color(srgb 1 0 0); stroke:color(srgb 0 0 1); stroke-width:4px; }
+#srgb-transparent { left:410px; top:670px; background:#024; background:color(srgb 0 0 0 / 0); }
 </style>
 <div id="hex" class="case"></div><div id="fraction" class="case"></div>
 <div id="mixed" class="case"></div><div id="alpha" class="case"></div>
@@ -113,3 +125,11 @@ html, body { margin: 0; background: white; }
 <div id="lab-missing-alpha" class="case"></div>
 <div id="lch-length-fallback" class="case"></div>
 <div id="oklch-percent-fallback" class="case"></div>
+<div id="srgb-gray" class="case"></div><div id="srgb-alpha" class="case"></div>
+<div id="srgb-missing" class="case"></div><div id="srgb-missing-alpha" class="case"></div>
+<div id="srgb-percent" class="case"></div><div id="srgb-gradient" class="case"></div>
+<div id="srgb-border" class="case"></div><div id="srgb-variable" class="case"></div>
+<svg id="srgb-svg" class="case" xmlns="http://www.w3.org/2000/svg" width="80" height="40">
+    <rect x="5" y="5" width="70" height="30"/>
+</svg>
+<div id="srgb-transparent" class="case"></div>
