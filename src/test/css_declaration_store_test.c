@@ -240,6 +240,41 @@ START_TEST(test_shorthand_catalogue)
 }
 END_TEST
 
+START_TEST(test_aural_values_survive_edits)
+{
+    const char *values = "azimuth: 220deg; elevation: 0deg; pitch-range: 55; pitch: 1.5khz; "
+        "play-during: url(\"Theme.wav\") mix repeat; richness: 60; speak-header: always; "
+        "speak-numeral: digits; speak-punctuation: code; speak: spell-out; speech-rate: 150; "
+        "stress: 40; voice-family: \"Voice Name\", female; volume: 25%; ";
+    char initial[768], expected[768];
+    snprintf(initial, sizeof(initial), "%spause:1000ms 2000ms!important;cue:url(Before.wav) url(After.wav);"
+        "opacity:1", values);
+    css_declaration_store *store = create(initial, _i != 0);
+    ck_assert(set(store, "opacity:.5", _i != 0));
+    snprintf(expected, sizeof(expected), "%spause: 1s 2s !important; cue: url(\"Before.wav\") "
+        "url(\"After.wav\"); opacity: 0.5;", values);
+    check_text(store, expected);
+    ck_assert(set(store, "pause-before:500ms", _i != 0));
+    ck_assert(set(store, "cue-after:none", _i != 0));
+    check_value(store, "pause-before", "0.5s", false);
+    check_value(store, "pause-after", "2s", true);
+    check_value(store, "cue-before", "url(\"Before.wav\")", false);
+    check_value(store, "cue-after", "none", false);
+    snprintf(expected, sizeof(expected), "%spause-before: 0.5s; pause-after: 2s !important; "
+        "cue: url(\"Before.wav\") none; opacity: 0.5;", values);
+    check_text(store, expected);
+    bool changed;
+    ck_assert_int_eq(css__declaration_store_remove(store, "pause-before", 12, &changed), CSS_OK);
+    ck_assert(changed);
+    ck_assert_int_eq(css__declaration_store_remove(store, "cue-after", 9, &changed), CSS_OK);
+    ck_assert(changed);
+    snprintf(expected, sizeof(expected), "%spause-after: 2s !important; cue-before: url(\"Before.wav\"); "
+        "opacity: 0.5;", values);
+    check_text(store, expected);
+    css__declaration_store_destroy(store);
+}
+END_TEST
+
 START_TEST(test_native_state_survives_readback_limits)
 {
     css_declaration_store *store = create("margin:var(--m);width:calc(100% - 2px);color:red", false);
@@ -370,6 +405,35 @@ static const struct {
     const char *name, *value, *priority, *expected;
     bool important;
 } inputs[] = {
+    {"azimuth", "BEHIND LEFT", "important", "220deg", true},
+    {"elevation", "-0", "", "0deg"},
+    {"pause-before", "123.456789ms", "", "0.123457s"},
+    {"pause-after", "20%", "", "20%"},
+    {"pitch-range", "34.5678912", "", "34.567891"},
+    {"pitch", "2KHZ", "", "2khz"},
+    {"play-during", "url(Sound.ogg) REPEAT MIX", "", "url(\"Sound.ogg\") mix repeat"},
+    {"richness", "23.4567891", "", "23.456789"},
+    {"speak-header", "ONCE", "", "once"},
+    {"speak-numeral", "DIGITS", "", "digits"},
+    {"speak-punctuation", "CODE", "", "code"},
+    {"speak", "SPELL-OUT", "", "spell-out"},
+    {"speech-rate", "123.4567891", "", "123.456789"},
+    {"stress", "45.6789123", "", "45.678912"},
+    {"voice-family", "One Two,MALE,'Male'", "", "\"One Two\", male, \"Male\""},
+    {"volume", "250%", "", "250%"},
+    {"cue", "url(Sound.ogg) NONE", "important", "url(\"Sound.ogg\") none", true},
+    {"pause", "1000ms 1s", "important", "1s", true},
+    {"azimuth", "left left", "", NULL},
+    {"elevation", "91deg", "", NULL},
+    {"play-during", "url(Sound.ogg) mix mix", "", NULL},
+    {"play-during", "repeat url(Sound.ogg)", "", NULL},
+    {"voice-family", "One,", "", NULL},
+    {"cue", "none initial", "", NULL},
+    {"cue", "none url(A.ogg) none", "", NULL},
+    {"pause", "1s 2s 3s", "", NULL},
+    {"pause", "initial 2s", "", NULL},
+    {"pause", "2s!important", "", NULL},
+
     {"fill", "NONE", "", "none"},
     {"fill", "#1234", "important", "rgba(17, 34, 51, 0.267)", true},
     {"stroke", "hsl(120 none 50 / .5)", "", "hsl(120 none 50% / 0.5)"},
@@ -767,6 +831,7 @@ int main(void)
     tcase_add_loop_test(tc, test_assignments, 0, ASSIGNMENT_COUNT * 2);
     tcase_add_loop_test(tc, test_removals, 0, REMOVAL_COUNT * 2);
     tcase_add_test(tc, test_shorthand_catalogue);
+    tcase_add_loop_test(tc, test_aural_values_survive_edits, 0, 2);
     tcase_add_test(tc, test_native_state_survives_readback_limits);
     tcase_add_test(tc, test_length_and_borrowed_names);
     tcase_add_test(tc, test_repeated_edits_release_sources);

@@ -46,6 +46,17 @@ static const struct {
     const char *input, *expected;
     bool pending; /* Partial pending shorthands serialize empty longhands, not round-trippable values. */
 } cases[] = {
+    {"azimuth:BEHIND LEFT;elevation:0;pause-before:1000MS;pause-after:1S;"
+     "pitch-range:50;pitch:2KHZ;play-during:url(A.ogg) repeat mix;richness:25;"
+     "speak-header:ONCE;speak-numeral:DIGITS;speak-punctuation:CODE;speak:NONE;"
+     "speech-rate:120;stress:50;voice-family:One Two,MALE;volume:200%;cue:none URL(A.ogg)",
+        "azimuth: 220deg; elevation: 0deg; pause: 1s; pitch-range: 50; pitch: 2khz; "
+        "play-during: url(\"A.ogg\") mix repeat; richness: 25; speak-header: once; speak-numeral: digits; "
+        "speak-punctuation: code; speak: none; speech-rate: 120; stress: 50; voice-family: \"One Two\", male; "
+        "volume: 200%; cue: none url(\"A.ogg\");"},
+    {"pause:1000ms;pause-after:2s!important", "pause-before: 1s; pause-after: 2s !important;"},
+    {"cue:url(A.ogg);cue-before:none", "cue: none url(\"A.ogg\");"},
+    {"cue:var(--Cue);cue-before:none", "cue-after: ; cue-before: none;", true},
     {"fill:#123;stroke:CURRENTcolor;fill-opacity:2;stroke-opacity:-.25;stroke-width:+2;cursor:url(Cur.cur),POINTER!important",
         "fill: rgb(17, 34, 51); stroke: currentcolor; fill-opacity: 2; stroke-opacity: -0.25; "
         "stroke-width: 2; cursor: url(\"Cur.cur\"), pointer !important;"},

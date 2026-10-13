@@ -695,14 +695,19 @@ START_TEST(test_allocation_failure)
                                "grid-template-columns:repeat(32,minmax(0,1fr));grid-template-rows:repeat(2,1px 2em);"
                                "grid-auto-flow:dense column;"
                                "fill:rgb(1 2 3);stroke:none;fill-opacity:.5;stroke-opacity:.25;stroke-width:2;"
-                               "cursor:url(Cursor.cur),url(Other.png),pointer;";
+                               "cursor:url(Cursor.cur),url(Other.png),pointer;"
+                               "azimuth:behind left;elevation:0;pause-before:123.456789ms;pause-after:1s;"
+                               "pitch-range:23;pitch:2khz;play-during:url(A.ogg) repeat mix;richness:50;"
+                               "speak-header:once;speak-numeral:digits;speak-punctuation:code;speak:none;"
+                               "speech-rate:90;stress:60;voice-family:One Two,male;volume:55%;"
+                               "cue:url(A.ogg) none;pause:1000ms 1s;";
     /* Grow the captured-source buffer after a retained declaration exists. */
     char css[16384];
     size_t pos = (size_t)sprintf(css, "opacity:1; /*");
     memset(css + pos, 'c', 8192);
     pos += 8192;
     snprintf(css + pos, sizeof(css) - pos, "*/%s", declarations);
-    const size_t expected = 65;
+    const size_t expected = 83;
     /* Keep shared property strings alive, so each iteration tests the same
      * allocation sequence instead of global string-cache initialization. */
     css_stylesheet *keeper;
@@ -861,6 +866,215 @@ static const struct {
     {"border:var(--x)", "border-top", ""},
     {"border:var(--x)", "border", "var(--x)"},
     {"margin:var(--x)!important; margin-left:1px", "margin", "var(--x)"},
+    /* Legacy aural declarations: specified values, not audio rendering. */
+    {"azimuth:BEHIND LEFT", "azimuth", "220deg"},
+    {"azimuth:LEFT behind", "azimuth", "220deg"},
+    {"azimuth:CENTER BEHIND", "azimuth", "180deg"},
+    {"azimuth:BEHIND", "azimuth", "180deg"},
+    {"azimuth:left-side", "azimuth", "270deg"},
+    {"azimuth:left-side behind", "azimuth", "270deg"},
+    {"azimuth:far-left", "azimuth", "300deg"},
+    {"azimuth:far-left behind", "azimuth", "240deg"},
+    {"azimuth:left", "azimuth", "320deg"},
+    {"azimuth:left behind", "azimuth", "220deg"},
+    {"azimuth:center-left", "azimuth", "340deg"},
+    {"azimuth:center-left behind", "azimuth", "200deg"},
+    {"azimuth:center", "azimuth", "0deg"},
+    {"azimuth:center behind", "azimuth", "180deg"},
+    {"azimuth:center-right", "azimuth", "20deg"},
+    {"azimuth:center-right behind", "azimuth", "160deg"},
+    {"azimuth:right", "azimuth", "40deg"},
+    {"azimuth:right behind", "azimuth", "140deg"},
+    {"azimuth:far-right", "azimuth", "60deg"},
+    {"azimuth:far-right behind", "azimuth", "120deg"},
+    {"azimuth:right-side", "azimuth", "90deg"},
+    {"azimuth:right-side behind", "azimuth", "90deg"},
+    {"azimuth:LEFTWARDS", "azimuth", "leftwards"},
+    {"azimuth:RIGHTWARDS", "azimuth", "rightwards"},
+    {"azimuth:0", "azimuth", "0deg"},
+    {"azimuth:-000.123456789DEG", "azimuth", "-0.123457deg"},
+    {"azimuth:1.23456789RAD", "azimuth", "1.234568rad"},
+    {"azimuth:10GRAD", "azimuth", "10grad"},
+    {"azimuth:var(--Direction,LEFT)", "azimuth", "var(--Direction,LEFT)"},
+    {"elevation:BELOW", "elevation", "below"},
+    {"elevation:LEVEL", "elevation", "level"},
+    {"elevation:ABOVE", "elevation", "above"},
+    {"elevation:HIGHER", "elevation", "higher"},
+    {"elevation:LOWER", "elevation", "lower"},
+    {"elevation:0", "elevation", "0deg"},
+    {"elevation:-90DEG", "elevation", "-90deg"},
+    {"elevation:1.23456789RAD", "elevation", "1.234568rad"},
+    {"elevation:99GRAD", "elevation", "99grad"},
+    {"pause-before:0", "pause-before", "0s"},
+    {"pause-before:-0ms", "pause-before", "0s"},
+    {"pause-before:1.23456789S", "pause-before", "1.234568s"},
+    {"pause-before:1234.56789MS", "pause-before", "1.234568s"},
+    {"pause-before:.000499999ms", "pause-before", "0s"},
+    {"pause-before:.0005MS", "pause-before", "0.000001s"},
+    {"pause-before:999.9999999ms", "pause-before", "1s"},
+    {"pause-before:1234567890123.456789MS", "pause-before", "1234567890.123457s"},
+    {"pause-before:20.123456789%", "pause-before", "20.123457%"},
+    {"pause-after:0", "pause-after", "0s"},
+    {"pause-after:-0ms", "pause-after", "0s"},
+    {"pause-after:1.23456789S", "pause-after", "1.234568s"},
+    {"pause-after:1234.56789MS", "pause-after", "1.234568s"},
+    {"pause-after:.000499999ms", "pause-after", "0s"},
+    {"pause-after:.0005MS", "pause-after", "0.000001s"},
+    {"pause-after:999.9999999ms", "pause-after", "1s"},
+    {"pause-after:1234567890123.456789MS", "pause-after", "1234567890.123457s"},
+    {"pause-after:20.123456789%", "pause-after", "20.123457%"},
+    {"pitch-range:0", "pitch-range", "0"},
+    {"pitch-range:+099.123456789", "pitch-range", "99.123457"},
+    {"pitch-range:100", "pitch-range", "100"},
+    {"richness:0", "richness", "0"},
+    {"richness:+099.123456789", "richness", "99.123457"},
+    {"richness:100", "richness", "100"},
+    {"stress:0", "stress", "0"},
+    {"stress:+099.123456789", "stress", "99.123457"},
+    {"stress:100", "stress", "100"},
+    {"pitch:X-LOW", "pitch", "x-low"},
+    {"pitch:LOW", "pitch", "low"},
+    {"pitch:MEDIUM", "pitch", "medium"},
+    {"pitch:HIGH", "pitch", "high"},
+    {"pitch:X-HIGH", "pitch", "x-high"},
+    {"pitch:0", "pitch", "0hz"},
+    {"pitch:220.123456789HZ", "pitch", "220.123457hz"},
+    {"pitch:1.23456789KHZ", "pitch", "1.234568khz"},
+    {"play-during:NONE", "play-during", "none"},
+    {"play-during:AUTO", "play-during", "auto"},
+    {"play-during:URL(A.ogg)", "play-during", "url(\"A.ogg\")"},
+    {"play-during:url(A.ogg) REPEAT MIX", "play-during", "url(\"A.ogg\") mix repeat"},
+    {"play-during:url(A.ogg) MIX REPEAT", "play-during", "url(\"A.ogg\") mix repeat"},
+    {"play-during:url(A.ogg) REPEAT", "play-during", "url(\"A.ogg\") repeat"},
+    {"play-during:url(A.ogg) MIX", "play-during", "url(\"A.ogg\") mix"},
+    {"speak-header:ONCE", "speak-header", "once"},
+    {"speak-header:ALWAYS", "speak-header", "always"},
+    {"speak-numeral:DIGITS", "speak-numeral", "digits"},
+    {"speak-numeral:CONTINUOUS", "speak-numeral", "continuous"},
+    {"speak-punctuation:CODE", "speak-punctuation", "code"},
+    {"speak-punctuation:NONE", "speak-punctuation", "none"},
+    {"speak:NORMAL", "speak", "normal"},
+    {"speak:NONE", "speak", "none"},
+    {"speak:SPELL-OUT", "speak", "spell-out"},
+    {"speech-rate:X-SLOW", "speech-rate", "x-slow"},
+    {"speech-rate:SLOW", "speech-rate", "slow"},
+    {"speech-rate:MEDIUM", "speech-rate", "medium"},
+    {"speech-rate:FAST", "speech-rate", "fast"},
+    {"speech-rate:X-FAST", "speech-rate", "x-fast"},
+    {"speech-rate:FASTER", "speech-rate", "faster"},
+    {"speech-rate:SLOWER", "speech-rate", "slower"},
+    {"volume:SILENT", "volume", "silent"},
+    {"volume:X-SOFT", "volume", "x-soft"},
+    {"volume:SOFT", "volume", "soft"},
+    {"volume:MEDIUM", "volume", "medium"},
+    {"volume:LOUD", "volume", "loud"},
+    {"volume:X-LOUD", "volume", "x-loud"},
+    {"speech-rate:+123456789.123456789", "speech-rate", "123456789.123457"},
+    {"volume:0", "volume", "0"},
+    {"volume:100", "volume", "100"},
+    {"volume:00012.123456789%", "volume", "12.123457%"},
+    {"volume:10000%", "volume", "10000%"},
+    {"voice-family:MALE, FEMALE, CHILD", "voice-family", "male, female, child"},
+    {"voice-family:One/**/Two,MALE", "voice-family", "\"One Two\", male"},
+    {"voice-family:\"Male\", female", "voice-family", "\"Male\", female"},
+    {"voice-family:System-UI,serif,Child", "voice-family", "\"System-UI\", \"serif\", child"},
+    {"voice-family:One\\20 Two, female", "voice-family", "\"One Two\", female"},
+    {"voice-family:\"a\\22 b\\a c\",CHILD", "voice-family", "\"a\\\"b\\a c\", child"},
+    {"cue:none", "cue", "none"},
+    {"cue:URL(A.ogg)", "cue", "url(\"A.ogg\")"},
+    {"cue:url(A.ogg) url(A.ogg)", "cue", "url(\"A.ogg\")"},
+    {"cue:none URL(B.ogg)", "cue", "none url(\"B.ogg\")"},
+    {"pause:0", "pause", "0s"},
+    {"pause:1000ms 1s", "pause", "1s"},
+    {"pause:20MS 30%", "pause", "0.02s 30%"},
+    {"cue:url(A.ogg) none", "cue-before", "url(\"A.ogg\")"},
+    {"cue:url(A.ogg) none", "cue-after", "none"},
+    {"pause:20ms 30%", "pause-before", "0.02s"},
+    {"pause:20ms 30%", "pause-after", "30%"},
+    {"cue:none;cue-after:url(A.ogg)", "cue", "none url(\"A.ogg\")"},
+    {"pause:1s;pause-before:2s", "pause", "2s 1s"},
+    {"cue:none!important;cue-after:url(A.ogg)", "cue", "none"},
+    {"pause:1s;pause-after:2s!important", "pause", ""},
+    {"cue:var(--Cue, url(A.ogg))", "cue", "var(--Cue, url(A.ogg))"},
+    {"cue:var(--Cue)", "cue-before", ""},
+    {"pause:var(--Pause, 20ms)", "pause", "var(--Pause, 20ms)"},
+    {"pause:var(--Pause);pause-after:1s", "pause", ""},
+    {"azimuth:INITIAL", "azimuth", "initial"},
+    {"azimuth:INHERIT", "azimuth", "inherit"},
+    {"azimuth:UNSET", "azimuth", "unset"},
+    {"azimuth:REVERT", "azimuth", "revert"},
+    {"elevation:INITIAL", "elevation", "initial"},
+    {"elevation:INHERIT", "elevation", "inherit"},
+    {"elevation:UNSET", "elevation", "unset"},
+    {"elevation:REVERT", "elevation", "revert"},
+    {"pause:INITIAL", "pause", "initial"},
+    {"pause:INHERIT", "pause", "inherit"},
+    {"pause:UNSET", "pause", "unset"},
+    {"pause:REVERT", "pause", "revert"},
+    {"pause-before:INITIAL", "pause-before", "initial"},
+    {"pause-before:INHERIT", "pause-before", "inherit"},
+    {"pause-before:UNSET", "pause-before", "unset"},
+    {"pause-before:REVERT", "pause-before", "revert"},
+    {"pause-after:INITIAL", "pause-after", "initial"},
+    {"pause-after:INHERIT", "pause-after", "inherit"},
+    {"pause-after:UNSET", "pause-after", "unset"},
+    {"pause-after:REVERT", "pause-after", "revert"},
+    {"pitch-range:INITIAL", "pitch-range", "initial"},
+    {"pitch-range:INHERIT", "pitch-range", "inherit"},
+    {"pitch-range:UNSET", "pitch-range", "unset"},
+    {"pitch-range:REVERT", "pitch-range", "revert"},
+    {"pitch:INITIAL", "pitch", "initial"},
+    {"pitch:INHERIT", "pitch", "inherit"},
+    {"pitch:UNSET", "pitch", "unset"},
+    {"pitch:REVERT", "pitch", "revert"},
+    {"play-during:INITIAL", "play-during", "initial"},
+    {"play-during:INHERIT", "play-during", "inherit"},
+    {"play-during:UNSET", "play-during", "unset"},
+    {"play-during:REVERT", "play-during", "revert"},
+    {"richness:INITIAL", "richness", "initial"},
+    {"richness:INHERIT", "richness", "inherit"},
+    {"richness:UNSET", "richness", "unset"},
+    {"richness:REVERT", "richness", "revert"},
+    {"speak-header:INITIAL", "speak-header", "initial"},
+    {"speak-header:INHERIT", "speak-header", "inherit"},
+    {"speak-header:UNSET", "speak-header", "unset"},
+    {"speak-header:REVERT", "speak-header", "revert"},
+    {"speak-numeral:INITIAL", "speak-numeral", "initial"},
+    {"speak-numeral:INHERIT", "speak-numeral", "inherit"},
+    {"speak-numeral:UNSET", "speak-numeral", "unset"},
+    {"speak-numeral:REVERT", "speak-numeral", "revert"},
+    {"speak-punctuation:INITIAL", "speak-punctuation", "initial"},
+    {"speak-punctuation:INHERIT", "speak-punctuation", "inherit"},
+    {"speak-punctuation:UNSET", "speak-punctuation", "unset"},
+    {"speak-punctuation:REVERT", "speak-punctuation", "revert"},
+    {"speak:INITIAL", "speak", "initial"},
+    {"speak:INHERIT", "speak", "inherit"},
+    {"speak:UNSET", "speak", "unset"},
+    {"speak:REVERT", "speak", "revert"},
+    {"speech-rate:INITIAL", "speech-rate", "initial"},
+    {"speech-rate:INHERIT", "speech-rate", "inherit"},
+    {"speech-rate:UNSET", "speech-rate", "unset"},
+    {"speech-rate:REVERT", "speech-rate", "revert"},
+    {"stress:INITIAL", "stress", "initial"},
+    {"stress:INHERIT", "stress", "inherit"},
+    {"stress:UNSET", "stress", "unset"},
+    {"stress:REVERT", "stress", "revert"},
+    {"voice-family:INITIAL", "voice-family", "initial"},
+    {"voice-family:INHERIT", "voice-family", "inherit"},
+    {"voice-family:UNSET", "voice-family", "unset"},
+    {"voice-family:REVERT", "voice-family", "revert"},
+    {"volume:INITIAL", "volume", "initial"},
+    {"volume:INHERIT", "volume", "inherit"},
+    {"volume:UNSET", "volume", "unset"},
+    {"volume:REVERT", "volume", "revert"},
+    {"cue:INITIAL", "cue", "initial"},
+    {"cue:INHERIT", "cue", "inherit"},
+    {"cue:UNSET", "cue", "unset"},
+    {"cue:REVERT", "cue", "revert"},
+    {"pause:calc(1s + 2s)", "pause", NULL},
+    {"pitch:calc(1hz + 2hz)", "pitch", NULL},
+    {"speech-rate:calc(1 + 2)", "speech-rate", NULL},
+
     {"fill:NONE", "fill", "none"},
     {"fill:CURRENTcolor", "fill", "currentcolor"},
     {"fill:ReD", "fill", "red"},
@@ -3715,6 +3929,11 @@ START_TEST(test_property_payload_important)
         "stroke-width:32768px", "stroke-width:2", "stroke-width:3%", "stroke-width:initial",
         "fill-opacity:.5", "stroke-opacity:.25",
         "cursor:auto", "cursor:url(Cur.cur),url(Other.cur),pointer",
+        "azimuth:behind left", "azimuth:-90deg", "elevation:20grad", "pause-before:20ms", "pause-after:30%",
+        "pause-before:initial", "pause-after:inherit",
+        "pitch:2khz", "pitch-range:50", "richness:50", "stress:50", "speech-rate:120", "volume:50%", "volume:50",
+        "speak:spell-out", "play-during:url(A.ogg) mix repeat", "play-during:url(A.ogg) repeat", "play-during:none",
+        "voice-family:One Two,male,'X'", "cue-before:none", "cue-after:url(A.ogg)", "cue-before:inherit",
     };
     for (size_t i = 0; i < N_ELEMENTS(values); i++) {
         char input[256];
@@ -3731,6 +3950,20 @@ START_TEST(test_property_payload_important)
             "!important corrupted payload or next declaration: %s", values[i]);
         css__declaration_list_destroy(normal);
         css__declaration_list_destroy(priority);
+    }
+    /* Shorthands emit two OPVs, each of which must receive the flag. */
+    static const char *const pairs[][2] = {
+        {"pause:20ms 30%!important;color:red", "pause-before:20ms!important;pause-after:30%!important;color:red"},
+        {"pause:initial!important;color:red", "pause-before:initial!important;pause-after:initial!important;color:red"},
+        {"cue:none url(A.ogg)!important;color:red", "cue-before:none!important;cue-after:url(A.ogg)!important;color:red"},
+        {"cue:inherit!important;color:red", "cue-before:inherit!important;cue-after:inherit!important;color:red"},
+    };
+    for (size_t i = 0; i < N_ELEMENTS(pairs); i++) {
+        css_declaration_list *shorthand = parse(pairs[i][0], _i != 0);
+        css_declaration_list *longhands = parse(pairs[i][1], _i != 0);
+        compare_sheets(css__declaration_list_sheet(shorthand), css__declaration_list_sheet(longhands));
+        css__declaration_list_destroy(shorthand);
+        css__declaration_list_destroy(longhands);
     }
 }
 END_TEST
@@ -4319,7 +4552,10 @@ START_TEST(test_value_allocation_failure)
         "grid-area", "grid-column", "grid-row", "grid-row-end", "place-content", "background-position", "object-position",
         "background-repeat", "text-decoration", "background", "background-color", "font", "font-size", "line-height",
         "transform", "transform", "grid-template-columns", "grid-template-rows", "grid-auto-flow",
-        "fill", "stroke", "fill-opacity", "stroke-opacity", "stroke-width", "cursor"};
+        "fill", "stroke", "fill-opacity", "stroke-opacity", "stroke-width", "cursor",
+        "azimuth", "elevation", "pause-before", "pause-after", "pitch-range", "pitch", "play-during", "richness",
+        "speech-rate", "stress", "voice-family", "volume",
+        "cue", "pause"};
     const char *name = names[_i];
     void (*limit)(unsigned) = _i == 37 ? calloc_limit : malloc_limit;
     /* Keep full-border inputs separate: they reset the quad style/colour cases. */
@@ -4345,6 +4581,12 @@ START_TEST(test_value_allocation_failure)
               "fill-opacity:.1234567;stroke-opacity:.7654321;stroke-width:12.3456789em";
     if (strcmp(name, "cursor") == 0)
         css = "cursor:url('Cursor.cur'),url('Other.png'),POINTER";
+    if (_i >= 47)
+        css = "azimuth:behind left;elevation:1.2345678deg;pause-before:123.456789ms;pause-after:1.2345678s;"
+              "pitch-range:12.3456789;pitch:1.2345678khz;play-during:url('a b.ogg') repeat mix;richness:23.4567891;"
+              "speak-header:ONCE;speak-numeral:DIGITS;speak-punctuation:CODE;speak:NONE;"
+              "speech-rate:123.4567891;stress:34.5678912;voice-family:One Two,MALE;volume:45.6789123%;"
+              "cue:url('a b.ogg') none;pause:123.456789ms 12.3456789%;";
     css_declaration_list *list = parse(css, false);
     css_declaration_order *order;
     ck_assert_int_eq(css__declaration_order_create(list, &order), CSS_OK);
@@ -4442,7 +4684,7 @@ int main(void)
     tcase_add_loop_test(tc, test_overflow_axes, 0, 2);
     tcase_add_test(tc, test_value_arguments);
 #ifdef WISP_TEST_ALLOC_FAILURE
-    tcase_add_loop_test(tc, test_value_allocation_failure, 0, 47);
+    tcase_add_loop_test(tc, test_value_allocation_failure, 0, 61);
     tcase_add_loop_test(tc, test_position_rollback, 0, 2);
     tcase_add_loop_test(tc, test_font_rollback, 0, 5);
     tcase_add_loop_test(tc, test_gap_rollback, 0, 4);

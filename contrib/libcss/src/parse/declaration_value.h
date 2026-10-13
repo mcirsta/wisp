@@ -22,6 +22,11 @@ css_error css__declaration_value_serialize(const css_declaration_contribution *v
  * A unitless length becomes px; specified units/precision never come from bytecode. */
 css_error css__declaration_numeric_serialize(const css_declaration_token *token, bool length_value, lwc_string **out);
 
+/* Divide an accepted decimal by 10^places before rounding and replace its
+ * unit (NULL for a number). Shared by scale percentages and millisecond times. */
+css_error css__declaration_numeric_divide(
+    const css_declaration_token *token, unsigned int places, const char *unit, lwc_string **out);
+
 /* Members must be in the requested shorthand's registered component order.
  * NULL members, mixed priorities, mixed CSS-wide keywords or incompatible
  * pending-substitution values give the CSSOM empty string. Reconstruction of

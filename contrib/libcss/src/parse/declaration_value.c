@@ -55,7 +55,7 @@ static bool digit(char ch)
  * ten fractional bits, and strtod/snprintf would introduce locale and binary
  * rounding differences. The current property parser does not accept exponents.
  * This is serialization after validation, not another property parser. */
-css_error css__declaration_numeric_serialize(const css_declaration_token *token, bool length_value, lwc_string **out)
+static css_error serialize_numeric(const css_declaration_token *token, const char *default_unit, lwc_string **out)
 {
     const char *text = lwc_string_data(token->text);
     size_t length = lwc_string_length(token->text);
@@ -140,12 +140,61 @@ css_error css__declaration_numeric_serialize(const css_declaration_token *token,
             char ch = text[pos];
             buffer[used++] = ch >= 'A' && ch <= 'Z' ? ch + ('a' - 'A') : ch;
         }
-    } else if (length_value) {
-        buffer[used++] = 'p';
-        buffer[used++] = 'x';
+    } else if (default_unit != NULL) {
+        size_t unit_length = strlen(default_unit);
+        memcpy(buffer + used, default_unit, unit_length);
+        used += unit_length;
     }
     css_error error = intern(buffer, used, out);
     free(buffer);
+    return error;
+}
+
+css_error css__declaration_numeric_serialize(const css_declaration_token *token, bool length_value, lwc_string **out)
+{
+    return serialize_numeric(token, length_value ? "px" : NULL, out);
+}
+
+css_error css__declaration_numeric_divide(
+    const css_declaration_token *token, unsigned int places, const char *unit, lwc_string **out)
+{
+    const char *text = lwc_string_data(token->text);
+    size_t length = lwc_string_length(token->text);
+    if (length > SIZE_MAX - places - 2)
+        return CSS_NOMEM;
+    char *buffer = malloc(length + places + 2);
+    if (buffer == NULL)
+        return CSS_NOMEM;
+    size_t first = (text[0] == '+' || text[0] == '-') ? 1 : 0;
+    size_t end = first;
+    while (end < length && digit(text[end]))
+        end++;
+    size_t whole = end - first, used = first;
+    if (first != 0)
+        buffer[0] = text[0];
+    if (whole > places) {
+        memcpy(buffer + used, text + first, whole - places);
+        used += whole - places;
+    } else {
+        buffer[used++] = '0';
+    }
+    buffer[used++] = '.';
+    for (size_t i = whole; i < places; i++)
+        buffer[used++] = '0';
+    size_t tail = whole < places ? whole : places;
+    memcpy(buffer + used, text + end - tail, tail);
+    used += tail;
+    if (end < length && text[end] == '.') {
+        while (++end < length && digit(text[end]))
+            buffer[used++] = text[end];
+    }
+    css_declaration_token number = {.type = CSS_TOKEN_NUMBER};
+    css_error error = intern(buffer, used, &number.text);
+    free(buffer);
+    if (error == CSS_OK) {
+        error = serialize_numeric(&number, unit, out);
+        lwc_string_unref(number.text);
+    }
     return error;
 }
 
@@ -299,6 +348,8 @@ static size_t scalar_arity(enum css_declaration_value_kind kind)
     switch (kind) {
     case CSS_DECL_VALUE_PAIR_LENGTH:
     case CSS_DECL_VALUE_PAIR_KEYWORD:
+    case CSS_DECL_VALUE_PAIR_TIME:
+    case CSS_DECL_VALUE_PAIR_URI:
         return 2;
     case CSS_DECL_VALUE_QUAD_LENGTH:
     case CSS_DECL_VALUE_QUAD_KEYWORD:
@@ -323,7 +374,7 @@ static const css_declaration_token *scalar_component(const css_declaration_contr
             continue;
         if (count == arity ||
             (token->type != CSS_TOKEN_IDENT && token->type != CSS_TOKEN_NUMBER && token->type != CSS_TOKEN_PERCENTAGE &&
-                token->type != CSS_TOKEN_DIMENSION))
+                token->type != CSS_TOKEN_DIMENSION && token->type != CSS_TOKEN_URI))
             return NULL;
         tokens[count++] = token;
     }
@@ -630,6 +681,54 @@ static css_error serialize_position(const css_declaration *source, lwc_string **
     return error;
 }
 
+/* Legacy aural angles use deg for unitless zero. CSSOM's declared-value
+ * azimuth example represents absolute directions as angles; leftwards and
+ * rightwards must stay relative. Both properties passed their native grammar. */
+static css_error serialize_angle(const css_declaration *source, lwc_string **out)
+{
+    const css_declaration_token *direction = NULL;
+    bool behind = false;
+    for (size_t i = 0; i < source->token_count; i++) {
+        const css_declaration_token *token = &source->tokens[i];
+        if (token->type == CSS_TOKEN_S)
+            continue;
+        if (token->type == CSS_TOKEN_IDENT && css__keyword_equal(token->text, "behind")) {
+            behind = true;
+        } else if (direction == NULL) {
+            direction = token;
+        } else {
+            return CSS_INVALID;
+        }
+    }
+    if (behind && direction == NULL)
+        return intern("180deg", 6, out);
+    if (direction == NULL)
+        return CSS_INVALID;
+    if (direction->type != CSS_TOKEN_IDENT) {
+        if (behind || (direction->type != CSS_TOKEN_NUMBER && direction->type != CSS_TOKEN_DIMENSION))
+            return CSS_INVALID;
+        return serialize_numeric(direction, "deg", out);
+    }
+    if (source->property->id == CSS_DECL_AZIMUTH) {
+        static const struct {
+            const char *name, *front, *back;
+        } directions[] = {
+            {"left-side", "270deg", "270deg"}, {"far-left", "300deg", "240deg"}, {"left", "320deg", "220deg"},
+            {"center-left", "340deg", "200deg"}, {"center", "0deg", "180deg"}, {"center-right", "20deg", "160deg"},
+            {"right", "40deg", "140deg"}, {"far-right", "60deg", "120deg"}, {"right-side", "90deg", "90deg"},
+        };
+        for (size_t i = 0; i < sizeof(directions) / sizeof(directions[0]); i++) {
+            if (css__keyword_equal(direction->text, directions[i].name)) {
+                const char *value = behind ? directions[i].back : directions[i].front;
+                return intern(value, strlen(value), out);
+            }
+        }
+    }
+    if (behind)
+        return CSS_INVALID;
+    return lwc_string_tolower(direction->text, out) == lwc_error_ok ? CSS_OK : CSS_NOMEM;
+}
+
 css_error css__declaration_value_serialize(const css_declaration_contribution *value, lwc_string **out)
 {
     if (out == NULL)
@@ -654,6 +753,8 @@ css_error css__declaration_value_serialize(const css_declaration_contribution *v
         return CSS_INVALID;
     if (kind == CSS_DECL_VALUE_TRANSFORM)
         return css__declaration_transform_serialize(source, out);
+    if (kind == CSS_DECL_VALUE_ANGLE)
+        return serialize_angle(source, out);
     if (kind == CSS_DECL_VALUE_FONT)
         return css__declaration_font_component(value, out);
     if (kind == CSS_DECL_VALUE_IMAGE_LIST)
@@ -663,7 +764,8 @@ css_error css__declaration_value_serialize(const css_declaration_contribution *v
     if (kind == CSS_DECL_VALUE_URI || kind == CSS_DECL_VALUE_CURSOR || kind == CSS_DECL_VALUE_KEYWORD_LIST ||
         kind == CSS_DECL_VALUE_GRID_TRACKS || kind == CSS_DECL_VALUE_GRID_FLOW ||
         kind == CSS_DECL_VALUE_CONTENT || kind == CSS_DECL_VALUE_STRING_LIST || kind == CSS_DECL_VALUE_COUNTER_LIST ||
-        kind == CSS_DECL_VALUE_FONT_FAMILY || kind == CSS_DECL_VALUE_REPEAT_LIST || kind == CSS_DECL_VALUE_TEXT_DECORATION)
+        kind == CSS_DECL_VALUE_FONT_FAMILY || kind == CSS_DECL_VALUE_VOICE_FAMILY || kind == CSS_DECL_VALUE_PLAY_DURING ||
+        kind == CSS_DECL_VALUE_REPEAT_LIST || kind == CSS_DECL_VALUE_TEXT_DECORATION)
         return css__declaration_text_serialize(source, out);
     if (kind == CSS_DECL_VALUE_ASPECT_RATIO || kind == CSS_DECL_VALUE_BORDER_SPACING || kind == CSS_DECL_VALUE_CLIP)
         return serialize_geometry(source, out);
@@ -687,6 +789,18 @@ css_error css__declaration_value_serialize(const css_declaration_contribution *v
         return lwc_string_tolower(token->text, out) == lwc_error_ok ? CSS_OK : CSS_NOMEM;
     if (kind == CSS_DECL_VALUE_KEYWORD || kind == CSS_DECL_VALUE_PAIR_KEYWORD || kind == CSS_DECL_VALUE_QUAD_KEYWORD)
         return CSS_INVALID;
+    if (kind == CSS_DECL_VALUE_PAIR_URI) {
+        css_declaration component = {.property = css_prop_lookup("cue-before", 10), .tokens = token, .token_count = 1};
+        return css__declaration_text_serialize(&component, out);
+    }
+    if ((kind == CSS_DECL_VALUE_TIME || kind == CSS_DECL_VALUE_PAIR_TIME) && token->type == CSS_TOKEN_DIMENSION) {
+        const char *text = lwc_string_data(token->text);
+        size_t length = lwc_string_length(token->text);
+        if (length >= 2 && (text[length - 2] == 'm' || text[length - 2] == 'M'))
+            return css__declaration_numeric_divide(token, 3, "s", out);
+    }
+    if (kind == CSS_DECL_VALUE_TIME || kind == CSS_DECL_VALUE_PAIR_TIME || kind == CSS_DECL_VALUE_FREQUENCY)
+        return serialize_numeric(token, kind == CSS_DECL_VALUE_FREQUENCY ? "hz" : "s", out);
     return css__declaration_numeric_serialize(
         token, kind != CSS_DECL_VALUE_NUMBER && kind != CSS_DECL_VALUE_NUMBER_LENGTH, out);
 }

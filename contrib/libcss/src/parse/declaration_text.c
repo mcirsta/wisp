@@ -268,7 +268,7 @@ static bool unsupported_font_generic(lwc_string *name)
 /* CSSOM serializes named families as strings. Join decoded identifiers with
  * single spaces, preserving whitespace inside each identifier. Writing their
  * escaped contents directly avoids allocating a temporary joined name. */
-static css_error font_family_name(const css_declaration *source, size_t *position,
+static css_error family_name(const css_declaration *source, size_t *position,
     const css_declaration_token **token, struct text_output *out)
 {
     css_error error;
@@ -279,7 +279,11 @@ static css_error font_family_name(const css_declaration *source, size_t *positio
     }
     if ((*token)->type != CSS_TOKEN_IDENT)
         return CSS_INVALID;
-    if (css__is_font_family_generic((*token)->text)) {
+    bool voice = source->property->value_kind == CSS_DECL_VALUE_VOICE_FAMILY;
+    bool generic = voice ? (css__keyword_equal((*token)->text, "male") ||
+        css__keyword_equal((*token)->text, "female") || css__keyword_equal((*token)->text, "child")) :
+        css__is_font_family_generic((*token)->text);
+    if (generic) {
         error = append(out, lwc_string_data((*token)->text), lwc_string_length((*token)->text), true);
         *token = next_token(source, position);
         return error;
@@ -287,7 +291,7 @@ static css_error font_family_name(const css_declaration *source, size_t *positio
     error = append(out, "\"", 1, false);
     bool first = true;
     while (*token != NULL && (*token)->type == CSS_TOKEN_IDENT) {
-        if (unsupported_font_generic((*token)->text))
+        if (!voice && unsupported_font_generic((*token)->text))
             return CSS_INVALID;
         if (error == CSS_OK && !first)
             error = append(out, " ", 1, false);
@@ -301,14 +305,14 @@ static css_error font_family_name(const css_declaration *source, size_t *positio
     return append(out, "\"", 1, false);
 }
 
-static css_error serialize_font_family(const css_declaration *source, struct text_output *out)
+static css_error serialize_family(const css_declaration *source, struct text_output *out)
 {
     size_t position = 0;
     const css_declaration_token *token = next_token(source, &position);
     if (token == NULL)
         return CSS_INVALID;
     for (;;) {
-        css_error error = font_family_name(source, &position, &token, out);
+        css_error error = family_name(source, &position, &token, out);
         if (error != CSS_OK || token == NULL)
             return error;
         if (!character(token, ','))
@@ -493,6 +497,31 @@ static css_error serialize_grid_flow(const css_declaration *source, struct text_
     return append(out, value, strlen(value), false);
 }
 
+static css_error serialize_play_during(const css_declaration *source, struct text_output *out)
+{
+    size_t position = 0;
+    const css_declaration_token *token = next_token(source, &position);
+    if (token == NULL)
+        return CSS_INVALID;
+    if (token->type == CSS_TOKEN_IDENT)
+        return serialize_list(source, out); /* auto or none */
+    if (token->type != CSS_TOKEN_URI)
+        return CSS_INVALID;
+    css_error error = url(out, token->text);
+    bool mix = false, repeat = false;
+    while ((token = next_token(source, &position)) != NULL) {
+        if (token->type != CSS_TOKEN_IDENT)
+            return CSS_INVALID;
+        mix |= css__keyword_equal(token->text, "mix");
+        repeat |= css__keyword_equal(token->text, "repeat");
+    }
+    if (error == CSS_OK && mix)
+        error = append(out, " mix", 4, false);
+    if (error == CSS_OK && repeat)
+        error = append(out, " repeat", 7, false);
+    return error;
+}
+
 static css_error serialize(const css_declaration *source, struct text_output *out)
 {
     switch (source->property->value_kind) {
@@ -502,7 +531,10 @@ static css_error serialize(const css_declaration *source, struct text_output *ou
     case CSS_DECL_VALUE_COUNTER_LIST:
         return serialize_counters(source, out);
     case CSS_DECL_VALUE_FONT_FAMILY:
-        return serialize_font_family(source, out);
+    case CSS_DECL_VALUE_VOICE_FAMILY:
+        return serialize_family(source, out);
+    case CSS_DECL_VALUE_PLAY_DURING:
+        return serialize_play_during(source, out);
     case CSS_DECL_VALUE_REPEAT_LIST:
         return serialize_repeats(source, out);
     case CSS_DECL_VALUE_TEXT_DECORATION:

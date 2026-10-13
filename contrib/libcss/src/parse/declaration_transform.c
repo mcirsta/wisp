@@ -27,53 +27,6 @@ static bool character(const css_declaration_token *token, char ch)
         lwc_string_data(token->text)[0] == ch;
 }
 
-/* Transforms 2 section 12: scale percentages serialize as numbers. Shift the
- * decimal before rounding, preserving arbitrarily long accepted decimals and
- * avoiding both floating-point loss and the renderer's fixed-point limit. */
-static css_error scale_number(const css_declaration_token *token, lwc_string **out)
-{
-    if (token->type != CSS_TOKEN_PERCENTAGE)
-        return css__declaration_numeric_serialize(token, false, out);
-    const char *text = lwc_string_data(token->text);
-    size_t length = lwc_string_length(token->text);
-    if (length > SIZE_MAX - 4)
-        return CSS_NOMEM;
-    char *buffer = malloc(length + 4);
-    if (buffer == NULL)
-        return CSS_NOMEM;
-    size_t first = (text[0] == '+' || text[0] == '-') ? 1 : 0;
-    size_t end = first;
-    while (end < length && text[end] != '.')
-        end++;
-    size_t whole = end - first, used = first;
-    if (first != 0)
-        buffer[0] = text[0];
-    if (whole > 2) {
-        memcpy(buffer + used, text + first, whole - 2);
-        used += whole - 2;
-    } else {
-        buffer[used++] = '0';
-    }
-    buffer[used++] = '.';
-    for (size_t i = whole; i < 2; i++)
-        buffer[used++] = '0';
-    size_t tail = whole < 2 ? whole : 2;
-    memcpy(buffer + used, text + end - tail, tail);
-    used += tail;
-    if (end < length) {
-        memcpy(buffer + used, text + end + 1, length - end - 1);
-        used += length - end - 1;
-    }
-    css_declaration_token number = {.type = CSS_TOKEN_NUMBER};
-    css_error error = lwc_intern_string(buffer, used, &number.text) == lwc_error_ok ? CSS_OK : CSS_NOMEM;
-    free(buffer);
-    if (error == CSS_OK) {
-        error = css__declaration_numeric_serialize(&number, false, out);
-        lwc_string_unref(number.text);
-    }
-    return error;
-}
-
 static css_error function(const css_declaration *source, size_t *cursor, lwc_string **out)
 {
     const css_declaration_token *token = next(source, cursor);
@@ -93,7 +46,10 @@ static css_error function(const css_declaration *source, size_t *cursor, lwc_str
             goto done;
         }
         if (syntax->argument == CSS_TRANSFORM_NUMBER) {
-            error = scale_number(token, &parts[count]);
+            /* Transforms 2 section 12: percentages serialize as numbers. */
+            error = token->type == CSS_TOKEN_PERCENTAGE ?
+                css__declaration_numeric_divide(token, 2, NULL, &parts[count]) :
+                css__declaration_numeric_serialize(token, false, &parts[count]);
         } else if (syntax->argument == CSS_TRANSFORM_ANGLE && token->type == CSS_TOKEN_NUMBER) {
             error = lwc_intern_string("0deg", 4, &parts[count]) == lwc_error_ok ? CSS_OK : CSS_NOMEM;
         } else {

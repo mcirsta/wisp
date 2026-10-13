@@ -49,7 +49,8 @@ checklist does not promise that all of that site's JavaScript will work.
 Already complete: accepted-declaration capture, generated property/alias
 metadata, winning-declaration order, shorthand reconstruction, owned editing,
 whole-value assignments and broad specified-value serialization. The transform
-and Grid batches are committed as `285fee12` and `9fbddb34`. Earlier dated
+and Grid batches are committed as `285fee12` and `9fbddb34`; the SVG paint/cursor
+batch is committed as `f7a238d0`. Earlier dated
 sections are historical records, not additional unchecked requirements.
 
 The remaining work is grouped here so adjacent discoveries do not silently move
@@ -58,9 +59,9 @@ the target. Each group can require more than one tested batch:
 - [x] Grid track/auto-flow readback and its shared parser corrections (2026-10-13).
 - [x] Specified-value readback for the existing SVG paint/opacity/stroke and
   cursor grammar (2026-10-13); broader SVG rendering remains separate.
-- [ ] Remaining scalar/list families: the already-registered legacy speech
-  properties. These support preserving existing declarations; they do not
-  require implementing new speech functionality.
+- [x] Remaining scalar/list families: specified-value readback for the
+  already-registered legacy speech properties (2026-10-13). This preserves
+  existing declarations without implementing new speech functionality.
 - [ ] Remaining color/font readback gaps, including missing RGB components and
   the native color families/system-font cases already accepted by parsing.
 - [ ] Math values: validate and serialize accepted expressions through shared
@@ -80,8 +81,9 @@ the target. Each group can require more than one tested batch:
 The earlier estimate of roughly 8–15 focused batches is a planning estimate,
 not a delivery guarantee. Property-family registrations are a coverage aid,
 not a percentage-complete measure: families can still have unsupported value
-forms. After the SVG paint/cursor batch, 167 of the 185 property registrations
-have a family; 18 remain without one. Update this list as groups finish. Keep
+forms. All 185 property registrations now have a family; this closes the
+unregistered-family work, not the remaining value forms or live binding.
+Update this list as groups finish. Keep
 optional rendering discoveries in `src/docs/layout-correctness.md` unless they
 block correct inline-style edits.
 The user has authorized worthwhile adjacent root-cause fixes too; distinguish
@@ -2194,6 +2196,49 @@ confirmed examples are in [the correctness backlog](../src/docs/layout-correctne
 These do not expand the finite prerequisites for live inline-style editing.
 The old Duktape getter was inspected again: it creates an empty object for a
 Modernizr probe, with no native paint/cursor readback implementation to reuse.
+
+### Legacy aural specified-value readback (2026-10-13)
+
+The SVG paint/cursor batch is committed as `f7a238d0`. The last 18 property
+registrations without a serialization family now use the shared numeric,
+keyword, string/list and shorthand machinery. This completes the scalar/list
+group in the finite checklist. It preserves the legacy declarations already
+accepted by LibCSS; it does not implement audio output or the newer CSS Speech
+property model.
+
+The grammar follows the existing
+[CSS 2.1 aural appendix](https://www.w3.org/TR/CSS21/aural.html), with
+[CSSOM serialization](https://drafts.csswg.org/cssom/#serialize-a-css-value):
+times are written in seconds, voice names retain their spelling and quoting,
+play-during modifiers use canonical order, and cue/pause retain their independent
+before/after values and priorities. Absolute azimuth keywords use the angle
+mapping shown by CSSOM's legacy example; relative leftwards/rightwards remain
+keywords. Numeric angles retain their declared units and precision.
+
+Millisecond conversion and transform percentage conversion now share the exact
+decimal-shift helper. Conversion precedes six-place rounding, avoiding the
+renderer's fixed-point precision loss and locale-dependent floating point.
+Family names reuse the font-family string handling while keeping their distinct
+generic keywords. There is no new persistent representation or renderer work
+on ordinary page loads.
+
+Tests cover whole/chunked parsing, readback/reparse, cssText, CSS-wide keywords,
+pending variables, invalid assignments, allocation failures and bytecode
+priorities. Owned-edit tests change opacity while preserving all these values,
+then edit and remove individual cue/pause members without losing their siblings.
+The legacy Duktape style getter was checked again; its Modernizr placeholder
+contains no declaration serializer to reuse.
+
+Validation: 89 selected native CSS/QuickJS/font/Grid/transform/SVG suites pass
+in both Debug and Release, including ASan/UBSan and LeakSanitizer in Debug.
+All 15 selected Qt regressions pass in Debug; the 12 that do not require JS
+diagnostic logs also pass in Release. Both builds are warning-free and
+`git diff --check` is clean. No GTK builds were run.
+
+Math-valued forms remain explicitly unsupported by readback and belong to the
+existing math checklist group. The next group is the remaining color/font value
+forms, followed by math, aggregate-property identities and the live QuickJS/DOM
+connection. All 185 registrations having a family is not full CSSOM completion.
 
 ## Assessment
 

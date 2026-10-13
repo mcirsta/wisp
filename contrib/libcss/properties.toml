@@ -201,6 +201,7 @@ parse = "IDENT:( INHERIT: INITIAL: REVERT: UNSET: AUTO:0,BOTTOM_AUTO IDENT:) LEN
 # ─── Properties ───
 
 [azimuth]
+declaration_value = "angle"
 enum = "CSS_PROP_AZIMUTH"
 cascade = "manual"
 computed = "none"
@@ -646,6 +647,7 @@ initial = "INLINE"
 parse = '''IDENT:( INHERIT: INITIAL: REVERT: UNSET: INLINE:0,DISPLAY_INLINE BLOCK:0,DISPLAY_BLOCK LIST_ITEM:0,DISPLAY_LIST_ITEM RUN_IN:0,DISPLAY_RUN_IN INLINE_BLOCK:0,DISPLAY_INLINE_BLOCK TABLE:0,DISPLAY_TABLE INLINE_TABLE:0,DISPLAY_INLINE_TABLE TABLE_ROW_GROUP:0,DISPLAY_TABLE_ROW_GROUP TABLE_HEADER_GROUP:0,DISPLAY_TABLE_HEADER_GROUP TABLE_FOOTER_GROUP:0,DISPLAY_TABLE_FOOTER_GROUP TABLE_ROW:0,DISPLAY_TABLE_ROW TABLE_COLUMN_GROUP:0,DISPLAY_TABLE_COLUMN_GROUP TABLE_COLUMN:0,DISPLAY_TABLE_COLUMN TABLE_CELL:0,DISPLAY_TABLE_CELL TABLE_CAPTION:0,DISPLAY_TABLE_CAPTION NONE:0,DISPLAY_NONE FLEX:0,DISPLAY_FLEX INLINE_FLEX:0,DISPLAY_INLINE_FLEX GRID:0,DISPLAY_GRID INLINE_GRID:0,DISPLAY_INLINE_GRID FLOW_ROOT:0,DISPLAY_FLOW_ROOT IDENT:)'''
 
 [elevation]
+declaration_value = "angle"
 enum = "CSS_PROP_ELEVATION"
 cascade = "manual"
 computed = "none"
@@ -1101,6 +1103,7 @@ defaults = "CSS_PAGE_BREAK_INSIDE_AUTO"
 parse = '''IDENT:( INHERIT: INITIAL: REVERT: UNSET: AUTO:0,PAGE_BREAK_INSIDE_AUTO AVOID:0,PAGE_BREAK_INSIDE_AVOID IDENT:)'''
 
 [pause_after]
+declaration_value = "time"
 enum = "CSS_PROP_PAUSE_AFTER"
 inherited = false
 cascade = "manual"
@@ -1108,6 +1111,7 @@ computed = "none"
 parse = '''IDENT:( INHERIT: INITIAL: REVERT: UNSET: IDENT:) LENGTH_UNIT:( UNIT_S:PAUSE_AFTER_SET MASK:UNIT_MASK_PAUSE_AFTER RANGE:<0 LENGTH_UNIT:) CALC:( UNIT_S:PAUSE_AFTER_CALC CALC:)'''
 
 [pause_before]
+declaration_value = "time"
 enum = "CSS_PROP_PAUSE_BEFORE"
 inherited = false
 cascade = "manual"
@@ -1115,6 +1119,7 @@ computed = "none"
 parse = '''IDENT:( INHERIT: INITIAL: REVERT: UNSET: IDENT:) LENGTH_UNIT:( UNIT_S:PAUSE_BEFORE_SET MASK:UNIT_MASK_PAUSE_BEFORE RANGE:<0 LENGTH_UNIT:) CALC:( UNIT_S:PAUSE_BEFORE_CALC CALC:)'''
 
 [pitch_range]
+declaration_value = "number"
 enum = "CSS_PROP_PITCH_RANGE"
 inherited = true
 cascade = "manual"
@@ -1122,6 +1127,7 @@ computed = "none"
 parse = '''IDENT:( INHERIT: INITIAL: REVERT: UNSET: IDENT:) NUMBER:( false:PITCH_RANGE_SET RANGE:num<0||num>F_100 NUMBER:) CALC:( NUMBER:PITCH_RANGE_CALC CALC:)'''
 
 [pitch]
+declaration_value = "frequency"
 enum = "CSS_PROP_PITCH"
 inherited = true
 cascade = "manual"
@@ -1129,6 +1135,7 @@ computed = "none"
 parse = '''IDENT:( INHERIT: INITIAL: REVERT: UNSET: X_LOW:0,PITCH_X_LOW LOW:0,PITCH_LOW MEDIUM:0,PITCH_MEDIUM HIGH:0,PITCH_HIGH X_HIGH:0,PITCH_X_HIGH IDENT:) LENGTH_UNIT:( UNIT_HZ:PITCH_FREQUENCY MASK:UNIT_MASK_PITCH RANGE:<0 LENGTH_UNIT:) CALC:( UNIT_HZ:PITCH_CALC CALC:)'''
 
 [play_during]
+declaration_value = "play_during"
 enum = "CSS_PROP_PLAY_DURING"
 inherited = false
 manual = true
@@ -1158,6 +1165,7 @@ outer_struct = true
 select_comments = "Encode quotes as an array of string objects, terminated with a blank entry."
 
 [richness]
+declaration_value = "number"
 enum = "CSS_PROP_RICHNESS"
 inherited = true
 cascade = "manual"
@@ -1181,6 +1189,7 @@ override = "get"
 parse = "WRAP:css__parse_side"
 
 [speak_header]
+declaration_value = "keyword"
 enum = "CSS_PROP_SPEAK_HEADER"
 inherited = true
 cascade = "manual"
@@ -1188,6 +1197,7 @@ computed = "none"
 parse = '''IDENT:( INHERIT: INITIAL: REVERT: UNSET: ONCE:0,SPEAK_HEADER_ONCE ALWAYS:0,SPEAK_HEADER_ALWAYS IDENT:)'''
 
 [speak_numeral]
+declaration_value = "keyword"
 enum = "CSS_PROP_SPEAK_NUMERAL"
 inherited = true
 cascade = "manual"
@@ -1195,6 +1205,7 @@ computed = "none"
 parse = '''IDENT:( INHERIT: INITIAL: REVERT: UNSET: DIGITS:0,SPEAK_NUMERAL_DIGITS CONTINUOUS:0,SPEAK_NUMERAL_CONTINUOUS IDENT:)'''
 
 [speak_punctuation]
+declaration_value = "keyword"
 enum = "CSS_PROP_SPEAK_PUNCTUATION"
 inherited = true
 cascade = "manual"
@@ -1202,6 +1213,7 @@ computed = "none"
 parse = '''IDENT:( INHERIT: INITIAL: REVERT: UNSET: CODE:0,SPEAK_PUNCTUATION_CODE NONE:0,SPEAK_PUNCTUATION_NONE IDENT:)'''
 
 [speak]
+declaration_value = "keyword"
 enum = "CSS_PROP_SPEAK"
 inherited = true
 cascade = "manual"
@@ -1209,6 +1221,7 @@ computed = "none"
 parse = '''IDENT:( INHERIT: INITIAL: REVERT: UNSET: NORMAL:0,SPEAK_NORMAL NONE:0,SPEAK_NONE SPELL_OUT:0,SPEAK_SPELL_OUT IDENT:)'''
 
 [speech_rate]
+declaration_value = "number"
 enum = "CSS_PROP_SPEECH_RATE"
 inherited = true
 cascade = "manual"
@@ -1216,6 +1229,7 @@ computed = "none"
 parse = '''IDENT:( INHERIT: INITIAL: REVERT: UNSET: X_SLOW:0,SPEECH_RATE_X_SLOW SLOW:0,SPEECH_RATE_SLOW MEDIUM:0,SPEECH_RATE_MEDIUM FAST:0,SPEECH_RATE_FAST X_FAST:0,SPEECH_RATE_X_FAST FASTER:0,SPEECH_RATE_FASTER SLOWER:0,SPEECH_RATE_SLOWER IDENT:) NUMBER:( false:SPEECH_RATE_SET RANGE:num<0 NUMBER:) CALC:( NUMBER:SPEECH_RATE_CALC CALC:)'''
 
 [stress]
+declaration_value = "number"
 enum = "CSS_PROP_STRESS"
 inherited = true
 cascade = "manual"
@@ -1326,6 +1340,7 @@ initial = "VISIBLE"
 parse = '''IDENT:( INHERIT: INITIAL: REVERT: UNSET: VISIBLE:0,VISIBILITY_VISIBLE HIDDEN:0,VISIBILITY_HIDDEN COLLAPSE:0,VISIBILITY_COLLAPSE IDENT:)'''
 
 [voice_family]
+declaration_value = "voice_family"
 enum = "CSS_PROP_VOICE_FAMILY"
 inherited = true
 manual = true
@@ -1333,6 +1348,7 @@ cascade = "manual"
 computed = "none"
 
 [volume]
+declaration_value = "number_length"
 enum = "CSS_PROP_VOLUME"
 inherited = true
 cascade = "manual"
@@ -2067,6 +2083,7 @@ cascade = "none"
 computed = "none"
 
 [cue]
+declaration_value = "pair_uri"
 declaration_longhands = ["cue_before", "cue_after"]
 enum = "CSS_PROP_CUE"
 inherited = false
@@ -2244,6 +2261,7 @@ computed = "none"
 helper_longhands = ["padding_side"]
 
 [pause]
+declaration_value = "pair_time"
 declaration_longhands = ["pause_before", "pause_after"]
 enum = "CSS_PROP_PAUSE"
 inherited = false

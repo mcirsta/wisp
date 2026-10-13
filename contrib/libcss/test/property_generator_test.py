@@ -83,7 +83,7 @@ class DeclarationMetadataTest(unittest.TestCase):
             self.reader.validate_declarations()
 
     def test_value_family_arity(self):
-        for kind in ("pair_length", "pair_keyword"):
+        for kind in ("pair_length", "pair_keyword", "pair_time", "pair_uri"):
             with self.subTest(kind=kind):
                 self.reader.toml_data["margin"]["declaration_value"] = kind
                 with self.assertRaisesRegex(ValueError, "margin: declaration_value requires 2"):
@@ -123,7 +123,7 @@ class DeclarationMetadataTest(unittest.TestCase):
         for kind in ("keyword", "uri", "image_list", "keyword_list", "content", "string_list", "counter_list",
                      "aspect_ratio", "border_spacing", "clip", "font_family", "colour", "grid_line",
                      "cursor", "position", "position_list", "repeat_list", "text_decoration", "transform",
-                     "grid_tracks", "grid_flow"):
+                     "grid_tracks", "grid_flow", "time", "frequency", "angle", "play_during", "voice_family"):
             with self.subTest(kind=kind):
                 self.reader.toml_data["overflow"]["declaration_value"] = kind
                 with self.assertRaisesRegex(ValueError, "overflow: declaration_value requires 0"):
