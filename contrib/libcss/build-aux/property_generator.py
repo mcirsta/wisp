@@ -1181,6 +1181,17 @@ class MultiFileGenerator:
         gen = GperfInputGenerator(keys, name_aliases)
         return gen.generate_gperf_input()
     
+    def generate_declaration_names(self):
+        """Supported CSSOM attributes from the same registrations as gperf."""
+        names = {p['name'].replace('_', '-') for p in self.dispatch_order}
+        names.update(name.replace('_', '-') for name, meta in self.metadata.items()
+                     if (meta.get('is_shorthand', False) and not meta.get('is_manual', False))
+                     or meta.get('is_alias', False))
+        if self.toml_reader:
+            names.update(self.toml_reader.get_legacy_aliases())
+        return '/* Generated from properties.toml. Do not edit. */\n' + ''.join(
+            f'"{name}",\n' for name in sorted(names))
+
     def generate_declaration_ids(self):
         """Property identities are independent of shared bytecode opcodes."""
         data = self.toml_reader.toml_data if self.toml_reader else self.metadata
@@ -1624,6 +1635,7 @@ def main():
         (propstrings_strings_out, generator.generate_propstrings_strings),
         (declaration_ids_out, generator.generate_declaration_ids),
         (gperf_out, generator.generate_gperf_input),
+        (os.path.join(output_dir, 'declaration_names.inc'), generator.generate_declaration_names),
         (cascade_decl_out, generator.generate_cascade_declarations),
         (parse_decl_out, generator.generate_parse_declarations),
         (unit_masks_out, generator.generate_unit_masks),

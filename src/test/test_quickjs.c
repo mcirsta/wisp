@@ -1284,8 +1284,7 @@ START_TEST(test_quickjs_document)
     JS_RunGC(dom_heap->rt);
     assert_predicate(dom_thread, "document.body.expando.owner === document.body", "GC preserves node identity/properties");
     assert_predicate(dom_thread,
-        "document.querySelector === undefined && document.createElementNS === undefined && "
-        "document.body.style === undefined",
+        "document.querySelector === undefined && document.createElementNS === undefined",
         "unsupported APIs do not fabricate success");
 }
 END_TEST
@@ -1570,6 +1569,8 @@ static JSValue close_dom_during_conversion(JSContext *ctx, JSValueConst object, 
     js_closethread(JS_GetContextOpaque(ctx));
     return JS_UNDEFINED;
 }
+
+#include "test_quickjs_style.inc"
 
 START_TEST(test_quickjs_dom_conversion_retirement)
 {
@@ -3930,10 +3931,11 @@ START_TEST(test_quickjs_binding_allocation_failure)
 
     /* Sweep small allocation budgets through registration, object creation and
      * property installation. Exercise the real generator output too. This is
-     * bounded OOM coverage, not a claim to inject failure at every allocation. */
+     * bounded OOM coverage, not a claim to inject failure at every allocation.
+     * CSS property accessors increase document registration beyond 64 KiB. */
     for (size_t i = 0; i < sizeof(bindings) / sizeof(bindings[0]); i++) {
         bool succeeded = false;
-        for (size_t extra = 0; extra <= 65536; extra += 256) {
+        for (size_t extra = 0; extra <= 262144; extra += extra < 65536 ? 256 : 1024) {
             JSRuntime *rt = JS_NewRuntime();
             ck_assert_ptr_nonnull(rt);
             JSContext *ctx = JS_NewContext(rt);
@@ -4098,6 +4100,7 @@ Suite *quickjs_suite(void)
     TCase *tc_dom = tcase_create("Real DOM");
     tcase_add_checked_fixture(tc_dom, setup_dom, teardown_dom);
     tcase_add_test(tc_dom, test_quickjs_document);
+    add_style_tests(tc_dom);
     tcase_add_test(tc_dom, test_quickjs_dom_attributes);
     tcase_add_test(tc_dom, test_quickjs_dom_text);
     tcase_add_test(tc_dom, test_quickjs_dom_conversion);

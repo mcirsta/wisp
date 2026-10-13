@@ -129,6 +129,7 @@ add_library(wisp ${WISP_LIB_TYPE}
 	content/handlers/css/internal.c
 	content/handlers/css/hints.c
 	content/handlers/css/select.c
+	content/handlers/css/inline.c
 	content/handlers/html/box_construct.c
 	content/handlers/html/content_visibility.c
 	content/handlers/html/details.c
@@ -196,6 +197,7 @@ add_library(wisp ${WISP_LIB_TYPE}
 	content/handlers/javascript/quickjs/tree.c
 	content/handlers/javascript/quickjs/markup.c
 	content/handlers/javascript/quickjs/tokenlist.c
+  content/handlers/javascript/quickjs/style.c
 	content/handlers/javascript/quickjs/platform.c
 	content/handlers/javascript/quickjs/collections.c
 	content/handlers/javascript/quickjs/storage.c

@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <libcss/declarations.h>
 #include "parse/declaration_store.h"
 #include "parse/property.h"
 
@@ -1233,6 +1234,49 @@ START_TEST(test_set_allocation_failure)
 END_TEST
 #endif
 
+START_TEST(test_public_clone)
+{
+    css_declarations *source = create("margin:var(--m);color:red", false), *copy = NULL;
+    ck_assert_int_eq(css_declarations_clone(source, &copy), CSS_OK);
+    bool changed;
+    ck_assert_int_eq(css_declarations_set(copy, &input_params, "margin-top", 10, "8px", 3, "", 0, &changed), CSS_OK);
+    ck_assert(changed);
+    check_value(source, "margin", "var(--m)", false);
+    check_value(copy, "margin-top", "8px", false);
+    css_declarations_destroy(source);
+    check_value(copy, "color", "red", false);
+    css_stylesheet *compiled;
+    ck_assert_int_eq(css_declarations_compile(copy, &input_params, &compiled), CSS_OK);
+    css_declarations_destroy(copy);
+    css_stylesheet_destroy(compiled);
+}
+END_TEST
+
+#ifdef WISP_TEST_ALLOC_FAILURE
+START_TEST(test_clone_allocation_failure)
+{
+    void (*allocators[])(unsigned) = {malloc_limit, calloc_limit, realloc_limit};
+    css_declarations *source = create("margin:var(--m);color:red", false), *copy;
+    bool succeeded = false;
+    for (unsigned n = 0; n < 16; n++) {
+        allocators[_i](n);
+        css_error error = css_declarations_clone(source, &copy);
+        allocators[_i](UINT_MAX);
+        check_text(source, "margin: var(--m); color: red;");
+        if (error == CSS_OK) {
+            css_declarations_destroy(copy);
+            succeeded = true;
+            break;
+        }
+        ck_assert_int_eq(error, CSS_NOMEM);
+        ck_assert_ptr_null(copy);
+    }
+    ck_assert(succeeded);
+    css_declarations_destroy(source);
+}
+END_TEST
+#endif
+
 static void unexpected_string(lwc_string *string, void *pw)
 {
     (*(unsigned *)pw)++;
@@ -1265,7 +1309,9 @@ int main(void)
     tcase_add_loop_test(tc, test_url_grammar_in_stylesheets, 0, 2);
     tcase_add_test(tc, test_invalid_value_chunks);
     tcase_add_test(tc, test_bad_arguments);
+    tcase_add_test(tc, test_public_clone);
 #ifdef WISP_TEST_ALLOC_FAILURE
+    tcase_add_loop_test(tc, test_clone_allocation_failure, 0, 3);
     tcase_add_loop_test(tc, test_create_allocation_failure, 0, 3);
     tcase_add_loop_test(tc, test_compile_allocation_failure, 0, 3);
     tcase_add_loop_test(tc, test_set_allocation_failure, 0, 3);

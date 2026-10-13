@@ -32,6 +32,7 @@
 #include "content/handlers/css/hints.h"
 #include "content/handlers/css/internal.h"
 #include "content/handlers/css/select.h"
+#include "content/handlers/css/inline.h"
 #include "content/handlers/html/direction.h"
 
 static css_error node_name(void *pw, void *node, css_qname *qname);
@@ -145,6 +146,14 @@ static css_error nscss_error_handler(void *pw, css_stylesheet *sheet, css_error 
     return CSS_OK;
 }
 
+void nscss_inline_params(css_stylesheet_params *params, const char *url, bool allow_quirks)
+{
+    *params = (css_stylesheet_params){.params_version = CSS_STYLESHEET_PARAMS_VERSION_2,
+        .level = CSS_LEVEL_DEFAULT, .charset = "UTF-8", .url = url, .allow_quirks = allow_quirks,
+        .inline_style = true, .resolve = nscss_resolve_url, .color = ns_system_colour,
+        .error = nscss_error_handler};
+}
+
 /**
  * Create an inline style
  *
@@ -162,23 +171,8 @@ nscss_create_inline_style(const uint8_t *data, size_t len, const char *charset, 
     css_stylesheet *sheet;
     css_error error;
 
-    params.params_version = CSS_STYLESHEET_PARAMS_VERSION_2;
-    params.level = CSS_LEVEL_DEFAULT;
+    nscss_inline_params(&params, url, allow_quirks);
     params.charset = charset;
-    params.url = url;
-    params.title = NULL;
-    params.allow_quirks = allow_quirks;
-    params.inline_style = true;
-    params.resolve = nscss_resolve_url;
-    params.resolve_pw = NULL;
-    params.import = NULL;
-    params.import_pw = NULL;
-    params.color = ns_system_colour;
-    params.color_pw = NULL;
-    params.font = NULL;
-    params.font_pw = NULL;
-    params.error = nscss_error_handler;
-    params.error_pw = NULL;
 
     error = css_stylesheet_create(&params, &sheet);
     if (error != CSS_OK) {

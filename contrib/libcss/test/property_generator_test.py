@@ -41,6 +41,14 @@ class DeclarationMetadataTest(unittest.TestCase):
             kind = prop.get("declaration_value", "none").upper()
             self.assertTrue(entry.endswith("CSS_DECL_VALUE_" + kind + "},"), name)
 
+    def test_cssom_names_match_registered_parser_names(self):
+        generator = GEN.MultiFileGenerator(self.reader.get_dispatch_order(), self.reader.prop_map)
+        generator.toml_reader = self.reader
+        output = generator.generate_gperf_input()
+        keys = {line.split(", ", 1)[0] for line in output.split("%%")[1].strip().splitlines()}
+        names = [line.strip('",') for line in generator.generate_declaration_names().splitlines()[1:]]
+        self.assertEqual(names, sorted(keys))
+
     def test_background_axes_are_native_longhands(self):
         dispatch = {prop['name'] for prop in self.reader.get_dispatch_order()}
         for kind in ('repeat', 'position'):

@@ -91,6 +91,7 @@ static void node_finalizer(JSRuntime *rt, JSValue object)
     release_native(node);
     JS_FreeValueRT(rt, node->event_target);
     JS_FreeValueRT(rt, node->class_list);
+    JS_FreeValueRT(rt, node->style);
     for (unsigned i = 0; i < 2; i++)
         JS_FreeValueRT(rt, node->child_lists[i]);
     JS_FreeValueRT(rt, node->owner);
@@ -105,6 +106,7 @@ static void node_mark(JSRuntime *rt, JSValueConst object, JS_MarkFunc *mark)
     JS_MarkValue(rt, node->owner, mark);
     JS_MarkValue(rt, node->event_target, mark);
     JS_MarkValue(rt, node->class_list, mark);
+    JS_MarkValue(rt, node->style, mark);
     for (unsigned i = 0; i < 2; i++)
         JS_MarkValue(rt, node->child_lists[i], mark);
     if (node->type == DOM_DOCUMENT_NODE) {
@@ -157,16 +159,25 @@ JSValue qjs_dom_owner(JSContext *ctx, JSValueConst object, struct qjs_dom_node *
     return JS_DupValue(ctx, node->type == DOM_DOCUMENT_NODE ? object : node->owner);
 }
 
-bool qjs_dom_is_html(dom_node *node)
+static bool node_namespace_is(dom_node *node, const char *name)
 {
     dom_string *namespace = NULL;
     if (dom_node_get_namespace(node, &namespace) != DOM_NO_ERR)
         return false;
-    const char *html = "http://www.w3.org/1999/xhtml";
-    bool result = namespace != NULL && dom_string_byte_length(namespace) == strlen(html) &&
-        memcmp(dom_string_data(namespace), html, strlen(html)) == 0;
+    bool result = namespace != NULL && dom_string_byte_length(namespace) == strlen(name) &&
+        memcmp(dom_string_data(namespace), name, strlen(name)) == 0;
     dom_string_unref(namespace);
     return result;
+}
+
+bool qjs_dom_is_html(dom_node *node)
+{
+    return node_namespace_is(node, "http://www.w3.org/1999/xhtml");
+}
+
+bool qjs_dom_is_svg(dom_node *node)
+{
+    return node_namespace_is(node, "http://www.w3.org/2000/svg");
 }
 
 static void trace_node(JSContext *ctx, struct qjs_dom_node *node)
@@ -209,6 +220,8 @@ JSValue qjs_dom_wrap(JSContext *ctx, JSValueConst owner, dom_node *native)
     switch (type) {
     case DOM_ELEMENT_NODE:
         kind = qjs_dom_is_html(native) ? QJS_HTML_ELEMENT : QJS_ELEMENT;
+        if (kind == QJS_ELEMENT && qjs_dom_is_svg(native))
+            kind = QJS_SVG_ELEMENT;
         break;
     case DOM_TEXT_NODE:
         kind = QJS_TEXT;
@@ -239,7 +252,7 @@ JSValue qjs_dom_wrap(JSContext *ctx, JSValueConst owner, dom_node *native)
     node->id = ++doc->next_id;
     node->owner = JS_DupValue(ctx, owner);
     node->event_target = JS_UNDEFINED;
-    node->class_list = JS_UNDEFINED;
+    node->class_list = node->style = JS_UNDEFINED;
     node->child_lists[0] = node->child_lists[1] = JS_UNDEFINED;
     node->document = doc;
     JS_SetOpaque(object, node);
@@ -360,7 +373,7 @@ int qjs_init_document(JSContext *ctx)
     doc->base.type = DOM_DOCUMENT_NODE;
     doc->base.owner = JS_UNDEFINED;
     doc->base.event_target = JS_UNDEFINED;
-    doc->base.class_list = JS_UNDEFINED;
+    doc->base.class_list = doc->base.style = JS_UNDEFINED;
     doc->base.child_lists[0] = doc->base.child_lists[1] = JS_UNDEFINED;
     doc->base.id = doc->next_id = 1;
     doc->base.document = doc;
@@ -375,7 +388,7 @@ int qjs_init_document(JSContext *ctx)
         int parent;
     } interfaces[] = {{"Node", -1}, {"Element", QJS_NODE}, {"HTMLElement", QJS_ELEMENT}, {"Document", QJS_NODE},
         {"HTMLDocument", QJS_DOCUMENT}, {"CharacterData", QJS_NODE}, {"Text", QJS_CHARACTER_DATA},
-        {"Comment", QJS_CHARACTER_DATA}, {"DocumentType", QJS_NODE}, {"DocumentFragment", QJS_NODE}};
+        {"Comment", QJS_CHARACTER_DATA}, {"DocumentType", QJS_NODE}, {"DocumentFragment", QJS_NODE}, {"SVGElement", QJS_ELEMENT}};
     for (unsigned i = 0; i < QJS_DOM_PROTOTYPES; i++) {
         JSValue parent = interfaces[i].parent < 0 ? JS_UNDEFINED : doc->prototypes[interfaces[i].parent];
         if (interfaces[i].parent < 0) {
@@ -409,7 +422,7 @@ int qjs_init_document(JSContext *ctx)
         if (JS_SetPropertyStr(ctx, global, interfaces[i].name, ctor) < 0)
             goto out;
     }
-    if (qjs_init_tokenlist(ctx) < 0 || qjs_dom_install_properties(ctx, doc->prototypes) < 0 ||
+    if (qjs_init_tokenlist(ctx) < 0 || qjs_dom_install_style(ctx, doc->prototypes) < 0 || qjs_dom_install_properties(ctx, doc->prototypes) < 0 ||
         qjs_dom_install_tree(ctx, doc->prototypes) < 0 || qjs_dom_install_markup(ctx, doc->prototypes) < 0 ||
         qjs_dom_install_collections(ctx, doc->prototypes) < 0 ||
         JS_SetPrototype(ctx, object, doc->prototypes[QJS_HTML_DOCUMENT]) < 0)

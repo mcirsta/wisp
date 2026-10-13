@@ -415,9 +415,9 @@ const char *nsurl_access(const nsurl *url)
     return "http://test";
 }
 
-css_stylesheet *
-nscss_create_inline_style(const uint8_t *data, size_t len, const char *encoding, const char *base_url, bool quirks)
+css_stylesheet *nscss_inline_style_for_element(dom_node *element, const char *url, bool quirks, bool *present)
 {
+    *present = false;
     return NULL;
 }
 

@@ -17,6 +17,7 @@ enum qjs_dom_prototype {
     QJS_COMMENT,
     QJS_DOCUMENT_TYPE,
     QJS_DOCUMENT_FRAGMENT,
+    QJS_SVG_ELEMENT,
     QJS_DOM_PROTOTYPES
 };
 
@@ -27,6 +28,7 @@ struct qjs_dom_node {
     dom_tokenlist *class_tokens;
     JSValue event_target; /* Lazy listener storage; Node inherits EventTarget. */
     JSValue class_list;
+    JSValue style;
     JSValue child_lists[2]; /* SameObject childNodes and children, allocated lazily. */
     JSValue owner; /* Document wrapper; undefined on the document itself. */
     struct qjs_dom_document *document;
@@ -42,6 +44,7 @@ JSValue qjs_dom_exception(JSContext *ctx, dom_exception error);
 dom_string *qjs_dom_string(JSContext *ctx, JSValueConst value, bool nullable);
 JSValue qjs_dom_from_string(JSContext *ctx, dom_string *value, bool nullable);
 bool qjs_dom_is_html(dom_node *node);
+bool qjs_dom_is_svg(dom_node *node);
 void qjs_dom_changed(
     JSContext *ctx, struct qjs_dom_node *node, const char *operation, dom_string *attribute, dom_exception error);
 /* Attribute edits to the wrapper, and child edits to separate template contents,
@@ -54,6 +57,7 @@ int qjs_dom_install_collections(JSContext *ctx, JSValue *prototypes);
 int qjs_dom_property_index(JSContext *ctx, JSAtom key, uint32_t *index);
 int qjs_dom_install_iteration(JSContext *ctx, JSValueConst proto, JSValueConst global, const char *name, bool iterable);
 int qjs_init_tokenlist(JSContext *ctx);
+int qjs_dom_install_style(JSContext *ctx, JSValue *prototypes);
 JSValue qjs_class_list_get(JSContext *ctx, JSValueConst object);
 JSValue qjs_class_list_set(JSContext *ctx, JSValueConst object, JSValueConst value);
 int qjs_dom_install_properties(JSContext *ctx, JSValue *prototypes);

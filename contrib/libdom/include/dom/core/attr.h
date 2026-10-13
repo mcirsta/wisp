@@ -9,6 +9,7 @@
 #define dom_core_attr_h_
 
 #include <stdbool.h>
+#include <stdint.h>
 
 #include <dom/core/exceptions.h>
 #include <dom/core/node.h>
@@ -19,6 +20,12 @@ struct dom_node;
 struct dom_attr;
 
 typedef struct dom_attr dom_attr;
+
+/* Native cache invalidation for string-valued attributes. Compare together with
+ * a retained Attr identity; assignments advance even for identical text, and
+ * detaching/replacing an Attr advances its token. No allocation or events.
+ * This does not track libdom's obsolete typed-attribute/child-node extensions. */
+uint64_t dom_attr_get_revision(const dom_attr *attr);
 
 /**
  * The attribute type

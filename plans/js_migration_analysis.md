@@ -100,15 +100,17 @@ the target. Each group can require more than one tested batch:
   suppress reparsing its own style-attribute update, and feed retained pending
   contributions to selection. Explicit author cssText/setAttribute replacements
   do parse the new text normally. Verify this in the DOM synchronization group.
-- [ ] QuickJS `CSSStyleProperties`: stable per-element object, generated property
+- [x] QuickJS `CSSStyleProperties`: stable per-element object, generated property
   accessors, standard methods, enumeration and CSSOM exception/conversion rules.
-- [ ] DOM synchronization: style-attribute edits in both directions, coalesced
+- [x] DOM synchronization: style-attribute edits in both directions, coalesced
   render invalidation, JS mutation attribution and no-op handling.
-  The native owned-declarations → inline-stylesheet compiler is implemented and
-  tested, including partially edited pending shorthands. Connecting it to DOM
-  ownership/attribute updates remains part of this group.
-- [ ] Integration/lifetime checks: detached trees, adoption, GC, navigation,
+  DOM-owned declarations now feed the inline-stylesheet compiler, including
+  partially edited pending shorthands. A native Attr identity/revision token
+  distinguishes explicit replacements from our own serialized publication.
+- [x] Integration/lifetime checks: detached trees, adoption, GC, navigation,
   reentrancy and failures; saved-page regression and a fresh live-target check.
+  Adoption/clone/import coverage here is native; cross-document JS wrappers
+  remain outside this inline-style batch.
 
 The earlier estimate of roughly 8–15 focused batches is a planning estimate,
 not a delivery guarantee. Property-family registrations are a coverage aid,
@@ -2974,6 +2976,61 @@ Next is the QuickJS `CSSStyleProperties` object, then the already-listed DOM
 synchronization and lifetime/live-target checks. No new JS API is exposed by
 this batch. Duktape's previously reviewed placeholder style getter supplies no
 native declaration implementation to reuse here.
+
+### Live inline style bindings and DOM ownership (2026-10-13)
+
+The native compiler batch was committed as `ad56543a`. HTML and SVG elements now
+expose stable `CSSStyleProperties` objects implementing the standard declaration
+methods, cssText forwarding, indexed enumeration and generated CSS property
+accessors. The supported names come from the same TOML registry as the parser,
+including aliases. Legacy null conversion, argument evaluation order, receiver
+checks and document retirement follow the existing QuickJS DOM conventions.
+This uses [CSSOM's inline-style and declaration algorithms](https://drafts.csswg.org/cssom/#the-elementcssinlinestyle-mixin)
+and the existing owned declarations, not the old Duktape placeholder getter.
+
+Declarations belong to the DOM element, independently of JS wrappers. API edits
+stage a cheap mutable copy sharing immutable value sources, serialize before
+publishing, and feed the retained declarations directly to native selection.
+An Attr identity/revision token detects external string assignments, including
+identical text, replacement and removal/reinsertion. Attribute clones initialize
+the token. No revision observer callbacks or rendering threads were added.
+The token does not cover libdom's obsolete typed-attribute/Attr-child extensions;
+these are not exposed by the modern JS bindings.
+
+Native adoption retains declarations; clone/import copy serialized attributes
+and lazily parse independent state. Selection resolves URLs in the destination
+context. Static elements keep ordinary inline parsing without an editable-store
+allocation. Attribute bytes are decoded UTF-8 regardless of the HTML source
+encoding. Reads preserve original attribute spelling; connected writes use the
+existing coalesced full refresh and `style.*` mutation traces. Invalid and exact
+repeat assignments do not publish or request rendering. Native allocations
+remain outside QuickJS's JS-heap limit, as with existing DOM bindings.
+
+Regression coverage includes pending shorthands, custom properties, priorities,
+coercion reentrancy, native attribute writes, clone/import/adoption, detached
+cycles, document retirement and allocation failures. Qt captures compare initial
+and timer-driven edits against equivalent static CSS, including opacity, SVG,
+retained `var()` members and replacement attributes. The registration OOM sweep
+now extends beyond 64 KiB to cover the generated property accessors.
+
+Validation: all 86 selected native suites pass in Release and Debug; native
+ASan/UBSan/LSan checks are clean. Ten Release and fourteen Debug Qt rendering/JS
+suites pass (Qt leak detection disabled). Both builds are warning-free. The
+QuickJS suite was rerun after the final test adjustments and passes in both.
+GTK and Windows were not built.
+
+The finite inline-style checklist is complete. Both the saved eBihoreanul bundle
+(`scripts.min_v202610062.js`) and the current live bundle
+(`scripts.min_v202610132.js`) pass `style.opacity` and now stop at line 32,
+column 1321: `document.createElement("nav").cloneNode(true)`. Both captures finish
+loading with readable main content, but the main bundle still aborts. This does
+not claim complete initialization or interactivity. The saved page also shows
+an external iframe error, outside this style change. Captures, exception excerpts
+and test summaries are under `out/js-review-2026-10-13/inline-style/`.
+
+Next is native-backed `Node.cloneNode`, with distinct wrapper identity,
+shallow/deep semantics, element-specific cloning state and lifetime tests. Keep
+this separate from the now-closed inline-style prerequisite checklist.
 
 ## Assessment
 

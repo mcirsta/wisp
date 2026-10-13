@@ -7,6 +7,7 @@
 #include <assert.h>
 #include <stdlib.h>
 #include <string.h>
+#include <libcss/declarations.h>
 
 #include "parse/declaration_store.h"
 #include "parse/font.h"
@@ -86,6 +87,30 @@ void css__declaration_store_destroy(css_declaration_store *store)
         value_unref(store->entries[i].source);
     free(store->entries);
     free(store);
+}
+
+css_error css_declarations_clone(const css_declarations *source, css_declarations **out)
+{
+    if (out == NULL)
+        return CSS_BADPARM;
+    *out = NULL;
+    if (source == NULL)
+        return CSS_BADPARM;
+    css_declarations *copy = calloc(1, sizeof(*copy));
+    if (copy == NULL)
+        return CSS_NOMEM;
+    css_error error = reserve(copy, source->count);
+    if (error != CSS_OK) {
+        css__declaration_store_destroy(copy);
+        return error;
+    }
+    for (size_t i = 0; i < source->count; i++) {
+        copy->entries[i] = source->entries[i];
+        value_ref(copy->entries[i].source);
+    }
+    copy->count = source->count;
+    *out = copy;
+    return CSS_OK;
 }
 
 css_error css__declaration_store_create(const css_declaration_list *list, css_declaration_store **out)

@@ -41,6 +41,7 @@
 #include "utils/talloc.h"
 #include "utils/utils.h"
 #include "content/handlers/css/select.h"
+#include "content/handlers/css/inline.h"
 #include <wctype.h>
 
 #include <wisp/content/fetch.h>
@@ -219,7 +220,6 @@ static bool box_construct_push(struct box_construct_ctx *ctx, struct box *box, s
 css_select_results *box_get_style(
     html_content *c, const css_computed_style *parent_style, const css_computed_style *root_style, dom_node *n)
 {
-    dom_string *s = NULL;
     css_stylesheet *inline_style = NULL;
     css_select_results *styles;
     nscss_select_ctx ctx;
@@ -230,22 +230,11 @@ css_select_results *box_get_style(
         return styles;
     HTML_PROFILE(if (c->restyling) c->restyle_profile.styled_elements++);
 
-    /* Firstly, construct inline stylesheet, if any */
     if (nsoption_bool(author_level_css)) {
-        dom_exception err;
-        err = dom_element_get_attribute(n, corestring_dom_style, &s);
-        if (err != DOM_NO_ERR) {
-            return NULL;
-        }
-    }
-
-    if (s != NULL) {
-        inline_style = nscss_create_inline_style((const uint8_t *)dom_string_data(s), dom_string_byte_length(s),
-            c->encoding, nsurl_access(c->base_url), c->quirks != DOM_DOCUMENT_QUIRKS_MODE_NONE);
-
-        dom_string_unref(s);
-
-        if (inline_style == NULL)
+        bool present;
+        inline_style = nscss_inline_style_for_element(n, nsurl_access(c->base_url),
+            c->quirks != DOM_DOCUMENT_QUIRKS_MODE_NONE, &present);
+        if (present && inline_style == NULL)
             return NULL;
     }
 

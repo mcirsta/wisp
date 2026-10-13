@@ -32,6 +32,7 @@ struct dom_element;
  */
 struct dom_attr {
     struct dom_node_internal base; /**< Base node */
+    uint64_t revision; /**< Value assignment or detachment, including identical strings. */
 
     struct dom_type_info *schema_type_info; /**< Type information */
 
@@ -129,6 +130,7 @@ dom_exception _dom_attr_initialise(dom_attr *a, struct dom_document *doc, dom_st
         return err;
     }
 
+    a->revision = 0;
     a->specified = specified;
     a->schema_type_info = NULL;
     a->is_id = false;
@@ -173,6 +175,17 @@ void _dom_attr_destroy(struct dom_attr *attr)
 
 /*-----------------------------------------------------------------------*/
 /* Following are our implementation specific APIs */
+
+/* Native cache token, not a Web API. Pair it with retained Attr identity. */
+uint64_t dom_attr_get_revision(const dom_attr *attr)
+{
+    return attr->revision;
+}
+
+void _dom_attr_touch(dom_attr *attr)
+{
+    attr->revision++;
+}
 
 /**
  * Get the Attr Node type
@@ -585,6 +598,8 @@ dom_exception _dom_attr_set_value(struct dom_attr *attr, dom_string *value)
     dom_node_unref(text);
     dom_node_remove_pending(text);
 
+    _dom_attr_touch(attr);
+
     /* Now the attribute node is specified */
     attr->specified = true;
 
@@ -790,6 +805,7 @@ dom_exception _dom_attr_copy(dom_node_internal *n, dom_node_internal **copy)
         return err;
     }
 
+    a->revision = 0;
     a->specified = old->specified;
 
     /* TODO: deal with dom_type_info, it get no definition ! */

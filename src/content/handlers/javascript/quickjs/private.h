@@ -39,7 +39,7 @@ struct jsheap {
     struct jsthread *threads;
     JSClassID event_class[QJS_EVENT_CLASSES], event_target_class;
     JSClassID abort_controller_class, abort_signal_class;
-    JSClassID node_class, tokenlist_class, collection_class[2], xhr_class, console_class;
+    JSClassID node_class, tokenlist_class, style_class, collection_class[2], xhr_class, console_class;
 };
 
 /* One context per document; queued timers belong to this owner. Active host

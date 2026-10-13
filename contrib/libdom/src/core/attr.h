@@ -65,6 +65,8 @@ dom_exception _dom_attr_copy(dom_node_internal *old, dom_node_internal **copy);
 #define DOM_ATTR_PROTECT_VTABLE __dom_attr_destroy, _dom_attr_copy
 
 
+void _dom_attr_touch(struct dom_attr *attr);
+
 void _dom_attr_set_isid(struct dom_attr *attr, bool is_id);
 void _dom_attr_set_specified(struct dom_attr *attr, bool specified);
 bool _dom_attr_readonly(const dom_attr *a);

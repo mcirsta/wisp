@@ -1,7 +1,9 @@
 Unimplemented javascript bindings {#unimplemented}
 =================================
 
-This is a list of all the binding methods, getters and setters without an implementation in a binding.
+This is a historical inventory from the removed Duktape bindings, not a list of
+current QuickJS gaps. See [the JavaScript implementation plan](../../plans/js_migration_analysis.md)
+for current support and deliberately deferred APIs.
 
 Type | Unimplemented binding
 ---- | ---------------------

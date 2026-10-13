@@ -393,6 +393,7 @@ CORESTRING_DOM_STRING(toggle);
 /* DOM userdata keys, not really CSS */
 CORESTRING_DOM_STRING(__ns_key_box_node_data);
 CORESTRING_DOM_STRING(__ns_key_libcss_node_data);
+CORESTRING_DOM_STRING(__ns_key_inline_style);
 CORESTRING_DOM_STRING(__ns_key_file_name_node_data);
 CORESTRING_DOM_STRING(__ns_key_image_coords_node_data);
 CORESTRING_DOM_STRING(__ns_key_html_content_data);

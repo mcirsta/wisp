@@ -359,6 +359,7 @@ add_wisp_test(test_quickjs
   ${CMAKE_SOURCE_DIR}/src/content/handlers/javascript/quickjs/tree.c
   ${CMAKE_SOURCE_DIR}/src/content/handlers/javascript/quickjs/markup.c
   ${CMAKE_SOURCE_DIR}/src/content/handlers/javascript/quickjs/tokenlist.c
+  ${CMAKE_SOURCE_DIR}/src/content/handlers/javascript/quickjs/style.c
   ${CMAKE_SOURCE_DIR}/src/content/handlers/javascript/quickjs/platform.c
   ${CMAKE_SOURCE_DIR}/src/content/handlers/javascript/quickjs/collections.c
   ${CMAKE_SOURCE_DIR}/src/content/handlers/javascript/quickjs/storage.c
@@ -455,6 +456,11 @@ add_executable(css_checked_test css_checked_test.c)
 target_include_directories(css_checked_test PRIVATE ${TEST_COMMON_INCLUDES} ${CMAKE_SOURCE_DIR}/include)
 target_link_libraries(css_checked_test wisp ${CHECK_LIBRARIES})
 add_test(NAME css_checked_test COMMAND css_checked_test)
+
+add_executable(css_inline_test css_inline_test.c)
+target_include_directories(css_inline_test PRIVATE ${TEST_COMMON_INCLUDES} ${CMAKE_SOURCE_DIR}/include)
+target_link_libraries(css_inline_test wisp ${CHECK_LIBRARIES})
+add_test(NAME css_inline_test COMMAND css_inline_test)
 
 add_executable(css_direction_test css_direction_test.c)
 target_include_directories(css_direction_test PRIVATE ${TEST_COMMON_INCLUDES} ${CMAKE_SOURCE_DIR}/include)
@@ -643,6 +649,8 @@ target_include_directories(restyle_tracking_test PRIVATE ${TEST_COMMON_INCLUDES}
 target_link_libraries(restyle_tracking_test wisp ${CHECK_LIBRARIES})
 # ASan interposes malloc itself; exercise real allocator failures in Release.
 if(TARGET malloc_fig AND CMAKE_BUILD_TYPE STREQUAL "Release")
+  target_link_libraries(css_inline_test malloc_fig)
+  target_compile_definitions(css_inline_test PRIVATE WISP_TEST_ALLOC_FAILURE)
   target_link_libraries(form_data_test malloc_fig)
   target_compile_definitions(form_data_test PRIVATE WISP_TEST_ALLOC_FAILURE)
   target_link_libraries(dom_form_owner_test malloc_fig)

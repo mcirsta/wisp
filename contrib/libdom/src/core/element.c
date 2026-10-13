@@ -286,6 +286,7 @@ static void _dom_element_attr_list_node_destroy(dom_attr_list *n)
     if (n->namespace != NULL)
         dom_string_unref(n->namespace);
 
+    _dom_attr_touch(n->attr);
     a->parent = NULL;
     dom_node_try_destroy(a);
 
