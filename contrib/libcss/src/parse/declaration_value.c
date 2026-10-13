@@ -14,6 +14,7 @@
 #include "parse/declaration_text.h"
 #include "parse/property.h"
 #include "parse/position.h"
+#include "parse/transform.h"
 #include "parse/properties/utils.h"
 #include "utils/css_utils.h"
 
@@ -651,6 +652,8 @@ css_error css__declaration_value_serialize(const css_declaration_contribution *v
     enum css_declaration_value_kind kind = property->value_kind;
     if (kind == CSS_DECL_VALUE_NONE)
         return CSS_INVALID;
+    if (kind == CSS_DECL_VALUE_TRANSFORM)
+        return css__declaration_transform_serialize(source, out);
     if (kind == CSS_DECL_VALUE_FONT)
         return css__declaration_font_component(value, out);
     if (kind == CSS_DECL_VALUE_IMAGE_LIST)

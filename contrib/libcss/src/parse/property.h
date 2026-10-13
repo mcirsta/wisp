@@ -50,6 +50,7 @@ enum css_declaration_value_kind {
     CSS_DECL_VALUE_OUTLINE,
     CSS_DECL_VALUE_COLOUR,
     CSS_DECL_VALUE_QUAD_COLOUR,
+    CSS_DECL_VALUE_TRANSFORM,
 };
 
 /* Immutable registration shared by the parser, variable resolver and specified

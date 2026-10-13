@@ -131,6 +131,31 @@ native/fallback painting geometry; preserving the angle only in CSSOM does not
 fix rendering. Keep this as a separate rendering batch, including corner
 keywords, negative/full-turn angles, non-square boxes and length-based stops.
 
+## CSS transform unit conversion
+
+Confirmed by source inspection on 2026-10-12 while adding specified transform
+readback. The existing painter uses translation values directly as pixels (apart
+from percentages), and treats every rotation as degrees. The cascade retains
+the original units; computed-style processing does not convert these transform
+arguments. Thus `font-size:20px; transform:translateX(2em)` moves by 2px instead
+of 40px, and `rotate(.25turn)` rotates by .25 degrees instead of 90 degrees.
+These paths predate the CSSOM work; specified readback correctly preserves units.
+
+There is also premature fixed-point saturation/rounding for percentage scales:
+the parser converts the percentage to fixed-point before dividing by 100. For
+example, `scale(10000000%)` saturates the percentage before division even though
+its equivalent factor of 100000 fits the fixed-point representation.
+
+Follow [CSS Transforms 1 section 7](https://drafts.csswg.org/css-transforms-1/#transform-functions)
+and [Transforms 2 section 12](https://drafts.csswg.org/css-transforms-2/#transform-functions).
+Resolve lengths with the element's style/unit context and rotations with their
+angle unit at the appropriate rendering boundary; normalize percentage scales
+before fixed-point quantization. Keep specified values independent of those
+conversions. Cover relative/absolute lengths, all supported angle units, negative
+and large scales, and equivalent number/percentage scale spellings in a separate
+rendering batch. The explicit-zero second scale argument is already fixed and
+covered by `test/css-transforms.html`.
+
 ## JavaScript-driven HotNews sidebar (deferred)
 
 The live article sidebar headed "Ultima oră" stays on its loading placeholders.

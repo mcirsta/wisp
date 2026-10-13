@@ -370,6 +370,12 @@ static const struct {
     const char *name, *value, *priority, *expected;
     bool important;
 } inputs[] = {
+    {"transform", "TRANSLATEX(1.23456789em) scale(50%,.5) rotate(-0)", "important",
+        "translateX(1.234568em) scale(0.5) rotate(0deg)", true},
+    {"transform", "rotate(45deg", "", "rotate(45deg)"},
+    {"transform", "translate(1px,2deg)", "", NULL},
+    {"transform", "translate(.00000001)", "", NULL},
+    {"transform", "scale(1) unknown(0)", "", NULL},
     {"color", "HSLA(NONE 100 50 / 50%)", "important", "hsl(none 100% 50% / 0.5)", true},
     {"background", "hwb(20 none 30% / none)", "", "hwb(20 none 30% / none)"},
     {"border", "solid hsl(-.5turn none 50%)", "", "solid hsl(180 none 50%)"},

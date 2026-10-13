@@ -1943,7 +1943,9 @@ static bool html_redraw_box(const html_content *html, struct box *box, int x_par
                 case CSS_TRANSFORM_FUNC_SCALE: {
                     /* M' = M * S(sx,sy) -- right multiply by scale */
                     float sx = val1;
-                    float sy = (func->value2 == 0) ? sx : val2;
+                    /* Parsing has already supplied the omitted Y argument.
+                     * An explicit zero makes the transform non-invertible. */
+                    float sy = val2;
                     transform_matrix[0] *= sx;
                     transform_matrix[1] *= sx;
                     transform_matrix[2] *= sy;

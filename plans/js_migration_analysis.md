@@ -1994,6 +1994,55 @@ serializers are still separate work. Unsupported native readback continues to
 return an explicit error. The live `element.style` object, DOM synchronization
 and JS mutation attribution remain pending.
 
+### Specified transform readback and argument validation (2026-10-12)
+
+Committed missing HSL/HWB component readback as `89e70996`. Native CSSOM now
+serializes the existing `translate`/`translateX`/`translateY`, `scale`/`scaleX`/
+`scaleY` and `rotate` subset, including `none`, priorities, deferred variables,
+owned assignments and whole declaration blocks. Function order and specified
+units survive; optional default arguments are omitted according to
+[CSS Transforms 1 section 3.1](https://drafts.csswg.org/css-transforms-1/#serialization-of-transform-functions).
+Rotation angles are not reduced modulo a full turn. Scale percentages become
+numbers as required by [Transforms 2 section 12](https://drafts.csswg.org/css-transforms-2/#transform-functions),
+with decimal shifting before rounding rather than conversion through renderer
+fixed-point values or binary floating point.
+
+A small shared descriptor provides supported function names, argument kinds and
+arity. The existing parser now uses one argument-validation path for either
+position: translation rejects angles/time/frequency/resolution/grid units, and
+functions reject nonzero unitless lengths/angles and whitespace-separated units
+even in quirks mode. This removes duplicated parsing branches whose validation
+had diverged. The normal property parser and CSSOM assignments share the fix;
+the serializer introduces no second CSS grammar. Registration belongs to
+`properties.toml` and its generator, not generated output.
+
+The Qt regression also exposed an older painter defect: an explicit second zero
+in `scale(2, 0)` was mistaken for an omitted argument. Parsing already supplies
+the omitted value, so painting now uses the stored second value directly. The
+regression failed before that correction and passes afterward.
+
+Coverage includes all supported functions, defaults and order, angle/length
+units, scale percentages and rounding, escaped names, long/precise values,
+512-function lists, invalid-value fallback in standards/quirks modes,
+whole/chunked input, owned assignments, cssText and allocation-failure recovery.
+The Qt fixture checks transforms and fallback geometry with 23 pixel samples in
+each document mode.
+
+Validation: all 81 selected native CSS/QuickJS/font/transform suites and all
+seven selected Qt rendering regressions pass in Debug and Release. Debug native
+tests include ASan/UBSan and LeakSanitizer. Both builds are warning-free,
+`git diff --check` is clean, and no GTK tests ran.
+
+This remains native groundwork, with the live `element.style` binding pending.
+It does not add matrix/skew/3D functions, transform math, transform-origin or
+computed-style matrix readback. Older rendering unit-conversion and percentage
+quantization defects found during inspection are recorded in
+[the correctness backlog](../src/docs/layout-correctness.md#css-transform-unit-conversion)
+for a separate rendering batch. Remaining specified-value families and modern
+aggregate-property modelling are still required before public CSSOM exposure.
+The Duktape style getter was checked again; its empty-object placeholder provides
+no transform or specified-value implementation to reuse.
+
 ## Assessment
 
 Keep QuickJS-ng and libdom. The missing part is the browser binding and execution

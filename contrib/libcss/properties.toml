@@ -1930,6 +1930,7 @@ values = [["length", "", "calc"], ["length", "", "calc"]]
 condition = "CSS_OBJECT_POSITION_SET"
 
 [transform]
+declaration_value = "transform"
 enum = "CSS_PROP_TRANSFORM"
 inherited = false
 cascade = "manual"

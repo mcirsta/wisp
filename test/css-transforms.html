@@ -1,0 +1,26 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>CSS transform arguments and painting</title>
+<style>
+html, body { margin: 0; background: white; }
+div { position: absolute; top: 30px; width: 20px; height: 20px; background: #024; }
+#translate { left: 10px; transform: translate(20px); }
+#translate-y { left: 90px; transform: translateY(20px); }
+#scale { left: 170px; transform: scale(200%); }
+#scale-x { left: 250px; transform: scaleX(2); }
+#scale-y { left: 330px; transform: scaleY(200%); }
+#rotate { left: 410px; width: 40px; transform: rotate(90deg); }
+#percent { left: 490px; transform: translate(100%, 100%); }
+/* An explicit second zero is not an omitted scale argument. */
+#zero { left: 570px; transform: scale(2, 0); }
+.invalid { top: 120px; transform: translate(20px); }
+#angle { left: 10px; transform: translate(0, 40deg); }
+#grid { left: 90px; transform: translate(1fr); }
+#second-grid { left: 170px; transform: translate(0, 1fr); }
+#unitless { left: 250px; transform: translate(40); }
+</style>
+<div id="translate"></div><div id="translate-y"></div><div id="scale"></div>
+<div id="scale-x"></div><div id="scale-y"></div><div id="rotate"></div>
+<div id="percent"></div><div id="zero"></div>
+<div id="angle" class="invalid"></div><div id="grid" class="invalid"></div>
+<div id="second-grid" class="invalid"></div><div id="unitless" class="invalid"></div>

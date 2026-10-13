@@ -857,6 +857,39 @@ static const struct {
     {"border:var(--x)", "border-top", ""},
     {"border:var(--x)", "border", "var(--x)"},
     {"margin:var(--x)!important; margin-left:1px", "margin", "var(--x)"},
+    {"transform:NONE", "transform", "none"},
+    {"transform:INITIAL", "transform", "initial"},
+    {"transform:var(--move,  translateX(1px))", "transform", "var(--move,  translateX(1px))"},
+    {"transform:TRANSLATEX( +01.23456789EM )", "transform", "translateX(1.234568em)"},
+    {"transform:translatey(-0010.2000%)", "transform", "translateY(-10.2%)"},
+    {"transform:translate(0)", "transform", "translate(0px)"},
+    {"transform:translate(2px,-0%)", "transform", "translate(2px)"},
+    {"transform:translate(2px,.00000001em)", "transform", "translate(2px)"},
+    {"transform:translate(2px,3%)", "transform", "translate(2px, 3%)"},
+    {"transform:scale(2,2)", "transform", "scale(2)"},
+    {"transform:scale(2,0)", "transform", "scale(2, 0)"},
+    {"transform:SCALE(50%,.50)", "transform", "scale(0.5)"},
+    {"transform:scale(50%,150%)", "transform", "scale(0.5, 1.5)"},
+    {"transform:scaleX(-012.3456789%)", "transform", "scaleX(-0.123457)"},
+    {"transform:scaleY(.00005%)", "transform", "scaleY(0.000001)"},
+    {"transform:scaleY(.00004999%)", "transform", "scaleY(0)"},
+    {"transform:scaleX(-.5%)", "transform", "scaleX(-0.005)"},
+    {"transform:scaleY(+5%)", "transform", "scaleY(0.05)"},
+    {"transform:scaleY(-0%)", "transform", "scaleY(0)"},
+    {"transform:scale(12345678912345678912345%)", "transform", "scale(123456789123456789123.45)"},
+    {"transform:scale(.12345678,-1.23456789)", "transform", "scale(0.123457, -1.234568)"},
+    {"transform:rotate(0)", "transform", "rotate(0deg)"},
+    {"transform:rotate(-0)", "transform", "rotate(0deg)"},
+    {"transform:rotate(740DEG)", "transform", "rotate(740deg)"},
+    {"transform:rotate(-1.25TURN)", "transform", "rotate(-1.25turn)"},
+    {"transform:rotate(100GRAD)", "transform", "rotate(100grad)"},
+    {"transform:rotate(3.14159265rad)", "transform", "rotate(3.141593rad)"},
+    {"transform:translateX(1px)scaleY(2)rotate(10deg)", "transform",
+        "translateX(1px) scaleY(2) rotate(10deg)"},
+    {"transform:t\\72 anslatex(1p\\78 )/**/sCaLeY(100%)", "transform", "translateX(1px) scaleY(1)"},
+    {"transform:scale(1)!important;transform:none", "transform", "scale(1)"},
+    {"transform:translate(123456789.12345678px, -123456789.7654321em)", "transform",
+        "translate(123456789.123457px, -123456789.765432em)"},
     {"width:calc(1px + 2em)", "width", NULL},
     {"margin:1px calc(2px + 1em)", "margin", NULL},
     {"margin:1px calc(2px + 1em)", "margin-top", NULL},
@@ -3348,6 +3381,112 @@ START_TEST(test_gradient_grammar)
 }
 END_TEST
 
+/* Invalid transform arguments must never replace an earlier valid value,
+ * including in quirks mode. CSS Transforms does not opt into unitless lengths. */
+START_TEST(test_transform_grammar)
+{
+    static const char *const invalid[] = {
+        "translate(1deg)", "translate(1px,2deg)", "translate(1fr)", "translate(1px,2fr)",
+        "translate(1s)", "translate(1px,2s)", "translate(1hz)", "translate(1px,2hz)",
+        "translate(1dpi)", "translate(1px,2dppx)", "translateX(1fr)", "translateY(1deg)",
+        "translate(1)", "translate(1px,2)", "translate(.00000001)", "translate(1px,-.00000001)",
+        "translate(0 px)", "translate(1px,0 em)", "rotate(1)", "rotate(.00000001)",
+        "rotate(0 deg)", "rotate(10%)", "rotate(1px)", "rotate(1foodeg)", "rotate(1e3deg)",
+        "scale(1px)", "scale(1,2px)", "scaleX(1deg)", "scaleY(1,2)",
+        "translate()", "translate(1px,)", "translate(1px 2px)", "translate(1px,2px,3px)",
+        "translateX(1px,2px)", "rotate(0,1deg)", "scale(1,)", "scale(1 2)",
+        "scale(1) none", "none scale(1)", "scale(1) garbage", "scale(1),rotate(0)",
+        "scale(1) unknown(0)", "scale(1) translate(2px,3deg)",
+    };
+    for (unsigned quirks = 0; quirks < 2; quirks++) {
+        css_stylesheet_params configured = params;
+        configured.allow_quirks = quirks != 0;
+        for (size_t i = 0; i < N_ELEMENTS(invalid); i++) {
+            char css[240];
+            snprintf(css, sizeof(css), "transform:translate(7px,9px);transform:%s;color:green", invalid[i]);
+            css_declaration_list *list;
+            ck_assert_int_eq(css__declaration_list_create(&configured, &list), CSS_OK);
+            size_t length = strlen(css);
+            for (size_t offset = 0; offset < length;) {
+                size_t chunk = _i == 0 ? length : 1;
+                check_append(css__declaration_list_append(list, (const uint8_t *)css + offset, chunk));
+                offset += chunk;
+            }
+            ck_assert_int_eq(css__declaration_list_complete(list), CSS_OK);
+            ck_assert_msg(css__declaration_list_count(list) == 2,
+                "accepted %s, quirks %u, chunks %d", css, quirks, _i);
+            css_declaration_order *order;
+            ck_assert_int_eq(css__declaration_order_create(list, &order), CSS_OK);
+            lwc_string *value;
+            ck_assert_int_eq(serialize_property(order, "transform", &value), CSS_OK);
+            ck_assert_str_eq(lwc_string_data(value), "translate(7px, 9px)");
+            lwc_string_unref(value);
+            css__declaration_order_destroy(order);
+            css__declaration_list_destroy(list);
+        }
+        const char *valid = "transform:translate(0,-0) rotate(-0) scale(50%,150%)";
+        css_declaration_list *list;
+        ck_assert_int_eq(css__declaration_list_create(&configured, &list), CSS_OK);
+        check_append(css__declaration_list_append(list, (const uint8_t *)valid, strlen(valid)));
+        ck_assert_int_eq(css__declaration_list_complete(list), CSS_OK);
+        ck_assert_uint_eq(css__declaration_list_count(list), 1);
+        css__declaration_list_destroy(list);
+    }
+}
+END_TEST
+
+START_TEST(test_transform_bytecode)
+{
+    static const char *const forms[][2] = {
+        {"translate(2px)", "translate(2px,0px)"},
+        {"translate(0,-0)", "translate(0px,0px)"},
+        {"scale(2)", "scale(2,2)"},
+        {"scale(50%)", "scale(50%,50%)"},
+        {"rotate(0)", "rotate(0deg)"},
+        {"TRANSLATEX(3PX)scaleY(2)rotate(45DEG)", "translateX(3px) scaleY(2) rotate(45deg)"},
+    };
+    for (size_t i = 0; i < N_ELEMENTS(forms); i++) {
+        char first[160], second[160];
+        snprintf(first, sizeof(first), "transform:%s", forms[i][0]);
+        snprintf(second, sizeof(second), "transform:%s", forms[i][1]);
+        css_declaration_list *a = parse(first, _i != 0), *b = parse(second, _i != 0);
+        ck_assert_uint_eq(css__declaration_list_count(a), 1);
+        ck_assert_uint_eq(css__declaration_list_count(b), 1);
+        compare_sheets(css__declaration_list_sheet(a), css__declaration_list_sheet(b));
+        css__declaration_list_destroy(a);
+        css__declaration_list_destroy(b);
+    }
+}
+END_TEST
+
+START_TEST(test_transform_many_functions)
+{
+    enum { COUNT = 256 };
+    const char *part = "translateX(1px) rotate(2deg) ";
+    size_t length = 10 + strlen(part) * COUNT;
+    char *input = malloc(length + 1);
+    ck_assert_ptr_nonnull(input);
+    memcpy(input, "transform:", 10);
+    for (size_t i = 0; i < COUNT; i++)
+        memcpy(input + 10 + i * strlen(part), part, strlen(part));
+    input[length] = '\0';
+    css_declaration_list *list = parse(input, _i != 0);
+    ck_assert_uint_eq(css__declaration_list_count(list), 1);
+    const css_style *style = inline_style(css__declaration_list_sheet(list));
+    ck_assert_uint_eq(style->bytecode[1], 2 * COUNT);
+    css_declaration_order *order;
+    ck_assert_int_eq(css__declaration_order_create(list, &order), CSS_OK);
+    lwc_string *value;
+    ck_assert_int_eq(serialize_property(order, "transform", &value), CSS_OK);
+    input[length - 1] = '\0'; /* The specified value has no trailing whitespace. */
+    ck_assert_str_eq(lwc_string_data(value), input + 10);
+    lwc_string_unref(value);
+    css__declaration_order_destroy(order);
+    css__declaration_list_destroy(list);
+    free(input);
+}
+END_TEST
+
 START_TEST(test_geometry_bytecode)
 {
     static const char *const forms[][2] = {
@@ -3896,13 +4035,16 @@ START_TEST(test_value_allocation_failure)
                       "object-position:center -.1234567em;"
                       "background-repeat:repeat no-repeat, no-repeat repeat,repeat repeat;"
                       "text-decoration:blink overline underline;"
+                      "transform:translate(.1234567em,2.3456789%) scale(12.3456789%,-.5678912) rotate(.1234567turn);"
                       "font-family:One/**/Two\\20 , 'a\\22 b\\a c',SERIF;";
     static const char *const names[] = {"margin", "--x", "background-image", "background-attachment", "border-style",
         "content", "quotes", "counter-reset", "aspect-ratio", "border-spacing", "clip", "font-family", "flex",
         "flex-flow", "color", "border-color", "list-style", "columns", "border", "border-left", "outline", "column-rule",
         "grid-area", "grid-column", "grid-row", "grid-row-end", "place-content", "background-position", "object-position",
-        "background-repeat", "text-decoration", "background", "background-color", "font", "font-size", "line-height"};
+        "background-repeat", "text-decoration", "background", "background-color", "font", "font-size", "line-height",
+        "transform", "transform"};
     const char *name = names[_i];
+    void (*limit)(unsigned) = _i == 37 ? calloc_limit : malloc_limit;
     /* Keep full-border inputs separate: they reset the quad style/colour cases. */
     if (strcmp(name, "border") == 0 || strcmp(name, "border-left") == 0)
         css = "border:.1234567px solid rgb(1.2 3.4 5.6)";
@@ -3925,9 +4067,9 @@ START_TEST(test_value_allocation_failure)
     unsigned failures = 0;
     for (unsigned attempt = 0; attempt < 200; attempt++) {
         lwc_string *value = (void *)1;
-        malloc_limit(attempt);
+        limit(attempt);
         css_error error = serialize_property(order, name, &value);
-        malloc_limit(UINT_MAX);
+        limit(UINT_MAX);
         if (error == CSS_OK) {
             ck_assert_ptr_nonnull(value);
             lwc_string_unref(value);
@@ -3978,6 +4120,9 @@ int main(void)
     tcase_add_loop_test(tc, test_clip_separators, 0, 2);
     tcase_add_loop_test(tc, test_geometry_invalid_units, 0, 2);
     tcase_add_loop_test(tc, test_gradient_grammar, 0, 2);
+    tcase_add_loop_test(tc, test_transform_grammar, 0, 2);
+    tcase_add_loop_test(tc, test_transform_bytecode, 0, 2);
+    tcase_add_loop_test(tc, test_transform_many_functions, 0, 2);
     tcase_add_loop_test(tc, test_geometry_bytecode, 0, 2);
     tcase_add_loop_test(tc, test_flex_bytecode, 0, 2);
     tcase_add_loop_test(tc, test_list_columns_bytecode, 0, 2);
@@ -4008,7 +4153,7 @@ int main(void)
     tcase_add_loop_test(tc, test_overflow_axes, 0, 2);
     tcase_add_test(tc, test_value_arguments);
 #ifdef WISP_TEST_ALLOC_FAILURE
-    tcase_add_loop_test(tc, test_value_allocation_failure, 0, 36);
+    tcase_add_loop_test(tc, test_value_allocation_failure, 0, 38);
     tcase_add_loop_test(tc, test_position_rollback, 0, 2);
     tcase_add_loop_test(tc, test_font_rollback, 0, 5);
     tcase_add_loop_test(tc, test_gap_rollback, 0, 4);
