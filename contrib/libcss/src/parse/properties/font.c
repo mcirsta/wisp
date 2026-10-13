@@ -11,6 +11,7 @@
 #include "bytecode/bytecode.h"
 #include "bytecode/opcodes.h"
 #include "parse/font.h"
+#include "parse/declarations.h"
 #include "parse/properties/properties.h"
 #include "parse/properties/utils.h"
 
@@ -93,6 +94,11 @@ static css_error parse_system_font(css_language *c, css_style *result, css_syste
 {
     css_error error;
     bool match;
+
+    if (system_font->family == NULL || system_font->size.size < 0 || system_font->line_height.size < 0 ||
+        css__system_font_unit(system_font->size.unit) == NULL ||
+        css__system_font_unit(system_font->line_height.unit) == NULL)
+        return CSS_BADPARM;
 
     /* style */
     switch (system_font->style) {
@@ -310,7 +316,10 @@ css_error css__parse_font(css_language *c, const parserutils_vector *vector, int
         error = c->sheet->font(c->sheet->font_pw, token->idata, &system_font);
         if (error == CSS_OK) {
             error = parse_system_font(c, result, &system_font);
-            lwc_string_unref(system_font.family);
+            if (error == CSS_OK && c->declarations != NULL)
+                error = css__declaration_list_system_font(c->declarations, &system_font);
+            if (system_font.family != NULL)
+                lwc_string_unref(system_font.family);
             if (error == CSS_OK)
                 parserutils_vector_iterate(vector, ctx);
             goto done;

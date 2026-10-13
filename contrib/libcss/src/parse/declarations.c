@@ -21,7 +21,36 @@ struct css_declaration_list {
     size_t capacity;
     css_error error;
     bool complete;
+    css_system_font *system_font;
 };
+
+static void system_font_destroy(css_system_font *font)
+{
+    if (font != NULL) {
+        lwc_string_unref(font->family);
+        free(font);
+    }
+}
+
+static css_error system_font_copy(const css_system_font *font, css_system_font **out)
+{
+    *out = NULL;
+    if (font == NULL)
+        return CSS_OK;
+    css_system_font *copy = malloc(sizeof(*copy));
+    if (copy == NULL)
+        return CSS_NOMEM;
+    *copy = *font;
+    copy->family = lwc_string_ref(font->family);
+    *out = copy;
+    return CSS_OK;
+}
+
+css_error css__declaration_list_system_font(css_declaration_list *list, const css_system_font *font)
+{
+    system_font_destroy(list->system_font);
+    return system_font_copy(font, &list->system_font);
+}
 
 void css__declaration_fini(css_declaration *entry)
 {
@@ -34,18 +63,27 @@ void css__declaration_fini(css_declaration *entry)
             lwc_string_unref(entry->tokens[i].text);
     }
     free((void *)entry->tokens);
+    system_font_destroy(entry->system_font);
 }
 
 css_error css__declaration_copy_value(const css_declaration *source, css_declaration *out)
 {
     *out = (css_declaration){0};
+    css_system_font *font;
+    css_error error = system_font_copy(source->system_font, &font);
+    if (error != CSS_OK)
+        return error;
     css_declaration_token *tokens = NULL;
     if (source->token_count != 0) {
-        if (source->token_count > SIZE_MAX / sizeof(*tokens))
+        if (source->token_count > SIZE_MAX / sizeof(*tokens)) {
+            system_font_destroy(font);
             return CSS_NOMEM;
+        }
         tokens = malloc(source->token_count * sizeof(*tokens));
-        if (tokens == NULL)
+        if (tokens == NULL) {
+            system_font_destroy(font);
             return CSS_NOMEM;
+        }
         for (size_t i = 0; i < source->token_count; i++) {
             tokens[i] = source->tokens[i];
             if (tokens[i].text != NULL)
@@ -56,6 +94,7 @@ css_error css__declaration_copy_value(const css_declaration *source, css_declara
     out->name = lwc_string_ref(source->name);
     out->source_value = lwc_string_ref(source->source_value);
     out->tokens = tokens;
+    out->system_font = font;
     out->bytecode_offset = out->bytecode_length = 0;
     return CSS_OK;
 }
@@ -142,6 +181,7 @@ css_error css__declaration_list_complete(css_declaration_list *list)
     if (list->complete) {
         parserutils_buffer_destroy(list->source);
         list->source = NULL;
+        css__declaration_list_system_font(list, NULL);
     }
     return list->error;
 }
@@ -156,6 +196,7 @@ void css__declaration_list_destroy(css_declaration_list *list)
     for (size_t i = 0; i < list->count; i++)
         css__declaration_fini(&list->entries[i]);
     free(list->entries);
+    system_font_destroy(list->system_font);
     free(list);
 }
 
@@ -304,6 +345,12 @@ css_error css__declaration_list_record(css_declaration_list *list, const css_tok
         }
         list->entries = entries;
         list->capacity = capacity;
+    }
+    if (!deferred) {
+        entry.system_font = list->system_font;
+        list->system_font = NULL;
+    } else {
+        css__declaration_list_system_font(list, NULL);
     }
     list->entries[list->count++] = entry;
     return CSS_OK;

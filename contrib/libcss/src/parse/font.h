@@ -2,9 +2,35 @@
 #ifndef css_parse_font_h_
 #define css_parse_font_h_
 
+#include <libcss/stylesheet.h>
 #include "bytecode/opcodes.h"
 #include "lex/lex.h"
 #include "utils/css_utils.h"
+
+/* Lengths (or percentages) accepted by both font-size and line-height. Reject
+ * invalid client results before bytecode emission, including non-length units
+ * and CALC, which cannot be represented by this callback's scalar descriptor. */
+static inline const char *css__system_font_unit(css_unit unit)
+{
+    static const char *const units[] = {
+        [CSS_UNIT_PX] = "px", [CSS_UNIT_EX] = "ex", [CSS_UNIT_EM] = "em", [CSS_UNIT_IN] = "in",
+        [CSS_UNIT_CM] = "cm", [CSS_UNIT_MM] = "mm", [CSS_UNIT_PT] = "pt", [CSS_UNIT_PC] = "pc",
+        [CSS_UNIT_CH] = "ch", [CSS_UNIT_REM] = "rem", [CSS_UNIT_LH] = "lh", [CSS_UNIT_VH] = "vh",
+        [CSS_UNIT_VW] = "vw", [CSS_UNIT_VI] = "vi", [CSS_UNIT_VB] = "vb", [CSS_UNIT_VMIN] = "vmin",
+        [CSS_UNIT_VMAX] = "vmax", [CSS_UNIT_Q] = "q", [CSS_UNIT_IC] = "ic", [CSS_UNIT_CQW] = "cqw",
+        [CSS_UNIT_CQH] = "cqh", [CSS_UNIT_CQI] = "cqi", [CSS_UNIT_CQB] = "cqb", [CSS_UNIT_PCT] = "%"};
+    return (unsigned)unit < N_ELEMENTS(units) ? units[unit] : NULL;
+}
+
+static inline bool css__system_font_equal(const css_system_font *a, const css_system_font *b)
+{
+    if (a == NULL || b == NULL)
+        return a == b;
+    return a->style == b->style && a->variant == b->variant && a->weight == b->weight &&
+           a->size.size == b->size.size && a->size.unit == b->size.unit &&
+           a->line_height.size == b->line_height.size && a->line_height.unit == b->line_height.unit &&
+           a->family == b->family;
+}
 
 /* Keep the current discrete CSS2 weight model shared by font-weight, font,
  * and specified-value readback. Variable weights need a separate storage change. */

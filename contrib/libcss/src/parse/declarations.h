@@ -37,6 +37,9 @@ typedef struct css_declaration {
     bool quirks_allowed; /**< Preserve grammar context for ambiguous hashless colours. */
     const css_declaration_token *tokens; /**< Value without surrounding whitespace or priority */
     size_t token_count;
+    /* Optional snapshot of the client's parse-time system-font resolution.
+     * Only font declarations that actually used that callback allocate it. */
+    css_system_font *system_font;
     uint32_t bytecode_offset; /**< Span in the list's inline rule */
     uint32_t bytecode_length;
 } css_declaration;
@@ -76,6 +79,10 @@ void css__declaration_list_destroy(css_declaration_list *list);
 size_t css__declaration_list_count(const css_declaration_list *list);
 const css_declaration *css__declaration_list_get(const css_declaration_list *list, size_t index);
 const css_stylesheet *css__declaration_list_sheet(const css_declaration_list *list);
+
+/* Reset before each declaration; retain a successful font callback result until
+ * that declaration is accepted. NULL discards an unaccepted pending result. */
+css_error css__declaration_list_system_font(css_declaration_list *list, const css_system_font *font);
 
 /* Language parser hook, called only after a declaration has been accepted. */
 css_error css__declaration_list_record(css_declaration_list *list, const css_token *name,

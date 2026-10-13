@@ -9,6 +9,7 @@
 #include <string.h>
 
 #include "parse/declaration_store.h"
+#include "parse/font.h"
 #include "parse/declaration_block.h"
 #include "parse/declaration_value.h"
 #include "parse/property.h"
@@ -209,7 +210,7 @@ static const char *member_name(const css_declaration *value, size_t component)
 
 /* Skip an exact repeat without allocation or serialization. Other equivalent
  * spellings may still report an update, as permitted by CSSOM. Deferred
- * shorthand members must also share a source before this can be a no-op. */
+ * shorthand and system-font members must share a source for this to be a no-op. */
 static bool unchanged(const css_declaration_store *store, const css_declaration *value)
 {
     const css_declaration *first = NULL;
@@ -223,9 +224,9 @@ static bool unchanged(const css_declaration_store *store, const css_declaration 
         const css_declaration *source = entry->source;
         if (entry->component != i || source->name != value->name || source->source_value != value->source_value ||
             source->important != value->important || source->quirks_allowed != value->quirks_allowed ||
-            source->deferred != value->deferred)
+            source->deferred != value->deferred || !css__system_font_equal(source->system_font, value->system_font))
             return false;
-        if (value->deferred && first != NULL && first != source)
+        if ((value->deferred || value->system_font != NULL) && first != NULL && first != source)
             return false;
         first = source;
     }

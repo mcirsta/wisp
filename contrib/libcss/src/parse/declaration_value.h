@@ -10,6 +10,7 @@
 #include "parse/declaration_order.h"
 
 /* Serialize one winning component's specified value, not its computed value.
+ * System-font components use the retained parse-time client resolution.
  * Supports custom properties, CSS-wide keywords, pending variable substitution
  * and the value families registered in properties.toml. CSS_INVALID means
  * that a property/value serializer is not implemented yet (e.g. math functions),

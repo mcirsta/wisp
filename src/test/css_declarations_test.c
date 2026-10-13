@@ -10,6 +10,8 @@
 #include "parse/declarations.h"
 #include "parse/declaration_order.h"
 #include "parse/declaration_value.h"
+#include "parse/declaration_store.h"
+#include "parse/declaration_block.h"
 #include "parse/language.h"
 #include "parse/property.h"
 #include "stylesheet.h"
@@ -4329,53 +4331,316 @@ END_TEST
 struct system_font_fixture {
     css_error error;
     lwc_string *family;
+    unsigned calls;
+    const css_system_font *override;
 };
 
 static css_error resolve_system_font(void *pw, lwc_string *name, css_system_font *font)
 {
     struct system_font_fixture *fixture = pw;
+    fixture->calls++;
     if (fixture->error != CSS_OK)
         return fixture->error;
-    if (!css__keyword_equal(name, "caption"))
+    static const char *const names[] = {"caption", "icon", "menu", "message-box", "small-caption", "status-bar"};
+    bool known = false;
+    for (size_t i = 0; i < N_ELEMENTS(names); i++)
+        known |= css__keyword_equal(name, names[i]);
+    if (!known)
         return CSS_INVALID;
+    if (fixture->override != NULL) {
+        *font = *fixture->override;
+        if (font->family != NULL)
+            font->family = lwc_string_ref(font->family);
+        return CSS_OK;
+    }
     *font = (css_system_font){.style = CSS_FONT_STYLE_ITALIC, .variant = CSS_FONT_VARIANT_NORMAL,
         .weight = CSS_FONT_WEIGHT_BOLD, .size = {INTTOFIX(16), CSS_UNIT_PX},
         .line_height = {INTTOFIX(20), CSS_UNIT_PX}, .family = lwc_string_ref(fixture->family)};
     return CSS_OK;
 }
 
-/* System fonts retain native support. Their CSSOM representation needs system
- * font state; never pretend its OS-resolved metrics were authored longhands. */
+static css_declaration_list *parse_system(const css_stylesheet_params *system_params, const char *input, bool chunks)
+{
+    css_declaration_list *list;
+    ck_assert_int_eq(css__declaration_list_create(system_params, &list), CSS_OK);
+    size_t length = strlen(input);
+    for (size_t pos = 0; pos < length; pos += chunks ? 1 : length)
+        check_append(css__declaration_list_append(list, (const uint8_t *)input + pos, chunks ? 1 : length));
+    ck_assert_int_eq(css__declaration_list_complete(list), CSS_OK);
+    return list;
+}
+
+/* This readback policy preserves the existing parse-time resolution model;
+ * CSSWG issue 1586 has no settled serialization rule for system-font longhands. */
 START_TEST(test_system_font_readback)
 {
+    static const char *const keywords[] = {"C\\41 PTION", "icon", "MENU", "message-box", "small-caption", "status-bar"};
+    static const char *const canonical[] = {"caption", "icon", "menu", "message-box", "small-caption", "status-bar"};
     struct system_font_fixture fixture = {0};
-    ck_assert_int_eq(lwc_intern_string("serif", 5, &fixture.family), lwc_error_ok);
+    ck_assert_int_eq(lwc_intern_string("sERIF", 5, &fixture.family), lwc_error_ok);
+    css_stylesheet_params system_params = params;
+    system_params.font = resolve_system_font;
+    system_params.font_pw = &fixture;
+    for (size_t k = 0; k < N_ELEMENTS(keywords); k++) {
+        char input[80];
+        snprintf(input, sizeof(input), "font: /* system */ %s !important", keywords[k]);
+        css_declaration_list *list = parse_system(&system_params, input, _i != 0);
+        ck_assert_uint_eq(css__declaration_list_count(list), 1);
+        unsigned calls = fixture.calls;
+        css_declaration_list *reference = parse("font:italic bold 16px/20px serif!important", false);
+        compare_sheets(css__declaration_list_sheet(list), css__declaration_list_sheet(reference));
+        css_declaration_order *order;
+        ck_assert_int_eq(css__declaration_order_create(list, &order), CSS_OK);
+        static const char *const names[] = {"font", "font-style", "font-variant", "font-weight", "font-size",
+            "line-height", "font-family"};
+        const char *expected[] = {canonical[k], "italic", "normal", "bold", "16px", "20px", "serif"};
+        for (size_t i = 0; i < N_ELEMENTS(names); i++) {
+            lwc_string *value;
+            ck_assert_int_eq(serialize_property(order, names[i], &value), CSS_OK);
+            ck_assert_msg(strcmp(lwc_string_data(value), expected[i]) == 0, "%s / %s: got %s", keywords[k], names[i],
+                lwc_string_data(value));
+            lwc_string_unref(value);
+        }
+        lwc_string *text;
+        ck_assert_int_eq(css__declaration_block_serialize(order, &text), CSS_OK);
+        snprintf(input, sizeof(input), "font: %s !important;", canonical[k]);
+        ck_assert_str_eq(lwc_string_data(text), input);
+        lwc_string_unref(text);
+        ck_assert_uint_eq(fixture.calls, calls);
+        css__declaration_order_destroy(order);
+        css__declaration_list_destroy(reference);
+        css__declaration_list_destroy(list);
+    }
+    /* A resolved but subsequently rejected font must not leak into the next
+     * declaration, an ordinary font, or a deferred shorthand. */
+    css_declaration_list *list = parse_system(&system_params,
+        "font:caption junk; color:red; font:12px serif; font:caption var(--x)", _i != 0);
+    ck_assert_uint_eq(css__declaration_list_count(list), 3);
+    for (size_t i = 0; i < 3; i++)
+        ck_assert_ptr_null(css__declaration_list_get(list, i)->system_font);
+    css__declaration_list_destroy(list);
+    lwc_string_unref(fixture.family);
+}
+END_TEST
+
+static void check_system_store(css_declaration_store *store, const char *property, const char *expected)
+{
+    lwc_string *value;
+    css_error error = property != NULL ? css__declaration_store_value(store, property, strlen(property), &value)
+                                      : css__declaration_store_serialize(store, &value);
+    ck_assert_int_eq(error, CSS_OK);
+    ck_assert_msg(strcmp(lwc_string_data(value), expected) == 0, "%s: expected %s, got %s",
+        property != NULL ? property : "cssText", expected, lwc_string_data(value));
+    lwc_string_unref(value);
+}
+
+START_TEST(test_system_font_editing)
+{
+    struct system_font_fixture fixture = {0};
+    const char *family = "System \"Font\"\\Family";
+    ck_assert_int_eq(lwc_intern_string(family, strlen(family), &fixture.family), lwc_error_ok);
+    css_system_font font = {.style = CSS_FONT_STYLE_OBLIQUE, .variant = CSS_FONT_VARIANT_SMALL_CAPS,
+        .weight = CSS_FONT_WEIGHT_600, .size = {INTTOFIX(16) + (1 << (CSS_RADIX_POINT - 2)), CSS_UNIT_PT},
+        .line_height = {INTTOFIX(125), CSS_UNIT_PCT}, .family = fixture.family};
+    fixture.override = &font;
+    css_stylesheet_params system_params = params;
+    system_params.font = resolve_system_font;
+    system_params.font_pw = &fixture;
+    css_declaration_list *list = parse_system(&system_params, "font:menu!important;color:red", _i != 0);
+    css_declaration_store *store;
+    ck_assert_int_eq(css__declaration_store_create(list, &store), CSS_OK);
+    css__declaration_list_destroy(list);
+    unsigned calls = fixture.calls;
+    fixture.error = CSS_BADPARM; /* Readback and non-font edits must not call it. */
+    check_system_store(store, "font", "menu");
+    check_system_store(store, "font-size", "16.25pt");
+    check_system_store(store, "font-family", "\"System \\\"Font\\\"\\\\Family\"");
+    check_system_store(store, NULL, "font: menu !important; color: red;");
+    bool changed;
+    css_declaration_assignment input = {"font-size", "18px", "important", 9, 4, 9};
+    ck_assert_int_eq(css__declaration_store_set_property(store, &system_params, &input, &changed), CSS_OK);
+    ck_assert(changed);
+    check_system_store(store, "font", "oblique small-caps 600 18px / 125% \"System \\\"Font\\\"\\\\Family\"");
+    check_system_store(store, NULL,
+        "font: oblique small-caps 600 18px / 125% \"System \\\"Font\\\"\\\\Family\" !important; color: red;");
+    input = (css_declaration_assignment){"font-weight", "normal", "", 11, 6, 0};
+    ck_assert_int_eq(css__declaration_store_set_property(store, &system_params, &input, &changed), CSS_OK);
+    ck_assert(changed);
+    check_system_store(store, "font", "");
+    check_system_store(store, NULL, "font-style: oblique !important; font-variant: small-caps !important; "
+        "font-weight: normal; font-size: 18px !important; line-height: 125% !important; "
+        "font-family: \"System \\\"Font\\\"\\\\Family\" !important; color: red;");
+    /* The edited block must also be independently reparsable without a client
+     * font callback, including escaping, priorities and percentage line-height. */
+    lwc_string *text, *again;
+    ck_assert_int_eq(css__declaration_store_serialize(store, &text), CSS_OK);
+    list = parse(lwc_string_data(text), _i != 0);
+    css_declaration_order *order;
+    ck_assert_int_eq(css__declaration_order_create(list, &order), CSS_OK);
+    ck_assert_int_eq(css__declaration_block_serialize(order, &again), CSS_OK);
+    ck_assert_str_eq(lwc_string_data(text), lwc_string_data(again));
+    lwc_string_unref(text);
+    lwc_string_unref(again);
+    css__declaration_order_destroy(order);
+    css__declaration_list_destroy(list);
+    input = (css_declaration_assignment){"font-weight", "600", "important", 11, 3, 9};
+    ck_assert_int_eq(css__declaration_store_set_property(store, &system_params, &input, &changed), CSS_OK);
+    ck_assert(changed);
+    ck_assert_int_eq(css__declaration_store_remove(store, "font-style", 10, &changed), CSS_OK);
+    ck_assert(changed);
+    check_system_store(store, "font", "");
+    check_system_store(store, NULL, "font-variant: small-caps !important; font-weight: 600 !important; "
+        "font-size: 18px !important; line-height: 125% !important; "
+        "font-family: \"System \\\"Font\\\"\\\\Family\" !important; color: red;");
+    ck_assert_uint_eq(fixture.calls, calls);
+    fixture.error = CSS_OK;
+    input = (css_declaration_assignment){"font", "menu", "", 4, 4, 0};
+    ck_assert_int_eq(css__declaration_store_set_property(store, &system_params, &input, &changed), CSS_OK);
+    ck_assert(changed);
+    ck_assert_int_eq(css__declaration_store_set_property(store, &system_params, &input, &changed), CSS_OK);
+    ck_assert(!changed);
+    font.size.size = INTTOFIX(20);
+    ck_assert_int_eq(css__declaration_store_set_property(store, &system_params, &input, &changed), CSS_OK);
+    ck_assert_msg(changed, "a changed resolver result cannot be skipped just because the keyword is unchanged");
+    check_system_store(store, "font-size", "20pt");
+    lwc_string_unref(fixture.family);
+    fixture.family = NULL;
+    check_system_store(store, "font-family", "\"System \\\"Font\\\"\\\\Family\"");
+    css__declaration_store_destroy(store);
+}
+END_TEST
+
+/* Invalid callback descriptors must fail before reaching bytecode or the
+ * specified-value snapshot, rather than asserting on a non-length unit. */
+START_TEST(test_system_font_invalid_result)
+{
+    struct system_font_fixture fixture = {0};
+    ck_assert_int_eq(lwc_intern_string("System Font", 11, &fixture.family), lwc_error_ok);
+    css_system_font font = {.style = CSS_FONT_STYLE_NORMAL, .variant = CSS_FONT_VARIANT_NORMAL,
+        .weight = CSS_FONT_WEIGHT_NORMAL, .size = {INTTOFIX(12), CSS_UNIT_PX},
+        .line_height = {INTTOFIX(16), CSS_UNIT_PX}, .family = fixture.family};
+    switch (_i) {
+    case 0:
+        font.size.unit = CSS_UNIT_CALC;
+        break;
+    case 1:
+        font.line_height.unit = CSS_UNIT_DEG;
+        break;
+    case 2:
+        font.size.size = -1;
+        break;
+    case 3:
+        font.line_height.size = -1;
+        break;
+    case 4:
+        font.family = NULL;
+        break;
+    case 5:
+        font.style = CSS_FONT_STYLE_INHERIT;
+        break;
+    case 6:
+        font.variant = CSS_FONT_VARIANT_INHERIT;
+        break;
+    case 7:
+        font.weight = CSS_FONT_WEIGHT_INHERIT;
+        break;
+    }
+    fixture.override = &font;
     css_stylesheet_params system_params = params;
     system_params.font = resolve_system_font;
     system_params.font_pw = &fixture;
     css_declaration_list *list;
     ck_assert_int_eq(css__declaration_list_create(&system_params, &list), CSS_OK);
-    const char *input = "font:caption";
-    check_append(css__declaration_list_append(list, (const uint8_t *)input, strlen(input)));
-    ck_assert_int_eq(css__declaration_list_complete(list), CSS_OK);
-    ck_assert_uint_eq(css__declaration_list_count(list), 1);
-    css_declaration_list *reference = parse("font:italic bold 16px/20px serif", false);
-    compare_sheets(css__declaration_list_sheet(list), css__declaration_list_sheet(reference));
-    css_declaration_order *order;
-    ck_assert_int_eq(css__declaration_order_create(list, &order), CSS_OK);
-    static const char *const names[] = {"font", "font-style", "font-variant", "font-weight", "font-size",
-        "line-height", "font-family"};
-    for (size_t i = 0; i < N_ELEMENTS(names); i++) {
-        lwc_string *value = (void *)1;
-        ck_assert_int_eq(serialize_property(order, names[i], &value), CSS_INVALID);
-        ck_assert_ptr_null(value);
-    }
-    css__declaration_order_destroy(order);
-    css__declaration_list_destroy(reference);
+    const char *input = "font:menu";
+    css_error error = css__declaration_list_append(list, (const uint8_t *)input, strlen(input));
+    if (error == CSS_OK || error == CSS_NEEDDATA)
+        error = css__declaration_list_complete(list);
+    ck_assert_msg(error == CSS_BADPARM, "invalid system font variant %d returned %d", _i, error);
+    ck_assert_ptr_null(css__declaration_list_sheet(list));
     css__declaration_list_destroy(list);
     lwc_string_unref(fixture.family);
 }
 END_TEST
+
+#ifdef WISP_TEST_ALLOC_FAILURE
+START_TEST(test_system_font_allocation_failure)
+{
+    void (*limit)(unsigned int) = _i == 0 ? malloc_limit : _i == 1 ? calloc_limit : realloc_limit;
+    struct system_font_fixture fixture = {0};
+    ck_assert_int_eq(lwc_intern_string("System Font", 11, &fixture.family), lwc_error_ok);
+    css_stylesheet_params system_params = params;
+    system_params.font = resolve_system_font;
+    system_params.font_pw = &fixture;
+    const char *input = "font:caption junk; font:menu; font:icon!important; color:red";
+    css_declaration_list *warm = parse_system(&system_params, input, false);
+    css__declaration_list_destroy(warm);
+    bool succeeded = false;
+    for (unsigned attempt = 0; attempt < 1024 && !succeeded; attempt++) {
+        css_declaration_list *list = NULL;
+        css_declaration_store *store = NULL;
+        lwc_string *text = NULL;
+        limit(attempt);
+        css_error error = css__declaration_list_create(&system_params, &list);
+        if (error == CSS_OK) {
+            error = css__declaration_list_append(list, (const uint8_t *)input, strlen(input));
+            if (error == CSS_OK || error == CSS_NEEDDATA)
+                error = css__declaration_list_complete(list);
+        }
+        if (error == CSS_OK)
+            error = css__declaration_store_create(list, &store);
+        css__declaration_list_destroy(list);
+        if (error == CSS_OK) {
+            bool changed;
+            /* Force scalar serialization of retained system-font components. */
+            error = css__declaration_store_remove(store, "font-size", 9, &changed);
+        }
+        if (error == CSS_OK)
+            error = css__declaration_store_serialize(store, &text);
+        limit(UINT_MAX);
+        ck_assert_msg(error == CSS_OK || error == CSS_NOMEM, "allocator %d, attempt %u: %d", _i, attempt, error);
+        if (error == CSS_OK) {
+            ck_assert_str_eq(lwc_string_data(text), "font-style: italic !important; font-variant: normal !important; "
+                "font-weight: bold !important; line-height: 20px !important; font-family: \"System Font\" !important; "
+                "color: red;");
+            succeeded = true;
+        } else {
+            ck_assert_ptr_null(text);
+        }
+        if (text != NULL)
+            lwc_string_unref(text);
+        css__declaration_store_destroy(store);
+    }
+    ck_assert_msg(succeeded, "system font allocator %d never completed", _i);
+    /* A failed snapshot copy must also leave an existing store unchanged. */
+    css_declaration_list *list = parse_system(&system_params, "font:menu", false);
+    css_declaration_store *store;
+    ck_assert_int_eq(css__declaration_store_create(list, &store), CSS_OK);
+    css__declaration_list_destroy(list);
+    list = parse_system(&system_params, "font:icon", false);
+    succeeded = false;
+    for (unsigned attempt = 0; attempt < 256 && !succeeded; attempt++) {
+        bool changed = true;
+        limit(attempt);
+        css_error error = css__declaration_store_set(store, css__declaration_list_get(list, 0), &changed);
+        limit(UINT_MAX);
+        if (error == CSS_OK) {
+            ck_assert(changed);
+            succeeded = true;
+        } else {
+            ck_assert_int_eq(error, CSS_NOMEM);
+            ck_assert(!changed);
+            check_system_store(store, "font", "menu");
+            check_system_store(store, "font-size", "16px");
+        }
+    }
+    ck_assert(succeeded);
+    check_system_store(store, "font", "icon");
+    css__declaration_list_destroy(list);
+    css__declaration_store_destroy(store);
+    lwc_string_unref(fixture.family);
+}
+END_TEST
+#endif
 
 START_TEST(test_font_callback_failure)
 {
@@ -4840,8 +5105,10 @@ int main(void)
     tcase_add_loop_test(tc, test_font_name_storage, 0, 2);
     tcase_add_loop_test(tc, test_font_prefix_bytecode, 0, 2);
     tcase_add_loop_test(tc, test_font_invalid_components, 0, 2);
-    tcase_add_test(tc, test_system_font_readback);
+    tcase_add_loop_test(tc, test_system_font_readback, 0, 2);
+    tcase_add_loop_test(tc, test_system_font_editing, 0, 2);
     tcase_add_loop_test(tc, test_font_callback_failure, 0, 2);
+    tcase_add_loop_test(tc, test_system_font_invalid_result, 0, 8);
     tcase_add_loop_test(tc, test_font_face_names, 0, 2);
     tcase_add_loop_test(tc, test_reserved_font_names, 0, 2);
     tcase_add_loop_test(tc, test_long_font_name, 0, 2);
@@ -4888,6 +5155,7 @@ int main(void)
     tcase_add_test(tc, test_value_arguments);
 #ifdef WISP_TEST_ALLOC_FAILURE
     tcase_add_loop_test(tc, test_value_allocation_failure, 0, 67);
+    tcase_add_loop_test(tc, test_system_font_allocation_failure, 0, 3);
     tcase_add_loop_test(tc, test_position_rollback, 0, 2);
     tcase_add_loop_test(tc, test_font_rollback, 0, 5);
     tcase_add_loop_test(tc, test_gap_rollback, 0, 4);

@@ -51,7 +51,8 @@ metadata, winning-declaration order, shorthand reconstruction, owned editing,
 whole-value assignments and broad specified-value serialization. The transform
 and Grid batches are committed as `285fee12` and `9fbddb34`; the SVG paint/cursor
 batch is committed as `f7a238d0`, the legacy aural batch as `fdf7b373`, and the
-Lab-family batch as `24cde21d`, and missing-RGB/sRGB support as `8f1aacf3`.
+Lab-family batch as `24cde21d`, missing-RGB/sRGB support as `8f1aacf3`, and
+extended HSL/HWB readback as `ed777a47`.
 Earlier dated sections are historical records, not additional unchecked requirements.
 
 The remaining work is grouped here so adjacent discoveries do not silently move
@@ -63,10 +64,11 @@ the target. Each group can require more than one tested batch:
 - [x] Remaining scalar/list families: specified-value readback for the
   already-registered legacy speech properties (2026-10-13). This preserves
   existing declarations without implementing new speech functionality.
-- [ ] Remaining color/font readback gaps: color readback is complete for the
-  already-supported non-math forms, including extended HSL/HWB, Lab-family
-  colors and missing RGB components (2026-10-13). Client-resolved system-font
-  cases remain. Display gamut mapping is separate renderer work.
+- [x] Remaining color/font readback gaps for already-supported non-math forms
+  (2026-10-13): extended HSL/HWB, Lab-family colors, missing RGB components,
+  and retained client-resolved system-font values. The system-font readback
+  policy is an implementation choice while CSSWG issue 1586 remains open; see
+  the dated section below. Display gamut mapping is separate renderer work.
 - [ ] Math values: validate and serialize accepted expressions through shared
   native handling, preserving specified-value semantics. This is the largest
   remaining uncertainty in the native prerequisite work.
@@ -2345,6 +2347,54 @@ Release Qt suites pass, including the existing 67 color pixel samples. Builds
 are warning-free; no GTK builds ran.
 This closes the color portion of the finite color/font group; system-font
 declaration state is the remaining part of that group.
+
+
+### Client-resolved system-font readback and edits (2026-10-13)
+
+Committed extended HSL/HWB readback as `ed777a47`. System-font declarations now
+retain the exact result of the native parser's existing client callback. The
+specified-value store owns its snapshot and family string independently of the
+parser stylesheet. An untouched `font: menu` retains `menu`; reading or changing
+individual components uses the captured values. Partial overrides, removals,
+mixed priorities and unrelated declarations remain serializable. Readback does
+not reenter the client, and reassigning the same keyword checks the newly
+resolved values before declaring the edit a no-op.
+
+[CSS Fonts 4](https://drafts.csswg.org/css-fonts-4/#font-prop) requires system-font
+components to be independently alterable, but the exact serialization remains
+an [open CSSWG issue](https://github.com/w3c/csswg-drafts/issues/1586). This batch
+keeps Wisp's existing parse-time resolution model. Returning resolved longhands
+and reconstructing an ordinary shorthand after partial edits is an explicit
+implementation choice, not a claim of a normative serialization requirement.
+The [tentative WPT](https://github.com/web-platform-tests/wpt/blob/master/css/css-fonts/system-fonts-serialization.tentative.html)
+instead proposes empty longhand readbacks; revisit this
+choice if that proposal becomes specified. No private CSS keyword or invented
+success value is exposed. Automatic response to OS font-setting changes remains
+outside the existing callback model.
+
+Ordinary stylesheet parsing allocates no snapshot. Declaration capture adds an
+optional pointer and allocates the descriptor only when a system-font callback
+succeeds; owned edits copy it only for surviving system-font sources. Rejected
+and variable-deferred declarations cannot carry a stale callback result. Client
+descriptors with invalid size/line-height units, negative dimensions or a missing
+family now return `CSS_BADPARM` instead of reaching malformed bytecode or an
+assertion. Existing style/variant/weight validation remains in the parser.
+
+Regressions exercise all six keywords, case/escapes, whole/chunked input, generic
+and quoted families, fractional sizes and percentage line-height, native-bytecode
+parity, partial edits, mixed priorities, removals and reparsing without a font
+callback. Ownership checks destroy the input stylesheet and client family before
+readback. Allocation-failure sweeps cover parsing, capture, copying, serialization
+and atomic edits; callback failure and native bytecode rollback tests remain.
+All 81 selected native suites pass in Release and Debug, including clean Debug
+ASan/UBSan and LeakSanitizer runs. All 10 selected Debug Qt suites and 7 Release
+Qt suites pass; builds are warning-free. No GTK builds ran.
+The historical Duktape style placeholder supplies no usable serializer for this.
+
+This closes the finite color/font group. Math values are next; no new renderer
+feature or live JS binding is claimed. Wisp's current stylesheet clients still
+supply no system-font callback, so this batch completes the accepted LibCSS
+callback path without changing frontends' system-font availability.
 
 ## Assessment
 

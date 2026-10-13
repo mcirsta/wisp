@@ -806,6 +806,9 @@ css_error handleDeclaration(css_language *c, const parserutils_vector *vector)
     context_entry *entry;
     css_rule *rule;
 
+    if (c->declarations != NULL)
+        css__declaration_list_system_font(c->declarations, NULL);
+
     /* Locations where declarations are permitted:
      *
      * + In @page
