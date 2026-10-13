@@ -5,7 +5,9 @@
 #include "select/select.h"
 #include "stylesheet.h"
 
-enum css_background_property { CSS_BG_IMAGE, CSS_BG_POSITION, CSS_BG_REPEAT, CSS_BG_ATTACHMENT, CSS_BG_COUNT };
+enum css_background_property {
+    CSS_BG_IMAGE, CSS_BG_POSITION, CSS_BG_REPEAT_X, CSS_BG_REPEAT_Y, CSS_BG_ATTACHMENT, CSS_BG_COUNT
+};
 
 typedef struct css_background_image {
     uint8_t type;

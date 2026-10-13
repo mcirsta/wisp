@@ -2299,6 +2299,20 @@ static const struct {
     {"background-position:var(--Pos, top, bottom)", "background-position", "var(--Pos, top, bottom)"},
     {"object-position:top;object-position:top,bottom", "object-position", "center top"},
 
+    {"background-repeat:repeat-x,repeat-y", "background-repeat-x", "repeat, no-repeat"},
+    {"background-repeat:repeat-x,repeat-y", "background-repeat-y", "no-repeat, repeat"},
+    {"background:repeat-y,repeat-x red", "background-repeat-x", "no-repeat, repeat"},
+    {"background:repeat-y,repeat-x red", "background-repeat-y", "repeat, no-repeat"},
+    {"background-repeat:repeat-x,repeat-y;background-repeat-x:no-repeat", "background-repeat", ""},
+    {"background-repeat:repeat-x,repeat-y;background-repeat-x:no-repeat", "background-repeat-y", "no-repeat, repeat"},
+    {"background-repeat-x:repeat,repeat;background-repeat-y:no-repeat,repeat", "background-repeat", "repeat-x, repeat"},
+    {"background-repeat-x:inherit;background-repeat-y:inherit", "background-repeat", "inherit"},
+    {"background-repeat-x:inherit;background-repeat-y:initial", "background-repeat", ""},
+    {"background-repeat-x:repeat!important;background-repeat-y:no-repeat", "background-repeat", ""},
+    {"background-repeat:var(--R)", "background-repeat-x", ""},
+    {"background-repeat:var(--R);background-repeat-x:no-repeat", "background-repeat", ""},
+    {"background-repeat-x:VAR(--R)", "background-repeat-x", "VAR(--R)"},
+    {"background-repeat-x:repeat,NO-REPEAT, repeat", "background-repeat-x", "repeat, no-repeat, repeat"},
     {"background-repeat:REPEAT", "background-repeat", "repeat"},
     {"background-repeat:NO-REPEAT", "background-repeat", "no-repeat"},
     {"background-repeat:REPEAT-X", "background-repeat", "repeat-x"},
@@ -3614,9 +3628,13 @@ START_TEST(test_repeat_bytecode)
             snprintf(css, sizeof(css), "background-repeat:%s%s", forms[i], priority);
             css_declaration_list *list = parse(css, _i != 0);
             const css_style *style = inline_style(css__declaration_list_sheet(list));
-            ck_assert_uint_eq(style->used, 1);
-            ck_assert_msg(style->bytecode[0] == buildOPV(CSS_PROP_BACKGROUND_REPEAT, important ? FLAG_IMPORTANT : 0, codes[i]),
-                "wrong repeat bytecode: %s", css);
+            ck_assert_uint_eq(style->used, 2);
+            static const opcode_t axes[] = {CSS_PROP_BACKGROUND_REPEAT_X, CSS_PROP_BACKGROUND_REPEAT_Y};
+            for (size_t axis = 0; axis < N_ELEMENTS(axes); axis++) {
+                uint16_t code = codes[i] & (1u << axis) ? BACKGROUND_REPEAT_REPEAT : BACKGROUND_REPEAT_NO_REPEAT;
+                ck_assert_msg(style->bytecode[axis] == buildOPV(axes[axis], important ? FLAG_IMPORTANT : 0, code),
+                    "wrong repeat bytecode, axis %zu: %s", axis, css);
+            }
             css__declaration_list_destroy(list);
             /* Try both sides of other unordered background components, and
              * multiple layers, to catch an over-consuming component parser. */
@@ -3796,6 +3814,11 @@ END_TEST
 START_TEST(test_repeat_decoration_invalid)
 {
     static const struct { const char *property, *value; } cases[] = {
+        {"background-repeat-x", "repeat-x"}, {"background-repeat-y", "repeat-y"},
+        {"background-repeat-x", "repeat no-repeat"}, {"background-repeat-y", "repeat repeat"},
+        {"background-repeat-x", "repeat,initial"}, {"background-repeat-y", "initial,repeat"},
+        {"background-repeat-x", "repeat,"}, {"background-repeat-y", ",repeat"},
+        {"background-repeat-x", "space"}, {"background-repeat-y", "round"},
         {"background-repeat", "repeat-x repeat"}, {"background-repeat", "repeat repeat-x"},
         {"background-repeat", "no-repeat repeat-y"}, {"background-repeat", "repeat-y no-repeat"},
         {"background-repeat", "repeat repeat repeat"}, {"background-repeat", "none"},

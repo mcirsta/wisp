@@ -3,11 +3,11 @@
 #include "bytecode/opcodes.h"
 #include "parse/properties/background.h"
 
-css_error css__background_list_append(css_style *result, css_style *items, opcode_t op, uint32_t count)
+css_error css__background_list_append(css_style *result, css_style *items, uint32_t count)
 {
     css_error error;
     if (count > 1) {
-        error = css__stylesheet_style_appendOPV(result, op, 0, BACKGROUND_LAYER_LIST);
+        error = css__stylesheet_style_appendOPV(result, getOpcode(items->bytecode[0]), 0, BACKGROUND_LAYER_LIST);
         if (error != CSS_OK)
             return error;
         /* Length includes the count word, but not the length word itself. */
@@ -22,7 +22,7 @@ css_error css__background_list_append(css_style *result, css_style *items, opcod
 }
 
 css_error css__parse_background_list(css_language *c, const parserutils_vector *v, int32_t *ctx, css_style *result,
-    opcode_t op, css_prop_handler parse_item)
+    css_prop_handler parse_item, css_background_list_appender append)
 {
     int32_t orig = *ctx;
     uint32_t count = 1, used = result->used;
@@ -64,7 +64,7 @@ css_error css__parse_background_list(css_language *c, const parserutils_vector *
             break;
         }
         if (!comma) {
-            error = css__background_list_append(result, items, op, count);
+            error = append(result, items, count);
             break;
         }
         parserutils_vector_iterate(v, ctx);

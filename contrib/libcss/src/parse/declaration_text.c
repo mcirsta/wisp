@@ -10,7 +10,6 @@
 #include "parse/declaration_text.h"
 #include "parse/declaration_value.h"
 #include "parse/property.h"
-#include "parse/repeat.h"
 #include "utils/css_utils.h"
 
 /* Measure first, then write into one exact-sized allocation. Long data URLs do
@@ -326,41 +325,6 @@ static css_error serialize_family(const css_declaration *source, struct text_out
     }
 }
 
-static css_error serialize_repeats(const css_declaration *source, struct text_output *out)
-{
-    static const char *const names[] = {[BACKGROUND_REPEAT_NO_REPEAT] = "no-repeat",
-        [BACKGROUND_REPEAT_REPEAT_X] = "repeat-x", [BACKGROUND_REPEAT_REPEAT_Y] = "repeat-y",
-        [BACKGROUND_REPEAT_REPEAT] = "repeat"};
-    size_t position = 0;
-    const css_declaration_token *token = next_token(source, &position);
-    for (;;) {
-        if (token == NULL || token->type != CSS_TOKEN_IDENT)
-            return CSS_INVALID;
-        int value = css__repeat_keyword(token->text);
-        if (value < 0)
-            return CSS_INVALID;
-        token = next_token(source, &position);
-        if (token != NULL && token->type == CSS_TOKEN_IDENT) {
-            int second = css__repeat_keyword(token->text);
-            if (!css__repeat_axis(value) || !css__repeat_axis(second))
-                return CSS_INVALID;
-            value = css__repeat_pair(value, second);
-            token = next_token(source, &position);
-        }
-        /* CSSOM's shortest backwards-compatible spelling uses the CSS2
-         * aliases for unequal axes and one keyword for equal axes. */
-        css_error error = append(out, names[value], strlen(names[value]), false);
-        if (error != CSS_OK || token == NULL)
-            return error;
-        if (!character(token, ','))
-            return CSS_INVALID;
-        error = append(out, ", ", 2, false);
-        if (error != CSS_OK)
-            return error;
-        token = next_token(source, &position);
-    }
-}
-
 static css_error serialize_decoration(const css_declaration *source, struct text_output *out)
 {
     if (source->token_count == 1 && source->tokens[0].type == CSS_TOKEN_IDENT &&
@@ -535,8 +499,6 @@ static css_error serialize(const css_declaration *source, struct text_output *ou
         return serialize_family(source, out);
     case CSS_DECL_VALUE_PLAY_DURING:
         return serialize_play_during(source, out);
-    case CSS_DECL_VALUE_REPEAT_LIST:
-        return serialize_repeats(source, out);
     case CSS_DECL_VALUE_TEXT_DECORATION:
         return serialize_decoration(source, out);
     case CSS_DECL_VALUE_GRID_TRACKS:

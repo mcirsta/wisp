@@ -14,10 +14,10 @@
 #include "parse/properties/utils.h"
 #include "parse/repeat.h"
 
-enum { BG_IMAGE, BG_POSITION, BG_REPEAT, BG_ATTACHMENT, BG_COLOUR, BG_COMPONENTS };
-static const char *const names[BG_COMPONENTS] = {"background-image", "background-position", "background-repeat",
-    "background-attachment", "background-color"};
-static const char *const defaults[BG_COMPONENTS] = {"none", "0% 0%", "repeat", "scroll", "transparent"};
+enum { BG_IMAGE, BG_POSITION, BG_REPEAT_X, BG_REPEAT_Y, BG_ATTACHMENT, BG_COLOUR, BG_COMPONENTS };
+static const char *const names[BG_COMPONENTS] = {"background-image", "background-position", "background-repeat-x",
+    "background-repeat-y", "background-attachment", "background-color"};
+static const char *const defaults[BG_COMPONENTS] = {"none", "0% 0%", "repeat", "repeat", "scroll", "transparent"};
 
 struct layer_values {
     size_t count;
@@ -104,13 +104,13 @@ static css_error background_component(const css_declaration *layer, size_t wante
             (css__keyword_equal(token->text, "scroll") || css__keyword_equal(token->text, "fixed"))) {
             component = BG_ATTACHMENT;
         } else if (token->type == CSS_TOKEN_IDENT && css__repeat_keyword(token->text) >= 0) {
-            component = BG_REPEAT;
+            component = BG_REPEAT_X;
         } else if (!quirky_colour && position_token(token)) {
             component = BG_POSITION;
         }
         if (lengths[component] != 0)
             return CSS_INVALID;
-        if (component == BG_POSITION || component == BG_REPEAT) {
+        if (component == BG_POSITION || component == BG_REPEAT_X) {
             size_t second = end;
             while (second < layer->token_count && layer->tokens[second].type == CSS_TOKEN_S)
                 second++;
@@ -127,8 +127,12 @@ static css_error background_component(const css_declaration *layer, size_t wante
         lengths[component] = end - pos;
         pos = end;
     }
+    bool repeat = wanted == BG_REPEAT_X || wanted == BG_REPEAT_Y;
+    const char *name = repeat ? "background-repeat" : names[wanted];
+    if (repeat)
+        wanted = BG_REPEAT_X; /* Both axes come from this syntax group. */
     *part = *layer;
-    part->property = css_prop_lookup(names[wanted], strlen(names[wanted]));
+    part->property = css_prop_lookup(name, strlen(name));
     part->tokens += starts[wanted];
     part->token_count = lengths[wanted];
     return CSS_OK;
@@ -181,6 +185,32 @@ css_error css__declaration_background_image(const css_declaration *source, lwc_s
     return error;
 }
 
+static css_error repeat_axis_value(const css_declaration *layer, size_t component, lwc_string **out)
+{
+    int value = css__repeat_keyword(layer->tokens[0].text);
+    if (value < 0)
+        return CSS_INVALID;
+    size_t second = 1;
+    while (second < layer->token_count && layer->tokens[second].type == CSS_TOKEN_S)
+        second++;
+    if (second < layer->token_count) {
+        int vertical = css__repeat_keyword(layer->tokens[second].text);
+        if (!css__repeat_axis(value) || !css__repeat_axis(vertical))
+            return CSS_INVALID;
+        value = css__repeat_pair(value, vertical);
+    }
+    unsigned mask = component == BG_REPEAT_X ? BACKGROUND_REPEAT_REPEAT_X : BACKGROUND_REPEAT_REPEAT_Y;
+    const char *text = value & mask ? "repeat" : "no-repeat";
+    return lwc_intern_string(text, strlen(text), out) == lwc_error_ok ? CSS_OK : CSS_NOMEM;
+}
+
+static css_error repeat_pair_value(lwc_string *x, lwc_string *y, lwc_string **out)
+{
+    bool horizontal = css__keyword_equal(x, "repeat"), vertical = css__keyword_equal(y, "repeat");
+    const char *text = horizontal ? (vertical ? "repeat" : "repeat-x") : (vertical ? "repeat-y" : "no-repeat");
+    return lwc_intern_string(text, strlen(text), out) == lwc_error_ok ? CSS_OK : CSS_NOMEM;
+}
+
 static css_error collect_values(const css_declaration_contribution *value, size_t component, struct layer_values *values)
 {
     const css_declaration *source = value->source;
@@ -213,6 +243,8 @@ static css_error collect_values(const css_declaration_contribution *value, size_
         if (part.token_count == 0) {
             error = lwc_intern_string(defaults[component], strlen(defaults[component]), out) == lwc_error_ok ?
                 CSS_OK : CSS_NOMEM;
+        } else if (part.property->value_kind == CSS_DECL_VALUE_REPEAT_LIST) {
+            error = repeat_axis_value(&part, component, out);
         } else {
             const css_declaration_contribution member = {.source = &part};
             error = css__declaration_value_serialize(&member, out);
@@ -226,24 +258,30 @@ static css_error collect_values(const css_declaration_contribution *value, size_
 css_error css__declaration_background_component(const css_declaration_contribution *value, lwc_string **out)
 {
     struct layer_values values = {0};
-    css_error error = collect_values(value, value->component, &values);
+    size_t component = value->component;
+    if (value->source->property->value_kind == CSS_DECL_VALUE_REPEAT_LIST)
+        component += BG_REPEAT_X;
+    css_error error = collect_values(value, component, &values);
     if (error == CSS_OK)
         error = css__declaration_values_join(values.items, values.count, ", ", out);
     destroy_values(&values);
     return error;
 }
 
-css_error css__declaration_background_shorthand(const css_declaration_contribution *const *members, lwc_string **out)
+static css_error
+serialize_layers(const css_declaration_contribution *const *members, bool repeat_only, lwc_string **out)
 {
+    size_t first = repeat_only ? BG_REPEAT_X : BG_IMAGE;
+    size_t end = repeat_only ? BG_REPEAT_Y + 1 : BG_COMPONENTS;
     /* CSSOM requires exact specified-value representation: repeating or
      * truncating lists as painting does would alter the independent longhands. */
     size_t count = 0;
-    for (size_t i = 0; i < BG_COLOUR; i++) {
+    for (size_t i = first; i < end && i != BG_COLOUR; i++) {
         size_t length;
-        css_error error = layer_count(members[i]->source, &length);
+        css_error error = layer_count(members[i - first]->source, &length);
         if (error != CSS_OK)
             return error;
-        if (i != 0 && length != count)
+        if (i != first && length != count)
             return lwc_intern_string("", 0, out) == lwc_error_ok ? CSS_OK : CSS_NOMEM;
         count = length;
     }
@@ -255,21 +293,27 @@ css_error css__declaration_background_shorthand(const css_declaration_contributi
     if (layers == NULL)
         return CSS_NOMEM;
     css_error error = CSS_OK;
-    for (size_t i = 0; i < BG_COMPONENTS; i++) {
-        error = collect_values(members[i], i, &values[i]);
+    for (size_t i = first; i < end; i++) {
+        error = collect_values(members[i - first], i, &values[i]);
         if (error != CSS_OK)
             goto done;
     }
     for (size_t layer = 0; layer < count; layer++) {
         lwc_string *parts[BG_COMPONENTS];
         size_t used = 0;
-        for (size_t i = 0; i < BG_COMPONENTS; i++) {
+        lwc_string *repeat = NULL;
+        error = repeat_pair_value(values[BG_REPEAT_X].items[layer], values[BG_REPEAT_Y].items[layer], &repeat);
+        if (error != CSS_OK)
+            goto done;
+        for (size_t i = first; i < end; i++) {
+            if (i == BG_REPEAT_Y)
+                continue;
             if (i == BG_COLOUR && layer + 1 != count)
                 continue;
-            lwc_string *part = values[i].items[i == BG_COLOUR ? 0 : layer];
+            lwc_string *part = i == BG_REPEAT_X ? repeat : values[i].items[i == BG_COLOUR ? 0 : layer];
             bool initial = css__keyword_equal(part, defaults[i]) ||
                 (i == BG_COLOUR && css__keyword_equal(part, "rgba(0, 0, 0, 0)"));
-            if (!initial)
+            if (!initial || repeat_only)
                 parts[used++] = part;
         }
         if (used == 0) {
@@ -277,6 +321,7 @@ css_error css__declaration_background_shorthand(const css_declaration_contributi
         } else {
             error = css__declaration_values_join(parts, used, " ", &layers[layer]);
         }
+        lwc_string_unref(repeat);
         if (error != CSS_OK)
             goto done;
     }
@@ -291,4 +336,15 @@ done:
     if (layers != &single)
         free(layers);
     return error;
+}
+
+css_error css__declaration_background_shorthand(const css_declaration_contribution *const *members, lwc_string **out)
+{
+    return serialize_layers(members, false, out);
+}
+
+css_error css__declaration_background_repeat_shorthand(
+    const css_declaration_contribution *const *members, lwc_string **out)
+{
+    return serialize_layers(members, true, out);
 }

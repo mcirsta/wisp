@@ -34,6 +34,12 @@ HELPER_MAP = {
 
 # Map cascade type → value type for set_from_hint data access, getter params, etc.
 TYPE_INFO = {
+    'background_keyword': {
+        'hint_data': None,
+        'get_vars': [],
+        'set_extra': '',
+        'get_extra': '',
+    },
     # type: (hint_data, getter_vars, setter_args_from_get, getter_args)
     'bg_border_color': {
         'hint_data': 'hint->data.color',
@@ -229,6 +235,8 @@ def generate_cascade_file(name, prop_data):
     lines.append('#include "bytecode/opcodes.h"')
     lines.append('#include "select/propget.h"')
     lines.append('#include "select/propset.h"')
+    if cascade_type == 'background_keyword':
+        lines.append('#include "select/background.h"')
     lines.append('')
     lines.append('#include "select/properties/helpers.h"')
     lines.append('#include "select/properties/properties.h"')
@@ -239,6 +247,11 @@ def generate_cascade_file(name, prop_data):
         lines.extend(generate_cascade_ident(name, NAME, prop_data, enum_prefix, initial))
     elif cascade_type == 'paint_color':
         lines.extend(generate_cascade_paint_color(name, NAME, prop_data, enum_prefix))
+    elif cascade_type == 'background_keyword':
+        lines.append(f'css_error css__cascade_{name}(uint32_t opv, css_style *style, css_select_state *state)')
+        lines.append('{')
+        lines.append(f'    return css__background_cascade(opv, style, state, {prop_data["background_list"]});')
+        lines.append('}')
     else:
         helper = HELPER_MAP[cascade_type]
         lines.append(f'css_error css__cascade_{name}(uint32_t opv, css_style *style, css_select_state *state)')
@@ -252,6 +265,8 @@ def generate_cascade_file(name, prop_data):
     info = TYPE_INFO[cascade_type]
     lines.append(f'css_error css__set_{name}_from_hint(const css_hint *hint, css_computed_style *style)')
     lines.append('{')
+    if cascade_type == 'background_keyword':
+        lines.append(f'    css__background_clear(style, {prop_data["background_list"]});')
     
     if info.get('counter'):
         # Counter special handling
@@ -292,6 +307,8 @@ def generate_cascade_file(name, prop_data):
     # 3. initial function
     lines.append(f'css_error css__initial_{name}(css_select_state *state)')
     lines.append('{')
+    if cascade_type == 'background_keyword':
+        lines.append(f'    css__background_clear(state->computed, {prop_data["background_list"]});')
     
     initial_val = f'{enum_prefix}_{initial}'
     if initial_data:
@@ -355,6 +372,10 @@ def generate_cascade_file(name, prop_data):
         lines.append(f'        return CSS_OK;')
         lines.append(f'    }}')
         lines.append(f'')
+        if cascade_type == 'background_keyword':
+            lines.append(f'    css_error error = css__background_copy(from, to, {prop_data["background_list"]});')
+            lines.append(f'    if (error != CSS_OK)')
+            lines.append(f'        return error;')
         lines.append(f'    return set_{name}(to, get_{name}(from));')
     
     lines.append('}')

@@ -334,6 +334,10 @@ uint8_t css_computed_min_height(const css_computed_style *style, css_fixed_or_ca
 
 uint8_t css_computed_min_width(const css_computed_style *style, css_fixed_or_calc *length, css_unit *unit);
 
+uint8_t css_computed_background_repeat_x(const css_computed_style *style);
+
+uint8_t css_computed_background_repeat_y(const css_computed_style *style);
+
 uint8_t css_computed_background_repeat(const css_computed_style *style);
 
 uint8_t css_computed_clear(const css_computed_style *style);

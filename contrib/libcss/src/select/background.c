@@ -212,11 +212,10 @@ static css_error read_value(uint32_t opv, css_style *style, enum css_background_
         default:
             break;
         }
-    } else if (p == CSS_BG_REPEAT) {
-        static const uint8_t keywords[] = {CSS_BACKGROUND_REPEAT_NO_REPEAT, CSS_BACKGROUND_REPEAT_REPEAT_X,
-            CSS_BACKGROUND_REPEAT_REPEAT_Y, CSS_BACKGROUND_REPEAT_REPEAT};
-        assert(value < sizeof(keywords));
-        v->keyword = keywords[value];
+    } else if (p == CSS_BG_REPEAT_X || p == CSS_BG_REPEAT_Y) {
+        assert(value == BACKGROUND_REPEAT_REPEAT || value == BACKGROUND_REPEAT_NO_REPEAT);
+        v->keyword = value == BACKGROUND_REPEAT_REPEAT ? CSS_BACKGROUND_REPEAT_AXIS_REPEAT
+                                                      : CSS_BACKGROUND_REPEAT_AXIS_NO_REPEAT;
     } else {
         v->keyword = value == BACKGROUND_ATTACHMENT_FIXED ? CSS_BACKGROUND_ATTACHMENT_FIXED
                                                           : CSS_BACKGROUND_ATTACHMENT_SCROLL;
@@ -275,8 +274,11 @@ css__background_cascade(uint32_t opv, css_style *style, css_select_state *state,
             hasFlagValue(opv) ? CSS_BACKGROUND_POSITION_INHERIT : CSS_BACKGROUND_POSITION_SET, first.position.x,
             first.position.xunit, first.position.y, first.position.yunit);
         break;
-    case CSS_BG_REPEAT:
-        error = set_background_repeat(state->computed, first.keyword);
+    case CSS_BG_REPEAT_X:
+        error = set_background_repeat_x(state->computed, first.keyword);
+        break;
+    case CSS_BG_REPEAT_Y:
+        error = set_background_repeat_y(state->computed, first.keyword);
         break;
     case CSS_BG_ATTACHMENT:
         error = set_background_attachment(state->computed, first.keyword);
@@ -348,12 +350,31 @@ uint8_t css_computed_background_position_layer(
     return CSS_BACKGROUND_POSITION_SET;
 }
 
-uint8_t css_computed_background_repeat_layer(const css_computed_style *s, uint32_t layer)
+static uint8_t repeat_axis_layer(const css_computed_style *s, enum css_background_property axis, uint32_t layer)
 {
-    struct css_background_list *list = get_list(s, CSS_BG_REPEAT);
+    struct css_background_list *list = get_list(s, axis);
     if (list != NULL)
         layer %= list->count + 1;
-    return list == NULL || layer == 0 ? get_background_repeat(s) : list->values[layer - 1].keyword;
+    if (list != NULL && layer != 0)
+        return list->values[layer - 1].keyword;
+    return axis == CSS_BG_REPEAT_X ? get_background_repeat_x(s) : get_background_repeat_y(s);
+}
+
+uint8_t css_computed_background_repeat_layer(const css_computed_style *s, uint32_t layer)
+{
+    /* CSS Backgrounds 4: repeat each axis's own list to match the image layers. */
+    uint8_t x = repeat_axis_layer(s, CSS_BG_REPEAT_X, layer);
+    uint8_t y = repeat_axis_layer(s, CSS_BG_REPEAT_Y, layer);
+    if (x == CSS_BACKGROUND_REPEAT_AXIS_INHERIT || y == CSS_BACKGROUND_REPEAT_AXIS_INHERIT)
+        return CSS_BACKGROUND_REPEAT_INHERIT;
+    if (x == CSS_BACKGROUND_REPEAT_AXIS_REPEAT)
+        return y == CSS_BACKGROUND_REPEAT_AXIS_REPEAT ? CSS_BACKGROUND_REPEAT_REPEAT : CSS_BACKGROUND_REPEAT_REPEAT_X;
+    return y == CSS_BACKGROUND_REPEAT_AXIS_REPEAT ? CSS_BACKGROUND_REPEAT_REPEAT_Y : CSS_BACKGROUND_REPEAT_NO_REPEAT;
+}
+
+uint8_t css_computed_background_repeat(const css_computed_style *s)
+{
+    return css_computed_background_repeat_layer(s, 0);
 }
 
 uint8_t css_computed_background_attachment_layer(const css_computed_style *s, uint32_t layer)

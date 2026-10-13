@@ -282,13 +282,15 @@ class TomlPropertyReader:
                             'pair_time': 2, 'pair_uri': 2,
                             'flex': 3, 'flex_flow': 2, 'list_style': 3, 'columns': 2, 'border': 12, 'border_side': 3,
                             'outline': 3, 'quad_colour': 4, 'grid_pair': 2, 'grid_area': 4,
-                            'background': 5, 'font': 6}.get(value_kind, 0)
+                            'background': 6, 'repeat_list': 2, 'font': 6}.get(value_kind, 0)
                 if len(members) != expected:
                     raise ValueError(f"{name}: declaration_value requires {expected} longhands")
                 ordered = {'font': ['font_style', 'font_variant_caps', 'font_weight', 'font_size', 'line_height', 'font_family'],
                            'flex': ['flex_grow', 'flex_shrink', 'flex_basis'],
-                           'background': ['background_image', 'background_position', 'background_repeat',
+                           'background': ['background_image', 'background_position',
+                                          'background_repeat_x', 'background_repeat_y',
                                           'background_attachment', 'background_color'],
+                           'repeat_list': ['background_repeat_x', 'background_repeat_y'],
                            'flex_flow': ['flex_direction', 'flex_wrap'],
                            'list_style': ['list_style_type', 'list_style_position', 'list_style_image'],
                            'columns': ['column_width', 'column_count'],

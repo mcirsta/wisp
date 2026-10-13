@@ -56,7 +56,8 @@ extended HSL/HWB readback as `ed777a47`, and resolved system-font readback as
 `2485deb1`. Shared native calc grammar validation is committed as `6f5ae059`, and finite
 math readback/edit preservation as `facb2b04`, and native calculation precision
 as `840e2aea`. Non-finite calculations, shared simplification and generated
-property ranges are committed as `ed93be8d`.
+property ranges are committed as `ed93be8d`; supported font/decoration identities
+as `908448f1`.
 Earlier dated sections are historical records, not additional unchecked requirements.
 
 The remaining work is grouped here so adjacent discoveries do not silently move
@@ -80,8 +81,9 @@ the target. Each group can require more than one tested batch:
 - [ ] Modern aggregate property identities/decomposition and preservation:
   `font-variant` and `text-decoration` now decompose into their supported
   `font-variant-caps` and `text-decoration-line` longhands, sharing native
-  parsing/cascade storage. Background position/repeat axes, white space and
-  logical start/end identities remain. Full new font/decoration grammars are
+  parsing/cascade storage. Background repeat axes now have independent native
+  lists, cascade and declaration edits. Background position axes, white space
+  and logical start/end identities remain. Full new font/decoration grammars are
   not prerequisites for this target.
   Pending-substitution preservation has native edit coverage. Correction to
   the earlier note: empty pending longhand readback is **required** by CSS
@@ -101,7 +103,7 @@ the target. Each group can require more than one tested batch:
 The earlier estimate of roughly 8–15 focused batches is a planning estimate,
 not a delivery guarantee. Property-family registrations are a coverage aid,
 not a percentage-complete measure: families can still have unsupported value
-forms. All 187 property registrations now have a family; this closes the
+forms. All 189 property registrations now have a family; this closes the
 unregistered-family work, not the remaining value forms or live binding.
 Update this list as groups finish. Keep
 optional rendering discoveries in `src/docs/layout-correctness.md` unless they
@@ -2656,6 +2658,47 @@ stylesheets and inline declarations. The 87 native suites pass in Release and
 Debug with clean native ASan/UBSan/LSan checks; seven selected Release Qt suites
 and ten Debug Qt suites pass. Background axes, white-space decomposition and
 logical start/end registration remain in the same finite checklist group.
+
+### Independent background-repeat axes (2026-10-13)
+
+Committed the preceding font/decoration batch as `908448f1`. This batch makes
+`background-repeat` a shorthand over `background-repeat-x` and
+`background-repeat-y`, following [CSS Backgrounds 4](https://drafts.csswg.org/css-backgrounds-4/#background-repeat).
+The currently supported repetition values remain `repeat` and `no-repeat`,
+with the existing `repeat-x`/`repeat-y` shorthand spellings. `round` and `space`
+remain unsupported because they require different painting behavior.
+
+This needed native storage changes: a single combined repeat list cannot retain
+different X/Y list lengths or inherit one axis independently. Each axis now has
+its own computed scalar and optional list tail. Single-layer backgrounds still
+need no list allocation; multi-layer tails are independently owned, copied,
+hashed and compared. Painting keeps its existing combined getter, which cycles
+each axis's list independently for the requested image layer. The old combined
+cascade file and serializer were removed. TOML drives the new identities,
+shorthand membership, computed storage and generated keyword-list cascade code.
+Existing unrelated bytecode numbers are retained; the additional Y slot appends
+to the native dispatch order.
+
+Specified declaration values retain their exact list lengths. Shorthand
+readback only combines compatible equal-length lists and preserves CSS-wide
+values, priorities and pending substitution. Editing or removing one axis
+preserves the other, including its original pending source when CSSOM requires
+empty textual readback. The background shorthand directly lists both axes.
+This finishes repeat-axis decomposition in the finite checklist; background
+position axes, white-space and logical start/end identities are next. The
+QuickJS style object, DOM synchronization and saved/live target retry remain
+pending; no new JavaScript API is enabled by this batch.
+
+Validation: all 87 selected native CSS/layout/QuickJS suites pass in Release
+and Debug, with clean native ASan/UBSan/LSan checks. The bytecode fixtures now
+expect the two repeat opcodes and shifted custom/deferred sentinels. Five Release
+Qt capture suites and eight Debug suites pass, including 66 background pixel
+samples, retained restyling and DOM/innerHTML/local-script integration. The three
+JS tests inspect diagnostic logging and therefore run against the Debug build;
+the Release configuration disables those logs. Both full builds are warning-free.
+The generator's 20 tests, chunked declaration input, shorthand reconstruction,
+unequal lists, priority/variable precedence, inheritance after source destruction,
+origin revert and edit/removal ownership are covered. GTK/Windows were not built.
 
 ## Assessment
 

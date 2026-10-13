@@ -258,12 +258,23 @@ condition = "CSS_BACKGROUND_POSITION_SET"
 
 [background_repeat]
 declaration_value = "repeat_list"
+declaration_longhands = ["background_repeat_x", "background_repeat_y"]
 enum = "CSS_PROP_BACKGROUND_REPEAT"
 inherited = false
-cascade = "manual"
+shorthand = true
+cascade = "none"
+computed = "none"
+
+[background_repeat_x]
+declaration_value = "keyword_list"
+enum = "CSS_PROP_BACKGROUND_REPEAT_X"
+enum_prefix = "CSS_BACKGROUND_REPEAT_AXIS"
+inherited = false
+cascade = "background_keyword"
+background_list = "CSS_BG_REPEAT_X"
 manual = true
 computed = "auto"
-bits = 3
+bits = 2
 initial = "REPEAT"
 
 [border_collapse]
@@ -1989,7 +2000,7 @@ select_comments = "Transform functions stored in css_computed_style.transform_*"
 
 [background]
 declaration_value = "background"
-declaration_longhands = ["background_image", "background_position", "background_repeat", "background_attachment", "background_color"]
+declaration_longhands = ["background_image", "background_position", "background_repeat_x", "background_repeat_y", "background_attachment", "background_color"]
 enum = "CSS_PROP_BACKGROUND"
 inherited = false
 shorthand = true
@@ -2385,3 +2396,16 @@ computed = "auto"
 bits = 2
 initial = "VISIBLE"
 parse = "IDENT:( INHERIT: INITIAL: REVERT: UNSET: VISIBLE:0,CONTENT_VISIBILITY_VISIBLE HIDDEN:0,CONTENT_VISIBILITY_HIDDEN IDENT:)"
+
+# Append new native slots to preserve existing bytecode fixture opcodes.
+[background_repeat_y]
+declaration_value = "keyword_list"
+enum = "CSS_PROP_BACKGROUND_REPEAT_Y"
+enum_prefix = "CSS_BACKGROUND_REPEAT_AXIS"
+inherited = false
+cascade = "background_keyword"
+background_list = "CSS_BG_REPEAT_Y"
+manual = true
+computed = "auto"
+bits = 2
+initial = "REPEAT"

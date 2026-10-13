@@ -32,5 +32,5 @@ css_error
 css__parse_background_attachment(css_language *c, const parserutils_vector *v, int32_t *ctx, css_style *result)
 {
     return css__parse_background_list(
-        c, v, ctx, result, CSS_PROP_BACKGROUND_ATTACHMENT, css__parse_background_attachment_item);
+        c, v, ctx, result, css__parse_background_attachment_item, css__background_list_append);
 }

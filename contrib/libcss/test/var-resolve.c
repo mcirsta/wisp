@@ -1927,6 +1927,99 @@ static void test_repeat_and_decoration_values(void)
     }
 }
 
+/* CSS Backgrounds 4, repeat longhands: lists retain independent lengths,
+ * cascade and inheritance. Expected letters: b=both, x/y=one axis, n=neither. */
+static void expect_background_repeats(const css_computed_style *style, const char *expected, const char *css)
+{
+    for (uint32_t layer = 0; expected[layer] != '\0'; layer++) {
+        uint8_t want = expected[layer] == 'b' ? CSS_BACKGROUND_REPEAT_REPEAT :
+            expected[layer] == 'x' ? CSS_BACKGROUND_REPEAT_REPEAT_X :
+            expected[layer] == 'y' ? CSS_BACKGROUND_REPEAT_REPEAT_Y : CSS_BACKGROUND_REPEAT_NO_REPEAT;
+        uint8_t actual = css_computed_background_repeat_layer(style, layer);
+        if (want != actual) {
+            fprintf(stderr, "repeat layer %u: expected %c (%u), got %u: %s\n",
+                layer, expected[layer], want, actual, css);
+            assert(false);
+        }
+    }
+    assert(css_computed_background_repeat(style) == css_computed_background_repeat_layer(style, 0));
+}
+
+static void test_background_repeat_axes(void)
+{
+    static const struct { const char *css, *expected; } cases[] = {
+        {"background-repeat-x:no-repeat", "yyyyyy"},
+        {"background-repeat-y:no-repeat", "xxxxxx"},
+        {"background-repeat:repeat-x,repeat-y;background-repeat-x:no-repeat", "nynyny"},
+        {"background-repeat-x:repeat,no-repeat;background-repeat-y:repeat,repeat,no-repeat", "byxybn"},
+        {"background-repeat-x:no-repeat;background-repeat:repeat-x", "xxxxxx"},
+        {"background-repeat-x:no-repeat!important;background-repeat:repeat-x,repeat-y", "nynyny"},
+        {"background-repeat:repeat-x!important;background-repeat-x:no-repeat,no-repeat", "xxxxxx"},
+        {"background-repeat-x:no-repeat,no-repeat;background-repeat-x:initial", "bbbbbb"},
+        {"background-repeat-y:no-repeat,no-repeat;background-repeat-y:unset", "bbbbbb"},
+        {"background-repeat-x:no-repeat,no-repeat;background:blue", "bbbbbb"},
+        {"--r:repeat-x,repeat-y;background-repeat:var(--r);background-repeat-x:no-repeat", "nynyny"},
+        {"--r:no-repeat,repeat;background-repeat-x:var(--r);background-repeat-y:no-repeat", "nxnxnx"},
+        {"--r:no-repeat,repeat;background-repeat-x:var(--r);background-repeat:repeat", "bbbbbb"},
+        {"--r:no-repeat,repeat;background-repeat-x:var(--r)!important;background-repeat:repeat-x", "nxnxnx"},
+        {"background-repeat:no-repeat,no-repeat;background-repeat-x:var(--missing)", "xxxxxx"},
+        {"--r:invalid;background-repeat:no-repeat,no-repeat;background-repeat-y:var(--r)", "yyyyyy"},
+        {"background-repeat:no-repeat;background-repeat:var(--missing);background-repeat-y:no-repeat", "xxxxxx"},
+        {"background-repeat:repeat-x,repeat-y;background-repeat-x:var(--missing,initial)", "xbxbxb"},
+    };
+    for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
+        for (unsigned inlined = 0; inlined < 2; inlined++) {
+            char css[512];
+            snprintf(css, sizeof(css), "div {%s;--w:37px;width:var(--w)}", cases[i].css);
+            style_case ctx;
+            setup_style_case(&ctx, inlined ? "" : css);
+            if (inlined)
+                ctx.inline_style = create_stylesheet_from_css(cases[i].css, true, false);
+            const css_computed_style *style = select_style_for_node(&ctx, &ctx.node, ctx.inline_style, &ctx.results);
+            expect_background_repeats(style, cases[i].expected, cases[i].css);
+            if (!inlined)
+                expect_length_px(css, style, css_computed_width, CSS_WIDTH_SET, 37);
+            destroy_style_case(&ctx);
+        }
+    }
+    const char *const children[] = {
+        "background-repeat-x:inherit;background-repeat-y:no-repeat",
+        "background-repeat-x:no-repeat;background-repeat-y:inherit",
+        "background-repeat:inherit",
+        "background-repeat:var(--missing,inherit)",
+    };
+    const char *const expected[] = {"xnxnxn", "yynyyn", "byxybn", "byxybn"};
+    for (size_t i = 0; i < sizeof(children) / sizeof(children[0]); i++) {
+        style_case p, c;
+        const css_computed_style *parent = select_style_from_css(
+            "div {background-repeat-x:repeat,no-repeat;background-repeat-y:repeat,repeat,no-repeat}", &p);
+        char css[256];
+        snprintf(css, sizeof(css), "div {%s}", children[i]);
+        setup_style_case(&c, css);
+        c.node.parent = &p.node; /* Root inherit is initial; exercise a real child. */
+        const css_computed_style *child = select_style_for_node(&c, &c.node, NULL, &c.results);
+        css_computed_style *composed;
+        assert(css_computed_style_compose(parent, child, &unit_ctx, &composed) == CSS_OK);
+        destroy_style_case(&p);
+        destroy_style_case(&c);
+        expect_background_repeats(composed, expected[i], children[i]);
+        css_computed_style_destroy(composed);
+    }
+    /* Revert must fall back independently to the lower origin's list. */
+    for (unsigned deferred = 0; deferred < 2; deferred++) {
+        style_case ctx;
+        setup_style_case(&ctx, deferred ?
+            "div {background-repeat:no-repeat;background-repeat-x:var(--missing,revert)}" :
+            "div {background-repeat:no-repeat;background-repeat-x:revert}");
+        css_stylesheet *user = create_stylesheet_from_css("div {background-repeat:repeat,no-repeat}", false, false);
+        assert(css_select_ctx_insert_sheet(ctx.select_ctx, user, 0, CSS_ORIGIN_USER, NULL) == CSS_OK);
+        const css_computed_style *style = select_style_for_node(&ctx, &ctx.node, NULL, &ctx.results);
+        expect_background_repeats(style, "xnxnxn", "axis revert to user origin");
+        destroy_style_case(&ctx);
+        css_stylesheet_destroy(user);
+    }
+}
+
 /* CSS Fonts 4 / Text Decoration 3 longhand identities share the supported
  * legacy rendering values, including substitution and cascade precedence. */
 static void test_aggregate_longhand_values(void)
@@ -2169,6 +2262,7 @@ int main(int argc, char **argv)
     test_svg_paint_payloads();
     test_position_payloads();
     test_repeat_and_decoration_values();
+    test_background_repeat_axes();
     test_aggregate_longhand_values();
     test_gap_aliases();
     test_deferred_revert();

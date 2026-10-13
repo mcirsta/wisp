@@ -411,7 +411,7 @@
 #reset
 
 ##
-## 05 - background-repeat
+## 05 / 8e - background-repeat-x / background-repeat-y
 ##
 
 #data
@@ -419,7 +419,7 @@
 #errors
 #expected
 | 1 *
-|   0x00000005
+|   0x00000005 0x0000008e
 #reset
 
 #data
@@ -427,7 +427,7 @@
 #errors
 #expected
 | 1 *
-|   0x00040005
+|   0x000c0005 0x0000008e
 #reset
 
 #data
@@ -435,7 +435,7 @@
 #errors
 #expected
 | 1 *
-|   0x00080005
+|   0x00000005 0x000c008e
 #reset
 
 #data
@@ -443,7 +443,7 @@
 #errors
 #expected
 | 1 *
-|   0x000c0005
+|   0x000c0005 0x000c008e
 #reset
 
 ##

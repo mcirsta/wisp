@@ -328,5 +328,5 @@ css__parse_background_image_item(css_language *c, const parserutils_vector *vect
 
 css_error css__parse_background_image(css_language *c, const parserutils_vector *v, int32_t *ctx, css_style *result)
 {
-    return css__parse_background_list(c, v, ctx, result, CSS_PROP_BACKGROUND_IMAGE, css__parse_background_image_item);
+    return css__parse_background_list(c, v, ctx, result, css__parse_background_image_item, css__background_list_append);
 }

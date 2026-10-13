@@ -108,6 +108,13 @@ enum css_background_image_e {
 
 enum css_background_position_e { CSS_BACKGROUND_POSITION_INHERIT = 0x0, CSS_BACKGROUND_POSITION_SET = 0x1 };
 
+enum css_background_repeat_axis_e {
+    CSS_BACKGROUND_REPEAT_AXIS_INHERIT = 0x0,
+    CSS_BACKGROUND_REPEAT_AXIS_REPEAT = 0x1,
+    CSS_BACKGROUND_REPEAT_AXIS_NO_REPEAT = 0x2
+};
+
+/* Combined repetition used by painters; each axis cascades independently. */
 enum css_background_repeat_e {
     CSS_BACKGROUND_REPEAT_INHERIT = 0x0,
     CSS_BACKGROUND_REPEAT_REPEAT_X = 0x1,

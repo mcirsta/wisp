@@ -2,7 +2,7 @@
 <meta charset="utf-8">
 <title>Multiple background layers</title>
 <style>
-html { height: 960px; background: none, linear-gradient(#eeeeee,#eeeeee); }
+html { height: 1100px; background: none, linear-gradient(#eeeeee,#eeeeee); }
 body { margin: 0; font: 14px sans-serif; }
 .case { position: absolute; width: 200px; height: 100px; background-color: yellow; }
 .case::after { content: attr(id); position: absolute; top: -20px; left: 0; }
@@ -32,6 +32,10 @@ body { margin: 0; font: 14px sans-serif; }
 #radial-default { left: 10px; top: 830px; background-image: radial-gradient( red 50%,blue 50%); }
 #radial-ellipse { left: 250px; top: 830px; background-image: radial-gradient( ELLIPSE,red 50%,blue 50%); }
 #radial-circle { left: 490px; top: 830px; background-image: radial-gradient( CIRCLE,red 50%,blue 50%); }
+/* Axis edits retain the other axis and its independent list length. */
+#axes-x { left: 10px; top: 970px; background-image: url(test_data/background_layers/red.png),url(test_data/background_layers/blue.png); background-position: 0 0,40px 40px; background-repeat: repeat-x,repeat; background-repeat-x: no-repeat; }
+#axes-y { left: 250px; top: 970px; background-image: url(test_data/background_layers/red.png),url(test_data/background_layers/blue.png); background-position: 0 0,40px 40px; background-repeat: repeat-y,repeat; background-repeat-y: no-repeat; }
+#axes-cycle { left: 490px; top: 970px; background-image: url(test_data/background_layers/red.png),none,url(test_data/background_layers/blue.png); background-position: 0 0,0 0,80px 40px; background-repeat-x: no-repeat,repeat; background-repeat-y: no-repeat,no-repeat,repeat; }
 </style>
 <div id="order" class="case"></div><div id="images" class="case"></div><div id="none" class="case"></div>
 <div id="cycle" class="case"></div><div id="repeat" class="case"></div><div id="mixed" class="case"></div>
@@ -43,3 +47,5 @@ body { margin: 0; font: 14px sans-serif; }
 <div id="pair-x" class="case"></div><div id="pair-y" class="case"></div><div id="pair-both" class="case"></div>
 
 <div id="radial-default" class="case"></div><div id="radial-ellipse" class="case"></div><div id="radial-circle" class="case"></div>
+
+<div id="axes-x" class="case"></div><div id="axes-y" class="case"></div><div id="axes-cycle" class="case"></div>

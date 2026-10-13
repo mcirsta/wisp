@@ -41,6 +41,19 @@ class DeclarationMetadataTest(unittest.TestCase):
             kind = prop.get("declaration_value", "none").upper()
             self.assertTrue(entry.endswith("CSS_DECL_VALUE_" + kind + "},"), name)
 
+    def test_repeat_axes_are_native_longhands(self):
+        self.assertEqual(self.reader.toml_data['background_repeat']['declaration_longhands'],
+                         ['background_repeat_x', 'background_repeat_y'])
+        dispatch = {prop['name'] for prop in self.reader.get_dispatch_order()}
+        self.assertNotIn('background_repeat', dispatch)
+        for axis in ('x', 'y'):
+            self.assertIn('background_repeat_' + axis, dispatch)
+            self.assertIn('background_repeat_' + axis,
+                          self.reader.toml_data['background']['declaration_longhands'])
+        self.reader.toml_data['background_repeat']['declaration_longhands'].reverse()
+        with self.assertRaisesRegex(ValueError, 'background_repeat: declaration_value requires ordered members'):
+            self.reader.validate_declarations()
+
     def test_legacy_alias_validation(self):
         for aliases in ("grid-gap", [1], ["GRID-GAP"], ["grid_gap"], ["--gap"], ["gríd-gap"],
                         ["gap"], ["row-gap"], ["grid-row-gap"], ["grid-gap", "grid-gap"]):
@@ -147,7 +160,7 @@ class DeclarationMetadataTest(unittest.TestCase):
     def test_scalar_family_cannot_describe_shorthand(self):
         for kind in ("keyword", "uri", "image_list", "keyword_list", "content", "string_list", "counter_list",
                      "aspect_ratio", "border_spacing", "clip", "font_family", "colour", "grid_line",
-                     "cursor", "position", "position_list", "repeat_list", "text_decoration", "transform",
+                     "cursor", "position", "position_list", "text_decoration", "transform",
                      "grid_tracks", "grid_flow", "time", "frequency", "angle", "play_during", "voice_family"):
             with self.subTest(kind=kind):
                 self.reader.toml_data["overflow"]["declaration_value"] = kind

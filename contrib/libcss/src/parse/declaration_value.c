@@ -850,13 +850,13 @@ css_error css__declaration_value_serialize(const css_declaration_contribution *v
         return css__declaration_font_component(value, out);
     if (kind == CSS_DECL_VALUE_IMAGE_LIST)
         return css__declaration_background_image(source, out);
-    if (kind == CSS_DECL_VALUE_BACKGROUND)
+    if (kind == CSS_DECL_VALUE_BACKGROUND || kind == CSS_DECL_VALUE_REPEAT_LIST)
         return css__declaration_background_component(value, out);
     if (kind == CSS_DECL_VALUE_URI || kind == CSS_DECL_VALUE_CURSOR || kind == CSS_DECL_VALUE_KEYWORD_LIST ||
         kind == CSS_DECL_VALUE_GRID_TRACKS || kind == CSS_DECL_VALUE_GRID_FLOW ||
         kind == CSS_DECL_VALUE_CONTENT || kind == CSS_DECL_VALUE_STRING_LIST || kind == CSS_DECL_VALUE_COUNTER_LIST ||
         kind == CSS_DECL_VALUE_FONT_FAMILY || kind == CSS_DECL_VALUE_VOICE_FAMILY || kind == CSS_DECL_VALUE_PLAY_DURING ||
-        kind == CSS_DECL_VALUE_REPEAT_LIST || kind == CSS_DECL_VALUE_TEXT_DECORATION)
+        kind == CSS_DECL_VALUE_TEXT_DECORATION)
         return css__declaration_text_serialize(source, out);
     if (kind == CSS_DECL_VALUE_ASPECT_RATIO || kind == CSS_DECL_VALUE_BORDER_SPACING || kind == CSS_DECL_VALUE_CLIP)
         return serialize_geometry(source, out);
@@ -1058,6 +1058,8 @@ css_error css__declaration_shorthand_serialize(const struct css_prop_entry *prop
         return css__declaration_font_shorthand(members, out);
     if (kind == CSS_DECL_VALUE_BACKGROUND)
         return css__declaration_background_shorthand(members, out);
+    if (kind == CSS_DECL_VALUE_REPEAT_LIST)
+        return css__declaration_background_repeat_shorthand(members, out);
     if (kind == CSS_DECL_VALUE_BORDER || kind == CSS_DECL_VALUE_BORDER_SIDE || kind == CSS_DECL_VALUE_OUTLINE)
         return serialize_border_shorthand(kind, members, out);
     if (scalar_arity(kind) == 1 && kind != CSS_DECL_VALUE_FLEX && kind != CSS_DECL_VALUE_FLEX_FLOW &&

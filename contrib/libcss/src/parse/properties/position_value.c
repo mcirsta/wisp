@@ -93,7 +93,8 @@ css_error css__parse_background_position_item(css_language *c, const parserutils
 
 css_error css__parse_background_position(css_language *c, const parserutils_vector *v, int32_t *ctx, css_style *result)
 {
-    return css__parse_background_list(c, v, ctx, result, CSS_PROP_BACKGROUND_POSITION, css__parse_background_position_item);
+    return css__parse_background_list(
+        c, v, ctx, result, css__parse_background_position_item, css__background_list_append);
 }
 
 css_error css__parse_object_position(css_language *c, const parserutils_vector *v, int32_t *ctx, css_style *result)

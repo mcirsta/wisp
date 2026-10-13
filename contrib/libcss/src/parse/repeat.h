@@ -25,7 +25,7 @@ static inline bool css__repeat_axis(int value)
 
 static inline int css__repeat_pair(int horizontal, int vertical)
 {
-    /* Existing bytecode already represents the independent repeat flags. */
+    /* The supported repeat-style keywords encode independent repeat flags. */
     return (horizontal == BACKGROUND_REPEAT_REPEAT ? BACKGROUND_REPEAT_REPEAT_X : 0) |
         (vertical == BACKGROUND_REPEAT_REPEAT ? BACKGROUND_REPEAT_REPEAT_Y : 0);
 }

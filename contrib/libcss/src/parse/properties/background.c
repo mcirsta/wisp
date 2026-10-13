@@ -11,7 +11,7 @@
 css_error css__parse_background(css_language *c, const parserutils_vector *v, int32_t *ctx, css_style *result)
 {
     static const opcode_t ops[] = {CSS_PROP_BACKGROUND_ATTACHMENT, CSS_PROP_BACKGROUND_COLOR, CSS_PROP_BACKGROUND_IMAGE,
-        CSS_PROP_BACKGROUND_POSITION, CSS_PROP_BACKGROUND_REPEAT};
+        CSS_PROP_BACKGROUND_POSITION, CSS_PROP_BACKGROUND_REPEAT_X};
     static const uint16_t defaults[] = {BACKGROUND_ATTACHMENT_SCROLL, BACKGROUND_COLOR_TRANSPARENT,
         BACKGROUND_IMAGE_NONE, BACKGROUND_POSITION_HORZ_LEFT | BACKGROUND_POSITION_VERT_TOP, BACKGROUND_REPEAT_REPEAT};
     static const css_prop_handler parsers[] = {css__parse_background_attachment_item, css__parse_background_color,
@@ -30,6 +30,9 @@ css_error css__parse_background(css_language *c, const parserutils_vector *v, in
             if (error != CSS_OK)
                 goto cleanup;
         }
+        error = css_stylesheet_style_flag_value(result, flag, CSS_PROP_BACKGROUND_REPEAT_Y);
+        if (error != CSS_OK)
+            goto cleanup;
         parserutils_vector_iterate(v, ctx);
         return CSS_OK;
     }
@@ -77,6 +80,9 @@ css_error css__parse_background(css_language *c, const parserutils_vector *v, in
         for (unsigned i = 0; i < 5; i++) {
             if (!seen[i] && (i != 1 || !comma)) {
                 error = css__stylesheet_style_appendOPV(items[i], ops[i], 0, defaults[i]);
+                if (error == CSS_OK && ops[i] == CSS_PROP_BACKGROUND_REPEAT_X)
+                    error = css__stylesheet_style_appendOPV(items[i], CSS_PROP_BACKGROUND_REPEAT_Y, 0,
+                        BACKGROUND_REPEAT_REPEAT);
                 if (error != CSS_OK)
                     goto cleanup;
             }
@@ -87,7 +93,8 @@ css_error css__parse_background(css_language *c, const parserutils_vector *v, in
         consumeWhitespace(v, ctx);
     }
     for (unsigned i = 0; i < 5; i++) {
-        error = css__background_list_append(result, items[i], ops[i], i == 1 ? 1 : count);
+        error = ops[i] == CSS_PROP_BACKGROUND_REPEAT_X ? css__background_repeat_append(result, items[i], count)
+                                                    : css__background_list_append(result, items[i], i == 1 ? 1 : count);
         if (error != CSS_OK)
             break;
     }
