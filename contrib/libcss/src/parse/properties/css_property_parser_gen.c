@@ -345,13 +345,29 @@ void output_calc(FILE *outputf, struct keyval *parseid, struct keyval_list *kvli
         mask = "0";
     }
 
+    const char *minimum = "-INFINITY", *maximum = "INFINITY";
+    for (int i = 1; i < kvlist->count; i++) {
+        struct keyval *limit = kvlist->item[i];
+        if (strcmp(limit->key, "MIN") == 0)
+            minimum = limit->val;
+        else if (strcmp(limit->key, "MAX") == 0)
+            maximum = limit->val;
+        else {
+            fprintf(stderr, "Unknown CALC option %s for %s\n", limit->key, parseid->key);
+            exit(EXIT_FAILURE);
+        }
+    }
+
     fprintf(outputf,
         "if ((token->type == CSS_TOKEN_FUNCTION) && "
         "(lwc_string_caseless_isequal(token->idata, c->strings[CALC], &match) == lwc_error_ok && match))"
         " {\n"
-        "\t\terror = css__parse_calc(c, vector, ctx, result, buildOPV(%s, 0, %s), %s, %s);\n"
+        "\t\tconst struct css_calc_parse_options options = {\n"
+        "\t\t\t.unit = %s, .unit_mask = %s,\n"
+        "\t\t\t.minimum = %s, .maximum = %s};\n"
+        "\t\terror = css__parse_calc(c, vector, ctx, result, buildOPV(%s, 0, %s), &options);\n"
         "\t} else ",
-        parseid->val, ckv->val, kind, mask);
+        kind, mask, minimum, maximum, parseid->val, ckv->val);
 }
 
 /* Output handling for sizing keywords: fit-content, min-content, max-content */

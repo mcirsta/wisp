@@ -44,6 +44,8 @@ enum calc_opcodes {
     CALC_MULTIPLY = '*',
     CALC_DIVIDE = '/',
     CALC_FINISH = '=',
+    CALC_CLAMP = 'C', /* Two floating operands: outer property minimum/maximum. */
+    CALC_INEXACT = '~', /* Simplification cannot prove percentage cancellation. */
 };
 
 typedef enum unit {

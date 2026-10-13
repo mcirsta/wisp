@@ -224,3 +224,19 @@ and `data-hn2-latest-hydrated="1"`. That explains why the saved version can show
 the widget without executing its loading script; it does not establish that the
 live widget previously worked. Evidence, fetched source and response are in
 `out/render-captures/hotnews-sidebar-2026-10-06/`.
+
+## Numeric calc values skipped during cascade
+
+Source inspection on 2026-10-13 confirmed that the existing cascade handlers
+for `flex-grow`, `flex-shrink`, `order`, `z-index` and `column-count` consume
+calculator operands and return without applying the declaration. Native CSSOM
+readback/editing now preserves these accepted expressions, and the shared parser
+compiles their arithmetic and property ranges, but this does not make these
+older cascade branches evaluate them. This predates the CSSOM work.
+
+A separate rendering batch should evaluate these numeric-only expressions at
+computed-value time, preserve cascade priority/inheritance, and apply each
+property's integer rounding and range rules. Cover finite/non-finite results,
+negative order/z-index, positive column counts and fractional flex factors.
+Keep this outside the finite inline-style binding checklist: preserving an
+accepted declaration must neither erase it nor invent new rendering support.

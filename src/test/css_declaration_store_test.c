@@ -340,16 +340,12 @@ START_TEST(test_extended_polar_values_survive_edits)
 }
 END_TEST
 
-START_TEST(test_native_state_survives_readback_limits)
+START_TEST(test_nonfinite_values_survive_edits)
 {
     css_declaration_store *store = create("margin:var(--m);width:calc(1px / 0);color:red", false);
     ck_assert(set(store, "margin-left:2px", false));
     const css_declaration *pending = css__declaration_store_get(store, 0)->source;
-    lwc_string *out = (void *)1;
-    ck_assert_int_eq(css__declaration_store_serialize(store, &out), CSS_INVALID);
-    ck_assert_ptr_null(out);
-    ck_assert_int_eq(css__declaration_store_value(store, "width", 5, &out), CSS_INVALID);
-    ck_assert_ptr_null(out);
+    check_value(store, "width", "calc(infinity * 1px)", false);
     check_value(store, "color", "red", false);
     check_value(store, "margin", "", false);
     ck_assert_ptr_eq(pending, css__declaration_store_get(store, 0)->source);
@@ -360,6 +356,15 @@ START_TEST(test_native_state_survives_readback_limits)
     ck_assert_int_eq(css__declaration_store_set(store, pending, &changed), CSS_OK);
     ck_assert(changed);
     check_value(store, "margin", "var(--m)", false);
+    lwc_string *out;
+    ck_assert_int_eq(css__declaration_store_serialize(store, &out), CSS_OK);
+    css_declaration_store *copy = create(lwc_string_data(out), false);
+    check_text(copy, lwc_string_data(out));
+    check_value(copy, "width", "calc(infinity * 1px)", false);
+    lwc_string_unref(out);
+    css__declaration_store_destroy(copy);
+    ck_assert(set(store, "width:calc(0px / 0)", false));
+    check_value(store, "width", "calc(NaN * 1px)", false);
     ck_assert_int_eq(css__declaration_store_remove(store, "width", 5, &changed), CSS_OK);
     ck_assert(changed);
     check_text(store, "margin: var(--m); color: red;");
@@ -958,7 +963,7 @@ int main(void)
     tcase_add_loop_test(tc, test_srgb_values_survive_edits, 0, 2);
     tcase_add_loop_test(tc, test_extended_polar_values_survive_edits, 0, 2);
     tcase_add_loop_test(tc, test_calc_values_survive_edits, 0, 2);
-    tcase_add_test(tc, test_native_state_survives_readback_limits);
+    tcase_add_test(tc, test_nonfinite_values_survive_edits);
     tcase_add_test(tc, test_length_and_borrowed_names);
     tcase_add_test(tc, test_repeated_edits_release_sources);
     tcase_add_test(tc, test_shared_source_lifetime);

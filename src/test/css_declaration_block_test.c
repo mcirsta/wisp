@@ -140,7 +140,7 @@ static const struct {
         true},
     /* Unsupported values must fail atomically, even after serializable values. */
     {"color:red;width:calc(100% - 2px)", "color: red; width: calc(100% - 2px);"},
-    {"color:red;width:calc(1px / 0)", NULL},
+    {"color:red;width:calc(1px / 0)", "color: red; width: calc(infinity * 1px);"},
     {"margin:1px;background-image:linear-gradient(red,blue)",
         "margin: 1px; background-image: linear-gradient(red, blue);"},
     {"color:red;grid-template-columns:20px 1fr", "color: red; grid-template-columns: 20px 1fr;"},

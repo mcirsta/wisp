@@ -58,10 +58,10 @@
 #errors
 #expected
 | *
-|  top: /* -> 0px */ calc(10px 5% + =)
-|  right: /* -> 0px */ calc(10px 5% + =)
-|  bottom: /* -> 0px */ calc(10px 5% + =)
-|  left: /* -> 0px */ calc(10px 5% + =)
+|  top: /* -> 0px */ calc(5% 10px + =)
+|  right: /* -> 0px */ calc(5% 10px + =)
+|  bottom: /* -> 0px */ calc(5% 10px + =)
+|  left: /* -> 0px */ calc(5% 10px + =)
 #reset
 
 #data

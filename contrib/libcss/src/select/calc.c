@@ -191,40 +191,10 @@ static css_error css__normalise_unit(
 
 /****************************** Compute ************************************/
 
-/* Analysis must not infer cancellation from rounded arithmetic. TwoSum and
- * fused residuals detect inexact operations without an arbitrary epsilon.
- * A failed proof simply leaves the edge classified as potentially nonzero. */
 static css_error css__calculator_exact_op(css_code_t op, double left, double right, double *out)
 {
-    double result, error;
-    switch (op) {
-    case CALC_SUBTRACT:
-        right = -right;
-        /* fall through */
-    case CALC_ADD: {
-        result = left + right;
-        double part = result - left;
-        error = (left - (result - part)) + (right - part);
-        break;
-    }
-    case CALC_MULTIPLY:
-        result = left * right;
-        error = fma(left, right, -result);
-        if (result == 0 && left != 0 && right != 0)
-            return CSS_INVALID;
-        break;
-    case CALC_DIVIDE:
-        if (right == 0)
-            return CSS_INVALID;
-        result = left / right;
-        error = fma(result, right, -left);
-        if (result == 0 && left != 0)
-            return CSS_INVALID;
-        break;
-    default:
-        return CSS_INVALID;
-    }
-    if (!isfinite(result) || error != 0)
+    double result = css__calc_binary(op, left, right);
+    if (!css__calc_is_exact(op, left, right, result))
         return CSS_INVALID;
     *out = result;
     return CSS_OK;
@@ -246,6 +216,23 @@ static css_error css__calculator_calculate(css_calculator *calc, const css_unit_
     while (*codeptr != CALC_FINISH) {
         css_code_t op = *codeptr++;
         switch (op) {
+        case CALC_CLAMP: {
+            double minimum = css__calc_read_number(&codeptr);
+            double maximum = css__calc_read_number(&codeptr);
+            if (calc->stack_ptr != 1 || (percent_out != NULL && calc->stack[0].percent != 0))
+                return CSS_INVALID;
+            double value = calc->stack[0].value;
+            /* Only the completed expression is range-clamped. NaN first
+             * becomes zero, then obeys the property's allowed range too. */
+            if (isnan(value))
+                value = 0;
+            calc->stack[0].value = fmin(maximum, fmax(minimum, value));
+            break;
+        }
+        case CALC_INEXACT:
+            if (percent_out != NULL)
+                return CSS_INVALID;
+            break;
         case CALC_PUSH_VALUE: {
             double v = css__calc_read_number(&codeptr);
             unit u = (unit)(*codeptr++);
@@ -310,9 +297,6 @@ static css_error css__calculator_calculate(css_calculator *calc, const css_unit_
                 return CSS_INVALID;
             }
 
-            if (op == CALC_DIVIDE && v_right == 0)
-                return CSS_INVALID;
-
             if (percent_out != NULL) {
                 if (css__calculator_exact_op(op, v_left, v_right, &v_left) != CSS_OK ||
                     css__calculator_exact_op(op, p_left, v_right, &p_left) != CSS_OK)
@@ -320,7 +304,7 @@ static css_error css__calculator_calculate(css_calculator *calc, const css_unit_
             } else if (op == CALC_MULTIPLY) {
                 v_left *= v_right;
             } else {
-                v_left /= v_right;
+                v_left = css__calc_binary(op, v_left, v_right);
             }
 
             CALC_PUSH(u_left, v_left, p_left);
@@ -354,8 +338,10 @@ css_error css_calculator_calculate(css_calculator *calc, const css_unit_ctx *uni
         return error;
     /* Conversion to the existing computed-value API is the sole fixed-point
      * boundary. Check range before conversion to avoid undefined casts. */
-    if (!isfinite(value))
-        return CSS_INVALID;
+    /* Values 4 10.9.2: NaN becomes zero and infinities saturate only at
+     * the outer computed-value boundary, never inside nested arithmetic. */
+    if (isnan(value))
+        value = 0;
     value = round(value * F_1);
     *value_out = value >= INT32_MAX ? INT32_MAX : value <= INT32_MIN ? INT32_MIN : (css_fixed)value;
     return CSS_OK;
@@ -379,7 +365,9 @@ css_error css_calculator_resolve_line_height(lwc_string *expr, const css_compute
      * operand needs to be frozen; inherited, already-resolved expressions share
      * their original storage. Keep viewport/container operands for reflow. */
     for (size_t i = 0; code[i] != CALC_FINISH;) {
-        if (code[i] == CALC_PUSH_NUMBER) {
+        if (code[i] == CALC_CLAMP) {
+            i += 1 + 2 * CSS_CALC_NUMBER_WORDS;
+        } else if (code[i] == CALC_PUSH_NUMBER) {
             i += 1 + CSS_CALC_NUMBER_WORDS;
         } else if (code[i] == CALC_PUSH_VALUE) {
             const css_code_t *operand = code + i + 1;
@@ -436,7 +424,7 @@ bool css_calculator_length_is_zero(css_calculator *calc, const css_unit_ctx *uni
     /* Test the unrounded result, never a value quantized to zero at the public
      * fixed-point boundary. Percentages still need separate coefficient proof. */
     if (css__calculator_calculate(calc, unit_ctx, -1, expr, style, &unit, &value, NULL) == CSS_OK)
-        return value == 0;
+        return value == 0 || isnan(value);
     return css__calculator_calculate(calc, unit_ctx, -1, expr, style, &unit, &value, &percent) == CSS_OK &&
         unit == CSS_UNIT_PX && value == 0 && percent == 0;
 }

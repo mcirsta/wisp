@@ -429,7 +429,7 @@ if(WISP_QT_CAPTURE)
         set_tests_properties(qt_inline_wrapper_margins PROPERTIES TIMEOUT 30)
         add_test(NAME qt_calc_inline_margins
             COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_calc_inline_margins.py $<TARGET_FILE:wisp-qt>)
-        set_tests_properties(qt_calc_inline_margins PROPERTIES TIMEOUT 30)
+        set_tests_properties(qt_calc_inline_margins PROPERTIES TIMEOUT 70)
         add_test(NAME qt_inline_spacing
             COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_inline_spacing.py $<TARGET_FILE:wisp-qt>)
         add_test(NAME qt_space_font

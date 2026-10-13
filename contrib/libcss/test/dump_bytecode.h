@@ -1569,6 +1569,16 @@ static void dump_bytecode_calc(struct dump_bytecode_cursor *cursor, struct dump_
     for (;;) {
         uint32_t op = dump_bytecode_read(&calc);
         switch (op) {
+        case CALC_CLAMP: {
+            assert(calc.end - calc.next >= 2 * CSS_CALC_NUMBER_WORDS);
+            double minimum = css__calc_read_number(&calc.next);
+            double maximum = css__calc_read_number(&calc.next);
+            dump_printf(out, "clamp(%.15g,%.15g) ", minimum, maximum);
+            break;
+        }
+        case CALC_INEXACT:
+            dump_printf(out, "~ ");
+            break;
         case CALC_FINISH:
             dump_printf(out, "=)");
             return;

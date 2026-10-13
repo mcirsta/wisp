@@ -628,20 +628,6 @@ static void test_zero_analysis_preserves_percentage_resolution(void)
     }
 }
 
-static void test_calc_division_by_zero(void)
-{
-    style_case ctx;
-    const css_computed_style *style = select_style_from_css("* { width:calc(1px / 0); }", &ctx);
-    css_fixed_or_calc length;
-    css_unit unit;
-    int px;
-    assert(css_computed_width(style, &length, &unit) == CSS_WIDTH_SET);
-    assert(unit == CSS_UNIT_CALC);
-    assert(!css_computed_length_is_zero(style, &unit_ctx, length, unit));
-    assert(css_computed_length_to_px(style, &unit_ctx, 200, length, unit, &px) == CSS_INVALID);
-    destroy_style_case(&ctx);
-}
-
 static void test_relative_offsets_with_calc(void)
 {
     style_case ctx;
@@ -759,6 +745,66 @@ static void test_calc_precision(void)
         }
     }
     unit_ctx.device_dpi = F_96;
+}
+
+static void test_pixel_conversion_range(void)
+{
+    /* Conversions retain the fixed-point range until their final result,
+     * including a no-op at 96dpi. Test both signs and high/low density. */
+    assert(css_unit_css2device_px(INT32_MAX, F_96) == INT32_MAX);
+    assert(css_unit_css2device_px(INT32_MIN, F_96) == INT32_MIN);
+    assert(css_unit_device2css_px(INT32_MAX, F_96) == INT32_MAX);
+    assert(css_unit_device2css_px(INT32_MIN, F_96) == INT32_MIN);
+    assert(css_unit_css2device_px(INT32_MAX, INTTOFIX(192)) == INT32_MAX);
+    assert(css_unit_css2device_px(INT32_MIN, INTTOFIX(192)) == INT32_MIN);
+    assert(css_unit_device2css_px(INT32_MAX, INTTOFIX(48)) == INT32_MAX);
+    assert(css_unit_device2css_px(INT32_MIN, INTTOFIX(48)) == INT32_MIN);
+    assert(css_unit_css2device_px(INT32_MAX, INTTOFIX(48)) == INT32_MAX / 2);
+    assert(css_unit_device2css_px(INT32_MIN, INTTOFIX(192)) == INT32_MIN / 2);
+    assert(css_unit_css2device_px(-1, F_96) == -1);
+    assert(css_unit_device2css_px(-1, F_96) == -1);
+}
+
+static void test_calc_nonfinite(void)
+{
+    const struct { const char *value; int px; bool zero; } cases[] = {
+        {"calc(1px / 0)", FIXTOINT(INT32_MAX), false},
+        {"calc(-1px / 0)", FIXTOINT(INT32_MIN), false},
+        {"calc(0px / 0)", 0, true},
+        {"calc(NaN * 1px + 5px)", 0, true},
+        {"calc(1px / -0)", FIXTOINT(INT32_MAX), false},
+        {"calc(1px / calc(-5 * 0))", FIXTOINT(INT32_MIN), false},
+        {"calc(1px / (1 / -infinity))", FIXTOINT(INT32_MIN), false},
+        {"calc((1px / 0) * 0)", 0, true},
+        {"calc(1px / (1 / 0) + 5px)", 5, false},
+        {"calc((1px / 0) - (1px / 0))", 0, true},
+        {"calc((1em - 1px) / 0)", 0, true},
+        {"calc((1em - 1em) / 0)", 0, true},
+        {"calc(1% / 0)", FIXTOINT(INT32_MAX), false},
+        {"calc((1% - 1px) / 0)", 0, false},
+        {"calc((0% + 1px) / 0)", 0, false},
+    };
+    for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
+        lwc_string *text = calc_readback(cases[i].value);
+        const char *values[] = {cases[i].value, lwc_string_data(text)};
+        for (size_t pass = 0; pass < 2; pass++) {
+            char css[200];
+            snprintf(css, sizeof(css), "* {font-size:16px;margin-left:%s}", values[pass]);
+            style_case ctx;
+            const css_computed_style *style = select_style_from_css(css, &ctx);
+            expect_calc_px(values[pass], style, &unit_ctx, 200, css_computed_margin_left,
+                CSS_MARGIN_SET, cases[i].px);
+            css_fixed_or_calc length;
+            css_unit unit;
+            assert(css_computed_margin_left(style, &length, &unit) == CSS_MARGIN_SET);
+            if (css_computed_length_is_zero(style, &unit_ctx, length, unit) != cases[i].zero) {
+                printf("FAIL - nonfinite zero classification: %s\n", values[pass]);
+                exit(EXIT_FAILURE);
+            }
+            destroy_style_case(&ctx);
+        }
+        lwc_string_unref(text);
+    }
 }
 
 static void test_flex_basis_px_calc(void)
@@ -974,6 +1020,11 @@ static void test_line_height_inheritance(void)
         {"font-size:15.5px;line-height:calc(200% + 1px)", CSS_LINE_HEIGHT_DIMENSION, INTTOFIX(32)},
         {"line-height:calc(1 + .25)", CSS_LINE_HEIGHT_NUMBER, FLTTOFIX(1.25)},
         {"line-height:calc(1em - 50px)", CSS_LINE_HEIGHT_DIMENSION, 0},
+        {"line-height:calc(0px / 0)", CSS_LINE_HEIGHT_DIMENSION, 0},
+        {"line-height:calc(-infinity * 1px)", CSS_LINE_HEIGHT_DIMENSION, 0},
+        {"line-height:calc(1px / 0)", CSS_LINE_HEIGHT_DIMENSION, INT32_MAX},
+        {"line-height:calc(1 / 0)", CSS_LINE_HEIGHT_NUMBER, INT32_MAX},
+        {"line-height:calc(0 / 0)", CSS_LINE_HEIGHT_NUMBER, 0},
         {"line-height:calc(.0005px * 100000)", CSS_LINE_HEIGHT_DIMENSION, INTTOFIX(50)},
         {"line-height:calc(.0005em * 100000)", CSS_LINE_HEIGHT_DIMENSION, INTTOFIX(2000)},
         {"line-height:calc(.0005% * 100000)", CSS_LINE_HEIGHT_DIMENSION, INTTOFIX(20)},
@@ -1024,10 +1075,11 @@ int main(void)
     test_length_to_px_invalid_percent();
     test_length_is_zero();
     test_zero_analysis_preserves_percentage_resolution();
-    test_calc_division_by_zero();
     test_relative_offsets_with_calc();
     test_width_px_calc();
     test_calc_precision();
+    test_calc_nonfinite();
+    test_pixel_conversion_range();
     test_calc_grammar_cascade();
     test_flex_basis_px_calc();
     test_font_size_calc_roundtrip();

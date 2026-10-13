@@ -103,7 +103,9 @@ typedef struct css_unit_ctx {
  */
 static inline css_fixed css_unit_css2device_px(const css_fixed css_pixels, const css_fixed device_dpi)
 {
-    return FDIV(FMUL(css_pixels, device_dpi), F_96);
+    /* Saturate the conversion result, not its intermediate product. */
+    int64_t value = (int64_t)css_pixels * device_dpi / F_96;
+    return value > INT32_MAX ? INT32_MAX : value < INT32_MIN ? INT32_MIN : (css_fixed)value;
 }
 
 /**
@@ -115,7 +117,8 @@ static inline css_fixed css_unit_css2device_px(const css_fixed css_pixels, const
  */
 static inline css_fixed css_unit_device2css_px(const css_fixed device_pixels, const css_fixed device_dpi)
 {
-    return FDIV(FMUL(device_pixels, F_96), device_dpi);
+    int64_t value = (int64_t)device_pixels * F_96 / device_dpi;
+    return value > INT32_MAX ? INT32_MAX : value < INT32_MIN ? INT32_MIN : (css_fixed)value;
 }
 
 /**

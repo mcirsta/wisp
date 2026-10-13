@@ -15,6 +15,7 @@
 #include "parse/declaration_store.h"
 #include "parse/declaration_block.h"
 #include "parse/calc.h"
+#include "select/calc.h"
 #include "parse/language.h"
 #include "parse/property.h"
 #include "stylesheet.h"
@@ -1251,10 +1252,29 @@ static const struct {
     {"flex:calc(1px / 0) 2 3", "flex-grow", "2"},
     {"columns:calc(1 + 1) calc(10px * 2)", "columns", "calc(20px) calc(2)"},
     {"columns:calc(1px / 0) 2", "column-count", "2"},
-    /* Preserve explicit failure for math the finite native evaluator cannot
-     * yet round-trip, rather than inventing zero or publishing unparseable text. */
-    {"width:calc(1px / 0)", "width", NULL},
-    {"width:calc(0px / 0)", "width", NULL},
+    /* Values 4 10.9.2 / 10.13: keywords round-trip without prematurely
+     * censoring non-finite results or nested signed zero. */
+    {"width:calc(1px / 0)", "width", "calc(infinity * 1px)"},
+    {"width:calc(-1px / 0)", "width", "calc(-infinity * 1px)"},
+    {"width:calc(0px / 0)", "width", "calc(NaN * 1px)"},
+    {"width:calc(1px * nAn)", "width", "calc(NaN * 1px)"},
+    {"width:calc(1in * iNfInItY)", "width", "calc(infinity * 1px)"},
+    {"width:calc(1% * -infinity)", "width", "calc(-infinity * 1%)"},
+    {"width:calc(1px / -0)", "width", "calc(infinity * 1px)"},
+    {"width:calc(1px / calc(-5 * 0))", "width", "calc(-infinity * 1px)"},
+    {"width:calc(1px / (1 / -infinity))", "width", "calc(-infinity * 1px)"},
+    {"width:calc(1px * infinity / infinity)", "width", "calc(NaN * 1px)"},
+    {"width:calc(0px * infinity)", "width", "calc(NaN * 1px)"},
+    {"width:calc(1px * (infinity - infinity))", "width", "calc(NaN * 1px)"},
+    {"width:calc(1px / -infinity)", "width", "calc(0px)"},
+    {"width:calc((1em - 1px) / 0)", "width", "calc((infinity * 1em) - (infinity * 1px))"},
+    {"width:calc((1% - 1px) / 0)", "width", "calc((infinity * 1%) - (infinity * 1px))"},
+    {"width:calc((0% + 1px) / 0)", "width", "calc((NaN * 1%) + (infinity * 1px))"},
+    {"line-height:calc(NaN)", "line-height", "calc(NaN)"},
+    {"line-height:calc(infinity)", "line-height", "calc(infinity)"},
+    {"pitch:calc(1khz / 0)", "pitch", "calc(infinity * 1hz)"},
+    {"pause-before:calc(1ms / 0)", "pause-before", "calc(infinity * 1s)"},
+    {"flex:calc(infinity) 1 calc(NaN * 1px)", "flex", "calc(infinity) 1 calc(NaN * 1px)"},
     {"margin:1px calc(2px + 1em)", "margin", "1px calc(1em + 2px)"},
     {"margin:1px calc(2px + 1em)", "margin-top", "1px"},
     {"color:rgb(1, 2, 3)", "color", "rgb(1, 2, 3)"},
@@ -4439,6 +4459,11 @@ START_TEST(test_calc_grammar)
         {"pause-before", "calc(1s + 1)", false},
         {"pitch", "calc(1khz + 2hz)", true},
         {"pitch", "calc(1hz + 1)", false},
+        {"width", "calc(infinity * 1px)", true}, {"width", "calc(NaN * 1%)", true},
+        {"line-height", "calc(-infinity)", true},
+        {"width", "calc(infinity)", false}, {"width", "infinity", false},
+        {"width", "calc(infinitypx)", false}, {"width", "calc(+infinity * 1px)", false},
+        {"width", "calc(NaN + 1px)", false}, {"width", "calc(infinity * 1fr)", false},
     };
     for (size_t i = 0; i < N_ELEMENTS(cases); i++) {
         char input[180];
@@ -4505,6 +4530,56 @@ START_TEST(test_calc_nesting_and_truncation)
 }
 END_TEST
 
+/* Exercise the actual generated property context and compiled program. Range
+ * constraints belong to the property, not the syntax of inner expressions. */
+START_TEST(test_calc_property_ranges)
+{
+    static const struct { const char *css; int result; } cases[] = {
+        {"width:calc(1px - 6px)", 0},
+        {"width:calc(1px / calc(-5 * 0))", 0},
+        {"width:calc(calc(-10px) + 20px)", 10},
+        {"height:calc(-5px)", 0},
+        {"min-width:calc(-5px)", 0}, {"max-width:calc(-5px)", 0},
+        {"min-height:calc(-5px)", 0}, {"max-height:calc(-5px)", 0},
+        {"inline-size:calc(-5px)", 0}, {"block-size:calc(-5px)", 0},
+        {"min-inline-size:calc(-5px)", 0}, {"max-block-size:calc(-5px)", 0},
+        {"padding-left:calc(-5px)", 0}, {"border-left-width:calc(-5px)", 0},
+        {"outline-width:calc(-5px)", 0}, {"font-size:calc(-5px)", 0},
+        {"line-height:calc(-5)", 0}, {"flex-basis:calc(-5px)", 0},
+        {"row-gap:calc(-5px)", 0}, {"column-gap:calc(-5px)", 0},
+        {"column-width:calc(-5px)", 0},
+        {"margin-left:calc(-5px)", -5}, {"left:calc(-5px)", -5},
+        {"text-indent:calc(-5px)", -5}, {"letter-spacing:calc(-5px)", -5},
+        {"word-spacing:calc(-5px)", -5}, {"vertical-align:calc(-5px)", -5},
+        {"flex-grow:calc(-5)", 0}, {"flex-shrink:calc(NaN)", 0},
+        {"column-count:calc(0)", 1}, {"orphans:calc(-infinity)", 1}, {"widows:calc(NaN)", 1},
+        {"pitch-range:calc(infinity)", 100}, {"richness:calc(200)", 100}, {"stress:calc(-infinity)", 0},
+        {"volume:calc(infinity)", 100}, {"volume:calc(200%)", 100},
+        {"z-index:calc(-5)", -5}, {"order:calc(-5)", -5},
+    };
+    css_unit_ctx units = {.device_dpi = INTTOFIX(96)};
+    css_calculator *calculator;
+    ck_assert_int_eq(css_calculator_create(&calculator), CSS_OK);
+    for (size_t i = 0; i < N_ELEMENTS(cases); i++) {
+        css_declaration_list *list = parse(cases[i].css, _i != 0);
+        ck_assert_msg(css__declaration_list_count(list) == 1, "%s was rejected", cases[i].css);
+        const css_stylesheet *sheet = css__declaration_list_sheet(list);
+        const css_style *style = inline_style(sheet);
+        ck_assert_uint_eq(style->used, 3);
+        lwc_string *expression;
+        ck_assert_int_eq(css__stylesheet_string_get((css_stylesheet *)sheet, style->bytecode[2], &expression), CSS_OK);
+        css_unit unit;
+        css_fixed result;
+        ck_assert_int_eq(css_calculator_calculate(calculator, &units, 200, expression, NULL,
+            &unit, &result), CSS_OK);
+        ck_assert_msg(result == INTTOFIX(cases[i].result), "%s: got %d, expected %d",
+            cases[i].css, result, INTTOFIX(cases[i].result));
+        css__declaration_list_destroy(list);
+    }
+    css_calculator_unref(calculator);
+}
+END_TEST
+
 START_TEST(test_calc_readback_bounds)
 {
     char flat[7000] = "width:calc(1px";
@@ -4531,8 +4606,7 @@ START_TEST(test_calc_readback_bounds)
     lwc_string_unref(out);
     css__declaration_list_destroy(list);
 
-    /* Fail without publishing a partial result when accepted operands exceed
-     * the simplifier's finite arithmetic range. Native declarations survive. */
+    /* Numeric overflow uses the same standard keyword form. */
     size_t digits = DBL_MAX_10_EXP + 16;
     char *huge = malloc(digits + 64);
     ck_assert_ptr_nonnull(huge);
@@ -4544,8 +4618,9 @@ START_TEST(test_calc_readback_bounds)
     ck_assert_uint_eq(css__declaration_list_count(list), 2);
     source = css__declaration_list_get(list, 0);
     out = (void *)1;
-    ck_assert_int_eq(css__declaration_calc_serialize(source->tokens, source->token_count, &out), CSS_INVALID);
-    ck_assert_ptr_null(out);
+    ck_assert_int_eq(css__declaration_calc_serialize(source->tokens, source->token_count, &out), CSS_OK);
+    ck_assert_str_eq(lwc_string_data(out), "calc(infinity * 1px)");
+    lwc_string_unref(out);
     css__declaration_list_destroy(list);
 }
 END_TEST
@@ -4574,7 +4649,7 @@ END_TEST
 #ifdef WISP_TEST_ALLOC_FAILURE
 START_TEST(test_calc_allocation_rollback)
 {
-    /* Force every allocation through buffer growth, string interning/storage
+    /* Force every allocation through simplifier growth, string interning/storage
      * and each append to the final style; neither ctx nor earlier bytecode may
      * change on failure. No temporary css_style is required by calc anymore. */
     void (*limit)(unsigned int) = _i == 0 ? malloc_limit : _i == 1 ? calloc_limit : realloc_limit;
@@ -5437,6 +5512,7 @@ int main(void)
     tcase_add_loop_test(tc, test_font_prefix_bytecode, 0, 2);
     tcase_add_loop_test(tc, test_calc_grammar, 0, 2);
     tcase_add_loop_test(tc, test_calc_nesting_and_truncation, 0, 2);
+    tcase_add_loop_test(tc, test_calc_property_ranges, 0, 2);
     tcase_add_test(tc, test_calc_readback_bounds);
     tcase_add_test(tc, test_calc_readback_locale);
     tcase_add_loop_test(tc, test_font_invalid_components, 0, 2);

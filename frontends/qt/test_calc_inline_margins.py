@@ -46,6 +46,22 @@ PROFILES = (
      (100, 200), (False, False)),
     ("tiny-viewport", "padding", "0px", "", "width:calc(.0005vw * 100000)",
      (150, 250), (False, False)),
+    # Non-finite values are censored only after the complete calculation.
+    # Bounded infinity also exercises CSS-pixel/device-pixel saturation.
+    ("infinite-width", "padding", "0px", "", "width:calc(1px / 0);max-width:60px",
+     (60, 60), (False, False)),
+    ("nan-width", "padding", "0px", "", "width:calc(0px / 0)",
+     (0, 0), (False, False)),
+    ("nested-negative-infinity", "padding", "0px", "", "width:calc(1px / calc(-5 * 0))",
+     (0, 0), (False, False)),
+    ("finite-after-infinity", "padding", "0px", "", "width:calc(1px / (1 / 0) + 50px)",
+     (50, 50), (False, False)),
+    ("mixed-infinity-width", "padding", "0px", "", "width:calc((1em - 1px) / 0)",
+     (0, 0), (False, False)),
+    ("negative-width", "padding", "0px", "", "width:calc(1px - 6px)",
+     (0, 0), (False, False)),
+    ("negative-edge", "padding", "calc(1px - 6px)", "", "", (200, 400), (False, False)),
+    ("nan-edge", "padding", "calc(NaN * 1px)", "", "", (200, 400), (False, False)),
     ("tiny-edge", "padding", "calc(.0000001px)", "", "", (200, 400), (True, True)),
     ("invalid-width", "padding", "0px", "", "width:100%;width:calc(0 + 20px)!important",
      (200, 400), (False, False)),
@@ -114,13 +130,14 @@ def main():
         fixture = Path(tmp) / "calc-inline-margins.html"
         fixture.write_text(fixture_html())
         dest = Path(tmp) / "capture"
+        # Inspecting every box at all three sizes is expensive under ASan.
         args = [str(binary), "--capture-dir", str(dest), "--capture-size", "300x800",
-                "--capture-settle", "100", "--capture-timeout", "8000", "--enable_javascript=0",
+                "--capture-settle", "100", "--capture-timeout", "30000", "--enable_javascript=0",
                 "--capture-resize", "500x800", "--capture-resize", "300x800"]
         for name, *_ in cases():
             for suffix in ("case", "before", "inner", "child", "after"):
                 args += ["--capture-id", name + "-" + suffix]
-        process = subprocess.run([*args, str(fixture)], env=env, capture_output=True, text=True, timeout=20)
+        process = subprocess.run([*args, str(fixture)], env=env, capture_output=True, text=True, timeout=60)
         assert process.returncode == 0 and "runtime error:" not in process.stderr, process.stderr
         meta = json.loads((dest / "capture.json").read_text())
         assert meta["result"] == "complete" and meta["load_complete"], meta
@@ -132,6 +149,7 @@ def main():
             for name, profile, side, sign in cases():
                 case, before, child, after = (boxes[name + "-" + suffix]
                                               for suffix in ("case", "before", "child", "after"))
+                assert boxes[name + "-inner"]["width"] >= 0, (index, name, boxes[name + "-inner"])
                 has_edge = profile[-1][index % 2]
                 # A computed nonzero edge reserves the explicit 20px line,
                 # even when percentages resolve to zero or pixels round down.

@@ -54,7 +54,8 @@ batch is committed as `f7a238d0`, the legacy aural batch as `fdf7b373`, and the
 Lab-family batch as `24cde21d`, missing-RGB/sRGB support as `8f1aacf3`, and
 extended HSL/HWB readback as `ed777a47`, and resolved system-font readback as
 `2485deb1`. Shared native calc grammar validation is committed as `6f5ae059`, and finite
-math readback/edit preservation as `facb2b04`.
+math readback/edit preservation as `facb2b04`, and native calculation precision
+as `840e2aea`.
 Earlier dated sections are historical records, not additional unchecked requirements.
 
 The remaining work is grouped here so adjacent discoveries do not silently move
@@ -71,16 +72,18 @@ the target. Each group can require more than one tested batch:
   and retained client-resolved system-font values. The system-font readback
   policy is an implementation choice while CSSWG issue 1586 remains open; see
   the dated section below. Display gamut mapping is separate renderer work.
-- [ ] Math values: validate and serialize accepted expressions through shared
-  native handling, preserving specified-value semantics. Native `calc()` type
-  and syntax validation, finite scalar-expression simplification/readback, and
-  shorthand edit-preservation checks and native calculation precision are
-  implemented (2026-10-13). Finish non-finite parse/evaluation/readback/reparse
-  behavior before closing this group; the early-rounding reproducer is fixed.
+- [x] Math values for the accepted scalar `calc()` grammar (2026-10-13): shared
+  native validation/simplification, finite and non-finite readback/reparse,
+  shorthand edit preservation, calculation precision and final range conversion.
+  This does not add dimensional products or new math functions.
 - [ ] Modern aggregate property identities/decomposition and preservation:
   finish the older aggregate models (`font-variant`, background position/repeat
   axes, text decoration, white space and logical start/end identities), then
   verify that editing one property cannot discard another accepted value.
+  Include partially overridden pending shorthands: `margin:var(--m)` followed
+  by `margin-left:2px` currently serializes the three pending sides as empty
+  declarations; reparsing loses those pending contributions. Native storage
+  retains them. This is part of this preservation group, not a new branch.
 - [ ] QuickJS `CSSStyleProperties`: stable per-element object, generated property
   accessors, standard methods, enumeration and CSSOM exception/conversion rules.
 - [ ] DOM synchronization: style-attribute edits in both directions, coalesced
@@ -2551,6 +2554,58 @@ This batch does not enable live `element.style`, add dimensional products or
 expand the supported math-function grammar. [CSSOM's defined six-decimal output](https://drafts.csswg.org/cssom/#serialize-a-css-component-value)
 normalization remains unchanged; exact arbitrary-precision round trips are not
 claimed.
+
+
+### Non-finite calculations and shared simplification (2026-10-13)
+
+Committed the preceding precision batch as `840e2aea`. The math checklist group
+is now complete for the accepted scalar `calc()` grammar. Live `element.style`
+still awaits aggregate property preservation and the QuickJS binding work.
+
+Infinity, negative infinity and NaN now parse case-insensitively inside calc,
+survive nested arithmetic, serialize to their standard keyword forms, and
+reparse through the same native grammar. Literal negative zero is normalized;
+arithmetic negative zero survives until the outer calculation completes.
+NaN becomes zero at that boundary; infinities saturate before integer conversion.
+The basis is [CSS Values 4 special values](https://drafts.csswg.org/css-values-4/#calc-type-checking),
+[simplification](https://drafts.csswg.org/css-values-4/#calc-simplification) and
+[serialization](https://drafts.csswg.org/css-values-4/#calc-serialize).
+
+The important shared correction is simplification **before** document unit
+resolution. Native parsing and CSSOM readback now use one scalar algebra helper.
+For example, `calc((1em - 1px) / 0)` preserves opposite infinite coefficients;
+it must not become a finite positive length before division in the native path
+while readback distributes the division. Zero coefficients retain their units.
+The existing conservative percentage-zero proof carries an inexact marker when
+simplification rounded an intermediate; it never invents a percentage basis.
+
+Compilation produces a bounded sum with one coefficient per supported unit.
+Long flat expressions therefore require less used-value work and bytecode;
+there is no persistent tree, extra rendering thread or new build flag.
+Pixel/device conversion also now clamps its final result instead of an
+intermediate product, fixing incorrect saturation even at 96 DPI.
+
+The Debug capture exposed missing property range enforcement: a negative
+calculated width reached layout and triggered its box-width assertion. Generated
+handlers now pass a compact calculation context with unit grammar and result
+limits from `properties.toml`. A final calculator operation enforces those
+limits after nested arithmetic; specified readback remains unclamped. This
+covers nonnegative dimensions, permitted negative margins/offsets, positive
+counts and bounded numeric ranges without adding layout exceptions. The new
+compiled-program regression covers 39 property/value combinations in whole and
+chunked input. Numeric-only properties whose existing cascade still skips calc
+remain a separate rendering limitation; this batch preserves their declarations
+and compiles their range rules without claiming new cascade support.
+
+Tests cover non-finite parsing, keyword casing, invalid dimensions, readback and
+reparse, unrelated edits, nested signed-zero arithmetic, mixed units, inherited
+line height, allocation rollback, percentage-zero proofs and pixel conversion
+at 48/96/192 DPI. The Qt fixture now has 176 cases across three viewport steps.
+Release and Debug native CSS/layout/QuickJS suites pass (87 each), as do the
+8 selected Release Qt suites and 11 Debug Qt suites. Native ASan/UBSan/LSan
+checks are clean; both complete builds are warning-free. GTK and Windows were
+not built. CSSOM's six-decimal normalization and the existing scalar-only math
+grammar remain the limits of this group.
 
 ## Assessment
 

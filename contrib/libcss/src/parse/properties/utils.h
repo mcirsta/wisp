@@ -8,6 +8,8 @@
 #ifndef css_css__parse_properties_utils_h_
 #define css_css__parse_properties_utils_h_
 
+#include <math.h>
+
 #include "parse/language.h"
 #include "parse/properties/properties.h"
 #include "stylesheet.h"
@@ -213,6 +215,13 @@ css_error css__comma_list_to_style(css_language *c, const parserutils_vector *ve
     bool (*reserved)(css_language *c, const css_token *ident),
     css_code_t (*get_value)(css_language *c, const css_token *token, bool first), css_style *result);
 
+/* Grammar and outer result limits supplied by the property generator.
+ * Limits never apply inside a nested calc. */
+struct css_calc_parse_options {
+    uint32_t unit, unit_mask;
+    double minimum, maximum;
+};
+
 /**
  * Parse a CSS calc() invocation
  *
@@ -224,8 +233,7 @@ css_error css__comma_list_to_style(css_language *c, const parserutils_vector *ve
  * \param[in] ctx      Pointer to vector iteration context
  * \param[in] result   Pointer to location to receive resulting style
  * \param[in] OPV      The CSS property we are calculating for
- * \param[in] unit     The kind of unit which we want to come out of this calc()
- * \param[in] unit_mask Allowed dimension/percentage classes from the property grammar
+ * \param[in] options  Result kind, accepted units and outer property range
  * \return CSS_OK on success,
  *         CSS_NOMEM on memory exhaustion,
  *         CSS_INVALID if the input is not valid
@@ -235,5 +243,5 @@ css_error css__comma_list_to_style(css_language *c, const parserutils_vector *ve
  */
 css_error css__parse_calc(
     css_language *c, const parserutils_vector *vector, int *ctx, css_style *result, css_code_t OPV,
-    uint32_t unit, uint32_t unit_mask);
+    const struct css_calc_parse_options *options);
 #endif
