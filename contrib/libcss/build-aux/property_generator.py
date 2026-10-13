@@ -1243,7 +1243,7 @@ class MultiFileGenerator:
         return '\n'.join(lines)
     
     def generate_unit_masks(self):
-        """Generate UNIT_MASK_* defines and property_unit_mask[] array.
+        """Generate UNIT_MASK_* defines shared by scalar and calc parsing.
         
         Unit masks are derived from the parse type in properties.gen:
         - COLOR/IDENT types -> 0 (no unit validation)
@@ -1255,7 +1255,7 @@ class MultiFileGenerator:
         For MANUAL properties, we preserve their existing unit masks.
         """
         lines = self._header("UNIT_MASKS",
-            "Unit mask definitions and property_unit_mask[] array")
+            "Unit mask definitions")
         
         # Map of known unit mask overrides for properties that don't follow
         # the simple type-based pattern. These are properties where the
@@ -1314,17 +1314,6 @@ class MultiFileGenerator:
             lines.append(f"#define UNIT_MASK_{NAME} {mask}")
         
         lines.append("")
-        
-        # Emit the property_unit_mask[] array
-        lines.append("/** Mapping from property bytecode index to bytecode unit class mask. */")
-        lines.append("static const uint32_t generated_property_unit_mask[CSS_N_PROPERTIES] = {")
-        for prop_info in self.dispatch_order:
-            name = prop_info['name']
-            NAME = name.upper()
-            if name in self.metadata:
-                enum_name = self.metadata[name]['enum']
-                lines.append(f"    [{enum_name}] = UNIT_MASK_{NAME},")
-        lines.append("};")
         
         return '\n'.join(lines)
     

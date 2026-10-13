@@ -4328,6 +4328,185 @@ START_TEST(test_value_arguments)
 }
 END_TEST
 
+/* CSS Values 4 10.8/10.9: syntax and dimensional validity are determined
+ * before the declaration participates in the cascade, including inside font
+ * and other shorthands. Expectations are independent of browser output. */
+START_TEST(test_calc_grammar)
+{
+    static const struct { const char *property, *value; bool accepted; } cases[] = {
+        {"width", "calc(1px + 2em)", true},
+        {"width", "calc(50% - 2px)", true},
+        {"width", "calc(0 + 2px)", false},
+        {"width", "calc(2px + 0)", false},
+        {"width", "calc(3 - 2)", false},
+        {"width", "calc(0)", false},
+        {"width", "calc(2px * 3px)", false},
+        {"width", "calc(0 * 2px + 1)", false},
+        {"width", "calc(1fr)", false},
+        {"width", "calc(1fr + 2px)", false},
+        {"width", "calc(1deg)", false},
+        {"width", "calc(1px+ 2px)", false},
+        {"width", "calc((1px)+ (2px))", false},
+        {"width", "calc(1px +(2px))", false},
+        {"width", "calc(1px/**/+/**/2px)", false},
+        {"width", "calc(1px /*before*/ + /*after*/ 2px)", true},
+        {"width", "calc(1px - -2px)", true},
+        {"width", "calc(12px/2 + 1px)", true},
+        {"width", "calc(12px/2/3)", true},
+        {"width", "calc(12px / (1 + 2))", true},
+        {"width", "calc(12px / calc(1 + 2))", true},
+        {"width", "calc(1px + CALC(2em * 3))", true},
+        {"width", "calc(calc(1px) * 2)", true},
+        {"width", "calc(1px +)", false},
+        {"width", "calc(1px /)", false},
+        {"width", "calc(1px *)", false},
+        {"width", "calc()", false},
+        {"width", "calc(())", false},
+        {"width", "calc(1px, 2px)", false},
+        {"line-height", "calc(1 + .25)", true},
+        {"line-height", "calc(100% + 2px)", true},
+        {"line-height", "calc(1 + 2px)", false},
+        {"line-height", "calc(25% + .25)", false},
+        {"z-index", "calc(1 + 2 / (3 + 4))", true},
+        {"z-index", "calc(1px)", false},
+        {"flex-grow", "calc(1 + 2)", true},
+        {"flex-shrink", "calc(1px)", false},
+        {"flex-basis", "calc(2 * (5% + 1px))", true},
+        {"flex", "1 1 calc(2 + 1px)", false},
+        {"font", "italic calc(1em + 2px)/calc(1 + .25) serif", true},
+        {"font", "italic calc(1em + 2)/1.25 serif", false},
+        {"inline-size", "calc(100% - 10px)", true},
+        {"max-block-size", "calc(2 + 1px)", false},
+        {"margin-left", "calc(-2px + 1%)", true},
+        {"padding-top", "calc(1fr)", false},
+        {"margin", "1px calc(1px + 1)", false},
+        {"border-top-width", "calc(1% + 1px)", false},
+        {"border-top-width", "calc(1px / 2 + 1px)", true},
+        {"gap", "calc(1px + 1%) calc(2px)", true},
+        {"column-width", "calc(1% + 1px)", false},
+        {"word-spacing", "calc(1em + 2px)", true},
+        {"word-spacing", "calc(1%)", false},
+        {"pause-before", "calc(1s + 250ms)", true},
+        {"pause-before", "calc(1s + 1)", false},
+        {"pitch", "calc(1khz + 2hz)", true},
+        {"pitch", "calc(1hz + 1)", false},
+    };
+    for (size_t i = 0; i < N_ELEMENTS(cases); i++) {
+        char input[180];
+        snprintf(input, sizeof(input), "%s:%s", cases[i].property, cases[i].value);
+        css_declaration_list *list = parse(input, _i != 0);
+        ck_assert_msg(css__declaration_list_count(list) == (size_t)cases[i].accepted,
+            "calc case %zu (%s): expected %s", i, input, cases[i].accepted ? "accepted" : "rejected");
+        css__declaration_list_destroy(list);
+    }
+}
+END_TEST
+
+START_TEST(test_calc_nesting_and_truncation)
+{
+    /* At least 32 nesting levels and 32 terms are required by Values 4 10.8.
+     * Excess nesting is deliberately rejected, not allowed to exhaust C stack. */
+    for (unsigned depth = 32; depth <= 512; depth *= 16) {
+        char input[1200];
+        size_t pos = (size_t)sprintf(input, "width:calc(");
+        memset(input + pos, '(', depth);
+        pos += depth;
+        memcpy(input + pos, "1px", 3);
+        pos += 3;
+        memset(input + pos, ')', depth + 1);
+        input[pos + depth + 1] = 0;
+        css_declaration_list *list = parse(input, _i != 0);
+        ck_assert_uint_eq(css__declaration_list_count(list), depth == 32 ? 1 : 0);
+        css__declaration_list_destroy(list);
+    }
+    char input[2200] = "width:calc(1px";
+    for (unsigned i = 1; i < 256; i++)
+        strcat(input, " + 1px");
+    strcat(input, ")");
+    css_declaration_list *list = parse(input, _i != 0);
+    ck_assert_uint_eq(css__declaration_list_count(list), 1);
+    css__declaration_list_destroy(list);
+    list = parse("width:calc(12px / (1 + 2))", false);
+    const css_declaration *source = css__declaration_list_get(list, 0);
+    css_stylesheet *sheet;
+    ck_assert_int_eq(css_stylesheet_create(&params, &sheet), CSS_OK);
+    css_style *style;
+    ck_assert_int_eq(css__stylesheet_style_create(sheet, &style), CSS_OK);
+    ck_assert_int_eq(css__stylesheet_style_append(style, 0x12345678), CSS_OK);
+    parserutils_vector *tokens;
+    ck_assert_int_eq(parserutils_vector_create(sizeof(css_token), 4, &tokens), PARSERUTILS_OK);
+    for (size_t i = 0; i < source->token_count; i++) {
+        int32_t ctx = 0;
+        css_error error = css__parse_width(sheet->parser_frontend, tokens, &ctx, style);
+        ck_assert_msg(error == CSS_INVALID, "truncated calc prefix %zu returned %d", i, error);
+        ck_assert_int_eq(ctx, 0);
+        ck_assert_uint_eq(style->used, 1);
+        ck_assert_uint_eq(style->bytecode[0], 0x12345678);
+        css_token token = {.type = source->tokens[i].type, .idata = source->tokens[i].text};
+        ck_assert_int_eq(parserutils_vector_append(tokens, &token), PARSERUTILS_OK);
+    }
+    int32_t ctx = 0;
+    ck_assert_int_eq(css__parse_width(sheet->parser_frontend, tokens, &ctx, style), CSS_OK);
+    ck_assert_uint_eq(style->used, 4);
+    ck_assert_uint_eq(ctx, source->token_count);
+    parserutils_vector_destroy(tokens);
+    css__stylesheet_style_destroy(style);
+    css_stylesheet_destroy(sheet);
+    css__declaration_list_destroy(list);
+}
+END_TEST
+
+#ifdef WISP_TEST_ALLOC_FAILURE
+START_TEST(test_calc_allocation_rollback)
+{
+    /* Force every allocation through buffer growth, string interning/storage
+     * and each append to the final style; neither ctx nor earlier bytecode may
+     * change on failure. No temporary css_style is required by calc anymore. */
+    void (*limit)(unsigned int) = _i == 0 ? malloc_limit : _i == 1 ? calloc_limit : realloc_limit;
+    css_declaration_list *list = parse("width:calc(12px / calc(1 + 2) + 3%)", false);
+    const css_declaration *source = css__declaration_list_get(list, 0);
+    parserutils_vector *tokens;
+    ck_assert_int_eq(parserutils_vector_create(sizeof(css_token), 4, &tokens), PARSERUTILS_OK);
+    for (size_t i = 0; i < source->token_count; i++) {
+        css_token token = {.type = source->tokens[i].type, .idata = source->tokens[i].text};
+        ck_assert_int_eq(parserutils_vector_append(tokens, &token), PARSERUTILS_OK);
+    }
+    for (unsigned spare = 0; spare < 3; spare++) {
+        bool succeeded = false;
+        for (unsigned attempt = 0; attempt < 128 && !succeeded; attempt++) {
+            css_stylesheet *sheet;
+            ck_assert_int_eq(css_stylesheet_create(&params, &sheet), CSS_OK);
+            css_style *style;
+            ck_assert_int_eq(css__stylesheet_style_create(sheet, &style), CSS_OK);
+            while (style->used < style->allocated - spare)
+                ck_assert_int_eq(css__stylesheet_style_append(style, 0x12345678), CSS_OK);
+            uint32_t used = style->used;
+            int32_t ctx = 0;
+            limit(attempt);
+            css_error error = css__parse_width(sheet->parser_frontend, tokens, &ctx, style);
+            limit(UINT_MAX);
+            if (error == CSS_OK) {
+                ck_assert_uint_eq(style->used, used + 3);
+                ck_assert_uint_eq(ctx, source->token_count);
+                succeeded = true;
+            } else {
+                ck_assert_msg(error == CSS_NOMEM, "allocator %d / spare %u / attempt %u: %d", _i, spare, attempt, error);
+                ck_assert_int_eq(ctx, 0);
+                ck_assert_uint_eq(style->used, used);
+            }
+            for (size_t i = 0; i < used; i++)
+                ck_assert_uint_eq(style->bytecode[i], 0x12345678);
+            css__stylesheet_style_destroy(style);
+            css_stylesheet_destroy(sheet);
+        }
+        ck_assert_msg(succeeded, "allocator %d / spare %u never completed", _i, spare);
+    }
+    parserutils_vector_destroy(tokens);
+    css__declaration_list_destroy(list);
+}
+END_TEST
+#endif
+
 struct system_font_fixture {
     css_error error;
     lwc_string *family;
@@ -5104,6 +5283,8 @@ int main(void)
     tcase_add_loop_test(tc, test_reserved_counter_names, 0, 2);
     tcase_add_loop_test(tc, test_font_name_storage, 0, 2);
     tcase_add_loop_test(tc, test_font_prefix_bytecode, 0, 2);
+    tcase_add_loop_test(tc, test_calc_grammar, 0, 2);
+    tcase_add_loop_test(tc, test_calc_nesting_and_truncation, 0, 2);
     tcase_add_loop_test(tc, test_font_invalid_components, 0, 2);
     tcase_add_loop_test(tc, test_system_font_readback, 0, 2);
     tcase_add_loop_test(tc, test_system_font_editing, 0, 2);
@@ -5156,6 +5337,7 @@ int main(void)
 #ifdef WISP_TEST_ALLOC_FAILURE
     tcase_add_loop_test(tc, test_value_allocation_failure, 0, 67);
     tcase_add_loop_test(tc, test_system_font_allocation_failure, 0, 3);
+    tcase_add_loop_test(tc, test_calc_allocation_rollback, 0, 3);
     tcase_add_loop_test(tc, test_position_rollback, 0, 2);
     tcase_add_loop_test(tc, test_font_rollback, 0, 5);
     tcase_add_loop_test(tc, test_gap_rollback, 0, 4);

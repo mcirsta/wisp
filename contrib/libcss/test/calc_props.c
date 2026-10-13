@@ -651,6 +651,35 @@ static void test_relative_offsets_with_calc(void)
     destroy_style_case(&ctx);
 }
 
+/* Invalid math must be discarded at parse time, retaining the earlier
+ * cascade value. It must not replace that value and fail only during layout. */
+static void test_calc_grammar_cascade(void)
+{
+    const char *invalid[] = {"calc(0 + 2px)", "calc(2px + 1)", "calc(2 * 3)", "calc(1px * 2px)",
+        "calc(1fr)", "calc(1px+ 2px)", "calc(1px +(2px))"};
+    for (size_t i = 0; i < sizeof(invalid) / sizeof(invalid[0]); i++) {
+        char css[160];
+        snprintf(css, sizeof(css), "* { width: 35px; width: %s !important; }", invalid[i]);
+        style_case ctx;
+        const css_computed_style *style = select_style_from_css(css, &ctx);
+        expect_calc_px(invalid[i], style, &unit_ctx, 200, css_computed_width, CSS_WIDTH_SET, 35);
+        destroy_style_case(&ctx);
+    }
+    const struct { const char *value; int px; } valid[] = {
+        {"calc(12px / 2 + 1px)", 7}, {"calc(12px / (1 + 2))", 4},
+        {"calc(12px / calc(1 + 2))", 4}, {"calc(calc(12px + 3px) * 2)", 30},
+        {"calc(2 * (50% - 5px))", 190}, {"calc(50% + calc(2em / 2))", 116},
+    };
+    for (size_t i = 0; i < sizeof(valid) / sizeof(valid[0]); i++) {
+        char css[160];
+        snprintf(css, sizeof(css), "* { font-size:16px; width:%s; }", valid[i].value);
+        style_case ctx;
+        const css_computed_style *style = select_style_from_css(css, &ctx);
+        expect_calc_px(valid[i].value, style, &unit_ctx, 200, css_computed_width, CSS_WIDTH_SET, valid[i].px);
+        destroy_style_case(&ctx);
+    }
+}
+
 static void test_width_px_calc(void)
 {
     style_case ctx;
@@ -932,6 +961,7 @@ int main(void)
     test_calc_division_by_zero();
     test_relative_offsets_with_calc();
     test_width_px_calc();
+    test_calc_grammar_cascade();
     test_flex_basis_px_calc();
     test_font_size_calc_roundtrip();
     test_em_uses_calc_font_size();

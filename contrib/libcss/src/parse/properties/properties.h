@@ -30,9 +30,6 @@ css_error css__parse_grid_template_internal(
 css_error css__parse_grid_line_internal(
     css_language *c, const parserutils_vector *vector, int32_t *ctx, css_style *result, enum css_properties_e id);
 
-/** Mapping from property bytecode index to bytecode unit class mask. */
-extern const uint32_t property_unit_mask[CSS_N_PROPERTIES];
-
 /* Auto-generated unit mask definitions */
 #include "unit_masks.inc"
 
@@ -40,6 +37,7 @@ extern const uint32_t property_unit_mask[CSS_N_PROPERTIES];
 #define UNIT_MASK_BORDER_SIDE_COLOR (0)
 #define UNIT_MASK_BORDER_SIDE_STYLE (0)
 #define UNIT_MASK_BORDER_SIDE_WIDTH (UNIT_LENGTH)
+#define UNIT_MASK_SIDE (UNIT_LENGTH | UNIT_PCT)
 #define UNIT_MASK_MARGIN_SIDE (UNIT_LENGTH | UNIT_PCT)
 #define UNIT_MASK_PADDING_SIDE (UNIT_LENGTH | UNIT_PCT)
 

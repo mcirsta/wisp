@@ -24,6 +24,16 @@ PROFILES = (
      (200, 400), (False, False)),
     ("cancel-divided", "padding", "calc((100% + 20px) / 2 - 50% - 10px)", "", "",
      (200, 400), (False, False)),
+    # CSS Values 4: nested math shares the surrounding expression's types;
+    # parenthesized divisors are numbers, and number + length is invalid.
+    ("cancel-nested-calc", "padding", "calc(calc(50% + 10px) - calc(50% + 10px))", "", "",
+     (200, 400), (False, False)),
+    ("cancel-divisor", "padding", "calc(30px / (1 + 2) - 10px)", "", "",
+     (200, 400), (False, False)),
+    ("divisor-width", "padding", "0px", "", "width:calc(100% / calc(1 + 1))",
+     (100, 200), (False, False)),
+    ("invalid-width", "padding", "0px", "", "width:100%;width:calc(0 + 20px)!important",
+     (200, 400), (False, False)),
     ("cancel-fraction", "padding", "calc(50% - 50% + 0.5px)", "", "", (200, 400), (True, True)),
     ("fraction", "padding", "calc(0.75px - 0.25px)", "", "", (200, 400), (True, True)),
     ("text", "text", "0px", "", "", (200, 400), (True, True)),

@@ -225,13 +225,15 @@ css_error css__comma_list_to_style(css_language *c, const parserutils_vector *ve
  * \param[in] result   Pointer to location to receive resulting style
  * \param[in] OPV      The CSS property we are calculating for
  * \param[in] unit     The kind of unit which we want to come out of this calc()
+ * \param[in] unit_mask Allowed dimension/percentage classes from the property grammar
  * \return CSS_OK on success,
  *         CSS_NOMEM on memory exhaustion,
-       CSS_INVALID if the input is not valid
+ *         CSS_INVALID if the input is not valid
  *
  * Post condition: \a *ctx is updated with the next token to process
  *                 If the input is invalid, then \a *ctx remains unchanged.
  */
 css_error css__parse_calc(
-    css_language *c, const parserutils_vector *vector, int *ctx, css_style *result, css_code_t OPV, uint32_t unit);
+    css_language *c, const parserutils_vector *vector, int *ctx, css_style *result, css_code_t OPV,
+    uint32_t unit, uint32_t unit_mask);
 #endif

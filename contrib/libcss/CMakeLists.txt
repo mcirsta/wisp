@@ -178,6 +178,7 @@ add_library(css ${WISP_LIB_TYPE}
 	src/charset/detect.c
 	src/lex/lex.c
 	src/parse/parse.c
+	src/parse/calc.c
 	src/parse/language.c
 	src/parse/declarations.c
 	src/parse/declaration_order.c
@@ -235,7 +236,6 @@ add_library(css ${WISP_LIB_TYPE}
 	src/parse/properties/padding.c
 	src/parse/properties/pause.c
 	src/parse/properties/play_during.c
-	src/parse/properties/properties.c
 	src/parse/properties/quotes.c
 	src/parse/properties/stroke_opacity.c
 	src/parse/properties/stroke_width.c

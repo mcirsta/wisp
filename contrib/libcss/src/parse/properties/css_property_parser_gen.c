@@ -316,7 +316,8 @@ void output_color(FILE *outputf, struct keyval *parseid, struct keyval_list *kvl
         parseid->val);
 }
 
-void output_calc(FILE *outputf, struct keyval *parseid, struct keyval_list *kvlist)
+void output_calc(FILE *outputf, struct keyval *parseid, struct keyval_list *kvlist,
+    struct keyval_list *length_unit)
 {
     struct keyval *ckv = kvlist->item[0];
     const char *kind;
@@ -328,13 +329,29 @@ void output_calc(FILE *outputf, struct keyval *parseid, struct keyval_list *kvli
     else
         kind = ckv->key;
 
+    /* A calculation must use the same dimension/percentage grammar as the
+     * scalar handler. Do not maintain a second table keyed by bytecode opcode:
+     * wrappers and logical aliases can share that opcode. */
+    const char *mask = NULL;
+    for (int i = 1; i < length_unit->count; i++) {
+        if (strcmp(length_unit->item[i]->key, "MASK") == 0)
+            mask = length_unit->item[i]->val;
+    }
+    if (mask == NULL) {
+        if (strcmp(ckv->key, "NUMBER") != 0) {
+            fprintf(stderr, "CALC for %s requires a LENGTH_UNIT MASK\n", parseid->key);
+            exit(EXIT_FAILURE);
+        }
+        mask = "0";
+    }
+
     fprintf(outputf,
         "if ((token->type == CSS_TOKEN_FUNCTION) && "
         "(lwc_string_caseless_isequal(token->idata, c->strings[CALC], &match) == lwc_error_ok && match))"
         " {\n"
-        "\t\terror = css__parse_calc(c, vector, ctx, result, buildOPV(%s, 0, %s), %s);\n"
+        "\t\terror = css__parse_calc(c, vector, ctx, result, buildOPV(%s, 0, %s), %s, %s);\n"
         "\t} else ",
-        parseid->val, ckv->val, kind);
+        parseid->val, ckv->val, kind, mask);
 }
 
 /* Output handling for sizing keywords: fit-content, min-content, max-content */
@@ -716,7 +733,7 @@ int main(int argc, char **argv)
             output_uri(outputf, base.item[0], &URI);
 
         if (CALC.count > 0) {
-            output_calc(outputf, base.item[0], &CALC);
+            output_calc(outputf, base.item[0], &CALC, &LENGTH_UNIT);
         }
 
         if (SIZING.count > 0) {

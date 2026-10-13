@@ -52,7 +52,8 @@ whole-value assignments and broad specified-value serialization. The transform
 and Grid batches are committed as `285fee12` and `9fbddb34`; the SVG paint/cursor
 batch is committed as `f7a238d0`, the legacy aural batch as `fdf7b373`, and the
 Lab-family batch as `24cde21d`, missing-RGB/sRGB support as `8f1aacf3`, and
-extended HSL/HWB readback as `ed777a47`.
+extended HSL/HWB readback as `ed777a47`, and resolved system-font readback as
+`2485deb1`.
 Earlier dated sections are historical records, not additional unchecked requirements.
 
 The remaining work is grouped here so adjacent discoveries do not silently move
@@ -70,8 +71,10 @@ the target. Each group can require more than one tested batch:
   policy is an implementation choice while CSSWG issue 1586 remains open; see
   the dated section below. Display gamut mapping is separate renderer work.
 - [ ] Math values: validate and serialize accepted expressions through shared
-  native handling, preserving specified-value semantics. This is the largest
-  remaining uncertainty in the native prerequisite work.
+  native handling, preserving specified-value semantics. Native `calc()` type
+  and syntax validation is fixed (2026-10-13); token-based simplification/readback
+  and edit-preservation checks remain. This is the largest remaining uncertainty
+  in the native prerequisite work.
 - [ ] Modern aggregate property identities/decomposition and preservation:
   finish the older aggregate models (`font-variant`, background position/repeat
   axes, text decoration, white space and logical start/end identities), then
@@ -2395,6 +2398,48 @@ This closes the finite color/font group. Math values are next; no new renderer
 feature or live JS binding is claimed. Wisp's current stylesheet clients still
 supply no system-font callback, so this batch completes the accepted LibCSS
 callback path without changing frontends' system-font availability.
+
+### Native calc grammar before math readback (2026-10-13)
+
+Committed system-font readback as `2485deb1`. Before adding math serialization,
+native-parser regressions demonstrated that `width: calc(0 + 2px)` was wrongly
+accepted and could displace an earlier valid width. The shared parser now checks
+expression types and operator spacing before publishing calculator bytecode.
+[CSS Values 4 sections 10.8–10.9](https://drafts.csswg.org/css-values-4/#calc-syntax)
+require whitespace around binary `+`/`-` and compatible operand types; a number
+does not become a length inside math, even when zero or a line-height multiplier.
+Nested `calc()` and arithmetic number divisors now work, including whitespace
+after division followed by another operator.
+
+Generated property handlers pass their scalar dimension/percentage masks to the
+shared parser. This removes the separate opcode-to-unit table and keeps wrappers,
+logical aliases and shorthand components on the same grammar. Parsing moved out
+of property utilities into `parse/calc.c`; a bounded recursive descent emits the
+existing postfix bytecode, with iterative sums/products. It uses one bytecode
+buffer and no longer allocates a temporary style for every calculation. Failure
+restores both the token cursor and existing output bytecode, including allocation
+failure during the final append.
+
+This remains the existing calculator's scalar multiplication/division subset.
+Values 4 dimensional products/cancellation, additional math functions and
+non-finite arithmetic are not implemented by this batch. The existing fixed-point
+evaluator and rounding are unchanged. Math readback must use retained specified
+tokens and the required simplification rules, not reconstruct source numbers
+from these fixed-point operands; the finite math checklist item stays open.
+
+Regressions cover whole/chunked input, type rejection across properties and
+shorthands, nested calculations, required whitespace, truncated tokens, bounded
+nesting, long flat expressions and allocation-failure rollback. Cascade tests
+verify invalid important declarations leave an earlier width intact and valid
+expressions resolve to expected dimensions. Qt coverage adds nested/divisor math
+and invalid-width fallback to the existing inline-edge fixture across a viewport
+resize round trip.
+
+All 87 selected native CSS/layout/QuickJS suites pass in Release and Debug, with
+clean Debug ASan/UBSan and LeakSanitizer results. All 8 selected Release Qt suites
+and 11 Debug Qt suites pass; the expanded calc fixture checks 116 cases at three
+viewport steps. The font-document test required an unsandboxed rerun to open its
+local HTTP fixture. Both builds are warning-free; no GTK builds ran.
 
 ## Assessment
 
