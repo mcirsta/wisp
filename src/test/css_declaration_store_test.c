@@ -342,7 +342,7 @@ END_TEST
 
 START_TEST(test_native_state_survives_readback_limits)
 {
-    css_declaration_store *store = create("margin:var(--m);width:calc(100% - 2px);color:red", false);
+    css_declaration_store *store = create("margin:var(--m);width:calc(1px / 0);color:red", false);
     ck_assert(set(store, "margin-left:2px", false));
     const css_declaration *pending = css__declaration_store_get(store, 0)->source;
     lwc_string *out = (void *)1;
@@ -363,6 +363,50 @@ START_TEST(test_native_state_survives_readback_limits)
     ck_assert_int_eq(css__declaration_store_remove(store, "width", 5, &changed), CSS_OK);
     ck_assert(changed);
     check_text(store, "margin: var(--m); color: red;");
+    css__declaration_store_destroy(store);
+}
+END_TEST
+
+START_TEST(test_calc_values_survive_edits)
+{
+    css_declaration_store *store = create("margin:calc(50% - (2px + 1px)) calc(1em * 2)!important;"
+        "font:italic calc(10px + 2px)/calc(1 + .25) serif;"
+        "border:calc(1px + 2px) solid red;flex:calc(1 + 1) 1 calc(100% / 2);"
+        "columns:calc(10px + 2em) calc(1 + 1);width:calc(0% + 1px);opacity:1", _i != 0);
+    ck_assert(set(store, "opacity:.5", _i != 0));
+    check_value(store, "margin", "calc(50% - 3px) calc(2em)", true);
+    check_value(store, "font", "italic calc(12px) / calc(1.25) serif", false);
+    check_value(store, "flex", "calc(2) 1 calc(50%)", false);
+    check_value(store, "columns", "calc(2em + 10px) calc(2)", false);
+    check_value(store, "width", "calc(0% + 1px)", false);
+    ck_assert(set(store, "margin-left:4px", _i != 0));
+    ck_assert(set(store, "line-height:2", _i != 0));
+    ck_assert(set(store, "border-left-color:blue", _i != 0));
+    ck_assert(set(store, "column-count:3", _i != 0));
+    check_value(store, "margin-left", "4px", false);
+    check_value(store, "margin-right", "calc(2em)", true);
+    check_value(store, "margin-top", "calc(50% - 3px)", true);
+    check_value(store, "font-size", "calc(12px)", false);
+    check_value(store, "line-height", "2", false);
+    check_value(store, "border-left-width", "calc(3px)", false);
+    check_value(store, "border-left-color", "blue", false);
+    check_value(store, "column-width", "calc(2em + 10px)", false);
+    /* The original stylesheet is already destroyed by create/set. Edits own
+     * the surviving math tokens; cssText must reparse and serialize stably. */
+    lwc_string *text;
+    ck_assert_int_eq(css__declaration_store_serialize(store, &text), CSS_OK);
+    css_declaration_store *copy = create(lwc_string_data(text), _i != 0);
+    check_text(copy, lwc_string_data(text));
+    check_value(copy, "width", "calc(0% + 1px)", false);
+    check_value(copy, "flex-basis", "calc(50%)", false);
+    check_value(copy, "margin-right", "calc(2em)", true);
+    lwc_string_unref(text);
+    css__declaration_store_destroy(copy);
+    bool changed;
+    ck_assert_int_eq(css__declaration_store_remove(store, "margin-left", 11, &changed), CSS_OK);
+    ck_assert(changed);
+    check_value(store, "margin-left", "", false);
+    check_value(store, "margin-right", "calc(2em)", true);
     css__declaration_store_destroy(store);
 }
 END_TEST
@@ -913,6 +957,7 @@ int main(void)
     tcase_add_loop_test(tc, test_lab_values_survive_edits, 0, 2);
     tcase_add_loop_test(tc, test_srgb_values_survive_edits, 0, 2);
     tcase_add_loop_test(tc, test_extended_polar_values_survive_edits, 0, 2);
+    tcase_add_loop_test(tc, test_calc_values_survive_edits, 0, 2);
     tcase_add_test(tc, test_native_state_survives_readback_limits);
     tcase_add_test(tc, test_length_and_borrowed_names);
     tcase_add_test(tc, test_repeated_edits_release_sources);

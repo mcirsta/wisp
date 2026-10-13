@@ -53,7 +53,7 @@ and Grid batches are committed as `285fee12` and `9fbddb34`; the SVG paint/curso
 batch is committed as `f7a238d0`, the legacy aural batch as `fdf7b373`, and the
 Lab-family batch as `24cde21d`, missing-RGB/sRGB support as `8f1aacf3`, and
 extended HSL/HWB readback as `ed777a47`, and resolved system-font readback as
-`2485deb1`.
+`2485deb1`. Shared native calc grammar validation is committed as `6f5ae059`.
 Earlier dated sections are historical records, not additional unchecked requirements.
 
 The remaining work is grouped here so adjacent discoveries do not silently move
@@ -72,9 +72,10 @@ the target. Each group can require more than one tested batch:
   the dated section below. Display gamut mapping is separate renderer work.
 - [ ] Math values: validate and serialize accepted expressions through shared
   native handling, preserving specified-value semantics. Native `calc()` type
-  and syntax validation is fixed (2026-10-13); token-based simplification/readback
-  and edit-preservation checks remain. This is the largest remaining uncertainty
-  in the native prerequisite work.
+  and syntax validation, finite scalar-expression simplification/readback, and
+  shorthand edit-preservation checks are implemented (2026-10-13). Finish the
+  native evaluator's early operand rounding and non-finite round-trip behavior
+  before closing this group; see the concrete precision reproducer below.
 - [ ] Modern aggregate property identities/decomposition and preservation:
   finish the older aggregate models (`font-variant`, background position/repeat
   axes, text decoration, white space and logical start/end identities), then
@@ -2440,6 +2441,65 @@ clean Debug ASan/UBSan and LeakSanitizer results. All 8 selected Release Qt suit
 and 11 Debug Qt suites pass; the expanded calc fixture checks 116 cases at three
 viewport steps. The font-document test required an unsandboxed rerun to open its
 local HTTP fixture. Both builds are warning-free; no GTK builds ran.
+
+### Specified calc readback and native precision gate (2026-10-13)
+
+Committed the native grammar correction as `6f5ae059`. Ordinary accepted finite
+`calc()` values now serialize from specified tokens. Readback uses the same
+recursive-descent grammar as rendering, with an operand/operator visitor rather
+than decoding fixed-point bytecode. No new per-declaration snapshot or ordinary
+stylesheet allocation is added. The readback path borrows tokens into one vector
+and uses a growable operand stack; flat sums reuse two live operand slots.
+
+The existing scalar multiplication/division grammar simplifies to a sum of unit
+coefficients, so it does not need a general expression-tree implementation.
+[CSS Values 4 simplification and serialization](https://drafts.csswg.org/css-values-4/#calc-simplification)
+determine unit conversion, term combination and order. Absolute units convert to
+canonical units; relative units and percentages remain unresolved, including
+zero terms. Numbers retain `calc()` wrappers and property range clamping is not
+applied during specified readback. Arithmetic uses finite `long double`
+precision from authored numbers, then formats six fractional digits without
+using the process decimal separator. This is not arbitrary-precision arithmetic;
+overflow and division by zero return the existing explicit readback limitation.
+
+Whole math components now survive pair/quad, font, flex, columns and border
+shorthand extraction and reconstruction. Reading an independent non-math
+component does not evaluate an unrelated unsupported calculation. Ownership,
+partial edits, mixed priorities, removals and cssText reparse tests cover these
+paths after destruction of the input stylesheet.
+
+**The math group remains open for a confirmed rendering prerequisite.** A local
+Qt capture of these two otherwise identical blocks gives widths **97px** and
+**50px**, respectively:
+
+```html
+<div style="width:calc(.0005px * 100000);height:20px"></div>
+<div style="width:calc(50px);height:20px"></div>
+```
+
+The first operand is rounded into the old fixed-point bytecode before the
+multiplication. A normal arithmetic control (`100px / (1 + 1) + 2px`) and its
+simplified value both render as 52px. This is a pre-existing native calculator
+limitation, not a new JS mutation or a change to the renderer in this batch.
+Nevertheless, correct CSSOM simplification must not make unrelated edits change
+layout: fix native calculation precision before enabling the live style object.
+Retain fractional operands through calculation and defer conversion to the
+appropriate result boundary; test raw and serialized values through the cascade
+and rendering. Non-finite results also need native parse/evaluation/reparse
+support before publishing their standard serialization. These are remaining
+parts of the existing math prerequisite, not a new feature-discovery branch.
+
+Readback regressions include nested math, arithmetic divisors, canonical units,
+percentage/relative zero terms, unclamped values, fractional precision and
+shorthand isolation. Additional tests cover 1024 flat terms, nested stack growth,
+truncated tokens, finite-range overflow, comma-decimal locales where installed,
+and malloc/calloc/realloc failure recovery with no partial output.
+
+All 87 selected native CSS/layout/QuickJS suites pass in Release and Debug;
+ASan/UBSan and native LeakSanitizer runs are clean. All 8 selected Release Qt
+suites and 11 Debug Qt suites pass. Both builds are warning-free. No GTK or
+Windows builds ran. The new readback remains native infrastructure; this batch
+does not enable the live `element.style` binding.
 
 ## Assessment
 

@@ -10,6 +10,7 @@
 #include "parse/declaration_value.h"
 #include "parse/declaration_background.h"
 #include "parse/declaration_font.h"
+#include "parse/calc.h"
 #include "parse/colour.h"
 #include "parse/declaration_text.h"
 #include "parse/property.h"
@@ -399,50 +400,79 @@ static size_t scalar_arity(enum css_declaration_value_kind kind)
     }
 }
 
-/* These grammars have one scalar token per supplied component. Functions need
- * their own specified-value tree/serializer; do not split them at whitespace
- * or serialize their evaluated fixed-point result. */
-static const css_declaration_token *scalar_component(const css_declaration_contribution *value, size_t arity)
+/* Locate whole scalar/math components, never splitting a function at its spaces. */
+static bool scalar_component(const css_declaration_contribution *value, size_t arity, css_declaration *part)
 {
     const css_declaration *source = value->source;
-    const css_declaration_token *tokens[4];
+    size_t starts[4], lengths[4];
     size_t count = 0;
-    for (size_t i = 0; i < source->token_count; i++) {
+    for (size_t i = 0; i < source->token_count;) {
         const css_declaration_token *token = &source->tokens[i];
-        if (token->type == CSS_TOKEN_S)
+        if (token->type == CSS_TOKEN_S) {
+            i++;
             continue;
+        }
         if (count == arity ||
             (token->type != CSS_TOKEN_IDENT && token->type != CSS_TOKEN_NUMBER && token->type != CSS_TOKEN_PERCENTAGE &&
-                token->type != CSS_TOKEN_DIMENSION && token->type != CSS_TOKEN_URI))
-            return NULL;
-        tokens[count++] = token;
+                token->type != CSS_TOKEN_DIMENSION && token->type != CSS_TOKEN_URI &&
+                !(token->type == CSS_TOKEN_FUNCTION && css__keyword_equal(token->text, "calc"))))
+            return false;
+        size_t end = css__declaration_component_end(source, i);
+        if (end == 0)
+            return false;
+        starts[count] = i;
+        lengths[count++] = end - i;
+        i = end;
     }
     if (count == 0)
-        return NULL;
+        return false;
     size_t component = value->component;
     if (component >= count)
         component = count == 1 ? 0 : component == 2 ? 0 : 1;
-    return tokens[component];
+    *part = *source;
+    part->tokens += starts[component];
+    part->token_count = lengths[component];
+    return true;
+}
+
+/* Within the accepted scalar-product calc grammar a dimension/percentage can
+ * never cancel its type. This identifies shorthand components without needing
+ * to evaluate or serialize unrelated components (including non-finite math). */
+static bool calc_number(const css_declaration_token *tokens, size_t count)
+{
+    for (size_t i = 0; i < count; i++) {
+        if (tokens[i].type == CSS_TOKEN_DIMENSION || tokens[i].type == CSS_TOKEN_PERCENTAGE)
+            return false;
+    }
+    return true;
 }
 
 /* Expand validated flex shorthands into their specified scalar components.
- * Numeric spellings retain CSSOM precision, independently of layout bytecode.
- * Math functions need a typed value serializer and remain explicitly unsupported. */
+ * Numeric spellings retain CSSOM precision, independently of layout bytecode. */
 static css_error serialize_flex_component(const css_declaration_contribution *value, lwc_string **out)
 {
     const css_declaration *source = value->source;
     bool flow = source->property->value_kind == CSS_DECL_VALUE_FLEX_FLOW;
     const css_declaration_token *parts[3] = {0};
+    size_t lengths[3] = {0};
     const char *defaults[3] = {"1", "1", "0px"};
     if (flow) {
         defaults[0] = "row";
         defaults[1] = "nowrap";
     }
     size_t factors = 0;
-    for (size_t i = 0; i < source->token_count; i++) {
+    for (size_t i = 0; i < source->token_count;) {
         const css_declaration_token *token = &source->tokens[i];
-        if (token->type == CSS_TOKEN_S)
+        if (token->type == CSS_TOKEN_S) {
+            i++;
             continue;
+        }
+        size_t end = css__declaration_component_end(source, i);
+        if (end == 0)
+            return CSS_INVALID;
+        size_t length = end - i;
+        i = end;
+        bool math = token->type == CSS_TOKEN_FUNCTION && css__keyword_equal(token->text, "calc");
         size_t component;
         if (flow) {
             if (token->type != CSS_TOKEN_IDENT)
@@ -453,10 +483,10 @@ static css_error serialize_flex_component(const css_declaration_contribution *va
             defaults[0] = defaults[1] = "0";
             defaults[2] = "auto";
             continue;
-        } else if (token->type == CSS_TOKEN_NUMBER && factors < 2) {
+        } else if ((token->type == CSS_TOKEN_NUMBER || (math && calc_number(token, length))) && factors < 2) {
             component = factors++;
         } else if (token->type == CSS_TOKEN_NUMBER || token->type == CSS_TOKEN_DIMENSION ||
-            token->type == CSS_TOKEN_PERCENTAGE || token->type == CSS_TOKEN_IDENT) {
+            token->type == CSS_TOKEN_PERCENTAGE || token->type == CSS_TOKEN_IDENT || math) {
             component = 2;
         } else {
             return CSS_INVALID;
@@ -464,6 +494,7 @@ static css_error serialize_flex_component(const css_declaration_contribution *va
         if (parts[component] != NULL)
             return CSS_INVALID;
         parts[component] = token;
+        lengths[component] = length;
     }
     size_t component = value->component;
     const css_declaration_token *token = parts[component];
@@ -471,6 +502,8 @@ static css_error serialize_flex_component(const css_declaration_contribution *va
         return intern(defaults[component], strlen(defaults[component]), out);
     if (token->type == CSS_TOKEN_IDENT)
         return lwc_string_tolower(token->text, out) == lwc_error_ok ? CSS_OK : CSS_NOMEM;
+    if (token->type == CSS_TOKEN_FUNCTION)
+        return css__declaration_calc_serialize(token, lengths[component], out);
     return css__declaration_numeric_serialize(token, component == 2, out);
 }
 
@@ -481,13 +514,21 @@ static css_error serialize_list_or_columns_component(const css_declaration_contr
     const css_declaration *source = value->source;
     bool columns = source->property->value_kind == CSS_DECL_VALUE_COLUMNS;
     const css_declaration_token *parts[3] = {0};
+    size_t lengths[3] = {0};
     const char *defaults[3] = {"disc", "outside", "none"};
     if (columns)
         defaults[0] = defaults[1] = "auto";
-    for (size_t i = 0; i < source->token_count; i++) {
+    for (size_t i = 0; i < source->token_count;) {
         const css_declaration_token *token = &source->tokens[i];
-        if (token->type == CSS_TOKEN_S)
+        if (token->type == CSS_TOKEN_S) {
+            i++;
             continue;
+        }
+        size_t end = css__declaration_component_end(source, i);
+        if (end == 0)
+            return CSS_INVALID;
+        size_t length = end - i;
+        i = end;
         size_t component;
         if (columns) {
             if (token->type == CSS_TOKEN_IDENT && css__keyword_equal(token->text, "auto"))
@@ -498,8 +539,10 @@ static css_error serialize_list_or_columns_component(const css_declaration_contr
                 /* Unitless zero is a width; a positive integer is a count.
                  * Do not round a small nonzero token into a zero length. */
                 component = css__number_sign(token->text) == 0 ? 0 : 1;
+            } else if (token->type == CSS_TOKEN_FUNCTION && css__keyword_equal(token->text, "calc")) {
+                component = calc_number(token, length) ? 1 : 0;
             } else {
-                return CSS_INVALID; /* Math values need a typed serializer. */
+                return CSS_INVALID;
             }
         } else if (token->type == CSS_TOKEN_URI) {
             component = 2;
@@ -515,6 +558,7 @@ static css_error serialize_list_or_columns_component(const css_declaration_contr
         if (parts[component] != NULL)
             return CSS_INVALID;
         parts[component] = token;
+        lengths[component] = length;
     }
     size_t component = value->component;
     const css_declaration_token *token = parts[component];
@@ -522,6 +566,8 @@ static css_error serialize_list_or_columns_component(const css_declaration_contr
         return intern(defaults[component], strlen(defaults[component]), out);
     if (token->type == CSS_TOKEN_IDENT)
         return lwc_string_tolower(token->text, out) == lwc_error_ok ? CSS_OK : CSS_NOMEM;
+    if (token->type == CSS_TOKEN_FUNCTION)
+        return css__declaration_calc_serialize(token, lengths[component], out);
     if (token->type == CSS_TOKEN_URI) {
         css_declaration image = {.property = css_prop_lookup("list-style-image", 16), .tokens = token, .token_count = 1};
         return css__declaration_text_serialize(&image, out);
@@ -821,13 +867,16 @@ css_error css__declaration_value_serialize(const css_declaration_contribution *v
     if (kind == CSS_DECL_VALUE_COLOUR || kind == CSS_DECL_VALUE_QUAD_COLOUR)
         return css__declaration_colour_serialize(value, out);
     size_t arity = scalar_arity(kind);
-    const css_declaration_token *token = scalar_component(value, arity);
-    if (token == NULL)
+    css_declaration part;
+    if (!scalar_component(value, arity, &part))
         return CSS_INVALID;
+    const css_declaration_token *token = part.tokens;
     if (token->type == CSS_TOKEN_IDENT)
         return lwc_string_tolower(token->text, out) == lwc_error_ok ? CSS_OK : CSS_NOMEM;
     if (kind == CSS_DECL_VALUE_KEYWORD || kind == CSS_DECL_VALUE_PAIR_KEYWORD || kind == CSS_DECL_VALUE_QUAD_KEYWORD)
         return CSS_INVALID;
+    if (token->type == CSS_TOKEN_FUNCTION)
+        return css__declaration_calc_serialize(part.tokens, part.token_count, out);
     if (kind == CSS_DECL_VALUE_PAIR_URI) {
         css_declaration component = {.property = css_prop_lookup("cue-before", 10), .tokens = token, .token_count = 1};
         return css__declaration_text_serialize(&component, out);

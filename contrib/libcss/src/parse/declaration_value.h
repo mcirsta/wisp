@@ -13,7 +13,7 @@
  * System-font components use the retained parse-time client resolution.
  * Supports custom properties, CSS-wide keywords, pending variable substitution
  * and the value families registered in properties.toml. CSS_INVALID means
- * that a property/value serializer is not implemented yet (e.g. math functions),
+ * that a property/value serializer is not implemented yet (e.g. non-finite math),
  * NOT that the already-accepted declaration is invalid. Callers must propagate
  * this limitation, never substitute raw text or an empty value as a fallback.
  * On success the caller owns *out; on every failure *out is NULL. */

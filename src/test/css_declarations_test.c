@@ -1,7 +1,9 @@
 /* Accepted inline declarations must retain parser output without changing the
  * compiled style. This exercises the real generated and manual property parsers. */
 #include <check.h>
+#include <float.h>
 #include <limits.h>
+#include <locale.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -12,6 +14,7 @@
 #include "parse/declaration_value.h"
 #include "parse/declaration_store.h"
 #include "parse/declaration_block.h"
+#include "parse/calc.h"
 #include "parse/language.h"
 #include "parse/property.h"
 #include "stylesheet.h"
@@ -1073,9 +1076,9 @@ static const struct {
     {"cue:INHERIT", "cue", "inherit"},
     {"cue:UNSET", "cue", "unset"},
     {"cue:REVERT", "cue", "revert"},
-    {"pause:calc(1s + 2s)", "pause", NULL},
-    {"pitch:calc(1hz + 2hz)", "pitch", NULL},
-    {"speech-rate:calc(1 + 2)", "speech-rate", NULL},
+    {"pause:calc(1s + 2s)", "pause", "calc(3s)"},
+    {"pitch:calc(1hz + 2hz)", "pitch", "calc(3hz)"},
+    {"speech-rate:calc(1 + 2)", "speech-rate", "calc(3)"},
 
     {"fill:NONE", "fill", "none"},
     {"fill:CURRENTcolor", "fill", "currentcolor"},
@@ -1205,9 +1208,55 @@ static const struct {
     {"transform:scale(1)!important;transform:none", "transform", "scale(1)"},
     {"transform:translate(123456789.12345678px, -123456789.7654321em)", "transform",
         "translate(123456789.123457px, -123456789.765432em)"},
-    {"width:calc(1px + 2em)", "width", NULL},
-    {"margin:1px calc(2px + 1em)", "margin", NULL},
-    {"margin:1px calc(2px + 1em)", "margin-top", NULL},
+    /* CSS Values 4 10.10.1 / 10.13: specified simplification, without layout
+     * metrics, property range clamping or dropping zero-valued unit terms. */
+    {"width:calc(1px + 2em)", "width", "calc(2em + 1px)"},
+    {"width:calc(20px + 30px)", "width", "calc(50px)"},
+    {"width:calc(20px + 0%)", "width", "calc(0% + 20px)"},
+    {"width:calc(100% - 100% + 1px)", "width", "calc(0% + 1px)"},
+    {"width:calc(1em - 1em + 1px)", "width", "calc(0em + 1px)"},
+    {"width:calc(0 * (10% + 1em + 5px))", "width", "calc(0% + 0em + 0px)"},
+    {"width:calc(2 * (50% - 5px))", "width", "calc(100% - 10px)"},
+    {"width:calc((50% - 5px) * -2)", "width", "calc(-100% + 10px)"},
+    {"width:calc(50% - (2px - 1em))", "width", "calc(50% + 1em - 2px)"},
+    {"width:calc(calc(1px + 2em) * calc(2 + 1))", "width", "calc(6em + 3px)"},
+    {"width:calc(12px / (1 + 2))", "width", "calc(4px)"},
+    {"width:calc(12px / calc(1 + 2) + 1px)", "width", "calc(5px)"},
+    {"width:calc(1px / 3)", "width", "calc(0.333333px)"},
+    {"width:calc(1px / -3)", "width", "calc(-0.333333px)"},
+    {"width:calc(1px / 3 * 3)", "width", "calc(1px)"},
+    {"width:calc(.0000004px * 10)", "width", "calc(0.000004px)"},
+    {"width:calc(.0000005px * 3)", "width", "calc(0.000002px)"},
+    {"width:calc(-.0000005px * 3)", "width", "calc(-0.000002px)"},
+    {"width:calc(.1234567px + .1234567px)", "width", "calc(0.246913px)"},
+    {"width:calc(999999999px + .25px)", "width", "calc(999999999.25px)"},
+    {"width:calc(1in + 2.54cm + 25.4mm + 72pt + 6pc + 101.6Q)", "width", "calc(576px)"},
+    {"width:calc(1q)", "width", "calc(0.944882px)"},
+    {"width:calc(1rem + 1vw + 1px + 1em + 1ch + 1%)", "width", "calc(1% + 1ch + 1em + 1px + 1rem + 1vw)"},
+    {"width:CALC(001.250PX /* unit */ + 2EM)", "width", "calc(2em + 1.25px)"},
+    {"width:calc(-0px)", "width", "calc(0px)"},
+    {"width:calc(-2px)", "width", "calc(-2px)"},
+    {"z-index:calc(1.5)", "z-index", "calc(1.5)"},
+    {"line-height:calc(.5 + .75)", "line-height", "calc(1.25)"},
+    {"line-height:calc(100% + 1px)", "line-height", "calc(100% + 1px)"},
+    {"pause:calc(1000ms + 50%) calc(1s / 2)", "pause", "calc(50% + 1s) calc(0.5s)"},
+    {"pitch:calc(1khz + 20hz)", "pitch", "calc(1020hz)"},
+    {"volume:calc(20% + 5%)", "volume", "calc(25%)"},
+    {"gap:calc(1px + 2%) calc(2em * 2)", "gap", "calc(2% + 1px) calc(4em)"},
+    {"margin-inline:calc(1px + 2%) calc(2px)", "margin-inline", "calc(2% + 1px) calc(2px)"},
+    {"margin:calc(1px) calc(2px) calc(3px)", "margin-left", "calc(2px)"},
+    {"padding:calc(-2px)", "padding", "calc(-2px)"},
+    {"border:calc(1px / 0) solid red", "border-left-color", "red"},
+    {"flex:calc(12px / 2) calc(1 + 1) calc(3)", "flex", "calc(2) calc(3) calc(6px)"},
+    {"flex:calc(1px / 0) 2 3", "flex-grow", "2"},
+    {"columns:calc(1 + 1) calc(10px * 2)", "columns", "calc(20px) calc(2)"},
+    {"columns:calc(1px / 0) 2", "column-count", "2"},
+    /* Preserve explicit failure for math the finite native evaluator cannot
+     * yet round-trip, rather than inventing zero or publishing unparseable text. */
+    {"width:calc(1px / 0)", "width", NULL},
+    {"width:calc(0px / 0)", "width", NULL},
+    {"margin:1px calc(2px + 1em)", "margin", "1px calc(1em + 2px)"},
+    {"margin:1px calc(2px + 1em)", "margin-top", "1px"},
     {"color:rgb(1, 2, 3)", "color", "rgb(1, 2, 3)"},
     {"font-family:'Example'", "font-family", "\"Example\""},
     {"display: InLiNe-BlOcK", "display", "inline-block"},
@@ -1578,8 +1627,8 @@ static const struct {
     {"flex:var(--f, 2 3 auto)", "flex", "var(--f, 2 3 auto)"},
     {"flex:var(--f)", "flex-grow", ""},
     {"flex:var(--f);flex-grow:2", "flex", ""},
-    {"flex:2 calc(1 + 1) auto", "flex", NULL},
-    {"flex:2 1 calc(10px + 2px)", "flex", NULL},
+    {"flex:2 calc(1 + 1) auto", "flex", "2 calc(2) auto"},
+    {"flex:2 1 calc(10px + 2px)", "flex", "2 1 calc(12px)"},
     {"flex-flow:ROW NOWRAP", "flex-flow", "row"},
     {"flex-flow:wrap", "flex-flow", "wrap"},
     {"flex-flow:wrap", "flex-direction", "row"},
@@ -1851,7 +1900,7 @@ static const struct {
     {"columns:var(--Columns, 12em 2)", "columns", "var(--Columns, 12em 2)"},
     {"columns:var(--Columns)", "column-count", ""},
     {"columns:var(--Columns);column-width:auto", "columns", ""},
-    {"columns:calc(12px + 2px) 2", "columns", NULL},
+    {"columns:calc(12px + 2px) 2", "columns", "calc(14px) 2"},
 
     /* Border/outline/rule specified components, including resets and side overrides. */
     {"border:none", "border", "none"},
@@ -1876,7 +1925,7 @@ static const struct {
     {"border:solid!important;border-left-width:3px", "border", "solid"},
     {"border:solid;border-left-width:3px!important", "border", ""},
     {"border:solid;border-left-color:inherit", "border", ""},
-    {"border:calc(1px + 2px) solid red", "border", NULL},
+    {"border:calc(1px + 2px) solid red", "border", "calc(3px) solid red"},
     {"border:calc(1px + 2px) solid red", "border-left-color", "red"},
     {"border:solid oklch(50% .1 0)", "border-left-width", "medium"},
     {"border:solid oklch(50% .1 0)", "border-left-color", "oklch(0.5 0.1 0)"},
@@ -1902,7 +1951,7 @@ static const struct {
     {"border-top:solid!important;border-top-width:3px", "border-top", "solid"},
     {"border-top:solid;border-top-width:3px!important", "border-top", ""},
     {"border-top:solid;border-top-color:inherit", "border-top", ""},
-    {"border-top:calc(1px + 2px) solid red", "border-top", NULL},
+    {"border-top:calc(1px + 2px) solid red", "border-top", "calc(3px) solid red"},
     {"border-top:calc(1px + 2px) solid red", "border-top-color", "red"},
     {"border-top:solid oklch(50% .1 0)", "border-top-width", "medium"},
     {"border-top:solid oklch(50% .1 0)", "border-top-color", "oklch(0.5 0.1 0)"},
@@ -1928,7 +1977,7 @@ static const struct {
     {"border-right:solid!important;border-right-width:3px", "border-right", "solid"},
     {"border-right:solid;border-right-width:3px!important", "border-right", ""},
     {"border-right:solid;border-right-color:inherit", "border-right", ""},
-    {"border-right:calc(1px + 2px) solid red", "border-right", NULL},
+    {"border-right:calc(1px + 2px) solid red", "border-right", "calc(3px) solid red"},
     {"border-right:calc(1px + 2px) solid red", "border-right-color", "red"},
     {"border-right:solid oklch(50% .1 0)", "border-right-width", "medium"},
     {"border-right:solid oklch(50% .1 0)", "border-right-color", "oklch(0.5 0.1 0)"},
@@ -1954,7 +2003,7 @@ static const struct {
     {"border-bottom:solid!important;border-bottom-width:3px", "border-bottom", "solid"},
     {"border-bottom:solid;border-bottom-width:3px!important", "border-bottom", ""},
     {"border-bottom:solid;border-bottom-color:inherit", "border-bottom", ""},
-    {"border-bottom:calc(1px + 2px) solid red", "border-bottom", NULL},
+    {"border-bottom:calc(1px + 2px) solid red", "border-bottom", "calc(3px) solid red"},
     {"border-bottom:calc(1px + 2px) solid red", "border-bottom-color", "red"},
     {"border-bottom:solid oklch(50% .1 0)", "border-bottom-width", "medium"},
     {"border-bottom:solid oklch(50% .1 0)", "border-bottom-color", "oklch(0.5 0.1 0)"},
@@ -1980,7 +2029,7 @@ static const struct {
     {"border-left:solid!important;border-left-width:3px", "border-left", "solid"},
     {"border-left:solid;border-left-width:3px!important", "border-left", ""},
     {"border-left:solid;border-left-color:inherit", "border-left", ""},
-    {"border-left:calc(1px + 2px) solid red", "border-left", NULL},
+    {"border-left:calc(1px + 2px) solid red", "border-left", "calc(3px) solid red"},
     {"border-left:calc(1px + 2px) solid red", "border-left-color", "red"},
     {"border-left:solid oklch(50% .1 0)", "border-left-width", "medium"},
     {"border-left:solid oklch(50% .1 0)", "border-left-color", "oklch(0.5 0.1 0)"},
@@ -2006,7 +2055,7 @@ static const struct {
     {"outline:solid!important;outline-width:3px", "outline", "solid"},
     {"outline:solid;outline-width:3px!important", "outline", ""},
     {"outline:solid;outline-color:inherit", "outline", ""},
-    {"outline:calc(1px + 2px) solid red", "outline", NULL},
+    {"outline:calc(1px + 2px) solid red", "outline", "red solid calc(3px)"},
     {"outline:calc(1px + 2px) solid red", "outline-color", "red"},
     {"outline:solid oklch(50% .1 0)", "outline-width", "medium"},
     {"outline:solid oklch(50% .1 0)", "outline-color", "oklch(0.5 0.1 0)"},
@@ -2032,7 +2081,7 @@ static const struct {
     {"column-rule:solid!important;column-rule-width:3px", "column-rule", "solid"},
     {"column-rule:solid;column-rule-width:3px!important", "column-rule", ""},
     {"column-rule:solid;column-rule-color:inherit", "column-rule", ""},
-    {"column-rule:calc(1px + 2px) solid red", "column-rule", NULL},
+    {"column-rule:calc(1px + 2px) solid red", "column-rule", "calc(3px) solid red"},
     {"column-rule:calc(1px + 2px) solid red", "column-rule-color", "red"},
     {"column-rule:solid oklch(50% .1 0)", "column-rule-width", "medium"},
     {"column-rule:solid oklch(50% .1 0)", "column-rule-color", "oklch(0.5 0.1 0)"},
@@ -2245,7 +2294,7 @@ static const struct {
     {"vertical-align:2px!important;vertical-align:0", "vertical-align", "2px"},
     {"vertical-align:2px;vertical-align:revert", "vertical-align", "revert"},
     {"vertical-align:var(--Offset, 2px)", "vertical-align", "var(--Offset, 2px)"},
-    {"vertical-align:calc(2px + 3px)", "vertical-align", NULL},
+    {"vertical-align:calc(2px + 3px)", "vertical-align", "calc(5px)"},
     {"page-break-before:ALWAYS", "page-break-before", "always"},
     {"page-break-before:LEFT", "page-break-before", "left"},
     {"page-break-before:RIGHT", "page-break-before", "right"},
@@ -2330,9 +2379,9 @@ static const struct {
     {"font:var(--Font)", "font-size", ""},
     {"font:var(--Font);font-size:16px", "font", ""},
     {"font:16px serif; font-weight:var(--Weight)", "font", ""},
-    {"font:italic calc(1em + 2px)/calc(1 + .25) serif", "font", NULL},
-    {"font:italic calc(1em + 2px)/calc(1 + .25) serif", "font-size", NULL},
-    {"font:italic calc(1em + 2px)/calc(1 + .25) serif", "line-height", NULL},
+    {"font:italic calc(1em + 2px)/calc(1 + .25) serif", "font", "italic calc(1em + 2px) / calc(1.25) serif"},
+    {"font:italic calc(1em + 2px)/calc(1 + .25) serif", "font-size", "calc(1em + 2px)"},
+    {"font:italic calc(1em + 2px)/calc(1 + .25) serif", "line-height", "calc(1.25)"},
     {"font:italic calc(1em + 2px)/calc(1 + .25) serif", "font-style", "italic"},
     {"font:italic calc(1em + 2px)/calc(1 + .25) serif", "font-family", "serif"},
 
@@ -4456,6 +4505,72 @@ START_TEST(test_calc_nesting_and_truncation)
 }
 END_TEST
 
+START_TEST(test_calc_readback_bounds)
+{
+    char flat[7000] = "width:calc(1px";
+    for (unsigned i = 1; i < 1024; i++)
+        strcat(flat, " + 1px");
+    strcat(flat, ")");
+    css_declaration_list *list = parse(flat, false);
+    const css_declaration *source = css__declaration_list_get(list, 0);
+    lwc_string *out;
+    ck_assert_int_eq(css__declaration_calc_serialize(source->tokens, source->token_count, &out), CSS_OK);
+    ck_assert_str_eq(lwc_string_data(out), "calc(1024px)");
+    lwc_string_unref(out);
+    css__declaration_list_destroy(list);
+
+    list = parse("width:calc(12px / calc(1 + 2) + 3%)", false);
+    source = css__declaration_list_get(list, 0);
+    for (size_t i = 0; i < source->token_count; i++) {
+        out = (void *)1;
+        ck_assert_int_eq(css__declaration_calc_serialize(source->tokens, i, &out), i == 0 ? CSS_BADPARM : CSS_INVALID);
+        ck_assert_ptr_null(out);
+    }
+    ck_assert_int_eq(css__declaration_calc_serialize(source->tokens, source->token_count, &out), CSS_OK);
+    ck_assert_str_eq(lwc_string_data(out), "calc(3% + 4px)");
+    lwc_string_unref(out);
+    css__declaration_list_destroy(list);
+
+    /* Fail without publishing a partial result when accepted operands exceed
+     * the simplifier's finite arithmetic range. Native declarations survive. */
+    size_t digits = LDBL_MAX_10_EXP + 16;
+    char *huge = malloc(digits + 64);
+    ck_assert_ptr_nonnull(huge);
+    strcpy(huge, "width:calc(");
+    memset(huge + 11, '9', digits);
+    strcpy(huge + 11 + digits, "px);color:red");
+    list = parse(huge, false);
+    free(huge);
+    ck_assert_uint_eq(css__declaration_list_count(list), 2);
+    source = css__declaration_list_get(list, 0);
+    out = (void *)1;
+    ck_assert_int_eq(css__declaration_calc_serialize(source->tokens, source->token_count, &out), CSS_INVALID);
+    ck_assert_ptr_null(out);
+    css__declaration_list_destroy(list);
+}
+END_TEST
+
+START_TEST(test_calc_readback_locale)
+{
+    char *saved = strdup(setlocale(LC_NUMERIC, NULL));
+    ck_assert_ptr_nonnull(saved);
+    static const char *const locales[] = {"C", "ro_RO.utf8", "de_DE.utf8"};
+    for (size_t i = 0; i < N_ELEMENTS(locales); i++) {
+        if (setlocale(LC_NUMERIC, locales[i]) == NULL)
+            continue;
+        css_declaration_list *list = parse("width:calc(50.25% - 1px / 3)", false);
+        const css_declaration *source = css__declaration_list_get(list, 0);
+        lwc_string *out;
+        ck_assert_int_eq(css__declaration_calc_serialize(source->tokens, source->token_count, &out), CSS_OK);
+        ck_assert_str_eq(lwc_string_data(out), "calc(50.25% - 0.333333px)");
+        lwc_string_unref(out);
+        css__declaration_list_destroy(list);
+    }
+    ck_assert_ptr_nonnull(setlocale(LC_NUMERIC, saved));
+    free(saved);
+}
+END_TEST
+
 #ifdef WISP_TEST_ALLOC_FAILURE
 START_TEST(test_calc_allocation_rollback)
 {
@@ -4502,6 +4617,43 @@ START_TEST(test_calc_allocation_rollback)
         ck_assert_msg(succeeded, "allocator %d / spare %u never completed", _i, spare);
     }
     parserutils_vector_destroy(tokens);
+    css__declaration_list_destroy(list);
+}
+END_TEST
+
+START_TEST(test_calc_readback_allocation_failure)
+{
+    void (*limit)(unsigned int) = _i == 0 ? malloc_limit : _i == 1 ? calloc_limit : realloc_limit;
+    char css[1800] = "margin:calc(1px) calc(2em) calc(3%) calc(";
+    /* Right-nesting exercises growth of the symbolic operand stack, whereas
+     * large flat sums should reuse its two live operand slots. */
+    for (size_t i = 0; i < 40; i++)
+        strcat(css, "1px + calc(");
+    strcat(css, "2em");
+    for (size_t i = 0; i < 41; i++)
+        strcat(css, ")");
+    css_declaration_list *list = parse(css, false);
+    css_declaration_order *order;
+    ck_assert_int_eq(css__declaration_order_create(list, &order), CSS_OK);
+    bool succeeded = false;
+    unsigned failures = 0;
+    for (unsigned attempt = 0; attempt < 128 && !succeeded; attempt++) {
+        lwc_string *out = (void *)1;
+        limit(attempt);
+        css_error error = serialize_property(order, "margin", &out);
+        limit(UINT_MAX);
+        if (error == CSS_OK) {
+            ck_assert_str_eq(lwc_string_data(out), "calc(1px) calc(2em) calc(3%) calc(2em + 40px)");
+            lwc_string_unref(out);
+            succeeded = true;
+        } else {
+            ck_assert_msg(error == CSS_NOMEM, "allocator %d attempt %u returned %d", _i, attempt, error);
+            ck_assert_ptr_null(out);
+            failures++;
+        }
+    }
+    ck_assert_msg(succeeded && (_i == 1 || failures > 0), "allocator %d did not finish/recover", _i);
+    css__declaration_order_destroy(order);
     css__declaration_list_destroy(list);
 }
 END_TEST
@@ -5285,6 +5437,8 @@ int main(void)
     tcase_add_loop_test(tc, test_font_prefix_bytecode, 0, 2);
     tcase_add_loop_test(tc, test_calc_grammar, 0, 2);
     tcase_add_loop_test(tc, test_calc_nesting_and_truncation, 0, 2);
+    tcase_add_test(tc, test_calc_readback_bounds);
+    tcase_add_test(tc, test_calc_readback_locale);
     tcase_add_loop_test(tc, test_font_invalid_components, 0, 2);
     tcase_add_loop_test(tc, test_system_font_readback, 0, 2);
     tcase_add_loop_test(tc, test_system_font_editing, 0, 2);
@@ -5338,6 +5492,7 @@ int main(void)
     tcase_add_loop_test(tc, test_value_allocation_failure, 0, 67);
     tcase_add_loop_test(tc, test_system_font_allocation_failure, 0, 3);
     tcase_add_loop_test(tc, test_calc_allocation_rollback, 0, 3);
+    tcase_add_loop_test(tc, test_calc_readback_allocation_failure, 0, 3);
     tcase_add_loop_test(tc, test_position_rollback, 0, 2);
     tcase_add_loop_test(tc, test_font_rollback, 0, 5);
     tcase_add_loop_test(tc, test_gap_rollback, 0, 4);

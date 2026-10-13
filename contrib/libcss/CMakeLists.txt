@@ -179,6 +179,7 @@ add_library(css ${WISP_LIB_TYPE}
 	src/lex/lex.c
 	src/parse/parse.c
 	src/parse/calc.c
+	src/parse/declaration_calc.c
 	src/parse/language.c
 	src/parse/declarations.c
 	src/parse/declaration_order.c

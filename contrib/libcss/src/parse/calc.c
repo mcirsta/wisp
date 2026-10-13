@@ -8,6 +8,7 @@
  */
 
 #include "parse/properties/utils.h"
+#include "parse/calc.h"
 #include "utils/parserutilserror.h"
 
 /* CSS Values 4 10.8 requires at least 32 levels. Bound C recursion while
@@ -15,14 +16,23 @@
 #define CALC_MAX_DEPTH 128
 
 struct calc_parser {
-    css_language *language;
     const parserutils_vector *tokens;
     parserutils_buffer *code;
     uint32_t unit_mask;
     unsigned depth;
+    css_calc_emit emit;
+    void *pw;
 };
 
 static css_error calc_sum(struct calc_parser *parser, int *ctx, uint32_t *type);
+
+static css_error calc_operator(struct calc_parser *parser, css_code_t op)
+{
+    if (parser->emit != NULL)
+        return parser->emit(parser->pw, op, NULL, 0);
+    return css_error_from_parserutils_error(
+        parserutils_buffer_append(parser->code, (const uint8_t *)&op, sizeof(op)));
+}
 
 static uint32_t calc_unit_type(uint32_t unit)
 {
@@ -67,22 +77,32 @@ static css_error calc_value(struct calc_parser *parser, int *ctx, uint32_t *type
         parserutils_vector_iterate(parser->tokens, ctx);
         *type = UNIT_CALC_NUMBER;
         const css_code_t push = CALC_PUSH_NUMBER;
+        if (parser->emit != NULL)
+            return parser->emit(parser->pw, push, token->idata, UNIT_CALC_NUMBER);
         return css_error_from_parserutils_error(
             parserutils_buffer_appendv(parser->code, 2, &push, sizeof(push), &number, sizeof(number)));
     }
     if (token->type != CSS_TOKEN_DIMENSION && token->type != CSS_TOKEN_PERCENTAGE)
         return CSS_INVALID;
-    css_fixed number;
-    uint32_t unit;
-    css_error error = css__parse_unit_specifier(
-        parser->language, parser->tokens, ctx, UNIT_CALC_NUMBER, &number, &unit);
-    if (error != CSS_OK)
-        return error;
+    size_t consumed;
+    css_fixed number = css__number_from_lwc_string(token->idata, false, &consumed);
+    uint32_t unit = UNIT_PCT;
+    if (token->type == CSS_TOKEN_DIMENSION) {
+        css_error error = css__parse_unit_keyword(lwc_string_data(token->idata) + consumed,
+            lwc_string_length(token->idata) - consumed, &unit);
+        if (error != CSS_OK)
+            return error;
+    } else if (consumed != lwc_string_length(token->idata)) {
+        return CSS_INVALID;
+    }
+    parserutils_vector_iterate(parser->tokens, ctx);
     /* fr shares the bytecode length bit, but is not a CSS length. */
-    if (unit == UNIT_FR || !(calc_unit_type(unit) & parser->unit_mask))
+    if (unit == UNIT_FR || (parser->emit == NULL && !(calc_unit_type(unit) & parser->unit_mask)))
         return CSS_INVALID;
     *type = unit == UNIT_PCT ? calc_percentage_type(parser->unit_mask) : calc_unit_type(unit);
     const css_code_t push = CALC_PUSH_VALUE;
+    if (parser->emit != NULL)
+        return parser->emit(parser->pw, push, token->idata, unit);
     return css_error_from_parserutils_error(parserutils_buffer_appendv(
         parser->code, 3, &push, sizeof(push), &number, sizeof(number), &unit, sizeof(unit)));
 }
@@ -117,8 +137,7 @@ static css_error calc_product(struct calc_parser *parser, int *ctx, uint32_t *ty
             *type = right;
         else if (right != UNIT_CALC_NUMBER)
             return CSS_INVALID;
-        error = css_error_from_parserutils_error(
-            parserutils_buffer_append(parser->code, (const uint8_t *)&op, sizeof(op)));
+        error = calc_operator(parser, op);
         if (error != CSS_OK)
             return error;
     }
@@ -150,10 +169,9 @@ static css_error calc_sum(struct calc_parser *parser, int *ctx, uint32_t *type)
         error = calc_product(parser, ctx, &right);
         if (error != CSS_OK)
             return error;
-        if (*type != right)
+        if (parser->emit == NULL && *type != right)
             return CSS_INVALID;
-        error = css_error_from_parserutils_error(
-            parserutils_buffer_append(parser->code, (const uint8_t *)&op, sizeof(op)));
+        error = calc_operator(parser, op);
         if (error != CSS_OK)
             return error;
     }
@@ -165,7 +183,7 @@ css_error css__parse_calc(css_language *c, const parserutils_vector *vector, int
 {
     int orig_ctx = *ctx;
     uint32_t orig_used = result->used;
-    struct calc_parser parser = {.language = c, .tokens = vector, .unit_mask = unit_mask, .depth = 1};
+    struct calc_parser parser = {.tokens = vector, .unit_mask = unit_mask, .depth = 1};
     css_error error = css_error_from_parserutils_error(parserutils_buffer_create(&parser.code));
     if (error != CSS_OK)
         return error;
@@ -202,5 +220,34 @@ done:
         *ctx = orig_ctx;
         result->used = orig_used;
     }
+    return error;
+}
+
+css_error css__calc_walk(const css_declaration_token *tokens, size_t count, css_calc_emit emit, void *pw)
+{
+    if (tokens == NULL || emit == NULL || count == 0 || count > INT32_MAX)
+        return CSS_BADPARM;
+    if (tokens[0].type != CSS_TOKEN_FUNCTION || !css__keyword_equal(tokens[0].text, "calc"))
+        return CSS_INVALID;
+    if (count > SIZE_MAX / sizeof(css_token))
+        return CSS_NOMEM;
+    parserutils_vector *vector;
+    css_error error = css_error_from_parserutils_error(parserutils_vector_create(sizeof(css_token), count, &vector));
+    if (error != CSS_OK)
+        return error;
+    for (size_t i = 0; i < count && error == CSS_OK; i++) {
+        css_token token = {.type = tokens[i].type, .idata = tokens[i].text};
+        error = css_error_from_parserutils_error(parserutils_vector_append(vector, &token));
+    }
+    if (error == CSS_OK) {
+        struct calc_parser parser = {.tokens = vector, .depth = 1, .emit = emit, .pw = pw};
+        int ctx = 1;
+        uint32_t type;
+        consumeWhitespace(vector, &ctx);
+        error = calc_sum(&parser, &ctx, &type);
+        if (error == CSS_OK && (size_t)ctx + 1 != count)
+            error = CSS_INVALID;
+    }
+    parserutils_vector_destroy(vector);
     return error;
 }
